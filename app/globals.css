@@ -630,6 +630,149 @@ a {
   margin: 0;
 }
 
+/* Settings */
+.settings-section {
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.settings-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.settings-hint {
+  font-size: 13px;
+  color: var(--sm-text-light);
+  margin-bottom: 16px;
+}
+
+/* Model options */
+.model-options {
+  display: flex;
+  gap: 12px;
+}
+
+.model-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border: 2px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.model-option input[type="radio"] {
+  display: none;
+}
+
+.model-option--active {
+  border-color: var(--sm-orange);
+  background: var(--sm-orange-light);
+}
+
+.model-option-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-option-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.model-option-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-orange);
+  color: var(--sm-white);
+}
+
+.model-option-badge--secondary {
+  background: var(--sm-border);
+  color: var(--sm-text-mid);
+}
+
+.model-option-desc {
+  font-size: 13px;
+  color: var(--sm-text-mid);
+}
+
+/* Member list */
+.member-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--sm-orange-light);
+  border: 1px solid var(--sm-orange-border);
+  border-radius: var(--sm-radius-pill);
+  font-size: 13px;
+}
+
+.member-name {
+  font-weight: 700;
+  color: var(--sm-orange);
+}
+
+.member-role {
+  color: var(--sm-text-mid);
+}
+
+.member-remove {
+  background: none;
+  border: none;
+  color: var(--sm-text-light);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.member-remove:hover {
+  color: #e53e3e;
+}
+
+.member-add {
+  display: flex;
+  gap: 8px;
+}
+
+.member-input {
+  padding: 8px 12px;
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  font-family: inherit;
+  font-size: 14px;
+  width: 100px;
+}
+
+.member-input--wide {
+  flex: 1;
+}
+
+.member-input:focus {
+  outline: none;
+  border-color: var(--sm-orange);
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .page-title { font-size: 22px; }

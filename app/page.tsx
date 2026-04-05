@@ -35,10 +35,18 @@ export default function HomePage() {
     setResult(null);
 
     try {
+      const stored = localStorage.getItem("meeting-settings");
+      const settings = stored ? JSON.parse(stored) : {};
+
       const res = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
+        body: JSON.stringify({
+          rawText,
+          model: settings.model,
+          members: settings.members,
+          context: settings.context,
+        }),
       });
 
       if (!res.ok) {

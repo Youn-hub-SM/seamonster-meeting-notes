@@ -20,6 +20,9 @@ export default function RootLayout({
             <Link href="/" className="header-logo">
               씨몬스터 <span>회의정리록</span>
             </Link>
+            <Link href="/settings" className="btn-secondary" style={{ padding: "6px 16px", fontSize: "13px" }}>
+              설정
+            </Link>
           </div>
         </header>
         {children}
