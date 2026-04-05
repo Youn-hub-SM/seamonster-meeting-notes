@@ -17,7 +17,6 @@ export interface TodoItem {
 }
 
 export interface Meeting {
-  id: string;
   title: string;
   date: string;
   createdAt: string;
