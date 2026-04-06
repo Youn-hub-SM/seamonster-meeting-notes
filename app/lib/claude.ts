@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { TEAM_MEMBERS, COMPANY_CONTEXT, DEFAULT_MODEL } from "./config";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -20,10 +21,20 @@ const MODELS: Record<string, string> = {
   haiku: "claude-haiku-4-5-20251001",
 };
 
-export interface SummarizeOptions {
-  model?: string;
-  members?: { name: string; role: string }[];
-  context?: string;
+function buildSystemPrompt(): string {
+  let prompt = BASE_PROMPT;
+
+  const activeMembers = TEAM_MEMBERS.filter((m) => m.name !== "예시이름");
+  if (activeMembers.length > 0) {
+    const memberList = activeMembers.map((m) => `- ${m.name}: ${m.role}`).join("\n");
+    prompt += `\n\n[팀원 정보]\n회의에 자주 참석하는 팀원:\n${memberList}\n이 이름이 언급되면 해당 역할에 맞게 담당자를 지정하세요.`;
+  }
+
+  if (COMPANY_CONTEXT) {
+    prompt += `\n\n[추가 맥락]\n${COMPANY_CONTEXT}`;
+  }
+
+  return prompt;
 }
 
 interface ClaudeResult {
@@ -39,34 +50,13 @@ interface ClaudeResult {
   todos: { assignee: string; task: string; deadline?: string }[];
 }
 
-function buildSystemPrompt(options: SummarizeOptions): string {
-  let prompt = BASE_PROMPT;
-
-  if (options.members && options.members.length > 0) {
-    const memberList = options.members
-      .map((m) => `- ${m.name}: ${m.role}`)
-      .join("\n");
-    prompt += `\n\n[팀원 정보]\n회의에 자주 참석하는 팀원:\n${memberList}\n이 이름이 언급되면 해당 역할에 맞게 담당자를 지정하세요.`;
-  }
-
-  if (options.context && options.context.trim()) {
-    prompt += `\n\n[추가 맥락]\n${options.context.trim()}`;
-  }
-
-  return prompt;
-}
-
-export async function summarizeMeeting(
-  rawText: string,
-  options: SummarizeOptions = {}
-): Promise<ClaudeResult> {
-  const modelKey = options.model || "sonnet";
-  const model = MODELS[modelKey] || MODELS.sonnet;
+export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
+  const model = MODELS[DEFAULT_MODEL] || MODELS.sonnet;
 
   const response = await anthropic.messages.create({
     model,
     max_tokens: 4096,
-    system: buildSystemPrompt(options),
+    system: buildSystemPrompt(),
     messages: [{ role: "user", content: rawText }],
   });
 

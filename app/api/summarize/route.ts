@@ -3,7 +3,7 @@ import { summarizeMeeting } from "@/app/lib/claude";
 
 export async function POST(request: Request) {
   try {
-    const { rawText, model, members, context } = await request.json();
+    const { rawText } = await request.json();
 
     if (!rawText || typeof rawText !== "string" || rawText.trim().length < 10) {
       return NextResponse.json(
@@ -12,11 +12,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await summarizeMeeting(rawText.trim(), {
-      model,
-      members,
-      context,
-    });
+    const result = await summarizeMeeting(rawText.trim());
 
     return NextResponse.json({
       title: result.title,
