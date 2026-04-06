@@ -23,6 +23,7 @@ export default function RootLayout({
             <nav className="header-nav">
               <Link href="/" className="header-nav-link">회의 정리</Link>
               <Link href="/correct" className="header-nav-link">문장 교정</Link>
+              <Link href="/cs" className="header-nav-link">CS 답변</Link>
             </nav>
           </div>
         </header>

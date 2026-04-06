@@ -905,6 +905,54 @@ a {
   font-weight: 600;
 }
 
+/* CS */
+.cs-category-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: var(--sm-radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--sm-orange-light);
+  color: var(--sm-orange);
+  margin-bottom: 16px;
+}
+
+.cs-category-badge[data-missing="true"] {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.cs-section {
+  margin-bottom: 24px;
+}
+
+.cs-reply {
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card);
+  padding: 20px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--sm-dark);
+  white-space: pre-wrap;
+}
+
+.cs-reply--missing {
+  background: #fff8e1;
+  border-color: #ffe082;
+}
+
+.cs-internal {
+  background: var(--sm-bg);
+  border: 1px dashed var(--sm-border);
+  border-radius: var(--sm-radius);
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--sm-text-mid);
+  white-space: pre-wrap;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .page-title { font-size: 22px; }
