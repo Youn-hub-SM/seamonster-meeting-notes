@@ -3,8 +3,8 @@ import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "씨몬스터 회의정리록",
-  description: "회의 내용을 AI가 자동으로 정리해주는 내부 도구",
+  title: "씨몬스터 내부 도구",
+  description: "회의 정리 · 문장 교정 AI 도구",
 };
 
 export default function RootLayout({
@@ -18,8 +18,12 @@ export default function RootLayout({
         <header className="header">
           <div className="header-inner">
             <Link href="/" className="header-logo">
-              씨몬스터 <span>회의정리록</span>
+              씨몬스터
             </Link>
+            <nav className="header-nav">
+              <Link href="/" className="header-nav-link">회의 정리</Link>
+              <Link href="/correct" className="header-nav-link">문장 교정</Link>
+            </nav>
           </div>
         </header>
         {children}
