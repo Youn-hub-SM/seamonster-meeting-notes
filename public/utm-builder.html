@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>씨몬스터 UTM 빌더</title>
+<style>
+  :root {
+    --primary: #F15A30;
+    --primary-dark: #D94E26;
+    --primary-light: #fff1ec;
+    --accent: #222;
+    --bg: #f5f6f7;
+    --card: #ffffff;
+    --text: #222;
+    --text-sub: #888;
+    --border: #ebebeb;
+    --success: #2E7D32;
+    --danger: #c0392b;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  /* Header */
+  .header {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+  }
+  .header-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .header-logo {
+    width: 40px;
+    height: 40px;
+    background: var(--primary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.5px;
+    flex-shrink: 0;
+  }
+  .header-text h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: -0.5px;
+  }
+  .header-text p {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-top: 2px;
+  }
+  .header-badge {
+    margin-left: auto;
+    background: var(--primary);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 4px;
+    letter-spacing: 0.3px;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #000;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title::before {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 16px;
+    background: var(--primary);
+    border-radius: 2px;
+  }
+
+  /* Form */
+  .form-group { margin-bottom: 20px; }
+  .form-group:last-child { margin-bottom: 0; }
+  .form-group label {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    color: #000;
+    margin-bottom: 6px;
+  }
+  .form-group label .optional {
+    font-weight: 500;
+    color: var(--text-sub);
+    font-size: 14px;
+  }
+  .form-group label .required-badge {
+    display: inline-block;
+    background: var(--primary);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-left: 5px;
+    vertical-align: middle;
+  }
+
+  .input-wrapper {
+    display: flex;
+    gap: 8px;
+  }
+  .input-wrapper select {
+    width: 200px;
+    flex-shrink: 0;
+  }
+  .input-wrapper input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  input[type="text"], input[type="url"], select {
+    width: 100%;
+    padding: 13px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 16px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+  }
+  input[type="text"]:focus, input[type="url"]:focus, select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(241,90,48,0.12);
+    background: #fff;
+  }
+  input::placeholder { color: #bbb; }
+
+  .medium-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .medium-chip {
+    padding: 7px 16px;
+    border-radius: 40px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: #555;
+  }
+  .medium-chip:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .medium-chip.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+
+  /* Preview */
+  .preview-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 15px;
+    word-break: break-all;
+    color: var(--text);
+    min-height: 52px;
+    line-height: 1.8;
+  }
+  .preview-box .param-key { color: var(--primary); font-weight: 700; }
+  .preview-box .param-val { color: #2E7D32; }
+  .preview-box .base-url { color: #000; font-weight: 600; }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 13px 28px;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    font-family: inherit;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-success { background: #000; color: #fff; }
+  .btn-success:hover { background: #333; }
+  .btn-danger { background: #f5f6f7; color: var(--danger); border: 1px solid #e0e0e0; }
+  .btn-danger:hover { background: #fef0ee; border-color: var(--primary); }
+  .btn-outline { background: #f5f6f7; color: #333; border: 1px solid #e0e0e0; }
+  .btn-outline:hover { background: #ebebeb; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #000;
+    color: #fff;
+    padding: 13px 26px;
+    border-radius: 40px;
+    font-size: 15px;
+    font-weight: 600;
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* History table */
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .history-table th {
+    text-align: left;
+    padding: 12px 12px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-sub);
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .history-table td {
+    padding: 13px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+  }
+  .history-table tr:hover td { background: var(--primary-light); }
+  .history-table .url-cell {
+    max-width: 300px;
+    color: var(--primary);
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .history-table .url-cell:hover { text-decoration: underline; }
+  .history-table .actions { white-space: nowrap; }
+  .btn-sm {
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-sub);
+    font-size: 14px;
+  }
+  .empty-state-icon { font-size: 32px; margin-bottom: 8px; }
+
+  /* Settings */
+  .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .status-dot.connected { background: var(--success); }
+  .status-dot.disconnected { background: #ccc; }
+
+  .help-text {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-top: 6px;
+    line-height: 1.6;
+  }
+
+  /* Script block */
+  .script-block {
+    background: #111;
+    color: #e2e8f0;
+    padding: 16px;
+    border-radius: 8px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    overflow-x: auto;
+    white-space: pre;
+    line-height: 1.6;
+    margin-top: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+    gap: 0;
+  }
+  .tab {
+    padding: 13px 22px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    color: var(--text-sub);
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-family: inherit;
+  }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab:hover { color: #333; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Guide section */
+  .guide-banner {
+    background: var(--primary-light);
+    border: 1px solid rgba(241,90,48,0.2);
+    border-radius: 16px;
+    padding: 18px 22px;
+    margin-bottom: 16px;
+  }
+  .guide-banner-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .guide-banner-header h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--primary-dark);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .guide-toggle-icon {
+    font-size: 11px;
+    color: var(--primary);
+    transition: transform 0.3s;
+    background: #fff;
+    border: 1px solid rgba(241,90,48,0.3);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .guide-toggle-icon.open { transform: rotate(180deg); }
+  .guide-body {
+    margin-top: 16px;
+    overflow: hidden;
+    transition: max-height 0.35s ease, margin-top 0.35s ease;
+    max-height: 2000px;
+  }
+  .guide-body.collapsed { max-height: 0 !important; margin-top: 0; }
+  .guide-what {
+    font-size: 15px;
+    color: #555;
+    line-height: 1.8;
+    margin-bottom: 16px;
+  }
+  .guide-what strong { color: var(--primary-dark); }
+  .guide-example {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+  }
+  .guide-example-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-sub);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .guide-example-url {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    word-break: break-all;
+    line-height: 1.9;
+    color: var(--text);
+  }
+  .guide-example-url .hl-base { color: #000; font-weight: 600; }
+  .guide-example-url .hl-key { color: var(--primary); font-weight: 700; }
+  .guide-example-url .hl-val { color: #2E7D32; font-weight: 600; }
+  .guide-params {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .guide-param-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--primary);
+  }
+  .guide-param-card.optional-card { border-top-color: #ddd; }
+  .guide-param-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 2px;
+    font-family: 'Consolas', monospace;
+  }
+  .guide-param-card.optional-card .guide-param-name { color: #888; }
+  .guide-param-label {
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 700;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .guide-param-card.optional-card .guide-param-label { color: #aaa; }
+  .guide-param-desc {
+    font-size: 14px;
+    color: #555;
+    line-height: 1.5;
+  }
+  .guide-param-example {
+    font-size: 13px;
+    color: #aaa;
+    margin-top: 5px;
+    font-family: 'Consolas', monospace;
+  }
+
+  /* Field description */
+  .field-desc {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+    padding: 9px 13px;
+    background: var(--primary-light);
+    border-radius: 6px;
+    line-height: 1.6;
+  }
+  .field-desc strong { color: var(--primary-dark); font-weight: 700; }
+
+  /* Naming guide */
+  .naming-guide {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 16px;
+  }
+  .naming-guide-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #000;
+    margin-bottom: 8px;
+  }
+  .naming-guide ul {
+    font-size: 14px;
+    color: #555;
+    line-height: 1.9;
+    padding-left: 18px;
+  }
+  .naming-guide strong { color: var(--primary-dark); }
+
+  /* Divider */
+  .form-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0 20px;
+  }
+
+  @media (max-width: 640px) {
+    .guide-params { grid-template-columns: 1fr; }
+    .input-wrapper { flex-direction: column; }
+    .input-wrapper select { min-width: 100%; }
+    .btn-row { flex-direction: column; }
+    .btn { width: 100%; justify-content: center; }
+    .history-table { font-size: 12px; }
+    .header-badge { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- UTM Guide Banner -->
+  <div class="guide-banner">
+    <div class="guide-banner-header" onclick="toggleGuide()">
+      <h2>UTM이 뭔가요? (처음이라면 꼭 읽어보세요!)</h2>
+      <span class="guide-toggle-icon" id="guideToggleIcon">▼</span>
+    </div>
+    <div class="guide-body collapsed" id="guideBody">
+      <div class="guide-what">
+        <strong>UTM(Urchin Tracking Module)</strong>은 URL 뒤에 붙이는 추적 코드예요.<br>
+        고객이 <strong>어디서, 어떤 경로로, 어떤 캠페인을 통해</strong> 우리 사이트에 들어왔는지 구글 애널리틱스에서 확인할 수 있게 해줍니다.<br><br>
+        예를 들어, 같은 상품 페이지 링크를 네이버 블로그에도, 인스타그램에도 올렸을 때<br>
+        UTM 없이는 "어디서 들어온 고객이 더 많이 구매했는지" 알 수 없어요.<br>
+        UTM을 붙이면 <strong>채널별 성과를 정확하게 비교</strong>할 수 있습니다!
+      </div>
+
+      <div class="guide-example">
+        <div class="guide-example-title">실제 UTM URL 예시</div>
+        <div class="guide-example-url">
+          <span class="hl-base">https://seamonster.co.kr/product/shrimp</span>?<br>
+          &nbsp;&nbsp;<span class="hl-key">utm_source</span>=<span class="hl-val">naver</span>&amp;
+          <span class="hl-key">utm_medium</span>=<span class="hl-val">blog</span>&amp;
+          <span class="hl-key">utm_campaign</span>=<span class="hl-val">2026_spring_sale</span>
+        </div>
+        <div style="font-size:12px;color:#78350f;margin-top:8px;line-height:1.6;">
+          → 이 URL을 클릭한 사람은 GA에서 <strong>"네이버 블로그의 2026 봄 세일 캠페인"</strong>에서 유입된 것으로 기록됩니다.
+        </div>
+      </div>
+
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:10px;">각 파라미터가 하는 역할</div>
+      <div class="guide-params">
+        <div class="guide-param-card">
+          <div class="guide-param-label">필수</div>
+          <div class="guide-param-name">utm_source</div>
+          <div class="guide-param-desc"><strong>어디서?</strong> — 고객이 유입된 플랫폼/사이트</div>
+          <div class="guide-param-example">naver, google, kakao, instagram</div>
+        </div>
+        <div class="guide-param-card">
+          <div class="guide-param-label">필수</div>
+          <div class="guide-param-name">utm_medium</div>
+          <div class="guide-param-desc"><strong>어떤 방식으로?</strong> — 광고/콘텐츠의 유형</div>
+          <div class="guide-param-example">cpc(클릭광고), blog, social, email</div>
+        </div>
+        <div class="guide-param-card optional-card">
+          <div class="guide-param-label">선택 (강력 권장)</div>
+          <div class="guide-param-name">utm_campaign</div>
+          <div class="guide-param-desc"><strong>어떤 캠페인?</strong> — 진행 중인 프로모션/이벤트명</div>
+          <div class="guide-param-example">2026_spring_sale, new_product</div>
+        </div>
+        <div class="guide-param-card optional-card">
+          <div class="guide-param-label">선택</div>
+          <div class="guide-param-name">utm_content</div>
+          <div class="guide-param-desc"><strong>어떤 소재?</strong> — 같은 캠페인 내 A/B 소재 구분</div>
+          <div class="guide-param-example">banner_a, video_15s, text_link</div>
+        </div>
+        <div class="guide-param-card optional-card">
+          <div class="guide-param-label">선택</div>
+          <div class="guide-param-name">utm_term</div>
+          <div class="guide-param-desc"><strong>어떤 키워드?</strong> — 검색광고에서 사용한 키워드</div>
+          <div class="guide-param-example">해산물, 새우, 씨몬스터</div>
+        </div>
+      </div>
+
+      <div class="naming-guide">
+        <div class="naming-guide-title">작성 팁</div>
+        <ul>
+          <li><strong>소문자</strong>로 통일하세요 — GA에서 Naver와 naver는 다른 소스로 집계됩니다</li>
+          <li><strong>띄어쓰기 대신 언더바(_)</strong>를 사용하세요 — 예: spring sale → spring_sale</li>
+          <li><strong>날짜나 시즌</strong>을 앞에 붙이면 나중에 찾기 쉬워요 — 예: 2026_spring_sale</li>
+          <li>팀 내에서 <strong>네이밍 규칙을 통일</strong>하면 데이터 분석이 훨씬 수월합니다</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- UTM Form -->
+  <div class="card">
+    <div class="card-title">UTM 파라미터 설정</div>
+
+    <div class="form-group">
+      <label>기본 URL (랜딩페이지)</label>
+      <div class="field-desc">
+        고객이 최종적으로 도착할 페이지 주소예요.<br>
+        <strong>상품 페이지, 이벤트 페이지, 메인 페이지</strong> 등 링크를 공유할 목적지 URL을 넣으세요.
+      </div>
+      <div class="input-wrapper">
+        <select id="urlPreset" onchange="onUrlPresetChange()">
+          <option value="">-- 사이트 선택 --</option>
+          <option value="https://seamonster.co.kr">씨몬스터 카페24몰</option>
+          <option value="https://smartstore.naver.com/seamonster">네이버 스마트스토어</option>
+          <option value="custom">직접 입력</option>
+        </select>
+        <input type="url" id="baseUrl" placeholder="https://example.com/page" value="https://" oninput="onBaseUrlInput()" onfocus="moveCursorToEnd(this)">
+        <button class="btn btn-outline" id="addUrlBtn" onclick="addUrlPreset()" title="즐겨찾기에 추가" style="display:none;white-space:nowrap;flex-shrink:0;">+ 저장</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>utm_source<span class="required-badge">필수</span> <span class="optional">유입 채널</span></label>
+      <div class="field-desc">
+        고객이 <strong>어디에서</strong> 이 링크를 클릭하나요?<br>
+        링크를 올릴 플랫폼을 선택하세요. 예) 네이버 블로그에 올릴 거면 → <strong>naver</strong>
+      </div>
+      <div class="input-wrapper">
+        <select id="sourcePreset" onchange="onSourceChange()">
+          <option value="">-- 소스 선택 --</option>
+          <option value="naver">naver</option>
+          <option value="google">google</option>
+          <option value="kakao">kakao</option>
+          <option value="instagram">instagram</option>
+          <option value="facebook">facebook</option>
+          <option value="youtube">youtube</option>
+          <option value="tiktok">tiktok</option>
+          <option value="daum">daum</option>
+          <option value="custom">직접 입력</option>
+        </select>
+        <input type="text" id="utmSource" placeholder="예: naver, google, kakao" oninput="updatePreview()">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>utm_medium<span class="required-badge">필수</span> <span class="optional">매체 유형</span></label>
+      <div class="field-desc">
+        <strong>어떤 방식</strong>으로 링크를 노출하나요?<br>
+        클릭당 과금 광고면 → <strong>cpc</strong> / 블로그 포스팅이면 → <strong>blog</strong> / SNS 게시물이면 → <strong>social</strong>
+      </div>
+      <div class="input-wrapper">
+        <select id="mediumPreset" onchange="onMediumPresetChange()">
+          <option value="">-- 매체 선택 --</option>
+          <option value="cpc">cpc (클릭광고)</option>
+          <option value="cpm">cpm (노출광고)</option>
+          <option value="display">display (디스플레이)</option>
+          <option value="social">social (소셜미디어)</option>
+          <option value="blog">blog (블로그)</option>
+          <option value="email">email (이메일)</option>
+          <option value="referral">referral (추천)</option>
+          <option value="affiliate">affiliate (제휴)</option>
+          <option value="custom">직접 입력</option>
+        </select>
+        <input type="text" id="utmMedium" placeholder="예: cpc, social, blog" oninput="updatePreview()">
+      </div>
+      <div class="medium-chips" id="mediumChips"></div>
+    </div>
+
+    <div class="form-group">
+      <label>utm_campaign <span class="optional">선택 · 캠페인명</span></label>
+      <div class="field-desc">
+        이 링크가 속한 <strong>캠페인(프로모션/이벤트) 이름</strong>이에요.<br>
+        나중에 GA에서 캠페인별 성과를 비교할 때 사용됩니다. 팀원들이 알아볼 수 있는 이름으로!
+      </div>
+      <input type="text" id="utmCampaign" placeholder="예: 2026_spring_sale, new_product_launch" oninput="updatePreview()" list="campaignSuggestions" autocomplete="off">
+      <datalist id="campaignSuggestions"></datalist>
+    </div>
+
+    <div class="form-group">
+      <label>utm_content <span class="optional">선택 · 광고 소재 구분</span></label>
+      <div class="field-desc">
+        같은 캠페인에서 <strong>여러 광고 소재</strong>를 테스트할 때 구분용으로 사용해요.<br>
+        예) 배너 A vs 배너 B, 15초 영상 vs 30초 영상 → 어떤 소재가 더 효과적인지 비교 가능!
+      </div>
+      <input type="text" id="utmContent" placeholder="예: banner_a, text_link, video_15s" oninput="updatePreview()">
+    </div>
+
+    <div class="form-group">
+      <label>utm_term <span class="optional">선택 · 검색 키워드</span></label>
+      <div class="field-desc">
+        주로 <strong>검색 광고</strong>에서 사용해요. 어떤 검색어에 광고를 노출했는지 기록합니다.<br>
+        검색 광고가 아니면 비워두셔도 됩니다.
+      </div>
+      <input type="text" id="utmTerm" placeholder="예: 해산물, 씨몬스터, 수산물" oninput="updatePreview()">
+    </div>
+
+    <div class="form-group">
+      <label>비고 <span class="optional">선택 · 내부 메모</span></label>
+      <div class="field-desc">
+        이 URL에 대한 <strong>내부 메모</strong>를 남겨두세요.<br>
+        GA에는 전송되지 않고, 히스토리에서만 확인할 수 있습니다.
+      </div>
+      <input type="text" id="utmNote" placeholder="예: 4월 인플루언서 A 협찬, 네이버 파워링크 2차 소재">
+    </div>
+  </div>
+
+  <!-- Preview & Actions -->
+  <div class="card">
+    <div class="card-title">생성된 URL 미리보기</div>
+    <div class="preview-box" id="previewBox">
+      <span style="color:var(--text-sub)">위 필드를 입력하면 URL이 자동 생성됩니다</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="copyUrl()" id="copyBtn" disabled>
+        URL 복사
+      </button>
+      <button class="btn btn-outline" onclick="showQr()" id="qrBtn" disabled>
+        QR 코드
+      </button>
+      <button class="btn btn-success" onclick="saveAndSend()" id="saveBtn" disabled>
+        저장 &amp; 시트 전송
+      </button>
+      <button class="btn btn-outline" onclick="resetForm()">
+        초기화
+      </button>
+    </div>
+  </div>
+
+  <!-- History & Settings Tabs -->
+  <div class="card">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('history')">생성 히스토리</button>
+      <button class="tab" onclick="switchTab('keywords')">추천 키워드 관리</button>
+      <button class="tab" onclick="switchTab('settings')">구글시트 연동 설정</button>
+      <button class="tab" onclick="switchTab('script')">Apps Script 코드</button>
+    </div>
+
+    <!-- History Tab -->
+    <div class="tab-content active" id="tab-history">
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <input type="text" id="historySearch" placeholder="캠페인, 소스, 미디엄, 비고로 검색..." oninput="renderHistory()" style="flex:1;">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('historySearch').value='';renderHistory()">초기화</button>
+      </div>
+      <div id="historyContainer">
+        <div class="empty-state">아직 생성된 UTM URL이 없습니다</div>
+      </div>
+      <div class="btn-row" id="historyClearRow" style="display:none">
+        <button class="btn btn-danger btn-sm" onclick="clearHistory()">전체 삭제</button>
+        <button class="btn btn-outline btn-sm" onclick="exportCsv()">CSV 다운로드</button>
+      </div>
+    </div>
+
+    <!-- Keywords Tab -->
+    <div class="tab-content" id="tab-keywords">
+      <!-- 랜딩페이지 관리 -->
+      <div style="margin-bottom:24px;">
+        <div class="card-title" style="margin-bottom:12px;">랜딩페이지 관리</div>
+        <div id="landingManager"></div>
+      </div>
+      <div style="height:1px;background:var(--border);margin-bottom:20px;"></div>
+      <!-- 소스/미디엄 관리 -->
+      <div class="card-title" style="margin-bottom:12px;">소스 · 미디엄 관리</div>
+      <p class="help-text" style="margin-bottom:16px;">소스(채널)와 소스별 추천 매체(medium)를 직접 관리하세요. 변경 후 <strong>저장</strong>을 눌러야 반영됩니다.</p>
+      <div id="keywordsContainer"></div>
+      <div class="kw-add-source" style="margin-top:12px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="newSourceInput" placeholder="새 소스 추가 (예: threads)" style="max-width:220px;">
+          <button class="btn btn-outline btn-sm" onclick="addSource()">+ 소스 추가</button>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:16px;">
+        <button class="btn btn-primary btn-sm" onclick="saveKeywords()">저장</button>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="tab-content" id="tab-settings">
+      <div class="form-group">
+        <label>Google Apps Script 웹앱 URL</label>
+        <input type="url" id="gasUrl" placeholder="https://script.google.com/macros/s/..." oninput="saveGasUrl()">
+        <div class="help-text">
+          구글시트에 Apps Script를 배포한 후 웹앱 URL을 여기에 입력하세요.<br>
+          아래 "Apps Script 코드" 탭에서 코드를 복사하여 사용할 수 있습니다.
+        </div>
+      </div>
+      <div class="form-group">
+        <label>연동 상태</label>
+        <div id="gasStatus">
+          <span class="status-dot disconnected"></span> 미설정
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-sm" onclick="testGasConnection()">연결 테스트</button>
+      </div>
+    </div>
+
+    <!-- Script Tab -->
+    <div class="tab-content" id="tab-script">
+      <p style="font-size:13px;color:var(--text-sub);margin-bottom:8px;">
+        아래 코드를 구글시트의 <strong>확장 프로그램 → Apps Script</strong>에 붙여넣고,<br>
+        <strong>배포 → 새 배포 → 웹 앱</strong>으로 배포하세요. (액세스: 모든 사용자)
+      </p>
+      <div class="script-block" id="scriptBlock"></div>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-sm" onclick="copyScript()">코드 복사</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- QR Modal -->
+<div id="qrModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:32px;max-width:360px;width:90%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,0.2);">
+    <div style="font-size:17px;font-weight:700;color:#000;margin-bottom:20px;">QR 코드</div>
+    <img id="qrImg" src="" alt="QR Code" style="width:220px;height:220px;border:1px solid var(--border);border-radius:8px;">
+    <div id="qrUrl" style="font-size:11px;color:var(--text-sub);font-family:'Consolas',monospace;word-break:break-all;margin:14px 0;line-height:1.5;"></div>
+    <div style="display:flex;gap:8px;justify-content:center;">
+      <a id="qrDownload" download="utm_qr.png" class="btn btn-primary btn-sm">QR 다운로드</a>
+      <button class="btn btn-outline btn-sm" onclick="closeQr()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Source → Medium 추천 맵 (기본값) ──
+const DEFAULT_MEDIUM_MAP = {
+  naver:     ['cpc','blog','display','shopping','brand_search'],
+  google:    ['cpc','display','shopping','discovery','pmax'],
+  kakao:     ['cpc','display','bizboard','kakao_moment'],
+  instagram: ['social','story','reels','collab'],
+  facebook:  ['social','cpc','display','cpa'],
+  youtube:   ['video','shorts','display','cpc'],
+  tiktok:    ['social','video','cpc','spark_ads'],
+  daum:      ['cpc','display','blog'],
+};
+
+// 저장된 커스텀 맵 또는 기본값 로드
+let SOURCE_MEDIUM_MAP = JSON.parse(localStorage.getItem('sm_medium_map') || 'null') || JSON.parse(JSON.stringify(DEFAULT_MEDIUM_MAP));
+
+// ── Apps Script 코드 ──
+const GAS_CODE = `// Google Apps Script - 씨몬스터 UTM 빌더 연동
+// 이 코드를 구글시트의 Apps Script에 붙여넣으세요.
+
+function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+
+    // 헤더가 없으면 생성
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        '생성일시', 'URL', 'Source', 'Medium',
+        'Campaign', 'Content', 'Term', '전체 UTM URL'
+      ]);
+      // 헤더 스타일
+      var headerRange = sheet.getRange(1, 1, 1, 8);
+      headerRange.setFontWeight('bold');
+      headerRange.setBackground('#0066cc');
+      headerRange.setFontColor('#ffffff');
+    }
+
+    sheet.appendRow([
+      data.date,
+      data.baseUrl,
+      data.source,
+      data.medium,
+      data.campaign,
+      data.content || '',
+      data.term || '',
+      data.fullUrl
+    ]);
+
+    // 열 너비 자동 조정
+    sheet.autoResizeColumns(1, 8);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'ok' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok', message: '씨몬스터 UTM 빌더 연동 활성화됨' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  // Load saved GAS URL
+  const savedGasUrl = localStorage.getItem('sm_gas_url');
+  if (savedGasUrl) {
+    document.getElementById('gasUrl').value = savedGasUrl;
+    updateGasStatus(true);
+  }
+  // Render script block
+  document.getElementById('scriptBlock').textContent = GAS_CODE;
+  // Load history
+  renderHistory();
+  // Render keywords & source select
+  renderKeywords();
+  renderUrlSelect();
+  renderLandingManager();
+  updateCampaignSuggestions();
+});
+
+// ── URL Preset ──
+const DEFAULT_URL_PRESETS = [
+  { label: '씨몬스터 카페24몰', value: 'https://seamonster.co.kr' },
+  { label: '네이버 스마트스토어', value: 'https://smartstore.naver.com/seamonster' },
+];
+
+function loadUrlPresets() {
+  return JSON.parse(localStorage.getItem('sm_url_presets') || 'null') || JSON.parse(JSON.stringify(DEFAULT_URL_PRESETS));
+}
+
+function saveUrlPresets(presets) {
+  localStorage.setItem('sm_url_presets', JSON.stringify(presets));
+}
+
+function renderUrlSelect() {
+  const sel = document.getElementById('urlPreset');
+  const current = sel.value;
+  const presets = loadUrlPresets();
+  sel.innerHTML = '<option value="">-- 사이트 선택 --</option>' +
+    presets.map(p => `<option value="${escHtml(p.value)}">${escHtml(p.label)}</option>`).join('') +
+    '<option value="custom">직접 입력</option>';
+  if (current) sel.value = current;
+}
+
+function onUrlPresetChange() {
+  const sel = document.getElementById('urlPreset');
+  const inp = document.getElementById('baseUrl');
+  const addBtn = document.getElementById('addUrlBtn');
+  if (sel.value === 'custom') {
+    inp.value = 'https://';
+    inp.focus();
+    moveCursorToEnd(inp);
+    addBtn.style.display = 'none';
+  } else if (sel.value) {
+    inp.value = sel.value;
+    addBtn.style.display = 'none';
+  } else {
+    inp.value = 'https://';
+    addBtn.style.display = 'none';
+  }
+  updatePreview();
+}
+
+function moveCursorToEnd(el) {
+  setTimeout(() => {
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, 0);
+}
+
+function onBaseUrlInput() {
+  const inp = document.getElementById('baseUrl');
+  const sel = document.getElementById('urlPreset');
+  const addBtn = document.getElementById('addUrlBtn');
+  const val = inp.value.trim();
+  const presets = loadUrlPresets();
+  const alreadySaved = presets.some(p => p.value === val);
+  // 직접 타이핑 중이면 프리셋 선택 해제
+  sel.value = '';
+  // URL이 https:// 초과이고 아직 저장 안 된 경우 버튼 표시
+  addBtn.style.display = (val && val !== 'https://' && !alreadySaved) ? '' : 'none';
+  updatePreview();
+}
+
+function addUrlPreset() {
+  const inp = document.getElementById('baseUrl');
+  const val = inp.value.trim();
+  if (!val) return;
+  const label = prompt('이 URL의 이름을 입력하세요:', new URL(val).hostname) || val;
+  const presets = loadUrlPresets();
+  if (presets.some(p => p.value === val)) { showToast('이미 저장된 URL입니다'); return; }
+  presets.push({ label, value: val });
+  saveUrlPresets(presets);
+  renderUrlSelect();
+  document.getElementById('urlPreset').value = val;
+  document.getElementById('addUrlBtn').style.display = 'none';
+  showToast(`"${label}" 저장됨`);
+  renderLandingManager();
+}
+
+// ── Source Change → Medium Chips ──
+function onSourceChange() {
+  const sel = document.getElementById('sourcePreset');
+  const inp = document.getElementById('utmSource');
+  if (sel.value === 'custom') {
+    inp.value = '';
+    inp.focus();
+  } else if (sel.value) {
+    inp.value = sel.value;
+  }
+  renderMediumChips(sel.value);
+  updatePreview();
+}
+
+function renderMediumChips(source) {
+  const container = document.getElementById('mediumChips');
+  const mediums = SOURCE_MEDIUM_MAP[source] || [];
+  if (!mediums.length) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = '<span style="font-size:13px;color:var(--text-sub);margin-right:4px;">추천 매체:</span>' +
+    mediums.map(m => `<span class="medium-chip" onclick="selectMediumChip('${m}', this)">${m}</span>`).join('');
+}
+
+function selectMediumChip(value, el) {
+  document.getElementById('utmMedium').value = value;
+  document.getElementById('mediumPreset').value = '';
+  document.querySelectorAll('.medium-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  updatePreview();
+}
+
+function onMediumPresetChange() {
+  const sel = document.getElementById('mediumPreset');
+  const inp = document.getElementById('utmMedium');
+  if (sel.value === 'custom') {
+    inp.value = '';
+    inp.focus();
+  } else if (sel.value) {
+    inp.value = sel.value;
+  }
+  document.querySelectorAll('.medium-chip').forEach(c => c.classList.remove('active'));
+  updatePreview();
+}
+
+// ── Preview ──
+function updatePreview() {
+  const base = document.getElementById('baseUrl').value.trim();
+  const source = document.getElementById('utmSource').value.trim();
+  const medium = document.getElementById('utmMedium').value.trim();
+  const campaign = document.getElementById('utmCampaign').value.trim();
+  const content = document.getElementById('utmContent').value.trim();
+  const term = document.getElementById('utmTerm').value.trim();
+
+  const box = document.getElementById('previewBox');
+  const copyBtn = document.getElementById('copyBtn');
+  const saveBtn = document.getElementById('saveBtn');
+
+  if (!base) {
+    box.innerHTML = '<span style="color:var(--text-sub)">기본 URL을 입력해주세요</span>';
+    copyBtn.disabled = true;
+    saveBtn.disabled = true;
+    return;
+  }
+
+  const params = [];
+  if (source) params.push(['utm_source', source]);
+  if (medium) params.push(['utm_medium', medium]);
+  if (campaign) params.push(['utm_campaign', campaign]);
+  if (content) params.push(['utm_content', content]);
+  if (term) params.push(['utm_term', term]);
+
+  if (!params.length) {
+    box.innerHTML = `<span class="base-url">${escHtml(base)}</span><span style="color:var(--text-sub)"> ← UTM 파라미터를 입력해주세요</span>`;
+    copyBtn.disabled = true;
+    saveBtn.disabled = true;
+    return;
+  }
+
+  const sep = base.includes('?') ? '&' : '?';
+  const paramStr = params.map(([k, v]) =>
+    `<span class="param-key">${k}</span>=<span class="param-val">${encodeURIComponent(v)}</span>`
+  ).join('&amp;');
+
+  box.innerHTML = `<span class="base-url">${escHtml(base)}</span>${sep}${paramStr}`;
+
+  const isValid = base && source && medium;
+  copyBtn.disabled = !isValid;
+  saveBtn.disabled = !isValid;
+  document.getElementById('qrBtn').disabled = !isValid;
+}
+
+function getFullUrl() {
+  const base = document.getElementById('baseUrl').value.trim();
+  const source = document.getElementById('utmSource').value.trim();
+  const medium = document.getElementById('utmMedium').value.trim();
+  const campaign = document.getElementById('utmCampaign').value.trim();
+  const content = document.getElementById('utmContent').value.trim();
+  const term = document.getElementById('utmTerm').value.trim();
+
+  const params = [];
+  if (source) params.push(`utm_source=${encodeURIComponent(source)}`);
+  if (medium) params.push(`utm_medium=${encodeURIComponent(medium)}`);
+  if (campaign) params.push(`utm_campaign=${encodeURIComponent(campaign)}`);
+  if (content) params.push(`utm_content=${encodeURIComponent(content)}`);
+  if (term) params.push(`utm_term=${encodeURIComponent(term)}`);
+
+  const sep = base.includes('?') ? '&' : '?';
+  return base + sep + params.join('&');
+}
+
+// ── Copy (+ 자동 히스토리 저장) ──
+function copyUrl() {
+  const url = getFullUrl();
+  navigator.clipboard.writeText(url).then(() => {
+    autoSaveHistory();
+    showToast('URL이 복사되었습니다');
+  });
+}
+
+function autoSaveHistory() {
+  const data = {
+    date: new Date().toLocaleString('ko-KR'),
+    baseUrl: document.getElementById('baseUrl').value.trim(),
+    source: document.getElementById('utmSource').value.trim(),
+    medium: document.getElementById('utmMedium').value.trim(),
+    campaign: document.getElementById('utmCampaign').value.trim(),
+    content: document.getElementById('utmContent').value.trim(),
+    term: document.getElementById('utmTerm').value.trim(),
+    note: document.getElementById('utmNote').value.trim(),
+    fullUrl: getFullUrl()
+  };
+  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  // 동일 URL 중복 저장 방지
+  if (history.length && history[0].fullUrl === data.fullUrl) return;
+  history.unshift(data);
+  if (history.length > 100) history.pop();
+  localStorage.setItem('sm_utm_history', JSON.stringify(history));
+  renderHistory();
+  updateCampaignSuggestions();
+}
+
+// ── QR Code ──
+function showQr() {
+  const url = getFullUrl();
+  const encoded = encodeURIComponent(url);
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=10&data=${encoded}`;
+  document.getElementById('qrImg').src = qrSrc;
+  document.getElementById('qrUrl').textContent = url;
+  document.getElementById('qrDownload').href = qrSrc;
+  document.getElementById('qrModal').style.display = 'flex';
+}
+
+function closeQr() {
+  document.getElementById('qrModal').style.display = 'none';
+}
+
+// 모달 바깥 클릭 시 닫기
+document.addEventListener('click', e => {
+  const modal = document.getElementById('qrModal');
+  if (e.target === modal) closeQr();
+});
+
+// ── Save & Send to GAS ──
+function saveAndSend() {
+  const data = {
+    date: new Date().toLocaleString('ko-KR'),
+    baseUrl: document.getElementById('baseUrl').value.trim(),
+    source: document.getElementById('utmSource').value.trim(),
+    medium: document.getElementById('utmMedium').value.trim(),
+    campaign: document.getElementById('utmCampaign').value.trim(),
+    content: document.getElementById('utmContent').value.trim(),
+    term: document.getElementById('utmTerm').value.trim(),
+    note: document.getElementById('utmNote').value.trim(),
+    fullUrl: getFullUrl()
+  };
+
+  // Save to localStorage
+  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  history.unshift(data);
+  if (history.length > 100) history.pop();
+  localStorage.setItem('sm_utm_history', JSON.stringify(history));
+  renderHistory();
+  updateCampaignSuggestions();
+
+  // Copy URL
+  navigator.clipboard.writeText(data.fullUrl);
+
+  // Send to Google Sheets via Apps Script
+  const gasUrl = localStorage.getItem('sm_gas_url');
+  if (gasUrl) {
+    fetch(gasUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(() => {
+      showToast('URL 복사 완료 & 구글시트에 전송했습니다!');
+    }).catch(() => {
+      showToast('URL 복사 완료 (구글시트 전송 실패 - URL 확인 필요)');
+    });
+  } else {
+    showToast('URL 복사 완료! (구글시트 연동 미설정)');
+  }
+}
+
+// ── History ──
+function renderHistory() {
+  const all = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  const query = (document.getElementById('historySearch')?.value || '').toLowerCase().trim();
+  const history = query
+    ? all.filter(h => [h.campaign, h.source, h.medium, h.note, h.baseUrl]
+        .some(v => (v || '').toLowerCase().includes(query)))
+    : all;
+  const container = document.getElementById('historyContainer');
+  const clearRow = document.getElementById('historyClearRow');
+
+  if (!all.length) {
+    container.innerHTML = '<div class="empty-state">아직 생성된 UTM URL이 없습니다</div>';
+    clearRow.style.display = 'none';
+    return;
+  }
+  if (!history.length) {
+    container.innerHTML = '<div class="empty-state">검색 결과가 없습니다</div>';
+    clearRow.style.display = 'flex';
+    return;
+  }
+
+  clearRow.style.display = 'flex';
+  let html = `<table class="history-table">
+    <thead><tr>
+      <th>일시</th><th>Source</th><th>Medium</th><th>Campaign</th><th>비고</th><th>URL</th><th>작업</th>
+    </tr></thead><tbody>`;
+
+  history.forEach((item, idx) => {
+    html += `<tr>
+      <td>${escHtml(item.date)}</td>
+      <td>${escHtml(item.source)}</td>
+      <td>${escHtml(item.medium)}</td>
+      <td>${escHtml(item.campaign)}</td>
+      <td style="color:var(--text-sub)">${escHtml(item.note || '')}</td>
+      <td class="url-cell" title="${escHtml(item.fullUrl)}" onclick="navigator.clipboard.writeText('${item.fullUrl.replace(/'/g,"\\'")}');showToast('URL 복사됨')">${escHtml(item.fullUrl)}</td>
+      <td class="actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteHistoryItem(${idx})">삭제</button>
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function deleteHistoryItem(idx) {
+  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  history.splice(idx, 1);
+  localStorage.setItem('sm_utm_history', JSON.stringify(history));
+  renderHistory();
+  showToast('삭제되었습니다');
+}
+
+function clearHistory() {
+  if (!confirm('전체 히스토리를 삭제하시겠습니까?')) return;
+  localStorage.removeItem('sm_utm_history');
+  renderHistory();
+  showToast('전체 히스토리가 삭제되었습니다');
+}
+
+function exportCsv() {
+  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  if (!history.length) return;
+
+  const BOM = '\uFEFF';
+  const headers = '생성일시,기본URL,Source,Medium,Campaign,Content,Term,비고,전체URL\n';
+  const rows = history.map(h =>
+    [h.date, h.baseUrl, h.source, h.medium, h.campaign, h.content, h.term, h.note, h.fullUrl]
+      .map(v => `"${(v||'').replace(/"/g,'""')}"`)
+      .join(',')
+  ).join('\n');
+
+  const blob = new Blob([BOM + headers + rows], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `씨몬스터_UTM_히스토리_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ── Reset ──
+function resetForm() {
+  document.getElementById('urlPreset').value = '';
+  document.getElementById('baseUrl').value = 'https://';
+  document.getElementById('sourcePreset').value = '';
+  document.getElementById('utmSource').value = '';
+  document.getElementById('mediumPreset').value = '';
+  document.getElementById('utmMedium').value = '';
+  document.getElementById('utmCampaign').value = '';
+  document.getElementById('utmContent').value = '';
+  document.getElementById('utmTerm').value = '';
+  document.getElementById('utmNote').value = '';
+  document.getElementById('mediumChips').innerHTML = '';
+  updatePreview();
+  showToast('폼이 초기화되었습니다');
+}
+
+// ── GAS Settings ──
+function saveGasUrl() {
+  const url = document.getElementById('gasUrl').value.trim();
+  if (url) {
+    localStorage.setItem('sm_gas_url', url);
+    updateGasStatus(true);
+  } else {
+    localStorage.removeItem('sm_gas_url');
+    updateGasStatus(false);
+  }
+}
+
+function updateGasStatus(connected) {
+  const el = document.getElementById('gasStatus');
+  if (connected) {
+    el.innerHTML = '<span class="status-dot connected"></span> 설정 완료';
+  } else {
+    el.innerHTML = '<span class="status-dot disconnected"></span> 미설정';
+  }
+}
+
+function testGasConnection() {
+  const url = localStorage.getItem('sm_gas_url');
+  if (!url) {
+    showToast('Apps Script URL을 먼저 입력해주세요');
+    return;
+  }
+  fetch(url, { mode: 'no-cors' })
+    .then(() => showToast('연결 요청 전송 완료! 구글시트를 확인해주세요'))
+    .catch(() => showToast('연결 실패 - URL을 확인해주세요'));
+}
+
+// ── Landing Page Management ──
+function renderLandingManager() {
+  const container = document.getElementById('landingManager');
+  const presets = loadUrlPresets();
+  if (!presets.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:16px;">저장된 랜딩페이지가 없습니다</div>';
+    return;
+  }
+  container.innerHTML = presets.map((p, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:#fff;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:14px;">${escHtml(p.label)}</div>
+        <div style="font-size:12px;color:var(--text-sub);font-family:'Consolas',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(p.value)}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="removeUrlPreset(${i})">삭제</button>
+    </div>
+  `).join('');
+}
+
+function removeUrlPreset(idx) {
+  const presets = loadUrlPresets();
+  presets.splice(idx, 1);
+  saveUrlPresets(presets);
+  renderUrlSelect();
+  renderLandingManager();
+  showToast('삭제되었습니다');
+}
+
+function resetUrlPresets() {
+  if (!confirm('기본값으로 초기화하시겠습니까?')) return;
+  localStorage.removeItem('sm_url_presets');
+  renderUrlSelect();
+  renderLandingManager();
+  showToast('초기화되었습니다');
+}
+
+// ── Keywords Management ──
+function renderKeywords() {
+  const container = document.getElementById('keywordsContainer');
+  const sources = Object.keys(SOURCE_MEDIUM_MAP);
+  container.innerHTML = sources.map(src => `
+    <div class="kw-row" id="kwrow_${src}" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;">
+      <div style="flex-shrink:0;width:110px;padding-top:13px;font-family:'Consolas',monospace;font-size:14px;font-weight:700;color:#333;">${src}</div>
+      <div style="flex:1;">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;" id="chips_${src}">
+          ${SOURCE_MEDIUM_MAP[src].map(m => `
+            <span class="kw-chip" style="display:inline-flex;align-items:center;gap:4px;padding:5px 12px;background:var(--bg);border:1px solid var(--border);border-radius:40px;font-size:13px;">
+              ${escHtml(m)}
+              <span onclick="removeMedium('${src}','${m}')" style="cursor:pointer;color:#aaa;font-size:12px;line-height:1;" title="삭제">✕</span>
+            </span>
+          `).join('')}
+        </div>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="addmed_${src}" placeholder="매체 추가" style="max-width:160px;padding:7px 12px;font-size:13px;" onkeydown="if(event.key==='Enter')addMedium('${src}')">
+          <button class="btn btn-outline btn-sm" onclick="addMedium('${src}')">추가</button>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-sm" style="flex-shrink:0;margin-top:8px;" onclick="removeSource('${src}')">소스 삭제</button>
+    </div>
+    <div style="height:1px;background:var(--border);margin-bottom:12px;"></div>
+  `).join('');
+  // 소스 드롭다운 동기화
+  renderSourceSelect();
+}
+
+function addMedium(src) {
+  const inp = document.getElementById('addmed_' + src);
+  const val = inp.value.trim();
+  if (!val) return;
+  if (!SOURCE_MEDIUM_MAP[src].includes(val)) {
+    SOURCE_MEDIUM_MAP[src].push(val);
+  }
+  inp.value = '';
+  renderKeywords();
+}
+
+function removeMedium(src, medium) {
+  SOURCE_MEDIUM_MAP[src] = SOURCE_MEDIUM_MAP[src].filter(m => m !== medium);
+  renderKeywords();
+}
+
+function addSource() {
+  const inp = document.getElementById('newSourceInput');
+  const val = inp.value.trim().toLowerCase();
+  if (!val) return;
+  if (SOURCE_MEDIUM_MAP[val]) { showToast('이미 존재하는 소스입니다'); return; }
+  SOURCE_MEDIUM_MAP[val] = [];
+  inp.value = '';
+  renderKeywords();
+}
+
+function removeSource(src) {
+  if (!confirm(`"${src}" 소스를 삭제하시겠습니까?`)) return;
+  delete SOURCE_MEDIUM_MAP[src];
+  renderKeywords();
+}
+
+function saveKeywords() {
+  localStorage.setItem('sm_medium_map', JSON.stringify(SOURCE_MEDIUM_MAP));
+  renderSourceSelect();
+  showToast('저장되었습니다');
+}
+
+function resetKeywords() {
+  if (!confirm('기본값으로 초기화하시겠습니까?')) return;
+  SOURCE_MEDIUM_MAP = JSON.parse(JSON.stringify(DEFAULT_MEDIUM_MAP));
+  localStorage.removeItem('sm_medium_map');
+  renderKeywords();
+  showToast('기본값으로 초기화되었습니다');
+}
+
+// ── Source Select 동적 렌더링 ──
+function renderSourceSelect() {
+  const sel = document.getElementById('sourcePreset');
+  const current = sel.value;
+  const sources = Object.keys(SOURCE_MEDIUM_MAP);
+  sel.innerHTML = '<option value="">-- 소스 선택 --</option>' +
+    sources.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('') +
+    '<option value="custom">직접 입력</option>';
+  if (current) sel.value = current;
+}
+
+// ── Campaign 자동완성 ──
+function updateCampaignSuggestions() {
+  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  const campaigns = [...new Set(history.map(h => h.campaign).filter(v => v))];
+  const dl = document.getElementById('campaignSuggestions');
+  dl.innerHTML = campaigns.map(c => `<option value="${escHtml(c)}">`).join('');
+}
+
+// ── Guide Toggle ──
+function toggleGuide() {
+  const body = document.getElementById('guideBody');
+  const icon = document.getElementById('guideToggleIcon');
+  const isCollapsed = body.classList.contains('collapsed');
+  if (isCollapsed) {
+    body.classList.remove('collapsed');
+    body.style.maxHeight = body.scrollHeight + 'px';
+    icon.classList.add('open');
+  } else {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    requestAnimationFrame(() => {
+      body.classList.add('collapsed');
+      icon.classList.remove('open');
+    });
+  }
+}
+
+// ── Tabs ──
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ── Script Copy ──
+function copyScript() {
+  navigator.clipboard.writeText(GAS_CODE).then(() => {
+    showToast('Apps Script 코드가 복사되었습니다!');
+  });
+}
+
+// ── Utils ──
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
