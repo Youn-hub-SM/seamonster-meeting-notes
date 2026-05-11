@@ -12,7 +12,9 @@ import {
   DATE_KIND_LABEL,
   DATE_KIND_COLOR,
   WeekGroup,
+  ProductGroup,
   groupByWeek,
+  groupByProduct,
   formatNumber,
   formatSpec,
   formatWeight,
@@ -487,7 +489,6 @@ function ProductionView({
     () =>
       groupByWeek(active, {
         dateKey: "productionDate",
-        productOpts: { includeStatus: true },
       }),
     [active]
   );
@@ -560,47 +561,18 @@ function ProductionWeekCard({
       </div>
 
       <div className="week-card-body">
-        <div className="week-table-wrap">
-          <table className="week-table">
-            <thead>
-              <tr>
-                <th>품목</th>
-                <th>규격</th>
-                <th className="num">총 중량</th>
-                <th className="num">총 수량</th>
-                <th>상태</th>
-                <th>거래처</th>
-              </tr>
-            </thead>
-            <tbody>
-              {week.productGroups.map((g, i) => (
-                <tr key={`${g.product}__${g.spec}__${g.status}__${i}`}>
-                  <td className="week-table-product">{g.product}</td>
-                  <td>{g.spec ? formatSpec(g.spec) : "-"}</td>
-                  <td className="num">{g.totalWeight ? `${formatNumber(g.totalWeight)}kg` : "-"}</td>
-                  <td className="num">{formatNumber(g.totalQuantity) || "-"}</td>
-                  <td>
-                    {g.status ? (
-                      <span
-                        className="orders-status-pill"
-                        style={{
-                          background: STATUS_COLORS[g.status]?.bg,
-                          color: STATUS_COLORS[g.status]?.fg,
-                        }}
-                        title={g.status}
-                      >
-                        {STATUS_SHORT[g.status] || g.status}
-                      </span>
-                    ) : "-"}
-                  </td>
-                  <td className="week-table-clients">
-                    {g.clients.length > 0 ? g.clients.join(", ") : "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ProductionSubSection
+          title="생산 진행"
+          accent="#0a66c2"
+          orders={week.orders.filter(
+            (o) => o.status === "발주확인/생산대기" || o.status === "생산요청/생산중"
+          )}
+        />
+        <ProductionSubSection
+          title="생산 완료"
+          accent="#22863a"
+          orders={week.orders.filter((o) => o.status === "생산완료/발송대기")}
+        />
 
         <details className="week-orders-toggle">
           <summary>개별 발주 보기 ({week.orders.length}건)</summary>
@@ -631,6 +603,64 @@ function ProductionWeekCard({
         </details>
       </div>
     </section>
+  );
+}
+
+function ProductionSubSection({
+  title,
+  accent,
+  orders,
+}: {
+  title: string;
+  accent: string;
+  orders: Order[];
+}) {
+  const groups = useMemo<ProductGroup[]>(() => groupByProduct(orders), [orders]);
+  if (groups.length === 0) return null;
+
+  const totalWeight = groups.reduce((sum, g) => sum + g.totalWeight, 0);
+  const totalQuantity = groups.reduce((sum, g) => sum + g.totalQuantity, 0);
+
+  return (
+    <div className="prod-sub">
+      <div className="prod-sub-header">
+        <h3 className="prod-sub-title">
+          <span className="prod-sub-dot" style={{ background: accent }} aria-hidden />
+          {title}
+        </h3>
+        <span className="prod-sub-summary">
+          {totalWeight ? `${formatNumber(totalWeight)}kg` : ""}
+          {totalQuantity ? ` · ${formatNumber(totalQuantity)}개` : ""}
+          {` · ${orders.length}건`}
+        </span>
+      </div>
+      <div className="week-table-wrap">
+        <table className="week-table">
+          <thead>
+            <tr>
+              <th>품목</th>
+              <th>규격</th>
+              <th className="num">총 중량</th>
+              <th className="num">총 수량</th>
+              <th>거래처</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr key={`${g.product}__${g.spec}`}>
+                <td className="week-table-product">{g.product}</td>
+                <td>{g.spec ? formatSpec(g.spec) : "-"}</td>
+                <td className="num">{g.totalWeight ? `${formatNumber(g.totalWeight)}kg` : "-"}</td>
+                <td className="num">{formatNumber(g.totalQuantity) || "-"}</td>
+                <td className="week-table-clients">
+                  {g.clients.length > 0 ? g.clients.join(", ") : "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

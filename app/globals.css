@@ -1387,6 +1387,47 @@ a {
   margin: 0 0 4px;
 }
 
+/* 주간 카드 안의 생산 진행/완료 sub-섹션 */
+.prod-sub {
+  margin-bottom: 14px;
+}
+
+.prod-sub:last-of-type {
+  margin-bottom: 0;
+}
+
+.prod-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prod-sub-title {
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sm-dark);
+}
+
+.prod-sub-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.prod-sub-summary {
+  font-size: 12px;
+  color: var(--sm-text-light);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .prod-section {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
