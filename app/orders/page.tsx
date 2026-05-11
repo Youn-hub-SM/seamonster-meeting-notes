@@ -69,8 +69,16 @@ export default function OrdersPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "저장 실패");
+
+      // 로컬 state 직접 업데이트 — 전체 reload 안 함
+      if (modal.mode === "create") {
+        const newOrder: Order = { ...(modal.data as Order), id: data.id };
+        setOrders((prev) => [...prev, newOrder]);
+      } else if (modal.data.id) {
+        const updated: Order = modal.data as Order;
+        setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+      }
       setModal(null);
-      await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장 중 오류");
     }
@@ -80,13 +88,49 @@ export default function OrdersPage() {
   async function handleDelete(id: string) {
     if (!confirm("정말 삭제하시겠어요?")) return;
     setError("");
+
+    // Optimistic: 즉시 UI 에서 제거
+    const snapshot = orders;
+    setOrders((prev) => prev.filter((o) => o.id !== id));
+
     try {
       const res = await fetch(`/api/orders?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "삭제 실패");
-      await reload();
+      if (!res.ok) {
+        setOrders(snapshot); // 롤백
+        throw new Error(data.error || "삭제 실패");
+      }
     } catch (err) {
+      setOrders(snapshot); // 롤백
       setError(err instanceof Error ? err.message : "삭제 중 오류");
+    }
+  }
+
+  // 인라인 상태 변경 — 즉시 UI 업데이트 + 백그라운드로 PUT
+  async function handleStatusChange(orderId: string, newStatus: Order["status"]) {
+    const target = orders.find((o) => o.id === orderId);
+    if (!target || target.status === newStatus) return;
+
+    const updated: Order = { ...target, status: newStatus };
+    const snapshot = orders;
+
+    // Optimistic update
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+
+    try {
+      const res = await fetch("/api/orders", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setOrders(snapshot); // 롤백
+        setError(data.error || "상태 변경 실패");
+      }
+    } catch (err) {
+      setOrders(snapshot); // 롤백
+      setError(err instanceof Error ? err.message : "상태 변경 오류");
     }
   }
 
@@ -98,6 +142,14 @@ export default function OrdersPage() {
           <p className="page-subtitle">발주·생산·발송 일정과 발주목록을 한곳에서 관리합니다.</p>
         </div>
         <div className="orders-header-actions">
+          <button
+            className="btn-secondary"
+            onClick={reload}
+            disabled={loading}
+            title="시트에서 다시 불러오기"
+          >
+            {loading ? "불러오는 중..." : "새로고침"}
+          </button>
           <button className="btn-primary" onClick={() => setModal({ mode: "create", data: { ...EMPTY_ORDER } })}>
             + 새 발주 등록
           </button>
@@ -170,6 +222,7 @@ export default function OrdersPage() {
           orders={filteredOrders}
           onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
           onDelete={handleDelete}
+          onStatusChange={handleStatusChange}
         />
       ) : view === "production" ? (
         <ProductionView
@@ -326,10 +379,12 @@ function ListView({
   orders,
   onEdit,
   onDelete,
+  onStatusChange,
 }: {
   orders: Order[];
   onEdit: (o: Order) => void;
   onDelete: (id: string) => void;
+  onStatusChange: (id: string, status: Order["status"]) => void;
 }) {
   const sorted = useMemo(() => {
     // 발송일 → 생산일 → 발주일 순서 우선, 빈 값은 뒤로
@@ -377,17 +432,21 @@ function ListView({
               <td>{formatSpec(o.spec) || "-"}</td>
               <td>{formatWeight(o.weight) || "-"}</td>
               <td>{o.quantity || "-"}</td>
-              <td>
-                <span
-                  className="orders-status-pill"
+              <td onClick={(e) => e.stopPropagation()}>
+                <select
+                  className="status-select"
+                  value={o.status}
+                  onChange={(e) => onStatusChange(o.id, e.target.value as Order["status"])}
                   style={{
                     background: STATUS_COLORS[o.status]?.bg,
                     color: STATUS_COLORS[o.status]?.fg,
                   }}
                   title={o.status}
                 >
-                  {STATUS_SHORT[o.status] || o.status}
-                </span>
+                  {ORDER_STATUSES.map((s) => (
+                    <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
+                  ))}
+                </select>
               </td>
               <td className="cell-actions">
                 <button

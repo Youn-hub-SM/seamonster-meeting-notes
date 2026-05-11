@@ -1256,6 +1256,40 @@ a {
   white-space: nowrap;
 }
 
+/* 인라인 상태 변경 select — pill 형태 */
+.status-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: none;
+  padding: 3px 22px 3px 10px;
+  border-radius: var(--sm-radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'><path fill='currentColor' d='M0 0l4 6 4-6z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 8px;
+  transition: opacity 0.15s;
+}
+
+.status-select:hover {
+  opacity: 0.85;
+}
+
+.status-select:focus {
+  outline: 2px solid var(--sm-orange);
+  outline-offset: 1px;
+}
+
+.status-select option {
+  background: var(--sm-white);
+  color: var(--sm-black);
+}
+
 /* Modal */
 .modal-backdrop {
   position: fixed;
