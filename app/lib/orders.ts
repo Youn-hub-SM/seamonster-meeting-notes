@@ -132,13 +132,13 @@ export function groupByProduct(
     const candidate = o.shipDate || o.productionDate || o.orderDate || "";
     if (candidate && (!g.nextDate || candidate < g.nextDate)) g.nextDate = candidate;
   }
-  // 품목 → 규격 → 상태 순으로 정렬 (사용자가 표에서 자연스럽게 읽을 수 있도록)
+  // 품목 → 규격 → 상태 순으로 정렬. 시트에서 숫자로 들어올 수 있으니 string으로 강제 변환.
   return Array.from(map.values()).sort((a, b) => {
-    const p = a.product.localeCompare(b.product, "ko");
+    const p = String(a.product ?? "").localeCompare(String(b.product ?? ""), "ko");
     if (p !== 0) return p;
-    const s = a.spec.localeCompare(b.spec, "ko");
+    const s = String(a.spec ?? "").localeCompare(String(b.spec ?? ""), "ko");
     if (s !== 0) return s;
-    return (a.status || "").localeCompare(b.status || "");
+    return String(a.status ?? "").localeCompare(String(b.status ?? ""));
   });
 }
 
