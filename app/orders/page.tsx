@@ -471,11 +471,11 @@ function CalendarView({
                           }}
                           title={`${s.order.client || "-"} · ${s.order.product || "-"} (${s.order.orderDate} → ${s.order.productionDate})`}
                         >
-                          {s.isStart && (
-                            <span className="cal-span-label">
-                              {s.order.product || s.order.client || "발주"}
-                            </span>
-                          )}
+                          <span className="cal-span-label">
+                            {s.isStart
+                              ? `${s.order.client || "거래처 미정"} · ${s.order.product || "품목 미정"}`
+                              : " "}
+                          </span>
                         </button>
                       ) : (
                         <span key={slotIdx} className="cal-span is-empty" aria-hidden />
