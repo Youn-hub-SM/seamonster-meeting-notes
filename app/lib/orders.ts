@@ -61,7 +61,7 @@ export const URGENCY_LABEL: Record<Exclude<Urgency, "normal">, string> = {
   urgent: "임박",
 };
 
-function addDaysISO(iso: string, days: number): string {
+export function addDaysISO(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   if (isNaN(d.getTime())) return iso;
   d.setDate(d.getDate() + days);

@@ -17,6 +17,7 @@ import {
   groupByWeek,
   groupByProduct,
   getUrgency,
+  addDaysISO,
   formatNumber,
   formatSpec,
   formatWeight,
@@ -181,6 +182,12 @@ export default function OrdersPage() {
         </div>
       </div>
 
+      <FocusBanner
+        orders={orders}
+        todayIso={todayIso}
+        onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
+      />
+
       <div className="orders-toolbar">
         <div className="orders-tabs">
           <button
@@ -304,6 +311,166 @@ export default function OrdersPage() {
           }
         />
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 오늘/내일 집중 배너
+// ─────────────────────────────────────────────
+type FocusItem = { order: Order; kinds: DateKind[] };
+
+function FocusBanner({
+  orders,
+  todayIso,
+  onEdit,
+}: {
+  orders: Order[];
+  todayIso: string;
+  onEdit: (o: Order) => void;
+}) {
+  const tomorrowIso = useMemo(() => addDaysISO(todayIso, 1), [todayIso]);
+  const [expanded, setExpanded] = useState(true);
+
+  const buckets = useMemo(() => {
+    const overdue: Order[] = [];
+    const today: FocusItem[] = [];
+    const tomorrow: FocusItem[] = [];
+
+    for (const o of orders) {
+      if (getUrgency(o, todayIso) === "overdue") {
+        overdue.push(o);
+        continue; // 지연이면 오늘/내일에서 제외 (중복 방지)
+      }
+      if (o.status === "발송완료") continue;
+
+      const todayKinds: DateKind[] = [];
+      if (o.orderDate === todayIso) todayKinds.push("order");
+      if (o.productionDate === todayIso) todayKinds.push("production");
+      if (o.shipDate === todayIso) todayKinds.push("ship");
+      if (todayKinds.length > 0) today.push({ order: o, kinds: todayKinds });
+
+      const tomorrowKinds: DateKind[] = [];
+      if (o.orderDate === tomorrowIso) tomorrowKinds.push("order");
+      if (o.productionDate === tomorrowIso) tomorrowKinds.push("production");
+      if (o.shipDate === tomorrowIso) tomorrowKinds.push("ship");
+      if (tomorrowKinds.length > 0) tomorrow.push({ order: o, kinds: tomorrowKinds });
+    }
+
+    return { overdue, today, tomorrow };
+  }, [orders, todayIso, tomorrowIso]);
+
+  const total = buckets.overdue.length + buckets.today.length + buckets.tomorrow.length;
+  if (total === 0) return null;
+
+  return (
+    <section className="focus-banner">
+      <button
+        type="button"
+        className="focus-banner-header"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <div className="focus-pills">
+          {buckets.overdue.length > 0 && (
+            <span className="focus-pill is-overdue">
+              <span className="focus-pill-dot" aria-hidden />지연 {buckets.overdue.length}건
+            </span>
+          )}
+          <span className={`focus-pill ${buckets.today.length > 0 ? "is-today" : "is-zero"}`}>
+            <span className="focus-pill-dot" aria-hidden />오늘 {buckets.today.length}건
+          </span>
+          <span className={`focus-pill ${buckets.tomorrow.length > 0 ? "is-tomorrow" : "is-zero"}`}>
+            <span className="focus-pill-dot" aria-hidden />내일 {buckets.tomorrow.length}건
+          </span>
+        </div>
+        <span className="focus-toggle">{expanded ? "접기 ▲" : "펼치기 ▼"}</span>
+      </button>
+
+      {expanded && (
+        <div className="focus-banner-body">
+          {buckets.overdue.length > 0 && (
+            <FocusGroup
+              title="지연"
+              tone="overdue"
+              items={buckets.overdue.map((o) => ({ order: o, kinds: [] }))}
+              onEdit={onEdit}
+            />
+          )}
+          {buckets.today.length > 0 && (
+            <FocusGroup title="오늘" tone="today" items={buckets.today} onEdit={onEdit} />
+          )}
+          {buckets.tomorrow.length > 0 && (
+            <FocusGroup title="내일" tone="tomorrow" items={buckets.tomorrow} onEdit={onEdit} />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FocusGroup({
+  title,
+  tone,
+  items,
+  onEdit,
+}: {
+  title: string;
+  tone: "overdue" | "today" | "tomorrow";
+  items: FocusItem[];
+  onEdit: (o: Order) => void;
+}) {
+  return (
+    <div className={`focus-group is-${tone}`}>
+      <h3 className="focus-group-title">
+        {title} <span className="focus-group-count">({items.length})</span>
+      </h3>
+      <div className="focus-group-list">
+        {items.map(({ order: o, kinds }) => (
+          <button key={o.id} type="button" className="focus-row" onClick={() => onEdit(o)}>
+            <span className="focus-row-kinds">
+              {kinds.length > 0 ? (
+                kinds.map((k) => (
+                  <span
+                    key={k}
+                    className="focus-row-kind"
+                    style={{ background: DATE_KIND_COLOR[k] }}
+                  >
+                    {DATE_KIND_LABEL[k]}
+                  </span>
+                ))
+              ) : (
+                <span className="focus-row-kind is-overdue-kind">지연</span>
+              )}
+            </span>
+            <span className="focus-row-date">
+              {tone === "overdue"
+                ? o.shipDate || o.productionDate || o.orderDate || "-"
+                : ""}
+            </span>
+            <span className="focus-row-client">
+              {o.client || "거래처 미정"}
+              {o.note && <span className="note-marker" title={o.note}> 📝</span>}
+            </span>
+            <span className="focus-row-product">
+              {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
+            </span>
+            <span className="focus-row-meta">
+              {o.weight ? formatWeight(o.weight) : ""}{o.quantity ? ` × ${o.quantity}` : ""}
+            </span>
+            <span
+              className="orders-status-pill"
+              style={{
+                background: STATUS_COLORS[o.status]?.bg,
+                color: STATUS_COLORS[o.status]?.fg,
+              }}
+              title={o.status}
+            >
+              {STATUS_SHORT[o.status] || o.status}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

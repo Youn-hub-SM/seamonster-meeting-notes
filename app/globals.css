@@ -983,6 +983,210 @@ a {
   flex-wrap: wrap;
 }
 
+/* ─── 오늘/내일 집중 배너 ─── */
+.focus-banner {
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card);
+  box-shadow: var(--sm-shadow-card);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.focus-banner-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  gap: 16px;
+  flex-wrap: wrap;
+  transition: background 0.15s;
+}
+
+.focus-banner-header:hover {
+  background: var(--sm-bg);
+}
+
+.focus-pills {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.focus-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--sm-radius-pill);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.focus-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.focus-pill.is-overdue {
+  background: #fee2e2;
+  color: #b91c1c;
+  animation: urgency-pulse 1.6s ease-in-out infinite;
+}
+.focus-pill.is-overdue .focus-pill-dot { background: #b91c1c; }
+
+.focus-pill.is-today {
+  background: var(--sm-orange-light);
+  color: var(--sm-orange);
+}
+.focus-pill.is-today .focus-pill-dot { background: var(--sm-orange); }
+
+.focus-pill.is-tomorrow {
+  background: #e3f2fd;
+  color: #0a66c2;
+}
+.focus-pill.is-tomorrow .focus-pill-dot { background: #0a66c2; }
+
+.focus-pill.is-zero {
+  background: var(--sm-bg);
+  color: var(--sm-text-light);
+}
+.focus-pill.is-zero .focus-pill-dot { background: var(--sm-border); }
+
+.focus-toggle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sm-text-mid);
+  white-space: nowrap;
+}
+
+.focus-banner-body {
+  border-top: 1px solid var(--sm-border);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.focus-group-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.focus-group.is-overdue .focus-group-title { color: #b91c1c; }
+.focus-group.is-today .focus-group-title { color: var(--sm-orange); }
+.focus-group.is-tomorrow .focus-group-title { color: #0a66c2; }
+
+.focus-group-count {
+  font-weight: 500;
+  color: var(--sm-text-light);
+  font-size: 13px;
+}
+
+.focus-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.focus-row {
+  display: grid;
+  grid-template-columns: auto 80px 1fr 1.5fr 1fr 80px;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--sm-bg);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  align-items: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.focus-row:hover {
+  background: var(--sm-orange-light);
+  border-color: var(--sm-orange-border);
+}
+
+.focus-group.is-overdue .focus-row {
+  background: rgba(220, 38, 38, 0.06);
+  border-color: rgba(220, 38, 38, 0.2);
+}
+.focus-group.is-overdue .focus-row:hover {
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.focus-row-kinds {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.focus-row-kind {
+  color: var(--sm-white);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--sm-radius);
+  white-space: nowrap;
+}
+
+.focus-row-kind.is-overdue-kind {
+  background: #b91c1c;
+}
+
+.focus-row-date {
+  font-variant-numeric: tabular-nums;
+  color: var(--sm-text-mid);
+  font-size: 13px;
+}
+
+.focus-row-client {
+  font-weight: 700;
+  color: var(--sm-black);
+}
+
+.focus-row-product {
+  color: var(--sm-dark);
+}
+
+.focus-row-meta {
+  color: var(--sm-text-mid);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  .focus-row {
+    grid-template-columns: auto 1fr;
+    gap: 6px;
+  }
+  .focus-row-date,
+  .focus-row-meta,
+  .focus-row-product {
+    grid-column: 2;
+    font-size: 12px;
+  }
+  .focus-row .orders-status-pill {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 .orders-tabs {
   display: flex;
   gap: 4px;
