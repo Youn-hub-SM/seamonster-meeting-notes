@@ -878,32 +878,16 @@ function WeekCard({
       </div>
 
       <div className="week-card-body">
-        <div className="week-table-wrap">
-          <table className="week-table">
-            <thead>
-              <tr>
-                <th>품목</th>
-                <th>규격</th>
-                <th className="num">총 중량</th>
-                <th className="num">총 수량</th>
-                <th>거래처</th>
-              </tr>
-            </thead>
-            <tbody>
-              {week.productGroups.map((g) => (
-                <tr key={`${g.product}__${g.spec}`}>
-                  <td className="week-table-product">{g.product}</td>
-                  <td>{g.spec ? formatSpec(g.spec) : "-"}</td>
-                  <td className="num">{g.totalWeight ? `${formatNumber(g.totalWeight)}kg` : "-"}</td>
-                  <td className="num">{formatNumber(g.totalQuantity) || "-"}</td>
-                  <td className="week-table-clients">
-                    {g.clients.length > 0 ? g.clients.join(", ") : "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ProductionSubSection
+          title="발송 예정"
+          accent="#F15A30"
+          orders={week.orders.filter((o) => o.status !== "발송완료")}
+        />
+        <ProductionSubSection
+          title="발송 완료"
+          accent="#22863a"
+          orders={week.orders.filter((o) => o.status === "발송완료")}
+        />
 
         <details className="week-orders-toggle">
           <summary>개별 발주 보기 ({week.orders.length}건)</summary>
