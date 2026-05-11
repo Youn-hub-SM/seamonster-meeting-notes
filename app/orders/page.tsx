@@ -657,22 +657,31 @@ function WeekCard({
       </div>
 
       <div className="week-card-body">
-        <div className="week-products">
-          {week.productGroups.map((g) => (
-            <div key={`${g.product}__${g.spec}`} className="week-product">
-              <div className="week-product-name">
-                {g.product}
-                {g.spec ? <span className="week-product-spec"> · {formatSpec(g.spec)}</span> : null}
-              </div>
-              <div className="week-product-totals">
-                {g.totalWeight ? <span>{formatNumber(g.totalWeight)}kg</span> : null}
-                {g.totalQuantity ? <span>× {formatNumber(g.totalQuantity)}</span> : null}
-              </div>
-              <div className="week-product-clients">
-                {g.clients.length > 0 ? g.clients.join(", ") : "거래처 미정"}
-              </div>
-            </div>
-          ))}
+        <div className="week-table-wrap">
+          <table className="week-table">
+            <thead>
+              <tr>
+                <th>품목</th>
+                <th>규격</th>
+                <th className="num">총 중량</th>
+                <th className="num">총 수량</th>
+                <th>거래처</th>
+              </tr>
+            </thead>
+            <tbody>
+              {week.productGroups.map((g) => (
+                <tr key={`${g.product}__${g.spec}`}>
+                  <td className="week-table-product">{g.product}</td>
+                  <td>{g.spec ? formatSpec(g.spec) : "-"}</td>
+                  <td className="num">{g.totalWeight ? `${formatNumber(g.totalWeight)}kg` : "-"}</td>
+                  <td className="num">{formatNumber(g.totalQuantity) || "-"}</td>
+                  <td className="week-table-clients">
+                    {g.clients.length > 0 ? g.clients.join(", ") : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <details className="week-orders-toggle">

@@ -1692,47 +1692,67 @@ a {
   padding: 16px 20px 20px;
 }
 
-.week-products {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+.week-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
   margin-bottom: 12px;
 }
 
-.week-product {
-  padding: 10px 12px;
-  background: var(--sm-bg);
-  border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.week-product-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--sm-black);
-}
-
-.week-product-spec {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--sm-text-mid);
-}
-
-.week-product-totals {
+.week-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 13px;
+  background: var(--sm-white);
+}
+
+.week-table thead th {
+  background: var(--sm-bg);
+  padding: 8px 12px;
+  text-align: left;
   font-weight: 700;
-  color: var(--sm-orange);
-  display: flex;
-  gap: 8px;
+  color: var(--sm-text-mid);
+  font-size: 12px;
+  border-bottom: 1px solid var(--sm-border);
+  white-space: nowrap;
+}
+
+.week-table thead th.num,
+.week-table tbody td.num {
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.week-product-clients {
-  font-size: 12px;
+.week-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--sm-border);
+  color: var(--sm-dark);
+  vertical-align: top;
+}
+
+.week-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.week-table tbody tr:hover {
+  background: var(--sm-orange-light);
+}
+
+.week-table-product {
+  font-weight: 700;
+  color: var(--sm-black);
+  white-space: nowrap;
+}
+
+.week-table .num {
+  font-weight: 700;
+  color: var(--sm-orange);
+  white-space: nowrap;
+}
+
+.week-table-clients {
   color: var(--sm-text-mid);
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -1843,7 +1863,9 @@ a {
   .week-card-header { flex-direction: column; align-items: stretch; }
   .week-card-totals { gap: 16px; justify-content: space-between; }
   .week-total { align-items: flex-start; }
-  .week-products { grid-template-columns: 1fr; }
+  .week-table { font-size: 12px; }
+  .week-table thead th,
+  .week-table tbody td { padding: 6px 8px; }
   .week-order-row {
     grid-template-columns: 1fr 1fr;
     gap: 4px;
