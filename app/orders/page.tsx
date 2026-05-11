@@ -63,6 +63,14 @@ export default function OrdersPage() {
     [orders]
   );
 
+  const knownProducts = useMemo(
+    () =>
+      Array.from(new Set(orders.map((o) => o.product).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b, "ko")
+      ),
+    [orders]
+  );
+
   async function handleSave() {
     if (!modal) return;
     setSaving(true);
@@ -249,6 +257,7 @@ export default function OrdersPage() {
           data={modal.data}
           saving={saving}
           clientSuggestions={knownClients}
+          productSuggestions={knownProducts}
           onChange={(data) => setModal({ ...modal, data })}
           onSave={handleSave}
           onClose={() => setModal(null)}
@@ -288,6 +297,7 @@ function CalendarView({
     production: true,
     ship: true,
   });
+  const [showProgress, setShowProgress] = useState(true);
 
   function toggleKind(k: DateKind) {
     setVisibleKinds((prev) => ({ ...prev, [k]: !prev[k] }));
@@ -315,6 +325,73 @@ function CalendarView({
     while (result.length % 7 !== 0) result.push({ date: null, iso: "", entries: [] });
     return result;
   }, [cursor, orders, visibleKinds]);
+
+  // 발주일 → 생산일 구간을 주(週) 단위로 슬롯 패킹.
+  // 같은 주 내에서 한 발주는 같은 슬롯에 머물러 가로로 이어지는 Gantt 바처럼 보이게 함.
+  type CellSlot = { order: Order; isStart: boolean; isEnd: boolean } | null;
+  const progressByIso = useMemo<Record<string, CellSlot[]>>(() => {
+    if (!showProgress) return {};
+    const result: Record<string, CellSlot[]> = {};
+    // 7개씩 끊어 주(週) row 단위로 처리
+    for (let i = 0; i < cells.length; i += 7) {
+      const week = cells.slice(i, i + 7).filter((c) => c.iso);
+      if (week.length === 0) continue;
+      const weekFirst = week[0].iso;
+      const weekLast = week[week.length - 1].iso;
+
+      // 발주일·생산일 모두 있고 이번 주와 겹치는 발주만 추출
+      const spans = orders
+        .filter(
+          (o) =>
+            o.orderDate &&
+            o.productionDate &&
+            o.orderDate <= o.productionDate &&
+            o.orderDate <= weekLast &&
+            o.productionDate >= weekFirst
+        )
+        .map((o) => ({
+          order: o,
+          clipStart: o.orderDate < weekFirst ? weekFirst : o.orderDate,
+          clipEnd: o.productionDate > weekLast ? weekLast : o.productionDate,
+        }))
+        .sort(
+          (a, b) =>
+            a.clipStart.localeCompare(b.clipStart) ||
+            a.clipEnd.localeCompare(b.clipEnd) ||
+            a.order.id.localeCompare(b.order.id)
+        );
+
+      // 그리디 슬롯 패킹: 끝난 슬롯을 재사용
+      const slotEnds: string[] = [];
+      const assignments: { span: typeof spans[number]; slot: number }[] = [];
+      for (const span of spans) {
+        let slot = slotEnds.findIndex((end) => end < span.clipStart);
+        if (slot === -1) {
+          slot = slotEnds.length;
+          slotEnds.push(span.clipEnd);
+        } else {
+          slotEnds[slot] = span.clipEnd;
+        }
+        assignments.push({ span, slot });
+      }
+
+      const maxSlots = slotEnds.length;
+      for (const cell of week) {
+        const slots: CellSlot[] = new Array(maxSlots).fill(null);
+        for (const { span, slot } of assignments) {
+          if (cell.iso >= span.clipStart && cell.iso <= span.clipEnd) {
+            slots[slot] = {
+              order: span.order,
+              isStart: cell.iso === span.order.orderDate,
+              isEnd: cell.iso === span.order.productionDate,
+            };
+          }
+        }
+        result[cell.iso] = slots;
+      }
+    }
+    return result;
+  }, [cells, orders, showProgress]);
 
   const todayIso = toISO(new Date());
 
@@ -354,6 +431,16 @@ function CalendarView({
             {DATE_KIND_LABEL[k]}일
           </button>
         ))}
+        <button
+          type="button"
+          className={`cal-legend-item ${showProgress ? "is-active" : "is-inactive"}`}
+          onClick={() => setShowProgress((v) => !v)}
+          aria-pressed={showProgress}
+          title={`발주→생산 진행 바 ${showProgress ? "숨기기" : "보이기"}`}
+        >
+          <span className="cal-legend-bar" />
+          발주→생산 진행
+        </button>
       </div>
 
       <div className="cal-grid">
@@ -370,6 +457,32 @@ function CalendarView({
             {cell.date && (
               <>
                 <div className="cal-date">{cell.date.getDate()}</div>
+                {showProgress && progressByIso[cell.iso] && progressByIso[cell.iso].length > 0 && (
+                  <div className="cal-spans">
+                    {progressByIso[cell.iso].map((s, slotIdx) =>
+                      s ? (
+                        <button
+                          key={slotIdx}
+                          type="button"
+                          className={`cal-span ${s.isStart ? "is-start" : ""} ${s.isEnd ? "is-end" : ""}`}
+                          onClick={() => onEdit(s.order)}
+                          style={{
+                            background: STATUS_COLORS[s.order.status]?.fg,
+                          }}
+                          title={`${s.order.client || "-"} · ${s.order.product || "-"} (${s.order.orderDate} → ${s.order.productionDate})`}
+                        >
+                          {s.isStart && (
+                            <span className="cal-span-label">
+                              {s.order.product || s.order.client || "발주"}
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <span key={slotIdx} className="cal-span is-empty" aria-hidden />
+                      )
+                    )}
+                  </div>
+                )}
                 <div className="cal-entries">
                   {cell.entries.map((e, idx) => (
                     <button
@@ -839,6 +952,7 @@ function OrderModal({
   data,
   saving,
   clientSuggestions = [],
+  productSuggestions = [],
   onChange,
   onSave,
   onClose,
@@ -848,6 +962,7 @@ function OrderModal({
   data: OrderInput;
   saving: boolean;
   clientSuggestions?: string[];
+  productSuggestions?: string[];
   onChange: (d: OrderInput) => void;
   onSave: () => void;
   onClose: () => void;
@@ -920,8 +1035,17 @@ function OrderModal({
               className="orders-input"
               value={data.product}
               onChange={(e) => set("product", e.target.value)}
-              placeholder="예: 대구순살"
+              placeholder={productSuggestions.length > 0 ? "기존 품목은 자동 추천됩니다" : "예: 대구순살"}
+              list="order-product-suggestions"
+              autoComplete="off"
             />
+            {productSuggestions.length > 0 && (
+              <datalist id="order-product-suggestions">
+                {productSuggestions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+            )}
           </Field>
 
           <div className="form-row">

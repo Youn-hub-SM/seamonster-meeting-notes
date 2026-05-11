@@ -1173,6 +1173,69 @@ a {
   border-radius: 50%;
 }
 
+.cal-spans {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* gap(1px)을 가로로 가려서 셀 사이가 끊겨 보이지 않게 함 */
+  margin: 2px -7px 4px;
+}
+
+.cal-span {
+  height: 10px;
+  border: none;
+  padding: 0 4px;
+  background: var(--sm-border);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sm-white);
+  text-align: left;
+  line-height: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  display: block;
+  transition: filter 0.15s, transform 0.15s;
+}
+
+.cal-span:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.cal-span.is-start {
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+  margin-left: 4px;
+}
+
+.cal-span.is-end {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  margin-right: 4px;
+}
+
+.cal-span.is-empty {
+  background: transparent;
+  cursor: default;
+  pointer-events: none;
+}
+
+.cal-span-label {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  display: block;
+}
+
+.cal-legend-bar {
+  display: inline-block;
+  width: 18px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #0a66c2, #22863a);
+}
+
 .cal-entries {
   display: flex;
   flex-direction: column;
