@@ -58,6 +58,11 @@ export default function OrdersPage() {
     return orders.filter((o) => o.status === statusFilter);
   }, [orders, statusFilter]);
 
+  const knownClients = useMemo(
+    () => Array.from(new Set(orders.map((o) => o.client).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko")),
+    [orders]
+  );
+
   async function handleSave() {
     if (!modal) return;
     setSaving(true);
@@ -243,6 +248,7 @@ export default function OrdersPage() {
           mode={modal.mode}
           data={modal.data}
           saving={saving}
+          clientSuggestions={knownClients}
           onChange={(data) => setModal({ ...modal, data })}
           onSave={handleSave}
           onClose={() => setModal(null)}
@@ -832,6 +838,7 @@ function OrderModal({
   mode,
   data,
   saving,
+  clientSuggestions = [],
   onChange,
   onSave,
   onClose,
@@ -840,6 +847,7 @@ function OrderModal({
   mode: "create" | "edit";
   data: OrderInput;
   saving: boolean;
+  clientSuggestions?: string[];
   onChange: (d: OrderInput) => void;
   onSave: () => void;
   onClose: () => void;
@@ -893,8 +901,17 @@ function OrderModal({
               className="orders-input"
               value={data.client}
               onChange={(e) => set("client", e.target.value)}
-              placeholder="예: A마트"
+              placeholder={clientSuggestions.length > 0 ? "기존 거래처는 자동 추천됩니다" : "예: A마트"}
+              list="order-client-suggestions"
+              autoComplete="off"
             />
+            {clientSuggestions.length > 0 && (
+              <datalist id="order-client-suggestions">
+                {clientSuggestions.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            )}
           </Field>
 
           <Field label="생산품목">
