@@ -144,7 +144,7 @@ function _orderToRow(o) {
     o.spec || '',
     o.weight || '',
     o.quantity || '',
-    o.status || '대기',
+    o.status || '발주확인/생산대기',
   ];
 }
 

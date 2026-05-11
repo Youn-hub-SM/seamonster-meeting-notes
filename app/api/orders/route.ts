@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { Order, OrderInput } from "@/app/lib/orders";
+import { migrateStatus } from "@/app/lib/orders";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,11 @@ export async function GET() {
     if (!data.ok) {
       return NextResponse.json({ error: data.error || "조회 실패" }, { status: 500 });
     }
-    return NextResponse.json({ orders: data.orders ?? [] });
+    const orders = (data.orders ?? []).map((o) => ({
+      ...o,
+      status: migrateStatus(o.status),
+    }));
+    return NextResponse.json({ orders });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "조회 중 오류" },

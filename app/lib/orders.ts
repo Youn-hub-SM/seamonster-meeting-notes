@@ -1,5 +1,26 @@
-export const ORDER_STATUSES = ["대기", "생산중", "생산완료", "발송완료", "취소"] as const;
+export const ORDER_STATUSES = [
+  "발주확인/생산대기",
+  "생산요청/생산중",
+  "생산완료/발송대기",
+  "발송완료",
+] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+// 옛 상태값 → 새 상태값 매핑 (시트에 남아 있는 과거 데이터 호환)
+const STATUS_MIGRATION: Record<string, OrderStatus> = {
+  "대기": "발주확인/생산대기",
+  "생산중": "생산요청/생산중",
+  "생산완료": "생산완료/발송대기",
+  "발송완료": "발송완료",
+  "취소": "발주확인/생산대기", // 취소는 더 이상 없음 → 기본값으로 마이그레이션
+};
+
+export function migrateStatus(raw: string | number | undefined | null): OrderStatus {
+  const s = raw === null || raw === undefined ? "" : String(raw).trim();
+  if ((ORDER_STATUSES as readonly string[]).includes(s)) return s as OrderStatus;
+  if (STATUS_MIGRATION[s]) return STATUS_MIGRATION[s];
+  return "발주확인/생산대기";
+}
 
 export interface Order {
   id: string;
@@ -25,15 +46,22 @@ export const EMPTY_ORDER: OrderInput = {
   spec: "",
   weight: "",
   quantity: "",
-  status: "대기",
+  status: "발주확인/생산대기",
 };
 
 export const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
-  "대기":     { bg: "#fff8e1", fg: "#b08800" },
-  "생산중":   { bg: "#e3f2fd", fg: "#0a66c2" },
-  "생산완료": { bg: "#e6ffed", fg: "#22863a" },
-  "발송완료": { bg: "#ede7f6", fg: "#5e35b1" },
-  "취소":     { bg: "#ffeef0", fg: "#cb2431" },
+  "발주확인/생산대기": { bg: "#fff8e1", fg: "#b08800" },
+  "생산요청/생산중":   { bg: "#e3f2fd", fg: "#0a66c2" },
+  "생산완료/발송대기": { bg: "#e6ffed", fg: "#22863a" },
+  "발송완료":          { bg: "#ede7f6", fg: "#5e35b1" },
+};
+
+// 표/pill 등 좁은 공간에서 사용할 짧은 라벨
+export const STATUS_SHORT: Record<OrderStatus, string> = {
+  "발주확인/생산대기": "생산대기",
+  "생산요청/생산중":   "생산중",
+  "생산완료/발송대기": "발송대기",
+  "발송완료":          "발송완료",
 };
 
 // 캘린더 셀에 표시할 날짜 타입(어떤 컬럼에 해당하는 날짜인지)

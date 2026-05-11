@@ -7,6 +7,7 @@ import {
   ORDER_STATUSES,
   EMPTY_ORDER,
   STATUS_COLORS,
+  STATUS_SHORT,
   DateKind,
   DATE_KIND_LABEL,
   DATE_KIND_COLOR,
@@ -383,8 +384,9 @@ function ListView({
                     background: STATUS_COLORS[o.status]?.bg,
                     color: STATUS_COLORS[o.status]?.fg,
                   }}
+                  title={o.status}
                 >
-                  {o.status}
+                  {STATUS_SHORT[o.status] || o.status}
                 </span>
               </td>
               <td className="cell-actions">
@@ -416,9 +418,9 @@ function ProductionView({
   orders: Order[];
   onEdit: (o: Order) => void;
 }) {
-  // 대기 + 생산중 만 (발송완료/생산완료/취소 제외)
+  // 발송완료를 제외한 진행 중인 발주만 표시
   const active = useMemo(
-    () => orders.filter((o) => o.status === "대기" || o.status === "생산중"),
+    () => orders.filter((o) => o.status !== "발송완료"),
     [orders]
   );
 
@@ -526,8 +528,9 @@ function ProductionWeekCard({
                           background: STATUS_COLORS[g.status]?.bg,
                           color: STATUS_COLORS[g.status]?.fg,
                         }}
+                        title={g.status}
                       >
-                        {g.status}
+                        {STATUS_SHORT[g.status] || g.status}
                       </span>
                     ) : "-"}
                   </td>
@@ -559,8 +562,9 @@ function ProductionWeekCard({
                     background: STATUS_COLORS[o.status]?.bg,
                     color: STATUS_COLORS[o.status]?.fg,
                   }}
+                  title={o.status}
                 >
-                  {o.status}
+                  {STATUS_SHORT[o.status] || o.status}
                 </span>
               </button>
             ))}
@@ -695,8 +699,9 @@ function WeekCard({
                     background: STATUS_COLORS[o.status]?.bg,
                     color: STATUS_COLORS[o.status]?.fg,
                   }}
+                  title={o.status}
                 >
-                  {o.status}
+                  {STATUS_SHORT[o.status] || o.status}
                 </span>
               </button>
             ))}
