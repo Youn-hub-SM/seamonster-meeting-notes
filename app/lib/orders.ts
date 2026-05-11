@@ -67,12 +67,22 @@ export interface ProductGroup {
   orders: Order[];
   // 카드에 표시할 "다음" 일정: 발송일이 비면 생산일, 그것도 비면 발주일
   nextDate: string;
+  status?: OrderStatus; // includeStatus=true 일 때만 채워짐
 }
 
-export function groupByProduct(orders: Order[]): ProductGroup[] {
+export interface GroupByProductOptions {
+  includeStatus?: boolean; // 키에 상태 포함 → 같은 품목+규격이라도 상태 다르면 별도 묶음
+}
+
+export function groupByProduct(
+  orders: Order[],
+  opts: GroupByProductOptions = {}
+): ProductGroup[] {
   const map = new Map<string, ProductGroup>();
   for (const o of orders) {
-    const key = `${o.product}__${o.spec}`;
+    const key = opts.includeStatus
+      ? `${o.product}__${o.spec}__${o.status}`
+      : `${o.product}__${o.spec}`;
     let g = map.get(key);
     if (!g) {
       g = {
@@ -83,6 +93,7 @@ export function groupByProduct(orders: Order[]): ProductGroup[] {
         clients: [],
         orders: [],
         nextDate: "",
+        status: opts.includeStatus ? o.status : undefined,
       };
       map.set(key, g);
     }
@@ -93,11 +104,13 @@ export function groupByProduct(orders: Order[]): ProductGroup[] {
     const candidate = o.shipDate || o.productionDate || o.orderDate || "";
     if (candidate && (!g.nextDate || candidate < g.nextDate)) g.nextDate = candidate;
   }
-  // 다음 일정이 빠른 순으로 정렬, 일정 비어 있으면 뒤로
+  // 품목 → 규격 → 상태 순으로 정렬 (사용자가 표에서 자연스럽게 읽을 수 있도록)
   return Array.from(map.values()).sort((a, b) => {
-    const ka = a.nextDate || "9999";
-    const kb = b.nextDate || "9999";
-    return ka.localeCompare(kb);
+    const p = a.product.localeCompare(b.product, "ko");
+    if (p !== 0) return p;
+    const s = a.spec.localeCompare(b.spec, "ko");
+    if (s !== 0) return s;
+    return (a.status || "").localeCompare(b.status || "");
   });
 }
 
@@ -162,11 +175,22 @@ function formatKoreanRange(monday: Date, sunday: Date): string {
   return `${m1}월 ${d1}일(월) ~ ${m2}월 ${d2}일(일)`;
 }
 
-// 발송일 기준 주차별로 그룹. 발송일 비면 "발송일 미정" 그룹(weekStart="").
-export function groupByWeek(orders: Order[]): WeekGroup[] {
+export interface GroupByWeekOptions {
+  dateKey?: "shipDate" | "productionDate"; // 기본: shipDate
+  productOpts?: GroupByProductOptions;
+}
+
+// 주차별로 그룹. 기준일이 비어 있으면 "<기준>일 미정" 그룹(weekStart="").
+export function groupByWeek(
+  orders: Order[],
+  opts: GroupByWeekOptions = {}
+): WeekGroup[] {
+  const dateKey = opts.dateKey || "shipDate";
+  const unscheduledLabel = dateKey === "productionDate" ? "생산일 미정" : "발송일 미정";
+
   const buckets = new Map<string, Order[]>();
   for (const o of orders) {
-    const monday = getMondayOf(o.shipDate);
+    const monday = getMondayOf(o[dateKey]);
     const key = monday ? toISODate(monday) : "";
     const arr = buckets.get(key) || [];
     arr.push(o);
@@ -178,7 +202,7 @@ export function groupByWeek(orders: Order[]): WeekGroup[] {
     let label: string;
     let weekEnd: string;
     if (key === "") {
-      label = "발송일 미정";
+      label = unscheduledLabel;
       weekEnd = "";
     } else {
       const monday = new Date(key + "T00:00:00");
@@ -204,12 +228,11 @@ export function groupByWeek(orders: Order[]): WeekGroup[] {
       totalWeight,
       totalQuantity,
       clients: Array.from(clientsSet),
-      productGroups: groupByProduct(list),
+      productGroups: groupByProduct(list, opts.productOpts),
       orders: list,
     });
   }
 
-  // 빠른 주차부터, 발송일 미정은 맨 뒤
   result.sort((a, b) => {
     if (a.weekStart === "" && b.weekStart === "") return 0;
     if (a.weekStart === "") return 1;

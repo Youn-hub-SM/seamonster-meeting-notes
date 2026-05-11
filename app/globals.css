@@ -1344,7 +1344,13 @@ a {
 .prod-wrap {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 16px;
+}
+
+.prod-help {
+  font-size: 13px;
+  color: var(--sm-text-mid);
+  margin: 0 0 4px;
 }
 
 .prod-section {

@@ -4,16 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Order,
   OrderInput,
-  OrderStatus,
   ORDER_STATUSES,
   EMPTY_ORDER,
   STATUS_COLORS,
   DateKind,
   DATE_KIND_LABEL,
   DATE_KIND_COLOR,
-  ProductGroup,
   WeekGroup,
-  groupByProduct,
   groupByWeek,
   formatNumber,
   formatSpec,
@@ -410,7 +407,7 @@ function ListView({
 }
 
 // ─────────────────────────────────────────────
-// 생산 현황 뷰 (계획 중 + 생산 중)
+// 생산 현황 뷰 (생산일 기준 주간별 표 형식)
 // ─────────────────────────────────────────────
 function ProductionView({
   orders,
@@ -419,10 +416,31 @@ function ProductionView({
   orders: Order[];
   onEdit: (o: Order) => void;
 }) {
-  const planning = useMemo(() => orders.filter((o) => o.status === "대기"), [orders]);
-  const inProgress = useMemo(() => orders.filter((o) => o.status === "생산중"), [orders]);
+  // 대기 + 생산중 만 (발송완료/생산완료/취소 제외)
+  const active = useMemo(
+    () => orders.filter((o) => o.status === "대기" || o.status === "생산중"),
+    [orders]
+  );
 
-  if (planning.length === 0 && inProgress.length === 0) {
+  const weeks = useMemo(
+    () =>
+      groupByWeek(active, {
+        dateKey: "productionDate",
+        productOpts: { includeStatus: true },
+      }),
+    [active]
+  );
+
+  const todayMonday = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const m = new Date(d);
+    m.setDate(d.getDate() + diff);
+    return toISOForView(m);
+  }, []);
+
+  if (active.length === 0) {
     return (
       <div className="empty-state">
         <div className="empty-state-icon">🏭</div>
@@ -433,149 +451,123 @@ function ProductionView({
 
   return (
     <div className="prod-wrap">
-      <ProductionSection
-        title="계획 중"
-        status="대기"
-        orders={planning}
-        onEdit={onEdit}
-        emptyText="계획 중인 발주가 없습니다."
-      />
-      <ProductionSection
-        title="생산 중"
-        status="생산중"
-        orders={inProgress}
-        onEdit={onEdit}
-        emptyText="생산 중인 발주가 없습니다."
-      />
+      <p className="prod-help">생산일 기준 · 대기/생산중인 발주만 표시됩니다.</p>
+      {weeks.map((w) => (
+        <ProductionWeekCard
+          key={w.weekStart || "unscheduled"}
+          week={w}
+          isCurrent={w.weekStart === todayMonday}
+          onEdit={onEdit}
+        />
+      ))}
     </div>
   );
 }
 
-function ProductionSection({
-  title,
-  status,
-  orders,
+function ProductionWeekCard({
+  week,
+  isCurrent,
   onEdit,
-  emptyText,
 }: {
-  title: string;
-  status: OrderStatus;
-  orders: Order[];
+  week: WeekGroup;
+  isCurrent: boolean;
   onEdit: (o: Order) => void;
-  emptyText: string;
 }) {
-  const groups = useMemo(() => groupByProduct(orders), [orders]);
-  const accent = STATUS_COLORS[status];
-
   return (
-    <section className="prod-section">
-      <div className="prod-section-header">
-        <h2 className="prod-section-title">
-          <span
-            className="prod-section-dot"
-            style={{ background: accent.fg }}
-            aria-hidden
-          />
-          {title}
-        </h2>
-        <span className="prod-section-count">발주 {orders.length}건 · 품목 {groups.length}종</span>
+    <section className={`week-card ${isCurrent ? "is-current" : ""} ${!week.weekStart ? "is-unscheduled" : ""}`}>
+      <div className="week-card-header">
+        <div className="week-card-title-block">
+          <h2 className="week-card-title">{week.label}</h2>
+          {isCurrent && <span className="week-card-badge">이번 주</span>}
+        </div>
+        <div className="week-card-totals">
+          <div className="week-total">
+            <span className="week-total-label">발주</span>
+            <span className="week-total-value">{week.orders.length}건</span>
+          </div>
+          <div className="week-total">
+            <span className="week-total-label">총 중량</span>
+            <span className="week-total-value week-total-weight">
+              {week.totalWeight ? `${formatNumber(week.totalWeight)}kg` : "-"}
+            </span>
+          </div>
+          <div className="week-total">
+            <span className="week-total-label">총 수량</span>
+            <span className="week-total-value">{formatNumber(week.totalQuantity) || "-"}</span>
+          </div>
+        </div>
       </div>
 
-      {orders.length === 0 ? (
-        <div className="prod-empty">{emptyText}</div>
-      ) : (
-        <>
-          <div className="prod-grid">
-            {groups.map((g) => (
-              <ProductGroupCard key={`${g.product}__${g.spec}`} group={g} onEdit={onEdit} />
+      <div className="week-card-body">
+        <div className="week-table-wrap">
+          <table className="week-table">
+            <thead>
+              <tr>
+                <th>품목</th>
+                <th>규격</th>
+                <th className="num">총 중량</th>
+                <th className="num">총 수량</th>
+                <th>상태</th>
+                <th>거래처</th>
+              </tr>
+            </thead>
+            <tbody>
+              {week.productGroups.map((g, i) => (
+                <tr key={`${g.product}__${g.spec}__${g.status}__${i}`}>
+                  <td className="week-table-product">{g.product}</td>
+                  <td>{g.spec ? formatSpec(g.spec) : "-"}</td>
+                  <td className="num">{g.totalWeight ? `${formatNumber(g.totalWeight)}kg` : "-"}</td>
+                  <td className="num">{formatNumber(g.totalQuantity) || "-"}</td>
+                  <td>
+                    {g.status ? (
+                      <span
+                        className="orders-status-pill"
+                        style={{
+                          background: STATUS_COLORS[g.status]?.bg,
+                          color: STATUS_COLORS[g.status]?.fg,
+                        }}
+                      >
+                        {g.status}
+                      </span>
+                    ) : "-"}
+                  </td>
+                  <td className="week-table-clients">
+                    {g.clients.length > 0 ? g.clients.join(", ") : "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <details className="week-orders-toggle">
+          <summary>개별 발주 보기 ({week.orders.length}건)</summary>
+          <div className="week-orders-list">
+            {week.orders.map((o) => (
+              <button key={o.id} className="week-order-row" onClick={() => onEdit(o)}>
+                <span className="week-order-date">{o.productionDate || "-"}</span>
+                <span className="week-order-client">{o.client || "거래처 미정"}</span>
+                <span className="week-order-product">
+                  {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
+                </span>
+                <span className="week-order-meta">
+                  {o.weight ? formatWeight(o.weight) : ""}{o.quantity ? ` × ${o.quantity}` : ""}
+                </span>
+                <span
+                  className="orders-status-pill"
+                  style={{
+                    background: STATUS_COLORS[o.status]?.bg,
+                    color: STATUS_COLORS[o.status]?.fg,
+                  }}
+                >
+                  {o.status}
+                </span>
+              </button>
             ))}
           </div>
-
-          <details className="prod-orders-toggle">
-            <summary>개별 발주 보기 ({orders.length}건)</summary>
-            <div className="prod-orders-list">
-              {orders.map((o) => (
-                <button
-                  key={o.id}
-                  className="prod-order-row"
-                  onClick={() => onEdit(o)}
-                >
-                  <span className="prod-order-client">{o.client || "거래처 미정"}</span>
-                  <span className="prod-order-product">
-                    {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
-                  </span>
-                  <span className="prod-order-meta">
-                    {o.weight ? <span>중량 {formatWeight(o.weight)}</span> : null}
-                    {o.quantity ? <span>수량 {o.quantity}</span> : null}
-                  </span>
-                  <span className="prod-order-date">
-                    {o.shipDate ? `발송 ${o.shipDate}` : o.productionDate ? `생산 ${o.productionDate}` : o.orderDate ? `발주 ${o.orderDate}` : "-"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </details>
-        </>
-      )}
+        </details>
+      </div>
     </section>
-  );
-}
-
-function ProductGroupCard({
-  group,
-  onEdit,
-}: {
-  group: ProductGroup;
-  onEdit: (o: Order) => void;
-}) {
-  return (
-    <div className="prod-card">
-      <div className="prod-card-header">
-        <div className="prod-card-product">{group.product}</div>
-        {group.spec ? <div className="prod-card-spec">{formatSpec(group.spec)}</div> : null}
-      </div>
-
-      <div className="prod-card-stats">
-        <div className="prod-card-stat">
-          <span className="prod-card-stat-label">총 중량</span>
-          <span className="prod-card-stat-value">
-            {group.totalWeight ? `${formatNumber(group.totalWeight)}kg` : "-"}
-          </span>
-        </div>
-        <div className="prod-card-stat">
-          <span className="prod-card-stat-label">총 수량</span>
-          <span className="prod-card-stat-value">{formatNumber(group.totalQuantity) || "-"}</span>
-        </div>
-      </div>
-
-      <div className="prod-card-meta">
-        <div className="prod-card-meta-row">
-          <span className="prod-card-meta-label">거래처</span>
-          <span className="prod-card-meta-value">
-            {group.clients.length > 0 ? group.clients.join(", ") : "-"}
-          </span>
-        </div>
-        <div className="prod-card-meta-row">
-          <span className="prod-card-meta-label">다음 일정</span>
-          <span className="prod-card-meta-value">{group.nextDate || "-"}</span>
-        </div>
-      </div>
-
-      <div className="prod-card-orders">
-        {group.orders.map((o) => (
-          <button
-            key={o.id}
-            className="prod-card-order"
-            onClick={() => onEdit(o)}
-            title="수정"
-          >
-            {o.client || "거래처 미정"}
-            {o.weight ? ` · ${formatWeight(o.weight)}` : ""}
-            {o.quantity ? ` × ${o.quantity}` : ""}
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 
