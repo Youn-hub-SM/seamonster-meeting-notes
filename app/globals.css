@@ -1072,16 +1072,49 @@ a {
 .cal-legend {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--sm-text-mid);
+  flex-wrap: wrap;
+}
+
+.cal-legend-hint {
+  color: var(--sm-text-light);
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 4px;
 }
 
 .cal-legend-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-pill);
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--sm-text-mid);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.cal-legend-item:hover {
+  background: var(--sm-bg);
+  border-color: var(--sm-orange-border);
+}
+
+.cal-legend-item.is-active {
+  background: var(--sm-bg);
+}
+
+.cal-legend-item.is-inactive {
+  opacity: 0.4;
+  text-decoration: line-through;
 }
 
 .cal-legend-dot {

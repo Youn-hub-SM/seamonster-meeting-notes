@@ -277,6 +277,15 @@ function CalendarView({
   onEdit: (o: Order) => void;
 }) {
   const monthLabel = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
+  const [visibleKinds, setVisibleKinds] = useState<Record<DateKind, boolean>>({
+    order: true,
+    production: true,
+    ship: true,
+  });
+
+  function toggleKind(k: DateKind) {
+    setVisibleKinds((prev) => ({ ...prev, [k]: !prev[k] }));
+  }
 
   const cells = useMemo(() => {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -290,16 +299,16 @@ function CalendarView({
       const iso = toISO(date);
       const entries: { kind: DateKind; order: Order }[] = [];
       for (const o of orders) {
-        if (o.orderDate === iso) entries.push({ kind: "order", order: o });
-        if (o.productionDate === iso) entries.push({ kind: "production", order: o });
-        if (o.shipDate === iso) entries.push({ kind: "ship", order: o });
+        if (visibleKinds.order && o.orderDate === iso) entries.push({ kind: "order", order: o });
+        if (visibleKinds.production && o.productionDate === iso) entries.push({ kind: "production", order: o });
+        if (visibleKinds.ship && o.shipDate === iso) entries.push({ kind: "ship", order: o });
       }
       result.push({ date, iso, entries });
     }
     // 마지막 주 빈 셀
     while (result.length % 7 !== 0) result.push({ date: null, iso: "", entries: [] });
     return result;
-  }, [cursor, orders]);
+  }, [cursor, orders, visibleKinds]);
 
   const todayIso = toISO(new Date());
 
@@ -325,11 +334,19 @@ function CalendarView({
       </div>
 
       <div className="cal-legend">
+        <span className="cal-legend-hint">표시:</span>
         {(Object.keys(DATE_KIND_LABEL) as DateKind[]).map((k) => (
-          <span key={k} className="cal-legend-item">
+          <button
+            key={k}
+            type="button"
+            className={`cal-legend-item ${visibleKinds[k] ? "is-active" : "is-inactive"}`}
+            onClick={() => toggleKind(k)}
+            aria-pressed={visibleKinds[k]}
+            title={`${DATE_KIND_LABEL[k]}일 ${visibleKinds[k] ? "숨기기" : "보이기"}`}
+          >
             <span className="cal-legend-dot" style={{ background: DATE_KIND_COLOR[k] }} />
             {DATE_KIND_LABEL[k]}일
-          </span>
+          </button>
         ))}
       </div>
 
