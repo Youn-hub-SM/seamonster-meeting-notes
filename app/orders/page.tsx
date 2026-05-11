@@ -13,8 +13,10 @@ import {
   DATE_KIND_COLOR,
   WeekGroup,
   ProductGroup,
+  URGENCY_LABEL,
   groupByWeek,
   groupByProduct,
+  getUrgency,
   formatNumber,
   formatSpec,
   formatWeight,
@@ -34,6 +36,14 @@ export default function OrdersPage() {
   const [modal, setModal] = useState<{ mode: "create" | "edit"; data: OrderInput } | null>(null);
   const [saving, setSaving] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"전체" | (typeof ORDER_STATUSES)[number]>("전체");
+
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
 
   async function reload() {
     setLoading(true);
@@ -231,6 +241,7 @@ export default function OrdersPage() {
           cursor={cursor}
           setCursor={setCursor}
           onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
+          todayIso={todayIso}
         />
       ) : view === "list" ? (
         <ListView
@@ -238,16 +249,19 @@ export default function OrdersPage() {
           onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
           onDelete={handleDelete}
           onStatusChange={handleStatusChange}
+          todayIso={todayIso}
         />
       ) : view === "production" ? (
         <ProductionView
           orders={orders}
           onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
+          todayIso={todayIso}
         />
       ) : (
         <WeeklyView
           orders={filteredOrders}
           onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
+          todayIso={todayIso}
         />
       )}
 
@@ -271,6 +285,23 @@ export default function OrdersPage() {
                 }
               : undefined
           }
+          onClone={
+            modal.mode === "edit"
+              ? () => {
+                  setModal({
+                    mode: "create",
+                    data: {
+                      ...modal.data,
+                      id: undefined,
+                      orderDate: "",
+                      productionDate: "",
+                      shipDate: "",
+                      status: "발주확인/생산대기",
+                    },
+                  });
+                }
+              : undefined
+          }
         />
       )}
     </div>
@@ -285,11 +316,13 @@ function CalendarView({
   cursor,
   setCursor,
   onEdit,
+  todayIso,
 }: {
   orders: Order[];
   cursor: Date;
   setCursor: (d: Date) => void;
   onEdit: (o: Order) => void;
+  todayIso: string;
 }) {
   const monthLabel = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
   const [visibleKinds, setVisibleKinds] = useState<Record<DateKind, boolean>>({
@@ -393,8 +426,6 @@ function CalendarView({
     return result;
   }, [cells, orders, showProgress]);
 
-  const todayIso = toISO(new Date());
-
   return (
     <div>
       <div className="cal-nav">
@@ -484,22 +515,28 @@ function CalendarView({
                   </div>
                 )}
                 <div className="cal-entries">
-                  {cell.entries.map((e, idx) => (
-                    <button
-                      key={`${e.order.id}-${e.kind}-${idx}`}
-                      className="cal-entry"
-                      onClick={() => onEdit(e.order)}
-                      style={{ borderLeftColor: DATE_KIND_COLOR[e.kind] }}
-                      title={`${DATE_KIND_LABEL[e.kind]}일 · ${e.order.client} · ${e.order.product}`}
-                    >
-                      <span className="cal-entry-kind" style={{ color: DATE_KIND_COLOR[e.kind] }}>
-                        {DATE_KIND_LABEL[e.kind]}
-                      </span>
-                      <span className="cal-entry-text">
-                        {e.order.client || "-"} · {e.order.product || "-"}
-                      </span>
-                    </button>
-                  ))}
+                  {cell.entries.map((e, idx) => {
+                    const urgency = getUrgency(e.order, todayIso);
+                    return (
+                      <button
+                        key={`${e.order.id}-${e.kind}-${idx}`}
+                        className={`cal-entry ${urgency !== "normal" ? `is-${urgency}` : ""}`}
+                        onClick={() => onEdit(e.order)}
+                        style={{ borderLeftColor: DATE_KIND_COLOR[e.kind] }}
+                        title={`${DATE_KIND_LABEL[e.kind]}일 · ${e.order.client} · ${e.order.product}${
+                          urgency !== "normal" ? ` · ${URGENCY_LABEL[urgency]}` : ""
+                        }${e.order.note ? `\n📝 ${e.order.note}` : ""}`}
+                      >
+                        <span className="cal-entry-kind" style={{ color: DATE_KIND_COLOR[e.kind] }}>
+                          {DATE_KIND_LABEL[e.kind]}
+                        </span>
+                        <span className="cal-entry-text">
+                          {e.order.client || "-"} · {e.order.product || "-"}
+                        </span>
+                        {e.order.note && <span className="cal-entry-note" aria-label="메모 있음">📝</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -518,11 +555,13 @@ function ListView({
   onEdit,
   onDelete,
   onStatusChange,
+  todayIso,
 }: {
   orders: Order[];
   onEdit: (o: Order) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: Order["status"]) => void;
+  todayIso: string;
 }) {
   const sorted = useMemo(() => {
     // 발송일 → 생산일 → 발주일 순서 우선, 빈 값은 뒤로
@@ -547,6 +586,7 @@ function ListView({
       <table className="orders-table">
         <thead>
           <tr>
+            <th></th>
             <th>발주일</th>
             <th>생산일</th>
             <th>발송일</th>
@@ -560,45 +600,62 @@ function ListView({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((o) => (
-            <tr key={o.id} onClick={() => onEdit(o)}>
-              <td className="cell-date">{o.orderDate || "-"}</td>
-              <td className="cell-date">{o.productionDate || "-"}</td>
-              <td className="cell-date">{o.shipDate || "-"}</td>
-              <td>{o.client || "-"}</td>
-              <td>{o.product || "-"}</td>
-              <td>{formatSpec(o.spec) || "-"}</td>
-              <td>{formatWeight(o.weight) || "-"}</td>
-              <td>{o.quantity || "-"}</td>
-              <td onClick={(e) => e.stopPropagation()}>
-                <select
-                  className="status-select"
-                  value={o.status}
-                  onChange={(e) => onStatusChange(o.id, e.target.value as Order["status"])}
-                  style={{
-                    background: STATUS_COLORS[o.status]?.bg,
-                    color: STATUS_COLORS[o.status]?.fg,
-                  }}
-                  title={o.status}
-                >
-                  {ORDER_STATUSES.map((s) => (
-                    <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
-                  ))}
-                </select>
-              </td>
-              <td className="cell-actions">
-                <button
-                  className="link-danger"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(o.id);
-                  }}
-                >
-                  삭제
-                </button>
-              </td>
-            </tr>
-          ))}
+          {sorted.map((o) => {
+            const urgency = getUrgency(o, todayIso);
+            return (
+              <tr
+                key={o.id}
+                onClick={() => onEdit(o)}
+                className={urgency !== "normal" ? `is-${urgency}` : ""}
+              >
+                <td className="cell-flag">
+                  {urgency !== "normal" && (
+                    <span className={`urgency-pill is-${urgency}`} title={URGENCY_LABEL[urgency]}>
+                      {URGENCY_LABEL[urgency]}
+                    </span>
+                  )}
+                </td>
+                <td className="cell-date">{o.orderDate || "-"}</td>
+                <td className="cell-date">{o.productionDate || "-"}</td>
+                <td className="cell-date">{o.shipDate || "-"}</td>
+                <td>{o.client || "-"}</td>
+                <td>
+                  {o.product || "-"}
+                  {o.note && <span className="note-marker" title={o.note}> 📝</span>}
+                </td>
+                <td>{formatSpec(o.spec) || "-"}</td>
+                <td>{formatWeight(o.weight) || "-"}</td>
+                <td>{o.quantity || "-"}</td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <select
+                    className="status-select"
+                    value={o.status}
+                    onChange={(e) => onStatusChange(o.id, e.target.value as Order["status"])}
+                    style={{
+                      background: STATUS_COLORS[o.status]?.bg,
+                      color: STATUS_COLORS[o.status]?.fg,
+                    }}
+                    title={o.status}
+                  >
+                    {ORDER_STATUSES.map((s) => (
+                      <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="cell-actions">
+                  <button
+                    className="link-danger"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(o.id);
+                    }}
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -611,9 +668,11 @@ function ListView({
 function ProductionView({
   orders,
   onEdit,
+  todayIso,
 }: {
   orders: Order[];
   onEdit: (o: Order) => void;
+  todayIso: string;
 }) {
   // 발송완료를 제외한 진행 중인 발주만 표시
   const active = useMemo(
@@ -656,6 +715,7 @@ function ProductionView({
           week={w}
           isCurrent={w.weekStart === todayMonday}
           onEdit={onEdit}
+          todayIso={todayIso}
         />
       ))}
     </div>
@@ -666,10 +726,12 @@ function ProductionWeekCard({
   week,
   isCurrent,
   onEdit,
+  todayIso,
 }: {
   week: WeekGroup;
   isCurrent: boolean;
   onEdit: (o: Order) => void;
+  todayIso: string;
 }) {
   return (
     <section className={`week-card ${isCurrent ? "is-current" : ""} ${!week.weekStart ? "is-unscheduled" : ""}`}>
@@ -713,28 +775,38 @@ function ProductionWeekCard({
         <details className="week-orders-toggle">
           <summary>개별 발주 보기 ({week.orders.length}건)</summary>
           <div className="week-orders-list">
-            {week.orders.map((o) => (
-              <button key={o.id} className="week-order-row" onClick={() => onEdit(o)}>
-                <span className="week-order-date">{o.productionDate || "-"}</span>
-                <span className="week-order-client">{o.client || "거래처 미정"}</span>
-                <span className="week-order-product">
-                  {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
-                </span>
-                <span className="week-order-meta">
-                  {o.weight ? formatWeight(o.weight) : ""}{o.quantity ? ` × ${o.quantity}` : ""}
-                </span>
-                <span
-                  className="orders-status-pill"
-                  style={{
-                    background: STATUS_COLORS[o.status]?.bg,
-                    color: STATUS_COLORS[o.status]?.fg,
-                  }}
-                  title={o.status}
+            {week.orders.map((o) => {
+              const urgency = getUrgency(o, todayIso);
+              return (
+                <button
+                  key={o.id}
+                  className={`week-order-row ${urgency !== "normal" ? `is-${urgency}` : ""}`}
+                  onClick={() => onEdit(o)}
                 >
-                  {STATUS_SHORT[o.status] || o.status}
-                </span>
-              </button>
-            ))}
+                  <span className="week-order-date">{o.productionDate || "-"}</span>
+                  <span className="week-order-client">
+                    {o.client || "거래처 미정"}
+                    {o.note && <span className="note-marker" title={o.note}> 📝</span>}
+                  </span>
+                  <span className="week-order-product">
+                    {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
+                  </span>
+                  <span className="week-order-meta">
+                    {o.weight ? formatWeight(o.weight) : ""}{o.quantity ? ` × ${o.quantity}` : ""}
+                  </span>
+                  <span
+                    className="orders-status-pill"
+                    style={{
+                      background: STATUS_COLORS[o.status]?.bg,
+                      color: STATUS_COLORS[o.status]?.fg,
+                    }}
+                    title={o.status}
+                  >
+                    {STATUS_SHORT[o.status] || o.status}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </details>
       </div>
@@ -806,9 +878,11 @@ function ProductionSubSection({
 function WeeklyView({
   orders,
   onEdit,
+  todayIso,
 }: {
   orders: Order[];
   onEdit: (o: Order) => void;
+  todayIso: string;
 }) {
   const weeks = useMemo(() => groupByWeek(orders), [orders]);
   const todayMonday = useMemo(() => {
@@ -837,6 +911,7 @@ function WeeklyView({
           week={w}
           isCurrent={w.weekStart === todayMonday}
           onEdit={onEdit}
+          todayIso={todayIso}
         />
       ))}
     </div>
@@ -847,10 +922,12 @@ function WeekCard({
   week,
   isCurrent,
   onEdit,
+  todayIso,
 }: {
   week: WeekGroup;
   isCurrent: boolean;
   onEdit: (o: Order) => void;
+  todayIso: string;
 }) {
   return (
     <section className={`week-card ${isCurrent ? "is-current" : ""} ${!week.weekStart ? "is-unscheduled" : ""}`}>
@@ -892,28 +969,38 @@ function WeekCard({
         <details className="week-orders-toggle">
           <summary>개별 발주 보기 ({week.orders.length}건)</summary>
           <div className="week-orders-list">
-            {week.orders.map((o) => (
-              <button key={o.id} className="week-order-row" onClick={() => onEdit(o)}>
-                <span className="week-order-date">{o.shipDate || "-"}</span>
-                <span className="week-order-client">{o.client || "거래처 미정"}</span>
-                <span className="week-order-product">
-                  {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
-                </span>
-                <span className="week-order-meta">
-                  {o.weight ? formatWeight(o.weight) : ""}{o.quantity ? ` × ${o.quantity}` : ""}
-                </span>
-                <span
-                  className="orders-status-pill"
-                  style={{
-                    background: STATUS_COLORS[o.status]?.bg,
-                    color: STATUS_COLORS[o.status]?.fg,
-                  }}
-                  title={o.status}
+            {week.orders.map((o) => {
+              const urgency = getUrgency(o, todayIso);
+              return (
+                <button
+                  key={o.id}
+                  className={`week-order-row ${urgency !== "normal" ? `is-${urgency}` : ""}`}
+                  onClick={() => onEdit(o)}
                 >
-                  {STATUS_SHORT[o.status] || o.status}
-                </span>
-              </button>
-            ))}
+                  <span className="week-order-date">{o.shipDate || "-"}</span>
+                  <span className="week-order-client">
+                    {o.client || "거래처 미정"}
+                    {o.note && <span className="note-marker" title={o.note}> 📝</span>}
+                  </span>
+                  <span className="week-order-product">
+                    {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
+                  </span>
+                  <span className="week-order-meta">
+                    {o.weight ? formatWeight(o.weight) : ""}{o.quantity ? ` × ${o.quantity}` : ""}
+                  </span>
+                  <span
+                    className="orders-status-pill"
+                    style={{
+                      background: STATUS_COLORS[o.status]?.bg,
+                      color: STATUS_COLORS[o.status]?.fg,
+                    }}
+                    title={o.status}
+                  >
+                    {STATUS_SHORT[o.status] || o.status}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </details>
       </div>
@@ -941,6 +1028,7 @@ function OrderModal({
   onSave,
   onClose,
   onDelete,
+  onClone,
 }: {
   mode: "create" | "edit";
   data: OrderInput;
@@ -951,6 +1039,7 @@ function OrderModal({
   onSave: () => void;
   onClose: () => void;
   onDelete?: () => void;
+  onClone?: () => void;
 }) {
   function set<K extends keyof OrderInput>(key: K, value: OrderInput[K]) {
     onChange({ ...data, [key]: value });
@@ -1078,6 +1167,16 @@ function OrderModal({
               ))}
             </select>
           </Field>
+
+          <Field label="비고 (메모)">
+            <textarea
+              className="orders-input orders-textarea"
+              value={data.note}
+              onChange={(e) => set("note", e.target.value)}
+              placeholder="예: 포장 색상 빨강, 직접 전달 요청, 결제 후 진행"
+              rows={3}
+            />
+          </Field>
         </div>
 
         <div className="modal-footer">
@@ -1087,6 +1186,16 @@ function OrderModal({
             </button>
           )}
           <div className="modal-footer-right">
+            {onClone && (
+              <button
+                className="btn-secondary"
+                onClick={onClone}
+                disabled={saving}
+                title="이 발주의 거래처·품목·규격·중량·수량·메모를 복사한 새 발주를 만듭니다"
+              >
+                복제
+              </button>
+            )}
             <button className="btn-secondary" onClick={onClose} disabled={saving}>
               취소
             </button>

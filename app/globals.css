@@ -1043,6 +1043,89 @@ a {
   border-color: var(--sm-orange);
 }
 
+.orders-textarea {
+  resize: vertical;
+  min-height: 70px;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
+/* ─── 긴급도 (지연/임박) 하이라이트 ─── */
+.urgency-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--sm-radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.urgency-pill.is-overdue {
+  background: #fee2e2;
+  color: #b91c1c;
+  animation: urgency-pulse 1.6s ease-in-out infinite;
+}
+
+.urgency-pill.is-urgent {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+@keyframes urgency-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.cell-flag {
+  width: 56px;
+  text-align: center;
+}
+
+.orders-table tbody tr.is-overdue td {
+  background: rgba(220, 38, 38, 0.06);
+}
+.orders-table tbody tr.is-overdue:hover td {
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.orders-table tbody tr.is-urgent td {
+  background: rgba(245, 158, 11, 0.06);
+}
+.orders-table tbody tr.is-urgent:hover td {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.cal-entry.is-overdue {
+  background: rgba(220, 38, 38, 0.10);
+  border-left-color: #b91c1c !important;
+  animation: urgency-pulse 1.6s ease-in-out infinite;
+}
+
+.cal-entry.is-urgent {
+  background: rgba(245, 158, 11, 0.10);
+  border-left-color: #b45309 !important;
+}
+
+.cal-entry-note {
+  margin-left: auto;
+  font-size: 10px;
+}
+
+.week-order-row.is-overdue {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.week-order-row.is-urgent {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.note-marker {
+  cursor: help;
+  opacity: 0.75;
+}
+
 .orders-error {
   background: #fff5f5;
   border: 1px solid #fed7d7;

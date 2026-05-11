@@ -33,6 +33,7 @@ export interface Order {
   weight: string;          // 중량
   quantity: string;        // 수량
   status: OrderStatus;
+  note: string;            // 비고
 }
 
 export type OrderInput = Omit<Order, "id"> & { id?: string };
@@ -47,7 +48,53 @@ export const EMPTY_ORDER: OrderInput = {
   weight: "",
   quantity: "",
   status: "발주확인/생산대기",
+  note: "",
 };
+
+// ─────────────────────────────────────────────
+// 발주 긴급도
+// ─────────────────────────────────────────────
+export type Urgency = "overdue" | "urgent" | "normal";
+
+export const URGENCY_LABEL: Record<Exclude<Urgency, "normal">, string> = {
+  overdue: "지연",
+  urgent: "임박",
+};
+
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// 오늘 기준으로 발주의 긴급도를 계산.
+// - overdue: 일정이 지났는데 다음 단계로 못 넘어간 상태
+//   · 발송일이 지났는데 미발송
+//   · 생산일이 지났는데 아직 생산대기/생산중
+// - urgent: 발송일이 오늘 또는 내일인데 아직 발송 안 됨
+export function getUrgency(o: Order, todayIso: string): Urgency {
+  if (o.status === "발송완료") return "normal";
+
+  if (o.shipDate && o.shipDate < todayIso) return "overdue";
+  if (
+    o.productionDate &&
+    o.productionDate < todayIso &&
+    (o.status === "발주확인/생산대기" || o.status === "생산요청/생산중")
+  ) {
+    return "overdue";
+  }
+
+  const tomorrow = addDaysISO(todayIso, 1);
+  if (o.shipDate && o.shipDate <= tomorrow) {
+    return "urgent";
+  }
+
+  return "normal";
+}
 
 export const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
   "발주확인/생산대기": { bg: "#fff8e1", fg: "#b08800" },

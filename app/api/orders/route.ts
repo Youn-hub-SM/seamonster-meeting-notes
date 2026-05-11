@@ -44,6 +44,7 @@ export async function GET() {
     const orders = (data.orders ?? []).map((o) => ({
       ...o,
       status: migrateStatus(o.status),
+      note: o.note ?? "",
     }));
     return NextResponse.json({ orders });
   } catch (err) {
