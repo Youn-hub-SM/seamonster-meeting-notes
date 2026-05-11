@@ -25,6 +25,7 @@ export default function RootLayout({
               <Link href="/correct" className="header-nav-link">문장 교정</Link>
               <Link href="/cs" className="header-nav-link">CS 답변</Link>
               <Link href="/utm" className="header-nav-link">UTM 빌더</Link>
+              <Link href="/orders" className="header-nav-link">도매 발주</Link>
             </nav>
           </div>
         </header>

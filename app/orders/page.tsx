@@ -1,0 +1,541 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  Order,
+  OrderInput,
+  ORDER_STATUSES,
+  EMPTY_ORDER,
+  STATUS_COLORS,
+  DateKind,
+  DATE_KIND_LABEL,
+  DATE_KIND_COLOR,
+} from "@/app/lib/orders";
+
+type View = "calendar" | "list";
+
+export default function OrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [view, setView] = useState<View>("calendar");
+  const [cursor, setCursor] = useState<Date>(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; data: OrderInput } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"전체" | (typeof ORDER_STATUSES)[number]>("전체");
+
+  async function reload() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/orders", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "조회 실패");
+      setOrders(data.orders || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "조회 중 오류");
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  const filteredOrders = useMemo(() => {
+    if (statusFilter === "전체") return orders;
+    return orders.filter((o) => o.status === statusFilter);
+  }, [orders, statusFilter]);
+
+  async function handleSave() {
+    if (!modal) return;
+    setSaving(true);
+    setError("");
+    try {
+      const method = modal.mode === "create" ? "POST" : "PUT";
+      const res = await fetch("/api/orders", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(modal.data),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "저장 실패");
+      setModal(null);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "저장 중 오류");
+    }
+    setSaving(false);
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("정말 삭제하시겠어요?")) return;
+    setError("");
+    try {
+      const res = await fetch(`/api/orders?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "삭제 실패");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "삭제 중 오류");
+    }
+  }
+
+  return (
+    <div className="orders-container">
+      <div className="orders-header">
+        <div>
+          <h1 className="page-title">도매 발주 관리</h1>
+          <p className="page-subtitle">발주·생산·발송 일정과 발주목록을 한곳에서 관리합니다.</p>
+        </div>
+        <div className="orders-header-actions">
+          <button className="btn-primary" onClick={() => setModal({ mode: "create", data: { ...EMPTY_ORDER } })}>
+            + 새 발주 등록
+          </button>
+        </div>
+      </div>
+
+      <div className="orders-toolbar">
+        <div className="orders-tabs">
+          <button
+            className={`orders-tab ${view === "calendar" ? "is-active" : ""}`}
+            onClick={() => setView("calendar")}
+          >
+            캘린더
+          </button>
+          <button
+            className={`orders-tab ${view === "list" ? "is-active" : ""}`}
+            onClick={() => setView("list")}
+          >
+            발주목록
+          </button>
+        </div>
+
+        <div className="orders-filter">
+          <label className="orders-filter-label">상태</label>
+          <select
+            className="orders-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          >
+            <option value="전체">전체</option>
+            {ORDER_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {error && <div className="orders-error">{error}</div>}
+
+      {loading ? (
+        <div className="loading-overlay">
+          <div className="spinner" />
+          <p className="loading-text">발주 데이터를 불러오는 중...</p>
+        </div>
+      ) : view === "calendar" ? (
+        <CalendarView
+          orders={filteredOrders}
+          cursor={cursor}
+          setCursor={setCursor}
+          onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
+        />
+      ) : (
+        <ListView
+          orders={filteredOrders}
+          onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
+          onDelete={handleDelete}
+        />
+      )}
+
+      {modal && (
+        <OrderModal
+          mode={modal.mode}
+          data={modal.data}
+          saving={saving}
+          onChange={(data) => setModal({ ...modal, data })}
+          onSave={handleSave}
+          onClose={() => setModal(null)}
+          onDelete={
+            modal.mode === "edit" && modal.data.id
+              ? () => {
+                  if (modal.data.id) {
+                    handleDelete(modal.data.id);
+                    setModal(null);
+                  }
+                }
+              : undefined
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 캘린더 뷰
+// ─────────────────────────────────────────────
+function CalendarView({
+  orders,
+  cursor,
+  setCursor,
+  onEdit,
+}: {
+  orders: Order[];
+  cursor: Date;
+  setCursor: (d: Date) => void;
+  onEdit: (o: Order) => void;
+}) {
+  const monthLabel = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
+
+  const cells = useMemo(() => {
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const startWeekday = first.getDay(); // 0=일
+    const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+
+    const result: { date: Date | null; iso: string; entries: { kind: DateKind; order: Order }[] }[] = [];
+    for (let i = 0; i < startWeekday; i++) result.push({ date: null, iso: "", entries: [] });
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(cursor.getFullYear(), cursor.getMonth(), d);
+      const iso = toISO(date);
+      const entries: { kind: DateKind; order: Order }[] = [];
+      for (const o of orders) {
+        if (o.orderDate === iso) entries.push({ kind: "order", order: o });
+        if (o.productionDate === iso) entries.push({ kind: "production", order: o });
+        if (o.shipDate === iso) entries.push({ kind: "ship", order: o });
+      }
+      result.push({ date, iso, entries });
+    }
+    // 마지막 주 빈 셀
+    while (result.length % 7 !== 0) result.push({ date: null, iso: "", entries: [] });
+    return result;
+  }, [cursor, orders]);
+
+  const todayIso = toISO(new Date());
+
+  return (
+    <div>
+      <div className="cal-nav">
+        <button className="btn-secondary" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
+          ←
+        </button>
+        <div className="cal-month">{monthLabel}</div>
+        <button className="btn-secondary" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
+          →
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={() => {
+            const d = new Date();
+            setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
+          }}
+        >
+          오늘
+        </button>
+      </div>
+
+      <div className="cal-legend">
+        {(Object.keys(DATE_KIND_LABEL) as DateKind[]).map((k) => (
+          <span key={k} className="cal-legend-item">
+            <span className="cal-legend-dot" style={{ background: DATE_KIND_COLOR[k] }} />
+            {DATE_KIND_LABEL[k]}일
+          </span>
+        ))}
+      </div>
+
+      <div className="cal-grid">
+        {["일", "월", "화", "수", "목", "금", "토"].map((w) => (
+          <div key={w} className="cal-weekday">
+            {w}
+          </div>
+        ))}
+        {cells.map((cell, i) => (
+          <div
+            key={i}
+            className={`cal-cell ${cell.date ? "" : "is-empty"} ${cell.iso === todayIso ? "is-today" : ""}`}
+          >
+            {cell.date && (
+              <>
+                <div className="cal-date">{cell.date.getDate()}</div>
+                <div className="cal-entries">
+                  {cell.entries.map((e, idx) => (
+                    <button
+                      key={`${e.order.id}-${e.kind}-${idx}`}
+                      className="cal-entry"
+                      onClick={() => onEdit(e.order)}
+                      style={{ borderLeftColor: DATE_KIND_COLOR[e.kind] }}
+                      title={`${DATE_KIND_LABEL[e.kind]}일 · ${e.order.client} · ${e.order.product}`}
+                    >
+                      <span className="cal-entry-kind" style={{ color: DATE_KIND_COLOR[e.kind] }}>
+                        {DATE_KIND_LABEL[e.kind]}
+                      </span>
+                      <span className="cal-entry-text">
+                        {e.order.client || "-"} · {e.order.product || "-"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 리스트 뷰
+// ─────────────────────────────────────────────
+function ListView({
+  orders,
+  onEdit,
+  onDelete,
+}: {
+  orders: Order[];
+  onEdit: (o: Order) => void;
+  onDelete: (id: string) => void;
+}) {
+  const sorted = useMemo(() => {
+    // 발송일 → 생산일 → 발주일 순서 우선, 빈 값은 뒤로
+    return [...orders].sort((a, b) => {
+      const ka = a.shipDate || a.productionDate || a.orderDate || "9999";
+      const kb = b.shipDate || b.productionDate || b.orderDate || "9999";
+      return ka.localeCompare(kb);
+    });
+  }, [orders]);
+
+  if (sorted.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-icon">📦</div>
+        <div className="empty-state-text">등록된 발주가 없습니다.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="orders-table-wrap">
+      <table className="orders-table">
+        <thead>
+          <tr>
+            <th>발주일</th>
+            <th>생산일</th>
+            <th>발송일</th>
+            <th>거래처</th>
+            <th>품목</th>
+            <th>규격</th>
+            <th>중량</th>
+            <th>수량</th>
+            <th>상태</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((o) => (
+            <tr key={o.id} onClick={() => onEdit(o)}>
+              <td className="cell-date">{o.orderDate || "-"}</td>
+              <td className="cell-date">{o.productionDate || "-"}</td>
+              <td className="cell-date">{o.shipDate || "-"}</td>
+              <td>{o.client || "-"}</td>
+              <td>{o.product || "-"}</td>
+              <td>{o.spec || "-"}</td>
+              <td>{o.weight || "-"}</td>
+              <td>{o.quantity || "-"}</td>
+              <td>
+                <span
+                  className="orders-status-pill"
+                  style={{
+                    background: STATUS_COLORS[o.status]?.bg,
+                    color: STATUS_COLORS[o.status]?.fg,
+                  }}
+                >
+                  {o.status}
+                </span>
+              </td>
+              <td className="cell-actions">
+                <button
+                  className="link-danger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(o.id);
+                  }}
+                >
+                  삭제
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 등록/수정 모달
+// ─────────────────────────────────────────────
+function OrderModal({
+  mode,
+  data,
+  saving,
+  onChange,
+  onSave,
+  onClose,
+  onDelete,
+}: {
+  mode: "create" | "edit";
+  data: OrderInput;
+  saving: boolean;
+  onChange: (d: OrderInput) => void;
+  onSave: () => void;
+  onClose: () => void;
+  onDelete?: () => void;
+}) {
+  function set<K extends keyof OrderInput>(key: K, value: OrderInput[K]) {
+    onChange({ ...data, [key]: value });
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">{mode === "create" ? "새 발주 등록" : "발주 수정"}</h2>
+          <button className="modal-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="form-row">
+            <Field label="발주일">
+              <input
+                type="date"
+                className="orders-input"
+                value={data.orderDate}
+                onChange={(e) => set("orderDate", e.target.value)}
+              />
+            </Field>
+            <Field label="생산일">
+              <input
+                type="date"
+                className="orders-input"
+                value={data.productionDate}
+                onChange={(e) => set("productionDate", e.target.value)}
+              />
+            </Field>
+            <Field label="발송일">
+              <input
+                type="date"
+                className="orders-input"
+                value={data.shipDate}
+                onChange={(e) => set("shipDate", e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <Field label="거래처명">
+            <input
+              type="text"
+              className="orders-input"
+              value={data.client}
+              onChange={(e) => set("client", e.target.value)}
+              placeholder="예: A마트"
+            />
+          </Field>
+
+          <Field label="생산품목">
+            <input
+              type="text"
+              className="orders-input"
+              value={data.product}
+              onChange={(e) => set("product", e.target.value)}
+              placeholder="예: 대구순살"
+            />
+          </Field>
+
+          <div className="form-row">
+            <Field label="규격">
+              <input
+                type="text"
+                className="orders-input"
+                value={data.spec}
+                onChange={(e) => set("spec", e.target.value)}
+                placeholder="예: 1kg/팩"
+              />
+            </Field>
+            <Field label="중량">
+              <input
+                type="text"
+                className="orders-input"
+                value={data.weight}
+                onChange={(e) => set("weight", e.target.value)}
+                placeholder="예: 200kg"
+              />
+            </Field>
+            <Field label="수량">
+              <input
+                type="text"
+                className="orders-input"
+                value={data.quantity}
+                onChange={(e) => set("quantity", e.target.value)}
+                placeholder="예: 50"
+              />
+            </Field>
+          </div>
+
+          <Field label="상태">
+            <select
+              className="orders-input"
+              value={data.status}
+              onChange={(e) => set("status", e.target.value as OrderInput["status"])}
+            >
+              {ORDER_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <div className="modal-footer">
+          {onDelete && (
+            <button className="btn-danger" onClick={onDelete} disabled={saving}>
+              삭제
+            </button>
+          )}
+          <div className="modal-footer-right">
+            <button className="btn-secondary" onClick={onClose} disabled={saving}>
+              취소
+            </button>
+            <button className="btn-primary" onClick={onSave} disabled={saving}>
+              {saving ? "저장 중..." : mode === "create" ? "등록" : "수정"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function toISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
