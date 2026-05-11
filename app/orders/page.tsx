@@ -12,11 +12,15 @@ import {
   DATE_KIND_LABEL,
   DATE_KIND_COLOR,
   ProductGroup,
+  WeekGroup,
   groupByProduct,
+  groupByWeek,
   formatNumber,
+  formatSpec,
+  formatWeight,
 } from "@/app/lib/orders";
 
-type View = "calendar" | "list" | "production";
+type View = "calendar" | "list" | "production" | "weekly";
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -122,6 +126,12 @@ export default function OrdersPage() {
           >
             생산 현황
           </button>
+          <button
+            className={`orders-tab ${view === "weekly" ? "is-active" : ""}`}
+            onClick={() => setView("weekly")}
+          >
+            주간 (발송일)
+          </button>
         </div>
 
         {view !== "production" && (
@@ -163,9 +173,14 @@ export default function OrdersPage() {
           onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
           onDelete={handleDelete}
         />
-      ) : (
+      ) : view === "production" ? (
         <ProductionView
           orders={orders}
+          onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
+        />
+      ) : (
+        <WeeklyView
+          orders={filteredOrders}
           onEdit={(o) => setModal({ mode: "edit", data: { ...o } })}
         />
       )}
@@ -346,8 +361,8 @@ function ListView({
             <th>발송일</th>
             <th>거래처</th>
             <th>품목</th>
-            <th>규격</th>
-            <th>중량</th>
+            <th>규격 (g)</th>
+            <th>중량 (kg)</th>
             <th>수량</th>
             <th>상태</th>
             <th></th>
@@ -361,8 +376,8 @@ function ListView({
               <td className="cell-date">{o.shipDate || "-"}</td>
               <td>{o.client || "-"}</td>
               <td>{o.product || "-"}</td>
-              <td>{o.spec || "-"}</td>
-              <td>{o.weight || "-"}</td>
+              <td>{formatSpec(o.spec) || "-"}</td>
+              <td>{formatWeight(o.weight) || "-"}</td>
               <td>{o.quantity || "-"}</td>
               <td>
                 <span
@@ -487,11 +502,11 @@ function ProductionSection({
                 >
                   <span className="prod-order-client">{o.client || "거래처 미정"}</span>
                   <span className="prod-order-product">
-                    {o.product || "-"}{o.spec ? ` · ${o.spec}` : ""}
+                    {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
                   </span>
                   <span className="prod-order-meta">
-                    {o.weight && <span>중량 {o.weight}</span>}
-                    {o.quantity && <span>수량 {o.quantity}</span>}
+                    {o.weight ? <span>중량 {formatWeight(o.weight)}</span> : null}
+                    {o.quantity ? <span>수량 {o.quantity}</span> : null}
                   </span>
                   <span className="prod-order-date">
                     {o.shipDate ? `발송 ${o.shipDate}` : o.productionDate ? `생산 ${o.productionDate}` : o.orderDate ? `발주 ${o.orderDate}` : "-"}
@@ -517,13 +532,15 @@ function ProductGroupCard({
     <div className="prod-card">
       <div className="prod-card-header">
         <div className="prod-card-product">{group.product}</div>
-        {group.spec && <div className="prod-card-spec">{group.spec}</div>}
+        {group.spec ? <div className="prod-card-spec">{formatSpec(group.spec)}</div> : null}
       </div>
 
       <div className="prod-card-stats">
         <div className="prod-card-stat">
           <span className="prod-card-stat-label">총 중량</span>
-          <span className="prod-card-stat-value">{formatNumber(group.totalWeight) || "-"}</span>
+          <span className="prod-card-stat-value">
+            {group.totalWeight ? `${formatNumber(group.totalWeight)}kg` : "-"}
+          </span>
         </div>
         <div className="prod-card-stat">
           <span className="prod-card-stat-label">총 수량</span>
@@ -553,13 +570,147 @@ function ProductGroupCard({
             title="수정"
           >
             {o.client || "거래처 미정"}
-            {o.weight ? ` · ${o.weight}` : ""}
+            {o.weight ? ` · ${formatWeight(o.weight)}` : ""}
             {o.quantity ? ` × ${o.quantity}` : ""}
           </button>
         ))}
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────
+// 주간 뷰 (발송일 = 매출일 기준)
+// ─────────────────────────────────────────────
+function WeeklyView({
+  orders,
+  onEdit,
+}: {
+  orders: Order[];
+  onEdit: (o: Order) => void;
+}) {
+  const weeks = useMemo(() => groupByWeek(orders), [orders]);
+  const todayMonday = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const m = new Date(d);
+    m.setDate(d.getDate() + diff);
+    return toISOForView(m);
+  }, []);
+
+  if (weeks.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-icon">📅</div>
+        <div className="empty-state-text">표시할 발주가 없습니다.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="week-wrap">
+      {weeks.map((w) => (
+        <WeekCard
+          key={w.weekStart || "unscheduled"}
+          week={w}
+          isCurrent={w.weekStart === todayMonday}
+          onEdit={onEdit}
+        />
+      ))}
+    </div>
+  );
+}
+
+function WeekCard({
+  week,
+  isCurrent,
+  onEdit,
+}: {
+  week: WeekGroup;
+  isCurrent: boolean;
+  onEdit: (o: Order) => void;
+}) {
+  return (
+    <section className={`week-card ${isCurrent ? "is-current" : ""} ${!week.weekStart ? "is-unscheduled" : ""}`}>
+      <div className="week-card-header">
+        <div className="week-card-title-block">
+          <h2 className="week-card-title">{week.label}</h2>
+          {isCurrent && <span className="week-card-badge">이번 주</span>}
+        </div>
+        <div className="week-card-totals">
+          <div className="week-total">
+            <span className="week-total-label">발주</span>
+            <span className="week-total-value">{week.orders.length}건</span>
+          </div>
+          <div className="week-total">
+            <span className="week-total-label">총 중량</span>
+            <span className="week-total-value week-total-weight">
+              {week.totalWeight ? `${formatNumber(week.totalWeight)}kg` : "-"}
+            </span>
+          </div>
+          <div className="week-total">
+            <span className="week-total-label">총 수량</span>
+            <span className="week-total-value">{formatNumber(week.totalQuantity) || "-"}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="week-card-body">
+        <div className="week-products">
+          {week.productGroups.map((g) => (
+            <div key={`${g.product}__${g.spec}`} className="week-product">
+              <div className="week-product-name">
+                {g.product}
+                {g.spec ? <span className="week-product-spec"> · {formatSpec(g.spec)}</span> : null}
+              </div>
+              <div className="week-product-totals">
+                {g.totalWeight ? <span>{formatNumber(g.totalWeight)}kg</span> : null}
+                {g.totalQuantity ? <span>× {formatNumber(g.totalQuantity)}</span> : null}
+              </div>
+              <div className="week-product-clients">
+                {g.clients.length > 0 ? g.clients.join(", ") : "거래처 미정"}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <details className="week-orders-toggle">
+          <summary>개별 발주 보기 ({week.orders.length}건)</summary>
+          <div className="week-orders-list">
+            {week.orders.map((o) => (
+              <button key={o.id} className="week-order-row" onClick={() => onEdit(o)}>
+                <span className="week-order-date">{o.shipDate || "-"}</span>
+                <span className="week-order-client">{o.client || "거래처 미정"}</span>
+                <span className="week-order-product">
+                  {o.product || "-"}{o.spec ? ` · ${formatSpec(o.spec)}` : ""}
+                </span>
+                <span className="week-order-meta">
+                  {o.weight ? formatWeight(o.weight) : ""}{o.quantity ? ` × ${o.quantity}` : ""}
+                </span>
+                <span
+                  className="orders-status-pill"
+                  style={{
+                    background: STATUS_COLORS[o.status]?.bg,
+                    color: STATUS_COLORS[o.status]?.fg,
+                  }}
+                >
+                  {o.status}
+                </span>
+              </button>
+            ))}
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function toISOForView(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 // ─────────────────────────────────────────────
@@ -645,31 +796,34 @@ function OrderModal({
           </Field>
 
           <div className="form-row">
-            <Field label="규격">
+            <Field label="규격 (g)">
               <input
                 type="text"
+                inputMode="numeric"
                 className="orders-input"
                 value={data.spec}
                 onChange={(e) => set("spec", e.target.value)}
-                placeholder="예: 1kg/팩"
+                placeholder="100"
               />
             </Field>
-            <Field label="중량">
+            <Field label="중량 (kg)">
               <input
                 type="text"
+                inputMode="numeric"
                 className="orders-input"
                 value={data.weight}
                 onChange={(e) => set("weight", e.target.value)}
-                placeholder="예: 200kg"
+                placeholder="10"
               />
             </Field>
             <Field label="수량">
               <input
                 type="text"
+                inputMode="numeric"
                 className="orders-input"
                 value={data.quantity}
                 onChange={(e) => set("quantity", e.target.value)}
-                placeholder="예: 50"
+                placeholder="50"
               />
             </Field>
           </div>

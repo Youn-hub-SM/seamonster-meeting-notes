@@ -106,3 +106,116 @@ export function formatNumber(n: number): string {
   if (!n) return "0";
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
+
+// 단위 표시 — 빈 값은 빈 문자열, 값 있으면 단위 부착
+export function formatSpec(v: string | number): string {
+  const s = v === null || v === undefined ? "" : String(v).trim();
+  if (!s) return "";
+  // 이미 단위가 붙어 있으면 그대로 표시
+  return /[a-zA-Zㄱ-힣]/.test(s) ? s : `${s}g`;
+}
+
+export function formatWeight(v: string | number): string {
+  const s = v === null || v === undefined ? "" : String(v).trim();
+  if (!s) return "";
+  return /[a-zA-Zㄱ-힣]/.test(s) ? s : `${s}kg`;
+}
+
+// ─────────────────────────────────────────────
+// 주간 그룹화 (월요일 시작 기준)
+// ─────────────────────────────────────────────
+export interface WeekGroup {
+  weekStart: string;  // YYYY-MM-DD (월요일)
+  weekEnd: string;    // YYYY-MM-DD (일요일)
+  label: string;      // "5월 11일(월) ~ 5월 17일(일)"
+  totalWeight: number;
+  totalQuantity: number;
+  clients: string[];
+  productGroups: ProductGroup[];
+  orders: Order[];
+}
+
+function getMondayOf(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  const day = d.getDay(); // 0=일, 1=월, ..., 6=토
+  const diff = day === 0 ? -6 : 1 - day;
+  const m = new Date(d);
+  m.setDate(d.getDate() + diff);
+  m.setHours(0, 0, 0, 0);
+  return m;
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatKoreanRange(monday: Date, sunday: Date): string {
+  const m1 = monday.getMonth() + 1;
+  const d1 = monday.getDate();
+  const m2 = sunday.getMonth() + 1;
+  const d2 = sunday.getDate();
+  return `${m1}월 ${d1}일(월) ~ ${m2}월 ${d2}일(일)`;
+}
+
+// 발송일 기준 주차별로 그룹. 발송일 비면 "발송일 미정" 그룹(weekStart="").
+export function groupByWeek(orders: Order[]): WeekGroup[] {
+  const buckets = new Map<string, Order[]>();
+  for (const o of orders) {
+    const monday = getMondayOf(o.shipDate);
+    const key = monday ? toISODate(monday) : "";
+    const arr = buckets.get(key) || [];
+    arr.push(o);
+    buckets.set(key, arr);
+  }
+
+  const result: WeekGroup[] = [];
+  for (const [key, list] of buckets.entries()) {
+    let label: string;
+    let weekEnd: string;
+    if (key === "") {
+      label = "발송일 미정";
+      weekEnd = "";
+    } else {
+      const monday = new Date(key + "T00:00:00");
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      label = formatKoreanRange(monday, sunday);
+      weekEnd = toISODate(sunday);
+    }
+
+    let totalWeight = 0;
+    let totalQuantity = 0;
+    const clientsSet = new Set<string>();
+    for (const o of list) {
+      totalWeight += parseNumber(o.weight);
+      totalQuantity += parseNumber(o.quantity);
+      if (o.client) clientsSet.add(o.client);
+    }
+
+    result.push({
+      weekStart: key,
+      weekEnd,
+      label,
+      totalWeight,
+      totalQuantity,
+      clients: Array.from(clientsSet),
+      productGroups: groupByProduct(list),
+      orders: list,
+    });
+  }
+
+  // 빠른 주차부터, 발송일 미정은 맨 뒤
+  result.sort((a, b) => {
+    if (a.weekStart === "" && b.weekStart === "") return 0;
+    if (a.weekStart === "") return 1;
+    if (b.weekStart === "") return -1;
+    return a.weekStart.localeCompare(b.weekStart);
+  });
+
+  return result;
+}

@@ -1597,6 +1597,230 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+/* Weekly view */
+.week-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.week-card {
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card);
+  box-shadow: var(--sm-shadow-card);
+  overflow: hidden;
+}
+
+.week-card.is-current {
+  border-color: var(--sm-orange);
+  box-shadow: 0 0 0 1px var(--sm-orange), var(--sm-shadow-card);
+}
+
+.week-card.is-unscheduled {
+  background: var(--sm-bg);
+  border-style: dashed;
+}
+
+.week-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 20px;
+  background: var(--sm-bg);
+  border-bottom: 1px solid var(--sm-border);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.week-card.is-current .week-card-header {
+  background: var(--sm-orange-light);
+}
+
+.week-card-title-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.week-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sm-black);
+}
+
+.week-card-badge {
+  background: var(--sm-orange);
+  color: var(--sm-white);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: var(--sm-radius-pill);
+}
+
+.week-card-totals {
+  display: flex;
+  gap: 20px;
+}
+
+.week-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.week-total-label {
+  font-size: 11px;
+  color: var(--sm-text-light);
+  font-weight: 600;
+}
+
+.week-total-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--sm-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.week-total-weight {
+  color: var(--sm-orange);
+}
+
+.week-card-body {
+  padding: 16px 20px 20px;
+}
+
+.week-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.week-product {
+  padding: 10px 12px;
+  background: var(--sm-bg);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.week-product-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sm-black);
+}
+
+.week-product-spec {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sm-text-mid);
+}
+
+.week-product-totals {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sm-orange);
+  display: flex;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.week-product-clients {
+  font-size: 12px;
+  color: var(--sm-text-mid);
+  line-height: 1.4;
+}
+
+.week-orders-toggle {
+  margin-top: 4px;
+  border-top: 1px solid var(--sm-border);
+  padding-top: 12px;
+}
+
+.week-orders-toggle summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sm-text-mid);
+  user-select: none;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.week-orders-toggle summary::-webkit-details-marker {
+  display: none;
+}
+
+.week-orders-toggle summary::before {
+  content: "▶";
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.week-orders-toggle[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.week-orders-toggle summary:hover {
+  color: var(--sm-orange);
+}
+
+.week-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.week-order-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 1.5fr 1fr 70px;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--sm-bg);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  align-items: center;
+  transition: background 0.15s;
+}
+
+.week-order-row:hover {
+  background: var(--sm-orange-light);
+}
+
+.week-order-date {
+  font-variant-numeric: tabular-nums;
+  color: var(--sm-text-mid);
+  font-size: 12px;
+}
+
+.week-order-client {
+  font-weight: 700;
+  color: var(--sm-black);
+}
+
+.week-order-product {
+  color: var(--sm-dark);
+}
+
+.week-order-meta {
+  color: var(--sm-text-mid);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   .page-title { font-size: 22px; }
@@ -1615,4 +1839,13 @@ a {
     gap: 4px;
   }
   .prod-order-date { text-align: left; }
+
+  .week-card-header { flex-direction: column; align-items: stretch; }
+  .week-card-totals { gap: 16px; justify-content: space-between; }
+  .week-total { align-items: flex-start; }
+  .week-products { grid-template-columns: 1fr; }
+  .week-order-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
 }
