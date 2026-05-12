@@ -440,13 +440,15 @@ function FocusGroup({
                   </span>
                 ))
               ) : (
-                <span className="focus-row-kind is-overdue-kind">지연</span>
+                <span className="focus-row-kind is-overdue-kind">
+                  지연
+                  {(o.shipDate || o.productionDate || o.orderDate) && (
+                    <span className="focus-row-kind-date">
+                      {" "}· {(o.shipDate || o.productionDate || o.orderDate).slice(5)}
+                    </span>
+                  )}
+                </span>
               )}
-            </span>
-            <span className="focus-row-date">
-              {tone === "overdue"
-                ? o.shipDate || o.productionDate || o.orderDate || "-"
-                : ""}
             </span>
             <span className="focus-row-client">
               {o.client || "거래처 미정"}

@@ -172,8 +172,10 @@ export function groupByProduct(
       };
       map.set(key, g);
     }
-    g.totalWeight += parseNumber(o.weight);
-    g.totalQuantity += parseNumber(o.quantity);
+    // weight 는 "1개당 중량(kg)" → 총 중량 = weight × quantity (quantity 누락 시 1로 간주)
+    const q = parseNumber(o.quantity);
+    g.totalWeight += parseNumber(o.weight) * (q > 0 ? q : 1);
+    g.totalQuantity += q;
     if (o.client && !g.clients.includes(o.client)) g.clients.push(o.client);
     g.orders.push(o);
     const candidate = o.shipDate || o.productionDate || o.orderDate || "";
@@ -291,8 +293,9 @@ export function groupByWeek(
     let totalQuantity = 0;
     const clientsSet = new Set<string>();
     for (const o of list) {
-      totalWeight += parseNumber(o.weight);
-      totalQuantity += parseNumber(o.quantity);
+      const q = parseNumber(o.quantity);
+      totalWeight += parseNumber(o.weight) * (q > 0 ? q : 1);
+      totalQuantity += q;
       if (o.client) clientsSet.add(o.client);
     }
 

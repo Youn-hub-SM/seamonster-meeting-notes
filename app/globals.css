@@ -1104,7 +1104,7 @@ a {
 
 .focus-row {
   display: grid;
-  grid-template-columns: auto 80px 1fr 1.5fr 1fr 80px;
+  grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) 96px;
   gap: 12px;
   padding: 10px 14px;
   background: var(--sm-bg);
@@ -1134,6 +1134,8 @@ a {
 .focus-row-kinds {
   display: inline-flex;
   gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .focus-row-kind {
@@ -1149,10 +1151,18 @@ a {
   background: #b91c1c;
 }
 
-.focus-row-date {
+.focus-row-kind-date {
+  font-weight: 500;
+  opacity: 0.85;
   font-variant-numeric: tabular-nums;
-  color: var(--sm-text-mid);
-  font-size: 13px;
+}
+
+.focus-row-client,
+.focus-row-product,
+.focus-row-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .focus-row-client {
@@ -1170,12 +1180,17 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+.focus-row .orders-status-pill {
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 768px) {
   .focus-row {
     grid-template-columns: auto 1fr;
-    gap: 6px;
+    gap: 4px 8px;
   }
-  .focus-row-date,
   .focus-row-meta,
   .focus-row-product {
     grid-column: 2;
