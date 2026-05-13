@@ -493,7 +493,8 @@ function CalendarView({
   onEdit: (o: Order) => void;
   todayIso: string;
 }) {
-  const monthLabel = `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
+  const isMobile = useIsMobile();
+  const [weekStart, setWeekStart] = useState<Date>(() => weekStartOf(new Date()));
   const [visibleKinds, setVisibleKinds] = useState<Record<DateKind, boolean>>({
     order: true,
     production: true,
@@ -505,12 +506,43 @@ function CalendarView({
     setVisibleKinds((prev) => ({ ...prev, [k]: !prev[k] }));
   }
 
+  // 모바일: 지난주·이번주·다음주 3주(21셀) / 데스크탑: 한 달
+  const navLabel = useMemo(() => {
+    if (isMobile) {
+      const start = addDaysDate(weekStart, -7);
+      const end = addDaysDate(weekStart, 13);
+      const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+      return `${fmt(start)} ~ ${fmt(end)}`;
+    }
+    return `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
+  }, [isMobile, weekStart, cursor]);
+
   const cells = useMemo(() => {
+    const result: { date: Date | null; iso: string; entries: { kind: DateKind; order: Order }[] }[] = [];
+
+    if (isMobile) {
+      // 지난주 월요일부터 21일치
+      const start = addDaysDate(weekStart, -7);
+      for (let i = 0; i < 21; i++) {
+        const date = addDaysDate(start, i);
+        const iso = toISO(date);
+        const entries: { kind: DateKind; order: Order }[] = [];
+        for (const o of orders) {
+          if (visibleKinds.order && o.orderDate === iso) entries.push({ kind: "order", order: o });
+          if (visibleKinds.production && o.productionDate === iso) entries.push({ kind: "production", order: o });
+          if (visibleKinds.ship && o.shipDate === iso) entries.push({ kind: "ship", order: o });
+        }
+        result.push({ date, iso, entries });
+      }
+      return result;
+    }
+
+    // 데스크탑: 한 달
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     const startWeekday = first.getDay(); // 0=일
     const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
 
-    const result: { date: Date | null; iso: string; entries: { kind: DateKind; order: Order }[] }[] = [];
+    // 일요일 시작이라 월요일 시작 주(週) packing과 어긋남 — 그대로 두되 첫 셀이 일요일 빈 칸으로 시작
     for (let i = 0; i < startWeekday; i++) result.push({ date: null, iso: "", entries: [] });
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(cursor.getFullYear(), cursor.getMonth(), d);
@@ -526,7 +558,7 @@ function CalendarView({
     // 마지막 주 빈 셀
     while (result.length % 7 !== 0) result.push({ date: null, iso: "", entries: [] });
     return result;
-  }, [cursor, orders, visibleKinds]);
+  }, [isMobile, weekStart, cursor, orders, visibleKinds]);
 
   // 발주일 → 생산일 구간을 주(週) 단위로 슬롯 패킹.
   // 같은 주 내에서 한 발주는 같은 슬롯에 머물러 가로로 이어지는 Gantt 바처럼 보이게 함.
@@ -598,18 +630,31 @@ function CalendarView({
   return (
     <div>
       <div className="cal-nav">
-        <button className="btn-secondary" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
+        <button
+          className="btn-secondary"
+          onClick={() => {
+            if (isMobile) setWeekStart((prev) => addDaysDate(prev, -7));
+            else setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1));
+          }}
+        >
           ←
         </button>
-        <div className="cal-month">{monthLabel}</div>
-        <button className="btn-secondary" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
+        <div className="cal-month">{navLabel}</div>
+        <button
+          className="btn-secondary"
+          onClick={() => {
+            if (isMobile) setWeekStart((prev) => addDaysDate(prev, 7));
+            else setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1));
+          }}
+        >
           →
         </button>
         <button
           className="btn-secondary"
           onClick={() => {
             const d = new Date();
-            setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
+            if (isMobile) setWeekStart(weekStartOf(d));
+            else setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
           }}
         >
           오늘
@@ -643,8 +688,11 @@ function CalendarView({
         </button>
       </div>
 
-      <div className="cal-grid">
-        {["일", "월", "화", "수", "목", "금", "토"].map((w) => (
+      <div className={`cal-grid ${isMobile ? "is-mobile-3week" : ""}`}>
+        {(isMobile
+          ? ["월", "화", "수", "목", "금", "토", "일"]
+          : ["일", "월", "화", "수", "목", "금", "토"]
+        ).map((w) => (
           <div key={w} className="cal-weekday">
             {w}
           </div>
@@ -1485,4 +1533,31 @@ function toISO(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function weekStartOf(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  const day = x.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  x.setDate(x.getDate() + diff);
+  return x;
+}
+
+function addDaysDate(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return isMobile;
 }

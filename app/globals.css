@@ -2602,39 +2602,55 @@ a {
     font-size: 12px;
   }
 
-  /* ── 캘린더 ── */
+  /* ── 캘린더 (3주 윈도우) ── */
   .cal-nav { gap: 8px; }
-  .cal-month { font-size: 16px; min-width: 110px; }
+  .cal-month {
+    font-size: 15px;
+    min-width: 0;
+    flex: 1;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
   .cal-legend { gap: 4px; }
   .cal-legend-item { padding: 4px 10px; font-size: 12px; }
   .cal-weekday { padding: 8px 4px; font-size: 12px; }
   .cal-cell {
-    min-height: 88px;
-    padding: 4px;
+    min-height: 130px;
+    padding: 5px;
+    gap: 3px;
   }
   .cal-date {
-    font-size: 11px;
-    width: 18px;
-    height: 18px;
+    font-size: 12px;
+    width: 20px;
+    height: 20px;
   }
   .cal-spans {
-    margin: 2px -5px 2px;
-  }
-  .cal-span {
-    height: 10px;
-    padding: 0 4px;
-    font-size: 10px;
-    line-height: 10px;
-  }
-  .cal-span-label { display: none; }
-  .cal-entries { gap: 1px; }
-  .cal-entry {
-    padding: 2px 4px;
-    font-size: 10px;
+    margin: 2px -6px 3px;
     gap: 2px;
   }
-  .cal-entry-text { display: none; }
-  .cal-entry-note { font-size: 9px; }
+  .cal-span {
+    height: 12px;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 12px;
+  }
+  .cal-span-label { display: none; }
+  .cal-entries { gap: 2px; }
+  .cal-entry {
+    padding: 3px 5px;
+    font-size: 11px;
+    gap: 3px;
+    border-left-width: 2px;
+  }
+  .cal-entry-kind {
+    font-size: 10px;
+  }
+  .cal-entry-text {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cal-entry-note { font-size: 10px; }
 
   /* ── 리스트 뷰: 테이블 숨김 / 카드 표시 ── */
   .orders-table-wrap { display: none; }
@@ -2740,11 +2756,12 @@ a {
 
 /* ── 더 좁은 화면 (≤ 480px) ── */
 @media (max-width: 480px) {
-  .cal-cell { min-height: 72px; padding: 3px; }
+  .cal-cell { min-height: 110px; padding: 4px; }
   .cal-weekday { padding: 6px 2px; font-size: 11px; }
-  .cal-entry { padding: 1px 3px; font-size: 9px; }
-  .cal-span { height: 8px; line-height: 8px; }
-  .cal-spans { margin: 1px -4px 2px; }
+  .cal-entry { padding: 2px 4px; font-size: 10px; }
+  .cal-entry-kind { font-size: 9px; }
+  .cal-span { height: 10px; line-height: 10px; font-size: 9px; }
+  .cal-spans { margin: 1px -5px 2px; }
 
   .orders-tab { padding: 10px 12px; font-size: 13px; }
   .focus-pill { padding: 5px 8px; font-size: 12px; }
