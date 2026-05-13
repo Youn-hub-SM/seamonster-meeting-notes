@@ -2340,27 +2340,412 @@ a {
   .detail-title { font-size: 22px; }
   .form-textarea { min-height: 200px; }
   .action-item { flex-direction: column; }
+}
 
-  .orders-header { flex-direction: column; align-items: stretch; }
-  .cal-cell { min-height: 80px; padding: 4px; }
+/* ────────────────────────────────────────────
+   발주관리 페이지 모바일 카드 마크업
+   기본은 데스크탑(table)만 노출, 모바일에서 카드로 전환
+   ──────────────────────────────────────────── */
+.orders-cards {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.order-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card);
+  box-shadow: var(--sm-shadow-card);
+  padding: 14px 16px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.order-card:active {
+  border-color: var(--sm-orange-border);
+}
+
+.order-card.is-overdue {
+  background: rgba(220, 38, 38, 0.04);
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+.order-card.is-urgent {
+  background: rgba(245, 158, 11, 0.04);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.order-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-card-client {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sm-black);
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.order-card-product {
+  font-size: 15px;
+  color: var(--sm-dark);
+  overflow-wrap: anywhere;
+}
+
+.order-card-spec {
+  color: var(--sm-text-mid);
+}
+
+.order-card-meta {
+  font-size: 14px;
+  color: var(--sm-text-mid);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-card-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+  color: var(--sm-text-mid);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-card-date em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--sm-text-light);
+  margin-right: 4px;
+}
+
+.order-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--sm-border);
+}
+
+.order-card-footer .status-select {
+  font-size: 13px;
+  padding: 6px 26px 6px 12px;
+}
+
+.order-card-footer .link-danger {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+/* ────────────────────────────────────────────
+   주간 카드 안의 sub-section 모바일 카드 마크업
+   ──────────────────────────────────────────── */
+.week-cards {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.week-card-item {
+  background: var(--sm-bg);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.week-card-item-product {
+  font-size: 15px;
+  color: var(--sm-black);
+  overflow-wrap: anywhere;
+}
+
+.week-card-item-product strong {
+  font-weight: 700;
+}
+
+.week-card-item-spec {
+  color: var(--sm-text-mid);
+  font-weight: 500;
+}
+
+.week-card-item-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 14px;
+  color: var(--sm-orange);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.week-card-item-totals em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--sm-text-light);
+  margin-right: 4px;
+  font-size: 12px;
+}
+
+.week-card-item-clients {
+  font-size: 13px;
+  color: var(--sm-text-mid);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ────────────────────────────────────────────
+   발주관리 페이지 — 모바일 통합 미디어쿼리
+   ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .orders-container {
+    padding: 16px 12px;
+  }
+
+  /* 헤더 — 세로 정렬, 버튼 가로 꽉 채움 */
+  .orders-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .orders-header .page-title { font-size: 22px; }
+  .orders-header .page-subtitle { font-size: 13px; }
+  .orders-header-actions {
+    flex-direction: row;
+    gap: 8px;
+  }
+  .orders-header-actions .btn-secondary,
+  .orders-header-actions .btn-primary {
+    flex: 1;
+    padding: 12px 14px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  /* 툴바 — 탭과 필터를 세로로 */
+  .orders-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* 탭 — 가로 스크롤 + 터치 타깃 */
+  .orders-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .orders-tabs::-webkit-scrollbar { display: none; }
+  .orders-tab {
+    padding: 10px 16px;
+    font-size: 14px;
+    flex-shrink: 0;
+    min-height: 40px;
+  }
+
+  /* 필터 — 가로 꽉 */
+  .orders-filter {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .orders-filter .orders-select {
+    flex: 1;
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+
+  /* ── 집중 배너 ── */
+  .focus-banner-header { padding: 10px 14px; }
+  .focus-pills { gap: 6px; }
+  .focus-pill { padding: 5px 10px; font-size: 13px; }
+  .focus-banner-body { padding: 12px 14px; }
+
+  .focus-row {
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .focus-row-kinds {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+  .focus-row-client {
+    grid-column: 1;
+    font-size: 15px;
+  }
+  .focus-row .orders-status-pill {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .focus-row-product {
+    grid-column: 1 / -1;
+    font-size: 13px;
+  }
+  .focus-row-meta {
+    grid-column: 1 / -1;
+    font-size: 12px;
+  }
+
+  /* ── 캘린더 ── */
+  .cal-nav { gap: 8px; }
+  .cal-month { font-size: 16px; min-width: 110px; }
+  .cal-legend { gap: 4px; }
+  .cal-legend-item { padding: 4px 10px; font-size: 12px; }
+  .cal-weekday { padding: 8px 4px; font-size: 12px; }
+  .cal-cell {
+    min-height: 88px;
+    padding: 4px;
+  }
+  .cal-date {
+    font-size: 11px;
+    width: 18px;
+    height: 18px;
+  }
+  .cal-spans {
+    margin: 2px -5px 2px;
+  }
+  .cal-span {
+    height: 10px;
+    padding: 0 4px;
+    font-size: 10px;
+    line-height: 10px;
+  }
+  .cal-span-label { display: none; }
+  .cal-entries { gap: 1px; }
+  .cal-entry {
+    padding: 2px 4px;
+    font-size: 10px;
+    gap: 2px;
+  }
   .cal-entry-text { display: none; }
-  .form-row { grid-template-columns: 1fr; }
+  .cal-entry-note { font-size: 9px; }
 
-  .prod-grid { grid-template-columns: 1fr; }
-  .prod-order-row {
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
+  /* ── 리스트 뷰: 테이블 숨김 / 카드 표시 ── */
+  .orders-table-wrap { display: none; }
+  .orders-cards { display: flex; }
+
+  /* ── 생산 현황 / 주간 뷰 ── */
+  .prod-help { font-size: 13px; }
+  .week-card-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 14px;
   }
-  .prod-order-date { text-align: left; }
-
-  .week-card-header { flex-direction: column; align-items: stretch; }
-  .week-card-totals { gap: 16px; justify-content: space-between; }
+  .week-card-title { font-size: 16px; }
+  .week-card-totals {
+    gap: 14px;
+    justify-content: space-between;
+  }
   .week-total { align-items: flex-start; }
-  .week-table { font-size: 13px; }
-  .week-table thead th,
-  .week-table tbody td { padding: 8px 10px; font-size: 13px; }
+  .week-total-value { font-size: 17px; }
+  .week-card-body { padding: 12px 14px 14px; }
+
+  /* sub-section 표 숨김, 카드 표시 */
+  .week-table-wrap { display: none; }
+  .week-cards { display: flex; }
+
+  .prod-sub-header { gap: 6px; }
+  .prod-sub-title { font-size: 15px; }
+
+  /* 개별 발주 행 (focus row와 같은 layout 사용) */
   .week-order-row {
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    font-size: 14px;
+    padding: 10px 12px;
   }
+  .week-order-date {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    order: -1;
+  }
+  .week-order-client {
+    grid-column: 1;
+    font-size: 15px;
+  }
+  .week-order-row .orders-status-pill {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .week-order-product {
+    grid-column: 1 / -1;
+    font-size: 13px;
+  }
+  .week-order-meta {
+    grid-column: 1 / -1;
+    font-size: 12px;
+  }
+
+  /* ── 모달 — 풀스크린 가깝게 ── */
+  .modal-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+  .modal {
+    max-width: 100%;
+    max-height: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+  .modal-header {
+    padding: 16px 18px;
+  }
+  .modal-title { font-size: 17px; }
+  .modal-body { padding: 16px 18px; }
+  .modal-footer {
+    padding: 14px 18px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .modal-footer-right {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  /* iOS 자동 줌 방지: input/select 폰트 ≥ 16px */
+  .orders-input,
+  .orders-select,
+  .orders-textarea {
+    font-size: 16px;
+    padding: 12px 14px;
+    min-height: 44px;
+  }
+  .orders-textarea {
+    min-height: 84px;
+  }
+
+  /* 모달 안 3컬럼 폼 — 1컬럼으로 */
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+/* ── 더 좁은 화면 (≤ 480px) ── */
+@media (max-width: 480px) {
+  .cal-cell { min-height: 72px; padding: 3px; }
+  .cal-weekday { padding: 6px 2px; font-size: 11px; }
+  .cal-entry { padding: 1px 3px; font-size: 9px; }
+  .cal-span { height: 8px; line-height: 8px; }
+  .cal-spans { margin: 1px -4px 2px; }
+
+  .orders-tab { padding: 10px 12px; font-size: 13px; }
+  .focus-pill { padding: 5px 8px; font-size: 12px; }
 }

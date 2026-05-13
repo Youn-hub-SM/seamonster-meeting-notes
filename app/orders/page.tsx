@@ -751,83 +751,152 @@ function ListView({
   }
 
   return (
-    <div className="orders-table-wrap">
-      <table className="orders-table">
-        <thead>
-          <tr>
-            <th></th>
-            <th>발주일</th>
-            <th>생산일</th>
-            <th>발송일</th>
-            <th>거래처</th>
-            <th>품목</th>
-            <th>규격 (g)</th>
-            <th>중량 (kg)</th>
-            <th>수량</th>
-            <th>상태</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((o) => {
-            const urgency = getUrgency(o, todayIso);
-            return (
-              <tr
-                key={o.id}
-                onClick={() => onEdit(o)}
-                className={urgency !== "normal" ? `is-${urgency}` : ""}
-              >
-                <td className="cell-flag">
-                  {urgency !== "normal" && (
-                    <span className={`urgency-pill is-${urgency}`} title={URGENCY_LABEL[urgency]}>
-                      {URGENCY_LABEL[urgency]}
-                    </span>
-                  )}
-                </td>
-                <td className="cell-date">{o.orderDate || "-"}</td>
-                <td className="cell-date">{o.productionDate || "-"}</td>
-                <td className="cell-date">{o.shipDate || "-"}</td>
-                <td>{o.client || "-"}</td>
-                <td>
-                  {o.product || "-"}
+    <>
+      {/* 모바일 카드 뷰 */}
+      <div className="orders-cards">
+        {sorted.map((o) => {
+          const urgency = getUrgency(o, todayIso);
+          return (
+            <button
+              key={o.id}
+              type="button"
+              className={`order-card ${urgency !== "normal" ? `is-${urgency}` : ""}`}
+              onClick={() => onEdit(o)}
+            >
+              <div className="order-card-top">
+                <span className="order-card-client">
+                  {o.client || "거래처 미정"}
                   {o.note && <span className="note-marker" title={o.note}> 📝</span>}
-                </td>
-                <td>{formatSpec(o.spec) || "-"}</td>
-                <td>{formatWeight(o.weight) || "-"}</td>
-                <td>{o.quantity || "-"}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  <select
-                    className="status-select"
-                    value={o.status}
-                    onChange={(e) => onStatusChange(o.id, e.target.value as Order["status"])}
-                    style={{
-                      background: STATUS_COLORS[o.status]?.bg,
-                      color: STATUS_COLORS[o.status]?.fg,
-                    }}
-                    title={o.status}
-                  >
-                    {ORDER_STATUSES.map((s) => (
-                      <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="cell-actions">
-                  <button
-                    className="link-danger"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(o.id);
-                    }}
-                  >
-                    삭제
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                </span>
+                {urgency !== "normal" && (
+                  <span className={`urgency-pill is-${urgency}`}>{URGENCY_LABEL[urgency]}</span>
+                )}
+              </div>
+              <div className="order-card-product">
+                {o.product || "품목 미정"}
+                {o.spec ? <span className="order-card-spec"> · {formatSpec(o.spec)}</span> : ""}
+              </div>
+              <div className="order-card-meta">
+                {o.weight ? formatWeight(o.weight) : ""}
+                {o.weight && o.quantity ? " · " : ""}
+                {o.quantity ? `${o.quantity}개` : ""}
+                {!o.weight && !o.quantity ? "-" : ""}
+              </div>
+              <div className="order-card-dates">
+                <span className="order-card-date"><em>발주</em>{o.orderDate ? o.orderDate.slice(5) : "-"}</span>
+                <span className="order-card-date"><em>생산</em>{o.productionDate ? o.productionDate.slice(5) : "-"}</span>
+                <span className="order-card-date"><em>발송</em>{o.shipDate ? o.shipDate.slice(5) : "-"}</span>
+              </div>
+              <div className="order-card-footer" onClick={(e) => e.stopPropagation()}>
+                <select
+                  className="status-select"
+                  value={o.status}
+                  onChange={(e) => onStatusChange(o.id, e.target.value as Order["status"])}
+                  style={{
+                    background: STATUS_COLORS[o.status]?.bg,
+                    color: STATUS_COLORS[o.status]?.fg,
+                  }}
+                  title={o.status}
+                >
+                  {ORDER_STATUSES.map((s) => (
+                    <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="link-danger"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(o.id);
+                  }}
+                >
+                  삭제
+                </button>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 데스크탑 테이블 뷰 */}
+      <div className="orders-table-wrap">
+        <table className="orders-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>발주일</th>
+              <th>생산일</th>
+              <th>발송일</th>
+              <th>거래처</th>
+              <th>품목</th>
+              <th>규격 (g)</th>
+              <th>중량 (kg)</th>
+              <th>수량</th>
+              <th>상태</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((o) => {
+              const urgency = getUrgency(o, todayIso);
+              return (
+                <tr
+                  key={o.id}
+                  onClick={() => onEdit(o)}
+                  className={urgency !== "normal" ? `is-${urgency}` : ""}
+                >
+                  <td className="cell-flag">
+                    {urgency !== "normal" && (
+                      <span className={`urgency-pill is-${urgency}`} title={URGENCY_LABEL[urgency]}>
+                        {URGENCY_LABEL[urgency]}
+                      </span>
+                    )}
+                  </td>
+                  <td className="cell-date">{o.orderDate || "-"}</td>
+                  <td className="cell-date">{o.productionDate || "-"}</td>
+                  <td className="cell-date">{o.shipDate || "-"}</td>
+                  <td>{o.client || "-"}</td>
+                  <td>
+                    {o.product || "-"}
+                    {o.note && <span className="note-marker" title={o.note}> 📝</span>}
+                  </td>
+                  <td>{formatSpec(o.spec) || "-"}</td>
+                  <td>{formatWeight(o.weight) || "-"}</td>
+                  <td>{o.quantity || "-"}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <select
+                      className="status-select"
+                      value={o.status}
+                      onChange={(e) => onStatusChange(o.id, e.target.value as Order["status"])}
+                      style={{
+                        background: STATUS_COLORS[o.status]?.bg,
+                        color: STATUS_COLORS[o.status]?.fg,
+                      }}
+                      title={o.status}
+                    >
+                      {ORDER_STATUSES.map((s) => (
+                        <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="cell-actions">
+                    <button
+                      className="link-danger"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(o.id);
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -1011,6 +1080,30 @@ function ProductionSubSection({
           {` · ${orders.length}건`}
         </span>
       </div>
+      {/* 모바일 카드 뷰 */}
+      <div className="week-cards">
+        {groups.map((g) => (
+          <div key={`${g.product}__${g.spec}__m`} className="week-card-item">
+            <div className="week-card-item-product">
+              <strong>{g.product}</strong>
+              {g.spec ? <span className="week-card-item-spec"> · {formatSpec(g.spec)}</span> : ""}
+            </div>
+            <div className="week-card-item-totals">
+              {g.totalWeight ? (
+                <span><em>총 중량</em>{formatNumber(g.totalWeight)}kg</span>
+              ) : null}
+              {g.totalQuantity ? (
+                <span><em>총 수량</em>{formatNumber(g.totalQuantity)}개</span>
+              ) : null}
+            </div>
+            {g.clients.length > 0 && (
+              <div className="week-card-item-clients">{g.clients.join(", ")}</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* 데스크탑 표 뷰 */}
       <div className="week-table-wrap">
         <table className="week-table">
           <thead>
