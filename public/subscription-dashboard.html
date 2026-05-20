@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>씨몬스터 정기배송 분석</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+  :root {
+    --primary: #F15A30;
+    --primary-dark: #D94E26;
+    --primary-light: #fff1ec;
+    --bg: #f5f6f7;
+    --card: #ffffff;
+    --text: #222;
+    --text-sub: #888;
+    --border: #ebebeb;
+    --success: #2E7D32;
+    --warning: #ED8936;
+    --danger: #c0392b;
+    --info: #2563eb;
+    --radius: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .top {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .top-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .top-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .top-title .badge {
+    display: inline-block; margin-left: 10px;
+    padding: 2px 8px;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .info-line { color: var(--text-sub); font-size: 12px; margin-top: 2px; }
+  .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    padding: 7px 13px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover { background: #fafafa; }
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+  .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+  .btn-ghost { background: transparent; color: var(--text-sub); border-color: transparent; }
+  .btn-ghost:hover { color: var(--text); background: #fafafa; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  .main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+
+  /* Empty */
+  .empty {
+    background: #fff; border: 2px dashed var(--border);
+    border-radius: var(--radius); padding: 64px 20px; text-align: center;
+  }
+  .empty.drag-over { border-color: var(--primary); background: var(--primary-light); }
+  .empty h2 { font-size: 18px; margin-bottom: 8px; }
+  .empty p { color: var(--text-sub); margin-bottom: 20px; }
+  .empty .hint { margin-top: 16px; font-size: 12px; color: var(--text-sub); }
+
+  /* Filter panel */
+  .filter-card {
+    background: #fff; border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 0;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .filter-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; cursor: pointer; user-select: none;
+    border-bottom: 1px solid transparent;
+  }
+  .filter-head.open { border-bottom-color: var(--border); }
+  .filter-head-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .filter-head-stat { font-size: 12px; color: var(--text-sub); }
+  .filter-head-stat strong { color: var(--primary-dark); }
+  .filter-body { padding: 14px 18px 18px; display: none; }
+  .filter-body.open { display: block; }
+  .filter-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 900px) { .filter-grid { grid-template-columns: 1fr; } }
+  .filter-group label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--text-sub); margin-bottom: 4px;
+  }
+  .filter-group input[type=text], .filter-group input[type=date] {
+    width: 100%;
+    padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+    background: #fff;
+  }
+  .filter-group .hint {
+    font-size: 11px; color: var(--text-sub); margin-top: 4px;
+  }
+  .chips {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
+  }
+  .chip {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-size: 12px;
+    cursor: pointer;
+    background: #fff;
+    color: var(--text-sub);
+  }
+  .chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .filter-actions {
+    display: flex; gap: 8px; margin-top: 14px;
+    padding-top: 14px; border-top: 1px solid var(--border);
+  }
+  .filter-date-row { display: flex; gap: 8px; }
+  .filter-date-row input { flex: 1; }
+
+  /* KPI */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px; margin-bottom: 16px;
+  }
+  @media (max-width: 1024px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 600px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    background: #fff; border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px;
+  }
+  .kpi-label { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+  .kpi-value { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  .kpi-sub { font-size: 11px; color: var(--text-sub); margin-top: 4px; }
+  .kpi.accent { border-color: var(--primary); }
+  .kpi.accent .kpi-value { color: var(--primary); }
+
+  /* Sections */
+  .card {
+    background: #fff; border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; gap: 8px; flex-wrap: wrap;
+  }
+  .card-title { font-size: 14px; font-weight: 700; }
+  .card-sub { font-size: 12px; color: var(--text-sub); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  .chart-wrap { position: relative; height: 280px; }
+  .chart-wrap.tall { height: 320px; }
+
+  /* Tables */
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table th, .table td {
+    padding: 8px 10px; text-align: left;
+    border-bottom: 1px solid var(--border); vertical-align: top;
+  }
+  .table th {
+    background: #fafafa; font-weight: 600;
+    color: var(--text-sub); font-size: 12px;
+    position: sticky; top: 0;
+  }
+  .table th.sortable { cursor: pointer; user-select: none; }
+  .table th.sortable:hover { background: #f0f0f0; color: var(--text); }
+  .table th .sort-arrow { color: #ccc; margin-left: 2px; font-size: 10px; }
+  .table th.sort-asc .sort-arrow, .table th.sort-desc .sort-arrow { color: var(--primary); }
+  .table tr:hover td { background: #fafafa; }
+  .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll-y { max-height: 360px; overflow-y: auto; }
+
+  .pill {
+    display: inline-block; padding: 2px 7px;
+    border-radius: 10px; font-size: 11px; font-weight: 600;
+  }
+  .pill-active { background: #e8f5e9; color: var(--success); }
+  .pill-pause { background: #fff4e5; color: var(--warning); }
+  .pill-cancel { background: #fbe9e7; color: var(--danger); }
+  .pill-blue { background: #e3f2fd; color: var(--info); }
+
+  .filters-inline {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .filters-inline input, .filters-inline select {
+    padding: 6px 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 12px; background: #fff;
+  }
+  .filters-inline input { min-width: 200px; }
+
+  /* Cohort table */
+  .cohort-cell {
+    display: inline-block;
+    min-width: 48px; padding: 4px 6px;
+    border-radius: 4px; font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  details.opt summary {
+    list-style: none; color: var(--primary-dark);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  details.opt ul { list-style: none; padding-left: 0; margin-top: 4px; }
+  details.opt li { font-size: 12px; color: var(--text-sub); padding: 1px 0; }
+
+  .priv-note {
+    margin-top: 24px; padding: 12px 16px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: 12px;
+    color: var(--text-sub); text-align: center;
+  }
+
+  /* Snapshot 영역 */
+  .snapshot-preview {
+    background: #fafafa; border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px; color: var(--text-sub);
+    margin-bottom: 12px; overflow-x: auto;
+    white-space: nowrap;
+  }
+  .snapshot-preview b { color: var(--primary-dark); }
+  .snapshot-actions {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .snapshot-advanced { margin-top: 16px; }
+  .snapshot-advanced summary {
+    cursor: pointer; font-size: 13px; font-weight: 600;
+    padding: 8px 0; color: var(--primary-dark);
+  }
+  .snapshot-sheet-row {
+    display: flex; gap: 8px; margin: 10px 0;
+  }
+  .snapshot-sheet-row input {
+    flex: 1; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px;
+  }
+  .snapshot-status {
+    font-size: 12px; padding: 6px 0;
+    min-height: 20px;
+  }
+  .snapshot-status.success { color: var(--success); }
+  .snapshot-status.error { color: var(--danger); }
+  .setup-guide { margin-top: 10px; }
+  .setup-guide summary {
+    font-size: 12px; color: var(--text-sub);
+    font-weight: 500;
+  }
+  .setup-steps {
+    padding-left: 20px; font-size: 13px;
+    line-height: 1.8; margin: 8px 0;
+  }
+  .apps-script-code {
+    background: #1e1e1e; color: #d4d4d4;
+    padding: 14px; border-radius: 6px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px; line-height: 1.5;
+    overflow-x: auto; white-space: pre;
+    cursor: pointer;
+    max-height: 320px; overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="top-inner">
+    <div>
+      <span class="top-title">정기배송 1회성 분석<span class="badge" id="dataBadge">데이터 없음</span></span>
+      <div class="info-line" id="dataInfo">CSV 파일을 업로드하면 분석이 시작됩니다.</div>
+    </div>
+    <div class="top-actions">
+      <input type="file" id="fileInput" accept=".csv" style="display:none">
+      <button class="btn btn-primary" id="uploadBtn">CSV 업로드</button>
+      <button class="btn btn-ghost" id="resetBtn" style="display:none">초기화</button>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <section class="empty" id="emptyState">
+    <h2>정기배송 CSV를 업로드해주세요</h2>
+    <p>카페24 어드민에서 다운로드한 정기배송 신청 CSV를 끌어다 놓거나 위의 <strong>CSV 업로드</strong> 버튼을 누르세요.</p>
+    <button class="btn btn-primary" id="emptyUploadBtn">파일 선택</button>
+    <div class="hint">데이터는 서버로 전송되지 않고 브라우저에서만 처리됩니다. 새로고침 시 즉시 사라집니다.</div>
+  </section>
+
+  <div id="dashboard" style="display:none">
+
+    <!-- 필터 패널 -->
+    <section class="filter-card">
+      <div class="filter-head open" id="filterHead">
+        <div class="filter-head-title">
+          <span id="filterToggle">▾</span>
+          필터
+        </div>
+        <div class="filter-head-stat" id="filterStat"></div>
+      </div>
+      <div class="filter-body open" id="filterBody">
+        <div class="filter-grid">
+          <div class="filter-group">
+            <label>제외할 신청자/수령자 이름 (콤마로 구분)</label>
+            <input type="text" id="fExcludeNames" value="윤현석, 안예지" placeholder="예: 윤현석, 안예지">
+            <div class="hint">신청자 또는 수령자 이름이 일치하는 신청건 전체를 제외합니다.</div>
+          </div>
+          <div class="filter-group">
+            <label>제외할 옵션 키워드 (콤마로 구분)</label>
+            <input type="text" id="fExcludeOpts" value="선택안함" placeholder="예: 선택안함, 미선택">
+            <div class="hint">옵션 텍스트에 키워드가 포함된 행을 제외합니다. 그 결과 옵션이 0개가 된 신청건은 분석에서 빠집니다.</div>
+          </div>
+          <div class="filter-group">
+            <label>신청일 기간</label>
+            <div class="filter-date-row">
+              <input type="date" id="fDateFrom">
+              <input type="date" id="fDateTo">
+            </div>
+            <div class="hint">비워두면 전체 기간.</div>
+          </div>
+          <div class="filter-group">
+            <label>상태</label>
+            <div class="chips" id="fStatuses"></div>
+          </div>
+          <div class="filter-group">
+            <label>배송주기</label>
+            <div class="chips" id="fCycles"></div>
+          </div>
+          <div class="filter-group">
+            <label>상품</label>
+            <div class="chips" id="fProducts"></div>
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-primary" id="applyFilterBtn">필터 적용</button>
+          <button class="btn" id="resetFilterBtn">필터 초기화</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- KPI -->
+    <section class="kpi-grid">
+      <div class="kpi accent">
+        <div class="kpi-label">활성 회원 수</div>
+        <div class="kpi-value" id="kpiActiveMembers">-</div>
+        <div class="kpi-sub" id="kpiActiveMembersSub">이용중 신청 보유</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">일시정지 회원 수</div>
+        <div class="kpi-value" id="kpiPauseMembers">-</div>
+        <div class="kpi-sub" id="kpiPauseMembersSub">CS 컨택 대상</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">결제 도달율 (D+2)</div>
+        <div class="kpi-value" id="kpiFirstPay">-</div>
+        <div class="kpi-sub" id="kpiFirstPaySub">결제 전 변심 이탈 제외</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">3회 잔존율</div>
+        <div class="kpi-value" id="kpi3rd">-</div>
+        <div class="kpi-sub" id="kpi3rdSub">회차 3+ 도달 비율 (2회 결제 완료)</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">1신청당 평균 중량</div>
+        <div class="kpi-value" id="kpiAOV">-</div>
+        <div class="kpi-sub" id="kpiAOVSub">옵션 무게 합산</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">누적 신청 / 해지 (건)</div>
+        <div class="kpi-value" id="kpiTotals">-</div>
+        <div class="kpi-sub" id="kpiTotalsSub">-</div>
+      </div>
+    </section>
+
+    <!-- 시계열 -->
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">주별 순증감</div>
+            <div class="card-sub">신규 − 해지 · 최근 10주 · 막대 hover 시 신규/해지 상세</div>
+          </div>
+        </div>
+        <div class="chart-wrap tall"><canvas id="weeklyChart"></canvas></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">월별 1신청당 평균 중량</div>
+            <div class="card-sub">옵션 무게 합산 · kg/신청</div>
+          </div>
+        </div>
+        <div class="chart-wrap tall"><canvas id="aovChart"></canvas></div>
+      </section>
+    </div>
+
+    <!-- 생존 / 코호트 -->
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">신청 후 잔존율</div>
+            <div class="card-sub">N일 경과 시점에 해지하지 않은 비율</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="survivalChart"></canvas></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">분기별 코호트 잔존율</div>
+            <div class="card-sub">가입 분기별 N일 후 잔존율 (해당 시점 도달 가능 코호트만)</div>
+          </div>
+        </div>
+        <div class="scroll-y">
+          <table class="table" id="cohortTable">
+            <thead>
+              <tr><th>가입 분기</th><th class="num">n</th><th class="num">+7일</th><th class="num">+30일</th><th class="num">+60일</th><th class="num">+90일</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- 분포 차트 -->
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-head"><div><div class="card-title">어종 Top 10</div><div class="card-sub">신청건당 1회 카운트 (같은 신청 내 중복 옵션 제외)</div></div></div>
+        <div class="chart-wrap"><canvas id="speciesChart"></canvas></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><div><div class="card-title">지역 분포</div><div class="card-sub">광역시도</div></div></div>
+        <div class="chart-wrap"><canvas id="regionChart"></canvas></div>
+      </section>
+    </div>
+
+    <!-- 테이블 -->
+    <section class="card">
+      <div class="card-head">
+        <div><div class="card-title">재구매 회원 랭킹</div><div class="card-sub">2건 이상 신청한 회원</div></div>
+      </div>
+      <div class="scroll-y">
+        <table class="table" id="repeatTable">
+          <thead>
+            <tr><th>회원ID</th><th>이름</th><th class="num">총 신청</th><th class="num">이용중</th><th class="num">일시정지</th><th class="num">해지</th><th>최근 신청</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div><div class="card-title">일시정지 워치리스트</div><div class="card-sub">재개 유도 CS 대상</div></div>
+      </div>
+      <div class="scroll-y">
+        <table class="table" id="pauseTable">
+          <thead>
+            <tr><th>신청번호</th><th>신청자</th><th>연락처</th><th>주기</th><th class="num">회차</th><th>신청일</th><th>옵션</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div><div class="card-title">전체 신청 (검색)</div><div class="card-sub" id="totalCount">-</div></div>
+      </div>
+      <div class="filters-inline">
+        <input type="text" id="searchInput" placeholder="이름, ID, 신청번호, 전화번호로 검색">
+        <select id="statusFilter">
+          <option value="">전체 상태</option>
+          <option value="이용중">이용중</option>
+          <option value="일시정지">일시정지</option>
+          <option value="해지">해지</option>
+        </select>
+      </div>
+      <div class="scroll-y">
+        <table class="table" id="ordersTable">
+          <thead>
+            <tr>
+              <th>신청번호</th>
+              <th class="sortable" data-sort="signDate">신청일<span class="sort-arrow">▾</span></th>
+              <th class="sortable" data-sort="status">상태<span class="sort-arrow">▾</span></th>
+              <th class="sortable" data-sort="applicant">신청자<span class="sort-arrow">▾</span></th>
+              <th class="sortable" data-sort="cycle">주기<span class="sort-arrow">▾</span></th>
+              <th class="sortable num" data-sort="round">회차<span class="sort-arrow">▾</span></th>
+              <th class="sortable" data-sort="cancelDate">해지일<span class="sort-arrow">▾</span></th>
+              <th>옵션</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 결과 스냅샷 저장 -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">결과 스냅샷 저장</div>
+          <div class="card-sub">KPI 값만 시계열로 누적 저장 · 개인정보 미포함</div>
+        </div>
+      </div>
+      <div class="snapshot-preview" id="snapshotPreview"></div>
+      <div class="snapshot-actions">
+        <button class="btn btn-primary" id="copySnapshotBtn">📋 TSV 복사 (구글시트에 붙여넣기)</button>
+        <button class="btn" id="downloadJsonBtn">💾 JSON 다운로드</button>
+      </div>
+      <details class="snapshot-advanced" id="snapshotAdvanced">
+        <summary>고급 : 구글시트로 자동 저장 (Apps Script 1회 셋업)</summary>
+        <div class="snapshot-sheet-row">
+          <input type="text" id="snapshotUrl" placeholder="Apps Script Web App URL (예: https://script.google.com/...)">
+          <button class="btn btn-primary" id="saveToSheetBtn">시트로 전송</button>
+        </div>
+        <div class="snapshot-status" id="snapshotStatus"></div>
+        <details class="setup-guide">
+          <summary>📖 Apps Script 셋업 가이드 보기</summary>
+          <ol class="setup-steps">
+            <li>새 구글시트 생성 → 첫 행은 비워둬도 자동으로 헤더가 생성됩니다.</li>
+            <li>메뉴에서 <strong>확장 프로그램 → Apps Script</strong> 클릭.</li>
+            <li>기본 코드 모두 지우고 아래 코드 붙여넣기.</li>
+            <li>저장(Ctrl+S) 후 <strong>배포 → 새 배포 → 유형: 웹 앱</strong> 선택.</li>
+            <li><strong>액세스 권한 : 모든 사용자</strong>로 설정 후 배포.</li>
+            <li>발급된 <strong>웹 앱 URL</strong>을 위 입력란에 붙여넣고 "시트로 전송" 클릭.</li>
+          </ol>
+          <pre class="apps-script-code" id="appsScriptCode">/* Apps Script 코드 — 아래 박스를 클릭하면 전체 복사됩니다 */</pre>
+          <button class="btn btn-sm" id="copyAppsScriptBtn">📋 Apps Script 코드 복사</button>
+        </details>
+      </details>
+    </section>
+
+    <div class="priv-note">데이터는 브라우저에서만 처리됩니다 · 새로고침 시 휘발 · 1회성 분석 도구</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// =========================== 상수 ===========================
+const REGION_MAP = {
+  "서울특별시":"서울","서울":"서울","부산광역시":"부산","부산":"부산",
+  "대구광역시":"대구","대구":"대구","인천광역시":"인천","인천":"인천",
+  "광주광역시":"광주","광주":"광주","대전광역시":"대전","대전":"대전",
+  "울산광역시":"울산","울산":"울산","세종특별자치시":"세종","세종":"세종",
+  "경기도":"경기","경기":"경기","강원특별자치도":"강원","강원도":"강원","강원":"강원",
+  "충청북도":"충북","충북":"충북","충청남도":"충남","충남":"충남",
+  "전북특별자치도":"전북","전라북도":"전북","전북":"전북",
+  "전라남도":"전남","전남":"전남","경상북도":"경북","경북":"경북",
+  "경상남도":"경남","경남":"경남","제주특별자치도":"제주","제주도":"제주","제주":"제주",
+};
+
+function statusBucket(s) {
+  if (!s) return "unknown";
+  if (s === "이용중") return "active";
+  if (s.startsWith("일시정지")) return "pause";
+  if (s.startsWith("해지")) return "cancel";
+  return "unknown";
+}
+
+function parseRegion(addr) {
+  if (!addr) return "";
+  const first = addr.trim().split(/\s+/)[0] || "";
+  return REGION_MAP[first] || first;
+}
+function parseSpecies(opt) {
+  const m = /종류=([^;]+)/.exec(opt || "");
+  return m ? m[1].trim() : "";
+}
+function parseOptionGrams(raw) {
+  if (!raw) return 0;
+  // "총 Nkg" 우선
+  const totalKg = /총\s*([\d.]+)\s*kg/.exec(raw);
+  if (totalKg) return parseFloat(totalKg[1]) * 1000;
+  // 중량 × 수량
+  const weight = /중량=([\d.]+)\s*(g|kg)/.exec(raw);
+  const qty = /수량=(\d+)/.exec(raw);
+  if (weight && qty) {
+    const w = parseFloat(weight[1]) * (weight[2] === 'kg' ? 1000 : 1);
+    return w * parseInt(qty[1], 10);
+  }
+  return 0;
+}
+function diffDays(a, b) {
+  if (!a || !b) return null;
+  const da = new Date(a + "T00:00:00"), db = new Date(b + "T00:00:00");
+  return Math.round((db - da) / 86400000);
+}
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+function pct(num, denom) {
+  if (!denom) return null;
+  return Math.round((num / denom) * 1000) / 10;
+}
+function getWeekKey(iso) {
+  if (!iso) return null;
+  const d = new Date(iso + "T00:00:00");
+  const day = (d.getDay() + 6) % 7; // 월=0
+  const monday = new Date(d); monday.setDate(d.getDate() - day);
+  const target = new Date(monday); target.setDate(monday.getDate() + 3);
+  const firstThu = new Date(target.getFullYear(), 0, 4);
+  const firstThuDay = (firstThu.getDay() + 6) % 7;
+  const firstWeekMonday = new Date(firstThu); firstWeekMonday.setDate(firstThu.getDate() - firstThuDay);
+  const week = Math.round((target - firstWeekMonday) / (7 * 86400000)) + 1;
+  return `${target.getFullYear()}-W${String(week).padStart(2,"0")}`;
+}
+function getQuarter(iso) {
+  if (!iso) return null;
+  const d = new Date(iso + "T00:00:00");
+  return `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3) + 1}`;
+}
+// "2026-W21" → "5/18~24" (해당 주 월요일~일요일)
+function formatWeekLabel(weekKey) {
+  const m = /(\d{4})-W(\d{2})/.exec(weekKey);
+  if (!m) return weekKey;
+  const year = parseInt(m[1], 10);
+  const week = parseInt(m[2], 10);
+  // ISO 주차의 목요일을 기준으로 해당 주의 월요일 찾기
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = (jan4.getDay() + 6) % 7;
+  const week1Monday = new Date(jan4); week1Monday.setDate(jan4.getDate() - jan4Day);
+  const monday = new Date(week1Monday); monday.setDate(week1Monday.getDate() + (week - 1) * 7);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  return `${monday.getMonth() + 1}/${monday.getDate()}~${sunday.getMonth() + 1}/${sunday.getDate()}`;
+}
+function getMonth(iso) {
+  return iso ? iso.slice(0, 7) : null;
+}
+
+// =========================== 상태 ===========================
+let rawRows = [];          // CSV 전체 raw rows
+let filteredRows = [];     // 필터 적용된 raw rows
+let orders = [];           // 필터된 rows를 신청번호로 묶은 신청 단위
+let allOrdersUnfiltered = []; // 필터 칩 옵션 생성용 (전체)
+let dataTodayISO = "";     // 데이터 최신일 (today 대용)
+let charts = {};
+let lastUploadedFileName = "";
+let sortField = "signDate"; // 기본 정렬: 신청일
+let sortDir = "desc";       // 기본 내림차순
+
+// =========================== 업로드 ===========================
+document.getElementById("uploadBtn").onclick = () => document.getElementById("fileInput").click();
+document.getElementById("emptyUploadBtn").onclick = () => document.getElementById("fileInput").click();
+document.getElementById("fileInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+});
+document.getElementById("resetBtn").onclick = () => {
+  rawRows = []; filteredRows = []; orders = []; allOrdersUnfiltered = [];
+  document.getElementById("dashboard").style.display = "none";
+  document.getElementById("emptyState").style.display = "block";
+  document.getElementById("resetBtn").style.display = "none";
+  document.getElementById("dataBadge").textContent = "데이터 없음";
+  document.getElementById("dataInfo").textContent = "CSV 파일을 업로드하면 분석이 시작됩니다.";
+  document.getElementById("fileInput").value = "";
+};
+const empty = document.getElementById("emptyState");
+["dragenter","dragover"].forEach(ev => empty.addEventListener(ev, e => { e.preventDefault(); empty.classList.add("drag-over"); }));
+["dragleave","drop"].forEach(ev => empty.addEventListener(ev, e => { e.preventDefault(); empty.classList.remove("drag-over"); }));
+empty.addEventListener("drop", e => {
+  const f = e.dataTransfer.files[0];
+  if (f && f.name.endsWith(".csv")) loadFile(f);
+});
+
+function loadFile(file) {
+  lastUploadedFileName = file.name;
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true, encoding: "UTF-8",
+    complete: result => {
+      rawRows = result.data.filter(r => r["신청번호"]);
+      const dates = rawRows.map(r => r["신청일"]).filter(Boolean).sort();
+      dataTodayISO = dates[dates.length - 1] || new Date().toISOString().slice(0, 10);
+      // 전체 신청건 풀(필터 칩 옵션용)
+      allOrdersUnfiltered = buildOrdersFromRows(rawRows);
+      populateFilterChips();
+      applyFilters();
+      document.getElementById("emptyState").style.display = "none";
+      document.getElementById("dashboard").style.display = "block";
+      document.getElementById("resetBtn").style.display = "inline-block";
+      document.getElementById("dataInfo").textContent = `파일: ${file.name} · 신청일 ${dates[0]} ~ ${dates[dates.length-1]} · 데이터 기준일 ${dataTodayISO}`;
+    },
+    error: err => alert("CSV 파싱 오류: " + err.message),
+  });
+}
+
+// =========================== 신청건 변환 ===========================
+function buildOrdersFromRows(rows) {
+  const byId = new Map();
+  for (const r of rows) {
+    const id = r["신청번호"];
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        signDate: r["신청일"] || "",
+        applicant: r["신청자"] || "",
+        applicantId: r["신청자아이디"] || "",
+        applicantPhone: r["신청자휴대전화"] || r["신청자일반전화"] || "",
+        recipient: r["수령자명"] || "",
+        recipientPhone: r["수령자휴대전화"] || r["수령자일반전화"] || "",
+        recipientAddr: r["수령자주소"] || "",
+        region: parseRegion(r["수령자주소"] || ""),
+        product: r["상품명"] || "",
+        cycle: r["배송주기"] || "",
+        status: r["정기배송 이용여부"] || "",
+        nextPay: r["결제예정일"] || "",
+        round: r["회차"] || "",
+        cancelDate: r["해지일"] || "",
+        options: [],
+      });
+    }
+    byId.get(id).options.push({
+      raw: r["옵션"] || "",
+      species: parseSpecies(r["옵션"] || ""),
+      qty: Number(r["수량"] || 0),
+    });
+  }
+  return Array.from(byId.values()).sort((a, b) => b.signDate.localeCompare(a.signDate));
+}
+
+// =========================== 필터 ===========================
+function populateFilterChips() {
+  const statuses = Array.from(new Set(allOrdersUnfiltered.map(o => o.status))).filter(Boolean).sort(statusSort);
+  const cycles = Array.from(new Set(allOrdersUnfiltered.map(o => o.cycle))).filter(Boolean).sort(cycleSort);
+  const products = Array.from(new Set(allOrdersUnfiltered.map(o => o.product))).filter(Boolean).sort();
+
+  // 기본값: "관리자" 단어가 포함된 상태는 제외
+  const statusDefaults = statuses.filter(s => !s.includes("관리자"));
+
+  renderChips("fStatuses", statuses, statusDefaults);
+  renderChips("fCycles", cycles, cycles);
+  renderChips("fProducts", products, products);
+}
+function statusSort(a, b) {
+  // 이용중 → 일시정지 → 해지 순, 각 그룹 내에서 구매자 → 관리자
+  const rank = s => {
+    const base = s.startsWith("이용중") ? 0 : s.startsWith("일시정지") ? 1 : s.startsWith("해지") ? 2 : 3;
+    const sub = s.includes("관리자") ? 1 : 0;
+    return base * 10 + sub;
+  };
+  return rank(a) - rank(b) || a.localeCompare(b, "ko");
+}
+function statusBucketLabel(s) {
+  const b = statusBucket(s);
+  return b === "active" ? "이용중" : b === "pause" ? "일시정지" : b === "cancel" ? "해지" : "기타";
+}
+function cycleSort(a, b) {
+  const ord = ["1주", "2주", "3주", "1개월"];
+  return ord.indexOf(a) - ord.indexOf(b);
+}
+function renderChips(elId, options, defaults) {
+  const el = document.getElementById(elId);
+  const selected = new Set(defaults);
+  el.innerHTML = options.map(opt =>
+    `<span class="chip ${selected.has(opt) ? "on" : ""}" data-val="${escapeHtml(opt)}">${escapeHtml(opt)}</span>`
+  ).join("");
+  el.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => chip.classList.toggle("on"));
+  });
+}
+function getChipSelected(elId) {
+  return Array.from(document.querySelectorAll(`#${elId} .chip.on`)).map(c => c.dataset.val);
+}
+
+document.getElementById("filterHead").addEventListener("click", () => {
+  const open = document.getElementById("filterBody").classList.toggle("open");
+  document.getElementById("filterHead").classList.toggle("open", open);
+  document.getElementById("filterToggle").textContent = open ? "▾" : "▸";
+});
+document.getElementById("applyFilterBtn").onclick = applyFilters;
+document.getElementById("resetFilterBtn").onclick = () => {
+  document.getElementById("fExcludeNames").value = "";
+  document.getElementById("fExcludeOpts").value = "";
+  document.getElementById("fDateFrom").value = "";
+  document.getElementById("fDateTo").value = "";
+  populateFilterChips();
+  applyFilters();
+};
+
+function applyFilters() {
+  const excludeNames = parseList(document.getElementById("fExcludeNames").value);
+  const excludeOpts = parseList(document.getElementById("fExcludeOpts").value);
+  const dateFrom = document.getElementById("fDateFrom").value;
+  const dateTo = document.getElementById("fDateTo").value;
+  const selStatuses = new Set(getChipSelected("fStatuses"));
+  const selCycles = new Set(getChipSelected("fCycles"));
+  const selProducts = new Set(getChipSelected("fProducts"));
+
+  // 1단계: 행 단위 옵션 키워드 필터
+  let rows = rawRows.filter(r => {
+    const opt = r["옵션"] || "";
+    return !excludeOpts.some(kw => kw && opt.includes(kw));
+  });
+
+  // 2단계: 신청건 단위 묶기
+  let ords = buildOrdersFromRows(rows);
+
+  // 3단계: 신청건 단위 필터
+  ords = ords.filter(o => {
+    if (!o.options.length) return false;
+    if (excludeNames.length) {
+      if (excludeNames.some(n => n && (o.applicant === n || o.recipient === n))) return false;
+    }
+    if (dateFrom && o.signDate < dateFrom) return false;
+    if (dateTo && o.signDate > dateTo) return false;
+    if (selStatuses.size && !selStatuses.has(o.status)) return false;
+    if (selCycles.size && !selCycles.has(o.cycle)) return false;
+    if (selProducts.size && !selProducts.has(o.product)) return false;
+    return true;
+  });
+
+  orders = ords;
+  filteredRows = rows.filter(r => orders.find(o => o.id === r["신청번호"]));
+
+  // 필터 통계
+  const totalOrders = allOrdersUnfiltered.length;
+  const totalRows = rawRows.length;
+  document.getElementById("filterStat").innerHTML =
+    `필터 후 <strong>${orders.length}</strong>건 / 전체 ${totalOrders}건 · 옵션 ${filteredRows.length} / ${totalRows}행`;
+  document.getElementById("dataBadge").textContent = `${orders.length}건`;
+
+  render();
+}
+
+function parseList(s) {
+  return (s || "").split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+}
+
+// =========================== 렌더 ===========================
+function render() {
+  renderKpis();
+  renderWeeklyChart();
+  renderAovChart();
+  renderSurvivalChart();
+  renderCohortTable();
+  renderSpeciesChart();
+  renderRegionChart();
+  renderRepeatTable();
+  renderPauseTable();
+  renderOrdersTable();
+}
+
+function renderKpis() {
+  const today = dataTodayISO;
+  const active = orders.filter(o => statusBucket(o.status) === "active");
+  const pause = orders.filter(o => statusBucket(o.status) === "pause");
+  const cancel = orders.filter(o => statusBucket(o.status) === "cancel");
+
+  // 활성 회원: 이용중 신청을 하나라도 가진 회원
+  // 일시정지 회원: 일시정지 신청을 하나라도 가진 회원 (이용중과 동시 보유여도 일시정지 카드에서도 카운트)
+  const activeMembers = new Set();
+  const pauseMembers = new Set();
+  orders.forEach(o => {
+    const k = o.applicantId || `(이름)${o.applicant}`;
+    if (!k) return;
+    const b = statusBucket(o.status);
+    if (b === "active") activeMembers.add(k);
+    if (b === "pause") pauseMembers.add(k);
+  });
+
+  // 첫결제 리드타임: 회차 1·이용중 신청건의 평균 (신청일 → 결제예정일)
+  const leadCandidates = orders
+    .filter(o => statusBucket(o.status) === "active" && (parseInt(o.round, 10) || 0) === 1 && o.nextPay && o.signDate)
+    .map(o => diffDays(o.signDate, o.nextPay))
+    .filter(d => d != null && d > 0);
+  const leadTime = leadCandidates.length
+    ? Math.round(leadCandidates.reduce((s, x) => s + x, 0) / leadCandidates.length)
+    : 2; // fallback D+2
+
+  // 첫결제 통과율: 신청 후 leadTime일 이상 경과한 신청건 중 leadTime 후에도 살아있는 건
+  const eligibleFP = orders.filter(o => o.signDate && diffDays(o.signDate, today) >= leadTime);
+  const passed = eligibleFP.filter(o => {
+    const b = statusBucket(o.status);
+    if (b !== "cancel") return true; // 이용중·일시정지면 통과
+    return o.cancelDate && diffDays(o.signDate, o.cancelDate) >= leadTime;
+  });
+  const firstPayRate = pct(passed.length, eligibleFP.length);
+
+  // 3회 잔존율: 회차 3+ 도달 = 2회 결제 완료한 신청건의 비율
+  // 모집단 = 결제 도달 가능한 모든 신청건 (이용중/일시정지/해지 모두 포함)
+  // 분자 = 회차 3+ 도달한 신청건 (이용중·일시정지는 round 활용, 해지된 건은 round가 비어있어 추정 불가 → 회차 3 도달 못한 것으로 보수적 가정)
+  const eligible3 = orders.filter(o => o.signDate);
+  const reached3 = eligible3.filter(o => {
+    const r = parseInt(o.round, 10);
+    return r >= 3;
+  });
+  const rate3 = pct(reached3.length, eligible3.length);
+
+  // 평균 객단가 (kg/신청) — 옵션 텍스트에서 무게 파싱
+  let totalGrams = 0;
+  let weightedOrders = 0;
+  orders.forEach(o => {
+    let orderGrams = 0;
+    o.options.forEach(opt => {
+      orderGrams += parseOptionGrams(opt.raw);
+    });
+    if (orderGrams > 0) {
+      totalGrams += orderGrams;
+      weightedOrders++;
+    }
+  });
+  const avgAOVkg = weightedOrders ? (totalGrams / weightedOrders / 1000).toFixed(2) : "-";
+
+  document.getElementById("kpiActiveMembers").textContent = activeMembers.size;
+  document.getElementById("kpiActiveMembersSub").textContent = `이용중 신청 ${active.length}건`;
+  document.getElementById("kpiPauseMembers").textContent = pauseMembers.size;
+  document.getElementById("kpiPauseMembersSub").textContent = `일시정지 신청 ${pause.length}건 · CS 컨택 대상`;
+  document.getElementById("kpiFirstPay").textContent = firstPayRate !== null ? `${firstPayRate}%` : "-";
+  document.getElementById("kpiFirstPaySub").textContent = `n=${eligibleFP.length} · 리드타임 D+${leadTime} 기준`;
+  document.getElementById("kpi3rd").textContent = rate3 !== null ? `${rate3}%` : "-";
+  document.getElementById("kpi3rdSub").textContent = `${reached3.length}건 / 전체 ${eligible3.length}건 (2회 결제 완료)`;
+  document.getElementById("kpiAOV").textContent = avgAOVkg + " kg";
+  document.getElementById("kpiAOVSub").textContent = `옵션 ${filteredRows.length}행 / 무게 파싱 ${weightedOrders}건`;
+  // 회원 단위 해지율 (모두 해지된 회원만 해지로 카운트)
+  const memberAlive = new Map();
+  orders.forEach(o => {
+    const k = o.applicantId || `(이름)${o.applicant}`;
+    if (!memberAlive.has(k)) memberAlive.set(k, false);
+    if (statusBucket(o.status) !== "cancel") memberAlive.set(k, true);
+  });
+  const totalMembers = memberAlive.size;
+  const lostMembers = Array.from(memberAlive.values()).filter(v => !v).length;
+  const memberCancelRate = pct(lostMembers, totalMembers);
+  const orderCancelRate = pct(cancel.length, orders.length);
+
+  document.getElementById("kpiTotals").textContent = `${orders.length} / ${cancel.length}`;
+  document.getElementById("kpiTotalsSub").innerHTML =
+    `신청 기준 ${orderCancelRate ?? "-"}% · 회원 ${totalMembers}명 중 ${lostMembers}명(${memberCancelRate ?? "-"}%)`;
+}
+
+// 주별 신규/해지/순증감 — 최근 10주 + 실제 날짜 라벨 (월요일 ~ 일요일)
+function renderWeeklyChart() {
+  const newByWeek = new Map();
+  const cancelByWeek = new Map();
+  orders.forEach(o => {
+    const wk = getWeekKey(o.signDate);
+    if (wk) newByWeek.set(wk, (newByWeek.get(wk) || 0) + 1);
+    if (statusBucket(o.status) === "cancel") {
+      const cw = getWeekKey(o.cancelDate);
+      if (cw) cancelByWeek.set(cw, (cancelByWeek.get(cw) || 0) + 1);
+    }
+  });
+  const allWeeks = Array.from(new Set([...newByWeek.keys(), ...cancelByWeek.keys()])).sort();
+  const weeks = allWeeks.slice(-10); // 최근 10주만
+  const labels = weeks.map(w => formatWeekLabel(w));
+  const newArr = weeks.map(w => newByWeek.get(w) || 0);
+  const cancelArr = weeks.map(w => -(cancelByWeek.get(w) || 0));
+  const netArr = weeks.map((w, i) => newArr[i] + cancelArr[i]);
+
+  if (charts.weekly) charts.weekly.destroy();
+
+  // 막대 위/아래에 숫자 라벨 그리는 plugin
+  const dataLabelsPlugin = {
+    id: "netLabels",
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = "600 11px sans-serif";
+      ctx.textAlign = "center";
+      meta.data.forEach((bar, i) => {
+        const v = netArr[i];
+        if (v === 0) return;
+        const sign = v > 0 ? "+" : "";
+        ctx.fillStyle = v >= 0 ? "#2E7D32" : "#c0392b";
+        const y = v >= 0 ? bar.y - 6 : bar.y + 14;
+        ctx.fillText(`${sign}${v}`, bar.x, y);
+      });
+      ctx.restore();
+    },
+  };
+
+  charts.weekly = new Chart(document.getElementById("weeklyChart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "순증감",
+        data: netArr,
+        backgroundColor: netArr.map(v => v >= 0 ? "rgba(46,125,50,0.85)" : "rgba(192,57,43,0.85)"),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 20, bottom: 8 } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: "#f0f0f0" }, ticks: { precision: 0 } },
+        x: { grid: { display: false } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              const n = newArr[ctx.dataIndex];
+              const c = Math.abs(cancelArr[ctx.dataIndex]);
+              return [
+                `순증감: ${v > 0 ? "+" : ""}${v}`,
+                `신규: ${n}`,
+                `해지: ${c}`,
+              ];
+            },
+          },
+        },
+      },
+    },
+    plugins: [dataLabelsPlugin],
+  });
+}
+
+// 월별 1신청당 평균 중량 추이 (kg)
+function renderAovChart() {
+  const sumGramsByMonth = new Map();
+  const cntByMonth = new Map();
+  orders.forEach(o => {
+    const m = getMonth(o.signDate);
+    if (!m) return;
+    let orderGrams = 0;
+    o.options.forEach(opt => { orderGrams += parseOptionGrams(opt.raw); });
+    if (orderGrams > 0) {
+      sumGramsByMonth.set(m, (sumGramsByMonth.get(m) || 0) + orderGrams);
+      cntByMonth.set(m, (cntByMonth.get(m) || 0) + 1);
+    }
+  });
+  const months = Array.from(cntByMonth.keys()).sort();
+  const avg = months.map(m => (sumGramsByMonth.get(m) / cntByMonth.get(m) / 1000).toFixed(2));
+
+  if (charts.aov) charts.aov.destroy();
+  charts.aov = new Chart(document.getElementById("aovChart"), {
+    type: "line",
+    data: {
+      labels: months,
+      datasets: [{
+        label: "평균 중량 (kg)",
+        data: avg,
+        borderColor: "#F15A30",
+        backgroundColor: "rgba(241,90,48,0.15)",
+        fill: true, tension: 0.3, pointRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v + " kg" } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} kg` } } },
+    },
+  });
+}
+
+// 잔존 곡선
+function renderSurvivalChart() {
+  const today = dataTodayISO;
+  const points = [0, 2, 3, 7, 14, 30, 60, 90, 180];
+  const data = points.map(N => {
+    const eligible = orders.filter(o => o.signDate && diffDays(o.signDate, today) >= N);
+    if (!eligible.length) return null;
+    const survived = eligible.filter(o => {
+      const b = statusBucket(o.status);
+      if (b !== "cancel") return true;
+      return o.cancelDate && diffDays(o.signDate, o.cancelDate) > N;
+    });
+    return Math.round((survived.length / eligible.length) * 1000) / 10;
+  });
+
+  if (charts.survival) charts.survival.destroy();
+  charts.survival = new Chart(document.getElementById("survivalChart"), {
+    type: "line",
+    data: {
+      labels: points.map(p => `+${p}일`),
+      datasets: [{ label: "잔존율(%)", data, borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,0.15)", fill: true, tension: 0.3, pointRadius: 4 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + "%" } } },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+// 코호트 잔존 테이블
+function renderCohortTable() {
+  const today = dataTodayISO;
+  const byQ = new Map();
+  orders.forEach(o => {
+    const q = getQuarter(o.signDate);
+    if (!q) return;
+    if (!byQ.has(q)) byQ.set(q, []);
+    byQ.get(q).push(o);
+  });
+  const tbody = document.querySelector("#cohortTable tbody");
+  const qs = Array.from(byQ.keys()).sort();
+  if (!qs.length) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-sub);padding:20px">데이터 없음</td></tr>`; return; }
+
+  const cells = qs.map(q => {
+    const cohort = byQ.get(q);
+    const row = [q, cohort.length];
+    [7, 30, 60, 90].forEach(N => {
+      const eligible = cohort.filter(o => diffDays(o.signDate, today) >= N);
+      if (!eligible.length) { row.push(null); return; }
+      const survived = eligible.filter(o => {
+        const b = statusBucket(o.status);
+        if (b !== "cancel") return true;
+        return o.cancelDate && diffDays(o.signDate, o.cancelDate) > N;
+      });
+      row.push(pct(survived.length, eligible.length));
+    });
+    return row;
+  });
+
+  tbody.innerHTML = cells.map(row => {
+    const cells = row.slice(2).map(v => {
+      if (v === null) return `<td class="num"><span style="color:var(--text-sub)">–</span></td>`;
+      const color = v >= 70 ? "#e8f5e9" : v >= 40 ? "#fff4e5" : "#fbe9e7";
+      return `<td class="num"><span class="cohort-cell" style="background:${color}">${v}%</span></td>`;
+    }).join("");
+    return `<tr><td>${row[0]}</td><td class="num">${row[1]}</td>${cells}</tr>`;
+  }).join("");
+}
+
+// 어종 Top10 — 신청건당 1회 카운트 (같은 신청 내 중복 어종은 1로 합침)
+function renderSpeciesChart() {
+  const counts = {};
+  orders.forEach(o => {
+    const speciesInOrder = new Set();
+    o.options.forEach(opt => {
+      if (opt.species) speciesInOrder.add(opt.species);
+    });
+    speciesInOrder.forEach(s => { counts[s] = (counts[s] || 0) + 1; });
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0, 10);
+
+  if (charts.species) charts.species.destroy();
+  charts.species = new Chart(document.getElementById("speciesChart"), {
+    type: "bar",
+    data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: "#F15A30" }] },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
+  });
+}
+
+// 지역 분포
+function renderRegionChart() {
+  const live = orders.filter(o => ["active","pause"].includes(statusBucket(o.status)));
+  const counts = {};
+  live.forEach(o => { const r = o.region || "(미상)"; counts[r] = (counts[r] || 0) + 1; });
+  const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+
+  if (charts.region) charts.region.destroy();
+  charts.region = new Chart(document.getElementById("regionChart"), {
+    type: "bar",
+    data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: "#2563eb" }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+  });
+}
+
+// 재구매 회원
+function renderRepeatTable() {
+  const byMember = new Map();
+  orders.forEach(o => {
+    const k = o.applicantId || `(이름)${o.applicant}`;
+    if (!byMember.has(k)) byMember.set(k, { id: o.applicantId, name: o.applicant, list: [] });
+    byMember.get(k).list.push(o);
+  });
+  const repeats = Array.from(byMember.values())
+    .filter(m => m.list.length >= 2)
+    .map(m => {
+      const a = m.list.filter(o => statusBucket(o.status) === "active").length;
+      const p = m.list.filter(o => statusBucket(o.status) === "pause").length;
+      const c = m.list.filter(o => statusBucket(o.status) === "cancel").length;
+      const last = m.list.map(o => o.signDate).sort().reverse()[0];
+      return { ...m, total: m.list.length, a, p, c, last };
+    })
+    .sort((x, y) => y.a - x.a || y.total - x.total);
+
+  const tbody = document.querySelector("#repeatTable tbody");
+  if (!repeats.length) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-sub);padding:20px">재구매 회원 없음</td></tr>`; return; }
+  tbody.innerHTML = repeats.map(r => `
+    <tr>
+      <td>${escapeHtml(r.id || "-")}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td class="num"><strong>${r.total}</strong></td>
+      <td class="num">${r.a}</td>
+      <td class="num">${r.p}</td>
+      <td class="num">${r.c}</td>
+      <td>${r.last}</td>
+    </tr>`).join("");
+}
+
+// 일시정지 워치리스트
+function renderPauseTable() {
+  const pause = orders.filter(o => statusBucket(o.status) === "pause")
+    .sort((a,b) => (parseInt(b.round)||0) - (parseInt(a.round)||0) || b.signDate.localeCompare(a.signDate));
+  const tbody = document.querySelector("#pauseTable tbody");
+  if (!pause.length) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-sub);padding:20px">일시정지 건 없음</td></tr>`; return; }
+  tbody.innerHTML = pause.map(o => `
+    <tr>
+      <td>${o.id}</td>
+      <td>${escapeHtml(o.applicant)} <span class="pill pill-pause">${o.status.replace("일시정지","")}</span></td>
+      <td>${escapeHtml(o.applicantPhone)}</td>
+      <td>${o.cycle}</td>
+      <td class="num">${o.round || "-"}</td>
+      <td>${o.signDate}</td>
+      <td>${renderOptionsCell(o.options)}</td>
+    </tr>`).join("");
+}
+
+function renderOptionsCell(options) {
+  if (!options.length) return "-";
+  if (options.length === 1) return `<span style="font-size:12px;color:var(--text-sub)">${escapeHtml(options[0].raw)}</span>`;
+  return `<details class="opt"><summary>옵션 ${options.length}개</summary><ul>${options.map(o => `<li>${escapeHtml(o.raw)}</li>`).join("")}</ul></details>`;
+}
+
+function compareOrders(a, b) {
+  const dir = sortDir === "asc" ? 1 : -1;
+  let av, bv;
+  switch (sortField) {
+    case "signDate": av = a.signDate; bv = b.signDate; break;
+    case "status": {
+      const order = { active: 0, pause: 1, cancel: 2, unknown: 3 };
+      av = order[statusBucket(a.status)]; bv = order[statusBucket(b.status)];
+      break;
+    }
+    case "applicant": av = a.applicant || ""; bv = b.applicant || ""; break;
+    case "cycle": {
+      const order = { "1주": 0, "2주": 1, "3주": 2, "1개월": 3 };
+      av = order[a.cycle] ?? 99; bv = order[b.cycle] ?? 99;
+      break;
+    }
+    case "round": av = parseInt(a.round, 10) || 0; bv = parseInt(b.round, 10) || 0; break;
+    case "cancelDate": av = a.cancelDate || ""; bv = b.cancelDate || ""; break;
+    default: return 0;
+  }
+  if (typeof av === "string") return av.localeCompare(bv, "ko") * dir;
+  return (av - bv) * dir;
+}
+
+function updateSortArrows() {
+  document.querySelectorAll("#ordersTable th[data-sort]").forEach(th => {
+    const arrow = th.querySelector(".sort-arrow");
+    if (!arrow) return;
+    th.classList.remove("sort-asc", "sort-desc");
+    if (th.dataset.sort === sortField) {
+      th.classList.add(sortDir === "asc" ? "sort-asc" : "sort-desc");
+      arrow.textContent = sortDir === "asc" ? "▴" : "▾";
+    } else {
+      arrow.textContent = "▾";
+    }
+  });
+}
+
+document.querySelectorAll("#ordersTable th[data-sort]").forEach(th => {
+  th.addEventListener("click", () => {
+    const field = th.dataset.sort;
+    if (sortField === field) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortField = field;
+      sortDir = "asc";
+    }
+    renderOrdersTable();
+  });
+});
+
+function renderOrdersTable() {
+  const q = (document.getElementById("searchInput").value || "").trim().toLowerCase();
+  const st = document.getElementById("statusFilter").value;
+  let list = orders.slice();
+  if (st) list = list.filter(o => statusBucketLabel(o.status) === st);
+  if (q) list = list.filter(o => (o.applicant + o.applicantId + o.recipient + o.id + o.applicantPhone + o.recipientPhone).toLowerCase().includes(q));
+  list.sort(compareOrders);
+  updateSortArrows();
+  document.getElementById("totalCount").textContent = `${list.length}건 / 필터 ${orders.length}건`;
+  const tbody = document.querySelector("#ordersTable tbody");
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-sub);padding:20px">결과 없음</td></tr>`; return; }
+  tbody.innerHTML = list.slice(0, 500).map(o => {
+    const b = statusBucket(o.status);
+    const pill = b === "active" ? `<span class="pill pill-active">이용중</span>` :
+                 b === "pause" ? `<span class="pill pill-pause">일시정지</span>` :
+                 b === "cancel" ? `<span class="pill pill-cancel">해지</span>` : escapeHtml(o.status);
+    return `<tr>
+      <td>${o.id}</td>
+      <td>${o.signDate}</td>
+      <td>${pill}</td>
+      <td>${escapeHtml(o.applicant)}<br><span style="color:var(--text-sub);font-size:11px">${escapeHtml(o.applicantId || "")}</span></td>
+      <td>${o.cycle}</td>
+      <td class="num">${o.round || "-"}</td>
+      <td>${o.cancelDate || "-"}</td>
+      <td>${renderOptionsCell(o.options)}</td>
+    </tr>`;
+  }).join("") + (list.length > 500 ? `<tr><td colspan="8" style="text-align:center;color:var(--text-sub);padding:12px">${list.length - 500}건 더 있음 — 검색으로 좁혀주세요</td></tr>` : "");
+}
+document.getElementById("searchInput").addEventListener("input", renderOrdersTable);
+document.getElementById("statusFilter").addEventListener("change", renderOrdersTable);
+
+// =========================== 결과 스냅샷 저장 ===========================
+const SNAPSHOT_FIELDS = [
+  { key: "savedAt",        label: "저장 시각" },
+  { key: "dataDate",       label: "데이터 기준일" },
+  { key: "fileName",       label: "파일명" },
+  { key: "filteredOrders", label: "필터 후 신청건" },
+  { key: "totalOrders",    label: "전체 신청건" },
+  { key: "activeMembers",  label: "활성 회원" },
+  { key: "pauseMembers",   label: "일시정지 회원" },
+  { key: "firstPayRate",   label: "결제 도달율(D+2)" },
+  { key: "reach3Rate",     label: "3회 잔존율" },
+  { key: "avgWeightKg",    label: "1신청당 평균중량(kg)" },
+  { key: "totalCancels",   label: "누적 해지(건)" },
+  { key: "lostMembers",    label: "해지 회원" },
+  { key: "totalMembers",   label: "전체 회원" },
+];
+
+function getCurrentSnapshot() {
+  // 회원 단위 활성/해지 카운트 (kpiTotalsSub의 텍스트에서도 가능하지만 직접 재계산)
+  const memberAlive = new Map();
+  orders.forEach(o => {
+    const k = o.applicantId || `(이름)${o.applicant}`;
+    if (!memberAlive.has(k)) memberAlive.set(k, false);
+    if (statusBucket(o.status) !== "cancel") memberAlive.set(k, true);
+  });
+  const totalMembers = memberAlive.size;
+  const lostMembers = Array.from(memberAlive.values()).filter(v => !v).length;
+  const cancelCount = orders.filter(o => statusBucket(o.status) === "cancel").length;
+
+  return {
+    savedAt:        new Date().toISOString().replace("T", " ").slice(0, 19),
+    dataDate:       dataTodayISO,
+    fileName:       lastUploadedFileName,
+    filteredOrders: orders.length,
+    totalOrders:    allOrdersUnfiltered.length,
+    activeMembers:  parseInt(document.getElementById("kpiActiveMembers").textContent) || 0,
+    pauseMembers:   parseInt(document.getElementById("kpiPauseMembers").textContent) || 0,
+    firstPayRate:   document.getElementById("kpiFirstPay").textContent,
+    reach3Rate:     document.getElementById("kpi3rd").textContent,
+    avgWeightKg:    document.getElementById("kpiAOV").textContent,
+    totalCancels:   cancelCount,
+    lostMembers,
+    totalMembers,
+  };
+}
+
+function renderSnapshotPreview() {
+  const s = getCurrentSnapshot();
+  const el = document.getElementById("snapshotPreview");
+  if (!el || !orders.length) return;
+  // 한 줄 미리보기 (주요 KPI만)
+  el.innerHTML =
+    `<b>${s.savedAt}</b> · 데이터 ${s.dataDate} · ` +
+    `활성 <b>${s.activeMembers}</b> · 일시정지 <b>${s.pauseMembers}</b> · ` +
+    `결제도달 <b>${s.firstPayRate}</b> · 3회잔존 <b>${s.reach3Rate}</b> · ` +
+    `평균중량 <b>${s.avgWeightKg}</b> · ` +
+    `해지 <b>${s.totalCancels}건 / ${s.lostMembers}명</b>`;
+}
+
+// 클립보드 TSV 복사
+document.getElementById("copySnapshotBtn").onclick = async () => {
+  if (!orders.length) return alert("먼저 CSV를 업로드하세요.");
+  const s = getCurrentSnapshot();
+  // 첫 줄 = 헤더, 두 번째 줄 = 값 (구글시트 paste 시 한 줄로 들어가게 하려면 헤더 빼고 값만)
+  const header = SNAPSHOT_FIELDS.map(f => f.label).join("\t");
+  const row    = SNAPSHOT_FIELDS.map(f => s[f.key] ?? "").join("\t");
+  const text   = header + "\n" + row;
+  try {
+    await navigator.clipboard.writeText(text);
+    flashStatus("success", "✅ 복사 완료. 구글시트 빈 칸에 붙여넣기 하세요. (첫 줄: 헤더, 두번째 줄: 값)");
+  } catch (e) {
+    flashStatus("error", "복사 실패: " + e.message);
+  }
+};
+
+// JSON 다운로드
+document.getElementById("downloadJsonBtn").onclick = () => {
+  if (!orders.length) return alert("먼저 CSV를 업로드하세요.");
+  const s = getCurrentSnapshot();
+  const blob = new Blob([JSON.stringify(s, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `subscription-snapshot-${dataTodayISO || "unknown"}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+// Apps Script로 POST 저장
+document.getElementById("saveToSheetBtn").onclick = async () => {
+  const url = document.getElementById("snapshotUrl").value.trim();
+  if (!url) return flashStatus("error", "Apps Script Web App URL을 먼저 입력하세요.");
+  if (!/^https:\/\/script\.google\.com\//.test(url))
+    return flashStatus("error", "올바른 Apps Script URL이 아닙니다.");
+  if (!orders.length) return flashStatus("error", "먼저 CSV를 업로드하세요.");
+
+  const s = getCurrentSnapshot();
+  flashStatus("", "전송 중...");
+  try {
+    // text/plain 으로 보내면 simple request로 처리되어 CORS preflight 없음
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(s),
+      mode: "no-cors", // Apps Script 응답을 못 읽지만 데이터는 전송됨
+    });
+    flashStatus("success", "✅ 전송 요청 완료. 구글시트에서 확인하세요.");
+  } catch (e) {
+    flashStatus("error", "전송 실패: " + e.message);
+  }
+};
+
+function flashStatus(cls, msg) {
+  const el = document.getElementById("snapshotStatus");
+  el.textContent = msg;
+  el.className = "snapshot-status " + cls;
+  if (cls === "success") setTimeout(() => { el.textContent = ""; el.className = "snapshot-status"; }, 5000);
+}
+
+// Apps Script 코드 (사용자에게 제공할 스니펫)
+const APPS_SCRIPT_CODE = `// 씨몬스터 정기배송 분석 스냅샷 수신용 Apps Script
+// 구글시트 > 확장 프로그램 > Apps Script 에 붙여넣고 웹앱 배포
+function doPost(e) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const data = JSON.parse(e.postData.contents);
+    const headers = [
+      '저장 시각', '데이터 기준일', '파일명',
+      '필터 후 신청건', '전체 신청건',
+      '활성 회원', '일시정지 회원',
+      '결제 도달율(D+2)', '3회 잔존율', '1신청당 평균중량(kg)',
+      '누적 해지(건)', '해지 회원', '전체 회원'
+    ];
+    // 헤더가 없으면 첫 줄에 추가
+    if (sheet.getLastRow() === 0) sheet.appendRow(headers);
+    sheet.appendRow([
+      data.savedAt, data.dataDate, data.fileName,
+      data.filteredOrders, data.totalOrders,
+      data.activeMembers, data.pauseMembers,
+      data.firstPayRate, data.reach3Rate, data.avgWeightKg,
+      data.totalCancels, data.lostMembers, data.totalMembers,
+    ]);
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+document.getElementById("appsScriptCode").textContent = APPS_SCRIPT_CODE;
+document.getElementById("copyAppsScriptBtn").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(APPS_SCRIPT_CODE);
+    flashStatus("success", "✅ Apps Script 코드가 복사됐습니다.");
+  } catch (e) {
+    flashStatus("error", "복사 실패: " + e.message);
+  }
+};
+document.getElementById("appsScriptCode").onclick = () => {
+  document.getElementById("copyAppsScriptBtn").click();
+};
+
+// 분석 갱신 시 미리보기도 갱신 (render() 끝부분에서 호출)
+const _origRender = render;
+render = function() { _origRender(); renderSnapshotPreview(); };
+</script>
+</body>
+</html>
