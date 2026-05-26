@@ -329,8 +329,12 @@
   .ship-day-badge .badge.overdue { background: var(--danger); color: #fff; }
 
   .ship-day-body {
-    padding: 4px 16px 10px;
+    padding: 8px 16px 10px;
     background: #fafafa;
+  }
+  .ship-day-arrival {
+    font-size: 11px; color: var(--info);
+    font-weight: 600; margin-bottom: 4px;
   }
   .ship-product-table {
     width: 100%; font-size: 12px;
@@ -691,7 +695,7 @@
       <div class="card-head">
         <div>
           <div class="card-title">발송 일정 — 향후 30일</div>
-          <div class="card-sub">이용중 신청 · 결제예정일+1일 = 발송일 (D+3 정책) · 상품 옵션 단위 SKU</div>
+          <div class="card-sub">이용중 신청 · 결제예정일 = 발송일 (D+2) · 도착예정일 = +1일 (D+3)</div>
         </div>
         <div>
           <button class="btn btn-sm" id="copyShipBtn">📋 TSV 복사</button>
@@ -1128,12 +1132,12 @@ function renderKpis() {
 }
 
 // 발송 일정: 향후 30일 · 상품 옵션 단위 수량 집계
-// 발송일 = 결제예정일 + 1일 (D+3 정책)
+// 발송일 = 결제예정일 (D+2), 도착예정일 = 발송일 + 1일 (D+3)
 function computeShippingSchedule() {
   const active = orders.filter(o => statusBucket(o.status) === "active" && o.nextPay);
   const byShipDate = new Map();
   active.forEach(o => {
-    const shipDate = addDaysISO(o.nextPay, 1);
+    const shipDate = o.nextPay;
     if (!byShipDate.has(shipDate)) {
       byShipDate.set(shipDate, { orders: [], products: new Map() });
     }
@@ -1223,22 +1227,41 @@ function renderShippingSchedule() {
     else if (d === 0) { klass += " today"; badge = `<span class="badge today">오늘</span>`; }
     else if (d <= 3) { badge = `<span class="badge soon">D-${d}</span>`; }
 
+    // 발송 명단도 검색에 따라 필터링 — 매칭 SKU를 보유한 신청건만
+    const matchedOrders = search
+      ? entry.orders.filter(o => o.options.some(opt => matchKey(parseProductKey(opt.raw))))
+      : entry.orders;
+    const headSummary = search
+      ? `${matchedOrders.length}건 / 총 ${entry.orders.length}건`
+      : `${entry.orders.length}건`;
+
     return `
       <details class="${klass}">
         <summary>
           <span class="ship-day-date">${date}</span>
           <span class="ship-day-weekday">${weekday(date)}</span>
-          <span class="ship-day-count">${entry.orders.length}건</span>
+          <span class="ship-day-count">${headSummary}</span>
           <span class="ship-day-qty">${dayQty}개</span>
           <span class="ship-day-badge">${badge}</span>
         </summary>
         <div class="ship-day-body">
+          <div class="ship-day-arrival">도착예정 : ${addDaysISO(date, 1)} (${weekday(addDaysISO(date, 1))})</div>
           <table class="ship-product-table">
             ${sorted.map(([k, q]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${q}개</td></tr>`).join("")}
           </table>
           <details class="ship-day-members">
-            <summary>발송 명단 ${entry.orders.length}건 보기</summary>
-            <ul>${entry.orders.map(o => `<li>${escapeHtml(o.applicant)} · ${o.cycle} · ${escapeHtml(o.region || "-")}</li>`).join("")}</ul>
+            <summary>발송 명단 ${matchedOrders.length}건${search ? ` (검색 매칭)` : ""} 보기</summary>
+            <ul>${matchedOrders.map(o => {
+              // 매칭된 SKU와 수량을 명단 옆에 표시 (검색 시에만)
+              let extra = "";
+              if (search) {
+                const matchedSkus = o.options
+                  .filter(opt => matchKey(parseProductKey(opt.raw)))
+                  .map(opt => `${parseProductKey(opt.raw)} ×${opt.qty || 1}`);
+                if (matchedSkus.length) extra = ` <span style="color:var(--primary-dark)">— ${escapeHtml(matchedSkus.join(", "))}</span>`;
+              }
+              return `<li>${escapeHtml(o.applicant)} · ${o.cycle} · ${escapeHtml(o.region || "-")}${extra}</li>`;
+            }).join("")}</ul>
           </details>
         </div>
       </details>
@@ -1266,12 +1289,13 @@ document.getElementById("copyShipBtn").addEventListener("click", async () => {
     return d >= -3 && d <= 30;
   });
   if (!schedule.length) return alert("발송 예정이 없습니다.");
-  const lines = ["발송일\t요일\t신청건수\t상품 옵션\t수량(개)"];
+  const lines = ["발송일\t요일\t도착예정일\t신청건수\t상품 옵션\t수량(개)"];
   schedule.forEach(([date, entry]) => {
     const wd = weekday(date);
+    const arrival = addDaysISO(date, 1);
     const sorted = Array.from(entry.products.entries()).sort((a, b) => b[1] - a[1]);
     sorted.forEach(([k, q]) => {
-      lines.push(`${date}\t${wd}\t${entry.orders.length}\t${k}\t${q}`);
+      lines.push(`${date}\t${wd}\t${arrival}\t${entry.orders.length}\t${k}\t${q}`);
     });
   });
   try {
