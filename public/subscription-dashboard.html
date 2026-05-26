@@ -249,6 +249,113 @@
     color: var(--text-sub); text-align: center;
   }
 
+  /* 발송 일정 영역 */
+  .ship-summary {
+    background: var(--primary-light);
+    border-radius: 8px; padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+  .ship-summary-title {
+    font-size: 12px; font-weight: 700;
+    color: var(--primary-dark); margin-bottom: 8px;
+  }
+  .ship-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+  }
+  .ship-summary-item {
+    background: #fff; padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(241,90,48,0.2);
+  }
+  .ship-summary-product {
+    font-size: 11px; color: var(--text);
+    font-weight: 600; margin-bottom: 4px;
+    line-height: 1.3; min-height: 28px;
+  }
+  .ship-summary-amount {
+    font-size: 16px; font-weight: 800;
+    color: var(--primary); font-variant-numeric: tabular-nums;
+  }
+  .ship-summary-count {
+    font-size: 10px; color: var(--text-sub); margin-top: 2px;
+  }
+  .ship-list-actions {
+    display: flex; gap: 8px; margin-bottom: 8px;
+  }
+  .ship-list { display: block; }
+  .ship-day {
+    border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 6px;
+    background: #fff; overflow: hidden;
+  }
+  .ship-day.today { border-color: var(--primary); }
+  .ship-day.overdue { border-color: var(--danger); }
+  .ship-day > summary {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; cursor: pointer; user-select: none;
+    list-style: none; gap: 8px;
+  }
+  .ship-day > summary::-webkit-details-marker { display: none; }
+  .ship-day.today > summary { background: var(--primary-light); }
+  .ship-day.overdue > summary { background: #fff0f0; }
+  .ship-day > summary::after {
+    content: "▸"; color: var(--text-sub); font-size: 12px;
+    transition: transform 0.15s;
+  }
+  .ship-day[open] > summary::after { content: "▾"; }
+  .ship-day-date { font-size: 14px; font-weight: 700; }
+  .ship-day-date .weekday { color: var(--text-sub); font-weight: 500; margin-left: 4px; }
+  .ship-day-stat {
+    font-size: 12px; color: var(--text-sub);
+    margin-left: auto; padding-right: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .ship-day-stat .badge {
+    display: inline-block; padding: 2px 6px;
+    border-radius: 8px; font-size: 10px;
+    font-weight: 700; margin-left: 4px;
+  }
+  .ship-day-stat .badge.today { background: var(--primary); color: #fff; }
+  .ship-day-stat .badge.soon { background: var(--info); color: #fff; }
+  .ship-day-stat .badge.overdue { background: var(--danger); color: #fff; }
+  .ship-day-body {
+    padding: 4px 14px 12px;
+    border-top: 1px solid var(--border);
+    background: #fafafa;
+  }
+  .ship-product-table {
+    width: 100%; font-size: 12px;
+    border-collapse: collapse; margin-top: 6px;
+  }
+  .ship-product-table td {
+    padding: 4px 0;
+    border-bottom: 1px dashed #e8e8e8;
+    line-height: 1.4;
+  }
+  .ship-product-table td.num {
+    text-align: right; font-variant-numeric: tabular-nums;
+    font-weight: 700; color: var(--primary-dark);
+    white-space: nowrap; padding-left: 8px;
+  }
+  .ship-product-table tr:last-child td { border-bottom: none; }
+  .ship-day-members {
+    margin-top: 10px; padding-top: 8px;
+    border-top: 1px dashed #ccc;
+  }
+  .ship-day-members summary {
+    font-size: 11px; color: var(--text-sub);
+    cursor: pointer; font-weight: 600;
+  }
+  .ship-day-members ul {
+    list-style: none; padding-left: 0; margin-top: 6px;
+  }
+  .ship-day-members li {
+    font-size: 11px; color: var(--text-sub);
+    padding: 2px 0;
+  }
+
   /* Snapshot 영역 */
   .snapshot-preview {
     background: #fafafa; border: 1px solid var(--border);
@@ -407,6 +514,21 @@
         <div class="kpi-value" id="kpiTotals">-</div>
         <div class="kpi-sub" id="kpiTotalsSub">-</div>
       </div>
+    </section>
+
+    <!-- 발송 일정 -->
+    <section class="card" id="shippingSection">
+      <div class="card-head">
+        <div>
+          <div class="card-title">발송 일정 — 향후 30일</div>
+          <div class="card-sub">이용중 신청 · 결제예정일+1일 = 발송일 (D+3 정책) · 상품 옵션 단위 수량</div>
+        </div>
+        <div>
+          <button class="btn btn-sm" id="copyShipBtn">📋 발송 계획 복사 (TSV)</button>
+        </div>
+      </div>
+      <div class="ship-summary" id="shipSummary"></div>
+      <div class="ship-list" id="shipList"></div>
     </section>
 
     <!-- 시계열 -->
@@ -626,6 +748,29 @@ function diffDays(a, b) {
   if (!a || !b) return null;
   const da = new Date(a + "T00:00:00"), db = new Date(b + "T00:00:00");
   return Math.round((db - da) / 86400000);
+}
+function addDaysISO(iso, n) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function weekday(iso) {
+  if (!iso) return "";
+  return ["일","월","화","수","목","금","토"][new Date(iso + "T00:00:00").getDay()];
+}
+// 상품 옵션 키 = 어종 + 중량/포장 + 패키지 수량/총량 (별개 SKU 단위)
+// 예: "연어순살 100g(개별포장) × 1개" / "연어순살 100g(개별포장) × 10개 / 총 1kg"
+function parseProductKey(raw) {
+  if (!raw) return "";
+  const species = (/종류=([^;]+)/.exec(raw) || [])[1]?.trim() || "";
+  const weight  = (/중량=([^;]+)/.exec(raw) || [])[1]?.trim() || "";
+  const pack    = (/수량=([^;]+)/.exec(raw) || [])[1]?.trim() || "";
+  const head    = [species, weight].filter(Boolean).join(" ");
+  return pack ? (head ? `${head} × ${pack}` : pack) : head;
 }
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -870,6 +1015,7 @@ function parseList(s) {
 // =========================== 렌더 ===========================
 function render() {
   renderKpis();
+  renderShippingSchedule();
   renderWeeklyChart();
   renderAovChart();
   renderSurvivalChart();
@@ -968,6 +1114,131 @@ function renderKpis() {
   document.getElementById("kpiTotalsSub").innerHTML =
     `신청 기준 ${orderCancelRate ?? "-"}% · 회원 ${totalMembers}명 중 ${lostMembers}명(${memberCancelRate ?? "-"}%)`;
 }
+
+// 발송 일정: 향후 30일 · 상품 옵션 단위 수량 집계
+// 발송일 = 결제예정일 + 1일 (D+3 정책)
+function computeShippingSchedule() {
+  const active = orders.filter(o => statusBucket(o.status) === "active" && o.nextPay);
+  const byShipDate = new Map();
+  active.forEach(o => {
+    const shipDate = addDaysISO(o.nextPay, 1);
+    if (!byShipDate.has(shipDate)) {
+      byShipDate.set(shipDate, { orders: [], products: new Map() });
+    }
+    const entry = byShipDate.get(shipDate);
+    entry.orders.push(o);
+    o.options.forEach(opt => {
+      const key = parseProductKey(opt.raw);
+      const qty = opt.qty || 0; // CSV 수량 컬럼 = 그 SKU를 몇 번 담았는지
+      if (!key || qty <= 0) return;
+      entry.products.set(key, (entry.products.get(key) || 0) + qty);
+    });
+  });
+  return Array.from(byShipDate.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function renderShippingSchedule() {
+  const today = dataTodayISO;
+  const schedule = computeShippingSchedule().filter(([date]) => {
+    const d = diffDays(today, date);
+    return d >= -3 && d <= 30; // 지연 3일 ~ 향후 30일
+  });
+
+  // 향후 30일 상품별 합계
+  const totals = new Map();
+  schedule.forEach(([, entry]) => {
+    entry.products.forEach((qty, key) => {
+      totals.set(key, (totals.get(key) || 0) + qty);
+    });
+  });
+  const totalsArr = Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
+  const grandQty = totalsArr.reduce((s, [, q]) => s + q, 0);
+  const orderTotal = schedule.reduce((s, [, e]) => s + e.orders.length, 0);
+
+  const summaryEl = document.getElementById("shipSummary");
+  if (!totalsArr.length) {
+    summaryEl.innerHTML = `<div class="ship-summary-title">발송 예정 없음 — 이용중 신청건이 없거나 결제예정일 정보가 없습니다.</div>`;
+    document.getElementById("shipList").innerHTML = "";
+    return;
+  }
+  summaryEl.innerHTML = `
+    <div class="ship-summary-title">향후 30일 상품별 합계 · ${schedule.length}일치 · ${orderTotal}건 신청 · 총 ${grandQty}개</div>
+    <div class="ship-summary-grid">
+      ${totalsArr.map(([k, q]) => `
+        <div class="ship-summary-item">
+          <div class="ship-summary-product">${escapeHtml(k)}</div>
+          <div class="ship-summary-amount">${q}<span style="font-size:11px;font-weight:600;margin-left:2px;color:var(--text-sub)">개</span></div>
+          <div class="ship-summary-count">${schedule.filter(([, e]) => e.products.has(k)).length}일 발송</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  // 발송일별 카드 — 모두 기본 접힘. 필요할 때만 펼침.
+  const shipListEl = document.getElementById("shipList");
+  shipListEl.innerHTML = `
+    <div class="ship-list-actions">
+      <button class="btn btn-sm" id="expandAllShipBtn">모두 펼치기</button>
+      <button class="btn btn-sm" id="collapseAllShipBtn">모두 접기</button>
+    </div>
+  ` + schedule.map(([date, entry]) => {
+    const dayQty = Array.from(entry.products.values()).reduce((s, q) => s + q, 0);
+    const sorted = Array.from(entry.products.entries()).sort((a, b) => b[1] - a[1]);
+    const d = diffDays(today, date);
+    let klass = "ship-day", badge = "";
+    if (d < 0) { klass += " overdue"; badge = `<span class="badge overdue">지연 ${-d}일</span>`; }
+    else if (d === 0) { klass += " today"; badge = `<span class="badge today">오늘</span>`; }
+    else if (d <= 3) { badge = `<span class="badge soon">D-${d}</span>`; }
+
+    return `
+      <details class="${klass}">
+        <summary>
+          <div class="ship-day-date">${date}<span class="weekday">(${weekday(date)})</span></div>
+          <div class="ship-day-stat">${entry.orders.length}건 · 총 ${dayQty}개 ${badge}</div>
+        </summary>
+        <div class="ship-day-body">
+          <table class="ship-product-table">
+            ${sorted.map(([k, q]) => `<tr><td>${escapeHtml(k)}</td><td class="num">${q}개</td></tr>`).join("")}
+          </table>
+          <details class="ship-day-members">
+            <summary>발송 명단 ${entry.orders.length}건 보기</summary>
+            <ul>${entry.orders.map(o => `<li>${escapeHtml(o.applicant)} · ${o.cycle} · ${escapeHtml(o.region || "-")}</li>`).join("")}</ul>
+          </details>
+        </div>
+      </details>
+    `;
+  }).join("");
+
+  // 전체 펼치기/접기
+  document.getElementById("expandAllShipBtn").onclick = () => {
+    shipListEl.querySelectorAll("details.ship-day").forEach(d => d.open = true);
+  };
+  document.getElementById("collapseAllShipBtn").onclick = () => {
+    shipListEl.querySelectorAll("details.ship-day").forEach(d => d.open = false);
+  };
+}
+
+// TSV 복사 (발송 계획)
+document.getElementById("copyShipBtn").addEventListener("click", async () => {
+  const today = dataTodayISO;
+  const schedule = computeShippingSchedule().filter(([date]) => {
+    const d = diffDays(today, date);
+    return d >= -3 && d <= 30;
+  });
+  if (!schedule.length) return alert("발송 예정이 없습니다.");
+  const lines = ["발송일\t요일\t신청건수\t상품 옵션\t수량(개)"];
+  schedule.forEach(([date, entry]) => {
+    const wd = weekday(date);
+    const sorted = Array.from(entry.products.entries()).sort((a, b) => b[1] - a[1]);
+    sorted.forEach(([k, q]) => {
+      lines.push(`${date}\t${wd}\t${entry.orders.length}\t${k}\t${q}`);
+    });
+  });
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    alert(`✅ 발송 계획 ${schedule.length}일치 복사 완료. 시트에 붙여넣기 하세요.`);
+  } catch (e) { alert("복사 실패: " + e.message); }
+});
 
 // 주별 신규/해지/순증감 — 최근 10주 + 실제 날짜 라벨 (월요일 ~ 일요일)
 function renderWeeklyChart() {
