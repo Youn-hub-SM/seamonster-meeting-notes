@@ -301,10 +301,10 @@
   .ship-day:first-of-type { border-top: 1px solid var(--border); }
   .ship-day > summary {
     display: grid;
-    grid-template-columns: 90px 28px 50px 70px 1fr 16px;
+    grid-template-columns: 95px 28px minmax(90px, auto) 60px 1fr 16px;
     align-items: center;
-    padding: 6px 10px; cursor: pointer; user-select: none;
-    list-style: none; gap: 4px;
+    padding: 8px 12px; cursor: pointer; user-select: none;
+    list-style: none; gap: 10px;
     font-size: 12px;
   }
   .ship-day > summary::-webkit-details-marker { display: none; }
@@ -315,11 +315,19 @@
     grid-column: 6; text-align: right;
   }
   .ship-day[open] > summary::after { content: "▾"; color: var(--primary); }
-  .ship-day-date { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ship-day-date { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .ship-day-weekday { color: var(--text-sub); text-align: center; font-size: 11px; }
-  .ship-day-count { color: var(--text-sub); font-variant-numeric: tabular-nums; text-align: right; }
-  .ship-day-qty { font-weight: 700; color: var(--primary-dark); font-variant-numeric: tabular-nums; text-align: right; }
-  .ship-day-badge { text-align: right; padding-right: 4px; }
+  .ship-day-count { color: var(--text-sub); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .ship-day-qty { font-weight: 700; color: var(--primary-dark); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .ship-day-badge { text-align: right; padding-right: 4px; white-space: nowrap; }
+  @media (max-width: 600px) {
+    .ship-day > summary {
+      grid-template-columns: 80px 22px 1fr 50px 14px;
+      gap: 6px; padding: 8px 10px; font-size: 11px;
+    }
+    .ship-day-badge { display: none; }
+    .ship-day > summary::after { grid-column: 5; }
+  }
   .ship-day-badge .badge {
     display: inline-block; padding: 1px 6px;
     border-radius: 8px; font-size: 10px; font-weight: 700;
