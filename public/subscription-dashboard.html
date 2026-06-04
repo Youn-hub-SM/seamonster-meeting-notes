@@ -525,6 +525,11 @@
         <div class="kpi-sub" id="kpi3rdSub">회차 3+ 도달 비율 (2회 결제 완료)</div>
       </div>
       <div class="kpi">
+        <div class="kpi-label">4회 잔존율</div>
+        <div class="kpi-value" id="kpi4th">-</div>
+        <div class="kpi-sub" id="kpi4thSub">회차 4+ 도달 비율 (3회 결제 완료)</div>
+      </div>
+      <div class="kpi">
         <div class="kpi-label">1신청당 평균 중량</div>
         <div class="kpi-value" id="kpiAOV">-</div>
         <div class="kpi-sub" id="kpiAOVSub">옵션 무게 합산</div>
@@ -1097,6 +1102,15 @@ function renderKpis() {
   });
   const rate3 = pct(reached3.length, eligible3.length);
 
+  // 4회 잔존율: 회차 4+ 도달 = 3회 결제 완료한 신청건의 비율
+  // 모집단/분자 처리 방식은 3회 잔존율과 동일 (해지건은 round 비어 있어 미도달 처리)
+  const eligible4 = orders.filter(o => o.signDate);
+  const reached4 = eligible4.filter(o => {
+    const r = parseInt(o.round, 10);
+    return r >= 4;
+  });
+  const rate4 = pct(reached4.length, eligible4.length);
+
   // 평균 객단가 (kg/신청) — 옵션 텍스트에서 무게 파싱
   let totalGrams = 0;
   let weightedOrders = 0;
@@ -1120,6 +1134,8 @@ function renderKpis() {
   document.getElementById("kpiFirstPaySub").textContent = `n=${eligibleFP.length} · 리드타임 D+${leadTime} 기준`;
   document.getElementById("kpi3rd").textContent = rate3 !== null ? `${rate3}%` : "-";
   document.getElementById("kpi3rdSub").textContent = `${reached3.length}건 / 전체 ${eligible3.length}건 (2회 결제 완료)`;
+  document.getElementById("kpi4th").textContent = rate4 !== null ? `${rate4}%` : "-";
+  document.getElementById("kpi4thSub").textContent = `${reached4.length}건 / 전체 ${eligible4.length}건 (3회 결제 완료)`;
   document.getElementById("kpiAOV").textContent = avgAOVkg + " kg";
   document.getElementById("kpiAOVSub").textContent = `옵션 ${filteredRows.length}행 / 무게 파싱 ${weightedOrders}건`;
   // 회원 단위 해지율 (모두 해지된 회원만 해지로 카운트)
@@ -1687,6 +1703,7 @@ const SNAPSHOT_FIELDS = [
   { key: "pauseMembers",   label: "일시정지 회원" },
   { key: "firstPayRate",   label: "결제 도달율(D+2)" },
   { key: "reach3Rate",     label: "3회 잔존율" },
+  { key: "reach4Rate",     label: "4회 잔존율" },
   { key: "avgWeightKg",    label: "1신청당 평균중량(kg)" },
   { key: "totalCancels",   label: "누적 해지(건)" },
   { key: "lostMembers",    label: "해지 회원" },
@@ -1715,6 +1732,7 @@ function getCurrentSnapshot() {
     pauseMembers:   parseInt(document.getElementById("kpiPauseMembers").textContent) || 0,
     firstPayRate:   document.getElementById("kpiFirstPay").textContent,
     reach3Rate:     document.getElementById("kpi3rd").textContent,
+    reach4Rate:     document.getElementById("kpi4th").textContent,
     avgWeightKg:    document.getElementById("kpiAOV").textContent,
     totalCancels:   cancelCount,
     lostMembers,
@@ -1730,7 +1748,7 @@ function renderSnapshotPreview() {
   el.innerHTML =
     `<b>${s.savedAt}</b> · 데이터 ${s.dataDate} · ` +
     `활성 <b>${s.activeMembers}</b> · 일시정지 <b>${s.pauseMembers}</b> · ` +
-    `결제도달 <b>${s.firstPayRate}</b> · 3회잔존 <b>${s.reach3Rate}</b> · ` +
+    `결제도달 <b>${s.firstPayRate}</b> · 3회잔존 <b>${s.reach3Rate}</b> · 4회잔존 <b>${s.reach4Rate}</b> · ` +
     `평균중량 <b>${s.avgWeightKg}</b> · ` +
     `해지 <b>${s.totalCancels}건 / ${s.lostMembers}명</b>`;
 }
@@ -1808,7 +1826,7 @@ function doPost(e) {
       '저장 시각', '데이터 기준일', '파일명',
       '필터 후 신청건', '전체 신청건',
       '활성 회원', '일시정지 회원',
-      '결제 도달율(D+2)', '3회 잔존율', '1신청당 평균중량(kg)',
+      '결제 도달율(D+2)', '3회 잔존율', '4회 잔존율', '1신청당 평균중량(kg)',
       '누적 해지(건)', '해지 회원', '전체 회원'
     ];
     // 헤더가 없으면 첫 줄에 추가
@@ -1817,7 +1835,7 @@ function doPost(e) {
       data.savedAt, data.dataDate, data.fileName,
       data.filteredOrders, data.totalOrders,
       data.activeMembers, data.pauseMembers,
-      data.firstPayRate, data.reach3Rate, data.avgWeightKg,
+      data.firstPayRate, data.reach3Rate, data.reach4Rate, data.avgWeightKg,
       data.totalCancels, data.lostMembers, data.totalMembers,
     ]);
     return ContentService.createTextOutput(JSON.stringify({ ok: true }))
