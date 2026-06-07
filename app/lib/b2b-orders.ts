@@ -1,0 +1,349 @@
+// B2B 발주 관련 타입·상수·헬퍼.
+// supabase/migrations/001_b2b_init.sql 의 orders / order_items 와 1:1.
+
+import { Company, TaxType } from "./b2b-types";
+
+// ─────────────────────────────────────────────
+// 상태 enum
+// ─────────────────────────────────────────────
+export const ORDER_STATUSES = [
+  "발주확인/생산대기",
+  "생산요청/생산중",
+  "생산완료/발송대기",
+  "발송완료",
+  "취소",
+] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const PAYMENT_STATUSES = ["미입금", "부분입금", "입금완료", "확인불필요"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const TAX_INVOICE_STATUSES = ["미발행", "발행대기", "발행완료", "면제"] as const;
+export type TaxInvoiceStatus = (typeof TAX_INVOICE_STATUSES)[number];
+
+// 색상 (UI 에서 status pill 에 사용).
+// /orders 와 같은 팔레트.
+export const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
+  "발주확인/생산대기": { bg: "#FFF4E0", fg: "#B86E00" },
+  "생산요청/생산중": { bg: "#E0F0FF", fg: "#0A66C2" },
+  "생산완료/발송대기": { bg: "#E0F5E5", fg: "#22863A" },
+  "발송완료": { bg: "#EFEFEF", fg: "#666666" },
+  "취소": { bg: "#FCE4E4", fg: "#C92A2A" },
+};
+
+export const STATUS_SHORT: Record<OrderStatus, string> = {
+  "발주확인/생산대기": "대기",
+  "생산요청/생산중": "생산중",
+  "생산완료/발송대기": "발송대기",
+  "발송완료": "발송완료",
+  "취소": "취소",
+};
+
+export const PAYMENT_COLORS: Record<PaymentStatus, { bg: string; fg: string }> = {
+  "미입금": { bg: "#FCE4E4", fg: "#C92A2A" },
+  "부분입금": { bg: "#FFF4E0", fg: "#B86E00" },
+  "입금완료": { bg: "#E0F5E5", fg: "#22863A" },
+  "확인불필요": { bg: "#EFEFEF", fg: "#666666" },
+};
+
+export const TAX_INVOICE_COLORS: Record<TaxInvoiceStatus, { bg: string; fg: string }> = {
+  "미발행": { bg: "#FCE4E4", fg: "#C92A2A" },
+  "발행대기": { bg: "#FFF4E0", fg: "#B86E00" },
+  "발행완료": { bg: "#E0F5E5", fg: "#22863A" },
+  "면제": { bg: "#EFEFEF", fg: "#666666" },
+};
+
+// ─────────────────────────────────────────────
+// 데이터 타입
+// ─────────────────────────────────────────────
+export interface Order {
+  id: string;
+  order_no: string;
+  company_id: string;
+  order_date: string;          // YYYY-MM-DD
+  production_date: string | null;
+  ship_date: string | null;
+  status: OrderStatus;
+  payment_status: PaymentStatus;
+  tax_invoice_status: TaxInvoiceStatus;
+  subtotal: number;
+  vat: number;
+  total: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderItem {
+  id: string;
+  order_id: string;
+  product_id: string | null;
+  product_name: string;        // 스냅샷
+  option_label: string | null;
+  spec: string | null;
+  qty: number;
+  unit_price: number;
+  line_total: number;
+  cost_at_order: number | null;
+  tax_type: TaxType;           // 과세/면세 스냅샷
+  sort_order: number;
+  created_at: string;
+}
+
+// 리스트 조회 응답: 업체명·라인 개수 정도만 미리보기
+export interface OrderListItem extends Order {
+  company_name: string;
+  item_count: number;
+}
+
+// 단일 조회 응답: 풀 디테일
+export interface OrderDetail extends Order {
+  company: Company;
+  items: OrderItem[];
+  shipments: Shipment[];
+}
+
+// 입금 내역
+export interface Payment {
+  id: string;
+  order_id: string;
+  amount: number;
+  paid_at: string;          // YYYY-MM-DD
+  method: string | null;
+  reference: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface PaymentInput {
+  order_id: string;
+  amount: number | string;
+  paid_at: string;
+  method: string;
+  reference: string;
+  notes: string;
+}
+
+// 송장 정규화 (입력 → DB payload)
+export function normalizeShipment(s: ShipmentInput): {
+  recipient_name: string;
+  recipient_phone: string;
+  address: string;
+  delivery_memo: string | null;
+  courier: string | null;
+  tracking_no: string | null;
+} {
+  const clean = (v: string): string | null => {
+    const t = (v ?? "").trim();
+    return t === "" ? null : t;
+  };
+  return {
+    recipient_name: (s.recipient_name ?? "").trim(),
+    recipient_phone: (s.recipient_phone ?? "").trim(),
+    address: (s.address ?? "").trim(),
+    delivery_memo: clean(s.delivery_memo),
+    courier: clean(s.courier),
+    tracking_no: clean(s.tracking_no),
+  };
+}
+
+// ─────────────────────────────────────────────
+// 입력 타입 (create / update)
+// ─────────────────────────────────────────────
+export interface OrderItemInput {
+  id?: string;                 // 편집 시 기존 라인 id (없으면 신규)
+  product_id: string | null;
+  product_name: string;
+  option_label: string;
+  spec: string;
+  qty: number | string;        // input value 라 string 도 허용 (저장 직전 변환)
+  unit_price: number | string;
+  cost_at_order: number | string;
+  tax_type: TaxType;
+  sort_order: number;
+}
+
+export interface ShipmentInput {
+  id?: string;
+  recipient_name: string;
+  recipient_phone: string;
+  address: string;
+  delivery_memo: string;
+  courier: string;
+  tracking_no: string;
+}
+
+export const EMPTY_SHIPMENT: ShipmentInput = {
+  recipient_name: "",
+  recipient_phone: "",
+  address: "",
+  delivery_memo: "",
+  courier: "",
+  tracking_no: "",
+};
+
+export interface Shipment {
+  id: string;
+  order_id: string;
+  recipient_name: string;
+  recipient_phone: string;
+  address: string;
+  delivery_memo: string | null;
+  courier: string | null;
+  tracking_no: string | null;
+  shipped_at: string | null;
+  created_at: string;
+}
+
+export interface OrderInput {
+  id?: string;
+  company_id: string;
+  order_date: string;
+  production_date: string;
+  ship_date: string;
+  status: OrderStatus;
+  payment_status: PaymentStatus;
+  tax_invoice_status: TaxInvoiceStatus;
+  notes: string;
+  items: OrderItemInput[];
+  shipment: ShipmentInput;  // 한 발주 = 한 송장 (기본)
+}
+
+export const EMPTY_ORDER_ITEM: OrderItemInput = {
+  product_id: null,
+  product_name: "",
+  option_label: "",
+  spec: "",
+  qty: 1,
+  unit_price: 0,
+  cost_at_order: 0,
+  tax_type: "taxable",
+  sort_order: 0,
+};
+
+export const EMPTY_ORDER: OrderInput = {
+  company_id: "",
+  order_date: "",
+  production_date: "",
+  ship_date: "",
+  status: "발주확인/생산대기",
+  payment_status: "미입금",
+  tax_invoice_status: "미발행",
+  notes: "",
+  items: [{ ...EMPTY_ORDER_ITEM }],
+  shipment: { ...EMPTY_SHIPMENT },
+};
+
+// ─────────────────────────────────────────────
+// 긴급도 (/orders 와 같은 규칙)
+// ─────────────────────────────────────────────
+export type Urgency = "overdue" | "urgent" | "normal";
+
+export const URGENCY_LABEL: Record<Exclude<Urgency, "normal">, string> = {
+  overdue: "지연",
+  urgent: "임박",
+};
+
+export function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function todayISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// 발주의 긴급도 계산.
+// - overdue: 발송일 지났는데 미발송 / 생산일 지났는데 대기·생산중
+// - urgent: 발송일이 오늘 또는 내일인데 아직 발송 안 됨
+export function getUrgency(o: Pick<Order, "status" | "production_date" | "ship_date">, todayIso: string): Urgency {
+  if (o.status === "발송완료" || o.status === "취소") return "normal";
+  const tomorrowIso = addDaysISO(todayIso, 1);
+
+  // 여기 도달 시 status 는 '발송완료' / '취소' 가 아님 (위에서 걸렀음)
+
+  // 발송일 지남
+  if (o.ship_date && o.ship_date < todayIso) return "overdue";
+  // 생산일 지남 + 아직 생산대기/생산중
+  if (
+    o.production_date &&
+    o.production_date < todayIso &&
+    (o.status === "발주확인/생산대기" || o.status === "생산요청/생산중")
+  ) {
+    return "overdue";
+  }
+  // 발송 임박
+  if (o.ship_date && (o.ship_date === todayIso || o.ship_date === tomorrowIso)) {
+    return "urgent";
+  }
+  return "normal";
+}
+
+// ─────────────────────────────────────────────
+// 입력 정규화 (string → number, "" → null 등)
+// ─────────────────────────────────────────────
+export function normalizeOrderItem(it: OrderItemInput): {
+  product_id: string | null;
+  product_name: string;
+  option_label: string | null;
+  spec: string | null;
+  qty: number;
+  unit_price: number;
+  cost_at_order: number | null;
+  tax_type: TaxType;
+  sort_order: number;
+} {
+  const cleanStr = (v: string | null): string | null => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    return s === "" ? null : s;
+  };
+  return {
+    product_id: it.product_id || null,
+    product_name: String(it.product_name || "").trim(),
+    option_label: cleanStr(it.option_label),
+    spec: cleanStr(it.spec),
+    qty: Number(it.qty) || 0,
+    unit_price: Number(it.unit_price) || 0,
+    cost_at_order: it.cost_at_order === "" || it.cost_at_order === null ? null : Number(it.cost_at_order) || null,
+    tax_type: it.tax_type === "exempt" ? "exempt" : "taxable",
+    sort_order: Number(it.sort_order) || 0,
+  };
+}
+
+export function validateOrder(input: OrderInput): string | null {
+  if (!input.company_id) return "업체를 선택하세요.";
+  if (!input.order_date) return "발주일을 입력하세요.";
+  if (!input.items || input.items.length === 0) return "라인아이템이 최소 1개 필요합니다.";
+  for (let i = 0; i < input.items.length; i++) {
+    const it = input.items[i];
+    if (!it.product_name?.trim()) return `${i + 1}번째 라인의 품목명을 입력하세요.`;
+    if (!Number(it.qty)) return `${i + 1}번째 라인의 수량을 입력하세요.`;
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// 포맷
+// ─────────────────────────────────────────────
+export function formatMoney(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "-";
+  return Number(n).toLocaleString();
+}
+
+export function formatQty(n: number | string | null | undefined): string {
+  if (n === null || n === undefined || n === "") return "-";
+  const num = Number(n);
+  if (isNaN(num)) return String(n);
+  // 정수면 그냥, 소수면 3자리까지
+  return Number.isInteger(num) ? num.toLocaleString() : num.toFixed(3).replace(/\.?0+$/, "");
+}
