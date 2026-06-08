@@ -131,6 +131,130 @@
 }
 
 /* ─────────────────────────────────────────────
+   대시보드 2단 레이아웃 (좌: 카드/바로가기, 우: 활동 피드)
+   ───────────────────────────────────────────── */
+.b2b-dash-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.b2b-dash-main {
+  min-width: 0;
+}
+
+/* 우측 활동 피드 */
+.b2b-feed {
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card);
+  box-shadow: var(--sm-shadow-card);
+  position: sticky;
+  top: 92px; /* 헤더(60) + 서브네비(~32) 아래 */
+  max-height: calc(100vh - 110px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.b2b-feed-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--sm-border);
+}
+
+.b2b-feed-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sm-black);
+}
+
+.b2b-feed-refresh {
+  background: transparent;
+  border: 1px solid var(--sm-border);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  color: var(--sm-text-mid);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.b2b-feed-refresh:hover {
+  border-color: var(--sm-orange);
+  color: var(--sm-orange);
+}
+
+.b2b-feed-empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--sm-text-light);
+  line-height: 1.7;
+}
+
+.b2b-feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.b2b-feed-item {
+  border-bottom: 1px solid var(--sm-border);
+}
+
+.b2b-feed-item:last-child {
+  border-bottom: none;
+}
+
+.b2b-feed-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 16px;
+  color: var(--sm-black);
+  transition: background 0.12s;
+}
+
+.b2b-feed-link:not(.is-static):hover {
+  background: var(--sm-orange-light);
+}
+
+.b2b-feed-link.is-static {
+  cursor: default;
+}
+
+.b2b-feed-summary {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sm-dark);
+}
+
+.b2b-feed-time {
+  font-size: 11px;
+  color: var(--sm-text-light);
+}
+
+/* 모바일·태블릿: 1단으로, 피드는 아래로 */
+@media (max-width: 1024px) {
+  .b2b-dash-layout {
+    grid-template-columns: 1fr;
+  }
+  .b2b-feed {
+    position: static;
+    max-height: none;
+  }
+  .b2b-feed-list {
+    max-height: 420px;
+  }
+}
+
+/* ─────────────────────────────────────────────
    버튼
    ───────────────────────────────────────────── */
 .b2b-btn-primary,

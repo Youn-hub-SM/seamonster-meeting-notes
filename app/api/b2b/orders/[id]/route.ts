@@ -6,6 +6,10 @@ import {
   normalizeShipment,
   validateOrder,
 } from "@/app/lib/b2b-orders";
+import {
+  logOrderStatusChanged,
+  logOrderPaymentStatusChanged,
+} from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +64,15 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     }
 
     const sb = supabaseAdmin();
+
+    // 0) 변경 전 상태 캡처 (알림용)
+    const { data: prevOrder } = await sb
+      .from("orders")
+      .select("status, payment_status")
+      .eq("id", id)
+      .single();
+    const prevStatus = prevOrder?.status as string | undefined;
+    const prevPayment = prevOrder?.payment_status as string | undefined;
 
     // 1) 헤더 update
     const { error: orderErr } = await sb
@@ -143,6 +156,14 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .single();
     if (refErr) throw refErr;
 
+    // 활동 로그 — 상태/입금상태 변경 시
+    if (prevStatus && prevStatus !== body.status) {
+      await logOrderStatusChanged(id, prevStatus, body.status);
+    }
+    if (prevPayment && prevPayment !== body.payment_status) {
+      await logOrderPaymentStatusChanged(id, prevPayment, body.payment_status);
+    }
+
     return NextResponse.json({ ok: true, order: refreshed });
   } catch (err) {
     console.error("[b2b/orders PUT]", err);
@@ -198,8 +219,24 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
 
     const sb = supabaseAdmin();
+    // 변경 전 상태 캡처 (알림용)
+    const { data: prev } = await sb
+      .from("orders")
+      .select("status, payment_status")
+      .eq("id", id)
+      .single();
+
     const { data, error } = await sb.from("orders").update(patch).eq("id", id).select().single();
     if (error) throw error;
+
+    // 활동 로그
+    if (body.status && prev?.status && prev.status !== body.status) {
+      await logOrderStatusChanged(id, prev.status, body.status);
+    }
+    if (body.payment_status && prev?.payment_status && prev.payment_status !== body.payment_status) {
+      await logOrderPaymentStatusChanged(id, prev.payment_status, body.payment_status);
+    }
+
     return NextResponse.json({ ok: true, order: data });
   } catch (err) {
     console.error("[b2b/orders PATCH]", err);

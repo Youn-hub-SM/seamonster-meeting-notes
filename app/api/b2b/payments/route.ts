@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { PaymentInput } from "@/app/lib/b2b-orders";
+import { logPaymentAdded } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,10 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (error) throw error;
+
+    // 활동 로그
+    await logPaymentAdded(body.order_id, amount, (body.method ?? "").trim() || null);
+
     return NextResponse.json({ ok: true, payment: data });
   } catch (err) {
     console.error("[b2b/payments POST]", err);

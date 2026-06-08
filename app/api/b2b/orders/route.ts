@@ -7,6 +7,7 @@ import {
   normalizeShipment,
   validateOrder,
 } from "@/app/lib/b2b-orders";
+import { logOrderCreated } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -149,6 +150,9 @@ export async function POST(req: NextRequest) {
       .eq("id", orderRow.id)
       .single();
     if (refErr) throw refErr;
+
+    // 활동 로그 기록 (fire-and-forget, 실패해도 응답엔 영향 없음)
+    await logOrderCreated(orderRow.id);
 
     return NextResponse.json({ ok: true, order: refreshed });
   } catch (err) {
