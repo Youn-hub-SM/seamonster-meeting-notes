@@ -388,7 +388,13 @@
 .b2b-table td {
   padding: 15px 18px;
   text-align: left;
+  vertical-align: middle;
   border-bottom: 1px solid var(--sm-border);
+}
+
+/* RowCell(td padding:0 + 내부 링크) 도 세로 가운데 정렬 */
+.b2b-table td:has(> .b2b-row-link) {
+  vertical-align: middle;
 }
 
 .b2b-table th {

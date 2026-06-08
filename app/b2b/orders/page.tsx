@@ -514,12 +514,11 @@ export default function OrdersListPage() {
                     />
                   </th>
                   <th style={{ width: 1 }}></th>
-                  <th>발주번호</th>
-                  <th>업체</th>
-                  <th>품목</th>
-                  <th>발주일</th>
-                  <th>생산일</th>
-                  <th>발송일</th>
+                  <th style={{ minWidth: 130 }}>업체</th>
+                  <th style={{ minWidth: 280 }}>품목</th>
+                  <th style={{ whiteSpace: "nowrap" }}>발주일</th>
+                  <th style={{ whiteSpace: "nowrap" }}>생산일</th>
+                  <th style={{ whiteSpace: "nowrap" }}>발송일</th>
                   <th className="num">합계</th>
                   <th>상태</th>
                   <th>입금</th>
@@ -554,16 +553,18 @@ export default function OrdersListPage() {
                           </span>
                         )}
                       </td>
-                      <RowCell href={`/b2b/orders/${o.id}`}>
-                        <strong>{o.order_no}</strong>
+                      <RowCell href={`/b2b/orders/${o.id}`} nowrap>
+                        <strong>{o.company_name}</strong>
+                        <span style={{ display: "block", fontSize: 11, color: "var(--sm-text-light)", marginTop: 2 }}>
+                          {o.order_no}
+                        </span>
                       </RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`}>{o.company_name}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`}>
                         <ItemsPreview items={o.items} />
                       </RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`}>{o.order_date}</RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`}>{o.production_date || "-"}</RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`}>{o.ship_date || "-"}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} nowrap>{o.order_date}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} nowrap>{o.production_date || "-"}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} nowrap>{o.ship_date || "-"}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {formatMoney(o.total)}
                       </RowCell>
@@ -645,9 +646,9 @@ function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
   const shown = items.slice(0, MAX);
   const rest = items.length - shown.length;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.4 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.45 }}>
       {shown.map((it, i) => (
-        <span key={i} style={{ fontSize: 13 }}>
+        <span key={i} style={{ fontSize: 13.5, whiteSpace: "nowrap" }}>
           {it.product_name}
           {it.spec ? <span style={{ color: "var(--sm-text-light)" }}> · {it.spec}</span> : ""}
           <span style={{ color: "var(--sm-text-mid)" }}> ×{it.qty}</span>
@@ -664,15 +665,21 @@ function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
 function RowCell({
   href,
   className,
+  nowrap,
   children,
 }: {
   href: string;
   className?: string;
+  nowrap?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <td className={className} style={{ padding: 0 }}>
-      <Link href={href} className="b2b-row-link" style={{ display: "block", padding: "12px 14px" }}>
+      <Link
+        href={href}
+        className="b2b-row-link"
+        style={{ display: "block", padding: "15px 18px", whiteSpace: nowrap ? "nowrap" : undefined }}
+      >
         {children}
       </Link>
     </td>
