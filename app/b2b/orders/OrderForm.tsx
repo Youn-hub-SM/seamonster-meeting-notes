@@ -523,8 +523,7 @@ export default function OrderForm({
                 <tr>
                   <th style={{ width: 200 }}>제품 선택</th>
                   <th>품목명 <span style={{ color: "var(--sm-orange)" }}>*</span></th>
-                  <th>옵션</th>
-                  <th style={{ width: 90 }}>규격</th>
+                  <th style={{ width: 130 }}>옵션</th>
                   <th className="num" style={{ width: 90 }}>수량 *</th>
                   <th className="num" style={{ width: 120 }}>단가</th>
                   <th style={{ width: 80 }}>과세</th>
@@ -562,17 +561,9 @@ export default function OrderForm({
                       <td data-label="옵션">
                         <input
                           type="text"
-                          value={it.option_label}
-                          onChange={(e) => updateItem(idx, { option_label: e.target.value })}
-                          placeholder="옵션"
-                        />
-                      </td>
-                      <td data-label="규격">
-                        <input
-                          type="text"
                           value={it.spec}
                           onChange={(e) => updateItem(idx, { spec: e.target.value })}
-                          placeholder="100g"
+                          placeholder="100g / 옵션"
                         />
                       </td>
                       <td data-label="수량">

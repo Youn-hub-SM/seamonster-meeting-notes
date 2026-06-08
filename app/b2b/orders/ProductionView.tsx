@@ -84,7 +84,7 @@ export default function ProductionView() {
                 <thead>
                   <tr>
                     <th>품목</th>
-                    <th>규격</th>
+                    <th>옵션</th>
                     <th className="num">총 수량</th>
                     <th>거래처</th>
                     <th className="num">발주 수</th>

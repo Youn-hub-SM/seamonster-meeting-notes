@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       .select(
         "id, order_no, order_date, ship_date, status, " +
           "company:company_id(name, contact_phone), " +
-          "order_items(product_name, option_label, qty, unit_price, sort_order, " +
+          "order_items(product_name, option_label, spec, qty, unit_price, sort_order, " +
             "product:product_id(sku))"
       )
       .eq("status", "발송완료")
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
     type ItemJoin = {
       product_name: string;
       option_label: string | null;
+      spec: string | null;
       qty: number;
       unit_price: number;
       sort_order: number;
@@ -98,7 +99,7 @@ export async function GET(req: NextRequest) {
           orderDateYmd,
           o.order_no,
           it.product_name ?? "",
-          it.option_label ?? "",
+          it.spec || it.option_label || "",   // option_name = 통합 옵션값(spec)
           sku,
           qty,
           price,
