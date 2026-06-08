@@ -9,6 +9,7 @@ import {
   PaymentStatus,
   formatMoney,
 } from "@/app/lib/b2b-orders";
+import { pingActivityFeed } from "../ActivityFeed";
 
 type UnpaidOrder = {
   id: string;
@@ -245,6 +246,7 @@ function PaymentModal({
       });
       await loadPayments();
       onChanged();
+      pingActivityFeed();
     } catch (err) {
       setError(err instanceof Error ? err.message : "추가 중 오류");
     }
@@ -276,6 +278,7 @@ function PaymentModal({
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "상태 변경 실패");
       onChanged();
+      pingActivityFeed();
     } catch (err) {
       setError(err instanceof Error ? err.message : "상태 변경 오류");
     }

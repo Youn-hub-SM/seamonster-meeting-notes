@@ -9,6 +9,7 @@ import {
 import {
   logOrderStatusChanged,
   logOrderPaymentStatusChanged,
+  logOrderTaxInvoiceChanged,
 } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
@@ -65,14 +66,15 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
     const sb = supabaseAdmin();
 
-    // 0) 변경 전 상태 캡처 (알림용)
+    // 0) 변경 전 상태 캡처 (활동 로그용)
     const { data: prevOrder } = await sb
       .from("orders")
-      .select("status, payment_status")
+      .select("status, payment_status, tax_invoice_status")
       .eq("id", id)
       .single();
     const prevStatus = prevOrder?.status as string | undefined;
     const prevPayment = prevOrder?.payment_status as string | undefined;
+    const prevTaxInvoice = prevOrder?.tax_invoice_status as string | undefined;
 
     // 1) 헤더 update
     const { error: orderErr } = await sb
@@ -156,12 +158,15 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .single();
     if (refErr) throw refErr;
 
-    // 활동 로그 — 상태/입금상태 변경 시
+    // 활동 로그 — 상태/입금상태/세금계산서 변경 시
     if (prevStatus && prevStatus !== body.status) {
       await logOrderStatusChanged(id, prevStatus, body.status);
     }
     if (prevPayment && prevPayment !== body.payment_status) {
       await logOrderPaymentStatusChanged(id, prevPayment, body.payment_status);
+    }
+    if (prevTaxInvoice && prevTaxInvoice !== body.tax_invoice_status) {
+      await logOrderTaxInvoiceChanged(id, prevTaxInvoice, body.tax_invoice_status);
     }
 
     return NextResponse.json({ ok: true, order: refreshed });
@@ -219,10 +224,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
 
     const sb = supabaseAdmin();
-    // 변경 전 상태 캡처 (알림용)
+    // 변경 전 상태 캡처 (활동 로그용)
     const { data: prev } = await sb
       .from("orders")
-      .select("status, payment_status")
+      .select("status, payment_status, tax_invoice_status")
       .eq("id", id)
       .single();
 
@@ -235,6 +240,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
     if (body.payment_status && prev?.payment_status && prev.payment_status !== body.payment_status) {
       await logOrderPaymentStatusChanged(id, prev.payment_status, body.payment_status);
+    }
+    if (body.tax_invoice_status && prev?.tax_invoice_status && prev.tax_invoice_status !== body.tax_invoice_status) {
+      await logOrderTaxInvoiceChanged(id, prev.tax_invoice_status, body.tax_invoice_status);
     }
 
     return NextResponse.json({ ok: true, order: data });

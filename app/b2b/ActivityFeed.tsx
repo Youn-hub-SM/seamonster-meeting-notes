@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+// 다른 컴포넌트(발주 목록·입금 모달 등)에서 상태를 바꾼 직후
+// 이 함수를 호출하면 우측 피드가 즉시 새로고침됨.
+export function pingActivityFeed() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("b2b:activity"));
+  }
+}
 
 type Activity = {
   id: string;
@@ -16,6 +25,7 @@ export default function ActivityFeed() {
   const [items, setItems] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const pathname = usePathname();
 
   const load = useCallback(async () => {
     setError("");
@@ -30,12 +40,31 @@ export default function ActivityFeed() {
     setLoading(false);
   }, []);
 
+  // 페이지 이동 시마다 새로고침 (예: 발주 등록 후 목록으로 이동 → 즉시 반영)
   useEffect(() => {
     load();
-    // 다른 탭/창에서 작업 후 돌아오면 자동 새로고침
+  }, [load, pathname]);
+
+  useEffect(() => {
+    // 다른 탭/창에서 작업 후 돌아오면 즉시 새로고침
     const onFocus = () => load();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+
+    // 같은 페이지에서 인라인 변경 직후 pingActivityFeed() 호출 시 즉시 반영
+    const onPing = () => load();
+    window.addEventListener("b2b:activity", onPing);
+
+    // 주기적 폴링(20초) — 같은 창에서 다른 사람이 바꾼 것도 반영.
+    // 탭이 백그라운드면 멈춰서 불필요한 요청 방지.
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 20000);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("b2b:activity", onPing);
+      clearInterval(interval);
+    };
   }, [load]);
 
   return (

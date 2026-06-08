@@ -22,6 +22,7 @@ import {
 import { Company } from "@/app/lib/b2b-types";
 import CalendarView from "./CalendarView";
 import WeeklyView from "./WeeklyView";
+import { pingActivityFeed } from "../ActivityFeed";
 
 type View = "list" | "calendar" | "weekly";
 
@@ -107,6 +108,8 @@ export default function OrdersListPage() {
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
         setError(data.error || "상태 변경 실패");
+      } else {
+        pingActivityFeed();
       }
     } catch (err) {
       setOrders(snapshot);
@@ -191,6 +194,8 @@ export default function OrdersListPage() {
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
         setError(data.error || "세금계산서 상태 변경 실패");
+      } else {
+        pingActivityFeed();
       }
     } catch (err) {
       setOrders(snapshot);
@@ -213,6 +218,8 @@ export default function OrdersListPage() {
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
         setError(data.error || "입금 상태 변경 실패");
+      } else {
+        pingActivityFeed();
       }
     } catch (err) {
       setOrders(snapshot);

@@ -118,6 +118,20 @@ export async function logOrderPaymentStatusChanged(orderId: string, fromStatus: 
   });
 }
 
+export async function logOrderTaxInvoiceChanged(orderId: string, fromStatus: string, toStatus: string): Promise<void> {
+  if (fromStatus === toStatus) return;
+  const o = await loadOrderSummary(orderId);
+  if (!o) return;
+  const emoji = toStatus === "발행완료" ? "🧾" : toStatus === "발행대기" ? "📝" : toStatus === "면제" ? "➖" : "📄";
+  await recordActivity({
+    event_type: "order.tax_invoice_changed",
+    summary: `${emoji} 세금계산서 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
+    order_id: o.id,
+    order_no: o.order_no,
+    meta: { from: fromStatus, to: toStatus },
+  });
+}
+
 export async function logPaymentAdded(orderId: string, amount: number, method: string | null): Promise<void> {
   const o = await loadOrderSummary(orderId);
   if (!o) return;
