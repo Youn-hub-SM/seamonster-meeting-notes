@@ -22,9 +22,10 @@ import {
 import { Company } from "@/app/lib/b2b-types";
 import CalendarView from "./CalendarView";
 import WeeklyView from "./WeeklyView";
+import ProductionView from "./ProductionView";
 import { pingActivityFeed } from "../ActivityFeed";
 
-type View = "list" | "calendar" | "weekly";
+type View = "list" | "calendar" | "weekly" | "production";
 
 export default function OrdersListPage() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -286,8 +287,18 @@ export default function OrdersListPage() {
         >
           주간 (발송일)
         </button>
+        <button
+          type="button"
+          className={`b2b-view-tab ${view === "production" ? "is-active" : ""}`}
+          onClick={() => setView("production")}
+        >
+          생산 집계
+        </button>
       </div>
 
+      {view === "production" ? (
+        <ProductionView />
+      ) : (
       <div className="b2b-card">
         <div className="b2b-card-head" style={{ gap: 12, flexWrap: "wrap", justifyContent: "flex-start" }}>
           <input
@@ -496,6 +507,7 @@ export default function OrdersListPage() {
           </>
         )}
       </div>
+      )}
     </>
   );
 }
