@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       .select(
         "id, order_no, order_date, ship_date, " +
           "company:company_id(name, contact_name, contact_phone, address), " +
-          "order_items(product_name, option_label, qty, sort_order), " +
+          "order_items(product_name, option_label, spec, qty, sort_order), " +
           "shipments(recipient_name, recipient_phone, address, delivery_memo)"
       )
       .in("id", ids)
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     type CompanyJoin = { name?: string; contact_name?: string; contact_phone?: string; address?: string };
-    type ItemJoin = { product_name: string; option_label: string | null; qty: number; sort_order: number };
+    type ItemJoin = { product_name: string; option_label: string | null; spec: string | null; qty: number; sort_order: number };
     type ShipmentJoin = { recipient_name: string; recipient_phone: string; address: string; delivery_memo: string | null };
     type OrderJoin = {
       id: string;
@@ -86,7 +86,8 @@ export async function POST(req: NextRequest) {
 
       for (const it of items) {
         sheet.getCell(`E${row}`).value = it.product_name ?? "";
-        sheet.getCell(`F${row}`).value = it.option_label ?? "";
+        // 옵션(F) = 통합된 옵션값(spec). 과거 데이터 호환 위해 option_label 도 폴백.
+        sheet.getCell(`F${row}`).value = it.spec || it.option_label || "";
         sheet.getCell(`G${row}`).value = Number(it.qty) || 0;
         sheet.getCell(`L${row}`).value = recipientName;
         sheet.getCell(`M${row}`).value = recipientPhone;

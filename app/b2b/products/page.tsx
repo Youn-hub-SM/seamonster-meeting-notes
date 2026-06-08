@@ -128,7 +128,7 @@ export default function ProductsPage() {
         <div>
           <h1 className="b2b-page-title">원가표</h1>
           <p className="b2b-page-subtitle">
-            제품·규격·원가·판매가를 관리합니다. 원가를 수정하면 이력이 자동 기록됩니다.
+            제품·옵션·원가·판매가를 관리합니다. 원가를 수정하면 이력이 자동 기록됩니다.
             {products.length > 0 && ` (전체 ${products.length}개)`}
           </p>
         </div>
@@ -152,7 +152,7 @@ export default function ProductsPage() {
           <input
             type="text"
             className="b2b-search"
-            placeholder="품목명·SKU·규격·메모 검색"
+            placeholder="품목명·SKU·옵션·메모 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -181,7 +181,7 @@ export default function ProductsPage() {
               <thead>
                 <tr>
                   <th>품목명</th>
-                  <th>규격</th>
+                  <th>옵션</th>
                   <th>단위</th>
                   <th className="num">원가</th>
                   <th className="num">판매가</th>
@@ -233,7 +233,7 @@ export default function ProductsPage() {
                             {TAX_TYPE_LABEL[p.tax_type]}
                           </span>
                         </td>
-                        <td data-label="규격">{p.spec || "-"}</td>
+                        <td data-label="옵션">{p.spec || "-"}</td>
                         <td data-label="단위">{p.unit}</td>
                         <td data-label="원가" className="num b2b-money">{p.cost_price.toLocaleString()}</td>
                         <td data-label="판매가" className="num b2b-money">{p.sale_price.toLocaleString()}</td>
@@ -399,7 +399,7 @@ function ProductModal({
             </Field>
           </div>
 
-          <Field label="규격">
+          <Field label="옵션">
             <input
               type="text"
               className="b2b-input"
