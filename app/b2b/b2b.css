@@ -541,6 +541,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0; /* 그리드/플렉스 칸이 내용 최소폭에 막혀 넓어지는 blowout 방지 */
 }
 
 .b2b-field-label {
@@ -565,6 +566,15 @@
   background: var(--sm-white);
   color: var(--sm-black);
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* date/number 입력은 고유 최소폭이 커서 칸을 밀어낼 수 있음 — 강제로 줄어들게 */
+.b2b-input[type="date"],
+.b2b-input[type="number"] {
+  min-width: 0;
 }
 
 .b2b-input:focus,
@@ -581,7 +591,7 @@
 
 .b2b-field-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
 }
 
