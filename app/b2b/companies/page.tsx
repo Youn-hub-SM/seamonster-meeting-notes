@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Company, CompanyInput, EMPTY_COMPANY } from "@/app/lib/b2b-types";
 
 type Modal = { mode: "create" | "edit"; data: CompanyInput } | null;
@@ -177,6 +178,13 @@ export default function CompaniesPage() {
                     <td>{c.biz_no || "-"}</td>
                     <td>{c.payment_terms || "-"}</td>
                     <td className="actions" onClick={(e) => e.stopPropagation()}>
+                      <Link
+                        href={`/b2b/companies/${c.id}`}
+                        className="b2b-btn-secondary"
+                        style={{ padding: "5px 10px", fontSize: 12, marginRight: 6 }}
+                      >
+                        상세
+                      </Link>
                       <button className="b2b-btn-danger" onClick={() => handleDelete(c.id, c.name)}>
                         삭제
                       </button>

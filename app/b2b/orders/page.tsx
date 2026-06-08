@@ -37,9 +37,12 @@ export default function OrdersListPage() {
   const [statusFilter, setStatusFilter] = useState<"전체" | OrderStatus>("전체");
   const [companyFilter, setCompanyFilter] = useState<string>(""); // ""=전체
   const [taxInvoiceFilter, setTaxInvoiceFilter] = useState<"전체" | TaxInvoiceStatus>("전체");
+  const [paymentFilter, setPaymentFilter] = useState<"전체" | PaymentStatus>("전체");
+  const [productFilter, setProductFilter] = useState<string>(""); // ""=전체
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const today = useMemo(() => todayISO(), []);
 
@@ -67,19 +70,29 @@ export default function OrdersListPage() {
     reload();
   }, []);
 
+  // 전체 발주의 품목명 목록 (제품 필터 드롭다운용)
+  const productNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of orders) for (const it of o.items || []) if (it.product_name) set.add(it.product_name);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+  }, [orders]);
+
   const filtered = useMemo(() => {
     let arr = orders;
     if (statusFilter !== "전체") arr = arr.filter((o) => o.status === statusFilter);
     if (companyFilter) arr = arr.filter((o) => o.company_id === companyFilter);
     if (taxInvoiceFilter !== "전체") arr = arr.filter((o) => o.tax_invoice_status === taxInvoiceFilter);
+    if (paymentFilter !== "전체") arr = arr.filter((o) => o.payment_status === paymentFilter);
+    if (productFilter) arr = arr.filter((o) => (o.items || []).some((it) => it.product_name === productFilter));
     const q = search.trim().toLowerCase();
     if (q) {
       arr = arr.filter((o) =>
-        [o.order_no, o.company_name, o.notes].filter(Boolean).some((v) => v!.toLowerCase().includes(q))
+        [o.order_no, o.company_name, o.notes].filter(Boolean).some((v) => v!.toLowerCase().includes(q)) ||
+        (o.items || []).some((it) => it.product_name.toLowerCase().includes(q))
       );
     }
     return arr;
-  }, [orders, statusFilter, companyFilter, taxInvoiceFilter, search]);
+  }, [orders, statusFilter, companyFilter, taxInvoiceFilter, paymentFilter, productFilter, search]);
 
   // 지연/임박 카운트 (배너용)
   const urgencyCount = useMemo(() => {
@@ -143,6 +156,40 @@ export default function OrdersListPage() {
       filteredIds.forEach((id) => next.add(id));
       return next;
     });
+  }
+
+  async function handleBulkStatus(newStatus: OrderStatus) {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    if (!confirm(`선택한 ${ids.length}건의 발주 상태를 "${newStatus}" 로 변경할까요?`)) return;
+    setBulkSaving(true);
+    setError("");
+    const snapshot = orders;
+    // Optimistic
+    setOrders((prev) => prev.map((o) => (selected.has(o.id) ? { ...o, status: newStatus } : o)));
+    try {
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/b2b/orders/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: newStatus }),
+          }).then((r) => r.ok)
+        )
+      );
+      const failed = results.filter((ok) => !ok).length;
+      if (failed > 0) {
+        setOrders(snapshot);
+        setError(`${failed}건 변경 실패 — 다시 시도해주세요.`);
+      } else {
+        setSelected(new Set());
+        pingActivityFeed();
+      }
+    } catch (err) {
+      setOrders(snapshot);
+      setError(err instanceof Error ? err.message : "일괄 변경 오류");
+    }
+    setBulkSaving(false);
   }
 
   async function handleExportShipping() {
@@ -334,6 +381,18 @@ export default function OrdersListPage() {
           </select>
           <select
             className="b2b-select"
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value as typeof paymentFilter)}
+            style={{ width: "auto", maxWidth: 140 }}
+            title="입금 상태"
+          >
+            <option value="전체">전체 입금</option>
+            {PAYMENT_STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            className="b2b-select"
             value={taxInvoiceFilter}
             onChange={(e) => setTaxInvoiceFilter(e.target.value as typeof taxInvoiceFilter)}
             style={{ width: "auto", maxWidth: 160 }}
@@ -344,6 +403,35 @@ export default function OrdersListPage() {
               <option key={s} value={s}>세금계산서 {s}</option>
             ))}
           </select>
+          <select
+            className="b2b-select"
+            value={productFilter}
+            onChange={(e) => setProductFilter(e.target.value)}
+            style={{ width: "auto", maxWidth: 200 }}
+            title="품목 포함 필터"
+          >
+            <option value="">전체 품목</option>
+            {productNames.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          {(statusFilter !== "전체" || companyFilter || taxInvoiceFilter !== "전체" || paymentFilter !== "전체" || productFilter || search) && (
+            <button
+              type="button"
+              className="b2b-btn-secondary"
+              style={{ padding: "6px 12px", fontSize: 13 }}
+              onClick={() => {
+                setStatusFilter("전체");
+                setCompanyFilter("");
+                setTaxInvoiceFilter("전체");
+                setPaymentFilter("전체");
+                setProductFilter("");
+                setSearch("");
+              }}
+            >
+              필터 초기화
+            </button>
+          )}
           <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--sm-text-light)" }}>
             {filtered.length}건
           </span>
@@ -377,7 +465,23 @@ export default function OrdersListPage() {
                 <span>
                   <strong>{selected.size}건</strong> 선택됨
                 </span>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <select
+                    className="b2b-select"
+                    value=""
+                    disabled={bulkSaving}
+                    onChange={(e) => {
+                      if (e.target.value) handleBulkStatus(e.target.value as OrderStatus);
+                      e.target.value = "";
+                    }}
+                    style={{ width: "auto" }}
+                    title="선택한 발주의 상태를 한 번에 변경"
+                  >
+                    <option value="">{bulkSaving ? "변경 중..." : "상태 일괄 변경 →"}</option>
+                    {ORDER_STATUSES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     className="b2b-btn-secondary"
