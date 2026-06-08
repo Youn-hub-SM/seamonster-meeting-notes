@@ -854,6 +854,15 @@
   }
 }
 
+/* 크게 만든 체크박스 (발주 목록 선택) */
+.b2b-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--sm-orange);
+  vertical-align: middle;
+}
+
 /* 선택 액션 바 (체크박스 선택 시 등장) */
 .b2b-selection-bar {
   display: flex;

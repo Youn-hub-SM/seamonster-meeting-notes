@@ -400,9 +400,10 @@ export default function OrdersListPage() {
             <table className="b2b-table">
               <thead>
                 <tr>
-                  <th style={{ width: 28 }}>
+                  <th style={{ width: 44, textAlign: "center" }}>
                     <input
                       type="checkbox"
+                      className="b2b-checkbox"
                       checked={filtered.length > 0 && filtered.every((o) => selected.has(o.id))}
                       onChange={toggleSelectAll}
                       title="이 페이지의 발주 전체 선택"
@@ -419,6 +420,7 @@ export default function OrdersListPage() {
                   <th>상태</th>
                   <th>입금</th>
                   <th>세금계산서</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -426,9 +428,17 @@ export default function OrdersListPage() {
                   const urgency = getUrgency(o, today);
                   return (
                     <tr key={o.id} className={urgency !== "normal" ? `is-${urgency}` : ""}>
-                      <td onClick={(e) => e.stopPropagation()} style={{ padding: "8px 4px" }}>
+                      <td
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // 셀 아무 데나 눌러도 토글 (체크박스 자체 클릭은 기본 동작)
+                          if ((e.target as HTMLElement).tagName !== "INPUT") toggleSelectOne(o.id);
+                        }}
+                        style={{ padding: "8px", cursor: "pointer" }}
+                      >
                         <input
                           type="checkbox"
+                          className="b2b-checkbox"
                           checked={selected.has(o.id)}
                           onChange={() => toggleSelectOne(o.id)}
                         />
@@ -497,6 +507,16 @@ export default function OrdersListPage() {
                             <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
+                        <Link
+                          href={`/b2b/orders/new?from=${o.id}`}
+                          className="b2b-btn-secondary"
+                          style={{ padding: "5px 10px", fontSize: 12 }}
+                          title="이 발주를 복제해 새 발주 만들기"
+                        >
+                          복제
+                        </Link>
                       </td>
                     </tr>
                   );
