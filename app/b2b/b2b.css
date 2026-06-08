@@ -250,7 +250,9 @@
 /* 좁은 화면: 1단으로, 피드는 본문 아래로 (테이블이 전체 폭을 써서 가로 스크롤 방지) */
 @media (max-width: 1400px) {
   .b2b-layout {
-    grid-template-columns: 1fr;
+    /* 1fr 이 아니라 minmax(0,1fr) — 내부의 넓은 테이블이 컬럼을 뷰포트 밖으로
+       밀어내는 것(grid blowout)을 방지. 테이블은 자체 overflow-x 로 스크롤. */
+    grid-template-columns: minmax(0, 1fr);
   }
   .b2b-feed {
     position: static;
@@ -575,6 +577,15 @@
 .b2b-input[type="date"],
 .b2b-input[type="number"] {
   min-width: 0;
+  text-align: left;
+}
+
+/* iOS Safari: input[type=date] 값이 가운데로 뜨는 것을 왼쪽 정렬로 */
+.b2b-input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+.b2b-input[type="date"]::-webkit-datetime-edit {
+  text-align: left;
 }
 
 .b2b-input:focus,
