@@ -18,11 +18,11 @@
 }
 
 .b2b-subnav-inner {
-  max-width: 1280px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 32px;
   display: flex;
-  gap: 4px;
+  gap: 6px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -32,8 +32,8 @@
 }
 
 .b2b-subnav-link {
-  padding: 14px 14px;
-  font-size: 14px;
+  padding: 16px 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--sm-text-mid);
   border-bottom: 2px solid transparent;
@@ -56,7 +56,7 @@
 .b2b-main {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 32px 24px 80px;
+  padding: 40px 32px 96px;
 }
 
 .b2b-page-head {
@@ -65,24 +65,25 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .b2b-page-title {
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--sm-black);
 }
 
 .b2b-page-subtitle {
-  margin-top: 4px;
-  font-size: 14px;
+  margin-top: 6px;
+  font-size: 15px;
   color: var(--sm-text-mid);
 }
 
 .b2b-page-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 /* ─────────────────────────────────────────────
@@ -90,16 +91,16 @@
    ───────────────────────────────────────────── */
 .b2b-dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 18px;
+  margin-bottom: 36px;
 }
 
 .b2b-stat-card {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
-  padding: 20px;
+  border-radius: 18px;
+  padding: 24px;
   box-shadow: var(--sm-shadow-card);
 }
 
@@ -110,11 +111,12 @@
 }
 
 .b2b-stat-card-value {
-  margin-top: 8px;
-  font-size: 28px;
+  margin-top: 10px;
+  font-size: 32px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--sm-black);
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .b2b-stat-card-hint {
@@ -152,12 +154,12 @@
 .b2b-feed {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: 18px;
   box-shadow: var(--sm-shadow-card);
   position: sticky;
-  top: 92px; /* 헤더(60) + 서브네비(~32) 아래 */
-  max-height: calc(100vh - 110px);
-  margin: 32px 24px 0 0;
+  top: 100px; /* 헤더(60) + 서브네비(~40) 아래 */
+  max-height: calc(100vh - 120px);
+  margin: 40px 32px 0 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -269,7 +271,7 @@
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  padding: 9px 16px;
+  padding: 11px 18px;
   border-radius: var(--sm-radius-btn);
   border: 1px solid transparent;
   cursor: pointer;
@@ -319,8 +321,8 @@
 .b2b-card {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
-  padding: 20px;
+  border-radius: 18px;
+  padding: 24px;
   box-shadow: var(--sm-shadow-card);
 }
 
@@ -328,12 +330,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .b2b-card-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--sm-black);
 }
 
@@ -378,12 +381,12 @@
 .b2b-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 14.5px;
 }
 
 .b2b-table th,
 .b2b-table td {
-  padding: 12px 14px;
+  padding: 15px 18px;
   text-align: left;
   border-bottom: 1px solid var(--sm-border);
 }
@@ -395,6 +398,12 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   background: var(--sm-bg);
+  white-space: nowrap;
+}
+
+/* 행 클릭 가능 셀(RowCell)의 내부 링크 패딩도 키움 */
+.b2b-table td .b2b-row-link {
+  padding: 15px 18px !important;
 }
 
 .b2b-table tbody tr {
@@ -422,8 +431,8 @@
 .b2b-search {
   width: 100%;
   max-width: 360px;
-  padding: 9px 14px;
-  font-size: 14px;
+  padding: 11px 16px;
+  font-size: 15px;
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
   background: var(--sm-white);
@@ -528,8 +537,8 @@
 .b2b-textarea,
 .b2b-select {
   font-family: inherit;
-  font-size: 14px;
-  padding: 9px 12px;
+  font-size: 15px;
+  padding: 11px 14px;
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
   background: var(--sm-white);
@@ -653,14 +662,14 @@
 .b2b-form-sections {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .b2b-form-section {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
-  padding: 20px;
+  border-radius: 18px;
+  padding: 24px;
   box-shadow: var(--sm-shadow-card);
 }
 
