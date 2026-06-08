@@ -5,8 +5,8 @@ import { supabaseAdmin } from "./supabase";
 //
 // 모든 기록은 fire-and-forget: 에러 나도 호출 측 작업(발주 저장 등)을 실패시키지 않음.
 //
-// ※ 나중에 Teams/Flow 등 외부 푸시를 붙일 거면 recordActivity() 안에서
-//   activity_log insert 직후에 전송 한 줄만 추가하면 됨 — 트리거 지점은 그대로 재사용.
+// recordActivity() 가 ① DB 기록(대시보드 피드) + ② 외부 웹훅(Zapier) 전송을 모두 담당.
+// 외부 웹훅은 환경변수 ZAPIER_WEBHOOK_URL 설정 시에만 동작.
 
 type ActivityInput = {
   event_type: string;
@@ -17,6 +17,7 @@ type ActivityInput = {
 };
 
 async function recordActivity(input: ActivityInput): Promise<void> {
+  // 1) DB 기록 (대시보드 피드의 소스) — 실패해도 호출 측 작업엔 영향 없음
   try {
     const sb = supabaseAdmin();
     await sb.from("activity_log").insert({
@@ -28,6 +29,35 @@ async function recordActivity(input: ActivityInput): Promise<void> {
     });
   } catch (err) {
     console.error("[b2b-activity] record failed", err);
+  }
+
+  // 2) Zapier(또는 호환 외부 웹훅) 전송 — ZAPIER_WEBHOOK_URL 미설정 시 스킵
+  await sendWebhook(input);
+}
+
+// 외부 웹훅 전송 (Zapier Catch Hook 등). fire-and-forget.
+async function sendWebhook(input: ActivityInput): Promise<void> {
+  const url = process.env.ZAPIER_WEBHOOK_URL;
+  if (!url) return;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: input.event_type,
+        summary: input.summary,
+        order_id: input.order_id ?? null,
+        order_no: input.order_no ?? null,
+        // meta 의 from/to/amount 등을 최상위로도 펼쳐 Zapier 필드 매핑 쉽게
+        ...(input.meta ?? {}),
+        occurred_at: new Date().toISOString(),
+      }),
+    });
+    if (!res.ok) {
+      console.warn("[b2b-activity] webhook responded", res.status);
+    }
+  } catch (err) {
+    console.error("[b2b-activity] webhook failed", err);
   }
 }
 
