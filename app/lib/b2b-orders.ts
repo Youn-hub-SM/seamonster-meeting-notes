@@ -90,10 +90,17 @@ export interface OrderItem {
   created_at: string;
 }
 
-// 리스트 조회 응답: 업체명·라인 개수 정도만 미리보기
+// 리스트 조회 응답: 업체명·라인 미리보기 포함
+export interface OrderLinePreview {
+  product_name: string;
+  spec: string | null;
+  qty: number;
+}
+
 export interface OrderListItem extends Order {
   company_name: string;
   item_count: number;
+  items: OrderLinePreview[];
 }
 
 // 단일 조회 응답: 풀 디테일

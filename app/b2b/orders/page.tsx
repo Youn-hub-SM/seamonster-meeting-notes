@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   OrderListItem,
+  OrderLinePreview,
   ORDER_STATUSES,
   PAYMENT_STATUSES,
   TAX_INVOICE_STATUSES,
@@ -410,6 +411,7 @@ export default function OrdersListPage() {
                   <th style={{ width: 1 }}></th>
                   <th>발주번호</th>
                   <th>업체</th>
+                  <th>품목</th>
                   <th>발주일</th>
                   <th>생산일</th>
                   <th>발송일</th>
@@ -440,13 +442,11 @@ export default function OrdersListPage() {
                       </td>
                       <RowCell href={`/b2b/orders/${o.id}`}>
                         <strong>{o.order_no}</strong>
-                        {o.item_count > 1 && (
-                          <span style={{ marginLeft: 8, fontSize: 12, color: "var(--sm-text-light)" }}>
-                            라인 {o.item_count}
-                          </span>
-                        )}
                       </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`}>{o.company_name}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`}>
+                        <ItemsPreview items={o.items} />
+                      </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`}>{o.order_date}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`}>{o.production_date || "-"}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`}>{o.ship_date || "-"}</RowCell>
@@ -509,6 +509,30 @@ export default function OrdersListPage() {
       </div>
       )}
     </>
+  );
+}
+
+// 품목 미리보기 — 라인아이템을 "품목명 규격 ×수량" 으로 나열, 많으면 외 N
+function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
+  if (!items || items.length === 0) {
+    return <span style={{ color: "var(--sm-text-light)" }}>-</span>;
+  }
+  const MAX = 3;
+  const shown = items.slice(0, MAX);
+  const rest = items.length - shown.length;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.4 }}>
+      {shown.map((it, i) => (
+        <span key={i} style={{ fontSize: 13 }}>
+          {it.product_name}
+          {it.spec ? <span style={{ color: "var(--sm-text-light)" }}> · {it.spec}</span> : ""}
+          <span style={{ color: "var(--sm-text-mid)" }}> ×{it.qty}</span>
+        </span>
+      ))}
+      {rest > 0 && (
+        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>외 {rest}종</span>
+      )}
+    </div>
   );
 }
 

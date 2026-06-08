@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     let q = sb
       .from("orders")
       .select(
-        "*, companies:company_id(name), order_items(id)"
+        "*, companies:company_id(name), order_items(product_name, spec, qty, sort_order)"
       )
       .order("order_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -45,17 +45,24 @@ export async function GET(req: NextRequest) {
     const { data, error } = await q;
     if (error) throw error;
 
-    // 평탄화: companies.name → company_name, order_items[] → item_count
+    // 평탄화: companies.name → company_name, order_items[] → items(정렬) + item_count
+    type ItemRow = { product_name: string; spec: string | null; qty: number; sort_order: number };
     type Row = Record<string, unknown> & {
       companies?: { name?: string } | null;
-      order_items?: { id: string }[];
+      order_items?: ItemRow[];
     };
     const orders: OrderListItem[] = (data as Row[] | null ?? []).map((r) => {
       const { companies, order_items, ...rest } = r;
+      const items = Array.isArray(order_items)
+        ? [...order_items]
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+            .map((it) => ({ product_name: it.product_name, spec: it.spec, qty: Number(it.qty) || 0 }))
+        : [];
       return {
         ...(rest as unknown as OrderListItem),
         company_name: companies?.name ?? "(미지정)",
-        item_count: Array.isArray(order_items) ? order_items.length : 0,
+        item_count: items.length,
+        items,
       };
     });
 

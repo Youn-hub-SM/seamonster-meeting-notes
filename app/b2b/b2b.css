@@ -135,7 +135,7 @@
    /b2b/* 모든 탭에 우측 피드 상시 노출 (로그인 페이지 제외)
    ───────────────────────────────────────────── */
 .b2b-layout {
-  max-width: 1280px;
+  max-width: 1600px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
