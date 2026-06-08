@@ -91,6 +91,37 @@ a {
   color: var(--sm-orange);
 }
 
+/* 모바일: 헤더를 한 줄 유지하고 메뉴는 가로 스크롤 띠로 */
+@media (max-width: 768px) {
+  .header {
+    padding: 0 12px;
+  }
+  .header-inner {
+    gap: 10px;
+    justify-content: flex-start;
+  }
+  .header-logo {
+    flex: 0 0 auto;
+    font-size: 17px;
+  }
+  .header-nav {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .header-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .header-nav-link {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 6px 10px;
+  }
+}
+
 /* Container */
 .container {
   max-width: var(--sm-container);
