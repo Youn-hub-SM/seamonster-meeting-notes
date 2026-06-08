@@ -92,7 +92,7 @@ export default function ActivityFeed() {
             const body = (
               <>
                 <span className="b2b-feed-summary">{a.summary}</span>
-                <span className="b2b-feed-time">{relativeTime(a.created_at)}</span>
+                <span className="b2b-feed-time">{formatTime(a.created_at)}</span>
               </>
             );
             return (
@@ -113,18 +113,12 @@ export default function ActivityFeed() {
   );
 }
 
-// 상대 시간: 방금 / N분 전 / N시간 전 / N일 전 / 날짜
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const diffSec = Math.floor((now - then) / 1000);
-  if (diffSec < 60) return "방금";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}분 전`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour}시간 전`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${diffDay}일 전`;
+// 절대 시간: "6월 8일 14:30" (24시간제)
+function formatTime(iso: string): string {
   const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${month}월 ${day}일 ${hh}:${mm}`;
 }
