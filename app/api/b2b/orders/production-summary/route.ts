@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 // GET /api/b2b/orders/production-summary
 // 생산이 필요한 발주(발주확인/생산대기 + 생산요청/생산중)의 라인아이템을
-// 생산예정일 주차별 → 품목+규격별 총수량으로 집계.
+// 생산예정일 주차별 → 품목+옵션별 총수량으로 집계.
 
 type ProductRow = {
   product_name: string;

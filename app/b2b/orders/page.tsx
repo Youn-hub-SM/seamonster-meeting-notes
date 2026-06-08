@@ -686,7 +686,7 @@ export default function OrdersListPage() {
   );
 }
 
-// 품목 미리보기 — 라인아이템을 "품목명 규격 ×수량" 으로 나열, 많으면 외 N
+// 품목 미리보기 — 발주 상품을 "품목명 옵션 ×수량" 으로 나열, 많으면 외 N
 function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
   if (!items || items.length === 0) {
     return <span style={{ color: "var(--sm-text-light)" }}>-</span>;

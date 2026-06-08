@@ -57,7 +57,7 @@ export default function ProductionView() {
   return (
     <div className="b2b-week-wrap">
       <p style={{ fontSize: 13, color: "var(--sm-text-light)", marginBottom: 4 }}>
-        생산예정일 기준 · 생산대기·생산중 발주만 · 품목+규격별 총수량
+        생산예정일 기준 · 생산대기·생산중 발주만 · 품목+옵션별 총수량
       </p>
       {weeks.map((w) => {
         const isCurrent = w.week_start === thisWeekStart;
