@@ -177,7 +177,7 @@ export default function ProductsPage() {
           </div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead>
                 <tr>
                   <th>품목명</th>
@@ -216,7 +216,7 @@ export default function ProductsPage() {
                           })
                         }
                       >
-                        <td>
+                        <td data-label="품목명">
                           <strong>{p.name}</strong>
                           {p.sku && <span style={{ marginLeft: 8, fontSize: 12, color: "var(--sm-text-light)" }}>{p.sku}</span>}
                           <span
@@ -233,11 +233,11 @@ export default function ProductsPage() {
                             {TAX_TYPE_LABEL[p.tax_type]}
                           </span>
                         </td>
-                        <td>{p.spec || "-"}</td>
-                        <td>{p.unit}</td>
-                        <td className="num b2b-money">{p.cost_price.toLocaleString()}</td>
-                        <td className="num b2b-money">{p.sale_price.toLocaleString()}</td>
-                        <td className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "#c92a2a" }}>
+                        <td data-label="규격">{p.spec || "-"}</td>
+                        <td data-label="단위">{p.unit}</td>
+                        <td data-label="원가" className="num b2b-money">{p.cost_price.toLocaleString()}</td>
+                        <td data-label="판매가" className="num b2b-money">{p.sale_price.toLocaleString()}</td>
+                        <td data-label="마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "#c92a2a" }}>
                           {margin >= 0 ? "+" : ""}{margin.toLocaleString()}
                           {p.sale_price > 0 && (
                             <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-text-light)" }}>
@@ -245,7 +245,7 @@ export default function ProductsPage() {
                             </span>
                           )}
                         </td>
-                        <td>
+                        <td data-label="상태">
                           {p.active ? (
                             <span style={{ fontSize: 12, color: "#22863a", fontWeight: 600 }}>사용</span>
                           ) : (

@@ -500,7 +500,7 @@ export default function OrdersListPage() {
                 </div>
               </div>
             )}
-            <div className="b2b-table-wrap">
+            <div className="b2b-table-wrap b2b-orders-table-wrap">
             <table className="b2b-table">
               <thead>
                 <tr>
@@ -628,6 +628,55 @@ export default function OrdersListPage() {
                 })}
               </tbody>
             </table>
+            </div>
+
+            {/* 모바일 카드 뷰 */}
+            <div className="b2b-order-cards">
+              {filtered.map((o) => {
+                const urgency = getUrgency(o, today);
+                return (
+                  <div key={o.id} className={`b2b-order-card ${urgency !== "normal" ? `is-${urgency}` : ""}`}>
+                    <div className="b2b-order-card-check">
+                      <input
+                        type="checkbox"
+                        className="b2b-checkbox"
+                        checked={selected.has(o.id)}
+                        onChange={() => toggleSelectOne(o.id)}
+                      />
+                    </div>
+                    <Link href={`/b2b/orders/${o.id}`} className="b2b-order-card-body">
+                      <div className="b2b-order-card-top">
+                        <div>
+                          <div className="b2b-order-card-company">{o.company_name}</div>
+                          <div className="b2b-order-card-no">{o.order_no}</div>
+                        </div>
+                        {urgency !== "normal" && (
+                          <span className={`b2b-urgency-pill is-${urgency}`}>{URGENCY_LABEL[urgency]}</span>
+                        )}
+                      </div>
+                      <div className="b2b-order-card-items">
+                        <ItemsPreview items={o.items} />
+                      </div>
+                      <div className="b2b-order-card-dates">
+                        <span><em>발주</em>{o.order_date?.slice(5) || "-"}</span>
+                        <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>
+                        <span><em>발송</em>{o.ship_date?.slice(5) || "-"}</span>
+                      </div>
+                      <div className="b2b-order-card-foot">
+                        <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
+                        <div className="b2b-order-card-pills">
+                          <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
+                            {STATUS_SHORT[o.status] || o.status}
+                          </span>
+                          <span className="b2b-status-pill" style={{ background: PAYMENT_COLORS[o.payment_status]?.bg, color: PAYMENT_COLORS[o.payment_status]?.fg }}>
+                            {o.payment_status}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}

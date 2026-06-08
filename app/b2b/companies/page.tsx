@@ -139,7 +139,7 @@ export default function CompaniesPage() {
           </div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead>
                 <tr>
                   <th>업체명</th>
@@ -173,12 +173,12 @@ export default function CompaniesPage() {
                       })
                     }
                   >
-                    <td><strong>{c.name}</strong></td>
-                    <td>{c.contact_name || "-"}</td>
-                    <td>{c.contact_phone || "-"}</td>
-                    <td>{c.biz_no || "-"}</td>
-                    <td>{c.payment_terms || "-"}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
+                    <td data-label="업체명"><strong>{c.name}</strong></td>
+                    <td data-label="담당자">{c.contact_name || "-"}</td>
+                    <td data-label="연락처">{c.contact_phone || "-"}</td>
+                    <td data-label="사업자번호">{c.biz_no || "-"}</td>
+                    <td data-label="결제조건">{c.payment_terms || "-"}</td>
+                    <td data-label="최근 발주" style={{ whiteSpace: "nowrap" }}>
                       {c.last_order_date ? (
                         c.last_order_date
                       ) : (
