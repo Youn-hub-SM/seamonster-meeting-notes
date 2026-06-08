@@ -1,5 +1,10 @@
 import OrderForm from "../OrderForm";
 
-export default function NewOrderPage() {
-  return <OrderForm mode="create" />;
+type PageProps = {
+  searchParams: Promise<{ from?: string }>;
+};
+
+export default async function NewOrderPage({ searchParams }: PageProps) {
+  const { from } = await searchParams;
+  return <OrderForm mode="create" cloneFromId={from} />;
 }

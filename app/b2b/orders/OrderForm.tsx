@@ -22,7 +22,15 @@ import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types
 
 type Mode = "create" | "edit";
 
-export default function OrderForm({ mode, orderId }: { mode: Mode; orderId?: string }) {
+export default function OrderForm({
+  mode,
+  orderId,
+  cloneFromId,
+}: {
+  mode: Mode;
+  orderId?: string;
+  cloneFromId?: string;
+}) {
   const router = useRouter();
 
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -92,6 +100,48 @@ export default function OrderForm({ mode, orderId }: { mode: Mode; orderId?: str
                 }
               : { ...EMPTY_SHIPMENT },
           });
+        } else if (mode === "create" && cloneFromId) {
+          // 복제 모드: 원본 발주를 불러와 업체·라인·송장은 복사, 날짜·상태는 초기화
+          const t = new Date();
+          const todayIso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+          const orderRes = await fetch(`/api/b2b/orders/${cloneFromId}`, { cache: "no-store" });
+          const orderJson = await orderRes.json();
+          if (!orderJson.ok) throw new Error(orderJson.error || "복제할 발주 조회 실패");
+          const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
+          setData({
+            // id 없음 (새 발주)
+            company_id: o.company_id,
+            order_date: todayIso,        // 발주일은 오늘
+            production_date: "",         // 일정은 비움
+            ship_date: "",
+            status: "발주확인/생산대기", // 상태 초기화
+            payment_status: "미입금",
+            tax_invoice_status: "미발행",
+            notes: o.notes ?? "",
+            items: (o.items || []).map((it, idx) => ({
+              // id 없음 (새 라인) — 원본 라인 id 는 복사하지 않음
+              product_id: it.product_id,
+              product_name: it.product_name,
+              option_label: it.option_label ?? "",
+              spec: it.spec ?? "",
+              qty: it.qty,
+              unit_price: it.unit_price,
+              cost_at_order: it.cost_at_order ?? "",
+              tax_type: it.tax_type,
+              sort_order: idx,
+            })),
+            shipment: o.shipments?.[0]
+              ? {
+                  // id 없음 (새 송장)
+                  recipient_name: o.shipments[0].recipient_name ?? "",
+                  recipient_phone: o.shipments[0].recipient_phone ?? "",
+                  address: o.shipments[0].address ?? "",
+                  delivery_memo: o.shipments[0].delivery_memo ?? "",
+                  courier: "",          // 운송장 정보는 비움 (건마다 다름)
+                  tracking_no: "",
+                }
+              : { ...EMPTY_SHIPMENT },
+          });
         } else {
           // create 모드: 발주일 기본값을 오늘로
           const t = new Date();
@@ -103,7 +153,7 @@ export default function OrderForm({ mode, orderId }: { mode: Mode; orderId?: str
       }
       setLoading(false);
     })();
-  }, [mode, orderId]);
+  }, [mode, orderId, cloneFromId]);
 
   // ─────────────────────────────────────────────
   // 합계 계산 (입력 동안에는 클라이언트, 저장 후엔 트리거가 재계산)
@@ -249,15 +299,31 @@ export default function OrderForm({ mode, orderId }: { mode: Mode; orderId?: str
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">
-            {mode === "create" ? "새 발주 등록" : `발주 수정 · ${originalOrder?.order_no ?? ""}`}
+            {mode === "create"
+              ? cloneFromId
+                ? "발주 복제"
+                : "새 발주 등록"
+              : `발주 수정 · ${originalOrder?.order_no ?? ""}`}
           </h1>
           <p className="b2b-page-subtitle">
             {mode === "create"
-              ? "업체와 일정, 라인아이템을 입력하세요. 합계는 자동 계산됩니다."
+              ? cloneFromId
+                ? "복제된 내용입니다. 발주일·일정·상태는 초기화됐어요. 확인 후 등록하세요."
+                : "업체와 일정, 라인아이템을 입력하세요. 합계는 자동 계산됩니다."
               : "라인아이템을 수정하면 합계는 저장 후 자동으로 재계산됩니다."}
           </p>
         </div>
         <div className="b2b-page-actions">
+          {mode === "edit" && orderId && (
+            <button
+              type="button"
+              className="b2b-btn-secondary"
+              onClick={() => router.push(`/b2b/orders/new?from=${orderId}`)}
+              title="이 발주의 업체·라인아이템·송장 정보를 복사해 새 발주를 만듭니다"
+            >
+              복제
+            </button>
+          )}
           <Link href="/b2b/orders" className="b2b-btn-secondary">목록으로</Link>
         </div>
       </header>
