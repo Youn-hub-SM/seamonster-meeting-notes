@@ -280,34 +280,46 @@
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
+/* 주요 액션: 딥 오렌지 채움 (흰글씨 AA) */
 .b2b-btn-primary {
-  background: var(--sm-orange);
-  color: var(--sm-white);
+  background: var(--action-primary);
+  color: var(--action-primary-fg);
 }
 
 .b2b-btn-primary:hover:not(:disabled) {
-  background: var(--sm-orange-hover);
+  background: var(--action-primary-hover);
 }
 
+.b2b-btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* 중립: 흰 바탕 외곽선 (조회·닫기) */
 .b2b-btn-secondary {
   background: var(--sm-white);
-  color: var(--sm-dark);
+  color: var(--action-neutral-fg);
   border-color: var(--sm-border);
 }
 
 .b2b-btn-secondary:hover:not(:disabled) {
-  border-color: var(--sm-orange);
-  color: var(--sm-orange);
+  border-color: var(--action-neutral-fg);
+  background: #FAFAFA;
 }
 
+.b2b-btn-secondary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* 위험: 외곽선 빨강 (채움 아님) — 실수 클릭 방지 + 확인창과 함께 사용 */
 .b2b-btn-danger {
-  background: transparent;
-  color: #c92a2a;
-  border-color: transparent;
+  background: var(--sm-white);
+  color: var(--action-danger);
+  border-color: var(--danger-border);
 }
 
 .b2b-btn-danger:hover:not(:disabled) {
-  background: #fdf1f1;
+  background: var(--action-danger-hover-bg);
+  border-color: var(--action-danger);
 }
 
 .b2b-btn-primary:disabled,

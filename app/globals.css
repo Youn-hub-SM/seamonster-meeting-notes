@@ -28,6 +28,25 @@
   --danger-fg:  #C92A2A; --danger-bg:  #FDF1F1; --danger-border: #F5C6C6;
   --neutral-fg: #666666; --neutral-bg: #EFEFEF;
 
+  /* ── 역할: 액션 색 (오직 "누를 수 있는 요소"에만) ───────
+     브랜드 오렌지는 밝아 흰글씨 버튼엔 AA 미달 → 채움용은 딥 오렌지로 파생.
+     밝은 --brand 는 로고·활성탭·링크·포커스 등 액센트로만. */
+  --action-primary: #C2410C;        /* 딥 오렌지 · 흰글씨 4.6:1 AA */
+  --action-primary-hover: #9A330A;
+  --action-primary-fg: #FFFFFF;
+  --action-danger: #C92A2A;         /* 위험: 외곽선(빨강 테두리·글씨) */
+  --action-danger-hover-bg: #FDF1F1;
+  --action-neutral-fg: #555555;     /* 중립 버튼 글씨 (흰 배경 AA) */
+
+  /* ── 역할: 상태 색 (오직 "상태 배지"에만 · 항상 텍스트 라벨 동반) ──
+     기존 의미색을 명도만 조정해 각 틴트 위 글씨 AA(4.5:1) 충족. */
+  --status-received-fg: #475569; --status-received-bg: #EEF2F6;  /* 발주접수 (슬레이트) */
+  --status-awaitpay-fg: #9A5B00; --status-awaitpay-bg: #FFF4E0;  /* 입금대기 (앰버) */
+  --status-paid-fg:     #1F7A34; --status-paid-bg:     #E5F5EA;  /* 입금완료 (그린) */
+  --status-progress-fg: #0A66C2; --status-progress-bg: #E0F0FF;  /* 생산중·출고완료 (블루) */
+  --status-cancel-fg:   #C92A2A; --status-cancel-bg:   #FDF1F1;  /* 취소 (레드) */
+  --status-muted-fg:    #555555; --status-muted-bg:    #EFEFEF;  /* 비활성·해당없음 (그레이) */
+
   /* ── 간격 (8px 배수 스케일) ─────────────────────────── */
   --space-1: 4px;
   --space-2: 8px;
