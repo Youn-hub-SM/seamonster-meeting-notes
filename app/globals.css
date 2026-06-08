@@ -1,26 +1,93 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.css');
 
+/* ════════════════════════════════════════════════════════════
+   디자인 토큰 — 단일 소스. 새 색/라이브러리 없이 기존 값만 명명·정리.
+   값을 바꾸려면 여기서만 수정 (컴포넌트는 토큰을 참조).
+   ════════════════════════════════════════════════════════════ */
 :root {
-  --sm-orange: #F15A30;
-  --sm-orange-hover: #D94E26;
-  --sm-orange-light: rgba(241, 90, 48, 0.06);
-  --sm-orange-border: rgba(241, 90, 48, 0.12);
-  --sm-black: #1A1A1A;
-  --sm-dark: #37352F;
-  --sm-white: #FFFFFF;
-  --sm-border: #EEEEEE;
-  --sm-text-mid: #666666;
-  --sm-text-light: #999999;
-  --sm-bg: #FAFAFA;
-  --sm-bg-warm: #FFF5F0;
-  --sm-container: 720px;
-  --sm-pad: 24px;
-  --sm-radius: 8px;
-  --sm-radius-card: 16px;
-  --sm-radius-btn: 12px;
-  --sm-radius-pill: 50px;
-  --sm-shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
-  --sm-shadow-float: 0 10px 30px rgba(0, 0, 0, 0.06);
+  /* ── 브랜드 (핵심색 1개) ───────────────────────────── */
+  --brand: #F15A30;
+  --brand-hover: #D94E26;
+  --brand-tint: rgba(241, 90, 48, 0.06);     /* 연한 배경 */
+  --brand-tint-border: rgba(241, 90, 48, 0.12);
+  --brand-bg-warm: #FFF5F0;
+
+  /* ── 중립 (텍스트·면·선) ───────────────────────────── */
+  --ink: #1A1A1A;          /* 기본 본문 (대비 AA 충족) */
+  --ink-strong: #37352F;   /* 제목·강조 텍스트 */
+  --text-muted: #666666;   /* 보조 텍스트 (AA on white) */
+  --text-subtle: #767676;  /* 캡션 — 흰 배경 대비 4.5:1 확보 (기존 #999 → AA 미달이라 상향) */
+  --surface: #FFFFFF;
+  --bg: #FAFAFA;
+  --line: #EEEEEE;
+
+  /* ── 의미색 (상태) : 보조색. 기존 사용값을 명명만 함 ── */
+  --success-fg: #22863A; --success-bg: #E0F5E5;
+  --warning-fg: #B86E00; --warning-bg: #FFF4E0;
+  --info-fg:    #0A66C2; --info-bg:    #E0F0FF;
+  --danger-fg:  #C92A2A; --danger-bg:  #FDF1F1; --danger-border: #F5C6C6;
+  --neutral-fg: #666666; --neutral-bg: #EFEFEF;
+
+  /* ── 간격 (8px 배수 스케일) ─────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── 타이포 스케일 ─────────────────────────────────── */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;   /* PC 본문 */
+  --text-md: 16px;     /* 모바일 본문 최소 */
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 26px;
+  --text-3xl: 30px;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* ── 모서리 ────────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 18px;
+  --radius-pill: 50px;
+
+  /* ── 그림자 ────────────────────────────────────────── */
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.06);
+
+  /* ── 레이아웃 폭 ───────────────────────────────────── */
+  --container: 720px;
+  --container-wide: 1280px;
+
+  /* ── 레거시 별칭 (기존 --sm-* 호환 · 값 동일, 점진 이전) ── */
+  --sm-orange: var(--brand);
+  --sm-orange-hover: var(--brand-hover);
+  --sm-orange-light: var(--brand-tint);
+  --sm-orange-border: var(--brand-tint-border);
+  --sm-bg-warm: var(--brand-bg-warm);
+  --sm-black: var(--ink);
+  --sm-dark: var(--ink-strong);
+  --sm-white: var(--surface);
+  --sm-border: var(--line);
+  --sm-text-mid: var(--text-muted);
+  --sm-text-light: var(--text-subtle);
+  --sm-bg: var(--bg);
+  --sm-container: var(--container);
+  --sm-pad: var(--space-6);
+  --sm-radius: var(--radius-sm);
+  --sm-radius-card: var(--radius-lg);
+  --sm-radius-btn: var(--radius-md);
+  --sm-radius-pill: var(--radius-pill);
+  --sm-shadow-card: var(--shadow-card);
+  --sm-shadow-float: var(--shadow-float);
 }
 
 * {
