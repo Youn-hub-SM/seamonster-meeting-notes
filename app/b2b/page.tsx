@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/app/lib/supabase";
-import ActivityFeed from "./ActivityFeed";
 
 export const dynamic = "force-dynamic";
 
@@ -122,8 +121,6 @@ export default async function B2BDashboard() {
         </div>
       )}
 
-      <div className="b2b-dash-layout">
-        <div className="b2b-dash-main">
       <div className="b2b-dash-grid">
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">등록된 업체</div>
@@ -201,10 +198,6 @@ export default async function B2BDashboard() {
           <Link href="/b2b/products" className="b2b-btn-secondary">원가표</Link>
         </div>
       </section>
-        </div>
-
-        <ActivityFeed />
-      </div>
     </>
   );
 }

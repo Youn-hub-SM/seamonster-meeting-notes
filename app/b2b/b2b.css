@@ -131,17 +131,21 @@
 }
 
 /* ─────────────────────────────────────────────
-   대시보드 2단 레이아웃 (좌: 카드/바로가기, 우: 활동 피드)
+   전역 2단 레이아웃 (좌: 페이지 내용, 우: 활동 피드)
+   /b2b/* 모든 탭에 우측 피드 상시 노출 (로그인 페이지 제외)
    ───────────────────────────────────────────── */
-.b2b-dash-layout {
+.b2b-layout {
+  max-width: 1280px;
+  margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 20px;
   align-items: start;
 }
 
-.b2b-dash-main {
-  min-width: 0;
+/* 피드와 함께 있을 때의 본문 컬럼 — 자체 max-width/auto 마진 해제하고 그리드 칸을 채움 */
+.b2b-main--with-feed {
+  max-width: none;
+  margin: 0;
 }
 
 /* 우측 활동 피드 */
@@ -153,6 +157,7 @@
   position: sticky;
   top: 92px; /* 헤더(60) + 서브네비(~32) 아래 */
   max-height: calc(100vh - 110px);
+  margin: 32px 24px 0 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -240,14 +245,15 @@
   color: var(--sm-text-light);
 }
 
-/* 모바일·태블릿: 1단으로, 피드는 아래로 */
+/* 모바일·태블릿: 1단으로, 피드는 본문 아래로 */
 @media (max-width: 1024px) {
-  .b2b-dash-layout {
+  .b2b-layout {
     grid-template-columns: 1fr;
   }
   .b2b-feed {
     position: static;
     max-height: none;
+    margin: 0 16px 40px;
   }
   .b2b-feed-list {
     max-height: 420px;
