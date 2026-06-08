@@ -514,11 +514,11 @@ export default function OrdersListPage() {
                     />
                   </th>
                   <th style={{ width: 1 }}></th>
-                  <th style={{ minWidth: 130 }}>업체</th>
-                  <th style={{ minWidth: 280 }}>품목</th>
-                  <th style={{ whiteSpace: "nowrap" }}>발주일</th>
-                  <th style={{ whiteSpace: "nowrap" }}>생산일</th>
-                  <th style={{ whiteSpace: "nowrap" }}>발송일</th>
+                  <th style={{ minWidth: 88 }}>업체</th>
+                  <th style={{ minWidth: 150 }}>품목</th>
+                  <th className="b2b-col-date">발주일</th>
+                  <th className="b2b-col-date">생산일</th>
+                  <th className="b2b-col-date">발송일</th>
                   <th className="num">합계</th>
                   <th>상태</th>
                   <th>입금</th>
@@ -562,9 +562,9 @@ export default function OrdersListPage() {
                       <RowCell href={`/b2b/orders/${o.id}`}>
                         <ItemsPreview items={o.items} />
                       </RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`} nowrap>{o.order_date}</RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`} nowrap>{o.production_date || "-"}</RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`} nowrap>{o.ship_date || "-"}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.ship_date || "-"}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {formatMoney(o.total)}
                       </RowCell>

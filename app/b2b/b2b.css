@@ -140,7 +140,7 @@
   max-width: 1600px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 285px;
   align-items: start;
 }
 
@@ -247,8 +247,8 @@
   color: var(--sm-text-light);
 }
 
-/* 모바일·태블릿: 1단으로, 피드는 본문 아래로 */
-@media (max-width: 1024px) {
+/* 좁은 화면: 1단으로, 피드는 본문 아래로 (테이블이 전체 폭을 써서 가로 스크롤 방지) */
+@media (max-width: 1400px) {
   .b2b-layout {
     grid-template-columns: 1fr;
   }
@@ -381,20 +381,40 @@
 .b2b-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14.5px;
+  font-size: 14px;
 }
 
 .b2b-table th,
 .b2b-table td {
-  padding: 15px 18px;
+  padding: 13px 13px;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--sm-border);
 }
 
-/* RowCell(td padding:0 + 내부 링크) 도 세로 가운데 정렬 */
-.b2b-table td:has(> .b2b-row-link) {
-  vertical-align: middle;
+/* RowCell(td padding:0 + 내부 링크) — 내부 링크 패딩을 헤더와 동일하게(13/13) */
+.b2b-table td .b2b-row-link {
+  padding: 13px 13px !important;
+}
+
+/* 날짜 컬럼: 헤더·셀 모두 좁은 패딩 + 작은 글씨 (헤더-셀 패딩 동일하게 유지) */
+.b2b-table th.b2b-col-date {
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+.b2b-table td.b2b-col-date .b2b-row-link {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* 인라인 상태 select 컬럼도 좀 더 컴팩트하게 */
+.b2b-table td:has(> .b2b-status-select) {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .b2b-table th {
@@ -405,11 +425,6 @@
   letter-spacing: 0.04em;
   background: var(--sm-bg);
   white-space: nowrap;
-}
-
-/* 행 클릭 가능 셀(RowCell)의 내부 링크 패딩도 키움 */
-.b2b-table td .b2b-row-link {
-  padding: 15px 18px !important;
 }
 
 .b2b-table tbody tr {
@@ -636,15 +651,16 @@
 /* 인라인 상태 select (행 안에서 색 pill 처럼 보이게) */
 .b2b-status-select {
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-radius: var(--sm-radius-pill);
   border: 1px solid transparent;
   background: var(--sm-bg);
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
+  max-width: 92px;
 }
 
 .b2b-status-select:focus {
