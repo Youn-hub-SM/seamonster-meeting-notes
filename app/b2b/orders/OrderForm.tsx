@@ -514,9 +514,9 @@ export default function OrderForm({
           </div>
         </section>
 
-        {/* ───── 라인아이템 ───── */}
+        {/* ───── 발주 상품 ───── */}
         <section className="b2b-form-section">
-          <div className="b2b-form-section-title">라인아이템</div>
+          <div className="b2b-form-section-title">발주 상품</div>
           <div className="b2b-table-wrap">
             <table className="b2b-items-table">
               <thead>
@@ -538,7 +538,7 @@ export default function OrderForm({
                   const price = Number(it.unit_price) || 0;
                   return (
                     <tr key={idx}>
-                      <td>
+                      <td data-label="제품 선택">
                         <select
                           value={it.product_id ?? ""}
                           onChange={(e) => pickProduct(idx, e.target.value)}
@@ -551,7 +551,7 @@ export default function OrderForm({
                           ))}
                         </select>
                       </td>
-                      <td>
+                      <td data-label="품목명">
                         <input
                           type="text"
                           value={it.product_name}
@@ -559,14 +559,15 @@ export default function OrderForm({
                           placeholder="품목명"
                         />
                       </td>
-                      <td>
+                      <td data-label="옵션">
                         <input
                           type="text"
                           value={it.option_label}
                           onChange={(e) => updateItem(idx, { option_label: e.target.value })}
+                          placeholder="옵션"
                         />
                       </td>
-                      <td>
+                      <td data-label="규격">
                         <input
                           type="text"
                           value={it.spec}
@@ -574,7 +575,7 @@ export default function OrderForm({
                           placeholder="100g"
                         />
                       </td>
-                      <td>
+                      <td data-label="수량">
                         <input
                           type="number"
                           inputMode="numeric"
@@ -584,7 +585,7 @@ export default function OrderForm({
                           style={{ textAlign: "right" }}
                         />
                       </td>
-                      <td>
+                      <td data-label="단가">
                         <input
                           type="number"
                           inputMode="numeric"
@@ -594,7 +595,7 @@ export default function OrderForm({
                           style={{ textAlign: "right" }}
                         />
                       </td>
-                      <td>
+                      <td data-label="과세">
                         <select
                           value={it.tax_type}
                           onChange={(e) => updateItem(idx, { tax_type: e.target.value as typeof it.tax_type })}
@@ -604,15 +605,15 @@ export default function OrderForm({
                           ))}
                         </select>
                       </td>
-                      <td className="num b2b-money" style={{ padding: "12px 10px", color: "var(--sm-text-mid)" }}>
+                      <td data-label="금액" className="num b2b-money b2b-item-amount" style={{ padding: "12px 10px", color: "var(--sm-text-mid)" }}>
                         {formatMoney(qty * price)}
                       </td>
-                      <td>
+                      <td className="b2b-item-remove">
                         <button
                           type="button"
                           className="b2b-icon-btn is-danger"
                           onClick={() => removeItemRow(idx)}
-                          title="라인 삭제"
+                          title="상품 삭제"
                         >
                           ✕
                         </button>
@@ -625,7 +626,7 @@ export default function OrderForm({
           </div>
           <div className="b2b-items-add-row">
             <button type="button" className="b2b-btn-secondary" onClick={addItemRow}>
-              + 라인 추가
+              + 상품 추가
             </button>
           </div>
         </section>
@@ -640,7 +641,7 @@ export default function OrderForm({
               면세 분 <strong className="b2b-money">{formatMoney(totals.exempt)}원</strong>
             </div>
             <div className="b2b-totals-row">
-              부가세 (과세분 × 10%) <strong className="b2b-money">{formatMoney(totals.vat)}원</strong>
+              부가세 <strong className="b2b-money">{formatMoney(totals.vat)}원</strong>
             </div>
             <div className="b2b-totals-row is-grand">
               합계 <strong className="b2b-money">{formatMoney(totals.total)}원</strong>

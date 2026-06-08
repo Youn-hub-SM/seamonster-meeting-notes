@@ -1600,3 +1600,71 @@
   gap: 5px;
   flex-wrap: wrap;
 }
+
+/* ═══════════════════════════════════════════════
+   발주 상품 표 → 모바일 카드 (각 상품이 라벨+입력 스택)
+   ═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .b2b-items-table,
+  .b2b-items-table tbody,
+  .b2b-items-table tr,
+  .b2b-items-table td {
+    display: block;
+    width: 100%;
+  }
+  .b2b-items-table thead {
+    display: none;
+  }
+  .b2b-items-table tr {
+    position: relative;
+    border: 1px solid var(--sm-border);
+    border-radius: 12px;
+    background: var(--sm-bg);
+    padding: 12px 12px 6px;
+    margin-bottom: 12px;
+  }
+  .b2b-items-table td {
+    border: none;
+    padding: 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .b2b-items-table td::before {
+    content: attr(data-label);
+    flex: 0 0 60px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--sm-text-mid);
+  }
+  .b2b-items-table td input,
+  .b2b-items-table td select {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    text-align: left !important;
+    font-size: 16px; /* iOS 줌 방지 */
+    padding: 9px 11px;
+  }
+  /* 금액(계산값) 행 */
+  .b2b-items-table td.b2b-item-amount {
+    justify-content: space-between;
+    font-weight: 700;
+    color: var(--sm-black) !important;
+    padding: 8px 0 4px !important;
+    border-top: 1px solid var(--sm-border);
+    margin-top: 4px;
+  }
+  /* 삭제 버튼: 카드 우상단 고정 */
+  .b2b-items-table td.b2b-item-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: auto;
+    padding: 0;
+  }
+  .b2b-items-table td.b2b-item-remove::before {
+    content: "";
+    flex: 0;
+  }
+}
