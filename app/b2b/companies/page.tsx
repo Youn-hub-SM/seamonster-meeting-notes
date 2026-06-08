@@ -147,6 +147,7 @@ export default function CompaniesPage() {
                   <th>연락처</th>
                   <th>사업자번호</th>
                   <th>결제조건</th>
+                  <th style={{ whiteSpace: "nowrap" }}>최근 발주</th>
                   <th className="actions"></th>
                 </tr>
               </thead>
@@ -177,6 +178,13 @@ export default function CompaniesPage() {
                     <td>{c.contact_phone || "-"}</td>
                     <td>{c.biz_no || "-"}</td>
                     <td>{c.payment_terms || "-"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {c.last_order_date ? (
+                        c.last_order_date
+                      ) : (
+                        <span style={{ color: "var(--sm-text-light)" }}>발주 없음</span>
+                      )}
+                    </td>
                     <td className="actions" onClick={(e) => e.stopPropagation()}>
                       <Link
                         href={`/b2b/companies/${c.id}`}

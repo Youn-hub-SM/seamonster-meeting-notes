@@ -14,6 +14,8 @@ export interface Company {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  // 목록 API 에서만 채워짐 (업체별 가장 최근 발주일)
+  last_order_date?: string | null;
 }
 
 export type CompanyInput = Omit<Company, "id" | "created_at" | "updated_at"> & {

@@ -7,12 +7,27 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const { data, error } = await sb
-      .from("companies")
-      .select("*")
-      .order("name", { ascending: true });
-    if (error) throw error;
-    return NextResponse.json({ ok: true, companies: data ?? [] });
+    const [companiesRes, ordersRes] = await Promise.all([
+      sb.from("companies").select("*").order("name", { ascending: true }),
+      sb.from("orders").select("company_id, order_date"),
+    ]);
+    if (companiesRes.error) throw companiesRes.error;
+    if (ordersRes.error) throw ordersRes.error;
+
+    // 업체별 최근 발주일 계산
+    const lastOrderByCompany = new Map<string, string>();
+    for (const o of (ordersRes.data ?? []) as { company_id: string; order_date: string }[]) {
+      if (!o.company_id || !o.order_date) continue;
+      const prev = lastOrderByCompany.get(o.company_id);
+      if (!prev || o.order_date > prev) lastOrderByCompany.set(o.company_id, o.order_date);
+    }
+
+    const companies = ((companiesRes.data ?? []) as { id: string }[]).map((c) => ({
+      ...c,
+      last_order_date: lastOrderByCompany.get(c.id) ?? null,
+    }));
+
+    return NextResponse.json({ ok: true, companies });
   } catch (err) {
     console.error("[b2b/companies GET]", err);
     return NextResponse.json(
