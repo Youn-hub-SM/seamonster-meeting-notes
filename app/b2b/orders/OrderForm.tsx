@@ -104,7 +104,10 @@ export default function OrderForm({
                   courier: o.shipments[0].courier ?? "",
                 }
               : { ...EMPTY_RECIPIENT },
-            shipments: (o.shipments || []).map((sh) => ({
+            shipments: (o.shipments || [])
+              // 날짜·상품이 모두 없는 행은 '배송 정보 전용' 기본 행 → 발송 일정 카드로는 노출 안 함
+              .filter((sh) => sh.ship_date || (sh.items && sh.items.length > 0))
+              .map((sh) => ({
               id: sh.id,
               ship_date: sh.ship_date ?? "",
               status: sh.status,

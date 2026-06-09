@@ -26,8 +26,12 @@ export async function saveOrderShipments(
   await sb.from("shipments").delete().eq("order_id", orderId);
 
   const rec = normalizeRecipient(recipient || ({} as RecipientInput));
+  const hasRecipient = !!(
+    rec.recipient_name || rec.recipient_phone || rec.address || rec.delivery_memo || rec.courier
+  );
   let earliest: string | null = null;
   let seq = 1;
+  let inserted = 0;
 
   for (const sch of schedules || []) {
     // 이 일정에 담긴 상품 (수량>0, 유효 인덱스만)
@@ -56,6 +60,7 @@ export async function saveOrderShipments(
       .select("id")
       .single();
     if (shipErr) throw shipErr;
+    inserted++;
 
     if (items.length > 0) {
       const rows = items.map((it) => ({
@@ -70,6 +75,25 @@ export async function saveOrderShipments(
     }
 
     if (sch.ship_date && (!earliest || sch.ship_date < earliest)) earliest = sch.ship_date;
+  }
+
+  // 발송 일정이 하나도 없지만 배송 정보가 있으면, 배송 정보만 담은 기본 행을 생성해 보존.
+  // (편집 화면에서는 날짜·상품이 없는 이 행을 발송 일정 카드로 노출하지 않음)
+  if (inserted === 0 && hasRecipient) {
+    const { error: recErr } = await sb.from("shipments").insert({
+      order_id: orderId,
+      seq: 1,
+      ship_date: null,
+      status: "발송대기",
+      recipient_name: rec.recipient_name || "(미지정)",
+      recipient_phone: rec.recipient_phone || "",
+      address: rec.address || "(주소 미입력)",
+      delivery_memo: rec.delivery_memo,
+      courier: rec.courier,
+      tracking_no: null,
+      shipped_at: null,
+    });
+    if (recErr) throw recErr;
   }
 
   return { earliestShipDate: earliest };
