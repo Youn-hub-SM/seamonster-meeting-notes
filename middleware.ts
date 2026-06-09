@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getB2BUsers } from "@/app/lib/b2b-auth";
 
-// /b2b 와 /api/b2b 전체를 단일 비밀번호로 보호.
-// 비번은 환경변수 B2B_PASSWORD 에 평문 저장.
-// 쿠키 b2b_auth 값을 환경변수와 직접 비교 (HttpOnly+Secure 라 노출 위험 낮음).
-// 비번 변경 시 모든 사용자가 다시 로그인 필요 — 사내 도구라 의도된 동작.
+// /b2b 와 /api/b2b 전체를 비밀번호로 보호.
+// 사용자별 비밀번호(B2B_USERS) + 관리자 비밀번호(B2B_PASSWORD) — 비밀번호로 사용자를 구분.
+// 쿠키 b2b_auth 값(비밀번호)을 직접 비교 (HttpOnly+Secure 라 노출 위험 낮음).
+// 비번 변경 시 해당 사용자는 다시 로그인 필요 — 사내 도구라 의도된 동작.
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -14,12 +15,12 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const expected = process.env.B2B_PASSWORD;
-  if (!expected) {
+  const users = getB2BUsers();
+  if (users.length === 0) {
     // 환경변수 미설정 — 보안상 모든 접근 차단
     if (pathname.startsWith("/api/b2b/")) {
       return NextResponse.json(
-        { ok: false, error: "B2B_PASSWORD 환경변수가 서버에 설정되어 있지 않습니다." },
+        { ok: false, error: "B2B_PASSWORD/B2B_USERS 환경변수가 서버에 설정되어 있지 않습니다." },
         { status: 503 }
       );
     }
@@ -30,7 +31,7 @@ export function middleware(req: NextRequest) {
   }
 
   const token = req.cookies.get("b2b_auth")?.value;
-  if (token && token === expected) {
+  if (token && users.some((u) => u.password === token)) {
     return NextResponse.next();
   }
 

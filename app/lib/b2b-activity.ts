@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
+import { resolveUserName } from "./b2b-auth";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
 // 대시보드 우측 "최근 변경" 피드의 소스.
@@ -16,27 +18,44 @@ type ActivityInput = {
   meta?: Record<string, unknown>;
 };
 
+// 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
+async function currentActor(): Promise<string | null> {
+  try {
+    const store = await cookies();
+    return resolveUserName(store.get("b2b_auth")?.value);
+  } catch {
+    return null;
+  }
+}
+
 async function recordActivity(input: ActivityInput): Promise<void> {
+  const actor = await currentActor();
+
   // 1) DB 기록 (대시보드 피드의 소스) — 실패해도 호출 측 작업엔 영향 없음
   try {
     const sb = supabaseAdmin();
-    await sb.from("activity_log").insert({
+    const row = {
       event_type: input.event_type,
       summary: input.summary,
       order_id: input.order_id ?? null,
       order_no: input.order_no ?? null,
       meta: input.meta ?? null,
-    });
+    };
+    const { error } = await sb.from("activity_log").insert({ ...row, actor });
+    // actor 컬럼이 아직 없으면(migration 009 미적용) 기존 형식으로 재시도
+    if (error) {
+      await sb.from("activity_log").insert(row);
+    }
   } catch (err) {
     console.error("[b2b-activity] record failed", err);
   }
 
   // 2) Zapier(또는 호환 외부 웹훅) 전송 — ZAPIER_WEBHOOK_URL 미설정 시 스킵
-  await sendWebhook(input);
+  await sendWebhook(input, actor);
 }
 
 // 외부 웹훅 전송 (Zapier Catch Hook 등). fire-and-forget.
-async function sendWebhook(input: ActivityInput): Promise<void> {
+async function sendWebhook(input: ActivityInput, actor: string | null): Promise<void> {
   const url = process.env.ZAPIER_WEBHOOK_URL;
   if (!url) return;
   try {
@@ -46,6 +65,7 @@ async function sendWebhook(input: ActivityInput): Promise<void> {
       body: JSON.stringify({
         event: input.event_type,
         summary: input.summary,
+        actor,
         order_id: input.order_id ?? null,
         order_no: input.order_no ?? null,
         // meta 의 from/to/amount 등을 최상위로도 펼쳐 Zapier 필드 매핑 쉽게

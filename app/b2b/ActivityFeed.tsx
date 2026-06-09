@@ -16,6 +16,7 @@ type Activity = {
   id: string;
   event_type: string;
   summary: string;
+  actor: string | null;
   order_id: string | null;
   order_no: string | null;
   created_at: string;
@@ -92,7 +93,10 @@ export default function ActivityFeed() {
             const body = (
               <>
                 <span className="b2b-feed-summary">{a.summary}</span>
-                <span className="b2b-feed-time">{formatTime(a.created_at)}</span>
+                <span className="b2b-feed-time">
+                  {a.actor ? `${a.actor} · ` : ""}
+                  {formatTime(a.created_at)}
+                </span>
               </>
             );
             return (

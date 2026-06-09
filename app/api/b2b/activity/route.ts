@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const sb = supabaseAdmin();
     const { data, error } = await sb
       .from("activity_log")
-      .select("id, event_type, summary, order_id, order_no, created_at")
+      .select("*") // actor 컬럼(migration 009) 적용 전에도 동작하도록 명시 컬럼 대신 *
       .order("created_at", { ascending: false })
       .limit(limit);
     if (error) throw error;
