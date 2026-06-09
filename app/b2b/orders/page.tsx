@@ -19,6 +19,7 @@ import {
   formatMoney,
   formatQty,
   getUrgency,
+  nextPendingShipDate,
   todayISO,
   URGENCY_LABEL,
   OrderExportOption,
@@ -105,7 +106,7 @@ export default function OrdersListPage() {
     let overdue = 0,
       urgent = 0;
     for (const o of orders) {
-      const u = getUrgency(o, today);
+      const u = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, today);
       if (u === "overdue") overdue++;
       else if (u === "urgent") urgent++;
     }
@@ -571,7 +572,7 @@ export default function OrdersListPage() {
               </thead>
               <tbody>
                 {filtered.map((o) => {
-                  const urgency = getUrgency(o, today);
+                  const urgency = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, today);
                   return (
                     <tr key={o.id} className={urgency !== "normal" ? `is-${urgency}` : ""}>
                       <td

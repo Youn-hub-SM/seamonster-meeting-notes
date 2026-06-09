@@ -9,6 +9,7 @@ import {
   SHIPMENT_STATUS_COLORS,
   ShipmentStatus,
   getUrgency,
+  nextPendingShipDate,
 } from "@/app/lib/b2b-orders";
 
 type DateKind = "order" | "production" | "ship";
@@ -179,7 +180,7 @@ export default function CalendarView({
                 <div className="b2b-cal-date">{cell.date.getDate()}</div>
                 <div className="b2b-cal-entries">
                   {cell.entries.map((e, idx) => {
-                    const urgency = getUrgency(e.order, todayIso);
+                    const urgency = getUrgency({ ...e.order, ship_date: nextPendingShipDate(e.order) }, todayIso);
                     // 발송 일정 항목은 일정 상태(발송대기/중/완료) 배지, 그 외는 발주 상태 배지
                     const badge = e.shipStatus
                       ? { label: e.shipStatus, colors: SHIPMENT_STATUS_COLORS[e.shipStatus] }

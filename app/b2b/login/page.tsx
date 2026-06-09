@@ -71,6 +71,7 @@ function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="비밀번호"
+            autoComplete="current-password"
             autoFocus
             disabled={loading}
             style={{ marginBottom: 12 }}

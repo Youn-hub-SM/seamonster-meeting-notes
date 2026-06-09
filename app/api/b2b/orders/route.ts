@@ -114,7 +114,16 @@ export async function POST(req: NextRequest) {
       })
       .select()
       .single();
-    if (orderErr) throw orderErr;
+    if (orderErr) {
+      // 발주번호 발번 충돌 (동시 등록 등) — 재시도 안내
+      if (orderErr.code === "23505") {
+        return NextResponse.json(
+          { ok: false, error: "발주번호 발번이 겹쳤습니다. 저장을 한 번 더 눌러주세요." },
+          { status: 409 }
+        );
+      }
+      throw orderErr;
+    }
 
     // 2) 라인아이템 insert
     const itemsToInsert = body.items.map((it, idx) => {

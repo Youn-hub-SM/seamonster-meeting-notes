@@ -351,6 +351,22 @@ export function todayISO(): string {
   return `${y}-${m}-${day}`;
 }
 
+// 분할 발송 발주의 '다음 발송 예정일'.
+// - 날짜 있는 발송 일정이 있으면: 미완료(발송완료·취소 제외) 일정 중 가장 이른 날짜.
+//   전부 발송완료면 null (지연/임박 판정 대상 아님).
+// - 일정이 없으면 헤더 ship_date 그대로.
+export function nextPendingShipDate(
+  o: Pick<OrderListItem, "ship_date"> & { shipments?: ShipmentDatePreview[] }
+): string | null {
+  const dated = (o.shipments ?? []).filter((s) => s.ship_date);
+  if (dated.length === 0) return o.ship_date;
+  const pending = dated
+    .filter((s) => s.status !== "발송완료" && s.status !== "취소")
+    .map((s) => s.ship_date!)
+    .sort();
+  return pending[0] ?? null;
+}
+
 // 발주의 긴급도 계산.
 // - overdue: 발송일 지났는데 미발송 / 생산일 지났는데 대기·생산중
 // - urgent: 발송일이 오늘 또는 내일인데 아직 발송 안 됨

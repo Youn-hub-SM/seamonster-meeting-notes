@@ -234,6 +234,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const { data, error } = await sb.from("orders").update(patch).eq("id", id).select().single();
     if (error) throw error;
 
+    // 발주를 발송완료로 바꾸면 미발송 발송 일정도 발송완료로 동기화
+    // (캘린더·주간뷰가 일정 상태를 표시하므로 어긋나면 영구 '발송대기'로 보임)
+    if (body.status === "발송완료") {
+      await sb
+        .from("shipments")
+        .update({ status: "발송완료", shipped_at: new Date().toISOString() })
+        .eq("order_id", id)
+        .in("status", ["발송대기", "발송중"]);
+    }
+
     // 활동 로그
     if (body.status && prev?.status && prev.status !== body.status) {
       await logOrderStatusChanged(id, prev.status, body.status);

@@ -208,6 +208,25 @@ export default function OrderForm({
     return { ...m, season };
   }, [data.items, data.box_count, data.ship_date, data.order_date, products, currentMonth]);
 
+  // 분할 수량 점검: 발송 일정에 배분한 수량 합계가 발주 수량과 다르면 경고 (저장은 막지 않음)
+  const splitWarnings = useMemo(() => {
+    const out: string[] = [];
+    const active = data.shipments.filter((s) => s.status !== "취소");
+    if (active.length === 0) return out;
+    data.items.forEach((it, idx) => {
+      if (!it.product_name.trim()) return;
+      const allocated = active.reduce((sum, s) => {
+        const f = s.items.find((x) => x.order_item_index === idx);
+        return sum + (f ? Number(f.qty) || 0 : 0);
+      }, 0);
+      const ordered = Number(it.qty) || 0;
+      if (allocated > 0 && allocated !== ordered) {
+        out.push(`${it.product_name}${it.spec ? ` ${it.spec}` : ""}: 발주 ${formatQty(ordered)}개인데 발송 일정에 ${formatQty(allocated)}개 배분됨`);
+      }
+    });
+    return out;
+  }, [data.items, data.shipments]);
+
   // ─────────────────────────────────────────────
   // 폼 필드 수정 핸들러
   // ─────────────────────────────────────────────
@@ -658,6 +677,14 @@ export default function OrderForm({
               </div>
             ))}
           </div>
+
+          {splitWarnings.length > 0 && (
+            <div style={{ marginTop: 12, padding: "10px 12px", background: "#FFF4E0", borderRadius: 8, fontSize: 13, color: "#B86E00" }}>
+              {splitWarnings.map((w, i) => (
+                <div key={i}>⚠ {w}</div>
+              ))}
+            </div>
+          )}
 
           <div style={{ marginTop: 12 }}>
             <button type="button" className="b2b-btn-secondary" onClick={addSchedule}>+ 발송 일정 추가</button>
