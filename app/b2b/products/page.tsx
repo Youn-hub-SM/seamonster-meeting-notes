@@ -212,6 +212,11 @@ export default function ProductsPage() {
                               tax_type: p.tax_type,
                               active: p.active,
                               notes: p.notes ?? "",
+                              cost_material: p.cost_material ?? 0,
+                              pkg_inner: p.pkg_inner ?? 0,
+                              pkg_label: p.pkg_label ?? 0,
+                              pkg_outer: p.pkg_outer ?? 0,
+                              volume_kg: p.volume_kg ?? null,
                             },
                           })
                         }
@@ -355,7 +360,14 @@ function ProductModal({
     onChange({ ...data, [key]: value });
   }
 
-  const margin = (Number(data.sale_price) || 0) - (Number(data.cost_price) || 0);
+  // 원가 상세가 있으면 제품 단위 원가 = 제품원가+포장재 합, 없으면 직접 입력한 cost_price.
+  const detailSum =
+    (Number(data.cost_material) || 0) +
+    (Number(data.pkg_inner) || 0) +
+    (Number(data.pkg_label) || 0) +
+    (Number(data.pkg_outer) || 0);
+  const effCost = detailSum > 0 ? detailSum : Number(data.cost_price) || 0;
+  const margin = (Number(data.sale_price) || 0) - effCost;
   const marginPct = Number(data.sale_price) > 0 ? (margin / Number(data.sale_price)) * 100 : 0;
 
   return (
@@ -425,34 +437,88 @@ function ProductModal({
             </span>
           </Field>
 
+          <Field label="기본 판매가 (도매가, 원)">
+            <input
+              type="number"
+              inputMode="numeric"
+              className="b2b-input b2b-money"
+              value={data.sale_price}
+              onChange={(e) => set("sale_price", Number(e.target.value) || 0)}
+              min={0}
+              step={1}
+            />
+          </Field>
+
+          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
+            원가 상세 (이익률 계산용)
+          </div>
           <div className="b2b-field-row">
-            <Field label="원가 (원)">
+            <Field label="제품원가 (원)">
               <input
                 type="number"
                 inputMode="numeric"
                 className="b2b-input b2b-money"
-                value={data.cost_price}
-                onChange={(e) => set("cost_price", Number(e.target.value) || 0)}
+                value={data.cost_material}
+                onChange={(e) => set("cost_material", Number(e.target.value) || 0)}
                 min={0}
                 step={1}
               />
             </Field>
-            <Field label="기본 판매가 (원)">
+            <Field label="내포장지 (원)">
               <input
                 type="number"
                 inputMode="numeric"
                 className="b2b-input b2b-money"
-                value={data.sale_price}
-                onChange={(e) => set("sale_price", Number(e.target.value) || 0)}
+                value={data.pkg_inner}
+                onChange={(e) => set("pkg_inner", Number(e.target.value) || 0)}
                 min={0}
                 step={1}
               />
             </Field>
           </div>
+          <div className="b2b-field-row">
+            <Field label="라벨 (원)">
+              <input
+                type="number"
+                inputMode="numeric"
+                className="b2b-input b2b-money"
+                value={data.pkg_label}
+                onChange={(e) => set("pkg_label", Number(e.target.value) || 0)}
+                min={0}
+                step={1}
+              />
+            </Field>
+            <Field label="외포장지 (원)">
+              <input
+                type="number"
+                inputMode="numeric"
+                className="b2b-input b2b-money"
+                value={data.pkg_outer}
+                onChange={(e) => set("pkg_outer", Number(e.target.value) || 0)}
+                min={0}
+                step={1}
+              />
+            </Field>
+          </div>
+          <Field label="제품부피 (kg) — 포장비·배송비 산정 기준">
+            <input
+              type="number"
+              inputMode="decimal"
+              className="b2b-input"
+              value={data.volume_kg ?? ""}
+              onChange={(e) => set("volume_kg", e.target.value === "" ? null : Number(e.target.value))}
+              min={0}
+              step={0.1}
+              placeholder="예: 0.1, 1, 10"
+              style={{ maxWidth: 200 }}
+            />
+          </Field>
 
-          {(data.cost_price > 0 || data.sale_price > 0) && (
+          {(effCost > 0 || data.sale_price > 0) && (
             <div style={{ padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 13 }}>
-              마진:{" "}
+              제품 단위 원가 <strong className="b2b-money">{effCost.toLocaleString()}원</strong>
+              {" · "}
+              마진(배송 제외):{" "}
               <strong style={{ color: margin >= 0 ? "var(--sm-dark)" : "#c92a2a" }}>
                 {margin >= 0 ? "+" : ""}{margin.toLocaleString()}원
                 {data.sale_price > 0 && ` (${marginPct.toFixed(1)}%)`}

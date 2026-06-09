@@ -43,6 +43,11 @@ export async function POST(req: NextRequest) {
         tax_type: clean.tax_type,
         active: clean.active,
         notes: clean.notes,
+        cost_material: clean.cost_material,
+        pkg_inner: clean.pkg_inner,
+        pkg_label: clean.pkg_label,
+        pkg_outer: clean.pkg_outer,
+        volume_kg: clean.volume_kg,
       })
       .select()
       .single();
@@ -88,6 +93,11 @@ export async function PUT(req: NextRequest) {
         tax_type: clean.tax_type,
         active: clean.active,
         notes: clean.notes,
+        cost_material: clean.cost_material,
+        pkg_inner: clean.pkg_inner,
+        pkg_label: clean.pkg_label,
+        pkg_outer: clean.pkg_outer,
+        volume_kg: clean.volume_kg,
       })
       .eq("id", body.id)
       .select()

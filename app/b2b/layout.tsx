@@ -34,6 +34,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
           <Link href="/b2b/orders" className="b2b-subnav-link">발주</Link>
           <Link href="/b2b/companies" className="b2b-subnav-link">업체 주소록</Link>
           <Link href="/b2b/products" className="b2b-subnav-link">원가표</Link>
+          <Link href="/b2b/margin" className="b2b-subnav-link">이익률</Link>
           <Link href="/b2b/reports" className="b2b-subnav-link">매출 집계</Link>
           <Link href="/b2b/payments" className="b2b-subnav-link">입금 확인</Link>
           <button
