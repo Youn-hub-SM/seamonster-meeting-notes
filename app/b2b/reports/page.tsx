@@ -19,7 +19,7 @@ type Report = {
     pending_total: number;
   };
   by_company: { company_name: string; orders: number; revenue: number; margin: number }[];
-  by_product: { product_name: string; qty: number; revenue: number; cost: number; margin: number }[];
+  by_product: { product_name: string; spec: string | null; qty: number; revenue: number; cost: number; margin: number }[];
   trend: { month: string; revenue: number }[];
 };
 
@@ -294,6 +294,7 @@ export default function ReportsPage() {
                   <thead>
                     <tr>
                       <th>품목</th>
+                      <th>옵션</th>
                       <th className="num">수량</th>
                       <th className="num">매출</th>
                       <th className="num">원가</th>
@@ -303,8 +304,9 @@ export default function ReportsPage() {
                   </thead>
                   <tbody>
                     {report.by_product.map((p) => (
-                      <tr key={p.product_name}>
+                      <tr key={`${p.product_name} ${p.spec ?? ""}`}>
                         <td><strong>{p.product_name}</strong></td>
+                        <td>{p.spec || "-"}</td>
                         <td className="num">{p.qty.toLocaleString()}</td>
                         <td className="num b2b-money">{formatMoney(p.revenue)}</td>
                         <td className="num b2b-money">{formatMoney(p.cost)}</td>

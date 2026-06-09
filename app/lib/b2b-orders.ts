@@ -109,10 +109,19 @@ export interface OrderLinePreview {
   qty: number;
 }
 
+// 목록용 발송 일정 미리보기 (날짜·상태)
+export interface ShipmentDatePreview {
+  id: string;
+  seq: number;
+  ship_date: string | null;
+  status: ShipmentStatus;
+}
+
 export interface OrderListItem extends Order {
   company_name: string;
   item_count: number;
   items: OrderLinePreview[];
+  shipments: ShipmentDatePreview[];   // 발송 일정 (캘린더·주간뷰 분할 발송 표시용)
 }
 
 // 단일 조회 응답: 풀 디테일

@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
     let q = sb
       .from("orders")
       .select(
-        "*, companies:company_id(name), order_items(product_name, spec, qty, sort_order)"
+        "*, companies:company_id(name), order_items(product_name, spec, qty, sort_order), " +
+          "shipments(id, seq, ship_date, status)"
       )
       .order("order_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -45,24 +46,32 @@ export async function GET(req: NextRequest) {
     const { data, error } = await q;
     if (error) throw error;
 
-    // 평탄화: companies.name → company_name, order_items[] → items(정렬) + item_count
+    // 평탄화: companies.name → company_name, order_items[] → items(정렬) + item_count, shipments[] 정렬
     type ItemRow = { product_name: string; spec: string | null; qty: number; sort_order: number };
+    type ShipRow = { id: string; seq: number; ship_date: string | null; status: string };
     type Row = Record<string, unknown> & {
       companies?: { name?: string } | null;
       order_items?: ItemRow[];
+      shipments?: ShipRow[];
     };
-    const orders: OrderListItem[] = (data as Row[] | null ?? []).map((r) => {
-      const { companies, order_items, ...rest } = r;
+    const orders: OrderListItem[] = ((data as unknown as Row[] | null) ?? []).map((r) => {
+      const { companies, order_items, shipments, ...rest } = r;
       const items = Array.isArray(order_items)
         ? [...order_items]
             .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
             .map((it) => ({ product_name: it.product_name, spec: it.spec, qty: Number(it.qty) || 0 }))
+        : [];
+      const ships = Array.isArray(shipments)
+        ? [...shipments]
+            .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+            .map((s) => ({ id: s.id, seq: s.seq, ship_date: s.ship_date, status: s.status as OrderListItem["shipments"][number]["status"] }))
         : [];
       return {
         ...(rest as unknown as OrderListItem),
         company_name: companies?.name ?? "(미지정)",
         item_count: items.length,
         items,
+        shipments: ships,
       };
     });
 

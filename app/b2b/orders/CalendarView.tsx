@@ -6,6 +6,8 @@ import {
   OrderListItem,
   STATUS_COLORS,
   STATUS_SHORT,
+  SHIPMENT_STATUS_COLORS,
+  ShipmentStatus,
   getUrgency,
 } from "@/app/lib/b2b-orders";
 
@@ -57,15 +59,26 @@ export default function CalendarView({
   }, [isMobile, weekStart, cursor]);
 
   // 셀 배열 만들기
+  type Entry = { kind: DateKind; order: OrderListItem; shipStatus?: ShipmentStatus };
   const cells = useMemo(() => {
-    const result: { date: Date | null; iso: string; entries: { kind: DateKind; order: OrderListItem }[] }[] = [];
+    const result: { date: Date | null; iso: string; entries: Entry[] }[] = [];
 
-    function entriesFor(iso: string): { kind: DateKind; order: OrderListItem }[] {
-      const out: { kind: DateKind; order: OrderListItem }[] = [];
+    function entriesFor(iso: string): Entry[] {
+      const out: Entry[] = [];
       for (const o of orders) {
         if (visibleKinds.order && o.order_date === iso) out.push({ kind: "order", order: o });
         if (visibleKinds.production && o.production_date === iso) out.push({ kind: "production", order: o });
-        if (visibleKinds.ship && o.ship_date === iso) out.push({ kind: "ship", order: o });
+        if (visibleKinds.ship) {
+          // 발송 일정(분할 발송)을 각 날짜에 표시 — 일정별 상태 사용. 일정 없으면 헤더 발송일로 폴백.
+          const dated = (o.shipments ?? []).filter((s) => s.ship_date);
+          if (dated.length > 0) {
+            for (const s of dated) {
+              if (s.ship_date === iso) out.push({ kind: "ship", order: o, shipStatus: s.status });
+            }
+          } else if (o.ship_date === iso) {
+            out.push({ kind: "ship", order: o });
+          }
+        }
       }
       return out;
     }
@@ -167,13 +180,17 @@ export default function CalendarView({
                 <div className="b2b-cal-entries">
                   {cell.entries.map((e, idx) => {
                     const urgency = getUrgency(e.order, todayIso);
+                    // 발송 일정 항목은 일정 상태(발송대기/중/완료) 배지, 그 외는 발주 상태 배지
+                    const badge = e.shipStatus
+                      ? { label: e.shipStatus, colors: SHIPMENT_STATUS_COLORS[e.shipStatus] }
+                      : { label: STATUS_SHORT[e.order.status], colors: STATUS_COLORS[e.order.status] };
                     return (
                       <Link
                         key={`${e.order.id}-${e.kind}-${idx}`}
                         href={`/b2b/orders/${e.order.id}`}
                         className={`b2b-cal-entry ${urgency !== "normal" ? `is-${urgency}` : ""}`}
                         style={{ borderLeftColor: DATE_KIND_COLOR[e.kind] }}
-                        title={`${DATE_KIND_LABEL[e.kind]}일 · ${e.order.company_name} · ${e.order.order_no}`}
+                        title={`${DATE_KIND_LABEL[e.kind]}일 · ${e.order.company_name} · ${e.order.order_no}${e.shipStatus ? ` · ${e.shipStatus}` : ""}`}
                       >
                         <span className="b2b-cal-entry-kind" style={{ color: DATE_KIND_COLOR[e.kind] }}>
                           {DATE_KIND_LABEL[e.kind]}
@@ -181,12 +198,9 @@ export default function CalendarView({
                         <span className="b2b-cal-entry-text">{e.order.company_name}</span>
                         <span
                           className="b2b-cal-entry-status"
-                          style={{
-                            background: STATUS_COLORS[e.order.status]?.bg,
-                            color: STATUS_COLORS[e.order.status]?.fg,
-                          }}
+                          style={{ background: badge.colors?.bg, color: badge.colors?.fg }}
                         >
-                          {STATUS_SHORT[e.order.status]}
+                          {badge.label}
                         </span>
                       </Link>
                     );
