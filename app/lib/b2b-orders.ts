@@ -245,6 +245,31 @@ export interface Shipment {
   items?: ShipmentItem[];
 }
 
+// ─────────────────────────────────────────────
+// 발송요청 출력 — 발송 일정 선택 옵션
+// ─────────────────────────────────────────────
+export interface ExportLineItem {
+  product_name: string;
+  spec: string | null;
+  qty: number;
+}
+
+export interface ShipmentExportOption {
+  id: string;
+  seq: number;
+  ship_date: string | null;
+  status: ShipmentStatus;
+  items: ExportLineItem[]; // 비어 있으면 발주 전체상품(fallback)로 출력
+}
+
+export interface OrderExportOption {
+  order_id: string;
+  order_no: string;
+  company_name: string;
+  fallbackItems: ExportLineItem[]; // 발송에 상품 분할이 없을 때 사용
+  shipments: ShipmentExportOption[];
+}
+
 export interface OrderInput {
   id?: string;
   company_id: string;

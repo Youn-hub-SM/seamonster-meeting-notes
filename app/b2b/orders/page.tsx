@@ -15,10 +15,15 @@ import {
   STATUS_SHORT,
   PAYMENT_COLORS,
   TAX_INVOICE_COLORS,
+  SHIPMENT_STATUS_COLORS,
   formatMoney,
+  formatQty,
   getUrgency,
   todayISO,
   URGENCY_LABEL,
+  OrderExportOption,
+  ShipmentExportOption,
+  ExportLineItem,
 } from "@/app/lib/b2b-orders";
 import { Company } from "@/app/lib/b2b-types";
 import CalendarView from "./CalendarView";
@@ -43,6 +48,7 @@ export default function OrdersListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [exportOptions, setExportOptions] = useState<OrderExportOption[] | null>(null);
 
   const today = useMemo(() => todayISO(), []);
 
@@ -192,15 +198,15 @@ export default function OrdersListPage() {
     setBulkSaving(false);
   }
 
-  async function handleExportShipping() {
-    if (selected.size === 0) return;
+  // 실제 xlsx 다운로드 (발송 단위 shipment_ids + 과거 발주 order_ids)
+  async function downloadShipping(payload: { shipment_ids?: string[]; order_ids?: string[] }) {
     setExporting(true);
     setError("");
     try {
       const res = await fetch("/api/b2b/orders/export-shipping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_ids: Array.from(selected) }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -222,10 +228,47 @@ export default function OrdersListPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      setExportOptions(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "다운로드 중 오류");
     }
     setExporting(false);
+  }
+
+  // 선택한 발주 중 분할 발송(일정 2개 이상)이 있으면 선택 모달, 없으면 바로 다운로드
+  async function handleExportShipping() {
+    if (selected.size === 0) return;
+    setExporting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/orders/export-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_ids: Array.from(selected) }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || "발송 정보 조회 실패");
+      const options: OrderExportOption[] = json.options || [];
+
+      const needsChoice = options.some((o) => o.shipments.length >= 2);
+      if (needsChoice) {
+        setExporting(false);
+        setExportOptions(options); // 모달 오픈
+        return;
+      }
+
+      // 분할 없음 → 발송(취소 제외) / 발송없는 과거발주는 발주 단위로 바로 출력
+      const shipment_ids: string[] = [];
+      const order_ids: string[] = [];
+      for (const o of options) {
+        if (o.shipments.length === 0) order_ids.push(o.order_id);
+        else for (const s of o.shipments) if (s.status !== "취소") shipment_ids.push(s.id);
+      }
+      await downloadShipping({ shipment_ids, order_ids });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "다운로드 중 오류");
+      setExporting(false);
+    }
   }
 
   async function handleTaxInvoiceChange(id: string, newStatus: TaxInvoiceStatus) {
@@ -682,7 +725,182 @@ export default function OrdersListPage() {
         )}
       </div>
       )}
+
+      {exportOptions && (
+        <ExportPickModal
+          options={exportOptions}
+          exporting={exporting}
+          onClose={() => setExportOptions(null)}
+          onConfirm={(payload) => downloadShipping(payload)}
+        />
+      )}
     </>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 발송 일정 선택 모달 — 분할 발송이 있는 발주에서 "어떤 발송을 뽑을지" 선택
+// ─────────────────────────────────────────────
+function shipmentSummary(s: ShipmentExportOption, fallback: ExportLineItem[]): string {
+  const list = s.items.length > 0 ? s.items : fallback;
+  if (list.length === 0) return "(상품 없음)";
+  const label = (it: ExportLineItem) =>
+    `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`;
+  const head = list.slice(0, 2).map(label).join(", ");
+  const rest = list.length - Math.min(2, list.length);
+  const base = rest > 0 ? `${head} 외 ${rest}종` : head;
+  return s.items.length === 0 ? `${base} · 전체상품` : base;
+}
+
+function ExportPickModal({
+  options,
+  exporting,
+  onClose,
+  onConfirm,
+}: {
+  options: OrderExportOption[];
+  exporting: boolean;
+  onClose: () => void;
+  onConfirm: (payload: { shipment_ids: string[]; order_ids: string[] }) => void;
+}) {
+  // 기본 선택: 취소가 아닌 모든 발송 + 발송 없는 발주(전체)
+  const [shipSel, setShipSel] = useState<Set<string>>(() => {
+    const s = new Set<string>();
+    for (const o of options) for (const sh of o.shipments) if (sh.status !== "취소") s.add(sh.id);
+    return s;
+  });
+  const [orderSel, setOrderSel] = useState<Set<string>>(() => {
+    const s = new Set<string>();
+    for (const o of options) if (o.shipments.length === 0) s.add(o.order_id);
+    return s;
+  });
+
+  const totalSelected = shipSel.size + orderSel.size;
+
+  function toggleShip(id: string) {
+    setShipSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleOrder(id: string) {
+    setOrderSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div className="b2b-modal-backdrop" onClick={onClose}>
+      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
+        <div className="b2b-modal-head">
+          <div>
+            <h2 className="b2b-modal-title">발송요청 양식 — 어떤 발송을 뽑을까요?</h2>
+            <div style={{ marginTop: 4, fontSize: 13, color: "var(--sm-text-mid)" }}>
+              분할 발송이 있어요. 출력할 발송 일정을 선택하세요.
+            </div>
+          </div>
+          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="b2b-modal-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {options.map((o) => (
+            <div
+              key={o.order_id}
+              style={{ border: "1px solid var(--sm-border)", borderRadius: 10, overflow: "hidden" }}
+            >
+              <div
+                style={{
+                  padding: "9px 12px",
+                  background: "var(--sm-bg)",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <span>{o.company_name}</span>
+                <span style={{ color: "var(--sm-text-light)", fontWeight: 500 }}>{o.order_no}</span>
+              </div>
+
+              {o.shipments.length === 0 ? (
+                <label className="b2b-export-pick">
+                  <input
+                    type="checkbox"
+                    className="b2b-checkbox"
+                    checked={orderSel.has(o.order_id)}
+                    onChange={() => toggleOrder(o.order_id)}
+                  />
+                  <span className="b2b-export-pick-main">
+                    <span className="b2b-export-pick-date">발송일정 없음 · 전체</span>
+                    <span className="b2b-export-pick-items">
+                      {o.fallbackItems.length === 0
+                        ? "(상품 없음)"
+                        : o.fallbackItems
+                            .slice(0, 2)
+                            .map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`)
+                            .join(", ") + (o.fallbackItems.length > 2 ? ` 외 ${o.fallbackItems.length - 2}종` : "")}
+                    </span>
+                  </span>
+                </label>
+              ) : (
+                o.shipments.map((s) => {
+                  const c = SHIPMENT_STATUS_COLORS[s.status];
+                  return (
+                    <label key={s.id} className="b2b-export-pick">
+                      <input
+                        type="checkbox"
+                        className="b2b-checkbox"
+                        checked={shipSel.has(s.id)}
+                        onChange={() => toggleShip(s.id)}
+                      />
+                      <span className="b2b-export-pick-main">
+                        <span className="b2b-export-pick-date">
+                          {s.ship_date || "예정일 미정"}
+                          <span
+                            className="b2b-status-pill"
+                            style={{ background: c?.bg, color: c?.fg, marginLeft: 8 }}
+                          >
+                            {s.status}
+                          </span>
+                        </span>
+                        <span className="b2b-export-pick-items">{shipmentSummary(s, o.fallbackItems)}</span>
+                      </span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="b2b-modal-foot">
+          <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
+            <strong>{totalSelected}건</strong> 발송 선택됨
+          </span>
+          <div className="b2b-modal-foot-right">
+            <button type="button" className="b2b-btn-secondary" onClick={onClose}>
+              취소
+            </button>
+            <button
+              type="button"
+              className="b2b-btn-primary"
+              disabled={exporting || totalSelected === 0}
+              onClick={() =>
+                onConfirm({ shipment_ids: Array.from(shipSel), order_ids: Array.from(orderSel) })
+              }
+            >
+              {exporting ? "생성 중..." : "선택 발송 양식 다운로드"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

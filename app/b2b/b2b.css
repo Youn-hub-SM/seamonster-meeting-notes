@@ -536,6 +536,41 @@
   margin-left: auto;
 }
 
+/* 발송요청 출력 — 발송 일정 선택 항목 */
+.b2b-export-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--sm-border);
+  cursor: pointer;
+}
+.b2b-export-pick:hover {
+  background: var(--sm-bg);
+}
+.b2b-export-pick .b2b-checkbox {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.b2b-export-pick-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.b2b-export-pick-date {
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.b2b-export-pick-items {
+  font-size: 12.5px;
+  color: var(--sm-text-mid);
+  line-height: 1.4;
+}
+
 /* ─────────────────────────────────────────────
    폼 필드
    ───────────────────────────────────────────── */
