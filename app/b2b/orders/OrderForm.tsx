@@ -673,7 +673,7 @@ export default function OrderForm({
                           <option value="">직접 입력</option>
                           {products.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.name}{p.spec ? ` (${p.spec})` : ""}
+                              {p.name}{p.spec ? ` ${p.spec}` : ""}
                             </option>
                           ))}
                         </select>
