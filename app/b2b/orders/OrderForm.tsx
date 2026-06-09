@@ -11,12 +11,17 @@ import {
   ORDER_STATUSES,
   PAYMENT_STATUSES,
   TAX_INVOICE_STATUSES,
+  SHIPMENT_STATUSES,
+  SHIPMENT_STATUS_COLORS,
   EMPTY_ORDER,
   EMPTY_ORDER_ITEM,
-  EMPTY_SHIPMENT,
+  EMPTY_RECIPIENT,
+  EMPTY_SHIPMENT_SCHEDULE,
+  RecipientInput,
+  ShipmentScheduleInput,
   Shipment,
-  ShipmentInput,
   formatMoney,
+  formatQty,
 } from "@/app/lib/b2b-orders";
 import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 
@@ -35,7 +40,7 @@ export default function OrderForm({
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [data, setData] = useState<OrderInput>({ ...EMPTY_ORDER, items: [{ ...EMPTY_ORDER_ITEM }], shipment: { ...EMPTY_SHIPMENT } });
+  const [data, setData] = useState<OrderInput>({ ...EMPTY_ORDER, items: [{ ...EMPTY_ORDER_ITEM }], recipient: { ...EMPTY_RECIPIENT }, shipments: [] });
   const [originalOrder, setOriginalOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,17 +93,26 @@ export default function OrderForm({
               tax_type: it.tax_type,
               sort_order: it.sort_order,
             })),
-            shipment: o.shipments?.[0]
+            recipient: o.shipments?.[0]
               ? {
-                  id: o.shipments[0].id,
                   recipient_name: o.shipments[0].recipient_name ?? "",
                   recipient_phone: o.shipments[0].recipient_phone ?? "",
                   address: o.shipments[0].address ?? "",
                   delivery_memo: o.shipments[0].delivery_memo ?? "",
                   courier: o.shipments[0].courier ?? "",
-                  tracking_no: o.shipments[0].tracking_no ?? "",
                 }
-              : { ...EMPTY_SHIPMENT },
+              : { ...EMPTY_RECIPIENT },
+            shipments: (o.shipments || []).map((sh) => ({
+              id: sh.id,
+              ship_date: sh.ship_date ?? "",
+              status: sh.status,
+              tracking_no: sh.tracking_no ?? "",
+              items: (sh.items || []).map((si) => ({
+                // order_item_id → 현재 items 배열의 인덱스로 매핑
+                order_item_index: (o.items || []).findIndex((oi) => oi.id === si.order_item_id),
+                qty: si.qty,
+              })).filter((x) => x.order_item_index >= 0),
+            })),
           });
         } else if (mode === "create" && cloneFromId) {
           // 복제 모드: 원본 발주를 불러와 업체·라인·송장은 복사, 날짜·상태는 초기화
@@ -130,17 +144,16 @@ export default function OrderForm({
               tax_type: it.tax_type,
               sort_order: idx,
             })),
-            shipment: o.shipments?.[0]
+            recipient: o.shipments?.[0]
               ? {
-                  // id 없음 (새 송장)
                   recipient_name: o.shipments[0].recipient_name ?? "",
                   recipient_phone: o.shipments[0].recipient_phone ?? "",
                   address: o.shipments[0].address ?? "",
                   delivery_memo: o.shipments[0].delivery_memo ?? "",
-                  courier: "",          // 운송장 정보는 비움 (건마다 다름)
-                  tracking_no: "",
+                  courier: "",          // 택배사 정보는 비움 (건마다 다름)
                 }
-              : { ...EMPTY_SHIPMENT },
+              : { ...EMPTY_RECIPIENT },
+            shipments: [],   // 발송 일정은 복제 안 함 (건마다 다름)
           });
         } else {
           // create 모드: 발주일 기본값을 오늘로
@@ -180,11 +193,11 @@ export default function OrderForm({
     setData((prev) => ({ ...prev, [key]: value }));
   }
 
-  function setShipment(patch: Partial<ShipmentInput>) {
-    setData((prev) => ({ ...prev, shipment: { ...prev.shipment, ...patch } }));
+  function setRecipient(patch: Partial<RecipientInput>) {
+    setData((prev) => ({ ...prev, recipient: { ...prev.recipient, ...patch } }));
   }
 
-  // 업체 변경 시 송장 정보 자동 채움 (담당자·연락처·주소 → 수령인 정보)
+  // 업체 변경 시 공통 배송 정보 자동 채움 (담당자·연락처·주소 → 수령인)
   function selectCompany(companyId: string) {
     setData((prev) => {
       const c = companies.find((cc) => cc.id === companyId);
@@ -192,14 +205,45 @@ export default function OrderForm({
       return {
         ...prev,
         company_id: companyId,
-        shipment: {
-          ...prev.shipment,
-          recipient_name: c.contact_name ?? prev.shipment.recipient_name,
-          recipient_phone: c.contact_phone ?? prev.shipment.recipient_phone,
-          address: c.address ?? prev.shipment.address,
+        recipient: {
+          ...prev.recipient,
+          recipient_name: c.contact_name ?? prev.recipient.recipient_name,
+          recipient_phone: c.contact_phone ?? prev.recipient.recipient_phone,
+          address: c.address ?? prev.recipient.address,
         },
       };
     });
+  }
+
+  // ── 발송 일정 핸들러 ──
+  function addSchedule() {
+    setData((prev) => ({ ...prev, shipments: [...prev.shipments, { ...EMPTY_SHIPMENT_SCHEDULE, items: [] }] }));
+  }
+  function removeSchedule(si: number) {
+    setData((prev) => ({ ...prev, shipments: prev.shipments.filter((_, i) => i !== si) }));
+  }
+  function setSchedule(si: number, patch: Partial<ShipmentScheduleInput>) {
+    setData((prev) => ({
+      ...prev,
+      shipments: prev.shipments.map((s, i) => (i === si ? { ...s, ...patch } : s)),
+    }));
+  }
+  function setScheduleQty(si: number, orderItemIndex: number, qty: string) {
+    setData((prev) => ({
+      ...prev,
+      shipments: prev.shipments.map((s, i) => {
+        if (i !== si) return s;
+        const items = [...s.items];
+        const found = items.findIndex((x) => x.order_item_index === orderItemIndex);
+        if (found >= 0) items[found] = { ...items[found], qty };
+        else items.push({ order_item_index: orderItemIndex, qty });
+        return { ...s, items };
+      }),
+    }));
+  }
+  function getScheduleQty(si: number, orderItemIndex: number): string {
+    const found = data.shipments[si]?.items.find((x) => x.order_item_index === orderItemIndex);
+    return found ? String(found.qty) : "";
   }
 
   function updateItem(idx: number, patch: Partial<OrderItemInput>) {
@@ -441,12 +485,12 @@ export default function OrderForm({
           </div>
         </section>
 
-        {/* ───── 송장 정보 ───── */}
+        {/* ───── 배송 정보 (공통) ───── */}
         <section className="b2b-form-section">
           <div className="b2b-form-section-title">
-            송장 정보
+            배송 정보
             <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
-              업체 선택 시 주소록 정보로 자동 채움 — 다르게 보낼 때만 수정
+              업체 선택 시 자동 채움 — 모든 발송 일정에 공통 적용
             </span>
           </div>
           <div className="b2b-field-row">
@@ -455,8 +499,8 @@ export default function OrderForm({
               <input
                 type="text"
                 className="b2b-input"
-                value={data.shipment.recipient_name}
-                onChange={(e) => setShipment({ recipient_name: e.target.value })}
+                value={data.recipient.recipient_name}
+                onChange={(e) => setRecipient({ recipient_name: e.target.value })}
                 placeholder="홍길동"
               />
             </div>
@@ -465,8 +509,8 @@ export default function OrderForm({
               <input
                 type="text"
                 className="b2b-input"
-                value={data.shipment.recipient_phone}
-                onChange={(e) => setShipment({ recipient_phone: e.target.value })}
+                value={data.recipient.recipient_phone}
+                onChange={(e) => setRecipient({ recipient_phone: e.target.value })}
                 placeholder="010-0000-0000"
               />
             </div>
@@ -476,41 +520,125 @@ export default function OrderForm({
             <input
               type="text"
               className="b2b-input"
-              value={data.shipment.address}
-              onChange={(e) => setShipment({ address: e.target.value })}
+              value={data.recipient.address}
+              onChange={(e) => setRecipient({ address: e.target.value })}
               placeholder="(우편번호) 시/도 시/군/구 도로명 + 상세"
             />
           </div>
-          <div className="b2b-field" style={{ marginTop: 12 }}>
-            <label className="b2b-field-label">배송 메세지</label>
-            <input
-              type="text"
-              className="b2b-input"
-              value={data.shipment.delivery_memo}
-              onChange={(e) => setShipment({ delivery_memo: e.target.value })}
-              placeholder="문 앞 / 부재 시 경비실 등"
-            />
-          </div>
           <div className="b2b-field-row" style={{ marginTop: 12 }}>
+            <div className="b2b-field">
+              <label className="b2b-field-label">배송 메세지</label>
+              <input
+                type="text"
+                className="b2b-input"
+                value={data.recipient.delivery_memo}
+                onChange={(e) => setRecipient({ delivery_memo: e.target.value })}
+                placeholder="문 앞 / 부재 시 경비실 등"
+              />
+            </div>
             <div className="b2b-field">
               <label className="b2b-field-label">택배사 (선택)</label>
               <input
                 type="text"
                 className="b2b-input"
-                value={data.shipment.courier}
-                onChange={(e) => setShipment({ courier: e.target.value })}
+                value={data.recipient.courier}
+                onChange={(e) => setRecipient({ courier: e.target.value })}
                 placeholder="CJ대한통운"
               />
             </div>
-            <div className="b2b-field">
-              <label className="b2b-field-label">운송장 번호 (선택)</label>
-              <input
-                type="text"
-                className="b2b-input"
-                value={data.shipment.tracking_no}
-                onChange={(e) => setShipment({ tracking_no: e.target.value })}
-              />
-            </div>
+          </div>
+        </section>
+
+        {/* ───── 발송 일정 (분할 발송) ───── */}
+        <section className="b2b-form-section">
+          <div className="b2b-form-section-title">
+            발송 일정
+            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
+              나눠서 보낼 경우 일정을 여러 개 추가 — 각 일정에 날짜·상태·보낼 수량
+            </span>
+          </div>
+
+          {data.shipments.length === 0 && (
+            <p style={{ fontSize: 13, color: "var(--sm-text-light)", margin: "4px 0 12px" }}>
+              아직 발송 일정이 없습니다. 한 번에 다 보내면 비워두셔도 되고, 나눠 보내면 일정을 추가하세요.
+            </p>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {data.shipments.map((sch, si) => (
+              <div key={si} style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: 14, background: "var(--sm-bg)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <strong style={{ fontSize: 14 }}>발송 {si + 1}</strong>
+                  <button type="button" className="b2b-icon-btn is-danger" onClick={() => removeSchedule(si)} title="발송 일정 삭제">✕</button>
+                </div>
+                <div className="b2b-field-row">
+                  <div className="b2b-field">
+                    <label className="b2b-field-label">발송예정일</label>
+                    <input
+                      type="date"
+                      className="b2b-input"
+                      value={sch.ship_date}
+                      onChange={(e) => setSchedule(si, { ship_date: e.target.value })}
+                    />
+                  </div>
+                  <div className="b2b-field">
+                    <label className="b2b-field-label">상태</label>
+                    <select
+                      className="b2b-select"
+                      value={sch.status}
+                      onChange={(e) => setSchedule(si, { status: e.target.value as ShipmentScheduleInput["status"] })}
+                      style={{ background: SHIPMENT_STATUS_COLORS[sch.status]?.bg, color: SHIPMENT_STATUS_COLORS[sch.status]?.fg, fontWeight: 600 }}
+                    >
+                      {SHIPMENT_STATUSES.map((s) => (
+                        <option key={s} value={s} style={{ background: "#fff", color: "#1a1a1a" }}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 이 발송에 담을 상품/수량 */}
+                <div style={{ marginTop: 12 }}>
+                  <label className="b2b-field-label" style={{ display: "block", marginBottom: 6 }}>보낼 수량 (상품별)</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {data.items.filter((it) => it.product_name.trim()).map((it) => {
+                      const oi = data.items.indexOf(it);
+                      return (
+                        <div key={oi} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ flex: 1, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {it.product_name}{it.spec ? ` · ${it.spec}` : ""}
+                            <span style={{ color: "var(--sm-text-light)", marginLeft: 6 }}>(주문 {formatQty(it.qty)})</span>
+                          </span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            className="b2b-input"
+                            style={{ width: 90, textAlign: "right" }}
+                            min={0}
+                            placeholder="0"
+                            value={getScheduleQty(si, oi)}
+                            onChange={(e) => setScheduleQty(si, oi, e.target.value)}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="b2b-field" style={{ marginTop: 12 }}>
+                  <label className="b2b-field-label">운송장 번호 (선택)</label>
+                  <input
+                    type="text"
+                    className="b2b-input"
+                    value={sch.tracking_no}
+                    onChange={(e) => setSchedule(si, { tracking_no: e.target.value })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="b2b-btn-secondary" onClick={addSchedule}>+ 발송 일정 추가</button>
           </div>
         </section>
 

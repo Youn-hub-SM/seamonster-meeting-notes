@@ -3,9 +3,9 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import {
   OrderInput,
   normalizeOrderItem,
-  normalizeShipment,
   validateOrder,
 } from "@/app/lib/b2b-orders";
+import { saveOrderShipments, SavedOrderItem } from "@/app/lib/b2b-shipments";
 import {
   logOrderStatusChanged,
   logOrderPaymentStatusChanged,
@@ -34,7 +34,11 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
     const [{ data: items, error: itemsErr }, { data: shipments, error: shipErr }] = await Promise.all([
       sb.from("order_items").select("*").eq("order_id", id).order("sort_order", { ascending: true }),
-      sb.from("shipments").select("*").eq("order_id", id).order("created_at", { ascending: true }),
+      sb
+        .from("shipments")
+        .select("*, items:shipment_items(*)")
+        .eq("order_id", id)
+        .order("seq", { ascending: true }),
     ]);
     if (itemsErr) throw itemsErr;
     if (shipErr) throw shipErr;
@@ -119,7 +123,10 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
         sort_order: clean.sort_order || idx,
       };
     });
-    const { error: insErr } = await sb.from("order_items").insert(itemsToInsert);
+    const { data: insertedItems, error: insErr } = await sb
+      .from("order_items")
+      .insert(itemsToInsert)
+      .select("id, product_name, spec, sort_order");
     if (insErr) {
       // 보상: 기존 라인아이템 복구 시도
       if (existingItems && existingItems.length > 0) {
@@ -132,23 +139,15 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       throw insErr;
     }
 
-    // 4) 송장 정보 — 기존 전체 삭제 후 재삽입 (한 발주 = 한 송장 기본)
-    if (body.shipment) {
-      const ship = normalizeShipment(body.shipment);
-      await sb.from("shipments").delete().eq("order_id", id);
-      if (ship.recipient_name || ship.address) {
-        const { error: shipErr } = await sb.from("shipments").insert({
-          order_id: id,
-          recipient_name: ship.recipient_name || "(미지정)",
-          recipient_phone: ship.recipient_phone || "",
-          address: ship.address || "(주소 미입력)",
-          delivery_memo: ship.delivery_memo,
-          courier: ship.courier,
-          tracking_no: ship.tracking_no,
-        });
-        if (shipErr) throw shipErr;
-      }
-    }
+    const savedItems: SavedOrderItem[] = (insertedItems ?? [])
+      .slice()
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((r) => ({ id: r.id, product_name: r.product_name, spec: r.spec }));
+
+    // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
+    const { earliestShipDate } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems);
+    const headerShipDate = body.ship_date || earliestShipDate;
+    await sb.from("orders").update({ ship_date: headerShipDate || null }).eq("id", id);
 
     // 5) 갱신된 헤더(트리거가 합계 재계산함) 재조회
     const { data: refreshed, error: refErr } = await sb

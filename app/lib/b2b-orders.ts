@@ -53,6 +53,17 @@ export const TAX_INVOICE_COLORS: Record<TaxInvoiceStatus, { bg: string; fg: stri
   "면제": { bg: "#EFEFEF", fg: "#666666" },
 };
 
+// 발송 일정 상태 (분할 발송)
+export const SHIPMENT_STATUSES = ["발송대기", "발송중", "발송완료", "취소"] as const;
+export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
+
+export const SHIPMENT_STATUS_COLORS: Record<ShipmentStatus, { bg: string; fg: string }> = {
+  "발송대기": { bg: "#FFF4E0", fg: "#B86E00" },
+  "발송중": { bg: "#E0F0FF", fg: "#0A66C2" },
+  "발송완료": { bg: "#E0F5E5", fg: "#22863A" },
+  "취소": { bg: "#FCE4E4", fg: "#C92A2A" },
+};
+
 // ─────────────────────────────────────────────
 // 데이터 타입
 // ─────────────────────────────────────────────
@@ -131,14 +142,13 @@ export interface PaymentInput {
   notes: string;
 }
 
-// 송장 정규화 (입력 → DB payload)
-export function normalizeShipment(s: ShipmentInput): {
+// 공통 배송 정보 정규화
+export function normalizeRecipient(s: RecipientInput): {
   recipient_name: string;
   recipient_phone: string;
   address: string;
   delivery_memo: string | null;
   courier: string | null;
-  tracking_no: string | null;
 } {
   const clean = (v: string): string | null => {
     const t = (v ?? "").trim();
@@ -150,7 +160,6 @@ export function normalizeShipment(s: ShipmentInput): {
     address: (s.address ?? "").trim(),
     delivery_memo: clean(s.delivery_memo),
     courier: clean(s.courier),
-    tracking_no: clean(s.tracking_no),
   };
 }
 
@@ -170,28 +179,61 @@ export interface OrderItemInput {
   sort_order: number;
 }
 
-export interface ShipmentInput {
-  id?: string;
+// 공통 배송 정보 — 모든 발송 일정이 공유 (보통 같은 수령인에게 나눠 보냄)
+export interface RecipientInput {
   recipient_name: string;
   recipient_phone: string;
   address: string;
   delivery_memo: string;
   courier: string;
-  tracking_no: string;
 }
 
-export const EMPTY_SHIPMENT: ShipmentInput = {
+export const EMPTY_RECIPIENT: RecipientInput = {
   recipient_name: "",
   recipient_phone: "",
   address: "",
   delivery_memo: "",
   courier: "",
-  tracking_no: "",
 };
+
+// 발송 일정에 담길 상품/수량 (정밀 분할)
+export interface ShipmentItemInput {
+  order_item_index: number; // 폼 내 발주상품 인덱스 (저장 시 order_item_id 로 매핑)
+  qty: number | string;
+}
+
+// 발송 일정 1건 (입력)
+export interface ShipmentScheduleInput {
+  id?: string;
+  ship_date: string;
+  status: ShipmentStatus;
+  tracking_no: string;
+  items: ShipmentItemInput[]; // qty>0 인 것만 저장
+}
+
+export const EMPTY_SHIPMENT_SCHEDULE: ShipmentScheduleInput = {
+  ship_date: "",
+  status: "발송대기",
+  tracking_no: "",
+  items: [],
+};
+
+// DB 응답
+export interface ShipmentItem {
+  id: string;
+  shipment_id: string;
+  order_item_id: string | null;
+  product_name: string;
+  spec: string | null;
+  qty: number;
+}
 
 export interface Shipment {
   id: string;
   order_id: string;
+  seq: number;
+  ship_date: string | null;
+  status: ShipmentStatus;
   recipient_name: string;
   recipient_phone: string;
   address: string;
@@ -200,6 +242,7 @@ export interface Shipment {
   tracking_no: string | null;
   shipped_at: string | null;
   created_at: string;
+  items?: ShipmentItem[];
 }
 
 export interface OrderInput {
@@ -207,13 +250,14 @@ export interface OrderInput {
   company_id: string;
   order_date: string;
   production_date: string;
-  ship_date: string;
+  ship_date: string;  // 헤더 대표 발송일 — 저장 시 가장 이른 발송 일정으로 자동 채움
   status: OrderStatus;
   payment_status: PaymentStatus;
   tax_invoice_status: TaxInvoiceStatus;
   notes: string;
   items: OrderItemInput[];
-  shipment: ShipmentInput;  // 한 발주 = 한 송장 (기본)
+  recipient: RecipientInput;            // 공통 배송 정보
+  shipments: ShipmentScheduleInput[];   // 발송 일정 (분할 발송)
 }
 
 export const EMPTY_ORDER_ITEM: OrderItemInput = {
@@ -238,7 +282,8 @@ export const EMPTY_ORDER: OrderInput = {
   tax_invoice_status: "미발행",
   notes: "",
   items: [{ ...EMPTY_ORDER_ITEM }],
-  shipment: { ...EMPTY_SHIPMENT },
+  recipient: { ...EMPTY_RECIPIENT },
+  shipments: [],
 };
 
 // ─────────────────────────────────────────────

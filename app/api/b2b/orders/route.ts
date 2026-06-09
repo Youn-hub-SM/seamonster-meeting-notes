@@ -4,9 +4,9 @@ import {
   OrderInput,
   OrderListItem,
   normalizeOrderItem,
-  normalizeShipment,
   validateOrder,
 } from "@/app/lib/b2b-orders";
+import { saveOrderShipments, SavedOrderItem } from "@/app/lib/b2b-shipments";
 import { logOrderCreated } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
@@ -123,31 +123,36 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    const { error: itemsErr } = await sb.from("order_items").insert(itemsToInsert);
+    const { data: insertedItems, error: itemsErr } = await sb
+      .from("order_items")
+      .insert(itemsToInsert)
+      .select("id, product_name, spec, sort_order");
     if (itemsErr) {
       // 보상: 헤더 롤백
       await sb.from("orders").delete().eq("id", orderRow.id);
       throw itemsErr;
     }
 
-    // 3) 송장 정보 — recipient_name 과 address 중 하나라도 채워져 있으면 row 생성
-    if (body.shipment) {
-      const ship = normalizeShipment(body.shipment);
-      if (ship.recipient_name || ship.address) {
-        const { error: shipErr } = await sb.from("shipments").insert({
-          order_id: orderRow.id,
-          recipient_name: ship.recipient_name || "(미지정)",
-          recipient_phone: ship.recipient_phone || "",
-          address: ship.address || "(주소 미입력)",
-          delivery_memo: ship.delivery_memo,
-          courier: ship.courier,
-          tracking_no: ship.tracking_no,
-        });
-        if (shipErr) {
-          await sb.from("orders").delete().eq("id", orderRow.id);
-          throw shipErr;
-        }
-      }
+    // 폼 인덱스(sort_order) 순으로 정렬해 매핑 안정화
+    const savedItems: SavedOrderItem[] = (insertedItems ?? [])
+      .slice()
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((r) => ({ id: r.id, product_name: r.product_name, spec: r.spec }));
+
+    // 3) 발송 일정(분할 발송) + 발송별 상품/수량
+    let earliestShipDate: string | null = null;
+    try {
+      const res = await saveOrderShipments(orderRow.id, body.recipient, body.shipments, savedItems);
+      earliestShipDate = res.earliestShipDate;
+    } catch (shipErr) {
+      await sb.from("orders").delete().eq("id", orderRow.id);
+      throw shipErr;
+    }
+
+    // 헤더 ship_date 동기화: 명시값 없으면 가장 이른 발송 일정으로
+    const headerShipDate = body.ship_date || earliestShipDate;
+    if (headerShipDate) {
+      await sb.from("orders").update({ ship_date: headerShipDate }).eq("id", orderRow.id);
     }
 
     // 4) 재조회해서 트리거가 계산한 합계 포함하여 반환
