@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { computeOrderMargin, seasonForDate } from "@/app/lib/b2b-margin";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,8 @@ export const dynamic = "force-dynamic";
 // 매출 정의:
 //   - 매출 = status='발송완료' 발주의 total (ship_date 기준 기간 필터)
 //   - 발주잔고 = status NOT IN ('발송완료','취소') 의 total (기간 무관)
-//   - 마진 = sum( (unit_price - cost_at_order) × qty ), 발송완료 발주만
+//   - 예상마진 = Σ 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용), 발송완료 발주만
+//   - by_product 마진 = Σ (unit_price − cost_at_order) × qty (배송비 제외, 제품 귀속 불가)
 //
 // 응답:
 //   { summary, backlog, by_company, by_product, trend }
@@ -25,9 +27,9 @@ export async function GET(req: NextRequest) {
     const { data: completed, error: cErr } = await sb
       .from("orders")
       .select(
-        "id, order_no, order_date, ship_date, status, total, subtotal, vat, " +
+        "id, order_no, order_date, ship_date, status, total, subtotal, vat, box_count, " +
           "company:company_id(id, name), " +
-          "order_items(product_name, qty, unit_price, cost_at_order, tax_type)"
+          "order_items(product_name, qty, unit_price, cost_at_order, tax_type, product_id, product:product_id(volume_kg))"
       )
       .eq("status", "발송완료")
       .gte("ship_date", from)
@@ -49,6 +51,8 @@ export async function GET(req: NextRequest) {
       unit_price: number;
       cost_at_order: number | null;
       tax_type: "taxable" | "exempt";
+      product_id: string | null;
+      product: { volume_kg: number | null } | { volume_kg: number | null }[] | null;
     };
     type CompletedRow = {
       id: string;
@@ -57,11 +61,13 @@ export async function GET(req: NextRequest) {
       total: number;
       subtotal: number;
       vat: number;
+      box_count: number | null;
       company: CompanyJoin | CompanyJoin[] | null;
       order_items: ItemJoin[];
     };
 
     const rows = (completed ?? []) as unknown as CompletedRow[];
+    const currentMonth = new Date().getMonth() + 1;
 
     // 요약
     let revenue = 0;
@@ -85,17 +91,29 @@ export async function GET(req: NextRequest) {
       const companyName = company?.name || "(미지정)";
       const companyKey = company?.id || "_unknown";
 
-      let orderMargin = 0;
       let orderTaxable = 0;
       let orderExempt = 0;
+
+      // 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용)
+      const season = seasonForDate(o.ship_date, currentMonth);
+      const marginLines = (o.order_items ?? []).map((it) => {
+        const prod = Array.isArray(it.product) ? it.product[0] : it.product;
+        return {
+          unitPrice: Number(it.unit_price) || 0,
+          qty: Number(it.qty) || 0,
+          costAtOrder: Number(it.cost_at_order) || 0,
+          taxType: it.tax_type,
+          volumeKg: Number(prod?.volume_kg) || 0,
+        };
+      });
+      const orderMargin = computeOrderMargin(marginLines, Number(o.box_count) || 1, season).profit;
 
       for (const it of o.order_items ?? []) {
         const qty = Number(it.qty) || 0;
         const price = Number(it.unit_price) || 0;
         const cost = Number(it.cost_at_order) || 0;
         const lineRevenue = qty * price;
-        const lineMargin = (price - cost) * qty;
-        orderMargin += lineMargin;
+        const lineMargin = (price - cost) * qty; // by_product 용 (배송비 제외)
         if (it.tax_type === "exempt") orderExempt += lineRevenue;
         else orderTaxable += lineRevenue;
 

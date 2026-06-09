@@ -81,6 +81,7 @@ export interface Order {
   vat: number;
   total: number;
   notes: string | null;
+  box_count: number;   // 배송 박스 수 (발주 단위 이익률 계산용)
   created_at: string;
   updated_at: string;
 }
@@ -280,6 +281,7 @@ export interface OrderInput {
   payment_status: PaymentStatus;
   tax_invoice_status: TaxInvoiceStatus;
   notes: string;
+  box_count: number | string;           // 배송 박스 수 (이익률 계산용)
   items: OrderItemInput[];
   recipient: RecipientInput;            // 공통 배송 정보
   shipments: ShipmentScheduleInput[];   // 발송 일정 (분할 발송)
@@ -306,6 +308,7 @@ export const EMPTY_ORDER: OrderInput = {
   payment_status: "미입금",
   tax_invoice_status: "미발행",
   notes: "",
+  box_count: 1,
   items: [{ ...EMPTY_ORDER_ITEM }],
   recipient: { ...EMPTY_RECIPIENT },
   shipments: [],

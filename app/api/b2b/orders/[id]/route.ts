@@ -92,6 +92,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
         payment_status: body.payment_status,
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
+        box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
       })
       .eq("id", id);
     if (orderErr) throw orderErr;

@@ -24,6 +24,7 @@ import {
   formatQty,
 } from "@/app/lib/b2b-orders";
 import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
+import { computeOrderMargin, seasonForDate, suggestBoxes, SEASON_MONTHS } from "@/app/lib/b2b-margin";
 
 type Mode = "create" | "edit";
 
@@ -81,6 +82,7 @@ export default function OrderForm({
             payment_status: o.payment_status,
             tax_invoice_status: o.tax_invoice_status,
             notes: o.notes ?? "",
+            box_count: o.box_count ?? 1,
             items: (o.items || []).map((it) => ({
               id: it.id,
               product_id: it.product_id,
@@ -132,6 +134,7 @@ export default function OrderForm({
             payment_status: "미입금",
             tax_invoice_status: "미발행",
             notes: o.notes ?? "",
+            box_count: o.box_count ?? 1,
             items: (o.items || []).map((it, idx) => ({
               // id 없음 (새 라인) — 원본 라인 id 는 복사하지 않음
               product_id: it.product_id,
@@ -185,6 +188,22 @@ export default function OrderForm({
     const vat = Math.round(taxable * 0.1);
     return { taxable, exempt, subtotal, vat, total: subtotal + vat };
   }, [data.items]);
+
+  // 발주 단위 이익률 (배송 박스 비용 포함)
+  const currentMonth = useMemo(() => new Date().getMonth() + 1, []);
+  const orderMargin = useMemo(() => {
+    const volById = new Map(products.map((p) => [p.id, p.volume_kg]));
+    const lines = data.items.map((it) => ({
+      unitPrice: Number(it.unit_price) || 0,
+      qty: Number(it.qty) || 0,
+      costAtOrder: Number(it.cost_at_order) || 0,
+      taxType: it.tax_type,
+      volumeKg: (it.product_id ? Number(volById.get(it.product_id)) : 0) || 0,
+    }));
+    const season = seasonForDate(data.ship_date || data.order_date, currentMonth);
+    const m = computeOrderMargin(lines, Number(data.box_count) || 1, season);
+    return { ...m, season };
+  }, [data.items, data.box_count, data.ship_date, data.order_date, products, currentMonth]);
 
   // ─────────────────────────────────────────────
   // 폼 필드 수정 핸들러
@@ -764,6 +783,70 @@ export default function OrderForm({
             </div>
             <div className="b2b-totals-row is-grand">
               합계 <strong className="b2b-money">{formatMoney(totals.total)}원</strong>
+            </div>
+          </div>
+        </section>
+
+        {/* ───── 이익률 (배송 박스 단위) ───── */}
+        <section className="b2b-form-section">
+          <div className="b2b-form-section-title">이익률 (배송 박스 기준)</div>
+          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--sm-text-mid)" }}>
+            매출 − 제품원가 − 배송비(박스 × 아이스박스+운반비+보냉비). 과세 상품은 공급가(÷1.1) 기준.
+          </p>
+
+          <div className="b2b-field-row" style={{ marginBottom: 12 }}>
+            <div className="b2b-field" style={{ maxWidth: 180 }}>
+              <label className="b2b-field-label">배송 박스 수</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                className="b2b-input"
+                value={data.box_count}
+                min={1}
+                step={1}
+                onChange={(e) => setField("box_count", e.target.value === "" ? 1 : Number(e.target.value))}
+              />
+              <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 4 }}>
+                총 부피 {orderMargin.volume.toLocaleString()}kg · 권장 {suggestBoxes(orderMargin.volume)}박스
+              </span>
+            </div>
+            <div className="b2b-field" style={{ maxWidth: 180 }}>
+              <label className="b2b-field-label">계절 (보냉비)</label>
+              <input
+                type="text"
+                className="b2b-input"
+                value={`${orderMargin.season} (${SEASON_MONTHS[orderMargin.season]})`}
+                readOnly
+                style={{ background: "var(--sm-bg)", color: "var(--sm-text-mid)" }}
+              />
+              <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 4 }}>
+                발송예정일 기준 자동
+              </span>
+            </div>
+          </div>
+
+          <div className="b2b-totals">
+            <div className="b2b-totals-row">
+              매출{orderMargin.revenue !== totals.subtotal ? " (공급가)" : ""}{" "}
+              <strong className="b2b-money">{formatMoney(Math.round(orderMargin.revenue))}원</strong>
+            </div>
+            <div className="b2b-totals-row">
+              제품원가 <strong className="b2b-money">− {formatMoney(Math.round(orderMargin.productCost))}원</strong>
+            </div>
+            <div className="b2b-totals-row" title={`박스 ${orderMargin.boxes}개 × (아이스박스 ${formatMoney(orderMargin.iceboxPerBox)} + 운반비 ${formatMoney(orderMargin.deliveryPerBox)} + 보냉비 ${formatMoney(orderMargin.coolingPerBox)})`}>
+              배송비 ({orderMargin.boxes}박스){" "}
+              <strong className="b2b-money">− {formatMoney(Math.round(orderMargin.shipping))}원</strong>
+            </div>
+            <div className="b2b-totals-row is-grand">
+              이익{" "}
+              <strong className="b2b-money" style={{ color: orderMargin.profit >= 0 ? "#22863a" : "#c92a2a" }}>
+                {orderMargin.profit >= 0 ? "+" : ""}{formatMoney(Math.round(orderMargin.profit))}원
+                {orderMargin.revenue > 0 && (
+                  <span style={{ marginLeft: 8, fontSize: 14 }}>
+                    ({orderMargin.marginPct.toFixed(1)}%)
+                  </span>
+                )}
+              </strong>
             </div>
           </div>
         </section>

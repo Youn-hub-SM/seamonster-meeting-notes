@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
         payment_status: body.payment_status,
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
+        box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
       })
       .select()
       .single();
