@@ -5,7 +5,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 매출 엑셀 추출 — 발송완료 발주의 라인아이템을 1행씩 펼침.
+// 매출 엑셀 추출 — 취소 제외 발주(발주일 기준)의 라인아이템을 1행씩 펼침.
 //
 // 양식 (헤더 순서 그대로):
 //   channel | order_date | order_id | product_name | option_name | sku_code |
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     const sb = supabaseAdmin();
 
-    // 발송완료 발주 + 업체 + 라인(+제품 sku)
+    // 취소 제외 발주(발주일 기준) + 업체 + 라인(+제품 sku)
     const { data: orders, error } = await sb
       .from("orders")
       .select(
@@ -51,10 +51,10 @@ export async function GET(req: NextRequest) {
           "order_items(product_name, option_label, spec, qty, unit_price, sort_order, " +
             "product:product_id(sku))"
       )
-      .eq("status", "발송완료")
-      .gte("ship_date", from)
-      .lte("ship_date", to)
-      .order("ship_date", { ascending: true });
+      .neq("status", "취소")
+      .gte("order_date", from)
+      .lte("order_date", to)
+      .order("order_date", { ascending: true });
     if (error) throw error;
 
     type CompanyJoin = { name?: string; contact_phone?: string };

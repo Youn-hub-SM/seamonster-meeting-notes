@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 
 // GET /api/b2b/reports?from=YYYY-MM-DD&to=YYYY-MM-DD
 //
-// 매출 정의:
-//   - 매출 = status='발송완료' 발주의 total (ship_date 기준 기간 필터)
-//   - 발주잔고 = status NOT IN ('발송완료','취소') 의 total (기간 무관)
-//   - 예상마진 = Σ 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용), 발송완료 발주만
+// 매출 정의 (발주일 기준):
+//   - 매출 = 취소 제외 발주의 total (order_date 기준 기간 필터)
+//   - 발주잔고 = status NOT IN ('발송완료','취소') 의 total (기간 무관, 미발송 잔량)
+//   - 예상마진 = Σ 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용), 취소 제외 발주
 //   - by_product 마진 = Σ (unit_price − cost_at_order) × qty (배송비 제외, 제품 귀속 불가)
 //
 // 응답:
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     const sb = supabaseAdmin();
 
-    // 1) 발송완료 발주 (기간 내, ship_date 기준)
+    // 1) 취소 제외 발주 (기간 내, 발주일 기준)
     const { data: completed, error: cErr } = await sb
       .from("orders")
       .select(
@@ -31,9 +31,9 @@ export async function GET(req: NextRequest) {
           "company:company_id(id, name), " +
           "order_items(product_name, qty, unit_price, cost_at_order, tax_type, product_id, product:product_id(volume_kg))"
       )
-      .eq("status", "발송완료")
-      .gte("ship_date", from)
-      .lte("ship_date", to);
+      .neq("status", "취소")
+      .gte("order_date", from)
+      .lte("order_date", to);
     if (cErr) throw cErr;
 
     // 2) 미발송 잔고 (전체 기간, 발송완료·취소 제외)
@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
     type CompletedRow = {
       id: string;
       order_no: string;
+      order_date: string;
       ship_date: string | null;
       total: number;
       subtotal: number;
@@ -95,7 +96,7 @@ export async function GET(req: NextRequest) {
       let orderExempt = 0;
 
       // 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용)
-      const season = seasonForDate(o.ship_date, currentMonth);
+      const season = seasonForDate(o.ship_date || o.order_date, currentMonth);
       const marginLines = (o.order_items ?? []).map((it) => {
         const prod = Array.isArray(it.product) ? it.product[0] : it.product;
         return {
@@ -148,8 +149,8 @@ export async function GET(req: NextRequest) {
       c.margin += orderMargin;
       byCompanyMap.set(companyKey, c);
 
-      // trend (월별)
-      const ym = (o.ship_date || "").slice(0, 7); // YYYY-MM
+      // trend (월별, 발주일 기준)
+      const ym = (o.order_date || "").slice(0, 7); // YYYY-MM
       if (ym) {
         trendMap.set(ym, (trendMap.get(ym) || 0) + (Number(o.total) || 0));
       }

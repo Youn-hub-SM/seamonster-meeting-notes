@@ -125,7 +125,7 @@ export default function ReportsPage() {
         <div>
           <h1 className="b2b-page-title">매출 집계</h1>
           <p className="b2b-page-subtitle">
-            발송완료 발주 기준 · 발송일이 선택된 기간에 속하는 발주만 집계됩니다.
+            발주일 기준 · 취소를 제외한 발주를 발주일이 속한 기간으로 집계합니다.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -136,7 +136,7 @@ export default function ReportsPage() {
             className="b2b-btn-primary"
             onClick={handleExport}
             disabled={exporting || loading || !report || report.summary.orders_completed === 0}
-            title={report && report.summary.orders_completed === 0 ? "이 기간에 발송완료된 발주가 없습니다" : ""}
+            title={report && report.summary.orders_completed === 0 ? "이 기간에 등록된 발주가 없습니다" : ""}
           >
             {exporting ? "생성 중..." : "엑셀 다운로드"}
           </button>
@@ -195,7 +195,7 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="b2b-stat-card">
-              <div className="b2b-stat-card-label">완료 발주</div>
+              <div className="b2b-stat-card-label">발주 건수</div>
               <div className="b2b-stat-card-value b2b-money">{report.summary.orders_completed}</div>
               <div className="b2b-stat-card-hint">
                 건당 평균 {formatMoney(report.summary.avg_order_value)}원
