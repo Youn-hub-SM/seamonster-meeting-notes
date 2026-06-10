@@ -296,6 +296,14 @@ export default function ProductsPage() {
               ? () => handleDelete(modal.data.id!, modal.data.name)
               : undefined
           }
+          onCopy={
+            modal.mode === "edit"
+              ? () =>
+                  // 현재 입력값 그대로 복사해 '새 제품 등록' 모드로 전환.
+                  // SKU 는 unique 라 비움 — 새 코드를 입력해야 저장됨.
+                  setModal({ mode: "create", data: { ...modal.data, id: undefined, sku: "" } })
+              : undefined
+          }
         />
       )}
     </>
@@ -347,6 +355,7 @@ function ProductModal({
   onSave,
   onClose,
   onDelete,
+  onCopy,
 }: {
   mode: "create" | "edit";
   data: ProductInput;
@@ -355,6 +364,7 @@ function ProductModal({
   onSave: () => void;
   onClose: () => void;
   onDelete?: () => void;
+  onCopy?: () => void;
 }) {
   function set<K extends keyof ProductInput>(key: K, value: ProductInput[K]) {
     onChange({ ...data, [key]: value });
@@ -548,13 +558,23 @@ function ProductModal({
         </div>
 
         <div className="b2b-modal-foot">
-          {onDelete ? (
-            <button className="b2b-btn-danger" onClick={onDelete} disabled={saving}>
-              삭제
-            </button>
-          ) : (
-            <span />
-          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            {onDelete && (
+              <button className="b2b-btn-danger" onClick={onDelete} disabled={saving}>
+                삭제
+              </button>
+            )}
+            {onCopy && (
+              <button
+                className="b2b-btn-secondary"
+                onClick={onCopy}
+                disabled={saving}
+                title="이 제품 정보를 복사해 새 제품으로 등록"
+              >
+                복사하기
+              </button>
+            )}
+          </div>
           <div className="b2b-modal-foot-right">
             <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>
               취소
