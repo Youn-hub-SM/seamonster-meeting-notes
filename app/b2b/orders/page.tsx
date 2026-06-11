@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   OrderListItem,
@@ -54,6 +54,17 @@ export default function OrdersListPage() {
   // 발송완료 변경 시 송장번호 입력 프롬프트
   const [trackingPrompt, setTrackingPrompt] = useState<{ id: string; orderNo: string } | null>(null);
   const [trackingInput, setTrackingInput] = useState("");
+  // 접힌 상위발주(복수발송) — 기본 펼침이라 여기에 담긴 것만 접힘
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleCollapse(id: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const today = useMemo(() => todayISO(), []);
 
@@ -574,8 +585,12 @@ export default function OrdersListPage() {
               <tbody>
                 {filtered.map((o) => {
                   const urgency = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, today);
+                  const parent = isParentOrder(o);
+                  const prog = parent ? shipProgress(o) : null;
+                  const isCollapsed = collapsed.has(o.id);
                   return (
-                    <tr key={o.id} className={urgency !== "normal" ? `is-${urgency}` : ""}>
+                    <Fragment key={o.id}>
+                    <tr className={`${urgency !== "normal" ? `is-${urgency}` : ""} ${parent ? "is-parent" : ""}`}>
                       <td
                         onClick={(e) => {
                           e.stopPropagation();
@@ -601,7 +616,7 @@ export default function OrdersListPage() {
                       <RowCell href={`/b2b/orders/${o.id}`} nowrap>
                         <strong>{o.company_name}</strong>
                         <span style={{ display: "block", fontSize: 11, color: "var(--sm-text-light)", marginTop: 2 }}>
-                          {o.order_no}
+                          {o.order_no}{parent ? " · 복수발송" : ""}
                         </span>
                       </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`}>
@@ -609,24 +624,35 @@ export default function OrdersListPage() {
                       </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.ship_date || "-"}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{parent ? "" : (o.ship_date || "-")}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {formatMoney(o.total)}
                       </RowCell>
                       <td onClick={(e) => e.stopPropagation()}>
-                        <select
-                          className="b2b-status-select"
-                          value={o.status}
-                          onChange={(e) => handleStatusChange(o.id, e.target.value as OrderStatus)}
-                          style={{
-                            background: STATUS_COLORS[o.status]?.bg,
-                            color: STATUS_COLORS[o.status]?.fg,
-                          }}
-                        >
-                          {ORDER_STATUSES.map((s) => (
-                            <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
-                          ))}
-                        </select>
+                        {parent && prog ? (
+                          <button
+                            type="button"
+                            className="b2b-parent-toggle"
+                            onClick={() => toggleCollapse(o.id)}
+                            title="발송 차수 펼치기/접기"
+                          >
+                            발송 {prog.done}/{prog.total} <span style={{ fontSize: 10 }}>{isCollapsed ? "▸" : "▾"}</span>
+                          </button>
+                        ) : (
+                          <select
+                            className="b2b-status-select"
+                            value={o.status}
+                            onChange={(e) => handleStatusChange(o.id, e.target.value as OrderStatus)}
+                            style={{
+                              background: STATUS_COLORS[o.status]?.bg,
+                              color: STATUS_COLORS[o.status]?.fg,
+                            }}
+                          >
+                            {ORDER_STATUSES.map((s) => (
+                              <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
+                            ))}
+                          </select>
+                        )}
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <select
@@ -669,6 +695,22 @@ export default function OrdersListPage() {
                         </Link>
                       </td>
                     </tr>
+                    {parent && !isCollapsed && (o.shipments ?? []).map((s) => (
+                      <tr key={s.id} className="b2b-child-row">
+                        <td></td>
+                        <td></td>
+                        <td colSpan={10} style={{ padding: 0 }}>
+                          <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 18px 9px 30px", flexWrap: "wrap" }}>
+                            <span style={{ color: "var(--sm-text-light)", fontSize: 13 }}>└ {s.seq}차 발송</span>
+                            <span style={{ fontSize: 13 }}>{s.ship_date || "날짜 미정"}</span>
+                            <span className="b2b-status-pill" style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg }}>
+                              {s.status}
+                            </span>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -678,7 +720,9 @@ export default function OrdersListPage() {
             {/* 모바일 카드 뷰 */}
             <div className="b2b-order-cards">
               {filtered.map((o) => {
-                const urgency = getUrgency(o, today);
+                const urgency = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, today);
+                const parent = isParentOrder(o);
+                const prog = parent ? shipProgress(o) : null;
                 return (
                   <div key={o.id} className={`b2b-order-card ${urgency !== "normal" ? `is-${urgency}` : ""}`}>
                     <div className="b2b-order-card-check">
@@ -705,14 +749,33 @@ export default function OrdersListPage() {
                       <div className="b2b-order-card-dates">
                         <span><em>발주</em>{o.order_date?.slice(5) || "-"}</span>
                         <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>
-                        <span><em>발송</em>{o.ship_date?.slice(5) || "-"}</span>
+                        {!parent && <span><em>발송</em>{o.ship_date?.slice(5) || "-"}</span>}
                       </div>
+                      {parent && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "2px 0 4px", paddingLeft: 4 }}>
+                          {(o.shipments ?? []).map((s) => (
+                            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                              <span style={{ color: "var(--sm-text-light)" }}>└ {s.seq}차</span>
+                              <span>{s.ship_date?.slice(5) || "날짜미정"}</span>
+                              <span className="b2b-status-pill" style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg }}>
+                                {s.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="b2b-order-card-foot">
                         <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
                         <div className="b2b-order-card-pills">
-                          <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
-                            {STATUS_SHORT[o.status] || o.status}
-                          </span>
+                          {parent && prog ? (
+                            <span className="b2b-status-pill" style={{ background: "#EEF2F6", color: "#475569" }}>
+                              발송 {prog.done}/{prog.total}
+                            </span>
+                          ) : (
+                            <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
+                              {STATUS_SHORT[o.status] || o.status}
+                            </span>
+                          )}
                           <span className="b2b-status-pill" style={{ background: PAYMENT_COLORS[o.payment_status]?.bg, color: PAYMENT_COLORS[o.payment_status]?.fg }}>
                             {o.payment_status}
                           </span>
@@ -1024,6 +1087,16 @@ function ExportPickModal({
       </div>
     </div>
   );
+}
+
+// 복수 발송(발송 일정 2건 이상) = 상위발주. 상태는 표시하지 않고 하위 차수가 각자 가짐.
+function isParentOrder(o: OrderListItem): boolean {
+  return (o.shipments?.length ?? 0) >= 2;
+}
+// 상위발주 발송 진행도: 발송완료 / 전체(취소 제외)
+function shipProgress(o: OrderListItem): { done: number; total: number } {
+  const ships = (o.shipments ?? []).filter((s) => s.status !== "취소");
+  return { done: ships.filter((s) => s.status === "발송완료").length, total: ships.length };
 }
 
 // 품목 미리보기 — 발주 상품을 "품목명 옵션 ×수량" 으로 나열, 많으면 외 N

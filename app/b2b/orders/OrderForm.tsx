@@ -194,6 +194,13 @@ export default function OrderForm({
     return { taxable, exempt, subtotal, vat, total: subtotal + vat };
   }, [data.items]);
 
+  // 복수 발송(실제 일정 2건 이상) — 상위발주가 되어 발주 상태는 차수별로 관리(상태칸 숨김)
+  const realScheduleCount = useMemo(
+    () => data.shipments.filter((s) => s.ship_date || s.items.some((i) => Number(i.qty) > 0)).length,
+    [data.shipments]
+  );
+  const isMultiShipment = realScheduleCount >= 2;
+
   // 발주 단위 이익률 (배송 박스 비용 포함)
   const currentMonth = useMemo(() => new Date().getMonth() + 1, []);
   const orderMargin = useMemo(() => {
@@ -492,15 +499,21 @@ export default function OrderForm({
           <div className="b2b-field-row">
             <div className="b2b-field">
               <label className="b2b-field-label">발주 상태</label>
-              <select
-                className="b2b-select"
-                value={data.status}
-                onChange={(e) => setField("status", e.target.value as OrderInput["status"])}
-              >
-                {ORDER_STATUSES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              {isMultiShipment ? (
+                <div style={{ padding: "9px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 13, color: "var(--sm-text-mid)", lineHeight: 1.4 }}>
+                  복수 발송이라 발주 상태는 <strong>발송 일정(차수)별</strong>로 관리됩니다.
+                </div>
+              ) : (
+                <select
+                  className="b2b-select"
+                  value={data.status}
+                  onChange={(e) => setField("status", e.target.value as OrderInput["status"])}
+                >
+                  {ORDER_STATUSES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="b2b-field">
               <label className="b2b-field-label">입금 상태</label>

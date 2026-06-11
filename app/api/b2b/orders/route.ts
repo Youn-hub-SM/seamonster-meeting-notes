@@ -161,18 +161,23 @@ export async function POST(req: NextRequest) {
 
     // 3) 발송 일정(분할 발송) + 발송별 상품/수량
     let earliestShipDate: string | null = null;
+    let derivedStatus: string | null = null;
     try {
       const res = await saveOrderShipments(orderRow.id, body.recipient, body.shipments, savedItems);
       earliestShipDate = res.earliestShipDate;
+      derivedStatus = res.derivedStatus;
     } catch (shipErr) {
       await sb.from("orders").delete().eq("id", orderRow.id);
       throw shipErr;
     }
 
-    // 헤더 ship_date 동기화: 명시값 없으면 가장 이른 발송 일정으로
+    // 헤더 동기화: ship_date(가장 이른 일정) + 복수 발송이면 상태 자동 도출
     const headerShipDate = body.ship_date || earliestShipDate;
-    if (headerShipDate) {
-      await sb.from("orders").update({ ship_date: headerShipDate }).eq("id", orderRow.id);
+    const headerPatch: Record<string, unknown> = {};
+    if (headerShipDate) headerPatch.ship_date = headerShipDate;
+    if (derivedStatus) headerPatch.status = derivedStatus;
+    if (Object.keys(headerPatch).length > 0) {
+      await sb.from("orders").update(headerPatch).eq("id", orderRow.id);
     }
 
     // 4) 재조회해서 트리거가 계산한 합계 포함하여 반환

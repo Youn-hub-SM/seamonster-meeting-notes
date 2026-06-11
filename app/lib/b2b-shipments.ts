@@ -19,7 +19,7 @@ export async function saveOrderShipments(
   recipient: RecipientInput,
   schedules: ShipmentScheduleInput[],
   orderItems: SavedOrderItem[]
-): Promise<{ earliestShipDate: string | null }> {
+): Promise<{ earliestShipDate: string | null; derivedStatus: string | null }> {
   const sb = supabaseAdmin();
 
   // 기존 발송 일정 전체 삭제 (PUT 재저장 대비)
@@ -32,6 +32,7 @@ export async function saveOrderShipments(
   let earliest: string | null = null;
   let seq = 1;
   let inserted = 0;
+  const insertedStatuses: string[] = [];
 
   for (const sch of schedules || []) {
     // 이 일정에 담긴 상품 (수량>0, 유효 인덱스만)
@@ -61,6 +62,7 @@ export async function saveOrderShipments(
       .single();
     if (shipErr) throw shipErr;
     inserted++;
+    insertedStatuses.push(sch.status || "발송대기");
 
     if (items.length > 0) {
       const rows = items.map((it) => ({
@@ -96,5 +98,16 @@ export async function saveOrderShipments(
     if (recErr) throw recErr;
   }
 
-  return { earliestShipDate: earliest };
+  // 복수 발송(2건 이상)이면 상위발주 상태를 하위 차수들로부터 자동 도출.
+  //  - 전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 그 외 → 생산완료/발송대기(진행중)
+  //  화면엔 상위 상태를 표시하지 않지만, 매출집계·필터가 동작하도록 DB 값은 일관되게 유지.
+  let derivedStatus: string | null = null;
+  if (insertedStatuses.length >= 2) {
+    const nonCancel = insertedStatuses.filter((s) => s !== "취소");
+    if (nonCancel.length === 0) derivedStatus = "취소";
+    else if (nonCancel.every((s) => s === "발송완료")) derivedStatus = "발송완료";
+    else derivedStatus = "생산완료/발송대기";
+  }
+
+  return { earliestShipDate: earliest, derivedStatus };
 }

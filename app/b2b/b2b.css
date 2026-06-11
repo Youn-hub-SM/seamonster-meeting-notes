@@ -536,6 +536,36 @@
   margin-left: auto;
 }
 
+/* 상위발주(복수발송) 진행도 토글 + 하위 차수 행 */
+.b2b-parent-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #EEF2F6;
+  color: #475569;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.b2b-parent-toggle:hover {
+  background: #e4eaf0;
+}
+.b2b-table tr.is-parent > td {
+  background: #fbfcfd;
+}
+.b2b-table tr.b2b-child-row > td {
+  background: #fbfcfd;
+  border-top: none;
+}
+.b2b-table tr.b2b-child-row .b2b-row-link:hover {
+  background: var(--sm-bg);
+}
+
 /* 텍스트 링크형 버튼 */
 .b2b-link-btn {
   background: none;
