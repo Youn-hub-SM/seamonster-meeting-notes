@@ -83,6 +83,7 @@ export default function OrderForm({
             tax_invoice_status: o.tax_invoice_status,
             notes: o.notes ?? "",
             box_count: o.box_count ?? 1,
+            tracking_no: o.tracking_no ?? "",
             items: (o.items || []).map((it) => ({
               id: it.id,
               product_id: it.product_id,
@@ -138,6 +139,7 @@ export default function OrderForm({
             tax_invoice_status: "미발행",
             notes: o.notes ?? "",
             box_count: o.box_count ?? 1,
+            tracking_no: "",   // 송장번호는 복제 안 함 (건마다 다름)
             items: (o.items || []).map((it, idx) => ({
               // id 없음 (새 라인) — 원본 라인 id 는 복사하지 않음
               product_id: it.product_id,
@@ -377,7 +379,9 @@ export default function OrderForm({
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
 
   const canSave =
-    !!data.company_id && !!data.order_date && data.items.length > 0 && data.items.every((it) => it.product_name.trim() && Number(it.qty) > 0);
+    !!data.company_id && !!data.order_date && data.items.length > 0 &&
+    data.items.every((it) => it.product_name.trim() && Number(it.qty) > 0) &&
+    (data.status !== "발송완료" || !!String(data.tracking_no).trim());
 
   return (
     <>
@@ -511,18 +515,35 @@ export default function OrderForm({
               </select>
             </div>
           </div>
-          <div className="b2b-field" style={{ marginTop: 12 }}>
-            <label className="b2b-field-label">세금계산서</label>
-            <select
-              className="b2b-select"
-              value={data.tax_invoice_status}
-              onChange={(e) => setField("tax_invoice_status", e.target.value as OrderInput["tax_invoice_status"])}
-              style={{ maxWidth: 200 }}
-            >
-              {TAX_INVOICE_STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+          <div className="b2b-field-row" style={{ marginTop: 12 }}>
+            <div className="b2b-field">
+              <label className="b2b-field-label">세금계산서</label>
+              <select
+                className="b2b-select"
+                value={data.tax_invoice_status}
+                onChange={(e) => setField("tax_invoice_status", e.target.value as OrderInput["tax_invoice_status"])}
+              >
+                {TAX_INVOICE_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div className="b2b-field">
+              <label className="b2b-field-label">
+                송장번호
+                {data.status === "발송완료" && <span className="req">*</span>}
+              </label>
+              <input
+                type="text"
+                className="b2b-input"
+                value={data.tracking_no}
+                onChange={(e) => setField("tracking_no", e.target.value)}
+                placeholder="발송완료 시 필수"
+              />
+              {data.status === "발송완료" && !String(data.tracking_no).trim() && (
+                <span style={{ fontSize: 12, color: "#c92a2a" }}>발송완료로 저장하려면 송장번호가 필요합니다.</span>
+              )}
+            </div>
           </div>
         </section>
 

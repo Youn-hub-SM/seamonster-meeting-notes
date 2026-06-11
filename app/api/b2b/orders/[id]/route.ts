@@ -93,6 +93,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
         box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
+        tracking_no: body.tracking_no?.trim() || null,
       })
       .eq("id", id);
     if (orderErr) throw orderErr;
@@ -211,7 +212,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       tax_invoice_status: string;
       production_date: string | null;
       ship_date: string | null;
+      tracking_no: string | null;
     }>;
+
+    const sb = supabaseAdmin();
+    // 변경 전 상태 캡처 (활동 로그용 + 송장번호 확인)
+    const { data: prev } = await sb
+      .from("orders")
+      .select("status, payment_status, tax_invoice_status, tracking_no")
+      .eq("id", id)
+      .single();
 
     const patch: Record<string, unknown> = {};
     if (body.status !== undefined) patch.status = body.status;
@@ -219,17 +229,21 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (body.tax_invoice_status !== undefined) patch.tax_invoice_status = body.tax_invoice_status;
     if (body.production_date !== undefined) patch.production_date = body.production_date || null;
     if (body.ship_date !== undefined) patch.ship_date = body.ship_date || null;
+    if (body.tracking_no !== undefined) patch.tracking_no = (body.tracking_no || "").trim() || null;
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ ok: false, error: "변경할 필드가 없습니다." }, { status: 400 });
     }
 
-    const sb = supabaseAdmin();
-    // 변경 전 상태 캡처 (활동 로그용)
-    const { data: prev } = await sb
-      .from("orders")
-      .select("status, payment_status, tax_invoice_status")
-      .eq("id", id)
-      .single();
+    // 발송완료로 바꾸려면 송장번호 필수 (이번 요청 또는 기존 값)
+    if (body.status === "발송완료") {
+      const trackingNo = (body.tracking_no ?? prev?.tracking_no ?? "").toString().trim();
+      if (!trackingNo) {
+        return NextResponse.json(
+          { ok: false, error: "발송완료로 변경하려면 송장번호가 필요합니다." },
+          { status: 400 }
+        );
+      }
+    }
 
     const { data, error } = await sb.from("orders").update(patch).eq("id", id).select().single();
     if (error) throw error;

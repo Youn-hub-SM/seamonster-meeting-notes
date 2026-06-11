@@ -82,6 +82,7 @@ export interface Order {
   total: number;
   notes: string | null;
   box_count: number;   // 배송 박스 수 (발주 단위 이익률 계산용)
+  tracking_no: string | null;  // 헤더 송장번호 (발송완료 시 필수)
   created_at: string;
   updated_at: string;
 }
@@ -291,6 +292,7 @@ export interface OrderInput {
   tax_invoice_status: TaxInvoiceStatus;
   notes: string;
   box_count: number | string;           // 배송 박스 수 (이익률 계산용)
+  tracking_no: string;                   // 헤더 송장번호 (발송완료 시 필수)
   items: OrderItemInput[];
   recipient: RecipientInput;            // 공통 배송 정보
   shipments: ShipmentScheduleInput[];   // 발송 일정 (분할 발송)
@@ -318,6 +320,7 @@ export const EMPTY_ORDER: OrderInput = {
   tax_invoice_status: "미발행",
   notes: "",
   box_count: 1,
+  tracking_no: "",
   items: [{ ...EMPTY_ORDER_ITEM }],
   recipient: { ...EMPTY_RECIPIENT },
   shipments: [],
@@ -433,6 +436,10 @@ export function validateOrder(input: OrderInput): string | null {
     const it = input.items[i];
     if (!it.product_name?.trim()) return `${i + 1}번째 라인의 품목명을 입력하세요.`;
     if (!Number(it.qty)) return `${i + 1}번째 라인의 수량을 입력하세요.`;
+  }
+  // 발송완료 상태면 송장번호 필수
+  if (input.status === "발송완료" && !String(input.tracking_no ?? "").trim()) {
+    return "발송완료로 저장하려면 송장번호를 입력하세요.";
   }
   return null;
 }

@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
         box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
+        tracking_no: body.tracking_no?.trim() || null,
       })
       .select()
       .single();

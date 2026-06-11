@@ -536,6 +536,21 @@
   margin-left: auto;
 }
 
+/* 엑셀식 체크박스 필터 드롭다운 항목 */
+.b2b-checkfilter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 13.5px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.b2b-checkfilter-row:hover {
+  background: var(--sm-bg);
+}
+
 /* 발송요청 출력 — 발송 일정 선택 항목 */
 .b2b-export-pick {
   display: flex;

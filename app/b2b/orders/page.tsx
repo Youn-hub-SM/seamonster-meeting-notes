@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   OrderListItem,
@@ -40,16 +40,20 @@ export default function OrdersListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("list");
-  const [statusFilter, setStatusFilter] = useState<"전체" | OrderStatus>("전체");
+  // 엑셀 필터식 체크박스 다중선택 (체크된 상태만 표시). 기본=전체 체크.
+  const [statusSel, setStatusSel] = useState<Set<OrderStatus>>(() => new Set(ORDER_STATUSES));
+  const [paymentSel, setPaymentSel] = useState<Set<PaymentStatus>>(() => new Set(PAYMENT_STATUSES));
+  const [taxSel, setTaxSel] = useState<Set<TaxInvoiceStatus>>(() => new Set(TAX_INVOICE_STATUSES));
   const [companyFilter, setCompanyFilter] = useState<string>(""); // ""=전체
-  const [taxInvoiceFilter, setTaxInvoiceFilter] = useState<"전체" | TaxInvoiceStatus>("전체");
-  const [paymentFilter, setPaymentFilter] = useState<"전체" | PaymentStatus>("전체");
   const [productFilter, setProductFilter] = useState<string>(""); // ""=전체
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [exportOptions, setExportOptions] = useState<OrderExportOption[] | null>(null);
+  // 발송완료 변경 시 송장번호 입력 프롬프트
+  const [trackingPrompt, setTrackingPrompt] = useState<{ id: string; orderNo: string } | null>(null);
+  const [trackingInput, setTrackingInput] = useState("");
 
   const today = useMemo(() => todayISO(), []);
 
@@ -84,12 +88,17 @@ export default function OrdersListPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
   }, [orders]);
 
+  // 체크박스 필터가 전체 선택 상태인지 (전체면 그 필터는 적용 안 한 것과 동일)
+  const statusAll = statusSel.size === ORDER_STATUSES.length;
+  const paymentAll = paymentSel.size === PAYMENT_STATUSES.length;
+  const taxAll = taxSel.size === TAX_INVOICE_STATUSES.length;
+
   const filtered = useMemo(() => {
     let arr = orders;
-    if (statusFilter !== "전체") arr = arr.filter((o) => o.status === statusFilter);
+    if (!statusAll) arr = arr.filter((o) => statusSel.has(o.status));
+    if (!paymentAll) arr = arr.filter((o) => paymentSel.has(o.payment_status));
+    if (!taxAll) arr = arr.filter((o) => taxSel.has(o.tax_invoice_status));
     if (companyFilter) arr = arr.filter((o) => o.company_id === companyFilter);
-    if (taxInvoiceFilter !== "전체") arr = arr.filter((o) => o.tax_invoice_status === taxInvoiceFilter);
-    if (paymentFilter !== "전체") arr = arr.filter((o) => o.payment_status === paymentFilter);
     if (productFilter) arr = arr.filter((o) => (o.items || []).some((it) => it.product_name === productFilter));
     const q = search.trim().toLowerCase();
     if (q) {
@@ -99,7 +108,7 @@ export default function OrdersListPage() {
       );
     }
     return arr;
-  }, [orders, statusFilter, companyFilter, taxInvoiceFilter, paymentFilter, productFilter, search]);
+  }, [orders, statusSel, paymentSel, taxSel, statusAll, paymentAll, taxAll, companyFilter, productFilter, search]);
 
   // 지연/임박 카운트 (배너용)
   const urgencyCount = useMemo(() => {
@@ -116,15 +125,25 @@ export default function OrdersListPage() {
   async function handleStatusChange(id: string, newStatus: OrderStatus) {
     const target = orders.find((o) => o.id === id);
     if (!target || target.status === newStatus) return;
+    // 발송완료로 바꾸는데 송장번호가 없으면 입력 프롬프트
+    if (newStatus === "발송완료" && !String(target.tracking_no ?? "").trim()) {
+      setTrackingInput("");
+      setTrackingPrompt({ id, orderNo: target.order_no });
+      return;
+    }
+    await patchStatus(id, newStatus);
+  }
 
+  async function patchStatus(id: string, newStatus: OrderStatus, trackingNo?: string) {
     const snapshot = orders;
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o)));
-
+    setOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) } : o))
+    );
     try {
       const res = await fetch(`/api/b2b/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -137,6 +156,15 @@ export default function OrdersListPage() {
       setOrders(snapshot);
       setError(err instanceof Error ? err.message : "상태 변경 오류");
     }
+  }
+
+  async function confirmTracking() {
+    if (!trackingPrompt) return;
+    const t = trackingInput.trim();
+    if (!t) return;
+    const { id } = trackingPrompt;
+    setTrackingPrompt(null);
+    await patchStatus(id, "발송완료", t);
   }
 
   function toggleSelectOne(id: string) {
@@ -167,6 +195,11 @@ export default function OrdersListPage() {
 
   async function handleBulkStatus(newStatus: OrderStatus) {
     if (selected.size === 0) return;
+    // 발송완료는 발주마다 송장번호가 달라 일괄 변경 불가 — 개별로 처리
+    if (newStatus === "발송완료") {
+      setError("발송완료는 송장번호가 발주마다 달라 일괄 변경할 수 없습니다. 발주별로 변경해주세요.");
+      return;
+    }
     const ids = Array.from(selected);
     if (!confirm(`선택한 ${ids.length}건의 발주 상태를 "${newStatus}" 로 변경할까요?`)) return;
     setBulkSaving(true);
@@ -401,17 +434,7 @@ export default function OrdersListPage() {
             onChange={(e) => setSearch(e.target.value)}
             style={{ maxWidth: 280 }}
           />
-          <select
-            className="b2b-select"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            style={{ width: "auto", maxWidth: 180 }}
-          >
-            <option value="전체">전체 상태</option>
-            {ORDER_STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+          <CheckFilter label="상태" options={ORDER_STATUSES} selected={statusSel} onChange={setStatusSel} />
           <select
             className="b2b-select"
             value={companyFilter}
@@ -423,30 +446,8 @@ export default function OrdersListPage() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <select
-            className="b2b-select"
-            value={paymentFilter}
-            onChange={(e) => setPaymentFilter(e.target.value as typeof paymentFilter)}
-            style={{ width: "auto", maxWidth: 140 }}
-            title="입금 상태"
-          >
-            <option value="전체">전체 입금</option>
-            {PAYMENT_STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <select
-            className="b2b-select"
-            value={taxInvoiceFilter}
-            onChange={(e) => setTaxInvoiceFilter(e.target.value as typeof taxInvoiceFilter)}
-            style={{ width: "auto", maxWidth: 160 }}
-            title="세금계산서 상태"
-          >
-            <option value="전체">전체 세금계산서</option>
-            {TAX_INVOICE_STATUSES.map((s) => (
-              <option key={s} value={s}>세금계산서 {s}</option>
-            ))}
-          </select>
+          <CheckFilter label="입금" options={PAYMENT_STATUSES} selected={paymentSel} onChange={setPaymentSel} />
+          <CheckFilter label="세금계산서" options={TAX_INVOICE_STATUSES} selected={taxSel} onChange={setTaxSel} />
           <select
             className="b2b-select"
             value={productFilter}
@@ -459,16 +460,16 @@ export default function OrdersListPage() {
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
-          {(statusFilter !== "전체" || companyFilter || taxInvoiceFilter !== "전체" || paymentFilter !== "전체" || productFilter || search) && (
+          {(!statusAll || companyFilter || !taxAll || !paymentAll || productFilter || search) && (
             <button
               type="button"
               className="b2b-btn-secondary"
               style={{ padding: "6px 12px", fontSize: 13 }}
               onClick={() => {
-                setStatusFilter("전체");
+                setStatusSel(new Set(ORDER_STATUSES));
                 setCompanyFilter("");
-                setTaxInvoiceFilter("전체");
-                setPaymentFilter("전체");
+                setTaxSel(new Set(TAX_INVOICE_STATUSES));
+                setPaymentSel(new Set(PAYMENT_STATUSES));
                 setProductFilter("");
                 setSearch("");
               }}
@@ -735,7 +736,127 @@ export default function OrdersListPage() {
           onConfirm={(payload) => downloadShipping(payload)}
         />
       )}
+
+      {trackingPrompt && (
+        <div className="b2b-modal-backdrop" onClick={() => setTrackingPrompt(null)}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div className="b2b-modal-head">
+              <h2 className="b2b-modal-title">발송완료 — 송장번호 입력</h2>
+              <button className="b2b-modal-close" onClick={() => setTrackingPrompt(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginBottom: 10 }}>
+                <strong>{trackingPrompt.orderNo}</strong> 발주를 발송완료 처리합니다. 송장번호를 입력하세요.
+              </div>
+              <input
+                type="text"
+                className="b2b-input"
+                value={trackingInput}
+                onChange={(e) => setTrackingInput(e.target.value)}
+                placeholder="송장번호"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter" && trackingInput.trim()) confirmTracking(); }}
+              />
+            </div>
+            <div className="b2b-modal-foot">
+              <span />
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setTrackingPrompt(null)}>취소</button>
+                <button className="b2b-btn-primary" onClick={confirmTracking} disabled={!trackingInput.trim()}>
+                  발송완료 처리
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 엑셀 필터식 체크박스 다중선택 드롭다운 (체크된 항목만 표시)
+// ─────────────────────────────────────────────
+function CheckFilter<T extends string>({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: readonly T[];
+  selected: Set<T>;
+  onChange: (next: Set<T>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const all = options.every((o) => selected.has(o));
+  const summary = all ? "전체" : selected.size === 0 ? "없음" : `${selected.size}개`;
+
+  function toggle(o: T) {
+    const next = new Set(selected);
+    if (next.has(o)) next.delete(o);
+    else next.add(o);
+    onChange(next);
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        className="b2b-select"
+        onClick={() => setOpen((v) => !v)}
+        style={{ width: "auto", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, color: all ? "var(--sm-text-mid)" : "var(--sm-dark)", fontWeight: all ? 400 : 600 }}
+        title={`${label} 필터`}
+      >
+        {label}: {summary} ▾
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            zIndex: 30,
+            minWidth: 180,
+            maxHeight: 320,
+            overflowY: "auto",
+            background: "var(--sm-white)",
+            border: "1px solid var(--sm-border)",
+            borderRadius: 10,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            padding: 6,
+          }}
+        >
+          <label className="b2b-checkfilter-row" style={{ fontWeight: 700 }}>
+            <input
+              type="checkbox"
+              className="b2b-checkbox"
+              checked={all}
+              onChange={() => onChange(all ? new Set() : new Set(options))}
+            />
+            전체 선택
+          </label>
+          <div style={{ height: 1, background: "var(--sm-border)", margin: "4px 0" }} />
+          {options.map((o) => (
+            <label key={o} className="b2b-checkfilter-row">
+              <input type="checkbox" className="b2b-checkbox" checked={selected.has(o)} onChange={() => toggle(o)} />
+              {o}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
