@@ -568,16 +568,21 @@
 
 /* 모바일 카드 — 하위 차수(상태 변경 가능) */
 .b2b-order-card-children {
+  flex-basis: 100%;   /* 카드 flex 행에서 본문 옆이 아니라 아래 전체폭으로 */
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 14px 12px 18px;
+  margin-top: 10px;
+  padding-top: 8px;
+  padding-left: 14px;
   border-top: 1px dashed var(--sm-border);
 }
 .b2b-order-card-child {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 /* 텍스트 링크형 버튼 */
@@ -1621,6 +1626,8 @@
 
 .b2b-order-card {
   display: flex;
+  flex-wrap: wrap;   /* 하위 차수 블록(flex-basis:100%)이 본문 아래로 내려가도록 */
+  align-items: flex-start;
   gap: 10px;
   border: 1px solid var(--sm-border);
   border-radius: 14px;
