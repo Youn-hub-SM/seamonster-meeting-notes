@@ -117,6 +117,31 @@ export function normalizeCompany(input: CompanyInput): CompanyInput {
   };
 }
 
+// ─────────────────────────────────────────────
+// 표시용 포맷 (저장값이 숫자만이든 하이픈 포함이든 보기 좋게)
+// ─────────────────────────────────────────────
+// 전화번호 → 010-0000-0000 (모바일 11자리), 지역번호·8자리 등도 보정
+export function formatPhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const d = String(raw).replace(/\D/g, "");
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) {
+    if (d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
+    return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  }
+  if (d.length === 9 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;
+  if (d.length === 8) return `${d.slice(0, 4)}-${d.slice(4)}`;
+  return String(raw); // 알 수 없는 형식은 원본 그대로
+}
+
+// 사업자등록번호 → 000-00-00000 (10자리)
+export function formatBizNo(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const d = String(raw).replace(/\D/g, "");
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`;
+  return String(raw);
+}
+
 export function normalizeProduct(input: ProductInput): ProductInput {
   const clean = (v: string | null | undefined): string | null => {
     if (v === null || v === undefined) return null;

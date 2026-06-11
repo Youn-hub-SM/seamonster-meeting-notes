@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Company } from "@/app/lib/b2b-types";
+import { Company, formatPhone, formatBizNo } from "@/app/lib/b2b-types";
 import {
   STATUS_COLORS,
   STATUS_SHORT,
@@ -65,7 +65,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
         <div>
           <h1 className="b2b-page-title">{c.name}</h1>
           <p className="b2b-page-subtitle">
-            {[c.biz_no, c.contact_name && `담당 ${c.contact_name}`, c.contact_phone, c.payment_terms]
+            {[formatBizNo(c.biz_no), c.contact_name && `담당 ${c.contact_name}`, formatPhone(c.contact_phone), c.payment_terms]
               .filter(Boolean)
               .join(" · ") || "거래처 상세"}
           </p>

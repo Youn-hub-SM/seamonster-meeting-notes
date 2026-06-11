@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Company, CompanyInput, EMPTY_COMPANY } from "@/app/lib/b2b-types";
+import { Company, CompanyInput, EMPTY_COMPANY, formatPhone, formatBizNo } from "@/app/lib/b2b-types";
 
 type Modal = { mode: "create" | "edit"; data: CompanyInput } | null;
 
@@ -176,8 +176,8 @@ export default function CompaniesPage() {
                   >
                     <td data-label="업체명"><strong>{c.name}</strong></td>
                     <td data-label="담당자">{c.contact_name || "-"}</td>
-                    <td data-label="연락처">{c.contact_phone || "-"}</td>
-                    <td data-label="사업자번호">{c.biz_no || "-"}</td>
+                    <td data-label="연락처">{c.contact_phone ? formatPhone(c.contact_phone) : "-"}</td>
+                    <td data-label="사업자번호">{c.biz_no ? formatBizNo(c.biz_no) : "-"}</td>
                     <td data-label="결제조건">{c.payment_terms || "-"}</td>
                     <td data-label="최근 발주" style={{ whiteSpace: "nowrap" }}>
                       {c.last_order_date ? (
