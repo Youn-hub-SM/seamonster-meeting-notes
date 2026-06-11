@@ -566,6 +566,20 @@
   background: var(--sm-bg);
 }
 
+/* 모바일 카드 — 하위 차수(상태 변경 가능) */
+.b2b-order-card-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px 12px 18px;
+  border-top: 1px dashed var(--sm-border);
+}
+.b2b-order-card-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* 텍스트 링크형 버튼 */
 .b2b-link-btn {
   background: none;

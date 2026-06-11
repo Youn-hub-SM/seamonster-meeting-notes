@@ -8,6 +8,17 @@ import {
 // 저장된 발주상품 (폼 인덱스 → DB id + 스냅샷)
 export type SavedOrderItem = { id: string; product_name: string; spec: string | null };
 
+// 복수 발송(2건 이상) 발주의 상위 상태를 하위 차수 상태들로부터 도출.
+//  전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 그 외 → 생산완료/발송대기(진행중)
+//  발송이 2건 미만이면 null(도출 안 함 — 일반 발주는 상태를 직접 관리).
+export function deriveParentStatus(statuses: string[]): string | null {
+  if (statuses.length < 2) return null;
+  const nonCancel = statuses.filter((s) => s !== "취소");
+  if (nonCancel.length === 0) return "취소";
+  if (nonCancel.every((s) => s === "발송완료")) return "발송완료";
+  return "생산완료/발송대기";
+}
+
 /**
  * 발주의 발송 일정(분할 발송)을 통째로 교체 저장.
  * - 기존 shipments 전부 삭제(shipment_items 는 cascade) 후 재삽입
@@ -101,13 +112,7 @@ export async function saveOrderShipments(
   // 복수 발송(2건 이상)이면 상위발주 상태를 하위 차수들로부터 자동 도출.
   //  - 전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 그 외 → 생산완료/발송대기(진행중)
   //  화면엔 상위 상태를 표시하지 않지만, 매출집계·필터가 동작하도록 DB 값은 일관되게 유지.
-  let derivedStatus: string | null = null;
-  if (insertedStatuses.length >= 2) {
-    const nonCancel = insertedStatuses.filter((s) => s !== "취소");
-    if (nonCancel.length === 0) derivedStatus = "취소";
-    else if (nonCancel.every((s) => s === "발송완료")) derivedStatus = "발송완료";
-    else derivedStatus = "생산완료/발송대기";
-  }
+  const derivedStatus = deriveParentStatus(insertedStatuses);
 
   return { earliestShipDate: earliest, derivedStatus };
 }

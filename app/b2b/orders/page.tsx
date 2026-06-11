@@ -16,6 +16,9 @@ import {
   PAYMENT_COLORS,
   TAX_INVOICE_COLORS,
   SHIPMENT_STATUS_COLORS,
+  SHIPMENT_STATUSES,
+  ShipmentStatus,
+  ShipmentDatePreview,
   formatMoney,
   formatQty,
   getUrgency,
@@ -51,8 +54,12 @@ export default function OrdersListPage() {
   const [exporting, setExporting] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [exportOptions, setExportOptions] = useState<OrderExportOption[] | null>(null);
-  // 발송완료 변경 시 송장번호 입력 프롬프트
-  const [trackingPrompt, setTrackingPrompt] = useState<{ id: string; orderNo: string } | null>(null);
+  // 발송완료 변경 시 송장번호 입력 프롬프트 (발주 or 발송 차수)
+  const [trackingPrompt, setTrackingPrompt] = useState<
+    | { kind: "order"; id: string; label: string }
+    | { kind: "shipment"; id: string; orderId: string; label: string }
+    | null
+  >(null);
   const [trackingInput, setTrackingInput] = useState("");
   // 접힌 상위발주(복수발송) — 기본 펼침이라 여기에 담긴 것만 접힘
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -139,7 +146,7 @@ export default function OrdersListPage() {
     // 발송완료로 바꾸는데 송장번호가 없으면 입력 프롬프트
     if (newStatus === "발송완료" && !String(target.tracking_no ?? "").trim()) {
       setTrackingInput("");
-      setTrackingPrompt({ id, orderNo: target.order_no });
+      setTrackingPrompt({ kind: "order", id, label: target.order_no });
       return;
     }
     await patchStatus(id, newStatus);
@@ -173,9 +180,54 @@ export default function OrdersListPage() {
     if (!trackingPrompt) return;
     const t = trackingInput.trim();
     if (!t) return;
-    const { id } = trackingPrompt;
+    const p = trackingPrompt;
     setTrackingPrompt(null);
-    await patchStatus(id, "발송완료", t);
+    if (p.kind === "order") await patchStatus(p.id, "발송완료", t);
+    else await patchShipment(p.orderId, p.id, "발송완료", t);
+  }
+
+  // 하위 차수(발송 일정) 상태 변경 — 발송완료면 송장번호 필요
+  function handleShipmentStatus(o: OrderListItem, ship: ShipmentDatePreview, newStatus: ShipmentStatus) {
+    if (ship.status === newStatus) return;
+    if (newStatus === "발송완료" && !String(ship.tracking_no ?? "").trim()) {
+      setTrackingInput("");
+      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송` });
+      return;
+    }
+    void patchShipment(o.id, ship.id, newStatus);
+  }
+
+  async function patchShipment(orderId: string, shipmentId: string, newStatus: ShipmentStatus, trackingNo?: string) {
+    const snapshot = orders;
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id !== orderId
+          ? o
+          : {
+              ...o,
+              shipments: (o.shipments ?? []).map((s) =>
+                s.id !== shipmentId ? s : { ...s, status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) }
+              ),
+            }
+      )
+    );
+    try {
+      const res = await fetch(`/api/b2b/shipments/${shipmentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setOrders(snapshot);
+        setError(data.error || "발송 상태 변경 실패");
+      } else {
+        pingActivityFeed();
+      }
+    } catch (err) {
+      setOrders(snapshot);
+      setError(err instanceof Error ? err.message : "발송 상태 변경 오류");
+    }
   }
 
   function toggleSelectOne(id: string) {
@@ -699,14 +751,25 @@ export default function OrdersListPage() {
                       <tr key={s.id} className="b2b-child-row">
                         <td></td>
                         <td></td>
-                        <td colSpan={10} style={{ padding: 0 }}>
-                          <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 18px 9px 30px", flexWrap: "wrap" }}>
-                            <span style={{ color: "var(--sm-text-light)", fontSize: 13 }}>└ {s.seq}차 발송</span>
-                            <span style={{ fontSize: 13 }}>{s.ship_date || "날짜 미정"}</span>
-                            <span className="b2b-status-pill" style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg }}>
-                              {s.status}
-                            </span>
-                          </Link>
+                        <td colSpan={10} style={{ padding: "8px 18px 8px 30px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                            <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ color: "var(--sm-text-light)", fontSize: 13 }}>└ {s.seq}차 발송</span>
+                              <span style={{ fontSize: 13 }}>{s.ship_date || "날짜 미정"}</span>
+                            </Link>
+                            <select
+                              className="b2b-status-select"
+                              value={s.status}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => handleShipmentStatus(o, s, e.target.value as ShipmentStatus)}
+                              style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg }}
+                              title="이 차수의 발송 상태 변경"
+                            >
+                              {SHIPMENT_STATUSES.map((st) => (
+                                <option key={st} value={st}>{st}</option>
+                              ))}
+                            </select>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -751,19 +814,6 @@ export default function OrdersListPage() {
                         <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>
                         {!parent && <span><em>발송</em>{o.ship_date?.slice(5) || "-"}</span>}
                       </div>
-                      {parent && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "2px 0 4px", paddingLeft: 4 }}>
-                          {(o.shipments ?? []).map((s) => (
-                            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-                              <span style={{ color: "var(--sm-text-light)" }}>└ {s.seq}차</span>
-                              <span>{s.ship_date?.slice(5) || "날짜미정"}</span>
-                              <span className="b2b-status-pill" style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg }}>
-                                {s.status}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                       <div className="b2b-order-card-foot">
                         <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
                         <div className="b2b-order-card-pills">
@@ -782,6 +832,26 @@ export default function OrdersListPage() {
                         </div>
                       </div>
                     </Link>
+                    {parent && (
+                      <div className="b2b-order-card-children">
+                        {(o.shipments ?? []).map((s) => (
+                          <div key={s.id} className="b2b-order-card-child">
+                            <span style={{ color: "var(--sm-text-light)", fontSize: 12.5 }}>└ {s.seq}차</span>
+                            <span style={{ fontSize: 12.5 }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
+                            <select
+                              className="b2b-status-select"
+                              value={s.status}
+                              onChange={(e) => handleShipmentStatus(o, s, e.target.value as ShipmentStatus)}
+                              style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg, marginLeft: "auto" }}
+                            >
+                              {SHIPMENT_STATUSES.map((st) => (
+                                <option key={st} value={st}>{st}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -809,7 +879,7 @@ export default function OrdersListPage() {
             </div>
             <div className="b2b-modal-body">
               <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginBottom: 10 }}>
-                <strong>{trackingPrompt.orderNo}</strong> 발주를 발송완료 처리합니다. 송장번호를 입력하세요.
+                <strong>{trackingPrompt.label}</strong> 을(를) 발송완료 처리합니다. 송장번호를 입력하세요.
               </div>
               <input
                 type="text"

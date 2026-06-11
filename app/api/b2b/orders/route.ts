@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       .from("orders")
       .select(
         "*, companies:company_id(name), order_items(product_name, spec, qty, sort_order), " +
-          "shipments(id, seq, ship_date, status)"
+          "shipments(id, seq, ship_date, status, tracking_no)"
       )
       .order("order_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     // 평탄화: companies.name → company_name, order_items[] → items(정렬) + item_count, shipments[] 정렬
     type ItemRow = { product_name: string; spec: string | null; qty: number; sort_order: number };
-    type ShipRow = { id: string; seq: number; ship_date: string | null; status: string };
+    type ShipRow = { id: string; seq: number; ship_date: string | null; status: string; tracking_no: string | null };
     type Row = Record<string, unknown> & {
       companies?: { name?: string } | null;
       order_items?: ItemRow[];
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
       const ships = Array.isArray(shipments)
         ? [...shipments]
             .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
-            .map((s) => ({ id: s.id, seq: s.seq, ship_date: s.ship_date, status: s.status as OrderListItem["shipments"][number]["status"] }))
+            .map((s) => ({ id: s.id, seq: s.seq, ship_date: s.ship_date, status: s.status as OrderListItem["shipments"][number]["status"], tracking_no: s.tracking_no ?? null }))
         : [];
       return {
         ...(rest as unknown as OrderListItem),

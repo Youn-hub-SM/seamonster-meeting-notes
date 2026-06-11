@@ -116,6 +116,7 @@ export interface ShipmentDatePreview {
   seq: number;
   ship_date: string | null;
   status: ShipmentStatus;
+  tracking_no: string | null;
 }
 
 export interface OrderListItem extends Order {
