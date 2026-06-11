@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
         address: clean.address,
         payment_terms: clean.payment_terms,
         notes: clean.notes,
+        biz_doc_path: clean.biz_doc_path,
       })
       .select()
       .single();
@@ -94,6 +95,7 @@ export async function PUT(req: NextRequest) {
         address: clean.address,
         payment_terms: clean.payment_terms,
         notes: clean.notes,
+        biz_doc_path: clean.biz_doc_path,
       })
       .eq("id", body.id)
       .select()

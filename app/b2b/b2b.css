@@ -536,6 +536,20 @@
   margin-left: auto;
 }
 
+/* 텍스트 링크형 버튼 */
+.b2b-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: underline;
+  color: var(--sm-orange);
+}
+.b2b-link-btn:hover {
+  opacity: 0.8;
+}
+
 /* 엑셀식 체크박스 필터 드롭다운 항목 */
 .b2b-checkfilter-row {
   display: flex;

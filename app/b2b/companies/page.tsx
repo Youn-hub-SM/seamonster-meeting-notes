@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Company, CompanyInput, EMPTY_COMPANY } from "@/app/lib/b2b-types";
 
@@ -169,6 +169,7 @@ export default function CompaniesPage() {
                           address: c.address ?? "",
                           payment_terms: c.payment_terms ?? "",
                           notes: c.notes ?? "",
+                          biz_doc_path: c.biz_doc_path ?? null,
                         },
                       })
                     }
@@ -241,8 +242,56 @@ function CompanyModal({
   onClose: () => void;
   onDelete?: () => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanMsg, setScanMsg] = useState("");
+
   function set<K extends keyof CompanyInput>(key: K, value: CompanyInput[K]) {
     onChange({ ...data, [key]: value });
+  }
+
+  async function handleScan(file: File) {
+    setScanning(true);
+    setScanMsg("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/b2b/companies/scan-doc", { method: "POST", body: fd });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "업로드 실패");
+
+      const next: CompanyInput = { ...data, biz_doc_path: j.path };
+      const f = j.fields;
+      if (f) {
+        if (f.name) next.name = f.name;
+        if (f.biz_no) next.biz_no = f.biz_no;
+        if (f.ceo_name) next.ceo_name = f.ceo_name;
+        if (f.address) next.address = f.address;
+        const extra = [
+          f.biz_type && `업태: ${f.biz_type}`,
+          f.biz_item && `종목: ${f.biz_item}`,
+          f.opened_on && `개업일: ${f.opened_on}`,
+        ].filter(Boolean).join(" / ");
+        if (extra) next.notes = data.notes ? `${data.notes}\n${extra}` : extra;
+      }
+      onChange(next);
+      setScanMsg(j.extractError ? "파일은 첨부됐지만 자동 인식에 실패했어요. 직접 입력해주세요." : "✓ 인식 완료 — 값을 확인하고 저장하세요.");
+    } catch (err) {
+      setScanMsg(err instanceof Error ? err.message : "오류");
+    }
+    setScanning(false);
+  }
+
+  async function viewDoc() {
+    if (!data.biz_doc_path) return;
+    try {
+      const res = await fetch(`/api/b2b/companies/doc?path=${encodeURIComponent(data.biz_doc_path)}`);
+      const j = await res.json();
+      if (j.ok) window.open(j.url, "_blank");
+      else setScanMsg(j.error || "파일 열기 실패");
+    } catch {
+      setScanMsg("파일 열기 실패");
+    }
   }
 
   return (
@@ -254,6 +303,51 @@ function CompanyModal({
         </div>
 
         <div className="b2b-modal-body">
+          {/* 사업자등록증 자동 입력 */}
+          <div style={{ border: "1px dashed var(--sm-border)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, background: "var(--sm-bg)" }}>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*,application/pdf"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleScan(f);
+                e.target.value = "";
+              }}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="b2b-btn-secondary"
+                onClick={() => fileRef.current?.click()}
+                disabled={scanning}
+              >
+                {scanning ? "인식 중..." : "📄 사업자등록증으로 자동 입력"}
+              </button>
+              {data.biz_doc_path && (
+                <>
+                  <span style={{ fontSize: 12.5, color: "#22863a", fontWeight: 600 }}>✓ 첨부됨</span>
+                  <button type="button" className="b2b-link-btn" onClick={viewDoc} style={{ fontSize: 12.5 }}>보기</button>
+                  <button
+                    type="button"
+                    className="b2b-link-btn"
+                    onClick={() => set("biz_doc_path", null)}
+                    style={{ fontSize: 12.5, color: "#c92a2a" }}
+                  >
+                    제거
+                  </button>
+                </>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 6 }}>
+              이미지·PDF(최대 5MB)를 올리면 상호·사업자번호·대표자·주소를 자동으로 채웁니다. 값은 확인 후 저장하세요.
+            </div>
+            {scanMsg && (
+              <div style={{ fontSize: 12.5, marginTop: 8, color: scanMsg.startsWith("✓") ? "#22863a" : "#c92a2a" }}>{scanMsg}</div>
+            )}
+          </div>
+
           <Field label="업체명" required>
             <input
               type="text"

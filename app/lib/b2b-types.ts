@@ -12,6 +12,7 @@ export interface Company {
   address: string | null;
   payment_terms: string | null;
   notes: string | null;
+  biz_doc_path: string | null;   // 사업자등록증 첨부 (Storage 경로)
   created_at: string;
   updated_at: string;
   // 목록 API 에서만 채워짐 (업체별 가장 최근 발주일)
@@ -32,6 +33,7 @@ export const EMPTY_COMPANY: CompanyInput = {
   address: "",
   payment_terms: "",
   notes: "",
+  biz_doc_path: null,
 };
 
 export const TAX_TYPES = ["taxable", "exempt"] as const;
@@ -111,6 +113,7 @@ export function normalizeCompany(input: CompanyInput): CompanyInput {
     address: clean("address"),
     payment_terms: clean("payment_terms"),
     notes: clean("notes"),
+    biz_doc_path: clean("biz_doc_path"),
   };
 }
 
