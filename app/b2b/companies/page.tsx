@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Company, CompanyInput, EMPTY_COMPANY, formatPhone, formatBizNo } from "@/app/lib/b2b-types";
+import { Company, CompanyInput, EMPTY_COMPANY, formatPhone, formatBizNo, checkBizNo } from "@/app/lib/b2b-types";
 
 type Modal = { mode: "create" | "edit"; data: CompanyInput } | null;
 
@@ -210,6 +210,7 @@ export default function CompaniesPage() {
         <CompanyModal
           mode={modal.mode}
           data={modal.data}
+          companies={companies}
           saving={saving}
           onChange={(data) => setModal({ ...modal, data })}
           onSave={handleSave}
@@ -228,6 +229,7 @@ export default function CompaniesPage() {
 function CompanyModal({
   mode,
   data,
+  companies,
   saving,
   onChange,
   onSave,
@@ -236,6 +238,7 @@ function CompanyModal({
 }: {
   mode: "create" | "edit";
   data: CompanyInput;
+  companies: Company[];
   saving: boolean;
   onChange: (d: CompanyInput) => void;
   onSave: () => void;
@@ -245,8 +248,48 @@ function CompanyModal({
   const fileRef = useRef<HTMLInputElement>(null);
   const [scanning, setScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState("");
+  // OCR 로 자동 입력된 칸(확인 필요 강조 대상)
+  const [aiFields, setAiFields] = useState<Set<keyof CompanyInput>>(new Set());
+  // 첨부 문서 미리보기 (서명 URL)
+  const [docUrl, setDocUrl] = useState("");
+  const docKind = (data.biz_doc_path || "").toLowerCase().endsWith(".pdf") ? "pdf" : "image";
+
+  // 첨부가 바뀌면 미리보기 URL 갱신
+  useEffect(() => {
+    let alive = true;
+    if (!data.biz_doc_path) { setDocUrl(""); return; }
+    (async () => {
+      try {
+        const j = await (await fetch(`/api/b2b/companies/doc?path=${encodeURIComponent(data.biz_doc_path!)}`)).json();
+        if (alive && j.ok) setDocUrl(j.url);
+      } catch { /* 미리보기 실패는 무시 */ }
+    })();
+    return () => { alive = false; };
+  }, [data.biz_doc_path]);
+
+  // 사업자번호 검증 + 중복 검사
+  const bizCheck = checkBizNo(data.biz_no);
+  const bizDigits = String(data.biz_no ?? "").replace(/\D/g, "");
+  const dupCompany = bizDigits.length === 10
+    ? companies.find((c) => c.id !== data.id && String(c.biz_no ?? "").replace(/\D/g, "") === bizDigits)
+    : undefined;
+
+  // OCR 강조 스타일
+  const aiStyle = (k: keyof CompanyInput): React.CSSProperties =>
+    aiFields.has(k) ? { background: "#FFF9DB", borderColor: "#F0C000" } : {};
+  const aiBadge = (k: keyof CompanyInput) =>
+    aiFields.has(k) ? (
+      <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#B86E00", background: "#FFF4E0", padding: "1px 6px", borderRadius: 8 }}>
+        확인 필요
+      </span>
+    ) : null;
 
   function set<K extends keyof CompanyInput>(key: K, value: CompanyInput[K]) {
+    if (aiFields.has(key)) {
+      const n = new Set(aiFields);
+      n.delete(key);
+      setAiFields(n);
+    }
     onChange({ ...data, [key]: value });
   }
 
@@ -261,12 +304,13 @@ function CompanyModal({
       if (!res.ok || !j.ok) throw new Error(j.error || "업로드 실패");
 
       const next: CompanyInput = { ...data, biz_doc_path: j.path };
+      const filled = new Set<keyof CompanyInput>();
       const f = j.fields;
       if (f) {
-        if (f.name) next.name = f.name;
-        if (f.biz_no) next.biz_no = f.biz_no;
-        if (f.ceo_name) next.ceo_name = f.ceo_name;
-        if (f.address) next.address = f.address;
+        if (f.name) { next.name = f.name; filled.add("name"); }
+        if (f.biz_no) { next.biz_no = f.biz_no; filled.add("biz_no"); }
+        if (f.ceo_name) { next.ceo_name = f.ceo_name; filled.add("ceo_name"); }
+        if (f.address) { next.address = f.address; filled.add("address"); }
         const extra = [
           f.biz_type && `업태: ${f.biz_type}`,
           f.biz_item && `종목: ${f.biz_item}`,
@@ -274,8 +318,9 @@ function CompanyModal({
         ].filter(Boolean).join(" / ");
         if (extra) next.notes = data.notes ? `${data.notes}\n${extra}` : extra;
       }
+      setAiFields(filled);
       onChange(next);
-      setScanMsg(j.extractError ? "파일은 첨부됐지만 자동 인식에 실패했어요. 직접 입력해주세요." : "✓ 인식 완료 — 값을 확인하고 저장하세요.");
+      setScanMsg(j.extractError ? "파일은 첨부됐지만 자동 인식에 실패했어요. 직접 입력해주세요." : "✓ 인식 완료 — 노란 칸을 원본과 대조해 확인 후 저장하세요.");
     } catch (err) {
       setScanMsg(err instanceof Error ? err.message : "오류");
     }
@@ -296,7 +341,7 @@ function CompanyModal({
 
   return (
     <div className="b2b-modal-backdrop" onClick={onClose}>
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{mode === "create" ? "새 업체 등록" : "업체 수정"}</h2>
           <button className="b2b-modal-close" onClick={onClose}>✕</button>
@@ -348,10 +393,30 @@ function CompanyModal({
             )}
           </div>
 
-          <Field label="업체명" required>
+          {/* 첨부 원본 미리보기 — 채워진 값과 1:1 대조 */}
+          {docUrl && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 6 }}>
+                첨부 원본 — 노란 칸을 이 원본과 대조해 확인하세요
+              </div>
+              {docKind === "image" ? (
+                <img
+                  src={docUrl}
+                  alt="사업자등록증"
+                  onClick={viewDoc}
+                  style={{ maxWidth: "100%", maxHeight: 340, borderRadius: 8, border: "1px solid var(--sm-border)", cursor: "zoom-in", display: "block" }}
+                />
+              ) : (
+                <button type="button" className="b2b-btn-secondary" onClick={viewDoc}>📄 PDF 원본 열기</button>
+              )}
+            </div>
+          )}
+
+          <Field label="업체명" required badge={aiBadge("name")}>
             <input
               type="text"
               className="b2b-input"
+              style={aiStyle("name")}
               value={data.name}
               onChange={(e) => set("name", e.target.value)}
               placeholder="예: 마린푸드"
@@ -360,25 +425,37 @@ function CompanyModal({
           </Field>
 
           <div className="b2b-field-row">
-            <Field label="사업자등록번호">
+            <Field label="사업자등록번호" badge={aiBadge("biz_no")}>
               <input
                 type="text"
                 className="b2b-input"
+                style={aiStyle("biz_no")}
                 value={data.biz_no ?? ""}
                 onChange={(e) => set("biz_no", e.target.value)}
                 placeholder="123-45-67890"
               />
             </Field>
-            <Field label="대표자명">
+            <Field label="대표자명" badge={aiBadge("ceo_name")}>
               <input
                 type="text"
                 className="b2b-input"
+                style={aiStyle("ceo_name")}
                 value={data.ceo_name ?? ""}
                 onChange={(e) => set("ceo_name", e.target.value)}
                 placeholder="홍길동"
               />
             </Field>
           </div>
+          {(bizCheck === "invalid" || dupCompany) && (
+            <div style={{ marginTop: -6, marginBottom: 12, fontSize: 12.5, display: "flex", flexDirection: "column", gap: 3 }}>
+              {bizCheck === "invalid" && (
+                <div style={{ color: "#c92a2a" }}>⚠ 사업자등록번호 검증에 실패했습니다 — 숫자를 잘못 읽었을 수 있어요. 원본과 대조해 확인하세요.</div>
+              )}
+              {dupCompany && (
+                <div style={{ color: "#B86E00" }}>⚠ 이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>
+              )}
+            </div>
+          )}
 
           <div className="b2b-field-row">
             <Field label="담당자명">
@@ -410,10 +487,11 @@ function CompanyModal({
             />
           </Field>
 
-          <Field label="기본 배송지">
+          <Field label="기본 배송지" badge={aiBadge("address")}>
             <input
               type="text"
               className="b2b-input"
+              style={aiStyle("address")}
               value={data.address ?? ""}
               onChange={(e) => set("address", e.target.value)}
               placeholder="(우편번호) 시/도 시/군/구 도로명 + 상세"
@@ -466,10 +544,12 @@ function CompanyModal({
 function Field({
   label,
   required,
+  badge,
   children,
 }: {
   label: string;
   required?: boolean;
+  badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -477,6 +557,7 @@ function Field({
       <label className="b2b-field-label">
         {label}
         {required && <span className="req">*</span>}
+        {badge}
       </label>
       {children}
     </div>

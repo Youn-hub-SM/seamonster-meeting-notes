@@ -142,6 +142,21 @@ export function formatBizNo(raw: string | null | undefined): string {
   return String(raw);
 }
 
+// 사업자등록번호 체크섬 검증 (국세청 알고리즘).
+//  가중치 [1,3,7,1,3,7,1,3,5], 9번째 자리×5의 10의자리 보정 후 (10 - 합%10)%10 == 마지막자리
+//  반환: "valid" | "invalid"(형식은 10자리지만 체크섬 불일치 — OCR 오류 의심) | "incomplete"(10자리 아님)
+export type BizNoCheck = "valid" | "invalid" | "incomplete";
+export function checkBizNo(raw: string | null | undefined): BizNoCheck {
+  const d = String(raw ?? "").replace(/\D/g, "");
+  if (d.length !== 10) return "incomplete";
+  const w = [1, 3, 7, 1, 3, 7, 1, 3, 5];
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += Number(d[i]) * w[i];
+  sum += Math.floor((Number(d[8]) * 5) / 10);
+  const check = (10 - (sum % 10)) % 10;
+  return check === Number(d[9]) ? "valid" : "invalid";
+}
+
 export function normalizeProduct(input: ProductInput): ProductInput {
   const clean = (v: string | null | undefined): string | null => {
     if (v === null || v === undefined) return null;
