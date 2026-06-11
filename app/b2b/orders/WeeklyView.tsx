@@ -74,7 +74,7 @@ export default function WeeklyView({
                 const o = r.order;
                 const urgency = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, todayIso);
                 const badge = r.status
-                  ? { label: r.status, colors: SHIPMENT_STATUS_COLORS[r.status] }
+                  ? { label: STATUS_SHORT[r.status] || r.status, colors: SHIPMENT_STATUS_COLORS[r.status] }
                   : { label: STATUS_SHORT[o.status], colors: STATUS_COLORS[o.status] };
                 return (
                   <Link

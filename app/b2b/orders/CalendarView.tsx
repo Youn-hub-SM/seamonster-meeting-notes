@@ -183,7 +183,7 @@ export default function CalendarView({
                     const urgency = getUrgency({ ...e.order, ship_date: nextPendingShipDate(e.order) }, todayIso);
                     // 발송 일정 항목은 일정 상태(발송대기/중/완료) 배지, 그 외는 발주 상태 배지
                     const badge = e.shipStatus
-                      ? { label: e.shipStatus, colors: SHIPMENT_STATUS_COLORS[e.shipStatus] }
+                      ? { label: STATUS_SHORT[e.shipStatus] || e.shipStatus, colors: SHIPMENT_STATUS_COLORS[e.shipStatus] }
                       : { label: STATUS_SHORT[e.order.status], colors: STATUS_COLORS[e.order.status] };
                     return (
                       <Link

@@ -753,9 +753,15 @@ export default function OrdersListPage() {
                         <td></td>
                         <td colSpan={10} style={{ padding: "8px 18px 8px 30px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                            <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                              <span style={{ color: "var(--sm-text-light)", fontSize: 13 }}>└ {s.seq}차 발송</span>
+                            <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                              <span style={{ color: "var(--sm-text-light)", fontSize: 13 }}>└ {s.seq}차</span>
                               <span style={{ fontSize: 13 }}>{s.ship_date || "날짜 미정"}</span>
+                              {s.items.length > 0 && (
+                                <span style={{ fontSize: 12.5, color: "var(--sm-text-mid)" }}>
+                                  {s.items.slice(0, 2).map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`).join(", ")}
+                                  {s.items.length > 2 ? ` 외 ${s.items.length - 2}종` : ""}
+                                </span>
+                              )}
                             </Link>
                             <select
                               className="b2b-status-select"
@@ -763,10 +769,10 @@ export default function OrdersListPage() {
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => handleShipmentStatus(o, s, e.target.value as ShipmentStatus)}
                               style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg }}
-                              title="이 차수의 발송 상태 변경"
+                              title="이 차수의 상태 변경"
                             >
                               {SHIPMENT_STATUSES.map((st) => (
-                                <option key={st} value={st}>{st}</option>
+                                <option key={st} value={st}>{STATUS_SHORT[st] || st}</option>
                               ))}
                             </select>
                           </div>
@@ -836,16 +842,21 @@ export default function OrdersListPage() {
                       <div className="b2b-order-card-children">
                         {(o.shipments ?? []).map((s) => (
                           <div key={s.id} className="b2b-order-card-child">
-                            <span style={{ color: "var(--sm-text-light)", fontSize: 12.5 }}>└ {s.seq}차</span>
-                            <span style={{ fontSize: 12.5 }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
+                            <span style={{ color: "var(--sm-text-light)", fontSize: 12.5, whiteSpace: "nowrap" }}>└ {s.seq}차</span>
+                            <span style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
+                            {s.items.length > 0 && (
+                              <span style={{ fontSize: 12, color: "var(--sm-text-mid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
+                                {s.items.map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""}×${formatQty(it.qty)}`).join(", ")}
+                              </span>
+                            )}
                             <select
                               className="b2b-status-select"
                               value={s.status}
                               onChange={(e) => handleShipmentStatus(o, s, e.target.value as ShipmentStatus)}
-                              style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg, marginLeft: "auto" }}
+                              style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg, marginLeft: "auto", flexShrink: 0 }}
                             >
                               {SHIPMENT_STATUSES.map((st) => (
-                                <option key={st} value={st}>{st}</option>
+                                <option key={st} value={st}>{STATUS_SHORT[st] || st}</option>
                               ))}
                             </select>
                           </div>

@@ -53,16 +53,11 @@ export const TAX_INVOICE_COLORS: Record<TaxInvoiceStatus, { bg: string; fg: stri
   "면제": { bg: "#EFEFEF", fg: "#666666" },
 };
 
-// 발송 일정 상태 (분할 발송)
-export const SHIPMENT_STATUSES = ["발송대기", "발송중", "발송완료", "취소"] as const;
-export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
-
-export const SHIPMENT_STATUS_COLORS: Record<ShipmentStatus, { bg: string; fg: string }> = {
-  "발송대기": { bg: "#FFF4E0", fg: "#B86E00" },
-  "발송중": { bg: "#E0F0FF", fg: "#0A66C2" },
-  "발송완료": { bg: "#E0F5E5", fg: "#22863A" },
-  "취소": { bg: "#FCE4E4", fg: "#C92A2A" },
-};
+// 발송 차수(하위 발주) 상태 — 일반 발주와 동일한 5단계 (발주확인/생산대기 ~ 취소).
+//  '발송중'은 사용하지 않음.
+export const SHIPMENT_STATUSES = ORDER_STATUSES;
+export type ShipmentStatus = OrderStatus;
+export const SHIPMENT_STATUS_COLORS = STATUS_COLORS;
 
 // ─────────────────────────────────────────────
 // 데이터 타입
@@ -117,6 +112,7 @@ export interface ShipmentDatePreview {
   ship_date: string | null;
   status: ShipmentStatus;
   tracking_no: string | null;
+  items: OrderLinePreview[];   // 이 차수에 담긴 상품 (품목 표시용)
 }
 
 export interface OrderListItem extends Order {
@@ -225,7 +221,7 @@ export interface ShipmentScheduleInput {
 
 export const EMPTY_SHIPMENT_SCHEDULE: ShipmentScheduleInput = {
   ship_date: "",
-  status: "발송대기",
+  status: "발주확인/생산대기",
   tracking_no: "",
   items: [],
 };
