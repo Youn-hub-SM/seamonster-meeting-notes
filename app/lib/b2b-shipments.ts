@@ -38,7 +38,8 @@ export async function saveOrderShipments(
   orderId: string,
   recipient: RecipientInput,
   schedules: ShipmentScheduleInput[],
-  orderItems: SavedOrderItem[]
+  orderItems: SavedOrderItem[],
+  orderBoxCount = 1
 ): Promise<{ earliestShipDate: string | null; derivedStatus: string | null; totalBoxes: number }> {
   const sb = supabaseAdmin();
 
@@ -105,7 +106,9 @@ export async function saveOrderShipments(
 
   // 발송 일정이 하나도 없지만 배송 정보가 있으면, 배송 정보만 담은 기본 행을 생성해 보존.
   // (편집 화면에서는 날짜·상품이 없는 이 행을 발송 일정 카드로 노출하지 않음)
+  //  박스 수는 발주 단위 box_count 를 물려받음 → 일정 없이 박스만 늘려도 송장 출력이 박스 수만큼 펼쳐짐.
   if (inserted === 0 && hasRecipient) {
+    const fallbackBoxes = Math.max(1, Math.floor(Number(orderBoxCount) || 1));
     const { error: recErr } = await sb.from("shipments").insert({
       order_id: orderId,
       seq: 1,
@@ -117,9 +120,11 @@ export async function saveOrderShipments(
       delivery_memo: rec.delivery_memo,
       courier: rec.courier,
       tracking_no: null,
+      box_count: fallbackBoxes,
       shipped_at: null,
     });
     if (recErr) throw recErr;
+    totalBoxes += fallbackBoxes;
   }
 
   // 복수 발송(2건 이상)이면 상위발주 상태를 하위 차수들로부터 자동 도출.

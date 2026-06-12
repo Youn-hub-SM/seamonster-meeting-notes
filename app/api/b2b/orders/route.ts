@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
     let derivedStatus: string | null = null;
     let totalBoxes = 0;
     try {
-      const res = await saveOrderShipments(orderRow.id, body.recipient, body.shipments, savedItems);
+      const res = await saveOrderShipments(orderRow.id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)));
       earliestShipDate = res.earliestShipDate;
       derivedStatus = res.derivedStatus;
       totalBoxes = res.totalBoxes;
