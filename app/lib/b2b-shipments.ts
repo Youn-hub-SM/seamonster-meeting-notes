@@ -39,7 +39,7 @@ export async function saveOrderShipments(
   recipient: RecipientInput,
   schedules: ShipmentScheduleInput[],
   orderItems: SavedOrderItem[]
-): Promise<{ earliestShipDate: string | null; derivedStatus: string | null }> {
+): Promise<{ earliestShipDate: string | null; derivedStatus: string | null; totalBoxes: number }> {
   const sb = supabaseAdmin();
 
   // 기존 발송 일정 전체 삭제 (PUT 재저장 대비)
@@ -52,6 +52,7 @@ export async function saveOrderShipments(
   let earliest: string | null = null;
   let seq = 1;
   let inserted = 0;
+  let totalBoxes = 0;
   const insertedStatuses: string[] = [];
 
   for (const sch of schedules || []) {
@@ -63,6 +64,7 @@ export async function saveOrderShipments(
     // 날짜·상품 둘 다 없는 빈 일정은 스킵
     if (!sch.ship_date && items.length === 0) continue;
 
+    const boxCount = Math.max(1, Math.floor(Number(sch.box_count) || 1));
     const { data: shipRow, error: shipErr } = await sb
       .from("shipments")
       .insert({
@@ -76,12 +78,14 @@ export async function saveOrderShipments(
         delivery_memo: rec.delivery_memo,
         courier: rec.courier,
         tracking_no: (sch.tracking_no || "").trim() || null,
+        box_count: boxCount,
         shipped_at: sch.status === "발송완료" ? new Date().toISOString() : null,
       })
       .select("id")
       .single();
     if (shipErr) throw shipErr;
     inserted++;
+    totalBoxes += boxCount;
     insertedStatuses.push(sch.status || "발주확인/생산대기");
 
     if (items.length > 0) {
@@ -123,5 +127,5 @@ export async function saveOrderShipments(
   //  화면엔 상위 상태를 표시하지 않지만, 매출집계·필터가 동작하도록 DB 값은 일관되게 유지.
   const derivedStatus = deriveParentStatus(insertedStatuses);
 
-  return { earliestShipDate: earliest, derivedStatus };
+  return { earliestShipDate: earliest, derivedStatus, totalBoxes };
 }

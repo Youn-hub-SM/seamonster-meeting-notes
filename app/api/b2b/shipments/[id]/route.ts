@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const sb = supabaseAdmin();
     const { data: ship, error: getErr } = await sb
       .from("shipments")
-      .select("id, order_id, status, tracking_no")
+      .select("id, order_id, status, tracking_no, box_count")
       .eq("id", id)
       .single();
     if (getErr || !ship) {
@@ -30,11 +30,22 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         ? (body.tracking_no || "").trim()
         : (ship.tracking_no ?? "").toString().trim();
 
-    if (newStatus === "발송완료" && !trackingNo) {
-      return NextResponse.json(
-        { ok: false, error: "발송완료로 변경하려면 송장번호가 필요합니다." },
-        { status: 400 }
-      );
+    // 박스 수만큼 송장번호 필요 (콤마 구분, 박스당 1개)
+    if (newStatus === "발송완료") {
+      const boxCount = Math.max(1, Number(ship.box_count) || 1);
+      const parts = trackingNo.split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (parts.length === 0) {
+        return NextResponse.json(
+          { ok: false, error: "발송완료로 변경하려면 송장번호가 필요합니다." },
+          { status: 400 }
+        );
+      }
+      if (parts.length < boxCount) {
+        return NextResponse.json(
+          { ok: false, error: `${boxCount}박스 — 박스별 송장번호 ${boxCount}개가 필요합니다 (${parts.length}개 입력됨).` },
+          { status: 400 }
+        );
+      }
     }
 
     const patch: Record<string, unknown> = {};

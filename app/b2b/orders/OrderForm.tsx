@@ -22,6 +22,8 @@ import {
   Shipment,
   formatMoney,
   formatQty,
+  splitTracking,
+  joinTracking,
 } from "@/app/lib/b2b-orders";
 import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import { computeOrderMargin, seasonForDate, suggestBoxes, SEASON_MONTHS } from "@/app/lib/b2b-margin";
@@ -113,6 +115,7 @@ export default function OrderForm({
               ship_date: sh.ship_date ?? "",
               status: sh.status,
               tracking_no: sh.tracking_no ?? "",
+              box_count: sh.box_count ?? 1,
               items: (sh.items || []).map((si) => ({
                 // order_item_id → 현재 items 배열의 인덱스로 매핑
                 order_item_index: (o.items || []).findIndex((oi) => oi.id === si.order_item_id),
@@ -201,6 +204,16 @@ export default function OrderForm({
   );
   const isMultiShipment = realScheduleCount >= 2;
 
+  // 박스 수: 발송 차수가 있으면 차수 박스 수의 합(자동), 없으면 발주에 직접 입력한 값.
+  const scheduleBoxSum = useMemo(
+    () =>
+      data.shipments
+        .filter((s) => s.ship_date || s.items.some((i) => Number(i.qty) > 0))
+        .reduce((sum, s) => sum + Math.max(1, Math.floor(Number(s.box_count) || 1)), 0),
+    [data.shipments]
+  );
+  const effectiveBoxCount = realScheduleCount > 0 ? scheduleBoxSum : Math.max(1, Number(data.box_count) || 1);
+
   // 발주 단위 이익률 (배송 박스 비용 포함)
   const currentMonth = useMemo(() => new Date().getMonth() + 1, []);
   const orderMargin = useMemo(() => {
@@ -213,9 +226,9 @@ export default function OrderForm({
       volumeKg: (it.product_id ? Number(volById.get(it.product_id)) : 0) || 0,
     }));
     const season = seasonForDate(data.ship_date || data.order_date, currentMonth);
-    const m = computeOrderMargin(lines, Number(data.box_count) || 1, season);
+    const m = computeOrderMargin(lines, effectiveBoxCount, season);
     return { ...m, season };
-  }, [data.items, data.box_count, data.ship_date, data.order_date, products, currentMonth]);
+  }, [data.items, effectiveBoxCount, data.ship_date, data.order_date, products, currentMonth]);
 
   // 분할 수량 점검: 발송 일정에 배분한 수량 합계가 발주 수량과 다르면 경고 (저장은 막지 않음)
   const splitWarnings = useMemo(() => {
@@ -294,6 +307,31 @@ export default function OrderForm({
   function getScheduleQty(si: number, orderItemIndex: number): string {
     const found = data.shipments[si]?.items.find((x) => x.order_item_index === orderItemIndex);
     return found ? String(found.qty) : "";
+  }
+  // 차수 박스 수 변경 — 송장 칸 수가 따라 바뀌므로 tracking 문자열도 길이에 맞춤
+  function setScheduleBoxCount(si: number, raw: string) {
+    const n = raw === "" ? 1 : Math.max(1, Math.floor(Number(raw) || 1));
+    setData((prev) => ({
+      ...prev,
+      shipments: prev.shipments.map((s, i) => {
+        if (i !== si) return s;
+        const boxes = splitTracking(s.tracking_no, n); // n 길이에 맞춰 패딩/자름
+        return { ...s, box_count: n, tracking_no: joinTracking(boxes) };
+      }),
+    }));
+  }
+  // 박스별 송장번호 1칸 변경 → 콤마 join 으로 보관
+  function setScheduleTracking(si: number, boxIdx: number, val: string) {
+    setData((prev) => ({
+      ...prev,
+      shipments: prev.shipments.map((s, i) => {
+        if (i !== si) return s;
+        const n = Math.max(1, Math.floor(Number(s.box_count) || 1));
+        const boxes = splitTracking(s.tracking_no, n);
+        boxes[boxIdx] = val;
+        return { ...s, tracking_no: joinTracking(boxes) };
+      }),
+    }));
   }
 
   function updateItem(idx: number, patch: Partial<OrderItemInput>) {
@@ -669,6 +707,19 @@ export default function OrderForm({
                       ))}
                     </select>
                   </div>
+                  <div className="b2b-field" style={{ maxWidth: 110 }}>
+                    <label className="b2b-field-label">박스 수</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      className="b2b-input"
+                      min={1}
+                      step={1}
+                      value={sch.box_count}
+                      onChange={(e) => setScheduleBoxCount(si, e.target.value)}
+                      style={{ textAlign: "right" }}
+                    />
+                  </div>
                 </div>
 
                 {/* 이 발송에 담을 상품/수량 */}
@@ -700,13 +751,21 @@ export default function OrderForm({
                 </div>
 
                 <div className="b2b-field" style={{ marginTop: 12 }}>
-                  <label className="b2b-field-label">운송장 번호 (선택)</label>
-                  <input
-                    type="text"
-                    className="b2b-input"
-                    value={sch.tracking_no}
-                    onChange={(e) => setSchedule(si, { tracking_no: e.target.value })}
-                  />
+                  <label className="b2b-field-label">
+                    운송장 번호 (선택){Math.max(1, Number(sch.box_count) || 1) > 1 ? ` · 박스 ${Math.max(1, Number(sch.box_count) || 1)}개` : ""}
+                  </label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {splitTracking(sch.tracking_no, Math.max(1, Number(sch.box_count) || 1)).map((tn, bi) => (
+                      <input
+                        key={bi}
+                        type="text"
+                        className="b2b-input"
+                        value={tn}
+                        placeholder={Math.max(1, Number(sch.box_count) || 1) > 1 ? `박스 ${bi + 1} 송장번호` : "송장번호"}
+                        onChange={(e) => setScheduleTracking(si, bi, e.target.value)}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             ))}
@@ -865,13 +924,17 @@ export default function OrderForm({
                 type="number"
                 inputMode="numeric"
                 className="b2b-input"
-                value={data.box_count}
+                value={realScheduleCount > 0 ? effectiveBoxCount : data.box_count}
                 min={1}
                 step={1}
+                readOnly={realScheduleCount > 0}
                 onChange={(e) => setField("box_count", e.target.value === "" ? 1 : Number(e.target.value))}
+                style={realScheduleCount > 0 ? { background: "var(--sm-bg)", color: "var(--sm-text-mid)" } : undefined}
               />
               <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 4 }}>
-                총 부피 {orderMargin.volume.toLocaleString()}kg · 권장 {suggestBoxes(orderMargin.volume)}박스
+                {realScheduleCount > 0
+                  ? `발송 차수 박스 수 합 (자동) · 총 부피 ${orderMargin.volume.toLocaleString()}kg`
+                  : `총 부피 ${orderMargin.volume.toLocaleString()}kg · 권장 ${suggestBoxes(orderMargin.volume)}박스`}
               </span>
             </div>
             <div className="b2b-field" style={{ maxWidth: 180 }}>

@@ -23,6 +23,8 @@ import {
   formatQty,
   getUrgency,
   nextPendingShipDate,
+  splitTracking,
+  joinTracking,
   todayISO,
   URGENCY_LABEL,
   OrderExportOption,
@@ -55,12 +57,13 @@ export default function OrdersListPage() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [exportOptions, setExportOptions] = useState<OrderExportOption[] | null>(null);
   // 발송완료 변경 시 송장번호 입력 프롬프트 (발주 or 발송 차수)
+  //  boxCount 만큼 송장 입력칸을 띄움 (박스당 1개).
   const [trackingPrompt, setTrackingPrompt] = useState<
-    | { kind: "order"; id: string; label: string }
-    | { kind: "shipment"; id: string; orderId: string; label: string }
+    | { kind: "order"; id: string; label: string; boxCount: number }
+    | { kind: "shipment"; id: string; orderId: string; label: string; boxCount: number }
     | null
   >(null);
-  const [trackingInput, setTrackingInput] = useState("");
+  const [trackingInput, setTrackingInput] = useState<string[]>([""]);
   // 접힌 상위발주(복수발송) — 기본 펼침이라 여기에 담긴 것만 접힘
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -143,10 +146,11 @@ export default function OrdersListPage() {
   async function handleStatusChange(id: string, newStatus: OrderStatus) {
     const target = orders.find((o) => o.id === id);
     if (!target || target.status === newStatus) return;
-    // 발송완료로 바꾸는데 송장번호가 없으면 입력 프롬프트
+    // 발송완료로 바꾸는데 송장번호가 없으면 입력 프롬프트 (박스 수만큼 칸)
     if (newStatus === "발송완료" && !String(target.tracking_no ?? "").trim()) {
-      setTrackingInput("");
-      setTrackingPrompt({ kind: "order", id, label: target.order_no });
+      const boxCount = Math.max(1, Number(target.box_count) || 1);
+      setTrackingInput(splitTracking(target.tracking_no, boxCount));
+      setTrackingPrompt({ kind: "order", id, label: target.order_no, boxCount });
       return;
     }
     await patchStatus(id, newStatus);
@@ -176,22 +180,26 @@ export default function OrdersListPage() {
     }
   }
 
+  // 송장 입력칸이 모두 채워졌는지 (박스 수만큼 필요)
+  const trackingComplete = trackingInput.length > 0 && trackingInput.every((t) => t.trim() !== "");
+
   async function confirmTracking() {
     if (!trackingPrompt) return;
-    const t = trackingInput.trim();
-    if (!t) return;
+    const joined = joinTracking(trackingInput);
+    if (!joined || !trackingComplete) return;
     const p = trackingPrompt;
     setTrackingPrompt(null);
-    if (p.kind === "order") await patchStatus(p.id, "발송완료", t);
-    else await patchShipment(p.orderId, p.id, "발송완료", t);
+    if (p.kind === "order") await patchStatus(p.id, "발송완료", joined);
+    else await patchShipment(p.orderId, p.id, "발송완료", joined);
   }
 
-  // 하위 차수(발송 일정) 상태 변경 — 발송완료면 송장번호 필요
+  // 하위 차수(발송 일정) 상태 변경 — 발송완료면 송장번호 필요 (박스 수만큼 칸)
   function handleShipmentStatus(o: OrderListItem, ship: ShipmentDatePreview, newStatus: ShipmentStatus) {
     if (ship.status === newStatus) return;
     if (newStatus === "발송완료" && !String(ship.tracking_no ?? "").trim()) {
-      setTrackingInput("");
-      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송` });
+      const boxCount = Math.max(1, Number(ship.box_count) || 1);
+      setTrackingInput(splitTracking(ship.tracking_no, boxCount));
+      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송`, boxCount });
       return;
     }
     void patchShipment(o.id, ship.id, newStatus);
@@ -890,23 +898,33 @@ export default function OrdersListPage() {
             </div>
             <div className="b2b-modal-body">
               <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginBottom: 10 }}>
-                <strong>{trackingPrompt.label}</strong> 을(를) 발송완료 처리합니다. 송장번호를 입력하세요.
+                <strong>{trackingPrompt.label}</strong> 을(를) 발송완료 처리합니다.{" "}
+                {trackingPrompt.boxCount > 1
+                  ? `${trackingPrompt.boxCount}박스 — 박스별 송장번호를 모두 입력하세요.`
+                  : "송장번호를 입력하세요."}
               </div>
-              <input
-                type="text"
-                className="b2b-input"
-                value={trackingInput}
-                onChange={(e) => setTrackingInput(e.target.value)}
-                placeholder="송장번호"
-                autoFocus
-                onKeyDown={(e) => { if (e.key === "Enter" && trackingInput.trim()) confirmTracking(); }}
-              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {trackingInput.map((tn, bi) => (
+                  <input
+                    key={bi}
+                    type="text"
+                    className="b2b-input"
+                    value={tn}
+                    onChange={(e) =>
+                      setTrackingInput((prev) => prev.map((v, i) => (i === bi ? e.target.value : v)))
+                    }
+                    placeholder={trackingPrompt.boxCount > 1 ? `박스 ${bi + 1} 송장번호` : "송장번호"}
+                    autoFocus={bi === 0}
+                    onKeyDown={(e) => { if (e.key === "Enter" && trackingComplete) confirmTracking(); }}
+                  />
+                ))}
+              </div>
             </div>
             <div className="b2b-modal-foot">
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setTrackingPrompt(null)}>취소</button>
-                <button className="b2b-btn-primary" onClick={confirmTracking} disabled={!trackingInput.trim()}>
+                <button className="b2b-btn-primary" onClick={confirmTracking} disabled={!trackingComplete}>
                   발송완료 처리
                 </button>
               </div>

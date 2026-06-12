@@ -111,7 +111,8 @@ export interface ShipmentDatePreview {
   seq: number;
   ship_date: string | null;
   status: ShipmentStatus;
-  tracking_no: string | null;
+  tracking_no: string | null;   // 박스 여러 개면 콤마로 이어붙임
+  box_count: number;            // 이 차수 박스 수 (송장 출력 행·송장 입력칸 기준)
   items: OrderLinePreview[];   // 이 차수에 담긴 상품 (품목 표시용)
 }
 
@@ -215,7 +216,8 @@ export interface ShipmentScheduleInput {
   id?: string;
   ship_date: string;
   status: ShipmentStatus;
-  tracking_no: string;
+  tracking_no: string;        // 박스 여러 개면 콤마로 이어붙임 (박스당 1개)
+  box_count: number | string; // 이 차수 박스 수 (송장 출력 행·송장 입력칸 기준)
   items: ShipmentItemInput[]; // qty>0 인 것만 저장
 }
 
@@ -223,8 +225,27 @@ export const EMPTY_SHIPMENT_SCHEDULE: ShipmentScheduleInput = {
   ship_date: "",
   status: "발주확인/생산대기",
   tracking_no: "",
+  box_count: 1,
   items: [],
 };
+
+// 박스별 송장번호 ↔ 저장 문자열(콤마 join) 변환.
+//  - 저장: 박스 수만큼 칸을 콤마로 이어붙임. 뒤쪽 빈 칸은 잘라냄.
+//  - 분해: 콤마로 나눈 뒤 box_count 길이에 맞춰 패딩/자름.
+export function splitTracking(joined: string | null | undefined, boxCount: number): string[] {
+  const n = Math.max(1, Math.floor(boxCount) || 1);
+  const parts = (joined ?? "").split(",").map((s) => s.trim());
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) out.push(parts[i] ?? "");
+  return out;
+}
+export function joinTracking(boxes: string[]): string {
+  const trimmed = boxes.map((s) => (s ?? "").trim());
+  // 뒤쪽 빈 칸 제거 (중간 빈 칸은 위치 보존 위해 유지)
+  let end = trimmed.length;
+  while (end > 0 && trimmed[end - 1] === "") end--;
+  return trimmed.slice(0, end).join(",");
+}
 
 // DB 응답
 export interface ShipmentItem {
@@ -247,7 +268,8 @@ export interface Shipment {
   address: string;
   delivery_memo: string | null;
   courier: string | null;
-  tracking_no: string | null;
+  tracking_no: string | null;   // 박스 여러 개면 콤마로 이어붙임
+  box_count: number;            // 이 차수 박스 수
   shipped_at: string | null;
   created_at: string;
   items?: ShipmentItem[];

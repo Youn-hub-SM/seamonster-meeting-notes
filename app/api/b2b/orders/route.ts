@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       .from("orders")
       .select(
         "*, companies:company_id(name), order_items(product_name, spec, qty, sort_order), " +
-          "shipments(id, seq, ship_date, status, tracking_no, shipment_items(product_name, spec, qty))"
+          "shipments(id, seq, ship_date, status, tracking_no, box_count, shipment_items(product_name, spec, qty))"
       )
       .order("order_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     // 평탄화: companies.name → company_name, order_items[] → items(정렬) + item_count, shipments[] 정렬
     type ItemRow = { product_name: string; spec: string | null; qty: number; sort_order: number };
     type ShipItemRow = { product_name: string; spec: string | null; qty: number };
-    type ShipRow = { id: string; seq: number; ship_date: string | null; status: string; tracking_no: string | null; shipment_items?: ShipItemRow[] };
+    type ShipRow = { id: string; seq: number; ship_date: string | null; status: string; tracking_no: string | null; box_count?: number; shipment_items?: ShipItemRow[] };
     type Row = Record<string, unknown> & {
       companies?: { name?: string } | null;
       order_items?: ItemRow[];
@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
               ship_date: s.ship_date,
               status: s.status as OrderListItem["shipments"][number]["status"],
               tracking_no: s.tracking_no ?? null,
+              box_count: Math.max(1, Number(s.box_count) || 1),
               items: (s.shipment_items ?? []).map((si) => ({ product_name: si.product_name, spec: si.spec, qty: Number(si.qty) || 0 })),
             }))
         : [];
@@ -170,20 +171,24 @@ export async function POST(req: NextRequest) {
     // 3) 발송 일정(분할 발송) + 발송별 상품/수량
     let earliestShipDate: string | null = null;
     let derivedStatus: string | null = null;
+    let totalBoxes = 0;
     try {
       const res = await saveOrderShipments(orderRow.id, body.recipient, body.shipments, savedItems);
       earliestShipDate = res.earliestShipDate;
       derivedStatus = res.derivedStatus;
+      totalBoxes = res.totalBoxes;
     } catch (shipErr) {
       await sb.from("orders").delete().eq("id", orderRow.id);
       throw shipErr;
     }
 
     // 헤더 동기화: ship_date(가장 이른 일정) + 복수 발송이면 상태 자동 도출
+    //  + 발주 박스 수(이익률용)는 발송 차수 박스 수의 합으로 동기화 (차수가 있을 때만)
     const headerShipDate = body.ship_date || earliestShipDate;
     const headerPatch: Record<string, unknown> = {};
     if (headerShipDate) headerPatch.ship_date = headerShipDate;
     if (derivedStatus) headerPatch.status = derivedStatus;
+    if (totalBoxes > 0) headerPatch.box_count = totalBoxes;
     if (Object.keys(headerPatch).length > 0) {
       await sb.from("orders").update(headerPatch).eq("id", orderRow.id);
     }

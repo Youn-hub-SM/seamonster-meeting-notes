@@ -147,11 +147,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .map((r) => ({ id: r.id, product_name: r.product_name, spec: r.spec }));
 
     // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
-    const { earliestShipDate, derivedStatus } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems);
+    const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems);
     const headerShipDate = body.ship_date || earliestShipDate;
     // 복수 발송이면 상위발주 상태를 하위 차수들로부터 자동 도출 (화면 미표시, 백엔드 일관성용)
+    //  + 발주 박스 수(이익률용)는 발송 차수 박스 수의 합으로 동기화 (차수가 있을 때만)
     const headerPatch: Record<string, unknown> = { ship_date: headerShipDate || null };
     if (derivedStatus) headerPatch.status = derivedStatus;
+    if (totalBoxes > 0) headerPatch.box_count = totalBoxes;
     await sb.from("orders").update(headerPatch).eq("id", id);
 
     // 5) 갱신된 헤더(트리거가 합계 재계산함) 재조회

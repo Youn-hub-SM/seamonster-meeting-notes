@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const TEMPLATE_PATH = path.join(process.cwd(), "templates", "shipping-request.xlsx");
 const SHEET_NAME = "주소";
 
-// 한 행 = 한 상품 라인
+// 한 행 = 한 상품 라인(단일 박스) 또는 한 박스(다중 박스)
 type OutRow = {
   sortKey: string;       // 출력 정렬용 (발송예정일)
   product: string;
@@ -30,6 +30,61 @@ type OutRow = {
 type CompanyJoin = { name?: string; contact_name?: string; contact_phone?: string; address?: string };
 type ItemJoin = { product_name: string; option_label: string | null; spec: string | null; qty: number; sort_order: number };
 type ShipItemJoin = { product_name: string; spec: string | null; qty: number };
+
+// 송장 출력용 상품 1건 (품목명 + 옵션 + 수량)
+type EffItem = { product_name: string; option: string; qty: number };
+
+function formatQ(n: number): string {
+  return Number.isInteger(n) ? n.toLocaleString() : n.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function itemSummary(items: EffItem[]): string {
+  return items
+    .map((it) => `${it.product_name}${it.option ? ` ${it.option}` : ""}×${formatQ(it.qty)}`)
+    .join(", ");
+}
+
+// 한 발송(또는 발주)을 송장 행으로 펼침.
+//  - 박스 1개: 상품별 1행 (기존 동작 유지).
+//  - 박스 2개 이상: 박스 수만큼 1행씩. 주소·연락처·메모는 동일,
+//    수령인명은 2번째부터 넘버링(윤현석, 윤현석2, 윤현석3),
+//    품목엔 상품 요약 + ' (N박스 중 n)' 표시.
+function pushRows(
+  rows: OutRow[],
+  opts: {
+    items: EffItem[];
+    recipientName: string;
+    recipientPhone: string;
+    address: string;
+    memo: string;
+    sortKey: string;
+    boxCount: number;
+  }
+) {
+  const { items, recipientName, recipientPhone, address, memo, sortKey } = opts;
+  const boxCount = Math.max(1, Math.floor(opts.boxCount) || 1);
+
+  if (boxCount <= 1) {
+    for (const it of items) {
+      rows.push({ sortKey, product: it.product_name, option: it.option, qty: it.qty, recipientName, recipientPhone, address, memo });
+    }
+    return;
+  }
+
+  const summary = itemSummary(items);
+  for (let b = 1; b <= boxCount; b++) {
+    rows.push({
+      sortKey,
+      product: `${summary} (${boxCount}박스 중 ${b})`,
+      option: "",
+      qty: 1,
+      recipientName: b === 1 ? recipientName : `${recipientName}${b}`,
+      recipientPhone,
+      address,
+      memo,
+    });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,7 +107,7 @@ export async function POST(req: NextRequest) {
       const { data: shipments, error: shipErr } = await sb
         .from("shipments")
         .select(
-          "id, seq, ship_date, recipient_name, recipient_phone, address, delivery_memo, " +
+          "id, seq, ship_date, box_count, recipient_name, recipient_phone, address, delivery_memo, " +
             "shipment_items(product_name, spec, qty), " +
             "order:order_id(order_no, " +
             "company:company_id(name, contact_name, contact_phone, address), " +
@@ -65,6 +120,7 @@ export async function POST(req: NextRequest) {
         id: string;
         seq: number;
         ship_date: string | null;
+        box_count: number | null;
         recipient_name: string | null;
         recipient_phone: string | null;
         address: string | null;
@@ -85,38 +141,20 @@ export async function POST(req: NextRequest) {
         const address = s.address || company?.address || "(주소 미입력)";
         const memo = s.delivery_memo ?? "";
         const sortKey = s.ship_date || "9999-12-31";
+        const boxCount = Math.max(1, Number(s.box_count) || 1);
 
         const splitItems = s.shipment_items ?? [];
-        if (splitItems.length > 0) {
-          // 이 발송에 담긴 상품/수량만
-          for (const it of splitItems) {
-            rows.push({
-              sortKey,
-              product: it.product_name ?? "",
-              option: it.spec || "",
-              qty: Number(it.qty) || 0,
-              recipientName,
-              recipientPhone,
-              address,
-              memo,
-            });
-          }
-        } else {
-          // 상품 분할이 없는 발송 → 발주 전체상품으로 출력 (단일 발송/과거 데이터)
-          const items = (order?.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-          for (const it of items) {
-            rows.push({
-              sortKey,
-              product: it.product_name ?? "",
-              option: it.spec || it.option_label || "",
-              qty: Number(it.qty) || 0,
-              recipientName,
-              recipientPhone,
-              address,
-              memo,
-            });
-          }
-        }
+        const effItems: EffItem[] =
+          splitItems.length > 0
+            ? // 이 발송에 담긴 상품/수량만
+              splitItems.map((it) => ({ product_name: it.product_name ?? "", option: it.spec || "", qty: Number(it.qty) || 0 }))
+            : // 상품 분할이 없는 발송 → 발주 전체상품으로 출력 (단일 발송/과거 데이터)
+              (order?.order_items ?? [])
+                .slice()
+                .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                .map((it) => ({ product_name: it.product_name ?? "", option: it.spec || it.option_label || "", qty: Number(it.qty) || 0 }));
+
+        pushRows(rows, { items: effItems, recipientName, recipientPhone, address, memo, sortKey, boxCount });
       }
     }
 
@@ -125,7 +163,7 @@ export async function POST(req: NextRequest) {
       const { data: orders, error: ordersErr } = await sb
         .from("orders")
         .select(
-          "id, order_no, ship_date, " +
+          "id, order_no, ship_date, box_count, " +
             "company:company_id(name, contact_name, contact_phone, address), " +
             "order_items(product_name, option_label, spec, qty, sort_order), " +
             "shipments(recipient_name, recipient_phone, address, delivery_memo)"
@@ -137,6 +175,7 @@ export async function POST(req: NextRequest) {
       type OrderRow = {
         order_no: string;
         ship_date: string | null;
+        box_count: number | null;
         company: CompanyJoin | CompanyJoin[] | null;
         order_items: ItemJoin[];
         shipments: { recipient_name: string; recipient_phone: string; address: string; delivery_memo: string | null }[];
@@ -150,20 +189,14 @@ export async function POST(req: NextRequest) {
         const address = ship?.address || company?.address || "(주소 미입력)";
         const memo = ship?.delivery_memo ?? "";
         const sortKey = o.ship_date || "9999-12-31";
+        const boxCount = Math.max(1, Number(o.box_count) || 1);
 
-        const items = (o.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-        for (const it of items) {
-          rows.push({
-            sortKey,
-            product: it.product_name ?? "",
-            option: it.spec || it.option_label || "",
-            qty: Number(it.qty) || 0,
-            recipientName,
-            recipientPhone,
-            address,
-            memo,
-          });
-        }
+        const items: EffItem[] = (o.order_items ?? [])
+          .slice()
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((it) => ({ product_name: it.product_name ?? "", option: it.spec || it.option_label || "", qty: Number(it.qty) || 0 }));
+
+        pushRows(rows, { items, recipientName, recipientPhone, address, memo, sortKey, boxCount });
       }
     }
 
