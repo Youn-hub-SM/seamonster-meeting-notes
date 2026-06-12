@@ -67,6 +67,86 @@ export default function OrdersListPage() {
   // 접힌 상위발주(복수발송) — 기본 펼침이라 여기에 담긴 것만 접힘
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
+  // ── 필터 유지 (로그인 사용자별 localStorage) ──
+  //  초기화 버튼을 누르기 전까지 페이지를 떠났다 와도 필터가 유지됨.
+  const [filterUser, setFilterUser] = useState<string | null>(null);
+  const [filterRestored, setFilterRestored] = useState(false);
+  const filterStoreKey = filterUser ? `b2b:orders:filters:${filterUser}` : null;
+
+  useEffect(() => {
+    fetch("/api/b2b/auth", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setFilterUser(j.ok && j.name ? j.name : "공용"))
+      .catch(() => setFilterUser("공용"));
+  }, []);
+
+  // 복원 (사용자 확인 후 1회). setState 가 적용된 다음 렌더부터 저장 effect 가 동작하도록
+  // filterRestored 는 state 로 — 복원 전에 기본값이 저장본을 덮어쓰는 걸 방지.
+  useEffect(() => {
+    if (!filterStoreKey) return;
+    try {
+      const raw = localStorage.getItem(filterStoreKey);
+      if (raw) {
+        const s = JSON.parse(raw) as {
+          v?: number;
+          status?: string[];
+          payment?: string[];
+          tax?: string[];
+          company?: string;
+          product?: string;
+          search?: string;
+        };
+        if (s && s.v === 1) {
+          if (Array.isArray(s.status))
+            setStatusSel(new Set(s.status.filter((x): x is OrderStatus => (ORDER_STATUSES as readonly string[]).includes(x))));
+          if (Array.isArray(s.payment))
+            setPaymentSel(new Set(s.payment.filter((x): x is PaymentStatus => (PAYMENT_STATUSES as readonly string[]).includes(x))));
+          if (Array.isArray(s.tax))
+            setTaxSel(new Set(s.tax.filter((x): x is TaxInvoiceStatus => (TAX_INVOICE_STATUSES as readonly string[]).includes(x))));
+          if (typeof s.company === "string") setCompanyFilter(s.company);
+          if (typeof s.product === "string") setProductFilter(s.product);
+          if (typeof s.search === "string") setSearch(s.search);
+        }
+      }
+    } catch {
+      // 저장본이 깨졌으면 무시하고 기본값 사용
+    }
+    setFilterRestored(true);
+  }, [filterStoreKey]);
+
+  // 저장 — 필터가 바뀔 때마다 (복원 완료 후에만)
+  useEffect(() => {
+    if (!filterStoreKey || !filterRestored) return;
+    try {
+      localStorage.setItem(
+        filterStoreKey,
+        JSON.stringify({
+          v: 1,
+          status: Array.from(statusSel),
+          payment: Array.from(paymentSel),
+          tax: Array.from(taxSel),
+          company: companyFilter,
+          product: productFilter,
+          search,
+        })
+      );
+    } catch {
+      // 저장 실패(시크릿 모드 등)는 무시 — 기능엔 영향 없음
+    }
+  }, [filterStoreKey, filterRestored, statusSel, paymentSel, taxSel, companyFilter, productFilter, search]);
+
+  function resetFilters() {
+    setStatusSel(new Set(ORDER_STATUSES));
+    setCompanyFilter("");
+    setTaxSel(new Set(TAX_INVOICE_STATUSES));
+    setPaymentSel(new Set(PAYMENT_STATUSES));
+    setProductFilter("");
+    setSearch("");
+    if (filterStoreKey) {
+      try { localStorage.removeItem(filterStoreKey); } catch {}
+    }
+  }
+
   function toggleCollapse(id: string) {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -536,14 +616,7 @@ export default function OrdersListPage() {
               type="button"
               className="b2b-btn-secondary"
               style={{ padding: "6px 12px", fontSize: 13 }}
-              onClick={() => {
-                setStatusSel(new Set(ORDER_STATUSES));
-                setCompanyFilter("");
-                setTaxSel(new Set(TAX_INVOICE_STATUSES));
-                setPaymentSel(new Set(PAYMENT_STATUSES));
-                setProductFilter("");
-                setSearch("");
-              }}
+              onClick={resetFilters}
             >
               필터 초기화
             </button>

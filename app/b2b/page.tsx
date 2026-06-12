@@ -14,9 +14,14 @@ type DashStats = {
   error?: string;
 };
 
+// 서버는 UTC 로 돌므로 한국 날짜는 +9h 보정해서 계산
+function kstNow(): Date {
+  return new Date(Date.now() + 9 * 3600 * 1000);
+}
+
 function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const d = kstNow();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 async function loadStats(): Promise<DashStats> {
@@ -94,8 +99,158 @@ async function loadStats(): Promise<DashStats> {
   }
 }
 
+// ─────────────────────────────────────────────
+// 이번 주 일정 (월~일) — 생산·발송 한눈에
+// ─────────────────────────────────────────────
+type WeekEntry = {
+  kind: "production" | "ship";
+  orderId: string;
+  company: string;
+  seqLabel: string; // 분할 발송 차수 표기 ("2차" 등, 없으면 "")
+  done: boolean;    // 끝난 일정 (희미하게 표시)
+};
+
+type WeekDay = {
+  iso: string;
+  dayNum: number;
+  weekday: string;
+  isToday: boolean;
+  entries: WeekEntry[];
+};
+
+const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
+
+function weekRange(): { start: string; end: string; days: { iso: string; dayNum: number }[] } {
+  const now = kstNow();
+  const dow = now.getUTCDay(); // 0=일
+  const diff = dow === 0 ? -6 : 1 - dow; // 월요일 시작
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() + diff);
+  const days: { iso: string; dayNum: number }[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setUTCDate(monday.getUTCDate() + i);
+    days.push({
+      iso: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`,
+      dayNum: d.getUTCDate(),
+    });
+  }
+  return { start: days[0].iso, end: days[6].iso, days };
+}
+
+type CompJoin = { name?: string } | { name?: string }[] | null;
+function compName(c: CompJoin): string {
+  const one = Array.isArray(c) ? c[0] : c;
+  return one?.name ?? "(미지정)";
+}
+
+async function loadWeekSchedule(): Promise<{ days: WeekDay[]; label: string } | null> {
+  try {
+    const sb = supabaseAdmin();
+    const { start, end, days } = weekRange();
+    const today = todayIso();
+
+    const [prodRes, shipRes, headerShipRes] = await Promise.all([
+      // 이번 주 생산일
+      sb
+        .from("orders")
+        .select("id, production_date, status, companies:company_id(name)")
+        .gte("production_date", start)
+        .lte("production_date", end)
+        .neq("status", "취소"),
+      // 이번 주 발송 차수 (분할 발송 포함)
+      sb
+        .from("shipments")
+        .select("id, seq, ship_date, status, order:order_id(id, status, companies:company_id(name))")
+        .gte("ship_date", start)
+        .lte("ship_date", end)
+        .neq("status", "취소"),
+      // 발송 차수에 날짜가 없는 과거 발주 — 헤더 발송일로 폴백
+      sb
+        .from("orders")
+        .select("id, ship_date, status, companies:company_id(name)")
+        .gte("ship_date", start)
+        .lte("ship_date", end)
+        .neq("status", "취소"),
+    ]);
+    if (prodRes.error) throw prodRes.error;
+    if (shipRes.error) throw shipRes.error;
+    if (headerShipRes.error) throw headerShipRes.error;
+
+    const byDate = new Map<string, WeekEntry[]>();
+    const push = (iso: string | null, e: WeekEntry) => {
+      if (!iso) return;
+      const arr = byDate.get(iso) ?? [];
+      arr.push(e);
+      byDate.set(iso, arr);
+    };
+
+    type ProdRow = { id: string; production_date: string; status: string; companies: CompJoin };
+    for (const o of (prodRes.data as unknown as ProdRow[] | null) ?? []) {
+      push(o.production_date, {
+        kind: "production",
+        orderId: o.id,
+        company: compName(o.companies),
+        seqLabel: "",
+        done: o.status === "생산완료/발송대기" || o.status === "발송완료",
+      });
+    }
+
+    type ShipRow = {
+      id: string;
+      seq: number;
+      ship_date: string;
+      status: string;
+      order: { id: string; status: string; companies: CompJoin } | { id: string; status: string; companies: CompJoin }[] | null;
+    };
+    const coveredOrderIds = new Set<string>();
+    for (const s of (shipRes.data as unknown as ShipRow[] | null) ?? []) {
+      const order = Array.isArray(s.order) ? s.order[0] : s.order;
+      if (!order || order.status === "취소") continue;
+      coveredOrderIds.add(order.id);
+      push(s.ship_date, {
+        kind: "ship",
+        orderId: order.id,
+        company: compName(order.companies),
+        seqLabel: s.seq > 1 ? `${s.seq}차` : "",
+        done: s.status === "발송완료",
+      });
+    }
+
+    type HeaderRow = { id: string; ship_date: string; status: string; companies: CompJoin };
+    for (const o of (headerShipRes.data as unknown as HeaderRow[] | null) ?? []) {
+      if (coveredOrderIds.has(o.id)) continue; // 차수 발송으로 이미 표시됨
+      push(o.ship_date, {
+        kind: "ship",
+        orderId: o.id,
+        company: compName(o.companies),
+        seqLabel: "",
+        done: o.status === "발송완료",
+      });
+    }
+
+    const weekDays: WeekDay[] = days.map((d, i) => ({
+      iso: d.iso,
+      dayNum: d.dayNum,
+      weekday: WEEKDAYS[i],
+      isToday: d.iso === today,
+      entries: (byDate.get(d.iso) ?? []).sort((a, b) =>
+        a.kind === b.kind ? a.company.localeCompare(b.company, "ko") : a.kind === "production" ? -1 : 1
+      ),
+    }));
+
+    const [sy, sm, sd] = start.split("-").map(Number);
+    const [, em, ed] = end.split("-").map(Number);
+    const label = sm === em ? `${sy}년 ${sm}월 ${sd}일 ~ ${ed}일` : `${sy}년 ${sm}월 ${sd}일 ~ ${em}월 ${ed}일`;
+
+    return { days: weekDays, label };
+  } catch {
+    return null; // 스키마 미적용 등 — 위젯만 조용히 숨김 (스탯 카드가 에러 안내)
+  }
+}
+
 export default async function B2BDashboard() {
-  const stats = await loadStats();
+  const [stats, week] = await Promise.all([loadStats(), loadWeekSchedule()]);
 
   return (
     <>
@@ -103,6 +258,9 @@ export default async function B2BDashboard() {
         <div>
           <h1 className="b2b-page-title">B2B 관리 대시보드</h1>
           <p className="b2b-page-subtitle">씨몬스터 B2B 발주·생산·발송·매출을 한곳에서 관리합니다.</p>
+        </div>
+        <div className="b2b-page-actions">
+          <Link href="/b2b/orders/new" className="b2b-btn-primary">+ 새 발주</Link>
         </div>
       </header>
 
@@ -125,21 +283,11 @@ export default async function B2BDashboard() {
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">등록된 업체</div>
           <div className="b2b-stat-card-value b2b-money">{stats.companies.toLocaleString()}</div>
-          <div className="b2b-quick-actions">
-            <Link href="/b2b/companies" className="b2b-btn-secondary">
-              주소록 열기
-            </Link>
-          </div>
         </div>
 
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">등록된 제품</div>
           <div className="b2b-stat-card-value b2b-money">{stats.products.toLocaleString()}</div>
-          <div className="b2b-quick-actions">
-            <Link href="/b2b/products" className="b2b-btn-secondary">
-              원가표 열기
-            </Link>
-          </div>
         </div>
 
         <div className="b2b-stat-card">
@@ -155,11 +303,6 @@ export default async function B2BDashboard() {
               <span style={{ color: "var(--sm-orange)" }}>발송 {stats.todayShip}</span>
             </div>
           )}
-          <div className="b2b-quick-actions">
-            <Link href="/b2b/orders" className="b2b-btn-secondary">
-              발주 열기
-            </Link>
-          </div>
         </div>
 
         <div className="b2b-stat-card" style={stats.unpaidCount > 0 ? { borderColor: "#f5c6c6" } : undefined}>
@@ -178,26 +321,54 @@ export default async function B2BDashboard() {
               <div className="b2b-stat-card-hint">{stats.unpaidCount}건 미입금/부분입금</div>
             </>
           )}
-          <div className="b2b-quick-actions" style={{ marginTop: stats.unpaidCount === 0 ? 8 : 0 }}>
-            <Link href="/b2b/payments" className="b2b-btn-secondary">
-              입금 확인 열기
-            </Link>
-          </div>
         </div>
       </div>
 
-      <section className="b2b-card">
-        <div className="b2b-card-head">
-          <h2 className="b2b-card-title">바로가기</h2>
-        </div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <Link href="/b2b/orders/new" className="b2b-btn-primary">+ 새 발주</Link>
-          <Link href="/b2b/orders" className="b2b-btn-secondary">발주 목록 (캘린더·주간)</Link>
-          <Link href="/b2b/reports" className="b2b-btn-secondary">매출 집계</Link>
-          <Link href="/b2b/companies" className="b2b-btn-secondary">업체 주소록</Link>
-          <Link href="/b2b/products" className="b2b-btn-secondary">원가표</Link>
-        </div>
-      </section>
+      {week && (
+        <section className="b2b-card">
+          <div className="b2b-card-head">
+            <div>
+              <h2 className="b2b-card-title">이번 주 일정</h2>
+              <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>{week.label}</span>
+            </div>
+            <Link href="/b2b/orders" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }}>
+              발주 캘린더
+            </Link>
+          </div>
+          <div className="b2b-week-glance">
+            {week.days.map((d) => (
+              <div key={d.iso} className={`b2b-week-glance-day ${d.isToday ? "is-today" : ""}`}>
+                <div className="b2b-week-glance-day-head">
+                  <span className="b2b-week-glance-weekday">{d.weekday}</span>
+                  <span className="b2b-week-glance-date">{d.dayNum}</span>
+                </div>
+                <div className="b2b-week-glance-entries">
+                  {d.entries.length === 0 ? (
+                    <span className="b2b-week-glance-empty">-</span>
+                  ) : (
+                    d.entries.map((e, i) => (
+                      <Link
+                        key={`${e.orderId}-${e.kind}-${i}`}
+                        href={`/b2b/orders/${e.orderId}`}
+                        className={`b2b-week-glance-entry ${e.done ? "is-done" : ""}`}
+                        title={`${e.kind === "production" ? "생산" : "발송"} · ${e.company}${e.seqLabel ? ` (${e.seqLabel})` : ""}`}
+                      >
+                        <span className={`b2b-week-glance-kind is-${e.kind}`}>
+                          {e.kind === "production" ? "생산" : "발송"}
+                        </span>
+                        <span className="b2b-week-glance-company">
+                          {e.company}
+                          {e.seqLabel && <em> {e.seqLabel}</em>}
+                        </span>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </>
   );
 }
