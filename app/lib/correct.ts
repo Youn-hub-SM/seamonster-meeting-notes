@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { DEFAULT_MODEL } from "./config";
+import { resolveModel } from "./config";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -37,11 +37,6 @@ const SYSTEM_PROMPT = `당신은 씨몬스터 브랜드의 공식 문장 교정 
   "tip": "반복되는 습관 1개만 지적 + 개선 방법 1문장"
 }`;
 
-const MODELS: Record<string, string> = {
-  sonnet: "claude-sonnet-4-20250514",
-  haiku: "claude-haiku-4-5-20251001",
-};
-
 export interface CorrectionResult {
   corrections: { original: string; corrected: string }[];
   analysis: {
@@ -54,7 +49,7 @@ export interface CorrectionResult {
 }
 
 export async function correctText(rawText: string): Promise<CorrectionResult> {
-  const model = MODELS[DEFAULT_MODEL] || MODELS.sonnet;
+  const model = resolveModel();
 
   const response = await anthropic.messages.create({
     model,

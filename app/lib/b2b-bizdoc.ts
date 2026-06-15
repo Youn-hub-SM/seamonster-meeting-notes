@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { MODELS } from "./config";
 
 // 사업자등록증 이미지/PDF → 구조화 필드 추출 (Claude vision).
 // 추출 정확도는 높지만 100%는 아니므로 호출 측에서 사용자 확인 후 저장하도록 한다.
@@ -36,7 +37,7 @@ export async function extractBizDoc(base64: string, mediaType: string): Promise<
       : { type: "image", source: { type: "base64", media_type: mediaType as "image/jpeg", data: base64 } };
 
   const resp = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: MODELS.sonnet, // 비전 OCR — 정확도 위해 sonnet 고정 (전역 모델과 별개)
     max_tokens: 1024,
     system: SYSTEM,
     messages: [

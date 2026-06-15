@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { TEAM_MEMBERS, COMPANY_CONTEXT, DEFAULT_MODEL } from "./config";
+import { TEAM_MEMBERS, COMPANY_CONTEXT, resolveModel } from "./config";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -15,11 +15,6 @@ const BASE_PROMPT = `한국어 회의 녹음(STT) 정리 전문 어시스턴트.
 [결론] 하기로/안하기로/보류를 범주별 정리. 의견·조언 금지, 결정 사실만. 미확정은 [보류]. 없으면 빈 배열.
 [To-Do] 행동 단위 분리. 기한 없으면 deadline 생략(추정 금지). 담당자 불명확 시 "담당자 미정".
 [공통] 존댓말. 짧고 명확. 서론/총평/미사여구 금지. 발언자 임의추정 금지. 기밀·전략도 수정 없이 의미 압축. 빈약해도 임의 보완 없이 그대로.`;
-
-const MODELS: Record<string, string> = {
-  sonnet: "claude-sonnet-4-20250514",
-  haiku: "claude-haiku-4-5-20251001",
-};
 
 function buildSystemPrompt(): string {
   let prompt = BASE_PROMPT;
@@ -51,7 +46,7 @@ interface ClaudeResult {
 }
 
 export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
-  const model = MODELS[DEFAULT_MODEL] || MODELS.sonnet;
+  const model = resolveModel();
 
   const response = await anthropic.messages.create({
     model,

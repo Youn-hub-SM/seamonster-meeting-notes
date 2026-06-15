@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { DEFAULT_MODEL } from "./config";
+import { resolveModel } from "./config";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -157,11 +157,6 @@ const SYSTEM_PROMPT = `당신은 씨몬스터(Sea Monster) CS 답변 생성기�
   "manualMissing": true
 }`;
 
-const MODELS: Record<string, string> = {
-  sonnet: "claude-sonnet-4-20250514",
-  haiku: "claude-haiku-4-5-20251001",
-};
-
 export interface CsResult {
   category: string;
   reply: string;
@@ -170,7 +165,7 @@ export interface CsResult {
 }
 
 export async function generateCsReply(query: string): Promise<CsResult> {
-  const model = MODELS[DEFAULT_MODEL] || MODELS.sonnet;
+  const model = resolveModel();
 
   const response = await anthropic.messages.create({
     model,

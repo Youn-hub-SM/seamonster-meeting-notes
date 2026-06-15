@@ -26,5 +26,26 @@ export const COMPANY_CONTEXT = `
 - 냉동 택배 배송 (아이스팩 + 보냉 포장)
 `.trim();
 
-// 기본 AI 모델: "sonnet" (정확) 또는 "haiku" (저렴)
-export const DEFAULT_MODEL = "sonnet";
+// =============================================
+// AI 모델 (전 기능 공통) — 여기만 바꾸면 회의정리·문장교정·CS답변·사업자등록증
+// OCR 4개 기능이 한 번에 바뀝니다.
+//   sonnet : 균형 (기본) — $3 / $15  per 1M 토큰
+//   haiku  : 저렴·빠름   — $1 / $5
+//   opus   : 최고 품질   — $5 / $25
+// 모델 ID는 별칭 그대로 사용 (날짜 접미사 붙이지 말 것).
+// =============================================
+export const MODELS = {
+  sonnet: "claude-sonnet-4-6",
+  haiku: "claude-haiku-4-5",
+  opus: "claude-opus-4-8",
+} as const;
+
+export type ModelKey = keyof typeof MODELS;
+
+// 기본 AI 모델 — sonnet / haiku / opus 중 하나
+export const DEFAULT_MODEL: ModelKey = "sonnet";
+
+// 모델 키 → 실제 모델 ID. 잘못된 키면 sonnet 으로 폴백.
+export function resolveModel(key: ModelKey = DEFAULT_MODEL): string {
+  return MODELS[key] ?? MODELS.sonnet;
+}
