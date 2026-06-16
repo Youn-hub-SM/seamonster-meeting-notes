@@ -10,6 +10,7 @@ import {
   logOrderStatusChanged,
   logOrderPaymentStatusChanged,
   logOrderTaxInvoiceChanged,
+  logOrderDeleted,
 } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
@@ -192,9 +193,24 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   try {
     const { id } = await params;
     const sb = supabaseAdmin();
+
+    // 삭제 전 스냅샷 (이력 기록용 — 삭제되면 못 읽음)
+    const { data: snap } = await sb
+      .from("orders")
+      .select("order_no, total, company:company_id(name)")
+      .eq("id", id)
+      .single();
+
     // order_items, shipments 는 ON DELETE CASCADE 로 같이 삭제됨
     const { error } = await sb.from("orders").delete().eq("id", id);
     if (error) throw error;
+
+    if (snap) {
+      const s = snap as { order_no: string; total: number; company: { name?: string } | { name?: string }[] | null };
+      const company = Array.isArray(s.company) ? s.company[0] : s.company;
+      await logOrderDeleted(s.order_no, company?.name ?? "(미지정)", Number(s.total) || 0);
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[b2b/orders DELETE]", err);

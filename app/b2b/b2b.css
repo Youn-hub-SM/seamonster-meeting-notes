@@ -234,6 +234,75 @@
 }
 
 /* ─────────────────────────────────────────────
+   히스토리 탭 — 전체 변경 이력 (날짜별 그룹)
+   ───────────────────────────────────────────── */
+.b2b-history {
+  display: flex;
+  flex-direction: column;
+}
+
+.b2b-history-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.b2b-history-day {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sm-text-mid);
+  padding: 14px 2px 6px;
+  border-bottom: 1px solid var(--sm-border);
+  margin-bottom: 2px;
+}
+
+.b2b-history-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+
+a.b2b-history-item:hover {
+  background: var(--sm-bg);
+}
+
+.b2b-history-item.is-static {
+  cursor: default;
+}
+
+.b2b-history-summary {
+  font-size: 13.5px;
+  color: var(--sm-black);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.b2b-history-meta {
+  font-size: 12px;
+  color: var(--sm-text-light);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 모바일: 요약을 줄바꿈 허용, 시각은 아래로 */
+@media (max-width: 768px) {
+  .b2b-history-item {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .b2b-history-summary {
+    white-space: normal;
+  }
+}
+
+/* ─────────────────────────────────────────────
    전역 2단 레이아웃 (좌: 페이지 내용, 우: 활동 피드)
    /b2b/* 모든 탭에 우측 피드 상시 노출 (로그인 페이지 제외)
    ───────────────────────────────────────────── */

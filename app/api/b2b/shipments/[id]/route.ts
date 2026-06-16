@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { deriveParentStatus } from "@/app/lib/b2b-shipments";
+import { logShipmentStatusChanged } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const sb = supabaseAdmin();
     const { data: ship, error: getErr } = await sb
       .from("shipments")
-      .select("id, order_id, status, tracking_no, box_count")
+      .select("id, order_id, seq, status, tracking_no, box_count")
       .eq("id", id)
       .single();
     if (getErr || !ship) {
@@ -55,6 +56,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     const { error: upErr } = await sb.from("shipments").update(patch).eq("id", id);
     if (upErr) throw upErr;
+
+    // 차수 상태 변경 이력 기록 (히스토리)
+    if (body.status !== undefined && newStatus !== ship.status) {
+      await logShipmentStatusChanged(ship.order_id as string, Number(ship.seq) || 1, ship.status as string, newStatus);
+    }
 
     // 상위발주 상태 재도출 (복수 발송이면)
     const { data: ships } = await sb.from("shipments").select("status").eq("order_id", ship.order_id);

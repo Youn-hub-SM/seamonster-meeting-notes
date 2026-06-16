@@ -182,6 +182,35 @@ export async function logOrderTaxInvoiceChanged(orderId: string, fromStatus: str
   });
 }
 
+// 발송 차수(하위 발주) 상태 변경
+export async function logShipmentStatusChanged(orderId: string, seq: number, fromStatus: string, toStatus: string): Promise<void> {
+  if (fromStatus === toStatus) return;
+  const o = await loadOrderSummary(orderId);
+  if (!o) return;
+  const emoji =
+    toStatus === "생산요청/생산중" ? "🏭" :
+    toStatus === "생산완료/발송대기" ? "✅" :
+    toStatus === "발송완료" ? "🚚" :
+    toStatus === "취소" ? "❌" : "🔄";
+  await recordActivity({
+    event_type: "shipment.status_changed",
+    summary: `${emoji} ${o.order_no} (${o.company_name}) · ${seq}차 발송 · ${fromStatus} → ${toStatus}`,
+    order_id: o.id,
+    order_no: o.order_no,
+    meta: { seq, from: fromStatus, to: toStatus },
+  });
+}
+
+// 발주 삭제 — order 가 이미 삭제됐으므로 스냅샷을 직접 받음 (order_id 는 null)
+export async function logOrderDeleted(orderNo: string, companyName: string, total: number): Promise<void> {
+  await recordActivity({
+    event_type: "order.deleted",
+    summary: `🗑️ 발주 삭제 · ${companyName} · ${orderNo} · ${fmtMoney(total)}원`,
+    order_id: null,
+    order_no: orderNo,
+  });
+}
+
 export async function logPaymentAdded(orderId: string, amount: number, method: string | null): Promise<void> {
   const o = await loadOrderSummary(orderId);
   if (!o) return;

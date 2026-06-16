@@ -48,6 +48,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
           <Link href="/b2b/margin" className="b2b-subnav-link">이익률</Link>
           <Link href="/b2b/reports" className="b2b-subnav-link">매출 집계</Link>
           <Link href="/b2b/payments" className="b2b-subnav-link">입금 확인</Link>
+          <Link href="/b2b/history" className="b2b-subnav-link">히스토리</Link>
           {userName && (
             <span
               style={{
