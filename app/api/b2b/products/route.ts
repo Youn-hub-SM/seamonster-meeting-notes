@@ -51,15 +51,7 @@ export async function POST(req: NextRequest) {
       })
       .select()
       .single();
-    if (error) {
-      if (error.code === "23505") {
-        return NextResponse.json(
-          { ok: false, error: "이미 같은 SKU 가 등록되어 있습니다." },
-          { status: 409 }
-        );
-      }
-      throw error;
-    }
+    if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
     return NextResponse.json({ ok: true, product: data });
   } catch (err) {
     console.error("[b2b/products POST]", err);
@@ -102,15 +94,7 @@ export async function PUT(req: NextRequest) {
       .eq("id", body.id)
       .select()
       .single();
-    if (error) {
-      if (error.code === "23505") {
-        return NextResponse.json(
-          { ok: false, error: "이미 같은 SKU 가 등록되어 있습니다." },
-          { status: 409 }
-        );
-      }
-      throw error;
-    }
+    if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
     return NextResponse.json({ ok: true, product: data });
   } catch (err) {
     console.error("[b2b/products PUT]", err);

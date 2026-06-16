@@ -300,8 +300,8 @@ export default function ProductsPage() {
             modal.mode === "edit"
               ? () =>
                   // 현재 입력값 그대로 복사해 '새 제품 등록' 모드로 전환.
-                  // SKU 는 unique 라 비움 — 새 코드를 입력해야 저장됨.
-                  setModal({ mode: "create", data: { ...modal.data, id: undefined, sku: "" } })
+                  // SKU 중복 허용이라 SKU 도 그대로 복사 (필요 시 수정).
+                  setModal({ mode: "create", data: { ...modal.data, id: undefined } })
               : undefined
           }
         />
