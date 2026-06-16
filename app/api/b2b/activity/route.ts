@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
       .select("*") // actor 컬럼(migration 009) 포함
       .order("created_at", { ascending: false });
 
-    if (type) query = query.eq("event_type", type);
+    if (type) {
+      const types = type.split(",").map((s) => s.trim()).filter(Boolean);
+      query = types.length > 1 ? query.in("event_type", types) : query.eq("event_type", types[0]);
+    }
     if (actor) query = query.eq("actor", actor);
     if (q) query = query.ilike("summary", `%${q}%`);
     if (dateFrom) query = query.gte("created_at", dateFrom);

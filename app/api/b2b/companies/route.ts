@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeCompany, CompanyInput } from "@/app/lib/b2b-types";
+import { logCompanyChange } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (error) throw error;
+    await logCompanyChange("created", data.name);
     return NextResponse.json({ ok: true, company: data });
   } catch (err) {
     console.error("[b2b/companies POST]", err);
@@ -101,6 +103,7 @@ export async function PUT(req: NextRequest) {
       .select()
       .single();
     if (error) throw error;
+    await logCompanyChange("updated", data.name);
     return NextResponse.json({ ok: true, company: data });
   } catch (err) {
     console.error("[b2b/companies PUT]", err);
@@ -118,6 +121,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "id가 필요합니다." }, { status: 400 });
     }
     const sb = supabaseAdmin();
+    const { data: snap } = await sb.from("companies").select("name").eq("id", id).single();
     const { error } = await sb.from("companies").delete().eq("id", id);
     if (error) {
       // FK 제약 (orders 가 참조 중) 등
@@ -129,6 +133,7 @@ export async function DELETE(req: NextRequest) {
       }
       throw error;
     }
+    if (snap?.name) await logCompanyChange("deleted", snap.name);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[b2b/companies DELETE]", err);

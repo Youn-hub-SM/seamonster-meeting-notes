@@ -23,6 +23,8 @@ const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "order.tax_invoice_changed", label: "세금계산서" },
   { value: "payment.added", label: "입금 기록" },
   { value: "order.deleted", label: "발주 삭제" },
+  { value: "company.created,company.updated,company.deleted", label: "업체 변경" },
+  { value: "product.created,product.updated,product.deleted", label: "원가표(품목) 변경" },
 ];
 
 const ACTOR_OPTIONS = ["", "지인", "예지", "현석", "관리자"];

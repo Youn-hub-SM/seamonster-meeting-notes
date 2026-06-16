@@ -219,6 +219,27 @@ export async function logOrderDeleted(orderNo: string, companyName: string, tota
   });
 }
 
+// 업체(주소록) 등록·수정·삭제
+export async function logCompanyChange(action: "created" | "updated" | "deleted", name: string): Promise<void> {
+  const verb = action === "created" ? "등록" : action === "updated" ? "수정" : "삭제";
+  const emoji = action === "deleted" ? "🗑️" : "🏢";
+  await recordActivity({
+    event_type: `company.${action}`,
+    summary: `${emoji} 업체 ${verb} · ${name}`,
+  });
+}
+
+// 원가표(제품/품목) 등록·수정·삭제
+export async function logProductChange(action: "created" | "updated" | "deleted", name: string, sku?: string | null): Promise<void> {
+  const verb = action === "created" ? "등록" : action === "updated" ? "수정" : "삭제";
+  const emoji = action === "deleted" ? "🗑️" : "📋";
+  const skuPart = sku ? ` (${sku})` : "";
+  await recordActivity({
+    event_type: `product.${action}`,
+    summary: `${emoji} 원가표 ${verb} · ${name}${skuPart}`,
+  });
+}
+
 export async function logPaymentAdded(orderId: string, amount: number, method: string | null): Promise<void> {
   const o = await loadOrderSummary(orderId);
   if (!o) return;

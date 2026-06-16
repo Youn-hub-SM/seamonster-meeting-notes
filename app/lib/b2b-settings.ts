@@ -12,7 +12,8 @@ const NOTIFY_KEY = "zapier_notify";
 //  - 상태형 이벤트(상태변경 등): 발송할 '결과 상태' 문자열 배열 (meta.to 가 포함되면 발송)
 export type NotifyConfig = Record<string, boolean | string[]>;
 
-// 기본값 = 전부 켜짐 (현재 동작 유지). 설정 화면에서 필요 없는 것을 끄도록.
+// 기본값. 발주 라이프사이클은 켜짐(현재 동작 유지), 업체·원가표 변경은
+// 관리성 작업이라 외부 알림은 기본 꺼짐(히스토리에는 항상 기록됨).
 export const DEFAULT_NOTIFY: NotifyConfig = {
   "order.created": true,
   "payment.added": true,
@@ -21,7 +22,16 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
   "shipment.status_changed": [...ORDER_STATUSES],
   "order.payment_status_changed": [...PAYMENT_STATUSES],
   "order.tax_invoice_changed": [...TAX_INVOICE_STATUSES],
+  company: false, // company.created/updated/deleted 묶음
+  product: false, // product.created/updated/deleted 묶음
 };
+
+// 이벤트 종류 → 설정 키 매핑. 업체·원가표는 등록/수정/삭제를 한 토글로 묶음.
+function notifyKeyFor(eventType: string): string {
+  if (eventType.startsWith("company.")) return "company";
+  if (eventType.startsWith("product.")) return "product";
+  return eventType;
+}
 
 // 설정 화면 구성용 메타데이터 (UI 가 이걸로 토글·체크박스를 그림)
 export const NOTIFY_EVENTS: {
@@ -38,6 +48,8 @@ export const NOTIFY_EVENTS: {
   { key: "order.tax_invoice_changed", label: "세금계산서 상태 변경", desc: "선택한 상태로 바뀔 때만", kind: "status", statuses: TAX_INVOICE_STATUSES },
   { key: "payment.added", label: "입금 기록", desc: "입금이 기록될 때", kind: "toggle" },
   { key: "order.deleted", label: "발주 삭제", desc: "발주가 삭제될 때", kind: "toggle" },
+  { key: "company", label: "업체 변경", desc: "업체 등록·수정·삭제 (기본 꺼짐)", kind: "toggle" },
+  { key: "product", label: "원가표(품목) 변경", desc: "품목 등록·수정·삭제 (기본 꺼짐)", kind: "toggle" },
 ];
 
 // 설정 읽기. 테이블 미적용(마이그레이션 015 전)이거나 행이 없으면 기본값(전부 발송).
@@ -63,7 +75,7 @@ export async function setNotifyConfig(config: NotifyConfig): Promise<void> {
 
 // 이 이벤트(+결과 상태)를 Zapier 로 보낼지 판단.
 export function shouldNotify(config: NotifyConfig, eventType: string, meta?: Record<string, unknown> | null): boolean {
-  const v = config[eventType];
+  const v = config[notifyKeyFor(eventType)];
   if (v === undefined) return true; // 미정의 이벤트 → 안전하게 발송
   if (typeof v === "boolean") return v;
   if (Array.isArray(v)) {

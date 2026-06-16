@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeProduct, ProductInput } from "@/app/lib/b2b-types";
+import { logProductChange } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
+    await logProductChange("created", data.name, data.sku);
     return NextResponse.json({ ok: true, product: data });
   } catch (err) {
     console.error("[b2b/products POST]", err);
@@ -95,6 +97,7 @@ export async function PUT(req: NextRequest) {
       .select()
       .single();
     if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
+    await logProductChange("updated", data.name, data.sku);
     return NextResponse.json({ ok: true, product: data });
   } catch (err) {
     console.error("[b2b/products PUT]", err);
@@ -112,6 +115,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "id가 필요합니다." }, { status: 400 });
     }
     const sb = supabaseAdmin();
+    const { data: snap } = await sb.from("products").select("name, sku").eq("id", id).single();
     const { error } = await sb.from("products").delete().eq("id", id);
     if (error) {
       if (error.code === "23503") {
@@ -122,6 +126,7 @@ export async function DELETE(req: NextRequest) {
       }
       throw error;
     }
+    if (snap?.name) await logProductChange("deleted", snap.name, snap.sku);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[b2b/products DELETE]", err);
