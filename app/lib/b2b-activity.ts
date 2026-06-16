@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
 import { resolveUserName } from "./b2b-auth";
+import { getNotifyConfig, shouldNotify } from "./b2b-settings";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
 // 대시보드 우측 "최근 변경" 피드의 소스.
@@ -55,9 +56,16 @@ async function recordActivity(input: ActivityInput): Promise<void> {
 }
 
 // 외부 웹훅 전송 (Zapier Catch Hook 등). fire-and-forget.
+//  설정(b2b_settings.zapier_notify)에 따라 이벤트·결과상태별로 발송을 거름.
+//  설정 미적용/조회 실패 시엔 기본값(전부 발송)으로 기존 동작 유지.
 async function sendWebhook(input: ActivityInput, actor: string | null): Promise<void> {
   const url = process.env.ZAPIER_WEBHOOK_URL;
   if (!url) return;
+
+  // 알림 설정 게이팅 — DB 기록(히스토리)은 영향 없음, 외부 발송만 거름
+  const config = await getNotifyConfig();
+  if (!shouldNotify(config, input.event_type, input.meta)) return;
+
   try {
     const res = await fetch(url, {
       method: "POST",
