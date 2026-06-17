@@ -2,7 +2,8 @@
    globals.css 의 --sm-* 변수 재사용. */
 
 .b2b-shell {
-  min-height: calc(100vh - 60px);
+  /* B2B 화면은 전역 헤더(60px)를 숨기므로 자체 바가 최상단 */
+  min-height: 100vh;
   background: var(--sm-bg);
 }
 
@@ -13,22 +14,129 @@
   background: var(--sm-white);
   border-bottom: 1px solid var(--sm-border);
   position: sticky;
-  top: 60px;
+  top: 0;
   z-index: 50;
 }
 
 .b2b-subnav-inner {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 0 32px;
+  padding: 0 16px;
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 좌: 햄버거+브랜드 / 중: B2B 링크(스크롤) / 우: 사용자+로그아웃 */
+.b2b-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.b2b-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
-
-.b2b-subnav-inner::-webkit-scrollbar {
+.b2b-nav-links::-webkit-scrollbar {
   display: none;
+}
+.b2b-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.b2b-appmenu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--sm-border);
+  border-radius: 9px;
+  background: var(--sm-white);
+  color: var(--sm-text-mid);
+  font-size: 17px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.b2b-appmenu-btn:hover {
+  border-color: var(--sm-orange);
+  color: var(--sm-orange);
+}
+
+.b2b-brand {
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  color: var(--sm-orange);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.b2b-nav-user {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sm-text-mid);
+  white-space: nowrap;
+}
+.b2b-logout-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--sm-text-light);
+}
+
+/* 햄버거 = 전체 앱 메뉴 드롭다운 */
+.b2b-appmenu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+}
+.b2b-appmenu {
+  position: absolute;
+  top: 100%;
+  left: 14px;
+  margin-top: 4px;
+  z-index: 62;
+  min-width: 200px;
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: 12px;
+  box-shadow: var(--sm-shadow-card);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.b2b-appmenu-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sm-text-light);
+  padding: 6px 10px 4px;
+}
+.b2b-appmenu-link {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--sm-black);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.b2b-appmenu-link:hover {
+  background: var(--sm-bg);
+}
+.b2b-appmenu-link.is-current {
+  color: var(--sm-orange);
+  font-weight: 700;
 }
 
 .b2b-subnav-link {
@@ -1732,11 +1840,24 @@ a.b2b-history-item:hover {
 
   /* 서브 네비: 좌우 패딩 줄이고 스크롤 유지 */
   .b2b-subnav-inner {
-    padding: 0 14px;
+    padding: 0 10px;
+    gap: 6px;
   }
   .b2b-subnav-link {
-    padding: 14px 12px;
+    padding: 14px 10px;
     font-size: 14px;
+  }
+  /* 모바일: 사용자명 숨겨 공간 확보, 브랜드도 약간 축소 */
+  .b2b-nav-user {
+    display: none;
+  }
+  .b2b-brand {
+    font-size: 16px;
+  }
+  .b2b-appmenu {
+    left: 10px;
+    right: 10px;
+    min-width: 0;
   }
 
   /* 카드/폼 섹션 패딩 축소 */
