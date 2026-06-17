@@ -67,7 +67,8 @@ export default function OrdersListPage() {
   // 직접 배송(택배 아님) — 체크 시 송장번호 없이 발송완료 가능
   const [directDelivery, setDirectDelivery] = useState(false);
   // 접힌 상위발주(복수발송) — 기본 펼침이라 여기에 담긴 것만 접힘
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // 복수발송 하위 차수 — 기본은 접힘. 사용자가 펼친 발주 id만 여기에 담김.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // ── 필터 유지 (로그인 사용자별 localStorage) ──
   //  초기화 버튼을 누르기 전까지 페이지를 떠났다 와도 필터가 유지됨.
@@ -149,8 +150,8 @@ export default function OrdersListPage() {
     }
   }
 
-  function toggleCollapse(id: string) {
-    setCollapsed((prev) => {
+  function toggleExpand(id: string) {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -726,7 +727,7 @@ export default function OrdersListPage() {
                   const urgency = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, today);
                   const parent = isParentOrder(o);
                   const prog = parent ? shipProgress(o) : null;
-                  const isCollapsed = collapsed.has(o.id);
+                  const isCollapsed = !expanded.has(o.id); // 기본 접힘
                   return (
                     <Fragment key={o.id}>
                     <tr className={`${urgency !== "normal" ? `is-${urgency}` : ""} ${parent ? "is-parent" : ""}`}>
@@ -772,7 +773,7 @@ export default function OrdersListPage() {
                           <button
                             type="button"
                             className="b2b-parent-toggle"
-                            onClick={() => toggleCollapse(o.id)}
+                            onClick={() => toggleExpand(o.id)}
                             title="발송 차수 펼치기/접기"
                           >
                             발송 {prog.done}/{prog.total} <span style={{ fontSize: 10 }}>{isCollapsed ? "▸" : "▾"}</span>
@@ -879,6 +880,7 @@ export default function OrdersListPage() {
                 const urgency = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, today);
                 const parent = isParentOrder(o);
                 const prog = parent ? shipProgress(o) : null;
+                const isCollapsed = !expanded.has(o.id); // 기본 접힘
                 return (
                   <div key={o.id} className={`b2b-order-card ${urgency !== "normal" ? `is-${urgency}` : ""}`}>
                     <div className="b2b-order-card-check">
@@ -911,8 +913,15 @@ export default function OrdersListPage() {
                         <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
                         <div className="b2b-order-card-pills">
                           {parent && prog ? (
-                            <span className="b2b-status-pill" style={{ background: "#EEF2F6", color: "#475569" }}>
-                              발송 {prog.done}/{prog.total}
+                            <span
+                              className="b2b-status-pill"
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleExpand(o.id); }}
+                              style={{ background: "#EEF2F6", color: "#475569", cursor: "pointer" }}
+                              title="발송 차수 펼치기/접기"
+                            >
+                              발송 {prog.done}/{prog.total} <span style={{ fontSize: 10 }}>{isCollapsed ? "▸" : "▾"}</span>
                             </span>
                           ) : (
                             <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
@@ -925,7 +934,7 @@ export default function OrdersListPage() {
                         </div>
                       </div>
                     </Link>
-                    {parent && (
+                    {parent && !isCollapsed && (
                       <div className="b2b-order-card-children">
                         {(o.shipments ?? []).map((s) => (
                           <div key={s.id} className="b2b-order-card-child">
