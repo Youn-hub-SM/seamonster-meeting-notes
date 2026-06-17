@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
       sameSite: "lax",
       path: "/",
       maxAge: MAX_AGE,
+      // 일부 모바일 사파리는 Expires 도 함께 줘야 영속 쿠키로 확실히 처리
+      expires: new Date(Date.now() + MAX_AGE * 1000),
     });
     return res;
   } catch (err) {

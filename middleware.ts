@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getB2BUsers } from "@/app/lib/b2b-auth";
 
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
+
 // /b2b 와 /api/b2b 전체를 비밀번호로 보호.
 // 사용자별 비밀번호(B2B_USERS) + 관리자 비밀번호(B2B_PASSWORD) — 비밀번호로 사용자를 구분.
 // 쿠키 b2b_auth 값(비밀번호)을 직접 비교 (HttpOnly+Secure 라 노출 위험 낮음).
@@ -32,7 +34,19 @@ export function middleware(req: NextRequest) {
 
   const token = req.cookies.get("b2b_auth")?.value;
   if (token && users.some((u) => u.password === token)) {
-    return NextResponse.next();
+    // 슬라이딩 세션: 인증된 요청마다 쿠키 만료를 30일 뒤로 재발급.
+    // iOS 사파리(ITP)는 쿠키 지속 정책이 빡빡해 고정 만료면 쉽게 풀림 —
+    // 방문(페이지 이동)·API 호출마다 다시 발급해 계속 쓰는 동안 안 풀리게 함.
+    const res = NextResponse.next();
+    res.cookies.set("b2b_auth", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: COOKIE_MAX_AGE,
+      expires: new Date(Date.now() + COOKIE_MAX_AGE * 1000),
+    });
+    return res;
   }
 
   // 인증 실패
