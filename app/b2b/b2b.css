@@ -1132,6 +1132,34 @@ a.b2b-history-item:hover {
   color: #B86E00;
 }
 
+.b2b-urgency-pill.is-complete {
+  background: #E0F5E5;
+  color: #22863A;
+}
+
+/* 완료 숨기기 토글 (필터 바) */
+.b2b-hidecomplete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--sm-text-mid);
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 6px 10px;
+  border: 1px solid var(--sm-border);
+  border-radius: 8px;
+  background: var(--sm-white);
+}
+.b2b-hidecomplete.is-on {
+  border-color: var(--sm-orange);
+  color: var(--sm-orange);
+  font-weight: 600;
+}
+.b2b-hidecomplete input {
+  margin: 0;
+}
+
 /* 행 배경 톤 — 지연/임박 강조 */
 .b2b-table tbody tr.is-overdue {
   background: rgba(201, 42, 42, 0.04);

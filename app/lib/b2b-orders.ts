@@ -415,6 +415,18 @@ export function getUrgency(o: Pick<Order, "status" | "production_date" | "ship_d
   return "normal";
 }
 
+// 발주 '완료' — 발송완료 + 입금완료(또는 확인불필요) + 세금계산서 발행완료(또는 면제).
+//  '더 할 일이 없는' 상태. 임박 칸 [완료] 배지 + 완료 숨기기 필터에 사용.
+export function isOrderComplete(
+  o: Pick<Order, "status" | "payment_status" | "tax_invoice_status">
+): boolean {
+  return (
+    o.status === "발송완료" &&
+    (o.payment_status === "입금완료" || o.payment_status === "확인불필요") &&
+    (o.tax_invoice_status === "발행완료" || o.tax_invoice_status === "면제")
+  );
+}
+
 // ─────────────────────────────────────────────
 // 입력 정규화 (string → number, "" → null 등)
 // ─────────────────────────────────────────────

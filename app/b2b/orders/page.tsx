@@ -22,6 +22,7 @@ import {
   formatMoney,
   formatQty,
   getUrgency,
+  isOrderComplete,
   nextPendingShipDate,
   splitTracking,
   joinTracking,
@@ -51,6 +52,7 @@ export default function OrdersListPage() {
   const [taxSel, setTaxSel] = useState<Set<TaxInvoiceStatus>>(() => new Set(TAX_INVOICE_STATUSES));
   const [companyFilter, setCompanyFilter] = useState<string>(""); // ""=전체
   const [productFilter, setProductFilter] = useState<string>(""); // ""=전체
+  const [hideComplete, setHideComplete] = useState(false); // 완료(발송·입금·발행 다 끝) 숨기기
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
@@ -97,6 +99,7 @@ export default function OrdersListPage() {
           tax?: string[];
           company?: string;
           product?: string;
+          hideComplete?: boolean;
           search?: string;
         };
         if (s && s.v === 1) {
@@ -108,6 +111,7 @@ export default function OrdersListPage() {
             setTaxSel(new Set(s.tax.filter((x): x is TaxInvoiceStatus => (TAX_INVOICE_STATUSES as readonly string[]).includes(x))));
           if (typeof s.company === "string") setCompanyFilter(s.company);
           if (typeof s.product === "string") setProductFilter(s.product);
+          if (typeof s.hideComplete === "boolean") setHideComplete(s.hideComplete);
           if (typeof s.search === "string") setSearch(s.search);
         }
       }
@@ -130,13 +134,14 @@ export default function OrdersListPage() {
           tax: Array.from(taxSel),
           company: companyFilter,
           product: productFilter,
+          hideComplete,
           search,
         })
       );
     } catch {
       // 저장 실패(시크릿 모드 등)는 무시 — 기능엔 영향 없음
     }
-  }, [filterStoreKey, filterRestored, statusSel, paymentSel, taxSel, companyFilter, productFilter, search]);
+  }, [filterStoreKey, filterRestored, statusSel, paymentSel, taxSel, companyFilter, productFilter, hideComplete, search]);
 
   function resetFilters() {
     setStatusSel(new Set(ORDER_STATUSES));
@@ -144,6 +149,7 @@ export default function OrdersListPage() {
     setTaxSel(new Set(TAX_INVOICE_STATUSES));
     setPaymentSel(new Set(PAYMENT_STATUSES));
     setProductFilter("");
+    setHideComplete(false);
     setSearch("");
     if (filterStoreKey) {
       try { localStorage.removeItem(filterStoreKey); } catch {}
@@ -204,6 +210,7 @@ export default function OrdersListPage() {
     if (!taxAll) arr = arr.filter((o) => taxSel.has(o.tax_invoice_status));
     if (companyFilter) arr = arr.filter((o) => o.company_id === companyFilter);
     if (productFilter) arr = arr.filter((o) => (o.items || []).some((it) => it.product_name === productFilter));
+    if (hideComplete) arr = arr.filter((o) => !isOrderComplete(o));
     const q = search.trim().toLowerCase();
     if (q) {
       arr = arr.filter((o) =>
@@ -212,7 +219,7 @@ export default function OrdersListPage() {
       );
     }
     return arr;
-  }, [orders, statusSel, paymentSel, taxSel, statusAll, paymentAll, taxAll, companyFilter, productFilter, search]);
+  }, [orders, statusSel, paymentSel, taxSel, statusAll, paymentAll, taxAll, companyFilter, productFilter, hideComplete, search]);
 
   // 지연/임박 카운트 (배너용)
   const urgencyCount = useMemo(() => {
@@ -618,7 +625,18 @@ export default function OrdersListPage() {
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
-          {(!statusAll || companyFilter || !taxAll || !paymentAll || productFilter || search) && (
+          <label
+            className={`b2b-hidecomplete ${hideComplete ? "is-on" : ""}`}
+            title="발송·입금·세금계산서가 모두 끝난 발주 숨기기"
+          >
+            <input
+              type="checkbox"
+              checked={hideComplete}
+              onChange={(e) => setHideComplete(e.target.checked)}
+            />
+            완료 숨기기
+          </label>
+          {(!statusAll || companyFilter || !taxAll || !paymentAll || productFilter || hideComplete || search) && (
             <button
               type="button"
               className="b2b-btn-secondary"
@@ -728,6 +746,7 @@ export default function OrdersListPage() {
                   const parent = isParentOrder(o);
                   const prog = parent ? shipProgress(o) : null;
                   const isCollapsed = !expanded.has(o.id); // 기본 접힘
+                  const complete = isOrderComplete(o);
                   return (
                     <Fragment key={o.id}>
                     <tr className={`${urgency !== "normal" ? `is-${urgency}` : ""} ${parent ? "is-parent" : ""}`}>
@@ -747,11 +766,13 @@ export default function OrdersListPage() {
                         />
                       </td>
                       <td className="cell-flag" style={{ padding: "8px 4px" }}>
-                        {urgency !== "normal" && (
+                        {complete ? (
+                          <span className="b2b-urgency-pill is-complete">완료</span>
+                        ) : urgency !== "normal" ? (
                           <span className={`b2b-urgency-pill is-${urgency}`}>
                             {URGENCY_LABEL[urgency]}
                           </span>
-                        )}
+                        ) : null}
                       </td>
                       <RowCell href={`/b2b/orders/${o.id}`} nowrap>
                         <strong>{o.company_name}</strong>
@@ -881,6 +902,7 @@ export default function OrdersListPage() {
                 const parent = isParentOrder(o);
                 const prog = parent ? shipProgress(o) : null;
                 const isCollapsed = !expanded.has(o.id); // 기본 접힘
+                const complete = isOrderComplete(o);
                 return (
                   <div key={o.id} className={`b2b-order-card ${urgency !== "normal" ? `is-${urgency}` : ""}`}>
                     <div className="b2b-order-card-check">
@@ -897,9 +919,11 @@ export default function OrdersListPage() {
                           <div className="b2b-order-card-company">{o.company_name}</div>
                           <div className="b2b-order-card-no">{o.order_no}</div>
                         </div>
-                        {urgency !== "normal" && (
+                        {complete ? (
+                          <span className="b2b-urgency-pill is-complete">완료</span>
+                        ) : urgency !== "normal" ? (
                           <span className={`b2b-urgency-pill is-${urgency}`}>{URGENCY_LABEL[urgency]}</span>
-                        )}
+                        ) : null}
                       </div>
                       <div className="b2b-order-card-items">
                         <ItemsPreview items={o.items} />
