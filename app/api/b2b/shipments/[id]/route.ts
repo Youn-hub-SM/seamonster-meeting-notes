@@ -32,7 +32,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         : (ship.tracking_no ?? "").toString().trim();
 
     // 박스 수만큼 송장번호 필요 (콤마 구분, 박스당 1개)
-    if (newStatus === "발송완료") {
+    //  '직접배송' 마커면 송장번호 검증 생략 (택배 아닌 직접 전달)
+    if (newStatus === "발송완료" && trackingNo.trim() !== "직접배송") {
       const boxCount = Math.max(1, Number(ship.box_count) || 1);
       const parts = trackingNo.split(",").map((s: string) => s.trim()).filter(Boolean);
       if (parts.length === 0) {

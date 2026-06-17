@@ -64,6 +64,8 @@ export default function OrdersListPage() {
     | null
   >(null);
   const [trackingInput, setTrackingInput] = useState<string[]>([""]);
+  // 직접 배송(택배 아님) — 체크 시 송장번호 없이 발송완료 가능
+  const [directDelivery, setDirectDelivery] = useState(false);
   // 접힌 상위발주(복수발송) — 기본 펼침이라 여기에 담긴 것만 접힘
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -230,6 +232,7 @@ export default function OrdersListPage() {
     if (newStatus === "발송완료" && !String(target.tracking_no ?? "").trim()) {
       const boxCount = Math.max(1, Number(target.box_count) || 1);
       setTrackingInput(splitTracking(target.tracking_no, boxCount));
+      setDirectDelivery(false);
       setTrackingPrompt({ kind: "order", id, label: target.order_no, boxCount });
       return;
     }
@@ -260,17 +263,19 @@ export default function OrdersListPage() {
     }
   }
 
-  // 송장 입력칸이 모두 채워졌는지 (박스 수만큼 필요)
-  const trackingComplete = trackingInput.length > 0 && trackingInput.every((t) => t.trim() !== "");
+  // 발송완료 처리 가능 여부: 직접 배송이거나, 박스 수만큼 송장이 다 채워졌을 때
+  const trackingComplete =
+    directDelivery || (trackingInput.length > 0 && trackingInput.every((t) => t.trim() !== ""));
 
   async function confirmTracking() {
-    if (!trackingPrompt) return;
-    const joined = joinTracking(trackingInput);
-    if (!joined || !trackingComplete) return;
+    if (!trackingPrompt || !trackingComplete) return;
+    // 직접 배송이면 송장 자리에 '직접배송' 마커 저장
+    const tracking = directDelivery ? "직접배송" : joinTracking(trackingInput);
     const p = trackingPrompt;
     setTrackingPrompt(null);
-    if (p.kind === "order") await patchStatus(p.id, "발송완료", joined);
-    else await patchShipment(p.orderId, p.id, "발송완료", joined);
+    setDirectDelivery(false);
+    if (p.kind === "order") await patchStatus(p.id, "발송완료", tracking);
+    else await patchShipment(p.orderId, p.id, "발송완료", tracking);
   }
 
   // 하위 차수(발송 일정) 상태 변경 — 발송완료면 송장번호 필요 (박스 수만큼 칸)
@@ -279,6 +284,7 @@ export default function OrdersListPage() {
     if (newStatus === "발송완료" && !String(ship.tracking_no ?? "").trim()) {
       const boxCount = Math.max(1, Number(ship.box_count) || 1);
       setTrackingInput(splitTracking(ship.tracking_no, boxCount));
+      setDirectDelivery(false);
       setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송`, boxCount });
       return;
     }
@@ -972,26 +978,42 @@ export default function OrdersListPage() {
             <div className="b2b-modal-body">
               <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginBottom: 10 }}>
                 <strong>{trackingPrompt.label}</strong> 을(를) 발송완료 처리합니다.{" "}
-                {trackingPrompt.boxCount > 1
+                {directDelivery
+                  ? "직접 배송 — 송장번호 없이 처리됩니다."
+                  : trackingPrompt.boxCount > 1
                   ? `${trackingPrompt.boxCount}박스 — 박스별 송장번호를 모두 입력하세요.`
                   : "송장번호를 입력하세요."}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {trackingInput.map((tn, bi) => (
-                  <input
-                    key={bi}
-                    type="text"
-                    className="b2b-input"
-                    value={tn}
-                    onChange={(e) =>
-                      setTrackingInput((prev) => prev.map((v, i) => (i === bi ? e.target.value : v)))
-                    }
-                    placeholder={trackingPrompt.boxCount > 1 ? `박스 ${bi + 1} 송장번호` : "송장번호"}
-                    autoFocus={bi === 0}
-                    onKeyDown={(e) => { if (e.key === "Enter" && trackingComplete) confirmTracking(); }}
-                  />
-                ))}
-              </div>
+
+              {/* 직접 배송(택배 아님): 체크 시 송장번호 불필요 */}
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, marginBottom: directDelivery ? 0 : 12, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  className="b2b-checkbox"
+                  checked={directDelivery}
+                  onChange={(e) => setDirectDelivery(e.target.checked)}
+                />
+                직접 배송 (송장번호 없음)
+              </label>
+
+              {!directDelivery && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {trackingInput.map((tn, bi) => (
+                    <input
+                      key={bi}
+                      type="text"
+                      className="b2b-input"
+                      value={tn}
+                      onChange={(e) =>
+                        setTrackingInput((prev) => prev.map((v, i) => (i === bi ? e.target.value : v)))
+                      }
+                      placeholder={trackingPrompt.boxCount > 1 ? `박스 ${bi + 1} 송장번호` : "송장번호"}
+                      autoFocus={bi === 0}
+                      onKeyDown={(e) => { if (e.key === "Enter" && trackingComplete) confirmTracking(); }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
             <div className="b2b-modal-foot">
               <span />
