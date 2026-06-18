@@ -30,6 +30,47 @@ import { computeOrderMargin, seasonForDate, suggestBoxes, SEASON_MONTHS } from "
 
 type Mode = "create" | "edit";
 
+// 발주 상세 → 복제용 폼 데이터.
+//  업체·라인·수령인·박스수·메모는 복사, 날짜·상태·송장·발송일정은 초기화(건마다 다름).
+function buildCloneData(
+  o: Order & { items: OrderItem[]; shipments: Shipment[] },
+  todayIso: string
+): OrderInput {
+  return {
+    company_id: o.company_id,
+    order_date: todayIso,
+    production_date: "",
+    ship_date: "",
+    status: "발주확인/생산대기",
+    payment_status: "미입금",
+    tax_invoice_status: "미발행",
+    notes: o.notes ?? "",
+    box_count: o.box_count ?? 1,
+    tracking_no: "",
+    items: (o.items || []).map((it, idx) => ({
+      product_id: it.product_id,
+      product_name: it.product_name,
+      option_label: it.option_label ?? "",
+      spec: it.spec ?? "",
+      qty: it.qty,
+      unit_price: it.unit_price,
+      cost_at_order: it.cost_at_order ?? "",
+      tax_type: it.tax_type,
+      sort_order: idx,
+    })),
+    recipient: o.shipments?.[0]
+      ? {
+          recipient_name: o.shipments[0].recipient_name ?? "",
+          recipient_phone: o.shipments[0].recipient_phone ?? "",
+          address: o.shipments[0].address ?? "",
+          delivery_memo: o.shipments[0].delivery_memo ?? "",
+          courier: "",
+        }
+      : { ...EMPTY_RECIPIENT },
+    shipments: [],
+  };
+}
+
 export default function OrderForm({
   mode,
   orderId,
@@ -48,6 +89,9 @@ export default function OrderForm({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // 거래처 선택 시 "최근 발주 복제?" 프롬프트 (신규 등록에서만)
+  const [clonePrompt, setClonePrompt] = useState<{ orderId: string; summary: string } | null>(null);
+  const [cloning, setCloning] = useState(false);
 
   // ─────────────────────────────────────────────
   // 초기 데이터 로드
@@ -131,41 +175,7 @@ export default function OrderForm({
           const orderJson = await orderRes.json();
           if (!orderJson.ok) throw new Error(orderJson.error || "복제할 발주 조회 실패");
           const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
-          setData({
-            // id 없음 (새 발주)
-            company_id: o.company_id,
-            order_date: todayIso,        // 발주일은 오늘
-            production_date: "",         // 일정은 비움
-            ship_date: "",
-            status: "발주확인/생산대기", // 상태 초기화
-            payment_status: "미입금",
-            tax_invoice_status: "미발행",
-            notes: o.notes ?? "",
-            box_count: o.box_count ?? 1,
-            tracking_no: "",   // 송장번호는 복제 안 함 (건마다 다름)
-            items: (o.items || []).map((it, idx) => ({
-              // id 없음 (새 라인) — 원본 라인 id 는 복사하지 않음
-              product_id: it.product_id,
-              product_name: it.product_name,
-              option_label: it.option_label ?? "",
-              spec: it.spec ?? "",
-              qty: it.qty,
-              unit_price: it.unit_price,
-              cost_at_order: it.cost_at_order ?? "",
-              tax_type: it.tax_type,
-              sort_order: idx,
-            })),
-            recipient: o.shipments?.[0]
-              ? {
-                  recipient_name: o.shipments[0].recipient_name ?? "",
-                  recipient_phone: o.shipments[0].recipient_phone ?? "",
-                  address: o.shipments[0].address ?? "",
-                  delivery_memo: o.shipments[0].delivery_memo ?? "",
-                  courier: "",          // 택배사 정보는 비움 (건마다 다름)
-                }
-              : { ...EMPTY_RECIPIENT },
-            shipments: [],   // 발송 일정은 복제 안 함 (건마다 다름)
-          });
+          setData(buildCloneData(o, todayIso));
         } else {
           // create 모드: 발주일 기본값을 오늘로
           const t = new Date();
@@ -276,6 +286,47 @@ export default function OrderForm({
         },
       };
     });
+    // 신규 등록 + 업체 선택 시: 이 업체의 최근 발주가 있으면 "복제?" 프롬프트
+    setClonePrompt(null);
+    if (mode === "create" && companyId) void checkRecentOrder(companyId);
+  }
+
+  // 선택한 업체의 가장 최근 발주를 찾아 복제 프롬프트 띄움
+  async function checkRecentOrder(companyId: string) {
+    try {
+      const res = await fetch(`/api/b2b/orders?company_id=${companyId}`, { cache: "no-store" });
+      const j = await res.json();
+      if (!j.ok) return;
+      const latest = (j.orders || [])[0]; // 목록은 발주일·생성순 내림차순
+      if (!latest) return;
+      const its = latest.items || [];
+      const head = its.slice(0, 2).map((it: { product_name: string; spec: string | null; qty: number }) =>
+        `${it.product_name}${it.spec ? ` ${it.spec}` : ""}×${formatQty(it.qty)}`).join(", ");
+      const more = its.length > 2 ? ` 외 ${its.length - 2}종` : "";
+      const summary = `${latest.order_no} · ${head}${more} · ${formatMoney(latest.total)}원`;
+      setClonePrompt({ orderId: latest.id, summary });
+    } catch {
+      // 조회 실패는 조용히 무시 — 그냥 빈 폼으로 진행
+    }
+  }
+
+  // "복제하기" — 최근 발주 상세를 불러와 폼을 채움
+  async function applyRecentClone() {
+    if (!clonePrompt) return;
+    setCloning(true);
+    try {
+      const res = await fetch(`/api/b2b/orders/${clonePrompt.orderId}`, { cache: "no-store" });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || "복제할 발주 조회 실패");
+      const o = j.order as Order & { items: OrderItem[]; shipments: Shipment[] };
+      const t = new Date();
+      const todayIso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+      setData(buildCloneData(o, todayIso));
+      setClonePrompt(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "복제 중 오류");
+    }
+    setCloning(false);
   }
 
   // ── 발송 일정 핸들러 ──
@@ -1004,6 +1055,37 @@ export default function OrderForm({
           </div>
         </div>
       </div>
+
+      {/* 거래처 선택 시: 최근 발주 복제 프롬프트 */}
+      {clonePrompt && (
+        <div className="b2b-modal-backdrop" onClick={() => setClonePrompt(null)}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="b2b-modal-head">
+              <h2 className="b2b-modal-title">최근 발주 복제</h2>
+              <button className="b2b-modal-close" onClick={() => setClonePrompt(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <div style={{ fontSize: 13.5, color: "var(--sm-text-mid)", marginBottom: 10 }}>
+                이 업체의 <strong>가장 최근 발주</strong>를 그대로 불러올까요? (날짜·상태·송장은 새로 시작)
+              </div>
+              <div style={{ fontSize: 13, padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8 }}>
+                {clonePrompt.summary}
+              </div>
+            </div>
+            <div className="b2b-modal-foot">
+              <span />
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setClonePrompt(null)} disabled={cloning}>
+                  아니요
+                </button>
+                <button className="b2b-btn-primary" onClick={applyRecentClone} disabled={cloning}>
+                  {cloning ? "불러오는 중..." : "복제하기"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
