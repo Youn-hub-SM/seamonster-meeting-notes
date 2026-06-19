@@ -36,7 +36,7 @@ export default function CompaniesPage() {
     const q = search.trim().toLowerCase();
     if (!q) return companies;
     return companies.filter((c) => {
-      return [c.name, c.contact_name, c.contact_phone, c.biz_no, c.address]
+      return [c.name, c.ceo_name, c.contact_name, c.contact_phone, c.contact_email, c.biz_no, c.address, c.payment_terms, c.notes]
         .filter(Boolean)
         .some((v) => v!.toLowerCase().includes(q));
     });
@@ -122,7 +122,7 @@ export default function CompaniesPage() {
           <input
             type="text"
             className="b2b-search"
-            placeholder="업체명·담당자·연락처·사업자번호·주소 검색"
+            placeholder="업체명·대표자·담당자·연락처·이메일·사업자번호·주소·결제조건·메모 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
