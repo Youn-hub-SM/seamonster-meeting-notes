@@ -19,9 +19,9 @@
 }
 
 .b2b-subnav-inner {
-  max-width: 1600px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 32px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -162,7 +162,7 @@
    메인 컨테이너
    ───────────────────────────────────────────── */
 .b2b-main {
-  max-width: 1440px;
+  max-width: 1800px;
   margin: 0 auto;
   padding: 40px 32px 96px;
 }
