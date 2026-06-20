@@ -1100,12 +1100,15 @@ a.b2b-history-item:hover {
   text-align: left;
 }
 
-/* iOS Safari: input[type=date] 값이 가운데로 뜨는 것을 왼쪽 정렬로 */
+/* iOS Safari: input[type=date] 값이 가운데로 뜨는 것을 왼쪽 정렬로 +
+   내부 값 요소가 고유 폭으로 칸을 밀어내지 않도록 줄어들게 (컨트롤 외형은 유지) */
 .b2b-input[type="date"]::-webkit-date-and-time-value {
   text-align: left;
+  min-width: 0;
 }
 .b2b-input[type="date"]::-webkit-datetime-edit {
   text-align: left;
+  min-width: 0;
 }
 
 .b2b-input:focus,
@@ -1932,13 +1935,6 @@ a.b2b-history-item:hover {
   }
   .b2b-brand {
     font-size: 17px;
-  }
-
-  /* iOS Safari: input[type=date] 가 width:100% 를 무시하고 칸 밖으로 넘치는 문제 —
-     기본 외형 제거로 다른 입력칸(업체·메모)과 동일 폭으로 맞춤 */
-  .b2b-input[type="date"] {
-    -webkit-appearance: none;
-    appearance: none;
   }
   .b2b-appmenu {
     left: 10px;
