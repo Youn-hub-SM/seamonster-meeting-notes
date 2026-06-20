@@ -787,10 +787,10 @@ a.b2b-history-item:hover {
   white-space: nowrap;
 }
 
-/* 인라인 상태 select 컬럼도 좀 더 컴팩트하게 */
+/* 인라인 상태 select 컬럼 — 헤더와 패딩 맞춤 */
 .b2b-table td:has(> .b2b-status-select) {
-  padding-left: 10px;
-  padding-right: 10px;
+  padding-left: 16px;
+  padding-right: 8px;
 }
 
 .b2b-table th {
@@ -915,13 +915,14 @@ a.b2b-history-item:hover {
 .b2b-parent-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: #EEF2F6;
   color: #475569;
   border: 1px solid #dbe2ea;
-  border-radius: 8px;
+  border-radius: var(--sm-radius-pill);
   padding: 4px 10px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -1118,8 +1119,9 @@ a.b2b-history-item:hover {
 .b2b-urgency-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: 4px 10px;
   border-radius: var(--sm-radius-pill);
   font-size: 12px;
   font-weight: 700;
@@ -1794,9 +1796,12 @@ a.b2b-history-item:hover {
 }
 
 .b2b-status-pill {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
   font-weight: 700;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: var(--sm-radius-pill);
   white-space: nowrap;
 }
