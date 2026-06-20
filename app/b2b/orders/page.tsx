@@ -784,7 +784,7 @@ export default function OrdersListPage() {
                         <ItemsPreview items={o.items} />
                       </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>
+                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || (!parent ? o.ship_date : "") || "-"}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{parent ? "" : (o.ship_date || "-")}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {formatMoney(o.total)}
@@ -930,7 +930,7 @@ export default function OrdersListPage() {
                       </div>
                       <div className="b2b-order-card-dates">
                         <span><em>발주</em>{o.order_date?.slice(5) || "-"}</span>
-                        <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>
+                        <span><em>생산</em>{(o.production_date || (!parent ? o.ship_date : ""))?.slice(5) || "-"}</span>
                         {!parent && <span><em>발송</em>{o.ship_date?.slice(5) || "-"}</span>}
                       </div>
                       <div className="b2b-order-card-foot">
