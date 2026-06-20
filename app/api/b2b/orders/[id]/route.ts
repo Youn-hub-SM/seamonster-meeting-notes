@@ -153,6 +153,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     // 복수 발송이면 상위발주 상태를 하위 차수들로부터 자동 도출 (화면 미표시, 백엔드 일관성용)
     //  + 발주 박스 수(이익률용)는 발송 차수 박스 수의 합으로 동기화 (차수가 있을 때만)
     const headerPatch: Record<string, unknown> = { ship_date: headerShipDate || null };
+    // 생산일 미입력 + 발송일 존재 → 생산일을 발송일과 동일하게 채움 (생산일이 있으면 건드리지 않음)
+    if (!body.production_date && headerShipDate) headerPatch.production_date = headerShipDate;
     if (derivedStatus) headerPatch.status = derivedStatus;
     if (totalBoxes > 0) headerPatch.box_count = totalBoxes;
     await sb.from("orders").update(headerPatch).eq("id", id);

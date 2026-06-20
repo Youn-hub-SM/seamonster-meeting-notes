@@ -187,6 +187,8 @@ export async function POST(req: NextRequest) {
     const headerShipDate = body.ship_date || earliestShipDate;
     const headerPatch: Record<string, unknown> = {};
     if (headerShipDate) headerPatch.ship_date = headerShipDate;
+    // 생산일 미입력 + 발송일 존재 → 생산일을 발송일과 동일하게 채움 (생산일이 있으면 건드리지 않음)
+    if (!body.production_date && headerShipDate) headerPatch.production_date = headerShipDate;
     if (derivedStatus) headerPatch.status = derivedStatus;
     if (totalBoxes > 0) headerPatch.box_count = totalBoxes;
     if (Object.keys(headerPatch).length > 0) {
