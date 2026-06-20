@@ -775,7 +775,7 @@ export default function OrdersListPage() {
                         ) : null}
                       </td>
                       <RowCell href={`/b2b/orders/${o.id}`} nowrap>
-                        <strong>{o.company_name}</strong>
+                        <span>{o.company_name}</span>
                         <span style={{ display: "block", fontSize: 11, color: "var(--sm-text-light)", marginTop: 2 }}>
                           {o.order_no}{parent ? " · 복수발송" : ""}
                         </span>
@@ -1337,7 +1337,7 @@ function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.45 }}>
       {shown.map((it, i) => (
-        <span key={i} style={{ fontSize: 13.5, whiteSpace: "nowrap" }}>
+        <span key={i} style={{ whiteSpace: "nowrap" }}>
           {it.product_name}
           {it.spec ? <span style={{ color: "var(--sm-text-light)" }}> · {it.spec}</span> : ""}
           <span style={{ color: "var(--sm-text-mid)" }}> ×{it.qty}</span>
