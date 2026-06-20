@@ -98,9 +98,10 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
             ))}
           </div>
 
-          {/* 우측: 사용자 + 로그아웃 */}
+          {/* 우측: 사용자 + 최근 변경 + 로그아웃 */}
           <div className="b2b-nav-right">
             {userName && <span className="b2b-nav-user" title="현재 로그인 사용자">{userName}</span>}
+            <ActivityFeed />
             <button type="button" onClick={handleLogout} className="b2b-subnav-link b2b-logout-btn" title="로그아웃">
               로그아웃
             </button>
@@ -128,10 +129,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
         )}
       </nav>
 
-      <div className="b2b-layout">
-        <main className="b2b-main b2b-main--with-feed">{children}</main>
-        <ActivityFeed />
-      </div>
+      <main className="b2b-main">{children}</main>
     </div>
   );
 }

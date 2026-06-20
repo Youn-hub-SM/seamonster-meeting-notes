@@ -75,7 +75,7 @@
 
 .b2b-brand {
   font-weight: 800;
-  font-size: 17px;
+  font-size: 19px;
   letter-spacing: -0.02em;
   color: var(--sm-orange);
   white-space: nowrap;
@@ -83,7 +83,7 @@
 }
 
 .b2b-nav-user {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 600;
   color: var(--sm-text-mid);
   white-space: nowrap;
@@ -141,7 +141,7 @@
 
 .b2b-subnav-link {
   padding: 16px 16px;
-  font-size: 15px;
+  font-size: 16.5px;
   font-weight: 600;
   color: var(--sm-text-mid);
   border-bottom: 2px solid transparent;
@@ -162,7 +162,7 @@
    메인 컨테이너
    ───────────────────────────────────────────── */
 .b2b-main {
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 40px 32px 96px;
 }
@@ -177,7 +177,7 @@
 }
 
 .b2b-page-title {
-  font-size: 30px;
+  font-size: 33px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--sm-black);
@@ -185,7 +185,7 @@
 
 .b2b-page-subtitle {
   margin-top: 6px;
-  font-size: 15px;
+  font-size: 17px;
   color: var(--sm-text-mid);
 }
 
@@ -505,32 +505,69 @@ a.b2b-history-item:hover {
 }
 
 /* ─────────────────────────────────────────────
-   전역 2단 레이아웃 (좌: 페이지 내용, 우: 활동 피드)
-   /b2b/* 모든 탭에 우측 피드 상시 노출 (로그인 페이지 제외)
+   최근 변경 — 네비 우측 pill + 드롭다운 팝오버
    ───────────────────────────────────────────── */
-.b2b-layout {
-  max-width: 1600px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 285px;
-  align-items: start;
+.b2b-feed-wrap {
+  position: relative;
+  display: inline-flex;
 }
 
-/* 피드와 함께 있을 때의 본문 컬럼 — 자체 max-width/auto 마진 해제하고 그리드 칸을 채움 */
-.b2b-main--with-feed {
-  max-width: none;
-  margin: 0;
+.b2b-feed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-pill);
+  background: var(--sm-white);
+  color: var(--sm-text-mid);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.b2b-feed-pill:hover,
+.b2b-feed-pill.is-open {
+  border-color: var(--sm-orange);
+  color: var(--sm-orange);
 }
 
-/* 우측 활동 피드 */
-.b2b-feed {
+.b2b-feed-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--sm-orange);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.b2b-feed-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+/* 드롭다운 팝오버 */
+.b2b-feed-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 62;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 560px);
   background: var(--sm-white);
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  position: sticky;
-  top: 100px; /* 헤더(60) + 서브네비(~40) 아래 */
-  max-height: calc(100vh - 120px);
-  margin: 40px 32px 0 0;
+  box-shadow: var(--sm-shadow-card);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -618,20 +655,15 @@ a.b2b-history-item:hover {
   color: var(--sm-text-light);
 }
 
-/* 좁은 화면: 1단으로, 피드는 본문 아래로 (테이블이 전체 폭을 써서 가로 스크롤 방지) */
-@media (max-width: 1400px) {
-  .b2b-layout {
-    /* 1fr 이 아니라 minmax(0,1fr) — 내부의 넓은 테이블이 컬럼을 뷰포트 밖으로
-       밀어내는 것(grid blowout)을 방지. 테이블은 자체 overflow-x 로 스크롤. */
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .b2b-feed {
-    position: static;
-    max-height: none;
-    margin: 0 16px 40px;
-  }
-  .b2b-feed-list {
-    max-height: 420px;
+/* 좁은 화면: 팝오버가 화면 밖으로 나가지 않게 좌우 고정 */
+@media (max-width: 600px) {
+  .b2b-feed-pop {
+    position: fixed;
+    top: 52px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-width: none;
   }
 }
 
@@ -642,7 +674,7 @@ a.b2b-history-item:hover {
 .b2b-btn-secondary,
 .b2b-btn-danger {
   font-family: inherit;
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 600;
   padding: 11px 18px;
   border-radius: var(--sm-radius-btn);
@@ -757,7 +789,7 @@ a.b2b-history-item:hover {
 .b2b-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .b2b-table th,
@@ -783,7 +815,7 @@ a.b2b-history-item:hover {
 .b2b-table td.b2b-col-date .b2b-row-link {
   padding-left: 8px !important;
   padding-right: 8px !important;
-  font-size: 12.5px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -796,7 +828,7 @@ a.b2b-history-item:hover {
 .b2b-table th {
   font-weight: 500;
   color: #6b7280;
-  font-size: 13px;
+  font-size: 15px;
   text-transform: none;
   letter-spacing: 0;
   background: transparent;
@@ -830,7 +862,7 @@ a.b2b-history-item:hover {
   width: 100%;
   max-width: 360px;
   padding: 11px 16px;
-  font-size: 15px;
+  font-size: 16px;
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
   background: var(--sm-white);
@@ -1050,7 +1082,7 @@ a.b2b-history-item:hover {
 .b2b-textarea,
 .b2b-select {
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px;
   padding: 11px 14px;
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
