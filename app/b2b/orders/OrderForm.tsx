@@ -730,9 +730,9 @@ export default function OrderForm({
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {data.shipments.map((sch, si) => (
-              <div key={si} style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: 14, background: "var(--sm-bg)" }}>
+              <div key={si} style={{ borderTop: "1px solid var(--sm-border)", paddingTop: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <strong style={{ fontSize: 14 }}>발송 {si + 1}</strong>
+                  <strong style={{ fontSize: 14, color: "var(--sm-text-mid)" }}>발송 {si + 1}</strong>
                   <button type="button" className="b2b-icon-btn is-danger" onClick={() => removeSchedule(si)} title="발송 일정 삭제">✕</button>
                 </div>
                 <div className="b2b-field-row">

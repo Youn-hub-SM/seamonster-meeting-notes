@@ -815,7 +815,7 @@ a.b2b-history-item:hover {
 
 .b2b-table td.num,
 .b2b-table th.num {
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2176,11 +2176,9 @@ a.b2b-history-item:hover {
   }
   .b2b-items-table tr {
     position: relative;
-    border: 1px solid var(--sm-border);
-    border-radius: 12px;
-    background: var(--sm-bg);
-    padding: 12px 12px 6px;
-    margin-bottom: 12px;
+    border-bottom: 1px solid var(--sm-border);
+    padding: 14px 0 8px;
+    margin-bottom: 0;
   }
   .b2b-items-table td {
     border: none;
