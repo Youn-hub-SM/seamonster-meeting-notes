@@ -10,7 +10,7 @@ import ActivityFeed from "./ActivityFeed";
 const APP_MENU = [
   { href: "/", label: "회의 정리" },
   { href: "/correct", label: "문장 교정" },
-  { href: "/cs", label: "CS 답변" },
+  { href: "/cs", label: "CS 코치" },
   { href: "/utm", label: "UTM 빌더" },
   { href: "/subscription", label: "정기배송 분석" },
   { href: "/b2b", label: "B2B" },

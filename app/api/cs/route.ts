@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateCsReply } from "@/app/lib/cs";
+import { generateCsAdvice } from "@/app/lib/cs";
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await generateCsReply(query.trim());
+    const result = await generateCsAdvice(query.trim());
     return NextResponse.json(result);
   } catch (error) {
     console.error("CS error:", error);

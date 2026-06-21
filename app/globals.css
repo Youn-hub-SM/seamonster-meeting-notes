@@ -968,11 +968,11 @@ a {
 }
 
 .cs-reply {
-  background: var(--sm-white);
-  border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  background: var(--sm-bg-warm);
+  border: 1px solid var(--sm-orange-border);
+  border-radius: 12px;
   padding: 20px;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.8;
   color: var(--sm-dark);
   white-space: pre-wrap;
@@ -988,10 +988,67 @@ a {
   border: 1px dashed var(--sm-border);
   border-radius: var(--sm-radius);
   padding: 16px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--sm-text-mid);
   white-space: pre-wrap;
+}
+
+/* CS 코치 — 조언 블록 */
+.cs-advice {
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--sm-dark);
+  white-space: pre-wrap;
+}
+
+.cs-advice-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cs-advice-list li {
+  position: relative;
+  padding-left: 22px;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--sm-dark);
+}
+
+.cs-advice-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--sm-orange);
+  font-weight: 700;
+}
+
+.cs-caution-list li::before {
+  content: "⚠";
+  color: #c92a2a;
+}
+
+.cs-reply-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cs-reply-hint {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sm-text-light);
+}
+
+.cs-copy-sm {
+  padding: 6px 14px;
+  font-size: 13.5px;
+  flex-shrink: 0;
 }
 
 /* ─── Orders (도매 발주) ─── */
