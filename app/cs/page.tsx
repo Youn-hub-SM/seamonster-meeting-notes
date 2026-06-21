@@ -86,10 +86,18 @@ export default function CsPage() {
           </div>
         )}
 
-        {/* ② 응대 방향·톤 */}
+        {/* ② 적용 매뉴얼·기준 (= 지금 매뉴얼은 이렇다) */}
+        {result.policy && (
+          <div className="cs-section">
+            <h2 className="detail-section-title">② 지금 매뉴얼은</h2>
+            <div className="cs-policy">{result.policy}</div>
+          </div>
+        )}
+
+        {/* ③ 이렇게 행동하세요 (= 그러니 너는 이렇게) */}
         {result.approach.length > 0 && (
           <div className="cs-section">
-            <h2 className="detail-section-title">② 이렇게 응대하세요</h2>
+            <h2 className="detail-section-title">③ 그러니 이렇게 행동하세요</h2>
             <ul className="cs-advice-list">
               {result.approach.map((a, i) => (
                 <li key={i}>{a}</li>
@@ -98,11 +106,11 @@ export default function CsPage() {
           </div>
         )}
 
-        {/* ③ 추천 답변 초안 (복붙용) */}
+        {/* ④ 추천 답변 초안 (복붙용) */}
         <div className="cs-section">
           <div className="cs-reply-head">
             <h2 className="detail-section-title" style={{ borderBottom: "none", marginBottom: 0, paddingBottom: 0 }}>
-              ③ 추천 답변 초안 <span className="cs-reply-hint">— 고객에게 보낼 문장</span>
+              ④ 추천 답변 초안 <span className="cs-reply-hint">— 고객에게 보낼 문장</span>
             </h2>
             <button className="btn-secondary cs-copy-sm" onClick={handleCopy}>
               {copied ? "복사됨" : "복사"}
@@ -113,23 +121,15 @@ export default function CsPage() {
           </div>
         </div>
 
-        {/* ④ 주의·리스크 */}
+        {/* ⑤ 주의·리스크 */}
         {result.cautions.length > 0 && (
           <div className="cs-section">
-            <h2 className="detail-section-title">④ 주의 · 리스크</h2>
+            <h2 className="detail-section-title">⑤ 주의 · 리스크</h2>
             <ul className="cs-advice-list cs-caution-list">
               {result.cautions.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}
             </ul>
-          </div>
-        )}
-
-        {/* ⑤ 적용 정책·보상 기준 */}
-        {result.policy && (
-          <div className="cs-section">
-            <h2 className="detail-section-title">⑤ 적용 정책 · 보상 기준</h2>
-            <div className="cs-internal">{result.policy}</div>
           </div>
         )}
 
@@ -149,7 +149,7 @@ export default function CsPage() {
         <div>
           <h1 className="page-title">CS 응대 코치</h1>
           <p className="page-subtitle" style={{ marginBottom: 0 }}>
-            고객 문의를 입력하면 어떻게 응대하면 좋을지 조언하고, 바로 쓸 수 있는 답변 초안까지 제안합니다
+            지금 상황을 적으면 — 매뉴얼은 이렇고, 그러니 어떻게 행동하면 되는지 코치합니다 (답변 초안까지)
           </p>
         </div>
         <Link href="/cs/manual" className="btn-secondary csm-back">매뉴얼 관리</Link>
@@ -158,14 +158,14 @@ export default function CsPage() {
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label className="form-label" htmlFor="query">고객 문의 내용</label>
+          <label className="form-label" htmlFor="query">상황 / 고객 문의</label>
           <textarea
             id="query"
             className="form-textarea"
             style={{ minHeight: 180 }}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`고객 문의 내용을 붙여넣으세요.\n\n예시:\n주문한 대구순살에서 가시가 나왔어요. 아이가 먹다가 발견했는데 너무 놀랐습니다.`}
+            placeholder={`고객 문의를 붙여넣거나, 지금 상황을 직접 설명하세요.\n\n예시\n· 고객이 2번째로 녹았다고 연락왔어. 어떻게 해야 해?\n· 주문한 대구순살에서 가시가 나왔다고 해요.`}
             required
           />
         </div>

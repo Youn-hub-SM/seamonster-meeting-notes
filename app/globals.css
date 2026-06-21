@@ -1002,6 +1002,18 @@ a {
   white-space: pre-wrap;
 }
 
+/* '지금 매뉴얼은' — 근거 블록 (왼쪽 강조선) */
+.cs-policy {
+  background: var(--sm-bg);
+  border-left: 3px solid var(--sm-orange);
+  border-radius: var(--sm-radius);
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--sm-text-mid);
+  white-space: pre-wrap;
+}
+
 .cs-advice-list {
   list-style: none;
   display: flex;
