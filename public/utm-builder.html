@@ -354,6 +354,23 @@
     line-height: 1.6;
   }
 
+  /* 대량 업로드 박스 */
+  .bulk-box {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .bulk-box code {
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--card);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
   /* 기존 시트 기록 가져오기 박스 */
   .import-box {
     border: 1px solid var(--border);
@@ -876,6 +893,23 @@
 
     <!-- Keywords Tab -->
     <div class="tab-content" id="tab-keywords">
+      <!-- 대량 업로드 (양식 CSV) -->
+      <div class="bulk-box">
+        <div class="card-title" style="margin-bottom:6px;">양식으로 대량 입력</div>
+        <p class="help-text" style="margin-top:0;margin-bottom:0;">
+          <strong>양식 다운로드</strong>로 현재 설정이 채워진 CSV를 받아 엑셀에서 편집한 뒤 <strong>파일 업로드</strong> 하세요.
+          랜딩페이지 즐겨찾기와 소스·매체를 한 번에 등록합니다. 열: <code>구분</code>(landing/source) · <code>이름또는소스</code> · <code>URL또는매체</code>
+          (소스·매체는 한 줄에 매체 1개)
+        </p>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-outline btn-sm" onclick="downloadDataTemplate()">양식 다운로드 (CSV)</button>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('bulkFile').click()">파일 업로드</button>
+          <input type="file" id="bulkFile" accept=".csv,text/csv" style="display:none" onchange="uploadDataFile(event)">
+          <span id="bulkStatus" class="help-text" style="align-self:center;margin-top:0;"></span>
+        </div>
+      </div>
+      <div style="height:1px;background:var(--border);margin:20px 0;"></div>
+
       <!-- 랜딩페이지 관리 -->
       <div style="margin-bottom:24px;">
         <div class="card-title" style="margin-bottom:12px;">랜딩페이지 관리</div>
@@ -1591,6 +1625,113 @@ function resetKeywords() {
   API.saveSettings({ sourceMediumMap: SOURCE_MEDIUM_MAP }).catch(() => showToast('초기화 저장 실패'));
   renderKeywords();
   showToast('기본값으로 초기화되었습니다');
+}
+
+// ── 고정 데이터 양식(CSV) 다운로드 / 대량 업로드 ──
+// 양식: 헤더 [구분, 이름또는소스, URL또는매체]
+//   landing,<이름>,<URL>          → 랜딩페이지 즐겨찾기
+//   source,<소스>,<매체>          → 소스·매체 (한 줄에 매체 1개, 매체 비우면 소스만 생성)
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function downloadDataTemplate() {
+  const BOM = '﻿';
+  const lines = ['구분,이름또는소스,URL또는매체'];
+  loadUrlPresets().forEach(p => lines.push(['landing', p.label, p.value].map(csvCell).join(',')));
+  Object.keys(SOURCE_MEDIUM_MAP).forEach(src => {
+    const meds = SOURCE_MEDIUM_MAP[src] || [];
+    if (!meds.length) lines.push(['source', src, ''].map(csvCell).join(','));
+    else meds.forEach(m => lines.push(['source', src, m].map(csvCell).join(',')));
+  });
+  const blob = new Blob([BOM + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `씨몬스터_UTM_고정데이터_양식_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// 따옴표(") 처리 포함 CSV 파서 → 행(셀 배열) 배열
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cur = '', inQ = false;
+  text = String(text || '').replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else if (c === '\r') { /* skip */ }
+    else cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+function uploadDataFile(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = ''; // 같은 파일 재선택 가능하게
+  if (!file) return;
+  const statusEl = document.getElementById('bulkStatus');
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const rows = parseCsv(reader.result);
+      const presets = [];
+      const map = {};
+      const seenUrl = new Set();
+      let hasLanding = false, hasSource = false;
+      rows.forEach(cells => {
+        const type = (cells[0] || '').trim().toLowerCase();
+        const a = (cells[1] || '').trim();
+        const b = (cells[2] || '').trim();
+        if (!type || type === '구분') return; // 헤더/빈 줄
+        if (type === 'landing' || type === '랜딩페이지') {
+          if (!b) return;
+          hasLanding = true;
+          if (!seenUrl.has(b)) { seenUrl.add(b); presets.push({ label: a || b, value: b }); }
+        } else if (type === 'source' || type === '소스' || type === '소스매체') {
+          if (!a) return;
+          hasSource = true;
+          if (!map[a]) map[a] = [];
+          if (b && !map[a].includes(b)) map[a].push(b);
+        }
+      });
+      if (!hasLanding && !hasSource) {
+        statusEl.textContent = '인식된 데이터가 없습니다. 양식(구분/이름또는소스/URL또는매체)을 확인해주세요.';
+        return;
+      }
+      const summary = [];
+      if (hasLanding) summary.push(`랜딩페이지 ${presets.length}개`);
+      if (hasSource) summary.push(`소스 ${Object.keys(map).length}개`);
+      if (!confirm(`업로드 내용으로 덮어씁니다.\n${summary.join(' · ')}\n계속할까요?`)) {
+        statusEl.textContent = '취소됨';
+        return;
+      }
+      const patch = {};
+      if (hasLanding) patch.presets = presets;
+      if (hasSource) patch.sourceMediumMap = map;
+      statusEl.textContent = '업로드 중…';
+      await API.saveSettings(patch);
+      if (hasLanding) URL_PRESETS = presets;
+      if (hasSource) SOURCE_MEDIUM_MAP = map;
+      renderUrlSelect();
+      renderLandingManager();
+      renderKeywords();
+      statusEl.textContent = `완료: ${summary.join(' · ')} 적용됨`;
+      showToast('대량 업로드 완료');
+    } catch (e) {
+      statusEl.textContent = '업로드 실패: ' + (e.message || '');
+      showToast('업로드 실패');
+    }
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 // ── Source Select 동적 렌더링 ──
