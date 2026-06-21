@@ -129,16 +129,17 @@ a {
   padding: 32px 20px;
 }
 
-/* Page Title */
+/* Page Title — B2B 와 동일 스케일 */
 .page-title {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   margin-bottom: 8px;
 }
 
 .page-subtitle {
   color: var(--sm-text-mid);
-  font-size: 15px;
+  font-size: 16px;
   margin-bottom: 32px;
 }
 
@@ -151,18 +152,16 @@ a {
 
 .meeting-card {
   background: var(--sm-white);
-  border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
   padding: var(--sm-pad);
-  box-shadow: var(--sm-shadow-card);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s;
   cursor: pointer;
   display: block;
 }
 
 .meeting-card:hover {
-  border-color: var(--sm-orange-border);
-  box-shadow: var(--sm-shadow-float);
+  border-color: var(--sm-orange);
 }
 
 .meeting-card-date {
@@ -196,20 +195,21 @@ a {
   color: var(--sm-text-light);
 }
 
-/* Buttons */
+/* Buttons — B2B 툴과 동일한 둥근사각 스타일로 통일 */
 .btn-primary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   background: var(--sm-orange);
   color: var(--sm-white);
-  border: none;
-  border-radius: var(--sm-radius-pill);
-  padding: 12px 28px;
-  font-size: 15px;
-  font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: var(--sm-radius-btn);
+  padding: 11px 20px;
+  font-size: 15.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.15s;
   font-family: inherit;
 }
 
@@ -225,41 +225,44 @@ a {
 .btn-secondary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   background: var(--sm-white);
-  color: var(--sm-black);
+  color: var(--sm-dark);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-pill);
-  padding: 10px 24px;
-  font-size: 14px;
+  border-radius: var(--sm-radius-btn);
+  padding: 11px 18px;
+  font-size: 15.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.15s, color 0.15s;
   font-family: inherit;
 }
 
 .btn-secondary:hover {
-  border-color: var(--sm-orange-border);
+  border-color: var(--sm-orange);
+  color: var(--sm-orange);
 }
 
 .btn-danger {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  background: var(--sm-white);
-  color: #e53e3e;
-  border: 1px solid #fed7d7;
-  border-radius: var(--sm-radius-pill);
-  padding: 10px 24px;
-  font-size: 14px;
+  background: transparent;
+  color: #c92a2a;
+  border: 1px solid transparent;
+  border-radius: var(--sm-radius-btn);
+  padding: 11px 18px;
+  font-size: 15.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.15s;
   font-family: inherit;
 }
 
 .btn-danger:hover {
-  background: #fff5f5;
+  background: #fdf1f1;
 }
 
 /* File upload */
@@ -342,11 +345,11 @@ a {
 .form-textarea {
   width: 100%;
   min-height: 300px;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.6;
   resize: vertical;
   transition: border-color 0.2s;
@@ -375,8 +378,9 @@ a {
 }
 
 .detail-title {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   line-height: 1.3;
   margin-bottom: 16px;
 }
