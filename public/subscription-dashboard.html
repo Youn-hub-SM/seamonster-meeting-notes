@@ -8,19 +8,26 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 <style>
   :root {
+    /* B2B 매니저(globals.css)와 동일한 디자인 토큰 */
     --primary: #F15A30;
     --primary-dark: #D94E26;
-    --primary-light: #fff1ec;
-    --bg: #f5f6f7;
-    --card: #ffffff;
-    --text: #222;
-    --text-sub: #888;
-    --border: #ebebeb;
-    --success: #2E7D32;
+    --primary-light: rgba(241, 90, 48, 0.06);
+    --warm: #FFF5F0;
+    --bg: #FAFAFA;
+    --card: #FFFFFF;
+    --text: #1A1A1A;
+    --text-sub: #666666;
+    --text-light: #999999;
+    --border: #EEEEEE;
+    --success: #22863a;
     --warning: #ED8936;
-    --danger: #c0392b;
+    --danger: #c92a2a;
     --info: #2563eb;
-    --radius: 10px;
+    --radius: 8px;
+    --radius-card: 16px;
+    --radius-btn: 12px;
+    --container: 1800px;
+    --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -61,14 +68,15 @@
   .info-line { color: var(--text-sub); font-size: 12px; margin-top: 2px; }
   .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .btn {
-    padding: 7px 13px;
-    border-radius: 7px;
+    padding: 10px 18px;
+    border-radius: var(--radius-btn);
     border: 1px solid var(--border);
     background: #fff;
     color: var(--text);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
   }
   .btn:hover { background: #fafafa; }
   .btn-primary {
@@ -81,7 +89,48 @@
   .btn-ghost:hover { color: var(--text); background: #fafafa; }
   .btn-sm { padding: 4px 10px; font-size: 12px; }
 
-  .main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+  .main { max-width: var(--container); margin: 0 auto; padding: 40px 32px 80px; }
+
+  /* 페이지 헤더 — 회의 정리·교정·CS 등 다른 탭과 동일(globals .page-title) */
+  .page-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+  }
+  .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; }
+  .page-subtitle { color: var(--text-sub); font-size: 16px; margin-bottom: 6px; }
+  .page-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; padding: 4px 12px;
+    background: var(--primary-light); color: var(--primary-dark);
+    border-radius: 50px; font-size: 12px; font-weight: 700;
+  }
+
+  /* 분석 히스토리(추세) */
+  .history-empty { font-size: 14px; color: var(--text-sub); padding: 16px 4px; }
+  .history-chart-wrap { margin-bottom: 16px; height: 280px; position: relative; }
+  .history-table-wrap { overflow-x: auto; }
+  .history-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .history-table th {
+    text-align: left; padding: 10px 12px; background: var(--bg);
+    border-bottom: 1px solid var(--border); color: var(--text-sub);
+    font-size: 13px; font-weight: 700; white-space: nowrap;
+  }
+  .history-table th.num, .history-table td.num { text-align: left; }
+  .history-table td {
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .history-table tr:hover td { background: var(--primary-light); }
+  .history-del {
+    background: none; border: none; color: var(--danger);
+    font-size: 13px; cursor: pointer; text-decoration: underline; font-family: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .main { padding: 18px 14px 64px; }
+    .page-title { font-size: 24px; }
+    .page-subtitle { font-size: 15px; }
+  }
 
   /* Empty */
   .empty {
@@ -171,7 +220,8 @@
   /* Sections */
   .card {
     background: #fff; border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+    border-radius: var(--radius-card); padding: 20px; margin-bottom: 16px;
+    box-shadow: var(--shadow-card);
   }
   .card-head {
     display: flex; align-items: center; justify-content: space-between;
@@ -429,21 +479,47 @@
 </style>
 </head>
 <body>
-<div class="top">
-  <div class="top-inner">
-    <div>
-      <span class="top-title">정기배송 1회성 분석<span class="badge" id="dataBadge">데이터 없음</span></span>
+<div class="main">
+
+  <div class="page-head">
+    <div class="page-head-text">
+      <h1 class="page-title">정기배송 분석</h1>
+      <p class="page-subtitle">정기배송 신청 CSV를 분석하고, 결과(KPI)를 시계열로 누적해 추세를 관찰합니다</p>
       <div class="info-line" id="dataInfo">CSV 파일을 업로드하면 분석이 시작됩니다.</div>
     </div>
-    <div class="top-actions">
+    <div class="page-head-actions">
+      <span class="badge" id="dataBadge">데이터 없음</span>
       <input type="file" id="fileInput" accept=".csv" style="display:none">
       <button class="btn btn-primary" id="uploadBtn">CSV 업로드</button>
       <button class="btn btn-ghost" id="resetBtn" style="display:none">초기화</button>
     </div>
   </div>
-</div>
 
-<div class="main">
+  <!-- 분석 히스토리 (추세) — CSV 업로드 없이도 항상 표시 -->
+  <section class="card" id="historySection">
+    <div class="card-head">
+      <div>
+        <div class="card-title">분석 히스토리 · 추세</div>
+        <div class="card-sub">저장된 결과 스냅샷의 시계열 추이 — 관찰·인사이트용 (개인정보 미포함)</div>
+      </div>
+      <button class="btn btn-sm" id="historyRefreshBtn">새로고침</button>
+    </div>
+    <div class="history-empty" id="historyEmpty">불러오는 중…</div>
+    <div class="history-chart-wrap" id="historyChartWrap" style="display:none">
+      <canvas id="historyChart" height="110"></canvas>
+    </div>
+    <div class="history-table-wrap" id="historyTableWrap" style="display:none">
+      <table class="history-table">
+        <thead><tr>
+          <th>데이터 기준일</th><th class="num">활성</th><th class="num">일시정지</th>
+          <th class="num">결제도달</th><th class="num">3회잔존</th><th class="num">4회잔존</th>
+          <th class="num">평균중량</th><th class="num">해지(건/명)</th><th>저장시각</th><th></th>
+        </tr></thead>
+        <tbody id="historyTbody"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="empty" id="emptyState">
     <h2>정기배송 CSV를 업로드해주세요</h2>
     <p>카페24 어드민에서 다운로드한 정기배송 신청 CSV를 끌어다 놓거나 위의 <strong>CSV 업로드</strong> 버튼을 누르세요.</p>
@@ -677,30 +753,12 @@
       </div>
       <div class="snapshot-preview" id="snapshotPreview"></div>
       <div class="snapshot-actions">
-        <button class="btn btn-primary" id="copySnapshotBtn">📋 TSV 복사 (구글시트에 붙여넣기)</button>
-        <button class="btn" id="downloadJsonBtn">💾 JSON 다운로드</button>
+        <button class="btn btn-primary" id="saveSupabaseBtn">💾 Supabase에 저장</button>
+        <button class="btn" id="copySnapshotBtn">📋 TSV 복사</button>
+        <button class="btn" id="downloadJsonBtn">JSON 다운로드</button>
+        <span class="snapshot-status" id="snapshotStatus"></span>
       </div>
-      <details class="snapshot-advanced" id="snapshotAdvanced">
-        <summary>고급 : 구글시트로 자동 저장 (Apps Script 1회 셋업)</summary>
-        <div class="snapshot-sheet-row">
-          <input type="text" id="snapshotUrl" placeholder="Apps Script Web App URL (예: https://script.google.com/...)">
-          <button class="btn btn-primary" id="saveToSheetBtn">시트로 전송</button>
-        </div>
-        <div class="snapshot-status" id="snapshotStatus"></div>
-        <details class="setup-guide">
-          <summary>📖 Apps Script 셋업 가이드 보기</summary>
-          <ol class="setup-steps">
-            <li>새 구글시트 생성 → 첫 행은 비워둬도 자동으로 헤더가 생성됩니다.</li>
-            <li>메뉴에서 <strong>확장 프로그램 → Apps Script</strong> 클릭.</li>
-            <li>기본 코드 모두 지우고 아래 코드 붙여넣기.</li>
-            <li>저장(Ctrl+S) 후 <strong>배포 → 새 배포 → 유형: 웹 앱</strong> 선택.</li>
-            <li><strong>액세스 권한 : 모든 사용자</strong>로 설정 후 배포.</li>
-            <li>발급된 <strong>웹 앱 URL</strong>을 위 입력란에 붙여넣고 "시트로 전송" 클릭.</li>
-          </ol>
-          <pre class="apps-script-code" id="appsScriptCode">/* Apps Script 코드 — 아래 박스를 클릭하면 전체 복사됩니다 */</pre>
-          <button class="btn btn-sm" id="copyAppsScriptBtn">📋 Apps Script 코드 복사</button>
-        </details>
-      </details>
+      <div class="card-sub" style="margin-top:8px;">저장하면 위 ‘분석 히스토리’에 점이 추가됩니다. 같은 데이터 기준일은 갱신됩니다. 모든 사용자 공용.</div>
     </section>
 
     <!-- 발송 일정 (보조 도구 — 운영 픽업용) -->
@@ -1784,30 +1842,6 @@ document.getElementById("downloadJsonBtn").onclick = () => {
   URL.revokeObjectURL(url);
 };
 
-// Apps Script로 POST 저장
-document.getElementById("saveToSheetBtn").onclick = async () => {
-  const url = document.getElementById("snapshotUrl").value.trim();
-  if (!url) return flashStatus("error", "Apps Script Web App URL을 먼저 입력하세요.");
-  if (!/^https:\/\/script\.google\.com\//.test(url))
-    return flashStatus("error", "올바른 Apps Script URL이 아닙니다.");
-  if (!orders.length) return flashStatus("error", "먼저 CSV를 업로드하세요.");
-
-  const s = getCurrentSnapshot();
-  flashStatus("", "전송 중...");
-  try {
-    // text/plain 으로 보내면 simple request로 처리되어 CORS preflight 없음
-    await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(s),
-      mode: "no-cors", // Apps Script 응답을 못 읽지만 데이터는 전송됨
-    });
-    flashStatus("success", "✅ 전송 요청 완료. 구글시트에서 확인하세요.");
-  } catch (e) {
-    flashStatus("error", "전송 실패: " + e.message);
-  }
-};
-
 function flashStatus(cls, msg) {
   const el = document.getElementById("snapshotStatus");
   el.textContent = msg;
@@ -1815,49 +1849,132 @@ function flashStatus(cls, msg) {
   if (cls === "success") setTimeout(() => { el.textContent = ""; el.className = "snapshot-status"; }, 5000);
 }
 
-// Apps Script 코드 (사용자에게 제공할 스니펫)
-const APPS_SCRIPT_CODE = `// 씨몬스터 정기배송 분석 스냅샷 수신용 Apps Script
-// 구글시트 > 확장 프로그램 > Apps Script 에 붙여넣고 웹앱 배포
-function doPost(e) {
+// =========================== Supabase 저장 + 분석 히스토리 ===========================
+document.getElementById("saveSupabaseBtn").onclick = async () => {
+  if (!orders.length) return flashStatus("error", "먼저 CSV를 업로드하세요.");
+  const s = getCurrentSnapshot();
+  flashStatus("", "저장 중...");
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    const data = JSON.parse(e.postData.contents);
-    const headers = [
-      '저장 시각', '데이터 기준일', '파일명',
-      '필터 후 신청건', '전체 신청건',
-      '활성 회원', '일시정지 회원',
-      '결제 도달율(D+2)', '3회 잔존율', '4회 잔존율', '1신청당 평균중량(kg)',
-      '누적 해지(건)', '해지 회원', '전체 회원'
-    ];
-    // 헤더가 없으면 첫 줄에 추가
-    if (sheet.getLastRow() === 0) sheet.appendRow(headers);
-    sheet.appendRow([
-      data.savedAt, data.dataDate, data.fileName,
-      data.filteredOrders, data.totalOrders,
-      data.activeMembers, data.pauseMembers,
-      data.firstPayRate, data.reach3Rate, data.reach4Rate, data.avgWeightKg,
-      data.totalCancels, data.lostMembers, data.totalMembers,
-    ]);
-    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}`;
-
-document.getElementById("appsScriptCode").textContent = APPS_SCRIPT_CODE;
-document.getElementById("copyAppsScriptBtn").onclick = async () => {
-  try {
-    await navigator.clipboard.writeText(APPS_SCRIPT_CODE);
-    flashStatus("success", "✅ Apps Script 코드가 복사됐습니다.");
+    const res = await fetch("/api/subscription/snapshots", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataDate: s.dataDate, fileName: s.fileName, snapshot: s }),
+    });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+    flashStatus("success", j.updated ? "✅ 같은 기준일 스냅샷을 갱신했습니다." : "✅ Supabase에 저장했습니다.");
+    loadHistory();
   } catch (e) {
-    flashStatus("error", "복사 실패: " + e.message);
+    flashStatus("error", "저장 실패: " + e.message);
   }
 };
-document.getElementById("appsScriptCode").onclick = () => {
-  document.getElementById("copyAppsScriptBtn").click();
-};
+
+// 문자열(예: "85%", "1.2kg")에서 숫자만 추출
+function numFrom(v) {
+  if (v == null) return null;
+  const m = String(v).replace(/,/g, "").match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+}
+
+let historyChart = null;
+let historyRows = [];
+
+async function loadHistory() {
+  const emptyEl = document.getElementById("historyEmpty");
+  try {
+    const res = await fetch("/api/subscription/snapshots", { cache: "no-store" });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+    historyRows = j.snapshots || [];
+  } catch (e) {
+    emptyEl.style.display = "";
+    emptyEl.textContent = "히스토리를 불러오지 못했습니다: " + e.message;
+    document.getElementById("historyChartWrap").style.display = "none";
+    document.getElementById("historyTableWrap").style.display = "none";
+    return;
+  }
+  renderHistory();
+}
+
+function renderHistory() {
+  const emptyEl = document.getElementById("historyEmpty");
+  const chartWrap = document.getElementById("historyChartWrap");
+  const tableWrap = document.getElementById("historyTableWrap");
+  if (!historyRows.length) {
+    emptyEl.style.display = "";
+    emptyEl.textContent = "아직 저장된 스냅샷이 없습니다. CSV 분석 후 ‘결과 스냅샷 저장 → Supabase에 저장’을 누르면 여기에 쌓입니다.";
+    chartWrap.style.display = "none";
+    tableWrap.style.display = "none";
+    return;
+  }
+  emptyEl.style.display = "none";
+  chartWrap.style.display = "";
+  tableWrap.style.display = "";
+
+  // 표 (최신 먼저)
+  const tbody = document.getElementById("historyTbody");
+  tbody.innerHTML = historyRows.slice().reverse().map(r => {
+    const s = r.snapshot || {};
+    const label = r.data_date || (s.savedAt || "").slice(0, 10) || "-";
+    return `<tr>
+      <td>${escapeHtml(label)}</td>
+      <td class="num">${s.activeMembers ?? "-"}</td>
+      <td class="num">${s.pauseMembers ?? "-"}</td>
+      <td class="num">${escapeHtml(String(s.firstPayRate ?? "-"))}</td>
+      <td class="num">${escapeHtml(String(s.reach3Rate ?? "-"))}</td>
+      <td class="num">${escapeHtml(String(s.reach4Rate ?? "-"))}</td>
+      <td class="num">${escapeHtml(String(s.avgWeightKg ?? "-"))}</td>
+      <td class="num">${s.totalCancels ?? "-"} / ${s.lostMembers ?? "-"}</td>
+      <td>${escapeHtml(String(s.savedAt || r.created_at || "").slice(0, 16))}</td>
+      <td><button class="history-del" onclick="deleteSnapshot('${r.id}')">삭제</button></td>
+    </tr>`;
+  }).join("");
+
+  // 차트 (오래된→최신) — 좌축: 회원 수, 우축: %
+  const labels = historyRows.map(r => r.data_date || (r.snapshot && r.snapshot.savedAt || "").slice(0, 10));
+  const ds = (key) => historyRows.map(r => numFrom(r.snapshot && r.snapshot[key]));
+  const ctx = document.getElementById("historyChart");
+  if (historyChart) historyChart.destroy();
+  historyChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: "활성 회원", data: ds("activeMembers"), borderColor: "#F15A30", backgroundColor: "#F15A30", yAxisID: "y", tension: 0.3 },
+        { label: "일시정지", data: ds("pauseMembers"), borderColor: "#999999", backgroundColor: "#999999", yAxisID: "y", tension: 0.3 },
+        { label: "결제도달 %", data: ds("firstPayRate"), borderColor: "#2563eb", backgroundColor: "#2563eb", yAxisID: "y1", tension: 0.3 },
+        { label: "3회잔존 %", data: ds("reach3Rate"), borderColor: "#22863a", backgroundColor: "#22863a", yAxisID: "y1", tension: 0.3 },
+        { label: "4회잔존 %", data: ds("reach4Rate"), borderColor: "#b08800", backgroundColor: "#b08800", yAxisID: "y1", tension: 0.3 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        y:  { type: "linear", position: "left", title: { display: true, text: "회원 수" }, beginAtZero: true },
+        y1: { type: "linear", position: "right", title: { display: true, text: "%" }, grid: { drawOnChartArea: false }, beginAtZero: true, max: 100 },
+      },
+      plugins: { legend: { position: "bottom" } },
+    },
+  });
+}
+
+async function deleteSnapshot(id) {
+  if (!confirm("이 스냅샷을 삭제할까요? (모든 사용자 공용)")) return;
+  try {
+    const res = await fetch("/api/subscription/snapshots?id=" + encodeURIComponent(id), { method: "DELETE" });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || "삭제 실패");
+    historyRows = historyRows.filter(r => r.id !== id);
+    renderHistory();
+  } catch (e) {
+    alert("삭제 실패: " + e.message);
+  }
+}
+
+document.getElementById("historyRefreshBtn").onclick = loadHistory;
+// 페이지 로드 시 히스토리 표시 (CSV 업로드 없이도)
+loadHistory();
 
 // 분석 갱신 시 미리보기도 갱신 (render() 끝부분에서 호출)
 const _origRender = render;
