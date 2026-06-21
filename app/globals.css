@@ -13,7 +13,7 @@
   --sm-text-light: #999999;
   --sm-bg: #FAFAFA;
   --sm-bg-warm: #FFF5F0;
-  --sm-container: 720px;
+  --sm-container: 1800px;  /* B2B(.b2b-main)와 동일하게 화면 전체 폭 */
   --sm-pad: 24px;
   --sm-radius: 8px;
   --sm-radius-card: 16px;
@@ -48,7 +48,7 @@ a {
 .header {
   background: var(--sm-white);
   border-bottom: 1px solid var(--sm-border);
-  padding: 0 20px;
+  padding: 0 32px;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -122,11 +122,17 @@ a {
   }
 }
 
-/* Container */
+/* Container — B2B(.b2b-main)와 동일한 전체 폭 + 여백 */
 .container {
   max-width: var(--sm-container);
   margin: 0 auto;
-  padding: 32px 20px;
+  padding: 40px 32px 96px;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 18px 14px 64px;
+  }
 }
 
 /* Page Title — B2B 와 동일 스케일 */
