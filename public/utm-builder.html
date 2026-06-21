@@ -1431,7 +1431,13 @@ async function deleteHistoryItem(id) {
 }
 
 async function clearHistory() {
-  if (!confirm('전체 히스토리를 삭제하시겠습니까?')) return;
+  // 공용 데이터라 한 번에 전원 기록이 사라짐 → '삭제' 직접 입력으로 이중 확인
+  const answer = prompt('⚠️ 전체 히스토리를 삭제하면 모든 사용자에게서 사라집니다. 되돌릴 수 없습니다.\n\n계속하려면 아래에 삭제 라고 입력하세요.');
+  if (answer === null) return; // 취소
+  if (answer.trim() !== '삭제') {
+    showToast('“삭제”를 정확히 입력해야 진행됩니다');
+    return;
+  }
   try {
     await API.clearLinks();
     HISTORY = [];
