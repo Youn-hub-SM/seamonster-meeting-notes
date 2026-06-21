@@ -93,7 +93,20 @@
   .container {
     max-width: var(--container);
     margin: 0 auto;
-    padding: 32px;
+    padding: 40px 32px 80px;
+  }
+
+  /* 페이지 제목 — 회의 정리·교정·CS 등 다른 탭과 동일 (globals .page-title) */
+  .page-title {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+  }
+  .page-subtitle {
+    color: var(--text-sub);
+    font-size: 16px;
+    margin-bottom: 32px;
   }
 
   /* 2단 레이아웃 — 좌: 입력폼/미리보기, 우: 히스토리/채널관리 (B2B 매니저처럼 화면 전체 활용) */
@@ -625,7 +638,9 @@
 
   @media (max-width: 768px) {
     .header-inner { padding: 14px 16px; }
-    .container { padding: 16px 14px 48px; }
+    .container { padding: 18px 14px 64px; }
+    .page-title { font-size: 24px; }
+    .page-subtitle { font-size: 15px; margin-bottom: 20px; }
   }
 
   @media (max-width: 640px) {
@@ -642,6 +657,9 @@
 <body>
 
 <div class="container">
+
+  <h1 class="page-title">UTM 빌더</h1>
+  <p class="page-subtitle">채널별 유입을 추적할 UTM 링크를 만들고 관리합니다</p>
 
   <!-- UTM Guide Banner -->
   <div class="guide-banner">
