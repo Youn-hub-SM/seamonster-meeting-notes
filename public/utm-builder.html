@@ -745,7 +745,7 @@
         QR 코드
       </button>
       <button class="btn btn-success" onclick="saveAndSend()" id="saveBtn" disabled>
-        저장 &amp; 시트 전송
+        저장 &amp; 복사
       </button>
       <button class="btn btn-outline" onclick="resetForm()">
         초기화
@@ -758,8 +758,6 @@
     <div class="tabs">
       <button class="tab active" onclick="switchTab('history')">생성 히스토리</button>
       <button class="tab" onclick="switchTab('keywords')">추천 키워드 관리</button>
-      <button class="tab" onclick="switchTab('settings')">구글시트 연동 설정</button>
-      <button class="tab" onclick="switchTab('script')">Apps Script 코드</button>
     </div>
 
     <!-- History Tab -->
@@ -799,39 +797,6 @@
         <button class="btn btn-primary btn-sm" onclick="saveKeywords()">저장</button>
       </div>
     </div>
-
-    <!-- Settings Tab -->
-    <div class="tab-content" id="tab-settings">
-      <div class="form-group">
-        <label>Google Apps Script 웹앱 URL</label>
-        <input type="url" id="gasUrl" placeholder="https://script.google.com/macros/s/..." oninput="saveGasUrl()">
-        <div class="help-text">
-          구글시트에 Apps Script를 배포한 후 웹앱 URL을 여기에 입력하세요.<br>
-          아래 "Apps Script 코드" 탭에서 코드를 복사하여 사용할 수 있습니다.
-        </div>
-      </div>
-      <div class="form-group">
-        <label>연동 상태</label>
-        <div id="gasStatus">
-          <span class="status-dot disconnected"></span> 미설정
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn btn-outline btn-sm" onclick="testGasConnection()">연결 테스트</button>
-      </div>
-    </div>
-
-    <!-- Script Tab -->
-    <div class="tab-content" id="tab-script">
-      <p style="font-size:13px;color:var(--text-sub);margin-bottom:8px;">
-        아래 코드를 구글시트의 <strong>확장 프로그램 → Apps Script</strong>에 붙여넣고,<br>
-        <strong>배포 → 새 배포 → 웹 앱</strong>으로 배포하세요. (액세스: 모든 사용자)
-      </p>
-      <div class="script-block" id="scriptBlock"></div>
-      <div class="btn-row">
-        <button class="btn btn-outline btn-sm" onclick="copyScript()">코드 복사</button>
-      </div>
-    </div>
   </div>
 
 </div>
@@ -864,74 +829,102 @@ const DEFAULT_MEDIUM_MAP = {
   daum:      ['cpc','display','blog'],
 };
 
-// 저장된 커스텀 맵 또는 기본값 로드
-let SOURCE_MEDIUM_MAP = JSON.parse(localStorage.getItem('sm_medium_map') || 'null') || JSON.parse(JSON.stringify(DEFAULT_MEDIUM_MAP));
+// ── 인메모리 상태 (Supabase 백엔드. API 로드 전 기본값으로 시작) ──
+let SOURCE_MEDIUM_MAP = JSON.parse(JSON.stringify(DEFAULT_MEDIUM_MAP));
+let URL_PRESETS = [];
+let HISTORY = [];
 
-// ── Apps Script 코드 ──
-const GAS_CODE = `// Google Apps Script - 씨몬스터 UTM 빌더 연동
-// 이 코드를 구글시트의 Apps Script에 붙여넣으세요.
+// ── Supabase API ──
+const API = {
+  async getSettings() {
+    const r = await fetch('/api/utm/settings', { cache: 'no-store' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '설정 조회 실패');
+    return j;
+  },
+  async saveSettings(patch) {
+    const r = await fetch('/api/utm/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '설정 저장 실패');
+    return j;
+  },
+  async getLinks() {
+    const r = await fetch('/api/utm/links', { cache: 'no-store' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '히스토리 조회 실패');
+    return (j.links || []).map(mapLink);
+  },
+  async addLink(data, dedupe) {
+    const r = await fetch('/api/utm/links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...data, dedupe: !!dedupe }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장 실패');
+    return { link: mapLink(j.link), deduped: !!j.deduped };
+  },
+  async deleteLink(id) {
+    const r = await fetch('/api/utm/links?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '삭제 실패');
+  },
+  async clearLinks() {
+    const r = await fetch('/api/utm/links?all=1', { method: 'DELETE' });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '삭제 실패');
+  },
+};
 
-function doPost(e) {
+// DB 행(snake_case) → 화면 표시용(camelCase). 일시는 KST 로 표기.
+function mapLink(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    date: row.created_at
+      ? new Date(row.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+      : '',
+    baseUrl: row.base_url || '',
+    source: row.source || '',
+    medium: row.medium || '',
+    campaign: row.campaign || '',
+    content: row.content || '',
+    term: row.term || '',
+    note: row.note || '',
+    fullUrl: row.full_url || '',
+  };
+}
+
+// 초기 데이터 로드 (설정 + 히스토리). DEFAULT_URL_PRESETS 는 아래에서 선언되며 호출 시점엔 준비됨.
+async function loadInitialData() {
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    var data = JSON.parse(e.postData.contents);
-
-    // 헤더가 없으면 생성
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow([
-        '생성일시', 'URL', 'Source', 'Medium',
-        'Campaign', 'Content', 'Term', '전체 UTM URL'
-      ]);
-      // 헤더 스타일
-      var headerRange = sheet.getRange(1, 1, 1, 8);
-      headerRange.setFontWeight('bold');
-      headerRange.setBackground('#0066cc');
-      headerRange.setFontColor('#ffffff');
+    const s = await API.getSettings();
+    URL_PRESETS = Array.isArray(s.presets) ? s.presets : JSON.parse(JSON.stringify(DEFAULT_URL_PRESETS));
+    if (s.sourceMediumMap && typeof s.sourceMediumMap === 'object' && Object.keys(s.sourceMediumMap).length) {
+      SOURCE_MEDIUM_MAP = s.sourceMediumMap;
     }
-
-    sheet.appendRow([
-      data.date,
-      data.baseUrl,
-      data.source,
-      data.medium,
-      data.campaign,
-      data.content || '',
-      data.term || '',
-      data.fullUrl
-    ]);
-
-    // 열 너비 자동 조정
-    sheet.autoResizeColumns(1, 8);
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: 'ok' }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+  } catch (e) {
+    URL_PRESETS = JSON.parse(JSON.stringify(DEFAULT_URL_PRESETS));
+    showToast('설정을 불러오지 못했습니다 (기본값 사용)');
+  }
+  try {
+    HISTORY = await API.getLinks();
+  } catch (e) {
+    HISTORY = [];
+    showToast('히스토리를 불러오지 못했습니다');
   }
 }
 
-function doGet(e) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok', message: '씨몬스터 UTM 빌더 연동 활성화됨' }))
-    .setMimeType(ContentService.MimeType.JSON);
-}`;
-
 // ── Init ──
-document.addEventListener('DOMContentLoaded', () => {
-  // Load saved GAS URL
-  const savedGasUrl = localStorage.getItem('sm_gas_url');
-  if (savedGasUrl) {
-    document.getElementById('gasUrl').value = savedGasUrl;
-    updateGasStatus(true);
-  }
-  // Render script block
-  document.getElementById('scriptBlock').textContent = GAS_CODE;
-  // Load history
+document.addEventListener('DOMContentLoaded', async () => {
+  // Supabase 에서 설정 + 히스토리 로드
+  await loadInitialData();
+  // Render
   renderHistory();
-  // Render keywords & source select
   renderKeywords();
   renderUrlSelect();
   renderLandingManager();
@@ -945,11 +938,12 @@ const DEFAULT_URL_PRESETS = [
 ];
 
 function loadUrlPresets() {
-  return JSON.parse(localStorage.getItem('sm_url_presets') || 'null') || JSON.parse(JSON.stringify(DEFAULT_URL_PRESETS));
+  return URL_PRESETS;
 }
 
 function saveUrlPresets(presets) {
-  localStorage.setItem('sm_url_presets', JSON.stringify(presets));
+  URL_PRESETS = presets;
+  API.saveSettings({ presets }).catch(() => showToast('저장 실패 - 다시 시도해주세요'));
 }
 
 function renderUrlSelect() {
@@ -1138,9 +1132,8 @@ function copyUrl() {
   });
 }
 
-function autoSaveHistory() {
+async function autoSaveHistory() {
   const data = {
-    date: new Date().toLocaleString('ko-KR'),
     baseUrl: document.getElementById('baseUrl').value.trim(),
     source: document.getElementById('utmSource').value.trim(),
     medium: document.getElementById('utmMedium').value.trim(),
@@ -1150,14 +1143,19 @@ function autoSaveHistory() {
     note: document.getElementById('utmNote').value.trim(),
     fullUrl: getFullUrl()
   };
-  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
-  // 동일 URL 중복 저장 방지
-  if (history.length && history[0].fullUrl === data.fullUrl) return;
-  history.unshift(data);
-  if (history.length > 100) history.pop();
-  localStorage.setItem('sm_utm_history', JSON.stringify(history));
-  renderHistory();
-  updateCampaignSuggestions();
+  // 직전 항목과 동일 URL이면 중복 저장 방지
+  if (HISTORY.length && HISTORY[0].fullUrl === data.fullUrl) return;
+  try {
+    const { link, deduped } = await API.addLink(data, true);
+    if (!deduped && link) {
+      HISTORY.unshift(link);
+      if (HISTORY.length > 100) HISTORY.pop();
+      renderHistory();
+      updateCampaignSuggestions();
+    }
+  } catch (e) {
+    showToast('히스토리 저장 실패');
+  }
 }
 
 // ── QR Code ──
@@ -1181,10 +1179,9 @@ document.addEventListener('click', e => {
   if (e.target === modal) closeQr();
 });
 
-// ── Save & Send to GAS ──
-function saveAndSend() {
+// ── 저장 & 복사 (Supabase 히스토리에 저장) ──
+async function saveAndSend() {
   const data = {
-    date: new Date().toLocaleString('ko-KR'),
     baseUrl: document.getElementById('baseUrl').value.trim(),
     source: document.getElementById('utmSource').value.trim(),
     medium: document.getElementById('utmMedium').value.trim(),
@@ -1195,38 +1192,26 @@ function saveAndSend() {
     fullUrl: getFullUrl()
   };
 
-  // Save to localStorage
-  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
-  history.unshift(data);
-  if (history.length > 100) history.pop();
-  localStorage.setItem('sm_utm_history', JSON.stringify(history));
-  renderHistory();
-  updateCampaignSuggestions();
-
   // Copy URL
   navigator.clipboard.writeText(data.fullUrl);
 
-  // Send to Google Sheets via Apps Script
-  const gasUrl = localStorage.getItem('sm_gas_url');
-  if (gasUrl) {
-    fetch(gasUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    }).then(() => {
-      showToast('URL 복사 완료 & 구글시트에 전송했습니다!');
-    }).catch(() => {
-      showToast('URL 복사 완료 (구글시트 전송 실패 - URL 확인 필요)');
-    });
-  } else {
-    showToast('URL 복사 완료! (구글시트 연동 미설정)');
+  try {
+    const { link } = await API.addLink(data, false);
+    if (link) {
+      HISTORY.unshift(link);
+      if (HISTORY.length > 100) HISTORY.pop();
+    }
+    renderHistory();
+    updateCampaignSuggestions();
+    showToast('URL 복사 완료 & 히스토리에 저장했습니다!');
+  } catch (e) {
+    showToast('URL 복사 완료 (저장 실패 - 다시 시도해주세요)');
   }
 }
 
 // ── History ──
 function renderHistory() {
-  const all = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  const all = HISTORY;
   const query = (document.getElementById('historySearch')?.value || '').toLowerCase().trim();
   const history = query
     ? all.filter(h => [h.campaign, h.source, h.medium, h.note, h.baseUrl]
@@ -1252,7 +1237,7 @@ function renderHistory() {
       <th>일시</th><th>Source</th><th>Medium</th><th>Campaign</th><th>비고</th><th>URL</th><th>작업</th>
     </tr></thead><tbody>`;
 
-  history.forEach((item, idx) => {
+  history.forEach((item) => {
     html += `<tr>
       <td>${escHtml(item.date)}</td>
       <td>${escHtml(item.source)}</td>
@@ -1261,7 +1246,7 @@ function renderHistory() {
       <td style="color:var(--text-sub)">${escHtml(item.note || '')}</td>
       <td class="url-cell" title="${escHtml(item.fullUrl)}" onclick="navigator.clipboard.writeText('${item.fullUrl.replace(/'/g,"\\'")}');showToast('URL 복사됨')">${escHtml(item.fullUrl)}</td>
       <td class="actions">
-        <button class="btn btn-danger btn-sm" onclick="deleteHistoryItem(${idx})">삭제</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteHistoryItem('${item.id}')">삭제</button>
       </td>
     </tr>`;
   });
@@ -1270,23 +1255,33 @@ function renderHistory() {
   container.innerHTML = html;
 }
 
-function deleteHistoryItem(idx) {
-  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
-  history.splice(idx, 1);
-  localStorage.setItem('sm_utm_history', JSON.stringify(history));
-  renderHistory();
-  showToast('삭제되었습니다');
+async function deleteHistoryItem(id) {
+  try {
+    await API.deleteLink(id);
+    HISTORY = HISTORY.filter(h => h.id !== id);
+    renderHistory();
+    updateCampaignSuggestions();
+    showToast('삭제되었습니다');
+  } catch (e) {
+    showToast('삭제 실패');
+  }
 }
 
-function clearHistory() {
+async function clearHistory() {
   if (!confirm('전체 히스토리를 삭제하시겠습니까?')) return;
-  localStorage.removeItem('sm_utm_history');
-  renderHistory();
-  showToast('전체 히스토리가 삭제되었습니다');
+  try {
+    await API.clearLinks();
+    HISTORY = [];
+    renderHistory();
+    updateCampaignSuggestions();
+    showToast('전체 히스토리가 삭제되었습니다');
+  } catch (e) {
+    showToast('삭제 실패');
+  }
 }
 
 function exportCsv() {
-  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
+  const history = HISTORY;
   if (!history.length) return;
 
   const BOM = '\uFEFF';
@@ -1321,38 +1316,6 @@ function resetForm() {
   showToast('폼이 초기화되었습니다');
 }
 
-// ── GAS Settings ──
-function saveGasUrl() {
-  const url = document.getElementById('gasUrl').value.trim();
-  if (url) {
-    localStorage.setItem('sm_gas_url', url);
-    updateGasStatus(true);
-  } else {
-    localStorage.removeItem('sm_gas_url');
-    updateGasStatus(false);
-  }
-}
-
-function updateGasStatus(connected) {
-  const el = document.getElementById('gasStatus');
-  if (connected) {
-    el.innerHTML = '<span class="status-dot connected"></span> 설정 완료';
-  } else {
-    el.innerHTML = '<span class="status-dot disconnected"></span> 미설정';
-  }
-}
-
-function testGasConnection() {
-  const url = localStorage.getItem('sm_gas_url');
-  if (!url) {
-    showToast('Apps Script URL을 먼저 입력해주세요');
-    return;
-  }
-  fetch(url, { mode: 'no-cors' })
-    .then(() => showToast('연결 요청 전송 완료! 구글시트를 확인해주세요'))
-    .catch(() => showToast('연결 실패 - URL을 확인해주세요'));
-}
-
 // ── Landing Page Management ──
 function renderLandingManager() {
   const container = document.getElementById('landingManager');
@@ -1383,7 +1346,8 @@ function removeUrlPreset(idx) {
 
 function resetUrlPresets() {
   if (!confirm('기본값으로 초기화하시겠습니까?')) return;
-  localStorage.removeItem('sm_url_presets');
+  URL_PRESETS = JSON.parse(JSON.stringify(DEFAULT_URL_PRESETS));
+  API.saveSettings({ presets: URL_PRESETS }).catch(() => showToast('초기화 저장 실패'));
   renderUrlSelect();
   renderLandingManager();
   showToast('초기화되었습니다');
@@ -1451,15 +1415,16 @@ function removeSource(src) {
 }
 
 function saveKeywords() {
-  localStorage.setItem('sm_medium_map', JSON.stringify(SOURCE_MEDIUM_MAP));
+  API.saveSettings({ sourceMediumMap: SOURCE_MEDIUM_MAP })
+    .then(() => showToast('저장되었습니다'))
+    .catch(() => showToast('저장 실패 - 다시 시도해주세요'));
   renderSourceSelect();
-  showToast('저장되었습니다');
 }
 
 function resetKeywords() {
   if (!confirm('기본값으로 초기화하시겠습니까?')) return;
   SOURCE_MEDIUM_MAP = JSON.parse(JSON.stringify(DEFAULT_MEDIUM_MAP));
-  localStorage.removeItem('sm_medium_map');
+  API.saveSettings({ sourceMediumMap: SOURCE_MEDIUM_MAP }).catch(() => showToast('초기화 저장 실패'));
   renderKeywords();
   showToast('기본값으로 초기화되었습니다');
 }
@@ -1477,8 +1442,7 @@ function renderSourceSelect() {
 
 // ── Campaign 자동완성 ──
 function updateCampaignSuggestions() {
-  const history = JSON.parse(localStorage.getItem('sm_utm_history') || '[]');
-  const campaigns = [...new Set(history.map(h => h.campaign).filter(v => v))];
+  const campaigns = [...new Set(HISTORY.map(h => h.campaign).filter(v => v))];
   const dl = document.getElementById('campaignSuggestions');
   dl.innerHTML = campaigns.map(c => `<option value="${escHtml(c)}">`).join('');
 }
@@ -1507,13 +1471,6 @@ function switchTab(name) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
-}
-
-// ── Script Copy ──
-function copyScript() {
-  navigator.clipboard.writeText(GAS_CODE).then(() => {
-    showToast('Apps Script 코드가 복사되었습니다!');
-  });
 }
 
 // ── Utils ──
