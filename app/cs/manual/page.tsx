@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 interface Entry {
   id: string;
+  category: string;
   title: string;
   content: string;
   sort_order: number;
@@ -18,6 +19,10 @@ export default function CsManualPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [filterCat, setFilterCat] = useState("");
+  const newCounter = useRef(0);
+  const addHandled = useRef(false);
 
   async function load() {
     setLoading(true);
@@ -26,7 +31,7 @@ export default function CsManualPage() {
       const res = await fetch("/api/cs/manual", { cache: "no-store" });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
-      setEntries(j.entries || []);
+      setEntries((j.entries || []).map((e: Entry) => ({ ...e, category: e.category || "일반" })));
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }
@@ -37,26 +42,56 @@ export default function CsManualPage() {
     load();
   }, []);
 
-  function patch(idx: number, p: Partial<Entry>) {
-    setEntries((prev) => prev.map((e, i) => (i === idx ? { ...e, ...p } : e)));
+  // CS 코치의 '미등록' → 원클릭 추가: ?add=<상황> 로 들어오면 새 항목 자동 생성
+  useEffect(() => {
+    if (loading || addHandled.current) return;
+    const q = new URLSearchParams(window.location.search).get("add");
+    if (q && q.trim()) {
+      addHandled.current = true;
+      addNew(`■ 이런 상황·문의\n${q.trim()}\n\n■ 이렇게 응대\n(여기에 응대 방법을 적어주세요)`);
+      // URL 정리 (새로고침 시 중복 추가 방지)
+      window.history.replaceState(null, "", "/cs/manual");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    entries.forEach((e) => set.add(e.category || "일반"));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+  }, [entries]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return entries.filter((e) => {
+      if (filterCat && (e.category || "일반") !== filterCat) return false;
+      if (!q) return true;
+      return [e.title, e.content, e.category].filter(Boolean).some((v) => v.toLowerCase().includes(q));
+    });
+  }, [entries, search, filterCat]);
+
+  function patchById(id: string, p: Partial<Entry>) {
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...p } : e)));
   }
 
-  function addNew() {
+  function addNew(prefillContent = "") {
+    newCounter.current += 1;
+    const id = `new-${newCounter.current}`;
+    const maxOrder = entries.reduce((m, e) => Math.max(m, e.sort_order || 0), 0);
     setEntries((prev) => [
+      { id, category: filterCat || "일반", title: "", content: prefillContent, sort_order: maxOrder + 1, _new: true, _dirty: true },
       ...prev,
-      { id: `new-${prev.length}-${prev.reduce((s, e) => s + e.title.length, 0)}`, title: "", content: "", sort_order: (prev.at(-1)?.sort_order ?? 0) + 1, _new: true, _dirty: true },
     ]);
+    setSearch("");
   }
 
-  async function save(idx: number) {
-    const e = entries[idx];
+  async function save(e: Entry) {
     if (!e.title.trim()) {
-      patch(idx, {});
       setError("제목을 입력하세요.");
       return;
     }
     setError("");
-    patch(idx, { _saving: true });
+    patchById(e.id, { _saving: true });
     try {
       const isNew = e._new;
       const res = await fetch("/api/cs/manual", {
@@ -64,6 +99,7 @@ export default function CsManualPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: isNew ? undefined : e.id,
+          category: e.category,
           title: e.title,
           content: e.content,
           sort_order: e.sort_order,
@@ -71,18 +107,17 @@ export default function CsManualPage() {
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      patch(idx, { id: j.entry.id, _new: false, _saving: false, _dirty: false, _saved: true });
-      setTimeout(() => patch(idx, { _saved: false }), 1800);
+      patchById(e.id, { id: j.entry.id, _new: false, _saving: false, _dirty: false, _saved: true });
+      setTimeout(() => patchById(j.entry.id, { _saved: false }), 1800);
     } catch (err) {
-      patch(idx, { _saving: false });
+      patchById(e.id, { _saving: false });
       setError(err instanceof Error ? err.message : "저장 중 오류");
     }
   }
 
-  async function remove(idx: number) {
-    const e = entries[idx];
+  async function remove(e: Entry) {
     if (e._new) {
-      setEntries((prev) => prev.filter((_, i) => i !== idx));
+      setEntries((prev) => prev.filter((x) => x.id !== e.id));
       return;
     }
     if (!confirm(`"${e.title}" 항목을 삭제할까요?`)) return;
@@ -90,7 +125,7 @@ export default function CsManualPage() {
       const res = await fetch(`/api/cs/manual?id=${encodeURIComponent(e.id)}`, { method: "DELETE" });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "삭제 실패");
-      setEntries((prev) => prev.filter((_, i) => i !== idx));
+      setEntries((prev) => prev.filter((x) => x.id !== e.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "삭제 중 오류");
     }
@@ -110,52 +145,84 @@ export default function CsManualPage() {
 
       {error && <p style={{ color: "#c92a2a", margin: "12px 0", fontSize: 14 }}>{error}</p>}
 
+      {/* 검색 + 카테고리 필터 + 추가 */}
+      {!loading && (
+        <div className="csm-toolbar">
+          <input
+            className="csm-search"
+            placeholder="제목·내용·카테고리 검색"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select className="csm-cat-filter" value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+            <option value="">전체 카테고리</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <button className="btn-primary csm-add-btn" onClick={() => addNew()}>+ 항목 추가</button>
+        </div>
+      )}
+
+      <datalist id="cs-cats">
+        {categories.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+
       {loading ? (
         <p style={{ color: "var(--sm-text-light)", padding: "32px 0" }}>불러오는 중...</p>
+      ) : filtered.length === 0 ? (
+        <p style={{ color: "var(--sm-text-light)", padding: "32px 0" }}>
+          {entries.length === 0 ? "등록된 매뉴얼이 없습니다. 항목을 추가하세요." : "검색 결과가 없습니다."}
+        </p>
       ) : (
-        <>
-          <div className="csm-list">
-            {entries.map((e, idx) => (
-              <div key={e.id} className="csm-card">
-                <div className="csm-card-row">
-                  <input
-                    className="csm-title-input"
-                    value={e.title}
-                    placeholder="항목 제목 (예: 배송 지연, 이유식 가시 보상)"
-                    onChange={(ev) => patch(idx, { title: ev.target.value, _dirty: true })}
-                  />
-                  <span className="csm-order">
-                    순서
-                    <input
-                      type="number"
-                      className="csm-order-input"
-                      value={e.sort_order}
-                      onChange={(ev) => patch(idx, { sort_order: Number(ev.target.value) || 0, _dirty: true })}
-                    />
-                  </span>
-                </div>
-                <textarea
-                  className="form-textarea csm-content"
-                  value={e.content}
-                  placeholder="이 항목의 매뉴얼 내용을 입력하세요."
-                  onChange={(ev) => patch(idx, { content: ev.target.value, _dirty: true })}
+        <div className="csm-list">
+          {filtered.map((e) => (
+            <div key={e.id} className={`csm-card ${e._new ? "is-new" : ""}`}>
+              <div className="csm-card-row">
+                <input
+                  className="csm-title-input"
+                  value={e.title}
+                  placeholder="항목 제목 (예: 배송 지연, 이유식 가시 보상)"
+                  onChange={(ev) => patchById(e.id, { title: ev.target.value, _dirty: true })}
                 />
-                <div className="csm-card-actions">
-                  <button
-                    className="btn-primary"
-                    onClick={() => save(idx)}
-                    disabled={e._saving || (!e._dirty && !e._new)}
-                  >
-                    {e._saving ? "저장 중..." : e._saved ? "저장됨 ✓" : e._dirty || e._new ? "저장" : "변경 없음"}
-                  </button>
-                  <button className="btn-danger" onClick={() => remove(idx)}>삭제</button>
-                </div>
+                <input
+                  className="csm-cat-input"
+                  list="cs-cats"
+                  value={e.category}
+                  placeholder="카테고리"
+                  onChange={(ev) => patchById(e.id, { category: ev.target.value, _dirty: true })}
+                />
+                <span className="csm-order">
+                  순서
+                  <input
+                    type="number"
+                    className="csm-order-input"
+                    value={e.sort_order}
+                    onChange={(ev) => patchById(e.id, { sort_order: Number(ev.target.value) || 0, _dirty: true })}
+                  />
+                </span>
               </div>
-            ))}
-          </div>
-
-          <button className="btn-secondary csm-add" onClick={addNew}>+ 항목 추가</button>
-        </>
+              <textarea
+                className="form-textarea csm-content"
+                value={e.content}
+                placeholder="이 항목의 매뉴얼 내용을 입력하세요."
+                onChange={(ev) => patchById(e.id, { content: ev.target.value, _dirty: true })}
+              />
+              <div className="csm-card-actions">
+                <button
+                  className="btn-primary"
+                  onClick={() => save(e)}
+                  disabled={e._saving || (!e._dirty && !e._new)}
+                >
+                  {e._saving ? "저장 중..." : e._saved ? "저장됨 ✓" : e._dirty || e._new ? "저장" : "변경 없음"}
+                </button>
+                <button className="btn-danger" onClick={() => remove(e)}>삭제</button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

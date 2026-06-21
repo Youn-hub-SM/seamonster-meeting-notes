@@ -5,6 +5,7 @@ import { supabaseAdmin } from "./supabase";
 
 export interface CsManualEntry {
   id: string;
+  category: string;
   title: string;
   content: string;
   sort_order: number;
@@ -12,6 +13,7 @@ export interface CsManualEntry {
 }
 
 export interface CsManualInput {
+  category?: string;
   title: string;
   content: string;
   sort_order?: number;
@@ -22,6 +24,7 @@ export interface CsManualInput {
 export const DEFAULT_CS_MANUAL: CsManualInput[] = [
   {
     sort_order: 1,
+    category: "응대 원칙",
     title: "기본 응대 원칙·톤앤매너",
     content: `고객 응대 4단계 (순서 고정):
 1) 공감으로 시작
@@ -44,6 +47,7 @@ export const DEFAULT_CS_MANUAL: CsManualInput[] = [
   },
   {
     sort_order: 2,
+    category: "클레임·배송",
     title: "클레임·배송 문제 해결",
     content: `배송 지연:
 사과 후 현재 배송 상태 안내. 즉시 조치 내용과 다음 안내 시점을 명확히 전달.
@@ -71,6 +75,7 @@ export const DEFAULT_CS_MANUAL: CsManualInput[] = [
   },
   {
     sort_order: 3,
+    category: "제품 FAQ",
     title: "일반 제품 FAQ",
     content: `염도: 전자레인지용 제품(소금·후추 가미된 저염)을 제외한 모든 제품은 일반 삼치를 포함해 무염.
 
@@ -90,6 +95,7 @@ export const DEFAULT_CS_MANUAL: CsManualInput[] = [
   },
   {
     sort_order: 4,
+    category: "이유식",
     title: "이유식 전용 생선 매뉴얼",
     content: `이유식 제품 특징 (대구살/달고기살):
 - 등살만 사용하여 잔가시가 거의 없음
@@ -116,6 +122,7 @@ export const DEFAULT_CS_MANUAL: CsManualInput[] = [
   },
   {
     sort_order: 5,
+    category: "상품·구매",
     title: "상품 정보·구매·배송·교환환불",
     content: `순살 생선 라인 (100g 단위):
 - 대구순살 ₩2,450 / 86kcal / 19.5g단백질 / 에어프라이어,팬구이,조림,찜
@@ -177,9 +184,12 @@ export async function fetchManualEntries(): Promise<CsManualEntry[]> {
 }
 
 // 항목들을 시스템 프롬프트에 넣을 매뉴얼 텍스트로 조립.
-export function assembleManual(entries: { title: string; content: string }[]): string {
+export function assembleManual(entries: { category?: string; title: string; content: string }[]): string {
   if (entries.length === 0) return "(등록된 매뉴얼이 없습니다.)";
   return entries
-    .map((e) => `[${e.title}]\n${e.content}`.trim())
+    .map((e) => {
+      const head = e.category && e.category !== "일반" ? `[${e.category} — ${e.title}]` : `[${e.title}]`;
+      return `${head}\n${e.content}`.trim();
+    })
     .join("\n\n");
 }

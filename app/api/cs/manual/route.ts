@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await sb
       .from("cs_manual")
       .insert({
+        category: (body.category ?? "").trim() || "일반",
         title: body.title.trim(),
         content: (body.content ?? "").trim(),
         sort_order: Number(body.sort_order) || 999,
@@ -52,6 +53,7 @@ export async function PUT(req: NextRequest) {
     const { data, error } = await sb
       .from("cs_manual")
       .update({
+        category: (body.category ?? "").trim() || "일반",
         title: body.title.trim(),
         content: (body.content ?? "").trim(),
         sort_order: Number(body.sort_order) || 999,

@@ -69,9 +69,15 @@ export default function CsPage() {
             {result.category}
           </div>
           <div className="result-actions">
-            <button className="btn-primary" onClick={handleCopy}>
-              {copied ? "복사 완료!" : "답변 초안 복사"}
-            </button>
+            {result.manualMissing ? (
+              <Link href={`/cs/manual?add=${encodeURIComponent(query)}`} className="btn-primary">
+                이 상황을 매뉴얼에 추가
+              </Link>
+            ) : (
+              <button className="btn-primary" onClick={handleCopy}>
+                {copied ? "복사 완료!" : "답변 초안 복사"}
+              </button>
+            )}
             <button className="btn-secondary" onClick={handleReset}>
               새 문의 입력
             </button>
