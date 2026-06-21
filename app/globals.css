@@ -1051,6 +1051,82 @@ a {
   flex-shrink: 0;
 }
 
+/* CS 매뉴얼(지식베이스) 편집 */
+.csm-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.csm-back {
+  flex-shrink: 0;
+}
+.csm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+}
+.csm-card {
+  background: var(--sm-white);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+}
+.csm-card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.csm-title-input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  padding: 8px 10px;
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  background: var(--sm-white);
+  color: var(--sm-black);
+}
+.csm-title-input:focus {
+  outline: none;
+  border-color: var(--sm-orange);
+}
+.csm-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--sm-text-light);
+}
+.csm-order-input {
+  width: 56px;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 7px 8px;
+  text-align: center;
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+}
+.csm-content {
+  min-height: 160px !important;
+  font-size: 15px !important;
+}
+.csm-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.csm-add {
+  margin-top: 16px;
+  width: 100%;
+}
+
 /* ─── Orders (도매 발주) ─── */
 .orders-container {
   max-width: 1200px;

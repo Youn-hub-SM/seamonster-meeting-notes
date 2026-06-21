@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { CsAdvice } from "@/app/lib/cs";
 
 export default function CsPage() {
@@ -144,10 +145,16 @@ export default function CsPage() {
 
   return (
     <div className="container">
-      <h1 className="page-title">CS 응대 코치</h1>
-      <p className="page-subtitle">
-        고객 문의를 입력하면 어떻게 응대하면 좋을지 조언하고, 바로 쓸 수 있는 답변 초안까지 제안합니다
-      </p>
+      <div className="csm-head">
+        <div>
+          <h1 className="page-title">CS 응대 코치</h1>
+          <p className="page-subtitle" style={{ marginBottom: 0 }}>
+            고객 문의를 입력하면 어떻게 응대하면 좋을지 조언하고, 바로 쓸 수 있는 답변 초안까지 제안합니다
+          </p>
+        </div>
+        <Link href="/cs/manual" className="btn-secondary csm-back">매뉴얼 관리</Link>
+      </div>
+      <div style={{ height: 24 }} />
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
