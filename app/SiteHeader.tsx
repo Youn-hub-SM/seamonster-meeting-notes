@@ -18,7 +18,6 @@ export default function SiteHeader() {
           <Link href="/correct" className="header-nav-link">문장 교정</Link>
           <Link href="/cs" className="header-nav-link">CS 답변</Link>
           <Link href="/utm" className="header-nav-link">UTM 빌더</Link>
-          <Link href="/orders" className="header-nav-link">도매 발주</Link>
           <Link href="/subscription" className="header-nav-link">정기배송 분석</Link>
           <Link href="/b2b" className="header-nav-link">B2B</Link>
         </nav>
