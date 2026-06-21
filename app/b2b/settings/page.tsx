@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { STATUS_SHORT } from "@/app/lib/b2b-orders";
+import { MODEL_OPTIONS } from "@/app/lib/config";
 
 type EventMeta = {
   key: string;
@@ -24,22 +25,50 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState<string>("");
+  const [model, setModel] = useState<string>("");
+  const [modelSaving, setModelSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/b2b/settings/notify", { cache: "no-store" });
-        const j = await res.json();
-        if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        const [notifyRes, modelRes] = await Promise.all([
+          fetch("/api/b2b/settings/notify", { cache: "no-store" }),
+          fetch("/api/b2b/settings/model", { cache: "no-store" }),
+        ]);
+        const j = await notifyRes.json();
+        if (!notifyRes.ok || !j.ok) throw new Error(j.error || "조회 실패");
         setConfig(j.config || {});
         setEvents(j.events || []);
         setWebhookSet(!!j.webhookSet);
+        const mj = await modelRes.json();
+        if (modelRes.ok && mj.ok) setModel(mj.current);
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
       setLoading(false);
     })();
   }, []);
+
+  async function selectModel(key: string) {
+    if (key === model || modelSaving) return;
+    const prev = model;
+    setModel(key); // 낙관적 반영
+    setModelSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/settings/model", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+    } catch (e) {
+      setModel(prev); // 실패 시 롤백
+      setError(e instanceof Error ? e.message : "모델 저장 중 오류");
+    }
+    setModelSaving(false);
+  }
 
   function isToggleOn(key: string): boolean {
     return config[key] === true;
@@ -100,6 +129,40 @@ export default function SettingsPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+
+      {/* AI 모델 선택 */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">AI 모델</h2>
+          {modelSaving && <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>적용 중...</span>}
+        </div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
+          회의록 정리 · 문장 교정 · CS 코치가 사용하는 모델입니다. 버튼을 누르면 즉시 적용됩니다.
+          (사업자등록증 OCR 은 정확도 위해 항상 Sonnet 사용)
+        </p>
+        {loading ? (
+          <div className="b2b-loading">불러오는 중...</div>
+        ) : (
+          <div className="ai-model-grid">
+            {MODEL_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                className={`ai-model-card ${model === opt.key ? "is-active" : ""}`}
+                onClick={() => selectModel(opt.key)}
+                disabled={modelSaving}
+              >
+                <div className="ai-model-label">
+                  {opt.label}
+                  {model === opt.key && <span className="ai-model-check">✓ 사용 중</span>}
+                </div>
+                <div className="ai-model-desc">{opt.desc}</div>
+                <div className="ai-model-price">{opt.price} <span>/ 1M 토큰</span></div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       {!webhookSet && (
         <div className="b2b-error" style={{ background: "#FFF4E0", color: "#B86E00", border: "1px solid #f0d9a8" }}>

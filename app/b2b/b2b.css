@@ -2272,3 +2272,68 @@ a.b2b-history-item:hover {
     flex: 0;
   }
 }
+
+/* ─────────────────────────────────────────────
+   AI 모델 선택 (설정 페이지)
+   ───────────────────────────────────────────── */
+.ai-model-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.ai-model-card {
+  text-align: left;
+  font-family: inherit;
+  background: var(--sm-white);
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ai-model-card:hover:not(:disabled) {
+  border-color: var(--sm-orange);
+}
+.ai-model-card.is-active {
+  border-color: var(--sm-orange);
+  background: var(--sm-orange-light);
+}
+.ai-model-card:disabled {
+  cursor: default;
+}
+.ai-model-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sm-black);
+}
+.ai-model-check {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sm-orange);
+  white-space: nowrap;
+}
+.ai-model-desc {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--sm-text-mid);
+  line-height: 1.5;
+}
+.ai-model-price {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sm-text-mid);
+}
+.ai-model-price span {
+  font-weight: 400;
+  color: var(--sm-text-light);
+}
+@media (max-width: 680px) {
+  .ai-model-grid {
+    grid-template-columns: 1fr;
+  }
+}

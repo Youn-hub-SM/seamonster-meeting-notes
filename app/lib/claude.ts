@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { TEAM_MEMBERS, COMPANY_CONTEXT, resolveModel } from "./config";
+import { TEAM_MEMBERS, COMPANY_CONTEXT } from "./config";
+import { getCurrentModel } from "./ai-model";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -46,7 +47,7 @@ interface ClaudeResult {
 }
 
 export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
-  const model = resolveModel();
+  const model = await getCurrentModel();
 
   const response = await anthropic.messages.create({
     model,

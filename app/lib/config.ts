@@ -42,8 +42,16 @@ export const MODELS = {
 
 export type ModelKey = keyof typeof MODELS;
 
-// 기본 AI 모델 — sonnet / haiku / opus 중 하나
+// 기본 AI 모델 — sonnet / haiku / opus 중 하나.
+// 설정 화면(/b2b/settings)에서 바꾼 값이 있으면 그게 우선(app/lib/ai-model.ts).
 export const DEFAULT_MODEL: ModelKey = "sonnet";
+
+// 설정 화면에서 모델 버튼을 그릴 때 쓰는 메타 (클라이언트 import 안전 — supabase 미포함)
+export const MODEL_OPTIONS: { key: ModelKey; label: string; desc: string; price: string }[] = [
+  { key: "haiku", label: "빠름 · 저렴", desc: "간단한 작업, 가장 빠르고 저렴", price: "$1 / $5" },
+  { key: "sonnet", label: "균형 (기본)", desc: "품질과 비용의 균형", price: "$3 / $15" },
+  { key: "opus", label: "최고 품질", desc: "가장 정확·신중 (비용 ↑)", price: "$5 / $25" },
+];
 
 // 모델 키 → 실제 모델 ID. 잘못된 키면 sonnet 으로 폴백.
 export function resolveModel(key: ModelKey = DEFAULT_MODEL): string {
