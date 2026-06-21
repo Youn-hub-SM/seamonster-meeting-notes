@@ -25,8 +25,10 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState<string>("");
-  const [model, setModel] = useState<string>("");
+  const [model, setModel] = useState<string>("");        // 전체 모델 (회의록·교정·CS 기본)
+  const [csModel, setCsModel] = useState<string>("");    // CS 전용 ("inherit" = 전체와 동일)
   const [modelSaving, setModelSaving] = useState(false);
+  const [csModelSaving, setCsModelSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -41,7 +43,10 @@ export default function SettingsPage() {
         setEvents(j.events || []);
         setWebhookSet(!!j.webhookSet);
         const mj = await modelRes.json();
-        if (modelRes.ok && mj.ok) setModel(mj.current);
+        if (modelRes.ok && mj.ok) {
+          setModel(mj.global);
+          setCsModel(mj.cs);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
@@ -59,7 +64,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/b2b/settings/model", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key }),
+        body: JSON.stringify({ scope: "global", key }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
@@ -69,6 +74,30 @@ export default function SettingsPage() {
     }
     setModelSaving(false);
   }
+
+  async function selectCsModel(key: string) {
+    if (key === csModel || csModelSaving) return;
+    const prev = csModel;
+    setCsModel(key);
+    setCsModelSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/settings/model", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "cs", key }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+    } catch (e) {
+      setCsModel(prev);
+      setError(e instanceof Error ? e.message : "CS 모델 저장 중 오류");
+    }
+    setCsModelSaving(false);
+  }
+
+  // 전체 모델의 표시 라벨 (CS '전체와 동일' 카드 설명용)
+  const globalLabel = MODEL_OPTIONS.find((o) => o.key === model)?.label ?? model;
 
   function isToggleOn(key: string): boolean {
     return config[key] === true;
@@ -130,14 +159,14 @@ export default function SettingsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
 
-      {/* AI 모델 선택 */}
+      {/* AI 모델 선택 (전체) */}
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">AI 모델</h2>
+          <h2 className="b2b-card-title">AI 모델 (전체)</h2>
           {modelSaving && <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>적용 중...</span>}
         </div>
         <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
-          회의록 정리 · 문장 교정 · CS 코치가 사용하는 모델입니다. 버튼을 누르면 즉시 적용됩니다.
+          회의록 정리 · 문장 교정이 사용하는 모델입니다. CS 코치는 기본적으로 이 모델을 따르며, 아래에서 따로 지정할 수 있습니다.
           (사업자등록증 OCR 은 정확도 위해 항상 Sonnet 사용)
         </p>
         {loading ? (
@@ -155,6 +184,52 @@ export default function SettingsPage() {
                 <div className="ai-model-label">
                   {opt.label}
                   {model === opt.key && <span className="ai-model-check">✓ 사용 중</span>}
+                </div>
+                <div className="ai-model-desc">{opt.desc}</div>
+                <div className="ai-model-price">{opt.price} <span>/ 1M 토큰</span></div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* CS 코치 전용 모델 */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">CS 코치 모델</h2>
+          {csModelSaving && <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>적용 중...</span>}
+        </div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
+          CS 응대 코치만 별도 모델을 쓸 수 있습니다. ‘전체와 동일’이면 위 설정을 따릅니다. (정확한 응대가 중요하면 최고 품질 권장)
+        </p>
+        {loading ? (
+          <div className="b2b-loading">불러오는 중...</div>
+        ) : (
+          <div className="ai-model-grid ai-model-grid-4">
+            <button
+              type="button"
+              className={`ai-model-card ${csModel === "inherit" ? "is-active" : ""}`}
+              onClick={() => selectCsModel("inherit")}
+              disabled={csModelSaving}
+            >
+              <div className="ai-model-label">
+                전체와 동일
+                {csModel === "inherit" && <span className="ai-model-check">✓ 사용 중</span>}
+              </div>
+              <div className="ai-model-desc">위 ‘전체’ 설정을 그대로 따름</div>
+              <div className="ai-model-price">현재 {globalLabel}</div>
+            </button>
+            {MODEL_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                className={`ai-model-card ${csModel === opt.key ? "is-active" : ""}`}
+                onClick={() => selectCsModel(opt.key)}
+                disabled={csModelSaving}
+              >
+                <div className="ai-model-label">
+                  {opt.label}
+                  {csModel === opt.key && <span className="ai-model-check">✓ 사용 중</span>}
                 </div>
                 <div className="ai-model-desc">{opt.desc}</div>
                 <div className="ai-model-price">{opt.price} <span>/ 1M 토큰</span></div>

@@ -41,3 +41,45 @@ export async function getCurrentModel(): Promise<string> {
   const key = await getAiModelKey();
   return MODELS[key] ?? MODELS.sonnet;
 }
+
+// ─────────────────────────────────────────────
+// CS 코치 전용 모델 (전체 설정과 별개로 둘 수 있음)
+//  - "inherit": 전체 모델을 따름 (기본)
+//  - 모델 키: CS 코치만 그 모델 사용
+// ─────────────────────────────────────────────
+const CS_MODEL_SETTING_KEY = "ai_model_cs";
+
+export async function getCsModelKey(): Promise<ModelKey | "inherit"> {
+  try {
+    const sb = supabaseAdmin();
+    const { data, error } = await sb
+      .from("b2b_settings")
+      .select("value")
+      .eq("key", CS_MODEL_SETTING_KEY)
+      .maybeSingle();
+    if (error || !data) return "inherit";
+    const v = data.value as { key?: string } | string | null;
+    const key = typeof v === "string" ? v : v?.key;
+    return key && key in MODELS ? (key as ModelKey) : "inherit";
+  } catch {
+    return "inherit";
+  }
+}
+
+export async function setCsModelKey(key: ModelKey | "inherit"): Promise<void> {
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("b2b_settings")
+    .upsert(
+      { key: CS_MODEL_SETTING_KEY, value: { key }, updated_at: new Date().toISOString() },
+      { onConflict: "key" }
+    );
+  if (error) throw error;
+}
+
+// CS 코치가 실제로 쓸 모델 ID. CS 전용 설정이 있으면 그것, 없으면(inherit) 전체 모델.
+export async function getCsModel(): Promise<string> {
+  const csKey = await getCsModelKey();
+  if (csKey !== "inherit") return MODELS[csKey] ?? MODELS.sonnet;
+  return getCurrentModel();
+}

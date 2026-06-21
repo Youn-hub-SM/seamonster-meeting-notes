@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getCurrentModel } from "./ai-model";
+import { getCsModel } from "./ai-model";
 import { fetchManualEntries, assembleManual, DEFAULT_CS_MANUAL } from "./cs-manual";
 
 const anthropic = new Anthropic({
@@ -73,7 +73,7 @@ export interface CsAdvice {
 }
 
 export async function generateCsAdvice(query: string): Promise<CsAdvice> {
-  const model = await getCurrentModel();
+  const model = await getCsModel();
 
   // 지식베이스(매뉴얼)를 DB 에서 불러와 시스템 프롬프트 조립.
   // DB(cs_manual) 미적용/오류 시에도 CS 코치가 멈추지 않도록 코드 내 기본 매뉴얼로 폴백.

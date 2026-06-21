@@ -2337,3 +2337,18 @@ a.b2b-history-item:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* CS 모델 섹션 — 카드 4개 (전체와 동일 + 3모델) */
+.ai-model-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 980px) {
+  .ai-model-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 680px) {
+  .ai-model-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
