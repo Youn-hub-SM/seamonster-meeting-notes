@@ -12,3 +12,7 @@ create table if not exists cs_manual (
 );
 
 create index if not exists cs_manual_sort_idx on cs_manual (sort_order, created_at);
+
+-- RLS 켜기 (정책 없음). 다른 테이블과 동일 — 앱은 service_role 로만 접근하므로
+-- RLS 를 우회해 정상 동작하고, anon/authenticated 키로는 접근 불가(차단)된다.
+alter table cs_manual enable row level security;
