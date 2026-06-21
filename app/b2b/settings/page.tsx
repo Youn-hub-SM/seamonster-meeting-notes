@@ -29,13 +29,19 @@ export default function SettingsPage() {
   const [csModel, setCsModel] = useState<string>("");    // CS 전용 ("inherit" = 전체와 동일)
   const [modelSaving, setModelSaving] = useState(false);
   const [csModelSaving, setCsModelSaving] = useState(false);
+  const [csPrompt, setCsPrompt] = useState<string>("");        // CS 코치 지침(기초 프롬프트)
+  const [csPromptDefault, setCsPromptDefault] = useState<string>("");
+  const [csPromptIsDefault, setCsPromptIsDefault] = useState(true);
+  const [csPromptSaving, setCsPromptSaving] = useState(false);
+  const [csPromptSaved, setCsPromptSaved] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        const [notifyRes, modelRes] = await Promise.all([
+        const [notifyRes, modelRes, promptRes] = await Promise.all([
           fetch("/api/b2b/settings/notify", { cache: "no-store" }),
           fetch("/api/b2b/settings/model", { cache: "no-store" }),
+          fetch("/api/b2b/settings/cs-prompt", { cache: "no-store" }),
         ]);
         const j = await notifyRes.json();
         if (!notifyRes.ok || !j.ok) throw new Error(j.error || "조회 실패");
@@ -47,12 +53,47 @@ export default function SettingsPage() {
           setModel(mj.global);
           setCsModel(mj.cs);
         }
+        const pj = await promptRes.json();
+        if (promptRes.ok && pj.ok) {
+          setCsPrompt(pj.prompt || "");
+          setCsPromptDefault(pj.default || "");
+          setCsPromptIsDefault(!!pj.isDefault);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
       setLoading(false);
     })();
   }, []);
+
+  async function saveCsPrompt(nextPrompt?: string) {
+    const body = nextPrompt !== undefined ? nextPrompt : csPrompt;
+    setCsPromptSaving(true);
+    setError("");
+    setCsPromptSaved("");
+    try {
+      const res = await fetch("/api/b2b/settings/cs-prompt", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: body }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setCsPrompt(j.prompt || "");
+      setCsPromptIsDefault(!!j.isDefault);
+      const d = new Date();
+      setCsPromptSaved(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 저장됨`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "프롬프트 저장 중 오류");
+    }
+    setCsPromptSaving(false);
+  }
+
+  function resetCsPrompt() {
+    if (!confirm("코치 지침을 기본값으로 되돌릴까요? 저장한 내용은 사라집니다.")) return;
+    setCsPrompt(csPromptDefault);
+    saveCsPrompt(""); // 빈 값 저장 → 서버에서 설정 삭제(기본값 복원)
+  }
 
   async function selectModel(key: string) {
     if (key === model || modelSaving) return;
@@ -236,6 +277,62 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        )}
+      </section>
+
+      {/* CS 코치 프롬프트 (기초 지침) */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">CS 코치 프롬프트 (지침)</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {csPromptSaved && <span style={{ fontSize: 13, color: "#22863a" }}>{csPromptSaved}</span>}
+            <span style={{ fontSize: 12.5, color: csPromptIsDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>
+              {csPromptIsDefault ? "기본값" : "사용자 지정"}
+            </span>
+          </div>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 12px" }}>
+          CS 코치의 역할·코칭 방식·원칙을 정의하는 기초 프롬프트입니다. 여기서 바꾸면 코드 수정·재배포 없이 즉시 반영됩니다.
+          <br />
+          <strong>매뉴얼 내용</strong>(지식)과 <strong>출력 형식(JSON)</strong>은 시스템이 자동으로 덧붙이므로 여기에 넣지 마세요 — 매뉴얼은{" "}
+          <a href="/cs/manual" style={{ color: "var(--sm-orange)", fontWeight: 600 }}>CS 매뉴얼</a>에서 관리합니다.
+        </p>
+        {loading ? (
+          <div className="b2b-loading">불러오는 중...</div>
+        ) : (
+          <>
+            <textarea
+              className="b2b-textarea"
+              value={csPrompt}
+              onChange={(e) => {
+                setCsPrompt(e.target.value);
+                setCsPromptSaved("");
+              }}
+              spellCheck={false}
+              style={{
+                width: "100%",
+                minHeight: 320,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                fontSize: 13.5,
+                lineHeight: 1.7,
+                resize: "vertical",
+                whiteSpace: "pre",
+                overflowWrap: "normal",
+                overflowX: "auto",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="b2b-btn-primary" onClick={() => saveCsPrompt()} disabled={csPromptSaving}>
+                {csPromptSaving ? "저장 중..." : "프롬프트 저장"}
+              </button>
+              <button className="b2b-btn-secondary" onClick={resetCsPrompt} disabled={csPromptSaving || csPromptIsDefault}>
+                기본값으로 복원
+              </button>
+              <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>
+                {csPrompt.length.toLocaleString()}자 · 모든 사용자 공용
+              </span>
+            </div>
+          </>
         )}
       </section>
 

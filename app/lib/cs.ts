@@ -1,13 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getCsModel } from "./ai-model";
 import { fetchManualEntries, assembleManual, DEFAULT_CS_MANUAL } from "./cs-manual";
+import { supabaseAdmin } from "./supabase";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// 엔진 설정(역할·최우선 규칙) — 고정. '지식'은 DB(cs_manual)에서 주입.
-const FRAMEWORK_HEADER = `당신은 씨몬스터(Sea Monster) CS 응대 직원을 돕는 'CS 코치'입니다.
+// 코치 지침(역할·코칭 방식·최우선 규칙) — 편집 가능한 '기초 프롬프트'.
+// b2b_settings 의 'cs_prompt' 키에 저장. 미설정/오류 시 아래 기본값 사용.
+// '지식'(매뉴얼)은 DB(cs_manual)에서 주입되고, 출력 JSON 형식(OUTPUT_RULES)은 파서가 의존하므로 코드 고정.
+export const DEFAULT_CS_PROMPT = `당신은 씨몬스터(Sea Monster) CS 응대 직원을 돕는 'CS 코치'입니다.
 직원이 주로 묻는 것은 "지금 이 상황에서 나는 어떻게 행동해야 하지?" 입니다.
 입력은 고객 문의 원문일 수도 있고, "고객이 2번째로 녹았다고 연락왔는데 어떻게 해야 해?" 같은
 직원 본인의 상황 설명·질문일 수도 있습니다. 어느 쪽이든 '직원이 지금 어떻게 행동해야 하는지'를 코치합니다.
@@ -72,11 +75,46 @@ export interface CsAdvice {
   manualMissing: boolean;
 }
 
+// ── 편집 가능한 코치 지침(기초 프롬프트) — b2b_settings 'cs_prompt' ──
+const CS_PROMPT_KEY = "cs_prompt";
+
+export async function getCsPrompt(): Promise<string> {
+  try {
+    const sb = supabaseAdmin();
+    const { data, error } = await sb
+      .from("b2b_settings")
+      .select("value")
+      .eq("key", CS_PROMPT_KEY)
+      .maybeSingle();
+    if (error || !data) return DEFAULT_CS_PROMPT;
+    const v = data.value as string | { text?: string } | null;
+    const text = typeof v === "string" ? v : v?.text;
+    return text && text.trim() ? text : DEFAULT_CS_PROMPT;
+  } catch {
+    return DEFAULT_CS_PROMPT;
+  }
+}
+
+// 빈 문자열로 저장하면 설정을 지워 기본값으로 복원.
+export async function setCsPrompt(prompt: string): Promise<void> {
+  const sb = supabaseAdmin();
+  if (!prompt || !prompt.trim()) {
+    const { error } = await sb.from("b2b_settings").delete().eq("key", CS_PROMPT_KEY);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await sb
+    .from("b2b_settings")
+    .upsert({ key: CS_PROMPT_KEY, value: prompt, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw error;
+}
+
 export async function generateCsAdvice(query: string): Promise<CsAdvice> {
   const model = await getCsModel();
 
-  // 지식베이스(매뉴얼)를 DB 에서 불러와 시스템 프롬프트 조립.
-  // DB(cs_manual) 미적용/오류 시에도 CS 코치가 멈추지 않도록 코드 내 기본 매뉴얼로 폴백.
+  // 코치 지침(편집 가능) + 지식베이스(매뉴얼, DB) + 출력 규칙(고정) 으로 시스템 프롬프트 조립.
+  // DB 미적용/오류 시에도 멈추지 않도록 각각 코드 기본값으로 폴백.
+  const framework = await getCsPrompt();
   let manualText: string;
   try {
     manualText = assembleManual(await fetchManualEntries());
@@ -84,7 +122,7 @@ export async function generateCsAdvice(query: string): Promise<CsAdvice> {
     console.error("[cs] 매뉴얼 DB 조회 실패 — 기본 매뉴얼로 폴백:", err);
     manualText = assembleManual(DEFAULT_CS_MANUAL);
   }
-  const systemPrompt = FRAMEWORK_HEADER + manualText + OUTPUT_RULES;
+  const systemPrompt = framework + manualText + OUTPUT_RULES;
 
   const response = await anthropic.messages.create({
     model,
