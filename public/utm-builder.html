@@ -6,18 +6,27 @@
 <title>씨몬스터 UTM 빌더</title>
 <style>
   :root {
+    /* B2B 매니저(globals.css)와 동일한 디자인 토큰 */
     --primary: #F15A30;
     --primary-dark: #D94E26;
-    --primary-light: #fff1ec;
-    --accent: #222;
-    --bg: #f5f6f7;
-    --card: #ffffff;
-    --text: #222;
-    --text-sub: #888;
-    --border: #ebebeb;
-    --success: #2E7D32;
-    --danger: #c0392b;
-    --radius: 10px;
+    --primary-light: rgba(241, 90, 48, 0.06);
+    --warm: #FFF5F0;
+    --accent: #1A1A1A;
+    --bg: #FAFAFA;
+    --card: #FFFFFF;
+    --text: #1A1A1A;
+    --text-sub: #666666;
+    --text-light: #999999;
+    --border: #EEEEEE;
+    --success: #22863a;
+    --danger: #c92a2a;
+    --radius: 8px;
+    --radius-card: 16px;
+    --radius-btn: 12px;
+    --radius-pill: 50px;
+    --container: 1800px;
+    --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
+    --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.06);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -38,9 +47,9 @@
     padding: 0;
   }
   .header-inner {
-    max-width: 960px;
+    max-width: var(--container);
     margin: 0 auto;
-    padding: 20px 16px;
+    padding: 18px 32px;
     display: flex;
     align-items: center;
     gap: 14px;
@@ -82,15 +91,27 @@
   }
 
   .container {
-    max-width: 960px;
+    max-width: var(--container);
     margin: 0 auto;
-    padding: 24px 16px;
+    padding: 32px;
+  }
+
+  /* 2단 레이아웃 — 좌: 입력폼/미리보기, 우: 히스토리/채널관리 (B2B 매니저처럼 화면 전체 활용) */
+  .utm-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 620px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .utm-col { min-width: 0; }
+  @media (max-width: 1024px) {
+    .utm-grid { grid-template-columns: 1fr; }
   }
 
   .card {
     background: var(--card);
-    border-radius: 16px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
     border: 1px solid var(--border);
     padding: 24px;
     margin-bottom: 16px;
@@ -155,22 +176,22 @@
 
   input[type="text"], input[type="url"], select {
     width: 100%;
-    padding: 13px 16px;
+    padding: 12px 14px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius);
     font-size: 16px;
     transition: border-color 0.15s, box-shadow 0.15s;
-    background: var(--bg);
+    background: var(--card);
     color: var(--text);
     font-family: inherit;
   }
   input[type="text"]:focus, input[type="url"]:focus, select:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(241,90,48,0.12);
+    box-shadow: 0 0 0 3px rgba(241,90,48,0.10);
     background: #fff;
   }
-  input::placeholder { color: #bbb; }
+  input::placeholder { color: var(--text-light); }
 
   .medium-chips {
     display: flex;
@@ -223,26 +244,28 @@
   .btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 13px 28px;
-    border: none;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 700;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 22px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-btn);
+    font-size: 15.5px;
+    font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
     font-family: inherit;
   }
   .btn:active { transform: scale(0.98); }
   .btn-primary { background: var(--primary); color: #fff; }
   .btn-primary:hover { background: var(--primary-dark); }
-  .btn-success { background: #000; color: #fff; }
-  .btn-success:hover { background: #333; }
-  .btn-danger { background: #f5f6f7; color: var(--danger); border: 1px solid #e0e0e0; }
-  .btn-danger:hover { background: #fef0ee; border-color: var(--primary); }
-  .btn-outline { background: #f5f6f7; color: #333; border: 1px solid #e0e0e0; }
-  .btn-outline:hover { background: #ebebeb; }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  /* 저장 & 복사 — 가장 강조되는 확정 액션 */
+  .btn-success { background: var(--accent); color: #fff; }
+  .btn-success:hover { background: #000; }
+  .btn-danger { background: transparent; color: var(--danger); border-color: transparent; }
+  .btn-danger:hover { background: #fdf1f1; }
+  .btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
   /* Toast */
   .toast {
@@ -273,23 +296,23 @@
   }
   .history-table th {
     text-align: left;
-    padding: 12px 12px;
-    border-bottom: 2px solid var(--border);
+    padding: 12px 14px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
     color: var(--text-sub);
     font-size: 13px;
     font-weight: 700;
     white-space: nowrap;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
   .history-table td {
-    padding: 13px 12px;
-    border-bottom: 1px solid #f0f0f0;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 15px;
+    color: var(--text);
   }
   .history-table tr:hover td { background: var(--primary-light); }
   .history-table .url-cell {
@@ -303,7 +326,7 @@
   .btn-sm {
     padding: 8px 16px;
     font-size: 14px;
-    border-radius: 6px;
+    border-radius: var(--radius);
   }
 
   .empty-state {
@@ -330,6 +353,54 @@
     margin-top: 6px;
     line-height: 1.6;
   }
+
+  /* 기존 시트 기록 가져오기 박스 */
+  .import-box {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    margin-bottom: 14px;
+  }
+  .import-box > summary {
+    cursor: pointer;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-sub);
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .import-box > summary::-webkit-details-marker { display: none; }
+  .import-box > summary::before { content: "▶"; font-size: 10px; transition: transform 0.15s; }
+  .import-box[open] > summary::before { transform: rotate(90deg); }
+  .import-box > summary:hover { color: var(--primary); }
+  .import-body { padding: 0 14px 14px; }
+  .import-body code {
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--card);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  #importPaste {
+    width: 100%;
+    min-height: 110px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+    background: var(--card);
+    color: var(--text);
+  }
+  #importPaste:focus { outline: none; border-color: var(--primary); }
 
   /* Script block */
   .script-block {
@@ -376,9 +447,9 @@
 
   /* Guide section */
   .guide-banner {
-    background: var(--primary-light);
-    border: 1px solid rgba(241,90,48,0.2);
-    border-radius: 16px;
+    background: var(--warm);
+    border: 1px solid var(--primary-light);
+    border-radius: var(--radius-card);
     padding: 18px 22px;
     margin-bottom: 16px;
   }
@@ -535,6 +606,11 @@
     margin: 4px 0 20px;
   }
 
+  @media (max-width: 768px) {
+    .header-inner { padding: 14px 16px; }
+    .container { padding: 16px 14px 48px; }
+  }
+
   @media (max-width: 640px) {
     .guide-params { grid-template-columns: 1fr; }
     .input-wrapper { flex-direction: column; }
@@ -623,6 +699,9 @@
       </div>
     </div>
   </div>
+
+  <div class="utm-grid">
+  <div class="utm-col">
 
   <!-- UTM Form -->
   <div class="card">
@@ -753,6 +832,9 @@
     </div>
   </div>
 
+  </div><!-- /utm-col (left) -->
+  <div class="utm-col">
+
   <!-- History & Settings Tabs -->
   <div class="card">
     <div class="tabs">
@@ -766,6 +848,23 @@
         <input type="text" id="historySearch" placeholder="캠페인, 소스, 미디엄, 비고로 검색..." oninput="renderHistory()" style="flex:1;">
         <button class="btn btn-outline btn-sm" onclick="document.getElementById('historySearch').value='';renderHistory()">초기화</button>
       </div>
+
+      <!-- 기존 구글시트 기록 가져오기 (일회성 이관) -->
+      <details class="import-box">
+        <summary>기존 구글시트 기록 가져오기</summary>
+        <div class="import-body">
+          <p class="help-text" style="margin-top:0;">
+            구글시트에서 데이터 영역을 <strong>전체 선택(Ctrl+A) → 복사(Ctrl+C)</strong> 한 뒤 아래 칸에 <strong>붙여넣기</strong> 하세요.<br>
+            열 순서: <code>생성일시 · URL · Source · Medium · Campaign · Content · Term · 전체 UTM URL</code> (헤더 행은 자동으로 건너뜁니다)
+          </p>
+          <textarea id="importPaste" placeholder="여기에 시트 내용을 붙여넣기…"></textarea>
+          <div class="btn-row" style="margin-top:10px;">
+            <button class="btn btn-primary btn-sm" onclick="importFromPaste()">가져오기</button>
+            <span id="importStatus" class="help-text" style="align-self:center;margin-top:0;"></span>
+          </div>
+        </div>
+      </details>
+
       <div id="historyContainer">
         <div class="empty-state">아직 생성된 UTM URL이 없습니다</div>
       </div>
@@ -798,6 +897,9 @@
       </div>
     </div>
   </div>
+
+  </div><!-- /utm-col (right) -->
+  </div><!-- /utm-grid -->
 
 </div>
 
@@ -877,6 +979,16 @@ const API = {
     const r = await fetch('/api/utm/links?all=1', { method: 'DELETE' });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || '삭제 실패');
+  },
+  async importLinks(rows) {
+    const r = await fetch('/api/utm/links/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '가져오기 실패');
+    return j; // { inserted, skipped }
   },
 };
 
@@ -1277,6 +1389,58 @@ async function clearHistory() {
     showToast('전체 히스토리가 삭제되었습니다');
   } catch (e) {
     showToast('삭제 실패');
+  }
+}
+
+// ── 기존 구글시트 기록 가져오기 (붙여넣기 → 일괄 이관) ──
+async function importFromPaste() {
+  const ta = document.getElementById('importPaste');
+  const statusEl = document.getElementById('importStatus');
+  const raw = (ta.value || '').trim();
+  if (!raw) { statusEl.textContent = '붙여넣은 내용이 없습니다.'; return; }
+
+  // 시트 복사 = 탭 구분(TSV). 줄 단위로 자르고, 각 줄을 탭(없으면 콤마)으로 분리.
+  const lines = raw.split(/\r?\n/).map(l => l.replace(/\r$/, '')).filter(l => l.trim() !== '');
+  const rows = [];
+  lines.forEach((line, idx) => {
+    let cells = line.split('\t');
+    if (cells.length < 2) cells = line.split(',');
+    cells = cells.map(c => c.trim());
+    // 헤더 행 자동 건너뛰기
+    const joined = cells.join(' ').toLowerCase();
+    if (idx === 0 && (joined.includes('생성일시') || (joined.includes('source') && joined.includes('medium')) || joined.includes('utm url'))) {
+      return;
+    }
+    // 열 순서: 생성일시 · URL · Source · Medium · Campaign · Content · Term · 전체 UTM URL
+    const [date, baseUrl, source, medium, campaign, content, term, fullUrl] = cells;
+    const full = (fullUrl || '').trim();
+    if (!full) return; // 전체 URL 없는 줄은 건너뜀
+    rows.push({
+      date: date || '',
+      baseUrl: baseUrl || '',
+      source: source || '',
+      medium: medium || '',
+      campaign: campaign || '',
+      content: content || '',
+      term: term || '',
+      fullUrl: full,
+    });
+  });
+
+  if (!rows.length) { statusEl.textContent = '인식된 행이 없습니다. 열 순서를 확인해주세요.'; return; }
+
+  statusEl.textContent = `${rows.length}건 가져오는 중…`;
+  try {
+    const { inserted, skipped } = await API.importLinks(rows);
+    HISTORY = await API.getLinks();
+    renderHistory();
+    updateCampaignSuggestions();
+    ta.value = '';
+    statusEl.textContent = `완료: ${inserted}건 추가${skipped ? `, ${skipped}건 건너뜀(중복)` : ''}`;
+    showToast(`${inserted}건을 가져왔습니다`);
+  } catch (e) {
+    statusEl.textContent = '가져오기 실패: ' + (e.message || '');
+    showToast('가져오기 실패');
   }
 }
 
