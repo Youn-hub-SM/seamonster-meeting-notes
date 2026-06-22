@@ -27,6 +27,7 @@ import {
 } from "@/app/lib/b2b-orders";
 import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import { computeOrderMargin, seasonForDate, suggestBoxes, SEASON_MONTHS } from "@/app/lib/b2b-margin";
+import { Combobox } from "./Combobox";
 
 type Mode = "create" | "edit";
 
@@ -522,16 +523,14 @@ export default function OrderForm({
           <div className="b2b-field-row">
             <div className="b2b-field">
               <label className="b2b-field-label">업체<span className="req">*</span></label>
-              <select
-                className="b2b-select"
-                value={data.company_id}
-                onChange={(e) => selectCompany(e.target.value)}
-              >
-                <option value="">업체 선택</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <Combobox
+                value={companies.find((c) => c.id === data.company_id)?.name ?? ""}
+                options={companies.map((c) => ({ id: c.id, label: c.name }))}
+                onSelect={(o) => selectCompany(o.id)}
+                placeholder="업체 검색 또는 선택"
+                ariaLabel="업체"
+                emptyText="일치하는 업체가 없습니다"
+              />
               {companies.length === 0 && (
                 <span style={{ fontSize: 12, color: "#c92a2a" }}>
                   등록된 업체가 없습니다 — <Link href="/b2b/companies" style={{ color: "var(--sm-orange)" }}>주소록에서 먼저 등록</Link>
@@ -852,8 +851,7 @@ export default function OrderForm({
             <table className="b2b-items-table">
               <thead>
                 <tr>
-                  <th style={{ width: 200 }}>제품 선택</th>
-                  <th>품목명 <span style={{ color: "var(--sm-orange)" }}>*</span></th>
+                  <th style={{ minWidth: 240 }}>품목명 <span style={{ color: "var(--sm-orange)" }}>*</span></th>
                   <th style={{ width: 130 }}>옵션</th>
                   <th className="num" style={{ width: 90 }}>수량 *</th>
                   <th className="num" style={{ width: 120 }}>단가</th>
@@ -868,25 +866,15 @@ export default function OrderForm({
                   const price = Number(it.unit_price) || 0;
                   return (
                     <tr key={idx}>
-                      <td data-label="제품 선택">
-                        <select
-                          value={it.product_id ?? ""}
-                          onChange={(e) => pickProduct(idx, e.target.value)}
-                        >
-                          <option value="">직접 입력</option>
-                          {products.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}{p.spec ? ` ${p.spec}` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
                       <td data-label="품목명">
-                        <input
-                          type="text"
+                        <Combobox
                           value={it.product_name}
-                          onChange={(e) => updateItem(idx, { product_name: e.target.value, product_id: null })}
-                          placeholder="품목명"
+                          options={products.map((p) => ({ id: p.id, label: p.name, sub: p.spec ?? "" }))}
+                          onSelect={(o) => pickProduct(idx, o.id)}
+                          onType={(text) => updateItem(idx, { product_name: text, product_id: null })}
+                          allowFreeText
+                          placeholder="제품 검색 또는 직접 입력"
+                          ariaLabel="품목명"
                         />
                       </td>
                       <td data-label="옵션">

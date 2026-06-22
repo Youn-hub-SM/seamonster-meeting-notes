@@ -2352,3 +2352,70 @@ a.b2b-history-item:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ─── 콤보박스 (업체·제품 입력 시 추천 검색) ─── */
+.b2b-combo {
+  position: relative;
+  width: 100%;
+}
+.b2b-combo-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  font-family: inherit;
+  font-size: 16px;
+  background: var(--sm-white);
+  color: var(--sm-black);
+}
+.b2b-combo-input:focus {
+  outline: none;
+  border-color: var(--sm-orange);
+}
+/* 드롭다운은 position:fixed (JS 좌표) — 테이블 overflow 에 안 잘림 */
+.b2b-combo-list {
+  z-index: 3000;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--sm-white);
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius);
+  box-shadow: var(--sm-shadow-float);
+  padding: 4px;
+}
+.b2b-combo-opt {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--sm-black);
+  cursor: pointer;
+}
+.b2b-combo-opt.is-active,
+.b2b-combo-opt:hover {
+  background: var(--sm-orange-light);
+}
+.b2b-combo-opt-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.b2b-combo-sub {
+  font-size: 13px;
+  color: var(--sm-text-light);
+  flex-shrink: 0;
+}
+.b2b-combo-empty {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--sm-text-light);
+}
