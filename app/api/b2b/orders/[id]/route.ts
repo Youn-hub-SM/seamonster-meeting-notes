@@ -12,6 +12,7 @@ import {
   logOrderTaxInvoiceChanged,
   logOrderDeleted,
 } from "@/app/lib/b2b-activity";
+import { exportOrderToSheetSafe } from "@/app/lib/b2b-sheet-export";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +179,11 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       await logOrderTaxInvoiceChanged(id, prevTaxInvoice, body.tax_invoice_status);
     }
 
+    // 발송완료된 발주 → 매출 구글시트로 1회 전송 (미설정/이미전송이면 내부에서 스킵)
+    if ((refreshed as { status?: string } | null)?.status === "발송완료") {
+      exportOrderToSheetSafe(id);
+    }
+
     return NextResponse.json({ ok: true, order: refreshed });
   } catch (err) {
     console.error("[b2b/orders PUT]", err);
@@ -290,6 +296,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
     if (body.tax_invoice_status && prev?.tax_invoice_status && prev.tax_invoice_status !== body.tax_invoice_status) {
       await logOrderTaxInvoiceChanged(id, prev.tax_invoice_status, body.tax_invoice_status);
+    }
+
+    // 발송완료 전환 → 매출 구글시트로 1회 전송 (미설정/이미전송이면 내부에서 스킵)
+    if (body.status === "발송완료") {
+      exportOrderToSheetSafe(id);
     }
 
     return NextResponse.json({ ok: true, order: data });

@@ -34,14 +34,19 @@ export default function SettingsPage() {
   const [csPromptIsDefault, setCsPromptIsDefault] = useState(true);
   const [csPromptSaving, setCsPromptSaving] = useState(false);
   const [csPromptSaved, setCsPromptSaved] = useState("");
+  const [sheetUrl, setSheetUrl] = useState<string>("");        // 매출 구글시트 Apps Script URL
+  const [sheetConnected, setSheetConnected] = useState(false);
+  const [sheetSaving, setSheetSaving] = useState(false);
+  const [sheetMsg, setSheetMsg] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        const [notifyRes, modelRes, promptRes] = await Promise.all([
+        const [notifyRes, modelRes, promptRes, sheetRes] = await Promise.all([
           fetch("/api/b2b/settings/notify", { cache: "no-store" }),
           fetch("/api/b2b/settings/model", { cache: "no-store" }),
           fetch("/api/b2b/settings/cs-prompt", { cache: "no-store" }),
+          fetch("/api/b2b/settings/sales-sheet", { cache: "no-store" }),
         ]);
         const j = await notifyRes.json();
         if (!notifyRes.ok || !j.ok) throw new Error(j.error || "조회 실패");
@@ -59,12 +64,52 @@ export default function SettingsPage() {
           setCsPromptDefault(pj.default || "");
           setCsPromptIsDefault(!!pj.isDefault);
         }
+        const sj = await sheetRes.json();
+        if (sheetRes.ok && sj.ok) {
+          setSheetUrl(sj.url || "");
+          setSheetConnected(!!sj.connected);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
       setLoading(false);
     })();
   }, []);
+
+  async function saveSheetUrl() {
+    setSheetSaving(true);
+    setSheetMsg("");
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/settings/sales-sheet", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: sheetUrl }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setSheetUrl(j.url || "");
+      setSheetConnected(!!j.connected);
+      setSheetMsg(j.connected ? "✅ 저장됨" : "연동 해제됨");
+    } catch (e) {
+      setSheetMsg(e instanceof Error ? e.message : "저장 중 오류");
+    }
+    setSheetSaving(false);
+  }
+
+  async function testSheet() {
+    setSheetSaving(true);
+    setSheetMsg("연결 확인 중...");
+    try {
+      const res = await fetch("/api/b2b/settings/sales-sheet", { method: "POST" });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "연결 실패");
+      setSheetMsg("✅ " + (j.message || "연결 정상"));
+    } catch (e) {
+      setSheetMsg(e instanceof Error ? e.message : "연결 실패");
+    }
+    setSheetSaving(false);
+  }
 
   async function saveCsPrompt(nextPrompt?: string) {
     const body = nextPrompt !== undefined ? nextPrompt : csPrompt;
@@ -139,6 +184,28 @@ export default function SettingsPage() {
 
   // 전체 모델의 표시 라벨 (CS '전체와 동일' 카드 설명용)
   const globalLabel = MODEL_OPTIONS.find((o) => o.key === model)?.label ?? model;
+
+  // 기존 매출 시트에 붙일 Apps Script 코드 (append 전용 — 기존 데이터/헤더 안 건드림)
+  const SHEET_APPS_SCRIPT = `function doPost(e) {
+  try {
+    var SHEET_NAME = ''; // 특정 탭이면 탭 이름, 비우면 활성(첫) 시트
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = SHEET_NAME ? ss.getSheetByName(SHEET_NAME) : ss.getActiveSheet();
+    var rows = (JSON.parse(e.postData.contents).rows) || [];
+    if (rows.length) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, appended: rows.length }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+function doGet() {
+  return ContentService.createTextOutput(JSON.stringify({ ok: true, message: '씨몬스터 매출 연동 활성' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
 
   function isToggleOn(key: string): boolean {
     return config[key] === true;
@@ -332,6 +399,78 @@ export default function SettingsPage() {
                 {csPrompt.length.toLocaleString()}자 · 모든 사용자 공용
               </span>
             </div>
+          </>
+        )}
+      </section>
+
+      {/* 발주 완료 → 매출 구글시트 전송 */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">매출 구글시트 연동</h2>
+          <span style={{ fontSize: 12.5, color: sheetConnected ? "#22863a" : "var(--sm-text-light)" }}>
+            {sheetConnected ? "● 연동됨" : "○ 미연동"}
+          </span>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
+          발주가 <strong>발송완료</strong>되면 매출집계 엑셀과 <strong>동일한 양식</strong>으로 기존 구글시트 맨 아래에 자동 추가됩니다(발주별 1회).
+          기존 데이터·서식은 건드리지 않습니다.
+        </p>
+        {loading ? (
+          <div className="b2b-loading">불러오는 중...</div>
+        ) : (
+          <>
+            <ol style={{ fontSize: 13.5, color: "var(--sm-text-mid)", lineHeight: 1.9, margin: "0 0 12px", paddingLeft: 20 }}>
+              <li>그 구글시트에서 <strong>확장 프로그램 → Apps Script</strong> 열기</li>
+              <li>아래 코드를 붙여넣고 저장 → <strong>배포 → 새 배포 → 웹 앱</strong> (액세스: 모든 사용자)</li>
+              <li>발급된 <strong>웹 앱 URL</strong>을 아래에 붙여넣고 저장 → "연결 테스트"</li>
+            </ol>
+            <div style={{ position: "relative", marginBottom: 14 }}>
+              <pre
+                style={{
+                  background: "#1A1A1A",
+                  color: "#e2e8f0",
+                  padding: 16,
+                  borderRadius: 8,
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  overflowX: "auto",
+                  maxHeight: 220,
+                  overflowY: "auto",
+                  margin: 0,
+                }}
+              >
+                {SHEET_APPS_SCRIPT}
+              </pre>
+              <button
+                type="button"
+                className="b2b-btn-secondary"
+                style={{ position: "absolute", top: 8, right: 8, padding: "4px 12px", fontSize: 12.5 }}
+                onClick={() => {
+                  navigator.clipboard.writeText(SHEET_APPS_SCRIPT);
+                  setSheetMsg("Apps Script 코드 복사됨");
+                }}
+              >
+                코드 복사
+              </button>
+            </div>
+            <label className="b2b-field-label" style={{ display: "block", marginBottom: 6 }}>Apps Script 웹앱 URL</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                className="b2b-input"
+                type="url"
+                value={sheetUrl}
+                onChange={(e) => setSheetUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/..."
+                style={{ flex: 1, minWidth: 280 }}
+              />
+              <button className="b2b-btn-primary" onClick={saveSheetUrl} disabled={sheetSaving}>저장</button>
+              <button className="b2b-btn-secondary" onClick={testSheet} disabled={sheetSaving || !sheetConnected}>연결 테스트</button>
+            </div>
+            {sheetMsg && (
+              <div style={{ fontSize: 13, color: sheetMsg.startsWith("✅") ? "#22863a" : "var(--sm-text-mid)", marginTop: 10 }}>
+                {sheetMsg}
+              </div>
+            )}
           </>
         )}
       </section>
