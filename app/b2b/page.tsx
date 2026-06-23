@@ -39,10 +39,10 @@ async function loadStats(): Promise<DashStats> {
         .limit(0)
         .eq("production_date", today)
         .not("status", "in", "(발송완료,취소)"),
+      // 오늘 발송: 분할발송 차수(shipments) 기준 — 헤더 단일 발송일이 아니라 차수별 발송일로 집계
       sb
-        .from("orders")
-        .select("id", { count: "exact" })
-        .limit(0)
+        .from("shipments")
+        .select("id, order:order_id(status)")
         .eq("ship_date", today)
         .not("status", "in", "(발송완료,취소)"),
       sb
@@ -75,11 +75,18 @@ async function loadStats(): Promise<DashStats> {
       return s + Math.max(0, Number(o.total) - paid);
     }, 0);
 
+    // 오늘 발송 차수 수 (취소된 발주 제외)
+    type ShipTodayRow = { order: { status: string } | { status: string }[] | null };
+    const todayShip = ((ship.data as unknown as ShipTodayRow[] | null) ?? []).filter((s) => {
+      const ord = Array.isArray(s.order) ? s.order[0] : s.order;
+      return ord ? ord.status !== "취소" : true;
+    }).length;
+
     return {
       companies: c.count ?? 0,
       products: p.count ?? 0,
       todayProduction: prod.count ?? 0,
-      todayShip: ship.count ?? 0,
+      todayShip,
       unpaidCount: (unpaid.data ?? []).length,
       unpaidTotal,
       schemaReady: true,
