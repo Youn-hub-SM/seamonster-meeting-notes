@@ -38,7 +38,8 @@ async function loadStats(): Promise<DashStats> {
         .select("id", { count: "exact" })
         .limit(0)
         .eq("production_date", today)
-        .not("status", "in", "(발송완료,취소)"),
+        .neq("production_status", "생산완료")
+        .neq("status", "취소"),
       // 오늘 발송: 분할발송 차수(shipments) 기준 — 헤더 단일 발송일이 아니라 차수별 발송일로 집계
       sb
         .from("shipments")
@@ -48,7 +49,7 @@ async function loadStats(): Promise<DashStats> {
       sb
         .from("orders")
         .select("id, total")
-        .in("payment_status", ["미입금", "부분입금"]),
+        .in("payment_status", ["입금전", "일부입금"]),
     ]);
     if (c.error) throw c.error;
     if (p.error) throw p.error;
@@ -161,7 +162,7 @@ async function loadWeekSchedule(): Promise<{ days: WeekDay[]; label: string } | 
       // 이번 주 생산일
       sb
         .from("orders")
-        .select("id, production_date, status, companies:company_id(name)")
+        .select("id, production_date, production_status, companies:company_id(name)")
         .gte("production_date", start)
         .lte("production_date", end)
         .neq("status", "취소"),
@@ -192,14 +193,14 @@ async function loadWeekSchedule(): Promise<{ days: WeekDay[]; label: string } | 
       byDate.set(iso, arr);
     };
 
-    type ProdRow = { id: string; production_date: string; status: string; companies: CompJoin };
+    type ProdRow = { id: string; production_date: string; production_status: string; companies: CompJoin };
     for (const o of (prodRes.data as unknown as ProdRow[] | null) ?? []) {
       push(o.production_date, {
         kind: "production",
         orderId: o.id,
         company: compName(o.companies),
         seqLabel: "",
-        done: o.status === "생산완료/발송대기" || o.status === "발송완료",
+        done: o.production_status === "생산완료",
       });
     }
 
@@ -318,14 +319,14 @@ export default async function B2BDashboard() {
           </div>
           {stats.unpaidCount === 0 ? (
             <div className="b2b-stat-card-value" style={{ fontSize: 16, fontWeight: 500, color: "var(--sm-text-light)" }}>
-              미입금 없음
+              미수금 없음
             </div>
           ) : (
             <>
               <div className="b2b-stat-card-value b2b-money" style={{ color: "#c92a2a" }}>
                 {stats.unpaidTotal.toLocaleString()}
               </div>
-              <div className="b2b-stat-card-hint">{stats.unpaidCount}건 미입금/부분입금</div>
+              <div className="b2b-stat-card-hint">{stats.unpaidCount}건 입금전/일부입금</div>
             </>
           )}
         </div>

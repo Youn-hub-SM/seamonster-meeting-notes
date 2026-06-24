@@ -8,6 +8,7 @@ import {
 import { saveOrderShipments, SavedOrderItem } from "@/app/lib/b2b-shipments";
 import {
   logOrderStatusChanged,
+  logOrderProductionStatusChanged,
   logOrderPaymentStatusChanged,
   logOrderTaxInvoiceChanged,
   logOrderDeleted,
@@ -75,10 +76,11 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     // 0) 변경 전 상태 캡처 (활동 로그용)
     const { data: prevOrder } = await sb
       .from("orders")
-      .select("status, payment_status, tax_invoice_status")
+      .select("status, production_status, payment_status, tax_invoice_status")
       .eq("id", id)
       .single();
     const prevStatus = prevOrder?.status as string | undefined;
+    const prevProduction = prevOrder?.production_status as string | undefined;
     const prevPayment = prevOrder?.payment_status as string | undefined;
     const prevTaxInvoice = prevOrder?.tax_invoice_status as string | undefined;
 
@@ -91,6 +93,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
         production_date: body.production_date || null,
         ship_date: body.ship_date || null,
         status: body.status,
+        production_status: body.production_status,
         payment_status: body.payment_status,
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
@@ -172,6 +175,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     if (prevStatus && prevStatus !== body.status) {
       await logOrderStatusChanged(id, prevStatus, body.status);
     }
+    if (prevProduction && prevProduction !== body.production_status) {
+      await logOrderProductionStatusChanged(id, prevProduction, body.production_status);
+    }
     if (prevPayment && prevPayment !== body.payment_status) {
       await logOrderPaymentStatusChanged(id, prevPayment, body.payment_status);
     }
@@ -237,6 +243,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const { id } = await params;
     const body = (await req.json()) as Partial<{
       status: string;
+      production_status: string;
       payment_status: string;
       tax_invoice_status: string;
       production_date: string | null;
@@ -248,12 +255,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // 변경 전 상태 캡처 (활동 로그용 + 송장번호 확인)
     const { data: prev } = await sb
       .from("orders")
-      .select("status, payment_status, tax_invoice_status, tracking_no")
+      .select("status, production_status, payment_status, tax_invoice_status, tracking_no")
       .eq("id", id)
       .single();
 
     const patch: Record<string, unknown> = {};
     if (body.status !== undefined) patch.status = body.status;
+    if (body.production_status !== undefined) patch.production_status = body.production_status;
     if (body.payment_status !== undefined) patch.payment_status = body.payment_status;
     if (body.tax_invoice_status !== undefined) patch.tax_invoice_status = body.tax_invoice_status;
     if (body.production_date !== undefined) patch.production_date = body.production_date || null;
@@ -284,12 +292,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         .from("shipments")
         .update({ status: "발송완료", shipped_at: new Date().toISOString() })
         .eq("order_id", id)
-        .in("status", ["발송대기", "발송중"]);
+        .eq("status", "발송대기");
     }
 
     // 활동 로그
     if (body.status && prev?.status && prev.status !== body.status) {
       await logOrderStatusChanged(id, prev.status, body.status);
+    }
+    if (body.production_status && prev?.production_status && prev.production_status !== body.production_status) {
+      await logOrderProductionStatusChanged(id, prev.production_status, body.production_status);
     }
     if (body.payment_status && prev?.payment_status && prev.payment_status !== body.payment_status) {
       await logOrderPaymentStatusChanged(id, prev.payment_status, body.payment_status);

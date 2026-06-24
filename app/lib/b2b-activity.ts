@@ -149,13 +149,25 @@ export async function logOrderStatusChanged(orderId: string, fromStatus: string,
   const o = await loadOrderSummary(orderId);
   if (!o) return;
   const emoji =
-    toStatus === "생산요청/생산중" ? "🏭" :
-    toStatus === "생산완료/발송대기" ? "✅" :
     toStatus === "발송완료" ? "🚚" :
-    toStatus === "취소" ? "❌" : "🔄";
+    toStatus === "취소" ? "❌" : "📦";
   await recordActivity({
     event_type: "order.status_changed",
     summary: `${emoji} ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
+    order_id: o.id,
+    order_no: o.order_no,
+    meta: { from: fromStatus, to: toStatus },
+  });
+}
+
+export async function logOrderProductionStatusChanged(orderId: string, fromStatus: string, toStatus: string): Promise<void> {
+  if (fromStatus === toStatus) return;
+  const o = await loadOrderSummary(orderId);
+  if (!o) return;
+  const emoji = toStatus === "생산완료" ? "✅" : toStatus === "생산중" ? "🏭" : "🧊";
+  await recordActivity({
+    event_type: "order.production_status_changed",
+    summary: `${emoji} 생산 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
     order_id: o.id,
     order_no: o.order_no,
     meta: { from: fromStatus, to: toStatus },
@@ -166,7 +178,7 @@ export async function logOrderPaymentStatusChanged(orderId: string, fromStatus: 
   if (fromStatus === toStatus) return;
   const o = await loadOrderSummary(orderId);
   if (!o) return;
-  const emoji = toStatus === "입금완료" ? "💰" : toStatus === "부분입금" ? "💵" : "⏳";
+  const emoji = toStatus === "입금완료" ? "💰" : toStatus === "일부입금" ? "💵" : "⏳";
   await recordActivity({
     event_type: "order.payment_status_changed",
     summary: `${emoji} 입금상태 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
@@ -180,7 +192,7 @@ export async function logOrderTaxInvoiceChanged(orderId: string, fromStatus: str
   if (fromStatus === toStatus) return;
   const o = await loadOrderSummary(orderId);
   if (!o) return;
-  const emoji = toStatus === "발행완료" ? "🧾" : toStatus === "발행대기" ? "📝" : toStatus === "면제" ? "➖" : "📄";
+  const emoji = toStatus === "발행완료" ? "🧾" : toStatus === "불필요" ? "➖" : "📄";
   await recordActivity({
     event_type: "order.tax_invoice_changed",
     summary: `${emoji} 세금계산서 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
@@ -196,10 +208,8 @@ export async function logShipmentStatusChanged(orderId: string, seq: number, fro
   const o = await loadOrderSummary(orderId);
   if (!o) return;
   const emoji =
-    toStatus === "생산요청/생산중" ? "🏭" :
-    toStatus === "생산완료/발송대기" ? "✅" :
     toStatus === "발송완료" ? "🚚" :
-    toStatus === "취소" ? "❌" : "🔄";
+    toStatus === "취소" ? "❌" : "📦";
   await recordActivity({
     event_type: "shipment.status_changed",
     summary: `${emoji} ${o.order_no} (${o.company_name}) · ${seq}차 발송 · ${fromStatus} → ${toStatus}`,

@@ -6,13 +6,16 @@ import {
   OrderListItem,
   OrderLinePreview,
   ORDER_STATUSES,
+  PRODUCTION_STATUSES,
   PAYMENT_STATUSES,
   TAX_INVOICE_STATUSES,
   OrderStatus,
+  ProductionStatus,
   PaymentStatus,
   TaxInvoiceStatus,
   STATUS_COLORS,
   STATUS_SHORT,
+  PRODUCTION_COLORS,
   PAYMENT_COLORS,
   TAX_INVOICE_COLORS,
   SHIPMENT_STATUS_COLORS,
@@ -245,6 +248,30 @@ export default function OrdersListPage() {
       return;
     }
     await patchStatus(id, newStatus);
+  }
+
+  async function patchProduction(id: string, newProd: ProductionStatus) {
+    const target = orders.find((o) => o.id === id);
+    if (!target || target.production_status === newProd) return;
+    const snapshot = orders;
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, production_status: newProd } : o)));
+    try {
+      const res = await fetch(`/api/b2b/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ production_status: newProd }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setOrders(snapshot);
+        setError(data.error || "생산상태 변경 실패");
+      } else {
+        pingActivityFeed();
+      }
+    } catch (err) {
+      setOrders(snapshot);
+      setError(err instanceof Error ? err.message : "생산상태 변경 오류");
+    }
   }
 
   async function patchStatus(id: string, newStatus: OrderStatus, trackingNo?: string) {
@@ -734,7 +761,8 @@ export default function OrdersListPage() {
                   <th className="b2b-col-date">생산일</th>
                   <th className="b2b-col-date">발송일</th>
                   <th className="num">합계</th>
-                  <th>상태</th>
+                  <th>생산</th>
+                  <th>발송</th>
                   <th>입금</th>
                   <th>세금계산서</th>
                   <th></th>
@@ -789,6 +817,21 @@ export default function OrdersListPage() {
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {formatMoney(o.total)}
                       </RowCell>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <select
+                          className="b2b-status-select"
+                          value={o.production_status}
+                          onChange={(e) => patchProduction(o.id, e.target.value as ProductionStatus)}
+                          style={{
+                            background: PRODUCTION_COLORS[o.production_status]?.bg,
+                            color: PRODUCTION_COLORS[o.production_status]?.fg,
+                          }}
+                        >
+                          {PRODUCTION_STATUSES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td onClick={(e) => e.stopPropagation()}>
                         {parent && prog ? (
                           <button
@@ -860,7 +903,7 @@ export default function OrdersListPage() {
                       <tr key={s.id} className="b2b-child-row">
                         <td></td>
                         <td></td>
-                        <td colSpan={10} style={{ padding: "8px 18px 8px 30px" }}>
+                        <td colSpan={11} style={{ padding: "8px 18px 8px 30px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                             <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                               <span style={{ color: "var(--sm-text-light)", fontSize: 13 }}>└ {s.seq}차</span>
@@ -936,6 +979,9 @@ export default function OrdersListPage() {
                       <div className="b2b-order-card-foot">
                         <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
                         <div className="b2b-order-card-pills">
+                          <span className="b2b-status-pill" style={{ background: PRODUCTION_COLORS[o.production_status]?.bg, color: PRODUCTION_COLORS[o.production_status]?.fg }}>
+                            {o.production_status}
+                          </span>
                           {parent && prog ? (
                             <span
                               className="b2b-status-pill"

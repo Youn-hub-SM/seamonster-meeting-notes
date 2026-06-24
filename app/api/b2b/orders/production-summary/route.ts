@@ -4,7 +4,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 export const dynamic = "force-dynamic";
 
 // GET /api/b2b/orders/production-summary
-// 생산이 필요한 발주(발주확인/생산대기 + 생산요청/생산중)의 라인아이템을
+// 생산이 필요한 발주(생산대기 + 생산중)의 라인아이템을
 // 생산예정일(일자)별 → 품목+옵션별 총수량으로 집계.
 //  → "며칠에 무엇을 얼마나 생산해야 하는가"를 하루 단위로 보여줌.
 
@@ -30,11 +30,11 @@ export async function GET(_req: NextRequest) {
     const { data, error } = await sb
       .from("orders")
       .select(
-        "id, production_date, status, " +
+        "id, production_date, production_status, " +
           "company:company_id(name), " +
           "order_items(product_name, spec, qty)"
       )
-      .in("status", ["발주확인/생산대기", "생산요청/생산중"])
+      .in("production_status", ["생산대기", "생산중"])
       .order("production_date", { ascending: true });
     if (error) throw error;
 

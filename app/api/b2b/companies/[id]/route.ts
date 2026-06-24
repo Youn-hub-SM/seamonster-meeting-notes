@@ -41,8 +41,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       order_items: { product_name: string; spec: string | null; qty: number }[];
     }[];
 
-    // 미입금/부분입금 발주의 입금 합계 → 미수금
-    const unpaidIds = orderRows.filter((o) => o.payment_status === "미입금" || o.payment_status === "부분입금").map((o) => o.id);
+    // 입금전/일부입금 발주의 입금 합계 → 미수금
+    const unpaidIds = orderRows.filter((o) => o.payment_status === "입금전" || o.payment_status === "일부입금").map((o) => o.id);
     let paidByOrder = new Map<string, number>();
     if (unpaidIds.length > 0) {
       const { data: pays, error: pErr } = await sb.from("payments").select("order_id, amount").in("order_id", unpaidIds);
@@ -57,7 +57,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
     for (const o of orderRows) {
       if (o.status === "발송완료") revenue += Number(o.total) || 0;
-      if (o.payment_status === "미입금" || o.payment_status === "부분입금") {
+      if (o.payment_status === "입금전" || o.payment_status === "일부입금") {
         const paid = paidByOrder.get(o.id) || 0;
         outstanding += Math.max(0, (Number(o.total) || 0) - paid);
       }

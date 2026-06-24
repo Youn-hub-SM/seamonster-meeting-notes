@@ -8,24 +8,14 @@ import {
 // 저장된 발주상품 (폼 인덱스 → DB id + 스냅샷)
 export type SavedOrderItem = { id: string; product_name: string; spec: string | null };
 
-// 복수 발송(2건 이상) 발주의 상위 상태를 하위 차수 상태들로부터 도출.
-//  전부 취소 → 취소 / 그 외 → 취소 제외 차수 중 '가장 덜 진행된' 상태(= 가장 느린 차수 기준).
-//  발송이 2건 미만이면 null(도출 안 함 — 일반 발주는 상태를 직접 관리).
-const STATUS_RANK: Record<string, number> = {
-  "발주확인/생산대기": 0,
-  "생산요청/생산중": 1,
-  "생산완료/발송대기": 2,
-  "발송완료": 3,
-};
+// 복수 발송(2건 이상) 발주의 상위 발송상태를 하위 차수 발송상태들로부터 도출.
+//  전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 하나라도 미발송 → 발송대기.
+//  발송이 2건 미만이면 null(도출 안 함 — 일반 발주는 메인 발송상태를 직접 관리).
 export function deriveParentStatus(statuses: string[]): string | null {
   if (statuses.length < 2) return null;
   const nonCancel = statuses.filter((s) => s !== "취소");
   if (nonCancel.length === 0) return "취소";
-  let min = nonCancel[0];
-  for (const s of nonCancel) {
-    if ((STATUS_RANK[s] ?? 0) < (STATUS_RANK[min] ?? 0)) min = s;
-  }
-  return min;
+  return nonCancel.every((s) => s === "발송완료") ? "발송완료" : "발송대기";
 }
 
 /**
@@ -72,7 +62,7 @@ export async function saveOrderShipments(
         order_id: orderId,
         seq: seq++,
         ship_date: sch.ship_date || null,
-        status: sch.status || "발주확인/생산대기",
+        status: sch.status || "발송대기",
         recipient_name: rec.recipient_name || "(미지정)",
         recipient_phone: rec.recipient_phone || "",
         address: rec.address || "(주소 미입력)",
@@ -87,7 +77,7 @@ export async function saveOrderShipments(
     if (shipErr) throw shipErr;
     inserted++;
     totalBoxes += boxCount;
-    insertedStatuses.push(sch.status || "발주확인/생산대기");
+    insertedStatuses.push(sch.status || "발송대기");
 
     if (items.length > 0) {
       const rows = items.map((it) => ({
@@ -113,7 +103,7 @@ export async function saveOrderShipments(
       order_id: orderId,
       seq: 1,
       ship_date: null,
-      status: "발주확인/생산대기",
+      status: "발송대기",
       recipient_name: rec.recipient_name || "(미지정)",
       recipient_phone: rec.recipient_phone || "",
       address: rec.address || "(주소 미입력)",
@@ -127,9 +117,9 @@ export async function saveOrderShipments(
     totalBoxes += fallbackBoxes;
   }
 
-  // 복수 발송(2건 이상)이면 상위발주 상태를 하위 차수들로부터 자동 도출.
-  //  - 전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 그 외 → 생산완료/발송대기(진행중)
-  //  화면엔 상위 상태를 표시하지 않지만, 매출집계·필터가 동작하도록 DB 값은 일관되게 유지.
+  // 복수 발송(2건 이상)이면 상위발주 발송상태를 하위 차수들로부터 자동 도출.
+  //  - 전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 하나라도 미발송 → 발송대기.
+  //  화면엔 상위 발송상태를 표시하지 않지만, 매출집계·필터가 동작하도록 DB 값은 일관되게 유지.
   const derivedStatus = deriveParentStatus(insertedStatuses);
 
   return { earliestShipDate: earliest, derivedStatus, totalBoxes };

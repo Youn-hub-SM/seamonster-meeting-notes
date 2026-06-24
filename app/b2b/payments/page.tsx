@@ -69,7 +69,7 @@ export default function PaymentsPage() {
         <div>
           <h1 className="b2b-page-title">입금 확인</h1>
           <p className="b2b-page-subtitle">
-            미입금·부분입금 발주를 한 화면에서 — 발주를 클릭해 입금 내역을 기록하세요.
+            입금전·일부입금 발주를 한 화면에서 — 발주를 클릭해 입금 내역을 기록하세요.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -84,7 +84,7 @@ export default function PaymentsPage() {
       {data && (
         <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
           <div className="b2b-stat-card">
-            <div className="b2b-stat-card-label">미입금 발주</div>
+            <div className="b2b-stat-card-label">미수금 발주</div>
             <div className="b2b-stat-card-value">{data.summary.order_count}건</div>
           </div>
           <div className="b2b-stat-card">
@@ -106,7 +106,7 @@ export default function PaymentsPage() {
 
       <div className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">미입금·부분입금 발주</h2>
+          <h2 className="b2b-card-title">입금전·일부입금 발주</h2>
         </div>
 
         {loading ? (
@@ -114,7 +114,7 @@ export default function PaymentsPage() {
         ) : !data || data.orders.length === 0 ? (
           <div className="b2b-empty">
             <div className="b2b-empty-icon">💰</div>
-            미입금 발주가 없습니다.
+            미수금 발주가 없습니다.
           </div>
         ) : (
           <div className="b2b-table-wrap">

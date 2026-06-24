@@ -6,55 +6,52 @@ import { Company, TaxType } from "./b2b-types";
 // ─────────────────────────────────────────────
 // 상태 enum
 // ─────────────────────────────────────────────
-export const ORDER_STATUSES = [
-  "발주확인/생산대기",
-  "생산요청/생산중",
-  "생산완료/발송대기",
-  "발송완료",
-  "취소",
-] as const;
+// ── 생산 상태 (발주 단위) ──
+export const PRODUCTION_STATUSES = ["생산대기", "생산중", "생산완료"] as const;
+export type ProductionStatus = (typeof PRODUCTION_STATUSES)[number];
+export const PRODUCTION_COLORS: Record<ProductionStatus, { bg: string; fg: string }> = {
+  "생산대기": { bg: "#FFF4E0", fg: "#B86E00" },
+  "생산중": { bg: "#E0F0FF", fg: "#0A66C2" },
+  "생산완료": { bg: "#E0F5E5", fg: "#22863A" },
+};
+
+// ── 발송 상태 (차수 단위; 발주 status 는 차수들의 롤업) ──
+export const ORDER_STATUSES = ["발송대기", "발송완료", "취소"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-export const PAYMENT_STATUSES = ["미입금", "부분입금", "입금완료", "확인불필요"] as const;
+export const PAYMENT_STATUSES = ["입금전", "일부입금", "입금완료", "불필요"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
-export const TAX_INVOICE_STATUSES = ["미발행", "발행대기", "발행완료", "면제"] as const;
+export const TAX_INVOICE_STATUSES = ["미발행", "발행완료", "불필요"] as const;
 export type TaxInvoiceStatus = (typeof TAX_INVOICE_STATUSES)[number];
 
 // 색상 (UI 에서 status pill 에 사용).
-// /orders 와 같은 팔레트.
 export const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
-  "발주확인/생산대기": { bg: "#FFF4E0", fg: "#B86E00" },
-  "생산요청/생산중": { bg: "#E0F0FF", fg: "#0A66C2" },
-  "생산완료/발송대기": { bg: "#E0F5E5", fg: "#22863A" },
-  "발송완료": { bg: "#EFEFEF", fg: "#666666" },
+  "발송대기": { bg: "#FFF4E0", fg: "#B86E00" },
+  "발송완료": { bg: "#E0F5E5", fg: "#22863A" },
   "취소": { bg: "#FCE4E4", fg: "#C92A2A" },
 };
 
 export const STATUS_SHORT: Record<OrderStatus, string> = {
-  "발주확인/생산대기": "대기",
-  "생산요청/생산중": "생산중",
-  "생산완료/발송대기": "발송대기",
+  "발송대기": "발송대기",
   "발송완료": "발송완료",
   "취소": "취소",
 };
 
 export const PAYMENT_COLORS: Record<PaymentStatus, { bg: string; fg: string }> = {
-  "미입금": { bg: "#FCE4E4", fg: "#C92A2A" },
-  "부분입금": { bg: "#FFF4E0", fg: "#B86E00" },
+  "입금전": { bg: "#FCE4E4", fg: "#C92A2A" },
+  "일부입금": { bg: "#FFF4E0", fg: "#B86E00" },
   "입금완료": { bg: "#E0F5E5", fg: "#22863A" },
-  "확인불필요": { bg: "#EFEFEF", fg: "#666666" },
+  "불필요": { bg: "#EFEFEF", fg: "#666666" },
 };
 
 export const TAX_INVOICE_COLORS: Record<TaxInvoiceStatus, { bg: string; fg: string }> = {
   "미발행": { bg: "#FCE4E4", fg: "#C92A2A" },
-  "발행대기": { bg: "#FFF4E0", fg: "#B86E00" },
   "발행완료": { bg: "#E0F5E5", fg: "#22863A" },
-  "면제": { bg: "#EFEFEF", fg: "#666666" },
+  "불필요": { bg: "#EFEFEF", fg: "#666666" },
 };
 
-// 발송 차수(하위 발주) 상태 — 일반 발주와 동일한 5단계 (발주확인/생산대기 ~ 취소).
-//  '발송중'은 사용하지 않음.
+// 발송 차수 상태 = 발주 발송 축과 동일 (발송대기/발송완료/취소).
 export const SHIPMENT_STATUSES = ORDER_STATUSES;
 export type ShipmentStatus = OrderStatus;
 export const SHIPMENT_STATUS_COLORS = STATUS_COLORS;
@@ -70,6 +67,7 @@ export interface Order {
   production_date: string | null;
   ship_date: string | null;
   status: OrderStatus;
+  production_status: ProductionStatus;
   payment_status: PaymentStatus;
   tax_invoice_status: TaxInvoiceStatus;
   subtotal: number;
@@ -223,7 +221,7 @@ export interface ShipmentScheduleInput {
 
 export const EMPTY_SHIPMENT_SCHEDULE: ShipmentScheduleInput = {
   ship_date: "",
-  status: "발주확인/생산대기",
+  status: "발송대기",
   tracking_no: "",
   box_count: 1,
   items: [],
@@ -306,7 +304,8 @@ export interface OrderInput {
   order_date: string;
   production_date: string;
   ship_date: string;  // 헤더 대표 발송일 — 저장 시 가장 이른 발송 일정으로 자동 채움
-  status: OrderStatus;
+  status: OrderStatus;  // 발송 상태(메인). 복수발송이면 차수 롤업으로 자동 도출.
+  production_status: ProductionStatus;  // 생산 상태 (발주 단위)
   payment_status: PaymentStatus;
   tax_invoice_status: TaxInvoiceStatus;
   notes: string;
@@ -334,8 +333,9 @@ export const EMPTY_ORDER: OrderInput = {
   order_date: "",
   production_date: "",
   ship_date: "",
-  status: "발주확인/생산대기",
-  payment_status: "미입금",
+  status: "발송대기",
+  production_status: "생산대기",
+  payment_status: "입금전",
   tax_invoice_status: "미발행",
   notes: "",
   box_count: 1,
@@ -392,20 +392,14 @@ export function nextPendingShipDate(
 // 발주의 긴급도 계산.
 // - overdue: 발송일 지났는데 미발송 / 생산일 지났는데 대기·생산중
 // - urgent: 발송일이 오늘 또는 내일인데 아직 발송 안 됨
-export function getUrgency(o: Pick<Order, "status" | "production_date" | "ship_date">, todayIso: string): Urgency {
+export function getUrgency(o: Pick<Order, "status" | "production_status" | "production_date" | "ship_date">, todayIso: string): Urgency {
   if (o.status === "발송완료" || o.status === "취소") return "normal";
   const tomorrowIso = addDaysISO(todayIso, 1);
 
-  // 여기 도달 시 status 는 '발송완료' / '취소' 가 아님 (위에서 걸렀음)
-
-  // 발송일 지남
+  // 발송일 지남 + 아직 미발송
   if (o.ship_date && o.ship_date < todayIso) return "overdue";
-  // 생산일 지남 + 아직 생산대기/생산중
-  if (
-    o.production_date &&
-    o.production_date < todayIso &&
-    (o.status === "발주확인/생산대기" || o.status === "생산요청/생산중")
-  ) {
+  // 생산일 지남 + 아직 생산 미완료
+  if (o.production_date && o.production_date < todayIso && o.production_status !== "생산완료") {
     return "overdue";
   }
   // 발송 임박
@@ -415,15 +409,15 @@ export function getUrgency(o: Pick<Order, "status" | "production_date" | "ship_d
   return "normal";
 }
 
-// 발주 '완료' — 발송완료 + 입금완료(또는 확인불필요) + 세금계산서 발행완료(또는 면제).
+// 발주 '완료' — 발송완료 + 입금완료(또는 불필요) + 세금계산서 발행완료(또는 불필요).
 //  '더 할 일이 없는' 상태. 임박 칸 [완료] 배지 + 완료 숨기기 필터에 사용.
 export function isOrderComplete(
   o: Pick<Order, "status" | "payment_status" | "tax_invoice_status">
 ): boolean {
   return (
     o.status === "발송완료" &&
-    (o.payment_status === "입금완료" || o.payment_status === "확인불필요") &&
-    (o.tax_invoice_status === "발행완료" || o.tax_invoice_status === "면제")
+    (o.payment_status === "입금완료" || o.payment_status === "불필요") &&
+    (o.tax_invoice_status === "발행완료" || o.tax_invoice_status === "불필요")
   );
 }
 

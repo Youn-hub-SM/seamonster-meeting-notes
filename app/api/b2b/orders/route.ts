@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
         production_date: body.production_date || null,
         ship_date: body.ship_date || null,
         status: body.status,
+        production_status: body.production_status,
         payment_status: body.payment_status,
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,

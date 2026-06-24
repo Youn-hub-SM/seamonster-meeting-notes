@@ -91,7 +91,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
             {formatMoney(data.summary.outstanding)}
           </div>
           {data.summary.unpaid_count > 0 && (
-            <div className="b2b-stat-card-hint">{data.summary.unpaid_count}건 미입금/부분입금</div>
+            <div className="b2b-stat-card-hint">{data.summary.unpaid_count}건 입금전/일부입금</div>
           )}
         </div>
         <div className="b2b-stat-card">

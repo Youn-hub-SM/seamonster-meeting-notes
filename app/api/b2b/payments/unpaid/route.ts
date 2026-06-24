@@ -4,19 +4,19 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 export const dynamic = "force-dynamic";
 
 // GET /api/b2b/payments/unpaid
-// 미입금·부분입금 발주 + 각 발주의 입금 합계
+// 입금전·일부입금 발주 + 각 발주의 입금 합계
 export async function GET(_req: NextRequest) {
   try {
     const sb = supabaseAdmin();
 
-    // 1) payment_status 가 미입금/부분입금 인 발주
+    // 1) payment_status 가 입금전/일부입금 인 발주
     const { data: orders, error: oErr } = await sb
       .from("orders")
       .select(
         "id, order_no, order_date, ship_date, status, payment_status, total, " +
           "company:company_id(name)"
       )
-      .in("payment_status", ["미입금", "부분입금"])
+      .in("payment_status", ["입금전", "일부입금"])
       .order("order_date", { ascending: true });
     if (oErr) throw oErr;
 
