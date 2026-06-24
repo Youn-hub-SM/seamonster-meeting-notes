@@ -3004,19 +3004,21 @@ a {
 /* ─── 내부도구 홈 ─── */
 .home-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
   margin-bottom: 44px;
 }
 .home-tool-card {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 78px;
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius-card);
   box-shadow: var(--sm-shadow-card);
-  padding: 20px 22px;
+  padding: 22px 18px;
   transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .home-tool-card:hover {
@@ -3024,9 +3026,8 @@ a {
   transform: translateY(-2px);
   box-shadow: var(--sm-shadow-float);
 }
-.home-tool-emoji { font-size: 26px; line-height: 1; }
-.home-tool-name { font-size: 18px; font-weight: 700; color: var(--sm-black); display: inline-flex; align-items: center; }
-.home-new, .change-new {
+.home-tool-name { font-size: 21px; font-weight: 700; color: var(--sm-black); letter-spacing: -0.01em; }
+.change-new {
   display: inline-block;
   font-size: 10.5px;
   font-weight: 800;
@@ -3037,8 +3038,6 @@ a {
   padding: 1px 6px;
   line-height: 1.5;
 }
-.home-new { margin-left: 7px; }
-.home-tool-desc { font-size: 13.5px; color: var(--sm-text-mid); line-height: 1.55; }
 .home-tool-card.is-external { background: var(--sm-bg-warm); border-color: var(--sm-orange-border); }
 
 .home-section-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 4px; }
@@ -3081,10 +3080,8 @@ a {
 
 @media (max-width: 768px) {
   .home-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 32px; }
-  .home-tool-card { padding: 14px; gap: 4px; }
-  .home-tool-emoji { font-size: 22px; }
-  .home-tool-name { font-size: 15px; }
-  .home-tool-desc { font-size: 12px; line-height: 1.45; }
+  .home-tool-card { padding: 18px 12px; min-height: 64px; }
+  .home-tool-name { font-size: 17px; }
   .home-section-title { font-size: 20px; }
   .change-item { padding: 16px; }
 }

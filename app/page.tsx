@@ -5,12 +5,12 @@ import { CHANGELOG } from "@/app/lib/changelog";
 export const dynamic = "force-dynamic";
 
 const TOOLS = [
-  { href: "/meeting", emoji: "📝", name: "회의록 정리", desc: "녹취·메모를 붙여넣으면 시간순 요약·결정·할 일로 정리" },
-  { href: "/correct", emoji: "✍️", name: "문장 교정", desc: "씨몬스터 톤앤매너에 맞게 문장 다듬기" },
-  { href: "/cs", emoji: "🎧", name: "CS 코치", desc: "상황을 적으면 매뉴얼 근거로 행동 코칭 + 답변 초안" },
-  { href: "/utm", emoji: "🔗", name: "UTM 빌더", desc: "채널별 추적 링크 생성·관리 (팀 공용 히스토리)" },
-  { href: "/subscription", emoji: "📦", name: "정기배송 분석", desc: "구독 CSV 분석 + KPI 추세 관찰" },
-  { href: "/b2b", emoji: "🏢", name: "B2B 매니저", desc: "발주·업체·원가·이익률·매출·입금 관리" },
+  { href: "/meeting", name: "회의록 정리" },
+  { href: "/correct", name: "문장 교정" },
+  { href: "/cs", name: "CS 코치" },
+  { href: "/utm", name: "UTM 빌더" },
+  { href: "/subscription", name: "정기배송 분석" },
+  { href: "/b2b", name: "B2B 매니저" },
 ];
 
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {
@@ -22,12 +22,10 @@ const TAG_STYLE: Record<string, { bg: string; color: string }> = {
 export default async function HomePage() {
   const gitbook = await getGitbookUrl();
 
-  // 최근 7일 내 업데이트면 NEW 뱃지
+  // 업데이트 노트의 최근 7일 항목에 NEW 뱃지
   const now = Date.now();
   const WEEK = 7 * 24 * 60 * 60 * 1000;
   const isNew = (dateStr: string) => now - new Date(dateStr).getTime() <= WEEK;
-  const recentHrefs = CHANGELOG.filter((c) => c.href && isNew(c.date)).map((c) => c.href as string);
-  const toolIsNew = (href: string) => href !== "/" && recentHrefs.some((h) => h.startsWith(href));
 
   return (
     <div className="container">
@@ -38,19 +36,12 @@ export default async function HomePage() {
       <div className="home-grid">
         {TOOLS.map((t) => (
           <Link key={t.href} href={t.href} className="home-tool-card">
-            <span className="home-tool-emoji">{t.emoji}</span>
-            <span className="home-tool-name">
-              {t.name}
-              {toolIsNew(t.href) && <span className="home-new">NEW</span>}
-            </span>
-            <span className="home-tool-desc">{t.desc}</span>
+            <span className="home-tool-name">{t.name}</span>
           </Link>
         ))}
         {gitbook && (
           <a href={gitbook} target="_blank" rel="noopener noreferrer" className="home-tool-card is-external">
-            <span className="home-tool-emoji">📖</span>
             <span className="home-tool-name">가이드라인 ↗</span>
-            <span className="home-tool-desc">사내 매뉴얼·규정 (GitBook, 새 탭)</span>
           </a>
         )}
       </div>
