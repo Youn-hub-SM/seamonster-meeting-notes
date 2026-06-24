@@ -295,42 +295,48 @@ export default function ProductionSchedulePage() {
       {addModal && (
         <div className="b2b-modal-backdrop" onClick={() => setAddModal(null)}>
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-            <h2 className="b2b-modal-title">생산일정 추가</h2>
+            <div className="b2b-modal-head"><h2 className="b2b-modal-title">생산일정 추가</h2></div>
             {!statsConfigured ? (
-              <div className="b2b-empty" style={{ padding: "24px 10px" }}>박스히어로 연동이 필요합니다. 설정에서 토큰을 등록하세요.</div>
+              <div className="b2b-modal-body">
+                <div className="b2b-empty" style={{ padding: "24px 10px" }}>박스히어로 연동이 필요합니다. 설정에서 토큰을 등록하세요.</div>
+              </div>
             ) : (
               <>
-                <div className="b2b-field">
-                  <label className="b2b-field-label">품목 {statsLoading && <span style={{ color: "var(--sm-text-light)", fontWeight: 400 }}>· 불러오는 중...</span>}</label>
-                  <select className="b2b-select" value={addModal.sku} onChange={(e) => pickItem(e.target.value)} disabled={statsLoading}>
-                    <option value="">{statsLoading ? "..." : "품목 선택"}</option>
-                    {itemStats.map((it) => <option key={it.sku} value={it.sku}>{it.name} ({it.sku})</option>)}
-                  </select>
-                </div>
-
-                {sel && (
-                  <div className="prod-add-stats">
-                    <div><span>현재고</span><strong>{sel.stock?.toLocaleString() ?? "-"}</strong></div>
-                    <div><span>하루 평균 출고</span><strong>{sel.dailyOut.toLocaleString()}</strong></div>
-                    <div><span>예상 소진일</span><strong>{addModal.depletionDate ? `${dayLabel(addModal.depletionDate)} (${sel.depletionDays}일)` : "—"}</strong></div>
-                  </div>
-                )}
-
-                <div className="b2b-field-row" style={{ marginTop: 12 }}>
+                <div className="b2b-modal-body">
                   <div className="b2b-field">
-                    <label className="b2b-field-label">생산량</label>
-                    <input type="number" className="b2b-input" value={addModal.qty} onChange={(e) => setAddModal({ ...addModal, qty: e.target.value })} placeholder="생산할 수량" autoFocus />
+                    <label className="b2b-field-label">품목 {statsLoading && <span style={{ color: "var(--sm-text-light)", fontWeight: 400 }}>· 불러오는 중...</span>}</label>
+                    <select className="b2b-select" value={addModal.sku} onChange={(e) => pickItem(e.target.value)} disabled={statsLoading}>
+                      <option value="">{statsLoading ? "..." : "품목 선택"}</option>
+                      {itemStats.map((it) => <option key={it.sku} value={it.sku}>{it.name} ({it.sku})</option>)}
+                    </select>
                   </div>
-                  <div className="b2b-field">
-                    <label className="b2b-field-label">생산 목표일</label>
-                    <input type="date" className="b2b-input" value={addModal.productionDate} onChange={(e) => setAddModal({ ...addModal, productionDate: e.target.value })} />
-                  </div>
-                </div>
-                <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 6, display: "block" }}>목표일은 예상 소진일로 자동 설정됩니다. 필요하면 바꾸세요.</span>
 
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
-                  <button className="b2b-btn-secondary" onClick={() => setAddModal(null)} disabled={savingAdd}>취소</button>
-                  <button className="b2b-btn-primary" onClick={saveAdd} disabled={savingAdd || !addModal.sku}>{savingAdd ? "저장 중..." : "추가"}</button>
+                  {sel && (
+                    <div className="prod-add-stats">
+                      <div><span>현재고</span><strong>{sel.stock?.toLocaleString() ?? "-"}</strong></div>
+                      <div><span>하루 평균 출고</span><strong>{sel.dailyOut.toLocaleString()}</strong></div>
+                      <div><span>예상 소진일</span><strong>{addModal.depletionDate ? `${dayLabel(addModal.depletionDate)} (${sel.depletionDays}일)` : "—"}</strong></div>
+                    </div>
+                  )}
+
+                  <div className="b2b-field-row">
+                    <div className="b2b-field">
+                      <label className="b2b-field-label">생산량</label>
+                      <input type="number" className="b2b-input" value={addModal.qty} onChange={(e) => setAddModal({ ...addModal, qty: e.target.value })} placeholder="생산할 수량" autoFocus />
+                    </div>
+                    <div className="b2b-field">
+                      <label className="b2b-field-label">생산 목표일</label>
+                      <input type="date" className="b2b-input" value={addModal.productionDate} onChange={(e) => setAddModal({ ...addModal, productionDate: e.target.value })} />
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11.5, color: "var(--sm-text-light)" }}>목표일은 예상 소진일로 자동 설정됩니다. 필요하면 바꾸세요.</span>
+                </div>
+                <div className="b2b-modal-foot">
+                  <div />
+                  <div className="b2b-modal-foot-right">
+                    <button className="b2b-btn-secondary" onClick={() => setAddModal(null)} disabled={savingAdd}>취소</button>
+                    <button className="b2b-btn-primary" onClick={saveAdd} disabled={savingAdd || !addModal.sku}>{savingAdd ? "저장 중..." : "추가"}</button>
+                  </div>
                 </div>
               </>
             )}
@@ -342,32 +348,34 @@ export default function ProductionSchedulePage() {
       {promoModal && (
         <div className="b2b-modal-backdrop" onClick={() => setPromoModal(null)}>
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
-            <h2 className="b2b-modal-title">{promoModal.id ? "프로모션 수정" : "프로모션 추가"}</h2>
-            <div className="b2b-field">
-              <label className="b2b-field-label">이름</label>
-              <input className="b2b-input" value={promoModal.name || ""} onChange={(e) => setPromoModal({ ...promoModal, name: e.target.value })} placeholder="예: 6월 라방 특가" />
-            </div>
-            <div className="b2b-field-row" style={{ marginTop: 12 }}>
+            <div className="b2b-modal-head"><h2 className="b2b-modal-title">{promoModal.id ? "프로모션 수정" : "프로모션 추가"}</h2></div>
+            <div className="b2b-modal-body">
               <div className="b2b-field">
-                <label className="b2b-field-label">시작일</label>
-                <input type="date" className="b2b-input" value={promoModal.start || ""} onChange={(e) => setPromoModal({ ...promoModal, start: e.target.value })} />
+                <label className="b2b-field-label">이름</label>
+                <input className="b2b-input" value={promoModal.name || ""} onChange={(e) => setPromoModal({ ...promoModal, name: e.target.value })} placeholder="예: 6월 라방 특가" />
+              </div>
+              <div className="b2b-field-row">
+                <div className="b2b-field">
+                  <label className="b2b-field-label">시작일</label>
+                  <input type="date" className="b2b-input" value={promoModal.start || ""} onChange={(e) => setPromoModal({ ...promoModal, start: e.target.value })} />
+                </div>
+                <div className="b2b-field">
+                  <label className="b2b-field-label">종료일</label>
+                  <input type="date" className="b2b-input" value={promoModal.end || ""} onChange={(e) => setPromoModal({ ...promoModal, end: e.target.value })} />
+                </div>
               </div>
               <div className="b2b-field">
-                <label className="b2b-field-label">종료일</label>
-                <input type="date" className="b2b-input" value={promoModal.end || ""} onChange={(e) => setPromoModal({ ...promoModal, end: e.target.value })} />
+                <label className="b2b-field-label">예상 판매량 (기간 합)</label>
+                <input type="number" className="b2b-input" value={promoModal.expectedQty ?? 0} onChange={(e) => setPromoModal({ ...promoModal, expectedQty: Number(e.target.value) })} placeholder="예: 500" />
+              </div>
+              <div className="b2b-field">
+                <label className="b2b-field-label">메모 (선택)</label>
+                <input className="b2b-input" value={promoModal.note || ""} onChange={(e) => setPromoModal({ ...promoModal, note: e.target.value })} placeholder="대상 품목·채널 등" />
               </div>
             </div>
-            <div className="b2b-field" style={{ marginTop: 12 }}>
-              <label className="b2b-field-label">예상 판매량 (기간 합)</label>
-              <input type="number" className="b2b-input" value={promoModal.expectedQty ?? 0} onChange={(e) => setPromoModal({ ...promoModal, expectedQty: Number(e.target.value) })} placeholder="예: 500" />
-            </div>
-            <div className="b2b-field" style={{ marginTop: 12 }}>
-              <label className="b2b-field-label">메모 (선택)</label>
-              <input className="b2b-input" value={promoModal.note || ""} onChange={(e) => setPromoModal({ ...promoModal, note: e.target.value })} placeholder="대상 품목·채널 등" />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 18 }}>
+            <div className="b2b-modal-foot">
               <div>{promoModal.id && <button className="b2b-btn-secondary" onClick={() => deletePromo(promoModal.id!)} disabled={savingPromo} style={{ color: "#c92a2a" }}>삭제</button>}</div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPromoModal(null)} disabled={savingPromo}>취소</button>
                 <button className="b2b-btn-primary" onClick={savePromo} disabled={savingPromo}>{savingPromo ? "저장 중..." : "저장"}</button>
               </div>
