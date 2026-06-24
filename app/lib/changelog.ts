@@ -14,6 +14,14 @@ export type ChangeEntry = {
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-06-24",
+    tag: "개선",
+    tool: "생산관리",
+    title: "생산일정을 캘린더로 — 프로모션 일정 추가",
+    desc: "생산일정이 월 캘린더로 바뀌었습니다. 좌측 캘린더에서 날짜별 생산량을 한눈에 보고, 우측에서 생산 목록을 상세히 확인합니다. '+ 프로모션'으로 주요 행사 기간과 예상판매량을 캘린더에 표시할 수 있어요.",
+    href: "/production",
+  },
+  {
+    date: "2026-06-24",
     tag: "신규",
     tool: "생산관리",
     title: "품목 엑셀 업로드 (박스히어로 내보내기)",

@@ -1019,6 +1019,86 @@ a.b2b-history-item:hover {
 .prod-prio-when { font-size: 12.5px; font-weight: 600; color: var(--sm-text-mid); }
 .prod-prio-reason { margin-top: 5px; font-size: 13.5px; color: var(--sm-text-mid); line-height: 1.5; }
 
+/* 생산일정 캘린더 레이아웃 */
+.prod-cal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+.prod-cal, .prod-cal-side {
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card, 16px);
+  background: var(--sm-white, #fff);
+  padding: 14px;
+}
+.prod-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.prod-cal-nav { display: flex; align-items: center; gap: 6px; }
+.prod-cal-nav button {
+  width: 30px; height: 30px; border: 1px solid var(--sm-border); background: var(--sm-white, #fff);
+  border-radius: 8px; font-size: 18px; line-height: 1; cursor: pointer; color: var(--sm-text-mid);
+}
+.prod-cal-nav button:hover { border-color: var(--sm-orange); color: var(--sm-orange); }
+.prod-cal-month { font-size: 17px; font-weight: 700; min-width: 110px; text-align: center; }
+.prod-cal-today { padding: 6px 12px !important; font-size: 13px; }
+
+.prod-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.prod-cal-wd { text-align: center; font-size: 12px; font-weight: 600; color: var(--sm-text-mid); padding: 4px 0; }
+.prod-cal-wd.is-sun { color: #c92a2a; }
+.prod-cal-wd.is-sat { color: #0a66c2; }
+
+.prod-cal-cell {
+  min-height: 84px; border: 1px solid var(--sm-border); border-radius: 8px; padding: 4px 5px;
+  display: flex; flex-direction: column; gap: 2px; background: var(--sm-white, #fff); overflow: hidden;
+}
+.prod-cal-cell.is-other { background: var(--sm-bg, #fafafa); }
+.prod-cal-cell.is-other .prod-cal-daynum { color: var(--sm-text-light); }
+.prod-cal-cell.is-today { border-color: var(--sm-orange); box-shadow: inset 0 0 0 1px var(--sm-orange); }
+.prod-cal-daynum { font-size: 12px; font-weight: 600; color: var(--sm-black); }
+.prod-cal-cell.is-today .prod-cal-daynum { color: var(--sm-orange); }
+
+.prod-cal-promo {
+  font-size: 10px; color: #fff; border-radius: 4px; padding: 1px 4px; line-height: 1.5;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; min-height: 13px;
+}
+.prod-cal-prod {
+  margin-top: auto; display: flex; align-items: baseline; gap: 4px;
+  background: var(--sm-orange-light, rgba(241, 90, 48, 0.08)); border-radius: 6px; padding: 2px 5px;
+}
+.prod-cal-qty { font-size: 14px; font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; }
+.prod-cal-cnt { font-size: 10px; color: var(--sm-text-mid); }
+
+.prod-cal-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sm-border); }
+.prod-cal-legend-item {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sm-black);
+  background: none; border: none; cursor: pointer; padding: 2px 4px; border-radius: 6px;
+}
+.prod-cal-legend-item:hover { background: var(--sm-bg, #fafafa); }
+.prod-cal-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.prod-cal-legend-q { color: var(--sm-text-light); font-size: 11.5px; }
+
+/* 우측 생산 목록 */
+.prod-cal-side-head { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+.prod-cal-side-sub { font-size: 12px; font-weight: 500; color: var(--sm-text-light); margin-left: 6px; }
+.prod-side-list { display: flex; flex-direction: column; gap: 10px; max-height: 72vh; overflow-y: auto; }
+.prod-side-day { border: 1px solid var(--sm-border); border-radius: 10px; padding: 10px 12px; }
+.prod-side-day.is-overdue { border-color: #f5c6c6; }
+.prod-side-day.is-today { border-color: var(--sm-orange); }
+.prod-side-day-head { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+.prod-side-day-label { font-size: 13.5px; font-weight: 700; color: var(--sm-black); }
+.prod-side-day-qty { margin-left: auto; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.prod-side-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.prod-side-items li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--sm-text-mid); }
+.prod-side-item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prod-side-item-spec { color: var(--sm-text-light); }
+.prod-side-item-qty { font-weight: 700; color: var(--sm-black); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+@media (max-width: 900px) {
+  .prod-cal-layout { grid-template-columns: 1fr; }
+  .prod-cal-cell { min-height: 60px; }
+  .prod-side-list { max-height: none; }
+}
+
 .b2b-table th {
   font-weight: 500;
   color: #6b7280;
