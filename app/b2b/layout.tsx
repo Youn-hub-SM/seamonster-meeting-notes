@@ -102,7 +102,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
             ))}
             {gitbook && (
               <a href={gitbook} target="_blank" rel="noopener noreferrer" className="b2b-subnav-link">
-                매뉴얼 ↗
+                가이드라인 ↗
               </a>
             )}
           </div>
@@ -141,7 +141,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
                   className="b2b-appmenu-link"
                   onClick={() => setMenuOpen(false)}
                 >
-                  매뉴얼 ↗
+                  가이드라인 ↗
                 </a>
               )}
             </div>

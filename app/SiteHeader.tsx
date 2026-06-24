@@ -33,7 +33,7 @@ export default function SiteHeader() {
           <Link href="/b2b" className="header-nav-link">B2B</Link>
           {gitbook && (
             <a href={gitbook} target="_blank" rel="noopener noreferrer" className="header-nav-link">
-              매뉴얼 ↗
+              가이드라인 ↗
             </a>
           )}
         </nav>

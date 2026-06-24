@@ -503,13 +503,13 @@ function doGet() {
       {/* 매뉴얼(GitBook) 링크 */}
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">매뉴얼(GitBook) 링크</h2>
+          <h2 className="b2b-card-title">가이드라인(GitBook) 링크</h2>
           <span style={{ fontSize: 12.5, color: gitbookUrl ? "#22863a" : "var(--sm-text-light)" }}>
             {gitbookUrl ? "● 표시 중" : "○ 미설정"}
           </span>
         </div>
         <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 12px" }}>
-          GitBook(또는 다른 문서) 주소를 넣으면 상단 네비와 B2B 서브네비에 <strong>‘매뉴얼 ↗’</strong> 링크가 새 탭으로 열립니다.
+          GitBook(또는 다른 문서) 주소를 넣으면 상단 네비와 B2B 서브네비에 <strong>‘가이드라인 ↗’</strong> 링크가 새 탭으로 열립니다.
           비우면 링크가 사라집니다.
         </p>
         {loading ? (
