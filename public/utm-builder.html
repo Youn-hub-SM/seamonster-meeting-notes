@@ -328,13 +328,14 @@
     font-size: 14px;
     color: var(--text);
   }
-  /* 컬럼 폭 — URL(6번)은 나머지 폭 차지 + 말줄임 */
-  .history-table th:nth-child(1), .history-table td:nth-child(1) { width: 116px; }
-  .history-table th:nth-child(2), .history-table td:nth-child(2) { width: 86px; }
-  .history-table th:nth-child(3), .history-table td:nth-child(3) { width: 78px; }
-  .history-table th:nth-child(4), .history-table td:nth-child(4) { width: 96px; }
-  .history-table th:nth-child(5), .history-table td:nth-child(5) { width: 64px; }
-  .history-table th:nth-child(7), .history-table td:nth-child(7) { width: 48px; }
+  /* 컬럼 폭 — %로 지정해 표가 항상 카드 폭에 꽉 맞게(가로 스크롤 없음). 모두 말줄임 */
+  .history-table th:nth-child(1), .history-table td:nth-child(1) { width: 16%; }  /* 일시 */
+  .history-table th:nth-child(2), .history-table td:nth-child(2) { width: 13%; }  /* Source */
+  .history-table th:nth-child(3), .history-table td:nth-child(3) { width: 11%; }  /* Medium */
+  .history-table th:nth-child(4), .history-table td:nth-child(4) { width: 14%; }  /* Campaign */
+  .history-table th:nth-child(5), .history-table td:nth-child(5) { width: 10%; }  /* 비고 */
+  .history-table th:nth-child(6), .history-table td:nth-child(6) { width: 28%; }  /* URL */
+  .history-table th:nth-child(7), .history-table td:nth-child(7) { width: 8%; }   /* 작업 */
   .history-table tr:hover td { background: var(--primary-light); }
   .history-table .url-cell {
     color: var(--primary);
@@ -343,6 +344,12 @@
   }
   .history-table .url-cell:hover { text-decoration: underline; }
   .history-table .actions { white-space: nowrap; }
+  /* 좁은 화면: 여백·글자·삭제버튼을 줄여 7컬럼이 가로 스크롤 없이 들어가게 */
+  @media (max-width: 720px) {
+    .history-table { font-size: 12px; }
+    .history-table th, .history-table td { padding: 8px 5px; }
+    .history-table .actions .btn-sm { padding: 5px 7px; font-size: 12px; }
+  }
   .btn-sm {
     padding: 8px 16px;
     font-size: 14px;
