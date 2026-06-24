@@ -1126,6 +1126,27 @@ a.b2b-history-item:hover {
 .tl-new { position: relative; display: block; font-size: 11px; color: var(--sm-text-light); margin-top: 1px; }
 .tl-h-overdue, .tl-overdue { background: rgba(229, 72, 77, 0.05); }
 .tl-h-none, .tl-none { background: var(--sm-bg-soft, #f7f8fa); }
+.tl-clickable { cursor: pointer; user-select: none; }
+.tl-clickable:hover { background: var(--sm-bg-soft, #f7f8fa); }
+.tl-caret { display: inline-block; color: var(--sm-text-light); font-size: 11px; margin-right: 5px; transition: transform 0.12s; }
+.tl-caret.is-open { transform: rotate(90deg); }
+.tl-row-open td { background: var(--sm-bg-soft, #f7f8fa); }
+.tl-row-open td.tl-item { background: var(--sm-bg-soft, #f7f8fa); }
+.tl-detail-row td { padding: 0 !important; background: #fbfcfd; }
+.tl-batches { display: flex; flex-direction: column; gap: 7px; padding: 11px 16px 13px; }
+.tl-batch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.tl-batch-date { font-weight: 700; min-width: 60px; color: var(--sm-text); }
+.tl-batch-date.is-overdue { color: #c92a2a; }
+.tl-batch-st { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
+.tl-batch-st.st-생산대기 { background: #eceef1; color: #6b7280; }
+.tl-batch-st.st-생산중 { background: #fff0db; color: #b86e00; }
+.tl-batch-co { color: var(--sm-text-mid); flex: 1; min-width: 140px; }
+.tl-batch-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tl-batch-btns { display: flex; gap: 6px; }
+.tl-batch-btns button { font-size: 12px; padding: 3px 10px; border: 1px solid var(--sm-border); border-radius: 7px; background: #fff; cursor: pointer; color: var(--sm-text-mid); white-space: nowrap; }
+.tl-batch-btns button:hover { background: var(--sm-bg-soft, #f7f8fa); }
+.tl-done-btn { border-color: #22863a !important; color: #22863a !important; font-weight: 600; }
+.tl-done-btn:hover { background: rgba(34, 134, 58, 0.07) !important; }
 
 .prod-cal-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sm-border); }
 .prod-cal-legend-item {
