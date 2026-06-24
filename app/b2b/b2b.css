@@ -1106,6 +1106,23 @@ a.b2b-history-item:hover {
 .prod-add-stats > div { display: flex; flex-direction: column; gap: 3px; }
 .prod-add-stats span { font-size: 11px; color: var(--sm-text-light); }
 .prod-add-stats strong { font-size: 14px; color: var(--sm-black); font-variant-numeric: tabular-nums; }
+
+/* 프로모션 — 상품별 예상판매량 줄 */
+.promo-item-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.promo-item-combo { flex: 1; min-width: 0; }
+.promo-item-qty { width: 90px !important; flex-shrink: 0; }
+.promo-item-del {
+  border: none; background: none; color: var(--sm-text-light); cursor: pointer;
+  font-size: 13px; padding: 6px 7px; border-radius: 6px; flex-shrink: 0; line-height: 1;
+}
+.promo-item-del:hover { color: #c92a2a; background: #fce4e4; }
+.promo-item-add {
+  border: 1px dashed var(--sm-border); background: var(--sm-white, #fff); color: var(--sm-text-mid);
+  font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+}
+.promo-item-add:hover { border-color: var(--sm-orange); color: var(--sm-orange); }
+.promo-item-total { font-size: 13px; color: var(--sm-text-mid); }
+.promo-item-total strong { color: var(--sm-orange); font-variant-numeric: tabular-nums; }
 .prod-side-list { display: flex; flex-direction: column; gap: 10px; max-height: 72vh; overflow-y: auto; }
 .prod-side-day { border: 1px solid var(--sm-border); border-radius: 10px; padding: 10px 12px; }
 .prod-side-day.is-overdue { border-color: #f5c6c6; }

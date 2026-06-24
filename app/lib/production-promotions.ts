@@ -8,12 +8,19 @@ import { supabaseAdmin } from "./supabase";
 
 const KEY = "production_promotions";
 
+export interface PromoItem {
+  sku: string;
+  name: string;
+  qty: number;         // 이 상품의 예상 판매량
+}
+
 export interface Promotion {
   id: string;
   name: string;
   start: string;       // YYYY-MM-DD
   end: string;         // YYYY-MM-DD (>= start)
-  expectedQty: number; // 예상 판매량(기간 합)
+  items: PromoItem[];  // 상품별 예상 판매량
+  expectedQty: number; // 예상 판매량 합계 (items 합)
   note?: string;
   color?: string;      // 캘린더 밴드 색 (선택)
 }
@@ -45,11 +52,20 @@ function normalize(p: Partial<Promotion>): Omit<Promotion, "id"> {
   const end = (p.end || "").trim() || start;
   const lo = start <= end ? start : end;
   const hi = start <= end ? end : start;
+  const items = Array.isArray(p.items)
+    ? p.items
+        .map((it) => ({ sku: (it.sku || "").trim(), name: (it.name || "").trim(), qty: Math.max(0, Math.floor(Number(it.qty) || 0)) }))
+        .filter((it) => it.name && it.qty > 0)
+    : [];
+  const expectedQty = items.length > 0
+    ? items.reduce((s, it) => s + it.qty, 0)
+    : Math.max(0, Math.floor(Number(p.expectedQty) || 0));
   return {
     name: (p.name || "").trim() || "프로모션",
     start: lo,
     end: hi,
-    expectedQty: Math.max(0, Math.floor(Number(p.expectedQty) || 0)),
+    items,
+    expectedQty,
     note: (p.note || "").trim() || undefined,
     color: p.color,
   };

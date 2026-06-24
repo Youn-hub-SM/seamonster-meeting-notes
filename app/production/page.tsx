@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Combobox, ComboOption } from "../b2b/orders/Combobox";
 
 type ProductRow = { product_name: string; spec: string; qty: number; companies: string[]; order_count: number };
 type DayBucket = { date: string; label: string; total_qty: number; order_count: number; products: ProductRow[] };
-type Promotion = { id: string; name: string; start: string; end: string; expectedQty: number; note?: string; color?: string };
+type PromoItem = { sku: string; name: string; qty: number | string };
+type Promotion = { id: string; name: string; start: string; end: string; items: PromoItem[]; expectedQty: number; note?: string; color?: string };
+type Product = { sku: string | null; name: string; spec: string | null };
 type ItemStat = { sku: string; name: string; stock: number | null; dailyOut: number; depletionDays: number | null };
 type Manual = { id: string; sku: string; name: string; qty: number; productionDate: string; stock: number | null; dailyOut: number; depletionDate: string | null };
 type PItem = { name: string; spec: string; qty: number; manual: boolean; manualId?: string; sku?: string };
@@ -34,12 +37,13 @@ function buildWeeks(year: number, month: number): Date[][] {
   return weeks;
 }
 
-const EMPTY_PROMO: Partial<Promotion> = { name: "", start: "", end: "", expectedQty: 0, note: "" };
+const EMPTY_PROMO: Partial<Promotion> = { name: "", start: "", end: "", items: [], expectedQty: 0, note: "" };
 
 export default function ProductionSchedulePage() {
   const [days, setDays] = useState<DayBucket[]>([]);
   const [manual, setManual] = useState<Manual[]>([]);
   const [promos, setPromos] = useState<Promotion[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const today = todayIso();
@@ -60,15 +64,17 @@ export default function ProductionSchedulePage() {
     setLoading(true);
     setError("");
     try {
-      const [pr, pm, mn] = await Promise.all([
+      const [pr, pm, mn, pd] = await Promise.all([
         fetch("/api/b2b/orders/production-summary", { cache: "no-store" }).then((r) => r.json()),
         fetch("/api/production/promotions", { cache: "no-store" }).then((r) => r.json()),
         fetch("/api/production/manual", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/b2b/products", { cache: "no-store" }).then((r) => r.json()),
       ]);
       if (!pr.ok) throw new Error(pr.error || "생산일정 조회 실패");
       setDays(pr.days || []);
       if (pm.ok) setPromos(pm.promotions || []);
       if (mn.ok) setManual(mn.items || []);
+      if (pd.ok) setProducts((pd.products || []).map((p: Product) => ({ sku: p.sku, name: p.name, spec: p.spec })));
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }
@@ -167,6 +173,19 @@ export default function ProductionSchedulePage() {
     try { const j = await (await fetch(`/api/production/manual?id=${id}`, { method: "DELETE" })).json(); if (j.ok) setManual(j.items || []); } catch { /* noop */ }
   }
 
+  const productOptions: ComboOption[] = useMemo(
+    () => products.map((p) => ({ id: p.sku || p.name, label: p.name, sub: p.spec || p.sku || "" })),
+    [products]
+  );
+  const itemStatOptions: ComboOption[] = useMemo(
+    () => itemStats.map((it) => ({ id: it.sku, label: it.name, sub: it.sku })),
+    [itemStats]
+  );
+  function setPromoItems(updater: (items: PromoItem[]) => PromoItem[]) {
+    setPromoModal((m) => (m ? { ...m, items: updater(m.items || []) } : m));
+  }
+  const promoTotal = (promoModal?.items || []).reduce((s, it) => s + (Number(it.qty) || 0), 0);
+
   const sel = addModal && addModal.sku ? itemStats.find((i) => i.sku === addModal.sku) : null;
   const monthLabel = `${view.y}년 ${view.m + 1}월`;
 
@@ -211,7 +230,7 @@ export default function ProductionSchedulePage() {
                   <div className="prod-cal-daynum">{d.getDate()}</div>
                   {dayPromos.map((p) => (
                     <div key={p.id} className="prod-cal-promo" style={{ background: p.color || "#F15A30" }}
-                      title={`${p.name} · 예상 ${p.expectedQty.toLocaleString()}개`} onClick={() => setPromoModal(p)}>
+                      title={`${p.name} · 예상 ${p.expectedQty.toLocaleString()}개${p.items && p.items.length ? "\n" + p.items.map((it) => `· ${it.name} ${Number(it.qty).toLocaleString()}`).join("\n") : ""}`} onClick={() => setPromoModal(p)}>
                       {iso === p.start ? `🎯 ${p.name}` : " "}
                     </div>
                   ))}
@@ -305,10 +324,13 @@ export default function ProductionSchedulePage() {
                 <div className="b2b-modal-body">
                   <div className="b2b-field">
                     <label className="b2b-field-label">품목 {statsLoading && <span style={{ color: "var(--sm-text-light)", fontWeight: 400 }}>· 불러오는 중...</span>}</label>
-                    <select className="b2b-select" value={addModal.sku} onChange={(e) => pickItem(e.target.value)} disabled={statsLoading}>
-                      <option value="">{statsLoading ? "..." : "품목 선택"}</option>
-                      {itemStats.map((it) => <option key={it.sku} value={it.sku}>{it.name} ({it.sku})</option>)}
-                    </select>
+                    <Combobox
+                      value={addModal.name}
+                      options={itemStatOptions}
+                      onSelect={(o) => pickItem(o.id)}
+                      placeholder={statsLoading ? "불러오는 중..." : "상품명·SKU 검색"}
+                      ariaLabel="품목"
+                    />
                   </div>
 
                   {sel && (
@@ -365,8 +387,29 @@ export default function ProductionSchedulePage() {
                 </div>
               </div>
               <div className="b2b-field">
-                <label className="b2b-field-label">예상 판매량 (기간 합)</label>
-                <input type="number" className="b2b-input" value={promoModal.expectedQty ?? 0} onChange={(e) => setPromoModal({ ...promoModal, expectedQty: Number(e.target.value) })} placeholder="예: 500" />
+                <label className="b2b-field-label">상품별 예상 판매량</label>
+                {(promoModal.items || []).length === 0 && (
+                  <div style={{ fontSize: 12.5, color: "var(--sm-text-light)", marginBottom: 6 }}>어떤 상품이 얼마나 나갈지 추가하세요. (MD 전달 수치)</div>
+                )}
+                {(promoModal.items || []).map((it, i) => (
+                  <div key={i} className="promo-item-row">
+                    <div className="promo-item-combo">
+                      <Combobox
+                        value={it.name}
+                        options={productOptions}
+                        onSelect={(o) => setPromoItems((items) => items.map((x, xi) => (xi === i ? { ...x, sku: o.id, name: o.label } : x)))}
+                        placeholder="상품 검색"
+                        ariaLabel="상품"
+                      />
+                    </div>
+                    <input type="number" className="b2b-input promo-item-qty" value={it.qty} onChange={(e) => setPromoItems((items) => items.map((x, xi) => (xi === i ? { ...x, qty: e.target.value } : x)))} placeholder="수량" />
+                    <button type="button" className="promo-item-del" onClick={() => setPromoItems((items) => items.filter((_, xi) => xi !== i))} title="삭제">✕</button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+                  <button type="button" className="promo-item-add" onClick={() => setPromoItems((items) => [...items, { sku: "", name: "", qty: "" }])}>+ 상품 추가</button>
+                  {promoTotal > 0 && <span className="promo-item-total">합계 <strong>{promoTotal.toLocaleString()}개</strong></span>}
+                </div>
               </div>
               <div className="b2b-field">
                 <label className="b2b-field-label">메모 (선택)</label>
