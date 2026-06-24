@@ -8,12 +8,15 @@ import { supabaseAdmin } from "./supabase";
 
 const KEY = "production_manual";
 
+export type ProdStatus = "생산대기" | "생산중" | "생산완료";
+
 export interface ManualProduction {
   id: string;
   sku: string;
   name: string;
   qty: number;                    // 생산량
   productionDate: string;         // YYYY-MM-DD (캘린더 배치)
+  status: ProdStatus;             // 생산 진행 상태 (칸반)
   stock: number | null;           // 추가 당시 현재고 스냅샷
   dailyOut: number;               // 추가 당시 일평균출고 스냅샷
   depletionDate: string | null;   // 예상 재고소진일 스냅샷
@@ -55,11 +58,22 @@ export async function addManualProduction(input: Partial<ManualProduction>): Pro
     name,
     qty,
     productionDate,
+    status: "생산대기",
     stock: input.stock == null ? null : Number(input.stock),
     dailyOut: Number(input.dailyOut) || 0,
     depletionDate: input.depletionDate || null,
     createdAt: new Date().toISOString(),
   });
+  await save(list);
+  return list;
+}
+
+const VALID_STATUS: ProdStatus[] = ["생산대기", "생산중", "생산완료"];
+export async function updateManualStatus(id: string, status: string): Promise<ManualProduction[]> {
+  if (!VALID_STATUS.includes(status as ProdStatus)) throw new Error("잘못된 상태입니다.");
+  const list = await getManualProductions();
+  const it = list.find((x) => x.id === id);
+  if (it) it.status = status as ProdStatus;
   await save(list);
   return list;
 }

@@ -1075,6 +1075,29 @@ a.b2b-history-item:hover {
 .prod-cal-item-qty { font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .prod-cal-item-more { font-size: 10px; color: var(--sm-text-light); margin-top: 1px; }
 
+/* 생산 보드 (칸반) */
+.kanban { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
+.kanban-col { background: var(--sm-bg, #fafafa); border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card, 16px); padding: 10px; }
+.kanban-col-head { font-size: 14px; font-weight: 700; padding: 4px 6px 10px; display: flex; align-items: center; gap: 6px; }
+.kanban-col-count { font-size: 12px; font-weight: 600; color: var(--sm-text-light); background: var(--sm-white, #fff); border: 1px solid var(--sm-border); border-radius: 999px; padding: 0 7px; }
+.kanban-col-body { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
+.kanban-empty { font-size: 12.5px; color: var(--sm-text-light); text-align: center; padding: 16px 0; }
+.kanban-card { background: var(--sm-white, #fff); border: 1px solid var(--sm-border); border-radius: 10px; padding: 10px 12px; }
+.kanban-card.is-overdue { border-color: #f0d9a8; background: #fffaf0; }
+.kanban-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.kanban-card-company { font-size: 13.5px; font-weight: 700; color: var(--sm-black); }
+.kanban-card-date { font-size: 12px; color: var(--sm-text-mid); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.kanban-card-date.is-overdue { color: #c92a2a; font-weight: 700; }
+.kanban-card-items { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.kanban-card-items li { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--sm-text-mid); }
+.ki-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ki-qty { font-weight: 700; color: var(--sm-black); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.kanban-card-actions { display: flex; gap: 6px; }
+.kanban-card-actions button { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--sm-border); background: var(--sm-white, #fff); cursor: pointer; color: var(--sm-text-mid); }
+.kanban-fwd { flex: 1; border-color: var(--sm-orange) !important; color: var(--sm-orange) !important; }
+.kanban-fwd:hover { background: var(--sm-orange-light, rgba(241, 90, 48, 0.07)); }
+@media (max-width: 768px) { .kanban { grid-template-columns: 1fr; } }
+
 .prod-cal-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sm-border); }
 .prod-cal-legend-item {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sm-black);

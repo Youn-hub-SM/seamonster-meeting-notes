@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { getManualProductions, addManualProduction, deleteManualProduction, ManualProduction } from "@/app/lib/production-manual";
+import { getManualProductions, addManualProduction, deleteManualProduction, updateManualStatus, ManualProduction } from "@/app/lib/production-manual";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, items });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "저장 실패") }, { status: 400 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { id, status } = (await req.json()) as { id?: string; status?: string };
+    if (!id || !status) return NextResponse.json({ ok: false, error: "id·status 가 필요합니다." }, { status: 400 });
+    const items = await updateManualStatus(id, status);
+    return NextResponse.json({ ok: true, items });
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "상태 변경 실패") }, { status: 400 });
   }
 }
 
