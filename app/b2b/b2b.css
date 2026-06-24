@@ -805,20 +805,6 @@ a.b2b-history-item:hover {
   padding: 15px 16px !important;
 }
 
-/* 발주 목록 — 모든 행 높이를 일정하게(내용 수직 중앙). 품목이 1~2줄로 달라도 행 높이 동일 */
-.b2b-orders-table-wrap .b2b-table tbody tr:not(.b2b-child-row) > td {
-  height: 64px;
-}
-.b2b-orders-table-wrap .b2b-table tbody tr:not(.b2b-child-row) > td .b2b-row-link {
-  min-height: 64px;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  overflow: hidden;
-}
-
 /* 날짜 컬럼: 헤더·셀 모두 좁은 패딩 + 작은 글씨 (헤더-셀 패딩 동일하게 유지) */
 .b2b-table th.b2b-col-date {
   padding-left: 8px;
@@ -836,6 +822,12 @@ a.b2b-history-item:hover {
 .b2b-table td:has(> .b2b-status-select) {
   padding-left: 16px;
   padding-right: 8px;
+}
+
+/* 상태 4개 컬럼(생산·발송·입금·세금계산서) — 가로 너비 동일하게 */
+.b2b-table th.b2b-col-status {
+  width: 104px;
+  min-width: 104px;
 }
 
 .b2b-table th {
