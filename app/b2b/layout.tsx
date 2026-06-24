@@ -34,6 +34,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [userName, setUserName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [gitbook, setGitbook] = useState("");
 
   // 로그인 페이지에서는 서브 네비·활동 피드를 숨김 (인증 전)
   const hideChrome = pathname === "/b2b/login";
@@ -44,6 +45,10 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
     fetch("/api/b2b/auth", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setUserName(j.name); })
+      .catch(() => {});
+    fetch("/api/links", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j.ok && j.gitbook) setGitbook(j.gitbook); })
       .catch(() => {});
   }, [hideChrome]);
 
@@ -95,6 +100,11 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
                 {m.label}
               </Link>
             ))}
+            {gitbook && (
+              <a href={gitbook} target="_blank" rel="noopener noreferrer" className="b2b-subnav-link">
+                매뉴얼 ↗
+              </a>
+            )}
           </div>
 
           {/* 우측: 사용자 + 최근 변경 + 로그아웃 */}
@@ -123,6 +133,17 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
                   {m.label}
                 </Link>
               ))}
+              {gitbook && (
+                <a
+                  href={gitbook}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="b2b-appmenu-link"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  매뉴얼 ↗
+                </a>
+              )}
             </div>
           </>
         )}

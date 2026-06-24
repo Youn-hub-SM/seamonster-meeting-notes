@@ -38,15 +38,19 @@ export default function SettingsPage() {
   const [sheetConnected, setSheetConnected] = useState(false);
   const [sheetSaving, setSheetSaving] = useState(false);
   const [sheetMsg, setSheetMsg] = useState("");
+  const [gitbookUrl, setGitbookUrl] = useState<string>("");    // 매뉴얼(GitBook) 링크
+  const [gitbookSaving, setGitbookSaving] = useState(false);
+  const [gitbookMsg, setGitbookMsg] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        const [notifyRes, modelRes, promptRes, sheetRes] = await Promise.all([
+        const [notifyRes, modelRes, promptRes, sheetRes, linksRes] = await Promise.all([
           fetch("/api/b2b/settings/notify", { cache: "no-store" }),
           fetch("/api/b2b/settings/model", { cache: "no-store" }),
           fetch("/api/b2b/settings/cs-prompt", { cache: "no-store" }),
           fetch("/api/b2b/settings/sales-sheet", { cache: "no-store" }),
+          fetch("/api/b2b/settings/links", { cache: "no-store" }),
         ]);
         const j = await notifyRes.json();
         if (!notifyRes.ok || !j.ok) throw new Error(j.error || "조회 실패");
@@ -69,6 +73,8 @@ export default function SettingsPage() {
           setSheetUrl(sj.url || "");
           setSheetConnected(!!sj.connected);
         }
+        const lj = await linksRes.json();
+        if (linksRes.ok && lj.ok) setGitbookUrl(lj.gitbook || "");
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
@@ -109,6 +115,25 @@ export default function SettingsPage() {
       setSheetMsg(e instanceof Error ? e.message : "연결 실패");
     }
     setSheetSaving(false);
+  }
+
+  async function saveGitbook() {
+    setGitbookSaving(true);
+    setGitbookMsg("");
+    try {
+      const res = await fetch("/api/b2b/settings/links", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: gitbookUrl }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setGitbookUrl(j.gitbook || "");
+      setGitbookMsg(j.gitbook ? "✅ 저장됨 — 네비에 ‘매뉴얼’ 링크가 보입니다." : "링크 제거됨");
+    } catch (e) {
+      setGitbookMsg(e instanceof Error ? e.message : "저장 중 오류");
+    }
+    setGitbookSaving(false);
   }
 
   async function saveCsPrompt(nextPrompt?: string) {
@@ -469,6 +494,47 @@ function doGet() {
             {sheetMsg && (
               <div style={{ fontSize: 13, color: sheetMsg.startsWith("✅") ? "#22863a" : "var(--sm-text-mid)", marginTop: 10 }}>
                 {sheetMsg}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* 매뉴얼(GitBook) 링크 */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">매뉴얼(GitBook) 링크</h2>
+          <span style={{ fontSize: 12.5, color: gitbookUrl ? "#22863a" : "var(--sm-text-light)" }}>
+            {gitbookUrl ? "● 표시 중" : "○ 미설정"}
+          </span>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 12px" }}>
+          GitBook(또는 다른 문서) 주소를 넣으면 상단 네비와 B2B 서브네비에 <strong>‘매뉴얼 ↗’</strong> 링크가 새 탭으로 열립니다.
+          비우면 링크가 사라집니다.
+        </p>
+        {loading ? (
+          <div className="b2b-loading">불러오는 중...</div>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                className="b2b-input"
+                type="url"
+                value={gitbookUrl}
+                onChange={(e) => setGitbookUrl(e.target.value)}
+                placeholder="https://___.gitbook.io/... (또는 연결된 도메인)"
+                style={{ flex: 1, minWidth: 280 }}
+              />
+              <button className="b2b-btn-primary" onClick={saveGitbook} disabled={gitbookSaving}>저장</button>
+              {gitbookUrl && (
+                <a href={gitbookUrl} target="_blank" rel="noopener noreferrer" className="b2b-btn-secondary" style={{ textDecoration: "none" }}>
+                  열기 ↗
+                </a>
+              )}
+            </div>
+            {gitbookMsg && (
+              <div style={{ fontSize: 13, color: gitbookMsg.startsWith("✅") ? "#22863a" : "var(--sm-text-mid)", marginTop: 10 }}>
+                {gitbookMsg}
               </div>
             )}
           </>
