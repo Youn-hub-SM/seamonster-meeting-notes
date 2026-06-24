@@ -2,21 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 
-// 전역 상단 헤더(씨몬스터 + 회의정리~B2B).
-// B2B 화면(/b2b/*)에서는 자체 단일 바 + 햄버거 메뉴를 쓰므로 숨김.
+// 전역 상단 헤더(씨몬스터 + 회의정리~생산관리).
+// B2B·생산관리 화면에서는 자체 단일 바 + 햄버거 메뉴를 쓰므로 숨김.
 export default function SiteHeader() {
   const pathname = usePathname();
-  const [gitbook, setGitbook] = useState("");
-
-  // 매뉴얼(GitBook) 링크 — 설정에 등록돼 있으면 네비에 노출
-  useEffect(() => {
-    fetch("/api/links", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (j.ok && j.gitbook) setGitbook(j.gitbook); })
-      .catch(() => {});
-  }, []);
 
   if (pathname?.startsWith("/b2b") || pathname?.startsWith("/production")) return null;
 
@@ -33,11 +23,6 @@ export default function SiteHeader() {
           <Link href="/subscription" className="header-nav-link">정기배송 분석</Link>
           <Link href="/b2b" className="header-nav-link">B2B</Link>
           <Link href="/production" className="header-nav-link">생산관리</Link>
-          {gitbook && (
-            <a href={gitbook} target="_blank" rel="noopener noreferrer" className="header-nav-link">
-              가이드라인 ↗
-            </a>
-          )}
         </nav>
       </div>
     </header>

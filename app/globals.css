@@ -3078,10 +3078,41 @@ a {
 }
 .change-link:hover { color: var(--sm-orange-hover); }
 
+/* 업데이트 노트 — 날짜별 묶음 */
+.change-day { border-bottom: 1px solid var(--sm-border); }
+.change-day:last-child { border-bottom: none; }
+.change-day-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  background: var(--sm-bg, #fafafa);
+  border-bottom: 1px solid var(--sm-border);
+}
+.change-day-date { font-size: 14px; font-weight: 700; color: var(--sm-black); font-variant-numeric: tabular-nums; }
+.change-day-count { font-size: 12px; color: var(--sm-text-light); margin-left: auto; }
+.change-day-items { display: flex; flex-direction: column; }
+.change-row {
+  display: flex;
+  gap: 10px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--sm-border);
+}
+.change-row:last-child { border-bottom: none; }
+.change-row .change-tag { flex-shrink: 0; height: fit-content; margin-top: 1px; }
+.change-row-main { min-width: 0; flex: 1; }
+.change-row-title {
+  font-size: 15px; font-weight: 700; color: var(--sm-black);
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.change-row .change-desc { margin-top: 3px; font-size: 13.5px; }
+.change-row .change-link { margin-top: 6px; font-size: 13px; }
+
 @media (max-width: 768px) {
   .home-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 32px; }
   .home-tool-card { padding: 18px 12px; min-height: 64px; }
   .home-tool-name { font-size: 17px; }
   .home-section-title { font-size: 20px; }
-  .change-item { padding: 16px; }
+  .change-day-head { padding: 10px 16px; }
+  .change-row { padding: 12px 16px; }
 }

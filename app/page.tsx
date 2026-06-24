@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { getGitbookUrl } from "@/app/lib/site-links";
 import { CHANGELOG } from "@/app/lib/changelog";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +19,20 @@ const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   수정: { bg: "#fff8e1", color: "#b08800" },
 };
 
-export default async function HomePage() {
-  const gitbook = await getGitbookUrl();
-
+export default function HomePage() {
   // 업데이트 노트의 최근 7일 항목에 NEW 뱃지
   const now = Date.now();
   const WEEK = 7 * 24 * 60 * 60 * 1000;
   const isNew = (dateStr: string) => now - new Date(dateStr).getTime() <= WEEK;
+
+  // 날짜별로 묶기 (CHANGELOG 는 최신순)
+  const groups: { date: string; items: typeof CHANGELOG }[] = [];
+  const byDate = new Map<string, number>();
+  for (const c of CHANGELOG) {
+    let gi = byDate.get(c.date);
+    if (gi === undefined) { gi = groups.length; byDate.set(c.date, gi); groups.push({ date: c.date, items: [] }); }
+    groups[gi].items.push(c);
+  }
 
   return (
     <div className="container">
@@ -40,36 +46,40 @@ export default async function HomePage() {
             <span className="home-tool-name">{t.name}</span>
           </Link>
         ))}
-        {gitbook && (
-          <a href={gitbook} target="_blank" rel="noopener noreferrer" className="home-tool-card is-external">
-            <span className="home-tool-name">가이드라인 ↗</span>
-          </a>
-        )}
       </div>
 
-      {/* 업데이트 노트 */}
+      {/* 업데이트 노트 — 날짜별 묶음 */}
       <section className="home-section">
         <h2 className="home-section-title">업데이트 노트</h2>
-        <p className="home-section-sub">추가·개선된 기능을 여기에 모아둡니다. 무엇이 생겼는지 확인하고 바로 써보세요.</p>
+        <p className="home-section-sub">추가·개선된 기능을 날짜별로 모아둡니다. 무엇이 생겼는지 확인하고 바로 써보세요.</p>
         <div className="changelog-list">
-          {CHANGELOG.map((c, i) => {
-            const tag = TAG_STYLE[c.tag] ?? TAG_STYLE["개선"];
-            return (
-              <div key={i} className="change-item">
-                <div className="change-meta">
-                  {isNew(c.date) && <span className="change-new">NEW</span>}
-                  <span className="change-tag" style={{ background: tag.bg, color: tag.color }}>{c.tag}</span>
-                  <span className="change-date">{c.date}</span>
-                  <span className="change-tool">{c.tool}</span>
-                </div>
-                <div className="change-title">{c.title}</div>
-                <div className="change-desc">{c.desc}</div>
-                {c.href && (
-                  <Link href={c.href} className="change-link">바로 써보기 →</Link>
-                )}
+          {groups.map((g) => (
+            <div key={g.date} className="change-day">
+              <div className="change-day-head">
+                <span className="change-day-date">{g.date}</span>
+                {isNew(g.date) && <span className="change-new">NEW</span>}
+                <span className="change-day-count">{g.items.length}건</span>
               </div>
-            );
-          })}
+              <div className="change-day-items">
+                {g.items.map((c, i) => {
+                  const tag = TAG_STYLE[c.tag] ?? TAG_STYLE["개선"];
+                  return (
+                    <div key={i} className="change-row">
+                      <span className="change-tag" style={{ background: tag.bg, color: tag.color }}>{c.tag}</span>
+                      <div className="change-row-main">
+                        <div className="change-row-title">
+                          {c.title}
+                          <span className="change-tool">{c.tool}</span>
+                        </div>
+                        <div className="change-desc">{c.desc}</div>
+                        {c.href && <Link href={c.href} className="change-link">바로 써보기 →</Link>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </div>

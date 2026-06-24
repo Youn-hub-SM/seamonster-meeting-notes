@@ -32,20 +32,18 @@ export default function ProductionLayout({ children }: { children: React.ReactNo
   const pathname = usePathname();
   const [userName, setUserName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [gitbook, setGitbook] = useState("");
 
   useEffect(() => {
     fetch("/api/b2b/auth", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setUserName(j.name); })
       .catch(() => {});
-    fetch("/api/links", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (j.ok && j.gitbook) setGitbook(j.gitbook); })
-      .catch(() => {});
   }, []);
 
   useEffect(() => { setMenuOpen(false); }, [pathname]);
+
+  // 설정 메뉴는 현석/관리자만
+  const isAdmin = userName === "현석" || userName === "관리자";
 
   async function handleLogout() {
     await fetch("/api/b2b/auth", { method: "DELETE" });
@@ -71,11 +69,10 @@ export default function ProductionLayout({ children }: { children: React.ReactNo
               ☰
             </button>
             <Link href="/" className="b2b-brand" title="내부도구 홈">씨몬스터</Link>
-            <span className="b2b-brand-sub">생산관리</span>
           </div>
 
           <div className="b2b-nav-links">
-            {PROD_MENU.map((m) => (
+            {PROD_MENU.filter((m) => m.href !== "/production/settings" || isAdmin).map((m) => (
               <Link
                 key={m.href}
                 href={m.href}
@@ -84,11 +81,6 @@ export default function ProductionLayout({ children }: { children: React.ReactNo
                 {m.label}
               </Link>
             ))}
-            {gitbook && (
-              <a href={gitbook} target="_blank" rel="noopener noreferrer" className="b2b-subnav-link">
-                가이드라인 ↗
-              </a>
-            )}
           </div>
 
           <div className="b2b-nav-right">
