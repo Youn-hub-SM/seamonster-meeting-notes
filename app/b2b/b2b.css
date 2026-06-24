@@ -1096,6 +1096,10 @@ a.b2b-history-item:hover {
 .kanban-card-actions button { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--sm-border); background: var(--sm-white, #fff); cursor: pointer; color: var(--sm-text-mid); }
 .kanban-fwd { flex: 1; border-color: var(--sm-orange) !important; color: var(--sm-orange) !important; }
 .kanban-fwd:hover { background: var(--sm-orange-light, rgba(241, 90, 48, 0.07)); }
+.ki-spec { color: var(--sm-text-light); font-weight: 500; }
+.kanban-card-bigqty { font-size: 22px; font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
+.kanban-card-bigqty span { font-size: 12px; font-weight: 600; color: var(--sm-text-mid); margin-left: 2px; }
+.kanban-card-contributors { font-size: 11.5px; color: var(--sm-text-light); line-height: 1.5; margin-bottom: 8px; }
 @media (max-width: 768px) { .kanban { grid-template-columns: 1fr; } }
 
 .prod-cal-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sm-border); }
