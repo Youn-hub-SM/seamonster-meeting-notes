@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { loadProdItemMaps } from "@/app/lib/production-items";
 
 export const dynamic = "force-dynamic";
 
@@ -27,19 +28,21 @@ type DayBucket = {
 export async function GET(_req: NextRequest) {
   try {
     const sb = supabaseAdmin();
-    const { data, error } = await sb
-      .from("orders")
-      .select(
-        "id, production_date, production_status, " +
-          "company:company_id(name), " +
-          "order_items(product_name, spec, qty)"
-      )
-      .in("production_status", ["생산대기", "생산중"])
-      .order("production_date", { ascending: true });
+    const [{ data, error }, maps] = await Promise.all([
+      sb.from("orders")
+        .select(
+          "id, production_date, production_status, " +
+            "company:company_id(name), " +
+            "order_items(product_id, product_name, spec, qty)"
+        )
+        .in("production_status", ["생산대기", "생산중"])
+        .order("production_date", { ascending: true }),
+      loadProdItemMaps(),
+    ]);
     if (error) throw error;
 
     type CompanyJoin = { name?: string };
-    type ItemJoin = { product_name: string; spec: string | null; qty: number };
+    type ItemJoin = { product_id: string | null; product_name: string; spec: string | null; qty: number };
     type OrderRow = {
       id: string;
       production_date: string | null;
@@ -69,10 +72,13 @@ export async function GET(_req: NextRequest) {
 
       for (const it of o.order_items ?? []) {
         const spec = (it.spec ?? "").trim();
-        const pkey = `${it.product_name}__${spec}`;
+        // 같은 SKU = 한 생산품목으로 묶음 (B2B 품목명 달라도). SKU 없으면 품목명+규격.
+        const sku = it.product_id ? maps.skuByProduct.get(it.product_id) || null : null;
+        const pkey = sku || `${it.product_name}__${spec}`;
+        const displayName = sku ? maps.displayBySku.get(sku) || it.product_name : it.product_name;
         let pr = bucket.products.get(pkey);
         if (!pr) {
-          pr = { product_name: it.product_name, spec, qty: 0, companies: [], order_ids: new Set() } as unknown as ProductRow & { order_ids: Set<string> };
+          pr = { product_name: displayName, spec, qty: 0, companies: [], order_ids: new Set() } as unknown as ProductRow & { order_ids: Set<string> };
           bucket.products.set(pkey, pr);
         }
         const prx = pr as ProductRow & { order_ids: Set<string> };

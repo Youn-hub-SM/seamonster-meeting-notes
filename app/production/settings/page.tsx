@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+type AliasItem = { sku: string; names: string[]; canonical: string; alias: string; display: string };
+
 export default function ProductionSettingsPage() {
   const [configured, setConfigured] = useState(false);
   const [masked, setMasked] = useState("");
@@ -9,13 +11,42 @@ export default function ProductionSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
+  const [aliasItems, setAliasItems] = useState<AliasItem[]>([]);
+  const [aliasInput, setAliasInput] = useState<Record<string, string>>({});
+  const [aliasSavingSku, setAliasSavingSku] = useState<string | null>(null);
+
   async function loadStatus() {
     try {
       const j = await (await fetch("/api/production/settings", { cache: "no-store" })).json();
       if (j.ok) { setConfigured(j.configured); setMasked(j.masked || ""); }
     } catch { /* noop */ }
   }
-  useEffect(() => { loadStatus(); }, []);
+  async function loadAliases() {
+    try {
+      const j = await (await fetch("/api/production/item-alias", { cache: "no-store" })).json();
+      if (j.ok) {
+        setAliasItems(j.items || []);
+        const inputs: Record<string, string> = {};
+        for (const it of j.items || []) inputs[it.sku] = it.alias || "";
+        setAliasInput(inputs);
+      }
+    } catch { /* noop */ }
+  }
+  useEffect(() => { loadStatus(); loadAliases(); }, []);
+
+  async function saveAlias(sku: string) {
+    setAliasSavingSku(sku);
+    try {
+      const res = await fetch("/api/production/item-alias", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku, name: aliasInput[sku] || "" }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      await loadAliases();
+    } catch { /* noop */ }
+    setAliasSavingSku(null);
+  }
 
   async function save() {
     if (!token.trim()) { setMsg({ kind: "err", text: "토큰을 입력하세요." }); return; }
@@ -43,7 +74,7 @@ export default function ProductionSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설정</h1>
-          <p className="b2b-page-subtitle">박스히어로 API 연동 토큰을 등록합니다.</p>
+          <p className="b2b-page-subtitle">박스히어로 연동 + 생산 품목명 정리.</p>
         </div>
       </header>
 
@@ -83,6 +114,39 @@ export default function ProductionSettingsPage() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="b2b-card" style={{ marginTop: 16 }}>
+        <div className="b2b-card-head"><h2 className="b2b-card-title">생산 품목명</h2></div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
+          B2B에서 같은 제품을 업체별로 다른 품목명으로 부르면(단가 차이 등) 생산에서 갈라집니다.
+          같은 <strong>SKU</strong>는 생산에선 한 품목으로 묶이며, 여기서 <strong>생산 표시명</strong>만 정리하면 됩니다. (비우면 가장 짧은 이름 자동 사용)
+        </p>
+        {aliasItems.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>정리할 품목이 없습니다. (같은 SKU에 이름이 여러 개인 경우만 표시)</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {aliasItems.map((it) => (
+              <div key={it.sku} style={{ borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
+                <div style={{ fontSize: 12, color: "var(--sm-text-light)", marginBottom: 4 }}>
+                  <code>{it.sku}</code> · B2B 품목명: {it.names.join(" / ")}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    className="b2b-input"
+                    value={aliasInput[it.sku] ?? ""}
+                    onChange={(e) => setAliasInput((m) => ({ ...m, [it.sku]: e.target.value }))}
+                    placeholder={it.canonical}
+                    style={{ flex: 1, minWidth: 240 }}
+                  />
+                  <button className="b2b-btn-secondary" onClick={() => saveAlias(it.sku)} disabled={aliasSavingSku === it.sku}>
+                    {aliasSavingSku === it.sku ? "..." : "저장"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Item = { name: string; spec: string; qty: number };
+type Item = { name: string; prodName: string; sku: string | null; spec: string; qty: number };
 type Unit = { id: string; kind: "order" | "manual"; status: string; company: string; orderNo: string | null; date: string | null; items: Item[] };
 type Contributor = { company: string; qty: number; unitId: string; kind: "order" | "manual"; status: string };
 type ProdCard = { key: string; product: string; spec: string; date: string | null; totalQty: number; status: string; contributors: Contributor[] };
@@ -44,9 +44,11 @@ export default function ProductionBoardPage() {
     const m = new Map<string, ProdCard>();
     for (const u of units) {
       for (const it of u.items) {
-        const key = `${it.name}|${it.spec}|${u.date || ""}`;
+        // 같은 SKU = 같은 생산품목으로 묶음 (B2B 품목명 달라도). SKU 없으면 품목명+규격.
+        const groupId = it.sku || `${it.name}|${it.spec}`;
+        const key = `${groupId}|${u.date || ""}`;
         let c = m.get(key);
-        if (!c) { c = { key, product: it.name, spec: it.spec, date: u.date, totalQty: 0, status: "", contributors: [] }; m.set(key, c); }
+        if (!c) { c = { key, product: it.prodName || it.name, spec: it.spec, date: u.date, totalQty: 0, status: "", contributors: [] }; m.set(key, c); }
         c.totalQty += it.qty;
         c.contributors.push({ company: u.company, qty: it.qty, unitId: u.id, kind: u.kind, status: u.status });
       }

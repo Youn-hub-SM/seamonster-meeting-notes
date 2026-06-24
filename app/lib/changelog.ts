@@ -14,6 +14,14 @@ export type ChangeEntry = {
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-06-25",
+    tag: "개선",
+    tool: "생산관리",
+    title: "같은 제품은 SKU로 묶음 (업체별 품목명 달라도)",
+    desc: "B2B에서 단가 때문에 같은 제품을 업체별로 다른 품목명으로 부르면 생산에서 갈라지던 문제를 해결했습니다. 이제 같은 SKU는 생산(보드·캘린더·요청서)에서 한 품목으로 합쳐집니다. 화면에 보일 이름은 설정 > '생산 품목명'에서 SKU별로 정리할 수 있어요(비우면 가장 짧은 이름 자동 사용).",
+    href: "/production/settings",
+  },
+  {
+    date: "2026-06-25",
     tag: "신규",
     tool: "생산관리",
     title: "생산요청서 + 칸반 보드 + 캘린더 품목 표시",
