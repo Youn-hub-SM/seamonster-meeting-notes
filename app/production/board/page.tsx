@@ -6,6 +6,7 @@ type Item = { name: string; prodName: string; sku: string | null; spec: string; 
 type Unit = { id: string; kind: "order" | "manual"; status: string; company: string; orderNo: string | null; date: string | null; items: Item[] };
 type Contributor = { company: string; qty: number; unitId: string; kind: "order" | "manual"; status: string };
 type ProdCard = { key: string; product: string; spec: string; date: string | null; totalQty: number; status: string; contributors: Contributor[] };
+type BacklogRow = { key: string; name: string; spec: string; b: Record<Bucket, number>; cum0: number; cum1: number; cum2: number; cum3: number; total: number };
 
 const COLUMNS = ["생산대기", "생산중", "생산완료"] as const;
 const COL_COLOR: Record<string, string> = { "생산대기": "#6b7280", "생산중": "#b86e00", "생산완료": "#22863a" };
@@ -17,10 +18,30 @@ function rollup(statuses: string[]): string {
   return "생산중";
 }
 
+// ── 타임라인(백로그) 주간 경계 — 월요일 시작, KST 기준(today는 API가 준 KST 날짜)
+function addDays(iso: string, n: number) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function md(iso: string) { return iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}` : ""; }
+type Bounds = { today: string; wEnd: string; w1End: string; w2End: string };
+function weekBounds(today: string): Bounds {
+  const d = new Date(today + "T00:00:00Z");
+  const sinceMon = (d.getUTCDay() + 6) % 7; // 0=월
+  const wEnd = addDays(today, 6 - sinceMon); // 이번 주 일요일
+  return { today, wEnd, w1End: addDays(wEnd, 7), w2End: addDays(wEnd, 14) };
+}
+type Bucket = "overdue" | "w0" | "w1" | "w2" | "w3" | "none";
+function bucketOf(date: string | null, B: Bounds): Bucket {
+  if (!date) return "none";
+  if (date < B.today) return "overdue";
+  if (date <= B.wEnd) return "w0";
+  if (date <= B.w1End) return "w1";
+  if (date <= B.w2End) return "w2";
+  return "w3";
+}
+
 export default function ProductionBoardPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [today, setToday] = useState("");
-  const [view, setView] = useState<"product" | "company">("product");
+  const [view, setView] = useState<"product" | "company" | "timeline">("product");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -58,6 +79,36 @@ export default function ProductionBoardPage() {
     return cards;
   }, [units]);
 
+  // 타임라인(생산 백로그): 미완료(생산대기·생산중)를 SKU별로 주간 버킷에 쌓고 누적 계산.
+  //  핵심 — 각 주 칸은 '그 주까지 끝내야 할 누적량'이라 지연되면 다음 주로 굴러가 커진다.
+  const backlog = useMemo(() => {
+    if (!today) return { rows: [] as BacklogRow[], maxCum: 1, totOverdue: 0, totW0: 0, B: null as Bounds | null };
+    const B = weekBounds(today);
+    const m = new Map<string, BacklogRow>();
+    for (const u of units) {
+      if (u.status === "생산완료") continue;
+      for (const it of u.items) {
+        const gid = it.sku || `${it.name}|${it.spec}`;
+        let r = m.get(gid);
+        if (!r) { r = { key: gid, name: it.prodName || it.name, spec: it.spec, b: { overdue: 0, w0: 0, w1: 0, w2: 0, w3: 0, none: 0 }, cum0: 0, cum1: 0, cum2: 0, cum3: 0, total: 0 }; m.set(gid, r); }
+        r.b[bucketOf(u.date, B)] += it.qty;
+      }
+    }
+    const rows = [...m.values()].map((r) => {
+      r.cum0 = r.b.overdue + r.b.w0;
+      r.cum1 = r.cum0 + r.b.w1;
+      r.cum2 = r.cum1 + r.b.w2;
+      r.cum3 = r.cum2 + r.b.w3;
+      r.total = r.cum3 + r.b.none;
+      return r;
+    }).filter((r) => r.total > 0)
+      .sort((a, b) => b.b.overdue - a.b.overdue || b.cum0 - a.cum0 || a.name.localeCompare(b.name, "ko"));
+    const maxCum = Math.max(1, ...rows.map((r) => r.cum3));
+    const totOverdue = rows.reduce((s, r) => s + r.b.overdue, 0);
+    const totW0 = rows.reduce((s, r) => s + r.cum0, 0);
+    return { rows, maxCum, totOverdue, totW0, B };
+  }, [units, today]);
+
   async function moveUnits(refs: { id: string; kind: "order" | "manual" }[], status: string) {
     const seen = new Set<string>();
     const uniq = refs.filter((r) => { const k = r.kind + r.id; if (seen.has(k)) return false; seen.add(k); return true; });
@@ -93,13 +144,14 @@ export default function ProductionBoardPage() {
           <div className="prod-range-tabs">
             <button className={`prod-range-tab ${view === "product" ? "is-active" : ""}`} onClick={() => setView("product")}>품목별</button>
             <button className={`prod-range-tab ${view === "company" ? "is-active" : ""}`} onClick={() => setView("company")}>발주처별</button>
+            <button className={`prod-range-tab ${view === "timeline" ? "is-active" : ""}`} onClick={() => setView("timeline")}>타임라인</button>
           </div>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
         </div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
-      {overdueCount > 0 && (
+      {view !== "timeline" && overdueCount > 0 && (
         <div className="b2b-error" style={{ background: "#fff4e0", color: "#b86e00", border: "1px solid #f0d9a8" }}>
           ⚠ 생산일이 지났는데 아직 생산 전/중인 건 {overdueCount}건 — 재고 쇼트 위험
         </div>
@@ -107,6 +159,60 @@ export default function ProductionBoardPage() {
 
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
+      ) : view === "timeline" ? (
+        !backlog.B || backlog.rows.length === 0 ? (
+          <div className="b2b-loading">생산할 항목이 없습니다.</div>
+        ) : (
+          <div className="tl-block">
+            <div className="tl-summary">
+              {backlog.totOverdue > 0
+                ? <span className="tl-sum-bad">🔴 지연 {backlog.totOverdue.toLocaleString()}개 밀림</span>
+                : <span className="tl-sum-ok">✓ 지연 없음</span>}
+              <span className="tl-sum-dot">·</span>
+              <span>이번주까지 <strong>{backlog.totW0.toLocaleString()}개</strong> 생산 필요</span>
+            </div>
+            <p className="tl-help">각 칸 = 그 시점까지 끝내야 할 <strong>누적</strong> 생산량(지연분 포함). 작은 <span className="tl-help-new">+N</span>은 그 주에 새로 잡힌 양 — 밀리면 다음 칸으로 굴러가 커집니다.</p>
+            <div className="tl-wrap">
+              <table className="tl-table">
+                <thead><tr>
+                  <th className="tl-item-h">품목</th>
+                  <th className="tl-h-overdue">지연</th>
+                  <th>이번주<span className="tl-th-sub">~{md(backlog.B.wEnd)}</span></th>
+                  <th>다음주<span className="tl-th-sub">~{md(backlog.B.w1End)}</span></th>
+                  <th>2주후<span className="tl-th-sub">~{md(backlog.B.w2End)}</span></th>
+                  <th>3주후+</th>
+                  <th className="tl-h-none">미정</th>
+                </tr></thead>
+                <tbody>
+                  {backlog.rows.map((r) => {
+                    const weeks = [
+                      { cum: r.cum0, nw: r.b.w0, c: "#e8590c" },
+                      { cum: r.cum1, nw: r.b.w1, c: "#1971c2" },
+                      { cum: r.cum2, nw: r.b.w2, c: "#1971c2" },
+                      { cum: r.cum3, nw: r.b.w3, c: "#1971c2" },
+                    ];
+                    return (
+                      <tr key={r.key} className={r.b.overdue > 0 ? "tl-row-bad" : ""}>
+                        <td className="tl-item"><span className="tl-item-name">{r.name}</span>{r.spec ? <span className="tl-item-spec"> {r.spec}</span> : ""}</td>
+                        <td className="tl-cell tl-overdue">
+                          <span className="tl-num" style={{ color: r.b.overdue > 0 ? "#c92a2a" : "#cdd2d8" }}>{r.b.overdue > 0 ? r.b.overdue.toLocaleString() : "·"}</span>
+                        </td>
+                        {weeks.map((w, i) => (
+                          <td key={i} className="tl-cell">
+                            {w.cum > 0 && <span className="tl-bar" style={{ width: `${Math.round((w.cum / backlog.maxCum) * 100)}%`, background: w.c }} />}
+                            <span className="tl-num" style={{ color: w.cum > 0 ? "var(--sm-text)" : "#cdd2d8" }}>{w.cum > 0 ? w.cum.toLocaleString() : "·"}</span>
+                            {w.nw > 0 && <span className="tl-new">+{w.nw.toLocaleString()}</span>}
+                          </td>
+                        ))}
+                        <td className="tl-cell tl-none"><span className="tl-num" style={{ color: r.b.none > 0 ? "var(--sm-text-mid)" : "#cdd2d8" }}>{r.b.none > 0 ? r.b.none.toLocaleString() : "·"}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
       ) : (
         <div className="kanban">
           {COLUMNS.map((col) => {

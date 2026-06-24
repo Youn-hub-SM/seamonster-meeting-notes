@@ -1102,6 +1102,31 @@ a.b2b-history-item:hover {
 .kanban-card-contributors { font-size: 11.5px; color: var(--sm-text-light); line-height: 1.5; margin-bottom: 8px; }
 @media (max-width: 768px) { .kanban { grid-template-columns: 1fr; } }
 
+/* 생산 보드 — 타임라인(백로그) 뷰 */
+.tl-summary { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sm-text-mid); margin-bottom: 6px; flex-wrap: wrap; }
+.tl-sum-bad { color: #c92a2a; font-weight: 700; }
+.tl-sum-ok { color: #22863a; font-weight: 700; }
+.tl-sum-dot { color: var(--sm-border); }
+.tl-help { font-size: 12.5px; color: var(--sm-text-light); margin: 0 0 12px; line-height: 1.6; }
+.tl-help-new { color: #1971c2; font-weight: 600; }
+.tl-wrap { overflow-x: auto; border: 1px solid var(--sm-border); border-radius: 10px; }
+.tl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tl-table th, .tl-table td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--sm-border); white-space: nowrap; }
+.tl-table tbody tr:last-child td { border-bottom: none; }
+.tl-table th { font-size: 12px; font-weight: 600; color: var(--sm-text-mid); background: var(--sm-bg-soft, #f7f8fa); }
+.tl-th-sub { display: block; font-size: 10.5px; font-weight: 500; color: var(--sm-text-light); margin-top: 1px; }
+.tl-item-h, .tl-item { text-align: left !important; min-width: 170px; position: sticky; left: 0; background: #fff; z-index: 1; }
+.tl-table th.tl-item-h { background: var(--sm-bg-soft, #f7f8fa); }
+.tl-item-name { font-weight: 600; color: var(--sm-text); }
+.tl-item-spec { font-size: 11.5px; color: var(--sm-text-light); }
+.tl-row-bad td.tl-item { box-shadow: inset 3px 0 0 #e5484d; }
+.tl-cell { position: relative; min-width: 76px; }
+.tl-bar { position: absolute; left: 0; top: 6px; bottom: 6px; border-radius: 3px; opacity: 0.16; pointer-events: none; }
+.tl-num { position: relative; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tl-new { position: relative; display: block; font-size: 11px; color: var(--sm-text-light); margin-top: 1px; }
+.tl-h-overdue, .tl-overdue { background: rgba(229, 72, 77, 0.05); }
+.tl-h-none, .tl-none { background: var(--sm-bg-soft, #f7f8fa); }
+
 .prod-cal-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sm-border); }
 .prod-cal-legend-item {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--sm-black);
