@@ -129,7 +129,7 @@ export function Combobox({
             filtered.map((o, i) => (
               <button
                 type="button"
-                key={o.id}
+                key={`${o.id}-${i}`}
                 className={`b2b-combo-opt${i === active ? " is-active" : ""}`}
                 onMouseDown={(e) => {
                   e.preventDefault();

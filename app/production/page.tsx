@@ -148,13 +148,13 @@ export default function ProductionSchedulePage() {
     } catch { setStatsConfigured(false); }
     setStatsLoading(false);
   }
-  function pickItem(sku: string) {
+  function pickItem(sku: string, displayName?: string) {
     const it = itemStats.find((i) => i.sku === sku);
     setAddModal((m) => {
       if (!m) return m;
       if (!it) return { ...m, sku: "", name: "", stock: null, dailyOut: 0, depletionDate: null };
       const dep = it.depletionDays != null ? addDaysIso(today, it.depletionDays) : null;
-      return { ...m, sku: it.sku, name: it.name, stock: it.stock, dailyOut: it.dailyOut, depletionDate: dep, productionDate: dep || today };
+      return { ...m, sku: it.sku, name: displayName || it.name, stock: it.stock, dailyOut: it.dailyOut, depletionDate: dep, productionDate: dep || today };
     });
   }
   async function saveAdd() {
@@ -173,13 +173,22 @@ export default function ProductionSchedulePage() {
     try { const j = await (await fetch(`/api/production/manual?id=${id}`, { method: "DELETE" })).json(); if (j.ok) setManual(j.items || []); } catch { /* noop */ }
   }
 
+  // SKU → 옵션(규격) — 검색 결과를 "상품명 | 옵션" 으로 보여주기 위해
+  const specBySku = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of products) if (p.sku && p.spec) m.set(p.sku.toUpperCase(), p.spec);
+    return m;
+  }, [products]);
   const productOptions: ComboOption[] = useMemo(
-    () => products.map((p) => ({ id: p.sku || p.name, label: p.name, sub: p.spec || p.sku || "" })),
+    () => products.map((p) => ({ id: p.sku || p.name, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })),
     [products]
   );
   const itemStatOptions: ComboOption[] = useMemo(
-    () => itemStats.map((it) => ({ id: it.sku, label: it.name, sub: it.sku })),
-    [itemStats]
+    () => itemStats.map((it) => {
+      const sp = specBySku.get(it.sku.toUpperCase());
+      return { id: it.sku, label: sp ? `${it.name} | ${sp}` : it.name, sub: it.sku };
+    }),
+    [itemStats, specBySku]
   );
   function setPromoItems(updater: (items: PromoItem[]) => PromoItem[]) {
     setPromoModal((m) => (m ? { ...m, items: updater(m.items || []) } : m));
@@ -327,7 +336,7 @@ export default function ProductionSchedulePage() {
                     <Combobox
                       value={addModal.name}
                       options={itemStatOptions}
-                      onSelect={(o) => pickItem(o.id)}
+                      onSelect={(o) => pickItem(o.id, o.label)}
                       placeholder={statsLoading ? "불러오는 중..." : "상품명·SKU 검색"}
                       ariaLabel="품목"
                     />
