@@ -3068,7 +3068,11 @@ a {
 .change-link:hover { color: var(--sm-orange-hover); }
 
 @media (max-width: 768px) {
-  .home-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 32px; }
+  .home-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 32px; }
+  .home-tool-card { padding: 14px; gap: 4px; }
+  .home-tool-emoji { font-size: 22px; }
+  .home-tool-name { font-size: 15px; }
+  .home-tool-desc { font-size: 12px; line-height: 1.45; }
   .home-section-title { font-size: 20px; }
   .change-item { padding: 16px; }
 }
