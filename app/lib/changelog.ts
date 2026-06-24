@@ -13,6 +13,14 @@ export type ChangeEntry = {
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-06-25",
+    tag: "신규",
+    tool: "생산관리",
+    title: "생산요청서 + 칸반 보드 + 캘린더 품목 표시",
+    desc: "제조사에 보낼 생산요청서를 일/주/월 단위로 엑셀 추출합니다. '생산 보드'(칸반)에서 생산 전·중·완료를 카드로 옮겨 체크하고, 생산일이 지난 미완료 건은 '재고 쇼트 위험'으로 경고합니다. 캘린더 각 날짜엔 이제 품목명·생산량이 바로 보입니다.",
+    href: "/production/request",
+  },
+  {
     date: "2026-06-24",
     tag: "개선",
     tool: "전체",

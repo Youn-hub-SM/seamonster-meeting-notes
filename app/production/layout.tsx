@@ -21,6 +21,7 @@ const APP_MENU = [
 const PROD_MENU = [
   { href: "/production", label: "생산일정" },
   { href: "/production/board", label: "생산 보드" },
+  { href: "/production/request", label: "생산요청서" },
   { href: "/production/inventory", label: "재고·생산필요" },
   { href: "/production/advice", label: "생산 조언" },
   { href: "/production/sku", label: "SKU 생성기" },
