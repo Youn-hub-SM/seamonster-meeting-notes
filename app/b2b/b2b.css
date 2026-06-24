@@ -1048,7 +1048,7 @@ a.b2b-history-item:hover {
 .prod-cal-wd.is-sat { color: #0a66c2; }
 
 .prod-cal-cell {
-  min-height: 84px; border: 1px solid var(--sm-border); border-radius: 8px; padding: 4px 5px;
+  min-height: 104px; border: 1px solid var(--sm-border); border-radius: 8px; padding: 4px 5px;
   display: flex; flex-direction: column; gap: 2px; background: var(--sm-white, #fff); overflow: hidden;
 }
 .prod-cal-cell.is-other { background: var(--sm-bg, #fafafa); }
@@ -1067,6 +1067,13 @@ a.b2b-history-item:hover {
 }
 .prod-cal-qty { font-size: 14px; font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; }
 .prod-cal-cnt { font-size: 10px; color: var(--sm-text-mid); }
+
+/* 캘린더 셀 — 제품·수량 목록 */
+.prod-cal-items { margin-top: 2px; display: flex; flex-direction: column; gap: 1px; }
+.prod-cal-item { display: flex; align-items: baseline; gap: 4px; font-size: 10.5px; line-height: 1.4; }
+.prod-cal-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sm-text-mid); }
+.prod-cal-item-qty { font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.prod-cal-item-more { font-size: 10px; color: var(--sm-text-light); margin-top: 1px; }
 
 .prod-cal-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sm-border); }
 .prod-cal-legend-item {

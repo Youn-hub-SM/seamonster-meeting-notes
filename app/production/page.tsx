@@ -244,9 +244,16 @@ export default function ProductionSchedulePage() {
                     </div>
                   ))}
                   {bucket && (
-                    <div className="prod-cal-prod" title={bucket.products.map((x) => `${x.name} ${x.qty}${x.manual ? " (직접)" : ""}`).join("\n")}>
-                      <span className="prod-cal-qty">{bucket.total_qty.toLocaleString()}</span>
-                      <span className="prod-cal-cnt">{bucket.products.length}종{bucket.hasManual ? " ✏" : ""}</span>
+                    <div className="prod-cal-items" title={bucket.products.map((x) => `${x.name} ${x.qty.toLocaleString()}개${x.manual ? " (직접)" : ""}`).join("\n")}>
+                      {bucket.products.slice(0, 3).map((x, i) => (
+                        <div key={i} className="prod-cal-item">
+                          <span className="prod-cal-item-name">{x.manual ? "✏ " : ""}{x.name}</span>
+                          <span className="prod-cal-item-qty">{x.qty.toLocaleString()}</span>
+                        </div>
+                      ))}
+                      {bucket.products.length > 3 && (
+                        <div className="prod-cal-item-more">외 {bucket.products.length - 3}종 · 합 {bucket.total_qty.toLocaleString()}</div>
+                      )}
                     </div>
                   )}
                 </div>
