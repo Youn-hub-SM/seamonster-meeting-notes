@@ -1,27 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { getRequestRows, periodRange, Period } from "@/app/lib/production-request";
+import { getRequestRows, PERIOD_DAYS } from "@/app/lib/production-request";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// GET /api/production/request?period=day|week|month&date=YYYY-MM-DD&format=json|xlsx
-function parsePeriod(p: string | null): Period {
-  return p === "week" || p === "month" ? p : "day";
+// GET /api/production/request?days=1|7|14|30&date=YYYY-MM-DD&format=json|xlsx
+function parseDays(p: string | null): number {
+  const n = Number(p);
+  return (PERIOD_DAYS as readonly number[]).includes(n) ? n : 7;
 }
 
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const period = parsePeriod(url.searchParams.get("period"));
+    const days = parseDays(url.searchParams.get("days"));
     const date = url.searchParams.get("date") || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
     const format = url.searchParams.get("format") || "json";
 
-    const data = await getRequestRows(period, date);
+    const data = await getRequestRows(days, date);
 
     if (format !== "xlsx") {
-      return NextResponse.json({ ok: true, period, ...data });
+      return NextResponse.json({ ok: true, days, ...data });
     }
 
     // ── 엑셀 생성 ──
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
     totalRow.getCell(3).numFmt = "#,##0";
 
     const buf = await wb.xlsx.writeBuffer();
-    const fname = `production-request-${period}-${data.from}.xlsx`;
+    const fname = `production-request-${days}d-${data.from}.xlsx`;
     return new NextResponse(buf as ArrayBuffer, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

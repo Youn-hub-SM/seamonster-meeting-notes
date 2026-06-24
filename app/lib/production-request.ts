@@ -6,7 +6,7 @@ import { getManualProductions } from "./production-manual";
 //  생산예정일(production_date / 수동 productionDate) 기준으로 일/주/월 범위 집계.
 // ─────────────────────────────────────────────
 
-export type Period = "day" | "week" | "month";
+export const PERIOD_DAYS = [1, 7, 14, 30] as const;
 
 export interface RequestRow {
   name: string;
@@ -17,24 +17,16 @@ export interface RequestRow {
 
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
 
-export function periodRange(period: Period, date: string): { from: string; to: string; label: string } {
+// 선택일(date)부터 N일 범위.
+export function periodRange(days: number, date: string): { from: string; to: string; label: string } {
   const d = new Date(date + "T00:00:00Z");
-  if (period === "week") {
-    const dow = (d.getUTCDay() + 6) % 7; // 월=0 … 일=6
-    const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - dow);
-    const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
-    return { from: iso(mon), to: iso(sun), label: `주간 (${iso(mon)} ~ ${iso(sun)})` };
-  }
-  if (period === "month") {
-    const first = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-    const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
-    return { from: iso(first), to: iso(last), label: `${d.getUTCFullYear()}년 ${d.getUTCMonth() + 1}월` };
-  }
-  return { from: date, to: date, label: `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일` };
+  const end = new Date(d); end.setUTCDate(d.getUTCDate() + Math.max(1, days) - 1);
+  if (days <= 1) return { from: date, to: date, label: `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 (당일)` };
+  return { from: date, to: iso(end), label: `${days}일 (${date} ~ ${iso(end)})` };
 }
 
-export async function getRequestRows(period: Period, date: string): Promise<{ from: string; to: string; label: string; rows: RequestRow[]; total: number }> {
-  const { from, to, label } = periodRange(period, date);
+export async function getRequestRows(days: number, date: string): Promise<{ from: string; to: string; label: string; rows: RequestRow[]; total: number }> {
+  const { from, to, label } = periodRange(days, date);
   const sb = supabaseAdmin();
 
   // B2B 발주(생산대기·생산중) 중 생산예정일이 기간 내인 라인아이템

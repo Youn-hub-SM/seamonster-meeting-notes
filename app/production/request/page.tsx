@@ -5,16 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 type Row = { name: string; spec: string; qty: number; manual: boolean };
 type Data = { from: string; to: string; label: string; rows: Row[]; total: number };
 
-const PERIODS = [
-  { k: "day", label: "일간" },
-  { k: "week", label: "주간" },
-  { k: "month", label: "월간" },
-] as const;
+const PERIODS = [1, 7, 14, 30] as const;
 
 function todayIso() { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; }
 
 export default function RequestPage() {
-  const [period, setPeriod] = useState<string>("week");
+  const [days, setDays] = useState<number>(7);
   const [date, setDate] = useState(todayIso());
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(false);
@@ -24,17 +20,17 @@ export default function RequestPage() {
     setLoading(true);
     setError("");
     try {
-      const j = await (await fetch(`/api/production/request?period=${period}&date=${date}`, { cache: "no-store" })).json();
+      const j = await (await fetch(`/api/production/request?days=${days}&date=${date}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setData(j);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 오류");
     }
     setLoading(false);
-  }, [period, date]);
+  }, [days, date]);
   useEffect(() => { load(); }, [load]);
 
-  const downloadUrl = `/api/production/request?period=${period}&date=${date}&format=xlsx`;
+  const downloadUrl = `/api/production/request?days=${days}&date=${date}&format=xlsx`;
 
   return (
     <div className="b2b-container" style={{ maxWidth: 900 }}>
@@ -53,12 +49,12 @@ export default function RequestPage() {
       <div className="b2b-card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div className="prod-range-tabs">
-            {PERIODS.map((p) => (
-              <button key={p.k} className={`prod-range-tab ${period === p.k ? "is-active" : ""}`} onClick={() => setPeriod(p.k)}>{p.label}</button>
+            {PERIODS.map((n) => (
+              <button key={n} className={`prod-range-tab ${days === n ? "is-active" : ""}`} onClick={() => setDays(n)}>{n}일</button>
             ))}
           </div>
           <input type="date" className="b2b-input" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />
-          {data && <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{data.label} · {data.from} ~ {data.to}</span>}
+          {data && <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{data.from} ~ {data.to}</span>}
         </div>
       </div>
 
