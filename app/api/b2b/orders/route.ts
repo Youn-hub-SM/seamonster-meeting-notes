@@ -182,18 +182,15 @@ export async function POST(req: NextRequest) {
       throw shipErr;
     }
 
-    // 헤더 동기화: ship_date(가장 이른 일정) + 복수 발송이면 상태 자동 도출
+    // 헤더 동기화: 복수발송(차수 2개 이상)이면 메인 발송일 null(차수별로 관리), 단일/없음이면 메인 발송일 사용.
     //  + 발주 박스 수(이익률용)는 발송 차수 박스 수의 합으로 동기화 (차수가 있을 때만)
-    const headerShipDate = body.ship_date || earliestShipDate;
-    const headerPatch: Record<string, unknown> = {};
-    if (headerShipDate) headerPatch.ship_date = headerShipDate;
-    // 생산일 미입력 + 발송일 존재 → 생산일을 발송일과 동일하게 채움 (생산일이 있으면 건드리지 않음)
-    if (!body.production_date && headerShipDate) headerPatch.production_date = headerShipDate;
+    // 생산일은 자동으로 채우지 않음 — 직접 입력한 값만 사용(헤더 insert 에서 이미 저장됨).
+    const splitCount = (body.shipments ?? []).filter((s) => s.ship_date || (Array.isArray(s.items) && s.items.some((i) => Number(i.qty) > 0))).length;
+    const headerShipDate = splitCount >= 2 ? null : (body.ship_date || earliestShipDate || null);
+    const headerPatch: Record<string, unknown> = { ship_date: headerShipDate };
     if (derivedStatus) headerPatch.status = derivedStatus;
     if (totalBoxes > 0) headerPatch.box_count = totalBoxes;
-    if (Object.keys(headerPatch).length > 0) {
-      await sb.from("orders").update(headerPatch).eq("id", orderRow.id);
-    }
+    await sb.from("orders").update(headerPatch).eq("id", orderRow.id);
 
     // 4) 재조회해서 트리거가 계산한 합계 포함하여 반환
     const { data: refreshed, error: refErr } = await sb

@@ -557,25 +557,21 @@ export default function OrderForm({
                 value={data.production_date}
                 onChange={(e) => setField("production_date", e.target.value)}
               />
-              <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 4 }}>
-                비워두면 발송예정일과 동일하게 저장됩니다.
-              </span>
             </div>
             <div className="b2b-field">
               <label className="b2b-field-label">발송예정일</label>
-              <input
-                type="date"
-                className="b2b-input"
-                value={data.ship_date}
-                onChange={(e) =>
-                  setData((prev) => ({
-                    ...prev,
-                    ship_date: e.target.value,
-                    // 생산일이 비어 있을 때만 발송일과 동일하게 자동 입력 (이미 있으면 유지)
-                    production_date: prev.production_date || e.target.value,
-                  }))
-                }
-              />
+              {data.shipments.length >= 2 ? (
+                <div style={{ fontSize: 12.5, color: "var(--sm-text-light)", padding: "11px 0" }}>
+                  복수발송 — 발송일은 아래 ‘발송 일정’의 차수별로 관리됩니다.
+                </div>
+              ) : (
+                <input
+                  type="date"
+                  className="b2b-input"
+                  value={data.ship_date}
+                  onChange={(e) => setField("ship_date", e.target.value)}
+                />
+              )}
             </div>
           </div>
 

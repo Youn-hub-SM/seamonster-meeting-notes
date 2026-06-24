@@ -150,12 +150,12 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
     // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
     const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)));
-    const headerShipDate = body.ship_date || earliestShipDate;
-    // 복수 발송이면 상위발주 상태를 하위 차수들로부터 자동 도출 (화면 미표시, 백엔드 일관성용)
+    // 복수발송(차수 2개 이상)이면 메인 발송일은 두지 않음(차수별 날짜로 관리). 단일/없음이면 메인 발송일 사용.
+    const splitCount = (body.shipments ?? []).filter((s) => s.ship_date || (Array.isArray(s.items) && s.items.some((i) => Number(i.qty) > 0))).length;
+    const headerShipDate = splitCount >= 2 ? null : (body.ship_date || earliestShipDate || null);
     //  + 발주 박스 수(이익률용)는 발송 차수 박스 수의 합으로 동기화 (차수가 있을 때만)
-    const headerPatch: Record<string, unknown> = { ship_date: headerShipDate || null };
-    // 생산일 미입력 + 발송일 존재 → 생산일을 발송일과 동일하게 채움 (생산일이 있으면 건드리지 않음)
-    if (!body.production_date && headerShipDate) headerPatch.production_date = headerShipDate;
+    // 생산일은 자동으로 채우지 않음 — 직접 입력한 값만 사용(헤더 update 에서 이미 저장됨).
+    const headerPatch: Record<string, unknown> = { ship_date: headerShipDate };
     if (derivedStatus) headerPatch.status = derivedStatus;
     if (totalBoxes > 0) headerPatch.box_count = totalBoxes;
     await sb.from("orders").update(headerPatch).eq("id", id);
