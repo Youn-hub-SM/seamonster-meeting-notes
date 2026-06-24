@@ -830,6 +830,128 @@ a.b2b-history-item:hover {
   min-width: 104px;
 }
 
+/* ═══════════════════════════════════════════════
+   생산관리 (/production)
+   ═══════════════════════════════════════════════ */
+.b2b-brand-sub {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sm-orange);
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--sm-border);
+}
+
+.prod-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.prod-day-card {
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card, 16px);
+  background: var(--sm-white, #fff);
+  overflow: hidden;
+}
+.prod-day-card.is-today {
+  border-color: var(--sm-orange);
+  box-shadow: 0 0 0 1px var(--sm-orange);
+}
+.prod-day-card.is-overdue {
+  border-color: #f5c6c6;
+}
+.prod-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--sm-bg, #fafafa);
+  border-bottom: 1px solid var(--sm-border);
+}
+.prod-day-card.is-today .prod-day-head {
+  background: var(--sm-orange-light, rgba(241, 90, 48, 0.07));
+}
+.prod-day-when {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prod-day-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sm-black);
+}
+.prod-day-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.prod-day-badge.is-overdue { background: #fce4e4; color: #c92a2a; }
+.prod-day-badge.is-today { background: var(--sm-orange); color: #fff; }
+.prod-day-badge.is-unset { background: #eee; color: #666; }
+.prod-day-sum {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--sm-text-mid);
+}
+.prod-day-sum-qty {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sm-black);
+  font-variant-numeric: tabular-nums;
+}
+.prod-table td.num { font-variant-numeric: tabular-nums; }
+.prod-companies { font-size: 13px; color: var(--sm-text-mid); }
+.prod-ordcount { color: var(--sm-text-light); }
+.prod-note {
+  margin-top: 18px;
+  font-size: 12.5px;
+  color: var(--sm-text-light);
+  line-height: 1.6;
+}
+
+/* SKU 생성기 결과 박스 */
+.prod-sku-result {
+  margin-top: 18px;
+  border: 1px solid var(--sm-border);
+  border-radius: var(--sm-radius-card, 16px);
+  background: var(--sm-bg, #fafafa);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.prod-sku-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sm-text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.prod-sku-value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--sm-black);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+.prod-sku-warn {
+  font-size: 13px;
+  color: #c92a2a;
+  font-weight: 600;
+}
+.prod-sku-ok {
+  font-size: 13px;
+  color: #22863a;
+  font-weight: 600;
+}
+
 .b2b-table th {
   font-weight: 500;
   color: #6b7280;

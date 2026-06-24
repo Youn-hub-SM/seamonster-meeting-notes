@@ -11,6 +11,7 @@ const TOOLS = [
   { href: "/utm", name: "UTM 빌더" },
   { href: "/subscription", name: "정기배송 분석" },
   { href: "/b2b", name: "B2B 매니저" },
+  { href: "/production", name: "생산관리" },
 ];
 
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {

@@ -14,6 +14,14 @@ export type ChangeEntry = {
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-06-24",
+    tag: "신규",
+    tool: "생산관리",
+    title: "생산관리 툴 추가 — 생산일정 + SKU 생성기",
+    desc: "B2B 발주를 끌어와 '며칠에 무엇을 몇 개' 생산해야 하는지 한눈에 봅니다(생산일정). SKU 생성기는 라인·어종·규격만 고르면 규칙대로 코드를 만들고 중복도 즉시 확인해줍니다. 박스히어로 재고 연동·생산 조언은 다음 단계에 붙습니다.",
+    href: "/production",
+  },
+  {
+    date: "2026-06-24",
     tag: "개선",
     tool: "B2B · 발주",
     title: "발주 상태를 생산·발송·입금·발행 4가지로 분리",

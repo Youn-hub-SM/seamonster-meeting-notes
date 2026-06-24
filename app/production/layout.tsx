@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import "./b2b.css";
-import ActivityFeed from "./ActivityFeed";
+import "../b2b/b2b.css";
 
 // 상위(전체) 앱 메뉴 — 햄버거로 접힘
 const APP_MENU = [
@@ -18,32 +17,21 @@ const APP_MENU = [
   { href: "/production", label: "생산관리" },
 ];
 
-// B2B 서브 메뉴 (한 줄 바)
-const B2B_MENU = [
-  { href: "/b2b", label: "대시보드" },
-  { href: "/b2b/orders", label: "발주" },
-  { href: "/b2b/companies", label: "업체 주소록" },
-  { href: "/b2b/products", label: "원가표" },
-  { href: "/b2b/margin", label: "이익률" },
-  { href: "/b2b/reports", label: "매출 집계" },
-  { href: "/b2b/payments", label: "입금 확인" },
-  { href: "/b2b/history", label: "히스토리" },
-  { href: "/b2b/settings", label: "설정" },
+// 생산관리 서브 메뉴
+const PROD_MENU = [
+  { href: "/production", label: "생산일정" },
+  { href: "/production/sku", label: "SKU 생성기" },
+  { href: "/production/products", label: "품목 업로드" },
 ];
 
-export default function B2BLayout({ children }: { children: React.ReactNode }) {
+export default function ProductionLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [userName, setUserName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [gitbook, setGitbook] = useState("");
 
-  // 로그인 페이지에서는 서브 네비·활동 피드를 숨김 (인증 전)
-  const hideChrome = pathname === "/b2b/login";
-
-  // 현재 로그인 사용자 이름 (비밀번호로 구분: 지인/예지/현석/관리자)
   useEffect(() => {
-    if (hideChrome) return;
     fetch("/api/b2b/auth", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j.ok) setUserName(j.name); })
@@ -52,9 +40,8 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
       .then((r) => r.json())
       .then((j) => { if (j.ok && j.gitbook) setGitbook(j.gitbook); })
       .catch(() => {});
-  }, [hideChrome]);
+  }, []);
 
-  // 경로 바뀌면 햄버거 메뉴 닫기
   useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   async function handleLogout() {
@@ -63,21 +50,13 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
     router.refresh();
   }
 
-  const isActive = (href: string) => (href === "/b2b" ? pathname === "/b2b" : pathname.startsWith(href));
-
-  if (hideChrome) {
-    return (
-      <div className="b2b-shell">
-        <main className="b2b-main">{children}</main>
-      </div>
-    );
-  }
+  const isActive = (href: string) =>
+    href === "/production" ? pathname === "/production" : pathname.startsWith(href);
 
   return (
     <div className="b2b-shell">
       <nav className="b2b-subnav">
         <div className="b2b-subnav-inner">
-          {/* 좌측: 햄버거(전체 메뉴) + 브랜드 */}
           <div className="b2b-nav-left">
             <button
               type="button"
@@ -89,11 +68,11 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
               ☰
             </button>
             <Link href="/" className="b2b-brand" title="내부도구 홈">씨몬스터</Link>
+            <span className="b2b-brand-sub">생산관리</span>
           </div>
 
-          {/* 가운데: B2B 메뉴 (모바일에서 가로 스크롤) */}
           <div className="b2b-nav-links">
-            {B2B_MENU.map((m) => (
+            {PROD_MENU.map((m) => (
               <Link
                 key={m.href}
                 href={m.href}
@@ -109,17 +88,14 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {/* 우측: 사용자 + 최근 변경 + 로그아웃 */}
           <div className="b2b-nav-right">
             {userName && <span className="b2b-nav-user" title="현재 로그인 사용자">{userName}</span>}
-            <ActivityFeed />
             <button type="button" onClick={handleLogout} className="b2b-subnav-link b2b-logout-btn" title="로그아웃">
               로그아웃
             </button>
           </div>
         </div>
 
-        {/* 햄버거 = 전체 앱 메뉴 드롭다운 */}
         {menuOpen && (
           <>
             <div className="b2b-appmenu-backdrop" onClick={() => setMenuOpen(false)} />
@@ -129,23 +105,12 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
                 <Link
                   key={m.href}
                   href={m.href}
-                  className={`b2b-appmenu-link ${m.href === "/b2b" ? "is-current" : ""}`}
+                  className={`b2b-appmenu-link ${m.href === "/production" ? "is-current" : ""}`}
                   onClick={() => setMenuOpen(false)}
                 >
                   {m.label}
                 </Link>
               ))}
-              {gitbook && (
-                <a
-                  href={gitbook}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="b2b-appmenu-link"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  가이드라인 ↗
-                </a>
-              )}
             </div>
           </>
         )}

@@ -17,10 +17,13 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // B2B·생산관리 API 는 인증 실패 시 JSON 401, 페이지는 로그인으로 리다이렉트
+  const isApi = pathname.startsWith("/api/b2b/") || pathname.startsWith("/api/production/");
+
   const users = getB2BUsers();
   if (users.length === 0) {
     // 환경변수 미설정 — 보안상 모든 접근 차단
-    if (pathname.startsWith("/api/b2b/")) {
+    if (isApi) {
       return NextResponse.json(
         { ok: false, error: "B2B_PASSWORD/B2B_USERS 환경변수가 서버에 설정되어 있지 않습니다." },
         { status: 503 }
@@ -50,7 +53,7 @@ export function middleware(req: NextRequest) {
   }
 
   // 인증 실패
-  if (pathname.startsWith("/api/b2b/")) {
+  if (isApi) {
     return NextResponse.json({ ok: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
@@ -61,5 +64,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/b2b/:path*", "/api/b2b/:path*"],
+  matcher: ["/b2b/:path*", "/api/b2b/:path*", "/production/:path*", "/api/production/:path*"],
 };
