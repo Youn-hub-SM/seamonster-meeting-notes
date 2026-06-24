@@ -1377,21 +1377,22 @@ function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
   if (!items || items.length === 0) {
     return <span style={{ color: "var(--sm-text-light)" }}>-</span>;
   }
-  const MAX = 3;
+  // 최대 2줄로 고정 — 행 높이를 일정하게 유지 (나머지는 마지막 줄에 "외 N종")
+  const MAX = 2;
   const shown = items.slice(0, MAX);
   const rest = items.length - shown.length;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.45 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.4 }}>
       {shown.map((it, i) => (
         <span key={i} style={{ whiteSpace: "nowrap" }}>
           {it.product_name}
           {it.spec ? <span style={{ color: "var(--sm-text-light)" }}> · {it.spec}</span> : ""}
           <span style={{ color: "var(--sm-text-mid)" }}> ×{it.qty}</span>
+          {i === shown.length - 1 && rest > 0 && (
+            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}> 외 {rest}종</span>
+          )}
         </span>
       ))}
-      {rest > 0 && (
-        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>외 {rest}종</span>
-      )}
     </div>
   );
 }
