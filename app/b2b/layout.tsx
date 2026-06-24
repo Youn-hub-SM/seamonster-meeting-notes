@@ -8,7 +8,8 @@ import ActivityFeed from "./ActivityFeed";
 
 // 상위(전체) 앱 메뉴 — 햄버거로 접힘
 const APP_MENU = [
-  { href: "/", label: "회의 정리" },
+  { href: "/", label: "홈" },
+  { href: "/meeting", label: "회의 정리" },
   { href: "/correct", label: "문장 교정" },
   { href: "/cs", label: "CS 코치" },
   { href: "/utm", label: "UTM 빌더" },
@@ -86,7 +87,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
             >
               ☰
             </button>
-            <Link href="/b2b" className="b2b-brand">씨몬스터</Link>
+            <Link href="/" className="b2b-brand" title="내부도구 홈">씨몬스터</Link>
           </div>
 
           {/* 가운데: B2B 메뉴 (모바일에서 가로 스크롤) */}

@@ -1,175 +1,74 @@
-"use client";
+import Link from "next/link";
+import { getGitbookUrl } from "@/app/lib/site-links";
+import { CHANGELOG } from "@/app/lib/changelog";
 
-import { useState, useRef } from "react";
-import { Meeting } from "@/app/lib/types";
-import { meetingToMarkdown } from "@/app/lib/markdown";
+export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const [rawText, setRawText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<Meeting | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [fileName, setFileName] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
+const TOOLS = [
+  { href: "/meeting", emoji: "📝", name: "회의록 정리", desc: "녹취·메모를 붙여넣으면 시간순 요약·결정·할 일로 정리" },
+  { href: "/correct", emoji: "✍️", name: "문장 교정", desc: "씨몬스터 톤앤매너에 맞게 문장 다듬기" },
+  { href: "/cs", emoji: "🎧", name: "CS 코치", desc: "상황을 적으면 매뉴얼 근거로 행동 코칭 + 답변 초안" },
+  { href: "/utm", emoji: "🔗", name: "UTM 빌더", desc: "채널별 추적 링크 생성·관리 (팀 공용 히스토리)" },
+  { href: "/subscription", emoji: "📦", name: "정기배송 분석", desc: "구독 CSV 분석 + KPI 추세 관찰" },
+  { href: "/b2b", emoji: "🏢", name: "B2B 매니저", desc: "발주·업체·원가·이익률·매출·입금 관리" },
+];
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+const TAG_STYLE: Record<string, { bg: string; color: string }> = {
+  신규: { bg: "#e6ffed", color: "#22863a" },
+  개선: { bg: "rgba(241,90,48,0.10)", color: "#D94E26" },
+  수정: { bg: "#fff8e1", color: "#b08800" },
+};
 
-    setFileName(file.name);
-    const text = await file.text();
-    setRawText(text);
-  }
-
-  function handleFileClear() {
-    setFileName("");
-    setRawText("");
-    if (fileRef.current) fileRef.current.value = "";
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    setResult(null);
-
-    try {
-      const res = await fetch("/api/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "오류가 발생했습니다.");
-      }
-
-      const meeting = await res.json();
-      setResult(meeting);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
-    }
-    setLoading(false);
-  }
-
-  async function handleCopy() {
-    if (!result) return;
-    await navigator.clipboard.writeText(meetingToMarkdown(result));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  function handleReset() {
-    setRawText("");
-    setResult(null);
-    setError("");
-    setFileName("");
-    if (fileRef.current) fileRef.current.value = "";
-  }
-
-  if (loading) {
-    return (
-      <div className="container">
-        <div className="loading-overlay">
-          <div className="spinner" />
-          <p className="loading-text">AI가 회의 내용을 정리하고 있습니다...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (result) {
-    const md = meetingToMarkdown(result);
-    return (
-      <div className="container">
-        <div className="result-header">
-          <h1 className="page-title">{result.title}</h1>
-          <p className="detail-date">{result.date}</p>
-          <div className="result-actions">
-            <button className="btn-primary" onClick={handleCopy}>
-              {copied ? "복사 완료!" : "마크다운 복사"}
-            </button>
-            <button className="btn-secondary" onClick={handleReset}>
-              새 회의록 작성
-            </button>
-          </div>
-        </div>
-
-        <div className="markdown-preview">
-          <pre className="markdown-text">{md}</pre>
-        </div>
-
-        <details style={{ marginTop: 24 }}>
-          <summary className="btn-secondary" style={{ cursor: "pointer" }}>
-            원본 텍스트 보기
-          </summary>
-          <div className="raw-text">{result.rawText}</div>
-        </details>
-      </div>
-    );
-  }
+export default async function HomePage() {
+  const gitbook = await getGitbookUrl();
 
   return (
     <div className="container">
-      <h1 className="page-title">회의록 정리</h1>
-      <p className="page-subtitle">
-        회의 내용을 직접 입력하거나 파일을 첨부하세요
-      </p>
+      <h1 className="page-title">씨몬스터 내부도구</h1>
+      <p className="page-subtitle">업무 도구를 한곳에서. 새 기능은 아래 업데이트 노트에 정리됩니다.</p>
 
-      <form onSubmit={handleSubmit}>
-        {/* 파일 업로드 */}
-        <div className="form-group">
-          <label className="form-label">파일 첨부 (srt, txt)</label>
-          <div className="file-upload-area">
-            {fileName ? (
-              <div className="file-attached">
-                <span className="file-name">{fileName}</span>
-                <button type="button" className="file-remove" onClick={handleFileClear}>
-                  제거
-                </button>
-              </div>
-            ) : (
-              <label className="file-drop" htmlFor="fileInput">
-                <span className="file-drop-text">클릭하여 파일 선택 또는 여기에 드래그</span>
-                <span className="file-drop-hint">.srt, .txt 파일 지원</span>
-              </label>
-            )}
-            <input
-              ref={fileRef}
-              id="fileInput"
-              type="file"
-              accept=".srt,.txt,.text"
-              onChange={handleFile}
-              className="file-input-hidden"
-            />
-          </div>
-        </div>
-
-        {/* 텍스트 직접 입력 */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="rawText">
-            {fileName ? "파일 내용 (수정 가능)" : "또는 직접 입력"}
-          </label>
-          <textarea
-            id="rawText"
-            className="form-textarea"
-            value={rawText}
-            onChange={(e) => setRawText(e.target.value)}
-            placeholder={`회의 녹취록, 메모, 대화 내용 등을 자유롭게 붙여넣으세요.\n\n타임코드가 있으면 활용하고, 없으면 흐름 순서로 정리합니다.`}
-            required
-          />
-        </div>
-
-        {error && (
-          <p style={{ color: "#e53e3e", marginBottom: 16, fontSize: 14 }}>{error}</p>
+      {/* 도구 바로가기 */}
+      <div className="home-grid">
+        {TOOLS.map((t) => (
+          <Link key={t.href} href={t.href} className="home-tool-card">
+            <span className="home-tool-emoji">{t.emoji}</span>
+            <span className="home-tool-name">{t.name}</span>
+            <span className="home-tool-desc">{t.desc}</span>
+          </Link>
+        ))}
+        {gitbook && (
+          <a href={gitbook} target="_blank" rel="noopener noreferrer" className="home-tool-card is-external">
+            <span className="home-tool-emoji">📖</span>
+            <span className="home-tool-name">가이드라인 ↗</span>
+            <span className="home-tool-desc">사내 매뉴얼·규정 (GitBook, 새 탭)</span>
+          </a>
         )}
+      </div>
 
-        <button type="submit" className="btn-primary" disabled={rawText.trim().length < 10}>
-          정리하기
-        </button>
-      </form>
+      {/* 업데이트 노트 */}
+      <section className="home-section">
+        <h2 className="home-section-title">업데이트 노트</h2>
+        <p className="home-section-sub">추가·개선된 기능을 여기에 모아둡니다. 무엇이 생겼는지 확인하고 바로 써보세요.</p>
+        <div className="changelog-list">
+          {CHANGELOG.map((c, i) => {
+            const tag = TAG_STYLE[c.tag] ?? TAG_STYLE["개선"];
+            return (
+              <div key={i} className="change-item">
+                <div className="change-meta">
+                  <span className="change-tag" style={{ background: tag.bg, color: tag.color }}>{c.tag}</span>
+                  <span className="change-date">{c.date}</span>
+                  <span className="change-tool">{c.tool}</span>
+                </div>
+                <div className="change-title">{c.title}</div>
+                <div className="change-desc">{c.desc}</div>
+                {c.href && (
+                  <Link href={c.href} className="change-link">바로 써보기 →</Link>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

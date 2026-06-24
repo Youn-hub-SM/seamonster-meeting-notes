@@ -25,7 +25,8 @@ export default function SiteHeader() {
       <div className="header-inner">
         <Link href="/" className="header-logo">씨몬스터</Link>
         <nav className="header-nav">
-          <Link href="/" className="header-nav-link">회의 정리</Link>
+          <Link href="/" className="header-nav-link">홈</Link>
+          <Link href="/meeting" className="header-nav-link">회의 정리</Link>
           <Link href="/correct" className="header-nav-link">문장 교정</Link>
           <Link href="/cs" className="header-nav-link">CS 코치</Link>
           <Link href="/utm" className="header-nav-link">UTM 빌더</Link>
