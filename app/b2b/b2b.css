@@ -975,6 +975,50 @@ a.b2b-history-item:hover {
   vertical-align: middle;
 }
 
+/* 생산 조언 */
+.prod-advice-summary {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--sm-orange-light, rgba(241, 90, 48, 0.07));
+  border: 1px solid #f0d2c6;
+  border-radius: var(--sm-radius-card, 16px);
+  padding: 18px 20px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--sm-black);
+}
+.prod-advice-summary-icon { font-size: 22px; line-height: 1.4; flex-shrink: 0; }
+
+.prod-prio-list { display: flex; flex-direction: column; gap: 10px; }
+.prod-prio-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid var(--sm-border);
+  border-radius: 12px;
+  background: var(--sm-white, #fff);
+  padding: 14px 16px;
+}
+.prod-prio-rank {
+  flex-shrink: 0;
+  width: 26px; height: 26px;
+  border-radius: 999px;
+  background: var(--sm-black);
+  color: #fff;
+  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.prod-prio-body { flex: 1; min-width: 0; }
+.prod-prio-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.prod-prio-name { font-size: 15px; font-weight: 700; color: var(--sm-black); }
+.prod-prio-sku { font-size: 12px; color: var(--sm-text-light); }
+.prod-prio-urg { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+.prod-prio-meta { display: flex; gap: 10px; align-items: baseline; margin-top: 5px; }
+.prod-prio-qty { font-size: 17px; font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; }
+.prod-prio-when { font-size: 12.5px; font-weight: 600; color: var(--sm-text-mid); }
+.prod-prio-reason { margin-top: 5px; font-size: 13.5px; color: var(--sm-text-mid); line-height: 1.5; }
+
 .b2b-table th {
   font-weight: 500;
   color: #6b7280;
