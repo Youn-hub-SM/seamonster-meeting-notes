@@ -301,15 +301,17 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* History table */
+  #historyContainer { overflow-x: auto; }   /* 좁은 화면에선 표가 카드 밖으로 안 튀고 가로 스크롤 */
   .history-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 14px;
     margin-top: 12px;
+    table-layout: fixed;   /* 컬럼 폭 고정 → 긴 URL이 표를 밀어내지 않고 말줄임 */
   }
   .history-table th {
     text-align: left;
-    padding: 12px 14px;
+    padding: 11px 12px;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
     color: var(--text-sub);
@@ -318,18 +320,23 @@
     white-space: nowrap;
   }
   .history-table td {
-    padding: 12px 14px;
+    padding: 11px 12px;
     border-bottom: 1px solid var(--border);
-    max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 15px;
+    font-size: 14px;
     color: var(--text);
   }
+  /* 컬럼 폭 — URL(6번)은 나머지 폭 차지 + 말줄임 */
+  .history-table th:nth-child(1), .history-table td:nth-child(1) { width: 116px; }
+  .history-table th:nth-child(2), .history-table td:nth-child(2) { width: 86px; }
+  .history-table th:nth-child(3), .history-table td:nth-child(3) { width: 78px; }
+  .history-table th:nth-child(4), .history-table td:nth-child(4) { width: 96px; }
+  .history-table th:nth-child(5), .history-table td:nth-child(5) { width: 64px; }
+  .history-table th:nth-child(7), .history-table td:nth-child(7) { width: 48px; }
   .history-table tr:hover td { background: var(--primary-light); }
   .history-table .url-cell {
-    max-width: 300px;
     color: var(--primary);
     cursor: pointer;
     font-weight: 600;

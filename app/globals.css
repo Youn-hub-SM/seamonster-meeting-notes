@@ -3025,7 +3025,19 @@ a {
   box-shadow: var(--sm-shadow-float);
 }
 .home-tool-emoji { font-size: 26px; line-height: 1; }
-.home-tool-name { font-size: 18px; font-weight: 700; color: var(--sm-black); }
+.home-tool-name { font-size: 18px; font-weight: 700; color: var(--sm-black); display: inline-flex; align-items: center; }
+.home-new, .change-new {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #fff;
+  background: var(--sm-orange);
+  border-radius: 5px;
+  padding: 1px 6px;
+  line-height: 1.5;
+}
+.home-new { margin-left: 7px; }
 .home-tool-desc { font-size: 13.5px; color: var(--sm-text-mid); line-height: 1.55; }
 .home-tool-card.is-external { background: var(--sm-bg-warm); border-color: var(--sm-orange-border); }
 

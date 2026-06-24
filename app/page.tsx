@@ -22,6 +22,13 @@ const TAG_STYLE: Record<string, { bg: string; color: string }> = {
 export default async function HomePage() {
   const gitbook = await getGitbookUrl();
 
+  // 최근 7일 내 업데이트면 NEW 뱃지
+  const now = Date.now();
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+  const isNew = (dateStr: string) => now - new Date(dateStr).getTime() <= WEEK;
+  const recentHrefs = CHANGELOG.filter((c) => c.href && isNew(c.date)).map((c) => c.href as string);
+  const toolIsNew = (href: string) => href !== "/" && recentHrefs.some((h) => h.startsWith(href));
+
   return (
     <div className="container">
       <h1 className="page-title">씨몬스터 내부도구</h1>
@@ -32,7 +39,10 @@ export default async function HomePage() {
         {TOOLS.map((t) => (
           <Link key={t.href} href={t.href} className="home-tool-card">
             <span className="home-tool-emoji">{t.emoji}</span>
-            <span className="home-tool-name">{t.name}</span>
+            <span className="home-tool-name">
+              {t.name}
+              {toolIsNew(t.href) && <span className="home-new">NEW</span>}
+            </span>
             <span className="home-tool-desc">{t.desc}</span>
           </Link>
         ))}
@@ -55,6 +65,7 @@ export default async function HomePage() {
             return (
               <div key={i} className="change-item">
                 <div className="change-meta">
+                  {isNew(c.date) && <span className="change-new">NEW</span>}
                   <span className="change-tag" style={{ background: tag.bg, color: tag.color }}>{c.tag}</span>
                   <span className="change-date">{c.date}</span>
                   <span className="change-tool">{c.tool}</span>
