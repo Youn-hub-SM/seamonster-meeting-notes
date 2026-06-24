@@ -334,8 +334,8 @@
   .history-table th:nth-child(3), .history-table td:nth-child(3) { width: 11%; }  /* Medium */
   .history-table th:nth-child(4), .history-table td:nth-child(4) { width: 14%; }  /* Campaign */
   .history-table th:nth-child(5), .history-table td:nth-child(5) { width: 10%; }  /* 비고 */
-  .history-table th:nth-child(6), .history-table td:nth-child(6) { width: 28%; }  /* URL */
-  .history-table th:nth-child(7), .history-table td:nth-child(7) { width: 8%; }   /* 작업 */
+  .history-table th:nth-child(6), .history-table td:nth-child(6) { width: 23%; }  /* URL */
+  .history-table th:nth-child(7), .history-table td:nth-child(7) { width: 14%; }  /* 작업 */
   .history-table tr:hover td { background: var(--primary-light); }
   .history-table .url-cell {
     color: var(--primary);
@@ -343,7 +343,16 @@
     font-weight: 600;
   }
   .history-table .url-cell:hover { text-decoration: underline; }
-  .history-table .actions { white-space: nowrap; }
+  /* 작업 칸: 말줄임(…) 끄고 여백·버튼을 줄여 삭제 버튼이 칸 안에 온전히 들어가게 */
+  .history-table td.actions {
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    text-align: right;
+    padding-left: 4px;
+    padding-right: 10px;
+  }
+  .history-table td.actions .btn-sm { padding: 6px 11px; font-size: 13px; }
   /* 좁은 화면: 여백·글자·삭제버튼을 줄여 7컬럼이 가로 스크롤 없이 들어가게 */
   @media (max-width: 720px) {
     .history-table { font-size: 12px; }
@@ -1433,6 +1442,7 @@ function renderHistory() {
 }
 
 async function deleteHistoryItem(id) {
+  if (!confirm('이 기록을 삭제할까요? (모든 사용자 공용이라 전원에게서 사라집니다)')) return;
   try {
     await API.deleteLink(id);
     HISTORY = HISTORY.filter(h => h.id !== id);
