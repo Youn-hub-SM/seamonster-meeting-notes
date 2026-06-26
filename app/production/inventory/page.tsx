@@ -8,6 +8,7 @@ type InvRow = {
   name: string;
   stock: number | null;
   dailyOut: number;
+  rawDailyOut: number;
   autoSafety: number;
   promoQty: number;
   adjust: number;
@@ -201,7 +202,18 @@ export default function InventoryPage() {
                       </span>
                     )}
                   </td>
-                  <td className="num">{r.dailyOut ? r.dailyOut.toFixed(1) : <span style={{ color: "var(--sm-text-light)" }}>-</span>}</td>
+                  <td className="num">
+                    {r.dailyOut || r.rawDailyOut ? (
+                      <>
+                        <span>{r.dailyOut.toFixed(1)}</span>
+                        {r.rawDailyOut - r.dailyOut > 0.05 && (
+                          <span className="inv-raw-out" title={`행사 제외 전 ${r.rawDailyOut.toFixed(1)}`}>행사↓</span>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ color: "var(--sm-text-light)" }}>-</span>
+                    )}
+                  </td>
                   <td className="num">
                     <div style={{ fontWeight: 600 }}>{r.safety.toLocaleString()}</div>
                     {(r.promoQty > 0 || r.adjust !== 0) && (
@@ -236,7 +248,7 @@ export default function InventoryPage() {
       )}
 
       {spanDays > 0 && (
-        <p className="prod-note">※ 안전재고는 박스히어로 출고 내역 기준, 최근 약 {spanDays}일 평균 출고 × {leadDays}일(생산 리드타임)로 자동 계산됩니다{capped ? " (출고 표본 일부만 집계)" : ""}. 박스히어로에 적힌 안전재고 값은 쓰지 않습니다.</p>
+        <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 박스히어로 출고 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다{capped ? " (출고 표본 일부만 집계)" : ""}. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
       )}
       {noSkuDemand > 0 && (
         <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>

@@ -1103,6 +1103,7 @@ a.b2b-history-item:hover {
 @media (max-width: 768px) { .kanban { grid-template-columns: 1fr; } }
 
 /* 재고·생산필요 — 안전재고 보정 */
+.inv-raw-out { display: inline-block; margin-left: 5px; font-size: 10px; font-weight: 600; color: #1971c2; background: rgba(25,113,194,0.1); border-radius: 4px; padding: 0 4px; vertical-align: middle; }
 .inv-safety-bd { font-size: 11px; color: var(--sm-text-light); margin-top: 1px; white-space: nowrap; }
 .inv-bd-promo { color: #1971c2; }
 .inv-bd-adj { color: #22863a; }

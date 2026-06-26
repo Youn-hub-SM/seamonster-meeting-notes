@@ -99,19 +99,51 @@ function addDaysIso(iso: string, n: number): string {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
+function daysInclusive(a: string, b: string): number {
+  if (!a || !b || b < a) return 0;
+  const ms = new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime();
+  return Math.round(ms / 86400_000) + 1;
+}
 
-// 안전재고 보정용: 지금~리드타임 안에 걸치는 프로모션의 SKU별 예상판매 합.
-//  (end >= today 이고 start <= today+leadDays = 지금 생산해 둬야 대비되는 행사)
-export async function getPromoQtyBySku(today: string, leadDays: number): Promise<Record<string, number>> {
+// 앞으로 반영할 프로모션 수요 — 지금~리드타임에 걸치는 프로모션의 '남은' 예상판매(SKU별).
+//  진행 중인 행사는 이미 지난 만큼은 빼고 남은 기간분만(일할). 안 시작한 행사는 전량.
+//  → 행사분때문에 '미리 만들어둔 것'은 현재고로 차감되고, 남은 행사분만 추가로 확보.
+export async function getPromoForwardBySku(today: string, leadDays: number): Promise<Record<string, number>> {
   const list = await getPromotions();
   const horizon = addDaysIso(today, Math.max(0, leadDays));
   const out: Record<string, number> = {};
   for (const p of list) {
     if (!p.start || p.end < today || p.start > horizon) continue;
+    const total = daysInclusive(p.start, p.end);
+    const fwd = daysInclusive(p.start > today ? p.start : today, p.end); // 남은(앞으로) 일수
+    if (total <= 0 || fwd <= 0) continue;
+    const frac = Math.min(1, fwd / total);
     for (const it of p.items || []) {
       const sku = (it.sku || "").trim().toUpperCase();
       if (!sku) continue;
-      out[sku] = (out[sku] || 0) + (Number(it.qty) || 0);
+      out[sku] = (out[sku] || 0) + (Number(it.qty) || 0) * frac;
+    }
+  }
+  return out;
+}
+
+// 판매속도 보정용 — 최근 집계창[from,to]에 '이미 나간' 프로모션 판매분(SKU별, 일할).
+//  이 값을 평상시 판매속도에서 빼서, 행사때 과하게 나간 스파이크를 제거한다.
+//  → 행사분때문에 '과하게 많이 나간 것'이 평상시 안전재고를 부풀리지 않게.
+export async function getPromoSoldInWindow(from: string, to: string): Promise<Record<string, number>> {
+  const list = await getPromotions();
+  const out: Record<string, number> = {};
+  if (!from || !to || to < from) return out;
+  for (const p of list) {
+    if (!p.start || p.end < from || p.start > to) continue;
+    const total = daysInclusive(p.start, p.end);
+    const overlap = daysInclusive(p.start > from ? p.start : from, p.end < to ? p.end : to);
+    if (total <= 0 || overlap <= 0) continue;
+    const frac = Math.min(1, overlap / total);
+    for (const it of p.items || []) {
+      const sku = (it.sku || "").trim().toUpperCase();
+      if (!sku) continue;
+      out[sku] = (out[sku] || 0) + (Number(it.qty) || 0) * frac;
     }
   }
   return out;
