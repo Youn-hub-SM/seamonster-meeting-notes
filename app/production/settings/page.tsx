@@ -263,6 +263,7 @@ export default function ProductionSettingsPage() {
           같은 SKU로 <strong>도매·소매가 섞여</strong> 나가는 품목만, 소매 판매속도에서 <strong>과거 도매(B2B) 발송분</strong>을 빼서 평상시 소매 속도만 잡습니다.
           도매 발송이 박스히어로 출고에 안 찍히면 과소생산→쇼트 위험이 있어 <strong>기본 꺼짐 + 품목 화이트리스트 + 차감비율</strong>로만 켜세요.
           (BULK·소매전용처럼 SKU가 이미 분리된 품목은 체크하지 않습니다.)
+          <br /><span style={{ color: "var(--sm-text-light)" }}>※ 분할발송 차수 기준이라, 발주를 통째로 한 번에 보낸 건은 아직 차감에 안 잡힙니다(차감 과소 = 안전측).</span>
         </p>
         <label className="prod-filter-check" style={{ marginBottom: 12 }}>
           <input type="checkbox" checked={demixEnabled} onChange={(e) => setDemixEnabledS(e.target.checked)} /> 도매 차감 사용
@@ -280,7 +281,7 @@ export default function ProductionSettingsPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             <div style={{ fontSize: 12.5, color: "var(--sm-text-mid)" }}>도매·소매 혼입 품목만 체크 — 근거(박스히어로 출고 vs B2B 발송):</div>
             {demixCands.map((c) => {
-              const ok = c.boxheroOut >= c.b2bShipped; // 도매가 BoxHero 출고에 잡힘(빼는 게 맞음)
+              const ok = c.boxheroOut >= c.b2bShipped * 0.9; // 도매가 BoxHero 출고에 잡힘(근사값이라 10% 여유)
               return (
                 <label key={c.sku} className="demix-cand">
                   <input type="checkbox" checked={demixSkus.includes(c.sku)} onChange={() => toggleDemixSku(c.sku)} />
