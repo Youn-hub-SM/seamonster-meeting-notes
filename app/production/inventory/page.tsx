@@ -18,6 +18,7 @@ type InvRow = {
   promoQty: number;
   adjust: number;
   adjustRaw: number;
+  adjustExcludeRaw: number;
   adjustMemo: string;
   adjustUntil: string | null;
   safety: number;
@@ -45,6 +46,7 @@ export default function InventoryPage() {
   const [onlyNeed, setOnlyNeed] = useState(true);
   const [editRow, setEditRow] = useState<InvRow | null>(null);
   const [eDelta, setEDelta] = useState("");
+  const [eExclude, setEExclude] = useState("");
   const [eMemo, setEMemo] = useState("");
   const [eUntil, setEUntil] = useState("");
   const [saving, setSaving] = useState(false);
@@ -96,6 +98,7 @@ export default function InventoryPage() {
   function openEdit(r: InvRow) {
     setEditRow(r);
     setEDelta(r.adjustRaw ? String(r.adjustRaw) : "");
+    setEExclude(r.adjustExcludeRaw ? String(r.adjustExcludeRaw) : "");
     setEMemo(r.adjustMemo || "");
     setEUntil(r.adjustUntil || "");
   }
@@ -108,7 +111,7 @@ export default function InventoryPage() {
       const res = await fetch("/api/production/safety-adjust", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku: editRow.sku, delta: Number(eDelta) || 0, memo: eMemo, until: eUntil || null }),
+        body: JSON.stringify({ sku: editRow.sku, delta: Number(eDelta) || 0, excludeOut: Number(eExclude) || 0, memo: eMemo, until: eUntil || null }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
@@ -274,9 +277,11 @@ export default function InventoryPage() {
                   </td>
                   <td className="num">
                     <button type="button" className="inv-adj-btn" onClick={() => openEdit(r)} title={r.adjustMemo || "안전재고 보정"}>
-                      {r.adjustRaw !== 0 ? (
+                      {r.adjustRaw !== 0 || r.adjustExcludeRaw > 0 ? (
                         <span className={r.adjustRaw !== 0 && r.adjust === 0 && r.adjustUntil ? "inv-adj-expired" : "inv-adj-set"}>
-                          {r.adjustRaw > 0 ? "+" : ""}{r.adjustRaw.toLocaleString()}
+                          {r.adjustExcludeRaw > 0 && <>행사−{r.adjustExcludeRaw.toLocaleString()}</>}
+                          {r.adjustExcludeRaw > 0 && r.adjustRaw !== 0 ? " " : ""}
+                          {r.adjustRaw !== 0 && <>{r.adjustRaw > 0 ? "+" : ""}{r.adjustRaw.toLocaleString()}</>}
                           {r.adjustUntil && <span className="inv-adj-until">~{r.adjustUntil.slice(5)}</span>}
                         </span>
                       ) : (
@@ -328,27 +333,41 @@ export default function InventoryPage() {
             </div>
             <div className="b2b-modal-body">
               <p className="inv-modal-auto">
-                자동 <strong>{editRow.autoSafety.toLocaleString()}</strong>
-                {editRow.promoQty > 0 && <> + 행사 <strong>{editRow.promoQty.toLocaleString()}</strong></>} 에 더하거나 뺄 값을 입력하세요. (음수 가능)
+                지금 <strong>평상시 하루 {editRow.dailyOut.toFixed(1)}개</strong>씩 나가서 자동 안전재고가 <strong>{editRow.autoSafety.toLocaleString()}개</strong>입니다{editRow.promoQty > 0 && <> (+ 예정 행사 {editRow.promoQty.toLocaleString()})</>}. 행사로 평소보다 많이 나갔다면 그 출고를 빼고, 더 확보할 게 있으면 더하세요.
               </p>
               <label className="b2b-field">
-                <span className="b2b-field-label">보정값 (개)</span>
-                <input className="b2b-input" type="number" value={eDelta} onChange={(e) => setEDelta(e.target.value)} placeholder="예: 500 또는 -100" />
+                <span className="b2b-field-label">① 행사 출고 빼기 (개)</span>
+                <input className="b2b-input" type="number" min={0} value={eExclude} onChange={(e) => setEExclude(e.target.value)} placeholder="예: 500" />
+                <span className="inv-field-hint">최근 {spanDays}일간 <strong>행사·이벤트로</strong> 평소보다 많이 나간 출고량. 이만큼은 평상시 속도에서 빼서 안전재고를 정상치로 낮춥니다.</span>
+              </label>
+              <label className="b2b-field">
+                <span className="b2b-field-label">② 추가 확보 (개)</span>
+                <input className="b2b-input" type="number" value={eDelta} onChange={(e) => setEDelta(e.target.value)} placeholder="예: 200 (음수도 가능)" />
+                <span className="inv-field-hint">앞으로 더 만들어둘 양을 안전재고에 더합니다.</span>
               </label>
               <label className="b2b-field">
                 <span className="b2b-field-label">사유 (선택)</span>
-                <input className="b2b-input" type="text" value={eMemo} onChange={(e) => setEMemo(e.target.value)} placeholder="예: 여름 프로모션 대비" />
+                <input className="b2b-input" type="text" value={eMemo} onChange={(e) => setEMemo(e.target.value)} placeholder="예: 여름 프로모션" />
               </label>
               <label className="b2b-field">
                 <span className="b2b-field-label">만료일 (선택) — 지나면 자동 해제</span>
                 <input className="b2b-input" type="date" value={eUntil} onChange={(e) => setEUntil(e.target.value)} />
               </label>
               <p className="inv-modal-preview">
-                최종 안전재고 ≈ <strong>{Math.max(0, editRow.autoSafety + editRow.promoQty + (Number(eDelta) || 0)).toLocaleString()}</strong>
+                {(() => {
+                  const sd = Math.max(1, spanDays);
+                  const baseDaily = editRow.dailyOut + (editRow.adjustExcludeRaw || 0) / sd; // 기존 행사출고 빼기 되돌린 평상시
+                  const newDaily = Math.max(0, baseDaily - (Number(eExclude) || 0) / sd);
+                  const newAuto = Math.ceil(newDaily * leadDays);
+                  const newSafety = Math.max(0, newAuto + editRow.promoQty + (Number(eDelta) || 0));
+                  return (
+                    <>적용 후 안전재고 ≈ <strong>{newSafety.toLocaleString()}</strong> <span style={{ color: "var(--sm-text-light)", fontWeight: 400 }}>(하루 {newDaily.toFixed(1)}×{leadDays}일{editRow.promoQty > 0 ? ` +행사 ${editRow.promoQty}` : ""}{(Number(eDelta) || 0) !== 0 ? ` +확보 ${Number(eDelta) || 0}` : ""})</span></>
+                  );
+                })()}
               </p>
             </div>
             <div className="b2b-modal-foot">
-              <button className="b2b-btn-secondary" onClick={() => { setEDelta(""); setEMemo(""); setEUntil(""); }}>초기화</button>
+              <button className="b2b-btn-secondary" onClick={() => { setEDelta(""); setEExclude(""); setEMemo(""); setEUntil(""); }}>초기화</button>
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setEditRow(null)}>취소</button>
                 <button className="b2b-btn-primary" onClick={saveAdjust} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>

@@ -9,7 +9,8 @@ import { supabaseAdmin } from "./supabase";
 const KEY = "production_safety_adjust";
 
 export interface SafetyAdjust {
-  delta: number;          // 안전재고에 더할 보정값 (음수 가능)
+  delta: number;          // 추가 확보: 안전재고에 더할 양 (음수 가능)
+  excludeOut?: number;    // 행사 출고 빼기: 집계창에서 평상시 속도에서 제외할 행사 출고량(≥0)
   memo?: string;          // 사유 (예: "여름 프로모션")
   until?: string | null;  // YYYY-MM-DD — 이 날짜가 지나면 무시
 }
@@ -31,12 +32,13 @@ export async function setSafetyAdjust(sku: string, adj: SafetyAdjust): Promise<R
   const key = (sku || "").trim().toUpperCase();
   if (!key) return cur;
   const delta = Math.round(Number(adj.delta) || 0);
+  const excludeOut = Math.max(0, Math.round(Number(adj.excludeOut) || 0));
   const memo = (adj.memo || "").trim();
   const until = (adj.until || "").trim() || null;
-  if (delta === 0 && !memo) {
-    delete cur[key]; // 보정값도 메모도 없으면 제거(기본 복귀)
+  if (delta === 0 && excludeOut === 0 && !memo) {
+    delete cur[key]; // 보정값·행사출고·메모 모두 없으면 제거(기본 복귀)
   } else {
-    cur[key] = { delta, ...(memo ? { memo } : {}), ...(until ? { until } : {}) };
+    cur[key] = { delta, ...(excludeOut ? { excludeOut } : {}), ...(memo ? { memo } : {}), ...(until ? { until } : {}) };
   }
   await sb.from("b2b_settings").upsert(
     { key: KEY, value: cur, updated_at: new Date().toISOString() },
@@ -50,4 +52,11 @@ export function effectiveDelta(adj: SafetyAdjust | undefined, today: string): nu
   if (!adj) return 0;
   if (adj.until && adj.until < today) return 0;
   return Math.round(Number(adj.delta) || 0);
+}
+
+// 만료 안 지난 유효 '행사 출고 빼기' 양(≥0). 평상시 속도에서 차감할 행사 출고.
+export function effectiveExclude(adj: SafetyAdjust | undefined, today: string): number {
+  if (!adj) return 0;
+  if (adj.until && adj.until < today) return 0;
+  return Math.max(0, Math.round(Number(adj.excludeOut) || 0));
 }

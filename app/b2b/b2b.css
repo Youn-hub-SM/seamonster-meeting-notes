@@ -1138,6 +1138,7 @@ a.b2b-history-item:hover {
 .inv-adj-until { display: block; font-size: 10px; color: var(--sm-text-light); font-weight: 400; }
 .inv-modal-auto { font-size: 13.5px; color: var(--sm-text-mid); margin: 0; line-height: 1.55; }
 .inv-modal-preview { font-size: 14px; color: var(--sm-text); margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--sm-border); }
+.inv-field-hint { font-size: 11.5px; color: var(--sm-text-light); line-height: 1.5; }
 
 /* 생산 보드 — 타임라인(백로그) 뷰 */
 .tl-summary { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sm-text-mid); margin-bottom: 6px; flex-wrap: wrap; }
