@@ -3,15 +3,14 @@ import { fetchBoxheroItems } from "./boxhero";
 import { getOrRefreshVelocity } from "./production-velocity";
 import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promotions";
 import { getSafetyAdjusts, effectiveDelta } from "./production-safety-adjust";
+import { getLeadDays } from "./production-config";
 
 // 박스히어로 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
 //  /api/production/inventory 와 생산 조언이 공유 — 숫자 일관성 유지.
 //
 // 안전재고는 박스히어로에 적힌 값을 쓰지 않고, 이 툴이 박스히어로 '출고 내역'으로 직접 산정한다.
-//  안전재고 = 최근 하루 평균 출고량 × 생산 리드타임(LEAD_DAYS).
-//  생산이 최소 LEAD_DAYS 걸린다고 보고, 그 기간 팔릴 만큼은 늘 쌓아두자는 의미(재고 쇼트 방지).
-
-export const LEAD_DAYS = 10; // 생산 리드타임(일) — 최소 10일
+//  안전재고 = 최근 하루 평균 출고량 × 생산 리드타임(설정값, 기본 10일).
+//  생산이 리드타임만큼 걸린다고 보고, 그 기간 팔릴 만큼은 늘 쌓아두자는 의미(재고 쇼트 방지).
 
 export interface InvRow {
   sku: string;
@@ -53,15 +52,16 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
   // 1b) 판매속도(최근 출고 일평균) — 안전재고 산정 기준. 6시간 캐시.
   const velocity = await getOrRefreshVelocity(token);
 
-  // 1c) 안전재고 보정: 프로모션(스파이크 제거 + 남은 행사분 가산) + 수동 보정
+  // 1c) 안전재고 보정: 리드타임(설정) + 프로모션(스파이크 제거 + 남은 행사분) + 수동 보정
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
   const span = Math.max(1, velocity.spanDays);
   const wsD = new Date(today + "T00:00:00Z");
   wsD.setUTCDate(wsD.getUTCDate() - span); // 판매속도 집계창 시작(근사)
   const windowStart = wsD.toISOString().slice(0, 10);
+  const leadDays = await getLeadDays(); // 생산 리드타임(설정값, 기본 10)
   const [promoForward, promoSold, adjusts] = await Promise.all([
-    getPromoForwardBySku(today, LEAD_DAYS),   // 앞으로 확보할 남은 행사분
-    getPromoSoldInWindow(windowStart, today), // 집계창에 이미 나간 행사분(속도에서 제거)
+    getPromoForwardBySku(today, leadDays),     // 앞으로 확보할 남은 행사분
+    getPromoSoldInWindow(windowStart, today),  // 집계창에 이미 나간 행사분(속도에서 제거)
     getSafetyAdjusts(),
   ]);
 
@@ -112,7 +112,7 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
     const stock = st ? st.stock : null;
     const rawDailyOut = velocity.perSku[sku] || 0;
     const dailyOut = Math.max(0, rawDailyOut - (promoSold[sku] || 0) / span); // 행사 스파이크 제거한 평상시 일평균
-    const autoSafety = Math.ceil(dailyOut * LEAD_DAYS);
+    const autoSafety = Math.ceil(dailyOut * leadDays);
     const promoQty = Math.round(promoForward[sku] || 0);
     const adj = adjusts[sku];
     const adjust = effectiveDelta(adj, today);
@@ -145,7 +145,7 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
     rows,
     itemCount: items.length,
     noSkuDemand,
-    leadDays: LEAD_DAYS,
+    leadDays,
     velocitySpanDays: velocity.spanDays,
     velocityCapped: velocity.capped,
   };

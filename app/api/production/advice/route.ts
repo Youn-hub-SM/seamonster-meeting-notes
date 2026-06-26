@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getCurrentModel } from "@/app/lib/ai-model";
 import { getBoxheroToken } from "@/app/lib/boxhero";
-import { getInventoryRows, LEAD_DAYS } from "@/app/lib/production-inventory";
+import { getInventoryRows } from "@/app/lib/production-inventory";
 import { getOrRefreshVelocity } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +13,11 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const HORIZON_DAYS = 14; // 예측 지평(2주)
 
-const SYSTEM_PROMPT = `당신은 씨몬스터(냉동 수산물 가공) 생산계획 어드바이저입니다.
+function buildSystemPrompt(leadDays: number): string {
+  return `당신은 씨몬스터(냉동 수산물 가공) 생산계획 어드바이저입니다.
 생산담당자가 수요 예측을 잘 못해 재고 부족·과잉이 잦습니다. 데이터로 "무엇을 얼마나, 언제 만들지"를 구체적으로 짚어주세요.
 
-참고: 안전재고 = 최근 일평균 출고 × ${LEAD_DAYS}일(생산 리드타임). 현재고가 안전재고보다 적으면 쇼트 위험 신호입니다.
+참고: 안전재고 = 최근 일평균 출고 × ${leadDays}일(생산 리드타임). 현재고가 안전재고보다 적으면 쇼트 위험 신호입니다.
 
 판단 근거(우선순위):
 1) 현재고 < 안전재고 / 현재고 마이너스 → 즉시 보충 (재고부족 위험 최우선)
@@ -28,6 +29,7 @@ const SYSTEM_PROMPT = `당신은 씨몬스터(냉동 수산물 가공) 생산계
 priorities 는 정말 시급한 것부터 최대 12건만 추리세요(전 품목 나열 금지). qty 는 권장 생산 수량(정수).
 순수 JSON만 반환(코드블록·설명 금지):
 {"summary":"전체 상황 2~3문장","priorities":[{"sku":"","name":"","urgency":"높음|중간|낮음","qty":0,"byWhen":"즉시|이번 주|다음 주","reason":"한 줄 근거"}],"notes":["참고 한 줄"]}`;
+}
 
 interface AdviceRow {
   sku: string;
@@ -108,7 +110,7 @@ export async function POST() {
     const response = await anthropic.messages.create({
       model,
       max_tokens: 8000,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(inv.leadDays),
       messages: [{ role: "user", content: JSON.stringify(userPayload) }],
     });
     const text = response.content[0]?.type === "text" ? response.content[0].text : "";

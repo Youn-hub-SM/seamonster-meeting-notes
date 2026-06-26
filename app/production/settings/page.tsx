@@ -15,6 +15,11 @@ export default function ProductionSettingsPage() {
   const [aliasInput, setAliasInput] = useState<Record<string, string>>({});
   const [aliasSavingSku, setAliasSavingSku] = useState<string | null>(null);
 
+  const [leadInput, setLeadInput] = useState("");
+  const [leadSaved, setLeadSaved] = useState<number | null>(null);
+  const [leadSaving, setLeadSaving] = useState(false);
+  const [leadMsg, setLeadMsg] = useState("");
+
   async function loadStatus() {
     try {
       const j = await (await fetch("/api/production/settings", { cache: "no-store" })).json();
@@ -32,7 +37,34 @@ export default function ProductionSettingsPage() {
       }
     } catch { /* noop */ }
   }
-  useEffect(() => { loadStatus(); loadAliases(); }, []);
+  async function loadLead() {
+    try {
+      const j = await (await fetch("/api/production/lead-days", { cache: "no-store" })).json();
+      if (j.ok) { setLeadSaved(j.leadDays); setLeadInput(String(j.leadDays)); }
+    } catch { /* noop */ }
+  }
+  useEffect(() => { loadStatus(); loadAliases(); loadLead(); }, []);
+
+  async function saveLead() {
+    const n = Math.round(Number(leadInput));
+    if (!Number.isFinite(n) || n < 1 || n > 60) { setLeadMsg("1~60 사이 숫자를 입력하세요."); return; }
+    setLeadSaving(true);
+    setLeadMsg("");
+    try {
+      const res = await fetch("/api/production/lead-days", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: n }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setLeadSaved(j.leadDays);
+      setLeadInput(String(j.leadDays));
+      setLeadMsg(`저장됨 — 안전재고가 하루 출고 × ${j.leadDays}일로 계산됩니다.`);
+    } catch (e) {
+      setLeadMsg(e instanceof Error ? e.message : "저장 실패");
+    }
+    setLeadSaving(false);
+  }
 
   async function saveAlias(sku: string) {
     setAliasSavingSku(sku);
@@ -74,7 +106,7 @@ export default function ProductionSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설정</h1>
-          <p className="b2b-page-subtitle">박스히어로 연동 + 생산 품목명 정리.</p>
+          <p className="b2b-page-subtitle">박스히어로 연동 · 생산 리드타임 · 생산 품목명 정리.</p>
         </div>
       </header>
 
@@ -114,6 +146,34 @@ export default function ProductionSettingsPage() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="b2b-card" style={{ marginTop: 16 }}>
+        <div className="b2b-card-head"><h2 className="b2b-card-title">생산 리드타임</h2></div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
+          제조사에 생산을 요청하고 받기까지 걸리는 일수입니다. <strong>안전재고 = 하루 평균 출고 × 리드타임</strong>으로,
+          이 기간 팔릴 만큼은 늘 확보해 재고 쇼트를 막습니다. {leadSaved != null && <>현재 <strong>{leadSaved}일</strong>.</>}
+        </p>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            className="b2b-input"
+            type="number"
+            min={1}
+            max={60}
+            value={leadInput}
+            onChange={(e) => setLeadInput(e.target.value)}
+            style={{ width: 120 }}
+          />
+          <span style={{ fontSize: 14, color: "var(--sm-text-mid)" }}>일</span>
+          <button className="b2b-btn-primary" onClick={saveLead} disabled={leadSaving}>
+            {leadSaving ? "저장 중..." : "저장"}
+          </button>
+        </div>
+        {leadMsg && (
+          <div style={{ marginTop: 10, fontSize: 13, color: leadMsg.startsWith("저장됨") ? "#22863a" : "#c92a2a", fontWeight: 600 }}>
+            {leadMsg}
+          </div>
+        )}
       </section>
 
       <section className="b2b-card" style={{ marginTop: 16 }}>
