@@ -9,6 +9,11 @@ type InvRow = {
   stock: number | null;
   dailyOut: number;
   rawDailyOut: number;
+  boxheroOutQty: number;
+  b2bShippedQty: number;
+  wholesaleSoldQty: number;
+  demixApplied: boolean;
+  demixClampedToZero: boolean;
   autoSafety: number;
   promoQty: number;
   adjust: number;
@@ -66,7 +71,7 @@ export default function InventoryPage() {
   useEffect(() => { load(); }, [load]);
 
   const stats = useMemo(() => {
-    let needItems = 0, needQty = 0, below = 0, urgent = 0, soon = 0;
+    let needItems = 0, needQty = 0, below = 0, urgent = 0, soon = 0, clamped = 0;
     for (const r of rows) {
       if (r.recommend > 0) { needItems++; needQty += r.recommend; }
       if (r.belowSafety) below++;
@@ -74,9 +79,12 @@ export default function InventoryPage() {
         if (r.requestByDays <= 0) urgent++;
         else if (r.requestByDays <= 7) soon++;
       }
+      if (r.demixClampedToZero) clamped++;
     }
-    return { needItems, needQty, below, urgent, soon };
+    return { needItems, needQty, below, urgent, soon, clamped };
   }, [rows]);
+
+  const clampedRows = useMemo(() => rows.filter((r) => r.demixClampedToZero), [rows]);
 
   const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0) : rows), [rows, onlyNeed]);
 
@@ -171,6 +179,15 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      {stats.clamped > 0 && (
+        <div className="inv-deadline-banner" style={{ background: "#fff0f0", borderColor: "#f5c6c6" }}>
+          <span className="inv-dl-text">
+            <span className="inv-dl-urgent">⚠ 도매 차감으로 {stats.clamped}종이 레이더에서 빠짐</span>
+            <span className="inv-dl-hint"> — 소매 속도가 0이 되어 마감일이 안 잡힙니다({clampedRows.slice(0, 4).map((r) => r.sku).join(", ")}{clampedRows.length > 4 ? " 외" : ""}). 설정에서 화이트리스트/차감비율을 확인하세요.</span>
+          </span>
+        </div>
+      )}
+
       {(stats.urgent > 0 || stats.soon > 0) && (
         <div className="inv-deadline-banner">
           <span className="inv-dl-text">
@@ -225,8 +242,14 @@ export default function InventoryPage() {
                     {r.dailyOut || r.rawDailyOut ? (
                       <>
                         <span>{r.dailyOut.toFixed(1)}</span>
-                        {r.rawDailyOut - r.dailyOut > 0.05 && (
+                        {(r.rawDailyOut - r.dailyOut - r.wholesaleSoldQty / Math.max(1, spanDays)) > 0.05 && (
                           <span className="inv-raw-out" title={`행사 제외 전 ${r.rawDailyOut.toFixed(1)}`}>행사↓</span>
+                        )}
+                        {r.wholesaleSoldQty > 0 && (
+                          <span className="inv-demix-out" title={`도매 발송분 차감 (창내 B2B 발송 ${r.b2bShippedQty} 중 ${r.wholesaleSoldQty})`}>도매↓</span>
+                        )}
+                        {r.demixClampedToZero && (
+                          <span className="inv-demix-clamp" title="도매 차감으로 소매 속도가 0이 됨 — 마감일이 사라집니다. 화이트리스트/비율 확인 요망">⚠0</span>
                         )}
                       </>
                     ) : (

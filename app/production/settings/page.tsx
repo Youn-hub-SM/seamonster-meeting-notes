@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 type AliasItem = { sku: string; names: string[]; canonical: string; alias: string; display: string };
+type DemixCand = { sku: string; name: string; boxheroOut: number; b2bShipped: number };
 
 export default function ProductionSettingsPage() {
   const [configured, setConfigured] = useState(false);
@@ -19,6 +20,14 @@ export default function ProductionSettingsPage() {
   const [leadSaved, setLeadSaved] = useState<number | null>(null);
   const [leadSaving, setLeadSaving] = useState(false);
   const [leadMsg, setLeadMsg] = useState("");
+
+  const [demixEnabled, setDemixEnabledS] = useState(false);
+  const [demixFactor, setDemixFactorS] = useState("0.6");
+  const [demixSkus, setDemixSkusS] = useState<string[]>([]);
+  const [demixCands, setDemixCands] = useState<DemixCand[]>([]);
+  const [demixLoading, setDemixLoading] = useState(true);
+  const [demixSaving, setDemixSaving] = useState(false);
+  const [demixMsg, setDemixMsg] = useState("");
 
   async function loadStatus() {
     try {
@@ -43,7 +52,46 @@ export default function ProductionSettingsPage() {
       if (j.ok) { setLeadSaved(j.leadDays); setLeadInput(String(j.leadDays)); }
     } catch { /* noop */ }
   }
-  useEffect(() => { loadStatus(); loadAliases(); loadLead(); }, []);
+  async function loadDemix() {
+    setDemixLoading(true);
+    try {
+      const [d, inv] = await Promise.all([
+        fetch("/api/production/demix", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/production/inventory", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+      ]);
+      if (d.ok) { setDemixEnabledS(d.enabled); setDemixFactorS(String(d.factor)); setDemixSkusS(d.skus || []); }
+      if (inv.ok) {
+        const cands: DemixCand[] = (inv.rows || [])
+          .filter((r: { b2bShippedQty: number }) => r.b2bShippedQty > 0)
+          .map((r: { sku: string; name: string; boxheroOutQty: number; b2bShippedQty: number }) => ({ sku: r.sku, name: r.name, boxheroOut: r.boxheroOutQty, b2bShipped: r.b2bShippedQty }))
+          .sort((a: DemixCand, b: DemixCand) => b.b2bShipped - a.b2bShipped);
+        setDemixCands(cands);
+      }
+    } catch { /* noop */ }
+    setDemixLoading(false);
+  }
+  useEffect(() => { loadStatus(); loadAliases(); loadLead(); loadDemix(); }, []);
+
+  function toggleDemixSku(sku: string) {
+    setDemixSkusS((s) => (s.includes(sku) ? s.filter((x) => x !== sku) : [...s, sku]));
+  }
+  async function saveDemix() {
+    setDemixSaving(true);
+    setDemixMsg("");
+    try {
+      const res = await fetch("/api/production/demix", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: demixEnabled, skus: demixSkus, factor: Number(demixFactor) || 0.6 }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setDemixEnabledS(j.enabled); setDemixSkusS(j.skus); setDemixFactorS(String(j.factor));
+      setDemixMsg("저장됨.");
+    } catch (e) {
+      setDemixMsg(e instanceof Error ? e.message : "저장 실패");
+    }
+    setDemixSaving(false);
+  }
 
   async function saveLead() {
     const n = Math.round(Number(leadInput));
@@ -106,7 +154,7 @@ export default function ProductionSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설정</h1>
-          <p className="b2b-page-subtitle">박스히어로 연동 · 생산 리드타임 · 생산 품목명 정리.</p>
+          <p className="b2b-page-subtitle">박스히어로 연동 · 생산 리드타임 · 생산 품목명 · 채널 분리.</p>
         </div>
       </header>
 
@@ -207,6 +255,51 @@ export default function ProductionSettingsPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="b2b-card" style={{ marginTop: 16 }}>
+        <div className="b2b-card-head"><h2 className="b2b-card-title">도매/소매 채널 분리 (실험)</h2></div>
+        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
+          같은 SKU로 <strong>도매·소매가 섞여</strong> 나가는 품목만, 소매 판매속도에서 <strong>과거 도매(B2B) 발송분</strong>을 빼서 평상시 소매 속도만 잡습니다.
+          도매 발송이 박스히어로 출고에 안 찍히면 과소생산→쇼트 위험이 있어 <strong>기본 꺼짐 + 품목 화이트리스트 + 차감비율</strong>로만 켜세요.
+          (BULK·소매전용처럼 SKU가 이미 분리된 품목은 체크하지 않습니다.)
+        </p>
+        <label className="prod-filter-check" style={{ marginBottom: 12 }}>
+          <input type="checkbox" checked={demixEnabled} onChange={(e) => setDemixEnabledS(e.target.checked)} /> 도매 차감 사용
+        </label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>차감 비율</span>
+          <input className="b2b-input" type="number" min={0} max={1} step={0.1} value={demixFactor} onChange={(e) => setDemixFactorS(e.target.value)} style={{ width: 90 }} />
+          <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>도매 발송분의 이 비율만 차감(안전 여유). 1 = 전량.</span>
+        </div>
+        {demixLoading ? (
+          <div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>후보 품목 불러오는 중...</div>
+        ) : demixCands.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>최근 집계창에 B2B 발송이 잡힌 품목이 없습니다. (도매 발송이 있어야 후보로 떠요)</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            <div style={{ fontSize: 12.5, color: "var(--sm-text-mid)" }}>도매·소매 혼입 품목만 체크 — 근거(박스히어로 출고 vs B2B 발송):</div>
+            {demixCands.map((c) => {
+              const ok = c.boxheroOut >= c.b2bShipped; // 도매가 BoxHero 출고에 잡힘(빼는 게 맞음)
+              return (
+                <label key={c.sku} className="demix-cand">
+                  <input type="checkbox" checked={demixSkus.includes(c.sku)} onChange={() => toggleDemixSku(c.sku)} />
+                  <code style={{ fontSize: 12 }}>{c.sku}</code>
+                  <span className="demix-cand-name">{c.name}</span>
+                  <span className={ok ? "demix-ok" : "demix-bad"}>
+                    BoxHero {c.boxheroOut.toLocaleString()} / B2B {c.b2bShipped.toLocaleString()}{ok ? "" : " ⚠ 도매 미기록 의심"}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {demixMsg && (
+          <div style={{ marginTop: 10, fontSize: 13, color: demixMsg === "저장됨." ? "#22863a" : "#c92a2a", fontWeight: 600 }}>{demixMsg}</div>
+        )}
+        <div style={{ marginTop: 14 }}>
+          <button className="b2b-btn-primary" onClick={saveDemix} disabled={demixSaving}>{demixSaving ? "저장 중..." : "저장"}</button>
+        </div>
       </section>
     </div>
   );
