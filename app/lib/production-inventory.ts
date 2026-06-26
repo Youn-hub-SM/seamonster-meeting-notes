@@ -1,14 +1,22 @@
 import { supabaseAdmin } from "./supabase";
 import { fetchBoxheroItems } from "./boxhero";
+import { getOrRefreshVelocity } from "./production-velocity";
 
-// 박스히어로 재고·안전재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
+// 박스히어로 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
 //  /api/production/inventory 와 생산 조언이 공유 — 숫자 일관성 유지.
+//
+// 안전재고는 박스히어로에 적힌 값을 쓰지 않고, 이 툴이 박스히어로 '출고 내역'으로 직접 산정한다.
+//  안전재고 = 최근 하루 평균 출고량 × 생산 리드타임(LEAD_DAYS).
+//  생산이 최소 LEAD_DAYS 걸린다고 보고, 그 기간 팔릴 만큼은 늘 쌓아두자는 의미(재고 쇼트 방지).
+
+export const LEAD_DAYS = 10; // 생산 리드타임(일) — 최소 10일
 
 export interface InvRow {
   sku: string;
   name: string;
   stock: number | null;   // 박스히어로 현재고 (null = 박스히어로에 없음)
-  safety: number | null;  // 안전재고
+  dailyOut: number;       // 최근 하루 평균 출고량 (박스히어로 출고 기준)
+  safety: number;         // 안전재고 = ceil(dailyOut × LEAD_DAYS) — 이 툴 산정값
   demand: number;         // B2B 생산대기·생산중 수요
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − 현재고)
   belowSafety: boolean;
@@ -20,15 +28,21 @@ export interface InventoryResult {
   rows: InvRow[];
   itemCount: number;
   noSkuDemand: number;
+  leadDays: number;          // 안전재고 산정에 쓴 리드타임
+  velocitySpanDays: number;  // 출고 평균이 커버한 일수
+  velocityCapped: boolean;   // 표본 상한에 걸려 일부만 집계했는지
 }
 
 export async function getInventoryRows(token: string): Promise<InventoryResult> {
-  // 1) 박스히어로 품목(현재고·안전재고)
+  // 1) 박스히어로 품목(현재고) — 안전재고는 더 이상 박스히어로 값을 쓰지 않음
   const items = await fetchBoxheroItems(token);
-  const stockBySku = new Map<string, { name: string; stock: number; safety: number | null }>();
+  const stockBySku = new Map<string, { name: string; stock: number }>();
   for (const it of items) {
-    if (it.sku) stockBySku.set(it.sku.toUpperCase(), { name: it.name, stock: it.quantity, safety: it.safety });
+    if (it.sku) stockBySku.set(it.sku.toUpperCase(), { name: it.name, stock: it.quantity });
   }
+
+  // 1b) 판매속도(최근 출고 일평균) — 안전재고 산정 기준. 6시간 캐시.
+  const velocity = await getOrRefreshVelocity(token);
 
   const sb = supabaseAdmin();
 
@@ -75,13 +89,15 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
     const st = stockBySku.get(sku);
     const demand = demandBySku.get(sku) || 0;
     const stock = st ? st.stock : null;
-    const safety = st ? st.safety : null;
-    const recommend = stock == null ? demand : Math.max(0, demand + (safety || 0) - stock);
-    const belowSafety = stock != null && safety != null && stock < safety;
+    const dailyOut = velocity.perSku[sku] || 0;
+    const safety = Math.ceil(dailyOut * LEAD_DAYS); // 이 툴 산정 안전재고
+    const recommend = stock == null ? demand : Math.max(0, demand + safety - stock);
+    const belowSafety = stock != null && stock < safety;
     rows.push({
       sku,
       name: st?.name || nameBySku.get(sku) || sku,
       stock,
+      dailyOut,
       safety,
       demand,
       recommend,
@@ -92,5 +108,12 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
   }
   rows.sort((a, b) => b.recommend - a.recommend || Number(b.belowSafety) - Number(a.belowSafety) || a.sku.localeCompare(b.sku));
 
-  return { rows, itemCount: items.length, noSkuDemand };
+  return {
+    rows,
+    itemCount: items.length,
+    noSkuDemand,
+    leadDays: LEAD_DAYS,
+    velocitySpanDays: velocity.spanDays,
+    velocityCapped: velocity.capped,
+  };
 }

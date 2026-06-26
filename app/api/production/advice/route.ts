@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getCurrentModel } from "@/app/lib/ai-model";
 import { getBoxheroToken } from "@/app/lib/boxhero";
-import { getInventoryRows } from "@/app/lib/production-inventory";
+import { getInventoryRows, LEAD_DAYS } from "@/app/lib/production-inventory";
 import { getOrRefreshVelocity } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +16,13 @@ const HORIZON_DAYS = 14; // 예측 지평(2주)
 const SYSTEM_PROMPT = `당신은 씨몬스터(냉동 수산물 가공) 생산계획 어드바이저입니다.
 생산담당자가 수요 예측을 잘 못해 재고 부족·과잉이 잦습니다. 데이터로 "무엇을 얼마나, 언제 만들지"를 구체적으로 짚어주세요.
 
+참고: 안전재고 = 최근 일평균 출고 × ${LEAD_DAYS}일(생산 리드타임). 현재고가 안전재고보다 적으면 쇼트 위험 신호입니다.
+
 판단 근거(우선순위):
-1) 안전재고 미달 / 현재고 마이너스 → 즉시 보충 (재고부족 위험 최우선)
+1) 현재고 < 안전재고 / 현재고 마이너스 → 즉시 보충 (재고부족 위험 최우선)
 2) B2B 확정 발주(생산대기·생산중) → 반드시 생산해야 하는 물량
-3) 판매속도(최근 일평균 출고) × ${HORIZON_DAYS}일 예측 수요 → 미리 만들어둘 물량
-권장량은 대략 (B2B수요 + 안전재고 + ${HORIZON_DAYS}일 예측판매 − 현재고) 를 기준으로, 현실적인 라운딩과 우선순위로 제시.
+3) ${HORIZON_DAYS}일 예측판매(판매속도×${HORIZON_DAYS}일) → 미리 만들어둘 물량
+권장량은 대략 (B2B수요 + ${HORIZON_DAYS}일 예측판매 − 현재고) 기준으로, 안전재고는 시급도 판단에만 쓰고 예측판매와 합산하지 마세요. 현실적인 라운딩·우선순위로 제시.
 
 규칙: 한국어 존댓말. 간결하고 행동가능하게. 추측·미사여구 금지. 데이터에 없는 건 지어내지 말 것.
 priorities 는 정말 시급한 것부터 최대 12건만 추리세요(전 품목 나열 금지). qty 는 권장 생산 수량(정수).
@@ -71,8 +73,9 @@ export async function POST() {
     const signal = rows
       .filter((r) => r.stock != null && (r.b2bDemand > 0 || r.predicted14 > 0 || (r.safety != null && r.stock < r.safety)))
       .sort((a, b) => {
-        const na = (a.b2bDemand + (a.safety || 0) + a.predicted14) - (a.stock || 0);
-        const nb = (b.b2bDemand + (b.safety || 0) + b.predicted14) - (b.stock || 0);
+        // 안전재고는 시급도(필터)에만 쓰고, 정렬 점수에는 예측판매만(중복 합산 방지)
+        const na = (a.b2bDemand + a.predicted14) - (a.stock || 0);
+        const nb = (b.b2bDemand + b.predicted14) - (b.stock || 0);
         return nb - na;
       })
       .slice(0, 40);

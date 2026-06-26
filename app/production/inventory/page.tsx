@@ -7,7 +7,8 @@ type InvRow = {
   sku: string;
   name: string;
   stock: number | null;
-  safety: number | null;
+  dailyOut: number;
+  safety: number;
   demand: number;
   recommend: number;
   belowSafety: boolean;
@@ -20,6 +21,9 @@ export default function InventoryPage() {
   const [configured, setConfigured] = useState(true);
   const [itemCount, setItemCount] = useState(0);
   const [noSkuDemand, setNoSkuDemand] = useState(0);
+  const [leadDays, setLeadDays] = useState(10);
+  const [spanDays, setSpanDays] = useState(0);
+  const [capped, setCapped] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [onlyNeed, setOnlyNeed] = useState(true);
@@ -36,6 +40,9 @@ export default function InventoryPage() {
       setRows(j.rows || []);
       setItemCount(j.itemCount || 0);
       setNoSkuDemand(j.noSkuDemand || 0);
+      setLeadDays(j.leadDays || 10);
+      setSpanDays(j.velocitySpanDays || 0);
+      setCapped(!!j.velocityCapped);
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }
@@ -84,7 +91,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="b2b-page-title">재고·생산필요</h1>
           <p className="b2b-page-subtitle">
-            권장 생산량 = B2B 수요 + 안전재고 − 현재고. 박스히어로 {itemCount}개 품목 기준.
+            권장 생산량 = B2B 수요 + 안전재고 − 현재고. 안전재고 = 최근 하루 출고 × {leadDays}일(생산 리드타임). 박스히어로 {itemCount}개 품목 기준.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -134,6 +141,7 @@ export default function InventoryPage() {
                 <th>SKU</th>
                 <th>품목</th>
                 <th className="num">현재고</th>
+                <th className="num">하루 출고</th>
                 <th className="num">안전재고</th>
                 <th className="num">B2B 수요</th>
                 <th className="num">권장 생산</th>
@@ -154,7 +162,8 @@ export default function InventoryPage() {
                       </span>
                     )}
                   </td>
-                  <td className="num">{r.safety == null ? "-" : r.safety.toLocaleString()}</td>
+                  <td className="num">{r.dailyOut ? r.dailyOut.toFixed(1) : <span style={{ color: "var(--sm-text-light)" }}>-</span>}</td>
+                  <td className="num">{r.safety ? r.safety.toLocaleString() : <span style={{ color: "var(--sm-text-light)" }}>-</span>}</td>
                   <td className="num">{r.demand ? r.demand.toLocaleString() : "-"}</td>
                   <td className="num">
                     {r.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{r.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}
@@ -166,6 +175,9 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {spanDays > 0 && (
+        <p className="prod-note">※ 안전재고는 박스히어로 출고 내역 기준, 최근 약 {spanDays}일 평균 출고 × {leadDays}일(생산 리드타임)로 자동 계산됩니다{capped ? " (출고 표본 일부만 집계)" : ""}. 박스히어로에 적힌 안전재고 값은 쓰지 않습니다.</p>
+      )}
       {noSkuDemand > 0 && (
         <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>
       )}

@@ -17,8 +17,8 @@ export async function GET() {
       return NextResponse.json({ ok: true, configured: false, rows: [] });
     }
     try {
-      const { rows, itemCount, noSkuDemand } = await getInventoryRows(token);
-      return NextResponse.json({ ok: true, configured: true, itemCount, noSkuDemand, rows });
+      const { rows, itemCount, noSkuDemand, leadDays, velocitySpanDays, velocityCapped } = await getInventoryRows(token);
+      return NextResponse.json({ ok: true, configured: true, itemCount, noSkuDemand, leadDays, velocitySpanDays, velocityCapped, rows });
     } catch (e) {
       const status = e instanceof BoxheroError ? e.status : 502;
       return NextResponse.json(
