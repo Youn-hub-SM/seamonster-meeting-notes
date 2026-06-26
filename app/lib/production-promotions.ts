@@ -93,3 +93,26 @@ export async function deletePromotion(id: string): Promise<Promotion[]> {
   await savePromotions(list);
   return list;
 }
+
+function addDaysIso(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// 안전재고 보정용: 지금~리드타임 안에 걸치는 프로모션의 SKU별 예상판매 합.
+//  (end >= today 이고 start <= today+leadDays = 지금 생산해 둬야 대비되는 행사)
+export async function getPromoQtyBySku(today: string, leadDays: number): Promise<Record<string, number>> {
+  const list = await getPromotions();
+  const horizon = addDaysIso(today, Math.max(0, leadDays));
+  const out: Record<string, number> = {};
+  for (const p of list) {
+    if (!p.start || p.end < today || p.start > horizon) continue;
+    for (const it of p.items || []) {
+      const sku = (it.sku || "").trim().toUpperCase();
+      if (!sku) continue;
+      out[sku] = (out[sku] || 0) + (Number(it.qty) || 0);
+    }
+  }
+  return out;
+}

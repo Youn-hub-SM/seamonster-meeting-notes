@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "./supabase";
 import { fetchBoxheroItems } from "./boxhero";
 import { getOrRefreshVelocity } from "./production-velocity";
+import { getPromoQtyBySku } from "./production-promotions";
+import { getSafetyAdjusts, effectiveDelta } from "./production-safety-adjust";
 
 // 박스히어로 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
 //  /api/production/inventory 와 생산 조언이 공유 — 숫자 일관성 유지.
@@ -16,7 +18,13 @@ export interface InvRow {
   name: string;
   stock: number | null;   // 박스히어로 현재고 (null = 박스히어로에 없음)
   dailyOut: number;       // 최근 하루 평균 출고량 (박스히어로 출고 기준)
-  safety: number;         // 안전재고 = ceil(dailyOut × LEAD_DAYS) — 이 툴 산정값
+  autoSafety: number;     // 자동 안전재고 = ceil(dailyOut × LEAD_DAYS)
+  promoQty: number;       // 프로모션 자동 가산(리드타임 내 행사)
+  adjust: number;         // 수동 보정(만료 반영된 유효값)
+  adjustRaw: number;      // 저장된 보정값(만료 무관 — 편집용)
+  adjustMemo: string;     // 보정 사유
+  adjustUntil: string | null; // 보정 만료일
+  safety: number;         // 최종 안전재고 = max(0, autoSafety + promoQty + adjust)
   demand: number;         // B2B 생산대기·생산중 수요
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − 현재고)
   belowSafety: boolean;
@@ -43,6 +51,13 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
 
   // 1b) 판매속도(최근 출고 일평균) — 안전재고 산정 기준. 6시간 캐시.
   const velocity = await getOrRefreshVelocity(token);
+
+  // 1c) 안전재고 보정: 프로모션 자동가산 + 수동 보정
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
+  const [promoBySku, adjusts] = await Promise.all([
+    getPromoQtyBySku(today, LEAD_DAYS),
+    getSafetyAdjusts(),
+  ]);
 
   const sb = supabaseAdmin();
 
@@ -90,7 +105,11 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
     const demand = demandBySku.get(sku) || 0;
     const stock = st ? st.stock : null;
     const dailyOut = velocity.perSku[sku] || 0;
-    const safety = Math.ceil(dailyOut * LEAD_DAYS); // 이 툴 산정 안전재고
+    const autoSafety = Math.ceil(dailyOut * LEAD_DAYS);
+    const promoQty = promoBySku[sku] || 0;
+    const adj = adjusts[sku];
+    const adjust = effectiveDelta(adj, today);
+    const safety = Math.max(0, autoSafety + promoQty + adjust); // 최종 안전재고
     const recommend = stock == null ? demand : Math.max(0, demand + safety - stock);
     const belowSafety = stock != null && stock < safety;
     rows.push({
@@ -98,6 +117,12 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
       name: st?.name || nameBySku.get(sku) || sku,
       stock,
       dailyOut,
+      autoSafety,
+      promoQty,
+      adjust,
+      adjustRaw: Math.round(Number(adj?.delta) || 0),
+      adjustMemo: adj?.memo || "",
+      adjustUntil: adj?.until || null,
       safety,
       demand,
       recommend,

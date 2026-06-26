@@ -8,6 +8,12 @@ type InvRow = {
   name: string;
   stock: number | null;
   dailyOut: number;
+  autoSafety: number;
+  promoQty: number;
+  adjust: number;
+  adjustRaw: number;
+  adjustMemo: string;
+  adjustUntil: string | null;
   safety: number;
   demand: number;
   recommend: number;
@@ -27,6 +33,11 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [onlyNeed, setOnlyNeed] = useState(true);
+  const [editRow, setEditRow] = useState<InvRow | null>(null);
+  const [eDelta, setEDelta] = useState("");
+  const [eMemo, setEMemo] = useState("");
+  const [eUntil, setEUntil] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,6 +73,33 @@ export default function InventoryPage() {
 
   const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0) : rows), [rows, onlyNeed]);
 
+  function openEdit(r: InvRow) {
+    setEditRow(r);
+    setEDelta(r.adjustRaw ? String(r.adjustRaw) : "");
+    setEMemo(r.adjustMemo || "");
+    setEUntil(r.adjustUntil || "");
+  }
+
+  async function saveAdjust() {
+    if (!editRow) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/production/safety-adjust", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku: editRow.sku, delta: Number(eDelta) || 0, memo: eMemo, until: eUntil || null }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setEditRow(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "보정 저장 실패");
+    }
+    setSaving(false);
+  }
+
   if (!configured && !loading) {
     return (
       <div className="b2b-container" style={{ maxWidth: 760 }}>
@@ -91,7 +129,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="b2b-page-title">재고·생산필요</h1>
           <p className="b2b-page-subtitle">
-            권장 생산량 = B2B 수요 + 안전재고 − 현재고. 안전재고 = 최근 하루 출고 × {leadDays}일(생산 리드타임). 박스히어로 {itemCount}개 품목 기준.
+            권장 생산량 = B2B 수요 + 안전재고 − 현재고. 안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정. 박스히어로 {itemCount}개 품목 기준.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -143,6 +181,7 @@ export default function InventoryPage() {
                 <th className="num">현재고</th>
                 <th className="num">하루 출고</th>
                 <th className="num">안전재고</th>
+                <th className="num">보정</th>
                 <th className="num">B2B 수요</th>
                 <th className="num">권장 생산</th>
               </tr>
@@ -163,7 +202,28 @@ export default function InventoryPage() {
                     )}
                   </td>
                   <td className="num">{r.dailyOut ? r.dailyOut.toFixed(1) : <span style={{ color: "var(--sm-text-light)" }}>-</span>}</td>
-                  <td className="num">{r.safety ? r.safety.toLocaleString() : <span style={{ color: "var(--sm-text-light)" }}>-</span>}</td>
+                  <td className="num">
+                    <div style={{ fontWeight: 600 }}>{r.safety.toLocaleString()}</div>
+                    {(r.promoQty > 0 || r.adjust !== 0) && (
+                      <div className="inv-safety-bd">
+                        자동 {r.autoSafety.toLocaleString()}
+                        {r.promoQty > 0 && <span className="inv-bd-promo"> · 행사 +{r.promoQty.toLocaleString()}</span>}
+                        {r.adjust !== 0 && <span className="inv-bd-adj"> · 보정 {r.adjust > 0 ? "+" : ""}{r.adjust.toLocaleString()}</span>}
+                      </div>
+                    )}
+                  </td>
+                  <td className="num">
+                    <button type="button" className="inv-adj-btn" onClick={() => openEdit(r)} title={r.adjustMemo || "안전재고 보정"}>
+                      {r.adjustRaw !== 0 ? (
+                        <span className={r.adjustRaw !== 0 && r.adjust === 0 && r.adjustUntil ? "inv-adj-expired" : "inv-adj-set"}>
+                          {r.adjustRaw > 0 ? "+" : ""}{r.adjustRaw.toLocaleString()}
+                          {r.adjustUntil && <span className="inv-adj-until">~{r.adjustUntil.slice(5)}</span>}
+                        </span>
+                      ) : (
+                        <span className="inv-adj-empty">+ 보정</span>
+                      )}
+                    </button>
+                  </td>
                   <td className="num">{r.demand ? r.demand.toLocaleString() : "-"}</td>
                   <td className="num">
                     {r.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{r.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}
@@ -180,6 +240,45 @@ export default function InventoryPage() {
       )}
       {noSkuDemand > 0 && (
         <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>
+      )}
+
+      {editRow && (
+        <div className="b2b-modal-backdrop" onClick={() => setEditRow(null)}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="b2b-modal-head">
+              <span className="b2b-modal-title">안전재고 보정 — {editRow.name}</span>
+              <button className="b2b-modal-close" onClick={() => setEditRow(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <p className="inv-modal-auto">
+                자동 <strong>{editRow.autoSafety.toLocaleString()}</strong>
+                {editRow.promoQty > 0 && <> + 행사 <strong>{editRow.promoQty.toLocaleString()}</strong></>} 에 더하거나 뺄 값을 입력하세요. (음수 가능)
+              </p>
+              <label className="b2b-field">
+                <span className="b2b-field-label">보정값 (개)</span>
+                <input className="b2b-input" type="number" value={eDelta} onChange={(e) => setEDelta(e.target.value)} placeholder="예: 500 또는 -100" />
+              </label>
+              <label className="b2b-field">
+                <span className="b2b-field-label">사유 (선택)</span>
+                <input className="b2b-input" type="text" value={eMemo} onChange={(e) => setEMemo(e.target.value)} placeholder="예: 여름 프로모션 대비" />
+              </label>
+              <label className="b2b-field">
+                <span className="b2b-field-label">만료일 (선택) — 지나면 자동 해제</span>
+                <input className="b2b-input" type="date" value={eUntil} onChange={(e) => setEUntil(e.target.value)} />
+              </label>
+              <p className="inv-modal-preview">
+                최종 안전재고 ≈ <strong>{Math.max(0, editRow.autoSafety + editRow.promoQty + (Number(eDelta) || 0)).toLocaleString()}</strong>
+              </p>
+            </div>
+            <div className="b2b-modal-foot">
+              <button className="b2b-btn-secondary" onClick={() => { setEDelta(""); setEMemo(""); setEUntil(""); }}>초기화</button>
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setEditRow(null)}>취소</button>
+                <button className="b2b-btn-primary" onClick={saveAdjust} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

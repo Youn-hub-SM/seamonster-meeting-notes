@@ -1102,6 +1102,19 @@ a.b2b-history-item:hover {
 .kanban-card-contributors { font-size: 11.5px; color: var(--sm-text-light); line-height: 1.5; margin-bottom: 8px; }
 @media (max-width: 768px) { .kanban { grid-template-columns: 1fr; } }
 
+/* 재고·생산필요 — 안전재고 보정 */
+.inv-safety-bd { font-size: 11px; color: var(--sm-text-light); margin-top: 1px; white-space: nowrap; }
+.inv-bd-promo { color: #1971c2; }
+.inv-bd-adj { color: #22863a; }
+.inv-adj-btn { background: none; border: 1px dashed var(--sm-border); border-radius: 7px; padding: 3px 8px; cursor: pointer; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--sm-text-mid); }
+.inv-adj-btn:hover { border-color: var(--sm-text-light); background: var(--sm-bg-soft, #f7f8fa); }
+.inv-adj-set { color: #22863a; font-weight: 700; }
+.inv-adj-expired { color: var(--sm-text-light); text-decoration: line-through; }
+.inv-adj-empty { color: var(--sm-text-light); }
+.inv-adj-until { display: block; font-size: 10px; color: var(--sm-text-light); font-weight: 400; }
+.inv-modal-auto { font-size: 13.5px; color: var(--sm-text-mid); margin: 0; line-height: 1.55; }
+.inv-modal-preview { font-size: 14px; color: var(--sm-text); margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--sm-border); }
+
 /* 생산 보드 — 타임라인(백로그) 뷰 */
 .tl-summary { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--sm-text-mid); margin-bottom: 6px; flex-wrap: wrap; }
 .tl-sum-bad { color: #c92a2a; font-weight: 700; }
