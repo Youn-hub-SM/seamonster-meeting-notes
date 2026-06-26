@@ -28,6 +28,7 @@ export default function ProductionSettingsPage() {
   const [demixLoading, setDemixLoading] = useState(true);
   const [demixSaving, setDemixSaving] = useState(false);
   const [demixMsg, setDemixMsg] = useState("");
+  const [demixUnresolved, setDemixUnresolved] = useState(0);
 
   async function loadStatus() {
     try {
@@ -66,6 +67,7 @@ export default function ProductionSettingsPage() {
           .map((r: { sku: string; name: string; boxheroOutQty: number; b2bShippedQty: number }) => ({ sku: r.sku, name: r.name, boxheroOut: r.boxheroOutQty, b2bShipped: r.b2bShippedQty }))
           .sort((a: DemixCand, b: DemixCand) => b.b2bShipped - a.b2bShipped);
         setDemixCands(cands);
+        setDemixUnresolved(inv.demixUnresolvedQty || 0);
       }
     } catch { /* noop */ }
     setDemixLoading(false);
@@ -294,6 +296,11 @@ export default function ProductionSettingsPage() {
               );
             })}
           </div>
+        )}
+        {demixUnresolved > 0 && (
+          <p style={{ marginTop: 10, fontSize: 12.5, color: "#c92a2a", lineHeight: 1.5 }}>
+            ⚠ 도매 발송 중 {demixUnresolved.toLocaleString()}개가 SKU와 연결되지 않아 차감에서 빠집니다 — 해당 발주 상품에 SKU가 지정됐는지 확인하세요.
+          </p>
         )}
         {demixMsg && (
           <div style={{ marginTop: 10, fontSize: 13, color: demixMsg === "저장됨." ? "#22863a" : "#c92a2a", fontWeight: 600 }}>{demixMsg}</div>

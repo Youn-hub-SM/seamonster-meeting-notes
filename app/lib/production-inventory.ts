@@ -138,7 +138,7 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
     const wholesaleSold = demixApplied ? (b2bShipped.bySku[sku] || 0) * demixFactor : 0; // 실제 차감할 도매분(계수 적용)
     const afterPromo = rawDailyOut - (promoSold[sku] || 0) / span;
     const dailyOut = Math.max(0, afterPromo - wholesaleSold / span); // 행사·도매 제거한 평상시(소매) 일평균
-    const demixClampedToZero = demixApplied && afterPromo > 0 && dailyOut === 0; // 도매 차감으로 0이 됨(레이더 실종)
+    const demixClampedToZero = demixApplied && afterPromo > 0.05 && dailyOut < 0.05; // 도매 차감으로 소매속도 무시가능 수준(레이더 실종)
     const autoSafety = Math.ceil(dailyOut * leadDays);
     const promoQty = Math.round(promoForward[sku] || 0);
     const adj = adjusts[sku];

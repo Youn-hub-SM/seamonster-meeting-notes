@@ -312,6 +312,9 @@ export default function InventoryPage() {
       {demixActive && demixUnresolved > 0 && (
         <p className="prod-note">※ 도매 차감 중 SKU가 연결되지 않은 발송 {demixUnresolved.toLocaleString()}개는 차감에서 제외됐습니다(과대생산 안전측).</p>
       )}
+      {demixActive && capped && (
+        <p className="prod-note" style={{ color: "#b86e00" }}>※ 출고 표본이 짧아(최근 약 {spanDays}일) 도매 차감 시 소매 속도가 부정확할 수 있습니다 — &lsquo;도매↓&rsquo; 품목은 설정의 근거(BoxHero vs B2B)와 대조해 확인하세요.</p>
+      )}
       {noSkuDemand > 0 && (
         <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>
       )}
