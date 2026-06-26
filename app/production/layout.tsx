@@ -17,13 +17,15 @@ const APP_MENU = [
   { href: "/production", label: "생산관리" },
 ];
 
-// 생산관리 서브 메뉴
+// 생산관리 서브 메뉴 — 업무 흐름 순.
+//  매일 보는 [생산일정·생산보드]를 앞에, 그다음 준비 단계 [생산조언 → 재고·생산필요 → 생산요청서],
+//  유틸리티 [SKU 생성기·품목 업로드·설정]는 맨 뒤.
 const PROD_MENU = [
   { href: "/production", label: "생산일정" },
   { href: "/production/board", label: "생산 보드" },
-  { href: "/production/request", label: "생산요청서" },
-  { href: "/production/inventory", label: "재고·생산필요" },
   { href: "/production/advice", label: "생산 조언" },
+  { href: "/production/inventory", label: "재고·생산필요" },
+  { href: "/production/request", label: "생산요청서" },
   { href: "/production/sku", label: "SKU 생성기" },
   { href: "/production/products", label: "품목 업로드" },
   { href: "/production/settings", label: "설정" },
