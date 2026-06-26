@@ -14,6 +14,14 @@ export type ChangeEntry = {
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-06-26",
+    tag: "신규",
+    tool: "생산관리",
+    title: "생산요청 마감일 경고 (리드타임 역산)",
+    desc: "재고·생산필요에 '요청 마감' 칸과 상단 경고를 추가했습니다. 현재고가 안전재고로 떨어지는 날을 리드타임만큼 앞당겨 'D-N / 지금!'으로 표시 — 이 날을 넘기면 지금 만들어도 리드타임 안에 못 대 쇼트가 납니다. '지금 요청 N종'을 한눈에 보고 생산요청서로 바로 넘어갈 수 있어요.",
+    href: "/production/inventory",
+  },
+  {
+    date: "2026-06-26",
     tag: "개선",
     tool: "생산관리",
     title: "생산 리드타임을 설정에서 조정",

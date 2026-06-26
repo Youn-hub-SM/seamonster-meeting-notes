@@ -19,6 +19,8 @@ type InvRow = {
   demand: number;
   recommend: number;
   belowSafety: boolean;
+  requestByDays: number | null;
+  requestBy: string | null;
   inBoxhero: boolean;
   inB2B: boolean;
 };
@@ -64,12 +66,16 @@ export default function InventoryPage() {
   useEffect(() => { load(); }, [load]);
 
   const stats = useMemo(() => {
-    let needItems = 0, needQty = 0, below = 0;
+    let needItems = 0, needQty = 0, below = 0, urgent = 0, soon = 0;
     for (const r of rows) {
       if (r.recommend > 0) { needItems++; needQty += r.recommend; }
       if (r.belowSafety) below++;
+      if (r.requestByDays != null) {
+        if (r.requestByDays <= 0) urgent++;
+        else if (r.requestByDays <= 7) soon++;
+      }
     }
-    return { needItems, needQty, below };
+    return { needItems, needQty, below, urgent, soon };
   }, [rows]);
 
   const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0) : rows), [rows, onlyNeed]);
@@ -165,6 +171,18 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      {(stats.urgent > 0 || stats.soon > 0) && (
+        <div className="inv-deadline-banner">
+          <span className="inv-dl-text">
+            {stats.urgent > 0 && <span className="inv-dl-urgent">🔴 지금 생산요청 {stats.urgent}종</span>}
+            {stats.urgent > 0 && stats.soon > 0 && <span className="inv-dl-sep"> · </span>}
+            {stats.soon > 0 && <span className="inv-dl-soon">🟠 7일 내 마감 {stats.soon}종</span>}
+            <span className="inv-dl-hint"> — 리드타임 {leadDays}일 기준, 이 날짜를 넘기면 만들어도 늦습니다.</span>
+          </span>
+          <Link href="/production/request" className="b2b-btn-secondary inv-dl-btn">생산요청서</Link>
+        </div>
+      )}
+
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : shown.length === 0 ? (
@@ -185,6 +203,7 @@ export default function InventoryPage() {
                 <th className="num">보정</th>
                 <th className="num">B2B 수요</th>
                 <th className="num">권장 생산</th>
+                <th className="num">요청 마감</th>
               </tr>
             </thead>
             <tbody>
@@ -239,6 +258,17 @@ export default function InventoryPage() {
                   <td className="num">{r.demand ? r.demand.toLocaleString() : "-"}</td>
                   <td className="num">
                     {r.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{r.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}
+                  </td>
+                  <td className="num">
+                    {r.requestByDays == null ? (
+                      <span style={{ color: "var(--sm-text-light)" }}>-</span>
+                    ) : r.requestByDays <= 0 ? (
+                      <span className="inv-dl-cell-urgent">지금!</span>
+                    ) : (
+                      <span className={r.requestByDays <= 7 ? "inv-dl-cell-soon" : "inv-dl-cell-ok"}>
+                        D-{r.requestByDays}{r.requestBy && <span className="inv-dl-cell-date"> {r.requestBy.slice(5)}</span>}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

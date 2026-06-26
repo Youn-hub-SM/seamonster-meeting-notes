@@ -28,6 +28,8 @@ export interface InvRow {
   demand: number;         // B2B 생산대기·생산중 수요
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − 현재고)
   belowSafety: boolean;
+  requestByDays: number | null; // 생산요청 마감까지 남은 일수(0·음수=지금/이미 늦음). 출고0·재고없음이면 null
+  requestBy: string | null;     // 생산요청 마감일(YYYY-MM-DD, 미래일 때만). 현재고가 안전재고로 떨어지는 날
   inBoxhero: boolean;
   inB2B: boolean;
 }
@@ -119,6 +121,18 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
     const safety = Math.max(0, autoSafety + promoQty + adjust); // 최종 안전재고
     const recommend = stock == null ? demand : Math.max(0, demand + safety - stock);
     const belowSafety = stock != null && stock < safety;
+    // 생산요청 마감일 = 현재고가 안전재고 수준으로 떨어지는 날(= 리드타임만큼 앞당긴 시점).
+    //  이 날을 넘기면 안전재고 밑으로 → 리드타임 안에 못 만들어 쇼트 위험.
+    let requestByDays: number | null = null;
+    let requestBy: string | null = null;
+    if (stock != null && dailyOut > 0) {
+      requestByDays = Math.floor((stock - safety) / dailyOut);
+      if (requestByDays > 0) {
+        const rd = new Date(today + "T00:00:00Z");
+        rd.setUTCDate(rd.getUTCDate() + requestByDays);
+        requestBy = rd.toISOString().slice(0, 10);
+      }
+    }
     rows.push({
       sku,
       name: st?.name || nameBySku.get(sku) || sku,
@@ -135,6 +149,8 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
       demand,
       recommend,
       belowSafety,
+      requestByDays,
+      requestBy,
       inBoxhero: !!st,
       inB2B: demand > 0,
     });
