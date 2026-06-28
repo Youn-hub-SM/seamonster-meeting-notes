@@ -14,6 +14,14 @@ export type ChangeEntry = {
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-06-27",
+    tag: "신규",
+    tool: "VOC 관리",
+    title: "VOC 관리툴 추가 (구축 시작)",
+    desc: "고객의 소리(VOC)를 모아 처리·분석·보고하는 도구를 만들기 시작했습니다. 사이드바 'CS' 분류에 CS 코치와 함께 들어갔고, 처리 상태·통계·AI 인사이트·손해금액 산정·후기 수집·보고서(PDF)·검색결과 추출·긍정/부정 분석·탈리 연동까지 메뉴 골격을 잡았습니다(기능은 순차 구현).",
+    href: "/voc",
+  },
+  {
+    date: "2026-06-27",
     tag: "개선",
     tool: "전체",
     title: "좌측 사이드바로 전체 메뉴 재편 (분류 → 툴 → 메뉴)",

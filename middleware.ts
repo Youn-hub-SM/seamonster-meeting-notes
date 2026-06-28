@@ -18,7 +18,7 @@ export function middleware(req: NextRequest) {
   }
 
   // B2B·생산관리 API 는 인증 실패 시 JSON 401, 페이지는 로그인으로 리다이렉트
-  const isApi = pathname.startsWith("/api/b2b/") || pathname.startsWith("/api/production/");
+  const isApi = pathname.startsWith("/api/b2b/") || pathname.startsWith("/api/production/") || pathname.startsWith("/api/voc/");
 
   const users = getB2BUsers();
   if (users.length === 0) {
@@ -64,5 +64,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/b2b/:path*", "/api/b2b/:path*", "/production/:path*", "/api/production/:path*"],
+  matcher: ["/b2b/:path*", "/api/b2b/:path*", "/production/:path*", "/api/production/:path*", "/voc/:path*", "/api/voc/:path*"],
 };

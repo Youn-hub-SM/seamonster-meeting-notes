@@ -54,7 +54,7 @@ export const NAV: NavCategory[] = [
     ],
   },
   {
-    label: "기타",
+    label: "CS",
     tools: [
       {
         href: "/cs", label: "CS 코치", emoji: "💬",
@@ -63,6 +63,25 @@ export const NAV: NavCategory[] = [
           { href: "/cs/manual", label: "매뉴얼" },
         ],
       },
+      {
+        href: "/voc", label: "VOC 관리", emoji: "📣",
+        menu: [
+          { href: "/voc", label: "처리 상태" },
+          { href: "/voc/stats", label: "통계·리포트" },
+          { href: "/voc/insights", label: "AI 인사이트" },
+          { href: "/voc/loss", label: "손해금액 산정" },
+          { href: "/voc/reviews", label: "후기 수집" },
+          { href: "/voc/reports", label: "보고서·요청서(PDF)" },
+          { href: "/voc/export", label: "검색결과 추출" },
+          { href: "/voc/sentiment", label: "긍정·부정 분석" },
+          { href: "/voc/settings", label: "설정·탈리 연동" },
+        ],
+      },
+    ],
+  },
+  {
+    label: "기타",
+    tools: [
       { href: "/meeting", label: "회의 정리", emoji: "📝" },
     ],
   },
