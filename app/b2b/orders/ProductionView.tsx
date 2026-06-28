@@ -59,7 +59,7 @@ export default function ProductionView() {
 
   return (
     <div className="b2b-week-wrap">
-      <p style={{ fontSize: 11, color: "var(--sm-text-light)", marginBottom: 12 }}>
+      <p style={{ fontSize: 12, color: "var(--sm-text-light)", marginBottom: 12 }}>
         생산예정일(일자)별 · 생산대기·생산중 발주만 · 품목+옵션별 총수량 ·{" "}
         <strong style={{ color: "var(--sm-text-mid)" }}>
           합계 {grandOrders}건 / {formatQty(grandQty)}개
@@ -108,7 +108,7 @@ export default function ProductionView() {
                       <td>{p.product_name}</td>
                       <td>{p.spec || "-"}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{formatQty(p.qty)}</td>
-                      <td style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
+                      <td style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
                         {p.companies.length > 0 ? p.companies.join(", ") : "-"}
                       </td>
                       <td className="num">{p.order_count}</td>

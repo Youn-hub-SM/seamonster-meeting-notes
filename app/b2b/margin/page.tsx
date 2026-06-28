@@ -127,7 +127,7 @@ export default function MarginPage() {
                           <span
                             style={{
                               marginLeft: 6,
-                              fontSize: 9,
+                              fontSize: 10,
                               fontWeight: 700,
                               padding: "1px 6px",
                               borderRadius: 10,
@@ -138,7 +138,7 @@ export default function MarginPage() {
                             {TAX_TYPE_LABEL[p.tax_type]}
                           </span>
                           {p.sku && (
-                            <span style={{ display: "block", fontSize: 9, color: "var(--sm-text-light)" }}>{p.sku}</span>
+                            <span style={{ display: "block", fontSize: 10, color: "var(--sm-text-light)" }}>{p.sku}</span>
                           )}
                         </td>
                         <td data-label="도매가" className="num b2b-money">{won(p.sale_price)}</td>
@@ -155,7 +155,7 @@ export default function MarginPage() {
                         <td className="actions">
                           <button
                             className="b2b-btn-secondary"
-                            style={{ padding: "4px 10px", fontSize: 10 }}
+                            style={{ padding: "4px 10px", fontSize: 11 }}
                             onClick={() => setExpanded(isExp ? null : p.id)}
                           >
                             {isExp ? "닫기" : "원가"}
@@ -185,8 +185,8 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: "pos
   const color = tone === "neg" ? "var(--sm-danger)" : tone === "pos" ? "var(--sm-success)" : "var(--sm-dark)";
   return (
     <div style={{ padding: "8px 14px", background: "var(--sm-bg)", borderRadius: 10, minWidth: 110 }}>
-      <div style={{ fontSize: 9, color: "var(--sm-text-light)" }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 10, color: "var(--sm-text-light)" }}>{label}</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color }}>{value}</div>
     </div>
   );
 }
@@ -197,7 +197,7 @@ function FragmentRow({ children }: { children: React.ReactNode }) {
 
 function CostDetail({ p, revenue, vatExcluded }: { p: Product; revenue: number; vatExcluded: boolean }) {
   const Row = ({ k, v, strong }: { k: string; v: string; strong?: boolean }) => (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 11, fontWeight: strong ? 700 : 400, color: strong ? undefined : "var(--sm-text-mid)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12, fontWeight: strong ? 700 : 400, color: strong ? undefined : "var(--sm-text-mid)" }}>
       <span>{k}</span>
       <span className="b2b-money">{v}</span>
     </div>
@@ -206,7 +206,7 @@ function CostDetail({ p, revenue, vatExcluded }: { p: Product; revenue: number; 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20 }}>
       <div>
-        <div style={{ fontWeight: 700, fontSize: 10, color: "var(--sm-text-mid)", marginBottom: 4 }}>원가 구성</div>
+        <div style={{ fontWeight: 700, fontSize: 11, color: "var(--sm-text-mid)", marginBottom: 4 }}>원가 구성</div>
         <Row k="제품원가" v={won(p.cost_material)} />
         <Row k="내포장지" v={won(p.pkg_inner)} />
         <Row k="라벨" v={won(p.pkg_label)} />
@@ -215,7 +215,7 @@ function CostDetail({ p, revenue, vatExcluded }: { p: Product; revenue: number; 
         <Row k="제품 단위 원가" v={won(p.cost_price)} strong />
       </div>
       <div>
-        <div style={{ fontWeight: 700, fontSize: 10, color: "var(--sm-text-mid)", marginBottom: 4 }}>손익</div>
+        <div style={{ fontWeight: 700, fontSize: 11, color: "var(--sm-text-mid)", marginBottom: 4 }}>손익</div>
         <Row k="도매가" v={won(p.sale_price)} />
         {vatExcluded && <Row k="└ 공급가 (÷1.1)" v={won(revenue)} />}
         <Row k="원가" v={won(p.cost_price)} />

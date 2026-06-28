@@ -367,7 +367,7 @@ export default function ProductionSchedulePage() {
                       <input type="date" className="b2b-input" value={addModal.productionDate} onChange={(e) => setAddModal({ ...addModal, productionDate: e.target.value })} />
                     </div>
                   </div>
-                  <span style={{ fontSize: 9.5, color: "var(--sm-text-light)" }}>목표일은 예상 소진일로 자동 설정됩니다. 필요하면 바꾸세요.</span>
+                  <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>목표일은 예상 소진일로 자동 설정됩니다. 필요하면 바꾸세요.</span>
                 </div>
                 <div className="b2b-modal-foot">
                   <div />
@@ -405,7 +405,7 @@ export default function ProductionSchedulePage() {
               <div className="b2b-field">
                 <label className="b2b-field-label">상품별 예상 판매량</label>
                 {(promoModal.items || []).length === 0 && (
-                  <div style={{ fontSize: 10.5, color: "var(--sm-text-light)", marginBottom: 6 }}>어떤 상품이 얼마나 나갈지 추가하세요. (MD 전달 수치)</div>
+                  <div style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginBottom: 6 }}>어떤 상품이 얼마나 나갈지 추가하세요. (MD 전달 수치)</div>
                 )}
                 {(promoModal.items || []).map((it, i) => (
                   <div key={i} className="promo-item-row">

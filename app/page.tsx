@@ -3,16 +3,6 @@ import { CHANGELOG } from "@/app/lib/changelog";
 
 export const dynamic = "force-dynamic";
 
-const TOOLS = [
-  { href: "/meeting", name: "회의록 정리" },
-  { href: "/correct", name: "문장 교정" },
-  { href: "/cs", name: "CS 코치" },
-  { href: "/utm", name: "UTM 빌더" },
-  { href: "/subscription", name: "정기배송 분석" },
-  { href: "/b2b", name: "B2B 매니저" },
-  { href: "/production", name: "생산관리" },
-];
-
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   신규: { bg: "var(--sm-success-bg)", color: "var(--sm-success)" },
   개선: { bg: "rgba(241,90,48,0.10)", color: "#D94E26" },
@@ -37,16 +27,7 @@ export default function HomePage() {
   return (
     <div className="container">
       <h1 className="page-title">씨몬스터 내부도구</h1>
-      <p className="page-subtitle">업무 도구를 한곳에서. 새 기능은 아래 업데이트 노트에 정리됩니다.</p>
-
-      {/* 도구 바로가기 */}
-      <div className="home-grid">
-        {TOOLS.map((t) => (
-          <Link key={t.href} href={t.href} className="home-tool-card">
-            <span className="home-tool-name">{t.name}</span>
-          </Link>
-        ))}
-      </div>
+      <p className="page-subtitle">업무 도구는 왼쪽 메뉴에서. 새 기능은 아래 업데이트 노트에 정리됩니다.</p>
 
       {/* 업데이트 노트 — 날짜별 묶음 */}
       <section className="home-section">

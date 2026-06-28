@@ -58,9 +58,9 @@ function LoginForm() {
         maxWidth: 360,
         boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
       }}>
-        <div style={{ fontSize: 34, marginBottom: 8 }}>🔒</div>
-        <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>B2B 관리툴</h1>
-        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", marginBottom: 20 }}>
+        <div style={{ fontSize: 35, marginBottom: 8 }}>🔒</div>
+        <h1 style={{ fontSize: 19, fontWeight: 700, marginBottom: 6 }}>B2B 관리툴</h1>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 20 }}>
           비밀번호를 입력하세요.
         </p>
 
@@ -78,7 +78,7 @@ function LoginForm() {
           />
           {error && (
             <div style={{
-              fontSize: 11,
+              fontSize: 12,
               color: "var(--sm-danger)",
               padding: "8px 12px",
               background: "var(--sm-danger-bg)",

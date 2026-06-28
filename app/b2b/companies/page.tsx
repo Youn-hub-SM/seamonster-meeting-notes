@@ -190,7 +190,7 @@ export default function CompaniesPage() {
                       <Link
                         href={`/b2b/companies/${c.id}`}
                         className="b2b-btn-secondary"
-                        style={{ padding: "5px 10px", fontSize: 10, marginRight: 6 }}
+                        style={{ padding: "5px 10px", fontSize: 11, marginRight: 6 }}
                       >
                         상세
                       </Link>
@@ -279,7 +279,7 @@ function CompanyModal({
     aiFields.has(k) ? { background: "var(--sm-warning-bg)", borderColor: "#F0C000" } : {};
   const aiBadge = (k: keyof CompanyInput) =>
     aiFields.has(k) ? (
-      <span style={{ marginLeft: 6, fontSize: 8.5, fontWeight: 700, color: "var(--sm-warning)", background: "var(--sm-warning-bg)", padding: "1px 6px", borderRadius: 8 }}>
+      <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: "var(--sm-warning)", background: "var(--sm-warning-bg)", padding: "1px 6px", borderRadius: 8 }}>
         확인 필요
       </span>
     ) : null;
@@ -372,31 +372,31 @@ function CompanyModal({
               </button>
               {data.biz_doc_path && (
                 <>
-                  <span style={{ fontSize: 10.5, color: "var(--sm-success)", fontWeight: 600 }}>✓ 첨부됨</span>
-                  <button type="button" className="b2b-link-btn" onClick={viewDoc} style={{ fontSize: 10.5 }}>보기</button>
+                  <span style={{ fontSize: 11.5, color: "var(--sm-success)", fontWeight: 600 }}>✓ 첨부됨</span>
+                  <button type="button" className="b2b-link-btn" onClick={viewDoc} style={{ fontSize: 11.5 }}>보기</button>
                   <button
                     type="button"
                     className="b2b-link-btn"
                     onClick={() => set("biz_doc_path", null)}
-                    style={{ fontSize: 10.5, color: "var(--sm-danger)" }}
+                    style={{ fontSize: 11.5, color: "var(--sm-danger)" }}
                   >
                     제거
                   </button>
                 </>
               )}
             </div>
-            <div style={{ fontSize: 9.5, color: "var(--sm-text-light)", marginTop: 6 }}>
+            <div style={{ fontSize: 10.5, color: "var(--sm-text-light)", marginTop: 6 }}>
               이미지·PDF(최대 5MB)를 올리면 상호·사업자번호·대표자·주소를 자동으로 채웁니다. 값은 확인 후 저장하세요.
             </div>
             {scanMsg && (
-              <div style={{ fontSize: 10.5, marginTop: 8, color: scanMsg.startsWith("✓") ? "var(--sm-success)" : "var(--sm-danger)" }}>{scanMsg}</div>
+              <div style={{ fontSize: 11.5, marginTop: 8, color: scanMsg.startsWith("✓") ? "var(--sm-success)" : "var(--sm-danger)" }}>{scanMsg}</div>
             )}
           </div>
 
           {/* 첨부 원본 미리보기 — 채워진 값과 1:1 대조 */}
           {docUrl && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: "var(--sm-text-mid)", marginBottom: 6 }}>
+              <div style={{ fontSize: 11, color: "var(--sm-text-mid)", marginBottom: 6 }}>
                 첨부 원본 — 노란 칸을 이 원본과 대조해 확인하세요
               </div>
               {docKind === "image" ? (
@@ -447,7 +447,7 @@ function CompanyModal({
             </Field>
           </div>
           {(bizCheck === "invalid" || dupCompany) && (
-            <div style={{ marginTop: -6, marginBottom: 12, fontSize: 10.5, display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ marginTop: -6, marginBottom: 12, fontSize: 11.5, display: "flex", flexDirection: "column", gap: 3 }}>
               {bizCheck === "invalid" && (
                 <div style={{ color: "var(--sm-danger)" }}>⚠ 사업자등록번호 검증에 실패했습니다 — 숫자를 잘못 읽었을 수 있어요. 원본과 대조해 확인하세요.</div>
               )}

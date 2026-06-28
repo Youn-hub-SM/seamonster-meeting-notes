@@ -96,7 +96,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
         </div>
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">기본 배송지</div>
-          <div style={{ fontSize: 11, color: "var(--sm-dark)", marginTop: 6, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: "var(--sm-dark)", marginTop: 6, lineHeight: 1.5 }}>
             {c.address || <span style={{ color: "var(--sm-text-light)" }}>미등록</span>}
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">발주 이력</h2>
-          <span style={{ fontSize: 10, color: "var(--sm-text-light)" }}>{data.orders.length}건</span>
+          <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>{data.orders.length}건</span>
         </div>
         {data.orders.length === 0 ? (
           <div className="b2b-empty">이 거래처의 발주가 없습니다.</div>
@@ -161,7 +161,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
                         <strong>{o.order_no}</strong>
                       </Link>
                     </td>
-                    <td style={{ fontSize: 11 }}>
+                    <td style={{ fontSize: 12 }}>
                       {o.items.length === 0
                         ? "-"
                         : o.items.slice(0, 2).map((it, i) => (

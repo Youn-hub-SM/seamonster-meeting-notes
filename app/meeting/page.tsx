@@ -163,7 +163,7 @@ export default function MeetingPage() {
         </div>
 
         {error && (
-          <p style={{ color: "var(--sm-danger)", marginBottom: 16, fontSize: 12 }}>{error}</p>
+          <p style={{ color: "var(--sm-danger)", marginBottom: 16, fontSize: 13 }}>{error}</p>
         )}
 
         <button type="submit" className="btn-primary" disabled={rawText.trim().length < 10}>

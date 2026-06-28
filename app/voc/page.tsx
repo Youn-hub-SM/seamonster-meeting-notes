@@ -159,7 +159,7 @@ export default function VocPage() {
                       value={r.status}
                       onChange={(e) => changeStatus(r, e.target.value)}
                       className="b2b-input"
-                      style={{ padding: "4px 8px", fontSize: 11, width: "auto", background: VOC_STATUS_COLOR[r.status].bg, color: VOC_STATUS_COLOR[r.status].fg, fontWeight: 700, border: "none", borderRadius: 8 }}
+                      style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: VOC_STATUS_COLOR[r.status].bg, color: VOC_STATUS_COLOR[r.status].fg, fontWeight: 700, border: "none", borderRadius: 8 }}
                     >
                       {VOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>

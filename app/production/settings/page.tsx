@@ -163,7 +163,7 @@ export default function ProductionSettingsPage() {
       <section className="b2b-card">
         <div className="b2b-card-head"><h2 className="b2b-card-title">박스히어로 연동</h2></div>
         <div style={{ padding: "4px 2px 2px" }}>
-          <div style={{ marginBottom: 14, fontSize: 11.5, color: "var(--sm-text-mid)", lineHeight: 1.6 }}>
+          <div style={{ marginBottom: 14, fontSize: 12.5, color: "var(--sm-text-mid)", lineHeight: 1.6 }}>
             상태:{" "}
             {configured
               ? <span style={{ color: "var(--sm-success)", fontWeight: 600 }}>연결됨 ({masked})</span>
@@ -185,7 +185,7 @@ export default function ProductionSettingsPage() {
           </div>
 
           {msg && (
-            <div style={{ marginTop: 10, fontSize: 11, color: msg.kind === "ok" ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: msg.kind === "ok" ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
               {msg.text}
             </div>
           )}
@@ -200,7 +200,7 @@ export default function ProductionSettingsPage() {
 
       <section className="b2b-card" style={{ marginTop: 16 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">생산 리드타임</h2></div>
-        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
           제조사에 생산을 요청하고 받기까지 걸리는 일수입니다. <strong>안전재고 = 하루 평균 출고 × 리드타임</strong>으로,
           이 기간 팔릴 만큼은 늘 확보해 재고 쇼트를 막습니다. {leadSaved != null && <>현재 <strong>{leadSaved}일</strong>.</>}
         </p>
@@ -214,13 +214,13 @@ export default function ProductionSettingsPage() {
             onChange={(e) => setLeadInput(e.target.value)}
             style={{ width: 120 }}
           />
-          <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>일</span>
+          <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>일</span>
           <button className="b2b-btn-primary" onClick={saveLead} disabled={leadSaving}>
             {leadSaving ? "저장 중..." : "저장"}
           </button>
         </div>
         {leadMsg && (
-          <div style={{ marginTop: 10, fontSize: 11, color: leadMsg.startsWith("저장됨") ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
+          <div style={{ marginTop: 10, fontSize: 12, color: leadMsg.startsWith("저장됨") ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
             {leadMsg}
           </div>
         )}
@@ -228,17 +228,17 @@ export default function ProductionSettingsPage() {
 
       <section className="b2b-card" style={{ marginTop: 16 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">생산 품목명</h2></div>
-        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
           B2B에서 같은 제품을 업체별로 다른 품목명으로 부르면(단가 차이 등) 생산에서 갈라집니다.
           같은 <strong>SKU</strong>는 생산에선 한 품목으로 묶이며, 여기서 <strong>생산 표시명</strong>만 정리하면 됩니다. (비우면 가장 짧은 이름 자동 사용)
         </p>
         {aliasItems.length === 0 ? (
-          <div style={{ fontSize: 11, color: "var(--sm-text-light)" }}>정리할 품목이 없습니다. (같은 SKU에 이름이 여러 개인 경우만 표시)</div>
+          <div style={{ fontSize: 12, color: "var(--sm-text-light)" }}>정리할 품목이 없습니다. (같은 SKU에 이름이 여러 개인 경우만 표시)</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {aliasItems.map((it) => (
               <div key={it.sku} style={{ borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
-                <div style={{ fontSize: 10, color: "var(--sm-text-light)", marginBottom: 4 }}>
+                <div style={{ fontSize: 11, color: "var(--sm-text-light)", marginBottom: 4 }}>
                   <code>{it.sku}</code> · B2B 품목명: {it.names.join(" / ")}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -261,7 +261,7 @@ export default function ProductionSettingsPage() {
 
       <section className="b2b-card" style={{ marginTop: 16 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">도매/소매 채널 분리 (실험)</h2></div>
-        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
           같은 SKU로 <strong>도매·소매가 섞여</strong> 나가는 품목만, 소매 판매속도에서 <strong>과거 도매(B2B) 발송분</strong>을 빼서 평상시 소매 속도만 잡습니다.
           도매 발송이 박스히어로 출고에 안 찍히면 과소생산→쇼트 위험이 있어 <strong>기본 꺼짐 + 품목 화이트리스트 + 차감비율</strong>로만 켜세요.
           (BULK·소매전용처럼 SKU가 이미 분리된 품목은 체크하지 않습니다.)
@@ -271,23 +271,23 @@ export default function ProductionSettingsPage() {
           <input type="checkbox" checked={demixEnabled} onChange={(e) => setDemixEnabledS(e.target.checked)} /> 도매 차감 사용
         </label>
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>차감 비율</span>
+          <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>차감 비율</span>
           <input className="b2b-input" type="number" min={0} max={1} step={0.1} value={demixFactor} onChange={(e) => setDemixFactorS(e.target.value)} style={{ width: 90 }} />
-          <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>도매 발송분의 이 비율만 차감(안전 여유). 1 = 전량.</span>
+          <span style={{ fontSize: 11.5, color: "var(--sm-text-light)" }}>도매 발송분의 이 비율만 차감(안전 여유). 1 = 전량.</span>
         </div>
         {demixLoading ? (
-          <div style={{ fontSize: 11, color: "var(--sm-text-light)" }}>후보 품목 불러오는 중...</div>
+          <div style={{ fontSize: 12, color: "var(--sm-text-light)" }}>후보 품목 불러오는 중...</div>
         ) : demixCands.length === 0 ? (
-          <div style={{ fontSize: 11, color: "var(--sm-text-light)" }}>최근 집계창에 B2B 발송이 잡힌 품목이 없습니다. (도매 발송이 있어야 후보로 떠요)</div>
+          <div style={{ fontSize: 12, color: "var(--sm-text-light)" }}>최근 집계창에 B2B 발송이 잡힌 품목이 없습니다. (도매 발송이 있어야 후보로 떠요)</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            <div style={{ fontSize: 10.5, color: "var(--sm-text-mid)" }}>도매·소매 혼입 품목만 체크 — 근거(박스히어로 출고 vs B2B 발송):</div>
+            <div style={{ fontSize: 11.5, color: "var(--sm-text-mid)" }}>도매·소매 혼입 품목만 체크 — 근거(박스히어로 출고 vs B2B 발송):</div>
             {demixCands.map((c) => {
               const ok = c.boxheroOut >= c.b2bShipped * 0.9; // 도매가 BoxHero 출고에 잡힘(근사값이라 10% 여유)
               return (
                 <label key={c.sku} className="demix-cand">
                   <input type="checkbox" checked={demixSkus.includes(c.sku)} onChange={() => toggleDemixSku(c.sku)} />
-                  <code style={{ fontSize: 10 }}>{c.sku}</code>
+                  <code style={{ fontSize: 11 }}>{c.sku}</code>
                   <span className="demix-cand-name">{c.name}</span>
                   <span className={ok ? "demix-ok" : "demix-bad"}>
                     BoxHero {c.boxheroOut.toLocaleString()} / B2B {c.b2bShipped.toLocaleString()}{ok ? "" : " ⚠ 도매 미기록 의심"}
@@ -298,12 +298,12 @@ export default function ProductionSettingsPage() {
           </div>
         )}
         {demixUnresolved > 0 && (
-          <p style={{ marginTop: 10, fontSize: 10.5, color: "var(--sm-danger)", lineHeight: 1.5 }}>
+          <p style={{ marginTop: 10, fontSize: 11.5, color: "var(--sm-danger)", lineHeight: 1.5 }}>
             ⚠ 도매 발송 중 {demixUnresolved.toLocaleString()}개가 SKU와 연결되지 않아 차감에서 빠집니다 — 해당 발주 상품에 SKU가 지정됐는지 확인하세요.
           </p>
         )}
         {demixMsg && (
-          <div style={{ marginTop: 10, fontSize: 11, color: demixMsg === "저장됨." ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>{demixMsg}</div>
+          <div style={{ marginTop: 10, fontSize: 12, color: demixMsg === "저장됨." ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>{demixMsg}</div>
         )}
         <div style={{ marginTop: 14 }}>
           <button className="b2b-btn-primary" onClick={saveDemix} disabled={demixSaving}>{demixSaving ? "저장 중..." : "저장"}</button>

@@ -115,7 +115,7 @@ export default function SkuGeneratorPage() {
                 placeholder={sp?.retailMid || "K"}
                 style={{ textTransform: "uppercase" }}
               />
-              <span style={{ fontSize: 9.5, color: "var(--sm-text-light)", marginTop: 4 }}>
+              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)", marginTop: 4 }}>
                 산지/가공 코드로 추정 — 비우면 어종 기본값 사용
               </span>
             </div>

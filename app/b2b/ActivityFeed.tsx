@@ -136,7 +136,7 @@ export default function ActivityFeed() {
               </button>
             </div>
 
-            {error && <div className="b2b-error" style={{ fontSize: 11 }}>{error}</div>}
+            {error && <div className="b2b-error" style={{ fontSize: 12 }}>{error}</div>}
 
             {loading ? (
               <div className="b2b-feed-empty">불러오는 중...</div>
