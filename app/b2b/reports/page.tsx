@@ -242,7 +242,7 @@ export default function ReportsPage() {
           <div className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head">
               <h2 className="b2b-card-title">업체별 매출</h2>
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
+              <span style={{ fontSize: 10, color: "var(--sm-text-light)" }}>
                 {report.by_company.length}개 업체
               </span>
             </div>
@@ -282,7 +282,7 @@ export default function ReportsPage() {
           <div className="b2b-card">
             <div className="b2b-card-head">
               <h2 className="b2b-card-title">제품별 매출</h2>
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
+              <span style={{ fontSize: 10, color: "var(--sm-text-light)" }}>
                 {report.by_product.length}개 품목
               </span>
             </div>

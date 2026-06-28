@@ -276,11 +276,11 @@ export default async function B2BDashboard() {
         <div className="b2b-error">
           <strong>Supabase 스키마가 아직 적용되지 않았어요.</strong>
           <br />
-          <code style={{ fontSize: 12 }}>meeting-notes/supabase/migrations/001_b2b_init.sql</code>{" "}
+          <code style={{ fontSize: 10 }}>meeting-notes/supabase/migrations/001_b2b_init.sql</code>{" "}
           파일 내용을 Supabase Dashboard {">"}  SQL Editor 에 붙여넣고 Run 해주세요.
           <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: "pointer", fontSize: 12, color: "#666" }}>에러 자세히 보기</summary>
-            <pre style={{ marginTop: 8, fontSize: 11, whiteSpace: "pre-wrap", color: "#666" }}>
+            <summary style={{ cursor: "pointer", fontSize: 10, color: "#666" }}>에러 자세히 보기</summary>
+            <pre style={{ marginTop: 8, fontSize: 9, whiteSpace: "pre-wrap", color: "#666" }}>
               {stats.error}
             </pre>
           </details>
@@ -301,11 +301,11 @@ export default async function B2BDashboard() {
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">오늘 일정</div>
           {stats.todayProduction === 0 && stats.todayShip === 0 ? (
-            <div className="b2b-stat-card-value" style={{ fontSize: 16, fontWeight: 500, color: "var(--sm-text-light)" }}>
+            <div className="b2b-stat-card-value" style={{ fontSize: 14, fontWeight: 500, color: "var(--sm-text-light)" }}>
               오늘 일정 없음
             </div>
           ) : (
-            <div className="b2b-stat-card-value" style={{ fontSize: 22 }}>
+            <div className="b2b-stat-card-value" style={{ fontSize: 20 }}>
               <span style={{ color: "#0A66C2" }}>생산 {stats.todayProduction}</span>
               <span style={{ color: "var(--sm-text-light)", margin: "0 8px", fontWeight: 400 }}>·</span>
               <span style={{ color: "var(--sm-orange)" }}>발송 {stats.todayShip}</span>
@@ -318,7 +318,7 @@ export default async function B2BDashboard() {
             미수금
           </div>
           {stats.unpaidCount === 0 ? (
-            <div className="b2b-stat-card-value" style={{ fontSize: 16, fontWeight: 500, color: "var(--sm-text-light)" }}>
+            <div className="b2b-stat-card-value" style={{ fontSize: 14, fontWeight: 500, color: "var(--sm-text-light)" }}>
               미수금 없음
             </div>
           ) : (
@@ -337,9 +337,9 @@ export default async function B2BDashboard() {
           <div className="b2b-card-head">
             <div>
               <h2 className="b2b-card-title">이번 주 일정</h2>
-              <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>{week.label}</span>
+              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>{week.label}</span>
             </div>
-            <Link href="/b2b/orders" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }}>
+            <Link href="/b2b/orders" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 11 }}>
               발주 캘린더
             </Link>
           </div>

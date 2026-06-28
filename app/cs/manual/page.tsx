@@ -143,7 +143,7 @@ export default function CsManualPage() {
         <Link href="/cs" className="btn-secondary csm-back">← CS 코치로</Link>
       </div>
 
-      {error && <p style={{ color: "#c92a2a", margin: "12px 0", fontSize: 14 }}>{error}</p>}
+      {error && <p style={{ color: "#c92a2a", margin: "12px 0", fontSize: 12 }}>{error}</p>}
 
       {/* 검색 + 카테고리 필터 + 추가 */}
       {!loading && (

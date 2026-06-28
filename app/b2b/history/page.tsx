@@ -157,7 +157,7 @@ export default function HistoryPage() {
           <span style={{ color: "var(--sm-text-light)" }}>~</span>
           <input type="date" className="b2b-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: "auto" }} title="종료일" />
           {hasFilter && (
-            <button type="button" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={reset}>
+            <button type="button" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 11 }} onClick={reset}>
               필터 초기화
             </button>
           )}
@@ -206,7 +206,7 @@ export default function HistoryPage() {
                   {loadingMore ? "불러오는 중..." : "더 보기"}
                 </button>
               ) : (
-                <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>마지막 기록까지 모두 표시했습니다.</span>
+                <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>마지막 기록까지 모두 표시했습니다.</span>
               )}
             </div>
           </>

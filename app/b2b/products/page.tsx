@@ -156,7 +156,7 @@ export default function ProductsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--sm-text-mid)" }}>
             <input
               type="checkbox"
               checked={showInactive}
@@ -223,11 +223,11 @@ export default function ProductsPage() {
                       >
                         <td data-label="품목명">
                           <strong>{p.name}</strong>
-                          {p.sku && <span style={{ marginLeft: 8, fontSize: 12, color: "var(--sm-text-light)" }}>{p.sku}</span>}
+                          {p.sku && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--sm-text-light)" }}>{p.sku}</span>}
                           <span
                             style={{
                               marginLeft: 8,
-                              fontSize: 11,
+                              fontSize: 9,
                               fontWeight: 700,
                               padding: "2px 6px",
                               borderRadius: 10,
@@ -245,23 +245,23 @@ export default function ProductsPage() {
                         <td data-label="마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "#c92a2a" }}>
                           {margin >= 0 ? "+" : ""}{margin.toLocaleString()}
                           {p.sale_price > 0 && (
-                            <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-text-light)" }}>
+                            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--sm-text-light)" }}>
                               ({marginPct.toFixed(0)}%)
                             </span>
                           )}
                         </td>
                         <td data-label="상태">
                           {p.active ? (
-                            <span style={{ fontSize: 12, color: "#22863a", fontWeight: 600 }}>사용</span>
+                            <span style={{ fontSize: 10, color: "#22863a", fontWeight: 600 }}>사용</span>
                           ) : (
-                            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>미사용</span>
+                            <span style={{ fontSize: 10, color: "var(--sm-text-light)" }}>미사용</span>
                           )}
                         </td>
                         <td className="actions" onClick={(e) => e.stopPropagation()}>
                           <button
                             className="b2b-btn-secondary"
                             onClick={() => toggleHistory(p.id)}
-                            style={{ padding: "4px 10px", fontSize: 12 }}
+                            style={{ padding: "4px 10px", fontSize: 10 }}
                           >
                             {isExpanded ? "이력 닫기" : "원가 이력"}
                           </button>
@@ -318,11 +318,11 @@ function FragmentRows({ children }: { children: React.ReactNode }) {
 function HistoryPanel({ loading, history }: { loading: boolean; history: CostHistory[] }) {
   if (loading) return <div className="b2b-loading" style={{ padding: 12 }}>이력 불러오는 중...</div>;
   if (history.length === 0) {
-    return <div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>원가 변경 이력이 없습니다.</div>;
+    return <div style={{ fontSize: 11, color: "var(--sm-text-light)" }}>원가 변경 이력이 없습니다.</div>;
   }
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 8 }}>
         원가 변경 이력 (최근 {history.length}건)
       </div>
       <table className="b2b-table" style={{ background: "var(--sm-white)" }}>
@@ -442,7 +442,7 @@ function ProductModal({
                 <option key={t} value={t}>{TAX_TYPE_LABEL[t]}</option>
               ))}
             </select>
-            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
+            <span style={{ fontSize: 10, color: "var(--sm-text-light)" }}>
               면세로 두면 발주 시 부가세 계산에서 제외됩니다.
             </span>
           </Field>
@@ -525,7 +525,7 @@ function ProductModal({
           </Field>
 
           {(effCost > 0 || data.sale_price > 0) && (
-            <div style={{ padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 13 }}>
+            <div style={{ padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 11 }}>
               제품 단위 원가 <strong className="b2b-money">{effCost.toLocaleString()}원</strong>
               {" · "}
               마진(배송 제외):{" "}
@@ -537,7 +537,7 @@ function ProductModal({
           )}
 
           <Field label="상태">
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
               <input
                 type="checkbox"
                 checked={data.active}

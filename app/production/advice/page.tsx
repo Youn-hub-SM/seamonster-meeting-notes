@@ -71,11 +71,11 @@ export default function ProductionAdvicePage() {
           <div className="b2b-empty" style={{ padding: "44px 20px" }}>
             <div className="b2b-empty-icon">🧠</div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>생산 조언 생성을 눌러 시작하세요</div>
-            <div style={{ color: "var(--sm-text-mid)", lineHeight: 1.6, fontSize: 14 }}>
+            <div style={{ color: "var(--sm-text-mid)", lineHeight: 1.6, fontSize: 12 }}>
               최근 출고 추세로 판매속도를 추정하고, 재고·안전재고·확정 발주를 합쳐<br />
               우선순위가 매겨진 생산 권장안을 만들어냅니다.
             </div>
-            <div style={{ marginTop: 14, fontSize: 13 }}>
+            <div style={{ marginTop: 14, fontSize: 11 }}>
               박스히어로 연동이 필요합니다 → <Link href="/production/settings" className="b2b-link">설정</Link>
             </div>
           </div>
@@ -126,7 +126,7 @@ export default function ProductionAdvicePage() {
           {advice.notes && advice.notes.length > 0 && (
             <section className="b2b-card" style={{ marginTop: 16 }}>
               <div className="b2b-card-head"><h2 className="b2b-card-title">참고</h2></div>
-              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 13.5, color: "var(--sm-text-mid)" }}>
+              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 11.5, color: "var(--sm-text-mid)" }}>
                 {advice.notes.map((n, i) => <li key={i}>{n}</li>)}
               </ul>
             </section>
@@ -149,7 +149,7 @@ export default function ProductionAdvicePage() {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.sku}>
-                        <td><code style={{ fontSize: 12 }}>{r.sku}</code></td>
+                        <td><code style={{ fontSize: 10 }}>{r.sku}</code></td>
                         <td>{r.name}</td>
                         <td className="num">{r.stock?.toLocaleString() ?? "-"}</td>
                         <td className="num">{r.safety?.toLocaleString() ?? "-"}</td>

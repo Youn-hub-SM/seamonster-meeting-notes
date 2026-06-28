@@ -18,6 +18,11 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
+  // 툴별 펼침 상태. 명시적 토글이 없으면 활성 툴만 기본 펼침.
+  const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
+  const isToolOpen = (href: string) => openTools[href] ?? toolActive(href, pathname);
+  const toggleTool = (href: string) =>
+    setOpenTools((s) => ({ ...s, [href]: !(s[href] ?? toolActive(href, pathname)) }));
 
   // 로그인 사용자(있으면) — 설정 메뉴 노출 + 푸터 표시용. /api/b2b/auth 는 미들웨어 예외라 어디서나 호출 가능.
   useEffect(() => {
@@ -38,13 +43,37 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
   function renderTool(t: NavTool) {
     const active = toolActive(t.href, pathname);
     const menu = (t.menu || []).filter((m) => !m.adminOnly || isAdmin);
+    const hasMenu = menu.length > 0;
+    const expanded = hasMenu && isToolOpen(t.href);
     return (
       <div key={t.href}>
-        <Link href={t.href} className={`app-sb-tool ${active ? "is-active" : ""}`} onClick={onNavigate}>
-          <span className="app-sb-emoji">{t.emoji}</span>
-          <span>{t.label}</span>
-        </Link>
-        {active && menu.length > 0 && (
+        <div className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
+          <Link
+            href={t.href}
+            className="app-sb-tool"
+            onClick={() => {
+              if (hasMenu) setOpenTools((s) => ({ ...s, [t.href]: true })); // 이동 시 자동 펼침
+              onNavigate?.();
+            }}
+          >
+            <span className="app-sb-emoji">{t.emoji}</span>
+            <span className="app-sb-tool-label">{t.label}</span>
+          </Link>
+          {hasMenu && (
+            <button
+              type="button"
+              className={`app-sb-chev ${expanded ? "is-open" : ""}`}
+              aria-label={expanded ? `${t.label} 메뉴 접기` : `${t.label} 메뉴 펼치기`}
+              aria-expanded={expanded}
+              onClick={() => toggleTool(t.href)}
+            >
+              <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+                <path d="M5.5 3.5L10 8l-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {expanded && (
           <div className="app-sb-menu">
             {menu.map((m) => (
               <Link

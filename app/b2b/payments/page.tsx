@@ -291,7 +291,7 @@ function PaymentModal({
         <div className="b2b-modal-head">
           <div>
             <h2 className="b2b-modal-title">{order.order_no} · {order.company_name}</h2>
-            <div style={{ marginTop: 4, fontSize: 13, color: "var(--sm-text-mid)" }}>
+            <div style={{ marginTop: 4, fontSize: 11, color: "var(--sm-text-mid)" }}>
               청구액 <strong className="b2b-money">{formatMoney(order.total)}</strong>
               {" · "}
               입금 <strong className="b2b-money">{formatMoney(paidSum)}</strong>
@@ -312,11 +312,11 @@ function PaymentModal({
             {loading ? (
               <div className="b2b-loading">불러오는 중...</div>
             ) : payments.length === 0 ? (
-              <div style={{ padding: 12, fontSize: 13, color: "var(--sm-text-light)", textAlign: "center", background: "var(--sm-bg)", borderRadius: 8 }}>
+              <div style={{ padding: 12, fontSize: 11, color: "var(--sm-text-light)", textAlign: "center", background: "var(--sm-bg)", borderRadius: 8 }}>
                 기록된 입금이 없습니다.
               </div>
             ) : (
-              <table className="b2b-table" style={{ fontSize: 13 }}>
+              <table className="b2b-table" style={{ fontSize: 11 }}>
                 <thead>
                   <tr>
                     <th>입금일</th>
@@ -334,10 +334,10 @@ function PaymentModal({
                       <td>{p.method || "-"}</td>
                       <td>
                         {p.reference || "-"}
-                        {p.notes && <div style={{ fontSize: 11, color: "var(--sm-text-light)" }}>{p.notes}</div>}
+                        {p.notes && <div style={{ fontSize: 9, color: "var(--sm-text-light)" }}>{p.notes}</div>}
                       </td>
                       <td className="actions">
-                        <button className="b2b-btn-danger" onClick={() => handleDelete(p.id)} style={{ fontSize: 12, padding: "4px 8px" }}>
+                        <button className="b2b-btn-danger" onClick={() => handleDelete(p.id)} style={{ fontSize: 10, padding: "4px 8px" }}>
                           삭제
                         </button>
                       </td>
@@ -417,7 +417,7 @@ function PaymentModal({
 
         <div className="b2b-modal-foot">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>입금 상태</span>
+            <span style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>입금 상태</span>
             <select
               className="b2b-select"
               value={order.payment_status}

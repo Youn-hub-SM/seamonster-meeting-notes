@@ -258,7 +258,7 @@ function doGet() {
           <p className="b2b-page-subtitle">Zapier(외부) 알림을 이벤트·상태별로 켜고 끕니다. 히스토리 기록은 항상 모두 남습니다.</p>
         </div>
         <div className="b2b-page-actions">
-          {savedAt && <span style={{ fontSize: 13, color: "#22863a", alignSelf: "center" }}>{savedAt}</span>}
+          {savedAt && <span style={{ fontSize: 11, color: "#22863a", alignSelf: "center" }}>{savedAt}</span>}
           <button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>
             {saving ? "저장 중..." : "저장"}
           </button>
@@ -271,9 +271,9 @@ function doGet() {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">AI 모델 (전체)</h2>
-          {modelSaving && <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>적용 중...</span>}
+          {modelSaving && <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>적용 중...</span>}
         </div>
-        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
+        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
           회의록 정리 · 문장 교정이 사용하는 모델입니다. CS 코치는 기본적으로 이 모델을 따르며, 아래에서 따로 지정할 수 있습니다.
           (사업자등록증 OCR 은 정확도 위해 항상 Sonnet 사용)
         </p>
@@ -305,9 +305,9 @@ function doGet() {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">CS 코치 모델</h2>
-          {csModelSaving && <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>적용 중...</span>}
+          {csModelSaving && <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>적용 중...</span>}
         </div>
-        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
+        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
           CS 응대 코치만 별도 모델을 쓸 수 있습니다. ‘전체와 동일’이면 위 설정을 따릅니다. (정확한 응대가 중요하면 최고 품질 권장)
         </p>
         {loading ? (
@@ -352,13 +352,13 @@ function doGet() {
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">CS 코치 프롬프트 (지침)</h2>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {csPromptSaved && <span style={{ fontSize: 13, color: "#22863a" }}>{csPromptSaved}</span>}
-            <span style={{ fontSize: 12.5, color: csPromptIsDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>
+            {csPromptSaved && <span style={{ fontSize: 11, color: "#22863a" }}>{csPromptSaved}</span>}
+            <span style={{ fontSize: 10.5, color: csPromptIsDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>
               {csPromptIsDefault ? "기본값" : "사용자 지정"}
             </span>
           </div>
         </div>
-        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 12px" }}>
+        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", margin: "0 0 12px" }}>
           CS 코치의 역할·코칭 방식·원칙을 정의하는 기초 프롬프트입니다. 여기서 바꾸면 코드 수정·재배포 없이 즉시 반영됩니다.
           <br />
           <strong>매뉴얼 내용</strong>(지식)과 <strong>출력 형식(JSON)</strong>은 시스템이 자동으로 덧붙이므로 여기에 넣지 마세요 — 매뉴얼은{" "}
@@ -380,7 +380,7 @@ function doGet() {
                 width: "100%",
                 minHeight: 320,
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-                fontSize: 13.5,
+                fontSize: 11.5,
                 lineHeight: 1.7,
                 resize: "vertical",
                 whiteSpace: "pre",
@@ -395,7 +395,7 @@ function doGet() {
               <button className="b2b-btn-secondary" onClick={resetCsPrompt} disabled={csPromptSaving || csPromptIsDefault}>
                 기본값으로 복원
               </button>
-              <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>
+              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>
                 {csPrompt.length.toLocaleString()}자 · 모든 사용자 공용
               </span>
             </div>
@@ -407,11 +407,11 @@ function doGet() {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">매출 구글시트 연동</h2>
-          <span style={{ fontSize: 12.5, color: sheetConnected ? "#22863a" : "var(--sm-text-light)" }}>
+          <span style={{ fontSize: 10.5, color: sheetConnected ? "#22863a" : "var(--sm-text-light)" }}>
             {sheetConnected ? "● 연동됨" : "○ 미연동"}
           </span>
         </div>
-        <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
+        <p style={{ fontSize: 11, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
           발주가 <strong>발송완료</strong>되면 매출집계 엑셀과 <strong>동일한 양식</strong>으로 기존 구글시트 맨 아래에 자동 추가됩니다(발주별 1회).
           기존 데이터·서식은 건드리지 않습니다.
         </p>
@@ -419,7 +419,7 @@ function doGet() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : (
           <>
-            <ol style={{ fontSize: 13.5, color: "var(--sm-text-mid)", lineHeight: 1.9, margin: "0 0 12px", paddingLeft: 20 }}>
+            <ol style={{ fontSize: 11.5, color: "var(--sm-text-mid)", lineHeight: 1.9, margin: "0 0 12px", paddingLeft: 20 }}>
               <li>그 구글시트에서 <strong>확장 프로그램 → Apps Script</strong> 열기</li>
               <li>아래 코드를 붙여넣고 저장 → <strong>배포 → 새 배포 → 웹 앱</strong> (액세스: 모든 사용자)</li>
               <li>발급된 <strong>웹 앱 URL</strong>을 아래에 붙여넣고 저장 → "연결 테스트"</li>
@@ -431,7 +431,7 @@ function doGet() {
                   color: "#e2e8f0",
                   padding: 16,
                   borderRadius: 8,
-                  fontSize: 12,
+                  fontSize: 10,
                   lineHeight: 1.55,
                   overflowX: "auto",
                   maxHeight: 220,
@@ -444,7 +444,7 @@ function doGet() {
               <button
                 type="button"
                 className="b2b-btn-secondary"
-                style={{ position: "absolute", top: 8, right: 8, padding: "4px 12px", fontSize: 12.5 }}
+                style={{ position: "absolute", top: 8, right: 8, padding: "4px 12px", fontSize: 10.5 }}
                 onClick={() => {
                   navigator.clipboard.writeText(SHEET_APPS_SCRIPT);
                   setSheetMsg("Apps Script 코드 복사됨");
@@ -467,7 +467,7 @@ function doGet() {
               <button className="b2b-btn-secondary" onClick={testSheet} disabled={sheetSaving || !sheetConnected}>연결 테스트</button>
             </div>
             {sheetMsg && (
-              <div style={{ fontSize: 13, color: sheetMsg.startsWith("✅") ? "#22863a" : "var(--sm-text-mid)", marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: sheetMsg.startsWith("✅") ? "#22863a" : "var(--sm-text-mid)", marginTop: 10 }}>
                 {sheetMsg}
               </div>
             )}
@@ -539,7 +539,7 @@ function doGet() {
         )}
       </section>
 
-      <p style={{ fontSize: 12.5, color: "var(--sm-text-light)", marginTop: 12 }}>
+      <p style={{ fontSize: 10.5, color: "var(--sm-text-light)", marginTop: 12 }}>
         💡 상태형 항목은 <strong>체크한 결과 상태로 바뀔 때만</strong> 알림이 갑니다. 예) 발주 상태에서 &lsquo;발송완료&rsquo;만 체크하면
         중간 단계(생산중·발송대기 등)는 알림이 오지 않습니다.
       </p>

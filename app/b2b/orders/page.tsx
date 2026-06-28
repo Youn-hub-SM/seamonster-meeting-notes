@@ -667,13 +667,13 @@ export default function OrdersListPage() {
             <button
               type="button"
               className="b2b-btn-secondary"
-              style={{ padding: "6px 12px", fontSize: 13 }}
+              style={{ padding: "6px 12px", fontSize: 11 }}
               onClick={resetFilters}
             >
               필터 초기화
             </button>
           )}
-          <span style={{ marginLeft: "auto", fontSize: 13, color: "var(--sm-text-light)" }}>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--sm-text-light)" }}>
             {filtered.length}건
           </span>
         </div>
@@ -804,7 +804,7 @@ export default function OrdersListPage() {
                       </td>
                       <RowCell href={`/b2b/orders/${o.id}`} nowrap>
                         <span>{o.company_name}</span>
-                        <span style={{ display: "block", fontSize: 11, color: "var(--sm-text-light)", marginTop: 2 }}>
+                        <span style={{ display: "block", fontSize: 9, color: "var(--sm-text-light)", marginTop: 2 }}>
                           {o.order_no}{parent ? " · 복수발송" : ""}
                         </span>
                       </RowCell>
@@ -840,7 +840,7 @@ export default function OrdersListPage() {
                             onClick={() => toggleExpand(o.id)}
                             title="발송 차수 펼치기/접기"
                           >
-                            {prog.done}/{prog.total} <span style={{ fontSize: 10 }}>{isCollapsed ? "▸" : "▾"}</span>
+                            {prog.done}/{prog.total} <span style={{ fontSize: 8 }}>{isCollapsed ? "▸" : "▾"}</span>
                           </button>
                         ) : (
                           <select
@@ -892,7 +892,7 @@ export default function OrdersListPage() {
                         <Link
                           href={`/b2b/orders/new?from=${o.id}`}
                           className="b2b-btn-secondary"
-                          style={{ padding: "5px 10px", fontSize: 12 }}
+                          style={{ padding: "5px 10px", fontSize: 10 }}
                           title="이 발주를 복제해 새 발주 만들기"
                         >
                           복제
@@ -906,10 +906,10 @@ export default function OrdersListPage() {
                         <td colSpan={11} style={{ padding: "8px 18px 8px 30px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                             <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                              <span style={{ color: "var(--sm-text-light)", fontSize: 13 }}>└ {s.seq}차</span>
-                              <span style={{ fontSize: 13 }}>{s.ship_date || "날짜 미정"}</span>
+                              <span style={{ color: "var(--sm-text-light)", fontSize: 11 }}>└ {s.seq}차</span>
+                              <span style={{ fontSize: 11 }}>{s.ship_date || "날짜 미정"}</span>
                               {s.items.length > 0 && (
-                                <span style={{ fontSize: 12.5, color: "var(--sm-text-mid)" }}>
+                                <span style={{ fontSize: 10.5, color: "var(--sm-text-mid)" }}>
                                   {s.items.slice(0, 2).map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`).join(", ")}
                                   {s.items.length > 2 ? ` 외 ${s.items.length - 2}종` : ""}
                                 </span>
@@ -991,7 +991,7 @@ export default function OrdersListPage() {
                               style={{ background: "#EEF2F6", color: "#475569", cursor: "pointer" }}
                               title="발송 차수 펼치기/접기"
                             >
-                              발송 {prog.done}/{prog.total} <span style={{ fontSize: 10 }}>{isCollapsed ? "▸" : "▾"}</span>
+                              발송 {prog.done}/{prog.total} <span style={{ fontSize: 8 }}>{isCollapsed ? "▸" : "▾"}</span>
                             </span>
                           ) : (
                             <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
@@ -1008,10 +1008,10 @@ export default function OrdersListPage() {
                       <div className="b2b-order-card-children">
                         {(o.shipments ?? []).map((s) => (
                           <div key={s.id} className="b2b-order-card-child">
-                            <span style={{ color: "var(--sm-text-light)", fontSize: 12.5, whiteSpace: "nowrap" }}>└ {s.seq}차</span>
-                            <span style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
+                            <span style={{ color: "var(--sm-text-light)", fontSize: 10.5, whiteSpace: "nowrap" }}>└ {s.seq}차</span>
+                            <span style={{ fontSize: 10.5, whiteSpace: "nowrap" }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
                             {s.items.length > 0 && (
-                              <span style={{ fontSize: 12, color: "var(--sm-text-mid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
+                              <span style={{ fontSize: 10, color: "var(--sm-text-mid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
                                 {s.items.map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""}×${formatQty(it.qty)}`).join(", ")}
                               </span>
                             )}
@@ -1055,7 +1055,7 @@ export default function OrdersListPage() {
               <button className="b2b-modal-close" onClick={() => setTrackingPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: "var(--sm-text-mid)", marginBottom: 10 }}>
                 <strong>{trackingPrompt.label}</strong> 을(를) 발송완료 처리합니다.{" "}
                 {directDelivery
                   ? "직접 배송 — 송장번호 없이 처리됩니다."
@@ -1065,7 +1065,7 @@ export default function OrdersListPage() {
               </div>
 
               {/* 직접 배송(택배 아님): 체크 시 송장번호 불필요 */}
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, marginBottom: directDelivery ? 0 : 12, cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, marginBottom: directDelivery ? 0 : 12, cursor: "pointer" }}>
                 <input
                   type="checkbox"
                   className="b2b-checkbox"
@@ -1258,7 +1258,7 @@ function ExportPickModal({
         <div className="b2b-modal-head">
           <div>
             <h2 className="b2b-modal-title">발송요청 양식 — 어떤 발송을 뽑을까요?</h2>
-            <div style={{ marginTop: 4, fontSize: 13, color: "var(--sm-text-mid)" }}>
+            <div style={{ marginTop: 4, fontSize: 11, color: "var(--sm-text-mid)" }}>
               분할 발송이 있어요. 출력할 발송 일정을 선택하세요.
             </div>
           </div>
@@ -1275,7 +1275,7 @@ function ExportPickModal({
                 style={{
                   padding: "9px 12px",
                   background: "var(--sm-bg)",
-                  fontSize: 13,
+                  fontSize: 11,
                   fontWeight: 700,
                   display: "flex",
                   justifyContent: "space-between",
@@ -1338,7 +1338,7 @@ function ExportPickModal({
         </div>
 
         <div className="b2b-modal-foot">
-          <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
+          <span style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>
             <strong>{totalSelected}건</strong> 발송 선택됨
           </span>
           <div className="b2b-modal-foot-right">
@@ -1390,7 +1390,7 @@ function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
         </span>
       ))}
       {rest > 0 && (
-        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>외 {rest}종</span>
+        <span style={{ fontSize: 10, color: "var(--sm-text-light)" }}>외 {rest}종</span>
       )}
     </div>
   );

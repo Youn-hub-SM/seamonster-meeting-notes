@@ -235,7 +235,7 @@ export default function InventoryPage() {
             <tbody>
               {shown.map((r) => (
                 <tr key={r.sku} className={r.belowSafety ? "is-overdue" : ""}>
-                  <td><code style={{ fontSize: 12.5 }}>{r.sku}</code></td>
+                  <td><code style={{ fontSize: 10.5 }}>{r.sku}</code></td>
                   <td>
                     {r.name}
                     {!r.inBoxhero && <span className="prod-tag">박스히어로 없음</span>}

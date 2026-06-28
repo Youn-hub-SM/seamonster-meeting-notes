@@ -535,7 +535,7 @@ export default function OrderForm({
                 emptyText="일치하는 업체가 없습니다"
               />
               {companies.length === 0 && (
-                <span style={{ fontSize: 12, color: "#c92a2a" }}>
+                <span style={{ fontSize: 10, color: "#c92a2a" }}>
                   등록된 업체가 없습니다 — <Link href="/b2b/companies" style={{ color: "var(--sm-orange)" }}>주소록에서 먼저 등록</Link>
                 </span>
               )}
@@ -564,7 +564,7 @@ export default function OrderForm({
             <div className="b2b-field">
               <label className="b2b-field-label">발송예정일</label>
               {isMultiShipment ? (
-                <div style={{ fontSize: 12.5, color: "var(--sm-text-light)", padding: "11px 0" }}>
+                <div style={{ fontSize: 10.5, color: "var(--sm-text-light)", padding: "11px 0" }}>
                   복수발송 — 발송일은 아래 ‘발송 일정’의 차수별로 관리됩니다.
                 </div>
               ) : (
@@ -610,7 +610,7 @@ export default function OrderForm({
             <div className="b2b-field">
               <label className="b2b-field-label">발송 상태</label>
               {isMultiShipment ? (
-                <div style={{ padding: "9px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 13, color: "var(--sm-text-mid)", lineHeight: 1.4 }}>
+                <div style={{ padding: "9px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 11, color: "var(--sm-text-mid)", lineHeight: 1.4 }}>
                   복수 발송이라 발송 상태는 <strong>발송 일정(차수)별</strong>로 관리됩니다.
                 </div>
               ) : (
@@ -668,7 +668,7 @@ export default function OrderForm({
                   placeholder="발송완료 시 필수"
                 />
                 {data.status === "발송완료" && !String(data.tracking_no).trim() && (
-                  <span style={{ fontSize: 12, color: "#c92a2a" }}>발송완료로 저장하려면 송장번호가 필요합니다.</span>
+                  <span style={{ fontSize: 10, color: "#c92a2a" }}>발송완료로 저장하려면 송장번호가 필요합니다.</span>
                 )}
               </div>
               <div className="b2b-field" aria-hidden />
@@ -680,7 +680,7 @@ export default function OrderForm({
         <section className="b2b-form-section">
           <div className="b2b-form-section-title">
             배송 정보
-            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
+            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
               업체 선택 시 자동 채움 — 모든 발송 일정에 공통 적용
             </span>
           </div>
@@ -744,13 +744,13 @@ export default function OrderForm({
         <section className="b2b-form-section">
           <div className="b2b-form-section-title">
             발송 일정
-            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
+            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
               나눠서 보낼 경우 일정을 여러 개 추가 — 각 일정에 날짜·상태·보낼 수량
             </span>
           </div>
 
           {data.shipments.length === 0 && (
-            <p style={{ fontSize: 13, color: "var(--sm-text-light)", margin: "4px 0 12px" }}>
+            <p style={{ fontSize: 11, color: "var(--sm-text-light)", margin: "4px 0 12px" }}>
               아직 발송 일정이 없습니다. 한 번에 다 보내면 비워두셔도 되고, 나눠 보내면 일정을 추가하세요.
             </p>
           )}
@@ -759,7 +759,7 @@ export default function OrderForm({
             {data.shipments.map((sch, si) => (
               <div key={si} style={{ borderTop: "1px solid var(--sm-border)", paddingTop: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <strong style={{ fontSize: 14, color: "var(--sm-text-mid)" }}>발송 {si + 1}</strong>
+                  <strong style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>발송 {si + 1}</strong>
                   <button type="button" className="b2b-icon-btn is-danger" onClick={() => removeSchedule(si)} title="발송 일정 삭제">✕</button>
                 </div>
                 <div className="b2b-field-row">
@@ -808,7 +808,7 @@ export default function OrderForm({
                       const oi = data.items.indexOf(it);
                       return (
                         <div key={oi} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ flex: 1, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span style={{ flex: 1, fontSize: 11, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {it.product_name}{it.spec ? ` · ${it.spec}` : ""}
                             <span style={{ color: "var(--sm-text-light)", marginLeft: 6 }}>(주문 {formatQty(it.qty)})</span>
                           </span>
@@ -850,7 +850,7 @@ export default function OrderForm({
           </div>
 
           {splitWarnings.length > 0 && (
-            <div style={{ marginTop: 12, padding: "10px 12px", background: "#FFF4E0", borderRadius: 8, fontSize: 13, color: "#B86E00" }}>
+            <div style={{ marginTop: 12, padding: "10px 12px", background: "#FFF4E0", borderRadius: 8, fontSize: 11, color: "#B86E00" }}>
               {splitWarnings.map((w, i) => (
                 <div key={i}>⚠ {w}</div>
               ))}
@@ -980,7 +980,7 @@ export default function OrderForm({
         {/* ───── 이익률 (배송 박스 단위) ───── */}
         <section className="b2b-form-section">
           <div className="b2b-form-section-title">이익률 (배송 박스 기준)</div>
-          <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--sm-text-mid)" }}>
+          <p style={{ margin: "0 0 12px", fontSize: 10.5, color: "var(--sm-text-mid)" }}>
             매출 − 제품원가 − 배송비(박스 × 아이스박스+운반비+보냉비). 과세 상품은 공급가(÷1.1) 기준.
           </p>
 
@@ -998,7 +998,7 @@ export default function OrderForm({
                 onChange={(e) => setField("box_count", e.target.value === "" ? 1 : Number(e.target.value))}
                 style={realScheduleCount > 0 ? { background: "var(--sm-bg)", color: "var(--sm-text-mid)" } : undefined}
               />
-              <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 4 }}>
+              <span style={{ fontSize: 9.5, color: "var(--sm-text-light)", marginTop: 4 }}>
                 {realScheduleCount > 0
                   ? `발송 차수 박스 수 합 (자동) · 총 부피 ${orderMargin.volume.toLocaleString()}kg`
                   : `총 부피 ${orderMargin.volume.toLocaleString()}kg · 권장 ${suggestBoxes(orderMargin.volume)}박스`}
@@ -1013,7 +1013,7 @@ export default function OrderForm({
                 readOnly
                 style={{ background: "var(--sm-bg)", color: "var(--sm-text-mid)" }}
               />
-              <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 4 }}>
+              <span style={{ fontSize: 9.5, color: "var(--sm-text-light)", marginTop: 4 }}>
                 발송예정일 기준 자동
               </span>
             </div>
@@ -1036,7 +1036,7 @@ export default function OrderForm({
               <strong className="b2b-money" style={{ color: orderMargin.profit >= 0 ? "#22863a" : "#c92a2a" }}>
                 {orderMargin.profit >= 0 ? "+" : ""}{formatMoney(Math.round(orderMargin.profit))}원
                 {orderMargin.revenue > 0 && (
-                  <span style={{ marginLeft: 8, fontSize: 14 }}>
+                  <span style={{ marginLeft: 8, fontSize: 12 }}>
                     ({orderMargin.marginPct.toFixed(1)}%)
                   </span>
                 )}
@@ -1081,10 +1081,10 @@ export default function OrderForm({
               <button className="b2b-modal-close" onClick={() => setClonePrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <div style={{ fontSize: 13.5, color: "var(--sm-text-mid)", marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, color: "var(--sm-text-mid)", marginBottom: 10 }}>
                 이 업체의 <strong>가장 최근 발주</strong>를 그대로 불러올까요? (날짜·상태·송장은 새로 시작)
               </div>
-              <div style={{ fontSize: 13, padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8 }}>
+              <div style={{ fontSize: 11, padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8 }}>
                 {clonePrompt.summary}
               </div>
             </div>

@@ -54,7 +54,7 @@ export default function RequestPage() {
             ))}
           </div>
           <input type="date" className="b2b-input" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />
-          {data && <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{data.from} ~ {data.to}</span>}
+          {data && <span style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>{data.from} ~ {data.to}</span>}
         </div>
       </div>
 
