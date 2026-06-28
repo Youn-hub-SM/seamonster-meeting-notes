@@ -3,7 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-const FIELDS = ["received_at", "source", "channel", "customer", "product", "category", "content", "sentiment", "status", "assignee", "resolution", "loss_amount"] as const;
+const FIELDS = ["received_at", "channel", "source", "customer", "purchase_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "assignee", "sentiment", "loss_amount"] as const;
 
 function pick(body: Record<string, unknown>) {
   const out: Record<string, unknown> = {};

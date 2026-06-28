@@ -1,18 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { VOC_SOURCES, VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, type Voc, type VocStatus } from "@/app/lib/voc";
+import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, type Voc, type VocStatus } from "@/app/lib/voc";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
 
 type Form = {
   id?: string;
-  received_at: string; source: string; channel: string; customer: string; product: string;
-  category: string; content: string; assignee: string; status: string; loss_amount: string; resolution: string;
+  received_at: string; channel: string; customer: string;
+  purchase_date: string; purchase_place: string; product: string;
+  category: string; content: string; resolution: string; cause: string;
+  status: string; improvement: string;
 };
 const emptyForm = (): Form => ({
-  received_at: TODAY(), source: "직접입력", channel: "", customer: "", product: "",
-  category: "불만", content: "", assignee: "", status: "접수", loss_amount: "", resolution: "",
+  received_at: TODAY(), channel: "", customer: "",
+  purchase_date: "", purchase_place: "", product: "",
+  category: "배송", content: "", resolution: "", cause: "",
+  status: "대기", improvement: "",
 });
 
 export default function VocPage() {
@@ -56,21 +60,21 @@ export default function VocPage() {
   function openNew() { setEdit(emptyForm()); }
   function openEdit(r: Voc) {
     setEdit({
-      id: r.id, received_at: r.received_at, source: r.source, channel: r.channel || "", customer: r.customer || "",
-      product: r.product || "", category: r.category, content: r.content, assignee: r.assignee || "",
-      status: r.status, loss_amount: r.loss_amount ? String(r.loss_amount) : "", resolution: r.resolution || "",
+      id: r.id, received_at: r.received_at, channel: r.channel || "", customer: r.customer || "",
+      purchase_date: r.purchase_date || "", purchase_place: r.purchase_place || "", product: r.product || "",
+      category: r.category, content: r.content, resolution: r.resolution || "", cause: r.cause || "",
+      status: r.status, improvement: r.improvement || "",
     });
   }
 
   async function save() {
     if (!edit) return;
-    if (!edit.content.trim()) { setError("내용을 입력하세요."); return; }
+    if (!edit.content.trim()) { setError("상세내용을 입력하세요."); return; }
     setSaving(true); setError("");
     try {
       const method = edit.id ? "PATCH" : "POST";
       const res = await fetch("/api/voc", {
-        method, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...edit, loss_amount: Number(edit.loss_amount) || 0 }),
+        method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
@@ -111,14 +115,14 @@ export default function VocPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC 처리 상태</h1>
-          <p className="b2b-page-subtitle">고객의 소리를 접수·처리·완료로 관리합니다. 상담 등에서 받은 건은 직접 입력하세요.</p>
+          <p className="b2b-page-subtitle">고객의 소리(클레임)를 접수·진행·완료로 관리합니다. 상담 등에서 받은 건은 직접 입력하세요.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={openNew}>+ VOC 추가</button>
         </div>
       </header>
 
-      {error && <div className="b2b-error">{error}{error.includes("voc") || error.includes("relation") ? " — supabase/migrations/023_voc.sql 를 먼저 적용하세요." : ""}</div>}
+      {error && <div className="b2b-error">{error}{(error.includes("voc") || error.includes("relation")) ? " — supabase/migrations/023_voc.sql 를 먼저 적용하세요." : ""}</div>}
 
       <div className="prod-range-tabs" style={{ marginBottom: 12, flexWrap: "wrap" }}>
         {(["전체", ...VOC_STATUSES] as const).map((s) => (
@@ -137,18 +141,17 @@ export default function VocPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr>
-              <th>접수일</th><th>경로</th><th>고객</th><th>유형</th><th>내용</th><th>담당자</th><th className="num">손해금액</th><th>상태</th>
+              <th>접수일</th><th>접수채널</th><th>고객</th><th>구매상품</th><th>유형</th><th>상세내용</th><th>상태</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} onClick={() => openEdit(r)} style={{ cursor: "pointer" }}>
                   <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
-                  <td>{r.source}</td>
+                  <td>{r.channel || "-"}</td>
                   <td>{r.customer || "-"}</td>
+                  <td>{r.product || "-"}</td>
                   <td>{r.category}</td>
-                  <td style={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.content}</td>
-                  <td>{r.assignee || "-"}</td>
-                  <td className="num">{r.loss_amount ? r.loss_amount.toLocaleString() : "-"}</td>
+                  <td style={{ maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.content}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <select
                       value={r.status}
@@ -168,7 +171,7 @@ export default function VocPage() {
 
       {edit && (
         <div className="b2b-modal-backdrop" onClick={() => setEdit(null)}>
-          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">{edit.id ? "VOC 수정" : "VOC 추가 (직접 입력)"}</span>
               <button className="b2b-modal-close" onClick={() => setEdit(null)}>✕</button>
@@ -177,36 +180,35 @@ export default function VocPage() {
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">접수일</span>
                   <input className="b2b-input" type="date" value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} /></label>
-                <label className="b2b-field"><span className="b2b-field-label">수집 경로</span>
-                  <select className="b2b-input" value={edit.source} onChange={(e) => setF("source", e.target.value)}>{VOC_SOURCES.map((s) => <option key={s}>{s}</option>)}</select></label>
+                <label className="b2b-field"><span className="b2b-field-label">접수채널</span>
+                  <input className="b2b-input" value={edit.channel} onChange={(e) => setF("channel", e.target.value)} placeholder="전화·카톡·이메일·리뷰…" /></label>
               </div>
               <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">고객 (이름/연락처)</span>
-                  <input className="b2b-input" value={edit.customer} onChange={(e) => setF("customer", e.target.value)} placeholder="선택" /></label>
-                <label className="b2b-field"><span className="b2b-field-label">채널</span>
-                  <input className="b2b-input" value={edit.channel} onChange={(e) => setF("channel", e.target.value)} placeholder="전화·카톡·이메일…" /></label>
+                <label className="b2b-field"><span className="b2b-field-label">고객명</span>
+                  <input className="b2b-input" value={edit.customer} onChange={(e) => setF("customer", e.target.value)} placeholder="이름/연락처" /></label>
+                <label className="b2b-field"><span className="b2b-field-label">구매일</span>
+                  <input className="b2b-input" type="date" value={edit.purchase_date} onChange={(e) => setF("purchase_date", e.target.value)} /></label>
               </div>
               <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">관련 상품</span>
-                  <input className="b2b-input" value={edit.product} onChange={(e) => setF("product", e.target.value)} placeholder="선택" /></label>
-                <label className="b2b-field"><span className="b2b-field-label">유형</span>
+                <label className="b2b-field"><span className="b2b-field-label">구매처</span>
+                  <input className="b2b-input" value={edit.purchase_place} onChange={(e) => setF("purchase_place", e.target.value)} placeholder="공식몰·쿠팡·네이버…" /></label>
+                <label className="b2b-field"><span className="b2b-field-label">구매상품</span>
+                  <input className="b2b-input" value={edit.product} onChange={(e) => setF("product", e.target.value)} placeholder="상품명" /></label>
+              </div>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">클레임 유형</span>
                   <select className="b2b-input" value={edit.category} onChange={(e) => setF("category", e.target.value)}>{VOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
-              </div>
-              <label className="b2b-field"><span className="b2b-field-label">내용 <span className="req">*</span></span>
-                <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} placeholder="고객이 말한 내용" /></label>
-              <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">담당자</span>
-                  <input className="b2b-input" value={edit.assignee} onChange={(e) => setF("assignee", e.target.value)} placeholder="선택" /></label>
-                <label className="b2b-field"><span className="b2b-field-label">손해/보상 금액 (원)</span>
-                  <input className="b2b-input" type="number" value={edit.loss_amount} onChange={(e) => setF("loss_amount", e.target.value)} placeholder="0" /></label>
-              </div>
-              <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">상태</span>
                   <select className="b2b-input" value={edit.status} onChange={(e) => setF("status", e.target.value)}>{VOC_STATUSES.map((s) => <option key={s}>{s}</option>)}</select></label>
-                <div className="b2b-field" />
               </div>
-              <label className="b2b-field"><span className="b2b-field-label">처리 내용/메모</span>
+              <label className="b2b-field"><span className="b2b-field-label">상세내용 <span className="req">*</span></span>
+                <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} placeholder="고객이 말한 내용" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">원인</span>
+                <textarea className="b2b-textarea" rows={2} value={edit.cause} onChange={(e) => setF("cause", e.target.value)} placeholder="왜 발생했는지 (분석)" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">처리내용</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.resolution} onChange={(e) => setF("resolution", e.target.value)} placeholder="어떻게 처리했는지" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">개선 필요사항</span>
+                <textarea className="b2b-textarea" rows={2} value={edit.improvement} onChange={(e) => setF("improvement", e.target.value)} placeholder="재발 방지를 위해 바꿔야 할 것" /></label>
             </div>
             <div className="b2b-modal-foot">
               {edit.id ? <button className="b2b-btn-secondary" onClick={remove} disabled={saving} style={{ color: "#c92a2a" }}>삭제</button> : <span />}
