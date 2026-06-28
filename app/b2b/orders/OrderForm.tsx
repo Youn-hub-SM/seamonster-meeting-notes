@@ -755,10 +755,10 @@ export default function OrderForm({
             </p>
           )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="sm-col sm-gap-3">
             {data.shipments.map((sch, si) => (
               <div key={si} style={{ borderTop: "1px solid var(--sm-border)", paddingTop: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div className="sm-between" style={{ marginBottom: 10 }}>
                   <strong style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>발송 {si + 1}</strong>
                   <button type="button" className="b2b-icon-btn is-danger" onClick={() => removeSchedule(si)} title="발송 일정 삭제">✕</button>
                 </div>
@@ -803,7 +803,7 @@ export default function OrderForm({
                 {/* 이 발송에 담을 상품/수량 */}
                 <div style={{ marginTop: 12 }}>
                   <label className="b2b-field-label" style={{ display: "block", marginBottom: 6 }}>보낼 수량 (상품별)</label>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div className="sm-col" style={{ gap: 6 }}>
                     {data.items.filter((it) => it.product_name.trim()).map((it) => {
                       const oi = data.items.indexOf(it);
                       return (
@@ -832,7 +832,7 @@ export default function OrderForm({
                   <label className="b2b-field-label">
                     운송장 번호 (선택){Math.max(1, Number(sch.box_count) || 1) > 1 ? ` · 박스 ${Math.max(1, Number(sch.box_count) || 1)}개` : ""}
                   </label>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div className="sm-col" style={{ gap: 6 }}>
                     {splitTracking(sch.tracking_no, Math.max(1, Number(sch.box_count) || 1)).map((tn, bi) => (
                       <input
                         key={bi}

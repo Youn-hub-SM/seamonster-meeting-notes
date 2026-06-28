@@ -61,6 +61,20 @@
   padding: 0;
 }
 
+/* ── 유틸 클래스 — 반복되는 인라인 style 대체 (디자인 기준: docs/design-system.md) ── */
+.sm-row { display: flex; align-items: center; }
+.sm-row-wrap { display: flex; align-items: center; flex-wrap: wrap; }
+.sm-col { display: flex; flex-direction: column; }
+.sm-between { display: flex; align-items: center; justify-content: space-between; }
+.sm-muted { color: var(--sm-text-mid); }       /* 보조 텍스트 */
+.sm-faint { color: var(--sm-text-light); }      /* 흐린 텍스트 */
+.sm-nowrap { white-space: nowrap; }
+.sm-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-gap-1 { gap: var(--sm-space-1); }
+.sm-gap-2 { gap: var(--sm-space-2); }
+.sm-gap-3 { gap: var(--sm-space-3); }
+.sm-gap-4 { gap: var(--sm-space-4); }
+
 body {
   font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   color: var(--sm-black);

@@ -85,6 +85,19 @@
 
 사이드바(전역): `.app-sb-tool` `.app-sb-menu-item` `.app-sb-chev` 등 — `app/globals.css`.
 
+### 유틸 클래스 (반복 인라인 대체) — `app/globals.css`
+레이아웃/텍스트의 반복 인라인 `style` 은 아래 유틸로 대체한다(간격 스케일 불변).
+| 클래스 | = |
+|---|---|
+| `.sm-row` / `.sm-row-wrap` | flex + 가운데정렬 (+ 줄바꿈) |
+| `.sm-col` | flex 세로 |
+| `.sm-between` | flex + 양끝정렬 |
+| `.sm-muted` / `.sm-faint` | 보조(#666) / 흐린(#999) 텍스트 |
+| `.sm-nowrap` / `.sm-ellipsis` | 줄바꿈 방지 / 말줄임 |
+| `.sm-gap-1~4` | gap = `--sm-space-1~4` (4·8·12·16) |
+
+> gap/margin 이 스케일(4·8·12·16·24·32)에 맞으면 `.sm-gap-*` 사용, 어중간한 값(6·10·14 등)은 당분간 인라인 유지 → 점진적으로 스케일에 수렴.
+
 ---
 
 ## 6. 적용 현황 & 다음 단계

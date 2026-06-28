@@ -1076,7 +1076,7 @@ export default function OrdersListPage() {
               </label>
 
               {!directDelivery && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="sm-col sm-gap-2">
                   {trackingInput.map((tn, bi) => (
                     <input
                       key={bi}
@@ -1265,7 +1265,7 @@ function ExportPickModal({
           <button className="b2b-modal-close" onClick={onClose}>✕</button>
         </div>
 
-        <div className="b2b-modal-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="b2b-modal-body sm-col" style={{ gap: 14 }}>
           {options.map((o) => (
             <div
               key={o.order_id}
@@ -1375,18 +1375,18 @@ function shipProgress(o: OrderListItem): { done: number; total: number } {
 // 품목 미리보기 — 발주 상품을 "품목명 옵션 ×수량" 으로 나열, 많으면 외 N
 function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
   if (!items || items.length === 0) {
-    return <span style={{ color: "var(--sm-text-light)" }}>-</span>;
+    return <span className="sm-faint">-</span>;
   }
   const MAX = 3;
   const shown = items.slice(0, MAX);
   const rest = items.length - shown.length;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.45 }}>
+    <div className="sm-col" style={{ gap: 2, lineHeight: 1.45 }}>
       {shown.map((it, i) => (
-        <span key={i} style={{ whiteSpace: "nowrap" }}>
+        <span key={i} className="sm-nowrap">
           {it.product_name}
-          {it.spec ? <span style={{ color: "var(--sm-text-light)" }}> · {it.spec}</span> : ""}
-          <span style={{ color: "var(--sm-text-mid)" }}> ×{it.qty}</span>
+          {it.spec ? <span className="sm-faint"> · {it.spec}</span> : ""}
+          <span className="sm-muted"> ×{it.qty}</span>
         </span>
       ))}
       {rest > 0 && (
