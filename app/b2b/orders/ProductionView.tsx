@@ -79,7 +79,7 @@ export default function ProductionView() {
                 <h2 className="b2b-week-title">{d.label}</h2>
                 {isToday && <span className="b2b-week-badge">오늘</span>}
                 {isOverdue && (
-                  <span className="b2b-week-badge" style={{ background: "#FCE4E4", color: "#C92A2A" }}>
+                  <span className="b2b-week-badge" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>
                     지남
                   </span>
                 )}

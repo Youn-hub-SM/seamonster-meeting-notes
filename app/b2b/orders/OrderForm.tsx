@@ -535,7 +535,7 @@ export default function OrderForm({
                 emptyText="일치하는 업체가 없습니다"
               />
               {companies.length === 0 && (
-                <span style={{ fontSize: 10, color: "#c92a2a" }}>
+                <span style={{ fontSize: 10, color: "var(--sm-danger)" }}>
                   등록된 업체가 없습니다 — <Link href="/b2b/companies" style={{ color: "var(--sm-orange)" }}>주소록에서 먼저 등록</Link>
                 </span>
               )}
@@ -668,7 +668,7 @@ export default function OrderForm({
                   placeholder="발송완료 시 필수"
                 />
                 {data.status === "발송완료" && !String(data.tracking_no).trim() && (
-                  <span style={{ fontSize: 10, color: "#c92a2a" }}>발송완료로 저장하려면 송장번호가 필요합니다.</span>
+                  <span style={{ fontSize: 10, color: "var(--sm-danger)" }}>발송완료로 저장하려면 송장번호가 필요합니다.</span>
                 )}
               </div>
               <div className="b2b-field" aria-hidden />
@@ -850,7 +850,7 @@ export default function OrderForm({
           </div>
 
           {splitWarnings.length > 0 && (
-            <div style={{ marginTop: 12, padding: "10px 12px", background: "#FFF4E0", borderRadius: 8, fontSize: 11, color: "#B86E00" }}>
+            <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--sm-warning-bg)", borderRadius: 8, fontSize: 11, color: "var(--sm-warning)" }}>
               {splitWarnings.map((w, i) => (
                 <div key={i}>⚠ {w}</div>
               ))}
@@ -1033,7 +1033,7 @@ export default function OrderForm({
             </div>
             <div className="b2b-totals-row is-grand">
               이익{" "}
-              <strong className="b2b-money" style={{ color: orderMargin.profit >= 0 ? "#22863a" : "#c92a2a" }}>
+              <strong className="b2b-money" style={{ color: orderMargin.profit >= 0 ? "var(--sm-success)" : "var(--sm-danger)" }}>
                 {orderMargin.profit >= 0 ? "+" : ""}{formatMoney(Math.round(orderMargin.profit))}원
                 {orderMargin.revenue > 0 && (
                   <span style={{ marginLeft: 8, fontSize: 12 }}>
@@ -1053,7 +1053,7 @@ export default function OrderForm({
               className="b2b-btn-danger"
               onClick={handleDelete}
               disabled={saving}
-              style={{ border: "1px solid #f5c6c6" }}
+              style={{ border: "1px solid var(--sm-danger-border)" }}
             >
               삭제
             </button>

@@ -85,9 +85,9 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
           <div className="b2b-stat-card-label">누적 매출 (발송완료)</div>
           <div className="b2b-stat-card-value b2b-money">{formatMoney(data.summary.revenue)}</div>
         </div>
-        <div className="b2b-stat-card" style={data.summary.outstanding > 0 ? { borderColor: "#f5c6c6" } : undefined}>
-          <div className="b2b-stat-card-label" style={data.summary.outstanding > 0 ? { color: "#c92a2a" } : undefined}>미수금</div>
-          <div className="b2b-stat-card-value b2b-money" style={data.summary.outstanding > 0 ? { color: "#c92a2a" } : undefined}>
+        <div className="b2b-stat-card" style={data.summary.outstanding > 0 ? { borderColor: "var(--sm-danger-border)" } : undefined}>
+          <div className="b2b-stat-card-label" style={data.summary.outstanding > 0 ? { color: "var(--sm-danger)" } : undefined}>미수금</div>
+          <div className="b2b-stat-card-value b2b-money" style={data.summary.outstanding > 0 ? { color: "var(--sm-danger)" } : undefined}>
             {formatMoney(data.summary.outstanding)}
           </div>
           {data.summary.unpaid_count > 0 && (

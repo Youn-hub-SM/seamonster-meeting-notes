@@ -30,18 +30,18 @@ function buildCols(today: string, gran: "week" | "day"): Col[] {
     const wEnd = addDays(today, 6 - sinceMon);
     const w1 = addDays(wEnd, 7), w2 = addDays(wEnd, 14);
     return [
-      { key: "w0", label: "이번주", sub: `~${md(wEnd)}`, lo: today, hi: wEnd, accent: "#e8590c" },
-      { key: "w1", label: "다음주", sub: `~${md(w1)}`, lo: addDays(wEnd, 1), hi: w1, accent: "#1971c2" },
-      { key: "w2", label: "2주후", sub: `~${md(w2)}`, lo: addDays(w1, 1), hi: w2, accent: "#1971c2" },
-      { key: "w3", label: "3주후+", sub: "", lo: addDays(w2, 1), hi: FAR, accent: "#1971c2" },
+      { key: "w0", label: "이번주", sub: `~${md(wEnd)}`, lo: today, hi: wEnd, accent: "var(--sm-danger)" },
+      { key: "w1", label: "다음주", sub: `~${md(w1)}`, lo: addDays(wEnd, 1), hi: w1, accent: "var(--sm-info)" },
+      { key: "w2", label: "2주후", sub: `~${md(w2)}`, lo: addDays(w1, 1), hi: w2, accent: "var(--sm-info)" },
+      { key: "w3", label: "3주후+", sub: "", lo: addDays(w2, 1), hi: FAR, accent: "var(--sm-info)" },
     ];
   }
   const cols: Col[] = [];
   for (let k = 0; k < 7; k++) {
     const dt = addDays(today, k);
-    cols.push({ key: `d${k}`, label: k === 0 ? "오늘" : md(dt), sub: `(${wd(dt)})`, lo: dt, hi: dt, accent: k === 0 ? "#e8590c" : "#1971c2" });
+    cols.push({ key: `d${k}`, label: k === 0 ? "오늘" : md(dt), sub: `(${wd(dt)})`, lo: dt, hi: dt, accent: k === 0 ? "var(--sm-danger)" : "var(--sm-info)" });
   }
-  cols.push({ key: "later", label: "그 이후", sub: "", lo: addDays(today, 7), hi: FAR, accent: "#1971c2" });
+  cols.push({ key: "later", label: "그 이후", sub: "", lo: addDays(today, 7), hi: FAR, accent: "var(--sm-info)" });
   return cols;
 }
 
@@ -190,7 +190,7 @@ export default function ProductionBoardPage() {
                           <span className="tl-item-name">{r.name}</span>{r.spec ? <span className="tl-item-spec"> {r.spec}</span> : ""}
                         </td>
                         <td className="tl-cell tl-overdue">
-                          <span className="tl-num" style={{ color: r.overdue > 0 ? "#c92a2a" : "#cdd2d8" }}>{r.overdue > 0 ? r.overdue.toLocaleString() : "·"}</span>
+                          <span className="tl-num" style={{ color: r.overdue > 0 ? "var(--sm-danger)" : "#cdd2d8" }}>{r.overdue > 0 ? r.overdue.toLocaleString() : "·"}</span>
                         </td>
                         {cols.map((c) => {
                           const cum = r.cumByCol[c.key] || 0;

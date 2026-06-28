@@ -117,7 +117,7 @@ export default function MarginPage() {
               <tbody>
                 {rows.map(({ p, m }) => {
                   const isExp = expanded === p.id;
-                  const tone = m.profit >= 0 ? "var(--sm-dark)" : "#c92a2a";
+                  const tone = m.profit >= 0 ? "var(--sm-dark)" : "var(--sm-danger)";
                   return (
                     <FragmentRow key={p.id}>
                       <tr>
@@ -131,8 +131,8 @@ export default function MarginPage() {
                               fontWeight: 700,
                               padding: "1px 6px",
                               borderRadius: 10,
-                              background: p.tax_type === "exempt" ? "#E0F0FF" : "#FFF4E0",
-                              color: p.tax_type === "exempt" ? "#0A66C2" : "#B86E00",
+                              background: p.tax_type === "exempt" ? "var(--sm-info-bg)" : "var(--sm-warning-bg)",
+                              color: p.tax_type === "exempt" ? "var(--sm-info)" : "var(--sm-warning)",
                             }}
                           >
                             {TAX_TYPE_LABEL[p.tax_type]}
@@ -182,7 +182,7 @@ export default function MarginPage() {
 }
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: "pos" | "neg" }) {
-  const color = tone === "neg" ? "#c92a2a" : tone === "pos" ? "#22863a" : "var(--sm-dark)";
+  const color = tone === "neg" ? "var(--sm-danger)" : tone === "pos" ? "var(--sm-success)" : "var(--sm-dark)";
   return (
     <div style={{ padding: "8px 14px", background: "var(--sm-bg)", borderRadius: 10, minWidth: 110 }}>
       <div style={{ fontSize: 9, color: "var(--sm-text-light)" }}>{label}</div>

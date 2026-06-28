@@ -12,8 +12,8 @@ type Row = {
 type VMeta = { computedAt: string; spanDays: number; txCount: number; capped: boolean };
 
 const URG_STYLE: Record<string, { bg: string; fg: string }> = {
-  "높음": { bg: "#fce4e4", fg: "#c92a2a" },
-  "중간": { bg: "#fff4e0", fg: "#b86e00" },
+  "높음": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  "중간": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
   "낮음": { bg: "#eef2f6", fg: "#475569" },
 };
 

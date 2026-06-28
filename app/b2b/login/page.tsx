@@ -79,9 +79,9 @@ function LoginForm() {
           {error && (
             <div style={{
               fontSize: 11,
-              color: "#c92a2a",
+              color: "var(--sm-danger)",
               padding: "8px 12px",
-              background: "#fdf1f1",
+              background: "var(--sm-danger-bg)",
               borderRadius: 8,
               marginBottom: 12,
             }}>

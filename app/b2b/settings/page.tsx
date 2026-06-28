@@ -258,7 +258,7 @@ function doGet() {
           <p className="b2b-page-subtitle">Zapier(외부) 알림을 이벤트·상태별로 켜고 끕니다. 히스토리 기록은 항상 모두 남습니다.</p>
         </div>
         <div className="b2b-page-actions">
-          {savedAt && <span style={{ fontSize: 11, color: "#22863a", alignSelf: "center" }}>{savedAt}</span>}
+          {savedAt && <span style={{ fontSize: 11, color: "var(--sm-success)", alignSelf: "center" }}>{savedAt}</span>}
           <button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>
             {saving ? "저장 중..." : "저장"}
           </button>
@@ -352,7 +352,7 @@ function doGet() {
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">CS 코치 프롬프트 (지침)</h2>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {csPromptSaved && <span style={{ fontSize: 11, color: "#22863a" }}>{csPromptSaved}</span>}
+            {csPromptSaved && <span style={{ fontSize: 11, color: "var(--sm-success)" }}>{csPromptSaved}</span>}
             <span style={{ fontSize: 10.5, color: csPromptIsDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>
               {csPromptIsDefault ? "기본값" : "사용자 지정"}
             </span>
@@ -407,7 +407,7 @@ function doGet() {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">매출 구글시트 연동</h2>
-          <span style={{ fontSize: 10.5, color: sheetConnected ? "#22863a" : "var(--sm-text-light)" }}>
+          <span style={{ fontSize: 10.5, color: sheetConnected ? "var(--sm-success)" : "var(--sm-text-light)" }}>
             {sheetConnected ? "● 연동됨" : "○ 미연동"}
           </span>
         </div>
@@ -467,7 +467,7 @@ function doGet() {
               <button className="b2b-btn-secondary" onClick={testSheet} disabled={sheetSaving || !sheetConnected}>연결 테스트</button>
             </div>
             {sheetMsg && (
-              <div style={{ fontSize: 11, color: sheetMsg.startsWith("✅") ? "#22863a" : "var(--sm-text-mid)", marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: sheetMsg.startsWith("✅") ? "var(--sm-success)" : "var(--sm-text-mid)", marginTop: 10 }}>
                 {sheetMsg}
               </div>
             )}
@@ -476,7 +476,7 @@ function doGet() {
       </section>
 
       {!webhookSet && (
-        <div className="b2b-error" style={{ background: "#FFF4E0", color: "#B86E00", border: "1px solid #f0d9a8" }}>
+        <div className="b2b-error" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "1px solid #f0d9a8" }}>
           <strong>Zapier 웹훅 URL(ZAPIER_WEBHOOK_URL)이 설정돼 있지 않습니다.</strong>
           <br />
           지금은 어떤 알림도 외부로 발송되지 않습니다. 아래 설정은 URL 설정 후 그대로 적용됩니다.

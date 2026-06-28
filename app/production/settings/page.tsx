@@ -166,8 +166,8 @@ export default function ProductionSettingsPage() {
           <div style={{ marginBottom: 14, fontSize: 11.5, color: "var(--sm-text-mid)", lineHeight: 1.6 }}>
             상태:{" "}
             {configured
-              ? <span style={{ color: "#22863a", fontWeight: 600 }}>연결됨 ({masked})</span>
-              : <span style={{ color: "#c92a2a", fontWeight: 600 }}>미설정</span>}
+              ? <span style={{ color: "var(--sm-success)", fontWeight: 600 }}>연결됨 ({masked})</span>
+              : <span style={{ color: "var(--sm-danger)", fontWeight: 600 }}>미설정</span>}
             <br />
             박스히어로 앱 → 설정 &gt; 통합 설정 &gt; API 에서 토큰을 발급해 붙여넣으세요. 저장 시 자동으로 연결을 확인합니다.
           </div>
@@ -185,7 +185,7 @@ export default function ProductionSettingsPage() {
           </div>
 
           {msg && (
-            <div style={{ marginTop: 10, fontSize: 11, color: msg.kind === "ok" ? "#22863a" : "#c92a2a", fontWeight: 600 }}>
+            <div style={{ marginTop: 10, fontSize: 11, color: msg.kind === "ok" ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
               {msg.text}
             </div>
           )}
@@ -220,7 +220,7 @@ export default function ProductionSettingsPage() {
           </button>
         </div>
         {leadMsg && (
-          <div style={{ marginTop: 10, fontSize: 11, color: leadMsg.startsWith("저장됨") ? "#22863a" : "#c92a2a", fontWeight: 600 }}>
+          <div style={{ marginTop: 10, fontSize: 11, color: leadMsg.startsWith("저장됨") ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
             {leadMsg}
           </div>
         )}
@@ -298,12 +298,12 @@ export default function ProductionSettingsPage() {
           </div>
         )}
         {demixUnresolved > 0 && (
-          <p style={{ marginTop: 10, fontSize: 10.5, color: "#c92a2a", lineHeight: 1.5 }}>
+          <p style={{ marginTop: 10, fontSize: 10.5, color: "var(--sm-danger)", lineHeight: 1.5 }}>
             ⚠ 도매 발송 중 {demixUnresolved.toLocaleString()}개가 SKU와 연결되지 않아 차감에서 빠집니다 — 해당 발주 상품에 SKU가 지정됐는지 확인하세요.
           </p>
         )}
         {demixMsg && (
-          <div style={{ marginTop: 10, fontSize: 11, color: demixMsg === "저장됨." ? "#22863a" : "#c92a2a", fontWeight: 600 }}>{demixMsg}</div>
+          <div style={{ marginTop: 10, fontSize: 11, color: demixMsg === "저장됨." ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>{demixMsg}</div>
         )}
         <div style={{ marginTop: 14 }}>
           <button className="b2b-btn-primary" onClick={saveDemix} disabled={demixSaving}>{demixSaving ? "저장 중..." : "저장"}</button>

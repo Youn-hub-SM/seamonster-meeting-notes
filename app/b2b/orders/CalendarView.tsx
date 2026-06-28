@@ -22,7 +22,7 @@ const DATE_KIND_LABEL: Record<DateKind, string> = {
 
 const DATE_KIND_COLOR: Record<DateKind, string> = {
   order: "#999999",
-  production: "#0A66C2",
+  production: "var(--sm-info)",
   ship: "#F15A30",
 };
 

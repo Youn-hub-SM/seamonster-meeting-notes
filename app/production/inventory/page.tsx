@@ -177,18 +177,18 @@ export default function InventoryPage() {
           <div className="b2b-stat-card-label">총 권장 생산량</div>
           <div className="b2b-stat-card-value">{stats.needQty.toLocaleString()}</div>
         </div>
-        <div className="b2b-stat-card" style={stats.below > 0 ? { borderColor: "#f5c6c6" } : undefined}>
-          <div className="b2b-stat-card-label" style={stats.below > 0 ? { color: "#c92a2a" } : undefined}>
+        <div className="b2b-stat-card" style={stats.below > 0 ? { borderColor: "var(--sm-danger-border)" } : undefined}>
+          <div className="b2b-stat-card-label" style={stats.below > 0 ? { color: "var(--sm-danger)" } : undefined}>
             안전재고 미달
           </div>
-          <div className="b2b-stat-card-value" style={stats.below > 0 ? { color: "#c92a2a" } : undefined}>
+          <div className="b2b-stat-card-value" style={stats.below > 0 ? { color: "var(--sm-danger)" } : undefined}>
             {stats.below}종
           </div>
         </div>
       </div>
 
       {stats.clamped > 0 && (
-        <div className="inv-deadline-banner" style={{ background: "#fff0f0", borderColor: "#f5c6c6" }}>
+        <div className="inv-deadline-banner" style={{ background: "#fff0f0", borderColor: "var(--sm-danger-border)" }}>
           <span className="inv-dl-text">
             <span className="inv-dl-urgent">⚠ 도매 차감으로 {stats.clamped}종이 레이더에서 빠짐</span>
             <span className="inv-dl-hint"> — 소매 속도가 0이 되어 마감일이 안 잡힙니다({clampedRows.slice(0, 4).map((r) => r.sku).join(", ")}{clampedRows.length > 4 ? " 외" : ""}). 화이트리스트/차감비율을 확인하세요.</span>
@@ -242,7 +242,7 @@ export default function InventoryPage() {
                   </td>
                   <td className="num">
                     {r.stock == null ? <span style={{ color: "var(--sm-text-light)" }}>-</span> : (
-                      <span style={r.belowSafety ? { color: "#c92a2a", fontWeight: 700 } : undefined}>
+                      <span style={r.belowSafety ? { color: "var(--sm-danger)", fontWeight: 700 } : undefined}>
                         {r.stock.toLocaleString()}
                       </span>
                     )}
@@ -318,7 +318,7 @@ export default function InventoryPage() {
         <p className="prod-note">※ 도매 차감 중 SKU가 연결되지 않은 발송 {demixUnresolved.toLocaleString()}개는 차감에서 제외됐습니다(과대생산 안전측).</p>
       )}
       {demixActive && capped && (
-        <p className="prod-note" style={{ color: "#b86e00" }}>※ 출고 표본이 짧아(최근 약 {spanDays}일) 도매 차감 시 소매 속도가 부정확할 수 있습니다 — &lsquo;도매↓&rsquo; 품목은 설정의 근거(BoxHero vs B2B)와 대조해 확인하세요.</p>
+        <p className="prod-note" style={{ color: "var(--sm-warning)" }}>※ 출고 표본이 짧아(최근 약 {spanDays}일) 도매 차감 시 소매 속도가 부정확할 수 있습니다 — &lsquo;도매↓&rsquo; 품목은 설정의 근거(BoxHero vs B2B)와 대조해 확인하세요.</p>
       )}
       {noSkuDemand > 0 && (
         <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>

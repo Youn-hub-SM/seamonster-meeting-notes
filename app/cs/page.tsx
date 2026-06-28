@@ -177,7 +177,7 @@ export default function CsPage() {
         </div>
 
         {error && (
-          <p style={{ color: "#e53e3e", marginBottom: 16, fontSize: 12 }}>{error}</p>
+          <p style={{ color: "var(--sm-danger)", marginBottom: 16, fontSize: 12 }}>{error}</p>
         )}
 
         <button type="submit" className="btn-primary" disabled={query.trim().length < 5}>

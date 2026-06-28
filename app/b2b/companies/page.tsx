@@ -276,10 +276,10 @@ function CompanyModal({
 
   // OCR 강조 스타일
   const aiStyle = (k: keyof CompanyInput): React.CSSProperties =>
-    aiFields.has(k) ? { background: "#FFF9DB", borderColor: "#F0C000" } : {};
+    aiFields.has(k) ? { background: "var(--sm-warning-bg)", borderColor: "#F0C000" } : {};
   const aiBadge = (k: keyof CompanyInput) =>
     aiFields.has(k) ? (
-      <span style={{ marginLeft: 6, fontSize: 8.5, fontWeight: 700, color: "#B86E00", background: "#FFF4E0", padding: "1px 6px", borderRadius: 8 }}>
+      <span style={{ marginLeft: 6, fontSize: 8.5, fontWeight: 700, color: "var(--sm-warning)", background: "var(--sm-warning-bg)", padding: "1px 6px", borderRadius: 8 }}>
         확인 필요
       </span>
     ) : null;
@@ -372,13 +372,13 @@ function CompanyModal({
               </button>
               {data.biz_doc_path && (
                 <>
-                  <span style={{ fontSize: 10.5, color: "#22863a", fontWeight: 600 }}>✓ 첨부됨</span>
+                  <span style={{ fontSize: 10.5, color: "var(--sm-success)", fontWeight: 600 }}>✓ 첨부됨</span>
                   <button type="button" className="b2b-link-btn" onClick={viewDoc} style={{ fontSize: 10.5 }}>보기</button>
                   <button
                     type="button"
                     className="b2b-link-btn"
                     onClick={() => set("biz_doc_path", null)}
-                    style={{ fontSize: 10.5, color: "#c92a2a" }}
+                    style={{ fontSize: 10.5, color: "var(--sm-danger)" }}
                   >
                     제거
                   </button>
@@ -389,7 +389,7 @@ function CompanyModal({
               이미지·PDF(최대 5MB)를 올리면 상호·사업자번호·대표자·주소를 자동으로 채웁니다. 값은 확인 후 저장하세요.
             </div>
             {scanMsg && (
-              <div style={{ fontSize: 10.5, marginTop: 8, color: scanMsg.startsWith("✓") ? "#22863a" : "#c92a2a" }}>{scanMsg}</div>
+              <div style={{ fontSize: 10.5, marginTop: 8, color: scanMsg.startsWith("✓") ? "var(--sm-success)" : "var(--sm-danger)" }}>{scanMsg}</div>
             )}
           </div>
 
@@ -449,10 +449,10 @@ function CompanyModal({
           {(bizCheck === "invalid" || dupCompany) && (
             <div style={{ marginTop: -6, marginBottom: 12, fontSize: 10.5, display: "flex", flexDirection: "column", gap: 3 }}>
               {bizCheck === "invalid" && (
-                <div style={{ color: "#c92a2a" }}>⚠ 사업자등록번호 검증에 실패했습니다 — 숫자를 잘못 읽었을 수 있어요. 원본과 대조해 확인하세요.</div>
+                <div style={{ color: "var(--sm-danger)" }}>⚠ 사업자등록번호 검증에 실패했습니다 — 숫자를 잘못 읽었을 수 있어요. 원본과 대조해 확인하세요.</div>
               )}
               {dupCompany && (
-                <div style={{ color: "#B86E00" }}>⚠ 이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>
+                <div style={{ color: "var(--sm-warning)" }}>⚠ 이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>
               )}
             </div>
           )}

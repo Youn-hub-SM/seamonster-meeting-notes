@@ -95,9 +95,9 @@ export default function PaymentsPage() {
             <div className="b2b-stat-card-label">입금 합계</div>
             <div className="b2b-stat-card-value b2b-money">{formatMoney(data.summary.total_paid)}</div>
           </div>
-          <div className="b2b-stat-card" style={{ borderColor: "#f5c6c6" }}>
-            <div className="b2b-stat-card-label" style={{ color: "#c92a2a" }}>미수금</div>
-            <div className="b2b-stat-card-value b2b-money" style={{ color: "#c92a2a" }}>
+          <div className="b2b-stat-card" style={{ borderColor: "var(--sm-danger-border)" }}>
+            <div className="b2b-stat-card-label" style={{ color: "var(--sm-danger)" }}>미수금</div>
+            <div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-danger)" }}>
               {formatMoney(data.summary.total_remaining)}
             </div>
           </div>
@@ -140,7 +140,7 @@ export default function PaymentsPage() {
                     <td>{o.ship_date || "-"}</td>
                     <td className="num b2b-money">{formatMoney(o.total)}</td>
                     <td className="num b2b-money">{formatMoney(o.paid)}</td>
-                    <td className="num b2b-money" style={{ color: o.remaining > 0 ? "#c92a2a" : "inherit", fontWeight: 600 }}>
+                    <td className="num b2b-money" style={{ color: o.remaining > 0 ? "var(--sm-danger)" : "inherit", fontWeight: 600 }}>
                       {formatMoney(o.remaining)}
                     </td>
                     <td>
@@ -296,7 +296,7 @@ function PaymentModal({
               {" · "}
               입금 <strong className="b2b-money">{formatMoney(paidSum)}</strong>
               {" · "}
-              잔액 <strong className="b2b-money" style={{ color: remaining > 0 ? "#c92a2a" : "#22863a" }}>
+              잔액 <strong className="b2b-money" style={{ color: remaining > 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>
                 {formatMoney(remaining)}
               </strong>
             </div>

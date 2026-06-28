@@ -306,15 +306,15 @@ export default async function B2BDashboard() {
             </div>
           ) : (
             <div className="b2b-stat-card-value" style={{ fontSize: 20 }}>
-              <span style={{ color: "#0A66C2" }}>생산 {stats.todayProduction}</span>
+              <span style={{ color: "var(--sm-info)" }}>생산 {stats.todayProduction}</span>
               <span style={{ color: "var(--sm-text-light)", margin: "0 8px", fontWeight: 400 }}>·</span>
               <span style={{ color: "var(--sm-orange)" }}>발송 {stats.todayShip}</span>
             </div>
           )}
         </div>
 
-        <div className="b2b-stat-card" style={stats.unpaidCount > 0 ? { borderColor: "#f5c6c6" } : undefined}>
-          <div className="b2b-stat-card-label" style={stats.unpaidCount > 0 ? { color: "#c92a2a" } : undefined}>
+        <div className="b2b-stat-card" style={stats.unpaidCount > 0 ? { borderColor: "var(--sm-danger-border)" } : undefined}>
+          <div className="b2b-stat-card-label" style={stats.unpaidCount > 0 ? { color: "var(--sm-danger)" } : undefined}>
             미수금
           </div>
           {stats.unpaidCount === 0 ? (
@@ -323,7 +323,7 @@ export default async function B2BDashboard() {
             </div>
           ) : (
             <>
-              <div className="b2b-stat-card-value b2b-money" style={{ color: "#c92a2a" }}>
+              <div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-danger)" }}>
                 {stats.unpaidTotal.toLocaleString()}
               </div>
               <div className="b2b-stat-card-hint">{stats.unpaidCount}건 입금전/일부입금</div>

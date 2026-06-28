@@ -231,8 +231,8 @@ export default function ProductsPage() {
                               fontWeight: 700,
                               padding: "2px 6px",
                               borderRadius: 10,
-                              background: p.tax_type === "exempt" ? "#E0F0FF" : "#FFF4E0",
-                              color: p.tax_type === "exempt" ? "#0A66C2" : "#B86E00",
+                              background: p.tax_type === "exempt" ? "var(--sm-info-bg)" : "var(--sm-warning-bg)",
+                              color: p.tax_type === "exempt" ? "var(--sm-info)" : "var(--sm-warning)",
                             }}
                           >
                             {TAX_TYPE_LABEL[p.tax_type]}
@@ -242,7 +242,7 @@ export default function ProductsPage() {
                         <td data-label="단위">{p.unit}</td>
                         <td data-label="원가" className="num b2b-money">{p.cost_price.toLocaleString()}</td>
                         <td data-label="판매가" className="num b2b-money">{p.sale_price.toLocaleString()}</td>
-                        <td data-label="마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "#c92a2a" }}>
+                        <td data-label="마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
                           {margin >= 0 ? "+" : ""}{margin.toLocaleString()}
                           {p.sale_price > 0 && (
                             <span style={{ marginLeft: 6, fontSize: 10, color: "var(--sm-text-light)" }}>
@@ -252,7 +252,7 @@ export default function ProductsPage() {
                         </td>
                         <td data-label="상태">
                           {p.active ? (
-                            <span style={{ fontSize: 10, color: "#22863a", fontWeight: 600 }}>사용</span>
+                            <span style={{ fontSize: 10, color: "var(--sm-success)", fontWeight: 600 }}>사용</span>
                           ) : (
                             <span style={{ fontSize: 10, color: "var(--sm-text-light)" }}>미사용</span>
                           )}
@@ -529,7 +529,7 @@ function ProductModal({
               제품 단위 원가 <strong className="b2b-money">{effCost.toLocaleString()}원</strong>
               {" · "}
               마진(배송 제외):{" "}
-              <strong style={{ color: margin >= 0 ? "var(--sm-dark)" : "#c92a2a" }}>
+              <strong style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
                 {margin >= 0 ? "+" : ""}{margin.toLocaleString()}원
                 {data.sale_price > 0 && ` (${marginPct.toFixed(1)}%)`}
               </strong>

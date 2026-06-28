@@ -10,9 +10,9 @@ import { Company, TaxType } from "./b2b-types";
 export const PRODUCTION_STATUSES = ["생산대기", "생산중", "생산완료"] as const;
 export type ProductionStatus = (typeof PRODUCTION_STATUSES)[number];
 export const PRODUCTION_COLORS: Record<ProductionStatus, { bg: string; fg: string }> = {
-  "생산대기": { bg: "#FFF4E0", fg: "#B86E00" },
-  "생산중": { bg: "#E0F0FF", fg: "#0A66C2" },
-  "생산완료": { bg: "#E0F5E5", fg: "#22863A" },
+  "생산대기": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  "생산중": { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
+  "생산완료": { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
 };
 
 // ── 발송 상태 (차수 단위; 발주 status 는 차수들의 롤업) ──
@@ -27,9 +27,9 @@ export type TaxInvoiceStatus = (typeof TAX_INVOICE_STATUSES)[number];
 
 // 색상 (UI 에서 status pill 에 사용).
 export const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
-  "발송대기": { bg: "#FFF4E0", fg: "#B86E00" },
-  "발송완료": { bg: "#E0F5E5", fg: "#22863A" },
-  "취소": { bg: "#FCE4E4", fg: "#C92A2A" },
+  "발송대기": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  "발송완료": { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+  "취소": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
 };
 
 export const STATUS_SHORT: Record<OrderStatus, string> = {
@@ -39,16 +39,16 @@ export const STATUS_SHORT: Record<OrderStatus, string> = {
 };
 
 export const PAYMENT_COLORS: Record<PaymentStatus, { bg: string; fg: string }> = {
-  "입금전": { bg: "#FCE4E4", fg: "#C92A2A" },
-  "일부입금": { bg: "#FFF4E0", fg: "#B86E00" },
-  "입금완료": { bg: "#E0F5E5", fg: "#22863A" },
-  "불필요": { bg: "#EFEFEF", fg: "#666666" },
+  "입금전": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  "일부입금": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  "입금완료": { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+  "불필요": { bg: "var(--sm-border)", fg: "var(--sm-text-mid)" },
 };
 
 export const TAX_INVOICE_COLORS: Record<TaxInvoiceStatus, { bg: string; fg: string }> = {
-  "미발행": { bg: "#FCE4E4", fg: "#C92A2A" },
-  "발행완료": { bg: "#E0F5E5", fg: "#22863A" },
-  "불필요": { bg: "#EFEFEF", fg: "#666666" },
+  "미발행": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  "발행완료": { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+  "불필요": { bg: "var(--sm-border)", fg: "var(--sm-text-mid)" },
 };
 
 // 발송 차수 상태 = 발주 발송 축과 동일 (발송대기/발송완료/취소).

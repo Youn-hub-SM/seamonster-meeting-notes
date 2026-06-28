@@ -35,7 +35,7 @@ export interface Voc {
 
 // 상태별 색 (목록 뱃지)
 export const VOC_STATUS_COLOR: Record<VocStatus, { bg: string; fg: string }> = {
-  대기: { bg: "#FFF4E0", fg: "#B86E00" },
-  진행중: { bg: "#E0F0FF", fg: "#0A66C2" },
-  완료: { bg: "#E0F5E5", fg: "#22863A" },
+  대기: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  진행중: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
+  완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
 };

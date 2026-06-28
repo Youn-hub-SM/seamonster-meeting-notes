@@ -213,7 +213,7 @@ export default function VocPage() {
                 <textarea className="b2b-textarea" rows={2} value={edit.improvement} onChange={(e) => setF("improvement", e.target.value)} placeholder="재발 방지를 위해 바꿔야 할 것" /></label>
             </div>
             <div className="b2b-modal-foot">
-              {edit.id ? <button className="b2b-btn-secondary" onClick={remove} disabled={saving} style={{ color: "#c92a2a" }}>삭제</button> : <span />}
+              {edit.id ? <button className="b2b-btn-secondary" onClick={remove} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button> : <span />}
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setEdit(null)}>취소</button>
                 <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>

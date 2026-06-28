@@ -433,7 +433,7 @@ export default function ProductionSchedulePage() {
               </div>
             </div>
             <div className="b2b-modal-foot">
-              <div>{promoModal.id && <button className="b2b-btn-secondary" onClick={() => deletePromo(promoModal.id!)} disabled={savingPromo} style={{ color: "#c92a2a" }}>삭제</button>}</div>
+              <div>{promoModal.id && <button className="b2b-btn-secondary" onClick={() => deletePromo(promoModal.id!)} disabled={savingPromo} style={{ color: "var(--sm-danger)" }}>삭제</button>}</div>
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPromoModal(null)} disabled={savingPromo}>취소</button>
                 <button className="b2b-btn-primary" onClick={savePromo} disabled={savingPromo}>{savingPromo ? "저장 중..." : "저장"}</button>
