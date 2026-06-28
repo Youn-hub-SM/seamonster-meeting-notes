@@ -96,10 +96,12 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
       <Link href="/" className="app-sb-brand" onClick={onNavigate}>씨몬스터</Link>
 
       <nav className="app-sb-nav">
-        <Link href="/" className={`app-sb-tool ${pathname === "/" ? "is-active" : ""}`} onClick={onNavigate}>
-          <span className="app-sb-emoji">{HOME.emoji}</span>
-          <span>{HOME.label}</span>
-        </Link>
+        <div className={`app-sb-tool-row ${pathname === "/" ? "is-active" : ""}`}>
+          <Link href="/" className="app-sb-tool" onClick={onNavigate}>
+            <span className="app-sb-emoji">{HOME.emoji}</span>
+            <span className="app-sb-tool-label">{HOME.label}</span>
+          </Link>
+        </div>
         {NAV.map((cat) => (
           <div key={cat.label} className="app-sb-group">
             <div className="app-sb-cat">{cat.label}</div>
