@@ -181,17 +181,18 @@ a {
   }
 }
 
-/* Page Title — B2B 와 동일 스케일 */
+/* Page Title — .b2b-page-title 와 동일 스케일(단일 기준) */
 .page-title {
-  font-size: 28px;
+  font-size: 31px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  color: var(--sm-black);
   margin-bottom: 8px;
 }
 
 .page-subtitle {
   color: var(--sm-text-mid);
-  font-size: 14px;
+  font-size: 15px;
   margin-bottom: 32px;
 }
 
@@ -2616,8 +2617,8 @@ a {
 
 /* Responsive */
 @media (max-width: 600px) {
-  .page-title { font-size: 20px; }
-  .detail-title { font-size: 20px; }
+  .page-title { font-size: 18px; }
+  .detail-title { font-size: 18px; }
   .form-textarea { min-height: 200px; }
   .action-item { flex-direction: column; }
 }
