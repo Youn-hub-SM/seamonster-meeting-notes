@@ -69,6 +69,7 @@ export default function VocPage() {
 
   async function save() {
     if (!edit) return;
+    if (!edit.received_at) { setError("접수일을 입력하세요."); return; }
     if (!edit.content.trim()) { setError("상세내용을 입력하세요."); return; }
     setSaving(true); setError("");
     try {
@@ -87,6 +88,7 @@ export default function VocPage() {
   }
 
   async function changeStatus(r: Voc, status: string) {
+    setError("");
     setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, status: status as VocStatus } : x)));
     try {
       const res = await fetch("/api/voc", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id, status }) });
@@ -98,7 +100,7 @@ export default function VocPage() {
   async function remove() {
     if (!edit?.id) return;
     if (!window.confirm("이 VOC를 삭제할까요? 복구되지 않습니다.")) return;
-    setSaving(true);
+    setSaving(true); setError("");
     try {
       const res = await fetch(`/api/voc?id=${encodeURIComponent(edit.id)}`, { method: "DELETE" });
       const j = await res.json();
@@ -179,7 +181,7 @@ export default function VocPage() {
             <div className="b2b-modal-body">
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">접수일</span>
-                  <input className="b2b-input" type="date" value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} /></label>
+                  <input className="b2b-input" type="date" required value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} /></label>
                 <label className="b2b-field"><span className="b2b-field-label">접수채널</span>
                   <input className="b2b-input" value={edit.channel} onChange={(e) => setF("channel", e.target.value)} placeholder="전화·카톡·이메일·리뷰…" /></label>
               </div>

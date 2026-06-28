@@ -28,7 +28,9 @@ export interface Voc {
   assignee: string | null;
   sentiment: VocSentiment | null;
   loss_amount: number;
+  created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 // 상태별 색 (목록 뱃지)
