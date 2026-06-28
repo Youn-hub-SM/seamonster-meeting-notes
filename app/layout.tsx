@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import SiteHeader from "./SiteHeader";
+import AppShell from "./AppShell";
 
 export const metadata: Metadata = {
   title: "씨몬스터 내부 도구",
-  description: "회의 정리 · 문장 교정 AI 도구",
+  description: "씨몬스터 사내 도구 모음 — 세일즈·생산·마케팅",
 };
 
 export default function RootLayout({
@@ -15,8 +15,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body>
-        <SiteHeader />
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
