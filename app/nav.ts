@@ -17,7 +17,7 @@ export const NAV: NavCategory[] = [
           { href: "/b2b", label: "대시보드" },
           { href: "/b2b/orders", label: "발주" },
           { href: "/b2b/companies", label: "업체 주소록" },
-          { href: "/b2b/products", label: "원가표" },
+          { href: "/b2b/products", label: "상품 마스터(원가표)" },
           { href: "/b2b/margin", label: "이익률" },
           { href: "/b2b/reports", label: "매출 집계" },
           { href: "/b2b/payments", label: "입금 확인" },

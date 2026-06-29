@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, type Voc, type VocStatus } from "@/app/lib/voc";
+import { Combobox } from "@/app/b2b/orders/Combobox";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
 
@@ -41,6 +42,12 @@ export default function VocPage() {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // 공용 상품 마스터(자동완성용)
+  const [products, setProducts] = useState<{ id: string; name: string; sku: string | null; spec: string | null }[]>([]);
+  useEffect(() => {
+    fetch("/api/products", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setProducts(j.products || []); }).catch(() => {});
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { 전체: rows.length };
@@ -213,7 +220,10 @@ export default function VocPage() {
                 <label className="b2b-field"><span className="b2b-field-label">구매처</span>
                   <input className="b2b-input" value={edit.purchase_place} onChange={(e) => setF("purchase_place", e.target.value)} placeholder="공식몰·쿠팡·네이버…" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">구매상품</span>
-                  <input className="b2b-input" value={edit.product} onChange={(e) => setF("product", e.target.value)} placeholder="상품명" /></label>
+                  <Combobox value={edit.product}
+                    options={products.map((p) => ({ id: p.id, label: p.name, sub: p.sku || p.spec || undefined }))}
+                    onSelect={(o) => setF("product", o.label)} onType={(t) => setF("product", t)}
+                    allowFreeText placeholder="상품 마스터에서 선택 또는 직접 입력" ariaLabel="구매상품" /></label>
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">제품 생산일</span>

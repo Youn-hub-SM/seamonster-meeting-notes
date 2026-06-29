@@ -126,9 +126,9 @@ export default function ProductsPage() {
     <>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">원가표</h1>
+          <h1 className="b2b-page-title">상품 마스터 (원가표)</h1>
           <p className="b2b-page-subtitle">
-            제품·옵션·원가·판매가를 관리합니다. 원가를 수정하면 이력이 자동 기록됩니다.
+            전사 상품 단일 목록 — 여기서 수정하면 생산관리·발주·VOC 등 모든 곳에 반영됩니다. 원가 수정 시 이력 자동 기록.
             {products.length > 0 && ` (전체 ${products.length}개)`}
           </p>
         </div>
