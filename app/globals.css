@@ -3243,14 +3243,20 @@ a {
   .app-topbar-brand { font-size: 17px; font-weight: 800; color: var(--sm-orange); }
 }
 
+.print-only { display: none; }  /* 화면엔 숨기고 인쇄 시에만 노출 */
+
 /* ── 인쇄(PDF 저장) — VOC 보고서·요청서 등 .voc-print 만 출력 ── */
 @media print {
+  .print-only { display: block !important; }
   .app-sidebar, .app-topbar, .app-sb-backdrop, .no-print { display: none !important; }
   .app-shell, .app-main { display: block !important; }
   .b2b-container { padding: 0 !important; max-width: none !important; }
   .voc-print { box-shadow: none !important; border: none !important; max-width: none !important; padding: 0 !important; }
   body { background: #fff !important; }
+  /* 색(막대·뱃지·헤더 배경) 인쇄 강제 */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   /* 개선요청서 사진: 새 페이지부터, A4 한 장에 2컷(약 125mm) 크게 */
   .voc-photos { page-break-before: always; }
+  .voc-photo-fig { page-break-inside: avoid; }
   .voc-photo { height: 125mm !important; max-height: none !important; object-fit: contain !important; border: none !important; background: #fff !important; page-break-inside: avoid; margin-bottom: 8mm !important; }
 }

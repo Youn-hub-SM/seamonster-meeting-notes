@@ -67,11 +67,11 @@ export const NAV: NavCategory[] = [
         href: "/voc", label: "VOC 관리", emoji: "📣",
         menu: [
           { href: "/voc", label: "처리 상태" },
-          { href: "/voc/stats", label: "통계·리포트" },
+          { href: "/voc/stats", label: "통계·보고서" },
           { href: "/voc/insights", label: "AI 인사이트" },
           { href: "/voc/loss", label: "손해금액 산정" },
           { href: "/voc/reviews", label: "후기 수집" },
-          { href: "/voc/reports", label: "보고서·개선요청서" },
+          { href: "/voc/reports", label: "개선요청서" },
           { href: "/voc/export", label: "검색결과 추출" },
           { href: "/voc/sentiment", label: "긍정·부정 분석" },
           { href: "/voc/settings", label: "설정·탈리 연동" },

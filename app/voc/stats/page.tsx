@@ -6,6 +6,8 @@ import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
 
 type Range = "전체" | "올해" | "90일" | "30일";
 
+const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
+
 function rangeStart(r: Range): string {
   if (r === "전체") return "0000-00-00";
   const now = new Date(Date.now() + 9 * 3600_000);
@@ -149,14 +151,18 @@ export default function VocStatsPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">VOC 통계·리포트</h1>
-          <p className="b2b-page-subtitle">클레임을 유형·채널·기간으로 집계해 한눈에 봅니다. PDF 보고서는 <Link href="/voc/reports" className="change-link">보고서·요청서</Link>에서.</p>
+          <h1 className="b2b-page-title">VOC 통계·보고서</h1>
+          <p className="b2b-page-subtitle no-print">클레임을 유형·채널·기간으로 집계합니다. 제조사 제출용은 <Link href="/voc/reports" className="change-link">개선요청서</Link>에서.</p>
+          <p className="print-only" style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {range === "전체" ? "전체 기간" : `최근 ${range}`}</p>
+        </div>
+        <div className="b2b-page-actions no-print">
+          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || rows.length === 0}>🖨 보고서 인쇄 / PDF</button>
         </div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
 
-      <div className="prod-range-tabs" style={{ marginBottom: 16, flexWrap: "wrap" }}>
+      <div className="prod-range-tabs no-print" style={{ marginBottom: 16, flexWrap: "wrap" }}>
         {(["30일", "90일", "올해", "전체"] as Range[]).map((r) => (
           <button key={r} className={`prod-range-tab ${range === r ? "is-active" : ""}`} onClick={() => setRange(r)}>{r === "전체" ? "전체" : `최근 ${r}`}</button>
         ))}
@@ -222,6 +228,29 @@ export default function VocStatsPage() {
             <BarList title="구매처별" data={byPlace} accent="var(--sm-warning)" />
             <BarList title="상태별" data={byStatus} accent="var(--sm-text-mid)" />
           </div>
+
+          {/* 상세 내역 — 보고서용 전체 목록 */}
+          <section className="b2b-card" style={{ marginTop: 14 }}>
+            <div className="b2b-card-head"><span className="b2b-card-title">상세 내역 ({shown.length}건)</span></div>
+            <div className="b2b-table-wrap">
+              <table className="b2b-table">
+                <thead><tr><th>접수일</th><th>채널</th><th>유형</th><th>내용</th><th>처리내용</th><th className="num">손해(원)</th><th>상태</th></tr></thead>
+                <tbody>
+                  {shown.map((r) => (
+                    <tr key={r.id}>
+                      <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(2)}</td>
+                      <td>{r.channel || "-"}</td>
+                      <td>{r.category}</td>
+                      <td style={{ maxWidth: 280 }}>{r.content}</td>
+                      <td style={{ maxWidth: 200 }}>{r.resolution || "-"}</td>
+                      <td className="num">{r.loss_amount ? r.loss_amount.toLocaleString() : "-"}</td>
+                      <td>{r.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
     </div>
