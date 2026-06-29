@@ -1233,6 +1233,24 @@ a.b2b-history-item:hover {
   .sm-stat-hero-metric { border-left: none; padding-left: 0; min-width: 0; }
 }
 
+/* VOC 처리 단계 보드 — 접수 / 응대·개선중 / 개선완료 (클릭 = 단계 필터) */
+.voc-stages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.voc-stage {
+  text-align: left; cursor: pointer; background: var(--sm-white);
+  border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card, 16px);
+  padding: 13px 16px; display: flex; flex-direction: column; gap: 5px;
+  transition: border-color .12s, background .12s, box-shadow .12s;
+}
+.voc-stage:hover { border-color: var(--sm-orange); }
+.voc-stage.is-active { border-color: var(--sm-orange); background: var(--sm-orange-light, rgba(241, 90, 48, .06)); box-shadow: inset 0 0 0 1px var(--sm-orange); }
+.voc-stage-step { font-size: 11px; color: var(--sm-text-light); font-weight: 600; }
+.voc-stage-top { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: var(--sm-text-mid); }
+.voc-stage.is-active .voc-stage-top { color: var(--sm-black); }
+.voc-stage-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.voc-stage-num { font-size: 26px; font-weight: 800; color: var(--sm-black); line-height: 1.1; }
+.voc-stage-unit { font-size: 13px; font-weight: 600; color: var(--sm-text-light); margin-left: 3px; }
+@media (max-width: 640px) { .voc-stages { grid-template-columns: 1fr; gap: 8px; } }
+
 /* 차트 카드 — 추세 막대 범례 */
 .sm-chart-legend { display: flex; gap: 14px; flex-wrap: wrap; }
 .sm-chart-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--sm-text-mid); }

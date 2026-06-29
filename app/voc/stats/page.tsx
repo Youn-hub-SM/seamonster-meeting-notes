@@ -45,11 +45,11 @@ function countBy(rows: Voc[], key: (r: Voc) => string | null | undefined): [stri
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-// 현황 히어로 도넛/지표 — 상태 구성(완료·진행중·대기)
+// 현황 히어로 도넛/지표 — 처리단계 구성(개선완료·응대개선중·접수)
 const STATUS_META: { key: string; color: string }[] = [
-  { key: "완료", color: "var(--sm-success)" },
-  { key: "진행중", color: "var(--sm-info)" },
-  { key: "대기", color: "var(--sm-warning)" },
+  { key: "개선완료", color: "var(--sm-success)" },
+  { key: "응대·개선중", color: "var(--sm-warning)" },
+  { key: "접수", color: "var(--sm-info)" },
 ];
 
 export default function VocStatsPage() {
@@ -81,8 +81,8 @@ export default function VocStatsPage() {
 
   const kpi = useMemo(() => {
     const total = shown.length;
-    const open = shown.filter((r) => r.status !== "완료").length;
-    const done = shown.filter((r) => r.status === "완료").length;
+    const open = shown.filter((r) => r.status !== "개선완료").length;
+    const done = shown.filter((r) => r.status === "개선완료").length;
     const loss = shown.reduce((s, r) => s + (r.loss_amount || 0), 0);
     const rate = total ? Math.round((done / total) * 100) : 0;
     return { total, open, done, rate, loss };

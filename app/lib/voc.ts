@@ -3,7 +3,7 @@ import { iceboxCost, deliveryCost, coolingCost, suggestBoxes, seasonForDate } fr
 
 export const VOC_SOURCES = ["직접입력", "설문", "리뷰", "기타"] as const;
 export const VOC_CATEGORIES = ["배송", "품질", "포장", "누락", "오배송", "가시", "이물", "기타"] as const;
-export const VOC_STATUSES = ["대기", "진행중", "완료"] as const;
+export const VOC_STATUSES = ["접수", "응대·개선중", "개선완료"] as const;
 export const VOC_SENTIMENTS = ["긍정", "부정", "중립"] as const;
 export const VOC_BUYER_TYPES = ["첫구매", "재구매"] as const;          // 구매자 구분
 export const VOC_COMP_TYPES = ["환불", "반품", "교환·재발송", "추가보상", "부분환불", "없음"] as const; // 보상유형
@@ -84,7 +84,7 @@ export interface Voc {
 
 // 상태별 색 (목록 뱃지)
 export const VOC_STATUS_COLOR: Record<VocStatus, { bg: string; fg: string }> = {
-  대기: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
-  진행중: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
-  완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+  접수: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
+  "응대·개선중": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  개선완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
 };

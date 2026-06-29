@@ -18,7 +18,7 @@ const emptyForm = (): Form => ({
   received_at: TODAY(), customer: "", buyer_type: "",
   purchase_date: "", production_date: "", purchase_place: "", product: "",
   category: "배송", content: "", resolution: "", cause: "",
-  status: "대기", improvement: "", customer_note: "",
+  status: "접수", improvement: "", customer_note: "",
   comp_type: "없음", comp_qty: "1", loss_amount: "", photos: [],
 });
 
@@ -179,7 +179,7 @@ export default function VocPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC 처리 상태</h1>
-          <p className="b2b-page-subtitle">고객의 소리(클레임)를 접수·진행·완료로 관리합니다. 상담 등에서 받은 건은 직접 입력하세요.</p>
+          <p className="b2b-page-subtitle">고객의 소리(클레임)를 <strong>접수 → 응대·개선중 → 개선완료</strong> 3단계로 관리합니다. 상담 등에서 받은 건은 직접 입력하세요.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={openNew}>+ VOC 추가</button>
@@ -188,13 +188,22 @@ export default function VocPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("voc") || error.includes("relation")) ? " — supabase/migrations/023_voc.sql 를 먼저 적용하세요." : ""}</div>}
 
-      <div className="sm-tabbar">
-        {(["전체", ...VOC_STATUSES] as const).map((s) => (
-          <button key={s} className={`sm-tab ${tab === s ? "is-active" : ""}`} onClick={() => setTab(s)}>
-            {s}<span className="sm-tab-count">{counts[s] || 0}</span>
+      <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+        <button className={`sm-tab ${tab === "전체" ? "is-active" : ""}`} onClick={() => setTab("전체")}>
+          전체<span className="sm-tab-count">{rows.length}</span>
+        </button>
+        <input className="b2b-input" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240, maxWidth: "100%" }} />
+      </div>
+
+      {/* 처리 단계 — 씨몬스터 VOC 기본 3단계(접수 → 응대·개선중 → 개선완료). 클릭 시 해당 단계만 필터 */}
+      <div className="voc-stages">
+        {VOC_STATUSES.map((s, i) => (
+          <button key={s} className={`voc-stage ${tab === s ? "is-active" : ""}`} onClick={() => setTab(tab === s ? "전체" : s)}>
+            <span className="voc-stage-step">{i + 1}단계</span>
+            <span className="voc-stage-top"><span className="voc-stage-dot" style={{ background: VOC_STATUS_COLOR[s].fg }} />{s}</span>
+            <span className="voc-stage-num">{counts[s] || 0}<span className="voc-stage-unit">건</span></span>
           </button>
         ))}
-        <input className="b2b-input sm-tab-search" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {loading ? (
@@ -205,29 +214,37 @@ export default function VocPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr>
-              <th>접수일</th><th>고객</th><th>구매자</th><th>구매상품</th><th>유형</th><th>상세내용</th><th>상태</th>
+              <th>접수일</th><th>구매채널</th><th>고객명</th><th>구매</th><th>구매일</th><th>구매상품</th><th>유형</th><th>특이사항</th><th>상세내용</th><th>처리내용</th><th>단계</th>
             </tr></thead>
             <tbody>
-              {shown.map((r) => (
+              {shown.map((r) => {
+                const sc = VOC_STATUS_COLOR[r.status] || { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
+                return (
                 <tr key={r.id} onClick={() => openEdit(r)} style={{ cursor: "pointer" }}>
                   <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
-                  <td>{r.customer || "-"}</td>
-                  <td>{r.buyer_type || "-"}</td>
-                  <td>{r.product || "-"}</td>
+                  <td>{r.purchase_place || "-"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{r.buyer_type || "-"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{r.purchase_date?.slice(5) || "-"}</td>
+                  <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.category}</td>
-                  <td style={{ maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.content}</td>
+                  <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.customer_note || ""}>{r.customer_note || "-"}</td>
+                  <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
+                  <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.resolution || ""}>{r.resolution || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <select
                       value={r.status}
                       onChange={(e) => changeStatus(r, e.target.value)}
                       className="b2b-input"
-                      style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: VOC_STATUS_COLOR[r.status].bg, color: VOC_STATUS_COLOR[r.status].fg, fontWeight: 700, border: "none", borderRadius: 8 }}
+                      style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: sc.bg, color: sc.fg, fontWeight: 700, border: "none", borderRadius: 8 }}
                     >
                       {VOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      {!VOC_STATUSES.includes(r.status) && <option value={r.status}>{r.status}</option>}
                     </select>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
