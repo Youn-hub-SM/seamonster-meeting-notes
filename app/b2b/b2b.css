@@ -1215,6 +1215,24 @@ a.b2b-history-item:hover {
 .prod-cal-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 .prod-cal-legend-q { color: var(--sm-text-light); font-size: 10.5px; }
 
+/* ── VOC 통계 — 현황 히어로(도넛+총계+구분지표) & 차트 (레퍼런스풍, 시원한 레이아웃) ── */
+.voc-hero { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; padding: 22px 24px; }
+.voc-hero-chart { flex-shrink: 0; }
+.voc-hero-body { flex: 1; min-width: 240px; }
+.voc-hero-label { font-size: 13px; color: var(--sm-text-mid); }
+.voc-hero-total { font-size: 30px; font-weight: 800; color: var(--sm-black); letter-spacing: -.5px; margin-top: 2px; }
+.voc-hero-breakdown { display: flex; flex-wrap: wrap; gap: 14px 0; margin-top: 16px; border-top: 1px solid var(--sm-border-light); padding-top: 14px; }
+.voc-hero-metric { flex: 1; min-width: 110px; padding: 0 18px; border-left: 1px solid var(--sm-border-light); display: flex; flex-direction: column; gap: 5px; }
+.voc-hero-metric:first-child { border-left: none; padding-left: 0; }
+.voc-hero-metric-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--sm-text-mid); }
+.voc-hero-metric-value { font-size: 20px; font-weight: 800; }
+.voc-hero-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+
+/* 차트 카드 — 추세 막대 */
+.voc-chart-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.voc-chart-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--sm-text-mid); }
+.voc-chart-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
 /* 우측 생산 목록 */
 .prod-cal-side-head { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .prod-cal-side-sub { font-size: 11px; font-weight: 500; color: var(--sm-text-light); margin-left: 6px; }

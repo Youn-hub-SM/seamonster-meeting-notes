@@ -114,15 +114,79 @@ function PieCard({ title, data, fmt }: { title: string; data: [string, number][]
   );
 }
 
-function KpiCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
+// 도넛(중앙 총계). colors 미지정 시 PIE_COLORS 순환.
+function Donut({ data, colors, size = 132, center, centerSub }: { data: [string, number][]; colors?: string[]; size?: number; center: string; centerSub?: string }) {
+  const total = data.reduce((s, [, n]) => s + n, 0);
+  const R = 42, W = 18, cx = 60, cy = 60, C = 2 * Math.PI * R;
+  let off = 0;
   return (
-    <section className="b2b-card" style={{ padding: "16px 18px" }}>
-      <div className="sm-faint" style={{ fontSize: 12, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 800, color: accent || "var(--sm-black)" }}>{value}</div>
-      {sub && <div className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>{sub}</div>}
-    </section>
+    <svg viewBox="0 0 120 120" width={size} height={size} style={{ flexShrink: 0 }}>
+      <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--sm-bg-subtle)" strokeWidth={W} />
+      {total > 0 && data.map(([label, n], i) => {
+        if (n <= 0) return null;
+        const len = (n / total) * C;
+        const seg = (
+          <circle key={i} cx={cx} cy={cy} r={R} fill="none" stroke={colors ? colors[i] : PIE_COLORS[i % PIE_COLORS.length]}
+            strokeWidth={W} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-off}
+            transform={`rotate(-90 ${cx} ${cy})`}><title>{`${label} ${Math.round((n / total) * 100)}%`}</title></circle>
+        );
+        off += len;
+        return seg;
+      })}
+      <text x={cx} y={cy - 1} textAnchor="middle" fontSize="23" fontWeight="800" fill="var(--sm-black)">{center}</text>
+      {centerSub && <text x={cx} y={cy + 15} textAnchor="middle" fontSize="11" fill="var(--sm-text-light)">{centerSub}</text>}
+    </svg>
   );
 }
+
+// 축 눈금용 — 보기 좋은 상한값(1/2/5 ×10ⁿ)
+function niceCeil(n: number): number {
+  if (n <= 5) return 5;
+  const p = Math.pow(10, Math.floor(Math.log10(n)));
+  const r = n / p;
+  const m = r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10;
+  return m * p;
+}
+
+// 추세 세로 막대 차트 — 가로 그리드선 + Y축 눈금 + X축 라벨(레퍼런스풍)
+function TrendChart({ data }: { data: { label: string; count: number; loss: number }[] }) {
+  if (!data.length) return <div className="sm-faint" style={{ fontSize: 13 }}>데이터 없음</div>;
+  const top = niceCeil(Math.max(...data.map((d) => d.count), 1));
+  const W = 760, H = 230, padL = 28, padR = 10, padT = 12, padB = 28;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const slot = plotW / data.length, bw = Math.min(46, slot * 0.5);
+  const y = (v: number) => padT + plotH - (v / top) * plotH;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(top * f));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+      {ticks.map((t, i) => (
+        <g key={i}>
+          <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--sm-border-light)" strokeWidth="1" />
+          <text x={padL - 6} y={y(t) + 3.5} textAnchor="end" fontSize="10.5" fill="var(--sm-text-light)">{t}</text>
+        </g>
+      ))}
+      {data.map((d, i) => {
+        const cx = padL + slot * i + slot / 2;
+        const yy = y(d.count);
+        return (
+          <g key={i}>
+            <rect x={cx - bw / 2} y={yy} width={bw} height={Math.max(0, padT + plotH - yy)} rx={4} fill="var(--sm-orange)">
+              <title>{`${d.label} · ${d.count}건${d.loss > 0 ? ` · 손해 ${d.loss.toLocaleString()}원` : ""}`}</title>
+            </rect>
+            <text x={cx} y={H - 9} textAnchor="middle" fontSize="11" fill="var(--sm-text-mid)">{d.label}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// 현황 히어로 도넛/지표 — 상태 구성(완료·진행중·대기)
+const STATUS_META: { key: string; color: string }[] = [
+  { key: "완료", color: "var(--sm-success)" },
+  { key: "진행중", color: "var(--sm-info)" },
+  { key: "대기", color: "var(--sm-warning)" },
+];
 
 export default function VocStatsPage() {
   const [rows, setRows] = useState<Voc[]>([]);
@@ -168,7 +232,7 @@ export default function VocStatsPage() {
   const byBuyer = useMemo(() => countBy(shown, (r) => r.buyer_type), [shown]);
   const bySource = useMemo(() => countBy(shown, (r) => r.source), [shown]);
   const byPlace = useMemo(() => countBy(shown, (r) => r.purchase_place), [shown]);
-  const byStatus = useMemo(() => countBy(shown, (r) => r.status), [shown]);
+  const statusComp = useMemo(() => STATUS_META.map((s) => ({ ...s, n: shown.filter((r) => r.status === s.key).length })), [shown]);
 
   // 단위(주/월)별 접수 건수 + 손해금액 — 시간순
   const trend = useMemo(() => {
@@ -227,12 +291,26 @@ export default function VocStatsPage() {
         <div className="b2b-empty"><div className="b2b-empty-icon">📭</div>아직 집계할 VOC가 없습니다. <Link href="/voc" className="change-link">처리 상태</Link>에서 먼저 등록하세요.</div>
       ) : (
         <>
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", marginBottom: 16 }}>
-            <KpiCard label="총 접수" value={`${kpi.total}건`} />
-            <KpiCard label="진행 중(미완료)" value={`${kpi.open}건`} accent="var(--sm-warning)" />
-            <KpiCard label="완료율" value={`${kpi.rate}%`} sub={`${kpi.done}건 완료`} accent="var(--sm-success)" />
-            <KpiCard label="총 손해/보상" value={`${kpi.loss.toLocaleString()}원`} accent="var(--sm-danger)" />
-          </div>
+          <section className="b2b-card voc-hero" style={{ marginBottom: 16 }}>
+            <div className="voc-hero-chart">
+              <Donut data={statusComp.map((s) => [s.key, s.n] as [string, number])} colors={statusComp.map((s) => s.color)} center={String(kpi.total)} centerSub="총 접수" />
+            </div>
+            <div className="voc-hero-body">
+              <div className="voc-hero-label">총 접수</div>
+              <div className="voc-hero-total">{kpi.total}건</div>
+              <div className="voc-hero-label" style={{ marginTop: 6 }}>총 손해/보상 <strong style={{ color: "var(--sm-danger)" }}>{kpi.loss.toLocaleString()}원</strong></div>
+              <div className="voc-hero-breakdown">
+                {statusComp.map((s) => (
+                  <div key={s.key} className="voc-hero-metric">
+                    <span className="voc-hero-metric-label"><span className="voc-hero-dot" style={{ background: s.color }} />{s.key}</span>
+                    <span className="voc-hero-metric-value" style={{ color: s.color }}>
+                      {s.n}건 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 600 }}>{kpi.total ? Math.round((s.n / kpi.total) * 100) : 0}%</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
 
           {/* 접수·손해 추세 — 주별/월별 토글 */}
           <section className="b2b-card">
@@ -244,26 +322,12 @@ export default function VocStatsPage() {
                 ))}
               </div>
             </div>
-            {trend.length === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 13 }}>데이터 없음</div>
-            ) : (
-              <div className="sm-col" style={{ gap: 9 }}>
-                {trend.map((t) => {
-                  const maxC = Math.max(...trend.map((x) => x.count), 1);
-                  return (
-                    <div key={t.key} className="sm-col" style={{ gap: 3 }}>
-                      <div className="sm-between" style={{ fontSize: 13 }}>
-                        <span>{t.label}</span>
-                        <span><strong>{t.count}건</strong>{t.loss > 0 && <span style={{ marginLeft: 8, color: "var(--sm-danger)" }}>손해 {t.loss.toLocaleString()}원</span>}</span>
-                      </div>
-                      <div style={{ height: 7, borderRadius: 4, background: "var(--sm-bg-subtle)", overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${Math.round((t.count / maxC) * 100)}%`, background: "var(--sm-orange)", borderRadius: 4 }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <div className="sm-between" style={{ marginBottom: 6 }}>
+              <span className="sm-faint" style={{ fontSize: 11 }}>단위 : 건</span>
+              <span className="voc-chart-legend"><span><i style={{ background: "var(--sm-orange)" }} />접수 건수</span></span>
+            </div>
+            <TrendChart data={trend} />
+            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>막대에 마우스를 올리면 건수·손해금액이 표시됩니다.</p>
           </section>
 
           {/* 손해금액 집계 */}
@@ -274,12 +338,11 @@ export default function VocStatsPage() {
             </div>
           )}
 
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginTop: 14 }}>
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginTop: 16 }}>
             <PieCard title="클레임 유형별" data={byCategory} />
             <PieCard title="구매자 구분" data={byBuyer} />
             <PieCard title="수집경로별" data={bySource} />
             <PieCard title="구매처별" data={byPlace} />
-            <PieCard title="상태별" data={byStatus} />
           </div>
 
           {/* 상세 내역 — 보고서용 전체 목록 */}
