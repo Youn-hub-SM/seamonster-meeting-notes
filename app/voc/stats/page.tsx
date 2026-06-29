@@ -4,17 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
 
-type Range = "전체" | "올해" | "90일" | "30일";
+type RMode = "7일" | "14일" | "30일" | "custom";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
-
-function rangeStart(r: Range): string {
-  if (r === "전체") return "0000-00-00";
-  const now = new Date(Date.now() + 9 * 3600_000);
-  if (r === "올해") return `${now.getFullYear()}-01-01`;
-  const days = r === "90일" ? 90 : 30;
-  const d = new Date(now.getTime() - days * 86400_000);
-  return d.toISOString().slice(0, 10);
+// 최근 N일 시작일(오늘 포함)
+function presetStart(days: number): string {
+  return new Date(Date.now() + 9 * 3600_000 - (days - 1) * 86400_000).toISOString().slice(0, 10);
 }
 
 type Unit = "주별" | "월별";
@@ -133,7 +128,9 @@ export default function VocStatsPage() {
   const [rows, setRows] = useState<Voc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [range, setRange] = useState<Range>("올해");
+  const [mode, setMode] = useState<RMode>("30일");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [unit, setUnit] = useState<Unit>("주별");
 
   const load = useCallback(async () => {
@@ -147,10 +144,12 @@ export default function VocStatsPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const shown = useMemo(() => {
-    const from = rangeStart(range);
-    return rows.filter((r) => (r.received_at || "") >= from);
-  }, [rows, range]);
+  const period = useMemo(() => {
+    if (mode === "custom") return { from: fromDate || "0000-00-00", to: toDate || TODAY(), label: `${fromDate || "처음"} ~ ${toDate || TODAY()}` };
+    const days = mode === "7일" ? 7 : mode === "14일" ? 14 : 30;
+    return { from: presetStart(days), to: TODAY(), label: `최근 ${mode}` };
+  }, [mode, fromDate, toDate]);
+  const shown = useMemo(() => rows.filter((r) => { const d = r.received_at || ""; return d >= period.from && d <= period.to; }), [rows, period]);
 
   const kpi = useMemo(() => {
     const total = shown.length;
@@ -197,7 +196,7 @@ export default function VocStatsPage() {
         <div>
           <h1 className="b2b-page-title">VOC 통계·보고서</h1>
           <p className="b2b-page-subtitle no-print">클레임을 유형·채널·기간으로 집계합니다. 제조사 제출용은 <Link href="/voc/reports" className="change-link">개선요청서</Link>에서.</p>
-          <p className="print-only" style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {range === "전체" ? "전체 기간" : `최근 ${range}`}</p>
+          <p className="print-only" style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
         </div>
         <div className="b2b-page-actions no-print">
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || rows.length === 0}>🖨 보고서 인쇄 / PDF</button>
@@ -206,10 +205,20 @@ export default function VocStatsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
 
-      <div className="prod-range-tabs no-print" style={{ marginBottom: 16, flexWrap: "wrap" }}>
-        {(["30일", "90일", "올해", "전체"] as Range[]).map((r) => (
-          <button key={r} className={`prod-range-tab ${range === r ? "is-active" : ""}`} onClick={() => setRange(r)}>{r === "전체" ? "전체" : `최근 ${r}`}</button>
-        ))}
+      <div className="no-print" style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="prod-range-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
+          {(["7일", "14일", "30일"] as RMode[]).map((m) => (
+            <button key={m} className={`prod-range-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
+          ))}
+          <button className={`prod-range-tab ${mode === "custom" ? "is-active" : ""}`} onClick={() => setMode("custom")}>직접지정</button>
+        </div>
+        {mode === "custom" && (
+          <span className="sm-row" style={{ gap: 6 }}>
+            <input className="b2b-input" type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} style={{ width: "auto" }} />
+            <span className="sm-faint">~</span>
+            <input className="b2b-input" type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} style={{ width: "auto" }} />
+          </span>
+        )}
       </div>
 
       {loading ? (

@@ -4,22 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
 
-// 제조사 제출용 개선요청서 — 기간(7/14/30일) 동안의 클레임·손해를 모아 "이런 일이 있었고 이만큼 손해가 났으니 개선해달라" 형식으로 출력.
-type Range = "7일" | "14일" | "30일" | "전체";
+// 제조사 제출용 개선요청서 — 기간(7/14/30일·직접지정) 동안의 클레임·손해를 모아 "이런 일이 있었고 이만큼 손해가 났으니 개선해달라" 형식으로 출력.
+type RMode = "7일" | "14일" | "30일" | "custom";
 
-function rangeStart(r: Range): string {
-  if (r === "전체") return "0000-00-00";
-  const now = new Date(Date.now() + 9 * 3600_000);
-  const days = r === "7일" ? 7 : r === "14일" ? 14 : 30;
-  return new Date(now.getTime() - (days - 1) * 86400_000).toISOString().slice(0, 10);
-}
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+function presetStart(days: number): string {
+  return new Date(Date.now() + 9 * 3600_000 - (days - 1) * 86400_000).toISOString().slice(0, 10);
+}
 
 export default function VocRequestPage() {
   const [rows, setRows] = useState<Voc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [range, setRange] = useState<Range>("14일");
+  const [mode, setMode] = useState<RMode>("14일");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [productFilter, setProductFilter] = useState<string>("");
   const [recipient, setRecipient] = useState<string>("");
 
@@ -40,13 +39,17 @@ export default function VocRequestPage() {
     return [...s].sort((a, b) => a.localeCompare(b, "ko"));
   }, [rows]);
 
-  const from = rangeStart(range);
+  const { from, to } = useMemo(() => {
+    if (mode === "custom") return { from: fromDate || "0000-00-00", to: toDate || TODAY() };
+    const days = mode === "7일" ? 7 : mode === "14일" ? 14 : 30;
+    return { from: presetStart(days), to: TODAY() };
+  }, [mode, fromDate, toDate]);
   const items = useMemo(() => {
     return rows
-      .filter((r) => (r.received_at || "") >= from)
+      .filter((r) => { const d = r.received_at || ""; return d >= from && d <= to; })
       .filter((r) => !productFilter || r.product === productFilter)
       .sort((a, b) => (a.received_at || "").localeCompare(b.received_at || ""));
-  }, [rows, from, productFilter]);
+  }, [rows, from, to, productFilter]);
 
   const summary = useMemo(() => {
     const total = items.length;
@@ -60,8 +63,8 @@ export default function VocRequestPage() {
   // 기간 내 모든 사진(어느 건의 것인지 캡션과 함께)
   const photos = useMemo(() => items.flatMap((r) => (r.photos || []).map((url) => ({ url, label: `${r.received_at?.slice(5)} · ${r.category}` }))), [items]);
 
-  const rangeLabel = range === "전체" ? "전체 기간" : `최근 ${range}`;
-  const periodText = range === "전체" ? "전체 기간" : `${from} ~ ${TODAY()}`;
+  const rangeLabel = mode === "custom" ? "직접지정" : `최근 ${mode}`;
+  const periodText = `${from === "0000-00-00" ? "처음" : from} ~ ${to}`;
 
   return (
     <div className="b2b-container">
@@ -80,10 +83,18 @@ export default function VocRequestPage() {
       {/* 컨트롤 */}
       <div className="no-print" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <div className="prod-range-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
-          {(["7일", "14일", "30일", "전체"] as Range[]).map((r) => (
-            <button key={r} className={`prod-range-tab ${range === r ? "is-active" : ""}`} onClick={() => setRange(r)}>{r === "전체" ? "전체" : `최근 ${r}`}</button>
+          {(["7일", "14일", "30일"] as RMode[]).map((m) => (
+            <button key={m} className={`prod-range-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
           ))}
+          <button className={`prod-range-tab ${mode === "custom" ? "is-active" : ""}`} onClick={() => setMode("custom")}>직접지정</button>
         </div>
+        {mode === "custom" && (
+          <span className="sm-row" style={{ gap: 6 }}>
+            <input className="b2b-input" type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} style={{ width: "auto" }} />
+            <span className="sm-faint">~</span>
+            <input className="b2b-input" type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} style={{ width: "auto" }} />
+          </span>
+        )}
         <select className="b2b-input" value={productFilter} onChange={(e) => setProductFilter(e.target.value)} style={{ width: "auto" }}>
           <option value="">전체 제품</option>
           {products.map((p) => <option key={p} value={p}>{p}</option>)}
