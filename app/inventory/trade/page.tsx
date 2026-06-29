@@ -7,6 +7,7 @@ import TxnTable from "../TxnTable";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
 type Preview = { summary: { valid: number; errors: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
+const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 export default function TradePage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -16,6 +17,10 @@ export default function TradePage() {
   const [importing, setImporting] = useState(false);
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
+  // 엑셀 업로드 옵션 (양식엔 유형이 없어 업로드 시 선택)
+  const [ioType, setIoType] = useState<"입고" | "출고">("입고");
+  const [ioDate, setIoDate] = useState(TODAY());
+  const [ioPartner, setIoPartner] = useState("");
 
   const load = useCallback(async () => {
     const j = await (await fetch("/api/inventory", { cache: "no-store" })).json();
@@ -28,7 +33,11 @@ export default function TradePage() {
   async function handleFile(file: File) {
     setImporting(true); setError("");
     try {
-      const fd = new FormData(); fd.append("file", file);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("type", ioType);
+      fd.append("txn_date", ioDate);
+      fd.append("partner", ioPartner);
       const res = await fetch("/api/inventory/txns/import", { method: "POST", body: fd });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
@@ -51,19 +60,34 @@ export default function TradePage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">구매 및 판매</h1><p className="b2b-page-subtitle">입고(매입)·출고(판매·소진)를 기록합니다. <strong>엑셀로 한 번에</strong> 올리거나, 한 건씩 입력하세요.</p></div>
+        <div><h1 className="b2b-page-title">구매 및 판매</h1><p className="b2b-page-subtitle">입고(매입)·출고(판매·소진)를 기록합니다. <strong>엑셀(SKU·수량·단가)로 한 번에</strong> 올리거나 한 건씩 입력하세요.</p></div>
         <div className="b2b-page-actions">
-          <a className="b2b-btn-secondary" href="/api/inventory/txns/template" title="입출고 엑셀 양식 내려받기">엑셀 양식</a>
-          <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
-            {importing ? "분석 중…" : "엑셀 업로드"}
-            <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
-          </label>
+          <a className="b2b-btn-secondary" href="/api/inventory/txns/template" title="SKU·수량·단가 엑셀 양식">엑셀 양식</a>
           <button className="b2b-btn-primary" onClick={() => setOpen(true)}>+ 입고/판매 기록</button>
         </div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+
+      {/* 엑셀 일괄 입력 — 양식에 유형이 없어 업로드 시 구매/판매 선택 */}
+      <section className="b2b-card" style={{ marginBottom: 16 }}>
+        <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <span className="b2b-card-title" style={{ marginRight: 4 }}>엑셀 일괄 입력</span>
+          <div className="sm-tabs">
+            <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => setIoType("입고")}>구매(입고)</button>
+            <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => setIoType("출고")}>판매(출고)</button>
+          </div>
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
+            <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} style={{ width: "auto" }} /></label>
+          <input className="b2b-input" placeholder={ioType === "입고" ? "매입처(선택)" : "판매처(선택)"} value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} style={{ width: 150 }} />
+          <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer", marginLeft: "auto" }}>
+            {importing ? "분석 중…" : "엑셀 업로드"}
+            <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+          </label>
+        </div>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>양식 = <strong>SKU · 수량 · 단가</strong>. 위에서 구매/판매를 고르고 업로드 → 미리보기 후 반영합니다. (거래일·거래처는 파일 전체에 적용)</p>
+      </section>
 
       <section className="b2b-card">
         <div className="b2b-card-head"><span className="b2b-card-title">입고·출고 내역</span></div>

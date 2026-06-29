@@ -15,7 +15,7 @@ export async function GET() {
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF3F8" } };
     for (const ex of TXN_XLSX_EXAMPLE) ws.addRow(ex);
-    ws.columns.forEach((c, i) => { c.width = TXN_XLSX_HEADERS[i] === "품목명" || TXN_XLSX_HEADERS[i] === "메모" ? 20 : 12; });
+    ws.columns.forEach((c) => { c.width = 16; });
 
     const buf = await wb.xlsx.writeBuffer();
     return new NextResponse(buf as ArrayBuffer, {
