@@ -71,6 +71,7 @@ export const NAV: NavCategory[] = [
           { href: "/voc/insights", label: "AI 인사이트" },
           { href: "/voc/loss", label: "손해금액 산정" },
           { href: "/voc/reports", label: "개선요청서" },
+          { href: "/voc/surveys", label: "설문 응답(Tally)" },
           { href: "/voc/settings", label: "설정·탈리 연동" },
         ],
       },

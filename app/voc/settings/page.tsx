@@ -71,7 +71,7 @@ export default function VocSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설정 · 탈리(Tally) 연동</h1>
-          <p className="b2b-page-subtitle">Tally 설문 응답을 VOC(수집경로=설문)로 가져옵니다. 모든 질문·답변은 ‘내용’에 그대로 저장되고, 유형·사진만 자동 추출합니다.</p>
+          <p className="b2b-page-subtitle">Tally 설문 응답을 <a href="/voc/surveys" className="change-link">설문 응답 수집</a>으로 가져옵니다(불만 클레임과 분리). 모든 질문·답변이 그대로 보존되고 사진도 함께 저장됩니다.</p>
         </div>
       </header>
 
