@@ -75,6 +75,50 @@ function BarList({ title, data, accent, fmt }: { title: string; data: [string, n
   );
 }
 
+// 카테고리 구분용 팔레트(차트 전용 — 디자인 토큰과 별개, design-system 의 categorical 예외)
+const PIE_COLORS = ["#F15A30", "#1971C2", "#22863A", "#B08800", "#C92A2A", "#7C3AED", "#0EA5A4", "#E8590C", "#6B7280", "#DB2777"];
+
+function PieCard({ title, data, fmt }: { title: string; data: [string, number][]; fmt?: (n: number) => string }) {
+  const total = data.reduce((s, [, n]) => s + n, 0);
+  const R = 42, W = 20, cx = 60, cy = 60, C = 2 * Math.PI * R;
+  let off = 0;
+  return (
+    <section className="b2b-card">
+      <div className="b2b-card-head"><span className="b2b-card-title">{title}</span></div>
+      {total === 0 ? (
+        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 13 }}>데이터 없음</div>
+      ) : (
+        <div className="sm-row-wrap" style={{ gap: 16, alignItems: "center" }}>
+          <svg viewBox="0 0 120 120" width="118" height="118" style={{ flexShrink: 0 }}>
+            {data.map(([label, n], i) => {
+              const len = (n / total) * C;
+              const seg = (
+                <circle key={i} cx={cx} cy={cy} r={R} fill="none" stroke={PIE_COLORS[i % PIE_COLORS.length]}
+                  strokeWidth={W} strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-off}
+                  transform={`rotate(-90 ${cx} ${cy})`}><title>{`${label} ${Math.round((n / total) * 100)}%`}</title></circle>
+              );
+              off += len;
+              return seg;
+            })}
+            {!fmt && <text x={cx} y={cy + 6} textAnchor="middle" fontSize="19" fontWeight="800" fill="var(--sm-black)">{total}</text>}
+          </svg>
+          <div className="sm-col" style={{ gap: 5, minWidth: 130, flex: 1 }}>
+            {data.map(([label, n], i) => (
+              <div key={i} className="sm-between" style={{ fontSize: 13, gap: 8 }}>
+                <span className="sm-row" style={{ gap: 6, minWidth: 0 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                  <span className="sm-ellipsis">{label}</span>
+                </span>
+                <span style={{ whiteSpace: "nowrap" }}><strong>{fmt ? fmt(n) : n}</strong> <span className="sm-faint">{Math.round((n / total) * 100)}%</span></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function KpiCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
   return (
     <section className="b2b-card" style={{ padding: "16px 18px" }}>
@@ -216,17 +260,17 @@ export default function VocStatsPage() {
           {/* 손해금액 집계 */}
           {kpi.loss > 0 && (
             <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}>
-              <BarList title="유형별 손해금액(원)" data={lossByCategory} accent="var(--sm-danger)" fmt={(n) => n.toLocaleString()} />
+              <PieCard title="유형별 손해금액(원)" data={lossByCategory} fmt={(n) => n.toLocaleString()} />
               <BarList title={`${unit} 손해금액(원)`} data={trend.filter((t) => t.loss > 0).map((t) => [t.label, t.loss] as [string, number])} accent="var(--sm-danger)" fmt={(n) => n.toLocaleString()} />
             </div>
           )}
 
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}>
-            <BarList title="클레임 유형별" data={byCategory} />
-            <BarList title="접수채널별" data={byChannel} accent="var(--sm-info)" />
-            <BarList title="수집경로별" data={bySource} accent="var(--sm-info)" />
-            <BarList title="구매처별" data={byPlace} accent="var(--sm-warning)" />
-            <BarList title="상태별" data={byStatus} accent="var(--sm-text-mid)" />
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginTop: 14 }}>
+            <PieCard title="클레임 유형별" data={byCategory} />
+            <PieCard title="접수채널별" data={byChannel} />
+            <PieCard title="수집경로별" data={bySource} />
+            <PieCard title="구매처별" data={byPlace} />
+            <PieCard title="상태별" data={byStatus} />
           </div>
 
           {/* 상세 내역 — 보고서용 전체 목록 */}
