@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, computeVocLoss, type Voc, type VocStatus } from "@/app/lib/voc";
+import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, VOC_FAULTS, suggestFault, computeVocLoss, type Voc, type VocStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
@@ -12,14 +12,14 @@ type Form = {
   purchase_date: string; production_date: string; purchase_place: string; product: string;
   category: string; content: string; resolution: string; cause: string;
   status: string; improvement: string; customer_note: string;
-  comp_type: string; comp_qty: string; loss_amount: string; photos: string[];
+  comp_type: string; comp_qty: string; fault: string; loss_amount: string; photos: string[];
 };
 const emptyForm = (): Form => ({
   received_at: TODAY(), customer: "", buyer_type: "",
   purchase_date: "", production_date: "", purchase_place: "", product: "",
   category: "배송", content: "", resolution: "", cause: "",
   status: "접수", improvement: "", customer_note: "",
-  comp_type: "없음", comp_qty: "1", loss_amount: "", photos: [],
+  comp_type: "없음", comp_qty: "1", fault: suggestFault("배송"), loss_amount: "", photos: [],
 });
 
 export default function VocPage() {
@@ -90,7 +90,7 @@ export default function VocPage() {
       purchase_date: r.purchase_date || "", production_date: r.production_date || "", purchase_place: r.purchase_place || "", product: r.product || "",
       category: r.category, content: r.content, resolution: r.resolution || "", cause: r.cause || "",
       status: r.status, improvement: r.improvement || "", customer_note: r.customer_note || "",
-      comp_type: r.comp_type || "없음", comp_qty: String(r.comp_qty ?? 1), loss_amount: r.loss_amount ? String(r.loss_amount) : "", photos: r.photos || [],
+      comp_type: r.comp_type || "없음", comp_qty: String(r.comp_qty ?? 1), fault: r.fault || suggestFault(r.category), loss_amount: r.loss_amount ? String(r.loss_amount) : "", photos: r.photos || [],
     });
   }
 
@@ -301,9 +301,15 @@ export default function VocPage() {
               {lossHint && <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 4px" }}>💰 {lossHint}</p>}
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">클레임 유형</span>
-                  <select className="b2b-input" value={edit.category} onChange={(e) => setF("category", e.target.value)}>{VOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
-                <label className="b2b-field"><span className="b2b-field-label">상태</span>
+                  <select className="b2b-input" value={edit.category} onChange={(e) => setEdit((f) => (f ? { ...f, category: e.target.value, fault: suggestFault(e.target.value) } : f))}>{VOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
+                <label className="b2b-field"><span className="b2b-field-label">상태(처리단계)</span>
                   <select className="b2b-input" value={edit.status} onChange={(e) => setF("status", e.target.value)}>{VOC_STATUSES.map((s) => <option key={s}>{s}</option>)}</select></label>
+              </div>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">손해 귀책 <span className="sm-faint" style={{ fontWeight: 400 }}>· 정산 분리용</span></span>
+                  <select className="b2b-input" value={edit.fault} onChange={(e) => setF("fault", e.target.value)}>{VOC_FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+                <label className="b2b-field"><span className="b2b-field-label">&nbsp;</span>
+                  <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>제조사 = 청구 가능 · 물류/자사 = 자사 부담</span></label>
               </div>
               <label className="b2b-field"><span className="b2b-field-label">상세내용 <span className="req">*</span></span>
                 <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} placeholder="고객이 말한 내용" /></label>
