@@ -3242,3 +3242,12 @@ a {
   .app-sb-toggle { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--sm-border); border-radius: 8px; background: var(--sm-white); font-size: 18px; cursor: pointer; }
   .app-topbar-brand { font-size: 17px; font-weight: 800; color: var(--sm-orange); }
 }
+
+/* ── 인쇄(PDF 저장) — VOC 보고서·요청서 등 .voc-print 만 출력 ── */
+@media print {
+  .app-sidebar, .app-topbar, .app-sb-backdrop, .no-print { display: none !important; }
+  .app-shell, .app-main { display: block !important; }
+  .b2b-container { padding: 0 !important; max-width: none !important; }
+  .voc-print { box-shadow: none !important; border: none !important; max-width: none !important; padding: 0 !important; }
+  body { background: #fff !important; }
+}
