@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import TxnTable from "../TxnTable";
+import OrdersTable from "../OrdersTable";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
 type Preview = { summary: { valid: number; errors: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
@@ -75,8 +75,8 @@ export default function TradePage() {
       </section>
 
       <section className="b2b-card">
-        <div className="b2b-card-head"><span className="b2b-card-title">입고·출고 내역</span></div>
-        <TxnTable types={["입고", "출고"]} reloadKey={reload} />
+        <div className="b2b-card-head"><span className="b2b-card-title">입고·출고 내역 (주문 단위)</span></div>
+        <OrdersTable reloadKey={reload} />
       </section>
 
       {preview && (

@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     if (qty === 0) return NextResponse.json({ ok: false, error: "수량을 입력하세요." }, { status: 400 });
     const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined;
 
+    const sb = supabaseAdmin();
     const row: Record<string, unknown> = {
       product_id, type, qty,
       unit_amount: b.unit_amount === undefined || b.unit_amount === "" || b.unit_amount === null ? null : Math.max(0, Math.round(Number(b.unit_amount) || 0)),
@@ -33,8 +34,15 @@ export async function POST(req: NextRequest) {
       created_by: await actor(req),
     };
     if (txn_date) row.txn_date = txn_date;
+    // 입고/출고 단건도 주문번호 부여(033 미적용이면 생략).
+    if (type === "입고" || type === "출고") {
+      try {
+        const { data, error } = await sb.rpc("next_inventory_order_no", { p_type: type });
+        if (!error && data) { row.group_id = crypto.randomUUID(); row.order_no = String(data); }
+      } catch { /* 033 미적용 */ }
+    }
 
-    const { data, error } = await supabaseAdmin().from("inventory_txns").insert(row).select().single();
+    const { data, error } = await sb.from("inventory_txns").insert(row).select().single();
     if (error) throw error;
     return NextResponse.json({ ok: true, txn: data });
   } catch (err) {
