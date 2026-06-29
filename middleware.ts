@@ -17,8 +17,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // B2B·생산관리 API 는 인증 실패 시 JSON 401, 페이지는 로그인으로 리다이렉트
-  const isApi = pathname.startsWith("/api/b2b/") || pathname.startsWith("/api/production/") || pathname.startsWith("/api/voc/");
+  // API 는 인증 실패 시 JSON 401, 페이지는 로그인으로 리다이렉트
+  const isApi = pathname.startsWith("/api/");
 
   const users = getB2BUsers();
   if (users.length === 0) {
@@ -64,5 +64,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/b2b/:path*", "/api/b2b/:path*", "/production/:path*", "/api/production/:path*", "/voc/:path*", "/api/voc/:path*"],
+  // 전체 게이팅: Next 내부·정적 이미지/폰트/스타일만 공개, 나머지(페이지·API·iframe html)는 로그인 필수.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|map)).*)"],
 };
