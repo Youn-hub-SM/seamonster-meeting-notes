@@ -3250,4 +3250,7 @@ a {
   .b2b-container { padding: 0 !important; max-width: none !important; }
   .voc-print { box-shadow: none !important; border: none !important; max-width: none !important; padding: 0 !important; }
   body { background: #fff !important; }
+  /* 개선요청서 사진: 새 페이지부터, A4 한 장에 2컷(약 125mm) 크게 */
+  .voc-photos { page-break-before: always; }
+  .voc-photo { height: 125mm !important; max-height: none !important; object-fit: contain !important; border: none !important; background: #fff !important; page-break-inside: avoid; margin-bottom: 8mm !important; }
 }

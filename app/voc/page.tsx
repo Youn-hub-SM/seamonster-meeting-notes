@@ -8,15 +8,15 @@ const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 1
 type Form = {
   id?: string;
   received_at: string; channel: string; customer: string;
-  purchase_date: string; purchase_place: string; product: string;
+  purchase_date: string; production_date: string; purchase_place: string; product: string;
   category: string; content: string; resolution: string; cause: string;
-  status: string; improvement: string;
+  status: string; improvement: string; photos: string[];
 };
 const emptyForm = (): Form => ({
   received_at: TODAY(), channel: "", customer: "",
-  purchase_date: "", purchase_place: "", product: "",
+  purchase_date: "", production_date: "", purchase_place: "", product: "",
   category: "배송", content: "", resolution: "", cause: "",
-  status: "대기", improvement: "",
+  status: "대기", improvement: "", photos: [],
 });
 
 export default function VocPage() {
@@ -27,6 +27,7 @@ export default function VocPage() {
   const [search, setSearch] = useState("");
   const [edit, setEdit] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -61,9 +62,9 @@ export default function VocPage() {
   function openEdit(r: Voc) {
     setEdit({
       id: r.id, received_at: r.received_at, channel: r.channel || "", customer: r.customer || "",
-      purchase_date: r.purchase_date || "", purchase_place: r.purchase_place || "", product: r.product || "",
+      purchase_date: r.purchase_date || "", production_date: r.production_date || "", purchase_place: r.purchase_place || "", product: r.product || "",
       category: r.category, content: r.content, resolution: r.resolution || "", cause: r.cause || "",
-      status: r.status, improvement: r.improvement || "",
+      status: r.status, improvement: r.improvement || "", photos: r.photos || [],
     });
   }
 
@@ -111,6 +112,23 @@ export default function VocPage() {
   }
 
   const setF = (k: keyof Form, v: string) => setEdit((f) => (f ? { ...f, [k]: v } : f));
+
+  async function uploadPhotos(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true); setError("");
+    try {
+      for (const file of Array.from(files)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/voc/photo", { method: "POST", body: fd });
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error(j.error || "업로드 실패");
+        setEdit((f) => (f ? { ...f, photos: [...f.photos, j.url] } : f));
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "사진 업로드 실패"); }
+    setUploading(false);
+  }
+  const removePhoto = (url: string) => setEdit((f) => (f ? { ...f, photos: f.photos.filter((p) => p !== url) } : f));
 
   return (
     <div className="b2b-container">
@@ -198,6 +216,11 @@ export default function VocPage() {
                   <input className="b2b-input" value={edit.product} onChange={(e) => setF("product", e.target.value)} placeholder="상품명" /></label>
               </div>
               <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">제품 생산일</span>
+                  <input className="b2b-input" type="date" value={edit.production_date} onChange={(e) => setF("production_date", e.target.value)} /></label>
+                <div className="b2b-field" />
+              </div>
+              <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">클레임 유형</span>
                   <select className="b2b-input" value={edit.category} onChange={(e) => setF("category", e.target.value)}>{VOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
                 <label className="b2b-field"><span className="b2b-field-label">상태</span>
@@ -211,6 +234,23 @@ export default function VocPage() {
                 <textarea className="b2b-textarea" rows={2} value={edit.resolution} onChange={(e) => setF("resolution", e.target.value)} placeholder="어떻게 처리했는지" /></label>
               <label className="b2b-field"><span className="b2b-field-label">개선 필요사항</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.improvement} onChange={(e) => setF("improvement", e.target.value)} placeholder="재발 방지를 위해 바꿔야 할 것" /></label>
+              <div className="b2b-field">
+                <span className="b2b-field-label">사진 첨부 <span className="sm-faint" style={{ fontWeight: 400 }}>· 개선요청서에 자동 첨부됩니다</span></span>
+                <div className="sm-row-wrap" style={{ gap: 8 }}>
+                  {edit.photos.map((url) => (
+                    <div key={url} style={{ position: "relative" }}>
+                      <img src={url} alt="첨부" style={{ width: 74, height: 74, objectFit: "cover", borderRadius: 8, border: "1px solid var(--sm-border)" }} />
+                      <button type="button" onClick={() => removePhoto(url)} aria-label="사진 삭제"
+                        style={{ position: "absolute", top: -7, right: -7, width: 21, height: 21, borderRadius: "50%", border: "2px solid var(--sm-white)", background: "var(--sm-danger)", color: "#fff", cursor: "pointer", fontSize: 11, lineHeight: 1, padding: 0 }}>✕</button>
+                    </div>
+                  ))}
+                  <label style={{ width: 74, height: 74, borderRadius: 8, border: "1px dashed var(--sm-border)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--sm-text-light)", fontSize: 22, flexShrink: 0 }}>
+                    {uploading ? "…" : "+"}
+                    <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={uploading}
+                      onChange={(e) => { uploadPhotos(e.target.files); e.target.value = ""; }} />
+                  </label>
+                </div>
+              </div>
             </div>
             <div className="b2b-modal-foot">
               {edit.id ? <button className="b2b-btn-secondary" onClick={remove} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button> : <span />}

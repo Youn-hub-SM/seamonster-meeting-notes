@@ -17,8 +17,10 @@ export interface Voc {
   source: VocSource;          // 수집 방식
   customer: string | null;    // 고객명
   purchase_date: string | null;  // 구매일
+  production_date: string | null; // 제품 생산일(제조사 배치 추적)
   purchase_place: string | null; // 구매처
   product: string | null;     // 구매상품
+  photos: string[];           // 첨부 사진 공개 URL
   category: VocCategory;      // 클레임 유형
   content: string;            // 상세내용
   resolution: string | null;  // 처리내용

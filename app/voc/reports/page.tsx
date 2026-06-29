@@ -67,7 +67,7 @@ export default function VocReportsPage() {
       <header className="b2b-page-head no-print">
         <div>
           <h1 className="b2b-page-title">VOC 보고서·요청서</h1>
-          <p className="b2b-page-subtitle">기간 보고서 또는 개별 처리 요청서를 만들어 인쇄·PDF로 저장합니다.</p>
+          <p className="b2b-page-subtitle">기간 보고서 또는 제조사 전달용 개선요청서(사진 포함)를 만들어 인쇄·PDF로 저장합니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || (mode === "request" && !picked)}>🖨 인쇄 / PDF 저장</button>
@@ -78,7 +78,7 @@ export default function VocReportsPage() {
 
       <div className="prod-range-tabs no-print" style={{ marginBottom: 12, flexWrap: "wrap" }}>
         <button className={`prod-range-tab ${mode === "report" ? "is-active" : ""}`} onClick={() => setMode("report")}>기간 보고서</button>
-        <button className={`prod-range-tab ${mode === "request" ? "is-active" : ""}`} onClick={() => setMode("request")}>개별 요청서</button>
+        <button className={`prod-range-tab ${mode === "request" ? "is-active" : ""}`} onClick={() => setMode("request")}>개선요청서</button>
       </div>
 
       {mode === "report" ? (
@@ -106,7 +106,7 @@ export default function VocReportsPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 20 }}>
             <div>
               <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
-              <h2 style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{mode === "report" ? "VOC 처리 보고서" : "VOC 처리 요청서"}</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{mode === "report" ? "VOC 처리 보고서" : "개선요청서"}</h2>
             </div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>
               <div>작성일 {TODAY()}</div>
@@ -157,19 +157,24 @@ export default function VocReportsPage() {
           ) : !picked ? (
             <div className="b2b-empty">요청서로 만들 VOC를 위에서 선택하세요.</div>
           ) : (
-            <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, overflow: "hidden" }}>
-              <Field label="접수일" value={picked.received_at} />
-              <Field label="접수채널" value={picked.channel} />
-              <Field label="고객" value={picked.customer} />
-              <Field label="구매정보" value={[picked.purchase_date, picked.purchase_place, picked.product].filter(Boolean).join(" · ")} />
-              <Field label="클레임 유형" value={picked.category} />
-              <Field label="상세내용" value={picked.content} />
-              <Field label="원인" value={picked.cause} />
-              <Field label="처리내용" value={picked.resolution} />
-              <Field label="개선 필요사항" value={picked.improvement} />
-              <Field label="손해/보상" value={picked.loss_amount ? `${picked.loss_amount.toLocaleString()}원` : "-"} />
-              <Field label="담당 / 상태" value={`${picked.assignee || "-"} / ${picked.status}`} />
-            </div>
+            <>
+              <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, overflow: "hidden" }}>
+                <Field label="접수일" value={picked.received_at} />
+                <Field label="제품 생산일" value={picked.production_date} />
+                <Field label="CS 유형" value={picked.category} />
+                <Field label="내용" value={picked.content} />
+                {picked.product && <Field label="제품" value={picked.product} />}
+              </div>
+              {picked.photos && picked.photos.length > 0 && (
+                <div className="voc-photos" style={{ marginTop: 24 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px" }}>첨부 사진 ({picked.photos.length}장)</h3>
+                  {picked.photos.map((url, i) => (
+                    <img key={i} src={url} alt={`첨부 ${i + 1}`} className="voc-photo"
+                      style={{ width: "100%", maxHeight: 440, objectFit: "contain", borderRadius: 8, border: "1px solid var(--sm-border)", marginBottom: 14, display: "block", background: "var(--sm-bg-subtle)" }} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </section>
       )}

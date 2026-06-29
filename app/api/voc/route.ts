@@ -6,14 +6,14 @@ export const dynamic = "force-dynamic";
 
 // 폼이 실제로 다루는 사용자 입력 필드만 허용(매스 어사인 방지).
 // source(수집방식)·assignee·sentiment·loss_amount 는 자동수집/정산 전용 → 전용 경로에서만 기록.
-const EDITABLE = ["received_at", "channel", "customer", "purchase_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement"] as const;
+const EDITABLE = ["received_at", "channel", "customer", "purchase_date", "production_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "photos"] as const;
 
-// "" → null 로 강등할 nullable 컬럼. 그 외(NOT NULL/Default 보유: received_at·category·status·content)는
+// "" → null 로 강등할 nullable 컬럼. 그 외(NOT NULL/Default 보유: received_at·category·status·content·photos)는
 // "" 면 키 자체를 생략 → POST 는 DB default, PATCH 는 기존값 유지(NOT NULL 위반 방지).
-const NULLABLE = new Set(["channel", "customer", "purchase_date", "purchase_place", "product", "resolution", "cause", "improvement"]);
+const NULLABLE = new Set(["channel", "customer", "purchase_date", "production_date", "purchase_place", "product", "resolution", "cause", "improvement"]);
 
 const ENUMS: Record<string, readonly string[]> = { source: VOC_SOURCES, category: VOC_CATEGORIES, status: VOC_STATUSES, sentiment: VOC_SENTIMENTS };
-const DATE_FIELDS = ["received_at", "purchase_date"];
+const DATE_FIELDS = ["received_at", "purchase_date", "production_date"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LEN = 5000;
 
@@ -26,6 +26,11 @@ function pick(body: Record<string, unknown>) {
       continue; // NOT NULL/Default 컬럼은 빈값이면 생략
     }
     out[f] = body[f];
+  }
+  // photos 는 문자열 URL 배열만 허용(null/잘못된 형식이면 생략 → DB default/기존값 유지)
+  if ("photos" in out) {
+    if (Array.isArray(out.photos)) out.photos = (out.photos as unknown[]).filter((x) => typeof x === "string");
+    else delete out.photos;
   }
   return out;
 }
