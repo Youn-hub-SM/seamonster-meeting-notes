@@ -188,13 +188,13 @@ export default function VocPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("voc") || error.includes("relation")) ? " — supabase/migrations/023_voc.sql 를 먼저 적용하세요." : ""}</div>}
 
-      <div className="prod-range-tabs" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+      <div className="voc-filterbar">
         {(["전체", ...VOC_STATUSES] as const).map((s) => (
-          <button key={s} className={`prod-range-tab ${tab === s ? "is-active" : ""}`} onClick={() => setTab(s)}>
-            {s} <span style={{ opacity: 0.6 }}>{counts[s] || 0}</span>
+          <button key={s} className={`voc-tab ${tab === s ? "is-active" : ""}`} onClick={() => setTab(s)}>
+            {s}<span className="voc-tab-count">{counts[s] || 0}</span>
           </button>
         ))}
-        <input className="b2b-input" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 200, marginLeft: "auto" }} />
+        <input className="b2b-input voc-search" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {loading ? (
@@ -214,7 +214,7 @@ export default function VocPage() {
                   <td>{r.customer || "-"}</td>
                   <td>{r.buyer_type || "-"}</td>
                   <td>{r.product || "-"}</td>
-                  <td>{r.category}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{r.category}</td>
                   <td style={{ maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.content}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <select
