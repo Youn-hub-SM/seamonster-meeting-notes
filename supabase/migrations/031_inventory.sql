@@ -32,4 +32,15 @@ create table if not exists inventory_items (
 alter table inventory_txns enable row level security;
 alter table inventory_items enable row level security;
 
+-- 현재고/과거수량 집계(품목당 1행) — 클라이언트의 1000행 제한과 무관하게 정확히 합산.
+--  asof 지정 시 그 날짜까지 누적. 서비스롤 rpc 로 호출.
+create or replace function inventory_stock(asof date default null)
+returns table (product_id uuid, qty bigint)
+language sql stable as $$
+  select t.product_id, coalesce(sum(t.qty), 0)::bigint
+  from inventory_txns t
+  where asof is null or t.txn_date <= asof
+  group by t.product_id
+$$;
+
 NOTIFY pgrst, 'reload schema';

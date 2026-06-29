@@ -43,9 +43,11 @@ export default function TxnModal({
 
   async function save() {
     if (!productId) { setError("품목을 선택하세요."); return; }
+    if (qty.trim() === "") { setError("수량을 입력하세요."); return; }
     let sendQty = Number(qty) || 0;
     if (type === "조정" && adjMode === "target") sendQty = (Number(qty) || 0) - current; // 목표−현재 = 델타
-    if (sendQty === 0) { setError("수량을 입력하세요."); return; }
+    if (sendQty === 0) { setError(type === "조정" ? "현재고와 동일합니다 (변동 없음)." : "수량을 입력하세요."); return; }
+    if (type === "출고" && after < 0 && !window.confirm(`현재고(${current.toLocaleString()})보다 많은 출고입니다. 재고가 ${after.toLocaleString()} 가 됩니다. 진행할까요?`)) return;
     setSaving(true); setError("");
     try {
       const res = await fetch("/api/inventory/txn", {

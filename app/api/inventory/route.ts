@@ -10,11 +10,10 @@ export async function GET(req: NextRequest) {
   try {
     const asof = req.nextUrl.searchParams.get("asof");
     const sb = supabaseAdmin();
-    let txnQ = sb.from("inventory_txns").select("product_id, qty");
-    if (asof && /^\d{4}-\d{2}-\d{2}$/.test(asof)) txnQ = txnQ.lte("txn_date", asof);
+    const asofParam = asof && /^\d{4}-\d{2}-\d{2}$/.test(asof) ? asof : null;
     const [pr, tr, ir] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit, cost_price").eq("active", true).order("name", { ascending: true }),
-      txnQ,
+      sb.rpc("inventory_stock", { asof: asofParam }), // 품목당 1행 집계(1000행 제한 무관)
       sb.from("inventory_items").select("product_id, min_qty, barcode, location"),
     ]);
     if (pr.error) throw pr.error;
@@ -22,7 +21,7 @@ export async function GET(req: NextRequest) {
     if (ir.error) throw ir.error;
 
     const qtyMap = new Map<string, number>();
-    for (const t of tr.data ?? []) qtyMap.set(t.product_id, (qtyMap.get(t.product_id) || 0) + (Number(t.qty) || 0));
+    for (const t of (tr.data as { product_id: string; qty: number }[] | null) ?? []) qtyMap.set(t.product_id, Number(t.qty) || 0);
     const itemMap = new Map<string, { min_qty: number; barcode: string | null; location: string | null }>();
     for (const it of ir.data ?? []) itemMap.set(it.product_id, { min_qty: Number(it.min_qty) || 0, barcode: it.barcode, location: it.location });
 

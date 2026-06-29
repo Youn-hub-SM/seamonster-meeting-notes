@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const [items, pr, tr] = await Promise.all([
       fetchBoxheroItems(token),
       sb.from("products").select("id, sku").eq("active", true),
-      sb.from("inventory_txns").select("product_id, qty"),
+      sb.rpc("inventory_stock", { asof: null }), // 현재고(품목당 1행 집계)
     ]);
     if (pr.error) throw pr.error;
     if (tr.error) throw tr.error;
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     for (const p of pr.data ?? []) if (p.sku) bySku.set(String(p.sku).trim(), p.id);
     // 현재고
     const cur = new Map<string, number>();
-    for (const t of tr.data ?? []) cur.set(t.product_id, (cur.get(t.product_id) || 0) + (Number(t.qty) || 0));
+    for (const t of (tr.data as { product_id: string; qty: number }[] | null) ?? []) cur.set(t.product_id, Number(t.qty) || 0);
 
     const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
     const rows: Record<string, unknown>[] = [];
