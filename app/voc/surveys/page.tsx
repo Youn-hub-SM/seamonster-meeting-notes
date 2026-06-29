@@ -89,9 +89,9 @@ export default function VocSurveysPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("survey") || error.includes("relation")) ? " — supabase/migrations/025_survey_responses.sql 를 먼저 적용하세요." : ""}</div>}
 
-      <div className="voc-tabs" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+      <div className="sm-tabs" style={{ marginBottom: 12, flexWrap: "wrap" }}>
         {(["목록", "분석"] as View[]).map((v) => (
-          <button key={v} className={`voc-tab ${view === v ? "is-active" : ""}`} onClick={() => setView(v)}>{v}</button>
+          <button key={v} className={`sm-tab ${view === v ? "is-active" : ""}`} onClick={() => setView(v)}>{v}</button>
         ))}
         <span className="sm-faint" style={{ fontSize: 13, alignSelf: "center" }}>총 {rows.length}건</span>
         {view === "목록" && <input className="b2b-input" placeholder="검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 200, marginLeft: "auto" }} />}

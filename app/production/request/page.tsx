@@ -48,9 +48,9 @@ export default function RequestPage() {
 
       <div className="b2b-card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div className="prod-range-tabs">
+          <div className="sm-tabs">
             {PERIODS.map((n) => (
-              <button key={n} className={`prod-range-tab ${days === n ? "is-active" : ""}`} onClick={() => setDays(n)}>{n}일</button>
+              <button key={n} className={`sm-tab ${days === n ? "is-active" : ""}`} onClick={() => setDays(n)}>{n}일</button>
             ))}
           </div>
           <input type="date" className="b2b-input" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />

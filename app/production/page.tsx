@@ -277,9 +277,9 @@ export default function ProductionSchedulePage() {
         <aside className="prod-cal-side">
           <div className="prod-cal-side-head">
             생산 목록
-            <div className="prod-range-tabs">
+            <div className="sm-tabs">
               {RANGES.map((n) => (
-                <button key={n} className={`prod-range-tab ${range === n ? "is-active" : ""}`} onClick={() => setRange(n)}>{n}일</button>
+                <button key={n} className={`sm-tab ${range === n ? "is-active" : ""}`} onClick={() => setRange(n)}>{n}일</button>
               ))}
             </div>
           </div>

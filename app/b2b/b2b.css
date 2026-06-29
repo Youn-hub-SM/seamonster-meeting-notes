@@ -1206,33 +1206,7 @@ a.b2b-history-item:hover {
 /* 우측 생산 목록 */
 .prod-cal-side-head { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .prod-cal-side-sub { font-size: 11px; font-weight: 500; color: var(--sm-text-light); margin-left: 6px; }
-.prod-range-tabs { display: inline-flex; border: 1px solid var(--sm-border); border-radius: 8px; overflow: hidden; }
-.prod-range-tab {
-  border: none; background: var(--sm-white, #fff); font-size: 11px; font-weight: 600;
-  color: var(--sm-text-mid); padding: 4px 10px; cursor: pointer; border-right: 1px solid var(--sm-border);
-}
-.prod-range-tab:last-child { border-right: none; }
-.prod-range-tab.is-active { background: var(--sm-orange); color: #fff; }
-
-/* 상태 필터 바 — 앱 버튼과 동일한 radius·톤의 둥근 탭 + 카운트 배지 */
-.voc-filterbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-.voc-tabs { display: inline-flex; gap: 8px; flex-wrap: wrap; } /* 카운트 없는 토글 그룹(기간·주월·목록/분석 등) */
-.voc-tab {
-  display: inline-flex; align-items: center; gap: 7px;
-  font-family: inherit; font-size: 13px; font-weight: 600;
-  padding: 8px 15px; border-radius: var(--sm-radius-btn);
-  border: 1px solid var(--sm-border); background: var(--sm-white); color: var(--sm-text-mid);
-  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
-}
-.voc-tab:hover:not(.is-active) { border-color: var(--sm-orange); color: var(--sm-orange); }
-.voc-tab.is-active { background: var(--sm-orange); border-color: var(--sm-orange); color: var(--sm-white); }
-.voc-tab-count {
-  font-size: 11px; font-weight: 700; line-height: 1; min-width: 16px; text-align: center;
-  padding: 3px 6px; border-radius: 999px; background: var(--sm-bg-subtle); color: var(--sm-text-mid);
-}
-.voc-tab.is-active .voc-tab-count { background: rgba(255, 255, 255, .28); color: var(--sm-white); }
-.voc-filterbar .voc-search { margin-left: auto; width: 240px; max-width: 100%; flex: 0 0 auto; }
-@media (max-width: 640px) { .voc-filterbar .voc-search { margin-left: 0; width: 100%; } }
+/* 탭/필터 스타일은 디자인시스템(.sm-tab) 으로 이전 — app/globals.css 참고 */
 
 .prod-side-manual-tag {
   margin-left: 6px; font-size: 9px; font-weight: 700; color: var(--sm-orange);

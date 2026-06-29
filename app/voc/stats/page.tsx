@@ -206,11 +206,11 @@ export default function VocStatsPage() {
       {error && <div className="b2b-error">{error}</div>}
 
       <div className="no-print" style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <div className="voc-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
+        <div className="sm-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
           {(["7일", "14일", "30일"] as RMode[]).map((m) => (
-            <button key={m} className={`voc-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
+            <button key={m} className={`sm-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
           ))}
-          <button className={`voc-tab ${mode === "custom" ? "is-active" : ""}`} onClick={() => setMode("custom")}>직접지정</button>
+          <button className={`sm-tab ${mode === "custom" ? "is-active" : ""}`} onClick={() => setMode("custom")}>직접지정</button>
         </div>
         {mode === "custom" && (
           <span className="sm-row" style={{ gap: 6 }}>
@@ -238,9 +238,9 @@ export default function VocStatsPage() {
           <section className="b2b-card">
             <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span className="b2b-card-title">접수·손해 추세</span>
-              <div className="voc-tabs" style={{ margin: 0 }}>
+              <div className="sm-tabs" style={{ margin: 0 }}>
                 {(["주별", "월별"] as Unit[]).map((u) => (
-                  <button key={u} className={`voc-tab ${unit === u ? "is-active" : ""}`} onClick={() => setUnit(u)}>{u}</button>
+                  <button key={u} className={`sm-tab ${unit === u ? "is-active" : ""}`} onClick={() => setUnit(u)}>{u}</button>
                 ))}
               </div>
             </div>

@@ -81,9 +81,31 @@
 | 폼 | `.b2b-form-section` `.b2b-form-section-title` `.b2b-form-foot` | |
 | 모달 | `.b2b-modal-backdrop` `.b2b-modal` `.b2b-modal-head` `.b2b-modal-body` `.b2b-modal-foot` | |
 | 상태 | `.b2b-error`(오류배너) `.b2b-empty`(빈상태) `.b2b-loading` | |
-| 탭/필터 | `.prod-range-tab` `.b2b-checkfilter-row` | |
+| 탭/필터 | **`.sm-tab`** (둥근 탭 — 아래 5.1, `globals.css`) · `.b2b-checkfilter-row`(엑셀식 체크필터) | |
 
 사이드바(전역): `.app-sb-tool` `.app-sb-menu-item` `.app-sb-chev` 등 — `app/globals.css`.
+
+### 5.1 탭 / 필터 (`.sm-tab`) — 전 도구 공용, `app/globals.css`
+상태·기간·뷰 전환 등 **모든 토글 탭은 이 컴포넌트로 통일**(구 `.prod-range-tab`·`.voc-tab` 폐기).
+앱 버튼과 같은 radius(`--sm-radius-btn`)·오렌지 톤이라 버튼군과 자동으로 어울린다.
+
+| 클래스 | 용도 |
+|---|---|
+| `.sm-tabbar` | 탭 + 검색을 한 줄에 두는 바(검색 입력에 `.sm-tab-search` → 우측 고정폭 240px, 모바일 전체폭) |
+| `.sm-tabs` | 토글 탭만 묶는 그룹(검색 없음) |
+| `.sm-tab` / `.sm-tab.is-active` | 탭 버튼 / 활성(오렌지 채움) |
+| `.sm-tab-count` | 탭 안 카운트 배지(선택) |
+
+```tsx
+<div className="sm-tabbar">
+  {(["전체", ...STATUSES]).map((s) => (
+    <button key={s} className={`sm-tab ${tab === s ? "is-active" : ""}`} onClick={() => setTab(s)}>
+      {s}<span className="sm-tab-count">{counts[s]}</span>
+    </button>
+  ))}
+  <input className="b2b-input sm-tab-search" placeholder="검색" />
+</div>
+```
 
 ### 유틸 클래스 (반복 인라인 대체) — `app/globals.css`
 레이아웃/텍스트의 반복 인라인 `style` 은 아래 유틸로 대체한다(간격 스케일 불변).
@@ -118,6 +140,7 @@
 ### 적용 현황 & 다음 단계
 - ✅ 색 토큰화 · 전역 폰트 -2 · 타이포/간격 스케일 · 유틸 클래스.
 - ✅ 컨테이너·페이지헤더·버튼·타이틀 전 화면 단일 기준 정렬. 죽은 page.module.css 제거.
+- ✅ 탭/필터 단일화 — `.sm-tab` 으로 B2B·생산·VOC 전 화면 통일(구 `.prod-range-tab`·`.voc-tab` 제거).
 - ⬜ 인라인 `style` 의 padding/margin/fontSize → 스케일/유틸로 점진 이관(새/수정 화면부터).
 
 **규칙 요약: 색은 시맨틱 토큰, 간격은 4px 스케일, 컴포넌트는 `.b2b-*` 재사용. 인라인 hex/px 금지.**

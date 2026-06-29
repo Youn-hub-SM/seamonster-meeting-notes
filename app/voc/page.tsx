@@ -188,13 +188,13 @@ export default function VocPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("voc") || error.includes("relation")) ? " — supabase/migrations/023_voc.sql 를 먼저 적용하세요." : ""}</div>}
 
-      <div className="voc-filterbar">
+      <div className="sm-tabbar">
         {(["전체", ...VOC_STATUSES] as const).map((s) => (
-          <button key={s} className={`voc-tab ${tab === s ? "is-active" : ""}`} onClick={() => setTab(s)}>
-            {s}<span className="voc-tab-count">{counts[s] || 0}</span>
+          <button key={s} className={`sm-tab ${tab === s ? "is-active" : ""}`} onClick={() => setTab(s)}>
+            {s}<span className="sm-tab-count">{counts[s] || 0}</span>
           </button>
         ))}
-        <input className="b2b-input voc-search" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className="b2b-input sm-tab-search" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {loading ? (

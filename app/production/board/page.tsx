@@ -147,9 +147,9 @@ export default function ProductionBoardPage() {
           <p className="b2b-page-subtitle">밀린 생산이 쌓이는 백로그. 각 칸 = 그 시점까지 끝내야 할 누적 생산량. 행을 펼쳐 생산일별로 완료 처리하세요.</p>
         </div>
         <div className="b2b-page-actions">
-          <div className="prod-range-tabs">
-            <button className={`prod-range-tab ${gran === "week" ? "is-active" : ""}`} onClick={() => setGran("week")}>주 단위</button>
-            <button className={`prod-range-tab ${gran === "day" ? "is-active" : ""}`} onClick={() => setGran("day")}>일 단위</button>
+          <div className="sm-tabs">
+            <button className={`sm-tab ${gran === "week" ? "is-active" : ""}`} onClick={() => setGran("week")}>주 단위</button>
+            <button className={`sm-tab ${gran === "day" ? "is-active" : ""}`} onClick={() => setGran("day")}>일 단위</button>
           </div>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
         </div>

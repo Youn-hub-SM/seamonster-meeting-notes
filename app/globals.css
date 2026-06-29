@@ -75,6 +75,29 @@
 .sm-gap-3 { gap: var(--sm-space-3); }
 .sm-gap-4 { gap: var(--sm-space-4); }
 
+/* ── 탭 / 필터 — 둥근 탭(앱 버튼과 동일 radius·톤). 전 도구 공용. 상세: docs/design-system.md ──
+   구조: <div class="sm-tabbar"> (검색 등 동반 시) 또는 <div class="sm-tabs"> (토글만)
+         > <button class="sm-tab is-active"> 라벨 <span class="sm-tab-count">3</span> </button>  */
+.sm-tabbar { display: flex; align-items: center; gap: var(--sm-space-2); flex-wrap: wrap; margin-bottom: var(--sm-space-4); }
+.sm-tabs { display: inline-flex; gap: var(--sm-space-2); flex-wrap: wrap; }
+.sm-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: inherit; font-size: var(--sm-fs-sm); font-weight: 600;
+  padding: 8px 15px; border-radius: var(--sm-radius-btn);
+  border: 1px solid var(--sm-border); background: var(--sm-white); color: var(--sm-text-mid);
+  cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+}
+.sm-tab:hover:not(.is-active) { border-color: var(--sm-orange); color: var(--sm-orange); }
+.sm-tab.is-active { background: var(--sm-orange); border-color: var(--sm-orange); color: var(--sm-white); }
+.sm-tab-count {
+  font-size: var(--sm-fs-xs); font-weight: 700; line-height: 1; min-width: 16px; text-align: center;
+  padding: 3px 6px; border-radius: 999px; background: var(--sm-bg-subtle); color: var(--sm-text-mid);
+}
+.sm-tab.is-active .sm-tab-count { background: rgba(255, 255, 255, .28); color: var(--sm-white); }
+/* 동반 검색창(우측 정렬, 고정폭). .b2b-input width:100% 보다 우선하도록 복합 선택자 사용 */
+.sm-tabbar .sm-tab-search { margin-left: auto; width: 240px; max-width: 100%; flex: 0 0 auto; }
+@media (max-width: 640px) { .sm-tabbar .sm-tab-search { margin-left: 0; width: 100%; } }
+
 body {
   font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   color: var(--sm-black);
