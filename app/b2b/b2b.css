@@ -1266,7 +1266,7 @@ a.b2b-history-item:hover {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
   text-align: left; background: none; border: none; cursor: pointer; padding: 8px 10px; border-radius: 7px;
 }
-.inv-buy-suggest-item:hover { background: var(--sm-bg-subtle); }
+.inv-buy-suggest-item:hover, .inv-buy-suggest-item.is-active { background: var(--sm-orange-light, rgba(241, 90, 48, .08)); }
 .inv-buy-table th, .inv-buy-table td { vertical-align: middle; }
 
 /* 우측 생산 목록 */

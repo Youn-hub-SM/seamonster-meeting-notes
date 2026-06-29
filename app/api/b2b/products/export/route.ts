@@ -32,7 +32,7 @@ export async function GET() {
     // 열 너비
     ws.columns.forEach((c, i) => {
       const h = PRODUCT_XLSX_HEADERS[i];
-      c.width = h === "ID" ? 38 : h === "품목명" || h === "메모" ? 22 : 12;
+      c.width = h === "ID" ? 38 : h === "품목명" || h === "비고" || h === "속성" ? 22 : 12;
     });
     // 안내 행은 생략(헤더만). ID 는 매칭 키 — 수정·삭제 금지, 비우면 신규 등록.
 

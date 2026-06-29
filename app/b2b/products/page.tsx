@@ -273,10 +273,13 @@ export default function ProductsPage() {
                               spec: p.spec ?? "",
                               unit: p.unit,
                               cost_price: p.cost_price,
+                              purchase_price: p.purchase_price ?? 0,
                               retail_price: p.retail_price ?? 0,
                               sale_price: p.sale_price,
                               tax_type: p.tax_type,
                               active: p.active,
+                              origin: p.origin ?? "",
+                              attrs: p.attrs ?? "",
                               notes: p.notes ?? "",
                               cost_material: p.cost_material ?? 0,
                               pkg_inner: p.pkg_inner ?? 0,
@@ -623,6 +626,21 @@ function ProductModal({
             </p>
           )}
 
+          <div className="b2b-field-row">
+            <Field label="매입단가 (원)">
+              <input type="number" inputMode="numeric" className="b2b-input b2b-money"
+                value={data.purchase_price}
+                onChange={(e) => set("purchase_price", Number(e.target.value) || 0)}
+                min={0} step={1} placeholder="구매 단가(외포장 등 제외)" />
+            </Field>
+            <Field label="원산지">
+              <input type="text" className="b2b-input" value={data.origin ?? ""} onChange={(e) => set("origin", e.target.value)} placeholder="예: 국내산 · 수입" />
+            </Field>
+          </div>
+          <Field label="속성 / 분류">
+            <input type="text" className="b2b-input" value={data.attrs ?? ""} onChange={(e) => set("attrs", e.target.value)} placeholder="예: 패키지 · 냉동 · 소분" />
+          </Field>
+
           <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
             원가 상세 (이익률 계산용)
           </div>
@@ -711,7 +729,7 @@ function ProductModal({
             </label>
           </Field>
 
-          <Field label="메모">
+          <Field label="비고">
             <textarea
               className="b2b-textarea"
               value={data.notes ?? ""}

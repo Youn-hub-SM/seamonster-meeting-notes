@@ -23,7 +23,7 @@ export default function NewTradePage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const products = useMemo<PickProduct[]>(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, spec: r.spec, unit: r.unit, cost_price: r.cost_price, qty: r.qty })), [rows]);
+  const products = useMemo<PickProduct[]>(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, spec: r.spec, unit: r.unit, cost_price: r.cost_price, purchase_price: r.purchase_price, origin: r.origin, attrs: r.attrs, qty: r.qty })), [rows]);
 
   return (
     <div className="b2b-container">

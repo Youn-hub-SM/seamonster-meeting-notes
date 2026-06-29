@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { signedQty, type InvTxnType } from "@/app/lib/inventory";
 import { matchKoQuery } from "@/app/lib/hangul";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
-export type PickProduct = { id: string; name: string; sku: string | null; spec: string | null; unit: string; cost_price: number; qty: number };
+export type PickProduct = { id: string; name: string; sku: string | null; spec: string | null; unit: string; cost_price: number; purchase_price: number; origin: string | null; attrs: string | null; qty: number };
 type Line = { key: string; product_id: string; name: string; sub: string; unit: string; qty: string; price: string };
 
 // BoxHero 구매창 스타일 — 전체 페이지 폼. 여러 제품을 담아 입고/출고를 한 번에. 제품 검색은 초성·다중단어 지원.
@@ -22,19 +22,34 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const [memo, setMemo] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [search, setSearch] = useState("");
+  const [active, setActive] = useState(-1); // 키보드 하이라이트 인덱스
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const suggestRef = useRef<HTMLDivElement>(null);
 
   const matches = useMemo(() => {
     const q = search.trim();
     if (!q) return [];
-    return products.filter((p) => matchKoQuery(`${p.name} ${p.sku || ""} ${p.spec || ""} ${p.unit}`, q)).slice(0, 12);
+    return products.filter((p) => matchKoQuery(`${p.name} ${p.sku || ""} ${p.spec || ""} ${p.origin || ""} ${p.attrs || ""} ${p.unit}`, q)).slice(0, 12);
   }, [products, search]);
 
+  // 활성 항목을 보이게 스크롤
+  useEffect(() => { suggestRef.current?.querySelector<HTMLElement>(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);
+
   function addLine(p: PickProduct) {
-    const sub = [p.spec, p.sku, `재고 ${p.qty.toLocaleString()}${p.unit}`].filter(Boolean).join(" · ");
-    setLines((ls) => [...ls, { key: `${p.id}-${ls.length}-${Date.now()}`, product_id: p.id, name: p.name, sub, unit: p.unit, qty: "1", price: p.cost_price ? String(p.cost_price) : "" }]);
-    setSearch("");
+    const sub = [p.spec, p.origin, p.attrs, p.sku, `재고 ${p.qty.toLocaleString()}${p.unit}`].filter(Boolean).join(" · ");
+    // 매입(입고)은 매입단가 우선, 없으면 원가. 그 외는 원가.
+    const base = type === "입고" && p.purchase_price > 0 ? p.purchase_price : p.cost_price;
+    setLines((ls) => [...ls, { key: `${p.id}-${ls.length}-${Date.now()}`, product_id: p.id, name: p.name, sub, unit: p.unit, qty: "1", price: base ? String(base) : "" }]);
+    setSearch(""); setActive(-1);
+  }
+
+  function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!matches.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, matches.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); if (active >= 0 && matches[active]) addLine(matches[active]); else if (matches.length === 1) addLine(matches[0]); }
+    else if (e.key === "Escape") { setSearch(""); setActive(-1); }
   }
   const setLine = (key: string, k: "qty" | "price", v: string) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, [k]: v } : l)));
   const removeLine = (key: string) => setLines((ls) => ls.filter((l) => l.key !== key));
@@ -81,14 +96,14 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
 
         {/* 큰 검색창 — 이름·옵션·SKU·초성·여러 단어("광어 100 1kg") */}
         <div style={{ position: "relative", marginBottom: 12 }}>
-          <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off"
-            placeholder="제품 검색 — 예: 광어 100 1kg / 초성 ㄱㅇ"
+          <input className="b2b-input" value={search} onChange={(e) => { setSearch(e.target.value); setActive(-1); }} onKeyDown={onSearchKey} autoComplete="off"
+            placeholder="제품 검색 — 예: 광어 100 1kg / 초성 ㄱㅇ  (↓↑ 이동, Enter 추가)"
             style={{ fontSize: 15, padding: "13px 16px" }} />
           {matches.length > 0 && (
-            <div className="inv-buy-suggest">
-              {matches.map((p) => (
-                <button key={p.id} className="inv-buy-suggest-item" onClick={() => addLine(p)}>
-                  <span><strong>{p.name}</strong> <span className="sm-faint" style={{ fontSize: 12 }}>{[p.spec, p.sku].filter(Boolean).join(" · ")}</span></span>
+            <div className="inv-buy-suggest" ref={suggestRef}>
+              {matches.map((p, i) => (
+                <button key={p.id} className={`inv-buy-suggest-item ${i === active ? "is-active" : ""}`} onClick={() => addLine(p)} onMouseEnter={() => setActive(i)}>
+                  <span><strong>{p.name}</strong> <span className="sm-faint" style={{ fontSize: 12 }}>{[p.spec, p.origin, p.attrs, p.sku].filter(Boolean).join(" · ")}</span></span>
                   <span className="sm-faint" style={{ fontSize: 12 }}>재고 {p.qty.toLocaleString()}{p.unit}</span>
                 </button>
               ))}

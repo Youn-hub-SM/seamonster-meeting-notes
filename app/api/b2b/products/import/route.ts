@@ -20,7 +20,7 @@ function cellStr(v: unknown): string {
   return String(v).trim();
 }
 
-const NUMERIC_KEYS = new Set<string>(["retail_price", "sale_price", "cost_price", "volume_kg"]);
+const NUMERIC_KEYS = new Set<string>(["retail_price", "sale_price", "purchase_price", "cost_price", "volume_kg"]);
 
 type Change = { label: string; from: string; to: string };
 type Update = { id: string; name: string; changes: Change[]; row: ProductInput };

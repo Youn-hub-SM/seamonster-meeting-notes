@@ -5,9 +5,9 @@ import type { Product, ProductInput, TaxType } from "./b2b-types";
 // 엑셀 헤더(순서 = 출력 순서). import 는 헤더 이름으로 셀을 찾으므로 열 순서가 바뀌어도 동작.
 export const PRODUCT_XLSX_HEADERS = [
   "ID", "SKU", "품목명", "옵션", "단위", "과세유형",
-  "소비자가", "b2b도매가",
+  "소비자가", "b2b도매가", "매입단가",
   "제품원가", "내포장지", "라벨", "외포장지", "원가직접입력",
-  "부피kg", "사용(Y/N)", "메모",
+  "부피kg", "사용(Y/N)", "원산지", "속성", "비고",
 ] as const;
 
 const num = (v: unknown): number => {
@@ -26,6 +26,7 @@ export function productToRow(p: Product): Record<string, string | number> {
     과세유형: p.tax_type === "exempt" ? "면세" : "과세",
     소비자가: Number(p.retail_price) || 0,
     b2b도매가: Number(p.sale_price) || 0,
+    매입단가: Number(p.purchase_price) || 0,
     제품원가: Number(p.cost_material) || 0,
     내포장지: Number(p.pkg_inner) || 0,
     라벨: Number(p.pkg_label) || 0,
@@ -33,7 +34,9 @@ export function productToRow(p: Product): Record<string, string | number> {
     원가직접입력: Number(p.cost_price) || 0,
     부피kg: p.volume_kg == null ? "" : Number(p.volume_kg),
     "사용(Y/N)": p.active ? "Y" : "N",
-    메모: p.notes ?? "",
+    원산지: p.origin ?? "",
+    속성: p.attrs ?? "",
+    비고: p.notes ?? "",
   };
 }
 
@@ -52,6 +55,7 @@ export function rowToInput(get: (header: string) => string): { id: string; input
     tax_type: tax,
     retail_price: num(get("소비자가")),
     sale_price: num(get("b2b도매가")),
+    purchase_price: num(get("매입단가")),
     cost_material: num(get("제품원가")),
     pkg_inner: num(get("내포장지")),
     pkg_label: num(get("라벨")),
@@ -59,7 +63,9 @@ export function rowToInput(get: (header: string) => string): { id: string; input
     cost_price: num(get("원가직접입력")),
     volume_kg: volRaw === "" ? null : Number(volRaw) || 0,
     active: !/^(n|no|미사용|false|0|x)$/i.test(activeRaw),
-    notes: get("메모"),
+    origin: get("원산지"),
+    attrs: get("속성"),
+    notes: get("비고") || get("메모"), // 구버전 양식('메모') 호환
   };
   return { id, input };
 }
@@ -73,10 +79,13 @@ export const PRODUCT_DIFF_FIELDS: { key: keyof ProductInput; label: string }[] =
   { key: "tax_type", label: "과세유형" },
   { key: "retail_price", label: "소비자가" },
   { key: "sale_price", label: "b2b도매가" },
+  { key: "purchase_price", label: "매입단가" },
   { key: "cost_price", label: "원가(제품단위)" },
   { key: "volume_kg", label: "부피kg" },
   { key: "active", label: "사용" },
-  { key: "notes", label: "메모" },
+  { key: "origin", label: "원산지" },
+  { key: "attrs", label: "속성" },
+  { key: "notes", label: "비고" },
 ];
 
 // 표시용 값 정규화(비교·diff 출력 공용)

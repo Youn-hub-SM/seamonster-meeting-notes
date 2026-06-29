@@ -51,11 +51,14 @@ export interface Product {
   spec: string | null;
   unit: string;
   cost_price: number;
+  purchase_price: number; // 매입단가(구매 단가, 외포장 등 제외)
   retail_price: number;  // 소비자 판매가
   sale_price: number;    // B2B 도매가(소비자가의 10% 할인가)
   tax_type: TaxType;
   active: boolean;
-  notes: string | null;
+  origin: string | null;  // 원산지
+  attrs: string | null;   // 속성/분류
+  notes: string | null;   // 비고
   // 이익률용 원가 상세 (migration 006)
   cost_material: number;   // 제품원가(제조)
   pkg_inner: number;       // 내포장지
@@ -76,10 +79,13 @@ export const EMPTY_PRODUCT: ProductInput = {
   spec: "",
   unit: "개",
   cost_price: 0,
+  purchase_price: 0,
   retail_price: 0,
   sale_price: 0,
   tax_type: "taxable",
   active: true,
+  origin: "",
+  attrs: "",
   notes: "",
   cost_material: 0,
   pkg_inner: 0,
@@ -187,10 +193,13 @@ export function normalizeProduct(input: ProductInput): ProductInput {
     spec: clean(input.spec),
     unit: input.unit?.trim() || "개",
     cost_price,
+    purchase_price: numOr0(input.purchase_price),
     retail_price: numOr0(input.retail_price),
     sale_price: numOr0(input.sale_price),
     tax_type: input.tax_type === "exempt" ? "exempt" : "taxable",
     active: input.active !== false,
+    origin: clean(input.origin),
+    attrs: clean(input.attrs),
     notes: clean(input.notes),
     cost_material: costMaterial,
     pkg_inner: pkgInner,

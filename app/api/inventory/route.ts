@@ -11,8 +11,14 @@ export async function GET(req: NextRequest) {
     const asof = req.nextUrl.searchParams.get("asof");
     const sb = supabaseAdmin();
     const asofParam = asof && /^\d{4}-\d{2}-\d{2}$/.test(asof) ? asof : null;
+    // 매입단가·원산지·속성은 migration 032 컬럼 — 미적용 환경에선 기본 컬럼으로 폴백(재고 페이지 안 죽게).
+    const productsQ = async () => {
+      const full = await sb.from("products").select("id, sku, name, spec, unit, cost_price, purchase_price, origin, attrs").eq("active", true).order("name", { ascending: true });
+      if (!full.error) return full;
+      return sb.from("products").select("id, sku, name, spec, unit, cost_price").eq("active", true).order("name", { ascending: true });
+    };
     const [pr, tr, ir] = await Promise.all([
-      sb.from("products").select("id, sku, name, spec, unit, cost_price").eq("active", true).order("name", { ascending: true }),
+      productsQ(),
       sb.rpc("inventory_stock", { asof: asofParam }), // 품목당 1행 집계(1000행 제한 무관)
       sb.from("inventory_items").select("product_id, min_qty, barcode, location"),
     ]);
@@ -31,7 +37,9 @@ export async function GET(req: NextRequest) {
       const cost = Number(p.cost_price) || 0;
       return {
         product_id: p.id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit,
-        cost_price: cost, qty, min_qty: meta.min_qty, value: qty * cost,
+        cost_price: cost, purchase_price: Number((p as { purchase_price?: number }).purchase_price) || 0,
+        origin: (p as { origin?: string | null }).origin ?? null, attrs: (p as { attrs?: string | null }).attrs ?? null,
+        qty, min_qty: meta.min_qty, value: qty * cost,
         barcode: meta.barcode, location: meta.location,
         low: meta.min_qty > 0 && qty <= meta.min_qty,
       };

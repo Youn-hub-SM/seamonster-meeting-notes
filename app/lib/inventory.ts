@@ -32,6 +32,9 @@ export interface InventoryRow {
   spec: string | null;
   unit: string;
   cost_price: number;
+  purchase_price: number;  // 매입단가(구매 단가)
+  origin: string | null;   // 원산지
+  attrs: string | null;    // 속성/분류
   qty: number;             // 현재고 = Σ txn.qty
   min_qty: number;         // 안전재고(재고부족 기준)
   value: number;           // 재고자산 = qty × cost_price
