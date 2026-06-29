@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatMoney } from "@/app/lib/b2b-orders";
+import { Donut, TrendChart, moneyCompact } from "@/app/components/charts";
 
 type Report = {
   period: { from: string; to: string };
@@ -114,9 +115,14 @@ export default function ReportsPage() {
     setExporting(false);
   }
 
-  const trendMax = useMemo(() => {
-    if (!report) return 0;
-    return Math.max(0, ...report.trend.map((t) => t.revenue));
+  // 히어로 도넛 — 업체별 매출 비중(상위 6 + 기타)
+  const companyDonut = useMemo<[string, number][]>(() => {
+    if (!report) return [];
+    const sorted = [...report.by_company].sort((a, b) => b.revenue - a.revenue);
+    const out = sorted.slice(0, 6).map((c) => [c.company_name, c.revenue] as [string, number]);
+    const rest = sorted.slice(6).reduce((s, c) => s + c.revenue, 0);
+    if (rest > 0) out.push(["기타", rest]);
+    return out;
   }, [report]);
 
   return (
@@ -185,56 +191,42 @@ export default function ReportsPage() {
         <div className="b2b-empty">데이터 없음</div>
       ) : (
         <>
-          {/* KPI 카드들 */}
-          <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
-            <div className="b2b-stat-card">
-              <div className="b2b-stat-card-label">총 매출</div>
-              <div className="b2b-stat-card-value b2b-money">{formatMoney(report.summary.revenue)}</div>
-              <div className="b2b-stat-card-hint">
-                과세 {formatMoney(report.summary.revenue_taxable)} · 면세 {formatMoney(report.summary.revenue_exempt)}
+          {/* 현황 히어로 — 업체별 매출 도넛 + 총매출 + 지표 */}
+          <section className="b2b-card sm-stat-hero" style={{ marginBottom: 16 }}>
+            <div className="sm-stat-hero-chart">
+              <Donut data={companyDonut} center={moneyCompact(report.summary.revenue)} centerSub="총 매출" />
+            </div>
+            <div className="sm-stat-hero-body">
+              <div className="sm-stat-hero-label">총 매출 <span className="sm-faint">· 과세 {formatMoney(report.summary.revenue_taxable)} · 면세 {formatMoney(report.summary.revenue_exempt)}</span></div>
+              <div className="sm-stat-hero-total b2b-money">{formatMoney(report.summary.revenue)}원</div>
+              <div className="sm-stat-hero-breakdown">
+                <div className="sm-stat-hero-metric">
+                  <span className="sm-stat-hero-metric-label">발주 건수</span>
+                  <span className="sm-stat-hero-metric-value">{report.summary.orders_completed}건</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>건당 평균 {formatMoney(report.summary.avg_order_value)}원</span>
+                </div>
+                <div className="sm-stat-hero-metric">
+                  <span className="sm-stat-hero-metric-label">예상 마진</span>
+                  <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-success)" }}>{formatMoney(report.summary.margin)}원</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>매출 대비 {report.summary.revenue > 0 ? Math.round((report.summary.margin / report.summary.revenue) * 100) : 0}%</span>
+                </div>
+                <div className="sm-stat-hero-metric">
+                  <span className="sm-stat-hero-metric-label">미발송 잔고 <span className="sm-faint">(전체 기간)</span></span>
+                  <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-warning)" }}>{formatMoney(report.backlog.pending_total)}원</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>{report.backlog.pending_orders}건 진행 중</span>
+                </div>
               </div>
             </div>
-            <div className="b2b-stat-card">
-              <div className="b2b-stat-card-label">발주 건수</div>
-              <div className="b2b-stat-card-value b2b-money">{report.summary.orders_completed}</div>
-              <div className="b2b-stat-card-hint">
-                건당 평균 {formatMoney(report.summary.avg_order_value)}원
-              </div>
-            </div>
-            <div className="b2b-stat-card">
-              <div className="b2b-stat-card-label">예상 마진</div>
-              <div className="b2b-stat-card-value b2b-money">{formatMoney(report.summary.margin)}</div>
-              <div className="b2b-stat-card-hint">
-                매출 대비 {report.summary.revenue > 0 ? Math.round((report.summary.margin / report.summary.revenue) * 100) : 0}%
-              </div>
-            </div>
-            <div className="b2b-stat-card">
-              <div className="b2b-stat-card-label">미발송 잔고 (전체 기간)</div>
-              <div className="b2b-stat-card-value b2b-money">{formatMoney(report.backlog.pending_total)}</div>
-              <div className="b2b-stat-card-hint">{report.backlog.pending_orders}건 진행 중</div>
-            </div>
-          </div>
+          </section>
 
           {/* 월별 추세 */}
           {report.trend.length > 0 && (
             <div className="b2b-card" style={{ marginBottom: 16 }}>
-              <div className="b2b-card-head">
+              <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h2 className="b2b-card-title">월별 매출 추세</h2>
+                <span className="sm-chart-legend"><span><i style={{ background: "var(--sm-orange)" }} />매출(원)</span></span>
               </div>
-              <div className="b2b-trend-bars">
-                {report.trend.map((t) => {
-                  const pct = trendMax > 0 ? (t.revenue / trendMax) * 100 : 0;
-                  return (
-                    <div key={t.month} className="b2b-trend-bar-row">
-                      <span className="b2b-trend-month">{t.month}</span>
-                      <div className="b2b-trend-bar-wrap">
-                        <div className="b2b-trend-bar" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="b2b-trend-value b2b-money">{formatMoney(t.revenue)}원</span>
-                    </div>
-                  );
-                })}
-              </div>
+              <TrendChart data={report.trend.map((t) => ({ label: t.month, value: t.revenue, tip: `${t.month} · ${formatMoney(t.revenue)}원` }))} fmtAxis={moneyCompact} />
             </div>
           )}
 

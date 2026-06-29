@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
+import { Donut } from "@/app/components/charts";
 
 // 제조사 제출용 개선요청서 — 기간(7/14/30일·직접지정) 동안의 클레임·손해를 모아 "이런 일이 있었고 이만큼 손해가 났으니 개선해달라" 형식으로 출력.
 type RMode = "7일" | "14일" | "30일" | "custom";
@@ -124,19 +125,26 @@ export default function VocRequestPage() {
             <div className="b2b-empty">해당 기간에 접수된 클레임이 없습니다.</div>
           ) : (
             <>
-              {/* 요약 통계 */}
-              <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: 16 }}>
-                <Stat label="접수 건수" value={`${summary.total}건`} />
-                <Stat label="총 손해/보상" value={`${summary.loss.toLocaleString()}원`} accent="var(--sm-danger)" />
-                <Stat label="대상 기간" value={periodText} small />
-              </div>
-              {summary.cats.length > 0 && (
-                <div className="sm-row-wrap" style={{ gap: 6, marginBottom: 20 }}>
-                  {summary.cats.map(([c, n]) => (
-                    <span key={c} className="b2b-feed-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{c} {n}건</span>
-                  ))}
+              {/* 요약 통계 — 유형별 접수 도넛 + 지표 */}
+              <div style={{ display: "flex", gap: 28, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
+                {summary.cats.length > 0 && (
+                  <Donut data={summary.cats} center={String(summary.total)} centerSub="건" size={116} />
+                )}
+                <div className="sm-col" style={{ gap: 14, flex: 1, minWidth: 240 }}>
+                  <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+                    <Stat label="접수 건수" value={`${summary.total}건`} />
+                    <Stat label="총 손해/보상" value={`${summary.loss.toLocaleString()}원`} accent="var(--sm-danger)" />
+                    <Stat label="대상 기간" value={periodText} small />
+                  </div>
+                  {summary.cats.length > 0 && (
+                    <div className="sm-row-wrap" style={{ gap: 6 }}>
+                      {summary.cats.map(([c, n]) => (
+                        <span key={c} className="b2b-feed-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{c} {n}건</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
 
               {/* 요청문 */}
               <div style={{ background: "var(--sm-bg-subtle)", borderRadius: 8, padding: "14px 16px", marginBottom: 22, lineHeight: 1.7, fontSize: 14 }}>

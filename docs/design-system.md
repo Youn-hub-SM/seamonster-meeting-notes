@@ -142,7 +142,7 @@
 - ✅ 컨테이너·페이지헤더·버튼·타이틀 전 화면 단일 기준 정렬. 죽은 page.module.css 제거.
 - ✅ 탭/필터 단일화 — `.sm-tab` 으로 B2B·생산·VOC 전 화면 통일(구 `.prod-range-tab`·`.voc-tab` 제거).
 - ✅ 캘린더 노션풍 통일(`prod-cal`·`b2b-cal`): 얇은 그리드선(`--sm-border-light`)·오늘=숫자 원형(오렌지)·이벤트 칩·셀 호버.
-- ✅ VOC 통계 대시보드화(`.voc-hero` 도넛+총계+구분지표, 추세 세로 막대차트 그리드선·축) — 차트 카테고리 색은 `PIE_COLORS` 예외 팔레트.
+- ✅ 통계 대시보드 컴포넌트화 — 공용 차트 `app/components/charts.tsx`(`Donut`/`TrendChart`/`PieCard`/`BarList`, `moneyCompact`) + 현황 히어로 `.sm-stat-hero`(도넛+총계+구분지표 3열). VOC 통계·B2B 매출 집계·개선요청서에 적용. 차트 카테고리 색은 `PIE_COLORS` 예외 팔레트.
 - ⬜ 인라인 `style` 의 padding/margin/fontSize → 스케일/유틸로 점진 이관(새/수정 화면부터).
 
 **규칙 요약: 색은 시맨틱 토큰, 간격은 4px 스케일, 컴포넌트는 `.b2b-*` 재사용. 인라인 hex/px 금지.**
