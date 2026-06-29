@@ -28,7 +28,7 @@ export const NAV: NavCategory[] = [
     ],
   },
   {
-    label: "생산",
+    label: "생산·재고",
     tools: [
       {
         href: "/production", label: "생산관리", emoji: "🏭",
@@ -42,11 +42,6 @@ export const NAV: NavCategory[] = [
           { href: "/production/products", label: "품목 업로드" },
         ],
       },
-    ],
-  },
-  {
-    label: "재고",
-    tools: [
       {
         href: "/inventory", label: "재고관리", emoji: "📦",
         menu: [
