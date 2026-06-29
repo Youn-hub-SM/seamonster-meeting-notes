@@ -5,6 +5,14 @@ import { Product, ProductInput, EMPTY_PRODUCT, CostHistory, TAX_TYPES, TAX_TYPE_
 
 type Modal = { mode: "create" | "edit"; data: ProductInput } | null;
 
+type DiffChange = { label: string; from: string; to: string };
+type ImportPreview = {
+  summary: { creates: number; updates: number; unchanged: number; errors: number };
+  creates: { name: string; row: ProductInput }[];
+  updates: { id: string; name: string; changes: DiffChange[]; row: ProductInput }[];
+  errors: { line: number; msg: string }[];
+};
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,6 +24,9 @@ export default function ProductsPage() {
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [history, setHistory] = useState<CostHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
 
   async function reload() {
     setLoading(true);
@@ -122,6 +133,46 @@ export default function ProductsPage() {
     setHistoryLoading(false);
   }
 
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/b2b/products/import", { method: "POST", body: fd });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "파일 분석 실패");
+      setPreview(j as ImportPreview);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "파일 분석 실패");
+    }
+    setImporting(false);
+  }
+
+  async function applyImport() {
+    if (!preview) return;
+    setApplying(true);
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/products/import/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creates: preview.creates.map((c) => c.row),
+          updates: preview.updates.map((u) => u.row),
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "적용 실패");
+      setPreview(null);
+      await reload();
+      if (j.errors && j.errors.length) setError(`일부 실패: ${j.errors.join("; ")}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "적용 실패");
+    }
+    setApplying(false);
+  }
+
   return (
     <>
       <header className="b2b-page-head">
@@ -133,6 +184,19 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="b2b-page-actions">
+          <a className="b2b-btn-secondary" href="/api/b2b/products/export" title="전 품목을 엑셀로 내려받기(ID 포함, 수정 후 재업로드 가능)">
+            엑셀 추출
+          </a>
+          <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }} title="추출한 엑셀을 수정해 업로드 — 변경 내역 확인 후 반영">
+            {importing ? "분석 중…" : "엑셀 업로드"}
+            <input
+              type="file"
+              accept=".xlsx"
+              style={{ display: "none" }}
+              disabled={importing}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ""; }}
+            />
+          </label>
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
             {loading ? "불러오는 중..." : "새로고침"}
           </button>
@@ -308,6 +372,76 @@ export default function ProductsPage() {
               : undefined
           }
         />
+      )}
+
+      {preview && (
+        <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
+            <div className="b2b-modal-head">
+              <h2 className="b2b-modal-title">엑셀 업로드 — 변경 확인</h2>
+              <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
+                <span>신규 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.creates}</strong></span>
+                <span>변경 <strong style={{ color: "var(--sm-info)" }}>{preview.summary.updates}</strong></span>
+                <span className="sm-faint">동일 {preview.summary.unchanged}</span>
+                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}</span>}
+              </div>
+
+              {preview.summary.creates + preview.summary.updates === 0 && (
+                <div className="b2b-empty" style={{ padding: 20 }}>반영할 변경이 없습니다.</div>
+              )}
+
+              {preview.updates.length > 0 && (
+                <section style={{ marginBottom: 12 }}>
+                  <div className="b2b-field-label" style={{ fontWeight: 700 }}>변경 ({preview.updates.length})</div>
+                  {preview.updates.map((u) => (
+                    <div key={u.id} style={{ padding: "8px 10px", border: "1px solid var(--sm-border)", borderRadius: 8, marginTop: 6 }}>
+                      <strong>{u.name}</strong>
+                      <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12 }}>
+                        {u.changes.map((c, i) => (
+                          <li key={i}>{c.label}: <span className="sm-faint" style={{ textDecoration: "line-through" }}>{c.from}</span> → <strong>{c.to}</strong></li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              {preview.creates.length > 0 && (
+                <section style={{ marginBottom: 12 }}>
+                  <div className="b2b-field-label" style={{ fontWeight: 700 }}>신규 ({preview.creates.length})</div>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 13 }}>
+                    {preview.creates.map((c, i) => <li key={i}>{c.name}</li>)}
+                  </ul>
+                </section>
+              )}
+
+              {preview.errors.length > 0 && (
+                <section>
+                  <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외됩니다</div>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)" }}>
+                    {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
+                  </ul>
+                </section>
+              )}
+            </div>
+            <div className="b2b-modal-foot">
+              <span />
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
+                <button
+                  className="b2b-btn-primary"
+                  onClick={applyImport}
+                  disabled={applying || preview.summary.creates + preview.summary.updates === 0}
+                >
+                  {applying ? "적용 중…" : `${preview.summary.creates + preview.summary.updates}건 적용`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
