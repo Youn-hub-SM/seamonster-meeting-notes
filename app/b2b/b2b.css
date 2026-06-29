@@ -1256,6 +1256,19 @@ a.b2b-history-item:hover {
 .sm-chart-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--sm-text-mid); }
 .sm-chart-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
 
+/* 재고 구매창 — 제품 검색 추천 드롭다운(초성 검색) */
+.inv-buy-suggest {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: 10px;
+  box-shadow: var(--sm-shadow-float, 0 8px 24px rgba(0,0,0,.12)); max-height: 280px; overflow: auto; padding: 4px;
+}
+.inv-buy-suggest-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  text-align: left; background: none; border: none; cursor: pointer; padding: 8px 10px; border-radius: 7px;
+}
+.inv-buy-suggest-item:hover { background: var(--sm-bg-subtle); }
+.inv-buy-table th, .inv-buy-table td { vertical-align: middle; }
+
 /* 우측 생산 목록 */
 .prod-cal-side-head { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .prod-cal-side-sub { font-size: 11px; font-weight: 500; color: var(--sm-text-light); margin-left: 6px; }

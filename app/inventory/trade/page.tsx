@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InventoryRow } from "@/app/lib/inventory";
-import TxnModal from "../TxnModal";
+import PurchaseForm, { type PickProduct } from "../PurchaseForm";
 import TxnTable from "../TxnTable";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
@@ -27,8 +27,7 @@ export default function TradePage() {
     if (j.ok) setRows(j.rows || []);
   }, []);
   useEffect(() => { load(); }, [load]);
-  const products = useMemo(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, unit: r.unit })), [rows]);
-  const qtyOf = useCallback((id: string) => rows.find((r) => r.product_id === id)?.qty || 0, [rows]);
+  const products = useMemo<PickProduct[]>(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, spec: r.spec, unit: r.unit, cost_price: r.cost_price, qty: r.qty })), [rows]);
 
   async function handleFile(file: File) {
     setImporting(true); setError("");
@@ -94,7 +93,7 @@ export default function TradePage() {
         <TxnTable types={["입고", "출고"]} reloadKey={reload} onChanged={load} />
       </section>
 
-      {open && <TxnModal products={products} qtyOf={qtyOf} defaultType="입고" onClose={() => setOpen(false)} onSaved={() => { setOpen(false); setReload((n) => n + 1); load(); }} />}
+      {open && <PurchaseForm products={products} defaultType="입고" onClose={() => setOpen(false)} onSaved={() => { setOpen(false); setReload((n) => n + 1); load(); }} />}
 
       {preview && (
         <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
