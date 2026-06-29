@@ -10,8 +10,9 @@ export const maxDuration = 60;
 // POST /api/inventory/txns/import/apply { rows: ImportTxn[] } — 미리보기에서 확인한 입출고를 일괄 기록.
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { rows?: ImportTxn[] };
+    const body = (await req.json()) as { rows?: ImportTxn[]; done?: boolean };
     const rows = Array.isArray(body.rows) ? body.rows : [];
+    const status = body.done === false ? "대기" : "완료"; // 즉시처리 미체크면 대기
     if (!rows.length) return NextResponse.json({ ok: false, error: "반영할 행이 없습니다." }, { status: 400 });
     const cookie = req.cookies.get("b2b_auth")?.value;
     const actor = (await verifySession(cookie)) || resolveUserName(cookie);
@@ -41,13 +42,19 @@ export async function POST(req: NextRequest) {
         partner: r.partner ? String(r.partner).slice(0, 200) : null,
         memo: r.memo ? String(r.memo).slice(0, 500) : null,
         created_by: actor,
+        status,
         ...(grp ? { group_id: grp.group_id, order_no: grp.order_no } : {}),
       };
     });
 
-    const { error } = await sb.from("inventory_txns").insert(insert);
-    if (error) throw error;
-    return NextResponse.json({ ok: true, applied: insert.length, orders: [...orderByType.values()].map((o) => o.order_no) });
+    // migration 034(status) 미적용이면 status 컬럼만 빼고 재시도(폴백). group/order 는 rpc 성공 시에만 추가돼 안전.
+    let ins = await sb.from("inventory_txns").insert(insert);
+    if (ins.error && /status/i.test(ins.error.message)) {
+      const stripped = insert.map(({ status: _s, ...rest }) => rest);
+      ins = await sb.from("inventory_txns").insert(stripped);
+    }
+    if (ins.error) throw ins.error;
+    return NextResponse.json({ ok: true, applied: insert.length, status, orders: [...orderByType.values()].map((o) => o.order_no) });
   } catch (err) {
     console.error("[inventory/txns import apply]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "적용 실패") }, { status: 500 });

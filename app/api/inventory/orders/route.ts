@@ -7,7 +7,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 type Raw = {
   id: string; product_id: string; type: string; qty: number; unit_amount: number | null;
   txn_date: string; partner: string | null; memo: string | null; created_by: string | null; created_at: string;
-  order_no?: string | null; group_id?: string | null;
+  order_no?: string | null; group_id?: string | null; status?: string | null;
   products?: { name?: string; sku?: string | null } | null;
 };
 
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
     const sel = (withGroup: boolean) => {
       let q = sb.from("inventory_txns")
-        .select(`id, product_id, type, qty, unit_amount, txn_date, partner, memo, created_by, created_at${withGroup ? ", order_no, group_id" : ""}, products(name, sku)`)
+        .select(`id, product_id, type, qty, unit_amount, txn_date, partner, memo, created_by, created_at${withGroup ? ", order_no, group_id, status" : ""}, products(name, sku)`)
         .in("type", ["입고", "출고"])
         .order("created_at", { ascending: false })
         .limit(limit);
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     const map = new Map<string, ReturnType<typeof emptyOrder>>();
     function emptyOrder(r: Raw) {
       return {
-        key: r.group_id || r.id, order_no: r.order_no || null, type: r.type,
+        key: r.group_id || r.id, order_no: r.order_no || null, type: r.type, status: r.status || "완료",
         txn_date: r.txn_date, created_at: r.created_at, partner: r.partner, memo: r.memo, created_by: r.created_by,
         item_count: 0, total_qty: 0, total_amount: 0,
         items: [] as { id: string; product_name: string; sku: string | null; qty: number; unit_amount: number | null; amount: number }[],
@@ -65,6 +65,25 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("[inventory/orders GET]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "주문 조회 실패") }, { status: 500 });
+  }
+}
+
+// PATCH { group_id?|id?, status } — 입고처리/출고처리(대기→완료) 등 상태 전환.
+export async function PATCH(req: NextRequest) {
+  try {
+    const b = (await req.json()) as { group_id?: string; id?: string; status?: string };
+    const status = b.status === "대기" ? "대기" : "완료";
+    const sb = supabaseAdmin();
+    let q = sb.from("inventory_txns").update({ status });
+    if (b.group_id) q = q.eq("group_id", b.group_id);
+    else if (b.id) q = q.eq("id", b.id);
+    else return NextResponse.json({ ok: false, error: "group_id 또는 id 가 필요합니다." }, { status: 400 });
+    const { error } = await q;
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[inventory/orders PATCH]", err);
+    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "처리 실패") }, { status: 500 });
   }
 }
 

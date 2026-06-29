@@ -5,7 +5,7 @@ import { INV_TYPE_COLOR } from "@/app/lib/inventory";
 
 type OrderItem = { id: string; product_name: string; sku: string | null; qty: number; unit_amount: number | null; amount: number };
 type Order = {
-  key: string; order_no: string | null; type: "입고" | "출고"; txn_date: string; created_at: string;
+  key: string; order_no: string | null; type: "입고" | "출고"; status: "대기" | "완료"; txn_date: string; created_at: string;
   partner: string | null; memo: string | null; created_by: string | null;
   item_count: number; total_qty: number; total_amount: number; items: OrderItem[];
 };
@@ -35,6 +35,11 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     await fetch(`/api/inventory/orders?${qs}`, { method: "DELETE" });
     await load();
   }
+  async function process(o: Order) {
+    const key = o.order_no ? { group_id: o.key } : { id: o.key };
+    await fetch(`/api/inventory/orders`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...key, status: "완료" }) });
+    await load();
+  }
   const dt = (iso: string) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
@@ -44,23 +49,28 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   return (
     <div className="b2b-table-wrap">
       <table className="b2b-table">
-        <thead><tr><th>일시</th><th>주문번호</th><th>유형</th><th>거래처</th><th>품목 수</th><th className="num">총수량</th><th className="num">총액</th><th>메모</th><th></th></tr></thead>
+        <thead><tr><th>상태</th><th>일시</th><th>주문번호</th><th>거래처</th><th>품목 수</th><th className="num">총수량</th><th className="num">총액</th><th>메모</th><th></th></tr></thead>
         <tbody>
           {orders.map((o) => {
             const c = INV_TYPE_COLOR[o.type];
             const isOpen = open.has(o.key);
+            const done = o.status === "완료";
+            const badge = done ? c : { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" };
             return (
               <FragmentRows key={o.key}>
                 <tr onClick={() => toggle(o.key)} style={{ cursor: "pointer" }}>
+                  <td><span className="b2b-feed-pill" style={{ background: badge.bg, color: badge.fg, fontWeight: 700, whiteSpace: "nowrap" }}>{o.type} {o.status}</span></td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 700 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
-                  <td><span className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontWeight: 700 }}>{o.type}</span></td>
                   <td>{o.partner || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{o.item_count}개 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 11 }}>{isOpen ? "▲" : "▼"}</span></td>
                   <td className="num b2b-money">{o.total_qty.toLocaleString()}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{o.total_amount.toLocaleString()}</td>
                   <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={o.memo || ""}>{o.memo || "-"}</td>
-                  <td onClick={(e) => e.stopPropagation()}><button className="b2b-link-btn" onClick={() => cancel(o)} style={{ color: "var(--sm-danger)" }}>취소</button></td>
+                  <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
+                    {!done && <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12, marginRight: 6 }} onClick={() => process(o)}>{o.type === "입고" ? "입고처리" : "출고처리"}</button>}
+                    <button className="b2b-link-btn" onClick={() => cancel(o)} style={{ color: "var(--sm-danger)" }}>취소</button>
+                  </td>
                 </tr>
                 {isOpen && (
                   <tr>

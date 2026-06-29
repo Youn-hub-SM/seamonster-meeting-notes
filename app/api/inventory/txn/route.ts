@@ -34,17 +34,22 @@ export async function POST(req: NextRequest) {
       created_by: await actor(req),
     };
     if (txn_date) row.txn_date = txn_date;
-    // 입고/출고 단건도 주문번호 부여(033 미적용이면 생략).
+    // 입고/출고 단건도 주문번호 부여(033 미적용이면 생략). 즉시처리 미체크면 대기.
     if (type === "입고" || type === "출고") {
+      row.status = b.done === false ? "대기" : "완료";
       try {
         const { data, error } = await sb.rpc("next_inventory_order_no", { p_type: type });
         if (!error && data) { row.group_id = crypto.randomUUID(); row.order_no = String(data); }
       } catch { /* 033 미적용 */ }
     }
 
-    const { data, error } = await sb.from("inventory_txns").insert(row).select().single();
-    if (error) throw error;
-    return NextResponse.json({ ok: true, txn: data });
+    let res = await sb.from("inventory_txns").insert(row).select().single();
+    if (res.error && /status/i.test(res.error.message)) {
+      const { status: _s, ...rest } = row;
+      res = await sb.from("inventory_txns").insert(rest).select().single();
+    }
+    if (res.error) throw res.error;
+    return NextResponse.json({ ok: true, txn: res.data });
   } catch (err) {
     console.error("[inventory/txn POST]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "기록 실패") }, { status: 500 });

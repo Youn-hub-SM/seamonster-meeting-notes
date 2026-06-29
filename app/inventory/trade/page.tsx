@@ -17,6 +17,7 @@ export default function TradePage() {
   const [ioType, setIoType] = useState<"입고" | "출고">("입고");
   const [ioDate, setIoDate] = useState(TODAY());
   const [ioPartner, setIoPartner] = useState("");
+  const [ioDone, setIoDone] = useState(true); // 즉시 입고/출고처리(기본 체크)
 
   async function handleFile(file: File) {
     setImporting(true); setError("");
@@ -34,7 +35,7 @@ export default function TradePage() {
     if (!preview) return;
     setApplying(true); setError("");
     try {
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows }) });
+      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows, done: ioDone }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "적용 실패");
       setPreview(null); setReload((n) => n + 1);
@@ -65,6 +66,7 @@ export default function TradePage() {
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
             <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} style={{ width: "auto" }} /></label>
           <input className="b2b-input" placeholder={ioType === "입고" ? "매입처(선택)" : "판매처(선택)"} value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} style={{ width: 150 }} />
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}><input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리</label>
           <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer", marginLeft: "auto" }}>
             {importing ? "분석 중…" : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}

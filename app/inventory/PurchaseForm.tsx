@@ -21,6 +21,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const [partner, setPartner] = useState("");
   const [memo, setMemo] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
+  const [done, setDone] = useState(true); // 즉시 입고/출고처리(기본 체크) — 해제 시 '대기'
   const [search, setSearch] = useState("");
   const [active, setActive] = useState(-1); // 키보드 하이라이트 인덱스
   const [saving, setSaving] = useState(false);
@@ -70,7 +71,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         type, qty: signedQty(type, Number(l.qty) || 0), product_id: l.product_id, product_name: l.name,
         unit_amount: Number(l.price) > 0 ? Math.round(Number(l.price)) : null, txn_date: date, partner: partner.trim() || null, memo: memo.trim() || null,
       }));
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
+      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
       onSaved();
@@ -138,9 +139,14 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
 
       {error && <div className="b2b-error" style={{ marginTop: 12 }}>{error}</div>}
 
-      <div className="sm-row" style={{ gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
-        <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>취소</button>
-        <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.items === 0}>{saving ? "저장 중…" : `${type === "입고" ? "구매" : "판매"} 저장`}</button>
+      <div className="sm-between" style={{ marginTop: 16, gap: 10, flexWrap: "wrap" }}>
+        <label className="sm-row" style={{ gap: 7, fontSize: 14, cursor: "pointer" }}>
+          <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> 즉시 {type === "입고" ? "입고" : "출고"}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’로 저장)</span>
+        </label>
+        <div className="sm-row" style={{ gap: 10 }}>
+          <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>취소</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.items === 0}>{saving ? "저장 중…" : (done ? `${type === "입고" ? "구매" : "판매"} 저장` : "대기로 저장")}</button>
+        </div>
       </div>
     </>
   );
