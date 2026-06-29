@@ -10,13 +10,13 @@ type Form = {
   received_at: string; channel: string; customer: string;
   purchase_date: string; production_date: string; purchase_place: string; product: string;
   category: string; content: string; resolution: string; cause: string;
-  status: string; improvement: string; photos: string[];
+  status: string; improvement: string; loss_amount: string; photos: string[];
 };
 const emptyForm = (): Form => ({
   received_at: TODAY(), channel: "", customer: "",
   purchase_date: "", production_date: "", purchase_place: "", product: "",
   category: "배송", content: "", resolution: "", cause: "",
-  status: "대기", improvement: "", photos: [],
+  status: "대기", improvement: "", loss_amount: "", photos: [],
 });
 
 export default function VocPage() {
@@ -64,7 +64,7 @@ export default function VocPage() {
       id: r.id, received_at: r.received_at, channel: r.channel || "", customer: r.customer || "",
       purchase_date: r.purchase_date || "", production_date: r.production_date || "", purchase_place: r.purchase_place || "", product: r.product || "",
       category: r.category, content: r.content, resolution: r.resolution || "", cause: r.cause || "",
-      status: r.status, improvement: r.improvement || "", photos: r.photos || [],
+      status: r.status, improvement: r.improvement || "", loss_amount: r.loss_amount ? String(r.loss_amount) : "", photos: r.photos || [],
     });
   }
 
@@ -218,7 +218,8 @@ export default function VocPage() {
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">제품 생산일</span>
                   <input className="b2b-input" type="date" value={edit.production_date} onChange={(e) => setF("production_date", e.target.value)} /></label>
-                <div className="b2b-field" />
+                <label className="b2b-field"><span className="b2b-field-label">손해/보상 금액 (원)</span>
+                  <input className="b2b-input" type="number" min={0} value={edit.loss_amount} onChange={(e) => setF("loss_amount", e.target.value)} placeholder="0" /></label>
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">클레임 유형</span>

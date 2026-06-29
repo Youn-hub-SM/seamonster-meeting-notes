@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 // 폼이 실제로 다루는 사용자 입력 필드만 허용(매스 어사인 방지).
 // source(수집방식)·assignee·sentiment·loss_amount 는 자동수집/정산 전용 → 전용 경로에서만 기록.
-const EDITABLE = ["received_at", "channel", "customer", "purchase_date", "production_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "photos"] as const;
+const EDITABLE = ["received_at", "channel", "customer", "purchase_date", "production_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "loss_amount", "photos"] as const;
 
 // "" → null 로 강등할 nullable 컬럼. 그 외(NOT NULL/Default 보유: received_at·category·status·content·photos)는
 // "" 면 키 자체를 생략 → POST 는 DB default, PATCH 는 기존값 유지(NOT NULL 위반 방지).
@@ -32,6 +32,8 @@ function pick(body: Record<string, unknown>) {
     if (Array.isArray(out.photos)) out.photos = (out.photos as unknown[]).filter((x) => typeof x === "string");
     else delete out.photos;
   }
+  // loss_amount 는 0 이상 정수로 정규화
+  if ("loss_amount" in out) out.loss_amount = Math.max(0, Math.round(Number(out.loss_amount) || 0));
   return out;
 }
 
