@@ -45,6 +45,24 @@ export const NAV: NavCategory[] = [
     ],
   },
   {
+    label: "재고",
+    tools: [
+      {
+        href: "/inventory", label: "재고관리", emoji: "📦",
+        menu: [
+          { href: "/inventory", label: "제품목록" },
+          { href: "/inventory/trade", label: "구매 및 판매" },
+          { href: "/inventory/adjust", label: "조정" },
+          { href: "/inventory/alerts", label: "재고 부족 알림" },
+          { href: "/inventory/stats", label: "통계" },
+          { href: "/inventory/quote", label: "월간 매입 견적서" },
+          { href: "/inventory/asof", label: "과거 수량 조회" },
+          { href: "/inventory/activity", label: "활동 히스토리" },
+        ],
+      },
+    ],
+  },
+  {
     label: "마케팅",
     tools: [
       { href: "/utm", label: "UTM 빌더", emoji: "🔗" },
