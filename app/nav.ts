@@ -2,8 +2,8 @@
 //  분류·소속은 여기 배열만 고치면 바로 반영됨.
 
 export type NavMenuItem = { href: string; label: string; adminOnly?: boolean };
-export type NavTool = { href: string; label: string; emoji: string; menu?: NavMenuItem[] };
-export type NavCategory = { label: string; tools: NavTool[] };
+export type NavTool = { href: string; label: string; emoji: string; adminOnly?: boolean; menu?: NavMenuItem[] };
+export type NavCategory = { label: string; adminOnly?: boolean; tools: NavTool[] };
 
 export const HOME: NavTool = { href: "/", label: "홈", emoji: "🏠" };
 
@@ -22,8 +22,6 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/reports", label: "매출 집계" },
           { href: "/b2b/payments", label: "입금 확인" },
           { href: "/b2b/history", label: "히스토리" },
-          { href: "/b2b/users", label: "계정 관리", adminOnly: true },
-          { href: "/b2b/settings", label: "설정", adminOnly: true },
         ],
       },
       { href: "/subscription", label: "정기배송 분석", emoji: "📈" },
@@ -82,6 +80,14 @@ export const NAV: NavCategory[] = [
     label: "기타",
     tools: [
       { href: "/meeting", label: "회의 정리", emoji: "📝" },
+    ],
+  },
+  {
+    label: "관리자",
+    adminOnly: true, // 관리자·현석에게만 노출
+    tools: [
+      { href: "/b2b/users", label: "계정 관리", emoji: "👤" },
+      { href: "/b2b/settings", label: "설정", emoji: "⚙️" },
     ],
   },
 ];

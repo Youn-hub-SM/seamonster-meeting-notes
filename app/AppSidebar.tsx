@@ -102,12 +102,16 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
             <span className="app-sb-tool-label">{HOME.label}</span>
           </Link>
         </div>
-        {NAV.map((cat) => (
-          <div key={cat.label} className="app-sb-group">
-            <div className="app-sb-cat">{cat.label}</div>
-            {cat.tools.map(renderTool)}
-          </div>
-        ))}
+        {NAV.filter((cat) => !cat.adminOnly || isAdmin).map((cat) => {
+          const tools = cat.tools.filter((t) => !t.adminOnly || isAdmin);
+          if (tools.length === 0) return null;
+          return (
+            <div key={cat.label} className="app-sb-group">
+              <div className="app-sb-cat">{cat.label}</div>
+              {tools.map(renderTool)}
+            </div>
+          );
+        })}
       </nav>
 
       {userName && (
