@@ -31,7 +31,7 @@ export async function POST() {
 
     const { data, error } = await supabaseAdmin()
       .from("voc")
-      .select("received_at, channel, source, product, purchase_place, category, content, cause, resolution, status, loss_amount")
+      .select("received_at, buyer_type, comp_type, source, product, purchase_place, category, content, cause, resolution, status, loss_amount")
       .order("received_at", { ascending: false })
       .limit(MAX_ROWS);
     if (error) throw error;
@@ -44,7 +44,8 @@ export async function POST() {
     // 토큰 절약: 본문은 200자로 컷
     const payload = rows.map((r) => ({
       date: r.received_at,
-      channel: r.channel,
+      buyer: r.buyer_type,
+      comp: r.comp_type,
       source: r.source,
       product: r.product,
       place: r.purchase_place,

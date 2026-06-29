@@ -165,7 +165,7 @@ export default function VocStatsPage() {
     const order = new Map(VOC_CATEGORIES.map((c, i) => [c as string, i]));
     return counts.sort((a, b) => (b[1] - a[1]) || ((order.get(a[0]) ?? 99) - (order.get(b[0]) ?? 99)));
   }, [shown]);
-  const byChannel = useMemo(() => countBy(shown, (r) => r.channel), [shown]);
+  const byBuyer = useMemo(() => countBy(shown, (r) => r.buyer_type), [shown]);
   const bySource = useMemo(() => countBy(shown, (r) => r.source), [shown]);
   const byPlace = useMemo(() => countBy(shown, (r) => r.purchase_place), [shown]);
   const byStatus = useMemo(() => countBy(shown, (r) => r.status), [shown]);
@@ -195,7 +195,7 @@ export default function VocStatsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC 통계·보고서</h1>
-          <p className="b2b-page-subtitle no-print">클레임을 유형·채널·기간으로 집계합니다. 제조사 제출용은 <Link href="/voc/reports" className="change-link">개선요청서</Link>에서.</p>
+          <p className="b2b-page-subtitle no-print">클레임을 유형·구매자·기간으로 집계합니다. 제조사 제출용은 <Link href="/voc/reports" className="change-link">개선요청서</Link>에서.</p>
           <p className="print-only" style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
         </div>
         <div className="b2b-page-actions no-print">
@@ -276,7 +276,7 @@ export default function VocStatsPage() {
 
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginTop: 14 }}>
             <PieCard title="클레임 유형별" data={byCategory} />
-            <PieCard title="접수채널별" data={byChannel} />
+            <PieCard title="구매자 구분" data={byBuyer} />
             <PieCard title="수집경로별" data={bySource} />
             <PieCard title="구매처별" data={byPlace} />
             <PieCard title="상태별" data={byStatus} />
@@ -287,12 +287,12 @@ export default function VocStatsPage() {
             <div className="b2b-card-head"><span className="b2b-card-title">상세 내역 ({shown.length}건)</span></div>
             <div className="b2b-table-wrap">
               <table className="b2b-table">
-                <thead><tr><th>접수일</th><th>채널</th><th>유형</th><th>내용</th><th>처리내용</th><th className="num">손해(원)</th><th>상태</th></tr></thead>
+                <thead><tr><th>접수일</th><th>구매자</th><th>유형</th><th>내용</th><th>처리내용</th><th className="num">손해(원)</th><th>상태</th></tr></thead>
                 <tbody>
                   {shown.map((r) => (
                     <tr key={r.id}>
                       <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(2)}</td>
-                      <td>{r.channel || "-"}</td>
+                      <td>{r.buyer_type || "-"}</td>
                       <td>{r.category}</td>
                       <td style={{ maxWidth: 280 }}>{r.content}</td>
                       <td style={{ maxWidth: 200 }}>{r.resolution || "-"}</td>

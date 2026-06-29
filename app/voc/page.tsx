@@ -1,23 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, type Voc, type VocStatus } from "@/app/lib/voc";
+import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, autoLoss, type Voc, type VocStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
 
 type Form = {
   id?: string;
-  received_at: string; channel: string; customer: string;
+  received_at: string; customer: string; buyer_type: string;
   purchase_date: string; production_date: string; purchase_place: string; product: string;
   category: string; content: string; resolution: string; cause: string;
-  status: string; improvement: string; loss_amount: string; photos: string[];
+  status: string; improvement: string; customer_note: string;
+  comp_type: string; comp_qty: string; loss_amount: string; photos: string[];
 };
 const emptyForm = (): Form => ({
-  received_at: TODAY(), channel: "", customer: "",
+  received_at: TODAY(), customer: "", buyer_type: "",
   purchase_date: "", production_date: "", purchase_place: "", product: "",
   category: "배송", content: "", resolution: "", cause: "",
-  status: "대기", improvement: "", loss_amount: "", photos: [],
+  status: "대기", improvement: "", customer_note: "",
+  comp_type: "없음", comp_qty: "1", loss_amount: "", photos: [],
 });
 
 export default function VocPage() {
@@ -43,11 +45,27 @@ export default function VocPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // 공용 상품 마스터(자동완성용)
-  const [products, setProducts] = useState<{ id: string; name: string; sku: string | null; spec: string | null }[]>([]);
+  // 공용 상품 마스터(자동완성 + 손해금액 자동계산 단가)
+  const [products, setProducts] = useState<{ id: string; name: string; sku: string | null; spec: string | null; sale_price: number | null; cost_price: number | null }[]>([]);
   useEffect(() => {
     fetch("/api/products", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setProducts(j.products || []); }).catch(() => {});
   }, []);
+
+  // 보상유형·수량·상품 변경 시 손해금액 자동계산
+  //  없음 → 0, 추가보상·부분환불 → 직접입력 유지, 그 외 → 마스터 단가 기준(매칭 안되면 직접입력 유지)
+  useEffect(() => {
+    setEdit((f) => {
+      if (!f) return f;
+      if (f.comp_type === "없음") return f.loss_amount === "0" ? f : { ...f, loss_amount: "0" };
+      if (VOC_COMP_MANUAL.has(f.comp_type)) return f;
+      const p = products.find((x) => x.name === f.product);
+      if (!p) return f; // 마스터에 없는 상품 → 단가 미확인, 직접입력 유지
+      const a = autoLoss(f.comp_type, Number(f.comp_qty), Number(p.sale_price) || 0, Number(p.cost_price) || 0);
+      if (a === null) return f;
+      const s = String(a);
+      return f.loss_amount === s ? f : { ...f, loss_amount: s };
+    });
+  }, [edit?.comp_type, edit?.comp_qty, edit?.product, products]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { 전체: rows.length };
@@ -68,10 +86,11 @@ export default function VocPage() {
   function openNew() { setEdit(emptyForm()); }
   function openEdit(r: Voc) {
     setEdit({
-      id: r.id, received_at: r.received_at, channel: r.channel || "", customer: r.customer || "",
+      id: r.id, received_at: r.received_at, customer: r.customer || "", buyer_type: r.buyer_type || "",
       purchase_date: r.purchase_date || "", production_date: r.production_date || "", purchase_place: r.purchase_place || "", product: r.product || "",
       category: r.category, content: r.content, resolution: r.resolution || "", cause: r.cause || "",
-      status: r.status, improvement: r.improvement || "", loss_amount: r.loss_amount ? String(r.loss_amount) : "", photos: r.photos || [],
+      status: r.status, improvement: r.improvement || "", customer_note: r.customer_note || "",
+      comp_type: r.comp_type || "없음", comp_qty: String(r.comp_qty ?? 1), loss_amount: r.loss_amount ? String(r.loss_amount) : "", photos: r.photos || [],
     });
   }
 
@@ -137,6 +156,22 @@ export default function VocPage() {
   }
   const removePhoto = (url: string) => setEdit((f) => (f ? { ...f, photos: f.photos.filter((p) => p !== url) } : f));
 
+  // 손해금액 계산 근거 안내문
+  const matched = edit ? products.find((p) => p.name === edit.product) : undefined;
+  const isManualType = edit ? VOC_COMP_MANUAL.has(edit.comp_type) : false;
+  let lossHint = "";
+  if (edit) {
+    if (edit.comp_type === "없음") lossHint = "보상 없음 → 0원";
+    else if (isManualType) lossHint = "직접 입력 유형 (자동계산 없음)";
+    else if (!matched) lossHint = "상품 단가 미확인 (마스터에 없는 상품) → 직접 입력";
+    else {
+      const isCost = edit.comp_type === "교환·재발송";
+      const unit = (isCost ? Number(matched.cost_price) : Number(matched.sale_price)) || 0;
+      const qn = Math.max(1, Number(edit.comp_qty) || 1);
+      lossHint = `${isCost ? "원가" : "판매가"} ${unit.toLocaleString()} × ${qn} = ${(unit * qn).toLocaleString()}원 (자동)`;
+    }
+  }
+
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
@@ -168,14 +203,14 @@ export default function VocPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr>
-              <th>접수일</th><th>접수채널</th><th>고객</th><th>구매상품</th><th>유형</th><th>상세내용</th><th>상태</th>
+              <th>접수일</th><th>고객</th><th>구매자</th><th>구매상품</th><th>유형</th><th>상세내용</th><th>상태</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} onClick={() => openEdit(r)} style={{ cursor: "pointer" }}>
                   <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
-                  <td>{r.channel || "-"}</td>
                   <td>{r.customer || "-"}</td>
+                  <td>{r.buyer_type || "-"}</td>
                   <td>{r.product || "-"}</td>
                   <td>{r.category}</td>
                   <td style={{ maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.content}</td>
@@ -207,8 +242,11 @@ export default function VocPage() {
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">접수일</span>
                   <input className="b2b-input" type="date" required value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} /></label>
-                <label className="b2b-field"><span className="b2b-field-label">접수채널</span>
-                  <input className="b2b-input" value={edit.channel} onChange={(e) => setF("channel", e.target.value)} placeholder="전화·카톡·이메일·리뷰…" /></label>
+                <label className="b2b-field"><span className="b2b-field-label">구매자 구분</span>
+                  <select className="b2b-input" value={edit.buyer_type} onChange={(e) => setF("buyer_type", e.target.value)}>
+                    <option value="">선택 안 함</option>
+                    {VOC_BUYER_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
+                  </select></label>
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">고객명</span>
@@ -228,9 +266,20 @@ export default function VocPage() {
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">제품 생산일</span>
                   <input className="b2b-input" type="date" value={edit.production_date} onChange={(e) => setF("production_date", e.target.value)} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">보상유형</span>
+                  <select className="b2b-input" value={edit.comp_type} onChange={(e) => setF("comp_type", e.target.value)}>
+                    {VOC_COMP_TYPES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select></label>
+              </div>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">보상 수량</span>
+                  <input className="b2b-input" type="number" min={1} value={edit.comp_qty}
+                    disabled={edit.comp_type === "없음" || isManualType}
+                    onChange={(e) => setF("comp_qty", e.target.value)} /></label>
                 <label className="b2b-field"><span className="b2b-field-label">손해/보상 금액 (원)</span>
                   <input className="b2b-input" type="number" min={0} value={edit.loss_amount} onChange={(e) => setF("loss_amount", e.target.value)} placeholder="0" /></label>
               </div>
+              {lossHint && <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 4px" }}>💰 {lossHint}</p>}
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">클레임 유형</span>
                   <select className="b2b-input" value={edit.category} onChange={(e) => setF("category", e.target.value)}>{VOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
@@ -245,6 +294,8 @@ export default function VocPage() {
                 <textarea className="b2b-textarea" rows={2} value={edit.resolution} onChange={(e) => setF("resolution", e.target.value)} placeholder="어떻게 처리했는지" /></label>
               <label className="b2b-field"><span className="b2b-field-label">개선 필요사항</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.improvement} onChange={(e) => setF("improvement", e.target.value)} placeholder="재발 방지를 위해 바꿔야 할 것" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">고객 특이사항</span>
+                <textarea className="b2b-textarea" rows={2} value={edit.customer_note} onChange={(e) => setF("customer_note", e.target.value)} placeholder="VIP·과거 클레임 이력·연락 시 주의할 점 등" /></label>
               <div className="b2b-field">
                 <span className="b2b-field-label">사진 첨부 <span className="sm-faint" style={{ fontWeight: 400 }}>· 개선요청서에 자동 첨부됩니다</span></span>
                 <div className="sm-row-wrap" style={{ gap: 8 }}>

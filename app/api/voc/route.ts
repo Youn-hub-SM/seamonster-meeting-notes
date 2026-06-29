@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { VOC_SOURCES, VOC_CATEGORIES, VOC_STATUSES, VOC_SENTIMENTS } from "@/app/lib/voc";
+import { VOC_SOURCES, VOC_CATEGORIES, VOC_STATUSES, VOC_SENTIMENTS, VOC_BUYER_TYPES, VOC_COMP_TYPES } from "@/app/lib/voc";
 
 export const dynamic = "force-dynamic";
 
 // 폼이 실제로 다루는 사용자 입력 필드만 허용(매스 어사인 방지).
 // source(수집방식)·assignee·sentiment·loss_amount 는 자동수집/정산 전용 → 전용 경로에서만 기록.
-const EDITABLE = ["received_at", "channel", "customer", "purchase_date", "production_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "loss_amount", "photos"] as const;
+const EDITABLE = ["received_at", "customer", "buyer_type", "purchase_date", "production_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "customer_note", "comp_type", "comp_qty", "loss_amount", "photos"] as const;
 
-// "" → null 로 강등할 nullable 컬럼. 그 외(NOT NULL/Default 보유: received_at·category·status·content·photos)는
+// "" → null 로 강등할 nullable 컬럼. 그 외(NOT NULL/Default 보유: received_at·category·status·content·photos·comp_type·comp_qty)는
 // "" 면 키 자체를 생략 → POST 는 DB default, PATCH 는 기존값 유지(NOT NULL 위반 방지).
-const NULLABLE = new Set(["channel", "customer", "purchase_date", "production_date", "purchase_place", "product", "resolution", "cause", "improvement"]);
+const NULLABLE = new Set(["customer", "buyer_type", "purchase_date", "production_date", "purchase_place", "product", "resolution", "cause", "improvement", "customer_note"]);
 
-const ENUMS: Record<string, readonly string[]> = { source: VOC_SOURCES, category: VOC_CATEGORIES, status: VOC_STATUSES, sentiment: VOC_SENTIMENTS };
+const ENUMS: Record<string, readonly string[]> = { source: VOC_SOURCES, category: VOC_CATEGORIES, status: VOC_STATUSES, sentiment: VOC_SENTIMENTS, buyer_type: VOC_BUYER_TYPES, comp_type: VOC_COMP_TYPES };
 const DATE_FIELDS = ["received_at", "purchase_date", "production_date"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LEN = 5000;
@@ -34,6 +34,8 @@ function pick(body: Record<string, unknown>) {
   }
   // loss_amount 는 0 이상 정수로 정규화
   if ("loss_amount" in out) out.loss_amount = Math.max(0, Math.round(Number(out.loss_amount) || 0));
+  // comp_qty 는 1 이상 정수로 정규화
+  if ("comp_qty" in out) out.comp_qty = Math.max(1, Math.round(Number(out.comp_qty) || 1));
   return out;
 }
 

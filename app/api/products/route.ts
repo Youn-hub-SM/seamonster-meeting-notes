@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const { data, error } = await supabaseAdmin()
       .from("products")
-      .select("id, sku, name, spec, unit")
+      .select("id, sku, name, spec, unit, sale_price, cost_price")
       .eq("active", true)
       .order("name", { ascending: true });
     if (error) throw error;
