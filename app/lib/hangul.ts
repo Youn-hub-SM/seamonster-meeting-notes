@@ -13,10 +13,17 @@ export function chosungOf(s: string): string {
   return out;
 }
 
-// name 이 query 에 매칭되는지 — 일반 부분일치 OR 초성 부분일치.
+// name 이 query(한 단어)에 매칭되는지 — 일반 부분일치 OR 초성 부분일치.
 export function matchKo(name: string, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   if (name.toLowerCase().includes(q)) return true;
   return chosungOf(name).includes(q);
+}
+
+// 여러 단어 검색 — 공백으로 나눈 각 단어가 모두 매칭(AND). "광어 100 1kg" → 이름·옵션·SKU 어디든.
+export function matchKoQuery(haystack: string, query: string): boolean {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return true;
+  return tokens.every((t) => matchKo(haystack, t));
 }

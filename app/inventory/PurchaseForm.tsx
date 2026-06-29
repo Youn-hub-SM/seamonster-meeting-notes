@@ -2,19 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { signedQty, type InvTxnType } from "@/app/lib/inventory";
-import { matchKo } from "@/app/lib/hangul";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 export type PickProduct = { id: string; name: string; sku: string | null; spec: string | null; unit: string; cost_price: number; qty: number };
 type Line = { key: string; product_id: string; name: string; sub: string; unit: string; qty: string; price: string };
 
-// BoxHero 구매창 스타일 — 여러 제품을 한 화면에 담아 입고/출고를 한 번에 기록. 제품 검색은 초성 지원.
-export default function PurchaseForm({ products, defaultType = "입고", onClose, onSaved }: {
+// BoxHero 구매창 스타일 — 전체 페이지 폼. 여러 제품을 담아 입고/출고를 한 번에. 제품 검색은 초성·다중단어 지원.
+export default function PurchaseForm({ products, defaultType = "입고", onSaved, onCancel }: {
   products: PickProduct[];
   defaultType?: InvTxnType;
-  onClose: () => void;
   onSaved: () => void;
+  onCancel: () => void;
 }) {
   const [type, setType] = useState<InvTxnType>(defaultType);
   const [date, setDate] = useState(TODAY());
@@ -28,7 +28,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onClose
   const matches = useMemo(() => {
     const q = search.trim();
     if (!q) return [];
-    return products.filter((p) => matchKo(`${p.name} ${p.sku || ""} ${p.spec || ""}`, q)).slice(0, 8);
+    return products.filter((p) => matchKoQuery(`${p.name} ${p.sku || ""} ${p.spec || ""} ${p.unit}`, q)).slice(0, 12);
   }, [products, search]);
 
   function addLine(p: PickProduct) {
@@ -64,69 +64,69 @@ export default function PurchaseForm({ products, defaultType = "입고", onClose
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 920, width: "94vw" }}>
-        <div className="b2b-modal-head">
-          <span className="b2b-modal-title">제품 선택 — {type === "입고" ? "구매(입고)" : "판매(출고)"}</span>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+    <>
+      <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <div className="sm-tabs">
+          <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => setType("입고")}>구매(입고)</button>
+          <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => setType("출고")}>판매(출고)</button>
         </div>
-        <div className="b2b-modal-body">
-          <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-            <div className="sm-tabs">
-              <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => setType("입고")}>구매(입고)</button>
-              <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => setType("출고")}>판매(출고)</button>
-            </div>
-            <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
-              <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
-            <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 160 }} />
-            <input className="b2b-input" placeholder="메모(선택)" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-          </div>
-
-          <div className="b2b-table-wrap">
-            <table className="b2b-table inv-buy-table">
-              <thead><tr><th>제품</th><th className="num" style={{ width: 90 }}>수량</th><th className="num" style={{ width: 130 }}>단가</th><th className="num" style={{ width: 120 }}>금액</th><th style={{ width: 36 }}></th></tr></thead>
-              <tbody>
-                {lines.map((l) => (
-                  <tr key={l.key}>
-                    <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 11 }}>{l.sub}</div>}</td>
-                    <td className="num"><input className="b2b-input" type="number" min={1} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 70, textAlign: "right", padding: "5px 8px" }} /></td>
-                    <td className="num"><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, "price", e.target.value)} style={{ width: 110, textAlign: "right", padding: "5px 8px" }} /></td>
-                    <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{amountOf(l).toLocaleString()}</td>
-                    <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>
-                  </tr>
-                ))}
-                {lines.length === 0 && <tr><td colSpan={5} className="sm-faint" style={{ padding: "14px 4px" }}>아래에서 제품을 검색해 추가하세요.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 제품 추가 — 초성 검색 */}
-          <div style={{ position: "relative", marginTop: 8 }}>
-            <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="+ 제품 검색 (이름·SKU·초성 ‘ㄴㅇ’)" autoComplete="off" />
-            {matches.length > 0 && (
-              <div className="inv-buy-suggest">
-                {matches.map((p) => (
-                  <button key={p.id} className="inv-buy-suggest-item" onClick={() => addLine(p)}>
-                    <span><strong>{p.name}</strong> <span className="sm-faint" style={{ fontSize: 11 }}>{[p.spec, p.sku].filter(Boolean).join(" · ")}</span></span>
-                    <span className="sm-faint" style={{ fontSize: 11 }}>재고 {p.qty.toLocaleString()}{p.unit}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "8px 12px", fontSize: 13 }}>일치하는 제품 없음</div></div>}
-          </div>
-
-          {error && <div className="b2b-error" style={{ marginTop: 10 }}>{error}</div>}
-        </div>
-        <div className="b2b-modal-foot">
-          <span className="sm-faint" style={{ fontSize: 13 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
-          <div className="b2b-modal-foot-right" style={{ alignItems: "center", gap: 14 }}>
-            <span style={{ fontSize: 16, fontWeight: 800 }}>총액 ₩{totals.amount.toLocaleString()}</span>
-            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
-            <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.items === 0}>{saving ? "저장 중…" : "저장"}</button>
-          </div>
-        </div>
+        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
+          <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
+        <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />
+        <input className="b2b-input" placeholder="메모(선택)" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
       </div>
-    </div>
+
+      <section className="b2b-card">
+        <div className="b2b-card-head"><span className="b2b-card-title">제품 선택</span></div>
+
+        {/* 큰 검색창 — 이름·옵션·SKU·초성·여러 단어("광어 100 1kg") */}
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off"
+            placeholder="제품 검색 — 예: 광어 100 1kg / 초성 ㄱㅇ"
+            style={{ fontSize: 15, padding: "13px 16px" }} />
+          {matches.length > 0 && (
+            <div className="inv-buy-suggest">
+              {matches.map((p) => (
+                <button key={p.id} className="inv-buy-suggest-item" onClick={() => addLine(p)}>
+                  <span><strong>{p.name}</strong> <span className="sm-faint" style={{ fontSize: 12 }}>{[p.spec, p.sku].filter(Boolean).join(" · ")}</span></span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>재고 {p.qty.toLocaleString()}{p.unit}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "10px 14px", fontSize: 13 }}>일치하는 제품 없음</div></div>}
+        </div>
+
+        <div className="b2b-table-wrap">
+          <table className="b2b-table inv-buy-table">
+            <thead><tr><th>제품</th><th className="num" style={{ width: 100 }}>수량</th><th className="num" style={{ width: 140 }}>단가</th><th className="num" style={{ width: 130 }}>금액</th><th style={{ width: 40 }}></th></tr></thead>
+            <tbody>
+              {lines.map((l) => (
+                <tr key={l.key}>
+                  <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 11 }}>{l.sub}</div>}</td>
+                  <td className="num"><input className="b2b-input" type="number" min={1} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 80, textAlign: "right", padding: "6px 8px" }} /></td>
+                  <td className="num"><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, "price", e.target.value)} style={{ width: 120, textAlign: "right", padding: "6px 8px" }} /></td>
+                  <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{amountOf(l).toLocaleString()}</td>
+                  <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>
+                </tr>
+              ))}
+              {lines.length === 0 && <tr><td colSpan={5} className="sm-faint" style={{ padding: "16px 4px" }}>위 검색창에서 제품을 찾아 추가하세요.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="sm-between" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--sm-border)", flexWrap: "wrap", gap: 12 }}>
+          <span className="sm-faint" style={{ fontSize: 13 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
+          <span style={{ fontSize: 19, fontWeight: 800 }}>총액 ₩{totals.amount.toLocaleString()}</span>
+        </div>
+      </section>
+
+      {error && <div className="b2b-error" style={{ marginTop: 12 }}>{error}</div>}
+
+      <div className="sm-row" style={{ gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
+        <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>취소</button>
+        <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.items === 0}>{saving ? "저장 중…" : `${type === "입고" ? "구매" : "판매"} 저장`}</button>
+      </div>
+    </>
   );
 }
