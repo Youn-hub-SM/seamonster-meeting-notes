@@ -51,7 +51,8 @@ export interface Product {
   spec: string | null;
   unit: string;
   cost_price: number;
-  sale_price: number;
+  retail_price: number;  // 소비자 판매가
+  sale_price: number;    // B2B 도매가(소비자가의 10% 할인가)
   tax_type: TaxType;
   active: boolean;
   notes: string | null;
@@ -75,6 +76,7 @@ export const EMPTY_PRODUCT: ProductInput = {
   spec: "",
   unit: "개",
   cost_price: 0,
+  retail_price: 0,
   sale_price: 0,
   tax_type: "taxable",
   active: true,
@@ -185,6 +187,7 @@ export function normalizeProduct(input: ProductInput): ProductInput {
     spec: clean(input.spec),
     unit: input.unit?.trim() || "개",
     cost_price,
+    retail_price: numOr0(input.retail_price),
     sale_price: numOr0(input.sale_price),
     tax_type: input.tax_type === "exempt" ? "exempt" : "taxable",
     active: input.active !== false,

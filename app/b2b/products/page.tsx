@@ -184,8 +184,9 @@ export default function ProductsPage() {
                   <th>옵션</th>
                   <th>단위</th>
                   <th className="num">원가</th>
-                  <th className="num">판매가</th>
-                  <th className="num">마진</th>
+                  <th className="num">소비자가</th>
+                  <th className="num">b2b도매가</th>
+                  <th className="num">b2b마진</th>
                   <th>상태</th>
                   <th className="actions"></th>
                 </tr>
@@ -208,6 +209,7 @@ export default function ProductsPage() {
                               spec: p.spec ?? "",
                               unit: p.unit,
                               cost_price: p.cost_price,
+                              retail_price: p.retail_price ?? 0,
                               sale_price: p.sale_price,
                               tax_type: p.tax_type,
                               active: p.active,
@@ -241,8 +243,9 @@ export default function ProductsPage() {
                         <td data-label="옵션">{p.spec || "-"}</td>
                         <td data-label="단위">{p.unit}</td>
                         <td data-label="원가" className="num b2b-money">{p.cost_price.toLocaleString()}</td>
-                        <td data-label="판매가" className="num b2b-money">{p.sale_price.toLocaleString()}</td>
-                        <td data-label="마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
+                        <td data-label="소비자가" className="num b2b-money">{p.retail_price ? p.retail_price.toLocaleString() : "-"}</td>
+                        <td data-label="b2b도매가" className="num b2b-money">{p.sale_price.toLocaleString()}</td>
+                        <td data-label="b2b마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
                           {margin >= 0 ? "+" : ""}{margin.toLocaleString()}
                           {p.sale_price > 0 && (
                             <span style={{ marginLeft: 6, fontSize: 11, color: "var(--sm-text-light)" }}>
@@ -269,7 +272,7 @@ export default function ProductsPage() {
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={8} style={{ background: "var(--sm-bg)", padding: 16 }}>
+                          <td colSpan={9} style={{ background: "var(--sm-bg)", padding: 16 }}>
                             <HistoryPanel loading={historyLoading} history={history} />
                           </td>
                         </tr>
@@ -379,6 +382,8 @@ function ProductModal({
   const effCost = detailSum > 0 ? detailSum : Number(data.cost_price) || 0;
   const margin = (Number(data.sale_price) || 0) - effCost;
   const marginPct = Number(data.sale_price) > 0 ? (margin / Number(data.sale_price)) * 100 : 0;
+  const retail = Number(data.retail_price) || 0;
+  const b2bDiscountPct = retail > 0 && Number(data.sale_price) > 0 ? ((retail - Number(data.sale_price)) / retail) * 100 : null;
 
   return (
     <div className="b2b-modal-backdrop" onClick={onClose}>
@@ -447,17 +452,42 @@ function ProductModal({
             </span>
           </Field>
 
-          <Field label="기본 판매가 (도매가, 원)">
-            <input
-              type="number"
-              inputMode="numeric"
-              className="b2b-input b2b-money"
-              value={data.sale_price}
-              onChange={(e) => set("sale_price", Number(e.target.value) || 0)}
-              min={0}
-              step={1}
-            />
-          </Field>
+          <div className="b2b-field-row">
+            <Field label="소비자 판매가 (원)">
+              <input
+                type="number"
+                inputMode="numeric"
+                className="b2b-input b2b-money"
+                value={data.retail_price}
+                onChange={(e) => {
+                  const v = Number(e.target.value) || 0;
+                  const next = { ...data, retail_price: v };
+                  if (!Number(data.sale_price)) next.sale_price = Math.round(v * 0.9); // b2b 비어있으면 10% 할인가 자동제안
+                  onChange(next);
+                }}
+                min={0}
+                step={1}
+                placeholder="소비자몰 판매가"
+              />
+            </Field>
+            <Field label="b2b 도매가 (원)">
+              <input
+                type="number"
+                inputMode="numeric"
+                className="b2b-input b2b-money"
+                value={data.sale_price}
+                onChange={(e) => set("sale_price", Number(e.target.value) || 0)}
+                min={0}
+                step={1}
+              />
+            </Field>
+          </div>
+          {b2bDiscountPct !== null && (
+            <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 4px" }}>
+              b2b 도매가는 소비자가 대비 {b2bDiscountPct >= 0 ? "−" : "+"}{Math.abs(b2bDiscountPct).toFixed(0)}% 할인
+              {Math.abs(b2bDiscountPct - 10) > 0.5 ? " · 기준(10%)과 다름" : ""}
+            </p>
+          )}
 
           <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
             원가 상세 (이익률 계산용)

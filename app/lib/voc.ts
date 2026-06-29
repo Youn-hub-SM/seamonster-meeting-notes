@@ -1,4 +1,5 @@
 // VOC(고객의 소리) 공통 상수·타입 — 클라이언트/서버 공용(여기엔 DB 코드 없음).
+import { iceboxCost, deliveryCost, coolingCost, suggestBoxes, seasonForDate } from "./b2b-margin";
 
 export const VOC_SOURCES = ["직접입력", "설문", "리뷰", "기타"] as const;
 export const VOC_CATEGORIES = ["배송", "품질", "포장", "누락", "오배송", "가시", "이물", "기타"] as const;
@@ -14,19 +15,42 @@ export type VocSentiment = (typeof VOC_SENTIMENTS)[number];
 export type VocBuyerType = (typeof VOC_BUYER_TYPES)[number];
 export type VocCompType = (typeof VOC_COMP_TYPES)[number];
 
-// 보상유형별 손해/보상 금액 자동계산. 단가는 상품 마스터(판매가·원가)에서.
-//  환불·반품 → 판매가×수량, 교환·재발송 → 원가×수량, 없음 → 0,
-//  추가보상·부분환불 → null(자동계산 없음, 직접 입력).
+// 보상유형별 손해/보상 금액 자동계산.
+//  손해 = 이미 나간 비용이 날아가는 것 = 상품원가(cost_price)×수량 + 배송원가.
+//  배송원가는 부피·계절 기준(b2b-margin: 아이스박스+운반비+보냉비) 1배송분.
+//  환불·반품·교환·재발송 → 원가+배송, 없음 → 0, 추가보상·부분환불 → 직접입력.
 export const VOC_COMP_MANUAL = new Set<string>(["추가보상", "부분환불"]);
-export function autoLoss(compType: string, qty: number, salePrice: number, costPrice: number): number | null {
-  const n = Math.max(1, Math.round(qty || 1));
-  switch (compType) {
-    case "환불":
-    case "반품": return Math.round((salePrice || 0) * n);
-    case "교환·재발송": return Math.round((costPrice || 0) * n);
-    case "없음": return 0;
-    default: return null; // 추가보상·부분환불
+
+export interface VocLossInput {
+  compType: string;
+  qty: number;
+  costPrice: number;    // 상품 1개 원가(cost_price)
+  volumeKg: number;     // 상품 1개 부피(kg). 0이면 배송원가 제외
+  receivedAt?: string | null; // 계절 판정용(없으면 fallbackMonth)
+  fallbackMonth: number;      // 현재월(1~12)
+}
+export interface VocLossResult {
+  auto: boolean;        // 자동계산 유형 여부(추가보상·부분환불=false)
+  amount: number;       // 손해 합계
+  productCost: number;  // 상품원가 합
+  shipping: number;     // 배송원가
+  boxes: number;        // 배송 박스 수
+}
+export function computeVocLoss(i: VocLossInput): VocLossResult {
+  const zero = { productCost: 0, shipping: 0, boxes: 0 };
+  if (i.compType === "없음") return { auto: true, amount: 0, ...zero };
+  if (VOC_COMP_MANUAL.has(i.compType)) return { auto: false, amount: 0, ...zero };
+  const qty = Math.max(1, Math.round(i.qty || 1));
+  const productCost = Math.round((Number(i.costPrice) || 0) * qty);
+  const vol = (Number(i.volumeKg) || 0) * qty;
+  let shipping = 0, boxes = 0;
+  if (vol > 0) {
+    boxes = suggestBoxes(vol);
+    const perBox = vol / boxes;
+    const season = seasonForDate(i.receivedAt, i.fallbackMonth);
+    shipping = Math.round(boxes * (iceboxCost(perBox) + deliveryCost(perBox) + coolingCost(season)));
   }
+  return { auto: true, amount: productCost + shipping, productCost, shipping, boxes };
 }
 
 export interface Voc {

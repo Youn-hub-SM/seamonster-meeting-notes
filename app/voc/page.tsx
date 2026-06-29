@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, autoLoss, type Voc, type VocStatus } from "@/app/lib/voc";
+import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, computeVocLoss, type Voc, type VocStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
@@ -46,7 +46,8 @@ export default function VocPage() {
   useEffect(() => { load(); }, [load]);
 
   // 공용 상품 마스터(자동완성 + 손해금액 자동계산 단가)
-  const [products, setProducts] = useState<{ id: string; name: string; sku: string | null; spec: string | null; sale_price: number | null; cost_price: number | null }[]>([]);
+  const [products, setProducts] = useState<{ id: string; name: string; sku: string | null; spec: string | null; cost_price: number | null; volume_kg: number | null }[]>([]);
+  const nowMonth = new Date(Date.now() + 9 * 3600_000).getMonth() + 1; // KST 현재월(계절 판정)
   useEffect(() => {
     fetch("/api/products", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setProducts(j.products || []); }).catch(() => {});
   }, []);
@@ -60,12 +61,11 @@ export default function VocPage() {
       if (VOC_COMP_MANUAL.has(f.comp_type)) return f;
       const p = products.find((x) => x.name === f.product);
       if (!p) return f; // 마스터에 없는 상품 → 단가 미확인, 직접입력 유지
-      const a = autoLoss(f.comp_type, Number(f.comp_qty), Number(p.sale_price) || 0, Number(p.cost_price) || 0);
-      if (a === null) return f;
-      const s = String(a);
+      const r = computeVocLoss({ compType: f.comp_type, qty: Number(f.comp_qty), costPrice: Number(p.cost_price) || 0, volumeKg: Number(p.volume_kg) || 0, receivedAt: f.received_at, fallbackMonth: nowMonth });
+      const s = String(r.amount);
       return f.loss_amount === s ? f : { ...f, loss_amount: s };
     });
-  }, [edit?.comp_type, edit?.comp_qty, edit?.product, products]);
+  }, [edit?.comp_type, edit?.comp_qty, edit?.product, edit?.received_at, products, nowMonth]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { 전체: rows.length };
@@ -165,10 +165,12 @@ export default function VocPage() {
     else if (isManualType) lossHint = "직접 입력 유형 (자동계산 없음)";
     else if (!matched) lossHint = "상품 단가 미확인 (마스터에 없는 상품) → 직접 입력";
     else {
-      const isCost = edit.comp_type === "교환·재발송";
-      const unit = (isCost ? Number(matched.cost_price) : Number(matched.sale_price)) || 0;
+      const cost = Number(matched.cost_price) || 0;
       const qn = Math.max(1, Number(edit.comp_qty) || 1);
-      lossHint = `${isCost ? "원가" : "판매가"} ${unit.toLocaleString()} × ${qn} = ${(unit * qn).toLocaleString()}원 (자동)`;
+      const r = computeVocLoss({ compType: edit.comp_type, qty: qn, costPrice: cost, volumeKg: Number(matched.volume_kg) || 0, receivedAt: edit.received_at, fallbackMonth: nowMonth });
+      lossHint = r.shipping > 0
+        ? `원가 ${cost.toLocaleString()}×${qn} + 배송 ${r.shipping.toLocaleString()}(${r.boxes}박스) = ${r.amount.toLocaleString()}원 (자동)`
+        : `원가 ${cost.toLocaleString()}×${qn} = ${r.productCost.toLocaleString()}원 · 배송원가 제외(부피 미입력)`;
     }
   }
 
