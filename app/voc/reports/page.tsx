@@ -82,11 +82,11 @@ export default function VocRequestPage() {
 
       {/* 컨트롤 */}
       <div className="no-print" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div className="prod-range-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
+        <div className="voc-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
           {(["7일", "14일", "30일"] as RMode[]).map((m) => (
-            <button key={m} className={`prod-range-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
+            <button key={m} className={`voc-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
           ))}
-          <button className={`prod-range-tab ${mode === "custom" ? "is-active" : ""}`} onClick={() => setMode("custom")}>직접지정</button>
+          <button className={`voc-tab ${mode === "custom" ? "is-active" : ""}`} onClick={() => setMode("custom")}>직접지정</button>
         </div>
         {mode === "custom" && (
           <span className="sm-row" style={{ gap: 6 }}>
