@@ -22,6 +22,7 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/reports", label: "매출 집계" },
           { href: "/b2b/payments", label: "입금 확인" },
           { href: "/b2b/history", label: "히스토리" },
+          { href: "/b2b/users", label: "계정 관리", adminOnly: true },
           { href: "/b2b/settings", label: "설정", adminOnly: true },
         ],
       },

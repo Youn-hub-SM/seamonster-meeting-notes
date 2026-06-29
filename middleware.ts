@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getB2BUsers } from "@/app/lib/b2b-auth";
+import { getB2BUsers, resolveUserName, verifySession } from "@/app/lib/b2b-auth";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 
@@ -9,7 +9,7 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 // 쿠키 b2b_auth 값(비밀번호)을 직접 비교 (HttpOnly+Secure 라 노출 위험 낮음).
 // 비번 변경 시 해당 사용자는 다시 로그인 필요 — 사내 도구라 의도된 동작.
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // 로그인 페이지·로그인 API + Tally 웹훅(외부 서버가 인증 없이 POST) 은 보호 제외
@@ -35,8 +35,10 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // 서명 세션 토큰(신버전, DB 계정 포함) 또는 구버전 비밀번호 쿠키(환경변수 계정) 둘 다 허용
   const token = req.cookies.get("b2b_auth")?.value;
-  if (token && users.some((u) => u.password === token)) {
+  const authed = (await verifySession(token)) || resolveUserName(token);
+  if (token && authed) {
     // 슬라이딩 세션: 인증된 요청마다 쿠키 만료를 30일 뒤로 재발급.
     // iOS 사파리(ITP)는 쿠키 지속 정책이 빡빡해 고정 만료면 쉽게 풀림 —
     // 방문(페이지 이동)·API 호출마다 다시 발급해 계속 쓰는 동안 안 풀리게 함.
