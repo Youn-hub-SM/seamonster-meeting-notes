@@ -40,7 +40,6 @@ export const NAV: NavCategory[] = [
           { href: "/production/request", label: "생산요청서" },
           { href: "/production/sku", label: "SKU 생성기" },
           { href: "/production/products", label: "품목 업로드" },
-          { href: "/production/settings", label: "설정", adminOnly: true },
         ],
       },
     ],
@@ -71,7 +70,6 @@ export const NAV: NavCategory[] = [
           { href: "/voc/loss", label: "손해금액 산정" },
           { href: "/voc/reports", label: "개선요청서" },
           { href: "/voc/surveys", label: "설문 응답(Tally)" },
-          { href: "/voc/settings", label: "설정·탈리 연동" },
         ],
       },
     ],
@@ -87,7 +85,14 @@ export const NAV: NavCategory[] = [
     adminOnly: true, // 관리자·현석에게만 노출
     tools: [
       { href: "/b2b/users", label: "계정 관리", emoji: "👤" },
-      { href: "/b2b/settings", label: "설정", emoji: "⚙️" },
+      {
+        href: "/b2b/settings", label: "설정", emoji: "⚙️",
+        menu: [
+          { href: "/b2b/settings", label: "B2B 도매" },
+          { href: "/production/settings", label: "생산관리" },
+          { href: "/voc/settings", label: "VOC·탈리 연동" },
+        ],
+      },
     ],
   },
 ];
