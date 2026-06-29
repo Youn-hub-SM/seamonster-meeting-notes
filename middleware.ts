@@ -12,8 +12,8 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 로그인 페이지·로그인 API 는 보호 제외 (그래야 들어올 수 있음)
-  if (pathname === "/b2b/login" || pathname === "/api/b2b/auth") {
+  // 로그인 페이지·로그인 API + Tally 웹훅(외부 서버가 인증 없이 POST) 은 보호 제외
+  if (pathname === "/b2b/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally") {
     return NextResponse.next();
   }
 
