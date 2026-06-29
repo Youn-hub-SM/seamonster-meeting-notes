@@ -52,7 +52,7 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
             href={t.href}
             className="app-sb-tool"
             onClick={() => {
-              if (hasMenu) setOpenTools((s) => ({ ...s, [t.href]: true })); // 이동 시 자동 펼침
+              if (hasMenu) toggleTool(t.href); // 탭(텍스트) 클릭 = 펼침/접힘 토글
               onNavigate?.();
             }}
           >
