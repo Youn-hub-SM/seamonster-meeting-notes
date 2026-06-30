@@ -59,7 +59,10 @@ export async function GET(req: NextRequest) {
     const source = sp.get("source");
     const search = sp.get("q");
     if (status) q = q.eq("status", status);
+    // 설문(Tally) 응답은 전체 VOC(클레임)에서 제외 — /voc/surveys 에서 별도 관리.
+    //  source 를 명시적으로 지정하면 그 값만(설문 직접 조회 등), 없으면 설문 제외가 기본.
     if (source) q = q.eq("source", source);
+    else q = q.neq("source", "설문");
     if (search) {
       // PostgREST or() 필터 주입 방지: 값을 따옴표로 감싸 콤마/괄호/점이 구분자로 해석되지 않게 하고,
       // 내부 큰따옴표·백슬래시만 이스케이프, 길이 100자 제한.

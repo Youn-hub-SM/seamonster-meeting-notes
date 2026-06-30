@@ -32,6 +32,7 @@ export async function POST() {
     const { data, error } = await supabaseAdmin()
       .from("voc")
       .select("received_at, buyer_type, comp_type, source, product, purchase_place, category, content, cause, resolution, status, loss_amount")
+      .neq("source", "설문") // 설문(Tally) 응답은 VOC 분석에서 제외
       .order("received_at", { ascending: false })
       .limit(MAX_ROWS);
     if (error) throw error;
