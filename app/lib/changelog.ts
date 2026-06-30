@@ -11,7 +11,33 @@ export type ChangeEntry = {
   href?: string;       // 바로 써보기 링크
 };
 
+// 업데이트노트 tool → 메뉴(필터) 라벨. 좌측 nav 의 툴 이름 기준으로 묶음.
+export function changeMenu(tool: string): string {
+  const t = tool.replace(/\s/g, "");
+  if (t.startsWith("B2B")) return "B2B 도매";
+  if (t.includes("상품마스터")) return "상품 마스터";
+  if (t.includes("정기배송")) return "정기배송 분석";
+  if (t.includes("생산")) return "생산관리";
+  if (t.includes("재고")) return "재고관리";
+  if (t.includes("UTM")) return "UTM 빌더";
+  if (t.includes("VOC")) return "VOC 관리";
+  if (t.includes("CS")) return "CS 코치";
+  if (t.includes("관리자")) return "관리자";
+  if (t.includes("전체")) return "공통";
+  return tool;
+}
+// 필터 칩 정렬 순서(nav 순서 기준). 목록에 없는 메뉴는 뒤로.
+export const MENU_ORDER = ["B2B 도매", "상품 마스터", "정기배송 분석", "생산관리", "재고관리", "UTM 빌더", "CS 코치", "VOC 관리", "관리자", "공통"];
+
 export const CHANGELOG: ChangeEntry[] = [
+  {
+    date: "2026-06-30",
+    tag: "개선",
+    tool: "전체",
+    title: "업데이트 노트를 메뉴별로 필터",
+    desc: "홈 업데이트 노트 위에 메뉴 필터가 생겼습니다. B2B 도매·상품 마스터·생산관리·재고관리·VOC 관리 등 원하는 메뉴만 골라 그 메뉴의 변경 이력만 볼 수 있어요. 각 칩에 건수가 표시됩니다.",
+    href: "/",
+  },
   {
     date: "2026-06-30",
     tag: "신규",
