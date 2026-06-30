@@ -152,7 +152,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="b2b-page-title">재고·생산필요</h1>
           <p className="b2b-page-subtitle">
-            권장 생산량 = B2B 수요 + 안전재고 − 현재고. 안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정. 박스히어로 {itemCount}개 품목 기준.
+            권장 생산량 = B2B 수요 + 안전재고 − 현재고. 안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정. 재고원장 {itemCount}개 품목 기준.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -238,7 +238,7 @@ export default function InventoryPage() {
                   <td><code style={{ fontSize: 11.5 }}>{r.sku}</code></td>
                   <td>
                     {r.name}
-                    {!r.inBoxhero && <span className="prod-tag">박스히어로 없음</span>}
+                    {!r.inBoxhero && <span className="prod-tag">원장에 없음</span>}
                   </td>
                   <td className="num">
                     {r.stock == null ? <span style={{ color: "var(--sm-text-light)" }}>-</span> : (
@@ -312,7 +312,7 @@ export default function InventoryPage() {
       )}
 
       {spanDays > 0 && (
-        <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 박스히어로 출고 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다{capped ? " (출고 표본 일부만 집계)" : ""}. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
+        <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 재고원장 출고(판매) 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
       )}
       {demixActive && demixUnresolved > 0 && (
         <p className="prod-note">※ 도매 차감 중 SKU가 연결되지 않은 발송 {demixUnresolved.toLocaleString()}개는 차감에서 제외됐습니다(과대생산 안전측).</p>

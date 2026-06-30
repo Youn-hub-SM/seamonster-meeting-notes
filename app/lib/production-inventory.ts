@@ -1,22 +1,21 @@
 import { supabaseAdmin } from "./supabase";
-import { fetchBoxheroItems } from "./boxhero";
-import { getOrRefreshVelocity } from "./production-velocity";
+import { getLedgerVelocity } from "./production-velocity";
 import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promotions";
 import { getSafetyAdjusts, effectiveDelta, effectiveExclude } from "./production-safety-adjust";
 import { getLeadDays, getDemixEnabled, getDemixSkus, getDemixFactor } from "./production-config";
 import { getB2bShippedInWindow } from "./production-b2b-shipments";
 
-// 박스히어로 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
+// 자체 재고원장(inventory_txns) 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
 //  /api/production/inventory 와 생산 조언이 공유 — 숫자 일관성 유지.
+//  (2026-06 박스히어로 API 의존 제거 → 현재고·판매속도 모두 자체 원장 기준.)
 //
-// 안전재고는 박스히어로에 적힌 값을 쓰지 않고, 이 툴이 박스히어로 '출고 내역'으로 직접 산정한다.
-//  안전재고 = 최근 하루 평균 출고량 × 생산 리드타임(설정값, 기본 10일).
+// 안전재고 = 최근 하루 평균 출고량(원장 '출고') × 생산 리드타임(설정값, 기본 10일).
 //  생산이 리드타임만큼 걸린다고 보고, 그 기간 팔릴 만큼은 늘 쌓아두자는 의미(재고 쇼트 방지).
 
 export interface InvRow {
   sku: string;
   name: string;
-  stock: number | null;   // 박스히어로 현재고 (null = 박스히어로에 없음)
+  stock: number | null;   // 현재고 (null = 원장에 거래내역 없음)
   dailyOut: number;       // 행사·도매 제거한 평상시(소매) 하루 평균 출고량
   rawDailyOut: number;    // 보정 전 원 출고 일평균(참고)
   boxheroOutQty: number;  // 집계창 BoxHero 총출고(근사 = rawDailyOut × span) — 근거 대조용
@@ -54,16 +53,25 @@ export interface InventoryResult {
   demixUnresolvedQty: number;// SKU 못 푼 B2B 발송분(차감 누락)
 }
 
-export async function getInventoryRows(token: string): Promise<InventoryResult> {
-  // 1) 박스히어로 품목(현재고) — 안전재고는 더 이상 박스히어로 값을 쓰지 않음
-  const items = await fetchBoxheroItems(token);
-  const stockBySku = new Map<string, { name: string; stock: number }>();
-  for (const it of items) {
-    if (it.sku) stockBySku.set(it.sku.toUpperCase(), { name: it.name, stock: it.quantity });
-  }
+export async function getInventoryRows(): Promise<InventoryResult> {
+  const sb = supabaseAdmin();
 
-  // 1b) 판매속도(최근 출고 일평균) — 안전재고 산정 기준. 6시간 캐시.
-  const velocity = await getOrRefreshVelocity(token);
+  // 1) 자체 원장 현재고(품목당 1행 집계) + 제품표(sku·name) — 박스히어로 API 대신.
+  const [stockRes, prodRes, velocity] = await Promise.all([
+    sb.rpc("inventory_stock", { asof: null }),
+    sb.from("products").select("id, sku, name"), // 전 품목(수요 매칭은 비활성 포함)
+    getLedgerVelocity(), // 1b) 판매속도(최근 출고 일평균) — 원장 '출고' 전수 집계
+  ]);
+  if (stockRes.error) throw stockRes.error;
+  if (prodRes.error) throw prodRes.error;
+
+  const stockByProduct = new Map<string, number>();
+  for (const t of (stockRes.data as { product_id: string; qty: number }[] | null) ?? []) stockByProduct.set(t.product_id, Number(t.qty) || 0);
+  // SKU(대문자) → {name, stock}. 원장에 거래내역이 있는(=inventory_stock 에 잡히는) 제품만 현재고 보유.
+  const stockBySku = new Map<string, { name: string; stock: number }>();
+  for (const p of prodRes.data ?? []) {
+    if (p.sku && stockByProduct.has(p.id)) stockBySku.set(String(p.sku).toUpperCase(), { name: p.name, stock: stockByProduct.get(p.id) || 0 });
+  }
 
   // 1c) 안전재고 보정: 리드타임(설정) + 프로모션(스파이크 제거 + 남은 행사분) + 수동 보정
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
@@ -87,14 +95,10 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
   //  과차감 방지는 under-subtract 계수(factor)와 화이트리스트로 처리.)
   const demixActive = demixEnabled && demixSkuSet.size > 0;
 
-  const sb = supabaseAdmin();
-
-  // 2) 제품표: product_id → sku / name
-  const { data: products, error: pErr } = await sb.from("products").select("id, sku, name");
-  if (pErr) throw pErr;
+  // 2) 제품표: product_id → sku / name (위에서 받은 prodRes 재사용)
   const skuByProduct = new Map<string, string>();
   const nameBySku = new Map<string, string>();
-  for (const p of products ?? []) {
+  for (const p of prodRes.data ?? []) {
     if (p.sku) {
       skuByProduct.set(p.id, p.sku);
       const k = String(p.sku).toUpperCase();
@@ -192,7 +196,7 @@ export async function getInventoryRows(token: string): Promise<InventoryResult> 
 
   return {
     rows,
-    itemCount: items.length,
+    itemCount: stockBySku.size,
     noSkuDemand,
     leadDays,
     velocitySpanDays: velocity.spanDays,

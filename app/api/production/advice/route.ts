@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getCurrentModel } from "@/app/lib/ai-model";
-import { getBoxheroToken } from "@/app/lib/boxhero";
 import { getInventoryRows } from "@/app/lib/production-inventory";
-import { getOrRefreshVelocity } from "@/app/lib/production-velocity";
+import { getLedgerVelocity } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -44,15 +43,10 @@ interface AdviceRow {
 
 export async function POST() {
   try {
-    const token = await getBoxheroToken();
-    if (!token) {
-      return NextResponse.json({ ok: false, error: "박스히어로가 연동되어 있지 않습니다. 설정에서 토큰을 등록하세요." }, { status: 400 });
-    }
-
-    // 재고+수요(공유 로직) + 판매속도(캐시/갱신) 병렬
+    // 재고+수요(공유 로직) + 판매속도(자체 원장) 병렬
     const [inv, velocity] = await Promise.all([
-      getInventoryRows(token),
-      getOrRefreshVelocity(token),
+      getInventoryRows(),
+      getLedgerVelocity(),
     ]);
 
     const rows: AdviceRow[] = inv.rows.map((r) => {

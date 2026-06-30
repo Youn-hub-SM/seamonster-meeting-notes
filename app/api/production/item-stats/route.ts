@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { getBoxheroToken } from "@/app/lib/boxhero";
 import { getInventoryRows } from "@/app/lib/production-inventory";
-import { getOrRefreshVelocity } from "@/app/lib/production-velocity";
+import { getLedgerVelocity } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,10 +12,7 @@ export const maxDuration = 60;
 
 export async function GET() {
   try {
-    const token = await getBoxheroToken();
-    if (!token) return NextResponse.json({ ok: true, configured: false, items: [] });
-
-    const [inv, velocity] = await Promise.all([getInventoryRows(token), getOrRefreshVelocity(token)]);
+    const [inv, velocity] = await Promise.all([getInventoryRows(), getLedgerVelocity()]);
 
     const items = inv.rows
       .filter((r) => r.inBoxhero)
