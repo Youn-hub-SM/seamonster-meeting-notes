@@ -164,6 +164,7 @@ export default function OrderForm({
               status: sh.status,
               tracking_no: sh.tracking_no ?? "",
               box_count: sh.box_count ?? 1,
+              stock_out: (sh as { stock_out?: boolean }).stock_out ?? false,
               items: (sh.items || []).map((si) => ({
                 // order_item_id → 현재 items 배열의 인덱스로 매핑
                 order_item_index: (o.items || []).findIndex((oi) => oi.id === si.order_item_id),
@@ -799,6 +800,11 @@ export default function OrderForm({
                     />
                   </div>
                 </div>
+
+                <label className="sm-row" style={{ gap: 7, fontSize: 13, marginTop: 10, cursor: "pointer", alignItems: "center" }}>
+                  <input type="checkbox" checked={sch.stock_out !== false} onChange={(e) => setSchedule(si, { stock_out: e.target.checked })} />
+                  재고 즉시 출고 <span className="sm-faint" style={{ fontSize: 11 }}>(발송 잡는 순간 재고 차감 · 오버부킹 방지)</span>
+                </label>
 
                 {/* 이 발송에 담을 상품/수량 */}
                 <div style={{ marginTop: 12 }}>

@@ -1,12 +1,25 @@
 import { supabaseAdmin } from "./supabase";
+import { signedQty } from "./inventory";
 import {
   RecipientInput,
   ShipmentScheduleInput,
   normalizeRecipient,
 } from "./b2b-orders";
 
-// 저장된 발주상품 (폼 인덱스 → DB id + 스냅샷)
-export type SavedOrderItem = { id: string; product_name: string; spec: string | null };
+// 저장된 발주상품 (폼 인덱스 → DB id + 스냅샷). product_id 는 즉시출고 시 재고원장 기록용.
+export type SavedOrderItem = { id: string; product_id: string | null; product_name: string; spec: string | null };
+
+type SbClient = ReturnType<typeof supabaseAdmin>;
+const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+
+// 즉시출고 컬럼(035) 적용 여부 — shipments.stock_out + inventory_txns.shipment_id 둘 다 있어야 동작.
+//  미적용이면 발주 저장은 그대로 되고 재고 차감만 비활성(컬럼 누락으로 저장이 깨지지 않게).
+async function stockOutAvailable(sb: SbClient): Promise<boolean> {
+  const a = await sb.from("shipments").select("stock_out").limit(1);
+  if (a.error) return false;
+  const b = await sb.from("inventory_txns").select("shipment_id").limit(1);
+  return !b.error;
+}
 
 // 복수 발송(2건 이상) 발주의 상위 발송상태를 하위 차수 발송상태들로부터 도출.
 //  전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 하나라도 미발송 → 발송대기.
@@ -33,7 +46,18 @@ export async function saveOrderShipments(
 ): Promise<{ earliestShipDate: string | null; derivedStatus: string | null; totalBoxes: number }> {
   const sb = supabaseAdmin();
 
-  // 기존 발송 일정 전체 삭제 (PUT 재저장 대비)
+  // 즉시출고(재고 선점) 가능 여부 + 거래처명(원장 표시용) 준비
+  const canDeduct = await stockOutAvailable(sb);
+  let partner: string | null = null;
+  if (canDeduct) {
+    const { data: ord } = await sb.from("orders").select("companies:company_id(name)").eq("id", orderId).single();
+    const c = (ord as { companies?: { name?: string } | { name?: string }[] } | null)?.companies;
+    partner = (Array.isArray(c) ? c[0]?.name : c?.name) ?? null;
+  }
+  const today = kstToday();
+
+  // 기존 발송 일정 전체 삭제 (PUT 재저장 대비).
+  //  inventory_txns.shipment_id 는 on delete cascade → 이 차수들의 옛 즉시출고가 함께 삭제되어 재고가 원복됨.
   await sb.from("shipments").delete().eq("order_id", orderId);
 
   const rec = normalizeRecipient(recipient || ({} as RecipientInput));
@@ -56,22 +80,26 @@ export async function saveOrderShipments(
     if (!sch.ship_date && items.length === 0) continue;
 
     const boxCount = Math.max(1, Math.floor(Number(sch.box_count) || 1));
+    // 취소 차수는 재고 선점하지 않음. 035 미적용이면 비활성. (undefined=기본 켜짐, UI 체크박스와 일치)
+    const wantStockOut = canDeduct && sch.stock_out !== false && sch.status !== "취소";
+    const shipInsert: Record<string, unknown> = {
+      order_id: orderId,
+      seq: seq++,
+      ship_date: sch.ship_date || null,
+      status: sch.status || "발송대기",
+      recipient_name: rec.recipient_name || "(미지정)",
+      recipient_phone: rec.recipient_phone || "",
+      address: rec.address || "(주소 미입력)",
+      delivery_memo: rec.delivery_memo,
+      courier: rec.courier,
+      tracking_no: (sch.tracking_no || "").trim() || null,
+      box_count: boxCount,
+      shipped_at: sch.status === "발송완료" ? new Date().toISOString() : null,
+    };
+    if (canDeduct) shipInsert.stock_out = wantStockOut;
     const { data: shipRow, error: shipErr } = await sb
       .from("shipments")
-      .insert({
-        order_id: orderId,
-        seq: seq++,
-        ship_date: sch.ship_date || null,
-        status: sch.status || "발송대기",
-        recipient_name: rec.recipient_name || "(미지정)",
-        recipient_phone: rec.recipient_phone || "",
-        address: rec.address || "(주소 미입력)",
-        delivery_memo: rec.delivery_memo,
-        courier: rec.courier,
-        tracking_no: (sch.tracking_no || "").trim() || null,
-        box_count: boxCount,
-        shipped_at: sch.status === "발송완료" ? new Date().toISOString() : null,
-      })
+      .insert(shipInsert)
       .select("id")
       .single();
     if (shipErr) throw shipErr;
@@ -89,6 +117,28 @@ export async function saveOrderShipments(
       }));
       const { error: siErr } = await sb.from("shipment_items").insert(rows);
       if (siErr) throw siErr;
+
+      // 재고 즉시 출고(선점) — 발송 잡는 순간 차감. shipment_id 로 묶여 차수 삭제/재저장 시 cascade 원복.
+      if (wantStockOut) {
+        const txns = items
+          .map((it) => ({ pid: orderItems[it.idx].product_id, qty: it.qty }))
+          .filter((x): x is { pid: string; qty: number } => !!x.pid && x.qty > 0)
+          .map((x) => ({
+            product_id: x.pid,
+            type: "출고",
+            qty: signedQty("출고", x.qty),
+            unit_amount: null,
+            txn_date: sch.ship_date || today,
+            partner,
+            memo: "B2B 발송 선점",
+            shipment_id: shipRow.id,
+            created_by: "B2B 자동출고",
+          }));
+        if (txns.length > 0) {
+          const { error: txErr } = await sb.from("inventory_txns").insert(txns);
+          if (txErr) throw txErr;
+        }
+      }
     }
 
     if (sch.ship_date && (!earliest || sch.ship_date < earliest)) earliest = sch.ship_date;

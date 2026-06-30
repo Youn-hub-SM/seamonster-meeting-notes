@@ -133,7 +133,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     const { data: insertedItems, error: insErr } = await sb
       .from("order_items")
       .insert(itemsToInsert)
-      .select("id, product_name, spec, sort_order");
+      .select("id, product_id, product_name, spec, sort_order");
     if (insErr) {
       // 보상: 기존 라인아이템 복구 시도
       if (existingItems && existingItems.length > 0) {
@@ -149,7 +149,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     const savedItems: SavedOrderItem[] = (insertedItems ?? [])
       .slice()
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((r) => ({ id: r.id, product_name: r.product_name, spec: r.spec }));
+      .map((r) => ({ id: r.id, product_id: r.product_id ?? null, product_name: r.product_name, spec: r.spec }));
 
     // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
     const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)));

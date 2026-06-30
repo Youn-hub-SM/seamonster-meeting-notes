@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
     const { data: insertedItems, error: itemsErr } = await sb
       .from("order_items")
       .insert(itemsToInsert)
-      .select("id, product_name, spec, sort_order");
+      .select("id, product_id, product_name, spec, sort_order");
     if (itemsErr) {
       // 보상: 헤더 롤백
       await sb.from("orders").delete().eq("id", orderRow.id);
@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
     const savedItems: SavedOrderItem[] = (insertedItems ?? [])
       .slice()
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      .map((r) => ({ id: r.id, product_name: r.product_name, spec: r.spec }));
+      .map((r) => ({ id: r.id, product_id: r.product_id ?? null, product_name: r.product_name, spec: r.spec }));
 
     // 3) 발송 일정(분할 발송) + 발송별 상품/수량
     let earliestShipDate: string | null = null;

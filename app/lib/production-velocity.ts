@@ -21,19 +21,24 @@ const dayMs = 86400_000;
 const dateAt = (base: string, deltaDays: number) => new Date(Date.parse(base + "T00:00:00Z") + deltaDays * dayMs).toISOString().slice(0, 10);
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / dayMs);
 
-interface OutRow { qty: number; txn_date: string; status?: string | null; products?: { sku: string | null } | null }
+interface OutRow { qty: number; txn_date: string; status?: string | null; shipment_id?: string | null; products?: { sku: string | null } | null }
 
-// 최근 windowDays 출고 → SKU별 일평균. status 미적용(034) 환경은 폴백 select.
+// 최근 windowDays 출고 → SKU별 일평균. 소매(shipment_id 없는 출고)만 — B2B 도매 출고는 제외.
+//  status(034)·shipment_id(035) 컬럼 유무에 따라 단계적 폴백 select.
 export async function getLedgerVelocity(windowDays = WINDOW_DAYS): Promise<VelocitySnapshot> {
   const sb = supabaseAdmin();
   const today = kstToday();
   const fromD = dateAt(today, -windowDays);
 
-  const withStatus = await sb.from("inventory_txns").select("qty, txn_date, status, products(sku)").eq("type", "출고").gte("txn_date", fromD).limit(20000);
-  let rows = (withStatus.data ?? []) as unknown as OutRow[];
-  if (withStatus.error) { // 034(status) 미적용 폴백
-    const base = await sb.from("inventory_txns").select("qty, txn_date, products(sku)").eq("type", "출고").gte("txn_date", fromD).limit(20000);
-    rows = (base.data ?? []) as unknown as OutRow[];
+  const selects = [
+    "qty, txn_date, status, shipment_id, products(sku)",
+    "qty, txn_date, status, products(sku)",
+    "qty, txn_date, products(sku)",
+  ];
+  let rows: OutRow[] = [];
+  for (const sel of selects) {
+    const res = await sb.from("inventory_txns").select(sel).eq("type", "출고").gte("txn_date", fromD).limit(20000);
+    if (!res.error) { rows = (res.data ?? []) as unknown as OutRow[]; break; }
   }
 
   const totals = new Map<string, number>();
@@ -41,6 +46,7 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS): Promise<Veloc
   let txCount = 0;
   for (const r of rows) {
     if (r.status != null && r.status !== "완료") continue; // 대기 출고 제외
+    if (r.shipment_id != null) continue;                   // B2B 도매 출고 제외(소매 속도만)
     const sku = r.products?.sku ? String(r.products.sku).toUpperCase() : null;
     if (!sku) continue;
     const q = Math.abs(Number(r.qty) || 0);

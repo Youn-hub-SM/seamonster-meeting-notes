@@ -216,6 +216,7 @@ export interface ShipmentScheduleInput {
   status: ShipmentStatus;
   tracking_no: string;        // 박스 여러 개면 콤마로 이어붙임 (박스당 1개)
   box_count: number | string; // 이 차수 박스 수 (송장 출력 행·송장 입력칸 기준)
+  stock_out?: boolean;        // 저장 시 재고를 즉시 출고(선점)할지 — 발송 잡는 순간 차감(오버부킹 방지)
   items: ShipmentItemInput[]; // qty>0 인 것만 저장
 }
 
@@ -224,6 +225,7 @@ export const EMPTY_SHIPMENT_SCHEDULE: ShipmentScheduleInput = {
   status: "발송대기",
   tracking_no: "",
   box_count: 1,
+  stock_out: true,            // 신규 차수는 기본 즉시 출고(재고 선점)
   items: [],
 };
 
