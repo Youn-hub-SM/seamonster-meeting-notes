@@ -36,11 +36,13 @@ export default function InventoryPage() {
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
+    const f = rows.filter((r) => {
       if (onlyLow && !r.low) return false;
       if (q && !(`${r.name} ${r.sku || ""} ${r.location || ""}`.toLowerCase().includes(q))) return false;
       return true;
     });
+    // 부족만 보기일 땐 부족분(안전−현재) 큰 순으로 — 옛 '재고 부족 알림'과 동일
+    return onlyLow ? f.sort((a, b) => (b.min_qty - b.qty) - (a.min_qty - a.qty)) : f;
   }, [rows, search, onlyLow]);
 
   async function saveMin(r: InventoryRow, v: string) {
@@ -68,8 +70,8 @@ export default function InventoryPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">재고 — 제품목록</h1>
-          <p className="b2b-page-subtitle">상품 마스터 기준 현재고·재고자산·안전재고. 행의 <strong>입·출·조정</strong>으로 입출고를 기록합니다.</p>
+          <h1 className="b2b-page-title">재고 목록</h1>
+          <p className="b2b-page-subtitle">상품 마스터 기준 현재고·재고자산·안전재고. <strong>부족만 보기</strong>로 재고 부족 품목을 모아 봅니다. 행의 <strong>입·출·조정</strong>으로 입출고를 기록합니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={importBoxhero} disabled={importing}>{importing ? "가져오는 중…" : "박스히어로 기초재고 가져오기"}</button>
@@ -107,7 +109,7 @@ export default function InventoryPage() {
                   <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}</td>
                   <td className="sm-faint">{r.sku || "-"}</td>
                   <td className="sm-faint">{r.location || "-"}</td>
-                  <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }}>{r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.unit}</span></td>
+                  <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }}>{r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.unit}</span>{r.low && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--sm-danger)" }}>부족 {Math.max(0, r.min_qty - r.qty).toLocaleString()}</span>}</td>
                   <td className="num">
                     <input type="number" min={0} defaultValue={r.min_qty} onBlur={(e) => saveMin(r, e.target.value)}
                       className="b2b-input" style={{ width: 70, padding: "3px 6px", fontSize: 12, textAlign: "right" }} />

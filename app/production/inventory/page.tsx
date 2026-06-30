@@ -31,6 +31,14 @@ type InvRow = {
   inB2B: boolean;
 };
 
+type Priority = { sku: string; name: string; urgency: string; qty: number; byWhen: string; reason: string };
+type Advice = { summary: string; priorities: Priority[]; notes: string[] };
+const URG_STYLE: Record<string, { bg: string; fg: string }> = {
+  "높음": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  "중간": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  "낮음": { bg: "#eef2f6", fg: "#475569" },
+};
+
 export default function InventoryPage() {
   const [rows, setRows] = useState<InvRow[]>([]);
   const [configured, setConfigured] = useState(true);
@@ -50,6 +58,20 @@ export default function InventoryPage() {
   const [eMemo, setEMemo] = useState("");
   const [eUntil, setEUntil] = useState("");
   const [saving, setSaving] = useState(false);
+  // AI 조언 (생산 조언 합침)
+  const [advice, setAdvice] = useState<Advice | null>(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
+
+  async function genAdvice() {
+    setAdviceLoading(true); setError("");
+    try {
+      const res = await fetch("/api/production/advice", { method: "POST" });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "AI 조언 생성 실패");
+      setAdvice(j.advice);
+    } catch (e) { setError(e instanceof Error ? e.message : "AI 조언 생성 실패"); }
+    setAdviceLoading(false);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,12 +172,15 @@ export default function InventoryPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">재고·생산필요</h1>
+          <h1 className="b2b-page-title">재고/생산 조언</h1>
           <p className="b2b-page-subtitle">
-            권장 생산량 = B2B 수요 + 안전재고 − 현재고. 안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정. 재고원장 {itemCount}개 품목 기준.
+            현재고·판매속도·B2B 수요로 권장 생산량을 계산하고, AI 조언으로 우선순위를 짚어줍니다. 안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정. 재고원장 {itemCount}개 품목 기준.
           </p>
         </div>
         <div className="b2b-page-actions">
+          <button className="b2b-btn-primary" onClick={genAdvice} disabled={adviceLoading}>
+            {adviceLoading ? "AI 분석 중…" : advice ? "🧠 다시 분석" : "🧠 AI 조언"}
+          </button>
           <label className="prod-filter-check">
             <input type="checkbox" checked={onlyNeed} onChange={(e) => setOnlyNeed(e.target.checked)} />
             생산필요만
@@ -207,6 +232,46 @@ export default function InventoryPage() {
           </span>
           <Link href="/production/request" className="b2b-btn-secondary inv-dl-btn">생산요청서</Link>
         </div>
+      )}
+
+      {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
+      {advice && (
+        <section style={{ marginBottom: 18 }}>
+          <div className="prod-advice-summary">
+            <div className="prod-advice-summary-icon">🧠</div>
+            <div>{advice.summary}</div>
+          </div>
+          {advice.priorities && advice.priorities.length > 0 && (
+            <div className="prod-prio-list" style={{ marginTop: 12 }}>
+              {advice.priorities.map((p, i) => {
+                const u = URG_STYLE[p.urgency] || URG_STYLE["낮음"];
+                return (
+                  <div key={i} className="prod-prio-card">
+                    <div className="prod-prio-rank">{i + 1}</div>
+                    <div className="prod-prio-body">
+                      <div className="prod-prio-top">
+                        <span className="prod-prio-name">{p.name}</span>
+                        <code className="prod-prio-sku">{p.sku}</code>
+                        <span className="prod-prio-urg" style={{ background: u.bg, color: u.fg }}>{p.urgency}</span>
+                      </div>
+                      <div className="prod-prio-meta">
+                        <span className="prod-prio-qty">{Number(p.qty).toLocaleString()}개</span>
+                        <span className="prod-prio-when">{p.byWhen}</span>
+                      </div>
+                      <div className="prod-prio-reason">{p.reason}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {advice.notes && advice.notes.length > 0 && (
+            <ul style={{ margin: "10px 0 0", paddingLeft: 18, lineHeight: 1.8, fontSize: 12.5, color: "var(--sm-text-mid)" }}>
+              {advice.notes.map((n, i) => <li key={i}>{n}</li>)}
+            </ul>
+          )}
+          <p className="prod-note" style={{ marginTop: 8 }}>※ 아래 표가 이 조언의 근거(현재고·안전재고·권장 생산량)입니다.</p>
+        </section>
       )}
 
       {loading ? (

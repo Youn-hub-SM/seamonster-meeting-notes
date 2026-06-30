@@ -31,30 +31,28 @@ export const NAV: NavCategory[] = [
     label: "생산·재고",
     tools: [
       {
-        href: "/production", label: "생산관리", emoji: "🏭",
+        href: "/production", label: "생산 관리", emoji: "🏭",
         menu: [
-          { href: "/production", label: "생산일정" },
+          { href: "/production", label: "생산 일정" },
           { href: "/production/board", label: "생산 보드" },
-          { href: "/production/advice", label: "생산 조언" },
-          { href: "/production/inventory", label: "재고·생산필요" },
-          { href: "/production/request", label: "생산요청서" },
-          { href: "/production/sku", label: "SKU 생성기" },
-          { href: "/production/products", label: "품목 업로드" },
+          { href: "/production/request", label: "생산 요청서" },
         ],
       },
       {
-        href: "/inventory", label: "재고관리", emoji: "📦",
+        href: "/inventory", label: "재고 관리", emoji: "📦",
         menu: [
-          { href: "/inventory", label: "제품목록" },
+          { href: "/inventory", label: "재고 목록" },
           { href: "/inventory/trade", label: "구매 및 판매" },
-          { href: "/inventory/adjust", label: "조정" },
-          { href: "/inventory/alerts", label: "재고 부족 알림" },
-          { href: "/inventory/stats", label: "통계" },
-          { href: "/inventory/quote", label: "월간 매입 견적서" },
+          { href: "/inventory/adjust", label: "재고 조정" },
+          { href: "/inventory/quote", label: "월간매입 견적서" },
           { href: "/inventory/asof", label: "과거 수량 조회" },
-          { href: "/inventory/activity", label: "활동 히스토리" },
         ],
       },
+      // 합친/독립 메뉴
+      { href: "/production/inventory", label: "재고/생산 조언", emoji: "🧮" },
+      { href: "/inventory/stats", label: "재고/생산 통계", emoji: "📊" },
+      { href: "/inventory/activity", label: "활동 히스토리", emoji: "🧾" },
+      { href: "/production/sku", label: "SKU 생성기", emoji: "🏷️" },
     ],
   },
   {
