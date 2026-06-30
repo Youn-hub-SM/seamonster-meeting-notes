@@ -28,6 +28,13 @@ export default function VocPage() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"전체" | VocStatus>("전체");
   const [search, setSearch] = useState("");
+  // 컬럼 필터 (유형·상품·구매처·구매자·구매일 범위)
+  const [fCategory, setFCategory] = useState("");
+  const [fProduct, setFProduct] = useState("");
+  const [fPlace, setFPlace] = useState("");
+  const [fBuyer, setFBuyer] = useState("");
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
   const [edit, setEdit] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -67,21 +74,36 @@ export default function VocPage() {
     });
   }, [edit?.comp_type, edit?.comp_qty, edit?.product, edit?.received_at, products, nowMonth]);
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { 전체: rows.length };
-    for (const s of VOC_STATUSES) c[s] = 0;
-    for (const r of rows) c[r.status] = (c[r.status] || 0) + 1;
-    return c;
-  }, [rows]);
+  // 필터 드롭다운 옵션 (데이터에 등장한 값)
+  const productOpts = useMemo(() => [...new Set(rows.map((r) => r.product).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "ko")), [rows]);
+  const placeOpts = useMemo(() => [...new Set(rows.map((r) => r.purchase_place).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "ko")), [rows]);
 
-  const shown = useMemo(() => {
+  // 상태(탭)를 제외한 모든 필터를 적용한 베이스 — 상태 보드 카운트는 이 베이스 기준(패싯).
+  const base = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
-      if (tab !== "전체" && r.status !== tab) return false;
       if (q && !(`${r.content} ${r.customer || ""} ${r.product || ""}`.toLowerCase().includes(q))) return false;
+      if (fCategory && r.category !== fCategory) return false;
+      if (fProduct && r.product !== fProduct) return false;
+      if (fPlace && r.purchase_place !== fPlace) return false;
+      if (fBuyer && r.buyer_type !== fBuyer) return false;
+      if (fFrom && (r.purchase_date || "") < fFrom) return false;
+      if (fTo && (r.purchase_date || "") > fTo) return false;
       return true;
     });
-  }, [rows, tab, search]);
+  }, [rows, search, fCategory, fProduct, fPlace, fBuyer, fFrom, fTo]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { 전체: base.length };
+    for (const s of VOC_STATUSES) c[s] = 0;
+    for (const r of base) c[r.status] = (c[r.status] || 0) + 1;
+    return c;
+  }, [base]);
+
+  const shown = useMemo(() => (tab === "전체" ? base : base.filter((r) => r.status === tab)), [base, tab]);
+
+  const hasFilter = !!(search || fCategory || fProduct || fPlace || fBuyer || fFrom || fTo);
+  const resetFilters = () => { setSearch(""); setFCategory(""); setFProduct(""); setFPlace(""); setFBuyer(""); setFFrom(""); setFTo(""); };
 
   function openNew() { setEdit(emptyForm()); }
   function openEdit(r: Voc) {
@@ -188,11 +210,37 @@ export default function VocPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("voc") || error.includes("relation")) ? " — supabase/migrations/023_voc.sql 를 먼저 적용하세요." : ""}</div>}
 
-      <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+      <div className="sm-between" style={{ marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
         <button className={`sm-tab ${tab === "전체" ? "is-active" : ""}`} onClick={() => setTab("전체")}>
-          전체<span className="sm-tab-count">{rows.length}</span>
+          전체<span className="sm-tab-count">{counts.전체}</span>
         </button>
         <input className="b2b-input" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240, maxWidth: "100%" }} />
+      </div>
+
+      {/* 컬럼 필터 — 유형·상품·구매처·구매자·구매일 */}
+      <div className="sm-row" style={{ marginBottom: 12, gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <select className="b2b-input" value={fCategory} onChange={(e) => setFCategory(e.target.value)} style={{ width: "auto" }} aria-label="유형 필터">
+          <option value="">유형 전체</option>
+          {VOC_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="b2b-input" value={fProduct} onChange={(e) => setFProduct(e.target.value)} style={{ width: "auto", maxWidth: 200 }} aria-label="상품 필터">
+          <option value="">상품 전체</option>
+          {productOpts.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select className="b2b-input" value={fPlace} onChange={(e) => setFPlace(e.target.value)} style={{ width: "auto" }} aria-label="구매처 필터">
+          <option value="">구매처 전체</option>
+          {placeOpts.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select className="b2b-input" value={fBuyer} onChange={(e) => setFBuyer(e.target.value)} style={{ width: "auto" }} aria-label="구매자 구분 필터">
+          <option value="">구매자 전체</option>
+          {VOC_BUYER_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <label className="sm-row" style={{ gap: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>구매일
+          <input className="b2b-input" type="date" value={fFrom} max={fTo || undefined} onChange={(e) => setFFrom(e.target.value)} style={{ width: "auto" }} aria-label="구매일 시작" />
+          <span className="sm-faint">~</span>
+          <input className="b2b-input" type="date" value={fTo} min={fFrom || undefined} onChange={(e) => setFTo(e.target.value)} style={{ width: "auto" }} aria-label="구매일 끝" /></label>
+        {hasFilter && <button className="b2b-link-btn" onClick={resetFilters} style={{ color: "var(--sm-text-light)", fontSize: 13 }}>필터 초기화 ✕</button>}
+        <span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>{shown.length}건</span>
       </div>
 
       {/* 처리 단계 — 씨몬스터 VOC 기본 3단계(접수 → 응대·개선중 → 개선완료). 클릭 시 해당 단계만 필터 */}
