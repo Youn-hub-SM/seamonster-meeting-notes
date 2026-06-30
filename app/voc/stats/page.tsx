@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
-import { Donut, TrendChart, PieCard, BarList } from "@/app/components/charts";
+import { Donut, TrendChart, PieCard, BarList, StackedBar, PIE_COLORS } from "@/app/components/charts";
 
 type RMode = "7일" | "14일" | "30일" | "custom";
 
@@ -13,7 +13,7 @@ function presetStart(days: number): string {
   return new Date(Date.now() + 9 * 3600_000 - (days - 1) * 86400_000).toISOString().slice(0, 10);
 }
 
-type Unit = "주별" | "월별";
+type Unit = "일별" | "주별" | "월별";
 
 // 해당 날짜가 속한 주의 월요일(YYYY-MM-DD). 주별 집계 키.
 function weekStart(dateStr: string): string {
@@ -24,16 +24,21 @@ function weekStart(dateStr: string): string {
 }
 function periodKey(dateStr: string, unit: Unit): string {
   if (!dateStr) return "미지정";
-  return unit === "주별" ? weekStart(dateStr) : dateStr.slice(0, 7);
+  if (unit === "일별") return dateStr;
+  if (unit === "주별") return weekStart(dateStr);
+  return dateStr.slice(0, 7);
 }
 function periodLabel(key: string, unit: Unit): string {
   if (unit === "월별") return key;
-  // 주별: "M/D 주(~D)" 형태
+  if (unit === "일별") { const d = new Date(key + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; }
+  // 주별: "M/D~D" 형태
   const s = new Date(key + "T00:00:00");
   const e = new Date(s.getTime() + 6 * 86400_000);
   const f = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
   return `${f(s)}~${f(e)}`;
 }
+// 단위별 표시 기간 상한(과밀 방지 — 최근분만).
+const PERIOD_CAP: Record<Unit, number> = { 일별: 60, 주별: 26, 월별: 18 };
 
 // 키별 집계 → [label, count] 내림차순
 function countBy(rows: Voc[], key: (r: Voc) => string | null | undefined): [string, number][] {
@@ -60,6 +65,7 @@ export default function VocStatsPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [unit, setUnit] = useState<Unit>("주별");
+  const [catUnit, setCatUnit] = useState<Unit>("월별");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -110,6 +116,34 @@ export default function VocStatsPage() {
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
       .map(([k, v]) => ({ key: k, label: periodLabel(k, unit), count: v.count, loss: v.loss }));
   }, [shown, unit]);
+
+  // 유형별 시계열 추세 — 전체 기간(범위 필터 무관), 단위별 최근 N기간. period × category 매트릭스.
+  const catTrend = useMemo(() => {
+    const labelByKey = new Map<string, string>();
+    const matrix = new Map<string, Map<string, number>>(); // category → periodKey → count
+    for (const r of rows) {
+      const d = r.received_at || "";
+      if (!d) continue;
+      const k = periodKey(d, catUnit);
+      if (k === "미지정") continue;
+      labelByKey.set(k, periodLabel(k, catUnit));
+      const cm = matrix.get(r.category) || new Map<string, number>();
+      cm.set(k, (cm.get(k) || 0) + 1);
+      matrix.set(r.category, cm);
+    }
+    let keys = [...labelByKey.keys()].sort((a, b) => a.localeCompare(b));
+    const cap = PERIOD_CAP[catUnit];
+    const capped = keys.length > cap;
+    if (capped) keys = keys.slice(-cap);
+    const labels = keys.map((k) => labelByKey.get(k)!);
+    const catTotals = VOC_CATEGORIES
+      .map((c) => [c, keys.reduce((s, k) => s + (matrix.get(c)?.get(k) || 0), 0)] as [string, number])
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1]);
+    const series = catTotals.map(([c]) => ({ key: c, values: keys.map((k) => matrix.get(c)?.get(k) || 0) }));
+    const grand = catTotals.reduce((s, [, n]) => s + n, 0);
+    return { labels, series, catTotals, grand, capped, cap };
+  }, [rows, catUnit]);
 
   // 유형별 손해금액 (내림차순)
   const lossByCategory = useMemo(() => {
@@ -192,6 +226,35 @@ export default function VocStatsPage() {
             </div>
             <TrendChart data={trend.map((t) => ({ label: t.label, value: t.count, tip: `${t.label} · ${t.count}건${t.loss > 0 ? ` · 손해 ${t.loss.toLocaleString()}원` : ""}` }))} />
             <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>막대에 마우스를 올리면 건수·손해금액이 표시됩니다.</p>
+          </section>
+
+          {/* 유형별 추세 — 기간(일/주/월) × 유형 누적 막대. 전체 기간 기준. */}
+          <section className="b2b-card" style={{ marginTop: 14 }}>
+            <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <span className="b2b-card-title">유형별 추세 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 전체 기간{catTrend.capped ? ` · 최근 ${catTrend.cap}개` : ""}</span></span>
+              <div className="sm-tabs" style={{ margin: 0 }}>
+                {(["일별", "주별", "월별"] as Unit[]).map((u) => (
+                  <button key={u} className={`sm-tab ${catUnit === u ? "is-active" : ""}`} onClick={() => setCatUnit(u)}>{u}</button>
+                ))}
+              </div>
+            </div>
+            {catTrend.series.length === 0 ? (
+              <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>집계할 유형이 없습니다.</div>
+            ) : (
+              <>
+                <StackedBar periods={catTrend.labels} series={catTrend.series} />
+                <div className="sm-row-wrap" style={{ gap: 12, marginTop: 10 }}>
+                  {catTrend.catTotals.map(([c, n], i) => (
+                    <span key={c} className="sm-row" style={{ gap: 6, fontSize: 12.5 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                      <span>{c}</span><strong>{n}</strong>
+                      <span className="sm-faint">{catTrend.grand ? Math.round((n / catTrend.grand) * 100) : 0}%</span>
+                    </span>
+                  ))}
+                </div>
+                <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>막대 = 기간별 접수 건수(유형 누적). 세그먼트가 클수록 그 시기에 많이 발생한 유형입니다.</p>
+              </>
+            )}
           </section>
 
           {/* 손해금액 집계 */}

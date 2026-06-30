@@ -82,6 +82,56 @@ export function TrendChart({ data, fmtAxis }: { data: { label: string; value: nu
   );
 }
 
+// 누적 세로막대 — 기간(X축) × 카테고리(누적 세그먼트). 유형별 시계열 변화용.
+//  series[i].values 는 periods 와 같은 길이. 세그먼트 호버 시 "기간 · 유형 N건".
+export function StackedBar({ periods, series, colors, fmtAxis }: {
+  periods: string[];
+  series: { key: string; values: number[] }[];
+  colors?: string[];
+  fmtAxis?: (n: number) => string;
+}) {
+  if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
+  const fmt = fmtAxis || ((n: number) => n.toLocaleString());
+  const totals = periods.map((_, i) => series.reduce((s, ser) => s + (ser.values[i] || 0), 0));
+  const top = niceCeil(Math.max(...totals, 1));
+  const W = 760, H = 240, padL = 40, padR = 10, padT = 12, padB = 28;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const slot = plotW / periods.length, bw = Math.min(46, slot * 0.62);
+  const hOf = (v: number) => (v / top) * plotH;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
+  const col = (i: number) => (colors ? colors[i % colors.length] : PIE_COLORS[i % PIE_COLORS.length]);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+      {ticks.map((t, i) => {
+        const yy = padT + plotH - hOf(t);
+        return (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={yy} y2={yy} stroke="var(--sm-border-light)" strokeWidth="1" />
+            <text x={padL - 6} y={yy + 3.5} textAnchor="end" fontSize="10.5" fill="var(--sm-text-light)">{fmt(Math.round(t))}</text>
+          </g>
+        );
+      })}
+      {periods.map((p, i) => {
+        const cx = padL + slot * i + slot / 2;
+        let acc = 0;
+        return (
+          <g key={i}>
+            {series.map((ser, si) => {
+              const v = ser.values[i] || 0;
+              if (v <= 0) return null;
+              const h = hOf(v);
+              const yTop = padT + plotH - hOf(acc) - h;
+              acc += v;
+              return <rect key={si} x={cx - bw / 2} y={yTop} width={bw} height={h} fill={col(si)}><title>{`${p} · ${ser.key} ${v}건`}</title></rect>;
+            })}
+            <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="var(--sm-text-mid)">{p}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 // 분포 도넛 카드(도넛 + 범례 행)
 export function PieCard({ title, data, fmt }: { title: string; data: [string, number][]; fmt?: (n: number) => string }) {
   const total = data.reduce((s, [, n]) => s + n, 0);
