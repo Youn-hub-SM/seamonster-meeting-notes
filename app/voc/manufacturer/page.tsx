@@ -29,6 +29,18 @@ export default function VocManufacturerPage() {
   async function copy() {
     try { await navigator.clipboard.writeText(draft); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { setError("복사 실패 — 텍스트를 직접 선택해 복사하세요."); }
   }
+  async function downloadDocx() {
+    setError("");
+    try {
+      const res = await fetch("/api/voc/manufacturer/docx", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ month, recipient, draft }) });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || "Word 생성 실패"); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `씨몬스터_고객반응_${month}.docx`; document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
+    } catch (e) { setError(e instanceof Error ? e.message : "Word 생성 실패"); }
+  }
   const [y, mm] = month.split("-");
   const exportUrl = `/api/voc/manufacturer/export?month=${month}${recipient ? `&recipient=${encodeURIComponent(recipient)}` : ""}`;
 
@@ -41,6 +53,7 @@ export default function VocManufacturerPage() {
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href={exportUrl} title="제조사 귀책 건수·청구 손해액(정산용)">⬇ 정산 데이터(엑셀)</a>
+          <button className="b2b-btn-secondary" onClick={downloadDocx} disabled={!draft}>📄 Word 다운로드</button>
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={!draft}>🖨 인쇄 / PDF</button>
         </div>
       </header>
