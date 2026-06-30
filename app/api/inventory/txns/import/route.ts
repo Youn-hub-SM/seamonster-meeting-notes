@@ -80,13 +80,18 @@ export async function POST(req: NextRequest) {
       const qtyCell = get("수량");
       if (!sku && !name && !qtyCell) continue; // 빈 행
 
-      const type = (hasType ? get("유형") : formType) as "입고" | "출고";
-      if (type !== "입고" && type !== "출고") { errors.push({ line: r, msg: `유형이 올바르지 않음 ('${type || "-"}')` }); continue; }
+      // 행에 유형이 있고 입고/출고면 우선, 아니면(예: BoxHero '제품') 업로드 시 선택값으로 폴백.
+      const rowType = hasType ? get("유형") : "";
+      const type = (rowType === "입고" || rowType === "출고" ? rowType : formType) as "입고" | "출고";
+      if (type !== "입고" && type !== "출고") { errors.push({ line: r, msg: `유형이 올바르지 않음 ('${rowType || "-"}') — 구매/판매를 선택하세요` }); continue; }
       const qtyMag = Math.abs(Math.round(xlsxNum(qtyCell)));
       if (qtyMag <= 0) { errors.push({ line: r, msg: "수량은 1 이상" }); continue; }
       const { id, err } = resolve(sku, name);
       if (!id) { errors.push({ line: r, msg: err || "품목 매칭 실패" }); continue; }
-      const dateRaw = get("날짜"); const txn_date = DATE_RE.test(dateRaw) ? dateRaw : (formDate || today);
+      // 행별 날짜(과거 출고 일괄 이관용). 컬럼명 별칭 + "2026-05-08 17:27" 같은 시각 포함도 앞 10자 추출.
+      const dateRaw = get("날짜") || get("일자") || get("거래일") || get("발주일");
+      const dm = dateRaw.match(/^\d{4}-\d{2}-\d{2}/);
+      const txn_date = dm ? dm[0] : (formDate || today);
       const amt = xlsxNum(get("단가"));
       rows.push({
         type, qty: signedQty(type, qtyMag), product_id: id, product_name: nameOf.get(id) || name,
