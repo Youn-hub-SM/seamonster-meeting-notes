@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
-import { Donut, TrendChart, PieCard, BarList, StackedBar, PIE_COLORS } from "@/app/components/charts";
+import { Donut, PieCard, StackedBar, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 
 type RMode = "7일" | "14일" | "30일" | "custom";
 
@@ -57,6 +57,21 @@ const STATUS_META: { key: string; color: string }[] = [
   { key: "접수", color: "var(--sm-info)" },
 ];
 
+// 추세 탐색 — 분류 기준(무엇으로 쌓을지) & 측정값
+const DIMS = ["유형", "구매처", "구매자", "귀책", "보상유형", "상태", "없음"] as const;
+type Dim = (typeof DIMS)[number];
+const DIM_FIELD: Record<Dim, (r: Voc) => string> = {
+  유형: (r) => r.category || "미지정",
+  구매처: (r) => r.purchase_place || "미지정",
+  구매자: (r) => r.buyer_type || "미지정",
+  귀책: (r) => r.fault || "미분류",
+  보상유형: (r) => r.comp_type || "없음",
+  상태: (r) => r.status,
+  없음: () => "전체 접수",
+};
+const METRICS = ["건수", "손해금액"] as const;
+type Metric = (typeof METRICS)[number];
+
 export default function VocStatsPage() {
   const [rows, setRows] = useState<Voc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,8 +79,9 @@ export default function VocStatsPage() {
   const [mode, setMode] = useState<RMode>("30일");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [unit, setUnit] = useState<Unit>("주별");
-  const [catUnit, setCatUnit] = useState<Unit>("월별");
+  const [pUnit, setPUnit] = useState<Unit>("월별");
+  const [dim, setDim] = useState<Dim>("유형");
+  const [metric, setMetric] = useState<Metric>("건수");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -104,46 +120,39 @@ export default function VocStatsPage() {
   const byPlace = useMemo(() => countBy(shown, (r) => r.purchase_place), [shown]);
   const statusComp = useMemo(() => STATUS_META.map((s) => ({ ...s, n: shown.filter((r) => r.status === s.key).length })), [shown]);
 
-  // 단위(주/월)별 접수 건수 + 손해금액 — 시간순
-  const trend = useMemo(() => {
-    const m = new Map<string, { count: number; loss: number }>();
-    for (const r of shown) {
-      const k = periodKey(r.received_at || "", unit);
-      const cur = m.get(k) || { count: 0, loss: 0 };
-      cur.count += 1; cur.loss += r.loss_amount || 0;
-      m.set(k, cur);
-    }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([k, v]) => ({ key: k, label: periodLabel(k, unit), count: v.count, loss: v.loss }));
-  }, [shown, unit]);
-
-  // 유형별 시계열 추세 — 전체 기간(범위 필터 무관), 단위별 최근 N기간. period × category 매트릭스.
-  const catTrend = useMemo(() => {
+  // 추세 탐색 — 선택한 기간(범위 필터 적용) 안에서 기간단위(pUnit) × 분류(dim)로 측정값(metric) 집계.
+  //  하나의 누적 막대로 분류·측정·기간을 토글하며 다양한 관점 관찰.
+  const explore = useMemo(() => {
+    const fld = DIM_FIELD[dim];
     const labelByKey = new Map<string, string>();
-    const matrix = new Map<string, Map<string, number>>(); // category → periodKey → count
-    for (const r of rows) {
+    const matrix = new Map<string, Map<string, number>>(); // 분류값 → periodKey → 측정값
+    for (const r of shown) {
       const d = r.received_at || "";
       if (!d) continue;
-      const k = periodKey(d, catUnit);
+      const k = periodKey(d, pUnit);
       if (k === "미지정") continue;
-      labelByKey.set(k, periodLabel(k, catUnit));
-      const cm = matrix.get(r.category) || new Map<string, number>();
-      cm.set(k, (cm.get(k) || 0) + 1);
-      matrix.set(r.category, cm);
+      labelByKey.set(k, periodLabel(k, pUnit));
+      const g = fld(r);
+      const inc = metric === "손해금액" ? (r.loss_amount || 0) : 1;
+      const gm = matrix.get(g) || new Map<string, number>();
+      gm.set(k, (gm.get(k) || 0) + inc);
+      matrix.set(g, gm);
     }
     let keys = [...labelByKey.keys()].sort((a, b) => a.localeCompare(b));
-    const cap = PERIOD_CAP[catUnit];
+    const cap = PERIOD_CAP[pUnit];
     const capped = keys.length > cap;
     if (capped) keys = keys.slice(-cap);
     const labels = keys.map((k) => labelByKey.get(k)!);
-    const catTotals = VOC_CATEGORIES
-      .map((c) => [c, keys.reduce((s, k) => s + (matrix.get(c)?.get(k) || 0), 0)] as [string, number])
+    const groupTotals = [...matrix.entries()]
+      .map(([g, m]) => [g, keys.reduce((s, k) => s + (m.get(k) || 0), 0)] as [string, number])
       .filter(([, n]) => n > 0)
       .sort((a, b) => b[1] - a[1]);
-    const series = catTotals.map(([c]) => ({ key: c, values: keys.map((k) => matrix.get(c)?.get(k) || 0) }));
-    const grand = catTotals.reduce((s, [, n]) => s + n, 0);
-    return { labels, series, catTotals, grand, capped, cap };
-  }, [rows, catUnit]);
+    const series = groupTotals.map(([g]) => ({ key: g, values: keys.map((k) => matrix.get(g)?.get(k) || 0) }));
+    const grand = groupTotals.reduce((s, [, n]) => s + n, 0);
+    return { labels, series, groupTotals, grand, capped, cap };
+  }, [shown, dim, metric, pUnit]);
+  const isMoney = metric === "손해금액";
+  const fmtVal = (n: number) => (isMoney ? `${n.toLocaleString()}원` : `${n}건`);
 
   // 유형별 손해금액 (내림차순)
   const lossByCategory = useMemo(() => {
@@ -210,58 +219,48 @@ export default function VocStatsPage() {
             </div>
           </section>
 
-          {/* 접수·손해 추세 — 주별/월별 토글 */}
+          {/* 추세 탐색 — 분류·측정·기간 토글로 하나의 누적 막대를 여러 관점으로 */}
           <section className="b2b-card">
-            <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="b2b-card-title">접수·손해 추세</span>
-              <div className="sm-tabs" style={{ margin: 0 }}>
-                {(["주별", "월별"] as Unit[]).map((u) => (
-                  <button key={u} className={`sm-tab ${unit === u ? "is-active" : ""}`} onClick={() => setUnit(u)}>{u}</button>
-                ))}
-              </div>
-            </div>
-            <div className="sm-between" style={{ marginBottom: 6 }}>
-              <span className="sm-faint" style={{ fontSize: 11 }}>단위 : 건</span>
-              <span className="sm-chart-legend"><span><i style={{ background: "var(--sm-orange)" }} />접수 건수</span></span>
-            </div>
-            <TrendChart data={trend.map((t) => ({ label: t.label, value: t.count, tip: `${t.label} · ${t.count}건${t.loss > 0 ? ` · 손해 ${t.loss.toLocaleString()}원` : ""}` }))} />
-            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>막대에 마우스를 올리면 건수·손해금액이 표시됩니다.</p>
-          </section>
-
-          {/* 유형별 추세 — 기간(일/주/월) × 유형 누적 막대. 전체 기간 기준. */}
-          <section className="b2b-card" style={{ marginTop: 14 }}>
             <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <span className="b2b-card-title">유형별 추세 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 전체 기간{catTrend.capped ? ` · 최근 ${catTrend.cap}개` : ""}</span></span>
+              <span className="b2b-card-title">추세 탐색 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {period.label}{explore.capped ? ` · 최근 ${explore.cap}개 기간` : ""}</span></span>
               <div className="sm-tabs" style={{ margin: 0 }}>
                 {(["일별", "주별", "월별"] as Unit[]).map((u) => (
-                  <button key={u} className={`sm-tab ${catUnit === u ? "is-active" : ""}`} onClick={() => setCatUnit(u)}>{u}</button>
+                  <button key={u} className={`sm-tab ${pUnit === u ? "is-active" : ""}`} onClick={() => setPUnit(u)}>{u}</button>
                 ))}
               </div>
             </div>
-            {catTrend.series.length === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>집계할 유형이 없습니다.</div>
+            <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+              <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>분류
+                <select className="b2b-input" value={dim} onChange={(e) => setDim(e.target.value as Dim)} style={{ width: "auto" }}>
+                  {DIMS.map((d) => <option key={d} value={d}>{d === "없음" ? "전체(분류 없음)" : `${d}별`}</option>)}
+                </select></label>
+              <div className="sm-tabs" style={{ margin: 0 }}>
+                {METRICS.map((m) => <button key={m} className={`sm-tab ${metric === m ? "is-active" : ""}`} onClick={() => setMetric(m)}>{m}</button>)}
+              </div>
+            </div>
+            {explore.series.length === 0 ? (
+              <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>이 기간에 집계할 데이터가 없습니다.</div>
             ) : (
               <>
-                <StackedBar periods={catTrend.labels} series={catTrend.series} />
+                <StackedBar periods={explore.labels} series={explore.series} unit={isMoney ? "원" : "건"} fmtAxis={isMoney ? moneyCompact : undefined} />
                 <div className="sm-row-wrap" style={{ gap: 12, marginTop: 10 }}>
-                  {catTrend.catTotals.map(([c, n], i) => (
-                    <span key={c} className="sm-row" style={{ gap: 6, fontSize: 12.5 }}>
+                  {explore.groupTotals.map(([g, n], i) => (
+                    <span key={g} className="sm-row" style={{ gap: 6, fontSize: 12.5 }}>
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
-                      <span>{c}</span><strong>{n}</strong>
-                      <span className="sm-faint">{catTrend.grand ? Math.round((n / catTrend.grand) * 100) : 0}%</span>
+                      <span>{g}</span><strong>{fmtVal(n)}</strong>
+                      <span className="sm-faint">{explore.grand ? Math.round((n / explore.grand) * 100) : 0}%</span>
                     </span>
                   ))}
                 </div>
-                <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>막대 = 기간별 접수 건수(유형 누적). 세그먼트가 클수록 그 시기에 많이 발생한 유형입니다.</p>
+                <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>분류·측정·기간을 바꿔 여러 관점으로 관찰하세요. 막대에 올리면 기간·항목별 값이 표시됩니다.</p>
               </>
             )}
           </section>
 
-          {/* 손해금액 집계 */}
+          {/* 유형별 손해금액 비중(총합) — 시계열은 위 '추세 탐색'에서 측정=손해금액으로 */}
           {kpi.loss > 0 && (
-            <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginTop: 14 }}>
-              <PieCard title="유형별 손해금액(원)" data={lossByCategory} fmt={(n) => n.toLocaleString()} />
-              <BarList title={`${unit} 손해금액(원)`} data={trend.filter((t) => t.loss > 0).map((t) => [t.label, t.loss] as [string, number])} accent="var(--sm-danger)" fmt={(n) => n.toLocaleString()} />
+            <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginTop: 14 }}>
+              <PieCard title="유형별 손해금액 비중(원)" data={lossByCategory} fmt={(n) => n.toLocaleString()} />
             </div>
           )}
 

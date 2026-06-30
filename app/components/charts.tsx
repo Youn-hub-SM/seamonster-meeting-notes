@@ -84,11 +84,12 @@ export function TrendChart({ data, fmtAxis }: { data: { label: string; value: nu
 
 // 누적 세로막대 — 기간(X축) × 카테고리(누적 세그먼트). 유형별 시계열 변화용.
 //  series[i].values 는 periods 와 같은 길이. 세그먼트 호버 시 "기간 · 유형 N건".
-export function StackedBar({ periods, series, colors, fmtAxis }: {
+export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
   periods: string[];
   series: { key: string; values: number[] }[];
   colors?: string[];
   fmtAxis?: (n: number) => string;
+  unit?: string; // 세그먼트 툴팁 값 단위(건/원 등)
 }) {
   if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
@@ -122,7 +123,7 @@ export function StackedBar({ periods, series, colors, fmtAxis }: {
               const h = hOf(v);
               const yTop = padT + plotH - hOf(acc) - h;
               acc += v;
-              return <rect key={si} x={cx - bw / 2} y={yTop} width={bw} height={h} fill={col(si)}><title>{`${p} · ${ser.key} ${v}건`}</title></rect>;
+              return <rect key={si} x={cx - bw / 2} y={yTop} width={bw} height={h} fill={col(si)}><title>{`${p} · ${ser.key} ${v.toLocaleString()}${unit}`}</title></rect>;
             })}
             <text x={cx} y={H - 9} textAnchor="middle" fontSize="10.5" fill="var(--sm-text-mid)">{p}</text>
           </g>
