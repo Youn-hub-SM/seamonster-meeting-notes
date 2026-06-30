@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { VOC_CATEGORIES, VOC_STATUSES, VOC_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, VOC_FAULTS, suggestFault, computeVocLoss, type Voc, type VocStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
+import { type VocImportRow } from "@/app/lib/voc-xlsx";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
 
@@ -38,6 +39,10 @@ export default function VocPage() {
   const [edit, setEdit] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // 엑셀 일괄 등록
+  const [importing, setImporting] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [preview, setPreview] = useState<{ summary: { valid: number; errors: number }; rows: VocImportRow[]; errors: { line: number; msg: string }[] } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -178,6 +183,29 @@ export default function VocPage() {
   }
   const removePhoto = (url: string) => setEdit((f) => (f ? { ...f, photos: f.photos.filter((p) => p !== url) } : f));
 
+  async function handleVocFile(file: File) {
+    setImporting(true); setError("");
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const res = await fetch("/api/voc/import", { method: "POST", body: fd });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      setPreview(j as NonNullable<typeof preview>);
+    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    setImporting(false);
+  }
+  async function applyVocImport() {
+    if (!preview) return;
+    setApplying(true); setError("");
+    try {
+      const res = await fetch("/api/voc/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows }) });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "등록 실패");
+      setPreview(null); await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "등록 실패"); }
+    setApplying(false);
+  }
+
   // 손해금액 계산 근거 안내문
   const matched = edit ? products.find((p) => p.name === edit.product) : undefined;
   const isManualType = edit ? VOC_COMP_MANUAL.has(edit.comp_type) : false;
@@ -204,6 +232,12 @@ export default function VocPage() {
           <p className="b2b-page-subtitle">고객의 소리(클레임)를 <strong>접수 → 응대·개선중 → 개선완료</strong> 3단계로 관리합니다. 상담 등에서 받은 건은 직접 입력하세요.</p>
         </div>
         <div className="b2b-page-actions">
+          <a className="b2b-btn-secondary" href="/api/voc/template" title="VOC 일괄 등록 엑셀 양식">엑셀 양식</a>
+          <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
+            {importing ? "분석 중…" : "엑셀 업로드"}
+            <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleVocFile(f); e.target.value = ""; }} />
+          </label>
           <button className="b2b-btn-primary" onClick={openNew}>+ VOC 추가</button>
         </div>
       </header>
@@ -295,6 +329,59 @@ export default function VocPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {preview && (
+        <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
+            <div className="b2b-modal-head">
+              <span className="b2b-modal-title">엑셀 업로드 — 미리보기</span>
+              <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
+                <span>등록 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
+                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
+              </div>
+              {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>등록할 행이 없습니다. 양식을 확인하세요.</div>}
+              {preview.rows.length > 0 && (
+                <div className="b2b-table-wrap" style={{ maxHeight: 340, overflow: "auto", marginBottom: 12 }}>
+                  <table className="b2b-table">
+                    <thead><tr><th>접수일</th><th>유형</th><th>고객</th><th>상품</th><th>상세내용</th><th>단계</th></tr></thead>
+                    <tbody>
+                      {preview.rows.slice(0, 200).map((r, i) => (
+                        <tr key={i}>
+                          <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
+                          <td>{r.category}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
+                          <td style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
+                          <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
+                          <td>{r.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>…외 {preview.rows.length - 200}건(전체 등록됩니다)</p>}
+                </div>
+              )}
+              {preview.errors.length > 0 && (
+                <section>
+                  <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행 제외</div>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 140, overflow: "auto" }}>
+                    {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
+                  </ul>
+                </section>
+              )}
+            </div>
+            <div className="b2b-modal-foot">
+              <span />
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
+                <button className="b2b-btn-primary" onClick={applyVocImport} disabled={applying || preview.summary.valid === 0}>{applying ? "등록 중…" : `${preview.summary.valid}건 등록`}</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
