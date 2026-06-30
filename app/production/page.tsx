@@ -14,7 +14,8 @@ type PItem = { name: string; spec: string; qty: number; manual: boolean; manualI
 type MergedDay = { date: string; label: string; total_qty: number; hasManual: boolean; products: PItem[] };
 
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
-const RANGES = [7, 14, 30] as const;
+const FILTER_MODES = ["일자별", "7일", "14일", "30일", "지정"] as const;
+type FilterMode = (typeof FILTER_MODES)[number];
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 function isoOf(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -48,7 +49,11 @@ export default function ProductionSchedulePage() {
   const [error, setError] = useState("");
   const today = todayIso();
   const [view, setView] = useState(() => { const t = new Date(); return { y: t.getFullYear(), m: t.getMonth() }; });
-  const [range, setRange] = useState<number>(14);
+  // 하단 생산목록 필터 — 일자별/7·14·30일/지정
+  const [fmode, setFmode] = useState<FilterMode>("14일");
+  const [oneDate, setOneDate] = useState(today);
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate, setToDate] = useState(addDaysIso(today, 7));
 
   const [promoModal, setPromoModal] = useState<Partial<Promotion> | null>(null);
   const [savingPromo, setSavingPromo] = useState(false);
@@ -107,13 +112,22 @@ export default function ProductionSchedulePage() {
   const promosOn = useCallback((iso: string) => promos.filter((p) => p.start <= iso && iso <= p.end), [promos]);
   const weeks = useMemo(() => buildWeeks(view.y, view.m), [view]);
 
-  // 우측 목록: 범위(다가오는 N일) + 지연 + 미정, 날짜 오름차순
+  // 하단 생산목록: 필터모드별. 일자별=특정일 / N일=다가오는 N일+지연+미정 / 지정=날짜 범위.
   const listDays = useMemo(() => {
-    const limit = addDaysIso(today, range);
-    return [...merged.values()]
-      .filter((d) => !d.date || d.date <= limit)
-      .sort((a, b) => { if (!a.date) return 1; if (!b.date) return -1; return a.date.localeCompare(b.date); });
-  }, [merged, today, range]);
+    const all = [...merged.values()];
+    let filtered: MergedDay[];
+    if (fmode === "일자별") {
+      filtered = all.filter((d) => d.date === oneDate);
+    } else if (fmode === "지정") {
+      const lo = fromDate || "0000-00-00", hi = toDate || "9999-12-31";
+      filtered = all.filter((d) => !!d.date && d.date >= lo && d.date <= hi);
+    } else {
+      const n = fmode === "7일" ? 7 : fmode === "30일" ? 30 : 14;
+      const limit = addDaysIso(today, n);
+      filtered = all.filter((d) => !d.date || d.date <= limit);
+    }
+    return filtered.sort((a, b) => { if (!a.date) return 1; if (!b.date) return -1; return a.date.localeCompare(b.date); });
+  }, [merged, today, fmode, oneDate, fromDate, toDate]);
 
   function gotoMonth(delta: number) { setView((v) => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; }); }
   function gotoToday() { const t = new Date(); setView({ y: t.getFullYear(), m: t.getMonth() }); }
@@ -273,20 +287,32 @@ export default function ProductionSchedulePage() {
           )}
         </div>
 
-        {/* 우측: 생산 목록 */}
+        {/* 하단: 생산 목록 (캘린더 아래 전체폭) */}
         <aside className="prod-cal-side">
-          <div className="prod-cal-side-head">
-            생산 목록
-            <div className="sm-tabs">
-              {RANGES.map((n) => (
-                <button key={n} className={`sm-tab ${range === n ? "is-active" : ""}`} onClick={() => setRange(n)}>{n}일</button>
-              ))}
+          <div className="prod-cal-side-head" style={{ flexWrap: "wrap" }}>
+            <span>생산 목록</span>
+            <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center", marginLeft: "auto" }}>
+              <div className="sm-tabs">
+                {FILTER_MODES.map((m) => (
+                  <button key={m} className={`sm-tab ${fmode === m ? "is-active" : ""}`} onClick={() => setFmode(m)}>{m === "지정" ? "날짜 지정" : m}</button>
+                ))}
+              </div>
+              {fmode === "일자별" && (
+                <input type="date" className="b2b-input" value={oneDate} onChange={(e) => setOneDate(e.target.value)} style={{ width: "auto" }} />
+              )}
+              {fmode === "지정" && (
+                <span className="sm-row" style={{ gap: 6 }}>
+                  <input type="date" className="b2b-input" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} style={{ width: "auto" }} />
+                  <span className="sm-faint">~</span>
+                  <input type="date" className="b2b-input" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} style={{ width: "auto" }} />
+                </span>
+              )}
             </div>
           </div>
           {loading ? (
             <div className="b2b-loading">불러오는 중...</div>
           ) : listDays.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: "30px 16px" }}><div className="b2b-empty-icon">🏭</div>{range}일 내 생산 일정이 없습니다.</div>
+            <div className="b2b-empty" style={{ padding: "30px 16px" }}><div className="b2b-empty-icon">🏭</div>{fmode === "일자별" ? `${oneDate} 생산 일정이 없습니다.` : fmode === "지정" ? "선택 기간에 생산 일정이 없습니다." : `다가오는 ${fmode} 내 생산 일정이 없습니다.`}</div>
           ) : (
             <div className="prod-side-list">
               {listDays.map((d) => {

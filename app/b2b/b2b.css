@@ -1022,7 +1022,7 @@ a.b2b-history-item:hover {
 /* 생산일정 캘린더 레이아웃 */
 .prod-cal-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: 1fr; /* 캘린더 전체폭 → 생산목록은 아래로 */
   gap: 16px;
   align-items: start;
 }
@@ -1051,20 +1051,20 @@ a.b2b-history-item:hover {
 .prod-cal-wd, .prod-cal-cell {
   border-right: 1px solid var(--sm-border-light); border-bottom: 1px solid var(--sm-border-light);
 }
-.prod-cal-wd { text-align: left; font-size: 10.5px; font-weight: 600; color: var(--sm-text-light); padding: 7px 8px; }
+.prod-cal-wd { text-align: left; font-size: 12px; font-weight: 600; color: var(--sm-text-light); padding: 9px 10px; }
 .prod-cal-wd.is-sun { color: var(--sm-danger); }
 .prod-cal-wd.is-sat { color: var(--sm-info); }
 
 .prod-cal-cell {
-  min-height: 112px; padding: 5px 6px; display: flex; flex-direction: column; gap: 3px;
+  min-height: 150px; padding: 7px 8px; display: flex; flex-direction: column; gap: 4px;
   background: var(--sm-white, #fff); overflow: hidden; transition: background .1s;
 }
 .prod-cal-cell:hover { background: var(--sm-bg-subtle); }
 .prod-cal-cell.is-other .prod-cal-daynum { color: var(--sm-text-light); }
 .prod-cal-cell.is-today { background: var(--sm-orange-light, rgba(241, 90, 48, .06)); }
 .prod-cal-daynum {
-  font-size: 11.5px; font-weight: 500; color: var(--sm-black);
-  width: 19px; height: 19px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 600; color: var(--sm-black);
+  width: 25px; height: 25px; display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%; align-self: flex-start;
 }
 .prod-cal-cell.is-today .prod-cal-daynum { background: var(--sm-orange); color: #fff; font-weight: 700; }
@@ -1081,11 +1081,12 @@ a.b2b-history-item:hover {
 .prod-cal-cnt { font-size: 9px; color: var(--sm-text-mid); }
 
 /* 캘린더 셀 — 제품·수량 목록 */
-.prod-cal-items { margin-top: 1px; display: flex; flex-direction: column; gap: 2px; }
-.prod-cal-item { display: flex; align-items: center; gap: 4px; font-size: 10px; line-height: 1.5; background: var(--sm-bg-subtle); border-radius: 5px; padding: 1px 6px; }
+.prod-cal-items { margin-top: 2px; display: flex; flex-direction: column; gap: 3px; }
+.prod-cal-item { display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 1.55; background: var(--sm-bg-subtle); border-radius: 6px; padding: 2px 8px; }
 .prod-cal-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sm-text-mid); }
 .prod-cal-item-qty { font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.prod-cal-item-more { font-size: 9px; color: var(--sm-text-light); margin-top: 1px; }
+.prod-cal-item-more { font-size: 11px; color: var(--sm-text-light); margin-top: 1px; }
+.prod-cal-promo { font-size: 11px !important; }
 
 /* 생산 보드 (칸반) */
 .kanban { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
@@ -1309,7 +1310,7 @@ a.b2b-history-item:hover {
 .promo-item-add:hover { border-color: var(--sm-orange); color: var(--sm-orange); }
 .promo-item-total { font-size: 12px; color: var(--sm-text-mid); }
 .promo-item-total strong { color: var(--sm-orange); font-variant-numeric: tabular-nums; }
-.prod-side-list { display: flex; flex-direction: column; gap: 10px; max-height: 72vh; overflow-y: auto; }
+.prod-side-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: start; }
 .prod-side-day { border: 1px solid var(--sm-border); border-radius: 10px; padding: 10px 12px; }
 .prod-side-day.is-overdue { border-color: var(--sm-danger-border); }
 .prod-side-day.is-today { border-color: var(--sm-orange); }
