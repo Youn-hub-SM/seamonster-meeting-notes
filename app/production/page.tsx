@@ -129,6 +129,11 @@ export default function ProductionSchedulePage() {
     return filtered.sort((a, b) => { if (!a.date) return 1; if (!b.date) return -1; return a.date.localeCompare(b.date); });
   }, [merged, today, fmode, oneDate, fromDate, toDate]);
 
+  // 표(VOC 처리상태풍)용 — 일자 × 품목 평탄화. 날짜는 바뀔 때만 표시.
+  const listRows = useMemo(() => listDays.flatMap((d) =>
+    d.products.map((p) => ({ date: d.date || "", label: d.label, name: p.name, spec: p.spec, qty: p.qty, manual: p.manual, manualId: p.manualId }))
+  ), [listDays]);
+
   function gotoMonth(delta: number) { setView((v) => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; }); }
   function gotoToday() { const t = new Date(); setView({ y: t.getFullYear(), m: t.getMonth() }); }
 
@@ -314,37 +319,33 @@ export default function ProductionSchedulePage() {
           ) : listDays.length === 0 ? (
             <div className="b2b-empty" style={{ padding: "30px 16px" }}><div className="b2b-empty-icon">🏭</div>{fmode === "일자별" ? `${oneDate} 생산 일정이 없습니다.` : fmode === "지정" ? "선택 기간에 생산 일정이 없습니다." : `다가오는 ${fmode} 내 생산 일정이 없습니다.`}</div>
           ) : (
-            <div className="prod-side-list">
-              {listDays.map((d) => {
-                const overdue = !!d.date && d.date < today;
-                const isToday = d.date === today;
-                return (
-                  <div key={d.date || "unset"} className={`prod-side-day ${overdue ? "is-overdue" : ""} ${isToday ? "is-today" : ""}`}>
-                    <div className="prod-side-day-head">
-                      <span className="prod-side-day-label">{d.label}</span>
-                      {overdue && <span className="prod-day-badge is-overdue">지연</span>}
-                      {isToday && <span className="prod-day-badge is-today">오늘</span>}
-                      <span className="prod-side-day-qty">{d.total_qty.toLocaleString()}개</span>
-                    </div>
-                    <ul className="prod-side-items">
-                      {d.products.map((p, i) => (
-                        <li key={i}>
-                          <span className="prod-side-item-name">
-                            {p.name}{p.spec ? <span className="prod-side-item-spec"> {p.spec}</span> : ""}
-                            {p.manual && <span className="prod-side-manual-tag">직접</span>}
-                          </span>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                            <span className="prod-side-item-qty">{p.qty.toLocaleString()}</span>
-                            {p.manual && p.manualId && (
-                              <button className="prod-side-del" title="삭제" onClick={() => deleteManual(p.manualId!)}>✕</button>
-                            )}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
+            <div className="b2b-table-wrap">
+              <table className="b2b-table">
+                <thead><tr><th>생산일</th><th>품목</th><th>규격</th><th className="num">수량</th><th>구분</th><th>상태</th><th></th></tr></thead>
+                <tbody>
+                  {listRows.map((r, i) => {
+                    const status = !r.date ? "미정" : r.date < today ? "지연" : r.date === today ? "오늘" : "예정";
+                    const sc = status === "지연" ? { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" }
+                      : status === "오늘" ? { bg: "var(--sm-orange-light, rgba(241,90,48,.1))", fg: "var(--sm-orange)" }
+                      : status === "예정" ? { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" }
+                      : { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
+                    const newDay = i === 0 || listRows[i - 1].date !== r.date;
+                    return (
+                      <tr key={i} style={newDay && i > 0 ? { borderTop: "2px solid var(--sm-border)" } : undefined}>
+                        <td style={{ whiteSpace: "nowrap", color: newDay ? "var(--sm-black)" : "transparent", fontWeight: newDay ? 600 : 400 }}>{r.label}</td>
+                        <td>{r.name}</td>
+                        <td>{r.spec || "-"}</td>
+                        <td className="num b2b-money">{r.qty.toLocaleString()}</td>
+                        <td><span className="b2b-feed-pill" style={{ background: r.manual ? "var(--sm-bg-subtle)" : "var(--sm-info-bg)", color: r.manual ? "var(--sm-text-mid)" : "var(--sm-info)" }}>{r.manual ? "직접" : "B2B"}</span></td>
+                        <td><span className="b2b-feed-pill" style={{ background: sc.bg, color: sc.fg, fontWeight: 700, whiteSpace: "nowrap" }}>{status}</span></td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {r.manual && r.manualId && <button className="b2b-link-btn" title="삭제" onClick={() => deleteManual(r.manualId!)} style={{ color: "var(--sm-danger)" }}>✕</button>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </aside>
