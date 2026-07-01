@@ -94,6 +94,7 @@ export const NAV: NavCategory[] = [
     label: "기타",
     tools: [
       { href: "/meeting", label: "회의 정리", icon: "note" },
+      { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },
     ],
   },
   {

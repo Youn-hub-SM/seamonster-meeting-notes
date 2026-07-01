@@ -66,6 +66,13 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
             </button>
+          ) : /^https?:\/\//.test(t.href) ? (
+            // 외부 링크(가이드 등)는 새 탭으로
+            <a href={t.href} target="_blank" rel="noreferrer" className="app-sb-tool" onClick={onNavigate}>
+              <span className="app-sb-emoji"><Icon name={t.icon} /></span>
+              <span className="app-sb-tool-label">{t.label}</span>
+              <span aria-hidden="true" style={{ marginLeft: "auto", fontSize: 11, color: "var(--sm-text-light)" }}>↗</span>
+            </a>
           ) : (
             <Link href={t.href} className="app-sb-tool" onClick={onNavigate}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
