@@ -26,6 +26,7 @@ export const NAV: NavCategory[] = [
         ],
       },
       { href: "/b2b/products", label: "상품 마스터", icon: "fish" },
+      { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/subscription", label: "정기배송 분석", icon: "trend" },
     ],
   },
@@ -63,7 +64,6 @@ export const NAV: NavCategory[] = [
     tools: [
       { href: "/utm", label: "UTM 빌더", icon: "link" },
       { href: "/qr", label: "QR 코드", icon: "qrcode" },
-      { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/correct", label: "문장 교정", icon: "pen" },
     ],
   },
