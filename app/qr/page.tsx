@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import QrDesigner from "./QrDesigner";
 
 type Link = { id: string; code: string; target_url: string; title: string | null; active: boolean; scan_count: number; created_by: string | null; created_at: string };
 type Scan = { scanned_at: string; referer: string | null; user_agent: string | null; country: string | null };
@@ -26,6 +27,7 @@ export default function QrPage() {
   const [edit, setEdit] = useState<Link | null>(null);
   const [qrFor, setQrFor] = useState<Link | null>(null);
   const [statsFor, setStatsFor] = useState<Link | null>(null);
+  const [designer, setDesigner] = useState<{ data: string; name: string } | null>(null);
 
   // 정적 QR
   const [staticText, setStaticText] = useState("");
@@ -140,9 +142,10 @@ export default function QrPage() {
           {staticText.trim() && (
             <div className="sm-col" style={{ gap: 10, marginTop: 14, alignItems: "flex-start" }}>
               <img src={qrSrc(staticText.trim(), 240)} alt="QR" width={220} height={220} style={{ border: "1px solid var(--sm-border)", borderRadius: 8 }} />
-              <div className="sm-row" style={{ gap: 8 }}>
+              <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&size=1024&download=1&format=png`}>PNG 다운로드</a>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&download=1&format=svg`}>SVG 다운로드</a>
+                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: staticText.trim(), name: "static" })}>🎨 디자인</button>
               </div>
             </div>
           )}
@@ -160,9 +163,10 @@ export default function QrPage() {
                 <code style={{ fontSize: 12 }}>{shortUrl(qrFor.code)}</code>
                 <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => copy(shortUrl(qrFor.code))}>복사</button>
               </div>
-              <div className="sm-row" style={{ gap: 8, justifyContent: "center", marginTop: 12 }}>
+              <div className="sm-row" style={{ gap: 8, justifyContent: "center", marginTop: 12, flexWrap: "wrap" }}>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&size=1024&download=1&format=png&name=${qrFor.code}`}>PNG</a>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&download=1&format=svg&name=${qrFor.code}`}>SVG</a>
+                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: shortUrl(qrFor.code), name: qrFor.code })}>🎨 디자인</button>
               </div>
             </div>
           </div>
@@ -171,6 +175,7 @@ export default function QrPage() {
 
       {edit && <EditModal link={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
       {statsFor && <StatsModal link={statsFor} onClose={() => setStatsFor(null)} />}
+      {designer && <QrDesigner data={designer.data} name={designer.name} onClose={() => setDesigner(null)} />}
     </div>
   );
 }
@@ -206,49 +211,82 @@ function EditModal({ link, onClose, onSaved }: { link: Link; onClose: () => void
   );
 }
 
+type Bd = { label: string; count: number };
+type StatsResp = { sampleSize: number; daily: { date: string; count: number }[]; hourly: { hour: number; count: number }[]; breakdowns: { device: Bd[]; os: Bd[]; browser: Bd[]; source: Bd[]; country: Bd[] }; recent: Scan[] };
+
+function Bars({ title, rows }: { title: string; rows: Bd[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <div>
+      <div className="b2b-field-label" style={{ fontWeight: 700, marginBottom: 4 }}>{title}</div>
+      {rows.length === 0 ? <span className="sm-faint" style={{ fontSize: 12 }}>-</span> : rows.map((r) => (
+        <div key={r.label} className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 2 }}>
+          <span style={{ fontSize: 11, width: 76, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.label}>{r.label}</span>
+          <span style={{ height: 10, background: "var(--sm-orange)", borderRadius: 3, width: `${(r.count / max) * 55 + 6}%`, minWidth: 6, display: "inline-block" }} />
+          <span style={{ fontSize: 11 }}>{r.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
-  const [daily, setDaily] = useState<{ date: string; count: number }[]>([]);
-  const [scans, setScans] = useState<Scan[]>([]);
+  const [data, setData] = useState<StatsResp | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     (async () => {
-      try { const j = await (await fetch(`/api/qr/scans?link=${link.id}`, { cache: "no-store" })).json(); if (j.ok) { setDaily(j.daily || []); setScans(j.scans || []); } } catch { /* noop */ }
+      try { const j = await (await fetch(`/api/qr/scans?link=${link.id}`, { cache: "no-store" })).json(); if (j.ok) setData(j as StatsResp); } catch { /* noop */ }
       setLoading(false);
     })();
   }, [link.id]);
-  const max = useMemo(() => Math.max(1, ...daily.map((d) => d.count)), [daily]);
+  const dmax = useMemo(() => Math.max(1, ...(data?.daily || []).map((d) => d.count)), [data]);
+  const hmax = useMemo(() => Math.max(1, ...(data?.hourly || []).map((h) => h.count)), [data]);
   return (
     <div className="b2b-modal-backdrop" onClick={onClose}>
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">스캔 통계 — {link.title || link.code}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
-          <p style={{ marginBottom: 10 }}>누적 스캔 <strong style={{ color: "var(--sm-orange)" }}>{link.scan_count.toLocaleString()}</strong>회 <span className="sm-faint" style={{ fontSize: 12 }}>(최근 500건 기준 일자·목록)</span></p>
-          {loading ? <div className="b2b-loading">불러오는 중...</div> : (
+          <p style={{ marginBottom: 10 }}>누적 스캔 <strong style={{ color: "var(--sm-orange)" }}>{link.scan_count.toLocaleString()}</strong>회 {data && data.sampleSize < link.scan_count && <span className="sm-faint" style={{ fontSize: 12 }}>(아래 분석은 최근 {data.sampleSize.toLocaleString()}건 기준)</span>}</p>
+          {loading ? <div className="b2b-loading">불러오는 중...</div> : !data || data.sampleSize === 0 ? <div className="sm-faint" style={{ fontSize: 13, padding: "10px 0" }}>아직 스캔 기록이 없습니다.</div> : (
             <>
-              {daily.length > 0 && (
+              {data.daily.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
                   <div className="b2b-field-label" style={{ fontWeight: 700 }}>일자별</div>
                   <div className="sm-col" style={{ gap: 3, marginTop: 4 }}>
-                    {daily.slice(-14).map((d) => (
+                    {data.daily.slice(-14).map((d) => (
                       <div key={d.date} className="sm-row" style={{ gap: 8, alignItems: "center" }}>
                         <span className="sm-faint" style={{ fontSize: 11, width: 74 }}>{d.date.slice(5)}</span>
-                        <span style={{ height: 12, background: "var(--sm-orange)", borderRadius: 3, width: `${(d.count / max) * 60 + 8}%`, minWidth: 8 }} />
+                        <span style={{ height: 12, background: "var(--sm-orange)", borderRadius: 3, width: `${(d.count / dmax) * 60 + 8}%`, minWidth: 8, display: "inline-block" }} />
                         <span style={{ fontSize: 12 }}>{d.count}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 14 }}>
+                <Bars title="기기" rows={data.breakdowns.device} />
+                <Bars title="OS" rows={data.breakdowns.os} />
+                <Bars title="브라우저·앱" rows={data.breakdowns.browser} />
+                <Bars title="유입 경로" rows={data.breakdowns.source} />
+                <Bars title="국가" rows={data.breakdowns.country} />
+              </div>
+
+              <div className="b2b-field-label" style={{ fontWeight: 700, marginBottom: 4 }}>시간대(시)</div>
+              <div className="sm-row" style={{ gap: 2, alignItems: "flex-end", height: 44, marginBottom: 14 }}>
+                {data.hourly.map((h) => (
+                  <div key={h.hour} title={`${h.hour}시 · ${h.count}회`} style={{ flex: 1, height: `${(h.count / hmax) * 100}%`, minHeight: h.count ? 3 : 0, background: "var(--sm-info)", borderRadius: 2 }} />
+                ))}
+              </div>
+
               <div className="b2b-field-label" style={{ fontWeight: 700 }}>최근 스캔</div>
-              {scans.length === 0 ? <div className="sm-faint" style={{ fontSize: 12, padding: "6px 0" }}>아직 스캔 기록이 없습니다.</div> : (
-                <div className="b2b-table-wrap" style={{ maxHeight: 240, overflow: "auto", marginTop: 4 }}>
-                  <table className="b2b-table"><thead><tr><th>시각</th><th>국가</th><th>유입</th></tr></thead>
-                    <tbody>{scans.slice(0, 100).map((s, i) => (
-                      <tr key={i}><td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{new Date(new Date(s.scanned_at).getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ")}</td><td>{s.country || "-"}</td><td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }} className="sm-faint">{s.referer || "직접"}</td></tr>
-                    ))}</tbody>
-                  </table>
-                </div>
-              )}
+              <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto", marginTop: 4 }}>
+                <table className="b2b-table"><thead><tr><th>시각</th><th>국가</th><th>유입</th></tr></thead>
+                  <tbody>{data.recent.slice(0, 100).map((s, i) => (
+                    <tr key={i}><td style={{ whiteSpace: "nowrap", fontSize: 12 }}>{new Date(new Date(s.scanned_at).getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ")}</td><td>{s.country || "-"}</td><td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }} className="sm-faint">{s.referer || "직접"}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
             </>
           )}
         </div>
