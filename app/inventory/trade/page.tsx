@@ -51,7 +51,7 @@ export default function TradePage() {
       <header className="b2b-page-head">
         <div><h1 className="b2b-page-title">구매 및 판매</h1><p className="b2b-page-subtitle">여러 제품을 한 화면에 담아 기록하거나, <strong>엑셀(SKU·수량·단가)</strong>로 한 번에 올리세요.</p></div>
         <div className="b2b-page-actions">
-          <a className="b2b-btn-secondary" href="/api/inventory/txns/template" title="SKU·수량·단가 엑셀 양식">엑셀 양식</a>
+          <a className="b2b-btn-secondary" href={`/api/inventory/txns/template?type=${ioType}`} title={ioType === "입고" ? "SKU·수량·단가 엑셀 양식" : "수량·(무시)·SKU 엑셀 양식"}>엑셀 양식 ({ioType === "입고" ? "구매" : "판매"})</a>
           <Link className="b2b-btn-primary" href="/inventory/trade/new">+ 입고/판매 기록</Link>
         </div>
       </header>
@@ -77,8 +77,13 @@ export default function TradePage() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
           </label>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>양식 = <strong>SKU · 수량 · 단가</strong>. 구매/판매를 고르고 업로드 → 미리보기 후 반영. (거래일·거래처는 파일 전체에 적용)</p>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 2 }}>과거 출고 일괄 이관: 엑셀에 <strong>‘날짜’</strong> 열(YYYY-MM-DD, 발주일/거래일도 인식)을 넣으면 행별 날짜로 기록됩니다 → 안전재고(판매속도) 워밍업에 쓰입니다.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
+          {ioType === "입고"
+            ? <>구매(입고) 양식 = <strong>SKU · 수량 · 단가</strong>.</>
+            : <>판매(출고) 양식 = <strong>수량 · (무시) · SKU</strong> (1열=수량, 3열=SKU, 가운데 열은 무시 — 외부 출고 파일을 그대로 올려도 됩니다).</>}
+          {" "}구매/판매를 고르고 업로드 → 미리보기 후 반영. (거래일·거래처는 파일 전체에 적용)
+        </p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 2 }}>과거 출고 일괄 이관: 출고는 위 양식으로 <strong>거래일</strong>을 그날로 지정해 나눠 올리거나, 헤더 양식(SKU·수량)에 <strong>‘날짜’</strong> 열(YYYY-MM-DD)을 넣으면 행별 날짜로 기록됩니다 → 안전재고(판매속도) 워밍업에 쓰입니다.</p>
       </section>
 
       <section className="b2b-card">

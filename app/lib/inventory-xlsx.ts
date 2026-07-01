@@ -10,6 +10,15 @@ export const TXN_XLSX_EXAMPLE: (string | number)[][] = [
   ["GA-1K-K-1000", 20, 13800],
 ];
 
+// ── 출고(판매) 전용 양식: 1열=수량 · 2열=(무시) · 3열=SKU ──
+//  외부 출고/판매 내보내기 파일을 그대로 올릴 수 있게 위치(열 순서) 기준으로 읽는다.
+//  가운데 열은 무시(빈칸). 단가 없음 — 판매속도(출고추세) 워밍업용. 거래일은 업로드 시 지정.
+export const OUT_TXN_XLSX_HEADERS = ["수량", "(무시)", "SKU"] as const;
+export const OUT_TXN_XLSX_EXAMPLE: (string | number)[][] = [
+  [100, "", "GA-100-K-100"],
+  [20, "", "GA-1K-K-1000"],
+];
+
 export function xlsxNum(v: unknown): number {
   const s = String(v ?? "").replace(/[,\s₩]/g, "");
   return s === "" ? 0 : Number(s) || 0;
