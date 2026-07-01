@@ -46,6 +46,7 @@ export const NAV: NavCategory[] = [
           { href: "/inventory", label: "재고 목록" },
           { href: "/inventory/trade", label: "구매 및 판매" },
           { href: "/inventory/adjust", label: "재고 조정" },
+          { href: "/inventory/bundles", label: "묶음 상품" },
           { href: "/inventory/quote", label: "월간매입 견적서" },
           { href: "/inventory/asof", label: "과거 수량 조회" },
         ],
