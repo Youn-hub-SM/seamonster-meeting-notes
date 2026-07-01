@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { NAV, HOME, type NavTool } from "./nav";
+import Icon from "./components/Icon";
 
 function toolActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/";
@@ -56,7 +57,7 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
               onNavigate?.();
             }}
           >
-            <span className="app-sb-emoji">{t.emoji}</span>
+            <span className="app-sb-emoji"><Icon name={t.icon} /></span>
             <span className="app-sb-tool-label">{t.label}</span>
           </Link>
           {hasMenu && (
@@ -98,7 +99,7 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
       <nav className="app-sb-nav">
         <div className={`app-sb-tool-row ${pathname === "/" ? "is-active" : ""}`}>
           <Link href="/" className="app-sb-tool" onClick={onNavigate}>
-            <span className="app-sb-emoji">{HOME.emoji}</span>
+            <span className="app-sb-emoji"><Icon name={HOME.icon} /></span>
             <span className="app-sb-tool-label">{HOME.label}</span>
           </Link>
         </div>
@@ -116,7 +117,7 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
 
       {userName && (
         <div className="app-sb-foot">
-          <span className="app-sb-username" title="현재 로그인 사용자">👤 {userName}</span>
+          <span className="app-sb-username" title="현재 로그인 사용자"><Icon name="user" size={14} /> {userName}</span>
           <button type="button" className="app-sb-logout" onClick={handleLogout}>로그아웃</button>
         </div>
       )}
