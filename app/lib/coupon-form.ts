@@ -5,11 +5,12 @@
 //  구조 재설계(2026-07): 조건부 노출 AND/OR, 달력+시간(datetime-range)/발급일기준(int-days) 필드,
 //  요청서 3블록(핵심 요약·상세 설정·위험 확인) + 조건부 체크리스트.
 
-// ── 조건부 노출/필수: 단일 + AND(all) + OR(any) 재귀 ──
+// ── 조건부 노출/필수: 단일 + AND(all) + OR(any) + NOT(not) 재귀 ──
 export type CouponCond =
   | { key: string; in: string[] }   // 단일: answers[key]가 in 중 하나(체크박스는 교집합)
   | { all: CouponCond[] }           // AND
-  | { any: CouponCond[] };          // OR
+  | { any: CouponCond[] }           // OR
+  | { not: CouponCond };            // NOT
 
 // ── 필드 값 타입: 문자열/다중선택 배열 + 기간(datetime-range) 객체 ──
 export type DateRange = { start: string; end: string };   // "YYYY-MM-DDTHH:mm" ×2
@@ -36,6 +37,8 @@ export type CouponField = {
   presets?: number[];        // int-days 프리셋 칩(예: [7,14,30])
   critical?: boolean;        // 요청서 '핵심 요약' 블록으로 승격
   emptyText?: string;        // 값이 비어도 이 문구로 출력(누락 vs 무제한 구분)
+  // 다른 선택에 따라 특정 옵션을 '선택 불가(비활성)'로 — when이 참이면 options의 각 값을 잠그고 reason 안내.
+  optionsDisabledIf?: { options: string[]; when: CouponCond; reason: string }[];
 };
 export type CouponStep = { title: string; desc?: string; note?: string; collapsible?: boolean; fields: CouponField[] };
 export type CouponChannel = { key: string; label: string; intro: string; steps: CouponStep[]; checklist: string[] };
@@ -122,7 +125,8 @@ const NAVER: CouponChannel = {
       { key: "gradeName", label: "대상 등급", type: "text", placeholder: "예: VIP, 골드", showIf: { key: "target", in: ["등급 고객"] }, requiredIf: { key: "target", in: ["등급 고객"] } },
     ] },
     { title: "혜택 종류", desc: "쿠폰인가요, 포인트인가요?", fields: [
-      { key: "benefitKind", label: "혜택 종류", type: "radio", required: true, critical: true, options: ["쿠폰", "포인트"], default: "쿠폰", help: "⚠️ 포인트는 재구매·등급 고객만 선택 가능. 다른 대상이면 '쿠폰'만 유효합니다." },
+      { key: "benefitKind", label: "혜택 종류", type: "radio", required: true, critical: true, options: ["쿠폰", "포인트"], default: "쿠폰", help: "포인트는 재구매·등급 고객만 선택할 수 있습니다.",
+        optionsDisabledIf: [{ options: ["포인트"], when: { not: { key: "target", in: ["재구매 고객", "등급 고객"] } }, reason: "포인트는 재구매·등급 고객만 가능" }] },
       { key: "pointRate", label: "적립율", type: "number", suffix: "%", critical: true, showIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, requiredIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, help: "⚠️ 판매가의 15% 이하·최대 20만원. 원 단위 입력 불가(정책). 구매확정 시 지급(옵션가 포함, 배송비·추가구성·쿠폰할인 제외)." },
       { key: "couponKind", label: "쿠폰 종류", type: "radio", critical: true, options: ["상품중복할인", "스토어장바구니할인", "배송비할인"], default: "상품중복할인", showIf: { key: "benefitKind", in: ["쿠폰"] }, requiredIf: { key: "benefitKind", in: ["쿠폰"] }, help: "상품중복할인=옵션 1개당 1장(정률 최대 70%). 스토어장바구니=총결제금액 1장(혜택상품 '내스토어 전체'만). 배송비=배송비 1장(최소주문금액 판매가 기준)." },
       { key: "issueLimit", label: "발급 건수", type: "radio", options: ["제한 없음(1인 1회)", "제한 있음(선착순)"], default: "제한 없음(1인 1회)", showIf: { key: "benefitKind", in: ["쿠폰"] } },
@@ -140,7 +144,12 @@ const NAVER: CouponChannel = {
       { key: "validDays", label: "발급일로부터", type: "int-days", suffix: "일", presets: [7, 14, 30], default: "14", showIf: { key: "validType", in: ["발급일 기준"] }, requiredIf: { key: "validType", in: ["발급일 기준"] } },
     ] },
     { title: "혜택 상품 지정", desc: "어디에 적용할까요?", fields: [
-      { key: "applyProduct", label: "혜택 상품 지정", type: "radio", required: true, critical: true, options: ["내스토어 상품 전체", "카테고리 선택", "상품 선택"], default: "내스토어 상품 전체", help: "⚠️ 스토어장바구니할인은 '내스토어 상품 전체'만 가능. 카테고리 선택은 알림받기·타겟팅-고객지정 대상만. 상품 선택은 최대 500개·'전시중' 상품만." },
+      { key: "applyProduct", label: "혜택 상품 지정", type: "radio", required: true, critical: true, options: ["내스토어 상품 전체", "카테고리 선택", "상품 선택"], default: "내스토어 상품 전체", help: "상품 선택은 최대 500개·'전시중' 상품만. 대상·쿠폰 종류에 따라 일부 선택지가 잠깁니다.",
+        optionsDisabledIf: [
+          { options: ["카테고리 선택"], when: { not: { key: "target", in: ["알림받기", "타겟팅-고객지정"] } }, reason: "카테고리 선택은 알림받기·타겟팅-고객지정 대상만 가능" },
+          { options: ["카테고리 선택", "상품 선택"], when: { key: "couponKind", in: ["스토어장바구니할인"] }, reason: "스토어장바구니할인은 '내스토어 상품 전체'만 가능" },
+          { options: ["카테고리 선택", "상품 선택"], when: { key: "rebuyCond", in: ["스토어 구매(내스토어 전체)"] }, reason: "재구매 '스토어 구매'는 내스토어 전체로 고정" },
+        ] },
       { key: "productNames", label: "카테고리/상품명", type: "textarea", placeholder: "카테고리명 또는 상품명을 줄바꿈으로 (상품 선택 최대 500개)", showIf: { key: "applyProduct", in: ["카테고리 선택", "상품 선택"] }, requiredIf: { key: "applyProduct", in: ["카테고리 선택", "상품 선택"] } },
     ] },
   ],
@@ -171,7 +180,11 @@ const TALK: CouponChannel = {
       { key: "friend", label: "채널 친구 여부", type: "radio", options: ["설정안함", "설정함(톡채널 친구)"], default: "설정함(톡채널 친구)", help: "'설정함'이면 다운로드 시 친구추가 팝업이 뜨고, 친구만 다운로드·사용할 수 있습니다(친구 유입 유도용)." },
     ] },
     { title: "적용", desc: "어디에 적용할까요?", fields: [
-      { key: "applyTarget", label: "쿠폰 적용 대상", type: "radio", required: true, options: ["스토어 전체 상품", "카테고리 선택", "상품 선택", "기획전 선택"], default: "스토어 전체 상품", help: "카테고리 최대 10개 / 상품 최대 30개('판매중'만) / 기획전 최대 5개('전시중'만). ⚠️ 장바구니 할인쿠폰은 '스토어 전체 상품'만, 첫구매 고객 쿠폰은 '스토어 전체 상품·카테고리 선택'만 가능합니다." },
+      { key: "applyTarget", label: "쿠폰 적용 대상", type: "radio", required: true, options: ["스토어 전체 상품", "카테고리 선택", "상품 선택", "기획전 선택"], default: "스토어 전체 상품", help: "카테고리 최대 10개 / 상품 최대 30개('판매중'만) / 기획전 최대 5개('전시중'만). 대상·쿠폰 종류에 따라 일부 선택지가 잠깁니다.",
+        optionsDisabledIf: [
+          { options: ["상품 선택", "기획전 선택"], when: { key: "target", in: ["첫구매 고객"] }, reason: "첫구매 고객은 전체상품·카테고리만 가능" },
+          { options: ["카테고리 선택", "상품 선택", "기획전 선택"], when: { key: "couponKind", in: ["장바구니 할인쿠폰"] }, reason: "장바구니 할인쿠폰은 '스토어 전체 상품'만 가능" },
+        ] },
       { key: "productNames", label: "카테고리/상품/기획전명", type: "textarea", placeholder: "이름을 줄바꿈으로 입력", showIf: { key: "applyTarget", in: ["카테고리 선택", "상품 선택", "기획전 선택"] }, requiredIf: { key: "applyTarget", in: ["카테고리 선택", "상품 선택", "기획전 선택"] }, help: "이름을 줄바꿈으로 입력. 개수 상한(카테고리10·상품30·기획전5)을 넘지 마세요." },
     ] },
     { title: "기간·발급·전시", desc: "언제 발급하고, 언제까지 쓰나요?", fields: [
@@ -200,6 +213,7 @@ function fieldIndex(ch: CouponChannel): Map<string, CouponField> {
 function evalCond(c: CouponCond, answers: Answers, ch: CouponChannel, seen: Set<string>): boolean {
   if ("all" in c) return c.all.every((x) => evalCond(x, answers, ch, seen));
   if ("any" in c) return c.any.some((x) => evalCond(x, answers, ch, seen));
+  if ("not" in c) return !evalCond(c.not, answers, ch, seen);
   const parent = fieldIndex(ch).get(c.key);
   if (parent && !isFieldShownInner(parent, answers, ch, seen)) return false;   // 부모 숨김 전파
   const v = answers[c.key];
@@ -228,6 +242,39 @@ function shownStr(ch: CouponChannel, answers: Answers, k: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 const numOf = (v: string): number => Number(v.replace(/[^\d.]/g, "")) || 0;
+
+// 다른 선택 때문에 '선택 불가'가 된 옵션 → { 옵션값: 사유 } 맵. 라디오/체크박스 렌더에서 비활성 처리.
+export function disabledOptions(f: CouponField, answers: Answers, ch: CouponChannel): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!f.optionsDisabledIf) return out;
+  for (const rule of f.optionsDisabledIf) {
+    if (evalCond(rule.when, answers, ch, new Set())) for (const o of rule.options) if (!out[o]) out[o] = rule.reason;
+  }
+  return out;
+}
+
+// 선택돼 있던 값이 '선택 불가'가 되면(예: 대상을 바꿔 포인트가 잠김) 기본값/첫 유효옵션으로 자동 교정.
+//  값이 바뀔 때마다 호출해 잠긴 값이 남지 않게 한다(수렴할 때까지 최대 몇 회 반복).
+export function healAnswers(ch: CouponChannel, a: Answers): Answers {
+  let cur = a, changed = false;
+  for (let i = 0; i < 8; i++) {
+    let hit = false;
+    const next: Answers = { ...cur };
+    for (const st of ch.steps) for (const f of st.fields) {
+      if (f.type !== "radio" || !f.optionsDisabledIf) continue;
+      const dis = disabledOptions(f, next, ch);
+      const v = next[f.key];
+      if (typeof v === "string" && dis[v]) {
+        const def = typeof f.default === "string" ? f.default : "";
+        next[f.key] = def && !dis[def] ? def : ((f.options || []).find((o) => !dis[o]) || "");
+        hit = true;
+      }
+    }
+    if (!hit) break;
+    cur = next; changed = true;
+  }
+  return changed ? cur : a;
+}
 
 export function isDateRange(v: AnswerVal | undefined): v is DateRange {
   return !!v && typeof v === "object" && !Array.isArray(v);

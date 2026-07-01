@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { COUPON_CHANNELS, buildRequestText, isFieldShown, isFieldRequired, isDateRange, type CouponChannel, type CouponField, type Answers, type AnswerVal, type DateRange } from "@/app/lib/coupon-form";
+import { COUPON_CHANNELS, buildRequestText, isFieldShown, isFieldRequired, isDateRange, disabledOptions, healAnswers, type CouponChannel, type CouponField, type Answers, type AnswerVal, type DateRange } from "@/app/lib/coupon-form";
 
 const nowKst = () => new Date(Date.now() + 9 * 3600_000);
 const TODAY = () => nowKst().toISOString().slice(0, 10);
@@ -42,8 +42,10 @@ export default function CouponPage() {
 
   function pickChannel(k: string) { setChannelKey(k); setStep(0); const ch = COUPON_CHANNELS.find((c) => c.key === k); setAnswers(ch ? defaultsFor(ch) : {}); setCopied(false); }
   function reset() { setChannelKey(""); setStep(0); setAnswers({}); setRequester(""); setCopied(false); }
-  const set = (key: string, val: AnswerVal) => setAnswers((a) => ({ ...a, [key]: val }));
-  const toggle = (key: string, opt: string) => setAnswers((a) => { const cur = Array.isArray(a[key]) ? (a[key] as string[]) : []; return { ...a, [key]: cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt] }; });
+  // 값 변경 후 healAnswers로 '선택 불가가 된 선택값'을 자동 교정(예: 대상 변경 시 잠긴 포인트 → 쿠폰).
+  const heal = (a: Answers): Answers => (channel ? healAnswers(channel, a) : a);
+  const set = (key: string, val: AnswerVal) => setAnswers((a) => heal({ ...a, [key]: val }));
+  const toggle = (key: string, opt: string) => setAnswers((a) => { const cur = Array.isArray(a[key]) ? (a[key] as string[]) : []; return heal({ ...a, [key]: cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt] }); });
   const setRange = (key: string, part: "start" | "end", val: string) => setAnswers((a) => { const cur = isDateRange(a[key]) ? (a[key] as DateRange) : { start: "", end: "" }; return { ...a, [key]: { ...cur, [part]: val } }; });
 
   function fieldValid(f: CouponField): boolean {
@@ -122,7 +124,7 @@ export default function CouponPage() {
               ) : visibleFields.length === 0 ? (
                 <p className="sm-faint" style={{ fontSize: 13, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다. <strong>다음</strong>을 누르세요.</p>
               ) : (
-                visibleFields.map((f) => <FieldView key={f.key} f={f} answers={answers} required={!!channel && isFieldRequired(f, answers, channel)} set={set} toggle={toggle} setRange={setRange} />)
+                visibleFields.map((f) => <FieldView key={f.key} f={f} answers={answers} ch={channel!} required={!!channel && isFieldRequired(f, answers, channel)} set={set} toggle={toggle} setRange={setRange} />)
               )}
 
               <div className="sm-between" style={{ marginTop: 18, gap: 10 }}>
@@ -156,10 +158,13 @@ export default function CouponPage() {
 }
 
 const chipStyle = (on: boolean) => ({ padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", border: `1px solid ${on ? "var(--sm-orange)" : "var(--sm-border)"}`, background: on ? "var(--sm-orange-light)" : "#fff", color: on ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: on ? 700 : 400 } as const);
+const lockStyle = { padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "not-allowed", border: "1px dashed var(--sm-border)", background: "var(--sm-bg)", color: "var(--sm-text-light)", fontWeight: 400, opacity: 0.65 } as const;
 
-function FieldView({ f, answers, required, set, toggle, setRange }: { f: CouponField; answers: Answers; required: boolean; set: (k: string, v: AnswerVal) => void; toggle: (k: string, o: string) => void; setRange: (k: string, part: "start" | "end", v: string) => void }) {
+function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: CouponField; answers: Answers; ch: CouponChannel; required: boolean; set: (k: string, v: AnswerVal) => void; toggle: (k: string, o: string) => void; setRange: (k: string, part: "start" | "end", v: string) => void }) {
   const v = answers[f.key];
   const range = isDateRange(v) ? v : { start: "", end: "" };
+  const locked = (f.type === "radio" || f.type === "checkbox") ? disabledOptions(f, answers, ch) : {};
+  const lockReasons = [...new Set(Object.values(locked))];
   return (
     <div className="b2b-field" style={{ marginBottom: 14 }}>
       <label className="b2b-field-label">{f.label}{required && <span style={{ color: "var(--sm-danger)" }}> *</span>}</label>
@@ -167,14 +172,16 @@ function FieldView({ f, answers, required, set, toggle, setRange }: { f: CouponF
         <div className="sm-row" style={{ gap: 6, flexWrap: "wrap" }}>
           {f.options?.map((o) => {
             const on = f.type === "radio" ? v === o : Array.isArray(v) && v.includes(o);
+            const off = !!locked[o];
             return (
-              <button key={o} type="button" onClick={() => (f.type === "radio" ? set(f.key, o) : toggle(f.key, o))} style={chipStyle(on)}>
-                {f.type === "checkbox" && <span style={{ marginRight: 4 }}>{on ? "☑" : "☐"}</span>}{o}
+              <button key={o} type="button" disabled={off} title={off ? locked[o] : undefined} onClick={off ? undefined : () => (f.type === "radio" ? set(f.key, o) : toggle(f.key, o))} style={off ? lockStyle : chipStyle(on)}>
+                {f.type === "checkbox" && !off && <span style={{ marginRight: 4 }}>{on ? "☑" : "☐"}</span>}{o}{off && " 🔒"}
               </button>
             );
           })}
         </div>
       )}
+      {lockReasons.length > 0 && <p className="sm-faint" style={{ fontSize: 11, marginTop: 5, lineHeight: 1.5, color: "var(--sm-text-light)" }}>{lockReasons.map((r) => `🔒 ${r}`).join("   ")}</p>}
       {f.type === "text" && <input className="b2b-input" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
       {f.type === "number" && <div className="sm-row" style={{ gap: 6, alignItems: "center" }}><input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} style={{ maxWidth: 200 }} />{f.suffix && <span className="sm-faint" style={{ fontSize: 13 }}>{f.suffix}</span>}</div>}
       {f.type === "textarea" && <textarea className="b2b-input" rows={2} value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
