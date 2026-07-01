@@ -47,15 +47,16 @@ export default function CouponPage() {
   const setRange = (key: string, part: "start" | "end", val: string) => setAnswers((a) => { const cur = isDateRange(a[key]) ? (a[key] as DateRange) : { start: "", end: "" }; return { ...a, [key]: { ...cur, [part]: val } }; });
 
   function fieldValid(f: CouponField): boolean {
-    if (!isFieldShown(f, answers)) return true;
+    if (!channel) return true;
+    if (!isFieldShown(f, answers, channel)) return true;
     const v = answers[f.key];
     if (f.type === "datetime-range") {
       const r = isDateRange(v) ? v : null;
       if (r && rangeInvalid(r)) return false;               // 기간 역전은 필수 아니어도 차단
-      if (!isFieldRequired(f, answers)) return true;
+      if (!isFieldRequired(f, answers, channel)) return true;
       return !!(r && r.start && r.end);
     }
-    if (!isFieldRequired(f, answers)) return true;
+    if (!isFieldRequired(f, answers, channel)) return true;
     if (Array.isArray(v)) return v.length > 0;
     return !!(v && String(v).trim());
   }
@@ -68,7 +69,7 @@ export default function CouponPage() {
   async function copy() { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* noop */ } }
 
   const cur = channel && !isReview ? channel.steps[step] : null;
-  const visibleFields = cur ? cur.fields.filter((f) => isFieldShown(f, answers)) : [];
+  const visibleFields = cur && channel ? cur.fields.filter((f) => isFieldShown(f, answers, channel)) : [];
   const collapsed = !!cur?.collapsible && !openExtra;
 
   return (
@@ -121,7 +122,7 @@ export default function CouponPage() {
               ) : visibleFields.length === 0 ? (
                 <p className="sm-faint" style={{ fontSize: 13, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다. <strong>다음</strong>을 누르세요.</p>
               ) : (
-                visibleFields.map((f) => <FieldView key={f.key} f={f} answers={answers} required={isFieldRequired(f, answers)} set={set} toggle={toggle} setRange={setRange} />)
+                visibleFields.map((f) => <FieldView key={f.key} f={f} answers={answers} required={!!channel && isFieldRequired(f, answers, channel)} set={set} toggle={toggle} setRange={setRange} />)
               )}
 
               <div className="sm-between" style={{ marginTop: 18, gap: 10 }}>
