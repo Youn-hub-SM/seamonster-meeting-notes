@@ -63,6 +63,7 @@ export const NAV: NavCategory[] = [
     tools: [
       { href: "/utm", label: "UTM 빌더", icon: "link" },
       { href: "/qr", label: "QR 코드", icon: "qrcode" },
+      { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/correct", label: "문장 교정", icon: "pen" },
     ],
   },
