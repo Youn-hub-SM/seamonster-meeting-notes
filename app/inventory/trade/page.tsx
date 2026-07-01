@@ -74,7 +74,7 @@ export default function TradePage() {
           </label>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>양식 = <strong>SKU · 수량 · 단가</strong>. 구매/판매를 고르고 업로드 → 미리보기 후 반영. (거래일·거래처는 파일 전체에 적용)</p>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 2 }}>과거 출고 일괄 이관: 엑셀에 <strong>‘날짜’</strong> 열(YYYY-MM-DD, 발주일/거래일도 인식)을 넣으면 행별 날짜로 기록됩니다 → 안전재고(판매속도) 워밍업. <strong>이관 후 ‘박스히어로 기초재고 가져오기’를 다시 실행</strong>해 현재고를 보정하세요.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 2 }}>과거 출고 일괄 이관: 엑셀에 <strong>‘날짜’</strong> 열(YYYY-MM-DD, 발주일/거래일도 인식)을 넣으면 행별 날짜로 기록됩니다 → 안전재고(판매속도) 워밍업에 쓰입니다.</p>
       </section>
 
       <section className="b2b-card">

@@ -41,7 +41,6 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
 
 export default function InventoryPage() {
   const [rows, setRows] = useState<InvRow[]>([]);
-  const [configured, setConfigured] = useState(true);
   const [itemCount, setItemCount] = useState(0);
   const [noSkuDemand, setNoSkuDemand] = useState(0);
   const [leadDays, setLeadDays] = useState(10);
@@ -79,9 +78,7 @@ export default function InventoryPage() {
     try {
       const res = await fetch("/api/production/inventory", { cache: "no-store" });
       const j = await res.json();
-      if (j.configured === false) { setConfigured(false); setRows([]); setLoading(false); return; }
       if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
-      setConfigured(true);
       setRows(j.rows || []);
       setItemCount(j.itemCount || 0);
       setNoSkuDemand(j.noSkuDemand || 0);
@@ -145,29 +142,6 @@ export default function InventoryPage() {
     setSaving(false);
   }
 
-  if (!configured && !loading) {
-    return (
-      <div className="b2b-container" style={{ maxWidth: 760 }}>
-        <header className="b2b-page-head">
-          <div>
-            <h1 className="b2b-page-title">재고·생산필요</h1>
-            <p className="b2b-page-subtitle">박스히어로 현재고와 B2B 수요를 합쳐 권장 생산량을 계산합니다.</p>
-          </div>
-        </header>
-        <section className="b2b-card">
-          <div className="b2b-empty" style={{ padding: "40px 20px" }}>
-            <div className="b2b-empty-icon">🔌</div>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>박스히어로 연동이 필요합니다</div>
-            <div style={{ color: "var(--sm-text-mid)", marginBottom: 16 }}>
-              설정에서 박스히어로 API 토큰을 등록하면 현재고·안전재고가 연동됩니다.
-            </div>
-            <Link href="/production/settings" className="b2b-btn-primary">설정으로 이동</Link>
-          </div>
-        </section>
-      </div>
-    );
-  }
-
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
@@ -181,10 +155,6 @@ export default function InventoryPage() {
           <button className="b2b-btn-primary" onClick={genAdvice} disabled={adviceLoading}>
             {adviceLoading ? "AI 분석 중…" : advice ? "🧠 다시 분석" : "🧠 AI 조언"}
           </button>
-          <label className="prod-filter-check">
-            <input type="checkbox" checked={onlyNeed} onChange={(e) => setOnlyNeed(e.target.checked)} />
-            생산필요만
-          </label>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>
             {loading ? "불러오는 중..." : "새로고침"}
           </button>
@@ -192,6 +162,13 @@ export default function InventoryPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+
+      {/* 필터 — 헤더와 분리해 위치 고정(클릭해도 안 밀림) */}
+      <div className="sm-row" style={{ marginBottom: 12 }}>
+        <label className="prod-filter-check">
+          <input type="checkbox" checked={onlyNeed} onChange={(e) => setOnlyNeed(e.target.checked)} /> 생산필요만 보기
+        </label>
+      </div>
 
       <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
         <div className="b2b-stat-card">
@@ -383,7 +360,7 @@ export default function InventoryPage() {
         <p className="prod-note">※ 도매 차감 중 SKU가 연결되지 않은 발송 {demixUnresolved.toLocaleString()}개는 차감에서 제외됐습니다(과대생산 안전측).</p>
       )}
       {demixActive && capped && (
-        <p className="prod-note" style={{ color: "var(--sm-warning)" }}>※ 출고 표본이 짧아(최근 약 {spanDays}일) 도매 차감 시 소매 속도가 부정확할 수 있습니다 — &lsquo;도매↓&rsquo; 품목은 설정의 근거(BoxHero vs B2B)와 대조해 확인하세요.</p>
+        <p className="prod-note" style={{ color: "var(--sm-warning)" }}>※ 출고 표본이 짧아(최근 약 {spanDays}일) 도매 차감 시 소매 속도가 부정확할 수 있습니다 — &lsquo;도매↓&rsquo; 품목은 설정의 근거(출고원장 vs B2B)와 대조해 확인하세요.</p>
       )}
       {noSkuDemand > 0 && (
         <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>

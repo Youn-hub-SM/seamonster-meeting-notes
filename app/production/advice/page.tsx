@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 
 type Priority = { sku: string; name: string; urgency: string; qty: number; byWhen: string; reason: string };
 type Advice = { summary: string; priorities: Priority[]; notes: string[] };
@@ -54,7 +53,7 @@ export default function ProductionAdvicePage() {
         <div>
           <h1 className="b2b-page-title">생산 조언</h1>
           <p className="b2b-page-subtitle">
-            박스히어로 재고·판매속도 + B2B 확정 발주를 종합해 Claude가 “무엇을 얼마나 언제 만들지”를 짚어줍니다.
+            재고관리 현재고·판매속도 + B2B 확정 발주를 종합해 Claude가 “무엇을 얼마나 언제 만들지”를 짚어줍니다.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -75,8 +74,8 @@ export default function ProductionAdvicePage() {
               최근 출고 추세로 판매속도를 추정하고, 재고·안전재고·확정 발주를 합쳐<br />
               우선순위가 매겨진 생산 권장안을 만들어냅니다.
             </div>
-            <div style={{ marginTop: 14, fontSize: 12 }}>
-              박스히어로 연동이 필요합니다 → <Link href="/production/settings" className="b2b-link">설정</Link>
+            <div style={{ marginTop: 14, fontSize: 12, color: "var(--sm-text-light)" }}>
+              재고관리에 출고(판매)가 쌓일수록 판매속도 추정이 정확해집니다.
             </div>
           </div>
         </section>

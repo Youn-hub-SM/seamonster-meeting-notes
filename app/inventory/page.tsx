@@ -11,8 +11,6 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
   const [modalFor, setModalFor] = useState<string>(""); // product_id
-  const [importing, setImporting] = useState(false);
-  const [note, setNote] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -52,20 +50,6 @@ export default function InventoryPage() {
     await fetch("/api/inventory", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_id: r.product_id, min_qty }) });
   }
 
-  async function importBoxhero() {
-    if (importing) return;
-    if (!window.confirm("박스히어로 현재고를 SKU 기준으로 가져와 기초재고를 맞출까요? (현재고가 박스히어로 수량이 되도록 '조정' 기록)")) return;
-    setImporting(true); setError(""); setNote("");
-    try {
-      const res = await fetch("/api/inventory/import", { method: "POST" });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "가져오기 실패");
-      setNote(`박스히어로 ${j.boxheroItems}개 중 SKU 일치 ${j.matched}개 · 조정 ${j.applied}건 반영 (미일치 ${j.unmatched})`);
-      await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "가져오기 실패"); }
-    setImporting(false);
-  }
-
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
@@ -74,13 +58,11 @@ export default function InventoryPage() {
           <p className="b2b-page-subtitle">상품 마스터 기준 현재고·재고자산·안전재고. <strong>부족만 보기</strong>로 재고 부족 품목을 모아 봅니다. 행의 <strong>입·출·조정</strong>으로 입출고를 기록합니다.</p>
         </div>
         <div className="b2b-page-actions">
-          <button className="b2b-btn-secondary" onClick={importBoxhero} disabled={importing}>{importing ? "가져오는 중…" : "박스히어로 기초재고 가져오기"}</button>
           <button className="b2b-btn-primary" onClick={() => setModalFor("__new__")}>+ 입·출·조정</button>
         </div>
       </header>
 
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
-      {note && <div className="b2b-card" style={{ marginBottom: 12, color: "var(--sm-success)", fontSize: 13 }}>✅ {note}</div>}
 
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 16 }}>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">품목 수</div><div className="b2b-stat-card-value">{totals.items}</div></div>

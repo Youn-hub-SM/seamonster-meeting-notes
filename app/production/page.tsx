@@ -222,7 +222,7 @@ export default function ProductionSchedulePage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">생산일정</h1>
-          <p className="b2b-page-subtitle">언제 무엇을 몇 개 생산할지 한눈에. 직접 생산일정을 추가하면 현재고·출고추세는 박스히어로에서 자동 채워집니다.</p>
+          <p className="b2b-page-subtitle">언제 무엇을 몇 개 생산할지 한눈에. 직접 생산일정을 추가하면 현재고·출고추세는 재고관리에서 자동 채워집니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={openAdd}>+ 생산일정 추가</button>
@@ -351,7 +351,7 @@ export default function ProductionSchedulePage() {
         </aside>
       </div>
 
-      <p className="prod-note">※ 박스히어로 재고를 반영한 “실제 생산 필요량”·생산 조언은 재고·생산필요 / 생산 조언 메뉴에서 확인하세요.</p>
+      <p className="prod-note">※ 재고관리 현재고를 반영한 “실제 생산 필요량”·AI 조언은 <strong>재고/생산 조언</strong> 메뉴에서 확인하세요.</p>
 
       {/* 생산일정 추가 모달 */}
       {addModal && (
@@ -360,7 +360,7 @@ export default function ProductionSchedulePage() {
             <div className="b2b-modal-head"><h2 className="b2b-modal-title">생산일정 추가</h2></div>
             {!statsConfigured ? (
               <div className="b2b-modal-body">
-                <div className="b2b-empty" style={{ padding: "24px 10px" }}>박스히어로 연동이 필요합니다. 설정에서 토큰을 등록하세요.</div>
+                <div className="b2b-empty" style={{ padding: "24px 10px" }}>표시할 품목이 없습니다. 상품 마스터에 제품을 등록하세요.</div>
               </div>
             ) : (
               <>
