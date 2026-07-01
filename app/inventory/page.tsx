@@ -5,6 +5,7 @@ import type { OverviewRow } from "@/app/api/inventory/overview/route";
 import type { InvChannelFilter } from "@/app/lib/inventory";
 import TxnModal from "./TxnModal";
 import { ChannelFilter, writeChannelOf } from "./ChannelTabs";
+import PromoManager from "@/app/components/PromoManager";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 function shift(iso: string, n: number) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
@@ -30,6 +31,7 @@ export default function InventoryPage() {
   const [cto, setCto] = useState(TODAY());
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "depletion_days", dir: "asc" });
   const [modalFor, setModalFor] = useState<string>("");
+  const [promoOpen, setPromoOpen] = useState(false);
 
   const range = useMemo(() => {
     if (pmode === "지정") return { from: cfrom, to: cto };
@@ -93,6 +95,7 @@ export default function InventoryPage() {
           <p className="b2b-page-subtitle">현재고·<strong>자동 안전재고</strong>·예상 소진일과, 선택한 기간의 <strong>총입고·총출고·일평균 소진</strong>을 봅니다. 열 제목을 눌러 정렬하세요.</p>
         </div>
         <div className="b2b-page-actions">
+          <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="프로모션 기간·예상판매 등록 → 안전재고에 반영">🎯 프로모션</button>
           <button className="b2b-btn-primary" onClick={() => setModalFor("__new__")}>+ 입·출·조정</button>
         </div>
       </header>
@@ -170,6 +173,14 @@ export default function InventoryPage() {
           lockProduct={modalFor !== "__new__"}
           onClose={() => setModalFor("")}
           onSaved={() => { setModalFor(""); load(); }}
+        />
+      )}
+
+      {promoOpen && (
+        <PromoManager
+          products={rows.map((r) => ({ sku: r.sku, name: r.name, spec: r.spec }))}
+          onClose={() => setPromoOpen(false)}
+          onChanged={load}
         />
       )}
     </div>
