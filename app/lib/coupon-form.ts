@@ -56,11 +56,11 @@ const OFFICIAL: CouponChannel = {
       { key: "benefit", label: "혜택 구분", type: "radio", required: true, critical: true, options: ["할인금액", "할인율", "적립금액", "적립율", "기본 배송비 할인", "전체 배송비 할인", "즉시 적립"], help: "자주 쓰는 건 할인율·할인금액·기본 배송비 할인." },
       { key: "benefitValue", label: "할인/적립 값", type: "text", placeholder: "예: 15% 또는 1,000원", showIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율"] }, requiredIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율"] } },
       { key: "maxDiscount", label: "최대 할인(적립)금액", type: "number", suffix: "원", critical: true,
-        showIf: { any: [{ key: "benefit", in: ["할인율", "적립율"] }, { key: "shipFeeType", in: ["할인율 지정"] }] },
-        requiredIf: { any: [{ key: "benefit", in: ["할인율", "적립율"] }, { key: "shipFeeType", in: ["할인율 지정"] }] },
+        showIf: { key: "benefit", in: ["할인율", "적립율"] },
+        requiredIf: { key: "benefit", in: ["할인율", "적립율"] },
         help: "⚠️ 할인율/적립율은 상한을 반드시 지정하세요. 0원 = 제한 없이 전액 적용(사고 위험)." },
-      { key: "shipFeeType", label: "배송비 할인 방식", type: "radio", options: ["전액 무료", "할인금액 지정", "할인율 지정"], default: "전액 무료", showIf: { key: "benefit", in: ["기본 배송비 할인"] }, requiredIf: { key: "benefit", in: ["기본 배송비 할인"] } },
-      { key: "shipFeeValue", label: "배송비 할인 값", type: "text", placeholder: "예: 2,500원 / 50%", showIf: { key: "shipFeeType", in: ["할인금액 지정", "할인율 지정"] }, requiredIf: { key: "shipFeeType", in: ["할인금액 지정", "할인율 지정"] } },
+      { key: "shipFeeType", label: "배송비 할인 방식", type: "radio", options: ["전액 무료(무료배송)", "할인금액 지정"], default: "전액 무료(무료배송)", showIf: { key: "benefit", in: ["기본 배송비 할인"] }, requiredIf: { key: "benefit", in: ["기본 배송비 할인"] }, help: "배송비 쿠폰은 금액(원) 또는 무료배송만 됩니다 — 할인율(%)은 지원하지 않습니다." },
+      { key: "shipFeeValue", label: "배송비 할인 금액", type: "number", suffix: "원", placeholder: "예: 2500", showIf: { key: "shipFeeType", in: ["할인금액 지정"] }, requiredIf: { key: "shipFeeType", in: ["할인금액 지정"] } },
       { key: "shipRegion", label: "지역별 추가배송비", type: "radio", options: ["포함", "미포함"], default: "미포함", showIf: { key: "benefit", in: ["기본 배송비 할인"] }, help: "도서산간(제주·섬) 추가배송비까지 할인할지. 보통 '미포함'." },
     ] },
     { title: "발급 방법", desc: "고객이 어떻게 받나요?", fields: [
@@ -371,7 +371,7 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
   const today = todayKst();
   const startDate = (k: string): string => { const v = answers[k]; return isDateRange(v) && v.start ? v.start.slice(0, 10) : ""; };
 
-  const pct = ["할인율", "적립율"].includes(s("benefit")) || s("discountUnit") === "할인율(%)" || s("shipFeeType") === "할인율 지정";
+  const pct = ["할인율", "적립율"].includes(s("benefit")) || s("discountUnit") === "할인율(%)";
   if (pct) {
     const md = s("maxDiscount");
     if (md === "" || md === "0") risks.push("[무제한] 최대 할인금액이 설정되지 않았습니다 — 할인율에 상한이 없으면 결제금액 전액이 할인될 수 있어요. 의도된 설정인지 확인.");
