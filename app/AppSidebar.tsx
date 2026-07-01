@@ -1,29 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { NAV, HOME, type NavTool } from "./nav";
 import Icon from "./components/Icon";
 
-function toolActive(href: string, pathname: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(href + "/");
-}
 function itemActive(href: string, toolHref: string, pathname: string) {
   if (href === toolHref) return pathname === href; // 인덱스 메뉴는 정확히 일치할 때만
   return pathname === href || pathname.startsWith(href + "/");
+}
+// 툴 활성 판정. 메뉴가 있으면 '하위 메뉴에 해당할 때만' 활성 — /production/sku 같이 URL
+//  접두어만 겹치는 독립 툴 때문에 부모(생산 관리)까지 주황색으로 켜지던 버그 방지.
+function toolActive(t: NavTool, pathname: string) {
+  if (t.href === "/") return pathname === "/";
+  const menu = t.menu || [];
+  if (menu.length) return menu.some((m) => itemActive(m.href, t.href, pathname));
+  return pathname === t.href || pathname.startsWith(t.href + "/");
 }
 
 export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavigate?: () => void }) {
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
-  // 툴별 펼침 상태. 명시적 토글이 없으면 활성 툴만 기본 펼침.
-  const [openTools, setOpenTools] = useState<Record<string, boolean>>({});
-  const isToolOpen = (href: string) => openTools[href] ?? toolActive(href, pathname);
-  const toggleTool = (href: string) =>
-    setOpenTools((s) => ({ ...s, [href]: !(s[href] ?? toolActive(href, pathname)) }));
+  // 아코디언: 한 번에 하나만 펼침. 미조작(undefined)이면 현재 경로의 활성 메뉴 툴을 기본 펼침.
+  const activeMenuHref = useMemo(() => {
+    for (const cat of NAV) for (const t of cat.tools) if (t.menu?.length && toolActive(t, pathname)) return t.href;
+    return null;
+  }, [pathname]);
+  const [openHref, setOpenHref] = useState<string | null | undefined>(undefined);
+  const effectiveOpen = openHref === undefined ? activeMenuHref : openHref;
+  const isToolOpen = (href: string) => effectiveOpen === href;
+  // 열려 있으면 닫고, 아니면 그것만 열기(나머지 아코디언은 닫힘).
+  const toggleTool = (href: string) => setOpenHref((cur) => ((cur === undefined ? activeMenuHref : cur) === href ? null : href));
 
   // 로그인 사용자(있으면) — 설정 메뉴 노출 + 푸터 표시용. /api/b2b/auth 는 미들웨어 예외라 어디서나 호출 가능.
   useEffect(() => {
@@ -42,24 +51,25 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
   }
 
   function renderTool(t: NavTool) {
-    const active = toolActive(t.href, pathname);
+    const active = toolActive(t, pathname);
     const menu = (t.menu || []).filter((m) => !m.adminOnly || isAdmin);
     const hasMenu = menu.length > 0;
     const expanded = hasMenu && isToolOpen(t.href);
     return (
       <div key={t.href}>
         <div className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
-          <Link
-            href={t.href}
-            className="app-sb-tool"
-            onClick={() => {
-              if (hasMenu) toggleTool(t.href); // 탭(텍스트) 클릭 = 펼침/접힘 토글
-              onNavigate?.();
-            }}
-          >
-            <span className="app-sb-emoji"><Icon name={t.icon} /></span>
-            <span className="app-sb-tool-label">{t.label}</span>
-          </Link>
+          {hasMenu ? (
+            // 하위 메뉴 있는 툴: 클릭해도 이동하지 않고 펼침/접힘만(이동은 하위 메뉴에서).
+            <button type="button" className="app-sb-tool" aria-expanded={expanded} onClick={() => toggleTool(t.href)}>
+              <span className="app-sb-emoji"><Icon name={t.icon} /></span>
+              <span className="app-sb-tool-label">{t.label}</span>
+            </button>
+          ) : (
+            <Link href={t.href} className="app-sb-tool" onClick={onNavigate}>
+              <span className="app-sb-emoji"><Icon name={t.icon} /></span>
+              <span className="app-sb-tool-label">{t.label}</span>
+            </Link>
+          )}
           {hasMenu && (
             <button
               type="button"

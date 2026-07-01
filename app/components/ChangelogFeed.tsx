@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { CHANGELOG, changeMenu, MENU_ORDER } from "@/app/lib/changelog";
 
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {
@@ -70,7 +69,6 @@ export default function ChangelogFeed() {
                         <span className="change-tool">{c.tool}</span>
                       </div>
                       <div className="change-desc">{c.desc}</div>
-                      {c.href && <Link href={c.href} className="change-link">바로 써보기 →</Link>}
                     </div>
                   </div>
                 );

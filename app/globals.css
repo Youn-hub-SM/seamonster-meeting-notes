@@ -3217,6 +3217,7 @@ a {
   padding: 8px 10px; border-radius: 8px;
   font-size: 14px; font-weight: 600; color: var(--sm-text-mid);
   transition: color 0.15s;
+  background: none; border: none; cursor: pointer; text-align: left; font-family: inherit;
 }
 .app-sb-tool-row:hover .app-sb-tool { color: var(--sm-black); }
 .app-sb-tool-row.is-active .app-sb-tool { color: var(--sm-orange); }
