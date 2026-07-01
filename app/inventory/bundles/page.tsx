@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BundlePreview } from "@/app/api/inventory/bundles/import/route";
+import { Combobox, ComboOption } from "../../b2b/orders/Combobox";
 
 type BundleRow = { parent_id: string; parent_sku: string | null; parent_name: string; components: { component_id: string; sku: string | null; name: string; spec: string | null; qty: number }[] };
 type PreviewResp = { summary: { bundles: number; valid: number; willCreate: number; errors: number }; previews: BundlePreview[] };
+type ProdLite = { sku: string | null; name: string; spec: string | null };
 
 export default function BundlesPage() {
   const [bundles, setBundles] = useState<BundleRow[]>([]);
@@ -13,6 +15,8 @@ export default function BundlesPage() {
   const [importing, setImporting] = useState(false);
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<PreviewResp | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [products, setProducts] = useState<ProdLite[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -24,6 +28,8 @@ export default function BundlesPage() {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+  // 구성품 검색용 상품 목록
+  useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/products", { cache: "no-store" })).json(); if (Array.isArray(j.products)) setProducts(j.products.map((p: ProdLite) => ({ sku: p.sku, name: p.name, spec: p.spec }))); } catch { /* noop */ } })(); }, []);
 
   async function handleFile(file: File) {
     setImporting(true); setError("");
@@ -62,8 +68,9 @@ export default function BundlesPage() {
           <p className="b2b-page-subtitle">세트 SKU를 <strong>구성품 × 수량</strong>으로 묶습니다(원가·가격 불필요). 판매/구매 엑셀에 세트 SKU가 나오면 자동으로 구성품으로 분해돼요. <strong>엑셀로 한 번에 등록</strong>하세요.</p>
         </div>
         <div className="b2b-page-actions">
+          <button className="b2b-btn-primary" onClick={() => setAddOpen(true)}>+ 직접 추가</button>
           <a className="b2b-btn-secondary" href="/api/inventory/bundles/template" title="묶음SKU·묶음명·구성품SKU·수량">엑셀 양식</a>
-          <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
+          <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
             {importing ? "분석 중…" : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
@@ -136,6 +143,72 @@ export default function BundlesPage() {
           </div>
         </div>
       )}
+
+      {addOpen && <AddBundleModal products={products} onClose={() => setAddOpen(false)} onSaved={load} />}
+    </div>
+  );
+}
+
+// 직접 추가 — 묶음 SKU(코드)·이름 입력 후 구성품(상품 검색)×수량 매칭. apply 라우트 재사용(부모 없으면 자동생성).
+function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; onClose: () => void; onSaved: () => void }) {
+  const [parentSku, setParentSku] = useState("");
+  const [name, setName] = useState("");
+  const [rows, setRows] = useState<{ sku: string; label: string; qty: number | string }[]>([{ sku: "", label: "", qty: 1 }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const options: ComboOption[] = useMemo(
+    () => products.map((p) => ({ id: p.sku || "", label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })).filter((o) => o.id),
+    [products]
+  );
+
+  async function save() {
+    if (!parentSku.trim()) { setError("묶음 SKU(코드)를 입력하세요."); return; }
+    const comps = rows.filter((r) => r.sku && Number(r.qty) > 0).map((r) => ({ sku: r.sku, qty: Number(r.qty) }));
+    if (!comps.length) { setError("구성품을 1개 이상 추가하세요."); return; }
+    setSaving(true); setError("");
+    try {
+      const res = await fetch("/api/inventory/bundles/import/apply", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bundles: [{ parentSku: parentSku.trim(), name: name.trim(), components: comps }] }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) { if (j.errors?.length) throw new Error(j.errors.join(" / ")); throw new Error(j.error || "저장 실패"); }
+      onSaved(); onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    setSaving(false);
+  }
+
+  return (
+    <div className="b2b-modal-backdrop" onClick={() => !saving && onClose()}>
+      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">묶음 직접 추가</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-body">
+          <div className="b2b-field-row">
+            <div className="b2b-field"><label className="b2b-field-label">묶음 SKU(코드)</label>
+              <input className="b2b-input" value={parentSku} onChange={(e) => setParentSku(e.target.value)} placeholder="예: SET-DG-100" /></div>
+            <div className="b2b-field"><label className="b2b-field-label">묶음명(선택)</label>
+              <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 대구 실속세트" /></div>
+          </div>
+          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>이 SKU가 상품에 없으면 최소 정보로 자동 생성됩니다(원가·가격 불필요).</p>
+          <div className="b2b-field-label" style={{ fontWeight: 700 }}>구성품</div>
+          {rows.map((r, i) => (
+            <div key={i} className="promo-item-row">
+              <div className="promo-item-combo">
+                <Combobox value={r.label} options={options} onSelect={(o) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, sku: o.id, label: o.label } : x)))} placeholder="상품 검색(이름·SKU)" ariaLabel="구성품" />
+              </div>
+              <input type="number" min={1} className="b2b-input promo-item-qty" value={r.qty} onChange={(e) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, qty: e.target.value } : x)))} placeholder="수량" />
+              <button type="button" className="promo-item-del" onClick={() => setRows((rs) => rs.filter((_, xi) => xi !== i))} title="삭제">✕</button>
+            </div>
+          ))}
+          <button type="button" className="promo-item-add" style={{ marginTop: 8 }} onClick={() => setRows((rs) => [...rs, { sku: "", label: "", qty: 1 }])}>+ 구성품 추가</button>
+          {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
+        </div>
+        <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
+          <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "저장"}</button>
+        </div></div>
+      </div>
     </div>
   );
 }
