@@ -55,14 +55,15 @@ const OFFICIAL: CouponChannel = {
       { key: "couponDesc", label: "쿠폰 설명(선택)", type: "text", placeholder: "고객/MD가 참고할 설명" },
     ] },
     { title: "혜택", desc: "어떤 혜택을 줄까요?", fields: [
-      { key: "benefit", label: "혜택 구분", type: "radio", required: true, critical: true, options: ["할인금액", "할인율", "적립금액", "적립율", "기본 배송비 할인", "전체 배송비 할인", "즉시 적립", "예치금 지급"], help: "배송비: '기본 배송비 할인'=기본 배송비만 / '전체 배송비 할인'=지역별·해외배송까지 포함(보통 권장 — 제주 등 차별 없음). 아래에서 방식(전액할인/할인금액/할인율)·포함 여부를 지정합니다. 즉시 적립=적립금, 예치금 지급=예치금을 바로 지급(원)." },
+      { key: "benefit", label: "혜택 구분", type: "radio", required: true, critical: true, options: ["할인금액", "할인율", "적립금액", "적립율", "기본 배송비 할인", "전체 배송비 할인", "즉시 적립", "예치금 지급"], help: "배송비: '기본 배송비 할인'=배송비를 일부(금액·%) 또는 전액 할인 / '전체 배송비 할인'=배송비를 전액 없앰(일반지역만 또는 도서산간 추가비용까지 선택). 즉시 적립=적립금, 예치금 지급=예치금을 바로 지급(원)." },
       { key: "benefitValue", label: "할인/적립 값", type: "text", placeholder: "예: 15% / 1,000원 (즉시적립·예치금은 원)", showIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립", "예치금 지급"] }, requiredIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립", "예치금 지급"] } },
-      // ── 배송비 할인(기본/전체 공통) — 카페24 실제 UI 반영 ──
-      { key: "shipFeeType", label: "배송비 할인 방식", type: "radio", options: ["전액할인", "할인금액", "할인율"], default: "전액할인", showIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] }, requiredIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] }, help: "전액할인=무료배송 / 할인금액=정액(원) / 할인율=%(최대금액 필수)." },
+      // ── 기본 배송비 할인 = 배송비를 일부/전액 할인(방식·값) ──
+      { key: "shipFeeType", label: "배송비 할인 방식", type: "radio", options: ["전액할인", "할인금액", "할인율"], default: "전액할인", showIf: { key: "benefit", in: ["기본 배송비 할인"] }, requiredIf: { key: "benefit", in: ["기본 배송비 할인"] }, help: "기본 배송비를 얼마나 할인할지. 전액할인=무료배송 / 할인금액=정액(원) / 할인율=%(최대금액 필수)." },
       { key: "shipFeeAmt", label: "배송비 할인 금액", type: "number", suffix: "원", placeholder: "예: 2500", showIf: { key: "shipFeeType", in: ["할인금액"] }, requiredIf: { key: "shipFeeType", in: ["할인금액"] } },
       { key: "shipFeePct", label: "배송비 할인율", type: "number", suffix: "%", showIf: { key: "shipFeeType", in: ["할인율"] }, requiredIf: { key: "shipFeeType", in: ["할인율"] } },
-      { key: "shipRegion", label: "지역별 추가배송비 포함", type: "radio", options: ["포함", "미포함"], default: "미포함", showIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] }, help: "도서산간 등 지역별 추가배송비까지 할인에 포함할지." },
-      { key: "shipOversea", label: "해외배송 포함", type: "radio", options: ["포함", "미포함"], default: "미포함", showIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] } },
+      // ── 전체 배송비 할인 = 배송비를 전액 없앰(어디까지) ──
+      { key: "shipRegion", label: "할인 범위", type: "radio", options: ["일반지역만", "도서산간 추가비용까지"], default: "일반지역만", critical: true, showIf: { key: "benefit", in: ["전체 배송비 할인"] }, requiredIf: { key: "benefit", in: ["전체 배송비 할인"] }, help: "전체 배송비(전액)를 어디까지 없앨지. '일반지역만'은 기본 배송비 할인의 전액할인과 동일합니다." },
+      { key: "shipOversea", label: "해외배송 포함", type: "radio", options: ["포함", "미포함"], default: "미포함", showIf: { key: "benefit", in: ["전체 배송비 할인"] } },
       { key: "maxDiscount", label: "최대 할인(적립)금액", type: "number", suffix: "원", critical: true,
         showIf: { any: [{ key: "benefit", in: ["할인율", "적립율"] }, { key: "shipFeeType", in: ["할인율"] }] },
         requiredIf: { any: [{ key: "benefit", in: ["할인율", "적립율"] }, { key: "shipFeeType", in: ["할인율"] }] },
