@@ -7,7 +7,7 @@ import { ChannelPicker } from "../ChannelTabs";
 import type { InvChannel } from "@/app/lib/inventory";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
-type Preview = { summary: { valid: number; errors: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
+type Preview = { summary: { valid: number; errors: number; merged?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 export default function TradePage() {
@@ -139,6 +139,7 @@ export default function TradePage() {
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
                 <span>반영 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
+                {!!preview.summary.merged && <span className="sm-faint">중복 SKU {preview.summary.merged}건 합산됨</span>}
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
               {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>반영할 행이 없습니다.</div>}
