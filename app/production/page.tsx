@@ -8,7 +8,7 @@ type DayBucket = { date: string; label: string; total_qty: number; order_count: 
 type PromoItem = { sku: string; name: string; qty: number | string };
 type Promotion = { id: string; name: string; start: string; end: string; items: PromoItem[]; expectedQty: number; note?: string; color?: string };
 type Product = { sku: string | null; name: string; spec: string | null };
-type ItemStat = { sku: string; name: string; stock: number | null; dailyOut: number; depletionDays: number | null };
+type ItemStat = { sku: string; name: string; stock: number | null; dailyOut: number; depletionDays: number | null; safety: number; demand: number; autoSafety: number; safetyDays: number | null; belowSafety: boolean };
 type Manual = { id: string; sku: string; name: string; qty: number; productionDate: string; stock: number | null; dailyOut: number; depletionDate: string | null };
 type PItem = { name: string; spec: string; qty: number; manual: boolean; manualId?: string; sku?: string };
 type MergedDay = { date: string; label: string; total_qty: number; hasManual: boolean; products: PItem[] };
@@ -22,6 +22,17 @@ function isoOf(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${
 function todayIso() { return isoOf(new Date()); }
 function addDaysIso(iso: string, n: number) { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return isoOf(d); }
 function dayLabel(iso: string) { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})`; }
+function daysBetweenIso(a: string, b: string) { return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86400_000); }
+
+// 보수적 권장 생산량 — 생산 목표일까지 예상 소진 + 안전재고 + 대기수요를 채우고 남는 부족분(올림, 최소 0).
+//  Q = max(0, ceil(하루평균출고 × 목표일까지 남은일수) + 안전재고 + 대기수요 − 현재고)
+//  → 생산이 목표일에 도착할 때 재고가 '안전재고 + 대기수요' 수준으로 회복되도록 넉넉히 잡는다(쇼트 방지).
+function recommendQty(it: ItemStat | null | undefined, productionDate: string, today: string): number | null {
+  if (!it || it.stock == null || !productionDate) return null;
+  const days = Math.max(0, daysBetweenIso(today, productionDate));
+  const deplete = Math.ceil((it.dailyOut || 0) * days);
+  return Math.max(0, deplete + (it.safety || 0) + (it.demand || 0) - it.stock);
+}
 
 function buildWeeks(year: number, month: number): Date[][] {
   const first = new Date(year, month, 1);
@@ -64,6 +75,8 @@ export default function ProductionSchedulePage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsConfigured, setStatsConfigured] = useState(true);
   const [savingAdd, setSavingAdd] = useState(false);
+  const [qtyTouched, setQtyTouched] = useState(false); // 생산량 수동 편집 여부(편집 전엔 권장값 자동반영)
+  const [leadDays, setLeadDays] = useState(10);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,21 +172,37 @@ export default function ProductionSchedulePage() {
   // 생산일정 추가
   async function openAdd() {
     setAddModal({ sku: "", name: "", qty: "", productionDate: today, stock: null, dailyOut: 0, depletionDate: null });
+    setQtyTouched(false);
     setStatsLoading(true); setStatsConfigured(true);
     try {
       const j = await (await fetch("/api/production/item-stats", { cache: "no-store" })).json();
       if (j.configured === false) setStatsConfigured(false);
       else setItemStats(j.items || []);
+      if (typeof j.leadDays === "number") setLeadDays(j.leadDays);
     } catch { setStatsConfigured(false); }
     setStatsLoading(false);
   }
   function pickItem(sku: string, displayName?: string) {
     const it = itemStats.find((i) => i.sku === sku);
+    setQtyTouched(false);
     setAddModal((m) => {
       if (!m) return m;
-      if (!it) return { ...m, sku: "", name: "", stock: null, dailyOut: 0, depletionDate: null };
+      if (!it) return { ...m, sku: "", name: "", stock: null, dailyOut: 0, depletionDate: null, qty: "" };
       const dep = it.depletionDays != null ? addDaysIso(today, it.depletionDays) : null;
-      return { ...m, sku: it.sku, name: displayName || it.name, stock: it.stock, dailyOut: it.dailyOut, depletionDate: dep, productionDate: dep || today };
+      // 기본 목표일 = 안전재고 도달일(현재고가 안전재고로 떨어지는 날). 이미 하회/불명이면 오늘.
+      const defDate = it.safetyDays != null && it.safetyDays > 0 ? addDaysIso(today, it.safetyDays) : today;
+      const rec = recommendQty(it, defDate, today);
+      return { ...m, sku: it.sku, name: displayName || it.name, stock: it.stock, dailyOut: it.dailyOut, depletionDate: dep, productionDate: defDate, qty: rec != null ? String(rec) : "" };
+    });
+  }
+  // 생산 목표일 변경 → 미편집 상태면 권장 생산량 자동 갱신.
+  function setProductionDate(productionDate: string) {
+    setAddModal((m) => {
+      if (!m) return m;
+      const it = itemStats.find((i) => i.sku === m.sku);
+      const next = { ...m, productionDate };
+      if (!qtyTouched && it) { const rec = recommendQty(it, productionDate, today); if (rec != null) next.qty = String(rec); }
+      return next;
     });
   }
   async function saveAdd() {
@@ -215,6 +244,16 @@ export default function ProductionSchedulePage() {
   const promoTotal = (promoModal?.items || []).reduce((s, it) => s + (Number(it.qty) || 0), 0);
 
   const sel = addModal && addModal.sku ? itemStats.find((i) => i.sku === addModal.sku) : null;
+  // 권장 생산량 미리보기(선택 품목 + 목표일 기준)
+  const recDays = sel && addModal ? Math.max(0, daysBetweenIso(today, addModal.productionDate)) : 0;
+  const recDeplete = sel ? Math.ceil((sel.dailyOut || 0) * recDays) : 0;
+  const recNow = sel && addModal ? recommendQty(sel, addModal.productionDate, today) : null;
+  const depDate = sel?.depletionDays != null ? addDaysIso(today, sel.depletionDays) : null;
+  const safetyDate = sel && sel.safetyDays != null && sel.safetyDays > 0 ? addDaysIso(today, sel.safetyDays) : null;
+  const dateWarn: null | "sold" | "safety" = sel && addModal?.productionDate
+    ? (depDate && addModal.productionDate > depDate ? "sold"
+      : ((safetyDate && addModal.productionDate > safetyDate) || sel.belowSafety) ? "safety" : null)
+    : null;
   const monthLabel = `${view.y}년 ${view.m + 1}월`;
 
   return (
@@ -380,21 +419,39 @@ export default function ProductionSchedulePage() {
                     <div className="prod-add-stats">
                       <div><span>현재고</span><strong>{sel.stock?.toLocaleString() ?? "-"}</strong></div>
                       <div><span>하루 평균 출고</span><strong>{sel.dailyOut.toLocaleString()}</strong></div>
-                      <div><span>예상 소진일</span><strong>{addModal.depletionDate ? `${dayLabel(addModal.depletionDate)} (${sel.depletionDays}일)` : "—"}</strong></div>
+                      <div><span>안전재고</span><strong>{sel.safety.toLocaleString()}</strong></div>
+                      <div><span>예상 소진일</span><strong>{depDate ? `${dayLabel(depDate)} (${sel.depletionDays}일)` : "—"}</strong></div>
                     </div>
                   )}
 
-                  <div className="b2b-field-row">
-                    <div className="b2b-field">
-                      <label className="b2b-field-label">생산량</label>
-                      <input type="number" className="b2b-input" value={addModal.qty} onChange={(e) => setAddModal({ ...addModal, qty: e.target.value })} placeholder="생산할 수량" autoFocus />
-                    </div>
-                    <div className="b2b-field">
-                      <label className="b2b-field-label">생산 목표일</label>
-                      <input type="date" className="b2b-input" value={addModal.productionDate} onChange={(e) => setAddModal({ ...addModal, productionDate: e.target.value })} />
-                    </div>
+                  {/* ① 생산 목표일 → ② 권장 생산량 순차 선택 */}
+                  <div className="b2b-field" style={{ opacity: sel ? 1 : 0.5 }}>
+                    <label className="b2b-field-label">① 생산 목표일</label>
+                    <input type="date" className="b2b-input" value={addModal.productionDate} disabled={!sel} onChange={(e) => setProductionDate(e.target.value)} />
+                    {sel && (
+                      <span style={{ fontSize: 11, color: "var(--sm-text-light)", marginTop: 3, display: "block" }}>
+                        기본값 = 안전재고 도달일{safetyDate ? ` (${dayLabel(safetyDate)})` : sel.belowSafety ? " · 이미 안전재고 이하 → 오늘" : ""}. 목표일을 바꾸면 권장량이 다시 계산됩니다.
+                      </span>
+                    )}
+                    {dateWarn === "sold" && <span style={{ fontSize: 11.5, color: "var(--sm-danger)", marginTop: 3, display: "block", fontWeight: 600 }}>⚠ 이 날짜엔 이미 품절 위험이 있어요. 더 이른 날짜를 권장합니다.</span>}
+                    {dateWarn === "safety" && <span style={{ fontSize: 11.5, color: "var(--sm-warning)", marginTop: 3, display: "block", fontWeight: 600 }}>⚠ 이 날짜엔 재고가 안전재고 밑으로 내려갑니다. 더 이른 날짜가 안전해요.</span>}
                   </div>
-                  <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>목표일은 예상 소진일로 자동 설정됩니다. 필요하면 바꾸세요.</span>
+
+                  <div className="b2b-field" style={{ marginTop: 12, opacity: sel ? 1 : 0.5 }}>
+                    <label className="b2b-field-label">② 생산량 {sel && recNow != null && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 권장 {recNow.toLocaleString()}개</span>}</label>
+                    <div className="sm-row" style={{ gap: 8 }}>
+                      <input type="number" className="b2b-input" value={addModal.qty} disabled={!sel} onChange={(e) => { setQtyTouched(true); setAddModal({ ...addModal, qty: e.target.value }); }} placeholder={sel ? "생산할 수량" : "먼저 품목을 선택하세요"} style={{ flex: 1 }} />
+                      {sel && recNow != null && (
+                        <button type="button" className="b2b-btn-secondary" style={{ whiteSpace: "nowrap" }} onClick={() => { setQtyTouched(false); setAddModal({ ...addModal, qty: String(recNow) }); }}>권장값 적용</button>
+                      )}
+                    </div>
+                    {sel && recNow != null && (
+                      <div style={{ fontSize: 11, color: "var(--sm-text-light)", marginTop: 5, lineHeight: 1.55 }}>
+                        권장 = 안전재고 {sel.safety.toLocaleString()}{sel.demand > 0 ? ` + 대기수요 ${sel.demand.toLocaleString()}` : ""}{recDeplete > 0 ? ` + 목표일까지 소진 ${recDeplete.toLocaleString()}` : ""} − 현재고 {(sel.stock ?? 0).toLocaleString()} = <strong style={{ color: "var(--sm-orange)" }}>{recNow.toLocaleString()}개</strong>
+                        <br />재고가 안전재고 아래로 떨어지지 않도록 넉넉히(올림) 계산합니다.
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="b2b-modal-foot">
                   <div />
