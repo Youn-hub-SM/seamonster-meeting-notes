@@ -53,7 +53,7 @@ const OFFICIAL: CouponChannel = {
       { key: "name", label: "쿠폰 이름", type: "text", required: true, critical: true, placeholder: "예: [삼치데이] 15% 할인 (2507)", help: "월/차수 태그를 넣으면 중복발급을 막고 목록에서 쉽게 구분됩니다." },
     ] },
     { title: "혜택", desc: "어떤 혜택을 줄까요?", fields: [
-      { key: "benefit", label: "혜택 구분", type: "radio", required: true, critical: true, options: ["할인금액", "할인율", "적립금액", "적립율", "기본 배송비 할인", "전체 배송비 할인", "즉시 적립"], help: "즉시 적립은 적립금을 바로 지급. 배송비 할인은 아래에서 방식(전액할인/할인금액/할인율)과 지역·해외배송 포함 여부를 지정합니다." },
+      { key: "benefit", label: "혜택 구분", type: "radio", required: true, critical: true, options: ["할인금액", "할인율", "적립금액", "적립율", "기본 배송비 할인", "전체 배송비 할인", "즉시 적립"], help: "배송비: '기본 배송비 할인'=기본 배송비만 / '전체 배송비 할인'=지역별·해외배송까지 포함(보통 권장 — 제주 등 차별 없음). 아래에서 방식(전액할인/할인금액/할인율)·포함 여부를 지정합니다. 즉시 적립은 적립금(원)을 바로 지급." },
       { key: "benefitValue", label: "할인/적립 값", type: "text", placeholder: "예: 15% / 1,000원 (즉시적립은 적립금 원)", showIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립"] }, requiredIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립"] } },
       // ── 배송비 할인(기본/전체 공통) — 카페24 실제 UI 반영 ──
       { key: "shipFeeType", label: "배송비 할인 방식", type: "radio", options: ["전액할인", "할인금액", "할인율"], default: "전액할인", showIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] }, requiredIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] }, help: "전액할인=무료배송 / 할인금액=정액(원) / 할인율=%(최대금액 필수)." },
