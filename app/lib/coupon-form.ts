@@ -148,41 +148,41 @@ const NAVER: CouponChannel = {
 };
 
 // ───────────────────────── 톡스토어(카카오) ─────────────────────────
+//  가이드: 유효기간은 '발급일 N일' 단일 방식. 정률/정액 표기. 첫구매·장바구니는 적용대상 제약(위험감지).
+//  판매자포인트(구매·리뷰)는 '상품 정보'에서 설정하는 항목이라 쿠폰 요청서엔 없음.
 const TALK: CouponChannel = {
   key: "talk",
   label: "톡스토어",
   intro: "카카오 톡스토어 쿠폰. 순서대로 고르면 요청서가 만들어집니다.",
   steps: [
-    { title: "쿠폰명", fields: [
-      { key: "name", label: "쿠폰명", type: "text", required: true, critical: true, placeholder: "예: 톡채널 친구쿠폰" },
+    { title: "쿠폰명", note: "동일 기간 내 최대 20개까지만 발행할 수 있어요. 현재 발행 편수는 판매자센터에서 직접 확인하세요.", fields: [
+      { key: "name", label: "쿠폰명", type: "text", required: true, critical: true, placeholder: "예: [톡친구] 10% (2507)", help: "월/차수·타겟을 넣으면 목록에서 구분이 쉽고 중복발행을 막습니다." },
     ] },
-    { title: "혜택", desc: "어떤 쿠폰을 줄까요?", fields: [
-      { key: "couponKind", label: "쿠폰 종류", type: "radio", required: true, critical: true, options: ["상품 할인쿠폰", "장바구니 할인쿠폰"], default: "상품 할인쿠폰" },
-      { key: "discountUnit", label: "할인 단위", type: "radio", required: true, options: ["할인율(%)", "할인액(원)"], help: "단위를 먼저 고르면 아래 입력칸이 바뀝니다." },
-      { key: "discountPct", label: "할인율", type: "number", suffix: "%", critical: true, showIf: { key: "discountUnit", in: ["할인율(%)"] }, requiredIf: { key: "discountUnit", in: ["할인율(%)"] } },
-      { key: "discountAmt", label: "할인액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["할인액(원)"] }, requiredIf: { key: "discountUnit", in: ["할인액(원)"] } },
-      { key: "maxDiscount", label: "최대 할인금액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["할인율(%)"] }, requiredIf: { key: "discountUnit", in: ["할인율(%)"] }, help: "⚠️ 할인율(%)이면 필수. 0원 = 무제한." },
-      { key: "minAmount", label: "최소 주문금액", type: "number", suffix: "원 이상" },
+    { title: "혜택", desc: "어떤 쿠폰을, 얼마나 할인할까요?", fields: [
+      { key: "couponKind", label: "쿠폰 종류", type: "radio", required: true, critical: true, options: ["상품 할인쿠폰", "장바구니 할인쿠폰"], default: "상품 할인쿠폰", help: "상품=주문번호 단위(주문번호당 1개, 즉시할인·톡딜과 동시 적용). 장바구니=스토어 단위(스토어당 1개). ⚠️ 장바구니는 적용 대상이 '스토어 전체 상품'만 가능합니다." },
+      { key: "discountUnit", label: "할인 단위", type: "radio", required: true, options: ["정률(%)", "정액(원)"], help: "카카오 표기 그대로 정률/정액. 단위를 먼저 고르면 아래 입력칸이 바뀝니다." },
+      { key: "discountPct", label: "할인율", type: "number", suffix: "%", critical: true, showIf: { key: "discountUnit", in: ["정률(%)"] }, requiredIf: { key: "discountUnit", in: ["정률(%)"] }, help: "1~99%, 1% 단위. 계산액이 최대 할인금액을 넘으면 최대금액까지만 할인됩니다." },
+      { key: "discountAmt", label: "할인액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정액(원)"] }, requiredIf: { key: "discountUnit", in: ["정액(원)"] }, help: "10원 단위로 입력하세요." },
+      { key: "maxDiscount", label: "최대 할인금액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정률(%)"] }, requiredIf: { key: "discountUnit", in: ["정률(%)"] }, help: "⚠️ 정률이면 필수. 정률 계산액이 이 금액을 넘으면 이 금액까지만 할인. 장바구니 정률은 상품 할인쿠폰 적용 후 금액 기준으로 계산됩니다." },
+      { key: "minAmount", label: "최소 주문금액", type: "number", suffix: "원 이상", emptyText: "제한없음", help: "이 금액 이상일 때만 사용 가능. 기준 = (판매가−즉시할인−소문내기할인−톡딜할인+옵션가) × 주문수량. 비우면 제한 없음." },
     ] },
     { title: "발급 대상", desc: "누구에게 제공하나요?", fields: [
-      { key: "target", label: "쿠폰 발급 대상", type: "radio", required: true, critical: true, options: ["전체 고객", "첫구매 고객", "재구매 고객"], default: "전체 고객" },
-      { key: "friend", label: "채널 친구 여부", type: "radio", options: ["설정안함", "설정함(톡채널 친구)"], default: "설정함(톡채널 친구)", help: "기본 '설정함' — 톡채널 친구 추가 유도용." },
+      { key: "target", label: "쿠폰 발급 대상", type: "radio", required: true, critical: true, options: ["전체 고객", "첫구매 고객", "재구매 고객"], default: "전체 고객", help: "첫구매=1년 이내 구매이력 없음, 재구매=1년 이내 구매이력 있음. ⚠️ 첫구매 고객 쿠폰은 적용 대상을 '스토어 전체 상품' 또는 '카테고리 선택'으로만 설정할 수 있습니다(상품·기획전 불가)." },
+      { key: "friend", label: "채널 친구 여부", type: "radio", options: ["설정안함", "설정함(톡채널 친구)"], default: "설정함(톡채널 친구)", help: "'설정함'이면 다운로드 시 친구추가 팝업이 뜨고, 친구만 다운로드·사용할 수 있습니다(친구 유입 유도용)." },
     ] },
     { title: "적용", desc: "어디에 적용할까요?", fields: [
-      { key: "applyTarget", label: "쿠폰 적용 대상", type: "radio", required: true, options: ["스토어 전체 상품", "카테고리 선택", "상품 선택", "기획전 선택"], default: "스토어 전체 상품" },
-      { key: "productNames", label: "카테고리/상품/기획전명", type: "textarea", placeholder: "이름을 줄바꿈으로 입력", showIf: { key: "applyTarget", in: ["카테고리 선택", "상품 선택", "기획전 선택"] }, requiredIf: { key: "applyTarget", in: ["카테고리 선택", "상품 선택", "기획전 선택"] } },
+      { key: "applyTarget", label: "쿠폰 적용 대상", type: "radio", required: true, options: ["스토어 전체 상품", "카테고리 선택", "상품 선택", "기획전 선택"], default: "스토어 전체 상품", help: "카테고리 최대 10개 / 상품 최대 30개('판매중'만) / 기획전 최대 5개('전시중'만). ⚠️ 장바구니 할인쿠폰은 '스토어 전체 상품'만, 첫구매 고객 쿠폰은 '스토어 전체 상품·카테고리 선택'만 가능합니다." },
+      { key: "productNames", label: "카테고리/상품/기획전명", type: "textarea", placeholder: "이름을 줄바꿈으로 입력", showIf: { key: "applyTarget", in: ["카테고리 선택", "상품 선택", "기획전 선택"] }, requiredIf: { key: "applyTarget", in: ["카테고리 선택", "상품 선택", "기획전 선택"] }, help: "이름을 줄바꿈으로 입력. 개수 상한(카테고리10·상품30·기획전5)을 넘지 마세요." },
     ] },
-    { title: "기간·발급·전시", fields: [
-      { key: "issuePeriod", label: "쿠폰 발급 기간", type: "datetime-range", required: true, critical: true },
-      { key: "validType", label: "쿠폰 유효기간", type: "radio", required: true, options: ["발급일 기준", "종료일 직접 설정"], default: "발급일 기준" },
-      { key: "validDays", label: "발급일로부터", type: "int-days", suffix: "일", presets: [7, 14, 30], default: "7", showIf: { key: "validType", in: ["발급일 기준"] }, requiredIf: { key: "validType", in: ["발급일 기준"] } },
-      { key: "validEnd", label: "유효 종료일", type: "datetime-range", critical: true, showIf: { key: "validType", in: ["종료일 직접 설정"] }, requiredIf: { key: "validType", in: ["종료일 직접 설정"] }, help: "종료 시점이 핵심입니다. 시작은 발급기간 시작과 동일하게 처리됩니다." },
-      { key: "issueQty", label: "발급 수량", type: "radio", required: true, options: ["특정 개수", "무제한"], default: "무제한" },
+    { title: "기간·발급·전시", desc: "언제 발급하고, 언제까지 쓰나요?", fields: [
+      { key: "issuePeriod", label: "쿠폰 발급 기간", type: "datetime-range", required: true, critical: true, help: "발행중 상태에서만 고객이 다운로드할 수 있어요." },
+      { key: "validDays", label: "발급일로부터", type: "int-days", suffix: "일", presets: [7, 14, 30], default: "7", required: true, critical: true, help: "다운로드 시점부터 N일. 발급 당일은 포함하지 않고 종료일 23:59:59에 만료됩니다(예: 12/1 발급·7일 → 12/8 23:59:59)." },
+      { key: "issueQty", label: "발급 수량", type: "radio", required: true, options: ["특정 개수", "무제한"], default: "무제한", help: "카카오 계정당 최대 1회 다운로드. '특정 개수'면 소진 시 자동으로 '소진중지'됩니다." },
       { key: "issueQtyN", label: "발급 개수", type: "number", suffix: "개", showIf: { key: "issueQty", in: ["특정 개수"] }, requiredIf: { key: "issueQty", in: ["특정 개수"] } },
-      { key: "display", label: "쿠폰 전시 여부", type: "radio", options: ["전시함", "전시안함"], default: "전시함", help: "메시지 전용·시크릿 쿠폰이면 '전시안함'." },
+      { key: "display", label: "쿠폰 전시 여부", type: "radio", options: ["전시함", "전시안함"], default: "전시함", help: "전시함=스토어홈·상품상세 노출. 전시안함=마케팅 메시지를 받은 고객만 발급받을 수 있는 시크릿 쿠폰입니다." },
     ] },
   ],
-  checklist: ["쿠폰명·쿠폰 종류 확인", "할인 단위/값 확인", "발급 대상·채널 친구 여부 확인", "적용 대상 확인", "발급기간·유효기간의 시작·종료 '시각' 확인", "발급 수량·전시 여부 확인"],
+  checklist: ["쿠폰명·쿠폰 종류 확인", "할인 단위/값 확인", "발급 대상·채널 친구 여부 확인", "적용 대상 확인", "발급기간·유효기간 확인", "발급 수량·전시 여부 확인"],
 };
 
 export const COUPON_CHANNELS: CouponChannel[] = [OFFICIAL, NAVER, TALK];
@@ -318,6 +318,18 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
     }
   }
 
+  // ── 톡스토어 특화 위험(가이드 기반) ── 라벨을 '정률(%)'로 바꿨으므로 정률 위험은 여기서 전담(공용 pct는 '할인율(%)'만 매칭).
+  if (ch.key === "talk") {
+    const t = s("target"), ck = s("couponKind"), du = s("discountUnit"), at = s("applyTarget");
+    if (t === "첫구매 고객" && ["상품 선택", "기획전 선택"].includes(at)) risks.push("[제약위반] 첫구매 고객 쿠폰은 적용 대상을 '스토어 전체 상품' 또는 '카테고리 선택'으로만 설정할 수 있습니다 — 상품·기획전 선택은 발행되지 않습니다.");
+    if (ck === "장바구니 할인쿠폰" && at !== "" && at !== "스토어 전체 상품") risks.push("[제약위반] 장바구니 할인쿠폰은 적용 대상이 '스토어 전체 상품'만 가능합니다 — 카테고리·상품·기획전 지정 불가.");
+    if (du === "정률(%)") {
+      const p = numOf(s("discountPct")), md = s("maxDiscount");
+      if (md === "" || md === "0") risks.push("[무제한] 정률 쿠폰인데 최대 할인금액이 없습니다 — 상한이 없으면 결제금액이 과다 할인될 수 있어요(정률은 최대 할인금액 필수).");
+      if (p > 0 && (p < 1 || p > 99)) risks.push(`[정책초과] 정률 할인율은 1~99%만 가능합니다 (현재 ${p}%).`);
+    }
+  }
+
   for (const f of ch.steps.flatMap((st) => st.fields)) {
     if (f.type !== "datetime-range" || !isFieldShown(f, answers, ch)) continue;
     const v = answers[f.key];
@@ -342,6 +354,14 @@ function buildChecklist(ch: CouponChannel, answers: Answers): string[] {
     if (s("couponKind") === "스토어장바구니할인") items.push("(장바구니) 혜택상품 '내스토어 전체' 고정 확인");
     if (s("couponKind") === "배송비할인") items.push("(배송비) 최소주문금액은 판매가 기준(즉시할인 무관) 확인");
     if (s("target") === "타겟팅-고객지정") items.push("(고객지정) 고객ID 100명 이내·구매이력/알림동의 고객만 확인");
+  }
+  if (ch.key === "talk") {
+    if (s("couponKind") === "장바구니 할인쿠폰") items.push("(장바구니) 적용 대상 '스토어 전체 상품' 고정 확인(스토어당 1개)");
+    if (s("target") === "첫구매 고객") items.push("(첫구매) 적용 대상은 전체상품·카테고리만 — 상품/기획전 아닌지 확인");
+    if (s("discountUnit") === "정률(%)") items.push("(정률) 할인율 1~99%·최대 할인금액 입력 확인");
+    if (s("discountUnit") === "정액(원)") items.push("(정액) 할인액 10원 단위 확인");
+    if (s("display") === "전시안함") items.push("(전시안함) 마케팅 메시지 수신 고객 전용 쿠폰인지 확인");
+    items.push("(발행) 동일 기간 20개 이내인지, 계정당 1회 다운로드 조건 확인");
   }
   return items;
 }
