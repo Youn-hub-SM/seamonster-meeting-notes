@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Product, ProductInput, EMPTY_PRODUCT, CostHistory, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
+import BundleEditor from "@/app/components/BundleEditor";
 
 type Modal = { mode: "create" | "edit"; data: ProductInput } | null;
 
@@ -27,6 +28,7 @@ export default function ProductsPage() {
   const [importing, setImporting] = useState(false);
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [bundleFor, setBundleFor] = useState<Product | null>(null);
 
   async function reload() {
     setLoading(true);
@@ -328,10 +330,11 @@ export default function ProductsPage() {
                           )}
                         </td>
                         <td className="actions" onClick={(e) => e.stopPropagation()}>
+                          <button className="b2b-btn-secondary" onClick={() => setBundleFor(p)} style={{ padding: "4px 10px", fontSize: 11 }} title="묶음(세트) 구성 편집">묶음</button>
                           <button
                             className="b2b-btn-secondary"
                             onClick={() => toggleHistory(p.id)}
-                            style={{ padding: "4px 10px", fontSize: 11 }}
+                            style={{ padding: "4px 10px", fontSize: 11, marginLeft: 6 }}
                           >
                             {isExpanded ? "이력 닫기" : "원가 이력"}
                           </button>
@@ -445,6 +448,14 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {bundleFor && (
+        <BundleEditor
+          parent={{ id: bundleFor.id, name: bundleFor.name, sku: bundleFor.sku }}
+          products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, spec: p.spec }))}
+          onClose={() => setBundleFor(null)}
+        />
       )}
     </>
   );
