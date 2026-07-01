@@ -12,8 +12,8 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 로그인 페이지·로그인 API + Tally 웹훅(외부 서버가 인증 없이 POST) 은 보호 제외
-  if (pathname === "/b2b/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally") {
+  // 로그인 페이지·로그인 API + Tally 웹훅(외부 서버가 인증 없이 POST) + QR 숏링크 리다이렉트(/q/*, 공개) 는 보호 제외
+  if (pathname === "/b2b/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname.startsWith("/q/")) {
     return NextResponse.next();
   }
 

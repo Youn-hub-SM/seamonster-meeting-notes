@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 export type IconName =
   | "home" | "truck" | "fish" | "trend" | "factory" | "box" | "bulb" | "bars"
-  | "receipt" | "tag" | "link" | "pen" | "chat" | "megaphone" | "note" | "user" | "gear";
+  | "receipt" | "tag" | "link" | "pen" | "chat" | "megaphone" | "note" | "user" | "gear" | "qrcode";
 
 const PATHS: Record<IconName, ReactNode> = {
   home: (
@@ -120,6 +120,14 @@ const PATHS: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="6.2" />
       <circle cx="12" cy="12" r="2.6" />
       <path d="M12 3.2v2.4M12 18.4v2.4M20.8 12h-2.4M5.6 12H3.2M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7M18.2 18.2l-1.7-1.7M7.5 7.5 5.8 5.8" />
+    </>
+  ),
+  qrcode: (
+    <>
+      <rect x="3.5" y="3.5" width="6" height="6" rx="1" />
+      <rect x="14.5" y="3.5" width="6" height="6" rx="1" />
+      <rect x="3.5" y="14.5" width="6" height="6" rx="1" />
+      <path d="M14.5 14.5h2.5v2.5M20.5 14.5h.01M14.5 20.5h.01M17.5 20.5h.01M20.5 20.5h.01M20.5 17.5h.01" />
     </>
   ),
 };
