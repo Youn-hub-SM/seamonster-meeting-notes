@@ -295,6 +295,51 @@ function deriveApplyDay(answers: Answers): string {
   return ["전체 고객", "알림받기", "타겟팅-고객지정"].includes(t) ? "혜택 적용일 당일 설정 가능" : "혜택 적용일 익일부터 (당일 불가)";
 }
 
+// KST 오늘(YYYY-MM-DD).
+function todayKst(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+// 채널별 '노출/발급 시작 시점' 파생 — 조기 노출 방지 배너·위험·체크리스트의 공용 소스.
+//  when=사람이 읽는 문자열, kind=문구 분기(immediate=등록 즉시 노출, scheduled=예정, conditional=조건/주기, none=미입력).
+//  range의 start는 shownStr로 못 읽음(문자열만 반환) → answers 직접 + isDateRange. radio(issue/exposeTime)만 shownStr.
+export type ExposeKind = "immediate" | "scheduled" | "conditional" | "none";
+export function deriveExposeStart(ch: CouponChannel, answers: Answers): { when: string; kind: ExposeKind } {
+  const s = (k: string): string => shownStr(ch, answers, k);
+  const startOf = (k: string): string => {
+    const v = answers[k];
+    return isDateRange(v) && v.start ? fmtDt(v.start) : "";
+  };
+  const past = (start: string): boolean => start.slice(0, 10) <= todayKst();   // 오늘 이하면 등록 즉시 노출
+
+  if (ch.key === "official") {
+    const issue = s("issue");
+    if (issue === "조건부 자동 발급") return { when: "해당 없음 (조건 충족 시 자동 발급 — 고정 노출일 없음)", kind: "conditional" };
+    if (issue === "정기 자동 발급") return { when: "해당 없음 (설정 주기마다 자동 발급 — 고정 노출일 없음)", kind: "conditional" };
+    if (s("exposeTime") === "지정 기간에만 노출") {
+      const start = startOf("exposePeriod");
+      if (!start) return { when: "⚠️ 노출 시작 일시 미입력 — 반드시 채우세요", kind: "none" };
+      return { when: `${start} 부터`, kind: past(start) ? "immediate" : "scheduled" };
+    }
+    return { when: "등록 즉시 (즉시 노출 설정)", kind: "immediate" };
+  }
+  if (ch.key === "naver") {
+    const start = startOf("issuePeriod");
+    if (!start) return { when: "⚠️ 발급기간 시작 미입력 — 반드시 채우세요", kind: "none" };
+    const nextDay = ["첫구매 고객", "재구매 고객", "타겟팅-그룹"].includes(s("target"));
+    if (deriveIssueMethod(answers) === "즉시발급") {
+      return { when: `${start} (발급일 즉시 지급 · 회수 불가)${nextDay ? " (단 이 대상은 익일부터 적용)" : ""}`, kind: past(start) ? "immediate" : "scheduled" };
+    }
+    return { when: `${start} 부터 다운로드 노출`, kind: past(start) ? "immediate" : "scheduled" };
+  }
+  if (ch.key === "talk") {
+    const start = startOf("issuePeriod");
+    if (!start) return { when: "⚠️ 발급기간 시작 미입력 — 반드시 채우세요", kind: "none" };
+    return { when: `${start} 부터 (발행중 상태에서만 다운로드)`, kind: past(start) ? "immediate" : "scheduled" };
+  }
+  return { when: "", kind: "none" };
+}
+
 // "2025-03-05T09:00" → "2025-03-05 09:00"
 function fmtDt(s: string): string {
   return s ? s.replace("T", " ") : "";
@@ -313,11 +358,8 @@ function fieldValueStr(f: CouponField, answers: Answers): string {
 }
 
 function lineFor(f: CouponField, answers: Answers): string | null {
-  let val = fieldValueStr(f, answers);
-  if (!val) {
-    if (f.emptyText) val = f.emptyText;
-    else return null;
-  }
+  const val = fieldValueStr(f, answers);
+  if (!val) return f.emptyText ? `· ${f.label} : ${f.emptyText}` : null;   // emptyText엔 단위(원 이상 등) 안 붙임
   const suffix = f.suffix && f.type !== "datetime-range" ? f.suffix : "";
   return `· ${f.label} : ${val}${suffix}`;
 }
@@ -326,6 +368,8 @@ function lineFor(f: CouponField, answers: Answers): string | null {
 function buildRisks(ch: CouponChannel, answers: Answers): string[] {
   const risks: string[] = [];
   const s = (k: string): string => shownStr(ch, answers, k);
+  const today = todayKst();
+  const startDate = (k: string): string => { const v = answers[k]; return isDateRange(v) && v.start ? v.start.slice(0, 10) : ""; };
 
   const pct = ["할인율", "적립율"].includes(s("benefit")) || s("discountUnit") === "할인율(%)" || s("shipFeeType") === "할인율 지정";
   if (pct) {
@@ -336,6 +380,16 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
   if (s("minAmountType") === "제한없음") risks.push("[무제한] 사용 기준 금액 '제한없음' — 소액 주문에도 쿠폰이 적용됩니다.");
   if (s("issueLimit") === "제한 없음") risks.push("[무제한] 발급 건수 '제한 없음' — 발급량이 제한되지 않습니다.");
   if (s("issueQty") === "무제한") risks.push("[무제한] 발급 수량 '무제한' — 발급량이 제한되지 않습니다.");
+
+  // ── 공식몰 조기/즉시 노출 위험 ──
+  if (ch.key === "official") {
+    const issue = s("issue"), et = s("exposeTime");
+    if (et === "즉시 노출" && ["대상자 지정 발급", "고객 다운로드 발급"].includes(issue)) risks.unshift("[즉시노출] 노출 시점이 '즉시 노출' — 지금 등록하면 바로 고객 화면에 노출/다운로드됩니다. 노출 예정일이 있다면 '지정 기간에만 노출'로 바꾸고 노출 시작 시각을 예정일로 설정하세요.");
+    if (et === "지정 기간에만 노출") {
+      const st = startDate("exposePeriod");
+      if (st && st <= today) risks.unshift("[조기노출] 지정 노출 시작일이 오늘 이하입니다 — 지금 등록하면 예정보다 일찍 노출됩니다. 노출 시작 시각을 예정일로 맞추세요.");
+    }
+  }
 
   // ── 네이버 특화 위험(가이드 기반) ──
   if (ch.key === "naver") {
@@ -360,8 +414,13 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
     if (bk === "쿠폰" && ck === "스토어장바구니할인" && ap !== "내스토어 상품 전체") risks.push("[제약위반] 스토어장바구니할인은 혜택상품이 '내스토어 상품 전체'만 가능 — 상품/카테고리 지정 불가.");
     if (deriveIssueMethod(answers) === "즉시발급") risks.push("[회수불가] 즉시발급 쿠폰은 발급 후 회수할 수 없습니다 — 대상·값을 다시 확인.");
     if (["첫구매 고객", "재구매 고객", "타겟팅-그룹"].includes(t) && isDateRange(ip) && ip.start) {
-      const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-      if (ip.start.slice(0, 10) === todayKst) risks.push("[적용일] 이 대상은 당일 적용 불가(익일부터) — 발급 시작일을 내일 이후로 조정하세요.");
+      if (ip.start.slice(0, 10) === today) risks.push("[적용일] 이 대상은 당일 적용 불가(익일부터) — 발급 시작일을 내일 이후로 조정하세요.");
+    }
+    // ── 조기/즉시 노출('오늘 이하면 등록 즉시 나감' 축 — 위 [적용일] 당일-불가와 별개) ──
+    const ipStart = startDate("issuePeriod");
+    if (ipStart && ipStart <= today) {
+      if (deriveIssueMethod(answers) === "즉시발급") risks.unshift("[즉시지급] 발급일이 오늘 이하 — 지금 등록하면 대상 고객에게 즉시 지급되고 회수 불가입니다. 발급일을 예정일로 맞추세요.");
+      else risks.unshift("[조기노출] 발급기간 시작이 오늘 이하 — 지금 등록하면 즉시 다운로드가 열립니다. 시작 시각을 예정일로 맞추세요.");
     }
   }
 
@@ -375,6 +434,9 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
       if (md === "" || md === "0") risks.push("[무제한] 정률 쿠폰인데 최대 할인금액이 없습니다 — 상한이 없으면 결제금액이 과다 할인될 수 있어요(정률은 최대 할인금액 필수).");
       if (p > 0 && (p < 1 || p > 99)) risks.push(`[정책초과] 정률 할인율은 1~99%만 가능합니다 (현재 ${p}%).`);
     }
+    // ── 조기 노출 ── 발행 기간 시작이 오늘 이하면 '발행중'=즉시 다운로드.
+    const ipStartT = startDate("issuePeriod");
+    if (ipStartT && ipStartT <= today) risks.unshift("[조기노출] 발급 기간 시작이 오늘 이하 — 지금 등록해 '발행중'이 되면 바로 다운로드가 열립니다. 예정일 전이라면 발급 시작 시각을 미루거나 '발행대기'로 등록하세요.");
   }
 
   for (const f of ch.steps.flatMap((st) => st.fields)) {
@@ -389,6 +451,15 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
 function buildChecklist(ch: CouponChannel, answers: Answers): string[] {
   const items = [...ch.checklist];
   const s = (k: string): string => shownStr(ch, answers, k);
+  // ★최우선 안전 항목(항상 선두): 조기 노출 방지 — '사용 기간'이 아니라 '노출 시작' 기준.
+  const ex = deriveExposeStart(ch, answers);
+  items.unshift(`[조기노출 방지] 노출 시작(${ex.when}) 전까지 '발행대기/미노출' 유지 — 예정일 전 미리 노출·발행 절대 금지`);
+  if (ex.kind === "immediate") items.push("[즉시노출 확인] 이 설정은 '등록 즉시 노출/발급' — 지금이 노출 예정 시점이 맞는지 등록 직전 재확인");
+  else if (ex.kind === "scheduled") {
+    if (ch.key === "official") items.push("(노출) 노출 시점 '지정 기간에만 노출' + 노출기간 시작=예정일인지 확인");
+    if (ch.key === "naver") items.push("(발급기간) 시작=예정일로 두고, 시작 전에는 등록하지 말거나 노출 안 되는지 확인");
+    if (ch.key === "talk") items.push("(발행) '발행대기'로 등록하고 예정일에 '발행'으로 전환(발행중 전엔 다운로드 불가) 확인");
+  } else if (ex.kind === "conditional") items.push("(조건/주기) 고정 노출일 아님 — 원하는 시작일에 맞춰 조건/주기를 활성화(미리 켜면 즉시 발급) 확인");
   if (s("issue") === "고객 다운로드 발급") items.push("(다운로드 발급) 상품 상세페이지 노출 여부 재확인");
   if (s("exposeTime") === "지정 기간에만 노출") items.push("(노출) 지정 노출기간 시작·종료 시각 확인");
   const pct = ["할인율", "적립율"].includes(s("benefit")) || s("discountUnit") === "할인율(%)";
@@ -420,6 +491,32 @@ export function buildRequestText(ch: CouponChannel, answers: Answers, meta: { re
 
   out.push(`[쿠폰 등록 요청서 · ${ch.label}]`);
   out.push(`요청자: ${meta.requester || "________"}  ·  요청일: ${meta.date}`);
+
+  // ▼ 조기 노출 방지 배너 — 최상단·모든 채널(핵심 요약보다 먼저). MD가 절대 못 놓치게. ▼
+  const expose = deriveExposeStart(ch, answers);
+  if (expose.when) {
+    const bar = "════════════════════════════════════════";
+    if (expose.kind === "immediate" || expose.kind === "none") {
+      out.push("", bar,
+        `🔴 노출/발급 시작 : ${expose.when}  ← 지금 등록하면 고객에게 바로 나갑니다`,
+        "   → 노출 예정일이 오늘이 아니라면 지금 등록하지 마세요.",
+        "   → 예정일까지 기다리거나 [지정 기간 노출 / 발행대기]로 바꿔 등록하세요.",
+        bar);
+    } else if (expose.kind === "conditional") {
+      out.push("", bar,
+        `🕒 노출/발급 시작 : ${expose.when}`,
+        "   → '노출 예정일'이 아니라 '조건(가입·후기·주기)' 시점에 발급됩니다.",
+        "   → 조건/주기 설정을 지금 켜면 즉시 활성화됩니다. 원하는 시작일에 맞춰 활성화하세요.",
+        bar);
+    } else {
+      out.push("", bar,
+        `🕒 노출/발급 시작 : ${expose.when}`,
+        "   → 이 시각 전에는 반드시 [발행대기 / 미노출] 상태로만 등록하세요.",
+        "   → 예정일 전 미리 노출·발행 절대 금지 (대상 외 고객에게 혜택이 새어나갑니다).",
+        bar);
+    }
+  }
+  // ▲
 
   const core = shown.filter((f) => f.critical).map((f) => lineFor(f, answers)).filter((x): x is string => !!x);
   // 네이버 쿠폰: 발급 방법·적용일은 대상에서 자동 파생(필드 아님)이라 핵심 요약에 직접 추가(포인트는 발급방법 개념 없음).
