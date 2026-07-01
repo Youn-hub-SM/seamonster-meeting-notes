@@ -12,6 +12,22 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // QR 전용 호스트(예: qr.seamonster.kr): 루트의 단일 경로를 숏링크로 매핑 → /캠페인명 을 /q/캠페인명 으로 내부 리라이트.
+  //  SHORT_LINK_HOST 환경변수로 지정. 관리툴 도메인(app.*)은 이 블록을 타지 않음.
+  const shortHost = (process.env.SHORT_LINK_HOST || "").toLowerCase();
+  if (shortHost && (req.headers.get("host") || "").toLowerCase() === shortHost) {
+    if (pathname.startsWith("/q/")) return NextResponse.next();       // 이미 정규 경로(공개)
+    if (/^\/[^/]+$/.test(pathname)) {                                  // 단일 세그먼트 = 숏코드
+      const url = req.nextUrl.clone();
+      url.pathname = `/q${pathname}`;                                 // /여름세일 → /q/여름세일
+      return NextResponse.rewrite(url);
+    }
+    return new NextResponse(
+      "<!doctype html><meta charset=\"utf-8\"><title>QR</title><body style=\"font-family:system-ui;text-align:center;padding:60px;color:#555\">QR 단축링크 전용 도메인입니다.</body>",
+      { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } }
+    );
+  }
+
   // 로그인 페이지·로그인 API + Tally 웹훅(외부 서버가 인증 없이 POST) + QR 숏링크 리다이렉트(/q/*, 공개) 는 보호 제외
   if (pathname === "/b2b/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname.startsWith("/q/")) {
     return NextResponse.next();

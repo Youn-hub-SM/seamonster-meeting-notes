@@ -15,7 +15,8 @@ function genCode(len = 6) {
 }
 const normUrl = (u: string) => { const t = (u || "").trim(); return t ? (/^https?:\/\//i.test(t) ? t : `https://${t}`) : ""; };
 const isValidUrl = (u: string) => { try { new URL(u); return true; } catch { return false; } };
-const cleanCode = (c: string) => (c || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32);
+// 캠페인명 코드 허용 — 한글/영문/숫자/-/_ OK. URL 깨는 문자·공백만 정리(공백→'-'). 대소문자는 보존.
+const cleanCode = (c: string) => (c || "").trim().replace(/\s+/g, "-").replace(/[/\\?#%&+<>"'`.]/g, "").slice(0, 64);
 
 async function actor(req: NextRequest) {
   const t = req.cookies.get("b2b_auth")?.value;

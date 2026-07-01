@@ -5,6 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 type Link = { id: string; code: string; target_url: string; title: string | null; active: boolean; scan_count: number; created_by: string | null; created_at: string };
 type Scan = { scanned_at: string; referer: string | null; user_agent: string | null; country: string | null };
 
+// 숏링크 전용 도메인(예: https://qr.seamonster.kr). 설정 시 QR·주소가 이 도메인 기준으로 생성.
+//  미설정 시 현재 도메인의 /q/{code} 로 폴백.
+const SHORT_BASE = (process.env.NEXT_PUBLIC_SHORT_BASE || "").replace(/\/+$/, "");
+const SHORT_HOST = SHORT_BASE.replace(/^https?:\/\//, "");
+
 export default function QrPage() {
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +43,8 @@ export default function QrPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const shortUrl = (code: string) => `${origin}/q/${code}`;
+  const shortUrl = (code: string) => (SHORT_BASE ? `${SHORT_BASE}/${code}` : `${origin}/q/${code}`);
+  const shortDisplay = (code: string) => (SHORT_HOST ? `${SHORT_HOST}/${code}` : `/q/${code}`);
   const qrSrc = (data: string, size = 200) => `/api/qr?data=${encodeURIComponent(data)}&size=${size}`;
 
   async function create() {
@@ -87,8 +93,8 @@ export default function QrPage() {
                 <input className="b2b-input" value={nTarget} onChange={(e) => setNTarget(e.target.value)} placeholder="https://예: 이벤트 페이지 주소" /></label>
               <label className="b2b-field" style={{ flex: 1, minWidth: 140 }}><span className="b2b-field-label">제목(선택)</span>
                 <input className="b2b-input" value={nTitle} onChange={(e) => setNTitle(e.target.value)} placeholder="예: 6월 라방 QR" /></label>
-              <label className="b2b-field" style={{ width: 150 }}><span className="b2b-field-label">커스텀 코드(선택)</span>
-                <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="비우면 자동" /></label>
+              <label className="b2b-field" style={{ width: 170 }}><span className="b2b-field-label">캠페인명·코드(선택)</span>
+                <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="예: 여름세일 (비우면 자동)" /></label>
               <button className="b2b-btn-primary" onClick={create} disabled={creating} style={{ height: 40 }}>{creating ? "생성 중…" : "만들기"}</button>
             </div>
           </section>
@@ -106,7 +112,7 @@ export default function QrPage() {
                       <td>
                         <strong>{l.title || l.code}</strong>
                         <div className="sm-row" style={{ gap: 6, marginTop: 2 }}>
-                          <code style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>/q/{l.code}</code>
+                          <code style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>{shortDisplay(l.code)}</code>
                           <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => copy(shortUrl(l.code))}>복사</button>
                         </div>
                       </td>
