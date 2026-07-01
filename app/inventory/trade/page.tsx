@@ -16,11 +16,14 @@ export default function TradePage() {
   const [importing, setImporting] = useState(false);
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [ioType, setIoType] = useState<"입고" | "출고">("입고");
+  const [uploadOpen, setUploadOpen] = useState(false); // 업로드 설정 모달
+  const [ioType, setIoType] = useState<"입고" | "출고">("출고"); // 기본 출고
   const [ioChannel, setIoChannel] = useState<InvChannel>("소매");
   const [ioDate, setIoDate] = useState(TODAY());
   const [ioPartner, setIoPartner] = useState("");
   const [ioDone, setIoDone] = useState(true); // 즉시 입고/출고처리(기본 체크)
+
+  function openUpload() { setError(""); setIoDate(TODAY()); setUploadOpen(true); } // 열 때 거래일은 오늘로 리셋
 
   async function handleFile(file: File) {
     setImporting(true); setError("");
@@ -31,6 +34,7 @@ export default function TradePage() {
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
       setPreview(j as Preview);
+      setUploadOpen(false); // 분석 성공 → 설정 모달 닫고 미리보기로
     } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
     setImporting(false);
   }
@@ -49,47 +53,81 @@ export default function TradePage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">구매 및 판매</h1><p className="b2b-page-subtitle">여러 제품을 한 화면에 담아 기록하거나, <strong>엑셀(SKU·수량·단가)</strong>로 한 번에 올리세요.</p></div>
+        <div><h1 className="b2b-page-title">구매 및 판매</h1><p className="b2b-page-subtitle">여러 제품을 한 화면에 담아 기록하거나, <strong>엑셀</strong>로 한 번에 올리세요. 엑셀 업로드는 유형·채널·거래일을 고른 뒤 파일을 첨부합니다.</p></div>
         <div className="b2b-page-actions">
-          <a className="b2b-btn-secondary" href={`/api/inventory/txns/template?type=${ioType}`} title={ioType === "입고" ? "SKU·수량·단가 엑셀 양식" : "수량·(무시)·SKU 엑셀 양식"}>엑셀 양식 ({ioType === "입고" ? "구매" : "판매"})</a>
+          <button className="b2b-btn-secondary" onClick={openUpload}>엑셀 업로드</button>
           <Link className="b2b-btn-primary" href="/inventory/trade/new">+ 입고/판매 기록</Link>
         </div>
       </header>
 
-      {error && <div className="b2b-error">{error}</div>}
-
-      {/* 엑셀 일괄 입력 — 양식에 유형이 없어 업로드 시 구매/판매 선택 */}
-      <section className="b2b-card" style={{ marginBottom: 16 }}>
-        <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <span className="b2b-card-title" style={{ marginRight: 4 }}>엑셀 일괄 입력</span>
-          <div className="sm-tabs">
-            <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => setIoType("입고")}>구매(입고)</button>
-            <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => setIoType("출고")}>판매(출고)</button>
-          </div>
-          <ChannelPicker value={ioChannel} onChange={setIoChannel} />
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
-            <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} style={{ width: "auto" }} /></label>
-          <input className="b2b-input" placeholder={ioType === "입고" ? "매입처(선택)" : "판매처(선택)"} value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} style={{ width: 150 }} />
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}><input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리</label>
-          <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer", marginLeft: "auto" }}>
-            {importing ? "분석 중…" : "엑셀 업로드"}
-            <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
-          </label>
-        </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
-          {ioType === "입고"
-            ? <>구매(입고) 양식 = <strong>SKU · 수량 · 단가</strong>.</>
-            : <>판매(출고) 양식 = <strong>수량 · (무시) · SKU</strong> (1열=수량, 3열=SKU, 가운데 열은 무시 — 외부 출고 파일을 그대로 올려도 됩니다).</>}
-          {" "}구매/판매를 고르고 업로드 → 미리보기 후 반영. (거래일·거래처는 파일 전체에 적용)
-        </p>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 2 }}>과거 출고 일괄 이관: 출고는 위 양식으로 <strong>거래일</strong>을 그날로 지정해 나눠 올리거나, 헤더 양식(SKU·수량)에 <strong>‘날짜’</strong> 열(YYYY-MM-DD)을 넣으면 행별 날짜로 기록됩니다 → 안전재고(판매속도) 워밍업에 쓰입니다.</p>
-      </section>
+      {error && !uploadOpen && !preview && <div className="b2b-error">{error}</div>}
 
       <section className="b2b-card">
         <div className="b2b-card-head"><span className="b2b-card-title">입고·출고 내역 (주문 단위)</span></div>
         <OrdersTable reloadKey={reload} />
       </section>
+
+      {/* 엑셀 업로드 설정 → 파일 첨부 */}
+      {uploadOpen && (
+        <div className="b2b-modal-backdrop" onClick={() => !importing && setUploadOpen(false)}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div className="b2b-modal-head">
+              <h2 className="b2b-modal-title">엑셀 일괄 업로드</h2>
+              <button className="b2b-modal-close" onClick={() => setUploadOpen(false)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <div className="b2b-field">
+                <label className="b2b-field-label">① 유형</label>
+                <div className="sm-tabs" style={{ margin: 0 }}>
+                  <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => setIoType("출고")}>판매(출고)</button>
+                  <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => setIoType("입고")}>구매(입고)</button>
+                </div>
+              </div>
+
+              <div className="b2b-field" style={{ marginTop: 12 }}>
+                <label className="b2b-field-label">② 채널 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 소매)</span></label>
+                <ChannelPicker value={ioChannel} onChange={setIoChannel} />
+              </div>
+
+              <div className="b2b-field-row" style={{ marginTop: 12 }}>
+                <div className="b2b-field">
+                  <label className="b2b-field-label">③ 거래일 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 오늘)</span></label>
+                  <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} />
+                </div>
+                <div className="b2b-field">
+                  <label className="b2b-field-label">{ioType === "입고" ? "매입처" : "판매처"} <span className="sm-faint" style={{ fontWeight: 400 }}>(선택)</span></label>
+                  <input className="b2b-input" placeholder="선택" value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} />
+                </div>
+              </div>
+
+              <label className="sm-row" style={{ gap: 7, marginTop: 12, fontSize: 13, cursor: "pointer" }}>
+                <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’)</span>
+              </label>
+
+              <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.5 }}>
+                {ioType === "입고"
+                  ? <>양식 = <strong>SKU · 수량 · 단가</strong></>
+                  : <>양식 = <strong>수량 · (무시) · SKU</strong> (외부 출고 파일 그대로 · 가운데 열 무시)</>}
+                {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="change-link">양식 다운로드</a>
+                <br />거래일·거래처·채널은 파일 전체에 적용됩니다.
+              </p>
+
+              {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
+            </div>
+            <div className="b2b-modal-foot">
+              <span />
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setUploadOpen(false)} disabled={importing}>취소</button>
+                <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
+                  {importing ? "분석 중…" : "④ 엑셀 첨부"}
+                  <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {preview && (
         <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
