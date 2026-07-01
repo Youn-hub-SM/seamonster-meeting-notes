@@ -9,6 +9,8 @@ export default function InvStatsPage() {
   const [txns, setTxns] = useState<InventoryTxn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [groupBy, setGroupBy] = useState<"품목" | "SKU">("품목");
+  const [q, setQ] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -50,10 +52,44 @@ export default function InvStatsPage() {
 
   const topValue = useMemo<[string, number][]>(() => rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 10).map((r) => [r.name, r.value]), [rows]);
 
+  // 품목별 입고/출고/조정 합(원장 기준)
+  const txnByProduct = useMemo(() => {
+    const m = new Map<string, { inq: number; outq: number; adj: number }>();
+    for (const t of txns) {
+      const cur = m.get(t.product_id) || { inq: 0, outq: 0, adj: 0 };
+      if (t.type === "입고") cur.inq += t.qty;
+      else if (t.type === "출고") cur.outq += Math.abs(t.qty);
+      else cur.adj += t.qty;
+      m.set(t.product_id, cur);
+    }
+    return m;
+  }, [txns]);
+
+  // 품목(옵션 구분) 또는 SKU 별 집계
+  const agg = useMemo(() => {
+    const items = rows.map((r) => ({ r, s: txnByProduct.get(r.product_id) || { inq: 0, outq: 0, adj: 0 } }));
+    if (groupBy === "품목") {
+      return items.map(({ r, s }) => ({ key: r.product_id, label: r.name, sub: r.spec || r.sku || "", qty: r.qty, value: r.value, inq: s.inq, outq: s.outq, adj: s.adj }));
+    }
+    const m = new Map<string, { qty: number; value: number; inq: number; outq: number; adj: number; names: Set<string> }>();
+    for (const { r, s } of items) {
+      const k = r.sku || "(SKU 없음)";
+      const cur = m.get(k) || { qty: 0, value: 0, inq: 0, outq: 0, adj: 0, names: new Set<string>() };
+      cur.qty += r.qty; cur.value += r.value; cur.inq += s.inq; cur.outq += s.outq; cur.adj += s.adj; cur.names.add(r.name);
+      m.set(k, cur);
+    }
+    return [...m.entries()].map(([k, v]) => ({ key: k, label: k, sub: [...v.names].join(", "), qty: v.qty, value: v.value, inq: v.inq, outq: v.outq, adj: v.adj }));
+  }, [rows, txnByProduct, groupBy]);
+
+  const shownAgg = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return agg.filter((a) => !s || `${a.label} ${a.sub}`.toLowerCase().includes(s)).sort((a, b) => b.value - a.value || b.qty - a.qty);
+  }, [agg, q]);
+
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고·자산 비중을 집계합니다.</p></div>
+        <div><h1 className="b2b-page-title">재고/생산 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고 추세와 <strong>품목(옵션 구분)·SKU별 집계</strong>를 봅니다.</p></div>
       </header>
       {error && <div className="b2b-error">{error}</div>}
       {loading ? <div className="b2b-loading">불러오는 중...</div> : (
@@ -77,6 +113,42 @@ export default function InvStatsPage() {
           </div>
 
           <BarList title="재고자산 TOP(원)" data={topValue} fmt={(n) => n.toLocaleString()} />
+
+          {/* 품목(옵션 구분)·SKU별 집계 */}
+          <section className="b2b-card" style={{ marginTop: 16 }}>
+            <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <span className="b2b-card-title">{groupBy === "품목" ? "품목별" : "SKU별"} 집계 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {shownAgg.length}건</span></span>
+              <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <div className="sm-tabs" style={{ margin: 0 }}>
+                  {(["품목", "SKU"] as const).map((g) => (
+                    <button key={g} className={`sm-tab ${groupBy === g ? "is-active" : ""}`} onClick={() => setGroupBy(g)}>{g === "품목" ? "품목별(옵션 구분)" : "SKU별"}</button>
+                  ))}
+                </div>
+                <input className="b2b-input" placeholder="검색" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 160 }} />
+              </div>
+            </div>
+            <div className="b2b-table-wrap">
+              <table className="b2b-table">
+                <thead><tr><th>{groupBy === "품목" ? "품목" : "SKU"}</th><th>{groupBy === "품목" ? "옵션/SKU" : "품목"}</th><th className="num">현재고</th><th className="num">입고</th><th className="num">출고</th><th className="num">조정</th><th className="num">재고자산(원)</th></tr></thead>
+                <tbody>
+                  {shownAgg.length === 0 ? (
+                    <tr><td colSpan={7} className="sm-faint" style={{ padding: "16px 4px" }}>집계할 품목이 없습니다.</td></tr>
+                  ) : shownAgg.map((a) => (
+                    <tr key={a.key}>
+                      <td><strong>{a.label}</strong></td>
+                      <td className="sm-faint" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.sub || "-"}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{a.qty.toLocaleString()}</td>
+                      <td className="num b2b-money" style={{ color: a.inq ? "var(--sm-success)" : "var(--sm-text-light)" }}>{a.inq ? a.inq.toLocaleString() : "-"}</td>
+                      <td className="num b2b-money" style={{ color: a.outq ? "var(--sm-info)" : "var(--sm-text-light)" }}>{a.outq ? a.outq.toLocaleString() : "-"}</td>
+                      <td className="num b2b-money" style={{ color: a.adj ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{a.adj ? (a.adj > 0 ? "+" : "") + a.adj.toLocaleString() : "-"}</td>
+                      <td className="num b2b-money">{a.value.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>※ 입고·출고·조정은 불러온 원장(최근 2000건) 합계. 현재고·재고자산은 전체 기준.</p>
+          </section>
         </>
       )}
     </div>
