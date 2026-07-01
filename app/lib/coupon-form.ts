@@ -49,7 +49,8 @@ const OFFICIAL: CouponChannel = {
   label: "공식몰",
   intro: "카페24 공식몰 쿠폰. 순서대로 고르면 요청서가 만들어집니다.",
   steps: [
-    { title: "쿠폰 이름", desc: "고객·MD 목록에서 보일 이름", fields: [
+    { title: "쿠폰 종류·이름", desc: "쿠폰 유형과 고객·MD 목록에 보일 이름", fields: [
+      { key: "couponType", label: "쿠폰 종류", type: "radio", required: true, critical: true, options: ["할인 쿠폰", "시리얼 쿠폰"], default: "할인 쿠폰", help: "할인 쿠폰=일반 발급(대상자·조건부·다운로드·정기). 시리얼 쿠폰=시리얼 번호를 만들어 배포하고, 고객이 마이쇼핑에서 번호를 입력해 받습니다(상품/스토어에 자동 노출되지 않음)." },
       { key: "name", label: "쿠폰 이름", type: "text", required: true, critical: true, placeholder: "예: [삼치데이] 15% 할인 (2507)", help: "월/차수 태그를 넣으면 중복발급을 막고 목록에서 쉽게 구분됩니다." },
     ] },
     { title: "혜택", desc: "어떤 혜택을 줄까요?", fields: [
@@ -67,7 +68,9 @@ const OFFICIAL: CouponChannel = {
         help: "⚠️ 할인율/적립율은 상한을 반드시 지정하세요. 0원 = 제한 없이 전액 적용(사고 위험)." },
     ] },
     { title: "발급 방법", desc: "고객이 어떻게 받나요?", fields: [
-      { key: "issue", label: "발급 구분", type: "radio", required: true, critical: true, options: ["대상자 지정 발급", "조건부 자동 발급", "고객 다운로드 발급", "정기 자동 발급"], help: "대상자 지정=특정 회원 / 조건부=가입·후기 등 조건 / 다운로드=고객이 직접 / 정기=주기 자동." },
+      { key: "serialCount", label: "발급(생성) 매수", type: "number", suffix: "개", critical: true, showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, requiredIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "생성할 시리얼 번호 개수. 이 수만큼 고객이 번호를 등록해 사용할 수 있습니다." },
+      { key: "serialUse", label: "시리얼 번호 사용 횟수", type: "radio", options: ["1회", "여러 번"], default: "1회", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "번호 1개당 사용 횟수. 보통 1회." },
+      { key: "issue", label: "발급 구분", type: "radio", required: true, critical: true, options: ["대상자 지정 발급", "조건부 자동 발급", "고객 다운로드 발급", "정기 자동 발급"], showIf: { key: "couponType", in: ["할인 쿠폰"] }, help: "대상자 지정=특정 회원 / 조건부=가입·후기 등 조건 / 다운로드=고객이 직접 / 정기=주기 자동." },
       { key: "targetMember", label: "대상 회원", type: "radio", options: ["전체회원", "특정회원(등급/그룹)"], showIf: { key: "issue", in: ["대상자 지정 발급"] }, requiredIf: { key: "issue", in: ["대상자 지정 발급"] } },
       { key: "targetMemberList", label: "특정 회원 대상", type: "textarea", placeholder: "회원등급 / 그룹 / 회원 ID", showIf: { all: [{ key: "issue", in: ["대상자 지정 발급"] }, { key: "targetMember", in: ["특정회원(등급/그룹)"] }] }, requiredIf: { all: [{ key: "issue", in: ["대상자 지정 발급"] }, { key: "targetMember", in: ["특정회원(등급/그룹)"] }] } },
       { key: "autoCond", label: "발급 조건", type: "checkbox", options: ["회원가입", "배송완료", "생일", "후기작성", "주문완료", "첫구매", "구매수량 도달", "등급 상향"], showIf: { key: "issue", in: ["조건부 자동 발급"] }, requiredIf: { key: "issue", in: ["조건부 자동 발급"] }, help: "쿠폰이 자동 발급될 트리거(보통 1개)." },
@@ -306,7 +309,7 @@ function todayKst(): string {
 // 채널별 '노출/발급 시작 시점' 파생 — 조기 노출 방지 배너·위험·체크리스트의 공용 소스.
 //  when=사람이 읽는 문자열, kind=문구 분기(immediate=등록 즉시 노출, scheduled=예정, conditional=조건/주기, none=미입력).
 //  range의 start는 shownStr로 못 읽음(문자열만 반환) → answers 직접 + isDateRange. radio(issue/exposeTime)만 shownStr.
-export type ExposeKind = "immediate" | "scheduled" | "conditional" | "none";
+export type ExposeKind = "immediate" | "scheduled" | "conditional" | "none" | "serial";
 export function deriveExposeStart(ch: CouponChannel, answers: Answers): { when: string; kind: ExposeKind } {
   const s = (k: string): string => shownStr(ch, answers, k);
   const startOf = (k: string): string => {
@@ -316,6 +319,7 @@ export function deriveExposeStart(ch: CouponChannel, answers: Answers): { when: 
   const past = (start: string): boolean => start.slice(0, 10) <= todayKst();   // 오늘 이하면 등록 즉시 노출
 
   if (ch.key === "official") {
+    if (s("couponType") === "시리얼 쿠폰") return { when: "시리얼 번호를 배포한 시점부터 사용 (상품·스토어 자동 노출 없음)", kind: "serial" };
     const issue = s("issue");
     if (issue === "조건부 자동 발급") return { when: "해당 없음 (조건 충족 시 자동 발급 — 고정 노출일 없음)", kind: "conditional" };
     if (issue === "정기 자동 발급") return { when: "해당 없음 (설정 주기마다 자동 발급 — 고정 노출일 없음)", kind: "conditional" };
@@ -456,13 +460,15 @@ function buildChecklist(ch: CouponChannel, answers: Answers): string[] {
   const s = (k: string): string => shownStr(ch, answers, k);
   // ★최우선 안전 항목(항상 선두): 조기 노출 방지 — '사용 기간'이 아니라 '노출 시작' 기준.
   const ex = deriveExposeStart(ch, answers);
-  items.unshift(`[조기노출 방지] 노출 시작(${ex.when}) 전까지 '발행대기/미노출' 유지 — 예정일 전 미리 노출·발행 절대 금지`);
+  if (ex.kind === "serial") items.unshift(`[조기 배포 방지] 시리얼 번호를 예정 시점 전에 배포하지 말 것 — 배포 즉시 대상 외 사용 가능(${ex.when})`);
+  else items.unshift(`[조기노출 방지] 노출 시작(${ex.when}) 전까지 '발행대기/미노출' 유지 — 예정일 전 미리 노출·발행 절대 금지`);
   if (ex.kind === "immediate") items.push("[즉시노출 확인] 이 설정은 '등록 즉시 노출/발급' — 지금이 노출 예정 시점이 맞는지 등록 직전 재확인");
   else if (ex.kind === "scheduled") {
     if (ch.key === "official") items.push("(노출) 노출 시점 '지정 기간에만 노출' + 노출기간 시작=예정일인지 확인");
     if (ch.key === "naver") items.push("(발급기간) 시작=예정일로 두고, 시작 전에는 등록하지 말거나 노출 안 되는지 확인");
     if (ch.key === "talk") items.push("(발행) '발행대기'로 등록하고 예정일에 '발행'으로 전환(발행중 전엔 다운로드 불가) 확인");
   } else if (ex.kind === "conditional") items.push("(조건/주기) 고정 노출일 아님 — 원하는 시작일에 맞춰 조건/주기를 활성화(미리 켜면 즉시 발급) 확인");
+  else if (ex.kind === "serial") items.push("(시리얼) 발급 매수·번호 배포 경로 확인 — 상품/스토어에 자동 노출되지 않고, 번호 배포로만 지급됩니다");
   if (s("issue") === "고객 다운로드 발급") items.push("(다운로드 발급) 상품 상세페이지 노출 여부 재확인");
   if (s("exposeTime") === "지정 기간에만 노출") items.push("(노출) 지정 노출기간 시작·종료 시각 확인");
   const pct = ["할인율", "적립율"].includes(s("benefit")) || s("discountUnit") === "할인율(%)";
@@ -510,6 +516,12 @@ export function buildRequestText(ch: CouponChannel, answers: Answers, meta: { re
         `🕒 노출/발급 시작 : ${expose.when}`,
         "   → '노출 예정일'이 아니라 '조건(가입·후기·주기)' 시점에 발급됩니다.",
         "   → 조건/주기 설정을 지금 켜면 즉시 활성화됩니다. 원하는 시작일에 맞춰 활성화하세요.",
+        bar);
+    } else if (expose.kind === "serial") {
+      out.push("", bar,
+        `🎫 발급 방식 : 시리얼 쿠폰 — ${expose.when}`,
+        "   → 시리얼 번호를 만들어 배포하면 고객이 마이쇼핑에서 번호를 입력해 받습니다.",
+        "   → 번호를 배포하기 전에는 아무도 받지 못합니다. 배포 시점·경로(문자·이벤트 등)를 관리하세요.",
         bar);
     } else {
       out.push("", bar,
