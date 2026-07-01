@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { INV_TYPE_COLOR, type InventoryTxn, type InvTxnType } from "@/app/lib/inventory";
+import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, type InventoryTxn, type InvTxnType, type InvChannel } from "@/app/lib/inventory";
 
 // 재고 원장 테이블 — 활동 히스토리·구매판매·조정 공용. type/types 필터·품목 필터 지원, 행 취소.
 export default function TxnTable({ type, types, productId, reloadKey = 0, onChanged }: { type?: InvTxnType; types?: InvTxnType[]; productId?: string; reloadKey?: number; onChanged?: () => void }) {
@@ -38,15 +38,17 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
   return (
     <div className="b2b-table-wrap">
       <table className="b2b-table">
-        <thead><tr><th>거래일</th><th>품목</th><th>유형</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th><th>메모</th><th>담당</th><th></th></tr></thead>
+        <thead><tr><th>거래일</th><th>품목</th><th>유형</th><th>채널</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th><th>메모</th><th>담당</th><th></th></tr></thead>
         <tbody>
           {rows.map((t) => {
             const c = INV_TYPE_COLOR[t.type];
+            const ch = t.channel ? INV_CHANNEL_COLOR[t.channel as InvChannel] : null;
             return (
               <tr key={t.id}>
                 <td style={{ whiteSpace: "nowrap" }}>{t.txn_date?.slice(5)}</td>
                 <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.product_name}{t.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{t.sku}</span> : null}</td>
                 <td><span className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontWeight: 700 }}>{t.type}</span></td>
+                <td>{ch ? <span className="b2b-feed-pill" style={{ background: ch.bg, color: ch.fg, fontWeight: 700 }}>{t.channel}</span> : <span className="sm-faint">-</span>}</td>
                 <td className="num b2b-money" style={{ color: t.qty >= 0 ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
                 <td className="num b2b-money">{t.unit_amount ? t.unit_amount.toLocaleString() : "-"}</td>
                 <td>{t.partner || "-"}</td>

@@ -9,12 +9,24 @@ export const INV_TYPE_COLOR: Record<InvTxnType, { bg: string; fg: string }> = {
   조정: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" }, // 실사 보정(±)
 };
 
+// 재고 채널 — 같은 품목(SKU)이라도 채널별로 현재고를 따로 잡는다.
+export const INV_CHANNELS = ["도매", "소매"] as const;
+export type InvChannel = (typeof INV_CHANNELS)[number];
+export const INV_CHANNEL_COLOR: Record<InvChannel, { bg: string; fg: string }> = {
+  도매: { bg: "var(--sm-orange-light)", fg: "var(--sm-orange)" }, // B2B
+  소매: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },        // 온라인몰
+};
+// 읽기(조회) 화면 필터 — 전체 = 도매+소매 합산.
+export const INV_CHANNEL_FILTERS = ["전체", "도매", "소매"] as const;
+export type InvChannelFilter = (typeof INV_CHANNEL_FILTERS)[number];
+
 export interface InventoryTxn {
   id: string;
   product_id: string;
   product_name?: string;   // 조인 표시용
   sku?: string | null;
   type: InvTxnType;
+  channel?: InvChannel;    // 도매/소매 재고 채널(migration 036, 기존행=소매)
   qty: number;             // 부호 있는 재고 변화량
   unit_amount: number | null;
   txn_date: string;

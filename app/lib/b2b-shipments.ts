@@ -119,13 +119,15 @@ export async function saveOrderShipments(
       if (siErr) throw siErr;
 
       // 재고 즉시 출고(선점) — 발송 잡는 순간 차감. shipment_id 로 묶여 차수 삭제/재저장 시 cascade 원복.
+      //  B2B 발송이므로 '도매' 채널 재고에서 차감(036). 컬럼 미적용 환경이면 channel 빼고 재시도.
       if (wantStockOut) {
-        const txns = items
+        const txns: Record<string, unknown>[] = items
           .map((it) => ({ pid: orderItems[it.idx].product_id, qty: it.qty }))
           .filter((x): x is { pid: string; qty: number } => !!x.pid && x.qty > 0)
           .map((x) => ({
             product_id: x.pid,
             type: "출고",
+            channel: "도매",
             qty: signedQty("출고", x.qty),
             unit_amount: null,
             txn_date: sch.ship_date || today,
@@ -135,8 +137,12 @@ export async function saveOrderShipments(
             created_by: "B2B 자동출고",
           }));
         if (txns.length > 0) {
-          const { error: txErr } = await sb.from("inventory_txns").insert(txns);
-          if (txErr) throw txErr;
+          let txr = await sb.from("inventory_txns").insert(txns);
+          if (txr.error && /channel/i.test(txr.error.message)) {
+            for (const t of txns) delete t.channel;
+            txr = await sb.from("inventory_txns").insert(txns);
+          }
+          if (txr.error) throw txr.error;
         }
       }
     }

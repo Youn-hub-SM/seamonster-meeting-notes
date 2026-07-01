@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
     const row: Record<string, unknown> = {
       product_id, type, qty,
+      channel: b.channel === "도매" ? "도매" : "소매", // 036, 기본 소매
       unit_amount: b.unit_amount === undefined || b.unit_amount === "" || b.unit_amount === null ? null : Math.max(0, Math.round(Number(b.unit_amount) || 0)),
       partner: String(b.partner || "").trim() || null,
       memo: String(b.memo || "").trim() || null,
@@ -43,10 +44,14 @@ export async function POST(req: NextRequest) {
       } catch { /* 033 미적용 */ }
     }
 
-    let res = await sb.from("inventory_txns").insert(row).select().single();
-    if (res.error && /status/i.test(res.error.message)) {
-      const { status: _s, ...rest } = row;
-      res = await sb.from("inventory_txns").insert(rest).select().single();
+    // 선택 컬럼(status=034, channel=036) 미적용 환경이면 그 컬럼만 빼고 재시도.
+    const attempt = { ...row };
+    let res = await sb.from("inventory_txns").insert(attempt).select().single();
+    for (let guard = 0; res.error && guard < 2; guard++) {
+      const miss = (["channel", "status"] as const).find((c) => c in attempt && new RegExp(c, "i").test(res.error!.message));
+      if (!miss) break;
+      delete attempt[miss];
+      res = await sb.from("inventory_txns").insert(attempt).select().single();
     }
     if (res.error) throw res.error;
     return NextResponse.json({ ok: true, txn: res.data });

@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InventoryRow } from "@/app/lib/inventory";
+import type { InventoryRow, InvChannel } from "@/app/lib/inventory";
 import type { AdjustRow } from "@/app/api/inventory/adjust/import/route";
 import TxnModal from "../TxnModal";
 import TxnTable from "../TxnTable";
+import { ChannelPicker } from "../ChannelTabs";
 
 type Preview = { summary: { valid: number; changed: number; errors: number }; rows: AdjustRow[]; errors: { line: number; msg: string }[] };
 
 export default function AdjustPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
+  const [channel, setChannel] = useState<InvChannel>("소매");
   const [open, setOpen] = useState(false);
   const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
@@ -18,9 +20,9 @@ export default function AdjustPage() {
   const [preview, setPreview] = useState<Preview | null>(null);
 
   const load = useCallback(async () => {
-    const j = await (await fetch("/api/inventory", { cache: "no-store" })).json();
+    const j = await (await fetch(`/api/inventory?channel=${encodeURIComponent(channel)}`, { cache: "no-store" })).json();
     if (j.ok) setRows(j.rows || []);
-  }, []);
+  }, [channel]);
   useEffect(() => { load(); }, [load]);
   const products = useMemo(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, unit: r.unit })), [rows]);
   const qtyOf = useCallback((id: string) => rows.find((r) => r.product_id === id)?.qty || 0, [rows]);
@@ -28,7 +30,7 @@ export default function AdjustPage() {
   async function handleFile(file: File) {
     setImporting(true); setError("");
     try {
-      const fd = new FormData(); fd.append("file", file);
+      const fd = new FormData(); fd.append("file", file); fd.append("channel", channel);
       const res = await fetch("/api/inventory/adjust/import", { method: "POST", body: fd });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
@@ -42,7 +44,7 @@ export default function AdjustPage() {
     try {
       const res = await fetch("/api/inventory/adjust/import/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: preview.rows.map((r) => ({ product_id: r.product_id, target: r.target, memo: r.memo })) }),
+        body: JSON.stringify({ channel, rows: preview.rows.map((r) => ({ product_id: r.product_id, target: r.target, memo: r.memo })) }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "반영 실패");
@@ -54,8 +56,9 @@ export default function AdjustPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고 조정</h1><p className="b2b-page-subtitle">실사·파손·분실 등으로 장부 재고를 보정합니다. 실사 수량(목표) 또는 증감(±)으로 입력. <strong>엑셀로 대량 실사</strong>도 가능합니다.</p></div>
+        <div><h1 className="b2b-page-title">재고 조정</h1><p className="b2b-page-subtitle">실사·파손·분실 등으로 장부 재고를 보정합니다. <strong>도매/소매 채널</strong>을 고르면 현재고·실사·조정이 그 채널 기준으로 적용됩니다. 실사 수량(목표) 또는 증감(±)으로 입력, <strong>엑셀 대량 실사</strong>도 가능합니다.</p></div>
         <div className="b2b-page-actions">
+          <ChannelPicker value={channel} onChange={setChannel} style={{ marginRight: 4 }} />
           <a className="b2b-btn-secondary" href="/api/inventory/adjust/template" title="SKU·실사수량·메모 양식">엑셀 양식</a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
             {importing ? "분석 중…" : "엑셀 업로드"}
@@ -73,13 +76,13 @@ export default function AdjustPage() {
         <TxnTable type="조정" reloadKey={reload} onChanged={load} />
       </section>
 
-      {open && <TxnModal products={products} qtyOf={qtyOf} defaultType="조정" onClose={() => setOpen(false)} onSaved={() => { setOpen(false); setReload((n) => n + 1); load(); }} />}
+      {open && <TxnModal products={products} qtyOf={qtyOf} defaultType="조정" defaultChannel={channel} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); setReload((n) => n + 1); load(); }} />}
 
       {preview && (
         <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="b2b-modal-head">
-              <span className="b2b-modal-title">엑셀 실사 — 미리보기</span>
+              <span className="b2b-modal-title">엑셀 실사 · {channel} — 미리보기</span>
               <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">

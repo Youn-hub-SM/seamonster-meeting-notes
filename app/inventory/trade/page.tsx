@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import OrdersTable from "../OrdersTable";
+import { ChannelPicker } from "../ChannelTabs";
+import type { InvChannel } from "@/app/lib/inventory";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
 type Preview = { summary: { valid: number; errors: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
@@ -15,6 +17,7 @@ export default function TradePage() {
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [ioType, setIoType] = useState<"입고" | "출고">("입고");
+  const [ioChannel, setIoChannel] = useState<InvChannel>("소매");
   const [ioDate, setIoDate] = useState(TODAY());
   const [ioPartner, setIoPartner] = useState("");
   const [ioDone, setIoDone] = useState(true); // 즉시 입고/출고처리(기본 체크)
@@ -35,7 +38,7 @@ export default function TradePage() {
     if (!preview) return;
     setApplying(true); setError("");
     try {
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows, done: ioDone }) });
+      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows, done: ioDone, channel: ioChannel }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "적용 실패");
       setPreview(null); setReload((n) => n + 1);
@@ -63,6 +66,7 @@ export default function TradePage() {
             <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => setIoType("입고")}>구매(입고)</button>
             <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => setIoType("출고")}>판매(출고)</button>
           </div>
+          <ChannelPicker value={ioChannel} onChange={setIoChannel} />
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
             <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} style={{ width: "auto" }} /></label>
           <input className="b2b-input" placeholder={ioType === "입고" ? "매입처(선택)" : "판매처(선택)"} value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} style={{ width: 150 }} />

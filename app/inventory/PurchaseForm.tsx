@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { signedQty, type InvTxnType } from "@/app/lib/inventory";
+import { signedQty, type InvTxnType, type InvChannel } from "@/app/lib/inventory";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { ChannelPicker } from "./ChannelTabs";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -17,6 +18,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   onCancel: () => void;
 }) {
   const [type, setType] = useState<InvTxnType>(defaultType);
+  const [channel, setChannel] = useState<InvChannel>("소매");
   const [date, setDate] = useState(TODAY());
   const [partner, setPartner] = useState("");
   const [memo, setMemo] = useState("");
@@ -71,7 +73,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         type, qty: signedQty(type, Number(l.qty) || 0), product_id: l.product_id, product_name: l.name,
         unit_amount: Number(l.price) > 0 ? Math.round(Number(l.price)) : null, txn_date: date, partner: partner.trim() || null, memo: memo.trim() || null,
       }));
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done }) });
+      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done, channel }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
       onSaved();
@@ -86,6 +88,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
           <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => setType("입고")}>구매(입고)</button>
           <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => setType("출고")}>판매(출고)</button>
         </div>
+        <ChannelPicker value={channel} onChange={setChannel} />
         <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
         <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />

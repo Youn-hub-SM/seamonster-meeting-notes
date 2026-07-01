@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InventoryRow } from "@/app/lib/inventory";
+import type { InventoryRow, InvChannelFilter } from "@/app/lib/inventory";
 import TxnModal from "./TxnModal";
+import { ChannelFilter, writeChannelOf } from "./ChannelTabs";
 
 export default function InventoryPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -10,17 +11,19 @@ export default function InventoryPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
+  const [channel, setChannel] = useState<InvChannelFilter>("전체");
   const [modalFor, setModalFor] = useState<string>(""); // product_id
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const j = await (await fetch("/api/inventory", { cache: "no-store" })).json();
+      const url = channel === "전체" ? "/api/inventory" : `/api/inventory?channel=${encodeURIComponent(channel)}`;
+      const j = await (await fetch(url, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setRows(j.rows || []);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
-  }, []);
+  }, [channel]);
   useEffect(() => { load(); }, [load]);
 
   const qtyOf = useCallback((id: string) => rows.find((r) => r.product_id === id)?.qty || 0, [rows]);
@@ -55,7 +58,7 @@ export default function InventoryPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">재고 목록</h1>
-          <p className="b2b-page-subtitle">상품 마스터 기준 현재고·재고자산·안전재고. <strong>부족만 보기</strong>로 재고 부족 품목을 모아 봅니다. 행의 <strong>입·출·조정</strong>으로 입출고를 기록합니다.</p>
+          <p className="b2b-page-subtitle">상품 마스터 기준 현재고·재고자산·안전재고. <strong>도매/소매</strong> 채널별로 재고를 나눠 봅니다. <strong>부족만 보기</strong>로 부족 품목을 모아 보고, 행의 <strong>입·출·조정</strong>으로 기록합니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={() => setModalFor("__new__")}>+ 입·출·조정</button>
@@ -71,9 +74,12 @@ export default function InventoryPage() {
       </div>
 
       <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
-        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>
-          <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> 부족만 보기
-        </label>
+        <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <ChannelFilter value={channel} onChange={setChannel} />
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>
+            <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> 부족만 보기
+          </label>
+        </div>
         <input className="b2b-input" placeholder="품목·SKU·위치 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240, maxWidth: "100%" }} />
       </div>
 
@@ -110,6 +116,7 @@ export default function InventoryPage() {
           products={products}
           qtyOf={qtyOf}
           defaultProductId={modalFor === "__new__" ? "" : modalFor}
+          defaultChannel={writeChannelOf(channel)}
           lockProduct={modalFor !== "__new__"}
           onClose={() => setModalFor("")}
           onSaved={() => { setModalFor(""); load(); }}

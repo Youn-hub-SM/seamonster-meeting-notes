@@ -9,8 +9,18 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     const asof = req.nextUrl.searchParams.get("asof");
+    const chanParam = req.nextUrl.searchParams.get("channel");
+    const chan = chanParam === "도매" || chanParam === "소매" ? chanParam : null; // null = 전체(도매+소매)
     const sb = supabaseAdmin();
     const asofParam = asof && /^\d{4}-\d{2}-\d{2}$/.test(asof) ? asof : null;
+    // 채널 지정 시 inventory_stock(asof, chan). 036 미적용(2-인자 함수 없음)이면 전체로 폴백.
+    const stockRpc = async () => {
+      if (chan) {
+        const res = await sb.rpc("inventory_stock", { asof: asofParam, chan });
+        if (!res.error) return res;
+      }
+      return sb.rpc("inventory_stock", { asof: asofParam });
+    };
     // 매입단가·원산지·속성은 migration 032 컬럼 — 미적용 환경에선 기본 컬럼으로 폴백(재고 페이지 안 죽게).
     const productsQ = async () => {
       const full = await sb.from("products").select("id, sku, name, spec, unit, cost_price, purchase_price, origin, attrs").eq("active", true).order("name", { ascending: true });
@@ -19,7 +29,7 @@ export async function GET(req: NextRequest) {
     };
     const [pr, tr, ir] = await Promise.all([
       productsQ(),
-      sb.rpc("inventory_stock", { asof: asofParam }), // 품목당 1행 집계(1000행 제한 무관)
+      stockRpc(), // 품목당 1행 집계(1000행 제한 무관) — 채널 필터 반영
       sb.from("inventory_items").select("product_id, min_qty, barcode, location"),
     ]);
     if (pr.error) throw pr.error;

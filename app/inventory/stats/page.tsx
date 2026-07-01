@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InventoryRow, InventoryTxn } from "@/app/lib/inventory";
+import type { InventoryRow, InventoryTxn, InvChannelFilter } from "@/app/lib/inventory";
 import { TrendChart, BarList } from "@/app/components/charts";
+import { ChannelFilter } from "../ChannelTabs";
 
 export default function InvStatsPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -10,21 +11,23 @@ export default function InvStatsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [groupBy, setGroupBy] = useState<"품목" | "SKU">("품목");
+  const [channel, setChannel] = useState<InvChannelFilter>("전체");
   const [q, setQ] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
+      const cq = channel === "전체" ? "" : `&channel=${encodeURIComponent(channel)}`;
       const [ij, tj] = await Promise.all([
-        (await fetch("/api/inventory", { cache: "no-store" })).json(),
-        (await fetch("/api/inventory/txns?limit=2000", { cache: "no-store" })).json(),
+        (await fetch(`/api/inventory${channel === "전체" ? "" : `?channel=${encodeURIComponent(channel)}`}`, { cache: "no-store" })).json(),
+        (await fetch(`/api/inventory/txns?limit=2000${cq}`, { cache: "no-store" })).json(),
       ]);
       if (!ij.ok) throw new Error(ij.error || "조회 실패");
       setRows(ij.rows || []);
       if (tj.ok) setTxns(tj.rows || []);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
-  }, []);
+  }, [channel]);
   useEffect(() => { load(); }, [load]);
 
   const totals = useMemo(() => ({
@@ -50,7 +53,7 @@ export default function InvStatsPage() {
   const inTrend = useMemo(() => monthly.map(([k, v]) => ({ label: k.slice(2), value: v.inq, tip: `${k} 입고 ${v.inq.toLocaleString()}` })), [monthly]);
   const outTrend = useMemo(() => monthly.map(([k, v]) => ({ label: k.slice(2), value: v.outq, tip: `${k} 출고 ${v.outq.toLocaleString()}` })), [monthly]);
 
-  const topValue = useMemo<[string, number][]>(() => rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 10).map((r) => [r.name, r.value]), [rows]);
+  const topValue = useMemo<[string, number][]>(() => rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 10).map((r) => [r.spec ? `${r.name} · ${r.spec}` : r.name, r.value]), [rows]);
 
   // 품목별 입고/출고/조정 합(원장 기준)
   const txnByProduct = useMemo(() => {
@@ -89,7 +92,8 @@ export default function InvStatsPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고/생산 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고 추세와 <strong>품목(옵션 구분)·SKU별 집계</strong>를 봅니다.</p></div>
+        <div><h1 className="b2b-page-title">재고/생산 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고 추세와 <strong>품목(옵션 구분)·SKU별 집계</strong>를 봅니다. <strong>도매/소매</strong> 채널로 걸러 볼 수 있어요.</p></div>
+        <div className="b2b-page-actions"><ChannelFilter value={channel} onChange={setChannel} /></div>
       </header>
       {error && <div className="b2b-error">{error}</div>}
       {loading ? <div className="b2b-loading">불러오는 중...</div> : (

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { INV_TYPE_COLOR, type InventoryTxn } from "@/app/lib/inventory";
+import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, type InventoryTxn, type InvChannel, type InvChannelFilter } from "@/app/lib/inventory";
+import { ChannelFilter } from "../ChannelTabs";
 
 // 활동 히스토리 — 날짜별 아코디언. 품목·SKU·메모 검색 시 해당 날짜만 펼쳐 보임.
 export default function ActivityPage() {
@@ -9,19 +10,21 @@ export default function ActivityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [channel, setChannel] = useState<InvChannelFilter>("전체");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const j = await (await fetch("/api/inventory/txns?limit=2000", { cache: "no-store" })).json();
+      const url = `/api/inventory/txns?limit=2000${channel === "전체" ? "" : `&channel=${encodeURIComponent(channel)}`}`;
+      const j = await (await fetch(url, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       const rows: InventoryTxn[] = j.rows || [];
       setTxns(rows);
       setOpen(new Set(rows.length ? [rows[0].txn_date] : [])); // 가장 최근 날짜만 펼침
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
-  }, []);
+  }, [channel]);
   useEffect(() => { load(); }, [load]);
 
   async function cancel(t: InventoryTxn) {
@@ -55,7 +58,10 @@ export default function ActivityPage() {
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
 
       <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
-        <input className="b2b-input" placeholder="품목·SKU·메모·거래처 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 280, maxWidth: "100%" }} />
+        <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <ChannelFilter value={channel} onChange={setChannel} />
+          <input className="b2b-input" placeholder="품목·SKU·메모·거래처 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260, maxWidth: "100%" }} />
+        </div>
         {q && <span className="sm-faint" style={{ fontSize: 12 }}>{groups.length}일 · {filtered.length}건</span>}
       </div>
 
@@ -81,7 +87,7 @@ export default function ActivityPage() {
                 {o && (
                   <div className="b2b-table-wrap" style={{ borderTop: "1px solid var(--sm-border)" }}>
                     <table className="b2b-table">
-                      <thead><tr><th>품목</th><th>유형</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th><th>메모</th><th>담당</th><th></th></tr></thead>
+                      <thead><tr><th>품목</th><th>유형</th><th>채널</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th><th>메모</th><th>담당</th><th></th></tr></thead>
                       <tbody>
                         {list.map((t) => {
                           const c = INV_TYPE_COLOR[t.type];
@@ -89,6 +95,7 @@ export default function ActivityPage() {
                             <tr key={t.id}>
                               <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.product_name}{t.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{t.sku}</span> : null}</td>
                               <td><span className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontWeight: 700 }}>{t.type}</span></td>
+                              <td>{t.channel ? (() => { const ch = INV_CHANNEL_COLOR[t.channel as InvChannel]; return <span className="b2b-feed-pill" style={{ background: ch.bg, color: ch.fg, fontWeight: 700 }}>{t.channel}</span>; })() : <span className="sm-faint">-</span>}</td>
                               <td className="num b2b-money" style={{ color: t.qty >= 0 ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
                               <td className="num b2b-money">{t.unit_amount ? t.unit_amount.toLocaleString() : "-"}</td>
                               <td>{t.partner || "-"}</td>

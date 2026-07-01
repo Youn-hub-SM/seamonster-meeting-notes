@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InventoryRow } from "@/app/lib/inventory";
+import type { InventoryRow, InvChannelFilter } from "@/app/lib/inventory";
+import { ChannelFilter } from "../ChannelTabs";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -11,17 +12,19 @@ export default function AsOfPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [channel, setChannel] = useState<InvChannelFilter>("전체");
   const [hideZero, setHideZero] = useState(true);
 
   const load = useCallback(async (d: string) => {
     setLoading(true); setError("");
     try {
-      const j = await (await fetch(`/api/inventory?asof=${d}`, { cache: "no-store" })).json();
+      const cq = channel === "전체" ? "" : `&channel=${encodeURIComponent(channel)}`;
+      const j = await (await fetch(`/api/inventory?asof=${d}${cq}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setRows(j.rows || []);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
-  }, []);
+  }, [channel]);
   useEffect(() => { load(date); }, [load, date]);
 
   const shown = useMemo(() => {
@@ -42,9 +45,10 @@ export default function AsOfPage() {
       {error && <div className="b2b-error">{error}</div>}
 
       <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
-        <span className="sm-row" style={{ gap: 8 }}>
+        <span className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
           <span className="sm-faint" style={{ fontSize: 13 }}>기준일</span>
           <input className="b2b-input" type="date" value={date} max={TODAY()} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />
+          <ChannelFilter value={channel} onChange={setChannel} style={{ marginLeft: 4 }} />
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", marginLeft: 8 }}><input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} /> 0 숨기기</label>
         </span>
         <input className="b2b-input" placeholder="품목·SKU 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 220, maxWidth: "100%" }} />

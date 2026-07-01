@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const file = form.get("file");
     if (!file || typeof file === "string") return NextResponse.json({ ok: false, error: "엑셀 파일을 첨부하세요." }, { status: 400 });
+    const chan = form.get("channel") === "도매" ? "도매" : "소매"; // 실사 대상 채널(036, 기본 소매)
 
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const wb = new ExcelJS.Workbook();
@@ -28,9 +29,14 @@ export async function POST(req: NextRequest) {
     if (!col.has("SKU") || !col.has("실사수량")) return NextResponse.json({ ok: false, error: "헤더에 'SKU'·'실사수량'이 필요합니다. (양식을 받아 사용하세요)" }, { status: 400 });
 
     const sb = supabaseAdmin();
+    const stockRpc = async () => {
+      const res = await sb.rpc("inventory_stock", { asof: null, chan });
+      if (!res.error) return res;
+      return sb.rpc("inventory_stock", { asof: null }); // 036 미적용 폴백(전체)
+    };
     const [pr, tr] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit").eq("active", true),
-      sb.rpc("inventory_stock", { asof: null }),
+      stockRpc(),
     ]);
     if (pr.error) throw pr.error;
     if (tr.error) throw tr.error;
@@ -59,7 +65,7 @@ export async function POST(req: NextRequest) {
       rows.push({ product_id: p.id, sku, name: p.name, spec: p.spec, unit: p.unit, current, target, delta: target - current, memo: get("메모").trim() || null });
     }
     const changed = rows.filter((r) => r.delta !== 0).length;
-    return NextResponse.json({ ok: true, summary: { valid: rows.length, changed, errors: errors.length }, rows, errors });
+    return NextResponse.json({ ok: true, channel: chan, summary: { valid: rows.length, changed, errors: errors.length }, rows, errors });
   } catch (err) {
     console.error("[inventory/adjust/import]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "파일 분석 실패") }, { status: 500 });
