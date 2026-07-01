@@ -33,6 +33,8 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
   const isToolOpen = (href: string) => effectiveOpen === href;
   // 열려 있으면 닫고, 아니면 그것만 열기(나머지 아코디언은 닫힘).
   const toggleTool = (href: string) => setOpenHref((cur) => ((cur === undefined ? activeMenuHref : cur) === href ? null : href));
+  // 다른 메뉴(경로)로 이동하면 수동으로 펼쳐둔 아코디언은 접고 현재 위치 기준으로 복귀.
+  useEffect(() => { setOpenHref(undefined); }, [pathname]);
 
   // 로그인 사용자(있으면) — 설정 메뉴 노출 + 푸터 표시용. /api/b2b/auth 는 미들웨어 예외라 어디서나 호출 가능.
   useEffect(() => {
