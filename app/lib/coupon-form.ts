@@ -52,10 +52,11 @@ const OFFICIAL: CouponChannel = {
     { title: "쿠폰 종류·이름", desc: "쿠폰 유형과 고객·MD 목록에 보일 이름", fields: [
       { key: "couponType", label: "쿠폰 종류", type: "radio", required: true, critical: true, options: ["할인 쿠폰", "시리얼 쿠폰"], default: "할인 쿠폰", help: "할인 쿠폰=일반 발급(대상자·조건부·다운로드·정기). 시리얼 쿠폰=시리얼 번호를 만들어 배포하고, 고객이 마이쇼핑에서 번호를 입력해 받습니다(상품/스토어에 자동 노출되지 않음)." },
       { key: "name", label: "쿠폰 이름", type: "text", required: true, critical: true, placeholder: "예: [삼치데이] 15% 할인 (2507)", help: "월/차수 태그를 넣으면 중복발급을 막고 목록에서 쉽게 구분됩니다." },
+      { key: "couponDesc", label: "쿠폰 설명(선택)", type: "text", placeholder: "고객/MD가 참고할 설명" },
     ] },
     { title: "혜택", desc: "어떤 혜택을 줄까요?", fields: [
-      { key: "benefit", label: "혜택 구분", type: "radio", required: true, critical: true, options: ["할인금액", "할인율", "적립금액", "적립율", "기본 배송비 할인", "전체 배송비 할인", "즉시 적립"], help: "배송비: '기본 배송비 할인'=기본 배송비만 / '전체 배송비 할인'=지역별·해외배송까지 포함(보통 권장 — 제주 등 차별 없음). 아래에서 방식(전액할인/할인금액/할인율)·포함 여부를 지정합니다. 즉시 적립은 적립금(원)을 바로 지급." },
-      { key: "benefitValue", label: "할인/적립 값", type: "text", placeholder: "예: 15% / 1,000원 (즉시적립은 적립금 원)", showIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립"] }, requiredIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립"] } },
+      { key: "benefit", label: "혜택 구분", type: "radio", required: true, critical: true, options: ["할인금액", "할인율", "적립금액", "적립율", "기본 배송비 할인", "전체 배송비 할인", "즉시 적립", "예치금 지급"], help: "배송비: '기본 배송비 할인'=기본 배송비만 / '전체 배송비 할인'=지역별·해외배송까지 포함(보통 권장 — 제주 등 차별 없음). 아래에서 방식(전액할인/할인금액/할인율)·포함 여부를 지정합니다. 즉시 적립=적립금, 예치금 지급=예치금을 바로 지급(원)." },
+      { key: "benefitValue", label: "할인/적립 값", type: "text", placeholder: "예: 15% / 1,000원 (즉시적립·예치금은 원)", showIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립", "예치금 지급"] }, requiredIf: { key: "benefit", in: ["할인금액", "할인율", "적립금액", "적립율", "즉시 적립", "예치금 지급"] } },
       // ── 배송비 할인(기본/전체 공통) — 카페24 실제 UI 반영 ──
       { key: "shipFeeType", label: "배송비 할인 방식", type: "radio", options: ["전액할인", "할인금액", "할인율"], default: "전액할인", showIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] }, requiredIf: { key: "benefit", in: ["기본 배송비 할인", "전체 배송비 할인"] }, help: "전액할인=무료배송 / 할인금액=정액(원) / 할인율=%(최대금액 필수)." },
       { key: "shipFeeAmt", label: "배송비 할인 금액", type: "number", suffix: "원", placeholder: "예: 2500", showIf: { key: "shipFeeType", in: ["할인금액"] }, requiredIf: { key: "shipFeeType", in: ["할인금액"] } },
@@ -68,8 +69,12 @@ const OFFICIAL: CouponChannel = {
         help: "⚠️ 할인율/적립율은 상한을 반드시 지정하세요. 0원 = 제한 없이 전액 적용(사고 위험)." },
     ] },
     { title: "발급 방법", desc: "고객이 어떻게 받나요?", fields: [
-      { key: "serialCount", label: "발급(생성) 매수", type: "number", suffix: "개", critical: true, showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, requiredIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "생성할 시리얼 번호 개수. 이 수만큼 고객이 번호를 등록해 사용할 수 있습니다." },
-      { key: "serialUse", label: "시리얼 번호 사용 횟수", type: "radio", options: ["1회", "여러 번"], default: "1회", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "번호 1개당 사용 횟수. 보통 1회." },
+      { key: "serialRedup", label: "동일인 재발급 가능 여부", type: "radio", options: ["불가능", "가능"], default: "불가능", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "같은 사람이 시리얼을 여러 번 등록할 수 있는지. ⚠️ '가능'이면 1인 다회 사용으로 예산 초과 위험." },
+      { key: "serialGen", label: "시리얼번호 생성방법", type: "radio", options: ["자동 생성", "직접 입력"], default: "자동 생성", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, requiredIf: { key: "couponType", in: ["시리얼 쿠폰"] } },
+      { key: "serialDigits", label: "시리얼번호 자릿수", type: "number", suffix: "자리", default: "10", showIf: { key: "serialGen", in: ["자동 생성"] }, help: "자동 생성 번호 자릿수(기본 10)." },
+      { key: "serialCodes", label: "직접 입력할 번호", type: "textarea", placeholder: "발급할 시리얼 번호를 줄바꿈으로 입력", showIf: { key: "serialGen", in: ["직접 입력"] }, requiredIf: { key: "serialGen", in: ["직접 입력"] } },
+      { key: "serialBasis", label: "시리얼번호 발급기준", type: "radio", options: ["여러개의 다른 시리얼번호로 발급", "한개의 동일 시리얼번호로 발급"], default: "여러개의 다른 시리얼번호로 발급", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "여러개=번호마다 다름(대량 배포) / 한개=모두 같은 번호(공용 코드)." },
+      { key: "serialMax", label: "최대 발급 수량", type: "number", suffix: "장", critical: true, showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, requiredIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "발급할 시리얼 매수. ⚠️ 1회 최대 1만장, 1일 20회까지 발급 가능." },
       { key: "issue", label: "발급 구분", type: "radio", required: true, critical: true, options: ["대상자 지정 발급", "조건부 자동 발급", "고객 다운로드 발급", "정기 자동 발급"], showIf: { key: "couponType", in: ["할인 쿠폰"] }, help: "대상자 지정=특정 회원 / 조건부=가입·후기 등 조건 / 다운로드=고객이 직접 / 정기=주기 자동." },
       { key: "targetMember", label: "대상 회원", type: "radio", options: ["전체회원", "특정회원(등급/그룹)"], showIf: { key: "issue", in: ["대상자 지정 발급"] }, requiredIf: { key: "issue", in: ["대상자 지정 발급"] } },
       { key: "targetMemberList", label: "특정 회원 대상", type: "textarea", placeholder: "회원등급 / 그룹 / 회원 ID", showIf: { all: [{ key: "issue", in: ["대상자 지정 발급"] }, { key: "targetMember", in: ["특정회원(등급/그룹)"] }] }, requiredIf: { all: [{ key: "issue", in: ["대상자 지정 발급"] }, { key: "targetMember", in: ["특정회원(등급/그룹)"] }] } },
@@ -388,13 +393,17 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
   if (s("issueLimit") === "제한 없음") risks.push("[무제한] 발급 건수 '제한 없음' — 발급량이 제한되지 않습니다.");
   if (s("issueQty") === "무제한") risks.push("[무제한] 발급 수량 '무제한' — 발급량이 제한되지 않습니다.");
 
-  // ── 공식몰 조기/즉시 노출 위험 ──
+  // ── 공식몰 조기/즉시 노출 + 시리얼 위험 ──
   if (ch.key === "official") {
     const issue = s("issue"), et = s("exposeTime");
     if (et === "즉시 노출" && ["대상자 지정 발급", "고객 다운로드 발급"].includes(issue)) risks.unshift("[즉시노출] 노출 시점이 '즉시 노출' — 지금 등록하면 바로 고객 화면에 노출/다운로드됩니다. 노출 예정일이 있다면 '지정 기간에만 노출'로 바꾸고 노출 시작 시각을 예정일로 설정하세요.");
     if (et === "지정 기간에만 노출") {
       const st = startDate("exposePeriod");
       if (st && st <= today) risks.unshift("[조기노출] 지정 노출 시작일이 오늘 이하입니다 — 지금 등록하면 예정보다 일찍 노출됩니다. 노출 시작 시각을 예정일로 맞추세요.");
+    }
+    if (s("couponType") === "시리얼 쿠폰") {
+      if (numOf(s("serialMax")) > 10000) risks.push("[한도초과] 시리얼 최대 발급 수량은 1회 1만장까지입니다 — 나눠서 발급하세요(1일 20회 한도).");
+      if (s("serialRedup") === "가능") risks.push("[재발급] 시리얼 동일인 재발급 '가능' — 1인이 여러 번 등록해 예산이 초과될 수 있어요.");
     }
   }
 
@@ -468,7 +477,7 @@ function buildChecklist(ch: CouponChannel, answers: Answers): string[] {
     if (ch.key === "naver") items.push("(발급기간) 시작=예정일로 두고, 시작 전에는 등록하지 말거나 노출 안 되는지 확인");
     if (ch.key === "talk") items.push("(발행) '발행대기'로 등록하고 예정일에 '발행'으로 전환(발행중 전엔 다운로드 불가) 확인");
   } else if (ex.kind === "conditional") items.push("(조건/주기) 고정 노출일 아님 — 원하는 시작일에 맞춰 조건/주기를 활성화(미리 켜면 즉시 발급) 확인");
-  else if (ex.kind === "serial") items.push("(시리얼) 발급 매수·번호 배포 경로 확인 — 상품/스토어에 자동 노출되지 않고, 번호 배포로만 지급됩니다");
+  else if (ex.kind === "serial") items.push("(시리얼) 최대 발급 수량·생성방법·번호 배포 경로 확인 — 상품/스토어 자동 노출 없이 번호 배포로만 지급(1회 1만장·1일 20회 한도)");
   if (s("issue") === "고객 다운로드 발급") items.push("(다운로드 발급) 상품 상세페이지 노출 여부 재확인");
   if (s("exposeTime") === "지정 기간에만 노출") items.push("(노출) 지정 노출기간 시작·종료 시각 확인");
   const pct = ["할인율", "적립율"].includes(s("benefit")) || s("discountUnit") === "할인율(%)";
