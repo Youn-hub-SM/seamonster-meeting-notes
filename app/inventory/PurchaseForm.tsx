@@ -41,8 +41,8 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
 
   function addLine(p: PickProduct) {
     const sub = [p.spec, p.origin, p.attrs, p.sku, `재고 ${p.qty.toLocaleString()}${p.unit}`].filter(Boolean).join(" · ");
-    // 매입(입고)은 매입단가 우선, 없으면 원가. 그 외는 원가.
-    const base = type === "입고" && p.purchase_price > 0 ? p.purchase_price : p.cost_price;
+    // 입고 = 상품 마스터의 '매입단가' 기준(미설정이면 빈칸 — 원가로 채우지 않음). 출고 = 원가 참고가.
+    const base = type === "입고" ? p.purchase_price : p.cost_price;
     setLines((ls) => [...ls, { key: `${p.id}-${ls.length}-${Date.now()}`, product_id: p.id, name: p.name, sub, unit: p.unit, qty: "1", price: base ? String(base) : "" }]);
     setSearch(""); setActive(-1);
   }
