@@ -72,7 +72,7 @@ export default function SalesUploadPage() {
 
   const s = preview?.summary;
   return (
-    <div className="b2b-container" style={{ maxWidth: 860 }}>
+    <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출 데이터 업로드</h1>

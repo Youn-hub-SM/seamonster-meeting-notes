@@ -33,7 +33,7 @@ export default function SalesHome() {
 
   const hasData = b && b.total_rows > 0;
   return (
-    <div className="b2b-container" style={{ maxWidth: 960 }}>
+    <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출</h1>

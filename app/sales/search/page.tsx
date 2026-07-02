@@ -54,7 +54,7 @@ export default function SalesSearchPage() {
 
   const c = res?.customer, s = res?.summary;
   return (
-    <div className="b2b-container" style={{ maxWidth: 920 }}>
+    <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">주문 검색</h1>
