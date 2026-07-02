@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Preview = {
   ok: boolean; error?: string;
@@ -10,8 +10,10 @@ type Preview = {
   sample?: { order_date: string; channel: string; order_id: string; product_name: string; sku_code: string; quantity: number; subtotal_amount: number }[];
   errors?: string[];
 };
+type Batch = { id: string; filename: string; total_rows: number; inserted: number; skipped: number; uploaded_by: string | null; status: "active" | "reverted"; created_at: string; reverted_at: string | null };
 
 const won = (n: number) => `${(n || 0).toLocaleString()}원`;
+const fmtTime = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
 
 export default function SalesUploadPage() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -20,6 +22,23 @@ export default function SalesUploadPage() {
   const [busy, setBusy] = useState<"" | "preview" | "apply">("");
   const [applied, setApplied] = useState<{ inserted: number; skipped: number; total_after: number | null } | null>(null);
   const [err, setErr] = useState("");
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [reverting, setReverting] = useState("");
+
+  function loadBatches() { fetch("/api/sales/upload/batches").then((r) => r.json()).then((j) => { if (j.ok) setBatches(j.batches); }).catch(() => {}); }
+  useEffect(() => { loadBatches(); }, []);
+
+  async function revert(b: Batch) {
+    if (!window.confirm(`'${b.filename}' 업로드로 추가된 ${b.inserted.toLocaleString()}건을 삭제해 되돌립니다.\n되돌릴 수 없습니다. 진행할까요?`)) return;
+    setReverting(b.id); setErr("");
+    try {
+      const r = await fetch("/api/sales/upload/revert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batch_id: b.id }) });
+      const j = await r.json();
+      if (!j.ok) setErr(j.error || "되돌리기 실패");
+      else loadBatches();
+    } catch (e) { setErr((e as Error).message); }
+    finally { setReverting(""); }
+  }
 
   function pick(f: File | null) { setFile(f); setPreview(null); setApplied(null); setErr(""); }
 
@@ -44,7 +63,7 @@ export default function SalesUploadPage() {
       const r = await fetch("/api/sales/upload/apply", { method: "POST", body: fd });
       const j = await r.json();
       if (!j.ok) setErr(j.error || "적용 실패");
-      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; }
+      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); }
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
   }
@@ -109,6 +128,32 @@ export default function SalesUploadPage() {
           <div className="sm-between" style={{ marginTop: 14 }}>
             <button className="b2b-btn-secondary" onClick={() => setPreview(null)}>취소</button>
             <button className="b2b-btn-primary" onClick={doApply} disabled={busy !== "" || s.new_rows === 0}>{busy === "apply" ? "적용 중…" : s.new_rows === 0 ? "적재할 신규 행 없음" : `${s.new_rows.toLocaleString()}건 적용`}</button>
+          </div>
+        </section>
+      )}
+
+      {batches.length > 0 && (
+        <section className="b2b-card" style={{ marginTop: 16 }}>
+          <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드 · 되돌리기</span></div>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>잘못 올린 업로드는 그 배치가 추가한 행만 정확히 삭제해 되돌립니다. 되돌린 뒤 같은 파일을 다시 올리면 복구됩니다(멱등).</p>
+          <div style={{ overflowX: "auto" }}>
+            <table className="b2b-table" style={{ fontSize: 12.5 }}>
+              <thead><tr><th>시각</th><th>파일</th><th style={{ textAlign: "right" }}>신규</th><th>올린 사람</th><th>상태</th><th></th></tr></thead>
+              <tbody>
+                {batches.map((b) => (
+                  <tr key={b.id}>
+                    <td>{fmtTime(b.created_at)}</td>
+                    <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.filename}</td>
+                    <td style={{ textAlign: "right" }}>{b.inserted.toLocaleString()}</td>
+                    <td>{b.uploaded_by || "-"}</td>
+                    <td>{b.status === "reverted" ? <span className="sm-faint">되돌림</span> : <span style={{ color: "var(--sm-success)", fontWeight: 700 }}>적용됨</span>}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {b.status === "active" && <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => revert(b)} disabled={reverting !== ""}>{reverting === b.id ? "되돌리는 중…" : "되돌리기"}</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/app/lib/supabase";
 import { parseSalesFile } from "@/app/lib/sales-parse";
 import { normalizeRow, type SalesOrderRow, type SalesCustomerRow } from "@/app/lib/sales-normalize";
-import { logSalesUpload } from "@/app/lib/b2b-activity";
+import { logSalesUpload, currentActor } from "@/app/lib/b2b-activity";
+import { randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,9 +50,13 @@ export async function POST(req: NextRequest) {
       existed += data?.length || 0;
     }
 
+    // 배치 id — 이 업로드가 '새로 삽입한' 행에만 태깅(멱등이라 기존 중복행은 미변경) → 되돌리기 시 정확히 이 배치분만 삭제.
+    const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14); // yyyymmddhhmmss(UTC)
+    const batchId = `web-${stamp}-${randomUUID().slice(0, 4)}`;
+
     // 멱등 upsert(중복 무시)
     for (let i = 0; i < orders.length; i += 1000) {
-      const chunk = orders.slice(i, i + 1000).map((o) => ({ ...o, source: "web" }));
+      const chunk = orders.slice(i, i + 1000).map((o) => ({ ...o, source: "web", upload_batch: batchId }));
       const { error } = await sb.from("sales_orders").upsert(chunk, { onConflict: "row_hash", ignoreDuplicates: true });
       if (error) return NextResponse.json({ ok: false, error: `적재 오류: ${error.message}` }, { status: 500 });
     }
@@ -77,10 +82,17 @@ export async function POST(req: NextRequest) {
 
     const inserted = orders.length - existed;
     const skipped = rows.length - inserted;
+    // 되돌리기 대상이 있을 때(신규 삽입>0)만 업로드 이력 기록.
+    if (inserted > 0) {
+      await sb.from("sales_uploads").insert({
+        id: batchId, filename: file.name, total_rows: rows.length,
+        inserted, skipped, uploaded_by: await currentActor(), status: "active",
+      });
+    }
     await logSalesUpload(file.name, inserted, skipped);
     const { data: bounds } = await sb.rpc("sales_date_bounds");
     const totalAfter = Array.isArray(bounds) && bounds[0] ? (bounds[0].total_rows as number) : null;
-    return NextResponse.json({ ok: true, inserted, skipped, total_after: totalAfter });
+    return NextResponse.json({ ok: true, inserted, skipped, total_after: totalAfter, batch_id: inserted > 0 ? batchId : null });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

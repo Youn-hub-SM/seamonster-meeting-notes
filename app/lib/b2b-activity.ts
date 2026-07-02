@@ -20,7 +20,7 @@ type ActivityInput = {
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
-async function currentActor(): Promise<string | null> {
+export async function currentActor(): Promise<string | null> {
   try {
     const store = await cookies();
     return resolveUserName(store.get("b2b_auth")?.value);
@@ -268,6 +268,13 @@ export async function logSalesUpload(filename: string, inserted: number, skipped
     event_type: "sales.upload",
     summary: `📈 매출 업로드 · ${filename} · 신규 ${inserted.toLocaleString()}건${skipped ? ` (중복 ${skipped.toLocaleString()} 제외)` : ""}`,
     meta: { filename, inserted, skipped },
+  });
+}
+export async function logSalesUploadRevert(filename: string, batchId: string, deleted: number): Promise<void> {
+  await recordActivity({
+    event_type: "sales.upload_revert",
+    summary: `↩️ 매출 업로드 되돌리기 · ${filename || batchId} · ${deleted.toLocaleString()}건 삭제`,
+    meta: { filename, batchId, deleted },
   });
 }
 export async function logSalesReportSent(reportType: "daily" | "weekly", baseDate: string, recipients: number): Promise<void> {
