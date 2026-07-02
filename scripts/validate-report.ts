@@ -25,7 +25,7 @@ async function main() {
     console.error("env 없음: NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SALES_PII_PEPPER"); process.exit(1);
   }
   const { computeDailyStats, computeWeeklyStats, maxOrderDate } = await import("../app/lib/sales-report");
-  const { buildDailyHtml } = await import("../app/lib/sales-report-html");
+  const { buildDailyHtml, buildWeeklyHtml } = await import("../app/lib/sales-report-html");
 
   const base = process.argv[2] || (await maxOrderDate()) || "";
   console.log(`\n=== 기준일: ${base} ===`);
@@ -42,7 +42,8 @@ async function main() {
 
   // 주간(기준일이 속한 주)
   const w = await computeWeeklyStats(base);
-  console.log(`[주간] ${w.week_start}~${w.week_end}: ${won(w.week_sales)} (전주 ${won(w.prev_week_sales)}) | 신규:재구매 ${w.new_cust}:${w.repeat_cust}`);
+  console.log(`[주간] ${w.week_start}~${w.week_end}: ${won(w.week_sales)} (전주 ${won(w.prev_week_sales)}) | 주문 ${w.order_count}건 | 신규:재구매 ${w.new_cust}:${w.repeat_cust}`);
+  console.log(`  주간 HTML 길이: ${buildWeeklyHtml(w).length} chars`);
   console.log("\n검증 완료.");
 }
 

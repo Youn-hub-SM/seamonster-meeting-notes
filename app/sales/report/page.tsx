@@ -94,7 +94,7 @@ export default function SalesReportPage() {
       {rpt?.ok && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">{rpt.subject}</span></div>
-          {rpt.report_type === "daily" && rpt.html ? (
+          {rpt.html ? (
             <iframe title="리포트 미리보기" srcDoc={rpt.html} style={{ width: "100%", height: 640, border: "1px solid var(--sm-border)", borderRadius: 8, background: "#fff" }} />
           ) : (
             <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.7, background: "var(--sm-surface-2, #f7fafb)", padding: 16, borderRadius: 8, border: "1px solid var(--sm-border)", fontFamily: "inherit" }}>{rpt.text}</pre>

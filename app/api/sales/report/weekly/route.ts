@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { computeWeeklyStats, buildWeeklyText, maxOrderDate } from "@/app/lib/sales-report";
+import { buildWeeklyHtml } from "@/app/lib/sales-report-html";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true, report_type: "weekly", base_date: base, period_start: s.week_start, period_end: s.week_end,
       subject: `[씨몬스터] 주간 매출 리포트 - ${s.week_start} ~ ${s.week_end}`,
-      text: buildWeeklyText(s),
+      html: buildWeeklyHtml(s), text: buildWeeklyText(s),
     });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });

@@ -111,7 +111,7 @@ export type WeeklyStats = {
   channels: { name: string; week: number; prev_week: number }[];
   top10: { rank: number; code: string; revenue: number }[];
   new_cust: number; repeat_cust: number; total_cust: number; new_ratio: number; repeat_ratio: number;
-  aov: number; max_order: number; min_order: number; max_codes: string; min_codes: string;
+  aov: number; order_count: number; max_order: number; min_order: number; max_codes: string; min_codes: string;
 };
 
 export async function computeWeeklyStats(baseIso: string): Promise<WeeklyStats> {
@@ -146,7 +146,7 @@ export async function computeWeeklyStats(baseIso: string): Promise<WeeklyStats> 
     top10: top.map((t, i) => ({ rank: i + 1, code: String(t.sku_code), revenue: n(t.revenue) })),
     new_cust: n(nrr.new_cust), repeat_cust: n(nrr.repeat_cust), total_cust: total,
     new_ratio: total > 0 ? n(nrr.new_cust) / total * 100 : 0, repeat_ratio: total > 0 ? n(nrr.repeat_cust) / total * 100 : 0,
-    aov: n(e.aov), max_order: n(e.max_order), min_order: n(e.min_order), max_codes: codesStr(maxCodes), min_codes: codesStr(minCodes),
+    aov: n(e.aov), order_count: n(e.order_count), max_order: n(e.max_order), min_order: n(e.min_order), max_codes: codesStr(maxCodes), min_codes: codesStr(minCodes),
   };
 }
 
