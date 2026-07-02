@@ -44,7 +44,7 @@ export default function SalesProfitPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">채널별 매출·이익</h1>
-          <p className="b2b-page-subtitle">기간 매출(Supabase)에 원가·중량·택배보냉비·채널수수료를 적용해 채널별 매출총이익을 계산합니다. <strong>원가(제조+포장재)·중량은 상품마스터(products) 기준</strong>.</p>
+          <p className="b2b-page-subtitle">기간 매출(Supabase)에 원가·중량·택배보냉비·채널수수료를 적용해 채널별 매출총이익을 계산합니다. <strong>원가(제조+포장재)·중량은 상품마스터(products) 기준, 묶음상품은 구성품 합으로 산출</strong>.</p>
         </div>
       </header>
 
@@ -59,7 +59,7 @@ export default function SalesProfitPage() {
           <a className="b2b-btn-secondary" href="/b2b/products" target="_blank" rel="noreferrer" style={{ marginLeft: "auto" }}>상품마스터 열기 ↗</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
-          원가=상품마스터 <code>cost_price</code>(제조원가+포장재), 중량=<code>volume_kg</code>. 수수료율(스마트스토어10·쿠팡12·카페244·토스12·톡스토어12%)·배송비매출(주문당 4,000원)·택배포장 표는 파이썬 값 그대로. 상품마스터에 원가·부피가 없는 SKU는 아래 <strong>미매칭</strong>으로 표시됩니다.
+          원가=상품마스터 <code>cost_price</code>(제조원가+포장재), 중량=<code>volume_kg</code>. <strong>묶음상품은 구성품(product_bundles) 합</strong>으로 자동 산출. 수수료율(스마트스토어10·쿠팡12·카페244·토스12·톡스토어12%)·배송비매출(주문당 4,000원)·택배포장 표는 파이썬 값 그대로. 원가·부피가 없는 SKU는 아래 <strong>미매칭</strong>으로 표시됩니다.
         </p>
       </section>
 
@@ -98,7 +98,7 @@ export default function SalesProfitPage() {
             <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
             <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 엑셀</button>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>상품마스터에 <strong>원가(cost_price) 또는 부피(volume_kg)가 없는</strong> SKU입니다(원가 0·중량 0으로 계산됨). <a href="/b2b/products" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>상품마스터</a>에서 이 코드들의 원가·부피를 채우면 매칭됩니다(원가표 CSV 임포트로 일괄 입력 가능). 엑셀은 채울 목록 참고용입니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>products에 없거나(TD_증정·DRYICE·프로모 등), 묶음이면 <strong>구성품</strong>·단품이면 <strong>자기</strong> 원가·부피가 없는 SKU입니다(원가 0·중량 0으로 계산됨). <a href="/b2b/products" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>상품마스터</a>에서 해당 상품(또는 묶음 구성품)의 원가·부피를 채우거나 <a href="/inventory/bundles" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>묶음 구성</a>을 등록하면 매칭됩니다. 엑셀은 채울 목록 참고용입니다.</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>
             <table className="b2b-table" style={{ fontSize: 12.5 }}>
               <thead><tr><th>관리코드</th><th style={{ textAlign: "right" }}>라인수</th><th style={{ textAlign: "right" }}>수량합</th><th style={{ textAlign: "right" }}>결제금액합</th><th>판매처</th></tr></thead>
