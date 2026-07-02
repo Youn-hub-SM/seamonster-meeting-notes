@@ -27,13 +27,14 @@ export async function POST(req: NextRequest) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await file.arrayBuffer());
 
+    // exceljs .values 는 index 0 에 빈 슬롯(hole)이 있어 map 이 이를 건너뜀 → Array.from 으로 홀 제거.
+    const headerOf = (w: ExcelJS.Worksheet) => { const raw = w.getRow(1).values as unknown[]; return Array.from({ length: raw.length }, (_, i) => cellStr(raw[i])); };
     // 관리코드 헤더가 있는 시트 선택(없으면 첫 시트)
     let ws = wb.worksheets[0];
     for (const w of wb.worksheets) {
-      const hdr = (w.getRow(1).values as unknown[]).map((v) => cellStr(v));
-      if (hdr.some((h) => h.includes("관리코드"))) { ws = w; break; }
+      if (headerOf(w).some((h) => h.includes("관리코드"))) { ws = w; break; }
     }
-    const header = (ws.getRow(1).values as unknown[]).map((v) => cellStr(v));
+    const header = headerOf(ws);
     const findCol = (...names: string[]) => header.findIndex((h) => names.some((n) => h.replace(/\s/g, "").includes(n)));
     const cCode = findCol("관리코드");
     const cWeight = findCol("중량");
