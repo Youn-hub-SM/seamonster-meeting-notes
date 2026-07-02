@@ -51,7 +51,7 @@ export default function SalesProfitPage() {
   }
 
   return (
-    <div className="b2b-container" style={{ maxWidth: 1100 }}>
+    <>
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">채널별 매출·이익</h1>
@@ -124,6 +124,6 @@ export default function SalesProfitPage() {
           </div>
         </section>
       )}
-    </div>
+    </>
   );
 }
