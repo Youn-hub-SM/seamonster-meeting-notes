@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import SalesReportPanel from "../SalesReportPanel";
 
 type Preview = {
   ok: boolean; error?: string;
@@ -24,6 +25,7 @@ export default function SalesUploadPage() {
   const [err, setErr] = useState("");
   const [batches, setBatches] = useState<Batch[]>([]);
   const [reverting, setReverting] = useState("");
+  const [applyNonce, setApplyNonce] = useState(0);   // 적용 성공마다 +1 → 인라인 리포트 패널 새로고침(재생성)
 
   function loadBatches() { fetch("/api/sales/upload/batches").then((r) => r.json()).then((j) => { if (j.ok) setBatches(j.batches); }).catch(() => {}); }
   useEffect(() => { loadBatches(); }, []);
@@ -63,7 +65,7 @@ export default function SalesUploadPage() {
       const r = await fetch("/api/sales/upload/apply", { method: "POST", body: fd });
       const j = await r.json();
       if (!j.ok) setErr(j.error || "적용 실패");
-      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); }
+      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); setApplyNonce((n) => n + 1); }
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
   }
@@ -93,6 +95,14 @@ export default function SalesUploadPage() {
           <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>적용 완료 ✓</span></div>
           <p style={{ fontSize: 14 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
         </section>
+      )}
+
+      {applied && (
+        <div style={{ marginTop: 20 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 4px" }}>바로 리포트 만들기 · 발송</h2>
+          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>방금 업로드한 데이터의 <strong>최신일 기준 일일 리포트</strong>가 자동 생성됩니다. 주간 전환·기준일 변경 후 그대로 발송할 수 있어요.</p>
+          <SalesReportPanel key={applyNonce} autoGenerate />
+        </div>
       )}
 
       {s && (
