@@ -46,13 +46,17 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const rows: { sku_code: string; product_name: string | null; weight_kg: number; cost_price: number; updated_at: string }[] = [];
     const seen = new Set<string>();
+    let skippedBlank = 0;
     ws.eachRow((row, i) => {
       if (i === 1) return;
       const vals = row.values as unknown[];
       const code = cellStr(vals[cCode]);
       if (!code || seen.has(code)) return;
+      const weight = cellNum(vals[cWeight]);
+      const cost = Math.round(cellNum(vals[cCost]));
+      if (weight === 0 && cost === 0) { skippedBlank++; return; } // 중량·원가 미입력(빈 행)은 스킵 → 0 등록 방지
       seen.add(code);
-      rows.push({ sku_code: code, product_name: cName >= 0 ? cellStr(vals[cName]) || null : null, weight_kg: cellNum(vals[cWeight]), cost_price: Math.round(cellNum(vals[cCost])), updated_at: now });
+      rows.push({ sku_code: code, product_name: cName >= 0 ? cellStr(vals[cName]) || null : null, weight_kg: weight, cost_price: cost, updated_at: now });
     });
     if (rows.length === 0) return NextResponse.json({ ok: false, error: "유효한 원가 행이 없습니다." }, { status: 400 });
 
@@ -62,7 +66,7 @@ export async function POST(req: NextRequest) {
       if (error) return NextResponse.json({ ok: false, error: `저장 오류: ${error.message}. 043 적용 여부 확인.` }, { status: 500 });
     }
     const { count } = await sb.from("sales_sku_cost").select("sku_code", { count: "exact", head: true });
-    return NextResponse.json({ ok: true, upserted: rows.length, total: count ?? null });
+    return NextResponse.json({ ok: true, upserted: rows.length, skipped_blank: skippedBlank, total: count ?? null });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

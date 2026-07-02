@@ -39,7 +39,7 @@ export default function SalesProfitPage() {
       const r = await fetch("/api/sales/profit/cost-upload", { method: "POST", body: fd });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "업로드 실패");
-      setCostMsg(`원가·중량 ${j.upserted.toLocaleString()}개 갱신 (총 ${j.total?.toLocaleString?.() ?? "-"}개)`);
+      setCostMsg(`원가·중량 ${j.upserted.toLocaleString()}개 갱신${j.skipped_blank ? ` (빈행 ${j.skipped_blank}개 제외)` : ""} · 총 ${j.total?.toLocaleString?.() ?? "-"}개`);
       await calc();
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); if (fileRef.current) fileRef.current.value = ""; }
@@ -48,6 +48,10 @@ export default function SalesProfitPage() {
   function exportXlsx() {
     if (!res) return;
     window.open(`/api/sales/profit/export?from=${res.from}&to=${res.to}`, "_blank");
+  }
+  function exportUnmatchedTemplate() {
+    if (!res) return;
+    window.open(`/api/sales/profit/unmatched-template?from=${res.from}&to=${res.to}`, "_blank");
   }
 
   return (
@@ -110,8 +114,11 @@ export default function SalesProfitPage() {
 
       {res && res.unmatched.length > 0 && (
         <section className="b2b-card" style={{ marginTop: 12, borderColor: "var(--sm-warning)" }}>
-          <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 관리코드 {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span></div>
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가·중량 백데이터에 없는 코드입니다(원가 0·중량 0으로 계산됨). 백데이터에 추가한 뒤 다시 업로드하면 정확해집니다.</p>
+          <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 관리코드 {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
+            <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 코드 양식 추출</button>
+          </div>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가·중량 백데이터에 없는 코드입니다(원가 0·중량 0으로 계산됨). <strong>①양식 추출</strong> → 노란칸(중량·상품원가) 채우기 → 상단 <strong>②"원가·중량 백데이터 업로드"</strong>로 올리면 매칭됩니다. (빈칸으로 둔 행은 등록되지 않습니다)</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>
             <table className="b2b-table" style={{ fontSize: 12.5 }}>
               <thead><tr><th>관리코드</th><th style={{ textAlign: "right" }}>라인수</th><th style={{ textAlign: "right" }}>수량합</th><th style={{ textAlign: "right" }}>결제금액합</th><th>판매처</th></tr></thead>
