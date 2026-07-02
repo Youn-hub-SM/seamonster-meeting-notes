@@ -44,3 +44,6 @@ next-env.d.ts
 
 # claude code local settings
 .claude/
+
+# 매출 파이썬 원본(참고용, 평문 SMTP 비밀번호 포함 → 절대 커밋 금지)
+/매출리포트_*.py
