@@ -38,6 +38,7 @@ export default function VocPage() {
   const [fTo, setFTo] = useState("");
   const [edit, setEdit] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
+  const [flowBusy, setFlowBusy] = useState("");   // flow 등록 중인 VOC id
   const [uploading, setUploading] = useState(false);
   // 엑셀 일괄 등록
   const [importing, setImporting] = useState(false);
@@ -149,6 +150,20 @@ export default function VocPage() {
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "변경 실패");
     } catch (e) { setError(e instanceof Error ? e.message : "변경 실패"); await load(); }
+  }
+
+  // flow(플로우)에 업무로 등록 — 클릭 1회. 성공 시 '등록됨' 표시(중복 방지).
+  async function registerFlow(r: Voc) {
+    if (r.flow_task_at) { setError("이미 flow에 등록된 VOC입니다."); return; }
+    if (!window.confirm(`이 VOC를 flow에 업무로 등록할까요?\n제목: [VOC/${r.category}] ${r.product || "상품미상"} - ${r.customer || "고객"}`)) return;
+    setFlowBusy(r.id); setError("");
+    try {
+      const res = await fetch("/api/voc/flow-task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "flow 등록 실패");
+      setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, flow_task_at: j.flow_task_at, flow_task_id: j.flow_task_id, flow_project_id: j.flow_project_id } : x)));
+    } catch (e) { setError(e instanceof Error ? e.message : "flow 등록 실패"); }
+    setFlowBusy("");
   }
 
   async function remove() {
@@ -314,15 +329,25 @@ export default function VocPage() {
                   <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
                   <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.resolution || ""}>{r.resolution || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <select
-                      value={r.status}
-                      onChange={(e) => changeStatus(r, e.target.value)}
-                      className="b2b-input"
-                      style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: sc.bg, color: sc.fg, fontWeight: 700, border: "none", borderRadius: 8 }}
-                    >
-                      {VOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      {!VOC_STATUSES.includes(r.status) && <option value={r.status}>{r.status}</option>}
-                    </select>
+                    <div className="sm-row" style={{ gap: 6, alignItems: "center" }}>
+                      <select
+                        value={r.status}
+                        onChange={(e) => changeStatus(r, e.target.value)}
+                        className="b2b-input"
+                        style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: sc.bg, color: sc.fg, fontWeight: 700, border: "none", borderRadius: 8 }}
+                      >
+                        {VOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        {!VOC_STATUSES.includes(r.status) && <option value={r.status}>{r.status}</option>}
+                      </select>
+                      {r.flow_task_at ? (
+                        <span title={`flow 등록됨 · ${r.flow_task_at.slice(0, 10)}`} style={{ fontSize: 11, fontWeight: 800, color: "var(--sm-success)", whiteSpace: "nowrap" }}>✓ flow</span>
+                      ) : (
+                        <button className="b2b-link-btn" onClick={() => registerFlow(r)} disabled={flowBusy === r.id}
+                          title="flow(플로우)에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: "var(--sm-primary, #2b6ef2)" }}>
+                          {flowBusy === r.id ? "등록중…" : "→ flow"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
                 );
@@ -475,7 +500,15 @@ export default function VocPage() {
               </div>
             </div>
             <div className="b2b-modal-foot">
-              {edit.id ? <button className="b2b-btn-secondary" onClick={remove} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button> : <span />}
+              <div className="sm-row" style={{ gap: 8, alignItems: "center" }}>
+                {edit.id ? <button className="b2b-btn-secondary" onClick={remove} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button> : <span />}
+                {edit.id && (() => {
+                  const er = rows.find((r) => r.id === edit.id);
+                  return er?.flow_task_at
+                    ? <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>flow 등록됨 ✓</span>
+                    : <button className="b2b-btn-secondary" onClick={() => er && registerFlow(er)} disabled={!er || flowBusy === edit.id}>{flowBusy === edit.id ? "flow 등록중…" : "flow에 업무 등록"}</button>;
+                })()}
+              </div>
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setEdit(null)}>취소</button>
                 <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>

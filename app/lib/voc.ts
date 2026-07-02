@@ -96,6 +96,9 @@ export interface Voc {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  flow_task_id?: string | null;    // flow(플로우) 업무 등록 식별자
+  flow_project_id?: string | null; // 등록된 flow 프로젝트
+  flow_task_at?: string | null;    // 등록 시각(값 있으면 flow에 등록됨)
 }
 
 // 상태별 색 (목록 뱃지)
