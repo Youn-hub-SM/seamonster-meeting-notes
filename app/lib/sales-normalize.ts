@@ -21,10 +21,17 @@ export function normalizeColname(s: unknown): string {
   return (s == null ? "" : String(s)).trim().replace(ZERO_WIDTH_AND_SPACES, "");
 }
 
-// 전화 → 숫자만(해시 입력). 파이썬 load_dataframe 규칙 정본. formatPhone(하이픈)과 절대 혼용 금지.
+// 전화 → 숫자만(해시 입력). formatPhone(하이픈)과 절대 혼용 금지.
+//  더미/마스킹 번호(쿠팡 010-0000-0000 등)는 '전화 없음'(빈 문자열)으로 처리 → customer_key 미생성 →
+//  신규/재구매 판정 오염 방지(파이썬은 이걸 한 고객으로 뭉치던 잠재 버그).
 export function normalizePhoneDigits(raw: unknown): string {
   if (raw == null) return "";
-  return String(raw).normalize("NFKC").replace(/[^0-9]/g, "");
+  const d = String(raw).normalize("NFKC").replace(/[^0-9]/g, "");
+  if (!d) return "";
+  if (d.length < 9) return "";            // 너무 짧음(유효 휴대폰 아님)
+  if (/^(\d)\1+$/.test(d)) return "";     // 전부 같은 숫자(0000…, 1111…)
+  if (/0{8,}$/.test(d)) return "";        // 뒤 8자리 이상 0 = 마스킹(010-0000-0000 등)
+  return d;
 }
 
 // customer_key = HMAC-SHA256(pepper, digits). 빈 전화 → ''(해시 안 함; 무전화 고객 뭉침 방지).
