@@ -261,3 +261,28 @@ export async function logPaymentAdded(orderId: string, amount: number, method: s
     meta: { amount, method },
   });
 }
+
+// ── 매출(sales) ──
+export async function logSalesUpload(filename: string, inserted: number, skipped: number): Promise<void> {
+  await recordActivity({
+    event_type: "sales.upload",
+    summary: `📈 매출 업로드 · ${filename} · 신규 ${inserted.toLocaleString()}건${skipped ? ` (중복 ${skipped.toLocaleString()} 제외)` : ""}`,
+    meta: { filename, inserted, skipped },
+  });
+}
+export async function logSalesReportSent(reportType: "daily" | "weekly", baseDate: string, recipients: number): Promise<void> {
+  await recordActivity({
+    event_type: "sales.report_sent",
+    summary: `✉️ ${reportType === "weekly" ? "주간" : "일일"} 매출 리포트 발송 · ${baseDate} · 수신 ${recipients}명`,
+    meta: { reportType, baseDate, recipients },
+  });
+}
+// 전화번호 조회 감사 — 번호는 뒤4자리만 기록(내부 오남용 억제).
+export async function logPhoneLookup(phoneDigits: string): Promise<void> {
+  const masked = phoneDigits ? `***${phoneDigits.slice(-4)}` : "(빈값)";
+  await recordActivity({
+    event_type: "sales.phone_lookup",
+    summary: `🔎 주문 검색(전화 조회) · ${masked}`,
+    meta: { masked },
+  });
+}
