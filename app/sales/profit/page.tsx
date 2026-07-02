@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { PROFIT_COLS, type ProfitRow } from "@/app/lib/sales-profit";
 
 type Unmatched = { sku_code: string; line_count: number; qty_sum: number; amount_sum: number; channels: string };
-type Result = { ok: boolean; error?: string; from: string; to: string; rows: ProfitRow[]; totals: ProfitRow; unmatched: Unmatched[]; cost_count: number | null; unmatched_amount: number };
+type Result = { ok: boolean; error?: string; from: string; to: string; rows: ProfitRow[]; totals: ProfitRow; unmatched: Unmatched[]; unmatched_amount: number };
 
 const won = (n: number) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
 const fmt = (r: ProfitRow, key: keyof ProfitRow, money?: boolean, pct?: boolean) =>
@@ -14,10 +14,8 @@ export default function SalesProfitPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [res, setRes] = useState<Result | null>(null);
-  const [busy, setBusy] = useState<"" | "calc" | "cost">("");
+  const [busy, setBusy] = useState<"" | "calc">("");
   const [err, setErr] = useState("");
-  const [costMsg, setCostMsg] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
 
   async function calc(f = from, t = to) {
     setBusy("calc"); setErr("");
@@ -31,19 +29,6 @@ export default function SalesProfitPage() {
     finally { setBusy(""); }
   }
   useEffect(() => { calc(); /* 최초: 최신 달 자동 */ /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
-
-  async function uploadCost(file: File) {
-    setBusy("cost"); setErr(""); setCostMsg("");
-    try {
-      const fd = new FormData(); fd.append("file", file);
-      const r = await fetch("/api/sales/profit/cost-upload", { method: "POST", body: fd });
-      const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "업로드 실패");
-      setCostMsg(`원가·중량 ${j.upserted.toLocaleString()}개 갱신${j.skipped_blank ? ` (빈행 ${j.skipped_blank}개 제외)` : ""} · 총 ${j.total?.toLocaleString?.() ?? "-"}개`);
-      await calc();
-    } catch (e) { setErr((e as Error).message); }
-    finally { setBusy(""); if (fileRef.current) fileRef.current.value = ""; }
-  }
 
   function exportXlsx() {
     if (!res) return;
@@ -59,7 +44,7 @@ export default function SalesProfitPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">채널별 매출·이익</h1>
-          <p className="b2b-page-subtitle">기간 매출(Supabase)에 원가·중량·택배보냉비·채널수수료를 적용해 채널별 매출총이익을 계산합니다. 원가/중량은 백데이터(관리코드별) 기준.</p>
+          <p className="b2b-page-subtitle">기간 매출(Supabase)에 원가·중량·택배보냉비·채널수수료를 적용해 채널별 매출총이익을 계산합니다. <strong>원가(제조+포장재)·중량은 상품마스터(products) 기준</strong>.</p>
         </div>
       </header>
 
@@ -71,16 +56,11 @@ export default function SalesProfitPage() {
           <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="b2b-input" style={{ width: 160 }} />
           <button className="b2b-btn-primary" onClick={() => calc()} disabled={busy !== ""}>{busy === "calc" ? "계산 중…" : "계산"}</button>
           {res && <button className="b2b-btn-secondary" onClick={exportXlsx} disabled={busy !== ""}>엑셀 추출</button>}
-          <label className="b2b-btn-secondary" style={{ cursor: busy ? "default" : "pointer", marginLeft: "auto" }}>
-            {busy === "cost" ? "업로드 중…" : "원가·중량 백데이터 업로드"}
-            <input ref={fileRef} type="file" accept=".xlsx" style={{ display: "none" }} disabled={busy !== ""} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCost(f); }} />
-          </label>
+          <a className="b2b-btn-secondary" href="/b2b/products" target="_blank" rel="noreferrer" style={{ marginLeft: "auto" }}>상품마스터 열기 ↗</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
-          원가·중량 <strong>{res?.cost_count ?? "-"}</strong>개 등록됨. 수수료율(스마트스토어10·쿠팡12·카페244·토스12·톡스토어12%)·배송비매출(주문당 4,000원)·택배포장 표는 파이썬 값 그대로.
-          {res?.cost_count === 0 && <span style={{ color: "var(--sm-warning)" }}> · 원가 데이터가 없습니다. 백데이터 xlsx를 먼저 업로드하세요.</span>}
+          원가=상품마스터 <code>cost_price</code>(제조원가+포장재), 중량=<code>volume_kg</code>. 수수료율(스마트스토어10·쿠팡12·카페244·토스12·톡스토어12%)·배송비매출(주문당 4,000원)·택배포장 표는 파이썬 값 그대로. 상품마스터에 원가·부피가 없는 SKU는 아래 <strong>미매칭</strong>으로 표시됩니다.
         </p>
-        {costMsg && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 4 }}>✓ {costMsg}</p>}
       </section>
 
       {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>⚠️ {err}</p>}
@@ -115,10 +95,10 @@ export default function SalesProfitPage() {
       {res && res.unmatched.length > 0 && (
         <section className="b2b-card" style={{ marginTop: 12, borderColor: "var(--sm-warning)" }}>
           <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 관리코드 {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
-            <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 코드 양식 추출</button>
+            <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
+            <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 엑셀</button>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가·중량 백데이터에 없는 코드입니다(원가 0·중량 0으로 계산됨). <strong>①양식 추출</strong> → 노란칸(중량·상품원가) 채우기 → 상단 <strong>②"원가·중량 백데이터 업로드"</strong>로 올리면 매칭됩니다. (빈칸으로 둔 행은 등록되지 않습니다)</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>상품마스터에 <strong>원가(cost_price) 또는 부피(volume_kg)가 없는</strong> SKU입니다(원가 0·중량 0으로 계산됨). <a href="/b2b/products" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>상품마스터</a>에서 이 코드들의 원가·부피를 채우면 매칭됩니다(원가표 CSV 임포트로 일괄 입력 가능). 엑셀은 채울 목록 참고용입니다.</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>
             <table className="b2b-table" style={{ fontSize: 12.5 }}>
               <thead><tr><th>관리코드</th><th style={{ textAlign: "right" }}>라인수</th><th style={{ textAlign: "right" }}>수량합</th><th style={{ textAlign: "right" }}>결제금액합</th><th>판매처</th></tr></thead>
