@@ -17,6 +17,7 @@ type ActivityInput = {
   order_id?: string | null;
   order_no?: string | null;
   meta?: Record<string, unknown>;
+  notify?: boolean;   // false면 DB 감사기록만 남기고 외부 웹훅(Zapier)은 보내지 않음. 매출 등 비-B2B 이벤트용.
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
@@ -52,7 +53,8 @@ async function recordActivity(input: ActivityInput): Promise<void> {
   }
 
   // 2) Zapier(또는 호환 외부 웹훅) 전송 — ZAPIER_WEBHOOK_URL 미설정 시 스킵
-  await sendWebhook(input, actor);
+  //    notify:false(매출 등 비-B2B 감사이벤트)는 외부 알림 없이 DB 기록만.
+  if (input.notify !== false) await sendWebhook(input, actor);
 }
 
 // 외부 웹훅 전송 (Zapier Catch Hook 등). fire-and-forget.
@@ -262,12 +264,13 @@ export async function logPaymentAdded(orderId: string, amount: number, method: s
   });
 }
 
-// ── 매출(sales) ──
+// ── 매출(sales) ── 비-B2B. 전부 notify:false → 외부 웹훅(Zapier) 미발송, DB 감사기록만.
 export async function logSalesUpload(filename: string, inserted: number, skipped: number): Promise<void> {
   await recordActivity({
     event_type: "sales.upload",
     summary: `📈 매출 업로드 · ${filename} · 신규 ${inserted.toLocaleString()}건${skipped ? ` (중복 ${skipped.toLocaleString()} 제외)` : ""}`,
     meta: { filename, inserted, skipped },
+    notify: false,
   });
 }
 export async function logSalesUploadRevert(filename: string, batchId: string, deleted: number): Promise<void> {
@@ -275,6 +278,7 @@ export async function logSalesUploadRevert(filename: string, batchId: string, de
     event_type: "sales.upload_revert",
     summary: `↩️ 매출 업로드 되돌리기 · ${filename || batchId} · ${deleted.toLocaleString()}건 삭제`,
     meta: { filename, batchId, deleted },
+    notify: false,
   });
 }
 export async function logSalesReportSent(reportType: "daily" | "weekly", baseDate: string, recipients: number): Promise<void> {
@@ -282,14 +286,16 @@ export async function logSalesReportSent(reportType: "daily" | "weekly", baseDat
     event_type: "sales.report_sent",
     summary: `✉️ ${reportType === "weekly" ? "주간" : "일일"} 매출 리포트 발송 · ${baseDate} · 수신 ${recipients}명`,
     meta: { reportType, baseDate, recipients },
+    notify: false,
   });
 }
-// 전화번호 조회 감사 — 번호는 뒤4자리만 기록(내부 오남용 억제).
+// 전화번호 조회 감사 — 번호는 뒤4자리만 기록(내부 오남용 억제). 외부 알림 없이 DB에만 남김.
 export async function logPhoneLookup(phoneDigits: string): Promise<void> {
   const masked = phoneDigits ? `***${phoneDigits.slice(-4)}` : "(빈값)";
   await recordActivity({
     event_type: "sales.phone_lookup",
     summary: `🔎 주문 검색(전화 조회) · ${masked}`,
     meta: { masked },
+    notify: false,
   });
 }

@@ -30,6 +30,9 @@ export async function GET(req: NextRequest) {
     if (type) {
       const types = type.split(",").map((s) => s.trim()).filter(Boolean);
       query = types.length > 1 ? query.in("event_type", types) : query.eq("event_type", types[0]);
+    } else {
+      // 매출(sales.*)은 B2B가 아니므로 기본 피드/히스토리에서 제외(명시적 type 필터 시엔 조회 가능).
+      query = query.not("event_type", "like", "sales.%");
     }
     if (actor) query = query.eq("actor", actor);
     if (q) query = query.ilike("summary", `%${q}%`);
