@@ -33,6 +33,9 @@ export const getFlowBase = async () => (await getVal("flow_api_base")) || DEFAUL
 export const setFlowBase = (s: string) => setVal("flow_api_base", s);
 export const getFlowDefaultPriority = async () => (await getVal("flow_default_priority")) || "normal";
 export const setFlowDefaultPriority = (s: string) => setVal("flow_default_priority", s);
+// 기본 담당자(workerId=이메일). 프로젝트 멤버여야 flow가 수락. 비우면 담당자 미지정.
+export const getFlowDefaultWorker = () => getVal("flow_default_worker");
+export const setFlowDefaultWorker = (s: string) => setVal("flow_default_worker", s);
 
 // VOC 처리단계 → flow 업무 상태
 export function vocStatusToFlow(status: string): "request" | "progress" | "complete" {

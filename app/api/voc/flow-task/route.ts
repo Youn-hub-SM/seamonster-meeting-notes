@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import type { Voc } from "@/app/lib/voc";
-import { getFlowApiKey, getFlowProjectId, getFlowBase, getFlowDefaultPriority, buildFlowTaskFromVoc, vocStatusToFlow, createFlowTask, type FlowTaskBody } from "@/app/lib/voc-flow";
+import { getFlowApiKey, getFlowProjectId, getFlowBase, getFlowDefaultPriority, getFlowDefaultWorker, buildFlowTaskFromVoc, vocStatusToFlow, createFlowTask, type FlowTaskBody } from "@/app/lib/voc-flow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const v = voc as Voc & { flow_task_at?: string | null };
     if (v.flow_task_at) return NextResponse.json({ ok: false, error: "이미 flow에 등록된 VOC입니다.", already: true }, { status: 409 });
 
-    const [apiKey, defaultProject, base, defaultPriority] = await Promise.all([getFlowApiKey(), getFlowProjectId(), getFlowBase(), getFlowDefaultPriority()]);
+    const [apiKey, defaultProject, base, defaultPriority, defaultWorker] = await Promise.all([getFlowApiKey(), getFlowProjectId(), getFlowBase(), getFlowDefaultPriority(), getFlowDefaultWorker()]);
     const projectId = (body.projectId || defaultProject || "").trim();
     if (!apiKey) return NextResponse.json({ ok: false, error: "flow API 키가 설정되지 않았습니다. VOC 설정에서 등록하세요." }, { status: 400 });
     if (!projectId) return NextResponse.json({ ok: false, error: "flow 프로젝트 ID가 없습니다. VOC 설정에서 기본 projectId를 등록하세요." }, { status: 400 });
@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
       viewPermission: "all",
     };
     if (body.endDate) taskBody.endDate = body.endDate.replace(/-/g, "").slice(0, 8);
-    if (body.workerId && body.workerId.trim()) taskBody.workers = [{ workerId: body.workerId.trim() }];
+    // 담당자: 요청에 있으면 우선, 없으면 설정의 기본 담당자. (flow 프로젝트 멤버여야 수락됨)
+    const worker = (body.workerId && body.workerId.trim()) || defaultWorker;
+    if (worker) taskBody.workers = [{ workerId: worker }];
 
     const r = await createFlowTask({ base, apiKey, projectId, body: taskBody });
     if (!r.ok) return NextResponse.json({ ok: false, error: r.error || "flow 등록 실패" }, { status: 502 });

@@ -21,6 +21,7 @@ export default function VocSettingsPage() {
   const [flowKey, setFlowKey] = useState("");
   const [flowProject, setFlowProject] = useState("");
   const [flowPriority, setFlowPriority] = useState("normal");
+  const [flowWorker, setFlowWorker] = useState("");
 
   const webhookUrl = origin ? `${origin}/api/voc/tally` : "/api/voc/tally";
 
@@ -30,7 +31,7 @@ export default function VocSettingsPage() {
       setHasApiKey(!!j.hasApiKey); setHasSecret(!!j.hasSecret); setFormId(j.formId || "");
     }).catch(() => {}).finally(() => setLoading(false));
     fetch("/api/voc/flow-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
-      if (j.ok) { setHasFlowKey(!!j.hasApiKey); setFlowProject(j.projectId || ""); setFlowPriority(j.priority || "normal"); }
+      if (j.ok) { setHasFlowKey(!!j.hasApiKey); setFlowProject(j.projectId || ""); setFlowPriority(j.priority || "normal"); setFlowWorker(j.worker || ""); }
     }).catch(() => {});
   }, []);
 
@@ -178,6 +179,15 @@ export default function VocSettingsPage() {
             <button className="b2b-btn-secondary" onClick={() => saveFlow({ priority: flowPriority }, "우선순위 저장됨", "flowpri")} disabled={busy === "flowpri"}>{busy === "flowpri" ? "저장 중…" : "저장"}</button>
           </div>
           <span className="sm-faint" style={{ fontSize: 12 }}>업무 상태는 VOC 단계에 맞춰 자동(접수→request · 응대·개선중→progress · 개선완료→complete)으로 등록됩니다.</span>
+        </div>
+
+        <div className="sm-col" style={{ gap: 6, marginTop: 14 }}>
+          <span className="b2b-field-label">4) 기본 담당자 (workerId · 이메일)</span>
+          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input className="b2b-input" type="email" value={flowWorker} onChange={(e) => setFlowWorker(e.target.value)} placeholder="예: seamonster2016@naver.com (비우면 미지정)" style={{ flex: 1, minWidth: 240 }} />
+            <button className="b2b-btn-secondary" onClick={() => saveFlow({ worker: flowWorker }, flowWorker.trim() ? "기본 담당자 저장됨" : "기본 담당자 해제됨", "flowworker")} disabled={busy === "flowworker"}>{busy === "flowworker" ? "저장 중…" : "저장"}</button>
+          </div>
+          <span className="sm-faint" style={{ fontSize: 12 }}>등록되는 업무의 담당자로 지정됩니다. <strong>반드시 플로우 프로젝트의 멤버 이메일</strong>이어야 합니다(아니면 flow가 거부). VOC별로 다르게 하려면 개별 등록 시 지정할 수 있게 추후 확장 가능.</span>
         </div>
       </section>
     </div>
