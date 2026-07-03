@@ -18,29 +18,47 @@ export async function GET() {
   }
 }
 
-// POST { rows: ChannelConfig[], deleted?: string[] } — 설정 upsert + 삭제된 채널 제거.
+// POST { rows: ChannelConfig[], deleted?: string[], replace?: boolean } — 설정 저장.
+//  · 같은 채널명이 여러 번 오면 마지막 값으로 dedup(upsert 중복키 충돌 방지).
+//  · replace!==false(기본)면 제출 목록에 없는 기존 채널 설정은 정리 → 이름변경/삭제로 생긴 고아 제거.
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { rows?: ChannelConfig[]; deleted?: string[] };
+    const body = (await req.json()) as { rows?: ChannelConfig[]; deleted?: string[]; replace?: boolean };
     const rows = (body.rows || []).filter((r) => r.channel && r.channel.trim());
     const sb = supabaseAdmin();
     const now = new Date().toISOString();
+
+    // 채널명 기준 dedup(마지막 값 우선)
+    const byCh = new Map<string, ChannelConfig>();
+    for (const r of rows) byCh.set(r.channel.trim(), r);
+    const clean = [...byCh.values()].map((r) => ({
+      channel: r.channel.trim(),
+      fee_rate: Math.min(1, Math.max(0, Number(r.fee_rate) || 0)),   // 0~100%로 클램프(오타로 500% 등 방지)
+      ship_mode: ["actual", "flat", "free_over", "none"].includes(r.ship_mode) ? r.ship_mode : "actual",
+      ship_fee: Math.max(0, Math.round(Number(r.ship_fee) || 0)),
+      ship_free_over: Math.max(0, Math.round(Number(r.ship_free_over) || 0)),
+      ship_free_over_sub: Math.max(0, Math.round(Number(r.ship_free_over_sub) || 0)),
+      revenue_adjust: Math.min(0.9, Math.max(0, Number(r.revenue_adjust) || 0)),
+      updated_at: now,
+    }));
+
+    // 명시적 삭제 목록(하위호환)
     if (body.deleted?.length) {
-      await sb.from("sales_channel_config").delete().in("channel", body.deleted.filter(Boolean));
+      const del = body.deleted.map((c) => (c || "").trim()).filter(Boolean);
+      if (del.length) await sb.from("sales_channel_config").delete().in("channel", del);
     }
-    if (rows.length) {
-      const clean = rows.map((r) => ({
-        channel: r.channel.trim(),
-        fee_rate: Math.max(0, Number(r.fee_rate) || 0),
-        ship_mode: ["actual", "flat", "free_over", "none"].includes(r.ship_mode) ? r.ship_mode : "actual",
-        ship_fee: Math.max(0, Math.round(Number(r.ship_fee) || 0)),
-        ship_free_over: Math.max(0, Math.round(Number(r.ship_free_over) || 0)),
-        ship_free_over_sub: Math.max(0, Math.round(Number(r.ship_free_over_sub) || 0)),
-        revenue_adjust: Math.min(0.9, Math.max(0, Number(r.revenue_adjust) || 0)),
-        updated_at: now,
-      }));
+
+    if (clean.length) {
       const { error } = await sb.from("sales_channel_config").upsert(clean, { onConflict: "channel" });
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+
+      // 전체 재조정: 제출 목록에 없는 채널은 제거(이름변경 시 옛 이름 고아 방지)
+      if (body.replace !== false) {
+        const keep = new Set(clean.map((c) => c.channel));
+        const { data: existing } = await sb.from("sales_channel_config").select("channel");
+        const orphans = (existing ?? []).map((e) => e.channel as string).filter((ch) => !keep.has(ch));
+        if (orphans.length) await sb.from("sales_channel_config").delete().in("channel", orphans);
+      }
     }
     return NextResponse.json({ ok: true });
   } catch (e) {

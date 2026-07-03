@@ -9,8 +9,15 @@ export const maxDuration = 30;
 // 주간 리포트 '미리보기'(DB 미기록). base가 속한 주(월~일). 생략 시 데이터 최신일 기준.
 export async function GET(req: NextRequest) {
   try {
-    const base = new URL(req.url).searchParams.get("base") || (await maxOrderDate());
-    if (!base) return NextResponse.json({ ok: false, error: "매출 데이터가 없습니다." }, { status: 400 });
+    let base = new URL(req.url).searchParams.get("base") || "";
+    if (!base) {
+      const max = await maxOrderDate();
+      if (!max) return NextResponse.json({ ok: false, error: "매출 데이터가 없습니다." }, { status: 400 });
+      // 기본값: 미완성(진행중) 주가 잡혀 전주 대비가 왜곡되지 않도록, 최근 '완료된 주'(가장 최근 일요일 ≤ 최신일)로 앵커.
+      const d = new Date(`${max}T00:00:00`);
+      d.setDate(d.getDate() - d.getDay());   // getDay: 일=0 → 그 주(또는 직전 주)의 일요일
+      base = d.toISOString().slice(0, 10);
+    }
     const s = await computeWeeklyStats(base);
     return NextResponse.json({
       ok: true, report_type: "weekly", base_date: base, period_start: s.week_start, period_end: s.week_end,

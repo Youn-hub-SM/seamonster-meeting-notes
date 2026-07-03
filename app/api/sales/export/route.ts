@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
       all.push(...batch);
       if (batch.length < PAGE) break;
     }
+    // HARD_CAP 에 걸려 절삭됐는지: 상한만큼 정확히 채워지면 그 이상 행이 남아있을 수 있음.
+    const truncated = all.length >= HARD_CAP;
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("매출");
@@ -60,6 +62,15 @@ export async function GET(req: NextRequest) {
     }
     ws.views = [{ state: "frozen", ySplit: 1 }];
 
+    if (truncated) {
+      // 상한 초과 → 일부만 추출됨을 파일 안에서도 명확히 안내(별도 시트).
+      const wa = wb.addWorksheet("⚠️안내");
+      wa.getColumn(1).width = 90;
+      wa.addRow([`이 파일은 안전 상한(${HARD_CAP.toLocaleString()}행)까지만 추출되었습니다. 결과가 더 많습니다.`]);
+      wa.addRow(["기간·판매처·검색어로 범위를 좁혀 나눠 받으세요."]);
+      wa.getRow(1).font = { bold: true, color: { argb: "FFB00020" } };
+    }
+
     const buf = await wb.xlsx.writeBuffer();
     const stamp = `${from || "all"}_${to || "all"}`.replace(/[^0-9a-zA-Z_-]/g, "");
     return new NextResponse(buf as ArrayBuffer, {
@@ -67,6 +78,7 @@ export async function GET(req: NextRequest) {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="sales_${stamp}.xlsx"`,
         "X-Row-Count": String(all.length),
+        "X-Truncated": truncated ? "1" : "0",
       },
     });
   } catch (e) {

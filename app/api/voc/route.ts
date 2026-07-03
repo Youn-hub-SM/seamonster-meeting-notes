@@ -65,8 +65,8 @@ export async function GET(req: NextRequest) {
     else q = q.neq("source", "설문");
     if (search) {
       // PostgREST or() 필터 주입 방지: 값을 따옴표로 감싸 콤마/괄호/점이 구분자로 해석되지 않게 하고,
-      // 내부 큰따옴표·백슬래시만 이스케이프, 길이 100자 제한.
-      const v = search.slice(0, 100).replace(/[\\"]/g, (m) => "\\" + m);
+      // 내부 큰따옴표·백슬래시 이스케이프, LIKE 와일드카드(% _)·PostgREST 와일드카드(*)는 공백으로 무력화, 길이 100자 제한.
+      const v = search.slice(0, 100).replace(/[\\"]/g, (m) => "\\" + m).replace(/[%_*]/g, " ");
       if (v.trim()) {
         const pat = `%${v}%`;
         q = q.or(`content.ilike."${pat}",customer.ilike."${pat}",product.ilike."${pat}"`);
