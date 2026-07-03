@@ -20,6 +20,7 @@ export default function ProductsPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
+  const [showBundles, setShowBundles] = useState(false); // 묶음(세트) 상품 표시 여부 — 기본 숨김
   const [modal, setModal] = useState<Modal>(null);
   const [saving, setSaving] = useState(false);
   const [historyFor, setHistoryFor] = useState<string | null>(null);
@@ -48,9 +49,12 @@ export default function ProductsPage() {
     reload();
   }, []);
 
+  const bundleCount = useMemo(() => products.filter((p) => p.is_bundle).length, [products]);
+
   const filtered = useMemo(() => {
     let arr = products;
     if (!showInactive) arr = arr.filter((p) => p.active);
+    if (!showBundles) arr = arr.filter((p) => !p.is_bundle); // 묶음(세트) 상품 숨김
     const q = search.trim().toLowerCase();
     if (q) {
       arr = arr.filter((p) =>
@@ -58,7 +62,7 @@ export default function ProductsPage() {
       );
     }
     return arr;
-  }, [products, search, showInactive]);
+  }, [products, search, showInactive, showBundles]);
 
   async function handleSave() {
     if (!modal) return;
@@ -87,7 +91,8 @@ export default function ProductsPage() {
           )
         );
       } else {
-        setProducts((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
+        // is_bundle/bundle_count 는 PUT 응답에 없으므로(파생값) 기존 값을 보존 — 배지 유지.
+        setProducts((prev) => prev.map((p) => (p.id === saved.id ? { ...saved, is_bundle: p.is_bundle, bundle_count: p.bundle_count } : p)));
       }
       setModal(null);
     } catch (err) {
@@ -182,7 +187,7 @@ export default function ProductsPage() {
           <h1 className="b2b-page-title">상품 마스터 (원가표)</h1>
           <p className="b2b-page-subtitle">
             전사 상품 단일 목록 — 여기서 수정하면 생산관리·발주·VOC 등 모든 곳에 반영됩니다. 원가 수정 시 이력 자동 기록.
-            {products.length > 0 && ` (전체 ${products.length}개)`}
+            {products.length > 0 && ` (전체 ${products.length}개${bundleCount > 0 ? ` · 묶음 ${bundleCount}개` : ""})`}
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -229,6 +234,17 @@ export default function ProductsPage() {
               onChange={(e) => setShowInactive(e.target.checked)}
             />
             미사용 제품도 표시
+          </label>
+          <label
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--sm-text-mid)" }}
+            title="세트/묶음으로 구성한 상품을 목록에 표시합니다. 기본은 숨김."
+          >
+            <input
+              type="checkbox"
+              checked={showBundles}
+              onChange={(e) => setShowBundles(e.target.checked)}
+            />
+            묶음 상품 표시{bundleCount > 0 ? ` (${bundleCount})` : ""}
           </label>
         </div>
 
@@ -308,6 +324,22 @@ export default function ProductsPage() {
                           >
                             {TAX_TYPE_LABEL[p.tax_type]}
                           </span>
+                          {p.is_bundle && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                borderRadius: 10,
+                                background: "var(--sm-info-bg)",
+                                color: "var(--sm-info)",
+                              }}
+                              title={`묶음(세트) 상품 — 구성품 ${p.bundle_count ?? 0}종`}
+                            >
+                              묶음{p.bundle_count ? ` ${p.bundle_count}` : ""}
+                            </span>
+                          )}
                         </td>
                         <td data-label="옵션">{p.spec || "-"}</td>
                         <td data-label="단위">{p.unit}</td>
@@ -455,6 +487,7 @@ export default function ProductsPage() {
           parent={{ id: bundleFor.id, name: bundleFor.name, sku: bundleFor.sku }}
           products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, spec: p.spec }))}
           onClose={() => setBundleFor(null)}
+          onSaved={reload}
         />
       )}
     </>

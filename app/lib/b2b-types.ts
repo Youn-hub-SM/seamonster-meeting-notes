@@ -67,6 +67,9 @@ export interface Product {
   volume_kg: number | null; // 제품부피(kg)
   created_at: string;
   updated_at: string;
+  // 파생(조회 전용, DB 컬럼 아님) — products GET 이 product_bundles 로 계산해 부착.
+  is_bundle?: boolean;    // 이 상품이 묶음(세트) 부모인지
+  bundle_count?: number;  // 구성품 종류 수
 }
 
 export type ProductInput = Omit<Product, "id" | "created_at" | "updated_at"> & {

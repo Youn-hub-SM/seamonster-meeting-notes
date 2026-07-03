@@ -2,19 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeProduct, ProductInput } from "@/app/lib/b2b-types";
 import { logProductChange } from "@/app/lib/b2b-activity";
+import { getAllBundles } from "@/app/lib/product-bundles";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const { data, error } = await sb
-      .from("products")
-      .select("*")
-      .order("active", { ascending: false })
-      .order("name", { ascending: true });
+    const [{ data, error }, bundles] = await Promise.all([
+      sb.from("products").select("*").order("active", { ascending: false }).order("name", { ascending: true }),
+      getAllBundles(sb), // 부모 product_id → 구성품[] (037 미적용이면 빈 맵 → is_bundle 전부 false)
+    ]);
     if (error) throw error;
-    return NextResponse.json({ ok: true, products: data ?? [] });
+    const products = (data ?? []).map((p) => {
+      const comps = bundles.get(p.id);
+      return { ...p, is_bundle: !!comps, bundle_count: comps?.length ?? 0 };
+    });
+    return NextResponse.json({ ok: true, products });
   } catch (err) {
     console.error("[b2b/products GET]", err);
     return NextResponse.json(
