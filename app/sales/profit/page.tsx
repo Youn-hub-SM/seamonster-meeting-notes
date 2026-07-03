@@ -110,6 +110,14 @@ export default function SalesProfitPage() {
               <li><strong>매출총이익</strong> = 총매출 − (총상품원가 + 판매수수료 + 총택배보냉비) · <strong>이익률</strong> = 이익 ÷ 총매출.</li>
             </ul>
             <div style={{ marginTop: 6, color: "var(--sm-text-light)" }}>※ 배송비는 실제 결제 기준이라 따로 설정할 필요가 없습니다. 아래에선 <strong>채널 수수료율</strong>만 관리합니다.</div>
+            <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "var(--sm-warning-bg,#fff7ed)", border: "1px solid var(--sm-warning,#f59e0b)", color: "var(--sm-text)" }}>
+              <strong>⚠️ 채널별 매출(결제금액) 기준 — 할인 반영 여부</strong>
+              <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                <li><strong>네이버(스마트스토어)·쿠팡·톡스토어</strong>: 할인금액이 <strong>반영된</strong> 실매출(순매출).</li>
+                <li><strong>카페24</strong>: 할인금액이 <strong>반영 안 됨</strong>(할인 전 금액) — 정확한 이익은 할인분만큼 <strong>별도 보정</strong> 필요.</li>
+                <li><strong>신규 채널</strong>이 생기면 그 채널 매출이 할인 반영인지 <strong>꼭 확인 후 반영</strong>하세요.</li>
+              </ul>
+            </div>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
