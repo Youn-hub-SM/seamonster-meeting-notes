@@ -29,7 +29,7 @@ export default function SalesProfitPage() {
   useEffect(() => { loadConfig(); }, []);
   const setCfgField = (i: number, k: keyof ChannelConfig, v: string | number) =>
     setCfg((c) => c.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
-  function addChannel() { setCfg((c) => [...c, { channel: "", fee_rate: 0, ship_mode: "flat", ship_fee: 4000, ship_free_over: 0, ship_free_over_sub: 0 }]); }
+  function addChannel() { setCfg((c) => [...c, { channel: "", fee_rate: 0, ship_mode: "actual", ship_fee: 4000, ship_free_over: 0, ship_free_over_sub: 0 }]); }
   function delChannel(i: number) { setCfg((c) => { const row = c[i]; if (row.channel) setDeletedCh((d) => [...d, row.channel]); return c.filter((_, idx) => idx !== i); }); }
   async function saveConfig() {
     setSavingCfg(true); setCfgMsg(""); setErr("");
@@ -101,7 +101,7 @@ export default function SalesProfitPage() {
               <button className="b2b-btn-primary" onClick={saveConfig} disabled={savingCfg}>{savingCfg ? "저장 중…" : "저장 + 재계산"}</button>
             </div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>배송비매출 정책: <strong>정액</strong>=주문당 배송비, <strong>N원 이상 무료</strong>=주문금액이 기준 이상이면 0·미만이면 배송비, <strong>없음</strong>=0. 판매수수료 = 총매출 × 수수료율. <strong>정기배송 무료기준</strong>은 상품명에 '정기배송'이 포함된 주문에만 적용(예: 카페24 일반 7만·정기 3만). 0이면 일반 기준과 동일.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>배송비매출 정책: <strong>실제 배송비결제금액(권장)</strong>=원본 데이터의 실제 배송비 합(무료배송·정기 등 이미 반영, 제일 정확) · <strong>정액</strong>=주문당 배송비 · <strong>N원 이상 무료</strong>=주문금액 기준 이상 0 · <strong>없음</strong>=0. 판매수수료 = 총매출 × 수수료율. (정기배송 무료기준은 <strong>N원 이상 무료</strong> 모드에서만, 상품명 '정기배송' 포함 주문에 적용)</p>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
               <thead><tr><th>판매처</th><th style={{ textAlign: "right" }}>수수료율(%)</th><th>배송비 정책</th><th style={{ textAlign: "right" }}>배송비(원)</th><th style={{ textAlign: "right" }}>일반 무료기준(원)</th><th style={{ textAlign: "right" }}>정기배송 무료기준(원)</th><th></th></tr></thead>
@@ -115,7 +115,7 @@ export default function SalesProfitPage() {
                         {SHIP_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                       </select>
                     </td>
-                    <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" min={0} value={row.ship_fee} disabled={row.ship_mode === "none"} onChange={(e) => setCfgField(i, "ship_fee", Number(e.target.value) || 0)} style={{ width: 100, textAlign: "right" }} /></td>
+                    <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" min={0} value={row.ship_fee} disabled={row.ship_mode === "none" || row.ship_mode === "actual"} onChange={(e) => setCfgField(i, "ship_fee", Number(e.target.value) || 0)} style={{ width: 100, textAlign: "right" }} /></td>
                     <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" min={0} value={row.ship_free_over} disabled={row.ship_mode !== "free_over"} onChange={(e) => setCfgField(i, "ship_free_over", Number(e.target.value) || 0)} style={{ width: 110, textAlign: "right" }} placeholder="예: 70000" /></td>
                     <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" min={0} value={row.ship_free_over_sub} disabled={row.ship_mode !== "free_over"} onChange={(e) => setCfgField(i, "ship_free_over_sub", Number(e.target.value) || 0)} style={{ width: 120, textAlign: "right" }} placeholder="0=일반과 동일" title="상품명에 '정기배송' 포함 주문에 적용" /></td>
                     <td style={{ textAlign: "right" }}><button className="b2b-link-btn" onClick={() => delChannel(i)} style={{ color: "var(--sm-danger)", fontSize: 12 }}>삭제</button></td>

@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       const clean = rows.map((r) => ({
         channel: r.channel.trim(),
         fee_rate: Math.max(0, Number(r.fee_rate) || 0),
-        ship_mode: ["flat", "free_over", "none"].includes(r.ship_mode) ? r.ship_mode : "flat",
+        ship_mode: ["actual", "flat", "free_over", "none"].includes(r.ship_mode) ? r.ship_mode : "actual",
         ship_fee: Math.max(0, Math.round(Number(r.ship_fee) || 0)),
         ship_free_over: Math.max(0, Math.round(Number(r.ship_free_over) || 0)),
         ship_free_over_sub: Math.max(0, Math.round(Number(r.ship_free_over_sub) || 0)),
