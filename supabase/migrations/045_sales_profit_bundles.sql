@@ -4,6 +4,7 @@
 --  · 중량은 구성품 중 volume_kg null 이 하나라도 있으면 null(=결측 표시). 원가는 구성품 중 0 있으면 결측 플래그.
 --  · 미매칭 = products 없음 OR (묶음/단품) 원가·부피 결측 → 상품마스터/구성품에서 채워야.
 
+drop function if exists sales_profit_summary(date, date);
 create or replace function sales_profit_summary(p_from date, p_to date)
 returns table(channel text, orders bigint, pay_amount bigint, product_cost bigint, cooling bigint)
 language sql stable as $$

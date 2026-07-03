@@ -3,6 +3,7 @@
 --  · products.sku 중복 가능(014에서 UNIQUE 제거) → distinct on 으로 최신(updated_at) 1건만.
 --  · 미매칭 = products 없음 OR cost_price=0 OR volume_kg null (상품마스터에서 채워야 함). sales_sku_cost(백데이터)는 더 이상 사용 안 함.
 
+drop function if exists sales_profit_summary(date, date);
 create or replace function sales_profit_summary(p_from date, p_to date)
 returns table(channel text, orders bigint, pay_amount bigint, product_cost bigint, cooling bigint)
 language sql stable as $$
