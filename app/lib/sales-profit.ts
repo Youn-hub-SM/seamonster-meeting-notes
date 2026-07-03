@@ -1,43 +1,31 @@
-// 채널별 매출·이익 — 파이썬 채널별_매출이익 계산 규칙 이식(값 그대로).
-//  매출=sales_orders, 원가·중량=sales_sku_cost, 택배보냉비=RPC 계단, 여기선 수수료·배송비매출·이익 계산.
+// 채널별 매출·이익 — 수수료율·배송비매출은 채널 설정(sales_channel_config)에서 RPC가 계산해 넘겨줌.
+//  여기선 총매출·수수료·총비용·매출총이익만 조립(파이썬 계산식).
 
-// 채널 판매수수료율(파이썬 CHANNEL_FEE_RATE). 미정의 채널(도매·팔도감 등)=0.
-export const CHANNEL_FEE_RATE: Record<string, number> = {
-  스마트스토어: 0.10, 쿠팡: 0.12, 카페24: 0.04, 토스: 0.12, 톡스토어: 0.12,
-};
-export const SHIPPING_FEE_PER_ORDER = 4000; // 배송비매출 = 주문수 × 4,000
-
-export type ProfitInput = { channel: string; orders: number; pay_amount: number; product_cost: number; cooling: number };
+export type ProfitInput = { channel: string; orders: number; pay_amount: number; ship_revenue: number; product_cost: number; cooling: number; fee_rate: number };
 export type ProfitRow = ProfitInput & {
-  ship_revenue: number;   // 배송비매출
-  gross_revenue: number;  // 총매출
-  fee: number;            // 판매수수료
-  total_cost: number;     // 총비용
+  gross_revenue: number;  // 총매출 = 총결제금액 + 배송비매출
+  fee: number;            // 판매수수료 = 총매출 × 수수료율
+  total_cost: number;     // 총비용 = 총상품원가 + 수수료 + 총택배보냉비
   profit: number;         // 매출총이익
   margin_pct: number;     // 매출총이익률(%)
 };
 
 export function computeProfitRow(r: ProfitInput): ProfitRow {
-  const ship_revenue = r.orders * SHIPPING_FEE_PER_ORDER;
-  const gross_revenue = r.pay_amount + ship_revenue;
-  const rate = CHANNEL_FEE_RATE[r.channel] ?? 0;
-  const fee = gross_revenue * rate;
+  const gross_revenue = r.pay_amount + r.ship_revenue;
+  const fee = gross_revenue * (Number(r.fee_rate) || 0);
   const total_cost = r.product_cost + fee + r.cooling;
   const profit = gross_revenue - total_cost;
   const margin_pct = gross_revenue > 0 ? Math.round((profit / gross_revenue) * 10000) / 100 : 0;
-  return { ...r, ship_revenue, gross_revenue, fee, total_cost, profit, margin_pct };
+  return { ...r, gross_revenue, fee, total_cost, profit, margin_pct };
 }
 
-// 채널 합계행(전체).
 export function computeProfitTotals(rows: ProfitRow[]): ProfitRow {
-  const sum = (k: keyof ProfitInput | "ship_revenue" | "gross_revenue" | "fee" | "total_cost" | "profit") =>
-    rows.reduce((a, r) => a + (Number(r[k as keyof ProfitRow]) || 0), 0);
-  const gross_revenue = sum("gross_revenue");
-  const profit = sum("profit");
+  const sum = (k: keyof ProfitRow) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  const gross_revenue = sum("gross_revenue"), profit = sum("profit");
   return {
-    channel: "전체", orders: sum("orders"), pay_amount: sum("pay_amount"),
-    ship_revenue: sum("ship_revenue"), gross_revenue, product_cost: sum("product_cost"),
-    cooling: sum("cooling"), fee: sum("fee"), total_cost: sum("total_cost"), profit,
+    channel: "전체", orders: sum("orders"), pay_amount: sum("pay_amount"), ship_revenue: sum("ship_revenue"),
+    product_cost: sum("product_cost"), cooling: sum("cooling"), fee: sum("fee"), fee_rate: 0,
+    gross_revenue, total_cost: sum("total_cost"), profit,
     margin_pct: gross_revenue > 0 ? Math.round((profit / gross_revenue) * 10000) / 100 : 0,
   };
 }
@@ -54,4 +42,12 @@ export const PROFIT_COLS: { key: keyof ProfitRow; label: string; money?: boolean
   { key: "total_cost", label: "총비용", money: true },
   { key: "profit", label: "매출총이익", money: true },
   { key: "margin_pct", label: "매출총이익률", pct: true },
+];
+
+// 채널 설정 타입 + 기본값(신규 채널 추가 시).
+export type ChannelConfig = { channel: string; fee_rate: number; ship_mode: "flat" | "free_over" | "none"; ship_fee: number; ship_free_over: number };
+export const SHIP_MODES: { value: ChannelConfig["ship_mode"]; label: string }[] = [
+  { value: "flat", label: "정액(주문당)" },
+  { value: "free_over", label: "N원 이상 무료" },
+  { value: "none", label: "없음(0)" },
 ];

@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
 
     const rows: ProfitRow[] = ((sumRows as ProfitInput[]) || []).map((r) => computeProfitRow({
       channel: String(r.channel), orders: Number(r.orders) || 0, pay_amount: Number(r.pay_amount) || 0,
-      product_cost: Number(r.product_cost) || 0, cooling: Number(r.cooling) || 0,
+      ship_revenue: Number(r.ship_revenue) || 0, product_cost: Number(r.product_cost) || 0,
+      cooling: Number(r.cooling) || 0, fee_rate: Number(r.fee_rate) || 0,
     }));
     const totals = computeProfitTotals(rows);
 
