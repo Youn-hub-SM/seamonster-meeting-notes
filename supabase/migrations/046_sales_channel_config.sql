@@ -23,6 +23,8 @@ insert into sales_channel_config (channel, fee_rate, ship_mode, ship_fee, ship_f
   ('팔도감',      0.00, 'flat', 4000, 0)
 on conflict (channel) do nothing;
 
+-- 반환 컬럼이 바뀌므로(ship_revenue·fee_rate 추가) create or replace 불가 → 먼저 DROP.
+drop function if exists sales_profit_summary(date, date);
 create or replace function sales_profit_summary(p_from date, p_to date)
 returns table(channel text, orders bigint, pay_amount bigint, ship_revenue bigint, product_cost bigint, cooling bigint, fee_rate numeric)
 language sql stable as $$
