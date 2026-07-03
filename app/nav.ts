@@ -36,6 +36,7 @@ export const NAV: NavCategory[] = [
           { href: "/sales/report", label: "리포트" },
           { href: "/sales/profit", label: "채널별 이익" },
           { href: "/sales/search", label: "주문 검색" },
+          { href: "/sales/history", label: "활동 히스토리" },
         ],
       },
     ],

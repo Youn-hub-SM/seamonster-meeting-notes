@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/app/lib/supabase";
 import type { ChannelConfig } from "@/app/lib/sales-profit";
+import { logSalesConfigChanged } from "@/app/lib/b2b-activity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
         if (orphans.length) await sb.from("sales_channel_config").delete().in("channel", orphans);
       }
     }
+    await logSalesConfigChanged(clean.length); // 활동 히스토리(감사)용 — 실패해도 무시(fire-and-forget)
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });

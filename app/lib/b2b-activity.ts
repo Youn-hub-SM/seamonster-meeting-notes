@@ -289,6 +289,14 @@ export async function logSalesReportSent(reportType: "daily" | "weekly", baseDat
     notify: false,
   });
 }
+export async function logSalesConfigChanged(channels: number): Promise<void> {
+  await recordActivity({
+    event_type: "sales.config_changed",
+    summary: `⚙️ 채널 이익 설정 저장 · ${channels}개 채널`,
+    meta: { channels },
+    notify: false,
+  });
+}
 // 전화번호 조회 감사 — 번호는 뒤4자리만 기록(내부 오남용 억제). 외부 알림 없이 DB에만 남김.
 export async function logPhoneLookup(phoneDigits: string): Promise<void> {
   const masked = phoneDigits ? `***${phoneDigits.slice(-4)}` : "(빈값)";
