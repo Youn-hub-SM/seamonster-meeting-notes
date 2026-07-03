@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const sb = supabaseAdmin();
     const { data, error } = await sb.from("sales_channel_config")
-      .select("channel,fee_rate,ship_mode,ship_fee,ship_free_over,ship_free_over_sub").order("channel");
+      .select("channel,fee_rate,ship_mode,ship_fee,ship_free_over,ship_free_over_sub,revenue_adjust").order("channel");
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (046 적용 여부 확인)` }, { status: 500 });
     return NextResponse.json({ ok: true, rows: data ?? [] });
   } catch (e) {
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
         ship_fee: Math.max(0, Math.round(Number(r.ship_fee) || 0)),
         ship_free_over: Math.max(0, Math.round(Number(r.ship_free_over) || 0)),
         ship_free_over_sub: Math.max(0, Math.round(Number(r.ship_free_over_sub) || 0)),
+        revenue_adjust: Math.min(0.9, Math.max(0, Number(r.revenue_adjust) || 0)),
         updated_at: now,
       }));
       const { error } = await sb.from("sales_channel_config").upsert(clean, { onConflict: "channel" });

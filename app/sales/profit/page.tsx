@@ -29,7 +29,7 @@ export default function SalesProfitPage() {
   useEffect(() => { loadConfig(); }, []);
   const setCfgField = (i: number, k: keyof ChannelConfig, v: string | number) =>
     setCfg((c) => c.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
-  function addChannel() { setCfg((c) => [...c, { channel: "", fee_rate: 0, ship_mode: "actual", ship_fee: 4000, ship_free_over: 0, ship_free_over_sub: 0 }]); }
+  function addChannel() { setCfg((c) => [...c, { channel: "", fee_rate: 0, ship_mode: "actual", ship_fee: 4000, ship_free_over: 0, ship_free_over_sub: 0, revenue_adjust: 0 }]); }
   function delChannel(i: number) { setCfg((c) => { const row = c[i]; if (row.channel) setDeletedCh((d) => [...d, row.channel]); return c.filter((_, idx) => idx !== i); }); }
   async function saveConfig() {
     setSavingCfg(true); setCfgMsg(""); setErr("");
@@ -114,23 +114,24 @@ export default function SalesProfitPage() {
               <strong>⚠️ 채널별 매출(결제금액) 기준 — 할인 반영 여부</strong>
               <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
                 <li><strong>네이버(스마트스토어)·쿠팡·톡스토어</strong>: 할인금액이 <strong>반영된</strong> 실매출(순매출).</li>
-                <li><strong>카페24</strong>: 할인금액이 <strong>반영 안 됨</strong>(할인 전 금액) — 정확한 이익은 할인분만큼 <strong>별도 보정</strong> 필요.</li>
-                <li><strong>신규 채널</strong>이 생기면 그 채널 매출이 할인 반영인지 <strong>꼭 확인 후 반영</strong>하세요.</li>
+                <li><strong>카페24</strong>: 할인금액이 <strong>반영 안 됨</strong>(할인 전 금액) → 아래 <strong>매출 보정율</strong>로 자동 차감(기본 5.5%). 실제 할인율에 맞게 조정하세요.</li>
+                <li><strong>신규 채널</strong>이 생기면 그 채널 매출이 할인 반영인지 <strong>꼭 확인</strong> 후, 미반영이면 매출 보정율을 넣으세요.</li>
               </ul>
             </div>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
-              <thead><tr><th>판매처</th><th style={{ textAlign: "right" }}>판매수수료율(%)</th><th></th></tr></thead>
+              <thead><tr><th>판매처</th><th style={{ textAlign: "right" }}>판매수수료율(%)</th><th style={{ textAlign: "right" }}>매출 보정율(%)</th><th></th></tr></thead>
               <tbody>
                 {cfg.map((row, i) => (
                   <tr key={i}>
                     <td><input className="b2b-input" value={row.channel} onChange={(e) => setCfgField(i, "channel", e.target.value)} placeholder="판매처명" style={{ width: 160 }} /></td>
                     <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" step="0.1" min={0} value={Number((row.fee_rate * 100).toFixed(2))} onChange={(e) => setCfgField(i, "fee_rate", (Number(e.target.value) || 0) / 100)} style={{ width: 90, textAlign: "right" }} /></td>
+                    <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" step="0.1" min={0} value={Number((row.revenue_adjust * 100).toFixed(2))} onChange={(e) => setCfgField(i, "revenue_adjust", (Number(e.target.value) || 0) / 100)} style={{ width: 90, textAlign: "right" }} title="총결제금액에서 차감(할인 미반영 보정). 예: 카페24 5.5" /></td>
                     <td style={{ textAlign: "right" }}><button className="b2b-link-btn" onClick={() => delChannel(i)} style={{ color: "var(--sm-danger)", fontSize: 12 }}>삭제</button></td>
                   </tr>
                 ))}
-                {cfg.length === 0 && <tr><td colSpan={3} className="sm-faint" style={{ padding: 12 }}>설정이 없습니다. "+ 채널 추가"로 등록하세요.</td></tr>}
+                {cfg.length === 0 && <tr><td colSpan={4} className="sm-faint" style={{ padding: 12 }}>설정이 없습니다. "+ 채널 추가"로 등록하세요.</td></tr>}
               </tbody>
             </table>
           </div>

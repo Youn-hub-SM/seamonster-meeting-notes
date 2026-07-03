@@ -45,7 +45,7 @@ export const PROFIT_COLS: { key: keyof ProfitRow; label: string; money?: boolean
 ];
 
 // 채널 설정 타입 + 기본값(신규 채널 추가 시).
-export type ChannelConfig = { channel: string; fee_rate: number; ship_mode: "actual" | "flat" | "free_over" | "none"; ship_fee: number; ship_free_over: number; ship_free_over_sub: number };
+export type ChannelConfig = { channel: string; fee_rate: number; ship_mode: "actual" | "flat" | "free_over" | "none"; ship_fee: number; ship_free_over: number; ship_free_over_sub: number; revenue_adjust: number };
 export const SHIP_MODES: { value: ChannelConfig["ship_mode"]; label: string }[] = [
   { value: "actual", label: "실제 배송비결제금액(권장)" },
   { value: "flat", label: "정액(주문당)" },
