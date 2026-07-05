@@ -1,0 +1,134 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+
+type Warn = { rowNo: number; addr: string; name: string };
+type FileOut = { name: string; b64: string };
+type Result = {
+  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number };
+  addressWarnings: Warn[];
+  unmatched: string[];
+  codeCount: number;
+  files: { normal: FileOut; guarantee: FileOut | null };
+};
+
+const KW_KEY = "fulfill_addr_keywords";
+
+function downloadB64(name: string, b64: string) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export default function FulfillPage() {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = useState("");
+  const [keywords, setKeywords] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [res, setRes] = useState<Result | null>(null);
+  const [ack, setAck] = useState(false); // 주소 경고 확인 체크
+
+  useEffect(() => { setKeywords(localStorage.getItem(KW_KEY) || ""); }, []);
+  function saveKeywords(v: string) { setKeywords(v); localStorage.setItem(KW_KEY, v); }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name); setError(""); setRes(null); setAck(false); setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("keywords", keywords);
+      const j = await (await fetch("/api/fulfill/generate", { method: "POST", body: fd })).json();
+      if (!j.ok) throw new Error(j.error || "생성 실패");
+      setRes(j as Result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "생성 실패");
+    }
+    setLoading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  const blocked = !!res && res.addressWarnings.length > 0 && !ack; // 주소 경고 있으면 확인 전까지 다운로드 잠금
+
+  return (
+    <div className="b2b-container" style={{ maxWidth: 880 }}>
+      <header className="b2b-page-head">
+        <div>
+          <h1 className="b2b-page-title">택배 발주처리</h1>
+          <p className="b2b-page-subtitle">
+            소매 주문 엑셀(A~M)을 올리면 <strong>CNplus 발주 파일(일반 + 도착보장)</strong>을 만들어 드립니다.
+            단품코드 NOTHING 제외 · 도착보장 분리(운임구분 3) · 박스타입/운임 자동. 품목명·중량은 <Link href="/fulfill/codes">코드표</Link> 기준.
+          </p>
+        </div>
+        <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/codes">코드표 관리</Link></div>
+      </header>
+
+      {error && <div className="b2b-error">{error}{error.includes("053") || error.includes("코드표") ? " — 코드표를 먼저 업로드하세요(코드표 관리)." : ""}</div>}
+
+      <section className="b2b-card" style={{ marginBottom: 16 }}>
+        <div className="b2b-field" style={{ marginBottom: 12 }}>
+          <label className="b2b-field-label">주소 경고어 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 쉼표로 구분 · 이 브라우저에 저장)</span></label>
+          <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="예: 제주마루 702호, 군부대, 사서함" />
+          <span className="sm-faint" style={{ fontSize: 12 }}>주소에 이 단어가 들어간 주문이 있으면 발주 전 경고합니다.</span>
+        </div>
+        <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={loading}>{loading ? "만드는 중…" : "주문 엑셀 올리기"}</button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
+          {fileName && <span className="sm-faint" style={{ fontSize: 12 }}>{fileName}</span>}
+        </div>
+      </section>
+
+      {res && (
+        <>
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">전체 주문행</div><div className="b2b-stat-card-value">{res.stats.total.toLocaleString()}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">NOTHING 제외</div><div className="b2b-stat-card-value" style={{ color: res.stats.excludedNothing ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{res.stats.excludedNothing}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반</div><div className="b2b-stat-card-value" style={{ color: "var(--sm-info)" }}>{res.stats.normalCount.toLocaleString()}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장</div><div className="b2b-stat-card-value" style={{ color: "var(--sm-orange)" }}>{res.stats.guaranteeCount.toLocaleString()}</div></div>
+          </div>
+
+          {res.unmatched.length > 0 && (
+            <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-danger-bg)", border: "1px solid var(--sm-danger)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
+              ⚠️ <strong>코드표에 없는 단품코드 {res.unmatched.length}개</strong> — 이 상품들은 <strong>품목명이 비고 중량이 0</strong>이라 박스타입/운임이 틀릴 수 있어요. <Link href="/fulfill/codes">코드표</Link>에 추가 후 다시 만드세요.
+              <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(" · ")}{res.unmatched.length > 30 ? " …" : ""}</div>
+            </div>
+          )}
+
+          {res.addressWarnings.length > 0 && (
+            <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
+              🚨 <strong>주소 경고 {res.addressWarnings.length}건</strong> — 발주 전 반드시 확인하세요.
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+                {res.addressWarnings.slice(0, 20).map((w, i) => <li key={i}>{w.name || "(이름?)"} · {w.addr}</li>)}
+              </ul>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
+                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 주소들을 확인했습니다 (체크해야 다운로드 가능)
+              </label>
+            </div>
+          )}
+
+          <section className="b2b-card">
+            <div className="b2b-card-head"><span className="b2b-card-title">발주 파일 다운로드</span></div>
+            <div className="sm-row" style={{ gap: 10, flexWrap: "wrap" }}>
+              <button className="b2b-btn-primary" disabled={blocked || res.stats.normalCount === 0} onClick={() => downloadB64(res.files.normal.name, res.files.normal.b64)}>
+                CNplus 일반 ({res.stats.normalCount})
+              </button>
+              <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => res.files.guarantee && downloadB64(res.files.guarantee.name, res.files.guarantee.b64)}>
+                CNplus [도착보장] ({res.stats.guaranteeCount})
+              </button>
+              {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소 경고를 확인(체크)해야 받을 수 있어요.</span>}
+            </div>
+            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 10 }}>코드표 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3으로 설정됩니다.</p>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}

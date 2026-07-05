@@ -32,6 +32,13 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/products/history", label: "변경 기록" },
         ],
       },
+      {
+        href: "/fulfill", label: "택배 발주처리", icon: "truck",
+        menu: [
+          { href: "/fulfill", label: "발주처리(CNplus)" },
+          { href: "/fulfill/codes", label: "코드표" },
+        ],
+      },
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/subscription", label: "정기배송 분석", icon: "trend" },
       {
