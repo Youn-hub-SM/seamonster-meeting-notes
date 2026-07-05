@@ -72,7 +72,7 @@ export const NAV: NavCategory[] = [
       // 합친/독립 메뉴
       { href: "/production/inventory", label: "재고/생산 조언", icon: "bulb" },
       { href: "/inventory/stats", label: "재고/생산 통계", icon: "bars" },
-      { href: "/inventory/reconcile", label: "재고 정합성 대사", icon: "receipt" },
+      { href: "/inventory/reconcile", label: "구매·판매·재고 확인", icon: "receipt" },
       { href: "/inventory/activity", label: "활동 히스토리", icon: "receipt" },
       { href: "/production/sku", label: "SKU 생성기", icon: "tag" },
     ],

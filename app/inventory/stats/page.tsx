@@ -92,9 +92,9 @@ export default function InvStatsPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고/생산 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고 추세와 <strong>품목(옵션 구분)·SKU별 집계</strong>를 봅니다. <strong>도매/소매</strong> 채널로 걸러 볼 수 있어요. 실제 판매와 대조하려면 <a href="/inventory/reconcile">재고 정합성 대사</a>.</p></div>
+        <div><h1 className="b2b-page-title">재고/생산 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고 추세와 <strong>품목(옵션 구분)·SKU별 집계</strong>를 봅니다. <strong>도매/소매</strong> 채널로 걸러 볼 수 있어요. 산 수·팔린 수·재고가 맞는지 보려면 <a href="/inventory/reconcile">구매·판매·재고 확인</a>.</p></div>
         <div className="b2b-page-actions">
-          <a className="b2b-btn-secondary" href="/inventory/reconcile" title="실제 판매(매출)를 출고로 보고 재고 원장과 대조">정합성 대사</a>
+          <a className="b2b-btn-secondary" href="/inventory/reconcile" title="팔린 수(매출)와 산 수, 지금 재고가 맞는지 확인">구매·판매·재고 확인</a>
           <ChannelFilter value={channel} onChange={setChannel} />
         </div>
       </header>
