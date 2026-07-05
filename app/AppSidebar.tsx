@@ -19,7 +19,7 @@ function toolActive(t: NavTool, pathname: string) {
   return pathname === t.href || pathname.startsWith(t.href + "/");
 }
 
-export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavigate?: () => void }) {
+export default function AppSidebar({ open, collapsed, onToggleCollapse, onNavigate }: { open: boolean; collapsed?: boolean; onToggleCollapse?: () => void; onNavigate?: () => void }) {
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
@@ -54,6 +54,20 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
 
   function renderTool(t: NavTool) {
     const active = toolActive(t, pathname);
+    // 접힘(아이콘만): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 라벨은 툴팁.
+    if (collapsed) {
+      const external = /^https?:\/\//.test(t.href);
+      const inner = <span className="app-sb-emoji"><Icon name={t.icon} /></span>;
+      return (
+        <div key={t.href} className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
+          {external ? (
+            <a href={t.href} target="_blank" rel="noreferrer" className="app-sb-tool" title={t.label} aria-label={t.label} onClick={onNavigate}>{inner}</a>
+          ) : (
+            <Link href={t.href} className="app-sb-tool" title={t.label} aria-label={t.label} onClick={onNavigate}>{inner}</Link>
+          )}
+        </div>
+      );
+    }
     const menu = (t.menu || []).filter((m) => !m.adminOnly || isAdmin);
     const hasMenu = menu.length > 0;
     const expanded = hasMenu && isToolOpen(t.href);
@@ -113,11 +127,21 @@ export default function AppSidebar({ open, onNavigate }: { open: boolean; onNavi
 
   return (
     <aside className={`app-sidebar ${open ? "is-open" : ""}`}>
-      <Link href="/" className="app-sb-brand" onClick={onNavigate}>씨몬스터</Link>
+      <div className="app-sb-head">
+        <Link href="/" className="app-sb-brand" onClick={onNavigate}>씨몬스터</Link>
+        {onToggleCollapse && (
+          <button type="button" className="app-sb-collapse" onClick={onToggleCollapse}
+            aria-label={collapsed ? "메뉴 펼치기" : "메뉴 접기"} title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M10 3.5 5.5 8 10 12.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+      </div>
 
       <nav className="app-sb-nav">
         <div className={`app-sb-tool-row ${pathname === "/" ? "is-active" : ""}`}>
-          <Link href="/" className="app-sb-tool" onClick={onNavigate}>
+          <Link href="/" className="app-sb-tool" title={HOME.label} aria-label={HOME.label} onClick={onNavigate}>
             <span className="app-sb-emoji"><Icon name={HOME.icon} /></span>
             <span className="app-sb-tool-label">{HOME.label}</span>
           </Link>
