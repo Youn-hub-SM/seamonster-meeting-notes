@@ -36,6 +36,7 @@ export type FulfillResult = {
   normal: unknown[][];        // A~R (18열) 일반
   guarantee: unknown[][];     // A~R 도착보장(Q=3)
   stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
+  fees: { baseNormal: number; baseGuar: number }; // 기본운임 합(일반/도착보장) — 배송일지 기록용
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
   unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
@@ -89,19 +90,20 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   // 택배량: 주문(주문번호+주소) 단위로 박스종류별 일반/도착보장 개수 집계
   const counts = new Map<string, { normal: number; guarantee: number }>();
   for (const cat of BOX_CATEGORIES) counts.set(cat, { normal: 0, guarantee: 0 });
-  let parcels = 0, parcelsGuar = 0;
+  let parcels = 0, parcelsGuar = 0, baseNormal = 0, baseGuar = 0;
   for (const [k, U] of groupW) {
     parcels++;
     const guar = groupGuar.get(k) === true;
-    if (guar) parcelsGuar++;
     const c = counts.get(boxCategory(U))!;
-    if (guar) c.guarantee++; else c.normal++;
+    if (guar) { parcelsGuar++; c.guarantee++; baseGuar += baseFee(U); }
+    else { c.normal++; baseNormal += baseFee(U); }
   }
   const parcelSummary = BOX_CATEGORIES.map((cat) => ({ category: cat, ...counts.get(cat)! }));
 
   return {
     headers: CNPLUS_HEADERS, normal, guarantee,
     stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar },
+    fees: { baseNormal, baseGuar },
     parcelSummary,
     addressWarnings, unmatched: [...unmatched],
   };

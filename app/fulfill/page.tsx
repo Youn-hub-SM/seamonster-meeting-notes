@@ -8,6 +8,7 @@ type FileOut = { name: string; b64: string };
 type Parcel = { category: string; normal: number; guarantee: number };
 type Result = {
   stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
+  fees: { baseNormal: number; baseGuar: number };
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
   unmatched: string[];
@@ -16,6 +17,7 @@ type Result = {
 };
 
 const KW_KEY = "fulfill_addr_keywords";
+const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
 function downloadB64(name: string, b64: string) {
   const bin = atob(b64);
@@ -36,6 +38,22 @@ export default function FulfillPage() {
   const [error, setError] = useState("");
   const [res, setRes] = useState<Result | null>(null);
   const [ack, setAck] = useState(false); // 주소 경고 확인 체크
+  const [recordDate, setRecordDate] = useState(kstToday());
+  const [recording, setRecording] = useState(false);
+  const [recordOk, setRecordOk] = useState("");
+
+  async function recordLog() {
+    if (!res || !recordDate) return;
+    setRecording(true); setRecordOk(""); setError("");
+    try {
+      const boxes_normal: Record<string, number> = {}, boxes_guar: Record<string, number> = {};
+      for (const p of res.parcelSummary) { if (p.normal) boxes_normal[p.category] = p.normal; if (p.guarantee) boxes_guar[p.category] = p.guarantee; }
+      const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar }) });
+      const j = await r.json(); if (!j.ok) throw new Error(j.error || "기록 실패");
+      setRecordOk(`${recordDate} 배송일지에 기록했어요.`);
+    } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }
+    setRecording(false);
+  }
 
   useEffect(() => { setKeywords(localStorage.getItem(KW_KEY) || ""); }, []);
   function saveKeywords(v: string) { setKeywords(v); localStorage.setItem(KW_KEY, v); }
@@ -107,8 +125,13 @@ export default function FulfillPage() {
           <section className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
               <span className="b2b-card-title">택배량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 주문(택배) {res.stats.parcels}건 (일반 {res.stats.parcels - res.stats.parcelsGuar} · 도착보장 {res.stats.parcelsGuar})</span></span>
-              <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
+              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <input type="date" className="b2b-input" value={recordDate} onChange={(e) => setRecordDate(e.target.value)} style={{ width: "auto", padding: "5px 8px", fontSize: 12 }} title="배송일지에 기록할 날짜" />
+                <button className="b2b-btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={recordLog} disabled={recording}>{recording ? "기록 중…" : "배송일지에 기록"}</button>
+                <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
+              </div>
             </div>
+            {recordOk && <div className="prod-sku-ok" style={{ fontSize: 12.5, margin: "0 0 8px" }}>✓ {recordOk} <Link href="/fulfill/log">배송일지 보기</Link></div>}
             <div className="b2b-table-wrap">
               <table className="b2b-table">
                 <thead><tr><th>박스종류</th><th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>

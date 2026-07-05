@@ -36,6 +36,7 @@ export const NAV: NavCategory[] = [
         href: "/fulfill", label: "택배 발주처리", icon: "truck",
         menu: [
           { href: "/fulfill", label: "발주처리(CNplus)" },
+          { href: "/fulfill/log", label: "배송일지" },
           { href: "/fulfill/codes", label: "코드표" },
         ],
       },

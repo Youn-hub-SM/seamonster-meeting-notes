@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       stats: res.stats,
+      fees: res.fees,
       parcelSummary: res.parcelSummary,
       addressWarnings: res.addressWarnings,
       unmatched: res.unmatched,
