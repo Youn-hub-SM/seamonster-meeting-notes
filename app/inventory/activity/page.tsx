@@ -51,7 +51,7 @@ export default function ActivityPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">활동 히스토리</h1><p className="b2b-page-subtitle">모든 입고·출고·조정 원장을 날짜별로 묶었습니다. 품목·SKU·메모로 검색하면 해당 날짜만 펼쳐 볼 수 있어요.</p></div>
+        <div><h1 className="b2b-page-title">변경 기록</h1><p className="b2b-page-subtitle">모든 입고·출고·조정 원장을 날짜별로 묶었습니다. 품목·SKU·메모로 검색하면 해당 날짜만 펼쳐 볼 수 있어요.</p></div>
         <div className="b2b-page-actions"><button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button></div>
       </header>
 

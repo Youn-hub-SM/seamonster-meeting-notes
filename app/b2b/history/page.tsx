@@ -124,7 +124,7 @@ export default function HistoryPage() {
     <>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">히스토리</h1>
+          <h1 className="b2b-page-title">변경 기록</h1>
           <p className="b2b-page-subtitle">
             발주·업체·입금 등 B2B 도매 변경 이력을 시간순으로 영구 기록합니다. (상품 마스터 변경은 <a href="/b2b/products/history">상품 마스터 › 변경 기록</a>)
           </p>
