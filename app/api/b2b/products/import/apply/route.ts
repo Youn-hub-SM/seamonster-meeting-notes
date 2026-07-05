@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeProduct, type ProductInput } from "@/app/lib/b2b-types";
 import { logProductChange } from "@/app/lib/b2b-activity";
+import { diffProduct } from "@/app/lib/product-diff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,19 +47,21 @@ export async function POST(req: NextRequest) {
     for (const input of creates) {
       const clean = normalizeProduct(input);
       if (!clean.name) { errors.push("품목명 누락 행 건너뜀"); continue; }
-      const { error } = await sb.from("products").insert(dbRow(clean));
+      const { data: ins, error } = await sb.from("products").insert(dbRow(clean)).select("id").single();
       if (error) { errors.push(`${clean.name}: ${error.message}`); continue; }
       created++;
-      await logProductChange("created", clean.name, clean.sku);
+      await logProductChange("created", clean.name, clean.sku, { source: "엑셀업로드", productId: ins?.id ?? null });
     }
 
     for (const input of updates) {
       if (!input.id) { errors.push(`${input.name || "?"}: id 없음`); continue; }
       const clean = normalizeProduct(input);
+      const { data: before } = await sb.from("products").select("*").eq("id", input.id).single(); // diff 용 이전값
       const { error } = await sb.from("products").update(dbRow(clean)).eq("id", input.id);
       if (error) { errors.push(`${clean.name}: ${error.message}`); continue; }
       updated++;
-      await logProductChange("updated", clean.name, clean.sku);
+      const changes = diffProduct(before, dbRow(clean));
+      if (changes.length) await logProductChange("updated", clean.name, clean.sku, { source: "엑셀업로드", changes, productId: input.id });
     }
 
     return NextResponse.json({ ok: errors.length === 0, created, updated, errors });

@@ -25,7 +25,13 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/history", label: "히스토리" },
         ],
       },
-      { href: "/b2b/products", label: "상품 마스터", icon: "fish" },
+      {
+        href: "/b2b/products", label: "상품 마스터", icon: "fish",
+        menu: [
+          { href: "/b2b/products", label: "상품 목록" },
+          { href: "/b2b/products/history", label: "변경 기록" },
+        ],
+      },
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/subscription", label: "정기배송 분석", icon: "trend" },
       {

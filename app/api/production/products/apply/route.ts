@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { logProductChange } from "@/app/lib/b2b-activity";
+import { diffProduct } from "@/app/lib/product-diff";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -42,6 +44,8 @@ export async function POST(req: NextRequest) {
           const { error: uErr } = await sb.from("products").update({ name, spec }).eq("id", ex.id);
           if (uErr) throw uErr;
           updated++;
+          const changes = diffProduct({ name: ex.name, spec: ex.spec }, { name, spec });
+          await logProductChange("updated", name, sku, { source: "품목업로드(생산)", changes, productId: ex.id });
         }
       } else {
         // 신규 — 금액/이익률은 0/기본값, 활성. (사용자가 추후 원가표에서 보완)
@@ -66,6 +70,7 @@ export async function POST(req: NextRequest) {
       const { error: iErr } = await sb.from("products").insert(toInsert);
       if (iErr) throw iErr;
       added = toInsert.length;
+      for (const row of toInsert) await logProductChange("created", String(row.name), String(row.sku), { source: "품목업로드(생산)" });
     }
 
     return NextResponse.json({ ok: true, added, updated });

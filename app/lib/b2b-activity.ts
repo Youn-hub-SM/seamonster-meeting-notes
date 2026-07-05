@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
 import { resolveUserName } from "./b2b-auth";
 import { getNotifyConfig, shouldNotify } from "./b2b-settings";
+import type { ProductFieldChange } from "./product-diff";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
 // 대시보드 우측 "최근 변경" 피드의 소스.
@@ -241,14 +242,23 @@ export async function logCompanyChange(action: "created" | "updated" | "deleted"
   });
 }
 
-// 원가표(제품/품목) 등록·수정·삭제
-export async function logProductChange(action: "created" | "updated" | "deleted", name: string, sku?: string | null): Promise<void> {
+// 상품 마스터(제품/품목) 등록·수정·삭제 — 변경 기록(/b2b/products/history)의 소스.
+//  opts.changes: 필드별 diff(수정 시), opts.source: 변경 경로(수동수정·엑셀업로드·품목업로드(생산) 등).
+export async function logProductChange(
+  action: "created" | "updated" | "deleted",
+  name: string,
+  sku?: string | null,
+  opts?: { source?: string; changes?: ProductFieldChange[]; productId?: string | null }
+): Promise<void> {
   const verb = action === "created" ? "등록" : action === "updated" ? "수정" : "삭제";
-  const emoji = action === "deleted" ? "🗑️" : "📋";
+  const emoji = action === "deleted" ? "🗑️" : action === "created" ? "🆕" : "✏️";
   const skuPart = sku ? ` (${sku})` : "";
+  const changes = opts?.changes ?? [];
+  const suffix = action === "updated" && changes.length ? ` · ${changes.length}개 항목` : "";
   await recordActivity({
     event_type: `product.${action}`,
-    summary: `${emoji} 원가표 ${verb} · ${name}${skuPart}`,
+    summary: `${emoji} 상품 마스터 ${verb} · ${name}${skuPart}${suffix}`,
+    meta: { source: opts?.source ?? null, changes, product_id: opts?.productId ?? null, name, sku: sku ?? null },
   });
 }
 

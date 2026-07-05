@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeProduct, ProductInput } from "@/app/lib/b2b-types";
 import { logProductChange } from "@/app/lib/b2b-activity";
 import { getAllBundles } from "@/app/lib/product-bundles";
+import { diffProduct } from "@/app/lib/product-diff";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
-    await logProductChange("created", data.name, data.sku);
+    await logProductChange("created", data.name, data.sku, { source: "수동등록", productId: data.id });
     return NextResponse.json({ ok: true, product: data });
   } catch (err) {
     console.error("[b2b/products POST]", err);
@@ -83,6 +84,7 @@ export async function PUT(req: NextRequest) {
     }
     const clean = normalizeProduct(body);
     const sb = supabaseAdmin();
+    const { data: before } = await sb.from("products").select("*").eq("id", body.id).single(); // 변경 diff 용 이전값
     const { data, error } = await sb
       .from("products")
       .update({
@@ -109,7 +111,8 @@ export async function PUT(req: NextRequest) {
       .select()
       .single();
     if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
-    await logProductChange("updated", data.name, data.sku);
+    const changes = diffProduct(before, data);
+    if (changes.length) await logProductChange("updated", data.name, data.sku, { source: "수동수정", changes, productId: data.id });
     return NextResponse.json({ ok: true, product: data });
   } catch (err) {
     console.error("[b2b/products PUT]", err);
@@ -138,7 +141,7 @@ export async function DELETE(req: NextRequest) {
       }
       throw error;
     }
-    if (snap?.name) await logProductChange("deleted", snap.name, snap.sku);
+    if (snap?.name) await logProductChange("deleted", snap.name, snap.sku, { source: "수동삭제" });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[b2b/products DELETE]", err);

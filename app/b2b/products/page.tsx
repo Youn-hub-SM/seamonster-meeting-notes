@@ -191,6 +191,9 @@ export default function ProductsPage() {
           </p>
         </div>
         <div className="b2b-page-actions">
+          <a className="b2b-btn-secondary" href="/b2b/products/history" title="상품 마스터 변경(등록·수정·삭제) 기록">
+            변경 기록
+          </a>
           <a className="b2b-btn-secondary" href="/api/b2b/products/export" title="전 품목을 엑셀로 내려받기(ID 포함, 수정 후 재업로드 가능)">
             엑셀 추출
           </a>
