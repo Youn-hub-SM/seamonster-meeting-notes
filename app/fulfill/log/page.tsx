@@ -179,6 +179,14 @@ export default function DeliveryLogPage() {
       onChange={(e) => setField(r.log_date, k, e.target.value)} onBlur={() => save(r.log_date)} />
   );
 
+  // 현재 조회 기간을 엑셀로 (미선택 시 서버가 해석한 기본 기간)
+  const exportHref = () => {
+    const p = new URLSearchParams();
+    const f = from || range.from, t = to || range.to;
+    if (f) p.set("from", f); if (t) p.set("to", t);
+    return `/api/fulfill/log/export?${p.toString()}`;
+  };
+
   return (
     <>
       <header className="b2b-page-head">
@@ -194,6 +202,7 @@ export default function DeliveryLogPage() {
           <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
           <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계</Link>
           <Link className="b2b-btn-secondary" href="/fulfill/settings">단가 설정</Link>
+          <a className="b2b-btn-secondary" href={exportHref()} style={rows.length ? undefined : { pointerEvents: "none", opacity: 0.5 }} title="현재 기간을 엑셀로 추출">엑셀 추출</a>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
         </div>
       </header>
