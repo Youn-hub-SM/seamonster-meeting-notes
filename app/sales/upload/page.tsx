@@ -84,8 +84,10 @@ export default function SalesUploadPage() {
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.tsv" onChange={(e) => pick(e.target.files?.[0] || null)} />
           <button className="b2b-btn-primary" onClick={doPreview} disabled={!file || busy !== ""}>{busy === "preview" ? "분석 중…" : "미리보기"}</button>
+          <a className="b2b-btn-secondary" href="/api/sales/upload/template" title="빈 양식(xlsx) 다운로드">양식 다운로드</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장(인코딩 안전). 한글 헤더(판매처·주문일자·결제금액…) 또는 영문 헤더 모두 인식. 과거 전체(수만 행 이상)는 백필 스크립트로 이관하세요.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>표준 주문수집 파일이 없을 땐 <strong>양식 다운로드</strong>로 빈 양식을 받아 손으로 채운 뒤 그대로 올리면 됩니다(일회성). 헤더 이름은 바꾸지 마세요.</p>
       </section>
 
       {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>⚠️ {err}</p>}
