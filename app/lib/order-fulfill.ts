@@ -7,6 +7,8 @@
 //  · R 기본운임 = U 구간 (≤2.7→2700, ≤5.2→3300, >5.2→3900)
 //  주문 총중량 U = 같은 (주문번호 B, 주소 E) 라인들의 Σ( 코드 총중량 × 수량 I ).
 
+import { type FulfillRates, DEFAULT_RATES, boxTypeOf, baseFeeOf } from "./fulfill-rates";
+
 export const CNPLUS_HEADERS = [
   "사용안함", "고객주문번호", "받는분성명", "우편번호", "받는분주소(전체, 분할)", "받는분전화번호",
   "사용안함", "사용안함", "내품수량", "배송메세지1", "품목코드", "사용안함", "사용안함",
@@ -37,14 +39,16 @@ export type FulfillResult = {
   normal: unknown[][];        // A~R (18열) 일반
   guarantee: unknown[][];     // A~R 도착보장(Q=3)
   stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
-  fees: { baseNormal: number; baseGuar: number }; // 기본운임 합(일반/도착보장) — 배송일지 기록용
+  fees: { baseNormal: number; baseGuar: number; guarExtra: number }; // 기본운임 합(일반/도착보장) + 도착보장 추가운임 — 배송일지 기록용
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
   unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
 };
 
-// rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어.
-export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[]): FulfillResult {
+// rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어. rates: 요율(기본운임 구간·도착보장 추가).
+export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES): FulfillResult {
+  const boxTypeR = (w: number) => boxTypeOf(w, rates.boxTiers);
+  const baseFeeR = (w: number) => baseFeeOf(w, rates.boxTiers);
   // 1) 단품코드에 NOTHING 포함 행 제외(정기배송 등)
   const kept: unknown[][] = [];
   let excludedNothing = 0;
@@ -79,9 +83,9 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     for (let c = 0; c < 13; c++) out.push(r[c] ?? "");     // A~M 원본 통과(타입 유지)
     out.push(info?.courier_name ?? "");                     // N 품목명
     out.push(1);                                            // O 박스수량
-    out.push(boxType(U));                                   // P 박스타입
+    out.push(boxTypeR(U));                                  // P 박스타입
     out.push(isGuar ? 3 : 1);                               // Q 운임구분
-    out.push(baseFee(U));                                   // R 기본운임
+    out.push(baseFeeR(U));                                  // R 기본운임
     (isGuar ? guarantee : normal).push(out);
 
     const addr = String(r[IDX.addr] ?? "");
@@ -96,15 +100,15 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     parcels++;
     const guar = groupGuar.get(k) === true;
     const c = counts.get(boxCategory(U))!;
-    if (guar) { parcelsGuar++; c.guarantee++; baseGuar += baseFee(U); }
-    else { c.normal++; baseNormal += baseFee(U); }
+    if (guar) { parcelsGuar++; c.guarantee++; baseGuar += baseFeeR(U); }
+    else { c.normal++; baseNormal += baseFeeR(U); }
   }
   const parcelSummary = BOX_CATEGORIES.map((cat) => ({ category: cat, ...counts.get(cat)! }));
 
   return {
     headers: CNPLUS_HEADERS, normal, guarantee,
     stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar },
-    fees: { baseNormal, baseGuar },
+    fees: { baseNormal, baseGuar, guarExtra: rates.guarSurcharge * parcelsGuar },
     parcelSummary,
     addressWarnings, unmatched: [...unmatched],
   };

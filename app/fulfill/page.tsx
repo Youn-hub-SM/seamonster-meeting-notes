@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { GUAR_SURCHARGE } from "@/app/lib/order-fulfill";
 
 type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
 type Parcel = { category: string; normal: number; guarantee: number };
 type Result = {
   stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
-  fees: { baseNormal: number; baseGuar: number };
+  fees: { baseNormal: number; baseGuar: number; guarExtra: number };
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
   unmatched: string[];
@@ -57,7 +56,7 @@ export default function FulfillPage() {
 
       const boxes_normal: Record<string, number> = {}, boxes_guar: Record<string, number> = {};
       for (const p of res.parcelSummary) { if (p.normal) boxes_normal[p.category] = p.normal; if (p.guarantee) boxes_guar[p.category] = p.guarantee; }
-      const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, mode: recordMode, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar, guar_extra_fee: GUAR_SURCHARGE * res.stats.parcelsGuar }) });
+      const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, mode: recordMode, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar, guar_extra_fee: res.fees.guarExtra }) });
       const j = await r.json(); if (!j.ok) throw new Error(j.error || "기록 실패");
       setRecordOk(`${recordDate} 배송일지에 ${recordMode === "add" ? "더했어요(누적)" : "기록했어요"}.`);
     } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }

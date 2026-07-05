@@ -38,6 +38,7 @@ export const NAV: NavCategory[] = [
           { href: "/fulfill", label: "발주처리(CNplus)" },
           { href: "/fulfill/log", label: "배송일지" },
           { href: "/fulfill/stats", label: "발송 통계" },
+          { href: "/fulfill/settings", label: "단가 설정" },
         ],
       },
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },

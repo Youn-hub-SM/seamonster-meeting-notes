@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
+import { DEFAULT_RATES, type FulfillRates } from "@/app/lib/fulfill-rates";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -16,7 +17,6 @@ type BoxDraft = Record<string, { n?: Record<string, string>; g?: Record<string, 
 
 const won = (n: unknown) => (Number(n) || 0).toLocaleString();
 const sumBoxes = (o: Boxes) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
-const DRY_FULL = 30800, DRY_HALF = 19800; // 드라이아이스 단가: 1박스 30,800 · 1/2박스 19,800
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const weekday = (iso: string) => WD[new Date(`${iso}T00:00:00`).getDay()];
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -45,6 +45,8 @@ export default function DeliveryLogPage() {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [draft, setDraft] = useState<Record<string, Partial<Record<EditKey, string>>>>({});
   const [boxDraft, setBoxDraft] = useState<BoxDraft>({});
+  const [rates, setRates] = useState<FulfillRates>(DEFAULT_RATES);
+  useEffect(() => { fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setRates(j.rates); }).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -157,7 +159,8 @@ export default function DeliveryLogPage() {
   }
 
   const feeTotal = (r: Row) => cur(r, "base_fee_normal") + cur(r, "base_fee_guar") + cur(r, "extra_fee") + cur(r, "guar_extra_fee") + cur(r, "pado_fee") + cur(r, "pado_extra") + cur(r, "pado_cod");
-  const dryAmt = (r: Row) => cur(r, "dryice_full") * DRY_FULL + cur(r, "dryice_half") * DRY_HALF;
+  const dryAmt = (r: Row) => cur(r, "dryice_full") * rates.dryFull + cur(r, "dryice_half") * rates.dryHalf;
+  const guarFeeTotal = (r: Row) => cur(r, "base_fee_guar") + cur(r, "guar_extra_fee"); // 도착보장 운임 = 기본 + 추가(143×건)
 
   const totals = useMemo(() => ({
     normal: rows.reduce((s, r) => s + sumBoxes(r.boxes_normal), 0),
@@ -186,6 +189,7 @@ export default function DeliveryLogPage() {
           <input type="date" className="b2b-input" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ width: "auto" }} title="추가할 날짜" />
           <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
           <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계</Link>
+          <Link className="b2b-btn-secondary" href="/fulfill/settings">단가 설정</Link>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
         </div>
       </header>
@@ -271,7 +275,10 @@ export default function DeliveryLogPage() {
                                 <label>도착보장 기본운임 {numInput(r, "base_fee_guar")}</label>
                                 <label>파도 추가 {numInput(r, "pado_extra")}</label>
                                 <label>파도 착불 {numInput(r, "pado_cod")}</label>
-                                <span className="sm-faint">드라이 단가: 풀 {DRY_FULL.toLocaleString()} · 반 {DRY_HALF.toLocaleString()}</span>
+                              </div>
+                              <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
+                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))} + 추가 {won(cur(r, "guar_extra_fee"))}({won(rates.guarSurcharge)}원×{sumBoxes(r.boxes_guar)}건) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFeeTotal(r))}원</strong></span>
+                                <span className="sm-faint">🧊 드라이 {won(dryAmt(r))}원 (풀 {won(rates.dryFull)}·반 {won(rates.dryHalf)})</span>
                               </div>
                             </div>
                           </td>

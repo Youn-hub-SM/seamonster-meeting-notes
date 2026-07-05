@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
+import { normalizeRates } from "@/app/lib/fulfill-rates";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -64,7 +65,11 @@ export async function POST(req: NextRequest) {
       codeMap.set(sku.toUpperCase(), { courier_name: c.courier_name || "", order_weight: Number(c.courier_weight) || 0 });
     }
 
-    const res = buildCnplus(rows, codeMap, keywords);
+    // 요율(설정) 로드 — 미설정이면 기본값
+    const { data: rateRow } = await sb.from("b2b_settings").select("value").eq("key", "fulfill_rates").maybeSingle();
+    const rates = normalizeRates(rateRow?.value ?? {});
+
+    const res = buildCnplus(rows, codeMap, keywords, rates);
 
     const d = new Date(Date.now() + 9 * 3600e3);
     const stamp = `${d.toISOString().slice(0, 10).replace(/-/g, "")}_${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;

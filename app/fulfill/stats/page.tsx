@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
+import { DEFAULT_RATES, type FulfillRates } from "@/app/lib/fulfill-rates";
 import { StackedBar, TrendChart, PieCard, BarList, moneyCompact, PIE_COLORS } from "@/app/components/charts";
 
 type Boxes = Record<string, number>;
@@ -12,7 +13,6 @@ type Row = {
   extra_fee: number; guar_extra_fee: number; pado_fee: number; pado_extra: number; pado_cod: number;
   dryice_full: number; dryice_half: number;
 };
-const DRY_FULL = 30800, DRY_HALF = 19800;
 const won = (n: number) => Math.round(n).toLocaleString();
 const sum = (o: Boxes) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
@@ -39,8 +39,10 @@ export default function FulfillStatsPage() {
   const [from, setFrom] = useState(firstOfMonth(5));
   const [to] = useState(iso(kstDate(0)));
   const [preset, setPreset] = useState("6개월");
+  const [rates, setRates] = useState<FulfillRates>(DEFAULT_RATES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  useEffect(() => { fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setRates(j.rates); }).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -54,7 +56,7 @@ export default function FulfillStatsPage() {
   useEffect(() => { load(); }, [load]);
 
   const feeTotal = (r: Row) => r.base_fee_normal + r.base_fee_guar + r.extra_fee + r.guar_extra_fee + r.pado_fee + r.pado_extra + r.pado_cod;
-  const dryAmt = (r: Row) => r.dryice_full * DRY_FULL + r.dryice_half * DRY_HALF;
+  const dryAmt = (r: Row) => r.dryice_full * rates.dryFull + r.dryice_half * rates.dryHalf;
 
   const agg = useMemo(() => {
     const months = monthsBetween(from, to);
@@ -92,7 +94,7 @@ export default function FulfillStatsPage() {
       guarRatioTrend: months.map((m) => { const n = mN.get(m) || 0, g = mG.get(m) || 0; const t = n + g; return { label: lbl(m), value: t ? Math.round((g / t) * 100) : 0, tip: `${m} · 도착보장 ${t ? Math.round((g / t) * 100) : 0}%` }; }),
       totN, totG, fee, dry, days,
     };
-  }, [rows, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows, from, to, rates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tot = agg.totN + agg.totG;
   const NG_COLORS = ["#1971C2", "#F15A30"]; // 일반 파랑 · 도착보장 주황
