@@ -14,7 +14,7 @@ export const NAV: NavCategory[] = [
     label: "세일즈",
     tools: [
       {
-        href: "/b2b", label: "B2B 도매", icon: "truck",
+        href: "/b2b", label: "B2B", icon: "truck",
         menu: [
           { href: "/b2b", label: "대시보드" },
           { href: "/b2b/orders", label: "발주" },
@@ -33,9 +33,9 @@ export const NAV: NavCategory[] = [
         ],
       },
       {
-        href: "/fulfill", label: "택배 발주처리", icon: "truck",
+        href: "/fulfill", label: "온라인 발주", icon: "truck",
         menu: [
-          { href: "/fulfill", label: "발주처리(CNplus)" },
+          { href: "/fulfill", label: "발주처리" },
           { href: "/fulfill/log", label: "배송일지" },
           { href: "/fulfill/stats", label: "발송 통계" },
           { href: "/fulfill/settings", label: "단가 설정" },
@@ -90,7 +90,7 @@ export const NAV: NavCategory[] = [
   {
     label: "마케팅",
     tools: [
-      { href: "/utm", label: "UTM 빌더", icon: "link" },
+      { href: "/utm", label: "UTM 만들기", icon: "link" },
       { href: "/qr", label: "QR 코드", icon: "qrcode" },
       { href: "/correct", label: "문장 교정", icon: "pen" },
     ],
@@ -108,12 +108,12 @@ export const NAV: NavCategory[] = [
       {
         href: "/voc", label: "VOC 관리", icon: "megaphone",
         menu: [
-          { href: "/voc", label: "처리 상태" },
+          { href: "/voc", label: "VOC 처리" },
           { href: "/voc/stats", label: "통계·보고서" },
           { href: "/voc/insights", label: "AI 인사이트" },
           { href: "/voc/loss", label: "손해금액 산정" },
           { href: "/voc/reports", label: "개선요청서" },
-          { href: "/voc/manufacturer", label: "제조사 공유자료" },
+          { href: "/voc/manufacturer", label: "월간 VOC 리포트" },
           { href: "/voc/surveys", label: "설문 응답(Tally)" },
         ],
       },

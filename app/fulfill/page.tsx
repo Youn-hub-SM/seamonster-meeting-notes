@@ -90,7 +90,7 @@ export default function FulfillPage() {
     <div className="b2b-container" style={{ maxWidth: 880 }}>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">택배 발주처리</h1>
+          <h1 className="b2b-page-title">발주처리</h1>
           <p className="b2b-page-subtitle">
             소매 주문 엑셀(A~M)을 올리면 <strong>CNplus 발주 파일(일반 + 도착보장)</strong>을 만들어 드립니다.
             단품코드 NOTHING 제외 · 도착보장 분리(운임구분 3) · 박스타입/운임 자동. 품목명·중량은 <Link href="/b2b/products">상품마스터</Link> 기준.
