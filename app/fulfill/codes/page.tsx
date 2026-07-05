@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-type Code = { sku: string; courier_name: string; order_weight: number; updated_at: string };
+type Code = { sku: string; name: string; courier_name: string; courier_weight: number };
 
 export default function FulfillCodesPage() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -34,7 +34,7 @@ export default function FulfillCodesPage() {
       const fd = new FormData(); fd.append("file", file);
       const j = await (await fetch("/api/fulfill/codes", { method: "POST", body: fd })).json();
       if (!j.ok) throw new Error(j.error || "업로드 실패");
-      setOk(`코드표 ${j.imported.toLocaleString()}개 반영 완료.`);
+      setOk(`상품마스터 반영 — 기존 ${(j.updated ?? 0).toLocaleString()}개 갱신 · 신규 ${(j.created ?? 0).toLocaleString()}개 생성.`);
       await load();
     } catch (err) { setError(err instanceof Error ? err.message : "업로드 실패"); }
     setImporting(false);
@@ -45,10 +45,10 @@ export default function FulfillCodesPage() {
     <div className="b2b-container" style={{ maxWidth: 880 }}>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">발주 코드표</h1>
+          <h1 className="b2b-page-title">택배 코드 (상품마스터)</h1>
           <p className="b2b-page-subtitle">
-            단품코드 → <strong>택배 상품명</strong>과 <strong>주문당 총중량(kg)</strong>. 발주처리에서 품목명·박스타입·운임 계산에 씁니다.
-            구글시트 <strong>code 탭</strong>(또는 코드명·상품명·총중량 열이 있는 엑셀)을 올리면 갱신됩니다.
+            택배 상품명·주문당 총중량은 <strong><Link href="/b2b/products">상품마스터</Link>에서 상품별로 관리</strong>합니다.
+            여기선 구글시트 <strong>code 탭</strong>(코드명·상품명·총중량)을 올려 <strong>한 번에 반영</strong>할 수 있어요 — 없는 SKU는 상품마스터에 자동 생성됩니다.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -71,13 +71,14 @@ export default function FulfillCodesPage() {
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">
-              <thead><tr><th>단품코드</th><th>택배 상품명</th><th className="num">주문당 총중량(kg)</th></tr></thead>
+              <thead><tr><th>단품코드</th><th>품목명</th><th>택배 상품명</th><th className="num">택배 총중량(kg)</th></tr></thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.sku}>
+                {rows.map((r, i) => (
+                  <tr key={`${r.sku}-${i}`}>
                     <td><code style={{ fontSize: 11 }}>{r.sku}</code></td>
-                    <td style={{ maxWidth: 460, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.courier_name || <span className="sm-faint">(없음)</span>}</td>
-                    <td className="num b2b-money">{r.order_weight}</td>
+                    <td className="sm-faint" style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</td>
+                    <td style={{ maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.courier_name || <span className="sm-faint">(없음)</span>}</td>
+                    <td className="num b2b-money">{r.courier_weight}</td>
                   </tr>
                 ))}
               </tbody>

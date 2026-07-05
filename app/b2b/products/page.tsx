@@ -307,6 +307,8 @@ export default function ProductsPage() {
                               pkg_label: p.pkg_label ?? 0,
                               pkg_outer: p.pkg_outer ?? 0,
                               volume_kg: p.volume_kg ?? null,
+                              courier_name: p.courier_name ?? "",
+                              courier_weight: p.courier_weight ?? 0,
                             },
                           })
                         }
@@ -751,6 +753,35 @@ function ProductModal({
               placeholder="예: 0.1, 1, 10"
               style={{ maxWidth: 200 }}
             />
+          </Field>
+
+          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
+            택배 발주(CNplus) 정보
+          </div>
+          <Field label="택배 상품명">
+            <input
+              type="text"
+              className="b2b-input"
+              value={data.courier_name ?? ""}
+              onChange={(e) => set("courier_name", e.target.value)}
+              placeholder="발주서에 찍힐 품목명 (예: 진공 씨몬스터 참돔순살 100g)"
+            />
+          </Field>
+          <Field label="택배 주문당 총중량 (kg) — 박스타입·운임 기준">
+            <input
+              type="number"
+              inputMode="decimal"
+              className="b2b-input"
+              value={data.courier_weight || ""}
+              onChange={(e) => set("courier_weight", Number(e.target.value) || 0)}
+              min={0}
+              step={0.1}
+              placeholder="예: 0.5, 1, 9"
+              style={{ maxWidth: 200 }}
+            />
+            <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
+              같은 주문의 라인 중량을 합해 박스타입(≤2.7→1, ≤5.2→2, 초과→3)과 운임을 정합니다. 제품부피와 다를 수 있어요.
+            </span>
           </Field>
 
           {(effCost > 0 || data.sale_price > 0) && (

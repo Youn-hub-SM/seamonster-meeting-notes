@@ -5,12 +5,14 @@ import Link from "next/link";
 
 type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
+type Parcel = { category: string; normal: number; guarantee: number };
 type Result = {
-  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number };
+  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
+  parcelSummary: Parcel[];
   addressWarnings: Warn[];
   unmatched: string[];
   codeCount: number;
-  files: { normal: FileOut; guarantee: FileOut | null };
+  files: { normal: FileOut; guarantee: FileOut | null; parcel: FileOut };
 };
 
 const KW_KEY = "fulfill_addr_keywords";
@@ -97,10 +99,33 @@ export default function FulfillPage() {
 
           {res.unmatched.length > 0 && (
             <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-danger-bg)", border: "1px solid var(--sm-danger)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
-              ⚠️ <strong>코드표에 없는 단품코드 {res.unmatched.length}개</strong> — 이 상품들은 <strong>품목명이 비고 중량이 0</strong>이라 박스타입/운임이 틀릴 수 있어요. <Link href="/fulfill/codes">코드표</Link>에 추가 후 다시 만드세요.
+              ⚠️ <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 이 상품들은 <strong>품목명이 비고 중량이 0</strong>이라 박스타입/운임이 틀릴 수 있어요. <Link href="/b2b/products">상품마스터</Link>에서 택배 상품명·중량을 채운 뒤 다시 만드세요.
               <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(" · ")}{res.unmatched.length > 30 ? " …" : ""}</div>
             </div>
           )}
+
+          <section className="b2b-card" style={{ marginBottom: 16 }}>
+            <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <span className="b2b-card-title">택배량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 주문(택배) {res.stats.parcels}건 (일반 {res.stats.parcels - res.stats.parcelsGuar} · 도착보장 {res.stats.parcelsGuar})</span></span>
+              <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
+            </div>
+            <div className="b2b-table-wrap">
+              <table className="b2b-table">
+                <thead><tr><th>박스종류</th><th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
+                <tbody>
+                  {res.parcelSummary.filter((p) => p.normal || p.guarantee).map((p) => (
+                    <tr key={p.category}>
+                      <td><strong>{p.category}</strong></td>
+                      <td className="num b2b-money">{p.normal || "-"}</td>
+                      <td className="num b2b-money" style={{ color: p.guarantee ? "var(--sm-orange)" : "var(--sm-text-light)" }}>{p.guarantee || "-"}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{p.normal + p.guarantee}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>주문(주문번호+주소) 단위로 총중량에 따라 박스종류를 나눠 셈. 배송일지 &lsquo;택배량&rsquo; 시트와 동일 기준.</p>
+          </section>
 
           {res.addressWarnings.length > 0 && (
             <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>

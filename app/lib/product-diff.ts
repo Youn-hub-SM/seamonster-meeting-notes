@@ -26,6 +26,8 @@ export const PRODUCT_DIFF_FIELDS: FieldDef[] = [
   { key: "pkg_label", label: "라벨", kind: "money" },
   { key: "pkg_outer", label: "외포장지", kind: "money" },
   { key: "volume_kg", label: "제품부피(kg)", kind: "num" },
+  { key: "courier_name", label: "택배 상품명", kind: "text" },
+  { key: "courier_weight", label: "택배 중량(kg)", kind: "num" },
 ];
 
 // 표시용 포맷

@@ -30,6 +30,8 @@ function dbRow(clean: ProductInput) {
     pkg_label: clean.pkg_label,
     pkg_outer: clean.pkg_outer,
     volume_kg: clean.volume_kg,
+    courier_name: clean.courier_name,
+    courier_weight: clean.courier_weight,
   };
 }
 

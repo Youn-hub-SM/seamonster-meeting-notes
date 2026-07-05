@@ -22,14 +22,23 @@ const IDX = { dbNo: 0, orderNo: 1, name: 2, zip: 3, addr: 4, phone1: 5, phone2: 
 export function boxType(w: number): number { return w <= 2.7 ? 1 : w <= 5.2 ? 2 : 3; }
 export function baseFee(w: number): number { return w <= 2.7 ? 2700 : w <= 5.2 ? 3300 : 3900; }
 
+// 택배량 집계용 박스종류(주문 총중량 구간). 배송일지 '해당 주문건 박스 종류'와 동일.
+export const BOX_CATEGORIES = ["굴", "생굴", "김치8", "김치10", "12kg", "15kg", "20kg", "25kg"] as const;
+export function boxCategory(w: number): string {
+  return w < 1.7 ? "굴" : w <= 2.7 ? "생굴" : w <= 4 ? "김치8" : w <= 5.2 ? "김치10"
+    : w <= 9 ? "12kg" : w <= 11 ? "15kg" : w < 16 ? "20kg" : "25kg";
+}
+
 export type CodeInfo = { courier_name: string; order_weight: number };
+export type ParcelCount = { category: string; normal: number; guarantee: number };
 export type FulfillResult = {
   headers: string[];
   normal: unknown[][];        // A~R (18열) 일반
   guarantee: unknown[][];     // A~R 도착보장(Q=3)
-  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number };
+  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
+  parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
-  unmatched: string[];        // 코드표에 없는 단품코드
+  unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
 };
 
 // rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어.
@@ -45,13 +54,16 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   // 2) 주문키(주문번호+주소)별 총중량 U
   const gkey = (r: unknown[]) => `${String(r[IDX.orderNo] ?? "")}||${String(r[IDX.addr] ?? "")}`;
   const groupW = new Map<string, number>();
+  const groupGuar = new Map<string, boolean>();  // 주문에 도착보장 라인이 하나라도 있으면 true
   const unmatched = new Set<string>();
   for (const r of kept) {
     const raw = String(r[IDX.sku] ?? "").trim();
     const info = codeMap.get(raw.toUpperCase());
     if (!info && raw) unmatched.add(raw);
     const t = (info?.order_weight ?? 0) * (Number(r[IDX.qty]) || 0);
-    groupW.set(gkey(r), (groupW.get(gkey(r)) ?? 0) + t);
+    const k = gkey(r);
+    groupW.set(k, (groupW.get(k) ?? 0) + t);
+    if (String(r[IDX.prop] ?? "").trim() === GUARANTEE_LABEL) groupGuar.set(k, true);
   }
 
   // 3) 18열 생성 + 도착보장 분리 + 주소 경고
@@ -74,9 +86,23 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     if (keywords.some((k) => k && addr.includes(k))) addressWarnings.push({ rowNo: i + 1, addr, name: String(r[IDX.name] ?? "") });
   });
 
+  // 택배량: 주문(주문번호+주소) 단위로 박스종류별 일반/도착보장 개수 집계
+  const counts = new Map<string, { normal: number; guarantee: number }>();
+  for (const cat of BOX_CATEGORIES) counts.set(cat, { normal: 0, guarantee: 0 });
+  let parcels = 0, parcelsGuar = 0;
+  for (const [k, U] of groupW) {
+    parcels++;
+    const guar = groupGuar.get(k) === true;
+    if (guar) parcelsGuar++;
+    const c = counts.get(boxCategory(U))!;
+    if (guar) c.guarantee++; else c.normal++;
+  }
+  const parcelSummary = BOX_CATEGORIES.map((cat) => ({ category: cat, ...counts.get(cat)! }));
+
   return {
     headers: CNPLUS_HEADERS, normal, guarantee,
-    stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length },
+    stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar },
+    parcelSummary,
     addressWarnings, unmatched: [...unmatched],
   };
 }

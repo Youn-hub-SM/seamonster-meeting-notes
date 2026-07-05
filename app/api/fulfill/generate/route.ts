@@ -53,12 +53,16 @@ export async function POST(req: NextRequest) {
     }
     if (rows.length === 0) return NextResponse.json({ ok: false, error: "데이터 행이 없습니다." }, { status: 400 });
 
-    // 코드표
+    // 택배 코드 = 상품마스터(courier_name·courier_weight)
     const sb = supabaseAdmin();
-    const { data: codes, error } = await sb.from("shipping_codes").select("sku, courier_name, order_weight");
-    if (error) return NextResponse.json({ ok: false, error: `${error.message} (053 적용/코드표 업로드 확인)` }, { status: 500 });
+    const { data: codes, error } = await sb.from("products").select("sku, courier_name, courier_weight").not("sku", "is", null);
+    if (error) return NextResponse.json({ ok: false, error: `${error.message} (054 적용 확인)` }, { status: 500 });
     const codeMap = new Map<string, CodeInfo>();
-    for (const c of codes ?? []) codeMap.set(String(c.sku).trim().toUpperCase(), { courier_name: c.courier_name || "", order_weight: Number(c.order_weight) || 0 });
+    for (const c of codes ?? []) {
+      const sku = String(c.sku || "").trim();
+      if (!sku) continue;
+      codeMap.set(sku.toUpperCase(), { courier_name: c.courier_name || "", order_weight: Number(c.courier_weight) || 0 });
+    }
 
     const res = buildCnplus(rows, codeMap, keywords);
 
@@ -67,15 +71,22 @@ export async function POST(req: NextRequest) {
     const normalB64 = await toXlsxB64(res.headers, res.normal);
     const guarB64 = res.guarantee.length ? await toXlsxB64(res.headers, res.guarantee) : null;
 
+    // 택배량 집계 xlsx (박스종류 × 일반/도착보장)
+    const parcelRows: unknown[][] = res.parcelSummary.map((p) => [p.category, p.normal, p.guarantee, p.normal + p.guarantee]);
+    parcelRows.push(["합계", res.stats.parcels - res.stats.parcelsGuar, res.stats.parcelsGuar, res.stats.parcels]);
+    const parcelB64 = await toXlsxB64(["박스종류", "일반", "도착보장", "합계"], parcelRows);
+
     return NextResponse.json({
       ok: true,
       stats: res.stats,
+      parcelSummary: res.parcelSummary,
       addressWarnings: res.addressWarnings,
       unmatched: res.unmatched,
       codeCount: codeMap.size,
       files: {
         normal: { name: `cnplus_출력_${stamp}.xlsx`, b64: normalB64 },
         guarantee: guarB64 ? { name: `[도착보장]cnplus_출력_${stamp}.xlsx`, b64: guarB64 } : null,
+        parcel: { name: `택배량_${stamp}.xlsx`, b64: parcelB64 },
       },
     });
   } catch (e) {
