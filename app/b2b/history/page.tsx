@@ -24,8 +24,8 @@ const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "payment.added", label: "입금 기록" },
   { value: "order.deleted", label: "발주 삭제" },
   { value: "company.created,company.updated,company.deleted", label: "업체 변경" },
-  { value: "product.created,product.updated,product.deleted", label: "원가표(품목) 변경" },
 ];
+// 상품 마스터 변경(product.*)은 전용 '변경 기록'(/b2b/products/history)에서 관리 — 여기선 제외.
 
 const ACTOR_OPTIONS = ["", "지인", "예지", "현석", "관리자"];
 const PAGE = 50;
@@ -126,7 +126,7 @@ export default function HistoryPage() {
         <div>
           <h1 className="b2b-page-title">히스토리</h1>
           <p className="b2b-page-subtitle">
-            모든 변경 이력을 시간순으로 영구 기록합니다. (우측 &lsquo;최근 변경&rsquo;과 달리 지워지지 않음)
+            발주·업체·입금 등 B2B 도매 변경 이력을 시간순으로 영구 기록합니다. (상품 마스터 변경은 <a href="/b2b/products/history">상품 마스터 › 변경 기록</a>)
           </p>
         </div>
       </header>
