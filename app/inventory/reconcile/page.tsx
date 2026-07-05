@@ -103,6 +103,9 @@ export default function InventoryReconcilePage() {
         <input type="date" className="b2b-input" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: "auto" }} title="끝일" />
         <span className="sm-faint" style={{ fontSize: 12 }}>보는 기간: {range.from} ~ {range.to}</span>
       </div>
+      <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 12px" }}>
+        팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송)"}</strong>. 채널을 바꾸면 그 채널 재고와 그 채널 판매로 비교합니다.
+      </p>
 
       {error && <div className="b2b-error">{error}{error.includes("051") ? " — supabase/migrations/051_inventory_reconcile.sql 를 먼저 적용하세요." : ""}</div>}
 
