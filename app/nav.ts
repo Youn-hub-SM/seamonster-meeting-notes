@@ -14,7 +14,7 @@ export const NAV: NavCategory[] = [
     label: "세일즈",
     tools: [
       {
-        href: "/b2b", label: "B2B", icon: "truck",
+        href: "/b2b", label: "B2B", icon: "handshake",
         menu: [
           { href: "/b2b", label: "대시보드" },
           { href: "/b2b/orders", label: "발주" },
