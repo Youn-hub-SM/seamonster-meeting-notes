@@ -20,13 +20,26 @@ const DRY_FULL = 30800, DRY_HALF = 19800; // 드라이아이스 단가: 1박스 
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const weekday = (iso: string) => WD[new Date(`${iso}T00:00:00`).getDay()];
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const kstDate = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - back); return d; };
+const isoOf = (d: Date) => d.toISOString().slice(0, 10);
+// 기간 프리셋(KST 기준)
+const PRESETS: { key: string; range: () => { from: string; to: string } }[] = [
+  { key: "오늘", range: () => ({ from: kstToday(), to: kstToday() }) },
+  { key: "어제", range: () => { const y = isoOf(kstDate(1)); return { from: y, to: y }; } },
+  { key: "7일", range: () => ({ from: isoOf(kstDate(6)), to: kstToday() }) },
+  { key: "14일", range: () => ({ from: isoOf(kstDate(13)), to: kstToday() }) },
+  { key: "지난달", range: () => { const n = kstDate(0); return { from: isoOf(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() - 1, 1))), to: isoOf(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0))) }; } },
+  { key: "이번달", range: () => { const n = kstDate(0); return { from: isoOf(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1))), to: kstToday() }; } },
+];
 
 export default function DeliveryLogPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [range, setRange] = useState({ from: "", to: "" });
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [preset, setPreset] = useState("");
   const [newDate, setNewDate] = useState(kstToday());
+  const applyPreset = (p: { key: string; range: () => { from: string; to: string } }) => { const r = p.range(); setFrom(r.from); setTo(r.to); setPreset(p.key); };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -177,10 +190,14 @@ export default function DeliveryLogPage() {
       </header>
 
       <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-        <span className="sm-faint" style={{ fontSize: 12 }}>기간</span>
-        <input type="date" className="b2b-input" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: "auto" }} />
+        <div className="sm-tabs" style={{ margin: 0 }}>
+          {PRESETS.map((p) => (
+            <button key={p.key} className={`sm-tab ${preset === p.key ? "is-active" : ""}`} onClick={() => applyPreset(p)}>{p.key}</button>
+          ))}
+        </div>
+        <input type="date" className="b2b-input" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(""); }} style={{ width: "auto" }} />
         <span style={{ color: "var(--sm-text-light)" }}>~</span>
-        <input type="date" className="b2b-input" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: "auto" }} />
+        <input type="date" className="b2b-input" value={to} onChange={(e) => { setTo(e.target.value); setPreset(""); }} style={{ width: "auto" }} />
         <span className="sm-faint" style={{ fontSize: 12 }}>{range.from} ~ {range.to} · {rows.length}일</span>
       </div>
 
