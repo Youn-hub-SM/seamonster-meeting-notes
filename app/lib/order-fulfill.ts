@@ -21,6 +21,7 @@ const IDX = { dbNo: 0, orderNo: 1, name: 2, zip: 3, addr: 4, phone1: 5, phone2: 
 // 박스타입/기본운임 구간 (주문 총중량 kg). 값 바뀌면 여기만 수정.
 export function boxType(w: number): number { return w <= 2.7 ? 1 : w <= 5.2 ? 2 : 3; }
 export function baseFee(w: number): number { return w <= 2.7 ? 2700 : w <= 5.2 ? 3300 : 3900; }
+export const GUAR_SURCHARGE = 143; // 도착보장 건당 추가운임(원). 배송일지 도착보장 추가운임 = 143 × 도착보장 건수.
 
 // 택배량 집계용 박스종류(주문 총중량 구간). 배송일지 '해당 주문건 박스 종류'와 동일.
 export const BOX_CATEGORIES = ["굴", "생굴", "김치8", "김치10", "12kg", "15kg", "20kg", "25kg"] as const;

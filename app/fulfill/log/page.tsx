@@ -50,13 +50,19 @@ export default function DeliveryLogPage() {
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: date, ...d }) });
       const j = await res.json(); if (!j.ok) throw new Error(j.error);
-      await load();
+      // 전체 리로드 대신 이 행만 로컬 갱신 + 이 날짜 draft만 제거 → 다른 행/칸의 미저장 편집 보존
+      setRows((rs) => rs.map((r) => (r.log_date === date ? applyDraft(r, d) : r)));
+      setDraft((prev) => { const n = { ...prev }; delete n[date]; return n; });
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
   }
   async function removeDay(date: string) {
     if (!window.confirm(`${date} 배송일지 행을 삭제할까요?`)) return;
-    await fetch(`/api/fulfill/log?log_date=${date}`, { method: "DELETE" });
-    await load();
+    try {
+      const res = await fetch(`/api/fulfill/log?log_date=${date}`, { method: "DELETE" });
+      const j = await res.json(); if (!j.ok) throw new Error(j.error);
+      setRows((rs) => rs.filter((r) => r.log_date !== date));
+      setDraft((prev) => { const n = { ...prev }; delete n[date]; return n; });
+    } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
   }
 
   const feeTotal = (r: Row) => r.base_fee_normal + r.base_fee_guar + cur(r, "extra_fee") + cur(r, "guar_extra_fee") + cur(r, "pado_fee") + cur(r, "pado_extra") + cur(r, "pado_cod");
@@ -173,3 +179,15 @@ export default function DeliveryLogPage() {
 }
 
 function FragmentRows({ children }: { children: React.ReactNode }) { return <>{children}</>; }
+
+// 저장 성공 시 서버와 동일 규칙으로 로컬 행에 draft 반영(memo→trim/null, dryice→소수, 나머지→반올림 정수)
+function applyDraft(r: Row, d: Partial<Record<EditKey, string>>): Row {
+  const next = { ...r };
+  const n = next as unknown as Record<string, unknown>;
+  for (const k of Object.keys(d) as EditKey[]) {
+    if (k === "memo") n.memo = (d.memo ?? "").trim() || null;
+    else if (k === "dryice_full" || k === "dryice_half") n[k] = Number(d[k]) || 0;
+    else n[k] = Math.round(Number(d[k]) || 0);
+  }
+  return next;
+}

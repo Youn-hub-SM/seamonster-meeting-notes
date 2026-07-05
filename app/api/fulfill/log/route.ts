@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MANUAL = ["extra_fee", "guar_extra_fee", "pado_fee", "pado_extra", "pado_cod", "dryice_full", "dryice_half", "memo"] as const;
+
+// 알려진 박스종류만·0 이상 정수로 정제(임의 jsonb 저장 방지)
+function sanitizeBoxes(o: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (o && typeof o === "object") for (const c of BOX_CATEGORIES) { const n = Math.max(0, Math.round(Number((o as Record<string, unknown>)[c]) || 0)); if (n) out[c] = n; }
+  return out;
+}
+function mergeBoxes(a: unknown, b: Record<string, number>): Record<string, number> {
+  const out = sanitizeBoxes(a);
+  for (const [k, v] of Object.entries(b)) out[k] = (out[k] || 0) + v;
+  return out;
+}
 
 // GET ?from=&to= — 배송일지(기본 최근 60일)
 export async function GET(req: NextRequest) {
@@ -33,10 +46,21 @@ export async function POST(req: NextRequest) {
     const row: Record<string, unknown> = { log_date, updated_at: new Date().toISOString() };
 
     if (b.record) {
-      row.boxes_normal = b.boxes_normal ?? {};
-      row.boxes_guar = b.boxes_guar ?? {};
-      row.base_fee_normal = Math.round(Number(b.base_fee_normal) || 0);
-      row.base_fee_guar = Math.round(Number(b.base_fee_guar) || 0);
+      // 자동칸 기록. mode='add'면 그날 기존 값에 누적(하루 여러 배치), 아니면 덮어쓰기.
+      const bxN = sanitizeBoxes(b.boxes_normal), bxG = sanitizeBoxes(b.boxes_guar);
+      const bfN = Math.round(Number(b.base_fee_normal) || 0), bfG = Math.round(Number(b.base_fee_guar) || 0);
+      const gxf = Math.round(Number(b.guar_extra_fee) || 0); // 도착보장 추가운임(143×건수) 자동
+      if (b.mode === "add") {
+        const { data: ex } = await sb.from("delivery_log").select("boxes_normal,boxes_guar,base_fee_normal,base_fee_guar,guar_extra_fee").eq("log_date", log_date).maybeSingle();
+        row.boxes_normal = mergeBoxes(ex?.boxes_normal, bxN);
+        row.boxes_guar = mergeBoxes(ex?.boxes_guar, bxG);
+        row.base_fee_normal = (Number(ex?.base_fee_normal) || 0) + bfN;
+        row.base_fee_guar = (Number(ex?.base_fee_guar) || 0) + bfG;
+        row.guar_extra_fee = (Number(ex?.guar_extra_fee) || 0) + gxf;
+      } else {
+        row.boxes_normal = bxN; row.boxes_guar = bxG;
+        row.base_fee_normal = bfN; row.base_fee_guar = bfG; row.guar_extra_fee = gxf;
+      }
     } else {
       for (const k of MANUAL) {
         if (b[k] === undefined) continue;

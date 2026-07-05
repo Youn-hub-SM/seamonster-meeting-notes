@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { GUAR_SURCHARGE } from "@/app/lib/order-fulfill";
 
 type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
@@ -39,18 +40,26 @@ export default function FulfillPage() {
   const [res, setRes] = useState<Result | null>(null);
   const [ack, setAck] = useState(false); // 주소 경고 확인 체크
   const [recordDate, setRecordDate] = useState(kstToday());
+  const [recordMode, setRecordMode] = useState<"replace" | "add">("replace");
   const [recording, setRecording] = useState(false);
   const [recordOk, setRecordOk] = useState("");
 
   async function recordLog() {
     if (!res || !recordDate) return;
+    if (res.unmatched.length > 0 && !window.confirm(`미매칭 SKU ${res.unmatched.length}개가 있어 기본운임이 실제보다 적게 기록될 수 있어요.\n상품마스터에서 택배 정보를 채운 뒤 다시 만드는 걸 권장합니다.\n\n그래도 지금 기록할까요?`)) return;
     setRecording(true); setRecordOk(""); setError("");
     try {
+      // 그날 기존 기록 확인 → 덮어쓰기 모드인데 이미 있으면 재확인
+      const ex = await (await fetch(`/api/fulfill/log?from=${recordDate}&to=${recordDate}`, { cache: "no-store" })).json();
+      const cur = ex.ok ? (ex.rows || []).find((r: { log_date: string; boxes_normal: Record<string, number>; boxes_guar: Record<string, number>; base_fee_normal: number; base_fee_guar: number }) => r.log_date === recordDate) : null;
+      const hasData = !!cur && (Object.keys(cur.boxes_normal || {}).length > 0 || Object.keys(cur.boxes_guar || {}).length > 0 || cur.base_fee_normal > 0 || cur.base_fee_guar > 0);
+      if (hasData && recordMode === "replace" && !window.confirm(`${recordDate}에 이미 기록이 있습니다. 덮어쓸까요?\n(하루 여러 배치를 합치려면 '더하기(누적)'로 바꿔 다시 눌러주세요)`)) { setRecording(false); return; }
+
       const boxes_normal: Record<string, number> = {}, boxes_guar: Record<string, number> = {};
       for (const p of res.parcelSummary) { if (p.normal) boxes_normal[p.category] = p.normal; if (p.guarantee) boxes_guar[p.category] = p.guarantee; }
-      const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar }) });
+      const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, mode: recordMode, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar, guar_extra_fee: GUAR_SURCHARGE * res.stats.parcelsGuar }) });
       const j = await r.json(); if (!j.ok) throw new Error(j.error || "기록 실패");
-      setRecordOk(`${recordDate} 배송일지에 기록했어요.`);
+      setRecordOk(`${recordDate} 배송일지에 ${recordMode === "add" ? "더했어요(누적)" : "기록했어요"}.`);
     } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }
     setRecording(false);
   }
@@ -127,6 +136,10 @@ export default function FulfillPage() {
               <span className="b2b-card-title">택배량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 주문(택배) {res.stats.parcels}건 (일반 {res.stats.parcels - res.stats.parcelsGuar} · 도착보장 {res.stats.parcelsGuar})</span></span>
               <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                 <input type="date" className="b2b-input" value={recordDate} onChange={(e) => setRecordDate(e.target.value)} style={{ width: "auto", padding: "5px 8px", fontSize: 12 }} title="배송일지에 기록할 날짜" />
+                <div className="sm-tabs" style={{ margin: 0 }} title="같은 날짜에 이미 기록이 있을 때">
+                  <button className={`sm-tab ${recordMode === "replace" ? "is-active" : ""}`} onClick={() => setRecordMode("replace")}>덮어쓰기</button>
+                  <button className={`sm-tab ${recordMode === "add" ? "is-active" : ""}`} onClick={() => setRecordMode("add")}>더하기</button>
+                </div>
                 <button className="b2b-btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={recordLog} disabled={recording}>{recording ? "기록 중…" : "배송일지에 기록"}</button>
                 <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
               </div>
