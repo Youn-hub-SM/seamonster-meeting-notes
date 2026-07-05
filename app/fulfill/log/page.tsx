@@ -158,9 +158,13 @@ export default function DeliveryLogPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
   }
 
-  const feeTotal = (r: Row) => cur(r, "base_fee_normal") + cur(r, "base_fee_guar") + cur(r, "extra_fee") + cur(r, "guar_extra_fee") + cur(r, "pado_fee") + cur(r, "pado_extra") + cur(r, "pado_cod");
+  // 채널별 운임 = 기본운임 + 추가운임(제주·도서산간 등 수동 가산). 파도는 착불 포함. 총 운임 공식은 기존과 동일.
+  const normalFee = (r: Row) => cur(r, "base_fee_normal") + cur(r, "extra_fee");                 // 씨몬 일반
+  const guarFee = (r: Row) => cur(r, "base_fee_guar") + cur(r, "guar_extra_fee");                 // 도착보장
+  const padoFee = (r: Row) => cur(r, "pado_fee") + cur(r, "pado_extra") + cur(r, "pado_cod");     // 파도(기본+추가+착불)
+  const feeTotal = (r: Row) => normalFee(r) + guarFee(r) + padoFee(r);
   const dryAmt = (r: Row) => { const rt = ratesFor(history, r.log_date); return cur(r, "dryice_full") * rt.dryFull + cur(r, "dryice_half") * rt.dryHalf; }; // 그 날짜에 유효했던 드라이 단가
-  const guarFeeTotal = (r: Row) => cur(r, "base_fee_guar") + cur(r, "guar_extra_fee"); // 도착보장 운임 = 기본 + 추가(저장값, 소급X)
+  const toggle = (date: string) => setOpen((s) => { const n = new Set(s); if (n.has(date)) n.delete(date); else n.add(date); return n; });
 
   const totals = useMemo(() => ({
     normal: rows.reduce((s, r) => s + sumBoxes(r.boxes_normal), 0),
@@ -223,8 +227,7 @@ export default function DeliveryLogPage() {
             <table className="b2b-table" style={{ fontSize: 12.5 }}>
               <thead><tr>
                 <th></th><th>날짜</th><th className="num">일반</th><th className="num">도착보장</th>
-                <th className="num">씨몬 기본운임</th><th className="num">씨몬 추가</th>
-                <th className="num">파도 운임</th><th className="num">도착보장 추가</th>
+                <th className="num">일반운임</th><th className="num">도착보장 운임</th><th className="num">파도 운임</th>
                 <th className="num">총 운임</th>
                 <th className="num" title="드라이아이스 박스 (풀/반)">드라이(풀/반)</th><th className="num">드라이 금액</th>
                 <th>비고</th><th></th>
@@ -236,14 +239,13 @@ export default function DeliveryLogPage() {
                   return (
                     <FragmentRows key={r.log_date}>
                       <tr>
-                        <td><button className="b2b-link-btn" onClick={() => setOpen((s) => { const n = new Set(s); if (n.has(r.log_date)) n.delete(r.log_date); else n.add(r.log_date); return n; })} style={{ color: "var(--sm-text-light)" }}>{o ? "▾" : "▸"}</button></td>
+                        <td><button className="b2b-link-btn" onClick={() => toggle(r.log_date)} style={{ color: "var(--sm-text-light)" }}>{o ? "▾" : "▸"}</button></td>
                         <td style={{ whiteSpace: "nowrap" }}><strong>{r.log_date.slice(5)}</strong> <span className="sm-faint">({weekday(r.log_date)})</span></td>
                         <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(r.boxes_normal))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{won(sumBoxes(r.boxes_guar))}</td>
-                        <td className="num b2b-money sm-faint">{won(cur(r, "base_fee_normal") + cur(r, "base_fee_guar"))}</td>
-                        <td className="num">{numInput(r, "extra_fee")}</td>
-                        <td className="num">{numInput(r, "pado_fee")}</td>
-                        <td className="num">{numInput(r, "guar_extra_fee")}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 700, cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(normalFee(r))}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)", cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(guarFee(r))}</td>
+                        <td className="num b2b-money" style={{ cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(padoFee(r))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(feeTotal(r))}</td>
                         <td className="num" style={{ whiteSpace: "nowrap" }}>{stepField(r, "dryice_full", 46)}<span style={{ margin: "0 5px", color: "var(--sm-text-light)" }}>/</span>{stepField(r, "dryice_half", 46)}</td>
                         <td className="num b2b-money">{won(dryAmt(r))}</td>
@@ -252,7 +254,7 @@ export default function DeliveryLogPage() {
                       </tr>
                       {o && (
                         <tr>
-                          <td colSpan={13} style={{ background: "var(--sm-bg)", padding: 12 }}>
+                          <td colSpan={12} style={{ background: "var(--sm-bg)", padding: 12 }}>
                             <div className="sm-col" style={{ gap: 12 }}>
                               <div>
                                 <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>택배량 직접 수정 <span className="sm-faint" style={{ fontWeight: 400 }}>(박스종류별)</span></div>
@@ -271,14 +273,45 @@ export default function DeliveryLogPage() {
                                   </tbody>
                                 </table>
                               </div>
-                              <div className="sm-row" style={{ gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
-                                <label>씨몬 기본운임(일반) {numInput(r, "base_fee_normal")}</label>
-                                <label>도착보장 기본운임 {numInput(r, "base_fee_guar")}</label>
-                                <label>파도 추가 {numInput(r, "pado_extra")}</label>
-                                <label>파도 착불 {numInput(r, "pado_cod")}</label>
+                              <div>
+                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부 <span className="sm-faint" style={{ fontWeight: 400 }}>(채널별 기본운임 + 추가운임 · 제주·도서산간 등 추가금은 &lsquo;추가운임&rsquo;에 직접 입력)</span></div>
+                                <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12, maxWidth: 480 }}>
+                                  <thead><tr><th>채널</th><th className="num">기본운임</th><th className="num">추가운임</th><th className="num">합계</th></tr></thead>
+                                  <tbody>
+                                    <tr>
+                                      <td style={{ whiteSpace: "nowrap" }}>씨몬 일반</td>
+                                      <td className="num">{numInput(r, "base_fee_normal")}</td>
+                                      <td className="num">{numInput(r, "extra_fee")}</td>
+                                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(normalFee(r))}</td>
+                                    </tr>
+                                    <tr>
+                                      <td style={{ whiteSpace: "nowrap", color: "var(--sm-orange)" }}>도착보장</td>
+                                      <td className="num">{numInput(r, "base_fee_guar")}</td>
+                                      <td className="num">{numInput(r, "guar_extra_fee")}</td>
+                                      <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{won(guarFee(r))}</td>
+                                    </tr>
+                                    <tr>
+                                      <td style={{ whiteSpace: "nowrap" }}>파도</td>
+                                      <td className="num">{numInput(r, "pado_fee")}</td>
+                                      <td className="num">{numInput(r, "pado_extra")}</td>
+                                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(cur(r, "pado_fee") + cur(r, "pado_extra"))}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>└ 파도 착불</td>
+                                      <td className="num sm-faint">—</td>
+                                      <td className="num">{numInput(r, "pado_cod")}</td>
+                                      <td className="num b2b-money sm-faint">{won(cur(r, "pado_cod"))}</td>
+                                    </tr>
+                                  </tbody>
+                                  <tfoot><tr>
+                                    <td style={{ fontWeight: 700 }}>총 운임</td><td /><td />
+                                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(feeTotal(r))}</td>
+                                  </tr></tfoot>
+                                </table>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))} + 추가 {won(cur(r, "guar_extra_fee"))}({won(rt.guarSurcharge)}원×{sumBoxes(r.boxes_guar)}건) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFeeTotal(r))}원</strong></span>
+                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))} + 추가 {won(cur(r, "guar_extra_fee"))}({won(rt.guarSurcharge)}원×{sumBoxes(r.boxes_guar)}건) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
+                                <span className="sm-faint">📦 파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
                                 <span className="sm-faint">🧊 드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
                             </div>
