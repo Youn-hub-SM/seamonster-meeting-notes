@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 
@@ -45,6 +45,12 @@ export default function DeliveryLogPage() {
   }, [from, to]);
   useEffect(() => { load(); }, [load]);
 
+  // 최신 상태 ref — 디바운스 저장 시 stale 클로저 방지
+  const rowsRef = useRef(rows); rowsRef.current = rows;
+  const draftRef = useRef(draft); draftRef.current = draft;
+  const boxDraftRef = useRef(boxDraft); boxDraftRef.current = boxDraft;
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const cur = (r: Row, k: EditKey): number => Number(draft[r.log_date]?.[k] ?? (r[k] as number)) || 0;
   const curMemo = (r: Row): string => draft[r.log_date]?.memo ?? (r.memo ?? "");
   const setField = (date: string, k: EditKey, v: string) => setDraft((d) => ({ ...d, [date]: { ...d[date], [k]: v } }));
@@ -55,7 +61,7 @@ export default function DeliveryLogPage() {
   }
 
   async function save(date: string) {
-    const d = draft[date]; if (!d) return;
+    const d = draftRef.current[date]; if (!d) return;
     try {
       await post({ log_date: date, ...d });
       setRows((rs) => rs.map((r) => (r.log_date === date ? applyDraft(r, d) : r)));
@@ -63,27 +69,58 @@ export default function DeliveryLogPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
   }
 
-  // 택배량(박스종류별) 수동 저장
   const boxVal = (r: Row, side: "n" | "g", cat: string): string =>
     boxDraft[r.log_date]?.[side]?.[cat] ?? String((side === "n" ? r.boxes_normal : r.boxes_guar)?.[cat] || "");
   const setBox = (date: string, side: "n" | "g", cat: string, v: string) =>
     setBoxDraft((bd) => ({ ...bd, [date]: { ...bd[date], [side]: { ...bd[date]?.[side], [cat]: v } } }));
-  function buildBoxes(r: Row, side: "n" | "g"): Boxes {
-    const base = side === "n" ? r.boxes_normal : r.boxes_guar;
-    const dr = boxDraft[r.log_date]?.[side] || {};
-    const out: Boxes = {};
-    for (const c of BOX_CATEGORIES) { const v = c in dr ? Number(dr[c]) || 0 : Number(base?.[c]) || 0; if (v > 0) out[c] = Math.round(v); }
-    return out;
-  }
+
   async function saveBoxes(date: string) {
-    const r = rows.find((x) => x.log_date === date); if (!r) return;
-    const bn = buildBoxes(r, "n"), bg = buildBoxes(r, "g");
+    const r = rowsRef.current.find((x) => x.log_date === date); if (!r) return;
+    const build = (side: "n" | "g"): Boxes => {
+      const base = side === "n" ? r.boxes_normal : r.boxes_guar;
+      const dr = boxDraftRef.current[date]?.[side] || {};
+      const out: Boxes = {};
+      for (const c of BOX_CATEGORIES) { const v = c in dr ? Number(dr[c]) || 0 : Number(base?.[c]) || 0; if (v > 0) out[c] = Math.round(v); }
+      return out;
+    };
+    const bn = build("n"), bg = build("g");
     try {
       await post({ log_date: date, boxes_normal: bn, boxes_guar: bg });
       setRows((rs) => rs.map((x) => (x.log_date === date ? { ...x, boxes_normal: bn, boxes_guar: bg } : x)));
       setBoxDraft((prev) => { const n = { ...prev }; delete n[date]; return n; });
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
   }
+
+  // 디바운스 저장(연타 후 한 번만 저장)
+  const schedule = (key: string, fn: () => void, ms = 500) => { clearTimeout(timers.current[key]); timers.current[key] = setTimeout(fn, ms); };
+  const scheduleSave = (date: string) => schedule("f:" + date, () => save(date));
+  const scheduleBoxSave = (date: string) => schedule("b:" + date, () => saveBoxes(date));
+
+  // +/- 개수 조절 — 함수형 업데이트로 연타 안전
+  function bumpBox(date: string, side: "n" | "g", cat: string, delta: number) {
+    setBoxDraft((bd) => {
+      const s = bd[date]?.[side]?.[cat];
+      const base = s !== undefined ? Number(s) || 0 : Number((rowsRef.current.find((r) => r.log_date === date)?.[side === "n" ? "boxes_normal" : "boxes_guar"])?.[cat]) || 0;
+      return { ...bd, [date]: { ...bd[date], [side]: { ...bd[date]?.[side], [cat]: String(Math.max(0, base + delta)) } } };
+    });
+    scheduleBoxSave(date);
+  }
+  function bumpField(date: string, k: EditKey, delta: number) {
+    setDraft((d) => {
+      const s = d[date]?.[k];
+      const base = s !== undefined ? Number(s) || 0 : Number(rowsRef.current.find((r) => r.log_date === date)?.[k]) || 0;
+      return { ...d, [date]: { ...d[date], [k]: String(Math.max(0, base + delta)) } };
+    });
+    scheduleSave(date);
+  }
+  const stepField = (r: Row, k: EditKey, w = 40) => (
+    <Stepper value={draft[r.log_date]?.[k] ?? String((r[k] as number) || "")} onBump={(d) => bumpField(r.log_date, k, d)}
+      onType={(v) => { setField(r.log_date, k, v); scheduleSave(r.log_date); }} onCommit={() => save(r.log_date)} w={w} />
+  );
+  const stepBox = (r: Row, side: "n" | "g", c: string) => (
+    <Stepper value={boxVal(r, side, c)} onBump={(d) => bumpBox(r.log_date, side, c, d)}
+      onType={(v) => { setBox(r.log_date, side, c, v); scheduleBoxSave(r.log_date); }} onCommit={() => saveBoxes(r.log_date)} w={38} />
+  );
 
   async function addDay() {
     if (!newDate) return;
@@ -185,7 +222,7 @@ export default function DeliveryLogPage() {
                         <td className="num">{numInput(r, "pado_fee")}</td>
                         <td className="num">{numInput(r, "guar_extra_fee")}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(feeTotal(r))}</td>
-                        <td className="num" style={{ whiteSpace: "nowrap" }}>{numInput(r, "dryice_full", 44)}/{numInput(r, "dryice_half", 44)}</td>
+                        <td className="num" style={{ whiteSpace: "nowrap" }}>{stepField(r, "dryice_full", 34)}<span style={{ margin: "0 5px", color: "var(--sm-text-light)" }}>/</span>{stepField(r, "dryice_half", 34)}</td>
                         <td className="num b2b-money">{won(dryAmt(r))}</td>
                         <td><input className="b2b-input" style={{ width: 120, padding: "4px 6px", fontSize: 12 }} value={curMemo(r)} onChange={(e) => setField(r.log_date, "memo", e.target.value)} onBlur={() => save(r.log_date)} /></td>
                         <td><button className="b2b-link-btn" onClick={() => removeDay(r.log_date)} style={{ color: "var(--sm-danger)" }}>삭제</button></td>
@@ -203,10 +240,7 @@ export default function DeliveryLogPage() {
                                       <tr key={side}>
                                         <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반" : "도착보장"}</td>
                                         {BOX_CATEGORIES.map((c) => (
-                                          <td key={c} className="num">
-                                            <input type="number" className="b2b-input" style={{ width: 46, padding: "3px 4px", fontSize: 12, textAlign: "right" }}
-                                              value={boxVal(r, side, c)} onChange={(e) => setBox(r.log_date, side, c, e.target.value)} onBlur={() => saveBoxes(r.log_date)} />
-                                          </td>
+                                          <td key={c} className="num" style={{ padding: "4px 3px" }}>{stepBox(r, side, c)}</td>
                                         ))}
                                         <td />
                                       </tr>
@@ -238,6 +272,18 @@ export default function DeliveryLogPage() {
 }
 
 function FragmentRows({ children }: { children: React.ReactNode }) { return <>{children}</>; }
+
+// −/＋ 로 개수를 시원하게 조절. 직접 타이핑도 가능. onBump=버튼, onType=입력, onCommit=blur 즉시저장.
+function Stepper({ value, onBump, onType, onCommit, w = 40 }: { value: string; onBump: (d: number) => void; onType: (v: string) => void; onCommit: () => void; w?: number }) {
+  const btn: React.CSSProperties = { padding: "3px 9px", fontSize: 15, lineHeight: 1, fontWeight: 700, minWidth: 26 };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+      <button type="button" className="b2b-btn-secondary" style={btn} onClick={() => onBump(-1)} aria-label="빼기">−</button>
+      <input type="number" className="b2b-input" style={{ width: w, padding: "5px 4px", fontSize: 13, textAlign: "center" }} value={value} onChange={(e) => onType(e.target.value)} onBlur={onCommit} />
+      <button type="button" className="b2b-btn-secondary" style={btn} onClick={() => onBump(1)} aria-label="더하기">+</button>
+    </span>
+  );
+}
 
 // 저장 성공 시 서버와 동일 규칙으로 로컬 행에 draft 반영(memo→trim/null, dryice→소수, 나머지→반올림 정수)
 function applyDraft(r: Row, d: Partial<Record<EditKey, string>>): Row {
