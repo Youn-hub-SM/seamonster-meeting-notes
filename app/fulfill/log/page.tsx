@@ -132,7 +132,7 @@ export default function DeliveryLogPage() {
   );
   const stepBox = (r: Row, side: "n" | "g", c: string) => (
     <Stepper value={boxVal(r, side, c)} onBump={(d) => bumpBox(r.log_date, side, c, d)}
-      onType={(v) => { setBox(r.log_date, side, c, v); scheduleBoxSave(r.log_date); }} onCommit={() => saveBoxes(r.log_date)} w={38} />
+      onType={(v) => { setBox(r.log_date, side, c, v); scheduleBoxSave(r.log_date); }} onCommit={() => saveBoxes(r.log_date)} w={50} />
   );
 
   async function addDay() {
@@ -185,6 +185,7 @@ export default function DeliveryLogPage() {
         <div className="b2b-page-actions sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <input type="date" className="b2b-input" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ width: "auto" }} title="추가할 날짜" />
           <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
+          <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계</Link>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
         </div>
       </header>
@@ -239,7 +240,7 @@ export default function DeliveryLogPage() {
                         <td className="num">{numInput(r, "pado_fee")}</td>
                         <td className="num">{numInput(r, "guar_extra_fee")}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(feeTotal(r))}</td>
-                        <td className="num" style={{ whiteSpace: "nowrap" }}>{stepField(r, "dryice_full", 34)}<span style={{ margin: "0 5px", color: "var(--sm-text-light)" }}>/</span>{stepField(r, "dryice_half", 34)}</td>
+                        <td className="num" style={{ whiteSpace: "nowrap" }}>{stepField(r, "dryice_full", 46)}<span style={{ margin: "0 5px", color: "var(--sm-text-light)" }}>/</span>{stepField(r, "dryice_half", 46)}</td>
                         <td className="num b2b-money">{won(dryAmt(r))}</td>
                         <td><input className="b2b-input" style={{ width: 120, padding: "4px 6px", fontSize: 12 }} value={curMemo(r)} onChange={(e) => setField(r.log_date, "memo", e.target.value)} onBlur={() => save(r.log_date)} /></td>
                         <td><button className="b2b-link-btn" onClick={() => removeDay(r.log_date)} style={{ color: "var(--sm-danger)" }}>삭제</button></td>
