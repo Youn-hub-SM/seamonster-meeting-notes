@@ -100,7 +100,7 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
   const setOverFee = (fee: number) => setTiers([...bounded, { maxKg: null, fee }]);
 
   return (
-    <section className="b2b-card" style={{ marginBottom: 16, borderLeft: active ? "3px solid var(--sm-orange)" : undefined }}>
+    <section className="b2b-card" style={{ marginBottom: 16 }}>
       <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <span className="b2b-card-title">적용 시작일</span>
