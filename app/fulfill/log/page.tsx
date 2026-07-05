@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
-import { DEFAULT_RATES, type FulfillRates } from "@/app/lib/fulfill-rates";
+import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -45,8 +45,8 @@ export default function DeliveryLogPage() {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [draft, setDraft] = useState<Record<string, Partial<Record<EditKey, string>>>>({});
   const [boxDraft, setBoxDraft] = useState<BoxDraft>({});
-  const [rates, setRates] = useState<FulfillRates>(DEFAULT_RATES);
-  useEffect(() => { fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setRates(j.rates); }).catch(() => {}); }, []);
+  const [history, setHistory] = useState<RateVersion[]>([{ ...DEFAULT_RATES, effectiveFrom: DEFAULT_EFFECTIVE }]);
+  useEffect(() => { fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); }).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -159,15 +159,15 @@ export default function DeliveryLogPage() {
   }
 
   const feeTotal = (r: Row) => cur(r, "base_fee_normal") + cur(r, "base_fee_guar") + cur(r, "extra_fee") + cur(r, "guar_extra_fee") + cur(r, "pado_fee") + cur(r, "pado_extra") + cur(r, "pado_cod");
-  const dryAmt = (r: Row) => cur(r, "dryice_full") * rates.dryFull + cur(r, "dryice_half") * rates.dryHalf;
-  const guarFeeTotal = (r: Row) => cur(r, "base_fee_guar") + cur(r, "guar_extra_fee"); // 도착보장 운임 = 기본 + 추가(143×건)
+  const dryAmt = (r: Row) => { const rt = ratesFor(history, r.log_date); return cur(r, "dryice_full") * rt.dryFull + cur(r, "dryice_half") * rt.dryHalf; }; // 그 날짜에 유효했던 드라이 단가
+  const guarFeeTotal = (r: Row) => cur(r, "base_fee_guar") + cur(r, "guar_extra_fee"); // 도착보장 운임 = 기본 + 추가(저장값, 소급X)
 
   const totals = useMemo(() => ({
     normal: rows.reduce((s, r) => s + sumBoxes(r.boxes_normal), 0),
     guar: rows.reduce((s, r) => s + sumBoxes(r.boxes_guar), 0),
     fee: rows.reduce((s, r) => s + feeTotal(r), 0),
     dry: rows.reduce((s, r) => s + dryAmt(r), 0),
-  }), [rows, draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [rows, draft, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const numInput = (r: Row, k: EditKey, w = 76) => (
     <input type="number" className="b2b-input b2b-money" style={{ width: w, padding: "4px 6px", fontSize: 12, textAlign: "right" }}
@@ -232,6 +232,7 @@ export default function DeliveryLogPage() {
               <tbody>
                 {rows.map((r) => {
                   const o = open.has(r.log_date);
+                  const rt = ratesFor(history, r.log_date); // 이 날짜에 유효했던 단가
                   return (
                     <FragmentRows key={r.log_date}>
                       <tr>
@@ -277,8 +278,8 @@ export default function DeliveryLogPage() {
                                 <label>파도 착불 {numInput(r, "pado_cod")}</label>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))} + 추가 {won(cur(r, "guar_extra_fee"))}({won(rates.guarSurcharge)}원×{sumBoxes(r.boxes_guar)}건) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFeeTotal(r))}원</strong></span>
-                                <span className="sm-faint">🧊 드라이 {won(dryAmt(r))}원 (풀 {won(rates.dryFull)}·반 {won(rates.dryHalf)})</span>
+                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))} + 추가 {won(cur(r, "guar_extra_fee"))}({won(rt.guarSurcharge)}원×{sumBoxes(r.boxes_guar)}건) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFeeTotal(r))}원</strong></span>
+                                <span className="sm-faint">🧊 드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
                             </div>
                           </td>
