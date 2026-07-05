@@ -62,10 +62,15 @@ export async function POST(req: NextRequest) {
         row.base_fee_normal = bfN; row.base_fee_guar = bfG; row.guar_extra_fee = gxf;
       }
     } else {
+      // 수동 편집: 제공된 칸만 부분 upsert(다른 칸 보존). 기본운임·택배량도 손으로 수정 가능.
       for (const k of MANUAL) {
         if (b[k] === undefined) continue;
         row[k] = k === "memo" ? (String(b[k] || "").trim() || null) : (k.startsWith("dryice") ? Number(b[k]) || 0 : Math.round(Number(b[k]) || 0));
       }
+      if (b.base_fee_normal !== undefined) row.base_fee_normal = Math.round(Number(b.base_fee_normal) || 0);
+      if (b.base_fee_guar !== undefined) row.base_fee_guar = Math.round(Number(b.base_fee_guar) || 0);
+      if (b.boxes_normal !== undefined) row.boxes_normal = sanitizeBoxes(b.boxes_normal);
+      if (b.boxes_guar !== undefined) row.boxes_guar = sanitizeBoxes(b.boxes_guar);
     }
     const { error } = await sb.from("delivery_log").upsert(row, { onConflict: "log_date" });
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

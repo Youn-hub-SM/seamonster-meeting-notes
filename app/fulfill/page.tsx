@@ -94,13 +94,13 @@ export default function FulfillPage() {
           <h1 className="b2b-page-title">택배 발주처리</h1>
           <p className="b2b-page-subtitle">
             소매 주문 엑셀(A~M)을 올리면 <strong>CNplus 발주 파일(일반 + 도착보장)</strong>을 만들어 드립니다.
-            단품코드 NOTHING 제외 · 도착보장 분리(운임구분 3) · 박스타입/운임 자동. 품목명·중량은 <Link href="/fulfill/codes">코드표</Link> 기준.
+            단품코드 NOTHING 제외 · 도착보장 분리(운임구분 3) · 박스타입/운임 자동. 품목명·중량은 <Link href="/b2b/products">상품마스터</Link> 기준.
           </p>
         </div>
-        <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/codes">코드표 관리</Link></div>
+        <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/log">배송일지</Link></div>
       </header>
 
-      {error && <div className="b2b-error">{error}{error.includes("053") || error.includes("코드표") ? " — 코드표를 먼저 업로드하세요(코드표 관리)." : ""}</div>}
+      {error && <div className="b2b-error">{error}{error.includes("054") ? " — 상품마스터에 택배 정보(migration 054)가 필요합니다." : ""}</div>}
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-field" style={{ marginBottom: 12 }}>
@@ -186,7 +186,7 @@ export default function FulfillPage() {
               </button>
               {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소 경고를 확인(체크)해야 받을 수 있어요.</span>}
             </div>
-            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 10 }}>코드표 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3으로 설정됩니다.</p>
+            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 10 }}>상품마스터 택배정보 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3으로 설정됩니다.</p>
           </section>
         </>
       )}
