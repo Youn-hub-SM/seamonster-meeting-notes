@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { deriveParentStatus } from "@/app/lib/b2b-shipments";
 import { logShipmentStatusChanged } from "@/app/lib/b2b-activity";
+import { syncOrderSalesSafe } from "@/app/lib/b2b-sales-sync";
 
+export const runtime = "nodejs"; // sales-sync 가 crypto(sales-normalize) 사용
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -68,6 +70,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const derived = deriveParentStatus((ships ?? []).map((s) => s.status as string));
     if (derived) {
       await sb.from("orders").update({ status: derived }).eq("id", ship.order_id);
+      // 차수 완료로 발주가 발송완료로 도출되면 매출원장에 1회 반영(이미 반영이면 내부 스킵)
+      if (derived === "발송완료") await syncOrderSalesSafe(ship.order_id as string);
     }
 
     return NextResponse.json({ ok: true });
