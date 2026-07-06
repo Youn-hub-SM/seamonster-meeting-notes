@@ -55,6 +55,7 @@ export const NAV: NavCategory[] = [
           { href: "/sales/history", label: "변경 기록" },
         ],
       },
+      { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
     ],
   },
   {
