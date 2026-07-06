@@ -13,8 +13,10 @@ export default function ScanPage() {
   const [error, setError] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
   const [scan, setScan] = useState("");
-  const [scanning, setScanning] = useState(false);
+  const [pending, setPending] = useState(0); // 처리 대기 중인 스캔 수
   const [msg, setMsg] = useState<{ kind: "ok" | "dup" | "bad"; text: string } | null>(null);
+  const queueRef = useRef<string[]>([]);
+  const processingRef = useRef(false);
 
   const loadState = useCallback(async (silent = false) => {
     if (!silent) setError("");
@@ -28,30 +30,45 @@ export default function ScanPage() {
   useEffect(() => {
     loadState();
     setTimeout(() => scanRef.current?.focus(), 100);
-    const t = setInterval(() => loadState(true), 8000); // 업로더가 추가한 데이터 반영
+    // 업로더가 추가한 데이터 반영. 단, 스캔 처리 중엔 건너뜀(진행 중 집계 덮어쓰기 방지).
+    const t = setInterval(() => { if (!processingRef.current && queueRef.current.length === 0) loadState(true); }, 8000);
     return () => clearInterval(t);
   }, [loadState]);
 
-  async function doScan() {
+  // 입력은 즉시 비우고 다음 스캔을 받음. 실제 처리(서버 왕복)는 백그라운드 큐에서 순차 진행 → 스캔이 안 밀림.
+  function submitScan() {
     const inv = scan.trim();
-    if (!inv || scanning) return;
-    setScanning(true);
-    try {
-      const j = await (await fetch("/api/fulfill/scan/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice_no: inv }) })).json();
-      if (!j.ok) throw new Error(j.error || "스캔 실패");
-      setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
-      if (!j.known) setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` });
-      else if (j.alreadyScanned) setMsg({ kind: "dup", text: `이미 스캔한 송장 · ${inv}` });
-      else setMsg({ kind: "ok", text: `스캔 완료 · ${inv}` });
-    } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); }
+    if (!inv) return;
     setScan("");
-    setScanning(false);
+    queueRef.current.push(inv);
+    setPending(queueRef.current.length);
     scanRef.current?.focus();
+    pump();
+  }
+  async function pump() {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    while (queueRef.current.length) {
+      const inv = queueRef.current[0];
+      try {
+        const j = await (await fetch("/api/fulfill/scan/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice_no: inv }) })).json();
+        if (!j.ok) throw new Error(j.error || "스캔 실패");
+        if (!j.known) setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` });
+        else {
+          setSt((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
+          setMsg(j.alreadyScanned ? { kind: "dup", text: `이미 스캔한 송장 · ${inv}` } : { kind: "ok", text: `스캔 완료 · ${inv}` });
+        }
+      } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); }
+      queueRef.current.shift();
+      setPending(queueRef.current.length);
+    }
+    processingRef.current = false;
   }
 
   // 스캔 초기화 — 인쇄 후 다음 라운드를 위해 자주 누르므로 확인창 없이 즉시(업로드 데이터는 유지).
   async function reset() {
     try {
+      queueRef.current = []; setPending(0); // 대기 중 스캔도 취소(깨끗한 새 라운드)
       const j = await (await fetch("/api/fulfill/scan/reset", { method: "POST" })).json();
       if (!j.ok) throw new Error(j.error || "초기화 실패");
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
@@ -115,14 +132,17 @@ export default function ScanPage() {
       <section className="b2b-card" style={{ marginBottom: 14 }}>
         <div className="sm-between" style={{ alignItems: "baseline" }}>
           <label className="b2b-field-label">송장번호 스캔 <span className="sm-faint" style={{ fontWeight: 400 }}>(하이픈 있어도/없어도 인식)</span></label>
-          <span className="sm-faint" style={{ fontSize: 12 }}>이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 14 }}>{st?.scannedCount ?? 0}</strong>건 · 대상 {st?.totalInvoices ?? 0}건</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>
+            이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 14 }}>{st?.scannedCount ?? 0}</strong>건 · 대상 {st?.totalInvoices ?? 0}건
+            {pending > 0 && <span style={{ color: "var(--sm-info)", marginLeft: 6 }}>· 처리 중 {pending}</span>}
+          </span>
         </div>
         <input
           ref={scanRef}
           className="b2b-input"
           value={scan}
           onChange={(e) => setScan(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doScan(); } }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitScan(); } }}
           placeholder="바코드를 스캔하거나 송장번호 입력 후 Enter"
           autoFocus
           style={{ fontSize: 20, padding: "12px 14px", fontWeight: 700, letterSpacing: 0.5 }}

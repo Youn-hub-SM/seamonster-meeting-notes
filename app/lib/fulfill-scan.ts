@@ -118,12 +118,15 @@ export function parseCsv(text: string): unknown[][] {
   return out;
 }
 
-// 상품마스터·묶음 로드 → SKU/ID 맵과 묶음 구성.
-export async function loadScanMaps(sb: ReturnType<typeof supabaseAdmin>): Promise<{
-  bySku: Map<string, ScanProduct>;
-  byId: Map<string, ScanProduct>;
-  bundles: Map<string, BundleComp[]>;
-}> {
+type ScanMaps = { bySku: Map<string, ScanProduct>; byId: Map<string, ScanProduct>; bundles: Map<string, BundleComp[]> };
+
+// 상품마스터·묶음은 자주 안 바뀌므로 인메모리 캐시(60초). 스캔마다 재로드하지 않아 응답이 빨라짐.
+let _mapCache: { maps: ScanMaps; at: number } | null = null;
+const MAP_TTL = 60_000;
+
+// 상품마스터·묶음 로드 → SKU/ID 맵과 묶음 구성. (캐시 히트 시 DB 미접근)
+export async function loadScanMaps(sb: ReturnType<typeof supabaseAdmin>): Promise<ScanMaps> {
+  if (_mapCache && Date.now() - _mapCache.at < MAP_TTL) return _mapCache.maps;
   const bySku = new Map<string, ScanProduct>();
   const byId = new Map<string, ScanProduct>();
   const { data } = await sb.from("products").select("id, sku, name");
@@ -132,7 +135,9 @@ export async function loadScanMaps(sb: ReturnType<typeof supabaseAdmin>): Promis
     if (p.sku) bySku.set(String(p.sku).trim().toUpperCase(), p);
   }
   const bundles = await getAllBundles(sb);
-  return { bySku, byId, bundles };
+  const maps: ScanMaps = { bySku, byId, bundles };
+  _mapCache = { maps, at: Date.now() };
+  return maps;
 }
 
 // 풀 전체 라인/이벤트를 페이지네이션으로 로드(PostgREST 기본 1000행 상한 회피).
@@ -161,21 +166,43 @@ async function fetchAllScanned(sb: ReturnType<typeof supabaseAdmin>): Promise<st
   return out;
 }
 
-// 풀 현재 상태 — 라인+이벤트+상품맵을 로드해 묶음 전개 집계.
-export async function computePoolState(sb: ReturnType<typeof supabaseAdmin>): Promise<{
-  tally: TallyRow[];
-  scannedCount: number;   // 스캔된 것 중 풀에 라인이 있는(유효) 송장 수
-  totalInvoices: number;  // 풀의 고유 송장 수
-  totalUnits: number;     // 집계된 총 수량
+// 스캔된 송장들의 라인만 로드(.in 청크). 풀 전체가 아니라 스캔셋(자주 초기화라 작음)만 → 빠름.
+async function fetchScannedItems(sb: ReturnType<typeof supabaseAdmin>, scanned: string[]): Promise<ScanRow[]> {
+  const out: ScanRow[] = [];
+  for (let i = 0; i < scanned.length; i += 200) {
+    const chunk = scanned.slice(i, i + 200);
+    const { data, error } = await sb.from("fulfill_scan_items").select("invoice_no, sku_code, qty").in("invoice_no", chunk);
+    if (error) throw error;
+    out.push(...((data as ScanRow[] | null) ?? []));
+  }
+  return out;
+}
+
+// 집계(핫 경로) — '스캔된 송장'의 라인만 로드해 묶음 전개. 풀 전체를 안 읽어 스캔마다 빠름.
+export async function computeTally(sb: ReturnType<typeof supabaseAdmin>): Promise<{
+  tally: TallyRow[]; scannedCount: number; totalUnits: number;
 }> {
-  const [items, scannedArr, maps] = await Promise.all([fetchAllItems(sb), fetchAllScanned(sb), loadScanMaps(sb)]);
-  const knownInvoices = new Set(items.map((r) => r.invoice_no));
-  const scanned = new Set(scannedArr);
-  const tally = buildScanTally(items, scanned, maps.bySku, maps.byId, maps.bundles);
+  const scanned = await fetchAllScanned(sb);
+  if (scanned.length === 0) return { tally: [], scannedCount: 0, totalUnits: 0 };
+  const [items, maps] = await Promise.all([fetchScannedItems(sb, scanned), loadScanMaps(sb)]);
+  const scannedSet = new Set(scanned);
+  const knownScanned = new Set(items.map((r) => r.invoice_no));
+  const tally = buildScanTally(items, scannedSet, maps.bySku, maps.byId, maps.bundles);
   let scannedCount = 0;
-  for (const inv of scanned) if (knownInvoices.has(inv)) scannedCount++;
+  for (const inv of scannedSet) if (knownScanned.has(inv)) scannedCount++;
   const totalUnits = tally.reduce((s, t) => s + t.qty, 0);
-  return { tally, scannedCount, totalInvoices: knownInvoices.size, totalUnits };
+  return { tally, scannedCount, totalUnits };
+}
+
+// 풀 전체 상태(콜드 경로: 최초 로드·폴링·초기화) — 집계 + 풀의 고유 송장 수(대상 건수).
+export async function computePoolState(sb: ReturnType<typeof supabaseAdmin>): Promise<{
+  tally: TallyRow[]; scannedCount: number; totalInvoices: number; totalUnits: number;
+}> {
+  const [tally, poolInvoices] = await Promise.all([
+    computeTally(sb),
+    fetchAllItems(sb).then((items) => new Set(items.map((r) => r.invoice_no)).size),
+  ]);
+  return { ...tally, totalInvoices: poolInvoices };
 }
 
 // 스캔된 송장들의 라인을 묶음 전개하여 상품별 누적 수량 산출.
