@@ -16,7 +16,7 @@ export function changeMenu(tool: string): string {
   const t = tool.replace(/\s/g, "");
   if (t.startsWith("B2B")) return "B2B 도매";
   if (t.includes("상품마스터")) return "상품 마스터";
-  if (t.includes("택배")) return "택배 발주처리";
+  if (t.includes("택배") || t.includes("온라인발주")) return "온라인 발주";
   if (t.includes("매출")) return "매출";
   if (t.includes("정기배송")) return "정기배송 분석";
   if (t.includes("생산")) return "생산관리";
@@ -29,13 +29,21 @@ export function changeMenu(tool: string): string {
   return tool;
 }
 // 필터 칩 정렬 순서(nav 순서 기준). 목록에 없는 메뉴는 뒤로.
-export const MENU_ORDER = ["B2B 도매", "상품 마스터", "택배 발주처리", "정기배송 분석", "매출", "생산관리", "재고관리", "UTM 빌더", "CS 코치", "VOC 관리", "관리자", "공통"];
+export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "생산관리", "재고관리", "UTM 빌더", "CS 코치", "VOC 관리", "관리자", "공통"];
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-07-06",
+    tag: "신규",
+    tool: "온라인 발주",
+    title: "송장 스캔 집계 — 바코드 스캔으로 상품별 필요 수량 실시간 계산",
+    desc: "그날 송장 데이터(송장번호·단품코드·수량 엑셀/CSV)를 한 번 올려 두면, 어느 기기·자리에서든 송장 바코드를 스캔해 상품별 필요 수량이 실시간으로 쌓입니다(업로드하는 사람과 스캔하는 사람이 달라도 OK). 세트(묶음상품)는 구성품으로 자동 전개되고, 스캔 초기화·엑셀 내보내기도 됩니다. 기존 파이썬 송장 스캔 프로그램을 웹으로 이관. 온라인 발주 › 송장 스캔.",
+    href: "/fulfill/scan",
+  },
+  {
     date: "2026-07-05",
     tag: "신규",
-    tool: "택배 발주처리",
+    tool: "온라인 발주",
     title: "택배 발주처리(CNplus) 추가 — 주문 엑셀 → 발주 파일",
     desc: "소매 주문 엑셀을 올리면 CJ CNplus 발주 파일(일반·도착보장)을 자동으로 만들어줍니다(기존 파이썬+구글시트 작업 대체). 택배 품목명·중량은 상품 마스터에서 관리하고, 박스종류별 택배량 집계도 함께 나와요. 세일즈 › 택배 발주처리.",
     href: "/fulfill",
