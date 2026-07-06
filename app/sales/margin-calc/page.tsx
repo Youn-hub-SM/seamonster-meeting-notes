@@ -18,6 +18,16 @@ export default function MarginCalcPage() {
   const [error, setError] = useState("");
   const [res, setRes] = useState<MarginResult | null>(null);
 
+  // 프롬프트(계산 지침) 설정 — 접이식, 처음 펼칠 때 로드.
+  const [pOpen, setPOpen] = useState(false);
+  const [pLoaded, setPLoaded] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [promptDefault, setPromptDefault] = useState("");
+  const [promptIsDefault, setPromptIsDefault] = useState(true);
+  const [pSaving, setPSaving] = useState(false);
+  const [pSaved, setPSaved] = useState("");
+  const [pError, setPError] = useState("");
+
   async function run(question?: string) {
     const text = (question ?? q).trim();
     if (!text) return;
@@ -29,6 +39,41 @@ export default function MarginCalcPage() {
       setRes(j.result as MarginResult);
     } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
     setLoading(false);
+  }
+
+  async function togglePrompt() {
+    const next = !pOpen;
+    setPOpen(next);
+    if (next && !pLoaded) {
+      setPError("");
+      try {
+        const r = await fetch("/api/sales/margin-calc/prompt", { cache: "no-store" });
+        const j = await r.json();
+        if (!r.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        setPrompt(j.prompt || ""); setPromptDefault(j.default || ""); setPromptIsDefault(!!j.isDefault);
+        setPLoaded(true);
+      } catch (e) { setPError(e instanceof Error ? e.message : "조회 실패"); }
+    }
+  }
+
+  async function savePrompt(next?: string) {
+    const body = next !== undefined ? next : prompt;
+    setPSaving(true); setPError(""); setPSaved("");
+    try {
+      const r = await fetch("/api/sales/margin-calc/prompt", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: body }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setPrompt(j.prompt || ""); setPromptIsDefault(!!j.isDefault);
+      const d = new Date();
+      setPSaved(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 저장됨`);
+    } catch (e) { setPError(e instanceof Error ? e.message : "저장 실패"); }
+    setPSaving(false);
+  }
+
+  function resetPrompt() {
+    if (!confirm("계산 지침을 기본값으로 되돌릴까요? 저장한 내용은 사라집니다.")) return;
+    setPrompt(promptDefault);
+    savePrompt(""); // 빈 값 저장 → 서버에서 설정 삭제(기본값 복원)
   }
 
   return (
@@ -92,10 +137,53 @@ export default function MarginCalcPage() {
         </div>
       )}
 
+      {/* 프롬프트(계산 지침) 설정 — 접이식 */}
+      <section className="b2b-card" style={{ marginTop: 24 }}>
+        <button type="button" className="mc-prompt-toggle" onClick={togglePrompt} aria-expanded={pOpen}>
+          <span>⚙️ 프롬프트 설정 <span className="sm-faint" style={{ fontWeight: 400 }}>· 계산 규칙 · 배송/보냉비 단가</span></span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{pOpen ? "접기 ▲" : "펼치기 ▼"}</span>
+        </button>
+
+        {pOpen && (
+          <div style={{ marginTop: 14 }}>
+            <p className="sm-faint" style={{ fontSize: 12, lineHeight: 1.7, margin: "0 0 12px" }}>
+              이익률 계산기의 <strong>역할·계산 규칙·배송 단가/보냉비 정책</strong>을 정의하는 지침입니다. 여기서 바꾸면 코드 수정·재배포 없이 즉시 반영됩니다.
+              <br />
+              원가표·채널 수수료는 <Link href="/b2b/products">상품 마스터</Link>·<Link href="/sales/profit">채널별 이익 설정</Link>에서 관리하고, <strong>출력 형식(JSON)</strong>은 시스템이 자동으로 덧붙이므로 여기에 넣지 마세요.
+            </p>
+
+            {pError && <div className="b2b-error" style={{ marginBottom: 10 }}>{pError}</div>}
+
+            {!pLoaded ? (
+              <div className="b2b-loading">불러오는 중…</div>
+            ) : (
+              <>
+                <textarea
+                  className="b2b-input"
+                  value={prompt}
+                  onChange={(e) => { setPrompt(e.target.value); setPSaved(""); }}
+                  spellCheck={false}
+                  style={{ width: "100%", minHeight: 340, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12.5, lineHeight: 1.7, resize: "vertical", whiteSpace: "pre", overflowWrap: "normal", overflowX: "auto" }}
+                />
+                <div className="sm-row" style={{ gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <button className="b2b-btn-primary" onClick={() => savePrompt()} disabled={pSaving}>{pSaving ? "저장 중…" : "지침 저장"}</button>
+                  <button className="b2b-btn-secondary" onClick={resetPrompt} disabled={pSaving || promptIsDefault}>기본값으로 복원</button>
+                  {pSaved && <span style={{ fontSize: 12, color: "var(--sm-success)" }}>{pSaved}</span>}
+                  <span className="sm-faint" style={{ fontSize: 11.5, marginLeft: "auto" }}>
+                    {prompt.length.toLocaleString()}자 · <span style={{ color: promptIsDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>{promptIsDefault ? "기본값" : "사용자 지정"}</span> · 모든 사용자 공용
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </section>
+
       <style>{`
         .mc-ai { font-size: 11px; font-weight: 700; color: var(--sm-orange); border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light); border-radius: 6px; padding: 1px 7px; vertical-align: middle; margin-left: 4px; }
         .mc-example { font-size: 12px; color: var(--sm-navy); background: var(--sm-bg); border: 1px solid var(--sm-border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
         .mc-example:hover { border-color: var(--sm-orange); color: var(--sm-orange); }
+        .mc-prompt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: none; border: none; padding: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sm-navy); text-align: left; }
       `}</style>
     </div>
   );
