@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
     const hashes = orders.map((o) => o.row_hash);
     let dupInDb = 0;
-    for (let i = 0; i < hashes.length; i += 1000) {
-      const { data, error } = await sb.from("sales_orders").select("row_hash").in("row_hash", hashes.slice(i, i + 1000));
+    for (let i = 0; i < hashes.length; i += 100) {   // 100개씩 — 큰 .in() 은 요청 URL 길이 초과로 게이트웨이 400(Bad Request)
+      const { data, error } = await sb.from("sales_orders").select("row_hash").in("row_hash", hashes.slice(i, i + 100));
       if (error) return NextResponse.json({ ok: false, error: `DB 조회 오류: ${error.message} (마이그레이션 039 적용 확인)` }, { status: 500 });
       dupInDb += data?.length || 0;
     }

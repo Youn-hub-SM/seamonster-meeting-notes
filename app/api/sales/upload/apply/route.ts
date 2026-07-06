@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     // 삽입 전 기존 개수(정확한 신규 건수 산출)
     const hashes = orders.map((o) => o.row_hash);
     let existed = 0;
-    for (let i = 0; i < hashes.length; i += 1000) {
-      const { data, error } = await sb.from("sales_orders").select("row_hash").in("row_hash", hashes.slice(i, i + 1000));
+    for (let i = 0; i < hashes.length; i += 100) {   // 100개씩 — 큰 .in() 은 요청 URL 길이 초과로 게이트웨이 400
+      const { data, error } = await sb.from("sales_orders").select("row_hash").in("row_hash", hashes.slice(i, i + 100));
       if (error) return NextResponse.json({ ok: false, error: `DB 조회 오류: ${error.message}` }, { status: 500 });
       existed += data?.length || 0;
     }
@@ -64,8 +64,8 @@ export async function POST(req: NextRequest) {
     // 고객 조회 테이블 병합 upsert(first/last/name). order_count는 검색 시 실시간 계산 → 여기선 미유지.
     const keys = [...custMap.keys()];
     const existing = new Map<string, { first_seen_date: string | null; last_seen_date: string | null }>();
-    for (let i = 0; i < keys.length; i += 1000) {
-      const { data } = await sb.from("sales_customers").select("customer_key, first_seen_date, last_seen_date").in("customer_key", keys.slice(i, i + 1000));
+    for (let i = 0; i < keys.length; i += 100) {     // 100개씩 — .in() URL 길이 한도 회피
+      const { data } = await sb.from("sales_customers").select("customer_key, first_seen_date, last_seen_date").in("customer_key", keys.slice(i, i + 100));
       for (const r of data || []) existing.set(r.customer_key, { first_seen_date: r.first_seen_date, last_seen_date: r.last_seen_date });
     }
     const custRows = keys.map((k) => {
