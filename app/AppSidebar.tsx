@@ -23,18 +23,17 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
-  // 아코디언: 한 번에 하나만 펼침. 미조작(undefined)이면 현재 경로의 활성 메뉴 툴을 기본 펼침.
+  // 아코디언: 여러 개를 동시에 펼칠 수 있음(단일 열림 아님). 활성 툴은 자동으로 펼치되, 열어둔 다른 건 닫지 않음.
   const activeMenuHref = useMemo(() => {
     for (const cat of NAV) for (const t of cat.tools) if (t.menu?.length && toolActive(t, pathname)) return t.href;
     return null;
   }, [pathname]);
-  const [openHref, setOpenHref] = useState<string | null | undefined>(undefined);
-  const effectiveOpen = openHref === undefined ? activeMenuHref : openHref;
-  const isToolOpen = (href: string) => effectiveOpen === href;
-  // 열려 있으면 닫고, 아니면 그것만 열기(나머지 아코디언은 닫힘).
-  const toggleTool = (href: string) => setOpenHref((cur) => ((cur === undefined ? activeMenuHref : cur) === href ? null : href));
-  // 다른 메뉴(경로)로 이동하면 수동으로 펼쳐둔 아코디언은 접고 현재 위치 기준으로 복귀.
-  useEffect(() => { setOpenHref(undefined); }, [pathname]);
+  const [openSet, setOpenSet] = useState<Set<string>>(new Set());
+  const isToolOpen = (href: string) => openSet.has(href);
+  // 클릭: 열려 있으면 닫고, 아니면 펼침(나머지는 그대로 유지).
+  const toggleTool = (href: string) => setOpenSet((s) => { const n = new Set(s); if (n.has(href)) n.delete(href); else n.add(href); return n; });
+  // 현재 경로의 활성 툴은 자동으로 펼쳐 둠(다른 아코디언은 접지 않음).
+  useEffect(() => { if (activeMenuHref) setOpenSet((s) => (s.has(activeMenuHref) ? s : new Set(s).add(activeMenuHref))); }, [activeMenuHref]);
 
   // 로그인 사용자(있으면) — 설정 메뉴 노출 + 푸터 표시용. /api/b2b/auth 는 미들웨어 예외라 어디서나 호출 가능.
   useEffect(() => {
