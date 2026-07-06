@@ -147,7 +147,7 @@ export default function ScanPage() {
               <a href="/api/fulfill/scan/template" className="change-link" style={{ fontSize: 12 }}>양식 다운로드</a>
             </div>
             <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-              엑셀(.xlsx)·CSV 지원. 열 제목에 <strong>송장번호</strong>·<strong>단품코드</strong>(·<strong>주문수량</strong>)가 있으면 자동 인식합니다. 단품코드 NOTHING(정기배송 등)은 제외됩니다.
+              엑셀(.xlsx)·CSV 지원. 택배사 <strong>&lsquo;파일접수 상세내역&rsquo;</strong>(운송장번호·상품코드·내품수량)을 <strong>그대로 올려도</strong> 자동 인식합니다. NOTHING(정기배송 등)은 제외됩니다.
             </p>
             <div className="sm-row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <input className="b2b-input" placeholder="배치 이름(선택 · 예: 7/6 오전)" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} style={{ width: 240, maxWidth: "100%" }} />

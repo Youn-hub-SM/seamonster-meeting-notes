@@ -18,23 +18,31 @@ export type ParsedScan = {
   error?: string;
 };
 
-// 헤더 후보(부분일치). 소문자·공백제거 후 비교.
+// 헤더 후보(별칭). 소문자·공백(줄바꿈 포함) 제거 후 비교. 목록 앞일수록 우선순위 높음.
+//  · 운송장번호(CJ 파일접수) = 송장번호. 고객주문번호는 송장이 아니므로 별칭에서 제외.
+//  · 상품코드/단품코드 둘 다 후보 — CJ 파일은 '상품코드'에 SKU가 있고 '단품코드'는 비어있어,
+//    실제 데이터가 있는 열을 고르도록 parseScanCells 에서 처리(빈 열 회피).
+//  · 내품수량(실제 품목수)을 박스 '수량'보다 우선.
 const INV_ALIASES = ["송장번호", "운송장번호", "운송장", "송장", "invoice", "tracking", "등기번호"];
-const CODE_ALIASES = ["단품코드", "품목코드", "옵션코드", "상품코드", "sku", "코드"];
-const QTY_ALIASES = ["주문수량", "수량합계", "수량", "qty", "quantity"];
+const CODE_ALIASES = ["단품코드", "상품코드", "품목코드", "옵션코드", "sku", "코드"];
+const QTY_ALIASES = ["내품수량", "주문수량", "수량합계", "수량", "qty", "quantity"];
 
 const norm = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, "");
 
+// 별칭 우선순위대로(정확 일치 → 부분 일치) 후보 열 인덱스 목록.
+function colCandidates(H: string[], aliases: string[]): number[] {
+  const al = aliases.map(norm);
+  const out: number[] = [];
+  const push = (i: number) => { if (i >= 0 && !out.includes(i)) out.push(i); };
+  for (const a of al) H.forEach((h, i) => { if (h === a) push(i); });          // 정확 일치
+  for (const a of al) H.forEach((h, i) => { if (h && h.includes(a)) push(i); }); // 부분 일치
+  return out;
+}
+
 export function findScanCols(headerCells: unknown[]): ScanCols {
   const H = headerCells.map(norm);
-  const find = (aliases: string[]) => {
-    const al = aliases.map(norm);
-    let i = H.findIndex((h) => h && al.includes(h)); // 정확 일치 우선
-    if (i >= 0) return i;
-    i = H.findIndex((h) => h && al.some((a) => h.includes(a))); // 부분 일치
-    return i;
-  };
-  return { invoice: find(INV_ALIASES), code: find(CODE_ALIASES), qty: find(QTY_ALIASES) };
+  const first = (aliases: string[]) => { const c = colCandidates(H, aliases); return c.length ? c[0] : -1; };
+  return { invoice: first(INV_ALIASES), code: first(CODE_ALIASES), qty: first(QTY_ALIASES) };
 }
 
 const SEP = String.fromCharCode(1); // (송장, 코드) 병합키 경계
@@ -46,12 +54,23 @@ export function parseScanCells(cells: unknown[][]): ParsedScan {
   if (!cells.length) return { ...empty, error: "빈 파일입니다." };
 
   let headerRow = -1;
-  let cols: ScanCols = { invoice: -1, code: -1, qty: -1 };
   for (let r = 0; r < Math.min(cells.length, 10); r++) {
     const c = findScanCols(cells[r] || []);
-    if (c.invoice >= 0 && c.code >= 0) { headerRow = r; cols = c; break; }
+    if (c.invoice >= 0 && c.code >= 0) { headerRow = r; break; }
   }
-  if (headerRow < 0) return { ...empty, error: "헤더에서 '송장번호'와 '단품코드' 열을 찾지 못했습니다. 열 제목을 확인하세요." };
+  if (headerRow < 0) return { ...empty, error: "헤더에서 '송장번호'와 '상품코드(단품코드)' 열을 찾지 못했습니다. 열 제목을 확인하세요." };
+
+  // 최종 열 결정: 후보 중 '데이터가 있는' 첫 열을 선택(빈 단품코드 열 등 회피).
+  const H = (cells[headerRow] || []).map(norm);
+  const sample = cells.slice(headerRow + 1, headerRow + 51);
+  const hasData = (c: number) => c >= 0 && sample.some((row) => String((row || [])[c] ?? "").trim() !== "");
+  const resolve = (aliases: string[]) => {
+    const cands = colCandidates(H, aliases);
+    for (const c of cands) if (hasData(c)) return c;
+    return cands.length ? cands[0] : -1;
+  };
+  const cols: ScanCols = { invoice: resolve(INV_ALIASES), code: resolve(CODE_ALIASES), qty: resolve(QTY_ALIASES) };
+  if (cols.invoice < 0 || cols.code < 0) return { ...empty, error: "헤더에서 '송장번호'와 '상품코드(단품코드)' 열을 찾지 못했습니다. 열 제목을 확인하세요." };
 
   const merged = new Map<string, ScanRow>();
   const invoices = new Set<string>();
