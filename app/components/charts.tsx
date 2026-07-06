@@ -158,7 +158,7 @@ export function PieCard({ title, data, fmt }: { title: string; data: [string, nu
             })}
             {!fmt && <text x={cx} y={cy + 6} textAnchor="middle" fontSize="19" fontWeight="800" fill="var(--sm-black)">{total}</text>}
           </svg>
-          <div className="sm-col" style={{ gap: 5, minWidth: 130, flex: 1 }}>
+          <div className="sm-col" style={{ gap: 5, minWidth: 150 }}>
             {data.map(([label, n], i) => (
               <div key={i} className="sm-between" style={{ fontSize: 13, gap: 8 }}>
                 <span className="sm-row" style={{ gap: 6, minWidth: 0 }}>

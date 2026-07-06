@@ -120,7 +120,7 @@ export default function FulfillStatsPage() {
       ) : (
         <div className="sm-col" style={{ gap: 16 }}>
           {/* KPI */}
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 0 }}>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 발송(택배)</div><div className="b2b-stat-card-value b2b-money">{won(tot)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 18 }}><span style={{ color: "var(--sm-info)" }}>{won(agg.totN)}</span> <span className="sm-faint">/</span> <span style={{ color: "var(--sm-orange)" }}>{won(agg.totG)}</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 비율</div><div className="b2b-stat-card-value">{tot ? Math.round((agg.totG / tot) * 100) : 0}%</div></div>
@@ -129,46 +129,42 @@ export default function FulfillStatsPage() {
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(agg.dry)}원</div></div>
           </div>
 
-          {/* 월별 발송량(헤드라인, 전체폭) */}
-          <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 일반/도착보장</span></span></div>
-            <StackedBar periods={agg.monthlyNG.periods} series={agg.monthlyNG.series} colors={NG} unit="건" />
-            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
-          </section>
+          {/* 모든 그래프 한 줄에 2개씩(막대→추세→도넛 순으로 높이 맞춤) */}
+          <div className="fx-2col">
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 일반/도착보장</span></span></div>
+              <StackedBar periods={agg.monthlyNG.periods} series={agg.monthlyNG.series} colors={NG} unit="건" />
+              <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
+            </section>
 
-          {/* 분포·요일 (2열) */}
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
-            <PieCard title="박스종류 비중" data={agg.catPie} />
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 구성</span></div>
+              <StackedBar periods={agg.monthlyCat.periods} series={agg.monthlyCat.series} unit="건" />
+              <Legend items={BOX_CATEGORIES.map((c, i) => [c, PIE_COLORS[i % PIE_COLORS.length]] as [string, string])} />
+            </section>
+
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">박스종류별 일반 vs 도착보장</span></div>
+              <StackedBar periods={agg.catNG.periods} series={agg.catNG.series} colors={NG} unit="건" />
+              <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
+            </section>
+
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">요일별 발송량</span></div>
               <TrendChart data={agg.weekday} />
             </section>
-          </div>
 
-          {/* 월별 박스종류 구성(전체폭) */}
-          <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 구성</span></div>
-            <StackedBar periods={agg.monthlyCat.periods} series={agg.monthlyCat.series} unit="건" />
-            <Legend items={BOX_CATEGORIES.map((c, i) => [c, PIE_COLORS[i % PIE_COLORS.length]] as [string, string])} />
-          </section>
-
-          {/* 박스종류별 일반 vs 도착보장(전체폭) */}
-          <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">박스종류별 일반 vs 도착보장</span></div>
-            <StackedBar periods={agg.catNG.periods} series={agg.catNG.series} colors={NG} unit="건" />
-            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
-          </section>
-
-          {/* 추세 (2열) */}
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">월별 운임</span></div>
               <TrendChart data={agg.feeTrend} fmtAxis={moneyCompact} />
             </section>
+
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">도착보장 비율 추세</span></div>
               <TrendChart data={agg.guarRatioTrend} fmtAxis={(n) => `${n}%`} />
             </section>
+
+            <PieCard title="박스종류 비중" data={agg.catPie} />
           </div>
 
           {/* 월별 박스종류 수량표 */}
