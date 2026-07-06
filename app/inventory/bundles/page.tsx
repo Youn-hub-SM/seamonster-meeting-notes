@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BundlePreview } from "@/app/api/inventory/bundles/import/route";
 import { Combobox, ComboOption } from "../../b2b/orders/Combobox";
+import BundleEditor from "@/app/components/BundleEditor";
 
 type BundleRow = { parent_id: string; parent_sku: string | null; parent_name: string; components: { component_id: string; sku: string | null; name: string; spec: string | null; qty: number }[] };
 type PreviewResp = { summary: { bundles: number; valid: number; willCreate: number; errors: number }; previews: BundlePreview[] };
-type ProdLite = { sku: string | null; name: string; spec: string | null };
+type ProdLite = { id: string; sku: string | null; name: string; spec: string | null };
 
 export default function BundlesPage() {
   const [bundles, setBundles] = useState<BundleRow[]>([]);
@@ -16,6 +17,7 @@ export default function BundlesPage() {
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<PreviewResp | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [editFor, setEditFor] = useState<BundleRow | null>(null);
   const [products, setProducts] = useState<ProdLite[]>([]);
 
   const load = useCallback(async () => {
@@ -29,7 +31,7 @@ export default function BundlesPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
   // 구성품 검색용 상품 목록
-  useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/products", { cache: "no-store" })).json(); if (Array.isArray(j.products)) setProducts(j.products.map((p: ProdLite) => ({ sku: p.sku, name: p.name, spec: p.spec }))); } catch { /* noop */ } })(); }, []);
+  useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/products", { cache: "no-store" })).json(); if (Array.isArray(j.products)) setProducts(j.products.map((p: ProdLite) => ({ id: p.id, sku: p.sku, name: p.name, spec: p.spec }))); } catch { /* noop */ } })(); }, []);
 
   async function handleFile(file: File) {
     setImporting(true); setError("");
@@ -98,7 +100,7 @@ export default function BundlesPage() {
                       ))}
                     </div>
                   </td>
-                  <td><button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => removeBundle(b)}>삭제</button></td>
+                  <td style={{ whiteSpace: "nowrap" }}><button className="b2b-link-btn" onClick={() => setEditFor(b)}>수정</button> <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => removeBundle(b)}>삭제</button></td>
                 </tr>
               ))}
             </tbody>
@@ -145,6 +147,7 @@ export default function BundlesPage() {
       )}
 
       {addOpen && <AddBundleModal products={products} onClose={() => setAddOpen(false)} onSaved={load} />}
+      {editFor && <BundleEditor parent={{ id: editFor.parent_id, name: editFor.parent_name, sku: editFor.parent_sku }} products={products} onClose={() => setEditFor(null)} onSaved={load} />}
     </div>
   );
 }
