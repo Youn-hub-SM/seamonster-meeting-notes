@@ -10,6 +10,7 @@ type State = { tally: Tally[]; scannedCount: number; totalInvoices: number; tota
 
 const SEL_KEY = "fulfill_scan_batch";
 const fmtTime = (iso: string) => { const d = new Date(iso); return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
 export default function ScanPage() {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -102,15 +103,40 @@ export default function ScanPage() {
     scanRef.current?.focus();
   }
 
+  // 스캔 초기화 — 인쇄 후 다음 라운드를 위해 자주 누르므로 확인창 없이 즉시(업로드 데이터는 유지).
   async function reset() {
-    if (!sel || !confirm("이 배치의 스캔 내역을 모두 초기화할까요? (업로드한 송장 데이터는 유지됩니다)")) return;
+    if (!sel) return;
     try {
       const j = await (await fetch(`/api/fulfill/scan/batches/${sel}/reset`, { method: "POST" })).json();
       if (!j.ok) throw new Error(j.error || "초기화 실패");
       setDetail((d) => (d ? { ...d, tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits, recent: [] } : d));
-      setMsg(null);
+      setMsg({ kind: "ok", text: "초기화 완료 · 새로 스캔하세요" });
       scanRef.current?.focus();
     } catch (e) { setError(e instanceof Error ? e.message : "초기화 실패"); }
+  }
+
+  // 피킹 리스트 인쇄 — 현재 스캔한 만큼의 상품별 수량을 별도 창으로 인쇄.
+  function printTally() {
+    if (!detail || !detail.tally.length) return;
+    const now = new Date();
+    const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const rows = detail.tally.map((t) => `<tr><td>${esc(t.name)}</td><td class="sku">${esc(t.sku || "")}</td><td class="q">${t.qty.toLocaleString()}</td></tr>`).join("");
+    const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>피킹 리스트</title>`
+      + `<style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;margin:22px;color:#111}`
+      + `h1{font-size:19px;margin:0 0 3px}.meta{color:#666;font-size:12px;margin-bottom:14px}`
+      + `table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #d0d0d0;padding:9px 6px;text-align:left}`
+      + `th{font-size:12px;color:#666}td{font-size:16px}th.q,td.q{text-align:right}td.q{font-weight:800;font-size:20px}`
+      + `td.sku{color:#999;font-size:12px}tfoot td{font-weight:800;border-top:2px solid #333;border-bottom:none;font-size:16px}`
+      + `@media print{body{margin:6mm}}</style></head><body>`
+      + `<h1>피킹 리스트 · ${esc(detail.batch.title)}</h1>`
+      + `<div class="meta">출력 ${ts} · 스캔 ${detail.scannedCount}건 · 총 ${detail.totalUnits.toLocaleString()}개</div>`
+      + `<table><thead><tr><th>상품명</th><th>SKU</th><th class="q">수량</th></tr></thead><tbody>${rows}</tbody>`
+      + `<tfoot><tr><td colspan="2">합계</td><td class="q">${detail.totalUnits.toLocaleString()}</td></tr></tfoot></table>`
+      + `<script>window.onload=function(){setTimeout(function(){window.print()},80)}</script></body></html>`;
+    const w = window.open("", "_blank", "width=760,height=920");
+    if (!w) { alert("팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 인쇄하세요."); return; }
+    w.document.write(html);
+    w.document.close();
   }
 
   async function removeBatch(id: string) {
@@ -122,8 +148,6 @@ export default function ScanPage() {
       await loadList();
     } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
   }
-
-  const pct = detail && detail.totalInvoices ? Math.round((detail.scannedCount / detail.totalInvoices) * 100) : 0;
 
   return (
     <div className="b2b-container" style={{ maxWidth: 920 }}>
@@ -204,21 +228,14 @@ export default function ScanPage() {
           <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <button className="b2b-btn-secondary" onClick={() => { setSel(""); localStorage.removeItem(SEL_KEY); setMsg(null); setUploadInfo(null); }}>← 배치 목록</button>
             <span style={{ fontWeight: 700 }}>{detail.batch.title}</span>
-            <div className="sm-row" style={{ gap: 6, marginLeft: "auto", flexWrap: "wrap" }}>
-              <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => (window.location.href = `/api/fulfill/scan/batches/${sel}/export`)}>엑셀 내보내기</button>
-              <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={reset}>스캔 초기화</button>
+            <button className="b2b-btn-secondary" style={{ marginLeft: "auto", padding: "5px 10px", fontSize: 12, color: "var(--sm-danger)" }} onClick={() => removeBatch(sel)}>이 배치 삭제</button>
+          </div>
+
+          <section className="b2b-card" style={{ marginBottom: 14 }}>
+            <div className="sm-between" style={{ alignItems: "baseline" }}>
+              <label className="b2b-field-label">송장번호 스캔</label>
+              <span className="sm-faint" style={{ fontSize: 12 }}>이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 14 }}>{detail.scannedCount.toLocaleString()}</strong>건</span>
             </div>
-          </div>
-
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", marginBottom: 14 }}>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">스캔한 송장</div><div className="b2b-stat-card-value" style={{ color: "var(--sm-success)" }}>{detail.scannedCount.toLocaleString()} <span className="sm-faint" style={{ fontSize: 13, fontWeight: 400 }}>/ {detail.totalInvoices.toLocaleString()}</span></div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">진행률</div><div className="b2b-stat-card-value">{pct}%</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">상품 종류</div><div className="b2b-stat-card-value">{detail.tally.length}</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 수량</div><div className="b2b-stat-card-value b2b-money">{detail.totalUnits.toLocaleString()}</div></div>
-          </div>
-
-          <section className="b2b-card" style={{ marginBottom: 16 }}>
-            <label className="b2b-field-label">송장번호 스캔</label>
             <input
               ref={scanRef}
               className="b2b-input"
@@ -239,9 +256,27 @@ export default function ScanPage() {
             )}
           </section>
 
+          {/* 인쇄 → 상품 가지러 → 초기화 → 다음 스캔. 두 버튼을 크고 눈에 띄게. */}
+          <div className="sm-row" style={{ gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+            <button
+              className="b2b-btn-primary"
+              onClick={printTally}
+              disabled={detail.tally.length === 0}
+              style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800 }}
+            >🖨 인쇄 (피킹 리스트)</button>
+            <button
+              onClick={reset}
+              disabled={detail.scannedCount === 0}
+              style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800, cursor: "pointer",
+                background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
+                opacity: detail.scannedCount === 0 ? 0.5 : 1 }}
+            >↺ 스캔 초기화</button>
+          </div>
+
           <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">상품별 집계</span>
-              <span className="sm-faint" style={{ fontSize: 12 }}>스캔한 송장 기준 · 묶음 전개 반영</span>
+            <div className="b2b-card-head">
+              <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 총 {detail.totalUnits.toLocaleString()}개 · 묶음 전개 반영</span></span>
+              <a className="change-link" style={{ fontSize: 12, cursor: "pointer" }} onClick={() => (window.location.href = `/api/fulfill/scan/batches/${sel}/export`)}>엑셀로 저장</a>
             </div>
             {detail.tally.length === 0 ? (
               <div className="b2b-empty" style={{ padding: 24 }}>아직 스캔된 송장이 없습니다. 위에서 스캔을 시작하세요.</div>
