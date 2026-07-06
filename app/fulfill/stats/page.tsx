@@ -97,7 +97,7 @@ export default function FulfillStatsPage() {
   }, [rows, from, to, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tot = agg.totN + agg.totG;
-  const NG_COLORS = ["#1971C2", "#F15A30"]; // 일반 파랑 · 도착보장 주황
+  const NG = ["var(--sm-info)", "var(--sm-orange)"]; // 일반(파랑=info) · 도착보장(주황=brand) — 디자인 토큰 통일
 
   return (
     <div className="b2b-container">
@@ -118,43 +118,49 @@ export default function FulfillStatsPage() {
       {loading ? <div className="b2b-loading">불러오는 중...</div> : tot === 0 ? (
         <div className="b2b-empty"><div className="b2b-empty-icon">📦</div>이 기간에 기록된 발송이 없습니다. <Link href="/fulfill/log">배송일지</Link>에서 먼저 기록하세요.</div>
       ) : (
-        <>
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
+        <div className="sm-col" style={{ gap: 16 }}>
+          {/* KPI */}
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 발송(택배)</div><div className="b2b-stat-card-value b2b-money">{won(tot)}</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 18 }}><span style={{ color: "#1971C2" }}>{won(agg.totN)}</span> / <span style={{ color: "var(--sm-orange)" }}>{won(agg.totG)}</span></div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 18 }}><span style={{ color: "var(--sm-info)" }}>{won(agg.totN)}</span> <span className="sm-faint">/</span> <span style={{ color: "var(--sm-orange)" }}>{won(agg.totG)}</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 비율</div><div className="b2b-stat-card-value">{tot ? Math.round((agg.totG / tot) * 100) : 0}%</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">일평균 발송</div><div className="b2b-stat-card-value b2b-money">{agg.days ? won(tot / agg.days) : 0}<span className="sm-faint" style={{ fontSize: 12 }}> /{agg.days}일</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계</div><div className="b2b-stat-card-value b2b-money">{won(agg.fee)}원</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(agg.dry)}원</div></div>
           </div>
 
-          <section className="b2b-card" style={{ marginBottom: 16 }}>
+          {/* 월별 발송량(헤드라인, 전체폭) */}
+          <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 일반/도착보장</span></span></div>
-            <StackedBar periods={agg.monthlyNG.periods} series={agg.monthlyNG.series} colors={NG_COLORS} />
-            <Legend items={[["일반", NG_COLORS[0]], ["도착보장", NG_COLORS[1]]]} />
+            <StackedBar periods={agg.monthlyNG.periods} series={agg.monthlyNG.series} colors={NG} unit="건" />
+            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
           </section>
 
-          <section className="b2b-card" style={{ marginBottom: 16 }}>
-            <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 구성</span></div>
-            <StackedBar periods={agg.monthlyCat.periods} series={agg.monthlyCat.series} />
-            <Legend items={BOX_CATEGORIES.map((c, i) => [c, PIE_COLORS[i % PIE_COLORS.length]] as [string, string])} />
-          </section>
-
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
-            <PieCard title="박스종류 비중(전체)" data={agg.catPie} />
+          {/* 분포·요일 (2열) */}
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+            <PieCard title="박스종류 비중" data={agg.catPie} />
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">요일별 발송량</span></div>
               <TrendChart data={agg.weekday} />
             </section>
           </div>
 
-          <section className="b2b-card" style={{ marginBottom: 16 }}>
-            <div className="b2b-card-head"><span className="b2b-card-title">박스종류별 일반 vs 도착보장</span></div>
-            <StackedBar periods={agg.catNG.periods} series={agg.catNG.series} colors={NG_COLORS} />
-            <Legend items={[["일반", NG_COLORS[0]], ["도착보장", NG_COLORS[1]]]} />
+          {/* 월별 박스종류 구성(전체폭) */}
+          <section className="b2b-card">
+            <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 구성</span></div>
+            <StackedBar periods={agg.monthlyCat.periods} series={agg.monthlyCat.series} unit="건" />
+            <Legend items={BOX_CATEGORIES.map((c, i) => [c, PIE_COLORS[i % PIE_COLORS.length]] as [string, string])} />
           </section>
 
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
+          {/* 박스종류별 일반 vs 도착보장(전체폭) */}
+          <section className="b2b-card">
+            <div className="b2b-card-head"><span className="b2b-card-title">박스종류별 일반 vs 도착보장</span></div>
+            <StackedBar periods={agg.catNG.periods} series={agg.catNG.series} colors={NG} unit="건" />
+            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
+          </section>
+
+          {/* 추세 (2열) */}
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">월별 운임</span></div>
               <TrendChart data={agg.feeTrend} fmtAxis={moneyCompact} />
@@ -165,7 +171,7 @@ export default function FulfillStatsPage() {
             </section>
           </div>
 
-          {/* 매월 박스종류별 수량 표 */}
+          {/* 월별 박스종류 수량표 */}
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 수량표</span></div>
             <div className="b2b-table-wrap">
@@ -176,7 +182,7 @@ export default function FulfillStatsPage() {
                     <tr key={m.month}>
                       <td><strong>{m.month.slice(2)}</strong></td>
                       {m.cats.map((v, i) => <td key={i} className="num b2b-money">{v || "-"}</td>)}
-                      <td className="num b2b-money" style={{ color: "#1971C2" }}>{won(m.n)}</td>
+                      <td className="num b2b-money" style={{ color: "var(--sm-info)" }}>{won(m.n)}</td>
                       <td className="num b2b-money" style={{ color: "var(--sm-orange)" }}>{won(m.g)}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(m.n + m.g)}</td>
                     </tr>
@@ -185,7 +191,7 @@ export default function FulfillStatsPage() {
               </table>
             </div>
           </section>
-        </>
+        </div>
       )}
     </div>
   );
