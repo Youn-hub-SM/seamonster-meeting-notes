@@ -23,7 +23,7 @@ const IDX = { dbNo: 0, orderNo: 1, name: 2, zip: 3, addr: 4, phone1: 5, phone2: 
 // 박스타입/기본운임 구간 (주문 총중량 kg). 값 바뀌면 여기만 수정.
 export function boxType(w: number): number { return w <= 2.7 ? 1 : w <= 5.2 ? 2 : 3; }
 export function baseFee(w: number): number { return w <= 2.7 ? 2700 : w <= 5.2 ? 3300 : 3900; }
-export const GUAR_SURCHARGE = 143; // 도착보장 건당 추가운임(원). 배송일지 도착보장 추가운임 = 143 × 도착보장 건수.
+export const GUAR_SURCHARGE = 143; // 도착보장 건당 운임(원). 이제 도착보장 '기본운임'에 143×건이 포함됨(추가운임은 제주 등 수동).
 
 // 택배량 집계용 박스종류(주문 총중량 구간). 배송일지 '해당 주문건 박스 종류'와 동일.
 export const BOX_CATEGORIES = ["굴", "생굴", "김치8", "김치10", "12kg", "15kg", "20kg", "25kg"] as const;
@@ -39,7 +39,7 @@ export type FulfillResult = {
   normal: unknown[][];        // A~R (18열) 일반
   guarantee: unknown[][];     // A~R 도착보장(Q=3)
   stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
-  fees: { baseNormal: number; baseGuar: number; guarExtra: number }; // 기본운임 합(일반/도착보장) + 도착보장 추가운임 — 배송일지 기록용
+  fees: { baseNormal: number; baseGuar: number; guarExtra: number }; // baseGuar=도착보장 기본운임(중량구간 + 143×건). guarExtra=0(추가운임은 배송일지에서 제주 등 수동). 배송일지 기록용
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
   unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
@@ -108,7 +108,7 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   return {
     headers: CNPLUS_HEADERS, normal, guarantee,
     stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar },
-    fees: { baseNormal, baseGuar, guarExtra: rates.guarSurcharge * parcelsGuar },
+    fees: { baseNormal, baseGuar: baseGuar + rates.guarSurcharge * parcelsGuar, guarExtra: 0 }, // 도착보장 기본운임 = 중량구간 + 143×도착보장건. 추가운임은 배송일지에서 제주 등 수동
     parcelSummary,
     addressWarnings, unmatched: [...unmatched],
   };

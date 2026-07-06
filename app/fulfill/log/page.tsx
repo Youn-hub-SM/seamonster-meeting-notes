@@ -319,7 +319,7 @@ export default function DeliveryLogPage() {
                                 </table>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))} + 추가 {won(cur(r, "guar_extra_fee"))}({won(rt.guarSurcharge)}원×{sumBoxes(r.boxes_guar)}건) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
+                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))}(제주 등 수동) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
                                 <span className="sm-faint">📦 파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
                                 <span className="sm-faint">🧊 드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
