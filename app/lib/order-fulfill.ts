@@ -7,7 +7,7 @@
 //  · R 기본운임 = U 구간 (≤2.7→2700, ≤5.2→3300, >5.2→3900)
 //  주문 총중량 U = 같은 (주문번호 B, 주소 E) 라인들의 Σ( 코드 총중량 × 수량 I ).
 
-import { type FulfillRates, DEFAULT_RATES, boxTypeOf, baseFeeOf } from "./fulfill-rates";
+import { type FulfillRates, type BoxTier, DEFAULT_RATES, boxTypeOf, baseFeeOf } from "./fulfill-rates";
 
 export const CNPLUS_HEADERS = [
   "사용안함", "고객주문번호", "받는분성명", "우편번호", "받는분주소(전체, 분할)", "받는분전화번호",
@@ -30,6 +30,23 @@ export const BOX_CATEGORIES = ["굴", "생굴", "김치8", "김치10", "12kg", "
 export function boxCategory(w: number): string {
   return w < 1.7 ? "굴" : w <= 2.7 ? "생굴" : w <= 4 ? "김치8" : w <= 5.2 ? "김치10"
     : w <= 9 ? "12kg" : w <= 11 ? "15kg" : w < 16 ? "20kg" : "25kg";
+}
+
+// 박스종류별 대표 중량(요율 구간에 대입해 기본운임 산출용). 각 종류 무게범위 안의 값.
+export const BOX_CATEGORY_WEIGHT: Record<(typeof BOX_CATEGORIES)[number], number> = {
+  "굴": 1.5, "생굴": 2.5, "김치8": 3.5, "김치10": 5.0, "12kg": 7, "15kg": 10, "20kg": 13, "25kg": 20,
+};
+
+// 박스종류별 개수 → 기본운임 합. 각 종류 대표중량을 요율 구간(tiers)에 대입해 합산.
+//  배송일지 '택배량 직접수정'에서 개수를 고치면 기본운임이 이 함수로 다시 계산된다.
+//  (박스종류 경계가 요율 구간의 하위분할이라, 발주처리 시점 ΣbaseFeeOf(주문중량) 과 정확히 일치)
+export function baseFeeFromBoxes(boxes: Record<string, number> | null | undefined, tiers: BoxTier[]): number {
+  let sum = 0;
+  for (const cat of BOX_CATEGORIES) {
+    const cnt = Math.max(0, Math.round(Number(boxes?.[cat]) || 0));
+    if (cnt) sum += cnt * baseFeeOf(BOX_CATEGORY_WEIGHT[cat], tiers);
+  }
+  return sum;
 }
 
 export type CodeInfo = { courier_name: string; order_weight: number };

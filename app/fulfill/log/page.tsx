@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
+import { BOX_CATEGORIES, baseFeeFromBoxes } from "@/app/lib/order-fulfill";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
 
 type Boxes = Record<string, number>;
@@ -64,11 +64,24 @@ export default function DeliveryLogPage() {
   const rowsRef = useRef(rows); rowsRef.current = rows;
   const draftRef = useRef(draft); draftRef.current = draft;
   const boxDraftRef = useRef(boxDraft); boxDraftRef.current = boxDraft;
+  const historyRef = useRef(history); historyRef.current = history;
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const cur = (r: Row, k: EditKey): number => Number(draft[r.log_date]?.[k] ?? (r[k] as number)) || 0;
   const curMemo = (r: Row): string => draft[r.log_date]?.memo ?? (r.memo ?? "");
   const setField = (date: string, k: EditKey, v: string) => setDraft((d) => ({ ...d, [date]: { ...d[date], [k]: v } }));
+
+  // 현재 화면상의 박스 개수(draft 우선). 기본운임은 이 개수로 자동 계산.
+  const curBoxesMap = (r: Row, side: "n" | "g"): Boxes => {
+    const base = side === "n" ? r.boxes_normal : r.boxes_guar;
+    const dr = boxDraft[r.log_date]?.[side] || {};
+    const out: Boxes = {};
+    for (const c of BOX_CATEGORIES) { const v = c in dr ? Number(dr[c]) || 0 : Number(base?.[c]) || 0; if (v > 0) out[c] = v; }
+    return out;
+  };
+  // 기본운임 = 택배량(박스종류별 개수) 자동계산. 도착보장은 박스당 도착보장 가산(guarSurcharge) 포함.
+  const baseNormalOf = (r: Row): number => baseFeeFromBoxes(curBoxesMap(r, "n"), ratesFor(history, r.log_date).boxTiers);
+  const baseGuarOf = (r: Row): number => { const rt = ratesFor(history, r.log_date); const b = curBoxesMap(r, "g"); return baseFeeFromBoxes(b, rt.boxTiers) + rt.guarSurcharge * sumBoxes(b); };
 
   async function post(body: Record<string, unknown>) {
     const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -99,9 +112,13 @@ export default function DeliveryLogPage() {
       return out;
     };
     const bn = build("n"), bg = build("g");
+    // 택배량이 바뀌면 기본운임도 다시 계산해서 함께 저장(통계·엑셀과 일치 유지).
+    const rt = ratesFor(historyRef.current, date);
+    const baseN = baseFeeFromBoxes(bn, rt.boxTiers);
+    const baseG = baseFeeFromBoxes(bg, rt.boxTiers) + rt.guarSurcharge * sumBoxes(bg);
     try {
-      await post({ log_date: date, boxes_normal: bn, boxes_guar: bg });
-      setRows((rs) => rs.map((x) => (x.log_date === date ? { ...x, boxes_normal: bn, boxes_guar: bg } : x)));
+      await post({ log_date: date, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG });
+      setRows((rs) => rs.map((x) => (x.log_date === date ? { ...x, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG } : x)));
       setBoxDraft((prev) => { const n = { ...prev }; delete n[date]; return n; });
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
   }
@@ -159,8 +176,8 @@ export default function DeliveryLogPage() {
   }
 
   // 채널별 운임 = 기본운임 + 추가운임(제주·도서산간 등 수동 가산). 파도는 착불 포함. 총 운임 공식은 기존과 동일.
-  const normalFee = (r: Row) => cur(r, "base_fee_normal") + cur(r, "extra_fee");                 // 씨몬 일반
-  const guarFee = (r: Row) => cur(r, "base_fee_guar") + cur(r, "guar_extra_fee");                 // 도착보장
+  const normalFee = (r: Row) => baseNormalOf(r) + cur(r, "extra_fee");                 // 씨몬 일반 = 택배량 자동 기본운임 + 추가운임
+  const guarFee = (r: Row) => baseGuarOf(r) + cur(r, "guar_extra_fee");                 // 도착보장 = 택배량 자동 기본운임(가산 포함) + 추가운임
   const padoFee = (r: Row) => cur(r, "pado_fee") + cur(r, "pado_extra") + cur(r, "pado_cod");     // 파도(기본+추가+착불)
   const feeTotal = (r: Row) => normalFee(r) + guarFee(r) + padoFee(r);
   const dryAmt = (r: Row) => { const rt = ratesFor(history, r.log_date); return cur(r, "dryice_full") * rt.dryFull + cur(r, "dryice_half") * rt.dryHalf; }; // 그 날짜에 유효했던 드라이 단가
@@ -171,7 +188,7 @@ export default function DeliveryLogPage() {
     guar: rows.reduce((s, r) => s + sumBoxes(r.boxes_guar), 0),
     fee: rows.reduce((s, r) => s + feeTotal(r), 0),
     dry: rows.reduce((s, r) => s + dryAmt(r), 0),
-  }), [rows, draft, history]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [rows, draft, boxDraft, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const numInput = (r: Row, k: EditKey, w = 76) => (
     <input type="number" className="b2b-input b2b-money" style={{ width: w, padding: "4px 6px", fontSize: 12, textAlign: "right" }}
@@ -283,19 +300,19 @@ export default function DeliveryLogPage() {
                                 </table>
                               </div>
                               <div>
-                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부 <span className="sm-faint" style={{ fontWeight: 400 }}>(채널별 기본운임 + 추가운임 · 제주·도서산간 등 추가금은 &lsquo;추가운임&rsquo;에 직접 입력)</span></div>
+                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부 <span className="sm-faint" style={{ fontWeight: 400 }}>(기본운임은 <strong>택배량에서 자동 계산</strong> · 제주·도서산간 등 추가금만 &lsquo;추가운임&rsquo;에 직접 입력)</span></div>
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12, maxWidth: 480 }}>
-                                  <thead><tr><th>채널</th><th className="num">기본운임</th><th className="num">추가운임</th><th className="num">합계</th></tr></thead>
+                                  <thead><tr><th>채널</th><th className="num">기본운임 <span className="sm-faint" style={{ fontWeight: 400 }}>(자동)</span></th><th className="num">추가운임</th><th className="num">합계</th></tr></thead>
                                   <tbody>
                                     <tr>
                                       <td style={{ whiteSpace: "nowrap" }}>씨몬 일반</td>
-                                      <td className="num">{numInput(r, "base_fee_normal")}</td>
+                                      <td className="num b2b-money" title="택배량에서 자동 계산">{won(baseNormalOf(r))}</td>
                                       <td className="num">{numInput(r, "extra_fee")}</td>
                                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(normalFee(r))}</td>
                                     </tr>
                                     <tr>
                                       <td style={{ whiteSpace: "nowrap", color: "var(--sm-orange)" }}>도착보장</td>
-                                      <td className="num">{numInput(r, "base_fee_guar")}</td>
+                                      <td className="num b2b-money" title="택배량 + 도착보장 가산 자동 계산" style={{ color: "var(--sm-orange)" }}>{won(baseGuarOf(r))}</td>
                                       <td className="num">{numInput(r, "guar_extra_fee")}</td>
                                       <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{won(guarFee(r))}</td>
                                     </tr>
@@ -319,7 +336,7 @@ export default function DeliveryLogPage() {
                                 </table>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(cur(r, "base_fee_guar"))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))}(제주 등 수동) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
+                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))}(제주 등 수동) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
                                 <span className="sm-faint">📦 파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
                                 <span className="sm-faint">🧊 드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
