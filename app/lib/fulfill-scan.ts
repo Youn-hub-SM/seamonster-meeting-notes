@@ -1,8 +1,8 @@
 import type { supabaseAdmin } from "./supabase";
 import { getAllBundles } from "./product-bundles";
 
-// 송장 스캔 집계 — 파이썬 seamonster_invoice 도구의 웹 이식.
-//  파싱(헤더 자동감지) + 묶음(세트) 구성품 전개 집계. DB엔 원자료만, 전개는 여기서 계산.
+// 송장 스캔 집계(단일 풀) — 파이썬 seamonster_invoice 웹 이식.
+//  파싱(헤더 자동감지) + 송장번호 정규화 + 묶음(세트) 전개 집계.
 
 export type ScanRow = { invoice_no: string; sku_code: string; qty: number };
 export type ScanProduct = { id: string; sku: string | null; name: string };
@@ -17,6 +17,9 @@ export type ParsedScan = {
   cols: ScanCols;
   error?: string;
 };
+
+// 송장번호 정규화 — 하이픈·공백 등 비영숫자 제거 후 대문자. 바코드('-' 없음)와 파일('-' 있음)을 동일 취급.
+export const normInvoice = (s: unknown) => String(s ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
 
 // 헤더 후보(별칭). 소문자·공백(줄바꿈 포함) 제거 후 비교. 목록 앞일수록 우선순위 높음.
 //  · 운송장번호(CJ 파일접수) = 송장번호. 고객주문번호는 송장이 아니므로 별칭에서 제외.
@@ -48,7 +51,7 @@ export function findScanCols(headerCells: unknown[]): ScanCols {
 const SEP = String.fromCharCode(1); // (송장, 코드) 병합키 경계
 
 // 2차원 셀 배열 → 정규화된 스캔 라인. 앞 10행 안에서 헤더행 자동 탐지.
-//  NOTHING 코드(정기배송 등 실물 없음) 제외, (송장·코드) 동일 라인은 수량 합산.
+//  NOTHING 코드(실물 없음) 제외, 송장번호 정규화, (송장,코드) 동일 라인은 수량 합산.
 export function parseScanCells(cells: unknown[][]): ParsedScan {
   const empty: ParsedScan = { rows: [], invoiceCount: 0, itemCount: 0, excludedNothing: 0, cols: { invoice: -1, code: -1, qty: -1 } };
   if (!cells.length) return { ...empty, error: "빈 파일입니다." };
@@ -77,7 +80,7 @@ export function parseScanCells(cells: unknown[][]): ParsedScan {
   let excludedNothing = 0;
   for (let r = headerRow + 1; r < cells.length; r++) {
     const row = cells[r] || [];
-    const inv = String(row[cols.invoice] ?? "").trim();
+    const inv = normInvoice(row[cols.invoice]);       // 하이픈·공백 제거 정규화
     const code = String(row[cols.code] ?? "").trim();
     if (!inv && !code) continue;
     if (!inv || !code) continue; // 불완전 행 건너뜀
@@ -132,16 +135,12 @@ export async function loadScanMaps(sb: ReturnType<typeof supabaseAdmin>): Promis
   return { bySku, byId, bundles };
 }
 
-// 배치의 전체 라인/이벤트를 페이지네이션으로 모두 로드(PostgREST 기본 1000행 상한 회피).
-async function fetchAllInvoiceItems(sb: ReturnType<typeof supabaseAdmin>, batchId: string): Promise<ScanRow[]> {
+// 풀 전체 라인/이벤트를 페이지네이션으로 로드(PostgREST 기본 1000행 상한 회피).
+async function fetchAllItems(sb: ReturnType<typeof supabaseAdmin>): Promise<ScanRow[]> {
   const out: ScanRow[] = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .from("fulfill_scan_items")
-      .select("invoice_no, sku_code, qty")
-      .eq("batch_id", batchId)
-      .range(from, from + PAGE - 1);
+    const { data, error } = await sb.from("fulfill_scan_items").select("invoice_no, sku_code, qty").range(from, from + PAGE - 1);
     if (error) throw error;
     const rows = (data as ScanRow[] | null) ?? [];
     out.push(...rows);
@@ -149,15 +148,11 @@ async function fetchAllInvoiceItems(sb: ReturnType<typeof supabaseAdmin>, batchI
   }
   return out;
 }
-async function fetchAllScanned(sb: ReturnType<typeof supabaseAdmin>, batchId: string): Promise<string[]> {
+async function fetchAllScanned(sb: ReturnType<typeof supabaseAdmin>): Promise<string[]> {
   const out: string[] = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .from("fulfill_scan_events")
-      .select("invoice_no")
-      .eq("batch_id", batchId)
-      .range(from, from + PAGE - 1);
+    const { data, error } = await sb.from("fulfill_scan_events").select("invoice_no").range(from, from + PAGE - 1);
     if (error) throw error;
     const rows = (data as { invoice_no: string }[] | null) ?? [];
     out.push(...rows.map((r) => r.invoice_no));
@@ -166,18 +161,14 @@ async function fetchAllScanned(sb: ReturnType<typeof supabaseAdmin>, batchId: st
   return out;
 }
 
-// 배치 현재 상태(집계·진행) — 라인+이벤트+상품맵을 로드해 묶음 전개 집계.
-export async function computeBatchState(sb: ReturnType<typeof supabaseAdmin>, batchId: string): Promise<{
+// 풀 현재 상태 — 라인+이벤트+상품맵을 로드해 묶음 전개 집계.
+export async function computePoolState(sb: ReturnType<typeof supabaseAdmin>): Promise<{
   tally: TallyRow[];
-  scannedCount: number;   // 스캔된 것 중 이 배치에 라인이 있는(유효) 송장 수
-  totalInvoices: number;  // 배치 내 고유 송장 수
+  scannedCount: number;   // 스캔된 것 중 풀에 라인이 있는(유효) 송장 수
+  totalInvoices: number;  // 풀의 고유 송장 수
   totalUnits: number;     // 집계된 총 수량
 }> {
-  const [items, scannedArr, maps] = await Promise.all([
-    fetchAllInvoiceItems(sb, batchId),
-    fetchAllScanned(sb, batchId),
-    loadScanMaps(sb),
-  ]);
+  const [items, scannedArr, maps] = await Promise.all([fetchAllItems(sb), fetchAllScanned(sb), loadScanMaps(sb)]);
   const knownInvoices = new Set(items.map((r) => r.invoice_no));
   const scanned = new Set(scannedArr);
   const tally = buildScanTally(items, scanned, maps.bySku, maps.byId, maps.bundles);
