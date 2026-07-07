@@ -34,8 +34,13 @@ export default function SettingsPage() {
   const [csPromptIsDefault, setCsPromptIsDefault] = useState(true);
   const [csPromptSaving, setCsPromptSaving] = useState(false);
   const [csPromptSaved, setCsPromptSaved] = useState("");
-  // Flow 직접 알림(Zapier 대체)
-  const [flowUrl, setFlowUrl] = useState("");
+  // Flow 봇 알림(Zapier 대체)
+  const [flowBotId, setFlowBotId] = useState("");
+  const [flowApiKey, setFlowApiKey] = useState("");     // 입력 시에만 갱신(빈값이면 기존 키 유지)
+  const [flowHasKey, setFlowHasKey] = useState(false);
+  const [flowReceivers, setFlowReceivers] = useState("");
+  const [flowTitle, setFlowTitle] = useState("");
+  const [flowTestReceiver, setFlowTestReceiver] = useState("");
   const [appUrl, setAppUrl] = useState("");
   const [flowActive, setFlowActive] = useState(false);
   const [zapierEnv, setZapierEnv] = useState(false);
@@ -69,7 +74,10 @@ export default function SettingsPage() {
         }
         const fj = await flowRes.json();
         if (flowRes.ok && fj.ok) {
-          setFlowUrl(fj.webhookUrl || "");
+          setFlowBotId(fj.botId || "");
+          setFlowReceivers(fj.receivers || "");
+          setFlowTitle(fj.title || "");
+          setFlowHasKey(!!fj.hasApiKey);
           setAppUrl(fj.appBaseUrl || "");
           setFlowActive(!!fj.active);
           setZapierEnv(!!fj.zapierEnv);
@@ -84,10 +92,13 @@ export default function SettingsPage() {
   async function saveFlow() {
     setFlowSaving(true); setError(""); setFlowMsg("");
     try {
-      const r = await fetch("/api/b2b/settings/flow-alert", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webhookUrl: flowUrl, appBaseUrl: appUrl }) });
+      const body: Record<string, string> = { botId: flowBotId, receivers: flowReceivers, title: flowTitle, appBaseUrl: appUrl };
+      if (flowApiKey.trim()) body.apiKey = flowApiKey.trim();   // 빈값이면 기존 키 유지
+      const r = await fetch("/api/b2b/settings/flow-alert", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
       setFlowActive(!!j.active);
+      if (flowApiKey.trim()) { setFlowHasKey(true); setFlowApiKey(""); }
       setFlowMsg("저장됨");
     } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
     setFlowSaving(false);
@@ -95,10 +106,10 @@ export default function SettingsPage() {
   async function testFlow() {
     setFlowSaving(true); setFlowMsg("");
     try {
-      const r = await fetch("/api/b2b/settings/flow-alert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webhookUrl: flowUrl }) });
+      const r = await fetch("/api/b2b/settings/flow-alert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(flowTestReceiver.trim() ? { testReceiver: flowTestReceiver.trim() } : {}) });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
-      setFlowMsg("✅ Flow로 테스트 메시지를 보냈어요. 채널을 확인하세요.");
+      setFlowMsg(`✅ Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.`);
     } catch (e) { setFlowMsg("❌ " + (e instanceof Error ? e.message : "테스트 실패")); }
     setFlowSaving(false);
   }
@@ -388,7 +399,7 @@ export default function SettingsPage() {
         </p>
       </section>
 
-      {/* Flow 직접 알림 (Zapier 대체) */}
+      {/* Flow 봇 알림 (Zapier 대체) */}
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">Flow 알림 (직접 발송)</h2>
@@ -397,24 +408,41 @@ export default function SettingsPage() {
           </span>
         </div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          B2B 알림을 <strong>Zapier 없이 Flow 인커밍 웹훅으로 직접</strong> 보냅니다(비용 절감). 웹훅 URL을 넣으면 <strong>Zapier 대신 Flow로만</strong> 발송돼요. 아래 <strong>이벤트별 on/off</strong>는 Flow에도 그대로 적용됩니다.
+          B2B 알림을 <strong>Zapier 없이 Flow(플로우)로 직접</strong> 지정 수신자에게 보냅니다(비용 절감). <strong>봇 ID·API 키·수신자</strong>가 모두 채워지면 <strong>Zapier 대신 Flow로만</strong> 발송돼요. 아래 <strong>이벤트별 on/off</strong>도 그대로 적용됩니다.
         </p>
         {loading ? (
           <div className="b2b-loading">불러오는 중...</div>
         ) : (
           <>
             <div className="b2b-field" style={{ marginBottom: 10 }}>
-              <label className="b2b-field-label">Flow 인커밍 웹훅 URL</label>
-              <input className="b2b-input" value={flowUrl} onChange={(e) => { setFlowUrl(e.target.value); setFlowMsg(""); }} placeholder="Flow 채널의 인커밍 웹훅 URL" spellCheck={false} />
+              <label className="b2b-field-label">봇 ID <span className="sm-faint" style={{ fontWeight: 400 }}>(flow.team 봇 소유 계정 이메일)</span></label>
+              <input className="b2b-input" value={flowBotId} onChange={(e) => { setFlowBotId(e.target.value); setFlowMsg(""); }} placeholder="예: seamonster.kr@gmail.com" spellCheck={false} />
+            </div>
+            <div className="b2b-field" style={{ marginBottom: 10 }}>
+              <label className="b2b-field-label">봇 API 키 {flowHasKey && <span style={{ color: "var(--sm-success)", fontWeight: 400 }}>· 설정됨</span>}</label>
+              <input className="b2b-input" type="password" value={flowApiKey} onChange={(e) => { setFlowApiKey(e.target.value); setFlowMsg(""); }} placeholder={flowHasKey ? "변경할 때만 입력 (비우면 기존 키 유지)" : "x-flow-api-key 값"} spellCheck={false} autoComplete="new-password" />
+            </div>
+            <div className="b2b-field" style={{ marginBottom: 10 }}>
+              <label className="b2b-field-label">수신자 <span className="sm-faint" style={{ fontWeight: 400 }}>(한 줄에 한 명, 또는 쉼표로 구분)</span></label>
+              <textarea className="b2b-input" value={flowReceivers} onChange={(e) => { setFlowReceivers(e.target.value); setFlowMsg(""); }} placeholder={"dizzywldls@naver.com\nmd@seamonster.kr\nseamonster2016@naver.com"} rows={3} spellCheck={false} style={{ resize: "vertical", fontFamily: "inherit" }} />
+              <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>flow.team의 <strong>같은 이용기관(조직) 멤버</strong> 이메일이어야 발송됩니다.</span>
+            </div>
+            <div className="b2b-field" style={{ marginBottom: 10 }}>
+              <label className="b2b-field-label">알림 제목</label>
+              <input className="b2b-input" value={flowTitle} onChange={(e) => setFlowTitle(e.target.value)} placeholder="씨몬스터 B2B 알림" spellCheck={false} />
             </div>
             <div className="b2b-field" style={{ marginBottom: 10 }}>
               <label className="b2b-field-label">앱 접속 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(알림의 주문 링크용)</span></label>
               <input className="b2b-input" value={appUrl} onChange={(e) => setAppUrl(e.target.value)} placeholder="예: https://내부도구주소 (비우면 Vercel 도메인 자동)" spellCheck={false} />
-              <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>알림에 <strong>주문 상세 링크</strong>(…/b2b/orders/…)를 붙입니다. 비우면 Vercel 프로덕션 도메인을 자동 사용해요.</span>
+              <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>알림 본문에 <strong>주문 상세 링크</strong>(…/b2b/orders/…)를 붙입니다. 비우면 Vercel 프로덕션 도메인을 자동 사용해요.</span>
+            </div>
+            <div className="b2b-field" style={{ marginBottom: 12 }}>
+              <label className="b2b-field-label">테스트 수신자 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 비우면 위 수신자 전체)</span></label>
+              <input className="b2b-input" value={flowTestReceiver} onChange={(e) => setFlowTestReceiver(e.target.value)} placeholder="테스트만 받을 이메일 1명" spellCheck={false} />
             </div>
             <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button className="b2b-btn-primary" onClick={saveFlow} disabled={flowSaving}>{flowSaving ? "저장 중..." : "저장"}</button>
-              <button className="b2b-btn-secondary" onClick={testFlow} disabled={flowSaving || !flowUrl.trim()}>테스트 발송</button>
+              <button className="b2b-btn-secondary" onClick={testFlow} disabled={flowSaving || !flowActive} title={flowActive ? "" : "먼저 저장하세요"}>테스트 발송</button>
               {flowMsg && <span style={{ fontSize: 12, color: flowMsg.startsWith("❌") ? "var(--sm-danger)" : "var(--sm-success)" }}>{flowMsg}</span>}
             </div>
           </>
@@ -425,7 +453,7 @@ export default function SettingsPage() {
         <div className="b2b-error" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "1px solid #f0d9a8" }}>
           <strong>외부 알림 대상이 없습니다.</strong>
           <br />
-          위 <strong>Flow 인커밍 웹훅</strong>을 설정하거나 Zapier 웹훅(ZAPIER_WEBHOOK_URL)을 지정하세요. 아래 이벤트 설정은 대상 지정 후 그대로 적용됩니다.
+          위 <strong>Flow 봇</strong>(봇 ID·API 키·수신자)을 설정하거나 Zapier 웹훅(ZAPIER_WEBHOOK_URL)을 지정하세요. 아래 이벤트 설정은 대상 지정 후 그대로 적용됩니다.
         </div>
       )}
 

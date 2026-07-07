@@ -74,9 +74,14 @@ export async function setNotifyConfig(config: NotifyConfig): Promise<void> {
 }
 
 // ─────────────────────────────────────────────
-// Flow 인커밍 웹훅(직접 알림) + 앱 접속 URL(알림 링크용). b2b_settings kv({v:...}) 저장.
-//  · flow_webhook_url 이 설정되면 B2B 알림을 Zapier 대신 Flow 로 직접 보냄(비용 절감).
+// Flow(플로우) 봇 알림 — flow.team Open API 로 B2B 알림을 지정 수신자에게 직접 발송(Zapier 대체, 비용 절감).
+//  API: POST https://api.flow.team/v1/bots/{botId}/notifications/bulk
+//  헤더: x-flow-api-key: <봇 키>   본문: { receivers:[{receiverId}], title, contents }
+//  응답: { response: { success, code, message, error? } }
+//  · flow_bot_id · flow_bot_api_key · flow_bot_receivers 가 모두 있으면 Zapier 대신 Flow 로 발송.
+//  · VOC용 flow_api_key(voc-flow.ts) 와는 별개의 봇 키라 flow_bot_api_key 로 분리 저장(서로 다른 키일 수 있음).
 //  · app_base_url 은 알림에 넣을 주문 상세 링크(/b2b/orders/{id})의 도메인. 미설정 시 Vercel 프로덕션 도메인.
+//  값은 b2b_settings kv({v:...}) 저장(코드/깃에 두지 않음).
 // ─────────────────────────────────────────────
 async function getKv(key: string): Promise<string> {
   try {
@@ -94,8 +99,34 @@ async function setKv(key: string, value: string): Promise<void> {
   if (error) throw error;
 }
 
-export const getFlowWebhookUrl = () => getKv("flow_webhook_url");
-export const setFlowWebhookUrl = (s: string) => setKv("flow_webhook_url", s);
+export const getFlowBotId = () => getKv("flow_bot_id");
+export const setFlowBotId = (s: string) => setKv("flow_bot_id", s);
+export const getFlowBotApiKey = () => getKv("flow_bot_api_key");
+export const setFlowBotApiKey = (s: string) => setKv("flow_bot_api_key", s);
+export const getFlowAlertTitle = async () => (await getKv("flow_alert_title")) || "씨몬스터 B2B 알림";
+export const setFlowAlertTitle = (s: string) => setKv("flow_alert_title", s);
+export const getFlowReceiversRaw = () => getKv("flow_bot_receivers");
+export const setFlowReceiversRaw = (s: string) => setKv("flow_bot_receivers", s);
+
+// 수신자: 줄바꿈/콤마/세미콜론/공백 구분 → 이메일 배열(이메일엔 공백이 없어 안전).
+export async function getFlowReceivers(): Promise<string[]> {
+  const raw = await getFlowReceiversRaw();
+  return raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+}
+
+export type FlowBotConfig = { botId: string; apiKey: string; receivers: string[]; title: string };
+export async function getFlowBotConfig(): Promise<FlowBotConfig> {
+  const [botId, apiKey, receivers, title] = await Promise.all([
+    getFlowBotId(), getFlowBotApiKey(), getFlowReceivers(), getFlowAlertTitle(),
+  ]);
+  return { botId, apiKey, receivers, title };
+}
+// 봇 ID·API 키·수신자가 모두 있어야 Flow 로 발송(아니면 Zapier 폴백).
+export async function isFlowBotConfigured(): Promise<boolean> {
+  const c = await getFlowBotConfig();
+  return !!(c.botId && c.apiKey && c.receivers.length);
+}
+
 export const setAppBaseUrl = (s: string) => setKv("app_base_url", s);
 
 // 앱 접속 URL(끝 슬래시 제거). 설정 없으면 Vercel 프로덕션 도메인, 그것도 없으면 빈 문자열.

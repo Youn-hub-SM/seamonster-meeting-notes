@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
 import { resolveUserName } from "./b2b-auth";
-import { getNotifyConfig, shouldNotify, getFlowWebhookUrl, getAppBaseUrl } from "./b2b-settings";
+import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
@@ -60,16 +60,15 @@ async function recordActivity(input: ActivityInput): Promise<void> {
 
 // 외부 알림 전송. fire-and-forget.
 //  설정(b2b_settings.zapier_notify)에 따라 이벤트·결과상태별로 발송을 거름.
-//  라우팅: Flow 인커밍 웹훅(flow_webhook_url) 이 설정돼 있으면 Flow 로 직접 발송(Zapier 완전 대체),
-//         없으면 기존 Zapier(ZAPIER_WEBHOOK_URL) 로 폴백.
+//  라우팅: Flow 봇(flow_bot_id·flow_bot_api_key·flow_bot_receivers) 이 모두 설정돼 있으면
+//         Flow 로 직접 발송(Zapier 완전 대체), 아니면 기존 Zapier(ZAPIER_WEBHOOK_URL) 로 폴백.
 async function sendWebhook(input: ActivityInput, actor: string | null): Promise<void> {
   // 알림 설정 게이팅 — DB 기록(히스토리)은 영향 없음, 외부 발송만 거름
   const config = await getNotifyConfig();
   if (!shouldNotify(config, input.event_type, input.meta)) return;
 
-  // 1순위: Flow 인커밍 웹훅(설정 시 Zapier 대체)
-  const flowUrl = await getFlowWebhookUrl();
-  if (flowUrl) { await sendFlowWebhook(flowUrl, input, actor); return; }
+  // 1순위: Flow 봇 알림(설정 시 Zapier 대체)
+  if (await isFlowBotConfigured()) { await sendFlowBotNotify(input, actor); return; }
 
   // 폴백: 기존 Zapier Catch Hook
   const url = process.env.ZAPIER_WEBHOOK_URL;
@@ -102,24 +101,50 @@ export async function b2bAlertLink(orderId: string | null | undefined): Promise<
   return base ? `${base}/b2b/orders/${orderId}` : null;
 }
 
-// Flow 인커밍 웹훅으로 알림 메시지 전송. 본문 = 요약 + (작업자) + 주문 상세 링크.
-//  Flow 웹훅은 { text } 형식을 받는다(대부분의 인커밍 웹훅 관례). 형식이 다르면 설정 화면 '테스트'로 확인.
-export async function sendFlowWebhook(url: string, input: ActivityInput, actor: string | null): Promise<{ ok: boolean; status: number }> {
+// Flow 봇 알림 발송(flow.team Open API bulk). 본문(contents) = 요약 + (작업자) + 주문 상세 링크.
+//  수신자·제목·봇키는 설정값. opts 로 테스트 발송 시 수신자/설정 오버라이드 가능.
+//  성공 판정: HTTP 2xx 이고 response.success !== false.
+export async function sendFlowBotNotify(
+  input: ActivityInput,
+  actor: string | null,
+  opts?: { config?: FlowBotConfig; receivers?: string[] },
+): Promise<{ ok: boolean; status: number; error?: string }> {
+  const cfg = opts?.config ?? (await getFlowBotConfig());
+  const receivers = (opts?.receivers ?? cfg.receivers).map((r) => r.trim()).filter(Boolean);
+  if (!cfg.botId || !cfg.apiKey || !receivers.length) {
+    return { ok: false, status: 0, error: "Flow 봇 설정(봇 ID·API 키·수신자)이 완료되지 않았습니다." };
+  }
+
   const link = await b2bAlertLink(input.order_id);
   const lines = [input.summary];
   if (actor) lines.push(`— 작업자: ${actor}`);
   if (link) lines.push(link);
+
+  const url = `https://api.flow.team/v1/bots/${encodeURIComponent(cfg.botId)}/notifications/bulk`;
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: lines.join("\n") }),
+      headers: { "Content-Type": "application/json", "x-flow-api-key": cfg.apiKey },
+      body: JSON.stringify({
+        receivers: receivers.map((r) => ({ receiverId: r })),
+        title: cfg.title || "씨몬스터 B2B 알림",
+        contents: lines.join("\n"),
+      }),
     });
-    if (!res.ok) console.warn("[b2b-activity] flow webhook", res.status);
-    return { ok: res.ok, status: res.status };
+    const text = await res.text().catch(() => "");
+    let json: unknown = null;
+    try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+    const resp = (json as { response?: { success?: boolean; message?: string; error?: { message?: string; verbose?: string[] } } } | null)?.response;
+    if (!res.ok || resp?.success === false) {
+      const msg = resp?.error?.message || resp?.message || text.slice(0, 200) || `HTTP ${res.status}`;
+      const verbose = resp?.error?.verbose?.length ? ` (${resp.error.verbose.join(", ")})` : "";
+      console.warn("[b2b-activity] flow bot notify failed", res.status, msg);
+      return { ok: false, status: res.status, error: `${msg}${verbose}` };
+    }
+    return { ok: true, status: res.status };
   } catch (err) {
-    console.error("[b2b-activity] flow webhook failed", err);
-    return { ok: false, status: 0 };
+    console.error("[b2b-activity] flow bot notify error", err);
+    return { ok: false, status: 0, error: (err as Error).message };
   }
 }
 
