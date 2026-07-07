@@ -44,8 +44,6 @@ export const NAV: NavCategory[] = [
           { href: "/fulfill/settings", label: "단가 설정" },
         ],
       },
-      { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
-      { href: "/subscription", label: "정기배송 분석", icon: "trend" },
       {
         href: "/sales", label: "매출", icon: "bars",
         menu: [
@@ -57,7 +55,8 @@ export const NAV: NavCategory[] = [
           { href: "/sales/history", label: "변경 기록" },
         ],
       },
-      { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
+      { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
+      { href: "/subscription", label: "정기배송 분석", icon: "trend" },
     ],
   },
   {
@@ -125,6 +124,7 @@ export const NAV: NavCategory[] = [
   {
     label: "기타",
     tools: [
+      { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
       { href: "/meeting", label: "회의 정리", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },
     ],
