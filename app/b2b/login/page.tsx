@@ -47,24 +47,13 @@ function LoginForm() {
       alignItems: "center",
       justifyContent: "center",
       padding: 20,
-      background: "linear-gradient(180deg, var(--sm-bg) 0%, #fdf1ec 100%)",
+      background: "var(--sm-bg)",
     }}>
-      <div style={{ width: "100%", maxWidth: 380 }}>
+      <div style={{ width: "100%", maxWidth: 360 }}>
         {/* 브랜드 */}
-        <div style={{ textAlign: "center", marginBottom: 22 }}>
-          <div style={{
-            width: 66, height: 66, margin: "0 auto 14px",
-            borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 33, background: "linear-gradient(135deg, var(--sm-orange), #ff9166)",
-            boxShadow: "0 10px 24px rgba(241,90,48,0.30)",
-          }}>🐟</div>
-          <h1 style={{ fontSize: 23, fontWeight: 800, color: "var(--sm-dark)", margin: 0, letterSpacing: "-0.3px" }}>
-            씨몬스터 업무 도우미
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "7px 0 0" }}>
-            사내 업무를 한 곳에서.
-          </p>
-        </div>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--sm-dark)", margin: "0 0 20px", textAlign: "center", letterSpacing: "-0.3px" }}>
+          씨몬스터 업무 도우미
+        </h1>
 
         {/* 로그인 카드 */}
         <div style={{
@@ -113,7 +102,7 @@ function LoginForm() {
         </div>
 
         <p style={{ textAlign: "center", fontSize: 11, color: "var(--sm-text-light)", marginTop: 16 }}>
-          © 씨몬스터
+          © 2026 seamonster corp. All rights reserved.
         </p>
       </div>
     </div>
