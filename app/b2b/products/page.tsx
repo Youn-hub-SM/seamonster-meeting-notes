@@ -310,6 +310,7 @@ export default function ProductsPage() {
                               courier_name: p.courier_name ?? "",
                               courier_weight: p.courier_weight ?? 0,
                               scan_name: p.scan_name ?? "",
+                              is_bundle: p.is_bundle,   // 묶음상품이면 송장스캔명 숨김용
                             },
                           })
                         }
@@ -560,6 +561,9 @@ function ProductModal({
     onChange({ ...data, [key]: value });
   }
 
+  // 묶음(세트)상품은 송장 스캔 시 구성품 합으로 펼쳐져 나오므로, 묶음 자체 표시명은 불필요 → 필드 숨김.
+  const isBundle = mode === "edit" && !!data.is_bundle;
+
   // 원가 상세가 있으면 제품 단위 원가 = 제품원가+포장재 합, 없으면 직접 입력한 cost_price.
   const detailSum =
     (Number(data.cost_material) || 0) +
@@ -784,18 +788,26 @@ function ProductModal({
               같은 주문의 라인 중량을 합해 박스타입(≤2.7→1, ≤5.2→2, 초과→3)과 운임을 정합니다. 제품부피와 다를 수 있어요.
             </span>
           </Field>
-          <Field label="송장 스캔 표시명">
-            <input
-              type="text"
-              className="b2b-input"
-              value={data.scan_name ?? ""}
-              onChange={(e) => set("scan_name", e.target.value)}
-              placeholder="송장 스캔 피킹 리스트에 나올 이름 (비우면 품목명 사용)"
-            />
-            <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
-              온라인 발주 &gt; 송장 스캔의 &lsquo;가지러 갈 상품&rsquo;·인쇄에 이 이름이 나옵니다. 비어 있으면 품목명을 씁니다.
-            </span>
-          </Field>
+          {isBundle ? (
+            <Field label="송장 스캔 표시명">
+              <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
+                🧩 묶음(세트)상품이라 송장 스캔 시 <strong>구성품의 합</strong>으로 나옵니다. 표시명은 각 구성품에서 지정하세요.
+              </span>
+            </Field>
+          ) : (
+            <Field label="송장 스캔 표시명">
+              <input
+                type="text"
+                className="b2b-input"
+                value={data.scan_name ?? ""}
+                onChange={(e) => set("scan_name", e.target.value)}
+                placeholder="송장 스캔 피킹 리스트에 나올 이름 (비우면 품목명 사용)"
+              />
+              <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
+                온라인 발주 &gt; 송장 스캔의 &lsquo;가지러 갈 상품&rsquo;·인쇄에 이 이름이 나옵니다. 비어 있으면 품목명을 씁니다.
+              </span>
+            </Field>
+          )}
 
           {(effCost > 0 || data.sale_price > 0) && (
             <div style={{ padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 12 }}>
