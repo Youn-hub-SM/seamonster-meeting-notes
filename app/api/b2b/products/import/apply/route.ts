@@ -32,6 +32,7 @@ function dbRow(clean: ProductInput) {
     volume_kg: clean.volume_kg,
     courier_name: clean.courier_name,
     courier_weight: clean.courier_weight,
+    scan_name: clean.scan_name,
   };
 }
 

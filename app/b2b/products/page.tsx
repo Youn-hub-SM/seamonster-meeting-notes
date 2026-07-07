@@ -309,6 +309,7 @@ export default function ProductsPage() {
                               volume_kg: p.volume_kg ?? null,
                               courier_name: p.courier_name ?? "",
                               courier_weight: p.courier_weight ?? 0,
+                              scan_name: p.scan_name ?? "",
                             },
                           })
                         }
@@ -781,6 +782,18 @@ function ProductModal({
             />
             <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
               같은 주문의 라인 중량을 합해 박스타입(≤2.7→1, ≤5.2→2, 초과→3)과 운임을 정합니다. 제품부피와 다를 수 있어요.
+            </span>
+          </Field>
+          <Field label="송장 스캔 표시명">
+            <input
+              type="text"
+              className="b2b-input"
+              value={data.scan_name ?? ""}
+              onChange={(e) => set("scan_name", e.target.value)}
+              placeholder="송장 스캔 피킹 리스트에 나올 이름 (비우면 품목명 사용)"
+            />
+            <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
+              온라인 발주 &gt; 송장 스캔의 &lsquo;가지러 갈 상품&rsquo;·인쇄에 이 이름이 나옵니다. 비어 있으면 품목명을 씁니다.
             </span>
           </Field>
 

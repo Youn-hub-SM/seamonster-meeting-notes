@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
         volume_kg: clean.volume_kg,
         courier_name: clean.courier_name,
         courier_weight: clean.courier_weight,
+        scan_name: clean.scan_name,
       })
       .select()
       .single();
@@ -110,6 +111,7 @@ export async function PUT(req: NextRequest) {
         volume_kg: clean.volume_kg,
         courier_name: clean.courier_name,
         courier_weight: clean.courier_weight,
+        scan_name: clean.scan_name,
       })
       .eq("id", body.id)
       .select()

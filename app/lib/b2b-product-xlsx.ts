@@ -7,7 +7,7 @@ export const PRODUCT_XLSX_HEADERS = [
   "ID", "SKU", "품목명", "옵션", "단위", "과세유형",
   "소비자가", "b2b도매가", "매입단가",
   "제품원가", "내포장지", "라벨", "외포장지", "원가직접입력",
-  "부피kg", "택배상품명", "택배중량kg", "사용(Y/N)", "원산지", "속성", "비고",
+  "부피kg", "택배상품명", "택배중량kg", "송장스캔명", "사용(Y/N)", "원산지", "속성", "비고",
 ] as const;
 
 const num = (v: unknown): number => {
@@ -35,6 +35,7 @@ export function productToRow(p: Product): Record<string, string | number> {
     부피kg: p.volume_kg == null ? "" : Number(p.volume_kg),
     택배상품명: p.courier_name ?? "",
     택배중량kg: Number(p.courier_weight) || 0,
+    송장스캔명: p.scan_name ?? "",
     "사용(Y/N)": p.active ? "Y" : "N",
     원산지: p.origin ?? "",
     속성: p.attrs ?? "",
@@ -66,6 +67,7 @@ export function rowToInput(get: (header: string) => string): { id: string; input
     volume_kg: volRaw === "" ? null : Number(volRaw) || 0,
     courier_name: get("택배상품명").trim(),
     courier_weight: num(get("택배중량kg")),
+    scan_name: get("송장스캔명").trim(),
     active: !/^(n|no|미사용|false|0|x)$/i.test(activeRaw),
     origin: get("원산지"),
     attrs: get("속성"),
@@ -88,6 +90,7 @@ export const PRODUCT_DIFF_FIELDS: { key: keyof ProductInput; label: string }[] =
   { key: "volume_kg", label: "부피kg" },
   { key: "courier_name", label: "택배상품명" },
   { key: "courier_weight", label: "택배중량kg" },
+  { key: "scan_name", label: "송장스캔명" },
   { key: "active", label: "사용" },
   { key: "origin", label: "원산지" },
   { key: "attrs", label: "속성" },

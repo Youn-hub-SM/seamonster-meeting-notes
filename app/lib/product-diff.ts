@@ -28,6 +28,7 @@ export const PRODUCT_DIFF_FIELDS: FieldDef[] = [
   { key: "volume_kg", label: "제품부피(kg)", kind: "num" },
   { key: "courier_name", label: "택배 상품명", kind: "text" },
   { key: "courier_weight", label: "택배 중량(kg)", kind: "num" },
+  { key: "scan_name", label: "송장 스캔명", kind: "text" },
 ];
 
 // 표시용 포맷

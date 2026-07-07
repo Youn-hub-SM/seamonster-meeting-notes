@@ -67,6 +67,7 @@ export interface Product {
   volume_kg: number | null; // 제품부피(kg)
   courier_name: string;     // 택배(CNplus) 품목명 (migration 054)
   courier_weight: number;   // 택배 주문당 총중량(kg) — 박스타입/운임 기준(부피와 다른 값)
+  scan_name: string;        // 송장 스캔 피킹 리스트 표시명 (migration 059) — 비면 name 사용
   created_at: string;
   updated_at: string;
   // 파생(조회 전용, DB 컬럼 아님) — products GET 이 product_bundles 로 계산해 부착.
@@ -99,6 +100,7 @@ export const EMPTY_PRODUCT: ProductInput = {
   volume_kg: null,
   courier_name: "",
   courier_weight: 0,
+  scan_name: "",
 };
 
 export interface CostHistory {
@@ -215,5 +217,6 @@ export function normalizeProduct(input: ProductInput): ProductInput {
     volume_kg: volume,
     courier_name: (input.courier_name ?? "").trim(),
     courier_weight: numOr0(input.courier_weight),
+    scan_name: (input.scan_name ?? "").trim(),
   };
 }

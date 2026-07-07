@@ -5,7 +5,9 @@ import { getAllBundles } from "./product-bundles";
 //  파싱(헤더 자동감지) + 송장번호 정규화 + 묶음(세트) 전개 집계.
 
 export type ScanRow = { invoice_no: string; sku_code: string; qty: number };
-export type ScanProduct = { id: string; sku: string | null; name: string };
+export type ScanProduct = { id: string; sku: string | null; name: string; scanName?: string | null };
+// 스캔 피킹 리스트 표시명 = scan_name(있으면) 아니면 상품명.
+const dispName = (p: ScanProduct): string => (p.scanName && p.scanName.trim() ? p.scanName.trim() : p.name);
 export type BundleComp = { component_id: string; qty: number };
 export type TallyRow = { key: string; sku: string; name: string; qty: number; unknown: boolean };
 export type ScanCols = { invoice: number; code: number; qty: number };
@@ -129,8 +131,14 @@ export async function loadScanMaps(sb: ReturnType<typeof supabaseAdmin>): Promis
   if (_mapCache && Date.now() - _mapCache.at < MAP_TTL) return _mapCache.maps;
   const bySku = new Map<string, ScanProduct>();
   const byId = new Map<string, ScanProduct>();
-  const { data } = await sb.from("products").select("id, sku, name");
-  for (const p of (data as ScanProduct[] | null) ?? []) {
+  // scan_name(059) 미적용이어도 스캔이 안 깨지게: 컬럼 없으면 name 만으로 폴백.
+  type Row = { id: string; sku: string | null; name: string; scan_name?: string | null };
+  const withScan = await sb.from("products").select("id, sku, name, scan_name");
+  const rows: Row[] = (withScan.error
+    ? ((await sb.from("products").select("id, sku, name")).data as Row[] | null)
+    : (withScan.data as Row[] | null)) ?? [];
+  for (const row of rows) {
+    const p: ScanProduct = { id: row.id, sku: row.sku, name: row.name, scanName: row.scan_name ?? null };
     byId.set(p.id, p);
     if (p.sku) bySku.set(String(p.sku).trim().toUpperCase(), p);
   }
@@ -228,11 +236,11 @@ export function buildScanTally(
       for (const c of comps) {
         const cp = byId.get(c.component_id);
         if (cp && cp.sku) expand(cp.sku, qty * c.qty, depth + 1);
-        else if (cp) addLeaf(cp.id, cp.sku || "", cp.name, qty * c.qty, false);
+        else if (cp) addLeaf(cp.id, cp.sku || "", dispName(cp), qty * c.qty, false);
         else addLeaf(`?id:${c.component_id}`, "", "삭제된 구성품", qty * c.qty, true);
       }
     } else {
-      addLeaf(p.id, p.sku || "", p.name, qty, false);
+      addLeaf(p.id, p.sku || "", dispName(p), qty, false);
     }
   };
   for (const it of items) {
