@@ -34,14 +34,22 @@ export default function SettingsPage() {
   const [csPromptIsDefault, setCsPromptIsDefault] = useState(true);
   const [csPromptSaving, setCsPromptSaving] = useState(false);
   const [csPromptSaved, setCsPromptSaved] = useState("");
+  // Flow 직접 알림(Zapier 대체)
+  const [flowUrl, setFlowUrl] = useState("");
+  const [appUrl, setAppUrl] = useState("");
+  const [flowActive, setFlowActive] = useState(false);
+  const [zapierEnv, setZapierEnv] = useState(false);
+  const [flowSaving, setFlowSaving] = useState(false);
+  const [flowMsg, setFlowMsg] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        const [notifyRes, modelRes, promptRes] = await Promise.all([
+        const [notifyRes, modelRes, promptRes, flowRes] = await Promise.all([
           fetch("/api/b2b/settings/notify", { cache: "no-store" }),
           fetch("/api/b2b/settings/model", { cache: "no-store" }),
           fetch("/api/b2b/settings/cs-prompt", { cache: "no-store" }),
+          fetch("/api/b2b/settings/flow-alert", { cache: "no-store" }),
         ]);
         const j = await notifyRes.json();
         if (!notifyRes.ok || !j.ok) throw new Error(j.error || "조회 실패");
@@ -59,12 +67,41 @@ export default function SettingsPage() {
           setCsPromptDefault(pj.default || "");
           setCsPromptIsDefault(!!pj.isDefault);
         }
+        const fj = await flowRes.json();
+        if (flowRes.ok && fj.ok) {
+          setFlowUrl(fj.webhookUrl || "");
+          setAppUrl(fj.appBaseUrl || "");
+          setFlowActive(!!fj.active);
+          setZapierEnv(!!fj.zapierEnv);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
       setLoading(false);
     })();
   }, []);
+
+  async function saveFlow() {
+    setFlowSaving(true); setError(""); setFlowMsg("");
+    try {
+      const r = await fetch("/api/b2b/settings/flow-alert", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webhookUrl: flowUrl, appBaseUrl: appUrl }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setFlowActive(!!j.active);
+      setFlowMsg("저장됨");
+    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
+    setFlowSaving(false);
+  }
+  async function testFlow() {
+    setFlowSaving(true); setFlowMsg("");
+    try {
+      const r = await fetch("/api/b2b/settings/flow-alert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webhookUrl: flowUrl }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
+      setFlowMsg("✅ Flow로 테스트 메시지를 보냈어요. 채널을 확인하세요.");
+    } catch (e) { setFlowMsg("❌ " + (e instanceof Error ? e.message : "테스트 실패")); }
+    setFlowSaving(false);
+  }
 
   async function saveCsPrompt(nextPrompt?: string) {
     const body = nextPrompt !== undefined ? nextPrompt : csPrompt;
@@ -351,17 +388,50 @@ export default function SettingsPage() {
         </p>
       </section>
 
-      {!webhookSet && (
+      {/* Flow 직접 알림 (Zapier 대체) */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">Flow 알림 (직접 발송)</h2>
+          <span style={{ fontSize: 11.5, color: flowActive ? "var(--sm-success)" : "var(--sm-text-light)" }}>
+            {flowActive ? "● Flow로 발송 중 (Zapier 대체)" : (zapierEnv ? "○ 현재 Zapier로 발송" : "○ 미설정")}
+          </span>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
+          B2B 알림을 <strong>Zapier 없이 Flow 인커밍 웹훅으로 직접</strong> 보냅니다(비용 절감). 웹훅 URL을 넣으면 <strong>Zapier 대신 Flow로만</strong> 발송돼요. 아래 <strong>이벤트별 on/off</strong>는 Flow에도 그대로 적용됩니다.
+        </p>
+        {loading ? (
+          <div className="b2b-loading">불러오는 중...</div>
+        ) : (
+          <>
+            <div className="b2b-field" style={{ marginBottom: 10 }}>
+              <label className="b2b-field-label">Flow 인커밍 웹훅 URL</label>
+              <input className="b2b-input" value={flowUrl} onChange={(e) => { setFlowUrl(e.target.value); setFlowMsg(""); }} placeholder="Flow 채널의 인커밍 웹훅 URL" spellCheck={false} />
+            </div>
+            <div className="b2b-field" style={{ marginBottom: 10 }}>
+              <label className="b2b-field-label">앱 접속 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(알림의 주문 링크용)</span></label>
+              <input className="b2b-input" value={appUrl} onChange={(e) => setAppUrl(e.target.value)} placeholder="예: https://내부도구주소 (비우면 Vercel 도메인 자동)" spellCheck={false} />
+              <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>알림에 <strong>주문 상세 링크</strong>(…/b2b/orders/…)를 붙입니다. 비우면 Vercel 프로덕션 도메인을 자동 사용해요.</span>
+            </div>
+            <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="b2b-btn-primary" onClick={saveFlow} disabled={flowSaving}>{flowSaving ? "저장 중..." : "저장"}</button>
+              <button className="b2b-btn-secondary" onClick={testFlow} disabled={flowSaving || !flowUrl.trim()}>테스트 발송</button>
+              {flowMsg && <span style={{ fontSize: 12, color: flowMsg.startsWith("❌") ? "var(--sm-danger)" : "var(--sm-success)" }}>{flowMsg}</span>}
+            </div>
+          </>
+        )}
+      </section>
+
+      {!webhookSet && !flowActive && (
         <div className="b2b-error" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "1px solid #f0d9a8" }}>
-          <strong>Zapier 웹훅 URL(ZAPIER_WEBHOOK_URL)이 설정돼 있지 않습니다.</strong>
+          <strong>외부 알림 대상이 없습니다.</strong>
           <br />
-          지금은 어떤 알림도 외부로 발송되지 않습니다. 아래 설정은 URL 설정 후 그대로 적용됩니다.
+          위 <strong>Flow 인커밍 웹훅</strong>을 설정하거나 Zapier 웹훅(ZAPIER_WEBHOOK_URL)을 지정하세요. 아래 이벤트 설정은 대상 지정 후 그대로 적용됩니다.
         </div>
       )}
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">Zapier 알림</h2>
+          <h2 className="b2b-card-title">알림 이벤트 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>(Flow·Zapier 공통)</span></h2>
         </div>
 
         {loading ? (

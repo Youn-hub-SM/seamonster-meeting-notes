@@ -73,6 +73,39 @@ export async function setNotifyConfig(config: NotifyConfig): Promise<void> {
   if (error) throw error;
 }
 
+// ─────────────────────────────────────────────
+// Flow 인커밍 웹훅(직접 알림) + 앱 접속 URL(알림 링크용). b2b_settings kv({v:...}) 저장.
+//  · flow_webhook_url 이 설정되면 B2B 알림을 Zapier 대신 Flow 로 직접 보냄(비용 절감).
+//  · app_base_url 은 알림에 넣을 주문 상세 링크(/b2b/orders/{id})의 도메인. 미설정 시 Vercel 프로덕션 도메인.
+// ─────────────────────────────────────────────
+async function getKv(key: string): Promise<string> {
+  try {
+    const { data, error } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", key).maybeSingle();
+    if (error || !data) return "";
+    const v = data.value as { v?: string } | string | null;
+    const s = typeof v === "string" ? v : v?.v;
+    return s && String(s).trim() ? String(s).trim() : "";
+  } catch { return ""; }
+}
+async function setKv(key: string, value: string): Promise<void> {
+  const { error } = await supabaseAdmin()
+    .from("b2b_settings")
+    .upsert({ key, value: { v: value.trim() }, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw error;
+}
+
+export const getFlowWebhookUrl = () => getKv("flow_webhook_url");
+export const setFlowWebhookUrl = (s: string) => setKv("flow_webhook_url", s);
+export const setAppBaseUrl = (s: string) => setKv("app_base_url", s);
+
+// 앱 접속 URL(끝 슬래시 제거). 설정 없으면 Vercel 프로덕션 도메인, 그것도 없으면 빈 문자열.
+export async function getAppBaseUrl(): Promise<string> {
+  const s = await getKv("app_base_url");
+  if (s) return s.replace(/\/+$/, "");
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return prod ? `https://${prod}` : "";
+}
+
 // 이 이벤트(+결과 상태)를 Zapier 로 보낼지 판단.
 export function shouldNotify(config: NotifyConfig, eventType: string, meta?: Record<string, unknown> | null): boolean {
   const v = config[notifyKeyFor(eventType)];
