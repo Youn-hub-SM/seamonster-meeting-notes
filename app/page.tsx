@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export default function HomePage() {
   return (
     <div className="container">
-      <h1 className="page-title">씨몬스터 내부도구</h1>
+      <h1 className="page-title">씨몬스터 업무 도우미</h1>
       <p className="page-subtitle">업무 도구는 왼쪽 메뉴에서. 새 기능은 아래 업데이트 노트에 정리됩니다.</p>
 
       {/* 업데이트 노트 — 메뉴별 필터 + 날짜별 묶음 */}

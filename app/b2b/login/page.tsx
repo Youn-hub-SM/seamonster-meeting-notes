@@ -47,56 +47,74 @@ function LoginForm() {
       alignItems: "center",
       justifyContent: "center",
       padding: 20,
-      background: "var(--sm-bg)",
+      background: "linear-gradient(180deg, var(--sm-bg) 0%, #fdf1ec 100%)",
     }}>
-      <div style={{
-        background: "var(--sm-white)",
-        border: "1px solid var(--sm-border)",
-        borderRadius: 16,
-        padding: "32px 28px",
-        width: "100%",
-        maxWidth: 360,
-        boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-      }}>
-        <div style={{ fontSize: 35, marginBottom: 8 }}>🔒</div>
-        <h1 style={{ fontSize: 19, fontWeight: 700, marginBottom: 6 }}>B2B 관리툴</h1>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 20 }}>
-          비밀번호를 입력하세요.
-        </p>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        {/* 브랜드 */}
+        <div style={{ textAlign: "center", marginBottom: 22 }}>
+          <div style={{
+            width: 66, height: 66, margin: "0 auto 14px",
+            borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 33, background: "linear-gradient(135deg, var(--sm-orange), #ff9166)",
+            boxShadow: "0 10px 24px rgba(241,90,48,0.30)",
+          }}>🐟</div>
+          <h1 style={{ fontSize: 23, fontWeight: 800, color: "var(--sm-dark)", margin: 0, letterSpacing: "-0.3px" }}>
+            씨몬스터 업무 도우미
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--sm-text-mid)", margin: "7px 0 0" }}>
+            사내 업무를 한 곳에서.
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <input
-            type="password"
-            className="b2b-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호"
-            autoComplete="current-password"
-            autoFocus
-            disabled={loading}
-            style={{ marginBottom: 12 }}
-          />
-          {error && (
-            <div style={{
-              fontSize: 12,
-              color: "var(--sm-danger)",
-              padding: "8px 12px",
-              background: "var(--sm-danger-bg)",
-              borderRadius: 8,
-              marginBottom: 12,
-            }}>
-              {error}
-            </div>
-          )}
-          <button
-            type="submit"
-            className="b2b-btn-primary"
-            disabled={loading || !password}
-            style={{ width: "100%" }}
-          >
-            {loading ? "확인 중..." : "들어가기"}
-          </button>
-        </form>
+        {/* 로그인 카드 */}
+        <div style={{
+          background: "var(--sm-white)",
+          border: "1px solid var(--sm-border)",
+          borderRadius: 16,
+          padding: "26px 24px",
+          boxShadow: "0 12px 32px rgba(0,0,0,0.07)",
+        }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", display: "block", marginBottom: 8 }}>
+            비밀번호
+          </label>
+          <form onSubmit={handleSubmit}>
+            <input
+              type="password"
+              className="b2b-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="비밀번호를 입력하세요"
+              autoComplete="current-password"
+              autoFocus
+              disabled={loading}
+              style={{ marginBottom: 12 }}
+            />
+            {error && (
+              <div style={{
+                fontSize: 12,
+                color: "var(--sm-danger)",
+                padding: "8px 12px",
+                background: "var(--sm-danger-bg)",
+                borderRadius: 8,
+                marginBottom: 12,
+              }}>
+                {error}
+              </div>
+            )}
+            <button
+              type="submit"
+              className="b2b-btn-primary"
+              disabled={loading || !password}
+              style={{ width: "100%" }}
+            >
+              {loading ? "확인 중..." : "들어가기"}
+            </button>
+          </form>
+        </div>
+
+        <p style={{ textAlign: "center", fontSize: 11, color: "var(--sm-text-light)", marginTop: 16 }}>
+          © 씨몬스터
+        </p>
       </div>
     </div>
   );
