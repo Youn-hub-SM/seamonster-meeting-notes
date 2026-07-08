@@ -109,6 +109,8 @@ export interface ShipmentDatePreview {
   seq: number;
   ship_date: string | null;
   status: ShipmentStatus;
+  recipient_name: string;       // 수령인 (발송완료 송장입력 모달 표시용)
+  recipient_phone: string;      // 수령인 연락처
   tracking_no: string | null;   // 박스 여러 개면 콤마로 이어붙임
   box_count: number;            // 이 차수 박스 수 (송장 출력 행·송장 입력칸 기준)
   items: OrderLinePreview[];   // 이 차수에 담긴 상품 (품목 표시용)

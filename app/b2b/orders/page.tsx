@@ -64,8 +64,8 @@ export default function OrdersListPage() {
   // 발송완료 변경 시 송장번호 입력 프롬프트 (발주 or 발송 차수)
   //  boxCount 만큼 송장 입력칸을 띄움 (박스당 1개).
   const [trackingPrompt, setTrackingPrompt] = useState<
-    | { kind: "order"; id: string; label: string; boxCount: number }
-    | { kind: "shipment"; id: string; orderId: string; label: string; boxCount: number }
+    | { kind: "order"; id: string; label: string; boxCount: number; recipientName?: string; recipientPhone?: string }
+    | { kind: "shipment"; id: string; orderId: string; label: string; boxCount: number; recipientName?: string; recipientPhone?: string }
     | null
   >(null);
   const [trackingInput, setTrackingInput] = useState<string[]>([""]);
@@ -242,9 +242,10 @@ export default function OrdersListPage() {
     // 발송완료로 바꾸는데 송장번호가 없으면 입력 프롬프트 (박스 수만큼 칸)
     if (newStatus === "발송완료" && !String(target.tracking_no ?? "").trim()) {
       const boxCount = Math.max(1, Number(target.box_count) || 1);
+      const rcpt = (target.shipments ?? [])[0];   // 발송정보는 차수 공통 → 첫 차수의 수령인 사용
       setTrackingInput(splitTracking(target.tracking_no, boxCount));
       setDirectDelivery(false);
-      setTrackingPrompt({ kind: "order", id, label: target.order_no, boxCount });
+      setTrackingPrompt({ kind: "order", id, label: target.order_no, boxCount, recipientName: rcpt?.recipient_name, recipientPhone: rcpt?.recipient_phone });
       return;
     }
     await patchStatus(id, newStatus);
@@ -320,7 +321,7 @@ export default function OrdersListPage() {
       const boxCount = Math.max(1, Number(ship.box_count) || 1);
       setTrackingInput(splitTracking(ship.tracking_no, boxCount));
       setDirectDelivery(false);
-      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송`, boxCount });
+      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송`, boxCount, recipientName: ship.recipient_name, recipientPhone: ship.recipient_phone });
       return;
     }
     void patchShipment(o.id, ship.id, newStatus);
@@ -1063,6 +1064,21 @@ export default function OrdersListPage() {
                   ? `${trackingPrompt.boxCount}박스 — 박스별 송장번호를 모두 입력하세요.`
                   : "송장번호를 입력하세요."}
               </div>
+
+              {/* 수령인 정보 — 발송완료 처리자가 누구에게 보내는지 확인용 */}
+              {(() => {
+                const rName = (trackingPrompt.recipientName || "").trim();
+                const showName = rName && rName !== "(미지정)" ? rName : "";
+                const rPhone = (trackingPrompt.recipientPhone || "").trim();
+                if (!showName && !rPhone) return null;
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 12, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, fontSize: 12.5 }}>
+                    <span style={{ color: "var(--sm-text-light)" }}>수령인</span>
+                    {showName && <strong style={{ color: "var(--sm-dark)" }}>{showName}</strong>}
+                    {rPhone && <span style={{ color: "var(--sm-text-mid)" }}>{rPhone}</span>}
+                  </div>
+                );
+              })()}
 
               {/* 직접 배송(택배 아님): 체크 시 송장번호 불필요 */}
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, marginBottom: directDelivery ? 0 : 12, cursor: "pointer" }}>

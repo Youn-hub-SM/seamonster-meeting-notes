@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       .from("orders")
       .select(
         "*, companies:company_id(name), order_items(product_name, spec, qty, sort_order), " +
-          "shipments(id, seq, ship_date, status, tracking_no, box_count, shipment_items(product_name, spec, qty))"
+          "shipments(id, seq, ship_date, status, recipient_name, recipient_phone, tracking_no, box_count, shipment_items(product_name, spec, qty))"
       )
       .order("order_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     // 평탄화: companies.name → company_name, order_items[] → items(정렬) + item_count, shipments[] 정렬
     type ItemRow = { product_name: string; spec: string | null; qty: number; sort_order: number };
     type ShipItemRow = { product_name: string; spec: string | null; qty: number };
-    type ShipRow = { id: string; seq: number; ship_date: string | null; status: string; tracking_no: string | null; box_count?: number; shipment_items?: ShipItemRow[] };
+    type ShipRow = { id: string; seq: number; ship_date: string | null; status: string; recipient_name?: string | null; recipient_phone?: string | null; tracking_no: string | null; box_count?: number; shipment_items?: ShipItemRow[] };
     type Row = Record<string, unknown> & {
       companies?: { name?: string } | null;
       order_items?: ItemRow[];
@@ -70,6 +70,8 @@ export async function GET(req: NextRequest) {
               seq: s.seq,
               ship_date: s.ship_date,
               status: s.status as OrderListItem["shipments"][number]["status"],
+              recipient_name: s.recipient_name ?? "",
+              recipient_phone: s.recipient_phone ?? "",
               tracking_no: s.tracking_no ?? null,
               box_count: Math.max(1, Number(s.box_count) || 1),
               items: (s.shipment_items ?? []).map((si) => ({ product_name: si.product_name, spec: si.spec, qty: Number(si.qty) || 0 })),
