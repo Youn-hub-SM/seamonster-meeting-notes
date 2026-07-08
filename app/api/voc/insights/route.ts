@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getCurrentModel } from "@/app/lib/ai-model";
+import { getFeatureModel } from "@/app/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -57,7 +57,7 @@ export async function POST() {
       loss: r.loss_amount || 0,
     }));
 
-    const model = await getCurrentModel();
+    const model = await getFeatureModel("voc");
     const response = await anthropic.messages.create({
       model,
       max_tokens: 6000,

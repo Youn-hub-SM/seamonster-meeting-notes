@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getCurrentModel } from "@/app/lib/ai-model";
+import { getFeatureModel } from "@/app/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `${y}년 ${m}월에 집계할 클레임·설문이 없습니다.`, counts: { claims: 0, surveys: 0 } }, { status: 400 });
     }
 
-    const model = await getCurrentModel();
+    const model = await getFeatureModel("voc");
     const resp = await anthropic.messages.create({
       model,
       max_tokens: 4000,

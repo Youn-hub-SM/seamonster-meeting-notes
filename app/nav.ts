@@ -137,6 +137,7 @@ export const NAV: NavCategory[] = [
       {
         href: "/b2b/settings", label: "설정", icon: "gear",
         menu: [
+          { href: "/b2b/settings/ai", label: "AI 설정" },
           { href: "/b2b/settings", label: "B2B 도매" },
           { href: "/production/settings", label: "생산관리" },
           { href: "/voc/settings", label: "VOC·탈리 연동" },

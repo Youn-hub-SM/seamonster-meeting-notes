@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getCurrentModel } from "./ai-model";
+import { getFeatureModel } from "./ai-model";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -49,7 +49,7 @@ export interface CorrectionResult {
 }
 
 export async function correctText(rawText: string): Promise<CorrectionResult> {
-  const model = await getCurrentModel();
+  const model = await getFeatureModel("correct");
 
   const response = await anthropic.messages.create({
     model,

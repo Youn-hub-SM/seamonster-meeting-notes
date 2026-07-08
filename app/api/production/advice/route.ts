@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { getCurrentModel } from "@/app/lib/ai-model";
+import { getFeatureModel } from "@/app/lib/ai-model";
 import { getInventoryRows } from "@/app/lib/production-inventory";
 import { getLedgerVelocity } from "@/app/lib/production-velocity";
 
@@ -85,7 +85,7 @@ export async function POST() {
       });
     }
 
-    const model = await getCurrentModel();
+    const model = await getFeatureModel("production");
     const userPayload = {
       horizonDays: HORIZON_DAYS,
       salesWindowDays: velocity.spanDays,

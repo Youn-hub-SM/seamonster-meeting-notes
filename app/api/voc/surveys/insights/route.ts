@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getCurrentModel } from "@/app/lib/ai-model";
+import { getFeatureModel } from "@/app/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,7 +38,7 @@ export async function POST() {
 
     const payload = rows.map((r) => (Array.isArray(r.answers) ? (r.answers as { label: string; value: string }[]).map((a) => `${a.label}: ${a.value}`) : []));
 
-    const model = await getCurrentModel();
+    const model = await getFeatureModel("voc");
     const response = await anthropic.messages.create({
       model,
       max_tokens: 5000,
