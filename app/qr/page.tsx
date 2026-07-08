@@ -15,7 +15,7 @@ export default function QrPage() {
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"dynamic" | "static">("dynamic");
+  const [tab, setTab] = useState<"brand" | "static">("brand");
   const [origin, setOrigin] = useState("");
 
   // 새 링크
@@ -74,31 +74,35 @@ export default function QrPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">QR 코드</h1>
-          <p className="b2b-page-subtitle"><strong>동적 QR</strong>은 짧은 주소로 인코딩돼, 목적지를 나중에 바꿔도 같은 QR을 그대로 씁니다. 스캔 수도 집계돼요. <strong>정적 QR</strong>은 아무 URL/텍스트를 즉석에서 QR로.</p>
+          <h1 className="b2b-page-title">QR코드 / 브랜드링크</h1>
+          <p className="b2b-page-subtitle"><strong>브랜드링크</strong>는 짧고 기억하기 쉬운 우리 주소로, 목적지를 나중에 바꿔도 같은 링크를 그대로 씁니다. 클릭·스캔 수도 집계되고, 필요하면 QR로도 내려받아요. <strong>정적 QR</strong>은 아무 URL/텍스트를 즉석에서 QR로.</p>
         </div>
       </header>
 
       <div className="sm-tabs" style={{ marginBottom: 16 }}>
-        <button className={`sm-tab ${tab === "dynamic" ? "is-active" : ""}`} onClick={() => setTab("dynamic")}>동적 QR · 숏링크</button>
+        <button className={`sm-tab ${tab === "brand" ? "is-active" : ""}`} onClick={() => setTab("brand")}>브랜드링크</button>
         <button className={`sm-tab ${tab === "static" ? "is-active" : ""}`} onClick={() => setTab("static")}>정적 QR</button>
       </div>
 
       {error && <div className="b2b-error">{error}</div>}
 
-      {tab === "dynamic" && (
+      {tab === "brand" && (
         <>
           <section className="b2b-card" style={{ marginBottom: 16 }}>
-            <div className="b2b-card-head"><span className="b2b-card-title">새 링크 만들기</span></div>
+            <div className="b2b-card-head"><span className="b2b-card-title">브랜드링크 만들기</span></div>
             <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <label className="b2b-field" style={{ flex: 2, minWidth: 220 }}><span className="b2b-field-label">목적지 URL</span>
-                <input className="b2b-input" value={nTarget} onChange={(e) => setNTarget(e.target.value)} placeholder="https://예: 이벤트 페이지 주소" /></label>
-              <label className="b2b-field" style={{ flex: 1, minWidth: 140 }}><span className="b2b-field-label">제목(선택)</span>
-                <input className="b2b-input" value={nTitle} onChange={(e) => setNTitle(e.target.value)} placeholder="예: 6월 라방 QR" /></label>
-              <label className="b2b-field" style={{ width: 170 }}><span className="b2b-field-label">캠페인명·코드(선택)</span>
+              <label className="b2b-field" style={{ flex: 2, minWidth: 220 }}><span className="b2b-field-label">연결할 주소 (목적지)</span>
+                <input className="b2b-input" value={nTarget} onChange={(e) => setNTarget(e.target.value)} placeholder="https://예: 이벤트·상품 페이지 주소" /></label>
+              <label className="b2b-field" style={{ width: 190 }}><span className="b2b-field-label">원하는 링크 주소 (선택)</span>
                 <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="예: 여름세일 (비우면 자동)" /></label>
-              <button className="b2b-btn-primary" onClick={create} disabled={creating} style={{ height: 40 }}>{creating ? "생성 중…" : "만들기"}</button>
+              <label className="b2b-field" style={{ flex: 1, minWidth: 130 }}><span className="b2b-field-label">메모 (선택)</span>
+                <input className="b2b-input" value={nTitle} onChange={(e) => setNTitle(e.target.value)} placeholder="예: 6월 라방" /></label>
+              <button className="b2b-btn-primary" onClick={create} disabled={creating} style={{ height: 40 }}>{creating ? "생성 중…" : "브랜드링크 만들기"}</button>
             </div>
+            <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>
+              만들어질 링크: <code style={{ color: "var(--sm-text-mid)" }}>{shortDisplay(nCode.trim() || "원하는주소")}</code>
+              {!SHORT_HOST && <> · 전용 도메인(예: app.seamonster.kr) 연결 전엔 <code>…/q/원하는주소</code> 형태로 동작합니다.</>}
+            </p>
           </section>
 
           {loading ? <div className="b2b-loading">불러오는 중...</div> : links.length === 0 ? (
