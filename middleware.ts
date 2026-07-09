@@ -12,9 +12,9 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // QR 전용 호스트(예: qr.seamonster.kr): 루트의 단일 경로를 숏링크로 매핑 → /캠페인명 을 /q/캠페인명 으로 내부 리라이트.
-  //  SHORT_LINK_HOST 환경변수로 지정. 관리툴 도메인(app.*)은 이 블록을 타지 않음.
-  const shortHost = (process.env.SHORT_LINK_HOST || "").toLowerCase();
+  // 브랜드링크/QR 전용 호스트(link.seamonster.kr): 루트의 단일 경로를 숏링크로 매핑 → /캠페인명 을 /q/캠페인명 으로 내부 리라이트.
+  //  기본값 link.seamonster.kr, SHORT_LINK_HOST 환경변수로 재정의 가능. 관리툴 도메인은 host 가 달라 이 블록을 타지 않음.
+  const shortHost = (process.env.SHORT_LINK_HOST || "link.seamonster.kr").toLowerCase();
   if (shortHost && (req.headers.get("host") || "").toLowerCase() === shortHost) {
     if (pathname.startsWith("/q/")) return NextResponse.next();       // 이미 정규 경로(공개)
     if (/^\/[^/]+$/.test(pathname)) {                                  // 단일 세그먼트 = 숏코드

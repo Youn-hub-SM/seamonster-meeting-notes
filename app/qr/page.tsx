@@ -6,9 +6,9 @@ import QrDesigner from "./QrDesigner";
 type Link = { id: string; code: string; target_url: string; title: string | null; active: boolean; scan_count: number; created_by: string | null; created_at: string };
 type Scan = { scanned_at: string; referer: string | null; user_agent: string | null; country: string | null };
 
-// 숏링크 전용 도메인(예: https://qr.seamonster.kr). 설정 시 QR·주소가 이 도메인 기준으로 생성.
-//  미설정 시 현재 도메인의 /q/{code} 로 폴백.
-const SHORT_BASE = (process.env.NEXT_PUBLIC_SHORT_BASE || "").replace(/\/+$/, "");
+// 브랜드링크/QR 전용 도메인. QR·표시 주소가 이 도메인 기준으로 생성됨(link.seamonster.kr/{코드}).
+//  NEXT_PUBLIC_SHORT_BASE 환경변수로 재정의 가능.
+const SHORT_BASE = (process.env.NEXT_PUBLIC_SHORT_BASE || "https://link.seamonster.kr").replace(/\/+$/, "");
 const SHORT_HOST = SHORT_BASE.replace(/^https?:\/\//, "");
 
 export default function QrPage() {
