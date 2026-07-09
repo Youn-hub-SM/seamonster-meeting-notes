@@ -47,3 +47,10 @@ next-env.d.ts
 
 # 매출 파이썬 원본(참고용, 평문 SMTP 비밀번호 포함 → 절대 커밋 금지)
 /매출리포트_*.py
+
+# 내부 진단/시드 스크립트(로컬 전용, 커밋 금지)
+/scripts/
+
+# 외부 API 참고 문서(원문, 대용량)
+/API Reference_*.txt
+/Release Notes_*.txt
