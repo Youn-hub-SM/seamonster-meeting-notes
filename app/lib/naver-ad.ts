@@ -97,6 +97,30 @@ export function updateKeywordBids(updates: BidUpdate[]): Promise<NaverKeyword[]>
   return naverAd<NaverKeyword[]>("PUT", "/ncc/keywords", { query: { fields: "bidAmt" }, body: updates });
 }
 
+// 광고그룹 입찰가 조정(쇼핑검색 등 그룹 단위). 벌크 API가 없어 개별 PUT /ncc/adgroups/{id}?fields=bidAmt.
+export type AdgroupBidUpdate = { nccAdgroupId: string; bidAmt: number };
+export async function updateAdgroupBids(updates: AdgroupBidUpdate[]): Promise<{ updated: number; failed: number; firstError?: string }> {
+  const results = await Promise.allSettled(updates.map((u) =>
+    naverAd<NaverAdgroup>("PUT", `/ncc/adgroups/${u.nccAdgroupId}`, { query: { fields: "bidAmt" }, body: { nccAdgroupId: u.nccAdgroupId, bidAmt: Math.max(0, Math.round(u.bidAmt)) } })
+  ));
+  const failedList = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  return { updated: results.length - failedList.length, failed: failedList.length, firstError: failedList[0] ? String(failedList[0].reason?.message || failedList[0].reason) : undefined };
+}
+
+// 여러 캠페인의 광고그룹 + 성과 병합(쇼핑검색 등 그룹 단위 뷰용).
+export async function listAdgroupsWithStats(campaignIds: string[], range: StatRange = {}): Promise<(NaverAdgroup & { stat?: NaverStat | null })[]> {
+  const groups = (await Promise.all(campaignIds.map((id) => listAdgroups(id).catch(() => [])))).flat();
+  const ids = groups.map((g) => g.nccAdgroupId);
+  let statById: Record<string, NaverStat> = {};
+  if (ids.length) {
+    try {
+      const stats = await getStats(ids, range);
+      statById = Object.fromEntries((stats || []).map((s) => [s.id, s]));
+    } catch { /* 성과 실패해도 그룹은 반환 */ }
+  }
+  return groups.map((g) => ({ ...g, stat: statById[g.nccAdgroupId] || null }));
+}
+
 // 자격 확인용 가벼운 핑(캠페인 목록). 실패 시 에러 던짐.
 export async function pingNaverAd(): Promise<{ ok: boolean; campaigns: number }> {
   const c = await listCampaigns();

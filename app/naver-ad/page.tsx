@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 type Campaign = { nccCampaignId: string; name: string; campaignTp: string };
 type Adgroup = { nccAdgroupId: string; nccCampaignId: string; name: string; bidAmt?: number };
 type Stat = { impCnt?: number; clkCnt?: number; salesAmt?: number; cpc?: number; ctr?: number; avgRnk?: number; ccnt?: number; crto?: number; convAmt?: number; ror?: number; cpConv?: number };
-type Keyword = {
-  nccKeywordId: string; nccAdgroupId: string; keyword: string; bidAmt: number; useGroupBidAmt: boolean;
-  adRelevanceScore?: number; expectedClickScore?: number; userLock?: boolean; stat?: Stat | null;
-};
-type Draft = { bidAmt: number; useGroupBidAmt: boolean };
+type ApiKeyword = { nccKeywordId: string; nccAdgroupId: string; keyword: string; bidAmt: number; useGroupBidAmt: boolean; adRelevanceScore?: number; expectedClickScore?: number; userLock?: boolean; stat?: Stat | null };
+type ApiAdgroupStat = Adgroup & { userLock?: boolean; stat?: Stat | null };
+// 키워드/광고그룹을 한 표로 다루는 통합 행
+type Row = { id: string; name: string; group: string; bidAmt: number; useGroupBidAmt?: boolean; adRel?: number; expClick?: number; userLock?: boolean; stat?: Stat | null; kind: "keyword" | "adgroup" };
+type Draft = { bidAmt: number; useGroupBidAmt?: boolean };
 
 const PRESETS = [
   { key: "today", label: "오늘" }, { key: "yesterday", label: "어제" },
@@ -18,17 +18,17 @@ const PRESETS = [
 const TYPE_LABEL: Record<string, string> = {
   WEB_SITE: "파워링크", POWER_CONTENTS: "파워컨텐츠", SHOPPING: "쇼핑검색", BRAND_SEARCH: "브랜드검색", PLACE: "플레이스",
 };
-const KEYWORD_TYPES = new Set(["WEB_SITE", "POWER_CONTENTS", "PLACE"]); // 키워드 입찰 가능 유형
+const TYPE_ORDER = ["WEB_SITE", "POWER_CONTENTS", "SHOPPING", "BRAND_SEARCH", "PLACE"];
+const KEYWORD_TYPES = new Set(["WEB_SITE", "POWER_CONTENTS", "PLACE"]); // 키워드 입찰(나머지는 광고그룹 단위)
 const won = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
 const num = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-// 정렬 키 → 값 추출 (없으면 -1 로 뒤로)
 type SortField = "impCnt" | "clkCnt" | "ctr" | "salesAmt" | "cpc" | "ccnt" | "convAmt" | "ror" | "avgRnk" | "bidAmt";
-const SORT_VAL: Record<SortField, (k: Keyword) => number> = {
-  impCnt: (k) => k.stat?.impCnt ?? -1, clkCnt: (k) => k.stat?.clkCnt ?? -1, ctr: (k) => k.stat?.ctr ?? -1,
-  salesAmt: (k) => k.stat?.salesAmt ?? -1, cpc: (k) => k.stat?.cpc ?? -1, ccnt: (k) => k.stat?.ccnt ?? -1,
-  convAmt: (k) => k.stat?.convAmt ?? -1, ror: (k) => k.stat?.ror ?? -1, avgRnk: (k) => k.stat?.avgRnk ?? 9999, bidAmt: (k) => k.bidAmt,
+const SORT_VAL: Record<SortField, (r: Row) => number> = {
+  impCnt: (r) => r.stat?.impCnt ?? -1, clkCnt: (r) => r.stat?.clkCnt ?? -1, ctr: (r) => r.stat?.ctr ?? -1,
+  salesAmt: (r) => r.stat?.salesAmt ?? -1, cpc: (r) => r.stat?.cpc ?? -1, ccnt: (r) => r.stat?.ccnt ?? -1,
+  convAmt: (r) => r.stat?.convAmt ?? -1, ror: (r) => r.stat?.ror ?? -1, avgRnk: (r) => r.stat?.avgRnk ?? 9999, bidAmt: (r) => r.bidAmt,
 };
 
 function Chip({ on, onClick, children, muted, title }: { on: boolean; onClick: () => void; children: React.ReactNode; muted?: boolean; title?: string }) {
@@ -45,17 +45,18 @@ function Chip({ on, onClick, children, muted, title }: { on: boolean; onClick: (
 export default function NaverAdPage() {
   const [status, setStatus] = useState<{ configured: boolean; connected?: boolean; error?: string } | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [adType, setAdType] = useState("WEB_SITE");
   const [selCamp, setSelCamp] = useState<string[]>([]);
-  const [adgroups, setAdgroups] = useState<Adgroup[]>([]);
+  const [adgroups, setAdgroups] = useState<Adgroup[]>([]); // 키워드 모드에서 그룹 선택용
   const [selGrp, setSelGrp] = useState<string[]>([]);
   const [preset, setPreset] = useState("last7days");
   const [customMode, setCustomMode] = useState(false);
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
-  const [keywords, setKeywords] = useState<Keyword[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
   const [draft, setDraft] = useState<Record<string, Draft>>({});
   const [loadingGrp, setLoadingGrp] = useState(false);
-  const [loadingKw, setLoadingKw] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedMsg, setSavedMsg] = useState("");
@@ -63,6 +64,8 @@ export default function NaverAdPage() {
   const [costOnly, setCostOnly] = useState(true);
   const [sortField, setSortField] = useState<SortField>("salesAmt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const mode: "keyword" | "adgroup" = KEYWORD_TYPES.has(adType) ? "keyword" : "adgroup";
 
   useEffect(() => {
     (async () => {
@@ -73,21 +76,37 @@ export default function NaverAdPage() {
           const c = await (await fetch("/api/naver-ad/campaigns", { cache: "no-store" })).json();
           if (c.ok) {
             const list = (c.campaigns || []) as Campaign[];
-            list.sort((a, b) => (KEYWORD_TYPES.has(b.campaignTp) ? 1 : 0) - (KEYWORD_TYPES.has(a.campaignTp) ? 1 : 0) || a.name.localeCompare(b.name, "ko"));
+            list.sort((a, b) => a.name.localeCompare(b.name, "ko"));
             setCampaigns(list);
+            // 기본 광고유형: WEB_SITE 없으면 존재하는 첫 유형
+            const present = TYPE_ORDER.filter((t) => list.some((c2) => c2.campaignTp === t));
+            if (present.length && !present.includes("WEB_SITE")) setAdType(present[0]);
           }
         }
       } catch (e) { setError(e instanceof Error ? e.message : "상태 조회 오류"); }
     })();
   }, []);
 
+  const presentTypes = useMemo(() => {
+    const cnt: Record<string, number> = {};
+    campaigns.forEach((c) => { cnt[c.campaignTp] = (cnt[c.campaignTp] || 0) + 1; });
+    return TYPE_ORDER.filter((t) => cnt[t]).map((t) => ({ t, n: cnt[t] }));
+  }, [campaigns]);
+  const campsOfType = useMemo(() => campaigns.filter((c) => c.campaignTp === adType), [campaigns, adType]);
   const campName = useMemo(() => Object.fromEntries(campaigns.map((c) => [c.nccCampaignId, c.name])), [campaigns]);
   const grpName = useMemo(() => Object.fromEntries(adgroups.map((g) => [g.nccAdgroupId, g.name])), [adgroups]);
 
-  // 선택 캠페인 → 광고그룹
+  function changeType(t: string) { setAdType(t); setSelCamp([]); setSelGrp([]); setAdgroups([]); setRows([]); setDraft({}); setError(""); }
+
   const selCampKey = selCamp.join(",");
+  const selGrpKey = selGrp.join(",");
+  const useCustom = customMode && !!since && !!until;
+  const rangeKey = useCustom ? `c:${since}:${until}` : `p:${preset}`;
+  const applyRange = (p: URLSearchParams) => { if (useCustom) { p.set("since", since); p.set("until", until); } else { p.set("datePreset", preset); } };
+
+  // 키워드 모드: 선택 캠페인 → 광고그룹(선택용)
   useEffect(() => {
-    if (!selCamp.length) { setAdgroups([]); setSelGrp([]); setKeywords([]); return; }
+    if (mode !== "keyword" || !selCamp.length) { setAdgroups([]); setSelGrp([]); return; }
     (async () => {
       setLoadingGrp(true); setError("");
       try {
@@ -98,27 +117,37 @@ export default function NaverAdPage() {
       } catch (e) { setError(e instanceof Error ? e.message : "그룹 조회 오류"); }
       setLoadingGrp(false);
     })();
-  }, [selCampKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, selCampKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 기간 쿼리 (직접설정+양끝 있으면 timeRange, 아니면 preset)
-  const useCustom = customMode && !!since && !!until;
-  const rangeKey = useCustom ? `c:${since}:${until}` : `p:${preset}`;
-
-  // 선택 그룹 → 키워드
-  const selGrpKey = selGrp.join(",");
-  const loadKeywords = useCallback(async () => {
-    if (!selGrp.length) { setKeywords([]); return; }
-    setLoadingKw(true); setError(""); setSavedMsg(""); setDraft({});
+  // 데이터 로드 (키워드 모드=그룹별 키워드 / 광고그룹 모드=캠페인별 그룹+성과)
+  const loadData = useCallback(async () => {
+    setError(""); setSavedMsg(""); setDraft({});
     try {
-      const p = new URLSearchParams({ adgroupIds: selGrpKey });
-      if (useCustom) { p.set("since", since); p.set("until", until); } else { p.set("datePreset", preset); }
-      const j = await (await fetch(`/api/naver-ad/keywords?${p}`, { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "키워드 조회 실패");
-      setKeywords(j.keywords || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "키워드 조회 오류"); }
-    setLoadingKw(false);
-  }, [selGrpKey, rangeKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadKeywords(); }, [selGrpKey, rangeKey, loadKeywords]);
+      if (mode === "keyword") {
+        if (!selGrp.length) { setRows([]); return; }
+        setLoading(true);
+        const p = new URLSearchParams({ adgroupIds: selGrpKey }); applyRange(p);
+        const j = await (await fetch(`/api/naver-ad/keywords?${p}`, { cache: "no-store" })).json();
+        if (!j.ok) throw new Error(j.error || "키워드 조회 실패");
+        setRows((j.keywords || []).map((k: ApiKeyword): Row => ({
+          id: k.nccKeywordId, name: k.keyword, group: grpName[k.nccAdgroupId] || "-", bidAmt: k.bidAmt, useGroupBidAmt: k.useGroupBidAmt,
+          adRel: k.adRelevanceScore, expClick: k.expectedClickScore, userLock: k.userLock, stat: k.stat, kind: "keyword",
+        })));
+      } else {
+        if (!selCamp.length) { setRows([]); return; }
+        setLoading(true);
+        const p = new URLSearchParams({ campaignIds: selCampKey }); applyRange(p);
+        const j = await (await fetch(`/api/naver-ad/adgroup-stats?${p}`, { cache: "no-store" })).json();
+        if (!j.ok) throw new Error(j.error || "광고그룹 성과 조회 실패");
+        setRows((j.adgroups || []).map((g: ApiAdgroupStat): Row => ({
+          id: g.nccAdgroupId, name: g.name, group: campName[g.nccCampaignId] || "-", bidAmt: g.bidAmt ?? 0,
+          userLock: g.userLock, stat: g.stat, kind: "adgroup",
+        })));
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    setLoading(false);
+  }, [mode, selGrpKey, selCampKey, rangeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, [loadData]);
 
   const toggle = (arr: string[], set: (v: string[]) => void, id: string) =>
     set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
@@ -128,47 +157,54 @@ export default function NaverAdPage() {
     else { setSortField(f); setSortDir(f === "avgRnk" ? "asc" : "desc"); }
   }
 
-  const shownKeywords = useMemo(() => {
+  const shownRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let list = keywords;
-    if (q) list = list.filter((k) => k.keyword.toLowerCase().includes(q));
-    if (costOnly) list = list.filter((k) => (k.stat?.salesAmt ?? 0) > 0);
+    let list = rows;
+    if (q) list = list.filter((r) => r.name.toLowerCase().includes(q));
+    if (costOnly) list = list.filter((r) => (r.stat?.salesAmt ?? 0) > 0);
     const get = SORT_VAL[sortField];
     const dir = sortDir === "desc" ? -1 : 1;
     return [...list].sort((a, b) => (get(a) - get(b)) * dir);
-  }, [keywords, search, costOnly, sortField, sortDir]);
+  }, [rows, search, costOnly, sortField, sortDir]);
 
-  // 합계 (표시된 키워드 기준)
   const totals = useMemo(() => {
-    const t = shownKeywords.reduce((a, k) => {
-      const s = k.stat; if (!s) return a;
+    const t = shownRows.reduce((a, r) => {
+      const s = r.stat; if (!s) return a;
       a.imp += s.impCnt ?? 0; a.clk += s.clkCnt ?? 0; a.cost += s.salesAmt ?? 0; a.conv += s.ccnt ?? 0; a.convAmt += s.convAmt ?? 0;
       return a;
     }, { imp: 0, clk: 0, cost: 0, conv: 0, convAmt: 0 });
     return { ...t, ctr: t.imp ? (t.clk / t.imp) * 100 : 0, cpc: t.clk ? t.cost / t.clk : 0, roas: t.cost ? (t.convAmt / t.cost) * 100 : 0 };
-  }, [shownKeywords]);
+  }, [shownRows]);
 
-  function setBid(k: Keyword, bidAmt: number) { setDraft((d) => ({ ...d, [k.nccKeywordId]: { bidAmt, useGroupBidAmt: false } })); setSavedMsg(""); }
-  function bump(k: Keyword, pct: number) {
-    const cur = draft[k.nccKeywordId]?.bidAmt ?? k.bidAmt;
-    setBid(k, Math.max(70, Math.round((cur * (1 + pct / 100)) / 10) * 10));
+  function setBid(r: Row, bidAmt: number) { setDraft((d) => ({ ...d, [r.id]: { bidAmt, useGroupBidAmt: false } })); setSavedMsg(""); }
+  function bump(r: Row, pct: number) {
+    const cur = draft[r.id]?.bidAmt ?? r.bidAmt;
+    const floor = r.kind === "keyword" ? 70 : 50;
+    setBid(r, Math.max(floor, Math.round((cur * (1 + pct / 100)) / 10) * 10));
   }
-  function toggleGroupBid(k: Keyword, on: boolean) { setDraft((d) => ({ ...d, [k.nccKeywordId]: { bidAmt: d[k.nccKeywordId]?.bidAmt ?? k.bidAmt, useGroupBidAmt: on } })); setSavedMsg(""); }
+  function toggleGroupBid(r: Row, on: boolean) { setDraft((d) => ({ ...d, [r.id]: { bidAmt: d[r.id]?.bidAmt ?? r.bidAmt, useGroupBidAmt: on } })); setSavedMsg(""); }
 
-  const changes = useMemo(() => keywords.filter((k) => {
-    const d = draft[k.nccKeywordId]; return d && (d.bidAmt !== k.bidAmt || d.useGroupBidAmt !== k.useGroupBidAmt);
-  }), [keywords, draft]);
+  const changes = useMemo(() => rows.filter((r) => {
+    const d = draft[r.id]; if (!d) return false;
+    return d.bidAmt !== r.bidAmt || (r.kind === "keyword" && (d.useGroupBidAmt ?? false) !== (r.useGroupBidAmt ?? false));
+  }), [rows, draft]);
 
   async function save() {
     if (!changes.length) return;
     setSaving(true); setError(""); setSavedMsg("");
     try {
-      const updates = changes.map((k) => { const d = draft[k.nccKeywordId]; return { nccKeywordId: k.nccKeywordId, bidAmt: d.bidAmt, useGroupBidAmt: d.useGroupBidAmt }; });
-      const r = await fetch("/api/naver-ad/keywords", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ updates }) });
-      const j = await r.json();
+      let r: Response, j: { ok?: boolean; error?: string; updated?: number; failed?: number };
+      if (mode === "keyword") {
+        const updates = changes.map((row) => { const d = draft[row.id]; return { nccKeywordId: row.id, bidAmt: d.bidAmt, useGroupBidAmt: d.useGroupBidAmt ?? false }; });
+        r = await fetch("/api/naver-ad/keywords", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ updates }) });
+      } else {
+        const updates = changes.map((row) => ({ nccAdgroupId: row.id, bidAmt: draft[row.id].bidAmt }));
+        r = await fetch("/api/naver-ad/adgroup-stats", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ updates }) });
+      }
+      j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "입찰가 변경 실패");
-      setSavedMsg(`✅ 입찰가 ${j.updated}개 변경 완료`);
-      loadKeywords();
+      setSavedMsg(`✅ 입찰가 ${j.updated}개 변경${j.failed ? ` (${j.failed}개 실패: ${j.error || ""})` : ""}`);
+      loadData();
     } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
     setSaving(false);
   }
@@ -178,27 +214,26 @@ export default function NaverAdPage() {
     if (!since || !until) { const now = new Date(); const from = new Date(now.getTime() - 13 * 864e5); setUntil(ymd(now)); setSince(ymd(from)); }
   }
 
-  // 정렬 가능한 숫자 헤더
   const Th = ({ f, children }: { f: SortField; children: React.ReactNode }) => (
-    <th className="num" style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }} onClick={() => sortBy(f)}
-      title="클릭하여 정렬">
+    <th className="num" style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }} onClick={() => sortBy(f)} title="클릭하여 정렬">
       {children}{sortField === f ? <span style={{ color: "var(--sm-orange)" }}>{sortDir === "desc" ? " ▾" : " ▴"}</span> : <span style={{ opacity: 0.25 }}> ⇅</span>}
     </th>
   );
-
   const roasColor = (s?: Stat | null): CSSProperties | undefined => {
     if (!s || (s.salesAmt ?? 0) === 0) return undefined;
-    if ((s.ccnt ?? 0) === 0) return { color: "var(--sm-danger, #d64545)" }; // 지출했는데 전환 0
+    if ((s.ccnt ?? 0) === 0) return { color: "var(--sm-danger, #d64545)" };
     if ((s.ror ?? 0) >= 300) return { color: "var(--sm-success)", fontWeight: 700 };
     return undefined;
   };
+
+  const hasSelection = mode === "keyword" ? selGrp.length > 0 : selCamp.length > 0;
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">네이버 광고</h1>
-          <p className="b2b-page-subtitle">파워링크 키워드의 기간별 광고비·ROAS·CPC·CTR을 보고 입찰가를 조정합니다. 기본은 <b>광고비가 나간 키워드</b>만, <b>비용 높은 순</b>으로 표시돼요.</p>
+          <p className="b2b-page-subtitle">광고유형을 먼저 고르고, 기간별 광고비·ROAS·CPC·CTR로 입찰가를 조정합니다. 기본은 <b>광고비가 나간 것</b>만 <b>비용 높은 순</b>.</p>
         </div>
         {changes.length > 0 && (
           <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center" }}>
@@ -218,26 +253,38 @@ export default function NaverAdPage() {
 
       {status?.connected && (
         <>
-          {/* 캠페인 필터(다중) */}
+          {/* ① 광고유형 필터 (상단) */}
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
-            <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)" }}>캠페인 <span className="sm-faint" style={{ fontWeight: 400 }}>(여러 개 선택 가능 · 키워드는 파워링크/파워컨텐츠에만 있음)</span></span>
-              {selCamp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => setSelCamp([])}>선택 해제</button>}
-            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginBottom: 8 }}>광고유형</div>
             <div className="sm-row" style={{ gap: 6, flexWrap: "wrap" }}>
-              {campaigns.map((c) => {
-                const kw = KEYWORD_TYPES.has(c.campaignTp);
-                return <Chip key={c.nccCampaignId} on={selCamp.includes(c.nccCampaignId)} muted={!kw}
-                  onClick={() => toggle(selCamp, setSelCamp, c.nccCampaignId)}
-                  title={kw ? "" : "키워드 입찰 없음(쇼핑=상품단위)"}>
-                  {c.name} <span style={{ fontSize: 10, opacity: 0.7 }}>· {TYPE_LABEL[c.campaignTp] || c.campaignTp}</span>
-                </Chip>;
-              })}
+              {presentTypes.map(({ t, n }) => (
+                <Chip key={t} on={adType === t} onClick={() => changeType(t)}>
+                  {TYPE_LABEL[t] || t} <span style={{ fontSize: 10, opacity: 0.6 }}>{n}</span>
+                </Chip>
+              ))}
+            </div>
+            <div className="sm-faint" style={{ fontSize: 11, marginTop: 7 }}>
+              {mode === "keyword"
+                ? "파워링크·파워컨텐츠는 키워드 단위로 입찰합니다. 캠페인 → 광고그룹을 골라 키워드를 봅니다."
+                : "쇼핑검색·브랜드검색은 키워드가 없고 상품(광고그룹) 단위로 입찰합니다. 캠페인을 고르면 그룹별 성과·입찰가가 나옵니다."}
             </div>
           </div>
 
-          {/* 광고그룹 필터(다중) */}
-          {selCamp.length > 0 && (
+          {/* ② 캠페인 필터(다중) */}
+          <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+            <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)" }}>{TYPE_LABEL[adType] || adType} 캠페인 <span className="sm-faint" style={{ fontWeight: 400 }}>(여러 개 선택 가능)</span></span>
+              {selCamp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => setSelCamp([])}>선택 해제</button>}
+            </div>
+            {campsOfType.length === 0 ? <span className="sm-faint" style={{ fontSize: 12 }}>이 유형의 캠페인이 없습니다.</span> : (
+              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap" }}>
+                {campsOfType.map((c) => <Chip key={c.nccCampaignId} on={selCamp.includes(c.nccCampaignId)} onClick={() => toggle(selCamp, setSelCamp, c.nccCampaignId)}>{c.name}</Chip>)}
+              </div>
+            )}
+          </div>
+
+          {/* ③ 광고그룹 필터(키워드 모드에서만, 다중) */}
+          {mode === "keyword" && selCamp.length > 0 && (
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
               <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)" }}>광고그룹 {loadingGrp ? "…" : `(${adgroups.length})`}</span>
@@ -248,8 +295,7 @@ export default function NaverAdPage() {
               </div>
               {adgroups.length === 0 ? <span className="sm-faint" style={{ fontSize: 12 }}>{loadingGrp ? "불러오는 중..." : "그룹이 없습니다."}</span> : (
                 <div className="sm-row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  {adgroups.map((g) => <Chip key={g.nccAdgroupId} on={selGrp.includes(g.nccAdgroupId)} onClick={() => toggle(selGrp, setSelGrp, g.nccAdgroupId)}
-                    title={campName[g.nccCampaignId] || ""}>{g.name}</Chip>)}
+                  {adgroups.map((g) => <Chip key={g.nccAdgroupId} on={selGrp.includes(g.nccAdgroupId)} onClick={() => toggle(selGrp, setSelGrp, g.nccAdgroupId)} title={campName[g.nccCampaignId] || ""}>{g.name}</Chip>)}
                 </div>
               )}
             </div>
@@ -272,48 +318,51 @@ export default function NaverAdPage() {
           {/* 필터·검색 */}
           <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
             <label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
-              <input type="checkbox" checked={costOnly} onChange={(e) => setCostOnly(e.target.checked)} />광고비 지출 키워드만
+              <input type="checkbox" checked={costOnly} onChange={(e) => setCostOnly(e.target.checked)} />광고비 지출만
             </label>
-            <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="키워드 검색" style={{ width: 180 }} />
+            <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={mode === "keyword" ? "키워드 검색" : "광고그룹 검색"} style={{ width: 180 }} />
             <div style={{ flex: 1 }} />
-            <button className="b2b-btn-secondary" onClick={loadKeywords} disabled={loadingKw || !selGrp.length}>{loadingKw ? "..." : "새로고침"}</button>
+            <button className="b2b-btn-secondary" onClick={loadData} disabled={loading || !hasSelection}>{loading ? "..." : "새로고침"}</button>
           </div>
 
-          {!selGrp.length ? (
-            <div className="b2b-empty"><div className="b2b-empty-icon">🔎</div>캠페인 → 광고그룹을 선택하면 키워드가 나옵니다. (여러 그룹을 선택하면 합쳐서 표시)</div>
-          ) : loadingKw ? <div className="b2b-loading">불러오는 중...</div> :
-            shownKeywords.length === 0 ? (
+          {!hasSelection ? (
+            <div className="b2b-empty"><div className="b2b-empty-icon">🔎</div>
+              {mode === "keyword" ? "캠페인 → 광고그룹을 선택하면 키워드가 나옵니다." : "캠페인을 선택하면 광고그룹별 성과·입찰가가 나옵니다."}
+            </div>
+          ) : loading ? <div className="b2b-loading">불러오는 중...</div> :
+            shownRows.length === 0 ? (
               <div className="b2b-empty">
-                {costOnly && keywords.length > 0
-                  ? <>이 기간에 <b>광고비가 나간 키워드</b>가 없습니다. <button className="b2b-link-btn" onClick={() => setCostOnly(false)}>전체 보기</button> 또는 기간을 넓혀보세요.</>
-                  : "키워드가 없습니다. (파워링크/파워컨텐츠 그룹인지 확인)"}
+                {costOnly && rows.length > 0
+                  ? <>이 기간에 <b>광고비가 나간 {mode === "keyword" ? "키워드" : "광고그룹"}</b>이 없습니다. <button className="b2b-link-btn" onClick={() => setCostOnly(false)}>전체 보기</button> 또는 기간을 넓혀보세요.</>
+                  : mode === "keyword" ? "키워드가 없습니다." : "광고그룹이 없습니다."}
               </div>
             ) : (
               <>
                 <div className="sm-row" style={{ justifyContent: "space-between", fontSize: 12, color: "var(--sm-text-light)", marginBottom: 6 }}>
-                  <span>{shownKeywords.length}개 키워드{costOnly ? " (지출>0)" : ""} · 비용순 정렬 시 상위가 최적화 우선순위</span>
+                  <span>{shownRows.length}개 {mode === "keyword" ? "키워드" : "광고그룹"}{costOnly ? " (지출>0)" : ""} · 비용순 상위가 최적화 우선순위</span>
                 </div>
                 <div className="b2b-table-wrap">
                   <table className="b2b-table">
                     <thead><tr>
-                      <th>키워드</th><th>그룹</th>
+                      <th>{mode === "keyword" ? "키워드" : "광고그룹"}</th><th>{mode === "keyword" ? "그룹" : "캠페인"}</th>
                       <Th f="impCnt">노출</Th><Th f="clkCnt">클릭</Th><Th f="ctr">CTR</Th>
                       <Th f="salesAmt">광고비</Th><Th f="cpc">CPC</Th>
                       <Th f="ccnt">전환</Th><Th f="convAmt">전환매출</Th><Th f="ror">ROAS</Th>
                       <Th f="avgRnk">평균순위</Th>
-                      <th className="num">연관/클릭</th><Th f="bidAmt">입찰가</Th>
+                      {mode === "keyword" && <th className="num">연관/클릭</th>}
+                      <Th f="bidAmt">입찰가</Th>
                     </tr></thead>
                     <tbody>
-                      {shownKeywords.map((k) => {
-                        const d = draft[k.nccKeywordId];
-                        const curBid = d?.bidAmt ?? k.bidAmt;
-                        const useGroup = d?.useGroupBidAmt ?? k.useGroupBidAmt;
-                        const changed = d && (d.bidAmt !== k.bidAmt || d.useGroupBidAmt !== k.useGroupBidAmt);
-                        const st = k.stat;
+                      {shownRows.map((r) => {
+                        const d = draft[r.id];
+                        const curBid = d?.bidAmt ?? r.bidAmt;
+                        const useGroup = r.kind === "keyword" ? (d?.useGroupBidAmt ?? r.useGroupBidAmt ?? false) : false;
+                        const changed = d && (d.bidAmt !== r.bidAmt || (r.kind === "keyword" && (d.useGroupBidAmt ?? false) !== (r.useGroupBidAmt ?? false)));
+                        const st = r.stat;
                         return (
-                          <tr key={k.nccKeywordId} style={changed ? { background: "var(--sm-orange-light)" } : undefined}>
-                            <td><strong>{k.keyword}</strong>{k.userLock ? <span className="sm-faint" style={{ fontSize: 11 }}> · OFF</span> : null}</td>
-                            <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{grpName[k.nccAdgroupId] || "-"}</td>
+                          <tr key={r.id} style={changed ? { background: "var(--sm-orange-light)" } : undefined}>
+                            <td><strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 11 }}> · OFF</span> : null}</td>
+                            <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.group}</td>
                             <td className="num b2b-money">{num(st?.impCnt)}</td>
                             <td className="num b2b-money">{num(st?.clkCnt)}</td>
                             <td className="num">{st?.ctr != null ? `${st.ctr.toFixed(2)}%` : "-"}</td>
@@ -323,16 +372,18 @@ export default function NaverAdPage() {
                             <td className="num b2b-money">{won(st?.convAmt)}</td>
                             <td className="num" style={roasColor(st)}>{st?.ror != null && (st?.salesAmt ?? 0) > 0 ? `${Math.round(st.ror)}%` : "-"}</td>
                             <td className="num">{st?.avgRnk != null ? st.avgRnk.toFixed(1) : "-"}</td>
-                            <td className="num" style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>{k.adRelevanceScore ?? "-"}/{k.expectedClickScore ?? "-"}</td>
+                            {mode === "keyword" && <td className="num" style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>{r.adRel ?? "-"}/{r.expClick ?? "-"}</td>}
                             <td style={{ whiteSpace: "nowrap" }}>
                               <div className="sm-row" style={{ gap: 4, alignItems: "center" }}>
-                                <button className="b2b-btn-secondary" style={{ padding: "2px 6px", fontSize: 11 }} onClick={() => bump(k, -10)} disabled={useGroup} title="-10%">−</button>
+                                <button className="b2b-btn-secondary" style={{ padding: "2px 6px", fontSize: 11 }} onClick={() => bump(r, -10)} disabled={useGroup} title="-10%">−</button>
                                 <input type="number" className="b2b-input b2b-money" value={useGroup ? "" : curBid} disabled={useGroup}
-                                  onChange={(e) => setBid(k, Math.max(0, Number(e.target.value) || 0))} style={{ width: 80, textAlign: "right" }} placeholder={useGroup ? "그룹" : ""} />
-                                <button className="b2b-btn-secondary" style={{ padding: "2px 6px", fontSize: 11 }} onClick={() => bump(k, 10)} disabled={useGroup} title="+10%">+</button>
-                                <label className="sm-row" style={{ gap: 3, fontSize: 11, cursor: "pointer" }} title="그룹 기본입찰가 사용">
-                                  <input type="checkbox" checked={useGroup} onChange={(e) => toggleGroupBid(k, e.target.checked)} />그룹
-                                </label>
+                                  onChange={(e) => setBid(r, Math.max(0, Number(e.target.value) || 0))} style={{ width: 80, textAlign: "right" }} placeholder={useGroup ? "그룹" : ""} />
+                                <button className="b2b-btn-secondary" style={{ padding: "2px 6px", fontSize: 11 }} onClick={() => bump(r, 10)} disabled={useGroup} title="+10%">+</button>
+                                {r.kind === "keyword" && (
+                                  <label className="sm-row" style={{ gap: 3, fontSize: 11, cursor: "pointer" }} title="그룹 기본입찰가 사용">
+                                    <input type="checkbox" checked={useGroup} onChange={(e) => toggleGroupBid(r, e.target.checked)} />그룹
+                                  </label>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -341,7 +392,7 @@ export default function NaverAdPage() {
                     </tbody>
                     <tfoot>
                       <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-soft, #fafafa)" }}>
-                        <td>합계</td><td style={{ fontSize: 11, color: "var(--sm-text-light)" }}>{shownKeywords.length}개</td>
+                        <td>합계</td><td style={{ fontSize: 11, color: "var(--sm-text-light)" }}>{shownRows.length}개</td>
                         <td className="num b2b-money">{num(totals.imp)}</td>
                         <td className="num b2b-money">{num(totals.clk)}</td>
                         <td className="num">{totals.ctr.toFixed(2)}%</td>
@@ -350,14 +401,16 @@ export default function NaverAdPage() {
                         <td className="num b2b-money">{num(totals.conv)}</td>
                         <td className="num b2b-money">{won(totals.convAmt)}</td>
                         <td className="num" style={totals.roas >= 300 ? { color: "var(--sm-success)" } : undefined}>{totals.cost ? `${Math.round(totals.roas)}%` : "-"}</td>
-                        <td className="num">-</td><td className="num">-</td><td>-</td>
+                        <td className="num">-</td>
+                        {mode === "keyword" && <td className="num">-</td>}
+                        <td>-</td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
                 <p className="sm-faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
-                  · <b>광고비</b>=기간 내 총 지출(VAT포함), <b>ROAS</b>=전환매출÷광고비. <span style={{ color: "var(--sm-danger, #d64545)" }}>빨간 ROAS</span>=지출했지만 전환 0(입찰가↓ 검토), <span style={{ color: "var(--sm-success)" }}>초록</span>=ROAS 300%↑(여력 있으면 입찰가↑).<br />
-                  · 전환·전환매출·ROAS는 <b>네이버 프리미엄 로그분석(전환추적)</b>이 연동돼야 값이 나옵니다. 0으로만 나오면 전환추적 미연동 상태예요.
+                  · <b>광고비</b>=기간 내 총 지출(VAT포함), <b>ROAS</b>=전환매출÷광고비. <span style={{ color: "var(--sm-danger, #d64545)" }}>빨강</span>=지출했지만 전환 0(입찰가↓ 검토), <span style={{ color: "var(--sm-success)" }}>초록</span>=ROAS 300%↑(여력 있으면 입찰가↑).<br />
+                  · 전환·전환매출·ROAS는 <b>네이버 프리미엄 로그분석(전환추적)</b> 연동 시 값이 나옵니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위 입찰가를 조정합니다." : ""}
                 </p>
               </>
             )}
