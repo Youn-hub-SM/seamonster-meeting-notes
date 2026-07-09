@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
     const sp = new URL(req.url).searchParams;
     const id = (sp.get("id") || sp.get("adgroupId") || "").trim();
     if (!id) return NextResponse.json({ ok: false, error: "id(광고그룹) 가 필요합니다." }, { status: 400 });
-    const { rows, raw } = await getShoppingSearchKeywords(id);
-    return NextResponse.json({ ok: true, keywords: rows, ...(sp.get("raw") === "1" ? { raw } : {}) });
+    const rows = await getShoppingSearchKeywords(id);
+    return NextResponse.json({ ok: true, keywords: rows });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "검색어 리포트 조회 실패") }, { status: 500 });
   }

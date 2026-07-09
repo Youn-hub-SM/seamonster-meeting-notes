@@ -122,19 +122,16 @@ export async function listAdgroupsWithStats(campaignIds: string[], range: StatRa
 }
 
 // 쇼핑검색광고 세부 검색어 리포트(statType=NPLA_SCH_KEYWORD). id=광고그룹(또는 캠페인) 단일.
-// 최근 30일·노출순 최대 1000개. datePreset/fields 안 받음. 응답 형태 미확정이라 유연 파싱.
-export type NplaSearchKeyword = { keyword: string; impCnt?: number; clkCnt?: number; salesAmt?: number; ctr?: number; cpc?: number; ccnt?: number; convAmt?: number; ror?: number };
-export async function getShoppingSearchKeywords(id: string): Promise<{ rows: NplaSearchKeyword[]; raw: unknown }> {
+// 최근 30일·노출순. 응답 행 = {schKeyword, impCnt, clkCnt, salesAmt(광고비), drtCrto(직접전환율%)}. 전환수/매출/ROAS 없음.
+export type NplaSearchKeyword = { keyword: string; impCnt: number; clkCnt: number; salesAmt: number; drtCrto?: number };
+export async function getShoppingSearchKeywords(id: string): Promise<NplaSearchKeyword[]> {
   const res = await naverAd<unknown>("GET", "/stats", { query: { id, statType: "NPLA_SCH_KEYWORD" } });
-  const arr = Array.isArray(res) ? res : (res as { data?: unknown[] })?.data ?? [];
-  const rows = (arr as Record<string, unknown>[]).map((r) => ({
-    keyword: String(r.keyword ?? r.searchKeyword ?? r.nqi ?? r.schKwd ?? ""),
+  const arr = Array.isArray(res) ? res : ((res as { data?: unknown[] })?.data ?? []);
+  return (arr as Record<string, unknown>[]).map((r) => ({
+    keyword: String(r.schKeyword ?? r.keyword ?? ""),
     impCnt: Number(r.impCnt ?? 0), clkCnt: Number(r.clkCnt ?? 0), salesAmt: Number(r.salesAmt ?? 0),
-    ctr: r.ctr != null ? Number(r.ctr) : undefined, cpc: r.cpc != null ? Number(r.cpc) : undefined,
-    ccnt: r.ccnt != null ? Number(r.ccnt) : undefined, convAmt: r.convAmt != null ? Number(r.convAmt) : undefined,
-    ror: r.ror != null ? Number(r.ror) : undefined,
+    drtCrto: r.drtCrto != null ? Number(r.drtCrto) : undefined,
   }));
-  return { rows, raw: res };
 }
 
 // 자격 확인용 가벼운 핑(캠페인 목록). 실패 시 에러 던짐.

@@ -10,6 +10,7 @@ type ApiAdgroupStat = Adgroup & { userLock?: boolean; stat?: Stat | null };
 // 키워드/광고그룹을 한 표로 다루는 통합 행
 type Row = { id: string; name: string; group: string; bidAmt: number; useGroupBidAmt?: boolean; adRel?: number; expClick?: number; userLock?: boolean; stat?: Stat | null; kind: "keyword" | "adgroup" };
 type Draft = { bidAmt: number; useGroupBidAmt?: boolean };
+type SearchKw = { keyword: string; impCnt: number; clkCnt: number; salesAmt: number; drtCrto?: number };
 
 const PRESETS = [
   { key: "today", label: "오늘" }, { key: "yesterday", label: "어제" },
@@ -64,6 +65,11 @@ export default function NaverAdPage() {
   const [costOnly, setCostOnly] = useState(true);
   const [sortField, setSortField] = useState<SortField>("salesAmt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [skGroup, setSkGroup] = useState<{ id: string; name: string } | null>(null); // 검색어 드릴다운 대상
+  const [skRows, setSkRows] = useState<SearchKw[]>([]);
+  const [skLoading, setSkLoading] = useState(false);
+  const [skErr, setSkErr] = useState("");
+  const [skCostOnly, setSkCostOnly] = useState(true);
 
   const mode: "keyword" | "adgroup" = KEYWORD_TYPES.has(adType) ? "keyword" : "adgroup";
 
@@ -214,6 +220,21 @@ export default function NaverAdPage() {
     if (!since || !until) { const now = new Date(); const from = new Date(now.getTime() - 13 * 864e5); setUntil(ymd(now)); setSince(ymd(from)); }
   }
 
+  async function openSearchKeywords(r: Row) {
+    setSkGroup({ id: r.id, name: r.name }); setSkRows([]); setSkErr(""); setSkLoading(true); setSkCostOnly(true);
+    try {
+      const j = await (await fetch(`/api/naver-ad/search-keywords?id=${encodeURIComponent(r.id)}`, { cache: "no-store" })).json();
+      if (!j.ok) throw new Error(j.error || "검색어 조회 실패");
+      setSkRows(j.keywords || []);
+    } catch (e) { setSkErr(e instanceof Error ? e.message : "검색어 조회 오류"); }
+    setSkLoading(false);
+  }
+  const skShown = useMemo(() => {
+    let list = skCostOnly ? skRows.filter((k) => k.salesAmt > 0) : skRows;
+    return [...list].sort((a, b) => b.salesAmt - a.salesAmt);
+  }, [skRows, skCostOnly]);
+  const skTot = useMemo(() => skShown.reduce((a, k) => ({ imp: a.imp + k.impCnt, clk: a.clk + k.clkCnt, cost: a.cost + k.salesAmt }), { imp: 0, clk: 0, cost: 0 }), [skShown]);
+
   const Th = ({ f, children }: { f: SortField; children: React.ReactNode }) => (
     <th className="num" style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }} onClick={() => sortBy(f)} title="클릭하여 정렬">
       {children}{sortField === f ? <span style={{ color: "var(--sm-orange)" }}>{sortDir === "desc" ? " ▾" : " ▴"}</span> : <span style={{ opacity: 0.25 }}> ⇅</span>}
@@ -361,7 +382,10 @@ export default function NaverAdPage() {
                         const st = r.stat;
                         return (
                           <tr key={r.id} style={changed ? { background: "var(--sm-orange-light)" } : undefined}>
-                            <td><strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 11 }}> · OFF</span> : null}</td>
+                            <td>
+                              <strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 11 }}> · OFF</span> : null}
+                              {r.kind === "adgroup" && <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => openSearchKeywords(r)} title="이 그룹으로 유입된 검색어별 비용">🔍 검색어</button>}
+                            </td>
                             <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.group}</td>
                             <td className="num b2b-money">{num(st?.impCnt)}</td>
                             <td className="num b2b-money">{num(st?.clkCnt)}</td>
@@ -415,6 +439,67 @@ export default function NaverAdPage() {
               </>
             )}
         </>
+      )}
+
+      {/* 쇼핑검색 세부 검색어 드릴다운 모달 */}
+      {skGroup && (
+        <div onClick={() => setSkGroup(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 12px", overflow: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--sm-white)", borderRadius: 12, width: "min(760px, 100%)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
+              <div>
+                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>🔍 검색어별 비용 — {skGroup.name}</div>
+                <div className="sm-faint" style={{ fontSize: 11 }}>최근 30일 · 이 광고그룹으로 유입된 실제 검색어(네이버 제공)</div>
+              </div>
+              <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setSkGroup(null)}>닫기</button>
+            </div>
+            <div style={{ padding: "10px 16px", overflow: "auto" }}>
+              {skErr && <div className="b2b-error">{skErr}</div>}
+              {skLoading ? <div className="b2b-loading">불러오는 중...</div> : (
+                <>
+                  <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+                    <label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+                      <input type="checkbox" checked={skCostOnly} onChange={(e) => setSkCostOnly(e.target.checked)} />광고비 지출만
+                    </label>
+                    <span className="sm-faint" style={{ fontSize: 12 }}>{skShown.length}개 검색어 · 광고비 {won(skTot.cost)}원</span>
+                  </div>
+                  {skShown.length === 0 ? <div className="b2b-empty">표시할 검색어가 없습니다.</div> : (
+                    <div className="b2b-table-wrap">
+                      <table className="b2b-table">
+                        <thead><tr>
+                          <th>검색어</th><th className="num">노출</th><th className="num">클릭</th><th className="num">CTR</th><th className="num">광고비</th><th className="num">CPC</th><th className="num">직접전환율</th>
+                        </tr></thead>
+                        <tbody>
+                          {skShown.slice(0, 300).map((k, i) => {
+                            const ctr = k.impCnt ? (k.clkCnt / k.impCnt) * 100 : 0;
+                            const cpc = k.clkCnt ? k.salesAmt / k.clkCnt : 0;
+                            return (
+                              <tr key={i}>
+                                <td><strong>{k.keyword || "(기타)"}</strong></td>
+                                <td className="num b2b-money">{num(k.impCnt)}</td>
+                                <td className="num b2b-money">{num(k.clkCnt)}</td>
+                                <td className="num">{ctr ? `${ctr.toFixed(2)}%` : "-"}</td>
+                                <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(k.salesAmt)}</td>
+                                <td className="num b2b-money">{k.clkCnt ? won(cpc) : "-"}</td>
+                                <td className="num">{k.drtCrto != null ? `${k.drtCrto.toFixed(1)}%` : "-"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-soft, #fafafa)" }}>
+                          <td>합계 ({skShown.length})</td><td className="num b2b-money">{num(skTot.imp)}</td><td className="num b2b-money">{num(skTot.clk)}</td>
+                          <td className="num">{skTot.imp ? `${(skTot.clk / skTot.imp * 100).toFixed(2)}%` : "-"}</td>
+                          <td className="num b2b-money">{won(skTot.cost)}</td><td className="num b2b-money">{skTot.clk ? won(skTot.cost / skTot.clk) : "-"}</td><td className="num">-</td>
+                        </tr></tfoot>
+                      </table>
+                    </div>
+                  )}
+                  {skShown.length > 300 && <p className="sm-faint" style={{ fontSize: 11, marginTop: 6 }}>상위 300개만 표시했습니다(광고비순).</p>}
+                  <p className="sm-faint" style={{ fontSize: 11, marginTop: 6 }}>· 이 리포트는 전환수·ROAS가 없고 <b>직접전환율</b>만 제공됩니다(네이버 NPLA_SCH_KEYWORD). 전환/ROAS는 그룹 단위 표에서 확인하세요.</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
