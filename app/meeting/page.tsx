@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Meeting } from "@/app/lib/types";
 import { meetingToMarkdown } from "@/app/lib/markdown";
+import MeetingTerms from "./MeetingTerms";
 
 export default function MeetingPage() {
   const [rawText, setRawText] = useState("");
@@ -117,6 +118,8 @@ export default function MeetingPage() {
       <p className="page-subtitle">
         회의 내용을 직접 입력하거나 파일을 첨부하세요
       </p>
+
+      <MeetingTerms />
 
       <form onSubmit={handleSubmit}>
         {/* 파일 업로드 */}

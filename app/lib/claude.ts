@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { TEAM_MEMBERS, COMPANY_CONTEXT } from "./config";
 import { getFeatureModel } from "./ai-model";
+import { meetingTermsPromptBlock } from "./meeting-terms";
 import { supabaseAdmin } from "./supabase";
 
 const anthropic = new Anthropic({
@@ -61,6 +62,9 @@ async function buildSystemPrompt(): Promise<string> {
   if (COMPANY_CONTEXT) {
     prompt += `\n\n[추가 맥락]\n${COMPANY_CONTEXT}`;
   }
+
+  // 팀 공유 용어집(회의 화면에서 편집) — 있으면 프롬프트에 주입
+  prompt += await meetingTermsPromptBlock();
 
   return prompt;
 }
