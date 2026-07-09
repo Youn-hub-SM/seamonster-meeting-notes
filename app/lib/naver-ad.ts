@@ -64,7 +64,8 @@ export async function naverAd<T = unknown>(method: "GET" | "POST" | "PUT" | "DEL
 export type NaverCampaign = { nccCampaignId: string; name: string; campaignTp: string; status?: string; statusReason?: string; dailyBudget?: number; useDailyBudget?: boolean; userLock?: boolean };
 export type NaverAdgroup = { nccAdgroupId: string; nccCampaignId: string; name: string; adgroupType?: string; bidAmt?: number; useDailyBudget?: boolean; dailyBudget?: number; status?: string; userLock?: boolean };
 export type NaverKeyword = { nccKeywordId: string; nccAdgroupId: string; customerId?: number; keyword: string; bidAmt: number; useGroupBidAmt: boolean; adRelevanceScore?: number; expectedClickScore?: number; status?: string; statusReason?: string; userLock?: boolean };
-export type NaverStat = { id: string; impCnt?: number; clkCnt?: number; salesAmt?: number; cpc?: number; ctr?: number; avgRnk?: number; ccnt?: number; crto?: number };
+// salesAmt = 광고비(총비용, VAT포함). convAmt = 전환매출액. ror = 광고수익률(ROAS, %). cpConv = 전환당비용.
+export type NaverStat = { id: string; impCnt?: number; clkCnt?: number; salesAmt?: number; cpc?: number; ctr?: number; avgRnk?: number; ccnt?: number; crto?: number; convAmt?: number; ror?: number; cpConv?: number };
 
 // ── 조회 ──
 export const listCampaigns = () => naverAd<NaverCampaign[]>("GET", "/ncc/campaigns");
@@ -73,13 +74,18 @@ export const listKeywords = (nccAdgroupId: string) => naverAd<NaverKeyword[]>("G
 
 // 성과(효율 판단). ids 는 반복 파라미터(ids=a&ids=b)로 전달해야 함(JSON 배열은 400).
 // fields 만 JSON 배열 문자열. 응답은 { data: [ StatObject ] } 형태 → 언랩. 90개씩 청크.
-export async function getStats(ids: string[], datePreset = "last7days"): Promise<NaverStat[]> {
+// 기간: {since,until}(YYYY-MM-DD) 있으면 timeRange, 없으면 datePreset(today/yesterday/last7days/last30days...).
+export type StatRange = { datePreset?: string; since?: string; until?: string };
+export async function getStats(ids: string[], range: StatRange = {}): Promise<NaverStat[]> {
   if (!ids.length) return [];
-  const fields = JSON.stringify(["impCnt", "clkCnt", "salesAmt", "cpc", "ctr", "avgRnk", "ccnt", "crto"]);
+  const fields = JSON.stringify(["impCnt", "clkCnt", "salesAmt", "ctr", "cpc", "avgRnk", "ccnt", "crto", "convAmt", "ror", "cpConv"]);
+  const dateQuery: Record<string, string> = range.since && range.until
+    ? { timeRange: JSON.stringify({ since: range.since, until: range.until }) }
+    : { datePreset: range.datePreset || "last7days" };
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 90) chunks.push(ids.slice(i, i + 90));
   const parts = await Promise.all(chunks.map(async (chunk) => {
-    const res = await naverAd<NaverStat[] | { data?: NaverStat[] }>("GET", "/stats", { query: { ids: chunk, fields, datePreset } });
+    const res = await naverAd<NaverStat[] | { data?: NaverStat[] }>("GET", "/stats", { query: { ids: chunk, fields, ...dateQuery } });
     return Array.isArray(res) ? res : (res?.data ?? []);
   }));
   return parts.flat();

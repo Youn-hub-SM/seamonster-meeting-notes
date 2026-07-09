@@ -10,7 +10,9 @@ export async function GET(req: NextRequest) {
   try {
     const sp = new URL(req.url).searchParams;
     const groupIds = (sp.get("adgroupIds") || sp.get("adgroupId") || "").split(",").map((s) => s.trim()).filter(Boolean);
-    const datePreset = sp.get("datePreset") || "last7days";
+    const since = sp.get("since") || undefined;
+    const until = sp.get("until") || undefined;
+    const range = since && until ? { since, until } : { datePreset: sp.get("datePreset") || "last7days" };
     const debug = sp.get("debug") === "1";
     if (!groupIds.length) return NextResponse.json({ ok: false, error: "adgroupIds 가 필요합니다." }, { status: 400 });
     if (groupIds.length > 30) return NextResponse.json({ ok: false, error: "한 번에 최대 30개 그룹까지 조회할 수 있습니다." }, { status: 400 });
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
         let statById: Record<string, NaverStat> = {};
         if (ids.length) {
           try {
-            const stats = await getStats(ids, datePreset);
+            const stats = await getStats(ids, range);
             statById = Object.fromEntries((stats || []).map((s) => [s.id, s]));
           } catch (e) { if (!statError) statError = String((e as Error)?.message || e); }
         }
