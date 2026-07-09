@@ -8,9 +8,11 @@
 -- [왜 필요했나] 하루 주문 167 vs total_customers 132 의 차이(35)는 재구매(1)가 아니라
 --   050 안심번호(32)+무전화(2) 였음. 이 버킷을 드러내 "132는 어디서, 나머지는 뭔지" 한눈에.
 --
--- 적용: Supabase Dashboard > SQL Editor 에 붙여넣고 Run. 멱등(create or replace).
+-- 적용: Supabase Dashboard > SQL Editor 에 붙여넣고 Run. 멱등.
+-- 061에서 컬럼 순서가 바뀌므로 create-or-replace 불가 → drop 후 create(뷰는 참조 대상 없음, 안전).
 
-create or replace view sales_daily_new_repeat as
+drop view if exists sales_daily_new_repeat;
+create view sales_daily_new_repeat as
 with base as (
   select
     o.order_date, o.order_id, o.subtotal_amount, o.customer_key,
