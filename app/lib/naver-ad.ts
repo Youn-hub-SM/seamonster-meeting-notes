@@ -71,15 +71,18 @@ export const listCampaigns = () => naverAd<NaverCampaign[]>("GET", "/ncc/campaig
 export const listAdgroups = (nccCampaignId: string) => naverAd<NaverAdgroup[]>("GET", "/ncc/adgroups", { query: { nccCampaignId } });
 export const listKeywords = (nccAdgroupId: string) => naverAd<NaverKeyword[]>("GET", "/ncc/keywords", { query: { nccAdgroupId } });
 
-// 성과(효율 판단). ids·fields 모두 JSON 배열 "문자열"로 전달해야 함. datePreset 예: "last7days".
-// 응답은 { data: [ StatObject ] } 형태(구버전은 배열) — 둘 다 허용.
+// 성과(효율 판단). ids 는 반복 파라미터(ids=a&ids=b)로 전달해야 함(JSON 배열은 400).
+// fields 만 JSON 배열 문자열. 응답은 { data: [ StatObject ] } 형태 → 언랩. 90개씩 청크.
 export async function getStats(ids: string[], datePreset = "last7days"): Promise<NaverStat[]> {
   if (!ids.length) return [];
   const fields = JSON.stringify(["impCnt", "clkCnt", "salesAmt", "cpc", "ctr", "avgRnk", "ccnt", "crto"]);
-  const res = await naverAd<NaverStat[] | { data?: NaverStat[] }>("GET", "/stats", {
-    query: { ids: JSON.stringify(ids), fields, datePreset },
-  });
-  return Array.isArray(res) ? res : (res?.data ?? []);
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 90) chunks.push(ids.slice(i, i + 90));
+  const parts = await Promise.all(chunks.map(async (chunk) => {
+    const res = await naverAd<NaverStat[] | { data?: NaverStat[] }>("GET", "/stats", { query: { ids: chunk, fields, datePreset } });
+    return Array.isArray(res) ? res : (res?.data ?? []);
+  }));
+  return parts.flat();
 }
 
 // ── 입찰가 조정 ── 최대 200개. useGroupBidAmt=false 여야 개별 bidAmt 적용.

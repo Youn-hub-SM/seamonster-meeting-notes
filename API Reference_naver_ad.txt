@@ -1,0 +1,558 @@
+API Reference
+This API reference is organized by resource type. Each resource type has one or more data representations and one or more methods.
+
+AdExtension
+Method	HTTP Request	Description
+list (by ids)	GET /ncc/ad-extensions{?ids}	
+다수의 확장 소재 ID를 이용하여 조회합니다.
+
+Retrieves information on multiple AD extensions
+
+list (by label id)	GET /ncc/ad-extensions{?nccLabelId}	
+특정 즐겨찾기(label id)로 등록한 확장소재 목록을 조회합니다.
+
+Returns the list of AD extensions of input label id.
+
+list (by owner id)	GET /ncc/ad-extensions{?ownerId}	
+확장 소재가 속한 특정 광고 객체(캠페인, 광고그룹, 소재)의 ID(ownerId)를 이용하여 조회합니다.
+
+Retrieves information on multiple AD extensions
+
+The ownerId value indicates either campaign id or adgroup id.
+
+get	GET /ncc/ad-extensions/{adExtensionId}	
+특정 확장 소재(adExtensionId)의 정보를 조회합니다.
+
+Retrieves information on an AD extension
+
+create	POST /ncc/ad-extensions	
+새로운 확장 소재를 생성합니다. ownerId는 확장 소재가 소속될 광고 객체(캠페인, 광고그룹)입니다.
+
+Registers a new AD extension to the specified campaign, adgroup or ad
+
+update	PUT /ncc/ad-extensions/{adExtensionId}{?fields}	
+특정 확장 소재의 정보를 변경합니다. field 파라미터가 없을 경우 확장 소재 정보 전체를 변경합니다. field 파라미터가 있을 경우 확장 소재의 특정 정보만 변경합니다.
+
+Change an AD extension
+
+The parameter field, you can enter one of the following: 'userLock', 'period'
+
+update items	PUT /ncc/ad-extensions{?fields}	
+여러개의 확장 소재를 변경합니다. field 파라미터가 없을 경우 확장 소재 정보 전체를 변경합니다. field 파라미터가 있을 경우 확장 소재의 특정 정보만 변경합니다.
+
+'userLock': On/Off 설정 변경 'period': 노출 기간 설정
+
+Change multiple AD extensions The parameter field, you can enter one of the following: 'userLock', 'inspect', 'period'
+
+delete	DELETE /ncc/ad-extensions/{adExtensionId}	
+확장 소재를 삭제합니다.
+
+Deletes a registered AD extension
+
+
+Adgroup
+Method	HTTP Request	Description
+list (negative search terms)	GET /ncc/adgroups/{adgroupId}/restricted-keywords?type=KEYWORD_PLUS_RESTRICT	
+Returns a list of impression-restricted keywords. This feature is only available for adgroups of website campaign types.
+
+list (by ids)	GET /ncc/adgroups{?ids}	
+Returns the list of adgroups of input adgroup ids
+
+list (by campaign id)	GET /ncc/adgroups{?nccCampaignId,baseSearchId,recordSize,selector}	
+Returns the list of partially AdGroups of input campaign id
+
+list (by label id)	GET /ncc/adgroups{?nccLabelId}	
+Returns the list of adgroups of input label id
+
+list (by sharedBudgetId)	GET /ncc/adgroups/shared-budgets/{sharedBudgetId}	
+공유예산에 연결된 광고그룹 리스트를 조회합니다.
+
+Returns a list of adgroups associated with shared budget.
+
+get	GET /ncc/adgroups/{adgroupId}	
+Returns the adgroup of input ID
+
+create	POST /ncc/adgroups	
+Create a new adgroup
+
+create (negative search terms)	POST /ncc/adgroups/{adgroupId}/restricted-keywords	
+Create impression-restricted keywords for the adgroup. This feature is only available for adgroups of website campaign types.
+
+update	PUT /ncc/adgroups/{adgroupId}	
+Change the Ad Group
+
+update (by fields)	PUT /ncc/adgroups/{adgroupId}{?fields}	
+Change the Ad Group. The parameter fields, enter the name of the Ad Group field you want to change.
+
+delete	DELETE /ncc/adgroups/{adgroupId}	
+Remove a Ad Group
+
+delete (negative search terms)	DELETE /ncc/adgroups/{adgroupId}/restricted-keywords{?ids}	
+Remove impression-restricted keywords. This feature is only available for adgroups of website campaign types.
+
+
+Ad
+Method	HTTP Request	Description
+list	GET /ncc/ads{?ids}	
+입력한 ID 목록의 소재를 조회합니다.
+
+Return the list of ads
+
+list (by adgroup id)	GET /ncc/ads{?nccAdgroupId}	
+광고그룹에 포함된 소재 목록을 조회합니다.
+
+Returns the list of ads of the adgroup id
+
+get	GET /ncc/ads/{adId}	
+입력한 ID에 해당하는 소재를 조회합니다.
+
+Return the ad of the adId
+
+create	POST /ncc/ads	
+create an ad
+
+update	PUT /ncc/ads/{adId}{?fields}	
+광고 소재의 정보를 변경합니다.
+
+Update the fields of the ads
+
+delete	DELETE /ncc/ads/{adId}	
+remove an ad of the adId
+
+copy	PUT /ncc/ads{?ids,targetAdgroupId,userLock}	
+광고 소재를 원하는 광고그룹에 복사합니다.
+
+Copy ads to another adgroup
+
+
+BrandNewContract
+Method	HTTP Request	Description
+list	GET /ncc/brand-new/contracts	
+해당 계정의 모든 신제품 검색 계약을 조회 한다
+
+Returns the list of time contracts of customer
+
+list (by adgroup id)	GET /ncc/brand-new/contracts{?adgroupId}	
+해당 계정의 특정 광고그룹 하위의 신제품 검색 계약을 조회한다.
+
+Returns the list of time contracts of adgroup
+
+
+Campaign
+Method	HTTP Request	Description
+list (by customer id, campaign type)	GET /ncc/campaigns{?campaignType,baseSearchId,recordSize,selector}	
+조회 조건에 해당하는 캠페인 목록을 조회합니다.
+
+Returns the list of partially campaigns of customer
+
+list (by ids)	GET /ncc/campaigns{?ids}	
+입력된 아이디에 해당하는 캠페인 목록을 조회합니다.
+
+Returns the list of campaigns of input campaign ids.
+
+list (by sharedBudgetId)	GET /ncc/campaigns/shared-budgets/{sharedBudgetId}	
+공유예산에 연결된 캠페인 리스트를 조회합니다.
+
+Returns a list of campaigns associated with shared budget.
+
+get	GET /ncc/campaigns/{campaignId}	
+단일 개체의 캠페인을 조회합니다.
+
+Returns the campaign of input ID
+
+create	POST /ncc/campaigns	
+새로운 캠페인을 생성합니다.
+
+Create a new campaign
+
+update	PUT /ncc/campaigns/{campaignId}{?fields}	
+캠페인을 수정합니다. fields 파라미터가 없을 경우 캠페인 전체가 변경됩니다. fields 파라미터에 입력하는 값의 유형에 따라 수정되는 캠페인의 필드가 결정됩니다.
+
+Change the Campaign. The parameter fields, enter the name of the Campaign field you want to change. or you can modify the campaign entire information if you give the full campaign json when calling api
+
+delete	DELETE /ncc/campaigns/{campaignId}	
+지정한 캠페인을 영구적으로 삭제합니다. 하위 요소가 존재하는 경우, 모든 하위요소는 함께 삭제됩니다.
+
+delete items	DELETE /ncc/campaigns{?ids}	
+뉴 클릭초이스 다수의 캠페인 삭제
+
+
+BusinessChannel
+Method	HTTP Request	Description
+list	GET /ncc/channels	
+Returns the list of business channel.
+
+list(by channel Type)	GET /ncc/channels{?channelTp}	
+Returns the business channel list of channel type.
+
+list(by ids)	GET /ncc/channels{?ids}	
+Returns the business channel list of input business channel ids.
+
+list(by channel Type)	GET /ncc/purchasable-place-channels{?type}	
+Returns the business channel list of purchasable place type.
+
+get	GET /ncc/channels/{businessChannelId}	
+Returns the business channel of input business channel id.
+
+create	POST /ncc/channels	
+Create a new business channel.
+
+update	PUT /ncc/channels/{businessChannelId}{?fields}	
+Change the business channel
+
+The parameter field, you can enter one of the following: 'name', 'inspectId', 'inspectPw', 'secondary'
+
+delete	DELETE /ncc/channels/{businessChannelId}	
+Remove a business channel
+
+delete(by ids)	DELETE /ncc/channels{?ids}	
+Remove business channels in id list.
+
+request inspect	PUT /ncc/channels/{businessChannelId}/inspect	
+request reinspect of business channel.
+
+
+Criterion
+Method	HTTP Request	Description
+list (by id)	GET /ncc/criterion/{ownerId}{?type}	
+광고그룹에 속한 타겟팅 정보를 반환합니다.
+
+Returns the list of Criterion
+
+get Criterion dictionary code	GET /ncc/criterion-dictionary/{type}	
+광고그룹에서 지원되는 타게팅 코드를 조회할 수 있습니다. 반경(PROXIMITY)는 조회할 수 없습니다.
+
+You can check the target code supported by the adgroup.
+
+The PROXIMITY cannot be inquired.
+
+update bidWeight	PUT /ncc/criterion/{ownerId}/bidWeight{?codes,bidWeight}	
+등록된 타겟팅의 입찰가 가중치를 변경할 수 있습니다.
+
+You can change the weighting of registered criterion.
+
+update Criterion	PUT /ncc/criterion/{ownerId}/{type}	
+타겟팅 유형별로 타겟팅을 변경할 수 있습니다.
+
+타겟팅 변경 시 Request Body에 포함되지 않는 코드는 모드 사용안함 처리가 되니 주의를 요합니다.
+
+반경 타겟팅 추가의 경우 dictionaryCode에 ‘Proximity’ 문자열을 입력해 주세요. 서버에 저장후 정상적인 code로 반환이 됩니다.
+
+Targeting can be changed by targeting type.
+
+Please note that when you change the targeting, all code that is not included in the Request Body will be disabled.
+
+If you want to add a Proximity target, enter the “Proximity” string in dictionaryCode. It will be saved on the server and returned to normal code..
+
+
+AdKeyword
+Method	HTTP Request	Description
+list (by ids)	GET /ncc/keywords{?ids}	
+Returns the list of AdKeyword of input AdKeyword Ids.
+
+list (by adgroup id)	GET /ncc/keywords{?nccAdgroupId,baseSearchId,recordSize,selector}	
+Returns the partially keyword list of input AdGroup Id.
+
+list (by label id)	GET /ncc/keywords{?nccLabelId}	
+Returns the list of AdKeyword of input label id.
+
+get	GET /ncc/keywords/{nccKeywordId}	
+Return an AdKeyword of input AdKeywordId.
+
+create	POST /ncc/keywords{?nccAdgroupId}	
+Create AD Keyword. The maximum number of requests is 100.
+
+update	PUT /ncc/keywords/{nccKeywordId}{?fields}	
+Change the AD Keyword The parameter field, you can enter one of the following: 'userLock', 'bidAmt', 'links', 'inspect'
+
+if field is userLock then Adkeyword.userlock is required
+
+if field is bidAmt then Adkeywords.bidAmt and Adkeyword.useGroupBidAmt are required
+
+if field is links then Adkeyword.links is required and links is json-formatted string
+
+if field is attr then Adkeyword.attr is required and attr is json-formatted string
+
+if field is inspect then Adkeyword's status sholud have pendded.
+
+update-items	PUT /ncc/keywords{?fields}	
+Change AD Keywords.(fields=userLock, bidAmt, inspect, links) The maximum number of requests is 200.
+
+if field is userLock then Adkeyword.userlock is required
+
+if field is bidAmt then Adkeywords.bidAmt and Adkeyword.useGroupBidAmt are required
+
+if field is links then Adkeyword.links is required and links is json-formatted string
+
+if field is attr then Adkeyword.attr is required and attr is json-formatted string
+
+if field is inspect then Adkeyword's status sholud have pendded.
+
+delete	DELETE /ncc/keywords/{nccKeywordId}	
+Remove a AdKeyword.
+
+delete-items	DELETE /ncc/keywords{?ids}	
+remove requested keywords.
+
+
+LabelRef
+Method	HTTP Request	Description
+update	PUT /ncc/label-refs	
+Create or Delete label references to Adgroups or Ads or Keywords.
+
+
+Label
+Method	HTTP Request	Description
+list	GET /ncc/labels	
+Retrieves information on the entire labels of an advertiser.
+
+update	PUT /ncc/labels	
+Renames a label. Any names which are already used in other labels within one advertiser cannot be used.
+
+
+ManagedKeyword
+Method	HTTP Request	Description
+list (by keywords)	GET /ncc/managedKeyword{?keywords}	
+Returns the list of ManagedKeyword List of input keywords
+
+
+ProductGroup
+Method	HTTP Request	Description
+get	GET /ncc/product-groups	
+계정에 등록된 상품 그룹의 목록은 API를 이용하여 조회할 수 있습니다.
+
+The list of product groups registered in the account can be inquired using the API below
+
+
+SharedBudget
+Method	HTTP Request	Description
+get	GET /ncc/shared-budgets	
+공유예산의 리스트를 조회합니다.
+
+Returns the list of Shared budget.
+
+get (by id)	GET /ncc/shared-budgets/{sharedBudgetId}	
+단건 공유예산을 조회합니다.
+
+Returns the Shared budget of input shared budget Id.
+
+create	POST /ncc/shared-budgets	
+공유예산을 생성합니다.
+
+Create the shared budget.
+
+update	PUT /ncc/shared-budgets/{sharedBudgetId}	
+공유예산을 수정합니다.
+
+Change the shared budget.
+
+update budget	PUT /ncc/shared-budgets{?fields}	
+공유예산의 하루예산을 수정합니다.
+
+Modify the daily budget of the shared budget.
+
+delete	DELETE /ncc/shared-budgets{?ids}	
+공유예산의 하루예산을 수정합니다.
+
+Modify the daily budget of the shared budget.
+
+exclude adgroups	PUT /ncc/shared-budgets/adgroups{?ids}	
+공유예산에 연결된 광고그룹을 공유예산에서 제외합니다.
+
+Remove adgroups connected to a shared budget from the shared budget.
+
+exclude campaigns	PUT /ncc/shared-budgets/campaigns{?ids}	
+공유예산에 연결된 캠페인을 공유예산에서 제외합니다.
+
+Remove campaigns connected to a shared budget from the shared budget.
+
+
+Target
+Method	HTTP Request	Description
+list (by owner id)	GET /ncc/targets{?ownerId,types}	
+Retrieves information on multiple Targets
+
+The ownerId value indicates either adgroup id or ad id.
+
+list (by owner id list)	GET /ncc/targets{?ownerIds}	
+Retrieves information on multiple Targets
+
+The owner ID list value indicates either adgroup id or ad id.
+
+update	PUT /ncc/targets/{targetId}	
+타겟팅을 변경합니다.
+
+타겟팅 유형 중 AD_TAG는 쇼핑 캠페인 하위의 카탈로그 광고 소재에 적용되며, 그외 소재에 등록할 때 오류가 발생합니다.
+
+등록가능항 태그의 길이는 최소 3자 부터 최대 10자이며, 최대 30개까지 등록 가능합니다.
+
+Change a target.
+
+Among the targeting types, AD_TAG is applied to catalog creatives under shopping campaigns, and an error occurs when registering for other creatives.
+
+The length of registerable tag is minimum 3 characters to maximum 10 characters. Up to 30 tags can be registered.
+
+
+TimeContract
+Method	HTTP Request	Description
+list	GET /ncc/time-contracts	
+해당 계정의 모든 계약을 조회 한다
+
+Returns the list of time contracts of customer
+
+list (by adgroup id)	GET /ncc/time-contracts{?adgroupId}	
+해당 계정의 특정 광고그룹 하위의 계약을 조회한다.
+
+Returns the list of time contracts of adgroup
+
+
+IpExclusion
+Method	HTTP Request	Description
+get	GET /tool/ip-exclusions	
+Get the registered restricted IP of user.
+
+create	POST /tool/ip-exclusions	
+Register the restrict IP of user.
+
+update	PUT /tool/ip-exclusions	
+Register the restrict IP of user.
+
+delete	DELETE /tool/ip-exclusions/{id}	
+Remove a restricted IP.
+
+delete(by ids)	DELETE /tool/ip-exclusions{?ids}	
+Remove business IPs in id list.
+
+
+Bizmoney
+Method	HTTP Request	Description
+get	GET /billing/bizmoney	
+Returns amount of bizmoney and a status of locks.
+
+get(charge)	GET /billing/bizmoney/histories/charge{?searchStartDt,searchEndDt}	
+bizmoney charging history
+
+get(exhaust)	GET /billing/bizmoney/histories/exhaust{?searchStartDt,searchEndDt}	
+bizmoney deduction history
+
+get(period)	GET /billing/bizmoney/histories/period{?searchStartDt,searchEndDt}	
+Daily BizMoney Status
+
+
+AdAccounts
+Method	HTTP Request	Description
+list	GET /ad-accounts	
+자신이 권한을 가진 (구성원으로 포함된) 광고계정 목록 조회 Retrieve a list of ad accounts in which you have access (as a member)
+
+Retrieve Ad Account Member List	GET /ad-accounts/{adAccountNo}/members	
+자신이 권한을 가진 특정 광고 계정의 구성원 조회 Returns a paginated list of members belonging to the specified ad account.
+
+
+ManagerAccounts
+Method	HTTP Request	Description
+list	GET /manager-accounts	
+자신이 권한을 가진 (구성원으로 포함된) 관리 계정 목록 조회 Retrieve a list of manager accounts in which you have access (as a member)
+
+Retrieve Child Ad Account List	GET /manager-accounts/{managerAccountNo}/child-ad-accounts	
+지정된 관리 계정에 속한 하위 광고 계정의 페이지네이션된 목록 Returns a paginated list of child ad accounts belonging to the specified manager account.
+
+
+StatReport
+Method	HTTP Request	Description
+list	GET /stat-reports	
+Retrieves all of the registered Report Jobs
+
+get	GET /stat-reports/{reportJobId}	
+Retrieves a registered Report Job
+
+create	POST /stat-reports	
+Registers a Report Job
+
+delete	DELETE /stat-reports	
+Delete Report Jobs
+
+delete	DELETE /stat-reports/{reportJobId}	
+Deletes a Report Job
+
+
+Stat
+Method	HTTP Request	Description
+get (by id)	GET /stats{?id,fields,timeRange,datePreset,timeIncrement,breakdown}	
+Receive the Summary Report per single entity
+
+get (by ids)	GET /stats{?ids,fields,timeRange,datePreset,timeIncrement,breakdown}	
+Receive the Summary Report per multiple entities
+
+get (by statType)	GET /stats{?id,statType}	
+Receive the Customized Report per stat type and single entity
+
+
+MasterReport
+Method	HTTP Request	Description
+list	GET /master-reports	
+Get all list of "Master Report" Jobs LIST (maximum 100 jobs) which recently created
+
+get (by id)	GET /master-reports/{id}	
+Get a "Master Report" Job details by specific ID.
+
+create	POST /master-reports	
+Create "Master Report" job
+
+delete all	DELETE /master-reports	
+Delete all "Master Report" jobs.
+
+delete (by id)	DELETE /master-reports/{id}	
+Delete by "Master Report" job id.
+
+
+RelKwdStat
+Method	HTTP Request	Description
+list	GET /keywordstool	
+Retrieves related keywords and their statistical indicators by query parameters. To determine search types and conditions, a user requests data by combining at least one parameter among business ID, ncc business channel ID, keyword hints, season, event ID and by using several conditional parameters.
+
+
+Estimate
+Method	HTTP Request	Description
+get (average position bid)	POST /estimate/average-position-bid/{type}	
+estimate bid by average position statistics.
+
+get (median bid)	POST /estimate/median-bid/{type}	
+estimate bid by median
+
+get (exposure minimum bid)	POST /estimate/exposure-minimum-bid/{type}	
+estimate the minimum bid is always exposure.
+
+get (performance)	POST /estimate/performance/{type}	
+estimate performance data by expect bid.
+
+get (performance-bulk)	POST /estimate/performance-bulk	
+estimate performance data by keyword and bid.
+
+get (average position bid) - NPLA	POST /npla-estimate/average-position-bid/{type}	
+estimate bid by average position statistics.
+
+get (exposure minimum bid) - NPLA	POST /npla-estimate/exposure-minimum-bid/{type}	
+estimate the minimum bid is always exposure.
+
+get (average position bid) - NPC	POST /npc-estimate/average-position-bid/{type}	
+estimate bid by average position statistics.
+
+get (exposure minimum bid) - NPC	POST /npc-estimate/exposure-minimum-bid/{type}	
+estimate the minimum bid is always exposure.
+
+get (performance) - NPC	POST /npc-estimate/performance	
+estimate performance data by keyword.
+
+
+InspectHistory
+Method	HTTP Request	Description
+Inspection history inquiry	POST /ncc/inspect-history	
+여러건의 검수이력을 조회합니다.
+
+View multiple inspection histories.
+
+Inspection history single inquiry	GET /ncc/inspect-history/{id}	
+특정 ID에 해당하는 검수이력을 조회합니다.
+
+View the inspection history corresponding to a specific ID.
+
