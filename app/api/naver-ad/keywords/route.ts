@@ -11,9 +11,11 @@ export async function GET(req: NextRequest) {
     const sp = new URL(req.url).searchParams;
     const groupIds = (sp.get("adgroupIds") || sp.get("adgroupId") || "").split(",").map((s) => s.trim()).filter(Boolean);
     const datePreset = sp.get("datePreset") || "last7days";
+    const debug = sp.get("debug") === "1";
     if (!groupIds.length) return NextResponse.json({ ok: false, error: "adgroupIds 가 필요합니다." }, { status: 400 });
     if (groupIds.length > 30) return NextResponse.json({ ok: false, error: "한 번에 최대 30개 그룹까지 조회할 수 있습니다." }, { status: 400 });
 
+    let statError: string | undefined;
     // 그룹별로 키워드 + 성과 병합 (한 그룹 실패해도 나머지는 반환)
     const perGroup = await Promise.all(groupIds.map(async (agId) => {
       try {
@@ -24,14 +26,16 @@ export async function GET(req: NextRequest) {
           try {
             const stats = await getStats(ids, datePreset);
             statById = Object.fromEntries((stats || []).map((s) => [s.id, s]));
-          } catch { /* 성과 실패해도 키워드는 반환 */ }
+          } catch (e) { if (!statError) statError = String((e as Error)?.message || e); }
         }
         return keywords.map((k) => ({ ...k, stat: statById[k.nccKeywordId] || null }));
       } catch {
         return [];
       }
     }));
-    return NextResponse.json({ ok: true, keywords: perGroup.flat() });
+    const body: Record<string, unknown> = { ok: true, keywords: perGroup.flat() };
+    if (debug && statError) body.statError = statError;
+    return NextResponse.json(body);
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "키워드 조회 실패") }, { status: 500 });
   }

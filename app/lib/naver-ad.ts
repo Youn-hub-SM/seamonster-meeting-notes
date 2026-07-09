@@ -71,10 +71,15 @@ export const listCampaigns = () => naverAd<NaverCampaign[]>("GET", "/ncc/campaig
 export const listAdgroups = (nccCampaignId: string) => naverAd<NaverAdgroup[]>("GET", "/ncc/adgroups", { query: { nccCampaignId } });
 export const listKeywords = (nccAdgroupId: string) => naverAd<NaverKeyword[]>("GET", "/ncc/keywords", { query: { nccAdgroupId } });
 
-// 성과(효율 판단). ids 최대 여러개. fields는 JSON 배열 문자열, datePreset 예: "last7days".
-export function getStats(ids: string[], datePreset = "last7days"): Promise<NaverStat[]> {
+// 성과(효율 판단). ids·fields 모두 JSON 배열 "문자열"로 전달해야 함. datePreset 예: "last7days".
+// 응답은 { data: [ StatObject ] } 형태(구버전은 배열) — 둘 다 허용.
+export async function getStats(ids: string[], datePreset = "last7days"): Promise<NaverStat[]> {
+  if (!ids.length) return [];
   const fields = JSON.stringify(["impCnt", "clkCnt", "salesAmt", "cpc", "ctr", "avgRnk", "ccnt", "crto"]);
-  return naverAd<NaverStat[]>("GET", "/stats", { query: { ids, fields, datePreset } });
+  const res = await naverAd<NaverStat[] | { data?: NaverStat[] }>("GET", "/stats", {
+    query: { ids: JSON.stringify(ids), fields, datePreset },
+  });
+  return Array.isArray(res) ? res : (res?.data ?? []);
 }
 
 // ── 입찰가 조정 ── 최대 200개. useGroupBidAmt=false 여야 개별 bidAmt 적용.
