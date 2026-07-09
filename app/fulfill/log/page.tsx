@@ -215,12 +215,22 @@ export default function DeliveryLogPage() {
           </p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <input type="date" className="b2b-input" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ width: "auto" }} title="추가할 날짜" />
-          <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
-          <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계</Link>
-          <Link className="b2b-btn-secondary" href="/fulfill/settings">단가 설정</Link>
-          <a className="b2b-btn-secondary" href={exportHref()} style={rows.length ? undefined : { pointerEvents: "none", opacity: 0.5 }} title="현재 기간을 엑셀로 추출">엑셀 추출</a>
-          <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
+          {/* 데스크톱 전용 — 모바일에선 현황 확인만 하도록 숨김 (.dlog-desk) */}
+          <div className="dlog-desk sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <input type="date" className="b2b-input" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ width: "auto" }} title="추가할 날짜" />
+            <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
+            <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계</Link>
+            <Link className="b2b-btn-secondary" href="/fulfill/settings">단가 설정</Link>
+            <a className="b2b-btn-secondary" href={exportHref()} style={rows.length ? undefined : { pointerEvents: "none", opacity: 0.5 }} title="현재 기간을 엑셀로 추출">엑셀 추출</a>
+          </div>
+          {/* 새로고침 — 모바일에서도 유일하게 남는 버튼(아이콘형) */}
+          <button className="b2b-btn-secondary dlog-refresh" onClick={load} disabled={loading} aria-label="새로고침" title="새로고침"
+            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 40, height: 38, padding: "0 12px" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={loading ? "dlog-spin" : ""} aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+          </button>
         </div>
       </header>
 

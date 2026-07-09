@@ -3315,3 +3315,14 @@ a {
   .voc-photo-fig { page-break-inside: avoid; }
   .voc-photo { height: 125mm !important; max-height: none !important; object-fit: contain !important; border: none !important; background: #fff !important; page-break-inside: avoid; margin-bottom: 8mm !important; }
 }
+
+/* ── 배송일지(/fulfill/log): 모바일에선 현황 확인만 — 새로고침(아이콘)만 노출 ── */
+.b2b-page-head .dlog-refresh { flex: 0 0 auto !important; width: 40px !important; padding: 0 !important; color: var(--sm-text-mid); }
+.dlog-refresh:hover { color: var(--sm-orange); }
+.dlog-refresh svg { display: block; }
+@keyframes dlog-spin { to { transform: rotate(360deg); } }
+.dlog-spin { animation: dlog-spin 0.8s linear infinite; transform-origin: center; }
+@media (max-width: 768px) {
+  .dlog-desk { display: none !important; }
+  .b2b-page-head .dlog-refresh { margin-left: auto; }   /* 헤더 우측에 단정하게 */
+}
