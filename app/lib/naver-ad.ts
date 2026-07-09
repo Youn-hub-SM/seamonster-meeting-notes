@@ -121,6 +121,22 @@ export async function listAdgroupsWithStats(campaignIds: string[], range: StatRa
   return groups.map((g) => ({ ...g, stat: statById[g.nccAdgroupId] || null }));
 }
 
+// 쇼핑검색광고 세부 검색어 리포트(statType=NPLA_SCH_KEYWORD). id=광고그룹(또는 캠페인) 단일.
+// 최근 30일·노출순 최대 1000개. datePreset/fields 안 받음. 응답 형태 미확정이라 유연 파싱.
+export type NplaSearchKeyword = { keyword: string; impCnt?: number; clkCnt?: number; salesAmt?: number; ctr?: number; cpc?: number; ccnt?: number; convAmt?: number; ror?: number };
+export async function getShoppingSearchKeywords(id: string): Promise<{ rows: NplaSearchKeyword[]; raw: unknown }> {
+  const res = await naverAd<unknown>("GET", "/stats", { query: { id, statType: "NPLA_SCH_KEYWORD" } });
+  const arr = Array.isArray(res) ? res : (res as { data?: unknown[] })?.data ?? [];
+  const rows = (arr as Record<string, unknown>[]).map((r) => ({
+    keyword: String(r.keyword ?? r.searchKeyword ?? r.nqi ?? r.schKwd ?? ""),
+    impCnt: Number(r.impCnt ?? 0), clkCnt: Number(r.clkCnt ?? 0), salesAmt: Number(r.salesAmt ?? 0),
+    ctr: r.ctr != null ? Number(r.ctr) : undefined, cpc: r.cpc != null ? Number(r.cpc) : undefined,
+    ccnt: r.ccnt != null ? Number(r.ccnt) : undefined, convAmt: r.convAmt != null ? Number(r.convAmt) : undefined,
+    ror: r.ror != null ? Number(r.ror) : undefined,
+  }));
+  return { rows, raw: res };
+}
+
 // 자격 확인용 가벼운 핑(캠페인 목록). 실패 시 에러 던짐.
 export async function pingNaverAd(): Promise<{ ok: boolean; campaigns: number }> {
   const c = await listCampaigns();
