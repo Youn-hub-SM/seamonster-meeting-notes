@@ -1,0 +1,90 @@
+import crypto from "crypto";
+
+// 네이버 검색광고 API 클라이언트 (서버 전용).
+//  Base: https://api.searchad.naver.com
+//  인증 헤더: X-Timestamp, X-API-KEY(액세스 라이선스), X-Customer(고객 ID), X-Signature
+//   서명 = base64( HMAC-SHA256( secretKey, `${timestamp}.${method}.${path}` ) )   ※ path는 쿼리 제외 순수 경로
+//  자격은 env: NAVER_AD_API_KEY · NAVER_AD_SECRET · NAVER_AD_CUSTOMER_ID
+//  용도: 파워링크 키워드 조회 + 입찰가(bidAmt) 조정으로 검색광고 효율화.
+
+const BASE = "https://api.searchad.naver.com";
+
+export function isNaverAdConfigured(): boolean {
+  return !!(process.env.NAVER_AD_API_KEY && process.env.NAVER_AD_SECRET && process.env.NAVER_AD_CUSTOMER_ID);
+}
+
+function creds() {
+  const apiKey = process.env.NAVER_AD_API_KEY || "";
+  const secret = process.env.NAVER_AD_SECRET || "";
+  const customerId = process.env.NAVER_AD_CUSTOMER_ID || "";
+  if (!apiKey || !secret || !customerId) throw new Error("네이버 광고 API 자격(NAVER_AD_API_KEY·SECRET·CUSTOMER_ID)이 설정되지 않았습니다.");
+  return { apiKey, secret, customerId };
+}
+
+function sign(timestamp: string, method: string, path: string, secret: string): string {
+  return crypto.createHmac("sha256", secret).update(`${timestamp}.${method}.${path}`).digest("base64");
+}
+
+type ReqOpts = { query?: Record<string, string | number | string[] | undefined>; body?: unknown };
+
+// 서명 요청. path 는 쿼리 제외 순수 경로(예: "/ncc/keywords"). 서명엔 path만, URL엔 쿼리 포함.
+export async function naverAd<T = unknown>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, opts: ReqOpts = {}): Promise<T> {
+  const { apiKey, secret, customerId } = creds();
+  const ts = String(Date.now());
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts.query || {})) {
+    if (v === undefined) continue;
+    if (Array.isArray(v)) v.forEach((x) => qs.append(k, String(x)));
+    else qs.append(k, String(v));
+  }
+  const url = `${BASE}${path}${qs.toString() ? `?${qs}` : ""}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json; charset=UTF-8",
+      "X-Timestamp": ts,
+      "X-API-KEY": apiKey,
+      "X-Customer": customerId,
+      "X-Signature": sign(ts, method, path, secret),
+    },
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    cache: "no-store",
+  });
+  const text = await res.text().catch(() => "");
+  let json: unknown = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+  if (!res.ok) {
+    const msg = (json as { title?: string; detail?: string; message?: string } | null);
+    throw new Error(`네이버 광고 API ${res.status}: ${msg?.title || msg?.detail || msg?.message || text.slice(0, 200) || ""}`);
+  }
+  return json as T;
+}
+
+// ── 타입(주요 필드) ──
+export type NaverCampaign = { nccCampaignId: string; name: string; campaignTp: string; status?: string; statusReason?: string; dailyBudget?: number; useDailyBudget?: boolean; userLock?: boolean };
+export type NaverAdgroup = { nccAdgroupId: string; nccCampaignId: string; name: string; adgroupType?: string; bidAmt?: number; useDailyBudget?: boolean; dailyBudget?: number; status?: string; userLock?: boolean };
+export type NaverKeyword = { nccKeywordId: string; nccAdgroupId: string; customerId?: number; keyword: string; bidAmt: number; useGroupBidAmt: boolean; adRelevanceScore?: number; expectedClickScore?: number; status?: string; statusReason?: string; userLock?: boolean };
+export type NaverStat = { id: string; impCnt?: number; clkCnt?: number; salesAmt?: number; cpc?: number; ctr?: number; avgRnk?: number; ccnt?: number; crto?: number };
+
+// ── 조회 ──
+export const listCampaigns = () => naverAd<NaverCampaign[]>("GET", "/ncc/campaigns");
+export const listAdgroups = (nccCampaignId: string) => naverAd<NaverAdgroup[]>("GET", "/ncc/adgroups", { query: { nccCampaignId } });
+export const listKeywords = (nccAdgroupId: string) => naverAd<NaverKeyword[]>("GET", "/ncc/keywords", { query: { nccAdgroupId } });
+
+// 성과(효율 판단). ids 최대 여러개. fields는 JSON 배열 문자열, datePreset 예: "last7days".
+export function getStats(ids: string[], datePreset = "last7days"): Promise<NaverStat[]> {
+  const fields = JSON.stringify(["impCnt", "clkCnt", "salesAmt", "cpc", "ctr", "avgRnk", "ccnt", "crto"]);
+  return naverAd<NaverStat[]>("GET", "/stats", { query: { ids, fields, datePreset } });
+}
+
+// ── 입찰가 조정 ── 최대 200개. useGroupBidAmt=false 여야 개별 bidAmt 적용.
+export type BidUpdate = { nccKeywordId: string; bidAmt: number; useGroupBidAmt: boolean };
+export function updateKeywordBids(updates: BidUpdate[]): Promise<NaverKeyword[]> {
+  return naverAd<NaverKeyword[]>("PUT", "/ncc/keywords", { query: { fields: "bidAmt" }, body: updates });
+}
+
+// 자격 확인용 가벼운 핑(캠페인 목록). 실패 시 에러 던짐.
+export async function pingNaverAd(): Promise<{ ok: boolean; campaigns: number }> {
+  const c = await listCampaigns();
+  return { ok: true, campaigns: Array.isArray(c) ? c.length : 0 };
+}
