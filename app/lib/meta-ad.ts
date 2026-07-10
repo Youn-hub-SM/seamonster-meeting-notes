@@ -12,8 +12,8 @@ export function isMetaAdConfigured(): boolean {
 }
 
 function creds() {
-  const token = process.env.META_ACCESS_TOKEN || "";
-  const rawAcct = process.env.META_AD_ACCOUNT_ID || "";
+  const token = (process.env.META_ACCESS_TOKEN || "").trim();
+  const rawAcct = (process.env.META_AD_ACCOUNT_ID || "").trim().replace(/\s+/g, ""); // 공백/개행 제거(붙여넣기 시 흔함)
   if (!token || !rawAcct) throw new Error("메타 광고 API 자격(META_ACCESS_TOKEN·META_AD_ACCOUNT_ID)이 설정되지 않았습니다.");
   const accountId = rawAcct.startsWith("act_") ? rawAcct : `act_${rawAcct}`;
   return { token, accountId };
