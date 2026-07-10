@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type Stage = { no: number; key: string; title: string; sub: string; desc: string; color: string; defined: boolean };
 
-// 사용자 정의 5단계 파이프라인(스펙 기반). 세부 기준은 추후 설정에서 커스텀.
+// 4단계 파이프라인(스펙 기반). 세부 기준값은 설정에서 시기별로 커스텀. 판정 지표=ROAS·CPA·CTR·구매수 종합.
 const STAGES: Stage[] = [
   { no: 1, key: "abo", title: "ABO 테스트", sub: "광고세트 예산 최적화", color: "#4c6ef5", defined: true,
     desc: "광고 소재를 특정 예산·목표 기준으로 A/B 테스트. 기준을 통과한 소재만 2단계로 승격합니다." },
@@ -14,8 +14,6 @@ const STAGES: Stage[] = [
     desc: "설정 기준(예: ROAS n% 이상 · n일 이상 유지) 충족 시 예산 +20% 증액을 권장하는 알림을 띄웁니다." },
   { no: 4, key: "decline", title: "효율 하락", sub: "리프레시", color: "#e8590c", defined: true,
     desc: "효율이 떨어지는 구간. ABO를 통과한 새 소재가 계속 유입되도록 관리합니다." },
-  { no: 5, key: "stage5", title: "5단계", sub: "정의 필요", color: "#868e96", defined: false,
-    desc: "스펙에 5단계라고 되어 있으나 세부 정의가 아직 없습니다. 어떤 단계인지 알려주시면 반영하겠습니다." },
 ];
 
 export default function MetaAdPage() {
