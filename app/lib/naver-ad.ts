@@ -134,6 +134,54 @@ export async function getShoppingSearchKeywords(id: string): Promise<NplaSearchK
   }));
 }
 
+// ── 구매 전환 집계(AD_CONVERSION_DETAIL 리포트) ──
+// 하루 단위 비동기 리포트(생성→폴링→TSV 다운로드). TSV 15컬럼(탭):
+//  0 date,1 customer,2 campaign,3 adgroup,4 keyword(nkw-.. 또는 '-'),5 adId,6 bizChannel,
+//  7 hour,8 region,9 media,10 pcMobile,11 convMethod(1직접/2간접),12 convType(purchase/add_to_cart..),13 convCount,14 convSales
+export type ConvRow = { adgroupId: string; keywordId: string | null; convType: string; conv: number; sales: number };
+const _sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function signedHeaders(method: string, path: string): Record<string, string> {
+  const { apiKey, secret, customerId } = creds();
+  const ts = String(Date.now());
+  return { "Content-Type": "application/json; charset=UTF-8", "X-Timestamp": ts, "X-API-KEY": apiKey, "X-Customer": customerId, "X-Signature": sign(ts, method, path, secret) };
+}
+
+function parseConvTsv(tsv: string): ConvRow[] {
+  const out: ConvRow[] = [];
+  for (const line of tsv.split("\n")) {
+    if (!line.trim()) continue;
+    const c = line.split("\t");
+    if (c.length < 15) continue;
+    out.push({ adgroupId: c[3], keywordId: c[4] && c[4] !== "-" ? c[4] : null, convType: c[12], conv: Number(c[13]) || 0, sales: Number(c[14]) || 0 });
+  }
+  return out;
+}
+
+// 하루치 전환 상세 행 조회(모든 전환유형 포함 — 필터는 호출측). statDt="YYYY-MM-DD".
+export async function fetchConvReportDay(statDt: string): Promise<ConvRow[]> {
+  const job = await naverAd<{ reportJobId?: number | string; id?: number | string; status?: string; downloadUrl?: string }>("POST", "/stat-reports", { body: { reportTp: "AD_CONVERSION_DETAIL", statDt } });
+  const jobId = job.reportJobId ?? job.id;
+  if (jobId == null) return [];
+  let status = String(job.status || ""); let url = String(job.downloadUrl || "");
+  for (let i = 0; i < 25 && status !== "BUILT" && status !== "DONE"; i++) {
+    await _sleep(1200);
+    const g = await naverAd<{ status?: string; downloadUrl?: string }>("GET", `/stat-reports/${jobId}`);
+    status = String(g.status || ""); url = String(g.downloadUrl || "");
+    if (status === "NONE" || status === "ERROR" || status === "REGIST_ERROR") break;
+  }
+  let rows: ConvRow[] = [];
+  if (url) {
+    try {
+      const u = new URL(url);
+      const dl = await fetch(url, { headers: signedHeaders("GET", u.pathname), cache: "no-store" });
+      if (dl.ok) rows = parseConvTsv(await dl.text());
+    } catch { /* 다운로드 실패 시 빈 배열 */ }
+  }
+  await naverAd("DELETE", `/stat-reports/${jobId}`).catch(() => {}); // 잡 정리(미삭제 시 자동 30일 후 삭제)
+  return rows;
+}
+
 // 자격 확인용 가벼운 핑(캠페인 목록). 실패 시 에러 던짐.
 export async function pingNaverAd(): Promise<{ ok: boolean; campaigns: number }> {
   const c = await listCampaigns();
