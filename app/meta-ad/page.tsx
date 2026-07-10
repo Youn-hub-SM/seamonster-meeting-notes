@@ -34,6 +34,7 @@ export default function MetaAdPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [liveOnly, setLiveOnly] = useState(true); // 현재 라이브(effective_status=ACTIVE)만
 
   useEffect(() => {
     (async () => {
@@ -65,18 +66,18 @@ export default function MetaAdPage() {
     if (!th) return null;
     const s = c.stat; const enough = s.spend >= th.minSpend;
     if (c.cbo) {
-      if (!enough) return <Badge color="#868e96">CBO · 데이터 부족</Badge>;
+      if (!enough) return <Badge color="#868e96">성과테스트 · 데이터 부족</Badge>;
       if (s.roas >= th.scaleRoas) return <Badge color="#2f9e44">③ 증액 권장 +{th.scalePct}%</Badge>;
       if (s.roas < th.declineRoas) return <Badge color="#e03131">④ 효율 하락</Badge>;
-      return <Badge color="#f76707">② CBO 정상</Badge>;
+      return <Badge color="#f76707">② 성과테스트</Badge>;
     }
-    return <Badge color="#4c6ef5">ABO 캠페인</Badge>;
+    return <Badge color="#4c6ef5">소재테스트</Badge>;
   }
   function adsetStage(a: Adset) {
-    if (!th || !a.abo) return a.abo ? null : <Badge color="#adb5bd">CBO 하위</Badge>;
+    if (!th || !a.abo) return a.abo ? null : <Badge color="#adb5bd">성과테스트 하위</Badge>;
     const s = a.stat; if (s.spend < th.minSpend) return <Badge color="#868e96">① 테스트 중</Badge>;
     const pass = s.roas >= th.aboPassRoas && s.purchases >= th.aboMinPurchases && (th.aboMaxCpa === 0 || (s.cpa > 0 && s.cpa <= th.aboMaxCpa));
-    return pass ? <Badge color="#2f9e44">① 통과 → CBO 승격</Badge> : <Badge color="#868e96">① 미달</Badge>;
+    return pass ? <Badge color="#2f9e44">① 통과 → 성과테스트 승격</Badge> : <Badge color="#868e96">① 미달</Badge>;
   }
 
   async function toggle(id: string, current: string, name: string) {
@@ -92,7 +93,11 @@ export default function MetaAdPage() {
   }
 
   const rows = tab === "campaign" ? (ov?.campaigns || []) : tab === "adset" ? (ov?.adsets || []) : (ov?.ads || []);
-  const shown = useMemo(() => [...rows].sort((a, b) => b.stat.spend - a.stat.spend), [rows]);
+  const shown = useMemo(() => {
+    const list = liveOnly ? rows.filter((r) => r.effective_status === "ACTIVE") : rows;
+    return [...list].sort((a, b) => b.stat.spend - a.stat.spend);
+  }, [rows, liveOnly]);
+  const liveN = (arr?: { effective_status: string }[]) => (arr ? (liveOnly ? arr.filter((r) => r.effective_status === "ACTIVE").length : arr.length) : "");
   const totals = useMemo(() => shown.reduce((t, r) => ({ spend: t.spend + r.stat.spend, purch: t.purch + r.stat.purchases, val: t.val + r.stat.purchaseValue }), { spend: 0, purch: 0, val: 0 }), [shown]);
   const blendRoas = totals.spend ? totals.val / totals.spend : 0;
 
@@ -111,7 +116,7 @@ export default function MetaAdPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">메타 광고</h1>
-          <p className="b2b-page-subtitle">4단계(ABO→CBO→증액→효율하락) 기준으로 소재를 판정합니다. {status?.account?.name ? <b>· {status.account.name}</b> : null} <Link href="/meta-ad/settings">기준 설정</Link></p>
+          <p className="b2b-page-subtitle">4단계(소재테스트→성과테스트→증액→효율하락) 기준으로 소재를 판정합니다. {status?.account?.name ? <b>· {status.account.name}</b> : null} <Link href="/meta-ad/settings">기준 설정</Link></p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
@@ -131,9 +136,9 @@ export default function MetaAdPage() {
         <>
           {/* 단계 범례 */}
           <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10, fontSize: 11 }}>
-            <Badge color="#4c6ef5">① ABO 테스트</Badge><Badge color="#f76707">② CBO 경쟁</Badge>
+            <Badge color="#4c6ef5">① 소재테스트</Badge><Badge color="#f76707">② 성과테스트</Badge>
             <Badge color="#2f9e44">③ 증액 권장</Badge><Badge color="#e03131">④ 효율 하락</Badge>
-            <span className="sm-faint">ROAS=매출÷지출(배수). 기준값은 <Link href="/meta-ad/settings">설정</Link>에서.</span>
+            <span className="sm-faint">소재테스트=ABO, 성과테스트=CBO. ROAS=매출÷지출(배수). 기준값은 <Link href="/meta-ad/settings">설정</Link>에서.</span>
           </div>
 
           {/* KPI */}
@@ -144,10 +149,15 @@ export default function MetaAdPage() {
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">ROAS</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-orange)" }}>{roasFmt(blendRoas)}</div></div>
           </div>
 
-          {/* 탭 */}
-          <div className="sm-row" style={{ gap: 6, marginBottom: 10 }}>
-            {([["campaign", `캠페인 ${ov?.campaigns.length ?? ""}`], ["adset", `광고세트 ${ov?.adsets.length ?? ""}`], ["ad", `소재 ${ov?.ads.length ?? ""}`]] as const).map(([k, l]) =>
-              <Chip key={k} on={tab === k} onClick={() => setTab(k)}>{l}</Chip>)}
+          {/* 탭 + 라이브 필터 */}
+          <div className="sm-row" style={{ gap: 6, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <Chip on={tab === "campaign"} onClick={() => setTab("campaign")}>캠페인 {liveN(ov?.campaigns)}</Chip>
+            <Chip on={tab === "adset"} onClick={() => setTab("adset")}>광고세트 {liveN(ov?.adsets)}</Chip>
+            <Chip on={tab === "ad"} onClick={() => setTab("ad")}>소재 {liveN(ov?.ads)}</Chip>
+            <div style={{ flex: 1 }} />
+            <label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+              <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} />라이브만 (게재 중)
+            </label>
           </div>
 
           {loading ? <div className="b2b-loading">불러오는 중...</div> : (

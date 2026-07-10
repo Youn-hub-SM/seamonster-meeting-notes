@@ -10,9 +10,9 @@ type Thresholds = {
 
 const FIELDS: { key: keyof Thresholds; label: string; hint: string; step?: number }[] = [
   { key: "minSpend", label: "판정 최소 지출(원)", hint: "이 금액 미만이면 데이터 부족으로 판정 보류" },
-  { key: "aboPassRoas", label: "ABO 통과 ROAS ≥", hint: "예: 2 = 200%(매출/지출 2배)", step: 0.1 },
-  { key: "aboMinPurchases", label: "ABO 통과 구매수 ≥", hint: "최소 구매 건수" },
-  { key: "aboMaxCpa", label: "ABO 통과 CPA ≤ (원)", hint: "0 이면 미사용" },
+  { key: "aboPassRoas", label: "소재테스트 통과 ROAS ≥", hint: "예: 2 = 200%(매출/지출 2배)", step: 0.1 },
+  { key: "aboMinPurchases", label: "소재테스트 통과 구매수 ≥", hint: "최소 구매 건수" },
+  { key: "aboMaxCpa", label: "소재테스트 통과 CPA ≤ (원)", hint: "0 이면 미사용" },
   { key: "scaleRoas", label: "증액 권장 ROAS ≥", hint: "이 이상이면 증액 권장", step: 0.1 },
   { key: "scaleDays", label: "증액 권장 유지일(일)", hint: "N일 이상 유지 시(현재는 선택 기간 기준)" },
   { key: "scalePct", label: "증액 권장 비율(%)", hint: "예: 20 = +20%" },
