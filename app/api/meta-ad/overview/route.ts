@@ -26,7 +26,15 @@ export async function GET(req: NextRequest) {
       campaigns: campaigns.map((c) => ({ ...c, cbo: isCBO(c), stat: ci.byId[c.id] || blank })),
       adsets: adsets.map((a) => ({ ...a, abo: isABO(a), stat: ai.byId[a.id] || blank })),
       ads: ads.map((a) => ({ ...a, stat: adi.byId[a.id] || blank })),
-      ...(debug ? { rawInsightSample: ci.rawSample } : {}),
+      ...(debug ? {
+        rawInsightSample: ci.rawSample,
+        debugInfo: {
+          sampleKeys: ci.rawSample ? Object.keys(ci.rawSample) : [],
+          sampleCampaignId: (ci.rawSample as Record<string, unknown> | undefined)?.campaign_id,
+          firstCampaignId: campaigns[0]?.id,
+          byIdCounts: { campaign: Object.keys(ci.byId).length, adset: Object.keys(ai.byId).length, ad: Object.keys(adi.byId).length },
+        },
+      } : {}),
     };
     return NextResponse.json(out);
   } catch (err) {
