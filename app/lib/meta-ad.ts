@@ -126,8 +126,10 @@ export async function metaDiagnostics(): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = { targetAccountId: accountId };
   try { out.me = await metaGet<{ id?: string; name?: string }>("/me", { fields: "id,name" }); } catch (e) { out.meErr = String((e as Error)?.message || e); }
   try {
-    const dt = await metaGet<{ data?: { scopes?: string[]; type?: string; app_id?: string; is_valid?: boolean; granular_scopes?: unknown } }>("/debug_token", { input_token: token });
-    out.scopes = dt?.data?.scopes; out.tokenType = dt?.data?.type; out.appId = dt?.data?.app_id; out.tokenValid = dt?.data?.is_valid; out.granularScopes = dt?.data?.granular_scopes;
+    const dt = await metaGet<{ data?: { scopes?: string[]; type?: string; app_id?: string; is_valid?: boolean; expires_at?: number; data_access_expires_at?: number } }>("/debug_token", { input_token: token });
+    out.scopes = dt?.data?.scopes; out.tokenType = dt?.data?.type; out.appId = dt?.data?.app_id; out.tokenValid = dt?.data?.is_valid;
+    out.expiresAt = dt?.data?.expires_at; // 0 = 만료 없음
+    out.dataAccessExpiresAt = dt?.data?.data_access_expires_at;
   } catch (e) { out.debugTokenErr = String((e as Error)?.message || e); }
   try {
     const aa = await metaGet<{ data?: { id?: string; name?: string; account_status?: number }[] }>("/me/adaccounts", { fields: "id,name,account_status", limit: 200 });
