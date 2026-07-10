@@ -118,3 +118,21 @@ export async function setEntityStatus(id: string, status: "ACTIVE" | "PAUSED"): 
 // ── 단계 분류 ── 예산이 캠페인에 있으면 CBO, 광고세트에 있으면 ABO.
 export const isCBO = (c: MetaCampaign) => !!(Number(c.daily_budget) || Number(c.lifetime_budget));
 export const isABO = (a: MetaAdset) => !!(Number(a.daily_budget) || Number(a.lifetime_budget));
+
+// ── 진단 ── 토큰 스코프 + 접근 가능한 광고계정 + 대상 계정 접근 여부. 권한 문제 원인 파악용.
+export async function metaDiagnostics(): Promise<Record<string, unknown>> {
+  const { token, accountId } = creds();
+  const out: Record<string, unknown> = { targetAccountId: accountId };
+  try { out.me = await metaGet<{ id?: string; name?: string }>("/me", { fields: "id,name" }); } catch (e) { out.meErr = String((e as Error)?.message || e); }
+  try {
+    const dt = await metaGet<{ data?: { scopes?: string[]; type?: string; app_id?: string; is_valid?: boolean; granular_scopes?: unknown } }>("/debug_token", { input_token: token });
+    out.scopes = dt?.data?.scopes; out.tokenType = dt?.data?.type; out.appId = dt?.data?.app_id; out.tokenValid = dt?.data?.is_valid; out.granularScopes = dt?.data?.granular_scopes;
+  } catch (e) { out.debugTokenErr = String((e as Error)?.message || e); }
+  try {
+    const aa = await metaGet<{ data?: { id?: string; name?: string; account_status?: number }[] }>("/me/adaccounts", { fields: "id,name,account_status", limit: 200 });
+    const list = (aa?.data || []).map((a) => ({ id: a.id, name: a.name }));
+    out.adAccounts = list;
+    out.targetInList = list.some((a) => a.id === accountId);
+  } catch (e) { out.adAccountsErr = String((e as Error)?.message || e); }
+  return out;
+}
