@@ -97,11 +97,12 @@ function parseInsight(r: InsightRow): MetaInsight {
 }
 export async function getInsights(level: "campaign" | "adset" | "ad", range: StatRange = {}, debug = false): Promise<{ byId: Record<string, MetaInsight>; rawSample?: InsightRow }> {
   const { accountId } = creds();
-  const params: Record<string, string> = { level, fields: "spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,cost_per_action_type" };
+  const key = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id";
+  // level만으로는 breakdown id 가 안 붙는 경우가 있어 fields 에 명시.
+  const params: Record<string, string> = { level, fields: `${key},spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,cost_per_action_type` };
   if (range.since && range.until) params.time_range = JSON.stringify({ since: range.since, until: range.until });
   else params.date_preset = range.datePreset || "last_7d";
   const rows = await metaList<InsightRow>(`/${accountId}/insights`, params);
-  const key = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id";
   const byId: Record<string, MetaInsight> = {};
   for (const r of rows) { const id = r[key] as string | undefined; if (id) byId[id] = parseInsight(r); }
   return { byId, ...(debug ? { rawSample: rows[0] } : {}) };
