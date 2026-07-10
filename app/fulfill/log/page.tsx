@@ -66,6 +66,17 @@ export default function DeliveryLogPage() {
   const boxDraftRef = useRef(boxDraft); boxDraftRef.current = boxDraft;
   const historyRef = useRef(history); historyRef.current = history;
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // 저장 직렬화 — 같은 날짜의 저장이 겹치면(연타·느린 네트워크) 오래된 응답이 최신 값을 덮어쓰지 않도록.
+  const running = useRef<Set<string>>(new Set());
+  const rerun = useRef<Set<string>>(new Set());
+  const runExclusive = useCallback(async (key: string, fn: () => Promise<void>) => {
+    if (running.current.has(key)) { rerun.current.add(key); return; } // 진행 중이면 끝난 뒤 한 번 더
+    running.current.add(key);
+    try { await fn(); } finally {
+      running.current.delete(key);
+      if (rerun.current.has(key)) { rerun.current.delete(key); runExclusive(key, fn); }
+    }
+  }, []);
 
   const cur = (r: Row, k: EditKey): number => Number(draft[r.log_date]?.[k] ?? (r[k] as number)) || 0;
   const curMemo = (r: Row): string => draft[r.log_date]?.memo ?? (r.memo ?? "");
@@ -89,12 +100,15 @@ export default function DeliveryLogPage() {
   }
 
   async function save(date: string) {
-    const d = draftRef.current[date]; if (!d) return;
-    try {
-      await post({ log_date: date, ...d });
-      setRows((rs) => rs.map((r) => (r.log_date === date ? applyDraft(r, d) : r)));
-      setDraft((prev) => { const n = { ...prev }; delete n[date]; return n; });
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    await runExclusive("f:" + date, async () => {
+      const snap = draftRef.current[date]; if (!snap) return;
+      try {
+        await post({ log_date: date, ...snap });
+        setRows((rs) => rs.map((r) => (r.log_date === date ? applyDraft(r, snap) : r)));
+        // 방금 저장한 값과 같은 칸만 초기화 — 저장 중 바꾼 값은 유지(원복 방지)
+        setDraft((prev) => reconcileFieldDraft(prev, date, snap));
+      } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    });
   }
 
   const boxVal = (r: Row, side: "n" | "g", cat: string): string =>
@@ -103,24 +117,27 @@ export default function DeliveryLogPage() {
     setBoxDraft((bd) => ({ ...bd, [date]: { ...bd[date], [side]: { ...bd[date]?.[side], [cat]: v } } }));
 
   async function saveBoxes(date: string) {
-    const r = rowsRef.current.find((x) => x.log_date === date); if (!r) return;
-    const build = (side: "n" | "g"): Boxes => {
-      const base = side === "n" ? r.boxes_normal : r.boxes_guar;
-      const dr = boxDraftRef.current[date]?.[side] || {};
-      const out: Boxes = {};
-      for (const c of BOX_CATEGORIES) { const v = c in dr ? Number(dr[c]) || 0 : Number(base?.[c]) || 0; if (v > 0) out[c] = Math.round(v); }
-      return out;
-    };
-    const bn = build("n"), bg = build("g");
-    // 택배량이 바뀌면 기본운임도 다시 계산해서 함께 저장(통계·엑셀과 일치 유지).
-    const rt = ratesFor(historyRef.current, date);
-    const baseN = baseFeeFromBoxes(bn, rt.boxTiers);
-    const baseG = baseFeeFromBoxes(bg, rt.boxTiers) + rt.guarSurcharge * sumBoxes(bg);
-    try {
-      await post({ log_date: date, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG });
-      setRows((rs) => rs.map((x) => (x.log_date === date ? { ...x, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG } : x)));
-      setBoxDraft((prev) => { const n = { ...prev }; delete n[date]; return n; });
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    await runExclusive("b:" + date, async () => {
+      const r = rowsRef.current.find((x) => x.log_date === date); if (!r) return;
+      const build = (side: "n" | "g"): Boxes => {
+        const base = side === "n" ? r.boxes_normal : r.boxes_guar;
+        const dr = boxDraftRef.current[date]?.[side] || {};
+        const out: Boxes = {};
+        for (const c of BOX_CATEGORIES) { const v = c in dr ? Number(dr[c]) || 0 : Number(base?.[c]) || 0; if (v > 0) out[c] = Math.round(v); }
+        return out;
+      };
+      const bn = build("n"), bg = build("g");
+      // 택배량이 바뀌면 기본운임도 다시 계산해서 함께 저장(통계·엑셀과 일치 유지).
+      const rt = ratesFor(historyRef.current, date);
+      const baseN = baseFeeFromBoxes(bn, rt.boxTiers);
+      const baseG = baseFeeFromBoxes(bg, rt.boxTiers) + rt.guarSurcharge * sumBoxes(bg);
+      try {
+        await post({ log_date: date, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG });
+        setRows((rs) => rs.map((x) => (x.log_date === date ? { ...x, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG } : x)));
+        // 방금 저장한 값과 같은 칸만 초기화 — 저장 중 +/- 로 바꾼 값은 유지(원복 방지)
+        setBoxDraft((prev) => reconcileBoxDraft(prev, date, bn, bg));
+      } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    });
   }
 
   // 디바운스 저장(연타 후 한 번만 저장)
@@ -378,6 +395,32 @@ function Stepper({ value, onBump, onType, onCommit, w = 40 }: { value: string; o
       <button type="button" className="b2b-btn-secondary" style={btn} onClick={() => onBump(1)} aria-label="더하기">+</button>
     </span>
   );
+}
+
+// 필드 저장 후: 방금 저장한 스냅샷과 값이 같은 칸만 초기화. 저장 중 사용자가 바꾼 칸은 유지(원복 방지).
+function reconcileFieldDraft(prev: Record<string, Partial<Record<EditKey, string>>>, date: string, saved: Partial<Record<EditKey, string>>): Record<string, Partial<Record<EditKey, string>>> {
+  const dd = prev[date]; if (!dd) return prev;
+  const kept: Partial<Record<EditKey, string>> = {};
+  for (const k of Object.keys(dd) as EditKey[]) { if (dd[k] !== saved[k]) kept[k] = dd[k]; }
+  const next = { ...prev };
+  if (Object.keys(kept).length) next[date] = kept; else delete next[date];
+  return next;
+}
+
+// 박스 저장 후: 저장된 값과 같은 칸만 초기화. 저장 중 +/- 로 바뀐 칸은 유지.
+function reconcileBoxDraft(prev: BoxDraft, date: string, savedN: Boxes, savedG: Boxes): BoxDraft {
+  const dd = prev[date]; if (!dd) return prev;
+  const pruneSide = (sideDraft: Record<string, string> | undefined, saved: Boxes): Record<string, string> | undefined => {
+    if (!sideDraft) return undefined;
+    const kept: Record<string, string> = {};
+    for (const [c, v] of Object.entries(sideDraft)) { if ((Number(v) || 0) !== (Number(saved[c]) || 0)) kept[c] = v; }
+    return Object.keys(kept).length ? kept : undefined;
+  };
+  const n = pruneSide(dd.n, savedN), g = pruneSide(dd.g, savedG);
+  const next = { ...prev };
+  if (!n && !g) delete next[date];
+  else { const entry: { n?: Record<string, string>; g?: Record<string, string> } = {}; if (n) entry.n = n; if (g) entry.g = g; next[date] = entry; }
+  return next;
 }
 
 // 저장 성공 시 서버와 동일 규칙으로 로컬 행에 draft 반영(memo→trim/null, dryice→소수, 나머지→반올림 정수)
