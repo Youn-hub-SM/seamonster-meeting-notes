@@ -18,6 +18,13 @@ const won = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
 const pct = (n?: number) => (n == null ? "-" : `${n.toFixed(2)}%`);
 const roasFmt = (n?: number) => (n == null ? "-" : n.toFixed(2));
 
+type StageInfo = { key: string; label: string; color: string };
+const STAGE_SHORT: Record<string, string> = {
+  material: "소재테스트", performance: "성과테스트", scale: "증액 권장", decline: "효율 하락", insufficient: "데이터 부족",
+  pass: "① 통과", fail: "① 미달", testing: "① 테스트중", sub: "성과테스트 하위",
+};
+const STAGE_ORDER = ["material", "performance", "scale", "decline", "insufficient", "pass", "fail", "testing", "sub"];
+
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   const s: CSSProperties = { fontSize: 12, padding: "5px 12px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", fontWeight: on ? 700 : 500, border: on ? "1px solid var(--sm-orange)" : "1px solid var(--sm-border)", background: on ? "var(--sm-orange-light)" : "var(--sm-white)", color: on ? "var(--sm-orange-hover)" : "var(--sm-text-mid)" };
   return <button type="button" onClick={onClick} style={s}>{children}</button>;
@@ -36,6 +43,7 @@ export default function MetaAdPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [liveOnly, setLiveOnly] = useState(true); // 현재 라이브(effective_status=ACTIVE)만
   const [resultsOnly, setResultsOnly] = useState(true); // 결과(지출>0) 있는 것만 — 완료된 광고 숨김
+  const [stageFilter, setStageFilter] = useState<string | null>(null); // 단계 필터(null=전체)
 
   useEffect(() => {
     (async () => {
@@ -62,24 +70,29 @@ export default function MetaAdPage() {
     return m;
   }, [ov]);
 
-  // 단계 판정
-  function campaignStage(c: Campaign) {
+  // 단계 판정 — key 반환(뱃지·필터 공용). 탭별로 판정 규칙이 다름.
+  const classify = useCallback((r: Campaign | Adset | Ad): StageInfo | null => {
     if (!th) return null;
-    const s = c.stat; const enough = s.spend >= th.minSpend;
-    if (c.cbo) {
-      if (!enough) return <Badge color="#868e96">성과테스트 · 데이터 부족</Badge>;
-      if (s.roas >= th.scaleRoas) return <Badge color="#2f9e44">③ 증액 권장 +{th.scalePct}%</Badge>;
-      if (s.roas < th.declineRoas) return <Badge color="#e03131">④ 효율 하락</Badge>;
-      return <Badge color="#f76707">② 성과테스트</Badge>;
+    if (tab === "campaign") {
+      const c = r as Campaign; const s = c.stat; const enough = s.spend >= th.minSpend;
+      if (c.cbo) {
+        if (!enough) return { key: "insufficient", label: "성과테스트 · 데이터 부족", color: "#868e96" };
+        if (s.roas >= th.scaleRoas) return { key: "scale", label: `③ 증액 권장 +${th.scalePct}%`, color: "#2f9e44" };
+        if (s.roas < th.declineRoas) return { key: "decline", label: "④ 효율 하락", color: "#e03131" };
+        return { key: "performance", label: "② 성과테스트", color: "#f76707" };
+      }
+      return { key: "material", label: "소재테스트", color: "#4c6ef5" };
     }
-    return <Badge color="#4c6ef5">소재테스트</Badge>;
-  }
-  function adsetStage(a: Adset) {
-    if (!th || !a.abo) return a.abo ? null : <Badge color="#adb5bd">성과테스트 하위</Badge>;
-    const s = a.stat; if (s.spend < th.minSpend) return <Badge color="#868e96">① 테스트 중</Badge>;
-    const pass = s.roas >= th.aboPassRoas && s.purchases >= th.aboMinPurchases && (th.aboMaxCpa === 0 || (s.cpa > 0 && s.cpa <= th.aboMaxCpa));
-    return pass ? <Badge color="#2f9e44">① 통과 → 성과테스트 승격</Badge> : <Badge color="#868e96">① 미달</Badge>;
-  }
+    if (tab === "adset") {
+      const a = r as Adset;
+      if (!a.abo) return { key: "sub", label: "성과테스트 하위", color: "#adb5bd" };
+      const s = a.stat;
+      if (s.spend < th.minSpend) return { key: "testing", label: "① 테스트 중", color: "#868e96" };
+      const pass = s.roas >= th.aboPassRoas && s.purchases >= th.aboMinPurchases && (th.aboMaxCpa === 0 || (s.cpa > 0 && s.cpa <= th.aboMaxCpa));
+      return pass ? { key: "pass", label: "① 통과 → 성과테스트 승격", color: "#2f9e44" } : { key: "fail", label: "① 미달", color: "#868e96" };
+    }
+    return null; // 소재(ad) 탭은 단계 없음
+  }, [tab, th]);
 
   async function toggle(id: string, current: string, name: string) {
     const next = current === "ACTIVE" ? "PAUSED" : "ACTIVE";
@@ -96,8 +109,18 @@ export default function MetaAdPage() {
   const rows = tab === "campaign" ? (ov?.campaigns || []) : tab === "adset" ? (ov?.adsets || []) : (ov?.ads || []);
   const passFilters = useCallback((r: { effective_status: string; stat: Stat }) =>
     (!liveOnly || r.effective_status === "ACTIVE") && (!resultsOnly || r.stat.spend > 0), [liveOnly, resultsOnly]);
-  const shown = useMemo(() => [...rows.filter(passFilters)].sort((a, b) => b.stat.spend - a.stat.spend), [rows, passFilters]);
+  const filtered = useMemo(() => rows.filter(passFilters), [rows, passFilters]);
+  const shown = useMemo(() => {
+    const list = stageFilter ? filtered.filter((r) => classify(r)?.key === stageFilter) : filtered;
+    return [...list].sort((a, b) => b.stat.spend - a.stat.spend);
+  }, [filtered, stageFilter, classify]);
   const visN = (arr?: { effective_status: string; stat: Stat }[]) => (arr ? arr.filter(passFilters).length : "");
+  // 단계별 개수(현재 탭·필터 기준) — 단계 필터 칩용
+  const stageGroups = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of filtered) { const k = classify(r)?.key; if (k) counts[k] = (counts[k] || 0) + 1; }
+    return STAGE_ORDER.filter((k) => counts[k]).map((k) => ({ key: k, n: counts[k] }));
+  }, [filtered, classify]);
   const totals = useMemo(() => shown.reduce((t, r) => ({ spend: t.spend + r.stat.spend, purch: t.purch + r.stat.purchases, val: t.val + r.stat.purchaseValue }), { spend: 0, purch: 0, val: 0 }), [shown]);
   const blendRoas = totals.spend ? totals.val / totals.spend : 0;
 
@@ -151,9 +174,9 @@ export default function MetaAdPage() {
 
           {/* 탭 + 라이브 필터 */}
           <div className="sm-row" style={{ gap: 6, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <Chip on={tab === "campaign"} onClick={() => setTab("campaign")}>캠페인 {visN(ov?.campaigns)}</Chip>
-            <Chip on={tab === "adset"} onClick={() => setTab("adset")}>광고세트 {visN(ov?.adsets)}</Chip>
-            <Chip on={tab === "ad"} onClick={() => setTab("ad")}>소재 {visN(ov?.ads)}</Chip>
+            <Chip on={tab === "campaign"} onClick={() => { setTab("campaign"); setStageFilter(null); }}>캠페인 {visN(ov?.campaigns)}</Chip>
+            <Chip on={tab === "adset"} onClick={() => { setTab("adset"); setStageFilter(null); }}>광고세트 {visN(ov?.adsets)}</Chip>
+            <Chip on={tab === "ad"} onClick={() => { setTab("ad"); setStageFilter(null); }}>소재 {visN(ov?.ads)}</Chip>
             <div style={{ flex: 1 }} />
             <label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} />라이브만 (게재 중)
@@ -162,6 +185,15 @@ export default function MetaAdPage() {
               <input type="checkbox" checked={resultsOnly} onChange={(e) => setResultsOnly(e.target.checked)} />결과 있는 것만 (지출&gt;0)
             </label>
           </div>
+
+          {/* 단계 필터 */}
+          {stageGroups.length > 0 && (
+            <div className="sm-row" style={{ gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>단계</span>
+              <Chip on={stageFilter === null} onClick={() => setStageFilter(null)}>전체 {filtered.length}</Chip>
+              {stageGroups.map((g) => <Chip key={g.key} on={stageFilter === g.key} onClick={() => setStageFilter(g.key)}>{STAGE_SHORT[g.key] || g.key} {g.n}</Chip>)}
+            </div>
+          )}
 
           {loading ? <div className="b2b-loading">불러오는 중...</div> : (
             <div className="b2b-table-wrap">
@@ -174,14 +206,14 @@ export default function MetaAdPage() {
                 <tbody>
                   {shown.map((r) => {
                     const s = r.stat; const budget = "daily_budget" in r ? (r.daily_budget || r.lifetime_budget) : undefined;
-                    const stage = tab === "campaign" ? campaignStage(r as Campaign) : tab === "adset" ? adsetStage(r as Adset) : null;
+                    const stage = classify(r);
                     const roasColor = s.spend >= (th?.minSpend ?? 0) && s.purchases > 0 ? (s.roas >= (th?.scaleRoas ?? 99) ? "var(--sm-success)" : s.roas < (th?.declineRoas ?? 0) ? "#e03131" : undefined) : undefined;
                     return (
                       <tr key={r.id} style={r.effective_status !== "ACTIVE" && r.status !== "ACTIVE" ? { opacity: 0.55 } : undefined}>
                         <td><Switch id={r.id} st={r.status} name={r.name} /></td>
                         <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}
                           {tab === "campaign" && adsetByCampaign[r.id] ? <span className="sm-faint" style={{ fontSize: 10 }}> · 세트 {adsetByCampaign[r.id]}</span> : null}</td>
-                        <td>{stage}</td>
+                        <td>{stage ? <Badge color={stage.color}>{stage.label}</Badge> : null}</td>
                         <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.spend)}</td>
                         <td className="num b2b-money">{won(s.purchases)}</td>
                         <td className="num b2b-money">{won(s.purchaseValue)}</td>
