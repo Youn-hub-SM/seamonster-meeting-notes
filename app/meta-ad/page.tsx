@@ -35,6 +35,7 @@ export default function MetaAdPage() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [liveOnly, setLiveOnly] = useState(true); // 현재 라이브(effective_status=ACTIVE)만
+  const [resultsOnly, setResultsOnly] = useState(true); // 결과(지출>0) 있는 것만 — 완료된 광고 숨김
 
   useEffect(() => {
     (async () => {
@@ -93,11 +94,10 @@ export default function MetaAdPage() {
   }
 
   const rows = tab === "campaign" ? (ov?.campaigns || []) : tab === "adset" ? (ov?.adsets || []) : (ov?.ads || []);
-  const shown = useMemo(() => {
-    const list = liveOnly ? rows.filter((r) => r.effective_status === "ACTIVE") : rows;
-    return [...list].sort((a, b) => b.stat.spend - a.stat.spend);
-  }, [rows, liveOnly]);
-  const liveN = (arr?: { effective_status: string }[]) => (arr ? (liveOnly ? arr.filter((r) => r.effective_status === "ACTIVE").length : arr.length) : "");
+  const passFilters = useCallback((r: { effective_status: string; stat: Stat }) =>
+    (!liveOnly || r.effective_status === "ACTIVE") && (!resultsOnly || r.stat.spend > 0), [liveOnly, resultsOnly]);
+  const shown = useMemo(() => [...rows.filter(passFilters)].sort((a, b) => b.stat.spend - a.stat.spend), [rows, passFilters]);
+  const visN = (arr?: { effective_status: string; stat: Stat }[]) => (arr ? arr.filter(passFilters).length : "");
   const totals = useMemo(() => shown.reduce((t, r) => ({ spend: t.spend + r.stat.spend, purch: t.purch + r.stat.purchases, val: t.val + r.stat.purchaseValue }), { spend: 0, purch: 0, val: 0 }), [shown]);
   const blendRoas = totals.spend ? totals.val / totals.spend : 0;
 
@@ -151,12 +151,15 @@ export default function MetaAdPage() {
 
           {/* 탭 + 라이브 필터 */}
           <div className="sm-row" style={{ gap: 6, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <Chip on={tab === "campaign"} onClick={() => setTab("campaign")}>캠페인 {liveN(ov?.campaigns)}</Chip>
-            <Chip on={tab === "adset"} onClick={() => setTab("adset")}>광고세트 {liveN(ov?.adsets)}</Chip>
-            <Chip on={tab === "ad"} onClick={() => setTab("ad")}>소재 {liveN(ov?.ads)}</Chip>
+            <Chip on={tab === "campaign"} onClick={() => setTab("campaign")}>캠페인 {visN(ov?.campaigns)}</Chip>
+            <Chip on={tab === "adset"} onClick={() => setTab("adset")}>광고세트 {visN(ov?.adsets)}</Chip>
+            <Chip on={tab === "ad"} onClick={() => setTab("ad")}>소재 {visN(ov?.ads)}</Chip>
             <div style={{ flex: 1 }} />
             <label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} />라이브만 (게재 중)
+            </label>
+            <label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+              <input type="checkbox" checked={resultsOnly} onChange={(e) => setResultsOnly(e.target.checked)} />결과 있는 것만 (지출&gt;0)
             </label>
           </div>
 
