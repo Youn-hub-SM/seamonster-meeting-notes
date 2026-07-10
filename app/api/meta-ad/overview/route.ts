@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listCampaigns, listAdsets, listAds, getInsights, isCBO, isABO, type MetaInsight } from "@/app/lib/meta-ad";
+import { getMetaThresholds } from "@/app/lib/meta-settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,14 +16,16 @@ export async function GET(req: NextRequest) {
     const range = since && until ? { since, until } : { datePreset: sp.get("datePreset") || "last_7d" };
     const debug = sp.get("debug") === "1";
 
-    const [campaigns, adsets, ads, ci, ai, adi] = await Promise.all([
+    const [campaigns, adsets, ads, ci, ai, adi, thresholds] = await Promise.all([
       listCampaigns(), listAdsets(), listAds(),
       getInsights("campaign", range, debug), getInsights("adset", range), getInsights("ad", range),
+      getMetaThresholds(),
     ]);
 
     const blank: MetaInsight = { spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, purchases: 0, purchaseValue: 0, roas: 0, cpa: 0 };
     const out = {
       ok: true,
+      thresholds,
       campaigns: campaigns.map((c) => ({ ...c, cbo: isCBO(c), stat: ci.byId[c.id] || blank })),
       adsets: adsets.map((a) => ({ ...a, abo: isABO(a), stat: ai.byId[a.id] || blank })),
       ads: ads.map((a) => ({ ...a, stat: adi.byId[a.id] || blank })),

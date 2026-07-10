@@ -83,7 +83,7 @@ export async function setNotifyConfig(config: NotifyConfig): Promise<void> {
 //  · app_base_url 은 알림에 넣을 주문 상세 링크(/b2b/orders/{id})의 도메인. 미설정 시 Vercel 프로덕션 도메인.
 //  값은 b2b_settings kv({v:...}) 저장(코드/깃에 두지 않음).
 // ─────────────────────────────────────────────
-async function getKv(key: string): Promise<string> {
+export async function getKv(key: string): Promise<string> {
   try {
     const { data, error } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", key).maybeSingle();
     if (error || !data) return "";
@@ -92,7 +92,7 @@ async function getKv(key: string): Promise<string> {
     return s && String(s).trim() ? String(s).trim() : "";
   } catch { return ""; }
 }
-async function setKv(key: string, value: string): Promise<void> {
+export async function setKv(key: string, value: string): Promise<void> {
   const { error } = await supabaseAdmin()
     .from("b2b_settings")
     .upsert({ key, value: { v: value.trim() }, updated_at: new Date().toISOString() }, { onConflict: "key" });
