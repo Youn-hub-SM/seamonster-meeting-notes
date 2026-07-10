@@ -70,6 +70,10 @@ export default function NaverAdPage() {
   const [skLoading, setSkLoading] = useState(false);
   const [skErr, setSkErr] = useState("");
   const [skCostOnly, setSkCostOnly] = useState(true);
+  const [convBasis, setConvBasis] = useState<"all" | "purchase">("all"); // 전환 기준: 전체 or 구매
+  const [purchaseMap, setPurchaseMap] = useState<Record<string, { conv: number; sales: number }>>({});
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [purchaseInfo, setPurchaseInfo] = useState<{ effectiveUntil?: string; cached?: boolean; days?: number } | null>(null);
 
   const mode: "keyword" | "adgroup" = KEYWORD_TYPES.has(adType) ? "keyword" : "adgroup";
 
@@ -155,6 +159,36 @@ export default function NaverAdPage() {
   }, [mode, selGrpKey, selCampKey, rangeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, [loadData]);
 
+  const hasSelection = mode === "keyword" ? selGrp.length > 0 : selCamp.length > 0;
+
+  // 구매 전환 기준: 기간 내 '구매' 전환/매출 별도 조회(어제까지). 명시적 기간(useCustom)에서만.
+  useEffect(() => {
+    if (convBasis !== "purchase" || !hasSelection || !useCustom) return;
+    let cancelled = false;
+    (async () => {
+      setPurchaseLoading(true);
+      try {
+        const p = new URLSearchParams({ type: mode, since, until });
+        const j = await (await fetch(`/api/naver-ad/purchase-conv?${p}`, { cache: "no-store" })).json();
+        if (cancelled) return;
+        if (!j.ok) throw new Error(j.error || "구매 전환 조회 실패");
+        setPurchaseMap(j.map || {});
+        setPurchaseInfo({ effectiveUntil: j.effectiveUntil, cached: j.cached, days: j.daysFetched });
+      } catch (e) { if (!cancelled) setError(e instanceof Error ? e.message : "구매 전환 오류"); }
+      if (!cancelled) setPurchaseLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [convBasis, mode, selGrpKey, selCampKey, since, until, useCustom, hasSelection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 전환 지표(기준에 따라 전체/구매). roas: 전체=네이버 ror, 구매=구매매출/광고비.
+  const metric = useCallback((r: Row) => {
+    if (convBasis === "purchase") {
+      const pm = purchaseMap[r.id]; const sales = pm?.sales ?? 0; const cost = r.stat?.salesAmt ?? 0;
+      return { conv: pm?.conv ?? 0, convAmt: sales, roas: cost ? (sales / cost) * 100 : 0 };
+    }
+    const s = r.stat; return { conv: s?.ccnt ?? 0, convAmt: s?.convAmt ?? 0, roas: s?.ror ?? 0 };
+  }, [convBasis, purchaseMap]);
+
   const toggle = (arr: string[], set: (v: string[]) => void, id: string) =>
     set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
 
@@ -168,19 +202,25 @@ export default function NaverAdPage() {
     let list = rows;
     if (q) list = list.filter((r) => r.name.toLowerCase().includes(q));
     if (costOnly) list = list.filter((r) => (r.stat?.salesAmt ?? 0) > 0);
-    const get = SORT_VAL[sortField];
+    const getVal = (r: Row) => {
+      if (sortField === "ccnt") return metric(r).conv;
+      if (sortField === "convAmt") return metric(r).convAmt;
+      if (sortField === "ror") return metric(r).roas;
+      return SORT_VAL[sortField](r);
+    };
     const dir = sortDir === "desc" ? -1 : 1;
-    return [...list].sort((a, b) => (get(a) - get(b)) * dir);
-  }, [rows, search, costOnly, sortField, sortDir]);
+    return [...list].sort((a, b) => (getVal(a) - getVal(b)) * dir);
+  }, [rows, search, costOnly, sortField, sortDir, metric]);
 
   const totals = useMemo(() => {
     const t = shownRows.reduce((a, r) => {
       const s = r.stat; if (!s) return a;
-      a.imp += s.impCnt ?? 0; a.clk += s.clkCnt ?? 0; a.cost += s.salesAmt ?? 0; a.conv += s.ccnt ?? 0; a.convAmt += s.convAmt ?? 0;
+      const m = metric(r);
+      a.imp += s.impCnt ?? 0; a.clk += s.clkCnt ?? 0; a.cost += s.salesAmt ?? 0; a.conv += m.conv; a.convAmt += m.convAmt;
       return a;
     }, { imp: 0, clk: 0, cost: 0, conv: 0, convAmt: 0 });
     return { ...t, ctr: t.imp ? (t.clk / t.imp) * 100 : 0, cpc: t.clk ? t.cost / t.clk : 0, roas: t.cost ? (t.convAmt / t.cost) * 100 : 0 };
-  }, [shownRows]);
+  }, [shownRows, metric]);
 
   function setBid(r: Row, bidAmt: number) { setDraft((d) => ({ ...d, [r.id]: { bidAmt, useGroupBidAmt: false } })); setSavedMsg(""); }
   function bump(r: Row, pct: number) {
@@ -220,6 +260,26 @@ export default function NaverAdPage() {
     if (!since || !until) { const now = new Date(); const from = new Date(now.getTime() - 13 * 864e5); setUntil(ymd(now)); setSince(ymd(from)); }
   }
 
+  // 프리셋 클릭: 구매 기준일 땐 명시적 기간(어제까지)으로 변환해 /stats·구매 정렬을 맞춤
+  const PRESET_SPAN: Record<string, number> = { today: 1, yesterday: 1, last7days: 7, last30days: 30 };
+  function onPreset(key: string) {
+    setPreset(key);
+    if (convBasis === "purchase") {
+      const now = new Date(); const y = ymd(new Date(now.getTime() - 864e5));
+      setCustomMode(true); setSince(ymd(new Date(now.getTime() - (PRESET_SPAN[key] ?? 7) * 864e5))); setUntil(y);
+    } else setCustomMode(false);
+  }
+  function setBasis(b: "all" | "purchase") {
+    setConvBasis(b);
+    if (b === "purchase") {
+      // 명시적 기간(어제까지) 강제 — /stats 광고비와 구매 매출 기간을 일치
+      const now = new Date(); const y = ymd(new Date(now.getTime() - 864e5));
+      setCustomMode(true);
+      if (customMode && since && until) { if (until > y) setUntil(y); }
+      else { setSince(ymd(new Date(now.getTime() - (PRESET_SPAN[preset] ?? 7) * 864e5))); setUntil(y); }
+    } else { setPurchaseMap({}); setPurchaseInfo(null); }
+  }
+
   async function openSearchKeywords(r: Row) {
     setSkGroup({ id: r.id, name: r.name }); setSkRows([]); setSkErr(""); setSkLoading(true); setSkCostOnly(true);
     try {
@@ -240,14 +300,16 @@ export default function NaverAdPage() {
       {children}{sortField === f ? <span style={{ color: "var(--sm-orange)" }}>{sortDir === "desc" ? " ▾" : " ▴"}</span> : <span style={{ opacity: 0.25 }}> ⇅</span>}
     </th>
   );
-  const roasColor = (s?: Stat | null): CSSProperties | undefined => {
-    if (!s || (s.salesAmt ?? 0) === 0) return undefined;
-    if ((s.ccnt ?? 0) === 0) return { color: "var(--sm-danger, #d64545)" };
-    if ((s.ror ?? 0) >= 300) return { color: "var(--sm-success)", fontWeight: 700 };
+  const roasColor = (r: Row): CSSProperties | undefined => {
+    const s = r.stat; if (!s || (s.salesAmt ?? 0) === 0) return undefined;
+    const m = metric(r);
+    if (m.conv === 0) return { color: "var(--sm-danger, #d64545)" };
+    if (m.roas >= 300) return { color: "var(--sm-success)", fontWeight: 700 };
     return undefined;
   };
-
-  const hasSelection = mode === "keyword" ? selGrp.length > 0 : selCamp.length > 0;
+  const convLabel = convBasis === "purchase" ? "구매전환" : "전환";
+  const convAmtLabel = convBasis === "purchase" ? "구매매출" : "전환매출";
+  const roasLabel = convBasis === "purchase" ? "구매ROAS" : "ROAS";
 
   return (
     <div className="b2b-container">
@@ -325,14 +387,27 @@ export default function NaverAdPage() {
           {/* 기간 */}
           <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>기간</span>
-            {PRESETS.map((p) => <Chip key={p.key} on={!customMode && preset === p.key} onClick={() => { setCustomMode(false); setPreset(p.key); }}>{p.label}</Chip>)}
-            <Chip on={customMode} onClick={enterCustom}>직접 설정</Chip>
+            {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key && (convBasis === "purchase" ? customMode : !customMode)} onClick={() => onPreset(p.key)}>{p.label}</Chip>)}
+            <Chip on={customMode && !PRESETS.some((p) => p.key === preset && convBasis === "purchase")} onClick={enterCustom}>직접 설정</Chip>
             {customMode && (
               <>
                 <input type="date" className="b2b-input" value={since} max={until || undefined} onChange={(e) => setSince(e.target.value)} style={{ width: 150 }} />
                 <span className="sm-faint">~</span>
                 <input type="date" className="b2b-input" value={until} min={since || undefined} onChange={(e) => setUntil(e.target.value)} style={{ width: 150 }} />
               </>
+            )}
+          </div>
+
+          {/* 전환 기준 (전체 vs 구매) */}
+          <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>전환 기준</span>
+            <Chip on={convBasis === "all"} onClick={() => setBasis("all")}>전체 전환</Chip>
+            <Chip on={convBasis === "purchase"} onClick={() => setBasis("purchase")}>구매 전환만</Chip>
+            {convBasis === "purchase" && (
+              <span className="sm-faint" style={{ fontSize: 11 }}>
+                {purchaseLoading ? "구매 전환 불러오는 중… (최초엔 다소 걸릴 수 있어요)"
+                  : purchaseInfo ? `장바구니 제외·구매만 · ~${purchaseInfo.effectiveUntil}까지${purchaseInfo.cached === false ? " · 캐시 미적용(느림, 064 마이그레이션 권장)" : ""}` : "장바구니 제외, 구매 전환만 집계"}
+              </span>
             )}
           </div>
 
@@ -368,7 +443,7 @@ export default function NaverAdPage() {
                       <th>{mode === "keyword" ? "키워드" : "광고그룹"}</th><th>{mode === "keyword" ? "그룹" : "캠페인"}</th>
                       <Th f="impCnt">노출</Th><Th f="clkCnt">클릭</Th><Th f="ctr">CTR</Th>
                       <Th f="salesAmt">광고비</Th><Th f="cpc">CPC</Th>
-                      <Th f="ccnt">전환</Th><Th f="convAmt">전환매출</Th><Th f="ror">ROAS</Th>
+                      <Th f="ccnt">{convLabel}</Th><Th f="convAmt">{convAmtLabel}</Th><Th f="ror">{roasLabel}</Th>
                       <Th f="avgRnk">평균순위</Th>
                       {mode === "keyword" && <th className="num">연관/클릭</th>}
                       <Th f="bidAmt">입찰가</Th>
@@ -392,9 +467,11 @@ export default function NaverAdPage() {
                             <td className="num">{st?.ctr != null ? `${st.ctr.toFixed(2)}%` : "-"}</td>
                             <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(st?.salesAmt)}</td>
                             <td className="num b2b-money">{won(st?.cpc)}</td>
-                            <td className="num b2b-money">{num(st?.ccnt)}</td>
-                            <td className="num b2b-money">{won(st?.convAmt)}</td>
-                            <td className="num" style={roasColor(st)}>{st?.ror != null && (st?.salesAmt ?? 0) > 0 ? `${Math.round(st.ror)}%` : "-"}</td>
+                            {(() => { const m = metric(r); const loadingP = convBasis === "purchase" && purchaseLoading; return (<>
+                              <td className="num b2b-money">{loadingP ? "…" : num(m.conv)}</td>
+                              <td className="num b2b-money">{loadingP ? "…" : won(m.convAmt)}</td>
+                              <td className="num" style={roasColor(r)}>{loadingP ? "…" : ((st?.salesAmt ?? 0) > 0 ? `${Math.round(m.roas)}%` : "-")}</td>
+                            </>); })()}
                             <td className="num">{st?.avgRnk != null ? st.avgRnk.toFixed(1) : "-"}</td>
                             {mode === "keyword" && <td className="num" style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>{r.adRel ?? "-"}/{r.expClick ?? "-"}</td>}
                             <td style={{ whiteSpace: "nowrap" }}>
@@ -433,8 +510,10 @@ export default function NaverAdPage() {
                   </table>
                 </div>
                 <p className="sm-faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
-                  · <b>광고비</b>=기간 내 총 지출(VAT포함), <b>ROAS</b>=전환매출÷광고비. <span style={{ color: "var(--sm-danger, #d64545)" }}>빨강</span>=지출했지만 전환 0(입찰가↓ 검토), <span style={{ color: "var(--sm-success)" }}>초록</span>=ROAS 300%↑(여력 있으면 입찰가↑).<br />
-                  · 전환·전환매출·ROAS는 <b>네이버 프리미엄 로그분석(전환추적)</b> 연동 시 값이 나옵니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위 입찰가를 조정합니다." : ""}
+                  · <b>광고비</b>=기간 내 총 지출(VAT포함), <b>{roasLabel}</b>={convAmtLabel}÷광고비. <span style={{ color: "var(--sm-danger, #d64545)" }}>빨강</span>=지출했지만 {convLabel} 0(입찰가↓ 검토), <span style={{ color: "var(--sm-success)" }}>초록</span>={roasLabel} 300%↑(여력 있으면 입찰가↑).<br />
+                  {convBasis === "purchase"
+                    ? <>· <b>구매 전환만</b> 집계(장바구니 등 제외) — AD_CONVERSION_DETAIL 리포트 기반, <b>오늘 제외 어제까지</b>. 광고비 기간도 자동으로 어제까지 맞춰집니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위." : ""}</>
+                    : <>· 전환·전환매출·ROAS는 <b>모든 전환유형 합</b>(구매+장바구니 등). ‘구매 전환만’으로 바꾸면 구매 기준으로 다시 계산됩니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위 입찰가를 조정합니다." : ""}</>}
                 </p>
               </>
             )}
