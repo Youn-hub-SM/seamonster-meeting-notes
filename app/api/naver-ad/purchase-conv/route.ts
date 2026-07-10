@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
     if (!since || !until) return NextResponse.json({ ok: false, error: "since·until(YYYY-MM-DD) 가 필요합니다." }, { status: 400 });
     // 최대 62일 안전장치는 lib 내부. 여기선 역전만 방지
     if (since > until) return NextResponse.json({ ok: false, error: "기간이 올바르지 않습니다." }, { status: 400 });
-    const { map, daysFetched, cached } = await getPurchaseConversions(since, until, type);
-    return NextResponse.json({ ok: true, type, since, until, map, daysFetched, cached });
+    const { map, daysFetched, cached, effectiveUntil } = await getPurchaseConversions(since, until, type);
+    return NextResponse.json({ ok: true, type, since, until, effectiveUntil, map, daysFetched, cached });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "구매 전환 조회 실패") }, { status: 500 });
   }

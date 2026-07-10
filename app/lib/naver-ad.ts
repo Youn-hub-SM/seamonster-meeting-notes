@@ -159,27 +159,30 @@ function parseConvTsv(tsv: string): ConvRow[] {
 }
 
 // 하루치 전환 상세 행 조회(모든 전환유형 포함 — 필터는 호출측). statDt="YYYY-MM-DD".
+// 지표 없는 날/오늘(미지원) 등은 400을 내므로 해당 일자는 빈 배열로 처리(전체 요청 실패 방지).
 export async function fetchConvReportDay(statDt: string): Promise<ConvRow[]> {
-  const job = await naverAd<{ reportJobId?: number | string; id?: number | string; status?: string; downloadUrl?: string }>("POST", "/stat-reports", { body: { reportTp: "AD_CONVERSION_DETAIL", statDt } });
-  const jobId = job.reportJobId ?? job.id;
-  if (jobId == null) return [];
-  let status = String(job.status || ""); let url = String(job.downloadUrl || "");
-  for (let i = 0; i < 25 && status !== "BUILT" && status !== "DONE"; i++) {
-    await _sleep(1200);
-    const g = await naverAd<{ status?: string; downloadUrl?: string }>("GET", `/stat-reports/${jobId}`);
-    status = String(g.status || ""); url = String(g.downloadUrl || "");
-    if (status === "NONE" || status === "ERROR" || status === "REGIST_ERROR") break;
-  }
-  let rows: ConvRow[] = [];
-  if (url) {
-    try {
+  try {
+    const job = await naverAd<{ reportJobId?: number | string; id?: number | string; status?: string; downloadUrl?: string }>("POST", "/stat-reports", { body: { reportTp: "AD_CONVERSION_DETAIL", statDt } });
+    const jobId = job.reportJobId ?? job.id;
+    if (jobId == null) return [];
+    let status = String(job.status || ""); let url = String(job.downloadUrl || "");
+    for (let i = 0; i < 25 && status !== "BUILT" && status !== "DONE"; i++) {
+      await _sleep(1200);
+      const g = await naverAd<{ status?: string; downloadUrl?: string }>("GET", `/stat-reports/${jobId}`).catch(() => ({} as { status?: string; downloadUrl?: string }));
+      status = String(g.status || ""); url = String(g.downloadUrl || "");
+      if (status === "NONE" || status === "ERROR" || status === "REGIST_ERROR") break;
+    }
+    let rows: ConvRow[] = [];
+    if (url) {
       const u = new URL(url);
       const dl = await fetch(url, { headers: signedHeaders("GET", u.pathname), cache: "no-store" });
       if (dl.ok) rows = parseConvTsv(await dl.text());
-    } catch { /* 다운로드 실패 시 빈 배열 */ }
+    }
+    await naverAd("DELETE", `/stat-reports/${jobId}`).catch(() => {}); // 잡 정리(미삭제 시 자동 30일 후 삭제)
+    return rows;
+  } catch {
+    return []; // 지표 없음/미지원 일자 → 0건 처리
   }
-  await naverAd("DELETE", `/stat-reports/${jobId}`).catch(() => {}); // 잡 정리(미삭제 시 자동 30일 후 삭제)
-  return rows;
 }
 
 // 자격 확인용 가벼운 핑(캠페인 목록). 실패 시 에러 던짐.

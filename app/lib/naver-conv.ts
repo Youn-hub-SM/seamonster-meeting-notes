@@ -42,16 +42,22 @@ function aggregateDay(rows: ConvRow[]) {
 type DayRows = { day: string; rows: ConvRow[] };
 
 // 지정 기간의 '구매 전환' 집계를 엔티티유형별로 반환.
-export async function getPurchaseConversions(since: string, until: string, entityType: "keyword" | "adgroup"): Promise<{ map: PurchaseAgg; daysFetched: number; cached: boolean }> {
-  const days = dateList(since, until);
-  // 최근 2일(오늘/어제)은 전환 지연 반영 위해 항상 재조회
+export async function getPurchaseConversions(since: string, until: string, entityType: "keyword" | "adgroup"): Promise<{ map: PurchaseAgg; daysFetched: number; cached: boolean; effectiveUntil: string }> {
   const now = new Date();
-  const recent = new Set([0, 1].map((n) => { const d = new Date(now.getTime() - n * 864e5); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`; }));
+  const fmt = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  const todayStr = fmt(now);
+  const yStr = fmt(new Date(now.getTime() - 864e5));
+  // AD_CONVERSION_DETAIL은 오늘(당일) 미지원 → 어제까지로 캡
+  const effUntil = until >= todayStr ? yStr : until;
+  const days = since > effUntil ? [] : dateList(since, effUntil);
+  const recent = new Set([yStr]); // 어제는 전환 지연 반영 위해 항상 재조회
+
+  if (!days.length) return { map: {}, daysFetched: 0, cached: true, effectiveUntil: effUntil };
 
   let useCache = true;
   let presentDays = new Set<string>();
   try {
-    const { data, error } = await supabaseAdmin().from("naver_conv_daily").select("stat_date").gte("stat_date", since).lte("stat_date", until);
+    const { data, error } = await supabaseAdmin().from("naver_conv_daily").select("stat_date").gte("stat_date", since).lte("stat_date", effUntil);
     if (error) throw error;
     presentDays = new Set((data || []).map((r) => String((r as { stat_date: string }).stat_date)));
   } catch { useCache = false; }
@@ -77,7 +83,7 @@ export async function getPurchaseConversions(since: string, until: string, entit
   // 결과 집계
   const map: PurchaseAgg = {};
   if (useCache) {
-    const { data } = await supabaseAdmin().from("naver_conv_daily").select("entity_id,purchase_conv,purchase_sales").eq("entity_type", entityType).gte("stat_date", since).lte("stat_date", until);
+    const { data } = await supabaseAdmin().from("naver_conv_daily").select("entity_id,purchase_conv,purchase_sales").eq("entity_type", entityType).gte("stat_date", since).lte("stat_date", effUntil);
     for (const r of (data || []) as { entity_id: string; purchase_conv: number; purchase_sales: number }[]) {
       const m = (map[r.entity_id] ||= { conv: 0, sales: 0 }); m.conv += r.purchase_conv || 0; m.sales += r.purchase_sales || 0;
     }
@@ -92,5 +98,5 @@ export async function getPurchaseConversions(since: string, until: string, entit
       }
     }
   }
-  return { map, daysFetched: toFetch.length, cached: useCache };
+  return { map, daysFetched: toFetch.length, cached: useCache, effectiveUntil: effUntil };
 }
