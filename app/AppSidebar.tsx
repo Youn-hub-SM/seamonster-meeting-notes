@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { NAV, HOME, type NavTool } from "./nav";
@@ -31,11 +31,15 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
     return null;
   }, [pathname]);
   const [openSet, setOpenSet] = useState<Set<string>>(new Set());
+  const skipAutoOpen = useRef(false); // 즐겨찾기로 이동 시 활성 아코디언 자동펼침 억제
   const isToolOpen = (href: string) => openSet.has(href);
   // 클릭: 열려 있으면 닫고, 아니면 펼침(나머지는 그대로 유지).
   const toggleTool = (href: string) => setOpenSet((s) => { const n = new Set(s); if (n.has(href)) n.delete(href); else n.add(href); return n; });
-  // 현재 경로의 활성 툴은 자동으로 펼쳐 둠(다른 아코디언은 접지 않음).
-  useEffect(() => { if (activeMenuHref) setOpenSet((s) => (s.has(activeMenuHref) ? s : new Set(s).add(activeMenuHref))); }, [activeMenuHref]);
+  // 현재 경로의 활성 툴은 자동으로 펼쳐 둠(다른 아코디언은 접지 않음). 단, 즐겨찾기로 이동했으면 억제.
+  useEffect(() => {
+    if (skipAutoOpen.current) { skipAutoOpen.current = false; return; }
+    if (activeMenuHref) setOpenSet((s) => (s.has(activeMenuHref) ? s : new Set(s).add(activeMenuHref)));
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 로그인 사용자(있으면) — 설정 메뉴 노출 + 푸터 표시용. /api/b2b/auth 는 미들웨어 예외라 어디서나 호출 가능.
   useEffect(() => {
@@ -193,7 +197,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               </div>
             ) : favorites.map((f) => (
               <div key={f.href} className={`app-sb-tool-row ${pathname === f.href || pathname.startsWith(f.href + "/") ? "is-active" : ""}`}>
-                <Link href={f.href} className="app-sb-tool" onClick={onNavigate}>
+                <Link href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
                   <span className="app-sb-emoji">⭐</span>
                   <span className="app-sb-tool-label">{f.label}</span>
                 </Link>
