@@ -40,6 +40,9 @@ export default function SettingsPage() {
   const [digest, setDigest] = useState("");
   const [digestBusy, setDigestBusy] = useState(false);
   const [digestMsg, setDigestMsg] = useState("");
+  type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
+  const [dcfg, setDcfg] = useState<DCfg | null>(null);
+  const [dcfgSaving, setDcfgSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -63,6 +66,8 @@ export default function SettingsPage() {
           setFlowActive(!!fj.active);
           setZapierEnv(!!fj.zapierEnv);
         }
+        const dg = await (await fetch("/api/b2b/settings/digest", { cache: "no-store" })).json();
+        if (dg.ok) setDcfg(dg.config);
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
@@ -106,6 +111,13 @@ export default function SettingsPage() {
     try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg("✅ 발송 완료"); }
     catch (e) { setDigestMsg("❌ " + (e instanceof Error ? e.message : "발송 실패")); }
     setDigestBusy(false);
+  }
+  async function saveDigestCfg() {
+    if (!dcfg) return;
+    setDcfgSaving(true); setDigestMsg("");
+    try { const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dcfg) })).json(); if (!j.ok) throw new Error(j.error || "저장 실패"); setDcfg(j.config); setDigestMsg("✅ 저장됨"); }
+    catch (e) { setDigestMsg("❌ " + (e instanceof Error ? e.message : "저장 실패")); }
+    setDcfgSaving(false);
   }
 
   function isToggleOn(key: string): boolean {
@@ -239,9 +251,41 @@ export default function SettingsPage() {
           <h2 className="b2b-card-title">아침 일정 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 매일 08:00 자동</span></h2>
         </div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          매일 아침 <strong>향후 7일 미완료 업무</strong>(발송 예정 · 발송일정 미등록 · 계산서 미발행 · 입금 대기)를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다.
+          매일 지정 시각에 <strong>미완료 업무</strong>를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다. 내용·시간·기간을 아래에서 정하세요.
           자동 발송은 Vercel 환경변수 <code>CRON_SECRET</code> 설정이 필요해요.
         </p>
+        {dcfg && (
+          <div style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 14, marginBottom: 12, display: "grid", gap: 12 }}>
+            <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              <input type="checkbox" className="b2b-checkbox" checked={dcfg.enabled} onChange={(e) => setDcfg({ ...dcfg, enabled: e.target.checked })} /> 자동 발송 사용
+            </label>
+            <div className="sm-row" style={{ gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+              <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>발송 시각
+                <select className="b2b-select" style={{ width: "auto" }} value={dcfg.hour} onChange={(e) => setDcfg({ ...dcfg, hour: Number(e.target.value) })}>
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                </select>
+                <span className="sm-faint" style={{ fontSize: 11 }}>(한국시간)</span>
+              </label>
+              <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>기간
+                <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
+              </label>
+            </div>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
+              <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
+                {([["ship", "발송 예정"], ["unscheduled", "발송일정 미등록"], ["invoice", "계산서 미발행"], ["payment", "입금 대기"]] as const).map(([k, l]) => (
+                  <label key={k} className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer" }}>
+                    <input type="checkbox" className="b2b-checkbox" checked={dcfg.sections[k]} onChange={(e) => setDcfg({ ...dcfg, sections: { ...dcfg.sections, [k]: e.target.checked } })} /> {l}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label style={{ fontSize: 13 }}>제목
+              <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="☀️ 씨몬스터 B2B 오늘의 할 일" />
+            </label>
+            <div><button className="b2b-btn-primary" onClick={saveDigestCfg} disabled={dcfgSaving}>{dcfgSaving ? "저장 중..." : "설정 저장"}</button></div>
+          </div>
+        )}
         <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: digest ? 10 : 0 }}>
           <button className="b2b-btn-secondary" onClick={loadDigest} disabled={digestBusy}>{digestBusy ? "..." : "미리보기"}</button>
           <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !flowActive} title={flowActive ? "" : "먼저 Flow 봇을 설정하세요"}>지금 보내기</button>
