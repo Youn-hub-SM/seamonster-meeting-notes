@@ -18,6 +18,18 @@ const won = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
 const pct = (n?: number) => (n == null ? "-" : `${n.toFixed(2)}%`);
 const roasFmt = (n?: number) => (n == null ? "-" : n.toFixed(2));
 
+// 프리셋 → 실제 날짜(메타/네이버 공통: 최근 N일 = 어제까지 N일, 오늘 제외).
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function presetRange(key: string): { since: string; until: string } {
+  const now = new Date();
+  const back = (n: number) => { const x = new Date(now); x.setDate(x.getDate() - n); return ymd(x); };
+  if (key === "today") return { since: back(0), until: back(0) };
+  if (key === "yesterday") return { since: back(1), until: back(1) };
+  if (key === "last_30d" || key === "last30days") return { since: back(30), until: back(1) };
+  return { since: back(7), until: back(1) }; // last_7d / last7days
+}
+const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : `${r.since} ~ ${r.until}`; };
+
 type StageInfo = { key: string; label: string; color: string };
 const STAGE_SHORT: Record<string, string> = {
   material: "소재테스트", performance: "성과테스트", scale: "증액 권장", decline: "효율 하락", insufficient: "데이터 부족",
@@ -143,6 +155,7 @@ export default function MetaAdPage() {
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
+          <span className="sm-faint" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{rangeLabel(preset)}</span>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading || !status?.connected}>{loading ? "..." : "새로고침"}</button>
         </div>
       </header>

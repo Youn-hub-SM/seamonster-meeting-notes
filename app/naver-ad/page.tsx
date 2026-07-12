@@ -24,6 +24,16 @@ const KEYWORD_TYPES = new Set(["WEB_SITE", "POWER_CONTENTS", "PLACE"]); // 키�
 const won = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
 const num = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// 프리셋 → 실제 날짜(네이버: 최근 N일 = 어제까지 N일, 오늘 제외).
+function presetRange(key: string): { since: string; until: string } {
+  const now = new Date();
+  const back = (n: number) => { const x = new Date(now); x.setDate(x.getDate() - n); return ymd(x); };
+  if (key === "today") return { since: back(0), until: back(0) };
+  if (key === "yesterday") return { since: back(1), until: back(1) };
+  if (key === "last30days") return { since: back(30), until: back(1) };
+  return { since: back(7), until: back(1) }; // last7days
+}
+const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : `${r.since} ~ ${r.until}`; };
 
 type SortField = "impCnt" | "clkCnt" | "ctr" | "salesAmt" | "cpc" | "ccnt" | "convAmt" | "ror" | "avgRnk" | "bidAmt";
 const SORT_VAL: Record<SortField, (r: Row) => number> = {
@@ -389,6 +399,7 @@ export default function NaverAdPage() {
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>기간</span>
             {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key && (convBasis === "purchase" ? customMode : !customMode)} onClick={() => onPreset(p.key)}>{p.label}</Chip>)}
             <Chip on={customMode && !PRESETS.some((p) => p.key === preset && convBasis === "purchase")} onClick={enterCustom}>직접 설정</Chip>
+            {!customMode && <span className="sm-faint" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{rangeLabel(preset)}</span>}
             {customMode && (
               <>
                 <input type="date" className="b2b-input" value={since} max={until || undefined} onChange={(e) => setSince(e.target.value)} style={{ width: 150 }} />
