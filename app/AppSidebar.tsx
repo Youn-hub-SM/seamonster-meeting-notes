@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { NAV, HOME, type NavTool } from "./nav";
-import Icon from "./components/Icon";
+import Icon, { type IconName } from "./components/Icon";
 
 function itemActive(href: string, toolHref: string, pathname: string) {
   if (href === toolHref) return pathname === href; // 인덱스 메뉴는 정확히 일치할 때만
@@ -51,6 +51,16 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
   const isAdmin = userName === "현석" || userName === "관리자";
 
+  // 즐겨찾기 항목 아이콘: href → 해당 툴(또는 상위 툴)의 실제 아이콘. (기존 ⭐ 대체)
+  const iconForHref = useMemo(() => {
+    const m = new Map<string, IconName>();
+    for (const cat of NAV) for (const t of cat.tools) {
+      m.set(t.href, t.icon);
+      for (const sub of t.menu || []) if (!m.has(sub.href)) m.set(sub.href, t.icon);
+    }
+    return (href: string): IconName => m.get(href) || "home";
+  }, []);
+
   // 즐겨찾기(아이디별) 로드 — 로그인 사용자 기준
   useEffect(() => {
     if (!userName) { setFavorites([]); setEditFav(false); return; }
@@ -66,11 +76,11 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
       if (j?.ok) setFavorites(j.favorites || []);
     } catch { /* 실패 시 다음 로드에서 정정 */ }
   }
-  const FavStar = ({ href, label }: { href: string; label: string }) => (
+  const FavToggle = ({ href, label }: { href: string; label: string }) => (
     <button type="button" className="app-sb-favstar" aria-label={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"} title={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"}
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(href, label); }}
-      style={{ marginLeft: "auto", flex: "0 0 auto", background: "none", border: "none", cursor: "pointer", color: isFav(href) ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 15, lineHeight: 1, padding: "0 6px" }}>
-      {isFav(href) ? "★" : "☆"}
+      style={{ marginLeft: "auto", flex: "0 0 auto", background: "none", border: "none", cursor: "pointer", color: isFav(href) ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 16, lineHeight: 1, padding: "0 6px" }}>
+      {isFav(href) ? "✕" : "＋"}
     </button>
   );
 
@@ -134,14 +144,14 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               </svg>
             </button>
           )}
-          {editFav && !hasMenu && <FavStar href={t.href} label={t.label} />}
+          {editFav && !hasMenu && <FavToggle href={t.href} label={t.label} />}
         </div>
         {expanded && (
           <div className="app-sb-menu">
             {menu.map((m) => editFav ? (
               <div key={m.href} className="app-sb-menu-row" style={{ display: "flex", alignItems: "center" }}>
                 <Link href={m.href} className={`app-sb-menu-item ${itemActive(m.href, t.href, pathname) ? "is-active" : ""}`} style={{ flex: 1 }} onClick={onNavigate}>{m.label}</Link>
-                <FavStar href={m.href} label={`${t.label} · ${m.label}`} />
+                <FavToggle href={m.href} label={`${t.label} · ${m.label}`} />
               </div>
             ) : (
               <Link
@@ -181,11 +191,11 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
           </Link>
         </div>
 
-        {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 별표가 나타남 */}
+        {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
         {!collapsed && userName && (
           <div className="app-sb-group">
             <div className="app-sb-cat" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <span>⭐ 즐겨찾는 메뉴</span>
+              <span>즐겨찾는 메뉴</span>
               <button type="button" onClick={() => setEditFav((v) => !v)}
                 style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, padding: 0, color: editFav ? "var(--sm-orange)" : "var(--sm-text-light)" }}>
                 {editFav ? "완료" : "편집"}
@@ -193,15 +203,15 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             </div>
             {favorites.length === 0 ? (
               <div className="sm-faint" style={{ fontSize: 11, padding: "2px 12px 4px", lineHeight: 1.5 }}>
-                {editFav ? "메뉴 옆 ☆를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
+                {editFav ? "메뉴 옆 ＋를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
               </div>
             ) : favorites.map((f) => (
               <div key={f.href} className={`app-sb-tool-row ${pathname === f.href || pathname.startsWith(f.href + "/") ? "is-active" : ""}`}>
                 <Link href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
-                  <span className="app-sb-emoji">⭐</span>
+                  <span className="app-sb-emoji"><Icon name={iconForHref(f.href)} /></span>
                   <span className="app-sb-tool-label">{f.label}</span>
                 </Link>
-                {editFav && <FavStar href={f.href} label={f.label} />}
+                {editFav && <FavToggle href={f.href} label={f.label} />}
               </div>
             ))}
           </div>
