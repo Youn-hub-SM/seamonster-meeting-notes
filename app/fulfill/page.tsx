@@ -89,10 +89,11 @@ export default function FulfillPage() {
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  async function recordLog() {
-    if (!res || !recordDate) return;
-    if (res.unmatched.length > 0 && !window.confirm(`미매칭 SKU ${res.unmatched.length}개가 있어 기본운임이 실제보다 적게 기록될 수 있어요.\n상품마스터에서 택배 정보를 채운 뒤 다시 만드는 걸 권장합니다.\n\n그래도 지금 기록할까요?`)) return;
+  async function recordLog(): Promise<boolean> {
+    if (!res || !recordDate) return false;
+    if (res.unmatched.length > 0 && !window.confirm(`미매칭 SKU ${res.unmatched.length}개가 있어 기본운임이 실제보다 적게 기록될 수 있어요.\n상품마스터에서 택배 정보를 채운 뒤 다시 만드는 걸 권장합니다.\n\n그래도 지금 기록할까요?`)) return false;
     setRecording(true); setRecordOk(""); setError("");
+    let ok = false;
     try {
       const ex = await (await fetch(`/api/fulfill/log?from=${recordDate}&to=${recordDate}`, { cache: "no-store" })).json();
       const cur = ex.ok ? (ex.rows || []).find((r: { log_date: string; boxes_normal: Record<string, number>; boxes_guar: Record<string, number>; base_fee_normal: number; base_fee_guar: number }) => r.log_date === recordDate) : null;
@@ -100,16 +101,36 @@ export default function FulfillPage() {
       // 동일 데이터 감지 시 덮어쓰기 권유
       if (hasData) {
         if (recordMode === "add") {
-          if (!window.confirm(`${recordDate}에 이미 배송일지 기록이 있습니다.\n\n같은 발주를 또 '더하기'하면 이중 집계됩니다. 동일한 데이터라면 '덮어쓰기'를 권장해요.\n\n그래도 '더하기'로 진행할까요?\n(취소 후 '덮어쓰기'로 바꿔 다시 눌러주세요)`)) { setRecording(false); return; }
-        } else if (!window.confirm(`${recordDate}에 이미 기록이 있습니다. 덮어쓸까요?`)) { setRecording(false); return; }
+          if (!window.confirm(`${recordDate}에 이미 배송일지 기록이 있습니다.\n\n같은 발주를 또 '더하기'하면 이중 집계됩니다. 동일한 데이터라면 '덮어쓰기'를 권장해요.\n\n그래도 '더하기'로 진행할까요?\n(취소 후 '덮어쓰기'로 바꿔 다시 눌러주세요)`)) { setRecording(false); return false; }
+        } else if (!window.confirm(`${recordDate}에 이미 기록이 있습니다. 덮어쓸까요?`)) { setRecording(false); return false; }
       }
       const boxes_normal: Record<string, number> = {}, boxes_guar: Record<string, number> = {};
       for (const p of res.parcelSummary) { if (p.normal) boxes_normal[p.category] = p.normal; if (p.guarantee) boxes_guar[p.category] = p.guarantee; }
       const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, mode: recordMode, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar, guar_extra_fee: res.fees.guarExtra }) });
       const j = await r.json(); if (!j.ok) throw new Error(j.error || "기록 실패");
       setRecordOk(`${recordDate} 배송일지에 ${recordMode === "add" ? "더했어요(누적)" : "기록했어요"}.`);
+      ok = true;
     } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }
     setRecording(false);
+    return ok;
+  }
+
+  // '다음 단계' = 그 단계 작업 수행 후 이동
+  async function onNext() {
+    if (!res) return;
+    if (step === 0) { setStep(1); return; }
+    if (step === 1) { // CN 2종 다운로드 후 이동
+      if (!blocked) {
+        const g = res.files.guarantee;
+        if (res.stats.normalCount > 0) downloadB64(res.files.normal.name, res.files.normal.b64);
+        if (g) setTimeout(() => downloadB64(g.name, g.b64), 400);
+      }
+      setStep(2); return;
+    }
+    if (step === 2) { // 아직 기록 안 했으면 배송일지 기록 후 이동
+      if (!recordOk) { const done = await recordLog(); if (!done) return; }
+      setStep(3); return;
+    }
   }
 
   async function commitDispatch(force = false) {
@@ -328,7 +349,11 @@ export default function FulfillPage() {
         <div className="sm-row" style={{ justifyContent: "space-between", marginTop: 18 }}>
           <button className="b2b-btn-secondary" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>← 이전</button>
           {step < STEPS.length - 1 ? (
-            <button className="b2b-btn-primary" onClick={() => setStep((s) => s + 1)} disabled={!canNext} title={!canNext ? "이 단계를 완료해야 넘어갈 수 있어요" : ""}>다음: {STEPS[step + 1]} →</button>
+            <button className="b2b-btn-primary" onClick={onNext} disabled={!canNext || recording} title={!canNext ? "이 단계를 완료해야 넘어갈 수 있어요" : ""}>
+              {step === 1 ? "📦 CN 2종 받고 다음 →"
+                : step === 2 ? (recording ? "기록 중…" : recordOk ? "다음: 상품 출고 →" : "배송일지에 기록 후 다음 →")
+                  : `다음: ${STEPS[step + 1]} →`}
+            </button>
           ) : <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>마지막 단계</span>}
         </div>
       )}
