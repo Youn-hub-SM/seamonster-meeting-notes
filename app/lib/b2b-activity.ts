@@ -148,6 +148,32 @@ export async function sendFlowBotNotify(
   }
 }
 
+// Flow 봇에 임의 텍스트 발송(아침 일정 다이제스트 등). 설정값 사용.
+export async function sendFlowText(contents: string, opts?: { config?: FlowBotConfig; receivers?: string[]; title?: string }): Promise<{ ok: boolean; status: number; error?: string }> {
+  const cfg = opts?.config ?? (await getFlowBotConfig());
+  const receivers = (opts?.receivers ?? cfg.receivers).map((r) => r.trim()).filter(Boolean);
+  if (!cfg.botId || !cfg.apiKey || !receivers.length) return { ok: false, status: 0, error: "Flow 봇 설정(봇 ID·API 키·수신자)이 완료되지 않았습니다." };
+  const url = `https://api.flow.team/v1/bots/${encodeURIComponent(cfg.botId)}/notifications/bulk`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-flow-api-key": cfg.apiKey },
+      body: JSON.stringify({ receivers: receivers.map((r) => ({ receiverId: r })), title: opts?.title || cfg.title || "씨몬스터 B2B 알림", contents }),
+    });
+    const text = await res.text().catch(() => "");
+    let json: unknown = null;
+    try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+    const resp = (json as { response?: { success?: boolean; message?: string; error?: { message?: string; verbose?: string[] } } } | null)?.response;
+    if (!res.ok || resp?.success === false) {
+      const msg = resp?.error?.message || resp?.message || text.slice(0, 200) || `HTTP ${res.status}`;
+      return { ok: false, status: res.status, error: msg };
+    }
+    return { ok: true, status: res.status };
+  } catch (err) {
+    return { ok: false, status: 0, error: (err as Error).message };
+  }
+}
+
 type OrderSummary = {
   id: string;
   order_no: string;

@@ -28,8 +28,8 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  // 로그인 페이지·로그인 API + Tally 웹훅(외부 서버가 인증 없이 POST) + QR 숏링크 리다이렉트(/q/*, 공개) 는 보호 제외
-  if (pathname === "/b2b/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname.startsWith("/q/")) {
+  // 로그인 페이지·로그인 API + Tally 웹훅 + QR 숏링크(/q/*) + 아침 다이제스트 크론(자체 CRON_SECRET/관리자 검증) 은 보호 제외
+  if (pathname === "/b2b/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname === "/api/b2b/schedule-digest" || pathname.startsWith("/q/")) {
     return NextResponse.next();
   }
 
