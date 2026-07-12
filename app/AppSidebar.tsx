@@ -23,6 +23,8 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
+  const [editFav, setEditFav] = useState(false);
   // 아코디언: 여러 개를 동시에 펼칠 수 있음(단일 열림 아님). 활성 툴은 자동으로 펼치되, 열어둔 다른 건 닫지 않음.
   const activeMenuHref = useMemo(() => {
     for (const cat of NAV) for (const t of cat.tools) if (t.menu?.length && toolActive(t, pathname)) return t.href;
@@ -44,6 +46,29 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   }, [pathname]);
 
   const isAdmin = userName === "현석" || userName === "관리자";
+
+  // 즐겨찾기(아이디별) 로드 — 로그인 사용자 기준
+  useEffect(() => {
+    if (!userName) { setFavorites([]); setEditFav(false); return; }
+    fetch("/api/b2b/favorites", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j?.ok) setFavorites(j.favorites || []); }).catch(() => {});
+  }, [userName]);
+
+  const isFav = (href: string) => favorites.some((f) => f.href === href);
+  async function toggleFav(href: string, label: string) {
+    const on = !isFav(href);
+    setFavorites((prev) => (on ? [...prev, { href, label }] : prev.filter((f) => f.href !== href))); // 낙관적
+    try {
+      const j = await (await fetch("/api/b2b/favorites", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ href, label, on }) })).json();
+      if (j?.ok) setFavorites(j.favorites || []);
+    } catch { /* 실패 시 다음 로드에서 정정 */ }
+  }
+  const FavStar = ({ href, label }: { href: string; label: string }) => (
+    <button type="button" className="app-sb-favstar" aria-label={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"} title={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(href, label); }}
+      style={{ marginLeft: "auto", flex: "0 0 auto", background: "none", border: "none", cursor: "pointer", color: isFav(href) ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 15, lineHeight: 1, padding: "0 6px" }}>
+      {isFav(href) ? "★" : "☆"}
+    </button>
+  );
 
   async function handleLogout() {
     await fetch("/api/b2b/auth", { method: "DELETE" });
@@ -105,10 +130,16 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               </svg>
             </button>
           )}
+          {editFav && !hasMenu && <FavStar href={t.href} label={t.label} />}
         </div>
         {expanded && (
           <div className="app-sb-menu">
-            {menu.map((m) => (
+            {menu.map((m) => editFav ? (
+              <div key={m.href} className="app-sb-menu-row" style={{ display: "flex", alignItems: "center" }}>
+                <Link href={m.href} className={`app-sb-menu-item ${itemActive(m.href, t.href, pathname) ? "is-active" : ""}`} style={{ flex: 1 }} onClick={onNavigate}>{m.label}</Link>
+                <FavStar href={m.href} label={`${t.label} · ${m.label}`} />
+              </div>
+            ) : (
               <Link
                 key={m.href}
                 href={m.href}
@@ -145,6 +176,33 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             <span className="app-sb-tool-label">{HOME.label}</span>
           </Link>
         </div>
+
+        {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 별표가 나타남 */}
+        {!collapsed && userName && (
+          <div className="app-sb-group">
+            <div className="app-sb-cat" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <span>⭐ 즐겨찾는 메뉴</span>
+              <button type="button" onClick={() => setEditFav((v) => !v)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, padding: 0, color: editFav ? "var(--sm-orange)" : "var(--sm-text-light)" }}>
+                {editFav ? "완료" : "편집"}
+              </button>
+            </div>
+            {favorites.length === 0 ? (
+              <div className="sm-faint" style={{ fontSize: 11, padding: "2px 12px 4px", lineHeight: 1.5 }}>
+                {editFav ? "메뉴 옆 ☆를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
+              </div>
+            ) : favorites.map((f) => (
+              <div key={f.href} className={`app-sb-tool-row ${pathname === f.href || pathname.startsWith(f.href + "/") ? "is-active" : ""}`}>
+                <Link href={f.href} className="app-sb-tool" onClick={onNavigate}>
+                  <span className="app-sb-emoji">⭐</span>
+                  <span className="app-sb-tool-label">{f.label}</span>
+                </Link>
+                {editFav && <FavStar href={f.href} label={f.label} />}
+              </div>
+            ))}
+          </div>
+        )}
+
         {NAV.filter((cat) => !cat.adminOnly || isAdmin).map((cat) => {
           const tools = cat.tools.filter((t) => !t.adminOnly || isAdmin);
           if (tools.length === 0) return null;
