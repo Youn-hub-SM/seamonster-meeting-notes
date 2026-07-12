@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 type Item = { sku: string; qty: number };
-type ProductRow = { productId: string; name: string; need: number; current: number; after: number; short: boolean };
+type ProductRow = { productId: string; name: string; option: string; need: number; current: number; after: number; short: boolean };
 type ItemRow = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -30,14 +30,16 @@ export async function POST(req: NextRequest) {
     const commit = !!body.commit;
     const sb = supabaseAdmin();
 
-    // 상품 맵(대문자 SKU) + 묶음
-    const { data: prods, error: pErr } = await sb.from("products").select("id, sku, name").not("sku", "is", null);
+    // 상품 맵(대문자 SKU) + 묶음. spec = 옵션.
+    const { data: prods, error: pErr } = await sb.from("products").select("id, sku, name, spec").not("sku", "is", null);
     if (pErr) return NextResponse.json({ ok: false, error: pErr.message }, { status: 500 });
     const bySku = new Map<string, { id: string; name: string }[]>();
     const nameById = new Map<string, string>();
-    for (const p of prods || []) {
+    const optById = new Map<string, string>();
+    for (const p of (prods || []) as { id: string; sku: string; name: string; spec?: string }[]) {
       const k = String(p.sku || "").trim().toUpperCase();
       nameById.set(p.id, p.name || "");
+      optById.set(p.id, p.spec || "");
       if (!k) continue;
       const a = bySku.get(k) || []; a.push({ id: p.id, name: p.name || "" }); bySku.set(k, a);
     }
@@ -85,8 +87,8 @@ export async function POST(req: NextRequest) {
 
     const productRows: ProductRow[] = productIds.map((pid) => {
       const need = perProduct.get(pid) || 0; const current = stockMap.get(pid) || 0;
-      return { productId: pid, name: nameById.get(pid) || "", need, current, after: current - need, short: current - need < 0 };
-    }).sort((a, b) => a.after - b.after);
+      return { productId: pid, name: nameById.get(pid) || "", option: optById.get(pid) || "", need, current, after: current - need, short: current - need < 0 };
+    }).sort((a, b) => a.name.localeCompare(b.name, "ko") || a.option.localeCompare(b.option, "ko")); // 가나다순
     const shortages = productRows.filter((r) => r.short).length;
 
     if (!commit) return NextResponse.json({ ok: true, committed: false, items: itemRows, products: productRows, shortages });

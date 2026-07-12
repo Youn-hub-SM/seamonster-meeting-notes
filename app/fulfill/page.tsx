@@ -17,7 +17,7 @@ type Result = {
   files: { normal: FileOut; guarantee: FileOut | null; parcel: FileOut };
 };
 type DItem = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" };
-type DProd = { productId: string; name: string; need: number; current: number; after: number; short: boolean };
+type DProd = { productId: string; name: string; option: string; need: number; current: number; after: number; short: boolean };
 type DispatchPreview = { items: DItem[]; products: DProd[]; shortages: number; message?: string };
 type DispatchDone = { orderNo: string; groupId: string; dispatched: number; totalQty: number; shortages: number };
 
@@ -260,11 +260,12 @@ export default function FulfillPage() {
                   <>
                     <div className="b2b-table-wrap">
                       <table className="b2b-table">
-                        <thead><tr><th>상품</th><th className="num">출고수량</th><th className="num">현재 재고</th><th className="num">출고 후</th></tr></thead>
+                        <thead><tr><th>상품</th><th>옵션</th><th className="num">출고수량</th><th className="num">현재 재고</th><th className="num">출고 후</th></tr></thead>
                         <tbody>
                           {dispatch.products.map((p) => (
                             <tr key={p.productId} style={p.short ? { background: "var(--sm-danger-bg)" } : undefined}>
                               <td><strong>{p.name}</strong></td>
+                              <td style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>{p.option || "-"}</td>
                               <td className="num b2b-money">{p.need.toLocaleString()}</td>
                               <td className="num b2b-money">{p.current.toLocaleString()}</td>
                               <td className="num b2b-money" style={{ fontWeight: 700, color: p.short ? "var(--sm-danger)" : undefined }}>{p.after.toLocaleString()}</td>
