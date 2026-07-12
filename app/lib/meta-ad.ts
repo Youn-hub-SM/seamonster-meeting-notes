@@ -43,12 +43,20 @@ export async function pingMetaAd(): Promise<{ ok: boolean; name?: string; accoun
   return { ok: true, name: j.name, accountStatus: j.account_status, currency: j.currency };
 }
 
-// ── 목록 조회(페이지네이션) ──
-async function metaList<T>(path: string, params: Record<string, string | number | undefined>): Promise<T[]> {
-  const first = await metaGet<{ data?: T[]; paging?: { next?: string } }>(path, { ...params, limit: 500 });
+// ── 목록 조회(페이지네이션) ── 데이터 과다 500이면 page limit을 절반씩 줄여 재시도.
+async function metaList<T>(path: string, params: Record<string, string | number | undefined>, pageLimit = 500): Promise<T[]> {
+  let lim = pageLimit;
+  let first: { data?: T[]; paging?: { next?: string } };
+  for (;;) {
+    try { first = await metaGet<{ data?: T[]; paging?: { next?: string } }>(path, { ...params, limit: lim }); break; }
+    catch (e) {
+      if (/reduce the amount of data/i.test(String((e as Error)?.message || "")) && lim > 25) { lim = Math.floor(lim / 2); continue; }
+      throw e;
+    }
+  }
   const out: T[] = [...(first.data || [])];
   let next = first.paging?.next;
-  for (let i = 0; i < 10 && next; i++) {
+  for (let i = 0; i < 40 && next; i++) {
     const res = await fetch(next, { cache: "no-store" });
     const j = (await res.json().catch(() => ({}))) as { data?: T[]; paging?: { next?: string } };
     out.push(...(j.data || [])); next = j.paging?.next;
@@ -102,7 +110,8 @@ export async function getInsights(level: "campaign" | "adset" | "ad", range: Sta
   const params: Record<string, string> = { level, fields: `${key},spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,cost_per_action_type` };
   if (range.since && range.until) params.time_range = JSON.stringify({ since: range.since, until: range.until });
   else params.date_preset = range.datePreset || "last_7d";
-  const rows = await metaList<InsightRow>(`/${accountId}/insights`, params);
+  // 인사이트는 행마다 action 배열이 커서 페이지를 작게(50) — '데이터 과다' 500 방지.
+  const rows = await metaList<InsightRow>(`/${accountId}/insights`, params, 50);
   const byId: Record<string, MetaInsight> = {};
   for (const r of rows) { const id = r[key] as string | undefined; if (id) byId[id] = parseInsight(r); }
   return { byId, ...(debug ? { rawSample: rows[0] } : {}) };
