@@ -222,8 +222,12 @@ export default function FulfillPage() {
           )}
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">② CN 파일 다운로드</span></div>
-            <div className="sm-row" style={{ gap: 10, flexWrap: "wrap" }}>
-              <button className="b2b-btn-primary" disabled={blocked || res.stats.normalCount === 0} onClick={() => downloadB64(res.files.normal.name, res.files.normal.b64)}>CNplus 일반 ({res.stats.normalCount})</button>
+            <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button className="b2b-btn-primary" style={{ padding: "10px 20px", fontSize: 15, fontWeight: 700 }} disabled={blocked || res.stats.normalCount === 0}
+                onClick={() => { const g = res.files.guarantee; downloadB64(res.files.normal.name, res.files.normal.b64); if (g) setTimeout(() => downloadB64(g.name, g.b64), 400); }}>
+                📦 모두 받기{res.files.guarantee ? " (2종)" : ""}
+              </button>
+              <button className="b2b-btn-secondary" disabled={blocked || res.stats.normalCount === 0} onClick={() => downloadB64(res.files.normal.name, res.files.normal.b64)}>CNplus 일반 ({res.stats.normalCount})</button>
               <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => res.files.guarantee && downloadB64(res.files.guarantee.name, res.files.guarantee.b64)}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
               {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소 경고를 확인(체크)해야 받을 수 있어요.</span>}
             </div>
