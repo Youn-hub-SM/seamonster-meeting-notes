@@ -13,8 +13,10 @@ async function userOf(req: NextRequest): Promise<string | null> {
   return (await verifySession(t)) || resolveUserName(t) || null;
 }
 
-// GET — 매시간 크론(Vercel: Authorization: Bearer CRON_SECRET)이 호출.
-//  설정된 시각(hour)·활성(enabled)일 때만 실제 발송(하루 1회 dedup). 관리자 수동은 미리보기/?send=1.
+// GET — 크론(Vercel: Authorization: Bearer CRON_SECRET)이 호출.
+//  Vercel Hobby는 크론이 '하루 1회'로 제한됨 → 매일 08:00 KST(vercel.json "0 23 * * *")에 한 번 발송.
+//  시간별 트리거(Vercel Pro의 시간별 크론 또는 외부 스케줄러)를 쓸 땐 경로에 ?gate=hour 를 붙이면
+//  설정된 시각(cfg.hour)에만 발송한다. 활성(enabled)·하루 1회 dedup은 두 경우 모두 적용. 관리자 수동은 미리보기/?send=1.
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
   const secret = process.env.CRON_SECRET || "";
@@ -26,10 +28,10 @@ export async function GET(req: NextRequest) {
 
   const cfg = await getDigestConfig();
 
-  // 크론: 설정 시각·활성·중복 검사 후 발송
+  // 크론: 활성·(선택적 시각 게이트)·중복 검사 후 발송
   if (isCron && sp.get("send") !== "1") {
     if (!cfg.enabled) return NextResponse.json({ ok: true, skipped: "disabled" });
-    if (kstHour() !== cfg.hour) return NextResponse.json({ ok: true, skipped: `hour ${kstHour()}!=${cfg.hour}` });
+    if (sp.get("gate") === "hour" && kstHour() !== cfg.hour) return NextResponse.json({ ok: true, skipped: `hour ${kstHour()}!=${cfg.hour}` });
     const today = kstDateStr();
     if ((await getDigestLastSent()) === today) return NextResponse.json({ ok: true, skipped: "already-sent" });
     const digest = await buildB2BDigest(cfg);

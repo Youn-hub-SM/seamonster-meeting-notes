@@ -270,6 +270,10 @@ export default function SettingsPage() {
                 <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
               </label>
             </div>
+            <p className="sm-faint" style={{ fontSize: 11, margin: 0, lineHeight: 1.6 }}>
+              ⓘ 현재 요금제(Hobby)에서는 크론이 하루 1회만 가능해 <strong>매일 오전 8시경</strong>에 발송됩니다.
+              지정한 시각에 맞춰 보내려면 시간별 크론(Vercel Pro)이 필요해요.
+            </p>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
