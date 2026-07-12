@@ -36,6 +36,10 @@ export default function SettingsPage() {
   const [zapierEnv, setZapierEnv] = useState(false);
   const [flowSaving, setFlowSaving] = useState(false);
   const [flowMsg, setFlowMsg] = useState("");
+  // 아침 일정 다이제스트
+  const [digest, setDigest] = useState("");
+  const [digestBusy, setDigestBusy] = useState(false);
+  const [digestMsg, setDigestMsg] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -89,6 +93,19 @@ export default function SettingsPage() {
       setFlowMsg(`✅ Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.`);
     } catch (e) { setFlowMsg("❌ " + (e instanceof Error ? e.message : "테스트 실패")); }
     setFlowSaving(false);
+  }
+  async function loadDigest() {
+    setDigestBusy(true); setDigestMsg("");
+    try { const j = await (await fetch("/api/b2b/schedule-digest", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "미리보기 실패"); setDigest(j.preview || ""); }
+    catch (e) { setDigestMsg("❌ " + (e instanceof Error ? e.message : "미리보기 실패")); }
+    setDigestBusy(false);
+  }
+  async function sendDigestNow() {
+    if (!window.confirm("지금 Flow로 '아침 일정 알림'을 보낼까요? (위 수신자 전체에게 발송)")) return;
+    setDigestBusy(true); setDigestMsg("");
+    try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg("✅ 발송 완료"); }
+    catch (e) { setDigestMsg("❌ " + (e instanceof Error ? e.message : "발송 실패")); }
+    setDigestBusy(false);
   }
 
   function isToggleOn(key: string): boolean {
@@ -214,6 +231,23 @@ export default function SettingsPage() {
             </div>
           </>
         )}
+      </section>
+
+      {/* 아침 일정 알림 (매일 08:00 자동 Flow 발송) */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">아침 일정 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 매일 08:00 자동</span></h2>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
+          매일 아침 <strong>향후 7일 미완료 업무</strong>(발송 예정 · 발송일정 미등록 · 계산서 미발행 · 입금 대기)를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다.
+          자동 발송은 Vercel 환경변수 <code>CRON_SECRET</code> 설정이 필요해요.
+        </p>
+        <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: digest ? 10 : 0 }}>
+          <button className="b2b-btn-secondary" onClick={loadDigest} disabled={digestBusy}>{digestBusy ? "..." : "미리보기"}</button>
+          <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !flowActive} title={flowActive ? "" : "먼저 Flow 봇을 설정하세요"}>지금 보내기</button>
+          {digestMsg && <span style={{ fontSize: 12, color: digestMsg.startsWith("❌") ? "var(--sm-danger)" : "var(--sm-success)" }}>{digestMsg}</span>}
+        </div>
+        {digest && <pre style={{ fontSize: 12, background: "var(--sm-bg)", padding: 12, borderRadius: 8, whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0, fontFamily: "inherit" }}>{digest}</pre>}
       </section>
 
       {!webhookSet && !flowActive && (
