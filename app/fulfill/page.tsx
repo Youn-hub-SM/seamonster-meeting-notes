@@ -12,9 +12,14 @@ type Result = {
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
   unmatched: string[];
+  outbound: { sku: string; name: string; qty: number }[];
   codeCount: number;
   files: { normal: FileOut; guarantee: FileOut | null; parcel: FileOut };
 };
+type DItem = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" };
+type DProd = { productId: string; name: string; need: number; current: number; after: number; short: boolean };
+type DispatchPreview = { items: DItem[]; products: DProd[]; shortages: number; message?: string };
+type DispatchDone = { orderNo: string; groupId: string; dispatched: number; totalQty: number; shortages: number };
 
 const KW_KEY = "fulfill_addr_keywords";
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -42,6 +47,45 @@ export default function FulfillPage() {
   const [recordMode, setRecordMode] = useState<"replace" | "add">("replace");
   const [recording, setRecording] = useState(false);
   const [recordOk, setRecordOk] = useState("");
+  const [dispatch, setDispatch] = useState<DispatchPreview | null>(null);
+  const [dispatchLoading, setDispatchLoading] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchDone, setDispatchDone] = useState<DispatchDone | null>(null);
+
+  // res 갱신 시 상품 출고 미리보기(재고 확인) 자동 로드
+  useEffect(() => {
+    setDispatch(null); setDispatchDone(null);
+    const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty })) || [];
+    if (!items.length) return;
+    let cancel = false;
+    setDispatchLoading(true);
+    (async () => {
+      try {
+        const j = await (await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: false }) })).json();
+        if (!cancel && j.ok) setDispatch(j);
+      } catch { /* 미리보기 실패는 무시 */ }
+      if (!cancel) setDispatchLoading(false);
+    })();
+    return () => { cancel = true; };
+  }, [res]);
+
+  async function commitDispatch(force = false) {
+    const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty })) || [];
+    if (!items.length) return;
+    setDispatching(true); setError("");
+    try {
+      const r = await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: true, force }) });
+      const j = await r.json();
+      if (r.status === 409 && j.duplicate) {
+        setDispatching(false);
+        if (window.confirm(`${j.error}\n\n그래도 다시 출고할까요? (재고가 또 차감됩니다)`)) return commitDispatch(true);
+        return;
+      }
+      if (!j.ok) throw new Error(j.error || "출고 실패");
+      setDispatchDone(j);
+    } catch (e) { setError(e instanceof Error ? e.message : "출고 실패"); }
+    setDispatching(false);
+  }
 
   async function recordLog() {
     if (!res || !recordDate) return;
@@ -186,6 +230,55 @@ export default function FulfillPage() {
               {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소 경고를 확인(체크)해야 받을 수 있어요.</span>}
             </div>
             <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 10 }}>상품마스터 택배정보 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3으로 설정됩니다.</p>
+          </section>
+
+          {/* 상품 출고 (소매 재고 차감) */}
+          <section className="b2b-card" style={{ marginTop: 16 }}>
+            <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <span className="b2b-card-title">상품 출고 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 소매 재고에서 차감</span></span>
+              {!dispatchDone && dispatch && dispatch.products.length > 0 && (
+                <button className="b2b-btn-primary" onClick={() => commitDispatch(false)} disabled={dispatching}>{dispatching ? "출고 중…" : `출고 완료 (${dispatch.products.length}품목)`}</button>
+              )}
+            </div>
+            {dispatchLoading ? <div className="b2b-loading">재고 확인 중…</div> : dispatchDone ? (
+              <div className="prod-sku-ok" style={{ fontSize: 13, lineHeight: 1.7 }}>
+                ✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link>
+                {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · ⚠️ 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
+                <div className="sm-faint" style={{ fontSize: 11.5, marginTop: 4 }}>잘못 눌렀다면 <Link href="/inventory/activity">재고 활동 히스토리</Link>에서 이 출고번호 배치를 취소하면 원복됩니다.</div>
+              </div>
+            ) : dispatch ? (
+              <>
+                {dispatch.items.some((i) => i.kind === "unmatched" || i.kind === "ambiguous") && (
+                  <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sm-danger-bg)", border: "1px solid var(--sm-danger)", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
+                    ⚠️ <strong>상품마스터에 없어 출고되지 않는 코드</strong> — <Link href="/b2b/products">상품마스터</Link>에 등록하면 다음부터 출고됩니다.
+                    <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{dispatch.items.filter((i) => i.kind === "unmatched" || i.kind === "ambiguous").map((i) => `${i.sku}${i.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(" · ")}</div>
+                  </div>
+                )}
+                {dispatch.products.length === 0 ? (
+                  <div className="b2b-empty">{dispatch.message || "출고할 품목이 없습니다."}</div>
+                ) : (
+                  <>
+                    <div className="b2b-table-wrap">
+                      <table className="b2b-table">
+                        <thead><tr><th>상품</th><th className="num">출고수량</th><th className="num">현재 재고</th><th className="num">출고 후</th></tr></thead>
+                        <tbody>
+                          {dispatch.products.map((p) => (
+                            <tr key={p.productId} style={p.short ? { background: "var(--sm-danger-bg)" } : undefined}>
+                              <td><strong>{p.name}</strong></td>
+                              <td className="num b2b-money">{p.need.toLocaleString()}</td>
+                              <td className="num b2b-money">{p.current.toLocaleString()}</td>
+                              <td className="num b2b-money" style={{ fontWeight: 700, color: p.short ? "var(--sm-danger)" : undefined }}>{p.after.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {dispatch.shortages > 0 && <p style={{ fontSize: 12, color: "var(--sm-danger)", marginTop: 6 }}>⚠️ 재고 부족 {dispatch.shortages}품목 — 출고는 진행되지만 마이너스 재고로 기록됩니다.</p>}
+                    <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>묶음(세트) 코드는 구성품으로 전개되어 차감됩니다. NOTHING(정기배송)은 제외됩니다. 같은 발주를 두 번 출고하려 하면 막습니다.</p>
+                  </>
+                )}
+              </>
+            ) : null}
           </section>
         </>
       )}

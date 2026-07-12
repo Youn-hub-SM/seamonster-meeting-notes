@@ -60,6 +60,7 @@ export type FulfillResult = {
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
   unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
+  outbound: { sku: string; name: string; qty: number }[]; // SKU별 출고수량(정기배송 제외) — 재고 출고 연동용
 };
 
 // rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어. rates: 요율(기본운임 구간·도착보장 추가).
@@ -122,11 +123,24 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   }
   const parcelSummary = BOX_CATEGORIES.map((cat) => ({ category: cat, ...counts.get(cat)! }));
 
+  // SKU별 출고수량(정기배송 제외) — 재고 소매 출고 연동용
+  const outMap = new Map<string, { sku: string; name: string; qty: number }>();
+  for (const r of kept) {
+    const sku = String(r[IDX.sku] ?? "").trim();
+    const q = Number(r[IDX.qty]) || 0;
+    if (!sku || q <= 0) continue;
+    const key = sku.toUpperCase();
+    const cur = outMap.get(key) ?? { sku, name: String(r[IDX.product] ?? "").trim(), qty: 0 };
+    cur.qty += q;
+    outMap.set(key, cur);
+  }
+  const outbound = [...outMap.values()].sort((a, b) => b.qty - a.qty);
+
   return {
     headers: CNPLUS_HEADERS, normal, guarantee,
     stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar },
     fees: { baseNormal, baseGuar: baseGuar + rates.guarSurcharge * parcelsGuar, guarExtra: 0 }, // 도착보장 기본운임 = 중량구간 + 143×도착보장건. 추가운임은 배송일지에서 제주 등 수동
     parcelSummary,
-    addressWarnings, unmatched: [...unmatched],
+    addressWarnings, unmatched: [...unmatched], outbound,
   };
 }

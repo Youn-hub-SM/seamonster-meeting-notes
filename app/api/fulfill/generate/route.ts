@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       parcelSummary: res.parcelSummary,
       addressWarnings: res.addressWarnings,
       unmatched: res.unmatched,
+      outbound: res.outbound, // SKU별 출고수량(재고 출고 연동용) — PII 없음
       codeCount: codeMap.size,
       files: {
         normal: { name: `cnplus_출력_${stamp}.xlsx`, b64: normalB64 },
