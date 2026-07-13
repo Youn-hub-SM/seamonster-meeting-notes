@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
-import { TrendChart, PieCard, ComboBarLine } from "@/app/components/charts";
+import { TrendChart, ComboBarLine, PIE_COLORS } from "@/app/components/charts";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -176,7 +176,7 @@ export default function FulfillStatsPage() {
               <div className="b2b-card-head"><span className="b2b-card-title">요일별 평균 발송량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 발송한 날 기준</span></span></div>
               <TrendChart data={agg.weekdayAvg} />
             </section>
-            <PieCard title="박스종류 비중" data={agg.catPie} />
+            <BoxTypeBars data={agg.catPie} />
           </div>
 
           {/* 월별 박스종류 수량표 */}
@@ -202,6 +202,42 @@ export default function FulfillStatsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// 박스종류 비중 — 랭킹 가로 막대(도넛보다 8종류에 가독성 좋음). 값 큰 순 정렬 + 카운트·%.
+function BoxTypeBars({ data }: { data: [string, number][] }) {
+  const sorted = [...data].sort((a, b) => b[1] - a[1]);
+  const total = sorted.reduce((s, [, n]) => s + n, 0);
+  const max = sorted.length ? sorted[0][1] : 1;
+  return (
+    <section className="b2b-card">
+      <div className="b2b-card-head"><span className="b2b-card-title">박스종류 비중</span></div>
+      {total === 0 ? (
+        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 13 }}>데이터 없음</div>
+      ) : (
+        <div className="sm-col" style={{ gap: 11 }}>
+          {sorted.map(([label, n], i) => {
+            const color = PIE_COLORS[i % PIE_COLORS.length];
+            const p = Math.round((n / total) * 100);
+            return (
+              <div key={label} className="sm-col" style={{ gap: 5 }} title={`${label} · ${n.toLocaleString()}건 (${p}%)`}>
+                <div className="sm-between" style={{ fontSize: 13 }}>
+                  <span className="sm-row" style={{ gap: 6, alignItems: "center", minWidth: 0 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
+                    <span className="sm-ellipsis">{label}</span>
+                  </span>
+                  <span style={{ whiteSpace: "nowrap" }}><strong>{n.toLocaleString()}</strong> <span className="sm-faint">{p}%</span></span>
+                </div>
+                <div style={{ height: 9, borderRadius: 5, background: "var(--sm-bg-subtle)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${Math.max(2, Math.round((n / max) * 100))}%`, background: color, borderRadius: 5, transition: "width .3s" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
