@@ -2626,6 +2626,52 @@ a.b2b-history-item:hover {
 }
 
 /* ═══════════════════════════════════════════════
+   입금 확인(payments) — 모바일 카드 + 상태 변경 버튼
+   ═══════════════════════════════════════════════ */
+/* 모바일: pay-table 은 라벨 없는 칸 숨김 → 업체·발주일·청구액·입금상태만 노출 */
+@media (max-width: 768px) {
+  .b2b-table.pay-table td:not([data-label]) { display: none; }
+  .b2b-table.pay-table.is-responsive tr { cursor: pointer; padding: 4px 2px; }
+  .b2b-table.pay-table td[data-label] { padding: 11px 14px; font-size: 14px; }
+  .b2b-table.pay-table td[data-label="업체"] { font-size: 15px; }
+}
+
+/* 입금 상태 변경 — 큰 '입금완료' 버튼 + 나머지 3개 */
+.pay-status-box { margin-bottom: 16px; }
+.pay-status-label { font-size: 12.5px; font-weight: 700; color: var(--sm-text-mid); margin-bottom: 8px; }
+.pay-paid-btn {
+  width: 100%; min-height: 52px; border-radius: 12px; border: none;
+  background: var(--sm-success); color: #fff; font-size: 16px; font-weight: 800;
+  cursor: pointer; font-family: inherit; transition: opacity 0.12s;
+}
+.pay-paid-btn:not(:disabled):hover { opacity: 0.9; }
+.pay-paid-btn.is-current {
+  background: var(--sm-success-bg); color: var(--sm-success);
+  border: 1.5px solid var(--sm-success); cursor: default;
+}
+.pay-status-others { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.pay-status-btn {
+  min-height: 44px; border: 1.5px solid var(--sm-border); border-radius: 10px;
+  background: var(--sm-white); color: var(--sm-text-mid); font-weight: 600; font-size: 13px;
+  cursor: pointer; font-family: inherit; transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.pay-status-btn:not(:disabled):hover { border-color: var(--sm-text-light); }
+.pay-status-btn.is-active { background: var(--sm-orange); border-color: var(--sm-orange); color: #fff; cursor: default; }
+
+.pay-add-box { background: var(--sm-bg); padding: 14px; border-radius: 10px; }
+
+/* 입금 내역 — 카드형 행 */
+.pay-history { display: flex; flex-direction: column; gap: 8px; }
+.pay-history-row {
+  position: relative; background: var(--sm-white); border: 1px solid var(--sm-border);
+  border-radius: 10px; padding: 10px 12px;
+}
+.pay-history-main { display: flex; align-items: baseline; gap: 10px; }
+.pay-history-date { font-size: 12px; color: var(--sm-text-light); }
+.pay-history-note { font-size: 12px; color: var(--sm-text-mid); margin-top: 3px; padding-right: 52px; }
+.pay-history-del { position: absolute; top: 8px; right: 8px; font-size: 11px; padding: 4px 10px; }
+
+/* ═══════════════════════════════════════════════
    발주 목록 모바일 카드
    ═══════════════════════════════════════════════ */
 .b2b-order-cards {

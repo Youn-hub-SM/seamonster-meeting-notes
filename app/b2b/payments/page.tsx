@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   Payment,
   PaymentInput,
-  PAYMENT_STATUSES,
   PAYMENT_COLORS,
   PaymentStatus,
   formatMoney,
@@ -58,18 +57,13 @@ export default function PaymentsPage() {
     reload();
   }, []);
 
-  // 모달이 데이터를 변경하면 (입금 추가/삭제, 상태 변경) 외부 리스트도 새로고침
-  function onModalChanged() {
-    reload();
-  }
-
   return (
     <>
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">입금 확인</h1>
           <p className="b2b-page-subtitle">
-            입금전·일부입금 발주를 한 화면에서 — 발주를 클릭해 입금 내역을 기록하세요.
+            입금전·일부입금 발주를 한 화면에서 — 발주를 눌러 입금 상태를 바꾸세요.
           </p>
         </div>
         <div className="b2b-page-actions">
@@ -118,7 +112,8 @@ export default function PaymentsPage() {
           </div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            {/* is-responsive + pay-table: 모바일은 카드(업체·발주일·청구액·입금상태만) */}
+            <table className="b2b-table is-responsive pay-table">
               <thead>
                 <tr>
                   <th>발주번호</th>
@@ -135,15 +130,15 @@ export default function PaymentsPage() {
                 {data.orders.map((o) => (
                   <tr key={o.id} onClick={() => setModalOrder(o)}>
                     <td><strong>{o.order_no}</strong></td>
-                    <td>{o.company_name}</td>
-                    <td>{o.order_date}</td>
+                    <td data-label="업체"><strong>{o.company_name}</strong></td>
+                    <td data-label="발주일">{o.order_date}</td>
                     <td>{o.ship_date || "-"}</td>
-                    <td className="num b2b-money">{formatMoney(o.total)}</td>
+                    <td className="num b2b-money" data-label="청구액">{formatMoney(o.total)}</td>
                     <td className="num b2b-money">{formatMoney(o.paid)}</td>
                     <td className="num b2b-money" style={{ color: o.remaining > 0 ? "var(--sm-danger)" : "inherit", fontWeight: 600 }}>
                       {formatMoney(o.remaining)}
                     </td>
-                    <td>
+                    <td data-label="입금상태">
                       <span
                         className="b2b-status-pill"
                         style={{
@@ -166,7 +161,7 @@ export default function PaymentsPage() {
         <PaymentModal
           order={modalOrder}
           onClose={() => setModalOrder(null)}
-          onChanged={onModalChanged}
+          onChanged={reload}
         />
       )}
     </>
@@ -174,7 +169,7 @@ export default function PaymentsPage() {
 }
 
 // ─────────────────────────────────────────────
-// 입금 내역 모달
+// 입금 모달 — 입금 상태 변경(최상단, 큰 버튼) + 입금 추가(금액·입금일·메모) + 내역
 // ─────────────────────────────────────────────
 function PaymentModal({
   order,
@@ -189,6 +184,8 @@ function PaymentModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
+  const [curStatus, setCurStatus] = useState<PaymentStatus>(order.payment_status);
+  const [statusSaving, setStatusSaving] = useState(false);
   const [form, setForm] = useState<PaymentInput>({
     order_id: order.id,
     amount: order.remaining > 0 ? order.remaining : "",
@@ -197,7 +194,6 @@ function PaymentModal({
     reference: "",
     notes: "",
   });
-  const [statusSaving, setStatusSaving] = useState(false);
 
   async function loadPayments() {
     setLoading(true);
@@ -221,6 +217,31 @@ function PaymentModal({
   const paidSum = payments.reduce((s, p) => s + Number(p.amount), 0);
   const remaining = order.total - paidSum;
 
+  async function handleStatusChange(newStatus: PaymentStatus) {
+    if (newStatus === curStatus) return;
+    setStatusSaving(true);
+    setError("");
+    const prev = curStatus;
+    setCurStatus(newStatus); // 낙관적
+    try {
+      const res = await fetch(`/api/b2b/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_status: newStatus }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "상태 변경 실패");
+      onChanged();
+      pingActivityFeed();
+      // 미수금 목록에서 빠지는 상태면 모달 닫기(완료감)
+      if (newStatus === "입금완료" || newStatus === "불필요") onClose();
+    } catch (err) {
+      setCurStatus(prev); // 롤백
+      setError(err instanceof Error ? err.message : "상태 변경 오류");
+    }
+    setStatusSaving(false);
+  }
+
   async function handleAdd() {
     if (!Number(form.amount) || Number(form.amount) <= 0) {
       setError("금액은 0보다 커야 합니다.");
@@ -232,18 +253,11 @@ function PaymentModal({
       const res = await fetch("/api/b2b/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, method: "", reference: "" }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "입금 추가 실패");
-      setForm({
-        order_id: order.id,
-        amount: "",
-        paid_at: todayIso(),
-        method: form.method,
-        reference: "",
-        notes: "",
-      });
+      setForm({ order_id: order.id, amount: "", paid_at: todayIso(), method: "", reference: "", notes: "" });
       await loadPayments();
       onChanged();
       pingActivityFeed();
@@ -266,37 +280,18 @@ function PaymentModal({
     }
   }
 
-  async function handleStatusChange(newStatus: PaymentStatus) {
-    setStatusSaving(true);
-    setError("");
-    try {
-      const res = await fetch(`/api/b2b/orders/${order.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payment_status: newStatus }),
-      });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "상태 변경 실패");
-      onChanged();
-      pingActivityFeed();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "상태 변경 오류");
-    }
-    setStatusSaving(false);
-  }
-
   return (
     <div className="b2b-modal-backdrop" onClick={onClose}>
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <div className="b2b-modal-head">
           <div>
-            <h2 className="b2b-modal-title">{order.order_no} · {order.company_name}</h2>
+            <h2 className="b2b-modal-title">{order.company_name}</h2>
             <div style={{ marginTop: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>
-              청구액 <strong className="b2b-money">{formatMoney(order.total)}</strong>
-              {" · "}
-              입금 <strong className="b2b-money">{formatMoney(paidSum)}</strong>
-              {" · "}
-              잔액 <strong className="b2b-money" style={{ color: remaining > 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>
+              {order.order_no} · {order.order_date}
+              {" · 청구 "}
+              <strong className="b2b-money">{formatMoney(order.total)}</strong>
+              {" · 잔액 "}
+              <strong className="b2b-money" style={{ color: remaining > 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>
                 {formatMoney(remaining)}
               </strong>
             </div>
@@ -307,49 +302,35 @@ function PaymentModal({
         <div className="b2b-modal-body">
           {error && <div className="b2b-error">{error}</div>}
 
-          <section>
-            <div className="b2b-form-section-title" style={{ marginBottom: 8 }}>입금 내역</div>
-            {loading ? (
-              <div className="b2b-loading">불러오는 중...</div>
-            ) : payments.length === 0 ? (
-              <div style={{ padding: 12, fontSize: 12, color: "var(--sm-text-light)", textAlign: "center", background: "var(--sm-bg)", borderRadius: 8 }}>
-                기록된 입금이 없습니다.
-              </div>
-            ) : (
-              <table className="b2b-table" style={{ fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    <th>입금일</th>
-                    <th className="num">금액</th>
-                    <th>방법</th>
-                    <th>메모</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((p) => (
-                    <tr key={p.id} style={{ cursor: "default" }}>
-                      <td>{p.paid_at}</td>
-                      <td className="num b2b-money">{formatMoney(p.amount)}</td>
-                      <td>{p.method || "-"}</td>
-                      <td>
-                        {p.reference || "-"}
-                        {p.notes && <div style={{ fontSize: 10, color: "var(--sm-text-light)" }}>{p.notes}</div>}
-                      </td>
-                      <td className="actions">
-                        <button className="b2b-btn-danger" onClick={() => handleDelete(p.id)} style={{ fontSize: 11, padding: "4px 8px" }}>
-                          삭제
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          {/* ① 입금 상태 변경 — 가장 중요, 최상단 큰 버튼 */}
+          <section className="pay-status-box">
+            <div className="pay-status-label">입금 상태 변경</div>
+            <button
+              className={`pay-paid-btn${curStatus === "입금완료" ? " is-current" : ""}`}
+              onClick={() => handleStatusChange("입금완료")}
+              disabled={statusSaving || curStatus === "입금완료"}
+            >
+              {curStatus === "입금완료" ? "✓ 입금완료됨" : "✓ 입금완료로 변경"}
+            </button>
+            <div className="pay-status-others">
+              {(["입금전", "일부입금", "불필요"] as PaymentStatus[]).map((s) => (
+                <button
+                  key={s}
+                  className={`pay-status-btn${curStatus === s ? " is-active" : ""}`}
+                  onClick={() => handleStatusChange(s)}
+                  disabled={statusSaving || curStatus === s}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </section>
 
-          <section style={{ background: "var(--sm-bg)", padding: 14, borderRadius: 8 }}>
-            <div className="b2b-form-section-title" style={{ marginBottom: 8 }}>입금 추가</div>
+          {/* ② 입금 추가 — 금액·입금일·메모만 */}
+          <section className="pay-add-box">
+            <div className="pay-status-label" style={{ marginBottom: 8 }}>
+              입금 추가 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>(선택)</span>
+            </div>
             <div className="b2b-field-row">
               <div className="b2b-field">
                 <label className="b2b-field-label">금액 (원)</label>
@@ -372,27 +353,6 @@ function PaymentModal({
                 />
               </div>
             </div>
-            <div className="b2b-field-row" style={{ marginTop: 10 }}>
-              <div className="b2b-field">
-                <label className="b2b-field-label">방법</label>
-                <input
-                  type="text"
-                  className="b2b-input"
-                  value={form.method}
-                  onChange={(e) => setForm({ ...form, method: e.target.value })}
-                  placeholder="계좌이체 / 카드 / 현금"
-                />
-              </div>
-              <div className="b2b-field">
-                <label className="b2b-field-label">송금명의·전표번호</label>
-                <input
-                  type="text"
-                  className="b2b-input"
-                  value={form.reference}
-                  onChange={(e) => setForm({ ...form, reference: e.target.value })}
-                />
-              </div>
-            </div>
             <div className="b2b-field" style={{ marginTop: 10 }}>
               <label className="b2b-field-label">메모</label>
               <input
@@ -400,38 +360,51 @@ function PaymentModal({
                 className="b2b-input"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="예) 세금계산서 발행분 / 부분입금"
               />
             </div>
-            <div style={{ marginTop: 12, textAlign: "right" }}>
+            <div style={{ marginTop: 12 }}>
               <button
                 type="button"
                 className="b2b-btn-primary"
                 onClick={handleAdd}
                 disabled={adding || !Number(form.amount) || Number(form.amount) <= 0}
+                style={{ width: "100%" }}
               >
                 {adding ? "추가 중..." : "+ 입금 추가"}
               </button>
             </div>
           </section>
+
+          {/* ③ 입금 내역 */}
+          <section style={{ marginTop: 16 }}>
+            <div className="pay-status-label" style={{ marginBottom: 8 }}>입금 내역</div>
+            {loading ? (
+              <div className="b2b-loading">불러오는 중...</div>
+            ) : payments.length === 0 ? (
+              <div style={{ padding: 12, fontSize: 12, color: "var(--sm-text-light)", textAlign: "center", background: "var(--sm-bg)", borderRadius: 8 }}>
+                기록된 입금이 없습니다.
+              </div>
+            ) : (
+              <div className="pay-history">
+                {payments.map((p) => (
+                  <div key={p.id} className="pay-history-row">
+                    <div className="pay-history-main">
+                      <span className="b2b-money" style={{ fontWeight: 700 }}>{formatMoney(p.amount)}</span>
+                      <span className="pay-history-date">{p.paid_at}</span>
+                    </div>
+                    {p.notes && <div className="pay-history-note">{p.notes}</div>}
+                    <button className="b2b-btn-danger pay-history-del" onClick={() => handleDelete(p.id)}>삭제</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         <div className="b2b-modal-foot">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>입금 상태</span>
-            <select
-              className="b2b-select"
-              value={order.payment_status}
-              onChange={(e) => handleStatusChange(e.target.value as PaymentStatus)}
-              disabled={statusSaving}
-              style={{ width: "auto" }}
-            >
-              {PAYMENT_STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>
+          <div className="b2b-modal-foot-right" style={{ width: "100%" }}>
+            <button className="b2b-btn-secondary" onClick={onClose} style={{ width: "100%" }}>닫기</button>
           </div>
         </div>
       </div>
