@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 // 내부도구 공용 차트 프리미티브 — 도넛 / 세로막대 추세 / 분포 도넛카드 / 가로바 리스트.
 // 디자인시스템: 카테고리 구분 색은 토큰이 아닌 전용 팔레트(PIE_COLORS) 예외. 레이아웃은 .b2b-card / .sm-* 사용.
 
@@ -130,6 +132,75 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
         );
       })}
     </svg>
+  );
+}
+
+// 막대(왼쪽 축, 누적) + 선(오른쪽 축) 콤보 — 발송량(막대) + 운임(선). 마우스오버 시 인터랙티브 툴팁.
+export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLabel = "운임", lineFmt = moneyCompact, barUnit = "건", lineColor = "#7C3AED" }: {
+  periods: string[];
+  barSeries: { key: string; values: number[] }[]; // 누적 막대(왼쪽 축)
+  barColors: string[];
+  lineValues: number[];                            // 선(오른쪽 축)
+  lineLabel?: string;
+  lineFmt?: (n: number) => string;
+  barUnit?: string;
+  lineColor?: string;
+}) {
+  const [hi, setHi] = useState<number | null>(null);
+  if (!periods.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
+  const totals = periods.map((_, i) => barSeries.reduce((s, ser) => s + (ser.values[i] || 0), 0));
+  const topL = niceCeil(Math.max(...totals, 1));
+  const topR = niceCeil(Math.max(...lineValues, 1));
+  const W = 760, H = 250, padL = 40, padR = 56, padT = 14, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const slot = plotW / periods.length, bw = Math.min(38, slot * 0.55);
+  const yL = (v: number) => padT + plotH - (v / topL) * plotH;
+  const yR = (v: number) => padT + plotH - (v / topR) * plotH;
+  const cx = (i: number) => padL + slot * i + slot / 2;
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const labelEvery = Math.ceil(periods.length / 14);
+  const linePts = periods.map((_, i) => `${cx(i)},${yR(lineValues[i] || 0)}`).join(" ");
+  const clamp = (v: number, lo: number, hex: number) => Math.max(lo, Math.min(hex, v));
+  const hex = 92, lo = 8;
+  return (
+    <div style={{ position: "relative" }} onMouseLeave={() => setHi(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+        {ticks.map((f, i) => {
+          const yy = yL(topL * f);
+          return (
+            <g key={i}>
+              <line x1={padL} x2={W - padR} y1={yy} y2={yy} stroke="var(--sm-border-light)" strokeWidth="1" />
+              <text x={padL - 6} y={yy + 3.5} textAnchor="end" fontSize="10" fill="var(--sm-text-light)">{Math.round(topL * f).toLocaleString()}</text>
+              <text x={W - padR + 6} y={yR(topR * f) + 3.5} textAnchor="start" fontSize="10" fill={lineColor}>{lineFmt(Math.round(topR * f))}</text>
+            </g>
+          );
+        })}
+        {periods.map((_, i) => {
+          let acc = 0;
+          return (
+            <g key={i}>
+              {barSeries.map((ser, si) => {
+                const v = ser.values[i] || 0; if (v <= 0) return null;
+                const h = (v / topL) * plotH; const yTop = padT + plotH - (acc / topL) * plotH - h; acc += v;
+                return <rect key={si} x={cx(i) - bw / 2} y={yTop} width={bw} height={h} fill={barColors[si % barColors.length]} opacity={hi === null || hi === i ? 1 : 0.45} />;
+              })}
+            </g>
+          );
+        })}
+        <polyline points={linePts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />
+        {periods.map((_, i) => <circle key={i} cx={cx(i)} cy={yR(lineValues[i] || 0)} r={hi === i ? 4 : 2.4} fill={lineColor} />)}
+        {periods.map((p, i) => (i % labelEvery === 0 || periods.length <= 14) ? <text key={i} x={cx(i)} y={H - 9} textAnchor="middle" fontSize="10" fill="var(--sm-text-mid)">{p}</text> : null)}
+        {periods.map((_, i) => <rect key={i} x={padL + slot * i} y={padT} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHi(i)} />)}
+      </svg>
+      {hi != null && (
+        <div style={{ position: "absolute", left: `${clamp((cx(hi) / W) * 100, lo, hex)}%`, top: 6, transform: "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 11.5, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5 }}>
+          <div style={{ fontWeight: 800, marginBottom: 2 }}>{periods[hi]}</div>
+          {barSeries.map((ser, si) => <div key={si}><span style={{ color: barColors[si % barColors.length] }}>●</span> {ser.key} <strong>{(ser.values[hi] || 0).toLocaleString()}{barUnit}</strong></div>)}
+          <div style={{ borderTop: "1px solid var(--sm-border)", marginTop: 3, paddingTop: 3 }}>합계 <strong>{totals[hi].toLocaleString()}{barUnit}</strong></div>
+          <div style={{ color: lineColor, fontWeight: 700 }}>{lineLabel} {lineFmt(lineValues[hi] || 0)}원</div>
+        </div>
+      )}
+    </div>
   );
 }
 

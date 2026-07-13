@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
-import { StackedBar, TrendChart, PieCard, BarList, moneyCompact, PIE_COLORS } from "@/app/components/charts";
+import { TrendChart, PieCard, ComboBarLine } from "@/app/components/charts";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -20,6 +20,7 @@ const WD_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 월~일
 
 const kstDate = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - back); return d; };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+const fmtLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function firstOfMonth(monthsBack: number): string { const n = kstDate(0); return iso(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() - monthsBack, 1))); }
 function monthsBetween(from: string, to: string): string[] {
   const out: string[] = []; let [y, m] = from.split("-").map(Number); const [ty, tm] = [Number(to.slice(0, 4)), Number(to.slice(5, 7))];
@@ -27,12 +28,30 @@ function monthsBetween(from: string, to: string): string[] {
   while ((y < ty || (y === ty && m <= tm)) && guard++ < 120) { out.push(`${y}-${String(m).padStart(2, "0")}`); m++; if (m > 12) { m = 1; y++; } }
   return out;
 }
+// 그 날짜가 속한 주의 월요일(로컬 기준, UTC 시프트 없이)
+function mondayOf(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return fmtLocal(d);
+}
+function weeksBetween(from: string, to: string): string[] {
+  const out: string[] = []; let d = new Date(`${mondayOf(from)}T00:00:00`); const end = new Date(`${mondayOf(to)}T00:00:00`);
+  let guard = 0;
+  while (d <= end && guard++ < 200) { out.push(fmtLocal(d)); d.setDate(d.getDate() + 7); }
+  return out;
+}
+const weekLabel = (mon: string) => { const [, m, d] = mon.split("-"); return `${Number(m)}/${Number(d)}`; };
+
 const PRESETS: { key: string; from: () => string }[] = [
   { key: "3개월", from: () => firstOfMonth(2) },
   { key: "6개월", from: () => firstOfMonth(5) },
   { key: "12개월", from: () => firstOfMonth(11) },
   { key: "올해", from: () => `${kstDate(0).getUTCFullYear()}-01-01` },
 ];
+
+const NG = ["var(--sm-info)", "var(--sm-orange)"]; // 일반=파랑 · 도착보장=주황
+const FEE_LINE = "#7C3AED"; // 운임 선(보라)
 
 export default function FulfillStatsPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -56,55 +75,63 @@ export default function FulfillStatsPage() {
   useEffect(() => { load(); }, [load]);
 
   const feeTotal = (r: Row) => r.base_fee_normal + r.base_fee_guar + r.extra_fee + r.guar_extra_fee + r.pado_fee + r.pado_extra + r.pado_cod;
-  const dryAmt = (r: Row) => { const rt = ratesFor(history, r.log_date); return r.dryice_full * rt.dryFull + r.dryice_half * rt.dryHalf; }; // 그 날짜에 유효했던 드라이 단가
+  const dryAmt = (r: Row) => { const rt = ratesFor(history, r.log_date); return r.dryice_full * rt.dryFull + r.dryice_half * rt.dryHalf; };
 
   const agg = useMemo(() => {
     const months = monthsBetween(from, to);
-    const mN = new Map<string, number>(), mG = new Map<string, number>();     // 월별 일반/도착보장
+    const weeks = weeksBetween(from, to);
+    const mN = new Map<string, number>(), mG = new Map<string, number>(), mFee = new Map<string, number>();
+    const wN = new Map<string, number>(), wG = new Map<string, number>(), wFee = new Map<string, number>();
     const mCat: Record<string, Map<string, number>> = {}; for (const c of BOX_CATEGORIES) mCat[c] = new Map();
-    const mFee = new Map<string, number>(), mDry = new Map<string, number>();
-    const catN = new Map<string, number>(), catG = new Map<string, number>(); // 박스종류별 일반/도착보장
-    const wd = new Array(7).fill(0);
+    const catN = new Map<string, number>(), catG = new Map<string, number>();
+    const wdSum = new Array(7).fill(0), wdDays = new Array(7).fill(0);
     let totN = 0, totG = 0, fee = 0, dry = 0, days = 0;
 
     for (const r of rows) {
-      const mo = r.log_date.slice(0, 7);
-      const n = sum(r.boxes_normal), g = sum(r.boxes_guar);
+      const mo = r.log_date.slice(0, 7), wk = mondayOf(r.log_date);
+      const n = sum(r.boxes_normal), g = sum(r.boxes_guar), f = feeTotal(r);
       if (n + g > 0) days++;
-      totN += n; totG += g; fee += feeTotal(r); dry += dryAmt(r);
-      mN.set(mo, (mN.get(mo) || 0) + n); mG.set(mo, (mG.get(mo) || 0) + g);
-      mFee.set(mo, (mFee.get(mo) || 0) + feeTotal(r)); mDry.set(mo, (mDry.get(mo) || 0) + dryAmt(r));
-      wd[new Date(`${r.log_date}T00:00:00`).getDay()] += n + g;
+      totN += n; totG += g; fee += f; dry += dryAmt(r);
+      mN.set(mo, (mN.get(mo) || 0) + n); mG.set(mo, (mG.get(mo) || 0) + g); mFee.set(mo, (mFee.get(mo) || 0) + f);
+      wN.set(wk, (wN.get(wk) || 0) + n); wG.set(wk, (wG.get(wk) || 0) + g); wFee.set(wk, (wFee.get(wk) || 0) + f);
+      const dow = new Date(`${r.log_date}T00:00:00`).getDay();
+      wdSum[dow] += n + g; if (n + g > 0) wdDays[dow]++;
       for (const c of BOX_CATEGORIES) {
         const cn = Number(r.boxes_normal?.[c]) || 0, cg = Number(r.boxes_guar?.[c]) || 0;
         catN.set(c, (catN.get(c) || 0) + cn); catG.set(c, (catG.get(c) || 0) + cg);
         mCat[c].set(mo, (mCat[c].get(mo) || 0) + cn + cg);
       }
     }
-    const lbl = (mo: string) => mo.slice(2); // "26-07"
+    const mLbl = (mo: string) => mo.slice(2);
     return {
-      months, lbl,
-      monthlyNG: { periods: months.map(lbl), series: [{ key: "일반", values: months.map((m) => mN.get(m) || 0) }, { key: "도착보장", values: months.map((m) => mG.get(m) || 0) }] },
-      monthlyCat: { periods: months.map(lbl), series: BOX_CATEGORIES.map((c) => ({ key: c, values: months.map((m) => mCat[c].get(m) || 0) })) },
-      monthTotals: months.map((m) => ({ month: m, n: mN.get(m) || 0, g: mG.get(m) || 0, cats: BOX_CATEGORIES.map((c) => mCat[c].get(m) || 0), fee: mFee.get(m) || 0 })),
+      weekly: {
+        periods: weeks.map(weekLabel),
+        series: [{ key: "일반", values: weeks.map((w) => wN.get(w) || 0) }, { key: "도착보장", values: weeks.map((w) => wG.get(w) || 0) }],
+        fee: weeks.map((w) => Math.round(wFee.get(w) || 0)),
+      },
+      monthly: {
+        periods: months.map(mLbl),
+        series: [{ key: "일반", values: months.map((m) => mN.get(m) || 0) }, { key: "도착보장", values: months.map((m) => mG.get(m) || 0) }],
+        fee: months.map((m) => Math.round(mFee.get(m) || 0)),
+      },
+      weekdayAvg: WD_ORDER.map((d) => {
+        const avg = wdDays[d] ? wdSum[d] / wdDays[d] : 0;
+        return { label: WD[d], value: Math.round(avg), tip: `${WD[d]}요일 평균 ${Math.round(avg).toLocaleString()}건 · ${wdDays[d]}일 발송(총 ${wdSum[d].toLocaleString()}건)` };
+      }),
       catPie: BOX_CATEGORIES.map((c) => [c, (catN.get(c) || 0) + (catG.get(c) || 0)] as [string, number]).filter(([, v]) => v > 0),
-      catNG: { periods: [...BOX_CATEGORIES], series: [{ key: "일반", values: BOX_CATEGORIES.map((c) => catN.get(c) || 0) }, { key: "도착보장", values: BOX_CATEGORIES.map((c) => catG.get(c) || 0) }] },
-      weekday: WD_ORDER.map((d) => ({ label: WD[d], value: wd[d], tip: `${WD[d]}요일 · ${wd[d].toLocaleString()}건` })),
-      feeTrend: months.map((m) => ({ label: lbl(m), value: Math.round(mFee.get(m) || 0), tip: `${m} · ${won(mFee.get(m) || 0)}원` })),
-      guarRatioTrend: months.map((m) => { const n = mN.get(m) || 0, g = mG.get(m) || 0; const t = n + g; return { label: lbl(m), value: t ? Math.round((g / t) * 100) : 0, tip: `${m} · 도착보장 ${t ? Math.round((g / t) * 100) : 0}%` }; }),
+      monthTotals: months.map((m) => ({ month: m, n: mN.get(m) || 0, g: mG.get(m) || 0, cats: BOX_CATEGORIES.map((c) => mCat[c].get(m) || 0) })),
       totN, totG, fee, dry, days,
     };
   }, [rows, from, to, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tot = agg.totN + agg.totG;
-  const NG = ["var(--sm-info)", "var(--sm-orange)"]; // 일반(파랑=info) · 도착보장(주황=brand) — 디자인 토큰 통일
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">발송 통계</h1>
-          <p className="b2b-page-subtitle">배송일지 기록으로 <strong>박스종류·월별·요일별·일반/도착보장</strong> 발송량을 분석합니다. <Link href="/fulfill/log">배송일지</Link>에서 기록·수정하면 반영돼요.</p>
+          <p className="b2b-page-subtitle">배송일지 기록으로 <strong>주차·월별 발송량과 운임, 요일별 평균, 박스종류</strong>를 분석합니다. 그래프에 마우스를 올리면 수치가 보여요. <Link href="/fulfill/log">배송일지</Link>에서 기록·수정하면 반영됩니다.</p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <div className="sm-tabs" style={{ margin: 0 }}>
@@ -129,41 +156,26 @@ export default function FulfillStatsPage() {
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(agg.dry)}원</div></div>
           </div>
 
-          {/* 모든 그래프 한 줄에 2개씩(막대→추세→도넛 순으로 높이 맞춤) */}
+          {/* 1) 주차별 발송량 + 운임 */}
+          <section className="b2b-card">
+            <div className="b2b-card-head"><span className="b2b-card-title">주차별 발송량 + 운임 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 막대=발송 · 선=운임</span></span></div>
+            <ComboBarLine periods={agg.weekly.periods} barSeries={agg.weekly.series} barColors={NG} lineValues={agg.weekly.fee} lineColor={FEE_LINE} />
+            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", FEE_LINE]]} />
+          </section>
+
+          {/* 2) 월별 발송량 + 운임 */}
+          <section className="b2b-card">
+            <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 + 운임 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 막대=발송 · 선=운임</span></span></div>
+            <ComboBarLine periods={agg.monthly.periods} barSeries={agg.monthly.series} barColors={NG} lineValues={agg.monthly.fee} lineColor={FEE_LINE} />
+            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", FEE_LINE]]} />
+          </section>
+
+          {/* 3) 요일별 평균 · 4) 박스종류 비중 */}
           <div className="fx-2col">
             <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 일반/도착보장</span></span></div>
-              <StackedBar periods={agg.monthlyNG.periods} series={agg.monthlyNG.series} colors={NG} unit="건" />
-              <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
+              <div className="b2b-card-head"><span className="b2b-card-title">요일별 평균 발송량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 발송한 날 기준</span></span></div>
+              <TrendChart data={agg.weekdayAvg} />
             </section>
-
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 구성</span></div>
-              <StackedBar periods={agg.monthlyCat.periods} series={agg.monthlyCat.series} unit="건" />
-              <Legend items={BOX_CATEGORIES.map((c, i) => [c, PIE_COLORS[i % PIE_COLORS.length]] as [string, string])} />
-            </section>
-
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">박스종류별 일반 vs 도착보장</span></div>
-              <StackedBar periods={agg.catNG.periods} series={agg.catNG.series} colors={NG} unit="건" />
-              <Legend items={[["일반", NG[0]], ["도착보장", NG[1]]]} />
-            </section>
-
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">요일별 발송량</span></div>
-              <TrendChart data={agg.weekday} />
-            </section>
-
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">월별 운임</span></div>
-              <TrendChart data={agg.feeTrend} fmtAxis={moneyCompact} />
-            </section>
-
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">도착보장 비율 추세</span></div>
-              <TrendChart data={agg.guarRatioTrend} fmtAxis={(n) => `${n}%`} />
-            </section>
-
             <PieCard title="박스종류 비중" data={agg.catPie} />
           </div>
 
