@@ -2,20 +2,29 @@ import { getKv, setKv } from "./b2b-settings";
 
 // 메타 광고 단계 판정 기준(시기별 커스텀). b2b_settings 에 JSON 저장.
 export type MetaThresholds = {
-  minSpend: number;      // 판정 최소 지출(이 미만이면 데이터 부족으로 판정 보류)
-  aboPassRoas: number;   // ABO 통과: ROAS ≥
-  aboMaxCpa: number;     // ABO 통과 보조: CPA ≤ (0=미사용)
-  aboMinPurchases: number; // ABO 통과 보조: 구매수 ≥
-  scaleRoas: number;     // 증액 권장: ROAS ≥
-  scaleDays: number;     // 증액 권장: N일 이상 유지(현재는 선택 기간 기준)
-  scalePct: number;      // 증액 권장 비율(%)
-  declineRoas: number;   // 효율 하락: ROAS <
+  minSpend: number;        // 판정 최소 지출(이 미만이면 데이터 부족으로 판정 보류)
+  // ── 소재테스트 예산 규칙(ABO) ──
+  testDailyPerCreative: number; // 소재당 일일 예산(원). 세트 권장예산 = 이 값 × 소재수
+  testDays: number;        // 소재테스트 기간(일)
+  // ── 우수소재 기준(아래 셋 중 하나만 충족해도 통과 = OR) ──
+  aboPassRoas: number;     // ① ROAS ≥
+  aboMaxCpa: number;       // ② 목표 전환단가(CPA) ≤ (0=미사용)
+  beatLiveCampaign: boolean; // ③ 현재 운영 중인 캠페인 ROAS 상회
+  aboMinPurchases: number; // 판정 전 최소 전환수(데이터 충분 게이트)
+  // ── 본 캠페인(CBO) 운영 ──
+  scaleRoas: number;       // 증액 권장: ROAS ≥
+  scaleDays: number;       // 증액 권장: N일 이상 유지(현재는 선택 기간 기준)
+  scalePct: number;        // 증액 비율(%) — 부여 예산/효율 좋을 때 이만큼씩(주 1회)
+  declineRoas: number;     // 효율 하락: ROAS <
 };
 
 export const META_THRESHOLD_DEFAULTS: MetaThresholds = {
   minSpend: 50000,
+  testDailyPerCreative: 20000,
+  testDays: 7,
   aboPassRoas: 2.0,
   aboMaxCpa: 0,
+  beatLiveCampaign: true,
   aboMinPurchases: 1,
   scaleRoas: 3.0,
   scaleDays: 3,

@@ -17,9 +17,10 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Partial<MetaThresholds>;
     const num = (v: unknown) => (v == null || v === "" ? undefined : Math.max(0, Number(v) || 0));
     const clean: Partial<MetaThresholds> = {};
-    for (const k of ["minSpend", "aboPassRoas", "aboMaxCpa", "aboMinPurchases", "scaleRoas", "scaleDays", "scalePct", "declineRoas"] as const) {
+    for (const k of ["minSpend", "testDailyPerCreative", "testDays", "aboPassRoas", "aboMaxCpa", "aboMinPurchases", "scaleRoas", "scaleDays", "scalePct", "declineRoas"] as const) {
       const v = num(body[k]); if (v !== undefined) clean[k] = v;
     }
+    if (typeof body.beatLiveCampaign === "boolean") clean.beatLiveCampaign = body.beatLiveCampaign;
     return NextResponse.json({ ok: true, thresholds: await saveMetaThresholds(clean) });
   } catch (err) {
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : "저장 실패" }, { status: 500 });
