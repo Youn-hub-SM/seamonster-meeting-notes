@@ -32,6 +32,34 @@ import { Combobox } from "./Combobox";
 
 type Mode = "create" | "edit";
 
+// 모바일에서는 접히는 섹션(아코디언), 데스크톱에서는 항상 펼침.
+function CollapsibleSection({ title, titleExtra, children }: { title: React.ReactNode; titleExtra?: React.ReactNode; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const apply = () => { setMobile(mq.matches); setOpen(!mq.matches); };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  return (
+    <section className="b2b-form-section">
+      <div
+        className={`b2b-form-section-title b2b-collapsible-head${mobile ? " is-mobile" : ""}`}
+        style={{ marginBottom: open ? 14 : 0 }}
+        onClick={mobile ? () => setOpen((o) => !o) : undefined}
+        role={mobile ? "button" : undefined}
+        aria-expanded={mobile ? open : undefined}
+      >
+        <span>{title}{titleExtra}</span>
+        {mobile && <span className="b2b-collapse-chev" aria-hidden>{open ? "▲" : "▼"}</span>}
+      </div>
+      {open && children}
+    </section>
+  );
+}
+
 // 발주 상세 → 복제용 폼 데이터.
 //  업체·라인·수령인·박스수·메모는 복사, 날짜·상태·송장·발송일정은 초기화(건마다 다름).
 function buildCloneData(
@@ -592,8 +620,7 @@ export default function OrderForm({
         </section>
 
         {/* ───── 상태 ───── */}
-        <section className="b2b-form-section">
-          <div className="b2b-form-section-title">상태</div>
+        <CollapsibleSection title="상태">
           {/* 생산(발주 단위) · 발송(차수) 분리 */}
           <div className="b2b-field-row">
             <div className="b2b-field">
@@ -675,16 +702,14 @@ export default function OrderForm({
               <div className="b2b-field" aria-hidden />
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
         {/* ───── 배송 정보 (공통) ───── */}
-        <section className="b2b-form-section">
-          <div className="b2b-form-section-title">
-            배송 정보
-            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
-              업체 선택 시 자동 채움 — 모든 발송 일정에 공통 적용
-            </span>
-          </div>
+        <CollapsibleSection title="배송 정보" titleExtra={
+          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
+            업체 선택 시 자동 채움 — 모든 발송 일정에 공통 적용
+          </span>
+        }>
           <div className="b2b-field-row">
             <div className="b2b-field">
               <label className="b2b-field-label">수령인 이름</label>
@@ -739,16 +764,14 @@ export default function OrderForm({
               />
             </div>
           </div>
-        </section>
+        </CollapsibleSection>
 
         {/* ───── 발송 일정 (분할 발송) ───── */}
-        <section className="b2b-form-section">
-          <div className="b2b-form-section-title">
-            발송 일정
-            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
-              나눠서 보낼 경우 일정을 여러 개 추가 — 각 일정에 날짜·상태·보낼 수량
-            </span>
-          </div>
+        <CollapsibleSection title="발송 일정" titleExtra={
+          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
+            나눠서 보낼 경우 일정을 여러 개 추가 — 각 일정에 날짜·상태·보낼 수량
+          </span>
+        }>
 
           {data.shipments.length === 0 && (
             <p style={{ fontSize: 12, color: "var(--sm-text-light)", margin: "4px 0 12px" }}>
@@ -866,7 +889,7 @@ export default function OrderForm({
           <div style={{ marginTop: 12 }}>
             <button type="button" className="b2b-btn-secondary" onClick={addSchedule}>+ 발송 일정 추가</button>
           </div>
-        </section>
+        </CollapsibleSection>
 
         {/* ───── 발주 상품 ───── */}
         <section className="b2b-form-section">
@@ -984,8 +1007,7 @@ export default function OrderForm({
         </section>
 
         {/* ───── 이익률 (배송 박스 단위) ───── */}
-        <section className="b2b-form-section">
-          <div className="b2b-form-section-title">이익률 (배송 박스 기준)</div>
+        <CollapsibleSection title="이익률 (배송 박스 기준)">
           <p style={{ margin: "0 0 12px", fontSize: 11.5, color: "var(--sm-text-mid)" }}>
             매출 − 제품원가 − 배송비(박스 × 아이스박스+운반비+보냉비). 과세 상품은 공급가(÷1.1) 기준.
           </p>
@@ -1049,7 +1071,7 @@ export default function OrderForm({
               </strong>
             </div>
           </div>
-        </section>
+        </CollapsibleSection>
 
         {/* ───── 푸터 ───── */}
         <div className="b2b-form-foot">

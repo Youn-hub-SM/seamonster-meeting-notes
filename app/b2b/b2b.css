@@ -1631,6 +1631,17 @@ a.b2b-history-item:hover {
   min-width: 0;
 }
 
+/* 모바일: date/number 입력의 네이티브 고유폭이 칸을 밀어 화면 밖으로 나가는 것 방지.
+   (iOS Safari에서 흔함 — appearance 제거해도 탭하면 피커는 정상 작동) */
+@media (max-width: 768px) {
+  .b2b-input[type="date"],
+  .b2b-input[type="number"],
+  .b2b-items-table input[type="number"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
 .b2b-input:focus,
 .b2b-textarea:focus,
 .b2b-select:focus {
@@ -1795,6 +1806,11 @@ a.b2b-history-item:hover {
   letter-spacing: 0.04em;
   margin-bottom: 14px;
 }
+
+/* 접이식 섹션 헤더(모바일 아코디언) */
+.b2b-collapsible-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.b2b-collapsible-head.is-mobile { cursor: pointer; user-select: none; }
+.b2b-collapse-chev { font-size: 10px; color: var(--sm-text-light); flex-shrink: 0; }
 
 /* 라인아이템 테이블 */
 .b2b-items-table {
@@ -2846,6 +2862,8 @@ a.b2b-history-item:hover {
     content: "";
     flex: 0;
   }
+  /* 삭제 ✕(카드 우상단 절대배치)가 품목명 행 입력과 겹치지 않도록 첫 셀 우측 여백 확보 */
+  .b2b-items-table td:first-child { padding-right: 48px; }
 }
 
 /* ─────────────────────────────────────────────
