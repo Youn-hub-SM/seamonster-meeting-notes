@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
-import { TrendChart, ComboBarLine, PIE_COLORS } from "@/app/components/charts";
+import { ComboBarLine } from "@/app/components/charts";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -116,7 +116,7 @@ export default function FulfillStatsPage() {
       },
       weekdayAvg: WD_ORDER.map((d) => {
         const avg = wdDays[d] ? wdSum[d] / wdDays[d] : 0;
-        return { label: WD[d], value: Math.round(avg), tip: `${WD[d]}요일 평균 ${Math.round(avg).toLocaleString()}건 · ${wdDays[d]}일 발송(총 ${wdSum[d].toLocaleString()}건)` };
+        return { label: WD[d], value: Math.round(avg), days: wdDays[d], total: wdSum[d] };
       }),
       catPie: BOX_CATEGORIES.map((c) => [c, (catN.get(c) || 0) + (catG.get(c) || 0)] as [string, number]).filter(([, v]) => v > 0),
       monthTotals: months.map((m) => ({ month: m, n: mN.get(m) || 0, g: mG.get(m) || 0, cats: BOX_CATEGORIES.map((c) => mCat[c].get(m) || 0) })),
@@ -170,13 +170,23 @@ export default function FulfillStatsPage() {
             <Legend items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", FEE_LINE]]} />
           </section>
 
-          {/* 3) 요일별 평균 · 4) 박스종류 비중 */}
+          {/* 3) 요일별 평균 · 4) 박스종류 비중 — 설문결과 스타일 가로 막대 */}
           <div className="fx-2col">
             <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">요일별 평균 발송량 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 발송한 날 기준</span></span></div>
-              <TrendChart data={agg.weekdayAvg} />
+              <div className="b2b-card-head"><span className="b2b-card-title">요일별 평균 발송량</span></div>
+              <div className="sm-faint" style={{ fontSize: 12, marginBottom: 12 }}>발송한 날 기준 평균 · 월~일</div>
+              <SurveyBars unit="건" accent="var(--sm-info)"
+                rows={agg.weekdayAvg.map((d) => ({ label: `${d.label}요일`, value: d.value, sub: `${d.days}일`, title: `${d.label}요일 평균 ${d.value.toLocaleString()}건 · ${d.days}일 발송(총 ${d.total.toLocaleString()}건)` }))} />
             </section>
-            <BoxTypeBars data={agg.catPie} />
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">박스종류 비중</span></div>
+              <div className="sm-faint" style={{ fontSize: 12, marginBottom: 12 }}>총 {won(agg.catPie.reduce((s, [, n]) => s + n, 0))}건</div>
+              {agg.catPie.length === 0 ? <div className="sm-faint" style={{ fontSize: 13 }}>데이터 없음</div> : (() => {
+                const t = agg.catPie.reduce((s, [, n]) => s + n, 0);
+                return <SurveyBars unit="건" sorted accent="var(--sm-orange)"
+                  rows={agg.catPie.map(([label, n]) => ({ label, value: n, sub: `${Math.round((n / t) * 100)}%`, title: `${label} ${n.toLocaleString()}건 (${Math.round((n / t) * 100)}%)` }))} />;
+              })()}
+            </section>
           </div>
 
           {/* 월별 박스종류 수량표 */}
@@ -205,39 +215,31 @@ export default function FulfillStatsPage() {
   );
 }
 
-// 박스종류 비중 — 랭킹 가로 막대(도넛보다 8종류에 가독성 좋음). 값 큰 순 정렬 + 카운트·%.
-function BoxTypeBars({ data }: { data: [string, number][] }) {
-  const sorted = [...data].sort((a, b) => b[1] - a[1]);
-  const total = sorted.reduce((s, [, n]) => s + n, 0);
-  const max = sorted.length ? sorted[0][1] : 1;
+// 설문결과 스타일 가로 막대 — 라벨은 막대 안, 값은 오른쪽. 막대 폭 ∝ 값.
+function SurveyBars({ rows, unit = "", sorted = false, accent = "var(--sm-info)" }: {
+  rows: { label: string; value: number; sub?: string; title?: string }[];
+  unit?: string; sorted?: boolean; accent?: string;
+}) {
+  const list = sorted ? [...rows].sort((a, b) => b.value - a.value) : rows;
+  const max = Math.max(1, ...list.map((r) => r.value));
   return (
-    <section className="b2b-card">
-      <div className="b2b-card-head"><span className="b2b-card-title">박스종류 비중</span></div>
-      {total === 0 ? (
-        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 13 }}>데이터 없음</div>
-      ) : (
-        <div className="sm-col" style={{ gap: 11 }}>
-          {sorted.map(([label, n], i) => {
-            const color = PIE_COLORS[i % PIE_COLORS.length];
-            const p = Math.round((n / total) * 100);
-            return (
-              <div key={label} className="sm-col" style={{ gap: 5 }} title={`${label} · ${n.toLocaleString()}건 (${p}%)`}>
-                <div className="sm-between" style={{ fontSize: 13 }}>
-                  <span className="sm-row" style={{ gap: 6, alignItems: "center", minWidth: 0 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
-                    <span className="sm-ellipsis">{label}</span>
-                  </span>
-                  <span style={{ whiteSpace: "nowrap" }}><strong>{n.toLocaleString()}</strong> <span className="sm-faint">{p}%</span></span>
-                </div>
-                <div style={{ height: 9, borderRadius: 5, background: "var(--sm-bg-subtle)", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${Math.max(2, Math.round((n / max) * 100))}%`, background: color, borderRadius: 5, transition: "width .3s" }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
+    <div className="sm-col" style={{ gap: 8 }}>
+      {list.map((r) => {
+        const w = r.value > 0 ? Math.max(7, Math.round((r.value / max) * 100)) : 0;
+        return (
+          <div key={r.label} className="sm-row" style={{ gap: 12, alignItems: "center" }} title={r.title}>
+            <div style={{ position: "relative", flex: 1, minWidth: 0, height: 38 }}>
+              <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${w}%`, background: `color-mix(in srgb, ${accent} 15%, var(--sm-bg-subtle))`, borderRadius: 8, transition: "width .35s ease" }} />
+              <span style={{ position: "absolute", left: 13, top: 0, height: "100%", display: "flex", alignItems: "center", fontSize: 13.5, fontWeight: 500, color: "var(--sm-dark)", whiteSpace: "nowrap", maxWidth: "calc(100% - 16px)", overflow: "hidden", textOverflow: "ellipsis" }}>{r.label}</span>
+            </div>
+            <div style={{ minWidth: 58, textAlign: "right", whiteSpace: "nowrap", lineHeight: 1.15 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)" }}>{r.value.toLocaleString()}</span>{unit && <span className="sm-faint" style={{ fontSize: 11 }}> {unit}</span>}
+              {r.sub && <div className="sm-faint" style={{ fontSize: 11 }}>{r.sub}</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
