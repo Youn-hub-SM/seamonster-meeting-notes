@@ -93,10 +93,12 @@ export default function NaverAdPage() {
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [purchaseInfo, setPurchaseInfo] = useState<{ effectiveUntil?: string; cached?: boolean; days?: number } | null>(null);
   // 성과 리포트(선택 대상 일/주/월 시계열)
-  const [rpt, setRpt] = useState<{ id: string; name: string } | null>(null);
+  const [rpt, setRpt] = useState<{ id: string; name: string; kind: "keyword" | "adgroup" } | null>(null);
   const [rptDays, setRptDays] = useState<DayStat[]>([]);
   const [rptGran, setRptGran] = useState<"day" | "week" | "month">("week");
   const [rptBack, setRptBack] = useState(90);
+  const [rptConv, setRptConv] = useState<"all" | "purchase">("all");
+  const [rptCapped, setRptCapped] = useState(false);
   const [rptLoading, setRptLoading] = useState(false);
   const [rptErr, setRptErr] = useState("");
 
@@ -325,21 +327,22 @@ export default function NaverAdPage() {
     if (!rpt) return;
     let cancelled = false;
     (async () => {
-      setRptLoading(true); setRptErr(""); setRptDays([]);
+      setRptLoading(true); setRptErr(""); setRptDays([]); setRptCapped(false);
       try {
         const now = new Date();
         const until = ymd(new Date(now.getTime() - 864e5)); // 어제
         const sinceD = ymd(new Date(now.getTime() - rptBack * 864e5));
-        const p = new URLSearchParams({ id: rpt.id, since: sinceD, until });
+        const p = new URLSearchParams({ id: rpt.id, since: sinceD, until, type: rpt.kind, conv: rptConv });
         const j = await (await fetch(`/api/naver-ad/report?${p}`, { cache: "no-store" })).json();
         if (cancelled) return;
         if (!j.ok) throw new Error(j.error || "리포트 조회 실패");
         setRptDays(j.days || []);
+        setRptCapped(!!j.capped);
       } catch (e) { if (!cancelled) setRptErr(e instanceof Error ? e.message : "리포트 오류"); }
       if (!cancelled) setRptLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [rpt, rptBack]);
+  }, [rpt, rptBack, rptConv]);
 
   // 일자별 → 일/주/월 버킷 집계(합계 후 비율지표 재계산)
   const rptAgg = useMemo(() => {
@@ -533,7 +536,7 @@ export default function NaverAdPage() {
                           <tr key={r.id} style={changed ? { background: "var(--sm-orange-light)" } : undefined}>
                             <td>
                               <strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 11 }}> · OFF</span> : null}
-                              <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => { setRpt({ id: r.id, name: r.name }); setRptGran("week"); setRptBack(90); }} title="이 대상의 주/월/일별 성과 리포트">📊 리포트</button>
+                              <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => { setRpt({ id: r.id, name: r.name, kind: r.kind }); setRptGran("week"); setRptBack(90); setRptConv("all"); }} title="이 대상의 주/월/일별 성과 리포트">📊 리포트</button>
                               {r.kind === "adgroup" && <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => openSearchKeywords(r)} title="이 그룹으로 유입된 검색어별 비용">🔍 검색어</button>}
                             </td>
                             <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.group}</td>
@@ -675,7 +678,14 @@ export default function NaverAdPage() {
                 <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>조회</span>
                 {[[30, "30일"], [90, "90일"], [180, "6개월"], [365, "1년"]].map(([b, l]) => <Chip key={b} on={rptBack === b} onClick={() => setRptBack(b as number)}>{l}</Chip>)}
               </div>
+              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>전환기준</span>
+                <Chip on={rptConv === "all"} onClick={() => setRptConv("all")}>전체 전환</Chip>
+                <Chip on={rptConv === "purchase"} onClick={() => setRptConv("purchase")}>구매전환만</Chip>
+                <span className="sm-faint" style={{ fontSize: 11, marginLeft: 4 }}>{rptConv === "purchase" ? "실제 구매만 집계 (최근 62일)" : "네이버 제공 전체 전환"}</span>
+              </div>
               {rptErr && <div className="b2b-error">{rptErr}</div>}
+              {rptConv === "purchase" && rptCapped && !rptLoading && <div className="b2b-empty" style={{ padding: "8px 10px", marginBottom: 10, fontSize: 12 }}>구매전환 기준은 리포트 부하로 <b>최근 62일</b>까지만 표시됩니다. 더 긴 기간은 전체 전환 기준을 이용하세요.</div>}
               {rptLoading ? <div className="b2b-loading">불러오는 중...</div> : rptAgg.rows.length === 0 ? (
                 <div className="b2b-empty">이 기간에 성과 데이터가 없습니다. 조회 기간을 넓혀보세요.</div>
               ) : (
@@ -683,7 +693,7 @@ export default function NaverAdPage() {
                   <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineColor="var(--sm-orange)" barUnit="원" />
                   <div className="sm-row" style={{ gap: 14, marginTop: 6, marginBottom: 12, fontSize: 12 }}>
                     <span className="sm-row" style={{ gap: 5, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--sm-info)" }} />광고비 (막대)</span>
-                    <span className="sm-row" style={{ gap: 5, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--sm-orange)" }} />ROAS (선)</span>
+                    <span className="sm-row" style={{ gap: 5, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--sm-orange)" }} />ROAS (선){rptConv === "purchase" ? " · 구매기준" : ""}</span>
                   </div>
                   <div className="b2b-table-wrap">
                     <table className="b2b-table" style={{ fontSize: 12.5 }}>
@@ -716,7 +726,7 @@ export default function NaverAdPage() {
                       </tr></tfoot>
                     </table>
                   </div>
-                  <p className="sm-faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>· 막대=광고비, 선=ROAS. 전환은 <b>전체 전환 기준</b>(구매+장바구니 등, 네이버 제공)입니다. 그래프에 마우스를 올리면 기간별 수치가 나와요.</p>
+                  <p className="sm-faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>· 막대=광고비, 선=ROAS. 전환은 {rptConv === "purchase" ? <><b>구매 전환 기준</b>(실제 구매만, 최근 62일)</> : <><b>전체 전환 기준</b>(구매+장바구니 등, 네이버 제공)</>}입니다. 그래프에 마우스를 올리면 기간별 수치가 나와요.</p>
                 </>
               )}
             </div>

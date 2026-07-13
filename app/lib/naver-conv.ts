@@ -41,18 +41,23 @@ function aggregateDay(rows: ConvRow[]) {
 
 type DayRows = { day: string; rows: ConvRow[] };
 
-// 지정 기간의 '구매 전환' 집계를 엔티티유형별로 반환.
-export async function getPurchaseConversions(since: string, until: string, entityType: "keyword" | "adgroup"): Promise<{ map: PurchaseAgg; daysFetched: number; cached: boolean; effectiveUntil: string }> {
+function fmtUTC(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+// until을 '어제'까지로 캡(AD_CONVERSION_DETAIL은 당일 미지원). 어제 문자열도 반환.
+function capUntil(until: string): { effUntil: string; yStr: string } {
   const now = new Date();
-  const fmt = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-  const todayStr = fmt(now);
-  const yStr = fmt(new Date(now.getTime() - 864e5));
-  // AD_CONVERSION_DETAIL은 오늘(당일) 미지원 → 어제까지로 캡
-  const effUntil = until >= todayStr ? yStr : until;
+  const todayStr = fmtUTC(now);
+  const yStr = fmtUTC(new Date(now.getTime() - 864e5));
+  return { effUntil: until >= todayStr ? yStr : until, yStr };
+}
+
+// 지정 기간의 일별 구매전환을 캐시에 채우고, 라이브 폴백용 rows·사용일자를 반환.
+async function ensureRange(since: string, effUntil: string, yStr: string): Promise<{ useCache: boolean; fetched: DayRows[]; toFetch: string[] }> {
   const days = since > effUntil ? [] : dateList(since, effUntil);
   const recent = new Set([yStr]); // 어제는 전환 지연 반영 위해 항상 재조회
-
-  if (!days.length) return { map: {}, daysFetched: 0, cached: true, effectiveUntil: effUntil };
+  if (!days.length) return { useCache: true, fetched: [], toFetch: [] };
 
   let useCache = true;
   let presentDays = new Set<string>();
@@ -79,8 +84,17 @@ export async function getPurchaseConversions(since: string, until: string, entit
       } catch { useCache = false; break; }
     }
   }
+  return { useCache, fetched, toFetch };
+}
 
-  // 결과 집계
+// 지정 기간의 '구매 전환' 집계를 엔티티유형별로 반환.
+export async function getPurchaseConversions(since: string, until: string, entityType: "keyword" | "adgroup"): Promise<{ map: PurchaseAgg; daysFetched: number; cached: boolean; effectiveUntil: string }> {
+  const { effUntil, yStr } = capUntil(until);
+  const days = since > effUntil ? [] : dateList(since, effUntil);
+  if (!days.length) return { map: {}, daysFetched: 0, cached: true, effectiveUntil: effUntil };
+
+  const { useCache, fetched, toFetch } = await ensureRange(since, effUntil, yStr);
+
   const map: PurchaseAgg = {};
   if (useCache) {
     const { data } = await supabaseAdmin().from("naver_conv_daily").select("entity_id,purchase_conv,purchase_sales").eq("entity_type", entityType).gte("stat_date", since).lte("stat_date", effUntil);
@@ -99,4 +113,34 @@ export async function getPurchaseConversions(since: string, until: string, entit
     }
   }
   return { map, daysFetched: toFetch.length, cached: useCache, effectiveUntil: effUntil };
+}
+
+export type PurchaseDay = { date: string; conv: number; sales: number };
+
+// 한 엔티티(광고그룹/키워드)의 '구매 전환'을 일자별로 반환. (리포트 그래프/표용)
+export async function getPurchaseConvByDay(entityId: string, entityType: "keyword" | "adgroup", since: string, until: string): Promise<{ days: PurchaseDay[]; daysFetched: number; cached: boolean; effectiveUntil: string }> {
+  const { effUntil, yStr } = capUntil(until);
+  if (since > effUntil) return { days: [], daysFetched: 0, cached: true, effectiveUntil: effUntil };
+
+  const { useCache, fetched, toFetch } = await ensureRange(since, effUntil, yStr);
+
+  const byDate: Record<string, { conv: number; sales: number }> = {};
+  if (useCache) {
+    const { data } = await supabaseAdmin().from("naver_conv_daily").select("stat_date,purchase_conv,purchase_sales").eq("entity_type", entityType).eq("entity_id", entityId).gte("stat_date", since).lte("stat_date", effUntil);
+    for (const r of (data || []) as { stat_date: string; purchase_conv: number; purchase_sales: number }[]) {
+      const d = (byDate[r.stat_date] ||= { conv: 0, sales: 0 }); d.conv += r.purchase_conv || 0; d.sales += r.purchase_sales || 0;
+    }
+  } else {
+    // 라이브 폴백: fetched = 전체 일자
+    for (const { day, rows } of fetched) {
+      for (const r of rows) {
+        if (r.convType !== "purchase") continue;
+        const id = entityType === "keyword" ? r.keywordId : r.adgroupId;
+        if (id !== entityId) continue;
+        const d = (byDate[day] ||= { conv: 0, sales: 0 }); d.conv += r.conv; d.sales += r.sales;
+      }
+    }
+  }
+  const days = Object.entries(byDate).map(([date, v]) => ({ date, conv: v.conv, sales: v.sales })).sort((a, b) => a.date.localeCompare(b.date));
+  return { days, daysFetched: toFetch.length, cached: useCache, effectiveUntil: effUntil };
 }
