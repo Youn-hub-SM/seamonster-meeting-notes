@@ -433,7 +433,12 @@ export default function NaverAdPage() {
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
             <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)" }}>{TYPE_LABEL[adType] || adType} 캠페인 <span className="sm-faint" style={{ fontWeight: 400 }}>(여러 개 선택 가능)</span></span>
-              {selCamp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => setSelCamp([])}>선택 해제</button>}
+              {campsOfType.length > 0 && (
+                <div className="sm-row" style={{ gap: 10 }}>
+                  <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => setSelCamp(campsOfType.map((c) => c.nccCampaignId))} disabled={selCamp.length === campsOfType.length}>전체 선택</button>
+                  {selCamp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => setSelCamp([])}>선택 해제</button>}
+                </div>
+              )}
             </div>
             {campsOfType.length === 0 ? <span className="sm-faint" style={{ fontSize: 12 }}>이 유형의 캠페인이 없습니다.</span> : (
               <div className="sm-row" style={{ gap: 6, flexWrap: "wrap" }}>
