@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { ComboBarLine } from "@/app/components/charts";
 
 type Campaign = { nccCampaignId: string; name: string; campaignTp: string };
+type DayStat = { date: string; impCnt: number; clkCnt: number; salesAmt: number; ctr?: number; cpc?: number; ccnt: number; convAmt: number; ror?: number };
 type Adgroup = { nccAdgroupId: string; nccCampaignId: string; name: string; bidAmt?: number };
 type Stat = { impCnt?: number; clkCnt?: number; salesAmt?: number; cpc?: number; ctr?: number; avgRnk?: number; ccnt?: number; crto?: number; convAmt?: number; ror?: number; cpConv?: number };
 type ApiKeyword = { nccKeywordId: string; nccAdgroupId: string; keyword: string; bidAmt: number; useGroupBidAmt: boolean; adRelevanceScore?: number; expectedClickScore?: number; userLock?: boolean; stat?: Stat | null };
@@ -34,6 +36,12 @@ function presetRange(key: string): { since: string; until: string } {
   return { since: back(7), until: back(1) }; // last7days
 }
 const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : `${r.since} ~ ${r.until}`; };
+// 리포트 주별 버킷: 그 날짜가 속한 주의 월요일(로컬)
+function mondayOf(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + (d.getDay() === 0 ? -6 : 1 - d.getDay()));
+  return ymd(d);
+}
 
 type SortField = "impCnt" | "clkCnt" | "ctr" | "salesAmt" | "cpc" | "ccnt" | "convAmt" | "ror" | "avgRnk" | "bidAmt";
 const SORT_VAL: Record<SortField, (r: Row) => number> = {
@@ -84,6 +92,13 @@ export default function NaverAdPage() {
   const [purchaseMap, setPurchaseMap] = useState<Record<string, { conv: number; sales: number }>>({});
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [purchaseInfo, setPurchaseInfo] = useState<{ effectiveUntil?: string; cached?: boolean; days?: number } | null>(null);
+  // 성과 리포트(선택 대상 일/주/월 시계열)
+  const [rpt, setRpt] = useState<{ id: string; name: string } | null>(null);
+  const [rptDays, setRptDays] = useState<DayStat[]>([]);
+  const [rptGran, setRptGran] = useState<"day" | "week" | "month">("week");
+  const [rptBack, setRptBack] = useState(90);
+  const [rptLoading, setRptLoading] = useState(false);
+  const [rptErr, setRptErr] = useState("");
 
   const mode: "keyword" | "adgroup" = KEYWORD_TYPES.has(adType) ? "keyword" : "adgroup";
 
@@ -305,6 +320,54 @@ export default function NaverAdPage() {
   }, [skRows, skCostOnly]);
   const skTot = useMemo(() => skShown.reduce((a, k) => ({ imp: a.imp + k.impCnt, clk: a.clk + k.clkCnt, cost: a.cost + k.salesAmt }), { imp: 0, clk: 0, cost: 0 }), [skShown]);
 
+  // 리포트: 대상·기간(rptBack) 변경 시 일자별 성과 조회
+  useEffect(() => {
+    if (!rpt) return;
+    let cancelled = false;
+    (async () => {
+      setRptLoading(true); setRptErr(""); setRptDays([]);
+      try {
+        const now = new Date();
+        const until = ymd(new Date(now.getTime() - 864e5)); // 어제
+        const sinceD = ymd(new Date(now.getTime() - rptBack * 864e5));
+        const p = new URLSearchParams({ id: rpt.id, since: sinceD, until });
+        const j = await (await fetch(`/api/naver-ad/report?${p}`, { cache: "no-store" })).json();
+        if (cancelled) return;
+        if (!j.ok) throw new Error(j.error || "리포트 조회 실패");
+        setRptDays(j.days || []);
+      } catch (e) { if (!cancelled) setRptErr(e instanceof Error ? e.message : "리포트 오류"); }
+      if (!cancelled) setRptLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [rpt, rptBack]);
+
+  // 일자별 → 일/주/월 버킷 집계(합계 후 비율지표 재계산)
+  const rptAgg = useMemo(() => {
+    const key = (date: string) => rptGran === "day" ? date : rptGran === "month" ? date.slice(0, 7) : mondayOf(date);
+    const label = (k: string) => {
+      if (rptGran === "day") return k.slice(5);
+      if (rptGran === "month") return k.slice(2);
+      const [, m, d] = k.split("-"); return `${Number(m)}/${Number(d)}`;
+    };
+    const map = new Map<string, { imp: number; clk: number; cost: number; conv: number; convAmt: number }>();
+    for (const dd of rptDays) {
+      const k = key(dd.date);
+      const b = map.get(k) || { imp: 0, clk: 0, cost: 0, conv: 0, convAmt: 0 };
+      b.imp += dd.impCnt; b.clk += dd.clkCnt; b.cost += dd.salesAmt; b.conv += dd.ccnt; b.convAmt += dd.convAmt;
+      map.set(k, b);
+    }
+    const keys = [...map.keys()].sort();
+    const rows = keys.map((k) => {
+      const b = map.get(k)!;
+      return { key: k, label: label(k), ...b, ctr: b.imp ? (b.clk / b.imp) * 100 : 0, cpc: b.clk ? b.cost / b.clk : 0, roas: b.cost ? (b.convAmt / b.cost) * 100 : 0 };
+    });
+    const t = rows.reduce((a, r) => ({ imp: a.imp + r.imp, clk: a.clk + r.clk, cost: a.cost + r.cost, conv: a.conv + r.conv, convAmt: a.convAmt + r.convAmt }), { imp: 0, clk: 0, cost: 0, conv: 0, convAmt: 0 });
+    return {
+      rows, periods: rows.map((r) => r.label), costs: rows.map((r) => Math.round(r.cost)), roas: rows.map((r) => Math.round(r.roas)),
+      tot: { ...t, ctr: t.imp ? (t.clk / t.imp) * 100 : 0, cpc: t.clk ? t.cost / t.clk : 0, roas: t.cost ? (t.convAmt / t.cost) * 100 : 0 },
+    };
+  }, [rptDays, rptGran]);
+
   const Th = ({ f, children }: { f: SortField; children: React.ReactNode }) => (
     <th className="num" style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }} onClick={() => sortBy(f)} title="클릭하여 정렬">
       {children}{sortField === f ? <span style={{ color: "var(--sm-orange)" }}>{sortDir === "desc" ? " ▾" : " ▴"}</span> : <span style={{ opacity: 0.25 }}> ⇅</span>}
@@ -470,6 +533,7 @@ export default function NaverAdPage() {
                           <tr key={r.id} style={changed ? { background: "var(--sm-orange-light)" } : undefined}>
                             <td>
                               <strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 11 }}> · OFF</span> : null}
+                              <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => { setRpt({ id: r.id, name: r.name }); setRptGran("week"); setRptBack(90); }} title="이 대상의 주/월/일별 성과 리포트">📊 리포트</button>
                               {r.kind === "adgroup" && <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => openSearchKeywords(r)} title="이 그룹으로 유입된 검색어별 비용">🔍 검색어</button>}
                             </td>
                             <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.group}</td>
@@ -585,6 +649,74 @@ export default function NaverAdPage() {
                   )}
                   {skShown.length > 300 && <p className="sm-faint" style={{ fontSize: 11, marginTop: 6 }}>상위 300개만 표시했습니다(광고비순).</p>}
                   <p className="sm-faint" style={{ fontSize: 11, marginTop: 6 }}>· 이 리포트는 전환수·ROAS가 없고 <b>직접전환율</b>만 제공됩니다(네이버 NPLA_SCH_KEYWORD). 전환/ROAS는 그룹 단위 표에서 확인하세요.</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 성과 리포트 모달 (선택 대상 일/주/월별) */}
+      {rpt && (
+        <div onClick={() => setRpt(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "5vh 12px", overflow: "auto" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--sm-white)", borderRadius: 12, width: "min(880px, 100%)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+            <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
+              <div>
+                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>📊 성과 리포트 — {rpt.name}</div>
+                <div className="sm-faint" style={{ fontSize: 11 }}>일/주/월별 추이 · 전체 전환 기준(네이버) · 어제까지 반영</div>
+              </div>
+              <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setRpt(null)}>닫기</button>
+            </div>
+            <div style={{ padding: "12px 16px", overflow: "auto" }}>
+              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>단위</span>
+                {(([["day", "일별"], ["week", "주별"], ["month", "월별"]]) as [("day" | "week" | "month"), string][]).map(([g, l]) => <Chip key={g} on={rptGran === g} onClick={() => setRptGran(g)}>{l}</Chip>)}
+                <span style={{ width: 10 }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>조회</span>
+                {[[30, "30일"], [90, "90일"], [180, "6개월"], [365, "1년"]].map(([b, l]) => <Chip key={b} on={rptBack === b} onClick={() => setRptBack(b as number)}>{l}</Chip>)}
+              </div>
+              {rptErr && <div className="b2b-error">{rptErr}</div>}
+              {rptLoading ? <div className="b2b-loading">불러오는 중...</div> : rptAgg.rows.length === 0 ? (
+                <div className="b2b-empty">이 기간에 성과 데이터가 없습니다. 조회 기간을 넓혀보세요.</div>
+              ) : (
+                <>
+                  <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineColor="var(--sm-orange)" barUnit="원" />
+                  <div className="sm-row" style={{ gap: 14, marginTop: 6, marginBottom: 12, fontSize: 12 }}>
+                    <span className="sm-row" style={{ gap: 5, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--sm-info)" }} />광고비 (막대)</span>
+                    <span className="sm-row" style={{ gap: 5, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--sm-orange)" }} />ROAS (선)</span>
+                  </div>
+                  <div className="b2b-table-wrap">
+                    <table className="b2b-table" style={{ fontSize: 12.5 }}>
+                      <thead><tr>
+                        <th>{rptGran === "day" ? "날짜" : rptGran === "week" ? "주(월요일)" : "월"}</th>
+                        <th className="num">노출</th><th className="num">클릭</th><th className="num">CTR</th><th className="num">광고비</th><th className="num">CPC</th><th className="num">전환</th><th className="num">전환매출</th><th className="num">ROAS</th>
+                      </tr></thead>
+                      <tbody>
+                        {[...rptAgg.rows].reverse().map((r) => (
+                          <tr key={r.key}>
+                            <td><strong>{r.label}</strong></td>
+                            <td className="num b2b-money">{num(r.imp)}</td>
+                            <td className="num b2b-money">{num(r.clk)}</td>
+                            <td className="num">{r.imp ? `${r.ctr.toFixed(2)}%` : "-"}</td>
+                            <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(r.cost)}</td>
+                            <td className="num b2b-money">{r.clk ? won(r.cpc) : "-"}</td>
+                            <td className="num b2b-money">{num(r.conv)}</td>
+                            <td className="num b2b-money">{won(r.convAmt)}</td>
+                            <td className="num" style={r.cost && r.roas >= 300 ? { color: "var(--sm-success)", fontWeight: 700 } : r.cost && r.conv === 0 ? { color: "var(--sm-danger, #d64545)" } : undefined}>{r.cost ? `${Math.round(r.roas)}%` : "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-soft,#fafafa)" }}>
+                        <td>합계 {rptAgg.rows.length}</td>
+                        <td className="num b2b-money">{num(rptAgg.tot.imp)}</td><td className="num b2b-money">{num(rptAgg.tot.clk)}</td>
+                        <td className="num">{rptAgg.tot.imp ? `${rptAgg.tot.ctr.toFixed(2)}%` : "-"}</td>
+                        <td className="num b2b-money">{won(rptAgg.tot.cost)}</td><td className="num b2b-money">{rptAgg.tot.clk ? won(rptAgg.tot.cpc) : "-"}</td>
+                        <td className="num b2b-money">{num(rptAgg.tot.conv)}</td><td className="num b2b-money">{won(rptAgg.tot.convAmt)}</td>
+                        <td className="num">{rptAgg.tot.cost ? `${Math.round(rptAgg.tot.roas)}%` : "-"}</td>
+                      </tr></tfoot>
+                    </table>
+                  </div>
+                  <p className="sm-faint" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>· 막대=광고비, 선=ROAS. 전환은 <b>전체 전환 기준</b>(구매+장바구니 등, 네이버 제공)입니다. 그래프에 마우스를 올리면 기간별 수치가 나와요.</p>
                 </>
               )}
             </div>

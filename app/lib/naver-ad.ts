@@ -91,6 +91,23 @@ export async function getStats(ids: string[], range: StatRange = {}): Promise<Na
   return parts.flat();
 }
 
+// ── 일자별 성과(시계열 리포트) ── 단일 id(광고그룹/키워드)에 timeIncrement=1(일별).
+//  응답 행마다 날짜 필드(dateStart 우선, statDt/date 폴백). 주별·월별은 호출측에서 집계.
+export type NaverDayStat = { date: string; impCnt: number; clkCnt: number; salesAmt: number; ctr?: number; cpc?: number; ccnt: number; convAmt: number; ror?: number; cpConv?: number };
+export async function getStatsByDay(id: string, range: { since: string; until: string }): Promise<{ days: NaverDayStat[]; rawSample?: unknown }> {
+  const fields = JSON.stringify(["impCnt", "clkCnt", "salesAmt", "ctr", "cpc", "ccnt", "crto", "convAmt", "ror", "cpConv"]);
+  const res = await naverAd<unknown>("GET", "/stats", { query: { id, fields, timeRange: JSON.stringify({ since: range.since, until: range.until }), timeIncrement: "1" } });
+  const arr = (Array.isArray(res) ? res : ((res as { data?: unknown[] })?.data ?? [])) as Record<string, unknown>[];
+  const days = arr.map((r) => ({
+    date: String(r.dateStart ?? r.statDt ?? r.date ?? r.dateEnd ?? "").slice(0, 10),
+    impCnt: Number(r.impCnt) || 0, clkCnt: Number(r.clkCnt) || 0, salesAmt: Number(r.salesAmt) || 0,
+    ctr: r.ctr != null ? Number(r.ctr) : undefined, cpc: r.cpc != null ? Number(r.cpc) : undefined,
+    ccnt: Number(r.ccnt) || 0, convAmt: Number(r.convAmt) || 0,
+    ror: r.ror != null ? Number(r.ror) : undefined, cpConv: r.cpConv != null ? Number(r.cpConv) : undefined,
+  })).filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date));
+  return { days, rawSample: arr[0] };
+}
+
 // ── 입찰가 조정 ── 최대 200개. useGroupBidAmt=false 여야 개별 bidAmt 적용.
 export type BidUpdate = { nccKeywordId: string; bidAmt: number; useGroupBidAmt: boolean };
 export function updateKeywordBids(updates: BidUpdate[]): Promise<NaverKeyword[]> {
