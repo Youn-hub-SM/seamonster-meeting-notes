@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
       // 기본 피드/히스토리에서 제외(명시적 type 필터 시엔 조회 가능):
       //  · 매출(sales.*) — B2B가 아님
       //  · 상품 마스터(product.*) — 전용 '변경 기록'(/b2b/products/history)에서 관리
-      query = query.not("event_type", "like", "sales.%").not("event_type", "like", "product.%");
+      //  · 생산요청(production_request.*) — 생산·재고 변경기록(/inventory/activity)에서 표시
+      query = query.not("event_type", "like", "sales.%").not("event_type", "like", "product.%").not("event_type", "like", "production_request.%");
     }
     if (actor) query = query.eq("actor", actor);
     if (q) query = query.ilike("summary", `%${q}%`);
