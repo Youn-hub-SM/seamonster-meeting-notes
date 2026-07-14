@@ -143,18 +143,21 @@ export async function sendFlowBotNotify(
   const link = await b2bAlertLink(input.order_id);
   const lines = [input.summary];
   if (actor) lines.push(`— 작업자: ${actor}`);
-  if (link) lines.push(link);
+  // 링크는 본문(contents)에 원문 URL로 넣지 않고, Flow 알림봇 body의 url(선택) 필드로 전달
+  //  → 플로우가 본문과 별개의 '자세히 보기' 클릭 링크로 렌더한다(주소 원문 노출 방지).
 
-  const url = `https://api.flow.team/v1/bots/${encodeURIComponent(cfg.botId)}/notifications/bulk`;
+  const endpoint = `https://api.flow.team/v1/bots/${encodeURIComponent(cfg.botId)}/notifications/bulk`;
+  const payload: Record<string, unknown> = {
+    receivers: receivers.map((r) => ({ receiverId: r })),
+    title: cfg.title || "씨몬스터 B2B 알림",
+    contents: lines.join("\n"),
+  };
+  if (link) payload.url = link; // format:url, max 2000 (문서 스펙)
   try {
-    const res = await fetch(url, {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-flow-api-key": cfg.apiKey },
-      body: JSON.stringify({
-        receivers: receivers.map((r) => ({ receiverId: r })),
-        title: cfg.title || "씨몬스터 B2B 알림",
-        contents: lines.join("\n"),
-      }),
+      body: JSON.stringify(payload),
     });
     const text = await res.text().catch(() => "");
     let json: unknown = null;
