@@ -5,6 +5,7 @@ import {
   PR_STATUSES, PR_STATUS_COLOR, PR_LINE_COLOR, lineState, allLinesFilled,
   type ProductionRequest, type PrItem, type PrStatus,
 } from "@/app/lib/wholesale-production";
+import { Combobox } from "@/app/b2b/orders/Combobox";
 
 function todayIso() { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; }
 
@@ -94,6 +95,16 @@ function WholesaleTab() {
     setBusy(false);
   }
 
+  async function setAssignee(id: string, assignee: string) {
+    setBusy(true); setError("");
+    try {
+      const j = await (await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignee }) })).json();
+      if (!j.ok) throw new Error(j.error || "담당자 변경 실패");
+      applyUpdated(j.request);
+    } catch (e) { setError(e instanceof Error ? e.message : "담당자 오류"); }
+    setBusy(false);
+  }
+
   async function removeRequest(id: string) {
     if (!confirm("이 요청서를 삭제할까요? (입고 기록이 있으면 삭제 대신 '취소'만 됩니다)")) return;
     setBusy(true); setError("");
@@ -161,6 +172,7 @@ function WholesaleTab() {
               onReceive={(body) => receive(r.id, body)}
               onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
               onStatus={(s) => patchStatus(r.id, s)}
+              onAssign={(v) => setAssignee(r.id, v)}
               onDelete={() => removeRequest(r.id)}
             />
           ))}
@@ -192,15 +204,31 @@ function StatusBadge({ status }: { status: PrStatus }) {
   return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}>{status}</span>;
 }
 
-function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
+// 생산 담당자 편집 — 이름 입력 후 값이 바뀌면 '저장' 노출.
+function AssigneeEditor({ value, busy, onSave }: { value: string | null; busy: boolean; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value || "");
+  useEffect(() => { setV(value || ""); }, [value]);
+  const changed = v.trim() !== (value || "");
+  return (
+    <span className="sm-row" style={{ gap: 6, alignItems: "center" }}>
+      <input className="b2b-input" style={{ width: 150, padding: "4px 9px" }} value={v} onChange={(e) => setV(e.target.value)} placeholder="담당자 이름" disabled={busy} />
+      {changed
+        ? <button className="b2b-btn-primary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => onSave(v.trim())}>저장</button>
+        : (!value && <span className="sm-faint" style={{ fontSize: 13 }}>미지정</span>)}
+    </span>
+  );
+}
+
+function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onAssign, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onReceive: (body: { item_id: string; qty: number; receipt_date: string; memo: string }) => Promise<boolean>;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
+  onAssign: (v: string) => void;
   onDelete: () => void;
 }) {
-  const suggestComplete = req.status === "처리중" && allLinesFilled(req.items);
+  const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
   return (
     <div className="b2b-card" style={{ padding: 0, overflow: "hidden" }}>
       {/* 헤더 줄 */}
@@ -208,7 +236,7 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
         <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</span>
         <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
         <StatusBadge status={req.status} />
-        <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.requested_by ? ` · ${req.requested_by}` : ""}</span>
+        <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.requested_by ? ` · 요청 ${req.requested_by}` : ""}{req.assignee ? ` · 담당 ${req.assignee}` : ""}</span>
         {req.title && <span style={{ fontSize: 13, color: "var(--sm-black)", fontWeight: 600 }}>{req.title}</span>}
         <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>품목 {req.items.length}</span>
         <span style={{ flex: 1, minWidth: 140, maxWidth: 260 }}><ProgressBar received={req.total_received} requested={req.total_requested} /></span>
@@ -217,6 +245,11 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
       {expanded && (
         <div style={{ borderTop: "1px solid var(--sm-border-light)", padding: 14 }}>
           {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
+
+          <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-text-mid)" }}>생산 담당자</span>
+            <AssigneeEditor value={req.assignee} busy={busy} onSave={onAssign} />
+          </div>
 
           <div className="b2b-table-wrap">
             <table className="b2b-table">
@@ -238,7 +271,7 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
               <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료 처리</button>
             )}
             {(req.status === "완료" || req.status === "취소") && (
-              <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("처리중")}>다시 열기</button>
+              <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>다시 열기</button>
             )}
             {req.status !== "취소" && (
               <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("취소")}>취소</button>
@@ -346,19 +379,10 @@ function CreateModal({ products, busy, onClose, onCreate }: {
   const [date, setDate] = useState(todayIso());
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
-  const [search, setSearch] = useState("");
   const [lines, setLines] = useState<NewLine[]>([]);
-
-  const matches = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    const chosen = new Set(lines.map((l) => l.product_id));
-    return products.filter((p) => !chosen.has(p.product_id) && (`${p.name} ${p.sku || ""} ${p.spec || ""}`.toLowerCase().includes(q))).slice(0, 20);
-  }, [search, products, lines]);
 
   function addLine(p: Prod) {
     setLines((prev) => [...prev, { product_id: p.product_id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, stock: p.qty, requested_qty: "", memo: "" }]);
-    setSearch("");
   }
   function updateLine(i: number, patch: Partial<NewLine>) { setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
   function removeLine(i: number) { setLines((prev) => prev.filter((_, idx) => idx !== i)); }
@@ -392,20 +416,21 @@ function CreateModal({ products, busy, onClose, onCreate }: {
             </label>
           </div>
 
-          {/* 품목 추가 */}
-          <div style={{ position: "relative", marginBottom: 8 }}>
+          {/* 품목 추가 — 다른 검색창과 동일한 콤보박스(이름·SKU·규격 아무 글자나 검색, 한글 입력 기본) */}
+          <div style={{ marginBottom: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>생산 품목 추가</span>
-            <input className="b2b-input" style={{ marginTop: 3 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목명·SKU 검색해서 선택" />
-            {matches.length > 0 && (
-              <div style={{ position: "absolute", zIndex: 5, left: 0, right: 0, background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, boxShadow: "var(--sm-shadow-float)", maxHeight: 240, overflow: "auto", marginTop: 2 }}>
-                {matches.map((p) => (
-                  <button key={p.product_id} onClick={() => addLine(p)} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", background: "none", border: "none", borderBottom: "1px solid var(--sm-border-light)", cursor: "pointer", fontSize: 13 }}>
-                    <span style={{ fontWeight: 600 }}>{p.name}</span> <span style={{ color: "var(--sm-text-light)" }}>{p.sku || ""}{p.spec ? ` · ${p.spec}` : ""}</span>
-                    <span style={{ float: "right", color: "var(--sm-text-mid)" }}>도매재고 {p.qty.toLocaleString()}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <div style={{ marginTop: 3 }}>
+              <Combobox
+                value=""
+                options={products
+                  .filter((p) => !lines.some((l) => l.product_id === p.product_id))
+                  .map((p) => ({ id: p.product_id, label: p.name, sub: `${p.sku ?? ""} ${p.spec ?? ""}`.trim() }))}
+                onSelect={(o) => { const p = products.find((x) => x.product_id === o.id); if (p) addLine(p); }}
+                placeholder="품목명·SKU·규격으로 검색해서 선택"
+                ariaLabel="생산 품목 추가"
+                emptyText="일치하는 품목이 없습니다"
+              />
+            </div>
           </div>
 
           {lines.length === 0 ? (

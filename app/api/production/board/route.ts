@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getManualProductions } from "@/app/lib/production-manual";
 import { loadProdItemMaps } from "@/app/lib/production-items";
+import { loadRequests } from "@/app/lib/wholesale-production-db";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,33 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ ok: true, today, cards: [...orderCards, ...manualCards] });
+    // 도매 생산 요청(진행 중: 요청/진행중) → 보드 카드. '남은 수량(요청-입고)'만 표시.
+    //  069 미적용 등 조회 실패 시 조용히 건너뜀(보드 자체는 계속 동작).
+    const reqs = await loadRequests(sb, {}).catch(() => []);
+    const requestCards = reqs
+      .filter((r) => r.status === "요청" || r.status === "진행중")
+      .map((r) => {
+        const items = r.items
+          .map((it) => {
+            const outstanding = it.requested_qty - it.received_qty;
+            const sku = (it.sku || "").toUpperCase() || null;
+            const prodName = sku ? maps.displayBySku.get(sku) || it.name : it.name;
+            return { name: it.name, prodName, sku, spec: it.spec || "", qty: outstanding };
+          })
+          .filter((it) => it.qty > 0);
+        return {
+          id: r.id,
+          kind: "request" as const,
+          status: r.status === "진행중" ? "생산중" : "생산대기", // 보드 상태 어휘로 매핑
+          company: r.assignee ? `생산요청 · ${r.assignee}` : (r.requested_by ? `생산요청(${r.requested_by})` : "생산요청"),
+          orderNo: r.req_no,
+          date: r.request_date,
+          items,
+        };
+      })
+      .filter((c) => c.items.length > 0);
+
+    return NextResponse.json({ ok: true, today, cards: [...orderCards, ...manualCards, ...requestCards] });
   } catch (err) {
     console.error("[production/board]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });

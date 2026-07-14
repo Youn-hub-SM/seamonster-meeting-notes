@@ -78,7 +78,7 @@ export async function loadRequests(
     return {
       id: r.id as string, req_no: (r.req_no as string) ?? null, title: (r.title as string) ?? null,
       requested_by: (r.requested_by as string) ?? null, request_date: String(r.request_date),
-      status: r.status as ProductionRequest["status"], memo: (r.memo as string) ?? null,
+      status: r.status as ProductionRequest["status"], assignee: (r.assignee as string) ?? null, memo: (r.memo as string) ?? null,
       created_by: (r.created_by as string) ?? null, created_at: String(r.created_at), updated_at: String(r.updated_at),
       items: its,
       total_requested: its.reduce((s, i) => s + i.requested_qty, 0),

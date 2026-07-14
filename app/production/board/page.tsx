@@ -3,8 +3,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 type Item = { name: string; prodName: string; sku: string | null; spec: string; qty: number };
-type Unit = { id: string; kind: "order" | "manual"; status: string; company: string; orderNo: string | null; date: string | null; items: Item[] };
-type Contributor = { unitId: string; kind: "order" | "manual"; company: string; qty: number; status: string };
+type Unit = { id: string; kind: "order" | "manual" | "request"; status: string; company: string; orderNo: string | null; date: string | null; items: Item[] };
+type Contributor = { unitId: string; kind: "order" | "manual" | "request"; company: string; qty: number; status: string };
 type Batch = { date: string | null; qty: number; status: string; contributors: Contributor[] };
 type Col = { key: string; label: string; sub: string; lo: string; hi: string; accent: string };
 type Row = { key: string; name: string; spec: string; overdue: number; none: number; byCol: Record<string, number>; cumByCol: Record<string, number>; total: number; batches: Batch[] };
@@ -110,9 +110,10 @@ export default function ProductionBoardPage() {
     return { cols, rows, maxCum, totOverdue, totFirst };
   }, [units, today, gran]);
 
-  async function moveUnits(refs: { id: string; kind: "order" | "manual" }[], status: string) {
+  async function moveUnits(refs: { id: string; kind: "order" | "manual" | "request" }[], status: string) {
     const seen = new Set<string>();
-    const uniq = refs.filter((r) => { const k = r.kind + r.id; if (seen.has(k)) return false; seen.add(k); return true; });
+    // 생산요청 카드는 보드에서 상태 변경 불가(완료는 생산요청서의 '입고'로만 처리) → 스킵.
+    const uniq = refs.filter((r) => r.kind !== "request").filter((r) => { const k = r.kind + r.id; if (seen.has(k)) return false; seen.add(k); return true; });
     const prev = units;
     setUnits((us) => us.map((u) => (uniq.some((r) => r.id === u.id && r.kind === u.kind) ? { ...u, status } : u)));
     try {

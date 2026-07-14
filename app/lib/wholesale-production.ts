@@ -1,12 +1,12 @@
 // 도매 재고 생산 요청 — 공용 타입·상수(클라이언트/서버 공용, DB 코드 없음).
 //  MD가 요청서 작성 → 생산담당자가 실제 생산량을 '입고 처리'(부분/초과/수정) → 도매 재고 반영.
 
-export const PR_STATUSES = ["요청", "처리중", "완료", "취소"] as const;
+export const PR_STATUSES = ["요청", "진행중", "완료", "취소"] as const;
 export type PrStatus = (typeof PR_STATUSES)[number];
 
 export const PR_STATUS_COLOR: Record<PrStatus, { bg: string; fg: string }> = {
   요청: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },        // 접수 대기
-  처리중: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" }, // 일부 입고됨
+  진행중: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" }, // 일부 입고됨
   완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },   // 생산·입고 종료
   취소: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },   // 취소(기록 보존)
 };
@@ -44,6 +44,7 @@ export interface ProductionRequest {
   requested_by: string | null;
   request_date: string;
   status: PrStatus;
+  assignee: string | null;      // 생산 담당자(변경 가능)
   memo: string | null;
   created_by: string | null;
   created_at: string;

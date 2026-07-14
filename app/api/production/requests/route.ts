@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
+import { logProductionRequestCreated } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,11 @@ export async function POST(req: NextRequest) {
     if (ie) { await sb.from("production_requests").delete().eq("id", requestId); throw ie; }
 
     const [full] = await loadRequests(sb, { id: requestId });
+    // 작성 알림(변경기록 + Flow 봇)
+    if (full) {
+      const label = full.title || `품목 ${full.items.length}종 · ${full.total_requested.toLocaleString()}개`;
+      await logProductionRequestCreated(full.req_no || "", label);
+    }
     return NextResponse.json({ ok: true, request: full });
   } catch (err) {
     console.error("[production/requests POST]", err);

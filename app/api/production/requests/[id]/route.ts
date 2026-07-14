@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
 import { PR_STATUSES, type PrStatus } from "@/app/lib/wholesale-production";
+import { logProductionRequestStatusChanged } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -32,12 +33,23 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
     if (b.title !== undefined) patch.title = String(b.title || "").trim() || null;
     if (b.requested_by !== undefined) patch.requested_by = String(b.requested_by || "").trim() || null;
+    if (b.assignee !== undefined) patch.assignee = String(b.assignee || "").trim() || null;
     if (b.memo !== undefined) patch.memo = String(b.memo || "").trim() || null;
     if (b.request_date !== undefined && DATE_RE.test(String(b.request_date))) patch.request_date = String(b.request_date);
 
     const sb = supabaseAdmin();
+    // 상태 변경이면 이전 상태·요청번호 확보(변경기록 + 알림용)
+    let prevStatus: string | null = null, reqNo = "";
+    if (patch.status !== undefined) {
+      const { data: cur } = await sb.from("production_requests").select("status, req_no").eq("id", id).single();
+      prevStatus = (cur as { status?: string } | null)?.status ?? null;
+      reqNo = (cur as { req_no?: string } | null)?.req_no ?? "";
+    }
     const { error } = await sb.from("production_requests").update(patch).eq("id", id);
     if (error) throw error;
+    // 상태 변경 → 변경기록(+진행중/완료면 Flow 알림)
+    if (patch.status !== undefined && prevStatus && prevStatus !== patch.status)
+      await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status));
     const [row] = await loadRequests(sb, { id });
     return NextResponse.json({ ok: true, request: row });
   } catch (err) {

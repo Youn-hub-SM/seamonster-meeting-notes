@@ -58,6 +58,28 @@ async function recordActivity(input: ActivityInput): Promise<void> {
   if (input.notify !== false) await sendWebhook(input, actor);
 }
 
+// ── 도매 생산 요청: 변경기록(활동피드) + notify:true면 Flow 봇 발송 ──
+//  둘 다 fire-and-forget(recordActivity 내부에서 실패 무시) — 호출 측 DB 작업에 영향 없음.
+export async function logProductionRequestCreated(reqNo: string, label: string): Promise<void> {
+  await recordActivity({
+    event_type: "production_request.created",
+    summary: `생산요청 등록 · ${reqNo || "(번호없음)"}${label ? ` · ${label}` : ""}`,
+    meta: { req_no: reqNo },
+    notify: true, // 작성 시 Flow 알림
+  });
+}
+export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string): Promise<void> {
+  if (fromStatus === toStatus) return;
+  // 생산 시작(진행중)·완료만 Flow 알림, 그 외(취소·다시열기)는 변경기록만.
+  const notify = toStatus === "진행중" || toStatus === "완료";
+  await recordActivity({
+    event_type: "production_request.status_changed",
+    summary: `생산요청 ${reqNo || "(번호없음)"} · ${fromStatus} → ${toStatus}`,
+    meta: { req_no: reqNo, from: fromStatus, to: toStatus },
+    notify,
+  });
+}
+
 // 외부 알림 전송. fire-and-forget.
 //  설정(b2b_settings.zapier_notify)에 따라 이벤트·결과상태별로 발송을 거름.
 //  라우팅: Flow 봇(flow_bot_id·flow_bot_api_key·flow_bot_receivers) 이 모두 설정돼 있으면

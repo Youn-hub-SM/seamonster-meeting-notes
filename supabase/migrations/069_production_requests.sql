@@ -18,8 +18,9 @@ create table if not exists production_requests (
   title text,                                  -- 요청 제목/메모(선택)
   requested_by text,                           -- 요청자(MD)
   request_date date not null default current_date,
-  status text not null default '요청'          -- 요청→처리중→완료 / 취소
-    check (status in ('요청', '처리중', '완료', '취소')),
+  status text not null default '요청'          -- 요청→진행중→완료 / 취소
+    check (status in ('요청', '진행중', '완료', '취소')),
+  assignee text,                               -- 생산 담당자(변경 가능)
   memo text,
   created_by text,
   created_at timestamptz not null default now(),
@@ -62,6 +63,14 @@ create index if not exists prod_receipt_txn_idx on production_receipts (inv_txn_
 alter table production_receipts drop constraint if exists production_receipts_inv_txn_id_fkey;
 alter table production_receipts add constraint production_receipts_inv_txn_id_fkey
   foreign key (inv_txn_id) references inventory_txns(id) on delete restrict;
+
+-- 담당자 컬럼 + 상태값 리네임(처리중→진행중) 멱등 수렴(이전 초안 적용분 대응).
+--  순서 중요: 옛 CHECK가 '진행중'을 막으므로 먼저 제약 제거 → 데이터 교정 → 새 제약.
+alter table production_requests add column if not exists assignee text;
+alter table production_requests drop constraint if exists production_requests_status_check;
+update production_requests set status = '진행중' where status = '처리중';
+alter table production_requests add constraint production_requests_status_check
+  check (status in ('요청', '진행중', '완료', '취소'));
 
 alter table production_requests enable row level security;
 alter table production_request_items enable row level security;

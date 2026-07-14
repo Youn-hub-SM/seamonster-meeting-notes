@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
+import type { ProductionRequest } from "../lib/wholesale-production";
 
 type ProductRow = { product_name: string; spec: string; qty: number; companies: string[]; order_count: number };
 type DayBucket = { date: string; label: string; total_qty: number; order_count: number; products: ProductRow[] };
@@ -10,7 +11,7 @@ type Promotion = { id: string; name: string; start: string; end: string; items: 
 type Product = { sku: string | null; name: string; spec: string | null };
 type ItemStat = { sku: string; name: string; stock: number | null; dailyOut: number; depletionDays: number | null; safety: number; demand: number; autoSafety: number; safetyDays: number | null; belowSafety: boolean };
 type Manual = { id: string; sku: string; name: string; qty: number; productionDate: string; stock: number | null; dailyOut: number; depletionDate: string | null };
-type PItem = { name: string; spec: string; qty: number; manual: boolean; manualId?: string; sku?: string };
+type PItem = { name: string; spec: string; qty: number; manual: boolean; manualId?: string; sku?: string; request?: boolean };
 type MergedDay = { date: string; label: string; total_qty: number; hasManual: boolean; products: PItem[] };
 
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
@@ -54,6 +55,7 @@ const EMPTY_PROMO: Partial<Promotion> = { name: "", start: "", end: "", items: [
 export default function ProductionSchedulePage() {
   const [days, setDays] = useState<DayBucket[]>([]);
   const [manual, setManual] = useState<Manual[]>([]);
+  const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [promos, setPromos] = useState<Promotion[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,17 +84,19 @@ export default function ProductionSchedulePage() {
     setLoading(true);
     setError("");
     try {
-      const [pr, pm, mn, pd] = await Promise.all([
+      const [pr, pm, mn, pd, rq] = await Promise.all([
         fetch("/api/b2b/orders/production-summary", { cache: "no-store" }).then((r) => r.json()),
         fetch("/api/production/promotions", { cache: "no-store" }).then((r) => r.json()),
         fetch("/api/production/manual", { cache: "no-store" }).then((r) => r.json()),
         fetch("/api/b2b/products", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/production/requests", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false })),
       ]);
       if (!pr.ok) throw new Error(pr.error || "생산일정 조회 실패");
       setDays(pr.days || []);
       if (pm.ok) setPromos(pm.promotions || []);
       if (mn.ok) setManual(mn.items || []);
       if (pd.ok) setProducts((pd.products || []).map((p: Product) => ({ sku: p.sku, name: p.name, spec: p.spec })));
+      if (rq.ok) setRequests((rq.requests || []).filter((r: ProductionRequest) => r.status === "요청" || r.status === "진행중"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }
@@ -119,8 +123,19 @@ export default function ProductionSchedulePage() {
       d.total_qty += e.qty;
       d.hasManual = true;
     }
+    // 도매 생산요청(진행 중) — request_date 기준, 남은 수량(요청-입고)만.
+    for (const req of requests) {
+      if (!req.request_date) continue;
+      const d = ensure(req.request_date, dayLabel(req.request_date));
+      for (const it of req.items) {
+        const outstanding = it.requested_qty - it.received_qty;
+        if (outstanding <= 0) continue;
+        d.products.push({ name: it.name, spec: it.spec ?? "", qty: outstanding, manual: false, request: true, sku: it.sku ?? undefined });
+        d.total_qty += outstanding;
+      }
+    }
     return m;
-  }, [days, manual]);
+  }, [days, manual, requests]);
 
   const promosOn = useCallback((iso: string) => promos.filter((p) => p.start <= iso && iso <= p.end), [promos]);
   const weeks = useMemo(() => buildWeeks(view.y, view.m), [view]);
@@ -144,7 +159,7 @@ export default function ProductionSchedulePage() {
 
   // 표(VOC 처리상태풍)용 — 일자 × 품목 평탄화. 날짜는 바뀔 때만 표시.
   const listRows = useMemo(() => listDays.flatMap((d) =>
-    d.products.map((p) => ({ date: d.date || "", label: d.label, name: p.name, spec: p.spec, qty: p.qty, manual: p.manual, manualId: p.manualId }))
+    d.products.map((p) => ({ date: d.date || "", label: d.label, name: p.name, spec: p.spec, qty: p.qty, manual: p.manual, manualId: p.manualId, request: p.request }))
   ), [listDays]);
 
   function gotoMonth(delta: number) { setView((v) => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; }); }
@@ -375,7 +390,7 @@ export default function ProductionSchedulePage() {
                         <td>{r.name}</td>
                         <td>{r.spec || "-"}</td>
                         <td className="num b2b-money">{r.qty.toLocaleString()}</td>
-                        <td><span className="b2b-feed-pill" style={{ background: r.manual ? "var(--sm-bg-subtle)" : "var(--sm-info-bg)", color: r.manual ? "var(--sm-text-mid)" : "var(--sm-info)" }}>{r.manual ? "직접" : "B2B"}</span></td>
+                        <td><span className="b2b-feed-pill" style={{ background: r.request ? "var(--sm-orange-light)" : r.manual ? "var(--sm-bg-subtle)" : "var(--sm-info-bg)", color: r.request ? "var(--sm-orange)" : r.manual ? "var(--sm-text-mid)" : "var(--sm-info)" }}>{r.request ? "생산요청" : r.manual ? "직접" : "B2B"}</span></td>
                         <td><span className="b2b-feed-pill" style={{ background: sc.bg, color: sc.fg, fontWeight: 700, whiteSpace: "nowrap" }}>{status}</span></td>
                         <td onClick={(e) => e.stopPropagation()}>
                           {r.manual && r.manualId && <button className="b2b-link-btn" title="삭제" onClick={() => deleteManual(r.manualId!)} style={{ color: "var(--sm-danger)" }}>✕</button>}

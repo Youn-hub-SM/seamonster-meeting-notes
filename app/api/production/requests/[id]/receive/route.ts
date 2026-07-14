@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
+import { logProductionRequestStatusChanged } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -72,11 +73,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const { error: re } = await sb.from("production_receipts").insert(receiptRow);
     if (re) { await sb.from("inventory_txns").delete().eq("id", invTxnId); throw re; }
 
-    // 3) 상태: 요청 → 처리중
-    if ((head as { status?: string } | null)?.status === "요청")
-      await sb.from("production_requests").update({ status: "처리중", updated_at: new Date().toISOString() }).eq("id", requestId);
-    else
+    // 3) 상태: 요청 → 진행중 (첫 입고 = 생산 시작 알림 + 변경기록)
+    if ((head as { status?: string } | null)?.status === "요청") {
+      await sb.from("production_requests").update({ status: "진행중", updated_at: new Date().toISOString() }).eq("id", requestId);
+      await logProductionRequestStatusChanged(reqNo, "요청", "진행중");
+    } else {
       await sb.from("production_requests").update({ updated_at: new Date().toISOString() }).eq("id", requestId);
+    }
 
     const [row] = await loadRequests(sb, { id: requestId });
     return NextResponse.json({ ok: true, request: row });
