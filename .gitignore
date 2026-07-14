@@ -54,3 +54,6 @@ next-env.d.ts
 # 외부 API 참고 문서(원문, 대용량)
 /API Reference_*.txt
 /Release Notes_*.txt
+
+# 임시 진단 스크립트(자격증명 포함 가능) — 커밋 금지
+_*.mjs
