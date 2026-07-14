@@ -134,6 +134,14 @@ async function reportModel(): Promise<string> {
 export type ReportTurn = { q: string; sql: string };
 export type ReportCorrection = { sql: string; error: string };
 
+// 서울(KST) 기준 오늘 — AI가 상대 기간(오늘·올해·최근 N일)을 학습연도가 아닌 '실제 오늘'로 계산하게 함.
+//  서버가 UTC라도 +9h 하면 KST 벽시계 날짜가 됨(생산 보드 kstTodayIso와 동일 방식).
+function kstTodayLabel(): string {
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][d.getUTCDay()];
+  return `${d.toISOString().slice(0, 10)} (${wd})`;
+}
+
 export async function planReport(question: string, history?: ReportTurn[], correction?: ReportCorrection): Promise<ReportPlan> {
   const [framework, model] = await Promise.all([getReportPrompt(), reportModel()]);
   // 후속 대화: 직전 질문·SQL 을 메시지로 넣어 '정제' 요청을 이해시킴(시스템 캐시는 그대로 유지)
@@ -152,7 +160,11 @@ export async function planReport(question: string, history?: ReportTurn[], corre
     model,
     max_tokens: 2048,
     // 스키마·규칙(정적 대용량 prefix)은 프롬프트 캐시 → 반복 질문의 입력 토큰 대폭 절감(정확도 영향 0)
-    system: [{ type: "text" as const, text: `${framework}\n\n${SCHEMA_BLOCK}\n\n${OUTPUT_RULES}`, cache_control: { type: "ephemeral" as const } }],
+    //  '오늘' 날짜는 캐시 breakpoint 뒤 별도 블록(매일 바뀌어도 정적 prefix 캐시는 유지).
+    system: [
+      { type: "text" as const, text: `${framework}\n\n${SCHEMA_BLOCK}\n\n${OUTPUT_RULES}`, cache_control: { type: "ephemeral" as const } },
+      { type: "text" as const, text: `[오늘] 기준일(Asia/Seoul 한국시간): ${kstTodayLabel()}\n- '오늘·어제·이번 주·이번 달·올해·작년·최근 N일' 등 모든 상대 기간은 반드시 이 날짜를 기준으로 계산할 것. 학습 시점의 연도를 임의로 가정하지 말 것(예: '올해'=위 날짜의 연도).\n- SQL 에서 현재 날짜/시각이 필요하면 (now() at time zone 'Asia/Seoul')::date 를 사용할 것.` },
+    ],
     messages: msgs,
   });
   const block = resp.content.find((b) => b.type === "text");
