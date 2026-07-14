@@ -8,6 +8,7 @@ type Thresholds = {
   testDailyPerCreative: number; testDays: number;
   aboPassRoas: number; aboMaxCpa: number; beatLiveCampaign: boolean; aboMinPurchases: number;
   scaleRoas: number; scaleDays: number; scalePct: number; declineRoas: number;
+  libraryRoas: number;
 };
 
 type NumField = { key: Exclude<keyof Thresholds, "beatLiveCampaign">; label: string; hint: string; step?: number };
@@ -34,7 +35,13 @@ const GROUPS: { title: string; fields: NumField[] }[] = [
       { key: "scaleRoas", label: "증액 권장 ROAS ≥", hint: "이 이상이면 증액 권장", step: 0.1 },
       { key: "scalePct", label: "증액 비율(%)", hint: "부여 예산/효율 좋을 때 주 1회 이만큼 증액. 예: 20 = +20%" },
       { key: "scaleDays", label: "증액 유지일(일)", hint: "N일 이상 유지 시(현재는 선택 기간 기준)" },
-      { key: "declineRoas", label: "효율 하락 ROAS <", hint: "이 미만이면 효율 하락 경고", step: 0.1 },
+      { key: "declineRoas", label: "효율 하락·위험 ROAS <", hint: "이 미만이면 위험소재로 판정(교체/종료 권장)", step: 0.1 },
+    ],
+  },
+  {
+    title: "⑤ 소재 라이브러리",
+    fields: [
+      { key: "libraryRoas", label: "라이브러리 저장 추천 ROAS ≥", hint: "이 이상 기록한 소재는 '라이브러리에 저장' 추천 (재사용용 아카이빙)", step: 0.1 },
     ],
   },
 ];

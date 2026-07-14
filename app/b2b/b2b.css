@@ -3068,3 +3068,15 @@ a.b2b-history-item:hover {
 /* 저장 다이얼로그 */
 .rp-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 14px; overflow: auto; }
 .rp-modal { background: var(--sm-white); border-radius: 12px; width: min(600px, 100%); padding: 16px 18px 18px; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+/* 메타 소재 라이브러리 */
+.mlib-lbl { font-size: 12px; font-weight: 600; color: var(--sm-text-mid); }
+.mlib-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 720px) { .mlib-3 { grid-template-columns: 1fr; } }
+.mlib-el-h { font-size: 12.5px; font-weight: 700; color: var(--sm-dark); margin-bottom: 5px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.mlib-el-h .sm-faint { font-weight: 400; font-size: 11px; }
+.mlib-num { color: #fff; font-size: 10px; width: 16px; height: 16px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; }
+.mlib-el textarea { resize: vertical; font-size: 12.5px; line-height: 1.5; }
+.mlib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.mlib-card { border: 1px solid var(--sm-border); border-radius: 12px; padding: 14px; background: var(--sm-white); }
+.mlib-el3 { margin-top: 9px; display: flex; flex-direction: column; gap: 5px; font-size: 12px; line-height: 1.55; color: var(--sm-text-mid); }
+.mlib-tag { font-weight: 700; font-size: 10.5px; margin-right: 5px; }

@@ -99,6 +99,7 @@ export const NAV: NavCategory[] = [
         menu: [
           { href: "/naver-ad", label: "네이버 광고" },
           { href: "/meta-ad", label: "메타 광고" },
+          { href: "/meta-ad/library", label: "메타 소재 라이브러리" },
         ],
       },
       { href: "/crm", label: "CRM 메시지맵", icon: "megaphone" },
