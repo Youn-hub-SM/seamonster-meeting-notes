@@ -21,8 +21,9 @@ export async function GET(req: NextRequest) {
     const range = since && until ? { since, until } : { datePreset: sp.get("datePreset") || "last_7d" };
     const debug = sp.get("debug") === "1";
     const fresh = sp.get("fresh") === "1";
+    const activeOnly = sp.get("scope") !== "all"; // 기본: 게재 중만(빠름). scope=all 이면 전체(ACTIVE+PAUSED)
 
-    const cacheKey = JSON.stringify(range);
+    const cacheKey = JSON.stringify({ range, activeOnly });
     if (!debug && !fresh) {
       const hit = cache.get(cacheKey);
       if (hit && Date.now() - hit.at < CACHE_TTL) {
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     }
 
     const [campaigns, adsets, ads, ci, ai, adi, thresholds] = await Promise.all([
-      listCampaigns(), listAdsets(), listAds(),
+      listCampaigns(activeOnly), listAdsets(activeOnly), listAds(activeOnly),
       getInsights("campaign", range, debug), getInsights("adset", range), getInsights("ad", range),
       getMetaThresholds(),
     ]);

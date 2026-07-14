@@ -101,12 +101,14 @@ export default function MetaAdPage() {
   const load = useCallback(async (force = false) => {
     setLoading(true); setError("");
     try {
-      const j: Overview = await (await fetch(`/api/meta-ad/overview?datePreset=${preset}${force ? "&fresh=1" : ""}`, { cache: "no-store" })).json();
+      // 라이브만=게재 중(active)만 가져와 빠름. 해제 시 전체(all, 느림·온디맨드).
+      const scope = liveOnly ? "active" : "all";
+      const j: Overview = await (await fetch(`/api/meta-ad/overview?datePreset=${preset}&scope=${scope}${force ? "&fresh=1" : ""}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setOv(j);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
-  }, [preset]);
+  }, [preset, liveOnly]);
   useEffect(() => { if (status?.connected) load(); }, [status?.connected, load]);
 
   const th = ov?.thresholds;

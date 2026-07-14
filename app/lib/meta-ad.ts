@@ -71,23 +71,27 @@ export type MetaAd = { id: string; name: string; status: string; effective_statu
 export type MetaInsight = { spend: number; impressions: number; clicks: number; ctr: number; cpc: number; purchases: number; purchaseValue: number; roas: number; cpa: number };
 export type StatRange = { datePreset?: string; since?: string; until?: string };
 
-// 보관(ARCHIVED)·삭제(DELETED)된 옛 항목 제외 — 계정 전체 이력을 매번 다 긁지 않게(속도↑). 필터 미지원 시 자동 폴백.
+// 조회 필터 — 계정 전체 이력을 매번 다 긁지 않게(속도↑). 필터 미지원 시 자동 폴백.
+//  active: 게재 중(ACTIVE)만 — 보드 기본('라이브만'). 수백 개 PAUSED 이력을 제외해 콜드로딩 대폭 단축.
+//  all: 보관/삭제만 제외(ACTIVE+PAUSED) — '라이브만' 해제 시.
+const ACTIVE_ONLY = JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]);
 const NOT_ARCHIVED = JSON.stringify([{ field: "effective_status", operator: "NOT_IN", value: ["ARCHIVED", "DELETED"] }]);
-async function listActive<T>(path: string, fields: string, pageLimit = 500): Promise<T[]> {
-  try { return await metaList<T>(path, { fields, filtering: NOT_ARCHIVED }, pageLimit); }
+async function listFiltered<T>(path: string, fields: string, filtering: string, pageLimit = 500): Promise<T[]> {
+  try { return await metaList<T>(path, { fields, filtering }, pageLimit); }
   catch { return await metaList<T>(path, { fields }, pageLimit); } // 필터 문제 시 무필터로
 }
-export function listCampaigns() {
+const scopeFilter = (activeOnly: boolean) => (activeOnly ? ACTIVE_ONLY : NOT_ARCHIVED);
+export function listCampaigns(activeOnly = false) {
   const { accountId } = creds();
-  return listActive<MetaCampaign>(`/${accountId}/campaigns`, "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy");
+  return listFiltered<MetaCampaign>(`/${accountId}/campaigns`, "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy", scopeFilter(activeOnly));
 }
-export function listAdsets() {
+export function listAdsets(activeOnly = false) {
   const { accountId } = creds();
-  return listActive<MetaAdset>(`/${accountId}/adsets`, "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,optimization_goal");
+  return listFiltered<MetaAdset>(`/${accountId}/adsets`, "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,optimization_goal", scopeFilter(activeOnly));
 }
-export function listAds() {
+export function listAds(activeOnly = false) {
   const { accountId } = creds();
-  return listActive<MetaAd>(`/${accountId}/ads`, "id,name,status,effective_status,adset_id,campaign_id");
+  return listFiltered<MetaAd>(`/${accountId}/ads`, "id,name,status,effective_status,adset_id,campaign_id", scopeFilter(activeOnly));
 }
 
 // ── 성과(인사이트) ── level별 엔티티id 키로 병합. purchase 계열 액션에서 구매수/매출/ROAS/CPA 추출.
