@@ -40,7 +40,12 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     await fetch(`/api/inventory/orders`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...key, status: "완료" }) });
     await load();
   }
-  const dt = (iso: string) => (iso ? iso.slice(0, 16).replace("T", " ") : "-");
+  // created_at(UTC timestamptz)을 한국(KST) 시각으로 표시. sv-SE 로케일 = "YYYY-MM-DD HH:mm:ss".
+  const dt = (iso: string) => {
+    if (!iso) return "-";
+    try { return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16); }
+    catch { return iso.slice(0, 16).replace("T", " "); }
+  };
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>;
