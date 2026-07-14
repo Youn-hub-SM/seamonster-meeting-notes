@@ -242,7 +242,8 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
               <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료</button>
             )}
             {(req.status === "완료" || req.status === "취소") && (
-              <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>다시 열기</button>
+              // 복구 — 입고 기록이 있으면 진행중, 없으면 요청(이전 단계)으로 되돌림.
+              <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus(req.total_received > 0 ? "진행중" : "요청")}>복구</button>
             )}
             {req.status !== "취소" && (
               <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("취소")}>취소</button>
