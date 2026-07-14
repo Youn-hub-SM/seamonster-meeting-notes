@@ -58,6 +58,11 @@ create index if not exists prod_receipt_req_idx on production_receipts (request_
 create index if not exists prod_receipt_item_idx on production_receipts (item_id);
 create index if not exists prod_receipt_txn_idx on production_receipts (inv_txn_id);
 
+-- 이전 초안(on delete set null)으로 이미 적용됐던 환경도 restrict로 수렴(create table if not exists는 FK를 안 고치므로 명시 재설정).
+alter table production_receipts drop constraint if exists production_receipts_inv_txn_id_fkey;
+alter table production_receipts add constraint production_receipts_inv_txn_id_fkey
+  foreign key (inv_txn_id) references inventory_txns(id) on delete restrict;
+
 alter table production_requests enable row level security;
 alter table production_request_items enable row level security;
 alter table production_receipts enable row level security;
