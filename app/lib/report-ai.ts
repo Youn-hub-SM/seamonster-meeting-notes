@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./config";
+import { getFeatureModelKey } from "./ai-model";
 import { supabaseAdmin } from "./supabase";
 import { SCHEMA_CATALOG, RUN_HERE_RELATIONS, LOOKER_RELATIONS } from "./report-schema";
 
@@ -11,6 +12,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export type ReportChart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 export type ReportLooker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
+export type ReportUsage = { input: number; cacheRead: number; cacheWrite: number; output: number };
 export type ReportPlan = {
   understood: string;         // 질문 해석 한 줄
   sql: string;                // 여기서 실행할 Postgres SELECT
@@ -18,6 +20,7 @@ export type ReportPlan = {
   chart: ReportChart;         // 추천 시각화
   looker: ReportLooker;       // 루커스튜디오용 SQL
   caveats: string[];          // 주의·가정
+  usage?: ReportUsage;        // 토큰 사용량(캐시 포함)
 };
 
 // 편집 가능한 지침 저장(이익률 계산기와 동일 패턴: b2b_settings)
@@ -119,12 +122,19 @@ export function validateReportSql(sql: string): string {
   return s;
 }
 
+// 리포트용 모델 — /b2b/settings/ai 에서 조정. 미설정(inherit)이면 opus(정교) 기본(공통기본 sonnet 아님).
+async function reportModel(): Promise<string> {
+  const k = await getFeatureModelKey("report");
+  return k !== "inherit" ? (MODELS[k] ?? MODELS.opus) : MODELS.opus;
+}
+
 export async function planReport(question: string): Promise<ReportPlan> {
-  const framework = await getReportPrompt();
+  const [framework, model] = await Promise.all([getReportPrompt(), reportModel()]);
   const resp = await anthropic.messages.create({
-    model: MODELS.opus,
-    max_tokens: 4096,
-    system: `${framework}\n\n${SCHEMA_BLOCK}\n\n${OUTPUT_RULES}`,
+    model,
+    max_tokens: 2048,
+    // 스키마·규칙(정적 대용량 prefix)은 프롬프트 캐시 → 반복 질문의 입력 토큰 대폭 절감(정확도 영향 0)
+    system: [{ type: "text" as const, text: `${framework}\n\n${SCHEMA_BLOCK}\n\n${OUTPUT_RULES}`, cache_control: { type: "ephemeral" as const } }],
     messages: [{ role: "user", content: `[질문]\n${question.trim()}` }],
   });
   const block = resp.content.find((b) => b.type === "text");
@@ -132,5 +142,12 @@ export async function planReport(question: string): Promise<ReportPlan> {
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   const plan = JSON.parse(cleaned) as ReportPlan;
   plan.sql = validateReportSql(plan.sql); // 단일 SELECT + 화이트리스트 검증 + 정규화
+  const u = resp.usage;
+  plan.usage = {
+    input: u.input_tokens ?? 0,
+    cacheRead: u.cache_read_input_tokens ?? 0,
+    cacheWrite: u.cache_creation_input_tokens ?? 0,
+    output: u.output_tokens ?? 0,
+  };
   return plan;
 }

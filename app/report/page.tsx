@@ -4,7 +4,8 @@ import { useState } from "react";
 
 type Chart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 type Looker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
-type Plan = { understood: string; sql: string; explanation: string; chart: Chart; looker: Looker; caveats: string[] };
+type Usage = { input: number; cacheRead: number; cacheWrite: number; output: number };
+type Plan = { understood: string; sql: string; explanation: string; chart: Chart; looker: Looker; caveats: string[]; usage?: Usage };
 type Row = Record<string, unknown>;
 
 const EXAMPLES = [
@@ -83,6 +84,13 @@ export default function ReportPage() {
       {plan && (
         <div className="sm-col" style={{ gap: 14 }}>
           <div className="rp-understood">💡 {plan.understood}</div>
+          {plan.usage && (
+            <div className="sm-faint" style={{ fontSize: 11, marginTop: -8 }}>
+              토큰 · 입력 {(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite).toLocaleString()}
+              {plan.usage.cacheRead > 0 ? ` (캐시적중 ${plan.usage.cacheRead.toLocaleString()})` : plan.usage.cacheWrite > 0 ? ` (캐시저장 ${plan.usage.cacheWrite.toLocaleString()})` : ""}
+              {" · 출력 "}{plan.usage.output.toLocaleString()}
+            </div>
+          )}
 
           {!err && rows.length > 0 && plan.chart?.type && plan.chart.type !== "none" && plan.chart.x && plan.chart.series?.length ? (
             <section className="b2b-card"><MiniChart chart={plan.chart} rows={rows} /></section>
