@@ -184,9 +184,7 @@ export default function ReportPage() {
             </div>
           )}
 
-          {!err && rows.length > 0 && plan.chart?.type && plan.chart.type !== "none" && plan.chart.x && plan.chart.series?.length ? (
-            <section className="b2b-card"><MiniChart chart={plan.chart} rows={rows} /></section>
-          ) : null}
+          {!err && rows.length > 0 ? <MiniChart chart={plan.chart} rows={rows} /> : null}
 
           {!err && (
             <section className="b2b-card">
@@ -316,21 +314,32 @@ export default function ReportPage() {
   );
 }
 
-// 간단 차트 — x축 라벨 + 첫 series 값. bar/pie=가로막대, line=세로 추세.
+// 차트 카드 — 데이터 형태와 안 맞으면 카드 자체를 렌더하지 않음(표만).
 function MiniChart({ chart, rows }: { chart: Chart; rows: Row[] }) {
-  const x = chart.x!;
-  const s = chart.series![0];
-  const data = rows.slice(0, 40).map((r) => ({ label: fmt(r[x]), value: num(r[s]) }));
-  const max = Math.max(1, ...data.map((d) => Math.abs(d.value)));
-  const title = `${s} — ${x}`;
+  const inner = buildChart(chart, rows);
+  return inner ? <section className="b2b-card">{inner}</section> : null;
+}
+// 차트 본체 — line: 시계열(x 유일·정렬가능·과다 아님)만. bar/pie: 값 큰 순 상위 24. 안 맞으면 null.
+function buildChart(chart: Chart, rows: Row[]) {
+  if (chart.type === "none") return null;
+  const x = chart.x, s = chart.series?.[0];
+  if (!x || !s || rows.length < 2) return null;
+  const raw = rows.map((r) => ({ label: fmt(r[x]), value: num(r[s]) })).filter((d) => d.label !== "");
+  const distinct = new Set(raw.map((d) => d.label)).size;
+  if (distinct < 2 || raw.every((d) => d.value === 0)) return null; // x가 한 종류거나 값 전부 0 → 표만
+
   if (chart.type === "line") {
+    // 시계열만: x가 유일(기간당 1값)하고 과다하지 않아야 라인. 랭킹처럼 중복 x면 표만.
+    if (distinct < raw.length || raw.length > 80) return null;
+    const data = [...raw].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+    const max = Math.max(1, ...data.map((d) => Math.abs(d.value)));
     const W = 640, H = 200, pad = 28;
     const step = data.length > 1 ? (W - pad * 2) / (data.length - 1) : 0;
     const pts = data.map((d, i) => [pad + i * step, H - pad - (Math.abs(d.value) / max) * (H - pad * 2)]);
     const path = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
     return (
       <div>
-        <div className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>{title}</div>
+        <div className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>{s} — {x}</div>
         <div style={{ overflowX: "auto" }}>
           <svg width={W} height={H} style={{ maxWidth: "100%" }}>
             <path d={path} fill="none" stroke="var(--sm-info)" strokeWidth={2} />
@@ -341,9 +350,12 @@ function MiniChart({ chart, rows }: { chart: Chart; rows: Row[] }) {
       </div>
     );
   }
+  // bar / pie → 값 큰 순 상위 24개 가로 막대
+  const data = [...raw].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 24);
+  const max = Math.max(1, ...data.map((d) => Math.abs(d.value)));
   return (
     <div>
-      <div className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>{title}</div>
+      <div className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>{s} — {x}{raw.length > 24 ? ` · 상위 24 / ${raw.length}` : ""}</div>
       <div className="sm-col" style={{ gap: 7 }}>
         {data.map((d, i) => (
           <div key={i} className="sm-row" style={{ gap: 10, alignItems: "center" }}>

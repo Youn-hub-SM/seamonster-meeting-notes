@@ -62,8 +62,12 @@ const OUTPUT_RULES = `[출력] 설명 없이 아래 JSON만 반환:
  "caveats":["주의·가정(있으면)"]
 }
 - sql 은 실제로 실행 가능한 완전한 쿼리. 컬럼 별칭은 한국어로.
-- chart.x/series 는 sql 의 SELECT 별칭과 정확히 일치해야 함(대소문자·한글 그대로). 시계열이면 line, 카테고리 비교면 bar, 비중이면 pie.
-- 표만 필요하면 chart.type="none".
+- chart.x/series 는 sql 의 SELECT 별칭과 정확히 일치(대소문자·한글 그대로). 차트 종류는 데이터 형태에 맞게 신중히 고를 것:
+   · line = 시계열만. x가 날짜/연월/주차 같은 '기간'이고, SQL이 그 기간 오름차순 정렬이며, 한 기간당 값 1개일 때만. **랭킹(ORDER BY 값 DESC)이나 2차원 집계(예: SKU×주차)에는 절대 line 을 쓰지 말 것.**
+   · bar = 카테고리·랭킹 비교(채널별/SKU별/상품군별 상위 N 등). x=범주 라벨, 값 큰 순 정렬.
+   · pie = 소수(≤8개) 항목의 비중.
+   · none = 행이 많거나(수십 개 이상), x축이 하나로 깔끔히 안 떨어지거나(예: SKU와 주차를 동시에 가진 결과), 표로 보는 게 더 명확할 때. **애매하면 none.**
+- 랭킹/Top-N 질문이면 line 금지 → bar(범주 x, 값 큰 순) 또는 none.
 - 이전 대화(assistant 의 이전 SQL)가 있으면, 새 질문이 그 결과를 '다듬는' 요청일 수 있음(예: "도매만 빼줘"·"월별로"·"상위 20개로"·"작년과 비교"). 그럴 땐 직전 SQL 을 기반으로 수정해 sql 을 다시 만들 것.`;
 
 export async function getReportPrompt(): Promise<string> {
