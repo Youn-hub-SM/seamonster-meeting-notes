@@ -86,13 +86,34 @@ export async function setReportPrompt(prompt: string): Promise<void> {
   if (error) throw error;
 }
 
-// 앱 1차 방어: 단일 SELECT만 허용(run_report·report_ro 가 2차 방어).
+// 앱 방어 ①: 단일 SELECT만 허용.
 export function assertSelectOnly(sql: string): string {
   const s = (sql || "").trim().replace(/;\s*$/, ""); // 끝 세미콜론 허용
   if (!/^(with|select)\b/i.test(s)) throw new Error("SELECT 쿼리만 실행할 수 있습니다.");
   if (s.includes(";")) throw new Error("여러 문장은 실행할 수 없습니다.");
   if (/\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|vacuum|call|do)\b/i.test(s))
     throw new Error("쓰기/DDL 구문은 실행할 수 없습니다.");
+  return s;
+}
+
+// 앱 방어 ②: 참조 테이블이 화이트리스트(매출·재고)에 있는지 검증 — 그 외/PII/시스템 테이블 차단.
+export function assertAllowedRelations(sql: string): void {
+  const allow = new Set(RUN_HERE_RELATIONS.map((r) => r.toLowerCase()));
+  const ctes = new Set<string>();
+  for (const m of sql.matchAll(/(?:\bwith\b|,)\s+([a-z_][a-z0-9_]*)\s+as\s*\(/gi)) ctes.add(m[1].toLowerCase());
+  for (const m of sql.matchAll(/\b(?:from|join)\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?(\s*\()?/gi)) {
+    if (m[2]) continue;             // 뒤에 '(' → 집합반환 함수(generate_series 등) 허용
+    const name = m[1].toLowerCase();
+    if (name === "_sub") continue;
+    if (!allow.has(name) && !ctes.has(name))
+      throw new Error(`허용되지 않은 테이블 참조: '${name}' — 매출·재고 관계만 조회할 수 있습니다.`);
+  }
+}
+
+// 단일 SELECT + 화이트리스트 통과한 정규화 SQL 반환.
+export function validateReportSql(sql: string): string {
+  const s = assertSelectOnly(sql);
+  assertAllowedRelations(s);
   return s;
 }
 
@@ -108,6 +129,6 @@ export async function planReport(question: string): Promise<ReportPlan> {
   const text = block && block.type === "text" ? block.text : "";
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   const plan = JSON.parse(cleaned) as ReportPlan;
-  plan.sql = assertSelectOnly(plan.sql); // 방어 + 정규화
+  plan.sql = validateReportSql(plan.sql); // 단일 SELECT + 화이트리스트 검증 + 정규화
   return plan;
 }

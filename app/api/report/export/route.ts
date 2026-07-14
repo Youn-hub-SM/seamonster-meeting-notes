@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { assertSelectOnly } from "@/app/lib/report-ai";
+import { validateReportSql } from "@/app/lib/report-ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     const { sql, title } = (await req.json()) as { sql?: string; title?: string };
     if (!sql) return NextResponse.json({ ok: false, error: "sql 필요" }, { status: 400 });
     let safe: string;
-    try { safe = assertSelectOnly(sql); } catch (e) { return NextResponse.json({ ok: false, error: extractErrorMsg(e, "SQL 검증 실패") }, { status: 400 }); }
+    try { safe = validateReportSql(sql); } catch (e) { return NextResponse.json({ ok: false, error: extractErrorMsg(e, "SQL 검증 실패") }, { status: 400 }); }
 
     const sb = supabaseAdmin();
     const { data, error } = await sb.rpc("run_report", { q: safe });
