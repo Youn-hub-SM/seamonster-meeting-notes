@@ -13,7 +13,7 @@ type Thresholds = {
   scaleRoas: number; scaleDays: number; scalePct: number; declineRoas: number;
   libraryRoas: number;
 };
-type Overview = { ok: boolean; error?: string; thresholds: Thresholds; campaigns: Campaign[]; adsets: Adset[]; ads: Ad[] };
+type Overview = { ok: boolean; error?: string; thresholds: Thresholds; campaigns: Campaign[]; adsets: Adset[]; ads: Ad[]; cached?: boolean };
 
 const PRESETS = [
   { key: "today", label: "오늘" }, { key: "yesterday", label: "어제" },
@@ -98,10 +98,10 @@ export default function MetaAdPage() {
     })();
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true); setError("");
     try {
-      const j: Overview = await (await fetch(`/api/meta-ad/overview?datePreset=${preset}`, { cache: "no-store" })).json();
+      const j: Overview = await (await fetch(`/api/meta-ad/overview?datePreset=${preset}${force ? "&fresh=1" : ""}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setOv(j);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
@@ -235,8 +235,8 @@ export default function MetaAdPage() {
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
-          <span className="sm-faint" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{rangeLabel(preset)}</span>
-          <button className="b2b-btn-secondary" onClick={load} disabled={loading || !status?.connected}>{loading ? "..." : "새로고침"}</button>
+          <span className="sm-faint" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{rangeLabel(preset)}{ov?.cached ? " · 캐시" : ""}</span>
+          <button className="b2b-btn-secondary" onClick={() => load(true)} disabled={loading || !status?.connected}>{loading ? "..." : "새로고침"}</button>
         </div>
       </header>
 

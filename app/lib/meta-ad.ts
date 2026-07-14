@@ -71,17 +71,23 @@ export type MetaAd = { id: string; name: string; status: string; effective_statu
 export type MetaInsight = { spend: number; impressions: number; clicks: number; ctr: number; cpc: number; purchases: number; purchaseValue: number; roas: number; cpa: number };
 export type StatRange = { datePreset?: string; since?: string; until?: string };
 
+// 보관(ARCHIVED)·삭제(DELETED)된 옛 항목 제외 — 계정 전체 이력을 매번 다 긁지 않게(속도↑). 필터 미지원 시 자동 폴백.
+const NOT_ARCHIVED = JSON.stringify([{ field: "effective_status", operator: "NOT_IN", value: ["ARCHIVED", "DELETED"] }]);
+async function listActive<T>(path: string, fields: string, pageLimit = 500): Promise<T[]> {
+  try { return await metaList<T>(path, { fields, filtering: NOT_ARCHIVED }, pageLimit); }
+  catch { return await metaList<T>(path, { fields }, pageLimit); } // 필터 문제 시 무필터로
+}
 export function listCampaigns() {
   const { accountId } = creds();
-  return metaList<MetaCampaign>(`/${accountId}/campaigns`, { fields: "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy" });
+  return listActive<MetaCampaign>(`/${accountId}/campaigns`, "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy");
 }
 export function listAdsets() {
   const { accountId } = creds();
-  return metaList<MetaAdset>(`/${accountId}/adsets`, { fields: "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,optimization_goal" });
+  return listActive<MetaAdset>(`/${accountId}/adsets`, "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,optimization_goal");
 }
 export function listAds() {
   const { accountId } = creds();
-  return metaList<MetaAd>(`/${accountId}/ads`, { fields: "id,name,status,effective_status,adset_id,campaign_id,creative{id,thumbnail_url}" });
+  return listActive<MetaAd>(`/${accountId}/ads`, "id,name,status,effective_status,adset_id,campaign_id");
 }
 
 // ── 성과(인사이트) ── level별 엔티티id 키로 병합. purchase 계열 액션에서 구매수/매출/ROAS/CPA 추출.
