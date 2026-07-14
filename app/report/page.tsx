@@ -50,6 +50,7 @@ export default function ReportPage() {
   const [saveName, setSaveName] = useState("");
   const [saveSql, setSaveSql] = useState("");
   const [varForm, setVarForm] = useState<{ rep: Saved; values: Record<string, string> } | null>(null);
+  const [corrected, setCorrected] = useState(0);
 
   const loadSaved = useCallback(async () => {
     try { const j = await (await fetch("/api/report/saved", { cache: "no-store" })).json(); if (j.ok) setSaved(j.reports || []); } catch { /* noop */ }
@@ -60,12 +61,12 @@ export default function ReportPage() {
     const qq = question.trim();
     if (!qq || loading) return;
     const hist = fresh ? [] : turns;
-    setLoading(true); setErr(""); setVarForm(null); setPlan(null); setRows([]); setCols([]); setShowSql(false);
+    setLoading(true); setErr(""); setVarForm(null); setPlan(null); setRows([]); setCols([]); setShowSql(false); setCorrected(0);
     try {
       const r = await fetch("/api/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: qq, history: hist }) });
       const j = await r.json();
-      if (!j.ok) { setErr(j.error || "실패"); if (j.plan) setPlan(j.plan); return; }
-      setPlan(j.plan); setRows(j.rows || []); setCols(j.columns || []);
+      if (!j.ok) { setErr(j.error || "실패"); if (j.plan) setPlan(j.plan); setCorrected(j.corrected || 0); return; }
+      setPlan(j.plan); setRows(j.rows || []); setCols(j.columns || []); setCorrected(j.corrected || 0);
       setTurns([...hist, { q: qq, sql: j.plan.sql }]); setQ("");
     } catch (e) { setErr(e instanceof Error ? e.message : "오류"); }
     finally { setLoading(false); }
@@ -80,7 +81,7 @@ export default function ReportPage() {
   }
   async function runSql(rep: Saved, sql: string) {
     if (loading) return;
-    setLoading(true); setErr(""); setVarForm(null); setPlan(null); setRows([]); setCols([]); setShowSql(false);
+    setLoading(true); setErr(""); setVarForm(null); setPlan(null); setRows([]); setCols([]); setShowSql(false); setCorrected(0);
     try {
       const r = await fetch("/api/report/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql }) });
       const j = await r.json();
@@ -174,6 +175,7 @@ export default function ReportPage() {
       {plan && (
         <div className="sm-col" style={{ gap: 14 }}>
           <div className="rp-understood">💡 {plan.understood}</div>
+          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 11.5, color: "var(--sm-info)", marginTop: -8 }}>🔧 SQL 오류를 자동 교정({corrected}회)해 실행했어요.</div>}
           {plan.usage && (
             <div className="sm-faint" style={{ fontSize: 11, marginTop: -8 }}>
               토큰 · 입력 {(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite).toLocaleString()}

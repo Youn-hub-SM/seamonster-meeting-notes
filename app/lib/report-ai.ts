@@ -130,8 +130,9 @@ async function reportModel(): Promise<string> {
 }
 
 export type ReportTurn = { q: string; sql: string };
+export type ReportCorrection = { sql: string; error: string };
 
-export async function planReport(question: string, history?: ReportTurn[]): Promise<ReportPlan> {
+export async function planReport(question: string, history?: ReportTurn[], correction?: ReportCorrection): Promise<ReportPlan> {
   const [framework, model] = await Promise.all([getReportPrompt(), reportModel()]);
   // 후속 대화: 직전 질문·SQL 을 메시지로 넣어 '정제' 요청을 이해시킴(시스템 캐시는 그대로 유지)
   const msgs: Anthropic.MessageParam[] = [];
@@ -140,6 +141,11 @@ export async function planReport(question: string, history?: ReportTurn[]): Prom
     msgs.push({ role: "assistant", content: JSON.stringify({ sql: h.sql }) });
   }
   msgs.push({ role: "user", content: `[질문]\n${question.trim()}` });
+  // 자동 교정: 방금 SQL 이 DB 오류로 실패 → 오류를 주고 고쳐 다시 만들게 함
+  if (correction) {
+    msgs.push({ role: "assistant", content: JSON.stringify({ sql: correction.sql }) });
+    msgs.push({ role: "user", content: `방금 그 SQL 이 PostgreSQL 오류로 실패했습니다:\n${correction.error}\n오류 원인을 고쳐, 같은 질문 의도의 올바른 단일 SELECT 로 다시 만들어 주세요. (없는 컬럼/함수·타입 캐스팅·GROUP BY·별칭 등은 스키마에 맞게 교정)` });
+  }
   const resp = await anthropic.messages.create({
     model,
     max_tokens: 2048,
