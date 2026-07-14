@@ -66,7 +66,13 @@ export async function DELETE(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ ok: false, error: "id 가 필요합니다." }, { status: 400 });
-    const { error } = await supabaseAdmin().from("inventory_txns").delete().eq("id", id);
+    const sb = supabaseAdmin();
+    // 생산요청 입고와 연결된 도매 입고 원장은 여기서 못 지운다(정합성 보호) → 생산요청서에서 취소.
+    //  (069 미적용 환경이면 count=null 로 통과)
+    const { count } = await sb.from("production_receipts").select("id", { count: "exact", head: true }).eq("inv_txn_id", id);
+    if ((count ?? 0) > 0)
+      return NextResponse.json({ ok: false, error: "이 입고는 생산요청 입고와 연결되어 있어 여기서 취소할 수 없습니다. 생산요청서에서 입고를 취소하세요." }, { status: 400 });
+    const { error } = await sb.from("inventory_txns").delete().eq("id", id);
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (err) {

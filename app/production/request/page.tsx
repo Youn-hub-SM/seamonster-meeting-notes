@@ -61,7 +61,8 @@ function WholesaleTab() {
     (async () => {
       try {
         const j = await (await fetch("/api/inventory/overview?channel=도매", { cache: "no-store" })).json();
-        if (j.ok) setProducts((j.rows || []).map((r: Prod) => ({ product_id: r.product_id, sku: r.sku, name: r.name, spec: r.spec, unit: r.unit, qty: r.qty })));
+        // 묶음(세트)은 자체 재고가 없어(구성품 기준) 생산 입고 대상이 아님 → 선택기에서 제외.
+        if (j.ok) setProducts((j.rows || []).filter((r: { is_bundle?: boolean }) => !r.is_bundle).map((r: Prod) => ({ product_id: r.product_id, sku: r.sku, name: r.name, spec: r.spec, unit: r.unit, qty: r.qty })));
       } catch { /* noop */ }
     })();
   }, []);
@@ -261,8 +262,10 @@ function ItemRow({ item, canEdit, busy, onReceive, onCancelReceipt }: {
   const [date, setDate] = useState(todayIso());
   const [memo, setMemo] = useState("");
   const st = lineState(item.requested_qty, item.received_qty);
-  // 열 때마다 현재 잔여수량 자동 채움(부분입고 반복 편의).
-  useEffect(() => { if (open) setQty(remaining > 0 ? String(remaining) : ""); }, [open, remaining]);
+  // 열 때만 1회 잔여수량 자동 채움. deps=[open]로 좁혀, 열려있는 동안 remaining이 바뀌어도
+  //  사용자가 입력 중인 값을 덮어쓰지 않게 함(입고 취소 시 remaining 증가 → 덮어쓰기 방지).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) setQty(remaining > 0 ? String(remaining) : ""); }, [open]);
 
   async function submit() {
     const n = Math.round(Number(qty) || 0);
@@ -283,44 +286,51 @@ function ItemRow({ item, canEdit, busy, onReceive, onCancelReceipt }: {
         <td className="num" style={{ color: remaining > 0 ? "var(--sm-text-mid)" : remaining < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{remaining.toLocaleString()}</td>
         <td><span style={{ fontSize: 13, fontWeight: 700, color: PR_LINE_COLOR[st] }}>{st}</span></td>
         <td>
-          {canEdit ? (
-            <button className="b2b-btn-secondary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => setOpen((v) => !v)}>{open ? "닫기" : "입고"}</button>
+          {(canEdit || item.receipts.length > 0) ? (
+            <button className="b2b-btn-secondary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => setOpen((v) => !v)}>{open ? "닫기" : canEdit ? "입고" : "이력"}</button>
           ) : <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>—</span>}
         </td>
       </tr>
 
-      {open && canEdit && (
+      {open && (
         <tr>
           <td colSpan={6} style={{ background: "var(--sm-bg-subtle)" }}>
-            <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end", padding: "4px 2px" }}>
-              <label className="sm-col" style={{ gap: 3 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>실제 입고 수량</span>
-                <input type="number" className="b2b-input" style={{ width: 120 }} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="예: 90" />
-              </label>
-              <label className="sm-col" style={{ gap: 3 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>입고일</span>
-                <input type="date" className="b2b-input" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
-              </label>
-              <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 160 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>사유·메모(선택)</span>
-                <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="부분입고 / 초과생산 / 수정 등" />
-              </label>
-              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy || !qty} onClick={submit}>입고 기록</button>
-            </div>
-            <p className="sm-faint" style={{ fontSize: 13, margin: "6px 2px 0" }}>초과 생산은 요청보다 많게, 수정(회수)은 음수로 입력하세요. 입고 즉시 도매 재고에 반영됩니다.</p>
+            {canEdit && (
+              <>
+                <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end", padding: "4px 2px" }}>
+                  <label className="sm-col" style={{ gap: 3 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>실제 입고 수량</span>
+                    <input type="number" className="b2b-input" style={{ width: 120 }} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="예: 90" />
+                  </label>
+                  <label className="sm-col" style={{ gap: 3 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>입고일</span>
+                    <input type="date" className="b2b-input" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
+                  </label>
+                  <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 160 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>사유·메모(선택)</span>
+                    <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="부분입고 / 초과생산 / 수정 등" />
+                  </label>
+                  <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy || Math.round(Number(qty) || 0) === 0} onClick={submit}>입고 기록</button>
+                </div>
+                <p className="sm-faint" style={{ fontSize: 13, margin: "6px 2px 0" }}>초과 생산은 요청보다 많게, 수정(회수)은 음수로 입력하세요. 입고 즉시 도매 재고에 반영됩니다.</p>
+              </>
+            )}
 
-            {item.receipts.length > 0 && (
-              <div style={{ marginTop: 8 }}>
+            {item.receipts.length > 0 ? (
+              <div style={{ marginTop: canEdit ? 10 : 2 }}>
+                <div className="sm-faint" style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>입고 이력</div>
                 {item.receipts.map((rc) => (
                   <div key={rc.id} className="sm-row" style={{ gap: 8, alignItems: "center", fontSize: 13, padding: "3px 2px", flexWrap: "wrap" }}>
                     <span style={{ color: "var(--sm-text-light)" }}>{rc.receipt_date}</span>
                     <span style={{ fontWeight: 700, color: rc.qty < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{rc.qty > 0 ? "+" : ""}{rc.qty.toLocaleString()}</span>
                     {rc.received_by && <span style={{ color: "var(--sm-text-mid)" }}>{rc.received_by}</span>}
                     {rc.memo && <span style={{ color: "var(--sm-text-mid)" }}>· {rc.memo}</span>}
-                    <button className="b2b-link-btn" style={{ fontSize: 13, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>
+                    {canEdit && <button className="b2b-link-btn" style={{ fontSize: 13, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>}
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="sm-faint" style={{ fontSize: 13, margin: "4px 2px" }}>아직 입고 기록이 없습니다.</p>
             )}
           </td>
         </tr>

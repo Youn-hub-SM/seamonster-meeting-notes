@@ -45,7 +45,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       return NextResponse.json({ ok: false, error: "요청서와 품목이 일치하지 않습니다." }, { status: 400 });
 
     const { data: head } = await sb.from("production_requests").select("req_no, status").eq("id", requestId).single();
-    const reqNo = (head as { req_no?: string } | null)?.req_no || "";
+    if (!head) return NextResponse.json({ ok: false, error: "요청서를 찾을 수 없습니다." }, { status: 404 });
+    const headStatus = (head as { status?: string }).status;
+    if (headStatus === "완료" || headStatus === "취소")
+      return NextResponse.json({ ok: false, error: `‘${headStatus}’ 상태 요청서에는 입고할 수 없습니다. 먼저 ‘다시 열기’ 하세요.` }, { status: 409 });
+    const reqNo = (head as { req_no?: string }).req_no || "";
     const who = await actor(req);
     const receipt_date = DATE_RE.test(String(b.receipt_date || "")) ? String(b.receipt_date) : undefined;
     const userMemo = String(b.memo || "").trim();
@@ -89,14 +93,14 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     const rid = req.nextUrl.searchParams.get("rid");
     if (!rid) return NextResponse.json({ ok: false, error: "입고 id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
-    const { data: rc, error: fe } = await sb.from("production_receipts").select("id, request_id, inv_txn_id").eq("id", rid).single();
+    const { data: rc, error: fe } = await sb.from("production_receipts").select("id, request_id").eq("id", rid).single();
     if (fe || !rc) return NextResponse.json({ ok: false, error: "입고 기록을 찾을 수 없습니다." }, { status: 404 });
     if ((rc as { request_id: string }).request_id !== requestId)
       return NextResponse.json({ ok: false, error: "요청서와 입고가 일치하지 않습니다." }, { status: 400 });
 
-    const txnId = (rc as { inv_txn_id?: string }).inv_txn_id;
-    await sb.from("production_receipts").delete().eq("id", rid);
-    if (txnId) await sb.from("inventory_txns").delete().eq("id", txnId); // 재고 원복
+    // 원자적 취소: receipt + 연결 도매 입고 원장을 한 트랜잭션에서 삭제(재고 원복).
+    const { error: ce } = await sb.rpc("cancel_production_receipt", { p_receipt_id: rid });
+    if (ce) throw ce;
 
     const [row] = await loadRequests(sb, { id: requestId });
     return NextResponse.json({ ok: true, request: row });

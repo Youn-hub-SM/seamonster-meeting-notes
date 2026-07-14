@@ -37,6 +37,12 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
     const who = await actor(req);
 
+    // 묶음(세트) 품목은 자체 재고가 없어(구성품 기준 도출) 도매 입고 대상이 아님 → 거부.
+    const pids = [...new Set(items.map((it) => it.product_id))];
+    const { data: bundles, error: be } = await sb.from("product_bundles").select("parent_id").in("parent_id", pids);
+    if (!be && (bundles ?? []).length)
+      return NextResponse.json({ ok: false, error: "묶음(세트) 품목은 생산 요청에 담을 수 없습니다. 구성품(단품)으로 요청하세요." }, { status: 400 });
+
     // 요청번호(PR-000001)
     let req_no: string | null = null;
     try { const { data } = await sb.rpc("next_production_request_no"); if (data) req_no = String(data); } catch { /* 069 미적용 */ }

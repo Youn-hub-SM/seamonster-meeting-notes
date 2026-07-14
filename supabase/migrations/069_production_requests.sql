@@ -49,14 +49,32 @@ create table if not exists production_receipts (
   receipt_date date not null default current_date,
   memo text,                                   -- 사유(부분/초과/수정 등)
   received_by text,
-  inv_txn_id uuid references inventory_txns(id) on delete set null,  -- 생성된 도매 입고 원장
+  -- restrict: 연결된 도매 입고 원장은 일반 재고툴에서 함부로 못 지운다(정합성 보호).
+  --  취소는 반드시 cancel_production_receipt(아래)로만 → receipt 먼저 지운 뒤 원장 삭제(원자적).
+  inv_txn_id uuid references inventory_txns(id) on delete restrict,
   created_at timestamptz not null default now()
 );
 create index if not exists prod_receipt_req_idx on production_receipts (request_id);
 create index if not exists prod_receipt_item_idx on production_receipts (item_id);
+create index if not exists prod_receipt_txn_idx on production_receipts (inv_txn_id);
 
 alter table production_requests enable row level security;
 alter table production_request_items enable row level security;
 alter table production_receipts enable row level security;
+
+-- 입고 취소(원자적) — 증거(receipt)와 연결 도매 입고 원장을 한 트랜잭션에서 함께 삭제.
+--  receipt를 먼저 지워 FK(restrict) 참조를 푼 뒤 원장을 삭제. 중간 실패 시 전체 롤백(재고·증거 정합).
+create or replace function cancel_production_receipt(p_receipt_id uuid) returns void
+language plpgsql as $$
+declare v_txn uuid;
+begin
+  select inv_txn_id into v_txn from production_receipts where id = p_receipt_id;
+  if not found then return; end if;
+  delete from production_receipts where id = p_receipt_id;
+  if v_txn is not null then
+    delete from inventory_txns where id = v_txn;
+  end if;
+end;
+$$;
 
 notify pgrst, 'reload schema';
