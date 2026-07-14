@@ -99,9 +99,11 @@ export function assertSelectOnly(sql: string): string {
 // 앱 방어 ②: 참조 테이블이 화이트리스트(매출·재고)에 있는지 검증 — 그 외/PII/시스템 테이블 차단.
 export function assertAllowedRelations(sql: string): void {
   const allow = new Set(RUN_HERE_RELATIONS.map((r) => r.toLowerCase()));
+  // 내장함수의 '키워드 FROM' 오탐 제거: extract(month FROM x)·substring·trim·overlay·position(...)
+  const scan = sql.replace(/\b(?:extract|substring|trim|overlay|position)\s*\([^()]*\)/gi, " NULL ");
   const ctes = new Set<string>();
-  for (const m of sql.matchAll(/(?:\bwith\b|,)\s+([a-z_][a-z0-9_]*)\s+as\s*\(/gi)) ctes.add(m[1].toLowerCase());
-  for (const m of sql.matchAll(/\b(?:from|join)\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?(\s*\()?/gi)) {
+  for (const m of scan.matchAll(/(?:\bwith\b|,)\s+([a-z_][a-z0-9_]*)\s+as\s*\(/gi)) ctes.add(m[1].toLowerCase());
+  for (const m of scan.matchAll(/\b(?:from|join)\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?(\s*\()?/gi)) {
     if (m[2]) continue;             // 뒤에 '(' → 집합반환 함수(generate_series 등) 허용
     const name = m[1].toLowerCase();
     if (name === "_sub") continue;
