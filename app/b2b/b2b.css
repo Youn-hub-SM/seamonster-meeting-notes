@@ -3024,6 +3024,15 @@ a.b2b-history-item:hover {
   background: var(--sm-white); color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
 .rp-chip:hover { background: var(--sm-bg-subtle); border-color: var(--sm-info); color: var(--sm-info); }
 .rp-chip:disabled { opacity: .5; cursor: default; }
+.rp-chip.is-active, .rp-chip.is-active:hover { background: var(--sm-orange-light); border-color: var(--sm-orange); color: var(--sm-orange-hover); font-weight: 700; }
+/* 질문 조립 도우미 */
+.rp-compose { border: 1px solid var(--sm-border); border-radius: 12px; background: var(--sm-white); margin-bottom: 10px; overflow: hidden; }
+.rp-compose-head { width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: none; border: none; cursor: pointer; text-align: left; font-size: 14px; font-weight: 700; color: var(--sm-dark); }
+.rp-compose-hint { font-size: 13px; font-weight: 400; color: var(--sm-text-light); }
+.rp-compose-body { padding: 6px 14px 14px; border-top: 1px solid var(--sm-border-light, #f4f4f4); display: flex; flex-direction: column; gap: 10px; }
+.rp-compose-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.rp-compose-label { font-size: 13px; font-weight: 700; color: var(--sm-text-mid); min-width: 92px; }
+.rp-compose-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
 .rp-understood { font-size: 14px; font-weight: 600; color: var(--sm-dark); background: var(--sm-info-bg, #e0f0ff);
   border-radius: 10px; padding: 10px 14px; }
 .rp-caveats { margin: 8px 0 0; padding-left: 2px; list-style: none; display: flex; flex-direction: column; gap: 3px; }

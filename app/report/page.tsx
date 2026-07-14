@@ -25,6 +25,51 @@ function fillVars(sql: string, values: Record<string, string>): string {
   return out;
 }
 
+// 질문 조립 도우미 — 칸을 클릭하면 자연스러운 질문 문장이 만들어져 질문칸에 채워짐.
+const COMPOSER_FACETS = [
+  { key: "period", label: "기간", opts: ["오늘", "이번 주", "이번 달", "지난 달", "최근 7일", "최근 30일", "올해", "작년"] },
+  { key: "dim", label: "무엇을 기준으로", opts: ["채널별", "상품별", "상품군별", "고객별", "지역별", "월별"] },
+  { key: "metric", label: "지표", opts: ["매출", "판매수량", "주문수", "객단가", "신규·재구매 고객수", "재구매율", "재고 현황"] },
+  { key: "scope", label: "범위·정렬", opts: ["상위 10개", "상위 20개", "많은 순", "적은 순", "전체"] },
+] as const;
+const COMPOSE_ORDER = ["period", "dim", "metric", "scope"] as const;
+
+function QuestionComposer({ disabled, onCompose }: { disabled: boolean; onCompose: (text: string) => void }) {
+  const [open, setOpen] = useState(true);
+  const [pick, setPick] = useState<Record<string, string>>({});
+  const compose = (p: Record<string, string>) => COMPOSE_ORDER.map((k) => p[k]).filter(Boolean).join(" ");
+  function toggle(key: string, opt: string) {
+    const next = { ...pick };
+    if (next[key] === opt) delete next[key]; else next[key] = opt;
+    setPick(next);
+    onCompose(compose(next));
+  }
+  function reset() { setPick({}); onCompose(""); }
+  return (
+    <div className="rp-compose">
+      <button className="rp-compose-head" onClick={() => setOpen((v) => !v)}>
+        <span>{open ? "▾" : "▸"} 질문 만들기 도우미</span>
+        <span className="rp-compose-hint">칸을 눌러 조합하면 아래 질문칸에 자동으로 채워집니다. 직접 고쳐 써도 돼요.</span>
+      </button>
+      {open && (
+        <div className="rp-compose-body">
+          {COMPOSER_FACETS.map((f) => (
+            <div key={f.key} className="rp-compose-row">
+              <span className="rp-compose-label">{f.label}</span>
+              <div className="rp-compose-chips">
+                {f.opts.map((o) => (
+                  <button key={o} type="button" className={`rp-chip ${pick[f.key] === o ? "is-active" : ""}`} disabled={disabled} onClick={() => toggle(f.key, o)}>{o}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {Object.keys(pick).length > 0 && <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={reset}>선택 초기화</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReportPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
@@ -164,6 +209,8 @@ export default function ReportPage() {
           {turns.map((t, i) => <span key={i} className="rp-thread-q">{t.q}</span>)}
         </div>
       )}
+
+      <QuestionComposer disabled={loading} onCompose={setQ} />
 
       <div className="rp-ask">
         <textarea className="b2b-input rp-input" rows={2} value={q}
