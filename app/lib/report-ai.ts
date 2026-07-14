@@ -17,7 +17,7 @@ export type ReportPlan = {
   understood: string;         // 질문 해석 한 줄
   sql: string;                // 여기서 실행할 Postgres SELECT
   explanation: string;        // 결과 읽는 법 1~2줄
-  chart: ReportChart;         // 추천 시각화
+  chart?: ReportChart;        // (미사용) 저장 호환용 — 화면은 표만 표시
   looker: ReportLooker;       // 루커스튜디오용 SQL
   caveats: string[];          // 주의·가정
   usage?: ReportUsage;        // 토큰 사용량(캐시 포함)
@@ -57,17 +57,11 @@ const OUTPUT_RULES = `[출력] 설명 없이 아래 JSON만 반환:
  "understood":"질문 해석 한 줄",
  "sql":"여기서 실행할 PostgreSQL SELECT (단일 문, 세미콜론 없이)",
  "explanation":"결과 읽는 법 1~2줄(무엇을 어떤 단위로 보여주는지)",
- "chart":{"type":"bar|line|pie|none","x":"x축 컬럼명","series":["값 컬럼명",...],"note":""},
  "looker":{"mode":"query|view|na","sql":"루커용 SQL(위 규칙)","note":"루커에서 쓰는 법"},
  "caveats":["주의·가정(있으면)"]
 }
 - sql 은 실제로 실행 가능한 완전한 쿼리. 컬럼 별칭은 한국어로.
-- chart.x/series 는 sql 의 SELECT 별칭과 정확히 일치(대소문자·한글 그대로). 차트 종류는 데이터 형태에 맞게 신중히 고를 것:
-   · line = 시계열만. x가 날짜/연월/주차 같은 '기간'이고, SQL이 그 기간 오름차순 정렬이며, 한 기간당 값 1개일 때만. **랭킹(ORDER BY 값 DESC)이나 2차원 집계(예: SKU×주차)에는 절대 line 을 쓰지 말 것.**
-   · bar = 카테고리·랭킹 비교(채널별/SKU별/상품군별 상위 N 등). x=범주 라벨, 값 큰 순 정렬.
-   · pie = 소수(≤8개) 항목의 비중.
-   · none = 행이 많거나(수십 개 이상), x축이 하나로 깔끔히 안 떨어지거나(예: SKU와 주차를 동시에 가진 결과), 표로 보는 게 더 명확할 때. **애매하면 none.**
-- 랭킹/Top-N 질문이면 line 금지 → bar(범주 x, 값 큰 순) 또는 none.
+- 결과는 표로만 보여주므로 차트/시각화 스펙은 만들지 말 것. SQL 정확성에 집중해 토큰을 아낄 것.
 - 이전 대화(assistant 의 이전 SQL)가 있으면, 새 질문이 그 결과를 '다듬는' 요청일 수 있음(예: "도매만 빼줘"·"월별로"·"상위 20개로"·"작년과 비교"). 그럴 땐 직전 SQL 을 기반으로 수정해 sql 을 다시 만들 것.`;
 
 export async function getReportPrompt(): Promise<string> {
