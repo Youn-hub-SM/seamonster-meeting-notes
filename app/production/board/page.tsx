@@ -165,7 +165,7 @@ export default function ProductionBoardPage() {
         <>
           <div className="tl-summary">
             {backlog.totOverdue > 0
-              ? <span className="tl-sum-bad">🔴 지연 {backlog.totOverdue.toLocaleString()}개 밀림</span>
+              ? <span className="tl-sum-bad">지연 {backlog.totOverdue.toLocaleString()}개 밀림</span>
               : <span className="tl-sum-ok">✓ 지연 없음</span>}
             <span className="tl-sum-dot">·</span>
             <span>{firstLabel}까지 <strong>{backlog.totFirst.toLocaleString()}개</strong> 생산 필요</span>

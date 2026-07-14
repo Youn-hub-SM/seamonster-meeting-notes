@@ -57,7 +57,7 @@ export default function MeetingTerms() {
     <section style={{ border: "1px solid var(--sm-orange-border, var(--sm-border))", borderRadius: 12, padding: "14px 16px", marginBottom: 22, background: "var(--sm-bg-warm)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: "var(--sm-dark)" }}>
-          📌 자주 쓰는 용어
+          자주 쓰는 용어
           <span style={{ fontWeight: 400, fontSize: 12, color: "var(--sm-text-light)", marginLeft: 6 }}>· 팀 공유 · {terms.length}개</span>
         </div>
         <button type="button" onClick={() => setOpen((o) => !o)} style={{ background: "none", border: "none", color: "var(--sm-text-mid)", cursor: "pointer", fontSize: 12 }}>

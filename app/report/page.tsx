@@ -123,7 +123,7 @@ export default function ReportPage() {
       {/* 저장된 리포트 */}
       {saved.length > 0 && (
         <div className="rp-saved">
-          <span className="rp-saved-label">⭐ 저장됨</span>
+          <span className="rp-saved-label">저장됨</span>
           {saved.map((s) => (
             <span key={s.id} className="rp-saved-chip">
               <button className="rp-saved-run" onClick={() => startSaved(s)} disabled={loading} title={s.question || s.name}>{s.name}{extractVars(s.sql).length ? " ⋯" : ""}</button>
@@ -136,7 +136,7 @@ export default function ReportPage() {
       {/* 이어지는 대화 표시 */}
       {turns.length > 0 && (
         <div className="rp-thread">
-          <span>🧵 이어지는 대화</span>
+          <span>이어지는 대화</span>
           {turns.map((t, i) => <span key={i} className="rp-thread-q">{t.q}</span>)}
           <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={newThread}>새 질문 시작</button>
         </div>
@@ -174,8 +174,8 @@ export default function ReportPage() {
 
       {plan && (
         <div className="sm-col" style={{ gap: 14 }}>
-          <div className="rp-understood">💡 {plan.understood}</div>
-          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 11.5, color: "var(--sm-info)", marginTop: -8 }}>🔧 SQL 오류를 자동 교정({corrected}회)해 실행했어요.</div>}
+          <div className="rp-understood">{plan.understood}</div>
+          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 11.5, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({corrected}회)해 실행했어요.</div>}
           {plan.usage && (
             <div className="sm-faint" style={{ fontSize: 11, marginTop: -8 }}>
               토큰 · 입력 {(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite).toLocaleString()}
@@ -209,14 +209,14 @@ export default function ReportPage() {
                 </div>
               )}
               {plan.explanation && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>· {plan.explanation}</p>}
-              {plan.caveats?.length > 0 && <ul className="rp-caveats">{plan.caveats.map((c, i) => <li key={i}>⚠ {c}</li>)}</ul>}
+              {plan.caveats?.length > 0 && <ul className="rp-caveats">{plan.caveats.map((c, i) => <li key={i}>{c}</li>)}</ul>}
             </section>
           )}
 
           {plan.looker && plan.looker.mode !== "na" && plan.looker.sql && (
             <section className="b2b-card">
               <div className="b2b-card-head">
-                <span className="b2b-card-title">📊 루커스튜디오용 SQL <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{plan.looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리로 붙여넣기"}</span></span>
+                <span className="b2b-card-title">루커스튜디오용 SQL <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{plan.looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리로 붙여넣기"}</span></span>
                 <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => copy(plan.looker.sql || "", "looker")}>{copied === "looker" ? "복사됨 ✓" : "복사"}</button>
               </div>
               {plan.looker.note && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>{plan.looker.note}</p>}
@@ -260,12 +260,12 @@ export default function ReportPage() {
       {/* 루커스튜디오 적용 가이드 (하단 상시 참고) */}
       <section className="rp-guide">
         <button className="rp-guide-head" onClick={() => setGuideOpen((v) => !v)}>
-          <span>📖 루커스튜디오(데이터 스튜디오)에 적용하는 법</span>
+          <span>루커스튜디오(데이터 스튜디오)에 적용하는 법</span>
           <span className="rp-guide-chev">{guideOpen ? "▾" : "▸"}</span>
         </button>
         {guideOpen && (
           <div className="rp-guide-body">
-            <p className="rp-guide-lead">위 <b>「📊 루커스튜디오용 SQL」</b>은 두 종류로 나와요. 카드에 <b>커스텀 쿼리</b>라고 적혀 있으면 A, <b>뷰 생성</b>이면 B를 따르세요.</p>
+            <p className="rp-guide-lead">위 <b>「루커스튜디오용 SQL」</b>은 두 종류로 나와요. 카드에 <b>커스텀 쿼리</b>라고 적혀 있으면 A, <b>뷰 생성</b>이면 B를 따르세요.</p>
             <div className="rp-guide-block">
               <div className="rp-guide-title">A. 커스텀 쿼리 <span className="rp-guide-tag ok">Supabase 작업 불필요</span></div>
               <ol className="rp-guide-steps">

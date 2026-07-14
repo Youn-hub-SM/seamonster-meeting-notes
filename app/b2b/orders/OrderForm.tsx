@@ -881,7 +881,7 @@ export default function OrderForm({
           {splitWarnings.length > 0 && (
             <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--sm-warning-bg)", borderRadius: 8, fontSize: 12, color: "var(--sm-warning)" }}>
               {splitWarnings.map((w, i) => (
-                <div key={i}>⚠ {w}</div>
+                <div key={i}>{w}</div>
               ))}
             </div>
           )}

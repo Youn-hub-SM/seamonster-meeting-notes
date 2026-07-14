@@ -95,28 +95,28 @@ export default function SettingsPage() {
       const r = await fetch("/api/b2b/settings/flow-alert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(flowTestReceiver.trim() ? { testReceiver: flowTestReceiver.trim() } : {}) });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
-      setFlowMsg(`✅ Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.`);
-    } catch (e) { setFlowMsg("❌ " + (e instanceof Error ? e.message : "테스트 실패")); }
+      setFlowMsg(`Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.`);
+    } catch (e) { setFlowMsg("" + (e instanceof Error ? e.message : "테스트 실패")); }
     setFlowSaving(false);
   }
   async function loadDigest() {
     setDigestBusy(true); setDigestMsg("");
     try { const j = await (await fetch("/api/b2b/schedule-digest", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "미리보기 실패"); setDigest(j.preview || ""); }
-    catch (e) { setDigestMsg("❌ " + (e instanceof Error ? e.message : "미리보기 실패")); }
+    catch (e) { setDigestMsg("" + (e instanceof Error ? e.message : "미리보기 실패")); }
     setDigestBusy(false);
   }
   async function sendDigestNow() {
     if (!window.confirm("지금 Flow로 '아침 일정 알림'을 보낼까요? (위 수신자 전체에게 발송)")) return;
     setDigestBusy(true); setDigestMsg("");
-    try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg("✅ 발송 완료"); }
-    catch (e) { setDigestMsg("❌ " + (e instanceof Error ? e.message : "발송 실패")); }
+    try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg("발송 완료"); }
+    catch (e) { setDigestMsg("" + (e instanceof Error ? e.message : "발송 실패")); }
     setDigestBusy(false);
   }
   async function saveDigestCfg() {
     if (!dcfg) return;
     setDcfgSaving(true); setDigestMsg("");
-    try { const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dcfg) })).json(); if (!j.ok) throw new Error(j.error || "저장 실패"); setDcfg(j.config); setDigestMsg("✅ 저장됨"); }
-    catch (e) { setDigestMsg("❌ " + (e instanceof Error ? e.message : "저장 실패")); }
+    try { const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dcfg) })).json(); if (!j.ok) throw new Error(j.error || "저장 실패"); setDcfg(j.config); setDigestMsg("저장됨"); }
+    catch (e) { setDigestMsg("" + (e instanceof Error ? e.message : "저장 실패")); }
     setDcfgSaving(false);
   }
 
@@ -239,7 +239,7 @@ export default function SettingsPage() {
             <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button className="b2b-btn-primary" onClick={saveFlow} disabled={flowSaving}>{flowSaving ? "저장 중..." : "저장"}</button>
               <button className="b2b-btn-secondary" onClick={testFlow} disabled={flowSaving || !flowActive} title={flowActive ? "" : "먼저 저장하세요"}>테스트 발송</button>
-              {flowMsg && <span style={{ fontSize: 12, color: flowMsg.startsWith("❌") ? "var(--sm-danger)" : "var(--sm-success)" }}>{flowMsg}</span>}
+              {flowMsg && <span style={{ fontSize: 12, color: flowMsg.startsWith("") ? "var(--sm-danger)" : "var(--sm-success)" }}>{flowMsg}</span>}
             </div>
           </>
         )}
@@ -285,7 +285,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <label style={{ fontSize: 13 }}>제목
-              <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="☀️ 씨몬스터 B2B 오늘의 할 일" />
+              <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="씨몬스터 B2B 오늘의 할 일" />
             </label>
             <div><button className="b2b-btn-primary" onClick={saveDigestCfg} disabled={dcfgSaving}>{dcfgSaving ? "저장 중..." : "설정 저장"}</button></div>
           </div>
@@ -293,7 +293,7 @@ export default function SettingsPage() {
         <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: digest ? 10 : 0 }}>
           <button className="b2b-btn-secondary" onClick={loadDigest} disabled={digestBusy}>{digestBusy ? "..." : "미리보기"}</button>
           <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !flowActive} title={flowActive ? "" : "먼저 Flow 봇을 설정하세요"}>지금 보내기</button>
-          {digestMsg && <span style={{ fontSize: 12, color: digestMsg.startsWith("❌") ? "var(--sm-danger)" : "var(--sm-success)" }}>{digestMsg}</span>}
+          {digestMsg && <span style={{ fontSize: 12, color: digestMsg.startsWith("") ? "var(--sm-danger)" : "var(--sm-success)" }}>{digestMsg}</span>}
         </div>
         {digest && <pre style={{ fontSize: 12, background: "var(--sm-bg)", padding: 12, borderRadius: 8, whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0, fontFamily: "inherit" }}>{digest}</pre>}
       </section>
@@ -363,7 +363,7 @@ export default function SettingsPage() {
       </section>
 
       <p style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 12 }}>
-        💡 상태형 항목은 <strong>체크한 결과 상태로 바뀔 때만</strong> 알림이 갑니다. 예) 발주 상태에서 &lsquo;발송완료&rsquo;만 체크하면
+        상태형 항목은 <strong>체크한 결과 상태로 바뀔 때만</strong> 알림이 갑니다. 예) 발주 상태에서 &lsquo;발송완료&rsquo;만 체크하면
         중간 단계(생산중·발송대기 등)는 알림이 오지 않습니다.
       </p>
     </>

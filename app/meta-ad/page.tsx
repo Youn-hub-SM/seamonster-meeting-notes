@@ -37,7 +37,7 @@ const rangeLabel = (key: string) => { const r = presetRange(key); return r.since
 type StageInfo = { key: string; label: string; color: string; action?: string };
 const STAGE_SHORT: Record<string, string> = {
   material: "소재테스트 캠페인", performance: "성과테스트", scale: "증액 권장", decline: "효율 하락", insufficient: "데이터 부족",
-  pass: "✅ 우수소재", danger: "⚠️ 위험소재", fail: "관찰", testing: "테스트 중", sub: "본 캠페인 하위",
+  pass: "우수소재", danger: "위험소재", fail: "관찰", testing: "테스트 중", sub: "본 캠페인 하위",
 };
 const STAGE_ORDER = ["pass", "danger", "testing", "fail", "scale", "performance", "decline", "material", "sub", "insufficient"];
 
@@ -71,7 +71,7 @@ function NameHelper({ today }: { today: string }) {
 function RecoRow({ color, icon, title, items, onClick }: { color: string; icon: string; title: string; items: string[]; onClick: () => void }) {
   return (
     <div>
-      <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, fontSize: 12.5, fontWeight: 700, color }}>{icon} {title} →</button>
+      <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, fontSize: 12.5, fontWeight: 700, color }}>{icon ? `${icon} ` : ""}{title} →</button>
       <div className="sm-faint" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.5 }}>{items.slice(0, 6).join(" · ")}{items.length > 6 ? ` 외 ${items.length - 6}건` : ""}</div>
     </div>
   );
@@ -156,11 +156,11 @@ export default function MetaAdPage() {
     const pass = s.purchases >= (th?.aboMinPurchases ?? 1) && (roasOk || cpaOk || beatOk);
     if (pass) {
       const why = roasOk ? `ROAS ${roasFmt(s.roas)}≥${th?.aboPassRoas}` : beatOk ? `현 캠페인 ROAS ${roasFmt(liveCampaignRoas)} 상회` : cpaOk ? `CPA ${won(s.cpa)}≤${won(th?.aboMaxCpa)}` : "기준 충족";
-      return { key: "pass", label: "✅ 우수소재 → 본 캠페인", color: "#2f9e44", action: `본 캠페인(CBO)에 새 세트로 추가 · 이름 "${today} 메시지" (${why})` };
+      return { key: "pass", label: "우수소재 → 본 캠페인", color: "#2f9e44", action: `본 캠페인(CBO)에 새 세트로 추가 · 이름 "${today} 메시지" (${why})` };
     }
     // 위험: 전환은 충분한데 ROAS가 하락 기준 미만 → 교체/종료
     if (s.purchases >= (th?.aboMinPurchases ?? 1) && s.roas < (th?.declineRoas ?? 0)) {
-      return { key: "danger", label: "⚠️ 위험소재", color: "#e03131", action: `ROAS ${roasFmt(s.roas)} < ${th?.declineRoas} — 소재 교체 또는 종료` };
+      return { key: "danger", label: "위험소재", color: "#e03131", action: `ROAS ${roasFmt(s.roas)} < ${th?.declineRoas} — 소재 교체 또는 종료` };
     }
     const why = s.purchases < (th?.aboMinPurchases ?? 1) ? `전환 ${s.purchases}건 (기준 ${th?.aboMinPurchases})` : `ROAS ${roasFmt(s.roas)}`;
     return { key: "fail", label: "관찰 필요", color: "#868e96", action: `기준 미달(${why}) — 관찰 또는 소재 교체` };
@@ -252,20 +252,20 @@ export default function MetaAdPage() {
 
       {status?.connected && th && (
         <>
-          {/* 🎯 권장 행동 목록 (항상 열림) */}
+          {/* 권장 행동 목록 (항상 열림) */}
           <div className="b2b-card" style={{ marginBottom: 12, padding: "12px 14px" }}>
-            <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--sm-dark)", marginBottom: 8 }}>🎯 지금 할 일 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11 }}>· 현재 상황 기반 권장 행동 (라이브 기준)</span></div>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--sm-dark)", marginBottom: 8 }}>지금 할 일 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11 }}>· 현재 상황 기반 권장 행동 (라이브 기준)</span></div>
             {!recos || (recos.pass.length + recos.danger.length + recos.scale.length + recos.decline.length + recos.library.length) === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 12.5 }}>지금 특별히 조치할 항목이 없습니다 👍 (테스트·모니터링 유지)</div>
+              <div className="sm-faint" style={{ fontSize: 12.5 }}>지금 특별히 조치할 항목이 없습니다 (테스트·모니터링 유지)</div>
             ) : (
               <div className="sm-col" style={{ gap: 9 }}>
-                {recos.pass.length > 0 && <RecoRow color="#2f9e44" icon="🟢" title={`우수소재 ${recos.pass.length}건 → 본 캠페인에 새 세트로 추가`} items={recos.pass.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("pass"); }} />}
-                {recos.danger.length > 0 && <RecoRow color="#e03131" icon="🔴" title={`위험소재 ${recos.danger.length}건 → 소재 교체/종료`} items={recos.danger.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("danger"); }} />}
-                {recos.scale.length > 0 && <RecoRow color="#2f9e44" icon="📈" title={`증액 가능 캠페인 ${recos.scale.length}건 → 주 1회 +${th.scalePct}%`} items={recos.scale.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("scale"); }} />}
-                {recos.decline.length > 0 && <RecoRow color="#e03131" icon="📉" title={`효율 하락 캠페인 ${recos.decline.length}건 → 소재 점검`} items={recos.decline.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("decline"); }} />}
+                {recos.pass.length > 0 && <RecoRow color="#2f9e44" icon="" title={`우수소재 ${recos.pass.length}건 → 본 캠페인에 새 세트로 추가`} items={recos.pass.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("pass"); }} />}
+                {recos.danger.length > 0 && <RecoRow color="#e03131" icon="" title={`위험소재 ${recos.danger.length}건 → 소재 교체/종료`} items={recos.danger.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("danger"); }} />}
+                {recos.scale.length > 0 && <RecoRow color="#2f9e44" icon="" title={`증액 가능 캠페인 ${recos.scale.length}건 → 주 1회 +${th.scalePct}%`} items={recos.scale.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("scale"); }} />}
+                {recos.decline.length > 0 && <RecoRow color="#e03131" icon="" title={`효율 하락 캠페인 ${recos.decline.length}건 → 소재 점검`} items={recos.decline.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("decline"); }} />}
                 {recos.library.length > 0 && (
                   <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "#7048e8" }}>⭐ 라이브러리 저장 추천 {recos.library.length}건 <span className="sm-faint" style={{ fontWeight: 400 }}>(ROAS ≥ {th.libraryRoas} · 재사용 아카이빙)</span></div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "#7048e8" }}>라이브러리 저장 추천 {recos.library.length}건 <span className="sm-faint" style={{ fontWeight: 400 }}>(ROAS ≥ {th.libraryRoas} · 재사용 아카이빙)</span></div>
                     <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginTop: 5 }}>
                       {recos.library.slice(0, 12).map((a) => (
                         <Link key={a.id} className="rp-chip" style={{ textDecoration: "none" }}
@@ -284,7 +284,7 @@ export default function MetaAdPage() {
           <div className="b2b-card" style={{ padding: 0, marginBottom: 12, borderColor: "var(--sm-orange-border, #f0c9a8)" }}>
             <button type="button" onClick={() => setShowPlaybook((v) => !v)}
               style={{ width: "100%", textAlign: "left", background: "var(--sm-orange-light)", border: "none", cursor: "pointer", padding: "10px 14px", borderRadius: showPlaybook ? "10px 10px 0 0" : 10, fontSize: 13.5, fontWeight: 800, color: "var(--sm-orange-hover)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>📋 운영 규칙 (플레이북)</span><span style={{ fontSize: 12 }}>{showPlaybook ? "접기 ▲" : "펼치기 ▼"}</span>
+              <span>운영 규칙 (플레이북)</span><span style={{ fontSize: 12 }}>{showPlaybook ? "접기 ▲" : "펼치기 ▼"}</span>
             </button>
             {showPlaybook && (
               <div style={{ padding: 14, display: "grid", gap: 10, fontSize: 12.5, lineHeight: 1.55 }}>

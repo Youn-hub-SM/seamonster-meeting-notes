@@ -1,5 +1,5 @@
 // 일일 매출 리포트 HTML 이메일 — 파이썬 build_daily_html 1:1 이식(테이블 기반, 이메일 안전).
-//  ⚠️ 이메일은 CSS 변수 불가 → 색상 하드코딩(디자인토큰 예외). DailyStats(sales-report.ts) 소비.
+//  이메일은 CSS 변수 불가 → 색상 하드코딩(디자인토큰 예외). DailyStats(sales-report.ts) 소비.
 import type { DailyStats, WeeklyStats } from "./sales-report";
 
 const C_DEEP = "#0d3b52", C_TIDE = "#1b6e8c", C_FOAM = "#eef6f8", C_LINE = "#d4e3e8",

@@ -148,7 +148,6 @@ export default function CrmPage() {
       {loading ? <div className="b2b-loading">불러오는 중...</div> :
         messages.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">💬</div>
             아직 등록된 메시지가 없습니다. <button className="b2b-link-btn" onClick={() => openNew()}>+ 메시지 추가</button>로 시작하거나,
             migration 063 적용 후 기존 시트 데이터를 이관하세요.
           </div>

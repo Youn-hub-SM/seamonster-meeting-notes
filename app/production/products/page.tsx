@@ -166,7 +166,7 @@ export default function ProductsUploadPage() {
           )}
 
           {changeCount === 0 && (
-            <div className="b2b-empty"><div className="b2b-empty-icon">✅</div>모든 품목이 이미 최신 상태입니다.</div>
+            <div className="b2b-empty">모든 품목이 이미 최신 상태입니다.</div>
           )}
         </>
       )}

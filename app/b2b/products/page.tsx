@@ -255,7 +255,6 @@ export default function ProductsPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">📦</div>
             {products.length === 0
               ? "등록된 제품이 없습니다. 우측 상단 [+ 제품 추가] 를 눌러 시작하세요."
               : "검색 결과가 없습니다."}
@@ -791,7 +790,7 @@ function ProductModal({
           {isBundle ? (
             <Field label="송장 스캔 표시명">
               <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
-                🧩 묶음(세트)상품이라 송장 스캔 시 <strong>구성품의 합</strong>으로 나옵니다. 표시명은 각 구성품에서 지정하세요.
+                묶음(세트)상품이라 송장 스캔 시 <strong>구성품의 합</strong>으로 나옵니다. 표시명은 각 구성품에서 지정하세요.
               </span>
             </Field>
           ) : (

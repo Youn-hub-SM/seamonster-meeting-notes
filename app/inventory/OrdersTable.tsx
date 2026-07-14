@@ -49,7 +49,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>;
-  if (orders.length === 0) return <div className="b2b-empty"><div className="b2b-empty-icon">📭</div>입고·출고 내역이 없습니다.</div>;
+  if (orders.length === 0) return <div className="b2b-empty">입고·출고 내역이 없습니다.</div>;
 
   return (
     <div className="b2b-table-wrap">

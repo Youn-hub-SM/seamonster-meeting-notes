@@ -111,7 +111,7 @@ export default function SalesProfitPage() {
             </ul>
             <div style={{ marginTop: 6, color: "var(--sm-text-light)" }}>※ 배송비는 실제 결제 기준이라 따로 설정할 필요가 없습니다. 아래에선 <strong>채널 수수료율</strong>만 관리합니다.</div>
             <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "var(--sm-warning-bg,#fff7ed)", border: "1px solid var(--sm-warning,#f59e0b)", color: "var(--sm-text)" }}>
-              <strong>⚠️ 채널별 매출(결제금액) 기준 — 할인 반영 여부</strong>
+              <strong>채널별 매출(결제금액) 기준 — 할인 반영 여부</strong>
               <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
                 <li><strong>네이버(스마트스토어)·쿠팡·톡스토어</strong>: 할인금액이 <strong>반영된</strong> 실매출(순매출).</li>
                 <li><strong>카페24</strong>: 할인금액이 <strong>반영 안 됨</strong>(할인 전 금액) → 아래 <strong>매출 보정율</strong>로 자동 차감(기본 5.5%). 실제 할인율에 맞게 조정하세요.</li>
@@ -140,7 +140,7 @@ export default function SalesProfitPage() {
         </section>
       )}
 
-      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>⚠️ {err}</p>}
+      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
 
       {res && (
         <section className="b2b-card" style={{ marginTop: 12 }}>

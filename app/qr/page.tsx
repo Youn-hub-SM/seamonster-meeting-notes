@@ -106,7 +106,7 @@ export default function QrPage() {
           </section>
 
           {loading ? <div className="b2b-loading">불러오는 중...</div> : links.length === 0 ? (
-            <div className="b2b-empty"><div className="b2b-empty-icon">🔗</div>아직 만든 링크가 없습니다.{error.includes("short_links") || error.includes("relation") ? " — supabase/migrations/038_qr_short_links.sql 를 먼저 적용하세요." : ""}</div>
+            <div className="b2b-empty">아직 만든 링크가 없습니다.{error.includes("short_links") || error.includes("relation") ? " — supabase/migrations/038_qr_short_links.sql 를 먼저 적용하세요." : ""}</div>
           ) : (
             <div className="b2b-table-wrap">
               <table className="b2b-table">
@@ -149,7 +149,7 @@ export default function QrPage() {
               <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&size=1024&download=1&format=png`}>PNG 다운로드</a>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&download=1&format=svg`}>SVG 다운로드</a>
-                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: staticText.trim(), name: "static" })}>🎨 디자인</button>
+                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: staticText.trim(), name: "static" })}>디자인</button>
               </div>
             </div>
           )}
@@ -170,7 +170,7 @@ export default function QrPage() {
               <div className="sm-row" style={{ gap: 8, justifyContent: "center", marginTop: 12, flexWrap: "wrap" }}>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&size=1024&download=1&format=png&name=${qrFor.code}`}>PNG</a>
                 <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&download=1&format=svg&name=${qrFor.code}`}>SVG</a>
-                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: shortUrl(qrFor.code), name: qrFor.code })}>🎨 디자인</button>
+                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: shortUrl(qrFor.code), name: qrFor.code })}>디자인</button>
               </div>
             </div>
           </div>

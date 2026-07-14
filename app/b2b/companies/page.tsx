@@ -132,7 +132,6 @@ export default function CompaniesPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">🏢</div>
             {companies.length === 0
               ? "등록된 업체가 없습니다. 우측 상단 [+ 업체 추가] 를 눌러 시작하세요."
               : "검색 결과가 없습니다."}
@@ -368,7 +367,7 @@ function CompanyModal({
                 onClick={() => fileRef.current?.click()}
                 disabled={scanning}
               >
-                {scanning ? "인식 중..." : "📄 사업자등록증으로 자동 입력"}
+                {scanning ? "인식 중..." : "사업자등록증으로 자동 입력"}
               </button>
               {data.biz_doc_path && (
                 <>
@@ -407,7 +406,7 @@ function CompanyModal({
                   style={{ maxWidth: "100%", maxHeight: 340, borderRadius: 8, border: "1px solid var(--sm-border)", cursor: "zoom-in", display: "block" }}
                 />
               ) : (
-                <button type="button" className="b2b-btn-secondary" onClick={viewDoc}>📄 PDF 원본 열기</button>
+                <button type="button" className="b2b-btn-secondary" onClick={viewDoc}>PDF 원본 열기</button>
               )}
             </div>
           )}
@@ -449,10 +448,10 @@ function CompanyModal({
           {(bizCheck === "invalid" || dupCompany) && (
             <div style={{ marginTop: -6, marginBottom: 12, fontSize: 11.5, display: "flex", flexDirection: "column", gap: 3 }}>
               {bizCheck === "invalid" && (
-                <div style={{ color: "var(--sm-danger)" }}>⚠ 사업자등록번호 검증에 실패했습니다 — 숫자를 잘못 읽었을 수 있어요. 원본과 대조해 확인하세요.</div>
+                <div style={{ color: "var(--sm-danger)" }}>사업자등록번호 검증에 실패했습니다 — 숫자를 잘못 읽었을 수 있어요. 원본과 대조해 확인하세요.</div>
               )}
               {dupCompany && (
-                <div style={{ color: "var(--sm-warning)" }}>⚠ 이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>
+                <div style={{ color: "var(--sm-warning)" }}>이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>
               )}
             </div>
           )}

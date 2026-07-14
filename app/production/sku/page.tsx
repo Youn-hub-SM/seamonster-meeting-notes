@@ -135,7 +135,7 @@ export default function SkuGeneratorPage() {
         </button>
         {sku && existing.length > 0 && (
           <div className="prod-sku-warn">
-            ⚠ 이미 사용 중인 SKU입니다 — {existing.map((p) => `${p.name}${p.spec ? ` (${p.spec})` : ""}`).join(", ")}
+            이미 사용 중인 SKU입니다 — {existing.map((p) => `${p.name}${p.spec ? ` (${p.spec})` : ""}`).join(", ")}
           </div>
         )}
         {sku && existing.length === 0 && (

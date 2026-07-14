@@ -126,7 +126,7 @@ export default function ScanPage() {
       {error && <div className="b2b-error">{error}{error.includes("057") ? " — supabase/migrations/057_fulfill_scan.sql 를 먼저 적용하세요." : ""}</div>}
 
       {st && st.totalInvoices === 0 && !error && (
-        <div className="b2b-empty" style={{ marginBottom: 16 }}><div className="b2b-empty-icon">📭</div>스캔할 송장 데이터가 없습니다. <Link href="/fulfill/scan/upload">송장 업로드</Link>에서 파일을 먼저 올리세요.</div>
+        <div className="b2b-empty" style={{ marginBottom: 16 }}>스캔할 송장 데이터가 없습니다. <Link href="/fulfill/scan/upload">송장 업로드</Link>에서 파일을 먼저 올리세요.</div>
       )}
 
       <section className="b2b-card" style={{ marginBottom: 14 }}>
@@ -151,7 +151,7 @@ export default function ScanPage() {
           <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 14, fontWeight: 700,
             background: msg.kind === "ok" ? "var(--sm-success-bg)" : msg.kind === "dup" ? "var(--sm-warning-bg)" : "var(--sm-danger-bg)",
             color: msg.kind === "ok" ? "var(--sm-success)" : msg.kind === "dup" ? "var(--sm-warning)" : "var(--sm-danger)" }}>
-            {msg.kind === "ok" ? "✓ " : msg.kind === "dup" ? "· " : "✗ "}{msg.text}
+            {msg.kind === "ok" ? "✓ " : msg.kind === "dup" ? "· " : ""}{msg.text}
           </div>
         )}
       </section>
@@ -159,7 +159,7 @@ export default function ScanPage() {
       {/* 인쇄 → 상품 가지러 → 초기화 → 다음 스캔. 두 버튼을 크고 눈에 띄게. */}
       <div className="sm-row" style={{ gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
         <button className="b2b-btn-primary" onClick={printTally} disabled={!st || st.tally.length === 0}
-          style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800 }}>🖨 인쇄 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F2)</span></button>
+          style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800 }}>인쇄 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F2)</span></button>
         <button onClick={reset} disabled={!st || st.scannedCount === 0}
           style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800, cursor: "pointer",
             background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
@@ -189,7 +189,7 @@ export default function ScanPage() {
             </table>
           </div>
         )}
-        {st && st.tally.some((t) => t.unknown) && <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 8, color: "var(--sm-danger)" }}>⚠️ 빨간 줄 = 상품마스터에 없는 단품코드. <Link href="/b2b/products">상품마스터</Link>에 등록하면 상품명으로 집계됩니다.</p>}
+        {st && st.tally.some((t) => t.unknown) && <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 8, color: "var(--sm-danger)" }}>빨간 줄 = 상품마스터에 없는 단품코드. <Link href="/b2b/products">상품마스터</Link>에 등록하면 상품명으로 집계됩니다.</p>}
       </section>
     </div>
   );

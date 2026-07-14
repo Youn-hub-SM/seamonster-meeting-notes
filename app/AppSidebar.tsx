@@ -51,7 +51,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
   const isAdmin = userName === "현석" || userName === "관리자";
 
-  // 즐겨찾기 항목 아이콘: href → 해당 툴(또는 상위 툴)의 실제 아이콘. (기존 ⭐ 대체)
+  // 즐겨찾기 항목 아이콘: href → 해당 툴(또는 상위 툴)의 실제 아이콘. (기존 대체)
   const iconForHref = useMemo(() => {
     const m = new Map<string, IconName>();
     for (const cat of NAV) for (const t of cat.tools) {

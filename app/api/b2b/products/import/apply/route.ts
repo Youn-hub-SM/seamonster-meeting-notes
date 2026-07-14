@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // 정규화된 ProductInput → DB 컬럼(매스 어사인 방지: 화이트리스트).
-//  ⚠ 단건 저장(/api/b2b/products POST·PUT)의 컬럼셋과 반드시 일치시킬 것 — 빠지면 엑셀 업로드에서 그 값이 반영 안 됨.
+//  단건 저장(/api/b2b/products POST·PUT)의 컬럼셋과 반드시 일치시킬 것 — 빠지면 엑셀 업로드에서 그 값이 반영 안 됨.
 function dbRow(clean: ProductInput) {
   return {
     sku: clean.sku,

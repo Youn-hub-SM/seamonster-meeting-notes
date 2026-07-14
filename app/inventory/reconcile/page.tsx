@@ -114,7 +114,7 @@ export default function InventoryReconcilePage() {
           {/* 안내 배너 */}
           {kpi.sold > 0 && kpi.coverage < 90 && (
             <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
-              ⚠️ 이 기간에 실제로 <strong>{won(kpi.sold)}개</strong>가 팔렸는데, 재고에서 빠진 건 <strong>{won(kpi.out)}개({kpi.coverage}%)</strong>뿐이에요.
+              이 기간에 실제로 <strong>{won(kpi.sold)}개</strong>가 팔렸는데, 재고에서 빠진 건 <strong>{won(kpi.out)}개({kpi.coverage}%)</strong>뿐이에요.
               판매가 재고에 <strong>거의 안 빠지고</strong> 있습니다. 매일 판매·구매·재고를 맞춰 주세요. (아래는 <strong>팔린 수를 실제 나간 수로 보고</strong> 비교한 표입니다.)
             </div>
           )}

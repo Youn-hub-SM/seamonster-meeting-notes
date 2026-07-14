@@ -83,7 +83,7 @@ export default function BundlesPage() {
       {error && <div className="b2b-error">{error}{(error.includes("product_bundles") || error.includes("relation")) ? " — supabase/migrations/037_product_bundles.sql 를 먼저 적용하세요." : ""}</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : bundles.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">📦</div>등록된 묶음이 없습니다. 위 <strong>엑셀 양식</strong>을 받아 채운 뒤 <strong>엑셀 업로드</strong>하세요.</div>
+        <div className="b2b-empty">등록된 묶음이 없습니다. 위 <strong>엑셀 양식</strong>을 받아 채운 뒤 <strong>엑셀 업로드</strong>하세요.</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">

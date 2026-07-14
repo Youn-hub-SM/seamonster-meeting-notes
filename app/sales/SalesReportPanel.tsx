@@ -86,7 +86,7 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
         </p>
       </section>
 
-      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>⚠️ {err}</p>}
+      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
 
       {sent && (
         <section className="b2b-card" style={{ marginTop: 12, borderColor: "var(--sm-success)" }}>

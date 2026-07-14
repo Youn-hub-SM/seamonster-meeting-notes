@@ -30,7 +30,8 @@ export type CouponField = {
   required?: boolean;
   requiredIf?: CouponCond;   // 조건부 필수(노출됐고 이 조건이면 필수)
   placeholder?: string;
-  help?: string;             // 안내/주의("⚠️" 포함 시 경고색)
+  help?: string;             // 안내/주의 문구
+  warn?: boolean;            // true 면 안내문을 경고색으로 표시
   default?: string | string[];
   showIf?: CouponCond;       // 이 조건일 때만 노출
   suffix?: string;           // number/int-days 단위(원·개·일 등)
@@ -68,15 +69,15 @@ const OFFICIAL: CouponChannel = {
       { key: "maxDiscount", label: "최대 할인(적립)금액", type: "number", suffix: "원", critical: true,
         showIf: { any: [{ key: "benefit", in: ["할인율", "적립율"] }, { key: "shipFeeType", in: ["할인율"] }] },
         requiredIf: { any: [{ key: "benefit", in: ["할인율", "적립율"] }, { key: "shipFeeType", in: ["할인율"] }] },
-        help: "⚠️ 할인율/적립율은 상한을 반드시 지정하세요. 0원 = 제한 없이 전액 적용(사고 위험)." },
+        help: "할인율/적립율은 상한을 반드시 지정하세요. 0원 = 제한 없이 전액 적용(사고 위험)." },
     ] },
     { title: "발급 방법", desc: "고객이 어떻게 받나요?", fields: [
-      { key: "serialRedup", label: "동일인 재발급 가능 여부", type: "radio", options: ["불가능", "가능"], default: "불가능", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "같은 사람이 시리얼을 여러 번 등록할 수 있는지. ⚠️ '가능'이면 1인 다회 사용으로 예산 초과 위험." },
+      { key: "serialRedup", label: "동일인 재발급 가능 여부", type: "radio", options: ["불가능", "가능"], default: "불가능", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, warn: true, help: "같은 사람이 시리얼을 여러 번 등록할 수 있는지. '가능'이면 1인 다회 사용으로 예산 초과 위험." },
       { key: "serialGen", label: "시리얼번호 생성방법", type: "radio", options: ["자동 생성", "직접 입력"], default: "자동 생성", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, requiredIf: { key: "couponType", in: ["시리얼 쿠폰"] } },
       { key: "serialDigits", label: "시리얼번호 자릿수", type: "number", suffix: "자리", default: "10", showIf: { key: "serialGen", in: ["자동 생성"] }, help: "자동 생성 번호 자릿수(기본 10)." },
       { key: "serialCodes", label: "직접 입력할 번호", type: "textarea", placeholder: "발급할 시리얼 번호를 줄바꿈으로 입력", showIf: { key: "serialGen", in: ["직접 입력"] }, requiredIf: { key: "serialGen", in: ["직접 입력"] } },
       { key: "serialBasis", label: "시리얼번호 발급기준", type: "radio", options: ["여러개의 다른 시리얼번호로 발급", "한개의 동일 시리얼번호로 발급"], default: "여러개의 다른 시리얼번호로 발급", showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "여러개=번호마다 다름(대량 배포) / 한개=모두 같은 번호(공용 코드)." },
-      { key: "serialMax", label: "최대 발급 수량", type: "number", suffix: "장", critical: true, showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, requiredIf: { key: "couponType", in: ["시리얼 쿠폰"] }, help: "발급할 시리얼 매수. ⚠️ 1회 최대 1만장, 1일 20회까지 발급 가능." },
+      { key: "serialMax", label: "최대 발급 수량", type: "number", suffix: "장", critical: true, showIf: { key: "couponType", in: ["시리얼 쿠폰"] }, requiredIf: { key: "couponType", in: ["시리얼 쿠폰"] }, warn: true, help: "발급할 시리얼 매수. 1회 최대 1만장, 1일 20회까지 발급 가능." },
       { key: "issue", label: "발급 구분", type: "radio", required: true, critical: true, options: ["대상자 지정 발급", "조건부 자동 발급", "고객 다운로드 발급", "정기 자동 발급"], showIf: { key: "couponType", in: ["할인 쿠폰"] }, help: "대상자 지정=특정 회원 / 조건부=가입·후기 등 조건 / 다운로드=고객이 직접 / 정기=주기 자동." },
       { key: "targetMember", label: "대상 회원", type: "radio", options: ["전체회원", "특정회원(등급/그룹)"], showIf: { key: "issue", in: ["대상자 지정 발급"] }, requiredIf: { key: "issue", in: ["대상자 지정 발급"] } },
       { key: "targetMemberList", label: "특정 회원 대상", type: "textarea", placeholder: "회원등급 / 그룹 / 회원 ID", showIf: { all: [{ key: "issue", in: ["대상자 지정 발급"] }, { key: "targetMember", in: ["특정회원(등급/그룹)"] }] }, requiredIf: { all: [{ key: "issue", in: ["대상자 지정 발급"] }, { key: "targetMember", in: ["특정회원(등급/그룹)"] }] } },
@@ -85,14 +86,14 @@ const OFFICIAL: CouponChannel = {
       { key: "dlMemberScope", label: "회원 대상", type: "radio", options: ["모든 회원", "특정 회원등급"], default: "모든 회원", showIf: { key: "dlBase", in: ["회원 대상"] }, requiredIf: { key: "dlBase", in: ["회원 대상"] }, help: "대부분 '모든 회원'. 특정 등급에게만 줄 때만 '특정 회원등급'." },
       { key: "dlMemberGrade", label: "특정 회원등급", type: "text", placeholder: "예: 우수회원, VIP", showIf: { key: "dlMemberScope", in: ["특정 회원등급"] }, requiredIf: { key: "dlMemberScope", in: ["특정 회원등급"] } },
       { key: "dlUnbuyMonths", label: "미구매 기간", type: "number", suffix: "개월", placeholder: "1~12", showIf: { key: "dlBase", in: ["미구매기간"] }, requiredIf: { key: "dlBase", in: ["미구매기간"] } },
-      { key: "dlRedup", label: "동일인 재발급", type: "radio", options: ["불가", "가능"], default: "불가", showIf: { key: "issue", in: ["고객 다운로드 발급"] }, help: "⚠️ '가능'이면 1인이 여러 번 수령 → 예산 초과 위험. 반복 이벤트만 '가능'." },
+      { key: "dlRedup", label: "동일인 재발급", type: "radio", options: ["불가", "가능"], default: "불가", showIf: { key: "issue", in: ["고객 다운로드 발급"] }, warn: true, help: "'가능'이면 1인이 여러 번 수령 → 예산 초과 위험. 반복 이벤트만 '가능'." },
       { key: "regularGrade", label: "대상 회원등급", type: "text", placeholder: "예: 우수회원", showIf: { key: "issue", in: ["정기 자동 발급"] }, requiredIf: { key: "issue", in: ["정기 자동 발급"] } },
       { key: "regularCycle", label: "정기 발급 주기", type: "radio", options: ["매일", "3일", "1주", "1개월", "3개월", "6개월"], showIf: { key: "issue", in: ["정기 자동 발급"] }, requiredIf: { key: "issue", in: ["정기 자동 발급"] } },
     ] },
     { title: "노출·전시", desc: "고객 화면에 언제/어떻게 보이나요?", fields: [
       { key: "exposeTime", label: "노출 시점", type: "radio", options: ["즉시 노출", "지정 기간에만 노출"], default: "즉시 노출", showIf: { any: [{ key: "issue", in: ["대상자 지정 발급"] }, { key: "issue", in: ["고객 다운로드 발급"] }] } },
       { key: "exposePeriod", label: "노출 기간", type: "datetime-range", critical: true, showIf: { key: "exposeTime", in: ["지정 기간에만 노출"] }, requiredIf: { key: "exposeTime", in: ["지정 기간에만 노출"] }, help: "이 기간에만 화면/다운로드 영역에 보입니다. 아래 '사용 기간'과는 다릅니다." },
-      { key: "detailExpose", label: "상품 상세페이지 노출", type: "radio", options: ["노출함", "노출 안함"], critical: true, showIf: { key: "issue", in: ["고객 다운로드 발급"] }, requiredIf: { key: "issue", in: ["고객 다운로드 발급"] }, help: "⚠️ 다운로드 발급이면 필수. 비공개·문자 전용 쿠폰이면 '노출 안함'." },
+      { key: "detailExpose", label: "상품 상세페이지 노출", type: "radio", options: ["노출함", "노출 안함"], critical: true, showIf: { key: "issue", in: ["고객 다운로드 발급"] }, requiredIf: { key: "issue", in: ["고객 다운로드 발급"] }, warn: true, help: "다운로드 발급이면 필수. 비공개·문자 전용 쿠폰이면 '노출 안함'." },
     ] },
     { title: "사용 기간", desc: "고객이 언제까지 쓸 수 있나요?", fields: [
       { key: "period", label: "사용 기간 방식", type: "radio", required: true, options: ["기간 설정", "발급일 기준", "발급 당월 말일까지"], default: "발급일 기준" },
@@ -128,13 +129,13 @@ const NAVER: CouponChannel = {
   intro: "네이버 스마트스토어 혜택(쿠폰/포인트). 대상을 고르면 가능한 항목만 순서대로 나타납니다.",
   steps: [
     { title: "혜택 이름", fields: [
-      { key: "name", label: "혜택 이름", type: "text", required: true, critical: true, placeholder: "예: 블랙프라이데이 10% 할인쿠폰 / 10월 재구매고객 할인쿠폰", help: "⚠️ 최대 30자(모바일 15자 이후 말줄임). 권장 = 행사목적 + 타겟 + 쿠폰종류. 할인율·스토어명은 자동 노출되니 이름에 안 넣어도 됩니다." },
+      { key: "name", label: "혜택 이름", type: "text", required: true, critical: true, placeholder: "예: 블랙프라이데이 10% 할인쿠폰 / 10월 재구매고객 할인쿠폰", warn: true, help: "최대 30자(모바일 15자 이후 말줄임). 권장 = 행사목적 + 타겟 + 쿠폰종류. 할인율·스토어명은 자동 노출되니 이름에 안 넣어도 됩니다." },
     ] },
     { title: "타겟팅 대상", desc: "누구에게 제공하나요? (대상이 혜택종류·발급방법을 결정)", fields: [
       { key: "target", label: "타겟팅 대상", type: "radio", required: true, critical: true, options: ["전체 고객", "첫구매 고객", "재구매 고객", "알림받기", "타겟팅-고객지정", "타겟팅-그룹", "등급 고객"], default: "전체 고객", help: "대상이 혜택 종류와 발급 방법을 자동으로 결정합니다. 포인트는 재구매·등급 고객만 가능." },
       { key: "custType", label: "고객 유형 제한", type: "radio", options: ["제한없음", "네이버플러스 멤버십"], default: "제한없음", showIf: { key: "target", in: ["전체 고객"] } },
       { key: "rebuyCond", label: "재구매 조건", type: "radio", options: ["스토어 구매(내스토어 전체)", "상품 구매(지정 상품)"], default: "스토어 구매(내스토어 전체)", showIf: { key: "target", in: ["재구매 고객"] }, requiredIf: { key: "target", in: ["재구매 고객"] }, help: "최근 180일 구매확정 이력 대상. '스토어 구매'면 혜택상품이 자동으로 내스토어 전체가 됩니다." },
-      { key: "custIds", label: "대상 고객 ID", type: "textarea", placeholder: "고객 ID를 줄바꿈으로 (최대 100명)", showIf: { key: "target", in: ["타겟팅-고객지정"] }, requiredIf: { key: "target", in: ["타겟팅-고객지정"] }, help: "⚠️ 최대 100명, 구매이력 또는 알림받기 동의 고객만. 즉시발급이라 발급 후 회수 불가." },
+      { key: "custIds", label: "대상 고객 ID", type: "textarea", placeholder: "고객 ID를 줄바꿈으로 (최대 100명)", showIf: { key: "target", in: ["타겟팅-고객지정"] }, requiredIf: { key: "target", in: ["타겟팅-고객지정"] }, warn: true, help: "최대 100명, 구매이력 또는 알림받기 동의 고객만. 즉시발급이라 발급 후 회수 불가." },
       { key: "targetGroup", label: "타겟팅 그룹 조건", type: "textarea", placeholder: "거래기간 / 거래정보(주문금액·구매빈도) / 관심여부(알림받기·상품찜) / 예상 고객수", showIf: { key: "target", in: ["타겟팅-그룹"] }, requiredIf: { key: "target", in: ["타겟팅-그룹"] } },
       { key: "groupIssueMethod", label: "발급 방법(그룹)", type: "radio", critical: true, options: ["다운로드", "즉시발급"], default: "다운로드", showIf: { key: "target", in: ["타겟팅-그룹"] }, requiredIf: { key: "target", in: ["타겟팅-그룹"] }, help: "타겟팅-그룹만 발급 방법을 선택합니다. 다른 대상은 자동 결정됩니다." },
       { key: "gradeName", label: "대상 등급", type: "text", placeholder: "예: VIP, 골드", showIf: { key: "target", in: ["등급 고객"] }, requiredIf: { key: "target", in: ["등급 고객"] } },
@@ -142,20 +143,20 @@ const NAVER: CouponChannel = {
     { title: "혜택 종류", desc: "쿠폰인가요, 포인트인가요?", fields: [
       { key: "benefitKind", label: "혜택 종류", type: "radio", required: true, critical: true, options: ["쿠폰", "포인트"], default: "쿠폰", help: "포인트는 재구매·등급 고객만 선택할 수 있습니다.",
         optionsDisabledIf: [{ options: ["포인트"], when: { not: { key: "target", in: ["재구매 고객", "등급 고객"] } }, reason: "포인트는 재구매·등급 고객만 가능" }] },
-      { key: "pointRate", label: "적립율", type: "number", suffix: "%", critical: true, showIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, requiredIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, help: "⚠️ 판매가의 15% 이하·최대 20만원. 원 단위 입력 불가(정책). 구매확정 시 지급(옵션가 포함, 배송비·추가구성·쿠폰할인 제외)." },
+      { key: "pointRate", label: "적립율", type: "number", suffix: "%", critical: true, showIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, requiredIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, warn: true, help: "판매가의 15% 이하·최대 20만원. 원 단위 입력 불가(정책). 구매확정 시 지급(옵션가 포함, 배송비·추가구성·쿠폰할인 제외)." },
       { key: "couponKind", label: "쿠폰 종류", type: "radio", critical: true, options: ["상품중복할인", "스토어장바구니할인", "배송비할인"], default: "상품중복할인", showIf: { key: "benefitKind", in: ["쿠폰"] }, requiredIf: { key: "benefitKind", in: ["쿠폰"] }, help: "상품중복할인=옵션 1개당 1장(정률 최대 70%). 스토어장바구니=총결제금액 1장(혜택상품 '내스토어 전체'만). 배송비=배송비 1장(최소주문금액 판매가 기준)." },
       { key: "issueLimit", label: "발급 건수", type: "radio", options: ["제한 없음(1인 1회)", "제한 있음(선착순)"], default: "제한 없음(1인 1회)", showIf: { key: "benefitKind", in: ["쿠폰"] } },
       { key: "issueLimitN", label: "선착순 발급 건수", type: "number", suffix: "건", showIf: { key: "issueLimit", in: ["제한 있음(선착순)"] }, requiredIf: { key: "issueLimit", in: ["제한 있음(선착순)"] } },
       { key: "discountUnit", label: "할인 설정", type: "radio", critical: true, options: ["정률할인(%)", "정액할인(원)"], default: "정률할인(%)", showIf: { key: "benefitKind", in: ["쿠폰"] }, requiredIf: { key: "benefitKind", in: ["쿠폰"] }, help: "단위를 먼저 고르면 아래 입력칸이 바뀝니다." },
       { key: "discountPct", label: "할인율", type: "number", suffix: "%", critical: true, showIf: { key: "discountUnit", in: ["정률할인(%)"] }, requiredIf: { key: "discountUnit", in: ["정률할인(%)"] }, help: "상품중복할인은 정률 최대 70%. 스토어장바구니는 최소주문금액의 70%까지." },
       { key: "discountAmt", label: "할인액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정액할인(원)"] }, requiredIf: { key: "discountUnit", in: ["정액할인(원)"] } },
-      { key: "maxDiscount", label: "최대 할인금액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정률할인(%)"] }, requiredIf: { key: "discountUnit", in: ["정률할인(%)"] }, help: "⚠️ 상한 999,990원. (최소주문금액×할인율) ≤ 최대할인금액이어야 발급됩니다. 예: 최소 5만원·10% → 5,000원 이상 입력." },
+      { key: "maxDiscount", label: "최대 할인금액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정률할인(%)"] }, requiredIf: { key: "discountUnit", in: ["정률할인(%)"] }, warn: true, help: "상한 999,990원. (최소주문금액×할인율) ≤ 최대할인금액이어야 발급됩니다. 예: 최소 5만원·10% → 5,000원 이상 입력." },
       { key: "minAmount", label: "최소주문금액", type: "number", suffix: "원 이상", emptyText: "제한없음", showIf: { key: "benefitKind", in: ["쿠폰"] }, help: "산정 기준이 쿠폰마다 다릅니다. 배송비할인=판매가 기준, 상품중복할인=(판매가+옵션가)×수량−즉시/상품할인, 스토어장바구니=총결제금액(배송비 제외)." },
     ] },
     { title: "기간", desc: "언제 발급하고 언제까지 유효한가요?", fields: [
       { key: "issuePeriod", label: "혜택 발급기간", type: "datetime-range", required: true, critical: true, help: "다운로드형=이 기간 동안 다운로드 노출 / 즉시발급형=이 날 즉시 지급. 첫구매·재구매·타겟팅그룹은 익일부터 적용." },
       { key: "validType", label: "쿠폰 유효기간", type: "radio", critical: true, options: ["기간으로 설정", "발급일 기준"], default: "발급일 기준", showIf: { key: "benefitKind", in: ["쿠폰"] }, requiredIf: { key: "benefitKind", in: ["쿠폰"] }, help: "포인트는 유효기간 개념이 없습니다." },
-      { key: "validRange", label: "유효기간", type: "datetime-range", critical: true, showIf: { key: "validType", in: ["기간으로 설정"] }, requiredIf: { key: "validType", in: ["기간으로 설정"] }, help: "⚠️ 유효 시작 ≥ 발급기간 시작, 유효 종료 ≥ 발급기간 종료." },
+      { key: "validRange", label: "유효기간", type: "datetime-range", critical: true, showIf: { key: "validType", in: ["기간으로 설정"] }, requiredIf: { key: "validType", in: ["기간으로 설정"] }, warn: true, help: "유효 시작 ≥ 발급기간 시작, 유효 종료 ≥ 발급기간 종료." },
       { key: "validDays", label: "발급일로부터", type: "int-days", suffix: "일", presets: [7, 14, 30], default: "14", showIf: { key: "validType", in: ["발급일 기준"] }, requiredIf: { key: "validType", in: ["발급일 기준"] } },
     ] },
     { title: "혜택 상품 지정", desc: "어디에 적용할까요?", fields: [
@@ -183,15 +184,15 @@ const TALK: CouponChannel = {
       { key: "name", label: "쿠폰명", type: "text", required: true, critical: true, placeholder: "예: [톡친구] 10% (2507)", help: "월/차수·타겟을 넣으면 목록에서 구분이 쉽고 중복발행을 막습니다." },
     ] },
     { title: "혜택", desc: "어떤 쿠폰을, 얼마나 할인할까요?", fields: [
-      { key: "couponKind", label: "쿠폰 종류", type: "radio", required: true, critical: true, options: ["상품 할인쿠폰", "장바구니 할인쿠폰"], default: "상품 할인쿠폰", help: "상품=주문번호 단위(주문번호당 1개, 즉시할인·톡딜과 동시 적용). 장바구니=스토어 단위(스토어당 1개). ⚠️ 장바구니는 적용 대상이 '스토어 전체 상품'만 가능합니다." },
+      { key: "couponKind", label: "쿠폰 종류", type: "radio", required: true, critical: true, options: ["상품 할인쿠폰", "장바구니 할인쿠폰"], default: "상품 할인쿠폰", warn: true, help: "상품=주문번호 단위(주문번호당 1개, 즉시할인·톡딜과 동시 적용). 장바구니=스토어 단위(스토어당 1개). 장바구니는 적용 대상이 '스토어 전체 상품'만 가능합니다." },
       { key: "discountUnit", label: "할인 단위", type: "radio", required: true, options: ["정률(%)", "정액(원)"], help: "카카오 표기 그대로 정률/정액. 단위를 먼저 고르면 아래 입력칸이 바뀝니다." },
       { key: "discountPct", label: "할인율", type: "number", suffix: "%", critical: true, showIf: { key: "discountUnit", in: ["정률(%)"] }, requiredIf: { key: "discountUnit", in: ["정률(%)"] }, help: "1~99%, 1% 단위. 계산액이 최대 할인금액을 넘으면 최대금액까지만 할인됩니다." },
       { key: "discountAmt", label: "할인액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정액(원)"] }, requiredIf: { key: "discountUnit", in: ["정액(원)"] }, help: "10원 단위로 입력하세요." },
-      { key: "maxDiscount", label: "최대 할인금액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정률(%)"] }, requiredIf: { key: "discountUnit", in: ["정률(%)"] }, help: "⚠️ 정률이면 필수. 정률 계산액이 이 금액을 넘으면 이 금액까지만 할인. 장바구니 정률은 상품 할인쿠폰 적용 후 금액 기준으로 계산됩니다." },
+      { key: "maxDiscount", label: "최대 할인금액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정률(%)"] }, requiredIf: { key: "discountUnit", in: ["정률(%)"] }, warn: true, help: "정률이면 필수. 정률 계산액이 이 금액을 넘으면 이 금액까지만 할인. 장바구니 정률은 상품 할인쿠폰 적용 후 금액 기준으로 계산됩니다." },
       { key: "minAmount", label: "최소 주문금액", type: "number", suffix: "원 이상", emptyText: "제한없음", help: "이 금액 이상일 때만 사용 가능. 기준 = (판매가−즉시할인−소문내기할인−톡딜할인+옵션가) × 주문수량. 비우면 제한 없음." },
     ] },
     { title: "발급 대상", desc: "누구에게 제공하나요?", fields: [
-      { key: "target", label: "쿠폰 발급 대상", type: "radio", required: true, critical: true, options: ["전체 고객", "첫구매 고객", "재구매 고객"], default: "전체 고객", help: "첫구매=1년 이내 구매이력 없음, 재구매=1년 이내 구매이력 있음. ⚠️ 첫구매 고객 쿠폰은 적용 대상을 '스토어 전체 상품' 또는 '카테고리 선택'으로만 설정할 수 있습니다(상품·기획전 불가)." },
+      { key: "target", label: "쿠폰 발급 대상", type: "radio", required: true, critical: true, options: ["전체 고객", "첫구매 고객", "재구매 고객"], default: "전체 고객", warn: true, help: "첫구매=1년 이내 구매이력 없음, 재구매=1년 이내 구매이력 있음. 첫구매 고객 쿠폰은 적용 대상을 '스토어 전체 상품' 또는 '카테고리 선택'으로만 설정할 수 있습니다(상품·기획전 불가)." },
       { key: "friend", label: "채널 친구 여부", type: "radio", options: ["설정안함", "설정함(톡채널 친구)"], default: "설정함(톡채널 친구)", help: "'설정함'이면 다운로드 시 친구추가 팝업이 뜨고, 친구만 다운로드·사용할 수 있습니다(친구 유입 유도용)." },
     ] },
     { title: "적용", desc: "어디에 적용할까요?", fields: [
@@ -334,14 +335,14 @@ export function deriveExposeStart(ch: CouponChannel, answers: Answers): { when: 
     if (issue === "정기 자동 발급") return { when: "해당 없음 (설정 주기마다 자동 발급 — 고정 노출일 없음)", kind: "conditional" };
     if (s("exposeTime") === "지정 기간에만 노출") {
       const start = startOf("exposePeriod");
-      if (!start) return { when: "⚠️ 노출 시작 일시 미입력 — 반드시 채우세요", kind: "none" };
+      if (!start) return { when: "노출 시작 일시 미입력 — 반드시 채우세요", kind: "none" };
       return { when: `${start} 부터`, kind: past(start) ? "immediate" : "scheduled" };
     }
     return { when: "등록 즉시 (즉시 노출 설정)", kind: "immediate" };
   }
   if (ch.key === "naver") {
     const start = startOf("issuePeriod");
-    if (!start) return { when: "⚠️ 발급기간 시작 미입력 — 반드시 채우세요", kind: "none" };
+    if (!start) return { when: "발급기간 시작 미입력 — 반드시 채우세요", kind: "none" };
     const nextDay = ["첫구매 고객", "재구매 고객", "타겟팅-그룹"].includes(s("target"));
     if (deriveIssueMethod(answers) === "즉시발급") {
       return { when: `${start} (발급일 즉시 지급 · 회수 불가)${nextDay ? " (단 이 대상은 익일부터 적용)" : ""}`, kind: past(start) ? "immediate" : "scheduled" };
@@ -350,7 +351,7 @@ export function deriveExposeStart(ch: CouponChannel, answers: Answers): { when: 
   }
   if (ch.key === "talk") {
     const start = startOf("issuePeriod");
-    if (!start) return { when: "⚠️ 발급기간 시작 미입력 — 반드시 채우세요", kind: "none" };
+    if (!start) return { when: "발급기간 시작 미입력 — 반드시 채우세요", kind: "none" };
     return { when: `${start} 부터 (발행중 상태에서만 다운로드)`, kind: past(start) ? "immediate" : "scheduled" };
   }
   return { when: "", kind: "none" };
@@ -520,25 +521,25 @@ export function buildRequestText(ch: CouponChannel, answers: Answers, meta: { re
     const bar = "════════════════════════════════════════";
     if (expose.kind === "immediate" || expose.kind === "none") {
       out.push("", bar,
-        `🔴 노출/발급 시작 : ${expose.when}  ← 지금 등록하면 고객에게 바로 나갑니다`,
+        `노출/발급 시작 : ${expose.when}  ← 지금 등록하면 고객에게 바로 나갑니다`,
         "   → 노출 예정일이 오늘이 아니라면 지금 등록하지 마세요.",
         "   → 예정일까지 기다리거나 [지정 기간 노출 / 발행대기]로 바꿔 등록하세요.",
         bar);
     } else if (expose.kind === "conditional") {
       out.push("", bar,
-        `🕒 노출/발급 시작 : ${expose.when}`,
+        `노출/발급 시작 : ${expose.when}`,
         "   → '노출 예정일'이 아니라 '조건(가입·후기·주기)' 시점에 발급됩니다.",
         "   → 조건/주기 설정을 지금 켜면 즉시 활성화됩니다. 원하는 시작일에 맞춰 활성화하세요.",
         bar);
     } else if (expose.kind === "serial") {
       out.push("", bar,
-        `🎫 발급 방식 : 시리얼 쿠폰 — ${expose.when}`,
+        `발급 방식 : 시리얼 쿠폰 — ${expose.when}`,
         "   → 시리얼 번호를 만들어 배포하면 고객이 마이쇼핑에서 번호를 입력해 받습니다.",
         "   → 번호를 배포하기 전에는 아무도 받지 못합니다. 배포 시점·경로(문자·이벤트 등)를 관리하세요.",
         bar);
     } else {
       out.push("", bar,
-        `🕒 노출/발급 시작 : ${expose.when}`,
+        `노출/발급 시작 : ${expose.when}`,
         "   → 이 시각 전에는 반드시 [발행대기 / 미노출] 상태로만 등록하세요.",
         "   → 예정일 전 미리 노출·발행 절대 금지 (대상 외 고객에게 혜택이 새어나갑니다).",
         bar);
@@ -559,7 +560,7 @@ export function buildRequestText(ch: CouponChannel, answers: Answers, meta: { re
   if (detail.length) out.push("", "■ 상세 설정", ...detail);
 
   const risks = buildRisks(ch, answers);
-  if (risks.length) out.push("", "⚠️ 위험 확인 (MD 필독)", ...risks.map((r) => `· ${r}`));
+  if (risks.length) out.push("", "위험 확인 (MD 필독)", ...risks.map((r) => `· ${r}`));
 
   out.push("", "── MD 등록 체크리스트 ──", ...buildChecklist(ch, answers).map((c) => `□ ${c}`));
   return out.join("\n");

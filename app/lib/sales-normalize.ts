@@ -2,7 +2,7 @@
 //  불변식: normalizePhoneDigits + customerKey + rowHash 가 세 경로에서 동일해야
 //  (a)멱등 적재(중복 0)와 (b)신규/재구매 판정 연속성이 동시에 성립한다.
 //  파이썬 매출리포트_ver_260623.py 의 정규화 규칙을 1:1 포팅(digits-only, 국가코드 변환 없음).
-//  ⚠️ Node 런타임 전용(crypto·pepper). runtime="nodejs" 라우트/스크립트에서만 import.
+//  Node 런타임 전용(crypto·pepper). runtime="nodejs" 라우트/스크립트에서만 import.
 import { createHmac, createHash } from "crypto";
 
 const ZERO_WIDTH_AND_SPACES = /[\s ​‌‍﻿]+/g;

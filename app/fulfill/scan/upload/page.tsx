@@ -134,7 +134,7 @@ export default function ScanUploadPage() {
         </div>
         <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
           엑셀(.xlsx)·CSV, <strong>여러 파일 선택 가능</strong>. 열 제목에서 <strong>송장번호·상품코드·수량</strong>을 자동 인식하고, NOTHING(정기배송 등)은 제외합니다. 송장번호는 하이픈이 있어도/없어도 동일하게 인식돼요.
-          <br />🔒 <strong>고객정보(받는분·전화·주소)는 이 브라우저에서 제거</strong>되고, <strong>송장번호·상품코드·수량만</strong> 저장됩니다(파일 원본은 서버로 전송되지 않아요).
+          <br /><strong>고객정보(받는분·전화·주소)는 이 브라우저에서 제거</strong>되고, <strong>송장번호·상품코드·수량만</strong> 저장됩니다(파일 원본은 서버로 전송되지 않아요).
         </p>
         <div className="sm-row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "업로드 중…" : "파일 선택 (여러 개 가능)"}</button>
@@ -144,7 +144,7 @@ export default function ScanUploadPage() {
           <div className="prod-sku-ok" style={{ fontSize: 12.5, marginTop: 12 }}>
             {result.files.map((f, i) => (
               <div key={i} style={{ color: f.error ? "var(--sm-danger)" : undefined }}>
-                {f.error ? "✗" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${f.invoiceCount.toLocaleString()}건 · 라인 ${f.itemCount.toLocaleString()}개${f.excludedNothing ? ` · NOTHING ${f.excludedNothing} 제외` : ""}`}
+                {f.error ? "" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${f.invoiceCount.toLocaleString()}건 · 라인 ${f.itemCount.toLocaleString()}개${f.excludedNothing ? ` · NOTHING ${f.excludedNothing} 제외` : ""}`}
               </div>
             ))}
             {result.unmatched.length > 0 && <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>미등록 단품코드 {result.unmatched.length}개: {result.unmatched.slice(0, 15).join(", ")}{result.unmatched.length > 15 ? " …" : ""} — <Link href="/b2b/products">상품마스터</Link>에 없으면 스캔 집계에 빨간 줄로 표시됩니다.</div>}
@@ -163,7 +163,7 @@ export default function ScanUploadPage() {
         {loading ? (
           <div className="b2b-loading">불러오는 중…</div>
         ) : uploads.length === 0 ? (
-          <div className="b2b-empty"><div className="b2b-empty-icon">📦</div>올린 파일이 없습니다. 위에서 송장 파일을 올리세요.</div>
+          <div className="b2b-empty">올린 파일이 없습니다. 위에서 송장 파일을 올리세요.</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">

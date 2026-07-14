@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // 업로드 배치 되돌리기 — 그 배치가 삽입한 sales_orders 행만 삭제 + 이력 status=reverted.
-//  ⚠️ 되돌릴 수 없는 삭제. sales_customers(재구매 판정)는 재집계하지 않음(분석엔 영향 없음).
+//  되돌릴 수 없는 삭제. sales_customers(재구매 판정)는 재집계하지 않음(분석엔 영향 없음).
 export async function POST(req: NextRequest) {
   try {
     const { batch_id } = await req.json().catch(() => ({ batch_id: "" }));

@@ -218,7 +218,7 @@ export default function FulfillPage() {
               </div>
               {res.unmatched.length > 0 && (
                 <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-danger-bg)", border: "1px solid var(--sm-danger)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
-                  ⚠️ <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있어요. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
+                  <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있어요. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
                   <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(" · ")}{res.unmatched.length > 30 ? " …" : ""}</div>
                 </div>
               )}
@@ -232,7 +232,7 @@ export default function FulfillPage() {
         <>
           {res.addressWarnings.length > 0 && (
             <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
-              🚨 <strong>주소 경고 {res.addressWarnings.length}건</strong> — 발주 전 반드시 확인하세요.
+              <strong>주소 경고 {res.addressWarnings.length}건</strong> — 발주 전 반드시 확인하세요.
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
                 {res.addressWarnings.slice(0, 20).map((w, i) => <li key={i}>{w.name || "(이름?)"} · {w.addr}</li>)}
               </ul>
@@ -246,7 +246,7 @@ export default function FulfillPage() {
             <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button className="b2b-btn-primary" style={{ padding: "10px 20px", fontSize: 15, fontWeight: 700 }} disabled={blocked || res.stats.normalCount === 0}
                 onClick={() => { const g = res.files.guarantee; downloadB64(res.files.normal.name, res.files.normal.b64); if (g) setTimeout(() => downloadB64(g.name, g.b64), 400); }}>
-                📦 모두 받기{res.files.guarantee ? " (2종)" : ""}
+                모두 받기{res.files.guarantee ? " (2종)" : ""}
               </button>
               <button className="b2b-btn-secondary" disabled={blocked || res.stats.normalCount === 0} onClick={() => downloadB64(res.files.normal.name, res.files.normal.b64)}>CNplus 일반 ({res.stats.normalCount})</button>
               <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => res.files.guarantee && downloadB64(res.files.guarantee.name, res.files.guarantee.b64)}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
@@ -304,14 +304,14 @@ export default function FulfillPage() {
           {dispatchLoading ? <div className="b2b-loading">재고 확인 중…</div> : dispatchDone ? (
             <div className="prod-sku-ok" style={{ fontSize: 13, lineHeight: 1.7 }}>
               ✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link>
-              {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · ⚠️ 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
+              {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
               <div className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>잘못 눌렀다면 <Link href="/inventory/activity">재고 활동 히스토리</Link>에서 이 출고번호 배치를 취소하면 원복됩니다. · <button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
             </div>
           ) : dispatch ? (
             <>
               {dispatch.items.some((i) => i.kind === "unmatched" || i.kind === "ambiguous") && (
                 <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sm-danger-bg)", border: "1px solid var(--sm-danger)", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
-                  ⚠️ <strong>상품마스터에 없어 출고되지 않는 코드</strong> — <Link href="/b2b/products">상품마스터</Link>에 등록하면 다음부터 출고됩니다.
+                  <strong>상품마스터에 없어 출고되지 않는 코드</strong> — <Link href="/b2b/products">상품마스터</Link>에 등록하면 다음부터 출고됩니다.
                   <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{dispatch.items.filter((i) => i.kind === "unmatched" || i.kind === "ambiguous").map((i) => `${i.sku}${i.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(" · ")}</div>
                 </div>
               )}
@@ -335,7 +335,7 @@ export default function FulfillPage() {
                       </tbody>
                     </table>
                   </div>
-                  {dispatch.shortages > 0 && <p style={{ fontSize: 12, color: "var(--sm-danger)", marginTop: 6 }}>⚠️ 재고 부족 {dispatch.shortages}품목 — 출고는 진행되지만 마이너스 재고로 기록됩니다.</p>}
+                  {dispatch.shortages > 0 && <p style={{ fontSize: 12, color: "var(--sm-danger)", marginTop: 6 }}>재고 부족 {dispatch.shortages}품목 — 출고는 진행되지만 마이너스 재고로 기록됩니다.</p>}
                   <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>재고 확인 후 <strong>출고 완료</strong>를 누르면 소매 재고에서 차감됩니다. 묶음(세트)은 구성품으로 전개, 정기배송은 제외. 같은 발주 재출고는 막습니다.</p>
                 </>
               )}
@@ -350,7 +350,7 @@ export default function FulfillPage() {
           <button className="b2b-btn-secondary" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>← 이전</button>
           {step < STEPS.length - 1 ? (
             <button className="b2b-btn-primary" onClick={onNext} disabled={!canNext || recording} title={!canNext ? "이 단계를 완료해야 넘어갈 수 있어요" : ""}>
-              {step === 1 ? "📦 CN 2종 받고 다음 →"
+              {step === 1 ? "CN 2종 받고 다음 →"
                 : step === 2 ? (recording ? "기록 중…" : recordOk ? "다음: 상품 출고 →" : "배송일지에 기록 후 다음 →")
                   : `다음: ${STEPS[step + 1]} →`}
             </button>

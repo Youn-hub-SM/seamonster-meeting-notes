@@ -9,7 +9,7 @@ import { normalizeRow, type SalesOrderRow } from "./sales-normalize";
 //  - 재동기화(멱등 재빌드): 발송완료 발주가 수정돼도 매번 현재 라인으로 upsert + 없어진 옛 행 삭제 → 원장이 실제와 일치
 //  - 이중집계 방지: row_hash 유니크 + 배치 단위 delete(간극 없이 upsert 후 stale 만 삭제)
 //  - 재구매/고객 분석 오염 방지: 전화 미전달 → customer_key='' (매출액만 반영, sales_customers 미기록)
-//  ⚠️ Node 런타임 전용(sales-normalize 의 crypto). 호출 라우트는 nodejs 여야 함.
+//  Node 런타임 전용(sales-normalize 의 crypto). 호출 라우트는 nodejs 여야 함.
 
 const SEP = String.fromCharCode(1); // 병합 키 구분자(제어문자 SOH) — 상품명/옵션/SKU 본문에 없어 필드 경계 모호성 방지
 

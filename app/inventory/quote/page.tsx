@@ -48,8 +48,8 @@ export default function QuotePage() {
       <header className="b2b-page-head no-print">
         <div><h1 className="b2b-page-title">월간 매입 결산</h1><p className="b2b-page-subtitle">선택한 달의 입고(매입)를 면세·과세·임대료로 정리하고 SKU별로 집계합니다. 엑셀로 그대로 받으세요.</p></div>
         <div className="b2b-page-actions">
-          <a className="b2b-btn-secondary" href={exportUrl}>⬇ 엑셀 다운로드</a>
-          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || items.length === 0}>🖨 인쇄 / PDF</button>
+          <a className="b2b-btn-secondary" href={exportUrl}>엑셀 다운로드</a>
+          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || items.length === 0}>인쇄 / PDF</button>
         </div>
       </header>
       {error && <div className="b2b-error no-print">{error}</div>}
@@ -69,7 +69,7 @@ export default function QuotePage() {
       </section>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : items.length === 0 && !s?.rentTotal ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">🧾</div>{ym} 매입 내역이 없습니다.</div>
+        <div className="b2b-empty">{ym} 매입 내역이 없습니다.</div>
       ) : s && (
         <section className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "28px 30px", maxWidth: 900, boxShadow: "var(--sm-shadow-card)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>

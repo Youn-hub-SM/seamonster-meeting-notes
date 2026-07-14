@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     console.error("[q redirect]", e);
   }
   return new NextResponse(
-    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>링크 없음</title><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:88vh;color:#333;text-align:center;margin:0"><div><div style="font-size:44px">🔗</div><p>이 링크는 존재하지 않거나 비활성 상태입니다.</p></div></body>`,
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>링크 없음</title><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:88vh;color:#333;text-align:center;margin:0"><div><div style="font-size:44px"></div><p>이 링크는 존재하지 않거나 비활성 상태입니다.</p></div></body>`,
     { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } }
   );
 }

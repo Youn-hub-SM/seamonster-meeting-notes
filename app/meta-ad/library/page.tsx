@@ -48,7 +48,7 @@ export default function MetaLibraryPage() {
       const body = { ...f, roas: f.roas ? Number(f.roas) : undefined, sourceAdId, ...prefillMetrics };
       const j = await (await fetch("/api/meta-ad/creatives", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
       if (!j.ok) throw new Error(j.error);
-      setMsg("✅ 저장됨"); setF({ ...EMPTY }); setSourceAdId(""); setPrefillMetrics({}); load();
+      setMsg("저장됨"); setF({ ...EMPTY }); setSourceAdId(""); setPrefillMetrics({}); load();
     } catch (e) { setErr(e instanceof Error ? e.message : "저장 오류"); }
     setSaving(false);
   }
@@ -73,7 +73,7 @@ export default function MetaLibraryPage() {
 
       {/* 기획 폼 */}
       <section className="b2b-card" style={{ marginBottom: 16 }}>
-        <div className="b2b-card-head"><span className="b2b-card-title">➕ 소재 기획</span></div>
+        <div className="b2b-card-head"><span className="b2b-card-title">소재 기획</span></div>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           <label className="sm-col" style={{ gap: 3, flex: "2 1 220px" }}>
             <span className="mlib-lbl">소재 이름 / 컨셉</span>
@@ -129,7 +129,7 @@ export default function MetaLibraryPage() {
       {/* 저장된 소재 */}
       <div className="b2b-card-head" style={{ marginBottom: 10 }}><span className="b2b-card-title">저장된 소재 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{list.length}개</span></span></div>
       {loading ? <div className="b2b-loading">불러오는 중...</div> : list.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">🎬</div>아직 저장된 소재가 없습니다. 위에서 기획해 저장하거나, 보드에서 우수 소재를 저장하세요.</div>
+        <div className="b2b-empty">아직 저장된 소재가 없습니다. 위에서 기획해 저장하거나, 보드에서 우수 소재를 저장하세요.</div>
       ) : (
         <div className="mlib-grid">
           {list.map((c) => (
@@ -141,7 +141,7 @@ export default function MetaLibraryPage() {
               {(c.roas || c.adLibraryUrl) && (
                 <div className="sm-row" style={{ gap: 8, marginTop: 5, fontSize: 11.5, flexWrap: "wrap", alignItems: "center" }}>
                   {c.roas ? <span className="sm-faint">ROAS <b style={{ color: "var(--sm-orange)" }}>{c.roas.toFixed(2)}</b></span> : null}
-                  {c.adLibraryUrl ? <a href={c.adLibraryUrl} target="_blank" rel="noreferrer" style={{ color: "var(--sm-info)", fontSize: 11.5 }}>🔗 소재 보기</a> : null}
+                  {c.adLibraryUrl ? <a href={c.adLibraryUrl} target="_blank" rel="noreferrer" style={{ color: "var(--sm-info)", fontSize: 11.5 }}>소재 보기</a> : null}
                 </div>
               )}
               <div className="mlib-el3">
@@ -149,7 +149,7 @@ export default function MetaLibraryPage() {
                 <div><span className="mlib-tag" style={{ color: "#f76707" }}>스토리</span> {c.story}</div>
                 <div><span className="mlib-tag" style={{ color: "#2f9e44" }}>제안</span> {c.offer}</div>
               </div>
-              {c.note && <div className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>📝 {c.note}</div>}
+              {c.note && <div className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>{c.note}</div>}
               <div className="sm-row" style={{ gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
                 <button className="b2b-link-btn" style={{ fontSize: 11.5 }} onClick={() => reuse(c)}>재사용(복제)</button>
                 <button className="b2b-link-btn" style={{ fontSize: 11.5, color: "var(--sm-orange)" }} onClick={() => del(c.id)}>삭제</button>

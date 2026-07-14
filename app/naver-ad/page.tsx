@@ -276,7 +276,7 @@ export default function NaverAdPage() {
       }
       j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "입찰가 변경 실패");
-      setSavedMsg(`✅ 입찰가 ${j.updated}개 변경${j.failed ? ` (${j.failed}개 실패: ${j.error || ""})` : ""}`);
+      setSavedMsg(`입찰가 ${j.updated}개 변경${j.failed ? ` (${j.failed}개 실패: ${j.error || ""})` : ""}`);
       loadData();
     } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
     setSaving(false);
@@ -504,8 +504,7 @@ export default function NaverAdPage() {
           </div>
 
           {!hasSelection ? (
-            <div className="b2b-empty"><div className="b2b-empty-icon">🔎</div>
-              {mode === "keyword" ? "캠페인 → 광고그룹을 선택하면 키워드가 나옵니다." : "캠페인을 선택하면 광고그룹별 성과·입찰가가 나옵니다."}
+            <div className="b2b-empty">{mode === "keyword" ? "캠페인 → 광고그룹을 선택하면 키워드가 나옵니다." : "캠페인을 선택하면 광고그룹별 성과·입찰가가 나옵니다."}
             </div>
           ) : loading ? <div className="b2b-loading">불러오는 중...</div> :
             shownRows.length === 0 ? (
@@ -541,8 +540,8 @@ export default function NaverAdPage() {
                           <tr key={r.id} style={changed ? { background: "var(--sm-orange-light)" } : undefined}>
                             <td>
                               <strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 11 }}> · OFF</span> : null}
-                              <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => { setRpt({ id: r.id, name: r.name, kind: r.kind }); setRptGran("week"); setRptBack(90); setRptConv("all"); }} title="이 대상의 주/월/일별 성과 리포트">📊 리포트</button>
-                              {r.kind === "adgroup" && <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => openSearchKeywords(r)} title="이 그룹으로 유입된 검색어별 비용">🔍 검색어</button>}
+                              <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => { setRpt({ id: r.id, name: r.name, kind: r.kind }); setRptGran("week"); setRptBack(90); setRptConv("all"); }} title="이 대상의 주/월/일별 성과 리포트">리포트</button>
+                              {r.kind === "adgroup" && <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 11 }} onClick={() => openSearchKeywords(r)} title="이 그룹으로 유입된 검색어별 비용">검색어</button>}
                             </td>
                             <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.group}</td>
                             <td className="num b2b-money">{num(st?.impCnt)}</td>
@@ -609,7 +608,7 @@ export default function NaverAdPage() {
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--sm-white)", borderRadius: 12, width: "min(760px, 100%)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
             <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
               <div>
-                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>🔍 검색어별 비용 — {skGroup.name}</div>
+                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>검색어별 비용 — {skGroup.name}</div>
                 <div className="sm-faint" style={{ fontSize: 11 }}>최근 30일 · 이 광고그룹으로 유입된 실제 검색어(네이버 제공)</div>
               </div>
               <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setSkGroup(null)}>닫기</button>
@@ -670,7 +669,7 @@ export default function NaverAdPage() {
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--sm-white)", borderRadius: 12, width: "min(880px, 100%)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
             <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
               <div>
-                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>📊 성과 리포트 — {rpt.name}</div>
+                <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>성과 리포트 — {rpt.name}</div>
                 <div className="sm-faint" style={{ fontSize: 11 }}>일/주/월별 추이 · 전체 전환 기준(네이버) · 어제까지 반영</div>
               </div>
               <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setRpt(null)}>닫기</button>

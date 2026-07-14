@@ -290,7 +290,7 @@ export default function ProductionSettingsPage() {
                   <code style={{ fontSize: 11 }}>{c.sku}</code>
                   <span className="demix-cand-name">{c.name}</span>
                   <span className={ok ? "demix-ok" : "demix-bad"}>
-                    BoxHero {c.boxheroOut.toLocaleString()} / B2B {c.b2bShipped.toLocaleString()}{ok ? "" : " ⚠ 도매 미기록 의심"}
+                    BoxHero {c.boxheroOut.toLocaleString()} / B2B {c.b2bShipped.toLocaleString()}{ok ? "" : " 도매 미기록 의심"}
                   </span>
                 </label>
               );
@@ -299,7 +299,7 @@ export default function ProductionSettingsPage() {
         )}
         {demixUnresolved > 0 && (
           <p style={{ marginTop: 10, fontSize: 11.5, color: "var(--sm-danger)", lineHeight: 1.5 }}>
-            ⚠ 도매 발송 중 {demixUnresolved.toLocaleString()}개가 SKU와 연결되지 않아 차감에서 빠집니다 — 해당 발주 상품에 SKU가 지정됐는지 확인하세요.
+            도매 발송 중 {demixUnresolved.toLocaleString()}개가 SKU와 연결되지 않아 차감에서 빠집니다 — 해당 발주 상품에 SKU가 지정됐는지 확인하세요.
           </p>
         )}
         {demixMsg && (

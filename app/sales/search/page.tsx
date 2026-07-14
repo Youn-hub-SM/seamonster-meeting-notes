@@ -97,7 +97,7 @@ export default function SalesSearchPage() {
         </p>
       </section>
 
-      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>⚠️ {err}</p>}
+      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
 
       {c !== undefined && (
         c ? (

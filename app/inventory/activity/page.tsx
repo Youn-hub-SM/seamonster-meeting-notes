@@ -68,7 +68,7 @@ export default function ActivityPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : groups.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">📭</div>{txns.length === 0 ? "내역이 없습니다." : "검색 결과가 없습니다."}</div>
+        <div className="b2b-empty">{txns.length === 0 ? "내역이 없습니다." : "검색 결과가 없습니다."}</div>
       ) : (
         <div className="sm-col" style={{ gap: 8 }}>
           {groups.map(([date, list]) => {

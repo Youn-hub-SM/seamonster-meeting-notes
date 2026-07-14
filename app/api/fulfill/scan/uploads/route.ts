@@ -25,7 +25,7 @@ export async function GET() {
 }
 
 // POST { files: [{ title, rows: [{invoice_no, sku_code, qty}] }] }
-//  ⚠️ 고객정보(받는분·전화·주소)는 브라우저에서 이미 제거된 상태로 전송된다(파일 자체는 서버로 안 옴).
+//  고객정보(받는분·전화·주소)는 브라우저에서 이미 제거된 상태로 전송된다(파일 자체는 서버로 안 옴).
 //     서버는 송장번호·상품코드·수량만 받아 풀에 누적한다.
 export async function POST(req: NextRequest) {
   try {

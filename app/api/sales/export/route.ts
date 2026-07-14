@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const cols = "order_date,channel,order_id,product_name,option_name,sku_code,quantity,selling_price,option_price,subtotal_amount,shipping_fee";
     const all: Record<string, unknown>[] = [];
     for (let offset = 0; offset < HARD_CAP; offset += PAGE) {
-      // ⚠️ order_date·order_id 는 유니크가 아니므로 동률행이 페이지 경계에 걸치면 OFFSET 페이징이
+      // order_date·order_id 는 유니크가 아니므로 동률행이 페이지 경계에 걸치면 OFFSET 페이징이
       //    행을 중복/누락시킴 → 유니크키 id 를 마지막 정렬키로 추가해 페이지 간 순서를 고정.
       let q = sb.from("sales_orders").select(cols)
         .order("order_date", { ascending: true }).order("order_id", { ascending: true }).order("id", { ascending: true })
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 
     if (truncated) {
       // 상한 초과 → 일부만 추출됨을 파일 안에서도 명확히 안내(별도 시트).
-      const wa = wb.addWorksheet("⚠️안내");
+      const wa = wb.addWorksheet("안내");
       wa.getColumn(1).width = 90;
       wa.addRow([`이 파일은 안전 상한(${HARD_CAP.toLocaleString()}행)까지만 추출되었습니다. 결과가 더 많습니다.`]);
       wa.addRow(["기간·판매처·검색어로 범위를 좁혀 나눠 받으세요."]);

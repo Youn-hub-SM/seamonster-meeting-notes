@@ -42,7 +42,6 @@ export default function WeeklyView({
   if (weeks.length === 0) {
     return (
       <div className="b2b-empty">
-        <div className="b2b-empty-icon">📅</div>
         표시할 발주가 없습니다.
       </div>
     );

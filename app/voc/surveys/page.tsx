@@ -100,7 +100,7 @@ export default function VocSurveysPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">📋</div>아직 수집된 응답이 없습니다. <Link href="/voc/settings" className="change-link">연동 설정</Link>에서 가져오세요.</div>
+        <div className="b2b-empty">아직 수집된 응답이 없습니다. <Link href="/voc/settings" className="change-link">연동 설정</Link>에서 가져오세요.</div>
       ) : view === "목록" ? (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -123,7 +123,7 @@ export default function VocSurveysPage() {
           {/* AI 요약 */}
           <section className="b2b-card">
             <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="b2b-card-title">🧠 AI 요약</span>
+              <span className="b2b-card-title">AI 요약</span>
               <button className="b2b-btn-primary" onClick={runAi} disabled={aiLoading} style={{ padding: "6px 14px" }}>{aiLoading ? "분석 중…" : insight ? "다시 분석" : "AI 분석 실행"}</button>
             </div>
             {!insight ? (
@@ -132,11 +132,11 @@ export default function VocSurveysPage() {
               <div className="sm-col" style={{ gap: 12 }}>
                 <p style={{ fontSize: 14, lineHeight: 1.7 }}>{insight.summary} {insight.sentiment && <span className="sm-faint">· {insight.sentiment}</span>}</p>
                 <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>👍 만족 요인</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>{(insight.highlights || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
-                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>🔧 개선점</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>{(insight.improvements || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
+                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>만족 요인</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>{(insight.highlights || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
+                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>개선점</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>{(insight.improvements || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
                 </div>
                 {insight.quotes?.length > 0 && (
-                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>💬 인용</div>
+                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>인용</div>
                     <div className="sm-col" style={{ gap: 6 }}>{insight.quotes.map((q, i) => <div key={i} style={{ fontSize: 13, padding: "8px 12px", background: "var(--sm-bg-subtle)", borderRadius: 8, borderLeft: "3px solid var(--sm-orange)" }}>“{q}”</div>)}</div>
                   </div>
                 )}

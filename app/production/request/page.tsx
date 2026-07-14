@@ -61,7 +61,7 @@ export default function RequestPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : !data || data.rows.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">📄</div>이 기간에 생산 예정인 품목이 없습니다. (생산예정일이 비어있으면 집계되지 않습니다)</div>
+        <div className="b2b-empty">이 기간에 생산 예정인 품목이 없습니다. (생산예정일이 비어있으면 집계되지 않습니다)</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">

@@ -223,7 +223,7 @@ export async function logOrderCreated(orderId: string): Promise<void> {
   if (!o) return;
   await recordActivity({
     event_type: "order.created",
-    summary: `📦 새 발주 · ${o.company_name} · ${o.order_no} · ${fmtMoney(o.total)}원`,
+    summary: `새 발주 · ${o.company_name} · ${o.order_no} · ${fmtMoney(o.total)}원`,
     order_id: o.id,
     order_no: o.order_no,
   });
@@ -234,8 +234,8 @@ export async function logOrderStatusChanged(orderId: string, fromStatus: string,
   const o = await loadOrderSummary(orderId);
   if (!o) return;
   const emoji =
-    toStatus === "발송완료" ? "🚚" :
-    toStatus === "취소" ? "❌" : "📦";
+    toStatus === "발송완료" ? "" :
+    toStatus === "취소" ? "" : "";
   await recordActivity({
     event_type: "order.status_changed",
     summary: `${emoji} ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
@@ -249,7 +249,7 @@ export async function logOrderProductionStatusChanged(orderId: string, fromStatu
   if (fromStatus === toStatus) return;
   const o = await loadOrderSummary(orderId);
   if (!o) return;
-  const emoji = toStatus === "생산완료" ? "✅" : toStatus === "생산중" ? "🏭" : "🧊";
+  const emoji = toStatus === "생산완료" ? "" : toStatus === "생산중" ? "" : "";
   await recordActivity({
     event_type: "order.production_status_changed",
     summary: `${emoji} 생산 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
@@ -263,7 +263,7 @@ export async function logOrderPaymentStatusChanged(orderId: string, fromStatus: 
   if (fromStatus === toStatus) return;
   const o = await loadOrderSummary(orderId);
   if (!o) return;
-  const emoji = toStatus === "입금완료" ? "💰" : toStatus === "일부입금" ? "💵" : "⏳";
+  const emoji = toStatus === "입금완료" ? "" : toStatus === "일부입금" ? "" : "";
   await recordActivity({
     event_type: "order.payment_status_changed",
     summary: `${emoji} 입금상태 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
@@ -277,7 +277,7 @@ export async function logOrderTaxInvoiceChanged(orderId: string, fromStatus: str
   if (fromStatus === toStatus) return;
   const o = await loadOrderSummary(orderId);
   if (!o) return;
-  const emoji = toStatus === "발행완료" ? "🧾" : toStatus === "불필요" ? "➖" : "📄";
+  const emoji = toStatus === "발행완료" ? "" : toStatus === "불필요" ? "" : "";
   await recordActivity({
     event_type: "order.tax_invoice_changed",
     summary: `${emoji} 세금계산서 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
@@ -293,8 +293,8 @@ export async function logShipmentStatusChanged(orderId: string, seq: number, fro
   const o = await loadOrderSummary(orderId);
   if (!o) return;
   const emoji =
-    toStatus === "발송완료" ? "🚚" :
-    toStatus === "취소" ? "❌" : "📦";
+    toStatus === "발송완료" ? "" :
+    toStatus === "취소" ? "" : "";
   await recordActivity({
     event_type: "shipment.status_changed",
     summary: `${emoji} ${o.order_no} (${o.company_name}) · ${seq}차 발송 · ${fromStatus} → ${toStatus}`,
@@ -308,7 +308,7 @@ export async function logShipmentStatusChanged(orderId: string, seq: number, fro
 export async function logOrderDeleted(orderNo: string, companyName: string, total: number): Promise<void> {
   await recordActivity({
     event_type: "order.deleted",
-    summary: `🗑️ 발주 삭제 · ${companyName} · ${orderNo} · ${fmtMoney(total)}원`,
+    summary: `발주 삭제 · ${companyName} · ${orderNo} · ${fmtMoney(total)}원`,
     order_id: null,
     order_no: orderNo,
   });
@@ -317,7 +317,7 @@ export async function logOrderDeleted(orderNo: string, companyName: string, tota
 // 업체(주소록) 등록·수정·삭제
 export async function logCompanyChange(action: "created" | "updated" | "deleted", name: string): Promise<void> {
   const verb = action === "created" ? "등록" : action === "updated" ? "수정" : "삭제";
-  const emoji = action === "deleted" ? "🗑️" : "🏢";
+  const emoji = action === "deleted" ? "" : "";
   await recordActivity({
     event_type: `company.${action}`,
     summary: `${emoji} 업체 ${verb} · ${name}`,
@@ -333,7 +333,7 @@ export async function logProductChange(
   opts?: { source?: string; changes?: ProductFieldChange[]; productId?: string | null }
 ): Promise<void> {
   const verb = action === "created" ? "등록" : action === "updated" ? "수정" : "삭제";
-  const emoji = action === "deleted" ? "🗑️" : action === "created" ? "🆕" : "✏️";
+  const emoji = action === "deleted" ? "" : action === "created" ? "" : "";
   const skuPart = sku ? ` (${sku})` : "";
   const changes = opts?.changes ?? [];
   const suffix = action === "updated" && changes.length ? ` · ${changes.length}개 항목` : "";
@@ -349,7 +349,7 @@ export async function logPaymentAdded(orderId: string, amount: number, method: s
   if (!o) return;
   await recordActivity({
     event_type: "payment.added",
-    summary: `💵 입금기록 · ${o.order_no} (${o.company_name}) · ${fmtMoney(amount)}원${method ? ` (${method})` : ""}`,
+    summary: `입금기록 · ${o.order_no} (${o.company_name}) · ${fmtMoney(amount)}원${method ? ` (${method})` : ""}`,
     order_id: o.id,
     order_no: o.order_no,
     meta: { amount, method },
@@ -360,7 +360,7 @@ export async function logPaymentAdded(orderId: string, amount: number, method: s
 export async function logSalesUpload(filename: string, inserted: number, skipped: number): Promise<void> {
   await recordActivity({
     event_type: "sales.upload",
-    summary: `📈 매출 업로드 · ${filename} · 신규 ${inserted.toLocaleString()}건${skipped ? ` (중복 ${skipped.toLocaleString()} 제외)` : ""}`,
+    summary: `매출 업로드 · ${filename} · 신규 ${inserted.toLocaleString()}건${skipped ? ` (중복 ${skipped.toLocaleString()} 제외)` : ""}`,
     meta: { filename, inserted, skipped },
     notify: false,
   });
@@ -376,7 +376,7 @@ export async function logSalesUploadRevert(filename: string, batchId: string, de
 export async function logSalesReportSent(reportType: "daily" | "weekly", baseDate: string, recipients: number): Promise<void> {
   await recordActivity({
     event_type: "sales.report_sent",
-    summary: `✉️ ${reportType === "weekly" ? "주간" : "일일"} 매출 리포트 발송 · ${baseDate} · 수신 ${recipients}명`,
+    summary: `${reportType === "weekly" ? "주간" : "일일"} 매출 리포트 발송 · ${baseDate} · 수신 ${recipients}명`,
     meta: { reportType, baseDate, recipients },
     notify: false,
   });
@@ -384,7 +384,7 @@ export async function logSalesReportSent(reportType: "daily" | "weekly", baseDat
 export async function logSalesConfigChanged(channels: number): Promise<void> {
   await recordActivity({
     event_type: "sales.config_changed",
-    summary: `⚙️ 채널 이익 설정 저장 · ${channels}개 채널`,
+    summary: `채널 이익 설정 저장 · ${channels}개 채널`,
     meta: { channels },
     notify: false,
   });
@@ -394,7 +394,7 @@ export async function logPhoneLookup(phoneDigits: string): Promise<void> {
   const masked = phoneDigits ? `***${phoneDigits.slice(-4)}` : "(빈값)";
   await recordActivity({
     event_type: "sales.phone_lookup",
-    summary: `🔎 주문 검색(전화 조회) · ${masked}`,
+    summary: `주문 검색(전화 조회) · ${masked}`,
     meta: { masked },
     notify: false,
   });

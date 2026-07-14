@@ -47,11 +47,10 @@ export default function VocInsightsPage() {
       {error && <div className="b2b-error">{error}</div>}
 
       {loading ? (
-        <div className="b2b-card"><div className="b2b-empty" style={{ padding: "40px 20px" }}><div className="b2b-empty-icon">🧠</div>클레임을 분석하는 중입니다… (최대 1분)</div></div>
+        <div className="b2b-card"><div className="b2b-empty" style={{ padding: "40px 20px" }}>클레임을 분석하는 중입니다… (최대 1분)</div></div>
       ) : !insight ? (
         <div className="b2b-card">
           <div className="b2b-empty" style={{ padding: "48px 20px", textAlign: "center" }}>
-            <div className="b2b-empty-icon">💡</div>
             <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 15 }}>아직 분석 결과가 없습니다</div>
             <div className="sm-muted" style={{ maxWidth: 520, margin: "0 auto", lineHeight: 1.65 }}>
               위의 <strong>AI 분석 실행</strong> 버튼을 누르면 최근 클레임을 모아 반복 패턴과 개선책을 정리해 드립니다.
@@ -63,13 +62,13 @@ export default function VocInsightsPage() {
           {meta && <div className="sm-faint" style={{ fontSize: 12 }}>최근 {meta.analyzed}건 기준 분석</div>}
 
           <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">📋 종합 진단</span></div>
+            <div className="b2b-card-head"><span className="b2b-card-title">종합 진단</span></div>
             <p style={{ lineHeight: 1.7, fontSize: 14 }}>{insight.summary}</p>
           </section>
 
           {insight.riskAlerts?.length > 0 && (
             <section className="b2b-card" style={{ borderColor: "var(--sm-danger-border)", background: "var(--sm-danger-bg)" }}>
-              <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-danger)" }}>⚠ 즉시 대응 필요</span></div>
+              <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-danger)" }}>즉시 대응 필요</span></div>
               <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 14 }}>
                 {insight.riskAlerts.map((a, i) => <li key={i}>{a}</li>)}
               </ul>
@@ -78,7 +77,7 @@ export default function VocInsightsPage() {
 
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
             <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">🔁 반복 패턴</span></div>
+              <div className="b2b-card-head"><span className="b2b-card-title">반복 패턴</span></div>
               <div className="sm-col" style={{ gap: 10 }}>
                 {(insight.patterns || []).map((p, i) => (
                   <div key={i} className="sm-col" style={{ gap: 2 }}>
@@ -90,7 +89,7 @@ export default function VocInsightsPage() {
             </section>
 
             <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">🎯 근본 원인</span></div>
+              <div className="b2b-card-head"><span className="b2b-card-title">근본 원인</span></div>
               <div className="sm-col" style={{ gap: 10 }}>
                 {(insight.rootCauses || []).map((c, i) => (
                   <div key={i} className="sm-col" style={{ gap: 2 }}>
@@ -103,7 +102,7 @@ export default function VocInsightsPage() {
           </div>
 
           <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">✅ 개선 제안</span></div>
+            <div className="b2b-card-head"><span className="b2b-card-title">개선 제안</span></div>
             <div className="sm-col" style={{ gap: 12 }}>
               {(insight.improvements || []).map((m, i) => (
                 <div key={i} className="sm-row" style={{ gap: 10, alignItems: "flex-start" }}>

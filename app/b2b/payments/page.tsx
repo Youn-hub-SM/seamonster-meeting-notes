@@ -107,7 +107,6 @@ export default function PaymentsPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : !data || data.orders.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">💰</div>
             미수금 발주가 없습니다.
           </div>
         ) : (

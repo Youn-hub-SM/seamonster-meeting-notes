@@ -153,7 +153,7 @@ export default function InventoryPage() {
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={genAdvice} disabled={adviceLoading}>
-            {adviceLoading ? "AI 분석 중…" : advice ? "🧠 다시 분석" : "🧠 AI 조언"}
+            {adviceLoading ? "AI 분석 중…" : advice ? "다시 분석" : "AI 조언"}
           </button>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>
             {loading ? "불러오는 중..." : "새로고침"}
@@ -192,7 +192,7 @@ export default function InventoryPage() {
       {stats.clamped > 0 && (
         <div className="inv-deadline-banner" style={{ background: "#fff0f0", borderColor: "var(--sm-danger-border)" }}>
           <span className="inv-dl-text">
-            <span className="inv-dl-urgent">⚠ 도매 차감으로 {stats.clamped}종이 레이더에서 빠짐</span>
+            <span className="inv-dl-urgent">도매 차감으로 {stats.clamped}종이 레이더에서 빠짐</span>
             <span className="inv-dl-hint"> — 소매 속도가 0이 되어 마감일이 안 잡힙니다({clampedRows.slice(0, 4).map((r) => r.sku).join(", ")}{clampedRows.length > 4 ? " 외" : ""}). 화이트리스트/차감비율을 확인하세요.</span>
           </span>
           <Link href="/production/settings" className="b2b-btn-secondary inv-dl-btn">설정</Link>
@@ -202,9 +202,9 @@ export default function InventoryPage() {
       {(stats.urgent > 0 || stats.soon > 0) && (
         <div className="inv-deadline-banner">
           <span className="inv-dl-text">
-            {stats.urgent > 0 && <span className="inv-dl-urgent">🔴 지금 생산요청 {stats.urgent}종</span>}
+            {stats.urgent > 0 && <span className="inv-dl-urgent">지금 생산요청 {stats.urgent}종</span>}
             {stats.urgent > 0 && stats.soon > 0 && <span className="inv-dl-sep"> · </span>}
-            {stats.soon > 0 && <span className="inv-dl-soon">🟠 7일 내 마감 {stats.soon}종</span>}
+            {stats.soon > 0 && <span className="inv-dl-soon">7일 내 마감 {stats.soon}종</span>}
             <span className="inv-dl-hint"> — 리드타임 {leadDays}일 기준, 이 날짜를 넘기면 만들어도 늦습니다.</span>
           </span>
           <Link href="/production/request" className="b2b-btn-secondary inv-dl-btn">생산요청서</Link>
@@ -215,7 +215,7 @@ export default function InventoryPage() {
       {advice && (
         <section style={{ marginBottom: 18 }}>
           <div className="prod-advice-summary">
-            <div className="prod-advice-summary-icon">🧠</div>
+            <div className="prod-advice-summary-icon"></div>
             <div>{advice.summary}</div>
           </div>
           {advice.priorities && advice.priorities.length > 0 && (
@@ -255,7 +255,6 @@ export default function InventoryPage() {
         <div className="b2b-loading">불러오는 중...</div>
       ) : shown.length === 0 ? (
         <div className="b2b-empty">
-          <div className="b2b-empty-icon">✅</div>
           {onlyNeed ? "지금 추가로 생산할 품목이 없습니다." : "표시할 품목이 없습니다."}
         </div>
       ) : (
@@ -300,7 +299,7 @@ export default function InventoryPage() {
                           <span className="inv-demix-out" title={`도매 발송분 차감 (창내 B2B 발송 ${r.b2bShippedQty} 중 ${r.wholesaleSoldQty})`}>도매↓</span>
                         )}
                         {r.demixClampedToZero && (
-                          <span className="inv-demix-clamp" title="도매 차감으로 소매 속도가 0이 됨 — 마감일이 사라집니다. 화이트리스트/비율 확인 요망">⚠0</span>
+                          <span className="inv-demix-clamp" title="도매 차감으로 소매 속도가 0이 됨 — 마감일이 사라집니다. 화이트리스트/비율 확인 요망">0</span>
                         )}
                       </>
                     ) : (

@@ -148,7 +148,6 @@ export default function ProductHistoryPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : items.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">🗒️</div>
             {hasFilter ? "조건에 맞는 변경 기록이 없습니다." : "아직 기록된 변경이 없습니다."}
           </div>
         ) : (

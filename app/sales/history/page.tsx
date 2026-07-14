@@ -148,7 +148,6 @@ export default function SalesHistoryPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : items.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">🗒️</div>
             {hasFilter ? "조건에 맞는 이력이 없습니다." : "아직 기록된 매출 활동이 없습니다."}
           </div>
         ) : (

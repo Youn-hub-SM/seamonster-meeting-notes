@@ -143,7 +143,7 @@ export default function FulfillStatsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
       {loading ? <div className="b2b-loading">불러오는 중...</div> : tot === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">📦</div>이 기간에 기록된 발송이 없습니다. <Link href="/fulfill/log">배송일지</Link>에서 먼저 기록하세요.</div>
+        <div className="b2b-empty">이 기간에 기록된 발송이 없습니다. <Link href="/fulfill/log">배송일지</Link>에서 먼저 기록하세요.</div>
       ) : (
         <div className="sm-col" style={{ gap: 16 }}>
           {/* KPI */}

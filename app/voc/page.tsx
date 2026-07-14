@@ -312,7 +312,7 @@ export default function VocPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : shown.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">📭</div>{rows.length === 0 ? "아직 등록된 VOC가 없습니다. '+ VOC 추가'로 시작하세요." : "조건에 맞는 VOC가 없습니다."}</div>
+        <div className="b2b-empty">{rows.length === 0 ? "아직 등록된 VOC가 없습니다. '+ VOC 추가'로 시작하세요." : "조건에 맞는 VOC가 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -464,7 +464,7 @@ export default function VocPage() {
                 <label className="b2b-field"><span className="b2b-field-label">손해/보상 금액 (원)</span>
                   <input className="b2b-input" type="number" min={0} value={edit.loss_amount} onChange={(e) => setF("loss_amount", e.target.value)} placeholder="0" /></label>
               </div>
-              {lossHint && <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 4px" }}>💰 {lossHint}</p>}
+              {lossHint && <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 4px" }}>{lossHint}</p>}
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">클레임 유형</span>
                   <select className="b2b-input" value={edit.category} onChange={(e) => setEdit((f) => (f ? { ...f, category: e.target.value, fault: suggestFault(e.target.value) } : f))}>{VOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>

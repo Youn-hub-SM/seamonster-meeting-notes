@@ -298,14 +298,14 @@ export default function ProductionSchedulePage() {
                   {dayPromos.map((p) => (
                     <div key={p.id} className="prod-cal-promo" style={{ background: p.color || "#F15A30" }}
                       title={`${p.name} · 예상 ${p.expectedQty.toLocaleString()}개${p.items && p.items.length ? "\n" + p.items.map((it) => `· ${it.name} ${Number(it.qty).toLocaleString()}`).join("\n") : ""}`} onClick={() => setPromoModal(p)}>
-                      {iso === p.start ? `🎯 ${p.name}` : " "}
+                      {iso === p.start ? `${p.name}` : " "}
                     </div>
                   ))}
                   {bucket && (
                     <div className="prod-cal-items" title={bucket.products.map((x) => `${x.name} ${x.qty.toLocaleString()}개${x.manual ? " (직접)" : ""}`).join("\n")}>
                       {bucket.products.slice(0, 3).map((x, i) => (
                         <div key={i} className="prod-cal-item">
-                          <span className="prod-cal-item-name">{x.manual ? "✏ " : ""}{x.name}</span>
+                          <span className="prod-cal-item-name">{x.manual ? "" : ""}{x.name}</span>
                           <span className="prod-cal-item-qty">{x.qty.toLocaleString()}</span>
                         </div>
                       ))}
@@ -356,7 +356,7 @@ export default function ProductionSchedulePage() {
           {loading ? (
             <div className="b2b-loading">불러오는 중...</div>
           ) : listDays.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: "30px 16px" }}><div className="b2b-empty-icon">🏭</div>{fmode === "일자별" ? `${oneDate} 생산 일정이 없습니다.` : fmode === "지정" ? "선택 기간에 생산 일정이 없습니다." : `다가오는 ${fmode} 내 생산 일정이 없습니다.`}</div>
+            <div className="b2b-empty" style={{ padding: "30px 16px" }}>{fmode === "일자별" ? `${oneDate} 생산 일정이 없습니다.` : fmode === "지정" ? "선택 기간에 생산 일정이 없습니다." : `다가오는 ${fmode} 내 생산 일정이 없습니다.`}</div>
           ) : (
             <div className="b2b-table-wrap">
               <table className="b2b-table">
@@ -433,8 +433,8 @@ export default function ProductionSchedulePage() {
                         기본값 = 안전재고 도달일{safetyDate ? ` (${dayLabel(safetyDate)})` : sel.belowSafety ? " · 이미 안전재고 이하 → 오늘" : ""}. 목표일을 바꾸면 권장량이 다시 계산됩니다.
                       </span>
                     )}
-                    {dateWarn === "sold" && <span style={{ fontSize: 11.5, color: "var(--sm-danger)", marginTop: 3, display: "block", fontWeight: 600 }}>⚠ 이 날짜엔 이미 품절 위험이 있어요. 더 이른 날짜를 권장합니다.</span>}
-                    {dateWarn === "safety" && <span style={{ fontSize: 11.5, color: "var(--sm-warning)", marginTop: 3, display: "block", fontWeight: 600 }}>⚠ 이 날짜엔 재고가 안전재고 밑으로 내려갑니다. 더 이른 날짜가 안전해요.</span>}
+                    {dateWarn === "sold" && <span style={{ fontSize: 11.5, color: "var(--sm-danger)", marginTop: 3, display: "block", fontWeight: 600 }}>이 날짜엔 이미 품절 위험이 있어요. 더 이른 날짜를 권장합니다.</span>}
+                    {dateWarn === "safety" && <span style={{ fontSize: 11.5, color: "var(--sm-warning)", marginTop: 3, display: "block", fontWeight: 600 }}>이 날짜엔 재고가 안전재고 밑으로 내려갑니다. 더 이른 날짜가 안전해요.</span>}
                   </div>
 
                   <div className="b2b-field" style={{ marginTop: 12, opacity: sel ? 1 : 0.5 }}>

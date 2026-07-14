@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     const r = await sendFlowBotNotify(
       {
         event_type: "test",
-        summary: "🔔 [테스트] 씨몬스터 업무 도우미 · B2B 알림 연결 확인",
+        summary: "[테스트] 씨몬스터 업무 도우미 · B2B 알림 연결 확인",
         order_id: null,
         order_no: null,
       },

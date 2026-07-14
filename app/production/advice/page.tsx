@@ -68,7 +68,6 @@ export default function ProductionAdvicePage() {
       {!advice && !loading && !error && (
         <section className="b2b-card">
           <div className="b2b-empty" style={{ padding: "44px 20px" }}>
-            <div className="b2b-empty-icon">🧠</div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>생산 조언 생성을 눌러 시작하세요</div>
             <div style={{ color: "var(--sm-text-mid)", lineHeight: 1.6, fontSize: 13 }}>
               최근 출고 추세로 판매속도를 추정하고, 재고·안전재고·확정 발주를 합쳐<br />
@@ -86,7 +85,7 @@ export default function ProductionAdvicePage() {
       {advice && !loading && (
         <>
           <section className="prod-advice-summary">
-            <div className="prod-advice-summary-icon">🧠</div>
+            <div className="prod-advice-summary-icon"></div>
             <div>{advice.summary}</div>
           </section>
 

@@ -90,7 +90,7 @@ export default function SalesUploadPage() {
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>표준 주문수집 파일이 없을 땐 <strong>양식 다운로드</strong>로 빈 양식을 받아 손으로 채운 뒤 그대로 올리면 됩니다(일회성). 헤더 이름은 바꾸지 마세요.</p>
       </section>
 
-      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>⚠️ {err}</p>}
+      {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
 
       {applied && (
         <section className="b2b-card" style={{ marginTop: 12, borderColor: "var(--sm-success)" }}>

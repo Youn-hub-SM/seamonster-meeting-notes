@@ -95,7 +95,6 @@ export default function MarginPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : rows.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">📊</div>
             {costed.length === 0
               ? "원가가 입력된 제품이 없습니다. 원가표에서 제품 원가를 등록하세요."
               : "검색 결과가 없습니다."}

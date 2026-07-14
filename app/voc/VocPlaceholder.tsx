@@ -12,7 +12,6 @@ export default function VocPlaceholder({ title, desc }: { title: string; desc: s
       </header>
       <section className="b2b-card">
         <div className="b2b-empty" style={{ padding: "48px 20px", textAlign: "center" }}>
-          <div className="b2b-empty-icon">🛠️</div>
           <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 15 }}>준비 중인 기능입니다</div>
           <div style={{ color: "var(--sm-text-mid)", maxWidth: 540, margin: "0 auto", lineHeight: 1.65 }}>{desc}</div>
           <div style={{ marginTop: 22 }}><Link href="/voc" className="b2b-btn-secondary">← VOC 관리 홈</Link></div>

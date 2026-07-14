@@ -31,7 +31,7 @@ export default function AlertsPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : low.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">✅</div>{withMin === 0 ? "안전재고가 설정된 품목이 없습니다. 제품목록에서 기준을 정하세요." : "부족한 품목이 없습니다."}</div>
+        <div className="b2b-empty">{withMin === 0 ? "안전재고가 설정된 품목이 없습니다. 제품목록에서 기준을 정하세요." : "부족한 품목이 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">

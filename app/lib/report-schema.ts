@@ -1,7 +1,7 @@
 // AI 커스텀 리포트가 SQL을 만들 때 참고하는 '스키마 카탈로그'.
 //  · 전부 public 스키마. 금액=원(KRW) 정수. customer_key=전화 HMAC 해시(PII 아님, 고객 식별용).
 //  · order_date=KST 기준일. 재고 현재수량=inventory_txns 에서 status='완료' 의 qty 합.
-//  ⚠ PII(전화·이름) 테이블 sales_customers 는 화이트리스트에서 제외 → 사용 금지.
+//  PII(전화·이름) 테이블 sales_customers 는 화이트리스트에서 제외 → 사용 금지.
 
 // 여기서(run_report=report_ro) 조회 가능한 관계
 export const RUN_HERE_RELATIONS = [

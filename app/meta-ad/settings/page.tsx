@@ -65,7 +65,7 @@ export default function MetaAdSettingsPage() {
     try {
       const j = await (await fetch("/api/meta-ad/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(t) })).json();
       if (!j.ok) throw new Error(j.error);
-      setT(j.thresholds); setMsg("✅ 저장됨");
+      setT(j.thresholds); setMsg("저장됨");
     } catch (e) { setErr(e instanceof Error ? e.message : "저장 오류"); }
     setSaving(false);
   }

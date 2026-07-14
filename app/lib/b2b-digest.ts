@@ -21,7 +21,7 @@ export type DigestConfig = { enabled: boolean; hour: number; days: number; secti
 export const DIGEST_DEFAULTS: DigestConfig = {
   enabled: true, hour: 8, days: 7,
   sections: { ship: true, unscheduled: true, invoice: true, payment: true },
-  title: "☀️ 씨몬스터 B2B 오늘의 할 일",
+  title: "씨몬스터 B2B 오늘의 할 일",
 };
 export async function getDigestConfig(): Promise<DigestConfig> {
   try {
@@ -87,19 +87,19 @@ export async function buildB2BDigest(cfg?: DigestConfig): Promise<B2BDigest> {
   const L: string[] = [`${c.title} — ${today.slice(5)}(${weekday(today)}) 기준 · 향후 ${c.days}일`];
 
   if (!hasTasks) {
-    L.push("", "처리할 미완료 업무가 없습니다. 좋은 하루 되세요 🎉");
+    L.push("", "처리할 미완료 업무가 없습니다. 좋은 하루 되세요");
   } else {
     if (c.sections.ship && byDate.size) {
-      L.push("", `📦 발송 예정 (${counts.ship}건)`);
+      L.push("", `발송 예정 (${counts.ship}건)`);
       [...byDate.keys()].sort().forEach((d) => {
         const items = byDate.get(d)!;
         const head = items.slice(0, 6).map((i) => `${i.name}${i.box ? ` ${i.box}박스` : ""}`);
         L.push(` · ${d.slice(5)}(${weekday(d)}): ${items.length > 6 ? `${head.join(", ")} 외 ${items.length - 6}건` : head.join(", ")}`);
       });
     }
-    if (c.sections.unscheduled && unscheduled.length) L.push("", `🗓 발송일정 미등록 (${unscheduled.length}건) — 일정 잡아야 함`, ` · ${cut(unscheduled.map((o) => nameOf(o)), 8)}`);
-    if (c.sections.invoice && needInvoice.length) L.push("", `🧾 계산서 미발행 (${needInvoice.length}건)`, ` · ${cut(needInvoice.map((o) => `${nameOf(o)} ${won(o.total)}원`), 8)}`);
-    if (c.sections.payment && needPay.length) L.push("", `💰 입금 대기 (${needPay.length}건)`, ` · ${cut(needPay.map((o) => `${nameOf(o)} ${won(o.total)}원`), 8)}`);
+    if (c.sections.unscheduled && unscheduled.length) L.push("", `발송일정 미등록 (${unscheduled.length}건) — 일정 잡아야 함`, ` · ${cut(unscheduled.map((o) => nameOf(o)), 8)}`);
+    if (c.sections.invoice && needInvoice.length) L.push("", `계산서 미발행 (${needInvoice.length}건)`, ` · ${cut(needInvoice.map((o) => `${nameOf(o)} ${won(o.total)}원`), 8)}`);
+    if (c.sections.payment && needPay.length) L.push("", `입금 대기 (${needPay.length}건)`, ` · ${cut(needPay.map((o) => `${nameOf(o)} ${won(o.total)}원`), 8)}`);
   }
   const base = await getAppBaseUrl();
   if (base) L.push("", `→ ${base}/b2b/orders`);

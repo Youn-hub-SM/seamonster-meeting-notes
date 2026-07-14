@@ -683,7 +683,6 @@ export default function OrdersListPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
-            <div className="b2b-empty-icon">📋</div>
             {orders.length === 0 ? (
               <>
                 등록된 발주가 없습니다.

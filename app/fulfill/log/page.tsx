@@ -274,7 +274,7 @@ export default function DeliveryLogPage() {
 
       <div className="b2b-card">
         {loading ? <div className="b2b-loading">불러오는 중...</div> : rows.length === 0 ? (
-          <div className="b2b-empty"><div className="b2b-empty-icon">🚚</div>기록이 없습니다. <Link href="/fulfill">발주처리</Link>에서 &lsquo;배송일지에 기록&rsquo;하거나 위 &lsquo;+ 날짜 추가&rsquo;로 시작하세요.</div>
+          <div className="b2b-empty">기록이 없습니다. <Link href="/fulfill">발주처리</Link>에서 &lsquo;배송일지에 기록&rsquo;하거나 위 &lsquo;+ 날짜 추가&rsquo;로 시작하세요.</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ fontSize: 12.5 }}>
@@ -363,9 +363,9 @@ export default function DeliveryLogPage() {
                                 </table>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">🚚 도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))}(제주 등 수동) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
-                                <span className="sm-faint">📦 파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
-                                <span className="sm-faint">🧊 드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
+                                <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))}(제주 등 수동) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
+                                <span className="sm-faint">파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
+                                <span className="sm-faint">드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
                             </div>
                           </td>

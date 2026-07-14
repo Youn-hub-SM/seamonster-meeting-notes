@@ -160,7 +160,7 @@ export default function VocLossPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty"><div className="b2b-empty-icon">📭</div>집계할 VOC가 없습니다. <Link href="/voc" className="change-link">처리 상태</Link>에서 먼저 등록하세요.</div>
+        <div className="b2b-empty">집계할 VOC가 없습니다. <Link href="/voc" className="change-link">처리 상태</Link>에서 먼저 등록하세요.</div>
       ) : (
         <>
           <section className="b2b-card sm-stat-hero" style={{ marginBottom: 16 }}>
@@ -218,7 +218,7 @@ export default function VocLossPage() {
                 </button>
               )}
             </div>
-            <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>‘현재기준’은 지금 상품 마스터 원가·배송비로 다시 계산한 값입니다. 다르면 ⚠ 표시 — 위 버튼으로 일괄 반영.</p>
+            <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>‘현재기준’은 지금 상품 마스터 원가·배송비로 다시 계산한 값입니다. 다르면 표시 — 위 버튼으로 일괄 반영.</p>
             <div className="b2b-table-wrap">
               <table className="b2b-table">
                 <thead><tr><th>접수일</th><th>제품</th><th>유형</th><th>보상유형</th><th>귀책</th><th className="num">기록 손해</th><th className="num">현재기준</th></tr></thead>
@@ -239,7 +239,7 @@ export default function VocLossPage() {
                           </select>
                         </td>
                         <td className="num b2b-money">{r.loss_amount ? won(r.loss_amount) : "-"}</td>
-                        <td className="num b2b-money" style={{ color: diff ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{diff ? `⚠ ${won(rc)}` : "="}</td>
+                        <td className="num b2b-money" style={{ color: diff ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{diff ? `${won(rc)}` : "="}</td>
                       </tr>
                     );
                   })}

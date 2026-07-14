@@ -33,7 +33,7 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>;
-  if (rows.length === 0) return <div className="b2b-empty"><div className="b2b-empty-icon">📭</div>내역이 없습니다.</div>;
+  if (rows.length === 0) return <div className="b2b-empty">내역이 없습니다.</div>;
 
   return (
     <div className="b2b-table-wrap">

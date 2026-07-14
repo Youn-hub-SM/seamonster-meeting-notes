@@ -47,7 +47,6 @@ export default function ProductionView() {
   if (days.length === 0) {
     return (
       <div className="b2b-empty">
-        <div className="b2b-empty-icon">🏭</div>
         생산 대기·생산 중인 발주가 없습니다.
       </div>
     );

@@ -115,20 +115,20 @@ export default function MarginCalcPage() {
 
       {res && !loading && (
         <div className="sm-col" style={{ gap: 16, marginTop: 16 }}>
-          <div className="sm-faint" style={{ fontSize: 13 }}>🧾 {res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}</div>
+          <div className="sm-faint" style={{ fontSize: 13 }}>{res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}</div>
 
           {res.results.map((r, i) => <ResultCard key={i} r={r} />)}
 
           {res.strategy && (
             <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">💡 판매 전략 제언</span></div>
+              <div className="b2b-card-head"><span className="b2b-card-title">판매 전략 제언</span></div>
               <div style={{ fontSize: 13.5, lineHeight: 1.75, whiteSpace: "pre-wrap", color: "var(--sm-text-mid)" }}>{res.strategy.replace(/\*\*/g, "")}</div>
             </section>
           )}
 
           {res.assumptions?.length > 0 && (
             <div className="sm-faint" style={{ fontSize: 12, lineHeight: 1.7 }}>
-              <strong>⚠️ 가정·주의</strong>
+              <strong>가정·주의</strong>
               <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{res.assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul>
             </div>
           )}
@@ -140,7 +140,7 @@ export default function MarginCalcPage() {
       {/* 프롬프트(계산 지침) 설정 — 접이식 */}
       <section className="b2b-card" style={{ marginTop: 24 }}>
         <button type="button" className="mc-prompt-toggle" onClick={togglePrompt} aria-expanded={pOpen}>
-          <span>⚙️ 프롬프트 설정 <span className="sm-faint" style={{ fontWeight: 400 }}>· 계산 규칙 · 배송/보냉비 단가</span></span>
+          <span>프롬프트 설정 <span className="sm-faint" style={{ fontWeight: 400 }}>· 계산 규칙 · 배송/보냉비 단가</span></span>
           <span className="sm-faint" style={{ fontSize: 12 }}>{pOpen ? "접기 ▲" : "펼치기 ▼"}</span>
         </button>
 
@@ -235,7 +235,7 @@ function ResultCard({ r }: { r: MarginResultItem }) {
           </tbody>
         </table>
       </div>
-      {r.taxNote && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>🧾 {r.taxNote}</p>}
+      {r.taxNote && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>{r.taxNote}</p>}
     </section>
   );
 }

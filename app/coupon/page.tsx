@@ -146,7 +146,7 @@ export default function CouponPage() {
                 <button className="b2b-btn-secondary" onClick={() => setStep(totalSteps - 1)}>← 수정</button>
                 <div className="sm-row" style={{ gap: 8 }}>
                   <button className="b2b-btn-secondary" onClick={reset}>처음부터</button>
-                  <button className="b2b-btn-primary" onClick={copy}>{copied ? "복사됨 ✓" : "📋 요청서 복사"}</button>
+                  <button className="b2b-btn-primary" onClick={copy}>{copied ? "복사됨 ✓" : "요청서 복사"}</button>
                 </div>
               </div>
             </section>
@@ -175,13 +175,13 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
             const off = !!locked[o];
             return (
               <button key={o} type="button" disabled={off} title={off ? locked[o] : undefined} onClick={off ? undefined : () => (f.type === "radio" ? set(f.key, o) : toggle(f.key, o))} style={off ? lockStyle : chipStyle(on)}>
-                {f.type === "checkbox" && !off && <span style={{ marginRight: 4 }}>{on ? "☑" : "☐"}</span>}{o}{off && " 🔒"}
+                {f.type === "checkbox" && !off && <span style={{ display: "inline-block", width: 11, height: 11, marginRight: 5, borderRadius: 3, border: "1.5px solid var(--sm-border)", background: on ? "var(--sm-orange)" : "transparent", verticalAlign: "middle" }} />}{o}{off && <span className="sm-faint" style={{ marginLeft: 4, fontSize: 10 }}>(잠김)</span>}
               </button>
             );
           })}
         </div>
       )}
-      {lockReasons.length > 0 && <p className="sm-faint" style={{ fontSize: 11, marginTop: 5, lineHeight: 1.5, color: "var(--sm-text-light)" }}>{lockReasons.map((r) => `🔒 ${r}`).join("   ")}</p>}
+      {lockReasons.length > 0 && <p className="sm-faint" style={{ fontSize: 11, marginTop: 5, lineHeight: 1.5, color: "var(--sm-text-light)" }}>{lockReasons.join("   ·   ")}</p>}
       {f.type === "text" && <input className="b2b-input" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
       {f.type === "number" && <div className="sm-row" style={{ gap: 6, alignItems: "center" }}><input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} style={{ maxWidth: 200 }} />{f.suffix && <span className="sm-faint" style={{ fontSize: 13 }}>{f.suffix}</span>}</div>}
       {f.type === "textarea" && <textarea className="b2b-input" rows={2} value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
@@ -202,7 +202,7 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
           {rangeInvalid(range) && <p style={{ color: "var(--sm-danger)", fontSize: 12, marginTop: 5 }}>종료가 시작보다 빨라요. 다시 확인하세요.</p>}
         </div>
       )}
-      {f.help && <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 5, lineHeight: 1.5, color: f.help.includes("⚠️") ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{f.help}</p>}
+      {f.help && <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 5, lineHeight: 1.5, color: f.warn ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{f.help}</p>}
     </div>
   );
 }
