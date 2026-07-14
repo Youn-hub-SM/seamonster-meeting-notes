@@ -137,7 +137,7 @@ export default function ReportPage() {
         <div className="rp-thread">
           <span>이어지는 대화</span>
           {turns.map((t, i) => <span key={i} className="rp-thread-q">{t.q}</span>)}
-          <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={newThread}>새 질문 시작</button>
+          <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={newThread}>새 질문 시작</button>
         </div>
       )}
 
@@ -154,10 +154,10 @@ export default function ReportPage() {
       {/* 저장 리포트 변수 입력 */}
       {varForm && (
         <section className="b2b-card" style={{ marginBottom: 14 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">▶ {varForm.rep.name} <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 값을 채우고 실행</span></span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title">▶ {varForm.rep.name} <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>· 값을 채우고 실행</span></span></div>
           <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
             {Object.keys(varForm.values).map((v) => (
-              <label key={v} className="sm-col" style={{ gap: 3, fontSize: 12 }}>
+              <label key={v} className="sm-col" style={{ gap: 3, fontSize: 13 }}>
                 <span style={{ fontWeight: 600, color: "var(--sm-dark)" }}>{v}</span>
                 <input className="b2b-input" style={{ width: 150 }} value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} placeholder={`${v} 값`} />
               </label>
@@ -174,9 +174,9 @@ export default function ReportPage() {
       {plan && (
         <div className="sm-col" style={{ gap: 14 }}>
           <div className="rp-understood">{plan.understood}</div>
-          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 11.5, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({corrected}회)해 실행했어요.</div>}
+          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 13, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({corrected}회)해 실행했어요.</div>}
           {plan.usage && (
-            <div className="sm-faint" style={{ fontSize: 11, marginTop: -8 }}>
+            <div className="sm-faint" style={{ fontSize: 13, marginTop: -8 }}>
               토큰 · 입력 {(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite).toLocaleString()}
               {plan.usage.cacheRead > 0 ? ` (캐시적중 ${plan.usage.cacheRead.toLocaleString()})` : plan.usage.cacheWrite > 0 ? ` (캐시저장 ${plan.usage.cacheWrite.toLocaleString()})` : ""}
               {" · 출력 "}{plan.usage.output.toLocaleString()}
@@ -186,7 +186,7 @@ export default function ReportPage() {
           {!err && (
             <section className="b2b-card">
               <div className="b2b-card-head">
-                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{rows.length}행{rows.length >= 5000 ? " (5,000행 제한)" : ""}</span></span>
+                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>{rows.length}행{rows.length >= 5000 ? " (5,000행 제한)" : ""}</span></span>
                 <div className="sm-row" style={{ gap: 6 }}>
                   <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => { setSaveName(plan.understood?.slice(0, 40) || ""); setSaveSql(plan.sql); setSaveOpen(true); }}>저장</button>
                   <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={exportXlsx} disabled={!rows.length}>엑셀</button>
@@ -194,7 +194,7 @@ export default function ReportPage() {
               </div>
               {rows.length === 0 ? <div className="b2b-empty">결과가 없습니다.</div> : (
                 <div className="b2b-table-wrap" style={{ maxHeight: 480, overflow: "auto" }}>
-                  <table className="b2b-table" style={{ fontSize: 12.5 }}>
+                  <table className="b2b-table">
                     <thead><tr>{cols.map((c) => <th key={c} className={typeof rows[0][c] === "number" ? "num" : ""}>{c}</th>)}</tr></thead>
                     <tbody>
                       {rows.slice(0, 500).map((r, i) => (
@@ -202,10 +202,10 @@ export default function ReportPage() {
                       ))}
                     </tbody>
                   </table>
-                  {rows.length > 500 && <div className="sm-faint" style={{ fontSize: 11, padding: 6 }}>표는 500행까지 표시 · 전체는 엑셀로</div>}
+                  {rows.length > 500 && <div className="sm-faint" style={{ fontSize: 13, padding: 6 }}>표는 500행까지 표시 · 전체는 엑셀로</div>}
                 </div>
               )}
-              {plan.explanation && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>· {plan.explanation}</p>}
+              {plan.explanation && <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>· {plan.explanation}</p>}
               {plan.caveats?.length > 0 && <ul className="rp-caveats">{plan.caveats.map((c, i) => <li key={i}>{c}</li>)}</ul>}
             </section>
           )}
@@ -213,19 +213,19 @@ export default function ReportPage() {
           {plan.looker && plan.looker.mode !== "na" && plan.looker.sql && (
             <section className="b2b-card">
               <div className="b2b-card-head">
-                <span className="b2b-card-title">루커스튜디오용 SQL <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{plan.looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리로 붙여넣기"}</span></span>
+                <span className="b2b-card-title">루커스튜디오용 SQL <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>{plan.looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리로 붙여넣기"}</span></span>
                 <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => copy(plan.looker.sql || "", "looker")}>{copied === "looker" ? "복사됨 ✓" : "복사"}</button>
               </div>
-              {plan.looker.note && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>{plan.looker.note}</p>}
+              {plan.looker.note && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 8 }}>{plan.looker.note}</p>}
               <pre className="rp-sql">{plan.looker.sql}</pre>
             </section>
           )}
 
           <div>
-            <button className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => setShowSql((v) => !v)}>{showSql ? "▾ 생성된 조회 SQL 숨기기" : "▸ 생성된 조회 SQL 보기"}</button>
+            <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => setShowSql((v) => !v)}>{showSql ? "▾ 생성된 조회 SQL 숨기기" : "▸ 생성된 조회 SQL 보기"}</button>
             {showSql && (
               <div className="sm-col" style={{ gap: 4, marginTop: 6 }}>
-                <div className="sm-row" style={{ justifyContent: "flex-end" }}><button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => copy(plan.sql, "sql")}>{copied === "sql" ? "복사됨 ✓" : "SQL 복사"}</button></div>
+                <div className="sm-row" style={{ justifyContent: "flex-end" }}><button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => copy(plan.sql, "sql")}>{copied === "sql" ? "복사됨 ✓" : "SQL 복사"}</button></div>
                 <pre className="rp-sql">{plan.sql}</pre>
               </div>
             )}
@@ -239,12 +239,12 @@ export default function ReportPage() {
           <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-card-head"><span className="b2b-card-title">리포트 저장</span></div>
             <label className="sm-col" style={{ gap: 4, marginBottom: 10 }}>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>이름</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>이름</span>
               <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 월별 채널 매출" />
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>SQL <span className="sm-faint" style={{ fontWeight: 400 }}>— 값을 <code>{"{{이름}}"}</code> 으로 바꾸면 재사용 때 그 값만 입력받습니다 (예: <code>order_month = {"{{월}}"}</code>)</span></span>
-              <textarea className="b2b-input" style={{ minHeight: 120, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 12 }} value={saveSql} onChange={(e) => setSaveSql(e.target.value)} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>SQL <span className="sm-faint" style={{ fontWeight: 400 }}>— 값을 <code>{"{{이름}}"}</code> 으로 바꾸면 재사용 때 그 값만 입력받습니다 (예: <code>order_month = {"{{월}}"}</code>)</span></span>
+              <textarea className="b2b-input" style={{ minHeight: 120, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13 }} value={saveSql} onChange={(e) => setSaveSql(e.target.value)} />
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>취소</button>
@@ -293,7 +293,7 @@ export default function ReportPage() {
                   <tr><td>SSL</td><td>사용 (Enable SSL)</td></tr>
                 </tbody>
               </table>
-              <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>* 이미 매출 대시보드를 만들며 연결해둔 그 데이터소스와 <b>같은 접속정보</b>입니다. 새로 연결할 때만 필요해요.</p>
+              <p className="sm-faint" style={{ fontSize: 13, marginTop: 6 }}>* 이미 매출 대시보드를 만들며 연결해둔 그 데이터소스와 <b>같은 접속정보</b>입니다. 새로 연결할 때만 필요해요.</p>
             </div>
             <div className="rp-guide-block">
               <div className="rp-guide-title">자주 겪는 것</div>

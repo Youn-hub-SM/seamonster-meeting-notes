@@ -84,7 +84,7 @@ export default function MetaLibraryPage() {
             <div className="sm-row" style={{ gap: 6 }}>
               {(["영상", "이미지"] as Format[]).map((t) => (
                 <button key={t} type="button" onClick={() => set("format", t)}
-                  style={{ fontSize: 12, padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontWeight: f.format === t ? 700 : 500, border: f.format === t ? "1px solid var(--sm-orange)" : "1px solid var(--sm-border)", background: f.format === t ? "var(--sm-orange-light)" : "var(--sm-white)", color: f.format === t ? "var(--sm-orange-hover)" : "var(--sm-text-mid)" }}>{t}</button>
+                  style={{ fontSize: 13, padding: "7px 14px", borderRadius: 8, cursor: "pointer", fontWeight: f.format === t ? 700 : 500, border: f.format === t ? "1px solid var(--sm-orange)" : "1px solid var(--sm-border)", background: f.format === t ? "var(--sm-orange-light)" : "var(--sm-white)", color: f.format === t ? "var(--sm-orange-hover)" : "var(--sm-text-mid)" }}>{t}</button>
               ))}
             </div>
           </label>
@@ -120,14 +120,14 @@ export default function MetaLibraryPage() {
             <input className="b2b-input b2b-money" style={{ width: 110, textAlign: "right" }} type="number" step={0.1} value={f.roas} onChange={(e) => set("roas", e.target.value)} placeholder="예: 3.2" />
           </label>
           <div style={{ flex: 1 }} />
-          {msg && <span style={{ fontSize: 12, color: "var(--sm-success)" }}>{msg}</span>}
+          {msg && <span style={{ fontSize: 13, color: "var(--sm-success)" }}>{msg}</span>}
           <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "라이브러리에 저장"}</button>
         </div>
         {err && <div className="b2b-error" style={{ marginTop: 10 }}>{err}</div>}
       </section>
 
       {/* 저장된 소재 */}
-      <div className="b2b-card-head" style={{ marginBottom: 10 }}><span className="b2b-card-title">저장된 소재 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{list.length}개</span></span></div>
+      <div className="b2b-card-head" style={{ marginBottom: 10 }}><span className="b2b-card-title">저장된 소재 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>{list.length}개</span></span></div>
       {loading ? <div className="b2b-loading">불러오는 중...</div> : list.length === 0 ? (
         <div className="b2b-empty">아직 저장된 소재가 없습니다. 위에서 기획해 저장하거나, 보드에서 우수 소재를 저장하세요.</div>
       ) : (
@@ -136,12 +136,12 @@ export default function MetaLibraryPage() {
             <div key={c.id} className="mlib-card">
               <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: "var(--sm-dark)" }}>{c.name}</div>
-                <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: c.format === "영상" ? "#4c6ef51a" : "#2f9e441a", color: c.format === "영상" ? "#4c6ef5" : "#2f9e44", whiteSpace: "nowrap" }}>{c.format}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: c.format === "영상" ? "#4c6ef51a" : "#2f9e441a", color: c.format === "영상" ? "#4c6ef5" : "#2f9e44", whiteSpace: "nowrap" }}>{c.format}</span>
               </div>
               {(c.roas || c.adLibraryUrl) && (
-                <div className="sm-row" style={{ gap: 8, marginTop: 5, fontSize: 11.5, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="sm-row" style={{ gap: 8, marginTop: 5, fontSize: 13, flexWrap: "wrap", alignItems: "center" }}>
                   {c.roas ? <span className="sm-faint">ROAS <b style={{ color: "var(--sm-orange)" }}>{c.roas.toFixed(2)}</b></span> : null}
-                  {c.adLibraryUrl ? <a href={c.adLibraryUrl} target="_blank" rel="noreferrer" style={{ color: "var(--sm-info)", fontSize: 11.5 }}>소재 보기</a> : null}
+                  {c.adLibraryUrl ? <a href={c.adLibraryUrl} target="_blank" rel="noreferrer" style={{ color: "var(--sm-info)", fontSize: 13 }}>소재 보기</a> : null}
                 </div>
               )}
               <div className="mlib-el3">
@@ -149,10 +149,10 @@ export default function MetaLibraryPage() {
                 <div><span className="mlib-tag" style={{ color: "#f76707" }}>스토리</span> {c.story}</div>
                 <div><span className="mlib-tag" style={{ color: "#2f9e44" }}>제안</span> {c.offer}</div>
               </div>
-              {c.note && <div className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>{c.note}</div>}
+              {c.note && <div className="sm-faint" style={{ fontSize: 13, marginTop: 6 }}>{c.note}</div>}
               <div className="sm-row" style={{ gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
-                <button className="b2b-link-btn" style={{ fontSize: 11.5 }} onClick={() => reuse(c)}>재사용(복제)</button>
-                <button className="b2b-link-btn" style={{ fontSize: 11.5, color: "var(--sm-orange)" }} onClick={() => del(c.id)}>삭제</button>
+                <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => reuse(c)}>재사용(복제)</button>
+                <button className="b2b-link-btn" style={{ fontSize: 13, color: "var(--sm-orange)" }} onClick={() => del(c.id)}>삭제</button>
               </div>
             </div>
           ))}
