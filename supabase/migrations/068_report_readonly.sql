@@ -31,6 +31,18 @@ grant select on
   inventory_items
 to report_ro;
 
+-- 1-b) RLS 정책: 060 에서 '정책 없이' RLS만 켜져 있어, 비소유자 report_ro 는 원장/재고 '테이블'을
+--   직접 읽으면 0행이 됨. → 화이트리스트 '테이블'에 report_ro 전용 SELECT 정책(읽기만) 부여.
+--   (분석 '뷰'는 소유자(postgres) 권한으로 실행되어 RLS 우회 → 정책 불필요. sales_customers 는 정책 없음=차단 유지.)
+do $$
+declare t text;
+begin
+  foreach t in array array['sales_orders','products','inventory_txns','inventory_items'] loop
+    execute format('drop policy if exists report_ro_sel on public.%I', t);
+    execute format('create policy report_ro_sel on public.%I for select to report_ro using (true)', t);
+  end loop;
+end $$;
+
 -- 2) 안전 실행 함수 — q(단일 SELECT)를 report_ro 권한으로 실행, JSON 배열 반환
 create or replace function public.run_report(q text)
 returns json
