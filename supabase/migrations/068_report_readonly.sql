@@ -60,6 +60,7 @@ begin
   return r;
 end $$;
 
+grant report_ro to current_user;                             -- 소유권 이전엔 대상 역할의 멤버여야 함(42501 방지)
 alter function public.run_report(text) owner to report_ro;   -- definer = report_ro 권한으로 실행
 revoke all on function public.run_report(text) from public;
 grant execute on function public.run_report(text) to service_role;  -- 서버(서비스키)만 호출
