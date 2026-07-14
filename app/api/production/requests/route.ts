@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     // 작성 알림(변경기록 + Flow 봇)
     if (full) {
       const label = full.title || `품목 ${full.items.length}종 · ${full.total_requested.toLocaleString()}개`;
-      await logProductionRequestCreated(full.req_no || "", label);
+      await logProductionRequestCreated(full.req_no || "", label, who);
     }
     return NextResponse.json({ ok: true, request: full });
   } catch (err) {

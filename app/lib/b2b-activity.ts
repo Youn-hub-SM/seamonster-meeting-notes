@@ -19,6 +19,7 @@ type ActivityInput = {
   order_no?: string | null;
   meta?: Record<string, unknown>;
   notify?: boolean;   // false면 DB 감사기록만 남기고 외부 웹훅(Zapier)은 보내지 않음. 매출 등 비-B2B 이벤트용.
+  actor?: string | null; // 지정 시 currentActor() 대신 이 값을 작업자로 사용(라우트가 이미 해석한 이름).
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
@@ -32,7 +33,7 @@ export async function currentActor(): Promise<string | null> {
 }
 
 async function recordActivity(input: ActivityInput): Promise<void> {
-  const actor = await currentActor();
+  const actor = input.actor !== undefined ? input.actor : await currentActor();
 
   // 1) DB 기록 (대시보드 피드의 소스) — 실패해도 호출 측 작업엔 영향 없음
   try {
@@ -60,15 +61,16 @@ async function recordActivity(input: ActivityInput): Promise<void> {
 
 // ── 도매 생산 요청: 변경기록(활동피드) + notify:true면 Flow 봇 발송 ──
 //  둘 다 fire-and-forget(recordActivity 내부에서 실패 무시) — 호출 측 DB 작업에 영향 없음.
-export async function logProductionRequestCreated(reqNo: string, label: string): Promise<void> {
+export async function logProductionRequestCreated(reqNo: string, label: string, actor?: string | null): Promise<void> {
   await recordActivity({
     event_type: "production_request.created",
     summary: `생산요청 등록 · ${reqNo || "(번호없음)"}${label ? ` · ${label}` : ""}`,
     meta: { req_no: reqNo },
     notify: true, // 작성 시 Flow 알림
+    actor,        // 메시지에 '작업자: {actor}' 로 표시(B2B 작업과 동일)
   });
 }
-export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string): Promise<void> {
+export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string, actor?: string | null): Promise<void> {
   if (fromStatus === toStatus) return;
   // 생산 시작(진행중)·완료만 Flow 알림, 그 외(취소·다시열기)는 변경기록만.
   const notify = toStatus === "진행중" || toStatus === "완료";
@@ -77,6 +79,7 @@ export async function logProductionRequestStatusChanged(reqNo: string, fromStatu
     summary: `생산요청 ${reqNo || "(번호없음)"} · ${fromStatus} → ${toStatus}`,
     meta: { req_no: reqNo, from: fromStatus, to: toStatus },
     notify,
+    actor,
   });
 }
 

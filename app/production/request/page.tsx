@@ -267,8 +267,11 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
           {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 ‘완료 처리’하세요.</p>}
 
           <div className="sm-row" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            {req.status === "요청" && (
+              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>진행 중으로 시작</button>
+            )}
             {req.status !== "완료" && req.status !== "취소" && (
-              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료 처리</button>
+              <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료 처리</button>
             )}
             {(req.status === "완료" || req.status === "취소") && (
               <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>다시 열기</button>
@@ -424,7 +427,7 @@ function CreateModal({ products, busy, onClose, onCreate }: {
                 value=""
                 options={products
                   .filter((p) => !lines.some((l) => l.product_id === p.product_id))
-                  .map((p) => ({ id: p.product_id, label: p.name, sub: `${p.sku ?? ""} ${p.spec ?? ""}`.trim() }))}
+                  .map((p) => ({ id: p.product_id, label: `${p.name}${p.spec ? ` — ${p.spec}` : ""}`, sub: p.sku ?? "" }))}
                 onSelect={(o) => { const p = products.find((x) => x.product_id === o.id); if (p) addLine(p); }}
                 placeholder="품목명·SKU·규격으로 검색해서 선택"
                 ariaLabel="생산 품목 추가"

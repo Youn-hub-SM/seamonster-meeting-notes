@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
 import { PR_STATUSES, type PrStatus } from "@/app/lib/wholesale-production";
 import { logProductionRequestStatusChanged } from "@/app/lib/b2b-activity";
+import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -47,9 +48,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
     const { error } = await sb.from("production_requests").update(patch).eq("id", id);
     if (error) throw error;
-    // 상태 변경 → 변경기록(+진행중/완료면 Flow 알림)
-    if (patch.status !== undefined && prevStatus && prevStatus !== patch.status)
-      await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status));
+    // 상태 변경 → 변경기록(+진행중/완료면 Flow 알림). 작업자(누가 바꿨는지)를 함께 전달.
+    if (patch.status !== undefined && prevStatus && prevStatus !== patch.status) {
+      const token = req.cookies.get("b2b_auth")?.value;
+      const who = (await verifySession(token)) || resolveUserName(token);
+      await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status), who);
+    }
     const [row] = await loadRequests(sb, { id });
     return NextResponse.json({ ok: true, request: row });
   } catch (err) {
