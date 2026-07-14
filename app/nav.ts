@@ -132,6 +132,7 @@ export const NAV: NavCategory[] = [
   {
     label: "기타",
     tools: [
+      { href: "/report", label: "커스텀 리포트", icon: "bars" },
       { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
       { href: "/meeting", label: "회의 정리", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },

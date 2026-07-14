@@ -3012,3 +3012,22 @@ a.b2b-history-item:hover {
   font-size: 13px;
   color: var(--sm-text-light);
 }
+
+/* ── 커스텀 리포트(/report) ── */
+.rp-ask { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 10px; }
+.rp-input { flex: 1; resize: vertical; min-height: 46px; font-size: 14px; line-height: 1.5; }
+.rp-ask .b2b-btn-primary { white-space: nowrap; }
+.rp-chip { font-size: 12px; padding: 5px 11px; border: 1px solid var(--sm-border); border-radius: 999px;
+  background: var(--sm-white); color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
+.rp-chip:hover { background: var(--sm-bg-subtle); border-color: var(--sm-info); color: var(--sm-info); }
+.rp-chip:disabled { opacity: .5; cursor: default; }
+.rp-understood { font-size: 14px; font-weight: 600; color: var(--sm-dark); background: var(--sm-info-bg, #e0f0ff);
+  border-radius: 10px; padding: 10px 14px; }
+.rp-caveats { margin: 8px 0 0; padding-left: 2px; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.rp-caveats li { font-size: 12px; color: var(--sm-orange); line-height: 1.5; }
+.rp-sql { background: #1e1e1e; color: #e6e6e6; border-radius: 8px; padding: 12px 14px; font-size: 12px;
+  line-height: 1.55; overflow-x: auto; white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; }
+@media (max-width: 768px) {
+  .rp-ask { flex-direction: column; align-items: stretch; }
+  .rp-ask .b2b-btn-primary { width: 100%; }
+}
