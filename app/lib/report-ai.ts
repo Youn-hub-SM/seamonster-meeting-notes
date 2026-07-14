@@ -63,7 +63,8 @@ const OUTPUT_RULES = `[출력] 설명 없이 아래 JSON만 반환:
 }
 - sql 은 실제로 실행 가능한 완전한 쿼리. 컬럼 별칭은 한국어로.
 - chart.x/series 는 sql 의 SELECT 별칭과 정확히 일치해야 함(대소문자·한글 그대로). 시계열이면 line, 카테고리 비교면 bar, 비중이면 pie.
-- 표만 필요하면 chart.type="none".`;
+- 표만 필요하면 chart.type="none".
+- 이전 대화(assistant 의 이전 SQL)가 있으면, 새 질문이 그 결과를 '다듬는' 요청일 수 있음(예: "도매만 빼줘"·"월별로"·"상위 20개로"·"작년과 비교"). 그럴 땐 직전 SQL 을 기반으로 수정해 sql 을 다시 만들 것.`;
 
 export async function getReportPrompt(): Promise<string> {
   try {
@@ -128,14 +129,23 @@ async function reportModel(): Promise<string> {
   return k !== "inherit" ? (MODELS[k] ?? MODELS.opus) : MODELS.opus;
 }
 
-export async function planReport(question: string): Promise<ReportPlan> {
+export type ReportTurn = { q: string; sql: string };
+
+export async function planReport(question: string, history?: ReportTurn[]): Promise<ReportPlan> {
   const [framework, model] = await Promise.all([getReportPrompt(), reportModel()]);
+  // 후속 대화: 직전 질문·SQL 을 메시지로 넣어 '정제' 요청을 이해시킴(시스템 캐시는 그대로 유지)
+  const msgs: Anthropic.MessageParam[] = [];
+  for (const h of (history || []).slice(-3)) {
+    msgs.push({ role: "user", content: `[질문]\n${h.q}` });
+    msgs.push({ role: "assistant", content: JSON.stringify({ sql: h.sql }) });
+  }
+  msgs.push({ role: "user", content: `[질문]\n${question.trim()}` });
   const resp = await anthropic.messages.create({
     model,
     max_tokens: 2048,
     // 스키마·규칙(정적 대용량 prefix)은 프롬프트 캐시 → 반복 질문의 입력 토큰 대폭 절감(정확도 영향 0)
     system: [{ type: "text" as const, text: `${framework}\n\n${SCHEMA_BLOCK}\n\n${OUTPUT_RULES}`, cache_control: { type: "ephemeral" as const } }],
-    messages: [{ role: "user", content: `[질문]\n${question.trim()}` }],
+    messages: msgs,
   });
   const block = resp.content.find((b) => b.type === "text");
   const text = block && block.type === "text" ? block.text : "";

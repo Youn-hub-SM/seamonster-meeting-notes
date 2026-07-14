@@ -3054,3 +3054,17 @@ a.b2b-history-item:hover {
 .rp-guide-tips li { font-size: 12.5px; color: var(--sm-text-mid); line-height: 1.6; }
 .rp-guide-body code { background: var(--sm-bg-subtle); border-radius: 5px; padding: 1px 6px; font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--sm-dark); word-break: break-all; }
+/* 저장된 리포트 */
+.rp-saved { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
+.rp-saved-label { font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
+.rp-saved-chip { display: inline-flex; align-items: center; border: 1px solid var(--sm-border); border-radius: 999px; overflow: hidden; background: var(--sm-white); }
+.rp-saved-run { border: none; background: none; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--sm-info); padding: 5px 4px 5px 12px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rp-saved-chip:hover { border-color: var(--sm-info); background: var(--sm-bg-subtle); }
+.rp-saved-del { border: none; background: none; cursor: pointer; color: var(--sm-text-light); font-size: 11px; padding: 5px 9px 5px 4px; }
+.rp-saved-del:hover { color: var(--sm-orange); }
+/* 이어지는 대화 */
+.rp-thread { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: var(--sm-text-mid); }
+.rp-thread-q { background: var(--sm-bg-subtle); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; color: var(--sm-text-mid); max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 저장 다이얼로그 */
+.rp-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 14px; overflow: auto; }
+.rp-modal { background: var(--sm-white); border-radius: 12px; width: min(600px, 100%); padding: 16px 18px 18px; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
