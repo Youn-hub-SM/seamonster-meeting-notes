@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Chart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 type Looker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
@@ -8,15 +8,7 @@ type Usage = { input: number; cacheRead: number; cacheWrite: number; output: num
 type Plan = { understood: string; sql: string; explanation: string; chart?: Chart; looker: Looker; caveats: string[]; usage?: Usage };
 type Row = Record<string, unknown>;
 type Turn = { q: string; sql: string };
-type Saved = { id: string; name: string; question: string; sql: string; chart: Chart; looker: Looker; createdAt: string };
-
-const EXAMPLES = [
-  "이번 달 채널별 매출 상위 10",
-  "월별 매출 추세 최근 12개월",
-  "대구살(DG) 상품군 재구매율",
-  "재고 부족(안전재고 미만) 품목",
-  "최근 30일 신규 vs 재구매 고객 수",
-];
+type Saved = { id: string; name: string; question: string; sql: string; chart: Chart; looker: Looker; createdAt: string; createdBy?: string | null };
 
 function fmt(v: unknown): string {
   if (v == null) return "";
@@ -50,11 +42,21 @@ export default function ReportPage() {
   const [saveSql, setSaveSql] = useState("");
   const [varForm, setVarForm] = useState<{ rep: Saved; values: Record<string, string> } | null>(null);
   const [corrected, setCorrected] = useState(0);
+  const [savedOpen, setSavedOpen] = useState(false);      // 저장 리스트 기본 접힘
+  const [me, setMe] = useState<string | null>(null);       // 현재 로그인 사용자(저장자 매칭)
+  const [savedFilter, setSavedFilter] = useState<"mine" | "all">("mine");
 
   const loadSaved = useCallback(async () => {
     try { const j = await (await fetch("/api/report/saved", { cache: "no-store" })).json(); if (j.ok) setSaved(j.reports || []); } catch { /* noop */ }
   }, []);
   useEffect(() => { loadSaved(); }, [loadSaved]);
+  useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/auth", { cache: "no-store" })).json(); if (j.ok) setMe(j.name); } catch { /* noop */ } })(); }, []);
+
+  // 저장자 필터 — 기본 '내 저장'(로그인 사용자와 createdBy 일치). me 없으면 전체.
+  const filteredSaved = useMemo(
+    () => (savedFilter === "all" || !me ? saved : saved.filter((s) => s.createdBy === me)),
+    [saved, savedFilter, me],
+  );
 
   async function ask(question: string, fresh = false) {
     const qq = question.trim();
@@ -119,15 +121,38 @@ export default function ReportPage() {
         </div>
       </header>
 
-      {/* 저장된 리포트 */}
+      {/* 저장된 리포트 — 기본 접힘, 펼치면 한 줄에 하나씩 전문 표시 */}
       {saved.length > 0 && (
-        <div className="rp-saved">
-          <span className="rp-saved-label">저장됨</span>
-          {saved.map((s) => (
-            <span key={s.id} className="rp-saved-chip">
-              <button className="rp-saved-run" onClick={() => startSaved(s)} disabled={loading} title={s.question || s.name}>{s.name}{extractVars(s.sql).length ? " ⋯" : ""}</button>
-              <button className="rp-saved-del" onClick={() => delSaved(s.id)} title="삭제">✕</button>
-            </span>
+        <div className="rp-saved-box">
+          <div className="rp-saved-bar">
+            <button className="rp-saved-toggle" onClick={() => setSavedOpen((v) => !v)}>
+              <span className="rp-saved-chev">{savedOpen ? "▾" : "▸"}</span>
+              저장된 리포트 <span className="rp-saved-count">{filteredSaved.length}개{savedFilter === "mine" && me ? " · 내 저장" : ""}</span>
+            </button>
+            {savedOpen && me && (
+              <div className="sm-tabs">
+                <button className={`sm-tab ${savedFilter === "mine" ? "is-active" : ""}`} onClick={() => setSavedFilter("mine")}>내 저장</button>
+                <button className={`sm-tab ${savedFilter === "all" ? "is-active" : ""}`} onClick={() => setSavedFilter("all")}>전체</button>
+              </div>
+            )}
+          </div>
+          {savedOpen && (filteredSaved.length === 0 ? (
+            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 리포트가 없습니다. ‘전체’로 바꿔보세요." : "저장된 리포트가 없습니다."}</div>
+          ) : (
+            <div className="rp-saved-list">
+              {filteredSaved.map((s) => (
+                <div key={s.id} className="rp-saved-item" onClick={() => { if (!loading) startSaved(s); }} title="클릭하면 실행">
+                  <span className="rp-saved-name">{s.name}{extractVars(s.sql).length ? <span className="rp-saved-var">변수</span> : null}</span>
+                  {s.question && <div className="rp-saved-q">{s.question}</div>}
+                  <div className="rp-saved-meta">
+                    <span>저장: {s.createdBy || "—"}</span>
+                    <span>·</span>
+                    <span>{s.createdAt.slice(0, 10)}</span>
+                    <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); delSaved(s.id); }}>삭제</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -137,18 +162,22 @@ export default function ReportPage() {
         <div className="rp-thread">
           <span>이어지는 대화</span>
           {turns.map((t, i) => <span key={i} className="rp-thread-q">{t.q}</span>)}
-          <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={newThread}>새 질문 시작</button>
         </div>
       )}
 
       <div className="rp-ask">
         <textarea className="b2b-input rp-input" rows={2} value={q}
-          placeholder={turns.length ? "이어서: 도매만 빼줘 / 월별로 바꿔줘 / 상위 20개로" : "예: 이번 달 채널별 매출 상위 10개 보여줘"}
+          placeholder={turns.length ? "이어서: 도매만 빼줘 / 월별로 바꿔줘 / 상위 20개로" : "질문을 한국어로 적어주세요. 예: 이번 달 채널별 매출 상위 10개"}
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(q); }} />
-        <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading || !q.trim()}>{loading ? "분석 중…" : turns.length ? "이어서 질문" : "조회"}</button>
-      </div>
-      <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-        {EXAMPLES.map((e) => <button key={e} className="rp-chip" onClick={() => ask(e, true)} disabled={loading}>{e}</button>)}
+        <div className="rp-ask-actions">
+          <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading || !q.trim()}>
+            {loading ? "분석 중…" : turns.length ? "이어서 질문" : "조회"}
+            <span className="rp-kbd">Ctrl+Enter</span>
+          </button>
+          {turns.length > 0 && (
+            <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 질문 시작</button>
+          )}
+        </div>
       </div>
 
       {/* 저장 리포트 변수 입력 */}

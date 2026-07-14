@@ -3014,9 +3014,12 @@ a.b2b-history-item:hover {
 }
 
 /* ── 커스텀 리포트(/report) ── */
-.rp-ask { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 10px; }
+.rp-ask { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 14px; }
 .rp-input { flex: 1; resize: vertical; min-height: 46px; font-size: 14px; line-height: 1.5; }
 .rp-ask .b2b-btn-primary { white-space: nowrap; }
+.rp-ask-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.rp-ask-actions button { white-space: nowrap; justify-content: center; }  /* 두 버튼 동일 크기(넓은 쪽에 맞춤) */
+.rp-kbd { display: block; font-size: 11px; font-weight: 500; opacity: .75; margin-top: 1px; }
 .rp-chip { font-size: 13px; padding: 5px 11px; border: 1px solid var(--sm-border); border-radius: 999px;
   background: var(--sm-white); color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
 .rp-chip:hover { background: var(--sm-bg-subtle); border-color: var(--sm-info); color: var(--sm-info); }
@@ -3029,7 +3032,7 @@ a.b2b-history-item:hover {
   line-height: 1.55; overflow-x: auto; white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 0; }
 @media (max-width: 768px) {
   .rp-ask { flex-direction: column; align-items: stretch; }
-  .rp-ask .b2b-btn-primary { width: 100%; }
+  .rp-ask-actions { width: 100%; }
 }
 /* 루커 적용 가이드 */
 .rp-guide { margin-top: 22px; border: 1px solid var(--sm-border); border-radius: 12px; background: var(--sm-white); overflow: hidden; }
@@ -3054,14 +3057,22 @@ a.b2b-history-item:hover {
 .rp-guide-tips li { font-size: 13px; color: var(--sm-text-mid); line-height: 1.6; }
 .rp-guide-body code { background: var(--sm-bg-subtle); border-radius: 5px; padding: 1px 6px; font-size: 13px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--sm-dark); word-break: break-all; }
-/* 저장된 리포트 */
-.rp-saved { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
-.rp-saved-label { font-size: 13px; font-weight: 700; color: var(--sm-text-mid); }
-.rp-saved-chip { display: inline-flex; align-items: center; border: 1px solid var(--sm-border); border-radius: 999px; overflow: hidden; background: var(--sm-white); }
-.rp-saved-run { border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--sm-info); padding: 5px 4px 5px 12px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rp-saved-chip:hover { border-color: var(--sm-info); background: var(--sm-bg-subtle); }
-.rp-saved-del { border: none; background: none; cursor: pointer; color: var(--sm-text-light); font-size: 13px; padding: 5px 9px 5px 4px; }
-.rp-saved-del:hover { color: var(--sm-orange); }
+/* 저장된 리포트 — 접이식 목록(펼치면 한 줄에 하나씩 전문 표시) */
+.rp-saved-box { margin-bottom: 14px; border: 1px solid var(--sm-border); border-radius: 12px; background: var(--sm-white); overflow: hidden; }
+.rp-saved-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; flex-wrap: wrap; }
+.rp-saved-toggle { display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; font-size: 14px; font-weight: 700; color: var(--sm-dark); }
+.rp-saved-chev { color: var(--sm-text-light); font-size: 13px; }
+.rp-saved-count { font-weight: 600; color: var(--sm-text-mid); }
+.rp-saved-list { border-top: 1px solid var(--sm-border-light, #f4f4f4); display: flex; flex-direction: column; }
+.rp-saved-item { padding: 12px 14px; border-bottom: 1px solid var(--sm-border-light, #f4f4f4); cursor: pointer; }
+.rp-saved-item:last-child { border-bottom: none; }
+.rp-saved-item:hover { background: var(--sm-bg-subtle); }
+.rp-saved-name { font-size: 15px; font-weight: 700; color: var(--sm-info); display: inline-flex; align-items: center; gap: 8px; }
+.rp-saved-var { font-size: 12px; font-weight: 700; color: var(--sm-orange); background: var(--sm-orange-light); border-radius: 999px; padding: 1px 8px; }
+.rp-saved-q { font-size: 13.5px; color: var(--sm-text-mid); line-height: 1.55; margin-top: 3px; }
+.rp-saved-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sm-text-light); margin-top: 7px; }
+.rp-saved-del2 { margin-left: auto; background: none; border: 1px solid var(--sm-border); border-radius: 7px; cursor: pointer; color: var(--sm-text-mid); font-size: 13px; padding: 3px 10px; }
+.rp-saved-del2:hover { color: var(--sm-danger); border-color: var(--sm-danger); }
 /* 이어지는 대화 */
 .rp-thread { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; color: var(--sm-text-mid); }
 .rp-thread-q { background: var(--sm-bg-subtle); border-radius: 999px; padding: 3px 10px; font-size: 13px; color: var(--sm-text-mid); max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

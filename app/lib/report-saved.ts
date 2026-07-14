@@ -13,6 +13,7 @@ export type SavedReport = {
   chart: ReportChart;
   looker: ReportLooker;
   createdAt: string;
+  createdBy?: string | null;  // 저장자(이름). 레거시 레코드는 없을 수 있음.
 };
 
 const KEY = "report_saved_list";
