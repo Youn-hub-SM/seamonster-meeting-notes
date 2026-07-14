@@ -3031,3 +3031,26 @@ a.b2b-history-item:hover {
   .rp-ask { flex-direction: column; align-items: stretch; }
   .rp-ask .b2b-btn-primary { width: 100%; }
 }
+/* 루커 적용 가이드 */
+.rp-guide { margin-top: 22px; border: 1px solid var(--sm-border); border-radius: 12px; background: var(--sm-white); overflow: hidden; }
+.rp-guide-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 13px 16px; background: none; border: none; cursor: pointer; font-size: 14px; font-weight: 700; color: var(--sm-dark); text-align: left; }
+.rp-guide-head:hover { background: var(--sm-bg-subtle); }
+.rp-guide-chev { color: var(--sm-text-light); font-size: 12px; }
+.rp-guide-body { padding: 6px 18px 18px; border-top: 1px solid var(--sm-border-light, #f4f4f4); }
+.rp-guide-lead { font-size: 13px; color: var(--sm-text-mid); line-height: 1.6; margin: 12px 0 6px; }
+.rp-guide-block { margin-top: 16px; }
+.rp-guide-title { font-size: 13.5px; font-weight: 700; color: var(--sm-dark); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rp-guide-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.rp-guide-tag.ok { background: #e6f4ea; color: #1e7e34; }
+.rp-guide-tag.warn { background: var(--sm-orange-light, rgba(241,90,48,.08)); color: var(--sm-orange); }
+.rp-guide-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.rp-guide-steps li { font-size: 13px; color: var(--sm-text-mid); line-height: 1.6; }
+.rp-guide-note { font-size: 12px; color: var(--sm-text-light); line-height: 1.6; margin: 8px 0 0; padding: 8px 11px; background: var(--sm-bg-subtle); border-radius: 8px; }
+.rp-guide-conn { border-collapse: collapse; font-size: 12.5px; }
+.rp-guide-conn td { padding: 4px 12px 4px 0; vertical-align: top; }
+.rp-guide-conn td:first-child { color: var(--sm-text-light); white-space: nowrap; }
+.rp-guide-tips { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.rp-guide-tips li { font-size: 12.5px; color: var(--sm-text-mid); line-height: 1.6; }
+.rp-guide-body code { background: var(--sm-bg-subtle); border-radius: 5px; padding: 1px 6px; font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--sm-dark); word-break: break-all; }
