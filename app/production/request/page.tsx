@@ -95,16 +95,6 @@ function WholesaleTab() {
     setBusy(false);
   }
 
-  async function setAssignee(id: string, assignee: string) {
-    setBusy(true); setError("");
-    try {
-      const j = await (await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assignee }) })).json();
-      if (!j.ok) throw new Error(j.error || "담당자 변경 실패");
-      applyUpdated(j.request);
-    } catch (e) { setError(e instanceof Error ? e.message : "담당자 오류"); }
-    setBusy(false);
-  }
-
   async function removeRequest(id: string) {
     if (!confirm("이 요청서를 삭제할까요? (입고 기록이 있으면 삭제 대신 '취소'만 됩니다)")) return;
     setBusy(true); setError("");
@@ -172,7 +162,6 @@ function WholesaleTab() {
               onReceive={(body) => receive(r.id, body)}
               onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
               onStatus={(s) => patchStatus(r.id, s)}
-              onAssign={(v) => setAssignee(r.id, v)}
               onDelete={() => removeRequest(r.id)}
             />
           ))}
@@ -204,28 +193,12 @@ function StatusBadge({ status }: { status: PrStatus }) {
   return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}>{status}</span>;
 }
 
-// 생산 담당자 편집 — 이름 입력 후 값이 바뀌면 '저장' 노출.
-function AssigneeEditor({ value, busy, onSave }: { value: string | null; busy: boolean; onSave: (v: string) => void }) {
-  const [v, setV] = useState(value || "");
-  useEffect(() => { setV(value || ""); }, [value]);
-  const changed = v.trim() !== (value || "");
-  return (
-    <span className="sm-row" style={{ gap: 6, alignItems: "center" }}>
-      <input className="b2b-input" style={{ width: 150, padding: "4px 9px" }} value={v} onChange={(e) => setV(e.target.value)} placeholder="담당자 이름" disabled={busy} />
-      {changed
-        ? <button className="b2b-btn-primary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => onSave(v.trim())}>저장</button>
-        : (!value && <span className="sm-faint" style={{ fontSize: 13 }}>미지정</span>)}
-    </span>
-  );
-}
-
-function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onAssign, onDelete }: {
+function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onReceive: (body: { item_id: string; qty: number; receipt_date: string; memo: string }) => Promise<boolean>;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
-  onAssign: (v: string) => void;
   onDelete: () => void;
 }) {
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
@@ -236,7 +209,7 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
         <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</span>
         <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
         <StatusBadge status={req.status} />
-        <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.requested_by ? ` · 요청 ${req.requested_by}` : ""}{req.assignee ? ` · 담당 ${req.assignee}` : ""}</span>
+        <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.requested_by ? ` · 요청 ${req.requested_by}` : ""}</span>
         {req.title && <span style={{ fontSize: 13, color: "var(--sm-black)", fontWeight: 600 }}>{req.title}</span>}
         <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>품목 {req.items.length}</span>
         <span style={{ flex: 1, minWidth: 140, maxWidth: 260 }}><ProgressBar received={req.total_received} requested={req.total_requested} /></span>
@@ -245,11 +218,6 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
       {expanded && (
         <div style={{ borderTop: "1px solid var(--sm-border-light)", padding: 14 }}>
           {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
-
-          <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-text-mid)" }}>생산 담당자</span>
-            <AssigneeEditor value={req.assignee} busy={busy} onSave={onAssign} />
-          </div>
 
           <div className="b2b-table-wrap">
             <table className="b2b-table">
@@ -264,14 +232,14 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
             </table>
           </div>
 
-          {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 ‘완료 처리’하세요.</p>}
+          {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 ‘완료’를 누르세요.</p>}
 
           <div className="sm-row" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
             {req.status === "요청" && (
-              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>진행 중으로 시작</button>
+              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>진행</button>
             )}
             {req.status !== "완료" && req.status !== "취소" && (
-              <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료 처리</button>
+              <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료</button>
             )}
             {(req.status === "완료" || req.status === "취소") && (
               <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>다시 열기</button>
