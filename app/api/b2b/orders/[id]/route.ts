@@ -153,7 +153,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .map((r) => ({ id: r.id, product_id: r.product_id ?? null, product_name: r.product_name, spec: r.spec }));
 
     // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
-    const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)));
+    const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)), body.ship_date, body.status);
     // 복수발송(차수 2개 이상)이면 메인 발송일은 두지 않음(차수별 날짜로 관리). 단일/없음이면 메인 발송일 사용.
     const splitCount = (body.shipments ?? []).filter((s) => s.ship_date || (Array.isArray(s.items) && s.items.some((i) => Number(i.qty) > 0))).length;
     const headerShipDate = splitCount >= 2 ? null : (body.ship_date || earliestShipDate || null);

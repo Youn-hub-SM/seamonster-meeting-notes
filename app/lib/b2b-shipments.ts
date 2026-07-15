@@ -69,9 +69,18 @@ export async function saveOrderShipments(
   recipient: RecipientInput,
   schedules: ShipmentScheduleInput[],
   orderItems: SavedOrderItem[],
-  orderBoxCount = 1
+  orderBoxCount = 1,
+  headerShipDate?: string | null,
+  headerStatus?: ShipmentScheduleInput["status"] | null
 ): Promise<{ earliestShipDate: string | null; derivedStatus: string | null; totalBoxes: number }> {
   const sb = supabaseAdmin();
+
+  // 발주 헤더의 '발송예정일'만 입력하고 발송 차수를 따로 만들지 않은 단일 발송 발주 —
+  //  그 발송예정일로 차수 하나를 만들어 재고 차감·발송 관리가 동작하게 한다(가장 흔한 사용 흐름).
+  //  차수를 이미 하나라도 만든 경우(분할발송)엔 손대지 않는다.
+  if (headerShipDate && !(schedules || []).some((s) => s.ship_date || (s.items || []).some((it) => Number(it.qty) > 0))) {
+    schedules = [{ ship_date: headerShipDate, status: headerStatus || "발송대기", tracking_no: "", box_count: 1, stock_out: true, items: [] }];
+  }
 
   // 즉시출고(재고 선점) 가능 여부 + 거래처명(원장 표시용) 준비
   const canDeduct = await stockOutAvailable(sb);
