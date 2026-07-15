@@ -52,9 +52,6 @@ export default function ProductionAdvicePage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">생산 조언</h1>
-          <p className="b2b-page-subtitle">
-            재고관리 현재고·판매속도 + B2B 확정 발주를 종합해 Claude가 “무엇을 얼마나 언제 만들지”를 짚어줍니다.
-          </p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={generate} disabled={loading}>

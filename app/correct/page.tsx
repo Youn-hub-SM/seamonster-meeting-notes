@@ -183,10 +183,7 @@ export default function CorrectPage() {
 
   return (
     <div className="container">
-      <h1 className="page-title">문장 교정</h1>
-      <p className="page-subtitle">
-        씨몬스터 톤앤매너에 맞게 문장을 교정합니다
-      </p>
+      <h1 className="page-title" style={{ marginBottom: "var(--sm-space-6)" }}>문장 교정</h1>
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">

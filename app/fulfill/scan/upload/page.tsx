@@ -119,9 +119,6 @@ export default function ScanUploadPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">송장 업로드</h1>
-          <p className="b2b-page-subtitle">
-            택배사 <strong>&lsquo;파일접수 상세내역&rsquo;</strong>(운송장번호·상품코드·내품수량) 엑셀/CSV를 <strong>여러 개 한 번에</strong> 올릴 수 있습니다. 올린 데이터는 모두 하나의 풀에 쌓이고, <Link href="/fulfill/scan">송장 스캔</Link> 화면에서 전체를 대상으로 스캔합니다.
-          </p>
         </div>
         <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/scan">송장 스캔 →</Link></div>
       </header>
@@ -133,7 +130,7 @@ export default function ScanUploadPage() {
           <a href="/api/fulfill/scan/template" className="sm-link" style={{ fontSize: 12 }}>양식 다운로드</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-          엑셀(.xlsx)·CSV, <strong>여러 파일 선택 가능</strong>. 열 제목에서 <strong>송장번호·상품코드·수량</strong>을 자동 인식하고, NOTHING(정기배송 등)은 제외합니다. 송장번호는 하이픈이 있어도/없어도 동일하게 인식돼요.
+          택배사 <strong>&lsquo;파일접수 상세내역&rsquo;</strong> 엑셀(.xlsx)·CSV, <strong>여러 파일 선택 가능</strong>. 열 제목에서 <strong>송장번호·상품코드·수량</strong>을 자동 인식하고, NOTHING(정기배송 등)은 제외합니다. 송장번호는 하이픈이 있어도/없어도 동일하게 인식돼요.
           <br /><strong>고객정보(받는분·전화·주소)는 이 브라우저에서 제거</strong>되고, <strong>송장번호·상품코드·수량만</strong> 저장됩니다(파일 원본은 서버로 전송되지 않아요).
         </p>
         <div className="sm-row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>

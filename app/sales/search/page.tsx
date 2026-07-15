@@ -59,7 +59,6 @@ export default function SalesSearchPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">주문 검색</h1>
-          <p className="b2b-page-subtitle">전화번호로 구매/재구매 이력을 확인하거나, 주문번호·상품명·기간으로 매출 원장을 조회합니다.</p>
         </div>
       </header>
 

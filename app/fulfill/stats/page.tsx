@@ -130,7 +130,6 @@ export default function FulfillStatsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">발송 통계</h1>
-          <p className="b2b-page-subtitle">배송일지 기록으로 <strong>주차·월별 발송량과 운임, 요일별 평균, 박스종류</strong>를 분석합니다. 그래프에 마우스를 올리면 수치가 보여요. <Link href="/fulfill/log">배송일지</Link>에서 기록·수정하면 반영됩니다.</p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <div className="sm-tabs" style={{ margin: 0 }}>

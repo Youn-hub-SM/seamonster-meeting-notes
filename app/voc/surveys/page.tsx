@@ -79,7 +79,6 @@ export default function VocSurveysPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설문 응답 수집</h1>
-          <p className="b2b-page-subtitle">Tally 등 설문 응답을 모으고 분석합니다. (불만 클레임은 <Link href="/voc" className="sm-link">처리 상태</Link>)</p>
         </div>
         <div className="b2b-page-actions">
           <Link href="/voc/settings" className="b2b-btn-secondary">연동 설정</Link>

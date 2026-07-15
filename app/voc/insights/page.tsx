@@ -37,7 +37,6 @@ export default function VocInsightsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC AI 인사이트</h1>
-          <p className="b2b-page-subtitle">접수된 클레임을 AI가 읽고 반복 패턴·근본 원인·개선책을 뽑아줍니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={run} disabled={loading}>{loading ? "분석 중..." : insight ? "다시 분석" : "AI 분석 실행"}</button>

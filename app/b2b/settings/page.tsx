@@ -194,7 +194,6 @@ export default function SettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설정</h1>
-          <p className="b2b-page-subtitle">Zapier(외부) 알림을 이벤트·상태별로 켜고 끕니다. 히스토리 기록은 항상 모두 남습니다.</p>
         </div>
         <div className="b2b-page-actions">
           {savedAt && <span style={{ fontSize: 12, color: "var(--sm-success)", alignSelf: "center" }}>{savedAt}</span>}

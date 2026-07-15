@@ -34,7 +34,6 @@ export default function MakerRequestPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">제조사 요청서</h1>
-          <p className="b2b-page-subtitle">제조사에 보낼 생산 요청을 생산예정일 기준으로 일/주/월 단위로 집계합니다.</p>
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-primary" href={downloadUrl} style={{ textDecoration: "none" }}>엑셀 다운로드</a>

@@ -578,10 +578,6 @@ export default function OrdersListPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">발주 관리</h1>
-          <p className="b2b-page-subtitle">
-            {SHOW_ORDER_PRODUCTION ? "발주·생산·발송 일정과 입금 상태를 한 화면에서 관리합니다." : "발주·발송 일정과 입금 상태를 한 화면에서 관리합니다."}
-            {orders.length > 0 && ` (전체 ${orders.length}건)`}
-          </p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>

@@ -82,7 +82,6 @@ export default function MarginCalcPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">이익률 계산기 <span className="mc-ai">AI</span></h1>
-          <p className="b2b-page-subtitle">상품·채널·판매가(할인)를 말로 물어보면, <strong>원가표·채널 수수료·배송/세무 정책</strong>을 근거로 <strong>순이익과 이익률</strong>을 계산하고 판매 전략을 제언합니다. 원가·정책은 <Link href="/b2b/products">상품 마스터</Link>·<Link href="/sales/profit">채널별 이익 설정</Link>을 따릅니다.</p>
         </div>
       </header>
 

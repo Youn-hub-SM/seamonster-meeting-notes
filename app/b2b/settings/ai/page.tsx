@@ -128,7 +128,6 @@ export default function AiSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">AI 설정</h1>
-          <p className="b2b-page-subtitle">기능별 AI 모델과 프롬프트를 지정합니다. 코드 수정·재배포 없이 즉시 반영됩니다.</p>
         </div>
       </header>
 

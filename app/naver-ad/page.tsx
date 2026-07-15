@@ -386,7 +386,6 @@ export default function NaverAdPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">네이버 광고</h1>
-          <p className="b2b-page-subtitle">광고유형을 먼저 고르고, 기간별 광고비·ROAS·CPC·CTR로 입찰가를 조정합니다. 기본은 <b>광고비가 나간 것</b>만 <b>비용 높은 순</b>.</p>
         </div>
         {changes.length > 0 && (
           <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center" }}>

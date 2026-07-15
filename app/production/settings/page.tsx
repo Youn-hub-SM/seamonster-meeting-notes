@@ -156,7 +156,6 @@ export default function ProductionSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설정</h1>
-          <p className="b2b-page-subtitle">박스히어로 연동 · 생산 리드타임 · 생산 품목명 · 채널 분리.</p>
         </div>
       </header>
 

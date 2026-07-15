@@ -109,7 +109,6 @@ export default function CrmPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">CRM 메시지맵</h1>
-          <p className="b2b-page-subtitle">고객 여정 단계별 CRM 메시지를 한눈에 보고, 앱에서 바로 편집합니다.</p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center" }}>
           <button className="b2b-btn-primary" onClick={() => openNew()}>+ 메시지 추가</button>

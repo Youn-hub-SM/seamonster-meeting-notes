@@ -67,7 +67,6 @@ export default function BundlesPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">묶음 상품</h1>
-          <p className="b2b-page-subtitle">세트 SKU를 <strong>구성품 × 수량</strong>으로 묶습니다(원가·가격 불필요). 판매/구매 엑셀에 세트 SKU가 나오면 자동으로 구성품으로 분해돼요. <strong>엑셀로 한 번에 등록</strong>하세요.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={() => setAddOpen(true)}>+ 직접 추가</button>

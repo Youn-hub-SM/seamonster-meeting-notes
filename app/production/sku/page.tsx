@@ -55,9 +55,6 @@ export default function SkuGeneratorPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">SKU 생성기</h1>
-          <p className="b2b-page-subtitle">
-            라인·어종·규격을 고르면 기존 SKU 규칙대로 코드를 만들어줍니다. 중복도 즉시 확인됩니다.
-          </p>
         </div>
       </header>
 

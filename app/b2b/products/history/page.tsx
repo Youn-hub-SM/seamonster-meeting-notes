@@ -109,10 +109,6 @@ export default function ProductHistoryPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">상품 마스터 변경 기록</h1>
-          <p className="b2b-page-subtitle">
-            상품 마스터의 모든 변경(등록·수정·삭제)을 항목별 이전값→새값까지 영구 기록합니다.
-            수동 편집·엑셀 업로드·품목 업로드(생산) 경로 모두 포함.
-          </p>
         </div>
         <div className="b2b-page-actions">
           <Link className="b2b-btn-secondary" href="/b2b/products">← 상품 목록</Link>

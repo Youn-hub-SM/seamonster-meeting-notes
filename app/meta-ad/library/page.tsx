@@ -67,7 +67,6 @@ export default function MetaLibraryPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">메타 소재 라이브러리</h1>
-          <p className="b2b-page-subtitle">잘 나온 소재를 <b>후킹·스토리·제안</b> 3요소로 기획·아카이빙해 재사용합니다. 이미지·영상은 <b>광고 라이브러리 링크</b>로 확인(업로드 없음). <Link href="/meta-ad">← 보드로</Link></p>
         </div>
       </header>
 

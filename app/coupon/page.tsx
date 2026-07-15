@@ -79,7 +79,6 @@ export default function CouponPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">쿠폰 등록 요청서</h1>
-          <p className="b2b-page-subtitle">채널을 고르고 하나씩 선택하면 <strong>일관된 요청서</strong>가 만들어집니다. 완료 후 복사해 Flow 태스크로 등록하세요. 요청서는 MD의 <strong>등록 체크리스트</strong>가 됩니다.</p>
         </div>
         {channel && <div className="b2b-page-actions"><button className="b2b-btn-secondary" onClick={reset}>채널 다시 선택</button></div>}
       </header>

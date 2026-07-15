@@ -98,9 +98,6 @@ export default function CompaniesPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">업체 주소록</h1>
-          <p className="b2b-page-subtitle">
-            거래처 정보 · 사업자등록번호 · 결제 조건을 관리합니다. {companies.length > 0 && `(전체 ${companies.length}개)`}
-          </p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>

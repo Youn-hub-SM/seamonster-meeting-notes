@@ -50,7 +50,7 @@ export default function FulfillSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">택배 단가 설정</h1>
-          <p className="b2b-page-subtitle">단가는 <strong>적용 시작일</strong>별로 관리돼 <strong>소급 적용되지 않습니다</strong>. 가격이 바뀌면 &lsquo;+ 새 단가(적용일부터)&rsquo;로 추가하세요. 각 날짜의 <Link href="/fulfill/log">배송일지</Link>는 그 날짜에 유효했던 단가로 계산됩니다.</p>
+          <p className="b2b-page-subtitle">단가는 적용 시작일별로 관리 — 소급 적용되지 않습니다</p>
         </div>
         <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>{saving ? "저장 중…" : "저장"}</button></div>
       </header>

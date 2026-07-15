@@ -51,7 +51,7 @@ export default function UsersPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">로그인 계정 관리</h1>
-          <p className="b2b-page-subtitle">여기서 추가한 계정은 즉시 로그인할 수 있습니다(재배포 불필요). 비밀번호로 사용자를 구분합니다.</p>
+          <p className="b2b-page-subtitle">비밀번호로 사용자를 구분합니다</p>
         </div>
       </header>
 

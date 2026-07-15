@@ -132,9 +132,7 @@ export default function ReportsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출 집계</h1>
-          <p className="b2b-page-subtitle">
-            발주일 기준 · 취소를 제외한 발주를 발주일이 속한 기간으로 집계합니다.
-          </p>
+          <p className="b2b-page-subtitle">발주일 기준 · 취소 제외</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>

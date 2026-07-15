@@ -68,7 +68,6 @@ export default function StatementPage() {
       <header className="b2b-page-head no-print">
         <div>
           <h1 className="b2b-page-title">거래명세표</h1>
-          <p className="b2b-page-subtitle">인쇄하거나 PDF 로 저장해 거래처에 전달하세요. 공급자 정보·직인은 설정에서 관리합니다.</p>
         </div>
         <div className="b2b-page-actions">
           <Link href="/b2b/orders" className="b2b-btn-secondary">발주 목록</Link>

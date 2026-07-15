@@ -70,9 +70,7 @@ export default function ProductsUploadPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">품목 업로드</h1>
-          <p className="b2b-page-subtitle">
-            박스히어로 품목 내보내기(엑셀)를 올리면 SKU 기준으로 신규 추가·이름 갱신합니다. 금액은 가져오지 않습니다(B2B 원가 보존).
-          </p>
+          <p className="b2b-page-subtitle">금액은 가져오지 않습니다 — 원가 보존</p>
         </div>
       </header>
 

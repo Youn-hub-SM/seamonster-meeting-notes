@@ -154,9 +154,6 @@ export default function CsPage() {
       <div className="csm-head">
         <div>
           <h1 className="page-title">CS 응대 코치</h1>
-          <p className="page-subtitle" style={{ marginBottom: 0 }}>
-            지금 상황을 적으면 — 매뉴얼은 이렇고, 그러니 어떻게 행동하면 되는지 코치합니다 (답변 초안까지)
-          </p>
         </div>
         <Link href="/cs/manual" className="btn-secondary csm-back">매뉴얼 관리</Link>
       </div>

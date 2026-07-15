@@ -78,9 +78,6 @@ export default function InventoryMovePage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">재고 옮기기 (소매 ↔ 도매)</h1>
-          <p className="b2b-page-subtitle">
-            소매용으로 만든 제품을 도매로, 또는 그 반대로 <strong>재고를 옮깁니다</strong>. 한쪽에서 빼고 다른 쪽에 더하는 걸 한 번에 처리해요.
-          </p>
         </div>
       </header>
 

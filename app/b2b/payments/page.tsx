@@ -62,9 +62,6 @@ export default function PaymentsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">입금 확인</h1>
-          <p className="b2b-page-subtitle">
-            입금전·일부입금 발주를 한 화면에서 — 발주를 눌러 입금 상태를 바꾸세요.
-          </p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>

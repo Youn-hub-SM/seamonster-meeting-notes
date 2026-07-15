@@ -53,7 +53,7 @@ export default function TradePage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">구매 및 판매</h1><p className="b2b-page-subtitle">여러 제품을 한 화면에 담아 기록하거나, <strong>엑셀</strong>로 한 번에 올리세요. 엑셀 업로드는 유형·채널·거래일을 고른 뒤 파일을 첨부합니다.</p></div>
+        <div><h1 className="b2b-page-title">구매 및 판매</h1></div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={openUpload}>엑셀 업로드</button>
           <Link className="b2b-btn-primary" href="/inventory/trade/new">+ 입고/판매 기록</Link>

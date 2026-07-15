@@ -79,7 +79,7 @@ export default function ActivityPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">변경 기록</h1><p className="b2b-page-subtitle">입고·출고·조정 원장과 생산요청 상태 변경을 날짜별로 묶었습니다. 품목·SKU·메모로 검색하면 해당 날짜만 펼쳐 볼 수 있어요.</p></div>
+        <div><h1 className="b2b-page-title">변경 기록</h1></div>
         <div className="b2b-page-actions"><button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button></div>
       </header>
 

@@ -174,7 +174,6 @@ export default function VocStatsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC 통계·보고서</h1>
-          <p className="b2b-page-subtitle no-print">클레임을 유형·구매자·기간으로 집계합니다. 제조사 제출용은 <Link href="/voc/reports" className="sm-link">개선요청서</Link>에서.</p>
           <p className="print-only" style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
         </div>
         <div className="b2b-page-actions no-print">

@@ -82,10 +82,7 @@ export default function InventoryReconcilePage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">구매·판매·재고 확인</h1>
-          <p className="b2b-page-subtitle">
-            <strong>산 수(구매)</strong>·<strong>팔린 수(판매)</strong>·<strong>지금 남은 재고</strong>가 서로 맞는지 매일 확인합니다.
-            팔린 수는 매출 데이터에서 자동으로 가져오고, 세트 상품은 낱개(구성품)로 풀어서 비교해요.
-          </p>
+          <p className="b2b-page-subtitle">세트 상품은 낱개(구성품)로 환산해 비교합니다</p>
         </div>
         <div className="b2b-page-actions"><ChannelFilter value={channel} onChange={setChannel} /></div>
       </header>

@@ -147,9 +147,7 @@ export default function InventoryPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">재고/생산 조언</h1>
-          <p className="b2b-page-subtitle">
-            현재고·판매속도·B2B 수요로 권장 생산량을 계산하고, AI 조언으로 우선순위를 짚어줍니다. 안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정. 재고원장 {itemCount}개 품목 기준.
-          </p>
+          <p className="b2b-page-subtitle">안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={genAdvice} disabled={adviceLoading}>

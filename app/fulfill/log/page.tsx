@@ -226,10 +226,6 @@ export default function DeliveryLogPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">배송일지</h1>
-          <p className="b2b-page-subtitle">
-            날짜별 <strong>택배량·운임·드라이아이스</strong> 기록. 택배량·기본운임은 <Link href="/fulfill">발주처리</Link>에서 자동 기록되며,
-            <strong> 모든 칸을 직접 추가·수정·삭제</strong>할 수 있습니다.
-          </p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {/* 데스크톱 전용 — 모바일에선 현황 확인만 하도록 숨김 (.dlog-desk) */}

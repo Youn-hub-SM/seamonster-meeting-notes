@@ -77,7 +77,7 @@ export default function SalesUploadPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출 데이터 업로드</h1>
-          <p className="b2b-page-subtitle">주문수집에서 받은 파일(엑셀·CSV)을 첨부하면 정규화·중복검사 후 <strong>미리보기</strong>를 보여주고, 확인 후 적용합니다. 같은 파일을 다시 올려도 <strong>중복은 자동 제외</strong>(멱등)됩니다.</p>
+          <p className="b2b-page-subtitle">같은 파일을 다시 올려도 중복은 자동 제외됩니다</p>
         </div>
       </header>
 

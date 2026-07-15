@@ -49,7 +49,6 @@ export default function VocManufacturerPage() {
       <header className="b2b-page-head no-print">
         <div>
           <h1 className="b2b-page-title">월간 VOC 리포트</h1>
-          <p className="b2b-page-subtitle">한 달간의 고객 클레임·설문을 <strong>‘고객 반응’ 서술형</strong>으로 AI가 초안을 만듭니다. 다듬어서 인쇄·복사해 제조사에 공유하세요.</p>
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href={exportUrl} title="제조사 귀책 건수·청구 손해액(정산용)">정산 데이터(엑셀)</a>

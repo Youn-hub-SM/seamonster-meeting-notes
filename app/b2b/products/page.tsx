@@ -185,10 +185,7 @@ export default function ProductsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">상품 마스터 (원가표)</h1>
-          <p className="b2b-page-subtitle">
-            전사 상품 단일 목록 — 여기서 수정하면 생산관리·발주·VOC 등 모든 곳에 반영됩니다. 원가 수정 시 이력 자동 기록.
-            {products.length > 0 && ` (전체 ${products.length}개${bundleCount > 0 ? ` · 묶음 ${bundleCount}개` : ""})`}
-          </p>
+          <p className="b2b-page-subtitle">여기서 수정하면 모든 도구에 반영됩니다</p>
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href="/b2b/products/history" title="상품 마스터 변경(등록·수정·삭제) 기록">

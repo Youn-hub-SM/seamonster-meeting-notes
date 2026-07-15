@@ -40,7 +40,7 @@ export default function AsOfPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">과거 수량 조회</h1><p className="b2b-page-subtitle">선택한 날짜 <strong>마감 시점</strong>의 누적 재고입니다(그날까지의 입출고·조정 합).</p></div>
+        <div><h1 className="b2b-page-title">과거 수량 조회</h1><p className="b2b-page-subtitle">선택한 날짜 마감 기준 누적 재고</p></div>
       </header>
       {error && <div className="b2b-error">{error}</div>}
 

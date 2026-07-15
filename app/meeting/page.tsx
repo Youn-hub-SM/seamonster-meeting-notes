@@ -114,10 +114,7 @@ export default function MeetingPage() {
 
   return (
     <div className="container">
-      <h1 className="page-title">회의록 정리</h1>
-      <p className="page-subtitle">
-        회의 내용을 직접 입력하거나 파일을 첨부하세요
-      </p>
+      <h1 className="page-title" style={{ marginBottom: "var(--sm-space-6)" }}>회의록 정리</h1>
 
       <MeetingTerms />
 

@@ -72,7 +72,6 @@ export default function VocRequestPage() {
       <header className="b2b-page-head no-print">
         <div>
           <h1 className="b2b-page-title">개선요청서</h1>
-          <p className="b2b-page-subtitle">기간 동안의 클레임·손해를 모아 제조사 제출용 개선요청서(사진 포함)로 만들어 인쇄·PDF로 저장합니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || items.length === 0}>인쇄 / PDF 저장</button>

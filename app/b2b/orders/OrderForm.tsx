@@ -555,13 +555,9 @@ export default function OrderForm({
                 : "새 발주 등록"
               : `발주 수정 · ${originalOrder?.order_no ?? ""}`}
           </h1>
-          <p className="b2b-page-subtitle">
-            {mode === "create"
-              ? cloneFromId
-                ? "복제된 내용입니다. 발주일·일정·상태는 초기화됐어요. 확인 후 등록하세요."
-                : "업체와 일정, 라인아이템을 입력하세요. 합계는 자동 계산됩니다."
-              : "라인아이템을 수정하면 합계는 저장 후 자동으로 재계산됩니다."}
-          </p>
+          {mode === "create" && cloneFromId && (
+            <p className="b2b-page-subtitle">복제된 내용입니다. 발주일·일정·상태는 초기화됐어요. 확인 후 등록하세요.</p>
+          )}
         </div>
         <div className="b2b-page-actions">
           {mode === "edit" && orderId && (

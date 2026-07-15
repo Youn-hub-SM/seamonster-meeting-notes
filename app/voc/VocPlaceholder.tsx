@@ -7,7 +7,6 @@ export default function VocPlaceholder({ title, desc }: { title: string; desc: s
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">{title}</h1>
-          <p className="b2b-page-subtitle">VOC 관리 · 구축 중인 기능</p>
         </div>
       </header>
       <section className="b2b-card">

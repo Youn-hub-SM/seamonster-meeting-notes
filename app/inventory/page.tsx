@@ -93,7 +93,6 @@ export default function InventoryPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">재고 목록</h1>
-          <p className="b2b-page-subtitle">현재고·<strong>자동 안전재고</strong>·예상 소진일과, 선택한 기간의 <strong>총입고·총출고·일평균 소진</strong>을 봅니다. 열 제목을 눌러 정렬하세요.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="프로모션 기간·예상판매 등록 → 안전재고에 반영">프로모션</button>

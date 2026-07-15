@@ -73,7 +73,6 @@ export default function SalesProfitPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">채널별 매출·이익</h1>
-          <p className="b2b-page-subtitle">채널별 매출총이익을 기간별로 계산합니다. 자세한 계산 기준은 아래 <strong>채널 설정</strong>에 정리돼 있습니다.</p>
         </div>
       </header>
 

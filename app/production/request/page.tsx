@@ -17,7 +17,7 @@ export default function RequestPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">도매 재고 생산 요청</h1>
-          <p className="b2b-page-subtitle">MD가 도매 재고 생산을 요청하면, 생산 담당자가 확인 후 실제 생산량을 입고 처리합니다. (부분·초과·수정 입고 가능 · 입고 시 도매 재고 반영)</p>
+          <p className="b2b-page-subtitle">입고 시 도매 재고에 반영됩니다</p>
         </div>
       </header>
 

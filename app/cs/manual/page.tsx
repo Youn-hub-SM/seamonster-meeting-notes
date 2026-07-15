@@ -136,9 +136,6 @@ export default function CsManualPage() {
       <div className="csm-head">
         <div>
           <h1 className="page-title">CS 매뉴얼 (지식베이스)</h1>
-          <p className="page-subtitle" style={{ marginBottom: 0 }}>
-            CS 코치가 답변할 때 근거로 쓰는 매뉴얼입니다. 여기서 추가·수정·삭제하면 코드 수정 없이 바로 반영됩니다.
-          </p>
         </div>
         <Link href="/cs" className="btn-secondary csm-back">← CS 코치로</Link>
       </div>

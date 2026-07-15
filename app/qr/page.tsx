@@ -75,7 +75,6 @@ export default function QrPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">QR코드 / 브랜드링크</h1>
-          <p className="b2b-page-subtitle"><strong>브랜드링크</strong>는 짧고 기억하기 쉬운 우리 주소로, 목적지를 나중에 바꿔도 같은 링크를 그대로 씁니다. 클릭·스캔 수도 집계되고, 필요하면 QR로도 내려받아요. <strong>정적 QR</strong>은 아무 URL/텍스트를 즉석에서 QR로.</p>
         </div>
       </header>
 

@@ -56,7 +56,7 @@ export default function AdjustPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고 조정</h1><p className="b2b-page-subtitle">실사·파손·분실 등으로 장부 재고를 보정합니다. <strong>도매/소매 채널</strong>을 고르면 현재고·실사·조정이 그 채널 기준으로 적용됩니다. 실사 수량(목표) 또는 증감(±)으로 입력, <strong>엑셀 대량 실사</strong>도 가능합니다.</p></div>
+        <div><h1 className="b2b-page-title">재고 조정</h1></div>
         <div className="b2b-page-actions">
           <ChannelPicker value={channel} onChange={setChannel} style={{ marginRight: 4 }} />
           <a className="b2b-btn-secondary" href="/api/inventory/adjust/template" title="SKU·실사수량·메모 양식">엑셀 양식</a>

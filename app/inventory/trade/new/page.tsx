@@ -30,7 +30,6 @@ export default function NewTradePage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">구매 / 판매 작성</h1>
-          <p className="b2b-page-subtitle">여러 제품을 담아 입고·출고를 한 번에 기록합니다. <Link href="/inventory/trade" className="sm-link">목록으로</Link></p>
         </div>
       </header>
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}

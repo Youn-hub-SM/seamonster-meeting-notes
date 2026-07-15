@@ -250,7 +250,6 @@ export default function VocPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC 처리</h1>
-          <p className="b2b-page-subtitle">고객의 소리(클레임)를 <strong>접수 → 응대·개선중 → 개선완료</strong> 3단계로 관리합니다. 상담 등에서 받은 건은 직접 입력하세요.</p>
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href="/api/voc/template" title="VOC 일괄 등록 엑셀 양식">엑셀 양식</a>

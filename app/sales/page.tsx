@@ -38,7 +38,7 @@ export default function SalesHome() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출</h1>
-          <p className="b2b-page-subtitle">주문 데이터 업로드 → 일일/주간 리포트 · 대시보드 · 주문검색. 기준일 {d?.base_date || b?.max_date || "-"}.</p>
+          <p className="b2b-page-subtitle">기준일 {d?.base_date || b?.max_date || "-"}</p>
         </div>
       </header>
 

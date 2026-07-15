@@ -162,7 +162,6 @@ export default function ReportPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">커스텀 리포트</h1>
-          <p className="b2b-page-subtitle">질문을 한국어로 적으면 <strong>매출·재고 데이터를 SQL로 조회</strong>해 표로 보여주고, <strong>루커스튜디오용 SQL</strong>까지 만들어줍니다. 이어서 다듬고, 자주 쓰는 건 저장하세요.</p>
         </div>
       </header>
 

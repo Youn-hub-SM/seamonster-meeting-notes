@@ -267,7 +267,6 @@ export default async function B2BDashboard() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">B2B 관리 대시보드</h1>
-          <p className="b2b-page-subtitle">씨몬스터 B2B 발주·생산·발송·매출을 한곳에서 관리합니다.</p>
         </div>
         <div className="b2b-page-actions">
           <Link href="/b2b/orders/new" className="b2b-btn-primary">+ 새 발주</Link>

@@ -280,7 +280,6 @@ export default function ProductionSchedulePage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">생산일정</h1>
-          <p className="b2b-page-subtitle">언제 무엇을 몇 개 생산할지 한눈에. 직접 생산일정을 추가하면 현재고·출고추세는 재고관리에서 자동 채워집니다.</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={openAdd}>+ 생산일정 추가</button>

@@ -46,7 +46,7 @@ export default function QuotePage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head no-print">
-        <div><h1 className="b2b-page-title">월간 매입 결산</h1><p className="b2b-page-subtitle">선택한 달의 입고(매입)를 면세·과세·임대료로 정리하고 SKU별로 집계합니다. 엑셀로 그대로 받으세요.</p></div>
+        <div><h1 className="b2b-page-title">월간 매입 결산</h1></div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href={exportUrl}>엑셀 다운로드</a>
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || items.length === 0}>인쇄 / PDF</button>

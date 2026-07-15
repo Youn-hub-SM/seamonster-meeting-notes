@@ -111,9 +111,6 @@ export default function SalesHistoryPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">변경 기록</h1>
-          <p className="b2b-page-subtitle">
-            매출 데이터 관련 활동을 시간순으로 영구 기록합니다 — 업로드·되돌리기·리포트 발송·채널 설정 변경·주문검색(전화조회).
-          </p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={() => setTick((t) => t + 1)} disabled={loading}>

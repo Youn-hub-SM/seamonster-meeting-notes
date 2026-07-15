@@ -162,7 +162,6 @@ export default function FulfillPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">발주처리</h1>
-          <p className="b2b-page-subtitle">소매 주문 엑셀 한 개로 <strong>CN 발주 → 배송일지 → 상품출고</strong>까지 순서대로 진행합니다. 한 단계씩 확인하며 진행하세요.</p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6 }}>
           {res && <button className="b2b-btn-secondary" onClick={reset}>새 발주 시작</button>}

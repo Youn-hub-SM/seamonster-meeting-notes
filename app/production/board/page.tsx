@@ -145,7 +145,7 @@ export default function ProductionBoardPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">생산 보드</h1>
-          <p className="b2b-page-subtitle">밀린 생산이 쌓이는 백로그. 각 칸 = 그 시점까지 끝내야 할 누적 생산량. 행을 펼쳐 생산일별로 완료 처리하세요.</p>
+          <p className="b2b-page-subtitle">각 칸 = 그 시점까지의 누적 생산량</p>
         </div>
         <div className="b2b-page-actions">
           <div className="sm-tabs">

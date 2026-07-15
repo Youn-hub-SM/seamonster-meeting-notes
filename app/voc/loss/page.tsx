@@ -130,7 +130,7 @@ export default function VocLossPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">손해금액 산정</h1>
-          <p className="b2b-page-subtitle">VOC 손해를 <strong>귀책별</strong>로 정산합니다 — 제조사 청구 가능액과 자사 부담액을 분리하고, 현재 원가 기준으로 재계산. 제조사 제출은 <Link href="/voc/reports" className="sm-link">개선요청서</Link>.</p>
+          <p className="b2b-page-subtitle">현재 원가 기준 재계산</p>
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href={`/api/voc/loss/export?from=${period.from}&to=${period.to}`}>엑셀 추출</a>

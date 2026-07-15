@@ -118,7 +118,6 @@ export default function ScanPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">송장 스캔</h1>
-          <p className="b2b-page-subtitle">송장 바코드를 스캔하면 <strong>상품별 필요 수량</strong>이 쌓입니다. 인쇄해서 상품을 가지러 간 뒤 <strong>초기화</strong>하고 다음 묶음을 스캔하세요. 송장 데이터는 <Link href="/fulfill/scan/upload">송장 업로드</Link>에서 올립니다.</p>
         </div>
         <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/scan/upload">송장 업로드</Link></div>
       </header>

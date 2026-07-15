@@ -64,9 +64,6 @@ export default function MarginPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">이익률</h1>
-          <p className="b2b-page-subtitle">
-            도매가 기준 이익률 — 매출 대비 제품 단위 원가(제품원가 + 포장재). 과세 제품은 공급가(÷1.1) 기준.
-          </p>
         </div>
       </header>
 
