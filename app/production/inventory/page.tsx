@@ -366,7 +366,7 @@ export default function InventoryPage() {
       )}
 
       {editRow && (
-        <div className="b2b-modal-backdrop" onClick={() => setEditRow(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">안전재고 보정 — {editRow.name}</span>

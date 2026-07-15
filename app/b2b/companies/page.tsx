@@ -339,7 +339,7 @@ function CompanyModal({
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{mode === "create" ? "새 업체 등록" : "업체 수정"}</h2>

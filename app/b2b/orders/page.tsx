@@ -1095,7 +1095,7 @@ export default function OrdersListPage() {
       )}
 
       {trackingPrompt && (
-        <div className="b2b-modal-backdrop" onClick={() => setTrackingPrompt(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">발송완료 — 송장번호 입력</h2>
@@ -1315,7 +1315,7 @@ function ExportPickModal({
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
         <div className="b2b-modal-head">
           <div>

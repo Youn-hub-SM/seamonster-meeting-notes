@@ -280,7 +280,7 @@ function PaymentModal({
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <div className="b2b-modal-head">
           <div>

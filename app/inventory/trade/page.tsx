@@ -69,7 +69,7 @@ export default function TradePage() {
 
       {/* 엑셀 업로드 설정 → 파일 첨부 */}
       {uploadOpen && (
-        <div className="b2b-modal-backdrop" onClick={() => !importing && setUploadOpen(false)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">엑셀 일괄 업로드</h2>
@@ -130,7 +130,7 @@ export default function TradePage() {
       )}
 
       {preview && (
-        <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">엑셀 업로드 — 미리보기</h2>

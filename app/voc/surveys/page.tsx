@@ -171,7 +171,7 @@ export default function VocSurveysPage() {
       )}
 
       {detail && (
-        <div className="b2b-modal-backdrop" onClick={() => setDetail(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">설문 응답 · {(detail.submitted_at || detail.created_at)?.slice(0, 10)}</span>

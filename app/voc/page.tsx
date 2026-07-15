@@ -364,7 +364,7 @@ export default function VocPage() {
       )}
 
       {preview && (
-        <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">엑셀 업로드 — 미리보기</span>
@@ -417,7 +417,7 @@ export default function VocPage() {
       )}
 
       {edit && (
-        <div className="b2b-modal-backdrop" onClick={() => setEdit(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">{edit.id ? "VOC 수정" : "VOC 추가 (직접 입력)"}</span>

@@ -56,7 +56,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={() => !saving && onClose()}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">프로모션 관리</h2>

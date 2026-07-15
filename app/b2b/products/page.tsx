@@ -419,7 +419,7 @@ export default function ProductsPage() {
       )}
 
       {preview && (
-        <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">엑셀 업로드 — 변경 확인</h2>
@@ -576,7 +576,7 @@ function ProductModal({
   const b2bDiscountPct = retail > 0 && Number(data.sale_price) > 0 ? ((retail - Number(data.sale_price)) / retail) * 100 : null;
 
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{mode === "create" ? "새 제품 등록" : "제품 수정"}</h2>

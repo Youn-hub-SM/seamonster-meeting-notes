@@ -260,7 +260,7 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving }: {
   const setLink = (k: string, v: string) => onChange({ ...data, links: { ...data.links, [k]: v } });
 
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{data.id ? "메시지 수정" : "새 메시지"}</h2>

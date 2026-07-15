@@ -158,7 +158,7 @@ export default function QrPage() {
 
       {/* QR 크게 보기 + 다운로드 */}
       {qrFor && (
-        <div className="b2b-modal-backdrop" onClick={() => setQrFor(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
             <div className="b2b-modal-head"><h2 className="b2b-modal-title">{qrFor.title || qrFor.code}</h2><button className="b2b-modal-close" onClick={() => setQrFor(null)}>✕</button></div>
             <div className="b2b-modal-body" style={{ textAlign: "center" }}>
@@ -200,7 +200,7 @@ function EditModal({ link, onClose, onSaved }: { link: Link; onClose: () => void
     setSaving(false);
   }
   return (
-    <div className="b2b-modal-backdrop" onClick={() => !saving && onClose()}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">링크 수정</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
@@ -246,7 +246,7 @@ function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
   const dmax = useMemo(() => Math.max(1, ...(data?.daily || []).map((d) => d.count)), [data]);
   const hmax = useMemo(() => Math.max(1, ...(data?.hourly || []).map((h) => h.count)), [data]);
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">스캔 통계 — {link.title || link.code}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">

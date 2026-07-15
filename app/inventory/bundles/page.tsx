@@ -112,7 +112,7 @@ export default function BundlesPage() {
 
       {/* 미리보기 → 반영 */}
       {preview && (
-        <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
             <div className="b2b-modal-head"><span className="b2b-modal-title">묶음 업로드 — 미리보기</span><button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button></div>
             <div className="b2b-modal-body">
@@ -183,7 +183,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={() => !saving && onClose()}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">묶음 직접 추가</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">

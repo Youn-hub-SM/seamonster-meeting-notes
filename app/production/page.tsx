@@ -411,7 +411,7 @@ export default function ProductionSchedulePage() {
 
       {/* 생산일정 추가 모달 */}
       {addModal && (
-        <div className="b2b-modal-backdrop" onClick={() => setAddModal(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="b2b-modal-head"><h2 className="b2b-modal-title">생산일정 추가</h2></div>
             {!statsConfigured ? (
@@ -485,7 +485,7 @@ export default function ProductionSchedulePage() {
 
       {/* 프로모션 모달 */}
       {promoModal && (
-        <div className="b2b-modal-backdrop" onClick={() => setPromoModal(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
             <div className="b2b-modal-head"><h2 className="b2b-modal-title">{promoModal.id ? "프로모션 수정" : "프로모션 추가"}</h2></div>
             <div className="b2b-modal-body">

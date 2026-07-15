@@ -1144,7 +1144,7 @@ export default function OrderForm({
 
       {/* 거래처 선택 시: 최근 발주 복제 프롬프트 */}
       {clonePrompt && (
-        <div className="b2b-modal-backdrop" onClick={() => setClonePrompt(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">최근 발주 복제</h2>

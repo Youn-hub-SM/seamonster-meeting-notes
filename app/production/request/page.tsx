@@ -388,7 +388,7 @@ function CreateModal({ products, busy, onClose, onCreate }: {
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">새 도매 생산 요청</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">

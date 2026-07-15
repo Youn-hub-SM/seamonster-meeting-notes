@@ -79,7 +79,7 @@ export default function AdjustPage() {
       {open && <TxnModal products={products} qtyOf={qtyOf} defaultType="조정" defaultChannel={channel} onClose={() => setOpen(false)} onSaved={() => { setOpen(false); setReload((n) => n + 1); load(); }} />}
 
       {preview && (
-        <div className="b2b-modal-backdrop" onClick={() => !applying && setPreview(null)}>
+        <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">엑셀 실사 · {channel} — 미리보기</span>

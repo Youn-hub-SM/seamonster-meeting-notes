@@ -50,7 +50,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
   }
 
   return (
-    <div className="b2b-modal-backdrop" onClick={() => !saving && onClose()}>
+    <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">묶음 구성 — {parent.name}{parent.sku ? ` (${parent.sku})` : ""}</h2>
