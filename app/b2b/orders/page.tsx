@@ -942,6 +942,14 @@ export default function OrdersListPage() {
                         >
                           복제
                         </Link>
+                        <Link
+                          href={`/b2b/orders/${o.id}/statement`}
+                          className="b2b-btn-secondary"
+                          style={{ padding: "5px 10px", fontSize: 11, marginLeft: 6 }}
+                          title="이 발주의 거래명세표 인쇄/PDF"
+                        >
+                          명세표
+                        </Link>
                       </td>
                     </tr>
                     {parent && !isCollapsed && (o.shipments ?? []).map((s) => (

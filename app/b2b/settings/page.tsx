@@ -44,6 +44,12 @@ export default function SettingsPage() {
   type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
   const [dcfgSaving, setDcfgSaving] = useState(false);
+  // 거래명세표 — 공급자(우리 회사) 정보 + 직인
+  type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; phone: string };
+  const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", phone: "" });
+  const [stamp, setStamp] = useState("");
+  const [supSaving, setSupSaving] = useState(false);
+  const [supMsg, setSupMsg] = useState<Msg | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -69,6 +75,8 @@ export default function SettingsPage() {
         }
         const dg = await (await fetch("/api/b2b/settings/digest", { cache: "no-store" })).json();
         if (dg.ok) setDcfg(dg.config);
+        const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
+        if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
@@ -99,6 +107,23 @@ export default function SettingsPage() {
       setFlowMsg({ ok: true, text: `Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.` });
     } catch (e) { setFlowMsg({ ok: false, text: e instanceof Error ? e.message : "테스트 실패" }); }
     setFlowSaving(false);
+  }
+  async function saveSupplier() {
+    setSupSaving(true); setSupMsg(null);
+    try {
+      const r = await fetch("/api/b2b/settings/statement", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: sup, stamp }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setSupMsg({ ok: true, text: "저장됨" });
+    } catch (e) { setSupMsg({ ok: false, text: e instanceof Error ? e.message : "저장 오류" }); }
+    setSupSaving(false);
+  }
+  function onStampFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; if (!f) return;
+    if (f.size > 500_000) { setSupMsg({ ok: false, text: "직인 이미지는 500KB 이하 PNG 로 올려주세요." }); return; }
+    const reader = new FileReader();
+    reader.onload = () => setStamp(String(reader.result || ""));
+    reader.readAsDataURL(f);
   }
   async function loadDigest() {
     setDigestBusy(true); setDigestMsg(null);
@@ -361,6 +386,43 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* 거래명세표 — 공급자 정보 + 직인 */}
+      <section className="b2b-card" style={{ marginTop: 16 }}>
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">거래명세표 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 공급자(우리 회사) 정보 · 발주 목록의 &lsquo;명세표&rsquo;에서 사용</span></h2>
+          <button className="b2b-btn-primary" onClick={saveSupplier} disabled={supSaving}>{supSaving ? "저장 중..." : "저장"}</button>
+        </div>
+        {supMsg && <div className={supMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{supMsg.text}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>상호</span>
+            <input className="b2b-input" value={sup.name} onChange={(e) => setSup({ ...sup, name: e.target.value })} placeholder="예: 씨몬스터" /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>사업자등록번호</span>
+            <input className="b2b-input" value={sup.biz_no} onChange={(e) => setSup({ ...sup, biz_no: e.target.value })} placeholder="000-00-00000" /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>대표자</span>
+            <input className="b2b-input" value={sup.ceo} onChange={(e) => setSup({ ...sup, ceo: e.target.value })} /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>전화</span>
+            <input className="b2b-input" value={sup.phone} onChange={(e) => setSup({ ...sup, phone: e.target.value })} /></label>
+          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>사업장 소재지</span>
+            <input className="b2b-input" value={sup.addr} onChange={(e) => setSup({ ...sup, addr: e.target.value })} /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>업태</span>
+            <input className="b2b-input" value={sup.biz_type} onChange={(e) => setSup({ ...sup, biz_type: e.target.value })} placeholder="예: 도소매" /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>종목</span>
+            <input className="b2b-input" value={sup.biz_item} onChange={(e) => setSup({ ...sup, biz_item: e.target.value })} placeholder="예: 수산물" /></label>
+        </div>
+        <div className="sm-row" style={{ gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>직인(도장) 이미지</span>
+          <input type="file" accept="image/png,image/jpeg" onChange={onStampFile} style={{ fontSize: 12 }} />
+          {stamp ? (
+            <>
+              <img src={stamp} alt="직인 미리보기" style={{ width: 44, height: 44, objectFit: "contain", border: "1px solid var(--sm-border)", borderRadius: 6, background: "var(--sm-white)" }} />
+              <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setStamp("")}>직인 제거</button>
+            </>
+          ) : (
+            <span className="sm-faint" style={{ fontSize: 12 }}>배경이 투명한 PNG(500KB 이하)를 올리면 명세표 공급자란에 자동으로 찍힙니다.</span>
+          )}
+        </div>
       </section>
 
       <p style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 12 }}>
