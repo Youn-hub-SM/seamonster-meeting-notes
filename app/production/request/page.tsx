@@ -158,17 +158,32 @@ function WholesaleTab() {
       ) : displayed.length === 0 ? (
         <div className="b2b-empty">{filter === "전체" ? "아직 생산 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요." : `‘${PR_STATUS_LABEL[filter as PrStatus]}’ 상태의 요청이 없습니다.`}</div>
       ) : (
-        <div className="sm-col" style={{ gap: 10 }}>
-          {displayed.map((r) => (
-            <RequestCard
-              key={r.id} req={r} expanded={expandedId === r.id} busy={busy}
-              onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)}
-              onReceive={(body) => receive(r.id, body)}
-              onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
-              onStatus={(s) => patchStatus(r.id, s)}
-              onDelete={() => removeRequest(r.id)}
-            />
-          ))}
+        <div className="b2b-table-wrap">
+          <table className="b2b-table">
+            <thead>
+              <tr>
+                <th style={{ width: 1 }}></th>
+                <th>요청번호</th>
+                <th className="b2b-col-status">상태</th>
+                <th>품목</th>
+                <th className="b2b-col-date">진행</th>
+                <th className="b2b-col-date">요청일</th>
+                <th className="b2b-col-date">마감일</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map((r) => (
+                <RequestRow
+                  key={r.id} req={r} expanded={expandedId === r.id} busy={busy}
+                  onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                  onReceive={(body) => receive(r.id, body)}
+                  onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
+                  onStatus={(s) => patchStatus(r.id, s)}
+                  onDelete={() => removeRequest(r.id)}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -177,19 +192,12 @@ function WholesaleTab() {
   );
 }
 
-function ProgressBar({ received, requested }: { received: number; requested: number }) {
-  const pct = requested > 0 ? Math.min(100, Math.round((received / requested) * 100)) : 0;
+// 진행(입고/요청) 표시 — 테이블 셀용 텍스트. 초과=danger, 완료=success, 그 외 회색.
+function ProgressCell({ received, requested }: { received: number; requested: number }) {
   const over = received > requested;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <div style={{ flex: 1, minWidth: 80, height: 8, borderRadius: 5, background: "var(--sm-bg-subtle)", overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: over ? "var(--sm-danger)" : pct >= 100 ? "var(--sm-success)" : "var(--sm-orange)" }} />
-      </div>
-      <span style={{ fontSize: 13, fontWeight: 600, color: over ? "var(--sm-danger)" : "var(--sm-text-mid)", whiteSpace: "nowrap" }}>
-        {received.toLocaleString()} / {requested.toLocaleString()}
-      </span>
-    </div>
-  );
+  const done = requested > 0 && received >= requested;
+  const color = over ? "var(--sm-danger)" : done ? "var(--sm-success)" : "var(--sm-text-mid)";
+  return <span style={{ fontSize: 13, fontWeight: 600, color, whiteSpace: "nowrap" }}>{received.toLocaleString()} / {requested.toLocaleString()}</span>;
 }
 
 function StatusBadge({ status }: { status: PrStatus }) {
@@ -197,7 +205,8 @@ function StatusBadge({ status }: { status: PrStatus }) {
   return <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{PR_STATUS_LABEL[status]}</span>;
 }
 
-function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
+// 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
+function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onReceive: (body: { item_id: string; qty: number; receipt_date: string; memo: string }) => Promise<boolean>;
@@ -206,61 +215,69 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
   onDelete: () => void;
 }) {
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
+  const itemPreview = req.items.slice(0, 2).map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join(" · ");
   return (
-    <div className="b2b-card" style={{ padding: 0, overflow: "hidden" }}>
-      {/* 헤더 줄 */}
-      <button onClick={onToggle} style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-        <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</span>
-        <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
-        <StatusBadge status={req.status} />
-        <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.due_date ? ` · 마감 ${req.due_date}` : ""}{req.requested_by ? ` · 요청 ${req.requested_by}` : ""}</span>
-        {req.title && <span style={{ fontSize: 13, color: "var(--sm-black)", fontWeight: 600 }}>{req.title}</span>}
-        {/* 발주 ItemsPreview 처럼 품목 개수 대신 '품목명 ×수량'을 최대 2종 미리보기(나머지는 외 N종) */}
-        <span className="sm-nowrap" style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
-          {req.items.slice(0, 2).map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join(" · ") || "품목 없음"}
+    <>
+      <tr onClick={onToggle} style={{ cursor: "pointer" }} className={expanded ? "is-parent" : ""}>
+        <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
+        <td style={{ whiteSpace: "nowrap" }}>
+          <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
+          {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.title}</span> : null}
+        </td>
+        <td className="b2b-col-status"><StatusBadge status={req.status} /></td>
+        <td className="sm-nowrap" style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
+          {itemPreview || "품목 없음"}
           {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
-        </span>
-        <span style={{ flex: 1, minWidth: 140, maxWidth: 260 }}><ProgressBar received={req.total_received} requested={req.total_requested} /></span>
-      </button>
+        </td>
+        <td className="b2b-col-date"><ProgressCell received={req.total_received} requested={req.total_requested} /></td>
+        <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>
+          {req.request_date}
+          {req.requested_by ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.requested_by}</span> : null}
+        </td>
+        <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{req.due_date || "-"}</td>
+      </tr>
 
       {expanded && (
-        <div style={{ borderTop: "1px solid var(--sm-border-light)", padding: 14 }}>
-          {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
+        <tr className="b2b-child-row">
+          <td></td>
+          <td colSpan={6} style={{ padding: "8px 18px 16px" }}>
+            {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
 
-          <div className="b2b-table-wrap">
-            <table className="b2b-table">
-              <thead>
-                <tr><th>품목</th><th className="num">요청</th><th className="num">입고</th><th className="num">잔여</th><th>상태</th><th>입고 처리</th></tr>
-              </thead>
-              <tbody>
-                {req.items.map((it) => (
-                  <ItemRow key={it.id} item={it} canEdit={req.status !== "완료" && req.status !== "취소"} busy={busy} onReceive={onReceive} onCancelReceipt={onCancelReceipt} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <div className="b2b-table-wrap">
+              <table className="b2b-table">
+                <thead>
+                  <tr><th>품목</th><th className="num">요청</th><th className="num">입고</th><th className="num">잔여</th><th>상태</th><th>입고 처리</th></tr>
+                </thead>
+                <tbody>
+                  {req.items.map((it) => (
+                    <ItemRow key={it.id} item={it} canEdit={req.status !== "완료" && req.status !== "취소"} busy={busy} onReceive={onReceive} onCancelReceipt={onCancelReceipt} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 ‘완료’를 누르세요.</p>}
+            {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 ‘완료’를 누르세요.</p>}
 
-          <div className="sm-row" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            {req.status === "요청" && (
-              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>{PR_STATUS_LABEL["진행중"]}</button>
-            )}
-            {req.status !== "완료" && req.status !== "취소" && (
-              <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료</button>
-            )}
-            {(req.status === "완료" || req.status === "취소") && (
-              // 복구 — 입고 기록이 있으면 진행중, 없으면 요청(이전 단계)으로 되돌림.
-              <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus(req.total_received > 0 ? "진행중" : "요청")}>복구</button>
-            )}
-            {req.status !== "취소" && (
-              <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("취소")}>취소</button>
-            )}
-            <button className="b2b-btn-danger" style={{ padding: "6px 14px" }} disabled={busy} onClick={onDelete}>삭제</button>
-          </div>
-        </div>
+            <div className="sm-row" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              {req.status === "요청" && (
+                <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>{PR_STATUS_LABEL["진행중"]}</button>
+              )}
+              {req.status !== "완료" && req.status !== "취소" && (
+                <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료</button>
+              )}
+              {(req.status === "완료" || req.status === "취소") && (
+                // 복구 — 입고 기록이 있으면 진행중, 없으면 요청(이전 단계)으로 되돌림.
+                <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus(req.total_received > 0 ? "진행중" : "요청")}>복구</button>
+              )}
+              {req.status !== "취소" && (
+                <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("취소")}>취소</button>
+              )}
+              <button className="b2b-btn-danger" style={{ padding: "6px 14px" }} disabled={busy} onClick={onDelete}>삭제</button>
+            </div>
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   );
 }
 
