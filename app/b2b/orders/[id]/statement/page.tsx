@@ -99,17 +99,14 @@ export default function StatementPage() {
 
           {/* 공급자 / 공급받는자 2단 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-            <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px", paddingRight: 82, position: "relative" }}>
+            <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
               <InfoRow label="등록번호" value={supplier?.biz_no} strong />
-              <InfoRow label="상호" value={supplier?.name} extraLabel="대표" extra={supplier?.ceo ? `${supplier.ceo} (인)` : ""} />
+              {/* 직인은 상호와 대표 사이에 인라인 배치(행 높이를 늘리지 않게 음수 마진) */}
+              <InfoRow label="상호" value={supplier?.name} stampSrc={stamp || undefined} extraLabel="대표" extra={supplier?.ceo || ""} />
               <InfoRow label="사업장" value={supplier?.addr} />
               <InfoRow label="업태" value={supplier?.biz_type} extraLabel="종목" extra={supplier?.biz_item} />
               <InfoRow label="이메일" value={supplier?.email} />
-              {/* 직인 — 오른쪽 여백(paddingRight)을 확보해 글자와 겹치지 않게 */}
-              {stamp && (
-                <img src={stamp} alt="직인" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 60, height: 60, objectFit: "contain", mixBlendMode: "multiply", opacity: 0.9 }} />
-              )}
             </div>
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
@@ -165,11 +162,15 @@ export default function StatementPage() {
   );
 }
 
-function InfoRow({ label, value, strong, extraLabel, extra }: { label: string; value?: string | null; strong?: boolean; extraLabel?: string; extra?: string | null }) {
+function InfoRow({ label, value, strong, extraLabel, extra, stampSrc }: { label: string; value?: string | null; strong?: boolean; extraLabel?: string; extra?: string | null; stampSrc?: string }) {
   return (
-    <div style={{ display: "flex", gap: 8, fontSize: 13, padding: "3px 0", borderTop: "1px solid var(--sm-border-light)" }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "3px 0", borderTop: "1px solid var(--sm-border-light)" }}>
       <span style={{ width: 52, flex: "0 0 auto", color: "var(--sm-text-mid)", fontSize: 12 }}>{label}</span>
       <span style={{ fontWeight: strong ? 700 : 500, flex: 1 }}>{value || "-"}</span>
+      {/* 직인 — 행 높이를 늘리지 않도록 음수 마진, 값과 extra 사이에 배치 */}
+      {stampSrc ? (
+        <img src={stampSrc} alt="직인" style={{ width: 46, height: 46, objectFit: "contain", mixBlendMode: "multiply", opacity: 0.9, margin: "-16px 0", flex: "0 0 auto" }} />
+      ) : null}
       {extraLabel ? (
         <>
           <span style={{ color: "var(--sm-text-mid)", fontSize: 12, flex: "0 0 auto" }}>{extraLabel}</span>
