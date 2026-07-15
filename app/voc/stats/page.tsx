@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
+import { VOC_CATEGORIES, VOC_STATUS_COLOR, VOC_FAULT_COLOR, type Voc } from "@/app/lib/voc";
 import { Donut, PieCard, StackedBar, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 
 type RMode = "7일" | "14일" | "30일" | "custom";
@@ -50,11 +50,11 @@ function countBy(rows: Voc[], key: (r: Voc) => string | null | undefined): [stri
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-// 현황 히어로 도넛/지표 — 처리단계 구성(개선완료·응대개선중·접수)
+// 현황 히어로 도넛/지표 — 처리단계 구성(개선완료·응대개선중·접수). 색은 목록 뱃지와 같은 지도에서.
 const STATUS_META: { key: string; color: string }[] = [
-  { key: "개선완료", color: "var(--sm-success)" },
-  { key: "응대·개선중", color: "var(--sm-warning)" },
-  { key: "접수", color: "var(--sm-info)" },
+  { key: "개선완료", color: VOC_STATUS_COLOR["개선완료"].fg },
+  { key: "응대·개선중", color: VOC_STATUS_COLOR["응대·개선중"].fg },
+  { key: "접수", color: VOC_STATUS_COLOR["접수"].fg },
 ];
 
 // 추세 탐색 — 분류 기준(무엇으로 쌓을지) & 측정값
@@ -71,6 +71,12 @@ const DIM_FIELD: Record<Dim, (r: Voc) => string> = {
 };
 const METRICS = ["건수", "손해금액"] as const;
 type Metric = (typeof METRICS)[number];
+// 이미 색 지도가 있는 분류축은 그 색으로 그린다 — 안 그러면 같은 '개선완료'가
+//  위 히어로에선 초록, 아래 추세에선 PIE_COLORS 순환색으로 나와 설명이 안 된다.
+const DIM_COLORS: Partial<Record<Dim, Record<string, string>>> = {
+  상태: Object.fromEntries(Object.entries(VOC_STATUS_COLOR).map(([k, v]) => [k, v.fg])),
+  귀책: VOC_FAULT_COLOR,
+};
 
 export default function VocStatsPage() {
   const [rows, setRows] = useState<Voc[]>([]);
@@ -149,7 +155,9 @@ export default function VocStatsPage() {
       .sort((a, b) => b[1] - a[1]);
     const series = groupTotals.map(([g]) => ({ key: g, values: keys.map((k) => matrix.get(g)?.get(k) || 0) }));
     const grand = groupTotals.reduce((s, [, n]) => s + n, 0);
-    return { labels, series, groupTotals, grand, capped, cap };
+    const map = DIM_COLORS[dim];
+    const colors = map ? groupTotals.map(([g], i) => map[g] || PIE_COLORS[i % PIE_COLORS.length]) : undefined;
+    return { labels, series, groupTotals, grand, capped, cap, colors };
   }, [shown, dim, metric, pUnit]);
   const isMoney = metric === "손해금액";
   const fmtVal = (n: number) => (isMoney ? `${n.toLocaleString()}원` : `${n}건`);
@@ -242,11 +250,11 @@ export default function VocStatsPage() {
               <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>이 기간에 집계할 데이터가 없습니다.</div>
             ) : (
               <>
-                <StackedBar periods={explore.labels} series={explore.series} unit={isMoney ? "원" : "건"} fmtAxis={isMoney ? moneyCompact : undefined} />
+                <StackedBar periods={explore.labels} series={explore.series} colors={explore.colors} unit={isMoney ? "원" : "건"} fmtAxis={isMoney ? moneyCompact : undefined} />
                 <div className="sm-row-wrap" style={{ gap: 12, marginTop: 10 }}>
                   {explore.groupTotals.map(([g, n], i) => (
                     <span key={g} className="sm-row" style={{ gap: 6, fontSize: 12.5 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                      <span className="sm-stat-hero-dot" style={{ background: explore.colors?.[i] || PIE_COLORS[i % PIE_COLORS.length] }} />
                       <span>{g}</span><strong>{fmtVal(n)}</strong>
                       <span className="sm-faint">{explore.grand ? Math.round((n / explore.grand) * 100) : 0}%</span>
                     </span>

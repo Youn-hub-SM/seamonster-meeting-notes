@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ComboBarLine } from "@/app/components/charts";
+import { ComboBarLine, ChartLegend, moneyCompact } from "@/app/components/charts";
 
 type Campaign = { nccCampaignId: string; name: string; campaignTp: string };
 type DayStat = { date: string; impCnt: number; clkCnt: number; salesAmt: number; ctr?: number; cpc?: number; ccnt: number; convAmt: number; ror?: number };
@@ -688,11 +688,11 @@ export default function NaverAdPage() {
                 <div className="b2b-empty">이 기간에 성과 데이터가 없습니다. 조회 기간을 넓혀보세요.</div>
               ) : (
                 <>
-                  <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineColor="var(--sm-orange)" barUnit="원" />
-                  <div className="sm-row" style={{ gap: 14, marginTop: 6, marginBottom: 12, fontSize: 13 }}>
-                    <span className="sm-row" style={{ gap: 5, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--sm-info)" }} />광고비 (막대)</span>
-                    <span className="sm-row" style={{ gap: 5, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--sm-orange)" }} />ROAS (선){rptConv === "purchase" ? " · 구매기준" : ""}</span>
-                  </div>
+                  <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} barFmt={moneyCompact} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineColor="var(--sm-orange)" barUnit="원" />
+                  <ChartLegend style={{ marginTop: 6, marginBottom: 12 }} items={[
+                    ["광고비 (막대)", "var(--sm-info)"],
+                    [`ROAS (선)${rptConv === "purchase" ? " · 구매기준" : ""}`, "var(--sm-orange)"],
+                  ]} />
                   <div className="b2b-table-wrap">
                     <table className="b2b-table">
                       <thead><tr>

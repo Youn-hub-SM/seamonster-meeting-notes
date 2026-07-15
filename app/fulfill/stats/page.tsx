@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
-import { ComboBarLine } from "@/app/components/charts";
+import { ComboBarLine, BarList, ChartLegend, CHART_LINE } from "@/app/components/charts";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -51,7 +51,6 @@ const PRESETS: { key: string; from: () => string }[] = [
 ];
 
 const NG = ["var(--sm-info)", "var(--sm-orange)"]; // 일반=파랑 · 도착보장=주황
-const FEE_LINE = "#7C3AED"; // 운임 선(보라)
 
 export default function FulfillStatsPage() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -158,35 +157,43 @@ export default function FulfillStatsPage() {
 
           {/* 1) 주차별 발송량 + 운임 */}
           <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">주차별 발송량 + 운임 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 막대=발송 · 선=운임</span></span></div>
-            <ComboBarLine periods={agg.weekly.periods} barSeries={agg.weekly.series} barColors={NG} lineValues={agg.weekly.fee} lineColor={FEE_LINE} />
-            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", FEE_LINE]]} />
+            <div className="b2b-card-head"><span className="b2b-card-title">주차별 발송량 + 운임</span></div>
+            <ComboBarLine periods={agg.weekly.periods} barSeries={agg.weekly.series} barColors={NG} lineValues={agg.weekly.fee} />
+            <ChartLegend style={{ marginTop: 8 }} items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", CHART_LINE]]} />
           </section>
 
           {/* 2) 월별 발송량 + 운임 */}
           <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 + 운임 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 막대=발송 · 선=운임</span></span></div>
-            <ComboBarLine periods={agg.monthly.periods} barSeries={agg.monthly.series} barColors={NG} lineValues={agg.monthly.fee} lineColor={FEE_LINE} />
-            <Legend items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", FEE_LINE]]} />
+            <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 + 운임</span></div>
+            <ComboBarLine periods={agg.monthly.periods} barSeries={agg.monthly.series} barColors={NG} lineValues={agg.monthly.fee} />
+            <ChartLegend style={{ marginTop: 8 }} items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", CHART_LINE]]} />
           </section>
 
-          {/* 3) 요일별 평균 · 4) 박스종류 비중 — 설문결과 스타일 가로 막대 */}
+          {/* 3) 요일별 평균 · 4) 박스종류 비중 */}
           <div className="fx-2col">
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">요일별 평균 발송량</span></div>
-              <div className="sm-faint" style={{ fontSize: 12, marginBottom: 12 }}>발송한 날 기준 평균 · 월~일</div>
-              <SurveyBars unit="건" accent="var(--sm-info)"
-                rows={agg.weekdayAvg.map((d) => ({ label: `${d.label}요일`, value: d.value, sub: `${d.days}일`, title: `${d.label}요일 평균 ${d.value.toLocaleString()}건 · ${d.days}일 발송(총 ${d.total.toLocaleString()}건)` }))} />
-            </section>
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">박스종류 비중</span></div>
-              <div className="sm-faint" style={{ fontSize: 12, marginBottom: 12 }}>총 {won(agg.catPie.reduce((s, [, n]) => s + n, 0))}건</div>
-              {agg.catPie.length === 0 ? <div className="sm-faint" style={{ fontSize: 13 }}>데이터 없음</div> : (() => {
-                const t = agg.catPie.reduce((s, [, n]) => s + n, 0);
-                return <SurveyBars unit="건" sorted accent="var(--sm-orange)"
-                  rows={agg.catPie.map(([label, n]) => ({ label, value: n, sub: `${Math.round((n / t) * 100)}%`, title: `${label} ${n.toLocaleString()}건 (${Math.round((n / t) * 100)}%)` }))} />;
-              })()}
-            </section>
+            <BarList
+              title="요일별 평균 발송량"
+              caption="발송한 날 기준 평균 · 월~일"
+              accent="var(--sm-info)"
+              minPct={7}
+              data={agg.weekdayAvg.map((d) => [`${d.label}요일`, d.value] as [string, number])}
+              sub={(label) => {
+                const d = agg.weekdayAvg.find((x) => `${x.label}요일` === label);
+                return d ? `${d.days}일 발송 · 총 ${d.total.toLocaleString()}건` : null;
+              }}
+            />
+            <BarList
+              title="박스종류 비중"
+              caption={`총 ${won(agg.catPie.reduce((s, [, n]) => s + n, 0))}건`}
+              accent="var(--sm-orange)"
+              minPct={7}
+              sorted
+              data={agg.catPie}
+              sub={(_, n) => {
+                const t = agg.catPie.reduce((s, [, v]) => s + v, 0);
+                return t ? `${Math.round((n / t) * 100)}%` : null;
+              }}
+            />
           </div>
 
           {/* 월별 박스종류 수량표 */}
@@ -215,42 +222,3 @@ export default function FulfillStatsPage() {
   );
 }
 
-// 설문결과 스타일 가로 막대 — 라벨은 막대 안, 값은 오른쪽. 막대 폭 ∝ 값.
-function SurveyBars({ rows, unit = "", sorted = false, accent = "var(--sm-info)" }: {
-  rows: { label: string; value: number; sub?: string; title?: string }[];
-  unit?: string; sorted?: boolean; accent?: string;
-}) {
-  const list = sorted ? [...rows].sort((a, b) => b.value - a.value) : rows;
-  const max = Math.max(1, ...list.map((r) => r.value));
-  return (
-    <div className="sm-col" style={{ gap: 8 }}>
-      {list.map((r) => {
-        const w = r.value > 0 ? Math.max(7, Math.round((r.value / max) * 100)) : 0;
-        return (
-          <div key={r.label} className="sm-row" style={{ gap: 12, alignItems: "center" }} title={r.title}>
-            <div style={{ position: "relative", flex: 1, minWidth: 0, height: 38 }}>
-              <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${w}%`, background: `color-mix(in srgb, ${accent} 15%, var(--sm-bg-subtle))`, borderRadius: 8, transition: "width .35s ease" }} />
-              <span style={{ position: "absolute", left: 13, top: 0, height: "100%", display: "flex", alignItems: "center", fontSize: 13.5, fontWeight: 500, color: "var(--sm-dark)", whiteSpace: "nowrap", maxWidth: "calc(100% - 16px)", overflow: "hidden", textOverflow: "ellipsis" }}>{r.label}</span>
-            </div>
-            <div style={{ minWidth: 58, textAlign: "right", whiteSpace: "nowrap", lineHeight: 1.15 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)" }}>{r.value.toLocaleString()}</span>{unit && <span className="sm-faint" style={{ fontSize: 11 }}> {unit}</span>}
-              {r.sub && <div className="sm-faint" style={{ fontSize: 11 }}>{r.sub}</div>}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Legend({ items }: { items: [string, string][] }) {
-  return (
-    <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginTop: 8, fontSize: 12 }}>
-      {items.map(([label, color]) => (
-        <span key={label} className="sm-row" style={{ gap: 5, alignItems: "center" }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />{label}
-        </span>
-      ))}
-    </div>
-  );
-}

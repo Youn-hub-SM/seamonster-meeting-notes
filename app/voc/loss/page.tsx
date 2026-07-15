@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { VOC_FAULTS, VOC_FAULT_CLAIMABLE, VOC_FAULT_BURDEN, VOC_COMP_MANUAL, computeVocLoss, type Voc } from "@/app/lib/voc";
+import { VOC_FAULTS, VOC_FAULT_CLAIMABLE, VOC_FAULT_BURDEN, VOC_FAULT_COLOR, VOC_COMP_MANUAL, computeVocLoss, type Voc } from "@/app/lib/voc";
 import { Donut, TrendChart, PieCard, BarList, moneyCompact } from "@/app/components/charts";
 
 type RMode = "7일" | "14일" | "30일" | "custom";
@@ -29,15 +29,11 @@ function periodLabel(key: string, unit: Unit): string {
   return `${f(s)}~${f(e)}`;
 }
 
-// 귀책 색(정산) — 제조사=청구가능(초록), 물류=주의, 자사=부담(빨강), 고객=정보, 미분류=회색
-const FAULT_META: { key: string; color: string }[] = [
-  { key: "제조사", color: "var(--sm-success)" },
-  { key: "물류", color: "var(--sm-warning)" },
-  { key: "자사", color: "var(--sm-danger)" },
-  { key: "고객", color: "var(--sm-info)" },
-  { key: "미분류", color: "var(--sm-text-light)" },
-];
-const FAULT_COLOR: Record<string, string> = Object.fromEntries(FAULT_META.map((f) => [f.key, f.color]));
+// 귀책 색(정산) — 제조사=청구가능(초록), 물류=주의, 자사=부담(빨강), 고객=정보, 미분류=회색.
+//  색 지도는 lib/voc.ts 의 VOC_FAULT_COLOR(통계 화면과 공유). 여기선 표시 순서만 정한다.
+const FAULT_META: { key: string; color: string }[] = ["제조사", "물류", "자사", "고객", "미분류"]
+  .map((key) => ({ key, color: VOC_FAULT_COLOR[key] }));
+const FAULT_COLOR = VOC_FAULT_COLOR;
 
 type Prod = { name: string; cost_price: number | null; volume_kg: number | null };
 const won = (n: number) => n.toLocaleString();

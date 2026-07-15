@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatMoney } from "@/app/lib/b2b-orders";
-import { Donut, TrendChart, moneyCompact } from "@/app/components/charts";
+import { Donut, TrendChart, ChartLegend, moneyCompact } from "@/app/components/charts";
 
 type Report = {
   period: { from: string; to: string };
@@ -232,7 +232,7 @@ export default function ReportsPage() {
             <div className="b2b-card" style={{ marginBottom: 16 }}>
               <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h2 className="b2b-card-title">월별 매출 추세</h2>
-                <span className="sm-chart-legend"><span><i style={{ background: "var(--sm-orange)" }} />매출(원)</span></span>
+                <ChartLegend items={[["매출(원)", "var(--sm-orange)"]]} />
               </div>
               <TrendChart data={report.trend.map((t) => ({ label: t.month, value: t.revenue, tip: `${t.month} · ${formatMoney(t.revenue)}원` }))} fmtAxis={moneyCompact} />
             </div>

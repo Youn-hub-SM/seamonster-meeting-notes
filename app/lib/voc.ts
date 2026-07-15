@@ -101,9 +101,19 @@ export interface Voc {
   flow_task_at?: string | null;    // 등록 시각(값 있으면 flow에 등록됨)
 }
 
-// 상태별 색 (목록 뱃지)
+// 상태별 색 (목록 뱃지·도넛·추세)
 export const VOC_STATUS_COLOR: Record<VocStatus, { bg: string; fg: string }> = {
   접수: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
   "응대·개선중": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
   개선완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+};
+
+// 귀책별 색 — 화면·차트가 같은 귀책을 같은 색으로 그리도록 한 곳에서 정의.
+//  (손해 분석의 도넛과 통계의 추세가 서로 다른 색을 쓰던 것을 통일)
+export const VOC_FAULT_COLOR: Record<string, string> = {
+  제조사: "var(--sm-success)",
+  물류: "var(--sm-warning)",
+  자사: "var(--sm-danger)",
+  고객: "var(--sm-info)",
+  미분류: "var(--sm-text-light)",
 };

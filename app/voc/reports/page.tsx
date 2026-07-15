@@ -128,7 +128,7 @@ export default function VocRequestPage() {
               {/* 요약 통계 — 유형별 접수 도넛 + 지표 */}
               <div style={{ display: "flex", gap: 28, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
                 {summary.cats.length > 0 && (
-                  <Donut data={summary.cats} center={String(summary.total)} centerSub="건" size={116} />
+                  <Donut data={summary.cats} center={String(summary.total)} centerSub="건" />
                 )}
                 <div className="sm-col" style={{ gap: 14, flex: 1, minWidth: 240 }}>
                   <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>

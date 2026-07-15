@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InventoryRow, InventoryTxn, InvChannelFilter } from "@/app/lib/inventory";
+import { INV_TYPE_COLOR, type InventoryRow, type InventoryTxn, type InvChannelFilter } from "@/app/lib/inventory";
 import { TrendChart, BarList } from "@/app/components/charts";
 import { ChannelFilter } from "../ChannelTabs";
 
@@ -111,11 +111,11 @@ export default function InvStatsPage() {
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">월별 입고 수량</span></div>
-              <TrendChart data={inTrend} />
+              <TrendChart data={inTrend} accent={INV_TYPE_COLOR["입고"].fg} />
             </section>
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">월별 출고 수량</span></div>
-              <TrendChart data={outTrend} />
+              <TrendChart data={outTrend} accent={INV_TYPE_COLOR["출고"].fg} />
             </section>
           </div>
 
