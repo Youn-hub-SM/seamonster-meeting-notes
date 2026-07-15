@@ -48,8 +48,9 @@ export async function GET(req: NextRequest) {
       .select(
         "id, order_no, order_date, ship_date, status, " +
           "company:company_id(name, contact_phone), " +
-          "order_items(product_name, option_label, spec, qty, unit_price, sort_order, " +
-            "product:product_id(sku))"
+          "order_items(id, product_name, option_label, spec, qty, unit_price, sort_order, " +
+            "product:product_id(sku)), " +
+          "shipments(status, shipment_items(order_item_id, qty))"
       )
       .neq("status", "취소")
       .gte("order_date", from)
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
     type CompanyJoin = { name?: string; contact_phone?: string };
     type ProductJoin = { sku?: string | null };
     type ItemJoin = {
+      id: string;
       product_name: string;
       option_label: string | null;
       spec: string | null;
@@ -68,11 +70,13 @@ export async function GET(req: NextRequest) {
       sort_order: number;
       product?: ProductJoin | ProductJoin[] | null;
     };
+    type ShipmentJoin = { status: string; shipment_items: { order_item_id: string | null; qty: number }[] };
     type OrderRow = {
       order_no: string;
       order_date: string;
       company: CompanyJoin | CompanyJoin[] | null;
       order_items: ItemJoin[];
+      shipments: ShipmentJoin[] | null;
     };
 
     const wb = new ExcelJS.Workbook();
@@ -88,11 +92,21 @@ export async function GET(req: NextRequest) {
       const customerPhone = company?.contact_phone ?? "";
       const orderDateYmd = (o.order_date ?? "").replace(/-/g, ""); // YYYY-MM-DD → YYYYMMDD
 
+      // 복수 차수 중 '취소'된 차수의 수량을 order_item 별로 집계 → 유효수량에서 차감(화면 리포트와 동일 기준).
+      const cancelledQty = new Map<string, number>();
+      for (const sh of o.shipments ?? []) {
+        if (sh.status !== "취소") continue;
+        for (const si of sh.shipment_items ?? []) {
+          if (si.order_item_id) cancelledQty.set(si.order_item_id, (cancelledQty.get(si.order_item_id) || 0) + (Number(si.qty) || 0));
+        }
+      }
+
       const items = (o.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
       for (const it of items) {
         const product = Array.isArray(it.product) ? it.product[0] : it.product;
         const sku = product?.sku ?? "";
-        const qty = Number(it.qty) || 0;
+        const qty = Math.max(0, (Number(it.qty) || 0) - (cancelledQty.get(it.id) || 0)); // 취소 차수 수량 차감
+        if (qty === 0) continue; // 전량 취소된 라인은 매출 0 → 행 제외
         const price = Number(it.unit_price) || 0;
         sheet.addRow([
           "도매",
