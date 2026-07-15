@@ -13,6 +13,32 @@ export type SavedOrderItem = { id: string; product_id: string | null; product_na
 type SbClient = ReturnType<typeof supabaseAdmin>;
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
+// 발송 재저장은 '전체 삭제 후 재삽입'이라 도중 실패하면 옛 차수·송장·선점출고가 사라진 채 남는다.
+//  DB 트랜잭션이 없으므로(마이그레이션 없이) 삭제 전에 스냅샷을 떠 두고, 실패 시 id 그대로 복원해 원자성을 흉내낸다.
+type ShipSnapshot = { ships: Record<string, unknown>[]; items: Record<string, unknown>[]; txns: Record<string, unknown>[] };
+async function snapshotOrderShipments(sb: SbClient, orderId: string): Promise<ShipSnapshot> {
+  const { data: ships } = await sb.from("shipments").select("*").eq("order_id", orderId);
+  const ids = (ships ?? []).map((s) => (s as { id: string }).id);
+  const items = ids.length ? ((await sb.from("shipment_items").select("*").in("shipment_id", ids)).data ?? []) : [];
+  let txns: Record<string, unknown>[] = [];
+  if (ids.length) {
+    const r = await sb.from("inventory_txns").select("*").in("shipment_id", ids);
+    txns = r.error ? [] : (r.data ?? []); // shipment_id 컬럼 미적용(035 전) 환경이면 무시
+  }
+  return { ships: ships ?? [], items, txns };
+}
+async function restoreOrderShipments(sb: SbClient, orderId: string, snap: ShipSnapshot): Promise<void> {
+  try {
+    // 부분 삽입된 새 데이터를 걷어낸 뒤 옛 데이터를 id 그대로 재삽입 → FK(shipment_id) 관계까지 원상복구.
+    await sb.from("shipments").delete().eq("order_id", orderId);
+    if (snap.ships.length) await sb.from("shipments").insert(snap.ships);
+    if (snap.items.length) await sb.from("shipment_items").insert(snap.items);
+    if (snap.txns.length) await sb.from("inventory_txns").insert(snap.txns);
+  } catch (e) {
+    console.error("[b2b-shipments] 발송 재저장 실패 후 복원도 실패:", orderId, e);
+  }
+}
+
 // 즉시출고 컬럼(035) 적용 여부 — shipments.stock_out + inventory_txns.shipment_id 둘 다 있어야 동작.
 //  미적용이면 발주 저장은 그대로 되고 재고 차감만 비활성(컬럼 누락으로 저장이 깨지지 않게).
 async function stockOutAvailable(sb: SbClient): Promise<boolean> {
@@ -59,10 +85,14 @@ export async function saveOrderShipments(
   const bundles = canDeduct ? await getAllBundles(sb) : new Map<string, BundleComponent[]>();
   const today = kstToday();
 
+  // 재저장 도중 실패 시 복원할 수 있도록 옛 발송 상태를 먼저 스냅샷(아래 catch 에서 사용).
+  const snap = await snapshotOrderShipments(sb, orderId);
+
   // 기존 발송 일정 전체 삭제 (PUT 재저장 대비).
   //  inventory_txns.shipment_id 는 on delete cascade → 이 차수들의 옛 즉시출고가 함께 삭제되어 재고가 원복됨.
   await sb.from("shipments").delete().eq("order_id", orderId);
 
+  try {
   const rec = normalizeRecipient(recipient || ({} as RecipientInput));
   const hasRecipient = !!(
     rec.recipient_name || rec.recipient_phone || rec.address || rec.delivery_memo || rec.courier
@@ -186,4 +216,9 @@ export async function saveOrderShipments(
   const derivedStatus = deriveParentStatus(insertedStatuses);
 
   return { earliestShipDate: earliest, derivedStatus, totalBoxes };
+  } catch (err) {
+    // 재저장 도중 실패 → delete 로 사라진 옛 발송·송장·선점출고를 스냅샷에서 복원(부분 상태 방지) 후 재던짐.
+    await restoreOrderShipments(sb, orderId, snap);
+    throw err;
+  }
 }
