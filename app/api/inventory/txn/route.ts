@@ -53,11 +53,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 세트면 구성품 여러 행으로, 아니면 그대로 1행. 같은 group_id/order_no 로 묶여 한 거래로 남는다.
-    const per = expandBundleQty(bundles, product_id, Math.abs(Number(b.qty) || 0));
+    //  qty(25행)는 이미 유형별 부호가 붙어 있음(출고=음수, 조정 감소=음수) → 부호 그대로 전개.
+    //  구성수량 c.qty 는 양수라 세트 전개 시 부호가 구성품에 그대로 전파된다. abs/재-signedQty 금지
+    //  (조정 감소가 증가로 뒤집히던 회귀 방지 — 조정은 34행에서 세트가 차단돼 항상 비세트 1행).
+    const per = expandBundleQty(bundles, product_id, qty);
     const attempt: Record<string, unknown>[] = [...per.entries()].map(([pid, q]) => ({
       ...row,
       product_id: pid,
-      qty: signedQty(type, q),
+      qty: q,
       ...(isSet ? { unit_amount: null, memo: [row.memo, "세트 분해"].filter(Boolean).join(" ") } : {}),
     }));
 
