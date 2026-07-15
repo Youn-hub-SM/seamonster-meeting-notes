@@ -124,30 +124,30 @@ export async function saveOrderShipments(
       // 재고 즉시 출고(선점) — 발송 잡는 순간 차감. shipment_id 로 묶여 차수 삭제/재저장 시 cascade 원복.
       //  B2B 발송이므로 '도매' 채널 재고에서 차감(036). 컬럼 미적용 환경이면 channel 빼고 재시도.
       if (wantStockOut) {
-        // 번들 상품이면 구성품으로 전개해 출고(번들 1개 = 구성품 각 필요수량만큼 차감). 단품이면 그대로.
-        const txns: Record<string, unknown>[] = [];
+        // 번들이면 구성품으로 재귀 전개(중첩 번들 포함) — 소매 출고(fulfill/dispatch)와 동일 규칙.
+        //  같은 품목이 여러 라인/구성품에 걸쳐 나오면 합산해 품목당 출고 1건으로.
+        const perProduct = new Map<string, number>();
+        const expand = (pid: string, qty: number, depth: number) => {
+          const comps = bundles.get(pid);
+          if (comps && comps.length && depth < 8) { for (const c of comps) expand(c.component_id, qty * c.qty, depth + 1); return; }
+          perProduct.set(pid, (perProduct.get(pid) || 0) + qty);
+        };
         for (const it of items) {
           const pid = orderItems[it.idx].product_id;
-          if (!pid || it.qty <= 0) continue;
-          const comps = bundles.get(pid);
-          const targets = comps && comps.length
-            ? comps.map((c) => ({ product_id: c.component_id, qty: it.qty * c.qty }))
-            : [{ product_id: pid, qty: it.qty }];
-          for (const t of targets) {
-            txns.push({
-              product_id: t.product_id,
-              type: "출고",
-              channel: "도매",
-              qty: signedQty("출고", t.qty),
-              unit_amount: null,
-              txn_date: sch.ship_date || today,
-              partner,
-              memo: comps && comps.length ? "B2B 발송 선점(번들 구성품)" : "B2B 발송 선점",
-              shipment_id: shipRow.id,
-              created_by: "B2B 자동출고",
-            });
-          }
+          if (pid && it.qty > 0) expand(pid, it.qty, 0);
         }
+        const txns: Record<string, unknown>[] = [...perProduct.entries()].map(([product_id, qty]) => ({
+          product_id,
+          type: "출고",
+          channel: "도매",
+          qty: signedQty("출고", qty),
+          unit_amount: null,
+          txn_date: sch.ship_date || today,
+          partner,
+          memo: "B2B 발송 선점",
+          shipment_id: shipRow.id,
+          created_by: "B2B 자동출고",
+        }));
         if (txns.length > 0) {
           let txr = await sb.from("inventory_txns").insert(txns);
           if (txr.error && /channel/i.test(txr.error.message)) {
