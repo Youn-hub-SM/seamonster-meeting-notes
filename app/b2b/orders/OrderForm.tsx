@@ -123,6 +123,7 @@ export default function OrderForm({
   // 거래처 선택 시 "최근 발주 복제?" 프롬프트 (신규 등록에서만)
   const [clonePrompt, setClonePrompt] = useState<{ orderId: string; summary: string } | null>(null);
   const [cloning, setCloning] = useState(false);
+  const [companyPrices, setCompanyPrices] = useState<Record<string, number>>({}); // 거래처별 상품 단가(product_id→단가)
 
   // ─────────────────────────────────────────────
   // 초기 데이터 로드
@@ -303,6 +304,26 @@ export default function OrderForm({
     setData((prev) => ({ ...prev, recipient: { ...prev.recipient, ...patch } }));
   }
 
+  // 거래처별 단가 로드 — 발주 단가 자동 채움용. 거래처가 바뀌면(신규 등록) 담긴 라인도 그 단가로 갱신.
+  useEffect(() => {
+    const cid = data.company_id;
+    if (!cid) { setCompanyPrices({}); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const j = await (await fetch(`/api/b2b/companies/${cid}/prices`, { cache: "no-store" })).json();
+        if (!alive || !j.ok) return;
+        const map: Record<string, number> = {};
+        for (const r of (j.prices || []) as { product_id: string; unit_price: number }[]) map[r.product_id] = Number(r.unit_price) || 0;
+        setCompanyPrices(map);
+        if (mode === "create") {
+          setData((prev) => ({ ...prev, items: prev.items.map((it) => (it.product_id && map[it.product_id] != null ? { ...it, unit_price: map[it.product_id] } : it)) }));
+        }
+      } catch { /* noop */ }
+    })();
+    return () => { alive = false; };
+  }, [data.company_id, mode]);
+
   // 업체 변경 시 공통 배송 정보 자동 채움 (담당자·연락처·주소 → 수령인)
   function selectCompany(companyId: string) {
     setData((prev) => {
@@ -436,7 +457,7 @@ export default function OrderForm({
       product_id: p.id,
       product_name: p.name,
       spec: p.spec ?? "",
-      unit_price: p.sale_price,
+      unit_price: companyPrices[p.id] ?? p.sale_price, // 거래처별 단가 있으면 우선, 없으면 기본판매가
       cost_at_order: p.cost_price,
       tax_type: p.tax_type,
     });
@@ -916,7 +937,7 @@ export default function OrderForm({
                       <td data-label="품목명">
                         <Combobox
                           value={it.product_name}
-                          options={products.map((p) => ({ id: p.id, label: p.name, sub: p.spec ?? "" }))}
+                          options={products.filter((p) => !p.is_bundle).map((p) => ({ id: p.id, label: p.name, sub: p.spec ?? "" }))}
                           onSelect={(o) => pickProduct(idx, o.id)}
                           onType={(text) => updateItem(idx, { product_name: text, product_id: null })}
                           allowFreeText

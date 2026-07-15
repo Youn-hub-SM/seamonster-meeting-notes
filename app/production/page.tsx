@@ -8,7 +8,7 @@ type ProductRow = { product_name: string; spec: string; qty: number; companies: 
 type DayBucket = { date: string; label: string; total_qty: number; order_count: number; products: ProductRow[] };
 type PromoItem = { sku: string; name: string; qty: number | string };
 type Promotion = { id: string; name: string; start: string; end: string; items: PromoItem[]; expectedQty: number; note?: string; color?: string };
-type Product = { sku: string | null; name: string; spec: string | null };
+type Product = { sku: string | null; name: string; spec: string | null; is_bundle?: boolean };
 type ItemStat = { sku: string; name: string; stock: number | null; dailyOut: number; depletionDays: number | null; safety: number; demand: number; autoSafety: number; safetyDays: number | null; belowSafety: boolean };
 type Manual = { id: string; sku: string; name: string; qty: number; productionDate: string; stock: number | null; dailyOut: number; depletionDate: string | null };
 type PItem = { name: string; spec: string; qty: number; manual: boolean; manualId?: string; sku?: string; request?: boolean };
@@ -95,7 +95,7 @@ export default function ProductionSchedulePage() {
       setDays(pr.days || []);
       if (pm.ok) setPromos(pm.promotions || []);
       if (mn.ok) setManual(mn.items || []);
-      if (pd.ok) setProducts((pd.products || []).map((p: Product) => ({ sku: p.sku, name: p.name, spec: p.spec })));
+      if (pd.ok) setProducts((pd.products || []).map((p: Product) => ({ sku: p.sku, name: p.name, spec: p.spec, is_bundle: p.is_bundle })));
       if (rq.ok) setRequests((rq.requests || []).filter((r: ProductionRequest) => r.status === "요청" || r.status === "진행중"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
@@ -242,16 +242,18 @@ export default function ProductionSchedulePage() {
     for (const p of products) if (p.sku && p.spec) m.set(p.sku.toUpperCase(), p.spec);
     return m;
   }, [products]);
+  // 번들(묶음)은 발주·생산 대상 제외 → SKU 집합으로 itemStats 쪽도 걸러냄.
+  const bundleSkus = useMemo(() => new Set(products.filter((p) => p.is_bundle && p.sku).map((p) => p.sku!.toUpperCase())), [products]);
   const productOptions: ComboOption[] = useMemo(
-    () => products.map((p) => ({ id: p.sku || p.name, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })),
+    () => products.filter((p) => !p.is_bundle).map((p) => ({ id: p.sku || p.name, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })),
     [products]
   );
   const itemStatOptions: ComboOption[] = useMemo(
-    () => itemStats.map((it) => {
+    () => itemStats.filter((it) => !bundleSkus.has(it.sku.toUpperCase())).map((it) => {
       const sp = specBySku.get(it.sku.toUpperCase());
       return { id: it.sku, label: sp ? `${it.name} | ${sp}` : it.name, sub: it.sku };
     }),
-    [itemStats, specBySku]
+    [itemStats, specBySku, bundleSkus]
   );
   function setPromoItems(updater: (items: PromoItem[]) => PromoItem[]) {
     setPromoModal((m) => (m ? { ...m, items: updater(m.items || []) } : m));

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Company, formatPhone, formatBizNo } from "@/app/lib/b2b-types";
+import CompanyPrices from "./CompanyPrices";
 import {
   STATUS_COLORS,
   STATUS_SHORT,
@@ -130,6 +131,9 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
           </div>
         </section>
       )}
+
+      {/* 거래처 전용 단가 */}
+      <CompanyPrices companyId={companyId} />
 
       {/* 발주 이력 */}
       <section className="b2b-card">
