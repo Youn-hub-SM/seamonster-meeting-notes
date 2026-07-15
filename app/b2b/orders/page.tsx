@@ -844,13 +844,24 @@ export default function OrdersListPage() {
                       ) : o.ship_date ? (
                         <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.ship_date}</RowCell>
                       ) : (
-                        <td className="b2b-col-date" onClick={(e) => e.stopPropagation()}>
-                          {/* 발송일 미등록 — 버튼을 눌러 날짜를 고르면 발송일 등록 + 재고 차감 */}
-                          <label className="b2b-link-btn" style={{ cursor: "pointer", position: "relative", display: "inline-flex", whiteSpace: "nowrap" }} title="발송일 등록(재고 차감)">
+                        <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
+                          {/* 발송일 미등록 — 버튼이 달력을 직접 연다(showPicker). 투명 input 오버레이는
+                              브라우저가 포커스만 주고 달력을 안 열 때가 있어 '안 눌리는' 느낌을 줬다. */}
+                          <button
+                            type="button"
+                            className="b2b-btn-secondary"
+                            style={{ padding: "4px 10px", fontSize: 12, whiteSpace: "nowrap" }}
+                            title="발송일 등록(재고 차감)"
+                            onClick={(e) => {
+                              const el = e.currentTarget.nextElementSibling as HTMLInputElement;
+                              if (typeof el.showPicker === "function") el.showPicker(); else el.click();
+                            }}
+                          >
                             + 발송일
-                            <input type="date" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
-                              onChange={(e) => { if (e.target.value) patchShipDate(o.id, e.target.value); }} />
-                          </label>
+                          </button>
+                          <input type="date" aria-label="발송일 선택"
+                            style={{ position: "absolute", left: 8, bottom: 0, width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+                            onChange={(e) => { if (e.target.value) patchShipDate(o.id, e.target.value); }} />
                         </td>
                       )}
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
