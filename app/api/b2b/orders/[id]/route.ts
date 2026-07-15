@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import {
   OrderInput,
+  ShipmentScheduleInput,
   normalizeOrderItem,
   validateOrder,
 } from "@/app/lib/b2b-orders";
@@ -283,6 +284,22 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           { ok: false, error: "발송완료로 변경하려면 송장번호가 필요합니다." },
           { status: 400 }
         );
+      }
+    }
+
+    // 발송일 인라인 등록/변경 — orders 컬럼만 바꾸면 재고가 안 빠지므로, saveOrderShipments 경로로 태워
+    //  발송 차수 생성 + 발주 전량 재고 차감(도매)을 함께 처리한다. 복수발송(차수 2개 이상)은 차수별 관리라 제외.
+    //  (status 를 함께 바꾸는 발송완료 처리는 아래 별도 흐름이므로 여기선 ship_date 단독 변경만 대상)
+    if (body.ship_date !== undefined && body.ship_date && body.status === undefined) {
+      const { count: shipCount } = await sb.from("shipments").select("id", { count: "exact", head: true }).eq("order_id", id);
+      if ((shipCount ?? 0) < 2) {
+        const { data: oi } = await sb.from("order_items").select("id, product_id, product_name, spec, sort_order").eq("order_id", id).order("sort_order", { ascending: true });
+        const savedItems: SavedOrderItem[] = (oi ?? []).map((r) => ({ id: r.id as string, product_id: (r.product_id as string) ?? null, product_name: r.product_name as string, spec: (r.spec as string) ?? null }));
+        const { data: ship0 } = await sb.from("shipments").select("recipient_name, recipient_phone, address, delivery_memo, courier, box_count").eq("order_id", id).limit(1).maybeSingle();
+        const recipient = (ship0 ? { recipient_name: ship0.recipient_name, recipient_phone: ship0.recipient_phone, address: ship0.address, delivery_memo: ship0.delivery_memo, courier: ship0.courier } : {}) as Parameters<typeof saveOrderShipments>[1];
+        const boxCount = Math.max(1, Math.floor(Number(ship0?.box_count) || 1));
+        const { earliestShipDate } = await saveOrderShipments(id, recipient, [], savedItems, boxCount, body.ship_date, (prev?.status as ShipmentScheduleInput["status"]) || "발송대기");
+        patch.ship_date = earliestShipDate; // orders.ship_date 는 아래 update 에서 동기화
       }
     }
 

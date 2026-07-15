@@ -276,6 +276,32 @@ export default function OrdersListPage() {
     }
   }
 
+  // 발송일 인라인 등록 — 서버에서 발송 차수 생성 + 발주 전량 도매 재고 차감까지 처리(단일 발송만).
+  //  성공 후 reload 로 shipments·재고 파생값·상태 정합성을 다시 맞춘다(낙관적 업데이트는 표시용).
+  async function patchShipDate(id: string, date: string) {
+    if (!date) return;
+    const snapshot = orders;
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ship_date: date } : o)));
+    try {
+      const res = await fetch(`/api/b2b/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ship_date: date }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setOrders(snapshot);
+        setError(data.error || "발송일 등록 실패");
+      } else {
+        pingActivityFeed();
+        await reload();
+      }
+    } catch (err) {
+      setOrders(snapshot);
+      setError(err instanceof Error ? err.message : "발송일 등록 오류");
+    }
+  }
+
   async function patchStatus(id: string, newStatus: OrderStatus, trackingNo?: string) {
     const snapshot = orders;
     setOrders((prev) =>
@@ -817,7 +843,20 @@ export default function OrdersListPage() {
                       </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>
                       {SHOW_ORDER_PRODUCTION && <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>}
-                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{parent ? "" : (o.ship_date || "-")}</RowCell>
+                      {parent ? (
+                        <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{""}</RowCell>
+                      ) : o.ship_date ? (
+                        <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.ship_date}</RowCell>
+                      ) : (
+                        <td className="b2b-col-date" onClick={(e) => e.stopPropagation()}>
+                          {/* 발송일 미등록 — 버튼을 눌러 날짜를 고르면 발송일 등록 + 재고 차감 */}
+                          <label className="b2b-link-btn" style={{ cursor: "pointer", position: "relative", display: "inline-flex", whiteSpace: "nowrap" }} title="발송일 등록(재고 차감)">
+                            + 발송일
+                            <input type="date" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+                              onChange={(e) => { if (e.target.value) patchShipDate(o.id, e.target.value); }} />
+                          </label>
+                        </td>
+                      )}
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {formatMoney(o.total)}
                       </RowCell>
