@@ -217,16 +217,19 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
           </div>
         )}
 
-        {NAV.filter((cat) => !cat.adminOnly || isAdmin).map((cat) => {
-          const tools = cat.tools.filter((t) => !t.adminOnly || isAdmin);
-          if (tools.length === 0) return null;
-          return (
-            <div key={cat.label} className="app-sb-group">
-              <div className="app-sb-cat">{cat.label}</div>
-              {tools.map(renderTool)}
-            </div>
-          );
-        })}
+        {/* 카테고리 목록만 스크롤 — 브랜드·홈·즐겨찾기(위)와 로그아웃(아래)은 항상 보임 */}
+        <div className="app-sb-scroll">
+          {NAV.filter((cat) => !cat.adminOnly || isAdmin).map((cat) => {
+            const tools = cat.tools.filter((t) => !t.adminOnly || isAdmin);
+            if (tools.length === 0) return null;
+            return (
+              <div key={cat.label} className="app-sb-group">
+                <div className="app-sb-cat">{cat.label}</div>
+                {tools.map(renderTool)}
+              </div>
+            );
+          })}
+        </div>
       </nav>
 
       {userName && (
