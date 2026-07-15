@@ -14,10 +14,10 @@ export type StatementSupplier = {
   addr: string;      // 사업장 소재지
   biz_type: string;  // 업태
   biz_item: string;  // 종목
-  phone: string;     // 전화
+  email: string;     // 이메일
 };
 
-const EMPTY: StatementSupplier = { name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", phone: "" };
+const EMPTY: StatementSupplier = { name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr" };
 
 export async function GET() {
   try {

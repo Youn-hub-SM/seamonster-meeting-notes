@@ -45,8 +45,8 @@ export default function SettingsPage() {
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
   const [dcfgSaving, setDcfgSaving] = useState(false);
   // 거래명세표 — 공급자(우리 회사) 정보 + 직인
-  type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; phone: string };
-  const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", phone: "" });
+  type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string };
+  const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr" });
   const [stamp, setStamp] = useState("");
   const [supSaving, setSupSaving] = useState(false);
   const [supMsg, setSupMsg] = useState<Msg | null>(null);
@@ -402,8 +402,8 @@ export default function SettingsPage() {
             <input className="b2b-input" value={sup.biz_no} onChange={(e) => setSup({ ...sup, biz_no: e.target.value })} placeholder="000-00-00000" /></label>
           <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>대표자</span>
             <input className="b2b-input" value={sup.ceo} onChange={(e) => setSup({ ...sup, ceo: e.target.value })} /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>전화</span>
-            <input className="b2b-input" value={sup.phone} onChange={(e) => setSup({ ...sup, phone: e.target.value })} /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>이메일</span>
+            <input className="b2b-input" value={sup.email} onChange={(e) => setSup({ ...sup, email: e.target.value })} placeholder="youn@seamonster.kr" /></label>
           <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>사업장 소재지</span>
             <input className="b2b-input" value={sup.addr} onChange={(e) => setSup({ ...sup, addr: e.target.value })} /></label>
           <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>업태</span>

@@ -10,7 +10,7 @@ import type { Company } from "@/app/lib/b2b-types";
 //  공급자(우리 회사)·직인은 설정(/b2b/settings 거래명세표 섹션, b2b_settings KV)에서.
 //  라인 세액: 과세=공급가액×10%(마지막 과세 라인이 반올림 오차 흡수 → 합계가 orders.vat 와 일치), 면세=0.
 
-type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; phone: string };
+type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string };
 type FullOrder = Order & { items: OrderItem[]; company: Company | null };
 
 const won = (n: number) => Math.round(n).toLocaleString();
@@ -105,7 +105,7 @@ export default function StatementPage() {
               <InfoRow label="상호" value={supplier?.name} extraLabel="성명" extra={supplier?.ceo ? `${supplier.ceo} (인)` : ""} />
               <InfoRow label="사업장" value={supplier?.addr} />
               <InfoRow label="업태" value={supplier?.biz_type} extraLabel="종목" extra={supplier?.biz_item} />
-              <InfoRow label="전화" value={supplier?.phone} />
+              <InfoRow label="이메일" value={supplier?.email} />
               {stamp && (
                 <img src={stamp} alt="직인" style={{ position: "absolute", right: 14, top: 30, width: 58, height: 58, objectFit: "contain", mixBlendMode: "multiply", opacity: 0.9 }} />
               )}
