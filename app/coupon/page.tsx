@@ -157,9 +157,6 @@ export default function CouponPage() {
   );
 }
 
-const chipStyle = (on: boolean) => ({ padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", border: `1px solid ${on ? "var(--sm-orange)" : "var(--sm-border)"}`, background: on ? "var(--sm-orange-light)" : "var(--sm-white)", color: on ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: on ? 700 : 400 } as const);
-const lockStyle = { padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "not-allowed", border: "1px dashed var(--sm-border)", background: "var(--sm-bg)", color: "var(--sm-text-light)", fontWeight: 400, opacity: 0.65 } as const;
-
 function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: CouponField; answers: Answers; ch: CouponChannel; required: boolean; set: (k: string, v: AnswerVal) => void; toggle: (k: string, o: string) => void; setRange: (k: string, part: "start" | "end", v: string) => void }) {
   const v = answers[f.key];
   const range = isDateRange(v) ? v : { start: "", end: "" };
@@ -174,8 +171,8 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
             const on = f.type === "radio" ? v === o : Array.isArray(v) && v.includes(o);
             const off = !!locked[o];
             return (
-              <button key={o} type="button" disabled={off} title={off ? locked[o] : undefined} onClick={off ? undefined : () => (f.type === "radio" ? set(f.key, o) : toggle(f.key, o))} style={off ? lockStyle : chipStyle(on)}>
-                {f.type === "checkbox" && !off && <span style={{ display: "inline-block", width: 11, height: 11, marginRight: 5, borderRadius: 3, border: "1.5px solid var(--sm-border)", background: on ? "var(--sm-orange)" : "transparent", verticalAlign: "middle" }} />}{o}{off && <span className="sm-faint" style={{ marginLeft: 4, fontSize: 10 }}>(잠김)</span>}
+              <button key={o} type="button" className={`sm-tab ${on ? "is-active" : ""}`} disabled={off} title={off ? locked[o] : undefined} onClick={off ? undefined : () => (f.type === "radio" ? set(f.key, o) : toggle(f.key, o))}>
+                {f.type === "checkbox" && !off && <span style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, border: "1.5px solid currentColor", background: on ? "currentColor" : "transparent", opacity: on ? 1 : 0.45 }} />}{o}{off && <span style={{ fontSize: 10 }}>(잠김)</span>}
               </button>
             );
           })}
@@ -187,7 +184,7 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
       {f.type === "textarea" && <textarea className="b2b-input" rows={2} value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
       {f.type === "int-days" && (
         <div className="sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          {f.presets?.map((p) => <button key={p} type="button" onClick={() => set(f.key, String(p))} style={chipStyle(String(v ?? "") === String(p))}>{p}일</button>)}
+          {f.presets?.map((p) => <button key={p} type="button" className={`sm-tab ${String(v ?? "") === String(p) ? "is-active" : ""}`} onClick={() => set(f.key, String(p))}>{p}일</button>)}
           <input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder="직접" style={{ maxWidth: 90 }} />
           <span className="sm-faint" style={{ fontSize: 13 }}>일</span>
         </div>

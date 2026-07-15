@@ -51,14 +51,8 @@ const SORT_VAL: Record<SortField, (r: Row) => number> = {
 };
 
 function Chip({ on, onClick, children, muted, title }: { on: boolean; onClick: () => void; children: React.ReactNode; muted?: boolean; title?: string }) {
-  const style: CSSProperties = {
-    fontSize: 13, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
-    border: on ? "1px solid var(--sm-orange)" : "1px solid var(--sm-border)",
-    background: on ? "var(--sm-orange-light)" : "var(--sm-white)",
-    color: on ? "var(--sm-orange-hover)" : muted ? "var(--sm-text-light)" : "var(--sm-text-mid)",
-    fontWeight: on ? 700 : 500, whiteSpace: "nowrap",
-  };
-  return <button type="button" onClick={onClick} title={title} style={style}>{children}</button>;
+  return <button type="button" className={`sm-tab sm-nowrap ${on ? "is-active" : ""}`} onClick={onClick} title={title}
+    style={muted && !on ? { color: "var(--sm-text-light)" } : undefined}>{children}</button>;
 }
 
 export default function NaverAdPage() {
