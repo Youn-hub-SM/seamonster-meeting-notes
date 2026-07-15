@@ -67,13 +67,18 @@ function NameHelper({ today }: { today: string }) {
   );
 }
 
-// 권장 행동 한 줄 — 클릭하면 해당 단계로 필터.
-function RecoRow({ color, icon, title, items, onClick }: { color: string; icon: string; title: string; items: string[]; onClick: () => void }) {
+// 권장 행동 한 줄 — 색 테두리·건수 배지로 가독성↑. 클릭하면 해당 단계로 필터.
+function RecoRow({ tone, count, title, items, onClick }: { tone: "good" | "bad"; count: number; title: string; items: string[]; onClick: () => void }) {
+  const c = tone === "bad" ? { fg: "var(--sm-danger)", bg: "var(--sm-danger-bg)" } : { fg: "var(--sm-success)", bg: "var(--sm-success-bg)" };
   return (
-    <div>
-      <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, fontSize: 13, fontWeight: 700, color }}>{icon ? `${icon} ` : ""}{title} →</button>
-      <div className="sm-faint" style={{ fontSize: 13, marginTop: 2, lineHeight: 1.5 }}>{items.slice(0, 6).join(" · ")}{items.length > 6 ? ` 외 ${items.length - 6}건` : ""}</div>
-    </div>
+    <button type="button" onClick={onClick} style={{ display: "block", width: "100%", textAlign: "left", background: "var(--sm-bg-subtle)", border: "none", borderLeft: `3px solid ${c.fg}`, borderRadius: 8, cursor: "pointer", padding: "10px 12px" }}>
+      <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: c.fg, background: c.bg, borderRadius: 999, padding: "1px 9px" }}>{count}건</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--sm-dark)" }}>{title}</span>
+        <span style={{ fontSize: 13, color: "var(--sm-info)", marginLeft: "auto" }}>보기 →</span>
+      </div>
+      <div className="sm-faint" style={{ fontSize: 13, marginTop: 5, lineHeight: 1.5 }}>{items.slice(0, 6).join(" · ")}{items.length > 6 ? ` 외 ${items.length - 6}건` : ""}</div>
+    </button>
   );
 }
 
@@ -89,6 +94,7 @@ export default function MetaAdPage() {
   const [resultsOnly, setResultsOnly] = useState(true);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
   const [showPlaybook, setShowPlaybook] = useState(false);
+  const [showTodo, setShowTodo] = useState(false); // '지금 할 일' 기본 접힘
   const today = ymd(new Date());
 
   useEffect(() => {
@@ -233,12 +239,13 @@ export default function MetaAdPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">메타 광고</h1>
-          <p className="b2b-page-subtitle">소재테스트 → 우수소재 → 본 캠페인 → 증액. 각 광고의 <b>다음 행동</b>을 규칙대로 안내합니다. {status?.account?.name ? <b>· {status.account.name}</b> : null} <Link href="/meta-ad/settings">기준 설정</Link> · <Link href="/meta-ad/library">소재 라이브러리</Link></p>
+          <p className="b2b-page-subtitle">소재테스트 → 우수소재 → 본 캠페인 → 증액. 각 광고의 <b>다음 행동</b>을 규칙대로 안내합니다. {status?.account?.name ? <b>· {status.account.name}</b> : null} <Link href="/meta-ad/settings">성과 목표·기준 설정</Link> · <Link href="/meta-ad/library">소재 라이브러리</Link></p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
           <span className="sm-faint" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{rangeLabel(preset)}{ov?.cached ? " · 캐시" : ""}</span>
           <button className="b2b-btn-secondary" onClick={() => load(true)} disabled={loading || !status?.connected}>{loading ? "..." : "새로고침"}</button>
+          <Link href="/meta-ad/settings" className="b2b-btn-secondary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>성과 기준 설정</Link>
         </div>
       </header>
 
@@ -252,33 +259,53 @@ export default function MetaAdPage() {
 
       {status?.connected && th && (
         <>
-          {/* 권장 행동 목록 (항상 열림) */}
-          <div className="b2b-card" style={{ marginBottom: 12, padding: "12px 14px" }}>
-            <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--sm-dark)", marginBottom: 8 }}>지금 할 일 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>· 현재 상황 기반 권장 행동 (라이브 기준)</span></div>
-            {!recos || (recos.pass.length + recos.danger.length + recos.scale.length + recos.decline.length + recos.library.length) === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 13 }}>지금 특별히 조치할 항목이 없습니다 (테스트·모니터링 유지)</div>
-            ) : (
-              <div className="sm-col" style={{ gap: 9 }}>
-                {recos.pass.length > 0 && <RecoRow color="#2f9e44" icon="" title={`우수소재 ${recos.pass.length}건 → 본 캠페인에 새 세트로 추가`} items={recos.pass.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("pass"); }} />}
-                {recos.danger.length > 0 && <RecoRow color="#e03131" icon="" title={`위험소재 ${recos.danger.length}건 → 소재 교체/종료`} items={recos.danger.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("danger"); }} />}
-                {recos.scale.length > 0 && <RecoRow color="#2f9e44" icon="" title={`증액 가능 캠페인 ${recos.scale.length}건 → 주 1회 +${th.scalePct}%`} items={recos.scale.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("scale"); }} />}
-                {recos.decline.length > 0 && <RecoRow color="#e03131" icon="" title={`효율 하락 캠페인 ${recos.decline.length}건 → 소재 점검`} items={recos.decline.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("decline"); }} />}
-                {recos.library.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#7048e8" }}>라이브러리 저장 추천 {recos.library.length}건 <span className="sm-faint" style={{ fontWeight: 400 }}>(ROAS ≥ {th.libraryRoas} · 재사용 아카이빙)</span></div>
-                    <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginTop: 5 }}>
-                      {recos.library.slice(0, 12).map((a) => (
-                        <Link key={a.id} className="rp-chip" style={{ textDecoration: "none" }}
-                          href={`/meta-ad/library?name=${encodeURIComponent(a.name)}&roas=${a.stat.roas.toFixed(2)}&adid=${a.id}&spend=${Math.round(a.stat.spend)}&purchases=${a.stat.purchases}`}>
-                          {a.name.length > 22 ? a.name.slice(0, 22) + "…" : a.name} · ROAS {roasFmt(a.stat.roas)} 저장→
-                        </Link>
-                      ))}
-                    </div>
+          {/* 지금 할 일 — 기본 접힘. 헤더에 건수 배지, 펼치면 권장 행동. */}
+          {(() => {
+            const todoN = recos ? recos.pass.length + recos.danger.length + recos.scale.length + recos.decline.length + recos.library.length : 0;
+            const dangerN = recos ? recos.danger.length + recos.decline.length : 0;
+            return (
+              <div className="b2b-card" style={{ padding: 0, marginBottom: 12 }}>
+                <button type="button" onClick={() => setShowTodo((v) => !v)}
+                  style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
+                  <span className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "var(--sm-dark)" }}>지금 할 일</span>
+                    {todoN > 0
+                      ? <span style={{ fontSize: 13, fontWeight: 800, padding: "2px 10px", borderRadius: 999, background: dangerN > 0 ? "var(--sm-danger-bg)" : "var(--sm-success-bg)", color: dangerN > 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{todoN}건{dangerN > 0 ? ` · 위험 ${dangerN}` : ""}</span>
+                      : <span className="sm-faint" style={{ fontSize: 13 }}>조치할 항목 없음</span>}
+                    <span className="sm-faint" style={{ fontSize: 13, fontWeight: 400 }}>· 라이브 기준</span>
+                  </span>
+                  <span style={{ fontSize: 13, color: "var(--sm-text-light)", whiteSpace: "nowrap" }}>{showTodo ? "접기 ▲" : "펼치기 ▼"}</span>
+                </button>
+                {showTodo && (
+                  <div style={{ padding: "0 14px 14px", borderTop: "1px solid var(--sm-border-light)" }}>
+                    {!recos || todoN === 0 ? (
+                      <div className="sm-faint" style={{ fontSize: 13, paddingTop: 12 }}>지금 특별히 조치할 항목이 없습니다 (테스트·모니터링 유지)</div>
+                    ) : (
+                      <div className="sm-col" style={{ gap: 10, paddingTop: 12 }}>
+                        {recos.pass.length > 0 && <RecoRow tone="good" count={recos.pass.length} title="우수소재 → 본 캠페인에 새 세트로 추가" items={recos.pass.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("pass"); }} />}
+                        {recos.danger.length > 0 && <RecoRow tone="bad" count={recos.danger.length} title="위험소재 → 소재 교체/종료" items={recos.danger.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("danger"); }} />}
+                        {recos.scale.length > 0 && <RecoRow tone="good" count={recos.scale.length} title={`증액 가능 캠페인 → 주 1회 +${th.scalePct}%`} items={recos.scale.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("scale"); }} />}
+                        {recos.decline.length > 0 && <RecoRow tone="bad" count={recos.decline.length} title="효율 하락 캠페인 → 소재 점검" items={recos.decline.map((c) => c.name)} onClick={() => { setTab("campaign"); setStageFilter("decline"); }} />}
+                        {recos.library.length > 0 && (
+                          <div style={{ background: "var(--sm-bg-subtle)", borderLeft: "3px solid #7048e8", borderRadius: 8, padding: "10px 12px" }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#7048e8" }}>라이브러리 저장 추천 {recos.library.length}건 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>(ROAS ≥ {th.libraryRoas} · 재사용 아카이빙)</span></div>
+                            <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                              {recos.library.slice(0, 12).map((a) => (
+                                <Link key={a.id} className="rp-chip" style={{ textDecoration: "none" }}
+                                  href={`/meta-ad/library?name=${encodeURIComponent(a.name)}&roas=${a.stat.roas.toFixed(2)}&adid=${a.id}&spend=${Math.round(a.stat.spend)}&purchases=${a.stat.purchases}`}>
+                                  {a.name.length > 22 ? a.name.slice(0, 22) + "…" : a.name} · ROAS {roasFmt(a.stat.roas)} 저장→
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* 운영 규칙(플레이북) */}
           <div className="b2b-card" style={{ padding: 0, marginBottom: 12, borderColor: "var(--sm-orange-border, #f0c9a8)" }}>
