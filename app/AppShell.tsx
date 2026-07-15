@@ -40,7 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {open && <div className="app-sb-backdrop" onClick={() => setOpen(false)} />}
       <div className="app-main">
         <div className="app-topbar">
-          <button type="button" className="app-sb-toggle" onClick={() => setOpen(true)} aria-label="메뉴"></button>
+          <button type="button" className="app-sb-toggle" onClick={() => setOpen(true)} aria-label="메뉴" aria-expanded={open}>☰</button>
           <Link href="/" className="app-topbar-brand">씨몬스터</Link>
         </div>
         {children}
