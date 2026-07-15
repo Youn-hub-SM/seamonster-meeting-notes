@@ -381,9 +381,7 @@ function PaymentModal({
             {loading ? (
               <div className="b2b-loading">불러오는 중...</div>
             ) : payments.length === 0 ? (
-              <div style={{ padding: 12, fontSize: 12, color: "var(--sm-text-light)", textAlign: "center", background: "var(--sm-bg)", borderRadius: 8 }}>
-                기록된 입금이 없습니다.
-              </div>
+              <div className="b2b-empty" style={{ padding: "20px 12px" }}>기록된 입금이 없습니다.</div>
             ) : (
               <div className="pay-history">
                 {payments.map((p) => (

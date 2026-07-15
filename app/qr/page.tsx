@@ -122,7 +122,7 @@ export default function QrPage() {
                           <button className="b2b-link-btn" style={{ fontSize: 11 }} onClick={() => copy(shortUrl(l.code))}>복사</button>
                         </div>
                       </td>
-                      <td style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><a href={l.target_url} target="_blank" rel="noreferrer" className="change-link" style={{ fontSize: 12 }}>{l.target_url}</a></td>
+                      <td style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><a href={l.target_url} target="_blank" rel="noreferrer" className="sm-link" style={{ fontSize: 12 }}>{l.target_url}</a></td>
                       <td className="num b2b-money"><button className="b2b-link-btn" onClick={() => setStatsFor(l)} title="스캔 통계">{l.scan_count.toLocaleString()}</button></td>
                       <td><label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer" }}><input type="checkbox" checked={l.active} onChange={() => toggleActive(l)} />{l.active ? "활성" : "비활성"}</label></td>
                       <td style={{ whiteSpace: "nowrap" }}>

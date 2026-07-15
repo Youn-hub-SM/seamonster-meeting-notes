@@ -91,7 +91,7 @@ export default function BundlesPage() {
             <tbody>
               {bundles.map((b) => (
                 <tr key={b.parent_id}>
-                  <td><strong>{b.parent_name}</strong> <span className="b2b-feed-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", fontSize: 10, fontWeight: 700 }}>세트</span></td>
+                  <td><strong>{b.parent_name}</strong> <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span></td>
                   <td className="sm-faint">{b.parent_sku || "-"}</td>
                   <td>
                     <div className="sm-col" style={{ gap: 2 }}>

@@ -106,7 +106,7 @@ export default function QuotePage() {
                   <td className="num b2b-money">{it.unit_price.toLocaleString()}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }} title={it.tax_type === "taxable" ? `공급가 ${it.amount.toLocaleString()} + VAT` : ""}>{it.total.toLocaleString()}</td>
                   <td>{it.ref_price > 0
-                    ? <span className="b2b-feed-pill" style={{ background: it.match === "같음" ? "var(--sm-success-bg)" : "var(--sm-danger-bg)", color: it.match === "같음" ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 700 }} title={it.match === "다름" ? `기준 ${it.ref_price.toLocaleString()} ≠ 실제 ${it.unit_price.toLocaleString()}` : ""}>{it.match}</span>
+                    ? <span className="b2b-status-pill" style={{ background: it.match === "같음" ? "var(--sm-success-bg)" : "var(--sm-danger-bg)", color: it.match === "같음" ? "var(--sm-success)" : "var(--sm-danger)" }} title={it.match === "다름" ? `기준 ${it.ref_price.toLocaleString()} ≠ 실제 ${it.unit_price.toLocaleString()}` : ""}>{it.match}</span>
                     : <span className="sm-faint">-</span>}</td>
                   <td><span className="sm-faint" style={{ fontSize: 12 }}>{it.tax_type === "exempt" ? "면세" : "과세"}</span></td>
                 </tr>

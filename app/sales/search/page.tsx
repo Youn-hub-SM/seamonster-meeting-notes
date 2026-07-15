@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { won as fmtWon } from "@/app/lib/format";
 
 type Row = { order_date: string; channel: string; order_id: string; product_name: string; option_name: string; sku_code: string; quantity: number; subtotal_amount: number };
 type Result = {
@@ -10,7 +11,7 @@ type Result = {
   rows?: Row[];
 };
 
-const won = (n: number) => `${(n || 0).toLocaleString()}원`;
+const won = (n: number) => `${fmtWon(n)}원`;
 
 export default function SalesSearchPage() {
   const [mode, setMode] = useState<"phone" | "order" | "text">("phone");

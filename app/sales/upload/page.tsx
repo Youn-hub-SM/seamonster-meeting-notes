@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import SalesReportPanel from "../SalesReportPanel";
+import { won as fmtWon } from "@/app/lib/format";
 
 type Preview = {
   ok: boolean; error?: string;
@@ -13,7 +14,7 @@ type Preview = {
 };
 type Batch = { id: string; filename: string; total_rows: number; inserted: number; skipped: number; uploaded_by: string | null; status: "active" | "reverted"; created_at: string; reverted_at: string | null };
 
-const won = (n: number) => `${(n || 0).toLocaleString()}원`;
+const won = (n: number) => `${fmtWon(n)}원`;
 const fmtTime = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
 
 export default function SalesUploadPage() {
@@ -175,9 +176,9 @@ export default function SalesUploadPage() {
 
 function Stat({ label, v, accent, danger }: { label: string; v: string; accent?: boolean; danger?: boolean }) {
   return (
-    <div className="b2b-card" style={{ padding: 12, textAlign: "center" }}>
-      <div className="sm-faint" style={{ fontSize: 11 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, marginTop: 3, color: danger ? "var(--sm-danger)" : accent ? "var(--sm-orange)" : "var(--sm-black)" }}>{v}</div>
+    <div className="b2b-stat-card">
+      <div className="b2b-stat-card-label">{label}</div>
+      <div className="b2b-stat-card-value b2b-money" style={danger ? { color: "var(--sm-danger)" } : accent ? { color: "var(--sm-orange)" } : undefined}>{v}</div>
     </div>
   );
 }

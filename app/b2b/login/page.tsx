@@ -59,9 +59,9 @@ function LoginForm() {
         <div style={{
           background: "var(--sm-white)",
           border: "1px solid var(--sm-border)",
-          borderRadius: 16,
+          borderRadius: "var(--sm-radius-card)",
           padding: "26px 24px",
-          boxShadow: "0 12px 32px rgba(0,0,0,0.07)",
+          boxShadow: "var(--sm-shadow-float)",
         }}>
           <label style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", display: "block", marginBottom: 8 }}>
             비밀번호
@@ -78,18 +78,7 @@ function LoginForm() {
               disabled={loading}
               style={{ marginBottom: 12 }}
             />
-            {error && (
-              <div style={{
-                fontSize: 12,
-                color: "var(--sm-danger)",
-                padding: "8px 12px",
-                background: "var(--sm-danger-bg)",
-                borderRadius: 8,
-                marginBottom: 12,
-              }}>
-                {error}
-              </div>
-            )}
+            {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
             <button
               type="submit"
               className="b2b-btn-primary"

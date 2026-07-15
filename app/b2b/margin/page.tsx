@@ -124,12 +124,9 @@ export default function MarginPage() {
                           <strong>{p.name}</strong>
                           {p.spec && <span style={{ color: "var(--sm-text-mid)" }}> {p.spec}</span>}
                           <span
+                            className="b2b-status-pill"
                             style={{
                               marginLeft: 6,
-                              fontSize: 10,
-                              fontWeight: 700,
-                              padding: "1px 6px",
-                              borderRadius: 10,
                               background: p.tax_type === "exempt" ? "var(--sm-info-bg)" : "var(--sm-warning-bg)",
                               color: p.tax_type === "exempt" ? "var(--sm-info)" : "var(--sm-warning)",
                             }}
@@ -181,11 +178,11 @@ export default function MarginPage() {
 }
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: "pos" | "neg" }) {
-  const color = tone === "neg" ? "var(--sm-danger)" : tone === "pos" ? "var(--sm-success)" : "var(--sm-dark)";
+  const color = tone === "neg" ? "var(--sm-danger)" : tone === "pos" ? "var(--sm-success)" : undefined;
   return (
-    <div style={{ padding: "8px 14px", background: "var(--sm-bg)", borderRadius: 10, minWidth: 110 }}>
-      <div style={{ fontSize: 10, color: "var(--sm-text-light)" }}>{label}</div>
-      <div style={{ fontSize: 17, fontWeight: 700, color }}>{value}</div>
+    <div className="b2b-stat-card" style={{ minWidth: 110 }}>
+      <div className="b2b-stat-card-label">{label}</div>
+      <div className="b2b-stat-card-value b2b-money" style={color ? { color } : undefined}>{value}</div>
     </div>
   );
 }

@@ -82,7 +82,7 @@ export default function VocRequestPage() {
       {error && <div className="b2b-error no-print">{error}</div>}
 
       {/* 컨트롤 */}
-      <div className="no-print" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="sm-tabbar no-print">
         <div className="sm-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
           {(["7일", "14일", "30일"] as RMode[]).map((m) => (
             <button key={m} className={`sm-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
@@ -139,7 +139,7 @@ export default function VocRequestPage() {
                   {summary.cats.length > 0 && (
                     <div className="sm-row-wrap" style={{ gap: 6 }}>
                       {summary.cats.map(([c, n]) => (
-                        <span key={c} className="b2b-feed-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{c} {n}건</span>
+                        <span key={c} className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{c} {n}건</span>
                       ))}
                     </div>
                   )}
@@ -193,7 +193,7 @@ export default function VocRequestPage() {
       )}
 
       <p className="sm-faint no-print" style={{ fontSize: 12, marginTop: 12 }}>
-        통계·기간 보고서는 <Link href="/voc/stats" className="change-link">통계·보고서</Link>에서 보고 인쇄할 수 있습니다.
+        통계·기간 보고서는 <Link href="/voc/stats" className="sm-link">통계·보고서</Link>에서 보고 인쇄할 수 있습니다.
       </p>
     </div>
   );

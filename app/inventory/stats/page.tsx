@@ -92,7 +92,7 @@ export default function InvStatsPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고/생산 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고 추세와 <strong>품목(옵션 구분)·SKU별 집계</strong>를 봅니다. <strong>도매/소매</strong> 채널로 걸러 볼 수 있어요. 산 수·팔린 수·재고가 맞는지 보려면 <a href="/inventory/reconcile" className="change-link">구매·판매·재고 확인</a>.</p></div>
+        <div><h1 className="b2b-page-title">재고/생산 통계</h1><p className="b2b-page-subtitle">재고자산·월별 입출고 추세와 <strong>품목(옵션 구분)·SKU별 집계</strong>를 봅니다. <strong>도매/소매</strong> 채널로 걸러 볼 수 있어요. 산 수·팔린 수·재고가 맞는지 보려면 <a href="/inventory/reconcile" className="sm-link">구매·판매·재고 확인</a>.</p></div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href="/inventory/reconcile" title="팔린 수(매출)와 산 수, 지금 재고가 맞는지 확인">구매·판매·재고 확인</a>
           <ChannelFilter value={channel} onChange={setChannel} />
@@ -139,7 +139,7 @@ export default function InvStatsPage() {
                 <thead><tr><th>{groupBy === "품목" ? "품목" : "SKU"}</th><th>{groupBy === "품목" ? "옵션/SKU" : "품목"}</th><th className="num">현재고</th><th className="num">입고</th><th className="num">출고</th><th className="num">조정</th><th className="num">재고자산(원)</th></tr></thead>
                 <tbody>
                   {shownAgg.length === 0 ? (
-                    <tr><td colSpan={7} className="sm-faint" style={{ padding: "16px 4px" }}>집계할 품목이 없습니다.</td></tr>
+                    <tr><td colSpan={7}><div className="b2b-empty" style={{ padding: "20px 10px" }}>집계할 품목이 없습니다.</div></td></tr>
                   ) : shownAgg.map((a) => (
                     <tr key={a.key}>
                       <td><strong>{a.label}</strong></td>

@@ -10,12 +10,7 @@ export default function SubscriptionDashboardPage() {
     <iframe
       src={`/subscription-dashboard.html?v=${V}`}
       title="씨몬스터 정기배송 분석 대시보드"
-      style={{
-        display: "block",
-        width: "100%",
-        height: "calc(100vh - 64px)",
-        border: "none",
-      }}
+      className="sm-iframe-fill"
     />
   );
 }

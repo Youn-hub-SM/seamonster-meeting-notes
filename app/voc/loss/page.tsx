@@ -130,7 +130,7 @@ export default function VocLossPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">손해금액 산정</h1>
-          <p className="b2b-page-subtitle">VOC 손해를 <strong>귀책별</strong>로 정산합니다 — 제조사 청구 가능액과 자사 부담액을 분리하고, 현재 원가 기준으로 재계산. 제조사 제출은 <Link href="/voc/reports" className="change-link">개선요청서</Link>.</p>
+          <p className="b2b-page-subtitle">VOC 손해를 <strong>귀책별</strong>로 정산합니다 — 제조사 청구 가능액과 자사 부담액을 분리하고, 현재 원가 기준으로 재계산. 제조사 제출은 <Link href="/voc/reports" className="sm-link">개선요청서</Link>.</p>
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href={`/api/voc/loss/export?from=${period.from}&to=${period.to}`}>엑셀 추출</a>
@@ -156,7 +156,7 @@ export default function VocLossPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty">집계할 VOC가 없습니다. <Link href="/voc" className="change-link">처리 상태</Link>에서 먼저 등록하세요.</div>
+        <div className="b2b-empty">집계할 VOC가 없습니다. <Link href="/voc" className="sm-link">처리 상태</Link>에서 먼저 등록하세요.</div>
       ) : (
         <>
           <section className="b2b-card sm-stat-hero" style={{ marginBottom: 16 }}>
@@ -229,8 +229,8 @@ export default function VocLossPage() {
                         <td style={{ whiteSpace: "nowrap" }}>{r.category}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{r.comp_type}</td>
                         <td onClick={(e) => e.stopPropagation()}>
-                          <select value={r.fault || "미분류"} onChange={(e) => changeFault(r, e.target.value)} className="b2b-input"
-                            style={{ padding: "3px 6px", fontSize: 12, width: "auto", border: "none", borderRadius: 7, fontWeight: 700, background: "var(--sm-bg-subtle)", color: FAULT_COLOR[r.fault || "미분류"] }}>
+                          <select value={r.fault || "미분류"} onChange={(e) => changeFault(r, e.target.value)} className="b2b-status-select"
+                            style={{ background: "var(--sm-bg-subtle)", color: FAULT_COLOR[r.fault || "미분류"] }}>
                             {VOC_FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}
                           </select>
                         </td>

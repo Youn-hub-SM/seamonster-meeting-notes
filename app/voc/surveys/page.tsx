@@ -79,7 +79,7 @@ export default function VocSurveysPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">설문 응답 수집</h1>
-          <p className="b2b-page-subtitle">Tally 등 설문 응답을 모으고 분석합니다. (불만 클레임은 <Link href="/voc" className="change-link">처리 상태</Link>)</p>
+          <p className="b2b-page-subtitle">Tally 등 설문 응답을 모으고 분석합니다. (불만 클레임은 <Link href="/voc" className="sm-link">처리 상태</Link>)</p>
         </div>
         <div className="b2b-page-actions">
           <Link href="/voc/settings" className="b2b-btn-secondary">연동 설정</Link>
@@ -89,18 +89,18 @@ export default function VocSurveysPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("survey") || error.includes("relation")) ? " — supabase/migrations/025_survey_responses.sql 를 먼저 적용하세요." : ""}</div>}
 
-      <div className="sm-tabs" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+      <div className="sm-tabbar" style={{ marginBottom: 12 }}>
         {(["목록", "분석"] as View[]).map((v) => (
           <button key={v} className={`sm-tab ${view === v ? "is-active" : ""}`} onClick={() => setView(v)}>{v}</button>
         ))}
         <span className="sm-faint" style={{ fontSize: 13, alignSelf: "center" }}>총 {rows.length}건</span>
-        {view === "목록" && <input className="b2b-input" placeholder="검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 200, marginLeft: "auto" }} />}
+        {view === "목록" && <input className="b2b-input sm-tab-search" placeholder="검색" value={search} onChange={(e) => setSearch(e.target.value)} />}
       </div>
 
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty">아직 수집된 응답이 없습니다. <Link href="/voc/settings" className="change-link">연동 설정</Link>에서 가져오세요.</div>
+        <div className="b2b-empty">아직 수집된 응답이 없습니다. <Link href="/voc/settings" className="sm-link">연동 설정</Link>에서 가져오세요.</div>
       ) : view === "목록" ? (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -199,7 +199,7 @@ export default function VocSurveysPage() {
               )}
             </div>
             <div className="b2b-modal-foot">
-              <button className="b2b-btn-secondary" onClick={() => remove(detail)} style={{ color: "var(--sm-danger)" }}>삭제</button>
+              <button className="b2b-btn-danger" onClick={() => remove(detail)}>삭제</button>
               <div className="b2b-modal-foot-right"><button className="b2b-btn-secondary" onClick={() => setDetail(null)}>닫기</button></div>
             </div>
           </div>

@@ -130,7 +130,7 @@ export default function ScanUploadPage() {
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">파일 올리기</span>
-          <a href="/api/fulfill/scan/template" className="change-link" style={{ fontSize: 12 }}>양식 다운로드</a>
+          <a href="/api/fulfill/scan/template" className="sm-link" style={{ fontSize: 12 }}>양식 다운로드</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
           엑셀(.xlsx)·CSV, <strong>여러 파일 선택 가능</strong>. 열 제목에서 <strong>송장번호·상품코드·수량</strong>을 자동 인식하고, NOTHING(정기배송 등)은 제외합니다. 송장번호는 하이픈이 있어도/없어도 동일하게 인식돼요.

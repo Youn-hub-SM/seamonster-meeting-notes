@@ -318,12 +318,9 @@ export default function ProductsPage() {
                           <strong>{p.name}</strong>
                           {p.sku && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--sm-text-light)" }}>{p.sku}</span>}
                           <span
+                            className="b2b-status-pill"
                             style={{
                               marginLeft: 8,
-                              fontSize: 10,
-                              fontWeight: 700,
-                              padding: "2px 6px",
-                              borderRadius: 10,
                               background: p.tax_type === "exempt" ? "var(--sm-info-bg)" : "var(--sm-warning-bg)",
                               color: p.tax_type === "exempt" ? "var(--sm-info)" : "var(--sm-warning)",
                             }}
@@ -332,15 +329,8 @@ export default function ProductsPage() {
                           </span>
                           {p.is_bundle && (
                             <span
-                              style={{
-                                marginLeft: 6,
-                                fontSize: 10,
-                                fontWeight: 700,
-                                padding: "2px 6px",
-                                borderRadius: 10,
-                                background: "var(--sm-info-bg)",
-                                color: "var(--sm-info)",
-                              }}
+                              className="b2b-status-pill"
+                              style={{ marginLeft: 6, background: "var(--sm-info-bg)", color: "var(--sm-info)" }}
                               title={`묶음(세트) 상품 — 구성품 ${p.bundle_count ?? 0}종`}
                             >
                               묶음{p.bundle_count ? ` ${p.bundle_count}` : ""}
@@ -508,7 +498,7 @@ function FragmentRows({ children }: { children: React.ReactNode }) {
 function HistoryPanel({ loading, history }: { loading: boolean; history: CostHistory[] }) {
   if (loading) return <div className="b2b-loading" style={{ padding: 12 }}>이력 불러오는 중...</div>;
   if (history.length === 0) {
-    return <div style={{ fontSize: 12, color: "var(--sm-text-light)" }}>원가 변경 이력이 없습니다.</div>;
+    return <div className="b2b-empty" style={{ padding: "16px 12px" }}>원가 변경 이력이 없습니다.</div>;
   }
   return (
     <div>

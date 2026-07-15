@@ -162,7 +162,7 @@ export default function SalesHistoryPage() {
                       <div key={a.id} className="b2b-history-item is-static">
                         <span className="b2b-history-summary" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           {meta && (
-                            <span className="b2b-feed-pill" style={{ background: meta.bg, color: meta.fg, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                            <span className="b2b-status-pill" style={{ background: meta.bg, color: meta.fg, flexShrink: 0 }}>
                               {meta.label}
                             </span>
                           )}

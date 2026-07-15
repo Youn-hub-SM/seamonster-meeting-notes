@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { won as fmtWon } from "@/app/lib/format";
+import { moneyCompact } from "@/app/components/charts";
 
 type Bounds = { min_date: string | null; max_date: string | null; total_rows: number };
 type Dash = {
@@ -14,8 +16,7 @@ type Dash = {
   top10: { rank: number; code: string; revenue: number }[];
 };
 
-const won = (n: number) => `${Math.round(n || 0).toLocaleString()}원`;
-function wonEok(v: number) { v = Math.round(v || 0); const eok = Math.floor(v / 1e8), man = Math.floor((v % 1e8) / 1e4); return eok > 0 ? `${eok}억 ${man.toLocaleString()}만` : `${man.toLocaleString()}만`; }
+const won = (n: number) => `${fmtWon(n)}원`;
 function pctBadge(p: number | null) {
   if (p === null) return <span style={{ color: "var(--sm-text-light)", fontWeight: 700 }}>신규</span>;
   const up = p >= 0;
@@ -41,14 +42,14 @@ export default function SalesHome() {
         </div>
       </header>
 
-      {err && <section className="b2b-card"><p style={{ color: "var(--sm-warning)", fontSize: 13 }}>데이터 조회 실패: {err}<br /><span className="sm-faint">마이그레이션 039를 Supabase에 아직 적용하지 않았다면 먼저 적용하세요.</span></p></section>}
+      {err && <div className="b2b-error">데이터 조회 실패: {err}<br /><span className="sm-faint">마이그레이션 039를 Supabase에 아직 적용하지 않았다면 먼저 적용하세요.</span></div>}
 
       {hasData && d && (
         <>
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
             <Kpi label={d.is_sunday ? "최근 3일(금~일)" : "어제 매출"} value={won(d.window_sales)} sub={`주문 ${d.order_count}건 · 객단가 ${won(d.aov)}`} />
-            <Kpi label="이번달 누적" value={`${wonEok(d.this_month_sales)} 원`} sub={<>전월 대비 환산 {pctBadge(d.month_rr_pct)}</>} />
-            <Kpi label="올해 누적" value={`${wonEok(d.this_year_sales)} 원`} sub={<>전년 대비 페이스 {pctBadge(d.year_rr_pct)}</>} accent />
+            <Kpi label="이번달 누적" value={`${moneyCompact(d.this_month_sales)} 원`} sub={<>전월 대비 환산 {pctBadge(d.month_rr_pct)}</>} />
+            <Kpi label="올해 누적" value={`${moneyCompact(d.this_year_sales)} 원`} sub={<>전년 대비 페이스 {pctBadge(d.year_rr_pct)}</>} accent />
             <Kpi label="신규 : 재구매" value={`${d.new_cust} : ${d.repeat_cust}`} sub={`${d.is_sunday ? "최근 3일" : "어제"} 기준 고객 수`} />
           </div>
 
@@ -61,7 +62,7 @@ export default function SalesHome() {
                     <tr key={c.name}><td>{c.name}</td><td style={{ textAlign: "right", fontWeight: 700 }}>{won(c.month)}</td><td style={{ textAlign: "right", width: 70 }}>{pctBadge(c.prev_month === 0 ? null : (c.month - c.prev_month) / c.prev_month * 100)}</td></tr>
                   ))}</tbody>
                 </table>
-              ) : <p className="sm-faint">데이터 없음</p>}
+              ) : <div className="b2b-empty" style={{ padding: "20px 10px" }}>데이터 없음</div>}
             </section>
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">{d.is_sunday ? "최근 3일" : "어제"} 잘 팔린 상품 Top 5</span></div>
@@ -71,7 +72,7 @@ export default function SalesHome() {
                     <tr key={t.rank}><td style={{ width: 28 }}>{t.rank}</td><td style={{ fontFamily: "monospace" }}>{t.code}</td><td style={{ textAlign: "right", fontWeight: 700 }}>{won(t.revenue)}</td></tr>
                   ))}</tbody>
                 </table>
-              ) : <p className="sm-faint">데이터 없음</p>}
+              ) : <div className="b2b-empty" style={{ padding: "20px 10px" }}>데이터 없음</div>}
             </section>
           </div>
         </>
@@ -79,16 +80,16 @@ export default function SalesHome() {
 
       <section className="b2b-card" style={{ marginTop: 12 }}>
         <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
-          <div className="b2b-card" style={{ padding: 14, textAlign: "center" }}>
-            <div className="sm-faint" style={{ fontSize: 12 }}>누적 행 수</div>
-            <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{b ? b.total_rows.toLocaleString() : "…"}</div>
+          <div className="b2b-stat-card">
+            <div className="b2b-stat-card-label">누적 행 수</div>
+            <div className="b2b-stat-card-value b2b-money">{b ? b.total_rows.toLocaleString() : "…"}</div>
           </div>
-          <div className="b2b-card" style={{ padding: 14, textAlign: "center" }}>
-            <div className="sm-faint" style={{ fontSize: 12 }}>데이터 기간</div>
-            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 8 }}>{b?.min_date && b?.max_date ? `${b.min_date} ~ ${b.max_date}` : "데이터 없음"}</div>
+          <div className="b2b-stat-card">
+            <div className="b2b-stat-card-label">데이터 기간</div>
+            <div className="b2b-stat-card-value" style={{ fontSize: 15 }}>{b?.min_date && b?.max_date ? `${b.min_date} ~ ${b.max_date}` : "데이터 없음"}</div>
           </div>
         </div>
-        {b && b.total_rows === 0 && <p className="sm-faint" style={{ fontSize: 13, marginTop: 10 }}>아직 매출 데이터가 없습니다. 과거 전체는 백필 스크립트로, 이후는 <Link href="/sales/upload" style={{ color: "var(--sm-orange)" }}>데이터 업로드</Link>로 채우세요.</p>}
+        {b && b.total_rows === 0 && <p className="sm-faint" style={{ fontSize: 13, marginTop: 10 }}>아직 매출 데이터가 없습니다. 과거 전체는 백필 스크립트로, 이후는 <Link href="/sales/upload" className="sm-link">데이터 업로드</Link>로 채우세요.</p>}
       </section>
 
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginTop: 12 }}>
@@ -102,10 +103,10 @@ export default function SalesHome() {
 
 function Kpi({ label, value, sub, accent }: { label: string; value: string; sub: ReactNode; accent?: boolean }) {
   return (
-    <div className="b2b-card" style={{ padding: 16 }}>
-      <div className="sm-faint" style={{ fontSize: 12, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: accent ? "var(--sm-orange)" : "var(--sm-black)" }}>{value}</div>
-      <div style={{ fontSize: 12.5, marginTop: 4 }}>{sub}</div>
+    <div className="b2b-stat-card">
+      <div className="b2b-stat-card-label">{label}</div>
+      <div className="b2b-stat-card-value b2b-money" style={accent ? { color: "var(--sm-orange)" } : undefined}>{value}</div>
+      <div className="b2b-stat-card-hint">{sub}</div>
     </div>
   );
 }

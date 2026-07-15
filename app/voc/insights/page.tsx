@@ -47,10 +47,10 @@ export default function VocInsightsPage() {
       {error && <div className="b2b-error">{error}</div>}
 
       {loading ? (
-        <div className="b2b-card"><div className="b2b-empty" style={{ padding: "40px 20px" }}>클레임을 분석하는 중입니다… (최대 1분)</div></div>
+        <div className="b2b-card"><div className="b2b-loading">클레임을 분석하는 중입니다… (최대 1분)</div></div>
       ) : !insight ? (
         <div className="b2b-card">
-          <div className="b2b-empty" style={{ padding: "48px 20px", textAlign: "center" }}>
+          <div className="b2b-empty">
             <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 15 }}>아직 분석 결과가 없습니다</div>
             <div className="sm-muted" style={{ maxWidth: 520, margin: "0 auto", lineHeight: 1.65 }}>
               위의 <strong>AI 분석 실행</strong> 버튼을 누르면 최근 클레임을 모아 반복 패턴과 개선책을 정리해 드립니다.
@@ -81,7 +81,7 @@ export default function VocInsightsPage() {
               <div className="sm-col" style={{ gap: 10 }}>
                 {(insight.patterns || []).map((p, i) => (
                   <div key={i} className="sm-col" style={{ gap: 2 }}>
-                    <div className="sm-between"><strong style={{ fontSize: 14 }}>{p.title}</strong><span className="b2b-feed-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>{p.count}건</span></div>
+                    <div className="sm-between"><strong style={{ fontSize: 14 }}>{p.title}</strong><span className="b2b-status-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>{p.count}건</span></div>
                     <div className="sm-muted" style={{ fontSize: 13 }}>{p.detail}</div>
                   </div>
                 ))}
@@ -106,7 +106,7 @@ export default function VocInsightsPage() {
             <div className="sm-col" style={{ gap: 12 }}>
               {(insight.improvements || []).map((m, i) => (
                 <div key={i} className="sm-row" style={{ gap: 10, alignItems: "flex-start" }}>
-                  <span className="b2b-feed-pill" style={{ background: "var(--sm-bg-subtle)", color: EFFORT_COLOR[m.effort] || "var(--sm-text-mid)", flexShrink: 0 }}>{m.effort || "—"}</span>
+                  <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: EFFORT_COLOR[m.effort] || "var(--sm-text-mid)", flexShrink: 0 }}>{m.effort || "—"}</span>
                   <div className="sm-col" style={{ gap: 2 }}>
                     <strong style={{ fontSize: 14 }}>{m.action}</strong>
                     <div className="sm-muted" style={{ fontSize: 13 }}>{m.impact}</div>

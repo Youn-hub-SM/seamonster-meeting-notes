@@ -152,7 +152,7 @@ export default function InventoryReconcilePage() {
                 </tr></thead>
                 <tbody>
                   {shown.length === 0 ? (
-                    <tr><td colSpan={9} className="sm-faint" style={{ padding: "16px 4px" }}>볼 품목이 없습니다.</td></tr>
+                    <tr><td colSpan={9}><div className="b2b-empty" style={{ padding: "20px 10px" }}>볼 품목이 없습니다.</div></td></tr>
                   ) : shown.map((r) => (
                     <tr key={r.product_id}>
                       <td><strong>{r.name}</strong></td>
@@ -165,9 +165,9 @@ export default function InventoryReconcilePage() {
                       <td className="num b2b-money" style={{ fontWeight: 700, color: r.notSubtracted > 0 ? "var(--sm-warning)" : r.notSubtracted < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.notSubtracted ? (r.notSubtracted > 0 ? "+" : "") + won(r.notSubtracted) : "0"}</td>
                       <td>
                         <span className="sm-row" style={{ gap: 4, flexWrap: "wrap" }}>
-                          {r.noBuy && <span className="b2b-feed-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)", fontSize: 10.5, fontWeight: 700 }}>산 기록 없음</span>}
-                          {r.minusStock && <span className="b2b-feed-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)", fontSize: 10.5, fontWeight: 700 }}>재고 마이너스</span>}
-                          {!r.minusStock && r.emptySelling && <span className="b2b-feed-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)", fontSize: 10.5, fontWeight: 700 }}>재고 0인데 팔림</span>}
+                          {r.noBuy && <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>산 기록 없음</span>}
+                          {r.minusStock && <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>재고 마이너스</span>}
+                          {!r.minusStock && r.emptySelling && <span className="b2b-status-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>재고 0인데 팔림</span>}
                           {!r.issue && <span className="sm-faint" style={{ fontSize: 11 }}>이상 없음</span>}
                         </span>
                       </td>

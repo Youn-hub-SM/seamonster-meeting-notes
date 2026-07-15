@@ -217,7 +217,7 @@ export default function FulfillPage() {
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장</div><div className="b2b-stat-card-value" style={{ color: "var(--sm-orange)" }}>{res.stats.guaranteeCount.toLocaleString()}</div></div>
               </div>
               {res.unmatched.length > 0 && (
-                <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-danger-bg)", border: "1px solid var(--sm-danger)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
+                <div className="b2b-error" style={{ lineHeight: 1.6 }}>
                   <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있어요. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
                   <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(" · ")}{res.unmatched.length > 30 ? " …" : ""}</div>
                 </div>
@@ -231,7 +231,7 @@ export default function FulfillPage() {
       {step === 1 && res && (
         <>
           {res.addressWarnings.length > 0 && (
-            <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
+            <div className="sm-warn" style={{ lineHeight: 1.6 }}>
               <strong>주소 경고 {res.addressWarnings.length}건</strong> — 발주 전 반드시 확인하세요.
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
                 {res.addressWarnings.slice(0, 20).map((w, i) => <li key={i}>{w.name || "(이름?)"} · {w.addr}</li>)}
@@ -310,7 +310,7 @@ export default function FulfillPage() {
           ) : dispatch ? (
             <>
               {dispatch.items.some((i) => i.kind === "unmatched" || i.kind === "ambiguous") && (
-                <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sm-danger-bg)", border: "1px solid var(--sm-danger)", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
+                <div className="b2b-error" style={{ marginBottom: 12, lineHeight: 1.6 }}>
                   <strong>상품마스터에 없어 출고되지 않는 코드</strong> — <Link href="/b2b/products">상품마스터</Link>에 등록하면 다음부터 출고됩니다.
                   <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{dispatch.items.filter((i) => i.kind === "unmatched" || i.kind === "ambiguous").map((i) => `${i.sku}${i.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(" · ")}</div>
                 </div>

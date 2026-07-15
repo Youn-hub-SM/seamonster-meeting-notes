@@ -108,7 +108,7 @@ export default function TradePage() {
                 {ioType === "입고"
                   ? <>양식 = <strong>SKU · 수량 · 단가</strong></>
                   : <>양식 = <strong>수량 · (무시) · SKU</strong> (외부 출고 파일 그대로 · 가운데 열 무시)</>}
-                {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="change-link">양식 다운로드</a>
+                {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="sm-link">양식 다운로드</a>
                 <br />거래일·거래처·채널은 파일 전체에 적용됩니다.
               </p>
 
@@ -151,7 +151,7 @@ export default function TradePage() {
                       {preview.rows.slice(0, 200).map((r, i) => { const c = INV_TYPE_COLOR[r.type]; return (
                         <tr key={i}>
                           <td style={{ whiteSpace: "nowrap" }}>{r.txn_date?.slice(5)}</td>
-                          <td><span className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontWeight: 700 }}>{r.type}</span></td>
+                          <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{r.type}</span></td>
                           <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
                           <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{r.qty.toLocaleString()}</td>
                           <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "-"}</td>

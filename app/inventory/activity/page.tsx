@@ -110,8 +110,8 @@ export default function ActivityPage() {
                   <strong style={{ fontSize: 14 }}>{date}</strong>
                   <span className="sm-faint" style={{ fontSize: 12 }}>{list.length}건</span>
                   <span className="sm-row" style={{ gap: 4, marginLeft: "auto", flexWrap: "wrap" }}>
-                    {Object.entries(byType).map(([ty, n]) => { const c = INV_TYPE_COLOR[ty as keyof typeof INV_TYPE_COLOR]; return <span key={ty} className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontSize: 11, fontWeight: 700 }}>{ty} {n}</span>; })}
-                    {evCount > 0 && <span className="b2b-feed-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", fontSize: 11, fontWeight: 700 }}>생산요청 {evCount}</span>}
+                    {Object.entries(byType).map(([ty, n]) => { const c = INV_TYPE_COLOR[ty as keyof typeof INV_TYPE_COLOR]; return <span key={ty} className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{ty} {n}</span>; })}
+                    {evCount > 0 && <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>생산요청 {evCount}</span>}
                   </span>
                 </button>
                 {o && (
@@ -121,7 +121,7 @@ export default function ActivityPage() {
                       <tbody>
                         {list.map((it) => it.kind === "event" ? (
                           <tr key={`ev-${it.e.id}`}>
-                            <td colSpan={6}><span className="b2b-feed-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", fontWeight: 700, marginRight: 8 }}>생산요청</span>{it.e.summary}</td>
+                            <td colSpan={6}><span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", marginRight: 8 }}>생산요청</span>{it.e.summary}</td>
                             <td>-</td>
                             <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{it.e.actor || "-"}</td>
                             <td></td>
@@ -131,8 +131,8 @@ export default function ActivityPage() {
                           return (
                             <tr key={t.id}>
                               <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.product_name}{t.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{t.sku}</span> : null}</td>
-                              <td><span className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontWeight: 700 }}>{t.type}</span></td>
-                              <td>{t.channel ? (() => { const ch = INV_CHANNEL_COLOR[t.channel as InvChannel]; return <span className="b2b-feed-pill" style={{ background: ch.bg, color: ch.fg, fontWeight: 700 }}>{t.channel}</span>; })() : <span className="sm-faint">-</span>}</td>
+                              <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span></td>
+                              <td>{t.channel ? (() => { const ch = INV_CHANNEL_COLOR[t.channel as InvChannel]; return <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span>; })() : <span className="sm-faint">-</span>}</td>
                               <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
                               <td className="num b2b-money">{t.unit_amount ? t.unit_amount.toLocaleString() : "-"}</td>
                               <td>{t.partner || "-"}</td>

@@ -70,13 +70,13 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
       {/* 추가 */}
       <div className="sm-row" style={{ gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 200 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>상품</span>
+          <span className="b2b-field-label">상품</span>
           <Combobox value={pick ? (pick.spec ? `${pick.name} · ${pick.spec}` : pick.name) : ""} options={options}
             onSelect={(o) => { const p = products.find((x) => x.id === o.id) ?? null; setPick(p); if (p && !price) setPrice(String(p.sale_price || "")); }}
             placeholder="상품명·SKU 검색" ariaLabel="상품 선택" emptyText="일치하는 상품이 없습니다" />
         </label>
         <label className="sm-col" style={{ gap: 3 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>단가(원)</span>
+          <span className="b2b-field-label">단가(원)</span>
           <input type="number" className="b2b-input" style={{ width: 120, textAlign: "right" }} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" />
         </label>
         <button className="b2b-btn-primary" disabled={busy || !pick || !price} onClick={() => pick && save(pick.id, Math.round(Number(price) || 0))}>추가</button>

@@ -64,7 +64,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
             return (
               <FragmentRows key={o.key}>
                 <tr onClick={() => toggle(o.key)} style={{ cursor: "pointer" }}>
-                  <td><span className="b2b-feed-pill" style={{ background: badge.bg, color: badge.fg, fontWeight: 700, whiteSpace: "nowrap" }}>{o.type} {o.status}</span></td>
+                  <td><span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type} {o.status}</span></td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 700 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
                   <td>{o.partner || "-"}</td>

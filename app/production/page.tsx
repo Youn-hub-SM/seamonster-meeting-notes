@@ -392,8 +392,8 @@ export default function ProductionSchedulePage() {
                         <td>{r.name}</td>
                         <td>{r.spec || "-"}</td>
                         <td className="num b2b-money">{r.qty.toLocaleString()}</td>
-                        <td><span className="b2b-feed-pill" style={{ background: r.request ? "var(--sm-orange-light)" : r.manual ? "var(--sm-bg-subtle)" : "var(--sm-info-bg)", color: r.request ? "var(--sm-orange)" : r.manual ? "var(--sm-text-mid)" : "var(--sm-info)" }}>{r.request ? "생산요청" : r.manual ? "직접" : "B2B"}</span></td>
-                        <td><span className="b2b-feed-pill" style={{ background: sc.bg, color: sc.fg, fontWeight: 700, whiteSpace: "nowrap" }}>{status}</span></td>
+                        <td><span className="b2b-status-pill" style={{ background: r.request ? "var(--sm-orange-light)" : r.manual ? "var(--sm-bg-subtle)" : "var(--sm-info-bg)", color: r.request ? "var(--sm-orange)" : r.manual ? "var(--sm-text-mid)" : "var(--sm-info)" }}>{r.request ? "생산요청" : r.manual ? "직접" : "B2B"}</span></td>
+                        <td><span className="b2b-status-pill" style={{ background: sc.bg, color: sc.fg }}>{status}</span></td>
                         <td onClick={(e) => e.stopPropagation()}>
                           {r.manual && r.manualId && <button className="b2b-link-btn" title="삭제" onClick={() => deleteManual(r.manualId!)} style={{ color: "var(--sm-danger)" }}>✕</button>}
                         </td>

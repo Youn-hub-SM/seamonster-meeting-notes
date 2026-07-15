@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { PROFIT_COLS, type ProfitRow, type ChannelConfig } from "@/app/lib/sales-profit";
+import { won as fmtWon } from "@/app/lib/format";
 
 type Unmatched = { sku_code: string; line_count: number; qty_sum: number; amount_sum: number; channels: string };
 type Result = { ok: boolean; error?: string; from: string; to: string; rows: ProfitRow[]; totals: ProfitRow; unmatched: Unmatched[]; unmatched_amount: number };
 
-const won = (n: number) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+const won = (n: number) => `${fmtWon(n)}원`;
 const fmt = (r: ProfitRow, key: keyof ProfitRow, money?: boolean, pct?: boolean) =>
   key === "channel" ? String(r[key]) : pct ? `${Number(r[key]).toFixed(2)}%` : money ? won(Number(r[key])) : Number(r[key]).toLocaleString();
 

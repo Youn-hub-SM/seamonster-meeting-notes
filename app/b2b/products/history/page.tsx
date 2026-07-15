@@ -165,10 +165,10 @@ export default function ProductHistoryPage() {
                     return (
                       <div key={a.id} className="b2b-history-item is-static" style={{ display: "block" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <span className="b2b-feed-pill" style={{ background: act.bg, color: act.fg, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{act.label}</span>
+                          <span className="b2b-status-pill" style={{ background: act.bg, color: act.fg, flexShrink: 0 }}>{act.label}</span>
                           <strong style={{ fontSize: 13.5 }}>{name}</strong>
                           {sku && <span className="sm-faint" style={{ fontSize: 11 }}>{sku}</span>}
-                          {source && <span className="b2b-feed-pill" style={{ background: "var(--sm-bg)", color: "var(--sm-text-light)", fontSize: 10.5, fontWeight: 600 }}>{source}</span>}
+                          {source && <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-light)" }}>{source}</span>}
                           <span className="b2b-history-meta" style={{ marginLeft: "auto" }}>
                             {a.actor ? `${a.actor} · ` : ""}{formatClock(a.created_at)}
                           </span>

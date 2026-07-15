@@ -97,7 +97,7 @@ export default function VocManufacturerPage() {
       )}
 
       <p className="sm-faint no-print" style={{ fontSize: 12, marginTop: 12 }}>
-        기간 단위 개선요청서는 <Link href="/voc/reports" className="change-link">개선요청서</Link>, 전체 통계는 <Link href="/voc/stats" className="change-link">통계·보고서</Link>에서.
+        기간 단위 개선요청서는 <Link href="/voc/reports" className="sm-link">개선요청서</Link>, 전체 통계는 <Link href="/voc/stats" className="sm-link">통계·보고서</Link>에서.
       </p>
     </div>
   );

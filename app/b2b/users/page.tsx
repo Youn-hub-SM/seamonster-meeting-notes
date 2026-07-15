@@ -47,7 +47,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="b2b-container">
+    <>
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">로그인 계정 관리</h1>
@@ -75,25 +75,25 @@ export default function UsersPage() {
               <thead><tr><th>이름</th><th>구분</th><th>상태</th><th>추가일</th><th></th></tr></thead>
               <tbody>
                 {envUsers.map((n) => (
-                  <tr key={`env-${n}`}><td>{n}</td><td className="sm-faint">환경변수(고정)</td><td><span className="b2b-feed-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>활성</span></td><td>-</td><td></td></tr>
+                  <tr key={`env-${n}`}><td>{n}</td><td className="sm-faint">환경변수(고정)</td><td><span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>활성</span></td><td>-</td><td></td></tr>
                 ))}
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td>{u.name}</td>
                     <td className="sm-faint">추가됨</td>
                     <td>
-                      <button className="b2b-feed-pill" onClick={() => toggle(u)} style={{ cursor: "pointer", border: "none", background: u.active ? "var(--sm-success-bg)" : "var(--sm-bg-subtle)", color: u.active ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{u.active ? "활성" : "비활성"}</button>
+                      <button className="b2b-status-pill" onClick={() => toggle(u)} style={{ cursor: "pointer", border: "none", fontFamily: "inherit", background: u.active ? "var(--sm-success-bg)" : "var(--sm-bg-subtle)", color: u.active ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{u.active ? "활성" : "비활성"}</button>
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>{u.created_at?.slice(0, 10)}</td>
                     <td><button className="b2b-link-btn" onClick={() => remove(u)} style={{ color: "var(--sm-danger)" }}>삭제</button></td>
                   </tr>
                 ))}
-                {!loading && users.length === 0 && envUsers.length === 0 && <tr><td colSpan={5} className="sm-faint">계정이 없습니다.</td></tr>}
+                {!loading && users.length === 0 && envUsers.length === 0 && <tr><td colSpan={5}><div className="b2b-empty" style={{ padding: "20px 10px" }}>계정이 없습니다.</div></td></tr>}
               </tbody>
             </table>
           </div>
         )}
       </section>
-    </div>
+    </>
   );
 }

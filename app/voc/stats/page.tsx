@@ -174,7 +174,7 @@ export default function VocStatsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC 통계·보고서</h1>
-          <p className="b2b-page-subtitle no-print">클레임을 유형·구매자·기간으로 집계합니다. 제조사 제출용은 <Link href="/voc/reports" className="change-link">개선요청서</Link>에서.</p>
+          <p className="b2b-page-subtitle no-print">클레임을 유형·구매자·기간으로 집계합니다. 제조사 제출용은 <Link href="/voc/reports" className="sm-link">개선요청서</Link>에서.</p>
           <p className="print-only" style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
         </div>
         <div className="b2b-page-actions no-print">
@@ -184,7 +184,7 @@ export default function VocStatsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
 
-      <div className="no-print" style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="sm-tabbar no-print">
         <div className="sm-tabs" style={{ margin: 0, flexWrap: "wrap" }}>
           {(["7일", "14일", "30일"] as RMode[]).map((m) => (
             <button key={m} className={`sm-tab ${mode === m ? "is-active" : ""}`} onClick={() => setMode(m)}>{`최근 ${m}`}</button>
@@ -203,7 +203,7 @@ export default function VocStatsPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty">아직 집계할 VOC가 없습니다. <Link href="/voc" className="change-link">처리 상태</Link>에서 먼저 등록하세요.</div>
+        <div className="b2b-empty">아직 집계할 VOC가 없습니다. <Link href="/voc" className="sm-link">처리 상태</Link>에서 먼저 등록하세요.</div>
       ) : (
         <>
           <section className="b2b-card sm-stat-hero" style={{ marginBottom: 16 }}>

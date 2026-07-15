@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { MarginResult, MarginResultItem } from "@/app/lib/margin-calc";
+import { won as fmtWon } from "@/app/lib/format";
 
-const won = (n: number) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+const won = (n: number) => `${fmtWon(n)}원`;
 
 const EXAMPLES = [
   "대구순살 1kg을 20% 할인가로 쿠팡에서 판매하면 이익률이 어때?",
@@ -191,7 +192,8 @@ export default function MarginCalcPage() {
 
 function ResultCard({ r }: { r: MarginResultItem }) {
   const positive = r.netProfit >= 0;
-  const emph = positive ? "var(--sm-orange)" : "var(--sm-danger)";
+  // 좋은 값 = success (매출 대시보드의 증감 배지와 같은 색 언어 — 주황은 브랜드 강조지 시맨틱이 아님)
+  const emph = positive ? "var(--sm-success)" : "var(--sm-danger)";
   return (
     <section className="b2b-card">
       <div className="b2b-card-head"><span className="b2b-card-title">{r.label}</span></div>

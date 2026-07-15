@@ -98,8 +98,8 @@ export default function InventoryMovePage() {
         {pid && (
           <div className="sm-row" style={{ gap: 14, margin: "10px 0 4px", fontSize: 13, flexWrap: "wrap" }}>
             <span>지금 재고 —</span>
-            <span className="b2b-feed-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)", fontWeight: 700 }}>소매 {(retail.get(pid) ?? 0).toLocaleString()}</span>
-            <span className="b2b-feed-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", fontWeight: 700 }}>도매 {(whole.get(pid) ?? 0).toLocaleString()}</span>
+            <span className="b2b-status-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>소매 {(retail.get(pid) ?? 0).toLocaleString()}</span>
+            <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>도매 {(whole.get(pid) ?? 0).toLocaleString()}</span>
           </div>
         )}
 
@@ -157,7 +157,7 @@ export default function InventoryMovePage() {
                     <td style={{ whiteSpace: "nowrap" }}>{m.txn_date}</td>
                     <td><strong>{m.product_name}</strong>{m.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{m.sku}</span> : null}{m.memo ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>· {m.memo}</span> : null}</td>
                     <td className="num b2b-money" style={{ fontWeight: 700 }}>{m.qty.toLocaleString()}</td>
-                    <td><span className="b2b-feed-pill" style={{ background: "var(--sm-bg)", color: "var(--sm-text-mid)", fontWeight: 700, fontSize: 11 }}>{m.from} → {m.to}</span>{!m.complete && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--sm-danger)" }}>불완전</span>}</td>
+                    <td><span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{m.from} → {m.to}</span>{!m.complete && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--sm-danger)" }}>불완전</span>}</td>
                     <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{m.created_by || "-"}</td>
                     <td><button className="b2b-link-btn" onClick={() => cancelMove(m.group_id)} style={{ color: "var(--sm-danger)" }}>취소</button></td>
                   </tr>

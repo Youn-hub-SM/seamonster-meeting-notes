@@ -25,7 +25,7 @@ export default function AlertsPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고 부족 알림</h1><p className="b2b-page-subtitle">현재고가 안전재고 이하인 품목입니다. 안전재고는 <Link href="/inventory" className="change-link">제품목록</Link>에서 설정.</p></div>
+        <div><h1 className="b2b-page-title">재고 부족 알림</h1><p className="b2b-page-subtitle">현재고가 안전재고 이하인 품목입니다. 안전재고는 <Link href="/inventory" className="sm-link">제품목록</Link>에서 설정.</p></div>
       </header>
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
       {loading ? (

@@ -77,9 +77,7 @@ export default function MeetingTerms() {
             <input value={note} onChange={(e) => setNote(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
               placeholder="뜻·설명 (선택)" style={inp(240)} maxLength={300} />
-            <button type="button" onClick={add} disabled={busy || !term.trim()}
-              style={{ padding: "8px 16px", fontSize: 13, fontWeight: 600, color: "var(--sm-white)", border: "none", borderRadius: 8,
-                background: "var(--sm-orange)", cursor: busy || !term.trim() ? "default" : "pointer", opacity: busy || !term.trim() ? 0.6 : 1 }}>
+            <button type="button" className="b2b-btn-primary" onClick={add} disabled={busy || !term.trim()}>
               추가
             </button>
             {msg && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>{msg}</span>}

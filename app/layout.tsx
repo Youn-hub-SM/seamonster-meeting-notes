@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./b2b/b2b.css"; // 공용 컴포넌트 라이브러리(.b2b-*) — 전 화면에서 쓰므로 루트에서 로드(한 어플, 한 스타일)
 import AppShell from "./AppShell";
 
 export const metadata: Metadata = {

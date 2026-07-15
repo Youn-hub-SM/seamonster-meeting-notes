@@ -176,9 +176,7 @@ export default function CsPage() {
           />
         </div>
 
-        {error && (
-          <p style={{ color: "var(--sm-danger)", marginBottom: 16, fontSize: 13 }}>{error}</p>
-        )}
+        {error && <div className="b2b-error">{error}</div>}
 
         <button type="submit" className="btn-primary" disabled={query.trim().length < 5}>
           조언 받기

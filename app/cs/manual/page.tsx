@@ -143,7 +143,7 @@ export default function CsManualPage() {
         <Link href="/cs" className="btn-secondary csm-back">← CS 코치로</Link>
       </div>
 
-      {error && <p style={{ color: "var(--sm-danger)", margin: "12px 0", fontSize: 13 }}>{error}</p>}
+      {error && <div className="b2b-error" style={{ margin: "12px 0" }}>{error}</div>}
 
       {/* 검색 + 카테고리 필터 + 추가 */}
       {!loading && (
@@ -171,11 +171,11 @@ export default function CsManualPage() {
       </datalist>
 
       {loading ? (
-        <p style={{ color: "var(--sm-text-light)", padding: "32px 0" }}>불러오는 중...</p>
+        <div className="b2b-loading">불러오는 중...</div>
       ) : filtered.length === 0 ? (
-        <p style={{ color: "var(--sm-text-light)", padding: "32px 0" }}>
+        <div className="b2b-empty">
           {entries.length === 0 ? "등록된 매뉴얼이 없습니다. 항목을 추가하세요." : "검색 결과가 없습니다."}
-        </p>
+        </div>
       ) : (
         <div className="csm-list">
           {filtered.map((e) => (

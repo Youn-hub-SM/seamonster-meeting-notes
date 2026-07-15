@@ -84,6 +84,15 @@
 .sm-gap-3 { gap: var(--sm-space-3); }
 .sm-gap-4 { gap: var(--sm-space-4); }
 
+/* 본문·부제목 안 인라인 링크 — 글자 크기는 문맥을 따른다.
+   (.change-link 는 홈 업데이트 노트 전용: 12.5px 고정 + margin-top 이라 부제목 안에서 어긋난다) */
+.sm-link { color: var(--sm-orange); font-weight: 600; text-decoration: none; }
+.sm-link:hover { text-decoration: underline; }
+
+/* iframe 도구(/utm·/subscription) 전체 높이 — 모바일은 상단바(52px)만큼 빼고, 데스크톱은 꽉 채움 */
+.sm-iframe-fill { width: 100%; border: none; display: block; height: calc(100vh - 52px); }
+@media (min-width: 901px) { .sm-iframe-fill { height: 100vh; } }
+
 /* ── 탭 / 필터 — 둥근 탭(앱 버튼과 동일 radius·톤). 전 도구 공용. 상세: docs/design-system.md ──
    구조: <div class="sm-tabbar"> (검색 등 동반 시) 또는 <div class="sm-tabs"> (토글만)
          > <button class="sm-tab is-active"> 라벨 <span class="sm-tab-count">3</span> </button>  */

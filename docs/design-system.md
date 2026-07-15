@@ -45,7 +45,10 @@
 | 통계 히어로(도넛+총계+지표) | `.b2b-card.sm-stat-hero` | 예: b2b/reports · voc/stats · voc/loss |
 | 차트 | `app/components/charts.tsx` 프리미티브 | **자체 차트 금지** — §6 |
 | 캘린더 | `prod-cal` / `b2b-cal` 세트 (노션풍) | |
-| 부제목 안 인라인 링크 | `.change-link` | 클래스 없는 `<a>` 는 리셋 때문에 본문과 같은 검정으로 렌더됨 |
+| 본문·부제목 안 인라인 링크 | `.sm-link` (크기 상속) | 클래스 없는 `<a>` 는 리셋 때문에 본문과 같은 검정으로 렌더됨. `.change-link` 는 홈 업데이트 노트 전용(12.5px 고정) |
+| 표 안 상태 변경 select | `.b2b-status-select` + 색은 색 지도에서 | `.b2b-input` 으로 흉내내지 말 것 |
+| KPI 숫자 타일 | `.b2b-stat-card` + `-label` + `-value`(`b2b-money`) + `-hint` | 화면마다 자체 타일을 만들지 말 것 |
+| iframe 도구 전체 높이 | `.sm-iframe-fill` | 모바일 상단바 높이까지 계산돼 있음 |
 | VOC 미구현 메뉴 | `VocPlaceholder` 컴포넌트 | |
 | 체크박스식 다중 필터 | `.b2b-checkfilter-row` | |
 
@@ -120,6 +123,12 @@
 
 **categorical 예외** (서열 없는 구분용 — 의도적으로 토큰이 아님): `PIE_COLORS`(charts.tsx) ·
 `COLORS`(production-promotions 캘린더 밴드) · `CH_COLOR`(crm 채널). 이 밖에 새 categorical 팔레트를 만들지 말 것.
+
+**증감·이익 색 규칙**: 요약(KPI·배지)에서 좋은 값 = `--sm-success`, 나쁜 값 = `--sm-danger`.
+빽빽한 표 안 금액은 중립(`--sm-dark`) — 표 전체가 초록이 되면 오히려 신호가 죽는다. 주황은 브랜드 강조지 시맨틱이 아니다.
+
+**금액 표기**: 반올림·콤마는 `app/lib/format.ts` 의 `won()` 한 곳(접미사 "원"만 화면 로컬).
+억/만 축약은 `moneyCompact`(charts.tsx) — 자체 축약 함수를 만들지 말 것.
 
 ---
 

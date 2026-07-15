@@ -77,11 +77,7 @@ export default function ProductionView() {
               <div className="b2b-week-title-block">
                 <h2 className="b2b-week-title">{d.label}</h2>
                 {isToday && <span className="b2b-week-badge">오늘</span>}
-                {isOverdue && (
-                  <span className="b2b-week-badge" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>
-                    지남
-                  </span>
-                )}
+                {isOverdue && <span className="b2b-urgency-pill is-overdue">지연</span>}
               </div>
               <div className="b2b-week-totals">
                 <span><em>발주</em><strong>{d.order_count}건</strong></span>

@@ -265,11 +265,11 @@ export default function VocPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("voc") || error.includes("relation")) ? " — supabase/migrations/023_voc.sql 를 먼저 적용하세요." : ""}</div>}
 
-      <div className="sm-between" style={{ marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
+      <div className="sm-tabbar" style={{ marginBottom: 10 }}>
         <button className={`sm-tab ${tab === "전체" ? "is-active" : ""}`} onClick={() => setTab("전체")}>
           전체<span className="sm-tab-count">{counts.전체}</span>
         </button>
-        <input className="b2b-input" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240, maxWidth: "100%" }} />
+        <input className="b2b-input sm-tab-search" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {/* 컬럼 필터 — 유형·상품·구매처·구매자·구매일 */}
@@ -339,8 +339,8 @@ export default function VocPage() {
                       <select
                         value={r.status}
                         onChange={(e) => changeStatus(r, e.target.value)}
-                        className="b2b-input"
-                        style={{ padding: "4px 8px", fontSize: 12, width: "auto", background: sc.bg, color: sc.fg, fontWeight: 700, border: "none", borderRadius: 8 }}
+                        className="b2b-status-select"
+                        style={{ background: sc.bg, color: sc.fg }}
                       >
                         {VOC_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                         {!VOC_STATUSES.includes(r.status) && <option value={r.status}>{r.status}</option>}
@@ -507,7 +507,7 @@ export default function VocPage() {
             </div>
             <div className="b2b-modal-foot">
               <div className="sm-row" style={{ gap: 8, alignItems: "center" }}>
-                {edit.id ? <button className="b2b-btn-secondary" onClick={remove} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button> : <span />}
+                {edit.id ? <button className="b2b-btn-danger" onClick={remove} disabled={saving}>삭제</button> : <span />}
                 {edit.id && (() => {
                   const er = rows.find((r) => r.id === edit.id);
                   return er?.flow_task_at
