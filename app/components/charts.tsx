@@ -18,6 +18,13 @@ const AXIS_FS = { y: 10.5, x: 11 };
 // X축 라벨 솎음 — 슬롯이 좁으면 겹치므로 일정 간격만 그린다.
 const labelStep = (n: number) => Math.ceil(n / 14);
 const showLabel = (i: number, n: number) => n <= 14 || i % labelStep(n) === 0;
+// 막대 꼭대기만 둥근 path — 막대 3종의 공통 언어.
+//  <rect rx> 는 네 모서리가 다 둥글어져서 쓸 수 없다(누적 막대에서 조각 사이가 벌어지고,
+//  단일 막대에서도 축에 닿는 바닥이 둥글어진다). 바닥은 각지게, 위만 둥글게.
+function barPath(x: number, y: number, w: number, h: number, r = GEOM.rx): string {
+  const rr = Math.max(0, Math.min(r, h, w / 2));
+  return `M${x},${y + h} L${x},${y + rr} Q${x},${y} ${x + rr},${y} L${x + w - rr},${y} Q${x + w},${y} ${x + w},${y + rr} L${x + w},${y + h} Z`;
+}
 
 // 차트 범례 — .sm-chart-legend(b2b.css). 화면마다 인라인으로 재구현하지 말 것.
 export function ChartLegend({ items, style }: { items: [string, string][]; style?: React.CSSProperties }) {
@@ -79,7 +86,7 @@ export function TrendChart({ data, fmtAxis, accent }: { data: { label: string; v
   if (!data.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const top = niceCeil(Math.max(...data.map((d) => d.value), 1));
-  const { W, H, padL, padT, padB, rx, barMax, barRatio } = GEOM, padR = 10;
+  const { W, H, padL, padT, padB, barMax, barRatio } = GEOM, padR = 10;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const slot = plotW / data.length, bw = Math.min(barMax, slot * barRatio);
   const y = (v: number) => padT + plotH - (v / top) * plotH;
@@ -97,9 +104,9 @@ export function TrendChart({ data, fmtAxis, accent }: { data: { label: string; v
         const yy = y(d.value);
         return (
           <g key={i}>
-            <rect x={cx - bw / 2} y={yy} width={bw} height={Math.max(0, padT + plotH - yy)} rx={rx} fill={accent || "var(--sm-orange)"}>
+            <path d={barPath(cx - bw / 2, yy, bw, Math.max(0, padT + plotH - yy))} fill={accent || "var(--sm-orange)"}>
               <title>{d.tip || `${d.label} · ${fmt(d.value)}`}</title>
-            </rect>
+            </path>
             {showLabel(i, data.length) && <text x={cx} y={H - 9} textAnchor="middle" fontSize={AXIS_FS.x} fill="var(--sm-text-mid)">{d.label}</text>}
           </g>
         );
@@ -121,7 +128,7 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const totals = periods.map((_, i) => series.reduce((s, ser) => s + (ser.values[i] || 0), 0));
   const top = niceCeil(Math.max(...totals, 1));
-  const { W, H, padL, padT, padB, rx, barMax, barRatio } = GEOM, padR = 10;
+  const { W, H, padL, padT, padB, barMax, barRatio } = GEOM, padR = 10;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const slot = plotW / periods.length, bw = Math.min(barMax, slot * barRatio);
   const hOf = (v: number) => (v / top) * plotH;
@@ -151,12 +158,13 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
         }).filter(Boolean) as { si: number; yTop: number; h: number; key: string; v: number }[];
         return (
           <g key={i}>
-            {segs.map((s, n) => (
-              // 누적 막대의 맨 위 조각만 둥글게 — 막대 하나가 통으로 rx 를 가진 것처럼 보인다.
-              <rect key={s.si} x={cx - bw / 2} y={s.yTop} width={bw} height={s.h} rx={n === segs.length - 1 ? rx : 0} fill={col(s.si)}>
-                <title>{`${p} · ${s.key} ${s.v.toLocaleString()}${unit}`}</title>
-              </rect>
-            ))}
+            {segs.map((s, n) => {
+              // 맨 위 조각만 꼭대기를 둥글게 — 막대 하나가 통으로 둥근 것처럼 보인다.
+              const t = <title>{`${p} · ${s.key} ${s.v.toLocaleString()}${unit}`}</title>;
+              return n === segs.length - 1
+                ? <path key={s.si} d={barPath(cx - bw / 2, s.yTop, bw, s.h)} fill={col(s.si)}>{t}</path>
+                : <rect key={s.si} x={cx - bw / 2} y={s.yTop} width={bw} height={s.h} fill={col(s.si)}>{t}</rect>;
+            })}
             {showLabel(i, periods.length) && <text x={cx} y={H - 9} textAnchor="middle" fontSize={AXIS_FS.x} fill="var(--sm-text-mid)">{p}</text>}
           </g>
         );
@@ -183,7 +191,7 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
   const totals = periods.map((_, i) => barSeries.reduce((s, ser) => s + (ser.values[i] || 0), 0));
   const topL = niceCeil(Math.max(...totals, 1));
   const topR = niceCeil(Math.max(...lineValues, 1));
-  const { W, H, padL, padT, padB, rx, barMax, barRatio } = GEOM, padR = 56;  // 오른쪽 축 자리
+  const { W, H, padL, padT, padB, barMax, barRatio } = GEOM, padR = 56;  // 오른쪽 축 자리
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const slot = plotW / periods.length, bw = Math.min(barMax, slot * barRatio);
   const yL = (v: number) => padT + plotH - (v / topL) * plotH;
@@ -214,8 +222,11 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
               {barSeries.map((ser, si) => {
                 const v = ser.values[i] || 0; if (v <= 0) return null;
                 const h = (v / topL) * plotH; const yTop = padT + plotH - (acc / topL) * plotH - h; acc += v;
-                const isTop = !barSeries.slice(si + 1).some((s2) => (s2.values[i] || 0) > 0);  // 맨 위 조각만 둥글게
-                return <rect key={si} x={cx(i) - bw / 2} y={yTop} width={bw} height={h} rx={isTop ? rx : 0} fill={barColors[si % barColors.length]} opacity={hi === null || hi === i ? 1 : 0.45} />;
+                const isTop = !barSeries.slice(si + 1).some((s2) => (s2.values[i] || 0) > 0);  // 맨 위 조각만 꼭대기 둥글게
+                const fill = barColors[si % barColors.length], op = hi === null || hi === i ? 1 : 0.45;
+                return isTop
+                  ? <path key={si} d={barPath(cx(i) - bw / 2, yTop, bw, h)} fill={fill} opacity={op} />
+                  : <rect key={si} x={cx(i) - bw / 2} y={yTop} width={bw} height={h} fill={fill} opacity={op} />;
               })}
             </g>
           );

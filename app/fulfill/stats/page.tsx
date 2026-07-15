@@ -155,19 +155,19 @@ export default function FulfillStatsPage() {
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(agg.dry)}원</div></div>
           </div>
 
-          {/* 1) 주차별 발송량 + 운임 */}
-          <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">주차별 발송량 + 운임</span></div>
-            <ComboBarLine periods={agg.weekly.periods} barSeries={agg.weekly.series} barColors={NG} lineValues={agg.weekly.fee} />
-            <ChartLegend style={{ marginTop: 8 }} items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", CHART_LINE]]} />
-          </section>
-
-          {/* 2) 월별 발송량 + 운임 */}
-          <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 + 운임</span></div>
-            <ComboBarLine periods={agg.monthly.periods} barSeries={agg.monthly.series} barColors={NG} lineValues={agg.monthly.fee} />
-            <ChartLegend style={{ marginTop: 8 }} items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", CHART_LINE]]} />
-          </section>
+          {/* 1) 주차별 · 2) 월별 발송량 + 운임 — 아래 두 카드와 같은 2열 폭 */}
+          <div className="fx-2col">
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">주차별 발송량 + 운임</span></div>
+              <ComboBarLine periods={agg.weekly.periods} barSeries={agg.weekly.series} barColors={NG} lineValues={agg.weekly.fee} />
+              <ChartLegend style={{ marginTop: 8 }} items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", CHART_LINE]]} />
+            </section>
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">월별 발송량 + 운임</span></div>
+              <ComboBarLine periods={agg.monthly.periods} barSeries={agg.monthly.series} barColors={NG} lineValues={agg.monthly.fee} />
+              <ChartLegend style={{ marginTop: 8 }} items={[["일반", NG[0]], ["도착보장", NG[1]], ["운임(선)", CHART_LINE]]} />
+            </section>
+          </div>
 
           {/* 3) 요일별 평균 · 4) 박스종류 비중 */}
           <div className="fx-2col">
