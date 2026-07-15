@@ -279,8 +279,8 @@ export default async function B2BDashboard() {
           <code style={{ fontSize: 11 }}>meeting-notes/supabase/migrations/001_b2b_init.sql</code>{" "}
           파일 내용을 Supabase Dashboard {">"}  SQL Editor 에 붙여넣고 Run 해주세요.
           <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: "pointer", fontSize: 11, color: "#666" }}>에러 자세히 보기</summary>
-            <pre style={{ marginTop: 8, fontSize: 10, whiteSpace: "pre-wrap", color: "#666" }}>
+            <summary style={{ cursor: "pointer", fontSize: 11, color: "var(--sm-text-mid)" }}>에러 자세히 보기</summary>
+            <pre style={{ marginTop: 8, fontSize: 10, whiteSpace: "pre-wrap", color: "var(--sm-text-mid)" }}>
               {stats.error}
             </pre>
           </details>

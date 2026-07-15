@@ -59,21 +59,25 @@ export default function AsOfPage() {
       ) : (
         <>
           <p className="sm-faint" style={{ fontSize: 13, marginBottom: 8 }}>{date} 마감 기준 · {shown.length}개 품목 · 재고자산 <strong className="b2b-money">{totalValue.toLocaleString()}원</strong></p>
-          <div className="b2b-table-wrap">
-            <table className="b2b-table">
-              <thead><tr><th>품목</th><th>SKU</th><th className="num">수량</th><th className="num">재고자산</th></tr></thead>
-              <tbody>
-                {shown.map((r) => (
-                  <tr key={r.product_id}>
-                    <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}</td>
-                    <td className="sm-faint">{r.sku || "-"}</td>
-                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.qty.toLocaleString()}{r.unit}</td>
-                    <td className="num b2b-money">{r.value.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {shown.length === 0 ? (
+            <div className="b2b-empty">{rows.length === 0 ? "해당 날짜 기준 재고 기록이 없습니다." : "조건에 맞는 품목이 없습니다."}</div>
+          ) : (
+            <div className="b2b-table-wrap">
+              <table className="b2b-table">
+                <thead><tr><th>품목</th><th>SKU</th><th className="num">수량</th><th className="num">재고자산</th></tr></thead>
+                <tbody>
+                  {shown.map((r) => (
+                    <tr key={r.product_id}>
+                      <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}</td>
+                      <td className="sm-faint">{r.sku || "-"}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.qty.toLocaleString()}{r.unit}</td>
+                      <td className="num b2b-money">{r.value.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>

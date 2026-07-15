@@ -379,7 +379,7 @@ export default function NaverAdPage() {
   const roasColor = (r: Row): CSSProperties | undefined => {
     const s = r.stat; if (!s || (s.salesAmt ?? 0) === 0) return undefined;
     const m = metric(r);
-    if (m.conv === 0) return { color: "var(--sm-danger, #d64545)" };
+    if (m.conv === 0) return { color: "var(--sm-danger)" };
     if (m.roas >= 300) return { color: "var(--sm-success)", fontWeight: 700 };
     return undefined;
   };
@@ -403,7 +403,7 @@ export default function NaverAdPage() {
       </header>
 
       {status && !status.configured && (
-        <div className="b2b-error" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "1px solid #f0d9a8" }}>
+        <div className="sm-warn">
           <strong>네이버 광고 API 자격이 아직 없습니다.</strong> <code>NAVER_AD_API_KEY</code>·<code>NAVER_AD_SECRET</code>·<code>NAVER_AD_CUSTOMER_ID</code> 를 넣고 재배포하세요.
         </div>
       )}
@@ -574,7 +574,7 @@ export default function NaverAdPage() {
                       })}
                     </tbody>
                     <tfoot>
-                      <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-soft, #fafafa)" }}>
+                      <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
                         <td>합계</td><td style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{shownRows.length}개</td>
                         <td className="num b2b-money">{num(totals.imp)}</td>
                         <td className="num b2b-money">{num(totals.clk)}</td>
@@ -592,7 +592,7 @@ export default function NaverAdPage() {
                   </table>
                 </div>
                 <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>
-                  · <b>광고비</b>=기간 내 총 지출(VAT포함), <b>{roasLabel}</b>={convAmtLabel}÷광고비. <span style={{ color: "var(--sm-danger, #d64545)" }}>빨강</span>=지출했지만 {convLabel} 0(입찰가↓ 검토), <span style={{ color: "var(--sm-success)" }}>초록</span>={roasLabel} 300%↑(여력 있으면 입찰가↑).<br />
+                  · <b>광고비</b>=기간 내 총 지출(VAT포함), <b>{roasLabel}</b>={convAmtLabel}÷광고비. <span style={{ color: "var(--sm-danger)" }}>빨강</span>=지출했지만 {convLabel} 0(입찰가↓ 검토), <span style={{ color: "var(--sm-success)" }}>초록</span>={roasLabel} 300%↑(여력 있으면 입찰가↑).<br />
                   {convBasis === "purchase"
                     ? <>· <b>구매 전환만</b> 집계(장바구니 등 제외) — AD_CONVERSION_DETAIL 리포트 기반, <b>오늘 제외 어제까지</b>. 광고비 기간도 자동으로 어제까지 맞춰집니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위." : ""}</>
                     : <>· 전환·전환매출·ROAS는 <b>모든 전환유형 합</b>(구매+장바구니 등). ‘구매 전환만’으로 바꾸면 구매 기준으로 다시 계산됩니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위 입찰가를 조정합니다." : ""}</>}
@@ -646,7 +646,7 @@ export default function NaverAdPage() {
                             );
                           })}
                         </tbody>
-                        <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-soft, #fafafa)" }}>
+                        <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
                           <td>합계 ({skShown.length})</td><td className="num b2b-money">{num(skTot.imp)}</td><td className="num b2b-money">{num(skTot.clk)}</td>
                           <td className="num">{skTot.imp ? `${(skTot.clk / skTot.imp * 100).toFixed(2)}%` : "-"}</td>
                           <td className="num b2b-money">{won(skTot.cost)}</td><td className="num b2b-money">{skTot.clk ? won(skTot.cost / skTot.clk) : "-"}</td><td className="num">-</td>
@@ -716,11 +716,11 @@ export default function NaverAdPage() {
                             <td className="num b2b-money">{r.clk ? won(r.cpc) : "-"}</td>
                             <td className="num b2b-money">{num(r.conv)}</td>
                             <td className="num b2b-money">{won(r.convAmt)}</td>
-                            <td className="num" style={r.cost && r.roas >= 300 ? { color: "var(--sm-success)", fontWeight: 700 } : r.cost && r.conv === 0 ? { color: "var(--sm-danger, #d64545)" } : undefined}>{r.cost ? `${Math.round(r.roas)}%` : "-"}</td>
+                            <td className="num" style={r.cost && r.roas >= 300 ? { color: "var(--sm-success)", fontWeight: 700 } : r.cost && r.conv === 0 ? { color: "var(--sm-danger)" } : undefined}>{r.cost ? `${Math.round(r.roas)}%` : "-"}</td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-soft,#fafafa)" }}>
+                      <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
                         <td>합계 {rptAgg.rows.length}</td>
                         <td className="num b2b-money">{num(rptAgg.tot.imp)}</td><td className="num b2b-money">{num(rptAgg.tot.clk)}</td>
                         <td className="num">{rptAgg.tot.imp ? `${rptAgg.tot.ctr.toFixed(2)}%` : "-"}</td>

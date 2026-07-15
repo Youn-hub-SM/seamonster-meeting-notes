@@ -13,7 +13,7 @@ type VMeta = { computedAt: string; spanDays: number; txCount: number; capped: bo
 const URG_STYLE: Record<string, { bg: string; fg: string }> = {
   "높음": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
   "중간": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
-  "낮음": { bg: "#eef2f6", fg: "#475569" },
+  "낮음": { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },
 };
 
 function fmtAgo(iso: string): string {

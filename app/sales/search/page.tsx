@@ -63,9 +63,9 @@ export default function SalesSearchPage() {
       </header>
 
       <section className="b2b-card">
-        <div className="sm-row" style={{ gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <div className="sm-tabs" style={{ marginBottom: 12 }}>
           {([["phone", "전화번호"], ["order", "주문번호"], ["text", "상품·기간"]] as const).map(([m, label]) => (
-            <button key={m} className={mode === m ? "b2b-btn-primary" : "b2b-btn-secondary"} onClick={() => { setMode(m); setRes(null); setErr(""); }}>{label}</button>
+            <button key={m} className={`sm-tab ${mode === m ? "is-active" : ""}`} onClick={() => { setMode(m); setRes(null); setErr(""); }}>{label}</button>
           ))}
         </div>
 
@@ -101,10 +101,10 @@ export default function SalesSearchPage() {
 
       {c !== undefined && (
         c ? (
-          <section className="b2b-card" style={{ marginTop: 12, borderColor: c.is_repeat ? "var(--sm-success)" : "var(--sm-border)" }}>
+          <section className="b2b-card" style={{ marginTop: 12 }}>
             <div className="b2b-card-head">
               <span className="b2b-card-title">{c.phone} {c.name ? `· ${c.name}` : ""}</span>
-              <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: c.is_repeat ? "var(--sm-success)" : "var(--sm-surface-2,#eef6f8)", color: c.is_repeat ? "#fff" : "var(--sm-faint)" }}>{c.is_repeat ? "재구매 고객" : "신규 고객"}</span>
+              <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: c.is_repeat ? "var(--sm-success)" : "var(--sm-bg-subtle)", color: c.is_repeat ? "var(--sm-white)" : "var(--sm-text-light)" }}>{c.is_repeat ? "재구매 고객" : "신규 고객"}</span>
             </div>
             <p style={{ fontSize: 14 }}>누적 주문 <strong>{c.order_count}</strong>건 · 첫 구매 {c.first_seen} · 최근 구매 {c.last_seen}</p>
           </section>

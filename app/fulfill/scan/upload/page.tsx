@@ -141,7 +141,7 @@ export default function ScanUploadPage() {
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple style={{ display: "none" }} onChange={(e) => { const f = e.target.files; if (f && f.length) upload(f); }} />
         </div>
         {result && (
-          <div className="prod-sku-ok" style={{ fontSize: 12.5, marginTop: 12 }}>
+          <div className="sm-success" style={{ marginTop: 12 }}>
             {result.files.map((f, i) => (
               <div key={i} style={{ color: f.error ? "var(--sm-danger)" : undefined }}>
                 {f.error ? "" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${f.invoiceCount.toLocaleString()}건 · 라인 ${f.itemCount.toLocaleString()}개${f.excludedNothing ? ` · NOTHING ${f.excludedNothing} 제외` : ""}`}

@@ -99,7 +99,7 @@ export default function SalesProfitPage() {
               <button className="b2b-btn-primary" onClick={saveConfig} disabled={savingCfg}>{savingCfg ? "저장 중…" : "저장 + 재계산"}</button>
             </div>
           </div>
-          <div style={{ fontSize: 12.5, lineHeight: 1.7, background: "var(--sm-surface-2,#f7fafb)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, lineHeight: 1.7, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
             <div style={{ fontWeight: 800, marginBottom: 4 }}>계산 방법</div>
             채널별로 기간 매출을 모아 <strong>매출총이익</strong>을 계산합니다.
             <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
@@ -110,7 +110,7 @@ export default function SalesProfitPage() {
               <li><strong>매출총이익</strong> = 총매출 − (총상품원가 + 판매수수료 + 총택배보냉비) · <strong>이익률</strong> = 이익 ÷ 총매출.</li>
             </ul>
             <div style={{ marginTop: 6, color: "var(--sm-text-light)" }}>※ 배송비는 실제 결제 기준이라 따로 설정할 필요가 없습니다. 아래에선 <strong>채널 수수료율</strong>만 관리합니다.</div>
-            <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "var(--sm-warning-bg,#fff7ed)", border: "1px solid var(--sm-warning,#f59e0b)", color: "var(--sm-text)" }}>
+            <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", color: "var(--sm-black)" }}>
               <strong>채널별 매출(결제금액) 기준 — 할인 반영 여부</strong>
               <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
                 <li><strong>네이버(스마트스토어)·쿠팡·톡스토어</strong>: 할인금액이 <strong>반영된</strong> 실매출(순매출).</li>
@@ -158,7 +158,7 @@ export default function SalesProfitPage() {
                     ))}
                   </tr>
                 ))}
-                <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 800, background: "var(--sm-surface-2,#f7fafb)" }}>
+                <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
                   {PROFIT_COLS.map((c) => (
                     <td key={c.key} style={{ textAlign: c.key === "channel" ? "left" : "right" }}>{fmt(res.totals, c.key, c.money, c.pct)}</td>
                   ))}
@@ -170,7 +170,7 @@ export default function SalesProfitPage() {
       )}
 
       {res && res.unmatched.length > 0 && (
-        <section className="b2b-card" style={{ marginTop: 12, borderColor: "var(--sm-warning)" }}>
+        <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
             <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
             <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 엑셀</button>

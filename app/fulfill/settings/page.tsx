@@ -56,7 +56,7 @@ export default function FulfillSettingsPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
-      {ok && <div className="prod-sku-ok" style={{ fontSize: 13, marginBottom: 12 }}>✓ {ok}</div>}
+      {ok && <div className="sm-success">✓ {ok}</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : (
         <>

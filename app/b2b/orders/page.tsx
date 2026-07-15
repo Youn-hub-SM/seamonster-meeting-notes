@@ -583,31 +583,31 @@ export default function OrdersListPage() {
         </div>
       )}
 
-      <div className="b2b-view-tabs">
+      <div className="sm-tabbar">
         <button
           type="button"
-          className={`b2b-view-tab ${view === "list" ? "is-active" : ""}`}
+          className={`sm-tab ${view === "list" ? "is-active" : ""}`}
           onClick={() => setView("list")}
         >
           목록
         </button>
         <button
           type="button"
-          className={`b2b-view-tab ${view === "calendar" ? "is-active" : ""}`}
+          className={`sm-tab ${view === "calendar" ? "is-active" : ""}`}
           onClick={() => setView("calendar")}
         >
           캘린더
         </button>
         <button
           type="button"
-          className={`b2b-view-tab ${view === "weekly" ? "is-active" : ""}`}
+          className={`sm-tab ${view === "weekly" ? "is-active" : ""}`}
           onClick={() => setView("weekly")}
         >
           주간 (발송일)
         </button>
         <button
           type="button"
-          className={`b2b-view-tab ${view === "production" ? "is-active" : ""}`}
+          className={`sm-tab ${view === "production" ? "is-active" : ""}`}
           onClick={() => setView("production")}
         >
           생산 집계
@@ -984,11 +984,11 @@ export default function OrdersListPage() {
                           </span>
                           {parent && prog ? (
                             <span
-                              className="b2b-status-pill"
+                              className="b2b-parent-toggle"
                               role="button"
                               tabIndex={0}
                               onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleExpand(o.id); }}
-                              style={{ background: "#EEF2F6", color: "#475569", cursor: "pointer" }}
+                              style={{ cursor: "pointer" }}
                               title="발송 차수 펼치기/접기"
                             >
                               발송 {prog.done}/{prog.total} <span style={{ fontSize: 9 }}>{isCollapsed ? "▸" : "▾"}</span>

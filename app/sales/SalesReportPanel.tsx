@@ -72,9 +72,9 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
   return (
     <>
       <section className="b2b-card">
-        <div className="sm-row" style={{ gap: 8, marginBottom: 12 }}>
-          <button className={mode === "daily" ? "b2b-btn-primary" : "b2b-btn-secondary"} onClick={() => switchMode("daily")} disabled={busy !== ""}>일일 리포트</button>
-          <button className={mode === "weekly" ? "b2b-btn-primary" : "b2b-btn-secondary"} onClick={() => switchMode("weekly")} disabled={busy !== ""}>주간 리포트</button>
+        <div className="sm-tabs" style={{ marginBottom: 12 }}>
+          <button className={`sm-tab ${mode === "daily" ? "is-active" : ""}`} onClick={() => switchMode("daily")} disabled={busy !== ""}>일일 리포트</button>
+          <button className={`sm-tab ${mode === "weekly" ? "is-active" : ""}`} onClick={() => switchMode("weekly")} disabled={busy !== ""}>주간 리포트</button>
         </div>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <label className="sm-faint" style={{ fontSize: 13 }}>기준일</label>
@@ -89,7 +89,7 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
       {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
 
       {sent && (
-        <section className="b2b-card" style={{ marginTop: 12, borderColor: "var(--sm-success)" }}>
+        <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>발송 완료 ✓</span></div>
           <p style={{ fontSize: 14 }}>수신: {sent.join(", ")}</p>
         </section>
@@ -99,9 +99,9 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">{rpt.subject}</span></div>
           {rpt.html ? (
-            <iframe title="리포트 미리보기" srcDoc={rpt.html} style={{ width: "100%", height: 640, border: "1px solid var(--sm-border)", borderRadius: 8, background: "#fff" }} />
+            <iframe title="리포트 미리보기" srcDoc={rpt.html} style={{ width: "100%", height: 640, border: "1px solid var(--sm-border)", borderRadius: 8, background: "var(--sm-white)" }} />
           ) : (
-            <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.7, background: "var(--sm-surface-2, #f7fafb)", padding: 16, borderRadius: 8, border: "1px solid var(--sm-border)", fontFamily: "inherit" }}>{rpt.text}</pre>
+            <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.7, background: "var(--sm-bg-subtle)", padding: 16, borderRadius: 8, border: "1px solid var(--sm-border)", fontFamily: "inherit" }}>{rpt.text}</pre>
           )}
           <div style={{ marginTop: 14, borderTop: "1px solid var(--sm-border)", paddingTop: 14 }}>
             <label className="sm-faint" style={{ fontSize: 13, display: "block", marginBottom: 6 }}>수신자 (비우면 기본 수신자 SALES_MAIL_TO로 발송, 쉼표로 여러 명)</label>

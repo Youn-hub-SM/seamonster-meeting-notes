@@ -98,7 +98,7 @@ export default function QuotePage() {
             <tbody>
               {items.map((it) => (
                 <tr key={it.product_id}>
-                  <td style={{ fontFamily: "var(--sm-mono, monospace)", fontSize: 12 }}>{it.sku || "-"}</td>
+                  <td style={{ fontFamily: "var(--sm-mono)", fontSize: 12 }}>{it.sku || "-"}</td>
                   <td>{it.name}</td>
                   <td>{it.spec || "-"}</td>
                   <td>{it.origin || "-"}</td>

@@ -97,15 +97,15 @@ export default function MetaLibraryPage() {
         {/* 3요소 필수 */}
         <div className="mlib-3">
           <div className="mlib-el">
-            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "#4c6ef5" }}>①</span> 후킹 <span className="sm-faint">첫 1~3초 · 시선 잡기</span></div>
+            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-info)" }}>①</span> 후킹 <span className="sm-faint">첫 1~3초 · 시선 잡기</span></div>
             <textarea className="b2b-input" value={f.hook} onChange={(e) => set("hook", e.target.value)} placeholder="예: '닭가슴살 질린 분?' / 충격적 비주얼 / 질문 던지기" rows={3} />
           </div>
           <div className="mlib-el">
-            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "#f76707" }}>②</span> 스토리 <span className="sm-faint">문제→공감→해결 전개</span></div>
+            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-orange)" }}>②</span> 스토리 <span className="sm-faint">문제→공감→해결 전개</span></div>
             <textarea className="b2b-input" value={f.story} onChange={(e) => set("story", e.target.value)} placeholder="예: 다이어트 단백질 고민 → 생선살로 해결 → 조리 간편함 시연" rows={3} />
           </div>
           <div className="mlib-el">
-            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "#2f9e44" }}>③</span> 제안 <span className="sm-faint">혜택 · CTA · 구매 유도</span></div>
+            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-success)" }}>③</span> 제안 <span className="sm-faint">혜택 · CTA · 구매 유도</span></div>
             <textarea className="b2b-input" value={f.offer} onChange={(e) => set("offer", e.target.value)} placeholder="예: 첫 구매 20% + 무료배송 / '지금 맛보기 담기'" rows={3} />
           </div>
         </div>
@@ -136,7 +136,7 @@ export default function MetaLibraryPage() {
             <div key={c.id} className="mlib-card">
               <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: "var(--sm-dark)" }}>{c.name}</div>
-                <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: c.format === "영상" ? "#4c6ef51a" : "#2f9e441a", color: c.format === "영상" ? "#4c6ef5" : "#2f9e44", whiteSpace: "nowrap" }}>{c.format}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: c.format === "영상" ? "var(--sm-info-bg)" : "var(--sm-success-bg)", color: c.format === "영상" ? "var(--sm-info)" : "var(--sm-success)", whiteSpace: "nowrap" }}>{c.format}</span>
               </div>
               {(c.roas || c.adLibraryUrl) && (
                 <div className="sm-row" style={{ gap: 8, marginTop: 5, fontSize: 13, flexWrap: "wrap", alignItems: "center" }}>
@@ -145,9 +145,9 @@ export default function MetaLibraryPage() {
                 </div>
               )}
               <div className="mlib-el3">
-                <div><span className="mlib-tag" style={{ color: "#4c6ef5" }}>후킹</span> {c.hook}</div>
-                <div><span className="mlib-tag" style={{ color: "#f76707" }}>스토리</span> {c.story}</div>
-                <div><span className="mlib-tag" style={{ color: "#2f9e44" }}>제안</span> {c.offer}</div>
+                <div><span className="mlib-tag" style={{ color: "var(--sm-info)" }}>후킹</span> {c.hook}</div>
+                <div><span className="mlib-tag" style={{ color: "var(--sm-orange)" }}>스토리</span> {c.story}</div>
+                <div><span className="mlib-tag" style={{ color: "var(--sm-success)" }}>제안</span> {c.offer}</div>
               </div>
               {c.note && <div className="sm-faint" style={{ fontSize: 13, marginTop: 6 }}>{c.note}</div>}
               <div className="sm-row" style={{ gap: 8, marginTop: 10, justifyContent: "flex-end" }}>

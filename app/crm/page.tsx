@@ -15,7 +15,7 @@ const CH_COLOR: Record<string, { bg: string; fg: string }> = {
   onsite: { bg: "#E0F2F1", fg: "#00695C" },
   leaflet: { bg: "#E8F5EE", fg: "#0F6E56" },
 };
-const ST_COLOR: Record<string, string> = { active: "#22863A", auto: "#1971C2", gap: "#C92A2A", paused: "#999999" };
+const ST_COLOR: Record<string, string> = { active: "var(--sm-success)", auto: "var(--sm-info)", gap: "var(--sm-danger)", paused: "var(--sm-text-light)" };
 const chColor = (k: string) => CH_COLOR[k] || { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
 
 type Stage = { stage: string; sub: string; stage_num: number; msgs: CrmMessage[] };
@@ -191,7 +191,7 @@ function BoardView({ stages, onCard, onAdd }: { stages: Stage[]; onCard: (m: Crm
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {s.msgs.map((m) => <Card key={m.id} m={m} onClick={() => onCard(m)} />)}
-            <button onClick={() => onAdd(s)} style={{ border: "1px dashed var(--sm-border-hard, var(--sm-border))", background: "transparent", borderRadius: 10, padding: "8px", fontSize: 12, color: "var(--sm-text-light)", cursor: "pointer" }}>+ 이 단계에 추가</button>
+            <button onClick={() => onAdd(s)} style={{ border: "1px dashed var(--sm-border)", background: "transparent", borderRadius: 10, padding: "8px", fontSize: 12, color: "var(--sm-text-light)", cursor: "pointer" }}>+ 이 단계에 추가</button>
           </div>
         </div>
       ))}
@@ -204,7 +204,7 @@ function Card({ m, onClick }: { m: CrmMessage; onClick: () => void }) {
   return (
     <div onClick={onClick} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: "10px 12px", background: "var(--sm-white)", cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: ST_COLOR[m.status] || "#ccc", flexShrink: 0 }} title={CRM_STATUS_LABEL[m.status] || m.status} />
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: ST_COLOR[m.status] || "var(--sm-border)", flexShrink: 0 }} title={CRM_STATUS_LABEL[m.status] || m.status} />
         <strong style={{ fontSize: 13, color: "var(--sm-dark)", lineHeight: 1.3 }}>{m.title || "(제목 없음)"}</strong>
       </div>
       <div className="sm-row" style={{ gap: 5, flexWrap: "wrap", alignItems: "center" }}>
@@ -240,7 +240,7 @@ function TableView({ msgs, onEdit }: { msgs: CrmMessage[]; onEdit: (m: CrmMessag
               <td><strong>{m.title || "(제목 없음)"}</strong>{m.detail && <div className="sm-faint" style={{ fontSize: 11, maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.detail}</div>}</td>
               <td style={{ whiteSpace: "nowrap" }}><span style={pill(chColor(m.channel))}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "-"}</span></td>
               <td style={{ fontSize: 12 }}>{m.timing || "-"}</td>
-              <td style={{ whiteSpace: "nowrap" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: ST_COLOR[m.status] || "#ccc", display: "inline-block", marginRight: 5 }} />{CRM_STATUS_LABEL[m.status] || m.status || "-"}</td>
+              <td style={{ whiteSpace: "nowrap" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: ST_COLOR[m.status] || "var(--sm-border)", display: "inline-block", marginRight: 5 }} />{CRM_STATUS_LABEL[m.status] || m.status || "-"}</td>
               <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.tags || "-"}</td>
               <td><button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => onEdit(m)}>편집</button></td>
             </tr>

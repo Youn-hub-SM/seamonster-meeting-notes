@@ -36,7 +36,7 @@ type Advice = { summary: string; priorities: Priority[]; notes: string[] };
 const URG_STYLE: Record<string, { bg: string; fg: string }> = {
   "높음": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
   "중간": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
-  "낮음": { bg: "#eef2f6", fg: "#475569" },
+  "낮음": { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },
 };
 
 export default function InventoryPage() {
@@ -190,7 +190,7 @@ export default function InventoryPage() {
       </div>
 
       {stats.clamped > 0 && (
-        <div className="inv-deadline-banner" style={{ background: "#fff0f0", borderColor: "var(--sm-danger-border)" }}>
+        <div className="inv-deadline-banner" style={{ background: "var(--sm-danger-bg)", borderColor: "var(--sm-danger-border)" }}>
           <span className="inv-dl-text">
             <span className="inv-dl-urgent">도매 차감으로 {stats.clamped}종이 레이더에서 빠짐</span>
             <span className="inv-dl-hint"> — 소매 속도가 0이 되어 마감일이 안 잡힙니다({clampedRows.slice(0, 4).map((r) => r.sku).join(", ")}{clampedRows.length > 4 ? " 외" : ""}). 화이트리스트/차감비율을 확인하세요.</span>

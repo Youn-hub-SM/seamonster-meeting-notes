@@ -11,6 +11,7 @@ type EventMeta = {
   statuses?: string[];
 };
 type NotifyConfig = Record<string, boolean | string[]>;
+type Msg = { ok: boolean; text: string };
 
 function statusLabel(s: string): string {
   return (STATUS_SHORT as Record<string, string>)[s] ?? s;
@@ -35,11 +36,11 @@ export default function SettingsPage() {
   const [flowActive, setFlowActive] = useState(false);
   const [zapierEnv, setZapierEnv] = useState(false);
   const [flowSaving, setFlowSaving] = useState(false);
-  const [flowMsg, setFlowMsg] = useState("");
+  const [flowMsg, setFlowMsg] = useState<Msg | null>(null);
   // 아침 일정 다이제스트
   const [digest, setDigest] = useState("");
   const [digestBusy, setDigestBusy] = useState(false);
-  const [digestMsg, setDigestMsg] = useState("");
+  const [digestMsg, setDigestMsg] = useState<Msg | null>(null);
   type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
   const [dcfgSaving, setDcfgSaving] = useState(false);
@@ -76,7 +77,7 @@ export default function SettingsPage() {
   }, []);
 
   async function saveFlow() {
-    setFlowSaving(true); setError(""); setFlowMsg("");
+    setFlowSaving(true); setError(""); setFlowMsg(null);
     try {
       const body: Record<string, string> = { botId: flowBotId, receivers: flowReceivers, title: flowTitle, appBaseUrl: appUrl };
       if (flowApiKey.trim()) body.apiKey = flowApiKey.trim();   // 빈값이면 기존 키 유지
@@ -85,38 +86,38 @@ export default function SettingsPage() {
       if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
       setFlowActive(!!j.active);
       if (flowApiKey.trim()) { setFlowHasKey(true); setFlowApiKey(""); }
-      setFlowMsg("저장됨");
+      setFlowMsg({ ok: true, text: "저장됨" });
     } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
     setFlowSaving(false);
   }
   async function testFlow() {
-    setFlowSaving(true); setFlowMsg("");
+    setFlowSaving(true); setFlowMsg(null);
     try {
       const r = await fetch("/api/b2b/settings/flow-alert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(flowTestReceiver.trim() ? { testReceiver: flowTestReceiver.trim() } : {}) });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
-      setFlowMsg(`Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.`);
-    } catch (e) { setFlowMsg("" + (e instanceof Error ? e.message : "테스트 실패")); }
+      setFlowMsg({ ok: true, text: `Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.` });
+    } catch (e) { setFlowMsg({ ok: false, text: e instanceof Error ? e.message : "테스트 실패" }); }
     setFlowSaving(false);
   }
   async function loadDigest() {
-    setDigestBusy(true); setDigestMsg("");
+    setDigestBusy(true); setDigestMsg(null);
     try { const j = await (await fetch("/api/b2b/schedule-digest", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "미리보기 실패"); setDigest(j.preview || ""); }
-    catch (e) { setDigestMsg("" + (e instanceof Error ? e.message : "미리보기 실패")); }
+    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "미리보기 실패" }); }
     setDigestBusy(false);
   }
   async function sendDigestNow() {
     if (!window.confirm("지금 Flow로 '아침 일정 알림'을 보낼까요? (위 수신자 전체에게 발송)")) return;
-    setDigestBusy(true); setDigestMsg("");
-    try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg("발송 완료"); }
-    catch (e) { setDigestMsg("" + (e instanceof Error ? e.message : "발송 실패")); }
+    setDigestBusy(true); setDigestMsg(null);
+    try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg({ ok: true, text: "발송 완료" }); }
+    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "발송 실패" }); }
     setDigestBusy(false);
   }
   async function saveDigestCfg() {
     if (!dcfg) return;
-    setDcfgSaving(true); setDigestMsg("");
-    try { const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dcfg) })).json(); if (!j.ok) throw new Error(j.error || "저장 실패"); setDcfg(j.config); setDigestMsg("저장됨"); }
-    catch (e) { setDigestMsg("" + (e instanceof Error ? e.message : "저장 실패")); }
+    setDcfgSaving(true); setDigestMsg(null);
+    try { const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dcfg) })).json(); if (!j.ok) throw new Error(j.error || "저장 실패"); setDcfg(j.config); setDigestMsg({ ok: true, text: "저장됨" }); }
+    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" }); }
     setDcfgSaving(false);
   }
 
@@ -212,15 +213,15 @@ export default function SettingsPage() {
           <>
             <div className="b2b-field" style={{ marginBottom: 10 }}>
               <label className="b2b-field-label">봇 ID <span className="sm-faint" style={{ fontWeight: 400 }}>(flow.team 봇 소유 계정 이메일)</span></label>
-              <input className="b2b-input" value={flowBotId} onChange={(e) => { setFlowBotId(e.target.value); setFlowMsg(""); }} placeholder="예: seamonster.kr@gmail.com" spellCheck={false} />
+              <input className="b2b-input" value={flowBotId} onChange={(e) => { setFlowBotId(e.target.value); setFlowMsg(null); }} placeholder="예: seamonster.kr@gmail.com" spellCheck={false} />
             </div>
             <div className="b2b-field" style={{ marginBottom: 10 }}>
               <label className="b2b-field-label">봇 API 키 {flowHasKey && <span style={{ color: "var(--sm-success)", fontWeight: 400 }}>· 설정됨</span>}</label>
-              <input className="b2b-input" type="password" value={flowApiKey} onChange={(e) => { setFlowApiKey(e.target.value); setFlowMsg(""); }} placeholder={flowHasKey ? "변경할 때만 입력 (비우면 기존 키 유지)" : "x-flow-api-key 값"} spellCheck={false} autoComplete="new-password" />
+              <input className="b2b-input" type="password" value={flowApiKey} onChange={(e) => { setFlowApiKey(e.target.value); setFlowMsg(null); }} placeholder={flowHasKey ? "변경할 때만 입력 (비우면 기존 키 유지)" : "x-flow-api-key 값"} spellCheck={false} autoComplete="new-password" />
             </div>
             <div className="b2b-field" style={{ marginBottom: 10 }}>
               <label className="b2b-field-label">수신자 <span className="sm-faint" style={{ fontWeight: 400 }}>(한 줄에 한 명, 또는 쉼표로 구분)</span></label>
-              <textarea className="b2b-input" value={flowReceivers} onChange={(e) => { setFlowReceivers(e.target.value); setFlowMsg(""); }} placeholder={"dizzywldls@naver.com\nmd@seamonster.kr\nseamonster2016@naver.com"} rows={3} spellCheck={false} style={{ resize: "vertical", fontFamily: "inherit" }} />
+              <textarea className="b2b-input" value={flowReceivers} onChange={(e) => { setFlowReceivers(e.target.value); setFlowMsg(null); }} placeholder={"dizzywldls@naver.com\nmd@seamonster.kr\nseamonster2016@naver.com"} rows={3} spellCheck={false} style={{ resize: "vertical", fontFamily: "inherit" }} />
               <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>flow.team의 <strong>같은 이용기관(조직) 멤버</strong> 이메일이어야 발송됩니다.</span>
             </div>
             <div className="b2b-field" style={{ marginBottom: 10 }}>
@@ -239,7 +240,7 @@ export default function SettingsPage() {
             <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button className="b2b-btn-primary" onClick={saveFlow} disabled={flowSaving}>{flowSaving ? "저장 중..." : "저장"}</button>
               <button className="b2b-btn-secondary" onClick={testFlow} disabled={flowSaving || !flowActive} title={flowActive ? "" : "먼저 저장하세요"}>테스트 발송</button>
-              {flowMsg && <span style={{ fontSize: 12, color: flowMsg.startsWith("") ? "var(--sm-danger)" : "var(--sm-success)" }}>{flowMsg}</span>}
+              {flowMsg && <span style={{ fontSize: 12, color: flowMsg.ok ? "var(--sm-success)" : "var(--sm-danger)" }}>{flowMsg.text}</span>}
             </div>
           </>
         )}
@@ -293,13 +294,13 @@ export default function SettingsPage() {
         <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: digest ? 10 : 0 }}>
           <button className="b2b-btn-secondary" onClick={loadDigest} disabled={digestBusy}>{digestBusy ? "..." : "미리보기"}</button>
           <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !flowActive} title={flowActive ? "" : "먼저 Flow 봇을 설정하세요"}>지금 보내기</button>
-          {digestMsg && <span style={{ fontSize: 12, color: digestMsg.startsWith("") ? "var(--sm-danger)" : "var(--sm-success)" }}>{digestMsg}</span>}
+          {digestMsg && <span style={{ fontSize: 12, color: digestMsg.ok ? "var(--sm-success)" : "var(--sm-danger)" }}>{digestMsg.text}</span>}
         </div>
         {digest && <pre style={{ fontSize: 12, background: "var(--sm-bg)", padding: 12, borderRadius: 8, whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0, fontFamily: "inherit" }}>{digest}</pre>}
       </section>
 
       {!webhookSet && !flowActive && (
-        <div className="b2b-error" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "1px solid #f0d9a8" }}>
+        <div className="sm-warn">
           <strong>외부 알림 대상이 없습니다.</strong>
           <br />
           위 <strong>Flow 봇</strong>(봇 ID·API 키·수신자)을 설정하거나 Zapier 웹훅(ZAPIER_WEBHOOK_URL)을 지정하세요. 아래 이벤트 설정은 대상 지정 후 그대로 적용됩니다.

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import OrdersTable from "../OrdersTable";
 import { ChannelPicker } from "../ChannelTabs";
-import type { InvChannel } from "@/app/lib/inventory";
+import { INV_TYPE_COLOR, type InvChannel } from "@/app/lib/inventory";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
 type Preview = { summary: { valid: number; errors: number; merged?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
@@ -148,16 +148,16 @@ export default function TradePage() {
                   <table className="b2b-table">
                     <thead><tr><th>날짜</th><th>유형</th><th>품목</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th></tr></thead>
                     <tbody>
-                      {preview.rows.slice(0, 200).map((r, i) => (
+                      {preview.rows.slice(0, 200).map((r, i) => { const c = INV_TYPE_COLOR[r.type]; return (
                         <tr key={i}>
                           <td style={{ whiteSpace: "nowrap" }}>{r.txn_date?.slice(5)}</td>
-                          <td><span className="b2b-feed-pill" style={{ background: r.type === "입고" ? "var(--sm-success-bg)" : "var(--sm-info-bg)", color: r.type === "입고" ? "var(--sm-success)" : "var(--sm-info)", fontWeight: 700 }}>{r.type}</span></td>
+                          <td><span className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontWeight: 700 }}>{r.type}</span></td>
                           <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
-                          <td className="num b2b-money" style={{ color: r.qty >= 0 ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{r.qty.toLocaleString()}</td>
+                          <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{r.qty.toLocaleString()}</td>
                           <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "-"}</td>
                           <td>{r.partner || "-"}</td>
                         </tr>
-                      ))}
+                      ); })}
                     </tbody>
                   </table>
                   {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>…외 {preview.rows.length - 200}건(전체 반영됩니다)</p>}

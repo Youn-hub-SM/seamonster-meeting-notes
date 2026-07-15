@@ -5,7 +5,7 @@ import { CHANGELOG, changeMenu, MENU_ORDER } from "@/app/lib/changelog";
 
 const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   신규: { bg: "var(--sm-success-bg)", color: "var(--sm-success)" },
-  개선: { bg: "rgba(241,90,48,0.10)", color: "#D94E26" },
+  개선: { bg: "var(--sm-orange-light)", color: "var(--sm-orange-hover)" },
   수정: { bg: "var(--sm-warning-bg)", color: "var(--sm-warning)" },
 };
 

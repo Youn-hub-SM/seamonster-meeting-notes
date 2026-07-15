@@ -161,7 +161,7 @@ export default function ProductionBoardPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : backlog.rows.length === 0 ? (
-        <div className="b2b-loading">생산할 항목이 없습니다.</div>
+        <div className="b2b-empty">생산할 항목이 없습니다.</div>
       ) : (
         <>
           <div className="tl-summary">
@@ -191,7 +191,7 @@ export default function ProductionBoardPage() {
                           <span className="tl-item-name">{r.name}</span>{r.spec ? <span className="tl-item-spec"> {r.spec}</span> : ""}
                         </td>
                         <td className="tl-cell tl-overdue">
-                          <span className="tl-num" style={{ color: r.overdue > 0 ? "var(--sm-danger)" : "#cdd2d8" }}>{r.overdue > 0 ? r.overdue.toLocaleString() : "·"}</span>
+                          <span className="tl-num" style={{ color: r.overdue > 0 ? "var(--sm-danger)" : "var(--sm-text-faint)" }}>{r.overdue > 0 ? r.overdue.toLocaleString() : "·"}</span>
                         </td>
                         {cols.map((c) => {
                           const cum = r.cumByCol[c.key] || 0;
@@ -199,12 +199,12 @@ export default function ProductionBoardPage() {
                           return (
                             <td key={c.key} className="tl-cell">
                               {cum > 0 && <span className="tl-bar" style={{ width: `${Math.round((cum / backlog.maxCum) * 100)}%`, background: c.accent }} />}
-                              <span className="tl-num" style={{ color: cum > 0 ? "var(--sm-text)" : "#cdd2d8" }}>{cum > 0 ? cum.toLocaleString() : "·"}</span>
+                              <span className="tl-num" style={{ color: cum > 0 ? "var(--sm-black)" : "var(--sm-text-faint)" }}>{cum > 0 ? cum.toLocaleString() : "·"}</span>
                               {nw > 0 && <span className="tl-new">+{nw.toLocaleString()}</span>}
                             </td>
                           );
                         })}
-                        <td className="tl-cell tl-none"><span className="tl-num" style={{ color: r.none > 0 ? "var(--sm-text-mid)" : "#cdd2d8" }}>{r.none > 0 ? r.none.toLocaleString() : "·"}</span></td>
+                        <td className="tl-cell tl-none"><span className="tl-num" style={{ color: r.none > 0 ? "var(--sm-text-mid)" : "var(--sm-text-faint)" }}>{r.none > 0 ? r.none.toLocaleString() : "·"}</span></td>
                       </tr>
                       {isOpen && (
                         <tr className="tl-detail-row">

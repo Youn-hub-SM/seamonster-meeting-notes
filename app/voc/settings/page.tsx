@@ -95,7 +95,7 @@ export default function VocSettingsPage() {
         </div>
       </header>
 
-      {msg && <div className={msg.ok ? "b2b-card" : "b2b-error"} style={msg.ok ? { borderColor: "var(--sm-success)", color: "var(--sm-success)", padding: "10px 14px", fontSize: 13, fontWeight: 600 } : undefined}>{msg.t}</div>}
+      {msg && <div className={msg.ok ? "sm-success" : "b2b-error"}>{msg.t}</div>}
 
       {/* API 키 방식(권장) */}
       <section className="b2b-card" style={{ marginTop: 14 }}>

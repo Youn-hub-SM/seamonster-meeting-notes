@@ -8,21 +8,22 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 <style>
   :root {
-    /* B2B 매니저(globals.css)와 동일한 디자인 토큰 */
-    --primary: #F15A30;
-    --primary-dark: #D94E26;
+    /* globals.css :root 의 --sm-* 와 값이 같아야 한다(정적 파일이라 import 는 안 됨).
+       토큰을 고칠 땐 globals.css 를 먼저 고치고 여기로 옮겨 적을 것. */
+    --primary: #F15A30;        /* --sm-orange */
+    --primary-dark: #D94E26;   /* --sm-orange-hover */
     --primary-light: rgba(241, 90, 48, 0.06);
-    --warm: #FFF5F0;
-    --bg: #FAFAFA;
+    --warm: #FFF5F0;           /* --sm-bg-warm */
+    --bg: #FAFAFA;             /* --sm-bg */
     --card: #FFFFFF;
-    --text: #1A1A1A;
-    --text-sub: #666666;
-    --text-light: #999999;
-    --border: #EEEEEE;
-    --success: #22863a;
-    --warning: #ED8936;
-    --danger: #c92a2a;
-    --info: #2563eb;
+    --text: #1A1A1A;           /* --sm-black */
+    --text-sub: #555555;       /* --sm-text-mid */
+    --text-light: #6B6B6B;     /* --sm-text-light */
+    --border: #EEEEEE;         /* --sm-border */
+    --success: #22863A;        /* --sm-success */
+    --warning: #B08800;        /* --sm-warning */
+    --danger: #C92A2A;         /* --sm-danger */
+    --info: #1971C2;           /* --sm-info */
     --radius: 8px;
     --radius-card: 16px;
     --radius-btn: 12px;

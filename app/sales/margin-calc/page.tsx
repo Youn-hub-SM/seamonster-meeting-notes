@@ -181,9 +181,9 @@ export default function MarginCalcPage() {
 
       <style>{`
         .mc-ai { font-size: 11px; font-weight: 700; color: var(--sm-orange); border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light); border-radius: 6px; padding: 1px 7px; vertical-align: middle; margin-left: 4px; }
-        .mc-example { font-size: 12px; color: var(--sm-navy); background: var(--sm-bg); border: 1px solid var(--sm-border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+        .mc-example { font-size: 12px; color: var(--sm-text-mid); background: var(--sm-bg); border: 1px solid var(--sm-border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
         .mc-example:hover { border-color: var(--sm-orange); color: var(--sm-orange); }
-        .mc-prompt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: none; border: none; padding: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sm-navy); text-align: left; }
+        .mc-prompt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: none; border: none; padding: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sm-text-mid); text-align: left; }
       `}</style>
     </div>
   );

@@ -22,20 +22,26 @@
   --sm-shadow-card: 0 4px 12px rgba(0, 0, 0, 0.04);
   --sm-shadow-float: 0 10px 30px rgba(0, 0, 0, 0.06);
 
-  /* ── 시맨틱 색 (상태/피드백) — 페이지마다 흩어진 빨강·초록·파랑·노랑을 여기로 통일 ── */
+  /* ── 시맨틱 색 (상태/피드백) — 페이지마다 흩어진 빨강·초록·파랑·노랑을 여기로 통일 ──
+     각 색은 텍스트 / -bg / -border 3종 세트. 배너·배지는 이 셋만 조합한다.
+     (세트가 danger 만 3종이던 시절, 나머지는 테두리 색이 없어 각자 hex 를 지어냈다) */
   --sm-danger: #C92A2A;          /* 오류·삭제·경고 텍스트/아이콘 */
   --sm-danger-bg: #FCE4E4;       /* 오류 배경 */
   --sm-danger-border: #F5C6C6;   /* 오류 테두리 */
   --sm-success: #22863A;         /* 완료·성공 */
   --sm-success-bg: #E6FFED;
+  --sm-success-border: #C6EDD3;
   --sm-warning: #B08800;         /* 주의·대기 */
   --sm-warning-bg: #FFF4E0;
+  --sm-warning-border: #F0D9A8;  /* 6곳에 인라인으로 복붙돼 있던 값을 토큰으로 승격 */
   --sm-info: #1971C2;            /* 정보·링크강조 */
   --sm-info-bg: #E0F0FF;
+  --sm-info-border: #B8D6F2;
 
   /* ── 중립 표면 ── */
-  --sm-bg-subtle: #F7F8FA;       /* 표 헤더·옅은 영역 */
+  --sm-bg-subtle: #F7F8FA;       /* 표 헤더·옅은 영역·합계행 */
   --sm-border-light: #F4F4F4;
+  --sm-text-faint: #C7C7C7;      /* 값 없음(·) 플레이스홀더 — text-light 보다 흐림 */
 
   /* ── 간격 스케일 (4px 베이스) — 인라인 px 대신 사용 ── */
   --sm-space-1: 4px;
@@ -53,6 +59,9 @@
   --sm-fs-lg: 17px;
   --sm-fs-xl: 19px;
   --sm-fs-2xl: 23px;
+
+  /* ── 폰트 스택 ── */
+  --sm-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;  /* SKU·코드 */
 }
 
 * {
@@ -87,8 +96,9 @@
   border: 1px solid var(--sm-border); background: var(--sm-white); color: var(--sm-text-mid);
   cursor: pointer; transition: background .15s, border-color .15s, color .15s;
 }
-.sm-tab:hover:not(.is-active) { border-color: var(--sm-orange); color: var(--sm-orange); }
+.sm-tab:hover:not(.is-active):not(:disabled) { border-color: var(--sm-orange); color: var(--sm-orange); }
 .sm-tab.is-active { background: var(--sm-orange); border-color: var(--sm-orange); color: var(--sm-white); }
+.sm-tab:disabled { opacity: .5; cursor: not-allowed; }
 .sm-tab-count {
   font-size: var(--sm-fs-xs); font-weight: 700; line-height: 1; min-width: 16px; text-align: center;
   padding: 3px 6px; border-radius: 999px; background: var(--sm-bg-subtle); color: var(--sm-text-mid);
@@ -97,6 +107,19 @@
 /* 동반 검색창(우측 정렬, 고정폭). .b2b-input width:100% 보다 우선하도록 복합 선택자 사용 */
 .sm-tabbar .sm-tab-search { margin-left: auto; width: 240px; max-width: 100%; flex: 0 0 auto; }
 @media (max-width: 640px) { .sm-tabbar .sm-tab-search { margin-left: 0; width: 100%; } }
+
+/* ── 상태 배너 — .b2b-error(오류)의 성공/경고 짝. 전 도구 공용. ──
+   형태(패딩·radius·폰트·아래여백)는 .b2b-error 와 동일하고 색 세트만 다르다.
+   짝이 없던 시절엔 생산툴 SKU 전용 .prod-sku-ok 를 빌려 쓰거나 인라인으로 지어냈다. */
+.sm-success, .sm-warn {
+  border: 1px solid;
+  border-radius: var(--sm-radius);
+  padding: 12px 16px;
+  font-size: var(--sm-fs-sm);
+  margin-bottom: var(--sm-space-4);
+}
+.sm-success { background: var(--sm-success-bg); color: var(--sm-success); border-color: var(--sm-success-border); }
+.sm-warn    { background: var(--sm-warning-bg); color: var(--sm-warning); border-color: var(--sm-warning-border); }
 
 body {
   font-family: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
@@ -202,6 +225,9 @@ a {
   .container {
     padding: 18px 14px 64px;
   }
+  /* .b2b-page-title / -subtitle 의 768px 규칙과 일치시킨다(아래 600px 규칙이 제목을 19px 로 덮음) */
+  .page-title { font-size: 21px; }
+  .page-subtitle { font-size: 12px; }
 }
 
 /* Page Title — .b2b-page-title 와 동일 스케일(단일 기준) */
@@ -281,7 +307,7 @@ a {
   color: var(--sm-white);
   border: 1px solid transparent;
   border-radius: var(--sm-radius-btn);
-  padding: 11px 20px;
+  padding: 11px 18px;
   font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
@@ -289,7 +315,7 @@ a {
   font-family: inherit;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: var(--sm-orange-hover);
 }
 

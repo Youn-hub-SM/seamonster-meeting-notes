@@ -275,7 +275,7 @@ function CompanyModal({
 
   // OCR 강조 스타일
   const aiStyle = (k: keyof CompanyInput): React.CSSProperties =>
-    aiFields.has(k) ? { background: "var(--sm-warning-bg)", borderColor: "#F0C000" } : {};
+    aiFields.has(k) ? { background: "var(--sm-warning-bg)", borderColor: "var(--sm-warning-border)" } : {};
   const aiBadge = (k: keyof CompanyInput) =>
     aiFields.has(k) ? (
       <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: "var(--sm-warning)", background: "var(--sm-warning-bg)", padding: "1px 6px", borderRadius: 8 }}>

@@ -93,7 +93,7 @@ export default function SalesUploadPage() {
       {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
 
       {applied && (
-        <section className="b2b-card" style={{ marginTop: 12, borderColor: "var(--sm-success)" }}>
+        <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>적용 완료 ✓</span></div>
           <p style={{ fontSize: 14 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
         </section>
@@ -177,7 +177,7 @@ function Stat({ label, v, accent, danger }: { label: string; v: string; accent?:
   return (
     <div className="b2b-card" style={{ padding: 12, textAlign: "center" }}>
       <div className="sm-faint" style={{ fontSize: 11 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, marginTop: 3, color: danger ? "var(--sm-danger)" : accent ? "var(--sm-orange)" : "var(--sm-text)" }}>{v}</div>
+      <div style={{ fontSize: 18, fontWeight: 800, marginTop: 3, color: danger ? "var(--sm-danger)" : accent ? "var(--sm-orange)" : "var(--sm-black)" }}>{v}</div>
     </div>
   );
 }

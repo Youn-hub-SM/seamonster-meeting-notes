@@ -21,9 +21,9 @@ const DATE_KIND_LABEL: Record<DateKind, string> = {
 };
 
 const DATE_KIND_COLOR: Record<DateKind, string> = {
-  order: "#999999",
+  order: "var(--sm-text-light)",
   production: "var(--sm-info)",
-  ship: "#F15A30",
+  ship: "var(--sm-orange)",
 };
 
 export default function CalendarView({

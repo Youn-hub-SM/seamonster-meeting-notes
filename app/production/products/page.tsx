@@ -92,7 +92,7 @@ export default function ProductsUploadPage() {
       </section>
 
       {done && (
-        <div className="prod-sku-ok" style={{ fontSize: 13, marginBottom: 16 }}>
+        <div className="sm-success">
           ✓ 반영 완료 — 신규 {done.added}개 추가, {done.updated}개 갱신.
         </div>
       )}

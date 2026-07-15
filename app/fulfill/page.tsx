@@ -179,7 +179,7 @@ export default function FulfillPage() {
             <div key={i} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "0 0 auto" }}>
               <button onClick={() => canJump(i) && setStep(i)} disabled={!canJump(i)} title={label}
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: canJump(i) ? "pointer" : "default", padding: 0 }}>
-                <span style={{ width: 30, height: 30, borderRadius: "50%", background: state === "todo" ? "var(--sm-white)" : color, border: `2px solid ${color}`, color: state === "todo" ? "var(--sm-text-light)" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flex: "0 0 auto" }}>
+                <span style={{ width: 30, height: 30, borderRadius: "50%", background: state === "todo" ? "var(--sm-white)" : color, border: `2px solid ${color}`, color: state === "todo" ? "var(--sm-text-light)" : "var(--sm-white)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flex: "0 0 auto" }}>
                   {state === "done" ? "✓" : i + 1}
                 </span>
                 <span style={{ fontSize: 11, fontWeight: state === "cur" ? 700 : 500, color: state === "cur" ? "var(--sm-dark)" : "var(--sm-text-light)", whiteSpace: "nowrap" }}>{label}</span>
@@ -272,7 +272,7 @@ export default function FulfillPage() {
               <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
             </div>
           </div>
-          {recordOk && <div className="prod-sku-ok" style={{ fontSize: 12.5, margin: "0 0 8px" }}>✓ {recordOk} <Link href="/fulfill/log">배송일지 보기</Link></div>}
+          {recordOk && <div className="sm-success" style={{ marginBottom: 8 }}>✓ {recordOk} <Link href="/fulfill/log">배송일지 보기</Link></div>}
           <div className="b2b-table-wrap">
             <table className="b2b-table">
               <thead><tr><th>박스종류</th><th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
@@ -302,7 +302,7 @@ export default function FulfillPage() {
             )}
           </div>
           {dispatchLoading ? <div className="b2b-loading">재고 확인 중…</div> : dispatchDone ? (
-            <div className="prod-sku-ok" style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <div className="sm-success" style={{ lineHeight: 1.7 }}>
               ✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link>
               {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
               <div className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>잘못 눌렀다면 <Link href="/inventory/activity">재고 활동 히스토리</Link>에서 이 출고번호 배치를 취소하면 원복됩니다. · <button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>

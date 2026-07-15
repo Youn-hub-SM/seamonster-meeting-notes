@@ -133,7 +133,7 @@ export default function ActivityPage() {
                               <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.product_name}{t.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{t.sku}</span> : null}</td>
                               <td><span className="b2b-feed-pill" style={{ background: c.bg, color: c.fg, fontWeight: 700 }}>{t.type}</span></td>
                               <td>{t.channel ? (() => { const ch = INV_CHANNEL_COLOR[t.channel as InvChannel]; return <span className="b2b-feed-pill" style={{ background: ch.bg, color: ch.fg, fontWeight: 700 }}>{t.channel}</span>; })() : <span className="sm-faint">-</span>}</td>
-                              <td className="num b2b-money" style={{ color: t.qty >= 0 ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
+                              <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
                               <td className="num b2b-money">{t.unit_amount ? t.unit_amount.toLocaleString() : "-"}</td>
                               <td>{t.partner || "-"}</td>
                               <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.memo || ""}>{t.memo || "-"}</td>

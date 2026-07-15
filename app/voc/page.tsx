@@ -349,7 +349,7 @@ export default function VocPage() {
                         <span title={`flow 등록됨 · ${r.flow_task_at.slice(0, 10)}`} style={{ fontSize: 11, fontWeight: 800, color: "var(--sm-success)", whiteSpace: "nowrap" }}>✓ flow</span>
                       ) : (
                         <button className="b2b-link-btn" onClick={() => registerFlow(r)} disabled={flowBusy === r.id}
-                          title="flow(플로우)에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: "var(--sm-primary, #2b6ef2)" }}>
+                          title="flow(플로우)에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", color: "var(--sm-info)" }}>
                           {flowBusy === r.id ? "등록중…" : "→ flow"}
                         </button>
                       )}
@@ -494,7 +494,7 @@ export default function VocPage() {
                     <div key={url} style={{ position: "relative" }}>
                       <img src={url} alt="첨부" style={{ width: 74, height: 74, objectFit: "cover", borderRadius: 8, border: "1px solid var(--sm-border)" }} />
                       <button type="button" onClick={() => removePhoto(url)} aria-label="사진 삭제"
-                        style={{ position: "absolute", top: -7, right: -7, width: 21, height: 21, borderRadius: "50%", border: "2px solid var(--sm-white)", background: "var(--sm-danger)", color: "#fff", cursor: "pointer", fontSize: 11, lineHeight: 1, padding: 0 }}>✕</button>
+                        style={{ position: "absolute", top: -7, right: -7, width: 21, height: 21, borderRadius: "50%", border: "2px solid var(--sm-white)", background: "var(--sm-danger)", color: "var(--sm-white)", cursor: "pointer", fontSize: 11, lineHeight: 1, padding: 0 }}>✕</button>
                     </div>
                   ))}
                   <label style={{ width: 74, height: 74, borderRadius: 8, border: "1px dashed var(--sm-border)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--sm-text-light)", fontSize: 22, flexShrink: 0 }}>

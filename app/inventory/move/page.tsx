@@ -85,7 +85,7 @@ export default function InventoryMovePage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
-      {ok && <div className="prod-sku-ok" style={{ fontSize: 13, marginBottom: 12 }}>✓ {ok}</div>}
+      {ok && <div className="sm-success">✓ {ok}</div>}
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-field">

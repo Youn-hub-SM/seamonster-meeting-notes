@@ -35,7 +35,7 @@ const FAULT_META: { key: string; color: string }[] = [
   { key: "물류", color: "var(--sm-warning)" },
   { key: "자사", color: "var(--sm-danger)" },
   { key: "고객", color: "var(--sm-info)" },
-  { key: "미분류", color: "#9CA3AF" },
+  { key: "미분류", color: "var(--sm-text-light)" },
 ];
 const FAULT_COLOR: Record<string, string> = Object.fromEntries(FAULT_META.map((f) => [f.key, f.color]));
 
@@ -182,7 +182,7 @@ export default function VocLossPage() {
                   <span className="sm-faint" style={{ fontSize: 12 }}>{totalLoss ? Math.round((burden / totalLoss) * 100) : 0}%</span>
                 </div>
                 <div className="sm-stat-hero-metric">
-                  <span className="sm-stat-hero-metric-label"><span className="sm-stat-hero-dot" style={{ background: "#9CA3AF" }} />고객·미분류</span>
+                  <span className="sm-stat-hero-metric-label"><span className="sm-stat-hero-dot" style={{ background: FAULT_COLOR["미분류"] }} />고객·미분류</span>
                   <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-text-mid)" }}>{won(other)}원</span>
                   <span className="sm-faint" style={{ fontSize: 12 }}>{totalLoss ? Math.round((other / totalLoss) * 100) : 0}%</span>
                 </div>

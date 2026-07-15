@@ -17,7 +17,7 @@ type Dash = {
 const won = (n: number) => `${Math.round(n || 0).toLocaleString()}원`;
 function wonEok(v: number) { v = Math.round(v || 0); const eok = Math.floor(v / 1e8), man = Math.floor((v % 1e8) / 1e4); return eok > 0 ? `${eok}억 ${man.toLocaleString()}만` : `${man.toLocaleString()}만`; }
 function pctBadge(p: number | null) {
-  if (p === null) return <span style={{ color: "var(--sm-faint)", fontWeight: 700 }}>신규</span>;
+  if (p === null) return <span style={{ color: "var(--sm-text-light)", fontWeight: 700 }}>신규</span>;
   const up = p >= 0;
   return <span style={{ color: up ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 700 }}>{up ? "▲" : "▼"} {Math.abs(p).toFixed(1)}%</span>;
 }
@@ -102,9 +102,9 @@ export default function SalesHome() {
 
 function Kpi({ label, value, sub, accent }: { label: string; value: string; sub: ReactNode; accent?: boolean }) {
   return (
-    <div className="b2b-card" style={{ padding: 16, borderColor: accent ? "var(--sm-orange)" : undefined }}>
+    <div className="b2b-card" style={{ padding: 16 }}>
       <div className="sm-faint" style={{ fontSize: 12, fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: accent ? "var(--sm-orange)" : "var(--sm-text)" }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: accent ? "var(--sm-orange)" : "var(--sm-black)" }}>{value}</div>
       <div style={{ fontSize: 12.5, marginTop: 4 }}>{sub}</div>
     </div>
   );
@@ -113,7 +113,7 @@ function Kpi({ label, value, sub, accent }: { label: string; value: string; sub:
 function NavCard({ href, title, desc }: { href: string; title: string; desc: string }) {
   return (
     <Link href={href} className="b2b-card" style={{ padding: 16, textDecoration: "none", display: "block" }}>
-      <div style={{ fontSize: 16, fontWeight: 800, color: "var(--sm-text)" }}>{title}</div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: "var(--sm-black)" }}>{title}</div>
       <div className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>{desc}</div>
       <div style={{ marginTop: 8, color: "var(--sm-orange)", fontWeight: 700, fontSize: 13 }}>열기 →</div>
     </Link>

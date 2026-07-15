@@ -103,12 +103,12 @@ export default function CouponPage() {
           <div className="sm-row" style={{ gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
             {channel.steps.map((s, i) => (
               <span key={i} className="sm-row" style={{ gap: 5, fontSize: 12, color: i === step ? "var(--sm-orange)" : i < step ? "var(--sm-text-mid)" : "var(--sm-text-light)", fontWeight: i === step ? 700 : 400 }}>
-                <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#fff", background: i < step ? "var(--sm-success)" : i === step ? "var(--sm-orange)" : "var(--sm-border)" }}>{i < step ? "✓" : i + 1}</span>
+                <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--sm-white)", background: i < step ? "var(--sm-success)" : i === step ? "var(--sm-orange)" : "var(--sm-border)" }}>{i < step ? "✓" : i + 1}</span>
                 {s.title}{i < channel.steps.length - 1 && <span className="sm-faint" style={{ margin: "0 2px" }}>·</span>}
               </span>
             ))}
             <span className="sm-row" style={{ gap: 5, fontSize: 12, color: isReview ? "var(--sm-orange)" : "var(--sm-text-light)", fontWeight: isReview ? 700 : 400 }}>
-              <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#fff", background: isReview ? "var(--sm-orange)" : "var(--sm-border)" }}>✓</span>완료
+              <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--sm-white)", background: isReview ? "var(--sm-orange)" : "var(--sm-border)" }}>✓</span>완료
             </span>
           </div>
 
@@ -157,7 +157,7 @@ export default function CouponPage() {
   );
 }
 
-const chipStyle = (on: boolean) => ({ padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", border: `1px solid ${on ? "var(--sm-orange)" : "var(--sm-border)"}`, background: on ? "var(--sm-orange-light)" : "#fff", color: on ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: on ? 700 : 400 } as const);
+const chipStyle = (on: boolean) => ({ padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", border: `1px solid ${on ? "var(--sm-orange)" : "var(--sm-border)"}`, background: on ? "var(--sm-orange-light)" : "var(--sm-white)", color: on ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: on ? 700 : 400 } as const);
 const lockStyle = { padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "not-allowed", border: "1px dashed var(--sm-border)", background: "var(--sm-bg)", color: "var(--sm-text-light)", fontWeight: 400, opacity: 0.65 } as const;
 
 function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: CouponField; answers: Answers; ch: CouponChannel; required: boolean; set: (k: string, v: AnswerVal) => void; toggle: (k: string, o: string) => void; setRange: (k: string, part: "start" | "end", v: string) => void }) {

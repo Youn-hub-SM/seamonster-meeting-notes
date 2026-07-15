@@ -313,7 +313,7 @@ export default function ProductionSchedulePage() {
                 <div key={iso} className={`prod-cal-cell ${inMonth ? "" : "is-other"} ${isToday ? "is-today" : ""}`}>
                   <div className="prod-cal-daynum">{d.getDate()}</div>
                   {dayPromos.map((p) => (
-                    <div key={p.id} className="prod-cal-promo" style={{ background: p.color || "#F15A30" }}
+                    <div key={p.id} className="prod-cal-promo" style={{ background: p.color || "var(--sm-orange)" }}
                       title={`${p.name} · 예상 ${p.expectedQty.toLocaleString()}개${p.items && p.items.length ? "\n" + p.items.map((it) => `· ${it.name} ${Number(it.qty).toLocaleString()}`).join("\n") : ""}`} onClick={() => setPromoModal(p)}>
                       {iso === p.start ? `${p.name}` : " "}
                     </div>
@@ -340,7 +340,7 @@ export default function ProductionSchedulePage() {
             <div className="prod-cal-legend">
               {promos.map((p) => (
                 <button key={p.id} className="prod-cal-legend-item" onClick={() => setPromoModal(p)}>
-                  <span className="prod-cal-legend-dot" style={{ background: p.color || "#F15A30" }} />
+                  <span className="prod-cal-legend-dot" style={{ background: p.color || "var(--sm-orange)" }} />
                   {p.name} <span className="prod-cal-legend-q">예상 {p.expectedQty.toLocaleString()}개</span>
                 </button>
               ))}
@@ -382,7 +382,7 @@ export default function ProductionSchedulePage() {
                   {listRows.map((r, i) => {
                     const status = !r.date ? "미정" : r.date < today ? "지연" : r.date === today ? "오늘" : "예정";
                     const sc = status === "지연" ? { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" }
-                      : status === "오늘" ? { bg: "var(--sm-orange-light, rgba(241,90,48,.1))", fg: "var(--sm-orange)" }
+                      : status === "오늘" ? { bg: "var(--sm-orange-light)", fg: "var(--sm-orange)" }
                       : status === "예정" ? { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" }
                       : { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
                     const newDay = i === 0 || listRows[i - 1].date !== r.date;

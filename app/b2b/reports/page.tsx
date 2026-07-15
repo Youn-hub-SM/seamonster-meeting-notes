@@ -153,12 +153,12 @@ export default function ReportsPage() {
 
       <div className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head" style={{ gap: 10, flexWrap: "wrap", justifyContent: "flex-start" }}>
-          <div style={{ display: "flex", gap: 4 }}>
+          <div className="sm-tabs">
             {(["this_month", "last_month", "this_year", "custom"] as Preset[]).map((p) => (
               <button
                 key={p}
                 type="button"
-                className={`b2b-preset-btn ${preset === p ? "is-active" : ""}`}
+                className={`sm-tab ${preset === p ? "is-active" : ""}`}
                 onClick={() => applyPreset(p)}
               >
                 {presetLabel(p)}

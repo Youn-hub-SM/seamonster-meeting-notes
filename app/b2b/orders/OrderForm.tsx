@@ -826,7 +826,7 @@ export default function OrderForm({
                       style={{ background: SHIPMENT_STATUS_COLORS[sch.status]?.bg, color: SHIPMENT_STATUS_COLORS[sch.status]?.fg, fontWeight: 600 }}
                     >
                       {SHIPMENT_STATUSES.map((s) => (
-                        <option key={s} value={s} style={{ background: "#fff", color: "#1a1a1a" }}>{s}</option>
+                        <option key={s} value={s} style={{ background: "var(--sm-white)", color: "var(--sm-black)" }}>{s}</option>
                       ))}
                     </select>
                   </div>
