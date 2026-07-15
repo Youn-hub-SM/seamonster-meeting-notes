@@ -49,7 +49,9 @@ next-env.d.ts
 /매출리포트_*.py
 
 # 내부 진단/시드 스크립트(로컬 전용, 커밋 금지)
-/scripts/
+# 단 sync-design-tokens 는 빌드(package.json build)가 실행하므로 반드시 커밋 — 예외 처리
+/scripts/*
+!/scripts/sync-design-tokens.mjs
 
 # 외부 API 참고 문서(원문, 대용량)
 /API Reference_*.txt

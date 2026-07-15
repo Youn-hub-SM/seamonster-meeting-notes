@@ -1,105 +1,131 @@
-# 씨몬스터 내부도구 디자인 기준 (Design System)
+# 씨몬스터 내부도구 디자인 시스템
 
-> 목적: 페이지마다 흩어진 색·간격·폰트를 **단일 토큰**으로 통일한다.
-> 새 화면을 만들 때 이 문서의 토큰과 공용 클래스만 쓰면 자동으로 톤이 맞는다.
+> 목적: **어떤 세션이 만들어도 같은 화면이 나오게 한다.** 사용자는 같은 의미를 같은 자리·같은 모양으로
+> 만나는 익숙함을 느껴야 한다. UI(화면·컴포넌트·차트)를 만들거나 고치기 전에 이 문서를 먼저 읽는다(CLAUDE.md 규칙).
+>
+> 한 줄 요약: **색은 시맨틱 토큰, 간격은 4px 스케일, 컴포넌트는 결정표에서, 차트는 프리미티브에서,
+> 같은 의미는 색 지도에서. 없으면 지어내지 말고 시스템에 추가한다.**
 
-토큰 정의 위치: **`app/globals.css` 의 `:root`** (단일 소스).
-값을 바꾸려면 여기 한 곳만 고치면 전체에 반영된다.
+토큰 단일 소스: **`app/globals.css` 의 `:root`**. 이 문서의 값과 코드가 다르면 **코드가 정답**이고,
+그걸 발견한 세션이 이 문서를 고친다. (과거 이 문서의 낡은 값 #666/#999 가 코드 5곳에 박제된 적이 있다 —
+문서가 틀리면 문서 자체가 이탈의 발원지가 된다.)
 
 ---
 
 ## 0. 4대 원칙
 
-1. **하드코딩 금지.** 인라인 `style={{ color: "#c92a2a" }}` / `fontSize: 13` 대신 토큰(`var(--sm-danger)`)과 공용 클래스를 쓴다.
-2. **공용 클래스 우선.** 버튼·입력·카드·표·모달은 이미 `.b2b-*` 클래스가 있다. 새로 스타일 짜지 말고 재사용한다.
-3. **없으면 토큰에 추가.** 정말 새로운 색/간격이 필요하면 인라인으로 박지 말고 `:root` 에 토큰을 추가한 뒤 사용한다.
+1. **하드코딩 금지.** 인라인 `style={{ color: "#c92a2a" }}` / `fontSize: 13` 대신 토큰(`var(--sm-danger)`)과 공용 클래스.
+2. **공용 우선.** 만들기 전에 §1 결정표에서 찾는다. 표에 없으면 `grep -rn "필요한것" app/globals.css app/b2b/b2b.css` —
+   클래스 정의는 이 두 파일뿐이다.
+3. **없으면 시스템에 추가.** 새 색·간격은 `:root` 에 토큰으로. 전 도구 공용 컴포넌트는 `.sm-*` 로 `globals.css` 에
+   (`.b2b-*` 신설 금지 — CLAUDE.md 4항. 페이지 전용이면 `.ma-*`·`.sales-*` 같은 접두사).
 4. **없는 토큰을 지어내지 않는다.** `var(--sm-surface-2, #f7fafb)` 처럼 쓰면 grep 에 안 걸려 규칙을 지킨 듯 보이지만,
-   그 이름이 `:root` 에 없으면 **폴백 hex 가 항상 렌더된다**(= 인라인 하드코딩과 동일). 폴백이 없으면 선언 자체가 무효가 되어 색이 조용히 상속된다.
-   쓰기 전에 있는지 확인: `grep -- "--sm-<이름>:" app/globals.css` → 매치가 0이면 그 토큰은 존재하지 않는다.
+   그 이름이 `:root` 에 없으면 **폴백 hex 가 항상 렌더된다**(= 인라인 하드코딩). 폴백이 없으면 선언 자체가 무효가 되어
+   색이 조용히 상속된다. 쓰기 전 확인: `grep -- "--sm-<이름>:" app/globals.css` — 매치 0이면 존재하지 않는 토큰이다.
 
 ---
 
-## 1. 색 토큰
+## 1. 결정표 — 새 화면을 만들거나 고칠 때 여기서 찾는다
 
-### 브랜드
-| 토큰 | 값 | 용도 |
+| 필요한 것 | 쓰는 것 | 주의 |
 |---|---|---|
-| `--sm-orange` | #F15A30 | 주요 액션·강조·활성 |
-| `--sm-orange-hover` | #D94E26 | 호버 |
-| `--sm-orange-light` | rgba(241,90,48,.06) | 활성/선택 배경 |
-| `--sm-orange-border` | rgba(241,90,48,.12) | 강조 테두리 |
+| 페이지 셸 | `.b2b-container` > `.b2b-page-head` > `h1.b2b-page-title` + `p.b2b-page-subtitle` + `.b2b-page-actions` | 폭·여백은 layout 의 `.b2b-main` 이 담당 |
+| 제목 있는 섹션 | `.b2b-card` + `.b2b-card-head` > `span.b2b-card-title` | **`.b2b-card` 는 투명 플랫 래퍼(border:none)** — 시각적 카드가 아니다. §2-3 |
+| 테두리 있는 카드 / KPI 타일 | `.b2b-stat-card` + `-label` + `-value` (+`-hint`) | 진짜 테두리·그림자는 이쪽 |
+| 폼 섹션(흰 배경 박스) | `.b2b-form-section` + `-title` + `.b2b-form-foot` | |
+| 탭·토글 (상태/기간/뷰 전환 전부) | `.sm-tabbar` 또는 `.sm-tabs` > `.sm-tab` + `.is-active` | 자체 Chip 금지. 활성 = 주황 채움 + 흰 글씨가 앱 표준. §5 스니펫 |
+| 버튼 | `.b2b-btn-primary` / `-secondary` / `-danger` · `.b2b-link-btn` · `.b2b-icon-btn` | |
+| 입력·폼 필드 | `.b2b-input` · `.b2b-field` + `.b2b-field-label` · `.b2b-combo` · `.b2b-checkbox` | |
+| 표 | `.b2b-table-wrap` > `.b2b-table` | 모바일 카드 변환은 `data-label` |
+| 오류 배너 | `.b2b-error` | |
+| 성공 / 경고 배너 | `.sm-success` / `.sm-warn` | `.b2b-error` 와 형태가 같은 3형제(globals.css). `.prod-sku-ok` 는 SKU 생성기 전용 — 차용 금지 |
+| 상태 배지 | `.b2b-status-pill` + 색은 §4 색 지도에서 | `.b2b-feed-pill` 은 네비 '최근 변경' 드롭다운 **트리거** — 배지 아님(기존 사용처는 점진 정리) |
+| 빈 상태 / 로딩 | `.b2b-empty` / `.b2b-loading` | **서로 바꿔 쓰지 말 것** — 같은 회색·같은 패딩이라 화면에서 구분 불가 |
+| 모달 | `.b2b-modal-backdrop` > `.b2b-modal` + `-head` / `-body` / `-foot` | |
+| 통계 히어로(도넛+총계+지표) | `.b2b-card.sm-stat-hero` | 예: b2b/reports · voc/stats · voc/loss |
+| 차트 | `app/components/charts.tsx` 프리미티브 | **자체 차트 금지** — §6 |
+| 캘린더 | `prod-cal` / `b2b-cal` 세트 (노션풍) | |
+| 부제목 안 인라인 링크 | `.change-link` | 클래스 없는 `<a>` 는 리셋 때문에 본문과 같은 검정으로 렌더됨 |
+| VOC 미구현 메뉴 | `VocPlaceholder` 컴포넌트 | |
+| 체크박스식 다중 필터 | `.b2b-checkfilter-row` | |
 
-### 시맨틱(상태/피드백) — **빨강·초록·파랑·노랑은 반드시 여기서**
-| 토큰 | 값 | 용도 |
-|---|---|---|
-| `--sm-danger` / `--sm-danger-bg` / `--sm-danger-border` | #C92A2A / #FCE4E4 / #F5C6C6 | 오류·삭제·미입금·경고 |
-| `--sm-success` / `--sm-success-bg` | #22863A / #E6FFED | 완료·성공·입금완료 |
-| `--sm-warning` / `--sm-warning-bg` | #B08800 / #FFF4E0 | 대기·주의 |
-| `--sm-info` / `--sm-info-bg` | #1971C2 / #E0F0FF | 정보·진행중·링크강조 |
-
-### 중립(텍스트/표면)
-| 토큰 | 값 | 용도 |
-|---|---|---|
-| `--sm-black` | #1A1A1A | 본문 기본 텍스트 |
-| `--sm-dark` | #37352F | 짙은 텍스트(노션풍 웜 그레이) |
-| `--sm-text-mid` | #555555 | 보조 텍스트 |
-| `--sm-text-light` | #6B6B6B | 흐린 텍스트·플레이스홀더 |
-| `--sm-white` | #FFF | 카드·입력 배경 |
-| `--sm-bg` | #FAFAFA | 페이지 배경 |
-| `--sm-bg-subtle` | #F7F8FA | 표 헤더·옅은 영역·합계행 |
-| `--sm-bg-warm` | #FFF5F0 | 브랜드 톤 옅은 배경 |
-| `--sm-border` / `--sm-border-light` | #EEE / #F4F4F4 | 구분선·테두리 |
+사이드바(전역): `.app-sb-*` — `app/globals.css`.
 
 ---
 
-## 2. 간격 스케일 (4px 베이스)
+## 2. 함정 — 실제로 반복해서 빠진 것들 (2026-07 전수 점검에서 확인)
 
-`--sm-space-1`=4 · `-2`=8 · `-3`=12 · `-4`=16 · `-5`=24 · `-6`=32
-(`--sm-pad`=24 는 페이지 기본 여백)
+몰라서 생기는 이탈이다. 새 세션도 똑같이 빠지므로 UI 작업 전에 한 번 훑는다.
 
-> 패딩/마진/gap 은 임의 px(`5px`,`7px`,`13px`) 대신 위 단계로 맞춘다.
-
-## 3. 타이포 스케일
-
-`--sm-fs-xs`=12 · `-sm`=13 · `-base`=14(본문) · `-md`=15 · `-lg`=17 · `-xl`=19 · `-2xl`=23
-
-> 본문 기본은 14px(`body`).
-
-## 4. 반경 / 그림자
-
-`--sm-radius`=8(기본) · `--sm-radius-btn`=12 · `--sm-radius-card`=16 · `--sm-radius-pill`=50
-`--sm-shadow-card` (카드) · `--sm-shadow-float` (모달/팝오버)
+1. **문서·주석·기존 코드의 색 값을 믿지 말 것.** `:root` 가 정답. 낡은 값이 코드에 남아 선례처럼 보이는 경우가 있다.
+2. **유령 토큰** — §0 원칙 4. `var(--없는토큰, #hex)` 32곳이 이걸로 생겼다.
+3. **`.b2b-card` 에 `borderColor`** — `border:none` 이라 아무것도 그려지지 않는다. 8곳이 "강조 테두리가 있는 줄" 알았지만
+   화면엔 없었다. 테두리가 필요하면 `.b2b-stat-card` / `.b2b-form-section`.
+4. **SVG `<rect rx>`** — 네 모서리가 전부 둥글어진다. 막대 꼭대기만 둥글게는 charts.tsx 의 `barPath()` (이미 프리미티브가 처리).
+5. **빈 상태를 `.b2b-loading` 으로 그리기** — 사용자가 "로딩 중인지 결과가 없는 건지" 구분 못 한다. 빈 상태는 `.b2b-empty`.
+6. **성공/실패 분기에 문자열 스니핑** — `msg.startsWith("")` 는 항상 true(실제 버그였음). `{ ok, text }` 플래그로.
+7. **캔버스(Chart.js)는 CSS 변수를 못 읽는다** — /subscription 은 `CSSV()` 로 런타임 해석. §6 예외.
+8. **`document.write` 인쇄 팝업은 별도 문서** — globals.css 미로드, `var()` 불가(fulfill/scan). 리터럴 유지가 맞다.
+9. **`app/globals.css`·`app/b2b/b2b.css` 는 전 서비스 공용 파일** — 고치기 전에 다른 세션에 알린다(CLAUDE.md 3-(b)).
 
 ---
 
-## 5. 공용 컴포넌트 클래스 (재사용)
+## 3. 토큰
 
-정의: `app/b2b/b2b.css` (B2B·생산·VOC 등 내부도구 전체에서 공용).
+### 색 — 시맨틱은 텍스트 / -bg / -border 3종 세트
 
-| 분류 | 클래스 | 비고 |
+배너·배지는 이 세트만 조합한다. (danger 만 3종이던 시절, 나머지는 테두리 색이 없어 화면마다 hex 를 지어냈다 — 세트에 구멍을 내지 말 것.)
+
+| 의미 | 텍스트 | -bg | -border | 용도 |
+|---|---|---|---|---|
+| `--sm-danger` | #C92A2A | #FCE4E4 | #F5C6C6 | 오류·삭제·미입금 + **진짜 이상치**(재고 마이너스·부족). 정상 흐름(출고 등)에 쓰지 않는다 |
+| `--sm-success` | #22863A | #E6FFED | #C6EDD3 | 완료·성공·입금완료 |
+| `--sm-warning` | #B08800 | #FFF4E0 | #F0D9A8 | 대기·주의 |
+| `--sm-info` | #1971C2 | #E0F0FF | #B8D6F2 | 정보·진행중·링크강조 |
+
+브랜드: `--sm-orange` #F15A30 · `-hover` #D94E26 · `-light` rgba(241,90,48,.06) · `-border` rgba(241,90,48,.12)
+
+중립: `--sm-black` #1A1A1A(본문) · `--sm-dark` #37352F(짙은 웜그레이) · `--sm-text-mid` #555(보조) ·
+`--sm-text-light` #6B6B6B(흐림) · `--sm-text-faint` #C7C7C7(값 없음 "·" 플레이스홀더) · `--sm-white` ·
+`--sm-bg` #FAFAFA(페이지) · `--sm-bg-warm` #FFF5F0 · `--sm-bg-subtle` #F7F8FA(표 헤더·합계행) ·
+`--sm-border` #EEE · `--sm-border-light` #F4F4F4(차트 격자)
+
+### 간격 (4px 베이스) / 타이포 / 반경 / 폰트
+
+- 간격: `--sm-space-1~6` = 4 / 8 / 12 / 16 / 24 / 32 (`--sm-pad`=24 페이지 여백). 임의 px(5·7·13) 대신 이 단계로.
+- 타이포: `--sm-fs-xs~2xl` = 12 / 13 / 14(본문) / 15 / 17 / 19 / 23
+- 반경: `--sm-radius`=8 · `-btn`=12 · `-card`=16 · `-pill`=50 / 그림자: `--sm-shadow-card` · `--sm-shadow-float`
+- 폰트: `--sm-mono` (SKU·코드용 모노스페이스 스택)
+
+### 유틸 클래스 (globals.css) — 반복 인라인 대체
+
+`.sm-row` `.sm-row-wrap` `.sm-col` `.sm-between` (flex) · `.sm-muted`(--sm-text-mid) `.sm-faint`(--sm-text-light) ·
+`.sm-nowrap` `.sm-ellipsis` · `.sm-gap-1~4`
+
+---
+
+## 4. 의미축 색 지도 — 같은 뜻은 항상 같은 색
+
+정의는 lib 한 곳, **배지·표·차트가 전부 그 지도를 조회한다.** 화면에서 새로 선언하지 말 것.
+(어기면 같은 "출고"가 배지는 파랑·숫자는 빨강, 같은 "개선완료"가 히어로는 초록·추세는 주황으로 갈린다 — 실제 있었던 일.)
+
+| 축 | 지도 | 위치 |
 |---|---|---|
-| 버튼 | `.b2b-btn-primary` `.b2b-btn-secondary` `.b2b-btn-danger` `.b2b-icon-btn` `.b2b-link-btn` | |
-| 입력 | `.b2b-input` `.b2b-field` `.b2b-field-label` `.b2b-field-row` `.b2b-combo` `.b2b-checkbox` | |
-| 레이아웃 | `.b2b-container` `.b2b-card` `.b2b-card-head` `.b2b-card-title` `.b2b-dash-grid` | |
-| 페이지 헤더 | `.b2b-page-head` `.b2b-page-title` `.b2b-page-subtitle` `.b2b-page-actions` | |
-| 표 | `.b2b-table` `.b2b-table-wrap` (모바일은 `data-label` 카드 변환) | |
-| 폼 | `.b2b-form-section` `.b2b-form-section-title` `.b2b-form-foot` | |
-| 모달 | `.b2b-modal-backdrop` `.b2b-modal` `.b2b-modal-head` `.b2b-modal-body` `.b2b-modal-foot` | |
-| 상태 | `.b2b-error`(오류배너) `.b2b-empty`(빈상태) `.b2b-loading` | |
-| 탭/필터 | **`.sm-tab`** (둥근 탭 — 아래 5.1, `globals.css`) · `.b2b-checkfilter-row`(엑셀식 체크필터) | |
+| 재고 유형 (입고=success · 출고=info · 조정=warning) | `INV_TYPE_COLOR` | `app/lib/inventory.ts` |
+| 재고 채널 (도매=orange · 소매=info) | `INV_CHANNEL_COLOR` | `app/lib/inventory.ts` |
+| 발주 상태·생산·입금·세금계산서·발송 | `STATUS_COLORS` `PRODUCTION_COLORS` `PAYMENT_COLORS` `TAX_INVOICE_COLORS` `SHIPMENT_STATUS_COLORS` | `app/lib/b2b-orders.ts` |
+| VOC 상태 (접수=info · 응대개선중=warning · 개선완료=success) | `VOC_STATUS_COLOR` | `app/lib/voc.ts` |
+| VOC 귀책 (제조사=success · 물류=warning · 자사=danger · 고객=info · 미분류=text-light) | `VOC_FAULT_COLOR` | `app/lib/voc.ts` |
+| 생산요청 상태 | `PR_STATUS_COLOR` | `app/lib/wholesale-production.ts` |
 
-사이드바(전역): `.app-sb-tool` `.app-sb-menu-item` `.app-sb-chev` 등 — `app/globals.css`.
+**categorical 예외** (서열 없는 구분용 — 의도적으로 토큰이 아님): `PIE_COLORS`(charts.tsx) ·
+`COLORS`(production-promotions 캘린더 밴드) · `CH_COLOR`(crm 채널). 이 밖에 새 categorical 팔레트를 만들지 말 것.
 
-### 5.1 탭 / 필터 (`.sm-tab`) — 전 도구 공용, `app/globals.css`
-상태·기간·뷰 전환 등 **모든 토글 탭은 이 컴포넌트로 통일**(구 `.prod-range-tab`·`.voc-tab` 폐기).
-앱 버튼과 같은 radius(`--sm-radius-btn`)·오렌지 톤이라 버튼군과 자동으로 어울린다.
+---
 
-| 클래스 | 용도 |
-|---|---|
-| `.sm-tabbar` | 탭 + 검색을 한 줄에 두는 바(검색 입력에 `.sm-tab-search` → 우측 고정폭 240px, 모바일 전체폭) |
-| `.sm-tabs` | 토글 탭만 묶는 그룹(검색 없음) |
-| `.sm-tab` / `.sm-tab.is-active` | 탭 버튼 / 활성(오렌지 채움) |
-| `.sm-tab-count` | 탭 안 카운트 배지(선택) |
+## 5. 탭 스니펫 (`.sm-tab` — 전 도구 공용, globals.css)
+
+상태·기간·뷰 전환 등 모든 토글이 이 하나다. `.sm-tab:disabled` 는 잠김(50% 흐림).
 
 ```tsx
 <div className="sm-tabbar">
@@ -108,46 +134,73 @@
       {s}<span className="sm-tab-count">{counts[s]}</span>
     </button>
   ))}
-  <input className="b2b-input sm-tab-search" placeholder="검색" />
+  <input className="b2b-input sm-tab-search" placeholder="검색" />  {/* 우측 240px, 모바일 전체폭 */}
 </div>
 ```
 
-### 유틸 클래스 (반복 인라인 대체) — `app/globals.css`
-레이아웃/텍스트의 반복 인라인 `style` 은 아래 유틸로 대체한다(간격 스케일 불변).
-| 클래스 | = |
-|---|---|
-| `.sm-row` / `.sm-row-wrap` | flex + 가운데정렬 (+ 줄바꿈) |
-| `.sm-col` | flex 세로 |
-| `.sm-between` | flex + 양끝정렬 |
-| `.sm-muted` / `.sm-faint` | 보조(#666) / 흐린(#999) 텍스트 |
-| `.sm-nowrap` / `.sm-ellipsis` | 줄바꿈 방지 / 말줄임 |
-| `.sm-gap-1~4` | gap = `--sm-space-1~4` (4·8·12·16) |
-
-> gap/margin 이 스케일(4·8·12·16·24·32)에 맞으면 `.sm-gap-*` 사용, 어중간한 값(6·10·14 등)은 당분간 인라인 유지 → 점진적으로 스케일에 수렴.
+검색이 없으면 `.sm-tabbar` 대신 `.sm-tabs`.
 
 ---
 
-## 6. 화면 통일 — 단일 시각 언어
+## 6. 차트 — charts.tsx 프리미티브만 (`app/components/charts.tsx`)
 
-내부도구 전 화면이 두 가지 인터랙션 모델로 나뉘지만 **시각 언어는 하나**다.
-- **데이터툴**(B2B·생산·VOC): 표/카드/폼. `.b2b-container`(레이아웃의 `.b2b-main`) + `.b2b-page-head` + `.b2b-*`.
-- **AI 단일입력툴**(문장교정·CS·회의)·**홈**: 입력→결과 레이아웃은 유지하되 **같은 토대**를 씀.
-  구 클래스가 b2b 동등물과 **수치까지 동일**하게 정렬됨:
-  | 구(단순툴) | = B2B |
-  |---|---|
-  | `.container` (1800 / 40·32·96) | `.b2b-main` |
-  | `.page-title` 31px / `.page-subtitle` 15px | `.b2b-page-title` / `.b2b-page-subtitle` |
-  | `.btn-primary/secondary/danger` | `.b2b-btn-*` (토큰 동일) |
-- **VOC 미구현 메뉴**: 공용 `VocPlaceholder`(표준 셸 + '준비중' 빈상태) — 8개 한 컴포넌트로 통일.
+| 프리미티브 | 용도 | 주요 prop |
+|---|---|---|
+| `Donut` | 도넛 + 중앙 총계 | `data` `colors` `size`(기본 132) `center` `centerSub` |
+| `PieCard` | 도넛 + 값·비율 범례 카드 (Donut 재사용) | `title` `data` `fmt` `colors` `size` |
+| `TrendChart` | 단일 세로막대 추세 | `data` `fmtAxis` **`accent`(의미색)** |
+| `StackedBar` | 누적 세로막대 (기간 x 카테고리) | `periods` `series` **`colors`(색 지도)** `fmtAxis` `unit` |
+| `ComboBarLine` | 누적막대 + 선, 좌우 2축 | `barColors` **`barFmt`**(금액이면 `moneyCompact`) `lineFmt` `lineColor`(기본 `CHART_LINE` 보라) |
+| `BarList` | 가로 순위막대 카드 | `title` `caption` `accent` `fmt` `sub` `minPct` `sorted` |
+| `ChartLegend` | 범례 | `items: [라벨, 색][]` — 인라인 범례 재구현 금지 |
+| 헬퍼 | `moneyCompact`(억/만 축약) · `niceCeil`(축 상한) · `PIE_COLORS` · `CHART_LINE` | |
 
-> 신규 화면은 `.b2b-*` 를 쓴다(구 `.container`/`.page-title`/`.btn-*` 는 동일 룩의 레거시 별칭).
+규칙:
+- **화면에서 자체 차트를 만들지 않는다.** 표현이 부족하면 프리미티브에 prop 을 추가한다.
+  (accent·barFmt·sub·minPct 가 없던 시절 화면마다 자작 차트가 생겼고, 그게 그래프 불일치의 뿌리였다.)
+- 의미축 데이터는 §4 색 지도를 `accent`/`colors` 로 전달. 지도 없는 분류만 `PIE_COLORS` 순환.
+- 좌표계(높이 240·여백·막대폭·모서리 4)는 내부 `GEOM` 상수가 3종 막대에 공유된다 — 개별 화면에서 크기를 흉내내지 말 것.
+- X축 라벨은 기간이 많으면 자동으로 솎아진다 — 화면에서 직접 그리지 말 것.
 
-### 적용 현황 & 다음 단계
-- ✅ 색 토큰화 · 전역 폰트 -2 · 타이포/간격 스케일 · 유틸 클래스.
-- ✅ 컨테이너·페이지헤더·버튼·타이틀 전 화면 단일 기준 정렬. 죽은 page.module.css 제거.
-- ✅ 탭/필터 단일화 — `.sm-tab` 으로 B2B·생산·VOC 전 화면 통일(구 `.prod-range-tab`·`.voc-tab` 제거).
-- ✅ 캘린더 노션풍 통일(`prod-cal`·`b2b-cal`): 얇은 그리드선(`--sm-border-light`)·오늘=숫자 원형(오렌지)·이벤트 칩·셀 호버.
-- ✅ 통계 대시보드 컴포넌트화 — 공용 차트 `app/components/charts.tsx`(`Donut`/`TrendChart`/`PieCard`/`BarList`, `moneyCompact`) + 현황 히어로 `.sm-stat-hero`(도넛+총계+구분지표 3열). VOC 통계·B2B 매출 집계·개선요청서에 적용. 차트 카테고리 색은 `PIE_COLORS` 예외 팔레트.
-- ⬜ 인라인 `style` 의 padding/margin/fontSize → 스케일/유틸로 점진 이관(새/수정 화면부터).
+**예외 — `/subscription`** (`public/subscription-dashboard.html`): 코드베이스 유일의 Chart.js(CDN).
+캔버스는 CSS 변수를 못 읽으므로 색은 `CSSV()`/`T{}` 로 **파일의 `:root` 에서 런타임 해석**한다 — JS 에 hex 하드코딩 금지.
+규격(직선·점 2.4·모서리 4·격자색)은 `applyChartDefaults()` 가 공용 차트에 맞춘다.
 
-**규칙 요약: 색은 시맨틱 토큰, 간격은 4px 스케일, 컴포넌트는 `.b2b-*` 재사용. 인라인 hex/px 금지.**
+---
+
+## 7. 변경 전파 — 시스템을 바꾸면 어디가 따라오나
+
+| 바꾸는 것 | 따라오는 곳 | 방법 |
+|---|---|---|
+| 색·간격·타이포 토큰 (`globals.css` `:root`) | React 전 화면 | 자동 (`var()` 참조) |
+| 〃 | `public/` 정적 HTML 2개 (utm-builder · subscription-dashboard) | **`npm run sync-tokens`** — `npm run build` 가 먼저 실행하므로 배포는 항상 동기. dev 중엔 수동 실행 |
+| 〃 | /subscription 의 Chart.js 색 | 파일 `:root` 를 런타임에 읽으므로 sync 만 되면 자동 |
+| 컴포넌트 모양 (`.b2b-*` / `.sm-*`) | 전 화면 | 자동 (클래스) — 단 두 CSS 는 공용 파일(§2-9) |
+| 차트 규격 (`GEOM`·프리미티브) | 통계 화면 전부 | 자동 |
+| 의미색 (lib 색 지도) | 그 축을 그리는 배지·표·차트 | 자동 (지도 조회) |
+| 따라오지 **않는** 곳 | fulfill/scan 인쇄 팝업(별도 문서) · categorical 팔레트(의도) | 수동 / 불변 |
+
+동기화 스크립트: `scripts/sync-design-tokens.mjs` (`--check` = 검사만, 어긋나면 exit 1).
+정적 도구를 새로 만들면 이 스크립트의 `TARGETS` 에 매핑을 등록한다.
+
+---
+
+## 8. 검증
+
+- `npx tsc --noEmit` + `npm run build` — 단 **둘 다 색·클래스 오용은 못 잡는다**(토큰은 그냥 문자열이다).
+- `public/` 정적 HTML 을 고쳤으면 인라인 스크립트 문법 검사:
+  `node -e "const s=require('fs').readFileSync('public/파일.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1]; new (require('vm').Script)(s); console.log('OK')"`
+- 색·레이아웃 변경은 화면으로 확인한다. dev 서버는 로그인 게이트가 있어 세션이 직접 못 보는 경우가 많다 —
+  그때는 사용자에게 스크린샷 확인을 요청한다(실제로 막대 모서리 회귀를 사용자 스크린샷이 잡았다).
+
+---
+
+## 9. 레거시 별칭 (신규 사용 금지)
+
+`.container` / `.page-title` / `.page-subtitle` / `.btn-*` 는 AI툴 5화면(홈·correct·cs·cs/manual·meeting)의 구 셸.
+`.b2b-*` 와 동일 수치로 정렬돼 있다(2026-07 반응형 포함). **신규 화면은 `.b2b-*`.**
+
+---
+
+**규칙 요약: 색은 시맨틱 토큰(3종 세트), 간격은 4px 스케일, 컴포넌트는 §1 결정표, 차트는 §6 프리미티브,
+같은 뜻은 §4 색 지도. 없으면 지어내지 말고 시스템에 추가하고, 토큰을 바꿨으면 `npm run sync-tokens`.**

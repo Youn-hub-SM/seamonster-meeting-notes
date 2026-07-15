@@ -89,7 +89,16 @@ grep -oE "^\.[a-zA-Z0-9_-]+ *\{" app/b2b/b2b.css | sed 's/ *{//' | sort | uniq -
 
 - **마이그레이션은 절대 직접 적용하지 않는다.** 파일만 작성하고, 사용자가 Supabase SQL Editor 에서 적용한다. 적용 여부를 확인하고 안내할 것.
 - 새 컬럼·테이블에 의존하는 코드는 **미적용 환경에서도 죽지 않게** 폴백을 넣는다 (기존 패턴: 에러 메시지에 컬럼명이 보이면 그 컬럼 빼고 재시도).
-- **디자인 토큰**: `app/globals.css` `:root` + `docs/design-system.md`. 인라인 hex/px 금지, `.b2b-*` 재사용.
+- **디자인 시스템 — UI(화면·컴포넌트·차트)를 만들거나 고치기 전에 `docs/design-system.md` 를 먼저 읽는다.**
+  어떤 세션이 만들어도 같은 화면이 나오게 하는 단일 기준이다(결정표·함정 목록·색 지도가 거기 있다). 문서 없이도 지켜야 할 최소:
+  - 토큰 단일 소스 = `app/globals.css` `:root`. **문서·주석·기존 코드에 적힌 hex 를 믿지 말고 :root 를 본다.** 인라인 hex/px 금지.
+  - **없는 토큰을 지어내지 않는다.** `var(--sm-X, #폴백)` 은 X 가 :root 에 없으면 폴백이 항상 렌더된다(= 하드코딩인데 grep 에 안 걸림).
+    쓰기 전 `grep -- "--sm-X:" app/globals.css` 로 존재 확인.
+  - 있는 것을 재사용: 탭 `.sm-tab` · 배너 `.b2b-error`/`.sm-success`/`.sm-warn` · 배지 `.b2b-status-pill` ·
+    차트는 `app/components/charts.tsx` 프리미티브(자체 차트 금지 — 표현이 부족하면 prop 을 추가).
+    같은 의미는 lib 색 지도(`INV_TYPE_COLOR`·`VOC_STATUS_COLOR` 등)를 조회 — 화면에서 색을 새로 선언하지 않는다.
+  - `:root` 토큰을 바꿨으면 `npm run sync-tokens` — public/ 정적 HTML 2개(iframe 도구)의 :root 가 따라온다.
+    `npm run build` 는 이를 자동 실행하므로 배포 산출물은 항상 동기 상태다.
 - **이모지 금지** (전문성).
 - **번들(세트)은 자체 재고가 없다.** 현재고는 구성품에서 파생된다. 모든 입출고는 `app/lib/product-bundles.ts` 의 `expandBundleQty()` 로 구성품 전개해 기록할 것 — 경로마다 따로 구현하면 같은 판매가 경로에 따라 다르게 차감된다(실제 발생한 버그).
 - **테스트가 없다.** 동작 변경을 잡아줄 장치가 `npx tsc --noEmit` + `npm run build` 뿐이므로, 의미가 바뀌는 수정은 직접 확인할 것.

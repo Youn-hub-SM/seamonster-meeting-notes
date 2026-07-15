@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "build": "node scripts/sync-design-tokens.mjs && next build",
+    "start": "next start",
+    "sync-tokens": "node scripts/sync-design-tokens.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
