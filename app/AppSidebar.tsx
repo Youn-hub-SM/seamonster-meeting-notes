@@ -25,6 +25,16 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const [userName, setUserName] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
+  // 즐겨찾기 아코디언 — 기본 펼침, 상태는 사이드바 접기(sb_collapsed)와 같은 방식으로 기억
+  const [favOpen, setFavOpen] = useState(true);
+  useEffect(() => { try { setFavOpen(localStorage.getItem("sb_fav_open") !== "0"); } catch {} }, []);
+  function toggleFavOpen() {
+    setFavOpen((v) => {
+      const next = !v;
+      try { localStorage.setItem("sb_fav_open", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  }
   // 아코디언: 여러 개를 동시에 펼칠 수 있음(단일 열림 아님). 활성 툴은 자동으로 펼치되, 열어둔 다른 건 닫지 않음.
   const activeMenuHref = useMemo(() => {
     for (const cat of NAV) for (const t of cat.tools) if (t.menu?.length && toolActive(t, pathname)) return t.href;
@@ -194,14 +204,27 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
         {!collapsed && userName && (
           <div className="app-sb-group">
-            <div className="app-sb-cat" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <span>즐겨찾는 메뉴</span>
-              <button type="button" onClick={() => setEditFav((v) => !v)}
+            <div className="app-sb-cat" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button type="button" className="app-sb-cat-toggle" onClick={toggleFavOpen} aria-expanded={favOpen}>
+                즐겨찾는 메뉴
+              </button>
+              <button type="button" onClick={() => { setEditFav((v) => !v); if (!favOpen) toggleFavOpen(); }}
                 style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, padding: 0, color: editFav ? "var(--sm-orange)" : "var(--sm-text-light)" }}>
                 {editFav ? "완료" : "편집"}
               </button>
+              <button
+                type="button"
+                className={`app-sb-chev ${favOpen ? "is-open" : ""}`}
+                aria-label={favOpen ? "즐겨찾는 메뉴 접기" : "즐겨찾는 메뉴 펼치기"}
+                aria-expanded={favOpen}
+                onClick={toggleFavOpen}
+              >
+                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+                  <path d="M5.5 3.5L10 8l-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
             </div>
-            {favorites.length === 0 ? (
+            {favOpen && (favorites.length === 0 ? (
               <div className="sm-faint" style={{ fontSize: 11, padding: "2px 12px 4px", lineHeight: 1.5 }}>
                 {editFav ? "메뉴 옆 ＋를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
               </div>
@@ -213,7 +236,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
                 </Link>
                 {editFav && <FavToggle href={f.href} label={f.label} />}
               </div>
-            ))}
+            )))}
           </div>
         )}
 
