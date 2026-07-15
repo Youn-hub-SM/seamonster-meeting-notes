@@ -10,7 +10,7 @@ import type { Company } from "@/app/lib/b2b-types";
 //  공급자(우리 회사)·직인은 설정(/b2b/settings 거래명세표 섹션, b2b_settings KV)에서.
 //  라인 세액: 과세=공급가액×10%(마지막 과세 라인이 반올림 오차 흡수 → 합계가 orders.vat 와 일치), 면세=0.
 
-type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string };
+type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string; bank: string };
 type FullOrder = Order & { items: OrderItem[]; company: Company | null };
 
 const won = (n: number) => Math.round(n).toLocaleString();
@@ -99,15 +99,16 @@ export default function StatementPage() {
 
           {/* 공급자 / 공급받는자 2단 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-            <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px", position: "relative" }}>
+            <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px", paddingRight: 82, position: "relative" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
               <InfoRow label="등록번호" value={supplier?.biz_no} strong />
-              <InfoRow label="상호" value={supplier?.name} extraLabel="성명" extra={supplier?.ceo ? `${supplier.ceo} (인)` : ""} />
+              <InfoRow label="상호" value={supplier?.name} extraLabel="대표" extra={supplier?.ceo ? `${supplier.ceo} (인)` : ""} />
               <InfoRow label="사업장" value={supplier?.addr} />
               <InfoRow label="업태" value={supplier?.biz_type} extraLabel="종목" extra={supplier?.biz_item} />
               <InfoRow label="이메일" value={supplier?.email} />
+              {/* 직인 — 오른쪽 여백(paddingRight)을 확보해 글자와 겹치지 않게 */}
               {stamp && (
-                <img src={stamp} alt="직인" style={{ position: "absolute", right: 14, top: 30, width: 58, height: 58, objectFit: "contain", mixBlendMode: "multiply", opacity: 0.9 }} />
+                <img src={stamp} alt="직인" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 60, height: 60, objectFit: "contain", mixBlendMode: "multiply", opacity: 0.9 }} />
               )}
             </div>
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
@@ -115,7 +116,6 @@ export default function StatementPage() {
               <InfoRow label="등록번호" value={c?.biz_no} strong />
               <InfoRow label="상호" value={c?.name} extraLabel="성명" extra={c?.ceo_name ?? ""} />
               <InfoRow label="주소" value={c?.address} />
-              <InfoRow label="연락처" value={c?.contact_phone} extraLabel="담당" extra={c?.contact_name ?? ""} />
             </div>
           </div>
 
@@ -152,10 +152,13 @@ export default function StatementPage() {
             <strong style={{ fontSize: 22 }}>{won(Number(order.total) || 0)}원</strong>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontSize: 12, color: "var(--sm-text-mid)" }}>
-            <span>위와 같이 거래하였음을 확인합니다.</span>
-            <span>인수자 : ____________________ (인)</span>
+          {/* 입금 은행정보(설정에서 입력) */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 14px", marginTop: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", flex: "0 0 auto" }}>입금계좌</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{supplier?.bank || "-"}</span>
           </div>
+
+          <p style={{ marginTop: 14, fontSize: 12, color: "var(--sm-text-mid)" }}>위와 같이 거래하였음을 확인합니다.</p>
         </section>
       )}
     </div>
