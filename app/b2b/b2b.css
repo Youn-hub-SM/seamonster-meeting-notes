@@ -1765,6 +1765,8 @@ a.b2b-history-item:hover {
   appearance: none;
   -webkit-appearance: none;
   max-width: 104px;
+  text-align: center;
+  text-align-last: center;
 }
 
 .b2b-status-select:focus {
