@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
+import { signedQty } from "@/app/lib/inventory";
+import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
 import type { ImportTxn } from "../route";
 
 export const runtime = "nodejs";
@@ -22,9 +24,27 @@ export async function POST(req: NextRequest) {
     const valid = rows.filter((r) => r && r.product_id && (r.type === "입고" || r.type === "출고") && Number(r.qty) !== 0);
     if (!valid.length) return NextResponse.json({ ok: false, error: "유효한 행이 없습니다." }, { status: 400 });
 
+    // 묶음(세트)은 자체 재고가 없다 → 반드시 구성품 원장으로 남긴다. 세트 id 로 기록하면
+    //  현재고가 구성품에서 파생되므로 그 원장은 무시되고 아무 재고도 줄지 않는다.
+    //  엑셀 업로드는 미리보기에서 이미 전개돼 오지만 수동 '구매 및 판매' 폼은 세트 그대로 온다 →
+    //  쓰기 직전인 여기서 전개해 두 경로를 한 규칙으로 통일(구성품은 재전개해도 그대로라 이중 전개 없음).
+    const bundles = await getAllBundles(sb);
+    const expanded: ImportTxn[] = [];
+    for (const r of valid) {
+      if (!isBundleId(bundles, r.product_id)) { expanded.push(r); continue; }
+      const per = expandBundleQty(bundles, r.product_id, Math.abs(Math.round(Number(r.qty))));
+      for (const [pid, q] of per) {
+        expanded.push({
+          ...r, product_id: pid, qty: signedQty(r.type, q),
+          unit_amount: null, // 세트 단가는 구성품에 나눌 수 없음 → 비움(메모로 출처 보존)
+          memo: r.memo ? `${r.memo} (세트 분해: ${r.product_name})` : `세트 분해: ${r.product_name}`,
+        });
+      }
+    }
+
     // 유형별로 주문번호(IN-/OUT-) + group_id 부여. migration 033 미적용이면 묶음 없이 진행(폴백).
     const orderByType = new Map<string, { group_id: string; order_no: string }>();
-    for (const t of new Set(valid.map((r) => r.type))) {
+    for (const t of new Set(expanded.map((r) => r.type))) {
       try {
         const { data, error } = await sb.rpc("next_inventory_order_no", { p_type: t });
         if (error || !data) throw error || new Error("no order_no");
@@ -32,7 +52,7 @@ export async function POST(req: NextRequest) {
       } catch { /* 033 미적용 — 묶음 생략 */ }
     }
 
-    const insert: Record<string, unknown>[] = valid.map((r) => {
+    const insert: Record<string, unknown>[] = expanded.map((r) => {
       const grp = orderByType.get(r.type);
       return {
         product_id: r.product_id,

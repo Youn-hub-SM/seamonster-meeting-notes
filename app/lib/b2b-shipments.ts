@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { signedQty } from "./inventory";
-import { getAllBundles, type BundleComponent } from "./product-bundles";
+import { getAllBundles, expandBundleQty, type BundleComponent } from "./product-bundles";
 import {
   RecipientInput,
   ShipmentScheduleInput,
@@ -124,17 +124,12 @@ export async function saveOrderShipments(
       // 재고 즉시 출고(선점) — 발송 잡는 순간 차감. shipment_id 로 묶여 차수 삭제/재저장 시 cascade 원복.
       //  B2B 발송이므로 '도매' 채널 재고에서 차감(036). 컬럼 미적용 환경이면 channel 빼고 재시도.
       if (wantStockOut) {
-        // 번들이면 구성품으로 재귀 전개(중첩 번들 포함) — 소매 출고(fulfill/dispatch)와 동일 규칙.
+        // 번들이면 구성품으로 재귀 전개(expandBundleQty 공용 규칙 — 소매 출고와 동일).
         //  같은 품목이 여러 라인/구성품에 걸쳐 나오면 합산해 품목당 출고 1건으로.
         const perProduct = new Map<string, number>();
-        const expand = (pid: string, qty: number, depth: number) => {
-          const comps = bundles.get(pid);
-          if (comps && comps.length && depth < 8) { for (const c of comps) expand(c.component_id, qty * c.qty, depth + 1); return; }
-          perProduct.set(pid, (perProduct.get(pid) || 0) + qty);
-        };
         for (const it of items) {
           const pid = orderItems[it.idx].product_id;
-          if (pid && it.qty > 0) expand(pid, it.qty, 0);
+          if (pid && it.qty > 0) expandBundleQty(bundles, pid, it.qty, perProduct);
         }
         const txns: Record<string, unknown>[] = [...perProduct.entries()].map(([product_id, qty]) => ({
           product_id,

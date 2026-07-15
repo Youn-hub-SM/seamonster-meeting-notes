@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { INV_TXN_TYPES, signedQty, type InvTxnType } from "@/app/lib/inventory";
+import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,13 @@ export async function POST(req: NextRequest) {
     const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined;
 
     const sb = supabaseAdmin();
+    // 묶음(세트)은 자체 재고가 없다 → 입고/출고는 구성품으로 전개해 기록(다른 경로와 동일 규칙),
+    //  조정은 파생값이라 조정 대상이 될 수 없으므로 막는다.
+    const bundles = await getAllBundles(sb);
+    const isSet = isBundleId(bundles, product_id);
+    if (isSet && type === "조정")
+      return NextResponse.json({ ok: false, error: "묶음(세트)은 자체 재고가 없어 조정할 수 없습니다. 구성품의 재고를 조정하세요." }, { status: 400 });
+
     const row: Record<string, unknown> = {
       product_id, type, qty,
       channel: b.channel === "도매" ? "도매" : "소매", // 036, 기본 소매
@@ -44,17 +52,25 @@ export async function POST(req: NextRequest) {
       } catch { /* 033 미적용 */ }
     }
 
+    // 세트면 구성품 여러 행으로, 아니면 그대로 1행. 같은 group_id/order_no 로 묶여 한 거래로 남는다.
+    const per = expandBundleQty(bundles, product_id, Math.abs(Number(b.qty) || 0));
+    const attempt: Record<string, unknown>[] = [...per.entries()].map(([pid, q]) => ({
+      ...row,
+      product_id: pid,
+      qty: signedQty(type, q),
+      ...(isSet ? { unit_amount: null, memo: [row.memo, "세트 분해"].filter(Boolean).join(" ") } : {}),
+    }));
+
     // 선택 컬럼(status=034, channel=036) 미적용 환경이면 그 컬럼만 빼고 재시도.
-    const attempt = { ...row };
-    let res = await sb.from("inventory_txns").insert(attempt).select().single();
+    let res = await sb.from("inventory_txns").insert(attempt).select();
     for (let guard = 0; res.error && guard < 2; guard++) {
-      const miss = (["channel", "status"] as const).find((c) => c in attempt && new RegExp(c, "i").test(res.error!.message));
+      const miss = (["channel", "status"] as const).find((c) => c in attempt[0] && new RegExp(c, "i").test(res.error!.message));
       if (!miss) break;
-      delete attempt[miss];
-      res = await sb.from("inventory_txns").insert(attempt).select().single();
+      for (const r of attempt) delete r[miss];
+      res = await sb.from("inventory_txns").insert(attempt).select();
     }
     if (res.error) throw res.error;
-    return NextResponse.json({ ok: true, txn: res.data });
+    return NextResponse.json({ ok: true, txn: res.data?.[0] ?? null, txns: res.data });
   } catch (err) {
     console.error("[inventory/txn POST]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "기록 실패") }, { status: 500 });

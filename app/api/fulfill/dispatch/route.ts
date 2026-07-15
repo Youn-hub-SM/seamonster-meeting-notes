@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { signedQty } from "@/app/lib/inventory";
-import { getAllBundles } from "@/app/lib/product-bundles";
+import { getAllBundles, expandBundleQty } from "@/app/lib/product-bundles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,18 +48,14 @@ export async function POST(req: NextRequest) {
     // 아이템 해석 + 묶음 전개 → product_id별 수량
     const perProduct = new Map<string, number>();
     const itemRows: ItemRow[] = [];
-    const expand = (pid: string, qty: number, depth: number) => {
-      const comps = bundles.get(pid);
-      if (comps && comps.length && depth < 8) { for (const c of comps) expand(c.component_id, qty * c.qty, depth + 1); return; }
-      perProduct.set(pid, (perProduct.get(pid) || 0) + qty);
-    };
+    const expand = (pid: string, qty: number) => expandBundleQty(bundles, pid, qty, perProduct); // 공용 전개 규칙
     for (const it of items) {
       const m = bySku.get(it.sku.toUpperCase());
       if (!m || !m.length) { itemRows.push({ sku: it.sku, name: "", qty: it.qty, kind: "unmatched" }); continue; }
       if (m.length > 1) { itemRows.push({ sku: it.sku, name: m[0].name, qty: it.qty, kind: "ambiguous" }); continue; }
       const p = m[0];
       const isBundle = (bundles.get(p.id)?.length || 0) > 0;
-      expand(p.id, it.qty, 0);
+      expand(p.id, it.qty);
       itemRows.push({ sku: it.sku, name: p.name, qty: it.qty, kind: isBundle ? "bundle" : "single" });
     }
 
