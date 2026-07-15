@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     try { const { data } = await sb.rpc("next_production_request_no"); if (data) req_no = String(data); } catch { /* 069 미적용 */ }
 
     const request_date = DATE_RE.test(String(b.request_date || "")) ? String(b.request_date) : undefined;
+    const due_date = DATE_RE.test(String(b.due_date || "")) ? String(b.due_date) : undefined;
     const head: Record<string, unknown> = {
       req_no,
       title: String(b.title || "").trim() || null,
@@ -58,8 +59,10 @@ export async function POST(req: NextRequest) {
       created_by: who,
     };
     if (request_date) head.request_date = request_date;
+    if (due_date) head.due_date = due_date; // 생산마감일(071). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
 
-    const { data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single();
+    let { data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single();
+    if (he && /due_date/i.test(he.message)) { delete head.due_date; ({ data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single()); }
     if (he) throw he;
     const requestId = (reqRow as { id: string }).id;
 

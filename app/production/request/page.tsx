@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  PR_STATUSES, PR_STATUS_COLOR, PR_LINE_COLOR, lineState, allLinesFilled,
+  PR_STATUSES, PR_STATUS_COLOR, PR_STATUS_LABEL, PR_LINE_COLOR, lineState, allLinesFilled,
   type ProductionRequest, type PrItem, type PrStatus,
 } from "@/app/lib/wholesale-production";
+import { addBusinessDays } from "@/app/lib/business-days";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 
 function todayIso() { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; }
@@ -142,7 +143,7 @@ function WholesaleTab() {
         <div className="sm-tabs">
           {(["전체", ...PR_STATUSES] as const).map((s) => (
             <button key={s} className={`sm-tab ${filter === s ? "is-active" : ""}`} onClick={() => setFilter(s)}>
-              {s}<span className="sm-tab-count">{counts[s] ?? 0}</span>
+              {s === "전체" ? "전체" : PR_STATUS_LABEL[s]}<span className="sm-tab-count">{counts[s] ?? 0}</span>
             </button>
           ))}
         </div>
@@ -152,7 +153,7 @@ function WholesaleTab() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : displayed.length === 0 ? (
-        <div className="b2b-empty">{filter === "전체" ? "아직 생산 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요." : `‘${filter}’ 상태의 요청이 없습니다.`}</div>
+        <div className="b2b-empty">{filter === "전체" ? "아직 생산 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요." : `‘${PR_STATUS_LABEL[filter as PrStatus]}’ 상태의 요청이 없습니다.`}</div>
       ) : (
         <div className="sm-col" style={{ gap: 10 }}>
           {displayed.map((r) => (
@@ -190,7 +191,7 @@ function ProgressBar({ received, requested }: { received: number; requested: num
 
 function StatusBadge({ status }: { status: PrStatus }) {
   const c = PR_STATUS_COLOR[status];
-  return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}>{status}</span>;
+  return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}>{PR_STATUS_LABEL[status]}</span>;
 }
 
 function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
@@ -209,7 +210,7 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
         <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</span>
         <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13, fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
         <StatusBadge status={req.status} />
-        <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.requested_by ? ` · 요청 ${req.requested_by}` : ""}</span>
+        <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.due_date ? ` · 마감 ${req.due_date}` : ""}{req.requested_by ? ` · 요청 ${req.requested_by}` : ""}</span>
         {req.title && <span style={{ fontSize: 13, color: "var(--sm-black)", fontWeight: 600 }}>{req.title}</span>}
         <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>품목 {req.items.length}</span>
         <span style={{ flex: 1, minWidth: 140, maxWidth: 260 }}><ProgressBar received={req.total_received} requested={req.total_requested} /></span>
@@ -349,6 +350,7 @@ function CreateModal({ products, busy, onClose, onCreate }: {
 }) {
   const [requestedBy, setRequestedBy] = useState("");
   const [date, setDate] = useState(todayIso());
+  const [dueDate, setDueDate] = useState(addBusinessDays(todayIso(), 7)); // 생산마감일 기본=요청일+7영업일(급발주 시 수정)
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [lines, setLines] = useState<NewLine[]>([]);
@@ -365,7 +367,7 @@ function CreateModal({ products, busy, onClose, onCreate }: {
     const items = lines
       .filter((l) => Number(l.requested_qty) > 0)
       .map((l) => ({ product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty)), memo: l.memo.trim() || undefined }));
-    onCreate({ title: title.trim() || undefined, requested_by: requestedBy.trim() || undefined, request_date: date, memo: memo.trim() || undefined, items });
+    onCreate({ title: title.trim() || undefined, requested_by: requestedBy.trim() || undefined, request_date: date, due_date: dueDate || undefined, memo: memo.trim() || undefined, items });
   }
 
   return (
@@ -381,6 +383,10 @@ function CreateModal({ products, busy, onClose, onCreate }: {
             <label className="sm-col" style={{ gap: 3 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>요청일</span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label className="sm-col" style={{ gap: 3 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>생산마감일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 7영업일</span></span>
+              <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>제목(선택)</span>

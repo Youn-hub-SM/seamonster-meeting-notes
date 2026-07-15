@@ -78,6 +78,7 @@ export async function loadRequests(
     return {
       id: r.id as string, req_no: (r.req_no as string) ?? null, title: (r.title as string) ?? null,
       requested_by: (r.requested_by as string) ?? null, request_date: String(r.request_date),
+      due_date: (r.due_date as string) ?? null, // 생산마감일(071 미적용이면 null)
       status: r.status as ProductionRequest["status"], assignee: (r.assignee as string) ?? null, memo: (r.memo as string) ?? null,
       created_by: (r.created_by as string) ?? null, created_at: String(r.created_at), updated_at: String(r.updated_at),
       items: its,

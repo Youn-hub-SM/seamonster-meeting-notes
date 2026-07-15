@@ -11,6 +11,15 @@ export const PR_STATUS_COLOR: Record<PrStatus, { bg: string; fg: string }> = {
   취소: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },   // 취소(기록 보존)
 };
 
+// 화면 표시 라벨 — DB status 문자열('진행중' 등)은 그대로 두고 '표시'만 바꾼다(로직·비교·알림은 raw 유지).
+//  '진행중'은 생산담당자가 요청을 확인하고 생산에 착수한 단계임을 분명히 하려고 '담당자 확인/생산 중'으로 표기.
+export const PR_STATUS_LABEL: Record<PrStatus, string> = {
+  요청: "요청",
+  진행중: "담당자 확인/생산 중",
+  완료: "완료",
+  취소: "취소",
+};
+
 // 입고 1건(증거)
 export interface PrReceipt {
   id: string;
@@ -43,6 +52,7 @@ export interface ProductionRequest {
   title: string | null;
   requested_by: string | null;
   request_date: string;
+  due_date: string | null;      // 생산마감일(기본 요청일+7영업일, 급발주 시 수정 가능)
   status: PrStatus;
   assignee: string | null;      // 생산 담당자(변경 가능)
   memo: string | null;
