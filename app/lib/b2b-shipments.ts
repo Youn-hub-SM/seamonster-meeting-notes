@@ -85,6 +85,23 @@ export async function saveOrderShipments(
   const bundles = canDeduct ? await getAllBundles(sb) : new Map<string, BundleComponent[]>();
   const today = kstToday();
 
+  // '발송예정일만 잡으면 발주 전량 재고 차감' — 어떤 차수에도 상품 수량이 배정되지 않았으면(분할발송 미사용),
+  //  발주 상품 전량을 재고 차감 대상 첫 차수(발송예정일 있고·취소 아니고·재고차감 켜짐)에 자동 배분한다.
+  //  차수별로 수량을 나눈 분할발송은 그대로 두어 자동배분을 하지 않는다(이중 차감 방지).
+  if (canDeduct) {
+    const anyAssigned = (schedules || []).some((s) => (s.items || []).some((it) => Number(it.qty) > 0));
+    if (!anyAssigned) {
+      const target = (schedules || []).find((s) => s.ship_date && s.status !== "취소" && s.stock_out !== false);
+      if (target) {
+        const { data: oi } = await sb.from("order_items").select("id, qty").eq("order_id", orderId);
+        const qtyById = new Map((oi || []).map((r) => [r.id as string, Number(r.qty) || 0]));
+        target.items = orderItems
+          .map((it, idx) => ({ order_item_index: idx, qty: qtyById.get(it.id) || 0 }))
+          .filter((x) => x.qty > 0);
+      }
+    }
+  }
+
   // 재저장 도중 실패 시 복원할 수 있도록 옛 발송 상태를 먼저 스냅샷(아래 catch 에서 사용).
   const snap = await snapshotOrderShipments(sb, orderId);
 
