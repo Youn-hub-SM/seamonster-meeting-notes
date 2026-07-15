@@ -14,6 +14,8 @@ type Report = {
     orders_completed: number;
     avg_order_value: number;
     margin: number;
+    margin_cost_missing_lines?: number;
+    margin_cost_missing_revenue?: number;
   };
   backlog: {
     pending_orders: number;
@@ -208,7 +210,13 @@ export default function ReportsPage() {
                 <div className="sm-stat-hero-metric">
                   <span className="sm-stat-hero-metric-label">예상 마진</span>
                   <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-success)" }}>{formatMoney(report.summary.margin)}원</span>
-                  <span className="sm-faint" style={{ fontSize: 12 }}>매출 대비 {report.summary.revenue > 0 ? Math.round((report.summary.margin / report.summary.revenue) * 100) : 0}%</span>
+                  {(report.summary.margin_cost_missing_lines ?? 0) > 0 ? (
+                    <span className="sm-faint" style={{ fontSize: 12, color: "var(--sm-danger)" }}>
+                      원가 미입력 {report.summary.margin_cost_missing_lines}건(매출 {formatMoney(report.summary.margin_cost_missing_revenue ?? 0)}원) · 마진 과대 가능
+                    </span>
+                  ) : (
+                    <span className="sm-faint" style={{ fontSize: 12 }}>매출 대비 {report.summary.revenue > 0 ? Math.round((report.summary.margin / report.summary.revenue) * 100) : 0}%</span>
+                  )}
                 </div>
                 <div className="sm-stat-hero-metric">
                   <span className="sm-stat-hero-metric-label">미발송 잔고 <span className="sm-faint">(전체 기간)</span></span>
