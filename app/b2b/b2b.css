@@ -1755,16 +1755,16 @@ a.b2b-history-item:hover {
 /* 인라인 상태 select (행 안에서 색 pill 처럼 보이게) */
 .b2b-status-select {
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 4px 6px;
+  padding: 6px 9px;
   border-radius: var(--sm-radius-pill);
   border: 1px solid transparent;
   background: var(--sm-bg);
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  max-width: 92px;
+  max-width: 104px;
 }
 
 .b2b-status-select:focus {
