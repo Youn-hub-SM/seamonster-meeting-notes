@@ -164,7 +164,7 @@ function WholesaleTab() {
               <tr>
                 <th style={{ width: 1 }}></th>
                 <th>요청번호</th>
-                <th className="b2b-col-status">상태</th>
+                <th className="b2b-col-status" style={{ width: 184, minWidth: 184 }}>상태</th>
                 <th>품목</th>
                 <th className="b2b-col-date">진행</th>
                 <th className="b2b-col-date">요청일</th>
@@ -226,7 +226,7 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
             value={req.status}
             disabled={busy}
             onChange={(e) => onStatus(e.target.value as PrStatus)}
-            style={{ background: PR_STATUS_COLOR[req.status].bg, color: PR_STATUS_COLOR[req.status].fg }}
+            style={{ background: PR_STATUS_COLOR[req.status].bg, color: PR_STATUS_COLOR[req.status].fg, maxWidth: "none", width: "100%", minWidth: 160 }}
           >
             {PR_STATUSES.map((s) => <option key={s} value={s}>{PR_STATUS_LABEL[s]}</option>)}
           </select>
