@@ -937,7 +937,7 @@ export default function OrderForm({
                       <td data-label="품목명">
                         <Combobox
                           value={it.product_name}
-                          options={products.filter((p) => !p.is_bundle).map((p) => ({ id: p.id, label: p.name, sub: p.spec ?? "" }))}
+                          options={products.map((p) => ({ id: p.id, label: p.name, sub: p.spec ?? "" }))}
                           onSelect={(o) => pickProduct(idx, o.id)}
                           onType={(text) => updateItem(idx, { product_name: text, product_id: null })}
                           allowFreeText

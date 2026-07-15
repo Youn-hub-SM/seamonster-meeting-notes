@@ -28,7 +28,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
     (async () => {
       try {
         const j = await (await fetch("/api/b2b/products", { cache: "no-store" })).json();
-        if (j.ok) setProducts((j.products as Prod[]).filter((p) => p.active && !p.is_bundle)); // 번들 제외
+        if (j.ok) setProducts((j.products as Prod[]).filter((p) => p.active)); // 번들 포함(발주는 번들 많음)
       } catch { /* noop */ }
     })();
   }, []);

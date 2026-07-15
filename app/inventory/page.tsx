@@ -47,7 +47,8 @@ export default function InventoryPage() {
       if (channel !== "전체") sp.set("channel", channel);
       const j = await (await fetch(`/api/inventory/overview?${sp}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
-      setRows(j.rows || []); setMeta(j.meta || null);
+      // 번들(세트)은 자체 재고가 없어 재고 관리에서 제외(출고는 B2B 발송 시 구성품으로 자동 차감).
+      setRows((j.rows || []).filter((r: OverviewRow) => !r.is_bundle)); setMeta(j.meta || null);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
   }, [range.from, range.to, channel]);
