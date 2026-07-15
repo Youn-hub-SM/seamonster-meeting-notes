@@ -169,6 +169,7 @@ function WholesaleTab() {
                 <th className="b2b-col-date">진행</th>
                 <th className="b2b-col-date">요청일</th>
                 <th className="b2b-col-date">마감일</th>
+                <th style={{ width: 1 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -241,12 +242,15 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
           {req.requested_by ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.requested_by}</span> : null}
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{req.due_date || "-"}</td>
+        <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} disabled={busy} onClick={onDelete}>삭제</button>
+        </td>
       </tr>
 
       {expanded && (
         <tr className="b2b-child-row">
           <td></td>
-          <td colSpan={6} style={{ padding: "8px 18px 16px" }}>
+          <td colSpan={7} style={{ padding: "8px 18px 16px" }}>
             {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
 
             <div className="b2b-table-wrap">
@@ -263,11 +267,6 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
             </div>
 
             {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 위 상태를 ‘완료’로 바꾸세요.</p>}
-
-            {/* 상태 변경은 상태 컬럼의 select 로 처리 — 여기엔 파괴적 액션(삭제)만 둔다 */}
-            <div className="sm-row" style={{ gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
-              <button className="b2b-btn-danger" style={{ padding: "6px 14px" }} disabled={busy} onClick={onDelete}>삭제</button>
-            </div>
           </td>
         </tr>
       )}
