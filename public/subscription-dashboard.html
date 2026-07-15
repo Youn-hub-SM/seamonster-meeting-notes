@@ -24,6 +24,11 @@
     --warning: #B08800;        /* --sm-warning */
     --danger: #C92A2A;         /* --sm-danger */
     --info: #1971C2;           /* --sm-info */
+    --border-light: #F4F4F4;   /* --sm-border-light · 차트 격자선 */
+    --bg-subtle: #F7F8FA;      /* --sm-bg-subtle */
+    --success-bg: #E6FFED;     /* --sm-success-bg */
+    --warning-bg: #FFF4E0;     /* --sm-warning-bg */
+    --danger-bg: #FCE4E4;      /* --sm-danger-bg */
     --radius: 8px;
     --radius-card: 16px;
     --radius-btn: 12px;
@@ -253,7 +258,7 @@
     position: sticky; top: 0;
   }
   .table th.sortable { cursor: pointer; user-select: none; }
-  .table th.sortable:hover { background: #f0f0f0; color: var(--text); }
+  .table th.sortable:hover { background: var(--bg-subtle); color: var(--text); }
   .table th .sort-arrow { color: #ccc; margin-left: 2px; font-size: 10px; }
   .table th.sort-asc .sort-arrow, .table th.sort-desc .sort-arrow { color: var(--primary); }
   .table tr:hover td { background: #fafafa; }
@@ -264,9 +269,9 @@
     display: inline-block; padding: 2px 7px;
     border-radius: 10px; font-size: 11px; font-weight: 600;
   }
-  .pill-active { background: #e8f5e9; color: var(--success); }
-  .pill-pause { background: #fff4e5; color: var(--warning); }
-  .pill-cancel { background: #fbe9e7; color: var(--danger); }
+  .pill-active { background: var(--success-bg); color: var(--success); }
+  .pill-pause { background: var(--warning-bg); color: var(--warning); }
+  .pill-cancel { background: var(--danger-bg); color: var(--danger); }
   .pill-blue { background: #e3f2fd; color: var(--info); }
 
   .filters-inline {
@@ -787,6 +792,42 @@
 
 <script>
 "use strict";
+
+// =========================== 차트 색·규격 ===========================
+// 이 화면은 Chart.js(캔버스)를 쓴다. 캔버스는 CSS 변수를 못 읽으므로 색을 런타임에
+// :root 에서 해석해 넘긴다 — 하드코딩하면 토큰을 고쳐도 차트만 안 따라온다.
+// 규격(격자색·눈금 크기·모서리·직선)은 app/components/charts.tsx 의 공용 차트와 맞춘다.
+const CSSV = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const T = {
+  orange:    () => CSSV("--primary"),
+  info:      () => CSSV("--info"),
+  success:   () => CSSV("--success"),
+  warning:   () => CSSV("--warning"),
+  danger:    () => CSSV("--danger"),
+  textMid:   () => CSSV("--text-sub"),
+  textLight: () => CSSV("--text-light"),
+  grid:      () => CSSV("--border-light"),
+};
+// #rrggbb → rgba(). 면채움·반투명 막대용.
+function alpha(hex, a) {
+  const h = hex.replace("#", "");
+  const v = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(v, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+// Chart.js 전역 기본값을 공용 차트 규격에 맞춘다(차트마다 따로 지정하지 않도록).
+function applyChartDefaults() {
+  if (!window.Chart) return;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = T.textMid();
+  Chart.defaults.elements.line.tension = 0;      // 공용 ComboBarLine 은 직선
+  Chart.defaults.elements.point.radius = 2.4;    // 〃 점 크기
+  Chart.defaults.elements.bar.borderRadius = 4;  // 〃 GEOM.rx
+  Chart.defaults.scale.grid.color = T.grid();
+  Chart.defaults.scale.ticks.color = T.textLight();
+}
+applyChartDefaults();  // Chart.js 는 위 <script src> 로 이미 로드됨
 
 // =========================== 상수 ===========================
 const REGION_MAP = {
@@ -1421,7 +1462,7 @@ function renderWeeklyChart() {
         const v = netArr[i];
         if (v === 0) return;
         const sign = v > 0 ? "+" : "";
-        ctx.fillStyle = v >= 0 ? "#2E7D32" : "#c0392b";
+        ctx.fillStyle = v >= 0 ? T.success() : T.danger();
         const y = v >= 0 ? bar.y - 6 : bar.y + 14;
         ctx.fillText(`${sign}${v}`, bar.x, y);
       });
@@ -1436,15 +1477,14 @@ function renderWeeklyChart() {
       datasets: [{
         label: "순증감",
         data: netArr,
-        backgroundColor: netArr.map(v => v >= 0 ? "rgba(46,125,50,0.85)" : "rgba(192,57,43,0.85)"),
-        borderRadius: 4,
+        backgroundColor: netArr.map(v => v >= 0 ? alpha(T.success(), 0.85) : alpha(T.danger(), 0.85)),
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       layout: { padding: { top: 20, bottom: 8 } },
       scales: {
-        y: { beginAtZero: true, grid: { color: "#f0f0f0" }, ticks: { precision: 0 } },
+        y: { beginAtZero: true, ticks: { precision: 0 } },
         x: { grid: { display: false } },
       },
       plugins: {
@@ -1494,9 +1534,9 @@ function renderAovChart() {
       datasets: [{
         label: "평균 중량 (kg)",
         data: avg,
-        borderColor: "#F15A30",
-        backgroundColor: "rgba(241,90,48,0.15)",
-        fill: true, tension: 0.3, pointRadius: 4,
+        borderColor: T.orange(),
+        backgroundColor: alpha(T.orange(), 0.15),
+        fill: true,
       }],
     },
     options: {
@@ -1527,7 +1567,7 @@ function renderSurvivalChart() {
     type: "line",
     data: {
       labels: points.map(p => `+${p}일`),
-      datasets: [{ label: "잔존율(%)", data, borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,0.15)", fill: true, tension: 0.3, pointRadius: 4 }],
+      datasets: [{ label: "잔존율(%)", data, borderColor: T.info(), backgroundColor: alpha(T.info(), 0.15), fill: true }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -1570,7 +1610,7 @@ function renderCohortTable() {
   tbody.innerHTML = cells.map(row => {
     const cells = row.slice(2).map(v => {
       if (v === null) return `<td class="num"><span style="color:var(--text-sub)">–</span></td>`;
-      const color = v >= 70 ? "#e8f5e9" : v >= 40 ? "#fff4e5" : "#fbe9e7";
+      const color = v >= 70 ? CSSV("--success-bg") : v >= 40 ? CSSV("--warning-bg") : CSSV("--danger-bg");
       return `<td class="num"><span class="cohort-cell" style="background:${color}">${v}%</span></td>`;
     }).join("");
     return `<tr><td>${row[0]}</td><td class="num">${row[1]}</td>${cells}</tr>`;
@@ -1592,7 +1632,7 @@ function renderSpeciesChart() {
   if (charts.species) charts.species.destroy();
   charts.species = new Chart(document.getElementById("speciesChart"), {
     type: "bar",
-    data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: "#F15A30" }] },
+    data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: T.orange() }] },
     options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } },
   });
 }
@@ -1607,7 +1647,7 @@ function renderRegionChart() {
   if (charts.region) charts.region.destroy();
   charts.region = new Chart(document.getElementById("regionChart"), {
     type: "bar",
-    data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: "#2563eb" }] },
+    data: { labels: sorted.map(x => x[0]), datasets: [{ data: sorted.map(x => x[1]), backgroundColor: T.info() }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
   });
 }
@@ -1941,11 +1981,12 @@ function renderHistory() {
     data: {
       labels,
       datasets: [
-        { label: "활성 회원", data: ds("activeMembers"), borderColor: "#F15A30", backgroundColor: "#F15A30", yAxisID: "y", tension: 0.3 },
-        { label: "일시정지", data: ds("pauseMembers"), borderColor: "#999999", backgroundColor: "#999999", yAxisID: "y", tension: 0.3 },
-        { label: "결제도달 %", data: ds("firstPayRate"), borderColor: "#2563eb", backgroundColor: "#2563eb", yAxisID: "y1", tension: 0.3 },
-        { label: "3회잔존 %", data: ds("reach3Rate"), borderColor: "#22863a", backgroundColor: "#22863a", yAxisID: "y1", tension: 0.3 },
-        { label: "4회잔존 %", data: ds("reach4Rate"), borderColor: "#b08800", backgroundColor: "#b08800", yAxisID: "y1", tension: 0.3 },
+        // 회원 수(왼쪽 축)는 브랜드/중립, 비율(오른쪽 축)은 시맨틱 — 축이 다르면 색계도 다르게.
+        { label: "활성 회원", data: ds("activeMembers"), borderColor: T.orange(), backgroundColor: T.orange(), yAxisID: "y" },
+        { label: "일시정지", data: ds("pauseMembers"), borderColor: T.textLight(), backgroundColor: T.textLight(), yAxisID: "y" },
+        { label: "결제도달 %", data: ds("firstPayRate"), borderColor: T.info(), backgroundColor: T.info(), yAxisID: "y1" },
+        { label: "3회잔존 %", data: ds("reach3Rate"), borderColor: T.success(), backgroundColor: T.success(), yAxisID: "y1" },
+        { label: "4회잔존 %", data: ds("reach4Rate"), borderColor: T.warning(), backgroundColor: T.warning(), yAxisID: "y1" },
       ],
     },
     options: {
