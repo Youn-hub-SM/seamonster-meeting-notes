@@ -70,8 +70,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const derived = deriveParentStatus((ships ?? []).map((s) => s.status as string));
     if (derived) {
       await sb.from("orders").update({ status: derived }).eq("id", ship.order_id);
-      // 차수 완료로 발주가 발송완료로 도출되면 매출원장에 1회 반영(이미 반영이면 내부 스킵)
-      if (derived === "발송완료") await syncOrderSalesSafe(ship.order_id as string);
+      // 발주 상태가 재도출되면 매출원장 동기화. 발송완료면 반영, 취소(전 차수 취소)면 옛 매출행 정리.
+      await syncOrderSalesSafe(ship.order_id as string);
     }
 
     return NextResponse.json({ ok: true });

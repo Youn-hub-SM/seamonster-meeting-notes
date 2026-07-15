@@ -46,11 +46,14 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
   if (error) throw error;
   const o = data as unknown as OrderJoin | null;
   if (!o) return { synced: false, rows: 0 };
-  if (o.status !== "발송완료") return { synced: false, rows: 0 }; // 발송완료 아님 → 반영/변경 없음
+  // 발송완료면 현재 라인으로 매출 반영, 그 외(취소·되돌림·상태변경)면 rows 를 비워 두고 계속 진행 →
+  //  아래 stale-delete(96-102)가 이 발주의 옛 매출행을 전부 제거한다. (조기 return 하면 취소 후에도
+  //  매출원장에 옛 발송완료분이 남아 전사 매출·이익이 영구 과대집계되던 버그를 방지)
+  const isCompleted = o.status === "발송완료";
 
   // 완전 동일한 라인(상품명·옵션·SKU·단가)은 수량 합산 병합 → 동일 row_hash 충돌로 인한 매출 누락 방지
   const groups = new Map<string, { product_name: string; option_name: string; sku: string; price: number; qty: number }>();
-  for (const it of (o.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))) {
+  if (isCompleted) for (const it of (o.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))) {
     const product = Array.isArray(it.product) ? it.product[0] : it.product;
     const product_name = it.product_name ?? "";
     const option_name = it.spec || it.option_label || "";

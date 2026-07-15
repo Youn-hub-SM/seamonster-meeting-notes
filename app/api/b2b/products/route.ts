@@ -137,6 +137,15 @@ export async function DELETE(req: NextRequest) {
     }
     const sb = supabaseAdmin();
     const { data: snap } = await sb.from("products").select("name, sku").eq("id", id).single();
+    // 재고 원장이 있으면 삭제 차단 — inventory_txns FK 는 on delete cascade(031)라
+    //  그냥 지우면 입출고 이력 전체가 조용히 소멸해 현재고·대사 기준이 무너진다. (031 미적용 환경이면 count=null 로 통과)
+    const { count: txnCount } = await sb.from("inventory_txns").select("id", { count: "exact", head: true }).eq("product_id", id);
+    if ((txnCount ?? 0) > 0) {
+      return NextResponse.json(
+        { ok: false, error: `이 품목은 재고 입출고 이력(${txnCount}건)이 있어 삭제할 수 없습니다. 삭제하면 재고 기록이 함께 사라집니다. 대신 '미사용' 처리하세요.` },
+        { status: 409 }
+      );
+    }
     const { error } = await sb.from("products").delete().eq("id", id);
     if (error) {
       if (error.code === "23503") {

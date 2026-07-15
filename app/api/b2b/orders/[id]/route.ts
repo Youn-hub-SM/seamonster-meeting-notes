@@ -186,10 +186,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       await logOrderTaxInvoiceChanged(id, prevTaxInvoice, body.tax_invoice_status);
     }
 
-    // 발송완료된 발주 → Supabase 매출원장(sales_orders)에 1회 반영 (이미 반영이면 내부에서 스킵)
-    if ((refreshed as { status?: string } | null)?.status === "발송완료") {
-      await syncOrderSalesSafe(id);
-    }
+    // 발주 편집 → 매출원장 재동기화. 발송완료면 현재 라인 반영, 그 외(취소·되돌림)면 옛 매출행을 정리한다.
+    //  (상태 무관하게 항상 호출 — 발송완료→취소로 되돌렸을 때 매출이 남아 과대집계되던 것을 방지)
+    await syncOrderSalesSafe(id);
 
     return NextResponse.json({ ok: true, order: refreshed });
   } catch (err) {
@@ -215,6 +214,10 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
       .select("order_no, total, company:company_id(name)")
       .eq("id", id)
       .single();
+
+    // 매출원장에서 이 발주분(b2b-<id>)을 먼저 제거 → 삭제된 발주 매출이 집계에 영구히 남지 않게.
+    //  (orders→sales_orders 는 FK 가 아니라 upload_batch 태그로만 연결되어 cascade 가 안 걸린다)
+    await sb.from("sales_orders").delete().eq("upload_batch", `b2b-${id}`);
 
     // order_items, shipments 는 ON DELETE CASCADE 로 같이 삭제됨
     const { error } = await sb.from("orders").delete().eq("id", id);
@@ -310,8 +313,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       await logOrderTaxInvoiceChanged(id, prev.tax_invoice_status, body.tax_invoice_status);
     }
 
-    // 발송완료 전환 → Supabase 매출원장(sales_orders)에 1회 반영 (이미 반영이면 내부에서 스킵)
-    if (body.status === "발송완료") {
+    // 발주 상태가 바뀌면 매출원장 재동기화. 발송완료면 반영, 취소·되돌림이면 옛 매출행을 정리한다.
+    //  (발송완료→취소 시 매출이 남아 전사 매출·이익이 과대집계되던 것을 방지)
+    if (body.status !== undefined && prev?.status !== body.status) {
       await syncOrderSalesSafe(id);
     }
 

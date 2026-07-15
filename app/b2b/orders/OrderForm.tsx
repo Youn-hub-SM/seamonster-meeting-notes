@@ -317,12 +317,22 @@ export default function OrderForm({
         for (const r of (j.prices || []) as { product_id: string; unit_price: number }[]) map[r.product_id] = Number(r.unit_price) || 0;
         setCompanyPrices(map);
         if (mode === "create") {
-          setData((prev) => ({ ...prev, items: prev.items.map((it) => (it.product_id && map[it.product_id] != null ? { ...it, unit_price: map[it.product_id] } : it)) }));
+          // 거래처가 바뀌면 담긴 라인의 단가를 '무조건' 재도출한다. 새 거래처 전용단가가 있으면 그 값,
+          //  없으면 기본판매가로 리셋 — 옛 거래처 단가만 갱신하면(있는 것만) 옛 협상단가가 잔존해
+          //  다른 거래처에 잘못된 단가로 발주가 나간다. pickProduct(460)와 동일 규칙.
+          setData((prev) => ({
+            ...prev,
+            items: prev.items.map((it) => {
+              if (!it.product_id) return it;
+              const p = products.find((pp) => pp.id === it.product_id);
+              return { ...it, unit_price: map[it.product_id] ?? p?.sale_price ?? it.unit_price };
+            }),
+          }));
         }
       } catch { /* noop */ }
     })();
     return () => { alive = false; };
-  }, [data.company_id, mode]);
+  }, [data.company_id, mode, products]);
 
   // 업체 변경 시 공통 배송 정보 자동 채움 (담당자·연락처·주소 → 수령인)
   function selectCompany(companyId: string) {

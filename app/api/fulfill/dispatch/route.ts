@@ -93,8 +93,11 @@ export async function POST(req: NextRequest) {
     const sig = sigOf(items); const today = kstToday();
     if (!body.force) {
       try {
-        const { data: dup } = await sb.from("fulfill_dispatch").select("order_no").eq("sig", sig).eq("dispatch_date", today).maybeSingle();
-        if (dup) return NextResponse.json({ ok: false, error: `이미 오늘 출고된 발주입니다(출고번호 ${dup.order_no}). 중복 출고를 막았습니다.`, duplicate: true }, { status: 409 });
+        // 같은 배치(SKU·수량 조합)를 다른 날 재업로드해도 이중차감을 막도록 '오늘'이 아니라 최근 7일로 검사.
+        //  (지연·재작업으로 이튿날 같은 엑셀을 다시 올리는 경우가 실제 이중출고 원인) 재출고가 정말 필요하면 force.
+        const since = new Date(Date.now() + 9 * 3600e3 - 7 * 86400e3).toISOString().slice(0, 10);
+        const { data: dup } = await sb.from("fulfill_dispatch").select("order_no, dispatch_date").eq("sig", sig).gte("dispatch_date", since).order("dispatch_date", { ascending: false }).limit(1).maybeSingle();
+        if (dup) return NextResponse.json({ ok: false, error: `이미 최근 출고된 발주입니다(${dup.dispatch_date}, 출고번호 ${dup.order_no}). 같은 배치가 다시 출고되려 합니다 — 정말 재출고하려면 강제 출고를 선택하세요.`, duplicate: true }, { status: 409 });
       } catch { /* 065 미적용 시 스킵 */ }
     }
 
