@@ -67,7 +67,8 @@ export const NAV: NavCategory[] = [
         menu: [
           { href: "/production", label: "생산 일정" },
           { href: "/production/board", label: "생산 보드" },
-          { href: "/production/request", label: "생산 요청서" },
+          { href: "/production/request", label: "도매 재고 생산 요청" },
+          { href: "/production/maker-request", label: "제조사 요청서" },
         ],
       },
       {
