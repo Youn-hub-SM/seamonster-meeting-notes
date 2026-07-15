@@ -21,7 +21,7 @@ export default function RequestPage() {
         </div>
       </header>
 
-      <div className="sm-tabs" style={{ marginBottom: 16 }}>
+      <div className="sm-tabbar" style={{ marginBottom: 16 }}>
         <button className={`sm-tab ${tab === "wholesale" ? "is-active" : ""}`} onClick={() => setTab("wholesale")}>도매 재고 생산 요청</button>
         <button className={`sm-tab ${tab === "maker" ? "is-active" : ""}`} onClick={() => setTab("maker")}>제조사 요청서(집계)</button>
       </div>
@@ -140,14 +140,17 @@ function WholesaleTab() {
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
 
       <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <div className="sm-tabs">
+        <div className="sm-tabbar">
           {(["전체", ...PR_STATUSES] as const).map((s) => (
             <button key={s} className={`sm-tab ${filter === s ? "is-active" : ""}`} onClick={() => setFilter(s)}>
               {s === "전체" ? "전체" : PR_STATUS_LABEL[s]}<span className="sm-tab-count">{counts[s] ?? 0}</span>
             </button>
           ))}
         </div>
-        <button className="b2b-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}>+ 새 생산 요청</button>
+        <div className="sm-row" style={{ gap: 8 }}>
+          <button className="b2b-btn-secondary" onClick={() => load()} disabled={loading}>{loading ? "불러오는 중..." : "새로고침"}</button>
+          <button className="b2b-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}>+ 새 생산 요청</button>
+        </div>
       </div>
 
       {loading ? (
@@ -191,7 +194,7 @@ function ProgressBar({ received, requested }: { received: number; requested: num
 
 function StatusBadge({ status }: { status: PrStatus }) {
   const c = PR_STATUS_COLOR[status];
-  return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 9px", borderRadius: 999, background: c.bg, color: c.fg, whiteSpace: "nowrap" }}>{PR_STATUS_LABEL[status]}</span>;
+  return <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{PR_STATUS_LABEL[status]}</span>;
 }
 
 function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
@@ -212,7 +215,11 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
         <StatusBadge status={req.status} />
         <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>{req.request_date}{req.due_date ? ` · 마감 ${req.due_date}` : ""}{req.requested_by ? ` · 요청 ${req.requested_by}` : ""}</span>
         {req.title && <span style={{ fontSize: 13, color: "var(--sm-black)", fontWeight: 600 }}>{req.title}</span>}
-        <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>품목 {req.items.length}</span>
+        {/* 발주 ItemsPreview 처럼 품목 개수 대신 '품목명 ×수량'을 최대 2종 미리보기(나머지는 외 N종) */}
+        <span className="sm-nowrap" style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
+          {req.items.slice(0, 2).map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join(" · ") || "품목 없음"}
+          {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
+        </span>
         <span style={{ flex: 1, minWidth: 140, maxWidth: 260 }}><ProgressBar received={req.total_received} requested={req.total_requested} /></span>
       </button>
 
@@ -237,7 +244,7 @@ function RequestCard({ req, expanded, busy, onToggle, onReceive, onCancelReceipt
 
           <div className="sm-row" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
             {req.status === "요청" && (
-              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>진행</button>
+              <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>{PR_STATUS_LABEL["진행중"]}</button>
             )}
             {req.status !== "완료" && req.status !== "취소" && (
               <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료</button>
@@ -373,7 +380,7 @@ function CreateModal({ products, busy, onClose, onCreate }: {
   return (
     <div className="b2b-modal-backdrop" onClick={onClose}>
       <div className="b2b-modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head"><span className="b2b-card-title">새 도매 생산 요청</span><button className="b2b-icon-btn" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">새 도매 생산 요청</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <label className="sm-col" style={{ gap: 3 }}>

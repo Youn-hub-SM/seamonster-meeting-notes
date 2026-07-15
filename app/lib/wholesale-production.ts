@@ -15,7 +15,7 @@ export const PR_STATUS_COLOR: Record<PrStatus, { bg: string; fg: string }> = {
 //  '진행중'은 생산담당자가 요청을 확인하고 생산에 착수한 단계임을 분명히 하려고 '담당자 확인/생산 중'으로 표기.
 export const PR_STATUS_LABEL: Record<PrStatus, string> = {
   요청: "요청",
-  진행중: "담당자 확인/생산 중",
+  진행중: "담당자 확인/진행 중",
   완료: "완료",
   취소: "취소",
 };
