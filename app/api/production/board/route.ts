@@ -90,7 +90,7 @@ export async function GET() {
           status: r.status === "진행중" ? "생산중" : "생산대기", // 보드 상태 어휘로 매핑
           company: r.assignee ? `생산요청 · ${r.assignee}` : (r.requested_by ? `생산요청(${r.requested_by})` : "생산요청"),
           orderNo: r.req_no,
-          date: r.request_date,
+          date: r.due_date || r.request_date, // 생산마감일 기준(없으면 요청일 폴백)
           items,
         };
       })

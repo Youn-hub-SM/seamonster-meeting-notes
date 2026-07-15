@@ -123,10 +123,12 @@ export default function ProductionSchedulePage() {
       d.total_qty += e.qty;
       d.hasManual = true;
     }
-    // 도매 생산요청(진행 중) — request_date 기준, 남은 수량(요청-입고)만.
+    // 도매 생산요청(진행 중) — 생산마감일(due_date) 기준으로 일정에 표시, 남은 수량(요청-입고)만.
+    //  (마감일까지 생산을 끝내야 하므로 요청일이 아니라 마감일에 잡는다. 마감일 없으면 요청일 폴백)
     for (const req of requests) {
-      if (!req.request_date) continue;
-      const d = ensure(req.request_date, dayLabel(req.request_date));
+      const sched = req.due_date || req.request_date;
+      if (!sched) continue;
+      const d = ensure(sched, dayLabel(sched));
       for (const it of req.items) {
         const outstanding = it.requested_qty - it.received_qty;
         if (outstanding <= 0) continue;
