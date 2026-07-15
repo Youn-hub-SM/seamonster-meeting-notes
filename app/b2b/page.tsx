@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/app/lib/supabase";
+import { SHOW_ORDER_PRODUCTION } from "@/app/lib/b2b-orders";
 
 export const dynamic = "force-dynamic";
 
@@ -194,7 +195,8 @@ async function loadWeekSchedule(): Promise<{ days: WeekDay[]; label: string } | 
     };
 
     type ProdRow = { id: string; production_date: string; production_status: string; companies: CompJoin };
-    for (const o of (prodRes.data as unknown as ProdRow[] | null) ?? []) {
+    // 생산 일정 — 생산관리로 이관되어 발주 대시보드 '이번 주 일정'에선 숨김(SHOW_ORDER_PRODUCTION)
+    if (SHOW_ORDER_PRODUCTION) for (const o of (prodRes.data as unknown as ProdRow[] | null) ?? []) {
       push(o.production_date, {
         kind: "production",
         orderId: o.id,
@@ -300,14 +302,19 @@ export default async function B2BDashboard() {
 
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">오늘 일정</div>
-          {stats.todayProduction === 0 && stats.todayShip === 0 ? (
+          {(SHOW_ORDER_PRODUCTION ? stats.todayProduction === 0 && stats.todayShip === 0 : stats.todayShip === 0) ? (
             <div className="b2b-stat-card-value" style={{ fontSize: 15, fontWeight: 500, color: "var(--sm-text-light)" }}>
               오늘 일정 없음
             </div>
           ) : (
             <div className="b2b-stat-card-value" style={{ fontSize: 21 }}>
-              <span style={{ color: "var(--sm-info)" }}>생산 {stats.todayProduction}</span>
-              <span style={{ color: "var(--sm-text-light)", margin: "0 8px", fontWeight: 400 }}>·</span>
+              {/* 생산 — 생산관리로 이관되어 발주 대시보드에선 숨김(SHOW_ORDER_PRODUCTION) */}
+              {SHOW_ORDER_PRODUCTION && (
+                <>
+                  <span style={{ color: "var(--sm-info)" }}>생산 {stats.todayProduction}</span>
+                  <span style={{ color: "var(--sm-text-light)", margin: "0 8px", fontWeight: 400 }}>·</span>
+                </>
+              )}
               <span style={{ color: "var(--sm-orange)" }}>발송 {stats.todayShip}</span>
             </div>
           )}

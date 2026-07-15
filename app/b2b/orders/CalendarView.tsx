@@ -10,6 +10,7 @@ import {
   ShipmentStatus,
   getUrgency,
   nextPendingShipDate,
+  SHOW_ORDER_PRODUCTION,
 } from "@/app/lib/b2b-orders";
 
 type DateKind = "order" | "production" | "ship";
@@ -68,7 +69,8 @@ export default function CalendarView({
       const out: Entry[] = [];
       for (const o of orders) {
         if (visibleKinds.order && o.order_date === iso) out.push({ kind: "order", order: o });
-        if (visibleKinds.production && o.production_date === iso) out.push({ kind: "production", order: o });
+        // 생산일 이벤트 — 생산관리로 이관되어 발주 캘린더에선 숨김(SHOW_ORDER_PRODUCTION). 범례 토글도 함께 제거.
+        if (SHOW_ORDER_PRODUCTION && visibleKinds.production && o.production_date === iso) out.push({ kind: "production", order: o });
         if (visibleKinds.ship) {
           // 발송 일정(분할 발송)을 각 날짜에 표시 — 일정별 상태 사용. 일정 없으면 헤더 발송일로 폴백.
           const dated = (o.shipments ?? []).filter((s) => s.ship_date);
@@ -148,7 +150,7 @@ export default function CalendarView({
 
       <div className="b2b-cal-legend">
         <span className="b2b-cal-legend-hint">표시:</span>
-        {(Object.keys(DATE_KIND_LABEL) as DateKind[]).map((k) => (
+        {(Object.keys(DATE_KIND_LABEL) as DateKind[]).filter((k) => SHOW_ORDER_PRODUCTION || k !== "production").map((k) => (
           <button
             key={k}
             type="button"

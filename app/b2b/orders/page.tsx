@@ -16,6 +16,7 @@ import {
   STATUS_COLORS,
   STATUS_SHORT,
   PRODUCTION_COLORS,
+  SHOW_ORDER_PRODUCTION,
   PAYMENT_COLORS,
   TAX_INVOICE_COLORS,
   SHIPMENT_STATUS_COLORS,
@@ -552,7 +553,7 @@ export default function OrdersListPage() {
         <div>
           <h1 className="b2b-page-title">발주 관리</h1>
           <p className="b2b-page-subtitle">
-            발주·생산·발송 일정과 입금 상태를 한 화면에서 관리합니다.
+            {SHOW_ORDER_PRODUCTION ? "발주·생산·발송 일정과 입금 상태를 한 화면에서 관리합니다." : "발주·발송 일정과 입금 상태를 한 화면에서 관리합니다."}
             {orders.length > 0 && ` (전체 ${orders.length}건)`}
           </p>
         </div>
@@ -605,16 +606,19 @@ export default function OrdersListPage() {
         >
           주간 (발송일)
         </button>
-        <button
-          type="button"
-          className={`sm-tab ${view === "production" ? "is-active" : ""}`}
-          onClick={() => setView("production")}
-        >
-          생산 집계
-        </button>
+        {/* 생산 집계 — 생산관리로 이관되어 발주에선 숨김(SHOW_ORDER_PRODUCTION). 탭·화면·API 는 롤백 대비 보존 */}
+        {SHOW_ORDER_PRODUCTION && (
+          <button
+            type="button"
+            className={`sm-tab ${view === "production" ? "is-active" : ""}`}
+            onClick={() => setView("production")}
+          >
+            생산 집계
+          </button>
+        )}
       </div>
 
-      {view === "production" ? (
+      {view === "production" && SHOW_ORDER_PRODUCTION ? (
         <ProductionView />
       ) : (
       <div className="b2b-card">
@@ -758,10 +762,10 @@ export default function OrdersListPage() {
                   <th style={{ minWidth: 88 }}>업체</th>
                   <th style={{ minWidth: 150 }}>품목</th>
                   <th className="b2b-col-date">발주일</th>
-                  <th className="b2b-col-date">생산일</th>
+                  {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
                   <th className="b2b-col-date">발송일</th>
                   <th className="num">합계</th>
-                  <th className="b2b-col-status">생산</th>
+                  {SHOW_ORDER_PRODUCTION && <th className="b2b-col-status">생산</th>}
                   <th className="b2b-col-status">발송</th>
                   <th className="b2b-col-status">입금</th>
                   <th className="b2b-col-status">세금계산서</th>
@@ -812,11 +816,12 @@ export default function OrdersListPage() {
                         <ItemsPreview items={o.items} />
                       </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>
-                      <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>
+                      {SHOW_ORDER_PRODUCTION && <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>}
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{parent ? "" : (o.ship_date || "-")}</RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
                         {formatMoney(o.total)}
                       </RowCell>
+                      {SHOW_ORDER_PRODUCTION && (
                       <td onClick={(e) => e.stopPropagation()}>
                         <select
                           className="b2b-status-select"
@@ -832,6 +837,7 @@ export default function OrdersListPage() {
                           ))}
                         </select>
                       </td>
+                      )}
                       <td onClick={(e) => e.stopPropagation()}>
                         {parent && prog ? (
                           <button
@@ -903,7 +909,7 @@ export default function OrdersListPage() {
                       <tr key={s.id} className="b2b-child-row">
                         <td></td>
                         <td></td>
-                        <td colSpan={11} style={{ padding: "8px 18px 8px 30px" }}>
+                        <td colSpan={SHOW_ORDER_PRODUCTION ? 11 : 9} style={{ padding: "8px 18px 8px 30px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                             <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                               <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>└ {s.seq}차</span>
@@ -973,15 +979,17 @@ export default function OrdersListPage() {
                       </div>
                       <div className="b2b-order-card-dates">
                         <span><em>발주</em>{o.order_date?.slice(5) || "-"}</span>
-                        <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>
+                        {SHOW_ORDER_PRODUCTION && <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>}
                         {!parent && <span><em>발송</em>{o.ship_date?.slice(5) || "-"}</span>}
                       </div>
                       <div className="b2b-order-card-foot">
                         <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
                         <div className="b2b-order-card-pills">
+                          {SHOW_ORDER_PRODUCTION && (
                           <span className="b2b-status-pill" style={{ background: PRODUCTION_COLORS[o.production_status]?.bg, color: PRODUCTION_COLORS[o.production_status]?.fg }}>
                             {o.production_status}
                           </span>
+                          )}
                           {parent && prog ? (
                             <span
                               className="b2b-parent-toggle"

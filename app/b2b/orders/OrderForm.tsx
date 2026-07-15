@@ -10,6 +10,7 @@ import {
   OrderItemInput,
   ORDER_STATUSES,
   PRODUCTION_STATUSES,
+  SHOW_ORDER_PRODUCTION,
   PAYMENT_STATUSES,
   TAX_INVOICE_STATUSES,
   SHIPMENT_STATUSES,
@@ -612,15 +613,20 @@ export default function OrderForm({
           </div>
 
           <div className="b2b-field-row" style={{ marginTop: 12 }}>
-            <div className="b2b-field">
-              <label className="b2b-field-label">생산예정일</label>
-              <input
-                type="date"
-                className="b2b-input"
-                value={data.production_date}
-                onChange={(e) => setField("production_date", e.target.value)}
-              />
-            </div>
+            {/* 생산예정일 — 생산관리로 이관되어 발주에선 숨김(SHOW_ORDER_PRODUCTION). 2열 그리드 유지 위해 빈 칸 대체 */}
+            {SHOW_ORDER_PRODUCTION ? (
+              <div className="b2b-field">
+                <label className="b2b-field-label">생산예정일</label>
+                <input
+                  type="date"
+                  className="b2b-input"
+                  value={data.production_date}
+                  onChange={(e) => setField("production_date", e.target.value)}
+                />
+              </div>
+            ) : (
+              <div className="b2b-field" aria-hidden />
+            )}
             <div className="b2b-field">
               <label className="b2b-field-label">발송예정일</label>
               {isMultiShipment ? (
@@ -654,18 +660,23 @@ export default function OrderForm({
         <CollapsibleSection title="상태">
           {/* 생산(발주 단위) · 발송(차수) 분리 */}
           <div className="b2b-field-row">
-            <div className="b2b-field">
-              <label className="b2b-field-label">생산 상태</label>
-              <select
-                className="b2b-select"
-                value={data.production_status}
-                onChange={(e) => setField("production_status", e.target.value as OrderInput["production_status"])}
-              >
-                {PRODUCTION_STATUSES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
+            {/* 생산 상태 — 생산관리로 이관되어 발주에선 숨김(SHOW_ORDER_PRODUCTION). 2열 그리드 유지 위해 빈 칸 대체 */}
+            {SHOW_ORDER_PRODUCTION ? (
+              <div className="b2b-field">
+                <label className="b2b-field-label">생산 상태</label>
+                <select
+                  className="b2b-select"
+                  value={data.production_status}
+                  onChange={(e) => setField("production_status", e.target.value as OrderInput["production_status"])}
+                >
+                  {PRODUCTION_STATUSES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="b2b-field" aria-hidden />
+            )}
             <div className="b2b-field">
               <label className="b2b-field-label">발송 상태</label>
               {isMultiShipment ? (
