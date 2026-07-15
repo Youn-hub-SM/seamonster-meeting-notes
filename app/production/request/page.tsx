@@ -13,7 +13,7 @@ function todayIso() { const t = new Date(); return `${t.getFullYear()}-${String(
 export default function RequestPage() {
   const [tab, setTab] = useState<"wholesale" | "maker">("wholesale");
   return (
-    <div className="b2b-container" style={{ maxWidth: 1040 }}>
+    <>
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">생산요청서</h1>
@@ -27,7 +27,7 @@ export default function RequestPage() {
       </div>
 
       {tab === "wholesale" ? <WholesaleTab /> : <MakerTab />}
-    </div>
+    </>
   );
 }
 
@@ -200,11 +200,6 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
   return <span style={{ fontSize: 13, fontWeight: 600, color, whiteSpace: "nowrap" }}>{received.toLocaleString()} / {requested.toLocaleString()}</span>;
 }
 
-function StatusBadge({ status }: { status: PrStatus }) {
-  const c = PR_STATUS_COLOR[status];
-  return <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{PR_STATUS_LABEL[status]}</span>;
-}
-
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
 function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
@@ -224,7 +219,18 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
           {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.title}</span> : null}
         </td>
-        <td className="b2b-col-status"><StatusBadge status={req.status} /></td>
+        <td className="b2b-col-status" onClick={(e) => e.stopPropagation()}>
+          {/* 발주관리처럼 상태를 인라인 select 로 바로 변경(요청/진행중/완료/취소) */}
+          <select
+            className="b2b-status-select"
+            value={req.status}
+            disabled={busy}
+            onChange={(e) => onStatus(e.target.value as PrStatus)}
+            style={{ background: PR_STATUS_COLOR[req.status].bg, color: PR_STATUS_COLOR[req.status].fg }}
+          >
+            {PR_STATUSES.map((s) => <option key={s} value={s}>{PR_STATUS_LABEL[s]}</option>)}
+          </select>
+        </td>
         <td className="sm-nowrap" style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
           {itemPreview || "품목 없음"}
           {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
@@ -256,22 +262,10 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
               </table>
             </div>
 
-            {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 ‘완료’를 누르세요.</p>}
+            {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 위 상태를 ‘완료’로 바꾸세요.</p>}
 
-            <div className="sm-row" style={{ gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-              {req.status === "요청" && (
-                <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("진행중")}>{PR_STATUS_LABEL["진행중"]}</button>
-              )}
-              {req.status !== "완료" && req.status !== "취소" && (
-                <button className={req.status === "진행중" ? "b2b-btn-primary" : "b2b-btn-secondary"} style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("완료")}>완료</button>
-              )}
-              {(req.status === "완료" || req.status === "취소") && (
-                // 복구 — 입고 기록이 있으면 진행중, 없으면 요청(이전 단계)으로 되돌림.
-                <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus(req.total_received > 0 ? "진행중" : "요청")}>복구</button>
-              )}
-              {req.status !== "취소" && (
-                <button className="b2b-btn-secondary" style={{ padding: "6px 14px" }} disabled={busy} onClick={() => onStatus("취소")}>취소</button>
-              )}
+            {/* 상태 변경은 상태 컬럼의 select 로 처리 — 여기엔 파괴적 액션(삭제)만 둔다 */}
+            <div className="sm-row" style={{ gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
               <button className="b2b-btn-danger" style={{ padding: "6px 14px" }} disabled={busy} onClick={onDelete}>삭제</button>
             </div>
           </td>
