@@ -108,6 +108,25 @@ export const VOC_STATUS_COLOR: Record<VocStatus, { bg: string; fg: string }> = {
   개선완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
 };
 
+// ── 문제 유형(카테고리) 마스터 — 072. 개선 추적은 건별이 아니라 '유형 단위'로 한다(개선 작업은 Flow) ──
+export const VOC_CAT_STATUSES = ["관찰", "개선중", "개선완료"] as const;
+export type VocCatStatus = (typeof VOC_CAT_STATUSES)[number];
+export const VOC_CAT_STATUS_COLOR: Record<VocCatStatus, { bg: string; fg: string }> = {
+  관찰: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
+  개선중: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  개선완료: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+};
+export interface VocCategoryRow {
+  id: string;
+  name: string;
+  fault: VocFault;            // 이 유형의 귀책 기본값(등록 시 자동 추정)
+  status: VocCatStatus;       // 유형별 개선 상태
+  resolved_at: string | null; // 마지막 개선완료 처리 시각(월말 결산 '개선' 축)
+  sort: number;
+  active: boolean;
+  memo: string | null;
+}
+
 // 귀책별 색 — 화면·차트가 같은 귀책을 같은 색으로 그리도록 한 곳에서 정의.
 //  (손해 분석의 도넛과 통계의 추세가 서로 다른 색을 쓰던 것을 통일)
 export const VOC_FAULT_COLOR: Record<string, string> = {
