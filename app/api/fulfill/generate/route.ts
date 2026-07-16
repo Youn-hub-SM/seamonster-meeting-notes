@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
+import { getAllBundles } from "@/app/lib/product-bundles";
 import { normalizeHistory, ratesFor } from "@/app/lib/fulfill-rates";
 import ExcelJS from "exceljs";
 
@@ -56,13 +57,27 @@ export async function POST(req: NextRequest) {
 
     // 택배 코드 = 상품마스터(courier_name·courier_weight)
     const sb = supabaseAdmin();
-    const { data: codes, error } = await sb.from("products").select("sku, courier_name, courier_weight").not("sku", "is", null);
+    const { data: codes, error } = await sb.from("products").select("id, sku, courier_name, courier_weight").not("sku", "is", null);
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (054 적용 확인)` }, { status: 500 });
+
+    // 묶음(세트)인데 택배중량이 미입력(0)이면 구성품 택배중량 × 수량 합으로 자동 폴백 —
+    //  중량 0 → 최저 박스타입/운임으로 조용히 잘못 계산되는 것을 방지. (037 미적용이면 빈 맵 → 폴백 없음)
+    const bundles = await getAllBundles(sb);
+    const weightById = new Map<string, number>();
+    for (const c of codes ?? []) weightById.set(c.id as string, Number(c.courier_weight) || 0);
+    const bundleWeight = (pid: string): number => {
+      const comps = bundles.get(pid);
+      if (!comps || !comps.length) return 0;
+      return comps.reduce((s, cm) => s + (weightById.get(cm.component_id) || 0) * cm.qty, 0);
+    };
+
     const codeMap = new Map<string, CodeInfo>();
     for (const c of codes ?? []) {
       const sku = String(c.sku || "").trim();
       if (!sku) continue;
-      codeMap.set(sku.toUpperCase(), { courier_name: c.courier_name || "", order_weight: Number(c.courier_weight) || 0 });
+      let w = Number(c.courier_weight) || 0;
+      if (w <= 0 && bundles.has(c.id as string)) w = Math.round(bundleWeight(c.id as string) * 100) / 100;
+      codeMap.set(sku.toUpperCase(), { courier_name: c.courier_name || "", order_weight: w });
     }
 
     // 요율(설정) 로드 — 처리일(오늘, KST)에 유효한 단가. 미설정이면 기본값

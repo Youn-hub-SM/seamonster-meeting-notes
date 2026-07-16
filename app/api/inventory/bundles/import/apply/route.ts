@@ -6,10 +6,18 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type InBundle = { parentSku?: string; name?: string; components?: { sku?: string; qty?: number }[] };
+type InBundle = {
+  parentSku?: string; name?: string;
+  components?: { sku?: string; qty?: number }[];
+  // 선택 — 상품마스터 재방문 없이 묶음 화면에서 한 번에 입력(비우면 기존값 유지)
+  courier_name?: string;    // 택배 상품명(CNplus 품목명)
+  courier_weight?: number;  // 택배 주문당 총중량(kg) — 박스타입/운임 구간 기준
+  retail_price?: number;    // 소비자가
+  sale_price?: number;      // B2B 도매가
+};
 
-// POST /api/inventory/bundles/import/apply { bundles: [{parentSku, name, components:[{sku, qty}]}] }
-//  묶음 부모SKU 가 상품에 없으면 최소 정보로 생성(원가·가격 0). 구성품은 기존 상품이어야 함. 구성 교체(전체 대체).
+// POST /api/inventory/bundles/import/apply { bundles: [{parentSku, name, components:[{sku, qty}], courier_name?, courier_weight?, retail_price?, sale_price?}] }
+//  묶음 부모SKU 가 상품에 없으면 생성(택배·가격 필드 포함). 이미 있으면 '입력된 값만' 갱신. 구성 교체(전체 대체).
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as { bundles?: InBundle[] };
@@ -30,14 +38,42 @@ export async function POST(req: NextRequest) {
       const comps = (Array.isArray(b.components) ? b.components : []).map((c) => ({ sku: String(c.sku || "").trim(), qty: Math.max(1, Math.round(Number(c.qty) || 1)) })).filter((c) => c.sku);
       if (!parentSku || !comps.length) { errors.push(`${parentSku || "?"}: 정보 부족`); continue; }
 
+      // 선택 필드(택배·가격) — 입력된 것만 반영(빈값/0 은 기존값 유지)
+      const extras: Record<string, unknown> = {};
+      const cn = String(b.courier_name || "").trim();
+      if (cn) extras.courier_name = cn.slice(0, 100);
+      if (Number(b.courier_weight) > 0) extras.courier_weight = Number(b.courier_weight);
+      if (Number(b.retail_price) > 0) extras.retail_price = Math.round(Number(b.retail_price));
+      if (Number(b.sale_price) > 0) extras.sale_price = Math.round(Number(b.sale_price));
+
       // 부모 확인/생성
       let parentId: string;
       const pIds = bySku.get(parentSku);
-      if (pIds && pIds.length === 1) parentId = pIds[0];
+      if (pIds && pIds.length === 1) {
+        parentId = pIds[0];
+        // 기존 부모 — 입력된 택배·가격 필드만 갱신(054/028 미적용이면 해당 컬럼 빼고 재시도)
+        if (Object.keys(extras).length > 0) {
+          let up = await sb.from("products").update(extras).eq("id", parentId);
+          for (let g = 0; up.error && g < 3; g++) {
+            const miss = (["courier_name", "courier_weight", "retail_price"] as const).find((k) => k in extras && new RegExp(k, "i").test(up.error!.message));
+            if (!miss) break;
+            delete extras[miss];
+            if (!Object.keys(extras).length) break;
+            up = await sb.from("products").update(extras).eq("id", parentId);
+          }
+        }
+      }
       else if (pIds && pIds.length > 1) { errors.push(`묶음SKU '${parentSku}' 중복 — 건너뜀`); continue; }
       else {
         const name = String(b.name || "").trim() || parentSku;
-        const ins = await sb.from("products").insert({ sku: parentSku, name, unit: "개", cost_price: 0, sale_price: 0, tax_type: "taxable", active: true }).select("id").single();
+        const insertRow: Record<string, unknown> = { sku: parentSku, name, unit: "개", cost_price: 0, sale_price: 0, tax_type: "taxable", active: true, ...extras };
+        let ins = await sb.from("products").insert(insertRow).select("id").single();
+        for (let g = 0; ins.error && g < 3; g++) {
+          const miss = (["courier_name", "courier_weight", "retail_price"] as const).find((k) => k in insertRow && new RegExp(k, "i").test(ins.error!.message));
+          if (!miss) break;
+          delete insertRow[miss];
+          ins = await sb.from("products").insert(insertRow).select("id").single();
+        }
         if (ins.error) { errors.push(`묶음SKU '${parentSku}' 생성 실패: ${ins.error.message}`); continue; }
         parentId = ins.data.id;
         bySku.set(parentSku, [parentId]);

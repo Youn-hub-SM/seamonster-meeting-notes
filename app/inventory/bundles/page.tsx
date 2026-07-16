@@ -7,7 +7,7 @@ import BundleEditor from "@/app/components/BundleEditor";
 
 type BundleRow = { parent_id: string; parent_sku: string | null; parent_name: string; components: { component_id: string; sku: string | null; name: string; spec: string | null; qty: number }[] };
 type PreviewResp = { summary: { bundles: number; valid: number; willCreate: number; errors: number }; previews: BundlePreview[] };
-type ProdLite = { id: string; sku: string | null; name: string; spec: string | null };
+type ProdLite = { id: string; sku: string | null; name: string; spec: string | null; courier_weight?: number | null };
 
 export default function BundlesPage() {
   const [bundles, setBundles] = useState<BundleRow[]>([]);
@@ -31,7 +31,7 @@ export default function BundlesPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
   // 구성품 검색용 상품 목록
-  useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/products", { cache: "no-store" })).json(); if (Array.isArray(j.products)) setProducts(j.products.map((p: ProdLite) => ({ id: p.id, sku: p.sku, name: p.name, spec: p.spec }))); } catch { /* noop */ } })(); }, []);
+  useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/products", { cache: "no-store" })).json(); if (Array.isArray(j.products)) setProducts(j.products.map((p: ProdLite) => ({ id: p.id, sku: p.sku, name: p.name, spec: p.spec, courier_weight: p.courier_weight ?? 0 }))); } catch { /* noop */ } })(); }, []);
 
   async function handleFile(file: File) {
     setImporting(true); setError("");
@@ -151,11 +151,17 @@ export default function BundlesPage() {
   );
 }
 
-// 직접 추가 — 묶음 SKU(코드)·이름 입력 후 구성품(상품 검색)×수량 매칭. apply 라우트 재사용(부모 없으면 자동생성).
+// 직접 추가 — 묶음 SKU·이름 + 택배 상품명/총중량 + 가격까지 한 번에(상품마스터 재방문 불필요).
+//  총중량은 구성품 택배중량 × 수량 합을 자동 제안(수동 수정 가능). apply 라우트 재사용(부모 없으면 자동생성).
 function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; onClose: () => void; onSaved: () => void }) {
   const [parentSku, setParentSku] = useState("");
   const [name, setName] = useState("");
   const [rows, setRows] = useState<{ sku: string; label: string; qty: number | string }[]>([{ sku: "", label: "", qty: 1 }]);
+  const [courierName, setCourierName] = useState("");
+  const [courierWeight, setCourierWeight] = useState("");
+  const [weightTouched, setWeightTouched] = useState(false); // 수동 편집 전엔 구성품 합 자동 반영
+  const [retailPrice, setRetailPrice] = useState("");
+  const [salePrice, setSalePrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -163,6 +169,18 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
     () => products.map((p) => ({ id: p.sku || "", label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })).filter((o) => o.id),
     [products]
   );
+
+  // 구성품 택배중량 × 수량 합 — 총중량 자동 제안
+  const weightSum = useMemo(() => {
+    let s = 0;
+    for (const r of rows) {
+      if (!r.sku) continue;
+      const p = products.find((x) => (x.sku || "") === r.sku);
+      s += (Number(p?.courier_weight) || 0) * (Number(r.qty) || 0);
+    }
+    return Math.round(s * 100) / 100;
+  }, [rows, products]);
+  useEffect(() => { if (!weightTouched) setCourierWeight(weightSum > 0 ? String(weightSum) : ""); }, [weightSum, weightTouched]);
 
   async function save() {
     if (!parentSku.trim()) { setError("묶음 SKU(코드)를 입력하세요."); return; }
@@ -172,7 +190,11 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
     try {
       const res = await fetch("/api/inventory/bundles/import/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bundles: [{ parentSku: parentSku.trim(), name: name.trim(), components: comps }] }),
+        body: JSON.stringify({ bundles: [{
+          parentSku: parentSku.trim(), name: name.trim(), components: comps,
+          courier_name: courierName.trim(), courier_weight: Number(courierWeight) || 0,
+          retail_price: Number(retailPrice) || 0, sale_price: Number(salePrice) || 0,
+        }] }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) { if (j.errors?.length) throw new Error(j.errors.join(" / ")); throw new Error(j.error || "저장 실패"); }
@@ -192,7 +214,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             <div className="b2b-field"><label className="b2b-field-label">묶음명(선택)</label>
               <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 대구 실속세트" /></div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>이 SKU가 상품에 없으면 최소 정보로 자동 생성됩니다(원가·가격 불필요).</p>
+          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>이 SKU가 상품에 없으면 자동 생성됩니다. 아래 택배·가격 정보까지 넣으면 상품마스터에 갈 필요가 없습니다.</p>
           <div className="b2b-field-label" style={{ fontWeight: 700 }}>구성품</div>
           {rows.map((r, i) => (
             <div key={i} className="promo-item-row">
@@ -204,6 +226,23 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             </div>
           ))}
           <button type="button" className="promo-item-add" style={{ marginTop: 8 }} onClick={() => setRows((rs) => [...rs, { sku: "", label: "", qty: 1 }])}>+ 구성품 추가</button>
+
+          <div className="b2b-field-label" style={{ fontWeight: 700, marginTop: 14 }}>택배 발주(CNplus) 정보 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11.5 }}>· 발주파일 품목명·박스타입/운임 계산에 사용</span></div>
+          <div className="b2b-field-row">
+            <div className="b2b-field"><label className="b2b-field-label">택배 상품명</label>
+              <input className="b2b-input" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="예: 진공 씨몬스터 참돔순살 100g×3" /></div>
+            <div className="b2b-field"><label className="b2b-field-label">주문당 총중량(kg)</label>
+              <input className="b2b-input" type="number" min={0} step={0.1} value={courierWeight}
+                onChange={(e) => { setWeightTouched(true); setCourierWeight(e.target.value); }}
+                placeholder="0" />
+              {weightSum > 0 && <span className="sm-faint" style={{ fontSize: 11 }}>구성품 합 {weightSum}kg {weightTouched ? "" : "자동 반영 중"}</span>}</div>
+          </div>
+          <div className="b2b-field-row">
+            <div className="b2b-field"><label className="b2b-field-label">소비자가(원, 선택)</label>
+              <input className="b2b-input" type="number" min={0} value={retailPrice} onChange={(e) => setRetailPrice(e.target.value)} placeholder="0" /></div>
+            <div className="b2b-field"><label className="b2b-field-label">B2B 도매가(원, 선택)</label>
+              <input className="b2b-input" type="number" min={0} value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="0" /></div>
+          </div>
           {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
         </div>
         <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
