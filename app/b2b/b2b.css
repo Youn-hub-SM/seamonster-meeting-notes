@@ -3102,3 +3102,38 @@ a.b2b-history-item:hover {
 .mlib-card { border: 1px solid var(--sm-border); border-radius: 12px; padding: 14px; background: var(--sm-white); }
 .mlib-el3 { margin-top: 9px; display: flex; flex-direction: column; gap: 5px; font-size: 12px; line-height: 1.55; color: var(--sm-text-mid); }
 .mlib-tag { font-weight: 700; font-size: 10.5px; margin-right: 5px; }
+
+/* ── 메타 광고 보드 '지금 할 일' ──
+   할 일 목록이라 장식 대신 순서로 읽힌다: 제목(무엇을) → 대상(어떤 것) → 건수.
+   색은 위험 건수에만 쓴다(그래야 눈에 띈다). 구분은 색 테두리·배지 대신 가로선. */
+.ma-todo-head { width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sm-space-2); padding: var(--sm-space-3); background: none; border: none; cursor: pointer; text-align: left; }
+.ma-todo-head-main { display: flex; align-items: baseline; gap: var(--sm-space-2); flex-wrap: wrap; }
+.ma-todo-head-title { font-size: var(--sm-fs-md); font-weight: 700; color: var(--sm-dark); }
+.ma-todo-head-n { font-size: var(--sm-fs-sm); color: var(--sm-text-mid); }
+.ma-todo-head-danger { color: var(--sm-danger); font-weight: 700; }
+.ma-todo-head-note { font-size: var(--sm-fs-sm); color: var(--sm-text-light); white-space: nowrap; font-weight: 400; }
+.ma-todo-body { padding: 0 var(--sm-space-3) var(--sm-space-2); border-top: 1px solid var(--sm-border-light); }
+.ma-todo-empty { padding-top: var(--sm-space-3); font-size: var(--sm-fs-sm); color: var(--sm-text-light); }
+.ma-todo-list { display: flex; flex-direction: column; }
+.ma-todo-row { display: flex; align-items: baseline; gap: var(--sm-space-3); width: 100%; text-align: left;
+  padding: var(--sm-space-3) var(--sm-space-1); background: none; border: none;
+  border-top: 1px solid var(--sm-border-light); }
+.ma-todo-list > .ma-todo-row:first-child { border-top: none; }
+button.ma-todo-row { cursor: pointer; }
+button.ma-todo-row:hover { background: var(--sm-bg-subtle); }
+.ma-todo-main { display: flex; flex-direction: column; gap: var(--sm-space-1); flex: 1; min-width: 0; }
+.ma-todo-title { font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-dark); }
+.ma-todo-why { font-size: var(--sm-fs-sm); font-weight: 400; color: var(--sm-text-light); }
+.ma-todo-items { font-size: var(--sm-fs-sm); color: var(--sm-text-mid); line-height: 1.6; }
+.ma-todo-items a { color: var(--sm-info); text-decoration: none; }
+.ma-todo-items a:hover { text-decoration: underline; }
+/* 건수는 자리를 고정해 세로로 훑을 수 있게 한다 */
+.ma-todo-count { flex: 0 0 auto; font-size: var(--sm-fs-sm); color: var(--sm-text-mid);
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ma-todo-count.is-danger { color: var(--sm-danger); font-weight: 700; }
+.ma-todo-go { flex: 0 0 auto; width: 8px; font-size: var(--sm-fs-base); color: var(--sm-text-light); }
+button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
+
+/* 증액 버튼 — 표의 예산 칸. 숫자 아래 줄에 작게 붙어 칸 폭을 늘리지 않는다. */
+.ma-raise { display: block; margin: var(--sm-space-1) 0 0 auto; padding: 3px 8px; font-size: var(--sm-fs-xs); white-space: nowrap; }

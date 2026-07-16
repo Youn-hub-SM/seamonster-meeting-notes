@@ -127,12 +127,59 @@ export async function getInsights(level: "campaign" | "adset" | "ad", range: Sta
   return { byId, ...(debug ? { rawSample: rows[0] } : {}) };
 }
 
+// ── 일별 인사이트 ── time_increment=1 → 하루 한 행. '연속 N일 유지' 판정용.
+//  집계 인사이트는 기간 전체를 한 행으로 뭉쳐서 주므로, 하루만 반짝 잘 나온 캠페인과
+//  꾸준히 잘 나온 캠페인이 구분되지 않는다. 증액 판정은 그 차이가 곧 돈이라 일별로 본다.
+export type MetaDaily = { date: string; spend: number; purchaseValue: number; roas: number };
+export async function getDailyInsights(level: "campaign" | "adset", range: { since: string; until: string }): Promise<Record<string, MetaDaily[]>> {
+  const { accountId } = creds();
+  const key = level === "campaign" ? "campaign_id" : "adset_id";
+  // date_start/date_stop 은 time_increment 사용 시 자동 포함(fields 에 넣으면 오히려 거부됨).
+  const rows = await metaList<InsightRow>(`/${accountId}/insights`, {
+    level,
+    time_increment: 1,
+    time_range: JSON.stringify({ since: range.since, until: range.until }),
+    fields: `${key},spend,actions,action_values,purchase_roas`,
+  }, 100);
+  const out: Record<string, MetaDaily[]> = {};
+  for (const r of rows) {
+    const id = r[key] as string | undefined;
+    const date = String(r.date_start || "");
+    if (!id || !date) continue;
+    const ins = parseInsight(r);
+    (out[id] ||= []).push({ date, spend: ins.spend, purchaseValue: ins.purchaseValue, roas: ins.roas });
+  }
+  for (const list of Object.values(out)) list.sort((a, b) => a.date.localeCompare(b.date)); // 과거→최근
+  return out;
+}
+
 // ── 광고 켜기/끄기 ── campaign/adset/ad 공통(엔티티 id 로 status 변경).
 export async function setEntityStatus(id: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
   const { token } = creds();
   const res = await fetch(`${BASE}/${id}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ status, access_token: token }) });
   const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
   if (!res.ok) throw new Error(`메타 API ${res.status}: ${j?.error?.message || "상태 변경 실패"}`);
+}
+
+// ── 캠페인 단건 조회 ── 예산 변경 직전에 서버가 현재 예산을 메타에서 직접 확인하는 용도.
+//  (클라이언트가 보낸 금액을 그대로 쓰면 화면이 낡았거나 조작된 경우 엉뚱한 금액이 반영된다.)
+export async function getCampaign(id: string): Promise<MetaCampaign> {
+  return metaGet<MetaCampaign>(`/${id}`, { fields: "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy" });
+}
+
+// ── 일 예산 변경 ── CBO 캠페인 전용.
+//  금액 단위는 계정 통화의 최소 단위. KRW 는 보조단위가 없어 '원' 그대로다(계정 통화가 KRW 라는 전제).
+export async function setCampaignDailyBudget(id: string, dailyBudget: number): Promise<void> {
+  const { token } = creds();
+  const amount = Math.round(dailyBudget);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("변경할 일 예산이 올바르지 않습니다.");
+  const res = await fetch(`${BASE}/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ daily_budget: String(amount), access_token: token }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+  if (!res.ok) throw new Error(`메타 API ${res.status}: ${j?.error?.message || "예산 변경 실패"}`);
 }
 
 // ── 단계 분류 ── 예산이 캠페인에 있으면 CBO, 광고세트에 있으면 ABO.

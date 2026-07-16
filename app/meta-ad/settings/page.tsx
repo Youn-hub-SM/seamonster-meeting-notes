@@ -32,9 +32,9 @@ const GROUPS: { title: string; fields: NumField[] }[] = [
   {
     title: "③④ 본 캠페인 운영 · 증액 (캠페인 예산 최적화 · CBO)",
     fields: [
-      { key: "scaleRoas", label: "증액 권장 ROAS ≥", hint: "이 이상이면 증액 권장", step: 0.1 },
-      { key: "scalePct", label: "증액 비율(%)", hint: "부여 예산/효율 좋을 때 주 1회 이만큼 증액. 예: 20 = +20%" },
-      { key: "scaleDays", label: "증액 유지일(일)", hint: "N일 이상 유지 시(현재는 선택 기간 기준)" },
+      { key: "scaleRoas", label: "증액 권장 ROAS ≥", hint: "아래 '증액 유지일' 동안 매일 이 이상이어야 증액 권장", step: 0.1 },
+      { key: "scalePct", label: "증액 비율(%)", hint: "증액 버튼이 올리는 폭. 한 번 올리면 7일간 다시 못 올림. 예: 20 = +20%" },
+      { key: "scaleDays", label: "증액 유지일(일)", hint: "어제까지 이 일수만큼 연속으로 ROAS 기준을 넘겨야 증액 권장 (하루 반짝 성과 제외)" },
       { key: "declineRoas", label: "효율 하락·위험 ROAS <", hint: "이 미만이면 위험소재로 판정(교체/종료 권장)", step: 0.1 },
     ],
   },
