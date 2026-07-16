@@ -208,13 +208,16 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">묶음 직접 추가</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
+          {/* ── 판매담당 입력 구역 — 묶음 정보·구성품·가격 ── */}
+          <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 묶음 정보 · 구성품 · 가격</span></div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">묶음 SKU(코드)</label>
               <input className="b2b-input" value={parentSku} onChange={(e) => setParentSku(e.target.value)} placeholder="예: SET-DG-100" /></div>
-            <div className="b2b-field"><label className="b2b-field-label">묶음명(선택)</label>
+            <div className="b2b-field"><label className="b2b-field-label">품목명(묶음명)</label>
               <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 대구 실속세트" /></div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>이 SKU가 상품에 없으면 자동 생성됩니다. 아래 택배·가격 정보까지 넣으면 상품마스터에 갈 필요가 없습니다.</p>
+          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>이 SKU가 상품에 없으면 자동 생성됩니다. 아래 정보까지 넣으면 상품마스터에 갈 필요가 없습니다.</p>
           <div className="b2b-field-label" style={{ fontWeight: 700 }}>구성품</div>
           {rows.map((r, i) => (
             <div key={i} className="promo-item-row">
@@ -226,8 +229,17 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             </div>
           ))}
           <button type="button" className="promo-item-add" style={{ marginTop: 8 }} onClick={() => setRows((rs) => [...rs, { sku: "", label: "", qty: 1 }])}>+ 구성품 추가</button>
+          <div className="b2b-field-row" style={{ marginTop: 10 }}>
+            <div className="b2b-field"><label className="b2b-field-label">소비자가(원, 선택)</label>
+              <input className="b2b-input" type="number" min={0} value={retailPrice} onChange={(e) => setRetailPrice(e.target.value)} placeholder="0" /></div>
+            <div className="b2b-field"><label className="b2b-field-label">B2B 도매가(원, 선택)</label>
+              <input className="b2b-input" type="number" min={0} value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="0" /></div>
+          </div>
+          </div>
 
-          <div className="b2b-field-label" style={{ fontWeight: 700, marginTop: 14 }}>택배 발주(CNplus) 정보 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11.5 }}>· 발주파일 품목명·박스타입/운임 계산에 사용</span></div>
+          {/* ── 생산담당 입력 구역 — 택배 발주 정보 ── */}
+          <div style={{ background: "var(--sm-orange-light)", borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 택배 발주(CNplus) — 발주파일 품목명·박스타입/운임 계산</span></div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">택배 상품명</label>
               <input className="b2b-input" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="예: 진공 씨몬스터 참돔순살 100g×3" /></div>
@@ -237,11 +249,6 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
                 placeholder="0" />
               {weightSum > 0 && <span className="sm-faint" style={{ fontSize: 11 }}>구성품 합 {weightSum}kg {weightTouched ? "" : "자동 반영 중"}</span>}</div>
           </div>
-          <div className="b2b-field-row">
-            <div className="b2b-field"><label className="b2b-field-label">소비자가(원, 선택)</label>
-              <input className="b2b-input" type="number" min={0} value={retailPrice} onChange={(e) => setRetailPrice(e.target.value)} placeholder="0" /></div>
-            <div className="b2b-field"><label className="b2b-field-label">B2B 도매가(원, 선택)</label>
-              <input className="b2b-input" type="number" min={0} value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="0" /></div>
           </div>
           {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
         </div>

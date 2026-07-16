@@ -571,6 +571,9 @@ function ProductModal({
         </div>
 
         <div className="b2b-modal-body">
+          {/* ── 판매담당 입력 구역 — 품목·가격·분류 ── */}
+          <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 품목 정보 · 가격 · 분류</span></div>
           <Field label="품목명" required>
             <input
               type="text"
@@ -680,8 +683,12 @@ function ProductModal({
           <Field label="속성 / 분류">
             <input type="text" className="b2b-input" value={data.attrs ?? ""} onChange={(e) => set("attrs", e.target.value)} placeholder="예: 패키지 · 냉동 · 소분" />
           </Field>
+          </div>
 
-          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
+          {/* ── 생산담당 입력 구역 — 원가 상세 · 택배 발주 · 송장 스캔 ── */}
+          <div style={{ background: "var(--sm-orange-light)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 원가 상세 · 택배 발주 · 송장 스캔</span></div>
+          <div className="b2b-field-label" style={{ fontWeight: 700 }}>
             원가 상세 (이익률 계산용)
           </div>
           <div className="b2b-field-row">
@@ -794,6 +801,7 @@ function ProductModal({
               </span>
             </Field>
           )}
+          </div>
 
           {(effCost > 0 || data.sale_price > 0) && (
             <div style={{ padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 12 }}>
