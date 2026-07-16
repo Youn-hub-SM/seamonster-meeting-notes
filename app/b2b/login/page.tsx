@@ -42,7 +42,7 @@ function LoginForm() {
 
   return (
     <div style={{
-      minHeight: "calc(100vh - 60px)",
+      minHeight: "100dvh",  /* 로그인은 셸(상단바) 없이 렌더 — 구 60px 헤더 잔재 제거 */
       display: "flex",
       alignItems: "center",
       justifyContent: "center",

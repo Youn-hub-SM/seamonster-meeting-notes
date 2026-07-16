@@ -154,7 +154,8 @@ export default function VocRequestPage() {
 
               {/* 상세 내역 */}
               <h3 style={{ fontSize: 14, fontWeight: 700, margin: "8px 0 8px" }}>접수 내역</h3>
-              <table className="b2b-table" style={{ marginBottom: 8 }}>
+              <div className="b2b-table-wrap" style={{ marginBottom: 8 }}>
+              <table className="b2b-table">
                 <thead><tr><th>접수일</th><th>제품 생산일</th><th>CS 유형</th><th>내용</th><th className="num">손해(원)</th></tr></thead>
                 <tbody>
                   {items.map((r) => (
@@ -172,6 +173,7 @@ export default function VocRequestPage() {
                   </tr>
                 </tbody>
               </table>
+              </div>
 
               {/* 사진 — 문서 제일 뒤, A4 2컷/페이지 */}
               {photos.length > 0 && (

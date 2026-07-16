@@ -89,9 +89,10 @@
 .sm-link { color: var(--sm-orange); font-weight: 600; text-decoration: none; }
 .sm-link:hover { text-decoration: underline; }
 
-/* iframe 도구(/utm·/subscription) 전체 높이 — 모바일은 상단바(52px)만큼 빼고, 데스크톱은 꽉 채움 */
-.sm-iframe-fill { width: 100%; border: none; display: block; height: calc(100vh - 52px); }
-@media (min-width: 901px) { .sm-iframe-fill { height: 100vh; } }
+/* iframe 도구(/utm·/subscription) 전체 높이 — 모바일은 상단바(52px)만큼 빼고, 데스크톱은 꽉 채움.
+   dvh = 모바일 주소창 수축을 따라가는 실제 가시 높이(미지원 브라우저는 위 vh 폴백). */
+.sm-iframe-fill { width: 100%; border: none; display: block; height: calc(100vh - 52px); height: calc(100dvh - 52px); }
+@media (min-width: 901px) { .sm-iframe-fill { height: 100vh; height: 100dvh; } }
 
 /* ── 탭 / 필터 — 둥근 탭(앱 버튼과 동일 radius·톤). 전 도구 공용. 상세: docs/design-system.md ──
    구조: <div class="sm-tabbar"> (검색 등 동반 시) 또는 <div class="sm-tabs"> (토글만)
@@ -2675,7 +2676,7 @@ a {
 
 /* Responsive */
 @media (max-width: 600px) {
-  .page-title { font-size: 19px; }
+  /* .page-title 은 768px 블록의 21px 유지 — b2b(.b2b-page-title 21px)와 같은 폰에서 같은 크기 */
   .detail-title { font-size: 19px; }
   .form-textarea { min-height: 200px; }
   .action-item { flex-direction: column; }
@@ -3321,7 +3322,7 @@ a {
 
 @media (max-width: 900px) {
   .app-sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0; height: 100vh;
+    position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; height: 100dvh; /* iOS 하단 툴바가 로그아웃 풋을 가리지 않게 */
     transform: translateX(-100%); transition: transform 0.22s ease;
     box-shadow: 2px 0 16px rgba(0, 0, 0, 0.12);
   }

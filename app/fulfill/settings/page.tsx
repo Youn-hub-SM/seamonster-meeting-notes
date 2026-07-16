@@ -115,6 +115,7 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
       <div style={{ marginTop: 4 }}>
         <div className="sm-faint" style={{ fontSize: 12, fontWeight: 700, margin: "6px 0 4px" }}>택배 기본운임 (주문 총중량 구간)</div>
         <p className="sm-faint" style={{ fontSize: 11.5, marginBottom: 6 }}>한 주문(같은 주소)의 총중량으로 박스타입·기본운임이 정해집니다. 일반·도착보장 공통이며, 도착보장은 아래 &lsquo;박스당 추가운임&rsquo;이 더해집니다.</p>
+        <div className="b2b-table-wrap">
         <table className="b2b-table" style={{ fontSize: 13 }}>
           <thead><tr><th>박스타입</th><th className="num">이하(kg)</th><th className="num">기본운임(원)</th><th></th></tr></thead>
           <tbody>
@@ -134,6 +135,7 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
             </tr>
           </tbody>
         </table>
+        </div>
         <button className="b2b-btn-secondary" style={{ marginTop: 8, padding: "5px 12px", fontSize: 12 }} onClick={addTier}>+ 구간 추가</button>
       </div>
 

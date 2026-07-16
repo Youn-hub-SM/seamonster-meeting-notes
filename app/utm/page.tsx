@@ -10,12 +10,7 @@ export default function UtmBuilderPage() {
     <iframe
       src={`/utm-builder.html?v=${V}`}
       title="씨몬스터 UTM 만들기"
-      style={{
-        display: "block",
-        width: "100%",
-        height: "calc(100vh - 64px)",
-        border: "none",
-      }}
+      className="sm-iframe-fill"
     />
   );
 }

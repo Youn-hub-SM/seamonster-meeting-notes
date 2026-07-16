@@ -198,7 +198,7 @@ function ResultCard({ r }: { r: MarginResultItem }) {
       <div className="b2b-card-head"><span className="b2b-card-title">{r.label}</span></div>
 
       {/* 강조: 순이익 · 이익률 */}
-      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 14 }}>
         <div className="b2b-stat-card" style={{ borderColor: emph, background: "var(--sm-orange-light)" }}>
           <div className="b2b-stat-card-label">순이익</div>
           <div className="b2b-stat-card-value" style={{ color: emph }}>{won(r.netProfit)}</div>

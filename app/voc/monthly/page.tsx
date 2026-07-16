@@ -110,7 +110,8 @@ export default function VocMonthlyPage() {
           </div>
 
           {/* 요약 */}
-          <table className="b2b-table" style={{ marginBottom: 22 }}>
+          <div className="b2b-table-wrap" style={{ marginBottom: 22 }}>
+          <table className="b2b-table">
             <thead><tr><th>구분</th><th className="num">{data.pm.slice(5)}월(전월)</th><th className="num">{mm}월(당월)</th><th className="num">증감</th></tr></thead>
             <tbody>
               <tr>
@@ -133,9 +134,11 @@ export default function VocMonthlyPage() {
               </tr>
             </tbody>
           </table>
+          </div>
 
           {/* 유형별 표 */}
           <strong style={{ fontSize: 14, display: "block", marginBottom: 6 }}>유형별 발생 · 개선 현황</strong>
+          <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr><th>유형</th><th className="num">전월 발생</th><th className="num">당월 발생</th><th className="num">증감</th><th className="num">손해금액</th><th>개선 상태</th><th>비고</th></tr></thead>
             <tbody>
@@ -165,6 +168,7 @@ export default function VocMonthlyPage() {
               </tr>
             </tbody>
           </table>
+          </div>
           <p className="sm-faint" style={{ fontSize: 11, marginTop: 12 }}>※ 발생 = 접수일 기준. 개선완료 = 유형 단위 처리(유형별 현황판에서 상태 변경 시 시점 기록). 개선 작업 자체는 Flow 에서 진행.</p>
         </section>
       )}

@@ -78,7 +78,8 @@ export default function QuotePage() {
           </div>
 
           {/* 요약 블록 */}
-          <table className="b2b-table" style={{ marginBottom: 22 }}>
+          <div className="b2b-table-wrap" style={{ marginBottom: 22 }}>
+          <table className="b2b-table">
             <thead><tr><th>구분</th><th className="num">공급가액</th><th className="num">세액 / 기타</th><th className="num">총액</th></tr></thead>
             <tbody>
               <tr><td style={{ fontWeight: 700 }}>임대료</td><td className="num b2b-money">{won(s.rentSupply)}</td><td className="num b2b-money">{won(s.rentVat)}</td><td className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.rentTotal)}</td></tr>
@@ -87,12 +88,14 @@ export default function QuotePage() {
               <tr style={{ background: "var(--sm-bg-subtle)" }}><td style={{ fontWeight: 800 }}>총 입금액</td><td className="num" /><td className="num" /><td className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{won(s.deposit)}</td></tr>
             </tbody>
           </table>
+          </div>
 
           {/* SKU 표 */}
           <div className="sm-between" style={{ marginBottom: 6 }}>
             <strong style={{ fontSize: 14 }}>품목별 매입 ({s.itemCount}종 · {s.totalQty.toLocaleString()}개)</strong>
             <span className="sm-faint" style={{ fontSize: 12 }}>검증 = 기준 매입가 대비</span>
           </div>
+          <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr><th>코드명</th><th>품목명</th><th>규격(g)</th><th>원산지</th><th className="num">매입수량</th><th className="num">매입가</th><th className="num">총 매입금액</th><th>검증</th><th>구분</th></tr></thead>
             <tbody>
@@ -120,6 +123,7 @@ export default function QuotePage() {
               </tr>
             </tbody>
           </table>
+          </div>
           <p className="sm-faint" style={{ fontSize: 11, marginTop: 12 }}>※ 매입가 = 총 매입금액 ÷ 매입수량(가중평균). 검증이 ‘다름’이면 제품 마스터의 매입단가와 실제 단가가 달라 확인이 필요합니다.</p>
         </section>
       )}

@@ -97,7 +97,7 @@ export default function StatementPage() {
           </div>
 
           {/* 공급자 / 공급받는자 2단 */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, marginBottom: 16 }}>
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
               <InfoRow label="등록번호" value={supplier?.biz_no} strong />
@@ -116,6 +116,7 @@ export default function StatementPage() {
           </div>
 
           {/* 품목 */}
+          <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead>
               <tr><th style={{ width: 34 }}>No</th><th>품목</th><th>규격</th><th className="num">수량</th><th className="num">단가</th><th className="num">공급가액</th><th className="num">세액</th><th style={{ width: 52 }}>비고</th></tr>
@@ -141,6 +142,7 @@ export default function StatementPage() {
               </tr>
             </tbody>
           </table>
+          </div>
 
           {/* 합계금액 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "2px solid var(--sm-black)", borderRadius: 8, padding: "12px 16px", marginTop: 14 }}>

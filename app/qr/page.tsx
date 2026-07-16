@@ -158,7 +158,7 @@ export default function QrPage() {
       {/* QR 크게 보기 + 다운로드 */}
       {qrFor && (
         <div className="b2b-modal-backdrop">
-          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
             <div className="b2b-modal-head"><h2 className="b2b-modal-title">{qrFor.title || qrFor.code}</h2><button className="b2b-modal-close" onClick={() => setQrFor(null)}>✕</button></div>
             <div className="b2b-modal-body" style={{ textAlign: "center" }}>
               <img src={qrSrc(shortUrl(qrFor.code), 280)} alt="QR" width={260} height={260} style={{ border: "1px solid var(--sm-border)", borderRadius: 8 }} />
