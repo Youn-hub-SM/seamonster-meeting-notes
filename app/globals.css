@@ -238,6 +238,10 @@ a {
   /* .b2b-page-title / -subtitle 의 768px 규칙과 일치시킨다(아래 600px 규칙이 제목을 19px 로 덮음) */
   .page-title { font-size: 21px; }
   .page-subtitle { font-size: 12px; }
+  /* 레거시(AI툴) 입력도 iOS 자동 확대 방지 — 16px 미만이면 포커스 시 발동 */
+  .form-textarea, .csm-search, .csm-cat-input, .csm-order-input, .member-input {
+    font-size: 16px !important;
+  }
 }
 
 /* Page Title — .b2b-page-title 와 동일 스케일(단일 기준) */

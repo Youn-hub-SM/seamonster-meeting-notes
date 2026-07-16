@@ -2586,12 +2586,16 @@ a.b2b-history-item:hover {
     padding: 10px 12px;
   }
 
-  /* 입력 폰트 16px 유지 — iOS 는 16px 미만이면 포커스 시 자동 확대(15px 는 발동함) */
+  /* 입력 폰트 16px 유지 — iOS 는 16px 미만이면 포커스 시 자동 확대(15px 도 발동).
+     !important 인 이유: 표 안 촘촘한 입력들이 인라인 fontSize:12~13 을 쓰는데,
+     기기 확대는 인라인보다 우선해서 막아야 하는 동작 가드라서. */
   .b2b-input,
   .b2b-textarea,
   .b2b-select,
-  .b2b-search {
-    font-size: 16px;
+  .b2b-search,
+  .b2b-combo-input,
+  .rp-input {
+    font-size: 16px !important;
   }
 }
 
