@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AppSidebar from "./AppSidebar";
+import { recordVisit } from "./lib/recent-pages";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
@@ -20,6 +21,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
+
+  // 최근 방문 기록(홈 퀵런치용) — 경로가 바뀔 때 네비 항목 단위로 저장
+  useEffect(() => { recordVisit(pathname); }, [pathname]);
 
   function toggleCollapse() {
     setCollapsed((c) => {
