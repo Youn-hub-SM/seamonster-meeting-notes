@@ -26,10 +26,11 @@ export async function POST(req: NextRequest) {
     if (!bundles.length) return NextResponse.json({ ok: false, error: "반영할 묶음이 없습니다." }, { status: 400 });
 
     const sb = supabaseAdmin();
-    const { data: products, error } = await sb.from("products").select("id, sku, name").eq("active", true);
+    // 비활성 포함 전체 조회 — SKU 는 유일(073)하므로 미사용 상품이 SKU 를 쥐고 있으면 생성 대신 안내해야 함
+    const { data: products, error } = await sb.from("products").select("id, sku, name, active");
     if (error) throw error;
-    const bySku = new Map<string, string[]>();
-    for (const p of products ?? []) { const k = p.sku ? String(p.sku).trim() : ""; if (k) bySku.set(k, [...(bySku.get(k) || []), p.id]); }
+    const bySku = new Map<string, { id: string; active: boolean }[]>();
+    for (const p of products ?? []) { const k = p.sku ? String(p.sku).trim() : ""; if (k) bySku.set(k, [...(bySku.get(k) || []), { id: p.id, active: p.active !== false }]); }
 
     let applied = 0, created = 0;
     const errors: string[] = [];
@@ -52,7 +53,8 @@ export async function POST(req: NextRequest) {
       let parentId: string;
       const pIds = bySku.get(parentSku);
       if (pIds && pIds.length === 1) {
-        parentId = pIds[0];
+        if (!pIds[0].active) { errors.push(`묶음SKU '${parentSku}' 는 미사용 처리된 상품입니다 — 상품마스터에서 사용 처리 후 다시 반영하세요.`); continue; }
+        parentId = pIds[0].id;
         // 기존 부모 — 입력된 택배·가격 필드만 갱신(054/028 미적용이면 해당 컬럼 빼고 재시도)
         if (Object.keys(extras).length > 0) {
           let up = await sb.from("products").update(extras).eq("id", parentId);
@@ -76,9 +78,13 @@ export async function POST(req: NextRequest) {
           delete insertRow[miss];
           ins = await sb.from("products").insert(insertRow).select("id").single();
         }
-        if (ins.error) { errors.push(`묶음SKU '${parentSku}' 생성 실패: ${ins.error.message}`); continue; }
+        if (ins.error) {
+          if (ins.error.code === "23505") errors.push(`묶음SKU '${parentSku}' 는 이미 다른 상품(대소문자 차이 포함)이 사용 중입니다.`);
+          else errors.push(`묶음SKU '${parentSku}' 생성 실패: ${ins.error.message}`);
+          continue;
+        }
         parentId = ins.data.id;
-        bySku.set(parentSku, [parentId]);
+        bySku.set(parentSku, [{ id: parentId, active: true }]);
         created++;
         await logProductChange("created", name, parentSku);
       }
@@ -91,7 +97,8 @@ export async function POST(req: NextRequest) {
         const ids = bySku.get(c.sku);
         if (!ids || ids.length === 0) { compErr = `구성품 '${c.sku}' 없음`; break; }
         if (ids.length > 1) { compErr = `구성품 '${c.sku}' 중복`; break; }
-        rows.push({ parent_id: parentId, component_id: ids[0], qty: c.qty });
+        if (!ids[0].active) { compErr = `구성품 '${c.sku}' 는 미사용 상품`; break; }
+        rows.push({ parent_id: parentId, component_id: ids[0].id, qty: c.qty });
       }
       if (compErr) { errors.push(`${parentSku}: ${compErr}`); continue; }
 

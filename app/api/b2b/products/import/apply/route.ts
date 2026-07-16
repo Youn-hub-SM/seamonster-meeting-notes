@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       const clean = normalizeProduct(input);
       if (!clean.name) { errors.push("품목명 누락 행 건너뜀"); continue; }
       const { data: ins, error } = await sb.from("products").insert(dbRow(clean)).select("id").single();
-      if (error) { errors.push(`${clean.name}: ${error.message}`); continue; }
+      if (error) { errors.push(error.code === "23505" ? `${clean.name}: SKU '${clean.sku}' 가 이미 다른 품목에 등록되어 있습니다.` : `${clean.name}: ${error.message}`); continue; }
       created++;
       await logProductChange("created", clean.name, clean.sku, { source: "엑셀업로드", productId: ins?.id ?? null });
     }
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       const clean = normalizeProduct(input);
       const { data: before } = await sb.from("products").select("*").eq("id", input.id).single(); // diff 용 이전값
       const { error } = await sb.from("products").update(dbRow(clean)).eq("id", input.id);
-      if (error) { errors.push(`${clean.name}: ${error.message}`); continue; }
+      if (error) { errors.push(error.code === "23505" ? `${clean.name}: SKU '${clean.sku}' 가 이미 다른 품목에 등록되어 있습니다.` : `${clean.name}: ${error.message}`); continue; }
       updated++;
       const changes = diffProduct(before, dbRow(clean));
       if (changes.length) await logProductChange("updated", clean.name, clean.sku, { source: "엑셀업로드", changes, productId: input.id });

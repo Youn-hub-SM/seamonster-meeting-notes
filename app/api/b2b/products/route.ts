@@ -65,7 +65,16 @@ export async function POST(req: NextRequest) {
       })
       .select()
       .single();
-    if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
+    if (error) {
+      if (error.code === "23505") {
+        // migration 073: upper(sku) 유니크 인덱스 — 대소문자만 달라도 같은 SKU 로 취급
+        return NextResponse.json(
+          { ok: false, error: `이미 같은 SKU(${clean.sku})가 등록되어 있습니다. 다른 SKU 를 입력하세요.` },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
     await logProductChange("created", data.name, data.sku, { source: "수동등록", productId: data.id });
     await notifyMasterChange("created", [`상품 등록 — ${data.name}${data.sku ? ` (${data.sku})` : ""}`]);
     return NextResponse.json({ ok: true, product: data });
@@ -118,7 +127,15 @@ export async function PUT(req: NextRequest) {
       .eq("id", body.id)
       .select()
       .single();
-    if (error) throw error; // SKU 중복 허용 — 유니크 제약 제거됨
+    if (error) {
+      if (error.code === "23505") {
+        return NextResponse.json(
+          { ok: false, error: `이미 같은 SKU(${clean.sku})가 등록된 다른 품목이 있습니다. 다른 SKU 를 입력하세요.` },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
     const changes = diffProduct(before, data);
     if (changes.length) {
       await logProductChange("updated", data.name, data.sku, { source: "수동수정", changes, productId: data.id });

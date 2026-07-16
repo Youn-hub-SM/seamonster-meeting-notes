@@ -50,7 +50,7 @@ VIEW sales_okr — 2026 OKR 스코어카드(단일행, 집계). 컬럼: okr1_fir
 ## 재고(INVENTORY)  [루커 못 봄]
 
 TABLE products — 상품/원가 마스터. sku_code 매칭은 products.sku = sales_orders.sku_code.
-  id(uuid), sku(text 내부코드·중복가능), name(text), spec(text 규격), unit(text 개/kg/박스),
+  id(uuid), sku(text 내부코드·유일(upper 기준)·null가능), name(text), spec(text 규격), unit(text 개/kg/박스),
   cost_price(numeric 현재원가=제조+포장), cost_material, pkg_inner, pkg_label, pkg_outer, sale_price(도매가), retail_price(소비자가), purchase_price(매입가),
   volume_kg(numeric null가능), tax_type(text 'taxable'|'exempt'), origin(text 원산지), attrs(text 분류·자유텍스트), active(bool), notes(text), updated_at
 

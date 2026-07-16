@@ -48,11 +48,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "헤더에 '품목명' 이 없습니다. 추출한 양식 그대로 업로드하세요." }, { status: 400 });
     }
 
-    // 기존 제품 맵(id 기준)
+    // 기존 제품 맵(id 기준) + SKU 소유자 맵(대문자 기준 — 073 유니크 인덱스와 같은 축)
     const { data, error } = await supabaseAdmin().from("products").select("*");
     if (error) throw error;
     const existing = new Map<string, Product>();
-    for (const p of (data ?? []) as Product[]) existing.set(p.id, p);
+    const skuOwner = new Map<string, string[]>(); // upper(sku) → product id[] (마이그레이션 전 중복 대비 리스트)
+    for (const p of (data ?? []) as Product[]) {
+      existing.set(p.id, p);
+      if (p.sku) { const k = p.sku.toUpperCase(); skuOwner.set(k, [...(skuOwner.get(k) || []), p.id]); }
+    }
+    const skuInFile = new Map<string, number>(); // upper(sku) → 먼저 쓴 행 번호 (파일 내 중복 검출)
 
     const creates: Create[] = [];
     const updates: Update[] = [];
@@ -72,6 +77,28 @@ export async function POST(req: NextRequest) {
       const { id, input } = rowToInput(get);
       if (!input.name) { errors.push({ line: r, msg: "품목명이 비어 있습니다." }); continue; }
       const clean = normalizeProduct(input);
+
+      // SKU 중복 사전검사 — apply 단계에서 DB 유니크(073)에 걸려 raw 에러가 나기 전에 미리보기에서 예고.
+      //  이 업로드가 SKU 를 '새로' 주장하는 행(신규 또는 SKU 변경)만 검사 — 기존 SKU 를 그대로 둔 수정 행은
+      //  통과(마이그레이션 전 중복 데이터를 그대로 다시 올려도 오탐하지 않도록).
+      if (clean.sku) {
+        const skuKey = clean.sku.toUpperCase();
+        const prevForSku = id ? existing.get(id) : undefined;
+        const keepsSameSku = !!(prevForSku?.sku && prevForSku.sku.toUpperCase() === skuKey);
+        if (!keepsSameSku) {
+          const dupLine = skuInFile.get(skuKey);
+          if (dupLine !== undefined) {
+            errors.push({ line: r, msg: `SKU '${clean.sku}' 가 이 파일의 ${dupLine}행과 중복됩니다.` });
+            continue;
+          }
+          const otherOwner = (skuOwner.get(skuKey) || []).find((oid) => oid !== id);
+          if (otherOwner) {
+            errors.push({ line: r, msg: `SKU '${clean.sku}' 는 이미 다른 품목(${existing.get(otherOwner)?.name || "?"})이 사용 중입니다.` });
+            continue;
+          }
+          skuInFile.set(skuKey, r);
+        }
+      }
 
       if (!id) { creates.push({ name: clean.name, row: clean }); continue; }
       const prev = existing.get(id);

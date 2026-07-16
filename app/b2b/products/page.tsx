@@ -23,6 +23,7 @@ export default function ProductsPage() {
   const [showBundles, setShowBundles] = useState(false); // 묶음(세트) 상품 표시 여부 — 기본 숨김
   const [modal, setModal] = useState<Modal>(null);
   const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState(""); // 모달 안에서 보여줄 저장 오류(SKU 중복 등) — 페이지 배너가 모달 뒤에 가려지는 문제 대응
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [history, setHistory] = useState<CostHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -67,11 +68,11 @@ export default function ProductsPage() {
   async function handleSave() {
     if (!modal) return;
     if (!modal.data.name.trim()) {
-      setError("품목명은 필수입니다.");
+      setModalError("품목명은 필수입니다.");
       return;
     }
     setSaving(true);
-    setError("");
+    setModalError("");
     try {
       const method = modal.mode === "create" ? "POST" : "PUT";
       const res = await fetch("/api/b2b/products", {
@@ -96,7 +97,7 @@ export default function ProductsPage() {
       }
       setModal(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "저장 중 오류");
+      setModalError(err instanceof Error ? err.message : "저장 중 오류");
     }
     setSaving(false);
   }
@@ -209,7 +210,7 @@ export default function ProductsPage() {
           </button>
           <button
             className="b2b-btn-primary"
-            onClick={() => setModal({ mode: "create", data: { ...EMPTY_PRODUCT } })}
+            onClick={() => { setModalError(""); setModal({ mode: "create", data: { ...EMPTY_PRODUCT } }); }}
           >
             + 제품 추가
           </button>
@@ -280,7 +281,8 @@ export default function ProductsPage() {
                   return (
                     <FragmentRows key={p.id}>
                       <tr
-                        onClick={() =>
+                        onClick={() => {
+                          setModalError("");
                           setModal({
                             mode: "edit",
                             data: {
@@ -308,8 +310,8 @@ export default function ProductsPage() {
                               scan_name: p.scan_name ?? "",
                               is_bundle: p.is_bundle,   // 묶음상품이면 송장스캔명 숨김용
                             },
-                          })
-                        }
+                          });
+                        }}
                       >
                         <td data-label="품목명">
                           <strong>{p.name}</strong>
@@ -386,9 +388,10 @@ export default function ProductsPage() {
           mode={modal.mode}
           data={modal.data}
           saving={saving}
+          error={modalError}
           onChange={(data) => setModal({ ...modal, data })}
           onSave={handleSave}
-          onClose={() => setModal(null)}
+          onClose={() => { setModalError(""); setModal(null); }}
           onDelete={
             modal.mode === "edit" && modal.data.id
               ? () => handleDelete(modal.data.id!, modal.data.name)
@@ -396,10 +399,12 @@ export default function ProductsPage() {
           }
           onCopy={
             modal.mode === "edit"
-              ? () =>
-                  // 현재 입력값 그대로 복사해 '새 제품 등록' 모드로 전환.
-                  // SKU 중복 허용이라 SKU 도 그대로 복사 (필요 시 수정).
-                  setModal({ mode: "create", data: { ...modal.data, id: undefined } })
+              ? () => {
+                  // 현재 입력값을 복사해 '새 제품 등록' 모드로 전환.
+                  // SKU 는 유일(073)하므로 비워서 새 코드 입력을 유도.
+                  setModalError("");
+                  setModal({ mode: "create", data: { ...modal.data, id: undefined, sku: "" } });
+                }
               : undefined
           }
         />
@@ -528,6 +533,7 @@ function ProductModal({
   mode,
   data,
   saving,
+  error,
   onChange,
   onSave,
   onClose,
@@ -537,6 +543,7 @@ function ProductModal({
   mode: "create" | "edit";
   data: ProductInput;
   saving: boolean;
+  error?: string;
   onChange: (d: ProductInput) => void;
   onSave: () => void;
   onClose: () => void;
@@ -835,6 +842,8 @@ function ProductModal({
             />
           </Field>
         </div>
+
+        {error && <div className="b2b-error" style={{ margin: "0 0 10px" }}>{error}</div>}
 
         <div className="b2b-modal-foot">
           <div style={{ display: "flex", gap: 8 }}>

@@ -29,10 +29,12 @@ export async function POST(req: NextRequest) {
     if (!col.has("묶음SKU") || !col.has("구성품SKU") || !col.has("수량"))
       return NextResponse.json({ ok: false, error: "헤더에 '묶음SKU'·'구성품SKU'·'수량' 이 필요합니다. (양식을 받아 사용하세요)" }, { status: 400 });
 
-    const { data: products, error } = await supabaseAdmin().from("products").select("id, sku, name").eq("active", true);
+    // 비활성 포함 전체 조회 — apply 와 같은 기준(SKU 유일 073). 미사용 상품이 SKU 를 쥐고 있으면
+    //  미리보기에서 미리 알려 '미리보기 OK → 반영 실패' 불일치를 없앤다.
+    const { data: products, error } = await supabaseAdmin().from("products").select("id, sku, name, active");
     if (error) throw error;
-    const bySku = new Map<string, { id: string; name: string }[]>();
-    for (const p of products ?? []) { const k = p.sku ? String(p.sku).trim() : ""; if (k) bySku.set(k, [...(bySku.get(k) || []), { id: p.id, name: p.name }]); }
+    const bySku = new Map<string, { id: string; name: string; active: boolean }[]>();
+    for (const p of products ?? []) { const k = p.sku ? String(p.sku).trim() : ""; if (k) bySku.set(k, [...(bySku.get(k) || []), { id: p.id, name: p.name, active: p.active !== false }]); }
 
     // 묶음SKU 로 그룹핑
     const groups = new Map<string, { name: string; comps: { sku: string; qty: number }[] }>();
@@ -56,10 +58,12 @@ export async function POST(req: NextRequest) {
       const parentExists = !!pIds && pIds.length === 1;
       let err: string | undefined;
       if (pIds && pIds.length > 1) err = `묶음SKU '${parentSku}' 가 ${pIds.length}개 상품과 중복`;
+      else if (pIds && pIds.length === 1 && !pIds[0].active) err = `묶음SKU '${parentSku}' 는 미사용 상품 — 사용 처리 후 반영하세요`;
       const components: BundleComp[] = g.comps.map((c) => {
         const ids = bySku.get(c.sku);
         if (!ids || ids.length === 0) return { sku: c.sku, qty: c.qty, name: null, ok: false, err: "구성품 SKU 없음" };
         if (ids.length > 1) return { sku: c.sku, qty: c.qty, name: ids[0].name, ok: false, err: `${ids.length}개와 중복` };
+        if (!ids[0].active) return { sku: c.sku, qty: c.qty, name: ids[0].name, ok: false, err: "미사용 상품" };
         return { sku: c.sku, qty: c.qty, name: ids[0].name, ok: true };
       });
       const ok = !err && components.length > 0 && components.every((c) => c.ok);
