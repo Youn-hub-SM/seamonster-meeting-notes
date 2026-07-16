@@ -2,8 +2,7 @@ import { supabaseAdmin } from "./supabase";
 import { getLedgerVelocity } from "./production-velocity";
 import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promotions";
 import { getSafetyAdjusts, effectiveDelta, effectiveExclude } from "./production-safety-adjust";
-import { getLeadDays, getDemixEnabled, getDemixSkus, getDemixFactor } from "./production-config";
-import { getB2bShippedInWindow } from "./production-b2b-shipments";
+import { getLeadDays } from "./production-config";
 
 // 자체 재고원장(inventory_txns) 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
 //  /api/production/inventory 와 생산 조언이 공유 — 숫자 일관성 유지.
@@ -16,13 +15,8 @@ export interface InvRow {
   sku: string;
   name: string;
   stock: number | null;   // 현재고 (null = 원장에 거래내역 없음)
-  dailyOut: number;       // 행사·도매 제거한 평상시(소매) 하루 평균 출고량
+  dailyOut: number;       // 행사 제거한 평상시 하루 평균 출고량
   rawDailyOut: number;    // 보정 전 원 출고 일평균(참고)
-  boxheroOutQty: number;  // 집계창 BoxHero 총출고(근사 = rawDailyOut × span) — 근거 대조용
-  b2bShippedQty: number;  // 집계창 B2B 발송완료 합(도매) — 근거 대조용
-  wholesaleSoldQty: number; // 실제 차감한 도매분(= b2bShipped × factor, demix 적용 시만)
-  demixApplied: boolean;  // 이 SKU에 de-mix(도매 차감)가 적용됐는지
-  demixClampedToZero: boolean; // 도매 차감으로 소매속도가 0으로 눌린 경우(레이더 실종 경고)
   autoSafety: number;     // 자동 안전재고 = ceil(dailyOut × LEAD_DAYS)
   promoQty: number;       // 프로모션 자동 가산(리드타임 내 행사)
   adjust: number;         // 추가 확보(만료 반영된 유효 delta)
@@ -47,10 +41,6 @@ export interface InventoryResult {
   leadDays: number;          // 안전재고 산정에 쓴 리드타임
   velocitySpanDays: number;  // 출고 평균이 커버한 일수
   velocityCapped: boolean;   // 표본 상한에 걸려 일부만 집계했는지
-  demixEnabled: boolean;     // 도매 de-mix 켜짐 여부
-  demixFactor: number;       // 도매 차감 계수(0~1)
-  demixActive: boolean;      // 이번 산정에 실제 de-mix가 적용됐는지(켜짐+미capped+화이트리스트有)
-  demixUnresolvedQty: number;// SKU 못 푼 B2B 발송분(차감 누락)
 }
 
 export async function getInventoryRows(): Promise<InventoryResult> {
@@ -80,20 +70,11 @@ export async function getInventoryRows(): Promise<InventoryResult> {
   wsD.setUTCDate(wsD.getUTCDate() - span); // 판매속도 집계창 시작(근사)
   const windowStart = wsD.toISOString().slice(0, 10);
   const leadDays = await getLeadDays(); // 생산 리드타임(설정값, 기본 10)
-  const [promoForward, promoSold, adjusts, demixEnabled, demixSkus, demixFactor, b2bShipped] = await Promise.all([
+  const [promoForward, promoSold, adjusts] = await Promise.all([
     getPromoForwardBySku(today, leadDays),     // 앞으로 확보할 남은 행사분
     getPromoSoldInWindow(windowStart, today),  // 집계창에 이미 나간 행사분(속도에서 제거)
     getSafetyAdjusts(),
-    getDemixEnabled(),
-    getDemixSkus(),
-    getDemixFactor(),
-    getB2bShippedInWindow(windowStart, today), // 집계창 B2B 발송완료(과거 도매 출고) — 근거 대조 + de-mix
   ]);
-  const demixSkuSet = new Set(demixSkus);
-  // de-mix 적용 조건: 켜짐 + 화이트리스트. (capped는 집계창을 짧게 줄일 뿐 그 창 안에선
-  //  가장 최근 트랜잭션이 전수라 부분표본이 아님 — velocity·b2bShipped 둘 다 같은 창이라 정합.
-  //  과차감 방지는 under-subtract 계수(factor)와 화이트리스트로 처리.)
-  const demixActive = demixEnabled && demixSkuSet.size > 0;
 
   // 2) 제품표: product_id → sku / name (위에서 받은 prodRes 재사용)
   const skuByProduct = new Map<string, string>();
@@ -137,15 +118,9 @@ export async function getInventoryRows(): Promise<InventoryResult> {
     const demand = demandBySku.get(sku) || 0;
     const stock = st ? st.stock : null;
     const rawDailyOut = velocity.perSku[sku] || 0;
-    const boxheroOutQty = Math.round(rawDailyOut * span);          // 창내 BoxHero 총출고(근사) — 근거 대조
-    const b2bShippedQty = Math.round(b2bShipped.bySku[sku] || 0);  // 창내 B2B 발송완료(도매) — 근거 대조
-    const demixApplied = demixActive && demixSkuSet.has(sku);
-    const wholesaleSold = demixApplied ? (b2bShipped.bySku[sku] || 0) * demixFactor : 0; // 실제 차감할 도매분(계수 적용)
     const adj = adjusts[sku];
     const manualExclude = effectiveExclude(adj, today); // 사용자가 '행사 출고'로 빼라고 한 양
-    const afterPromo = rawDailyOut - (promoSold[sku] || 0) / span - manualExclude / span;
-    const dailyOut = Math.max(0, afterPromo - wholesaleSold / span); // 행사·도매·수동행사 제거한 평상시(소매) 일평균
-    const demixClampedToZero = demixApplied && afterPromo > 0.05 && dailyOut < 0.05; // 도매 차감으로 소매속도 무시가능 수준(레이더 실종)
+    const dailyOut = Math.max(0, rawDailyOut - (promoSold[sku] || 0) / span - manualExclude / span); // 행사·수동행사 제거한 평상시 일평균
     const autoSafety = Math.ceil(dailyOut * leadDays);
     const promoQty = Math.round(promoForward[sku] || 0);
     const adjust = effectiveDelta(adj, today);
@@ -170,11 +145,6 @@ export async function getInventoryRows(): Promise<InventoryResult> {
       stock,
       dailyOut,
       rawDailyOut,
-      boxheroOutQty,
-      b2bShippedQty,
-      wholesaleSoldQty: Math.round(wholesaleSold),
-      demixApplied,
-      demixClampedToZero,
       autoSafety,
       promoQty,
       adjust,
@@ -201,9 +171,5 @@ export async function getInventoryRows(): Promise<InventoryResult> {
     leadDays,
     velocitySpanDays: velocity.spanDays,
     velocityCapped: velocity.capped,
-    demixEnabled,
-    demixFactor,
-    demixActive,
-    demixUnresolvedQty: b2bShipped.unresolvedQty,
   };
 }

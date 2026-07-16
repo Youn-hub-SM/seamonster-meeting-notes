@@ -9,11 +9,6 @@ type InvRow = {
   stock: number | null;
   dailyOut: number;
   rawDailyOut: number;
-  boxheroOutQty: number;
-  b2bShippedQty: number;
-  wholesaleSoldQty: number;
-  demixApplied: boolean;
-  demixClampedToZero: boolean;
   autoSafety: number;
   promoQty: number;
   adjust: number;
@@ -45,9 +40,6 @@ export default function InventoryPage() {
   const [noSkuDemand, setNoSkuDemand] = useState(0);
   const [leadDays, setLeadDays] = useState(10);
   const [spanDays, setSpanDays] = useState(0);
-  const [capped, setCapped] = useState(false);
-  const [demixActive, setDemixActive] = useState(false);
-  const [demixUnresolved, setDemixUnresolved] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [onlyNeed, setOnlyNeed] = useState(true);
@@ -84,9 +76,6 @@ export default function InventoryPage() {
       setNoSkuDemand(j.noSkuDemand || 0);
       setLeadDays(j.leadDays || 10);
       setSpanDays(j.velocitySpanDays || 0);
-      setCapped(!!j.velocityCapped);
-      setDemixActive(!!j.demixActive);
-      setDemixUnresolved(j.demixUnresolvedQty || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }
@@ -96,7 +85,7 @@ export default function InventoryPage() {
   useEffect(() => { load(); }, [load]);
 
   const stats = useMemo(() => {
-    let needItems = 0, needQty = 0, below = 0, urgent = 0, soon = 0, clamped = 0;
+    let needItems = 0, needQty = 0, below = 0, urgent = 0, soon = 0;
     for (const r of rows) {
       if (r.recommend > 0) { needItems++; needQty += r.recommend; }
       if (r.belowSafety) below++;
@@ -104,15 +93,11 @@ export default function InventoryPage() {
         if (r.requestByDays <= 0) urgent++;
         else if (r.requestByDays <= 7) soon++;
       }
-      if (r.demixClampedToZero) clamped++;
     }
-    return { needItems, needQty, below, urgent, soon, clamped };
+    return { needItems, needQty, below, urgent, soon };
   }, [rows]);
 
-  const clampedRows = useMemo(() => rows.filter((r) => r.demixClampedToZero), [rows]);
-
-  // '생산필요만' 켜도 도매차감으로 0이 된(레이더 실종) 행은 보이게 유지
-  const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0 || r.demixClampedToZero) : rows), [rows, onlyNeed]);
+  const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0) : rows), [rows, onlyNeed]);
 
   function openEdit(r: InvRow) {
     setEditRow(r);
@@ -186,16 +171,6 @@ export default function InventoryPage() {
           </div>
         </div>
       </div>
-
-      {stats.clamped > 0 && (
-        <div className="inv-deadline-banner" style={{ background: "var(--sm-danger-bg)", borderColor: "var(--sm-danger-border)" }}>
-          <span className="inv-dl-text">
-            <span className="inv-dl-urgent">도매 차감으로 {stats.clamped}종이 레이더에서 빠짐</span>
-            <span className="inv-dl-hint"> — 소매 속도가 0이 되어 마감일이 안 잡힙니다({clampedRows.slice(0, 4).map((r) => r.sku).join(", ")}{clampedRows.length > 4 ? " 외" : ""}). 화이트리스트/차감비율을 확인하세요.</span>
-          </span>
-          <Link href="/production/settings" className="b2b-btn-secondary inv-dl-btn">설정</Link>
-        </div>
-      )}
 
       {(stats.urgent > 0 || stats.soon > 0) && (
         <div className="inv-deadline-banner">
@@ -290,14 +265,8 @@ export default function InventoryPage() {
                     {r.dailyOut || r.rawDailyOut ? (
                       <>
                         <span>{r.dailyOut.toFixed(1)}</span>
-                        {(r.rawDailyOut - r.dailyOut - r.wholesaleSoldQty / Math.max(1, spanDays)) > 0.05 && (
+                        {(r.rawDailyOut - r.dailyOut) > 0.05 && (
                           <span className="inv-raw-out" title={`행사 제외 전 ${r.rawDailyOut.toFixed(1)}`}>행사↓</span>
-                        )}
-                        {r.wholesaleSoldQty > 0 && (
-                          <span className="inv-demix-out" title={`도매 발송분 차감 (창내 B2B 발송 ${r.b2bShippedQty} 중 ${r.wholesaleSoldQty})`}>도매↓</span>
-                        )}
-                        {r.demixClampedToZero && (
-                          <span className="inv-demix-clamp" title="도매 차감으로 소매 속도가 0이 됨 — 마감일이 사라집니다. 화이트리스트/비율 확인 요망">0</span>
                         )}
                       </>
                     ) : (
@@ -352,12 +321,6 @@ export default function InventoryPage() {
 
       {spanDays > 0 && (
         <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 재고원장 출고(판매) 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
-      )}
-      {demixActive && demixUnresolved > 0 && (
-        <p className="prod-note">※ 도매 차감 중 SKU가 연결되지 않은 발송 {demixUnresolved.toLocaleString()}개는 차감에서 제외됐습니다(과대생산 안전측).</p>
-      )}
-      {demixActive && capped && (
-        <p className="prod-note" style={{ color: "var(--sm-warning)" }}>※ 출고 표본이 짧아(최근 약 {spanDays}일) 도매 차감 시 소매 속도가 부정확할 수 있습니다 — &lsquo;도매↓&rsquo; 품목은 설정의 근거(출고원장 vs B2B)와 대조해 확인하세요.</p>
       )}
       {noSkuDemand > 0 && (
         <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>
