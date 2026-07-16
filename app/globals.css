@@ -3119,6 +3119,7 @@ a {
   margin-bottom: 44px;
 }
 .home-tool-card {
+  min-width: 0; /* 그리드 아이템 기본 min-width:auto 가 긴 라벨로 트랙을 밀어내는 것 방지 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3219,8 +3220,8 @@ a {
 .change-row .change-link { margin-top: 6px; font-size: 12px; }
 
 @media (max-width: 768px) {
-  .home-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 32px; }
-  .home-tool-card { padding: 18px 12px; min-height: 64px; }
+  .home-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 32px; }
+  .home-tool-card { padding: 16px 14px; min-height: 56px; }
   .home-tool-name { font-size: 16px; }
   .home-section-title { font-size: 19px; }
   .change-day-head { padding: 10px 16px; }
