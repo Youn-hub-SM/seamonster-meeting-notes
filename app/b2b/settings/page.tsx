@@ -44,6 +44,8 @@ export default function SettingsPage() {
   type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
   const [dcfgSaving, setDcfgSaving] = useState(false);
+  const [digestLastSent, setDigestLastSent] = useState<string | null>(null); // 마지막 '자동' 발송일(크론 성공 시에만 기록)
+  const [cronSecretSet, setCronSecretSet] = useState(true); // Vercel CRON_SECRET 유무(없으면 크론이 매일 401)
   // 거래명세표 — 공급자(우리 회사) 정보 + 직인
   type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string; bank: string };
   const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr", bank: "" });
@@ -74,7 +76,7 @@ export default function SettingsPage() {
           setZapierEnv(!!fj.zapierEnv);
         }
         const dg = await (await fetch("/api/b2b/settings/digest", { cache: "no-store" })).json();
-        if (dg.ok) setDcfg(dg.config);
+        if (dg.ok) { setDcfg(dg.config); setDigestLastSent(dg.lastSent || null); setCronSecretSet(dg.cronSecretSet !== false); }
         const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
         if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
       } catch (e) {
@@ -274,6 +276,10 @@ export default function SettingsPage() {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">아침 일정 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 매일 08:00 자동</span></h2>
+          <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
+            마지막 자동 발송: <strong style={{ color: digestLastSent ? "var(--sm-success)" : "var(--sm-danger)" }}>{digestLastSent || "기록 없음"}</strong>
+            {!cronSecretSet && <strong style={{ color: "var(--sm-danger)", marginLeft: 8 }}>CRON_SECRET 미설정 — 자동 발송이 매일 실패합니다</strong>}
+          </span>
         </div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
           매일 지정 시각에 <strong>미완료 업무</strong>를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다. 내용·시간·기간을 아래에서 정하세요.

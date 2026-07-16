@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { getDigestConfig, saveDigestConfig, type DigestConfig } from "@/app/lib/b2b-digest";
+import { getDigestConfig, saveDigestConfig, getDigestLastSent, type DigestConfig } from "@/app/lib/b2b-digest";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,10 @@ async function isAdminReq(req: NextRequest): Promise<boolean> {
 }
 
 export async function GET() {
-  return NextResponse.json({ ok: true, config: await getDigestConfig() });
+  // 자동 발송 진단 정보 포함 — lastSent(마지막 자동 발송일, 크론 성공 시에만 기록)와
+  //  cronSecretSet(Vercel CRON_SECRET 환경변수 유무 — 없으면 크론이 매일 401 로 조용히 실패).
+  const [config, lastSent] = await Promise.all([getDigestConfig(), getDigestLastSent()]);
+  return NextResponse.json({ ok: true, config, lastSent: lastSent || null, cronSecretSet: !!process.env.CRON_SECRET });
 }
 
 export async function PUT(req: NextRequest) {
