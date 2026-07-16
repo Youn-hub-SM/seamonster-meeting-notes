@@ -30,6 +30,17 @@ export default function ProductionSettingsPage() {
   const [demixMsg, setDemixMsg] = useState("");
   const [demixUnresolved, setDemixUnresolved] = useState(0);
 
+  // [업무도우미 변경알림] — 상품마스터 변경 시 Flow 알림봇으로 수신자들에게 발송(B2B 도매 봇과 별개)
+  type MnConfig = { enabled: boolean; botId: string; receivers: string; title: string; events: Record<string, boolean> };
+  const [mn, setMn] = useState<MnConfig | null>(null);
+  const [mnEventDefs, setMnEventDefs] = useState<{ key: string; label: string }[]>([]);
+  const [mnApiKey, setMnApiKey] = useState("");       // 입력 시에만 갱신(빈값이면 기존 키 유지)
+  const [mnHasKey, setMnHasKey] = useState(false);
+  const [mnFallbackKey, setMnFallbackKey] = useState(false); // 전용 키 없이 B2B 봇 키 폴백 중
+  const [mnTestReceiver, setMnTestReceiver] = useState("");
+  const [mnBusy, setMnBusy] = useState(false);
+  const [mnMsg, setMnMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
   async function loadStatus() {
     try {
       const j = await (await fetch("/api/production/settings", { cache: "no-store" })).json();
@@ -72,7 +83,38 @@ export default function ProductionSettingsPage() {
     } catch { /* noop */ }
     setDemixLoading(false);
   }
-  useEffect(() => { loadStatus(); loadAliases(); loadLead(); loadDemix(); }, []);
+  async function loadMn() {
+    try {
+      const j = await (await fetch("/api/production/settings/master-notify", { cache: "no-store" })).json();
+      if (j.ok) { setMn(j.config); setMnEventDefs(j.events || []); setMnHasKey(!!j.hasApiKey); setMnFallbackKey(!!j.fallbackKey); }
+    } catch { /* noop */ }
+  }
+  useEffect(() => { loadStatus(); loadAliases(); loadLead(); loadDemix(); loadMn(); }, []);
+
+  async function saveMn() {
+    if (!mn) return;
+    setMnBusy(true); setMnMsg(null);
+    try {
+      const body: Record<string, unknown> = { ...mn };
+      if (mnApiKey.trim()) body.apiKey = mnApiKey.trim();
+      const r = await fetch("/api/production/settings/master-notify", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (mnApiKey.trim()) { setMnHasKey(true); setMnFallbackKey(false); setMnApiKey(""); }
+      setMnMsg({ kind: "ok", text: "저장됨" });
+    } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "저장 오류" }); }
+    setMnBusy(false);
+  }
+  async function testMn() {
+    setMnBusy(true); setMnMsg(null);
+    try {
+      const r = await fetch("/api/production/settings/master-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mnTestReceiver.trim() ? { testReceiver: mnTestReceiver.trim() } : {}) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
+      setMnMsg({ kind: "ok", text: "테스트 알림을 보냈습니다. Flow 를 확인하세요." });
+    } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "테스트 실패" }); }
+    setMnBusy(false);
+  }
 
   function toggleDemixSku(sku: string) {
     setDemixSkusS((s) => (s.includes(sku) ? s.filter((x) => x !== sku) : [...s, sku]));
@@ -307,6 +349,49 @@ export default function ProductionSettingsPage() {
         <div style={{ marginTop: 14 }}>
           <button className="b2b-btn-primary" onClick={saveDemix} disabled={demixSaving}>{demixSaving ? "저장 중..." : "저장"}</button>
         </div>
+      </section>
+
+      {/* [업무도우미 변경알림] — 상품마스터 변경 시 Flow 알림봇으로 수신자들에게 발송 */}
+      <section className="b2b-card" style={{ marginTop: 16 }}>
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 시 Flow 알림 발송 (B2B 도매 알림봇과 별개 봇)</span></h2>
+          <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "저장"}</button>
+        </div>
+        {mnMsg && <div className={mnMsg.kind === "ok" ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}
+        {mn && (
+          <>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+              <input type="checkbox" className="b2b-checkbox" checked={mn.enabled} onChange={(e) => setMn({ ...mn, enabled: e.target.checked })} />
+              변경알림 켜기
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>봇 ID</span>
+                <input className="b2b-input" value={mn.botId} onChange={(e) => setMn({ ...mn, botId: e.target.value })} placeholder="BFLOW_300003566171" /></label>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>알림 제목</span>
+                <input className="b2b-input" value={mn.title} onChange={(e) => setMn({ ...mn, title: e.target.value })} placeholder="[업무도우미 변경알림]" /></label>
+              <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>수신 대상 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11.5 }}>· 쉼표로 구분(B2B 알림봇 수신자와 같은 ID 형식)</span></span>
+                <input className="b2b-input" value={mn.receivers} onChange={(e) => setMn({ ...mn, receivers: e.target.value })} placeholder="예: user1@seamonster.kr, user2@seamonster.kr" /></label>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>Flow API 키 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11.5 }}>{mnHasKey ? "· 저장됨(입력 시 교체)" : mnFallbackKey ? "· B2B 봇 키 사용 중(입력 시 전용 키)" : "· 미설정"}</span></span>
+                <input className="b2b-input" type="password" value={mnApiKey} onChange={(e) => setMnApiKey(e.target.value)} placeholder={mnHasKey || mnFallbackKey ? "변경할 때만 입력" : "키관리에서 발급받은 API Key"} /></label>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>발송할 변경 목록</span>
+              <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginTop: 6 }}>
+                {mnEventDefs.map((ev) => (
+                  <label key={ev.key} className="sm-row" style={{ gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" className="b2b-checkbox" checked={mn.events[ev.key] !== false}
+                      onChange={(e) => setMn({ ...mn, events: { ...mn.events, [ev.key]: e.target.checked } })} />
+                    {ev.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+              <input className="b2b-input" style={{ width: 220 }} value={mnTestReceiver} onChange={(e) => setMnTestReceiver(e.target.value)} placeholder="테스트 수신자(비우면 전체)" />
+              <button className="b2b-btn-secondary" onClick={testMn} disabled={mnBusy}>테스트 발송</button>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
