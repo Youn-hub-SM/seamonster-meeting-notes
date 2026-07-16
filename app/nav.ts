@@ -121,6 +121,7 @@ export const NAV: NavCategory[] = [
         href: "/voc", label: "VOC 관리", icon: "megaphone",
         menu: [
           { href: "/voc", label: "VOC 처리" },
+          { href: "/voc/monthly", label: "월말 결산" },
           { href: "/voc/stats", label: "통계·보고서" },
           { href: "/voc/insights", label: "AI 인사이트" },
           { href: "/voc/loss", label: "손해금액 산정" },
