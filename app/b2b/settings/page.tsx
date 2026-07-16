@@ -44,6 +44,15 @@ export default function SettingsPage() {
   type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
   const [dcfgSaving, setDcfgSaving] = useState(false);
+  // [업무도우미 변경알림] — 상품마스터 변경 시 Flow 채팅방 발송(Chats API)
+  type MnConfig = { enabled: boolean; roomId: string; registerId: string; title: string; events: Record<string, boolean> };
+  const [mn, setMn] = useState<MnConfig | null>(null);
+  const [mnEventDefs, setMnEventDefs] = useState<{ key: string; label: string }[]>([]);
+  const [mnApiKey, setMnApiKey] = useState("");       // 입력 시에만 갱신(빈값이면 기존 키 유지)
+  const [mnHasKey, setMnHasKey] = useState(false);
+  const [mnFallbackKey, setMnFallbackKey] = useState(false); // 전용 키 없이 VOC Flow 키 폴백 중
+  const [mnBusy, setMnBusy] = useState(false);
+  const [mnMsg, setMnMsg] = useState<Msg | null>(null);
   // 거래명세표 — 공급자(우리 회사) 정보 + 직인
   type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string; bank: string };
   const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr", bank: "" });
@@ -77,6 +86,8 @@ export default function SettingsPage() {
         if (dg.ok) setDcfg(dg.config);
         const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
         if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
+        const mnr = await (await fetch("/api/b2b/settings/master-notify", { cache: "no-store" })).json();
+        if (mnr.ok) { setMn(mnr.config); setMnEventDefs(mnr.events || []); setMnHasKey(!!mnr.hasApiKey); setMnFallbackKey(!!mnr.fallbackKey); }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
@@ -107,6 +118,30 @@ export default function SettingsPage() {
       setFlowMsg({ ok: true, text: `Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.` });
     } catch (e) { setFlowMsg({ ok: false, text: e instanceof Error ? e.message : "테스트 실패" }); }
     setFlowSaving(false);
+  }
+  async function saveMn() {
+    if (!mn) return;
+    setMnBusy(true); setMnMsg(null);
+    try {
+      const body: Record<string, unknown> = { ...mn };
+      if (mnApiKey.trim()) body.apiKey = mnApiKey.trim();
+      const r = await fetch("/api/b2b/settings/master-notify", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (mnApiKey.trim()) { setMnHasKey(true); setMnFallbackKey(false); setMnApiKey(""); }
+      setMnMsg({ ok: true, text: "저장됨" });
+    } catch (e) { setMnMsg({ ok: false, text: e instanceof Error ? e.message : "저장 오류" }); }
+    setMnBusy(false);
+  }
+  async function testMn() {
+    setMnBusy(true); setMnMsg(null);
+    try {
+      const r = await fetch("/api/b2b/settings/master-notify", { method: "POST" });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
+      setMnMsg({ ok: true, text: "테스트 메시지를 보냈습니다. Flow 채팅방을 확인하세요." });
+    } catch (e) { setMnMsg({ ok: false, text: e instanceof Error ? e.message : "테스트 실패" }); }
+    setMnBusy(false);
   }
   async function saveSupplier() {
     setSupSaving(true); setSupMsg(null);
@@ -384,6 +419,48 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      {/* [업무도우미 변경알림] — 상품마스터 변경 시 Flow 채팅방 발송 */}
+      <section className="b2b-card" style={{ marginTop: 16 }}>
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 시 Flow 채팅방으로 발송 (B2B 도매 알림봇과 별개)</span></h2>
+          <div className="sm-row" style={{ gap: 8 }}>
+            <button className="b2b-btn-secondary" onClick={testMn} disabled={mnBusy || !mn?.roomId}>테스트 발송</button>
+            <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "저장"}</button>
+          </div>
+        </div>
+        {mnMsg && <div className={mnMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}
+        {mn && (
+          <>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+              <input type="checkbox" className="b2b-checkbox" checked={mn.enabled} onChange={(e) => setMn({ ...mn, enabled: e.target.checked })} />
+              변경알림 켜기
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>수신 채팅방 ID</span>
+                <input className="b2b-input" value={mn.roomId} onChange={(e) => setMn({ ...mn, roomId: e.target.value })} placeholder="예: 300003566171 (숫자만)" /></label>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>작성자 ID</span>
+                <input className="b2b-input" value={mn.registerId} onChange={(e) => setMn({ ...mn, registerId: e.target.value })} placeholder="seamonster.kr2@gmail.com" /></label>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>알림 제목</span>
+                <input className="b2b-input" value={mn.title} onChange={(e) => setMn({ ...mn, title: e.target.value })} placeholder="[업무도우미 변경알림]" /></label>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>Flow API 키 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11.5 }}>{mnHasKey ? "· 저장됨(입력 시 교체)" : mnFallbackKey ? "· VOC Flow 키 사용 중(입력 시 전용 키)" : "· 미설정"}</span></span>
+                <input className="b2b-input" type="password" value={mnApiKey} onChange={(e) => setMnApiKey(e.target.value)} placeholder={mnHasKey || mnFallbackKey ? "변경할 때만 입력" : "키관리에서 발급받은 API Key"} /></label>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>발송할 변경 목록</span>
+              <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginTop: 6 }}>
+                {mnEventDefs.map((ev) => (
+                  <label key={ev.key} className="sm-row" style={{ gap: 5, fontSize: 13 }}>
+                    <input type="checkbox" className="b2b-checkbox" checked={mn.events[ev.key] !== false}
+                      onChange={(e) => setMn({ ...mn, events: { ...mn.events, [ev.key]: e.target.checked } })} />
+                    {ev.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </>
         )}
       </section>
 

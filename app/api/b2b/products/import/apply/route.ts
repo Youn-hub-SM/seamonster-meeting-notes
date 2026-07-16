@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeProduct, type ProductInput } from "@/app/lib/b2b-types";
 import { logProductChange } from "@/app/lib/b2b-activity";
+import { notifyMasterChange } from "@/app/lib/master-notify";
 import { diffProduct } from "@/app/lib/product-diff";
 
 export const runtime = "nodejs";
@@ -67,6 +68,9 @@ export async function POST(req: NextRequest) {
       if (changes.length) await logProductChange("updated", clean.name, clean.sku, { source: "엑셀업로드", changes, productId: input.id });
     }
 
+    if (created + updated > 0) {
+      await notifyMasterChange("import", [`엑셀 일괄 변경 — 신규 ${created}건 · 수정 ${updated}건${errors.length ? ` · 오류 ${errors.length}건` : ""}`]);
+    }
     return NextResponse.json({ ok: errors.length === 0, created, updated, errors });
   } catch (err) {
     console.error("[b2b/products import apply]", err);

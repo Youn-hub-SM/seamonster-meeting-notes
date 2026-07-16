@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { logProductChange } from "@/app/lib/b2b-activity";
+import { notifyMasterChange } from "@/app/lib/master-notify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
 
     let applied = 0, created = 0;
     const errors: string[] = [];
+    const appliedLabels: string[] = []; // 변경알림용 — 반영된 묶음 이름(SKU)
 
     for (const b of bundles) {
       const parentSku = String(b.parentSku || "").trim();
@@ -99,6 +101,15 @@ export async function POST(req: NextRequest) {
       const insb = await sb.from("product_bundles").insert(rows);
       if (insb.error) { errors.push(`${parentSku}: ${insb.error.message}`); continue; }
       applied++;
+      appliedLabels.push(`${String(b.name || "").trim() || parentSku} (${parentSku}) — 구성 ${comps.length}종`);
+    }
+
+    if (applied > 0) {
+      await notifyMasterChange("bundle", [
+        `묶음 구성 변경 — ${applied}건${created > 0 ? ` (신규 세트 ${created}개)` : ""}`,
+        ...appliedLabels.slice(0, 10).map((s) => `- ${s}`),
+        ...(appliedLabels.length > 10 ? [`외 ${appliedLabels.length - 10}건`] : []),
+      ]);
     }
 
     return NextResponse.json({ ok: errors.length === 0, applied, created, errors });
