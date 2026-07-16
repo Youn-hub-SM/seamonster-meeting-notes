@@ -107,7 +107,7 @@ export default function BundlesPage() {
         </div>
       )}
 
-      <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>※ 개별 편집은 <strong>상품 마스터</strong>의 각 상품 ‘묶음’ 버튼에서도 가능합니다. 구성품은 이미 등록된 상품이어야 하며, 묶음SKU가 없으면 업로드 시 최소 정보로 자동 생성됩니다.</p>
+      <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>구성품은 등록된 상품이어야 하며, 없는 묶음 SKU는 최소 정보로 자동 생성됩니다</p>
 
       {/* 미리보기 → 반영 */}
       {preview && (
@@ -217,7 +217,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             <div className="b2b-field"><label className="b2b-field-label">품목명(묶음명)</label>
               <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 대구 실속세트" /></div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>이 SKU가 상품에 없으면 자동 생성됩니다. 아래 정보까지 넣으면 상품마스터에 갈 필요가 없습니다.</p>
+          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>SKU가 상품 마스터에 없으면 자동 생성됩니다</p>
           <div className="b2b-field-label" style={{ fontWeight: 700 }}>구성품</div>
           {rows.map((r, i) => (
             <div key={i} className="promo-item-row">
