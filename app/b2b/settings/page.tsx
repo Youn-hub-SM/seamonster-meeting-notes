@@ -440,7 +440,7 @@ export default function SettingsPage() {
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
               <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>수신 채팅방 ID</span>
-                <input className="b2b-input" value={mn.roomId} onChange={(e) => setMn({ ...mn, roomId: e.target.value })} placeholder="예: 300003566171 (숫자만)" /></label>
+                <input className="b2b-input" value={mn.roomId} onChange={(e) => setMn({ ...mn, roomId: e.target.value })} placeholder="예: 3403419 (숫자만)" /></label>
               <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>작성자 ID</span>
                 <input className="b2b-input" value={mn.registerId} onChange={(e) => setMn({ ...mn, registerId: e.target.value })} placeholder="seamonster.kr2@gmail.com" /></label>
               <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>알림 제목</span>

@@ -27,7 +27,7 @@ export type MasterNotifyConfig = {
 
 const DEFAULTS: MasterNotifyConfig = {
   enabled: false,
-  roomId: "",
+  roomId: "3403419", // 업무도우미 변경알림 채팅방
   registerId: "seamonster.kr2@gmail.com",
   title: "[업무도우미 변경알림]",
   events: { created: true, updated: true, deleted: true, bundle: true, import: true },
