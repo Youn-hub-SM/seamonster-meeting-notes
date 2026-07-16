@@ -44,7 +44,7 @@ function presetRange(key: string): { since: string; until: string } {
 }
 const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : `${r.since} ~ ${r.until}`; };
 
-type StageInfo = { key: string; label: string; color: string; action?: string };
+type StageInfo = { key: string; label: string; tone: Tone; action?: string };
 const STAGE_SHORT: Record<string, string> = {
   material: "소재테스트 캠페인", performance: "성과테스트", scale: "증액 권장", decline: "효율 하락", insufficient: "데이터 부족",
   pass: "우수소재", danger: "위험소재", fail: "관찰", testing: "테스트 중", sub: "본 캠페인 하위",
@@ -55,8 +55,18 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   const s: CSSProperties = { fontSize: 13, padding: "5px 12px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", fontWeight: on ? 700 : 500, border: on ? "1px solid var(--sm-orange)" : "1px solid var(--sm-border)", background: on ? "var(--sm-orange-light)" : "var(--sm-white)", color: on ? "var(--sm-orange-hover)" : "var(--sm-text-mid)" };
   return <button type="button" onClick={onClick} style={s}>{children}</button>;
 }
-function Badge({ color, children }: { color: string; children: React.ReactNode }) {
-  return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: `${color}1a`, color, whiteSpace: "nowrap" }}>{children}</span>;
+// 단계 배지 색 — 시맨틱 토큰 fg/bg 쌍. (구 `${color}1a` hex-알파 접합은 CSS 변수와 호환 안 돼 제거)
+const TONE = {
+  info: { fg: "var(--sm-info)", bg: "var(--sm-info-bg)" },
+  success: { fg: "var(--sm-success)", bg: "var(--sm-success-bg)" },
+  brand: { fg: "var(--sm-orange)", bg: "var(--sm-orange-light)" },
+  danger: { fg: "var(--sm-danger)", bg: "var(--sm-danger-bg)" },
+  muted: { fg: "var(--sm-text-mid)", bg: "var(--sm-bg-subtle)" },
+} as const;
+type Tone = (typeof TONE)[keyof typeof TONE];
+
+function Badge({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: tone.bg, color: tone.fg, whiteSpace: "nowrap" }}>{children}</span>;
 }
 
 // 본 캠페인 진입용 광고세트 이름 만들기: "yyyy-mm-dd 메시지"
@@ -175,44 +185,44 @@ export default function MetaAdPage() {
 
   const classifyCampaign = useCallback((c: Campaign): StageInfo => {
     const s = c.stat;
-    if (!c.cbo) return { key: "material", label: "① 소재테스트 캠페인", color: "#4c6ef5", action: "광고세트 탭에서 소재별로 판정" };
+    if (!c.cbo) return { key: "material", label: "① 소재테스트 캠페인", tone: TONE.info, action: "광고세트 탭에서 소재별로 판정" };
     const budget = Number(c.daily_budget) || 0;
     const up = Math.round(budget * (1 + (th?.scalePct ?? 0) / 100));
-    if (s.spend < (th?.minSpend ?? 0)) return { key: "insufficient", label: "성과테스트 · 데이터 부족", color: "#868e96", action: `지출 ${won(th?.minSpend)}원까지 대기 후 판정` };
+    if (s.spend < (th?.minSpend ?? 0)) return { key: "insufficient", label: "성과테스트 · 데이터 부족", tone: TONE.muted, action: `지출 ${won(th?.minSpend)}원까지 대기 후 판정` };
     if (s.roas >= (th?.scaleRoas ?? 99)) {
       // 고른 기간의 평균만 보면 하루 반짝 성과에도 증액 권장이 뜬다. 최근 N일 연속 충족을 함께 본다.
       const need = Math.max(1, th?.scaleDays ?? 1);
       const streak = scaleStreak(c);
-      if (streak < need) return { key: "performance", label: "② 성과테스트(운영)", color: "#f76707", action: `증액 대기 — ROAS ${th?.scaleRoas} 이상 ${streak}/${need}일 연속 (${need}일 채우면 증액 권장)` };
+      if (streak < need) return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: `증액 대기 — ROAS ${th?.scaleRoas} 이상 ${streak}/${need}일 연속 (${need}일 채우면 증액 권장)` };
       const cooling = scaleCooldown(c.id);
-      if (cooling) return { key: "performance", label: "② 성과테스트(운영)", color: "#f76707", action: cooling };
-      return { key: "scale", label: `③ 증액 권장 +${th?.scalePct}%`, color: "#2f9e44", action: budget ? `증액: 일 ${won(budget)}원 → ${won(up)}원 (+${th?.scalePct}%, ${need}일 연속 ROAS ${th?.scaleRoas}↑)` : `예산 +${th?.scalePct}% 증액 — 총 예산 캠페인이라 메타에서 직접 조정` };
+      if (cooling) return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: cooling };
+      return { key: "scale", label: `③ 증액 권장 +${th?.scalePct}%`, tone: TONE.success, action: budget ? `증액: 일 ${won(budget)}원 → ${won(up)}원 (+${th?.scalePct}%, ${need}일 연속 ROAS ${th?.scaleRoas}↑)` : `예산 +${th?.scalePct}% 증액 — 총 예산 캠페인이라 메타에서 직접 조정` };
     }
-    if (s.roas < (th?.declineRoas ?? 0)) return { key: "decline", label: "④ 효율 하락", color: "#e03131", action: "소재 점검 후 교체 · 개선 없으면 예산 축소/종료" };
-    return { key: "performance", label: "② 성과테스트(운영)", color: "#f76707", action: "운영 유지 · 모니터링" };
+    if (s.roas < (th?.declineRoas ?? 0)) return { key: "decline", label: "④ 효율 하락", tone: TONE.danger, action: "소재 점검 후 교체 · 개선 없으면 예산 축소/종료" };
+    return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: "운영 유지 · 모니터링" };
   }, [th, scaleStreak, scaleCooldown]);
 
   const classifyAdset = useCallback((a: Adset): StageInfo => {
-    if (!a.abo) return { key: "sub", label: "본 캠페인 하위 세트", color: "#adb5bd", action: "본 캠페인(CBO) 소속 — 캠페인 탭에서 관리" };
+    if (!a.abo) return { key: "sub", label: "본 캠페인 하위 세트", tone: TONE.muted, action: "본 캠페인(CBO) 소속 — 캠페인 탭에서 관리" };
     const s = a.stat;
     const creatives = adsByAdset[a.id] || 1;
     const recBudget = (th?.testDailyPerCreative || 0) * creatives;
     const budgetNote = `권장 일예산 ${won(recBudget)}원 (소재 ${creatives}개 × ${won(th?.testDailyPerCreative)}원)`;
-    if (s.spend < (th?.minSpend ?? 0)) return { key: "testing", label: "① 테스트 중", color: "#868e96", action: `${th?.testDays}일/지출 ${won(th?.minSpend)}원까지 유지 · ${budgetNote}` };
+    if (s.spend < (th?.minSpend ?? 0)) return { key: "testing", label: "① 테스트 중", tone: TONE.muted, action: `${th?.testDays}일/지출 ${won(th?.minSpend)}원까지 유지 · ${budgetNote}` };
     const roasOk = s.roas >= (th?.aboPassRoas ?? 99);
     const cpaOk = (th?.aboMaxCpa ?? 0) > 0 && s.cpa > 0 && s.cpa <= (th?.aboMaxCpa ?? 0);
     const beatOk = !!th?.beatLiveCampaign && liveCampaignRoas > 0 && s.roas >= liveCampaignRoas;
     const pass = s.purchases >= (th?.aboMinPurchases ?? 1) && (roasOk || cpaOk || beatOk);
     if (pass) {
       const why = roasOk ? `ROAS ${roasFmt(s.roas)}≥${th?.aboPassRoas}` : beatOk ? `현 캠페인 ROAS ${roasFmt(liveCampaignRoas)} 상회` : cpaOk ? `CPA ${won(s.cpa)}≤${won(th?.aboMaxCpa)}` : "기준 충족";
-      return { key: "pass", label: "우수소재 → 본 캠페인", color: "#2f9e44", action: `본 캠페인(CBO)에 새 세트로 추가 · 이름 "${today} 메시지" (${why})` };
+      return { key: "pass", label: "우수소재 → 본 캠페인", tone: TONE.success, action: `본 캠페인(CBO)에 새 세트로 추가 · 이름 "${today} 메시지" (${why})` };
     }
     // 위험: 전환은 충분한데 ROAS가 하락 기준 미만 → 교체/종료
     if (s.purchases >= (th?.aboMinPurchases ?? 1) && s.roas < (th?.declineRoas ?? 0)) {
-      return { key: "danger", label: "위험소재", color: "#e03131", action: `ROAS ${roasFmt(s.roas)} < ${th?.declineRoas} — 소재 교체 또는 종료` };
+      return { key: "danger", label: "위험소재", tone: TONE.danger, action: `ROAS ${roasFmt(s.roas)} < ${th?.declineRoas} — 소재 교체 또는 종료` };
     }
     const why = s.purchases < (th?.aboMinPurchases ?? 1) ? `전환 ${s.purchases}건 (기준 ${th?.aboMinPurchases})` : `ROAS ${roasFmt(s.roas)}`;
-    return { key: "fail", label: "관찰 필요", color: "#868e96", action: `기준 미달(${why}) — 관찰 또는 소재 교체` };
+    return { key: "fail", label: "관찰 필요", tone: TONE.muted, action: `기준 미달(${why}) — 관찰 또는 소재 교체` };
   }, [th, adsByAdset, liveCampaignRoas, today]);
 
   const classify = useCallback((r: Campaign | Adset | Ad): StageInfo | null => {
@@ -296,7 +306,7 @@ export default function MetaAdPage() {
     return (
       <button onClick={() => toggle(id, st, name)} disabled={busy} title={on ? "끄기" : "켜기"}
         style={{ width: 40, height: 22, borderRadius: 999, border: "none", cursor: busy ? "wait" : "pointer", background: on ? "var(--sm-success)" : "var(--sm-border)", position: "relative", opacity: busy ? 0.5 : 1, flex: "0 0 auto" }}>
-        <span style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "left .15s" }} />
+        <span style={{ position: "absolute", top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "var(--sm-white)", transition: "left .15s" }} />
       </button>
     );
   };
@@ -306,7 +316,7 @@ export default function MetaAdPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">메타 광고</h1>
-          <p className="b2b-page-subtitle">소재테스트 → 우수소재 → 본 캠페인 → 증액. 각 광고의 <b>다음 행동</b>을 규칙대로 안내합니다. {status?.account?.name ? <b>· {status.account.name}</b> : null} <Link href="/meta-ad/settings">성과 목표·기준 설정</Link> · <Link href="/meta-ad/library">소재 라이브러리</Link></p>
+          {status?.account?.name && <p className="b2b-page-subtitle">연결 계정 · {status.account.name}</p>}
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
@@ -317,7 +327,7 @@ export default function MetaAdPage() {
       </header>
 
       {status && !status.configured && (
-        <div className="b2b-error" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "1px solid #f0d9a8" }}>
+        <div className="sm-warn">
           <strong>메타 API 연결 대기 중.</strong> <code>META_ACCESS_TOKEN</code>·<code>META_AD_ACCOUNT_ID</code> 를 넣으세요.
         </div>
       )}
@@ -381,17 +391,17 @@ export default function MetaAdPage() {
           })()}
 
           {/* 운영 규칙(플레이북) */}
-          <div className="b2b-card" style={{ padding: 0, marginBottom: 12, borderColor: "var(--sm-orange-border, #f0c9a8)" }}>
+          <div className="b2b-card" style={{ padding: 0, marginBottom: 12, borderColor: "var(--sm-orange-border)" }}>
             <button type="button" onClick={() => setShowPlaybook((v) => !v)}
               style={{ width: "100%", textAlign: "left", background: "var(--sm-orange-light)", border: "none", cursor: "pointer", padding: "10px 14px", borderRadius: showPlaybook ? "10px 10px 0 0" : 10, fontSize: 13.5, fontWeight: 800, color: "var(--sm-orange-hover)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>운영 규칙 (플레이북)</span><span style={{ fontSize: 13 }}>{showPlaybook ? "접기 ▲" : "펼치기 ▼"}</span>
             </button>
             {showPlaybook && (
               <div style={{ padding: 14, display: "grid", gap: 10, fontSize: 13, lineHeight: 1.55 }}>
-                <div><Badge color="#4c6ef5">① 소재테스트 (ABO)</Badge> <b>1세트=1소재</b>, 소재당 <b>{won(th.testDailyPerCreative)}원/일 · {th.testDays}일</b>. AB테스트는 한 세트에 소재를 몰아넣고 소재당 예산 추가(2개=일 {won(th.testDailyPerCreative * 2)}원).</div>
-                <div><Badge color="#2f9e44">② 우수소재</Badge> 다음 중 하나 충족 → <b>ROAS ≥ {th.aboPassRoas}</b>{th.aboMaxCpa > 0 ? <> · <b>CPA ≤ {won(th.aboMaxCpa)}원</b></> : null}{th.beatLiveCampaign ? <> · <b>현 캠페인 ROAS 상회</b>{liveCampaignRoas > 0 ? <span className="sm-faint">(현재 {roasFmt(liveCampaignRoas)})</span> : null}</> : null}.</div>
-                <div><Badge color="#f76707">③ 본 캠페인 진입 (CBO)</Badge> 우수소재는 <b>기존 본 캠페인에 새 광고세트로 추가</b>. 세트 이름은 <code>yyyy-mm-dd 주요 메시지</code>.</div>
-                <div><Badge color="#e03131">④ 증액</Badge> <b>ROAS ≥ {th.scaleRoas} 를 {th.scaleDays}일 연속</b> 유지한 캠페인만 <b>+{th.scalePct}%</b> 증액. 올린 뒤 <b>{SCALE_COOLDOWN_DAYS}일</b>은 다시 올리지 않는다(주 1회).</div>
+                <div><Badge tone={TONE.info}>① 소재테스트 (ABO)</Badge> <b>1세트=1소재</b>, 소재당 <b>{won(th.testDailyPerCreative)}원/일 · {th.testDays}일</b>. AB테스트는 한 세트에 소재를 몰아넣고 소재당 예산 추가(2개=일 {won(th.testDailyPerCreative * 2)}원).</div>
+                <div><Badge tone={TONE.success}>② 우수소재</Badge> 다음 중 하나 충족 → <b>ROAS ≥ {th.aboPassRoas}</b>{th.aboMaxCpa > 0 ? <> · <b>CPA ≤ {won(th.aboMaxCpa)}원</b></> : null}{th.beatLiveCampaign ? <> · <b>현 캠페인 ROAS 상회</b>{liveCampaignRoas > 0 ? <span className="sm-faint">(현재 {roasFmt(liveCampaignRoas)})</span> : null}</> : null}.</div>
+                <div><Badge tone={TONE.brand}>③ 본 캠페인 진입 (CBO)</Badge> 우수소재는 <b>기존 본 캠페인에 새 광고세트로 추가</b>. 세트 이름은 <code>yyyy-mm-dd 주요 메시지</code>.</div>
+                <div><Badge tone={TONE.success}>④ 증액</Badge> <b>ROAS ≥ {th.scaleRoas} 를 {th.scaleDays}일 연속</b> 유지한 캠페인만 <b>+{th.scalePct}%</b> 증액. 올린 뒤 <b>{SCALE_COOLDOWN_DAYS}일</b>은 다시 올리지 않는다(주 1회).</div>
                 <div style={{ borderTop: "1px dashed var(--sm-border)", paddingTop: 10 }}><NameHelper today={today} /></div>
               </div>
             )}
@@ -441,14 +451,14 @@ export default function MetaAdPage() {
                   {shown.map((r) => {
                     const s = r.stat; const budget = "daily_budget" in r ? (r.daily_budget || r.lifetime_budget) : undefined;
                     const stage = classify(r);
-                    const roasColor = s.spend >= (th?.minSpend ?? 0) && s.purchases > 0 ? (s.roas >= (th?.scaleRoas ?? 99) ? "var(--sm-success)" : s.roas < (th?.declineRoas ?? 0) ? "#e03131" : undefined) : undefined;
+                    const roasColor = s.spend >= (th?.minSpend ?? 0) && s.purchases > 0 ? (s.roas >= (th?.scaleRoas ?? 99) ? "var(--sm-success)" : s.roas < (th?.declineRoas ?? 0) ? "var(--sm-danger)" : undefined) : undefined;
                     return (
                       <tr key={r.id} style={r.effective_status !== "ACTIVE" && r.status !== "ACTIVE" ? { opacity: 0.55 } : undefined}>
                         <td><Switch id={r.id} st={r.status} name={r.name} /></td>
                         <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}
                           {tab === "campaign" && adsetByCampaign[r.id] ? <span className="sm-faint" style={{ fontSize: 13 }}> · 세트 {adsetByCampaign[r.id]}</span> : null}</td>
                         <td style={{ minWidth: 200, maxWidth: 320 }}>
-                          {stage ? <Badge color={stage.color}>{stage.label}</Badge> : null}
+                          {stage ? <Badge tone={stage.tone}>{stage.label}</Badge> : null}
                           {stage?.action ? <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 3, lineHeight: 1.4, whiteSpace: "normal" }}>{stage.action}</div> : null}
                         </td>
                         <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.spend)}</td>
@@ -473,7 +483,7 @@ export default function MetaAdPage() {
                     );
                   })}
                 </tbody>
-                <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-soft,#fafafa)" }}>
+                <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
                   <td></td><td>합계 {shown.length}</td><td></td>
                   <td className="num b2b-money">{won(totals.spend)}</td><td className="num b2b-money">{won(totals.purch)}</td>
                   <td className="num b2b-money">{won(totals.val)}</td><td className="num b2b-money" style={{ color: "var(--sm-orange)" }}>{roasFmt(blendRoas)}</td>

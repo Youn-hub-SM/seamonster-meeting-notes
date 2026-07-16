@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 
 type Thresholds = {
   minSpend: number;
@@ -75,7 +74,6 @@ export default function MetaAdSettingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">메타 광고 · 판정 기준 설정</h1>
-          <p className="b2b-page-subtitle">소재테스트 예산·우수소재 기준·증액 규칙에 쓰이는 값입니다. 시기에 맞게 조정하세요. <Link href="/meta-ad">← 보드로</Link></p>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center" }}>
           {msg && <span style={{ fontSize: 13, color: "var(--sm-success)" }}>{msg}</span>}

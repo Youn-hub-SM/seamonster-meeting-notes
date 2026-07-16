@@ -1107,7 +1107,7 @@ a.b2b-history-item:hover {
 .kanban-col-body { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
 .kanban-empty { font-size: 11.5px; color: var(--sm-text-light); text-align: center; padding: 16px 0; }
 .kanban-card { background: var(--sm-white, #fff); border: 1px solid var(--sm-border); border-radius: 10px; padding: 10px 12px; }
-.kanban-card.is-overdue { border-color: #f0d9a8; background: var(--sm-warning-bg); }
+.kanban-card.is-overdue { border-color: var(--sm-warning-border); background: var(--sm-warning-bg); }
 .kanban-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .kanban-card-company { font-size: 12.5px; font-weight: 700; color: var(--sm-black); }
 .kanban-card-date { font-size: 11px; color: var(--sm-text-mid); font-variant-numeric: tabular-nums; flex-shrink: 0; }
@@ -1128,7 +1128,7 @@ a.b2b-history-item:hover {
 
 /* 설정 — 도매 de-mix 후보 */
 .demix-cand { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; padding: 6px 0; border-top: 1px solid var(--sm-border); }
-.demix-cand-name { flex: 1; min-width: 120px; color: var(--sm-text); }
+.demix-cand-name { flex: 1; min-width: 120px; color: var(--sm-black); }
 .demix-ok { font-size: 11px; color: var(--sm-success); font-weight: 600; white-space: nowrap; }
 .demix-bad { font-size: 11px; color: var(--sm-danger); font-weight: 700; white-space: nowrap; }
 
@@ -1137,7 +1137,7 @@ a.b2b-history-item:hover {
 .inv-demix-clamp { display: inline-block; margin-left: 5px; font-size: 9px; font-weight: 700; color: var(--sm-danger); background: rgba(201, 42, 42, 0.1); border-radius: 4px; padding: 0 4px; vertical-align: middle; }
 
 /* 재고·생산필요 — 생산요청 마감 */
-.inv-deadline-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--sm-warning-bg); border: 1px solid #f0d9a8; border-radius: 10px; padding: 11px 14px; margin-bottom: 14px; }
+.inv-deadline-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--sm-warning-bg); border: 1px solid var(--sm-warning-border); border-radius: 10px; padding: 11px 14px; margin-bottom: 14px; }
 .inv-dl-text { flex: 1; min-width: 200px; font-size: 12.5px; line-height: 1.55; }
 .inv-dl-urgent { color: var(--sm-danger); font-weight: 700; }
 .inv-dl-soon { color: var(--sm-warning); font-weight: 700; }
@@ -1155,19 +1155,19 @@ a.b2b-history-item:hover {
 .inv-bd-promo { color: var(--sm-info); }
 .inv-bd-adj { color: var(--sm-success); }
 .inv-adj-btn { background: none; border: 1px dashed var(--sm-border); border-radius: 7px; padding: 3px 8px; cursor: pointer; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--sm-text-mid); }
-.inv-adj-btn:hover { border-color: var(--sm-text-light); background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
+.inv-adj-btn:hover { border-color: var(--sm-text-light); background: var(--sm-bg-subtle); }
 .inv-adj-set { color: var(--sm-success); font-weight: 700; }
 .inv-adj-expired { color: var(--sm-text-light); text-decoration: line-through; }
 .inv-adj-empty { color: var(--sm-text-light); }
 .inv-adj-until { display: block; font-size: 9px; color: var(--sm-text-light); font-weight: 400; }
 .inv-modal-auto { font-size: 12.5px; color: var(--sm-text-mid); margin: 0; line-height: 1.55; }
-.inv-modal-preview { font-size: 13px; color: var(--sm-text); margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--sm-border); }
+.inv-modal-preview { font-size: 13px; color: var(--sm-black); margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--sm-border); }
 .inv-field-hint { font-size: 10.5px; color: var(--sm-text-light); line-height: 1.5; }
 
 /* VOC 예정 기능 로드맵 카드 */
 .voc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .voc-card { display: block; border: 1px solid var(--sm-border); border-radius: 12px; padding: 16px 16px 18px; background: var(--sm-white); transition: border-color 0.15s, box-shadow 0.15s; }
-.voc-card:hover { border-color: var(--sm-orange-border, #f0d9d0); box-shadow: var(--sm-shadow-card); }
+.voc-card:hover { border-color: var(--sm-orange-border); box-shadow: var(--sm-shadow-card); }
 .voc-card-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--sm-black); }
 .voc-soon { font-size: 9.5px; font-weight: 700; color: var(--sm-text-light); background: var(--sm-bg); border: 1px solid var(--sm-border); border-radius: 5px; padding: 1px 6px; }
 .voc-card-desc { margin-top: 6px; font-size: 12px; color: var(--sm-text-mid); line-height: 1.55; }
@@ -1183,11 +1183,11 @@ a.b2b-history-item:hover {
 .tl-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .tl-table th, .tl-table td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--sm-border); white-space: nowrap; }
 .tl-table tbody tr:last-child td { border-bottom: none; }
-.tl-table th { font-size: 11px; font-weight: 600; color: var(--sm-text-mid); background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
+.tl-table th { font-size: 11px; font-weight: 600; color: var(--sm-text-mid); background: var(--sm-bg-subtle); }
 .tl-th-sub { display: block; font-size: 9.5px; font-weight: 500; color: var(--sm-text-light); margin-top: 1px; }
 .tl-item-h, .tl-item { text-align: left !important; min-width: 170px; position: sticky; left: 0; background: #fff; z-index: 1; }
-.tl-table th.tl-item-h { background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
-.tl-item-name { font-weight: 600; color: var(--sm-text); }
+.tl-table th.tl-item-h { background: var(--sm-bg-subtle); }
+.tl-item-name { font-weight: 600; color: var(--sm-black); }
 .tl-item-spec { font-size: 10.5px; color: var(--sm-text-light); }
 .tl-row-bad td.tl-item { box-shadow: inset 3px 0 0 #e5484d; }
 .tl-cell { position: relative; min-width: 76px; }
@@ -1195,17 +1195,17 @@ a.b2b-history-item:hover {
 .tl-num { position: relative; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tl-new { position: relative; display: block; font-size: 10px; color: var(--sm-text-light); margin-top: 1px; }
 .tl-h-overdue, .tl-overdue { background: rgba(229, 72, 77, 0.05); }
-.tl-h-none, .tl-none { background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
+.tl-h-none, .tl-none { background: var(--sm-bg-subtle); }
 .tl-clickable { cursor: pointer; user-select: none; }
-.tl-clickable:hover { background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
+.tl-clickable:hover { background: var(--sm-bg-subtle); }
 .tl-caret { display: inline-block; color: var(--sm-text-light); font-size: 10px; margin-right: 5px; transition: transform 0.12s; }
 .tl-caret.is-open { transform: rotate(90deg); }
-.tl-row-open td { background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
-.tl-row-open td.tl-item { background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
+.tl-row-open td { background: var(--sm-bg-subtle); }
+.tl-row-open td.tl-item { background: var(--sm-bg-subtle); }
 .tl-detail-row td { padding: 0 !important; background: var(--sm-bg-subtle); }
 .tl-batches { display: flex; flex-direction: column; gap: 7px; padding: 11px 16px 13px; }
 .tl-batch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11.5px; }
-.tl-batch-date { font-weight: 700; min-width: 60px; color: var(--sm-text); }
+.tl-batch-date { font-weight: 700; min-width: 60px; color: var(--sm-black); }
 .tl-batch-date.is-overdue { color: var(--sm-danger); }
 .tl-batch-st { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 10px; white-space: nowrap; }
 .tl-batch-st.st-생산대기 { background: #eceef1; color: #6b7280; }
@@ -1214,7 +1214,7 @@ a.b2b-history-item:hover {
 .tl-batch-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
 .tl-batch-btns { display: flex; gap: 6px; }
 .tl-batch-btns button { font-size: 11px; padding: 3px 10px; border: 1px solid var(--sm-border); border-radius: 7px; background: #fff; cursor: pointer; color: var(--sm-text-mid); white-space: nowrap; }
-.tl-batch-btns button:hover { background: var(--sm-bg-soft, var(--sm-bg-subtle)); }
+.tl-batch-btns button:hover { background: var(--sm-bg-subtle); }
 .tl-done-btn { border-color: var(--sm-success) !important; color: var(--sm-success) !important; font-weight: 600; }
 .tl-done-btn:hover { background: rgba(34, 134, 58, 0.07) !important; }
 
@@ -1338,6 +1338,9 @@ a.b2b-history-item:hover {
   .prod-cal-layout { grid-template-columns: 1fr; }
   .prod-cal-cell { min-height: 60px; }
   .prod-side-list { max-height: none; }
+  /* 좁은 셀(≈44px)에서 수량이 잘리지 않게 — 패딩·폰트 축소 */
+  .prod-cal-item { padding: 2px 3px; gap: 3px; font-size: 10px; }
+  .prod-cal-item-more { font-size: 9px; }
 }
 
 .b2b-table th {
@@ -1468,9 +1471,9 @@ a.b2b-history-item:hover {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  background: #EEF2F6;
-  color: #475569;
-  border: 1px solid #dbe2ea;
+  background: var(--sm-bg-subtle);
+  color: var(--sm-text-mid);
+  border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius-pill);
   padding: 4px 10px;
   font-size: 11px;
@@ -1480,7 +1483,7 @@ a.b2b-history-item:hover {
   white-space: nowrap;
 }
 .b2b-parent-toggle:hover {
-  background: #e4eaf0;
+  background: var(--sm-bg);
 }
 .b2b-table tr.is-parent > td {
   background: var(--sm-bg-subtle);
@@ -2499,13 +2502,15 @@ a.b2b-history-item:hover {
     border-radius: 12px;
   }
 
-  /* 대시보드 카드: 2열 */
+  /* 대시보드 카드: 2열 — 8자리 금액("12,345,678원")이 카드 폭(≈135px)을 안 넘게 값 폰트 축소 + 줄바꿈 백스톱 */
   .b2b-dash-grid {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
   }
+  .b2b-stat-card { min-width: 0; }
   .b2b-stat-card-value {
-    font-size: 23px;
+    font-size: 20px;
+    overflow-wrap: anywhere;
   }
 
   /* 이번 주 일정: 요일을 세로 행으로 (요일 라벨 좌측 고정) */
@@ -2551,6 +2556,7 @@ a.b2b-history-item:hover {
     max-width: none;
     border-radius: 18px 18px 0 0;
     max-height: 92vh;
+    max-height: 92dvh; /* iOS 주소창 노출 시 모달 상단(제목·닫기)이 잘리지 않게 */
   }
   .b2b-modal-foot {
     flex-wrap: wrap;
@@ -2580,12 +2586,12 @@ a.b2b-history-item:hover {
     padding: 10px 12px;
   }
 
-  /* 입력 폰트 16px 유지 (iOS 자동 줌 방지) */
+  /* 입력 폰트 16px 유지 — iOS 는 16px 미만이면 포커스 시 자동 확대(15px 는 발동함) */
   .b2b-input,
   .b2b-textarea,
   .b2b-select,
   .b2b-search {
-    font-size: 15px;
+    font-size: 16px;
   }
 }
 
@@ -2725,7 +2731,7 @@ a.b2b-history-item:hover {
   background: rgba(201, 42, 42, 0.03);
 }
 .b2b-order-card.is-urgent {
-  border-color: #f0d9a8;
+  border-color: var(--sm-warning-border);
   background: rgba(184, 110, 0, 0.03);
 }
 
@@ -2840,7 +2846,7 @@ a.b2b-history-item:hover {
     width: 100%;
     min-width: 0;
     text-align: left !important;
-    font-size: 15px; /* iOS 줌 방지 */
+    font-size: 16px; /* iOS 줌 방지 — 16px 미만이면 발동 */
     padding: 9px 11px;
   }
   /* 금액(계산값) 행 */
