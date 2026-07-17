@@ -136,6 +136,7 @@ export const NAV: NavCategory[] = [
     label: "기타",
     tools: [
       { href: "/guide", label: "사용 가이드", icon: "book" },
+      { href: "/updates", label: "업데이트 노트", icon: "note" },
       { href: "/report", label: "커스텀 리포트", icon: "bars" },
       { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
       { href: "/meeting", label: "회의 정리", icon: "note" },
