@@ -18,7 +18,7 @@ export default function InventoryReconcilePage() {
   const [range, setRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [channel, setChannel] = useState<InvChannelFilter>("전체");
+  const [channel, setChannel] = useState<InvChannelFilter>("소매"); // 도매는 B2B 발주에서 따로 관리 — 이 화면 기본은 소매만
   const [from, setFrom] = useState(kstDay(6));   // 기본: 최근 7일
   const [to, setTo] = useState(kstDay(0));
   const [q, setQ] = useState("");
