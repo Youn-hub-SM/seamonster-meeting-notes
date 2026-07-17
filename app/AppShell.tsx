@@ -45,7 +45,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="app-main">
         <div className="app-topbar">
           <button type="button" className="app-sb-toggle" onClick={() => setOpen(true)} aria-label="메뉴" aria-expanded={open}>☰</button>
-          <Link href="/" className="app-topbar-brand">씨몬스터</Link>
+          <Link href="/" className="app-topbar-brand">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="씨몬스터" style={{ height: 18, width: "auto", display: "block" }} />
+          </Link>
         </div>
         {children}
       </div>

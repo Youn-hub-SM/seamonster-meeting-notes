@@ -182,7 +182,10 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   return (
     <aside className={`app-sidebar ${open ? "is-open" : ""}`}>
       <div className="app-sb-head">
-        <Link href="/" className="app-sb-brand" onClick={onNavigate}>씨몬스터</Link>
+        <Link href="/" className="app-sb-brand" onClick={onNavigate}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="씨몬스터" style={{ height: 22, width: "auto", display: "block" }} />
+        </Link>
         {onToggleCollapse && (
           <button type="button" className="app-sb-collapse" onClick={onToggleCollapse}
             aria-label={collapsed ? "메뉴 펼치기" : "메뉴 접기"} title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}>
