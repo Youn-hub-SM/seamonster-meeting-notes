@@ -478,11 +478,11 @@ function RequestModal({ initial, products, busy, onClose, onSubmit }: {
                       <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
                       <td className="num"><input type="number" className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder="0" /></td>
                       <td><input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" /></td>
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         {l.received > 0 ? (
                           <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="입고 기록이 있어 뺄 수 없습니다">입고 {l.received.toLocaleString()}</span>
                         ) : (
-                          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => removeLine(i)}>삭제</button>
+                          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", whiteSpace: "nowrap" }} onClick={() => removeLine(i)}>삭제</button>
                         )}
                       </td>
                     </tr>

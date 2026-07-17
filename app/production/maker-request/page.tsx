@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 function todayIso() { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; }
 
-type AggRow = { name: string; spec: string; qty: number; manual: boolean };
+type AggRow = { name: string; spec: string; qty: number; manual: boolean; wholesale: boolean };
 type AggData = { from: string; to: string; label: string; rows: AggRow[]; total: number };
 const PERIODS = [1, 7, 14, 30] as const;
 
@@ -70,7 +70,12 @@ export default function MakerRequestPage() {
                   <td>{r.name}</td>
                   <td>{r.spec || "-"}</td>
                   <td className="num"><strong>{r.qty.toLocaleString()}</strong></td>
-                  <td>{r.manual ? <span className="prod-side-manual-tag">직접</span> : ""}</td>
+                  <td>
+                    <span className="sm-row" style={{ gap: 4 }}>
+                      {r.manual && <span className="prod-side-manual-tag">직접</span>}
+                      {r.wholesale && <span className="prod-side-manual-tag">도매</span>}
+                    </span>
+                  </td>
                 </tr>
               ))}
               <tr>

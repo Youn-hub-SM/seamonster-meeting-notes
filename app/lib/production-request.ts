@@ -1,10 +1,11 @@
 import { supabaseAdmin } from "./supabase";
 import { getManualProductions } from "./production-manual";
 import { loadProdItemMaps } from "./production-items";
+import { loadRequests } from "./wholesale-production-db";
 
 // ─────────────────────────────────────────────
 // 생산요청서 — 제조사에 보낼 "이 기간에 이 품목 몇 개 생산" 집계.
-//  생산예정일(production_date / 수동 productionDate) 기준으로 일/주/월 범위 집계.
+//  B2B 발주=생산예정일, 수동 일정=생산일, 도매 생산요청=생산마감일 기준(생산 일정 화면과 동일 축).
 // ─────────────────────────────────────────────
 
 export const PERIOD_DAYS = [1, 7, 14, 30] as const;
@@ -14,6 +15,7 @@ export interface RequestRow {
   spec: string;
   qty: number;
   manual: boolean;
+  wholesale: boolean; // 도매 생산요청분 포함 여부(비고 표시용)
 }
 
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
@@ -50,7 +52,7 @@ export async function getRequestRows(days: number, date: string): Promise<{ from
       const sku = it.product_id ? maps.skuByProduct.get(it.product_id) || null : null;
       const k = sku || `${it.product_name}|${spec}`;
       const name = sku ? maps.displayBySku.get(sku) || it.product_name : it.product_name;
-      const cur = map.get(k) || { name, spec, qty: 0, manual: false };
+      const cur = map.get(k) || { name, spec, qty: 0, manual: false, wholesale: false };
       cur.qty += Number(it.qty) || 0;
       map.set(k, cur);
     }
@@ -63,10 +65,31 @@ export async function getRequestRows(days: number, date: string): Promise<{ from
     const sku = (m.sku || "").toUpperCase() || null;
     const k = sku || `${m.name}|`;
     const name = sku ? maps.displayBySku.get(sku) || m.name : m.name;
-    const cur = map.get(k) || { name, spec: "", qty: 0, manual: true };
+    const cur = map.get(k) || { name, spec: "", qty: 0, manual: true, wholesale: false };
     cur.qty += m.qty;
     cur.manual = true;
     map.set(k, cur);
+  }
+
+  // 도매 생산요청(요청·진행중) — 생산마감일(없는 옛 데이터는 요청일) 기준, 남은 수량(요청-입고)만.
+  //  생산 일정 화면과 같은 축·같은 수량 규칙.
+  const wholesaleReqs = await loadRequests(sb);
+  for (const req of wholesaleReqs) {
+    if (req.status !== "요청" && req.status !== "진행중") continue;
+    const sched = req.due_date || req.request_date;
+    if (!sched || sched < from || sched > to) continue;
+    for (const it of req.items) {
+      const remaining = it.requested_qty - it.received_qty;
+      if (remaining <= 0) continue;
+      const sku = it.product_id ? maps.skuByProduct.get(it.product_id) || null : null;
+      const spec = (it.spec || "").trim();
+      const k = sku || `${it.name}|${spec}`;
+      const name = sku ? maps.displayBySku.get(sku) || it.name : it.name;
+      const cur = map.get(k) || { name, spec, qty: 0, manual: false, wholesale: true };
+      cur.qty += remaining;
+      cur.wholesale = true;
+      map.set(k, cur);
+    }
   }
 
   const rows = [...map.values()]

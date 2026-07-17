@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     header.font = { bold: true };
     header.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }; c.border = { bottom: { style: "thin", color: { argb: "FFCCCCCC" } } }; });
     for (const r of data.rows) {
-      const row = ws.addRow([r.name, r.spec || "", r.qty, r.manual ? "직접추가" : ""]);
+      const row = ws.addRow([r.name, r.spec || "", r.qty, [r.manual && "직접추가", r.wholesale && "도매요청"].filter(Boolean).join("·")]);
       row.getCell(3).numFmt = "#,##0";
     }
     ws.addRow([]);
