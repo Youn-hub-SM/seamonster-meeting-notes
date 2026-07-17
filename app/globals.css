@@ -3308,7 +3308,7 @@ a {
 
 /* 접힘(고정 끄기, 아이콘만) — 데스크톱 전용. 모바일 드로어엔 미적용 */
 @media (min-width: 901px) {
-  .app-shell.is-collapsed .app-sidebar { width: 60px; padding: 12px 6px; }
+  .app-shell.is-collapsed .app-sidebar { width: 60px; padding: 12px 6px; transition: width 0.18s ease, margin-right 0.18s ease, padding 0.18s ease; }
   .app-shell.is-collapsed .app-sb-brand { display: none; }
   .app-shell.is-collapsed .app-sb-head { justify-content: center; }
   .app-shell.is-collapsed .app-sb-collapse { margin-right: 0; }

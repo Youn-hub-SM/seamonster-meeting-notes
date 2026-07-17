@@ -26,6 +26,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   // 고정 끄기(collapsed) 상태에서 마우스 오버 시 임시 펼침. 고정을 끄는 순간에도
   //  포인터가 안에 있으므로 바로 레일로 줄지 않고, 마우스가 떠날 때 접힌다.
   const [hovering, setHovering] = useState(false);
+  const rail = !!collapsed && !hovering; // 아이콘만 보이는 레일 렌더 여부(호버 펼침 중엔 전체 메뉴 렌더)
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
   // 즐겨찾기 아코디언 — 기본 펼침, 상태는 사이드바 접기(sb_collapsed)와 같은 방식으로 기억
@@ -105,8 +106,8 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
   function renderTool(t: NavTool) {
     const active = toolActive(t, pathname);
-    // 접힘(아이콘만): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 라벨은 툴팁.
-    if (collapsed) {
+    // 레일(아이콘만): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 라벨은 툴팁.
+    if (rail) {
       const external = /^https?:\/\//.test(t.href);
       const inner = <span className="app-sb-emoji"><Icon name={t.icon} /></span>;
       return (
@@ -212,7 +213,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
         </div>
 
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
-        {!collapsed && userName && (
+        {!rail && userName && (
           <div className="app-sb-group">
             <div className="app-sb-cat" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button type="button" className="app-sb-cat-toggle" onClick={toggleFavOpen} aria-expanded={favOpen}>
