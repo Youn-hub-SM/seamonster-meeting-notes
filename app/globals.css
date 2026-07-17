@@ -3310,7 +3310,7 @@ a {
 @media (min-width: 901px) {
   .app-shell.is-collapsed .app-sidebar { width: 60px; padding: 12px 6px; transition: width 0.18s ease, margin-right 0.18s ease, padding 0.18s ease; }
   .app-shell.is-collapsed .app-sb-brand { display: none; }
-  .app-shell.is-collapsed .app-sb-head { justify-content: center; }
+  .app-shell.is-collapsed .app-sb-head { justify-content: center; margin-bottom: 14px; }
   .app-shell.is-collapsed .app-sb-collapse { margin-right: 0; }
   .app-shell.is-collapsed .app-sb-cat { display: none; }
   .app-shell.is-collapsed .app-sb-tool-label { display: none; }
@@ -3322,7 +3322,7 @@ a {
      (margin-right 음수) 본문 위로 겹쳐 펼친다 — 본문이 밀리지 않음. */
   .app-shell.is-collapsed .app-sidebar.is-hover-open { width: 236px; padding: 12px 10px; margin-right: -176px; box-shadow: 2px 0 16px rgba(0, 0, 0, 0.12); }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-brand { display: block; }
-  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-head { justify-content: flex-start; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-head { justify-content: flex-start; margin-bottom: 0; }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-collapse { margin-right: 2px; }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-cat { display: block; }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-tool-label { display: block; }
