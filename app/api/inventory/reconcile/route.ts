@@ -16,11 +16,12 @@ export async function GET(req: NextRequest) {
     const channel = (p.get("channel") || "").trim(); // "" | "도매" | "소매"
 
     const sb = supabaseAdmin();
+    // 매출 입력 최신일 — 화면의 '시차 안내'용(매출은 영업일에만 입력되므로 원장 출고보다 늦을 수 있음)
+    const { data: b } = await sb.rpc("sales_date_bounds");
+    const salesMax = Array.isArray(b) && b[0]?.max_date ? String(b[0].max_date) : null;
     if (!from || !to) {
-      const { data: b } = await sb.rpc("sales_date_bounds");
-      const max = Array.isArray(b) && b[0]?.max_date ? String(b[0].max_date) : null;
-      if (!max) return NextResponse.json({ ok: false, error: "매출 데이터가 없습니다." }, { status: 400 });
-      to = to || max;
+      if (!salesMax) return NextResponse.json({ ok: false, error: "매출 데이터가 없습니다." }, { status: 400 });
+      to = to || salesMax;
       if (!from) {
         const d = new Date(`${to}T00:00:00`);
         d.setDate(d.getDate() - 30);
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     });
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (051 적용 여부 확인)` }, { status: 500 });
 
-    return NextResponse.json({ ok: true, from, to, channel: channel || "전체", rows: data ?? [] });
+    return NextResponse.json({ ok: true, from, to, channel: channel || "전체", salesMax, rows: data ?? [] });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "대사 조회 실패") }, { status: 500 });
   }

@@ -16,6 +16,7 @@ const kstDay = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.se
 export default function InventoryReconcilePage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [range, setRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
+  const [salesMax, setSalesMax] = useState<string | null>(null); // 매출 입력 최신일(영업일에만 입력)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [channel, setChannel] = useState<InvChannelFilter>("소매"); // 도매는 B2B 발주에서 따로 관리 — 이 화면 기본은 소매만
@@ -36,6 +37,7 @@ export default function InventoryReconcilePage() {
       if (!j.ok) throw new Error(j.error || "불러오기 실패");
       setRows(j.rows || []);
       setRange({ from: j.from, to: j.to });
+      setSalesMax(j.salesMax || null);
     } catch (e) { setError(e instanceof Error ? e.message : "불러오기 오류"); }
     setLoading(false);
   }, [from, to, channel]);
@@ -102,7 +104,15 @@ export default function InventoryReconcilePage() {
       </div>
       <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 12px" }}>
         팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송)"}</strong>. 채널을 바꾸면 그 채널 재고와 그 채널 판매로 비교합니다.
+        {salesMax && <> · 매출 입력: <strong>~{salesMax}</strong></>}
       </p>
+      {salesMax && to > salesMax && (
+        <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sm-info-bg)", border: "1px solid var(--sm-info)", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
+          매출은 <strong>{salesMax}</strong>까지 입력돼 있습니다(영업일에만 입력). 그 이후에 나간 출고는 아직 비교할 매출이 없어서
+          <strong> 빠진 수가 팔린 수보다 커 보일 수 있어요</strong> — 다음 매출 입력 후 자동으로 맞춰집니다.
+          주문일과 발송일이 하루 이틀 어긋나는 것도 정상이니, 판정은 <strong>최근 7일</strong> 기준으로 보세요.
+        </div>
+      )}
 
       {error && <div className="b2b-error">{error}{error.includes("051") ? " — supabase/migrations/051_inventory_reconcile.sql 를 먼저 적용하세요." : ""}</div>}
 
