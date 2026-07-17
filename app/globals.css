@@ -3306,18 +3306,29 @@ a {
 .app-sb-collapse svg { display: block; transition: transform 0.18s ease; }
 @media (max-width: 900px) { .app-sb-collapse { display: none; } } /* 모바일은 드로어 — 접기 없음 */
 
-/* 접힘(아이콘만) — 데스크톱 전용. 모바일 드로어엔 미적용 */
+/* 접힘(고정 끄기, 아이콘만) — 데스크톱 전용. 모바일 드로어엔 미적용 */
 @media (min-width: 901px) {
   .app-shell.is-collapsed .app-sidebar { width: 60px; padding: 12px 6px; }
   .app-shell.is-collapsed .app-sb-brand { display: none; }
   .app-shell.is-collapsed .app-sb-head { justify-content: center; }
   .app-shell.is-collapsed .app-sb-collapse { margin-right: 0; }
-  .app-shell.is-collapsed .app-sb-collapse svg { transform: rotate(180deg); } /* « → » */
   .app-shell.is-collapsed .app-sb-cat { display: none; }
   .app-shell.is-collapsed .app-sb-tool-label { display: none; }
   .app-shell.is-collapsed .app-sb-tool { justify-content: center; gap: 0; padding: 9px 0; }
   .app-shell.is-collapsed .app-sb-group { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--sm-border); }
   .app-shell.is-collapsed .app-sb-foot { display: none; }
+
+  /* 고정 끄기 상태에서 마우스 오버 → 임시 펼침. 레이아웃 자리는 60px 그대로 두고
+     (margin-right 음수) 본문 위로 겹쳐 펼친다 — 본문이 밀리지 않음. */
+  .app-shell.is-collapsed .app-sidebar.is-hover-open { width: 236px; padding: 12px 10px; margin-right: -176px; box-shadow: 2px 0 16px rgba(0, 0, 0, 0.12); }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-brand { display: block; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-head { justify-content: flex-start; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-collapse { margin-right: 2px; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-cat { display: block; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-tool-label { display: block; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-tool { justify-content: flex-start; gap: 9px; padding: 8px 10px; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-group { margin-top: 12px; padding-top: 0; border-top: none; }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-foot { display: flex; }
 }
 
 /* 모바일 상단바(햄버거) — 데스크탑 숨김 */

@@ -23,6 +23,9 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
+  // 고정 끄기(collapsed) 상태에서 마우스 오버 시 임시 펼침. 고정을 끄는 순간에도
+  //  포인터가 안에 있으므로 바로 레일로 줄지 않고, 마우스가 떠날 때 접힌다.
+  const [hovering, setHovering] = useState(false);
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
   // 즐겨찾기 아코디언 — 기본 펼침, 상태는 사이드바 접기(sb_collapsed)와 같은 방식으로 기억
@@ -180,20 +183,24 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   }
 
   return (
-    <aside className={`app-sidebar ${open ? "is-open" : ""}`}>
+    <aside
+      className={`app-sidebar ${open ? "is-open" : ""} ${collapsed && hovering ? "is-hover-open" : ""}`}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
       <div className="app-sb-head">
+        {onToggleCollapse && (
+          <button type="button" className="app-sb-collapse" onClick={onToggleCollapse}
+            aria-label="사이드바 고정 끄기/켜기" title="사이드바 고정 끄기/켜기">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M2.5 4h11M2.5 8h11M2.5 12h11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
         <Link href="/" className="app-sb-brand" onClick={onNavigate}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="씨몬스터" style={{ height: 22, width: "auto", display: "block" }} />
         </Link>
-        {onToggleCollapse && (
-          <button type="button" className="app-sb-collapse" onClick={onToggleCollapse}
-            aria-label={collapsed ? "메뉴 펼치기" : "메뉴 접기"} title={collapsed ? "메뉴 펼치기" : "메뉴 접기"}>
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-              <path d="M10 3.5 5.5 8 10 12.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )}
       </div>
 
       <nav className="app-sb-nav">
