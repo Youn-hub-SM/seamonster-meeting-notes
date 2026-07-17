@@ -388,7 +388,8 @@ function RequestModal({ initial, products, busy, onClose, onSubmit }: {
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
   const [requestedBy, setRequestedBy] = useState(initial?.requested_by || "");
   const [date, setDate] = useState(initial?.request_date || todayIso());
-  const [dueDate, setDueDate] = useState(initial ? (initial.due_date || "") : addBusinessDays(todayIso(), 7)); // 생산마감일 기본=요청일+7영업일(급발주 시 수정)
+  // 생산마감일 필수 — 기본 요청일+7영업일(급발주 시 수정). 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
+  const [dueDate, setDueDate] = useState(initial ? (initial.due_date || addBusinessDays(initial.request_date, 7)) : addBusinessDays(todayIso(), 7));
   const [title, setTitle] = useState(initial?.title || "");
   const [memo, setMemo] = useState(initial?.memo || "");
   const [lines, setLines] = useState<NewLine[]>(() =>
@@ -407,7 +408,7 @@ function RequestModal({ initial, products, busy, onClose, onSubmit }: {
   function updateLine(i: number, patch: Partial<NewLine>) { setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
   function removeLine(i: number) { setLines((prev) => prev.filter((_, idx) => idx !== i)); }
 
-  const valid = lines.some((l) => Number(l.requested_qty) > 0);
+  const valid = lines.some((l) => Number(l.requested_qty) > 0) && !!dueDate;
 
   function submit() {
     const items = lines
@@ -417,7 +418,7 @@ function RequestModal({ initial, products, busy, onClose, onSubmit }: {
       title: title.trim() || (isEdit ? "" : undefined),
       requested_by: requestedBy.trim() || (isEdit ? "" : undefined),
       request_date: date,
-      due_date: dueDate || (isEdit ? "" : undefined),
+      due_date: dueDate,
       memo: memo.trim() || (isEdit ? "" : undefined),
       items,
     });

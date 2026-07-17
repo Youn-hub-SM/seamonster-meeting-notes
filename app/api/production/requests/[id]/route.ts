@@ -39,7 +39,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (b.assignee !== undefined) patch.assignee = String(b.assignee || "").trim() || null;
     if (b.memo !== undefined) patch.memo = String(b.memo || "").trim() || null;
     if (b.request_date !== undefined && DATE_RE.test(String(b.request_date))) patch.request_date = String(b.request_date);
-    if (b.due_date !== undefined) patch.due_date = DATE_RE.test(String(b.due_date)) ? String(b.due_date) : null; // 빈값 = 마감일 해제
+    if (b.due_date !== undefined) {
+      // 생산마감일은 필수(일정·보드가 마감일 기준) — 빈값·형식 오류는 거부, 해제 불가.
+      if (!DATE_RE.test(String(b.due_date))) return NextResponse.json({ ok: false, error: "생산마감일을 입력하세요." }, { status: 400 });
+      patch.due_date = String(b.due_date);
+    }
 
     const sb = supabaseAdmin();
 

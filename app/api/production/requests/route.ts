@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
 import { logProductionRequestCreated } from "@/app/lib/b2b-activity";
+import { addBusinessDays } from "@/app/lib/business-days";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,10 @@ export async function POST(req: NextRequest) {
     try { const { data } = await sb.rpc("next_production_request_no"); if (data) req_no = String(data); } catch { /* 069 미적용 */ }
 
     const request_date = DATE_RE.test(String(b.request_date || "")) ? String(b.request_date) : undefined;
-    const due_date = DATE_RE.test(String(b.due_date || "")) ? String(b.due_date) : undefined;
+    // 생산마감일은 필수 — 안 오거나 형식이 틀리면 요청일+7영업일로 서버가 채운다(일정·보드가 마감일 기준이라 비면 안 됨).
+    const due_date = DATE_RE.test(String(b.due_date || ""))
+      ? String(b.due_date)
+      : addBusinessDays(request_date || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7);
     const head: Record<string, unknown> = {
       req_no,
       title: String(b.title || "").trim() || null,
