@@ -12,7 +12,7 @@ type Result = {
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
   unmatched: string[];
-  outbound: { sku: string; name: string; qty: number }[];
+  outbound: { sku: string; name: string; qty: number; orderDate: string | null }[];
   codeCount: number;
   files: { normal: FileOut; guarantee: FileOut | null; parcel: FileOut };
 };
@@ -60,7 +60,7 @@ export default function FulfillPage() {
   // res 갱신 시 상품 출고 미리보기(재고 확인) 자동 로드
   useEffect(() => {
     setDispatch(null); setDispatchDone(null);
-    const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty })) || [];
+    const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty, orderDate: o.orderDate ?? null })) || [];
     if (!items.length) return;
     let cancel = false;
     setDispatchLoading(true);
@@ -134,7 +134,7 @@ export default function FulfillPage() {
   }
 
   async function commitDispatch(force = false) {
-    const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty })) || [];
+    const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty, orderDate: o.orderDate ?? null })) || [];
     if (!items.length) return;
     setDispatching(true); setError("");
     try {

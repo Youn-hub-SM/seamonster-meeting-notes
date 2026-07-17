@@ -8,14 +8,26 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type Item = { sku: string; qty: number };
+type Item = { sku: string; qty: number; orderDate?: string | null };
 type ProductRow = { productId: string; name: string; option: string; need: number; current: number; after: number; short: boolean };
 type ItemRow = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+// 중복 검사 서명 — SKU별 '합산' 수량 기준(주문일 분해와 무관). 기존(분해 전) 서명과도 동일해 연속성 유지.
 function sigOf(items: Item[]): string {
-  const norm = items.map((i) => `${i.sku.trim().toUpperCase()}:${Math.round(i.qty)}`).sort().join("|");
+  const merged = new Map<string, number>();
+  for (const i of items) { const k = i.sku.trim().toUpperCase(); merged.set(k, (merged.get(k) || 0) + Math.round(i.qty)); }
+  const norm = [...merged.entries()].map(([k, q]) => `${k}:${q}`).sort().join("|");
   return crypto.createHash("sha1").update(norm).digest("hex").slice(0, 16);
+}
+
+// 주문일(L열 파싱값) 검증 — 형식 불량·미래·과도한 과거(14일 초과)는 처리일 폴백(재고 시점 왜곡 방지).
+function validOrderDate(v: string | null | undefined, today: string): string | null {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  if (v > today) return null;
+  const d = new Date(today + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - 14);
+  if (v < d.toISOString().slice(0, 10)) return null;
+  return v;
 }
 
 // POST { items:[{sku,qty}], commit?, force? }
@@ -23,9 +35,10 @@ function sigOf(items: Item[]): string {
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as { items?: Item[]; commit?: boolean; force?: boolean };
+    const todayKst = kstToday();
     const items = (body.items || [])
       .filter((i) => i && i.sku && Number(i.qty) > 0)
-      .map((i) => ({ sku: String(i.sku).trim(), qty: Math.round(Number(i.qty)) }));
+      .map((i) => ({ sku: String(i.sku).trim(), qty: Math.round(Number(i.qty)), orderDate: validOrderDate(i.orderDate, todayKst) }));
     if (!items.length) return NextResponse.json({ ok: false, error: "출고할 품목이 없습니다." }, { status: 400 });
     const commit = !!body.commit;
     const sb = supabaseAdmin();
@@ -45,17 +58,22 @@ export async function POST(req: NextRequest) {
     }
     const bundles = await getAllBundles(sb);
 
-    // 아이템 해석 + 묶음 전개 → product_id별 수량
+    // 아이템 해석 + 묶음 전개 → product_id별 수량(전체 합 = 재고 확인용) + 주문일별 수량(출고 기록용).
+    //  출고 txn 은 '주문일' 축으로 기록해 매출(주문일자)과 같은 축에서 완전 대조 — 주문일 없으면 처리일.
     const perProduct = new Map<string, number>();
+    const perDateProduct = new Map<string, Map<string, number>>(); // 주문일("" = 처리일) → product_id → qty
     const itemRows: ItemRow[] = [];
-    const expand = (pid: string, qty: number) => expandBundleQty(bundles, pid, qty, perProduct); // 공용 전개 규칙
     for (const it of items) {
       const m = bySku.get(it.sku.toUpperCase());
       if (!m || !m.length) { itemRows.push({ sku: it.sku, name: "", qty: it.qty, kind: "unmatched" }); continue; }
       if (m.length > 1) { itemRows.push({ sku: it.sku, name: m[0].name, qty: it.qty, kind: "ambiguous" }); continue; }
       const p = m[0];
       const isBundle = (bundles.get(p.id)?.length || 0) > 0;
-      expand(p.id, it.qty);
+      expandBundleQty(bundles, p.id, it.qty, perProduct); // 공용 전개 규칙
+      const dk = it.orderDate || "";
+      const dm = perDateProduct.get(dk) || new Map<string, number>();
+      expandBundleQty(bundles, p.id, it.qty, dm);
+      perDateProduct.set(dk, dm);
       itemRows.push({ sku: it.sku, name: p.name, qty: it.qty, kind: isBundle ? "bundle" : "single" });
     }
 
@@ -104,9 +122,17 @@ export async function POST(req: NextRequest) {
     let orderNo = "";
     try { const { data } = await sb.rpc("next_inventory_order_no", { p_type: "출고" }); orderNo = String(data || ""); } catch { /* 033 미적용 */ }
     const groupId = crypto.randomUUID();
-    const memo = `온라인발주 출고 ${today}`;
     type TxnRow = { product_id: string; type: string; qty: number; channel?: string; status?: string; group_id: string; order_no: string | null; partner: string; memo: string; txn_date: string };
-    let rows: TxnRow[] = productIds.map((pid) => ({ product_id: pid, type: "출고", qty: signedQty("출고", perProduct.get(pid) || 0), channel: "소매", status: "완료", group_id: groupId, order_no: orderNo || null, partner: "온라인몰", memo, txn_date: today }));
+    // 주문일별로 분해 기록 — 매출(주문일자)과 같은 축. 주문일 없는 행("")은 처리일로.
+    let rows: TxnRow[] = [];
+    for (const [dk, dm] of perDateProduct) {
+      const txnDate = dk || today;
+      const memo = dk && dk !== today ? `온라인발주 출고 ${today} (주문일 ${dk})` : `온라인발주 출고 ${today}`;
+      for (const [pid, q] of dm) {
+        if (q <= 0) continue;
+        rows.push({ product_id: pid, type: "출고", qty: signedQty("출고", q), channel: "소매", status: "완료", group_id: groupId, order_no: orderNo || null, partner: "온라인몰", memo, txn_date: txnDate });
+      }
+    }
     let insErr = (await sb.from("inventory_txns").insert(rows)).error;
     if (insErr && /channel/i.test(insErr.message)) { rows = rows.map(({ channel, ...r }) => r); insErr = (await sb.from("inventory_txns").insert(rows)).error; }
     if (insErr && /status/i.test(insErr.message)) { rows = rows.map(({ status, ...r }) => r); insErr = (await sb.from("inventory_txns").insert(rows)).error; }

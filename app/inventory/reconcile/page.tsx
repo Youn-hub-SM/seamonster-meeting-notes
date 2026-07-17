@@ -108,9 +108,9 @@ export default function InventoryReconcilePage() {
       </p>
       {salesMax && to > salesMax && (
         <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sm-info-bg)", border: "1px solid var(--sm-info)", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
-          매출은 <strong>{salesMax}</strong>까지 입력돼 있습니다(영업일에만 입력). 그 이후에 나간 출고는 아직 비교할 매출이 없어서
-          <strong> 빠진 수가 팔린 수보다 커 보일 수 있어요</strong> — 다음 매출 입력 후 자동으로 맞춰집니다.
-          주문일과 발송일이 하루 이틀 어긋나는 것도 정상이니, 판정은 <strong>최근 7일</strong> 기준으로 보세요.
+          매출은 <strong>{salesMax}</strong>까지 입력돼 있습니다(영업일에만 입력). 그 이후 주문일의 출고는 아직 비교할 매출이 없어
+          <strong> 빠진 수만 먼저 보일 수 있어요</strong> — 다음 매출 입력 후에는 <strong>완전히 일치</strong>해야 정상입니다.
+          (출고는 주문일 기준으로 기록되므로, 남는 차이 = 매핑 오류·CS 재발송 등 확인 대상)
         </div>
       )}
 

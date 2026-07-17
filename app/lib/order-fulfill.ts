@@ -49,6 +49,25 @@ export function baseFeeFromBoxes(boxes: Record<string, number> | null | undefine
   return sum;
 }
 
+// L열(날짜) 셀 → YYYY-MM-DD. 엑셀 날짜셀(Date)·직렬값(number)·문자열 모두 방어 파싱, 실패 시 null.
+//  출고를 '주문일' 축으로 기록해 매출(주문일자)과 같은 축에서 완전 대조하기 위함 — 실패 행은 처리일로 폴백.
+export function dateCellToIso(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    // exceljs 날짜셀은 UTC 기준 Date — UTC 부품으로 조립해야 하루 밀림이 없다
+    return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, "0")}-${String(v.getUTCDate()).padStart(2, "0")}`;
+  }
+  if (typeof v === "number" && Number.isFinite(v) && v > 20000 && v < 60000) {
+    return new Date(Math.round((v - 25569) * 86400e3)).toISOString().slice(0, 10); // 엑셀 직렬값(25569=1970-01-01)
+  }
+  const s = String(v).trim();
+  let m = s.match(/(\d{4})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = s.match(/^(\d{4})(\d{2})(\d{2})(?!\d)/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return null;
+}
+
 export type CodeInfo = { courier_name: string; order_weight: number };
 export type ParcelCount = { category: string; normal: number; guarantee: number };
 export type FulfillResult = {
@@ -60,7 +79,7 @@ export type FulfillResult = {
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
   unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
-  outbound: { sku: string; name: string; qty: number }[]; // SKU별 출고수량(정기배송 제외) — 재고 출고 연동용
+  outbound: { sku: string; name: string; qty: number; orderDate: string | null }[]; // (주문일 L열 × SKU)별 출고수량(정기배송 제외) — 재고 출고를 주문일 축으로 기록
 };
 
 // rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어. rates: 요율(기본운임 구간·도착보장 추가).
@@ -123,14 +142,16 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   }
   const parcelSummary = BOX_CATEGORIES.map((cat) => ({ category: cat, ...counts.get(cat)! }));
 
-  // SKU별 출고수량(정기배송 제외) — 재고 소매 출고 연동용
-  const outMap = new Map<string, { sku: string; name: string; qty: number }>();
+  // (주문일 L열 × SKU)별 출고수량(정기배송 제외) — 매출(주문일자)과 같은 축으로 재고 출고 기록.
+  //  한 발주 배치에 이틀 치 주문이 섞이므로(수집 마감 시각 기준) 주문일별로 분해해야 완전 대조가 성립.
+  const outMap = new Map<string, { sku: string; name: string; qty: number; orderDate: string | null }>();
   for (const r of kept) {
     const sku = String(r[IDX.sku] ?? "").trim();
     const q = Number(r[IDX.qty]) || 0;
     if (!sku || q <= 0) continue;
-    const key = sku.toUpperCase();
-    const cur = outMap.get(key) ?? { sku, name: String(r[IDX.product] ?? "").trim(), qty: 0 };
+    const orderDate = dateCellToIso(r[IDX.date]);
+    const key = `${orderDate || ""}||${sku.toUpperCase()}`;
+    const cur = outMap.get(key) ?? { sku, name: String(r[IDX.product] ?? "").trim(), qty: 0, orderDate };
     cur.qty += q;
     outMap.set(key, cur);
   }
