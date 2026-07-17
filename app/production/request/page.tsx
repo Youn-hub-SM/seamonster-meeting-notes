@@ -29,7 +29,13 @@ export default function RequestPage() {
 // ───────────────────────────── 도매 재고 생산 요청 ─────────────────────────────
 
 type Prod = { product_id: string; sku: string | null; name: string; spec: string | null; unit: string; qty: number };
-type NewLine = { product_id: string; sku: string | null; name: string; spec: string | null; unit: string; stock: number; requested_qty: string; memo: string };
+type NewLine = {
+  item_id?: string;          // 수정 모드: 기존 라인 id (신규 추가 라인은 없음)
+  received: number;          // 수정 모드: 입고 누계 — 입고 있는 라인은 뺄 수 없음
+  product_id: string; sku: string | null; name: string; spec: string | null; unit: string;
+  stock: number | null;      // 도매재고(모를 때 null 표시)
+  requested_qty: string; memo: string;
+};
 
 function WholesaleTab() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
@@ -39,6 +45,7 @@ function WholesaleTab() {
   const [products, setProducts] = useState<Prod[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editReq, setEditReq] = useState<ProductionRequest | null>(null); // 수정 모달 대상
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -78,6 +85,17 @@ function WholesaleTab() {
       await load();
       setExpandedId(j.request?.id ?? null);
     } catch (e) { setError(e instanceof Error ? e.message : "생성 오류"); }
+    setBusy(false);
+  }
+
+  async function updateRequest(id: string, payload: unknown) {
+    setBusy(true); setError("");
+    try {
+      const j = await (await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).json();
+      if (!j.ok) throw new Error(j.error || "수정 실패");
+      applyUpdated(j.request);
+      setEditReq(null);
+    } catch (e) { setError(e instanceof Error ? e.message : "수정 오류"); }
     setBusy(false);
   }
 
@@ -175,6 +193,7 @@ function WholesaleTab() {
                   onReceive={(body) => receive(r.id, body)}
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
                   onStatus={(s) => patchStatus(r.id, s)}
+                  onEdit={() => setEditReq(r)}
                   onDelete={() => removeRequest(r.id)}
                 />
               ))}
@@ -183,7 +202,8 @@ function WholesaleTab() {
         </div>
       )}
 
-      {createOpen && <CreateModal products={products} busy={busy} onClose={() => setCreateOpen(false)} onCreate={createRequest} />}
+      {createOpen && <RequestModal products={products} busy={busy} onClose={() => setCreateOpen(false)} onSubmit={createRequest} />}
+      {editReq && <RequestModal initial={editReq} products={products} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
 }
@@ -197,15 +217,17 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onDelete }: {
+function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onEdit, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onReceive: (body: { item_id: string; qty: number; receipt_date: string; memo: string }) => Promise<boolean>;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
+  const editable = req.status === "요청" || req.status === "진행중";
   const itemPreview = req.items.slice(0, 2).map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join(" · ");
   return (
     <>
@@ -238,7 +260,8 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{req.due_date || "-"}</td>
         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} disabled={busy} onClick={onDelete}>삭제</button>
+          {editable && <button className="b2b-link-btn" disabled={busy} onClick={onEdit}>수정</button>}
+          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", marginLeft: 6 }} disabled={busy} onClick={onDelete}>삭제</button>
         </td>
       </tr>
 
@@ -357,18 +380,29 @@ function ItemRow({ item, canEdit, busy, onReceive, onCancelReceipt }: {
   );
 }
 
-function CreateModal({ products, busy, onClose, onCreate }: {
-  products: Prod[]; busy: boolean; onClose: () => void; onCreate: (payload: unknown) => void;
+// 생성/수정 겸용 — initial 이 있으면 수정 모드(기존 라인 id 유지, 입고 있는 라인은 뺄 수 없음).
+function RequestModal({ initial, products, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; products: Prod[]; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
-  const [requestedBy, setRequestedBy] = useState("");
-  const [date, setDate] = useState(todayIso());
-  const [dueDate, setDueDate] = useState(addBusinessDays(todayIso(), 7)); // 생산마감일 기본=요청일+7영업일(급발주 시 수정)
-  const [title, setTitle] = useState("");
-  const [memo, setMemo] = useState("");
-  const [lines, setLines] = useState<NewLine[]>([]);
+  const isEdit = !!initial;
+  const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
+  const [requestedBy, setRequestedBy] = useState(initial?.requested_by || "");
+  const [date, setDate] = useState(initial?.request_date || todayIso());
+  const [dueDate, setDueDate] = useState(initial ? (initial.due_date || "") : addBusinessDays(todayIso(), 7)); // 생산마감일 기본=요청일+7영업일(급발주 시 수정)
+  const [title, setTitle] = useState(initial?.title || "");
+  const [memo, setMemo] = useState(initial?.memo || "");
+  const [lines, setLines] = useState<NewLine[]>(() =>
+    initial
+      ? initial.items.map((it) => ({
+          item_id: it.id, received: it.received_qty,
+          product_id: it.product_id, sku: it.sku, name: it.name, spec: it.spec, unit: it.unit,
+          stock: stockOf(it.product_id), requested_qty: String(it.requested_qty), memo: it.memo || "",
+        }))
+      : []
+  );
 
   function addLine(p: Prod) {
-    setLines((prev) => [...prev, { product_id: p.product_id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, stock: p.qty, requested_qty: "", memo: "" }]);
+    setLines((prev) => [...prev, { received: 0, product_id: p.product_id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, stock: p.qty, requested_qty: "", memo: "" }]);
   }
   function updateLine(i: number, patch: Partial<NewLine>) { setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
   function removeLine(i: number) { setLines((prev) => prev.filter((_, idx) => idx !== i)); }
@@ -378,14 +412,21 @@ function CreateModal({ products, busy, onClose, onCreate }: {
   function submit() {
     const items = lines
       .filter((l) => Number(l.requested_qty) > 0)
-      .map((l) => ({ product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty)), memo: l.memo.trim() || undefined }));
-    onCreate({ title: title.trim() || undefined, requested_by: requestedBy.trim() || undefined, request_date: date, due_date: dueDate || undefined, memo: memo.trim() || undefined, items });
+      .map((l) => ({ id: l.item_id, product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty)), memo: l.memo.trim() || undefined }));
+    onSubmit({
+      title: title.trim() || (isEdit ? "" : undefined),
+      requested_by: requestedBy.trim() || (isEdit ? "" : undefined),
+      request_date: date,
+      due_date: dueDate || (isEdit ? "" : undefined),
+      memo: memo.trim() || (isEdit ? "" : undefined),
+      items,
+    });
   }
 
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">새 도매 생산 요청</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">{isEdit ? `요청서 수정 ${initial?.req_no || ""}` : "새 도매 생산 요청"}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <label className="sm-col" style={{ gap: 3 }}>
@@ -431,12 +472,18 @@ function CreateModal({ products, busy, onClose, onCreate }: {
                 <thead><tr><th>품목</th><th className="num">도매재고</th><th className="num">요청수량</th><th>메모</th><th></th></tr></thead>
                 <tbody>
                   {lines.map((l, i) => (
-                    <tr key={l.product_id}>
+                    <tr key={l.item_id || l.product_id}>
                       <td><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
-                      <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock.toLocaleString()}</td>
+                      <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
                       <td className="num"><input type="number" className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder="0" /></td>
                       <td><input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" /></td>
-                      <td><button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => removeLine(i)}>삭제</button></td>
+                      <td>
+                        {l.received > 0 ? (
+                          <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="입고 기록이 있어 뺄 수 없습니다">입고 {l.received.toLocaleString()}</span>
+                        ) : (
+                          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => removeLine(i)}>삭제</button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -451,7 +498,7 @@ function CreateModal({ products, busy, onClose, onCreate }: {
         </div>
         <div className="b2b-modal-foot">
           <button className="b2b-btn-secondary" onClick={onClose}>취소</button>
-          <button className="b2b-btn-primary" disabled={busy || !valid} onClick={submit}>요청서 만들기</button>
+          <button className="b2b-btn-primary" disabled={busy || !valid} onClick={submit}>{isEdit ? "수정 저장" : "요청서 만들기"}</button>
         </div>
       </div>
     </div>
