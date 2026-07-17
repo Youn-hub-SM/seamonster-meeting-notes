@@ -106,13 +106,6 @@ export default function InventoryReconcilePage() {
         팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송)"}</strong>. 채널을 바꾸면 그 채널 재고와 그 채널 판매로 비교합니다.
         {salesMax && <> · 매출 입력: <strong>~{salesMax}</strong></>}
       </p>
-      {salesMax && to > salesMax && (
-        <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--sm-info-bg)", border: "1px solid var(--sm-info)", marginBottom: 12, fontSize: 12.5, lineHeight: 1.6 }}>
-          매출은 <strong>{salesMax}</strong>까지 입력돼 있습니다(영업일에만 입력). 그 이후 주문일의 출고는 아직 비교할 매출이 없어
-          <strong> 빠진 수만 먼저 보일 수 있어요</strong> — 다음 매출 입력 후에는 <strong>완전히 일치</strong>해야 정상입니다.
-          (출고는 주문일 기준으로 기록되므로, 남는 차이 = 매핑 오류·CS 재발송 등 확인 대상)
-        </div>
-      )}
 
       {error && <div className="b2b-error">{error}{error.includes("051") ? " — supabase/migrations/051_inventory_reconcile.sql 를 먼저 적용하세요." : ""}</div>}
 
