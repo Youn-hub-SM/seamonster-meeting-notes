@@ -177,6 +177,23 @@ export default function CrmPage() {
     setSaving(false);
   }
 
+  // ── 1회성 가져오기(빈 상태 전용) — 원본 맵 시드 30개 또는 시트 CSV 붙여넣기 ──
+  const [importing, setImporting] = useState(false);
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [csvText, setCsvText] = useState("");
+  async function runImport(mode: "seed" | "csv") {
+    if (mode === "seed" && !confirm("원본 CRM 맵 데이터(8단계 · 30개 메시지)를 가져올까요?")) return;
+    setImporting(true); setError("");
+    try {
+      const r = await fetch("/api/crm/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mode === "csv" ? { mode, csv: csvText } : { mode }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "가져오기 실패");
+      setCsvOpen(false); setCsvText("");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "가져오기 오류"); }
+    setImporting(false);
+  }
+
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
@@ -226,8 +243,23 @@ export default function CrmPage() {
       {loading ? <div className="b2b-loading">불러오는 중...</div> :
         messages.length === 0 ? (
           <div className="b2b-empty">
-            아직 등록된 메시지가 없습니다. <button className="b2b-link-btn" onClick={() => openNew()}>+ 메시지 추가</button>로 시작하거나,
-            migration 063 적용 후 기존 시트 데이터를 이관하세요.
+            <p className="crm-empty-lead">아직 등록된 메시지가 없습니다.</p>
+            <div className="sm-row-wrap crm-empty-actions">
+              <button className="b2b-btn-primary" onClick={() => runImport("seed")} disabled={importing}>
+                {importing ? "가져오는 중..." : "원본 맵 데이터 가져오기 (8단계 · 30개)"}
+              </button>
+              <button className="b2b-btn-secondary" onClick={() => openNew()}>+ 빈 상태에서 직접 추가</button>
+              <button className="b2b-link-btn" onClick={() => setCsvOpen((v) => !v)}>시트 CSV 붙여넣기</button>
+            </div>
+            {csvOpen && (
+              <div className="crm-csv-box">
+                <p className="sm-faint crm-csv-hint">구글시트(메시지 맵)를 전체 선택 → 복사해 붙여넣으세요. 헤더(스테이지·메시지명·상태...) 포함.</p>
+                <textarea className="b2b-textarea" rows={6} value={csvText} onChange={(e) => setCsvText(e.target.value)} placeholder="스테이지,부제,메시지명,상태,채널,발송시점,..." spellCheck={false} />
+                <button className="b2b-btn-primary" onClick={() => runImport("csv")} disabled={importing || !csvText.trim()}>
+                  {importing ? "가져오는 중..." : "CSV 가져오기"}
+                </button>
+              </div>
+            )}
           </div>
         ) : tab === "board" ? (
           <BoardView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />

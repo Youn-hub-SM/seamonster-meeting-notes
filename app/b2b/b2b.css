@@ -3265,6 +3265,11 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-table-hint { font-size: var(--sm-fs-xs); margin-top: var(--sm-space-2); }
 .crm-modal { max-width: 560px; }
 .crm-field-num { max-width: 110px; }
+/* 빈 상태 가져오기 */
+.crm-empty-lead { margin: 0 0 var(--sm-space-3); }
+.crm-empty-actions { gap: var(--sm-space-2); justify-content: center; }
+.crm-csv-box { max-width: 640px; margin: var(--sm-space-3) auto 0; display: flex; flex-direction: column; gap: var(--sm-space-2); text-align: left; }
+.crm-csv-hint { margin: 0; font-size: var(--sm-fs-xs); }
 /* GA 성과(자동) — 수동 perf(회색)와 구분되는 정보 톤 */
 .crm-ga { display: block; font-size: 11px; color: var(--sm-info); margin-top: 6px; font-variant-numeric: tabular-nums; }
 .crm-ga-hint { font-size: var(--sm-fs-xs); margin: calc(-1 * var(--sm-space-1)) 0 var(--sm-space-2); }
