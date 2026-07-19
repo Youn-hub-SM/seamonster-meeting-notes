@@ -272,17 +272,17 @@ export default function SettingsPage() {
         )}
       </section>
 
-      {/* 아침 일정 알림 (매일 08:00 자동 Flow 발송) */}
+      {/* 아침 일정 알림 (매일 오전 06시대 자동 Flow 발송 — 크론 0 21 * * * UTC) */}
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">아침 일정 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 매일 08:00 자동</span></h2>
+          <h2 className="b2b-card-title">아침 일정 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 매일 오전 06~07시 자동</span></h2>
           <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
             마지막 자동 발송: <strong style={{ color: digestLastSent ? "var(--sm-success)" : "var(--sm-danger)" }}>{digestLastSent || "기록 없음"}</strong>
             {!cronSecretSet && <strong style={{ color: "var(--sm-danger)", marginLeft: 8 }}>CRON_SECRET 미설정 — 자동 발송이 매일 실패합니다</strong>}
           </span>
         </div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          매일 지정 시각에 <strong>미완료 업무</strong>를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다. 내용·시간·기간을 아래에서 정하세요.
+          매일 아침 <strong>미완료 업무</strong>를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다. 내용·기간을 아래에서 정하세요.
           자동 발송은 Vercel 환경변수 <code>CRON_SECRET</code> 설정이 필요해요.
         </p>
         {dcfg && (
@@ -291,19 +291,17 @@ export default function SettingsPage() {
               <input type="checkbox" className="b2b-checkbox" checked={dcfg.enabled} onChange={(e) => setDcfg({ ...dcfg, enabled: e.target.checked })} /> 자동 발송 사용
             </label>
             <div className="sm-row" style={{ gap: 16, flexWrap: "wrap", alignItems: "center" }}>
-              <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>발송 시각
-                <select className="b2b-select" style={{ width: "auto" }} value={dcfg.hour} onChange={(e) => setDcfg({ ...dcfg, hour: Number(e.target.value) })}>
-                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-                </select>
+              <span className="sm-row" style={{ gap: 6, fontSize: 13 }}>발송 시각
+                <strong>오전 06~07시</strong>
                 <span className="sm-faint" style={{ fontSize: 11 }}>(한국시간)</span>
-              </label>
+              </span>
               <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>기간
                 <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
               </label>
             </div>
             <p className="sm-faint" style={{ fontSize: 11, margin: 0, lineHeight: 1.6 }}>
-              ⓘ 현재 요금제(Hobby)는 크론이 하루 1회 + 최대 1시간 지연이라 실제 발송은 <strong>매일 오전 06~07시 사이</strong>입니다.
-              위 발송 시각을 분 단위로 맞추려면 시간별 크론(Vercel Pro)이 필요해요.
+              ⓘ 현재 요금제(Hobby)는 크론이 하루 1회 + 최대 1시간 지연이라 시각을 분 단위로 지정할 수 없어요.
+              바꾸려면 시간별 크론(Vercel Pro)이 필요합니다.
             </p>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
