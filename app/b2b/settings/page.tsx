@@ -302,8 +302,8 @@ export default function SettingsPage() {
               </label>
             </div>
             <p className="sm-faint" style={{ fontSize: 11, margin: 0, lineHeight: 1.6 }}>
-              ⓘ 현재 요금제(Hobby)에서는 크론이 하루 1회만 가능해 <strong>매일 오전 8시경</strong>에 발송됩니다.
-              지정한 시각에 맞춰 보내려면 시간별 크론(Vercel Pro)이 필요해요.
+              ⓘ 현재 요금제(Hobby)는 크론이 하루 1회 + 최대 1시간 지연이라 실제 발송은 <strong>매일 오전 06~07시 사이</strong>입니다.
+              위 발송 시각을 분 단위로 맞추려면 시간별 크론(Vercel Pro)이 필요해요.
             </p>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
