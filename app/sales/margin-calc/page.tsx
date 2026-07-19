@@ -8,7 +8,7 @@ import { Combobox } from "@/app/b2b/orders/Combobox";
 
 const won = (n: number) => `${fmtWon(n)}원`;
 
-type Saved = { id: string; name: string; question: string; createdAt: string; createdBy?: string | null };
+type Saved = { id: string; name: string; question: string; result?: MarginResult | null; createdAt: string; createdBy?: string | null };
 type ProdOpt = { name: string; spec: string | null; sku: string | null };
 
 // 질문 조립 도우미 — 칸을 클릭하면 시나리오 문장이 만들어져 질문칸에 채워짐.
@@ -107,6 +107,8 @@ export default function MarginCalcPage() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveQuestion, setSaveQuestion] = useState("");
+  // 저장본을 스냅샷으로 열었을 때의 출처 표시(이름·저장일) — '다시 계산'으로 최신화 가능
+  const [snapshotOf, setSnapshotOf] = useState<{ name: string; date: string; question: string } | null>(null);
 
   // 프롬프트(계산 지침) 설정 — 접이식, 처음 펼칠 때 로드.
   const [pOpen, setPOpen] = useState(false);
@@ -134,7 +136,7 @@ export default function MarginCalcPage() {
     const text = (question ?? q).trim();
     if (!text || loading) return;
     const hist = fresh ? [] : turns;
-    setLoading(true); setError(""); setRes(null);
+    setLoading(true); setError(""); setRes(null); setSnapshotOf(null);
     if (fresh) setTurns([]);
     try {
       const r = await fetch("/api/sales/margin-calc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, history: hist }) });
@@ -147,7 +149,20 @@ export default function MarginCalcPage() {
     setLoading(false);
   }
 
-  function newThread() { setTurns([]); setRes(null); setError(""); setQ(""); }
+  function newThread() { setTurns([]); setRes(null); setError(""); setQ(""); setSnapshotOf(null); }
+
+  // 저장본 클릭 — 스냅샷이 있으면 AI 없이 즉시 열기(이어서 질문도 가능). 없으면(레거시) 재계산.
+  function openSaved(s: Saved) {
+    if (loading) return;
+    if (s.result) {
+      setError(""); setQ("");
+      setRes(s.result);
+      setTurns([{ q: s.question, result: s.result }]);
+      setSnapshotOf({ name: s.name, date: s.createdAt.slice(0, 10), question: s.question });
+    } else {
+      run(s.question, true);
+    }
+  }
 
   function openSave() {
     const joined = turns.map((t) => t.q).join(" — 이어서: ");
@@ -157,7 +172,7 @@ export default function MarginCalcPage() {
   }
   async function doSave() {
     if (!saveName.trim() || !saveQuestion.trim()) return;
-    const r = await fetch("/api/sales/margin-calc/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveQuestion.trim() }) });
+    const r = await fetch("/api/sales/margin-calc/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveQuestion.trim(), result: res }) });
     const j = await r.json();
     if (!j.ok) { setError(j.error || "저장 실패"); return; }
     setSaveOpen(false); loadSaved();
@@ -229,8 +244,8 @@ export default function MarginCalcPage() {
           ) : (
             <div className="rp-saved-list">
               {filteredSaved.map((s) => (
-                <div key={s.id} className="rp-saved-item" onClick={() => { if (!loading) run(s.question, true); }} title="클릭하면 현재 원가·수수료 기준으로 다시 계산">
-                  <span className="rp-saved-name">{s.name}</span>
+                <div key={s.id} className="rp-saved-item" onClick={() => openSaved(s)} title={s.result ? "클릭하면 저장된 결과가 바로 열립니다" : "클릭하면 다시 계산합니다"}>
+                  <span className="rp-saved-name">{s.name}{s.result ? null : <span className="rp-saved-var">재계산</span>}</span>
                   <div className="rp-saved-q">{s.question}</div>
                   <div className="rp-saved-meta">
                     <span>저장: {s.createdBy || "—"}</span>
@@ -275,6 +290,12 @@ export default function MarginCalcPage() {
 
       {res && !loading && (
         <div className="sm-col" style={{ gap: 14 }}>
+          {snapshotOf && (
+            <div className="sm-faint" style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              저장된 결과 <strong>{snapshotOf.name}</strong> ({snapshotOf.date} 저장) — 이후 원가·수수료가 바뀌었을 수 있어요.
+              <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12 }} disabled={loading} onClick={() => run(snapshotOf.question, true)}>현재 기준 다시 계산</button>
+            </div>
+          )}
           <div className="rp-understood">
             {res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}
             {res.results.length > 0 && (
@@ -312,7 +333,7 @@ export default function MarginCalcPage() {
               <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 대구 1kg 쿠팡 20% 할인" />
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 실행할 때마다 이 질문을 현재 원가·수수료 기준으로 다시 계산합니다</span></span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 지금 결과가 함께 저장되어 클릭 시 바로 열리고, '다시 계산'하면 이 질문으로 최신 원가 기준 재계산됩니다</span></span>
               <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 13, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => setSaveQuestion(e.target.value)} />
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
