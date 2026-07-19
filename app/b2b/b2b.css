@@ -3144,3 +3144,13 @@ button.ma-todo-row:hover { background: var(--sm-bg-subtle); }
 .ma-todo-count.is-danger { color: var(--sm-danger); font-weight: 700; }
 .ma-todo-go { flex: 0 0 auto; width: 8px; font-size: var(--sm-fs-base); color: var(--sm-text-light); }
 button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
+
+/* ── CRM 메시지맵 (/crm) ──
+   표 인라인 편집 — 셀이 평소엔 표 텍스트처럼 보이고, 올리면 편집 가능이 드러나고, 포커스에만 입력 태 */
+.crm-cell { width: 100%; min-width: 0; font: inherit; font-size: var(--sm-fs-sm); color: var(--sm-dark);
+  background: transparent; border: 1px solid transparent; border-radius: var(--sm-radius);
+  padding: var(--sm-space-1) var(--sm-space-2); margin: calc(-1 * var(--sm-space-1)) calc(-1 * var(--sm-space-2)); }
+.crm-cell:hover { border-color: var(--sm-border); }
+.crm-cell:focus { outline: none; border-color: var(--sm-orange); background: var(--sm-white); }
+.crm-cell::placeholder { color: var(--sm-text-light); }
+.crm-saving { font-size: var(--sm-fs-sm); color: var(--sm-text-light); white-space: nowrap; }

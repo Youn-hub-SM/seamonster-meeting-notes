@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CrmMessage, CrmMessageInput, EMPTY_CRM_MESSAGE,
   CRM_CHANNELS, CRM_CHANNEL_LABEL, CRM_STATUSES, CRM_STATUS_LABEL, CRM_LINK_TYPES, crmTags,
@@ -17,6 +17,14 @@ const CH_COLOR: Record<string, { bg: string; fg: string }> = {
 };
 const ST_COLOR: Record<string, string> = { active: "var(--sm-success)", auto: "var(--sm-info)", gap: "var(--sm-danger)", paused: "var(--sm-text-light)" };
 const chColor = (k: string) => CH_COLOR[k] || { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
+// 인라인 상태 select 색 — 시맨틱 토큰(soft bg + fg)만 사용.
+const ST_SELECT: Record<string, { bg: string; fg: string }> = {
+  active: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+  auto: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
+  gap: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  paused: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-light)" },
+};
+const stColor = (k: string) => ST_SELECT[k] || { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
 
 type Stage = { stage: string; sub: string; stage_num: number; msgs: CrmMessage[] };
 
@@ -31,6 +39,10 @@ export default function CrmPage() {
   const [edit, setEdit] = useState<CrmMessageInput | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const messagesRef = useRef<CrmMessage[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
@@ -41,6 +53,26 @@ export default function CrmPage() {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // ── 인라인 편집 ── 인라인으로 고치는 필드는 전부 문자열(스테이지·제목·시점·태그·채널·상태).
+  //  타이핑 중엔 로컬만 갱신(setStr), 저장은 blur/select-change 때 해당 행 전체를 PUT.
+  const setStr = (id: string, key: keyof CrmMessage, value: string) =>
+    setMessages((prev) => prev.map((m) => (m.id === id ? ({ ...m, [key]: value } as CrmMessage) : m)));
+
+  // override = select 처럼 로컬 반영(비동기) 전에 저장할 때 새 값을 주입.
+  const saveRow = useCallback(async (id: string, override?: Partial<CrmMessage>) => {
+    const base = messagesRef.current.find((m) => m.id === id);
+    if (!base) return;
+    const row = override ? { ...base, ...override } : base;
+    setSavingId(id); setError("");
+    try {
+      const r = await fetch("/api/crm/messages", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setMessages((prev) => prev.map((m) => (m.id === id ? (j.message as CrmMessage) : m))); // 서버 정규화 결과로 교체
+    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); load(); } // 실패 시 서버 상태로 재동기
+    setSavingId(null);
+  }, [load]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -72,6 +104,12 @@ export default function CrmPage() {
     const stageCount = new Set(messages.map((m) => m.stage || "(미분류)")).size;
     return { total, active, gap, byCh, stageCount };
   }, [messages]);
+
+  // 스테이지 자동완성 목록 — 인라인 편집 시 오타로 새 스테이지가 생기지 않게 기존값 제안.
+  const stageNames = useMemo(
+    () => [...new Set(messages.map((m) => m.stage).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko")),
+    [messages],
+  );
 
   function openNew(seed?: Partial<CrmMessageInput>) {
     const maxStageNum = messages.reduce((mx, m) => Math.max(mx, m.stage_num), 0);
@@ -153,7 +191,7 @@ export default function CrmPage() {
         ) : tab === "board" ? (
           <BoardView stages={stages} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : (
-          <TableView msgs={filtered} onEdit={openEdit} />
+          <TableView msgs={filtered} stageNames={stageNames} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
         )}
 
       {edit && (
@@ -226,27 +264,72 @@ function Card({ m, onClick }: { m: CrmMessage; onClick: () => void }) {
   );
 }
 
-// ── 표(편집) 뷰 ──
-function TableView({ msgs, onEdit }: { msgs: CrmMessage[]; onEdit: (m: CrmMessage) => void }) {
+// ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·초안·링크·성과)는 '상세' 버튼→모달 ──
+function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
+  msgs: CrmMessage[]; stageNames: string[]; savingId: string | null;
+  onField: (id: string, key: keyof CrmMessage, value: string) => void;
+  onSave: (id: string, override?: Partial<CrmMessage>) => void;
+  onEdit: (m: CrmMessage) => void;
+}) {
   return (
-    <div className="b2b-table-wrap">
-      <table className="b2b-table">
-        <thead><tr><th>스테이지</th><th>메시지명</th><th>채널</th><th>발송시점</th><th>상태</th><th>태그</th><th></th></tr></thead>
-        <tbody>
-          {msgs.map((m) => (
-            <tr key={m.id}>
-              <td style={{ whiteSpace: "nowrap" }}><span style={{ color: "var(--sm-text-light)", fontSize: 11 }}>{m.stage_num || "-"}</span> {m.stage}</td>
-              <td><strong>{m.title || "(제목 없음)"}</strong>{m.detail && <div className="sm-faint" style={{ fontSize: 11, maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.detail}</div>}</td>
-              <td style={{ whiteSpace: "nowrap" }}><span style={pill(chColor(m.channel))}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "-"}</span></td>
-              <td style={{ fontSize: 12 }}>{m.timing || "-"}</td>
-              <td style={{ whiteSpace: "nowrap" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: ST_COLOR[m.status] || "var(--sm-border)", display: "inline-block", marginRight: 5 }} />{CRM_STATUS_LABEL[m.status] || m.status || "-"}</td>
-              <td style={{ fontSize: 11, color: "var(--sm-text-light)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.tags || "-"}</td>
-              <td><button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => onEdit(m)}>편집</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <datalist id="crm-stage-names">{stageNames.map((s) => <option key={s} value={s} />)}</datalist>
+      <div className="b2b-table-wrap">
+        <table className="b2b-table">
+          <thead><tr>
+            <th style={{ minWidth: 150 }}>스테이지</th><th style={{ minWidth: 200 }}>메시지명</th>
+            <th style={{ width: 116 }}>채널</th><th style={{ minWidth: 130 }}>발송시점</th>
+            <th style={{ width: 116 }}>상태</th><th style={{ minWidth: 140 }}>태그</th><th style={{ width: 92 }}></th>
+          </tr></thead>
+          <tbody>
+            {msgs.map((m) => (
+              <tr key={m.id}>
+                <td><CellText id={m.id} value={m.stage} field="stage" placeholder="스테이지" list="crm-stage-names" onField={onField} onSave={onSave} /></td>
+                <td><CellText id={m.id} value={m.title} field="title" placeholder="메시지명" onField={onField} onSave={onSave} /></td>
+                <td>
+                  <select className="b2b-status-select" value={m.channel} aria-label="채널"
+                    style={{ background: chColor(m.channel).bg, color: chColor(m.channel).fg }}
+                    onChange={(e) => { onField(m.id, "channel", e.target.value); onSave(m.id, { channel: e.target.value }); }}>
+                    {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select>
+                </td>
+                <td><CellText id={m.id} value={m.timing} field="timing" placeholder="예: 결제 후 1시간" onField={onField} onSave={onSave} /></td>
+                <td>
+                  <select className="b2b-status-select" value={m.status} aria-label="상태"
+                    style={{ background: stColor(m.status).bg, color: stColor(m.status).fg }}
+                    onChange={(e) => { onField(m.id, "status", e.target.value); onSave(m.id, { status: e.target.value }); }}>
+                    {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </select>
+                </td>
+                <td><CellText id={m.id} value={m.tags} field="tags" placeholder="쉼표로 구분" onField={onField} onSave={onSave} /></td>
+                <td className="actions">
+                  {savingId === m.id
+                    ? <span className="crm-saving">저장 중…</span>
+                    : <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => onEdit(m)}>상세</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>셀을 눌러 바로 수정하면 자동 저장됩니다. 상세 설명·메시지 초안·링크·성과는 <b>상세</b>에서 편집하세요.</p>
+    </>
+  );
+}
+
+// 표 셀의 인라인 텍스트 — 타이핑 중엔 로컬 갱신, 값이 바뀐 채 포커스를 잃으면 저장.
+function CellText({ id, value, field, placeholder, list, onField, onSave }: {
+  id: string; value: string; field: keyof CrmMessage; placeholder?: string; list?: string;
+  onField: (id: string, key: keyof CrmMessage, value: string) => void;
+  onSave: (id: string) => void;
+}) {
+  const focusVal = useRef("");
+  return (
+    <input className="crm-cell" value={value || ""} placeholder={placeholder} list={list} spellCheck={false}
+      onChange={(e) => onField(id, field, e.target.value)}
+      onFocus={(e) => { focusVal.current = e.target.value; }}
+      onBlur={(e) => { if (e.target.value !== focusVal.current) onSave(id); }}
+      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
   );
 }
 
