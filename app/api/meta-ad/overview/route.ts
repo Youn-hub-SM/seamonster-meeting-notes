@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listCampaigns, listAdsets, listAds, getInsights, getDailyInsights, isCBO, isABO, type MetaInsight } from "@/app/lib/meta-ad";
 import { getMetaThresholds } from "@/app/lib/meta-settings";
-import { getScaleLog } from "@/app/lib/meta-scale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,8 +31,8 @@ export async function GET(req: NextRequest) {
     const fresh = sp.get("fresh") === "1";
     const activeOnly = sp.get("scope") !== "all"; // 기본: 게재 중만(빠름). scope=all 이면 전체(ACTIVE+PAUSED)
 
-    // 기준값이 먼저 있어야 '연속 N일' 창을 정할 수 있어 Graph 호출보다 앞선다(둘 다 KV 조회라 빠름).
-    const [thresholds, scaleLog] = await Promise.all([getMetaThresholds(), getScaleLog()]);
+    // 기준값이 먼저 있어야 '연속 N일' 창을 정할 수 있어 Graph 호출보다 앞선다(KV 조회라 빠름).
+    const thresholds = await getMetaThresholds();
     const scaleRange = scaleWindow(thresholds.scaleDays);
 
     // scaleDays 가 바뀌면 창이 달라지므로 캐시 키에 포함.
@@ -55,7 +54,6 @@ export async function GET(req: NextRequest) {
     const out = {
       ok: true,
       thresholds,
-      scaleLog,
       scaleRange, // 화면에 '언제부터 언제까지 연속인지' 표시용
       // daily = 증액 판정용 최근 N일(보드에서 고른 기간과 무관). 판정 자체는 클라이언트가 기준값으로 수행.
       campaigns: campaigns.map((c) => ({ ...c, cbo: isCBO(c), stat: ci.byId[c.id] || blank, daily: dailyByCampaign[c.id] || [] })),

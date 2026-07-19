@@ -9,7 +9,6 @@ type Daily = { date: string; spend: number; purchaseValue: number; roas: number 
 type Campaign = { id: string; name: string; status: string; effective_status: string; objective?: string; daily_budget?: string; lifetime_budget?: string; cbo: boolean; stat: Stat; daily: Daily[] };
 type Adset = { id: string; name: string; status: string; effective_status: string; campaign_id: string; daily_budget?: string; lifetime_budget?: string; abo: boolean; stat: Stat };
 type Ad = { id: string; name: string; status: string; effective_status: string; adset_id: string; stat: Stat };
-type ScaleEntry = { at: string; from: number; to: number };
 type Thresholds = {
   minSpend: number; testDailyPerCreative: number; testDays: number;
   aboPassRoas: number; aboMaxCpa: number; beatLiveCampaign: boolean; aboMinPurchases: number;
@@ -18,12 +17,9 @@ type Thresholds = {
 };
 type Overview = {
   ok: boolean; error?: string; thresholds: Thresholds;
-  scaleLog: Record<string, ScaleEntry>; scaleRange: { since: string; until: string };
+  scaleRange: { since: string; until: string };
   campaigns: Campaign[]; adsets: Adset[]; ads: Ad[]; cached?: boolean;
 };
-
-const SCALE_COOLDOWN_DAYS = 7; // 증액은 주 1회 — 서버(meta-scale.ts)와 같은 값
-const daysSince = (iso?: string) => { const t = Date.parse(iso || ""); return Number.isFinite(t) ? (Date.now() - t) / 86_400_000 : null; };
 
 const PRESETS = [
   { key: "today", label: "오늘" }, { key: "yesterday", label: "어제" },
@@ -176,13 +172,6 @@ export default function MetaAdPage() {
     return n;
   }, [th]);
 
-  // 증액 후 쿨다운이 남았으면 남은 안내 문구, 아니면 null.
-  const scaleCooldown = useCallback((id: string): string | null => {
-    const since = daysSince(ov?.scaleLog?.[id]?.at);
-    if (since === null || since >= SCALE_COOLDOWN_DAYS) return null;
-    return `${Math.floor(since)}일 전에 증액함 — ${Math.ceil(SCALE_COOLDOWN_DAYS - since)}일 뒤 다시 증액 가능 (주 1회)`;
-  }, [ov]);
-
   const classifyCampaign = useCallback((c: Campaign): StageInfo => {
     const s = c.stat;
     if (!c.cbo) return { key: "material", label: "① 소재테스트 캠페인", tone: TONE.info, action: "광고세트 탭에서 소재별로 판정" };
@@ -194,13 +183,11 @@ export default function MetaAdPage() {
       const need = Math.max(1, th?.scaleDays ?? 1);
       const streak = scaleStreak(c);
       if (streak < need) return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: `증액 대기 — ROAS ${th?.scaleRoas} 이상 ${streak}/${need}일 연속 (${need}일 채우면 증액 권장)` };
-      const cooling = scaleCooldown(c.id);
-      if (cooling) return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: cooling };
-      return { key: "scale", label: `③ 증액 권장 +${th?.scalePct}%`, tone: TONE.success, action: budget ? `증액: 일 ${won(budget)}원 → ${won(up)}원 (+${th?.scalePct}%, ${need}일 연속 ROAS ${th?.scaleRoas}↑)` : `예산 +${th?.scalePct}% 증액 — 총 예산 캠페인이라 메타에서 직접 조정` };
+      return { key: "scale", label: `③ 증액 권장 +${th?.scalePct}%`, tone: TONE.success, action: budget ? `광고관리자에서 일 ${won(budget)}원 → ${won(up)}원 (+${th?.scalePct}%, ${need}일 연속 ROAS ${th?.scaleRoas}↑)` : `예산 +${th?.scalePct}% 증액 — 총 예산 캠페인이라 메타에서 직접 조정` };
     }
     if (s.roas < (th?.declineRoas ?? 0)) return { key: "decline", label: "④ 효율 하락", tone: TONE.danger, action: "소재 점검 후 교체 · 개선 없으면 예산 축소/종료" };
     return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: "운영 유지 · 모니터링" };
-  }, [th, scaleStreak, scaleCooldown]);
+  }, [th, scaleStreak]);
 
   const classifyAdset = useCallback((a: Adset): StageInfo => {
     if (!a.abo) return { key: "sub", label: "본 캠페인 하위 세트", tone: TONE.muted, action: "본 캠페인(CBO) 소속 — 캠페인 탭에서 관리" };
@@ -257,22 +244,6 @@ export default function MetaAdPage() {
       if (!j.ok) throw new Error(j.error);
       await load(true); // 방금 바꾼 값이라 캐시(90초)를 건너뛰어야 반영된 상태가 보인다
     } catch (e) { setError(e instanceof Error ? e.message : "상태 변경 실패"); }
-    setBusyId(null);
-  }
-
-  // 예산 증액 — 되돌릴 수 없는 지출 변경이라 금액을 그대로 보여주고 확인받는다.
-  //  여기 숫자는 확인창 표시용일 뿐, 실제 계산·주1회 검증은 서버가 메타의 현재 예산을 다시 읽어 수행한다.
-  async function raise(c: Campaign) {
-    const from = Number(c.daily_budget) || 0;
-    const pct = th?.scalePct ?? 0;
-    const to = Math.round(from * (1 + pct / 100));
-    if (!window.confirm(`"${c.name}"\n\n실제 메타 캠페인의 일 예산을 올립니다.\n\n일 ${won(from)}원 → ${won(to)}원 (+${pct}%)\n\n진행할까요?`)) return;
-    setBusyId(c.id); setError("");
-    try {
-      const j = await (await fetch("/api/meta-ad/budget", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: c.id, expectFrom: from }) })).json();
-      if (!j.ok) throw new Error(j.error);
-      await load(true);
-    } catch (e) { setError(e instanceof Error ? e.message : "증액 실패"); }
     setBusyId(null);
   }
 
@@ -401,7 +372,7 @@ export default function MetaAdPage() {
                 <div><Badge tone={TONE.info}>① 소재테스트 (ABO)</Badge> <b>1세트=1소재</b>, 소재당 <b>{won(th.testDailyPerCreative)}원/일 · {th.testDays}일</b>. AB테스트는 한 세트에 소재를 몰아넣고 소재당 예산 추가(2개=일 {won(th.testDailyPerCreative * 2)}원).</div>
                 <div><Badge tone={TONE.success}>② 우수소재</Badge> 다음 중 하나 충족 → <b>ROAS ≥ {th.aboPassRoas}</b>{th.aboMaxCpa > 0 ? <> · <b>CPA ≤ {won(th.aboMaxCpa)}원</b></> : null}{th.beatLiveCampaign ? <> · <b>현 캠페인 ROAS 상회</b>{liveCampaignRoas > 0 ? <span className="sm-faint">(현재 {roasFmt(liveCampaignRoas)})</span> : null}</> : null}.</div>
                 <div><Badge tone={TONE.brand}>③ 본 캠페인 진입 (CBO)</Badge> 우수소재는 <b>기존 본 캠페인에 새 광고세트로 추가</b>. 세트 이름은 <code>yyyy-mm-dd 주요 메시지</code>.</div>
-                <div><Badge tone={TONE.success}>④ 증액</Badge> <b>ROAS ≥ {th.scaleRoas} 를 {th.scaleDays}일 연속</b> 유지한 캠페인만 <b>+{th.scalePct}%</b> 증액. 올린 뒤 <b>{SCALE_COOLDOWN_DAYS}일</b>은 다시 올리지 않는다(주 1회).</div>
+                <div><Badge tone={TONE.success}>④ 증액</Badge> <b>ROAS ≥ {th.scaleRoas} 를 {th.scaleDays}일 연속</b> 유지한 캠페인만 <b>주 1회 +{th.scalePct}%</b> 증액(광고관리자에서 실행).</div>
                 <div style={{ borderTop: "1px dashed var(--sm-border)", paddingTop: 10 }}><NameHelper today={today} /></div>
               </div>
             )}
@@ -467,18 +438,7 @@ export default function MetaAdPage() {
                         <td className="num b2b-money" style={roasColor ? { color: roasColor, fontWeight: 700 } : undefined}>{s.purchases > 0 ? roasFmt(s.roas) : "-"}</td>
                         <td className="num b2b-money">{s.cpa > 0 ? won(s.cpa) : "-"}</td>
                         <td className="num">{pct(s.ctr)}</td>
-                        {tab !== "ad" && (
-                          <td className="num b2b-money">
-                            {budget ? won(Number(budget)) : "-"}
-                            {/* 증액 버튼은 '증액 권장'으로 판정된 일예산 캠페인에만 — 총예산 캠페인은 메타에서 조정 */}
-                            {tab === "campaign" && stage?.key === "scale" && Number((r as Campaign).daily_budget) > 0 && (
-                              <button type="button" className="b2b-btn-secondary ma-raise" disabled={busyId === r.id}
-                                onClick={() => raise(r as Campaign)}>
-                                {busyId === r.id ? "..." : `+${th?.scalePct}% 증액`}
-                              </button>
-                            )}
-                          </td>
-                        )}
+                        {tab !== "ad" && <td className="num b2b-money">{budget ? won(Number(budget)) : "-"}</td>}
                       </tr>
                     );
                   })}
@@ -493,8 +453,8 @@ export default function MetaAdPage() {
             </div>
           )}
           <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>
-            · ON 스위치와 증액 버튼은 <b>실제 메타 광고</b>를 바꿉니다(확인창 있음). · ‘다음 행동’은 <Link href="/meta-ad/settings">설정</Link>의 기준값으로 계산됩니다.
-            · 증액 권장은 <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상일 때만 뜨고{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}, 한 번 올리면 <b>{SCALE_COOLDOWN_DAYS}일간</b> 다시 뜨지 않습니다. · 세트 추가는 메타에서 직접 실행하세요.
+            · ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다(확인창 있음). · ‘다음 행동’은 <Link href="/meta-ad/settings">설정</Link>의 기준값으로 계산됩니다.
+            · 증액 권장은 <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상일 때만 뜹니다{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}. · 증액·세트 추가는 메타 광고관리자에서 직접 실행하세요.
           </p>
         </>
       )}

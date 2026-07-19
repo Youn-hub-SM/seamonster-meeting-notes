@@ -14,7 +14,7 @@ export type MetaThresholds = {
   // ── 본 캠페인(CBO) 운영 ──
   scaleRoas: number;       // 증액 권장: ROAS ≥ (scaleDays 동안 매일)
   scaleDays: number;       // 증액 권장: 어제까지 이 일수만큼 연속 충족해야 함(하루 반짝 성과 배제)
-  scalePct: number;        // 증액 비율(%) — 증액 버튼이 올리는 폭. 재증액 간격은 meta-scale.ts
+  scalePct: number;        // 증액 비율(%) — 증액 권장 시 안내하는 폭(주 1회, 광고관리자에서 실행)
   declineRoas: number;     // 효율 하락/위험: ROAS < (이 미만이면 위험소재 판정)
   // ── 소재 라이브러리 ──
   libraryRoas: number;     // 이 ROAS 이상 기록한 소재는 '라이브러리 저장 추천'
