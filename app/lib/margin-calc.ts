@@ -70,7 +70,9 @@ const OUTPUT_RULES = `[출력] 설명 문장 없이 아래 JSON만 반환:
 }
 - 모든 금액은 원 단위 정수, 이익률은 % 소수 첫째자리.
 - expenses 는 매출→순이익으로 이어지는 모든 지출을 빠짐없이 투명하게 나열(합 = 매출 지출분).
-- 원가표에서 상품을 못 찾으면 가장 가까운 후보로 계산하되 assumptions 에 명시. 여러 채널/가격을 물으면 results 를 여러 개로.`;
+- 원가표에서 상품을 못 찾으면 가장 가까운 후보로 계산하되 assumptions 에 명시. 여러 채널/가격을 물으면 results 를 여러 개로.
+- 어떤 경우에도 JSON 외 텍스트를 출력하지 말 것. 정보가 부족해도 되묻는 문장을 쓰지 말고 합리적으로 가정해 계산하고 assumptions 에 명시.
+  상품명이 아예 없어 계산이 불가능할 때만 results 를 빈 배열로 하고, scenario 에 "상품명을 함께 적어주세요" 안내 한 줄을 담을 것(JSON 유지).`;
 
 // ── 편집 가능한 지침 저장 — b2b_settings 'margin_calc_prompt' (CS 코치 프롬프트와 동일 방식) ──
 const MARGIN_PROMPT_KEY = "margin_calc_prompt";
@@ -145,5 +147,13 @@ export async function analyzeMargin(question: string, ref: MarginRefData, histor
   const block = resp.content.find((b) => b.type === "text");
   const text = block && block.type === "text" ? block.text : "";
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-  return JSON.parse(cleaned) as MarginResult;
+  try {
+    return JSON.parse(cleaned) as MarginResult;
+  } catch {
+    // 모델이 규칙을 어기고 산문으로 답한 경우(질문이 모호할 때 되묻기 등) — 앞뒤 텍스트를 걷어내고 JSON 부분만 재시도.
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (m) { try { return JSON.parse(m[0]) as MarginResult; } catch { /* fall through */ } }
+    // 그래도 아니면 모델의 말을 안내문으로 그대로 보여준다(원시 파싱 에러 노출 방지).
+    return { scenario: cleaned.slice(0, 300), product: "", results: [], strategy: "", assumptions: [] };
+  }
 }

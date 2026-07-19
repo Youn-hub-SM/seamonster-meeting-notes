@@ -241,7 +241,9 @@ export default function MarginCalcPage() {
         <div className="sm-col" style={{ gap: 14 }}>
           <div className="rp-understood">
             {res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}
-            <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12.5 }} onClick={openSave}>저장</button>
+            {res.results.length > 0 && (
+              <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12.5 }} onClick={openSave}>저장</button>
+            )}
           </div>
 
           {res.results.map((r, i) => <ResultCard key={i} r={r} />)}
