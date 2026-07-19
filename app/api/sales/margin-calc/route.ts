@@ -6,11 +6,23 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// GET — 질문 만들기 도우미용 채널 목록(수수료 설정된 실제 채널)
+// GET — 질문 만들기 도우미용: 채널 목록 + 전체 상품(검색용) + 최근 30일 잘 팔린 상품(추천 칩)
 export async function GET() {
   try {
-    const { data } = await supabaseAdmin().from("sales_channel_config").select("channel").order("channel");
-    return NextResponse.json({ ok: true, channels: (data ?? []).map((c) => String(c.channel)).filter(Boolean) });
+    const sb = supabaseAdmin();
+    const [{ data: chans }, { data: prods }, topRes] = await Promise.all([
+      sb.from("sales_channel_config").select("channel").order("channel"),
+      sb.from("products").select("name, spec, sku").eq("active", true).order("name"),
+      // 판매량 상위 — run_report(068) 미적용이면 빈 목록 폴백. retail_price>0 로 부자재(드라이아이스 등) 제외.
+      sb.rpc("run_report", { q: "select p.name from sales_orders o join products p on p.sku = o.sku_code and p.retail_price > 0 where o.order_date >= current_date - 30 group by 1 order by sum(o.quantity) desc limit 10" }),
+    ]);
+    const topProducts = Array.isArray(topRes.data) ? (topRes.data as { name: string }[]).map((r) => String(r.name)).filter(Boolean) : [];
+    return NextResponse.json({
+      ok: true,
+      channels: (chans ?? []).map((c) => String(c.channel)).filter(Boolean),
+      products: (prods ?? []).map((p) => ({ name: p.name as string, spec: (p.spec as string) || null, sku: (p.sku as string) || null })),
+      topProducts,
+    });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "채널 조회 실패") }, { status: 500 });
   }

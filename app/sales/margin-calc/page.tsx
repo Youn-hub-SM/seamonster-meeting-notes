@@ -4,16 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { MarginResult, MarginResultItem, MarginTurn } from "@/app/lib/margin-calc";
 import { won as fmtWon } from "@/app/lib/format";
+import { Combobox } from "@/app/b2b/orders/Combobox";
 
 const won = (n: number) => `${fmtWon(n)}원`;
 
 type Saved = { id: string; name: string; question: string; createdAt: string; createdBy?: string | null };
+type ProdOpt = { name: string; spec: string | null; sku: string | null };
 
-// 질문 조립 도우미 — 칸을 클릭하면 시나리오 문장이 만들어져 질문칸에 채워짐(상품명은 직접 입력).
+// 질문 조립 도우미 — 칸을 클릭하면 시나리오 문장이 만들어져 질문칸에 채워짐.
+//  상품은 최근 30일 잘 팔린 순 추천 칩 + 전체 상품 검색.
 const PRICE_OPTS = ["정가로", "10% 할인으로", "20% 할인으로", "30% 할인으로", "도매가로", "1+1로"];
 const ASK_OPTS = ["팔면 이익률이 어때?", "팔면 순이익은 얼마야?", "몇 %까지 할인해도 남아?", "손익분기 판매가는 얼마야?"];
 
-function QuestionComposer({ channels, disabled, onCompose }: { channels: string[]; disabled: boolean; onCompose: (text: string) => void }) {
+function QuestionComposer({ channels, products, topProducts, disabled, onCompose }: {
+  channels: string[]; products: ProdOpt[]; topProducts: string[]; disabled: boolean; onCompose: (text: string) => void;
+}) {
   const [open, setOpen] = useState(true);
   const [pick, setPick] = useState<Record<string, string>>({});
   const FACETS = [
@@ -22,7 +27,7 @@ function QuestionComposer({ channels, disabled, onCompose }: { channels: string[
     { key: "ask", label: "질문", opts: ASK_OPTS },
   ];
   const compose = (p: Record<string, string>) =>
-    [p.channel ? `${p.channel}에서` : "", p.price || "", p.ask || ""].filter(Boolean).join(" ");
+    [p.product || "", p.channel ? `${p.channel}에서` : "", p.price || "", p.ask || ""].filter(Boolean).join(" ");
   function toggle(key: string, opt: string) {
     const next = { ...pick };
     if (next[key] === opt) delete next[key]; else next[key] = opt;
@@ -34,10 +39,39 @@ function QuestionComposer({ channels, disabled, onCompose }: { channels: string[
     <div className="rp-compose">
       <button className="rp-compose-head" onClick={() => setOpen((v) => !v)}>
         <span>{open ? "▾" : "▸"} 질문 만들기 도우미</span>
-        <span className="rp-compose-hint">칸을 눌러 조합한 뒤, 질문칸 맨 앞에 상품명(예: 대구순살 1kg)을 붙여주세요.</span>
+        <span className="rp-compose-hint">칸을 눌러 조합하면 아래 질문칸에 자동으로 채워집니다. 직접 고쳐 써도 돼요.</span>
       </button>
       {open && (
         <div className="rp-compose-body">
+          {/* 상품 — 잘 팔린 순 추천 칩 + 전체 검색 */}
+          <div className="rp-compose-row">
+            <span className="rp-compose-label">상품</span>
+            <div className="rp-compose-chips" style={{ alignItems: "center" }}>
+              {topProducts.map((name) => (
+                <button key={name} type="button" className={`rp-chip ${pick.product === name ? "is-active" : ""}`} disabled={disabled} onClick={() => toggle("product", name)}>{name}</button>
+              ))}
+              {pick.product && !topProducts.includes(pick.product) && (
+                <button type="button" className="rp-chip is-active" disabled={disabled} onClick={() => toggle("product", pick.product)}>{pick.product} ✕</button>
+              )}
+              {products.length > 0 && (
+                <div style={{ minWidth: 200, flex: "0 1 240px" }}>
+                  <Combobox
+                    value=""
+                    options={products.map((p, i) => ({ id: String(i), label: `${p.name}${p.spec ? ` — ${p.spec}` : ""}`, sub: p.sku ?? "" }))}
+                    onSelect={(o) => {
+                      const p = products[Number(o.id)];
+                      if (!p) return;
+                      const next = { ...pick, product: p.name };
+                      setPick(next); onCompose(compose(next));
+                    }}
+                    placeholder="다른 상품 검색"
+                    ariaLabel="상품 검색"
+                    emptyText="일치하는 상품이 없습니다"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
           {FACETS.filter((f) => f.opts.length > 0).map((f) => (
             <div key={f.key} className="rp-compose-row">
               <span className="rp-compose-label">{f.label}</span>
@@ -62,6 +96,8 @@ export default function MarginCalcPage() {
   const [res, setRes] = useState<MarginResult | null>(null);
   const [turns, setTurns] = useState<MarginTurn[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
+  const [products, setProducts] = useState<ProdOpt[]>([]);
+  const [topProducts, setTopProducts] = useState<string[]>([]);
 
   // 저장된 계산
   const [saved, setSaved] = useState<Saved[]>([]);
@@ -87,7 +123,7 @@ export default function MarginCalcPage() {
   }, []);
   useEffect(() => { loadSaved(); }, [loadSaved]);
   useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/auth", { cache: "no-store" })).json(); if (j.ok) setMe(j.name); } catch { /* noop */ } })(); }, []);
-  useEffect(() => { (async () => { try { const j = await (await fetch("/api/sales/margin-calc", { cache: "no-store" })).json(); if (j.ok) setChannels(j.channels || []); } catch { /* noop */ } })(); }, []);
+  useEffect(() => { (async () => { try { const j = await (await fetch("/api/sales/margin-calc", { cache: "no-store" })).json(); if (j.ok) { setChannels(j.channels || []); setProducts(j.products || []); setTopProducts(j.topProducts || []); } } catch { /* noop */ } })(); }, []);
 
   const filteredSaved = useMemo(
     () => (savedFilter === "all" || !me ? saved : saved.filter((s) => s.createdBy === me)),
@@ -217,7 +253,7 @@ export default function MarginCalcPage() {
         </div>
       )}
 
-      <QuestionComposer channels={channels} disabled={loading} onCompose={setQ} />
+      <QuestionComposer channels={channels} products={products} topProducts={topProducts} disabled={loading} onCompose={setQ} />
 
       <div className="rp-ask">
         <textarea className="b2b-input rp-input" rows={2} value={q}
