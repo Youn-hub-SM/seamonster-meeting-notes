@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { analyzeMargin, type MarginProduct, type MarginChannel } from "@/app/lib/margin-calc";
+import { analyzeMargin, type MarginProduct, type MarginChannel, type MarginTurn } from "@/app/lib/margin-calc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// POST { question } — 자연어 시나리오 → 원가표·채널정책 자동 제공 → opus 이익률 분석.
+// GET — 질문 만들기 도우미용 채널 목록(수수료 설정된 실제 채널)
+export async function GET() {
+  try {
+    const { data } = await supabaseAdmin().from("sales_channel_config").select("channel").order("channel");
+    return NextResponse.json({ ok: true, channels: (data ?? []).map((c) => String(c.channel)).filter(Boolean) });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: extractErrorMsg(e, "채널 조회 실패") }, { status: 500 });
+  }
+}
+
+// POST { question, history? } — 자연어 시나리오 → 원가표·채널정책 자동 제공 → opus 이익률 분석.
+//  history: [{ q, result }] — '이어서 질문'(이전 시나리오를 문맥으로 수정·비교).
 export async function POST(req: NextRequest) {
   try {
-    const { question } = (await req.json()) as { question?: string };
+    const { question, history } = (await req.json()) as { question?: string; history?: MarginTurn[] };
     const q = (question || "").trim();
     if (!q) return NextResponse.json({ ok: false, error: "질문을 입력하세요." }, { status: 400 });
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ ok: false, error: "ANTHROPIC_API_KEY 가 설정되어 있지 않습니다." }, { status: 503 });
@@ -33,7 +44,8 @@ export async function POST(req: NextRequest) {
     }));
 
     const month = new Date(Date.now() + 9 * 3600e3).getUTCMonth() + 1; // KST 월
-    const result = await analyzeMargin(q, { products, channels, month });
+    const hist = Array.isArray(history) ? history.filter((t) => t && typeof t.q === "string" && t.result) : [];
+    const result = await analyzeMargin(q, { products, channels, month }, hist);
     return NextResponse.json({ ok: true, result });
   } catch (e) {
     // opus 응답 JSON 파싱 실패 등

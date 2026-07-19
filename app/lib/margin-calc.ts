@@ -117,14 +117,30 @@ function dataBlock(ref: MarginRefData): string {
   ].join("\n\n");
 }
 
-export async function analyzeMargin(question: string, ref: MarginRefData): Promise<MarginResult> {
+// 이어지는 대화 한 턴 — 이전 질문과 그때의 결과(JSON). 후속 질문("택배비 4천원이면?")의 문맥이 된다.
+export type MarginTurn = { q: string; result: MarginResult };
+
+export async function analyzeMargin(question: string, ref: MarginRefData, history: MarginTurn[] = []): Promise<MarginResult> {
   // 편집 가능한 지침(역할·계산 규칙·배송정책) + 고정 출력 규칙(JSON) 으로 시스템 프롬프트 조립.
   const framework = await getMarginPrompt();
+  const hist = history.slice(-4); // 최근 4턴이면 후속 수정 문맥으로 충분(토큰 절약)
+  const messages: Anthropic.MessageParam[] = [];
+  if (hist.length) {
+    messages.push({ role: "user", content: `${dataBlock(ref)}\n\n[질문]\n${hist[0].q.trim()}` });
+    messages.push({ role: "assistant", content: JSON.stringify(hist[0].result) });
+    for (const t of hist.slice(1)) {
+      messages.push({ role: "user", content: `[이어지는 질문]\n${t.q.trim()}` });
+      messages.push({ role: "assistant", content: JSON.stringify(t.result) });
+    }
+    messages.push({ role: "user", content: `[이어지는 질문]\n${question.trim()}` });
+  } else {
+    messages.push({ role: "user", content: `${dataBlock(ref)}\n\n[질문]\n${question.trim()}` });
+  }
   const resp = await anthropic.messages.create({
     model: MODELS.opus, // 최고급 — 고급 계산·전략
     max_tokens: 4096,
     system: `${framework}\n\n${OUTPUT_RULES}`,
-    messages: [{ role: "user", content: `${dataBlock(ref)}\n\n[질문]\n${question.trim()}` }],
+    messages,
   });
   const block = resp.content.find((b) => b.type === "text");
   const text = block && block.type === "text" ? block.text : "";

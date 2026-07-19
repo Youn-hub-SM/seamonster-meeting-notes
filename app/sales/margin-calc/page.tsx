@@ -1,23 +1,76 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { MarginResult, MarginResultItem } from "@/app/lib/margin-calc";
+import type { MarginResult, MarginResultItem, MarginTurn } from "@/app/lib/margin-calc";
 import { won as fmtWon } from "@/app/lib/format";
 
 const won = (n: number) => `${fmtWon(n)}원`;
 
-const EXAMPLES = [
-  "대구순살 1kg을 20% 할인가로 쿠팡에서 판매하면 이익률이 어때?",
-  "연어순살 100g을 스마트스토어에서 12,900원에 팔 때 순이익은?",
-  "농어순살 1kg 도매가로 팔면 마진이 얼마나 남아?",
-];
+type Saved = { id: string; name: string; question: string; createdAt: string; createdBy?: string | null };
+
+// 질문 조립 도우미 — 칸을 클릭하면 시나리오 문장이 만들어져 질문칸에 채워짐(상품명은 직접 입력).
+const PRICE_OPTS = ["정가로", "10% 할인으로", "20% 할인으로", "30% 할인으로", "도매가로", "1+1로"];
+const ASK_OPTS = ["팔면 이익률이 어때?", "팔면 순이익은 얼마야?", "몇 %까지 할인해도 남아?", "손익분기 판매가는 얼마야?"];
+
+function QuestionComposer({ channels, disabled, onCompose }: { channels: string[]; disabled: boolean; onCompose: (text: string) => void }) {
+  const [open, setOpen] = useState(true);
+  const [pick, setPick] = useState<Record<string, string>>({});
+  const FACETS = [
+    { key: "channel", label: "채널", opts: channels },
+    { key: "price", label: "가격 조건", opts: PRICE_OPTS },
+    { key: "ask", label: "질문", opts: ASK_OPTS },
+  ];
+  const compose = (p: Record<string, string>) =>
+    [p.channel ? `${p.channel}에서` : "", p.price || "", p.ask || ""].filter(Boolean).join(" ");
+  function toggle(key: string, opt: string) {
+    const next = { ...pick };
+    if (next[key] === opt) delete next[key]; else next[key] = opt;
+    setPick(next);
+    onCompose(compose(next));
+  }
+  function reset() { setPick({}); onCompose(""); }
+  return (
+    <div className="rp-compose">
+      <button className="rp-compose-head" onClick={() => setOpen((v) => !v)}>
+        <span>{open ? "▾" : "▸"} 질문 만들기 도우미</span>
+        <span className="rp-compose-hint">칸을 눌러 조합한 뒤, 질문칸 맨 앞에 상품명(예: 대구순살 1kg)을 붙여주세요.</span>
+      </button>
+      {open && (
+        <div className="rp-compose-body">
+          {FACETS.filter((f) => f.opts.length > 0).map((f) => (
+            <div key={f.key} className="rp-compose-row">
+              <span className="rp-compose-label">{f.label}</span>
+              <div className="rp-compose-chips">
+                {f.opts.map((o) => (
+                  <button key={o} type="button" className={`rp-chip ${pick[f.key] === o ? "is-active" : ""}`} disabled={disabled} onClick={() => toggle(f.key, o)}>{o}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {Object.keys(pick).length > 0 && <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={reset}>선택 초기화</button>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function MarginCalcPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [res, setRes] = useState<MarginResult | null>(null);
+  const [turns, setTurns] = useState<MarginTurn[]>([]);
+  const [channels, setChannels] = useState<string[]>([]);
+
+  // 저장된 계산
+  const [saved, setSaved] = useState<Saved[]>([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedFilter, setSavedFilter] = useState<"mine" | "all">("mine");
+  const [me, setMe] = useState<string | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [saveQuestion, setSaveQuestion] = useState("");
 
   // 프롬프트(계산 지침) 설정 — 접이식, 처음 펼칠 때 로드.
   const [pOpen, setPOpen] = useState(false);
@@ -29,17 +82,52 @@ export default function MarginCalcPage() {
   const [pSaved, setPSaved] = useState("");
   const [pError, setPError] = useState("");
 
-  async function run(question?: string) {
+  const loadSaved = useCallback(async () => {
+    try { const j = await (await fetch("/api/sales/margin-calc/saved", { cache: "no-store" })).json(); if (j.ok) setSaved(j.saved || []); } catch { /* noop */ }
+  }, []);
+  useEffect(() => { loadSaved(); }, [loadSaved]);
+  useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/auth", { cache: "no-store" })).json(); if (j.ok) setMe(j.name); } catch { /* noop */ } })(); }, []);
+  useEffect(() => { (async () => { try { const j = await (await fetch("/api/sales/margin-calc", { cache: "no-store" })).json(); if (j.ok) setChannels(j.channels || []); } catch { /* noop */ } })(); }, []);
+
+  const filteredSaved = useMemo(
+    () => (savedFilter === "all" || !me ? saved : saved.filter((s) => s.createdBy === me)),
+    [saved, savedFilter, me],
+  );
+
+  async function run(question?: string, fresh = false) {
     const text = (question ?? q).trim();
-    if (!text) return;
-    setQ(text); setLoading(true); setError(""); setRes(null);
+    if (!text || loading) return;
+    const hist = fresh ? [] : turns;
+    setLoading(true); setError(""); setRes(null);
+    if (fresh) setTurns([]);
     try {
-      const r = await fetch("/api/sales/margin-calc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text }) });
+      const r = await fetch("/api/sales/margin-calc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, history: hist }) });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "분석 실패");
       setRes(j.result as MarginResult);
+      setTurns([...hist, { q: text, result: j.result as MarginResult }]);
+      setQ("");
     } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
     setLoading(false);
+  }
+
+  function newThread() { setTurns([]); setRes(null); setError(""); setQ(""); }
+
+  function openSave() {
+    const joined = turns.map((t) => t.q).join(" — 이어서: ");
+    setSaveName((res?.scenario || joined).slice(0, 40));
+    setSaveQuestion(joined);
+    setSaveOpen(true);
+  }
+  async function doSave() {
+    if (!saveName.trim() || !saveQuestion.trim()) return;
+    const r = await fetch("/api/sales/margin-calc/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveQuestion.trim() }) });
+    const j = await r.json();
+    if (!j.ok) { setError(j.error || "저장 실패"); return; }
+    setSaveOpen(false); loadSaved();
+  }
+  async function delSaved(id: string) {
+    await fetch(`/api/sales/margin-calc/saved?id=${id}`, { method: "DELETE" }); loadSaved();
   }
 
   async function togglePrompt() {
@@ -78,44 +166,83 @@ export default function MarginCalcPage() {
   }
 
   return (
-    <div className="b2b-container" style={{ maxWidth: 860 }}>
+    <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">이익률 계산기 <span className="mc-ai">AI</span></h1>
         </div>
       </header>
 
-      <section className="b2b-card">
-        <textarea
-          className="b2b-input" rows={3}
-          placeholder="예: 대구순살 1kg을 20% 할인가로 쿠팡에서 판매하면 이익률이 어때?"
-          value={q} onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run(); }}
-          style={{ width: "100%", resize: "vertical", fontSize: 14, lineHeight: 1.6 }}
-        />
-        <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
-          <button className="b2b-btn-primary" onClick={() => run()} disabled={loading || !q.trim()}>{loading ? "분석 중…" : "분석하기"}</button>
-          <span className="sm-faint" style={{ fontSize: 12 }}>⌘/Ctrl + Enter</span>
-        </div>
-        <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginTop: 12 }}>
-          <span className="sm-faint" style={{ fontSize: 12 }}>예시:</span>
-          {EXAMPLES.map((ex) => (
-            <button key={ex} className="mc-example" onClick={() => run(ex)} disabled={loading}>{ex}</button>
+      {/* 저장된 계산 — 기본 접힘, 클릭 실행 */}
+      {saved.length > 0 && (
+        <div className="rp-saved-box">
+          <div className="rp-saved-bar">
+            <button className="rp-saved-toggle" onClick={() => setSavedOpen((v) => !v)}>
+              <span className="rp-saved-chev">{savedOpen ? "▾" : "▸"}</span>
+              저장된 계산 <span className="rp-saved-count">{filteredSaved.length}개{savedFilter === "mine" && me ? " · 내 저장" : ""}</span>
+            </button>
+            {savedOpen && me && (
+              <div className="sm-tabs">
+                <button className={`sm-tab ${savedFilter === "mine" ? "is-active" : ""}`} onClick={() => setSavedFilter("mine")}>내 저장</button>
+                <button className={`sm-tab ${savedFilter === "all" ? "is-active" : ""}`} onClick={() => setSavedFilter("all")}>전체</button>
+              </div>
+            )}
+          </div>
+          {savedOpen && (filteredSaved.length === 0 ? (
+            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 계산이 없습니다. ‘전체’로 바꿔보세요." : "저장된 계산이 없습니다."}</div>
+          ) : (
+            <div className="rp-saved-list">
+              {filteredSaved.map((s) => (
+                <div key={s.id} className="rp-saved-item" onClick={() => { if (!loading) run(s.question, true); }} title="클릭하면 현재 원가·수수료 기준으로 다시 계산">
+                  <span className="rp-saved-name">{s.name}</span>
+                  <div className="rp-saved-q">{s.question}</div>
+                  <div className="rp-saved-meta">
+                    <span>저장: {s.createdBy || "—"}</span>
+                    <span>·</span>
+                    <span>{s.createdAt.slice(0, 10)}</span>
+                    <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); delSaved(s.id); }}>삭제</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           ))}
-        </div>
-      </section>
-
-      {error && <div className="b2b-error" style={{ marginTop: 12 }}>{error}</div>}
-
-      {loading && (
-        <div className="b2b-card" style={{ marginTop: 16, textAlign: "center", padding: "28px 16px" }}>
-          <div className="b2b-loading">원가표·정책을 근거로 계산 중… (최고급 모델, 10~20초)</div>
         </div>
       )}
 
+      {/* 이어지는 대화 표시 */}
+      {turns.length > 0 && (
+        <div className="rp-thread">
+          <span>이어지는 계산</span>
+          {turns.map((t, i) => <span key={i} className="rp-thread-q">{t.q}</span>)}
+        </div>
+      )}
+
+      <QuestionComposer channels={channels} disabled={loading} onCompose={setQ} />
+
+      <div className="rp-ask">
+        <textarea className="b2b-input rp-input" rows={2} value={q}
+          placeholder={turns.length ? "이어서: 택배비를 4,000원으로 바꾸면? / 30% 할인이면? / 스마트스토어와 비교해줘" : "예: 대구순살 1kg을 20% 할인가로 쿠팡에서 판매하면 이익률이 어때?"}
+          onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run(); }} />
+        <div className="rp-ask-actions">
+          <button className="b2b-btn-primary" onClick={() => run()} disabled={loading || !q.trim()}>
+            {loading ? "분석 중…" : turns.length ? "이어서 질문" : "분석하기"}
+            <span className="rp-kbd">Ctrl+Enter</span>
+          </button>
+          {turns.length > 0 && (
+            <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 계산 시작</button>
+          )}
+        </div>
+      </div>
+
+      {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
+      {loading && <div className="b2b-loading">원가표·정책을 근거로 계산 중… (최고급 모델, 10~20초)</div>}
+
       {res && !loading && (
-        <div className="sm-col" style={{ gap: 16, marginTop: 16 }}>
-          <div className="sm-faint" style={{ fontSize: 13 }}>{res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}</div>
+        <div className="sm-col" style={{ gap: 14 }}>
+          <div className="rp-understood">
+            {res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}
+            <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12.5 }} onClick={openSave}>저장</button>
+          </div>
 
           {res.results.map((r, i) => <ResultCard key={i} r={r} />)}
 
@@ -134,6 +261,27 @@ export default function MarginCalcPage() {
           )}
 
           <p className="sm-faint" style={{ fontSize: 11.5 }}>※ 원가·수수료·배송정책 데이터를 근거로 한 추정입니다. 실제 정산과 차이가 있을 수 있어요.</p>
+        </div>
+      )}
+
+      {/* 저장 다이얼로그 */}
+      {saveOpen && (
+        <div className="rp-modal-bg" onClick={() => setSaveOpen(false)}>
+          <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="b2b-card-head"><span className="b2b-card-title">계산 저장</span></div>
+            <label className="sm-col" style={{ gap: 4, marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>이름</span>
+              <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 대구 1kg 쿠팡 20% 할인" />
+            </label>
+            <label className="sm-col" style={{ gap: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 실행할 때마다 이 질문을 현재 원가·수수료 기준으로 다시 계산합니다</span></span>
+              <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 13, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => setSaveQuestion(e.target.value)} />
+            </label>
+            <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+              <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>취소</button>
+              <button className="b2b-btn-primary" onClick={doSave} disabled={!saveName.trim() || !saveQuestion.trim()}>저장</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -181,8 +329,6 @@ export default function MarginCalcPage() {
 
       <style>{`
         .mc-ai { font-size: 11px; font-weight: 700; color: var(--sm-orange); border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light); border-radius: 6px; padding: 1px 7px; vertical-align: middle; margin-left: 4px; }
-        .mc-example { font-size: 12px; color: var(--sm-text-mid); background: var(--sm-bg); border: 1px solid var(--sm-border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
-        .mc-example:hover { border-color: var(--sm-orange); color: var(--sm-orange); }
         .mc-prompt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: none; border: none; padding: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sm-text-mid); text-align: left; }
       `}</style>
     </div>
