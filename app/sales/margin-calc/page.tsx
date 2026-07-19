@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { MarginResult, MarginResultItem, MarginTurn } from "@/app/lib/margin-calc";
+import type { MarginResult, MarginResultItem, MarginSpec, MarginTurn } from "@/app/lib/margin-calc";
 import { won as fmtWon } from "@/app/lib/format";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 
 const won = (n: number) => `${fmtWon(n)}원`;
 
-type Saved = { id: string; name: string; question: string; result?: MarginResult | null; createdAt: string; createdBy?: string | null };
+type Saved = { id: string; name: string; question: string; specs?: MarginSpec[] | null; result?: MarginResult | null; createdAt: string; createdBy?: string | null };
 type ProdOpt = { name: string; spec: string | null; sku: string | null };
 
 // 질문 조립 도우미 — 칸을 클릭하면 시나리오 문장이 만들어져 질문칸에 채워짐.
@@ -107,7 +107,7 @@ export default function MarginCalcPage() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveQuestion, setSaveQuestion] = useState("");
-  // 저장본을 스냅샷으로 열었을 때의 출처 표시(이름·저장일) — '다시 계산'으로 최신화 가능
+  // 저장본을 '스냅샷'으로 열었을 때의 출처(스펙 없는 저장본) — 'AI로 다시 계산'으로 최신화 가능
   const [snapshotOf, setSnapshotOf] = useState<{ name: string; date: string; question: string } | null>(null);
 
   // 프롬프트(계산 지침) 설정 — 접이식, 처음 펼칠 때 로드.
@@ -151,10 +151,21 @@ export default function MarginCalcPage() {
 
   function newThread() { setTurns([]); setRes(null); setError(""); setQ(""); setSnapshotOf(null); }
 
-  // 저장본 클릭 — 스냅샷이 있으면 AI 없이 즉시 열기(이어서 질문도 가능). 없으면(레거시) 재계산.
-  function openSaved(s: Saved) {
+  // 저장본 클릭 — 스펙(레시피)이 있으면 AI 없이 '현재' 원가 기준 즉시 계산(저장 SQL 재실행에 해당).
+  //  스펙이 없으면 저장 시점 스냅샷 표시, 그것도 없으면(레거시) AI 재계산.
+  async function openSaved(s: Saved) {
     if (loading) return;
-    if (s.result) {
+    if (s.specs?.length) {
+      setLoading(true); setError(""); setRes(null); setSnapshotOf(null); setTurns([]); setQ("");
+      try {
+        const r = await fetch("/api/sales/margin-calc/replay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ specs: s.specs, name: s.name }) });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "재계산 실패");
+        setRes(j.result as MarginResult);
+        setTurns([{ q: s.question, result: j.result as MarginResult }]); // 이어서 질문 가능
+      } catch (e) { setError(e instanceof Error ? e.message : "재계산 실패"); }
+      setLoading(false);
+    } else if (s.result) {
       setError(""); setQ("");
       setRes(s.result);
       setTurns([{ q: s.question, result: s.result }]);
@@ -172,7 +183,8 @@ export default function MarginCalcPage() {
   }
   async function doSave() {
     if (!saveName.trim() || !saveQuestion.trim()) return;
-    const r = await fetch("/api/sales/margin-calc/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveQuestion.trim(), result: res }) });
+    const specs = (res?.results || []).map((r) => r.spec).filter(Boolean);
+    const r = await fetch("/api/sales/margin-calc/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveQuestion.trim(), specs, result: res }) });
     const j = await r.json();
     if (!j.ok) { setError(j.error || "저장 실패"); return; }
     setSaveOpen(false); loadSaved();
@@ -244,8 +256,8 @@ export default function MarginCalcPage() {
           ) : (
             <div className="rp-saved-list">
               {filteredSaved.map((s) => (
-                <div key={s.id} className="rp-saved-item" onClick={() => openSaved(s)} title={s.result ? "클릭하면 저장된 결과가 바로 열립니다" : "클릭하면 다시 계산합니다"}>
-                  <span className="rp-saved-name">{s.name}{s.result ? null : <span className="rp-saved-var">재계산</span>}</span>
+                <div key={s.id} className="rp-saved-item" onClick={() => openSaved(s)} title={s.specs?.length ? "클릭하면 현재 원가 기준으로 즉시 계산됩니다 (AI 없음)" : s.result ? "클릭하면 저장 시점 결과가 열립니다" : "클릭하면 AI 로 다시 계산합니다"}>
+                  <span className="rp-saved-name">{s.name}{s.specs?.length ? null : s.result ? <span className="rp-saved-var">저장시점</span> : <span className="rp-saved-var">AI 재계산</span>}</span>
                   <div className="rp-saved-q">{s.question}</div>
                   <div className="rp-saved-meta">
                     <span>저장: {s.createdBy || "—"}</span>
@@ -292,8 +304,8 @@ export default function MarginCalcPage() {
         <div className="sm-col" style={{ gap: 14 }}>
           {snapshotOf && (
             <div className="sm-faint" style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              저장된 결과 <strong>{snapshotOf.name}</strong> ({snapshotOf.date} 저장) — 이후 원가·수수료가 바뀌었을 수 있어요.
-              <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12 }} disabled={loading} onClick={() => run(snapshotOf.question, true)}>현재 기준 다시 계산</button>
+              저장 시점 결과 <strong>{snapshotOf.name}</strong> ({snapshotOf.date}) — 이후 원가·수수료가 바뀌었을 수 있어요.
+              <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12 }} disabled={loading} onClick={() => run(snapshotOf.question, true)}>AI로 다시 계산</button>
             </div>
           )}
           <div className="rp-understood">
@@ -304,13 +316,6 @@ export default function MarginCalcPage() {
           </div>
 
           {res.results.map((r, i) => <ResultCard key={i} r={r} />)}
-
-          {res.strategy && (
-            <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">판매 전략 제언</span></div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.75, whiteSpace: "pre-wrap", color: "var(--sm-text-mid)" }}>{res.strategy.replace(/\*\*/g, "")}</div>
-            </section>
-          )}
 
           {res.assumptions?.length > 0 && (
             <div className="sm-faint" style={{ fontSize: 12, lineHeight: 1.7 }}>
@@ -333,7 +338,7 @@ export default function MarginCalcPage() {
               <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 대구 1kg 쿠팡 20% 할인" />
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 지금 결과가 함께 저장되어 클릭 시 바로 열리고, '다시 계산'하면 이 질문으로 최신 원가 기준 재계산됩니다</span></span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 계산 레시피가 함께 저장되어, 클릭할 때마다 AI 없이 현재 원가·수수료 기준으로 즉시 계산됩니다</span></span>
               <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 13, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => setSaveQuestion(e.target.value)} />
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
