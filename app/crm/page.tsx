@@ -2,29 +2,41 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CrmMessage, CrmMessageInput, EMPTY_CRM_MESSAGE,
+  CrmMessage, CrmMessageInput, CrmPerf, EMPTY_CRM_MESSAGE,
   CRM_CHANNELS, CRM_CHANNEL_LABEL, CRM_STATUSES, CRM_STATUS_LABEL, CRM_LINK_TYPES, crmTags,
 } from "@/app/lib/crm";
 
-// ── 배지 색 (인라인) ──
-const CH_COLOR: Record<string, { bg: string; fg: string }> = {
-  kakao: { bg: "#FFF8E1", fg: "#8D6E00" },
-  cafe24: { bg: "#E6F1FB", fg: "#185FA5" },
-  manual: { bg: "#F1EFE8", fg: "#4A4946" },
-  custom: { bg: "#F0EBF8", fg: "#6B45B0" },
-  onsite: { bg: "#E0F2F1", fg: "#00695C" },
-  leaflet: { bg: "#E8F5EE", fg: "#0F6E56" },
-};
-const ST_COLOR: Record<string, string> = { active: "var(--sm-success)", auto: "var(--sm-info)", gap: "var(--sm-danger)", paused: "var(--sm-text-light)" };
-const chColor = (k: string) => CH_COLOR[k] || { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
-// 인라인 상태 select 색 — 시맨틱 토큰(soft bg + fg)만 사용.
-const ST_SELECT: Record<string, { bg: string; fg: string }> = {
-  active: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
-  auto: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
-  gap: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
-  paused: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-light)" },
-};
-const stColor = (k: string) => ST_SELECT[k] || { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" };
+// 색은 전부 b2b.css 의 .crm-* 클래스(채널 팔레트·시맨틱 토큰) — 인라인 hex 금지.
+const CH_KEYS = new Set(CRM_CHANNELS.map((c) => c.key));
+const ST_KEYS = new Set(CRM_STATUSES.map((s) => s.key));
+const chipCls = (k: string) => `crm-chip ${CH_KEYS.has(k) ? `crm-ch-${k}` : ""}`;
+const dotCls = (st: string) => `crm-dot ${ST_KEYS.has(st) ? `is-${st}` : ""}`;
+const stSelCls = (st: string) => `b2b-status-select ${ST_KEYS.has(st) ? `crm-stsel-${st}` : ""}`;
+const chSelCls = (k: string) => `b2b-status-select ${CH_KEYS.has(k) ? `crm-chsel-${k}` : ""}`;
+
+// 성과 한 줄 요약 — 값이 있는 지표만.
+const wonCompact = (n: number) => (n >= 10000 ? `${(n / 10000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만원` : `${n.toLocaleString("ko-KR")}원`);
+function perfLine(p?: CrmPerf): string {
+  if (!p) return "";
+  const parts: string[] = [];
+  if (p.sent) parts.push(`발송 ${p.sent.toLocaleString("ko-KR")}`);
+  if (p.opened) parts.push(`열람 ${p.opened.toLocaleString("ko-KR")}`);
+  if (p.clicked) parts.push(`클릭 ${p.clicked.toLocaleString("ko-KR")}`);
+  if (p.converted) parts.push(`전환 ${p.converted.toLocaleString("ko-KR")}`);
+  if (p.revenue) parts.push(wonCompact(p.revenue));
+  return parts.join(" · ");
+}
+
+// GA 성과(utm_campaign 세션 귀속, 최근 90일) 한 줄 — 카드에 자동 표시.
+type GaStat = { sessions: number; users: number; purchases: number; revenue: number };
+type GaState = { configured: boolean; stats: Record<string, GaStat> };
+function gaLine(g?: GaStat): string {
+  if (!g) return "";
+  const parts = [`세션 ${g.sessions.toLocaleString("ko-KR")}`];
+  if (g.purchases) parts.push(`구매 ${g.purchases.toLocaleString("ko-KR")}`);
+  if (g.revenue) parts.push(wonCompact(g.revenue));
+  return parts.join(" · ");
+}
 
 type Stage = { stage: string; sub: string; stage_num: number; msgs: CrmMessage[] };
 
@@ -32,7 +44,7 @@ export default function CrmPage() {
   const [messages, setMessages] = useState<CrmMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"board" | "table">("board");
+  const [tab, setTab] = useState<"board" | "flow" | "table">("board");
   const [search, setSearch] = useState("");
   const [chFilter, setChFilter] = useState("");
 
@@ -40,8 +52,31 @@ export default function CrmPage() {
   const [saving, setSaving] = useState(false);
 
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [ga, setGa] = useState<GaState | null>(null);
   const messagesRef = useRef<CrmMessage[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  // GA 성과 — utm_campaign 이 달린 메시지가 있을 때만 조회. 실패해도 화면은 수동 perf 로 동작.
+  const campaigns = useMemo(
+    () => [...new Set(messages.map((m) => (m.links?.utm_campaign || "").trim()).filter(Boolean))],
+    [messages],
+  );
+  const campaignsKey = campaigns.join(","); // 문자열 키 — 내용이 같으면 재조회하지 않음(인라인 저장마다 배열 참조가 바뀌므로)
+  useEffect(() => {
+    if (!campaignsKey) { setGa(null); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const j = await (await fetch(`/api/crm/ga-stats?campaigns=${encodeURIComponent(campaignsKey)}`, { cache: "no-store" })).json();
+        if (alive && j.ok) setGa({ configured: !!j.configured, stats: j.stats || {} });
+      } catch { /* GA는 부가 정보 — 실패는 조용히 */ }
+    })();
+    return () => { alive = false; };
+  }, [campaignsKey]);
+  const gaOf = useCallback((m: CrmMessage): GaStat | undefined => {
+    const c = (m.links?.utm_campaign || "").trim();
+    return c ? ga?.stats?.[c] : undefined;
+  }, [ga]);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -148,7 +183,7 @@ export default function CrmPage() {
         <div>
           <h1 className="b2b-page-title">CRM 메시지맵</h1>
         </div>
-        <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center" }}>
+        <div className="b2b-page-actions sm-row sm-gap-2">
           <button className="b2b-btn-primary" onClick={() => openNew()}>+ 메시지 추가</button>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
         </div>
@@ -157,30 +192,36 @@ export default function CrmPage() {
       {error && <div className="b2b-error">{error}</div>}
 
       {/* 요약 스트립 */}
-      <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+      <div className="crm-summary">
         <Stat label="메시지" value={summary.total} />
         <Stat label="스테이지" value={summary.stageCount} />
-        <Stat label="활성" value={summary.active} color="var(--sm-success)" />
-        {summary.gap > 0 && <Stat label="공백·미완" value={summary.gap} color="var(--sm-danger)" />}
-        <div style={{ flex: 1 }} />
+        <Stat label="활성" value={summary.active} tone="success" />
+        {summary.gap > 0 && <Stat label="공백·미완" value={summary.gap} tone="danger" />}
+        <div className="crm-summary-spacer" />
         {CRM_CHANNELS.filter((c) => summary.byCh[c.key]).map((c) => (
-          <span key={c.key} style={{ ...pill(chColor(c.key)) }}>{c.label} {summary.byCh[c.key]}</span>
+          <span key={c.key} className={chipCls(c.key)}>{c.label} {summary.byCh[c.key]}</span>
         ))}
       </div>
 
       {/* 탭 + 필터 */}
-      <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-        <div className="sm-tabs" style={{ margin: 0 }}>
+      <div className="crm-toolbar">
+        <div className="sm-tabs">
           <button className={`sm-tab ${tab === "board" ? "is-active" : ""}`} onClick={() => setTab("board")}>보드</button>
+          <button className={`sm-tab ${tab === "flow" ? "is-active" : ""}`} onClick={() => setTab("flow")}>흐름</button>
           <button className={`sm-tab ${tab === "table" ? "is-active" : ""}`} onClick={() => setTab("table")}>표(편집)</button>
         </div>
-        <div style={{ flex: 1 }} />
-        <select className="b2b-select" value={chFilter} onChange={(e) => setChFilter(e.target.value)} style={{ width: "auto" }}>
+        <div className="crm-summary-spacer" />
+        <select className="b2b-select crm-ch-filter" value={chFilter} onChange={(e) => setChFilter(e.target.value)}>
           <option value="">전체 채널</option>
           {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
         </select>
-        <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="메시지·스테이지·태그 검색" style={{ width: 200 }} />
+        <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="메시지·스테이지·태그 검색" />
       </div>
+
+      {/* utm_campaign 은 달았는데 GA env 가 없을 때만 안내(설정되면 카드에 자동 표시) */}
+      {campaigns.length > 0 && ga && !ga.configured && (
+        <p className="sm-faint crm-ga-hint">GA 연동 대기 — <code>GA4_PROPERTY_ID</code>·<code>GA_SA_EMAIL</code>·<code>GA_SA_PRIVATE_KEY</code> 를 넣으면 UTM 캠페인 성과(세션·구매·매출)가 카드에 자동 표시됩니다.</p>
+      )}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> :
         messages.length === 0 ? (
@@ -189,7 +230,9 @@ export default function CrmPage() {
             migration 063 적용 후 기존 시트 데이터를 이관하세요.
           </div>
         ) : tab === "board" ? (
-          <BoardView stages={stages} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
+          <BoardView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
+        ) : tab === "flow" ? (
+          <FlowView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : (
           <TableView msgs={filtered} stageNames={stageNames} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
         )}
@@ -204,31 +247,30 @@ export default function CrmPage() {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
+function Stat({ label, value, tone }: { label: string; value: number; tone?: "success" | "danger" }) {
   return (
-    <div style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: "8px 14px", background: "var(--sm-white)" }}>
-      <div style={{ fontSize: 11, color: "var(--sm-text-light)" }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: color || "var(--sm-dark)" }}>{value}</div>
+    <div className={`crm-stat${tone ? ` is-${tone}` : ""}`}>
+      <div className="crm-stat-label">{label}</div>
+      <div className="crm-stat-value">{value}</div>
     </div>
   );
 }
-const pill = (c: { bg: string; fg: string }): React.CSSProperties => ({ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999, background: c.bg, color: c.fg, whiteSpace: "nowrap" });
 
 // ── 보드 뷰 (스테이지 컬럼) ──
-function BoardView({ stages, onCard, onAdd }: { stages: Stage[]; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
+function BoardView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
   return (
-    <div style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 12, alignItems: "flex-start" }}>
+    <div className="crm-board">
       {stages.map((s) => (
-        <div key={s.stage} style={{ flex: "0 0 300px", width: 300 }}>
-          <div style={{ background: "var(--sm-dark)", color: "#fff", borderRadius: 12, padding: "12px 16px", marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: "var(--sm-orange)", fontWeight: 700 }}>STAGE {s.stage_num || "-"}</div>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{s.stage}</div>
-            {s.sub && <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", marginTop: 2 }}>{s.sub}</div>}
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,.6)", marginTop: 6 }}>{s.msgs.length}개</div>
+        <div key={s.stage} className="crm-bstage">
+          <div className="crm-bhead">
+            <div className="crm-bhead-no">STAGE {s.stage_num || "-"}</div>
+            <div className="crm-bhead-name">{s.stage}</div>
+            {s.sub && <div className="crm-bhead-sub">{s.sub}</div>}
+            <div className="crm-bhead-n">{s.msgs.length}개</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {s.msgs.map((m) => <Card key={m.id} m={m} onClick={() => onCard(m)} />)}
-            <button onClick={() => onAdd(s)} style={{ border: "1px dashed var(--sm-border)", background: "transparent", borderRadius: 10, padding: "8px", fontSize: 12, color: "var(--sm-text-light)", cursor: "pointer" }}>+ 이 단계에 추가</button>
+          <div className="crm-bcol">
+            {s.msgs.map((m) => <Card key={m.id} m={m} ga={gaOf(m)} onClick={() => onCard(m)} />)}
+            <button type="button" className="crm-add" onClick={() => onAdd(s)}>+ 이 단계에 추가</button>
           </div>
         </div>
       ))}
@@ -236,30 +278,80 @@ function BoardView({ stages, onCard, onAdd }: { stages: Stage[]; onCard: (m: Crm
   );
 }
 
-function Card({ m, onClick }: { m: CrmMessage; onClick: () => void }) {
-  const c = chColor(m.channel);
+function Card({ m, ga, onClick }: { m: CrmMessage; ga?: GaStat; onClick: () => void }) {
+  const gl = gaLine(ga);
   return (
-    <div onClick={onClick} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: "10px 12px", background: "var(--sm-white)", cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,.03)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: ST_COLOR[m.status] || "var(--sm-border)", flexShrink: 0 }} title={CRM_STATUS_LABEL[m.status] || m.status} />
-        <strong style={{ fontSize: 13, color: "var(--sm-dark)", lineHeight: 1.3 }}>{m.title || "(제목 없음)"}</strong>
+    <div className="crm-card" onClick={onClick}>
+      <div className="crm-card-head">
+        <span className={dotCls(m.status)} title={CRM_STATUS_LABEL[m.status] || m.status} />
+        <strong className="crm-card-title">{m.title || "(제목 없음)"}</strong>
       </div>
-      <div className="sm-row" style={{ gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ ...pill(c), fontSize: 10, padding: "2px 8px" }}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
-        {m.timing && <span style={{ fontSize: 11, color: "var(--sm-text-mid)" }}>· {m.timing}</span>}
+      <div className="sm-row-wrap crm-card-meta-row">
+        <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
+        {m.timing && <span className="crm-card-meta">· {m.timing}</span>}
       </div>
       {crmTags(m.tags).length > 0 && (
-        <div className="sm-row" style={{ gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-          {crmTags(m.tags).map((t) => <span key={t} style={{ fontSize: 10, color: "var(--sm-text-light)", background: "var(--sm-bg-subtle)", borderRadius: 4, padding: "1px 6px" }}>{t}</span>)}
+        <div className="sm-row-wrap crm-card-tags">
+          {crmTags(m.tags).map((t) => <span key={t} className="crm-tag">{t}</span>)}
         </div>
       )}
+      {gl && <div className="crm-ga" title="GA · utm_campaign 세션 귀속 · 최근 90일">GA {gl}</div>}
       {CRM_LINK_TYPES.some((l) => m.links?.[l.key]) && (
-        <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+        <div className="sm-row-wrap crm-card-links">
           {CRM_LINK_TYPES.filter((l) => m.links?.[l.key]).map((l) => (
-            <a key={l.key} href={m.links[l.key]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 10.5, color: "var(--sm-info)", textDecoration: "none", border: "1px solid var(--sm-border)", borderRadius: 6, padding: "1px 6px" }}>{l.label} ↗</a>
+            <a key={l.key} className="crm-link" href={m.links[l.key]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{l.label} ↗</a>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── 흐름 뷰 — 여정 리본(정거장 레일) + 단계 안 발송시점 타임라인. 공백은 점선 카드(흐름의 구멍) ──
+function FlowView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
+  return (
+    <div className="crm-flow-wrap">
+      <div className="crm-flow">
+        {stages.map((s, i) => {
+          const gapN = s.msgs.filter((m) => m.status === "gap").length;
+          return (
+            <div key={s.stage} className="crm-fstage">
+              <div className="crm-fhead">
+                <div className="crm-fno">STAGE {s.stage_num || i + 1}</div>
+                <div className="crm-fname">{s.stage}</div>
+                {s.sub && <div className="crm-fsub">{s.sub}</div>}
+                <div className="crm-fmeta">
+                  {s.msgs.length}개
+                  {gapN > 0 && <> · <span className="crm-fgapn">공백 {gapN}{gapN === s.msgs.length ? " — 전부 구멍" : ""}</span></>}
+                </div>
+              </div>
+              <div className="crm-ftl">
+                {s.msgs.map((m) => {
+                  const perf = perfLine(m.perf);
+                  const gl = gaLine(gaOf(m));
+                  return (
+                    <div key={m.id} className={`crm-fmsg ${ST_KEYS.has(m.status) ? `is-${m.status}` : ""}`}>
+                      {m.timing && <div className="crm-ftime">{m.timing}</div>}
+                      <button type="button" className={`crm-fcard${m.status === "gap" ? " is-gap" : ""}`} onClick={() => onCard(m)}>
+                        <span className="crm-ft">{m.title || "(제목 없음)"}</span>
+                        <span className="sm-row-wrap crm-fchips">
+                          <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
+                          {m.status === "gap" && <span className="crm-chip crm-chip-gap">미운영</span>}
+                          {m.status === "auto" && <span className="crm-chip crm-chip-auto">자동</span>}
+                          {m.status === "paused" && <span className="crm-chip crm-chip-paused">중단</span>}
+                        </span>
+                        {perf && <span className="crm-fperf">{perf}</span>}
+                        {gl && <span className="crm-ga" title="GA · utm_campaign 세션 귀속 · 최근 90일">GA {gl}</span>}
+                      </button>
+                    </div>
+                  );
+                })}
+                <button type="button" className="crm-add" onClick={() => onAdd(s)}>+ 추가</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -277,9 +369,9 @@ function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
       <div className="b2b-table-wrap">
         <table className="b2b-table">
           <thead><tr>
-            <th style={{ minWidth: 150 }}>스테이지</th><th style={{ minWidth: 200 }}>메시지명</th>
-            <th style={{ width: 116 }}>채널</th><th style={{ minWidth: 130 }}>발송시점</th>
-            <th style={{ width: 116 }}>상태</th><th style={{ minWidth: 140 }}>태그</th><th style={{ width: 92 }}></th>
+            <th className="crm-col-stage">스테이지</th><th className="crm-col-title">메시지명</th>
+            <th className="crm-col-select">채널</th><th className="crm-col-timing">발송시점</th>
+            <th className="crm-col-select">상태</th><th className="crm-col-tags">태그</th><th className="crm-col-actions"></th>
           </tr></thead>
           <tbody>
             {msgs.map((m) => (
@@ -287,16 +379,14 @@ function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
                 <td><CellText id={m.id} value={m.stage} field="stage" placeholder="스테이지" list="crm-stage-names" onField={onField} onSave={onSave} /></td>
                 <td><CellText id={m.id} value={m.title} field="title" placeholder="메시지명" onField={onField} onSave={onSave} /></td>
                 <td>
-                  <select className="b2b-status-select" value={m.channel} aria-label="채널"
-                    style={{ background: chColor(m.channel).bg, color: chColor(m.channel).fg }}
+                  <select className={chSelCls(m.channel)} value={m.channel} aria-label="채널"
                     onChange={(e) => { onField(m.id, "channel", e.target.value); onSave(m.id, { channel: e.target.value }); }}>
                     {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </td>
                 <td><CellText id={m.id} value={m.timing} field="timing" placeholder="예: 결제 후 1시간" onField={onField} onSave={onSave} /></td>
                 <td>
-                  <select className="b2b-status-select" value={m.status} aria-label="상태"
-                    style={{ background: stColor(m.status).bg, color: stColor(m.status).fg }}
+                  <select className={stSelCls(m.status)} value={m.status} aria-label="상태"
                     onChange={(e) => { onField(m.id, "status", e.target.value); onSave(m.id, { status: e.target.value }); }}>
                     {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                   </select>
@@ -305,14 +395,14 @@ function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
                 <td className="actions">
                   {savingId === m.id
                     ? <span className="crm-saving">저장 중…</span>
-                    : <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => onEdit(m)}>상세</button>}
+                    : <button className="b2b-btn-secondary crm-detail-btn" onClick={() => onEdit(m)}>상세</button>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>셀을 눌러 바로 수정하면 자동 저장됩니다. 상세 설명·메시지 초안·링크·성과는 <b>상세</b>에서 편집하세요.</p>
+      <p className="sm-faint crm-table-hint">셀을 눌러 바로 수정하면 자동 저장됩니다. 상세 설명·메시지 초안·링크·성과는 <b>상세</b>에서 편집하세요.</p>
     </>
   );
 }
@@ -343,7 +433,7 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving }: {
 
   return (
     <div className="b2b-modal-backdrop">
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+      <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{data.id ? "메시지 수정" : "새 메시지"}</h2>
           <button className="b2b-modal-close" onClick={onClose}>✕</button>
@@ -352,7 +442,7 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving }: {
           <div className="b2b-field-row">
             <label className="b2b-field"><span className="b2b-field-label">스테이지</span>
               <input className="b2b-input" value={data.stage} onChange={(e) => set("stage", e.target.value)} placeholder="예: 유입/인지" /></label>
-            <label className="b2b-field" style={{ maxWidth: 110 }}><span className="b2b-field-label">순서(번호)</span>
+            <label className="b2b-field crm-field-num"><span className="b2b-field-label">순서(번호)</span>
               <input type="number" className="b2b-input" value={data.stage_num} onChange={(e) => set("stage_num", Number(e.target.value) || 0)} /></label>
           </div>
           <label className="b2b-field"><span className="b2b-field-label">스테이지 부제(선택)</span>
@@ -378,16 +468,20 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving }: {
           <label className="b2b-field"><span className="b2b-field-label">태그(콤마 구분)</span>
             <input className="b2b-input" value={data.tags} onChange={(e) => set("tags", e.target.value)} placeholder="예: 신규, 자동화" /></label>
 
-          <div className="b2b-field-label" style={{ marginTop: 6, fontWeight: 700 }}>링크 (선택)</div>
-          <div className="b2b-field-row" style={{ flexWrap: "wrap" }}>
+          <div className="b2b-field-label crm-links-title">링크 (선택)</div>
+          <div className="b2b-field-row crm-links-row">
             {CRM_LINK_TYPES.map((l) => (
-              <label key={l.key} className="b2b-field" style={{ minWidth: 160, flex: 1 }}>
+              <label key={l.key} className="b2b-field crm-link-field">
                 <span className="b2b-field-label">{l.label}</span>
                 <input className="b2b-input" value={data.links[l.key] || ""} onChange={(e) => setLink(l.key, e.target.value)} placeholder="https://" spellCheck={false} />
               </label>
             ))}
           </div>
-          <label className="sm-row" style={{ gap: 8, fontSize: 13, marginTop: 8, cursor: "pointer" }}>
+          <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인 (GA 성과 연동)</span>
+            <input className="b2b-input" value={data.links.utm_campaign || ""} onChange={(e) => setLink("utm_campaign", e.target.value)}
+              placeholder="이 메시지 링크의 utm_campaign 값 — 예: crm_60d_winback" spellCheck={false} />
+            <span className="sm-faint crm-field-hint">UTM 만들기에서 쓴 캠페인명과 똑같이 넣으면 GA 세션·구매·매출이 카드에 자동 표시됩니다.</span></label>
+          <label className="sm-row sm-gap-2 crm-active-check">
             <input type="checkbox" checked={data.active} onChange={(e) => set("active", e.target.checked)} /> 목록에 표시(체크 해제 시 숨김)
           </label>
         </div>

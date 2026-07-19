@@ -2,6 +2,8 @@
 
 export type CrmLinks = {
   solapi?: string; cafe24?: string; meta?: string; sheets?: string; channel?: string; blog?: string; onsite?: string;
+  /** GA 연동 키 — 이 메시지 링크들의 utm_campaign 값. URL 이 아니라 캠페인명이라 CRM_LINK_TYPES(바로가기 버튼)에는 넣지 않는다. */
+  utm_campaign?: string;
 };
 export type CrmPerf = {
   sent?: number; reached?: number; opened?: number; clicked?: number; converted?: number; revenue?: number;
@@ -71,6 +73,8 @@ const toInt = (v: unknown): number => { const n = Number(v); return Number.isFin
 export function normalizeCrmMessage(input: CrmMessageInput): CrmMessageInput {
   const links: CrmLinks = {};
   for (const { key } of CRM_LINK_TYPES) { const u = clean((input.links || {})[key]); if (u) links[key] = u; }
+  const utm = clean(input.links?.utm_campaign); // URL 링크가 아니라서 별도 보존
+  if (utm) links.utm_campaign = utm;
   const perfIn = input.perf || {};
   const perf: CrmPerf = {};
   (["sent", "reached", "opened", "clicked", "converted", "revenue"] as (keyof CrmPerf)[]).forEach((k) => {
