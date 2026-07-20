@@ -17,7 +17,6 @@ const periodLabel = (m: Pick<CrmMessage, "start_date" | "end_date">) =>
 const CH_KEYS = new Set(CRM_CHANNELS.map((c) => c.key));
 const ST_KEYS = new Set(CRM_STATUSES.map((s) => s.key));
 const chipCls = (k: string) => `crm-chip ${CH_KEYS.has(k) ? `crm-ch-${k}` : ""}`;
-const dotCls = (st: string) => `crm-dot ${ST_KEYS.has(st) ? `is-${st}` : ""}`;
 const stSelCls = (st: string) => `b2b-status-select ${ST_KEYS.has(st) ? `crm-stsel-${st}` : ""}`;
 const chSelCls = (k: string) => `b2b-status-select ${CH_KEYS.has(k) ? `crm-chsel-${k}` : ""}`;
 
@@ -52,7 +51,7 @@ export default function CrmPage() {
   const [datesSupported, setDatesSupported] = useState(true); // migration 074 미적용이면 false → 날짜 기능 숨김
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"board" | "flow" | "table" | "stats">("board");
+  const [tab, setTab] = useState<"flow" | "table" | "stats">("flow");
   const [search, setSearch] = useState("");
   const [chFilter, setChFilter] = useState("");
   const [asof, setAsof] = useState(""); // 기준일(YYYY-MM-DD) — 비면 전체, 고르면 그날 진행 중만(보드·흐름)
@@ -240,14 +239,13 @@ export default function CrmPage() {
       {/* 탭 + 필터 */}
       <div className="crm-toolbar">
         <div className="sm-tabs">
-          <button className={`sm-tab ${tab === "board" ? "is-active" : ""}`} onClick={() => setTab("board")}>보드</button>
           <button className={`sm-tab ${tab === "flow" ? "is-active" : ""}`} onClick={() => setTab("flow")}>흐름</button>
           <button className={`sm-tab ${tab === "table" ? "is-active" : ""}`} onClick={() => setTab("table")}>표(편집)</button>
           <button className={`sm-tab ${tab === "stats" ? "is-active" : ""}`} onClick={() => setTab("stats")}>통계</button>
         </div>
         <div className="crm-summary-spacer" />
-        {/* 기준일 — 그날 진행 중인 메시지만(보드·흐름). 기간은 각 메시지 '상세'에서 설정 */}
-        {datesSupported && (tab === "board" || tab === "flow") && (
+        {/* 기준일 — 그날 진행 중인 메시지만(흐름). 기간은 각 메시지 '상세'에서 설정 */}
+        {datesSupported && tab === "flow" && (
           <div className="sm-row crm-datebar">
             <span className="crm-datebar-label">기준일</span>
             <input type="date" className="b2b-input crm-date-input" value={asof} onChange={(e) => setAsof(e.target.value)} aria-label="기준일" />
@@ -267,7 +265,7 @@ export default function CrmPage() {
       </div>
 
       {/* 기준일 안내 — 몇 개가 걸러졌는지 명시(조용히 사라지면 '데이터가 없어졌다'로 오해) */}
-      {asof && (tab === "board" || tab === "flow") && (
+      {asof && tab === "flow" && (
         <p className="sm-faint crm-asof-hint">
           {asof} 기준 진행 중 {dateFiltered.length}개 표시 · 기간 밖/중단 {filtered.length - dateFiltered.length}개 숨김
         </p>
@@ -299,8 +297,6 @@ export default function CrmPage() {
               </div>
             )}
           </div>
-        ) : tab === "board" ? (
-          <BoardView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : tab === "flow" ? (
           <FlowView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : tab === "table" ? (
@@ -328,58 +324,6 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
   );
 }
 
-// ── 보드 뷰 (스테이지 컬럼) ──
-function BoardView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
-  return (
-    <div className="crm-board">
-      {stages.map((s) => (
-        <div key={s.stage} className="crm-bstage">
-          <div className="crm-bhead">
-            <div className="crm-bhead-no">STAGE {s.stage_num || "-"}</div>
-            <div className="crm-bhead-name">{s.stage}</div>
-            {s.sub && <div className="crm-bhead-sub">{s.sub}</div>}
-            <div className="crm-bhead-n">{s.msgs.length}개</div>
-          </div>
-          <div className="crm-bcol">
-            {s.msgs.map((m) => <Card key={m.id} m={m} ga={gaOf(m)} onClick={() => onCard(m)} />)}
-            <button type="button" className="crm-add" onClick={() => onAdd(s)}>+ 이 단계에 추가</button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Card({ m, ga, onClick }: { m: CrmMessage; ga?: GaStat; onClick: () => void }) {
-  const gl = gaLine(ga);
-  return (
-    <div className="crm-card" onClick={onClick}>
-      <div className="crm-card-head">
-        <span className={dotCls(m.status)} title={CRM_STATUS_LABEL[m.status] || m.status} />
-        <strong className="crm-card-title">{m.title || "(제목 없음)"}</strong>
-      </div>
-      <div className="sm-row-wrap crm-card-meta-row">
-        <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
-        {periodLabel(m) && <span className="crm-chip crm-chip-period">{periodLabel(m)}</span>}
-        {m.timing && <span className="crm-card-meta">· {m.timing}</span>}
-      </div>
-      {crmTags(m.tags).length > 0 && (
-        <div className="sm-row-wrap crm-card-tags">
-          {crmTags(m.tags).map((t) => <span key={t} className="crm-tag">{t}</span>)}
-        </div>
-      )}
-      {gl && <div className="crm-ga" title="GA · utm_campaign 세션 귀속 · 최근 90일">GA {gl}</div>}
-      {CRM_LINK_TYPES.some((l) => m.links?.[l.key]) && (
-        <div className="sm-row-wrap crm-card-links">
-          {CRM_LINK_TYPES.filter((l) => m.links?.[l.key]).map((l) => (
-            <a key={l.key} className="crm-link" href={m.links[l.key]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{l.label} ↗</a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── 흐름 뷰 — 여정 리본(정거장 레일) + 단계 안 발송시점 타임라인. 공백은 점선 카드(흐름의 구멍) ──
 function FlowView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
   return (
@@ -402,10 +346,13 @@ function FlowView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: 
                 {s.msgs.map((m) => {
                   const perf = perfLine(m.perf);
                   const gl = gaLine(gaOf(m));
+                  const tags = crmTags(m.tags);
+                  const links = CRM_LINK_TYPES.filter((l) => m.links?.[l.key]);
                   return (
                     <div key={m.id} className={`crm-fmsg ${ST_KEYS.has(m.status) ? `is-${m.status}` : ""}`}>
                       {m.timing && <div className="crm-ftime">{m.timing}</div>}
-                      <button type="button" className={`crm-fcard${m.status === "gap" ? " is-gap" : ""}`} onClick={() => onCard(m)}>
+                      {/* div+onClick(버튼 아님) — 카드 안에 바로가기 <a> 가 있어 중첩 인터랙티브를 피한다 */}
+                      <div className={`crm-fcard${m.status === "gap" ? " is-gap" : ""}`} onClick={() => onCard(m)}>
                         <span className="crm-ft">{m.title || "(제목 없음)"}</span>
                         <span className="sm-row-wrap crm-fchips">
                           <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
@@ -413,14 +360,22 @@ function FlowView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: 
                           {m.status === "gap" && <span className="crm-chip crm-chip-gap">미운영</span>}
                           {m.status === "auto" && <span className="crm-chip crm-chip-auto">자동</span>}
                           {m.status === "paused" && <span className="crm-chip crm-chip-paused">중단</span>}
+                          {tags.map((t) => <span key={t} className="crm-tag">{t}</span>)}
                         </span>
                         {perf && <span className="crm-fperf">{perf}</span>}
                         {gl && <span className="crm-ga" title="GA · utm_campaign 세션 귀속 · 최근 90일">GA {gl}</span>}
-                      </button>
+                        {links.length > 0 && (
+                          <span className="sm-row-wrap crm-flinks">
+                            {links.map((l) => (
+                              <a key={l.key} className="crm-link" href={m.links[l.key]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{l.label} ↗</a>
+                            ))}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
-                <button type="button" className="crm-add" onClick={() => onAdd(s)}>+ 추가</button>
+                <button type="button" className="crm-add" onClick={() => onAdd(s)}>+ 이 단계에 추가</button>
               </div>
             </div>
           );

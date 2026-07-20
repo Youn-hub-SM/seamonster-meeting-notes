@@ -3168,12 +3168,6 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-chip-gap    { background: transparent; color: var(--sm-danger); border: 1px dashed var(--sm-danger-border); }
 .crm-chip-auto   { background: var(--sm-info-bg); color: var(--sm-info); }
 .crm-chip-paused { background: var(--sm-bg-subtle); color: var(--sm-text-light); }
-/* 상태 점 */
-.crm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sm-border); display: inline-block; flex: 0 0 auto; }
-.crm-dot.is-active { background: var(--sm-success); }
-.crm-dot.is-auto   { background: var(--sm-info); }
-.crm-dot.is-gap    { background: var(--sm-danger); }
-.crm-dot.is-paused { background: var(--sm-text-light); }
 /* 표 인라인 셀렉트 색 — 상태는 시맨틱, 채널은 위 팔레트와 동일 */
 .crm-stsel-active { background: var(--sm-success-bg); color: var(--sm-success); }
 .crm-stsel-auto   { background: var(--sm-info-bg); color: var(--sm-info); }
@@ -3199,26 +3193,11 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-ch-filter { width: auto; }
 .crm-search { width: 200px; }
 
-/* 보드 뷰 */
-.crm-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: var(--sm-space-3); align-items: flex-start; }
-.crm-bstage { flex: 0 0 300px; width: 300px; }
-.crm-bhead { background: var(--sm-dark); color: var(--sm-white); border-radius: 12px; padding: var(--sm-space-3) var(--sm-space-4); margin-bottom: 10px; }
-.crm-bhead-no { font-size: 11px; color: var(--sm-orange); font-weight: 700; }
-.crm-bhead-name { font-size: var(--sm-fs-lg); font-weight: 800; }
-.crm-bhead-sub { font-size: 11px; color: rgba(255, 255, 255, .7); margin-top: 2px; }
-.crm-bhead-n { font-size: 11px; color: rgba(255, 255, 255, .6); margin-top: 6px; }
-.crm-bcol { display: flex; flex-direction: column; gap: var(--sm-space-2); }
-.crm-card { border: 1px solid var(--sm-border); border-radius: 10px; padding: 10px 12px; background: var(--sm-white); cursor: pointer; }
-.crm-card:hover { border-color: var(--sm-orange); }
-.crm-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.crm-card-title { font-size: var(--sm-fs-sm); color: var(--sm-dark); line-height: 1.3; }
-.crm-card-meta-row { gap: 5px; align-items: center; }
-.crm-card-meta { font-size: 11px; color: var(--sm-text-mid); }
-.crm-card-tags { gap: 4px; margin-top: 6px; }
+/* 태그·바로가기(흐름 카드) + 단계 추가 버튼 */
 .crm-tag { font-size: 10px; color: var(--sm-text-light); background: var(--sm-bg-subtle); border-radius: 4px; padding: 1px 6px; }
-.crm-card-links { gap: 6px; margin-top: 8px; }
 .crm-link { font-size: 11px; color: var(--sm-info); text-decoration: none; border: 1px solid var(--sm-border); border-radius: 6px; padding: 1px 6px; }
 .crm-link:hover { border-color: var(--sm-info); }
+.crm-flinks { gap: 6px; margin-top: 7px; display: flex; }
 .crm-add { border: 1px dashed var(--sm-border); background: transparent; border-radius: 10px; padding: var(--sm-space-2);
   font-size: var(--sm-fs-xs); color: var(--sm-text-light); cursor: pointer; }
 .crm-add:hover { border-color: var(--sm-orange); color: var(--sm-orange); }
