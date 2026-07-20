@@ -137,6 +137,45 @@ export function crmTags(tags: string): string[] {
   return (tags || "").split(/[,/]/).map((t) => t.trim()).filter(Boolean);
 }
 
+// ── 선택지(발송채널·고객·유형) — 화면에서 추가/삭제 ──
+//  기본값 = 위 상수. 저장은 서버 전용 crm-options.ts(b2b_settings KV) — 이 파일은 클라이언트도 import 하므로 서버 의존 금지.
+//  새 선택지의 key 는 라벨 그대로(한글 키 허용). 선택지를 지워도 기존 메시지 값은 유지되고 "(구)" 로 표시된다.
+export type CrmOption = { key: string; label: string };
+export type CrmOptions = { channels: CrmOption[]; customers: CrmOption[]; msgTypes: CrmOption[] };
+
+export const DEFAULT_CRM_OPTIONS: CrmOptions = {
+  channels: CRM_CHANNELS,
+  customers: CRM_CUSTOMERS,
+  msgTypes: CRM_MSG_TYPES,
+};
+
+const OPT_MAX_ITEMS = 30;
+const OPT_MAX_LABEL = 20;
+
+function sanitizeOptionList(v: unknown, fallback: CrmOption[]): CrmOption[] {
+  if (!Array.isArray(v)) return fallback;
+  const seen = new Set<string>();
+  const out: CrmOption[] = [];
+  for (const item of v) {
+    const key = typeof (item as CrmOption)?.key === "string" ? (item as CrmOption).key.trim().slice(0, OPT_MAX_LABEL) : "";
+    const label = ((typeof (item as CrmOption)?.label === "string" ? (item as CrmOption).label.trim() : "") || key).slice(0, OPT_MAX_LABEL);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, label });
+    if (out.length >= OPT_MAX_ITEMS) break;
+  }
+  return out.length > 0 ? out : fallback; // 전부 지우면 기본값 복귀(빈 셀렉트 방지)
+}
+
+export function sanitizeCrmOptions(v: unknown): CrmOptions {
+  const o = (v && typeof v === "object" ? v : {}) as Partial<CrmOptions>;
+  return {
+    channels: sanitizeOptionList(o.channels, DEFAULT_CRM_OPTIONS.channels),
+    customers: sanitizeOptionList(o.customers, DEFAULT_CRM_OPTIONS.customers),
+    msgTypes: sanitizeOptionList(o.msgTypes, DEFAULT_CRM_OPTIONS.msgTypes),
+  };
+}
+
 // ── 기준일 판정 ── 그 날짜(YYYY-MM-DD)에 '진행 중'인가.
 //  규칙: 비활성=아니오 · 기간이 있으면 기간 안이어야 함(경계 포함) · 기간 없으면 상시=예.
 export function crmOnDate(m: Pick<CrmMessage, "status" | "start_date" | "end_date">, ymd: string): boolean {

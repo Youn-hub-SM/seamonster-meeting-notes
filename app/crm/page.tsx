@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CrmMessage, CrmMessageInput, CrmPerf, EMPTY_CRM_MESSAGE,
-  CRM_CHANNELS, CRM_CHANNEL_LABEL, CRM_CUSTOMERS, CRM_CUSTOMER_LABEL, CRM_MSG_TYPES, CRM_MSG_TYPE_LABEL,
+  CRM_CHANNEL_LABEL, CRM_CUSTOMER_LABEL, CRM_MSG_TYPE_LABEL,
   CRM_STATUSES, CRM_STATUS_LABEL, statusKey, crmTags, crmOnDate,
+  DEFAULT_CRM_OPTIONS, type CrmOption, type CrmOptions,
 } from "@/app/lib/crm";
 import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/charts";
 
@@ -15,11 +16,16 @@ const periodLabel = (m: Pick<CrmMessage, "start_date" | "end_date">) =>
   m.start_date || m.end_date ? `${m.start_date ? md(m.start_date) : ""}~${m.end_date ? md(m.end_date) : ""}` : "";
 
 // 색은 전부 b2b.css 의 .crm-* 클래스(채널 팔레트·시맨틱 토큰) — 인라인 hex 금지.
-//  채널 칩 색은 구 키(manual 등)도 CSS 에 남아 있어 개편 전 행이 원래 색으로 보인다.
-const CH_CHIP_KEYS = new Set([...CRM_CHANNELS.map((c) => c.key), "manual", "custom", "onsite", "leaflet"]);
+//  색 배지는 내장 채널(+구 키)만 — 사용자가 추가한 선택지는 중립 칩. 라벨은 선택지 → 내장 맵 → 원문 순 폴백.
+const CH_CHIP_KEYS = new Set(["kakao", "solapi", "cafe24", "bloomai", "manual", "custom", "onsite", "leaflet"]);
 const chipCls = (k: string) => `crm-chip ${CH_CHIP_KEYS.has(k) ? `crm-ch-${k}` : ""}`;
 const stSelCls = (st: string) => `b2b-status-select crm-stsel-${statusKey(st)}`;
 const chSelCls = (k: string) => `b2b-status-select ${CH_CHIP_KEYS.has(k) ? `crm-chsel-${k}` : ""}`;
+const optLabel = (list: CrmOption[], fallback: Record<string, string>) => {
+  const m = Object.fromEntries(list.map((o) => [o.key, o.label]));
+  return (k: string) => m[k] || fallback[k] || k;
+};
+type Labels = { ch: (k: string) => string; cust: (k: string) => string; type: (k: string) => string };
 
 // 성과 한 줄 요약 — 값이 있는 지표만.
 const wonCompact = (n: number) => (n >= 10000 ? `${(n / 10000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만원` : `${n.toLocaleString("ko-KR")}원`);
@@ -66,6 +72,21 @@ export default function CrmPage() {
 
   const [savingId, setSavingId] = useState<string | null>(null);
   const [ga, setGa] = useState<GaState | null>(null);
+
+  // 선택지(발송채널·고객·유형) — 설정 저장분, 없으면 기본값. '선택지 관리'에서 편집.
+  const [opts, setOpts] = useState<CrmOptions>(DEFAULT_CRM_OPTIONS);
+  const [showOpts, setShowOpts] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try { const j = await (await fetch("/api/crm/options", { cache: "no-store" })).json(); if (j.ok && j.options) setOpts(j.options); }
+      catch { /* 기본값 유지 */ }
+    })();
+  }, []);
+  const labels = useMemo<Labels>(() => ({
+    ch: optLabel(opts.channels, CRM_CHANNEL_LABEL),
+    cust: optLabel(opts.customers, CRM_CUSTOMER_LABEL),
+    type: optLabel(opts.msgTypes, CRM_MSG_TYPE_LABEL),
+  }), [opts]);
   const messagesRef = useRef<CrmMessage[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -235,6 +256,7 @@ export default function CrmPage() {
         </div>
         <div className="b2b-page-actions sm-row sm-gap-2">
           <button className="b2b-btn-primary" onClick={() => openNew()}>+ 메시지 추가</button>
+          <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리</button>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
         </div>
       </header>
@@ -249,7 +271,7 @@ export default function CrmPage() {
         {summary.inactive > 0 && <Stat label="비활성" value={summary.inactive} />}
         <div className="crm-summary-spacer" />
         {Object.entries(summary.byCh).map(([k, n]) => (
-          <span key={k} className={chipCls(k)}>{CRM_CHANNEL_LABEL[k] || k} {n}</span>
+          <span key={k} className={chipCls(k)}>{labels.ch(k)} {n}</span>
         ))}
       </div>
 
@@ -286,7 +308,7 @@ export default function CrmPage() {
             {fieldsSupported && (
               <select className="b2b-select crm-ch-filter" value={custSel} onChange={(e) => setCustSel(e.target.value)} aria-label="고객 필터">
                 <option value="">전체 고객</option>
-                {CRM_CUSTOMERS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                {opts.customers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select>
             )}
             <select className="b2b-select crm-ch-filter" value={stSel} onChange={(e) => setStSel(e.target.value)} aria-label="상태 필터">
@@ -299,7 +321,7 @@ export default function CrmPage() {
           <>
             <select className="b2b-select crm-ch-filter" value={chFilter} onChange={(e) => setChFilter(e.target.value)} aria-label="발송채널 필터">
               <option value="">전체 발송채널</option>
-              {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              {opts.channels.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
             <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="메시지·스테이지·태그 검색" />
           </>
@@ -340,23 +362,27 @@ export default function CrmPage() {
             )}
           </div>
         ) : tab === "flow" ? (
-          <FlowView stages={stages} gaOf={gaOf} msgOpen={msgOpen} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
+          <FlowView stages={stages} gaOf={gaOf} msgOpen={msgOpen} labels={labels} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : tab === "table" ? (
           <>
-            {(stageSel || stSel) && (
+            {(stageSel || custSel || stSel) && (
               <p className="sm-faint crm-asof-hint">필터 결과 {tableFiltered.length}개 / 전체 {filtered.length}개</p>
             )}
-            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
+            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} opts={opts} labels={labels} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
           </>
         ) : (
-          <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} />
+          <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} chLabel={labels.ch} />
         )}
 
       {edit && (
         <EditModal
           data={edit} onChange={setEdit} onClose={() => setEdit(null)} onSave={save}
           onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported} fieldsSupported={fieldsSupported}
+          opts={opts} labels={labels}
         />
+      )}
+      {showOpts && (
+        <OptionsModal current={opts} onClose={() => setShowOpts(false)} onSaved={(o) => { setOpts(o); setShowOpts(false); }} />
       )}
     </div>
   );
@@ -372,7 +398,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
 }
 
 // ── 흐름 뷰 — 여정 리본(정거장 레일) + 단계 안 발송시점 타임라인. 공백은 점선 카드(흐름의 구멍) ──
-function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; msgOpen: boolean; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
+function FlowView({ stages, gaOf, msgOpen, labels, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; msgOpen: boolean; labels: Labels; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
   return (
     <div className="crm-flow-wrap">
       <div className="crm-flow">
@@ -402,9 +428,9 @@ function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; g
                       <div className={`crm-fcard${st === "inactive" ? " is-inactive" : ""}`} onClick={() => onCard(m)}>
                         <span className="crm-ft">{m.title || "(제목 없음)"}</span>
                         <span className="sm-row-wrap crm-fchips">
-                          <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
-                          {m.msg_type && <span className="crm-chip">{CRM_MSG_TYPE_LABEL[m.msg_type] || m.msg_type}</span>}
-                          {m.customer && <span className="crm-chip">{CRM_CUSTOMER_LABEL[m.customer] || m.customer}</span>}
+                          <span className={chipCls(m.channel)}>{m.channel ? labels.ch(m.channel) : "미지정"}</span>
+                          {m.msg_type && <span className="crm-chip">{labels.type(m.msg_type)}</span>}
+                          {m.customer && <span className="crm-chip">{labels.cust(m.customer)}</span>}
                           {periodLabel(m) && <span className="crm-chip crm-chip-period">{periodLabel(m)}</span>}
                           {st === "inactive" && <span className="crm-chip crm-chip-inactive">비활성</span>}
                           {tags.map((t) => <span key={t} className="crm-tag">{t}</span>)}
@@ -437,8 +463,8 @@ function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; g
 }
 
 // ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·내용·링크·성과)는 '상세' 버튼→모달 ──
-function TableView({ msgs, stageNames, fieldsSupported, savingId, onField, onSave, onEdit }: {
-  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; savingId: string | null;
+function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, onField, onSave, onEdit }: {
+  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; opts: CrmOptions; labels: Labels; savingId: string | null;
   onField: (id: string, key: keyof CrmMessage, value: string) => void;
   onSave: (id: string, override?: Partial<CrmMessage>) => void;
   onEdit: (m: CrmMessage) => void;
@@ -446,6 +472,9 @@ function TableView({ msgs, stageNames, fieldsSupported, savingId, onField, onSav
   const sel = (m: CrmMessage, field: keyof CrmMessage) => (e: React.ChangeEvent<HTMLSelectElement>) => {
     onField(m.id, field, e.target.value); onSave(m.id, { [field]: e.target.value });
   };
+  // 현재 값이 선택지에 없으면(삭제됐거나 개편 전 값) "(구)" 로 표시하는 옵션을 앞에 붙인다 — 값 소실 없이 계속 편집 가능
+  const legacyOpt = (list: CrmOption[], value: string, label: (k: string) => string) =>
+    value && !list.some((o) => o.key === value) ? <option value={value}>{label(value)} (구)</option> : null;
   return (
     <>
       <datalist id="crm-stage-names">{stageNames.map((s) => <option key={s} value={s} />)}</datalist>
@@ -468,24 +497,23 @@ function TableView({ msgs, stageNames, fieldsSupported, savingId, onField, onSav
                   <td>
                     <select className="b2b-status-select" value={m.customer} aria-label="고객" onChange={sel(m, "customer")}>
                       <option value="">미지정</option>
-                      {CRM_CUSTOMERS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                      {legacyOpt(opts.customers, m.customer, labels.cust)}
+                      {opts.customers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                     </select>
                   </td>
                 )}
                 <td>
                   <select className={chSelCls(m.channel)} value={m.channel} aria-label="발송채널" onChange={sel(m, "channel")}>
-                    {/* 개편 전 값(수동·기타 등)은 선택지엔 없지만, 현재 값이면 (구) 표기로 보여 준다 */}
-                    {!CRM_CHANNELS.some((c) => c.key === m.channel) && m.channel && (
-                      <option value={m.channel}>{CRM_CHANNEL_LABEL[m.channel] || m.channel} (구)</option>
-                    )}
-                    {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                    {legacyOpt(opts.channels, m.channel, labels.ch)}
+                    {opts.channels.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </td>
                 {fieldsSupported && (
                   <td>
                     <select className="b2b-status-select" value={m.msg_type} aria-label="유형" onChange={sel(m, "msg_type")}>
                       <option value="">미지정</option>
-                      {CRM_MSG_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                      {legacyOpt(opts.msgTypes, m.msg_type, labels.type)}
+                      {opts.msgTypes.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                     </select>
                   </td>
                 )}
@@ -532,7 +560,7 @@ function CellText({ id, value, field, placeholder, list, onField, onSave }: {
 type GaDaily = { date: string; campaign: string; sessions: number; purchases: number; revenue: number };
 const STATS_RANGES = [{ d: 7, label: "7일" }, { d: 30, label: "30일" }, { d: 90, label: "90일" }];
 
-function StatsView({ messages, campaigns, gaConfigured }: { messages: CrmMessage[]; campaigns: string[]; gaConfigured?: boolean }) {
+function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: CrmMessage[]; campaigns: string[]; gaConfigured?: boolean; chLabel: (k: string) => string }) {
   const [days, setDays] = useState(30);
   const [daily, setDaily] = useState<GaDaily[] | null>(null);
   const [gaErr, setGaErr] = useState("");
@@ -558,9 +586,9 @@ function StatsView({ messages, campaigns, gaConfigured }: { messages: CrmMessage
   // 맵 구조 — GA 없이도 항상
   const byChannel = useMemo<[string, number][]>(() => {
     const m = new Map<string, number>();
-    for (const msg of messages) { const l = CRM_CHANNEL_LABEL[msg.channel] || msg.channel || "미지정"; m.set(l, (m.get(l) || 0) + 1); }
+    for (const msg of messages) { const l = msg.channel ? chLabel(msg.channel) : "미지정"; m.set(l, (m.get(l) || 0) + 1); }
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  }, [messages]);
+  }, [messages, chLabel]);
   const inactiveByStage = useMemo<[string, number][]>(() => {
     const m = new Map<string, number>();
     for (const msg of messages) if (statusKey(msg.status) === "inactive") { const s = msg.stage || "(미분류)"; m.set(s, (m.get(s) || 0) + 1); }
@@ -653,13 +681,98 @@ function StatsView({ messages, campaigns, gaConfigured }: { messages: CrmMessage
   );
 }
 
+// ── 선택지 관리 모달 — 발송채널·고객·유형을 추가/삭제. 상태(활성/비활성)는 로직이 걸려 있어 고정 ──
+const OPT_SECTIONS: { key: keyof CrmOptions; title: string }[] = [
+  { key: "channels", title: "발송채널" },
+  { key: "customers", title: "고객" },
+  { key: "msgTypes", title: "유형" },
+];
+
+function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onClose: () => void; onSaved: (o: CrmOptions) => void }) {
+  const [draft, setDraft] = useState<CrmOptions>(() => ({
+    channels: current.channels.map((o) => ({ ...o })),
+    customers: current.customers.map((o) => ({ ...o })),
+    msgTypes: current.msgTypes.map((o) => ({ ...o })),
+  }));
+  const [adding, setAdding] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const add = (sec: keyof CrmOptions) => {
+    const label = (adding[sec] || "").trim();
+    if (!label) return;
+    if (draft[sec].some((o) => o.key === label || o.label === label)) { setError(`"${label}" 은 이미 있습니다.`); return; }
+    setError("");
+    setDraft((d) => ({ ...d, [sec]: [...d[sec], { key: label, label }] })); // 새 선택지 key = 라벨 그대로(한글 허용)
+    setAdding((a) => ({ ...a, [sec]: "" }));
+  };
+  const removeOpt = (sec: keyof CrmOptions, key: string) =>
+    setDraft((d) => ({ ...d, [sec]: d[sec].filter((o) => o.key !== key) }));
+
+  async function saveOpts() {
+    setSaving(true); setError("");
+    try {
+      const r = await fetch("/api/crm/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ options: draft }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      onSaved(j.options as CrmOptions); // 서버 정제 결과(중복 제거 등)로 반영
+    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
+    setSaving(false);
+  }
+
+  return (
+    <div className="b2b-modal-backdrop">
+      <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="b2b-modal-head">
+          <h2 className="b2b-modal-title">선택지 관리</h2>
+          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="b2b-modal-body">
+          {error && <div className="b2b-error">{error}</div>}
+          {OPT_SECTIONS.map(({ key, title }) => (
+            <div key={key} className="crm-opt-section">
+              <div className="b2b-field-label crm-opt-title">{title}</div>
+              <div className="sm-row-wrap crm-opt-list">
+                {draft[key].map((o) => (
+                  <span key={o.key} className="crm-chip crm-opt-item">
+                    {o.label}
+                    <button type="button" className="crm-opt-x" aria-label={`${o.label} 삭제`} onClick={() => removeOpt(key, o.key)}>✕</button>
+                  </span>
+                ))}
+                {draft[key].length === 0 && <span className="sm-faint crm-opt-empty">비어 있음 — 저장하면 기본값으로 돌아갑니다</span>}
+              </div>
+              <div className="sm-row crm-opt-add">
+                <input className="b2b-input" value={adding[key] || ""} placeholder={`새 ${title} 이름`} maxLength={20}
+                  onChange={(e) => setAdding((a) => ({ ...a, [key]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") add(key); }} />
+                <button type="button" className="b2b-btn-secondary" onClick={() => add(key)}>추가</button>
+              </div>
+            </div>
+          ))}
+          <p className="sm-faint crm-field-hint">선택지를 지워도 그 값을 쓰던 기존 메시지는 그대로 남고 "(구)" 로 표시됩니다. 상태(활성/비활성)는 기준일 필터와 연결돼 있어 고정입니다.</p>
+        </div>
+        <div className="b2b-modal-foot">
+          <div />
+          <div className="b2b-modal-foot-right">
+            <button className="b2b-btn-secondary" onClick={onClose}>취소</button>
+            <button className="b2b-btn-primary" onClick={saveOpts} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 편집 모달 ──
-function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported }: {
+function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported, opts, labels }: {
   data: CrmMessageInput; onChange: (d: CrmMessageInput) => void; onClose: () => void;
   onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean; fieldsSupported: boolean;
+  opts: CrmOptions; labels: Labels;
 }) {
   const set = <K extends keyof CrmMessageInput>(k: K, v: CrmMessageInput[K]) => onChange({ ...data, [k]: v });
   const setLink = (k: string, v: string) => onChange({ ...data, links: { ...data.links, [k]: v } });
+  const legacyOpt = (list: CrmOption[], value: string, label: (k: string) => string) =>
+    value && !list.some((o) => o.key === value) ? <option value={value}>{label(value)} (구)</option> : null;
 
   return (
     <div className="b2b-modal-backdrop">
@@ -684,21 +797,21 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
               <label className="b2b-field"><span className="b2b-field-label">고객</span>
                 <select className="b2b-select" value={data.customer} onChange={(e) => set("customer", e.target.value)}>
                   <option value="">미지정</option>
-                  {CRM_CUSTOMERS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  {legacyOpt(opts.customers, data.customer, labels.cust)}
+                  {opts.customers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                 </select></label>
             )}
             <label className="b2b-field"><span className="b2b-field-label">발송채널</span>
               <select className="b2b-select" value={data.channel} onChange={(e) => set("channel", e.target.value)}>
-                {!CRM_CHANNELS.some((c) => c.key === data.channel) && data.channel && (
-                  <option value={data.channel}>{CRM_CHANNEL_LABEL[data.channel] || data.channel} (구)</option>
-                )}
-                {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                {legacyOpt(opts.channels, data.channel, labels.ch)}
+                {opts.channels.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select></label>
             {fieldsSupported && (
               <label className="b2b-field"><span className="b2b-field-label">유형</span>
                 <select className="b2b-select" value={data.msg_type} onChange={(e) => set("msg_type", e.target.value)}>
                   <option value="">미지정</option>
-                  {CRM_MSG_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  {legacyOpt(opts.msgTypes, data.msg_type, labels.type)}
+                  {opts.msgTypes.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                 </select></label>
             )}
           </div>

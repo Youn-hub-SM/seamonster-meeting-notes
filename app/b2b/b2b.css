@@ -3265,6 +3265,17 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-stats-kpi { gap: var(--sm-space-2); }
 .crm-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--sm-space-3); }
 
+/* 선택지 관리 모달 */
+.crm-opt-section { display: flex; flex-direction: column; gap: var(--sm-space-2); margin-bottom: var(--sm-space-3); }
+.crm-opt-title { font-weight: 700; }
+.crm-opt-list { gap: 6px; }
+.crm-opt-item { display: inline-flex; align-items: center; gap: 5px; }
+.crm-opt-x { border: none; background: none; cursor: pointer; padding: 0; font-size: 10px; color: var(--sm-text-light); line-height: 1; }
+.crm-opt-x:hover { color: var(--sm-danger); }
+.crm-opt-add { gap: var(--sm-space-2); }
+.crm-opt-add .b2b-input { max-width: 220px; }
+.crm-opt-empty { font-size: var(--sm-fs-xs); }
+
 /* 빈 상태 가져오기 */
 .crm-empty-lead { margin: 0 0 var(--sm-space-3); }
 .crm-empty-actions { gap: var(--sm-space-2); justify-content: center; }
