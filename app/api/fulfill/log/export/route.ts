@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 import { normalizeHistory, ratesFor } from "@/app/lib/fulfill-rates";
+import { mergeDeliveryRow } from "@/app/lib/delivery-log";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -29,11 +30,12 @@ export async function GET(req: NextRequest) {
     const sb = supabaseAdmin();
     const { data, error } = await sb.from("delivery_log").select("*").gte("log_date", from).lte("log_date", to).order("log_date", { ascending: true });
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (055 적용 확인)` }, { status: 500 });
-    const rows = (data ?? []) as LogRow[];
 
     // 드라이 단가는 날짜별로 소급 적용 안 함 → 각 행 날짜에 유효했던 단가 사용
     const { data: rateRow } = await sb.from("b2b_settings").select("value").eq("key", "fulfill_rates").maybeSingle();
     const history = normalizeHistory(rateRow?.value ?? {});
+    // 자동+직접수정 병합 → 최종값으로 추출(화면·통계와 일치)
+    const rows = (data ?? []).map((r) => mergeDeliveryRow(r as Record<string, unknown>, history)) as unknown as LogRow[];
     const weekday = (iso: string) => WD[new Date(`${iso}T00:00:00Z`).getUTCDay()];
 
     const wb = new ExcelJS.Workbook();

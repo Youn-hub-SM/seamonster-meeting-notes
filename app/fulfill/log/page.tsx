@@ -2,13 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BOX_CATEGORIES, baseFeeFromBoxes } from "@/app/lib/order-fulfill";
+import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
+import { mergeCounts, manualFeeDelta, sumCounts } from "@/app/lib/delivery-log";
 
 type Boxes = Record<string, number>;
 type Row = {
-  log_date: string; boxes_normal: Boxes; boxes_guar: Boxes;
-  base_fee_normal: number; base_fee_guar: number;
+  log_date: string;
+  boxes_normal: Boxes; boxes_guar: Boxes;            // 최종(자동+보정) — 서버 병합
+  base_fee_normal: number; base_fee_guar: number;    // 최종 기본운임
+  boxes_normal_auto: Boxes; boxes_guar_auto: Boxes;  // 자동입력(발주처리 기록, 수정 불가)
+  base_fee_normal_auto: number; base_fee_guar_auto: number;
+  boxes_normal_manual: Boxes; boxes_guar_manual: Boxes; // 직접수정 보정(±)
+  manual_updated_at: string | null;                  // 직접수정 최종 시각
   extra_fee: number; guar_extra_fee: number; pado_fee: number; pado_extra: number; pado_cod: number;
   dryice_full: number; dryice_half: number; memo: string | null;
 };
@@ -17,6 +23,11 @@ type BoxDraft = Record<string, { n?: Record<string, string>; g?: Record<string, 
 
 const won = (n: unknown) => (Number(n) || 0).toLocaleString();
 const sumBoxes = (o: Boxes) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+// 직접수정 최종 시각 — KST 초 단위 "YYYY-MM-DD HH:mm:ss"
+const kstStamp = (iso: string): string => {
+  const d = new Date(new Date(iso).getTime() + 9 * 3600e3).toISOString();
+  return `${d.slice(0, 10)} ${d.slice(11, 19)}`;
+};
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const weekday = (iso: string) => WD[new Date(`${iso}T00:00:00`).getDay()];
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -82,17 +93,24 @@ export default function DeliveryLogPage() {
   const curMemo = (r: Row): string => draft[r.log_date]?.memo ?? (r.memo ?? "");
   const setField = (date: string, k: EditKey, v: string) => setDraft((d) => ({ ...d, [date]: { ...d[date], [k]: v } }));
 
-  // 현재 화면상의 박스 개수(draft 우선). 기본운임은 이 개수로 자동 계산.
-  const curBoxesMap = (r: Row, side: "n" | "g"): Boxes => {
-    const base = side === "n" ? r.boxes_normal : r.boxes_guar;
+  // 현재 화면상의 직접수정 보정(draft 우선, ± 부호 유지)
+  const curManualMap = (r: Row, side: "n" | "g"): Boxes => {
+    const base = side === "n" ? r.boxes_normal_manual : r.boxes_guar_manual;
     const dr = boxDraft[r.log_date]?.[side] || {};
     const out: Boxes = {};
-    for (const c of BOX_CATEGORIES) { const v = c in dr ? Number(dr[c]) || 0 : Number(base?.[c]) || 0; if (v > 0) out[c] = v; }
+    for (const c of BOX_CATEGORIES) { const v = c in dr ? Math.round(Number(dr[c]) || 0) : Math.round(Number(base?.[c]) || 0); if (v !== 0) out[c] = v; }
     return out;
   };
-  // 기본운임 = 택배량(박스종류별 개수) 자동계산. 도착보장은 박스당 도착보장 가산(guarSurcharge) 포함.
-  const baseNormalOf = (r: Row): number => baseFeeFromBoxes(curBoxesMap(r, "n"), ratesFor(history, r.log_date).boxTiers);
-  const baseGuarOf = (r: Row): number => { const rt = ratesFor(history, r.log_date); const b = curBoxesMap(r, "g"); return baseFeeFromBoxes(b, rt.boxTiers) + rt.guarSurcharge * sumBoxes(b); };
+  // 최종 택배량 = 자동입력 + 보정(0 미만 방지)
+  const finalBoxes = (r: Row, side: "n" | "g"): Boxes =>
+    mergeCounts(side === "n" ? r.boxes_normal_auto : r.boxes_guar_auto, curManualMap(r, side));
+  // 최종 기본운임 = 자동 운임(발주처리 주문 단위 정밀값) + 보정분(박스종류 대표단가). 도착보장 보정엔 가산 포함.
+  const baseNormalOf = (r: Row): number =>
+    Math.max(0, (Number(r.base_fee_normal_auto) || 0) + manualFeeDelta(curManualMap(r, "n"), ratesFor(history, r.log_date).boxTiers));
+  const baseGuarOf = (r: Row): number => {
+    const rt = ratesFor(history, r.log_date); const m = curManualMap(r, "g");
+    return Math.max(0, (Number(r.base_fee_guar_auto) || 0) + manualFeeDelta(m, rt.boxTiers) + rt.guarSurcharge * sumCounts(m));
+  };
 
   async function post(body: Record<string, unknown>) {
     const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -112,7 +130,7 @@ export default function DeliveryLogPage() {
   }
 
   const boxVal = (r: Row, side: "n" | "g", cat: string): string =>
-    boxDraft[r.log_date]?.[side]?.[cat] ?? String((side === "n" ? r.boxes_normal : r.boxes_guar)?.[cat] || "");
+    boxDraft[r.log_date]?.[side]?.[cat] ?? String((side === "n" ? r.boxes_normal_manual : r.boxes_guar_manual)?.[cat] || "");
   const setBox = (date: string, side: "n" | "g", cat: string, v: string) =>
     setBoxDraft((bd) => ({ ...bd, [date]: { ...bd[date], [side]: { ...bd[date]?.[side], [cat]: v } } }));
 
@@ -120,22 +138,19 @@ export default function DeliveryLogPage() {
     await runExclusive("b:" + date, async () => {
       const r = rowsRef.current.find((x) => x.log_date === date); if (!r) return;
       const build = (side: "n" | "g"): Boxes => {
-        const base = side === "n" ? r.boxes_normal : r.boxes_guar;
+        const base = side === "n" ? r.boxes_normal_manual : r.boxes_guar_manual;
         const dr = boxDraftRef.current[date]?.[side] || {};
         const out: Boxes = {};
-        for (const c of BOX_CATEGORIES) { const v = c in dr ? Number(dr[c]) || 0 : Number(base?.[c]) || 0; if (v > 0) out[c] = Math.round(v); }
+        for (const c of BOX_CATEGORIES) { const v = c in dr ? Math.round(Number(dr[c]) || 0) : Math.round(Number(base?.[c]) || 0); if (v !== 0) out[c] = v; }
         return out;
       };
-      const bn = build("n"), bg = build("g");
-      // 택배량이 바뀌면 기본운임도 다시 계산해서 함께 저장(통계·엑셀과 일치 유지).
-      const rt = ratesFor(historyRef.current, date);
-      const baseN = baseFeeFromBoxes(bn, rt.boxTiers);
-      const baseG = baseFeeFromBoxes(bg, rt.boxTiers) + rt.guarSurcharge * sumBoxes(bg);
+      const mn = build("n"), mg = build("g");
       try {
-        await post({ log_date: date, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG });
-        setRows((rs) => rs.map((x) => (x.log_date === date ? { ...x, boxes_normal: bn, boxes_guar: bg, base_fee_normal: baseN, base_fee_guar: baseG } : x)));
+        await post({ log_date: date, boxes_normal_manual: mn, boxes_guar_manual: mg });
+        const stamp = new Date().toISOString();
+        setRows((rs) => rs.map((x) => (x.log_date === date ? { ...x, boxes_normal_manual: mn, boxes_guar_manual: mg, manual_updated_at: stamp } : x)));
         // 방금 저장한 값과 같은 칸만 초기화 — 저장 중 +/- 로 바꾼 값은 유지(원복 방지)
-        setBoxDraft((prev) => reconcileBoxDraft(prev, date, bn, bg));
+        setBoxDraft((prev) => reconcileBoxDraft(prev, date, mn, mg));
       } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     });
   }
@@ -145,12 +160,15 @@ export default function DeliveryLogPage() {
   const scheduleSave = (date: string) => schedule("f:" + date, () => save(date));
   const scheduleBoxSave = (date: string) => schedule("b:" + date, () => saveBoxes(date));
 
-  // +/- 개수 조절 — 함수형 업데이트로 연타 안전
+  // +/- 보정 조절 — 함수형 업데이트로 연타 안전. 보정은 음수 허용하되 '최종(자동+보정)'이 0 미만이 되지 않게 제한.
   function bumpBox(date: string, side: "n" | "g", cat: string, delta: number) {
     setBoxDraft((bd) => {
+      const row = rowsRef.current.find((r) => r.log_date === date);
       const s = bd[date]?.[side]?.[cat];
-      const base = s !== undefined ? Number(s) || 0 : Number((rowsRef.current.find((r) => r.log_date === date)?.[side === "n" ? "boxes_normal" : "boxes_guar"])?.[cat]) || 0;
-      return { ...bd, [date]: { ...bd[date], [side]: { ...bd[date]?.[side], [cat]: String(Math.max(0, base + delta)) } } };
+      const cur = s !== undefined ? Number(s) || 0 : Number((row?.[side === "n" ? "boxes_normal_manual" : "boxes_guar_manual"])?.[cat]) || 0;
+      const auto = Number((row?.[side === "n" ? "boxes_normal_auto" : "boxes_guar_auto"])?.[cat]) || 0;
+      const next = Math.max(-auto, cur + delta);
+      return { ...bd, [date]: { ...bd[date], [side]: { ...bd[date]?.[side], [cat]: String(next) } } };
     });
     scheduleBoxSave(date);
   }
@@ -176,7 +194,12 @@ export default function DeliveryLogPage() {
     if (rows.some((r) => r.log_date === newDate)) { setError("이미 있는 날짜입니다."); setOpen((s) => new Set(s).add(newDate)); return; }
     try {
       await post({ log_date: newDate });
-      const blank: Row = { log_date: newDate, boxes_normal: {}, boxes_guar: {}, base_fee_normal: 0, base_fee_guar: 0, extra_fee: 0, guar_extra_fee: 0, pado_fee: 0, pado_extra: 0, pado_cod: 0, dryice_full: 0, dryice_half: 0, memo: null };
+      const blank: Row = {
+        log_date: newDate, boxes_normal: {}, boxes_guar: {}, base_fee_normal: 0, base_fee_guar: 0,
+        boxes_normal_auto: {}, boxes_guar_auto: {}, base_fee_normal_auto: 0, base_fee_guar_auto: 0,
+        boxes_normal_manual: {}, boxes_guar_manual: {}, manual_updated_at: null,
+        extra_fee: 0, guar_extra_fee: 0, pado_fee: 0, pado_extra: 0, pado_cod: 0, dryice_full: 0, dryice_half: 0, memo: null,
+      };
       setRows((rs) => [blank, ...rs.filter((r) => r.log_date !== newDate)].sort((a, b) => b.log_date.localeCompare(a.log_date)));
       setOpen((s) => new Set(s).add(newDate));
     } catch (e) { setError(e instanceof Error ? e.message : "추가 실패"); }
@@ -201,8 +224,8 @@ export default function DeliveryLogPage() {
   const toggle = (date: string) => setOpen((s) => { const n = new Set(s); if (n.has(date)) n.delete(date); else n.add(date); return n; });
 
   const totals = useMemo(() => ({
-    normal: rows.reduce((s, r) => s + sumBoxes(r.boxes_normal), 0),
-    guar: rows.reduce((s, r) => s + sumBoxes(r.boxes_guar), 0),
+    normal: rows.reduce((s, r) => s + sumBoxes(finalBoxes(r, "n")), 0),
+    guar: rows.reduce((s, r) => s + sumBoxes(finalBoxes(r, "g")), 0),
     fee: rows.reduce((s, r) => s + feeTotal(r), 0),
     dry: rows.reduce((s, r) => s + dryAmt(r), 0),
   }), [rows, draft, boxDraft, history]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -290,8 +313,8 @@ export default function DeliveryLogPage() {
                       <tr>
                         <td><button className="b2b-link-btn" onClick={() => toggle(r.log_date)} style={{ color: "var(--sm-text-light)" }}>{o ? "▾" : "▸"}</button></td>
                         <td style={{ whiteSpace: "nowrap" }}><strong>{r.log_date.slice(5)}</strong> <span className="sm-faint">({weekday(r.log_date)})</span></td>
-                        <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(r.boxes_normal))}</td>
-                        <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{won(sumBoxes(r.boxes_guar))}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(finalBoxes(r, "n")))}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{won(sumBoxes(finalBoxes(r, "g")))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700, cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(normalFee(r))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)", cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(guarFee(r))}</td>
                         <td className="num b2b-money" style={{ cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(padoFee(r))}</td>
@@ -305,25 +328,63 @@ export default function DeliveryLogPage() {
                         <tr>
                           <td colSpan={12} style={{ background: "var(--sm-bg)", padding: 12 }}>
                             <div className="sm-col" style={{ gap: 12 }}>
+                              {/* ① 자동입력 — 발주처리 기록. 수정 불가 */}
                               <div>
-                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>택배량 직접 수정 <span className="sm-faint" style={{ fontWeight: 400 }}>(박스종류별)</span></div>
+                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>자동입력 <span className="sm-faint" style={{ fontWeight: 400 }}>· 발주처리 기록 — 수정 불가</span></div>
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
-                                  <thead><tr><th></th>{BOX_CATEGORIES.map((c) => <th key={c} className="num">{c}</th>)}<th></th></tr></thead>
+                                  <thead><tr><th></th>{BOX_CATEGORIES.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
                                   <tbody>
-                                    {(["n", "g"] as const).map((side) => (
-                                      <tr key={side}>
-                                        <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반" : "도착보장"}</td>
-                                        {BOX_CATEGORIES.map((c) => (
-                                          <td key={c} className="num" style={{ padding: "4px 3px" }}>{stepBox(r, side, c)}</td>
-                                        ))}
-                                        <td />
-                                      </tr>
-                                    ))}
+                                    {(["n", "g"] as const).map((side) => {
+                                      const auto = side === "n" ? r.boxes_normal_auto : r.boxes_guar_auto;
+                                      return (
+                                        <tr key={side}>
+                                          <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반" : "도착보장"}</td>
+                                          {BOX_CATEGORIES.map((c) => (
+                                            <td key={c} className="num b2b-money" style={{ color: auto?.[c] ? undefined : "var(--sm-text-light)" }}>{auto?.[c] || "-"}</td>
+                                          ))}
+                                          <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(auto))}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              {/* ② 직접수정 — 보정(±). 최종 = 자동 + 보정 */}
+                              <div>
+                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>
+                                  직접수정 <span className="sm-faint" style={{ fontWeight: 400 }}>· 보정(±) — 최종 = 자동입력 + 보정</span>
+                                  {r.manual_updated_at && <span className="sm-faint" style={{ fontWeight: 400, marginLeft: 8 }}>수정일 {kstStamp(r.manual_updated_at)}</span>}
+                                </div>
+                                <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
+                                  <thead><tr><th></th>{BOX_CATEGORIES.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
+                                  <tbody>
+                                    {(["n", "g"] as const).map((side) => {
+                                      const fin = finalBoxes(r, side);
+                                      return (
+                                        <FragmentRows key={side}>
+                                          <tr>
+                                            <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반 보정" : "도착보장 보정"}</td>
+                                            {BOX_CATEGORIES.map((c) => (
+                                              <td key={c} className="num" style={{ padding: "4px 3px" }}>{stepBox(r, side, c)}</td>
+                                            ))}
+                                            <td className="num b2b-money">{won(sumCounts(curManualMap(r, side)))}</td>
+                                          </tr>
+                                          <tr>
+                                            <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>└ 최종</td>
+                                            {BOX_CATEGORIES.map((c) => (
+                                              <td key={c} className="num b2b-money" style={{ color: fin[c] ? undefined : "var(--sm-text-light)" }}>{fin[c] || "-"}</td>
+                                            ))}
+                                            <td className="num b2b-money" style={{ fontWeight: 700, color: side === "g" ? "var(--sm-orange)" : undefined }}>{won(sumBoxes(fin))}</td>
+                                          </tr>
+                                        </FragmentRows>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>
                               <div>
-                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부 <span className="sm-faint" style={{ fontWeight: 400 }}>(기본운임은 <strong>택배량에서 자동 계산</strong> · 제주·도서산간 등 추가금만 &lsquo;추가운임&rsquo;에 직접 입력)</span></div>
+                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부 <span className="sm-faint" style={{ fontWeight: 400 }}>(기본운임은 <strong>자동입력+직접수정에서 자동 계산</strong> · 제주·도서산간 등 추가금만 &lsquo;추가운임&rsquo;에 직접 입력)</span></div>
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12, maxWidth: 480 }}>
                                   <thead><tr><th>채널</th><th className="num">기본운임 <span className="sm-faint" style={{ fontWeight: 400 }}>(자동)</span></th><th className="num">추가운임</th><th className="num">합계</th></tr></thead>
                                   <tbody>

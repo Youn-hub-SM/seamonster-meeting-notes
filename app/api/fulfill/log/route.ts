@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
+import { normalizeHistory } from "@/app/lib/fulfill-rates";
+import { cleanBoxes, mergeDeliveryRow } from "@/app/lib/delivery-log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,19 +9,15 @@ export const dynamic = "force-dynamic";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MANUAL = ["extra_fee", "guar_extra_fee", "pado_fee", "pado_extra", "pado_cod", "dryice_full", "dryice_half", "memo"] as const;
 
-// 알려진 박스종류만·0 이상 정수로 정제(임의 jsonb 저장 방지)
-function sanitizeBoxes(o: unknown): Record<string, number> {
-  const out: Record<string, number> = {};
-  if (o && typeof o === "object") for (const c of BOX_CATEGORIES) { const n = Math.max(0, Math.round(Number((o as Record<string, unknown>)[c]) || 0)); if (n) out[c] = n; }
-  return out;
-}
+const sanitizeBoxes = (o: unknown) => cleanBoxes(o);
 function mergeBoxes(a: unknown, b: Record<string, number>): Record<string, number> {
   const out = sanitizeBoxes(a);
   for (const [k, v] of Object.entries(b)) out[k] = (out[k] || 0) + v;
   return out;
 }
 
-// GET ?from=&to= — 배송일지(기본 최근 60일)
+// GET ?from=&to= — 배송일지(기본 최근 60일). 행은 자동+직접수정 '병합'으로 반환:
+//  boxes_*/base_fee_* = 최종값(통계·기존 소비처 호환), *_auto/*_manual/manual_updated_at = 화면 구분 표시용.
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
@@ -28,9 +25,14 @@ export async function GET(req: NextRequest) {
     if (!DATE_RE.test(to)) { const d = new Date(Date.now() + 9 * 3600e3); to = d.toISOString().slice(0, 10); }
     if (!DATE_RE.test(from)) { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - 60); from = d.toISOString().slice(0, 10); }
     const sb = supabaseAdmin();
-    const { data, error } = await sb.from("delivery_log").select("*").gte("log_date", from).lte("log_date", to).order("log_date", { ascending: false });
+    const [{ data, error }, { data: rateRow }] = await Promise.all([
+      sb.from("delivery_log").select("*").gte("log_date", from).lte("log_date", to).order("log_date", { ascending: false }),
+      sb.from("b2b_settings").select("value").eq("key", "fulfill_rates").maybeSingle(),
+    ]);
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (055 적용 확인)` }, { status: 500 });
-    return NextResponse.json({ ok: true, from, to, rows: data ?? [] });
+    const history = normalizeHistory(rateRow?.value ?? {});
+    const rows = (data ?? []).map((r) => mergeDeliveryRow(r as Record<string, unknown>, history));
+    return NextResponse.json({ ok: true, from, to, rows });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "조회 실패") }, { status: 500 });
   }
@@ -62,18 +64,23 @@ export async function POST(req: NextRequest) {
         row.base_fee_normal = bfN; row.base_fee_guar = bfG; row.guar_extra_fee = gxf;
       }
     } else {
-      // 수동 편집: 제공된 칸만 부분 upsert(다른 칸 보존). 기본운임·택배량도 손으로 수정 가능.
+      // 수동 편집: 제공된 칸만 부분 upsert(다른 칸 보존).
+      //  택배량 자동칸(boxes_*/base_fee_*)은 발주처리 기록 전용 — 직접수정은 보정(±) 컬럼에만 기록.
       for (const k of MANUAL) {
         if (b[k] === undefined) continue;
         row[k] = k === "memo" ? (String(b[k] || "").trim() || null) : (k.startsWith("dryice") ? Number(b[k]) || 0 : Math.round(Number(b[k]) || 0));
       }
-      if (b.base_fee_normal !== undefined) row.base_fee_normal = Math.round(Number(b.base_fee_normal) || 0);
-      if (b.base_fee_guar !== undefined) row.base_fee_guar = Math.round(Number(b.base_fee_guar) || 0);
-      if (b.boxes_normal !== undefined) row.boxes_normal = sanitizeBoxes(b.boxes_normal);
-      if (b.boxes_guar !== undefined) row.boxes_guar = sanitizeBoxes(b.boxes_guar);
+      if (b.boxes_normal_manual !== undefined || b.boxes_guar_manual !== undefined) {
+        if (b.boxes_normal_manual !== undefined) row.boxes_normal_manual = cleanBoxes(b.boxes_normal_manual, true);
+        if (b.boxes_guar_manual !== undefined) row.boxes_guar_manual = cleanBoxes(b.boxes_guar_manual, true);
+        row.manual_updated_at = new Date().toISOString(); // 직접수정 최종 시각(초 단위 표시용)
+      }
     }
     const { error } = await sb.from("delivery_log").upsert(row, { onConflict: "log_date" });
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    if (error) {
+      if (/manual/i.test(error.message)) return NextResponse.json({ ok: false, error: "직접수정 저장에는 075_delivery_log_manual.sql 적용이 필요합니다." }, { status: 500 });
+      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "저장 실패") }, { status: 500 });
