@@ -40,6 +40,48 @@ export function manualFeeDelta(manual: BoxCounts, tiers: RateVersion["boxTiers"]
   return sum;
 }
 
+// 직접수정 내역 1건 — 왜 고쳤는지(note)까지 기록
+export type ManualEntry = {
+  id: string;
+  side: "n" | "g";        // 일반/도착보장
+  category: string;        // 박스종류
+  qty: number;             // ±수량
+  note: string;            // 내용(사유)
+  at: string;              // 기록 시각(ISO)
+  by?: string | null;      // 작업자
+};
+
+export function cleanEntries(o: unknown): ManualEntry[] {
+  if (!Array.isArray(o)) return [];
+  const out: ManualEntry[] = [];
+  for (const e of o as Record<string, unknown>[]) {
+    if (!e || typeof e !== "object") continue;
+    const side = e.side === "g" ? "g" : "n";
+    const category = String(e.category || "");
+    const qty = Math.round(Number(e.qty) || 0);
+    if (!(BOX_CATEGORIES as readonly string[]).includes(category) || qty === 0) continue;
+    out.push({ id: String(e.id || ""), side, category, qty, note: String(e.note || ""), at: String(e.at || ""), by: (e.by as string) ?? null });
+  }
+  return out;
+}
+
+// 내역 → 박스종류별 보정 합(±)
+export function entriesToCounts(entries: ManualEntry[], side: "n" | "g"): BoxCounts {
+  const out: BoxCounts = {};
+  for (const e of entries) if (e.side === side) out[e.category] = (out[e.category] || 0) + e.qty;
+  for (const c of Object.keys(out)) if (out[c] === 0) delete out[c];
+  return out;
+}
+
+export function addCounts(a: BoxCounts, b: BoxCounts): BoxCounts {
+  const out: BoxCounts = { ...a };
+  for (const [c, v] of Object.entries(b)) {
+    const n = (out[c] || 0) + v;
+    if (n === 0) delete out[c]; else out[c] = n;
+  }
+  return out;
+}
+
 export type MergedDeliveryRow = Record<string, unknown> & {
   log_date: string;
   boxes_normal: BoxCounts;        // 최종(자동+보정)
@@ -50,8 +92,9 @@ export type MergedDeliveryRow = Record<string, unknown> & {
   boxes_guar_auto: BoxCounts;
   base_fee_normal_auto: number;
   base_fee_guar_auto: number;
-  boxes_normal_manual: BoxCounts; // 직접수정 보정(±)
+  boxes_normal_manual: BoxCounts; // 직접수정 보정 합(± = 내역 합 + 075 구컬럼 잔여)
   boxes_guar_manual: BoxCounts;
+  manual_entries: ManualEntry[];  // 건별 내역(사유 포함)
   manual_updated_at: string | null;
 };
 
@@ -60,8 +103,10 @@ export function mergeDeliveryRow(row: Record<string, unknown>, history: RateVers
   const log_date = String(row.log_date || "");
   const autoN = cleanBoxes(row.boxes_normal);
   const autoG = cleanBoxes(row.boxes_guar);
-  const manN = cleanBoxes(row.boxes_normal_manual, true);
-  const manG = cleanBoxes(row.boxes_guar_manual, true);
+  const entries = cleanEntries(row.manual_entries);
+  // 보정 합 = 내역 합 + 구컬럼(075, 내역 도입 전 저장분) 잔여값
+  const manN = addCounts(cleanBoxes(row.boxes_normal_manual, true), entriesToCounts(entries, "n"));
+  const manG = addCounts(cleanBoxes(row.boxes_guar_manual, true), entriesToCounts(entries, "g"));
   const rt = ratesFor(history, log_date);
   const feeN = Math.max(0, Math.round(Number(row.base_fee_normal) || 0) + manualFeeDelta(manN, rt.boxTiers));
   // 도착보장 보정은 박스당 도착보장 가산(guarSurcharge)도 함께 반영
@@ -79,6 +124,7 @@ export function mergeDeliveryRow(row: Record<string, unknown>, history: RateVers
     base_fee_guar_auto: Math.round(Number(row.base_fee_guar) || 0),
     boxes_normal_manual: manN,
     boxes_guar_manual: manG,
+    manual_entries: entries,
     manual_updated_at: (row.manual_updated_at as string) || null,
   };
 }

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeHistory } from "@/app/lib/fulfill-rates";
-import { cleanBoxes, mergeDeliveryRow } from "@/app/lib/delivery-log";
+import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
+import { cleanBoxes, cleanEntries, mergeDeliveryRow, type ManualEntry } from "@/app/lib/delivery-log";
+import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,13 +41,52 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST — record:true 면 발주처리 자동칸(택배량·기본운임) 기록, 아니면 수동칸 편집. 둘 다 날짜 단위 upsert(부분 컬럼).
+// POST — record:true 면 발주처리 자동칸(택배량·기본운임) 기록, add_entry/del_entry 면 직접수정 내역, 아니면 수동칸 편집.
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as Record<string, unknown>;
     const log_date = String(b.log_date || "");
     if (!DATE_RE.test(log_date)) return NextResponse.json({ ok: false, error: "날짜(YYYY-MM-DD)가 올바르지 않습니다." }, { status: 400 });
     const sb = supabaseAdmin();
+
+    // ── 직접수정 내역 추가/삭제 — 사유(내용)까지 히스토리로 남긴다 ──
+    if (b.add_entry || b.del_entry) {
+      const { data: ex, error: exErr } = await sb.from("delivery_log").select("manual_entries").eq("log_date", log_date).maybeSingle();
+      if (exErr) {
+        if (/manual_entries/i.test(exErr.message)) return NextResponse.json({ ok: false, error: "직접수정 내역에는 076_delivery_log_manual_entries.sql 적용이 필요합니다." }, { status: 500 });
+        return NextResponse.json({ ok: false, error: exErr.message }, { status: 500 });
+      }
+      let entries = cleanEntries(ex?.manual_entries);
+      let added: ManualEntry | null = null;
+      if (b.add_entry) {
+        const a = b.add_entry as Record<string, unknown>;
+        const side = a.side === "g" ? "g" as const : "n" as const;
+        const category = String(a.category || "");
+        const qty = Math.round(Number(a.qty) || 0);
+        const note = String(a.note || "").trim();
+        if (!(BOX_CATEGORIES as readonly string[]).includes(category)) return NextResponse.json({ ok: false, error: "박스종류가 올바르지 않습니다." }, { status: 400 });
+        if (qty === 0) return NextResponse.json({ ok: false, error: "수량(±)을 입력하세요." }, { status: 400 });
+        if (!note) return NextResponse.json({ ok: false, error: "내용(사유)을 입력하세요." }, { status: 400 });
+        const token = req.cookies.get("b2b_auth")?.value;
+        const by = (await verifySession(token)) || resolveUserName(token);
+        added = { id: randomUUID(), side, category, qty, note: note.slice(0, 200), at: new Date().toISOString(), by };
+        entries = [...entries, added];
+      } else {
+        const id = String((b.del_entry as Record<string, unknown>)?.id || "");
+        if (!id) return NextResponse.json({ ok: false, error: "삭제할 내역 id 가 없습니다." }, { status: 400 });
+        entries = entries.filter((e) => e.id !== id);
+      }
+      const { error: upErr } = await sb.from("delivery_log").upsert(
+        { log_date, manual_entries: entries, manual_updated_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { onConflict: "log_date" }
+      );
+      if (upErr) {
+        if (/manual/i.test(upErr.message)) return NextResponse.json({ ok: false, error: "직접수정 내역에는 076_delivery_log_manual_entries.sql 적용이 필요합니다." }, { status: 500 });
+        return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true, entry: added, entries });
+    }
+
     const row: Record<string, unknown> = { log_date, updated_at: new Date().toISOString() };
 
     if (b.record) {
