@@ -3244,10 +3244,12 @@ a {
 }
 .app-sb-brand { font-size: 18px; font-weight: 800; color: var(--sm-orange); padding: 8px 10px 8px; display: block; }
 .app-sb-nav { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
-/* 고정 구역(브랜드·홈·즐겨찾기)과의 경계 — 풋(.app-sb-foot)과 같은 헤어라인.
-   스크롤된 항목은 이 선에서 잘려, 즐겨찾기와 이어진 한 목록처럼 보이지 않는다. */
-.app-sb-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; margin-top: 12px; border-top: 1px solid var(--sm-border); }
+/* 스크롤 구역 — 즐겨찾기 반전 블록이 이미 고정/스크롤 경계를 색면으로 보여주므로 선은 두지 않음 */
+.app-sb-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
 .app-sb-group { margin-top: 12px; }
+/* 즐겨찾는 메뉴 — 배경 반전 블록으로 스크롤 목록과 확실히 분리(고정 구역임을 색면으로 표시) */
+.app-sb-fav { margin-top: 8px; padding: 4px 6px 8px; background: var(--sm-bg-warm); border-radius: var(--sm-radius); }
+.app-sb-fav .app-sb-tool-row:hover { background: var(--sm-white); }  /* 반전 배경 위 호버는 흰색으로 */
 .app-sb-cat { font-size: 11px; font-weight: 700; color: var(--sm-text-light); letter-spacing: 0.4px; padding: 6px 10px 3px; }
 /* 카테고리 라벨을 아코디언 토글로 쓸 때(즐겨찾기) — .app-sb-cat 의 타이포를 그대로 상속 */
 .app-sb-cat-toggle { flex: 1; min-width: 0; background: none; border: none; padding: 0; font: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; text-align: left; }

@@ -214,7 +214,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
         {!rail && userName && (
-          <div className="app-sb-group">
+          <div className="app-sb-group app-sb-fav">
             <div className="app-sb-cat" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button type="button" className="app-sb-cat-toggle" onClick={toggleFavOpen} aria-expanded={favOpen}>
                 즐겨찾는 메뉴
