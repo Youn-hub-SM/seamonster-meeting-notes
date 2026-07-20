@@ -78,3 +78,41 @@ export async function getCampaignStats(campaigns: string[], sinceDays = 90): Pro
   }
   return out;
 }
+
+// ── 캠페인 일자별 성과 ── 추이용. 행 = 날짜 × 캠페인 (날짜 오름차순).
+export type GaDailyRow = { date: string; campaign: string; sessions: number; purchases: number; revenue: number };
+
+export async function getCampaignDaily(campaigns: string[], sinceDays = 30): Promise<GaDailyRow[]> {
+  const list = [...new Set(campaigns.map((c) => c.trim()).filter(Boolean))];
+  if (list.length === 0) return [];
+  const { propertyId } = creds();
+  const token = await accessToken();
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dateRanges: [{ startDate: `${Math.max(1, sinceDays)}daysAgo`, endDate: "yesterday" }],
+      dimensions: [{ name: "date" }, { name: "sessionCampaignName" }],
+      metrics: [{ name: "sessions" }, { name: "transactions" }, { name: "purchaseRevenue" }],
+      dimensionFilter: { filter: { fieldName: "sessionCampaignName", inListFilter: { values: list, caseSensitive: false } } },
+      orderBys: [{ dimension: { dimensionName: "date" } }],
+      limit: "10000", // 365일 × 캠페인 수십 개도 충분
+    }),
+    cache: "no-store",
+  });
+  const j = (await res.json().catch(() => ({}))) as {
+    rows?: { dimensionValues?: { value?: string }[]; metricValues?: { value?: string }[] }[];
+    error?: { message?: string };
+  };
+  if (!res.ok) throw new Error(`GA API ${res.status}: ${j.error?.message || "조회 실패"}`);
+  const out: GaDailyRow[] = [];
+  for (const r of j.rows || []) {
+    const raw = r.dimensionValues?.[0]?.value || ""; // YYYYMMDD
+    const campaign = r.dimensionValues?.[1]?.value || "";
+    const m = (i: number) => Number(r.metricValues?.[i]?.value) || 0;
+    if (raw.length === 8 && campaign) {
+      out.push({ date: `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`, campaign, sessions: m(0), purchases: m(1), revenue: Math.round(m(2)) });
+    }
+  }
+  return out;
+}

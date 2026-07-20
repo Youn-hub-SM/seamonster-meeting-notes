@@ -84,6 +84,7 @@ export function seedMessages(): CrmMessageInput[] {
         detail: m.detail, msg: m.msg || "", img_url: "",
         links: {}, perf: m.perf || {}, tags: "",
         sort_order: mi + 1, active: true,
+        start_date: "", end_date: "",
       });
     });
   });
@@ -181,6 +182,7 @@ export function csvToMessages(csv: string): CrmMessageInput[] {
       title, status: toStatusKey(g(row, "status")), channel: toChannelKey(g(row, "channel")),
       timing: g(row, "timing"), detail: g(row, "detail"), msg: g(row, "msg"), img_url: g(row, "img_url"),
       links, perf, tags: g(row, "tags"), sort_order: sort, active: true,
+      start_date: "", end_date: "",
     });
   }
   return out;

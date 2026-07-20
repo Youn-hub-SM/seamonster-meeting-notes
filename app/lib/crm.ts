@@ -26,6 +26,9 @@ export interface CrmMessage {
   tags: string;
   sort_order: number;
   active: boolean;
+  /** 진행 기간(YYYY-MM-DD, ""=제한 없음). migration 074 — 미적용 DB에선 항상 "". */
+  start_date: string;
+  end_date: string;
   created_at: string;
   updated_at: string;
 }
@@ -65,10 +68,12 @@ export const CRM_LINK_TYPES: { key: keyof CrmLinks; label: string }[] = [
 export const EMPTY_CRM_MESSAGE: CrmMessageInput = {
   stage_num: 0, stage: "", sub: "", title: "", status: "active", channel: "kakao",
   timing: "", detail: "", msg: "", img_url: "", links: {}, perf: {}, tags: "", sort_order: 0, active: true,
+  start_date: "", end_date: "",
 };
 
 const clean = (v: unknown): string => (typeof v === "string" ? v.trim() : v == null ? "" : String(v));
 const toInt = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : 0; };
+const toYmd = (v: unknown): string => { const s = clean(v).slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ""; };
 
 export function normalizeCrmMessage(input: CrmMessageInput): CrmMessageInput {
   const links: CrmLinks = {};
@@ -96,10 +101,22 @@ export function normalizeCrmMessage(input: CrmMessageInput): CrmMessageInput {
     tags: clean(input.tags),
     sort_order: toInt(input.sort_order),
     active: input.active !== false,
+    start_date: toYmd(input.start_date),
+    end_date: toYmd(input.end_date),
   };
 }
 
 // tags 문자열 → 배열
 export function crmTags(tags: string): string[] {
   return (tags || "").split(/[,/]/).map((t) => t.trim()).filter(Boolean);
+}
+
+// ── 기준일 판정 ── 그 날짜(YYYY-MM-DD)에 '진행 중'인가.
+//  규칙: 중단(paused)=아니오 · 기간이 있으면 기간 안이어야 함(경계 포함) · 기간 없으면 상시=예.
+//  공백(gap)도 기간 없으면 '예' — 구멍은 매일 구멍이므로 기준일을 골라도 계속 보여야 한다.
+export function crmOnDate(m: Pick<CrmMessage, "status" | "start_date" | "end_date">, ymd: string): boolean {
+  if (m.status === "paused") return false;
+  if (m.start_date && ymd < m.start_date) return false;
+  if (m.end_date && ymd > m.end_date) return false;
+  return true;
 }

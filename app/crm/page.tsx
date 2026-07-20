@@ -3,8 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CrmMessage, CrmMessageInput, CrmPerf, EMPTY_CRM_MESSAGE,
-  CRM_CHANNELS, CRM_CHANNEL_LABEL, CRM_STATUSES, CRM_STATUS_LABEL, CRM_LINK_TYPES, crmTags,
+  CRM_CHANNELS, CRM_CHANNEL_LABEL, CRM_STATUSES, CRM_STATUS_LABEL, CRM_LINK_TYPES, crmTags, crmOnDate,
 } from "@/app/lib/crm";
+import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/charts";
+
+const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+// 기간 표시: "7/1~7/15" · 시작만 "7/1~" · 종료만 "~7/15"
+const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
+const periodLabel = (m: Pick<CrmMessage, "start_date" | "end_date">) =>
+  m.start_date || m.end_date ? `${m.start_date ? md(m.start_date) : ""}~${m.end_date ? md(m.end_date) : ""}` : "";
 
 // 색은 전부 b2b.css 의 .crm-* 클래스(채널 팔레트·시맨틱 토큰) — 인라인 hex 금지.
 const CH_KEYS = new Set(CRM_CHANNELS.map((c) => c.key));
@@ -42,11 +49,13 @@ type Stage = { stage: string; sub: string; stage_num: number; msgs: CrmMessage[]
 
 export default function CrmPage() {
   const [messages, setMessages] = useState<CrmMessage[]>([]);
+  const [datesSupported, setDatesSupported] = useState(true); // migration 074 미적용이면 false → 날짜 기능 숨김
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"board" | "flow" | "table">("board");
+  const [tab, setTab] = useState<"board" | "flow" | "table" | "stats">("board");
   const [search, setSearch] = useState("");
   const [chFilter, setChFilter] = useState("");
+  const [asof, setAsof] = useState(""); // 기준일(YYYY-MM-DD) — 비면 전체, 고르면 그날 진행 중만(보드·흐름)
 
   const [edit, setEdit] = useState<CrmMessageInput | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,7 +92,9 @@ export default function CrmPage() {
     try {
       const j = await (await fetch("/api/crm/messages", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
-      setMessages(j.messages || []);
+      // 폴백 응답엔 날짜 컬럼이 없음 → ""로 채워 화면 로직을 단일화
+      setMessages(((j.messages || []) as CrmMessage[]).map((m) => ({ ...m, start_date: m.start_date || "", end_date: m.end_date || "" })));
+      setDatesSupported(j.datesSupported !== false);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
   }, []);
@@ -118,9 +129,15 @@ export default function CrmPage() {
     });
   }, [messages, search, chFilter]);
 
+  // 기준일 필터(보드·흐름 전용) — 그날 진행 중이 아닌 것(기간 밖·중단)을 뺀다. 표·통계엔 미적용.
+  const dateFiltered = useMemo(
+    () => (asof ? filtered.filter((m) => crmOnDate(m, asof)) : filtered),
+    [filtered, asof],
+  );
+
   const stages: Stage[] = useMemo(() => {
     const map = new Map<string, Stage>();
-    for (const m of filtered) {
+    for (const m of dateFiltered) {
       const key = m.stage || "(미분류)";
       if (!map.has(key)) map.set(key, { stage: key, sub: m.sub, stage_num: m.stage_num, msgs: [] });
       const s = map.get(key)!;
@@ -128,7 +145,7 @@ export default function CrmPage() {
       s.msgs.push(m);
     }
     return [...map.values()].sort((a, b) => a.stage_num - b.stage_num || a.stage.localeCompare(b.stage, "ko"));
-  }, [filtered]);
+  }, [dateFiltered]);
 
   const summary = useMemo(() => {
     const total = messages.length;
@@ -226,14 +243,35 @@ export default function CrmPage() {
           <button className={`sm-tab ${tab === "board" ? "is-active" : ""}`} onClick={() => setTab("board")}>보드</button>
           <button className={`sm-tab ${tab === "flow" ? "is-active" : ""}`} onClick={() => setTab("flow")}>흐름</button>
           <button className={`sm-tab ${tab === "table" ? "is-active" : ""}`} onClick={() => setTab("table")}>표(편집)</button>
+          <button className={`sm-tab ${tab === "stats" ? "is-active" : ""}`} onClick={() => setTab("stats")}>통계</button>
         </div>
         <div className="crm-summary-spacer" />
-        <select className="b2b-select crm-ch-filter" value={chFilter} onChange={(e) => setChFilter(e.target.value)}>
-          <option value="">전체 채널</option>
-          {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-        </select>
-        <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="메시지·스테이지·태그 검색" />
+        {/* 기준일 — 그날 진행 중인 메시지만(보드·흐름). 기간은 각 메시지 '상세'에서 설정 */}
+        {datesSupported && (tab === "board" || tab === "flow") && (
+          <div className="sm-row crm-datebar">
+            <span className="crm-datebar-label">기준일</span>
+            <input type="date" className="b2b-input crm-date-input" value={asof} onChange={(e) => setAsof(e.target.value)} aria-label="기준일" />
+            {asof !== kstToday() && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof(kstToday())}>오늘</button>}
+            {asof && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof("")}>전체</button>}
+          </div>
+        )}
+        {tab !== "stats" && (
+          <>
+            <select className="b2b-select crm-ch-filter" value={chFilter} onChange={(e) => setChFilter(e.target.value)}>
+              <option value="">전체 채널</option>
+              {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+            <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="메시지·스테이지·태그 검색" />
+          </>
+        )}
       </div>
+
+      {/* 기준일 안내 — 몇 개가 걸러졌는지 명시(조용히 사라지면 '데이터가 없어졌다'로 오해) */}
+      {asof && (tab === "board" || tab === "flow") && (
+        <p className="sm-faint crm-asof-hint">
+          {asof} 기준 진행 중 {dateFiltered.length}개 표시 · 기간 밖/중단 {filtered.length - dateFiltered.length}개 숨김
+        </p>
+      )}
 
       {/* utm_campaign 은 달았는데 GA env 가 없을 때만 안내(설정되면 카드에 자동 표시) */}
       {campaigns.length > 0 && ga && !ga.configured && (
@@ -265,14 +303,16 @@ export default function CrmPage() {
           <BoardView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : tab === "flow" ? (
           <FlowView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
-        ) : (
+        ) : tab === "table" ? (
           <TableView msgs={filtered} stageNames={stageNames} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
+        ) : (
+          <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} />
         )}
 
       {edit && (
         <EditModal
           data={edit} onChange={setEdit} onClose={() => setEdit(null)} onSave={save}
-          onDelete={() => remove(edit.id)} saving={saving}
+          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported}
         />
       )}
     </div>
@@ -320,6 +360,7 @@ function Card({ m, ga, onClick }: { m: CrmMessage; ga?: GaStat; onClick: () => v
       </div>
       <div className="sm-row-wrap crm-card-meta-row">
         <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
+        {periodLabel(m) && <span className="crm-chip crm-chip-period">{periodLabel(m)}</span>}
         {m.timing && <span className="crm-card-meta">· {m.timing}</span>}
       </div>
       {crmTags(m.tags).length > 0 && (
@@ -368,6 +409,7 @@ function FlowView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: 
                         <span className="crm-ft">{m.title || "(제목 없음)"}</span>
                         <span className="sm-row-wrap crm-fchips">
                           <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
+                          {periodLabel(m) && <span className="crm-chip crm-chip-period">{periodLabel(m)}</span>}
                           {m.status === "gap" && <span className="crm-chip crm-chip-gap">미운영</span>}
                           {m.status === "auto" && <span className="crm-chip crm-chip-auto">자동</span>}
                           {m.status === "paused" && <span className="crm-chip crm-chip-paused">중단</span>}
@@ -455,10 +497,136 @@ function CellText({ id, value, field, placeholder, list, onField, onSave }: {
   );
 }
 
+// ── 통계 뷰 ── 맵 구조(채널·단계별 공백) + GA 추이(일자별 세션·매출, 캠페인 순위).
+//  GA 축은 utm_campaign 이 달린 메시지들만 — 수동 perf 는 스냅샷이라 추이를 만들 수 없다.
+type GaDaily = { date: string; campaign: string; sessions: number; purchases: number; revenue: number };
+const STATS_RANGES = [{ d: 7, label: "7일" }, { d: 30, label: "30일" }, { d: 90, label: "90일" }];
+
+function StatsView({ messages, campaigns, gaConfigured }: { messages: CrmMessage[]; campaigns: string[]; gaConfigured?: boolean }) {
+  const [days, setDays] = useState(30);
+  const [daily, setDaily] = useState<GaDaily[] | null>(null);
+  const [gaErr, setGaErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const campaignsKey = campaigns.join(",");
+  useEffect(() => {
+    if (!campaignsKey || gaConfigured === false) { setDaily(null); return; }
+    let alive = true;
+    setLoading(true); setGaErr("");
+    (async () => {
+      try {
+        const j = await (await fetch(`/api/crm/ga-stats?campaigns=${encodeURIComponent(campaignsKey)}&days=${days}&daily=1`, { cache: "no-store" })).json();
+        if (!alive) return;
+        if (!j.ok) throw new Error(j.error || "GA 조회 실패");
+        setDaily(j.configured ? (j.daily || []) : null);
+      } catch (e) { if (alive) { setDaily(null); setGaErr(e instanceof Error ? e.message : "GA 조회 실패"); } }
+      if (alive) setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [campaignsKey, days, gaConfigured]);
+
+  // 맵 구조 — GA 없이도 항상
+  const byChannel = useMemo<[string, number][]>(() => {
+    const m = new Map<string, number>();
+    for (const msg of messages) { const l = CRM_CHANNEL_LABEL[msg.channel] || msg.channel || "미지정"; m.set(l, (m.get(l) || 0) + 1); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [messages]);
+  const gapByStage = useMemo<[string, number][]>(() => {
+    const m = new Map<string, number>();
+    for (const msg of messages) if (msg.status === "gap") { const s = msg.stage || "(미분류)"; m.set(s, (m.get(s) || 0) + 1); }
+    return [...m.entries()];
+  }, [messages]);
+
+  // GA 집계 — 일자별 합산 추이(60일 초과는 7일 묶음) + 캠페인 순위
+  const ga = useMemo(() => {
+    if (!daily) return null;
+    const byDate = new Map<string, { sessions: number; purchases: number; revenue: number }>();
+    const byCampaign = new Map<string, { sessions: number; purchases: number; revenue: number }>();
+    for (const r of daily) {
+      const d = byDate.get(r.date) || { sessions: 0, purchases: 0, revenue: 0 };
+      d.sessions += r.sessions; d.purchases += r.purchases; d.revenue += r.revenue; byDate.set(r.date, d);
+      const c = byCampaign.get(r.campaign) || { sessions: 0, purchases: 0, revenue: 0 };
+      c.sessions += r.sessions; c.purchases += r.purchases; c.revenue += r.revenue; byCampaign.set(r.campaign, c);
+    }
+    const dates = [...byDate.keys()].sort();
+    type Pt = { label: string; sessions: number; revenue: number };
+    let pts: Pt[];
+    if (days <= 60) {
+      pts = dates.map((d) => ({ label: md(d), sessions: byDate.get(d)!.sessions, revenue: byDate.get(d)!.revenue }));
+    } else {
+      // 7일 묶음(첫 날짜 기준) — 90일을 일 단위로 그리면 축 라벨이 뭉개진다
+      const chunks = new Map<number, Pt>();
+      const t0 = dates.length ? Date.parse(dates[0]) : 0;
+      for (const d of dates) {
+        const i = Math.floor((Date.parse(d) - t0) / (7 * 86_400e3));
+        const p = chunks.get(i) || { label: `${md(new Date(t0 + i * 7 * 86_400e3).toISOString().slice(0, 10))}~`, sessions: 0, revenue: 0 };
+        p.sessions += byDate.get(d)!.sessions; p.revenue += byDate.get(d)!.revenue;
+        chunks.set(i, p);
+      }
+      pts = [...chunks.keys()].sort((a, b) => a - b).map((k) => chunks.get(k)!);
+    }
+    const totals = [...byDate.values()].reduce((t, v) => ({ sessions: t.sessions + v.sessions, purchases: t.purchases + v.purchases, revenue: t.revenue + v.revenue }), { sessions: 0, purchases: 0, revenue: 0 });
+    const rank: [string, number][] = [...byCampaign.entries()].map(([c, v]) => [c, v.revenue]);
+    const rankSub = (label: string) => { const v = byCampaign.get(label); return v ? `세션 ${v.sessions.toLocaleString("ko-KR")} · 구매 ${v.purchases.toLocaleString("ko-KR")}` : null; };
+    return { pts, totals, rank, rankSub };
+  }, [daily, days]);
+
+  return (
+    <div className="sm-col crm-stats">
+      {/* GA 추이 */}
+      <div className="sm-row-wrap crm-stats-head">
+        <h2 className="crm-stats-title">캠페인 성과 추이 <span className="sm-faint crm-stats-note">GA · utm_campaign 세션 귀속 · 어제까지</span></h2>
+        <div className="crm-summary-spacer" />
+        <div className="sm-tabs">
+          {STATS_RANGES.map((r) => (
+            <button key={r.d} className={`sm-tab ${days === r.d ? "is-active" : ""}`} onClick={() => setDays(r.d)}>{r.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {gaConfigured === false ? (
+        <p className="sm-faint crm-asof-hint">GA 연동 대기 — env(GA4_PROPERTY_ID·GA_SA_EMAIL·GA_SA_PRIVATE_KEY)를 넣으면 여기에 추이가 표시됩니다.</p>
+      ) : !campaignsKey ? (
+        <p className="sm-faint crm-asof-hint">utm_campaign 이 달린 메시지가 없습니다 — 메시지 상세에서 UTM 캠페인을 넣으면 추이가 생깁니다.</p>
+      ) : gaErr ? (
+        <div className="b2b-error">{gaErr}</div>
+      ) : loading && !ga ? (
+        <div className="b2b-loading">GA 불러오는 중...</div>
+      ) : ga && (
+        <>
+          <div className="sm-row-wrap crm-stats-kpi">
+            <div className="crm-stat"><div className="crm-stat-label">세션</div><div className="crm-stat-value">{ga.totals.sessions.toLocaleString("ko-KR")}</div></div>
+            <div className="crm-stat"><div className="crm-stat-label">구매</div><div className="crm-stat-value">{ga.totals.purchases.toLocaleString("ko-KR")}</div></div>
+            <div className="crm-stat"><div className="crm-stat-label">매출</div><div className="crm-stat-value">{moneyCompact(ga.totals.revenue)}</div></div>
+          </div>
+          <div className="crm-stats-grid">
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">일자별 세션</span></div>
+              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.sessions, tip: `${p.label} · 세션 ${p.sessions.toLocaleString("ko-KR")}` }))} />
+            </section>
+            <section className="b2b-card">
+              <div className="b2b-card-head"><span className="b2b-card-title">일자별 매출</span></div>
+              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.revenue, tip: `${p.label} · ${p.revenue.toLocaleString("ko-KR")}원` }))} fmtAxis={moneyCompact} />
+            </section>
+            <BarList title="캠페인별 매출" caption={`최근 ${days}일 · 막대 = 매출`} data={ga.rank} fmt={moneyCompact} sub={ga.rankSub} sorted minPct={2} empty="기간 내 매출 없음" />
+          </div>
+        </>
+      )}
+
+      {/* 맵 구조 */}
+      <h2 className="crm-stats-title crm-stats-title-2">메시지 구성</h2>
+      <div className="crm-stats-grid">
+        <PieCard title="채널별 메시지" data={byChannel} />
+        <BarList title="단계별 공백(미운영)" caption="공백이 많은 단계 = 여정이 끊기는 곳" data={gapByStage} sorted minPct={4} empty="공백 없음" />
+      </div>
+    </div>
+  );
+}
+
 // ── 편집 모달 ──
-function EditModal({ data, onChange, onClose, onSave, onDelete, saving }: {
+function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported }: {
   data: CrmMessageInput; onChange: (d: CrmMessageInput) => void; onClose: () => void;
-  onSave: () => void; onDelete: () => void; saving: boolean;
+  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean;
 }) {
   const set = <K extends keyof CrmMessageInput>(k: K, v: CrmMessageInput[K]) => onChange({ ...data, [k]: v });
   const setLink = (k: string, v: string) => onChange({ ...data, links: { ...data.links, [k]: v } });
@@ -493,6 +661,17 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving }: {
             <label className="b2b-field"><span className="b2b-field-label">발송 시점</span>
               <input className="b2b-input" value={data.timing} onChange={(e) => set("timing", e.target.value)} placeholder="예: 선정 시 / 상시" /></label>
           </div>
+          {datesSupported && (
+            <div className="b2b-field-row">
+              <label className="b2b-field"><span className="b2b-field-label">진행 시작일 (선택)</span>
+                <input type="date" className="b2b-input" value={data.start_date || ""} onChange={(e) => set("start_date", e.target.value)} /></label>
+              <label className="b2b-field"><span className="b2b-field-label">진행 종료일 (선택)</span>
+                <input type="date" className="b2b-input" value={data.end_date || ""} onChange={(e) => set("end_date", e.target.value)} /></label>
+            </div>
+          )}
+          {datesSupported && (data.start_date || data.end_date) ? (
+            <p className="sm-faint crm-field-hint">기준일 필터에서 이 기간 안의 날짜에만 표시됩니다. 비우면 상시.</p>
+          ) : null}
           <label className="b2b-field"><span className="b2b-field-label">상세 설명</span>
             <textarea className="b2b-textarea" value={data.detail} onChange={(e) => set("detail", e.target.value)} rows={2} placeholder="어떤 메시지인지·자동화 여부 등" /></label>
           <label className="b2b-field"><span className="b2b-field-label">메시지 내용/초안(선택)</span>

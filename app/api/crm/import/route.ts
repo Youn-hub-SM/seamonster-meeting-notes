@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
     if (inputs.length === 0) {
       return NextResponse.json({ ok: false, error: mode === "csv" ? "CSV에서 읽을 행이 없습니다. 헤더(스테이지·메시지명 등) 포함 전체를 붙여넣었는지 확인하세요." : "시드 데이터가 비어 있습니다." }, { status: 400 });
     }
-    const rows = inputs.map((i) => { const { id: _omit, ...row } = normalizeCrmMessage(i); void _omit; return row; });
+    // 시드·CSV엔 진행 기간이 없으므로 날짜 키는 아예 뺀다(074 미적용 DB에서도 동작).
+    const rows = inputs.map((i) => { const { id: _omit, start_date: _s, end_date: _e, ...row } = normalizeCrmMessage(i); void _omit; void _s; void _e; return row; });
     const { error } = await supabaseAdmin().from("crm_messages").insert(rows);
     if (error) throw error;
     return NextResponse.json({ ok: true, inserted: rows.length, mode });

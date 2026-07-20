@@ -3265,6 +3265,23 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-table-hint { font-size: var(--sm-fs-xs); margin-top: var(--sm-space-2); }
 .crm-modal { max-width: 560px; }
 .crm-field-num { max-width: 110px; }
+/* 진행 기간 칩 + 기준일 필터 */
+.crm-chip-period { background: var(--sm-white); color: var(--sm-text-mid); border: 1px solid var(--sm-border); font-variant-numeric: tabular-nums; }
+.crm-datebar { gap: var(--sm-space-1); align-items: center; }
+.crm-datebar-label { font-size: var(--sm-fs-sm); font-weight: 600; color: var(--sm-text-mid); white-space: nowrap; }
+.crm-date-input { width: 150px; }
+.crm-date-btn { padding: 5px 10px; font-size: var(--sm-fs-sm); white-space: nowrap; }
+.crm-asof-hint { font-size: var(--sm-fs-xs); margin: calc(-1 * var(--sm-space-1)) 0 var(--sm-space-2); }
+
+/* 통계 탭 */
+.crm-stats { gap: var(--sm-space-3); }
+.crm-stats-head { gap: var(--sm-space-2); align-items: center; }
+.crm-stats-title { font-size: var(--sm-fs-md); font-weight: 800; color: var(--sm-dark); margin: 0; }
+.crm-stats-title-2 { margin-top: var(--sm-space-2); }
+.crm-stats-note { font-size: var(--sm-fs-xs); font-weight: 400; }
+.crm-stats-kpi { gap: var(--sm-space-2); }
+.crm-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--sm-space-3); }
+
 /* 빈 상태 가져오기 */
 .crm-empty-lead { margin: 0 0 var(--sm-space-3); }
 .crm-empty-actions { gap: var(--sm-space-2); justify-content: center; }
