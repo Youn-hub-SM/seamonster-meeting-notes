@@ -106,8 +106,18 @@ export default function FulfillPage() {
       }
       const boxes_normal: Record<string, number> = {}, boxes_guar: Record<string, number> = {};
       for (const p of res.parcelSummary) { if (p.normal) boxes_normal[p.category] = p.normal; if (p.guarantee) boxes_guar[p.category] = p.guarantee; }
-      const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, mode: recordMode, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar, guar_extra_fee: res.fees.guarExtra }) });
-      const j = await r.json(); if (!j.ok) throw new Error(j.error || "기록 실패");
+      // 같은 내용이 이미 기록돼 있으면 서버가 중복(409)으로 차단 — 사용자가 확인하면 강행(force) 재시도
+      let force = false;
+      for (;;) {
+        const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, mode: recordMode, force, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar, guar_extra_fee: res.fees.guarExtra }) });
+        const j = await r.json();
+        if (r.status === 409 && j.duplicate) {
+          if (!window.confirm(`${j.error}\n\n그래도 기록할까요? (이중 집계됩니다)`)) { setRecording(false); return false; }
+          force = true; continue;
+        }
+        if (!j.ok) throw new Error(j.error || "기록 실패");
+        break;
+      }
       setRecordOk(`${recordDate} 배송일지에 ${recordMode === "add" ? "더했어요(누적)" : "기록했어요"}.`);
       ok = true;
     } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }

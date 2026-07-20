@@ -82,6 +82,54 @@ export function addCounts(a: BoxCounts, b: BoxCounts): BoxCounts {
   return out;
 }
 
+// 자동입력(발주처리 '배송일지에 기록') 1건 — 배치 단위 이력. 합계 = 이력 합, 건별 되돌리기 가능.
+export type RecordEntry = {
+  id: string;
+  at: string;                       // 기록 시각(ISO)
+  by?: string | null;               // 작업자
+  mode: "add" | "replace" | "baseline"; // baseline = 이력 도입 전 기존 합계(1건으로 캡처)
+  boxes_normal: BoxCounts;
+  boxes_guar: BoxCounts;
+  base_fee_normal: number;
+  base_fee_guar: number;
+  sig: string;                      // 내용 서명(중복 판정: 같은 날짜 + 같은 sig = 중복)
+};
+
+export function cleanRecordEntries(o: unknown): RecordEntry[] {
+  if (!Array.isArray(o)) return [];
+  const out: RecordEntry[] = [];
+  for (const e of o as Record<string, unknown>[]) {
+    if (!e || typeof e !== "object") continue;
+    out.push({
+      id: String(e.id || ""),
+      at: String(e.at || ""),
+      by: (e.by as string) ?? null,
+      mode: e.mode === "replace" ? "replace" : e.mode === "baseline" ? "baseline" : "add",
+      boxes_normal: cleanBoxes(e.boxes_normal),
+      boxes_guar: cleanBoxes(e.boxes_guar),
+      base_fee_normal: Math.round(Number(e.base_fee_normal) || 0),
+      base_fee_guar: Math.round(Number(e.base_fee_guar) || 0),
+      sig: String(e.sig || ""),
+    });
+  }
+  return out;
+}
+
+// 이력 합 → 자동입력 컬럼 값(박스 합·운임 합)
+export function recordTotals(entries: RecordEntry[]): { boxes_normal: BoxCounts; boxes_guar: BoxCounts; base_fee_normal: number; base_fee_guar: number } {
+  let bn: BoxCounts = {}, bg: BoxCounts = {}, fn = 0, fg = 0;
+  for (const e of entries) {
+    bn = addCounts(bn, e.boxes_normal);
+    bg = addCounts(bg, e.boxes_guar);
+    fn += e.base_fee_normal;
+    fg += e.base_fee_guar;
+  }
+  // 자동 합계는 음수가 없어야 정상 — 방어적으로 0 미만 제거
+  for (const c of Object.keys(bn)) if (bn[c] < 0) delete bn[c];
+  for (const c of Object.keys(bg)) if (bg[c] < 0) delete bg[c];
+  return { boxes_normal: bn, boxes_guar: bg, base_fee_normal: Math.max(0, fn), base_fee_guar: Math.max(0, fg) };
+}
+
 export type MergedDeliveryRow = Record<string, unknown> & {
   log_date: string;
   boxes_normal: BoxCounts;        // 최종(자동+보정)
@@ -95,6 +143,7 @@ export type MergedDeliveryRow = Record<string, unknown> & {
   boxes_normal_manual: BoxCounts; // 직접수정 보정 합(± = 내역 합 + 075 구컬럼 잔여)
   boxes_guar_manual: BoxCounts;
   manual_entries: ManualEntry[];  // 건별 내역(사유 포함)
+  record_entries: RecordEntry[];  // 자동입력 배치 이력(되돌리기용)
   manual_updated_at: string | null;
 };
 
@@ -125,6 +174,7 @@ export function mergeDeliveryRow(row: Record<string, unknown>, history: RateVers
     boxes_normal_manual: manN,
     boxes_guar_manual: manG,
     manual_entries: entries,
+    record_entries: cleanRecordEntries(row.record_entries),
     manual_updated_at: (row.manual_updated_at as string) || null,
   };
 }

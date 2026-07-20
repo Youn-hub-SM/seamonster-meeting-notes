@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeHistory } from "@/app/lib/fulfill-rates";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
-import { cleanBoxes, cleanEntries, mergeDeliveryRow, type ManualEntry } from "@/app/lib/delivery-log";
+import { cleanBoxes, cleanEntries, cleanRecordEntries, recordTotals, mergeDeliveryRow, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
+
+// 자동 기록 내용 서명 — 같은 날짜에 같은 서명이 이미 있으면 '같은 파일을 두 번 기록'으로 판정.
+function recordSig(bn: Record<string, number>, bg: Record<string, number>, fn: number, fg: number): string {
+  const norm = (o: Record<string, number>) => Object.entries(o).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join(",");
+  return createHash("sha1").update(`${norm(bn)}|${norm(bg)}|${fn}|${fg}`).digest("hex").slice(0, 16);
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,23 +93,76 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, entry: added, entries });
     }
 
+    // ── 자동 기록 되돌리기 — 배치 이력 1건 삭제 후 자동 합계 재계산 ──
+    if (b.del_record) {
+      const id = String((b.del_record as Record<string, unknown>)?.id || "");
+      if (!id) return NextResponse.json({ ok: false, error: "되돌릴 기록 id 가 없습니다." }, { status: 400 });
+      const { data: ex, error: exErr } = await sb.from("delivery_log").select("record_entries, guar_extra_fee").eq("log_date", log_date).maybeSingle();
+      if (exErr) {
+        if (/record_entries/i.test(exErr.message)) return NextResponse.json({ ok: false, error: "기록 되돌리기에는 078_delivery_log_record_entries.sql 적용이 필요합니다." }, { status: 500 });
+        return NextResponse.json({ ok: false, error: exErr.message }, { status: 500 });
+      }
+      const entries = cleanRecordEntries(ex?.record_entries).filter((e) => e.id !== id);
+      const totals = recordTotals(entries);
+      const { error: upErr } = await sb.from("delivery_log").upsert(
+        { log_date, record_entries: entries, ...totals, updated_at: new Date().toISOString() },
+        { onConflict: "log_date" }
+      );
+      if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 });
+      return NextResponse.json({ ok: true, entries, ...totals });
+    }
+
     const row: Record<string, unknown> = { log_date, updated_at: new Date().toISOString() };
 
     if (b.record) {
-      // 자동칸 기록. mode='add'면 그날 기존 값에 누적(하루 여러 배치), 아니면 덮어쓰기.
+      // 자동칸 기록 — 배치 이력(record_entries)에 1건 추가하고 자동 합계 = 이력 합으로 재계산.
+      //  같은 날짜에 같은 내용(sig)이 이미 있으면 중복으로 차단(force 로 강행). 078 미적용이면 구방식 폴백.
       const bxN = sanitizeBoxes(b.boxes_normal), bxG = sanitizeBoxes(b.boxes_guar);
       const bfN = Math.round(Number(b.base_fee_normal) || 0), bfG = Math.round(Number(b.base_fee_guar) || 0);
-      const gxf = Math.round(Number(b.guar_extra_fee) || 0); // 도착보장 추가운임(143×건수) 자동
-      if (b.mode === "add") {
-        const { data: ex } = await sb.from("delivery_log").select("boxes_normal,boxes_guar,base_fee_normal,base_fee_guar,guar_extra_fee").eq("log_date", log_date).maybeSingle();
-        row.boxes_normal = mergeBoxes(ex?.boxes_normal, bxN);
-        row.boxes_guar = mergeBoxes(ex?.boxes_guar, bxG);
-        row.base_fee_normal = (Number(ex?.base_fee_normal) || 0) + bfN;
-        row.base_fee_guar = (Number(ex?.base_fee_guar) || 0) + bfG;
-        row.guar_extra_fee = (Number(ex?.guar_extra_fee) || 0) + gxf;
+      const gxf = Math.round(Number(b.guar_extra_fee) || 0); // 도착보장 추가운임(구버전 호환 — 현재 0)
+      const sig = recordSig(bxN, bxG, bfN, bfG);
+      const mode = b.mode === "add" ? "add" as const : "replace" as const;
+
+      const { data: ex, error: exErr } = await sb.from("delivery_log")
+        .select("boxes_normal,boxes_guar,base_fee_normal,base_fee_guar,guar_extra_fee,record_entries")
+        .eq("log_date", log_date).maybeSingle();
+      const legacy = !!exErr && /record_entries/i.test(exErr.message); // 078 미적용
+      if (exErr && !legacy) return NextResponse.json({ ok: false, error: exErr.message }, { status: 500 });
+
+      if (legacy) {
+        // 구방식: 컬럼에 직접 누적/덮어쓰기(이력·중복차단 없음)
+        const { data: ex2 } = await sb.from("delivery_log").select("boxes_normal,boxes_guar,base_fee_normal,base_fee_guar,guar_extra_fee").eq("log_date", log_date).maybeSingle();
+        if (mode === "add") {
+          row.boxes_normal = mergeBoxes(ex2?.boxes_normal, bxN);
+          row.boxes_guar = mergeBoxes(ex2?.boxes_guar, bxG);
+          row.base_fee_normal = (Number(ex2?.base_fee_normal) || 0) + bfN;
+          row.base_fee_guar = (Number(ex2?.base_fee_guar) || 0) + bfG;
+          row.guar_extra_fee = (Number(ex2?.guar_extra_fee) || 0) + gxf;
+        } else {
+          row.boxes_normal = bxN; row.boxes_guar = bxG;
+          row.base_fee_normal = bfN; row.base_fee_guar = bfG; row.guar_extra_fee = gxf;
+        }
       } else {
-        row.boxes_normal = bxN; row.boxes_guar = bxG;
-        row.base_fee_normal = bfN; row.base_fee_guar = bfG; row.guar_extra_fee = gxf;
+        let entries = cleanRecordEntries(ex?.record_entries);
+        // 이력 도입 전(또는 구방식으로) 쌓인 기존 합계는 '이전 기록' 1건으로 캡처 — 재계산에서 사라지지 않게
+        const exBn = cleanBoxes(ex?.boxes_normal), exBg = cleanBoxes(ex?.boxes_guar);
+        const exFn = Math.round(Number(ex?.base_fee_normal) || 0), exFg = Math.round(Number(ex?.base_fee_guar) || 0);
+        if (entries.length === 0 && (Object.keys(exBn).length || Object.keys(exBg).length || exFn || exFg)) {
+          entries = [{ id: randomUUID(), at: new Date().toISOString(), by: null, mode: "baseline", boxes_normal: exBn, boxes_guar: exBg, base_fee_normal: exFn, base_fee_guar: exFg, sig: recordSig(exBn, exBg, exFn, exFg) }];
+        }
+        // 중복 차단 — 더하기에서 같은 내용이 이미 있으면 이중 집계로 판정(덮어쓰기는 의도적 재기록이라 통과)
+        if (mode === "add" && !b.force && entries.some((e) => e.sig === sig)) {
+          return NextResponse.json({ ok: false, duplicate: true, error: "같은 내용의 기록이 이 날짜에 이미 있습니다(같은 발주 파일로 보임). 그래도 더하려면 강행을 선택하세요." }, { status: 409 });
+        }
+        const token = req.cookies.get("b2b_auth")?.value;
+        const by = (await verifySession(token)) || resolveUserName(token);
+        const entry: RecordEntry = { id: randomUUID(), at: new Date().toISOString(), by, mode, boxes_normal: bxN, boxes_guar: bxG, base_fee_normal: bfN, base_fee_guar: bfG, sig };
+        entries = mode === "replace" ? [entry] : [...entries, entry];
+        const totals = recordTotals(entries);
+        row.record_entries = entries;
+        row.boxes_normal = totals.boxes_normal; row.boxes_guar = totals.boxes_guar;
+        row.base_fee_normal = totals.base_fee_normal; row.base_fee_guar = totals.base_fee_guar;
+        row.guar_extra_fee = mode === "add" ? (Number(ex?.guar_extra_fee) || 0) + gxf : gxf;
       }
     } else {
       // 수동 편집: 제공된 칸만 부분 upsert(다른 칸 보존).

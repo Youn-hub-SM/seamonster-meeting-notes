@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
-import { mergeCounts, manualFeeDelta, sumCounts, type ManualEntry } from "@/app/lib/delivery-log";
+import { mergeCounts, manualFeeDelta, sumCounts, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -15,6 +15,7 @@ type Row = {
   base_fee_normal_auto: number; base_fee_guar_auto: number;
   boxes_normal_manual: Boxes; boxes_guar_manual: Boxes; // 직접수정 보정 합(±, 내역 합산)
   manual_entries: ManualEntry[];                     // 건별 내역(사유 포함)
+  record_entries: RecordEntry[];                     // 자동입력 배치 이력(되돌리기용)
   manual_updated_at: string | null;                  // 직접수정 최종 시각
   extra_fee: number; guar_extra_fee: number; pado_fee: number; pado_extra: number; pado_cod: number;
   dryice_full: number; dryice_half: number; memo: string | null;
@@ -152,6 +153,22 @@ export default function DeliveryLogPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "추가 실패"); }
     setEBusy(false);
   }
+  // 자동입력 배치 기록 되돌리기 — 그 배치의 박스·운임 기여분이 합계에서 빠진다
+  async function delRecord(date: string, entry: RecordEntry) {
+    const label = entry.mode === "baseline" ? "이전 기록 합계" : entry.mode === "replace" ? "덮어쓰기 기록" : "더하기 기록";
+    if (!window.confirm(`이 ${label}을 되돌릴까요?\n일반 ${sumBoxes(entry.boxes_normal)}박스 · 도착보장 ${sumBoxes(entry.boxes_guar)}박스 · 운임 ${won(entry.base_fee_normal + entry.base_fee_guar)}원이 합계에서 빠집니다.`)) return;
+    try {
+      const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: date, del_record: { id: entry.id } }) });
+      const j = await res.json(); if (!j.ok) throw new Error(j.error || "되돌리기 실패");
+      setRows((rs) => rs.map((r) => (r.log_date === date ? {
+        ...r,
+        record_entries: j.entries || [],
+        boxes_normal_auto: j.boxes_normal || {}, boxes_guar_auto: j.boxes_guar || {},
+        base_fee_normal_auto: j.base_fee_normal || 0, base_fee_guar_auto: j.base_fee_guar || 0,
+      } : r)));
+    } catch (e) { setError(e instanceof Error ? e.message : "되돌리기 실패"); }
+  }
+
   async function delEntry(date: string, entry: ManualEntry) {
     if (!window.confirm(`이 보정을 삭제할까요?\n${entry.side === "n" ? "일반" : "도착보장"} · ${entry.category} · ${entry.qty > 0 ? "+" : ""}${entry.qty} · ${entry.note}`)) return;
     try {
@@ -192,7 +209,7 @@ export default function DeliveryLogPage() {
       const blank: Row = {
         log_date: newDate, boxes_normal: {}, boxes_guar: {}, base_fee_normal: 0, base_fee_guar: 0,
         boxes_normal_auto: {}, boxes_guar_auto: {}, base_fee_normal_auto: 0, base_fee_guar_auto: 0,
-        boxes_normal_manual: {}, boxes_guar_manual: {}, manual_entries: [], manual_updated_at: null,
+        boxes_normal_manual: {}, boxes_guar_manual: {}, manual_entries: [], record_entries: [], manual_updated_at: null,
         extra_fee: 0, guar_extra_fee: 0, pado_fee: 0, pado_extra: 0, pado_cod: 0, dryice_full: 0, dryice_half: 0, memo: null,
       };
       setRows((rs) => [blank, ...rs.filter((r) => r.log_date !== newDate)].sort((a, b) => b.log_date.localeCompare(a.log_date)));
@@ -343,6 +360,22 @@ export default function DeliveryLogPage() {
                                     })}
                                   </tbody>
                                 </table>
+                                {(r.record_entries || []).length > 0 && (
+                                  <div style={{ marginTop: 6 }}>
+                                    {[...r.record_entries].reverse().map((e) => (
+                                      <div key={e.id} className="sm-row" style={{ gap: 8, alignItems: "center", fontSize: 12, padding: "3px 2px", flexWrap: "wrap" }}>
+                                        <span className="sm-faint">{e.at ? kstStamp(e.at) : "-"}</span>
+                                        <span style={{ fontWeight: 600, color: e.mode === "baseline" ? "var(--sm-text-light)" : "var(--sm-text-mid)" }}>
+                                          {e.mode === "baseline" ? "이전 기록 합계" : e.mode === "replace" ? "덮어쓰기" : "더하기"}
+                                        </span>
+                                        <span>일반 {sumBoxes(e.boxes_normal)} · 도착보장 {sumBoxes(e.boxes_guar)}박스</span>
+                                        <span className="b2b-money">{won(e.base_fee_normal + e.base_fee_guar)}원</span>
+                                        {e.by && <span className="sm-faint">{e.by}</span>}
+                                        <button className="b2b-link-btn" style={{ fontSize: 12, color: "var(--sm-danger)" }} onClick={() => delRecord(r.log_date, e)}>되돌리기</button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
 
                               {/* ② 직접수정 — 사유가 있는 건별 보정. 최종 = 자동 + 보정 합 */}
