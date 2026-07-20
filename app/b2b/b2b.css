@@ -3224,6 +3224,11 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-fmsg.is-gap::before    { background: var(--sm-danger); }
 .crm-fmsg.is-paused::before { background: var(--sm-text-light); }
 .crm-ftime { font-size: 11px; font-weight: 600; color: var(--sm-text-mid); margin-bottom: 4px; }
+/* 메시지 초안 펼침(메시지 열기) — 전문을 그대로, 줄바꿈 보존 */
+.crm-fdraft { display: block; white-space: pre-wrap; font-size: var(--sm-fs-sm); line-height: 1.6; color: var(--sm-dark);
+  background: var(--sm-bg-subtle); border-radius: var(--sm-radius); padding: var(--sm-space-2) 10px; margin-top: 7px; }
+.crm-fdraft.is-empty { color: var(--sm-text-light); }
+.crm-msgopen-on { border-color: var(--sm-orange); color: var(--sm-orange); }
 .crm-fcard { display: block; width: 100%; text-align: left; border: 1px solid var(--sm-border); border-radius: 10px;
   background: var(--sm-white); padding: 9px 11px 10px; cursor: pointer; font: inherit; }
 .crm-fcard:hover { border-color: var(--sm-orange); }

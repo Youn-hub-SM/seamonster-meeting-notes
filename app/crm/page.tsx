@@ -54,7 +54,10 @@ export default function CrmPage() {
   const [tab, setTab] = useState<"flow" | "table" | "stats">("flow");
   const [search, setSearch] = useState("");
   const [chFilter, setChFilter] = useState("");
-  const [asof, setAsof] = useState(""); // 기준일(YYYY-MM-DD) — 비면 전체, 고르면 그날 진행 중만(보드·흐름)
+  const [asof, setAsof] = useState(""); // 기준일(YYYY-MM-DD) — 비면 전체, 고르면 그날 진행 중만(흐름)
+  const [msgOpen, setMsgOpen] = useState(false); // 흐름: 모든 카드의 메시지 초안 펼침 — 톤앤매너 일괄 검수용
+  const [stageSel, setStageSel] = useState(""); // 표 필터: 스테이지
+  const [stSel, setStSel] = useState("");       // 표 필터: 상태
 
   const [edit, setEdit] = useState<CrmMessageInput | null>(null);
   const [saving, setSaving] = useState(false);
@@ -128,10 +131,16 @@ export default function CrmPage() {
     });
   }, [messages, search, chFilter]);
 
-  // 기준일 필터(보드·흐름 전용) — 그날 진행 중이 아닌 것(기간 밖·중단)을 뺀다. 표·통계엔 미적용.
+  // 기준일 필터(흐름 전용) — 그날 진행 중이 아닌 것(기간 밖·중단)을 뺀다. 표·통계엔 미적용.
   const dateFiltered = useMemo(
     () => (asof ? filtered.filter((m) => crmOnDate(m, asof)) : filtered),
     [filtered, asof],
+  );
+
+  // 표 전용 필터 — 스테이지·상태(공통 채널·검색 위에 얹힘)
+  const tableFiltered = useMemo(
+    () => filtered.filter((m) => (!stageSel || (m.stage || "(미분류)") === stageSel) && (!stSel || m.status === stSel)),
+    [filtered, stageSel, stSel],
   );
 
   const stages: Stage[] = useMemo(() => {
@@ -244,6 +253,12 @@ export default function CrmPage() {
           <button className={`sm-tab ${tab === "stats" ? "is-active" : ""}`} onClick={() => setTab("stats")}>통계</button>
         </div>
         <div className="crm-summary-spacer" />
+        {/* 흐름: 메시지 초안 전체 펼침 — 모든 메시지가 같은 톤앤매너인지 한눈에 검수 */}
+        {tab === "flow" && (
+          <button className={`b2b-btn-secondary crm-date-btn${msgOpen ? " crm-msgopen-on" : ""}`} onClick={() => setMsgOpen((v) => !v)}>
+            {msgOpen ? "메시지 닫기" : "메시지 열기"}
+          </button>
+        )}
         {/* 기준일 — 그날 진행 중인 메시지만(흐름). 기간은 각 메시지 '상세'에서 설정 */}
         {datesSupported && tab === "flow" && (
           <div className="sm-row crm-datebar">
@@ -252,6 +267,19 @@ export default function CrmPage() {
             {asof !== kstToday() && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof(kstToday())}>오늘</button>}
             {asof && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof("")}>전체</button>}
           </div>
+        )}
+        {/* 표: 스테이지·상태 필터 — 원하는 메시지만 좁혀서 편집 */}
+        {tab === "table" && (
+          <>
+            <select className="b2b-select crm-ch-filter" value={stageSel} onChange={(e) => setStageSel(e.target.value)} aria-label="스테이지 필터">
+              <option value="">전체 스테이지</option>
+              {stageNames.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select className="b2b-select crm-ch-filter" value={stSel} onChange={(e) => setStSel(e.target.value)} aria-label="상태 필터">
+              <option value="">전체 상태</option>
+              {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </>
         )}
         {tab !== "stats" && (
           <>
@@ -298,9 +326,14 @@ export default function CrmPage() {
             )}
           </div>
         ) : tab === "flow" ? (
-          <FlowView stages={stages} gaOf={gaOf} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
+          <FlowView stages={stages} gaOf={gaOf} msgOpen={msgOpen} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : tab === "table" ? (
-          <TableView msgs={filtered} stageNames={stageNames} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
+          <>
+            {(stageSel || stSel) && (
+              <p className="sm-faint crm-asof-hint">필터 결과 {tableFiltered.length}개 / 전체 {filtered.length}개</p>
+            )}
+            <TableView msgs={tableFiltered} stageNames={stageNames} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
+          </>
         ) : (
           <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} />
         )}
@@ -325,7 +358,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
 }
 
 // ── 흐름 뷰 — 여정 리본(정거장 레일) + 단계 안 발송시점 타임라인. 공백은 점선 카드(흐름의 구멍) ──
-function FlowView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
+function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; gaOf: (m: CrmMessage) => GaStat | undefined; msgOpen: boolean; onCard: (m: CrmMessage) => void; onAdd: (s: Stage) => void }) {
   return (
     <div className="crm-flow-wrap">
       <div className="crm-flow">
@@ -362,6 +395,12 @@ function FlowView({ stages, gaOf, onCard, onAdd }: { stages: Stage[]; gaOf: (m: 
                           {m.status === "paused" && <span className="crm-chip crm-chip-paused">중단</span>}
                           {tags.map((t) => <span key={t} className="crm-tag">{t}</span>)}
                         </span>
+                        {/* 메시지 열기 — 초안 전문을 펼쳐 톤앤매너를 나란히 검수. 없는 것도 표시해 초안 누락이 보이게 */}
+                        {msgOpen && (
+                          m.msg
+                            ? <span className="crm-fdraft">{m.msg}</span>
+                            : <span className="crm-fdraft is-empty">(초안 없음)</span>
+                        )}
                         {perf && <span className="crm-fperf">{perf}</span>}
                         {gl && <span className="crm-ga" title="GA · utm_campaign 세션 귀속 · 최근 90일">GA {gl}</span>}
                         {links.length > 0 && (
