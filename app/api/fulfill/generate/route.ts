@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
 import { getAllBundles } from "@/app/lib/product-bundles";
 import { normalizeHistory, ratesFor } from "@/app/lib/fulfill-rates";
+import { itemsSig, orderKey } from "@/app/lib/fulfill-sig";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (ws.columnCount < 13) return NextResponse.json({ ok: false, error: `열 수가 부족합니다(최소 13열, 현재 ${ws.columnCount}).` }, { status: 400 });
 
     // 헤더 1행 제외, A~M(13열) 데이터행
-    const rows: unknown[][] = [];
+    let rows: unknown[][] = [];
     for (let r = 2; r <= ws.rowCount; r++) {
       const arr: unknown[] = [];
       let any = false;
@@ -55,8 +56,36 @@ export async function POST(req: NextRequest) {
     }
     if (rows.length === 0) return NextResponse.json({ ok: false, error: "데이터 행이 없습니다." }, { status: 400 });
 
-    // 택배 코드 = 상품마스터(courier_name·courier_weight)
     const sb = supabaseAdmin();
+
+    // ── 이미 출고 처리된 주문 자동 제외(079) — 누적 다운로드 파일 등에서 처리 완료 주문이 섞여 와도
+    //    CN파일·택배량·배송일지·출고 전부에서 걸러낸다. 주문번호(B열) 해시 기준. 미적용 환경은 통과.
+    let excludedProcessed = 0;
+    const excludedOrderNos: string[] = [];
+    try {
+      const since = new Date(Date.now() - 45 * 86400e3).toISOString();
+      const { data: keyRows, error: kErr } = await sb.from("fulfill_order_keys").select("key").gte("processed_at", since);
+      if (!kErr && keyRows) {
+        const processed = new Set(keyRows.map((k) => k.key as string));
+        if (processed.size) {
+          const seen = new Set<string>();
+          rows = rows.filter((r) => {
+            const orderNo = String(r[1] ?? "").trim(); // B열 주문번호
+            if (!orderNo || !processed.has(orderKey(orderNo))) return true;
+            if (!seen.has(orderNo)) { seen.add(orderNo); excludedOrderNos.push(orderNo); }
+            return false;
+          });
+          excludedProcessed = seen.size;
+        }
+        // 오래된 키 정리(60일) — 실패 무시
+        sb.from("fulfill_order_keys").delete().lt("processed_at", new Date(Date.now() - 60 * 86400e3).toISOString()).then(() => {});
+      }
+    } catch { /* 079 미적용 — 필터 없이 진행 */ }
+    if (rows.length === 0) {
+      return NextResponse.json({ ok: false, error: `모든 주문(${excludedProcessed}건)이 이미 출고 처리된 주문입니다. 새 주문이 없는 파일이거나, 이전에 처리한 파일을 다시 올린 것으로 보입니다.` }, { status: 400 });
+    }
+
+    // 택배 코드 = 상품마스터(courier_name·courier_weight)
     const { data: codes, error } = await sb.from("products").select("id, sku, courier_name, courier_weight").not("sku", "is", null);
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (054 적용 확인)` }, { status: 500 });
 
@@ -86,6 +115,17 @@ export async function POST(req: NextRequest) {
 
     const res = buildCnplus(rows, codeMap, keywords, rates);
 
+    // 이 파일의 주문번호 키를 배치 서명으로 임시 보관 — 4단계 '출고 완료' 때 확정 등록(079). 실패해도 진행.
+    try {
+      const keys = [...new Set(rows.map((r) => String(r[1] ?? "").trim()).filter(Boolean).map(orderKey))];
+      if (keys.length && res.outbound.length) {
+        await sb.from("fulfill_pending_keys").upsert(
+          { sig: itemsSig(res.outbound), keys, created_at: new Date().toISOString() },
+          { onConflict: "sig" }
+        );
+      }
+    } catch { /* 079 미적용 — 스킵 */ }
+
     const d = new Date(Date.now() + 9 * 3600e3);
     const stamp = `${d.toISOString().slice(0, 10).replace(/-/g, "")}_${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;
     const normalB64 = await toXlsxB64(res.headers, res.normal);
@@ -104,6 +144,8 @@ export async function POST(req: NextRequest) {
       addressWarnings: res.addressWarnings,
       unmatched: res.unmatched,
       outbound: res.outbound, // SKU별 출고수량(재고 출고 연동용) — PII 없음
+      excludedProcessed,                          // 이미 출고 처리돼 자동 제외한 주문 수
+      excludedOrderNos: excludedOrderNos.slice(0, 10), // 표시용 일부
       codeCount: codeMap.size,
       files: {
         normal: { name: `cnplus_출력_${stamp}.xlsx`, b64: normalB64 },

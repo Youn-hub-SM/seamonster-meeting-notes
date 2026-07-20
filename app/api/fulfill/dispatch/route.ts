@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { signedQty } from "@/app/lib/inventory";
 import { getAllBundles, expandBundleQty } from "@/app/lib/product-bundles";
+import { itemsSig } from "@/app/lib/fulfill-sig";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,13 +14,8 @@ type ProductRow = { productId: string; name: string; option: string; need: numbe
 type ItemRow = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-// 중복 검사 서명 — SKU별 '합산' 수량 기준(주문일 분해와 무관). 기존(분해 전) 서명과도 동일해 연속성 유지.
-function sigOf(items: Item[]): string {
-  const merged = new Map<string, number>();
-  for (const i of items) { const k = i.sku.trim().toUpperCase(); merged.set(k, (merged.get(k) || 0) + Math.round(i.qty)); }
-  const norm = [...merged.entries()].map(([k, q]) => `${k}:${q}`).sort().join("|");
-  return crypto.createHash("sha1").update(norm).digest("hex").slice(0, 16);
-}
+// 중복 검사 서명 — SKU별 '합산' 수량 기준(주문일 분해와 무관). generate 의 배치 서명과 같은 산식(itemsSig).
+const sigOf = (items: Item[]): string => itemsSig(items);
 
 // 주문일(L열 파싱값) 검증 — 형식 불량·미래·과도한 과거(14일 초과)는 처리일 폴백(재고 시점 왜곡 방지).
 function validOrderDate(v: string | null | undefined, today: string): string | null {
@@ -140,6 +136,16 @@ export async function POST(req: NextRequest) {
 
     const totalQty = productRows.reduce((s, r) => s + r.need, 0);
     try { await sb.from("fulfill_dispatch").insert({ sig, dispatch_date: today, channel: "소매", sku_count: productIds.length, total_qty: totalQty, group_id: groupId, order_no: orderNo || null, created_by: "온라인발주" }); } catch { /* 065 미적용 스킵 */ }
+
+    // 출고 완료 = 이 배치의 주문들을 '처리됨'으로 확정(079) — 이후 파일에 섞여 오면 자동 제외됨. 실패 무시.
+    try {
+      const { data: pend } = await sb.from("fulfill_pending_keys").select("keys").eq("sig", sig).maybeSingle();
+      const keys = Array.isArray(pend?.keys) ? (pend!.keys as string[]).filter((k) => typeof k === "string" && k) : [];
+      if (keys.length) {
+        await sb.from("fulfill_order_keys").upsert(keys.map((key) => ({ key, order_no: orderNo || null, processed_at: new Date().toISOString() })), { onConflict: "key", ignoreDuplicates: true });
+        await sb.from("fulfill_pending_keys").delete().eq("sig", sig);
+      }
+    } catch { /* 079 미적용 스킵 */ }
 
     return NextResponse.json({ ok: true, committed: true, orderNo, groupId, items: itemRows, products: productRows, dispatched: productIds.length, totalQty, shortages });
   } catch (e) {

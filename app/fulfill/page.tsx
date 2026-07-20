@@ -13,6 +13,8 @@ type Result = {
   addressWarnings: Warn[];
   unmatched: string[];
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[];
+  excludedProcessed?: number;      // 이미 출고 처리돼 자동 제외된 주문 수(079)
+  excludedOrderNos?: string[];
   codeCount: number;
   files: { normal: FileOut; guarantee: FileOut | null; parcel: FileOut };
 };
@@ -221,6 +223,13 @@ export default function FulfillPage() {
             <>
               <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">전체 주문행</div><div className="b2b-stat-card-value">{res.stats.total.toLocaleString()}</div></div>
+                {(res.excludedProcessed || 0) > 0 && (
+                  <div className="b2b-stat-card" style={{ borderColor: "var(--sm-warning)" }}>
+                    <div className="b2b-stat-card-label">이미 처리된 주문 제외</div>
+                    <div className="b2b-stat-card-value" style={{ color: "var(--sm-warning)" }}>{(res.excludedProcessed || 0).toLocaleString()}</div>
+                    <div className="b2b-stat-card-hint" title={(res.excludedOrderNos || []).join(", ")}>출고 완료된 주문 — CN·택배량·출고에서 자동 제외</div>
+                  </div>
+                )}
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">NOTHING 제외</div><div className="b2b-stat-card-value" style={{ color: res.stats.excludedNothing ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{res.stats.excludedNothing}</div></div>
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반</div><div className="b2b-stat-card-value" style={{ color: "var(--sm-info)" }}>{res.stats.normalCount.toLocaleString()}</div></div>
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장</div><div className="b2b-stat-card-value" style={{ color: "var(--sm-orange)" }}>{res.stats.guaranteeCount.toLocaleString()}</div></div>
