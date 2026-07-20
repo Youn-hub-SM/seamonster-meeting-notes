@@ -3244,7 +3244,9 @@ a {
 }
 .app-sb-brand { font-size: 18px; font-weight: 800; color: var(--sm-orange); padding: 8px 10px 8px; display: block; }
 .app-sb-nav { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
-.app-sb-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
+/* 고정 구역(브랜드·홈·즐겨찾기)과의 경계 — 풋(.app-sb-foot)과 같은 헤어라인.
+   스크롤된 항목은 이 선에서 잘려, 즐겨찾기와 이어진 한 목록처럼 보이지 않는다. */
+.app-sb-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; margin-top: 12px; border-top: 1px solid var(--sm-border); }
 .app-sb-group { margin-top: 12px; }
 .app-sb-cat { font-size: 11px; font-weight: 700; color: var(--sm-text-light); letter-spacing: 0.4px; padding: 6px 10px 3px; }
 /* 카테고리 라벨을 아코디언 토글로 쓸 때(즐겨찾기) — .app-sb-cat 의 타이포를 그대로 상속 */
