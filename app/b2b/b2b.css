@@ -3159,22 +3159,23 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--sm-radius-pill);
   white-space: nowrap; background: var(--sm-bg-subtle); color: var(--sm-text-mid); }
 .crm-ch-kakao   { background: #FFF8E1; color: #8D6E00; }
+.crm-ch-solapi  { background: #E8F5E9; color: #2E7D32; }
 .crm-ch-cafe24  { background: #E6F1FB; color: #185FA5; }
+.crm-ch-bloomai { background: #F0EBF8; color: #6B45B0; }
+/* 구 채널(개편 전 저장분 표시용 — 선택지엔 없음) */
 .crm-ch-manual  { background: #F1EFE8; color: #4A4946; }
 .crm-ch-custom  { background: #F0EBF8; color: #6B45B0; }
 .crm-ch-onsite  { background: #E0F2F1; color: #00695C; }
 .crm-ch-leaflet { background: #E8F5EE; color: #0F6E56; }
-/* 상태 칩(흐름 뷰 보조) — 시맨틱 토큰 */
-.crm-chip-gap    { background: transparent; color: var(--sm-danger); border: 1px dashed var(--sm-danger-border); }
-.crm-chip-auto   { background: var(--sm-info-bg); color: var(--sm-info); }
-.crm-chip-paused { background: var(--sm-bg-subtle); color: var(--sm-text-light); }
+/* 상태 칩(흐름 뷰 보조) */
+.crm-chip-inactive { background: var(--sm-bg-subtle); color: var(--sm-text-light); border: 1px dashed var(--sm-border); }
 /* 표 인라인 셀렉트 색 — 상태는 시맨틱, 채널은 위 팔레트와 동일 */
-.crm-stsel-active { background: var(--sm-success-bg); color: var(--sm-success); }
-.crm-stsel-auto   { background: var(--sm-info-bg); color: var(--sm-info); }
-.crm-stsel-gap    { background: var(--sm-danger-bg); color: var(--sm-danger); }
-.crm-stsel-paused { background: var(--sm-bg-subtle); color: var(--sm-text-light); }
+.crm-stsel-active   { background: var(--sm-success-bg); color: var(--sm-success); }
+.crm-stsel-inactive { background: var(--sm-bg-subtle); color: var(--sm-text-light); }
 .crm-chsel-kakao   { background: #FFF8E1; color: #8D6E00; }
+.crm-chsel-solapi  { background: #E8F5E9; color: #2E7D32; }
 .crm-chsel-cafe24  { background: #E6F1FB; color: #185FA5; }
+.crm-chsel-bloomai { background: #F0EBF8; color: #6B45B0; }
 .crm-chsel-manual  { background: #F1EFE8; color: #4A4946; }
 .crm-chsel-custom  { background: #F0EBF8; color: #6B45B0; }
 .crm-chsel-onsite  { background: #E0F2F1; color: #00695C; }
@@ -3214,15 +3215,13 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-fname { font-size: var(--sm-fs-md); font-weight: 800; line-height: 1.25; }
 .crm-fsub { font-size: 11px; color: var(--sm-text-light); margin-top: 1px; }
 .crm-fmeta { font-size: 11px; color: var(--sm-text-light); margin-top: 4px; font-variant-numeric: tabular-nums; }
-.crm-fgapn { color: var(--sm-danger); font-weight: 700; }
+.crm-finact { color: var(--sm-text-mid); font-weight: 700; }
 .crm-ftl { position: relative; display: flex; flex-direction: column; gap: 11px; padding-left: 17px; }
 .crm-ftl::before { content: ""; position: absolute; left: 3px; top: 8px; bottom: 8px; width: 2px; background: var(--sm-border); }
 .crm-fmsg { position: relative; }
 .crm-fmsg::before { content: ""; position: absolute; left: -17px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--sm-border); }
-.crm-fmsg.is-active::before { background: var(--sm-success); }
-.crm-fmsg.is-auto::before   { background: var(--sm-info); }
-.crm-fmsg.is-gap::before    { background: var(--sm-danger); }
-.crm-fmsg.is-paused::before { background: var(--sm-text-light); }
+.crm-fmsg.is-active::before   { background: var(--sm-success); }
+.crm-fmsg.is-inactive::before { background: var(--sm-text-light); }
 .crm-ftime { font-size: 11px; font-weight: 600; color: var(--sm-text-mid); margin-bottom: 4px; }
 /* 메시지 초안 펼침(메시지 열기) — 전문을 그대로, 줄바꿈 보존 */
 .crm-fdraft { display: block; white-space: pre-wrap; font-size: var(--sm-fs-sm); line-height: 1.6; color: var(--sm-dark);
@@ -3232,8 +3231,8 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-fcard { display: block; width: 100%; text-align: left; border: 1px solid var(--sm-border); border-radius: 10px;
   background: var(--sm-white); padding: 9px 11px 10px; cursor: pointer; font: inherit; }
 .crm-fcard:hover { border-color: var(--sm-orange); }
-.crm-fcard.is-gap { border-style: dashed; border-color: var(--sm-danger-border); }
-.crm-fcard.is-gap:hover { border-color: var(--sm-danger); }
+.crm-fcard.is-inactive { border-style: dashed; background: var(--sm-bg); }
+.crm-fcard.is-inactive:hover { border-color: var(--sm-text-light); }
 .crm-ft { display: block; font-size: var(--sm-fs-sm); font-weight: 700; color: var(--sm-dark); line-height: 1.35; }
 .crm-fchips { gap: 5px; margin-top: 6px; }
 .crm-fperf { display: block; font-size: 11px; color: var(--sm-text-light); margin-top: 6px; font-variant-numeric: tabular-nums; }
@@ -3275,7 +3274,4 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-ga { display: block; font-size: 11px; color: var(--sm-info); margin-top: 6px; font-variant-numeric: tabular-nums; }
 .crm-ga-hint { font-size: var(--sm-fs-xs); margin: calc(-1 * var(--sm-space-1)) 0 var(--sm-space-2); }
 .crm-field-hint { font-size: 11px; margin-top: 3px; }
-.crm-links-title { margin-top: 6px; font-weight: 700; }
-.crm-links-row { flex-wrap: wrap; }
-.crm-link-field { min-width: 160px; flex: 1; }
 .crm-active-check { font-size: var(--sm-fs-sm); margin-top: var(--sm-space-2); cursor: pointer; }

@@ -84,7 +84,7 @@ export function seedMessages(): CrmMessageInput[] {
         detail: m.detail, msg: m.msg || "", img_url: "",
         links: {}, perf: m.perf || {}, tags: "",
         sort_order: mi + 1, active: true,
-        start_date: "", end_date: "",
+        start_date: "", end_date: "", customer: "", msg_type: "",
       });
     });
   });
@@ -124,19 +124,18 @@ const COL_MAP: Record<string, string> = {
   "태그": "tags", "스테이지번호": "stage_num",
 };
 
-// 시트에 한글 라벨로 적었어도 키로 수렴(관대한 매핑).
+// 시트에 한글 라벨로 적었어도 키로 수렴(관대한 매핑). 상태는 개편된 2종(활성/비활성)으로.
 function toStatusKey(v: string): string {
   const s = v.trim().toLowerCase();
-  if (["active", "auto", "gap", "paused"].includes(s)) return s;
-  if (/활성|운영/.test(s)) return "active";
-  if (/자동/.test(s)) return "auto";
-  if (/공백|미완|미운영|빈/.test(s)) return "gap";
-  if (/중단|중지/.test(s)) return "paused";
-  return "gap";
+  if (/^비활성|inactive|공백|미완|미운영|빈|중단|중지|gap|paused/.test(s)) return "inactive";
+  if (/활성|운영|자동|active|auto/.test(s)) return "active";
+  return "inactive"; // 알 수 없는 값은 '나가는 중'으로 오해하지 않게
 }
 function toChannelKey(v: string): string {
   const s = v.trim().toLowerCase();
-  if (["kakao", "manual", "cafe24", "custom", "onsite", "leaflet"].includes(s)) return s;
+  if (["kakao", "solapi", "cafe24", "bloomai", "manual", "custom", "onsite", "leaflet"].includes(s)) return s;
+  if (/솔라피/.test(s)) return "solapi";
+  if (/블룸/.test(s)) return "bloomai";
   if (/알림톡|카카오/.test(s)) return "kakao";
   if (/카페24|cafe/.test(s)) return "cafe24";
   if (/맞춤|타겟/.test(s)) return "custom";
@@ -166,10 +165,11 @@ export function csvToMessages(csv: string): CrmMessageInput[] {
     const sort = (sortSeq.get(stage) || 0) + 1;
     sortSeq.set(stage, sort);
 
+    // 링크는 통합 1개 — 시트의 종류별 URL 중 첫 번째를 채택(normalize 도 같은 규칙)
     const links: Record<string, string> = {};
     for (const lt of ["solapi", "cafe24", "meta", "sheets", "channel", "blog", "onsite"]) {
       const u = g(row, `link_${lt}`);
-      if (u) links[lt] = u;
+      if (u) { links.url = u; break; }
     }
     const perf: CrmPerf = {};
     (["sent", "reached", "opened", "clicked", "converted", "revenue"] as (keyof CrmPerf)[]).forEach((k) => {
@@ -182,7 +182,7 @@ export function csvToMessages(csv: string): CrmMessageInput[] {
       title, status: toStatusKey(g(row, "status")), channel: toChannelKey(g(row, "channel")),
       timing: g(row, "timing"), detail: g(row, "detail"), msg: g(row, "msg"), img_url: g(row, "img_url"),
       links, perf, tags: g(row, "tags"), sort_order: sort, active: true,
-      start_date: "", end_date: "",
+      start_date: "", end_date: "", customer: "", msg_type: "",
     });
   }
   return out;

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CrmMessage, CrmMessageInput, CrmPerf, EMPTY_CRM_MESSAGE,
-  CRM_CHANNELS, CRM_CHANNEL_LABEL, CRM_STATUSES, CRM_STATUS_LABEL, CRM_LINK_TYPES, crmTags, crmOnDate,
+  CRM_CHANNELS, CRM_CHANNEL_LABEL, CRM_CUSTOMERS, CRM_CUSTOMER_LABEL, CRM_MSG_TYPES, CRM_MSG_TYPE_LABEL,
+  CRM_STATUSES, CRM_STATUS_LABEL, statusKey, crmTags, crmOnDate,
 } from "@/app/lib/crm";
 import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/charts";
 
@@ -14,11 +15,11 @@ const periodLabel = (m: Pick<CrmMessage, "start_date" | "end_date">) =>
   m.start_date || m.end_date ? `${m.start_date ? md(m.start_date) : ""}~${m.end_date ? md(m.end_date) : ""}` : "";
 
 // 색은 전부 b2b.css 의 .crm-* 클래스(채널 팔레트·시맨틱 토큰) — 인라인 hex 금지.
-const CH_KEYS = new Set(CRM_CHANNELS.map((c) => c.key));
-const ST_KEYS = new Set(CRM_STATUSES.map((s) => s.key));
-const chipCls = (k: string) => `crm-chip ${CH_KEYS.has(k) ? `crm-ch-${k}` : ""}`;
-const stSelCls = (st: string) => `b2b-status-select ${ST_KEYS.has(st) ? `crm-stsel-${st}` : ""}`;
-const chSelCls = (k: string) => `b2b-status-select ${CH_KEYS.has(k) ? `crm-chsel-${k}` : ""}`;
+//  채널 칩 색은 구 키(manual 등)도 CSS 에 남아 있어 개편 전 행이 원래 색으로 보인다.
+const CH_CHIP_KEYS = new Set([...CRM_CHANNELS.map((c) => c.key), "manual", "custom", "onsite", "leaflet"]);
+const chipCls = (k: string) => `crm-chip ${CH_CHIP_KEYS.has(k) ? `crm-ch-${k}` : ""}`;
+const stSelCls = (st: string) => `b2b-status-select crm-stsel-${statusKey(st)}`;
+const chSelCls = (k: string) => `b2b-status-select ${CH_CHIP_KEYS.has(k) ? `crm-chsel-${k}` : ""}`;
 
 // 성과 한 줄 요약 — 값이 있는 지표만.
 const wonCompact = (n: number) => (n >= 10000 ? `${(n / 10000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만원` : `${n.toLocaleString("ko-KR")}원`);
@@ -48,7 +49,8 @@ type Stage = { stage: string; sub: string; stage_num: number; msgs: CrmMessage[]
 
 export default function CrmPage() {
   const [messages, setMessages] = useState<CrmMessage[]>([]);
-  const [datesSupported, setDatesSupported] = useState(true); // migration 074 미적용이면 false → 날짜 기능 숨김
+  const [datesSupported, setDatesSupported] = useState(true);   // migration 074 미적용이면 false → 날짜 기능 숨김
+  const [fieldsSupported, setFieldsSupported] = useState(true); // migration 077 미적용이면 false → 고객·유형 숨김
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"flow" | "table" | "stats">("flow");
@@ -94,9 +96,12 @@ export default function CrmPage() {
     try {
       const j = await (await fetch("/api/crm/messages", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
-      // 폴백 응답엔 날짜 컬럼이 없음 → ""로 채워 화면 로직을 단일화
-      setMessages(((j.messages || []) as CrmMessage[]).map((m) => ({ ...m, start_date: m.start_date || "", end_date: m.end_date || "" })));
+      // 폴백 응답엔 선택 컬럼이 없음 → ""로 채워 화면 로직을 단일화
+      setMessages(((j.messages || []) as CrmMessage[]).map((m) => ({
+        ...m, start_date: m.start_date || "", end_date: m.end_date || "", customer: m.customer || "", msg_type: m.msg_type || "",
+      })));
       setDatesSupported(j.datesSupported !== false);
+      setFieldsSupported(j.fieldsSupported !== false);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
   }, []);
@@ -137,10 +142,14 @@ export default function CrmPage() {
     [filtered, asof],
   );
 
-  // 표 전용 필터 — 스테이지·상태(공통 채널·검색 위에 얹힘)
+  // 표 전용 필터 — 스테이지·고객·상태(공통 채널·검색 위에 얹힘)
+  const [custSel, setCustSel] = useState("");
   const tableFiltered = useMemo(
-    () => filtered.filter((m) => (!stageSel || (m.stage || "(미분류)") === stageSel) && (!stSel || m.status === stSel)),
-    [filtered, stageSel, stSel],
+    () => filtered.filter((m) =>
+      (!stageSel || (m.stage || "(미분류)") === stageSel) &&
+      (!custSel || m.customer === custSel) &&
+      (!stSel || statusKey(m.status) === stSel)),
+    [filtered, stageSel, custSel, stSel],
   );
 
   const stages: Stage[] = useMemo(() => {
@@ -157,12 +166,11 @@ export default function CrmPage() {
 
   const summary = useMemo(() => {
     const total = messages.length;
-    const active = messages.filter((m) => m.status === "active").length;
-    const gap = messages.filter((m) => m.status === "gap").length;
+    const active = messages.filter((m) => statusKey(m.status) === "active").length;
     const byCh: Record<string, number> = {};
-    for (const m of messages) byCh[m.channel] = (byCh[m.channel] || 0) + 1;
+    for (const m of messages) byCh[m.channel || "(미지정)"] = (byCh[m.channel || "(미지정)"] || 0) + 1;
     const stageCount = new Set(messages.map((m) => m.stage || "(미분류)")).size;
-    return { total, active, gap, byCh, stageCount };
+    return { total, active, inactive: total - active, byCh, stageCount };
   }, [messages]);
 
   // 스테이지 자동완성 목록 — 인라인 편집 시 오타로 새 스테이지가 생기지 않게 기존값 제안.
@@ -238,10 +246,10 @@ export default function CrmPage() {
         <Stat label="메시지" value={summary.total} />
         <Stat label="스테이지" value={summary.stageCount} />
         <Stat label="활성" value={summary.active} tone="success" />
-        {summary.gap > 0 && <Stat label="공백·미완" value={summary.gap} tone="danger" />}
+        {summary.inactive > 0 && <Stat label="비활성" value={summary.inactive} />}
         <div className="crm-summary-spacer" />
-        {CRM_CHANNELS.filter((c) => summary.byCh[c.key]).map((c) => (
-          <span key={c.key} className={chipCls(c.key)}>{c.label} {summary.byCh[c.key]}</span>
+        {Object.entries(summary.byCh).map(([k, n]) => (
+          <span key={k} className={chipCls(k)}>{CRM_CHANNEL_LABEL[k] || k} {n}</span>
         ))}
       </div>
 
@@ -268,13 +276,19 @@ export default function CrmPage() {
             {asof && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof("")}>전체</button>}
           </div>
         )}
-        {/* 표: 스테이지·상태 필터 — 원하는 메시지만 좁혀서 편집 */}
+        {/* 표: 스테이지·고객·상태 필터 — 원하는 메시지만 좁혀서 편집 */}
         {tab === "table" && (
           <>
             <select className="b2b-select crm-ch-filter" value={stageSel} onChange={(e) => setStageSel(e.target.value)} aria-label="스테이지 필터">
               <option value="">전체 스테이지</option>
               {stageNames.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            {fieldsSupported && (
+              <select className="b2b-select crm-ch-filter" value={custSel} onChange={(e) => setCustSel(e.target.value)} aria-label="고객 필터">
+                <option value="">전체 고객</option>
+                {CRM_CUSTOMERS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+            )}
             <select className="b2b-select crm-ch-filter" value={stSel} onChange={(e) => setStSel(e.target.value)} aria-label="상태 필터">
               <option value="">전체 상태</option>
               {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -283,8 +297,8 @@ export default function CrmPage() {
         )}
         {tab !== "stats" && (
           <>
-            <select className="b2b-select crm-ch-filter" value={chFilter} onChange={(e) => setChFilter(e.target.value)}>
-              <option value="">전체 채널</option>
+            <select className="b2b-select crm-ch-filter" value={chFilter} onChange={(e) => setChFilter(e.target.value)} aria-label="발송채널 필터">
+              <option value="">전체 발송채널</option>
               {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
             <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="메시지·스테이지·태그 검색" />
@@ -295,7 +309,7 @@ export default function CrmPage() {
       {/* 기준일 안내 — 몇 개가 걸러졌는지 명시(조용히 사라지면 '데이터가 없어졌다'로 오해) */}
       {asof && tab === "flow" && (
         <p className="sm-faint crm-asof-hint">
-          {asof} 기준 진행 중 {dateFiltered.length}개 표시 · 기간 밖/중단 {filtered.length - dateFiltered.length}개 숨김
+          {asof} 기준 진행 중 {dateFiltered.length}개 표시 · 기간 밖/비활성 {filtered.length - dateFiltered.length}개 숨김
         </p>
       )}
 
@@ -332,7 +346,7 @@ export default function CrmPage() {
             {(stageSel || stSel) && (
               <p className="sm-faint crm-asof-hint">필터 결과 {tableFiltered.length}개 / 전체 {filtered.length}개</p>
             )}
-            <TableView msgs={tableFiltered} stageNames={stageNames} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
+            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
           </>
         ) : (
           <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} />
@@ -341,7 +355,7 @@ export default function CrmPage() {
       {edit && (
         <EditModal
           data={edit} onChange={setEdit} onClose={() => setEdit(null)} onSave={save}
-          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported}
+          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported} fieldsSupported={fieldsSupported}
         />
       )}
     </div>
@@ -363,7 +377,7 @@ function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; g
     <div className="crm-flow-wrap">
       <div className="crm-flow">
         {stages.map((s, i) => {
-          const gapN = s.msgs.filter((m) => m.status === "gap").length;
+          const inactiveN = s.msgs.filter((m) => statusKey(m.status) === "inactive").length;
           return (
             <div key={s.stage} className="crm-fstage">
               <div className="crm-fhead">
@@ -372,7 +386,7 @@ function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; g
                 {s.sub && <div className="crm-fsub">{s.sub}</div>}
                 <div className="crm-fmeta">
                   {s.msgs.length}개
-                  {gapN > 0 && <> · <span className="crm-fgapn">공백 {gapN}{gapN === s.msgs.length ? " — 전부 구멍" : ""}</span></>}
+                  {inactiveN > 0 && <> · <span className="crm-finact">비활성 {inactiveN}{inactiveN === s.msgs.length ? " — 전부" : ""}</span></>}
                 </div>
               </div>
               <div className="crm-ftl">
@@ -380,19 +394,19 @@ function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; g
                   const perf = perfLine(m.perf);
                   const gl = gaLine(gaOf(m));
                   const tags = crmTags(m.tags);
-                  const links = CRM_LINK_TYPES.filter((l) => m.links?.[l.key]);
+                  const st = statusKey(m.status);
                   return (
-                    <div key={m.id} className={`crm-fmsg ${ST_KEYS.has(m.status) ? `is-${m.status}` : ""}`}>
+                    <div key={m.id} className={`crm-fmsg is-${st}`}>
                       {m.timing && <div className="crm-ftime">{m.timing}</div>}
                       {/* div+onClick(버튼 아님) — 카드 안에 바로가기 <a> 가 있어 중첩 인터랙티브를 피한다 */}
-                      <div className={`crm-fcard${m.status === "gap" ? " is-gap" : ""}`} onClick={() => onCard(m)}>
+                      <div className={`crm-fcard${st === "inactive" ? " is-inactive" : ""}`} onClick={() => onCard(m)}>
                         <span className="crm-ft">{m.title || "(제목 없음)"}</span>
                         <span className="sm-row-wrap crm-fchips">
                           <span className={chipCls(m.channel)}>{CRM_CHANNEL_LABEL[m.channel] || m.channel || "미지정"}</span>
+                          {m.msg_type && <span className="crm-chip">{CRM_MSG_TYPE_LABEL[m.msg_type] || m.msg_type}</span>}
+                          {m.customer && <span className="crm-chip">{CRM_CUSTOMER_LABEL[m.customer] || m.customer}</span>}
                           {periodLabel(m) && <span className="crm-chip crm-chip-period">{periodLabel(m)}</span>}
-                          {m.status === "gap" && <span className="crm-chip crm-chip-gap">미운영</span>}
-                          {m.status === "auto" && <span className="crm-chip crm-chip-auto">자동</span>}
-                          {m.status === "paused" && <span className="crm-chip crm-chip-paused">중단</span>}
+                          {st === "inactive" && <span className="crm-chip crm-chip-inactive">비활성</span>}
                           {tags.map((t) => <span key={t} className="crm-tag">{t}</span>)}
                         </span>
                         {/* 메시지 열기 — 초안 전문을 펼쳐 톤앤매너를 나란히 검수. 없는 것도 표시해 초안 누락이 보이게 */}
@@ -403,11 +417,9 @@ function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; g
                         )}
                         {perf && <span className="crm-fperf">{perf}</span>}
                         {gl && <span className="crm-ga" title="GA · utm_campaign 세션 귀속 · 최근 90일">GA {gl}</span>}
-                        {links.length > 0 && (
+                        {m.links?.url && (
                           <span className="sm-row-wrap crm-flinks">
-                            {links.map((l) => (
-                              <a key={l.key} className="crm-link" href={m.links[l.key]} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{l.label} ↗</a>
-                            ))}
+                            <a className="crm-link" href={m.links.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>링크 ↗</a>
                           </span>
                         )}
                       </div>
@@ -424,13 +436,16 @@ function FlowView({ stages, gaOf, msgOpen, onCard, onAdd }: { stages: Stage[]; g
   );
 }
 
-// ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·초안·링크·성과)는 '상세' 버튼→모달 ──
-function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
-  msgs: CrmMessage[]; stageNames: string[]; savingId: string | null;
+// ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·내용·링크·성과)는 '상세' 버튼→모달 ──
+function TableView({ msgs, stageNames, fieldsSupported, savingId, onField, onSave, onEdit }: {
+  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; savingId: string | null;
   onField: (id: string, key: keyof CrmMessage, value: string) => void;
   onSave: (id: string, override?: Partial<CrmMessage>) => void;
   onEdit: (m: CrmMessage) => void;
 }) {
+  const sel = (m: CrmMessage, field: keyof CrmMessage) => (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onField(m.id, field, e.target.value); onSave(m.id, { [field]: e.target.value });
+  };
   return (
     <>
       <datalist id="crm-stage-names">{stageNames.map((s) => <option key={s} value={s} />)}</datalist>
@@ -438,7 +453,10 @@ function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
         <table className="b2b-table">
           <thead><tr>
             <th className="crm-col-stage">스테이지</th><th className="crm-col-title">메시지명</th>
-            <th className="crm-col-select">채널</th><th className="crm-col-timing">발송시점</th>
+            {fieldsSupported && <th className="crm-col-select">고객</th>}
+            <th className="crm-col-select">발송채널</th>
+            {fieldsSupported && <th className="crm-col-select">유형</th>}
+            <th className="crm-col-timing">발송시점</th>
             <th className="crm-col-select">상태</th><th className="crm-col-tags">태그</th><th className="crm-col-actions"></th>
           </tr></thead>
           <tbody>
@@ -446,16 +464,34 @@ function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
               <tr key={m.id}>
                 <td><CellText id={m.id} value={m.stage} field="stage" placeholder="스테이지" list="crm-stage-names" onField={onField} onSave={onSave} /></td>
                 <td><CellText id={m.id} value={m.title} field="title" placeholder="메시지명" onField={onField} onSave={onSave} /></td>
+                {fieldsSupported && (
+                  <td>
+                    <select className="b2b-status-select" value={m.customer} aria-label="고객" onChange={sel(m, "customer")}>
+                      <option value="">미지정</option>
+                      {CRM_CUSTOMERS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                    </select>
+                  </td>
+                )}
                 <td>
-                  <select className={chSelCls(m.channel)} value={m.channel} aria-label="채널"
-                    onChange={(e) => { onField(m.id, "channel", e.target.value); onSave(m.id, { channel: e.target.value }); }}>
+                  <select className={chSelCls(m.channel)} value={m.channel} aria-label="발송채널" onChange={sel(m, "channel")}>
+                    {/* 개편 전 값(수동·기타 등)은 선택지엔 없지만, 현재 값이면 (구) 표기로 보여 준다 */}
+                    {!CRM_CHANNELS.some((c) => c.key === m.channel) && m.channel && (
+                      <option value={m.channel}>{CRM_CHANNEL_LABEL[m.channel] || m.channel} (구)</option>
+                    )}
                     {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </td>
+                {fieldsSupported && (
+                  <td>
+                    <select className="b2b-status-select" value={m.msg_type} aria-label="유형" onChange={sel(m, "msg_type")}>
+                      <option value="">미지정</option>
+                      {CRM_MSG_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                    </select>
+                  </td>
+                )}
                 <td><CellText id={m.id} value={m.timing} field="timing" placeholder="예: 결제 후 1시간" onField={onField} onSave={onSave} /></td>
                 <td>
-                  <select className={stSelCls(m.status)} value={m.status} aria-label="상태"
-                    onChange={(e) => { onField(m.id, "status", e.target.value); onSave(m.id, { status: e.target.value }); }}>
+                  <select className={stSelCls(m.status)} value={statusKey(m.status)} aria-label="상태" onChange={sel(m, "status")}>
                     {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                   </select>
                 </td>
@@ -470,7 +506,7 @@ function TableView({ msgs, stageNames, savingId, onField, onSave, onEdit }: {
           </tbody>
         </table>
       </div>
-      <p className="sm-faint crm-table-hint">셀을 눌러 바로 수정하면 자동 저장됩니다. 상세 설명·메시지 초안·링크·성과는 <b>상세</b>에서 편집하세요.</p>
+      <p className="sm-faint crm-table-hint">셀을 눌러 바로 수정하면 자동 저장됩니다. 상세 설명·메시지 내용·링크·성과는 <b>상세</b>에서 편집하세요.</p>
     </>
   );
 }
@@ -525,9 +561,9 @@ function StatsView({ messages, campaigns, gaConfigured }: { messages: CrmMessage
     for (const msg of messages) { const l = CRM_CHANNEL_LABEL[msg.channel] || msg.channel || "미지정"; m.set(l, (m.get(l) || 0) + 1); }
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [messages]);
-  const gapByStage = useMemo<[string, number][]>(() => {
+  const inactiveByStage = useMemo<[string, number][]>(() => {
     const m = new Map<string, number>();
-    for (const msg of messages) if (msg.status === "gap") { const s = msg.stage || "(미분류)"; m.set(s, (m.get(s) || 0) + 1); }
+    for (const msg of messages) if (statusKey(msg.status) === "inactive") { const s = msg.stage || "(미분류)"; m.set(s, (m.get(s) || 0) + 1); }
     return [...m.entries()];
   }, [messages]);
 
@@ -610,17 +646,17 @@ function StatsView({ messages, campaigns, gaConfigured }: { messages: CrmMessage
       {/* 맵 구조 */}
       <h2 className="crm-stats-title crm-stats-title-2">메시지 구성</h2>
       <div className="crm-stats-grid">
-        <PieCard title="채널별 메시지" data={byChannel} />
-        <BarList title="단계별 공백(미운영)" caption="공백이 많은 단계 = 여정이 끊기는 곳" data={gapByStage} sorted minPct={4} empty="공백 없음" />
+        <PieCard title="발송채널별 메시지" data={byChannel} />
+        <BarList title="단계별 비활성" caption="비활성이 많은 단계 = 여정이 끊기는 곳" data={inactiveByStage} sorted minPct={4} empty="비활성 없음" />
       </div>
     </div>
   );
 }
 
 // ── 편집 모달 ──
-function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported }: {
+function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported }: {
   data: CrmMessageInput; onChange: (d: CrmMessageInput) => void; onClose: () => void;
-  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean;
+  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean; fieldsSupported: boolean;
 }) {
   const set = <K extends keyof CrmMessageInput>(k: K, v: CrmMessageInput[K]) => onChange({ ...data, [k]: v });
   const setLink = (k: string, v: string) => onChange({ ...data, links: { ...data.links, [k]: v } });
@@ -644,12 +680,31 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
           <label className="b2b-field"><span className="b2b-field-label">메시지명</span>
             <input className="b2b-input" value={data.title} onChange={(e) => set("title", e.target.value)} placeholder="예: 체험단 안내 링크" /></label>
           <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">채널</span>
+            {fieldsSupported && (
+              <label className="b2b-field"><span className="b2b-field-label">고객</span>
+                <select className="b2b-select" value={data.customer} onChange={(e) => set("customer", e.target.value)}>
+                  <option value="">미지정</option>
+                  {CRM_CUSTOMERS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                </select></label>
+            )}
+            <label className="b2b-field"><span className="b2b-field-label">발송채널</span>
               <select className="b2b-select" value={data.channel} onChange={(e) => set("channel", e.target.value)}>
+                {!CRM_CHANNELS.some((c) => c.key === data.channel) && data.channel && (
+                  <option value={data.channel}>{CRM_CHANNEL_LABEL[data.channel] || data.channel} (구)</option>
+                )}
                 {CRM_CHANNELS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
               </select></label>
+            {fieldsSupported && (
+              <label className="b2b-field"><span className="b2b-field-label">유형</span>
+                <select className="b2b-select" value={data.msg_type} onChange={(e) => set("msg_type", e.target.value)}>
+                  <option value="">미지정</option>
+                  {CRM_MSG_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                </select></label>
+            )}
+          </div>
+          <div className="b2b-field-row">
             <label className="b2b-field"><span className="b2b-field-label">상태</span>
-              <select className="b2b-select" value={data.status} onChange={(e) => set("status", e.target.value)}>
+              <select className="b2b-select" value={statusKey(data.status)} onChange={(e) => set("status", e.target.value)}>
                 {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select></label>
             <label className="b2b-field"><span className="b2b-field-label">발송 시점</span>
@@ -668,24 +723,19 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
           ) : null}
           <label className="b2b-field"><span className="b2b-field-label">상세 설명</span>
             <textarea className="b2b-textarea" value={data.detail} onChange={(e) => set("detail", e.target.value)} rows={2} placeholder="어떤 메시지인지·자동화 여부 등" /></label>
-          <label className="b2b-field"><span className="b2b-field-label">메시지 내용/초안(선택)</span>
-            <textarea className="b2b-textarea" value={data.msg} onChange={(e) => set("msg", e.target.value)} rows={3} /></label>
+          <label className="b2b-field"><span className="b2b-field-label">메시지 내용</span>
+            <textarea className="b2b-textarea" value={data.msg} onChange={(e) => set("msg", e.target.value)} rows={3} placeholder="발송되는 메시지 전문 — 흐름 탭 '메시지 열기'에서 나란히 검수됩니다" /></label>
           <label className="b2b-field"><span className="b2b-field-label">태그(콤마 구분)</span>
             <input className="b2b-input" value={data.tags} onChange={(e) => set("tags", e.target.value)} placeholder="예: 신규, 자동화" /></label>
 
-          <div className="b2b-field-label crm-links-title">링크 (선택)</div>
-          <div className="b2b-field-row crm-links-row">
-            {CRM_LINK_TYPES.map((l) => (
-              <label key={l.key} className="b2b-field crm-link-field">
-                <span className="b2b-field-label">{l.label}</span>
-                <input className="b2b-input" value={data.links[l.key] || ""} onChange={(e) => setLink(l.key, e.target.value)} placeholder="https://" spellCheck={false} />
-              </label>
-            ))}
+          <div className="b2b-field-row">
+            <label className="b2b-field"><span className="b2b-field-label">링크 (선택)</span>
+              <input className="b2b-input" value={data.links.url || ""} onChange={(e) => setLink("url", e.target.value)} placeholder="https:// — 메시지 버튼/랜딩 URL 1개" spellCheck={false} /></label>
+            <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인 (GA 성과 연동)</span>
+              <input className="b2b-input" value={data.links.utm_campaign || ""} onChange={(e) => setLink("utm_campaign", e.target.value)}
+                placeholder="예: crm_60d_winback" spellCheck={false} /></label>
           </div>
-          <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인 (GA 성과 연동)</span>
-            <input className="b2b-input" value={data.links.utm_campaign || ""} onChange={(e) => setLink("utm_campaign", e.target.value)}
-              placeholder="이 메시지 링크의 utm_campaign 값 — 예: crm_60d_winback" spellCheck={false} />
-            <span className="sm-faint crm-field-hint">UTM 만들기에서 쓴 캠페인명과 똑같이 넣으면 GA 세션·구매·매출이 카드에 자동 표시됩니다.</span></label>
+          <span className="sm-faint crm-field-hint">UTM 캠페인은 UTM 만들기에서 쓴 캠페인명과 똑같이 — GA 세션·구매·매출이 카드에 자동 표시됩니다.</span>
           <label className="sm-row sm-gap-2 crm-active-check">
             <input type="checkbox" checked={data.active} onChange={(e) => set("active", e.target.checked)} /> 목록에 표시(체크 해제 시 숨김)
           </label>
