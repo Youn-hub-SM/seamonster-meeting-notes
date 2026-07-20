@@ -11,7 +11,9 @@ export function itemsSig(items: { sku: string; qty: number }[]): string {
   return createHash("sha1").update(norm).digest("hex").slice(0, 16);
 }
 
-// 주문번호 키 — 개인정보 없이 주문번호만 해시. 이미 처리된 주문 필터의 단위.
-export function orderKey(orderNo: string): string {
-  return createHash("sha1").update(orderNo.trim()).digest("hex").slice(0, 16);
+// 주문 키 — '주문번호 + 상품 구성(단품코드:수량 정렬)' 해시. 이미 처리된 주문 필터의 단위.
+//  주문번호만 쓰면 우연히 번호가 겹치는 별개 주문을 오탐할 수 있어, 구성까지 같아야 중복으로 판정한다.
+//  (같은 파일 안의 동일 주문번호 여러 행은 한 주문의 라인들 — 필터 대상이 아니라 함께 집계됨)
+export function orderKey(composite: string): string {
+  return createHash("sha1").update(composite.trim()).digest("hex").slice(0, 16);
 }

@@ -59,7 +59,18 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
 
     // ── 이미 출고 처리된 주문 자동 제외(079) — 누적 다운로드 파일 등에서 처리 완료 주문이 섞여 와도
-    //    CN파일·택배량·배송일지·출고 전부에서 걸러낸다. 주문번호(B열) 해시 기준. 미적용 환경은 통과.
+    //    CN파일·택배량·배송일지·출고 전부에서 걸러낸다.
+    //    중복 판정 = '주문번호(B열) + 상품 구성(단품코드:수량 정렬)' 이 모두 같을 때만 —
+    //    우연히 번호만 겹치는 별개 주문은 구성이 달라 통과한다. 미적용 환경은 필터 없이 진행.
+    const compByOrder = new Map<string, string[]>(); // 주문번호 → ["SKU:수량", ...] (파일 내 그 주문의 전체 라인)
+    for (const r of rows) {
+      const orderNo = String(r[1] ?? "").trim();
+      if (!orderNo) continue;
+      const arr = compByOrder.get(orderNo) || [];
+      arr.push(`${String(r[10] ?? "").trim().toUpperCase()}:${Math.round(Number(r[8]) || 0)}`); // K열 단품코드 : I열 수량
+      compByOrder.set(orderNo, arr);
+    }
+    const keyOf = (orderNo: string) => orderKey(`${orderNo}|${(compByOrder.get(orderNo) || []).slice().sort().join(",")}`);
     let excludedProcessed = 0;
     const excludedOrderNos: string[] = [];
     try {
@@ -71,7 +82,7 @@ export async function POST(req: NextRequest) {
           const seen = new Set<string>();
           rows = rows.filter((r) => {
             const orderNo = String(r[1] ?? "").trim(); // B열 주문번호
-            if (!orderNo || !processed.has(orderKey(orderNo))) return true;
+            if (!orderNo || !processed.has(keyOf(orderNo))) return true;
             if (!seen.has(orderNo)) { seen.add(orderNo); excludedOrderNos.push(orderNo); }
             return false;
           });
@@ -115,9 +126,9 @@ export async function POST(req: NextRequest) {
 
     const res = buildCnplus(rows, codeMap, keywords, rates);
 
-    // 이 파일의 주문번호 키를 배치 서명으로 임시 보관 — 4단계 '출고 완료' 때 확정 등록(079). 실패해도 진행.
+    // 이 파일의 주문 키(주문번호+구성)를 배치 서명으로 임시 보관 — 4단계 '출고 완료' 때 확정 등록(079). 실패해도 진행.
     try {
-      const keys = [...new Set(rows.map((r) => String(r[1] ?? "").trim()).filter(Boolean).map(orderKey))];
+      const keys = [...new Set(rows.map((r) => String(r[1] ?? "").trim()).filter(Boolean).map(keyOf))];
       if (keys.length && res.outbound.length) {
         await sb.from("fulfill_pending_keys").upsert(
           { sig: itemsSig(res.outbound), keys, created_at: new Date().toISOString() },
