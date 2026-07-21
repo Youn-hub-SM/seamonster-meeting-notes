@@ -77,8 +77,7 @@ export default function FulfillSettingsPage() {
     <div className="b2b-container" style={{ maxWidth: 760 }}>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">택배 단가 설정</h1>
-          <p className="b2b-page-subtitle">단가는 적용 시작일별로 관리 — 소급 적용되지 않습니다</p>
+          <h1 className="b2b-page-title">온라인 발주 설정</h1>
         </div>
         <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>{saving ? "저장 중…" : "저장"}</button></div>
       </header>

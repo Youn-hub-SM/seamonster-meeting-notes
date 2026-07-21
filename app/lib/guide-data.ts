@@ -496,7 +496,7 @@ export const GUIDE: GuideCategory[] = [
           },
           {
             "href": "/fulfill/settings",
-            "label": "단가 설정",
+            "label": "설정",
             "what": "택배 단가(중량 구간·도착보장·드라이·부자재)와 중복 방지 기준을 관리",
             "steps": [
               "구간 표에서 '이하(kg)'와 '기본운임(원)'을 입력한다",

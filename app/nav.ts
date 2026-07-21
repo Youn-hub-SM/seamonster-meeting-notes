@@ -41,7 +41,7 @@ export const NAV: NavCategory[] = [
           { href: "/fulfill/scan", label: "송장 스캔" },
           { href: "/fulfill/log", label: "배송일지" },
           { href: "/fulfill/stats", label: "발송 통계" },
-          { href: "/fulfill/settings", label: "단가 설정" },
+          { href: "/fulfill/settings", label: "설정" },
         ],
       },
       {
