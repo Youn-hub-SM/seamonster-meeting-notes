@@ -60,7 +60,10 @@ export default function HomeSitemap() {
       </div>
 
       <style jsx>{`
-        .sm-map-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px 20px; }
+        /* 최소 컬럼 210px → 모바일(347px)에선 1열이라 전부 좌측 세로 나열됐다.
+           minmax 최소값을 낮춰 좁은 화면에서도 2열이 되게 함(넓은 화면은 자동으로 3~4열). */
+        .sm-map-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 20px; }
+        @media (max-width: 380px) { .sm-map-grid { grid-template-columns: 1fr 1fr; } }
         .sm-map-col { break-inside: avoid; }
         .sm-map-cat { font-size: 12px; font-weight: 800; color: var(--sm-text-light); letter-spacing: 0.4px; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--sm-border); }
         .sm-map-tool { margin-bottom: 10px; }
