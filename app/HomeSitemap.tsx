@@ -62,14 +62,17 @@ export default function HomeSitemap() {
       <style jsx>{`
         /* 최소 컬럼 210px → 모바일(347px)에선 1열이라 전부 좌측 세로 나열됐다.
            minmax 최소값을 낮춰 좁은 화면에서도 2열이 되게 함(넓은 화면은 자동으로 3~4열). */
-        .sm-map-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 20px; }
+        /* 카테고리 블록 사이 세로 간격을 넉넉히(30px) — 2열에서 뭉쳐 보이던 것 해소.
+           최소 컬럼 150px → 좁은 화면 2열, 넓은 화면은 자동 3~4열. */
+        .sm-map-grid { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 30px 22px; }
         @media (max-width: 380px) { .sm-map-grid { grid-template-columns: 1fr 1fr; } }
         .sm-map-col { break-inside: avoid; }
-        .sm-map-cat { font-size: 12px; font-weight: 800; color: var(--sm-text-light); letter-spacing: 0.4px; padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--sm-border); }
-        .sm-map-tool { margin-bottom: 10px; }
+        /* 헤더를 브랜드색으로 — 밑줄 대신 색이 각 열을 잡아준다(레퍼런스처럼). 노이즈 줄고 위계 명확. */
+        .sm-map-cat { font-size: 13px; font-weight: 800; color: var(--sm-orange); letter-spacing: 0.3px; margin-bottom: 12px; }
+        .sm-map-tool { margin-bottom: 11px; }
         .sm-map-tool-link { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; color: var(--sm-dark); }
         .sm-map-tool-link:hover { color: var(--sm-orange); }
-        .sm-map-subs { display: flex; flex-direction: column; gap: 2px; margin: 5px 0 0 22px; }
+        .sm-map-subs { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 0 22px; }
         .sm-map-sub { font-size: 12.5px; color: var(--sm-text-mid); padding: 1px 0; }
         .sm-map-sub:hover { color: var(--sm-orange); }
       `}</style>
