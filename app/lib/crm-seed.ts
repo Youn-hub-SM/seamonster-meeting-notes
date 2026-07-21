@@ -81,8 +81,11 @@ export function seedMessages(): CrmMessageInput[] {
       out.push({
         stage_num: si + 1, stage: s.stage, sub: s.sub,
         title: m.title, status: m.status, channel: m.ch, timing: m.timing,
-        detail: m.detail, msg: m.msg || "", img_url: "",
-        links: {}, perf: m.perf || {}, tags: "",
+        // 여정 구조(스테이지·제목·채널·발송시점·설명)만 이관.
+        //  msg(예시 초안)·perf(구 카페24 데모의 가짜 성과)는 실데이터가 아니라 제외 — 사용자 요청(2026-07-18).
+        //  성과는 GA 연동으로 채우고, 초안은 실제 발송 문구를 직접 입력한다.
+        detail: m.detail, msg: "", img_url: "",
+        links: {}, perf: {}, tags: "",
         sort_order: mi + 1, active: true,
         start_date: "", end_date: "", customer: "", msg_type: "",
       });
