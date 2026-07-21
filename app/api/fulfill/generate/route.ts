@@ -4,6 +4,7 @@ import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
 import { getAllBundles } from "@/app/lib/product-bundles";
 import { normalizeHistory, ratesFor } from "@/app/lib/fulfill-rates";
 import { itemsSig, orderKey } from "@/app/lib/fulfill-sig";
+import { getDedupConfig } from "@/app/lib/fulfill-dedup";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -59,9 +60,9 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
 
     // ── 이미 출고 처리된 주문 자동 제외(079) — 누적 다운로드 파일 등에서 처리 완료 주문이 섞여 와도
-    //    CN파일·택배량·배송일지·출고 전부에서 걸러낸다.
-    //    중복 판정 = '주문번호(B열) + 상품 구성(단품코드:수량 정렬)' 이 모두 같을 때만 —
-    //    우연히 번호만 겹치는 별개 주문은 구성이 달라 통과한다. 미적용 환경은 필터 없이 진행.
+    //    CN파일·택배량·배송일지·출고 전부에서 걸러낸다. 설정(온라인발주>단가설정 '중복 방지')로 on/off·기준·창 조정.
+    //    판정 기본 = '주문번호(B열) + 상품 구성(단품코드:수량 정렬)' 모두 동일. 'order_only'면 주문번호만.
+    const dedup = await getDedupConfig();
     const compByOrder = new Map<string, string[]>(); // 주문번호 → ["SKU:수량", ...] (파일 내 그 주문의 전체 라인)
     for (const r of rows) {
       const orderNo = String(r[1] ?? "").trim();
@@ -70,11 +71,13 @@ export async function POST(req: NextRequest) {
       arr.push(`${String(r[10] ?? "").trim().toUpperCase()}:${Math.round(Number(r[8]) || 0)}`); // K열 단품코드 : I열 수량
       compByOrder.set(orderNo, arr);
     }
-    const keyOf = (orderNo: string) => orderKey(`${orderNo}|${(compByOrder.get(orderNo) || []).slice().sort().join(",")}`);
+    const keyOf = (orderNo: string) => dedup.match === "order_only"
+      ? orderKey(orderNo)
+      : orderKey(`${orderNo}|${(compByOrder.get(orderNo) || []).slice().sort().join(",")}`);
     let excludedProcessed = 0;
     const excludedOrderNos: string[] = [];
-    try {
-      const since = new Date(Date.now() - 45 * 86400e3).toISOString();
+    if (dedup.enabled) try {
+      const since = new Date(Date.now() - dedup.windowDays * 86400e3).toISOString();
       const { data: keyRows, error: kErr } = await sb.from("fulfill_order_keys").select("key").gte("processed_at", since);
       if (!kErr && keyRows) {
         const processed = new Set(keyRows.map((k) => k.key as string));
@@ -88,8 +91,9 @@ export async function POST(req: NextRequest) {
           });
           excludedProcessed = seen.size;
         }
-        // 오래된 키 정리(60일) — 실패 무시
-        sb.from("fulfill_order_keys").delete().lt("processed_at", new Date(Date.now() - 60 * 86400e3).toISOString()).then(() => {});
+        // 오래된 키 정리(창의 2배 또는 90일 중 큰 값) — 실패 무시
+        const cutoff = new Date(Date.now() - Math.max(90, dedup.windowDays * 2) * 86400e3).toISOString();
+        sb.from("fulfill_order_keys").delete().lt("processed_at", cutoff).then(() => {});
       }
     } catch { /* 079 미적용 — 필터 없이 진행 */ }
     if (rows.length === 0) {

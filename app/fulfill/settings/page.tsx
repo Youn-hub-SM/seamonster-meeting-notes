@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, type RateVersion, type BoxTier } from "@/app/lib/fulfill-rates";
+import { DEDUP_DEFAULT, type DedupConfig, type DedupMatch } from "@/app/lib/fulfill-dedup";
 
 const num = (v: string) => Math.max(0, Math.round(Number(v) || 0));
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -14,9 +15,36 @@ export default function FulfillSettingsPage() {
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
 
+  // 중복 방지 설정
+  const [dedup, setDedup] = useState<DedupConfig>(DEDUP_DEFAULT);
+  const [processedCount, setProcessedCount] = useState<number | null>(null);
+  const [dedupSaving, setDedupSaving] = useState(false);
+  const [dedupMsg, setDedupMsg] = useState("");
+
   useEffect(() => {
     fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); }).catch(() => {}).finally(() => setLoading(false));
+    fetch("/api/fulfill/dedup", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) { setDedup(j.config); setProcessedCount(j.processedCount); } }).catch(() => {});
   }, []);
+
+  async function saveDedup() {
+    setDedupSaving(true); setDedupMsg("");
+    try {
+      const r = await fetch("/api/fulfill/dedup", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dedup) });
+      const j = await r.json(); if (!j.ok) throw new Error(j.error || "저장 실패");
+      setDedup(j.config); setDedupMsg("저장됨");
+    } catch (e) { setDedupMsg(e instanceof Error ? e.message : "저장 실패"); }
+    setDedupSaving(false);
+  }
+  async function clearProcessed() {
+    if (!window.confirm("처리완료 주문 기록을 모두 지울까요?\n중복 판정 기준이 비워집니다(재고·배송일지에는 영향 없음). 이후 출고 완료분부터 다시 쌓입니다.")) return;
+    setDedupSaving(true); setDedupMsg("");
+    try {
+      const r = await fetch("/api/fulfill/dedup", { method: "DELETE" });
+      const j = await r.json(); if (!j.ok) throw new Error(j.error || "초기화 실패");
+      setProcessedCount(0); setDedupMsg("처리완료 기록을 비웠습니다");
+    } catch (e) { setDedupMsg(e instanceof Error ? e.message : "초기화 실패"); }
+    setDedupSaving(false);
+  }
 
   // 오늘 적용 중인 버전의 인덱스 (적용일이 오늘 이하인 것 중 가장 최근; 없으면 가장 이른 것)
   const activeIdx = useMemo(() => {
@@ -57,6 +85,43 @@ export default function FulfillSettingsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
       {ok && <div className="sm-success">✓ {ok}</div>}
+
+      {/* 중복 방지 — 이미 출고 처리된 주문 자동 제외 기준 */}
+      <div className="b2b-card" style={{ marginBottom: 16 }}>
+        <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <span className="b2b-card-title">중복 방지 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 이미 출고 처리된 주문을 파일에서 자동 제외</span></span>
+          <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            <input type="checkbox" className="b2b-checkbox" checked={dedup.enabled} onChange={(e) => setDedup({ ...dedup, enabled: e.target.checked })} /> 사용
+          </label>
+        </div>
+        <div className="sm-col" style={{ gap: 12, opacity: dedup.enabled ? 1 : 0.5, pointerEvents: dedup.enabled ? "auto" : "none" }}>
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 5 }}>같은 주문으로 보는 기준</div>
+            <div className="sm-tabs" style={{ margin: 0 }}>
+              {([["order_and_items", "주문번호 + 상품 구성"], ["order_only", "주문번호만"]] as [DedupMatch, string][]).map(([v, l]) => (
+                <button key={v} className={`sm-tab ${dedup.match === v ? "is-active" : ""}`} onClick={() => setDedup({ ...dedup, match: v })}>{l}</button>
+              ))}
+            </div>
+            <p className="sm-faint" style={{ fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.6 }}>
+              {dedup.match === "order_and_items"
+                ? "주문번호와 담긴 상품·수량이 모두 같아야 중복으로 봅니다(권장). 번호만 우연히 겹치는 별개 주문은 통과합니다."
+                : "주문번호가 같으면 중복으로 봅니다. 번호가 재사용되는 채널에선 정상 주문이 막힐 수 있어 권장하지 않습니다."}
+            </p>
+          </div>
+          <label className="sm-row" style={{ gap: 8, fontSize: 13, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 600 }}>대조 기간</span>
+            최근 <input type="number" className="b2b-input" min={1} max={180} value={dedup.windowDays} onChange={(e) => setDedup({ ...dedup, windowDays: num(e.target.value) })} style={{ width: 70, textAlign: "right" }} /> 일 내 출고 완료분과 대조
+          </label>
+          <div className="sm-faint" style={{ fontSize: 12 }}>
+            현재 등록된 처리완료 주문: <strong>{processedCount == null ? "—" : processedCount.toLocaleString()}</strong>건
+            {processedCount != null && processedCount > 0 && <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8, color: "var(--sm-danger)" }} onClick={clearProcessed} disabled={dedupSaving}>기록 비우기</button>}
+          </div>
+        </div>
+        <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12 }}>
+          <button className="b2b-btn-primary" style={{ padding: "6px 16px" }} onClick={saveDedup} disabled={dedupSaving}>{dedupSaving ? "저장 중…" : "중복 방지 저장"}</button>
+          {dedupMsg && <span style={{ fontSize: 12, color: dedupMsg.includes("실패") ? "var(--sm-danger)" : "var(--sm-success)" }}>{dedupMsg}</span>}
+        </div>
+      </div>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : (
         <>
