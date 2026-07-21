@@ -16,10 +16,10 @@ export function meetingToMarkdown(meeting: Meeting): string {
   // 1) 시간순 요약
   if (meeting.timelineSummary.length > 0) {
     out.push("", "1) 시간순 요약", "");
-    meeting.timelineSummary.forEach((item, i) => {
+    for (const item of meeting.timelineSummary) {
       const t = (item.time || "").trim();
-      out.push(`  (${i + 1}) ${t ? `${t}  ` : ""}${item.content}`);
-    });
+      out.push(`  · ${t ? `${t}  ` : ""}${item.content}`);
+    }
   }
 
   // 2) 결론(의사결정) — 항목이 하나도 없는 범주는 건너뜀
@@ -40,12 +40,21 @@ export function meetingToMarkdown(meeting: Meeting): string {
     });
   }
 
-  // 3) To-Do
+  // 3) To-Do — 담당자별로 묶어 표시(등장 순서 유지)
   if (meeting.todos.length > 0) {
     out.push("", "3) To-Do", "");
-    meeting.todos.forEach((item, i) => {
+    const order: string[] = [];
+    const byAssignee = new Map<string, string[]>();
+    for (const item of meeting.todos) {
+      const who = item.assignee || "담당자 미정";
+      if (!byAssignee.has(who)) { byAssignee.set(who, []); order.push(who); }
       const deadline = item.deadline ? ` — ${item.deadline}` : "";
-      out.push(`  (${i + 1}) [${item.assignee}] ${item.task}${deadline}`);
+      byAssignee.get(who)!.push(`${item.task}${deadline}`);
+    }
+    order.forEach((who, wi) => {
+      out.push(`  [${who}]`);
+      for (const task of byAssignee.get(who)!) out.push(`     · ${task}`);
+      if (wi < order.length - 1) out.push("");
     });
   }
 
