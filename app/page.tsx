@@ -1,5 +1,6 @@
 import Link from "next/link";
 import HomeQuickLaunch from "@/app/HomeQuickLaunch";
+import HomeSitemap from "@/app/HomeSitemap";
 import Icon from "@/app/components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,9 @@ export default function HomePage() {
           )}
         </div>
       </section>
+
+      {/* 전체 사이트맵 — 사이드바(NAV)와 동일 구조 */}
+      <HomeSitemap />
     </div>
   );
 }
