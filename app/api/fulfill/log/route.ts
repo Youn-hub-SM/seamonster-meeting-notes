@@ -113,6 +113,7 @@ export async function POST(req: NextRequest) {
     }
 
     const row: Record<string, unknown> = { log_date, updated_at: new Date().toISOString() };
+    let recordedId: string | null = null; // 방금 만든 이력 id(발주처리에서 즉시 되돌리기용)
 
     if (b.record) {
       // 자동칸 기록 — 배치 이력(record_entries)에 1건 추가하고 자동 합계 = 이력 합으로 재계산.
@@ -157,6 +158,7 @@ export async function POST(req: NextRequest) {
         const token = req.cookies.get("b2b_auth")?.value;
         const by = (await verifySession(token)) || resolveUserName(token);
         const entry: RecordEntry = { id: randomUUID(), at: new Date().toISOString(), by, mode, boxes_normal: bxN, boxes_guar: bxG, base_fee_normal: bfN, base_fee_guar: bfG, sig };
+        recordedId = entry.id;
         entries = mode === "replace" ? [entry] : [...entries, entry];
         const totals = recordTotals(entries);
         row.record_entries = entries;
@@ -182,7 +184,7 @@ export async function POST(req: NextRequest) {
       if (/manual/i.test(error.message)) return NextResponse.json({ ok: false, error: "직접수정 저장에는 075_delivery_log_manual.sql 적용이 필요합니다." }, { status: 500 });
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, recordedId });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "저장 실패") }, { status: 500 });
   }

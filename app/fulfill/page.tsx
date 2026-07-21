@@ -51,6 +51,8 @@ export default function FulfillPage() {
   const [recordMode, setRecordMode] = useState<"replace" | "add">("add"); // 더하기 기본
   const [recording, setRecording] = useState(false);
   const [recordOk, setRecordOk] = useState("");
+  const [lastRecord, setLastRecord] = useState<{ date: string; id: string } | null>(null); // 방금 기록(즉시 취소용)
+  const [undoing, setUndoing] = useState(false);
   const [dispatch, setDispatch] = useState<DispatchPreview | null>(null);
   const [dispatchLoading, setDispatchLoading] = useState(false);
   const [dispatching, setDispatching] = useState(false);
@@ -94,7 +96,7 @@ export default function FulfillPage() {
   async function recordLog(): Promise<boolean> {
     if (!res || !recordDate) return false;
     if (res.unmatched.length > 0 && !window.confirm(`미매칭 SKU ${res.unmatched.length}개가 있어 기본운임이 실제보다 적게 기록될 수 있어요.\n상품마스터에서 택배 정보를 채운 뒤 다시 만드는 걸 권장합니다.\n\n그래도 지금 기록할까요?`)) return false;
-    setRecording(true); setRecordOk(""); setError("");
+    setRecording(true); setRecordOk(""); setError(""); setLastRecord(null);
     let ok = false;
     try {
       const ex = await (await fetch(`/api/fulfill/log?from=${recordDate}&to=${recordDate}`, { cache: "no-store" })).json();
@@ -118,6 +120,7 @@ export default function FulfillPage() {
           force = true; continue;
         }
         if (!j.ok) throw new Error(j.error || "기록 실패");
+        if (j.recordedId) setLastRecord({ date: recordDate, id: j.recordedId }); // 즉시 취소용(078 적용 시)
         break;
       }
       setRecordOk(`${recordDate} 배송일지에 ${recordMode === "add" ? "더했어요(누적)" : "기록했어요"}.`);
@@ -125,6 +128,19 @@ export default function FulfillPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }
     setRecording(false);
     return ok;
+  }
+
+  // 방금 기록한 배송일지 취소 — 그 배치 이력 1건을 되돌린다(합계·운임 재계산).
+  async function undoRecord() {
+    if (!lastRecord) return;
+    if (!window.confirm(`방금 기록한 ${lastRecord.date} 배송일지를 취소할까요?`)) return;
+    setUndoing(true); setError("");
+    try {
+      const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: lastRecord.date, del_record: { id: lastRecord.id } }) });
+      const j = await r.json(); if (!j.ok) throw new Error(j.error || "취소 실패");
+      setLastRecord(null); setRecordOk("");
+    } catch (e) { setError(e instanceof Error ? e.message : "취소 실패"); }
+    setUndoing(false);
   }
 
   // '다음 단계' = 그 단계 작업 수행 후 이동
@@ -290,7 +306,13 @@ export default function FulfillPage() {
               <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
             </div>
           </div>
-          {recordOk && <div className="sm-success" style={{ marginBottom: 8 }}>✓ {recordOk} <Link href="/fulfill/log">배송일지 보기</Link></div>}
+          {recordOk && (
+            <div className="sm-success" style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span>✓ {recordOk}</span>
+              <Link href="/fulfill/log">배송일지 보기</Link>
+              {lastRecord && <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={undoRecord} disabled={undoing}>{undoing ? "취소 중…" : "기록 취소"}</button>}
+            </div>
+          )}
           <div className="b2b-table-wrap">
             <table className="b2b-table">
               <thead><tr><th>박스종류</th><th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
