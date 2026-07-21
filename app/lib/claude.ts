@@ -87,7 +87,7 @@ export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
 
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: 8192, // 긴 회의(결정·To-Do 많음)에서 JSON 이 잘려 파싱 실패하던 것 방지
     system: await buildSystemPrompt(),
     messages: [{ role: "user", content: rawText }],
   });
@@ -100,5 +100,12 @@ export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
     .replace(/\n?```\s*$/i, "")
     .trim();
 
-  return JSON.parse(cleaned) as ClaudeResult;
+  try {
+    return JSON.parse(cleaned) as ClaudeResult;
+  } catch {
+    // 모델이 앞뒤 문장을 덧붙이거나 형식을 살짝 어긴 경우 — 첫 { ~ 마지막 } 만 떼어 재시도
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]) as ClaudeResult;
+    throw new Error("정리 결과 형식을 해석하지 못했습니다. 내용이 너무 길거나 형식이 특이하면 나눠서 시도해 주세요.");
+  }
 }

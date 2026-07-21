@@ -90,7 +90,7 @@ export default function MeetingPage() {
           <p className="detail-date">{result.date}</p>
           <div className="result-actions">
             <button className="btn-primary" onClick={handleCopy}>
-              {copied ? "복사 완료!" : "마크다운 복사"}
+              {copied ? "복사 완료!" : "정리본 복사"}
             </button>
             <button className="btn-secondary" onClick={handleReset}>
               새 회의록 작성
