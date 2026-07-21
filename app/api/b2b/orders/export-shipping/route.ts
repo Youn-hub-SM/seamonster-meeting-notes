@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
     }
 
     const buf = await workbook.xlsx.writeBuffer();
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const dateStr = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, ""); // KST 벽시계 날짜(파일명)
     const filename = `shipping-request_${dateStr}.xlsx`;
 
     return new NextResponse(Buffer.from(buf), {

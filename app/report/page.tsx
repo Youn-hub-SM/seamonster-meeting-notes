@@ -191,7 +191,7 @@ export default function ReportPage() {
                   <div className="rp-saved-meta">
                     <span>저장: {s.createdBy || "—"}</span>
                     <span>·</span>
-                    <span>{s.createdAt.slice(0, 10)}</span>
+                    <span>{new Date(new Date(s.createdAt).getTime() + 9 * 3600e3).toISOString().slice(0, 10)}</span>
                     <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); delSaved(s.id); }}>삭제</button>
                   </div>
                 </div>

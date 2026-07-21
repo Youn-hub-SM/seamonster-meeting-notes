@@ -985,7 +985,7 @@ function loadFile(file) {
     complete: result => {
       rawRows = result.data.filter(r => r["신청번호"]);
       const dates = rawRows.map(r => r["신청일"]).filter(Boolean).sort();
-      dataTodayISO = dates[dates.length - 1] || new Date().toISOString().slice(0, 10);
+      dataTodayISO = dates[dates.length - 1] || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);  // 폴백 기준일(KST 벽시계 날짜)
       // 전체 신청건 풀(필터 칩 옵션용)
       allOrdersUnfiltered = buildOrdersFromRows(rawRows);
       populateFilterChips();
@@ -1822,7 +1822,7 @@ function getCurrentSnapshot() {
   const cancelCount = orders.filter(o => statusBucket(o.status) === "cancel").length;
 
   return {
-    savedAt:        new Date().toISOString().replace("T", " ").slice(0, 19),
+    savedAt:        new Date(Date.now() + 9 * 3600e3).toISOString().replace("T", " ").slice(0, 19),  // 저장 시각(KST 벽시계)
     dataDate:       dataTodayISO,
     fileName:       lastUploadedFileName,
     filteredOrders: orders.length,

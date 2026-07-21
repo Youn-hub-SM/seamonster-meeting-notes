@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-function todayIso() { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; }
+// KST 오늘 — 서버(UTC SSR)·클라이언트 모두 서울 벽시계 날짜로 일치(새벽 하이드레이션 불일치 방지)
+function todayIso() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
 
 type AggRow = { name: string; spec: string; qty: number; manual: boolean; wholesale: boolean };
 type AggData = { from: string; to: string; label: string; rows: AggRow[]; total: number };
