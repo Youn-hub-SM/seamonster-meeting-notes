@@ -70,6 +70,13 @@ export function buildFlowTaskFromVoc(v: Voc): { title: string; contents: string 
   L.push(`■ 정산/처리`);
   L.push(`· 손해 귀책: ${v.fault} · 보상: ${v.comp_type}${v.comp_qty ? `×${v.comp_qty}` : ""} · 손해금액: ${won(v.loss_amount)}`);
   if (v.assignee) L.push(`· 담당자: ${v.assignee}`);
+  // 첨부 사진 — flow 는 본문 첨부파일을 못 받으므로 공개 URL 링크로 넣는다(클릭하면 열림).
+  const photos = (v.photos ?? []).filter((u) => typeof u === "string" && u.trim());
+  if (photos.length) {
+    L.push("");
+    L.push(`■ 첨부 사진 (${photos.length})`);
+    photos.forEach((u, i) => L.push(`· 사진${i + 1}: ${u.trim()}`));
+  }
   L.push("");
   L.push(`— 씨몬스터 VOC #${v.id.slice(0, 8)} · 내부도구에서 등록`);
 
