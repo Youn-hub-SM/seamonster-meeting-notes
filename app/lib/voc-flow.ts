@@ -84,34 +84,73 @@ export type FlowTaskBody = {
   viewPermission?: string;
 };
 
-// flow 업무 생성 호출. 성공(2xx) 시 {ok:true, id?}. 실패 시 flow가 준 메시지 포함.
+const ATTEMPT_TIMEOUT_MS = 12_000; // 한 번 시도가 이보다 길면 끊음(flow 지연 시 무한 대기 방지)
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// flow API 는 종종 게이트웨이가 느려 502/503/504 를 준다.
+//  · 502/503/429/네트워크오류 = 요청이 처리 전에 튕긴 것(안전하게 재시도)
+//  · 504/408/타임아웃 = 처리됐을 수도 있어 재시도 시 중복 우려 → 딱 1번만
+function retryPolicy(status: number): { retry: boolean; ambiguous: boolean } {
+  if (status === 429 || status === 500 || status === 502 || status === 503) return { retry: true, ambiguous: false };
+  if (status === 408 || status === 504 || status === 0) return { retry: true, ambiguous: true }; // 0 = 타임아웃/네트워크
+  return { retry: false, ambiguous: false };
+}
+
+// flow 업무 생성 호출(타임아웃 + 유형별 재시도). 성공(2xx) 시 {ok:true, id?}. 실패 시 사람이 읽을 메시지.
 export async function createFlowTask(opts: { base: string; apiKey: string; projectId: string; body: FlowTaskBody }): Promise<{ ok: boolean; id: string | null; status: number; error?: string }> {
   const url = `${opts.base.replace(/\/$/, "")}/user/posts/projects/${encodeURIComponent(opts.projectId)}/tasks`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-flow-api-key": opts.apiKey },
-      body: JSON.stringify(opts.body),
-    });
-  } catch (e) {
-    return { ok: false, id: null, status: 0, error: `flow 연결 실패: ${(e as Error).message}` };
+
+  let ambiguousUsed = false; // 504 류는 중복 우려로 딱 1회만 재시도
+  let last: { status: number; error: string } = { status: 0, error: "flow 응답 없음" };
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ATTEMPT_TIMEOUT_MS);
+    let res: Response | null = null;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-flow-api-key": opts.apiKey },
+        body: JSON.stringify(opts.body),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      const aborted = (e as Error).name === "AbortError";
+      last = { status: 0, error: aborted ? "flow 서버 응답 시간 초과" : `flow 연결 실패: ${(e as Error).message}` };
+      const pol = retryPolicy(0);
+      if (pol.retry && !(pol.ambiguous && ambiguousUsed) && attempt < 2) { if (pol.ambiguous) ambiguousUsed = true; await sleep(1000 * (attempt + 1)); continue; }
+      break;
+    }
+    clearTimeout(timer);
+
+    const text = await res.text().catch(() => "");
+    let json: unknown = null;
+    try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON(예: nginx 504 HTML) */ }
+
+    if (res.ok) {
+      const j = json as Record<string, unknown> | null;
+      const pick = (o: Record<string, unknown> | null | undefined, ...keys: string[]) => {
+        for (const k of keys) { const val = o?.[k]; if (val != null && val !== "") return String(val); }
+        return null;
+      };
+      const data = (j?.data as Record<string, unknown>) || (j?.result as Record<string, unknown>) || j;
+      const id = pick(data, "postSrl", "post_srl", "id", "taskId", "srl", "postId");
+      return { ok: true, id, status: res.status };
+    }
+
+    // 실패 — HTML(504 페이지 등)은 사용자에게 그대로 보이지 않게 상태코드만 요약
+    const isHtml = /<html|<head|Gateway Time-out/i.test(text);
+    const apiMsg = (json as { message?: string; error?: string } | null)?.message || (json as { error?: string } | null)?.error;
+    const friendly = res.status === 504 ? "flow 서버 응답 지연(504)" : res.status === 502 || res.status === 503 ? `flow 서버 일시 오류(${res.status})` : `flow API ${res.status}`;
+    last = { status: res.status, error: `${friendly}${apiMsg ? `: ${apiMsg}` : isHtml ? "" : text ? `: ${text.slice(0, 200)}` : ""}` };
+
+    const pol = retryPolicy(res.status);
+    if (pol.retry && !(pol.ambiguous && ambiguousUsed) && attempt < 2) { if (pol.ambiguous) ambiguousUsed = true; await sleep(1000 * (attempt + 1)); continue; }
+    break;
   }
-  const text = await res.text().catch(() => "");
-  let json: unknown = null;
-  try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
-  if (!res.ok) {
-    const msg = (json as { message?: string; error?: string } | null)?.message
-      || (json as { error?: string } | null)?.error || text.slice(0, 300) || `HTTP ${res.status}`;
-    return { ok: false, id: null, status: res.status, error: `flow API ${res.status}: ${msg}` };
-  }
-  // 성공 — 반환 페이로드에서 식별자 추출(스키마가 불확실하므로 흔한 키들 시도)
-  const j = json as Record<string, unknown> | null;
-  const pick = (o: Record<string, unknown> | null | undefined, ...keys: string[]) => {
-    for (const k of keys) { const val = o?.[k]; if (val != null && val !== "") return String(val); }
-    return null;
-  };
-  const data = (j?.data as Record<string, unknown>) || (j?.result as Record<string, unknown>) || j;
-  const id = pick(data, "postSrl", "post_srl", "id", "taskId", "srl", "postId");
-  return { ok: true, id, status: res.status };
+
+  // 재시도까지 실패 — 이미 등록됐을 가능성 안내(중복 방지)
+  const tail = (last.status === 504 || last.status === 0) ? " — 이미 flow에 등록됐을 수 있으니 flow에서 확인 후, 없으면 다시 시도하세요." : " — 잠시 후 다시 시도하세요.";
+  return { ok: false, id: null, status: last.status, error: last.error + tail };
 }

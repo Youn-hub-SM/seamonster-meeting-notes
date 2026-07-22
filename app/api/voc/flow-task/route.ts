@@ -5,6 +5,7 @@ import { getFlowApiKey, getFlowProjectId, getFlowBase, getFlowDefaultPriority, g
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // flow 지연 시 타임아웃(12s)+재시도가 Vercel 함수 한도 안에 들도록
 
 // POST { id, projectId?, priority?, endDate?, workerId? } — VOC 한 건을 flow 프로젝트 업무로 등록.
 export async function POST(req: NextRequest) {
