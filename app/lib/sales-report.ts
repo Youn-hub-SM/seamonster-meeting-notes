@@ -33,6 +33,7 @@ export type DailyStats = {
   channels: string[]; channel_summary: Record<string, ChannelCum>; channel_window: Record<string, number>;
   top10: { rank: number; code: string; revenue: number }[];
   new_cust: number; repeat_cust: number; total_cust: number; new_ratio: number; repeat_ratio: number;
+  unclassified_orders: number; unclassified_revenue: number;
   aov: number; order_count: number; max_order: number; min_order: number; max_order_codes: string; min_order_codes: string;
   day_breakdown: { label: string; date: string; revenue: number }[] | null;
   year: number; month: number; day: number;
@@ -99,6 +100,7 @@ export async function computeDailyStats(baseIso?: string): Promise<DailyStats> {
     top10: top.map((t, i) => ({ rank: i + 1, code: String(t.sku_code), revenue: n(t.revenue) })),
     new_cust: newC, repeat_cust: repeatC, total_cust: total,
     new_ratio: total > 0 ? newC / total * 100 : 0, repeat_ratio: total > 0 ? repeatC / total * 100 : 0,
+    unclassified_orders: n(nrr.unclassified_orders), unclassified_revenue: n(nrr.unclassified_revenue),
     aov: n(e.aov), order_count: n(e.order_count), max_order: n(e.max_order), min_order: n(e.min_order),
     max_order_codes: codesStr(maxCodes), min_order_codes: codesStr(minCodes),
     day_breakdown, year, month, day,
@@ -111,6 +113,7 @@ export type WeeklyStats = {
   channels: { name: string; week: number; prev_week: number }[];
   top10: { rank: number; code: string; revenue: number }[];
   new_cust: number; repeat_cust: number; total_cust: number; new_ratio: number; repeat_ratio: number;
+  unclassified_orders: number; unclassified_revenue: number;
   aov: number; order_count: number; max_order: number; min_order: number; max_codes: string; min_codes: string;
 };
 
@@ -146,6 +149,7 @@ export async function computeWeeklyStats(baseIso: string): Promise<WeeklyStats> 
     top10: top.map((t, i) => ({ rank: i + 1, code: String(t.sku_code), revenue: n(t.revenue) })),
     new_cust: n(nrr.new_cust), repeat_cust: n(nrr.repeat_cust), total_cust: total,
     new_ratio: total > 0 ? n(nrr.new_cust) / total * 100 : 0, repeat_ratio: total > 0 ? n(nrr.repeat_cust) / total * 100 : 0,
+    unclassified_orders: n(nrr.unclassified_orders), unclassified_revenue: n(nrr.unclassified_revenue),
     aov: n(e.aov), order_count: n(e.order_count), max_order: n(e.max_order), min_order: n(e.min_order), max_codes: codesStr(maxCodes), min_codes: codesStr(minCodes),
   };
 }
@@ -172,7 +176,7 @@ export function buildDailyText(s: DailyStats): string {
   L.push("");
   if (s.top10.length) L.push(`${s.is_sunday ? "최근 3일(금~일)" : "어제"} 판매된 주요 상품(sku_code 기준) Top 10은 다음과 같습니다.`, s.top10.map((t) => `${t.rank}위 ${t.code} ${won(t.revenue)}`).join(", ") + " …");
   L.push("");
-  L.push(`${s.is_sunday ? "최근 3일(금~일) 기준 " : ""}고객 분포는 신규 고객 ${s.new_cust}명(${s.new_ratio.toFixed(1)}%), 재구매 고객 ${s.repeat_cust}명(${s.repeat_ratio.toFixed(1)}%)였으며,`);
+  L.push(`${s.is_sunday ? "최근 3일(금~일) 기준 " : ""}고객 분포는 신규 고객 ${s.new_cust}명(${s.new_ratio.toFixed(1)}%), 재구매 고객 ${s.repeat_cust}명(${s.repeat_ratio.toFixed(1)}%)${s.unclassified_orders > 0 ? `, 미분류 ${s.unclassified_orders}건(안심번호·무전화, 신규/재구매 제외)` : ""}였으며,`);
   L.push(`객단가는 ${won(s.aov)}이며, 최고매출건은 ${won(s.max_order)}(품목코드: ${s.max_order_codes}), 최저매출건은 ${won(s.min_order)}(품목코드: ${s.min_order_codes}) 입니다.`);
   return L.join("\n");
 }
@@ -186,7 +190,7 @@ export function buildWeeklyText(s: WeeklyStats): string {
   L.push("");
   if (s.top10.length) L.push("이번 주 판매된 주요 상품(sku_code 기준) Top 10은 다음과 같습니다.", s.top10.map((t) => `${t.rank}위 ${t.code} ${won(t.revenue)}`).join(", ") + " …");
   L.push("");
-  L.push(`주간 고객 분포는 신규 고객 ${s.new_cust}명(${s.new_ratio.toFixed(1)}%), 재구매 고객 ${s.repeat_cust}명(${s.repeat_ratio.toFixed(1)}%)였으며,`);
+  L.push(`주간 고객 분포는 신규 고객 ${s.new_cust}명(${s.new_ratio.toFixed(1)}%), 재구매 고객 ${s.repeat_cust}명(${s.repeat_ratio.toFixed(1)}%)${s.unclassified_orders > 0 ? `, 미분류 ${s.unclassified_orders}건(안심번호·무전화, 신규/재구매 제외)` : ""}였으며,`);
   L.push(`주간 객단가는 ${won(s.aov)}이며, 최고매출건은 ${won(s.max_order)}(품목코드: ${s.max_codes}), 최저매출건은 ${won(s.min_order)}(품목코드: ${s.min_codes}) 입니다.`);
   return L.join("\n");
 }

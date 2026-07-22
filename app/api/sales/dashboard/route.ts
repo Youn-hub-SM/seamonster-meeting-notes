@@ -17,7 +17,7 @@ export async function GET() {
       window_sales: s.window_sales, window_start: s.window_start, window_end: s.window_end,
       this_month_sales: s.this_month_sales, prev_month_sales: s.prev_month_sales, month_rr_pct: s.month_rr_pct,
       this_year_sales: s.this_year_sales, last_year_sales: s.last_year_sales, year_rr_pct: s.year_rr_pct,
-      order_count: s.order_count, aov: s.aov, new_cust: s.new_cust, repeat_cust: s.repeat_cust,
+      order_count: s.order_count, aov: s.aov, new_cust: s.new_cust, repeat_cust: s.repeat_cust, unclassified_orders: s.unclassified_orders,
       channels, top10: s.top10.slice(0, 5),
     });
   } catch (e) {

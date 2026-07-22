@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-07-18";
+export const GUIDE_UPDATED = "2026-07-22";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -549,6 +549,8 @@ export const GUIDE: GuideCategory[] = [
             ],
             "tips": [
               "일요일에는 '어제 매출' 대신 최근 3일(금~일) 합산이 표시된다",
+              "신규:재구매는 전화번호로 식별되는 고객만 센다 — 생애 첫 구매면 신규, 이전 구매 이력이 있으면 재구매(루커 스튜디오와 같은 기준)",
+              "050 안심번호·무전화 주문은 동일인 식별이 안 돼 '미분류'로 따로 표시된다(신규/재구매에서 제외)",
               "숫자가 안 보이면 데이터가 없는 것 — 데이터 업로드에서 주문 파일을 먼저 올린다"
             ],
             "keywords": [
@@ -608,7 +610,8 @@ export const GUIDE: GuideCategory[] = [
             "tips": [
               "수신자를 비우면 기본 수신자(SALES_MAIL_TO)에게 발송된다",
               "첫 발송은 본인 주소만 넣어 1통으로 확인한다",
-              "일요일 기준일의 일일 리포트는 금~일 합산이다"
+              "일요일 기준일의 일일 리포트는 금~일 합산이다",
+              "고객 분포의 신규/재구매는 전화번호로 식별되는 고객만 세며, 050 안심번호·무전화는 '미분류'로 따로 표기된다(루커 스튜디오와 같은 기준)"
             ],
             "keywords": [
               "리포트",

@@ -11,7 +11,7 @@ type Dash = {
   window_sales: number; window_start: string; window_end: string;
   this_month_sales: number; prev_month_sales: number; month_rr_pct: number | null;
   this_year_sales: number; last_year_sales: number; year_rr_pct: number | null;
-  order_count: number; aov: number; new_cust: number; repeat_cust: number;
+  order_count: number; aov: number; new_cust: number; repeat_cust: number; unclassified_orders?: number;
   channels: { name: string; month: number; prev_month: number }[];
   top10: { rank: number; code: string; revenue: number }[];
 };
@@ -50,7 +50,7 @@ export default function SalesHome() {
             <Kpi label={d.is_sunday ? "최근 3일(금~일)" : "어제 매출"} value={won(d.window_sales)} sub={`주문 ${d.order_count}건 · 객단가 ${won(d.aov)}`} />
             <Kpi label="이번달 누적" value={`${moneyCompact(d.this_month_sales)} 원`} sub={<>전월 대비 환산 {pctBadge(d.month_rr_pct)}</>} />
             <Kpi label="올해 누적" value={`${moneyCompact(d.this_year_sales)} 원`} sub={<>전년 대비 페이스 {pctBadge(d.year_rr_pct)}</>} accent />
-            <Kpi label="신규 : 재구매" value={`${d.new_cust} : ${d.repeat_cust}`} sub={`${d.is_sunday ? "최근 3일" : "어제"} 기준 고객 수`} />
+            <Kpi label="신규 : 재구매" value={`${d.new_cust} : ${d.repeat_cust}`} sub={`${d.is_sunday ? "최근 3일" : "어제"} 기준 고객 수${d.unclassified_orders ? ` · 미분류 ${d.unclassified_orders}건` : ""}`} />
           </div>
 
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 12, marginTop: 12 }}>

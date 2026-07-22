@@ -48,7 +48,7 @@ export function buildDailyHtml(s: DailyStats): string {
   const kpiHtml = `
     <table width="100%" cellpadding="0" cellspacing="0">
       <tr>${kpiCell(`${windowLabel} 매출`, won(s.window_sales), daySub)}${kpiCell("객단가", won(s.aov), `<span style="color:${C_MUTED}">주문 ${s.order_count}건</span>`)}</tr>
-      <tr>${kpiCell("신규 : 재구매", `${s.new_ratio.toFixed(0)} : ${s.repeat_ratio.toFixed(0)}`, `<span style="color:${C_MUTED}">신규 ${s.new_cust} / 재구매 ${s.repeat_cust}명</span>`)}${kpiCell("최고 / 최저 건", `${won(s.max_order)} / ${won(s.min_order)}`, `<span style="color:${C_MUTED}">${esc(s.max_order_codes)} / ${esc(s.min_order_codes)}</span>`)}</tr>
+      <tr>${kpiCell("신규 : 재구매", `${s.new_ratio.toFixed(0)} : ${s.repeat_ratio.toFixed(0)}`, `<span style="color:${C_MUTED}">신규 ${s.new_cust} / 재구매 ${s.repeat_cust}명${s.unclassified_orders > 0 ? ` &middot; 미분류 ${s.unclassified_orders}건` : ""}</span>`)}${kpiCell("최고 / 최저 건", `${won(s.max_order)} / ${won(s.min_order)}`, `<span style="color:${C_MUTED}">${esc(s.max_order_codes)} / ${esc(s.min_order_codes)}</span>`)}</tr>
     </table>`;
 
   // 누적 2칸
@@ -187,7 +187,7 @@ export function buildWeeklyHtml(s: WeeklyStats): string {
   const kpiHtml = `
     <table width="100%" cellpadding="0" cellspacing="0">
       <tr>${kpiCell("주간 매출", won(s.week_sales), weekSub)}${kpiCell("객단가", won(s.aov), `<span style="color:${C_MUTED}">주문 ${s.order_count}건</span>`)}</tr>
-      <tr>${kpiCell("신규 : 재구매", `${s.new_ratio.toFixed(0)} : ${s.repeat_ratio.toFixed(0)}`, `<span style="color:${C_MUTED}">신규 ${s.new_cust} / 재구매 ${s.repeat_cust}명</span>`)}${kpiCell("최고 / 최저 건", `${won(s.max_order)} / ${won(s.min_order)}`, `<span style="color:${C_MUTED}">${esc(s.max_codes)} / ${esc(s.min_codes)}</span>`)}</tr>
+      <tr>${kpiCell("신규 : 재구매", `${s.new_ratio.toFixed(0)} : ${s.repeat_ratio.toFixed(0)}`, `<span style="color:${C_MUTED}">신규 ${s.new_cust} / 재구매 ${s.repeat_cust}명${s.unclassified_orders > 0 ? ` &middot; 미분류 ${s.unclassified_orders}건` : ""}</span>`)}${kpiCell("최고 / 최저 건", `${won(s.max_order)} / ${won(s.min_order)}`, `<span style="color:${C_MUTED}">${esc(s.max_codes)} / ${esc(s.min_codes)}</span>`)}</tr>
     </table>`;
 
   // 채널별 주간(전주 대비)
