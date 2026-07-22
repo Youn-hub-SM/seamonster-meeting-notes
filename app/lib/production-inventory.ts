@@ -2,7 +2,7 @@ import { supabaseAdmin } from "./supabase";
 import { getLedgerVelocity } from "./production-velocity";
 import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promotions";
 import { getSafetyAdjusts, effectiveDelta, effectiveExclude } from "./production-safety-adjust";
-import { getLeadDays } from "./production-config";
+import { getLeadDays, LINK_B2B_ORDERS_TO_PRODUCTION } from "./production-config";
 
 // 자체 재고원장(inventory_txns) 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
 //  /api/production/inventory 와 생산 조언이 공유 — 숫자 일관성 유지.
@@ -87,11 +87,11 @@ export async function getInventoryRows(): Promise<InventoryResult> {
     }
   }
 
-  // 3) B2B 수요: 생산대기·생산중 발주 라인아이템 합 (SKU 기준)
-  const { data: orders, error: oErr } = await sb
-    .from("orders")
-    .select("id, production_status, order_items(product_id, qty)")
-    .in("production_status", ["생산대기", "생산중"]);
+  // 3) B2B 수요: 생산대기·생산중 발주 라인아이템 합 (SKU 기준).
+  //  재고 생산을 별도 운영하면(플래그 off) B2B 수요는 재고 조언 계산에서 제외.
+  const { data: orders, error: oErr } = LINK_B2B_ORDERS_TO_PRODUCTION
+    ? await sb.from("orders").select("id, production_status, order_items(product_id, qty)").in("production_status", ["생산대기", "생산중"])
+    : { data: [] as unknown, error: null };
   if (oErr) throw oErr;
 
   const demandBySku = new Map<string, number>();

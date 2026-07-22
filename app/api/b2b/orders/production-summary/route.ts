@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadProdItemMaps } from "@/app/lib/production-items";
+import { LINK_B2B_ORDERS_TO_PRODUCTION } from "@/app/lib/production-config";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,8 @@ type DayBucket = {
 
 export async function GET(_req: NextRequest) {
   try {
+    // 재고 생산은 '도매 재고 생산 요청'으로 별도 운영 — B2B 발주는 생산 계획에 자동 반영하지 않음.
+    if (!LINK_B2B_ORDERS_TO_PRODUCTION) return NextResponse.json({ ok: true, days: [] });
     const sb = supabaseAdmin();
     const [{ data, error }, maps] = await Promise.all([
       sb.from("orders")

@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getManualProductions } from "@/app/lib/production-manual";
 import { loadProdItemMaps } from "@/app/lib/production-items";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
+import { LINK_B2B_ORDERS_TO_PRODUCTION } from "@/app/lib/production-config";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +28,14 @@ export async function GET() {
     const sb = supabaseAdmin();
     const sel = "id, order_no, production_status, production_date, companies:company_id(name), order_items(product_id, product_name, spec, qty, sort_order)";
 
+    // 재고 생산을 별도 운영하면(플래그 off) B2B 발주 카드는 보드에 표시하지 않음 — 수동·도매요청만.
     const [pendingRes, doneRes, maps] = await Promise.all([
-      sb.from("orders").select(sel).in("production_status", ["생산대기", "생산중"]).order("production_date", { ascending: true }),
-      sb.from("orders").select(sel).eq("production_status", "생산완료").gte("production_date", cutoff).order("production_date", { ascending: false }),
+      LINK_B2B_ORDERS_TO_PRODUCTION
+        ? sb.from("orders").select(sel).in("production_status", ["생산대기", "생산중"]).order("production_date", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
+      LINK_B2B_ORDERS_TO_PRODUCTION
+        ? sb.from("orders").select(sel).eq("production_status", "생산완료").gte("production_date", cutoff).order("production_date", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
       loadProdItemMaps(),
     ]);
     if (pendingRes.error) throw pendingRes.error;

@@ -2,10 +2,11 @@ import { supabaseAdmin } from "./supabase";
 import { getManualProductions } from "./production-manual";
 import { loadProdItemMaps } from "./production-items";
 import { loadRequests } from "./wholesale-production-db";
+import { LINK_B2B_ORDERS_TO_PRODUCTION } from "./production-config";
 
 // ─────────────────────────────────────────────
 // 생산요청서 — 제조사에 보낼 "이 기간에 이 품목 몇 개 생산" 집계.
-//  B2B 발주=생산예정일, 수동 일정=생산일, 도매 생산요청=생산마감일 기준(생산 일정 화면과 동일 축).
+//  수동 일정=생산일, 도매 생산요청=생산마감일 기준. (B2B 발주 연동은 LINK_B2B_ORDERS_TO_PRODUCTION 로 게이팅)
 // ─────────────────────────────────────────────
 
 export const PERIOD_DAYS = [1, 7, 14, 30] as const;
@@ -32,13 +33,16 @@ export async function getRequestRows(days: number, date: string): Promise<{ from
   const { from, to, label } = periodRange(days, date);
   const sb = supabaseAdmin();
 
-  // B2B 발주(생산대기·생산중) 중 생산예정일이 기간 내인 라인아이템 + SKU 매핑
+  // B2B 발주(생산대기·생산중) 중 생산예정일이 기간 내인 라인아이템 + SKU 매핑.
+  //  재고 생산을 별도 운영하면(플래그 off) B2B 발주는 집계에서 제외 — 빈 조회로 대체.
   const [{ data: orders, error }, maps] = await Promise.all([
-    sb.from("orders")
-      .select("production_date, production_status, order_items(product_id, product_name, spec, qty)")
-      .in("production_status", ["생산대기", "생산중"])
-      .gte("production_date", from)
-      .lte("production_date", to),
+    LINK_B2B_ORDERS_TO_PRODUCTION
+      ? sb.from("orders")
+          .select("production_date, production_status, order_items(product_id, product_name, spec, qty)")
+          .in("production_status", ["생산대기", "생산중"])
+          .gte("production_date", from)
+          .lte("production_date", to)
+      : Promise.resolve({ data: [], error: null }),
     loadProdItemMaps(),
   ]);
   if (error) throw error;
