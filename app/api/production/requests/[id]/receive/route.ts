@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const { id: requestId } = await params;
     const b = (await req.json()) as Record<string, unknown>;
     const item_id = String(b.item_id || "");
-    const qty = Math.round(Number(b.qty) || 0);
+    const qty = Math.round((Number(b.qty) || 0) * 100) / 100;
     if (!item_id) return NextResponse.json({ ok: false, error: "품목을 선택하세요." }, { status: 400 });
     if (qty === 0) return NextResponse.json({ ok: false, error: "입고 수량을 입력하세요.(초과·수정은 음수도 가능)" }, { status: 400 });
 

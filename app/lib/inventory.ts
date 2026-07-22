@@ -59,7 +59,7 @@ export interface InventoryRow {
 // 입력값(양수 수량 또는 조정 델타) → 부호 있는 재고 변화량.
 //  입고 = +수량, 출고 = -수량, 조정 = 입력값 그대로(부호 허용).
 export function signedQty(type: InvTxnType, input: number): number {
-  const n = Math.round(Number(input) || 0);
+  const n = Math.round((Number(input) || 0) * 100) / 100; // 재고 수량은 소수 둘째자리까지 허용
   if (type === "입고") return Math.abs(n);
   if (type === "출고") return -Math.abs(n);
   return n; // 조정

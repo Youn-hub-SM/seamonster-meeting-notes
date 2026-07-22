@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     const insert: Record<string, unknown>[] = [];
     for (const r of rows) {
       if (!r || !r.product_id || r.target == null) continue;
-      const target = Math.round(Number(r.target));
+      const target = Math.round(Number(r.target) * 100) / 100;
       if (!Number.isFinite(target) || target < 0) continue;
       const delta = target - (stock.get(r.product_id) || 0);
       if (delta === 0) continue;

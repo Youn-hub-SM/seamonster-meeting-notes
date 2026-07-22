@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       if (!ids || ids.length === 0) { errors.push({ line: r, msg: `SKU '${sku}' 품목을 찾을 수 없음` }); continue; }
       if (ids.length > 1) { errors.push({ line: r, msg: `SKU '${sku}' 가 ${ids.length}개 품목과 중복` }); continue; }
       if (targetRaw.trim() === "") { errors.push({ line: r, msg: "실사수량이 비었습니다." }); continue; }
-      const target = Math.round(xlsxNum(targetRaw));
+      const target = Math.round(xlsxNum(targetRaw) * 100) / 100;
       if (target < 0) { errors.push({ line: r, msg: "실사수량은 0 이상" }); continue; }
       const p = ids[0];
       const current = stock.get(p.id) || 0;

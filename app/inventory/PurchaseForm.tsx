@@ -133,7 +133,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
               {lines.map((l) => (
                 <tr key={l.key}>
                   <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 11 }}>{l.sub}</div>}</td>
-                  <td className="num"><input className="b2b-input" type="number" min={1} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 80, textAlign: "right", padding: "6px 8px" }} /></td>
+                  <td className="num"><input className="b2b-input" type="number" min={0.01} step={0.01} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 80, textAlign: "right", padding: "6px 8px" }} /></td>
                   <td className="num"><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, "price", e.target.value)} style={{ width: 120, textAlign: "right", padding: "6px 8px" }} /></td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{amountOf(l).toLocaleString()}</td>
                   <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>

@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     const product_id = String(b.product_id || "");
     const from = String(b.from || "");
     const to = String(b.to || "");
-    const qty = Math.round(Number(b.qty) || 0);
+    const qty = Math.round((Number(b.qty) || 0) * 100) / 100;
     if (!product_id) return NextResponse.json({ ok: false, error: "품목을 선택하세요." }, { status: 400 });
     if (!CHANNELS.includes(from as never) || !CHANNELS.includes(to as never)) return NextResponse.json({ ok: false, error: "채널이 올바르지 않습니다." }, { status: 400 });
     if (from === to) return NextResponse.json({ ok: false, error: "옮길 채널이 서로 달라야 합니다." }, { status: 400 });

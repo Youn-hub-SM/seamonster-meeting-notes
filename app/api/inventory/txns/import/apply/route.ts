@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const expanded: ImportTxn[] = [];
     for (const r of valid) {
       if (!isBundleId(bundles, r.product_id)) { expanded.push(r); continue; }
-      const per = expandBundleQty(bundles, r.product_id, Math.abs(Math.round(Number(r.qty))));
+      const per = expandBundleQty(bundles, r.product_id, Math.abs(Math.round(Number(r.qty) * 100) / 100));
       for (const [pid, q] of per) {
         expanded.push({
           ...r, product_id: pid, qty: signedQty(r.type, q),
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         product_id: r.product_id,
         type: r.type,
         channel,
-        qty: Math.round(Number(r.qty)),
+        qty: Math.round(Number(r.qty) * 100) / 100,
         unit_amount: r.unit_amount == null ? null : Math.max(0, Math.round(Number(r.unit_amount))),
         txn_date: /^\d{4}-\d{2}-\d{2}$/.test(String(r.txn_date)) ? r.txn_date : undefined,
         partner: r.partner ? String(r.partner).slice(0, 200) : null,

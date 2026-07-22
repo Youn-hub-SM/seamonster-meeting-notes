@@ -41,7 +41,7 @@ export default function InventoryMovePage() {
 
   const fromQty = pid ? (dir.from === "소매" ? retail.get(pid) : whole.get(pid)) ?? 0 : 0;
   const toQty = pid ? (dir.to === "소매" ? retail.get(pid) : whole.get(pid)) ?? 0 : 0;
-  const nQty = Math.max(0, Math.round(Number(qty) || 0));
+  const nQty = Math.max(0, Math.round((Number(qty) || 0) * 100) / 100);
   const shortage = pid && nQty > 0 && nQty > fromQty;
 
   const options = useMemo(() => products.map((p) => ({ id: p.id, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })), [products]);
@@ -115,7 +115,7 @@ export default function InventoryMovePage() {
         <div className="b2b-field-row" style={{ marginTop: 12 }}>
           <div className="b2b-field">
             <label className="b2b-field-label">옮길 수량</label>
-            <input className="b2b-input b2b-money" type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
+            <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
             {shortage && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>{dir.from} 재고({fromQty.toLocaleString()})보다 많아요. 그래도 옮기면 {dir.from}가 마이너스가 됩니다.</span>}
           </div>
           <div className="b2b-field">

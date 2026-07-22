@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const todayKst = kstToday();
     const items = (body.items || [])
       .filter((i) => i && i.sku && Number(i.qty) > 0)
-      .map((i) => ({ sku: String(i.sku).trim(), qty: Math.round(Number(i.qty)), orderDate: validOrderDate(i.orderDate, todayKst) }));
+      .map((i) => ({ sku: String(i.sku).trim(), qty: Math.round(Number(i.qty) * 100) / 100, orderDate: validOrderDate(i.orderDate, todayKst) }));
     if (!items.length) return NextResponse.json({ ok: false, error: "출고할 품목이 없습니다." }, { status: 400 });
     const commit = !!body.commit;
     const sb = supabaseAdmin();
