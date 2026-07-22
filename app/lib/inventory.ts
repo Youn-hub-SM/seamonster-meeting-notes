@@ -53,6 +53,7 @@ export interface InventoryRow {
   barcode: string | null;
   location: string | null;
   low: boolean;            // min_qty>0 이고 qty<=min_qty
+  is_bundle?: boolean;     // 묶음(세트) 상품 여부 — 구매/판매 검색에서 제외 토글용
 }
 
 // 입력값(양수 수량 또는 조정 델타) → 부호 있는 재고 변화량.

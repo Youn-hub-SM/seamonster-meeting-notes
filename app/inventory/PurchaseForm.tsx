@@ -7,7 +7,7 @@ import { ChannelPicker } from "./ChannelTabs";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
-export type PickProduct = { id: string; name: string; sku: string | null; spec: string | null; unit: string; cost_price: number; purchase_price: number; origin: string | null; attrs: string | null; qty: number };
+export type PickProduct = { id: string; name: string; sku: string | null; spec: string | null; unit: string; cost_price: number; purchase_price: number; origin: string | null; attrs: string | null; qty: number; is_bundle?: boolean };
 type Line = { key: string; product_id: string; name: string; sub: string; unit: string; qty: string; price: string };
 
 // BoxHero 구매창 스타일 — 전체 페이지 폼. 여러 제품을 담아 입고/출고를 한 번에. 제품 검색은 초성·다중단어 지원.
@@ -25,6 +25,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const [lines, setLines] = useState<Line[]>([]);
   const [done, setDone] = useState(true); // 즉시 입고/출고처리(기본 체크) — 해제 시 '대기'
   const [search, setSearch] = useState("");
+  const [excludeBundles, setExcludeBundles] = useState(true); // 묶음(세트) 제외 — 기본 켜짐(세트는 자체 재고 없음)
   const [active, setActive] = useState(-1); // 키보드 하이라이트 인덱스
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -33,8 +34,11 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const matches = useMemo(() => {
     const q = search.trim();
     if (!q) return [];
-    return products.filter((p) => matchKoQuery(`${p.name} ${p.sku || ""} ${p.spec || ""} ${p.origin || ""} ${p.attrs || ""} ${p.unit}`, q)).slice(0, 12);
-  }, [products, search]);
+    return products
+      .filter((p) => !excludeBundles || !p.is_bundle)
+      .filter((p) => matchKoQuery(`${p.name} ${p.sku || ""} ${p.spec || ""} ${p.origin || ""} ${p.attrs || ""} ${p.unit}`, q))
+      .slice(0, 12);
+  }, [products, search, excludeBundles]);
 
   // 활성 항목을 보이게 스크롤
   useEffect(() => { suggestRef.current?.querySelector<HTMLElement>(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);
@@ -96,7 +100,13 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       </div>
 
       <section className="b2b-card">
-        <div className="b2b-card-head"><span className="b2b-card-title">제품 선택</span></div>
+        <div className="b2b-card-head" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <span className="b2b-card-title">제품 선택</span>
+          <label className="sm-row" style={{ gap: 6, fontSize: 12.5, color: "var(--sm-text-mid)", cursor: "pointer" }}>
+            <input type="checkbox" className="b2b-checkbox" checked={excludeBundles} onChange={(e) => setExcludeBundles(e.target.checked)} />
+            묶음(세트) 제외
+          </label>
+        </div>
 
         {/* 큰 검색창 — 이름·옵션·SKU·초성·여러 단어("광어 100 1kg") */}
         <div style={{ position: "relative", marginBottom: 12 }}>

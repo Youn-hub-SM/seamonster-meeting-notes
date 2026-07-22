@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { getAllBundles } from "@/app/lib/product-bundles";
 import type { InventoryRow } from "@/app/lib/inventory";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +28,11 @@ export async function GET(req: NextRequest) {
       if (!full.error) return full;
       return sb.from("products").select("id, sku, name, spec, unit, cost_price").eq("active", true).order("name", { ascending: true });
     };
-    const [pr, tr, ir] = await Promise.all([
+    const [pr, tr, ir, bundles] = await Promise.all([
       productsQ(),
       stockRpc(), // 품목당 1행 집계(1000행 제한 무관) — 채널 필터 반영
       sb.from("inventory_items").select("product_id, min_qty, barcode, location"),
+      getAllBundles(sb), // 부모 product_id → 구성품[] (037 미적용이면 빈 맵 → is_bundle 전부 false)
     ]);
     if (pr.error) throw pr.error;
     if (tr.error) throw tr.error;
@@ -52,6 +54,7 @@ export async function GET(req: NextRequest) {
         qty, min_qty: meta.min_qty, value: qty * cost,
         barcode: meta.barcode, location: meta.location,
         low: meta.min_qty > 0 && qty <= meta.min_qty,
+        is_bundle: bundles.has(p.id),
       };
     });
     return NextResponse.json({ ok: true, rows });

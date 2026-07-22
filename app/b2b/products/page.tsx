@@ -59,7 +59,7 @@ export default function ProductsPage() {
     const q = search.trim().toLowerCase();
     if (q) {
       arr = arr.filter((p) =>
-        [p.name, p.sku, p.spec, p.notes].filter(Boolean).some((v) => v!.toLowerCase().includes(q))
+        [p.name, p.sku, p.spec, p.attrs, p.origin, p.notes].filter(Boolean).some((v) => v!.toLowerCase().includes(q))
       );
     }
     return arr;
@@ -224,7 +224,7 @@ export default function ProductsPage() {
           <input
             type="text"
             className="b2b-search"
-            placeholder="품목명·SKU·옵션·메모 검색"
+            placeholder="품목명·SKU·옵션·속성·원산지·메모 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
