@@ -5,7 +5,8 @@
 //  · P 박스타입 = 주문 총중량 U 로 구간 (≤2.7→1, ≤5.2→2, >5.2→3)
 //  · Q 운임구분 = 1 (도착보장 3)
 //  · R 기본운임 = U 구간 (≤2.7→2700, ≤5.2→3300, >5.2→3900)
-//  주문 총중량 U = 같은 (주문번호 B, 주소 E) 라인들의 Σ( 코드 총중량 × 수량 I ).
+//  주문 총중량 U = 같은 (주문번호 B, 주소 E, 배송타입) 라인들의 Σ( 코드 총중량 × 수량 I ).
+//  배송타입 = M열 '네이버 도착보장' 여부. 일반/도착보장은 다른 박스로 나가므로 혼합 주문은 타입별 2박스.
 
 import { type FulfillRates, type BoxTier, DEFAULT_RATES, boxTypeOf, baseFeeOf } from "./fulfill-rates";
 
@@ -94,13 +95,14 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     kept.push(r);
   }
 
-  // 2) 주문키(주문번호+주소)별 총중량 U
-  const gkey = (r: unknown[]) => `${String(r[IDX.orderNo] ?? "")}||${String(r[IDX.addr] ?? "")}`;
+  // 2) 박스키(주문번호+주소+배송타입)별 총중량 U — 일반과 도착보장은 발주 파일도 분리되고
+  //    물리적으로 다른 박스로 나가므로, 한 주문에 둘이 섞여 있으면 타입별로 나눠 센다(일반 1박스 + 도착보장 1박스).
+  const isGuarRow = (r: unknown[]) => String(r[IDX.prop] ?? "").trim() === GUARANTEE_LABEL;
+  const gkey = (r: unknown[]) => `${String(r[IDX.orderNo] ?? "")}||${String(r[IDX.addr] ?? "")}||${isGuarRow(r) ? "G" : "N"}`;
   const groupW = new Map<string, number>();
-  const groupGuar = new Map<string, boolean>();  // 주문에 도착보장 라인이 하나라도 있으면 true
-  const groupDb = new Map<string, Set<string>>();   // 주문키 → DB번호(A열, 비어있지 않은 것만)
-  const groupAddr = new Map<string, string>();      // 주문키 → 주소(공백 제거) — 합배송 2중 체크용
-  const groupName = new Map<string, string>();      // 주문키 → 받는분성명
+  const groupDb = new Map<string, Set<string>>();   // 박스키 → DB번호(A열, 비어있지 않은 것만)
+  const groupAddr = new Map<string, string>();      // 박스키 → 주소(공백 제거) — 합배송 2중 체크용
+  const groupName = new Map<string, string>();      // 박스키 → 받는분성명
   const unmatched = new Set<string>();
   for (const r of kept) {
     const raw = String(r[IDX.sku] ?? "").trim();
@@ -109,7 +111,6 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     const t = (info?.order_weight ?? 0) * (Number(r[IDX.qty]) || 0);
     const k = gkey(r);
     groupW.set(k, (groupW.get(k) ?? 0) + t);
-    if (String(r[IDX.prop] ?? "").trim() === GUARANTEE_LABEL) groupGuar.set(k, true);
     const db = String(r[IDX.dbNo] ?? "").trim();
     if (db) { const s = groupDb.get(k) ?? new Set<string>(); s.add(db); groupDb.set(k, s); }
     if (!groupAddr.has(k)) groupAddr.set(k, String(r[IDX.addr] ?? "").replace(/\s+/g, ""));
@@ -128,8 +129,9 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     parent.set(x, r);
     return r;
   };
+  //  같은 배송타입끼리만 병합(일반↔도착보장은 다른 박스로 나가므로 DB번호가 같아도 합치지 않음)
   const byDb = new Map<string, string[]>();
-  for (const [k, dbs] of groupDb) for (const db of dbs) { const a = byDb.get(db) ?? []; a.push(k); byDb.set(db, a); }
+  for (const [k, dbs] of groupDb) for (const db of dbs) { const bk = `${db}||${k.endsWith("||G") ? "G" : "N"}`; const a = byDb.get(bk) ?? []; a.push(k); byDb.set(bk, a); }
   for (const keys of byDb.values()) {
     if (keys.length < 2) continue;
     for (let i = 1; i < keys.length; i++) {
@@ -139,12 +141,10 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
       if (sameAddr || sameName) parent.set(find(b), find(a));
     }
   }
-  const superW = new Map<string, number>();       // 병합 후 박스별 총중량
-  const superGuar = new Map<string, boolean>();
+  const superW = new Map<string, number>();       // 병합 후 박스별 총중량 (키의 타입 접미사 G/N = 도착보장 여부)
   for (const [k, U] of groupW) {
     const r0 = find(k);
     superW.set(r0, (superW.get(r0) ?? 0) + U);
-    if (groupGuar.get(k) === true) superGuar.set(r0, true);
   }
   const mergedParcels = groupW.size - superW.size; // 병합으로 줄어든 박스 수
 
@@ -153,8 +153,8 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   const addressWarnings: FulfillResult["addressWarnings"] = [];
   kept.forEach((r, i) => {
     const info = codeMap.get(String(r[IDX.sku] ?? "").trim().toUpperCase());
-    const U = groupW.get(gkey(r)) ?? 0;
-    const isGuar = String(r[IDX.prop] ?? "").trim() === GUARANTEE_LABEL;
+    const U = groupW.get(gkey(r)) ?? 0;   // 자기 박스(주문+주소+타입) 중량 — 혼합 주문이면 일반/도착보장 각자 중량
+    const isGuar = isGuarRow(r);
     const out: unknown[] = [];
     for (let c = 0; c < 13; c++) out.push(r[c] ?? "");     // A~M 원본 통과(타입 유지)
     out.push(info?.courier_name ?? "");                     // N 품목명
@@ -175,7 +175,7 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   let parcels = 0, parcelsGuar = 0, baseNormal = 0, baseGuar = 0;
   for (const [k, U] of superW) {
     parcels++;
-    const guar = superGuar.get(k) === true;
+    const guar = k.endsWith("||G");
     const c = counts.get(boxCategory(U))!;
     if (guar) { parcelsGuar++; c.guarantee++; baseGuar += baseFeeR(U); }
     else { c.normal++; baseNormal += baseFeeR(U); }
