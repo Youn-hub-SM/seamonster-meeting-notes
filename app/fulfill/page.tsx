@@ -7,7 +7,7 @@ type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
 type Parcel = { category: string; normal: number; guarantee: number };
 type Result = {
-  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
+  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number; mergedParcels?: number };
   fees: { baseNormal: number; baseGuar: number; guarExtra: number };
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
@@ -295,7 +295,7 @@ export default function FulfillPage() {
       {step === 2 && res && (
         <section className="b2b-card">
           <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <span className="b2b-card-title">③ 배송일지 기록 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 택배 {res.stats.parcels}건 (일반 {res.stats.parcels - res.stats.parcelsGuar} · 도착보장 {res.stats.parcelsGuar})</span></span>
+            <span className="b2b-card-title">③ 배송일지 기록 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 택배 {res.stats.parcels}건 (일반 {res.stats.parcels - res.stats.parcelsGuar} · 도착보장 {res.stats.parcelsGuar}){(res.stats.mergedParcels ?? 0) > 0 && <> · 합배송 병합 {res.stats.mergedParcels}건</>}</span></span>
             <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <input type="date" className="b2b-input" value={recordDate} onChange={(e) => setRecordDate(e.target.value)} style={{ width: "auto", padding: "5px 8px", fontSize: 12 }} />
               <div className="sm-tabs" style={{ margin: 0 }} title="같은 날짜에 이미 기록이 있을 때">

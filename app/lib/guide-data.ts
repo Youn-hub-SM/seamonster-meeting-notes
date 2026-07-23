@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-07-22";
+export const GUIDE_UPDATED = "2026-07-23";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -357,6 +357,7 @@ export const GUIDE: GuideCategory[] = [
               "4단계에서 출고 목록·재고를 확인하고 '출고 완료'를 누른다"
             ],
             "tips": [
+              "합배송: 고객주문번호가 달라도 DB번호(A열)가 같고 주소 또는 받는분이 같으면 한 박스로 계산된다 — 병합되면 3단계 제목에 '합배송 병합 N건'이 표시된다",
               "이미 출고 완료된 주문이 파일에 섞여 있으면(누적 다운로드 등) 자동으로 제외되고 '이미 처리된 주문 제외' 카드에 건수가 표시된다",
               "같은 발주를 '더하기'로 두 번 기록하면 이중 집계된다. 같은 데이터를 다시 기록할 땐 '덮어쓰기'를 쓴다",
               "'출고 완료'는 소매 재고를 실제로 차감한다. 같은 발주 재출고는 경고가 뜨며, 강행하면 재고가 또 차감된다",

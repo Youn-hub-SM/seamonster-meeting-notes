@@ -74,7 +74,7 @@ export type FulfillResult = {
   headers: string[];
   normal: unknown[][];        // A~R (18열) 일반
   guarantee: unknown[][];     // A~R 도착보장(Q=3)
-  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number };
+  stats: { total: number; excludedNothing: number; normalCount: number; guaranteeCount: number; parcels: number; parcelsGuar: number; mergedParcels: number };
   fees: { baseNormal: number; baseGuar: number; guarExtra: number }; // baseGuar=도착보장 기본운임(중량구간 + 143×건). guarExtra=0(추가운임은 배송일지에서 제주 등 수동). 배송일지 기록용
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
@@ -98,6 +98,9 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   const gkey = (r: unknown[]) => `${String(r[IDX.orderNo] ?? "")}||${String(r[IDX.addr] ?? "")}`;
   const groupW = new Map<string, number>();
   const groupGuar = new Map<string, boolean>();  // 주문에 도착보장 라인이 하나라도 있으면 true
+  const groupDb = new Map<string, Set<string>>();   // 주문키 → DB번호(A열, 비어있지 않은 것만)
+  const groupAddr = new Map<string, string>();      // 주문키 → 주소(공백 제거) — 합배송 2중 체크용
+  const groupName = new Map<string, string>();      // 주문키 → 받는분성명
   const unmatched = new Set<string>();
   for (const r of kept) {
     const raw = String(r[IDX.sku] ?? "").trim();
@@ -107,7 +110,43 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     const k = gkey(r);
     groupW.set(k, (groupW.get(k) ?? 0) + t);
     if (String(r[IDX.prop] ?? "").trim() === GUARANTEE_LABEL) groupGuar.set(k, true);
+    const db = String(r[IDX.dbNo] ?? "").trim();
+    if (db) { const s = groupDb.get(k) ?? new Set<string>(); s.add(db); groupDb.set(k, s); }
+    if (!groupAddr.has(k)) groupAddr.set(k, String(r[IDX.addr] ?? "").replace(/\s+/g, ""));
+    if (!groupName.has(k)) groupName.set(k, String(r[IDX.name] ?? "").trim());
   }
+
+  // 2b) 합배송 병합 — 고객주문번호가 달라도 DB번호(A열)가 같으면 실제로는 한 박스(합배송)로 나간다.
+  //  2중 체크: 주소(공백 제거) 또는 받는분성명까지 같을 때만 병합 — 무관한 주문에 같은 DB번호가 잘못
+  //  들어있는 경우(데이터 오류)의 오병합 방어. 병합은 택배량·운임·배송일지 '집계'에만 적용하고,
+  //  CNplus 파일의 각 행(P 박스타입·R 기본운임)은 기존 그대로 둔다 — 물류사로 나가는 파일은 불변.
+  const parent = new Map<string, string>();
+  for (const k of groupW.keys()) parent.set(k, k);
+  const find = (x: string): string => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    parent.set(x, r);
+    return r;
+  };
+  const byDb = new Map<string, string[]>();
+  for (const [k, dbs] of groupDb) for (const db of dbs) { const a = byDb.get(db) ?? []; a.push(k); byDb.set(db, a); }
+  for (const keys of byDb.values()) {
+    if (keys.length < 2) continue;
+    for (let i = 1; i < keys.length; i++) {
+      const a = keys[0], b = keys[i];
+      const sameAddr = !!groupAddr.get(a) && groupAddr.get(a) === groupAddr.get(b);
+      const sameName = !!groupName.get(a) && groupName.get(a) === groupName.get(b);
+      if (sameAddr || sameName) parent.set(find(b), find(a));
+    }
+  }
+  const superW = new Map<string, number>();       // 병합 후 박스별 총중량
+  const superGuar = new Map<string, boolean>();
+  for (const [k, U] of groupW) {
+    const r0 = find(k);
+    superW.set(r0, (superW.get(r0) ?? 0) + U);
+    if (groupGuar.get(k) === true) superGuar.set(r0, true);
+  }
+  const mergedParcels = groupW.size - superW.size; // 병합으로 줄어든 박스 수
 
   // 3) 18열 생성 + 도착보장 분리 + 주소 경고
   const normal: unknown[][] = [], guarantee: unknown[][] = [];
@@ -129,13 +168,14 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     if (keywords.some((k) => k && addr.includes(k))) addressWarnings.push({ rowNo: i + 1, addr, name: String(r[IDX.name] ?? "") });
   });
 
-  // 택배량: 주문(주문번호+주소) 단위로 박스종류별 일반/도착보장 개수 집계
+  // 택배량: 합배송 병합 후 박스 단위로 박스종류별 일반/도착보장 개수 집계
+  //  (병합된 박스는 합산 중량으로 종류·기본운임 산정 — 실제 발송 박스와 일치)
   const counts = new Map<string, { normal: number; guarantee: number }>();
   for (const cat of BOX_CATEGORIES) counts.set(cat, { normal: 0, guarantee: 0 });
   let parcels = 0, parcelsGuar = 0, baseNormal = 0, baseGuar = 0;
-  for (const [k, U] of groupW) {
+  for (const [k, U] of superW) {
     parcels++;
-    const guar = groupGuar.get(k) === true;
+    const guar = superGuar.get(k) === true;
     const c = counts.get(boxCategory(U))!;
     if (guar) { parcelsGuar++; c.guarantee++; baseGuar += baseFeeR(U); }
     else { c.normal++; baseNormal += baseFeeR(U); }
@@ -159,7 +199,7 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
 
   return {
     headers: CNPLUS_HEADERS, normal, guarantee,
-    stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar },
+    stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar, mergedParcels },
     fees: { baseNormal, baseGuar: baseGuar + rates.guarSurcharge * parcelsGuar, guarExtra: 0 }, // 도착보장 기본운임 = 중량구간 + 143×도착보장건. 추가운임은 배송일지에서 제주 등 수동
     parcelSummary,
     addressWarnings, unmatched: [...unmatched], outbound,
