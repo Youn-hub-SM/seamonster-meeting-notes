@@ -20,6 +20,7 @@ export type Answers = Record<string, AnswerVal>;
 export type CouponFieldType =
   | "radio" | "checkbox" | "text" | "number" | "textarea"
   | "datetime-range"   // 달력+시간(시작~종료)
+  | "date"             // 달력 단일 날짜("YYYY-MM-DD") — 발급일처럼 하루만 지정하는 항목
   | "int-days";        // 발급일 기준 N일(숫자 + 프리셋 칩, suffix "일")
 
 export type CouponField = {
@@ -145,8 +146,9 @@ const NAVER: CouponChannel = {
         optionsDisabledIf: [{ options: ["포인트"], when: { not: { key: "target", in: ["재구매 고객", "등급 고객"] } }, reason: "포인트는 재구매·등급 고객만 가능" }] },
       { key: "pointRate", label: "적립율", type: "number", suffix: "%", critical: true, showIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, requiredIf: { all: [{ key: "benefitKind", in: ["포인트"] }, { key: "target", in: ["재구매 고객", "등급 고객"] }] }, warn: true, help: "판매가의 15% 이하·최대 20만원. 원 단위 입력 불가(정책). 구매확정 시 지급(옵션가 포함, 배송비·추가구성·쿠폰할인 제외)." },
       { key: "couponKind", label: "쿠폰 종류", type: "radio", critical: true, options: ["상품중복할인", "스토어장바구니할인", "배송비할인"], default: "상품중복할인", showIf: { key: "benefitKind", in: ["쿠폰"] }, requiredIf: { key: "benefitKind", in: ["쿠폰"] }, help: "상품중복할인=옵션 1개당 1장(정률 최대 70%). 스토어장바구니=총결제금액 1장(혜택상품 '내스토어 전체'만). 배송비=배송비 1장(최소주문금액 판매가 기준)." },
-      { key: "issueLimit", label: "발급 건수", type: "radio", options: ["제한 없음(1인 1회)", "제한 있음(선착순)"], default: "제한 없음(1인 1회)", showIf: { key: "benefitKind", in: ["쿠폰"] } },
-      { key: "issueLimitN", label: "선착순 발급 건수", type: "number", suffix: "건", showIf: { key: "issueLimit", in: ["제한 있음(선착순)"] }, requiredIf: { key: "issueLimit", in: ["제한 있음(선착순)"] } },
+      // 발급 건수는 타겟팅-고객지정/그룹 화면에는 항목 자체가 없다 → 그 대상에서는 숨김.
+      { key: "issueLimit", label: "발급 건수", type: "radio", options: ["제한 없음(1인 1회)", "제한 있음(선착순)"], default: "제한 없음(1인 1회)", showIf: { all: [{ key: "benefitKind", in: ["쿠폰"] }, { not: { key: "target", in: ["타겟팅-고객지정", "타겟팅-그룹"] } }] } },
+      { key: "issueLimitN", label: "선착순 발급 건수", type: "number", suffix: "건", showIf: { all: [{ key: "issueLimit", in: ["제한 있음(선착순)"] }, { not: { key: "target", in: ["타겟팅-고객지정", "타겟팅-그룹"] } }] }, requiredIf: { all: [{ key: "issueLimit", in: ["제한 있음(선착순)"] }, { not: { key: "target", in: ["타겟팅-고객지정", "타겟팅-그룹"] } }] } },
       { key: "discountUnit", label: "할인 설정", type: "radio", critical: true, options: ["정률할인(%)", "정액할인(원)"], default: "정률할인(%)", showIf: { key: "benefitKind", in: ["쿠폰"] }, requiredIf: { key: "benefitKind", in: ["쿠폰"] }, help: "단위를 먼저 고르면 아래 입력칸이 바뀝니다." },
       { key: "discountPct", label: "할인율", type: "number", suffix: "%", critical: true, showIf: { key: "discountUnit", in: ["정률할인(%)"] }, requiredIf: { key: "discountUnit", in: ["정률할인(%)"] }, help: "상품중복할인은 정률 최대 70%. 스토어장바구니는 최소주문금액의 70%까지." },
       { key: "discountAmt", label: "할인액", type: "number", suffix: "원", critical: true, showIf: { key: "discountUnit", in: ["정액할인(원)"] }, requiredIf: { key: "discountUnit", in: ["정액할인(원)"] } },
@@ -154,7 +156,10 @@ const NAVER: CouponChannel = {
       { key: "minAmount", label: "최소주문금액", type: "number", suffix: "원 이상", emptyText: "제한없음", showIf: { key: "benefitKind", in: ["쿠폰"] }, help: "산정 기준이 쿠폰마다 다릅니다. 배송비할인=판매가 기준, 상품중복할인=(판매가+옵션가)×수량−즉시/상품할인, 스토어장바구니=총결제금액(배송비 제외)." },
     ] },
     { title: "기간", desc: "언제 발급하고 언제까지 유효한가요?", fields: [
-      { key: "issuePeriod", label: "혜택 발급기간", type: "datetime-range", required: true, critical: true, help: "다운로드형=이 기간 동안 다운로드 노출 / 즉시발급형=이 날 즉시 지급. 첫구매·재구매·타겟팅그룹은 익일부터 적용." },
+      // 타겟팅-고객지정/그룹은 네이버 화면이 '발급일' 하루만 받는다(기간 아님) → 대상별로 필드를 분리.
+      { key: "issuePeriod", label: "혜택 발급기간", type: "datetime-range", required: true, critical: true, showIf: { not: { key: "target", in: ["타겟팅-고객지정", "타겟팅-그룹"] } }, help: "다운로드형=이 기간 동안 다운로드 노출 / 즉시발급형=이 날 즉시 지급. 첫구매·재구매는 익일부터 적용." },
+      { key: "issueDate", label: "혜택 발급일", type: "date", critical: true, showIf: { key: "target", in: ["타겟팅-고객지정"] }, requiredIf: { key: "target", in: ["타겟팅-고객지정"] }, warn: true, help: "*고객지정 유형은 당일 발급 가능하며, 등록 완료 시 쿠폰이 즉시 발급됩니다." },
+      { key: "issueDateGroup", label: "혜택 발급일", type: "date", critical: true, showIf: { key: "target", in: ["타겟팅-그룹"] }, requiredIf: { key: "target", in: ["타겟팅-그룹"] }, warn: true, help: "*설정된 발급일의 새벽~오전 중 고객에게 쿠폰이 즉시 발급됩니다." },
       { key: "validType", label: "쿠폰 유효기간", type: "radio", critical: true, options: ["기간으로 설정", "발급일 기준"], default: "발급일 기준", showIf: { key: "benefitKind", in: ["쿠폰"] }, requiredIf: { key: "benefitKind", in: ["쿠폰"] }, help: "포인트는 유효기간 개념이 없습니다." },
       { key: "validRange", label: "유효기간", type: "datetime-range", critical: true, showIf: { key: "validType", in: ["기간으로 설정"] }, requiredIf: { key: "validType", in: ["기간으로 설정"] }, warn: true, help: "유효 시작 ≥ 발급기간 시작, 유효 종료 ≥ 발급기간 종료." },
       { key: "validDays", label: "발급일로부터", type: "int-days", suffix: "일", presets: [7, 14, 30], default: "14", showIf: { key: "validType", in: ["발급일 기준"] }, requiredIf: { key: "validType", in: ["발급일 기준"] } },
@@ -169,7 +174,7 @@ const NAVER: CouponChannel = {
       { key: "productNames", label: "카테고리/상품명", type: "textarea", placeholder: "카테고리명 또는 상품명을 줄바꿈으로 (상품 선택 최대 500개)", showIf: { key: "applyProduct", in: ["카테고리 선택", "상품 선택"] }, requiredIf: { key: "applyProduct", in: ["카테고리 선택", "상품 선택"] } },
     ] },
   ],
-  checklist: ["혜택 이름 30자 이내(모바일 15자) 확인", "타겟팅 대상 확인 — 혜택종류·발급방법이 대상에서 자동 결정됨", "혜택 종류(쿠폰/포인트)와 값 확인", "발급기간·유효기간의 시작·종료 '시각' 확인", "혜택 상품 지정 확인"],
+  checklist: ["혜택 이름 30자 이내(모바일 15자) 확인", "타겟팅 대상 확인 — 혜택종류·발급방법이 대상에서 자동 결정됨", "혜택 종류(쿠폰/포인트)와 값 확인", "발급기간(또는 발급일)·유효기간 확인 — 기간은 시작·종료 '시각'까지", "혜택 상품 지정 확인"],
 };
 
 // ───────────────────────── 톡스토어(카카오) ─────────────────────────
@@ -316,6 +321,20 @@ function todayKst(): string {
   return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
+// 네이버 '발급 시작 시점' 단일 소스 — 대상에 따라 저장 위치가 다르다.
+//  타겟팅-고객지정/그룹 = 단일 발급일(issueDate/issueDateGroup, "YYYY-MM-DD"),
+//  그 외 = 발급기간(issuePeriod)의 시작("YYYY-MM-DDTHH:mm").
+//  ★이 대상들에서 issuePeriod 를 폴백으로 읽으면 안 된다 — 기본값(smartRange)이 숨은 채 남아 있어
+//   '미입력'인데도 오늘 날짜가 잡혀 즉시지급 경고가 조용히 사라진다.
+const NAVER_DATE_TARGETS = ["타겟팅-고객지정", "타겟팅-그룹"];
+function naverIssueStart(ch: CouponChannel, answers: Answers): string {
+  if (NAVER_DATE_TARGETS.includes(shownStr(ch, answers, "target"))) {
+    return shownStr(ch, answers, "issueDate") || shownStr(ch, answers, "issueDateGroup");
+  }
+  const ip = answers["issuePeriod"];
+  return isDateRange(ip) && ip.start ? ip.start : "";
+}
+
 // 채널별 '노출/발급 시작 시점' 파생 — 조기 노출 방지 배너·위험·체크리스트의 공용 소스.
 //  when=사람이 읽는 문자열, kind=문구 분기(immediate=등록 즉시 노출, scheduled=예정, conditional=조건/주기, none=미입력).
 //  range의 start는 shownStr로 못 읽음(문자열만 반환) → answers 직접 + isDateRange. radio(issue/exposeTime)만 shownStr.
@@ -341,9 +360,13 @@ export function deriveExposeStart(ch: CouponChannel, answers: Answers): { when: 
     return { when: "등록 즉시 (즉시 노출 설정)", kind: "immediate" };
   }
   if (ch.key === "naver") {
-    const start = startOf("issuePeriod");
-    if (!start) return { when: "발급기간 시작 미입력 — 반드시 채우세요", kind: "none" };
-    const nextDay = ["첫구매 고객", "재구매 고객", "타겟팅-그룹"].includes(s("target"));
+    const t = s("target");
+    const dateOnly = NAVER_DATE_TARGETS.includes(t);
+    const start = fmtDt(naverIssueStart(ch, answers));
+    if (!start) return { when: `${dateOnly ? "발급일" : "발급기간 시작"} 미입력 — 반드시 채우세요`, kind: "none" };
+    if (t === "타겟팅-고객지정") return { when: `${start} (당일 발급 가능 · 등록 완료 시 즉시 발급 · 회수 불가)`, kind: past(start) ? "immediate" : "scheduled" };
+    if (t === "타겟팅-그룹") return { when: `${start} 새벽~오전 중 즉시 발급`, kind: past(start) ? "immediate" : "scheduled" };
+    const nextDay = ["첫구매 고객", "재구매 고객"].includes(t);
     if (deriveIssueMethod(answers) === "즉시발급") {
       return { when: `${start} (발급일 즉시 지급 · 회수 불가)${nextDay ? " (단 이 대상은 익일부터 적용)" : ""}`, kind: past(start) ? "immediate" : "scheduled" };
     }
@@ -426,21 +449,31 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
       else if (minA > 0 && p > 0 && (minA * p) / 100 > maxD) risks.push(`[발급불가] 최소주문금액×할인율(${Math.round((minA * p) / 100).toLocaleString()}원) > 최대할인금액(${maxD.toLocaleString()}원) — 이대로면 쿠폰이 발급되지 않습니다. 최대할인금액을 올리세요.`);
       if (ck === "상품중복할인" && p > 70) risks.push(`[정책초과] 상품중복할인 정률은 최대 70% (현재 ${p}%).`);
     }
+    // 발급 시작 시점 — 대상에 따라 발급기간(range) 또는 단일 발급일. 날짜부만 비교(형식이 달라 문자열 직접 비교 불가).
+    const ipStartRaw = naverIssueStart(ch, answers);
     const ip = answers["issuePeriod"], vr = answers["validRange"];
-    if (bk === "쿠폰" && s("validType") === "기간으로 설정" && isDateRange(ip) && isDateRange(vr)) {
-      if (vr.start && ip.start && vr.start < ip.start) risks.push("[기간오류] 유효 시작이 발급기간 시작보다 빠릅니다 (유효 시작 ≥ 발급 시작).");
-      if (vr.end && ip.end && vr.end < ip.end) risks.push("[기간오류] 유효 종료가 발급기간 종료보다 빠릅니다 (유효 종료 ≥ 발급 종료).");
+    if (bk === "쿠폰" && s("validType") === "기간으로 설정" && isDateRange(vr)) {
+      if (NAVER_DATE_TARGETS.includes(t)) {
+        if (vr.start && ipStartRaw && vr.start.slice(0, 10) < ipStartRaw.slice(0, 10)) risks.push("[기간오류] 유효 시작이 발급일보다 빠릅니다 (유효 시작 ≥ 발급일).");
+      } else if (isDateRange(ip)) {
+        if (vr.start && ip.start && vr.start < ip.start) risks.push("[기간오류] 유효 시작이 발급기간 시작보다 빠릅니다 (유효 시작 ≥ 발급 시작).");
+        if (vr.end && ip.end && vr.end < ip.end) risks.push("[기간오류] 유효 종료가 발급기간 종료보다 빠릅니다 (유효 종료 ≥ 발급 종료).");
+      }
     }
     if (ap === "카테고리 선택" && !["알림받기", "타겟팅-고객지정"].includes(t)) risks.push("[제약위반] '카테고리 선택'은 알림받기·타겟팅-고객지정 대상만 가능 — 현재 대상에서는 선택 불가.");
     if (bk === "쿠폰" && ck === "스토어장바구니할인" && ap !== "내스토어 상품 전체") risks.push("[제약위반] 스토어장바구니할인은 혜택상품이 '내스토어 상품 전체'만 가능 — 상품/카테고리 지정 불가.");
     if (deriveIssueMethod(answers) === "즉시발급") risks.push("[회수불가] 즉시발급 쿠폰은 발급 후 회수할 수 없습니다 — 대상·값을 다시 확인.");
-    if (["첫구매 고객", "재구매 고객", "타겟팅-그룹"].includes(t) && isDateRange(ip) && ip.start) {
+    if (["첫구매 고객", "재구매 고객"].includes(t) && isDateRange(ip) && ip.start) {
       if (ip.start.slice(0, 10) === today) risks.push("[적용일] 이 대상은 당일 적용 불가(익일부터) — 발급 시작일을 내일 이후로 조정하세요.");
     }
+    if (t === "타겟팅-그룹" && ipStartRaw && ipStartRaw.slice(0, 10) === today) {
+      risks.push("[적용일] 그룹 대상은 발급일 새벽~오전에 일괄 발급 — 오늘로 지정하면 이미 발급 시점이 지났을 수 있습니다. 내일 이후로 조정하세요.");
+    }
     // ── 조기/즉시 노출('오늘 이하면 등록 즉시 나감' 축 — 위 [적용일] 당일-불가와 별개) ──
-    const ipStart = startDate("issuePeriod");
+    const ipStart = ipStartRaw.slice(0, 10);
     if (ipStart && ipStart <= today) {
-      if (deriveIssueMethod(answers) === "즉시발급") risks.unshift("[즉시지급] 발급일이 오늘 이하 — 지금 등록하면 대상 고객에게 즉시 지급되고 회수 불가입니다. 발급일을 예정일로 맞추세요.");
+      if (t === "타겟팅-고객지정") risks.unshift("[즉시지급] 발급일이 오늘 이하 — 고객지정은 등록 완료 즉시 발급되고 회수할 수 없습니다. 지금 등록해도 되는 시점인지 확인하세요.");
+      else if (deriveIssueMethod(answers) === "즉시발급") risks.unshift("[즉시지급] 발급일이 오늘 이하 — 지금 등록하면 대상 고객에게 즉시 지급되고 회수 불가입니다. 발급일을 예정일로 맞추세요.");
       else risks.unshift("[조기노출] 발급기간 시작이 오늘 이하 — 지금 등록하면 즉시 다운로드가 열립니다. 시작 시각을 예정일로 맞추세요.");
     }
   }
@@ -479,7 +512,9 @@ function buildChecklist(ch: CouponChannel, answers: Answers): string[] {
   if (ex.kind === "immediate") items.push("[즉시노출 확인] 이 설정은 '등록 즉시 노출/발급' — 지금이 노출 예정 시점이 맞는지 등록 직전 재확인");
   else if (ex.kind === "scheduled") {
     if (ch.key === "official") items.push("(노출) 노출 시점 '지정 기간에만 노출' + 노출기간 시작=예정일인지 확인");
-    if (ch.key === "naver") items.push("(발급기간) 시작=예정일로 두고, 시작 전에는 등록하지 말거나 노출 안 되는지 확인");
+    if (ch.key === "naver") items.push(NAVER_DATE_TARGETS.includes(s("target"))
+      ? "(발급일) 발급일=예정일이 맞는지 확인 — 이 대상은 발급일에 즉시 지급되며 회수 불가"
+      : "(발급기간) 시작=예정일로 두고, 시작 전에는 등록하지 말거나 노출 안 되는지 확인");
     if (ch.key === "talk") items.push("(발행) '발행대기'로 등록하고 예정일에 '발행'으로 전환(발행중 전엔 다운로드 불가) 확인");
   } else if (ex.kind === "conditional") items.push("(조건/주기) 고정 노출일 아님 — 원하는 시작일에 맞춰 조건/주기를 활성화(미리 켜면 즉시 발급) 확인");
   else if (ex.kind === "serial") items.push("(시리얼) 최대 발급 수량·생성방법·번호 배포 경로 확인 — 상품/스토어 자동 노출 없이 번호 배포로만 지급(1회 1만장·1일 20회 한도)");
@@ -491,7 +526,8 @@ function buildChecklist(ch: CouponChannel, answers: Answers): string[] {
     if (s("benefitKind") === "포인트") items.push("(포인트) 적립율 15% 이하·최대 20만원, 유효기간 없음 확인");
     if (s("discountUnit") === "정률할인(%)") items.push("(정률) 최소주문금액×할인율 ≤ 최대할인금액 확인");
     if (deriveIssueMethod(answers) === "즉시발급") items.push("(즉시발급) 발급 후 회수 불가 — 대상·값 최종 확인");
-    if (s("target") === "타겟팅-그룹") items.push("(그룹) 발급 방법(다운로드/즉시) 택1 확인");
+    if (s("target") === "타겟팅-그룹") items.push("(그룹) 발급 방법(다운로드/즉시) 택1 확인", "(그룹) 설정한 발급일의 새벽~오전 중 일괄 발급됨 확인");
+    if (s("target") === "타겟팅-고객지정") items.push("(고객지정) 당일 발급 가능 — 등록 완료 즉시 발급됨 확인");
     if (s("couponKind") === "스토어장바구니할인") items.push("(장바구니) 혜택상품 '내스토어 전체' 고정 확인");
     if (s("couponKind") === "배송비할인") items.push("(배송비) 최소주문금액은 판매가 기준(즉시할인 무관) 확인");
     if (s("target") === "타겟팅-고객지정") items.push("(고객지정) 고객ID 100명 이내·구매이력/알림동의 고객만 확인");

@@ -188,6 +188,7 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
           <span className="sm-faint" style={{ fontSize: 13 }}>일</span>
         </div>
       )}
+      {f.type === "date" && <input className="b2b-input" type="date" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} style={{ maxWidth: 220 }} />}
       {f.type === "datetime-range" && (
         <div>
           <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
