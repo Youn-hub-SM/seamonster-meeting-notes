@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
-import { resolveUserName } from "./b2b-auth";
+import { resolveUserName, verifySession } from "./b2b-auth";
 import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
 
@@ -23,10 +23,13 @@ type ActivityInput = {
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
+//  서명 세션 토큰(현행 로그인) 우선, 구식 비밀번호 쿠키는 하위 호환 폴백 —
+//  verifySession 없이 resolveUserName 만 쓰면 현행 로그인 사용자가 전부 null(- 표시)이 된다.
 export async function currentActor(): Promise<string | null> {
   try {
     const store = await cookies();
-    return resolveUserName(store.get("b2b_auth")?.value);
+    const token = store.get("b2b_auth")?.value;
+    return (await verifySession(token)) || resolveUserName(token);
   } catch {
     return null;
   }
