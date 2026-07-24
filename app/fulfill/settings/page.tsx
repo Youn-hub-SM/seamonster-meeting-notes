@@ -107,7 +107,16 @@ export default function FulfillSettingsPage() {
                 )}</td>
                 <td>{boxCats.length > 1 && (
                   <button className="b2b-link-btn" style={{ color: "var(--sm-text-light)" }} aria-label="삭제"
-                    onClick={() => setBoxCats((cs) => { const next = cs.filter((_, j) => j !== i); next[next.length - 1] = { ...next[next.length - 1], maxKg: null }; return next; })}>✕</button>
+                    onClick={() => {
+                      // 기본 8종은 대표중량 폴백이 있어 과거 보정분 운임이 유지되지만, 직접 만든 종류는 환산액이 0원이 된다.
+                      const known = DEFAULT_BOX_CATS.some((d) => d.name === c.name);
+                      const msg = `'${c.name}' 을 목록에서 뺄까요?\n\n`
+                        + `과거 배송일지의 이 종류 기록(수량·직접수정 내역)은 그대로 남고 표·엑셀에도 계속 보입니다.\n`
+                        + `새 발주처리에서는 더 이상 이 종류로 분류되지 않습니다.`
+                        + (known ? "" : "\n\n※ 직접 추가한 종류라, 이 종류로 된 직접수정 보정의 운임 환산액은 0원이 됩니다(수량은 유지).");
+                      if (!window.confirm(msg)) return;
+                      setBoxCats((cs) => { const next = cs.filter((_, j) => j !== i); next[next.length - 1] = { ...next[next.length - 1], maxKg: null }; return next; });
+                    }}>✕</button>
                 )}</td>
               </tr>
             ))}
@@ -127,6 +136,7 @@ export default function FulfillSettingsPage() {
         <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 8 }}>
           이름을 바꾸거나 지워도 <strong>과거 배송일지 기록은 사라지지 않습니다</strong> — 예전 이름의 열이 표·엑셀에 그대로 남아 함께 표시됩니다.
           다만 새로 기록할 때는 위 목록만 고를 수 있습니다. 저장은 위 <strong>저장</strong> 버튼을 누르세요.
+          <br />무게 기준(이하 kg)을 바꾸면 같은 무게의 박스가 이전과 다른 종류로 집계되니, 기간을 걸친 통계 비교 시 참고하세요.
         </p>
       </div>
 
