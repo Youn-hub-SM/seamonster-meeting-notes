@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
-import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
+import { DEFAULT_RATES, DEFAULT_EFFECTIVE, DEFAULT_BOX_CATS, ratesFor, type RateVersion, type BoxCat } from "@/app/lib/fulfill-rates";
+import { unionCategories } from "@/app/lib/delivery-log";
 import { ComboBarLine, BarList, ChartLegend, CHART_LINE } from "@/app/components/charts";
 
 type Boxes = Record<string, number>;
@@ -54,6 +54,7 @@ const NG = ["var(--sm-info)", "var(--sm-orange)"]; // 일반=파랑 · 도착보
 
 export default function FulfillStatsPage() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [boxCats, setBoxCats] = useState<BoxCat[]>(DEFAULT_BOX_CATS);
   const [from, setFrom] = useState(firstOfMonth(5));
   const [to] = useState(iso(kstDate(0)));
   const [preset, setPreset] = useState("6개월");
@@ -67,7 +68,7 @@ export default function FulfillStatsPage() {
     try {
       const j = await (await fetch(`/api/fulfill/log?from=${from}&to=${to}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
-      setRows(j.rows || []);
+      setRows(j.rows || []); if (Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
   }, [from, to]);
@@ -76,12 +77,17 @@ export default function FulfillStatsPage() {
   const feeTotal = (r: Row) => r.base_fee_normal + r.base_fee_guar + r.extra_fee + r.guar_extra_fee + r.pado_fee + r.pado_extra + r.pado_cod;
   const dryAmt = (r: Row) => { const rt = ratesFor(history, r.log_date); return r.dryice_full * rt.dryFull + r.dryice_half * rt.dryHalf; };
 
+  // 박스종류 목록 = 설정 + 과거 기록에만 있는 종류(합집합)
+  const BOX_CATS = useMemo(
+    () => unionCategories(boxCats, ...rows.flatMap((r) => [r.boxes_normal, r.boxes_guar])),
+    [boxCats, rows]);
+
   const agg = useMemo(() => {
     const months = monthsBetween(from, to);
     const weeks = weeksBetween(from, to);
     const mN = new Map<string, number>(), mG = new Map<string, number>(), mFee = new Map<string, number>();
     const wN = new Map<string, number>(), wG = new Map<string, number>(), wFee = new Map<string, number>();
-    const mCat: Record<string, Map<string, number>> = {}; for (const c of BOX_CATEGORIES) mCat[c] = new Map();
+    const mCat: Record<string, Map<string, number>> = {}; for (const c of BOX_CATS) mCat[c] = new Map();
     const catN = new Map<string, number>(), catG = new Map<string, number>();
     const wdSum = new Array(7).fill(0), wdDays = new Array(7).fill(0);
     let totN = 0, totG = 0, fee = 0, dry = 0, days = 0;
@@ -95,7 +101,7 @@ export default function FulfillStatsPage() {
       wN.set(wk, (wN.get(wk) || 0) + n); wG.set(wk, (wG.get(wk) || 0) + g); wFee.set(wk, (wFee.get(wk) || 0) + f);
       const dow = new Date(`${r.log_date}T00:00:00`).getDay();
       wdSum[dow] += n + g; if (n + g > 0) wdDays[dow]++;
-      for (const c of BOX_CATEGORIES) {
+      for (const c of BOX_CATS) {
         const cn = Number(r.boxes_normal?.[c]) || 0, cg = Number(r.boxes_guar?.[c]) || 0;
         catN.set(c, (catN.get(c) || 0) + cn); catG.set(c, (catG.get(c) || 0) + cg);
         mCat[c].set(mo, (mCat[c].get(mo) || 0) + cn + cg);
@@ -117,8 +123,8 @@ export default function FulfillStatsPage() {
         const avg = wdDays[d] ? wdSum[d] / wdDays[d] : 0;
         return { label: WD[d], value: Math.round(avg), days: wdDays[d], total: wdSum[d] };
       }),
-      catPie: BOX_CATEGORIES.map((c) => [c, (catN.get(c) || 0) + (catG.get(c) || 0)] as [string, number]).filter(([, v]) => v > 0),
-      monthTotals: months.map((m) => ({ month: m, n: mN.get(m) || 0, g: mG.get(m) || 0, cats: BOX_CATEGORIES.map((c) => mCat[c].get(m) || 0) })),
+      catPie: BOX_CATS.map((c) => [c, (catN.get(c) || 0) + (catG.get(c) || 0)] as [string, number]).filter(([, v]) => v > 0),
+      monthTotals: months.map((m) => ({ month: m, n: mN.get(m) || 0, g: mG.get(m) || 0, cats: BOX_CATS.map((c) => mCat[c].get(m) || 0) })),
       totN, totG, fee, dry, days,
     };
   }, [rows, from, to, history]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -200,7 +206,7 @@ export default function FulfillStatsPage() {
             <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 수량표</span></div>
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ fontSize: 12.5 }}>
-                <thead><tr><th>월</th>{BOX_CATEGORIES.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
+                <thead><tr><th>월</th>{BOX_CATS.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
                 <tbody>
                   {agg.monthTotals.map((m) => (
                     <tr key={m.month}>

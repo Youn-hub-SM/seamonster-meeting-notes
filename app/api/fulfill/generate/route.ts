@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
 import { getAllBundles } from "@/app/lib/product-bundles";
-import { normalizeHistory, ratesFor } from "@/app/lib/fulfill-rates";
+import { normalizeHistory, ratesFor, normalizeBoxCats } from "@/app/lib/fulfill-rates";
 import { itemsSig, orderKey } from "@/app/lib/fulfill-sig";
 import { getDedupConfig } from "@/app/lib/fulfill-dedup";
 import ExcelJS from "exceljs";
@@ -127,8 +127,9 @@ export async function POST(req: NextRequest) {
     // 요율(설정) 로드 — 처리일(오늘, KST)에 유효한 단가. 미설정이면 기본값
     const { data: rateRow } = await sb.from("b2b_settings").select("value").eq("key", "fulfill_rates").maybeSingle();
     const rates = ratesFor(normalizeHistory(rateRow?.value ?? {}), new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
+    const boxCats = normalizeBoxCats((rateRow?.value as { boxCats?: unknown })?.boxCats); // 배송일지 박스 종류(설정)
 
-    const res = buildCnplus(rows, codeMap, keywords, rates);
+    const res = buildCnplus(rows, codeMap, keywords, rates, boxCats);
 
     // 이 파일의 주문 키(주문번호+구성)를 배치 서명으로 임시 보관 — 4단계 '출고 완료' 때 확정 등록(079). 실패해도 진행.
     try {

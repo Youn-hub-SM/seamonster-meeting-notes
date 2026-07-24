@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID, createHash } from "node:crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { normalizeHistory } from "@/app/lib/fulfill-rates";
-import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
+import { normalizeHistory, normalizeBoxCats } from "@/app/lib/fulfill-rates";
 import { cleanBoxes, cleanEntries, cleanRecordEntries, recordTotals, mergeDeliveryRow, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
@@ -40,8 +39,10 @@ export async function GET(req: NextRequest) {
     ]);
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (055 적용 확인)` }, { status: 500 });
     const history = normalizeHistory(rateRow?.value ?? {});
-    const rows = (data ?? []).map((r) => mergeDeliveryRow(r as Record<string, unknown>, history));
-    return NextResponse.json({ ok: true, from, to, rows });
+    const boxCats = normalizeBoxCats((rateRow?.value as { boxCats?: unknown })?.boxCats);
+    const rows = (data ?? []).map((r) => mergeDeliveryRow(r as Record<string, unknown>, history, boxCats));
+    // boxCats = 화면 표 헤더용(설정 목록). 과거 기록에만 있는 종류는 각 행 데이터에서 화면이 합집합으로 붙인다.
+    return NextResponse.json({ ok: true, from, to, rows, boxCats });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "조회 실패") }, { status: 500 });
   }
@@ -70,7 +71,10 @@ export async function POST(req: NextRequest) {
         const category = String(a.category || "");
         const qty = Math.round(Number(a.qty) || 0);
         const note = String(a.note || "").trim();
-        if (!(BOX_CATEGORIES as readonly string[]).includes(category)) return NextResponse.json({ ok: false, error: "박스종류가 올바르지 않습니다." }, { status: 400 });
+        // 새 내역은 '현재 설정된' 박스 종류만 허용(오타 방지). 과거 내역은 cleanEntries 가 그대로 보존한다.
+        const { data: rateRow2 } = await sb.from("b2b_settings").select("value").eq("key", "fulfill_rates").maybeSingle();
+        const allowed = normalizeBoxCats((rateRow2?.value as { boxCats?: unknown })?.boxCats).map((c) => c.name);
+        if (!allowed.includes(category)) return NextResponse.json({ ok: false, error: "박스종류가 올바르지 않습니다." }, { status: 400 });
         if (qty === 0) return NextResponse.json({ ok: false, error: "수량(±)을 입력하세요." }, { status: 400 });
         if (!note) return NextResponse.json({ ok: false, error: "내용(사유)을 입력하세요." }, { status: 400 });
         const token = req.cookies.get("b2b_auth")?.value;

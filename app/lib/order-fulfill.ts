@@ -8,7 +8,7 @@
 //  주문 총중량 U = 같은 (주문번호 B, 주소 E, 배송타입) 라인들의 Σ( 코드 총중량 × 수량 I ).
 //  배송타입 = M열 '네이버 도착보장' 여부. 일반/도착보장은 다른 박스로 나가므로 혼합 주문은 타입별 2박스.
 
-import { type FulfillRates, type BoxTier, DEFAULT_RATES, boxTypeOf, baseFeeOf } from "./fulfill-rates";
+import { type FulfillRates, type BoxTier, type BoxCat, DEFAULT_RATES, DEFAULT_BOX_CATS, boxTypeOf, baseFeeOf, boxCategoryOf, boxCatWeights } from "./fulfill-rates";
 
 export const CNPLUS_HEADERS = [
   "사용안함", "고객주문번호", "받는분성명", "우편번호", "받는분주소(전체, 분할)", "받는분전화번호",
@@ -27,25 +27,24 @@ export function baseFee(w: number): number { return w <= 2.7 ? 2700 : w <= 5.2 ?
 export const GUAR_SURCHARGE = 143; // 도착보장 건당 운임(원). 이제 도착보장 '기본운임'에 143×건이 포함됨(추가운임은 제주 등 수동).
 
 // 택배량 집계용 박스종류(주문 총중량 구간). 배송일지 '해당 주문건 박스 종류'와 동일.
-export const BOX_CATEGORIES = ["굴", "생굴", "김치8", "김치10", "12kg", "15kg", "20kg", "25kg"] as const;
-export function boxCategory(w: number): string {
-  return w < 1.7 ? "굴" : w <= 2.7 ? "생굴" : w <= 4 ? "김치8" : w <= 5.2 ? "김치10"
-    : w <= 9 ? "12kg" : w <= 11 ? "15kg" : w < 16 ? "20kg" : "25kg";
+//  ★목록은 이제 설정(온라인 발주 설정 > 배송일지 박스 종류)에서 편집한다 — fulfill-rates.ts 의 BoxCat.
+//   아래 BOX_CATEGORIES 는 '설정을 못 읽는 곳'을 위한 기본값일 뿐이니, 새 코드는 설정에서 받은 cats 를 넘길 것.
+export const BOX_CATEGORIES: string[] = DEFAULT_BOX_CATS.map((c) => c.name);
+
+export function boxCategory(w: number, cats: BoxCat[] = DEFAULT_BOX_CATS): string {
+  return boxCategoryOf(w, cats);
 }
 
-// 박스종류별 대표 중량(요율 구간에 대입해 기본운임 산출용). 각 종류 무게범위 안의 값.
-export const BOX_CATEGORY_WEIGHT: Record<(typeof BOX_CATEGORIES)[number], number> = {
-  "굴": 1.5, "생굴": 2.5, "김치8": 3.5, "김치10": 5.0, "12kg": 7, "15kg": 10, "20kg": 13, "25kg": 20,
-};
-
-// 박스종류별 개수 → 기본운임 합. 각 종류 대표중량을 요율 구간(tiers)에 대입해 합산.
+// 박스종류별 개수 → 기본운임 합. 각 종류 대표중량(구간에서 자동 도출)을 요율 구간(tiers)에 대입해 합산.
 //  배송일지 '택배량 직접수정'에서 개수를 고치면 기본운임이 이 함수로 다시 계산된다.
-//  (박스종류 경계가 요율 구간의 하위분할이라, 발주처리 시점 ΣbaseFeeOf(주문중량) 과 정확히 일치)
-export function baseFeeFromBoxes(boxes: Record<string, number> | null | undefined, tiers: BoxTier[]): number {
+//  (박스종류가 요율 구간을 걸치지 않도록 저장 시 검증하므로 — validateBoxCats — 발주처리 시점
+//   ΣbaseFeeOf(주문중량) 과 정확히 일치한다.)
+export function baseFeeFromBoxes(boxes: Record<string, number> | null | undefined, tiers: BoxTier[], cats: BoxCat[] = DEFAULT_BOX_CATS): number {
+  const w = boxCatWeights(cats);
   let sum = 0;
-  for (const cat of BOX_CATEGORIES) {
+  for (const cat of Object.keys(w)) {
     const cnt = Math.max(0, Math.round(Number(boxes?.[cat]) || 0));
-    if (cnt) sum += cnt * baseFeeOf(BOX_CATEGORY_WEIGHT[cat], tiers);
+    if (cnt) sum += cnt * baseFeeOf(w[cat], tiers);
   }
   return sum;
 }
@@ -84,7 +83,8 @@ export type FulfillResult = {
 };
 
 // rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어. rates: 요율(기본운임 구간·도착보장 추가).
-export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES): FulfillResult {
+export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS): FulfillResult {
+  const catNames = cats.map((c) => c.name);
   const boxTypeR = (w: number) => boxTypeOf(w, rates.boxTiers);
   const baseFeeR = (w: number) => baseFeeOf(w, rates.boxTiers);
   // 1) 단품코드에 NOTHING 포함 행 제외(정기배송 등)
@@ -171,16 +171,16 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   // 택배량: 합배송 병합 후 박스 단위로 박스종류별 일반/도착보장 개수 집계
   //  (병합된 박스는 합산 중량으로 종류·기본운임 산정 — 실제 발송 박스와 일치)
   const counts = new Map<string, { normal: number; guarantee: number }>();
-  for (const cat of BOX_CATEGORIES) counts.set(cat, { normal: 0, guarantee: 0 });
+  for (const cat of catNames) counts.set(cat, { normal: 0, guarantee: 0 });
   let parcels = 0, parcelsGuar = 0, baseNormal = 0, baseGuar = 0;
   for (const [k, U] of superW) {
     parcels++;
     const guar = k.endsWith("||G");
-    const c = counts.get(boxCategory(U))!;
+    const c = counts.get(boxCategoryOf(U, cats))!;
     if (guar) { parcelsGuar++; c.guarantee++; baseGuar += baseFeeR(U); }
     else { c.normal++; baseNormal += baseFeeR(U); }
   }
-  const parcelSummary = BOX_CATEGORIES.map((cat) => ({ category: cat, ...counts.get(cat)! }));
+  const parcelSummary = catNames.map((cat) => ({ category: cat, ...counts.get(cat)! }));
 
   // (주문일 L열 × SKU)별 출고수량(정기배송 제외) — 매출(주문일자)과 같은 축으로 재고 출고 기록.
   //  한 발주 배치에 이틀 치 주문이 섞이므로(수집 마감 시각 기준) 주문일별로 분해해야 완전 대조가 성립.

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
+import { DEFAULT_BOX_CATS, type BoxCat } from "@/app/lib/fulfill-rates";
+import { unionCategories } from "@/app/lib/delivery-log";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
 import { mergeCounts, manualFeeDelta, sumCounts, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
 
@@ -46,6 +47,7 @@ const PRESETS: { key: string; range: () => { from: string; to: string } }[] = [
 
 export default function DeliveryLogPage() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [boxCats, setBoxCats] = useState<BoxCat[]>(DEFAULT_BOX_CATS); // 설정에서 편집한 박스 종류
   const [range, setRange] = useState({ from: "", to: "" });
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -59,7 +61,7 @@ export default function DeliveryLogPage() {
   // 직접수정 내역 추가 모달
   const [entryFor, setEntryFor] = useState<string | null>(null); // 대상 날짜
   const [eSide, setESide] = useState<"n" | "g">("n");
-  const [eCat, setECat] = useState<string>(BOX_CATEGORIES[0]);
+  const [eCat, setECat] = useState<string>(DEFAULT_BOX_CATS[0].name);
   const [eMode, setEMode] = useState<"add" | "sub">("add");
   const [eQty, setEQty] = useState("1");
   const [eNote, setENote] = useState("");
@@ -73,7 +75,7 @@ export default function DeliveryLogPage() {
       const p = new URLSearchParams(); if (from) p.set("from", from); if (to) p.set("to", to);
       const j = await (await fetch(`/api/fulfill/log?${p.toString()}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
-      setRows(j.rows || []); setRange({ from: j.from, to: j.to }); setDraft({});
+      setRows(j.rows || []); if (Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats); setRange({ from: j.from, to: j.to }); setDraft({});
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
   }, [from, to]);
@@ -131,7 +133,7 @@ export default function DeliveryLogPage() {
 
   // 직접수정 내역 추가 모달 열기
   function openEntry(date: string) {
-    setEntryFor(date); setESide("n"); setECat(BOX_CATEGORIES[0]); setEMode("add"); setEQty("1"); setENote("");
+    setEntryFor(date); setESide("n"); setECat(CATS_EDIT[0] || DEFAULT_BOX_CATS[0].name); setEMode("add"); setEQty("1"); setENote("");
   }
   async function addEntry() {
     if (!entryFor) return;
@@ -249,6 +251,13 @@ export default function DeliveryLogPage() {
   );
 
   // 현재 조회 기간을 엑셀로 (미선택 시 서버가 해석한 기본 기간)
+  // 표에 보일 박스종류 = 설정 목록 + 과거 기록에만 있는 종류(합집합) → 종류를 바꿔도 과거분이 안 사라진다.
+  const CATS_VIEW = useMemo(
+    () => unionCategories(boxCats, ...rows.flatMap((r) => [r.boxes_normal_auto, r.boxes_guar_auto, r.boxes_normal_manual, r.boxes_guar_manual, r.boxes_normal, r.boxes_guar] as (Record<string, number> | undefined)[])),
+    [boxCats, rows]);
+  // 새 직접수정 내역에 고를 수 있는 종류 = 현재 설정 목록만(과거 종류로 새로 쌓지 않도록)
+  const CATS_EDIT = useMemo(() => boxCats.map((c) => c.name), [boxCats]);
+
   const exportHref = () => {
     const p = new URLSearchParams();
     const f = from || range.from, t = to || range.to;
@@ -344,14 +353,14 @@ export default function DeliveryLogPage() {
                               <div>
                                 <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>자동입력 <span className="sm-faint" style={{ fontWeight: 400 }}>· 발주처리 기록 — 수정 불가</span></div>
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
-                                  <thead><tr><th></th>{BOX_CATEGORIES.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
+                                  <thead><tr><th></th>{CATS_VIEW.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
                                   <tbody>
                                     {(["n", "g"] as const).map((side) => {
                                       const auto = side === "n" ? r.boxes_normal_auto : r.boxes_guar_auto;
                                       return (
                                         <tr key={side}>
                                           <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반" : "도착보장"}</td>
-                                          {BOX_CATEGORIES.map((c) => (
+                                          {CATS_VIEW.map((c) => (
                                             <td key={c} className="num b2b-money" style={{ color: auto?.[c] ? undefined : "var(--sm-text-light)" }}>{auto?.[c] || "-"}</td>
                                           ))}
                                           <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(auto))}</td>
@@ -386,7 +395,7 @@ export default function DeliveryLogPage() {
                                   <button className="b2b-btn-secondary" style={{ padding: "3px 12px", fontSize: 12 }} onClick={() => openEntry(r.log_date)}>+ 추가</button>
                                 </div>
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
-                                  <thead><tr><th></th>{BOX_CATEGORIES.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
+                                  <thead><tr><th></th>{CATS_VIEW.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
                                   <tbody>
                                     {(["n", "g"] as const).map((side) => {
                                       const man = curManualMap(r, side);
@@ -395,7 +404,7 @@ export default function DeliveryLogPage() {
                                         <FragmentRows key={side}>
                                           <tr>
                                             <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반 보정" : "도착보장 보정"}</td>
-                                            {BOX_CATEGORIES.map((c) => (
+                                            {CATS_VIEW.map((c) => (
                                               <td key={c} className="num b2b-money" style={{ color: man[c] ? (man[c] > 0 ? "var(--sm-success)" : "var(--sm-danger)") : "var(--sm-text-light)" }}>
                                                 {man[c] ? (man[c] > 0 ? `+${man[c]}` : man[c]) : "-"}
                                               </td>
@@ -404,7 +413,7 @@ export default function DeliveryLogPage() {
                                           </tr>
                                           <tr>
                                             <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>└ 최종</td>
-                                            {BOX_CATEGORIES.map((c) => (
+                                            {CATS_VIEW.map((c) => (
                                               <td key={c} className="num b2b-money" style={{ color: fin[c] ? undefined : "var(--sm-text-light)" }}>{fin[c] || "-"}</td>
                                             ))}
                                             <td className="num b2b-money" style={{ fontWeight: 700, color: side === "g" ? "var(--sm-orange)" : undefined }}>{won(sumBoxes(fin))}</td>
@@ -504,7 +513,7 @@ export default function DeliveryLogPage() {
                 <label className="sm-col" style={{ gap: 3, fontSize: 13 }}>
                   <span style={{ fontWeight: 600 }}>박스종류</span>
                   <select className="b2b-select" value={eCat} onChange={(e) => setECat(e.target.value)} style={{ width: "auto", padding: "6px 10px" }}>
-                    {BOX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {CATS_EDIT.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </label>
                 <label className="sm-col" style={{ gap: 3, fontSize: 13 }}>

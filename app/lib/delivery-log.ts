@@ -1,5 +1,4 @@
-import { BOX_CATEGORIES, BOX_CATEGORY_WEIGHT } from "./order-fulfill";
-import { baseFeeOf, ratesFor, type RateVersion } from "./fulfill-rates";
+import { baseFeeOf, ratesFor, boxCatWeights, DEFAULT_BOX_CATS, type RateVersion, type BoxCat } from "./fulfill-rates";
 
 // 배송일지 자동입력/직접수정 병합 — 화면·통계·엑셀이 같은 '최종값'을 쓰도록 한 곳에서 파생.
 //  자동입력(boxes_*, base_fee_* = 발주처리 기록) + 직접수정 보정(boxes_*_manual, ±) →
@@ -7,35 +6,51 @@ import { baseFeeOf, ratesFor, type RateVersion } from "./fulfill-rates";
 
 export type BoxCounts = Record<string, number>;
 
-// 알려진 박스종류만 정수로 정제. signed=true 면 음수(빼기 보정) 허용.
+// 박스종류별 개수를 정수로 정제. signed=true 면 음수(빼기 보정) 허용.
+//  ★설정에서 박스 종류를 바꿔도 과거 기록이 사라지지 않도록, '현재 목록에 없는 종류도 버리지 않는다'.
+//   (예전엔 현재 목록만 훑어서, 종류 이름을 바꾸면 그 이름으로 쌓인 과거 택배량이 화면·통계·엑셀에서 조용히 증발했다.)
 export function cleanBoxes(o: unknown, signed = false): BoxCounts {
   const out: BoxCounts = {};
-  if (o && typeof o === "object") for (const c of BOX_CATEGORIES) {
-    const raw = Math.round(Number((o as Record<string, unknown>)[c]) || 0);
-    const n = signed ? raw : Math.max(0, raw);
-    if (n !== 0) out[c] = n;
+  if (o && typeof o === "object" && !Array.isArray(o)) {
+    for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+      const name = String(k).trim();
+      if (!name) continue;
+      const raw = Math.round(Number(v) || 0);
+      const n = signed ? raw : Math.max(0, raw);
+      if (n !== 0) out[name] = n;
+    }
   }
   return out;
 }
 
+// 여러 기록에 등장하는 모든 박스종류 = 현재 설정 목록 + 과거 데이터에만 있는 종류(뒤에 붙임).
+//  표 헤더·엑셀 열은 이 순서를 쓴다 → 과거 기록이 항상 보인다.
+export function unionCategories(cats: BoxCat[], ...records: (BoxCounts | null | undefined)[]): string[] {
+  const order = (cats.length ? cats : DEFAULT_BOX_CATS).map((c) => c.name);
+  const seen = new Set(order);
+  for (const r of records) if (r) for (const k of Object.keys(r)) if (!seen.has(k)) { seen.add(k); order.push(k); }
+  return order;
+}
+
 export const sumCounts = (o: BoxCounts): number => Object.values(o).reduce((a, b) => a + b, 0);
 
-// 최종 수량 = 자동 + 보정 (박스종류별 0 미만 방지)
+// 최종 수량 = 자동 + 보정 (박스종류별 0 미만 방지). 현재 목록에 없는 과거 종류도 그대로 보존.
 export function mergeCounts(auto: BoxCounts, manual: BoxCounts): BoxCounts {
   const out: BoxCounts = {};
-  for (const c of BOX_CATEGORIES) {
+  for (const c of new Set([...Object.keys(auto), ...Object.keys(manual)])) {
     const v = Math.max(0, (auto[c] || 0) + (manual[c] || 0));
     if (v > 0) out[c] = v;
   }
   return out;
 }
 
-// 보정분 운임(부호 유지) = Σ 보정개수 × 그 박스종류 대표중량의 기본운임
-export function manualFeeDelta(manual: BoxCounts, tiers: RateVersion["boxTiers"]): number {
+// 보정분 운임(부호 유지) = Σ 보정개수 × 그 박스종류 대표중량의 기본운임.
+//  현재 설정에 없는 과거 종류는 기본 8종 대표중량으로 폴백(이름을 바꾼 뒤에도 과거 보정분 금액이 유지되도록).
+export function manualFeeDelta(manual: BoxCounts, tiers: RateVersion["boxTiers"], cats: BoxCat[] = DEFAULT_BOX_CATS): number {
+  const w = { ...boxCatWeights(DEFAULT_BOX_CATS), ...boxCatWeights(cats) };
   let sum = 0;
-  for (const c of BOX_CATEGORIES) {
-    const cnt = manual[c] || 0;
-    if (cnt) sum += cnt * baseFeeOf(BOX_CATEGORY_WEIGHT[c as keyof typeof BOX_CATEGORY_WEIGHT], tiers);
+  for (const [c, cnt] of Object.entries(manual)) {
+    if (cnt && w[c] != null) sum += cnt * baseFeeOf(w[c], tiers);
   }
   return sum;
 }
@@ -59,7 +74,8 @@ export function cleanEntries(o: unknown): ManualEntry[] {
     const side = e.side === "g" ? "g" : "n";
     const category = String(e.category || "");
     const qty = Math.round(Number(e.qty) || 0);
-    if (!(BOX_CATEGORIES as readonly string[]).includes(category) || qty === 0) continue;
+    // 종류 이름은 저장 시점 목록으로 검증됨 — 여기서 현재 목록으로 다시 거르면 과거 내역이 사라진다.
+    if (!category || qty === 0) continue;
     out.push({ id: String(e.id || ""), side, category, qty, note: String(e.note || ""), at: String(e.at || ""), by: (e.by as string) ?? null });
   }
   return out;
@@ -148,7 +164,7 @@ export type MergedDeliveryRow = Record<string, unknown> & {
 };
 
 // DB 행 → 최종값 병합 행. 기존 소비처(통계·엑셀)는 boxes_*/base_fee_* 를 그대로 읽으면 최종값이 된다.
-export function mergeDeliveryRow(row: Record<string, unknown>, history: RateVersion[]): MergedDeliveryRow {
+export function mergeDeliveryRow(row: Record<string, unknown>, history: RateVersion[], cats: BoxCat[] = DEFAULT_BOX_CATS): MergedDeliveryRow {
   const log_date = String(row.log_date || "");
   const autoN = cleanBoxes(row.boxes_normal);
   const autoG = cleanBoxes(row.boxes_guar);
@@ -157,9 +173,9 @@ export function mergeDeliveryRow(row: Record<string, unknown>, history: RateVers
   const manN = addCounts(cleanBoxes(row.boxes_normal_manual, true), entriesToCounts(entries, "n"));
   const manG = addCounts(cleanBoxes(row.boxes_guar_manual, true), entriesToCounts(entries, "g"));
   const rt = ratesFor(history, log_date);
-  const feeN = Math.max(0, Math.round(Number(row.base_fee_normal) || 0) + manualFeeDelta(manN, rt.boxTiers));
+  const feeN = Math.max(0, Math.round(Number(row.base_fee_normal) || 0) + manualFeeDelta(manN, rt.boxTiers, cats));
   // 도착보장 보정은 박스당 도착보장 가산(guarSurcharge)도 함께 반영
-  const feeG = Math.max(0, Math.round(Number(row.base_fee_guar) || 0) + manualFeeDelta(manG, rt.boxTiers) + rt.guarSurcharge * sumCounts(manG));
+  const feeG = Math.max(0, Math.round(Number(row.base_fee_guar) || 0) + manualFeeDelta(manG, rt.boxTiers, cats) + rt.guarSurcharge * sumCounts(manG));
   return {
     ...row,
     log_date,

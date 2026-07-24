@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { BOX_CATEGORIES } from "@/app/lib/order-fulfill";
-import { normalizeHistory, ratesFor } from "@/app/lib/fulfill-rates";
+import { unionCategories } from "@/app/lib/delivery-log";
+import { normalizeHistory, ratesFor, normalizeBoxCats } from "@/app/lib/fulfill-rates";
 import { mergeDeliveryRow } from "@/app/lib/delivery-log";
 import ExcelJS from "exceljs";
 
@@ -35,7 +35,10 @@ export async function GET(req: NextRequest) {
     const { data: rateRow } = await sb.from("b2b_settings").select("value").eq("key", "fulfill_rates").maybeSingle();
     const history = normalizeHistory(rateRow?.value ?? {});
     // 자동+직접수정 병합 → 최종값으로 추출(화면·통계와 일치)
-    const rows = (data ?? []).map((r) => mergeDeliveryRow(r as Record<string, unknown>, history)) as unknown as LogRow[];
+    const boxCats = normalizeBoxCats((rateRow?.value as { boxCats?: unknown })?.boxCats);
+    const rows = (data ?? []).map((r) => mergeDeliveryRow(r as Record<string, unknown>, history, boxCats)) as unknown as LogRow[];
+    // 엑셀 박스종류 열 = 설정 목록 + 과거 기록에만 있는 종류(합집합) → 과거분이 빠지지 않는다.
+    const CATS = unionCategories(boxCats, ...rows.flatMap((r) => [r.boxes_normal as Record<string, number>, r.boxes_guar as Record<string, number>]));
     const weekday = (iso: string) => WD[new Date(`${iso}T00:00:00Z`).getUTCDay()];
 
     const wb = new ExcelJS.Workbook();
@@ -96,11 +99,11 @@ export async function GET(req: NextRequest) {
     const bcols = [
       { header: "날짜", key: "date", width: 12 },
       { header: "구분", key: "kind", width: 10 },
-      ...BOX_CATEGORIES.map((c) => ({ header: c, key: `b_${c}`, width: 8 })),
+      ...CATS.map((c) => ({ header: c, key: `b_${c}`, width: 8 })),
       { header: "합계", key: "sum", width: 8 },
     ];
     ws2.columns = bcols;
-    for (const c of BOX_CATEGORIES) ws2.getColumn(`b_${c}`).numFmt = "#,##0";
+    for (const c of CATS) ws2.getColumn(`b_${c}`).numFmt = "#,##0";
     ws2.getColumn("sum").numFmt = "#,##0";
     const catAcc: Record<string, number> = {};
     for (const r of rows) {
@@ -108,7 +111,7 @@ export async function GET(req: NextRequest) {
         const tot = boxSum(boxes);
         if (!tot) continue;
         const rv: Record<string, unknown> = { date: r.log_date, kind, sum: tot };
-        for (const c of BOX_CATEGORIES) { const v = n((boxes as Record<string, number> | null)?.[c]); rv[`b_${c}`] = v; catAcc[c] = (catAcc[c] || 0) + v; }
+        for (const c of CATS) { const v = n((boxes as Record<string, number> | null)?.[c]); rv[`b_${c}`] = v; catAcc[c] = (catAcc[c] || 0) + v; }
         ws2.addRow(rv);
       }
     }
@@ -116,7 +119,7 @@ export async function GET(req: NextRequest) {
     const catTotal = Object.values(catAcc).reduce((a, b) => a + b, 0);
     if (catTotal) {
       const tr: Record<string, unknown> = { date: "합계", kind: "", sum: catTotal };
-      for (const c of BOX_CATEGORIES) tr[`b_${c}`] = catAcc[c] || 0;
+      for (const c of CATS) tr[`b_${c}`] = catAcc[c] || 0;
       ws2.addRow(tr).font = { bold: true };
     }
 

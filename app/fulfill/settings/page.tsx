@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { DEFAULT_RATES, DEFAULT_EFFECTIVE, type RateVersion, type BoxTier } from "@/app/lib/fulfill-rates";
+import { DEFAULT_RATES, DEFAULT_EFFECTIVE, DEFAULT_BOX_CATS, validateBoxCats, type RateVersion, type BoxTier, type BoxCat } from "@/app/lib/fulfill-rates";
 import { DEDUP_DEFAULT, type DedupConfig, type DedupMatch } from "@/app/lib/fulfill-dedup";
 
 const num = (v: string) => Math.max(0, Math.round(Number(v) || 0));
@@ -10,6 +10,7 @@ const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 
 
 export default function FulfillSettingsPage() {
   const [history, setHistory] = useState<RateVersion[]>([{ ...DEFAULT_RATES, effectiveFrom: DEFAULT_EFFECTIVE }]);
+  const [boxCats, setBoxCats] = useState<BoxCat[]>(DEFAULT_BOX_CATS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +23,7 @@ export default function FulfillSettingsPage() {
   const [dedupMsg, setDedupMsg] = useState("");
 
   useEffect(() => {
-    fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); }).catch(() => {}).finally(() => setLoading(false));
+    fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); if (j.ok && Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats); }).catch(() => {}).finally(() => setLoading(false));
     fetch("/api/fulfill/dedup", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) { setDedup(j.config); setProcessedCount(j.processedCount); } }).catch(() => {});
   }, []);
 
@@ -58,9 +59,10 @@ export default function FulfillSettingsPage() {
   async function save() {
     setSaving(true); setError(""); setOk("");
     try {
-      const res = await fetch("/api/fulfill/rates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versions: history }) });
+      const res = await fetch("/api/fulfill/rates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versions: history, boxCats }) });
       const j = await res.json(); if (!j.ok) throw new Error(j.error || "저장 실패");
-      setHistory(j.history); setOk("저장했어요. 각 날짜의 배송일지는 그 날짜에 유효했던 단가로 계산됩니다.");
+      setHistory(j.history); if (Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats);
+      setOk("저장했어요. 각 날짜의 배송일지는 그 날짜에 유효했던 단가로 계산됩니다.");
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
   }
@@ -84,6 +86,49 @@ export default function FulfillSettingsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
       {ok && <div className="sm-success">✓ {ok}</div>}
+
+      {/* 배송일지 박스 종류 — 택배량 집계 단위 */}
+      <div className="b2b-card" style={{ marginBottom: 16 }}>
+        <div className="b2b-card-head"><span className="b2b-card-title">배송일지 박스 종류 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 택배량을 세는 단위</span></span></div>
+        <p className="sm-faint" style={{ fontSize: 11.5, marginBottom: 8 }}>
+          주문 총중량이 어느 구간에 드는지로 박스 종류가 정해집니다. 이름과 이하(kg)를 바꿀 수 있고, 마지막 종류는 항상 &lsquo;초과&rsquo;입니다.
+          한 종류가 위 <strong>기본운임 구간 경계</strong>를 걸치면 저장되지 않습니다(같은 종류인데 운임이 달라져 배송일지 수정 시 금액이 어긋남).
+        </p>
+        <table className="b2b-table" style={{ fontSize: 13 }}>
+          <thead><tr><th>박스 종류</th><th className="num">이하(kg)</th><th style={{ width: 40 }}></th></tr></thead>
+          <tbody>
+            {boxCats.map((c, i) => (
+              <tr key={i}>
+                <td><input className="b2b-input" style={{ width: 140 }} value={c.name}
+                  onChange={(e) => setBoxCats((cs) => cs.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} /></td>
+                <td className="num">{c.maxKg == null ? <span className="sm-faint">초과(무제한)</span> : (
+                  <input type="number" step="0.1" className="b2b-input b2b-money" style={{ width: 90 }} value={c.maxKg}
+                    onChange={(e) => setBoxCats((cs) => cs.map((x, j) => (j === i ? { ...x, maxKg: Number(e.target.value) || 0 } : x)))} />
+                )}</td>
+                <td>{boxCats.length > 1 && (
+                  <button className="b2b-link-btn" style={{ color: "var(--sm-text-light)" }} aria-label="삭제"
+                    onClick={() => setBoxCats((cs) => { const next = cs.filter((_, j) => j !== i); next[next.length - 1] = { ...next[next.length - 1], maxKg: null }; return next; })}>✕</button>
+                )}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button className="b2b-btn-secondary" style={{ marginTop: 8, padding: "5px 12px", fontSize: 12 }}
+          onClick={() => setBoxCats((cs) => {
+            const lastBounded = [...cs].reverse().find((x) => x.maxKg != null)?.maxKg ?? 0;
+            const next = cs.map((x) => ({ ...x }));
+            next[next.length - 1] = { ...next[next.length - 1], maxKg: lastBounded + 1 };
+            return [...next, { name: "새 종류", maxKg: null }];
+          })}>+ 종류 추가</button>
+        {(() => {
+          const errs = validateBoxCats(boxCats, history[history.length - 1]?.boxTiers ?? DEFAULT_RATES.boxTiers);
+          return errs.length ? <div className="b2b-error" style={{ marginTop: 10, whiteSpace: "pre-line" }}>{errs.join("\n")}</div> : null;
+        })()}
+        <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 8 }}>
+          이름을 바꾸거나 지워도 <strong>과거 배송일지 기록은 사라지지 않습니다</strong> — 예전 이름의 열이 표·엑셀에 그대로 남아 함께 표시됩니다.
+          다만 새로 기록할 때는 위 목록만 고를 수 있습니다. 저장은 위 <strong>저장</strong> 버튼을 누르세요.
+        </p>
+      </div>
 
       {/* 중복 방지 — 이미 출고 처리된 주문 자동 제외 기준 */}
       <div className="b2b-card" style={{ marginBottom: 16 }}>
