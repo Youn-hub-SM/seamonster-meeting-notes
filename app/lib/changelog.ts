@@ -34,7 +34,7 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 
 export const CHANGELOG: ChangeEntry[] = [
   {
-    date: "2026-07-23",
+    date: "2026-07-24",
     tag: "수정",
     tool: "쿠폰 요청서",
     title: "네이버 타겟팅 대상 항목을 실제 등록화면에 맞춤",

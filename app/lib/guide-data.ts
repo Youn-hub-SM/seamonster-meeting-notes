@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-07-23";
+export const GUIDE_UPDATED = "2026-07-24";
 
 export const GUIDE: GuideCategory[] = [
   {

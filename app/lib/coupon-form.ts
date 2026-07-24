@@ -418,7 +418,9 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
   }
   if (s("dlRedup") === "가능") risks.push("[재발급] 동일인 재발급 '가능' — 1인이 여러 번 수령해 예산이 초과될 수 있어요.");
   if (s("minAmountType") === "제한없음") risks.push("[무제한] 사용 기준 금액 '제한없음' — 소액 주문에도 쿠폰이 적용됩니다.");
-  if (s("issueLimit") === "제한 없음") risks.push("[무제한] 발급 건수 '제한 없음' — 발급량이 제한되지 않습니다.");
+  // (발급 건수) 네이버 실제 옵션은 "제한 없음(1인 1회)" — 1인 1회는 정상 설정이라 경고하지 않는다.
+  //  과거 "제한 없음" 문자열로 비교하던 죽은 검사가 있었으나(값이 없어 한 번도 발화 안 됨),
+  //  문자열만 맞추면 기본값이라 거의 모든 네이버 쿠폰에서 상시 노출돼 경고가 둔감해지므로 제거함.
   if (s("issueQty") === "무제한") risks.push("[무제한] 발급 수량 '무제한' — 발급량이 제한되지 않습니다.");
 
   // ── 공식몰 조기/즉시 노출 + 시리얼 위험 ──
@@ -465,9 +467,6 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
     if (deriveIssueMethod(answers) === "즉시발급") risks.push("[회수불가] 즉시발급 쿠폰은 발급 후 회수할 수 없습니다 — 대상·값을 다시 확인.");
     if (["첫구매 고객", "재구매 고객"].includes(t) && isDateRange(ip) && ip.start) {
       if (ip.start.slice(0, 10) === today) risks.push("[적용일] 이 대상은 당일 적용 불가(익일부터) — 발급 시작일을 내일 이후로 조정하세요.");
-    }
-    if (t === "타겟팅-그룹" && ipStartRaw && ipStartRaw.slice(0, 10) === today) {
-      risks.push("[적용일] 그룹 대상은 발급일 새벽~오전에 일괄 발급 — 오늘로 지정하면 이미 발급 시점이 지났을 수 있습니다. 내일 이후로 조정하세요.");
     }
     // ── 조기/즉시 노출('오늘 이하면 등록 즉시 나감' 축 — 위 [적용일] 당일-불가와 별개) ──
     const ipStart = ipStartRaw.slice(0, 10);
@@ -588,7 +587,8 @@ export function buildRequestText(ch: CouponChannel, answers: Answers, meta: { re
   if (ch.key === "naver" && (typeof answers["benefitKind"] === "string" ? answers["benefitKind"] : "쿠폰") === "쿠폰") {
     const im = deriveIssueMethod(answers);
     if (im) core.push(`· 발급 방법(자동) : ${im}`);
-    core.push(`· 적용일 : ${deriveApplyDay(answers)}`);
+    // 타겟팅-고객지정/그룹은 '발급일'을 직접 지정하므로 적용일 줄이 중복·혼란 → 출력하지 않음.
+    if (!NAVER_DATE_TARGETS.includes(shownStr(ch, answers, "target"))) core.push(`· 적용일 : ${deriveApplyDay(answers)}`);
   }
   if (core.length) out.push("", "■ 핵심 요약 (먼저 확인)", ...core);
 
