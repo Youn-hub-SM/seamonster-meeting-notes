@@ -31,11 +31,13 @@ export default function HtmlshotPage() {
   const [preset, setPreset] = useState<Preset>("coupang");
   const [customWidth, setCustomWidth] = useState(780);
   const [maxSliceHeight, setMaxSliceHeight] = useState(8000);
+  const [splitMode, setSplitMode] = useState<"section" | "height">("section");
   const [format, setFormat] = useState<"jpeg" | "png">("jpeg");
   const [quality, setQuality] = useState(88);
   const [scale, setScale] = useState<1 | 2>(1);
   const [baseUrl, setBaseUrl] = useState("https://seamonster.kr");
   const [expand, setExpand] = useState(true);
+  const [aiStatic, setAiStatic] = useState(true);
   const [prompt, setPrompt] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -54,7 +56,7 @@ export default function HtmlshotPage() {
       const res = await fetch("/api/htmlshot/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html, width, maxSliceHeight, format, quality, scale, baseUrl, expand, prompt }),
+        body: JSON.stringify({ html, width, maxSliceHeight, splitMode, format, quality, scale, baseUrl, expand, aiStatic, prompt }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "변환에 실패했습니다.");
@@ -149,6 +151,13 @@ export default function HtmlshotPage() {
                 </div>
               )}
               <div className="b2b-field">
+                <label className="b2b-field-label">분할 방식</label>
+                <select className="b2b-input" value={splitMode} onChange={(e) => setSplitMode(e.target.value === "height" ? "height" : "section")}>
+                  <option value="section">섹션마다 1장</option>
+                  <option value="height">최대 높이 기준</option>
+                </select>
+              </div>
+              <div className="b2b-field">
                 <label className="b2b-field-label">장당 최대 높이 (px)</label>
                 <input type="number" className="b2b-input" min={1000} max={20000} step={500} value={maxSliceHeight}
                   onChange={(e) => setMaxSliceHeight(parseInt(e.target.value) || 8000)} />
@@ -184,6 +193,10 @@ export default function HtmlshotPage() {
             <label className="b2b-checkbox">
               <input type="checkbox" checked={expand} onChange={(e) => setExpand(e.target.checked)} />
               접힌 아코디언·패널 모두 펼쳐서 캡처
+            </label>
+            <label className="b2b-checkbox">
+              <input type="checkbox" checked={aiStatic} onChange={(e) => setAiStatic(e.target.checked)} />
+              AI 정적 변환 — 탭·캐러셀 등 숨은 내용을 모두 펼친 레이아웃으로 재구성
             </label>
 
             <div className="b2b-form-foot">

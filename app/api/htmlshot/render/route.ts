@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       html,
       width: clampInt(body.width, 300, 1600, 780),
       maxSliceHeight: clampInt(body.maxSliceHeight, 1000, 20000, 8000),
+      splitMode: body.splitMode === "height" ? "height" : "section",
       format: body.format === "png" ? "png" : "jpeg",
       quality: clampInt(body.quality, 40, 100, 88),
       scale: body.scale === 2 ? 2 : 1,
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
         ? body.baseUrl.replace(/\/+$/, "")
         : "https://seamonster.kr",
       expand: body.expand !== false,
+      aiStatic: body.aiStatic !== false,
       prompt: typeof body.prompt === "string" ? body.prompt : undefined,
     };
 

@@ -16,11 +16,13 @@ export interface HtmlshotOptions {
   html: string;
   width: number;           // 출력 폭(px) — 쿠팡 780 / 스마트스토어 860
   maxSliceHeight: number;  // 장당 최대 높이(px, 출력 기준 아님 — 렌더 px)
+  splitMode: "section" | "height"; // section: 섹션마다 1장(큰 섹션만 추가 분할) / height: 높이 한도 기준
   format: "jpeg" | "png";
   quality: number;         // jpeg 만 사용 (1~100)
   scale: 1 | 2;            // deviceScaleFactor — 2면 출력 픽셀 2배(선명)
   baseUrl: string;         // 상대경로(/web/upload/...) 기준 도메인
   expand: boolean;         // 아코디언/접힘 패널 자동 펼침
+  aiStatic: boolean;       // AI 정적 변환 — 탭/캐러셀 등 인터랙티브 UI를 펼친 레이아웃으로
   prompt?: string;         // AI 전처리 지시 (선택)
 }
 
@@ -48,46 +50,82 @@ interface AiTransform {
   notes: string;
 }
 
-const AI_SYSTEM = `상세페이지 HTML을 이미지 캡처용으로 전처리하는 도구. 사용자의 지시를 읽고
-HTML 을 직접 고치는 대신 아래 JSON 스펙만 반환한다. 순수 JSON 한 개만, 다른 텍스트 금지.
+// CSS/JS 페이로드에 JSON 을 쓰면 모델이 값 안의 따옴표·개행을 이스케이프하지 않아
+// 파싱이 깨진다(실제 발생) → 이스케이프가 필요 없는 태그 블록 형식을 쓴다.
+const AI_SYSTEM_BASE = `상세페이지 HTML을 이미지 캡처용으로 전처리하는 도구. 임무를 읽고
+HTML 을 직접 고치는 대신 변환 스펙을 아래 4개 태그 블록으로만 반환한다. 블록 밖 텍스트·코드펜스 금지.
 
-{"removeSelectors":["#id",".class"],"css":"주입할 CSS","js":"주입할 JS(즉시실행, DOM 조작)","notes":"적용 내용 한 줄 요약(한국어)"}
+<REMOVE>
+통째로 없앨 요소의 CSS 셀렉터, 한 줄에 하나 (없으면 비움)
+</REMOVE>
+<CSS>
+주입할 CSS (없으면 비움)
+</CSS>
+<JS>
+주입할 JS — 즉시 실행되는 DOM 조작 코드 (없으면 비움)
+</JS>
+<NOTES>
+적용 내용 한 줄 요약 (한국어)
+</NOTES>
 
 규칙:
-- removeSelectors: 지시에 따라 통째로 없앨 요소의 CSS 셀렉터. HTML에 실제로 존재하는 id/class 만 사용.
-- css: 스타일 변경 지시(색·크기·간격·숨김 등)는 CSS 로. !important 사용 가능.
-- js: 텍스트 교체·클래스 부여 등 CSS 로 안 되는 것만. try/catch 불필요(호출부가 감쌈). 없으면 빈 문자열.
-- 이미지 캡처 목적이므로 애니메이션/호버 효과 관련 지시는 최종 정지 상태 기준으로 처리.
-- 지시가 HTML 과 무관하거나 수행 불가면 세 필드를 비우고 notes 에 이유를 적는다.`;
+- REMOVE: HTML에 실제로 존재하는 id/class 만 사용.
+- CSS: 스타일 변경(색·크기·간격·숨김·레이아웃)은 CSS 로. !important 사용 가능.
+- JS: 텍스트 교체·클래스 부여·요소 삽입 등 CSS 로 안 되는 것만. try/catch 불필요(호출부가 감쌈).
+- 이미지 캡처 목적이므로 애니메이션/호버 효과는 최종 정지 상태 기준으로 처리.
+- 수행 불가한 지시는 건너뛰고 NOTES 에 이유를 적는다.`;
 
-export async function aiTransform(html: string, prompt: string): Promise<AiTransform> {
+// 인터랙티브 UI 정적화 임무 — 이미지에선 클릭/스크롤이 불가능하므로 내용이 숨는 패턴을 펼친다
+const AI_SYSTEM_STATIC = `
+
+[정적 변환 임무 — 반드시 수행]
+이 HTML 은 이미지로 캡처된다. 클릭·스크롤이 불가능하므로, 내용이 숨겨지는 인터랙티브 패턴을 찾아 모두 보이는 정적 레이아웃으로 바꾼다:
+1. 탭(활성 탭만 보이는 구조): 모든 패널이 세로로 쌓여 보이게 한다 (display:none→block, absolute 겹침→position:static 등).
+   js 로 각 패널 앞에 해당 탭 이름을 굵은 제목으로 삽입하고, 탭 버튼 줄은 숨긴다.
+2. 가로 캐러셀/슬라이더(overflow 스크롤 트랙): 트랙을 flex-wrap:wrap; overflow:visible 로 바꿔 모든 카드가 격자로 보이게 하고,
+   좌우 화살표·페이저는 숨긴다. 카드 폭은 2~3열이 되게 조정.
+3. 아코디언/접힘 패널: 열림 상태 클래스(is-open 등)를 js 로 부여하고 max-height·opacity 제한을 해제한다.
+4. 겹쳐 쌓인 이미지 스택(탭 연동 등 opacity 0 으로 숨긴 이미지): 전부 보이면 겹치므로, 각 이미지가 해당 패널 옆/아래에 자연스럽게 배치되게 하거나 대표 1장만 남긴다.
+5. 클릭해야 의미 있는 UI 는 숨긴다: 확대(+)·닫기 버튼, '전체보기'류 버튼, 입력폼/검색/질문 위젯, 플로팅 버튼, 재생 컨트롤.
+6. 결과 레이아웃이 겹치거나 잘리지 않게 높이·간격을 함께 보정한다.`;
+
+// <TAG>...</TAG> 블록 추출 — 닫는 태그가 없으면 끝까지
+function extractBlock(text: string, tag: string): string {
+  const open = `<${tag}>`;
+  const close = `</${tag}>`;
+  const i = text.indexOf(open);
+  if (i < 0) return "";
+  const j = text.indexOf(close, i + open.length);
+  return (j < 0 ? text.slice(i + open.length) : text.slice(i + open.length, j)).trim();
+}
+
+export async function aiTransform(html: string, prompt: string, aiStatic: boolean): Promise<AiTransform> {
   const model = await getCurrentModel();
+  const system = AI_SYSTEM_BASE + (aiStatic ? AI_SYSTEM_STATIC : "");
+  const userInstruction = prompt.trim() ? `[추가 변환 지시]\n${prompt.trim()}\n\n` : "";
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 4096,
-    system: AI_SYSTEM,
+    max_tokens: 6000,
+    system,
     messages: [
       {
         role: "user",
-        content: `[변환 지시]\n${prompt}\n\n[HTML]\n${html.slice(0, 150_000)}`,
+        content: `${userInstruction}[HTML]\n${html.slice(0, 150_000)}`,
       },
     ],
   });
   const text = response.content[0]?.type === "text" ? response.content[0].text : "";
-  const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-  let parsed: Partial<AiTransform>;
-  try {
-    parsed = JSON.parse(cleaned) as Partial<AiTransform>;
-  } catch {
-    const m = cleaned.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error("AI 전처리 결과를 해석하지 못했습니다. 지시를 더 짧고 명확하게 적어주세요.");
-    parsed = JSON.parse(m[0]) as Partial<AiTransform>;
+  if (!text.includes("<CSS>") && !text.includes("<REMOVE>") && !text.includes("<JS>")) {
+    throw new Error("AI 전처리 결과를 해석하지 못했습니다. 지시를 더 짧고 명확하게 적어주세요.");
   }
   return {
-    removeSelectors: Array.isArray(parsed.removeSelectors) ? parsed.removeSelectors.filter((s) => typeof s === "string") : [],
-    css: typeof parsed.css === "string" ? parsed.css : "",
-    js: typeof parsed.js === "string" ? parsed.js : "",
-    notes: typeof parsed.notes === "string" ? parsed.notes : "",
+    removeSelectors: extractBlock(text, "REMOVE")
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s && !s.startsWith("<")),
+    css: extractBlock(text, "CSS"),
+    js: extractBlock(text, "JS"),
+    notes: extractBlock(text, "NOTES"),
   };
 }
 
@@ -201,10 +239,11 @@ function buildDocument(html: string, baseUrl: string): string {
 }
 
 export async function captureSlices(opts: HtmlshotOptions): Promise<HtmlshotResult> {
-  // AI 전처리(선택) — 브라우저 띄우기 전에 스펙만 먼저 받아둔다
+  // AI 전처리 — 브라우저 띄우기 전에 스펙만 먼저 받아둔다
+  // (정적 변환 켜짐 또는 사용자 지시가 있을 때만 호출)
   let transform: AiTransform | null = null;
-  if (opts.prompt && opts.prompt.trim()) {
-    transform = await aiTransform(opts.html, opts.prompt.trim());
+  if (opts.aiStatic || (opts.prompt && opts.prompt.trim())) {
+    transform = await aiTransform(opts.html, opts.prompt || "", opts.aiStatic);
   }
 
   const browser = await launchBrowser();
@@ -284,8 +323,8 @@ export async function captureSlices(opts: HtmlshotOptions): Promise<HtmlshotResu
     await page.evaluate(() => window.scrollTo(0, 0));
     await new Promise((r) => setTimeout(r, 400));
 
-    // 전체 높이 + 섹션 경계 수집 (어색한 중간 절단 방지용 컷 후보)
-    const { totalHeight, boundaries } = await page.evaluate(() => {
+    // 전체 높이 + 컷 후보 경계 + 최상위 섹션 경계 수집
+    const { totalHeight, boundaries, majorTops } = await page.evaluate(() => {
       const h = Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
       const set = new Set<number>();
       const push = (el: Element) => {
@@ -294,24 +333,65 @@ export async function captureSlices(opts: HtmlshotOptions): Promise<HtmlshotResu
       };
       document.querySelectorAll("section, [class*='-sec'], [class*='__sec'], hr").forEach(push);
       document.body.querySelectorAll(":scope > *, :scope > * > *").forEach(push);
-      return { totalHeight: h, boundaries: Array.from(set).sort((a, b) => a - b) };
-    });
-    const height = Math.min(totalHeight, 60_000); // 폭주 방지 상한
 
-    // 그리디 분할: 시작점에서 maxSliceHeight 이내의 가장 먼 경계에서 자르고, 없으면 강제 컷
-    const maxH = Math.max(1_000, opts.maxSliceHeight);
-    const cuts: Array<{ y: number; h: number }> = [];
-    let y = 0;
-    while (y < height) {
-      const limit = y + maxH;
-      if (limit >= height) {
-        cuts.push({ y, h: height - y });
+      // 최상위 섹션: 단일 래퍼(div 하나로 감싼 구조)를 파고들어가 첫 다자식 노드의 자식들
+      const skip = new Set(["SCRIPT", "STYLE", "LINK", "TEMPLATE", "META", "NOSCRIPT"]);
+      let node: Element = document.body;
+      let tops: number[] = [];
+      for (let depth = 0; depth < 6; depth++) {
+        const kids = Array.from(node.children).filter(
+          (el) => !skip.has(el.tagName) && el.getBoundingClientRect().height > 8,
+        );
+        if (kids.length === 1) {
+          node = kids[0];
+          continue;
+        }
+        tops = kids
+          .map((el) => Math.round(el.getBoundingClientRect().top + window.pageYOffset))
+          .filter((t) => t > 0 && t < h);
         break;
       }
-      const candidates = boundaries.filter((b) => b > y + maxH * 0.4 && b <= limit);
-      const cut = candidates.length ? candidates[candidates.length - 1] : limit;
-      cuts.push({ y, h: cut - y });
-      y = cut;
+      return { totalHeight: h, boundaries: Array.from(set).sort((a, b) => a - b), majorTops: tops.sort((a, b) => a - b) };
+    });
+    const height = Math.min(totalHeight, 60_000); // 폭주 방지 상한
+    const maxH = Math.max(1_000, opts.maxSliceHeight);
+
+    // 그리디 분할: 시작점에서 maxH 이내의 가장 먼 경계에서 자르고, 없으면 강제 컷
+    const greedyCuts = (startY: number, endY: number): Array<{ y: number; h: number }> => {
+      const out: Array<{ y: number; h: number }> = [];
+      let y = startY;
+      while (y < endY) {
+        const limit = y + maxH;
+        if (limit >= endY) {
+          out.push({ y, h: endY - y });
+          break;
+        }
+        const candidates = boundaries.filter((b) => b > y + maxH * 0.4 && b <= limit);
+        const cut = candidates.length ? candidates[candidates.length - 1] : limit;
+        out.push({ y, h: cut - y });
+        y = cut;
+      }
+      return out;
+    };
+
+    // 섹션 모드: 최상위 섹션마다 1장. 얇은 섹션(마퀴 바 등)은 다음 섹션에 병합,
+    // 최대높이 초과 섹션만 내부 경계로 추가 분할.
+    const MIN_SECTION = 500;
+    let cuts: Array<{ y: number; h: number }>;
+    if (opts.splitMode === "section" && majorTops.length > 0) {
+      const segments: Array<{ y: number; h: number }> = [];
+      let start = 0;
+      for (const t of majorTops.filter((t) => t > 0 && t < height)) {
+        if (t - start < MIN_SECTION) continue; // 얇으면 다음 경계까지 병합
+        segments.push({ y: start, h: t - start });
+        start = t;
+      }
+      const lastH = height - start;
+      if (lastH < MIN_SECTION && segments.length) segments[segments.length - 1].h += lastH;
+      else if (lastH > 0) segments.push({ y: start, h: lastH });
+      cuts = segments.flatMap((s) => greedyCuts(s.y, s.y + s.h));
+    } else {
+      cuts = greedyCuts(0, height);
     }
 
     // 조각별 클립 스크린샷 (sharp 없이 분할 — captureBeyondViewport 로 뷰포트 밖도 촬영됨)
