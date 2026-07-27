@@ -123,6 +123,43 @@ const CHROMIUM_PACK_URL =
   process.env.CHROMIUM_PACK_URL ||
   "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar";
 
+// 람다 chromium 엔 한글 폰트가 없어 한글이 전부 빈 칸으로 렌더됨(실제 발생).
+// 패키지 fonts.conf 가 /tmp/fonts 를 스캔하므로(v149에서 font() API 는 제거됨)
+// 캡처 전에 한글 TTF 를 그 폴더에 내려받는다.
+// 1순위 Pretendard(상세페이지 실제 서체), 실패 시 Noto Sans KR.
+const KOREAN_FONT_URLS = [
+  process.env.HTMLSHOT_FONT_URL,
+  "https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/public/variable/PretendardVariable.ttf",
+  "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf",
+].filter(Boolean) as string[];
+
+let fontReady = false; // 람다 인스턴스당 1회만 로드 (웜 호출에선 스킵)
+
+async function ensureKoreanFont(): Promise<void> {
+  if (fontReady) return;
+  const dir = process.env.FONTCONFIG_PATH || "/tmp/fonts";
+  await fs.promises.mkdir(dir, { recursive: true });
+  const dest = `${dir}/korean-font.ttf`;
+  if (fs.existsSync(dest)) {
+    fontReady = true;
+    return;
+  }
+  for (const url of KOREAN_FONT_URLS) {
+    try {
+      const res = await fetch(url, { redirect: "follow" });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 100_000) throw new Error("font file too small"); // CDN 오류 응답 방지
+      await fs.promises.writeFile(dest, buf);
+      fontReady = true;
+      return;
+    } catch {
+      /* 다음 후보 시도 */
+    }
+  }
+  throw new Error("한글 폰트 로드에 실패했습니다. 잠시 후 다시 시도해주세요.");
+}
+
 async function launchBrowser(): Promise<Browser> {
   const puppeteer = await import("puppeteer-core");
   const onVercel = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
@@ -136,6 +173,8 @@ async function launchBrowser(): Promise<Browser> {
       // GitHub 릴리스 팩을 /tmp 로 내려받아 사용 (웜 람다에선 캐시됨)
       executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
     }
+    // executablePath() 이후에 폰트 배치 — fonts.tar.br 인플레이트(/tmp/fonts 생성)와 순서 보장
+    await ensureKoreanFont();
     return puppeteer.launch({
       args: chromium.args,
       executablePath,
