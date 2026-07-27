@@ -117,14 +117,28 @@ function findLocalChrome(): string | null {
   return null;
 }
 
+// 번들 바이너리가 람다에 없을 때(파일 트레이싱 누락) 런타임에 내려받는 폴백 팩.
+// ⚠️ package.json 의 @sparticuz/chromium 메이저 버전과 반드시 일치시킬 것.
+const CHROMIUM_PACK_URL =
+  process.env.CHROMIUM_PACK_URL ||
+  "https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar";
+
 async function launchBrowser(): Promise<Browser> {
   const puppeteer = await import("puppeteer-core");
   const onVercel = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
   if (onVercel) {
     const chromium = (await import("@sparticuz/chromium")).default;
+    let executablePath: string;
+    try {
+      executablePath = await chromium.executablePath();
+    } catch {
+      // node_modules/@sparticuz/chromium/bin 이 트레이싱에서 빠진 경우 —
+      // GitHub 릴리스 팩을 /tmp 로 내려받아 사용 (웜 람다에선 캐시됨)
+      executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
+    }
     return puppeteer.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(),
+      executablePath,
       headless: true,
     });
   }
