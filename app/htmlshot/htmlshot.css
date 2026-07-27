@@ -1,0 +1,17 @@
+/* 상세 이미지 변환(/htmlshot) 전용 — 접두사 hs- (CLAUDE.md 4항) */
+
+.hs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sm-space-4); align-items: start; }
+@media (max-width: 900px) { .hs-grid { grid-template-columns: 1fr; } }
+
+.hs-html-input { min-height: 320px; font-family: ui-monospace, Consolas, monospace; font-size: var(--sm-fs-xs); line-height: 1.5; }
+.hs-prompt-input { min-height: 72px; }
+
+.hs-opt-row { display: flex; flex-wrap: wrap; gap: var(--sm-space-3); }
+.hs-opt-row .b2b-field { flex: 1 1 120px; min-width: 110px; }
+
+.hs-result-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--sm-space-3); }
+.hs-result-card { border: 1px solid var(--sm-border); border-radius: 8px; overflow: hidden; background: var(--sm-white); }
+.hs-result-thumb { width: 100%; height: 220px; object-fit: cover; object-position: top; display: block; background: var(--sm-bg-subtle); }
+.hs-result-meta { display: flex; justify-content: space-between; align-items: center; gap: var(--sm-space-2); padding: var(--sm-space-2) var(--sm-space-3); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+
+.hs-result-actions { display: flex; align-items: center; gap: var(--sm-space-3); margin-bottom: var(--sm-space-4); flex-wrap: wrap; }

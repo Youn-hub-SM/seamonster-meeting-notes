@@ -95,6 +95,7 @@ export const NAV: NavCategory[] = [
     tools: [
       { href: "/utm", label: "UTM 만들기", icon: "link" },
       { href: "/qr", label: "QR코드/브랜드링크", icon: "qrcode" },
+      { href: "/htmlshot", label: "상세 이미지 변환", icon: "image" },
       {
         href: "/naver-ad", label: "광고", icon: "trend",
         menu: [

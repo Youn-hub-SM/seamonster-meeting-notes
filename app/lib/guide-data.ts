@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-07-24";
+export const GUIDE_UPDATED = "2026-07-28";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1271,6 +1271,39 @@ export const GUIDE: GuideCategory[] = [
               "광고 링크",
               "유입 추적",
               "URL 빌더"
+            ]
+          }
+        ]
+      },
+      {
+        "tool": "상세 이미지 변환",
+        "entries": [
+          {
+            "href": "/htmlshot",
+            "label": "상세 이미지 변환",
+            "what": "코드형 상세 HTML을 쿠팡·스마트스토어 업로드용 이미지 세트(자동 분할)로 변환",
+            "steps": [
+              "왼쪽 칸에 상세페이지 HTML 전체를 붙여넣는다",
+              "플랫폼에서 쿠팡(780px)·스마트스토어(860px)·직접 입력 중 하나를 고른다",
+              "필요하면 장당 최대 높이·형식(JPG/PNG)·해상도를 조정한다",
+              "섹션을 빼거나 스타일을 바꾸려면 'AI 변환 지시'에 자연어로 적는다",
+              "[이미지로 변환]을 누르고 결과를 기다린다 (최대 1분)",
+              "[전체 ZIP 다운로드]를 누르거나 이미지별 '저장'을 누른다"
+            ],
+            "tips": [
+              "다운로드 링크는 24시간 뒤 만료된다 — 결과는 바로 저장해둔다",
+              "HTML 안의 /web/upload/... 같은 상대경로 이미지는 '이미지 기준 도메인'을 기준으로 불러온다"
+            ],
+            "keywords": [
+              "상세페이지",
+              "이미지 변환",
+              "쿠팡",
+              "스마트스토어",
+              "네이버",
+              "상세 이미지",
+              "HTML 캡처",
+              "통이미지",
+              "스크린샷"
             ]
           }
         ]

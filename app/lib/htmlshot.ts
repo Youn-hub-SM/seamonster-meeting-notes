@@ -1,0 +1,335 @@
+// 상세 이미지 변환(/htmlshot) — HTML 을 헤드리스 크롬으로 렌더링해 플랫폼 규격
+// (쿠팡/스마트스토어)에 맞춘 이미지 세트로 자르는 서버 로직.
+//  · Vercel: @sparticuz/chromium + puppeteer-core (next.config serverExternalPackages 필수)
+//  · 로컬(Windows/Mac): 설치된 Chrome/Edge 실행파일을 찾아 사용
+//  · 결과 이미지는 Supabase Storage 'htmlshot' 버킷에 올리고 서명 URL 반환
+//    (Vercel 응답 바디 4.5MB 제한 회피 — 이미지 세트가 수십 MB 일 수 있음)
+import fs from "fs";
+import Anthropic from "@anthropic-ai/sdk";
+import type { Browser } from "puppeteer-core";
+import { getCurrentModel } from "./ai-model";
+import { supabaseAdmin } from "./supabase";
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+export interface HtmlshotOptions {
+  html: string;
+  width: number;           // 출력 폭(px) — 쿠팡 780 / 스마트스토어 860
+  maxSliceHeight: number;  // 장당 최대 높이(px, 출력 기준 아님 — 렌더 px)
+  format: "jpeg" | "png";
+  quality: number;         // jpeg 만 사용 (1~100)
+  scale: 1 | 2;            // deviceScaleFactor — 2면 출력 픽셀 2배(선명)
+  baseUrl: string;         // 상대경로(/web/upload/...) 기준 도메인
+  expand: boolean;         // 아코디언/접힘 패널 자동 펼침
+  prompt?: string;         // AI 전처리 지시 (선택)
+}
+
+export interface HtmlshotSlice {
+  url: string;    // 서명 URL (24시간)
+  path: string;   // storage 경로
+  width: number;  // 출력 픽셀
+  height: number;
+  bytes: number;
+}
+
+export interface HtmlshotResult {
+  slices: HtmlshotSlice[];
+  totalHeight: number;   // 렌더 전체 높이(px)
+  aiNotes?: string;      // AI 전처리가 실제로 적용한 내용 요약
+}
+
+/* ── AI 전처리 ────────────────────────────────────────────────
+   프롬프트(자연어)를 "변환 스펙"(제거 셀렉터 + 주입 CSS/JS)으로 해석.
+   HTML 전체를 다시 쓰게 하지 않는다 — 출력이 짧아 빠르고, 원본 훼손 위험이 없다. */
+interface AiTransform {
+  removeSelectors: string[];
+  css: string;
+  js: string;
+  notes: string;
+}
+
+const AI_SYSTEM = `상세페이지 HTML을 이미지 캡처용으로 전처리하는 도구. 사용자의 지시를 읽고
+HTML 을 직접 고치는 대신 아래 JSON 스펙만 반환한다. 순수 JSON 한 개만, 다른 텍스트 금지.
+
+{"removeSelectors":["#id",".class"],"css":"주입할 CSS","js":"주입할 JS(즉시실행, DOM 조작)","notes":"적용 내용 한 줄 요약(한국어)"}
+
+규칙:
+- removeSelectors: 지시에 따라 통째로 없앨 요소의 CSS 셀렉터. HTML에 실제로 존재하는 id/class 만 사용.
+- css: 스타일 변경 지시(색·크기·간격·숨김 등)는 CSS 로. !important 사용 가능.
+- js: 텍스트 교체·클래스 부여 등 CSS 로 안 되는 것만. try/catch 불필요(호출부가 감쌈). 없으면 빈 문자열.
+- 이미지 캡처 목적이므로 애니메이션/호버 효과 관련 지시는 최종 정지 상태 기준으로 처리.
+- 지시가 HTML 과 무관하거나 수행 불가면 세 필드를 비우고 notes 에 이유를 적는다.`;
+
+export async function aiTransform(html: string, prompt: string): Promise<AiTransform> {
+  const model = await getCurrentModel();
+  const response = await anthropic.messages.create({
+    model,
+    max_tokens: 4096,
+    system: AI_SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content: `[변환 지시]\n${prompt}\n\n[HTML]\n${html.slice(0, 150_000)}`,
+      },
+    ],
+  });
+  const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+  const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+  let parsed: Partial<AiTransform>;
+  try {
+    parsed = JSON.parse(cleaned) as Partial<AiTransform>;
+  } catch {
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error("AI 전처리 결과를 해석하지 못했습니다. 지시를 더 짧고 명확하게 적어주세요.");
+    parsed = JSON.parse(m[0]) as Partial<AiTransform>;
+  }
+  return {
+    removeSelectors: Array.isArray(parsed.removeSelectors) ? parsed.removeSelectors.filter((s) => typeof s === "string") : [],
+    css: typeof parsed.css === "string" ? parsed.css : "",
+    js: typeof parsed.js === "string" ? parsed.js : "",
+    notes: typeof parsed.notes === "string" ? parsed.notes : "",
+  };
+}
+
+/* ── 브라우저 실행 ──────────────────────────────────────────── */
+function findLocalChrome(): string | null {
+  const candidates = [
+    process.env.CHROME_PATH,
+    // Windows
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe` : undefined,
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    // macOS
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    // Linux (로컬 도커 등)
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+  ].filter(Boolean) as string[];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch {
+      /* 접근 불가 경로 무시 */
+    }
+  }
+  return null;
+}
+
+async function launchBrowser(): Promise<Browser> {
+  const puppeteer = await import("puppeteer-core");
+  const onVercel = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
+  if (onVercel) {
+    const chromium = (await import("@sparticuz/chromium")).default;
+    return puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  }
+  const local = findLocalChrome();
+  if (!local) {
+    throw new Error("로컬 Chrome/Edge 를 찾지 못했습니다. CHROME_PATH 환경변수로 실행파일 경로를 지정해주세요.");
+  }
+  return puppeteer.launch({ executablePath: local, headless: true });
+}
+
+/* ── 캡처 파이프라인 ────────────────────────────────────────── */
+function buildDocument(html: string, baseUrl: string): string {
+  // 이미 완전한 문서면 base 만 주입, 아니면 골격으로 감싼다.
+  const baseTag = `<base href="${baseUrl.replace(/"/g, "")}/">`;
+  if (/<html[\s>]/i.test(html)) {
+    if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1><meta charset="utf-8">${baseTag}`);
+    return html.replace(/<html([^>]*)>/i, `<html$1><head><meta charset="utf-8">${baseTag}</head>`);
+  }
+  return `<!doctype html><html><head><meta charset="utf-8">${baseTag}` +
+    `<style>html,body{margin:0;padding:0;background:#fff}</style></head><body>${html}</body></html>`;
+}
+
+export async function captureSlices(opts: HtmlshotOptions): Promise<HtmlshotResult> {
+  // AI 전처리(선택) — 브라우저 띄우기 전에 스펙만 먼저 받아둔다
+  let transform: AiTransform | null = null;
+  if (opts.prompt && opts.prompt.trim()) {
+    transform = await aiTransform(opts.html, opts.prompt.trim());
+  }
+
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: opts.width, height: 1000, deviceScaleFactor: opts.scale });
+
+    const doc = buildDocument(opts.html, opts.baseUrl || "https://seamonster.kr");
+    try {
+      await page.setContent(doc, { waitUntil: "load", timeout: 25_000 });
+      await page.waitForNetworkIdle({ idleTime: 700, timeout: 15_000 });
+    } catch {
+      /* 네트워크가 안 잠잠해져도(광고 스크립트 등) 렌더는 됐으므로 진행 */
+    }
+
+    // AI 스펙 적용 (제거 → CSS → JS)
+    if (transform) {
+      if (transform.removeSelectors.length) {
+        await page.evaluate((sels: string[]) => {
+          sels.forEach((s) => {
+            try {
+              document.querySelectorAll(s).forEach((el) => el.remove());
+            } catch { /* 잘못된 셀렉터 무시 */ }
+          });
+        }, transform.removeSelectors);
+      }
+      if (transform.css) await page.addStyleTag({ content: transform.css });
+      if (transform.js) {
+        await page.evaluate((code: string) => {
+          try {
+            // eslint-disable-next-line no-new-func
+            new Function(code)();
+          } catch { /* AI JS 오류는 캡처를 막지 않는다 */ }
+        }, transform.js);
+      }
+    }
+
+    // 정적화: 애니메이션 정지(마퀴·게이지가 항상 같은 프레임으로 찍히게)
+    await page.addStyleTag({
+      content: "*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}",
+    });
+
+    // 접힘 패널 펼침: max-height 0 으로 접힌 요소를 열고, 부모에 is-open 부여
+    // (아코디언 열림 상태의 스타일 — 색·회전 아이콘 — 까지 따라오게)
+    if (opts.expand) {
+      await page.evaluate(() => {
+        const all = Array.from(document.querySelectorAll<HTMLElement>("body *"));
+        for (const el of all) {
+          const cs = window.getComputedStyle(el);
+          if (cs.position === "fixed") continue; // 모달/라이트박스는 건드리지 않음
+          if (cs.maxHeight === "0px" && cs.overflow.includes("hidden")) {
+            el.style.setProperty("max-height", "none", "important");
+            if (parseFloat(cs.opacity) === 0) el.style.setProperty("opacity", "1", "important");
+            const item = el.closest<HTMLElement>('[class*="__item"], [class*="__card"], [class*="-item"], [class*="-card"]');
+            if (item && !item.className.includes("is-open")) item.classList.add("is-open");
+          }
+        }
+      });
+    }
+
+    // 지연 로드(IntersectionObserver·lazy 이미지) 트리거: 끝까지 스크롤 후 복귀
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        let y = 0;
+        const step = () => {
+          y += 800;
+          window.scrollTo(0, y);
+          if (y < document.body.scrollHeight + 800) setTimeout(step, 60);
+          else resolve();
+        };
+        step();
+      });
+    });
+    try {
+      await page.waitForNetworkIdle({ idleTime: 600, timeout: 8_000 });
+    } catch { /* 계속 진행 */ }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await new Promise((r) => setTimeout(r, 400));
+
+    // 전체 높이 + 섹션 경계 수집 (어색한 중간 절단 방지용 컷 후보)
+    const { totalHeight, boundaries } = await page.evaluate(() => {
+      const h = Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+      const set = new Set<number>();
+      const push = (el: Element) => {
+        const top = Math.round(el.getBoundingClientRect().top + window.pageYOffset);
+        if (top > 0 && top < h) set.add(top);
+      };
+      document.querySelectorAll("section, [class*='-sec'], [class*='__sec'], hr").forEach(push);
+      document.body.querySelectorAll(":scope > *, :scope > * > *").forEach(push);
+      return { totalHeight: h, boundaries: Array.from(set).sort((a, b) => a - b) };
+    });
+    const height = Math.min(totalHeight, 60_000); // 폭주 방지 상한
+
+    // 그리디 분할: 시작점에서 maxSliceHeight 이내의 가장 먼 경계에서 자르고, 없으면 강제 컷
+    const maxH = Math.max(1_000, opts.maxSliceHeight);
+    const cuts: Array<{ y: number; h: number }> = [];
+    let y = 0;
+    while (y < height) {
+      const limit = y + maxH;
+      if (limit >= height) {
+        cuts.push({ y, h: height - y });
+        break;
+      }
+      const candidates = boundaries.filter((b) => b > y + maxH * 0.4 && b <= limit);
+      const cut = candidates.length ? candidates[candidates.length - 1] : limit;
+      cuts.push({ y, h: cut - y });
+      y = cut;
+    }
+
+    // 조각별 클립 스크린샷 (sharp 없이 분할 — captureBeyondViewport 로 뷰포트 밖도 촬영됨)
+    const buffers: Array<{ buf: Buffer; h: number }> = [];
+    for (const c of cuts) {
+      const shot = await page.screenshot({
+        clip: { x: 0, y: c.y, width: opts.width, height: c.h },
+        type: opts.format,
+        ...(opts.format === "jpeg" ? { quality: Math.min(100, Math.max(1, opts.quality)) } : {}),
+      });
+      buffers.push({ buf: Buffer.from(shot), h: c.h });
+    }
+
+    // Supabase Storage 업로드 → 서명 URL (24h)
+    const slices = await uploadSlices(buffers, opts);
+    return { slices, totalHeight: height, aiNotes: transform?.notes || undefined };
+  } finally {
+    await browser.close();
+  }
+}
+
+/* ── 업로드 ─────────────────────────────────────────────────── */
+async function uploadSlices(
+  buffers: Array<{ buf: Buffer; h: number }>,
+  opts: HtmlshotOptions,
+): Promise<HtmlshotSlice[]> {
+  const sb = supabaseAdmin();
+  const BUCKET = "htmlshot";
+
+  // 버킷 없으면 생성 (이미 있으면 에러 무시 — 마이그레이션 없이 동작)
+  try {
+    await sb.storage.createBucket(BUCKET, { public: false });
+  } catch { /* already exists */ }
+
+  const ext = opts.format === "jpeg" ? "jpg" : "png";
+  const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+  const dir = `${stamp}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const out: HtmlshotSlice[] = [];
+  for (let i = 0; i < buffers.length; i++) {
+    const path = `${dir}/${String(i + 1).padStart(2, "0")}.${ext}`;
+    const { error: upErr } = await sb.storage.from(BUCKET).upload(path, buffers[i].buf, {
+      contentType: opts.format === "jpeg" ? "image/jpeg" : "image/png",
+      upsert: true,
+    });
+    if (upErr) throw new Error(`이미지 업로드 실패: ${upErr.message}`);
+    const { data: signed, error: signErr } = await sb.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24);
+    if (signErr || !signed) throw new Error(`다운로드 URL 생성 실패: ${signErr?.message || "unknown"}`);
+    out.push({
+      url: signed.signedUrl,
+      path,
+      width: opts.width * opts.scale,
+      height: buffers[i].h * opts.scale,
+      bytes: buffers[i].buf.length,
+    });
+  }
+
+  // 7일 넘은 폴더 청소 (베스트에포트 — 실패해도 무시)
+  try {
+    const { data: rootDirs } = await sb.storage.from(BUCKET).list("", { limit: 100 });
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const d of rootDirs || []) {
+      const ts = Date.parse(
+        `${d.name.slice(0, 4)}-${d.name.slice(4, 6)}-${d.name.slice(6, 8)}T${d.name.slice(8, 10)}:${d.name.slice(10, 12)}:00Z`,
+      );
+      if (!isNaN(ts) && ts < cutoff) {
+        const { data: files } = await sb.storage.from(BUCKET).list(d.name, { limit: 100 });
+        if (files?.length) await sb.storage.from(BUCKET).remove(files.map((f) => `${d.name}/${f.name}`));
+      }
+    }
+  } catch { /* 청소 실패는 무시 */ }
+
+  return out;
+}
