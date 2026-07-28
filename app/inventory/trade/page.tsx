@@ -56,7 +56,7 @@ export default function TradePage() {
         <div><h1 className="b2b-page-title">구매 및 판매</h1></div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={openUpload}>엑셀 업로드</button>
-          <Link className="b2b-btn-primary" href="/inventory/trade/new">+ 입고/판매 기록</Link>
+          <Link className="b2b-btn-primary" href="/inventory/trade/new">+ 입고/출고 기록</Link>
         </div>
       </header>
 
