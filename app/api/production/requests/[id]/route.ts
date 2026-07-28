@@ -35,6 +35,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       patch.status = s;
     }
     if (b.title !== undefined) patch.title = String(b.title || "").trim() || null;
+    if (b.purpose !== undefined) patch.purpose = b.purpose === "도매 납품" ? "도매 납품" : "재고 보충"; // 용도(082)
     if (b.requested_by !== undefined) patch.requested_by = String(b.requested_by || "").trim() || null;
     if (b.assignee !== undefined) patch.assignee = String(b.assignee || "").trim() || null;
     if (b.memo !== undefined) patch.memo = String(b.memo || "").trim() || null;
@@ -81,6 +82,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       reqNo = (cur as { req_no?: string } | null)?.req_no ?? "";
     }
     let { error } = await sb.from("production_requests").update(patch).eq("id", id);
+    if (error && "purpose" in patch && /purpose/i.test(error.message)) {
+      delete patch.purpose; // 082 미적용 환경 폴백
+      ({ error } = await sb.from("production_requests").update(patch).eq("id", id));
+    }
     if (error && "due_date" in patch && /due_date/i.test(error.message)) {
       delete patch.due_date; // 071 미적용 환경 폴백
       ({ error } = await sb.from("production_requests").update(patch).eq("id", id));

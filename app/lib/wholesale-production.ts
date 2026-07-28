@@ -46,10 +46,14 @@ export interface PrItem {
 }
 
 // 요청서(헤더) + 라인
+export const PR_PURPOSES = ["재고 보충", "도매 납품"] as const;
+export type PrPurpose = (typeof PR_PURPOSES)[number];
+
 export interface ProductionRequest {
   id: string;
   req_no: string | null;
   title: string | null;
+  purpose: PrPurpose;           // 생산 용도(082) — 재고 보충(자동 생성) | 도매 납품(MD 직접). 미적용 환경은 기본 재고 보충
   requested_by: string | null;
   request_date: string;
   due_date: string | null;      // 생산마감일(기본 요청일+7영업일, 급발주 시 수정 가능)

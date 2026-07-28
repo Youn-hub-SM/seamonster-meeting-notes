@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
       title: String(b.title || "").trim() || null,
       requested_by: String(b.requested_by || "").trim() || who,
       status: "요청",
+      purpose: b.purpose === "도매 납품" ? "도매 납품" : "재고 보충", // 용도(082) — 그 외 값은 재고 보충
       memo: String(b.memo || "").trim() || null,
       created_by: who,
     };
@@ -66,7 +67,13 @@ export async function POST(req: NextRequest) {
     if (due_date) head.due_date = due_date; // 생산마감일(071). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
 
     let { data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single();
-    if (he && /due_date/i.test(he.message)) { delete head.due_date; ({ data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single()); }
+    // 선택 컬럼(071 due_date · 082 purpose) 미적용 환경 폴백 — 에러 메시지에 보이는 컬럼만 빼고 재시도.
+    for (const col of ["due_date", "purpose"] as const) {
+      if (he && col in head && new RegExp(col, "i").test(he.message)) {
+        delete head[col];
+        ({ data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single());
+      }
+    }
     if (he) throw he;
     const requestId = (reqRow as { id: string }).id;
 

@@ -128,7 +128,7 @@ export default function InventoryPage() {
       if (!items.length) throw new Error(`선택 품목을 품목 목록에서 찾지 못했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
       const c = await (await fetch("/api/production/requests", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "생산 화면에서 생성", items }),
+        body: JSON.stringify({ title: "생산 화면에서 생성", purpose: "재고 보충", items }),
       })).json();
       if (!c.ok) throw new Error(c.error || "요청 생성 실패");
       if (missed.length) alert(`요청서를 만들었지만 ${missed.length}종은 품목 목록에 없어 제외했습니다: ${missed.join(", ")}`);

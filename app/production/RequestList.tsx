@@ -6,8 +6,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  PR_STATUSES, PR_STATUS_COLOR, PR_STATUS_LABEL, PR_LINE_COLOR, lineState, allLinesFilled,
-  type ProductionRequest, type PrItem, type PrStatus,
+  PR_STATUSES, PR_STATUS_COLOR, PR_STATUS_LABEL, PR_LINE_COLOR, PR_PURPOSES, lineState, allLinesFilled,
+  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose,
 } from "@/app/lib/wholesale-production";
 import { addBusinessDays } from "@/app/lib/business-days";
 import { Combobox } from "@/app/b2b/orders/Combobox";
@@ -249,6 +249,9 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
         <td style={{ whiteSpace: "nowrap" }}>
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
+          <span className="b2b-status-pill" style={req.purpose === "도매 납품"
+            ? { background: "var(--sm-orange-light)", color: "var(--sm-orange)" }
+            : { background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{req.purpose}</span>
           {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.title}</span> : null}
         </td>
         <td className="b2b-col-status" onClick={(e) => e.stopPropagation()}>
@@ -405,6 +408,8 @@ function RequestModal({ initial, prefill, products, busy, onClose, onSubmit }: {
   // 생산마감일 필수 — 기본 요청일+7영업일(급발주 시 수정). 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
   const [dueDate, setDueDate] = useState(initial ? (initial.due_date || addBusinessDays(initial.request_date, 7)) : addBusinessDays(todayIso(), 7));
   const [title, setTitle] = useState(initial?.title || "");
+  // 용도(082): 자동 생성('생산' 화면)은 재고 보충으로 만들어지므로, MD가 직접 여는 이 모달은 기본 도매 납품.
+  const [purpose, setPurpose] = useState<PrPurpose>(initial?.purpose || "도매 납품");
   const [memo, setMemo] = useState(initial?.memo || "");
   const [lines, setLines] = useState<NewLine[]>(() =>
     initial
@@ -430,6 +435,7 @@ function RequestModal({ initial, prefill, products, busy, onClose, onSubmit }: {
       .map((l) => ({ id: l.item_id, product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty)), memo: l.memo.trim() || undefined }));
     onSubmit({
       title: title.trim() || (isEdit ? "" : undefined),
+      purpose,
       requested_by: requestedBy.trim() || (isEdit ? "" : undefined),
       request_date: date,
       due_date: dueDate,
@@ -444,6 +450,14 @@ function RequestModal({ initial, prefill, products, busy, onClose, onSubmit }: {
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">{isEdit ? `요청서 수정 ${initial?.req_no || ""}` : "새 도매 생산 요청"}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <div className="sm-col" style={{ gap: 3 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>용도</span>
+              <div className="sm-tabs" style={{ margin: 0 }}>
+                {PR_PURPOSES.map((pp) => (
+                  <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} onClick={() => setPurpose(pp)}>{pp}</button>
+                ))}
+              </div>
+            </div>
             <label className="sm-col" style={{ gap: 3 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>요청자(MD)</span>
               <input className="b2b-input" style={{ width: 160 }} value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="이름(비우면 본인)" />
