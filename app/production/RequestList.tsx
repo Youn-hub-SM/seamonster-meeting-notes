@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  PR_STATUSES, PR_STATUS_COLOR, PR_STATUS_LABEL, PR_LINE_COLOR, PR_PURPOSES, lineState, allLinesFilled,
+  PR_LINE_COLOR, PR_PURPOSES, lineState, allLinesFilled,
   type ProductionRequest, type PrItem, type PrStatus, type PrPurpose,
 } from "@/app/lib/wholesale-production";
 import { addBusinessDays } from "@/app/lib/business-days";
@@ -28,7 +28,7 @@ type NewLine = {
 
 export function RequestList() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
-  const [filter, setFilter] = useState<"전체" | PrStatus>("전체");
+  const [showDone, setShowDone] = useState(false); // 기본 진행(요청·진행중)만 — 완료·취소는 토글로
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [products, setProducts] = useState<Prod[]>([]);
@@ -49,7 +49,15 @@ export function RequestList() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const displayed = useMemo(() => (filter === "전체" ? requests : requests.filter((r) => r.status === filter)), [requests, filter]);
+  const displayed = useMemo(
+    () => (showDone ? requests : requests.filter((r) => r.status === "요청" || r.status === "진행중")),
+    [requests, showDone]);
+
+  // 담당자 '확인' 버튼용 로그인 사용자 이름
+  const [userName, setUserName] = useState<string | null>(null);
+  useEffect(() => {
+    fetch("/api/b2b/auth", { cache: "no-store" }).then((r) => r.json()).then((j) => setUserName(j?.ok ? j.name || null : null)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -156,24 +164,39 @@ export function RequestList() {
     setBusy(false);
   }
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { 전체: requests.length };
-    for (const s of PR_STATUSES) c[s] = requests.filter((r) => r.status === s).length;
-    return c;
-  }, [requests]);
+  const doneCount = useMemo(() => requests.filter((r) => r.status === "완료" || r.status === "취소").length, [requests]);
+
+  // 제조사에게 건넬 요청서 텍스트 — 담당자가 확인 후 복사해 전달(제조사 전달용, DB 저장 없음).
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  async function copyRequestSheet(r: ProductionRequest) {
+    const L: string[] = [];
+    L.push(`[생산 요청서] ${r.req_no || ""}${r.purpose === "도매 납품" ? " (도매 납품)" : ""}`.trim());
+    L.push(`요청일 ${r.request_date} · 생산마감일 ${r.due_date || "-"}${r.requested_by ? ` · 요청 ${r.requested_by}` : ""}${r.assignee ? ` · 담당 ${r.assignee}` : ""}`);
+    if (r.title) L.push(r.title);
+    L.push("--------------------------------");
+    r.items.forEach((it, i) => L.push(`${i + 1}. ${it.name}${it.spec ? ` ${it.spec}` : ""}${it.sku ? ` [${it.sku}]` : ""}  ×${it.requested_qty.toLocaleString()}${it.unit || ""}${it.memo ? ` — ${it.memo}` : ""}`));
+    L.push("--------------------------------");
+    L.push(`총 ${r.items.length}품목 · ${r.total_requested.toLocaleString()}개`);
+    if (r.memo) L.push(`메모: ${r.memo}`);
+    try {
+      await navigator.clipboard.writeText(L.join("\n"));
+      setCopiedId(r.id); setTimeout(() => setCopiedId(null), 2000);
+    } catch { setError("복사 실패 — 브라우저 권한을 확인하세요."); }
+  }
+
+  // 생산 담당자 확인 — 담당자=본인 기록 + 진행중 전환(제조사에 전달했다는 표시)
+  async function confirmRequest(r: ProductionRequest) {
+    await updateRequest(r.id, { assignee: userName || "확인", status: r.status === "요청" ? "진행중" : r.status });
+  }
 
   return (
     <div>
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
 
       <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <div className="sm-tabbar">
-          {(["전체", ...PR_STATUSES] as const).map((s) => (
-            <button key={s} className={`sm-tab ${filter === s ? "is-active" : ""}`} onClick={() => setFilter(s)}>
-              {s === "전체" ? "전체" : PR_STATUS_LABEL[s]}<span className="sm-tab-count">{counts[s] ?? 0}</span>
-            </button>
-          ))}
-        </div>
+        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", cursor: "pointer" }}>
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> 완료·취소 보기 <span className="sm-faint" style={{ fontSize: 12 }}>({doneCount})</span>
+        </label>
         <div className="sm-row" style={{ gap: 8 }}>
           <button className="b2b-btn-secondary" onClick={() => load()} disabled={loading}>{loading ? "불러오는 중..." : "새로고침"}</button>
           <button className="b2b-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}>+ 새 생산 요청</button>
@@ -183,7 +206,7 @@ export function RequestList() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : displayed.length === 0 ? (
-        <div className="b2b-empty">{filter === "전체" ? "아직 생산 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요." : `‘${PR_STATUS_LABEL[filter as PrStatus]}’ 상태의 요청이 없습니다.`}</div>
+        <div className="b2b-empty">{showDone ? "요청이 없습니다." : "진행 중인 생산 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요."}</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -191,11 +214,11 @@ export function RequestList() {
               <tr>
                 <th style={{ width: 1 }}></th>
                 <th>요청번호</th>
-                <th className="b2b-col-status" style={{ width: 160, minWidth: 160 }}>상태</th>
                 <th>품목</th>
                 <th className="b2b-col-date">진행</th>
                 <th className="b2b-col-date">요청일</th>
                 <th className="b2b-col-date">마감일</th>
+                <th className="b2b-col-date">담당</th>
                 <th style={{ width: 1 }}></th>
               </tr>
             </thead>
@@ -207,6 +230,9 @@ export function RequestList() {
                   onReceive={(body) => receive(r.id, body)}
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
                   onStatus={(s) => patchStatus(r.id, s)}
+                  onConfirm={() => confirmRequest(r)}
+                  onCopySheet={() => copyRequestSheet(r)}
+                  copied={copiedId === r.id}
                   onEdit={() => setEditReq(r)}
                   onDelete={() => removeRequest(r.id)}
                 />
@@ -231,12 +257,15 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onEdit, onDelete }: {
+function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onConfirm, onCopySheet, copied, onEdit, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onReceive: (body: { item_id: string; qty: number; receipt_date: string; memo: string }) => Promise<boolean>;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
+  onConfirm: () => void;
+  onCopySheet: () => void;
+  copied: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -249,22 +278,7 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
         <td style={{ whiteSpace: "nowrap" }}>
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
-          <span className="b2b-status-pill" style={req.purpose === "도매 납품"
-            ? { background: "var(--sm-orange-light)", color: "var(--sm-orange)" }
-            : { background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{req.purpose}</span>
           {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.title}</span> : null}
-        </td>
-        <td className="b2b-col-status" onClick={(e) => e.stopPropagation()}>
-          {/* 발주관리처럼 상태를 인라인 select 로 바로 변경(요청/진행중/완료/취소) */}
-          <select
-            className="b2b-status-select"
-            value={req.status}
-            disabled={busy}
-            onChange={(e) => onStatus(e.target.value as PrStatus)}
-            style={{ background: PR_STATUS_COLOR[req.status].bg, color: PR_STATUS_COLOR[req.status].fg, maxWidth: "none", width: "100%", minWidth: 148, fontSize: 12.5, padding: "6px 10px" }}
-          >
-            {PR_STATUSES.map((s) => <option key={s} value={s}>{PR_STATUS_LABEL[s]}</option>)}
-          </select>
         </td>
         <td className="sm-nowrap" style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
           {itemPreview || "품목 없음"}
@@ -276,8 +290,21 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
           {req.requested_by ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.requested_by}</span> : null}
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{req.due_date || "-"}</td>
+        <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
+          {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}
+          {req.assignee ? (
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{req.assignee}
+              {(req.status === "완료" || req.status === "취소") && <span className="sm-faint" style={{ marginLeft: 5, fontSize: 11 }}>{req.status}</span>}
+            </span>
+          ) : (req.status === "요청" || req.status === "진행중") ? (
+            <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} disabled={busy} onClick={onConfirm}>확인</button>
+          ) : (
+            <span className="sm-faint" style={{ fontSize: 12 }}>{req.status}</span>
+          )}
+        </td>
         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-          {editable && <button className="b2b-link-btn" disabled={busy} onClick={onEdit}>수정</button>}
+          <button className="b2b-link-btn" disabled={busy} onClick={onCopySheet} title="제조사에 건넬 요청서 텍스트 복사">{copied ? "복사됨 ✓" : "요청서"}</button>
+          {editable && <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} onClick={onEdit}>수정</button>}
           <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", marginLeft: 6 }} disabled={busy} onClick={onDelete}>삭제</button>
         </td>
       </tr>
@@ -301,7 +328,12 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
               </table>
             </div>
 
-            {suggestComplete && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 10 }}>모든 품목이 요청 수량 이상 입고되었습니다. 생산이 끝났다면 위 상태를 ‘완료’로 바꾸세요.</p>}
+            {suggestComplete && (
+              <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: "var(--sm-success)" }}>모든 품목이 요청 수량 이상 입고되었습니다.</span>
+                <button className="b2b-btn-primary" style={{ padding: "5px 14px", fontSize: 12.5 }} disabled={busy} onClick={() => onStatus("완료")}>생산 완료 처리</button>
+              </div>
+            )}
           </td>
         </tr>
       )}
