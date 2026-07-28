@@ -773,11 +773,11 @@ export const GUIDE: GuideCategory[] = [
     "category": "생산·재고",
     "tools": [
       {
-        "tool": "구매 및 판매",
+        "tool": "입고 및 출고",
         "entries": [
           {
             "href": "/inventory/trade",
-            "label": "구매 및 판매",
+            "label": "입고 및 출고",
             "what": "구매(입고)·판매(출고)를 주문 단위로 기록하고 엑셀로 일괄 올리는 화면",
             "steps": [
               "직접 쓰려면 '+ 입고/출고 기록'을 누른다",

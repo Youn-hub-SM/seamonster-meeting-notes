@@ -64,7 +64,7 @@ export const NAV: NavCategory[] = [
     tools: [
       // 2026-07-28 재편: 구매 및 판매를 상단으로, 생산/재고를 각각 묶고 나머지는 독립 메뉴.
       //  생산 보드·제조사 요청서는 '안씀' 처리(페이지 코드만 보존).
-      { href: "/inventory/trade", label: "구매 및 판매", icon: "receipt" },
+      { href: "/inventory/trade", label: "입고 및 출고", icon: "receipt" },
       {
         href: "/production", label: "생산 관리", icon: "factory",
         menu: [
