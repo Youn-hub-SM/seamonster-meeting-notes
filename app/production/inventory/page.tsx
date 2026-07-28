@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { matchKoQuery } from "@/app/lib/hangul";
+import { addBusinessDays } from "@/app/lib/business-days";
 
 type InvRow = {
   sku: string;
@@ -95,19 +97,31 @@ export default function InventoryPage() {
     return { needItems, needQty, below, urgent, soon };
   }, [rows]);
 
-  const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0) : rows), [rows, onlyNeed]);
+  const [search, setSearch] = useState("");
+  const shown = useMemo(() => {
+    const base = onlyNeed ? rows.filter((r) => r.recommend > 0) : rows;
+    const q = search.trim();
+    return q ? base.filter((r) => matchKoQuery(`${r.name} ${r.sku}`, q)) : base;   // 이름·SKU·초성 검색
+  }, [rows, onlyNeed, search]);
 
-  // 생산 요청 — 권장 생산>0 품목을 체크해 누르면 요청서가 바로 생성되고(마감일 기본 7영업일),
-  //  생산 일정에 반영 + 하단 '생산 요청 목록'에 신청번호로 쌓인다. 수량·마감일 수정은 목록의 '수정'에서.
+  // 생산 요청 — 품목을 체크하고 버튼을 누르면 '수량 확인' 모달이 열린다.
+  //  권장 수량이 기본으로 채워지며(0이면 빈칸) 실제 원하는 양으로 고쳐서 요청 처리.
+  //  권장 생산이 없는 품목도 체크 가능(도매 등 MD 판단 물량).
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
+  type ReqLine = { sku: string; name: string; product_id: string; recommend: number; qty: string };
+  const [reqDraft, setReqDraft] = useState<{ lines: ReqLine[]; missed: string[] } | null>(null);
+  const [reqDue, setReqDue] = useState("");
+  const [reqPurpose, setReqPurpose] = useState<"재고 보충" | "도매 납품">("재고 보충");
   const selectable = useMemo(() => shown.filter((r) => r.recommend > 0), [shown]);
   const allChecked = selectable.length > 0 && selectable.every((r) => sel.has(r.sku));
   const toggleSel = (sku: string) => setSel((s) => { const n = new Set(s); if (n.has(sku)) n.delete(sku); else n.add(sku); return n; });
-  const toggleAll = () => setSel(allChecked ? new Set() : new Set(selectable.map((r) => r.sku)));
-  async function makeRequest() {
-    const picked = rows.filter((r) => sel.has(r.sku) && r.recommend > 0);
+  const toggleAll = () => setSel(allChecked ? new Set() : new Set([...sel, ...selectable.map((r) => r.sku)]));
+
+  // 1단계: 체크한 품목을 SKU→product_id 로 매칭해 수량 확인 모달 열기
+  async function openRequestDraft() {
+    const picked = rows.filter((r) => sel.has(r.sku));
     if (!picked.length || creating) return;
     setCreating(true); setError("");
     try {
@@ -118,20 +132,37 @@ export default function InventoryPage() {
       for (const row of (j.rows || []) as { product_id: string; sku: string | null; is_bundle?: boolean }[]) {
         if (row.sku && !row.is_bundle) bySku.set(row.sku.toUpperCase(), row.product_id);
       }
-      const items: { product_id: string; requested_qty: number }[] = [];
+      const lines: ReqLine[] = [];
       const missed: string[] = [];
       for (const r of picked) {
         const pid = bySku.get(r.sku.toUpperCase());
-        if (pid) items.push({ product_id: pid, requested_qty: r.recommend });
+        if (pid) lines.push({ sku: r.sku, name: r.name, product_id: pid, recommend: r.recommend, qty: r.recommend > 0 ? String(r.recommend) : "" });
         else missed.push(r.sku);
       }
-      if (!items.length) throw new Error(`선택 품목을 품목 목록에서 찾지 못했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
+      if (!lines.length) throw new Error(`선택 품목을 품목 목록에서 찾지 못했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
+      setReqDue(addBusinessDays(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7));
+      setReqPurpose("재고 보충");
+      setReqDraft({ lines, missed });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "요청 준비 실패");
+    }
+    setCreating(false);
+  }
+
+  // 2단계: 입력한 실제 수량으로 요청 생성
+  async function submitRequest() {
+    if (!reqDraft || creating) return;
+    const items = reqDraft.lines
+      .map((l) => ({ product_id: l.product_id, requested_qty: Math.max(0, Math.round(Number(l.qty) || 0)) }))
+      .filter((it) => it.requested_qty > 0);
+    if (!items.length) { setError("수량을 1개 이상 입력하세요."); return; }
+    setCreating(true); setError("");
+    try {
       const c = await (await fetch("/api/production/requests", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "생산 화면에서 생성", purpose: "재고 보충", items }),
+        body: JSON.stringify({ title: "생산 화면에서 생성", purpose: reqPurpose, due_date: reqDue || undefined, items }),
       })).json();
       if (!c.ok) throw new Error(c.error || "요청 생성 실패");
-      if (missed.length) alert(`요청서를 만들었지만 ${missed.length}종은 품목 목록에 없어 제외했습니다: ${missed.join(", ")}`);
       router.push("/production"); // 생산 일정 + 하단 요청 목록에서 확인
     } catch (e) {
       setError(e instanceof Error ? e.message : "요청 생성 실패");
@@ -175,8 +206,8 @@ export default function InventoryPage() {
           <p className="b2b-page-subtitle">안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정</p>
         </div>
         <div className="b2b-page-actions">
-          <button className="b2b-btn-primary" onClick={makeRequest} disabled={sel.size === 0 || creating} title={sel.size === 0 ? "아래 표에서 품목을 체크하세요" : undefined}>
-            {creating ? "요청 생성 중…" : `선택 ${sel.size}종 생산 요청`}
+          <button className="b2b-btn-primary" onClick={openRequestDraft} disabled={sel.size === 0 || creating} title={sel.size === 0 ? "아래 표에서 품목을 체크하세요" : undefined}>
+            {creating && !reqDraft ? "준비 중…" : `선택 ${sel.size}종 생산 요청`}
           </button>
           <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>
             {adviceLoading ? "AI 분석 중…" : advice ? "다시 분석" : "AI 조언"}
@@ -190,10 +221,12 @@ export default function InventoryPage() {
       {error && <div className="b2b-error">{error}</div>}
 
       {/* 필터 — 헤더와 분리해 위치 고정(클릭해도 안 밀림) */}
-      <div className="sm-row" style={{ marginBottom: 12 }}>
+      <div className="sm-row" style={{ marginBottom: 12, gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목 검색 — 이름·SKU·초성 (예: ㄱㅇ)" style={{ maxWidth: 280 }} />
         <label className="prod-filter-check">
           <input type="checkbox" checked={onlyNeed} onChange={(e) => setOnlyNeed(e.target.checked)} /> 생산필요만 보기
         </label>
+        {sel.size > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>체크 {sel.size}종 (검색을 바꿔도 유지)</span>}
       </div>
 
       <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
@@ -292,7 +325,7 @@ export default function InventoryPage() {
             <tbody>
               {shown.map((r) => (
                 <tr key={r.sku} className={r.belowSafety ? "is-overdue" : ""}>
-                  <td>{r.recommend > 0 ? <input type="checkbox" checked={sel.has(r.sku)} onChange={() => toggleSel(r.sku)} /> : null}</td>
+                  <td><input type="checkbox" checked={sel.has(r.sku)} onChange={() => toggleSel(r.sku)} /></td>
                   <td><code style={{ fontSize: 11.5 }}>{r.sku}</code></td>
                   <td>
                     {r.name}
@@ -364,6 +397,68 @@ export default function InventoryPage() {
 
       {spanDays > 0 && (
         <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 재고원장 출고(판매) 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
+      )}
+
+      {/* 수량 확인 모달 — 체크한 품목의 실제 요청 수량을 입력해 요청 처리 */}
+      {reqDraft && (
+        <div className="b2b-modal-backdrop">
+          <div className="b2b-modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+            <div className="b2b-modal-head">
+              <h2 className="b2b-modal-title">생산 요청 — 수량 확인</h2>
+              <button className="b2b-modal-close" onClick={() => setReqDraft(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                <label className="sm-col" style={{ gap: 3 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>용도</span>
+                  <div className="sm-tabs" style={{ margin: 0 }}>
+                    {(["재고 보충", "도매 납품"] as const).map((pp) => (
+                      <button key={pp} type="button" className={`sm-tab ${reqPurpose === pp ? "is-active" : ""}`} onClick={() => setReqPurpose(pp)}>{pp}</button>
+                    ))}
+                  </div>
+                </label>
+                <label className="sm-col" style={{ gap: 3 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>생산마감일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 7영업일</span></span>
+                  <input type="date" className="b2b-input" style={{ width: 150 }} value={reqDue} onChange={(e) => setReqDue(e.target.value)} />
+                </label>
+              </div>
+
+              <table className="b2b-table" style={{ fontSize: 13 }}>
+                <thead><tr><th>품목</th><th className="num">권장</th><th className="num" style={{ width: 120 }}>요청 수량</th><th style={{ width: 36 }}></th></tr></thead>
+                <tbody>
+                  {reqDraft.lines.map((l, i) => (
+                    <tr key={l.sku}>
+                      <td>{l.name} <code style={{ fontSize: 11 }} className="sm-faint">{l.sku}</code></td>
+                      <td className="num">{l.recommend > 0 ? l.recommend.toLocaleString() : <span className="sm-faint">-</span>}</td>
+                      <td className="num">
+                        <input className="b2b-input b2b-money" type="number" min={0} value={l.qty} placeholder="0"
+                          onChange={(e) => setReqDraft((d) => d && ({ ...d, lines: d.lines.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)) }))}
+                          style={{ width: 100, textAlign: "right", padding: "6px 8px" }} />
+                      </td>
+                      <td>{reqDraft.lines.length > 1 && (
+                        <button className="b2b-link-btn" style={{ color: "var(--sm-text-light)" }} aria-label="빼기"
+                          onClick={() => setReqDraft((d) => d && ({ ...d, lines: d.lines.filter((_, j) => j !== i) }))}>✕</button>
+                      )}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {reqDraft.missed.length > 0 && (
+                <p className="sm-warn" style={{ marginTop: 8, fontSize: 12 }}>
+                  {reqDraft.missed.length}종은 품목 목록에 없어 제외됩니다: {reqDraft.missed.join(", ")} (묶음이거나 SKU 미등록)
+                </p>
+              )}
+              <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>수량 0인 품목은 요청에서 빠집니다. 요청 후 수정은 생산 일정 하단 ‘생산 요청 목록’의 ‘수정’에서.</p>
+            </div>
+            <div className="b2b-modal-foot">
+              <span />
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setReqDraft(null)} disabled={creating}>취소</button>
+                <button className="b2b-btn-primary" onClick={submitRequest} disabled={creating}>{creating ? "요청 중…" : "요청 처리"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {editRow && (
