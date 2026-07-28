@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 type InvRow = {
@@ -38,7 +37,6 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
 export default function InventoryPage() {
   const [rows, setRows] = useState<InvRow[]>([]);
   const [itemCount, setItemCount] = useState(0);
-  const [noSkuDemand, setNoSkuDemand] = useState(0);
   const [leadDays, setLeadDays] = useState(10);
   const [spanDays, setSpanDays] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -74,7 +72,6 @@ export default function InventoryPage() {
       if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
       setRows(j.rows || []);
       setItemCount(j.itemCount || 0);
-      setNoSkuDemand(j.noSkuDemand || 0);
       setLeadDays(j.leadDays || 10);
       setSpanDays(j.velocitySpanDays || 0);
     } catch (err) {
@@ -100,18 +97,46 @@ export default function InventoryPage() {
 
   const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0) : rows), [rows, onlyNeed]);
 
-  // 생산 요청 만들기 — 권장 생산>0 품목을 체크해 생산요청서로 넘긴다(권장 수량 프리필).
+  // 생산 요청 — 권장 생산>0 품목을 체크해 누르면 요청서가 바로 생성되고(마감일 기본 7영업일),
+  //  생산 일정에 반영 + 하단 '생산 요청 목록'에 신청번호로 쌓인다. 수량·마감일 수정은 목록의 '수정'에서.
   const router = useRouter();
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [creating, setCreating] = useState(false);
   const selectable = useMemo(() => shown.filter((r) => r.recommend > 0), [shown]);
   const allChecked = selectable.length > 0 && selectable.every((r) => sel.has(r.sku));
   const toggleSel = (sku: string) => setSel((s) => { const n = new Set(s); if (n.has(sku)) n.delete(sku); else n.add(sku); return n; });
   const toggleAll = () => setSel(allChecked ? new Set() : new Set(selectable.map((r) => r.sku)));
-  function makeRequest() {
-    const items = rows.filter((r) => sel.has(r.sku) && r.recommend > 0).map((r) => ({ sku: r.sku, qty: r.recommend }));
-    if (!items.length) return;
-    try { sessionStorage.setItem("prod_req_prefill", JSON.stringify(items)); } catch { return; }
-    router.push("/production/request");
+  async function makeRequest() {
+    const picked = rows.filter((r) => sel.has(r.sku) && r.recommend > 0);
+    if (!picked.length || creating) return;
+    setCreating(true); setError("");
+    try {
+      // 품목 마스터에서 SKU → product_id 매칭(묶음 제외 — 세트는 자체 재고가 없어 생산 입고 대상 아님)
+      const j = await (await fetch("/api/inventory/overview?channel=도매", { cache: "no-store" })).json();
+      if (!j.ok) throw new Error(j.error || "품목 조회 실패");
+      const bySku = new Map<string, string>();
+      for (const row of (j.rows || []) as { product_id: string; sku: string | null; is_bundle?: boolean }[]) {
+        if (row.sku && !row.is_bundle) bySku.set(row.sku.toUpperCase(), row.product_id);
+      }
+      const items: { product_id: string; requested_qty: number }[] = [];
+      const missed: string[] = [];
+      for (const r of picked) {
+        const pid = bySku.get(r.sku.toUpperCase());
+        if (pid) items.push({ product_id: pid, requested_qty: r.recommend });
+        else missed.push(r.sku);
+      }
+      if (!items.length) throw new Error(`선택 품목을 품목 목록에서 찾지 못했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
+      const c = await (await fetch("/api/production/requests", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "생산 화면에서 생성", items }),
+      })).json();
+      if (!c.ok) throw new Error(c.error || "요청 생성 실패");
+      if (missed.length) alert(`요청서를 만들었지만 ${missed.length}종은 품목 목록에 없어 제외했습니다: ${missed.join(", ")}`);
+      router.push("/production"); // 생산 일정 + 하단 요청 목록에서 확인
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "요청 생성 실패");
+      setCreating(false);
+    }
   }
 
   function openEdit(r: InvRow) {
@@ -146,12 +171,12 @@ export default function InventoryPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">재고/생산 조언</h1>
+          <h1 className="b2b-page-title">생산</h1>
           <p className="b2b-page-subtitle">안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정</p>
         </div>
         <div className="b2b-page-actions">
-          <button className="b2b-btn-primary" onClick={makeRequest} disabled={sel.size === 0} title={sel.size === 0 ? "아래 표에서 품목을 체크하세요" : undefined}>
-            선택 {sel.size}종 생산 요청 →
+          <button className="b2b-btn-primary" onClick={makeRequest} disabled={sel.size === 0 || creating} title={sel.size === 0 ? "아래 표에서 품목을 체크하세요" : undefined}>
+            {creating ? "요청 생성 중…" : `선택 ${sel.size}종 생산 요청`}
           </button>
           <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>
             {adviceLoading ? "AI 분석 중…" : advice ? "다시 분석" : "AI 조언"}
@@ -198,7 +223,7 @@ export default function InventoryPage() {
             {stats.soon > 0 && <span className="inv-dl-soon">7일 내 마감 {stats.soon}종</span>}
             <span className="inv-dl-hint"> — 리드타임 {leadDays}일 기준, 이 날짜를 넘기면 만들어도 늦습니다.</span>
           </span>
-          <Link href="/production/request" className="b2b-btn-secondary inv-dl-btn">생산요청서</Link>
+          <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }}>품목 체크 후 위 ‘생산 요청’</span>
         </div>
       )}
 
@@ -260,7 +285,6 @@ export default function InventoryPage() {
                 <th className="num">하루 출고</th>
                 <th className="num">안전재고</th>
                 <th className="num">보정</th>
-                <th className="num">B2B 수요</th>
                 <th className="num">권장 생산</th>
                 <th className="num">요청 마감</th>
               </tr>
@@ -317,7 +341,6 @@ export default function InventoryPage() {
                       )}
                     </button>
                   </td>
-                  <td className="num">{r.demand ? r.demand.toLocaleString() : "-"}</td>
                   <td className="num">
                     {r.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{r.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}
                   </td>
@@ -341,9 +364,6 @@ export default function InventoryPage() {
 
       {spanDays > 0 && (
         <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 재고원장 출고(판매) 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
-      )}
-      {noSkuDemand > 0 && (
-        <p className="prod-note">※ SKU가 연결되지 않은 B2B 수요 {noSkuDemand.toLocaleString()}개는 재고 매칭에서 제외됐습니다(품목에 SKU를 지정하면 포함됩니다).</p>
       )}
 
       {editRow && (

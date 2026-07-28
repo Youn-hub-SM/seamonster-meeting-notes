@@ -66,11 +66,11 @@ export const NAV: NavCategory[] = [
       //  생산 보드·제조사 요청서는 '안씀' 처리(페이지 코드만 보존).
       { href: "/inventory/trade", label: "입고 및 출고", icon: "receipt" },
       {
+        // 도매 재고 생산 요청은 별도 메뉴에서 숨김 — 요청 목록·입고는 생산 일정 하단에 통합(2026-07-28).
         href: "/production", label: "생산 관리", icon: "factory",
         menu: [
           { href: "/production", label: "생산 일정" },
-          { href: "/production/request", label: "도매 재고 생산 요청" },
-          { href: "/production/inventory", label: "생산 조언" },
+          { href: "/production/inventory", label: "생산" },
         ],
       },
       {
