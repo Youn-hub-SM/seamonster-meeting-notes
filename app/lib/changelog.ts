@@ -19,8 +19,7 @@ export function changeMenu(tool: string): string {
   if (t.includes("택배") || t.includes("온라인발주")) return "온라인 발주";
   if (t.includes("매출")) return "매출";
   if (t.includes("정기배송")) return "정기배송 분석";
-  if (t.includes("생산")) return "생산관리";
-  if (t.includes("재고")) return "재고관리";
+  if (t.includes("생산") || t.includes("재고")) return "재고/생산 관리"; // 2026-07-28 두 메뉴 통합
   if (t.includes("UTM")) return "UTM 빌더";
   if (t.includes("광고")) return "광고";
   if (t.includes("VOC")) return "VOC 관리";
@@ -30,16 +29,16 @@ export function changeMenu(tool: string): string {
   return tool;
 }
 // 필터 칩 정렬 순서(nav 순서 기준). 목록에 없는 메뉴는 뒤로.
-export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "생산관리", "재고관리", "UTM 빌더", "광고", "CS 코치", "VOC 관리", "관리자", "공통"];
+export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "재고/생산 관리", "UTM 빌더", "광고", "CS 코치", "VOC 관리", "관리자", "공통"];
 
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-07-28",
     tag: "개선",
     tool: "생산관리",
-    title: "생산 보드·제조사 요청서 정리(안씀 처리)",
-    desc: "쓰지 않는 두 화면(생산 보드, 제조사 요청서)을 메뉴와 가이드에서 뺐습니다. 생산 관리 메뉴는 '생산 일정'과 '도매 재고 생산 요청' 둘로 단순해집니다. 데이터나 다른 기능에는 영향이 없습니다.",
-    href: "/production",
+    title: "메뉴 정리 — 재고/생산 관리로 통합, 안 쓰는 화면 숨김",
+    desc: "① 쓰지 않는 두 화면(생산 보드, 제조사 요청서)을 메뉴와 가이드에서 뺐습니다. ② 재고 관리와 생산 관리 메뉴를 '재고/생산 관리' 하나로 합쳤습니다 — 재고 목록·구매 및 판매·재고 조정·재고 옮기기·월간매입 견적서·과거 수량 조회·생산 일정·도매 재고 생산 요청이 한 메뉴 아래에 있습니다. 주소와 데이터는 그대로라 즐겨찾기·바로가기는 계속 동작합니다.",
+    href: "/inventory",
   },
   {
     date: "2026-07-24",

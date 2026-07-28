@@ -3,19 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { NAV, HOME, type NavTool } from "./nav";
+import { NAV, HOME, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
-function itemActive(href: string, toolHref: string, pathname: string) {
-  if (href === toolHref) return pathname === href; // 인덱스 메뉴는 정확히 일치할 때만
-  return pathname === href || pathname.startsWith(href + "/");
+function itemActive(m: NavMenuItem, toolHref: string, pathname: string) {
+  if (m.exact || m.href === toolHref) return pathname === m.href; // 인덱스·exact 메뉴는 정확히 일치할 때만
+  return pathname === m.href || pathname.startsWith(m.href + "/");
 }
 // 툴 활성 판정. 메뉴가 있으면 '하위 메뉴에 해당할 때만' 활성 — /production/sku 같이 URL
-//  접두어만 겹치는 독립 툴 때문에 부모(생산 관리)까지 주황색으로 켜지던 버그 방지.
+//  접두어만 겹치는 독립 툴 때문에 부모(재고/생산 관리)까지 주황색으로 켜지던 버그 방지.
 function toolActive(t: NavTool, pathname: string) {
   if (t.href === "/") return pathname === "/";
   const menu = t.menu || [];
-  if (menu.length) return menu.some((m) => itemActive(m.href, t.href, pathname));
+  if (menu.length) return menu.some((m) => itemActive(m, t.href, pathname));
   return pathname === t.href || pathname.startsWith(t.href + "/");
 }
 
@@ -164,14 +164,14 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
           <div className="app-sb-menu">
             {menu.map((m) => editFav ? (
               <div key={m.href} className="app-sb-menu-row" style={{ display: "flex", alignItems: "center" }}>
-                <Link href={m.href} className={`app-sb-menu-item ${itemActive(m.href, t.href, pathname) ? "is-active" : ""}`} style={{ flex: 1 }} onClick={onNavigate}>{m.label}</Link>
+                <Link href={m.href} className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`} style={{ flex: 1 }} onClick={onNavigate}>{m.label}</Link>
                 <FavToggle href={m.href} label={`${t.label} · ${m.label}`} />
               </div>
             ) : (
               <Link
                 key={m.href}
                 href={m.href}
-                className={`app-sb-menu-item ${itemActive(m.href, t.href, pathname) ? "is-active" : ""}`}
+                className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`}
                 onClick={onNavigate}
               >
                 {m.label}

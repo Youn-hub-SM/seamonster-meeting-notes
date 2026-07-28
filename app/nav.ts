@@ -3,7 +3,7 @@
 
 import type { IconName } from "./components/Icon";
 
-export type NavMenuItem = { href: string; label: string; adminOnly?: boolean };
+export type NavMenuItem = { href: string; label: string; adminOnly?: boolean; exact?: boolean }; // exact: 정확히 일치할 때만 활성(다른 독립 툴이 이 경로 아래에 있을 때)
 export type NavTool = { href: string; label: string; icon: IconName; adminOnly?: boolean; menu?: NavMenuItem[] };
 export type NavCategory = { label: string; adminOnly?: boolean; tools: NavTool[] };
 
@@ -63,15 +63,8 @@ export const NAV: NavCategory[] = [
     label: "생산·재고",
     tools: [
       {
-        href: "/production", label: "생산 관리", icon: "factory",
-        // 생산 보드·제조사 요청서는 '안씀' 처리(2026-07-28) — 페이지 코드는 남아 있고 메뉴에서만 숨김.
-        menu: [
-          { href: "/production", label: "생산 일정" },
-          { href: "/production/request", label: "도매 재고 생산 요청" },
-        ],
-      },
-      {
-        href: "/inventory", label: "재고 관리", icon: "box",
+        // 재고 관리 + 생산 관리 → 하나로 합침(2026-07-28). 생산 보드·제조사 요청서는 '안씀' 처리(페이지 코드만 보존).
+        href: "/inventory", label: "재고/생산 관리", icon: "box",
         menu: [
           { href: "/inventory", label: "재고 목록" },
           { href: "/inventory/trade", label: "구매 및 판매" },
@@ -79,6 +72,9 @@ export const NAV: NavCategory[] = [
           { href: "/inventory/move", label: "재고 옮기기(소매↔도매)" },
           { href: "/inventory/quote", label: "월간매입 견적서" },
           { href: "/inventory/asof", label: "과거 수량 조회" },
+          // exact: /production 아래에 독립 툴(SKU 생성기·재고/생산 조언 등)이 있어 접두어 매칭이면 오작동
+          { href: "/production", label: "생산 일정", exact: true },
+          { href: "/production/request", label: "도매 재고 생산 요청" },
         ],
       },
       // 합친/독립 메뉴
