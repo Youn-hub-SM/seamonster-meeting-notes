@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-07-24",
+    tag: "수정",
+    tool: "정기배송 분석",
+    title: "배송주기 '4주' 반영",
+    desc: "새로 생긴 4주 주기가 필터와 정렬에서 올바른 자리(3주와 1개월 사이)에 표시됩니다. 주기를 일수로 환산해 정렬하므로 앞으로 새로운 주기가 추가돼도 자동으로 반영됩니다.",
+    href: "/subscription",
+  },
+  {
+    date: "2026-07-24",
     tag: "개선",
     tool: "온라인 발주 · 배송일지",
     title: "배송일지 박스 종류를 설정에서 직접 편집",
