@@ -167,7 +167,7 @@ export default function InventoryPage() {
         body: JSON.stringify({ title: "생산 화면에서 생성", purpose: reqPurpose, due_date: reqDue || undefined, items }),
       })).json();
       if (!c.ok) throw new Error(c.error || "요청 생성 실패");
-      router.push("/production"); // 생산 일정 + 하단 요청 목록에서 확인
+      router.push("/production/request"); // 생산 요청 목록에서 확인(일정에도 마감일 기준 반영)
     } catch (e) {
       setError(e instanceof Error ? e.message : "요청 생성 실패");
       setCreating(false);
@@ -449,7 +449,7 @@ export default function InventoryPage() {
                   {reqDraft.missed.length}종은 품목 목록에 없어 제외됩니다: {reqDraft.missed.join(", ")} (묶음이거나 SKU 미등록)
                 </p>
               )}
-              <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>수량 0인 품목은 요청에서 빠집니다. 요청 후 수정은 생산 일정 하단 ‘생산 요청 목록’의 ‘수정’에서.</p>
+              <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>수량 0인 품목은 요청에서 빠집니다. 요청 후 수정은 ‘생산 요청’ 메뉴의 ‘수정’에서.</p>
             </div>
             <div className="b2b-modal-foot">
               <span />

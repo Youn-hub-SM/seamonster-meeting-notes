@@ -141,7 +141,7 @@ export default function InvStatsPage() {
               <div className="b2b-stat-card" style={fulfill.overdue > 0 ? { borderColor: "var(--sm-danger-border)" } : undefined}>
                 <div className="b2b-stat-card-label" style={fulfill.overdue > 0 ? { color: "var(--sm-danger)" } : undefined}>마감 지난 미완료</div>
                 <div className="b2b-stat-card-value" style={{ color: fulfill.overdue > 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{fulfill.overdue}건</div>
-                <div className="b2b-stat-card-hint">생산 지연 신호 — 생산 일정 하단 목록에서 확인</div>
+                <div className="b2b-stat-card-hint">생산 지연 신호 — 생산 요청 메뉴에서 확인</div>
               </div>
             </div>
           )}

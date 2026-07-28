@@ -1,7 +1,6 @@
 "use client";
 
-// 생산 요청 목록 — 신청번호(req_no)별 요청서 + 품목별 입고 처리.
-//  생산 일정(/production) 하단과 (숨김) /production/request 두 곳에서 사용.
+// 생산 요청 목록 — 신청번호(req_no)별 요청서 + 품목별 입고 처리. (/production/request '생산 요청' 메뉴)
 //  '생산'(/production/inventory) 화면의 '생산 요청' 버튼이 여기 목록으로 요청을 만든다.
 
 import { useCallback, useEffect, useMemo, useState } from "react";

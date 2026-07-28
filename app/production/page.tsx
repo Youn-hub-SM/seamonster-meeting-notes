@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
 import type { ProductionRequest } from "../lib/wholesale-production";
-import { RequestList } from "./RequestList";
 
 type ProductRow = { product_name: string; spec: string; qty: number; companies: string[]; order_count: number };
 type DayBucket = { date: string; label: string; total_qty: number; order_count: number; products: ProductRow[] };
@@ -486,12 +485,6 @@ export default function ProductionSchedulePage() {
       )}
 
       {/* 프로모션 모달 */}
-      {/* 생산 요청 목록 — 신청번호별 요청서·입고 처리(도매 재고 반영). '생산' 화면의 생산 요청 버튼이 여기로 쌓인다. */}
-      <section style={{ marginTop: 28 }}>
-        <h2 style={{ fontSize: 17, fontWeight: 800, marginBottom: 10 }}>생산 요청 목록</h2>
-        <RequestList />
-      </section>
-
       {promoModal && (
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
