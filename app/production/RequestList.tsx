@@ -166,26 +166,6 @@ export function RequestList() {
 
   const doneCount = useMemo(() => requests.filter((r) => r.status === "완료" || r.status === "취소").length, [requests]);
 
-  // 생산 이행률 — "요청한 만큼 실제로 생산(입고)됐는가"를 목록 전체로 집계.
-  //  전체 = 취소 제외 요청의 Σ입고/Σ요청. 마감 경과 = 마감일 지난 미완료 요청(생산 지연 신호).
-  const fulfill = useMemo(() => {
-    const act = requests.filter((r) => r.status !== "취소");
-    const reqSum = act.reduce((s, r) => s + r.total_requested, 0);
-    const recSum = act.reduce((s, r) => s + r.total_received, 0);
-    const done = requests.filter((r) => r.status === "완료");
-    const doneReq = done.reduce((s, r) => s + r.total_requested, 0);
-    const doneRec = done.reduce((s, r) => s + r.total_received, 0);
-    const today = todayIso();
-    const overdue = requests.filter((r) => (r.status === "요청" || r.status === "진행중") && r.due_date && r.due_date < today).length;
-    return {
-      reqSum, recSum,
-      pct: reqSum > 0 ? (recSum / reqSum) * 100 : null,
-      donePct: doneReq > 0 ? (doneRec / doneReq) * 100 : null,
-      doneCount: done.length,
-      overdue,
-    };
-  }, [requests]);
-
   // 제조사에게 건넬 요청서 텍스트 — 담당자가 확인 후 복사해 전달(제조사 전달용, DB 저장 없음).
   const [copiedId, setCopiedId] = useState<string | null>(null);
   async function copyRequestSheet(r: ProductionRequest) {
@@ -212,15 +192,6 @@ export function RequestList() {
   return (
     <div>
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
-
-      {fulfill.reqSum > 0 && (
-        <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10, fontSize: 13, color: "var(--sm-text-mid)" }}>
-          <span>생산 이행률 <strong style={{ fontSize: 15, color: fulfill.pct != null && fulfill.pct < 90 ? "var(--sm-warning)" : "var(--sm-success)" }}>{fulfill.pct?.toFixed(1)}%</strong>
-            <span className="sm-faint" style={{ fontSize: 12 }}> · 입고 {fulfill.recSum.toLocaleString()} / 요청 {fulfill.reqSum.toLocaleString()} (취소 제외)</span></span>
-          {fulfill.donePct != null && <span className="sm-faint" style={{ fontSize: 12 }}>완료 요청 {fulfill.doneCount}건 기준 {fulfill.donePct.toFixed(1)}%</span>}
-          {fulfill.overdue > 0 && <span style={{ color: "var(--sm-danger)", fontWeight: 700, fontSize: 12.5 }}>마감 지난 미완료 {fulfill.overdue}건</span>}
-        </div>
-      )}
 
       <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", cursor: "pointer" }}>
