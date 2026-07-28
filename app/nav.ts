@@ -64,11 +64,10 @@ export const NAV: NavCategory[] = [
     tools: [
       {
         href: "/production", label: "생산 관리", icon: "factory",
+        // 생산 보드·제조사 요청서는 '안씀' 처리(2026-07-28) — 페이지 코드는 남아 있고 메뉴에서만 숨김.
         menu: [
           { href: "/production", label: "생산 일정" },
-          { href: "/production/board", label: "생산 보드" },
           { href: "/production/request", label: "도매 재고 생산 요청" },
-          { href: "/production/maker-request", label: "제조사 요청서" },
         ],
       },
       {
