@@ -6,6 +6,7 @@ import type { InvChannelFilter } from "@/app/lib/inventory";
 import TxnModal from "./TxnModal";
 import { ChannelFilter, writeChannelOf } from "./ChannelTabs";
 import PromoManager from "@/app/components/PromoManager";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 function shift(iso: string, n: number) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
@@ -64,10 +65,10 @@ export default function InventoryPage() {
   }), [rows]);
 
   const shown = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     const f = rows.filter((r) => {
       if (onlyLow && !r.low) return false;
-      if (q && !(`${r.name} ${r.sku || ""} ${r.spec || ""}`.toLowerCase().includes(q))) return false;
+      if (q && !matchKoQuery(`${r.name} ${r.sku || ""} ${r.spec || ""} ${r.attrs || ""}`, q)) return false; // 속성/분류·초성 검색
       return true;
     });
     const { key, dir } = sort;
@@ -126,7 +127,7 @@ export default function InventoryPage() {
             <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> 부족만 보기
           </label>
         </div>
-        <input className="b2b-input" placeholder="품목·SKU·옵션 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 220, maxWidth: "100%" }} />
+        <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
       {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 안전재고 = 일평균소진 × 리드타임 {meta.leadDays}일 + 프로모션 확보분</p>}

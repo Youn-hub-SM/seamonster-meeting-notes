@@ -13,6 +13,7 @@ const daysInclusive = (a: string, b: string) => Math.max(1, Math.round((Date.par
 
 export type OverviewRow = {
   product_id: string; sku: string | null; name: string; spec: string | null; unit: string;
+  attrs: string | null; // 속성/분류(상품마스터 자유 입력) — 재고 목록 검색용
   qty: number; cost_price: number; value: number;
   period_in: number; period_out: number; daily_out: number;
   auto_safety: number; promo_qty: number; depletion_days: number | null; low: boolean;
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
       return sb.rpc("inventory_stock", { asof: null });
     };
     const [pr, sr, promoFwd, bundles] = await Promise.all([
-      sb.from("products").select("id, sku, name, spec, unit, cost_price").eq("active", true).order("name", { ascending: true }),
+      sb.from("products").select("id, sku, name, spec, unit, cost_price, attrs").eq("active", true).order("name", { ascending: true }),
       stockRpc(),
       getPromoForwardBySku(today, leadDays),
       getAllBundles(sb),
@@ -89,7 +90,7 @@ export async function GET(req: NextRequest) {
       const auto_safety = Math.ceil(daily_out * leadDays) + Math.round(promo);
       const depletion_days = daily_out > 0 ? Math.floor(qty / daily_out) : null;
       return {
-        product_id: p.id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit,
+        product_id: p.id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, attrs: (p as { attrs?: string | null }).attrs ?? null,
         qty, cost_price: cost, value: qty * cost,
         period_in, period_out, daily_out: Math.round(daily_out * 10) / 10,
         auto_safety, promo_qty: Math.round(promo), depletion_days,
