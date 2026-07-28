@@ -62,27 +62,31 @@ export const NAV: NavCategory[] = [
   {
     label: "생산·재고",
     tools: [
+      // 2026-07-28 재편: 구매 및 판매를 상단으로, 생산/재고를 각각 묶고 나머지는 독립 메뉴.
+      //  생산 보드·제조사 요청서는 '안씀' 처리(페이지 코드만 보존).
+      { href: "/inventory/trade", label: "구매 및 판매", icon: "receipt" },
       {
-        // 재고 관리 + 생산 관리 → 하나로 합침(2026-07-28). 생산 보드·제조사 요청서는 '안씀' 처리(페이지 코드만 보존).
-        href: "/inventory", label: "재고/생산 관리", icon: "box",
+        href: "/production", label: "생산 관리", icon: "factory",
         menu: [
-          { href: "/inventory", label: "재고 목록" },
-          { href: "/inventory/trade", label: "구매 및 판매" },
-          { href: "/inventory/adjust", label: "재고 조정" },
-          { href: "/inventory/move", label: "재고 옮기기(소매↔도매)" },
-          { href: "/inventory/quote", label: "월간매입 견적서" },
-          { href: "/inventory/asof", label: "과거 수량 조회" },
-          // exact: /production 아래에 독립 툴(SKU 생성기·재고/생산 조언 등)이 있어 접두어 매칭이면 오작동
-          { href: "/production", label: "생산 일정", exact: true },
+          { href: "/production", label: "생산 일정" },
           { href: "/production/request", label: "도매 재고 생산 요청" },
+          { href: "/production/inventory", label: "생산 조언" },
         ],
       },
-      // 합친/독립 메뉴
-      { href: "/production/inventory", label: "재고/생산 조언", icon: "bulb" },
-      { href: "/inventory/stats", label: "재고/생산 통계", icon: "bars" },
-      { href: "/inventory/reconcile", label: "구매·판매·재고 확인", icon: "receipt" },
-      { href: "/inventory/activity", label: "변경 기록", icon: "receipt" },
-      { href: "/production/sku", label: "SKU 생성기", icon: "tag" },
+      {
+        href: "/inventory", label: "재고 관리", icon: "box",
+        menu: [
+          { href: "/inventory", label: "재고 목록" },
+          { href: "/inventory/adjust", label: "재고 조정" },
+          { href: "/inventory/move", label: "소매↔도매" },
+          { href: "/inventory/asof", label: "과거수량 조회" },
+        ],
+      },
+      { href: "/inventory/stats", label: "통계", icon: "bars" },
+      { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
+      { href: "/inventory/quote", label: "월간매입 견적서", icon: "note" },
+      { href: "/production/sku", label: "SKU 생성", icon: "tag" },
+      { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
     ],
   },
   {
