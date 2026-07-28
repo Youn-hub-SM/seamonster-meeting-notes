@@ -686,6 +686,10 @@
         <div class="card-head"><div><div class="card-title">지역 분포</div><div class="card-sub">광역시도</div></div></div>
         <div class="chart-wrap"><canvas id="regionChart"></canvas></div>
       </section>
+      <section class="card">
+        <div class="card-head"><div><div class="card-title">주기별 분포</div><div class="card-sub">이용중·일시정지 신청 기준 — 새 주기(4주 등) 채택 추적</div></div></div>
+        <div class="chart-wrap"><canvas id="cycleChart"></canvas></div>
+      </section>
     </div>
 
     <!-- 테이블 -->
@@ -1157,6 +1161,7 @@ function render() {
   renderCohortTable();
   renderSpeciesChart();
   renderRegionChart();
+  renderCycleChart();
   renderRepeatTable();
   renderPauseTable();
   renderOrdersTable();
@@ -1658,6 +1663,26 @@ function renderRegionChart() {
   });
 }
 
+// 주기별 분포 — 배송주기 구성 비중(새 4주 주기 채택 추적용). 지역 분포와 같은 이용중·일시정지 기준.
+function renderCycleChart() {
+  const live = orders.filter(o => ["active","pause"].includes(statusBucket(o.status)));
+  const counts = {};
+  live.forEach(o => { const c = o.cycle || "(미상)"; counts[c] = (counts[c] || 0) + 1; });
+  const sorted = Object.keys(counts).sort(cycleSort).map(c => [c, counts[c]]);
+  const total = sorted.reduce((s, x) => s + x[1], 0) || 1;
+  const palette = [T.orange(), T.info(), T.success(), T.warning(), T.danger(), T.textLight()];
+
+  if (charts.cycle) charts.cycle.destroy();
+  charts.cycle = new Chart(document.getElementById("cycleChart"), {
+    type: "doughnut",
+    data: {
+      labels: sorted.map(x => `${x[0]} · ${x[1]}건 (${Math.round(x[1] / total * 100)}%)`),
+      datasets: [{ data: sorted.map(x => x[1]), backgroundColor: sorted.map((_, i) => palette[i % palette.length]), borderWidth: 0 }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } },
+  });
+}
+
 // 재구매 회원
 function renderRepeatTable() {
   const byMember = new Map();
@@ -1809,6 +1834,7 @@ const SNAPSHOT_FIELDS = [
   { key: "totalCancels",   label: "누적 해지(건)" },
   { key: "lostMembers",    label: "해지 회원" },
   { key: "totalMembers",   label: "전체 회원" },
+  { key: "cycleMix",       label: "주기 구성" },
 ];
 
 function getCurrentSnapshot() {
@@ -1822,6 +1848,12 @@ function getCurrentSnapshot() {
   const totalMembers = memberAlive.size;
   const lostMembers = Array.from(memberAlive.values()).filter(v => !v).length;
   const cancelCount = orders.filter(o => statusBucket(o.status) === "cancel").length;
+
+  // 주기 구성(이용중·일시정지) — "1주 3 · 2주 8 · 4주 2" 형태. 스냅샷 히스토리에서 주기 채택 추세 확인용.
+  const cycleCounts = {};
+  orders.filter(o => ["active","pause"].includes(statusBucket(o.status)))
+    .forEach(o => { const c = o.cycle || "(미상)"; cycleCounts[c] = (cycleCounts[c] || 0) + 1; });
+  const cycleMix = Object.keys(cycleCounts).sort(cycleSort).map(c => `${c} ${cycleCounts[c]}`).join(" · ");
 
   return {
     savedAt:        new Date(Date.now() + 9 * 3600e3).toISOString().replace("T", " ").slice(0, 19),  // 저장 시각(KST 벽시계)
@@ -1838,6 +1870,7 @@ function getCurrentSnapshot() {
     totalCancels:   cancelCount,
     lostMembers,
     totalMembers,
+    cycleMix,
   };
 }
 
@@ -1851,7 +1884,8 @@ function renderSnapshotPreview() {
     `활성 <b>${s.activeMembers}</b> · 일시정지 <b>${s.pauseMembers}</b> · ` +
     `결제도달 <b>${s.firstPayRate}</b> · 3회잔존 <b>${s.reach3Rate}</b> · 4회잔존 <b>${s.reach4Rate}</b> · ` +
     `평균중량 <b>${s.avgWeightKg}</b> · ` +
-    `해지 <b>${s.totalCancels}건 / ${s.lostMembers}명</b>`;
+    `해지 <b>${s.totalCancels}건 / ${s.lostMembers}명</b> · ` +
+    `주기 <b>${s.cycleMix || "-"}</b>`;
 }
 
 // 클립보드 TSV 복사
