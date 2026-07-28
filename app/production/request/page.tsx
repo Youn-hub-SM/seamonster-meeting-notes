@@ -48,6 +48,7 @@ function WholesaleTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editReq, setEditReq] = useState<ProductionRequest | null>(null); // 수정 모달 대상
   const [busy, setBusy] = useState(false);
+  const [prefill, setPrefill] = useState<NewLine[] | null>(null); // 생산 조언에서 넘어온 품목·권장수량
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -71,6 +72,30 @@ function WholesaleTab() {
       } catch { /* noop */ }
     })();
   }, []);
+
+  // 생산 조언 → '생산 요청 만들기' 핸드오프: 조언 화면이 sessionStorage에 담은 {sku, qty}[] 를
+  //  품목 목록 로드 후 SKU로 매칭해, 권장 수량이 채워진 새 요청 모달을 자동으로 연다.
+  useEffect(() => {
+    if (!products.length) return;
+    let raw: string | null = null;
+    try { raw = sessionStorage.getItem("prod_req_prefill"); sessionStorage.removeItem("prod_req_prefill"); } catch { /* noop */ }
+    if (!raw) return;
+    try {
+      const items = JSON.parse(raw) as { sku?: unknown; qty?: unknown }[];
+      const lines: NewLine[] = [];
+      const missed: string[] = [];
+      for (const it of Array.isArray(items) ? items : []) {
+        const sku = String(it?.sku ?? "").trim();
+        if (!sku) continue;
+        const p = products.find((x) => (x.sku || "").toUpperCase() === sku.toUpperCase());
+        if (!p) { missed.push(sku); continue; }
+        const qty = Math.max(0, Math.round(Number(it?.qty) || 0));
+        lines.push({ received: 0, product_id: p.product_id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, stock: p.qty, requested_qty: qty ? String(qty) : "", memo: "" });
+      }
+      if (missed.length) setError(`생산 조언 품목 중 ${missed.length}종은 품목 목록에 없어 제외했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
+      if (lines.length) { setPrefill(lines); setCreateOpen(true); }
+    } catch { /* 형식 오류 — 무시 */ }
+  }, [products]);
 
   // 목록 갱신 후 펼친 요청서 최신본 반영
   function applyUpdated(updated: ProductionRequest) {
@@ -203,7 +228,7 @@ function WholesaleTab() {
         </div>
       )}
 
-      {createOpen && <RequestModal products={products} busy={busy} onClose={() => setCreateOpen(false)} onSubmit={createRequest} />}
+      {createOpen && <RequestModal products={products} prefill={prefill ?? undefined} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
       {editReq && <RequestModal initial={editReq} products={products} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
@@ -382,8 +407,8 @@ function ItemRow({ item, canEdit, busy, onReceive, onCancelReceipt }: {
 }
 
 // 생성/수정 겸용 — initial 이 있으면 수정 모드(기존 라인 id 유지, 입고 있는 라인은 뺄 수 없음).
-function RequestModal({ initial, products, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; products: Prod[]; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, products, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; products: Prod[]; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
@@ -400,7 +425,7 @@ function RequestModal({ initial, products, busy, onClose, onSubmit }: {
           product_id: it.product_id, sku: it.sku, name: it.name, spec: it.spec, unit: it.unit,
           stock: stockOf(it.product_id), requested_qty: String(it.requested_qty), memo: it.memo || "",
         }))
-      : []
+      : (prefill ?? [])   // 생산 조언에서 넘어온 품목·권장수량 (없으면 빈 목록)
   );
 
   function addLine(p: Prod) {

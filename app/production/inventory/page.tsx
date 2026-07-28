@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type InvRow = {
   sku: string;
@@ -99,6 +100,20 @@ export default function InventoryPage() {
 
   const shown = useMemo(() => (onlyNeed ? rows.filter((r) => r.recommend > 0) : rows), [rows, onlyNeed]);
 
+  // 생산 요청 만들기 — 권장 생산>0 품목을 체크해 생산요청서로 넘긴다(권장 수량 프리필).
+  const router = useRouter();
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const selectable = useMemo(() => shown.filter((r) => r.recommend > 0), [shown]);
+  const allChecked = selectable.length > 0 && selectable.every((r) => sel.has(r.sku));
+  const toggleSel = (sku: string) => setSel((s) => { const n = new Set(s); if (n.has(sku)) n.delete(sku); else n.add(sku); return n; });
+  const toggleAll = () => setSel(allChecked ? new Set() : new Set(selectable.map((r) => r.sku)));
+  function makeRequest() {
+    const items = rows.filter((r) => sel.has(r.sku) && r.recommend > 0).map((r) => ({ sku: r.sku, qty: r.recommend }));
+    if (!items.length) return;
+    try { sessionStorage.setItem("prod_req_prefill", JSON.stringify(items)); } catch { return; }
+    router.push("/production/request");
+  }
+
   function openEdit(r: InvRow) {
     setEditRow(r);
     setEDelta(r.adjustRaw ? String(r.adjustRaw) : "");
@@ -135,7 +150,10 @@ export default function InventoryPage() {
           <p className="b2b-page-subtitle">안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정</p>
         </div>
         <div className="b2b-page-actions">
-          <button className="b2b-btn-primary" onClick={genAdvice} disabled={adviceLoading}>
+          <button className="b2b-btn-primary" onClick={makeRequest} disabled={sel.size === 0} title={sel.size === 0 ? "아래 표에서 품목을 체크하세요" : undefined}>
+            선택 {sel.size}종 생산 요청 →
+          </button>
+          <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>
             {adviceLoading ? "AI 분석 중…" : advice ? "다시 분석" : "AI 조언"}
           </button>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>
@@ -235,6 +253,7 @@ export default function InventoryPage() {
           <table className="b2b-table">
             <thead>
               <tr>
+                <th style={{ width: 34 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
                 <th>SKU</th>
                 <th>품목</th>
                 <th className="num">현재고</th>
@@ -249,6 +268,7 @@ export default function InventoryPage() {
             <tbody>
               {shown.map((r) => (
                 <tr key={r.sku} className={r.belowSafety ? "is-overdue" : ""}>
+                  <td>{r.recommend > 0 ? <input type="checkbox" checked={sel.has(r.sku)} onChange={() => toggleSel(r.sku)} /> : null}</td>
                   <td><code style={{ fontSize: 11.5 }}>{r.sku}</code></td>
                   <td>
                     {r.name}
