@@ -259,18 +259,6 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {(stats.urgent > 0 || stats.soon > 0) && (
-        <div className="inv-deadline-banner">
-          <span className="inv-dl-text">
-            {stats.urgent > 0 && <span className="inv-dl-urgent">지금 생산요청 {stats.urgent}종</span>}
-            {stats.urgent > 0 && stats.soon > 0 && <span className="inv-dl-sep"> · </span>}
-            {stats.soon > 0 && <span className="inv-dl-soon">7일 내 마감 {stats.soon}종</span>}
-            <span className="inv-dl-hint"> — 리드타임 {leadDays}일 기준, 이 날짜를 넘기면 만들어도 늦습니다.</span>
-          </span>
-          <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }}>품목 체크 후 위 ‘생산 요청’</span>
-        </div>
-      )}
-
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {advice && (
         <section style={{ marginBottom: 18 }}>
