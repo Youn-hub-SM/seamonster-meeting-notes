@@ -50,6 +50,8 @@ export default function InventoryPage() {
   const [eMemo, setEMemo] = useState("");
   const [eUntil, setEUntil] = useState("");
   const [saving, setSaving] = useState(false);
+  // 채널 탭 — 소매/도매 각각의 재고·소진 속도로 조언(도매는 행사·보정 없는 순수 수식).
+  const [channel, setChannel] = useState<"소매" | "도매">("소매");
   // AI 조언 (생산 조언 합침)
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
@@ -57,7 +59,7 @@ export default function InventoryPage() {
   async function genAdvice() {
     setAdviceLoading(true); setError("");
     try {
-      const res = await fetch("/api/production/advice", { method: "POST" });
+      const res = await fetch("/api/production/advice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "AI 조언 생성 실패");
       setAdvice(j.advice);
@@ -69,7 +71,7 @@ export default function InventoryPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/production/inventory", { cache: "no-store" });
+      const res = await fetch(`/api/production/inventory?channel=${encodeURIComponent(channel)}`, { cache: "no-store" });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
       setRows(j.rows || []);
@@ -80,9 +82,11 @@ export default function InventoryPage() {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }
     setLoading(false);
-  }, []);
+  }, [channel]);
 
   useEffect(() => { load(); }, [load]);
+  // 탭 전환 시 선택·AI 조언 초기화(채널이 다르면 다른 데이터)
+  useEffect(() => { setSel(new Set()); setAdvice(null); }, [channel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stats = useMemo(() => {
     let needItems = 0, needQty = 0, below = 0, urgent = 0, soon = 0;
@@ -141,7 +145,7 @@ export default function InventoryPage() {
       }
       if (!lines.length) throw new Error(`선택 품목을 품목 목록에서 찾지 못했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
       setReqDue(addBusinessDays(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7));
-      setReqPurpose("재고 보충");
+      setReqPurpose(channel === "도매" ? "도매 납품" : "재고 보충"); // 탭 기준 기본 용도
       setReqDraft({ lines, missed });
     } catch (e) {
       setError(e instanceof Error ? e.message : "요청 준비 실패");
@@ -203,7 +207,9 @@ export default function InventoryPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">생산</h1>
-          <p className="b2b-page-subtitle">안전재고 = 최근 하루 출고 × {leadDays}일 + 프로모션 + 수동 보정</p>
+          <p className="b2b-page-subtitle">{channel === "도매"
+            ? <>도매 기준 — 안전재고 = 최근 하루 도매 소진(B2B 납품) × {leadDays}일. 행사·보정 없이 순수 수식.</>
+            : <>소매 기준 — 안전재고 = 최근 하루 소매 출고 × {leadDays}일 + 프로모션 + 수동 보정</>}</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={openRequestDraft} disabled={sel.size === 0 || creating} title={sel.size === 0 ? "아래 표에서 품목을 체크하세요" : undefined}>
@@ -222,6 +228,11 @@ export default function InventoryPage() {
 
       {/* 필터 — 헤더와 분리해 위치 고정(클릭해도 안 밀림) */}
       <div className="sm-row" style={{ marginBottom: 12, gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="sm-tabs" style={{ margin: 0 }}>
+          {(["소매", "도매"] as const).map((ch) => (
+            <button key={ch} type="button" className={`sm-tab ${channel === ch ? "is-active" : ""}`} onClick={() => setChannel(ch)}>{ch}</button>
+          ))}
+        </div>
         <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목 검색 — 이름·SKU·초성 (예: ㄱㅇ)" style={{ maxWidth: 280 }} />
         <label className="prod-filter-check">
           <input type="checkbox" checked={onlyNeed} onChange={(e) => setOnlyNeed(e.target.checked)} /> 생산필요만 보기
@@ -317,7 +328,7 @@ export default function InventoryPage() {
                 <th className="num">현재고</th>
                 <th className="num">하루 출고</th>
                 <th className="num">안전재고</th>
-                <th className="num">보정</th>
+                {channel === "소매" && <th className="num">보정</th>}
                 <th className="num">권장 생산</th>
                 <th className="num">요청 마감</th>
               </tr>
@@ -360,7 +371,7 @@ export default function InventoryPage() {
                       </div>
                     )}
                   </td>
-                  <td className="num">
+                  {channel === "소매" && <td className="num">
                     <button type="button" className="inv-adj-btn" onClick={() => openEdit(r)} title={r.adjustMemo || "안전재고 보정"}>
                       {r.adjustRaw !== 0 || r.adjustExcludeRaw > 0 ? (
                         <span className={r.adjustRaw !== 0 && r.adjust === 0 && r.adjustUntil ? "inv-adj-expired" : "inv-adj-set"}>
@@ -373,7 +384,7 @@ export default function InventoryPage() {
                         <span className="inv-adj-empty">+ 보정</span>
                       )}
                     </button>
-                  </td>
+                  </td>}
                   <td className="num">
                     {r.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{r.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}
                   </td>
@@ -395,9 +406,11 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {spanDays > 0 && (
-        <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 재고원장 출고(판매) 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
-      )}
+      {spanDays > 0 && (channel === "도매" ? (
+        <p className="prod-note">※ 도매 안전재고 = 하루 도매 소진 × {leadDays}일. 하루 소진은 최근 약 {spanDays}일 도매 채널 출고(B2B 납품) 평균이며, 소매로 옮긴 이동분은 제외합니다(소매 부족은 소매 탭이 잡음 — 이중 계상 방지). 행사·수동 보정은 적용하지 않습니다.</p>
+      ) : (
+        <p className="prod-note">※ 안전재고 = 평상시 하루 출고 × {leadDays}일 + 행사 + 보정. 하루 출고는 최근 약 {spanDays}일 소매 채널 출고(판매) 평균이며, <strong>행사 기간에 나간 분은 빼서</strong> 평상시 속도만 잡습니다. 행사분은 '남은 기간'만큼만 따로 더하고, 미리 만들어둔 재고는 현재고로 차감됩니다.</p>
+      ))}
 
       {/* 수량 확인 모달 — 체크한 품목의 실제 요청 수량을 입력해 요청 처리 */}
       {reqDraft && (

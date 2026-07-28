@@ -21,16 +21,21 @@ const dayMs = 86400_000;
 const dateAt = (base: string, deltaDays: number) => new Date(Date.parse(base + "T00:00:00Z") + deltaDays * dayMs).toISOString().slice(0, 10);
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / dayMs);
 
-interface OutRow { qty: number; txn_date: string; status?: string | null; shipment_id?: string | null; products?: { sku: string | null } | null }
+interface OutRow { qty: number; txn_date: string; status?: string | null; shipment_id?: string | null; channel?: string | null; partner?: string | null; products?: { sku: string | null } | null }
 
-// 최근 windowDays 출고 → SKU별 일평균. 소매(shipment_id 없는 출고)만 — B2B 도매 출고는 제외.
-//  status(034)·shipment_id(035) 컬럼 유무에 따라 단계적 폴백 select.
-export async function getLedgerVelocity(windowDays = WINDOW_DAYS): Promise<VelocitySnapshot> {
+// 최근 windowDays 출고 → SKU별 일평균.
+//  channel 미지정(레거시) = 전 채널에서 B2B 발송(shipment) 제외 — 기존 소비처(생산 일정 등) 동작 유지.
+//  channel="소매"   = 소매 판매 속도: 소매 채널 출고만, B2B 발송·채널이동 제외.
+//  channel="도매"   = 도매 소진 속도: 도매 채널 출고(B2B 발송 포함), 채널이동 제외 —
+//                     소매 보충 이동을 빼는 이유: 소매 부족분은 소매 탭 조언이 이미 잡으므로 이중 계상 방지.
+//  status(034)·shipment_id(035)·channel(036) 컬럼 유무에 따라 단계적 폴백 select.
+export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소매" | "도매"): Promise<VelocitySnapshot> {
   const sb = supabaseAdmin();
   const today = kstToday();
   const fromD = dateAt(today, -windowDays);
 
   const selects = [
+    "qty, txn_date, status, shipment_id, channel, partner, products(sku)",
     "qty, txn_date, status, shipment_id, products(sku)",
     "qty, txn_date, status, products(sku)",
     "qty, txn_date, products(sku)",
@@ -46,7 +51,14 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS): Promise<Veloc
   let txCount = 0;
   for (const r of rows) {
     if (r.status != null && r.status !== "완료") continue; // 대기 출고 제외
-    if (r.shipment_id != null) continue;                   // B2B 도매 출고 제외(소매 속도만)
+    if (r.partner === "채널이동") continue;                 // 소매↔도매 이동은 판매/납품이 아님
+    if (channel) {
+      if ((r.channel ?? "소매") !== channel) continue;      // 채널 필터(036 미적용 행은 소매 취급)
+      if (channel === "소매" && r.shipment_id != null) continue; // 소매 속도에서 B2B 발송 제외
+      // 도매 속도는 B2B 발송 포함(납품 소진이 곧 도매 수요)
+    } else {
+      if (r.shipment_id != null) continue;                  // 레거시: B2B 도매 출고 제외
+    }
     const sku = r.products?.sku ? String(r.products.sku).toUpperCase() : null;
     if (!sku) continue;
     const q = Math.abs(Number(r.qty) || 0);

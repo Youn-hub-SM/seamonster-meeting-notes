@@ -43,14 +43,25 @@ export interface InventoryResult {
   velocityCapped: boolean;   // 표본 상한에 걸려 일부만 집계했는지
 }
 
-export async function getInventoryRows(): Promise<InventoryResult> {
+// channel 미지정 = 전체 재고·레거시 속도(기존 소비처 호환). "소매"/"도매" = 그 채널의 재고·소진 속도만.
+//  도매 조언 수식 = 소매와 동일 구조(안전재고 = 하루 소진 × 리드타임)를 도매 데이터로 계산.
+//  단 행사(프로모션)·수동 보정은 소매 판매 보정 장치라 도매 채널에는 적용하지 않는다(순수 수식).
+export async function getInventoryRows(channel?: "소매" | "도매"): Promise<InventoryResult> {
   const sb = supabaseAdmin();
 
   // 1) 자체 원장 현재고(품목당 1행 집계) + 제품표(sku·name) — 박스히어로 API 대신.
+  const stockRpc = async () => {
+    if (channel) {
+      const r = await sb.rpc("inventory_stock", { asof: null, chan: channel });
+      if (!r.error) return r;
+      // 036 미적용 폴백 — 채널 구분 없이 전체
+    }
+    return sb.rpc("inventory_stock", { asof: null });
+  };
   const [stockRes, prodRes, velocity] = await Promise.all([
-    sb.rpc("inventory_stock", { asof: null }),
+    stockRpc(),
     sb.from("products").select("id, sku, name"), // 전 품목(수요 매칭은 비활성 포함)
-    getLedgerVelocity(), // 1b) 판매속도(최근 출고 일평균) — 원장 '출고' 전수 집계
+    getLedgerVelocity(undefined, channel), // 1b) 소진 속도(최근 출고 일평균) — 채널별
   ]);
   if (stockRes.error) throw stockRes.error;
   if (prodRes.error) throw prodRes.error;
@@ -70,11 +81,14 @@ export async function getInventoryRows(): Promise<InventoryResult> {
   wsD.setUTCDate(wsD.getUTCDate() - span); // 판매속도 집계창 시작(근사)
   const windowStart = wsD.toISOString().slice(0, 10);
   const leadDays = await getLeadDays(); // 생산 리드타임(설정값, 기본 10)
-  const [promoForward, promoSold, adjusts] = await Promise.all([
-    getPromoForwardBySku(today, leadDays),     // 앞으로 확보할 남은 행사분
-    getPromoSoldInWindow(windowStart, today),  // 집계창에 이미 나간 행사분(속도에서 제거)
-    getSafetyAdjusts(),
-  ]);
+  const wholesale = channel === "도매"; // 행사·수동 보정은 소매 판매 장치 — 도매 수식에는 미적용
+  const [promoForward, promoSold, adjusts] = wholesale
+    ? [{} as Record<string, number>, {} as Record<string, number>, {} as Awaited<ReturnType<typeof getSafetyAdjusts>>]
+    : await Promise.all([
+        getPromoForwardBySku(today, leadDays),     // 앞으로 확보할 남은 행사분
+        getPromoSoldInWindow(windowStart, today),  // 집계창에 이미 나간 행사분(속도에서 제거)
+        getSafetyAdjusts(),
+      ]);
 
   // 2) 제품표: product_id → sku / name (위에서 받은 prodRes 재사용)
   const skuByProduct = new Map<string, string>();

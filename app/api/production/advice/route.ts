@@ -41,12 +41,14 @@ interface AdviceRow {
   predicted14: number;    // 14일 예측 판매
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    // 재고+수요(공유 로직) + 판매속도(자체 원장) 병렬
+    let channel: "소매" | "도매" | undefined;
+    try { const b = await req.json(); channel = b?.channel === "도매" ? "도매" : b?.channel === "소매" ? "소매" : undefined; } catch { /* body 없음 */ }
+    // 재고(공유 로직) + 소진속도(자체 원장) 병렬 — 채널별
     const [inv, velocity] = await Promise.all([
-      getInventoryRows(),
-      getLedgerVelocity(),
+      getInventoryRows(channel),
+      getLedgerVelocity(undefined, channel),
     ]);
 
     const rows: AdviceRow[] = inv.rows.map((r) => {
