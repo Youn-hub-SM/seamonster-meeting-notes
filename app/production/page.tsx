@@ -96,7 +96,7 @@ export default function ProductionSchedulePage() {
       if (pm.ok) setPromos(pm.promotions || []);
       if (mn.ok) setManual(mn.items || []);
       if (pd.ok) setProducts((pd.products || []).map((p: Product) => ({ sku: p.sku, name: p.name, spec: p.spec, is_bundle: p.is_bundle })));
-      if (rq.ok) setRequests((rq.requests || []).filter((r: ProductionRequest) => r.status === "요청" || r.status === "진행중"));
+      if (rq.ok) setRequests((rq.requests || []).filter((r: ProductionRequest) => r.status === "진행중")); // 담당자가 확인(진행중)한 요청만 일정에 반영 — 미확인(요청)은 제외
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }

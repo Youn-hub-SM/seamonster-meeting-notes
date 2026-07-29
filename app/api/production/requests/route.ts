@@ -54,12 +54,17 @@ export async function POST(req: NextRequest) {
     const due_date = DATE_RE.test(String(b.due_date || ""))
       ? String(b.due_date)
       : addBusinessDays(request_date || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7);
+    const purpose = b.purpose === "도매 납품" ? "도매 납품" : "재고 보충"; // 용도(082) — 그 외 값은 재고 보충
+    // 제조사(소매) 요청을 생산 담당자 '지인'이 직접 작성하면 확인 절차 생략 — 담당 지정 + 진행중으로 시작.
+    //  (작성자 본인이 담당자라 별도 확인이 무의미. 도매 요청은 이행 주체가 달라 자동 확인 없음.)
+    const autoConfirm = who === "지인" && purpose === "재고 보충";
     const head: Record<string, unknown> = {
       req_no,
       title: String(b.title || "").trim() || null,
       requested_by: String(b.requested_by || "").trim() || who,
-      status: "요청",
-      purpose: b.purpose === "도매 납품" ? "도매 납품" : "재고 보충", // 용도(082) — 그 외 값은 재고 보충
+      status: autoConfirm ? "진행중" : "요청",
+      purpose,
+      ...(autoConfirm ? { assignee: who } : {}),
       memo: String(b.memo || "").trim() || null,
       created_by: who,
     };
