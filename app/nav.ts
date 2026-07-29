@@ -71,6 +71,7 @@ export const NAV: NavCategory[] = [
           { href: "/production", label: "생산 일정" },
           { href: "/production/request", label: "생산 요청" },
           { href: "/production/inventory", label: "생산" },
+          { href: "/inventory/quote", label: "월간매입 견적서" },
         ],
       },
       {
@@ -84,7 +85,6 @@ export const NAV: NavCategory[] = [
       },
       { href: "/inventory/stats", label: "통계", icon: "bars" },
       { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
-      { href: "/inventory/quote", label: "월간매입 견적서", icon: "note" },
       { href: "/production/sku", label: "SKU 생성", icon: "tag" },
       { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
     ],
