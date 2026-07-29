@@ -79,7 +79,7 @@ export async function getRequestRows(days: number, date: string): Promise<{ from
   //  생산 일정 화면과 같은 축·같은 수량 규칙.
   const wholesaleReqs = await loadRequests(sb);
   for (const req of wholesaleReqs) {
-    if (req.status !== "진행중") continue; // 담당자가 확인(진행중)한 요청만 — 일정과 동일 규칙
+    if (req.status !== "진행중" || req.purpose === "도매 납품") continue; // 확인된 제조사 요청만 — 도매(이전 지시)는 제조사 생산 대상 아님
     const sched = req.due_date || req.request_date;
     if (!sched || sched < from || sched > to) continue;
     for (const it of req.items) {

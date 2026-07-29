@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { INV_TYPE_COLOR } from "@/app/lib/inventory";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 type OrderItem = { id: string; product_name: string; sku: string | null; qty: number; unit_amount: number | null; amount: number };
 type Order = {
@@ -16,19 +17,50 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
+  // 필터 — 유형(전체/입고/출고)·기간은 서버 쿼리, 품목 검색은 로드된 목록에서(초성·다중단어)
+  const [fType, setFType] = useState<"전체" | "입고" | "출고">("전체");
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
+  const [search, setSearch] = useState("");
+  // 세부 내역 '전 → 후' 재고 변동 — 펼칠 때 1회 조회해 캐시
+  const [balances, setBalances] = useState<Record<string, { before: number; after: number } | null>>({});
 
+  const DATE_OK = /^\d{4}-\d{2}-\d{2}$/;
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const j = await (await fetch("/api/inventory/orders", { cache: "no-store" })).json();
+      const qs = new URLSearchParams();
+      if (fType !== "전체") qs.set("type", fType);
+      if (DATE_OK.test(fFrom)) qs.set("from", fFrom);
+      if (DATE_OK.test(fTo)) qs.set("to", fTo);
+      const j = await (await fetch("/api/inventory/orders" + (qs.toString() ? "?" + qs.toString() : ""), { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setOrders(j.orders || []);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fType, fFrom, fTo]);
   useEffect(() => { load(); }, [load, reloadKey]);
 
-  function toggle(k: string) { setOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; }); }
+  const shown = useMemo(() => {
+    const q = search.trim();
+    if (!q) return orders;
+    // 품목명·SKU·거래처·주문번호로 검색(다른 화면과 동일한 초성·다중단어 매칭)
+    return orders.filter((o) => matchKoQuery(`${o.items.map((it) => `${it.product_name} ${it.sku || ""}`).join(" ")} ${o.partner || ""} ${o.order_no || ""}`, q));
+  }, [orders, search]);
+
+  function toggle(k: string) {
+    setOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+    // 펼칠 때 그 주문 품목들의 '전 → 후' 잔고 조회(미조회분만)
+    const o = orders.find((x) => x.key === k);
+    if (!o || open.has(k)) return;
+    const need = o.items.map((it) => it.id).filter((id) => !(id in balances));
+    if (!need.length) return;
+    fetch("/api/inventory/orders/balance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ txn_ids: need }) })
+      .then((r) => r.json())
+      .then((j) => { if (j?.ok) setBalances((prev) => ({ ...prev, ...j.balances })); })
+      .catch(() => {});
+  }
   async function cancel(o: Order) {
     if (!window.confirm(`${o.order_no || "이 건"} (${o.item_count}개 품목)을 취소할까요? 재고가 원복됩니다.`)) return;
     const qs = o.order_no ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`;
@@ -47,16 +79,35 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     catch { return iso.slice(0, 16).replace("T", " "); }
   };
 
-  if (loading) return <div className="b2b-loading">불러오는 중...</div>;
-  if (error) return <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>;
-  if (orders.length === 0) return <div className="b2b-empty">입고·출고 내역이 없습니다.</div>;
+  const filters = (
+    <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+      <div className="sm-tabs" style={{ margin: 0 }}>
+        {(["전체", "입고", "출고"] as const).map((t) => (
+          <button key={t} type="button" className={`sm-tab ${fType === t ? "is-active" : ""}`} onClick={() => setFType(t)}>{t}</button>
+        ))}
+      </div>
+      <input className="b2b-input" type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} style={{ width: 145 }} title="시작일" />
+      <span className="sm-faint">~</span>
+      <input className="b2b-input" type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} style={{ width: 145 }} title="종료일" />
+      <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목·SKU·거래처·주문번호 — 초성 가능" style={{ width: 280, maxWidth: "100%" }} />
+      {(fFrom || fTo || search || fType !== "전체") && (
+        <button className="b2b-link-btn" onClick={() => { setFType("전체"); setFFrom(""); setFTo(""); setSearch(""); }}>초기화</button>
+      )}
+    </div>
+  );
+
+  if (loading) return <>{filters}<div className="b2b-loading">불러오는 중...</div></>;
+  if (error) return <>{filters}<div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div></>;
+  if (shown.length === 0) return <>{filters}<div className="b2b-empty">{orders.length === 0 ? "입고·출고 내역이 없습니다." : "필터에 맞는 내역이 없습니다."}</div></>;
 
   return (
+    <>
+    {filters}
     <div className="b2b-table-wrap">
       <table className="b2b-table">
         <thead><tr><th>상태</th><th>일시</th><th>주문번호</th><th>거래처</th><th>품목 수</th><th className="num">총수량</th><th className="num">총액</th><th>메모</th><th></th></tr></thead>
         <tbody>
-          {orders.map((o) => {
+          {shown.map((o) => {
             const c = INV_TYPE_COLOR[o.type];
             const isOpen = open.has(o.key);
             const done = o.status === "완료";
@@ -80,17 +131,24 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                 {isOpen && (
                   <tr>
                     <td colSpan={9} style={{ background: "var(--sm-bg-subtle)", padding: "10px 16px" }}>
-                      <table className="b2b-table" style={{ background: "var(--sm-white)" }}>
-                        <thead><tr><th>제품</th><th className="num">수량</th><th className="num">단가</th><th className="num">금액</th></tr></thead>
+                      {/* tableLayout fixed — 어느 주문을 펼쳐도 세부 표 셀 폭 동일 */}
+                      <table className="b2b-table" style={{ background: "var(--sm-white)", tableLayout: "fixed", minWidth: 640 }}>
+                        <thead><tr><th>제품</th><th className="num" style={{ width: 210 }}>수량</th><th className="num" style={{ width: 120 }}>단가</th><th className="num" style={{ width: 140 }}>금액</th></tr></thead>
                         <tbody>
-                          {o.items.map((it) => (
-                            <tr key={it.id}>
-                              <td>{it.product_name}{it.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{it.sku}</span> : null}</td>
-                              <td className="num b2b-money">{it.qty.toLocaleString()}</td>
-                              <td className="num b2b-money">{it.unit_amount ? it.unit_amount.toLocaleString() : "-"}</td>
-                              <td className="num b2b-money">₩{it.amount.toLocaleString()}</td>
-                            </tr>
-                          ))}
+                          {o.items.map((it) => {
+                            const bal = balances[it.id];
+                            return (
+                              <tr key={it.id}>
+                                <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product_name}{it.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{it.sku}</span> : null}</td>
+                                <td className="num" style={{ whiteSpace: "nowrap" }}>
+                                  <span className="b2b-money" style={{ fontWeight: 700 }}>{it.qty.toLocaleString()}</span>
+                                  {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11.5 }}>({bal.before.toLocaleString()} → {bal.after.toLocaleString()})</span>}
+                                </td>
+                                <td className="num b2b-money">{it.unit_amount ? it.unit_amount.toLocaleString() : "-"}</td>
+                                <td className="num b2b-money">₩{it.amount.toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </td>
@@ -102,6 +160,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 

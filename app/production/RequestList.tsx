@@ -56,6 +56,23 @@ export function RequestList() {
   const displayed = useMemo(
     () => (showDone ? byTab : byTab.filter((r) => r.status === "요청" || r.status === "진행중")),
     [byTab, showDone]);
+  // 도매 탭 종합 — 열린(요청·진행중) 도매 요청을 품목별로 합산해 한눈에.
+  const wholesaleSummary = useMemo(() => {
+    if (tab !== "도매") return [];
+    const agg = new Map<string, { name: string; sku: string | null; requested: number; received: number }>();
+    for (const r of byTab) {
+      if (r.status !== "요청" && r.status !== "진행중") continue;
+      for (const it of r.items) {
+        const k = it.product_id;
+        const cur = agg.get(k) ?? { name: it.name, sku: it.sku, requested: 0, received: 0 };
+        cur.requested += it.requested_qty;
+        cur.received += it.received_qty;
+        agg.set(k, cur);
+      }
+    }
+    return [...agg.values()].sort((a, b) => (b.requested - b.received) - (a.requested - a.received));
+  }, [tab, byTab]);
+
   const tabCounts = useMemo(() => ({
     제조사: requests.filter((r) => r.purpose !== "도매 납품" && (r.status === "요청" || r.status === "진행중")).length,
     도매: requests.filter((r) => r.purpose === "도매 납품" && (r.status === "요청" || r.status === "진행중")).length,
@@ -224,6 +241,32 @@ export function RequestList() {
         </div>
       </div>
 
+      {tab === "도매" && wholesaleSummary.length > 0 && (
+        <section className="b2b-card" style={{ marginBottom: 14 }}>
+          <div className="b2b-card-head"><span className="b2b-card-title">도매 요청 종합 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 열린 요청 품목별 합산</span></span></div>
+          <div className="b2b-table-wrap">
+            <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 13 }}>
+              <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>요청</th><th className="num" style={{ width: 100 }}>이전 완료</th><th className="num" style={{ width: 100 }}>잔여</th><th className="num" style={{ width: 90 }}>이행률</th></tr></thead>
+              <tbody>
+                {wholesaleSummary.map((r) => {
+                  const remain = r.requested - r.received;
+                  const pct = r.requested > 0 ? Math.round((r.received / r.requested) * 100) : 0;
+                  return (
+                    <tr key={`${r.name}-${r.sku}`}>
+                      <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{r.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.sku}</span> : null}</td>
+                      <td className="num b2b-money">{r.requested.toLocaleString()}</td>
+                      <td className="num b2b-money">{r.received.toLocaleString()}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700, color: remain > 0 ? "var(--sm-orange)" : "var(--sm-success)" }}>{remain.toLocaleString()}</td>
+                      <td className="num" style={{ color: pct >= 100 ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{pct}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : displayed.length === 0 ? (
@@ -351,9 +394,9 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                 : <>입고는 <strong>입고 및 출고</strong> 메뉴에서 하세요 — 같은 품목이 입고되면 이 요청에 자동으로 연결됩니다(오래된 요청부터). 잘못 연결된 입고는 아래 입고 이력에서 취소.</>}
             </p>
             <div className="b2b-table-wrap">
-              <table className="b2b-table">
+              <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 700 }}>
                 <thead>
-                  <tr><th>품목</th><th className="num">요청</th><th className="num">입고</th><th className="num">잔여</th><th>상태</th><th>입고 이력</th></tr>
+                  <tr><th>품목</th><th className="num" style={{ width: 90 }}>요청</th><th className="num" style={{ width: 90 }}>{req.purpose === "도매 납품" ? "이전" : "입고"}</th><th className="num" style={{ width: 90 }}>잔여</th><th style={{ width: 80 }}>상태</th><th style={{ width: 110 }}>입고 이력</th></tr>
                 </thead>
                 <tbody>
                   {req.items.map((it) => (
