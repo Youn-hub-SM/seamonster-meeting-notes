@@ -79,15 +79,63 @@ export async function logProductionRequestCreated(reqNo: string, label: string, 
 }
 export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string, actor?: string | null): Promise<void> {
   if (fromStatus === toStatus) return;
-  // 생산 시작(진행중)·완료만 Flow 알림, 그 외(취소·다시열기)는 변경기록만.
-  const notify = toStatus === "진행중" || toStatus === "완료";
+  // 진행중·완료·취소는 Flow 알림(설정 체크리스트로 개별 제어), 다시열기 등은 변경기록만.
+  const helperEvent = toStatus === "완료" ? "prod_completed" : toStatus === "취소" ? "prod_cancelled" : toStatus === "진행중" ? "prod_started" : null;
   await recordActivity({
     event_type: "production_request.status_changed",
     summary: `생산요청 ${reqNo || "(번호없음)"} · ${fromStatus} → ${toStatus}`,
     meta: { req_no: reqNo, from: fromStatus, to: toStatus },
-    notify,
+    notify: !!helperEvent,
     bot: "helper", // 생산 알림은 '업무도우미 변경알림' 봇으로
-    helperEvent: toStatus === "완료" ? "prod_completed" : "prod_started",
+    helperEvent: helperEvent ?? undefined,
+    actor,
+  });
+}
+
+export async function logProductionRequestUpdated(reqNo: string, actor?: string | null): Promise<void> {
+  await recordActivity({
+    event_type: "production_request.updated",
+    summary: `생산요청 수정 · ${reqNo || "(번호없음)"} (품목·수량·마감일 등)`,
+    meta: { req_no: reqNo },
+    notify: true,
+    bot: "helper",
+    helperEvent: "prod_updated",
+    actor,
+  });
+}
+
+export async function logProductionRequestDeleted(reqNo: string, label: string, actor?: string | null): Promise<void> {
+  await recordActivity({
+    event_type: "production_request.deleted",
+    summary: `생산요청 삭제 · ${reqNo || "(번호없음)"}${label ? ` · ${label}` : ""}`,
+    meta: { req_no: reqNo },
+    notify: true,
+    bot: "helper",
+    helperEvent: "prod_deleted",
+    actor,
+  });
+}
+
+export async function logProductionReceipt(reqNo: string, itemName: string, qty: number, actor?: string | null): Promise<void> {
+  await recordActivity({
+    event_type: "production_request.receipt",
+    summary: `생산 입고 · ${reqNo || "(번호없음)"} · ${itemName} ×${qty.toLocaleString()}`,
+    meta: { req_no: reqNo, qty },
+    notify: true,
+    bot: "helper",
+    helperEvent: "prod_receipt",
+    actor,
+  });
+}
+
+export async function logProductionReceiptCancelled(reqNo: string, itemName: string, qty: number, actor?: string | null): Promise<void> {
+  await recordActivity({
+    event_type: "production_request.receipt_cancelled",
+    summary: `생산 입고 취소 · ${reqNo || "(번호없음)"} · ${itemName} ×${qty.toLocaleString()} (재고 원복)`,
+    meta: { req_no: reqNo, qty },
+    notify: true,
+    bot: "helper",
+    helperEvent: "prod_receipt_cancel",
     actor,
   });
 }

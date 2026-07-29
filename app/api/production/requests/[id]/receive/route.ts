@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
-import { logProductionRequestStatusChanged } from "@/app/lib/b2b-activity";
+import { logProductionRequestStatusChanged, logProductionReceipt, logProductionReceiptCancelled } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const sb = supabaseAdmin();
     // 라인이 이 요청서 소속인지 확인 + product_id 확보
     const { data: item, error: ie } = await sb
-      .from("production_request_items").select("id, request_id, product_id").eq("id", item_id).single();
+      .from("production_request_items").select("id, request_id, product_id, products(name)").eq("id", item_id).single();
     if (ie || !item) return NextResponse.json({ ok: false, error: "요청 품목을 찾을 수 없습니다." }, { status: 404 });
     if ((item as { request_id: string }).request_id !== requestId)
       return NextResponse.json({ ok: false, error: "요청서와 품목이 일치하지 않습니다." }, { status: 400 });
@@ -73,6 +73,11 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const { error: re } = await sb.from("production_receipts").insert(receiptRow);
     if (re) { await sb.from("inventory_txns").delete().eq("id", invTxnId); throw re; }
 
+    // 입고 알림(품목·수량 — 설정 체크리스트 prod_receipt 로 제어)
+    const prodRel = (item as { products?: { name?: string } | { name?: string }[] | null }).products;
+    const itemName = (Array.isArray(prodRel) ? prodRel[0]?.name : prodRel?.name) || "품목";
+    await logProductionReceipt(reqNo, itemName, qty, who);
+
     // 3) 상태: 요청 → 진행중 (첫 입고 = 생산 시작 알림 + 변경기록)
     if ((head as { status?: string } | null)?.status === "요청") {
       await sb.from("production_requests").update({ status: "진행중", updated_at: new Date().toISOString() }).eq("id", requestId);
@@ -96,7 +101,7 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     const rid = req.nextUrl.searchParams.get("rid");
     if (!rid) return NextResponse.json({ ok: false, error: "입고 id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
-    const { data: rc, error: fe } = await sb.from("production_receipts").select("id, request_id").eq("id", rid).single();
+    const { data: rc, error: fe } = await sb.from("production_receipts").select("id, request_id, qty, production_request_items(products(name))").eq("id", rid).single();
     if (fe || !rc) return NextResponse.json({ ok: false, error: "입고 기록을 찾을 수 없습니다." }, { status: 404 });
     if ((rc as { request_id: string }).request_id !== requestId)
       return NextResponse.json({ ok: false, error: "요청서와 입고가 일치하지 않습니다." }, { status: 400 });
@@ -104,6 +109,17 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     // 원자적 취소: receipt + 연결 도매 입고 원장을 한 트랜잭션에서 삭제(재고 원복).
     const { error: ce } = await sb.rpc("cancel_production_receipt", { p_receipt_id: rid });
     if (ce) throw ce;
+
+    // 입고 취소 알림(설정 체크리스트 prod_receipt_cancel 로 제어)
+    try {
+      const { data: head } = await sb.from("production_requests").select("req_no").eq("id", requestId).maybeSingle();
+      type RcRel = { qty?: number; production_request_items?: { products?: { name?: string } | { name?: string }[] | null } | { products?: { name?: string } | { name?: string }[] | null }[] | null };
+      const rel = (rc as RcRel).production_request_items;
+      const item0 = Array.isArray(rel) ? rel[0] : rel;
+      const pr = item0?.products;
+      const itemName = (Array.isArray(pr) ? pr[0]?.name : pr?.name) || "품목";
+      await logProductionReceiptCancelled((head as { req_no?: string } | null)?.req_no || "", itemName, Number((rc as RcRel).qty) || 0, await actor(req));
+    } catch { /* 알림 실패 무시 */ }
 
     const [row] = await loadRequests(sb, { id: requestId });
     return NextResponse.json({ ok: true, request: row });

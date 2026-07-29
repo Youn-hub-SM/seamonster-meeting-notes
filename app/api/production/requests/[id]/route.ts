@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
 import { PR_STATUSES, type PrStatus } from "@/app/lib/wholesale-production";
-import { logProductionRequestStatusChanged } from "@/app/lib/b2b-activity";
+import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProductionRequestDeleted } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const dynamic = "force-dynamic";
@@ -110,11 +110,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         if (de) throw de;
       }
     }
-    // 상태 변경 → 변경기록(+진행중/완료면 Flow 알림). 작업자(누가 바꿨는지)를 함께 전달.
+    // 변경기록·알림. 작업자(누가 바꿨는지)를 함께 전달.
+    const token = req.cookies.get("b2b_auth")?.value;
+    const who = (await verifySession(token)) || resolveUserName(token);
     if (patch.status !== undefined && prevStatus && prevStatus !== patch.status) {
-      const token = req.cookies.get("b2b_auth")?.value;
-      const who = (await verifySession(token)) || resolveUserName(token);
       await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status), who);
+    }
+    // 상태 외의 실질 수정(품목 교체·마감일·수량 등) → 수정 알림(설정 체크리스트로 제어)
+    const contentKeys = Object.keys(patch).filter((k) => k !== "updated_at" && k !== "status");
+    if (itemsIn !== null || contentKeys.length > 0) {
+      await logProductionRequestUpdated(reqNo, who);
     }
     const [row] = await loadRequests(sb, { id });
     return NextResponse.json({ ok: true, request: row });
@@ -131,8 +136,12 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     const { count, error: ce } = await sb.from("production_receipts").select("id", { count: "exact", head: true }).eq("request_id", id);
     if (ce) throw ce;
     if ((count ?? 0) > 0) return NextResponse.json({ ok: false, error: "입고 기록이 있어 삭제할 수 없습니다. 입고를 먼저 취소하거나 요청서를 '취소' 처리하세요." }, { status: 400 });
+    const { data: head } = await sb.from("production_requests").select("req_no, title").eq("id", id).maybeSingle(); // 삭제 알림용(삭제 전에 확보)
     const { error } = await sb.from("production_requests").delete().eq("id", id);
     if (error) throw error;
+    const token = _req.cookies.get("b2b_auth")?.value;
+    const who = (await verifySession(token)) || resolveUserName(token);
+    await logProductionRequestDeleted((head as { req_no?: string } | null)?.req_no || "", (head as { title?: string } | null)?.title || "", who);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "삭제 실패") }, { status: 500 });

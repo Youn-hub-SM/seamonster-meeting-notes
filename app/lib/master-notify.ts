@@ -14,10 +14,15 @@ export const MASTER_NOTIFY_EVENTS = [
   { key: "deleted", label: "상품 삭제", group: "상품마스터" },
   { key: "bundle", label: "묶음 구성 변경", group: "상품마스터" },
   { key: "import", label: "엑셀 일괄 변경", group: "상품마스터" },
-  // 생산·재고 알림(b2b-activity 의 helper 라우팅)도 이 체크리스트로 개별 제어
+  // 생산·재고 알림(b2b-activity 의 helper 라우팅)도 이 체크리스트로 개별 제어 — 요청 라이프사이클 순서
   { key: "prod_request", label: "생산 요청 등록", group: "생산·재고" },
+  { key: "prod_updated", label: "생산 요청 수정(품목·수량·마감일)", group: "생산·재고" },
   { key: "prod_started", label: "생산 시작(진행중 전환)", group: "생산·재고" },
+  { key: "prod_receipt", label: "입고 기록(품목별)", group: "생산·재고" },
+  { key: "prod_receipt_cancel", label: "입고 취소", group: "생산·재고" },
   { key: "prod_completed", label: "생산 완료", group: "생산·재고" },
+  { key: "prod_cancelled", label: "생산 요청 취소", group: "생산·재고" },
+  { key: "prod_deleted", label: "생산 요청 삭제", group: "생산·재고" },
   { key: "inv_move", label: "재고 이전(소매→도매)", group: "생산·재고" },
 ] as const;
 export type MasterNotifyEventKey = (typeof MASTER_NOTIFY_EVENTS)[number]["key"];
@@ -35,7 +40,7 @@ const DEFAULTS: MasterNotifyConfig = {
   botId: "BFLOW_300003566171",
   receivers: "",
   title: "[업무도우미 변경알림]",
-  events: { created: true, updated: true, deleted: true, bundle: true, import: true, prod_request: true, prod_started: true, prod_completed: true, inv_move: true },
+  events: { created: true, updated: true, deleted: true, bundle: true, import: true, prod_request: true, prod_updated: true, prod_started: true, prod_receipt: true, prod_receipt_cancel: true, prod_completed: true, prod_cancelled: true, prod_deleted: true, inv_move: true },
 };
 
 export async function getMasterNotifyConfig(): Promise<MasterNotifyConfig> {
