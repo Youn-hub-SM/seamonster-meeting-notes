@@ -414,7 +414,7 @@ export default function InventoryPage() {
                   <span style={{ fontSize: 13, fontWeight: 600 }}>용도</span>
                   <div className="sm-tabs" style={{ margin: 0 }}>
                     {(["재고 보충", "도매 납품"] as const).map((pp) => (
-                      <button key={pp} type="button" className={`sm-tab ${reqPurpose === pp ? "is-active" : ""}`} onClick={() => setReqPurpose(pp)}>{pp}</button>
+                      <button key={pp} type="button" className={`sm-tab ${reqPurpose === pp ? "is-active" : ""}`} onClick={() => setReqPurpose(pp)}>{pp === "재고 보충" ? "소매" : "도매"}</button>
                     ))}
                   </div>
                 </label>

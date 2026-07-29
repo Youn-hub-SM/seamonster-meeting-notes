@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  PR_LINE_COLOR, PR_PURPOSES, lineState, allLinesFilled,
+  PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, lineState, allLinesFilled,
   type ProductionRequest, type PrItem, type PrStatus, type PrPurpose,
 } from "@/app/lib/wholesale-production";
 import { addBusinessDays } from "@/app/lib/business-days";
@@ -67,12 +67,17 @@ export function RequestList() {
     fetch("/api/b2b/auth", { cache: "no-store" }).then((r) => r.json()).then((j) => setUserName(j?.ok ? j.name || null : null)).catch(() => {});
   }, []);
 
+  const [retailQty, setRetailQty] = useState<Map<string, number>>(new Map()); // 소매 현재고(용도=소매 선택 시 표시)
   useEffect(() => {
     (async () => {
       try {
-        const j = await (await fetch("/api/inventory/overview?channel=도매", { cache: "no-store" })).json();
+        const [w, r] = await Promise.all([
+          (await fetch("/api/inventory/overview?channel=도매", { cache: "no-store" })).json(),
+          (await fetch("/api/inventory/overview?channel=소매", { cache: "no-store" })).json(),
+        ]);
         // 묶음(세트)은 자체 재고가 없어(구성품 기준) 생산 입고 대상이 아님 → 선택기에서 제외.
-        if (j.ok) setProducts((j.rows || []).filter((r: { is_bundle?: boolean }) => !r.is_bundle).map((r: Prod) => ({ product_id: r.product_id, sku: r.sku, name: r.name, spec: r.spec, unit: r.unit, qty: r.qty })));
+        if (w.ok) setProducts((w.rows || []).filter((x: { is_bundle?: boolean }) => !x.is_bundle).map((x: Prod) => ({ product_id: x.product_id, sku: x.sku, name: x.name, spec: x.spec, unit: x.unit, qty: x.qty })));
+        if (r.ok) setRetailQty(new Map((r.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, Number(x.qty) || 0])));
       } catch { /* noop */ }
     })();
   }, []);
@@ -251,8 +256,8 @@ export function RequestList() {
         </div>
       )}
 
-      {createOpen && <RequestModal products={products} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
-      {editReq && <RequestModal initial={editReq} products={products} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
+      {createOpen && <RequestModal products={products} retailQty={retailQty} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
 }
@@ -416,8 +421,8 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 }
 
 // 생성/수정 겸용 — initial 이 있으면 수정 모드(기존 라인 id 유지, 입고 있는 라인은 뺄 수 없음).
-function RequestModal({ initial, prefill, defaultPurpose, products, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
@@ -472,7 +477,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, busy, onClos
               <span style={{ fontSize: 13, fontWeight: 600 }}>용도</span>
               <div className="sm-tabs" style={{ margin: 0 }}>
                 {PR_PURPOSES.map((pp) => (
-                  <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} onClick={() => setPurpose(pp)}>{pp}</button>
+                  <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} onClick={() => setPurpose(pp)}>{PR_PURPOSE_LABEL[pp]}</button>
                 ))}
               </div>
             </div>
@@ -516,12 +521,15 @@ function RequestModal({ initial, prefill, defaultPurpose, products, busy, onClos
           ) : (
             <div className="b2b-table-wrap">
               <table className="b2b-table">
-                <thead><tr><th>품목</th><th className="num">도매재고</th><th className="num">요청수량</th><th>메모</th><th></th></tr></thead>
+                <thead><tr><th>품목</th><th className="num">{purpose === "도매 납품" ? "도매재고" : "소매재고"}</th><th className="num">요청수량</th><th>메모</th><th></th></tr></thead>
                 <tbody>
                   {lines.map((l, i) => (
                     <tr key={l.item_id || l.product_id}>
                       <td><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
-                      <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
+                      <td className="num" style={{ color: "var(--sm-text-mid)" }}>{(() => {
+                        const v = purpose === "도매 납품" ? l.stock : (retailQty.get(l.product_id) ?? null); // 소매=소매 현재고, 도매=도매 현재고
+                        return v == null ? "-" : v.toLocaleString();
+                      })()}</td>
                       <td className="num"><input type="number" className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder="0" /></td>
                       <td><input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" /></td>
                       <td style={{ whiteSpace: "nowrap" }}>
