@@ -424,6 +424,7 @@ export default function InventoryPage() {
           qtyOf={qtyOf}
           defaultProductId={modalFor === "__new__" ? "" : modalFor}
           defaultChannel={writeChannelOf(channel)}
+          qtySource={channel}
           lockProduct={modalFor !== "__new__"}
           onClose={() => setModalFor("")}
           onSaved={() => { setModalFor(""); load(); }}

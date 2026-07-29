@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { cellStr, xlsxNum } from "@/app/lib/inventory-xlsx";
+import { getAllBundles, isBundleId } from "@/app/lib/product-bundles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,9 +35,10 @@ export async function POST(req: NextRequest) {
       if (!res.error) return res;
       return sb.rpc("inventory_stock", { asof: null }); // 036 미적용 폴백(전체)
     };
-    const [pr, tr] = await Promise.all([
+    const [pr, tr, bundles] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit").eq("active", true),
       stockRpc(),
+      getAllBundles(sb), // 세트는 자체 재고가 없어 조정 대상이 될 수 없다(단건 API 와 같은 규칙)
     ]);
     if (pr.error) throw pr.error;
     if (tr.error) throw tr.error;
@@ -57,6 +59,8 @@ export async function POST(req: NextRequest) {
       const ids = bySku.get(sku);
       if (!ids || ids.length === 0) { errors.push({ line: r, msg: `SKU '${sku}' 품목을 찾을 수 없음` }); continue; }
       if (ids.length > 1) { errors.push({ line: r, msg: `SKU '${sku}' 가 ${ids.length}개 품목과 중복` }); continue; }
+      // 세트 현재고는 구성품에서 파생된다 → 세트에 조정을 쓰면 화면엔 아무 변화 없이 원장만 더럽혀진다.
+      if (isBundleId(bundles, ids[0].id)) { errors.push({ line: r, msg: `'${ids[0].name}' 은 묶음(세트)이라 조정할 수 없습니다 — 구성품 SKU 로 넣으세요` }); continue; }
       if (targetRaw.trim() === "") { errors.push({ line: r, msg: "실사수량이 비었습니다." }); continue; }
       const target = Math.round(xlsxNum(targetRaw) * 100) / 100;
       if (target < 0) { errors.push({ line: r, msg: "실사수량은 0 이상" }); continue; }
