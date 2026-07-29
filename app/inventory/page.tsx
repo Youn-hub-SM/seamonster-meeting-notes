@@ -38,6 +38,17 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
   "낮음": { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },
 };
 
+// ── 표 열 폭 ──
+//  아래 px 은 '표가 가장 좁을 때(= minWidth)' 의 하한이다. 브라우저에서 열별 자연폭을 재서
+//  그 바로 위로 잡은 값 — 이 폭에서는 어느 열도 내용이 잘리지 않는다.
+//  실제 렌더는 이 값을 %로 바꿔 쓰므로, 화면이 넓어지면 품목만 커지지 않고 모든 열이 같은 비율로 늘어난다.
+const COL = {
+  chk: 32, sku: 108, name: 112, qty: 72, safety: 78, daily: 80, dep: 78,
+  pin: 68, pout: 68, val: 96, rec: 78, req: 80, act: 80, adj: 76,
+} as const;
+const TABLE_MIN = Object.values(COL).reduce((a, b) => a + b, 0); // 1106 — 사이드바(237)+스크롤바(15) 더해도 1366 창에 들어간다
+const pct = (px: number) => `${((px / TABLE_MIN) * 100).toFixed(3)}%`;
+
 // 정렬 가능한 컬럼(생산 열 포함)
 type SortKey = "name" | "qty" | "auto_safety" | "depletion_days" | "period_in" | "period_out" | "daily_out" | "value" | "recommend" | "request_by";
 const numKey = (r: OverviewRow, k: Exclude<SortKey, "recommend" | "request_by">): number | string =>
@@ -169,7 +180,7 @@ export default function InventoryPage() {
   function toggleSort(key: SortKey) {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
   }
-  const Th = ({ k, label, num, w }: { k: SortKey; label: string; num?: boolean; w?: number }) => (
+  const Th = ({ k, label, num, w }: { k: SortKey; label: string; num?: boolean; w?: number | string }) => (
     <th className={num ? "num" : undefined} onClick={() => toggleSort(k)} style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none", width: w }} title="클릭하여 정렬">
       {label}<span style={{ marginLeft: 3, color: sort.key === k ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 10 }}>{sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </th>
@@ -352,18 +363,18 @@ export default function InventoryPage() {
         <div className="b2b-empty">{rows.length === 0 ? "활성 품목이 없습니다. 상품 마스터에 제품을 등록하세요." : "조건에 맞는 품목이 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
-          {/* tableLayout fixed — 내용 길이와 무관하게 열 폭 고정.
-              폭은 각 열의 실측 자연폭(브라우저 측정) 바로 위로 잡았다. minWidth = 고정폭 합 994 + 품목 최소 112 = 1106.
-              사이드바(236+1)와 세로 스크롤바(≈15)를 더해도 1358 이라, 1366 이상 창이면 가로 스크롤이 없다. */}
-          <table className="b2b-table inv-table" style={{ tableLayout: "fixed", minWidth: 1106 }}>
+          {/* tableLayout fixed + 열 폭을 % 로 — 내용 길이에 흔들리지 않으면서, 화면이 넓어지면
+              품목만 커지는 대신 모든 열이 같은 비율로 넓어진다. minWidth(TABLE_MIN) 가 하한이라
+              그 폭에서는 COL 의 실측 px 과 정확히 같아진다. */}
+          <table className="b2b-table inv-table" style={{ tableLayout: "fixed", minWidth: TABLE_MIN }}>
             <thead><tr>
-              <th style={{ width: 32 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
-              <th style={{ width: 108 }}>SKU</th><Th k="name" label="품목" />
-              <Th k="qty" label="현재고" num w={72} /><Th k="auto_safety" label="안전재고" num w={78} /><Th k="daily_out" label="하루 출고" num w={80} /><Th k="depletion_days" label="예상소진" num w={78} />
-              <Th k="period_in" label="총입고" num w={68} /><Th k="period_out" label="총출고" num w={68} />
-              <Th k="value" label="재고자산" num w={96} />
-              <Th k="recommend" label="권장생산" num w={78} /><Th k="request_by" label="주문필요" num w={80} />
-              <th style={{ width: 80 }}></th><th className="num" style={{ width: 76 }}>보정</th>
+              <th style={{ width: pct(COL.chk) }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
+              <th style={{ width: pct(COL.sku) }}>SKU</th><Th k="name" label="품목" w={pct(COL.name)} />
+              <Th k="qty" label="현재고" num w={pct(COL.qty)} /><Th k="auto_safety" label="안전재고" num w={pct(COL.safety)} /><Th k="daily_out" label="하루 출고" num w={pct(COL.daily)} /><Th k="depletion_days" label="예상소진" num w={pct(COL.dep)} />
+              <Th k="period_in" label="총입고" num w={pct(COL.pin)} /><Th k="period_out" label="총출고" num w={pct(COL.pout)} />
+              <Th k="value" label="재고자산" num w={pct(COL.val)} />
+              <Th k="recommend" label="권장생산" num w={pct(COL.rec)} /><Th k="request_by" label="주문필요" num w={pct(COL.req)} />
+              <th style={{ width: pct(COL.act) }}></th><th className="num" style={{ width: pct(COL.adj) }}>보정</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => {
@@ -378,7 +389,8 @@ export default function InventoryPage() {
                   style={{ background: r.low ? "var(--sm-danger-bg)" : undefined }}>
                   <td onClick={(e) => e.stopPropagation()}>{pv.has ? <input type="checkbox" checked={picked} onChange={() => toggleSel(r.product_id)} /> : null}</td>
                   <td className="sm-faint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sku || "-"}</td>
-                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}{r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}</td>
+                  {/* 비례 배분이라 넓은 화면에서도 품목 폭이 무한정 늘지는 않는다 → 잘린 이름은 마우스를 올려 확인 */}
+                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${r.name}${r.spec ? ` ${r.spec}` : ""}`}><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}{r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>{r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span></td>
                   <td className="num b2b-money" title={r.promo_qty ? `프로모션 확보분 +${r.promo_qty.toLocaleString()} 포함` : undefined}>{r.auto_safety.toLocaleString()}{r.promo_qty ? <span style={{ color: "var(--sm-orange)", fontSize: 10, marginLeft: 2 }}></span> : null}</td>
                   <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>
