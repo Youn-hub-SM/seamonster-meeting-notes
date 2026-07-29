@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
     const col = new Map<string, number>();
     headerRow.eachCell((cell, c) => col.set(cellStr(cell.value), c));
     if (!col.has("SKU") || !col.has("실사수량")) return NextResponse.json({ ok: false, error: "헤더에 'SKU'·'실사수량'이 필요합니다. (양식을 받아 사용하세요)" }, { status: 400 });
+    // 전 품목이 채워져 내려간 양식인지 판별 — 그 양식은 안 적은 줄이 대부분이라 오류가 아니라 '건너뜀'이 맞다.
+    //  손으로 만든 파일이면 적어 넣은 행만 있는 것이므로 실사수량 누락은 실수 → 예전처럼 오류로 알린다.
+    const isFilledForm = col.has("품목명") && [...col.keys()].some((h) => h.startsWith("현재고"));
 
     const sb = supabaseAdmin();
     const stockRpc = async () => {
@@ -49,19 +52,23 @@ export async function POST(req: NextRequest) {
 
     const rows: AdjustRow[] = [];
     const errors: { line: number; msg: string }[] = [];
+    let skipped = 0; // 실사수량 미입력 행 — 전 품목이 채워진 양식을 그대로 올리는 게 정상 사용이라 오류로 보지 않는다
     for (let r = 2; r <= ws.rowCount; r++) {
       const row = ws.getRow(r);
       const get = (h: string) => { const c = col.get(h); return c ? cellStr(row.getCell(c).value) : ""; };
       const sku = get("SKU").trim();
       const targetRaw = get("실사수량");
       if (!sku && !targetRaw) continue;
+      if (targetRaw.trim() === "") { // 품목만 있고 실사수량을 안 적은 행
+        if (isFilledForm) { skipped++; continue; }
+        errors.push({ line: r, msg: "실사수량이 비었습니다." }); continue;
+      }
       if (!sku) { errors.push({ line: r, msg: "SKU가 비었습니다." }); continue; }
       const ids = bySku.get(sku);
       if (!ids || ids.length === 0) { errors.push({ line: r, msg: `SKU '${sku}' 품목을 찾을 수 없음` }); continue; }
       if (ids.length > 1) { errors.push({ line: r, msg: `SKU '${sku}' 가 ${ids.length}개 품목과 중복` }); continue; }
       // 세트 현재고는 구성품에서 파생된다 → 세트에 조정을 쓰면 화면엔 아무 변화 없이 원장만 더럽혀진다.
       if (isBundleId(bundles, ids[0].id)) { errors.push({ line: r, msg: `'${ids[0].name}' 은 묶음(세트)이라 조정할 수 없습니다 — 구성품 SKU 로 넣으세요` }); continue; }
-      if (targetRaw.trim() === "") { errors.push({ line: r, msg: "실사수량이 비었습니다." }); continue; }
       const target = Math.round(xlsxNum(targetRaw) * 100) / 100;
       if (target < 0) { errors.push({ line: r, msg: "실사수량은 0 이상" }); continue; }
       const p = ids[0];
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
       rows.push({ product_id: p.id, sku, name: p.name, spec: p.spec, unit: p.unit, current, target, delta: target - current, memo: get("메모").trim() || null });
     }
     const changed = rows.filter((r) => r.delta !== 0).length;
-    return NextResponse.json({ ok: true, channel: chan, summary: { valid: rows.length, changed, errors: errors.length }, rows, errors });
+    return NextResponse.json({ ok: true, channel: chan, summary: { valid: rows.length, changed, errors: errors.length, skipped }, rows, errors });
   } catch (err) {
     console.error("[inventory/adjust/import]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "파일 분석 실패") }, { status: 500 });

@@ -7,7 +7,7 @@ import TxnModal from "../TxnModal";
 import TxnTable from "../TxnTable";
 import { ChannelPicker } from "../ChannelTabs";
 
-type Preview = { summary: { valid: number; changed: number; errors: number }; rows: AdjustRow[]; errors: { line: number; msg: string }[] };
+type Preview = { summary: { valid: number; changed: number; errors: number; skipped?: number }; rows: AdjustRow[]; errors: { line: number; msg: string }[] };
 
 export default function AdjustPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -89,6 +89,7 @@ export default function AdjustPage() {
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
                 <span>실제 변경 <strong style={{ color: "var(--sm-orange)" }}>{preview.summary.changed}</strong>건</span>
                 <span className="sm-faint">일치 {preview.summary.valid}건 중</span>
+                {!!preview.summary.skipped && <span className="sm-faint">미입력 {preview.summary.skipped.toLocaleString()}행 건너뜀</span>}
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
               {preview.rows.length === 0 && <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. 양식을 확인하세요.</div>}

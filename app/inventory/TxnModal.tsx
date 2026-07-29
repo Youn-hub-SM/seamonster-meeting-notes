@@ -24,6 +24,7 @@ type Preview = {
   valid: number;    // 매칭된 행 수
   errCount: number;
   merged: number;   // 입출고에서 합산된 중복 행 수
+  skipped: number;  // 수량을 안 적어 건너뛴 행(채워진 양식에서는 정상)
 };
 
 export default function TxnModal({
@@ -64,7 +65,10 @@ export default function TxnModal({
   const [applying, setApplying] = useState(false);
   const [ioDone, setIoDone] = useState(true); // 입고/출고 즉시처리(해제 시 '대기')
   const [preview, setPreview] = useState<Preview | null>(null);
-  const templateHref = isAdjust ? "/api/inventory/adjust/template" : `/api/inventory/txns/template?type=${type}`;
+  // 양식은 전 품목의 SKU·품목명·현재고를 채워서 받는다(fill=1) — 수량 칸만 채우면 되게.
+  const templateHref = isAdjust
+    ? `/api/inventory/adjust/template?fill=1&channel=${encodeURIComponent(channel)}`
+    : `/api/inventory/txns/template?type=${type}&fill=1&channel=${encodeURIComponent(channel)}`;
 
   // 분석 요청 순번 — 응답이 늦게 온 옛 요청은 버린다(유형·채널을 바꾼 뒤 도착한 결과가 반대 표에 그려지면 화면이 죽는다).
   const reqSeq = useRef(0);
@@ -83,7 +87,7 @@ export default function TxnModal({
       const j = await res.json();
       if (seq !== reqSeq.current) return; // 그 사이 조건이 바뀜 → 폐기
       if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
-      const base = { reqType, reqChannel, rows: j.rows || [], errors: j.errors || [], valid: Number(j.summary?.valid) || 0, errCount: Number(j.summary?.errors) || 0 };
+      const base = { reqType, reqChannel, rows: j.rows || [], errors: j.errors || [], valid: Number(j.summary?.valid) || 0, errCount: Number(j.summary?.errors) || 0, skipped: Number(j.summary?.skipped) || 0 };
       setPreview(adj
         ? { ...base, kind: "조정", count: Number(j.summary?.changed) || 0, merged: 0 }
         : { ...base, kind: "입출", count: Number(j.summary?.valid) || 0, merged: Number(j.summary?.merged) || 0 });
@@ -303,6 +307,7 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
             <span>반영 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.count.toLocaleString()}</strong>건</span>
           )}
           {!!preview.merged && <span className="sm-faint">중복 SKU {preview.merged}건 합산됨</span>}
+          {!!preview.skipped && <span className="sm-faint">미입력 {preview.skipped.toLocaleString()}행 건너뜀</span>}
           {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.errCount}건(제외)</span>}
         </div>
 
@@ -380,12 +385,11 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
       )}
 
       <p className="sm-faint" style={{ fontSize: 12.5, marginTop: 12, lineHeight: 1.6 }}>
+        양식에는 <strong>SKU · 품목명 · 현재고({channel})</strong>가 이미 채워져 있습니다 — <strong>{isAdjust ? "실사수량" : "수량"}</strong> 칸만 적으면 되고, 비워 둔 줄은 건너뜁니다.
         {isAdjust
-          ? <>양식 = <strong>SKU · 실사수량 · 메모</strong> — 현재고가 실사수량이 되도록 조정합니다. 거래일은 오늘로 기록됩니다.</>
-          : type === "입고"
-          ? <>양식 = <strong>SKU · 수량 · 단가</strong> (날짜·거래처·메모 열이 있으면 그 값이 우선)</>
-          : <>양식 = <strong>수량 · (무시) · SKU</strong> (외부 출고 파일 그대로 · 가운데 열 무시). <strong>SKU · 수량 · 단가</strong> 양식도 됩니다.</>}
-        <br />{channel} 재고에 기록됩니다. 묶음(세트)은 {isAdjust ? "조정할 수 없습니다 — 구성품으로 넣으세요" : "구성품으로 자동 분해됩니다"}.
+          ? <> 현재고가 실사수량이 되도록 조정하며, 거래일은 오늘로 기록됩니다.</>
+          : <> 단가는 선택입니다.{type === "출고" ? " 외부 출고 파일(수량·(무시)·SKU)도 그대로 올릴 수 있습니다." : ""}</>}
+        <br />{channel} 재고에 기록됩니다. 묶음(세트)과 <strong>SKU 가 없는 품목</strong>은 양식에서 빠집니다 — 빠진 품목은 양식 맨 아래에 적혀 있습니다.
         {" · "}<a href={templateHref} className="sm-link">양식 다운로드</a>
       </p>
 
