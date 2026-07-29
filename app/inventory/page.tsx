@@ -42,9 +42,11 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
 //  아래 px 은 '표가 가장 좁을 때(= minWidth)' 의 하한이다. 브라우저에서 열별 자연폭을 재서
 //  그 바로 위로 잡은 값 — 이 폭에서는 어느 열도 내용이 잘리지 않는다.
 //  실제 렌더는 이 값을 %로 바꿔 쓰므로, 화면이 넓어지면 품목만 커지지 않고 모든 열이 같은 비율로 늘어난다.
+//  품목은 가중치를 25% 올렸다(112→140). 늘린 28px 은 여유가 남던 열에서 되가져와
+//  합계(=TABLE_MIN)는 그대로다 — 1366 창의 무스크롤을 지키기 위해. 줄인 열도 헤더·내용이 잘리지 않는 걸 실측 확인했다.
 const COL = {
-  chk: 32, sku: 108, name: 112, qty: 72, safety: 78, daily: 80, dep: 78,
-  pin: 68, pout: 68, val: 96, rec: 78, req: 80, act: 80, adj: 76,
+  chk: 31, sku: 108, name: 140, qty: 72, safety: 76, daily: 78, dep: 76,
+  pin: 64, pout: 64, val: 96, rec: 76, req: 78, act: 78, adj: 69,
 } as const;
 const TABLE_MIN = Object.values(COL).reduce((a, b) => a + b, 0); // 1106 — 사이드바(237)+스크롤바(15) 더해도 1366 창에 들어간다
 const pct = (px: number) => `${((px / TABLE_MIN) * 100).toFixed(3)}%`;
