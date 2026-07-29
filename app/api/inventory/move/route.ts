@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { logInventoryMovedToWholesale } from "@/app/lib/b2b-activity";
+import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const dynamic = "force-dynamic";
@@ -85,15 +86,27 @@ export async function POST(req: NextRequest) {
     const { data, error } = await sb.from("inventory_txns").insert([
       { ...base, type: "출고", qty: -qty, channel: from, unit_amount: null },
       { ...base, type: "입고", qty: qty, channel: to, unit_amount: null },
-    ]).select("id");
+    ]).select("id, type, qty, txn_date");
     if (error) {
       if (/channel/i.test(error.message)) return NextResponse.json({ ok: false, error: "채널 컬럼이 없습니다 — migration 036 을 먼저 적용하세요." }, { status: 500 });
       throw error;
     }
 
-    // 소매→도매 이전만 알림('업무도우미 변경알림' 봇) — 도매 요청 대응 이동이라 담당자들이 알아야 함.
-    //  fire-and-forget: 알림 실패해도 이동 자체는 성공 응답.
+    // 소매→도매 이전 = '도매 납품' 요청의 이행(생산 담당자 성과) — 도매 입고편을 증거로 자동 매칭.
+    //  이전 취소는 이 화면의 '취소'(group 삭제) → cascade(083)로 증거도 함께 원복.
+    //  알림도 발송('업무도우미 변경알림' 봇). 둘 다 fire-and-forget — 실패해도 이동은 성공.
     if (from === "소매" && to === "도매") {
+      try {
+        const inLeg = (data ?? []).find((t) => t.type === "입고" && Number(t.qty) > 0);
+        if (inLeg) {
+          await allocateReceiptsToOpenRequests(
+            sb,
+            [{ inv_txn_id: inLeg.id as string, product_id, qty: Number(inLeg.qty), receipt_date: (inLeg.txn_date as string) || undefined }],
+            created_by,
+            { purpose: "도매 납품", memo: "소매→도매 이전 연동" },
+          );
+        }
+      } catch (e) { console.warn("[inventory/move] 도매요청 매칭 실패", e); }
       try {
         const { data: prod } = await sb.from("products").select("name, sku").eq("id", product_id).maybeSingle();
         await logInventoryMovedToWholesale(prod?.name || "품목", (prod?.sku as string) ?? null, qty, memo, created_by);

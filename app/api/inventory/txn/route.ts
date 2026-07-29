@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
           sb,
           (res.data ?? []).filter((t) => Number(t.qty) > 0).map((t) => ({ inv_txn_id: t.id as string, product_id: t.product_id as string, qty: Number(t.qty), receipt_date: (t.txn_date as string) || undefined })),
           row.created_by as string | null,
+          { purpose: "재고 보충" }, // 입고(도소매 무관) = 제조사 요청 이행
         );
       } catch (e) { console.warn("[inventory/txn] 생산요청 매칭 실패", e); }
     }

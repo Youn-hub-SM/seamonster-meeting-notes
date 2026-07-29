@@ -18,10 +18,14 @@ export type AllocEntry = {
   receipt_date?: string;  // 원장 거래일(YYYY-MM-DD)
 };
 
+// 이행 규칙(2026-07-29 확정):
+//  · 입고(도소매 무관)          → '재고 보충'(제조사 요청) 이행 — 제조사가 만들어 보냈는가
+//  · 소매→도매 이전(도매 입고편) → '도매 납품'(도매 요청) 이행 — 생산 담당자가 도매로 옮겼는가
 export async function allocateReceiptsToOpenRequests(
   sb: SupabaseClient,
   entries: AllocEntry[],
   actor: string | null,
+  opts?: { purpose?: "재고 보충" | "도매 납품"; memo?: string },
 ): Promise<void> {
   const positive = entries.filter((e) => e.inv_txn_id && e.product_id && Math.floor(e.qty) > 0);
   if (!positive.length) return;
@@ -34,12 +38,18 @@ export async function allocateReceiptsToOpenRequests(
     for (const p of data ?? []) nameById.set(p.id as string, p.name as string);
   } catch { /* 이름 없이 진행 */ }
 
-  // 열린 요청 품목(요청·진행중) — 오래된 요청부터
-  const { data: itemsRaw, error: ie } = await sb
-    .from("production_request_items")
-    .select("id, request_id, requested_qty, product_id, production_requests!inner(id, req_no, status, request_date, created_at)")
-    .in("product_id", pids)
-    .in("production_requests.status", ["요청", "진행중"]);
+  // 열린 요청 품목(요청·진행중) — 오래된 요청부터. 용도 필터(082) 미적용 환경이면 용도 무관 폴백.
+  const query = (withPurpose: boolean) => {
+    let q = sb
+      .from("production_request_items")
+      .select("id, request_id, requested_qty, product_id, production_requests!inner(id, req_no, status, request_date, created_at)")
+      .in("product_id", pids)
+      .in("production_requests.status", ["요청", "진행중"]);
+    if (withPurpose && opts?.purpose) q = q.eq("production_requests.purpose", opts.purpose);
+    return q;
+  };
+  let { data: itemsRaw, error: ie } = await query(true);
+  if (ie && /purpose/i.test(ie.message)) ({ data: itemsRaw, error: ie } = await query(false)); // 082 미적용 폴백
   if (ie || !itemsRaw?.length) return;
 
   type Head = { id: string; req_no: string | null; status: string; request_date: string; created_at: string };
@@ -75,7 +85,7 @@ export async function allocateReceiptsToOpenRequests(
 
       const row: Record<string, unknown> = {
         request_id: it.request_id, item_id: it.id, qty: alloc,
-        memo: "입고/출고 연동", received_by: actor, inv_txn_id: e.inv_txn_id,
+        memo: opts?.memo || "입고/출고 연동", received_by: actor, inv_txn_id: e.inv_txn_id,
       };
       if (e.receipt_date && /^\d{4}-\d{2}-\d{2}$/.test(e.receipt_date)) row.receipt_date = e.receipt_date;
       const { error: re } = await sb.from("production_receipts").insert(row);

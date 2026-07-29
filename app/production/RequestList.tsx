@@ -28,6 +28,8 @@ type NewLine = {
 export function RequestList() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [showDone, setShowDone] = useState(false); // 기본 진행(요청·진행중)만 — 완료·취소는 토글로
+  // 탭: 제조사 요청(재고 보충 — 이행=입고) / 도매 요청(도매 납품 — 이행=소매→도매 이전)
+  const [tab, setTab] = useState<"제조사" | "도매">("제조사");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [products, setProducts] = useState<Prod[]>([]);
@@ -48,9 +50,16 @@ export function RequestList() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const byTab = useMemo(
+    () => requests.filter((r) => (tab === "도매" ? r.purpose === "도매 납품" : r.purpose !== "도매 납품")),
+    [requests, tab]);
   const displayed = useMemo(
-    () => (showDone ? requests : requests.filter((r) => r.status === "요청" || r.status === "진행중")),
-    [requests, showDone]);
+    () => (showDone ? byTab : byTab.filter((r) => r.status === "요청" || r.status === "진행중")),
+    [byTab, showDone]);
+  const tabCounts = useMemo(() => ({
+    제조사: requests.filter((r) => r.purpose !== "도매 납품" && (r.status === "요청" || r.status === "진행중")).length,
+    도매: requests.filter((r) => r.purpose === "도매 납품" && (r.status === "요청" || r.status === "진행중")).length,
+  }), [requests]);
 
   // 담당자 '확인' 버튼용 로그인 사용자 이름
   const [userName, setUserName] = useState<string | null>(null);
@@ -152,7 +161,7 @@ export function RequestList() {
     setBusy(false);
   }
 
-  const doneCount = useMemo(() => requests.filter((r) => r.status === "완료" || r.status === "취소").length, [requests]);
+  const doneCount = useMemo(() => byTab.filter((r) => r.status === "완료" || r.status === "취소").length, [byTab]);
 
   // 제조사에게 건넬 요청서 텍스트 — 담당자가 확인 후 복사해 전달(제조사 전달용, DB 저장 없음).
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -187,9 +196,16 @@ export function RequestList() {
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
 
       <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", cursor: "pointer" }}>
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> 완료·취소 보기 <span className="sm-faint" style={{ fontSize: 12 }}>({doneCount})</span>
-        </label>
+        <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="sm-tabs" style={{ margin: 0 }}>
+            <button className={`sm-tab ${tab === "제조사" ? "is-active" : ""}`} onClick={() => setTab("제조사")}>제조사 요청<span className="sm-tab-count">{tabCounts.제조사}</span></button>
+            <button className={`sm-tab ${tab === "도매" ? "is-active" : ""}`} onClick={() => setTab("도매")}>도매 요청<span className="sm-tab-count">{tabCounts.도매}</span></button>
+          </div>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{tab === "제조사" ? "이행 = 입고 (제조사 성과)" : "이행 = 소매→도매 이전 (생산 담당자 성과)"}</span>
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", cursor: "pointer" }}>
+            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> 완료·취소 보기 <span className="sm-faint" style={{ fontSize: 12 }}>({doneCount})</span>
+          </label>
+        </div>
         <div className="sm-row" style={{ gap: 8 }}>
           <button className="b2b-btn-secondary" onClick={() => load()} disabled={loading}>{loading ? "불러오는 중..." : "새로고침"}</button>
           <button className="b2b-btn-primary" onClick={() => setCreateOpen(true)} disabled={busy}>+ 새 생산 요청</button>
@@ -199,7 +215,7 @@ export function RequestList() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : displayed.length === 0 ? (
-        <div className="b2b-empty">{showDone ? "요청이 없습니다." : "진행 중인 생산 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요."}</div>
+        <div className="b2b-empty">{showDone ? `${tab} 요청이 없습니다.` : `진행 중인 ${tab} 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요.`}</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -234,7 +250,7 @@ export function RequestList() {
         </div>
       )}
 
-      {createOpen && <RequestModal products={products} prefill={prefill ?? undefined} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {createOpen && <RequestModal products={products} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
       {editReq && <RequestModal initial={editReq} products={products} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
@@ -313,7 +329,9 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
             {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
 
             <p className="sm-faint" style={{ fontSize: 12.5, marginBottom: 8 }}>
-              입고는 <strong>입고 및 출고</strong> 메뉴에서 하세요 — 같은 품목이 입고되면 이 요청에 자동으로 연결됩니다(오래된 요청부터). 잘못 연결된 입고는 아래 입고 이력에서 취소.
+              {req.purpose === "도매 납품"
+                ? <>이행은 <strong>소매↔도매</strong> 화면에서 소매→도매로 옮기면 자동 연결됩니다(오래된 요청부터). 이전 취소도 그 화면에서.</>
+                : <>입고는 <strong>입고 및 출고</strong> 메뉴에서 하세요 — 같은 품목이 입고되면 이 요청에 자동으로 연결됩니다(오래된 요청부터). 잘못 연결된 입고는 아래 입고 이력에서 취소.</>}
             </p>
             <div className="b2b-table-wrap">
               <table className="b2b-table">
@@ -380,7 +398,9 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
                     <span style={{ fontWeight: 700, color: rc.qty < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{rc.qty > 0 ? "+" : ""}{rc.qty.toLocaleString()}</span>
                     {rc.received_by && <span style={{ color: "var(--sm-text-mid)" }}>{rc.received_by}</span>}
                     {rc.memo && <span style={{ color: "var(--sm-text-mid)" }}>· {rc.memo}</span>}
-                    {canEdit && <button className="b2b-link-btn" style={{ fontSize: 13, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>}
+                    {canEdit && (rc.memo?.includes("이전 연동")
+                      ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 소매↔도매 화면에서</span>
+                      : <button className="b2b-link-btn" style={{ fontSize: 13, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>)}
                   </div>
                 ))}
               </div>
@@ -395,8 +415,8 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 }
 
 // 생성/수정 겸용 — initial 이 있으면 수정 모드(기존 라인 id 유지, 입고 있는 라인은 뺄 수 없음).
-function RequestModal({ initial, prefill, products, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; prefill?: NewLine[]; products: Prod[]; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, defaultPurpose, products, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
@@ -405,8 +425,8 @@ function RequestModal({ initial, prefill, products, busy, onClose, onSubmit }: {
   // 생산마감일 필수 — 기본 요청일+7영업일(급발주 시 수정). 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
   const [dueDate, setDueDate] = useState(initial ? (initial.due_date || addBusinessDays(initial.request_date, 7)) : addBusinessDays(todayIso(), 7));
   const [title, setTitle] = useState(initial?.title || "");
-  // 용도(082): 자동 생성('생산' 화면)은 재고 보충으로 만들어지므로, MD가 직접 여는 이 모달은 기본 도매 납품.
-  const [purpose, setPurpose] = useState<PrPurpose>(initial?.purpose || "도매 납품");
+  // 용도(082) — 새 요청은 현재 탭 기준(제조사 탭=재고 보충 / 도매 탭=도매 납품), 수정은 기존 값.
+  const [purpose, setPurpose] = useState<PrPurpose>(initial?.purpose || defaultPurpose || "재고 보충");
   const [memo, setMemo] = useState(initial?.memo || "");
   const [lines, setLines] = useState<NewLine[]>(() =>
     initial

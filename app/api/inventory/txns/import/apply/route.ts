@@ -89,6 +89,7 @@ export async function POST(req: NextRequest) {
           sb,
           inRows.map((r) => ({ inv_txn_id: r.id as string, product_id: r.product_id as string, qty: Number(r.qty), receipt_date: (r.txn_date as string) || undefined })),
           actor,
+          { purpose: "재고 보충" }, // 입고(도소매 무관) = 제조사 요청 이행
         );
       } catch (e) { console.warn("[inventory/txns import apply] 생산요청 매칭 실패", e); }
     }

@@ -30,28 +30,26 @@ export default function InvStatsPage() {
   }, [channel]);
   useEffect(() => { load(); }, [load]);
 
-  // 생산 이행률 — 생산 요청(요청량) 대비 실제 입고량. 채널 필터와 무관(생산 요청은 도매 입고 단일 경로).
-  type PrLite = { status: string; due_date: string | null; total_requested: number; total_received: number };
+  // 생산 이행률 — 두 주체로 분리(2026-07-29 규칙):
+  //  제조사(재고 보충 요청, 이행=입고) / 생산 담당자(도매 납품 요청, 이행=소매→도매 이전)
+  type PrLite = { status: string; purpose?: string; due_date: string | null; total_requested: number; total_received: number };
   const [prReqs, setPrReqs] = useState<PrLite[]>([]);
   useEffect(() => {
     fetch("/api/production/requests", { cache: "no-store" }).then((r) => r.json())
       .then((j) => { if (j.ok) setPrReqs((j.requests || []) as PrLite[]); }).catch(() => {});
   }, []);
   const fulfill = useMemo(() => {
-    const act = prReqs.filter((r) => r.status !== "취소");
-    const reqSum = act.reduce((s, r) => s + r.total_requested, 0);
-    const recSum = act.reduce((s, r) => s + r.total_received, 0);
-    const done = prReqs.filter((r) => r.status === "완료");
-    const doneReq = done.reduce((s, r) => s + r.total_requested, 0);
-    const doneRec = done.reduce((s, r) => s + r.total_received, 0);
+    const rate = (list: PrLite[]) => {
+      const act = list.filter((r) => r.status !== "취소");
+      const reqSum = act.reduce((s, r) => s + r.total_requested, 0);
+      const recSum = act.reduce((s, r) => s + r.total_received, 0);
+      return { reqSum, recSum, pct: reqSum > 0 ? (recSum / reqSum) * 100 : null };
+    };
+    const mfg = rate(prReqs.filter((r) => r.purpose !== "도매 납품"));
+    const whl = rate(prReqs.filter((r) => r.purpose === "도매 납품"));
     const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const overdue = prReqs.filter((r) => (r.status === "요청" || r.status === "진행중") && r.due_date && r.due_date < today).length;
-    return {
-      reqSum, recSum,
-      pct: reqSum > 0 ? (recSum / reqSum) * 100 : null,
-      donePct: doneReq > 0 ? (doneRec / doneReq) * 100 : null,
-      doneCount: done.length, overdue,
-    };
+    return { mfg, whl, overdue, any: mfg.reqSum > 0 || whl.reqSum > 0 };
   }, [prReqs]);
 
   const totals = useMemo(() => ({
@@ -125,18 +123,18 @@ export default function InvStatsPage() {
       {error && <div className="b2b-error">{error}</div>}
       {loading ? <div className="b2b-loading">불러오는 중...</div> : (
         <>
-          {/* 생산 이행률 — 요청량 대비 실제 입고(생산 요청 전체 기준, 취소 제외) */}
-          {fulfill.reqSum > 0 && (
+          {/* 생산 이행률 — 제조사(입고) / 생산 담당자(소매→도매 이전) 분리 */}
+          {fulfill.any && (
             <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: 16 }}>
               <div className="b2b-stat-card">
-                <div className="b2b-stat-card-label">생산 이행률</div>
-                <div className="b2b-stat-card-value" style={{ color: fulfill.pct != null && fulfill.pct < 90 ? "var(--sm-warning)" : "var(--sm-success)" }}>{fulfill.pct?.toFixed(1)}%</div>
-                <div className="b2b-stat-card-hint">입고 {fulfill.recSum.toLocaleString()} / 요청 {fulfill.reqSum.toLocaleString()} (취소 제외)</div>
+                <div className="b2b-stat-card-label">제조사 이행률</div>
+                <div className="b2b-stat-card-value" style={{ color: fulfill.mfg.pct != null && fulfill.mfg.pct < 90 ? "var(--sm-warning)" : "var(--sm-success)" }}>{fulfill.mfg.pct != null ? `${fulfill.mfg.pct.toFixed(1)}%` : "-"}</div>
+                <div className="b2b-stat-card-hint">제조사 요청 — 입고 {fulfill.mfg.recSum.toLocaleString()} / 요청 {fulfill.mfg.reqSum.toLocaleString()}</div>
               </div>
               <div className="b2b-stat-card">
-                <div className="b2b-stat-card-label">완료 요청 이행률</div>
-                <div className="b2b-stat-card-value">{fulfill.donePct != null ? `${fulfill.donePct.toFixed(1)}%` : "-"}</div>
-                <div className="b2b-stat-card-hint">완료 처리된 요청 {fulfill.doneCount}건 기준</div>
+                <div className="b2b-stat-card-label">도매 이전 이행률</div>
+                <div className="b2b-stat-card-value" style={{ color: fulfill.whl.pct != null && fulfill.whl.pct < 90 ? "var(--sm-warning)" : "var(--sm-success)" }}>{fulfill.whl.pct != null ? `${fulfill.whl.pct.toFixed(1)}%` : "-"}</div>
+                <div className="b2b-stat-card-hint">도매 요청 — 이전 {fulfill.whl.recSum.toLocaleString()} / 요청 {fulfill.whl.reqSum.toLocaleString()} (생산 담당자)</div>
               </div>
               <div className="b2b-stat-card" style={fulfill.overdue > 0 ? { borderColor: "var(--sm-danger-border)" } : undefined}>
                 <div className="b2b-stat-card-label" style={fulfill.overdue > 0 ? { color: "var(--sm-danger)" } : undefined}>마감 지난 미완료</div>
