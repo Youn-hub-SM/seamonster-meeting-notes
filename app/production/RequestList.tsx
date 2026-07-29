@@ -144,13 +144,20 @@ export function RequestList() {
     setBusy(false);
   }
 
-  async function removeRequest(id: string) {
-    if (!confirm("이 요청서를 삭제할까요? (입고 기록이 있으면 삭제 대신 '취소'만 됩니다)")) return;
+  async function removeRequest(r: ProductionRequest) {
+    // 입고 기록이 있으면 삭제 불가(입고 증거·재고 정합) → '취소' 상태 전환으로 대체.
+    const hasReceipts = r.items.some((it) => it.receipts.length > 0);
+    if (hasReceipts) {
+      if (!confirm("입고 기록이 있어 삭제할 수 없습니다.\n대신 '취소' 상태로 바꿀까요?\n(기록은 보존되고 목록·생산 일정·이행률에서 빠집니다)")) return;
+      await patchStatus(r.id, "취소");
+      return;
+    }
+    if (!confirm("이 요청서를 삭제할까요?")) return;
     setBusy(true); setError("");
     try {
-      const j = await (await fetch(`/api/production/requests/${id}`, { method: "DELETE" })).json();
+      const j = await (await fetch(`/api/production/requests/${r.id}`, { method: "DELETE" })).json();
       if (!j.ok) throw new Error(j.error || "삭제 실패");
-      setRequests((prev) => prev.filter((r) => r.id !== id));
+      setRequests((prev) => prev.filter((x) => x.id !== r.id));
     } catch (e) { setError(e instanceof Error ? e.message : "삭제 오류"); }
     setBusy(false);
   }
@@ -248,7 +255,7 @@ export function RequestList() {
                   onCopySheet={() => copyRequestSheet(r)}
                   copied={copiedId === r.id}
                   onEdit={() => setEditReq(r)}
-                  onDelete={() => removeRequest(r.id)}
+                  onDelete={() => removeRequest(r)}
                 />
               ))}
             </tbody>
@@ -324,7 +331,11 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
           <button className="b2b-link-btn" disabled={busy} onClick={onCopySheet} title="제조사에 건넬 요청서 텍스트 복사">{copied ? "복사됨 ✓" : "요청서"}</button>
           {editable && <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} onClick={onEdit}>수정</button>}
-          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", marginLeft: 6 }} disabled={busy} onClick={onDelete}>삭제</button>
+          {(req.status === "완료" || req.status === "취소") ? (
+            <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} title="진행중으로 되돌려 입고·수정을 다시 연다" onClick={() => onStatus("진행중")}>다시 열기</button>
+          ) : (
+            <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", marginLeft: 6 }} disabled={busy} onClick={onDelete}>삭제</button>
+          )}
         </td>
       </tr>
 
