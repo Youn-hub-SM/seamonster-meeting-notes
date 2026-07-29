@@ -28,6 +28,21 @@ type InvRow = {
   inB2B: boolean;
 };
 
+// 정렬 가능한 컬럼(재고 목록과 동일한 클릭 토글 방식)
+type PSortKey = "sku" | "name" | "stock" | "safety" | "dailyOut" | "depletion" | "recommend" | "requestBy";
+const sortVal = (r: InvRow, k: PSortKey): number | string => {
+  switch (k) {
+    case "sku": return r.sku;
+    case "name": return r.name;
+    case "stock": return r.stock ?? Number.POSITIVE_INFINITY;
+    case "safety": return r.safety;
+    case "dailyOut": return r.dailyOut;
+    case "depletion": return r.stock != null && r.dailyOut > 0 ? Math.floor(r.stock / r.dailyOut) : Number.POSITIVE_INFINITY;
+    case "recommend": return r.recommend;
+    case "requestBy": return r.requestByDays ?? Number.POSITIVE_INFINITY;
+  }
+};
+
 type Priority = { sku: string; name: string; urgency: string; qty: number; byWhen: string; reason: string };
 type Advice = { summary: string; priorities: Priority[]; notes: string[] };
 const URG_STYLE: Record<string, { bg: string; fg: string }> = {
@@ -102,11 +117,28 @@ export default function InventoryPage() {
   }, [rows]);
 
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<{ key: PSortKey; dir: "asc" | "desc" }>({ key: "recommend", dir: "desc" });
   const shown = useMemo(() => {
     const base = onlyNeed ? rows.filter((r) => r.recommend > 0) : rows;
     const q = search.trim();
-    return q ? base.filter((r) => matchKoQuery(`${r.name} ${r.sku}`, q)) : base;   // 이름·SKU·초성 검색
-  }, [rows, onlyNeed, search]);
+    const f = q ? base.filter((r) => matchKoQuery(`${r.name} ${r.sku}`, q)) : base;   // 이름·SKU·초성 검색
+    const { key, dir } = sort;
+    const mul = dir === "asc" ? 1 : -1;
+    return [...f].sort((a, b) => {
+      const va = sortVal(a, key), vb = sortVal(b, key);
+      if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb), "ko") * mul;
+      return (va - vb) * mul;
+    });
+  }, [rows, onlyNeed, search, sort]);
+
+  function toggleSort(key: PSortKey) {
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" || key === "sku" ? "asc" : "desc" }));
+  }
+  const Th = ({ k, label, num, w }: { k: PSortKey; label: string; num?: boolean; w?: number }) => (
+    <th className={num ? "num" : undefined} onClick={() => toggleSort(k)} style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none", width: w }} title="클릭하여 정렬">
+      {label}<span style={{ marginLeft: 3, color: sort.key === k ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 10 }}>{sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
+    </th>
+  );
 
   // 생산 요청 — 품목을 체크하고 버튼을 누르면 '수량 확인' 모달이 열린다.
   //  권장 수량이 기본으로 채워지며(0이면 빈칸) 실제 원하는 양으로 고쳐서 요청 처리.
@@ -313,14 +345,14 @@ export default function InventoryPage() {
             <thead>
               <tr>
                 <th style={{ width: 34 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
-                <th style={{ width: 150 }}>SKU</th>
-                <th>품목</th>
-                <th className="num" style={{ width: 110 }}>현재고</th>
-                <th className="num" style={{ width: 120 }}>안전재고</th>
-                <th className="num" style={{ width: 110 }}>하루 출고</th>
-                <th className="num" style={{ width: 110 }}>예상소진</th>
-                <th className="num" style={{ width: 110 }}>권장생산</th>
-                <th className="num" style={{ width: 130 }}>주문필요</th>
+                <Th k="sku" label="SKU" w={150} />
+                <Th k="name" label="품목" />
+                <Th k="stock" label="현재고" num w={110} />
+                <Th k="safety" label="안전재고" num w={120} />
+                <Th k="dailyOut" label="하루 출고" num w={110} />
+                <Th k="depletion" label="예상소진" num w={110} />
+                <Th k="recommend" label="권장생산" num w={110} />
+                <Th k="requestBy" label="주문필요" num w={130} />
                 <th className="num" style={{ width: 110 }}>보정</th>
               </tr>
             </thead>
