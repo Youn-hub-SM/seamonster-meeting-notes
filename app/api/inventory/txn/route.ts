@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { INV_TXN_TYPES, signedQty, type InvTxnType } from "@/app/lib/inventory";
+import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
 import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +74,17 @@ export async function POST(req: NextRequest) {
       res = await sb.from("inventory_txns").insert(attempt).select();
     }
     if (res.error) throw res.error;
+
+    // 입고(완료)면 열린 생산 요청에 자동 매칭(실패해도 입고는 성공)
+    if (type === "입고" && row.status !== "대기") {
+      try {
+        await allocateReceiptsToOpenRequests(
+          sb,
+          (res.data ?? []).filter((t) => Number(t.qty) > 0).map((t) => ({ inv_txn_id: t.id as string, product_id: t.product_id as string, qty: Number(t.qty), receipt_date: (t.txn_date as string) || undefined })),
+          row.created_by as string | null,
+        );
+      } catch (e) { console.warn("[inventory/txn] 생산요청 매칭 실패", e); }
+    }
     return NextResponse.json({ ok: true, txn: res.data?.[0] ?? null, txns: res.data });
   } catch (err) {
     console.error("[inventory/txn POST]", err);
@@ -86,13 +98,14 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ ok: false, error: "id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
-    // 생산요청 입고와 연결된 도매 입고 원장은 여기서 못 지운다(정합성 보호) → 생산요청서에서 취소.
-    //  (069 미적용 환경이면 count=null 로 통과)
-    const { count } = await sb.from("production_receipts").select("id", { count: "exact", head: true }).eq("inv_txn_id", id);
-    if ((count ?? 0) > 0)
-      return NextResponse.json({ ok: false, error: "이 입고는 생산요청 입고와 연결되어 있어 여기서 취소할 수 없습니다. 생산요청서에서 입고를 취소하세요." }, { status: 400 });
+    // 083(cascade) 이후: 생산요청과 연결된 입고를 여기서 취소하면 요청 쪽 입고 기록도 함께 원복된다.
+    //  083 미적용(restrict)이면 FK 오류 → 안내 문구로 변환.
     const { error } = await sb.from("inventory_txns").delete().eq("id", id);
-    if (error) throw error;
+    if (error) {
+      if (/production_receipts/i.test(error.message))
+        return NextResponse.json({ ok: false, error: "생산 요청과 연결된 입고입니다 — migration 083 적용 후에는 여기서 취소하면 요청 기록도 함께 원복됩니다. (지금은 생산 요청 화면의 입고 이력에서 취소하세요)" }, { status: 409 });
+      throw error;
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[inventory/txn DELETE]", err);

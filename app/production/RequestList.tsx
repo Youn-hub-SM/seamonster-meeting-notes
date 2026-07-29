@@ -141,17 +141,6 @@ export function RequestList() {
     setBusy(false);
   }
 
-  async function receive(id: string, body: { item_id: string; qty: number; receipt_date: string; memo: string }) {
-    setBusy(true); setError("");
-    try {
-      const j = await (await fetch(`/api/production/requests/${id}/receive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
-      if (!j.ok) throw new Error(j.error || "입고 실패");
-      applyUpdated(j.request);
-      return true;
-    } catch (e) { setError(e instanceof Error ? e.message : "입고 오류"); return false; }
-    finally { setBusy(false); }
-  }
-
   async function cancelReceipt(id: string, rid: string) {
     if (!confirm("이 입고를 취소할까요? 도매 재고에서도 원복됩니다.")) return;
     setBusy(true); setError("");
@@ -231,7 +220,6 @@ export function RequestList() {
                 <RequestRow
                   key={r.id} req={r} expanded={expandedId === r.id} busy={busy}
                   onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)}
-                  onReceive={(body) => receive(r.id, body)}
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
                   onStatus={(s) => patchStatus(r.id, s)}
                   onConfirm={() => confirmRequest(r)}
@@ -267,10 +255,9 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt, onStatus, onConfirm, onCopySheet, copied, onEdit, onDelete }: {
+function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onCopySheet, copied, onEdit, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
-  onReceive: (body: { item_id: string; qty: number; receipt_date: string; memo: string }) => Promise<boolean>;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
   onConfirm: () => void;
@@ -325,14 +312,17 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
           <td colSpan={7} style={{ padding: "8px 18px 16px" }}>
             {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
 
+            <p className="sm-faint" style={{ fontSize: 12.5, marginBottom: 8 }}>
+              입고는 <strong>입고 및 출고</strong> 메뉴에서 하세요 — 같은 품목이 입고되면 이 요청에 자동으로 연결됩니다(오래된 요청부터). 잘못 연결된 입고는 아래 입고 이력에서 취소.
+            </p>
             <div className="b2b-table-wrap">
               <table className="b2b-table">
                 <thead>
-                  <tr><th>품목</th><th className="num">요청</th><th className="num">입고</th><th className="num">잔여</th><th>상태</th><th>입고 처리</th></tr>
+                  <tr><th>품목</th><th className="num">요청</th><th className="num">입고</th><th className="num">잔여</th><th>상태</th><th>입고 이력</th></tr>
                 </thead>
                 <tbody>
                   {req.items.map((it) => (
-                    <ItemRow key={it.id} item={it} canEdit={req.status !== "완료" && req.status !== "취소"} busy={busy} onReceive={onReceive} onCancelReceipt={onCancelReceipt} />
+                    <ItemRow key={it.id} item={it} canEdit={req.status !== "완료" && req.status !== "취소"} busy={busy} onCancelReceipt={onCancelReceipt} />
                   ))}
                 </tbody>
               </table>
@@ -351,28 +341,13 @@ function RequestRow({ req, expanded, busy, onToggle, onReceive, onCancelReceipt,
   );
 }
 
-function ItemRow({ item, canEdit, busy, onReceive, onCancelReceipt }: {
+function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
   item: PrItem; canEdit: boolean; busy: boolean;
-  onReceive: (body: { item_id: string; qty: number; receipt_date: string; memo: string }) => Promise<boolean>;
   onCancelReceipt: (rid: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const remaining = item.requested_qty - item.received_qty;
-  const [qty, setQty] = useState("");
-  const [date, setDate] = useState(todayIso());
-  const [memo, setMemo] = useState("");
   const st = lineState(item.requested_qty, item.received_qty);
-  // 열 때만 1회 잔여수량 자동 채움. deps=[open]로 좁혀, 열려있는 동안 remaining이 바뀌어도
-  //  사용자가 입력 중인 값을 덮어쓰지 않게 함(입고 취소 시 remaining 증가 → 덮어쓰기 방지).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (open) setQty(remaining > 0 ? String(remaining) : ""); }, [open]);
-
-  async function submit() {
-    const n = Math.round(Number(qty) || 0);
-    if (n === 0) return;
-    const ok = await onReceive({ item_id: item.id, qty: n, receipt_date: date, memo: memo.trim() });
-    if (ok) { setOpen(false); setMemo(""); }
-  }
 
   return (
     <>
@@ -386,8 +361,8 @@ function ItemRow({ item, canEdit, busy, onReceive, onCancelReceipt }: {
         <td className="num" style={{ color: remaining > 0 ? "var(--sm-text-mid)" : remaining < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{remaining.toLocaleString()}</td>
         <td><span style={{ fontSize: 13, fontWeight: 700, color: PR_LINE_COLOR[st] }}>{st}</span></td>
         <td>
-          {(canEdit || item.receipts.length > 0) ? (
-            <button className="b2b-btn-secondary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => setOpen((v) => !v)}>{open ? "닫기" : canEdit ? "입고" : "이력"}</button>
+          {item.receipts.length > 0 ? (
+            <button className="b2b-btn-secondary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => setOpen((v) => !v)}>{open ? "닫기" : "입고 이력"}</button>
           ) : <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>—</span>}
         </td>
       </tr>
@@ -395,26 +370,6 @@ function ItemRow({ item, canEdit, busy, onReceive, onCancelReceipt }: {
       {open && (
         <tr>
           <td colSpan={6} style={{ background: "var(--sm-bg-subtle)" }}>
-            {canEdit && (
-              <>
-                <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end", padding: "4px 2px" }}>
-                  <label className="sm-col" style={{ gap: 3 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>실제 입고 수량</span>
-                    <input type="number" className="b2b-input" style={{ width: 120 }} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="예: 90" />
-                  </label>
-                  <label className="sm-col" style={{ gap: 3 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>입고일</span>
-                    <input type="date" className="b2b-input" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
-                  </label>
-                  <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 160 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>사유·메모(선택)</span>
-                    <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="부분입고 / 초과생산 / 수정 등" />
-                  </label>
-                  <button className="b2b-btn-primary" style={{ padding: "6px 14px" }} disabled={busy || Math.round(Number(qty) || 0) === 0} onClick={submit}>입고 기록</button>
-                </div>
-                <p className="sm-faint" style={{ fontSize: 13, margin: "6px 2px 0" }}>초과 생산은 요청보다 많게, 수정(회수)은 음수로 입력하세요. 입고 즉시 도매 재고에 반영됩니다.</p>
-              </>
-            )}
 
             {item.receipts.length > 0 ? (
               <div style={{ marginTop: canEdit ? 10 : 2 }}>

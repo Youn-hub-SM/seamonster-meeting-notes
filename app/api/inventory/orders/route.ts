@@ -94,12 +94,17 @@ export async function DELETE(req: NextRequest) {
     const groupId = sp.get("group_id");
     const id = sp.get("id");
     const sb = supabaseAdmin();
+    // 083(cascade) 이후: 생산요청과 연결된 입고 취소 시 요청 쪽 기록도 함께 원복. 미적용(restrict)이면 안내.
+    const friendly = (e: { message: string }) =>
+      /production_receipts/i.test(e.message)
+        ? NextResponse.json({ ok: false, error: "생산 요청과 연결된 입고가 포함돼 있습니다 — migration 083 적용 후에는 여기서 취소하면 요청 기록도 함께 원복됩니다. (지금은 생산 요청 화면의 입고 이력에서 취소하세요)" }, { status: 409 })
+        : null;
     if (groupId) {
       const { error } = await sb.from("inventory_txns").delete().eq("group_id", groupId);
-      if (error) throw error;
+      if (error) { const f = friendly(error); if (f) return f; throw error; }
     } else if (id) {
       const { error } = await sb.from("inventory_txns").delete().eq("id", id);
-      if (error) throw error;
+      if (error) { const f = friendly(error); if (f) return f; throw error; }
     } else {
       return NextResponse.json({ ok: false, error: "group_id 또는 id 가 필요합니다." }, { status: 400 });
     }

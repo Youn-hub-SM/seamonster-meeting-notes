@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { signedQty } from "@/app/lib/inventory";
 import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
+import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
 import type { ImportTxn } from "../route";
 
 export const runtime = "nodejs";
@@ -70,14 +71,27 @@ export async function POST(req: NextRequest) {
     });
 
     // 선택 컬럼(status=034, channel=036) 미적용 환경이면 그 컬럼만 빼고 재시도. group/order 는 rpc 성공 시에만 추가돼 안전.
-    let ins = await sb.from("inventory_txns").insert(insert);
+    let ins = await sb.from("inventory_txns").insert(insert).select("id, product_id, qty, type, txn_date");
     for (let guard = 0; ins.error && guard < 2; guard++) {
       const miss = (["channel", "status"] as const).find((c) => new RegExp(c, "i").test(ins.error!.message));
       if (!miss) break;
       for (const row of insert) delete row[miss];
-      ins = await sb.from("inventory_txns").insert(insert);
+      ins = await sb.from("inventory_txns").insert(insert).select("id, product_id, qty, type, txn_date");
     }
     if (ins.error) throw ins.error;
+
+    // 입고(즉시 처리)면 열린 생산 요청에 자동 매칭 — 요청에 없는 품목·초과분은 일반 입고로 남음.
+    //  실패해도 입고는 성공(fire-and-forget).
+    if (status === "완료") {
+      try {
+        const inRows = (ins.data ?? []).filter((r) => r.type === "입고" && Number(r.qty) > 0);
+        await allocateReceiptsToOpenRequests(
+          sb,
+          inRows.map((r) => ({ inv_txn_id: r.id as string, product_id: r.product_id as string, qty: Number(r.qty), receipt_date: (r.txn_date as string) || undefined })),
+          actor,
+        );
+      } catch (e) { console.warn("[inventory/txns import apply] 생산요청 매칭 실패", e); }
+    }
     return NextResponse.json({ ok: true, applied: insert.length, status, orders: [...orderByType.values()].map((o) => o.order_no) });
   } catch (err) {
     console.error("[inventory/txns import apply]", err);
