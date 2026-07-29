@@ -242,10 +242,10 @@ export function RequestList() {
       </div>
 
       {tab === "도매" && wholesaleSummary.length > 0 && (
-        <section className="b2b-card" style={{ marginBottom: 18, background: "var(--sm-bg-subtle)", borderLeft: "3px solid var(--sm-orange)" }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">도매 요청 종합 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 열린 요청 품목별 합산 — 아래 목록의 요약</span></span></div>
+        <section className="b2b-card" style={{ marginBottom: 16 }}>
+          <div className="b2b-card-head"><span className="b2b-card-title">도매 요청 종합 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 열린 요청 품목별 합산</span></span></div>
           <div className="b2b-table-wrap">
-            <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 12.5, background: "var(--sm-white)" }}>
+            <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 13 }}>
               <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>요청</th><th className="num" style={{ width: 100 }}>이전 완료</th><th className="num" style={{ width: 100 }}>잔여</th><th className="num" style={{ width: 90 }}>이행률</th></tr></thead>
               <tbody>
                 {wholesaleSummary.map((r) => {
