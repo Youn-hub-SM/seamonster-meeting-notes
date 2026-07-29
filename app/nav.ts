@@ -71,7 +71,7 @@ export const NAV: NavCategory[] = [
         menu: [
           { href: "/production", label: "생산 일정" },
           { href: "/production/request", label: "생산 요청" },
-          { href: "/production/inventory", label: "생산" },
+          // 2026-07-29: '생산' 화면은 재고 목록으로 통합(권장생산·주문필요·보정·생산 요청 생성).
           { href: "/inventory/quote", label: "월간매입 견적서" },
         ],
       },
