@@ -189,7 +189,7 @@ export default function ProductionSettingsPage() {
       {/* [업무도우미 변경알림] — 상품마스터 변경 시 Flow 알림봇으로 수신자들에게 발송 */}
       <section className="b2b-card" style={{ marginTop: 16 }}>
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 시 Flow 알림 발송 (B2B 도매 알림봇과 별개 봇)</span></h2>
+          <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 + 생산 요청·재고 이전(소매→도매) 알림이 이 봇으로 발송 (B2B 도매 알림봇과 별개 봇)</span></h2>
           <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "저장"}</button>
         </div>
         {mnMsg && <div className={mnMsg.kind === "ok" ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}

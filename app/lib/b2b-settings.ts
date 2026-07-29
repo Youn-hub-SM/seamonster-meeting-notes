@@ -127,28 +127,24 @@ export async function isFlowBotConfigured(): Promise<boolean> {
   return !!(c.botId && c.apiKey && c.receivers.length);
 }
 
-// ── '업무도우미 변경알림' 봇(봇2) — 생산·재고 관련 알림 전용 ──
-//  B2B 발주 알림(위 기본 봇 = b2b도매 챗봇)과 채널을 분리. 봇2 미설정이면 기본 봇으로 폴백(알림 유실 방지).
-export const getFlowBot2Id = () => getKv("flow_bot2_id");
-export const setFlowBot2Id = (s: string) => setKv("flow_bot2_id", s);
-export const getFlowBot2ApiKey = () => getKv("flow_bot2_api_key");
-export const setFlowBot2ApiKey = (s: string) => setKv("flow_bot2_api_key", s);
-export const getFlowBot2Title = async () => (await getKv("flow_bot2_title")) || "업무도우미 변경알림";
-export const setFlowBot2Title = (s: string) => setKv("flow_bot2_title", s);
-export const getFlowBot2ReceiversRaw = () => getKv("flow_bot2_receivers");
-export const setFlowBot2ReceiversRaw = (s: string) => setKv("flow_bot2_receivers", s);
-export async function getFlowBot2Receivers(): Promise<string[]> {
-  const raw = await getFlowBot2ReceiversRaw();
-  return raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+// ── '업무도우미 변경알림' 봇 — 생산·재고 알림 라우팅용 ──
+//  별도 설정을 두지 않고 생산관리 설정의 [업무도우미 변경알림] 봇(master_notify_config ·
+//  master_notify_api_key, master-notify.ts와 동일 KV)을 그대로 읽는다 — 봇 설정 단일화.
+//  enabled 플래그는 상품마스터 이벤트 게이팅용이라 여기서는 보지 않는다(봇 정보만 사용).
+export async function getHelperBotConfig(): Promise<FlowBotConfig> {
+  const raw = await getKv("master_notify_config");
+  let botId = "BFLOW_300003566171", receivers = "", title = "[업무도우미 변경알림]";
+  try {
+    const j = JSON.parse(raw || "{}") as { botId?: string; receivers?: string; title?: string };
+    botId = String(j.botId || botId);
+    receivers = String(j.receivers || "");
+    title = String(j.title || title);
+  } catch { /* 기본값 유지 */ }
+  const apiKey = (await getKv("master_notify_api_key")) || (await getKv("flow_bot_api_key")); // 전용 키 없으면 B2B 봇 키 폴백(master-notify와 동일)
+  return { botId, apiKey, receivers: receivers.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean), title };
 }
-export async function getFlowBot2Config(): Promise<FlowBotConfig> {
-  const [botId, apiKey, receivers, title] = await Promise.all([
-    getFlowBot2Id(), getFlowBot2ApiKey(), getFlowBot2Receivers(), getFlowBot2Title(),
-  ]);
-  return { botId, apiKey, receivers, title };
-}
-export async function isFlowBot2Configured(): Promise<boolean> {
-  const c = await getFlowBot2Config();
+export async function isHelperBotConfigured(): Promise<boolean> {
+  const c = await getHelperBotConfig();
   return !!(c.botId && c.apiKey && c.receivers.length);
 }
 

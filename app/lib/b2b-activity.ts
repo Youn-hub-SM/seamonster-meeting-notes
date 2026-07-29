@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
 import { resolveUserName, verifySession } from "./b2b-auth";
-import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getFlowBot2Config, isFlowBot2Configured, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
+import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getHelperBotConfig, isHelperBotConfigured, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
@@ -20,7 +20,7 @@ type ActivityInput = {
   meta?: Record<string, unknown>;
   notify?: boolean;   // false면 DB 감사기록만 남기고 외부 웹훅(Zapier)은 보내지 않음. 매출 등 비-B2B 이벤트용.
   actor?: string | null; // 지정 시 currentActor() 대신 이 값을 작업자로 사용(라우트가 이미 해석한 이름).
-  bot?: "helper";     // "helper" = '업무도우미 변경알림' 봇(봇2)으로 발송(생산·재고 알림). 미설정/봇2 미구성이면 기본 봇.
+  bot?: "helper";     // "helper" = '업무도우미 변경알림' 봇으로 발송(생산·재고 알림 — 생산관리 설정의 봇). 미구성이면 기본 봇.
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
@@ -110,9 +110,9 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   const config = await getNotifyConfig();
   if (!shouldNotify(config, input.event_type, input.meta)) return;
 
-  // 0순위: '업무도우미 변경알림' 봇(봇2) — 생산·재고 알림 전용. 봇2 미구성이면 아래 기본 경로로 폴백.
-  if (input.bot === "helper" && (await isFlowBot2Configured())) {
-    await sendFlowBotNotify(input, actor, { config: await getFlowBot2Config() });
+  // 0순위: '업무도우미 변경알림' 봇(생산관리 설정의 봇 재사용) — 생산·재고 알림 전용. 미구성이면 아래 기본 경로로 폴백.
+  if (input.bot === "helper" && (await isHelperBotConfigured())) {
+    await sendFlowBotNotify(input, actor, { config: await getHelperBotConfig() });
     return;
   }
 

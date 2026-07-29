@@ -37,14 +37,6 @@ export default function SettingsPage() {
   const [zapierEnv, setZapierEnv] = useState(false);
   const [flowSaving, setFlowSaving] = useState(false);
   const [flowMsg, setFlowMsg] = useState<Msg | null>(null);
-  // '업무도우미 변경알림' 봇(봇2) — 생산·재고 알림 전용
-  const [bot2Id, setBot2Id] = useState("");
-  const [bot2ApiKey, setBot2ApiKey] = useState("");
-  const [bot2HasKey, setBot2HasKey] = useState(false);
-  const [bot2Receivers, setBot2Receivers] = useState("");
-  const [bot2Title, setBot2Title] = useState("");
-  const [bot2Active, setBot2Active] = useState(false);
-  const [bot2Msg, setBot2Msg] = useState<Msg | null>(null);
   // 아침 일정 다이제스트
   const [digest, setDigest] = useState("");
   const [digestBusy, setDigestBusy] = useState(false);
@@ -79,11 +71,6 @@ export default function SettingsPage() {
           setFlowReceivers(fj.receivers || "");
           setFlowTitle(fj.title || "");
           setFlowHasKey(!!fj.hasApiKey);
-          setBot2Id(fj.bot2Id || "");
-          setBot2Receivers(fj.bot2Receivers || "");
-          setBot2Title(fj.bot2Title || "");
-          setBot2HasKey(!!fj.bot2HasApiKey);
-          setBot2Active(!!fj.bot2Active);
           setAppUrl(fj.appBaseUrl || "");
           setFlowActive(!!fj.active);
           setZapierEnv(!!fj.zapierEnv);
@@ -121,30 +108,6 @@ export default function SettingsPage() {
       if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
       setFlowMsg({ ok: true, text: `Flow로 테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.` });
     } catch (e) { setFlowMsg({ ok: false, text: e instanceof Error ? e.message : "테스트 실패" }); }
-    setFlowSaving(false);
-  }
-  async function saveBot2() {
-    setFlowSaving(true); setError(""); setBot2Msg(null);
-    try {
-      const body: Record<string, string> = { bot2Id, bot2Receivers, bot2Title };
-      if (bot2ApiKey.trim()) body.bot2ApiKey = bot2ApiKey.trim();   // 빈값이면 기존 키 유지
-      const r = await fetch("/api/b2b/settings/flow-alert", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setBot2Active(!!j.bot2Active);
-      if (bot2ApiKey.trim()) { setBot2HasKey(true); setBot2ApiKey(""); }
-      setBot2Msg({ ok: true, text: "저장됨" });
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
-    setFlowSaving(false);
-  }
-  async function testBot2() {
-    setFlowSaving(true); setBot2Msg(null);
-    try {
-      const r = await fetch("/api/b2b/settings/flow-alert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bot: "helper" }) });
-      const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
-      setBot2Msg({ ok: true, text: `테스트 발송 완료 (수신자 ${j.sentTo}명). 플로우를 확인하세요.` });
-    } catch (e) { setBot2Msg({ ok: false, text: e instanceof Error ? e.message : "테스트 실패" }); }
     setFlowSaving(false);
   }
   async function saveSupplier() {
@@ -304,47 +267,6 @@ export default function SettingsPage() {
               <button className="b2b-btn-primary" onClick={saveFlow} disabled={flowSaving}>{flowSaving ? "저장 중..." : "저장"}</button>
               <button className="b2b-btn-secondary" onClick={testFlow} disabled={flowSaving || !flowActive} title={flowActive ? "" : "먼저 저장하세요"}>테스트 발송</button>
               {flowMsg && <span style={{ fontSize: 12, color: flowMsg.ok ? "var(--sm-success)" : "var(--sm-danger)" }}>{flowMsg.text}</span>}
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* '업무도우미 변경알림' 봇 — 생산·재고 알림 전용(봇2) */}
-      <section className="b2b-card">
-        <div className="b2b-card-head">
-          <h2 className="b2b-card-title">업무도우미 변경알림 봇 (생산·재고)</h2>
-          <span style={{ fontSize: 11.5, color: bot2Active ? "var(--sm-success)" : "var(--sm-text-light)" }}>
-            {bot2Active ? "● 생산·재고 알림을 이 봇으로 발송 중" : "○ 미설정 — 생산·재고 알림도 위 기본 봇으로 발송"}
-          </span>
-        </div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          <strong>생산 요청(등록·진행·완료)과 재고 이전(소매→도매) 알림</strong>을 B2B 발주 알림과 분리해 이 봇으로 보냅니다.
-          봇 ID·API 키·수신자가 모두 채워지면 적용되고, 비어 있으면 위 기본 봇으로 폴백합니다.
-        </p>
-        {loading ? (
-          <div className="b2b-loading">불러오는 중...</div>
-        ) : (
-          <>
-            <div className="b2b-field" style={{ marginBottom: 10 }}>
-              <label className="b2b-field-label">봇 ID <span className="sm-faint" style={{ fontWeight: 400 }}>(flow.team 봇 소유 계정 이메일)</span></label>
-              <input className="b2b-input" value={bot2Id} onChange={(e) => { setBot2Id(e.target.value); setBot2Msg(null); }} placeholder="예: seamonster.kr@gmail.com" spellCheck={false} />
-            </div>
-            <div className="b2b-field" style={{ marginBottom: 10 }}>
-              <label className="b2b-field-label">봇 API 키 {bot2HasKey && <span style={{ color: "var(--sm-success)", fontWeight: 400 }}>· 설정됨</span>}</label>
-              <input className="b2b-input" type="password" value={bot2ApiKey} onChange={(e) => { setBot2ApiKey(e.target.value); setBot2Msg(null); }} placeholder={bot2HasKey ? "변경할 때만 입력 (비우면 기존 키 유지)" : "x-flow-api-key 값"} spellCheck={false} autoComplete="new-password" />
-            </div>
-            <div className="b2b-field" style={{ marginBottom: 10 }}>
-              <label className="b2b-field-label">수신자 <span className="sm-faint" style={{ fontWeight: 400 }}>(한 줄에 한 명, 또는 쉼표로 구분)</span></label>
-              <textarea className="b2b-input" value={bot2Receivers} onChange={(e) => { setBot2Receivers(e.target.value); setBot2Msg(null); }} rows={3} spellCheck={false} style={{ resize: "vertical", fontFamily: "inherit" }} />
-            </div>
-            <div className="b2b-field" style={{ marginBottom: 12 }}>
-              <label className="b2b-field-label">알림 제목</label>
-              <input className="b2b-input" value={bot2Title} onChange={(e) => setBot2Title(e.target.value)} placeholder="업무도우미 변경알림" spellCheck={false} />
-            </div>
-            <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="b2b-btn-primary" onClick={saveBot2} disabled={flowSaving}>{flowSaving ? "저장 중..." : "저장"}</button>
-              <button className="b2b-btn-secondary" onClick={testBot2} disabled={flowSaving || !bot2Active} title={bot2Active ? "" : "먼저 저장하세요"}>테스트 발송</button>
-              {bot2Msg && <span style={{ fontSize: 12, color: bot2Msg.ok ? "var(--sm-success)" : "var(--sm-danger)" }}>{bot2Msg.text}</span>}
             </div>
           </>
         )}
