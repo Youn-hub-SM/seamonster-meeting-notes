@@ -224,16 +224,16 @@ export function RequestList() {
       ) : (
         <div className="b2b-table-wrap">
           {/* tableLayout fixed — 탭(제조사/도매) 전환 시 내용 길이와 무관하게 두 탭의 표 모양 동일 */}
-          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 860 }}>
+          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1000 }}>
             <thead>
               <tr>
                 <th style={{ width: 28 }}></th>
-                <th style={{ width: 140 }}>요청번호</th>
+                <th style={{ width: 130 }}>요청번호</th>
                 <th>품목</th>
-                <th className="b2b-col-date" style={{ width: 120 }}>진행</th>
-                <th className="b2b-col-date" style={{ width: 96 }}>요청일</th>
-                <th className="b2b-col-date" style={{ width: 96 }}>마감일</th>
-                <th className="b2b-col-date" style={{ width: 90 }}>담당</th>
+                <th className="b2b-col-date" style={{ width: 130 }}>진행</th>
+                <th className="b2b-col-date" style={{ width: 125 }}>요청일</th>
+                <th className="b2b-col-date" style={{ width: 125 }}>마감일</th>
+                <th className="b2b-col-date" style={{ width: 115 }}>담당</th>
                 <th style={{ width: 150 }}></th>
               </tr>
             </thead>
