@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { logInventoryMovedToWholesale } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +90,16 @@ export async function POST(req: NextRequest) {
       if (/channel/i.test(error.message)) return NextResponse.json({ ok: false, error: "채널 컬럼이 없습니다 — migration 036 을 먼저 적용하세요." }, { status: 500 });
       throw error;
     }
+
+    // 소매→도매 이전만 알림('업무도우미 변경알림' 봇) — 도매 요청 대응 이동이라 담당자들이 알아야 함.
+    //  fire-and-forget: 알림 실패해도 이동 자체는 성공 응답.
+    if (from === "소매" && to === "도매") {
+      try {
+        const { data: prod } = await sb.from("products").select("name, sku").eq("id", product_id).maybeSingle();
+        await logInventoryMovedToWholesale(prod?.name || "품목", (prod?.sku as string) ?? null, qty, memo, created_by);
+      } catch (e) { console.warn("[inventory/move] 이전 알림 실패", e); }
+    }
+
     return NextResponse.json({ ok: true, group_id, count: data?.length ?? 0 });
   } catch (err) {
     console.error("[inventory/move POST]", err);

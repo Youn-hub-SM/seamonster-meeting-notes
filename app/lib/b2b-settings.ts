@@ -127,6 +127,31 @@ export async function isFlowBotConfigured(): Promise<boolean> {
   return !!(c.botId && c.apiKey && c.receivers.length);
 }
 
+// ── '업무도우미 변경알림' 봇(봇2) — 생산·재고 관련 알림 전용 ──
+//  B2B 발주 알림(위 기본 봇 = b2b도매 챗봇)과 채널을 분리. 봇2 미설정이면 기본 봇으로 폴백(알림 유실 방지).
+export const getFlowBot2Id = () => getKv("flow_bot2_id");
+export const setFlowBot2Id = (s: string) => setKv("flow_bot2_id", s);
+export const getFlowBot2ApiKey = () => getKv("flow_bot2_api_key");
+export const setFlowBot2ApiKey = (s: string) => setKv("flow_bot2_api_key", s);
+export const getFlowBot2Title = async () => (await getKv("flow_bot2_title")) || "업무도우미 변경알림";
+export const setFlowBot2Title = (s: string) => setKv("flow_bot2_title", s);
+export const getFlowBot2ReceiversRaw = () => getKv("flow_bot2_receivers");
+export const setFlowBot2ReceiversRaw = (s: string) => setKv("flow_bot2_receivers", s);
+export async function getFlowBot2Receivers(): Promise<string[]> {
+  const raw = await getFlowBot2ReceiversRaw();
+  return raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+}
+export async function getFlowBot2Config(): Promise<FlowBotConfig> {
+  const [botId, apiKey, receivers, title] = await Promise.all([
+    getFlowBot2Id(), getFlowBot2ApiKey(), getFlowBot2Receivers(), getFlowBot2Title(),
+  ]);
+  return { botId, apiKey, receivers, title };
+}
+export async function isFlowBot2Configured(): Promise<boolean> {
+  const c = await getFlowBot2Config();
+  return !!(c.botId && c.apiKey && c.receivers.length);
+}
+
 export const setAppBaseUrl = (s: string) => setKv("app_base_url", s);
 
 // 앱 접속 URL(끝 슬래시 제거). 설정 없으면 Vercel 프로덕션 도메인, 그것도 없으면 빈 문자열.

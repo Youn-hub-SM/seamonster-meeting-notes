@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
 import { resolveUserName, verifySession } from "./b2b-auth";
-import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
+import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getFlowBot2Config, isFlowBot2Configured, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
@@ -20,6 +20,7 @@ type ActivityInput = {
   meta?: Record<string, unknown>;
   notify?: boolean;   // false면 DB 감사기록만 남기고 외부 웹훅(Zapier)은 보내지 않음. 매출 등 비-B2B 이벤트용.
   actor?: string | null; // 지정 시 currentActor() 대신 이 값을 작업자로 사용(라우트가 이미 해석한 이름).
+  bot?: "helper";     // "helper" = '업무도우미 변경알림' 봇(봇2)으로 발송(생산·재고 알림). 미설정/봇2 미구성이면 기본 봇.
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
@@ -70,6 +71,7 @@ export async function logProductionRequestCreated(reqNo: string, label: string, 
     summary: `생산요청 등록 · ${reqNo || "(번호없음)"}${label ? ` · ${label}` : ""}`,
     meta: { req_no: reqNo },
     notify: true, // 작성 시 Flow 알림
+    bot: "helper", // 생산 알림은 '업무도우미 변경알림' 봇으로
     actor,        // 메시지에 '작업자: {actor}' 로 표시(B2B 작업과 동일)
   });
 }
@@ -82,6 +84,19 @@ export async function logProductionRequestStatusChanged(reqNo: string, fromStatu
     summary: `생산요청 ${reqNo || "(번호없음)"} · ${fromStatus} → ${toStatus}`,
     meta: { req_no: reqNo, from: fromStatus, to: toStatus },
     notify,
+    bot: "helper", // 생산 알림은 '업무도우미 변경알림' 봇으로
+    actor,
+  });
+}
+
+// ── 재고 이전(소매→도매) — 도매 요청 대응 이동만 알림('업무도우미 변경알림' 봇) ──
+export async function logInventoryMovedToWholesale(name: string, sku: string | null, qty: number, memo: string | null, actor?: string | null): Promise<void> {
+  await recordActivity({
+    event_type: "inventory.moved_to_wholesale",
+    summary: `재고 이전(소매→도매) · ${name}${sku ? ` [${sku}]` : ""} ×${qty.toLocaleString()}${memo ? ` · ${memo}` : ""}`,
+    meta: { sku, qty },
+    notify: true,
+    bot: "helper",
     actor,
   });
 }
@@ -94,6 +109,12 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   // 알림 설정 게이팅 — DB 기록(히스토리)은 영향 없음, 외부 발송만 거름
   const config = await getNotifyConfig();
   if (!shouldNotify(config, input.event_type, input.meta)) return;
+
+  // 0순위: '업무도우미 변경알림' 봇(봇2) — 생산·재고 알림 전용. 봇2 미구성이면 아래 기본 경로로 폴백.
+  if (input.bot === "helper" && (await isFlowBot2Configured())) {
+    await sendFlowBotNotify(input, actor, { config: await getFlowBot2Config() });
+    return;
+  }
 
   // 1순위: Flow 봇 알림(설정 시 Zapier 대체)
   if (await isFlowBotConfigured()) { await sendFlowBotNotify(input, actor); return; }
