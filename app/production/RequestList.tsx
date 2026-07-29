@@ -1,7 +1,7 @@
 "use client";
 
 // 생산 요청 목록 — 신청번호(req_no)별 요청서 + 품목별 입고 처리. (/production/request '생산 요청' 메뉴)
-//  재고 목록(/inventory)의 '선택 N종 생산 요청' 버튼이 여기 목록으로 요청을 만든다.
+//  재고 목록(/inventory)의 '선택 N종 생산 요청' 버튼이 여기로 넘어와 새 요청 창을 연다(권장 수량 채움).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -37,7 +37,7 @@ export function RequestList() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editReq, setEditReq] = useState<ProductionRequest | null>(null); // 수정 모달 대상
   const [busy, setBusy] = useState(false);
-  const [prefill, setPrefill] = useState<NewLine[] | null>(null); // 생산 조언에서 넘어온 품목·권장수량
+  const [prefill, setPrefill] = useState<NewLine[] | null>(null); // 재고 목록에서 넘어온 품목·권장수량
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -108,18 +108,45 @@ export function RequestList() {
     })();
   }, []);
 
-  // 생산 조언 → '생산 요청 만들기' 핸드오프: 조언 화면이 sessionStorage에 담은 {sku, qty}[] 를
-  //  품목 목록 로드 후 SKU로 매칭해, 권장 수량이 채워진 새 요청 모달을 자동으로 연다.
+  // 채널 수식 권장(재고 목록과 동일 출처) — 새 요청 창 권장: 제조사 = 소매+도매 합(재고 목록 '전체'의 권장), 도매 = 도매 수식.
+  //  recReady=false 면 모달은 권장을 '-' 로 표시한다(로드 전/실패를 '권장 0' 으로 오독하면 수량을 깎게 된다).
+  const [recRetail, setRecRetail] = useState<Map<string, number>>(new Map());
+  const [recWhole, setRecWhole] = useState<Map<string, number>>(new Map());
+  const [recReady, setRecReady] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [r, w] = await Promise.all([
+          (await fetch("/api/production/inventory?channel=소매", { cache: "no-store" })).json(),
+          (await fetch("/api/production/inventory?channel=도매", { cache: "no-store" })).json(),
+        ]);
+        const toMap = (j: { rows?: { sku: string; recommend: number }[] }) =>
+          new Map((j.rows || []).map((x) => [x.sku.toUpperCase(), Number(x.recommend) || 0]));
+        if (r.ok) setRecRetail(toMap(r));
+        if (w.ok) setRecWhole(toMap(w));
+        if (r.ok && w.ok) setRecReady(true);
+      } catch { /* 권장 없이도 요청 작성은 가능 — 권장 열은 '-' 로 남는다 */ }
+    })();
+  }, []);
+
+  // 재고 목록 '선택 N종 생산 요청' → 핸드오프: sessionStorage 의 {purpose, at, items:[{sku, qty}]} 를
+  //  품목 목록 로드 후 SKU로 매칭해, 권장 수량이 채워진 새 요청 모달을 자동으로 연다. (구 배열 형식도 허용)
   useEffect(() => {
     if (!products.length) return;
     let raw: string | null = null;
     try { raw = sessionStorage.getItem("prod_req_prefill"); sessionStorage.removeItem("prod_req_prefill"); } catch { /* noop */ }
     if (!raw) return;
     try {
-      const items = JSON.parse(raw) as { sku?: unknown; qty?: unknown }[];
+      const parsed: unknown = JSON.parse(raw);
+      const obj = parsed && !Array.isArray(parsed) && typeof parsed === "object" ? (parsed as { purpose?: unknown; at?: unknown; items?: unknown }) : null;
+      // 넘어온 지 10분이 지난 권장은 버린다 — 품목 로드 실패로 소비되지 않고 남았다가 한참 뒤 낡은 수량으로 열리는 것 방지
+      const at = Number(obj?.at) || 0;
+      if (at && Date.now() - at > 10 * 60_000) return;
+      const arr = Array.isArray(parsed) ? parsed : Array.isArray(obj?.items) ? (obj!.items as unknown[]) : [];
+      const purpose: PrPurpose | null = obj?.purpose === "도매 납품" || obj?.purpose === "재고 보충" ? (obj.purpose as PrPurpose) : null;
       const lines: NewLine[] = [];
       const missed: string[] = [];
-      for (const it of Array.isArray(items) ? items : []) {
+      for (const it of arr as { sku?: unknown; qty?: unknown }[]) {
         const sku = String(it?.sku ?? "").trim();
         if (!sku) continue;
         const p = products.find((x) => (x.sku || "").toUpperCase() === sku.toUpperCase());
@@ -127,8 +154,11 @@ export function RequestList() {
         const qty = Math.max(0, Math.round(Number(it?.qty) || 0));
         lines.push({ received: 0, product_id: p.product_id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, stock: p.qty, requested_qty: qty ? String(qty) : "", memo: "" });
       }
-      if (missed.length) setError(`생산 조언 품목 중 ${missed.length}종은 품목 목록에 없어 제외했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
-      if (lines.length) { setPrefill(lines); setCreateOpen(true); }
+      if (missed.length) setError(`넘어온 품목 중 ${missed.length}종은 품목 목록에 없어 제외했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
+      if (lines.length) {
+        if (purpose) setTab(purpose === "도매 납품" ? "도매" : "제조사"); // 모달 기본 요청도 탭을 따라간다
+        setPrefill(lines); setCreateOpen(true);
+      }
     } catch { /* 형식 오류 — 무시 */ }
   }, [products]);
 
@@ -143,6 +173,7 @@ export function RequestList() {
       const j = await (await fetch("/api/production/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).json();
       if (!j.ok) throw new Error(j.error || "생성 실패");
       setCreateOpen(false);
+      setPrefill(null); // 소비 완료 — 안 지우면 다음 '+ 새 생산 요청'에 방금 요청한 품목이 다시 채워져 중복 요청이 된다
       await load();
       setExpandedId(j.request?.id ?? null);
     } catch (e) { setError(e instanceof Error ? e.message : "생성 오류"); }
@@ -318,8 +349,8 @@ export function RequestList() {
         </section>
       )}
 
-      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
-      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
+      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} recRetail={recRetail} recWhole={recWhole} recReady={recReady} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} recRetail={recRetail} recWhole={recWhole} recReady={recReady} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
 }
@@ -487,8 +518,8 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 }
 
 // 생성/수정 겸용 — initial 이 있으면 수정 모드(기존 라인 id 유지, 입고 있는 라인은 뺄 수 없음).
-function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, recRetail, recWhole, recReady, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; recRetail: Map<string, number>; recWhole: Map<string, number>; recReady: boolean; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
@@ -507,7 +538,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           product_id: it.product_id, sku: it.sku, name: it.name, spec: it.spec, unit: it.unit,
           stock: stockOf(it.product_id), requested_qty: String(it.requested_qty), memo: it.memo || "",
         }))
-      : (prefill ?? [])   // 생산 조언에서 넘어온 품목·권장수량 (없으면 빈 목록)
+      : (prefill ?? [])   // 재고 목록에서 넘어온 품목·권장수량 (없으면 빈 목록)
   );
 
   function addLine(p: Prod) {
@@ -587,27 +618,33 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           ) : (
             <div className="b2b-table-wrap">
               <table className="b2b-table">
-                {/* 제조사 요청 = 도매 필요량(열린 도매 요청 잔여)을 반영해 수량 판단 / 도매 요청 = 도매 현재고 기준 */}
+                {/* 권장 = 재고 목록과 동일 수식 — 제조사: 소매 권장+도매 권장 합('전체' 필터의 권장), 도매: 도매 수식.
+                    제조사에는 도매 필요량(열린 도매 요청 잔여)도 참고로 표시 */}
+                {/* 첫 숫자 열(재고) 폭은 두 탭 모두 100 — 탭 전환 시 표가 흔들리지 않게 */}
                 {purpose === "도매 납품" ? (
-                  <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>도매재고</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
+                  <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>도매 재고</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
                 ) : (
-                  <thead><tr><th>품목</th><th className="num" style={{ width: 90 }}>소매 재고</th><th className="num" style={{ width: 100 }}>도매 필요량</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
+                  <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>소매 재고</th><th className="num" style={{ width: 100 }}>도매 필요량</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
                 )}
                 <tbody>
                   {lines.map((l, i) => {
                     const retail = retailQty.get(l.product_id) ?? null;
                     const need = wholesaleNeed.get(l.product_id) ?? 0;
-                    const recommend = Math.max(0, need - (retail ?? 0)); // 소매 재고로 이전 충당하고 남는 부족분
+                    const rk = (l.sku || "").toUpperCase();
+                    const recommend = !recReady ? null : purpose === "도매 납품" ? (recWhole.get(rk) ?? 0) : (recRetail.get(rk) ?? 0) + (recWhole.get(rk) ?? 0);
                     return (
                       <tr key={l.item_id || l.product_id}>
                         <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
                         {purpose === "도매 납품" ? (
-                          <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
+                          <>
+                            <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
+                            <td className="num" style={{ fontWeight: 700, color: (recommend ?? 0) > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend == null ? "-" : recommend.toLocaleString()}</td>
+                          </>
                         ) : (
                           <>
                             <td className="num" style={{ color: "var(--sm-text-mid)" }}>{retail == null ? "-" : retail.toLocaleString()}</td>
                             <td className="num" style={{ color: need > 0 ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: need > 0 ? 700 : 400 }}>{need.toLocaleString()}</td>
-                            <td className="num" style={{ fontWeight: 700, color: recommend > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend.toLocaleString()}</td>
+                            <td className="num" style={{ fontWeight: 700, color: (recommend ?? 0) > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend == null ? "-" : recommend.toLocaleString()}</td>
                           </>
                         )}
                         <td className="num"><input type="number" className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder="0" /></td>
