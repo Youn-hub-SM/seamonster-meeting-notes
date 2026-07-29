@@ -83,8 +83,8 @@ export default function InventoryPage() {
   function toggleSort(key: SortKey) {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
   }
-  const Th = ({ k, label, num }: { k: SortKey; label: string; num?: boolean }) => (
-    <th className={num ? "num" : undefined} onClick={() => toggleSort(k)} style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }} title="클릭하여 정렬">
+  const Th = ({ k, label, num, w }: { k: SortKey; label: string; num?: boolean; w?: number }) => (
+    <th className={num ? "num" : undefined} onClick={() => toggleSort(k)} style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none", width: w }} title="클릭하여 정렬">
       {label}<span style={{ marginLeft: 3, color: sort.key === k ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 10 }}>{sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </th>
   );
@@ -138,24 +138,26 @@ export default function InventoryPage() {
         <div className="b2b-empty">{rows.length === 0 ? "활성 품목이 없습니다. 상품 마스터에 제품을 등록하세요." : "조건에 맞는 품목이 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          {/* 생산 화면과 공통 기본 열(SKU|품목|현재고|안전재고|하루 출고|예상소진) + 재고 전용(총입고|총출고|재고자산).
+              tableLayout fixed — 내용 길이와 무관하게 열 폭 고정. */}
+          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1060 }}>
             <thead><tr>
-              <Th k="name" label="품목" /><th>SKU</th>
-              <Th k="qty" label="현재고" num /><Th k="auto_safety" label="안전재고" num /><Th k="depletion_days" label="예상소진" num />
-              <Th k="period_in" label="총입고" num /><Th k="period_out" label="총출고" num /><Th k="daily_out" label="일평균소진" num />
-              <Th k="value" label="재고자산" num /><th></th>
+              <th style={{ width: 110 }}>SKU</th><Th k="name" label="품목" />
+              <Th k="qty" label="현재고" num w={90} /><Th k="auto_safety" label="안전재고" num w={96} /><Th k="daily_out" label="하루 출고" num w={90} /><Th k="depletion_days" label="예상소진" num w={90} />
+              <Th k="period_in" label="총입고" num w={90} /><Th k="period_out" label="총출고" num w={90} />
+              <Th k="value" label="재고자산" num w={110} /><th style={{ width: 110 }}></th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.product_id} style={{ background: r.low ? "var(--sm-danger-bg)" : undefined }}>
-                  <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}{r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}</td>
-                  <td className="sm-faint">{r.sku || "-"}</td>
+                  <td className="sm-faint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sku || "-"}</td>
+                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}{r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>{r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span></td>
                   <td className="num b2b-money" title={r.promo_qty ? `프로모션 확보분 +${r.promo_qty.toLocaleString()} 포함` : undefined}>{r.auto_safety.toLocaleString()}{r.promo_qty ? <span style={{ color: "var(--sm-orange)", fontSize: 10, marginLeft: 2 }}></span> : null}</td>
+                  <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.depletion_days == null ? "var(--sm-text-light)" : r.depletion_days <= (meta?.leadDays ?? 10) ? "var(--sm-danger)" : "var(--sm-black)" }}>{r.depletion_days == null ? "-" : `${r.depletion_days}일`}</td>
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
-                  <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>
                   <td className="num b2b-money">{r.value.toLocaleString()}</td>
                   <td><button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setModalFor(r.product_id)}>입·출·조정</button></td>
                 </tr>

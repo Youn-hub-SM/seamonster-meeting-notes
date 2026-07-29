@@ -226,20 +226,6 @@ export default function InventoryPage() {
 
       {error && <div className="b2b-error">{error}</div>}
 
-      {/* 필터 — 헤더와 분리해 위치 고정(클릭해도 안 밀림) */}
-      <div className="sm-row" style={{ marginBottom: 12, gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div className="sm-tabs" style={{ margin: 0 }}>
-          {(["소매", "도매"] as const).map((ch) => (
-            <button key={ch} type="button" className={`sm-tab ${channel === ch ? "is-active" : ""}`} onClick={() => setChannel(ch)}>{ch}</button>
-          ))}
-        </div>
-        <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목 검색 — 이름·SKU·초성 (예: ㄱㅇ)" style={{ maxWidth: 280 }} />
-        <label className="prod-filter-check">
-          <input type="checkbox" checked={onlyNeed} onChange={(e) => setOnlyNeed(e.target.checked)} /> 생산필요만 보기
-        </label>
-        {sel.size > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>체크 {sel.size}종 (검색을 바꿔도 유지)</span>}
-      </div>
-
       <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">생산 권장 품목</div>
@@ -257,6 +243,20 @@ export default function InventoryPage() {
             {stats.below}종
           </div>
         </div>
+      </div>
+
+      {/* 필터 — 헤더와 분리해 위치 고정(클릭해도 안 밀림) */}
+      <div className="sm-row" style={{ marginBottom: 12, gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="sm-tabs" style={{ margin: 0 }}>
+          {(["소매", "도매"] as const).map((ch) => (
+            <button key={ch} type="button" className={`sm-tab ${channel === ch ? "is-active" : ""}`} onClick={() => setChannel(ch)}>{ch}</button>
+          ))}
+        </div>
+        <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목 검색 — 이름·SKU·초성 (예: ㄱㅇ)" style={{ maxWidth: 280 }} />
+        <label className="prod-filter-check">
+          <input type="checkbox" checked={onlyNeed} onChange={(e) => setOnlyNeed(e.target.checked)} /> 생산필요만 보기
+        </label>
+        {sel.size > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>체크 {sel.size}종 (검색을 바꿔도 유지)</span>}
       </div>
 
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
@@ -307,26 +307,31 @@ export default function InventoryPage() {
         </div>
       ) : (
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          {/* 재고 목록과 공통 기본 열(SKU|품목|현재고|안전재고|하루 출고|예상소진) + 생산 전용(권장생산|주문필요|보정).
+              tableLayout fixed — 탭·내용과 무관하게 열 폭 고정. */}
+          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1080 }}>
             <thead>
               <tr>
                 <th style={{ width: 34 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
-                <th>SKU</th>
+                <th style={{ width: 110 }}>SKU</th>
                 <th>품목</th>
-                <th className="num">현재고</th>
-                <th className="num">하루 출고</th>
-                <th className="num">안전재고</th>
-                {channel === "소매" && <th className="num">보정</th>}
-                <th className="num">권장 생산</th>
-                <th className="num">요청 마감</th>
+                <th className="num" style={{ width: 90 }}>현재고</th>
+                <th className="num" style={{ width: 110 }}>안전재고</th>
+                <th className="num" style={{ width: 90 }}>하루 출고</th>
+                <th className="num" style={{ width: 90 }}>예상소진</th>
+                <th className="num" style={{ width: 94 }}>권장생산</th>
+                <th className="num" style={{ width: 116 }}>주문필요</th>
+                <th className="num" style={{ width: 96 }}>보정</th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((r) => (
+              {shown.map((r) => {
+                const dep = r.stock != null && r.dailyOut > 0 ? Math.floor(r.stock / r.dailyOut) : null; // 예상소진(일)
+                return (
                 <tr key={r.sku} className={r.belowSafety ? "is-overdue" : ""}>
                   <td><input type="checkbox" checked={sel.has(r.sku)} onChange={() => toggleSel(r.sku)} /></td>
-                  <td><code style={{ fontSize: 11.5 }}>{r.sku}</code></td>
-                  <td>
+                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><code style={{ fontSize: 11.5 }}>{r.sku}</code></td>
+                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {r.name}
                     {!r.inBoxhero && <span className="prod-tag">원장에 없음</span>}
                   </td>
@@ -335,6 +340,16 @@ export default function InventoryPage() {
                       <span style={r.belowSafety ? { color: "var(--sm-danger)", fontWeight: 700 } : undefined}>
                         {r.stock.toLocaleString()}
                       </span>
+                    )}
+                  </td>
+                  <td className="num">
+                    <div style={{ fontWeight: 600 }}>{r.safety.toLocaleString()}</div>
+                    {(r.promoQty > 0 || r.adjust !== 0) && (
+                      <div className="inv-safety-bd">
+                        자동 {r.autoSafety.toLocaleString()}
+                        {r.promoQty > 0 && <span className="inv-bd-promo"> · 행사 +{r.promoQty.toLocaleString()}</span>}
+                        {r.adjust !== 0 && <span className="inv-bd-adj"> · 보정 {r.adjust > 0 ? "+" : ""}{r.adjust.toLocaleString()}</span>}
+                      </div>
                     )}
                   </td>
                   <td className="num">
@@ -349,30 +364,7 @@ export default function InventoryPage() {
                       <span style={{ color: "var(--sm-text-light)" }}>-</span>
                     )}
                   </td>
-                  <td className="num">
-                    <div style={{ fontWeight: 600 }}>{r.safety.toLocaleString()}</div>
-                    {(r.promoQty > 0 || r.adjust !== 0) && (
-                      <div className="inv-safety-bd">
-                        자동 {r.autoSafety.toLocaleString()}
-                        {r.promoQty > 0 && <span className="inv-bd-promo"> · 행사 +{r.promoQty.toLocaleString()}</span>}
-                        {r.adjust !== 0 && <span className="inv-bd-adj"> · 보정 {r.adjust > 0 ? "+" : ""}{r.adjust.toLocaleString()}</span>}
-                      </div>
-                    )}
-                  </td>
-                  {channel === "소매" && <td className="num">
-                    <button type="button" className="inv-adj-btn" onClick={() => openEdit(r)} title={r.adjustMemo || "안전재고 보정"}>
-                      {r.adjustRaw !== 0 || r.adjustExcludeRaw > 0 ? (
-                        <span className={r.adjustRaw !== 0 && r.adjust === 0 && r.adjustUntil ? "inv-adj-expired" : "inv-adj-set"}>
-                          {r.adjustExcludeRaw > 0 && <>행사−{r.adjustExcludeRaw.toLocaleString()}</>}
-                          {r.adjustExcludeRaw > 0 && r.adjustRaw !== 0 ? " " : ""}
-                          {r.adjustRaw !== 0 && <>{r.adjustRaw > 0 ? "+" : ""}{r.adjustRaw.toLocaleString()}</>}
-                          {r.adjustUntil && <span className="inv-adj-until">~{r.adjustUntil.slice(5)}</span>}
-                        </span>
-                      ) : (
-                        <span className="inv-adj-empty">+ 보정</span>
-                      )}
-                    </button>
-                  </td>}
+                  <td className="num" style={{ color: dep == null ? "var(--sm-text-light)" : dep <= leadDays ? "var(--sm-danger)" : "var(--sm-black)" }}>{dep == null ? "-" : `${dep}일`}</td>
                   <td className="num">
                     {r.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{r.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}
                   </td>
@@ -387,8 +379,27 @@ export default function InventoryPage() {
                       </span>
                     )}
                   </td>
+                  <td className="num">
+                    {channel === "소매" ? (
+                      <button type="button" className="inv-adj-btn" onClick={() => openEdit(r)} title={r.adjustMemo || "안전재고 보정"}>
+                        {r.adjustRaw !== 0 || r.adjustExcludeRaw > 0 ? (
+                          <span className={r.adjustRaw !== 0 && r.adjust === 0 && r.adjustUntil ? "inv-adj-expired" : "inv-adj-set"}>
+                            {r.adjustExcludeRaw > 0 && <>행사−{r.adjustExcludeRaw.toLocaleString()}</>}
+                            {r.adjustExcludeRaw > 0 && r.adjustRaw !== 0 ? " " : ""}
+                            {r.adjustRaw !== 0 && <>{r.adjustRaw > 0 ? "+" : ""}{r.adjustRaw.toLocaleString()}</>}
+                            {r.adjustUntil && <span className="inv-adj-until">~{r.adjustUntil.slice(5)}</span>}
+                          </span>
+                        ) : (
+                          <span className="inv-adj-empty">+ 보정</span>
+                        )}
+                      </button>
+                    ) : (
+                      <span style={{ color: "var(--sm-text-light)" }}>-</span>
+                    )}
+                  </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
