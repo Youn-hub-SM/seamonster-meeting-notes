@@ -168,15 +168,20 @@ export function RequestList() {
   // 제조사에게 건넬 요청서 텍스트 — 담당자가 확인 후 복사해 전달(제조사 전달용, DB 저장 없음).
   const [copiedId, setCopiedId] = useState<string | null>(null);
   async function copyRequestSheet(r: ProductionRequest) {
+    // 제조사 전달용 — 내부 정보(요청자·담당·제목·용도)는 빼고 번호·날짜·품목만(대표 확정 서식).
     const L: string[] = [];
-    L.push(`[생산 요청서] ${r.req_no || ""}${r.purpose === "도매 납품" ? " (도매 납품)" : ""}`.trim());
-    L.push(`요청일 ${r.request_date} · 생산마감일 ${r.due_date || "-"}${r.requested_by ? ` · 요청 ${r.requested_by}` : ""}${r.assignee ? ` · 담당 ${r.assignee}` : ""}`);
-    if (r.title) L.push(r.title);
+    L.push(`[생산 요청서] ${r.req_no || ""}`.trim());
+    L.push("");
+    L.push(`요청일 ${r.request_date}`);
+    L.push(`생산마감일 ${r.due_date || "-"}`);
+    L.push("");
     L.push("--------------------------------");
+    L.push("");
     r.items.forEach((it, i) => L.push(`${i + 1}. ${it.name}${it.spec ? ` ${it.spec}` : ""}${it.sku ? ` [${it.sku}]` : ""}  ×${it.requested_qty.toLocaleString()}${it.unit || ""}${it.memo ? ` — ${it.memo}` : ""}`));
+    L.push("");
     L.push("--------------------------------");
+    L.push("");
     L.push(`총 ${r.items.length}품목 · ${r.total_requested.toLocaleString()}개`);
-    if (r.memo) L.push(`메모: ${r.memo}`);
     try {
       await navigator.clipboard.writeText(L.join("\n"));
       setCopiedId(r.id); setTimeout(() => setCopiedId(null), 2000);
