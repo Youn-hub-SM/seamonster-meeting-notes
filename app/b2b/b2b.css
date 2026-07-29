@@ -1144,6 +1144,18 @@ a.b2b-history-item:hover {
 .inv-dl-sep { color: var(--sm-text-light); }
 .inv-dl-hint { color: var(--sm-text-mid); font-weight: 400; }
 .inv-dl-btn { flex-shrink: 0; }
+/* 재고 목록 표 — 열이 14개라 기본 셀 여백(좌우 16px)만으로 448px 을 먹는다.
+   사이드바를 켠 노트북 화면에서도 가로 스크롤 없이 들어가도록 이 표만 여백·글자를 좁힌다. */
+.inv-table { font-size: 13px; }
+.inv-table th, .inv-table td { padding: 10px 8px; }
+/* 줄 아무 곳이나 눌러 선택 — 부족(빨간 줄) 인라인 배경을 덮어야 하므로 !important.
+   6% 투명한 --sm-orange-light 는 눈에 안 띄어, 따뜻한 색면 + 좌측 주황 띠로 표시한다. */
+.inv-table tbody tr.is-pick { cursor: pointer; }
+.inv-table tbody tr.is-pick:hover { background: var(--sm-bg-subtle) !important; }
+.inv-table tbody tr.is-sel,
+.inv-table tbody tr.is-sel:hover { background: var(--sm-bg-warm) !important; }
+.inv-table tbody tr.is-sel td:first-child { box-shadow: inset 3px 0 0 var(--sm-orange); }
+
 .inv-dl-cell-urgent { color: var(--sm-danger); font-weight: 800; }
 .inv-dl-cell-soon { color: var(--sm-warning); font-weight: 700; font-variant-numeric: tabular-nums; }
 .inv-dl-cell-ok { color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }

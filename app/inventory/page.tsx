@@ -276,7 +276,7 @@ export default function InventoryPage() {
       {/* 데이터박스 6종 — 재고 4 + 생산 2 (생산 권장 품목 = 안전재고(행사·보정 반영) 미달과 동일 데이터라 통합) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">품목 수</div><div className="b2b-stat-card-value">{totals.items}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 자산(원가)</div><div className="b2b-stat-card-value b2b-money">{totals.value.toLocaleString()}원</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 자산(원가)</div><div className="b2b-stat-card-value b2b-money">{totals.value.toLocaleString()}</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 부족</div><div className="b2b-stat-card-value" style={{ color: totals.low ? "var(--sm-danger)" : "var(--sm-black)" }}>{totals.low}건</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">기간 총출고</div><div className="b2b-stat-card-value b2b-money">{totals.out.toLocaleString()}</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">생산 권장 품목</div><div className="b2b-stat-card-value" style={{ color: prodStats.needItems ? "var(--sm-orange)" : "var(--sm-black)" }}>{prodStats.needItems}종</div></div>
@@ -352,24 +352,31 @@ export default function InventoryPage() {
         <div className="b2b-empty">{rows.length === 0 ? "활성 품목이 없습니다. 상품 마스터에 제품을 등록하세요." : "조건에 맞는 품목이 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
-          {/* tableLayout fixed — 내용 길이와 무관하게 열 폭 고정 */}
-          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1620 }}>
+          {/* tableLayout fixed — 내용 길이와 무관하게 열 폭 고정.
+              폭은 각 열의 실측 자연폭(브라우저 측정) 바로 위로 잡았다. minWidth = 고정폭 합 994 + 품목 최소 112 = 1106.
+              사이드바(236+1)와 세로 스크롤바(≈15)를 더해도 1358 이라, 1366 이상 창이면 가로 스크롤이 없다. */}
+          <table className="b2b-table inv-table" style={{ tableLayout: "fixed", minWidth: 1106 }}>
             <thead><tr>
-              <th style={{ width: 34 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
-              <th style={{ width: 150 }}>SKU</th><Th k="name" label="품목" />
-              <Th k="qty" label="현재고" num w={110} /><Th k="auto_safety" label="안전재고" num w={120} /><Th k="daily_out" label="하루 출고" num w={110} /><Th k="depletion_days" label="예상소진" num w={110} />
-              <Th k="period_in" label="총입고" num w={110} /><Th k="period_out" label="총출고" num w={110} />
-              <Th k="value" label="재고자산" num w={130} />
-              <Th k="recommend" label="권장생산" num w={110} /><Th k="request_by" label="주문필요" num w={130} />
-              <th style={{ width: 110 }}></th><th className="num" style={{ width: 96 }}>보정</th>
+              <th style={{ width: 32 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
+              <th style={{ width: 108 }}>SKU</th><Th k="name" label="품목" />
+              <Th k="qty" label="현재고" num w={72} /><Th k="auto_safety" label="안전재고" num w={78} /><Th k="daily_out" label="하루 출고" num w={80} /><Th k="depletion_days" label="예상소진" num w={78} />
+              <Th k="period_in" label="총입고" num w={68} /><Th k="period_out" label="총출고" num w={68} />
+              <Th k="value" label="재고자산" num w={96} />
+              <Th k="recommend" label="권장생산" num w={78} /><Th k="request_by" label="주문필요" num w={80} />
+              <th style={{ width: 80 }}></th><th className="num" style={{ width: 76 }}>보정</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => {
                 const pv = prodView(r);
                 const adj = channel !== "도매" ? pv.retail : undefined; // 보정은 소매 수식에만 적용
+                const picked = sel.has(r.product_id);
                 return (
-                <tr key={r.product_id} style={{ background: r.low ? "var(--sm-danger-bg)" : undefined }}>
-                  <td>{pv.has ? <input type="checkbox" checked={sel.has(r.product_id)} onChange={() => toggleSel(r.product_id)} /> : null}</td>
+                /* 줄 어디를 눌러도 선택 토글 — 체크박스·버튼 칸은 아래에서 전파를 막는다 */
+                <tr key={r.product_id}
+                  className={`${pv.has ? "is-pick" : ""} ${picked ? "is-sel" : ""}`}
+                  onClick={pv.has ? () => toggleSel(r.product_id) : undefined}
+                  style={{ background: r.low ? "var(--sm-danger-bg)" : undefined }}>
+                  <td onClick={(e) => e.stopPropagation()}>{pv.has ? <input type="checkbox" checked={picked} onChange={() => toggleSel(r.product_id)} /> : null}</td>
                   <td className="sm-faint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sku || "-"}</td>
                   <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}{r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>{r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span></td>
@@ -391,8 +398,8 @@ export default function InventoryPage() {
                       </span>
                     )}
                   </td>
-                  <td><button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setModalFor(r.product_id)}>입·출·조정</button></td>
-                  <td className="num">
+                  <td onClick={(e) => e.stopPropagation()}><button className="b2b-btn-secondary" style={{ padding: "4px 6px", fontSize: 11.5, whiteSpace: "nowrap" }} onClick={() => setModalFor(r.product_id)}>입·출·조정</button></td>
+                  <td className="num" onClick={(e) => e.stopPropagation()}>
                     {adj ? (
                       <button type="button" className="inv-adj-btn" onClick={() => openEdit(adj)} title={adj.adjustMemo || "안전재고 보정"}>
                         {adj.adjustRaw !== 0 || adj.adjustExcludeRaw > 0 ? (

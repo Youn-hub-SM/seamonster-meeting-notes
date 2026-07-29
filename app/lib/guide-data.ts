@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-07-29";
+export const GUIDE_UPDATED = "2026-07-30";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -958,7 +958,7 @@ export const GUIDE: GuideCategory[] = [
               "부족한 것만 보려면 '부족만 보기'를 체크한다",
               "컬럼 제목을 클릭해 정렬한다",
               "표에서 권장생산(주황 숫자)과 주문필요(D-일수)를 확인한다",
-              "생산할 품목을 체크한다 (헤더 체크박스 = 권장 생산 있는 품목 전체 선택)",
+              "생산할 품목을 고른다 — 줄의 아무 곳이나 누르면 선택되고, 선택된 줄은 색이 바뀐다 (헤더 체크박스 = 권장 생산 있는 품목 전체 선택)",
               "'선택 N종 생산 요청'을 누른다 — '생산 요청' 메뉴로 이동하며 새 생산 요청 창이 권장 수량이 채워진 채 열린다",
               "창에서 실제 원하는 양으로 고치고 '요청서 만들기'를 누른다",
               "품목 줄의 '입·출·조정'을 눌러 그 품목의 입고·출고·조정을 기록한다",
