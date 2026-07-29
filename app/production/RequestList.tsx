@@ -84,7 +84,16 @@ export function RequestList() {
     fetch("/api/b2b/auth", { cache: "no-store" }).then((r) => r.json()).then((j) => setUserName(j?.ok ? j.name || null : null)).catch(() => {});
   }, []);
 
-  const [retailQty, setRetailQty] = useState<Map<string, number>>(new Map()); // 소매 현재고(용도=소매 선택 시 표시)
+  const [retailQty, setRetailQty] = useState<Map<string, number>>(new Map()); // 소매 현재고(제조사 요청 작성 시 표시)
+  // 도매 필요량 = 열린(요청·진행중) 도매 요청의 잔여(요청-이전) 합 — 제조사 요청 수량 판단 근거
+  const wholesaleNeed = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of requests) {
+      if (r.purpose !== "도매 납품" || (r.status !== "요청" && r.status !== "진행중")) continue;
+      for (const it of r.items) m.set(it.product_id, (m.get(it.product_id) || 0) + Math.max(0, it.requested_qty - it.received_qty));
+    }
+    return m;
+  }, [requests]);
   useEffect(() => {
     (async () => {
       try {
@@ -309,8 +318,8 @@ export function RequestList() {
         </section>
       )}
 
-      {createOpen && <RequestModal products={products} retailQty={retailQty} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
-      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
+      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
 }
@@ -478,8 +487,8 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 }
 
 // 생성/수정 겸용 — initial 이 있으면 수정 모드(기존 라인 id 유지, 입고 있는 라인은 뺄 수 없음).
-function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
@@ -526,12 +535,12 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, b
 
   return (
     <div className="b2b-modal-backdrop">
-      <div className="b2b-modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">{isEdit ? `요청서 수정 ${initial?.req_no || ""}` : "새 도매 생산 요청"}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+      <div className="b2b-modal" style={{ maxWidth: 880 }} onClick={(e) => e.stopPropagation()}>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">{isEdit ? `요청서 수정 ${initial?.req_no || ""}` : "새 생산 요청"}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <div className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>용도</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>요청</span>
               <div className="sm-tabs" style={{ margin: 0 }}>
                 {PR_PURPOSES.map((pp) => (
                   <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} onClick={() => setPurpose(pp)}>{PR_PURPOSE_LABEL[pp]}</button>
@@ -578,26 +587,41 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, b
           ) : (
             <div className="b2b-table-wrap">
               <table className="b2b-table">
-                <thead><tr><th>품목</th><th className="num">{purpose === "도매 납품" ? "도매재고" : "소매재고"}</th><th className="num">요청수량</th><th>메모</th><th></th></tr></thead>
+                {/* 제조사 요청 = 도매 필요량(열린 도매 요청 잔여)을 반영해 수량 판단 / 도매 요청 = 도매 현재고 기준 */}
+                {purpose === "도매 납품" ? (
+                  <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>도매재고</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
+                ) : (
+                  <thead><tr><th>품목</th><th className="num" style={{ width: 90 }}>소매 재고</th><th className="num" style={{ width: 100 }}>도매 필요량</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
+                )}
                 <tbody>
-                  {lines.map((l, i) => (
-                    <tr key={l.item_id || l.product_id}>
-                      <td><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
-                      <td className="num" style={{ color: "var(--sm-text-mid)" }}>{(() => {
-                        const v = purpose === "도매 납품" ? l.stock : (retailQty.get(l.product_id) ?? null); // 소매=소매 현재고, 도매=도매 현재고
-                        return v == null ? "-" : v.toLocaleString();
-                      })()}</td>
-                      <td className="num"><input type="number" className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder="0" /></td>
-                      <td><input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" /></td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        {l.received > 0 ? (
-                          <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="입고 기록이 있어 뺄 수 없습니다">입고 {l.received.toLocaleString()}</span>
+                  {lines.map((l, i) => {
+                    const retail = retailQty.get(l.product_id) ?? null;
+                    const need = wholesaleNeed.get(l.product_id) ?? 0;
+                    const recommend = Math.max(0, need - (retail ?? 0)); // 소매 재고로 이전 충당하고 남는 부족분
+                    return (
+                      <tr key={l.item_id || l.product_id}>
+                        <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
+                        {purpose === "도매 납품" ? (
+                          <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
                         ) : (
-                          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", whiteSpace: "nowrap" }} onClick={() => removeLine(i)}>삭제</button>
+                          <>
+                            <td className="num" style={{ color: "var(--sm-text-mid)" }}>{retail == null ? "-" : retail.toLocaleString()}</td>
+                            <td className="num" style={{ color: need > 0 ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: need > 0 ? 700 : 400 }}>{need.toLocaleString()}</td>
+                            <td className="num" style={{ fontWeight: 700, color: recommend > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend.toLocaleString()}</td>
+                          </>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="num"><input type="number" className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder="0" /></td>
+                        <td><input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" /></td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          {l.received > 0 ? (
+                            <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="입고 기록이 있어 뺄 수 없습니다">입고 {l.received.toLocaleString()}</span>
+                          ) : (
+                            <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", whiteSpace: "nowrap" }} onClick={() => removeLine(i)}>삭제</button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -411,10 +411,10 @@ export default function InventoryPage() {
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
                 <label className="sm-col" style={{ gap: 3 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>용도</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>요청</span>
                   <div className="sm-tabs" style={{ margin: 0 }}>
                     {(["재고 보충", "도매 납품"] as const).map((pp) => (
-                      <button key={pp} type="button" className={`sm-tab ${reqPurpose === pp ? "is-active" : ""}`} onClick={() => setReqPurpose(pp)}>{pp === "재고 보충" ? "소매" : "도매"}</button>
+                      <button key={pp} type="button" className={`sm-tab ${reqPurpose === pp ? "is-active" : ""}`} onClick={() => setReqPurpose(pp)}>{pp === "재고 보충" ? "제조사" : "도매"}</button>
                     ))}
                   </div>
                 </label>
