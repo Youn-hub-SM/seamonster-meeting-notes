@@ -140,12 +140,12 @@ export default function InventoryPage() {
         <div className="b2b-table-wrap">
           {/* 생산 화면과 공통 기본 열(SKU|품목|현재고|안전재고|하루 출고|예상소진) + 재고 전용(총입고|총출고|재고자산).
               tableLayout fixed — 내용 길이와 무관하게 열 폭 고정. */}
-          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1060 }}>
+          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1280 }}>
             <thead><tr>
-              <th style={{ width: 110 }}>SKU</th><Th k="name" label="품목" />
-              <Th k="qty" label="현재고" num w={90} /><Th k="auto_safety" label="안전재고" num w={96} /><Th k="daily_out" label="하루 출고" num w={90} /><Th k="depletion_days" label="예상소진" num w={90} />
-              <Th k="period_in" label="총입고" num w={90} /><Th k="period_out" label="총출고" num w={90} />
-              <Th k="value" label="재고자산" num w={110} /><th style={{ width: 110 }}></th>
+              <th style={{ width: 150 }}>SKU</th><Th k="name" label="품목" />
+              <Th k="qty" label="현재고" num w={110} /><Th k="auto_safety" label="안전재고" num w={120} /><Th k="daily_out" label="하루 출고" num w={110} /><Th k="depletion_days" label="예상소진" num w={110} />
+              <Th k="period_in" label="총입고" num w={110} /><Th k="period_out" label="총출고" num w={110} />
+              <Th k="value" label="재고자산" num w={130} /><th style={{ width: 110 }}></th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (

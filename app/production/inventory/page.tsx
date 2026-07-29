@@ -309,19 +309,19 @@ export default function InventoryPage() {
         <div className="b2b-table-wrap">
           {/* 재고 목록과 공통 기본 열(SKU|품목|현재고|안전재고|하루 출고|예상소진) + 생산 전용(권장생산|주문필요|보정).
               tableLayout fixed — 탭·내용과 무관하게 열 폭 고정. */}
-          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1080 }}>
+          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1280 }}>
             <thead>
               <tr>
                 <th style={{ width: 34 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
-                <th style={{ width: 110 }}>SKU</th>
+                <th style={{ width: 150 }}>SKU</th>
                 <th>품목</th>
-                <th className="num" style={{ width: 90 }}>현재고</th>
-                <th className="num" style={{ width: 110 }}>안전재고</th>
-                <th className="num" style={{ width: 90 }}>하루 출고</th>
-                <th className="num" style={{ width: 90 }}>예상소진</th>
-                <th className="num" style={{ width: 94 }}>권장생산</th>
-                <th className="num" style={{ width: 116 }}>주문필요</th>
-                <th className="num" style={{ width: 96 }}>보정</th>
+                <th className="num" style={{ width: 110 }}>현재고</th>
+                <th className="num" style={{ width: 120 }}>안전재고</th>
+                <th className="num" style={{ width: 110 }}>하루 출고</th>
+                <th className="num" style={{ width: 110 }}>예상소진</th>
+                <th className="num" style={{ width: 110 }}>권장생산</th>
+                <th className="num" style={{ width: 130 }}>주문필요</th>
+                <th className="num" style={{ width: 110 }}>보정</th>
               </tr>
             </thead>
             <tbody>
@@ -330,7 +330,7 @@ export default function InventoryPage() {
                 return (
                 <tr key={r.sku} className={r.belowSafety ? "is-overdue" : ""}>
                   <td><input type="checkbox" checked={sel.has(r.sku)} onChange={() => toggleSel(r.sku)} /></td>
-                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><code style={{ fontSize: 11.5 }}>{r.sku}</code></td>
+                  <td className="sm-faint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sku}</td>
                   <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {r.name}
                     {!r.inBoxhero && <span className="prod-tag">원장에 없음</span>}
