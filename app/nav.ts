@@ -31,6 +31,7 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/products", label: "상품 목록" },
           { href: "/b2b/products/history", label: "변경 기록" },
           { href: "/inventory/bundles", label: "묶음 상품" },
+          { href: "/production/sku", label: "SKU 생성" },
         ],
       },
       {
@@ -85,7 +86,6 @@ export const NAV: NavCategory[] = [
       },
       { href: "/inventory/stats", label: "통계", icon: "bars" },
       { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
-      { href: "/production/sku", label: "SKU 생성", icon: "tag" },
       { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
     ],
   },
