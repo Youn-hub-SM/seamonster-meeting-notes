@@ -9,11 +9,16 @@ import { getKv, setKv } from "./b2b-settings";
 import { currentActor } from "./b2b-activity";
 
 export const MASTER_NOTIFY_EVENTS = [
-  { key: "created", label: "상품 등록" },
-  { key: "updated", label: "상품 수정" },
-  { key: "deleted", label: "상품 삭제" },
-  { key: "bundle", label: "묶음 구성 변경" },
-  { key: "import", label: "엑셀 일괄 변경" },
+  { key: "created", label: "상품 등록", group: "상품마스터" },
+  { key: "updated", label: "상품 수정", group: "상품마스터" },
+  { key: "deleted", label: "상품 삭제", group: "상품마스터" },
+  { key: "bundle", label: "묶음 구성 변경", group: "상품마스터" },
+  { key: "import", label: "엑셀 일괄 변경", group: "상품마스터" },
+  // 생산·재고 알림(b2b-activity 의 helper 라우팅)도 이 체크리스트로 개별 제어
+  { key: "prod_request", label: "생산 요청 등록", group: "생산·재고" },
+  { key: "prod_started", label: "생산 시작(진행중 전환)", group: "생산·재고" },
+  { key: "prod_completed", label: "생산 완료", group: "생산·재고" },
+  { key: "inv_move", label: "재고 이전(소매→도매)", group: "생산·재고" },
 ] as const;
 export type MasterNotifyEventKey = (typeof MASTER_NOTIFY_EVENTS)[number]["key"];
 
@@ -30,7 +35,7 @@ const DEFAULTS: MasterNotifyConfig = {
   botId: "BFLOW_300003566171",
   receivers: "",
   title: "[업무도우미 변경알림]",
-  events: { created: true, updated: true, deleted: true, bundle: true, import: true },
+  events: { created: true, updated: true, deleted: true, bundle: true, import: true, prod_request: true, prod_started: true, prod_completed: true, inv_move: true },
 };
 
 export async function getMasterNotifyConfig(): Promise<MasterNotifyConfig> {

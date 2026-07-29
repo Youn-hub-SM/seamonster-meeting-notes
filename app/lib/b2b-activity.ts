@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
 import { resolveUserName, verifySession } from "./b2b-auth";
-import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getHelperBotConfig, isHelperBotConfigured, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
+import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getHelperBotConfig, isHelperBotConfigured, isHelperEventEnabled, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
@@ -21,6 +21,7 @@ type ActivityInput = {
   notify?: boolean;   // false면 DB 감사기록만 남기고 외부 웹훅(Zapier)은 보내지 않음. 매출 등 비-B2B 이벤트용.
   actor?: string | null; // 지정 시 currentActor() 대신 이 값을 작업자로 사용(라우트가 이미 해석한 이름).
   bot?: "helper";     // "helper" = '업무도우미 변경알림' 봇으로 발송(생산·재고 알림 — 생산관리 설정의 봇). 미구성이면 기본 봇.
+  helperEvent?: string; // 생산관리 설정 '발송할 변경 목록'의 체크 키 — 해제돼 있으면 발송 안 함(DB 기록은 유지).
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
@@ -72,6 +73,7 @@ export async function logProductionRequestCreated(reqNo: string, label: string, 
     meta: { req_no: reqNo },
     notify: true, // 작성 시 Flow 알림
     bot: "helper", // 생산 알림은 '업무도우미 변경알림' 봇으로
+    helperEvent: "prod_request",
     actor,        // 메시지에 '작업자: {actor}' 로 표시(B2B 작업과 동일)
   });
 }
@@ -85,6 +87,7 @@ export async function logProductionRequestStatusChanged(reqNo: string, fromStatu
     meta: { req_no: reqNo, from: fromStatus, to: toStatus },
     notify,
     bot: "helper", // 생산 알림은 '업무도우미 변경알림' 봇으로
+    helperEvent: toStatus === "완료" ? "prod_completed" : "prod_started",
     actor,
   });
 }
@@ -97,6 +100,7 @@ export async function logInventoryMovedToWholesale(name: string, sku: string | n
     meta: { sku, qty },
     notify: true,
     bot: "helper",
+    helperEvent: "inv_move",
     actor,
   });
 }
@@ -110,10 +114,14 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   const config = await getNotifyConfig();
   if (!shouldNotify(config, input.event_type, input.meta)) return;
 
-  // 0순위: '업무도우미 변경알림' 봇(생산관리 설정의 봇 재사용) — 생산·재고 알림 전용. 미구성이면 아래 기본 경로로 폴백.
-  if (input.bot === "helper" && (await isHelperBotConfigured())) {
-    await sendFlowBotNotify(input, actor, { config: await getHelperBotConfig() });
-    return;
+  // 0순위: '업무도우미 변경알림' 봇(생산관리 설정의 봇 재사용) — 생산·재고 알림 전용.
+  //  체크리스트에서 해제된 이벤트는 어느 봇으로도 안 보냄. 봇 미구성이면 아래 기본 경로로 폴백.
+  if (input.bot === "helper") {
+    if (input.helperEvent && !(await isHelperEventEnabled(input.helperEvent))) return;
+    if (await isHelperBotConfigured()) {
+      await sendFlowBotNotify(input, actor, { config: await getHelperBotConfig() });
+      return;
+    }
   }
 
   // 1순위: Flow 봇 알림(설정 시 Zapier 대체)

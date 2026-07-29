@@ -147,6 +147,14 @@ export async function isHelperBotConfigured(): Promise<boolean> {
   const c = await getHelperBotConfig();
   return !!(c.botId && c.apiKey && c.receivers.length);
 }
+// 생산관리 설정 '발송할 변경 목록' 체크 — 생산·재고 알림도 이벤트별로 켜고 끈다. 미저장 키는 켜짐 취급.
+export async function isHelperEventEnabled(key: string): Promise<boolean> {
+  const raw = await getKv("master_notify_config");
+  try {
+    const j = JSON.parse(raw || "{}") as { events?: Record<string, boolean> };
+    return (j.events || {})[key] !== false;
+  } catch { return true; }
+}
 
 export const setAppBaseUrl = (s: string) => setKv("app_base_url", s);
 
