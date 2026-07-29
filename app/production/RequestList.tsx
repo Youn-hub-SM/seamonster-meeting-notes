@@ -242,8 +242,8 @@ export function RequestList() {
       </div>
 
       {tab === "도매" && wholesaleSummary.length > 0 && (
-        <section className="b2b-card" style={{ marginBottom: 16 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">도매 요청 종합 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 열린 요청 품목별 합산</span></span></div>
+        <section className="b2b-form-section" style={{ marginBottom: 16 }}>
+          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>도매 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 품목별 합산</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 13 }}>
               <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>요청</th><th className="num" style={{ width: 100 }}>이전 완료</th><th className="num" style={{ width: 100 }}>잔여</th><th className="num" style={{ width: 90 }}>이행률</th></tr></thead>
@@ -272,8 +272,8 @@ export function RequestList() {
       ) : displayed.length === 0 ? (
         <div className="b2b-empty">{showDone ? `${tab} 요청이 없습니다.` : `진행 중인 ${tab} 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요.`}</div>
       ) : (
-        <section className="b2b-card">
-        <div className="b2b-card-head"><span className="b2b-card-title">{tab} 요청 목록 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {displayed.length}건</span></span></div>
+        <section className="b2b-form-section">
+        <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{tab} 요청 목록 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· {displayed.length}건</span></div>
         <div className="b2b-table-wrap">
           {/* tableLayout fixed — 탭(제조사/도매) 전환 시 내용 길이와 무관하게 두 탭의 표 모양 동일 */}
           <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1000 }}>
