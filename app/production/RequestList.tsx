@@ -218,17 +218,18 @@ export function RequestList() {
         <div className="b2b-empty">{showDone ? `${tab} 요청이 없습니다.` : `진행 중인 ${tab} 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요.`}</div>
       ) : (
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          {/* tableLayout fixed — 탭(제조사/도매) 전환 시 내용 길이와 무관하게 두 탭의 표 모양 동일 */}
+          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 860 }}>
             <thead>
               <tr>
-                <th style={{ width: 1 }}></th>
-                <th>요청번호</th>
+                <th style={{ width: 28 }}></th>
+                <th style={{ width: 140 }}>요청번호</th>
                 <th>품목</th>
-                <th className="b2b-col-date">진행</th>
-                <th className="b2b-col-date">요청일</th>
-                <th className="b2b-col-date">마감일</th>
-                <th className="b2b-col-date">담당</th>
-                <th style={{ width: 1 }}></th>
+                <th className="b2b-col-date" style={{ width: 120 }}>진행</th>
+                <th className="b2b-col-date" style={{ width: 96 }}>요청일</th>
+                <th className="b2b-col-date" style={{ width: 96 }}>마감일</th>
+                <th className="b2b-col-date" style={{ width: 90 }}>담당</th>
+                <th style={{ width: 150 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -291,9 +292,9 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
         <td style={{ whiteSpace: "nowrap" }}>
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
-          {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.title}</span> : null}
+          {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis" }}>{req.title}</span> : null}
         </td>
-        <td className="sm-nowrap" style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
+        <td style={{ fontSize: 13, color: "var(--sm-text-mid)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {itemPreview || "품목 없음"}
           {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
         </td>
