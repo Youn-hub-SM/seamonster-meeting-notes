@@ -57,7 +57,12 @@ export default function VocRequestPage() {
     const loss = items.reduce((s, r) => s + (r.loss_amount || 0), 0);
     const byCat = new Map<string, number>();
     for (const r of items) byCat.set(r.category, (byCat.get(r.category) || 0) + 1);
-    const cats = VOC_CATEGORIES.map((c) => [c, byCat.get(c) || 0] as [string, number]).filter(([, n]) => n > 0);
+    // 기본 8종은 기존 순서대로, 사용자가 추가한 유형(072 마스터)은 그 뒤에 건수순으로 — 새 유형이 집계에서 누락되지 않게.
+    const known = VOC_CATEGORIES.map((c) => [c as string, byCat.get(c) || 0] as [string, number]).filter(([, n]) => n > 0);
+    const extra = [...byCat.entries()]
+      .filter(([c]) => !(VOC_CATEGORIES as readonly string[]).includes(c))
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
+    const cats = [...known, ...extra];
     return { total, loss, cats };
   }, [items]);
 

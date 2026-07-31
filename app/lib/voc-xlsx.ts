@@ -14,20 +14,26 @@ export const VOC_XLSX_EXAMPLE: string[] = [
 ];
 
 // 입력 가이드(템플릿 2번째 시트용) — 필드별 허용값.
-export const VOC_XLSX_GUIDE: [string, string][] = [
-  ["필수 항목", "접수일 · 상세내용 (나머지는 비워도 됨)"],
-  ["접수일 / 구매일 / 제품생산일", "YYYY-MM-DD (예: 2026-05-03). 비우면 해당 항목 없음"],
-  ["구매자구분", VOC_BUYER_TYPES.join(" / ") + " (또는 비움)"],
-  ["클레임유형", VOC_CATEGORIES.join(" / ") + " · 비우면 '배송'"],
-  ["보상유형", VOC_COMP_TYPES.join(" / ") + " · 비우면 '없음'"],
-  ["손해귀책", VOC_FAULTS.join(" / ") + " · 비우면 유형에 따라 자동"],
-  ["처리단계", VOC_STATUSES.join(" / ") + " · 비우면 '접수'"],
-  ["보상수량 / 손해·보상금액", "숫자. 비우면 1 / 0"],
-];
+//  클레임유형은 사용자가 추가/편집하는 마스터(072 voc_categories) 라서 목록을 받아 안내한다(미지정 시 기본 8종).
+export function vocXlsxGuide(catNames: readonly string[] = VOC_CATEGORIES): [string, string][] {
+  const cats = catNames.length ? catNames : VOC_CATEGORIES;
+  return [
+    ["필수 항목", "접수일 · 상세내용 (나머지는 비워도 됨)"],
+    ["접수일 / 구매일 / 제품생산일", "YYYY-MM-DD (예: 2026-05-03). 비우면 해당 항목 없음"],
+    ["구매자구분", VOC_BUYER_TYPES.join(" / ") + " (또는 비움)"],
+    ["클레임유형", cats.join(" / ") + ` · 비우면 '${defaultCategory(cats)}'`],
+    ["보상유형", VOC_COMP_TYPES.join(" / ") + " · 비우면 '없음'"],
+    ["손해귀책", VOC_FAULTS.join(" / ") + " · 비우면 유형에 따라 자동"],
+    ["처리단계", VOC_STATUSES.join(" / ") + " · 비우면 '접수'"],
+    ["보상수량 / 손해·보상금액", "숫자. 비우면 1 / 0"],
+  ];
+}
 
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}/;
 const datePrefix = (s: string): string => { const m = String(s || "").trim().match(DATE_PREFIX); return m ? m[0] : ""; };
 const coerce = (v: string, allowed: readonly string[], dflt: string): string => (allowed as readonly string[]).includes(v) ? v : dflt;
+// 유형 미기재 시 기본값 — 기존 동작('배송') 유지, 그 유형이 없어졌으면 첫 유형.
+const defaultCategory = (cats: readonly string[]): string => (cats.includes("배송") ? "배송" : cats[0] || "배송");
 const numOr = (s: string, dflt: number): number => { const n = Number(String(s || "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? n : dflt; };
 
 // 정규화된 VOC 임포트 1행 (apply 가 그대로 insert).
@@ -53,7 +59,8 @@ export function cellStr(v: unknown): string {
 }
 
 // 한 행(헤더 접근자 get) → 정규화 행 또는 오류. 빈 행은 {} 반환.
-export function parseVocRow(get: (h: string) => string): { row?: VocImportRow; err?: string } {
+//  cats: 유형 마스터(이름·귀책 기본값). 넘기지 않으면 기본 8종 — 화면에서 추가한 유형이 '배송'으로 둔갑하지 않게 서버가 넘긴다.
+export function parseVocRow(get: (h: string) => string, cats?: readonly { name: string; fault: string }[]): { row?: VocImportRow; err?: string } {
   const received = datePrefix(get("접수일"));
   const content = get("상세내용").trim();
   // 핵심 칸이 모두 비면 빈 행으로 스킵
@@ -62,7 +69,9 @@ export function parseVocRow(get: (h: string) => string): { row?: VocImportRow; e
   if (!content) return { err: "상세내용이 필요합니다." };
 
   const clean = (h: string): string | null => { const v = get(h).trim(); return v || null; };
-  const category = coerce(get("클레임유형").trim(), VOC_CATEGORIES, "배송");
+  const catNames = cats?.length ? cats.map((c) => c.name) : (VOC_CATEGORIES as readonly string[]);
+  const category = coerce(get("클레임유형").trim(), catNames, defaultCategory(catNames));
+  const catFault = cats?.find((c) => c.name === category)?.fault || suggestFault(category);
   const buyer = get("구매자구분").trim();
   const row: VocImportRow = {
     received_at: received,
@@ -76,7 +85,7 @@ export function parseVocRow(get: (h: string) => string): { row?: VocImportRow; e
     comp_type: coerce(get("보상유형").trim(), VOC_COMP_TYPES, "없음"),
     comp_qty: Math.max(1, Math.round(numOr(get("보상수량"), 1))),
     loss_amount: Math.max(0, Math.round(numOr(get("손해/보상금액"), 0))),
-    fault: coerce(get("손해귀책").trim(), VOC_FAULTS, suggestFault(category)),
+    fault: coerce(get("손해귀책").trim(), VOC_FAULTS, catFault),
     status: coerce(get("처리단계").trim(), VOC_STATUSES, "접수"),
     content,
     cause: clean("원인"),

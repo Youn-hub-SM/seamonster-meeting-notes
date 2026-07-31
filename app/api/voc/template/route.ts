@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { VOC_XLSX_HEADERS, VOC_XLSX_EXAMPLE, VOC_XLSX_GUIDE } from "@/app/lib/voc-xlsx";
+import { VOC_XLSX_HEADERS, VOC_XLSX_EXAMPLE, vocXlsxGuide } from "@/app/lib/voc-xlsx";
+import { loadVocCategoryNames } from "@/app/lib/voc-categories";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function GET() {
     const gs = wb.addWorksheet("입력안내");
     gs.addRow(["항목", "설명"]).font = { bold: true };
     gs.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF3F8" } };
-    for (const [k, v] of VOC_XLSX_GUIDE) gs.addRow([k, v]);
+    for (const [k, v] of vocXlsxGuide(await loadVocCategoryNames())) gs.addRow([k, v]);
     gs.getColumn(1).width = 22; gs.getColumn(2).width = 60;
     gs.addRow([]);
     gs.addRow(["", "※ 예시 행(2행)은 지우고 입력하세요. 접수일·상세내용만 있으면 등록됩니다."]).font = { color: { argb: "FF8A94A6" } };

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { VOC_CATEGORIES, VOC_STATUSES, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_FAULTS, suggestFault } from "@/app/lib/voc";
+import { VOC_STATUSES, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_FAULTS } from "@/app/lib/voc";
+import { loadVocCategoryOptions, faultOf } from "@/app/lib/voc-categories";
 import type { VocImportRow } from "@/app/lib/voc-xlsx";
 
 export const runtime = "nodejs";
@@ -21,10 +22,15 @@ export async function POST(req: NextRequest) {
     const cookie = req.cookies.get("b2b_auth")?.value;
     const actor = (await verifySession(cookie)) || resolveUserName(cookie);
 
+    // 유형은 마스터(072 voc_categories) 기준 — 미리보기와 같은 목록으로 재검증한다.
+    const cats = await loadVocCategoryOptions();
+    const catNames = cats.map((c) => c.name);
+    const catDflt = catNames.includes("배송") ? "배송" : catNames[0] || "배송";
+
     const insert = rows
       .filter((r) => r && DATE_RE.test(String(r.received_at)) && String(r.content || "").trim())
       .map((r) => {
-        const category = inSet(r.category, VOC_CATEGORIES, "배송");
+        const category = inSet(r.category, catNames, catDflt);
         return {
           received_at: r.received_at,
           customer: r.customer ? String(r.customer).slice(0, 5000) : null,
@@ -37,7 +43,7 @@ export async function POST(req: NextRequest) {
           comp_type: inSet(r.comp_type, VOC_COMP_TYPES, "없음"),
           comp_qty: Math.max(1, Math.round(Number(r.comp_qty) || 1)),
           loss_amount: Math.max(0, Math.round(Number(r.loss_amount) || 0)),
-          fault: inSet(r.fault, VOC_FAULTS, suggestFault(category)),
+          fault: inSet(r.fault, VOC_FAULTS, faultOf(cats, category)),
           status: inSet(r.status, VOC_STATUSES, "접수"),
           content: String(r.content).slice(0, 5000),
           cause: r.cause ? String(r.cause).slice(0, 5000) : null,

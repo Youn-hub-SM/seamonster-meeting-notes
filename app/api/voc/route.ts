@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { VOC_SOURCES, VOC_CATEGORIES, VOC_STATUSES, VOC_SENTIMENTS, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_FAULTS } from "@/app/lib/voc";
+import { VOC_SOURCES, VOC_STATUSES, VOC_SENTIMENTS, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_FAULTS } from "@/app/lib/voc";
+import { loadVocCategoryNames } from "@/app/lib/voc-categories";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,8 @@ const EDITABLE = ["received_at", "customer", "buyer_type", "purchase_date", "pro
 // "" 면 키 자체를 생략 → POST 는 DB default, PATCH 는 기존값 유지(NOT NULL 위반 방지).
 const NULLABLE = new Set(["customer", "buyer_type", "purchase_date", "production_date", "purchase_place", "product", "resolution", "cause", "improvement", "customer_note"]);
 
-const ENUMS: Record<string, readonly string[]> = { source: VOC_SOURCES, category: VOC_CATEGORIES, status: VOC_STATUSES, sentiment: VOC_SENTIMENTS, buyer_type: VOC_BUYER_TYPES, comp_type: VOC_COMP_TYPES, fault: VOC_FAULTS };
+// category 는 사용자가 추가/편집하는 마스터(072 voc_categories) 기준이라 여기 두지 않고 저장 직전에 DB 로 검증한다.
+const ENUMS: Record<string, readonly string[]> = { source: VOC_SOURCES, status: VOC_STATUSES, sentiment: VOC_SENTIMENTS, buyer_type: VOC_BUYER_TYPES, comp_type: VOC_COMP_TYPES, fault: VOC_FAULTS };
 const DATE_FIELDS = ["received_at", "purchase_date", "production_date"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LEN = 5000;
@@ -40,14 +42,27 @@ function pick(body: Record<string, unknown>) {
 }
 
 // 잘못된 enum·날짜형식·과대 페이로드를 DB 에 닿기 전 400 으로 차단.
-function validate(row: Record<string, unknown>): string | null {
+//  유형(category)만 고정 목록이 아니라 유형 마스터를 조회해 검증 — 화면에서 추가한 유형이 저장에서 막히지 않게.
+async function validate(row: Record<string, unknown>): Promise<string | null> {
   for (const [k, allowed] of Object.entries(ENUMS))
     if (row[k] != null && !allowed.includes(String(row[k]))) return `${k} 값이 올바르지 않습니다.`;
+  if (row.category != null) {
+    const names = await loadVocCategoryNames();
+    if (!names.includes(String(row.category))) return `'${row.category}' 는 등록되지 않은 문제 유형입니다. (VOC 목록 > 문제 유형 관리에서 먼저 추가)`;
+  }
   for (const k of DATE_FIELDS)
     if (row[k] != null && !DATE_RE.test(String(row[k]))) return "날짜 형식(YYYY-MM-DD)이 올바르지 않습니다.";
   for (const k of Object.keys(row))
     if (typeof row[k] === "string" && (row[k] as string).length > MAX_LEN) return "입력이 너무 깁니다.";
   return null;
+}
+
+// 072 의 CHECK 해제(alter table voc drop constraint voc_category_check)가 빠진 환경이면
+//  새 유형 저장이 DB 제약에 걸린다 — 원문 대신 조치 안내로 바꿔 준다.
+function friendlyErr(msg: string): string {
+  return /voc_category_check/i.test(msg)
+    ? "DB 에 옛 유형 제약이 남아 있습니다. 072_voc_categories.sql 의 'alter table voc drop constraint if exists voc_category_check;' 를 Supabase SQL Editor 에서 실행하세요."
+    : msg;
 }
 
 // GET /api/voc?status=&source=&q= — 목록
@@ -89,14 +104,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "상세내용을 입력하세요." }, { status: 400 });
     }
     const row = pick(body);
-    const verr = validate(row);
+    const verr = await validate(row);
     if (verr) return NextResponse.json({ ok: false, error: verr }, { status: 400 });
     const { data, error } = await supabaseAdmin().from("voc").insert(row).select().single();
     if (error) throw error;
     return NextResponse.json({ ok: true, row: data });
   } catch (err) {
     console.error("[voc POST]", err);
-    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "저장 실패") }, { status: 500 });
+    return NextResponse.json({ ok: false, error: friendlyErr(extractErrorMsg(err, "저장 실패")) }, { status: 500 });
   }
 }
 
@@ -110,7 +125,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "상세내용을 입력하세요." }, { status: 400 });
     }
     const picked = pick(body);
-    const verr = validate(picked);
+    const verr = await validate(picked);
     if (verr) return NextResponse.json({ ok: false, error: verr }, { status: 400 });
     const row = { ...picked, updated_at: new Date().toISOString() };
     const { data, error } = await supabaseAdmin().from("voc").update(row).eq("id", body.id).select().single();
@@ -118,7 +133,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true, row: data });
   } catch (err) {
     console.error("[voc PATCH]", err);
-    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "수정 실패") }, { status: 500 });
+    return NextResponse.json({ ok: false, error: friendlyErr(extractErrorMsg(err, "수정 실패")) }, { status: 500 });
   }
 }
 

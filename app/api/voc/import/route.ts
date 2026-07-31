@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { VOC_XLSX_HEADERS, cellStr, parseVocRow, type VocImportRow } from "@/app/lib/voc-xlsx";
+import { loadVocCategoryOptions } from "@/app/lib/voc-categories";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,12 +28,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "헤더에 '접수일'·'상세내용'이 필요합니다. (양식을 받아 사용하세요)" }, { status: 400 });
     }
 
+    const cats = await loadVocCategoryOptions(); // 사용자가 추가한 유형도 그대로 인정
     const rows: VocImportRow[] = [];
     const errors: { line: number; msg: string }[] = [];
     for (let r = 2; r <= ws.rowCount; r++) {
       const row = ws.getRow(r);
       const get = (h: string) => { const c = col.get(h); return c ? cellStr(row.getCell(c).value) : ""; };
-      const { row: parsed, err } = parseVocRow(get);
+      const { row: parsed, err } = parseVocRow(get, cats);
       if (err) { errors.push({ line: r, msg: err }); continue; }
       if (parsed) rows.push(parsed);
     }
