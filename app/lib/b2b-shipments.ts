@@ -94,20 +94,62 @@ export async function saveOrderShipments(
   const bundles = canDeduct ? await getAllBundles(sb) : new Map<string, BundleComponent[]>();
   const today = kstToday();
 
-  // '발송예정일만 잡으면 발주 전량 재고 차감' — 어떤 차수에도 상품 수량이 배정되지 않았으면(분할발송 미사용),
-  //  발주 상품 전량을 재고 차감 대상 첫 차수(발송예정일 있고·취소 아니고·재고차감 켜짐)에 자동 배분한다.
-  //  차수별로 수량을 나눈 분할발송은 그대로 두어 자동배분을 하지 않는다(이중 차감 방지).
+  // 발주 라인별 주문 수량 — 재고 차감은 '발주 전량' 기준이라 항상 필요하다.
+  const orderQtyById = new Map<string, number>();
+  if (canDeduct) {
+    const { data: oi } = await sb.from("order_items").select("id, qty").eq("order_id", orderId);
+    for (const r of oi || []) orderQtyById.set(r.id as string, Number(r.qty) || 0);
+  }
+
+  // 차수에 상품 수량이 하나도 배정되지 않았으면(분할발송 미사용) 발주 전량을 첫 차수에 자동 배분한다.
+  //  이 배분은 shipment_items(발송 관리·매출 리포트·재고 대사의 '팔린 수' 기준)를 위한 것이고,
+  //  재고 차감량과는 별개다 — 차감은 아래에서 발주 전량으로 따로 계산한다.
   if (canDeduct) {
     const anyAssigned = (schedules || []).some((s) => (s.items || []).some((it) => Number(it.qty) > 0));
     if (!anyAssigned) {
       const target = (schedules || []).find((s) => s.ship_date && s.status !== "취소" && s.stock_out !== false);
       if (target) {
-        const { data: oi } = await sb.from("order_items").select("id, qty").eq("order_id", orderId);
-        const qtyById = new Map((oi || []).map((r) => [r.id as string, Number(r.qty) || 0]));
         target.items = orderItems
-          .map((it, idx) => ({ order_item_index: idx, qty: qtyById.get(it.id) || 0 }))
+          .map((it, idx) => ({ order_item_index: idx, qty: orderQtyById.get(it.id) || 0 }))
           .filter((x) => x.qty > 0);
       }
+    }
+  }
+
+  // ── 재고 차감은 '첫 발송일에 발주 전량' 1회 ──
+  //  선결제 대량 발주를 나눠 받는 거래라, 첫 발송일 전까지 전 물량을 생산해 두고 그때 재고에서 뺀다.
+  //  차수별로 나눠 찍지 않는 이유: 차수에 수량을 일부만 배정하면 나머지가 영영 차감되지 않았다.
+  //  대상 = 실제로 저장되는 차수 중 취소가 아니고 재고차감이 켜진 것, 그중 발송예정일이 가장 이른 것.
+  //  (발송예정일이 있는 차수가 없으면 첫 차수에 붙이고 날짜는 헤더 발송예정일 → 오늘 순으로 잡는다.)
+  const willInsert = (s: ShipmentScheduleInput) =>
+    !!s.ship_date || (s.items || []).some((it) => Number(it.qty) > 0 && orderItems[it.order_item_index]);
+  let deductIdx = -1;
+  if (canDeduct) {
+    const eligible = (schedules || [])
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => willInsert(s) && s.status !== "취소" && s.stock_out !== false);
+    const dated = eligible.filter(({ s }) => !!s.ship_date);
+    deductIdx = dated.length
+      ? dated.reduce((a, b) => ((a.s.ship_date as string) <= (b.s.ship_date as string) ? a : b)).i
+      : (eligible[0]?.i ?? -1);
+  }
+
+  // 차감할 품목·수량 — 발주 전량에서 '취소 차수에 배정된 수량'만 뺀다(매출 리포트와 같은 규칙).
+  //  번들 라인은 구성품으로 전개(번들은 자체 재고가 없음).
+  const deductPerProduct = new Map<string, number>();
+  if (canDeduct && deductIdx >= 0) {
+    const effQty = new Map(orderQtyById);
+    for (const s of schedules || []) {
+      if (s.status !== "취소") continue;
+      for (const it of s.items || []) {
+        const line = orderItems[it.order_item_index];
+        if (!line) continue;
+        effQty.set(line.id, Math.max(0, (effQty.get(line.id) || 0) - (Number(it.qty) || 0)));
+      }
+    }
+    for (const line of orderItems) {
+      const q = effQty.get(line.id) || 0;
+      if (line.product_id && q > 0) expandBundleQty(bundles, line.product_id, q, deductPerProduct);
     }
   }
 
@@ -129,7 +171,8 @@ export async function saveOrderShipments(
   let totalBoxes = 0;
   const insertedStatuses: string[] = [];
 
-  for (const sch of schedules || []) {
+  for (let si = 0; si < (schedules || []).length; si++) {
+    const sch = (schedules as ShipmentScheduleInput[])[si];
     // 이 일정에 담긴 상품 (수량>0, 유효 인덱스만)
     const items = (sch.items || [])
       .map((it) => ({ idx: it.order_item_index, qty: Number(it.qty) || 0 }))
@@ -176,38 +219,30 @@ export async function saveOrderShipments(
       }));
       const { error: siErr } = await sb.from("shipment_items").insert(rows);
       if (siErr) throw siErr;
+    }
 
-      // 재고 즉시 출고(선점) — 발송 잡는 순간 차감. shipment_id 로 묶여 차수 삭제/재저장 시 cascade 원복.
-      //  B2B 발송이므로 '도매' 채널 재고에서 차감(036). 컬럼 미적용 환경이면 channel 빼고 재시도.
-      if (wantStockOut) {
-        // 번들이면 구성품으로 재귀 전개(expandBundleQty 공용 규칙 — 소매 출고와 동일).
-        //  같은 품목이 여러 라인/구성품에 걸쳐 나오면 합산해 품목당 출고 1건으로.
-        const perProduct = new Map<string, number>();
-        for (const it of items) {
-          const pid = orderItems[it.idx].product_id;
-          if (pid && it.qty > 0) expandBundleQty(bundles, pid, it.qty, perProduct);
-        }
-        const txns: Record<string, unknown>[] = [...perProduct.entries()].map(([product_id, qty]) => ({
-          product_id,
-          type: "출고",
-          channel: "도매",
-          qty: signedQty("출고", qty),
-          unit_amount: null,
-          txn_date: sch.ship_date || today,
-          partner,
-          memo: "B2B 발송 선점",
-          shipment_id: shipRow.id,
-          created_by: "B2B 자동출고",
-        }));
-        if (txns.length > 0) {
-          let txr = await sb.from("inventory_txns").insert(txns);
-          if (txr.error && /channel/i.test(txr.error.message)) {
-            for (const t of txns) delete t.channel;
-            txr = await sb.from("inventory_txns").insert(txns);
-          }
-          if (txr.error) throw txr.error;
-        }
+    // 재고 차감(선점) — 발주 전량을 이 차수(가장 이른 발송일) 하나에만 기록한다.
+    //  shipment_id 로 묶여 있어 재저장·발주 삭제 시 cascade 로 함께 지워지며 재고가 원복된다.
+    //  '도매' 채널에서 차감(036). 컬럼 미적용 환경이면 channel 을 빼고 재시도.
+    if (canDeduct && si === deductIdx && deductPerProduct.size > 0) {
+      const txns: Record<string, unknown>[] = [...deductPerProduct.entries()].map(([product_id, qty]) => ({
+        product_id,
+        type: "출고",
+        channel: "도매",
+        qty: signedQty("출고", qty),
+        unit_amount: null,
+        txn_date: sch.ship_date || headerShipDate || today,
+        partner,
+        memo: "B2B 발송 선점(발주 전량)",
+        shipment_id: shipRow.id,
+        created_by: "B2B 자동출고",
+      }));
+      let txr = await sb.from("inventory_txns").insert(txns);
+      if (txr.error && /channel/i.test(txr.error.message)) {
+        for (const t of txns) delete t.channel;
+        txr = await sb.from("inventory_txns").insert(txns);
       }
+      if (txr.error) throw txr.error;
     }
 
     if (sch.ship_date && (!earliest || sch.ship_date < earliest)) earliest = sch.ship_date;

@@ -811,6 +811,11 @@ export default function OrderForm({
           </span>
         }>
 
+          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
+            도매 재고는 <strong>가장 이른 발송일에 발주 전량</strong>이 한 번에 빠집니다 — 나눠 받더라도 그 전까지 전 물량을 만들어 두기 때문입니다.
+            차수별 ‘보낼 수량’은 발송·정산 관리용이라 재고 차감량과는 무관합니다. 취소한 차수의 수량은 차감에서 빠집니다.
+          </p>
+
           {data.shipments.length === 0 && (
             <p style={{ fontSize: 12, color: "var(--sm-text-light)", margin: "4px 0 12px" }}>
               아직 발송 일정이 없습니다. 한 번에 다 보내면 비워두셔도 되고, 나눠 보내면 일정을 추가하세요.
@@ -864,7 +869,7 @@ export default function OrderForm({
 
                 <label className="sm-row" style={{ gap: 7, fontSize: 13, marginTop: 10, cursor: "pointer", alignItems: "center" }}>
                   <input type="checkbox" checked={sch.stock_out !== false} onChange={(e) => setSchedule(si, { stock_out: e.target.checked })} />
-                  재고 즉시 출고 <span className="sm-faint" style={{ fontSize: 11 }}>(발송 잡는 순간 재고 차감 · 오버부킹 방지)</span>
+                  재고 차감 대상 <span className="sm-faint" style={{ fontSize: 11 }}>(체크된 차수 중 발송일이 가장 이른 곳에서 발주 전량이 한 번에 빠집니다 · 오버부킹 방지)</span>
                 </label>
 
                 {/* 이 발송에 담을 상품/수량 */}
