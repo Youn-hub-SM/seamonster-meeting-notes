@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { NAV, HOME, type NavTool, type NavMenuItem } from "./nav";
+import { NAV, HOME, sortByNavOrder, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 function itemActive(m: NavMenuItem, toolHref: string, pathname: string) {
@@ -80,6 +80,9 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
     if (!userName) { setFavorites([]); setEditFav(false); return; }
     fetch("/api/b2b/favorites", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j?.ok) setFavorites(j.favorites || []); }).catch(() => {});
   }, [userName]);
+
+  // 표시 순서 = 실제 메뉴 순서(대분류 → 툴 → 하위 메뉴). 담은 순서는 저장만 하고 화면에선 항상 이 순서.
+  const sortedFavorites = useMemo(() => sortByNavOrder(favorites), [favorites]);
 
   const isFav = (href: string) => favorites.some((f) => f.href === href);
   async function toggleFav(href: string, label: string) {
@@ -239,7 +242,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               <div className="sm-faint" style={{ fontSize: 11, padding: "2px 12px 4px", lineHeight: 1.5 }}>
                 {editFav ? "메뉴 옆 ＋를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
               </div>
-            ) : favorites.map((f) => (
+            ) : sortedFavorites.map((f) => (
               <div key={f.href} className={`app-sb-tool-row ${pathname === f.href || pathname.startsWith(f.href + "/") ? "is-active" : ""}`}>
                 <Link href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
                   <span className="app-sb-emoji"><Icon name={iconForHref(f.href)} /></span>

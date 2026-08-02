@@ -160,3 +160,28 @@ export const NAV: NavCategory[] = [
     ],
   },
 ];
+
+// ── 즐겨찾기 정렬 — 담은 순서가 아니라 실제 메뉴 순서(분류 → 툴 → 하위 메뉴)로 ──
+//  NAV 를 위에서부터 순회한 등장 순서를 href 별 인덱스로 만든다. 같은 href 가 툴과
+//  하위 메뉴에 모두 나오면(예: /inventory) 먼저 나온 자리를 쓴다. NAV 에 없는 href
+//  (삭제된 메뉴의 옛 즐겨찾기)는 맨 뒤로 보내되 담은 순서를 유지한다.
+const NAV_ORDER: Map<string, number> = (() => {
+  const m = new Map<string, number>();
+  let i = 0;
+  for (const cat of NAV) for (const t of cat.tools) {
+    if (!m.has(t.href)) m.set(t.href, i++);
+    for (const sub of t.menu || []) if (!m.has(sub.href)) m.set(sub.href, i++);
+  }
+  return m;
+})();
+
+export function sortByNavOrder<T extends { href: string }>(list: T[]): T[] {
+  return list
+    .map((item, idx) => ({ item, idx }))
+    .sort((a, b) => {
+      const ai = NAV_ORDER.get(a.item.href) ?? Number.POSITIVE_INFINITY;
+      const bi = NAV_ORDER.get(b.item.href) ?? Number.POSITIVE_INFINITY;
+      return ai !== bi ? ai - bi : a.idx - b.idx; // 미등록 href 끼리는 담은 순서 유지
+    })
+    .map((x) => x.item);
+}
