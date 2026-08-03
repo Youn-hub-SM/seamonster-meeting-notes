@@ -105,7 +105,7 @@ export default function SalesProfitPage() {
             <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
               <li><strong>총매출</strong> = 총결제금액 + <strong>배송비매출(실제 배송비결제금액)</strong> — 원본 주문 데이터의 실제 배송비라 무료배송·정기배송이 이미 반영됩니다.</li>
               <li><strong>총상품원가</strong> = 상품마스터(products)의 <code>cost_price</code>(제조원가+포장재) × 수량. <strong>묶음상품은 구성품(product_bundles) 합</strong>으로 자동 산출.</li>
-              <li><strong>총택배보냉비</strong> = 주문 총중량(구성품 <code>volume_kg</code> 합) → 택배포장 표(아이스박스+운반비+아이스팩+드라이아이스), <strong>주문당 1회</strong>.</li>
+              <li><strong>총택배보냉비</strong> = 택배 총중량(구성품 <code>volume_kg</code> 합) → 택배포장 표(아이스박스+운반비+아이스팩+드라이아이스), <strong>택배 1건당 1회</strong>. 같은 주문자(전화)·같은 주문일은 주문번호가 여러 개여도 <strong>합배송 1건</strong>으로 묶어 계산합니다 — 톡딜처럼 주문번호가 상품별로 갈리는 채널의 과대 계산 방지. 전화번호가 없는 주문은 주문번호별 1건.</li>
               <li><strong>판매수수료</strong> = 총매출 × <strong>채널 수수료율</strong>(아래에서 설정).</li>
               <li><strong>매출총이익</strong> = 총매출 − (총상품원가 + 판매수수료 + 총택배보냉비) · <strong>이익률</strong> = 이익 ÷ 총매출.</li>
             </ul>
