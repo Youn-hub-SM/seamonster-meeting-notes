@@ -13,6 +13,15 @@ async function userOf(req: NextRequest): Promise<string | null> {
   return (await verifySession(t)) || resolveUserName(t) || null;
 }
 
+// 본문 맨 끝의 '→ https://…' 원문 링크 줄을 떼어 Flow body 의 url 필드로 보낸다 —
+//  변동 알림과 같은 '자세히 보기' 클릭 링크로 렌더되고, 본문에는 주소 원문이 노출되지 않는다.
+//  (미리보기(preview) 응답에는 원문 그대로 남겨 어디로 가는 링크인지 보이게 둔다)
+function splitTrailingLink(text: string): { text: string; url?: string } {
+  const m = text.match(/\n\n→ (https?:\/\/\S+)\s*$/);
+  if (!m || m.index === undefined) return { text };
+  return { text: text.slice(0, m.index), url: m[1] };
+}
+
 // GET — 크론(Vercel: Authorization: Bearer CRON_SECRET)이 호출.
 //  Vercel Hobby는 크론이 '하루 1회'로 제한됨 → 매일 08:00 KST(vercel.json "0 23 * * *")에 한 번 발송.
 //  시간별 트리거(Vercel Pro의 시간별 크론 또는 외부 스케줄러)를 쓸 땐 경로에 ?gate=hour 를 붙이면
@@ -35,7 +44,8 @@ export async function GET(req: NextRequest) {
     const today = kstDateStr();
     if ((await getDigestLastSent()) === today) return NextResponse.json({ ok: true, skipped: "already-sent" });
     const digest = await buildB2BDigest(cfg);
-    const r = await sendFlowText(digest.text);
+    const { text, url } = splitTrailingLink(digest.text);
+    const r = await sendFlowText(text, { url });
     if (r.ok) await setDigestLastSent(today);
     return NextResponse.json({ ok: r.ok, sent: r.ok, error: r.error, counts: digest.counts });
   }
@@ -43,7 +53,8 @@ export async function GET(req: NextRequest) {
   // 관리자 수동(또는 강제 send)
   const digest = await buildB2BDigest(cfg);
   if (sp.get("send") === "1") {
-    const r = await sendFlowText(digest.text);
+    const { text, url } = splitTrailingLink(digest.text);
+    const r = await sendFlowText(text, { url });
     return NextResponse.json({ ok: r.ok, sent: r.ok, error: r.error, counts: digest.counts });
   }
   return NextResponse.json({ ok: true, preview: digest.text, counts: digest.counts });

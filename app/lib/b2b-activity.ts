@@ -257,7 +257,9 @@ export async function sendFlowBotNotify(
 }
 
 // Flow 봇에 임의 텍스트 발송(아침 일정 다이제스트 등). 설정값 사용.
-export async function sendFlowText(contents: string, opts?: { config?: FlowBotConfig; receivers?: string[]; title?: string }): Promise<{ ok: boolean; status: number; error?: string }> {
+//  opts.url — 변동 알림(sendFlowBotNotify)과 동일하게 본문이 아니라 Flow body 의 url 필드로 전달 →
+//  플로우가 '자세히 보기' 클릭 링크로 렌더한다(본문에 주소 원문 노출 방지).
+export async function sendFlowText(contents: string, opts?: { config?: FlowBotConfig; receivers?: string[]; title?: string; url?: string }): Promise<{ ok: boolean; status: number; error?: string }> {
   const cfg = opts?.config ?? (await getFlowBotConfig());
   const receivers = (opts?.receivers ?? cfg.receivers).map((r) => r.trim()).filter(Boolean);
   if (!cfg.botId || !cfg.apiKey || !receivers.length) return { ok: false, status: 0, error: "Flow 봇 설정(봇 ID·API 키·수신자)이 완료되지 않았습니다." };
@@ -266,7 +268,12 @@ export async function sendFlowText(contents: string, opts?: { config?: FlowBotCo
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-flow-api-key": cfg.apiKey },
-      body: JSON.stringify({ receivers: receivers.map((r) => ({ receiverId: r })), title: opts?.title || cfg.title || "씨몬스터 B2B 알림", contents }),
+      body: JSON.stringify({
+        receivers: receivers.map((r) => ({ receiverId: r })),
+        title: opts?.title || cfg.title || "씨몬스터 B2B 알림",
+        contents,
+        ...(opts?.url ? { url: opts.url } : {}), // format:url, max 2000 (문서 스펙)
+      }),
     });
     const text = await res.text().catch(() => "");
     let json: unknown = null;
