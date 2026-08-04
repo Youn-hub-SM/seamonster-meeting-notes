@@ -67,10 +67,12 @@ export async function POST(req: NextRequest) {
       .order("received_at", { ascending: true })
       .limit(MAX_CLAIMS);
     if (vocErr) throw vocErr;
+    // 아주 긴 내용만 자르되, 잘렸다는 표식을 남긴다 — 표식이 없으면 AI가 끊긴 문장을 그대로 인용한다.
+    const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) + " …(이하 생략)" : s);
     const claims = (vocData ?? []).map((r) => ({
       product: r.product || "", type: r.category,
-      content: String(r.content || "").slice(0, 300),
-      cause: r.cause ? String(r.cause).slice(0, 160) : undefined,
+      content: cut(String(r.content || ""), 600),
+      cause: r.cause ? cut(String(r.cause), 240) : undefined,
     }));
 
     // 2) 이달 설문 응답 (submitted_at 또는 created_at 기준)
@@ -98,12 +100,16 @@ export async function POST(req: NextRequest) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const resp = await anthropic.messages.create({
       model,
-      max_tokens: 4000,
+      max_tokens: 8000, // 데이터 많은 달에 4000 으로는 출력이 문장 중간에서 끊겼다
       system: buildSystem(y, mNum),
       messages: [{ role: "user", content: JSON.stringify({ claims, surveys }) }],
     });
     let draft = resp.content[0]?.type === "text" ? resp.content[0].text : "";
     draft = draft.replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/i, "").trim();
+    // 그래도 출력 한도에 걸려 끊겼으면 문서에 조용히 남기지 말고 표시 — 편집 칸에서 보고 지우거나 다시 생성
+    if (resp.stop_reason === "max_tokens") {
+      draft += "\n\n(주의: 내용이 길어 뒷부분이 잘렸습니다 — '다시 생성'을 누르거나, 이 문단을 지우고 직접 보완하세요)";
+    }
 
     return NextResponse.json({ ok: true, draft, counts: { claims: claims.length, surveys: surveys.length } });
   } catch (err) {

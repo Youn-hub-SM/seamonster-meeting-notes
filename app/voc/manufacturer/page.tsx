@@ -142,7 +142,8 @@ export default function VocManufacturerPage() {
     L.push("가. 제품별");
     for (const p of mfg.byProduct) L.push(`- ${p.product}: ${p.count}건 · ${won(p.claimable)}원 (${p.categories.map(([c, n]) => `${c} ${n}`).join(" · ")})`);
     L.push("나. 접수 상세");
-    for (const r of mfg.items) L.push(`- ${(r.received_at || "").slice(5)} ${r.product || "-"} · ${r.category} · ${won(r.loss_amount || 0)}원${r.content ? ` — ${String(r.content).slice(0, 60)}` : ""}`);
+    // 내용은 자르지 않는다 — 제조사에 보내는 문서라 문장이 중간에 끊기면 안 됨(줄바꿈만 공백으로)
+    for (const r of mfg.items) L.push(`- ${(r.received_at || "").slice(5)} ${r.product || "-"} · ${r.category} · ${won(r.loss_amount || 0)}원${r.content ? ` — ${String(r.content).replace(/\s*\n+\s*/g, " ")}` : ""}`);
     return L.join("\n");
   }, [showClaim, mfg]);
 
@@ -255,7 +256,7 @@ export default function VocManufacturerPage() {
                           <td style={{ ...cellTd, whiteSpace: "nowrap" }}>{(r.received_at || "").slice(5)}</td>
                           <td style={cellTd}>{r.product || "-"}</td>
                           <td style={{ ...cellTd, whiteSpace: "nowrap" }}>{r.category}</td>
-                          <td style={cellTd}>{String(r.content || "").slice(0, 120)}</td>
+                          <td style={cellTd}>{String(r.content || "")}</td>
                           <td style={{ ...cellTd, ...num }}>{won(r.loss_amount || 0)}</td>
                         </tr>
                       ))}
