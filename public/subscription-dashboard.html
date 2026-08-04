@@ -557,6 +557,14 @@
             <div class="hint">옵션 텍스트에 키워드가 포함된 행을 제외합니다. 그 결과 옵션이 0개가 된 신청건은 분석에서 빠집니다.</div>
           </div>
           <div class="filter-group">
+            <label>제외 기본값</label>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <button class="btn btn-sm" id="saveExcludeBtn">현재 제외값을 기본값으로 저장</button>
+              <span class="hint" id="excludeSaveStatus" style="margin:0"></span>
+            </div>
+            <div class="hint">저장하면 다음 방문부터(모든 사용자 공용) 위 두 칸이 이 값으로 시작합니다.</div>
+          </div>
+          <div class="filter-group">
             <label>신청일 기간</label>
             <div class="filter-date-row">
               <input type="date" id="fDateFrom">
@@ -2053,6 +2061,41 @@ async function deleteSnapshot(id) {
 document.getElementById("historyRefreshBtn").onclick = loadHistory;
 // 페이지 로드 시 히스토리 표시 (CSV 업로드 없이도)
 loadHistory();
+
+// =========================== 제외 기본값 (서버 저장, 전 사용자 공용) ===========================
+// 저장값이 있으면 필터 입력칸을 채운다. 이미 CSV 를 올린 상태라면 즉시 재적용.
+// 실패하면 HTML 하드코딩 기본값으로 조용히 진행(분석 자체는 서버 없이도 동작해야 하므로).
+(async function loadExcludeDefaults() {
+  try {
+    const res = await fetch("/api/subscription/settings", { cache: "no-store" });
+    const j = await res.json();
+    if (!res.ok || !j.ok || !j.saved) return;
+    if (typeof j.names === "string") document.getElementById("fExcludeNames").value = j.names;
+    if (typeof j.opts === "string") document.getElementById("fExcludeOpts").value = j.opts;
+    if (orders.length) applyFilters();
+  } catch (e) { /* 기본값으로 진행 */ }
+})();
+
+document.getElementById("saveExcludeBtn").onclick = async () => {
+  const el = document.getElementById("excludeSaveStatus");
+  el.textContent = "저장 중...";
+  try {
+    const res = await fetch("/api/subscription/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        names: document.getElementById("fExcludeNames").value,
+        opts: document.getElementById("fExcludeOpts").value,
+      }),
+    });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+    el.textContent = "저장됨 — 다음부터 이 값으로 시작합니다";
+    setTimeout(() => { el.textContent = ""; }, 5000);
+  } catch (e) {
+    el.textContent = "저장 실패: " + e.message;
+  }
+};
 
 // 분석 갱신 시 미리보기도 갱신 (render() 끝부분에서 호출)
 const _origRender = render;

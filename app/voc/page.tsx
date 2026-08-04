@@ -479,7 +479,11 @@ export default function VocPage() {
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">구매처</span>
-                  <input className="b2b-input" value={edit.purchase_place} onChange={(e) => setF("purchase_place", e.target.value)} placeholder="공식몰·쿠팡·네이버…" /></label>
+                  {/* 이미 등록된 VOC 의 구매처를 선택지로 — 표기가 흩어지지 않게(구매상품과 같은 콤보박스) */}
+                  <Combobox value={edit.purchase_place}
+                    options={placeOpts.map((p) => ({ id: p, label: p }))}
+                    onSelect={(o) => setF("purchase_place", o.label)} onType={(t) => setF("purchase_place", t)}
+                    allowFreeText placeholder="기존 구매처에서 선택 또는 직접 입력" ariaLabel="구매처" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">구매상품</span>
                   <Combobox value={edit.product}
                     options={products.map((p) => ({ id: p.id, label: p.name, sub: p.sku || p.spec || undefined }))}

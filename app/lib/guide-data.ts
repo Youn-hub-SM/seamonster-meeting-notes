@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-07-30";
+export const GUIDE_UPDATED = "2026-07-31";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -782,9 +782,13 @@ export const GUIDE: GuideCategory[] = [
             "what": "정기배송 현황·추세를 보는 대시보드",
             "steps": [
               "메뉴에서 '정기배송 분석'을 연다",
-              "화면 안 대시보드에서 지표를 확인한다"
+              "화면 안 대시보드에서 지표를 확인한다",
+              "분석에서 뺄 이름·옵션이 있으면 필터의 '제외할 신청자/수령자 이름'과 '제외할 옵션 키워드'를 고친다 (콤마로 구분)",
+              "계속 쓸 값이면 '현재 제외값을 기본값으로 저장'을 누른다 — 다음 방문부터 그 값으로 시작한다"
             ],
-            "tips": [],
+            "tips": [
+              "제외 기본값은 모든 사용자 공용이다 — 저장하면 다른 사람 화면의 시작값도 바뀐다"
+            ],
             "keywords": [
               "정기배송",
               "구독",
@@ -1544,6 +1548,7 @@ export const GUIDE: GuideCategory[] = [
             "steps": [
               "'+ VOC 추가'를 누른다",
               "접수일·클레임 유형·상세내용을 입력한다(보상유형을 고르면 손해금액이 자동 계산된다)",
+              "구매처·구매상품은 입력칸을 누르면 이미 등록된 값이 목록으로 떠서 선택하거나 직접 입력한다",
               "'저장'을 누른다",
               "여러 건은 '엑셀 양식'을 받아 채우고 '엑셀 업로드'를 누른다",
               "미리보기에서 건수를 확인하고 'N건 등록'을 누른다",
