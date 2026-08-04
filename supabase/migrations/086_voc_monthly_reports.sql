@@ -17,4 +17,6 @@ create table if not exists voc_monthly_reports (
 
 create index if not exists voc_monthly_reports_month_idx on voc_monthly_reports (month);
 
+alter table voc_monthly_reports enable row level security;  -- 서비스롤로만 접근(정책 없음) — 프로젝트 공통 관행
+
 notify pgrst, 'reload schema';
