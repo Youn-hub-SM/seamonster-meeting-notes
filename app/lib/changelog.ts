@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-07-31",
+    tag: "수정",
+    tool: "VOC",
+    title: "월간 VOC 리포트 — 'not valid JSON' 오류 수정",
+    desc: "데이터가 많은 달에 AI 초안 생성이 서버 제한시간(60초)을 넘기면 알 수 없는 파싱 오류(Unexpected token 'A'…)만 뜨던 문제를 고쳤습니다. 제한시간을 120초로 늘렸고, 그래도 실패하면 원인과 대처법(재시도·AI 모델 변경)을 읽을 수 있는 안내로 보여줍니다.",
+    href: "/voc/manufacturer",
+  },
+  {
+    date: "2026-07-31",
     tag: "개선",
     tool: "정기배송",
     title: "정기배송 분석 — 제외할 이름·옵션 키워드를 기본값으로 저장",

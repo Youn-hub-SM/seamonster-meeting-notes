@@ -4,9 +4,10 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getFeatureModel } from "@/app/lib/ai-model";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// 데이터가 많은 달은 AI 생성이 60초를 넘겨 플랫폼이 함수를 끊었다(클라이언트엔 JSON 아닌
+//  "An error occurred…" 텍스트가 내려가 파싱 오류로 보임) → 여유 있게 연장(120s 선례: sales/export).
+export const maxDuration = 120;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const MAX_CLAIMS = 300;
 const MAX_SURVEYS = 200;
@@ -92,6 +93,9 @@ export async function POST(req: NextRequest) {
     }
 
     const model = await getFeatureModel("voc");
+    // SDK 는 핸들러 안에서 생성 — 모듈 초기화에서 만들면 키 미설정 시 import 자체가 죽어
+    //  위의 친절한 400 응답 대신 플랫폼 오류 텍스트가 내려간다.
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const resp = await anthropic.messages.create({
       model,
       max_tokens: 4000,

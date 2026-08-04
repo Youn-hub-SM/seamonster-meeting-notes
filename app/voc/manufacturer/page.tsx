@@ -19,7 +19,12 @@ export default function VocManufacturerPage() {
     setLoading(true); setError(""); setCopied(false);
     try {
       const res = await fetch("/api/voc/manufacturer/digest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ month }) });
-      const j = await res.json();
+      // 함수가 시간 초과 등으로 끊기면 Vercel 이 JSON 아닌 텍스트("An error occurred…")를 내려보낸다
+      //  → 무조건 res.json() 하면 "Unexpected token 'A'…" 파싱 오류만 보였다. 텍스트로 받고 직접 판별.
+      const raw = await res.text();
+      let j: { ok?: boolean; draft?: string; counts?: { claims: number; surveys: number }; error?: string } | null = null;
+      try { j = JSON.parse(raw); } catch { /* 플랫폼 오류 텍스트 */ }
+      if (!j) throw new Error(`서버가 응답을 완성하지 못했습니다 (HTTP ${res.status}). 데이터가 많은 달은 AI 생성이 제한시간을 넘길 수 있어요 — 잠시 후 다시 시도하거나, 관리자 > 설정 > AI 설정에서 'VOC 인사이트' 모델을 빠른 모델로 바꿔보세요.`);
       if (!res.ok || !j.ok) throw new Error(j.error || "초안 생성 실패");
       setDraft(j.draft || "");
       setCounts(j.counts || null);
