@@ -129,8 +129,9 @@ export default function VocManufacturerPage() {
   }
 
   // ── 손해 청구 섹션 (개선요청서와 동일 기준: 제조사 귀책 · 설문 제외 · 해당 월) ──
+  //  제조사가 현재 한 곳뿐이라 제조사명 입력과 무관하게 항상 포함한다(이름은 수신 표기용).
   const mfg = useMemo(() => buildManufacturerReport(claims, month), [claims, month]);
-  const showClaim = !!recipient.trim() && !!draft;
+  const showClaim = !!draft;
 
   // Word 용 텍스트 섹션 — 초안과 같은 구조("숫자. / 가. / - 불릿")라 docx 변환기가 그대로 서식화한다.
   const claimText = useMemo(() => {
@@ -185,13 +186,13 @@ export default function VocManufacturerPage() {
         <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>대상 월
             <input className="b2b-input" type="month" value={month} max={THIS_MONTH()} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }} /></label>
-          <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="수신 제조사명 — 손해 청구 정리 포함" style={{ width: 220 }} />
+          <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="수신 제조사명 (선택 · 문서에 표기)" style={{ width: 220 }} />
           <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
           <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "AI 작성 중…" : draft ? "다시 생성" : "AI 초안 생성"}</button>
           {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건 · 설문 {counts.surveys}건 반영</span>}
           {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("저장 실패") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 클레임(VOC)·설문(Tally)을 긍정/부정·제품별로 정리합니다(리뷰 섹션 제외). 생성·편집하면 자동 저장되어 다시 열면 그대로 이어집니다. 제조사명을 넣으면 손해 청구(제조사 귀책) 정리가 문서 끝에 붙습니다.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 클레임(VOC)·설문(Tally)을 긍정/부정·제품별로 정리합니다(리뷰 섹션 제외). 생성·편집하면 자동 저장되어 다시 열면 그대로 이어집니다. 손해 청구(제조사 귀책) 정리가 문서 끝에 항상 붙고, 제조사명은 수신 표기에 쓰입니다.</p>
       </section>
 
       {/* 편집 (화면 전용) */}
