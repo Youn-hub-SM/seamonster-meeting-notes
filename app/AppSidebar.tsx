@@ -23,6 +23,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
+  const [role, setRole] = useState<string>("internal");
   // 고정 끄기(collapsed) 상태에서 마우스 오버 시 임시 펼침. 고정을 끄는 순간에도
   //  포인터가 안에 있으므로 바로 레일로 줄지 않고, 마우스가 떠날 때 접힌다.
   const [hovering, setHovering] = useState(false);
@@ -59,11 +60,14 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   useEffect(() => {
     fetch("/api/b2b/auth", { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => setUserName(j?.ok ? j.name || null : null))
+      .then((j) => { setUserName(j?.ok ? j.name || null : null); setRole(j?.ok ? j.role || "internal" : "internal"); })
       .catch(() => {});
   }, [pathname]);
 
   const isAdmin = userName === "현석" || userName === "관리자";
+  // 파도소리 계정은 /factory 만 접근 가능(미들웨어가 차단) — 사이드바도 그 툴만 남긴다.
+  //  숨김은 보안이 아니라 표시 문제다. 되돌아오는 죽은 링크를 안 보여주기 위한 것.
+  const isFactoryUser = role === "factory";
 
   // 즐겨찾기 항목 아이콘: href → 해당 툴(또는 상위 툴)의 실제 아이콘. (기존 대체)
   const iconForHref = useMemo(() => {
@@ -208,15 +212,18 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
       </div>
 
       <nav className="app-sb-nav">
-        <div className={`app-sb-tool-row ${pathname === "/" ? "is-active" : ""}`}>
-          <Link href="/" className="app-sb-tool" title={HOME.label} aria-label={HOME.label} onClick={onNavigate}>
-            <span className="app-sb-emoji"><Icon name={HOME.icon} /></span>
-            <span className="app-sb-tool-label">{HOME.label}</span>
-          </Link>
-        </div>
+        {/* 홈·즐겨찾기는 파도소리 계정에겐 전부 막힌 경로라 감춘다 */}
+        {!isFactoryUser && (
+          <div className={`app-sb-tool-row ${pathname === "/" ? "is-active" : ""}`}>
+            <Link href="/" className="app-sb-tool" title={HOME.label} aria-label={HOME.label} onClick={onNavigate}>
+              <span className="app-sb-emoji"><Icon name={HOME.icon} /></span>
+              <span className="app-sb-tool-label">{HOME.label}</span>
+            </Link>
+          </div>
+        )}
 
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
-        {!rail && userName && (
+        {!rail && userName && !isFactoryUser && (
           <div className="app-sb-group app-sb-fav">
             <div className="app-sb-cat" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button type="button" className="app-sb-cat-toggle" onClick={toggleFavOpen} aria-expanded={favOpen}>
@@ -257,7 +264,9 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
         {/* 카테고리 목록만 스크롤 — 브랜드·홈·즐겨찾기(위)와 로그아웃(아래)은 항상 보임 */}
         <div className="app-sb-scroll">
           {NAV.filter((cat) => !cat.adminOnly || isAdmin).map((cat) => {
-            const tools = cat.tools.filter((t) => !t.adminOnly || isAdmin);
+            const tools = cat.tools
+              .filter((t) => !t.adminOnly || isAdmin)
+              .filter((t) => !isFactoryUser || t.href.startsWith("/factory"));
             if (tools.length === 0) return null;
             return (
               <div key={cat.label} className="app-sb-group">

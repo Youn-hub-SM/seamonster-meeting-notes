@@ -38,6 +38,12 @@ export function isAdminName(name: string | null | undefined): boolean {
   return !!name && ADMINS.has(name);
 }
 
+// 계정 역할(migration 088). internal = 내부 계정(전 메뉴) / factory = 파도소리 계정(/factory 만).
+//  환경변수 계정(B2B_PASSWORD·B2B_USERS)은 항상 internal — 외부 계정은 DB(app_users)로만 만든다.
+export const APP_ROLES = ["internal", "factory"] as const;
+export type AppRole = (typeof APP_ROLES)[number];
+export type Session = { name: string; role: AppRole };
+
 // ── 서명 세션 토큰 ──────────────────────────────────────────────
 // DB 계정은 비밀번호가 환경변수에 없으므로, 로그인 시 이름을 서명한 토큰을 발급하고
 // 미들웨어는 서명만 검증한다(매 요청 DB 조회 회피). 시크릿 = B2B_PASSWORD(서버 전용).
@@ -56,20 +62,38 @@ async function hmac(msg: string): Promise<string> {
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(msg)));
   return b64url(sig);
 }
-// 토큰: "<urlencoded name>.<hmac(name)>"
-export async function signSession(name: string): Promise<string> {
-  return `${encodeURIComponent(name)}.${await hmac(name)}`;
+// 토큰: "<urlencoded payload>.<hmac(payload)>"
+//  payload = 이름(internal) 또는 "이름|역할"(그 외). internal 은 이름만 실어 **구버전 토큰과 같은 값**이 되므로
+//  이미 발급된 쿠키가 그대로 유효하다(역할 도입으로 전원 로그아웃되지 않는다).
+export async function signSession(name: string, role: AppRole = "internal"): Promise<string> {
+  const payload = role === "internal" ? name : `${name}|${role}`;
+  return `${encodeURIComponent(payload)}.${await hmac(payload)}`;
 }
-export async function verifySession(token: string | undefined | null): Promise<string | null> {
+
+// 서명 검증 후 이름·역할까지. 미들웨어처럼 역할이 필요한 곳에서 쓴다.
+export async function verifySessionFull(token: string | undefined | null): Promise<Session | null> {
   if (!token) return null;
   const i = token.lastIndexOf(".");
   if (i <= 0) return null;
-  let name: string;
-  try { name = decodeURIComponent(token.slice(0, i)); } catch { return null; }
+  let payload: string;
+  try { payload = decodeURIComponent(token.slice(0, i)); } catch { return null; }
   const sig = token.slice(i + 1);
-  const expect = await hmac(name);
+  const expect = await hmac(payload);
   if (sig.length !== expect.length) return null;
   let diff = 0;
   for (let k = 0; k < sig.length; k++) diff |= sig.charCodeAt(k) ^ expect.charCodeAt(k);
-  return diff === 0 ? name : null;
+  if (diff !== 0) return null;
+
+  // 역할 분리는 '알려진 역할 이름'일 때만 — 이름에 '|' 가 들어가도 오인하지 않는다.
+  const bar = payload.lastIndexOf("|");
+  if (bar > 0) {
+    const tail = payload.slice(bar + 1);
+    if ((APP_ROLES as readonly string[]).includes(tail)) return { name: payload.slice(0, bar), role: tail as AppRole };
+  }
+  return { name: payload, role: "internal" };
+}
+
+// 기존 호출부(18곳) 호환 — 이름만 돌려준다.
+export async function verifySession(token: string | undefined | null): Promise<string | null> {
+  return (await verifySessionFull(token))?.name ?? null;
 }

@@ -60,6 +60,15 @@ git add app/sales/page.tsx app/api/sales/upload/route.ts   # 경로를 손으로
 
 > **DB 구조를 바꾸는 세션은 항상 하나만.** 채번 전 `ls supabase/migrations/ | tail -3` 로 확인하고, 만들었으면 즉시 공유.
 
+**번호열이 둘이다.** `supabase/migrations/NNN_*.sql`(본체) 와 `supabase/migrations/factory/NNN_*.sql`(파도소리) 는
+각자 001 부터 센다. 같은 DB 에 적용되므로 규칙이 하나 붙는다:
+
+> **factory 번호열은 `factory` 스키마 밖(public)을 만들거나 바꾸지 않는다.**
+> public 을 건드려야 하면 본 번호열에 둔다(예: `088_app_users_role.sql` 은 파도소리 기능이지만 public 이라 본체에 있다).
+
+어기면 두 번호열의 적용 순서에 결과가 좌우되는데, 그걸 잡아줄 장치가 없다.
+factory 스키마는 Supabase Dashboard > Settings > API > **Exposed schemas 에 `factory` 가 등록돼야** PostgREST 로 읽힌다.
+
 ### (b) 공용 파일 수정
 
 내 기능만 고치는 것처럼 보이지만 전 서비스가 쓰는 파일:

@@ -23,15 +23,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { name, password } — 계정 추가. 관리자만.
+// POST { name, password, role? } — 계정 추가. 관리자만.
 export async function POST(req: NextRequest) {
   try {
     const admin = await adminName(req);
     if (!admin) return NextResponse.json({ ok: false, error: "관리자만 접근할 수 있습니다." }, { status: 403 });
-    const { name, password } = (await req.json()) as { name?: string; password?: string };
+    const { name, password, role } = (await req.json()) as { name?: string; password?: string; role?: string };
     if (!name?.trim() || !password?.trim()) return NextResponse.json({ ok: false, error: "이름과 비밀번호를 입력하세요." }, { status: 400 });
     if (getB2BUsers().some((u) => u.name === name.trim())) return NextResponse.json({ ok: false, error: "환경변수에 이미 있는 이름입니다." }, { status: 400 });
-    await addUser(name, password, admin);
+    await addUser(name, password, admin, role === "factory" ? "factory" : "internal");
     return NextResponse.json({ ok: true });
   } catch (err) {
     const msg = extractErrorMsg(err, "추가 실패");

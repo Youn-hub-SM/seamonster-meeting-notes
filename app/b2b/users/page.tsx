@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type AppUser = { id: string; name: string; active: boolean; created_at: string };
+type AppRole = "internal" | "factory";
+type AppUser = { id: string; name: string; active: boolean; role: AppRole; created_at: string };
+
+const ROLE_LABEL: Record<AppRole, string> = { internal: "내부", factory: "파도소리" };
 
 export default function UsersPage() {
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -11,6 +14,7 @@ export default function UsersPage() {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<AppRole>("internal");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -29,10 +33,10 @@ export default function UsersPage() {
     if (!name.trim() || !password.trim()) { setError("이름과 비밀번호를 입력하세요."); return; }
     setSaving(true); setError("");
     try {
-      const res = await fetch("/api/b2b/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, password }) });
+      const res = await fetch("/api/b2b/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, password, role }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "추가 실패");
-      setName(""); setPassword(""); await load();
+      setName(""); setPassword(""); setRole("internal"); await load();
     } catch (e) { setError(e instanceof Error ? e.message : "추가 실패"); }
     setSaving(false);
   }
@@ -62,9 +66,13 @@ export default function UsersPage() {
         <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
           <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름(예: 민수)" style={{ flex: 1, minWidth: 160 }} />
           <input className="b2b-input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호(서로 달라야 함)" style={{ flex: 1, minWidth: 160 }} />
+          <select className="b2b-input" value={role} onChange={(e) => setRole(e.target.value as AppRole)} style={{ minWidth: 120 }}>
+            <option value="internal">내부</option>
+            <option value="factory">파도소리</option>
+          </select>
           <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중…" : "추가"}</button>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호 자체가 신원이라 사람마다 서로 다른 값으로 정하세요.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호 자체가 신원이라 사람마다 서로 다른 값으로 정하세요. 파도소리 계정은 입출고 화면만 열립니다.</p>
       </section>
 
       <section className="b2b-card" style={{ marginTop: 14 }}>
@@ -80,7 +88,7 @@ export default function UsersPage() {
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td>{u.name}</td>
-                    <td className="sm-faint">추가됨</td>
+                    <td className="sm-faint">{ROLE_LABEL[u.role] || "내부"}</td>
                     <td>
                       <button className="b2b-status-pill" onClick={() => toggle(u)} style={{ cursor: "pointer", border: "none", fontFamily: "inherit", background: u.active ? "var(--sm-success-bg)" : "var(--sm-bg-subtle)", color: u.active ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{u.active ? "활성" : "비활성"}</button>
                     </td>

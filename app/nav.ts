@@ -87,6 +87,8 @@ export const NAV: NavCategory[] = [
       { href: "/inventory/stats", label: "통계", icon: "bars" },
       { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
       { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
+      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
+      { href: "/factory", label: "파도소리 재고", icon: "factory" },
     ],
   },
   {

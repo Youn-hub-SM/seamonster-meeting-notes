@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getB2BUsers, resolveUserName, signSession, verifySession } from "@/app/lib/b2b-auth";
+import { getB2BUsers, resolveUserName, signSession, verifySessionFull, type AppRole } from "@/app/lib/b2b-auth";
 import { getActiveDbUsers } from "@/app/lib/app-users";
 
 export const dynamic = "force-dynamic";
@@ -16,16 +16,18 @@ export async function POST(req: NextRequest) {
     if (envUsers.length === 0) {
       return NextResponse.json({ ok: false, error: "서버에 B2B_PASSWORD 가 설정되어 있지 않습니다." }, { status: 503 });
     }
+    // 환경변수 계정은 항상 internal. 역할(파도소리)은 DB 계정에만 있다.
     let name = envUsers.find((u) => u.password === password)?.name || null;
+    let role: AppRole = "internal";
     if (!name && password) {
-      const dbUsers = await getActiveDbUsers();
-      name = dbUsers.find((u) => u.password === password)?.name || null;
+      const hit = (await getActiveDbUsers()).find((u) => u.password === password);
+      if (hit) { name = hit.name; role = hit.role; }
     }
     if (!name) {
       return NextResponse.json({ ok: false, error: "비밀번호가 틀렸습니다." }, { status: 401 });
     }
-    const token = await signSession(name);
-    const res = NextResponse.json({ ok: true, name });
+    const token = await signSession(name, role);
+    const res = NextResponse.json({ ok: true, name, role });
     res.cookies.set(COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -40,14 +42,15 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET: 현재 로그인 사용자 이름 (서명 토큰 우선, 구버전 비밀번호 쿠키 호환)
+// GET: 현재 로그인 사용자 이름·역할 (서명 토큰 우선, 구버전 비밀번호 쿠키 호환)
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(COOKIE)?.value;
-  const name = (await verifySession(token)) || resolveUserName(token);
+  const sess = await verifySessionFull(token);
+  const name = sess?.name || resolveUserName(token); // 구버전 쿠키는 환경변수 계정 = internal
   if (!name) {
     return NextResponse.json({ ok: false, error: "인증이 필요합니다." }, { status: 401 });
   }
-  return NextResponse.json({ ok: true, name });
+  return NextResponse.json({ ok: true, name, role: sess?.role || "internal" });
 }
 
 // DELETE: 로그아웃

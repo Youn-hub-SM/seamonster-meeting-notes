@@ -1,0 +1,89 @@
+/* 파도소리(제조사) 전용 셸 — /factory 하위에서만 로드된다.
+   씨몬스터 셸(AppShell)과 분리된 별도 사이트처럼 보이게 하는 스코프다.
+
+   색: 파도소리 브랜드 = 파랑, 흰 배경.
+   공용 컴포넌트(.b2b-*, .sm-*)는 강조색을 전부 --sm-orange 계열 토큰으로 참조하므로
+   이 스코프에서 토큰 값만 파랑으로 덮으면 안의 버튼·탭·링크가 전부 따라온다.
+   컴포넌트 CSS(globals/b2b.css)는 건드리지 않는다 — 씨몬스터 화면 영향 0. */
+
+.fac-theme {
+  --fac-blue: #2F6BF2;
+  --fac-blue-hover: #1E56D6;
+  --sm-orange: var(--fac-blue);
+  --sm-orange-hover: var(--fac-blue-hover);
+  --sm-orange-light: rgba(47, 107, 242, .07);
+  --sm-orange-border: rgba(47, 107, 242, .16);
+  --sm-bg: #FFFFFF;            /* 페이지 배경 — 씨몬스터의 웜그레이 대신 흰색 */
+  --sm-bg-warm: #F3F7FF;       /* 웜베이지 대신 옅은 파랑 */
+}
+
+/* ── 셸 골격: 좌측 고정 사이드바 + 본문 ─────────────────────────── */
+.fac-shell { display: flex; min-height: 100dvh; background: #fff; }
+
+.fac-sb {
+  width: 208px; flex: 0 0 208px;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 18px 12px 14px;
+  border-right: 1px solid var(--sm-border);
+  position: sticky; top: 0; height: 100dvh; overflow-y: auto;
+  background: #fff;
+}
+.fac-brand {
+  display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.3px;
+  color: var(--fac-blue); padding: 2px 10px 14px; text-decoration: none;
+}
+.fac-brand small { display: block; font-size: 11px; font-weight: 600; color: var(--sm-text-light); margin-top: 2px; }
+
+.fac-nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 10px; border-radius: 8px;
+  font-size: 14px; font-weight: 600; color: var(--sm-text-mid);
+  text-decoration: none; white-space: nowrap;
+}
+.fac-nav-item:hover { background: var(--sm-bg-subtle); }
+.fac-nav-item.is-active { background: var(--sm-orange-light); color: var(--fac-blue); }
+.fac-nav-item svg { flex: 0 0 auto; }
+
+.fac-sb-foot {
+  margin-top: auto; padding: 10px 10px 0; border-top: 1px solid var(--sm-border-light);
+  display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--sm-text-mid);
+}
+.fac-sb-user { font-weight: 700; color: var(--sm-dark); }
+.fac-sb-foot button, .fac-sb-foot a {
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--sm-text-light); text-align: left; text-decoration: none;
+}
+.fac-sb-foot button:hover, .fac-sb-foot a:hover { color: var(--fac-blue); }
+
+.fac-main { flex: 1; min-width: 0; background: #fff; }
+
+/* 모바일: 사이드바를 상단 가로 바로 접는다 */
+@media (max-width: 768px) {
+  .fac-shell { flex-direction: column; }
+  .fac-sb {
+    width: 100%; flex: none; height: auto; position: static;
+    flex-direction: row; align-items: center; gap: 2px;
+    padding: 10px 12px; border-right: none; border-bottom: 1px solid var(--sm-border);
+    overflow-x: auto;
+  }
+  .fac-brand { padding: 0 10px 0 0; }
+  .fac-brand small { display: none; }
+  .fac-nav-item { padding: 7px 10px; }
+  .fac-sb-foot { margin: 0 0 0 auto; padding: 0 0 0 10px; border-top: none; flex-direction: row; align-items: center; gap: 10px; white-space: nowrap; }
+}
+
+/* ── 로그인 화면(셸 없음) ───────────────────────────────────────── */
+.fac-login {
+  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: #fff;
+}
+.fac-login-card {
+  width: 100%; max-width: 360px; background: #fff;
+  border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card);
+  padding: 26px 24px; box-shadow: var(--sm-shadow-float);
+}
+.fac-login-title {
+  font-size: 22px; font-weight: 800; letter-spacing: -0.3px;
+  color: var(--fac-blue); margin: 0 0 4px; text-align: center;
+}
+.fac-login-sub { font-size: 12.5px; color: var(--sm-text-light); text-align: center; margin: 0 0 20px; }

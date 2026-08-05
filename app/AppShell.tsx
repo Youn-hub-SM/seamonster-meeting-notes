@@ -35,6 +35,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // 로그인 페이지는 사이드바 없이 전체 화면
   if (pathname === "/b2b/login") return <>{children}</>;
+  // 파도소리(/factory)는 별도 사이트처럼 자체 셸을 쓴다 — app/factory/layout.tsx
+  if (pathname.startsWith("/factory")) return <>{children}</>;
 
   const isCollapsed = collapsed && desktop;
 

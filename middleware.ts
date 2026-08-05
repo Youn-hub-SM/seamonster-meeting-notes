@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getB2BUsers, resolveUserName, verifySession } from "@/app/lib/b2b-auth";
+import { getB2BUsers, resolveUserName, verifySessionFull } from "@/app/lib/b2b-auth";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
+
+// 파도소리(제조사) 계정에 열어줄 경로. 로그인·로그아웃은 열려 있어야 로그인 자체가 된다.
+function isFactoryPath(p: string): boolean {
+  return p === "/factory" || p.startsWith("/factory/") || p.startsWith("/api/factory")
+    || p === "/b2b/login" || p === "/api/b2b/auth";
+}
 
 // /b2b 와 /api/b2b 전체를 비밀번호로 보호.
 // 사용자별 비밀번호(B2B_USERS) + 관리자 비밀번호(B2B_PASSWORD) — 비밀번호로 사용자를 구분.
@@ -14,8 +20,10 @@ export async function middleware(req: NextRequest) {
 
   // 브랜드링크/QR 전용 호스트(link.seamonster.kr): 루트의 단일 경로를 숏링크로 매핑 → /캠페인명 을 /q/캠페인명 으로 내부 리라이트.
   //  기본값 link.seamonster.kr, SHORT_LINK_HOST 환경변수로 재정의 가능. 관리툴 도메인은 host 가 달라 이 블록을 타지 않음.
+  const host = (req.headers.get("host") || "").toLowerCase();
+
   const shortHost = (process.env.SHORT_LINK_HOST || "link.seamonster.kr").toLowerCase();
-  if (shortHost && (req.headers.get("host") || "").toLowerCase() === shortHost) {
+  if (shortHost && host === shortHost) {
     if (pathname.startsWith("/q/")) return NextResponse.next();       // 이미 정규 경로(공개)
     if (/^\/[^/]+$/.test(pathname)) {                                  // 단일 세그먼트 = 숏코드
       const url = req.nextUrl.clone();
@@ -28,8 +36,19 @@ export async function middleware(req: NextRequest) {
     );
   }
 
+  // 파도소리 전용 도메인(선택). FACTORY_HOST 를 설정하면 그 호스트는 /factory 만 서비스한다.
+  //  모르는 호스트(베타 배포 URL·localhost)는 내부로 취급한다 — 접근 통제는 아래 역할 검사가 담당하고
+  //  이 분기는 주소 안내와 1차 필터다. 도메인을 붙이기 전에는 FACTORY_HOST 를 비워두면 된다.
+  const factoryHost = (process.env.FACTORY_HOST || "").toLowerCase();
+  if (factoryHost && host === factoryHost && !isFactoryPath(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/factory";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
   // 로그인 페이지·로그인 API + Tally 웹훅 + QR 숏링크(/q/*) + 아침 다이제스트 크론(자체 CRON_SECRET/관리자 검증) 은 보호 제외
-  if (pathname === "/b2b/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname === "/api/b2b/schedule-digest" || pathname.startsWith("/q/")) {
+  if (pathname === "/b2b/login" || pathname === "/factory/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname === "/api/b2b/schedule-digest" || pathname.startsWith("/q/")) {
     return NextResponse.next();
   }
 
@@ -53,8 +72,18 @@ export async function middleware(req: NextRequest) {
 
   // 서명 세션 토큰(신버전, DB 계정 포함) 또는 구버전 비밀번호 쿠키(환경변수 계정) 둘 다 허용
   const token = req.cookies.get("b2b_auth")?.value;
-  const authed = (await verifySession(token)) || resolveUserName(token);
+  const sess = await verifySessionFull(token);
+  const authed = sess?.name || resolveUserName(token); // 구버전 쿠키 = 환경변수 계정 = internal
   if (token && authed) {
+    // 파도소리 계정은 /factory 밖으로 나가지 못한다. 메뉴 숨김이 아니라 경로 차단이라
+    // API 를 직접 불러도 막힌다(사이드바에서 안 보이는 것과 다르다).
+    if (sess?.role === "factory" && !isFactoryPath(pathname)) {
+      if (isApi) return NextResponse.json({ ok: false, error: "접근 권한이 없습니다." }, { status: 403 });
+      const url = req.nextUrl.clone();
+      url.pathname = "/factory";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
     // 슬라이딩 세션: 인증된 요청마다 쿠키 만료를 30일 뒤로 재발급.
     // iOS 사파리(ITP)는 쿠키 지속 정책이 빡빡해 고정 만료면 쉽게 풀림 —
     // 방문(페이지 이동)·API 호출마다 다시 발급해 계속 쓰는 동안 안 풀리게 함.
@@ -75,9 +104,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "인증이 필요합니다." }, { status: 401 });
   }
 
+  // 파도소리 화면(/factory·전용 호스트)은 파도소리 로그인으로 — 씨몬스터 로그인 화면을 보여주지 않는다.
   const url = req.nextUrl.clone();
-  url.pathname = "/b2b/login";
-  if (pathname !== "/b2b") url.searchParams.set("redirect", pathname + (req.nextUrl.search || ""));
+  const toFactory = pathname.startsWith("/factory") || (!!factoryHost && host === factoryHost);
+  url.pathname = toFactory ? "/factory/login" : "/b2b/login";
+  url.search = "";
+  if (toFactory) {
+    if (pathname !== "/factory") url.searchParams.set("redirect", pathname + (req.nextUrl.search || ""));
+  } else if (pathname !== "/b2b") {
+    url.searchParams.set("redirect", pathname + (req.nextUrl.search || ""));
+  }
   return NextResponse.redirect(url);
 }
 
