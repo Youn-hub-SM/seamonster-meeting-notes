@@ -308,10 +308,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     // 발주를 발송완료로 바꾸면 미발송 발송 일정도 발송완료로 동기화
     // (캘린더·주간뷰가 일정 상태를 표시하므로 어긋나면 영구 '발송대기'로 보임)
+    //  송장번호도 함께 내려준다 — 차수가 '발송완료인데 송장 없음' 으로 남으면 이후 그 차수를 건드리는
+    //  요청(예: 발송요청 양식의 박스 수 저장)이 송장 검증에 걸려 막힌다.
     if (body.status === "발송완료") {
+      const shipPatch: Record<string, unknown> = { status: "발송완료", shipped_at: new Date().toISOString() };
+      const orderTracking = (patch.tracking_no as string | null) ?? (prev?.tracking_no ?? null);
+      if (orderTracking) shipPatch.tracking_no = orderTracking;
       await sb
         .from("shipments")
-        .update({ status: "발송완료", shipped_at: new Date().toISOString() })
+        .update(shipPatch)
         .eq("order_id", id)
         .eq("status", "발송대기");
     }

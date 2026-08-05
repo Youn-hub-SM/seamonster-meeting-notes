@@ -35,7 +35,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     // 박스 수만큼 송장번호 필요 (콤마 구분, 박스당 1개)
     //  '직접배송' 마커면 송장번호 검증 생략 (택배 아닌 직접 전달)
-    if (newStatus === "발송완료" && trackingNo.trim() !== "직접배송") {
+    //  이미 발송완료인 차수에 박스 수만 저장하는 요청까지 막으면 안 된다 — 상태·송장을 실제로
+    //  건드리는 요청에서만 검증한다(발주 단위로 발송완료 처리하면 송장이 orders 에만 남아
+    //  차수의 tracking_no 가 비어 있을 수 있고, 그러면 양식 다운로드가 영구히 막힌다).
+    const touchesShipping = body.status !== undefined || body.tracking_no !== undefined;
+    if (touchesShipping && newStatus === "발송완료" && trackingNo.trim() !== "직접배송") {
       const boxCount = Math.max(1, Number(ship.box_count) || 1);
       const parts = trackingNo.split(",").map((s: string) => s.trim()).filter(Boolean);
       if (parts.length === 0) {
@@ -57,14 +61,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (body.tracking_no !== undefined) patch.tracking_no = (body.tracking_no || "").trim() || null;
     // 실제 포장 박스 수 확정(발송요청 양식에서 입력) — 송장 출력 행 수·송장 입력칸 수·이익률 배송비가 이 값을 따른다.
     if (body.box_count !== undefined) patch.box_count = Math.max(1, Math.floor(Number(body.box_count) || 1));
-    patch.shipped_at = newStatus === "발송완료" ? new Date().toISOString() : null;
+    // 발송 시각은 상태를 실제로 건드릴 때만 손댄다 — 박스 수만 저장하는 요청이 이미 찍힌 발송 시각을
+    //  현재 시각으로 밀거나(재다운로드 때마다) 지워 버리면 안 된다.
+    if (touchesShipping) patch.shipped_at = newStatus === "발송완료" ? new Date().toISOString() : null;
 
     const { error: upErr } = await sb.from("shipments").update(patch).eq("id", id);
     if (upErr) throw upErr;
 
     // 박스 수가 바뀌면 발주 헤더(orders.box_count)도 차수 합으로 다시 맞춘다 — 이익률·발주 단위 송장칸이 이걸 읽는다.
     //  취소 차수는 빼고 센다 — 안 보낸 박스까지 세면 부분 취소 발주의 배송비가 과대 계산된다.
-    if (body.box_count !== undefined) {
+    //  상태 변경(취소↔복구)도 합계를 바꾸므로 같이 재동기화한다. 안 그러면 취소한 박스가 계속 배송비로 남는다.
+    if (body.box_count !== undefined || newStatus !== ship.status) {
       const { data: all } = await sb.from("shipments").select("box_count, status").eq("order_id", ship.order_id);
       const total = (all ?? [])
         .filter((s) => (s as { status: string | null }).status !== "취소")

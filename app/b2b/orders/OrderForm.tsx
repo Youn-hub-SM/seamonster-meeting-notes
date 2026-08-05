@@ -249,14 +249,17 @@ export default function OrderForm({
   const isMultiShipment = realScheduleCount >= 2;
 
   // 박스 수: 발송 차수가 있으면 차수 박스 수의 합(자동), 없으면 발주에 직접 입력한 값.
+  //  취소 차수는 뺀다 — 서버가 저장하는 합(saveOrderShipments 의 totalBoxes)과 같은 규칙이라야
+  //  이 화면의 이익률이 저장 후 값과 어긋나지 않는다.
   const scheduleBoxSum = useMemo(
     () =>
       data.shipments
-        .filter((s) => s.ship_date || s.items.some((i) => Number(i.qty) > 0))
+        .filter((s) => (s.ship_date || s.items.some((i) => Number(i.qty) > 0)) && s.status !== "취소")
         .reduce((sum, s) => sum + Math.max(1, Math.floor(Number(s.box_count) || 1)), 0),
     [data.shipments]
   );
-  const effectiveBoxCount = realScheduleCount > 0 ? scheduleBoxSum : Math.max(1, Number(data.box_count) || 1);
+  //  전 차수 취소면 합이 0 이 되므로 1 로 받친다 — 0 이면 배송비 계산이 박스당 부피에서 나눗셈이 깨진다.
+  const effectiveBoxCount = realScheduleCount > 0 ? Math.max(1, scheduleBoxSum) : Math.max(1, Number(data.box_count) || 1);
 
   // 발주 단위 이익률 (배송 박스 비용 포함)
   const currentMonth = useMemo(() => new Date().getMonth() + 1, []);

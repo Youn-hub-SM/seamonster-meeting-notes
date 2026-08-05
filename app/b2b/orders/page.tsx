@@ -72,7 +72,12 @@ export default function OrdersListPage() {
   const [trackingInput, setTrackingInput] = useState<string[]>([""]);
   // 발송일 등록 창 — 차수(발송예정일 + 박스 수)를 여기서만 만든다. 발주 등록 폼에는 발송 일정이 없다.
   const [shipPrompt, setShipPrompt] = useState<{ id: string; label: string } | null>(null);
-  const [shipRows, setShipRows] = useState<{ ship_date: string; box_count: string; items: Record<number, string> }[]>([]);
+  //  status·tracking_no·stock_out 은 이 창에서 고치지 않지만 반드시 함께 실어 왕복시킨다 —
+  //  저장이 차수를 통째로 지우고 다시 넣는 방식이라(saveOrderShipments), 안 실으면 송장번호가 사라지고
+  //  발송완료가 발송대기로 되돌아간다.
+  const [shipRows, setShipRows] = useState<
+    { ship_date: string; box_count: string; status: ShipmentStatus; tracking_no: string; stock_out: boolean; items: Record<number, string> }[]
+  >([]);
   const [shipItems, setShipItems] = useState<{ id: string; product_name: string; spec: string | null; qty: number }[]>([]);
   const [shipSaving, setShipSaving] = useState(false);
   const [shipLoading, setShipLoading] = useState(false);
@@ -291,16 +296,27 @@ export default function OrdersListPage() {
       const j = await (await fetch(`/api/b2b/orders/${id}/shipments`, { cache: "no-store" })).json();
       const items = (j?.ok ? j.items : []) as typeof shipItems;
       setShipItems(items || []);
-      type Sch = { ship_date: string; box_count: number; items: { order_item_index: number; qty: number }[] };
+      type Sch = {
+        ship_date: string; box_count: number; status?: ShipmentStatus; tracking_no?: string; stock_out?: boolean;
+        items: { order_item_index: number; qty: number }[];
+      };
       const rows = ((j?.ok ? j.schedules : []) as Sch[] | undefined)?.map((s) => ({
         ship_date: s.ship_date || "",
         box_count: String(Math.max(1, Number(s.box_count) || 1)),
+        status: (s.status || "발송대기") as ShipmentStatus,
+        tracking_no: s.tracking_no || "",
+        stock_out: s.stock_out !== false,
         items: Object.fromEntries((s.items || []).map((x) => [x.order_item_index, String(x.qty)])),
       }));
       // 새로 만드는 첫 차수는 발주 전량을 미리 담아 둔다(그대로 저장하면 단일 발송).
-      const blank = { ship_date: "", box_count: "1", items: Object.fromEntries((items || []).map((it, i) => [i, String(it.qty)])) };
+      const blank = {
+        ship_date: "", box_count: "1", status: "발송대기" as ShipmentStatus, tracking_no: "", stock_out: true,
+        items: Object.fromEntries((items || []).map((it, i) => [i, String(it.qty)])),
+      };
       setShipRows(rows?.length ? rows : [blank]);
-    } catch { setShipRows([{ ship_date: "", box_count: "1", items: {} }]); }
+    } catch {
+      setShipRows([{ ship_date: "", box_count: "1", status: "발송대기", tracking_no: "", stock_out: true, items: {} }]);
+    }
     setShipLoading(false);
   }
 
@@ -322,10 +338,10 @@ export default function OrdersListPage() {
       .filter((r) => r.ship_date)
       .map((r) => ({
         ship_date: r.ship_date,
-        status: "발송대기" as const,
-        tracking_no: "",
+        status: r.status,
+        tracking_no: r.tracking_no,
         box_count: Math.max(1, Math.floor(Number(r.box_count) || 1)),
-        stock_out: true,
+        stock_out: r.stock_out,
         items: Object.entries(r.items)
           .map(([k, v]) => ({ order_item_index: Number(k), qty: Number(v) || 0 }))
           .filter((x) => x.qty > 0),
@@ -1244,7 +1260,17 @@ export default function OrdersListPage() {
                     <div key={i} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 12 }}>
                       <div className="sm-row" style={{ gap: 8, alignItems: "flex-end" }}>
                       <label className="b2b-field" style={{ flex: 1, minWidth: 0 }}>
-                        <span className="b2b-field-label">{shipRows.length > 1 ? `${i + 1}차 발송예정일` : "발송예정일"}</span>
+                        <span className="b2b-field-label">
+                          {shipRows.length > 1 ? `${i + 1}차 발송예정일` : "발송예정일"}
+                          {/* 이미 처리된 차수를 건드리는 중임을 알린다 — 상태·송장번호는 그대로 보존된다 */}
+                          {r.status !== "발송대기" && (
+                            <span className="b2b-status-pill" style={{
+                              marginLeft: 6,
+                              background: SHIPMENT_STATUS_COLORS[r.status]?.bg,
+                              color: SHIPMENT_STATUS_COLORS[r.status]?.fg,
+                            }}>{r.status}</span>
+                          )}
+                        </span>
                         <input type="date" className="b2b-input" value={r.ship_date}
                           onChange={(e) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, ship_date: e.target.value } : x)))} />
                       </label>
@@ -1280,7 +1306,7 @@ export default function OrdersListPage() {
                   )}
                   <div>
                     <button type="button" className="b2b-btn-secondary"
-                      onClick={() => setShipRows((p) => [...p, { ship_date: "", box_count: "1", items: {} }])}>+ 발송 일정 추가</button>
+                      onClick={() => setShipRows((p) => [...p, { ship_date: "", box_count: "1", status: "발송대기", tracking_no: "", stock_out: true, items: {} }])}>+ 발송 일정 추가</button>
                   </div>
                 </div>
               )}
