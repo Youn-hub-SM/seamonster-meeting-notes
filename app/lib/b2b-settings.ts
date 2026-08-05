@@ -19,6 +19,7 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
   "payment.added": true,
   "order.deleted": true,
   "order.status_changed": [...ORDER_STATUSES],
+  "shipment.scheduled": true,
   "shipment.status_changed": [...ORDER_STATUSES],
   "order.payment_status_changed": [...PAYMENT_STATUSES],
   "order.tax_invoice_changed": [...TAX_INVOICE_STATUSES],
@@ -43,6 +44,7 @@ export const NOTIFY_EVENTS: {
 }[] = [
   { key: "order.created", label: "발주 등록", desc: "새 발주가 등록될 때", kind: "toggle" },
   { key: "order.status_changed", label: "발주 상태 변경", desc: "선택한 상태로 바뀔 때만 알림", kind: "status", statuses: ORDER_STATUSES },
+  { key: "shipment.scheduled", label: "발송일정 등록", desc: "[+ 발송일]로 발송예정일을 새로 잡거나 바꿀 때", kind: "toggle" },
   { key: "shipment.status_changed", label: "발송 차수 상태 변경", desc: "분할 발송(차수)이 선택한 상태로 바뀔 때만", kind: "status", statuses: ORDER_STATUSES },
   { key: "order.payment_status_changed", label: "입금 상태 변경", desc: "선택한 입금 상태로 바뀔 때만", kind: "status", statuses: PAYMENT_STATUSES },
   { key: "order.tax_invoice_changed", label: "세금계산서 상태 변경", desc: "선택한 상태로 바뀔 때만", kind: "status", statuses: TAX_INVOICE_STATUSES },

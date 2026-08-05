@@ -402,6 +402,35 @@ export async function logOrderTaxInvoiceChanged(orderId: string, fromStatus: str
   });
 }
 
+// 2026-08-10 → 8/10. 알림 한 줄에 여러 차수를 담아야 해서 짧게 쓴다.
+function fmtShipDates(dates: string[]): string {
+  if (dates.length === 0) return "없음";
+  return dates
+    .map((d) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+      return m ? `${Number(m[2])}/${Number(m[3])}` : d;
+    })
+    .join(", ");
+}
+
+// 발송 일정(발송예정일) 등록·변경 — 발주 목록의 '+ 발송일' 창에서 저장할 때.
+//  날짜가 실제로 달라졌을 때만 호출한다(비교는 호출 측에서). 취소 차수는 제외한 날짜만 넘긴다.
+export async function logShipmentScheduled(orderId: string, before: string[], after: string[]): Promise<void> {
+  const o = await loadOrderSummary(orderId);
+  if (!o) return;
+  const isNew = before.length === 0;
+  const split = after.length >= 2 ? ` · ${after.length}차 분할` : "";
+  await recordActivity({
+    event_type: "shipment.scheduled",
+    summary:
+      `${isNew ? "발송일정 등록" : "발송일정 변경"} · ${o.company_name} · ${o.order_no}${split} · ` +
+      (isNew ? fmtShipDates(after) : `${fmtShipDates(before)} → ${fmtShipDates(after)}`),
+    order_id: o.id,
+    order_no: o.order_no,
+    meta: { before, after },
+  });
+}
+
 // 발송 차수(하위 발주) 상태 변경
 export async function logShipmentStatusChanged(orderId: string, seq: number, fromStatus: string, toStatus: string): Promise<void> {
   if (fromStatus === toStatus) return;

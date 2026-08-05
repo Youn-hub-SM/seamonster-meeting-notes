@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { saveOrderShipments, type SavedOrderItem } from "@/app/lib/b2b-shipments";
 import type { ShipmentScheduleInput, RecipientInput } from "@/app/lib/b2b-orders";
+import { logShipmentScheduled } from "@/app/lib/b2b-activity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,16 +75,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const sb = supabaseAdmin();
 
     // 배송정보는 기존 차수(또는 배송정보 전용 행)에서 물려받는다 — 이 창에서는 배송지를 고치지 않는다.
+    //  같은 조회로 저장 전 발송예정일 스냅샷도 뜬다(알림을 '실제로 바뀐 경우'에만 보내기 위해).
     const [oi, sh] = await Promise.all([
       sb.from("order_items").select("id, product_id, product_name, spec, sort_order").eq("order_id", id).order("sort_order", { ascending: true }),
-      sb.from("shipments").select("recipient_name, recipient_phone, address, delivery_memo, courier").eq("order_id", id).order("seq", { ascending: true }).limit(1).maybeSingle(),
+      sb.from("shipments").select("recipient_name, recipient_phone, address, delivery_memo, courier, ship_date, status").eq("order_id", id).order("seq", { ascending: true }),
     ]);
     if (oi.error) throw oi.error;
     const savedItems: SavedOrderItem[] = (oi.data ?? []).map((r) => ({
       id: r.id as string, product_id: (r.product_id as string) ?? null,
       product_name: r.product_name as string, spec: (r.spec as string) ?? null,
     }));
-    const recipient = (sh.data ?? {}) as RecipientInput;
+    const prevShips = (sh.data ?? []) as ({ ship_date: string | null; status: string | null } & RecipientInput)[];
+    const recipient = (prevShips[0] ?? {}) as RecipientInput;
+    const datesOf = (rows: { ship_date?: string | null; status?: string | null }[]) =>
+      rows
+        .filter((r) => r.ship_date && r.status !== "취소")
+        .map((r) => r.ship_date as string)
+        .sort();
+    const beforeDates = datesOf(prevShips);
 
     const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, recipient, schedules, savedItems);
 
@@ -93,6 +102,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (derivedStatus) patch.status = derivedStatus;
     const { error } = await sb.from("orders").update(patch).eq("id", id);
     if (error) throw error;
+
+    // 알림 — 발송예정일이 실제로 달라졌을 때만. 수량 배분만 고치고 저장하는 경우가 잦아
+    //  날짜가 그대로면 조용히 넘긴다(설정: 관리자 › 알림 › '발송일정 등록').
+    const afterDates = datesOf(schedules);
+    if (beforeDates.join("|") !== afterDates.join("|")) {
+      await logShipmentScheduled(id, beforeDates, afterDates);
+    }
 
     return NextResponse.json({ ok: true, ship_date: earliestShipDate, box_count: totalBoxes });
   } catch (err) {
