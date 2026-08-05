@@ -76,6 +76,58 @@
   .fac-sb-foot { margin: 0 0 0 auto; padding: 0 0 0 10px; border-top: none; flex-direction: row; align-items: center; gap: 10px; white-space: nowrap; }
 }
 
+/* ── 재고 목록 모바일·태블릿(≤900px) — 검색과 시인성 최우선 ─────────
+   표 11컬럼은 좁은 화면에서 읽을 수 없다 → 이름/수량 목록으로 전환.
+   한 줄 = 품명(+매입처) / 아래 작은 특징줄(규격·테잎색·원산지·창고·입고일) / 우측 큰 수량.
+   줄을 누르면 출고·이동·수정 버튼이 펼쳐진다. */
+.fac-search-mobile { display: none; }
+.fac-list { display: none; }
+
+@media (max-width: 900px) {
+  .fac-main { padding: 12px 14px 70px; }
+  /* 통계카드·기간탭·기준안내·표·데스크톱 검색은 숨김 — 검색+목록만 남긴다 */
+  .fac-main .b2b-dash-grid,
+  .fac-stock-periods,
+  .fac-stock-meta,
+  .fac-stock-table,
+  .fac-search-desktop { display: none !important; }
+
+  /* 검색 — 스크롤해도 상단에 붙어 있는 첫 번째 컨트롤 */
+  .fac-search-mobile {
+    display: block; width: 100%;
+    position: sticky; top: 8px; z-index: 5;
+    font-size: 16px;                 /* 16px 미만이면 iOS 가 포커스 시 화면을 확대한다 */
+    padding: 12px 14px; border-radius: 10px;
+    background: #fff; border: 1.5px solid var(--sm-border);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .05);
+    margin-bottom: 10px;
+  }
+  .fac-search-mobile:focus { border-color: var(--fac-blue); outline: none; }
+
+  /* 창고 탭 + 소진 체크 — 한 줄 가로 스크롤(세로 공간 절약) */
+  .fac-stock-bar { margin-bottom: 6px; }
+  .fac-stock-bar > .sm-row { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 8px; padding-bottom: 4px; }
+  .fac-stock-bar .sm-tabs { flex-wrap: nowrap; }
+  .fac-stock-bar label { white-space: nowrap; }
+
+  .fac-list { display: block; }
+  .fac-item { border-bottom: 1px solid var(--sm-border-light); }
+  .fac-item-row { display: flex; align-items: center; gap: 10px; padding: 12px 2px; cursor: pointer; }
+  .fac-item-main { flex: 1; min-width: 0; }
+  .fac-item-name { font-size: 15px; font-weight: 700; color: var(--sm-black); }
+  .fac-item-supplier { margin-left: 6px; font-size: 11px; font-weight: 600; color: var(--sm-text-light); }
+  .fac-item-sub { margin-top: 3px; font-size: 12px; color: var(--sm-text-mid); overflow-wrap: anywhere; }
+  .fac-item-qty { flex: 0 0 auto; font-size: 17px; font-weight: 800; color: var(--sm-black); font-variant-numeric: tabular-nums; }
+  .fac-item-qty small { font-size: 12px; font-weight: 700; color: var(--sm-text-light); margin-left: 1px; }
+  .fac-item-qty.is-zero { color: var(--sm-text-faint); }
+  .fac-item-actions { display: flex; gap: 8px; padding: 0 2px 12px; }
+  .fac-item-actions button {
+    flex: 1; padding: 9px 0; font-size: 13.5px; font-weight: 700; font-family: inherit;
+    border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light);
+    color: var(--fac-blue); border-radius: 9px; cursor: pointer;
+  }
+}
+
 /* ── 로그인 화면(셸 없음) ───────────────────────────────────────── */
 .fac-login {
   min-height: 100dvh; display: flex; align-items: center; justify-content: center;

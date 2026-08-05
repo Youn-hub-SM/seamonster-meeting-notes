@@ -37,6 +37,7 @@ export default function FactoryStockPage() {
   const [lotForm, setLotForm] = useState<LotStock | "new" | null>(null);
   const [txnFor, setTxnFor] = useState<LotStock | null>(null);
   const [moveFor, setMoveFor] = useState<LotStock | null>(null);
+  const [openLot, setOpenLot] = useState<string | null>(null); // 모바일 목록에서 펼친 줄
 
   const range = useMemo(() => {
     if (pmode === "지정") return { from: cfrom, to: cto };
@@ -140,6 +141,10 @@ export default function FactoryStockPage() {
         </div>
       )}
 
+      {/* 모바일 전용 검색 — 목록 위 상단 고정(데스크톱에선 숨김, 필터줄 우측 검색이 대신) */}
+      <input className="b2b-input fac-search-mobile" placeholder="제품 검색 — 품명·규격·매입처" value={kw}
+        onChange={(e) => setKw(e.target.value)} />
+
       {/* 데이터박스 — 창고탭·검색을 따라간다(보이는 로트 기준) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">로트</div><div className="b2b-stat-card-value">{totals.lots}</div></div>
@@ -149,7 +154,7 @@ export default function FactoryStockPage() {
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">기간 출고</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-info)" }}>{totals.pout.toLocaleString()}</div></div>
       </div>
 
-      <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+      <div className="sm-between fac-stock-bar" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <div className="sm-tabs" style={{ margin: 0 }}>
             <button className={`sm-tab ${wh === "" ? "is-active" : ""}`} onClick={() => setWh("")}>전체</button>
@@ -159,13 +164,13 @@ export default function FactoryStockPage() {
               <button key={w.id} className={`sm-tab ${wh === w.id ? "is-active" : ""}`} onClick={() => setWh(w.id)}>{w.name}</button>
             ))}
           </div>
-          <div className="sm-tabs" style={{ margin: 0 }}>
+          <div className="sm-tabs fac-stock-periods" style={{ margin: 0 }}>
             {PERIODS.map(([k]) => (
               <button key={k} className={`sm-tab ${pmode === k ? "is-active" : ""}`} onClick={() => setPmode(k)}>{k === "지정" ? "날짜 지정" : k}</button>
             ))}
           </div>
           {pmode === "지정" && (
-            <span className="sm-row" style={{ gap: 6 }}>
+            <span className="sm-row fac-stock-periods" style={{ gap: 6 }}>
               <input type="date" className="b2b-input" value={cfrom} max={cto} onChange={(e) => setCfrom(e.target.value)} style={{ width: "auto" }} />
               <span className="sm-faint">~</span>
               <input type="date" className="b2b-input" value={cto} min={cfrom} max={today()} onChange={(e) => setCto(e.target.value)} style={{ width: "auto" }} />
@@ -177,16 +182,46 @@ export default function FactoryStockPage() {
             소진 로트 포함
           </label>
         </div>
-        <input className="b2b-input" placeholder="품명·규격·매입처·적요 검색" value={kw}
+        <input className="b2b-input fac-search-desktop" placeholder="품명·규격·매입처·적요 검색" value={kw}
           onChange={(e) => setKw(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {range.from} ~ {range.to} · 기간 입고·출고 = 이 범위 거래의 합(이동 포함)</p>
+      <p className="sm-faint fac-stock-meta" style={{ fontSize: 12, marginBottom: 8 }}>기간 {range.from} ~ {range.to} · 기간 입고·출고 = 이 범위 거래의 합(이동 포함)</p>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : shown.length === 0 ? (
         <div className="b2b-empty">재고가 없습니다.</div>
       ) : (
-        <div className="b2b-table-wrap">
+        <>
+        {/* 모바일(≤900px) 목록 — 이름/수량 + 작은 특징줄. 줄을 누르면 출고·이동·수정이 펼쳐진다 */}
+        <div className="fac-list">
+          {shown.map((l) => (
+            <div key={l.id} className="fac-item">
+              <div className="fac-item-row" onClick={() => setOpenLot(openLot === l.id ? null : l.id)}>
+                <div className="fac-item-main">
+                  <div className="fac-item-name">
+                    {l.item_name}
+                    {l.supplier ? <span className="fac-item-supplier">{l.supplier}</span> : null}
+                  </div>
+                  <div className="fac-item-sub">
+                    {[l.spec, l.tape_color, l.origin, l.warehouse, (l.first_in_date || "").slice(2, 10).replace(/-/g, ".")].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <div className={`fac-item-qty ${n0(l.qty) <= 0 ? "is-zero" : ""}`}>
+                  {n0(l.qty).toLocaleString()}<small>{l.unit}</small>
+                </div>
+              </div>
+              {openLot === l.id && (
+                <div className="fac-item-actions">
+                  <button onClick={() => setTxnFor(l)}>출고</button>
+                  <button onClick={() => setMoveFor(l)}>이동</button>
+                  <button onClick={() => setLotForm(l)}>수정</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="b2b-table-wrap fac-stock-table">
           <table className="b2b-table">
             <thead><tr>
               <Th k="item_name" label="품명" />
@@ -224,6 +259,7 @@ export default function FactoryStockPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {lotForm && (
