@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 export type ComboOption = { id: string; label: string; sub?: string };
 
@@ -35,16 +36,21 @@ export function Combobox({
   const [active, setActive] = useState(0);
 
   const text = query ?? value ?? "";
-  const q = (query ?? "").trim().toLowerCase();
-  const filtered = q
-    ? options.filter((o) => o.label.toLowerCase().includes(q) || (o.sub || "").toLowerCase().includes(q))
-    : options;
+  // 재고 목록 검색창과 같은 규칙 — 초성("ㄱㅇ")·부분일치, 공백으로 나눈 단어는 모두 만족(AND).
+  //  이름과 보조정보(SKU·규격)를 한 덩어리로 훑어 "광어 1kg" 처럼 섞어 쳐도 찾힌다.
+  const q = (query ?? "").trim();
+  const filtered = q ? options.filter((o) => matchKoQuery(`${o.label} ${o.sub || ""}`, q)) : options;
 
   function updateCoords() {
     const el = inputRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setCoords({ top: r.bottom + 2, left: r.left, width: r.width });
+    // 모바일 카드에서 입력칸이 180px 안팎까지 좁아져 제품명이 잘렸다 → 목록은 최소 260px 확보하고,
+    //  화면 밖으로 나가지 않게 좌측을 당긴다(입력칸 폭이 더 넓으면 그대로 맞춘다).
+    const vw = typeof window === "undefined" ? r.width : window.innerWidth;
+    const width = Math.min(Math.max(r.width, 260), Math.max(160, vw - 16));
+    const left = Math.max(8, Math.min(r.left, vw - width - 8));
+    setCoords({ top: r.bottom + 2, left, width });
   }
   function openList() {
     updateCoords();
