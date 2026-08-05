@@ -206,7 +206,9 @@ export async function saveOrderShipments(
       .single();
     if (shipErr) throw shipErr;
     inserted++;
-    totalBoxes += boxCount;
+    // 취소 차수의 박스는 빼고 센다 — 이 합이 orders.box_count 가 되고 이익률 배송비를 정하는데,
+    //  안 보낸 박스까지 세면 부분 취소 발주의 배송비가 과대 계산된다.
+    if ((sch.status || "발송대기") !== "취소") totalBoxes += boxCount;
     insertedStatuses.push(sch.status || "발송대기");
 
     if (items.length > 0) {

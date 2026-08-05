@@ -521,13 +521,16 @@ export default function OrdersListPage() {
     setBulkSaving(false);
   }
 
-  // 선택한 발주 중 발송일정이 하나도 없는 것 — 양식은 발송 차수 단위로 뽑히므로 이런 발주는 뽑을 수 없다.
+  // 선택한 발주 중 뽑을 발송이 없는 것 — 양식은 발송 차수 단위로 뽑히므로 이런 발주는 뽑을 수 없다.
+  //  차수 '개수'로 보면 안 된다: 발주 등록 시 배송정보만으로 날짜 없는 행이 하나 생기므로(b2b-shipments 의 fallback),
+  //  일정을 안 잡아도 차수는 1건이다. 실제 기준은 '발송예정일이 있는 취소 아닌 차수'다.
   //  목록 조회가 발주의 모든 차수를 함께 실어오므로(api/b2b/orders route) 서버에 다시 묻지 않고 판정한다.
   const noScheduleSelected = useMemo(() => {
     const names: string[] = [];
     for (const o of orders) {
       if (!selected.has(o.id)) continue;
-      if ((o.shipments?.length ?? 0) === 0) names.push(o.company_name || o.order_no);
+      const pickable = (o.shipments ?? []).some((s) => s.ship_date && s.status !== "취소");
+      if (!pickable) names.push(o.company_name || o.order_no);
     }
     return names;
   }, [orders, selected]);
@@ -588,7 +591,7 @@ export default function OrdersListPage() {
   async function handleExportShipping() {
     if (selected.size === 0) return;
     if (noScheduleSelected.length > 0) {
-      setError(`발송일정이 없는 발주가 있습니다: ${noScheduleSelected.join(", ")} — 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요.`);
+      setError(`뽑을 발송이 없는 발주가 있습니다: ${noScheduleSelected.join(", ")} — 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요.`);
       return;
     }
     setExporting(true);
@@ -604,11 +607,11 @@ export default function OrdersListPage() {
       const options: OrderExportOption[] = json.options || [];
 
       // 목록 데이터가 오래됐을 수 있으니 서버 응답으로 한 번 더 막는다.
-      const missing = options.filter((o) => o.shipments.length === 0);
+      const missing = options.filter((o) => !o.shipments.some((s) => s.ship_date && s.status !== "취소"));
       if (missing.length > 0) {
         setExporting(false);
         setError(
-          `발송일정이 없는 발주가 있습니다: ${missing.map((o) => o.company_name || o.order_no).join(", ")}` +
+          `뽑을 발송이 없는 발주가 있습니다(발송일정 미등록 또는 전 차수 취소): ${missing.map((o) => o.company_name || o.order_no).join(", ")}` +
             " — 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요."
         );
         return;
@@ -861,7 +864,7 @@ export default function OrdersListPage() {
                     disabled={exporting || noScheduleSelected.length > 0}
                     title={
                       noScheduleSelected.length > 0
-                        ? "발송일정이 없는 발주가 선택되어 있습니다 — 목록에서 ‘+ 발송일’로 먼저 등록하세요"
+                        ? "뽑을 발송이 없는 발주가 선택되어 있습니다 — 목록에서 ‘+ 발송일’로 먼저 등록하세요"
                         : undefined
                     }
                   >
@@ -871,7 +874,7 @@ export default function OrdersListPage() {
                 {noScheduleSelected.length > 0 && (
                   // 양식은 발송 차수 단위로 뽑히고 박스 수도 차수에 저장된다 — 일정 없이는 뽑을 것이 없다.
                   <div style={{ flexBasis: "100%", fontSize: 12, color: "var(--sm-text-mid)" }}>
-                    발송일정이 없어 양식을 뽑을 수 없는 발주: <strong>{noScheduleSelected.join(", ")}</strong>
+                    뽑을 발송이 없어 양식을 만들 수 없는 발주: <strong>{noScheduleSelected.join(", ")}</strong>
                     {" "}— 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요.
                   </div>
                 )}
@@ -1462,6 +1465,12 @@ function CheckFilter<T extends string>({
 // ─────────────────────────────────────────────
 // 발송 일정 선택 모달 — 분할 발송이 있는 발주에서 "어떤 발송을 뽑을지" 선택
 // ─────────────────────────────────────────────
+// 양식으로 뽑을 수 있는 발송 = 발송예정일이 잡혔고 취소가 아닌 차수.
+//  날짜 없는 행은 발주 등록 때 배송정보만으로 만들어진 자리표시 행이라 보낼 물건이 아니다.
+function isPickable(s: ShipmentExportOption): boolean {
+  return !!s.ship_date && s.status !== "취소";
+}
+
 function shipmentSummary(s: ShipmentExportOption, fallback: ExportLineItem[]): string {
   const list = s.items.length > 0 ? s.items : fallback;
   if (list.length === 0) return "(상품 없음)";
@@ -1484,10 +1493,10 @@ function ExportPickModal({
   onClose: () => void;
   onConfirm: (payload: { shipment_ids: string[]; order_ids: string[]; boxes: Record<string, number> }) => void;
 }) {
-  // 기본 선택: 취소가 아닌 모든 발송 + 발송 없는 발주(전체)
+  // 기본 선택: 뽑을 수 있는 발송 전부. 취소 차수와 날짜 미정 행(배송정보만 든 fallback)은 보낼 게 아니라 제외한다.
   const [shipSel, setShipSel] = useState<Set<string>>(() => {
     const s = new Set<string>();
-    for (const o of options) for (const sh of o.shipments) if (sh.status !== "취소") s.add(sh.id);
+    for (const o of options) for (const sh of o.shipments) if (isPickable(sh)) s.add(sh.id);
     return s;
   });
   // 분할 발송이 섞여 있을 때만 '차수를 고르라'는 안내를 붙인다.
@@ -1558,14 +1567,21 @@ function ExportPickModal({
                   </span>
                 </div>
               ) : (
+                // 취소·날짜미정 행은 선택 불가로 남겨 이유를 보여준다(왜 안 뽑히는지 화면에서 알 수 있게).
                 o.shipments.map((s) => {
                   const c = SHIPMENT_STATUS_COLORS[s.status];
+                  const pickable = isPickable(s);
                   return (
-                    <div key={s.id} className="b2b-export-pick" style={{ alignItems: "center" }}>
+                    <div
+                      key={s.id}
+                      className="b2b-export-pick"
+                      style={{ alignItems: "center", opacity: pickable ? 1 : 0.5 }}
+                    >
                       <input
                         type="checkbox"
                         className="b2b-checkbox"
                         checked={shipSel.has(s.id)}
+                        disabled={!pickable}
                         onChange={() => toggleShip(s.id)}
                         aria-label={`${s.ship_date || "예정일 미정"} 선택`}
                       />
@@ -1581,16 +1597,22 @@ function ExportPickModal({
                         </span>
                         <span className="b2b-export-pick-items">{shipmentSummary(s, o.fallbackItems)}</span>
                       </span>
-                      <label className="sm-row" style={{ gap: 6, flexShrink: 0, fontSize: 12, color: "var(--sm-text-mid)" }}>
-                        박스
-                        <input
-                          type="number" inputMode="numeric" min={1} step={1} className="b2b-input"
-                          style={{ width: 74, textAlign: "right" }}
-                          value={boxes[s.id] ?? "1"}
-                          onChange={(e) => setBoxes((p) => ({ ...p, [s.id]: e.target.value }))}
-                          onBlur={() => setBoxes((p) => ({ ...p, [s.id]: p[s.id] === "" ? "1" : p[s.id] }))}
-                        />
-                      </label>
+                      {pickable ? (
+                        <label className="sm-row" style={{ gap: 6, flexShrink: 0, fontSize: 12, color: "var(--sm-text-mid)" }}>
+                          박스
+                          <input
+                            type="number" inputMode="numeric" min={1} step={1} className="b2b-input"
+                            style={{ width: 74, textAlign: "right" }}
+                            value={boxes[s.id] ?? "1"}
+                            onChange={(e) => setBoxes((p) => ({ ...p, [s.id]: e.target.value }))}
+                            onBlur={() => setBoxes((p) => ({ ...p, [s.id]: p[s.id] === "" ? "1" : p[s.id] }))}
+                          />
+                        </label>
+                      ) : (
+                        <span style={{ flexShrink: 0, fontSize: 11.5, color: "var(--sm-text-light)" }}>
+                          {s.status === "취소" ? "취소 — 제외" : "발송일 미정 — 제외"}
+                        </span>
+                      )}
                     </div>
                   );
                 })

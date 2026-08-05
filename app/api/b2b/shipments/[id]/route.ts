@@ -63,9 +63,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (upErr) throw upErr;
 
     // 박스 수가 바뀌면 발주 헤더(orders.box_count)도 차수 합으로 다시 맞춘다 — 이익률·발주 단위 송장칸이 이걸 읽는다.
+    //  취소 차수는 빼고 센다 — 안 보낸 박스까지 세면 부분 취소 발주의 배송비가 과대 계산된다.
     if (body.box_count !== undefined) {
-      const { data: all } = await sb.from("shipments").select("box_count").eq("order_id", ship.order_id);
-      const total = (all ?? []).reduce((a, s) => a + Math.max(1, Number((s as { box_count: number | null }).box_count) || 1), 0);
+      const { data: all } = await sb.from("shipments").select("box_count, status").eq("order_id", ship.order_id);
+      const total = (all ?? [])
+        .filter((s) => (s as { status: string | null }).status !== "취소")
+        .reduce((a, s) => a + Math.max(1, Number((s as { box_count: number | null }).box_count) || 1), 0);
       if (total > 0) await sb.from("orders").update({ box_count: total }).eq("id", ship.order_id);
     }
 
