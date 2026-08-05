@@ -55,7 +55,11 @@
 }
 .fac-sb-foot button:hover, .fac-sb-foot a:hover { color: var(--fac-blue); }
 
-.fac-main { flex: 1; min-width: 0; background: #fff; }
+.fac-main { flex: 1; min-width: 0; background: #fff; padding: 26px clamp(16px, 3vw, 44px) 80px; }
+/* 본문 폭 제한 — 풀폭이 너무 넓다는 피드백(2026-08-06). 재고 표 10컬럼 기준 1240px, 남는 공간은 가운데 정렬. */
+.fac-main .b2b-container { max-width: 1240px; margin: 0 auto; }
+/* 표 안 행동 링크(출고·이동·수정)가 붙어 보이는 문제 — 링크 사이 간격 */
+.fac-main .b2b-table .b2b-link-btn + .b2b-link-btn { margin-left: 10px; }
 
 /* 모바일: 사이드바를 상단 가로 바로 접는다 */
 @media (max-width: 768px) {

@@ -88,8 +88,9 @@ export default function FactoryStockPage() {
       </div>
 
       <div className="sm-row sm-gap-3" style={{ margin: "8px 0", alignItems: "center" }}>
-        <label className="b2b-checkbox">
-          <input type="checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} />
+        {/* .b2b-checkbox 는 input 전용 클래스(18px 정사각) — label 에 붙이면 라벨 폭이 18px 가 돼 글자가 세로로 쏟아진다 */}
+        <label className="sm-row" style={{ gap: 6, alignItems: "center", cursor: "pointer" }}>
+          <input type="checkbox" className="b2b-checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} />
           소진 로트 포함
         </label>
         <span className="sm-faint">{lots.length}로트 · {totals.boxes.toLocaleString()}박스{totals.kg > 0 ? ` · ${Math.round(totals.kg).toLocaleString()}kg` : ""}</span>
