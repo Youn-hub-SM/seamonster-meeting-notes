@@ -28,7 +28,7 @@ import {
   joinTracking,
 } from "@/app/lib/b2b-orders";
 import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
-import { computeOrderMargin, seasonForDate, suggestBoxes, SEASON_MONTHS } from "@/app/lib/b2b-margin";
+import { computeOrderMargin, seasonForDate, SEASON_MONTHS } from "@/app/lib/b2b-margin";
 import { Combobox } from "./Combobox";
 
 type Mode = "create" | "edit";
@@ -1058,41 +1058,33 @@ export default function OrderForm({
             매출 − 제품원가 − 배송비(박스 × 아이스박스+운반비+보냉비). 과세 상품은 공급가(÷1.1) 기준.
           </p>
 
+          {/* 박스 수는 여기서 고치지 않는다 — 실제 발송한 박스 수(발송일 등록에서 입력)만 이익률에 반영한다.
+              readOnly input 은 모바일에서 키보드만 뜨고 입력이 안 돼 텍스트로 표시한다. */}
           <div className="b2b-field-row" style={{ marginBottom: 12 }}>
-            <div className="b2b-field" style={{ maxWidth: 180 }}>
+            <div className="b2b-field" style={{ maxWidth: 220 }}>
               <label className="b2b-field-label">배송 박스 수</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                className="b2b-input"
-                value={realScheduleCount > 0 ? effectiveBoxCount : data.box_count}
-                min={1}
-                step={1}
-                readOnly={realScheduleCount > 0}
-                onChange={(e) => setField("box_count", e.target.value === "" ? "" : Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-                onBlur={() => { if (data.box_count === "") setField("box_count", 1); }}
-                style={realScheduleCount > 0 ? { background: "var(--sm-bg)", color: "var(--sm-text-mid)" } : undefined}
-              />
-              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)", marginTop: 4 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, padding: "9px 0" }}>
+                {realScheduleCount > 0 ? `${effectiveBoxCount}박스` : "미정"}
+              </div>
+              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>
                 {realScheduleCount > 0
-                  ? `발송 차수 박스 수 합 (자동) · 총 부피 ${orderMargin.volume.toLocaleString()}kg`
-                  : `총 부피 ${orderMargin.volume.toLocaleString()}kg · 권장 ${suggestBoxes(orderMargin.volume)}박스`}
+                  ? `발송 일정 ${realScheduleCount}건의 박스 수 합 · 총 부피 ${orderMargin.volume.toLocaleString()}kg`
+                  : `총 부피 ${orderMargin.volume.toLocaleString()}kg · 발주 목록에서 ‘+ 발송일’로 발송 일정과 박스 수를 넣으면 계산됩니다`}
               </span>
             </div>
-            <div className="b2b-field" style={{ maxWidth: 180 }}>
+            <div className="b2b-field" style={{ maxWidth: 220 }}>
               <label className="b2b-field-label">계절 (보냉비)</label>
-              <input
-                type="text"
-                className="b2b-input"
-                value={`${orderMargin.season} (${SEASON_MONTHS[orderMargin.season]})`}
-                readOnly
-                style={{ background: "var(--sm-bg)", color: "var(--sm-text-mid)" }}
-              />
-              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)", marginTop: 4 }}>
-                발송예정일 기준 자동
-              </span>
+              <div style={{ fontSize: 15, fontWeight: 700, padding: "9px 0" }}>
+                {orderMargin.season} <span style={{ fontWeight: 400, fontSize: 12, color: "var(--sm-text-mid)" }}>({SEASON_MONTHS[orderMargin.season]})</span>
+              </div>
+              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>발송예정일 기준 자동</span>
             </div>
           </div>
+          {realScheduleCount === 0 && (
+            <p className="sm-faint" style={{ fontSize: 11.5, margin: "-4px 0 12px" }}>
+              발송 일정이 없어 배송비를 1박스로 잡은 잠정 이익률입니다.
+            </p>
+          )}
 
           <div className="b2b-totals">
             <div className="b2b-totals-row">
