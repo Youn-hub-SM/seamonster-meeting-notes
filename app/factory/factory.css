@@ -70,11 +70,36 @@
     padding: 10px 12px; border-right: none; border-bottom: 1px solid var(--sm-border);
     overflow-x: auto;
   }
-  .fac-brand { padding: 0 10px 0 0; }
-  .fac-brand small { display: none; }
+  .fac-brand { display: none; }   /* 모바일 상단바에선 로고 생략 — 메뉴 공간 확보(사용자 요청) */
   .fac-nav-item { padding: 7px 10px; }
   .fac-sb-foot { margin: 0 0 0 auto; padding: 0 0 0 10px; border-top: none; flex-direction: row; align-items: center; gap: 10px; white-space: nowrap; }
 }
+
+/* ── 창고 드롭다운(체크박스 다중 선택) — 데스크톱·모바일 공용 ────── */
+.fac-wh-dd { position: relative; }
+.fac-wh-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  width: auto; cursor: pointer; white-space: nowrap; font-weight: 600;
+}
+.fac-wh-caret { font-size: 10px; color: var(--sm-text-light); }
+.fac-dd-backdrop { position: fixed; inset: 0; z-index: 30; }
+.fac-wh-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 31;
+  background: #fff; border: 1px solid var(--sm-border); border-radius: 10px;
+  box-shadow: var(--sm-shadow-float); padding: 8px; min-width: 190px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.fac-wh-reset {
+  text-align: left; background: none; border: none; font: inherit;
+  font-size: 13px; font-weight: 700; color: var(--fac-blue);
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+}
+.fac-wh-reset:hover { background: var(--sm-orange-light); }
+.fac-wh-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px; font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.fac-wh-opt:hover { background: var(--sm-bg-subtle); }
 
 /* ── 재고 목록 모바일·태블릿(≤900px) — 검색과 시인성 최우선 ─────────
    표 11컬럼은 좁은 화면에서 읽을 수 없다 → 이름/수량 목록으로 전환.
@@ -104,10 +129,9 @@
   }
   .fac-search-mobile:focus { border-color: var(--fac-blue); outline: none; }
 
-  /* 창고 탭 + 소진 체크 — 한 줄 가로 스크롤(세로 공간 절약) */
+  /* 창고 드롭다운 + 소진 체크 한 줄 — overflow 스크롤을 쓰지 않는다(드롭다운 패널이 잘린다) */
   .fac-stock-bar { margin-bottom: 6px; }
-  .fac-stock-bar > .sm-row { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 8px; padding-bottom: 4px; }
-  .fac-stock-bar .sm-tabs { flex-wrap: nowrap; }
+  .fac-stock-bar > .sm-row { gap: 8px; }
   .fac-stock-bar label { white-space: nowrap; }
 
   .fac-list { display: block; }

@@ -9,6 +9,7 @@ import {
   OUT_TYPES, TAPE_COLORS, ORIGINS, SITE_DEST, lotLabel, toKg,
   type LotStock, type TxnType, type Warehouse,
 } from "@/app/lib/factory";
+import { matchKoQuery } from "@/app/lib/hangul";
 import { today, daysAgo, n0 } from "./util";
 
 type Suggest = { item_names: string[]; specs: string[]; suppliers: string[]; notes: string[]; dests: string[] };
@@ -25,7 +26,8 @@ export default function FactoryStockPage() {
   const [suggest, setSuggest] = useState<Suggest>({ item_names: [], specs: [], suppliers: [], notes: [], dests: [] });
 
   const [lots, setLots] = useState<LotStock[]>([]);
-  const [wh, setWh] = useState("");          // "" 전체 · "own" 내부 · "ext" 외부 · warehouse_id
+  const [whSel, setWhSel] = useState<Set<string>>(new Set()); // 체크된 창고 id — 비어 있으면 전체
+  const [whOpen, setWhOpen] = useState(false);
   const [kw, setKw] = useState("");
   const [showEmpty, setShowEmpty] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -67,12 +69,11 @@ export default function FactoryStockPage() {
   }, []);
 
   const shown = useMemo(() => {
-    const q = kw.trim().toLowerCase();
+    const q = kw.trim();
     const f = lots.filter((l) => {
-      if (wh === "own" && !l.is_own) return false;
-      if (wh === "ext" && l.is_own) return false;
-      if (wh && wh !== "own" && wh !== "ext" && l.warehouse_id !== wh) return false;
-      if (q && !`${l.item_name} ${l.spec || ""} ${l.supplier || ""} ${l.note || ""} ${l.origin || ""}`.toLowerCase().includes(q)) return false;
+      if (whSel.size > 0 && !whSel.has(l.warehouse_id)) return false;
+      // 초성·다단어 검색(재고 목록과 동일한 matchKoQuery) — "ㄱㅇㄹ 국" → 가오리+국산
+      if (q && !matchKoQuery(`${l.item_name} ${l.spec || ""} ${l.supplier || ""} ${l.note || ""} ${l.origin || ""} ${l.warehouse}`, q)) return false;
       return true;
     });
     const { key, dir } = sort;
@@ -97,7 +98,18 @@ export default function FactoryStockPage() {
       }
       return (va - vb) * mul;
     });
-  }, [lots, wh, kw, sort]);
+  }, [lots, whSel, kw, sort]);
+
+  const toggleWh = (id: string) => setWhSel((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const whLabel = useMemo(() => {
+    if (whSel.size === 0) return "창고: 전체";
+    const names = warehouses.filter((w) => whSel.has(w.id)).map((w) => w.name);
+    return names.length === 1 ? `창고: ${names[0]}` : `창고: ${names[0]} 외 ${names.length - 1}`;
+  }, [whSel, warehouses]);
 
   const totals = useMemo(() => ({
     lots: shown.length,
@@ -142,7 +154,7 @@ export default function FactoryStockPage() {
       )}
 
       {/* 모바일 전용 검색 — 목록 위 상단 고정(데스크톱에선 숨김, 필터줄 우측 검색이 대신) */}
-      <input className="b2b-input fac-search-mobile" placeholder="제품 검색 — 품명·규격·매입처" value={kw}
+      <input className="b2b-input fac-search-mobile" placeholder="제품 검색 — 초성 가능 (예: ㄱㅇㄹ 국)" value={kw}
         onChange={(e) => setKw(e.target.value)} />
 
       {/* 데이터박스 — 창고탭·검색을 따라간다(보이는 로트 기준) */}
@@ -156,13 +168,25 @@ export default function FactoryStockPage() {
 
       <div className="sm-between fac-stock-bar" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <div className="sm-tabs" style={{ margin: 0 }}>
-            <button className={`sm-tab ${wh === "" ? "is-active" : ""}`} onClick={() => setWh("")}>전체</button>
-            <button className={`sm-tab ${wh === "own" ? "is-active" : ""}`} onClick={() => setWh("own")}>구평(내부)</button>
-            <button className={`sm-tab ${wh === "ext" ? "is-active" : ""}`} onClick={() => setWh("ext")}>외부창고</button>
-            {warehouses.filter((w) => !w.is_own).map((w) => (
-              <button key={w.id} className={`sm-tab ${wh === w.id ? "is-active" : ""}`} onClick={() => setWh(w.id)}>{w.name}</button>
-            ))}
+          {/* 창고 필터 — 드롭다운 + 체크박스 다중 선택(비면 전체) */}
+          <div className="fac-wh-dd">
+            <button type="button" className="b2b-input fac-wh-btn" onClick={() => setWhOpen((v) => !v)} aria-expanded={whOpen}>
+              {whLabel} <span className="fac-wh-caret">▼</span>
+            </button>
+            {whOpen && (
+              <>
+                <div className="fac-dd-backdrop" onClick={() => setWhOpen(false)} />
+                <div className="fac-wh-panel">
+                  <button type="button" className="fac-wh-reset" onClick={() => { setWhSel(new Set()); setWhOpen(false); }}>전체 창고 보기</button>
+                  {warehouses.map((w) => (
+                    <label key={w.id} className="fac-wh-opt">
+                      <input type="checkbox" className="b2b-checkbox" checked={whSel.has(w.id)} onChange={() => toggleWh(w.id)} />
+                      {w.name}{w.is_own ? " (내부)" : ""}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
           <div className="sm-tabs fac-stock-periods" style={{ margin: 0 }}>
             {PERIODS.map(([k]) => (
@@ -182,7 +206,7 @@ export default function FactoryStockPage() {
             소진 로트 포함
           </label>
         </div>
-        <input className="b2b-input fac-search-desktop" placeholder="품명·규격·매입처·적요 검색" value={kw}
+        <input className="b2b-input fac-search-desktop" placeholder="품명·규격·매입처 — 초성 가능 (예: ㄱㅇㄹ 국)" value={kw}
           onChange={(e) => setKw(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
