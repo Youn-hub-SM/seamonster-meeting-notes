@@ -521,6 +521,17 @@ export default function OrdersListPage() {
     setBulkSaving(false);
   }
 
+  // 선택한 발주 중 발송일정이 하나도 없는 것 — 양식은 발송 차수 단위로 뽑히므로 이런 발주는 뽑을 수 없다.
+  //  목록 조회가 발주의 모든 차수를 함께 실어오므로(api/b2b/orders route) 서버에 다시 묻지 않고 판정한다.
+  const noScheduleSelected = useMemo(() => {
+    const names: string[] = [];
+    for (const o of orders) {
+      if (!selected.has(o.id)) continue;
+      if ((o.shipments?.length ?? 0) === 0) names.push(o.company_name || o.order_no);
+    }
+    return names;
+  }, [orders, selected]);
+
   // 실제 xlsx 다운로드 (발송 단위 shipment_ids + 과거 발주 order_ids)
   async function downloadShipping(payload: { shipment_ids?: string[]; order_ids?: string[]; boxes?: Record<string, number> }) {
     setExporting(true);
@@ -528,15 +539,17 @@ export default function OrdersListPage() {
     try {
       // 양식에 적은 박스 수를 먼저 확정 저장 — 이 엑셀이 송장 출력 직전 단계라, 여기서 정한 수가
       //  송장 행 수·발송완료 시 송장 입력칸 수·이익률 배송비의 기준이 된다.
+      //  저장이 실패하면 엑셀의 송장 행 수가 틀리게 나오므로, 다운로드까지 가지 않고 멈춘다.
       const boxes = payload.boxes || {};
       const changed = Object.entries(boxes);
       if (changed.length) {
-        await Promise.all(changed.map(([id, n]) =>
+        const saved = await Promise.all(changed.map(([id, n]) =>
           fetch(`/api/b2b/shipments/${id}`, {
             method: "PATCH", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ box_count: n }),
-          }).catch(() => null)
+          }).then((r) => r.ok).catch(() => false)
         ));
+        if (saved.some((ok) => !ok)) throw new Error("박스 수 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
       }
       const res = await fetch("/api/b2b/orders/export-shipping", {
         method: "POST",
@@ -571,9 +584,13 @@ export default function OrdersListPage() {
     setExporting(false);
   }
 
-  // 선택한 발주 중 분할 발송(일정 2개 이상)이 있으면 선택 모달, 없으면 바로 다운로드
+  // 항상 선택 모달을 연다 — 실제 포장 박스 수를 여기서 확정 입력받아야 하기 때문(차수가 1개여도 마찬가지).
   async function handleExportShipping() {
     if (selected.size === 0) return;
+    if (noScheduleSelected.length > 0) {
+      setError(`발송일정이 없는 발주가 있습니다: ${noScheduleSelected.join(", ")} — 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요.`);
+      return;
+    }
     setExporting(true);
     setError("");
     try {
@@ -586,21 +603,19 @@ export default function OrdersListPage() {
       if (!res.ok || !json.ok) throw new Error(json.error || "발송 정보 조회 실패");
       const options: OrderExportOption[] = json.options || [];
 
-      const needsChoice = options.some((o) => o.shipments.length >= 2);
-      if (needsChoice) {
+      // 목록 데이터가 오래됐을 수 있으니 서버 응답으로 한 번 더 막는다.
+      const missing = options.filter((o) => o.shipments.length === 0);
+      if (missing.length > 0) {
         setExporting(false);
-        setExportOptions(options); // 모달 오픈
+        setError(
+          `발송일정이 없는 발주가 있습니다: ${missing.map((o) => o.company_name || o.order_no).join(", ")}` +
+            " — 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요."
+        );
         return;
       }
 
-      // 분할 없음 → 발송(취소 제외) / 발송없는 과거발주는 발주 단위로 바로 출력
-      const shipment_ids: string[] = [];
-      const order_ids: string[] = [];
-      for (const o of options) {
-        if (o.shipments.length === 0) order_ids.push(o.order_id);
-        else for (const s of o.shipments) if (s.status !== "취소") shipment_ids.push(s.id);
-      }
-      await downloadShipping({ shipment_ids, order_ids });
+      setExporting(false);
+      setExportOptions(options); // 박스 수 확정 + 차수 선택 모달
     } catch (err) {
       setError(err instanceof Error ? err.message : "다운로드 중 오류");
       setExporting(false);
@@ -810,7 +825,8 @@ export default function OrdersListPage() {
         ) : (
           <>
             {selected.size > 0 && (
-              <div className="b2b-selection-bar">
+              // 안내문이 한 줄에 눌리지 않도록 이 바만 줄바꿈 허용 (.b2b-selection-bar 는 공용이라 CSS 를 건드리지 않는다)
+              <div className="b2b-selection-bar" style={{ flexWrap: "wrap", rowGap: 8 }}>
                 <span>
                   <strong>{selected.size}건</strong> 선택됨
                 </span>
@@ -842,11 +858,23 @@ export default function OrdersListPage() {
                     type="button"
                     className="b2b-btn-primary"
                     onClick={handleExportShipping}
-                    disabled={exporting}
+                    disabled={exporting || noScheduleSelected.length > 0}
+                    title={
+                      noScheduleSelected.length > 0
+                        ? "발송일정이 없는 발주가 선택되어 있습니다 — 목록에서 ‘+ 발송일’로 먼저 등록하세요"
+                        : undefined
+                    }
                   >
                     {exporting ? "생성 중..." : "발송요청 양식 다운로드"}
                   </button>
                 </div>
+                {noScheduleSelected.length > 0 && (
+                  // 양식은 발송 차수 단위로 뽑히고 박스 수도 차수에 저장된다 — 일정 없이는 뽑을 것이 없다.
+                  <div style={{ flexBasis: "100%", fontSize: 12, color: "var(--sm-text-mid)" }}>
+                    발송일정이 없어 양식을 뽑을 수 없는 발주: <strong>{noScheduleSelected.join(", ")}</strong>
+                    {" "}— 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요.
+                  </div>
+                )}
               </div>
             )}
             <div className="b2b-table-wrap b2b-orders-table-wrap">
@@ -1462,13 +1490,10 @@ function ExportPickModal({
     for (const o of options) for (const sh of o.shipments) if (sh.status !== "취소") s.add(sh.id);
     return s;
   });
-  const [orderSel, setOrderSel] = useState<Set<string>>(() => {
-    const s = new Set<string>();
-    for (const o of options) if (o.shipments.length === 0) s.add(o.order_id);
-    return s;
-  });
+  // 분할 발송이 섞여 있을 때만 '차수를 고르라'는 안내를 붙인다.
+  const hasSplit = options.some((o) => o.shipments.length >= 2);
 
-  const totalSelected = shipSel.size + orderSel.size;
+  const totalSelected = shipSel.size;
 
   // 실제 포장 박스 수 — 여기서 확정하면 저장되어 송장 출력 행 수·송장 입력칸 수·이익률에 반영된다.
   const [boxes, setBoxes] = useState<Record<string, string>>(() => {
@@ -1485,23 +1510,15 @@ function ExportPickModal({
       return next;
     });
   }
-  function toggleOrder(id: string) {
-    setOrderSel((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
         <div className="b2b-modal-head">
           <div>
-            <h2 className="b2b-modal-title">발송요청 양식 — 어떤 발송을 뽑을까요?</h2>
+            <h2 className="b2b-modal-title">발송요청 양식 — 실제 포장 박스 수</h2>
             <div style={{ marginTop: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>
-              분할 발송이 있어요. 출력할 발송 일정을 선택하세요.
+              실제로 포장한 박스 수를 넣으세요. 저장되어 송장 매수와 이익률 배송비의 기준이 됩니다.
+              {hasSplit ? " 나눠 보내는 발주는 이번에 뽑을 차수만 남기세요." : ""}
             </div>
           </div>
           <button className="b2b-modal-close" onClick={onClose}>✕</button>
@@ -1529,25 +1546,17 @@ function ExportPickModal({
               </div>
 
               {o.shipments.length === 0 ? (
-                <label className="b2b-export-pick">
-                  <input
-                    type="checkbox"
-                    className="b2b-checkbox"
-                    checked={orderSel.has(o.order_id)}
-                    onChange={() => toggleOrder(o.order_id)}
-                  />
+                // 목록에서 미리 막지만, 조회 시점 차이로 여기까지 오면 이유를 보여주고 선택은 막는다.
+                <div className="b2b-export-pick">
                   <span className="b2b-export-pick-main">
-                    <span className="b2b-export-pick-date">발송일정 없음 · 전체</span>
+                    <span className="b2b-export-pick-date" style={{ color: "var(--sm-text-light)" }}>
+                      발송일정 없음 — 뽑을 수 없음
+                    </span>
                     <span className="b2b-export-pick-items">
-                      {o.fallbackItems.length === 0
-                        ? "(상품 없음)"
-                        : o.fallbackItems
-                            .slice(0, 2)
-                            .map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`)
-                            .join(", ") + (o.fallbackItems.length > 2 ? ` 외 ${o.fallbackItems.length - 2}종` : "")}
+                      목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요
                     </span>
                   </span>
-                </label>
+                </div>
               ) : (
                 o.shipments.map((s) => {
                   const c = SHIPMENT_STATUS_COLORS[s.status];
@@ -1605,7 +1614,7 @@ function ExportPickModal({
               onClick={() =>
                 onConfirm({
                   shipment_ids: Array.from(shipSel),
-                  order_ids: Array.from(orderSel),
+                  order_ids: [],
                   boxes: Object.fromEntries(
                     Array.from(shipSel).map((id) => [id, Math.max(1, Math.floor(Number(boxes[id]) || 1))])
                   ),
