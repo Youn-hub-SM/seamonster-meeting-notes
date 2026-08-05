@@ -63,9 +63,9 @@ export default function QuotePage() {
             <input className="b2b-input" type="month" value={ym} max={THIS_MONTH()} onChange={(e) => setYm(e.target.value)} style={{ width: "auto" }} /></label>
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>임대료(총액·부가세 포함)
             <input className="b2b-input" type="number" min={0} value={rent || ""} onChange={(e) => setRent(Number(e.target.value) || 0)} placeholder="0" style={{ width: 130, textAlign: "right" }} /></label>
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>면세 기타(면세취급)
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>면세 기타
             <input className="b2b-input" type="number" min={0} value={etc || ""} onChange={(e) => setEtc(Number(e.target.value) || 0)} placeholder="0" style={{ width: 120, textAlign: "right" }} /></label>
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>과세 기타(공급가·스티로폼 등)
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>과세 기타
             <input className="b2b-input" type="number" min={0} value={taxEtc || ""} onChange={(e) => setTaxEtc(Number(e.target.value) || 0)} placeholder="0" style={{ width: 130, textAlign: "right" }} /></label>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 과세는 입고 단가를 공급가액으로 보고 부가세 10%를 더합니다. 임대료·면세/과세 기타는 직접 입력(브라우저에 기억).</p>
