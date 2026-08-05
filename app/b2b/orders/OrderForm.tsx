@@ -8,7 +8,6 @@ import {
   OrderInput,
   OrderItem,
   OrderItemInput,
-  ORDER_STATUSES,
   PRODUCTION_STATUSES,
   SHOW_ORDER_PRODUCTION,
   PAYMENT_STATUSES,
@@ -543,8 +542,7 @@ export default function OrderForm({
 
   const canSave =
     !!data.company_id && !!data.order_date && data.items.length > 0 &&
-    data.items.every((it) => it.product_name.trim() && Number(it.qty) > 0) &&
-    (data.status !== "발송완료" || !!String(data.tracking_no).trim());
+    data.items.every((it) => it.product_name.trim() && Number(it.qty) > 0);
 
   return (
     <>
@@ -629,7 +627,7 @@ export default function OrderForm({
               <label className="b2b-field-label">발송예정일</label>
               {isMultiShipment ? (
                 <div style={{ fontSize: 11.5, color: "var(--sm-text-light)", padding: "11px 0" }}>
-                  복수발송 — 발송일은 아래 ‘발송 일정’의 차수별로 관리됩니다.
+                  복수발송 — 발송일은 발주 목록의 ‘+ 발송일’ 창에서 차수별로 관리됩니다.
                 </div>
               ) : (
                 <input
@@ -675,24 +673,7 @@ export default function OrderForm({
             ) : (
               <div className="b2b-field" aria-hidden />
             )}
-            <div className="b2b-field">
-              <label className="b2b-field-label">발송 상태</label>
-              {isMultiShipment ? (
-                <div style={{ padding: "9px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 12, color: "var(--sm-text-mid)", lineHeight: 1.4 }}>
-                  복수 발송이라 발송 상태는 <strong>발송 일정(차수)별</strong>로 관리됩니다.
-                </div>
-              ) : (
-                <select
-                  className="b2b-select"
-                  value={data.status}
-                  onChange={(e) => setField("status", e.target.value as OrderInput["status"])}
-                >
-                  {ORDER_STATUSES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+            <div className="b2b-field" aria-hidden />
           </div>
           <div className="b2b-field-row" style={{ marginTop: 12 }}>
             <div className="b2b-field">
@@ -720,28 +701,6 @@ export default function OrderForm({
               </select>
             </div>
           </div>
-          {/* 헤더 송장번호 — 단일 발송에서만 (복수발송은 차수별 송장) */}
-          {!isMultiShipment && (
-            <div className="b2b-field-row" style={{ marginTop: 12 }}>
-              <div className="b2b-field">
-                <label className="b2b-field-label">
-                  송장번호
-                  {data.status === "발송완료" && <span className="req">*</span>}
-                </label>
-                <input
-                  type="text"
-                  className="b2b-input"
-                  value={data.tracking_no}
-                  onChange={(e) => setField("tracking_no", e.target.value)}
-                  placeholder="발송완료 시 필수"
-                />
-                {data.status === "발송완료" && !String(data.tracking_no).trim() && (
-                  <span style={{ fontSize: 11, color: "var(--sm-danger)" }}>발송완료로 저장하려면 송장번호가 필요합니다.</span>
-                )}
-              </div>
-              <div className="b2b-field" aria-hidden />
-            </div>
-          )}
         </CollapsibleSection>
 
         {/* ───── 배송 정보 (공통) ───── */}
