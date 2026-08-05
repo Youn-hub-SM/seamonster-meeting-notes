@@ -72,7 +72,8 @@ export default function OrdersListPage() {
   const [trackingInput, setTrackingInput] = useState<string[]>([""]);
   // 발송일 등록 창 — 차수(발송예정일 + 박스 수)를 여기서만 만든다. 발주 등록 폼에는 발송 일정이 없다.
   const [shipPrompt, setShipPrompt] = useState<{ id: string; label: string } | null>(null);
-  const [shipRows, setShipRows] = useState<{ ship_date: string; box_count: string }[]>([]);
+  const [shipRows, setShipRows] = useState<{ ship_date: string; box_count: string; items: Record<number, string> }[]>([]);
+  const [shipItems, setShipItems] = useState<{ id: string; product_name: string; spec: string | null; qty: number }[]>([]);
   const [shipSaving, setShipSaving] = useState(false);
   const [shipLoading, setShipLoading] = useState(false);
   // 직접 배송(택배 아님) — 체크 시 송장번호 없이 발송완료 가능
@@ -284,17 +285,35 @@ export default function OrdersListPage() {
   // 발송일 등록 창 열기 — 기존 차수가 있으면 불러와 이어서 편집(복수 발송 세팅).
   async function openShipPrompt(id: string, label: string) {
     setShipPrompt({ id, label });
-    setShipRows([]);
+    setShipRows([]); setShipItems([]);
     setShipLoading(true);
     try {
       const j = await (await fetch(`/api/b2b/orders/${id}/shipments`, { cache: "no-store" })).json();
-      const rows = (j?.ok ? j.schedules : [])?.map((s: { ship_date: string; box_count: number }) => ({
-        ship_date: s.ship_date || "", box_count: String(Math.max(1, Number(s.box_count) || 1)),
-      })) as { ship_date: string; box_count: string }[] | undefined;
-      setShipRows(rows?.length ? rows : [{ ship_date: "", box_count: "1" }]);
-    } catch { setShipRows([{ ship_date: "", box_count: "1" }]); }
+      const items = (j?.ok ? j.items : []) as typeof shipItems;
+      setShipItems(items || []);
+      type Sch = { ship_date: string; box_count: number; items: { order_item_index: number; qty: number }[] };
+      const rows = ((j?.ok ? j.schedules : []) as Sch[] | undefined)?.map((s) => ({
+        ship_date: s.ship_date || "",
+        box_count: String(Math.max(1, Number(s.box_count) || 1)),
+        items: Object.fromEntries((s.items || []).map((x) => [x.order_item_index, String(x.qty)])),
+      }));
+      // 새로 만드는 첫 차수는 발주 전량을 미리 담아 둔다(그대로 저장하면 단일 발송).
+      const blank = { ship_date: "", box_count: "1", items: Object.fromEntries((items || []).map((it, i) => [i, String(it.qty)])) };
+      setShipRows(rows?.length ? rows : [blank]);
+    } catch { setShipRows([{ ship_date: "", box_count: "1", items: {} }]); }
     setShipLoading(false);
   }
+
+  // 차수별 배분 합계 — 발주 수량과 다르면 경고(저장은 막지 않음)
+  const shipAllocWarn = useMemo(() => {
+    if (!shipPrompt || !shipItems.length) return [] as string[];
+    const out: string[] = [];
+    shipItems.forEach((it, i) => {
+      const sum = shipRows.reduce((a, r) => a + (Number(r.items[i]) || 0), 0);
+      if (sum !== it.qty) out.push(`${it.product_name}${it.spec ? ` ${it.spec}` : ""}: 발주 ${it.qty} / 배분 ${sum}`);
+    });
+    return out;
+  }, [shipPrompt, shipItems, shipRows]);
 
   // 발송 일정 저장 — 차수 통째 교체. 서버가 도매 재고 차감·헤더 발송일/상태/박스 수까지 맞춘다.
   async function saveShipments() {
@@ -307,7 +326,9 @@ export default function OrdersListPage() {
         tracking_no: "",
         box_count: Math.max(1, Math.floor(Number(r.box_count) || 1)),
         stock_out: true,
-        items: [] as { order_item_index: number; qty: number }[],
+        items: Object.entries(r.items)
+          .map(([k, v]) => ({ order_item_index: Number(k), qty: Number(v) || 0 }))
+          .filter((x) => x.qty > 0),
       }));
     if (!schedules.length) { setError("발송예정일을 1개 이상 넣으세요."); return; }
     setShipSaving(true);
@@ -501,10 +522,22 @@ export default function OrdersListPage() {
   }
 
   // 실제 xlsx 다운로드 (발송 단위 shipment_ids + 과거 발주 order_ids)
-  async function downloadShipping(payload: { shipment_ids?: string[]; order_ids?: string[] }) {
+  async function downloadShipping(payload: { shipment_ids?: string[]; order_ids?: string[]; boxes?: Record<string, number> }) {
     setExporting(true);
     setError("");
     try {
+      // 양식에 적은 박스 수를 먼저 확정 저장 — 이 엑셀이 송장 출력 직전 단계라, 여기서 정한 수가
+      //  송장 행 수·발송완료 시 송장 입력칸 수·이익률 배송비의 기준이 된다.
+      const boxes = payload.boxes || {};
+      const changed = Object.entries(boxes);
+      if (changed.length) {
+        await Promise.all(changed.map(([id, n]) =>
+          fetch(`/api/b2b/shipments/${id}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ box_count: n }),
+          }).catch(() => null)
+        ));
+      }
       const res = await fetch("/api/b2b/orders/export-shipping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -531,6 +564,7 @@ export default function OrdersListPage() {
       a.remove();
       URL.revokeObjectURL(url);
       setExportOptions(null);
+      if (Object.keys(payload.boxes || {}).length) await reload(); // 확정 박스 수 반영
     } catch (err) {
       setError(err instanceof Error ? err.message : "다운로드 중 오류");
     }
@@ -1169,7 +1203,8 @@ export default function OrdersListPage() {
               ) : (
                 <div className="sm-col" style={{ gap: 10 }}>
                   {shipRows.map((r, i) => (
-                    <div key={i} className="sm-row" style={{ gap: 8, alignItems: "flex-end" }}>
+                    <div key={i} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 12 }}>
+                      <div className="sm-row" style={{ gap: 8, alignItems: "flex-end" }}>
                       <label className="b2b-field" style={{ flex: 1, minWidth: 0 }}>
                         <span className="b2b-field-label">{shipRows.length > 1 ? `${i + 1}차 발송예정일` : "발송예정일"}</span>
                         <input type="date" className="b2b-input" value={r.ship_date}
@@ -1186,11 +1221,35 @@ export default function OrdersListPage() {
                         <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
                           onClick={() => setShipRows((p) => p.filter((_, j) => j !== i))}>✕</button>
                       )}
+                      </div>
+                      {/* 이 차수에 담을 수량 — 발송요청 엑셀·매출 집계가 이 배분을 읽는다 */}
+                      {shipItems.length > 0 && (
+                        <div className="sm-col" style={{ gap: 6, marginTop: 8, paddingLeft: 2 }}>
+                          <span className="b2b-field-label" style={{ margin: 0 }}>보낼 수량 (상품별)</span>
+                          {shipItems.map((it, oi) => (
+                            <div key={oi} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {it.product_name}{it.spec ? ` · ${it.spec}` : ""}
+                                <span className="sm-faint" style={{ marginLeft: 6 }}>(주문 {it.qty})</span>
+                              </span>
+                              <input type="number" inputMode="numeric" min={0} className="b2b-input" placeholder="0"
+                                style={{ width: 90, textAlign: "right" }}
+                                value={r.items[oi] ?? ""}
+                                onChange={(e) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, items: { ...x.items, [oi]: e.target.value } } : x)))} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
+                  {shipAllocWarn.length > 0 && (
+                    <div className="sm-warn" style={{ fontSize: 12 }}>
+                      배분 수량이 발주 수량과 다릅니다 — {shipAllocWarn.join(" / ")}
+                    </div>
+                  )}
                   <div>
                     <button type="button" className="b2b-btn-secondary"
-                      onClick={() => setShipRows((p) => [...p, { ship_date: "", box_count: "1" }])}>+ 발송 일정 추가</button>
+                      onClick={() => setShipRows((p) => [...p, { ship_date: "", box_count: "1", items: {} }])}>+ 발송 일정 추가</button>
                   </div>
                 </div>
               )}
@@ -1395,7 +1454,7 @@ function ExportPickModal({
   options: OrderExportOption[];
   exporting: boolean;
   onClose: () => void;
-  onConfirm: (payload: { shipment_ids: string[]; order_ids: string[] }) => void;
+  onConfirm: (payload: { shipment_ids: string[]; order_ids: string[]; boxes: Record<string, number> }) => void;
 }) {
   // 기본 선택: 취소가 아닌 모든 발송 + 발송 없는 발주(전체)
   const [shipSel, setShipSel] = useState<Set<string>>(() => {
@@ -1410,6 +1469,13 @@ function ExportPickModal({
   });
 
   const totalSelected = shipSel.size + orderSel.size;
+
+  // 실제 포장 박스 수 — 여기서 확정하면 저장되어 송장 출력 행 수·송장 입력칸 수·이익률에 반영된다.
+  const [boxes, setBoxes] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const o of options) for (const s of o.shipments) m[s.id] = String(Math.max(1, Number(s.box_count) || 1));
+    return m;
+  });
 
   function toggleShip(id: string) {
     setShipSel((prev) => {
@@ -1486,12 +1552,13 @@ function ExportPickModal({
                 o.shipments.map((s) => {
                   const c = SHIPMENT_STATUS_COLORS[s.status];
                   return (
-                    <label key={s.id} className="b2b-export-pick">
+                    <div key={s.id} className="b2b-export-pick" style={{ alignItems: "center" }}>
                       <input
                         type="checkbox"
                         className="b2b-checkbox"
                         checked={shipSel.has(s.id)}
                         onChange={() => toggleShip(s.id)}
+                        aria-label={`${s.ship_date || "예정일 미정"} 선택`}
                       />
                       <span className="b2b-export-pick-main">
                         <span className="b2b-export-pick-date">
@@ -1505,7 +1572,17 @@ function ExportPickModal({
                         </span>
                         <span className="b2b-export-pick-items">{shipmentSummary(s, o.fallbackItems)}</span>
                       </span>
-                    </label>
+                      <label className="sm-row" style={{ gap: 6, flexShrink: 0, fontSize: 12, color: "var(--sm-text-mid)" }}>
+                        박스
+                        <input
+                          type="number" inputMode="numeric" min={1} step={1} className="b2b-input"
+                          style={{ width: 74, textAlign: "right" }}
+                          value={boxes[s.id] ?? "1"}
+                          onChange={(e) => setBoxes((p) => ({ ...p, [s.id]: e.target.value }))}
+                          onBlur={() => setBoxes((p) => ({ ...p, [s.id]: p[s.id] === "" ? "1" : p[s.id] }))}
+                        />
+                      </label>
+                    </div>
                   );
                 })
               )}
@@ -1526,7 +1603,13 @@ function ExportPickModal({
               className="b2b-btn-primary"
               disabled={exporting || totalSelected === 0}
               onClick={() =>
-                onConfirm({ shipment_ids: Array.from(shipSel), order_ids: Array.from(orderSel) })
+                onConfirm({
+                  shipment_ids: Array.from(shipSel),
+                  order_ids: Array.from(orderSel),
+                  boxes: Object.fromEntries(
+                    Array.from(shipSel).map((id) => [id, Math.max(1, Math.floor(Number(boxes[id]) || 1))])
+                  ),
+                })
               }
             >
               {exporting ? "생성 중..." : "선택 발송 양식 다운로드"}

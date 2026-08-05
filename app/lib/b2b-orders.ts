@@ -291,6 +291,7 @@ export interface ShipmentExportOption {
   seq: number;
   ship_date: string | null;
   status: ShipmentStatus;
+  box_count: number;       // 실제 포장 박스 수 — 발송요청 양식에서 확정 입력(송장 출력·이익률 기준)
   items: ExportLineItem[]; // 비어 있으면 발주 전체상품(fallback)로 출력
 }
 

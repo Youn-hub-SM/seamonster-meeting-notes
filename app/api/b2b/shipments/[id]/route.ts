@@ -15,7 +15,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   try {
     const { id } = await params;
-    const body = (await req.json()) as { status?: string; tracking_no?: string };
+    const body = (await req.json()) as { status?: string; tracking_no?: string; box_count?: number };
 
     const sb = supabaseAdmin();
     const { data: ship, error: getErr } = await sb
@@ -55,10 +55,19 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const patch: Record<string, unknown> = {};
     if (body.status !== undefined) patch.status = body.status;
     if (body.tracking_no !== undefined) patch.tracking_no = (body.tracking_no || "").trim() || null;
+    // 실제 포장 박스 수 확정(발송요청 양식에서 입력) — 송장 출력 행 수·송장 입력칸 수·이익률 배송비가 이 값을 따른다.
+    if (body.box_count !== undefined) patch.box_count = Math.max(1, Math.floor(Number(body.box_count) || 1));
     patch.shipped_at = newStatus === "발송완료" ? new Date().toISOString() : null;
 
     const { error: upErr } = await sb.from("shipments").update(patch).eq("id", id);
     if (upErr) throw upErr;
+
+    // 박스 수가 바뀌면 발주 헤더(orders.box_count)도 차수 합으로 다시 맞춘다 — 이익률·발주 단위 송장칸이 이걸 읽는다.
+    if (body.box_count !== undefined) {
+      const { data: all } = await sb.from("shipments").select("box_count").eq("order_id", ship.order_id);
+      const total = (all ?? []).reduce((a, s) => a + Math.max(1, Number((s as { box_count: number | null }).box_count) || 1), 0);
+      if (total > 0) await sb.from("orders").update({ box_count: total }).eq("id", ship.order_id);
+    }
 
     // 차수 상태 변경 이력 기록 (히스토리)
     if (body.status !== undefined && newStatus !== ship.status) {

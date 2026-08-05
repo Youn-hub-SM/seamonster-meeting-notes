@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
         "id, order_no, order_date, " +
           "companies:company_id(name), " +
           "order_items(product_name, option_label, spec, qty, sort_order), " +
-          "shipments(id, seq, ship_date, status, shipment_items(product_name, spec, qty))"
+          "shipments(id, seq, ship_date, status, box_count, shipment_items(product_name, spec, qty))"
       )
       .in("id", ids)
       .order("order_date", { ascending: true });
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     type CompJoin = { name?: string };
     type OItem = { product_name: string; option_label: string | null; spec: string | null; qty: number; sort_order: number };
     type SItem = { product_name: string; spec: string | null; qty: number };
-    type ShipJoin = { id: string; seq: number; ship_date: string | null; status: string; shipment_items: SItem[] };
+    type ShipJoin = { id: string; seq: number; ship_date: string | null; status: string; box_count: number | null; shipment_items: SItem[] };
     type Row = {
       id: string;
       order_no: string;
@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
           seq: s.seq,
           ship_date: s.ship_date,
           status: (s.status || "발송대기") as ShipmentStatus,
+          box_count: Math.max(1, Number(s.box_count) || 1),
           items: (s.shipment_items ?? []).map((si) => ({
             product_name: si.product_name,
             spec: si.spec,
