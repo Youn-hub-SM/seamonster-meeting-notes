@@ -71,6 +71,9 @@ export interface LotStock {
   last_out_date: string | null;
   created_at: string;
   updated_at: string;
+  // 기간 입출고 — lots API 에 from/to 를 주면 서버가 채운다(그 범위 거래의 +합 / −합)
+  period_in?: number;
+  period_out?: number;
 }
 
 export interface LotTxn {

@@ -16,8 +16,10 @@ function txt(v: unknown): string | null {
   return s || null;
 }
 
-// GET ?warehouse_id= &own=1|0 &q= &empty=1 — 로트 목록(현재수량 포함)
+// GET ?warehouse_id= &own=1|0 &q= &empty=1 &from= &to= — 로트 목록(현재수량 + 기간 입출고)
 //  기본은 소진 로트(현재수량 0 이하)를 숨긴다. empty=1 이면 전부 보여준다.
+//  from~to 를 주면 그 범위 거래를 로트별로 합산해 period_in(+합)·period_out(−합)을 붙인다.
+//  이동도 포함한다 — 그 로트 입장에서는 실제로 들어오고 나간 수량이다.
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
@@ -34,7 +36,29 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await q.order("item_name").order("first_in_date", { ascending: true });
     if (error) throw error;
-    return NextResponse.json({ ok: true, rows: data || [] });
+    const rows = (data || []) as Record<string, unknown>[];
+
+    const from = sp.get("from") || "";
+    const to = sp.get("to") || "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) && rows.length) {
+      const { data: tx, error: te } = await factoryDb()
+        .from("lot_txns").select("lot_id, qty")
+        .gte("txn_date", from).lte("txn_date", to)
+        .limit(20000); // supabase 기본 1000행 캡 해제 — 현재 주 66건 수준이라 수년치 여유
+      if (te) throw te;
+      const inMap = new Map<string, number>();
+      const outMap = new Map<string, number>();
+      for (const t of (tx || []) as { lot_id: string; qty: number }[]) {
+        const v = Number(t.qty) || 0;
+        if (v > 0) inMap.set(t.lot_id, (inMap.get(t.lot_id) || 0) + v);
+        else outMap.set(t.lot_id, (outMap.get(t.lot_id) || 0) - v);
+      }
+      for (const r of rows) {
+        r.period_in = inMap.get(String(r.id)) || 0;
+        r.period_out = outMap.get(String(r.id)) || 0;
+      }
+    }
+    return NextResponse.json({ ok: true, rows });
   } catch (err) {
     console.error("[factory/lots GET]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "재고 조회 실패") }, { status: 500 });
