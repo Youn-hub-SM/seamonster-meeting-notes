@@ -625,18 +625,12 @@ export default function OrderForm({
             )}
             <div className="b2b-field">
               <label className="b2b-field-label">발송예정일</label>
-              {isMultiShipment ? (
-                <div style={{ fontSize: 11.5, color: "var(--sm-text-light)", padding: "11px 0" }}>
-                  복수발송 — 발송일은 발주 목록의 ‘+ 발송일’ 창에서 차수별로 관리됩니다.
-                </div>
-              ) : (
-                <input
-                  type="date"
-                  className="b2b-input"
-                  value={data.ship_date}
-                  onChange={(e) => setField("ship_date", e.target.value)}
-                />
-              )}
+              <div style={{ fontSize: 13, padding: "10px 0", color: data.ship_date ? undefined : "var(--sm-text-light)" }}>
+                {data.ship_date || "미정"}
+              </div>
+              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>
+                발주 목록의 ‘+ 발송일’ 창에서 잡습니다{isMultiShipment ? " (복수발송 — 가장 이른 날짜)" : ""}
+              </span>
             </div>
           </div>
 
