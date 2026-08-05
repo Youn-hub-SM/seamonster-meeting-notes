@@ -924,7 +924,14 @@ export default function OrdersListPage() {
                       {parent ? (
                         <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{""}</RowCell>
                       ) : o.ship_date ? (
-                        <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.ship_date}</RowCell>
+                        <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
+                          {/* 등록된 발송일도 눌러서 고친다 — 같은 창에서 차수 추가·삭제까지 */}
+                          <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
+                            title="발송일 수정"
+                            onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
+                            {o.ship_date}
+                          </button>
+                        </td>
                       ) : (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
                           {/* 발송일 미등록 — 버튼이 달력을 직접 연다(showPicker). 투명 input 오버레이는
@@ -1195,7 +1202,7 @@ export default function OrdersListPage() {
             </div>
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-                나눠 보내면 줄을 추가하세요. 박스 수는 실제 보낼 박스 개수이고, 송장번호 입력칸 수와 이익률 배송비가 이 값으로 계산됩니다.
+                나눠 보내면 줄을 추가하세요. 박스 수는 실제 포장할 때 정해지므로 여기서는 넣지 않고, ‘발송요청 양식 다운로드’에서 확정합니다.
                 저장하면 도매 재고에서 발주 전량이 가장 이른 발송일에 차감됩니다.
               </p>
               {shipLoading ? (
@@ -1209,13 +1216,6 @@ export default function OrdersListPage() {
                         <span className="b2b-field-label">{shipRows.length > 1 ? `${i + 1}차 발송예정일` : "발송예정일"}</span>
                         <input type="date" className="b2b-input" value={r.ship_date}
                           onChange={(e) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, ship_date: e.target.value } : x)))} />
-                      </label>
-                      <label className="b2b-field" style={{ width: 96, flexShrink: 0 }}>
-                        <span className="b2b-field-label">박스 수</span>
-                        <input type="number" inputMode="numeric" min={1} step={1} className="b2b-input" style={{ textAlign: "right" }}
-                          value={r.box_count}
-                          onChange={(e) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, box_count: e.target.value } : x)))}
-                          onBlur={() => setShipRows((p) => p.map((x, j) => (j === i && x.box_count === "" ? { ...x, box_count: "1" } : x)))} />
                       </label>
                       {shipRows.length > 1 && (
                         <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
