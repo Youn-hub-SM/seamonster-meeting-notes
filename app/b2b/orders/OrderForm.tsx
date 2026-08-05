@@ -424,15 +424,17 @@ export default function OrderForm({
     const found = data.shipments[si]?.items.find((x) => x.order_item_index === orderItemIndex);
     return found ? String(found.qty) : "";
   }
-  // 차수 박스 수 변경 — 송장 칸 수가 따라 바뀌므로 tracking 문자열도 길이에 맞춤
+  // 차수 박스 수 변경 — 송장 칸 수가 따라 바뀌므로 tracking 문자열도 길이에 맞춤.
+  //  빈 값을 즉시 1로 되돌리면 모바일에서 기본값 1을 지우고 새 숫자를 입력할 수 없다(1→13 처럼 붙음)
+  //  → 입력 중에는 빈 값을 그대로 두고, blur(칸 벗어남)·저장 시에 1로 보정한다. 서버도 숫자로 강제 변환한다.
   function setScheduleBoxCount(si: number, raw: string) {
-    const n = raw === "" ? 1 : Math.max(1, Math.floor(Number(raw) || 1));
+    const n = Math.max(1, Math.floor(Number(raw) || 1)); // 송장 칸 수 계산용(빈 값=1칸 유지)
     setData((prev) => ({
       ...prev,
       shipments: prev.shipments.map((s, i) => {
         if (i !== si) return s;
         const boxes = splitTracking(s.tracking_no, n); // n 길이에 맞춰 패딩/자름
-        return { ...s, box_count: n, tracking_no: joinTracking(boxes) };
+        return { ...s, box_count: raw === "" ? "" : n, tracking_no: joinTracking(boxes) };
       }),
     }));
   }
@@ -862,6 +864,7 @@ export default function OrderForm({
                       step={1}
                       value={sch.box_count}
                       onChange={(e) => setScheduleBoxCount(si, e.target.value)}
+                      onBlur={() => { if (sch.box_count === "") setScheduleBoxCount(si, "1"); }}
                       style={{ textAlign: "right" }}
                     />
                   </div>
@@ -1066,7 +1069,8 @@ export default function OrderForm({
                 min={1}
                 step={1}
                 readOnly={realScheduleCount > 0}
-                onChange={(e) => setField("box_count", e.target.value === "" ? 1 : Number(e.target.value))}
+                onChange={(e) => setField("box_count", e.target.value === "" ? "" : Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                onBlur={() => { if (data.box_count === "") setField("box_count", 1); }}
                 style={realScheduleCount > 0 ? { background: "var(--sm-bg)", color: "var(--sm-text-mid)" } : undefined}
               />
               <span style={{ fontSize: 10.5, color: "var(--sm-text-light)", marginTop: 4 }}>
