@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { computeQuote, type QuoteTxn } from "@/app/lib/inventory-quote";
-import { fetchQuoteTxns, validMonth } from "./fetch";
+import { fetchQuoteTxns, fetchQuoteReturns, validMonth } from "./fetch";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +14,11 @@ export async function GET(req: NextRequest) {
     const exemptEtc = Number(req.nextUrl.searchParams.get("etc")) || 0;
     const taxableEtc = Number(req.nextUrl.searchParams.get("tax_etc")) || 0;
 
-    const txns: QuoteTxn[] = await fetchQuoteTxns(month);
+    const [txns, returns] = await Promise.all([fetchQuoteTxns(month), fetchQuoteReturns(month)]) as [QuoteTxn[], Awaited<ReturnType<typeof fetchQuoteReturns>>];
     // status 컬럼이 있으면 '완료'만(대기 매입은 결산 제외). 없으면 전체.
     const hasStatus = txns.some((t) => t.status != null);
     const used = hasStatus ? txns.filter((t) => t.status === "완료") : txns;
-    const result = computeQuote(month, used, { rent, exemptEtc, taxableEtc });
+    const result = computeQuote(month, used, { rent, exemptEtc, taxableEtc, returns });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("[inventory/quote GET]", err);

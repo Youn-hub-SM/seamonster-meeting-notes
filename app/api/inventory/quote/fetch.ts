@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/app/lib/supabase";
-import type { QuoteTxn } from "@/app/lib/inventory-quote";
+import type { QuoteTxn, QuoteReturn } from "@/app/lib/inventory-quote";
 
 const MONTH_RE = /^\d{4}-\d{2}$/;
 
@@ -46,5 +46,19 @@ export async function fetchQuoteTxns(month: string): Promise<QuoteTxn[]> {
       sku: r.products.sku, name: r.products.name, spec: r.products.spec,
       origin: r.products.origin ?? null, purchase_price: r.products.purchase_price ?? 0, tax_type: r.products.tax_type ?? "taxable",
     } : null,
+  }));
+}
+
+// 해당 월의 제조사 반품(purchase_returns). 마이그레이션 087 미적용이면 빈 배열 — 결산은 그대로 돈다.
+export async function fetchQuoteReturns(month: string): Promise<QuoteReturn[]> {
+  const sb = supabaseAdmin();
+  const { from, to } = monthRange(month);
+  const res = await sb.from("purchase_returns").select("product_id, qty, unit_amount")
+    .gte("return_date", from).lte("return_date", to).limit(5000);
+  if (res.error) return [];
+  return (res.data ?? []).map((r) => ({
+    product_id: r.product_id as string,
+    qty: Number(r.qty) || 0,
+    unit_amount: r.unit_amount == null ? null : Number(r.unit_amount),
   }));
 }

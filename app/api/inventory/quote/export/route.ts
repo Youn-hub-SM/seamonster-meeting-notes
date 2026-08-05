@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { computeQuote } from "@/app/lib/inventory-quote";
-import { fetchQuoteTxns, validMonth } from "../fetch";
+import { fetchQuoteTxns, fetchQuoteReturns, validMonth } from "../fetch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,10 +22,11 @@ export async function GET(req: NextRequest) {
     const exemptEtc = Number(req.nextUrl.searchParams.get("etc")) || 0;
     const taxableEtc = Number(req.nextUrl.searchParams.get("tax_etc")) || 0;
 
-    const txns = await fetchQuoteTxns(month);
+    // 반품도 같이 넘긴다 — 안 넘기면 화면과 엑셀의 총 매입금액이 서로 다르게 나온다.
+    const [txns, returns] = await Promise.all([fetchQuoteTxns(month), fetchQuoteReturns(month)]);
     const hasStatus = txns.some((t) => t.status != null);
     const used = hasStatus ? txns.filter((t) => t.status === "완료") : txns;
-    const { items, raw, summary } = computeQuote(month, used, { rent, exemptEtc, taxableEtc });
+    const { items, raw, summary } = computeQuote(month, used, { rent, exemptEtc, taxableEtc, returns });
     const [y, m] = month.split("-");
     const title = `${y}년 ${m}월`;
 
@@ -55,21 +56,22 @@ export async function GET(req: NextRequest) {
     ws.addRow([]);
 
     // 품목 표
-    const HEAD = ["코드명", "품목명", "규격(g)", "원산지", "매입수량", "매입가", "총 매입금액", "검증", "구분"];
+    const HEAD = ["코드명", "품목명", "규격(g)", "원산지", "매입가", "매입수량", "반품수량", "총 매입금액", "구분"];
     const hr = ws.addRow(HEAD);
     hr.font = BOLD; hr.eachCell((c) => (c.fill = HEAD_FILL));
     for (const it of items) {
       const row = ws.addRow([
         it.sku || "", it.name, it.spec || "", it.origin || "",
-        it.qty, it.unit_price, it.total,
-        it.match, it.tax_type === "exempt" ? "면세" : "과세",
+        it.unit_price, it.qty, it.return_qty || "", it.total,
+        it.tax_type === "exempt" ? "면세" : "과세",
       ]);
-      row.getCell(5).numFmt = MONEY; row.getCell(6).numFmt = MONEY; row.getCell(7).numFmt = MONEY;
-      if (it.match === "다름") row.getCell(8).font = { color: { argb: "FFC0392B" }, bold: true };
+      row.getCell(5).numFmt = MONEY; row.getCell(6).numFmt = MONEY; row.getCell(7).numFmt = MONEY; row.getCell(8).numFmt = MONEY;
+      // 반품이 있는 줄은 눈에 띄게 — 총 매입금액이 매입가×매입수량과 안 맞는 이유가 이 열이다
+      if (it.return_qty > 0) row.getCell(7).font = { color: { argb: "FFC0392B" }, bold: true };
     }
-    const totalRow = ws.addRow(["합계", "", "", "", summary.totalQty, "", summary.totalAmount, "", ""]);
+    const totalRow = ws.addRow(["합계", "", "", "", "", summary.totalQty, summary.totalReturnQty || "", summary.totalAmount, ""]);
     totalRow.font = BOLD; totalRow.eachCell((c) => (c.fill = SUM_FILL));
-    totalRow.getCell(5).numFmt = MONEY; totalRow.getCell(7).numFmt = MONEY;
+    totalRow.getCell(6).numFmt = MONEY; totalRow.getCell(7).numFmt = MONEY; totalRow.getCell(8).numFmt = MONEY;
 
     ws.columns.forEach((c, i) => { c.width = i === 0 ? 16 : i === 1 ? 22 : i === 3 ? 10 : 13; });
 
