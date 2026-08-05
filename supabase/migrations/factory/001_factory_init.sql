@@ -106,4 +106,12 @@ alter table factory.warehouses enable row level security;
 alter table factory.lots enable row level security;
 alter table factory.lot_txns enable row level security;
 
+-- ── 권한 ────────────────────────────────────────────────────────────
+-- public 과 달리 직접 만든 스키마는 기본 grant 가 없다 — 안 주면 서비스 키도
+-- "permission denied for schema factory [42501]" 를 맞는다(003 에서 뒤늦게 발견).
+-- anon/authenticated 는 주지 않는다(파도소리 앱은 service_role 전용, 최소 권한).
+grant usage on schema factory to service_role;
+grant all on all tables in schema factory to service_role;   -- 뷰(lot_stock) 포함
+alter default privileges for role postgres in schema factory grant all on tables to service_role;
+
 notify pgrst, 'reload schema';
