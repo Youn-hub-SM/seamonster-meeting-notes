@@ -261,6 +261,49 @@ export default function OrderForm({
   //  전 차수 취소면 합이 0 이 되므로 1 로 받친다 — 0 이면 배송비 계산이 박스당 부피에서 나눗셈이 깨진다.
   const effectiveBoxCount = realScheduleCount > 0 ? Math.max(1, scheduleBoxSum) : Math.max(1, Number(data.box_count) || 1);
 
+  // ── 발송·송장 (읽기 전용, 수정 화면) — 발송완료 후 송장번호를 확인할 곳이 없어 여기서 보여준다.
+  //  송장은 차수(shipments.tracking_no)에 있고, 발주 단위로 발송완료 처리한 옛 데이터는
+  //  orders.tracking_no 에만 있으므로 차수 송장이 비면 발주 송장으로 채운다(단일 차수일 때만).
+  const [copiedTrack, setCopiedTrack] = useState("");
+  const shippedInfo = useMemo(() => {
+    const real = data.shipments.filter((sh) => sh.ship_date || sh.items.some((i) => Number(i.qty) > 0));
+    const rows = real.map((sh, idx) => ({
+      key: sh.id || String(idx),
+      seq: idx + 1,
+      ship_date: sh.ship_date || "",
+      status: sh.status as string,
+      box_count: Math.max(1, Math.floor(Number(sh.box_count) || 1)),
+      tracking: (sh.tracking_no || "").trim() || (real.length <= 1 ? (data.tracking_no || "").trim() : ""),
+      itemsLabel: sh.items
+        .map((it) => {
+          const oi = data.items[it.order_item_index];
+          return oi ? `${oi.product_name}${oi.spec ? ` ${oi.spec}` : ""} ×${formatQty(Number(it.qty) || 0)}` : null;
+        })
+        .filter(Boolean)
+        .join(", "),
+    }));
+    // 차수가 아예 없는 옛 발주 — 발주 단위 송장만 있다
+    if (rows.length === 0 && (data.tracking_no || "").trim()) {
+      rows.push({
+        key: "order", seq: 1, ship_date: data.ship_date || "", status: data.status as string,
+        box_count: Math.max(1, Math.floor(Number(data.box_count) || 1)),
+        tracking: (data.tracking_no || "").trim(), itemsLabel: "",
+      });
+    }
+    return rows;
+  }, [data.shipments, data.items, data.tracking_no, data.ship_date, data.status, data.box_count]);
+  const showShipInfo = mode === "edit" && shippedInfo.some((r) => r.tracking || r.status === "발송완료");
+  const orderItemsLabel = data.items
+    .filter((it) => it.product_id)
+    .map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(Number(it.qty) || 0)}`)
+    .join(", ");
+  function copyTracking(key: string, num: string) {
+    navigator.clipboard?.writeText(num).then(() => {
+      setCopiedTrack(key);
+      setTimeout(() => setCopiedTrack((cur) => (cur === key ? "" : cur)), 1500);
+    }).catch(() => {});
+  }
+
   // 발주 단위 이익률 (배송 박스 비용 포함)
   const currentMonth = useMemo(() => new Date().getMonth() + 1, []);
   const orderMargin = useMemo(() => {
@@ -764,6 +807,63 @@ export default function OrderForm({
 
         {/* 발송 일정(차수)은 발주 목록의 '+ 발송일' 창에서만 만든다 —
             실제 발송 기준으로 날짜·박스 수·수량을 한 곳에서 잡기 위해 이 폼에서는 뺐다. */}
+
+        {/* ───── 발송 · 송장번호 (읽기 전용) ───── */}
+        {showShipInfo && (
+          <section className="b2b-form-section">
+            <div className="b2b-form-section-title">
+              발송 · 송장번호
+              {data.recipient.courier ? <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: "var(--sm-text-mid)" }}>{data.recipient.courier}</span> : null}
+            </div>
+            <div className="sm-col" style={{ gap: 10 }}>
+              {shippedInfo.map((r) => (
+                <div key={r.key} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: "10px 12px" }}>
+                  <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <strong style={{ fontSize: 13 }}>
+                      {shippedInfo.length > 1 ? `${r.seq}차 · ` : ""}{r.ship_date || "날짜미정"}
+                    </strong>
+                    <span className="b2b-status-pill" style={{
+                      background: SHIPMENT_STATUS_COLORS[r.status as keyof typeof SHIPMENT_STATUS_COLORS]?.bg,
+                      color: SHIPMENT_STATUS_COLORS[r.status as keyof typeof SHIPMENT_STATUS_COLORS]?.fg,
+                    }}>{r.status}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--sm-text-mid)", marginTop: 6 }}>
+                    <span style={{ color: "var(--sm-text-light)", marginRight: 5 }}>발송 제품</span>
+                    {r.itemsLabel || orderItemsLabel || "-"}
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    {r.tracking === "직접배송" ? (
+                      <span style={{ fontSize: 12.5, color: "var(--sm-text-mid)" }}>직접배송 — 택배 송장 없음</span>
+                    ) : r.tracking ? (
+                      <div className="sm-col" style={{ gap: 3 }}>
+                        {splitTracking(r.tracking, r.box_count).map((num, bi) => (
+                          <div key={bi} className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            {r.box_count > 1 && <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", width: 40, flexShrink: 0 }}>박스 {bi + 1}</span>}
+                            {num ? (
+                              <>
+                                <span style={{ fontFamily: "var(--sm-mono)", fontSize: 13.5, fontWeight: 600 }}>{num}</span>
+                                <button type="button" className="b2b-link-btn" style={{ fontSize: 11.5 }}
+                                  onClick={() => copyTracking(`${r.key}-${bi}`, num)}>
+                                  {copiedTrack === `${r.key}-${bi}` ? "복사됨" : "복사"}
+                                </button>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>미입력</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>
+                        {r.status === "발송완료" ? "송장번호 미입력" : "아직 발송 전"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ───── 발주 상품 ───── */}
         <section className="b2b-form-section">
