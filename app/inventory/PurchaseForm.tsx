@@ -89,10 +89,12 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
     <>
       <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div className="sm-tabs">
-          <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => setType("입고")}>구매(입고)</button>
+          <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => { setType("입고"); if (channel === "도매") setChannel("소매"); }}>구매(입고)</button>
           <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => setType("출고")}>판매(출고)</button>
         </div>
-        <ChannelPicker value={channel} onChange={setChannel} />
+        <ChannelPicker value={channel} onChange={setChannel}
+          disabledChannels={type === "입고" ? ["도매"] : []}
+          disabledHint="도매 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 도매 입고는 막았습니다" />
         <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
         <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />

@@ -80,13 +80,18 @@ export default function TradePage() {
                 <label className="b2b-field-label">① 유형</label>
                 <div className="sm-tabs" style={{ margin: 0 }}>
                   <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => setIoType("출고")}>판매(출고)</button>
-                  <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => setIoType("입고")}>구매(입고)</button>
+                  <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => { setIoType("입고"); if (ioChannel === "도매") setIoChannel("소매"); }}>구매(입고)</button>
                 </div>
               </div>
 
               <div className="b2b-field" style={{ marginTop: 12 }}>
                 <label className="b2b-field-label">② 채널 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 소매)</span></label>
-                <ChannelPicker value={ioChannel} onChange={setIoChannel} />
+                <ChannelPicker value={ioChannel} onChange={setIoChannel}
+                  disabledChannels={ioType === "입고" ? ["도매"] : []}
+                  disabledHint="도매 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 도매 입고는 막았습니다" />
+                {ioType === "입고" && (
+                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 도매는 [소매↔도매]에서 옮깁니다.</p>
+                )}
               </div>
 
               <div className="b2b-field-row" style={{ marginTop: 12 }}>
