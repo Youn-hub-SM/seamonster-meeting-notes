@@ -969,7 +969,14 @@ export default function OrdersListPage() {
                       <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.order_date}</RowCell>
                       {SHOW_ORDER_PRODUCTION && <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{o.production_date || "-"}</RowCell>}
                       {parent ? (
-                        <RowCell href={`/b2b/orders/${o.id}`} className="b2b-col-date" nowrap>{""}</RowCell>
+                        <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
+                          {/* 복수발송은 날짜가 차수마다 달라 한 칸에 못 적는다 — 차수 창을 여는 입구만 둔다 */}
+                          <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
+                            title="발송 차수 수정"
+                            onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
+                            {(o.shipments ?? []).length}차 · 수정
+                          </button>
+                        </td>
                       ) : o.ship_date ? (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                           {/* 등록된 발송일도 눌러서 고친다 — 같은 창에서 차수 추가·삭제까지 */}
@@ -1164,7 +1171,16 @@ export default function OrdersListPage() {
                       <div className="b2b-order-card-dates">
                         <span><em>발주</em>{o.order_date?.slice(5) || "-"}</span>
                         {SHOW_ORDER_PRODUCTION && <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>}
-                        {!parent && <span><em>발송</em>{o.ship_date?.slice(5) || "-"}</span>}
+                        {/* 카드 전체가 상세로 가는 링크라 눌림을 여기서 끊는다 — 안 그러면 창 대신 상세가 열린다.
+                            손가락으로 누르는 화면이라 글자보다 넉넉한 영역을 준다. */}
+                        <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                          <em>발송</em>
+                          <button type="button" className="b2b-link-btn"
+                            style={{ fontSize: "inherit", padding: "4px 2px", margin: "-4px 0" }}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openShipPrompt(o.id, o.company_name || o.order_no); }}>
+                            {parent ? `${(o.shipments ?? []).length}차 · 수정` : o.ship_date ? o.ship_date.slice(5) : "+ 발송일"}
+                          </button>
+                        </span>
                       </div>
                       <div className="b2b-order-card-foot">
                         <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
