@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-08-06",
+    tag: "개선",
+    tool: "B2B 도매",
+    title: "발송일 창의 날짜 입력을 누르기 쉬운 버튼으로",
+    desc: "발송예정일 칸이 휴대폰에서 얇은 네모로 찌그러져 누르기 어려웠습니다. 큼직한 버튼으로 바꿔 날짜와 요일이 보이고, 누르면 달력이 바로 열립니다. 날짜가 없으면 '날짜 선택'으로 표시됩니다.",
+    href: "/b2b/orders",
+  },
+  {
     date: "2026-08-05",
     tag: "수정",
     tool: "B2B 도매",

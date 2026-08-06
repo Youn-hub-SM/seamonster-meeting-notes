@@ -1287,8 +1287,10 @@ export default function OrdersListPage() {
                             }}>{r.status}</span>
                           )}
                         </span>
-                        <input type="date" className="b2b-input" value={r.ship_date}
-                          onChange={(e) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, ship_date: e.target.value } : x)))} />
+                        <ShipDateField
+                          value={r.ship_date}
+                          ariaLabel={shipRows.length > 1 ? `${i + 1}차 발송예정일 선택` : "발송예정일 선택"}
+                          onChange={(v) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, ship_date: v } : x)))} />
                       </label>
                       {shipRows.length > 1 && (
                         <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
@@ -1690,6 +1692,48 @@ function ExportPickModal({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// 발송예정일 입력 필드 — 네이티브 date 입력은 iOS 에서 얇게 찌그러져 누르기 어렵다.
+//  큼직한 버튼이 값을 보여주고, 누르면 숨은 input 의 달력을 연다(showPicker).
+//  input 을 필드 크기로 깔아 두는 이유: 데스크톱 크롬의 달력이 input 위치에 열리므로
+//  0×0 으로 두면 달력이 엉뚱한 곳에 뜬다. 클릭은 pointerEvents 로 버튼만 받는다.
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
+function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange: (v: string) => void; ariaLabel: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : null;
+  function open() {
+    const el = ref.current;
+    if (!el) return;
+    try { el.showPicker(); } catch { el.focus(); el.click(); } // 구형 브라우저 폴백
+  }
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        ref={ref} type="date" value={value} tabIndex={-1} aria-hidden
+        onChange={(e) => onChange(e.target.value)}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, pointerEvents: "none", border: 0, padding: 0 }}
+      />
+      <button
+        type="button" aria-label={ariaLabel} onClick={open}
+        style={{
+          width: "100%", minHeight: 48, padding: "0 14px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+          border: "1px solid var(--sm-border)", borderRadius: "var(--sm-radius)",
+          background: "var(--sm-white)", cursor: "pointer", font: "inherit", fontSize: 15,
+        }}
+      >
+        {d ? (
+          <span style={{ fontWeight: 700 }}>
+            {value} <span style={{ fontWeight: 400, color: "var(--sm-text-mid)" }}>({WEEKDAYS[d.getDay()]})</span>
+          </span>
+        ) : (
+          <span style={{ color: "var(--sm-text-light)" }}>날짜 선택</span>
+        )}
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>
+      </button>
     </div>
   );
 }
