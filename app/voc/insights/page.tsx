@@ -62,13 +62,13 @@ export default function VocInsightsPage() {
 
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">종합 진단</span></div>
-            <p style={{ lineHeight: 1.7, fontSize: 14 }}>{insight.summary}</p>
+            <p style={{ lineHeight: 1.7, fontSize: 15 }}>{insight.summary}</p>
           </section>
 
           {insight.riskAlerts?.length > 0 && (
             <section className="b2b-card" style={{ borderColor: "var(--sm-danger-border)", background: "var(--sm-danger-bg)" }}>
               <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-danger)" }}>즉시 대응 필요</span></div>
-              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 14 }}>
+              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 15 }}>
                 {insight.riskAlerts.map((a, i) => <li key={i}>{a}</li>)}
               </ul>
             </section>
@@ -80,8 +80,8 @@ export default function VocInsightsPage() {
               <div className="sm-col" style={{ gap: 10 }}>
                 {(insight.patterns || []).map((p, i) => (
                   <div key={i} className="sm-col" style={{ gap: 2 }}>
-                    <div className="sm-between"><strong style={{ fontSize: 14 }}>{p.title}</strong><span className="b2b-status-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>{p.count}건</span></div>
-                    <div className="sm-muted" style={{ fontSize: 13 }}>{p.detail}</div>
+                    <div className="sm-between"><strong style={{ fontSize: 15 }}>{p.title}</strong><span className="b2b-status-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>{p.count}건</span></div>
+                    <div className="sm-muted" style={{ fontSize: 15 }}>{p.detail}</div>
                   </div>
                 ))}
               </div>
@@ -92,8 +92,8 @@ export default function VocInsightsPage() {
               <div className="sm-col" style={{ gap: 10 }}>
                 {(insight.rootCauses || []).map((c, i) => (
                   <div key={i} className="sm-col" style={{ gap: 2 }}>
-                    <strong style={{ fontSize: 14 }}>{c.cause}</strong>
-                    <div className="sm-muted" style={{ fontSize: 13 }}>{c.detail}</div>
+                    <strong style={{ fontSize: 15 }}>{c.cause}</strong>
+                    <div className="sm-muted" style={{ fontSize: 15 }}>{c.detail}</div>
                   </div>
                 ))}
               </div>
@@ -107,8 +107,8 @@ export default function VocInsightsPage() {
                 <div key={i} className="sm-row" style={{ gap: 10, alignItems: "flex-start" }}>
                   <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: EFFORT_COLOR[m.effort] || "var(--sm-text-mid)", flexShrink: 0 }}>{m.effort || "—"}</span>
                   <div className="sm-col" style={{ gap: 2 }}>
-                    <strong style={{ fontSize: 14 }}>{m.action}</strong>
-                    <div className="sm-muted" style={{ fontSize: 13 }}>{m.impact}</div>
+                    <strong style={{ fontSize: 15 }}>{m.action}</strong>
+                    <div className="sm-muted" style={{ fontSize: 15 }}>{m.impact}</div>
                   </div>
                 </div>
               ))}

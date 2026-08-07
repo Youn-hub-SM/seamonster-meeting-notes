@@ -95,7 +95,7 @@ export default function BundlesPage() {
                   <td>
                     <div className="sm-col" style={{ gap: 2 }}>
                       {b.components.map((c) => (
-                        <span key={c.component_id} style={{ fontSize: 13 }}>{c.name}{c.spec ? <span className="sm-faint" style={{ fontSize: 11 }}> {c.spec}</span> : null} <strong>× {c.qty}</strong> {c.sku ? <span className="sm-faint" style={{ fontSize: 11 }}>({c.sku})</span> : null}</span>
+                        <span key={c.component_id} style={{ fontSize: 15 }}>{c.name}{c.spec ? <span className="sm-faint" style={{ fontSize: 12 }}> {c.spec}</span> : null} <strong>× {c.qty}</strong> {c.sku ? <span className="sm-faint" style={{ fontSize: 12 }}>({c.sku})</span> : null}</span>
                       ))}
                     </div>
                   </td>
@@ -126,7 +126,7 @@ export default function BundlesPage() {
                   <tbody>
                     {preview.previews.map((p, i) => (
                       <tr key={i} style={p.ok ? undefined : { background: "var(--sm-danger-bg)" }}>
-                        <td><strong>{p.parentSku}</strong><div className="sm-faint" style={{ fontSize: 11 }}>{p.name}{!p.parentExists ? " · 신규생성" : ""}</div></td>
+                        <td><strong>{p.parentSku}</strong><div className="sm-faint" style={{ fontSize: 12 }}>{p.name}{!p.parentExists ? " · 신규생성" : ""}</div></td>
                         <td><div className="sm-col" style={{ gap: 1 }}>{p.components.map((c, ci) => (
                           <span key={ci} style={{ fontSize: 12, color: c.ok ? undefined : "var(--sm-danger)" }}>{c.name || c.sku} × {c.qty} {c.ok ? "" : `— ${c.err}`}</span>
                         ))}</div></td>
@@ -217,7 +217,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             <div className="b2b-field"><label className="b2b-field-label">품목명(묶음명)</label>
               <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 대구 실속세트" /></div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 11.5, margin: "-2px 0 8px" }}>SKU가 상품 마스터에 없으면 자동 생성됩니다</p>
+          <p className="sm-faint" style={{ fontSize: 12, margin: "-2px 0 8px" }}>SKU가 상품 마스터에 없으면 자동 생성됩니다</p>
           <div className="b2b-field-label" style={{ fontWeight: 700 }}>구성품</div>
           {rows.map((r, i) => (
             <div key={i} className="promo-item-row">
@@ -247,7 +247,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
               <input className="b2b-input" type="number" min={0} step={0.1} value={courierWeight}
                 onChange={(e) => { setWeightTouched(true); setCourierWeight(e.target.value); }}
                 placeholder="0" />
-              {weightSum > 0 && <span className="sm-faint" style={{ fontSize: 11 }}>구성품 합 {weightSum}kg {weightTouched ? "" : "자동 반영 중"}</span>}</div>
+              {weightSum > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>구성품 합 {weightSum}kg {weightTouched ? "" : "자동 반영 중"}</span>}</div>
           </div>
           </div>
           {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}

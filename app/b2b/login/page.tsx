@@ -90,7 +90,7 @@ function LoginForm() {
           </form>
         </div>
 
-        <p style={{ textAlign: "center", fontSize: 11, color: "var(--sm-text-light)", marginTop: 16 }}>
+        <p style={{ textAlign: "center", fontSize: 12, color: "var(--sm-text-light)", marginTop: 16 }}>
           © 2026 seamonster corp. All rights reserved.
         </p>
       </div>

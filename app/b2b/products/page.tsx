@@ -315,7 +315,7 @@ export default function ProductsPage() {
                       >
                         <td data-label="품목명">
                           <strong>{p.name}</strong>
-                          {p.sku && <span style={{ marginLeft: 8, fontSize: 11, color: "var(--sm-text-light)" }}>{p.sku}</span>}
+                          {p.sku && <span style={{ marginLeft: 8, fontSize: 12, color: "var(--sm-text-light)" }}>{p.sku}</span>}
                           <span
                             className="b2b-status-pill"
                             style={{
@@ -344,24 +344,24 @@ export default function ProductsPage() {
                         <td data-label="b2b마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
                           {margin >= 0 ? "+" : ""}{margin.toLocaleString()}
                           {p.sale_price > 0 && (
-                            <span style={{ marginLeft: 6, fontSize: 11, color: "var(--sm-text-light)" }}>
+                            <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-text-light)" }}>
                               ({marginPct.toFixed(0)}%)
                             </span>
                           )}
                         </td>
                         <td data-label="상태">
                           {p.active ? (
-                            <span style={{ fontSize: 11, color: "var(--sm-success)", fontWeight: 600 }}>사용</span>
+                            <span style={{ fontSize: 12, color: "var(--sm-success)", fontWeight: 600 }}>사용</span>
                           ) : (
-                            <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>미사용</span>
+                            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>미사용</span>
                           )}
                         </td>
                         <td className="actions" onClick={(e) => e.stopPropagation()}>
-                          <button className="b2b-btn-secondary" onClick={() => setBundleFor(p)} style={{ padding: "4px 10px", fontSize: 11 }} title="묶음(세트) 구성 편집">묶음</button>
+                          <button className="b2b-btn-secondary" onClick={() => setBundleFor(p)} style={{ padding: "4px 10px", fontSize: 12 }} title="묶음(세트) 구성 편집">묶음</button>
                           <button
                             className="b2b-btn-secondary"
                             onClick={() => toggleHistory(p.id)}
-                            style={{ padding: "4px 10px", fontSize: 11, marginLeft: 6 }}
+                            style={{ padding: "4px 10px", fontSize: 12, marginLeft: 6 }}
                           >
                             {isExpanded ? "이력 닫기" : "원가 이력"}
                           </button>
@@ -448,7 +448,7 @@ export default function ProductsPage() {
               {preview.creates.length > 0 && (
                 <section style={{ marginBottom: 12 }}>
                   <div className="b2b-field-label" style={{ fontWeight: 700 }}>신규 ({preview.creates.length})</div>
-                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 13 }}>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 15 }}>
                     {preview.creates.map((c, i) => <li key={i}>{c.name}</li>)}
                   </ul>
                 </section>
@@ -504,7 +504,7 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
   }
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 8 }}>
         원가 변경 이력 (최근 {history.length}건)
       </div>
       <table className="b2b-table" style={{ background: "var(--sm-white)" }}>
@@ -634,7 +634,7 @@ function ProductModal({
                 <option key={t} value={t}>{TAX_TYPE_LABEL[t]}</option>
               ))}
             </select>
-            <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
+            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
               면세로 두면 발주 시 부가세 계산에서 제외됩니다.
             </span>
           </Field>
@@ -784,7 +784,7 @@ function ProductModal({
               placeholder="예: 0.5, 1, 9"
               style={{ maxWidth: 200 }}
             />
-            <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
+            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
               같은 주문의 라인 중량을 합해 박스타입(≤2.7→1, ≤5.2→2, 초과→3)과 운임을 정합니다. 제품부피와 다를 수 있어요.
             </span>
           </Field>
@@ -803,7 +803,7 @@ function ProductModal({
                 onChange={(e) => set("scan_name", e.target.value)}
                 placeholder="송장 스캔 피킹 리스트에 나올 이름 (비우면 품목명 사용)"
               />
-              <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>
+              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
                 온라인 발주 &gt; 송장 스캔의 &lsquo;가지러 갈 상품&rsquo;·인쇄에 이 이름이 나옵니다. 비어 있으면 품목명을 씁니다.
               </span>
             </Field>
@@ -823,7 +823,7 @@ function ProductModal({
           )}
 
           <Field label="상태">
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15 }}>
               <input
                 type="checkbox"
                 checked={data.active}

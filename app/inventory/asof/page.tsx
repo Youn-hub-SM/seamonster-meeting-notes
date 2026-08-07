@@ -46,10 +46,10 @@ export default function AsOfPage() {
 
       <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
         <span className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <span className="sm-faint" style={{ fontSize: 13 }}>기준일</span>
+          <span className="sm-faint" style={{ fontSize: 15 }}>기준일</span>
           <input className="b2b-input" type="date" value={date} max={TODAY()} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />
           <ChannelFilter value={channel} onChange={setChannel} style={{ marginLeft: 4 }} />
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", marginLeft: 8 }}><input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} /> 0 숨기기</label>
+          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)", marginLeft: 8 }}><input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} /> 0 숨기기</label>
         </span>
         <input className="b2b-input" placeholder="품목·SKU 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 220, maxWidth: "100%" }} />
       </div>
@@ -58,7 +58,7 @@ export default function AsOfPage() {
         <div className="b2b-loading">불러오는 중...</div>
       ) : (
         <>
-          <p className="sm-faint" style={{ fontSize: 13, marginBottom: 8 }}>{date} 마감 기준 · {shown.length}개 품목 · 재고자산 <strong className="b2b-money">{totalValue.toLocaleString()}원</strong></p>
+          <p className="sm-faint" style={{ fontSize: 15, marginBottom: 8 }}>{date} 마감 기준 · {shown.length}개 품목 · 재고자산 <strong className="b2b-money">{totalValue.toLocaleString()}원</strong></p>
           {shown.length === 0 ? (
             <div className="b2b-empty">{rows.length === 0 ? "해당 날짜 기준 재고 기록이 없습니다." : "조건에 맞는 품목이 없습니다."}</div>
           ) : (
@@ -68,7 +68,7 @@ export default function AsOfPage() {
                 <tbody>
                   {shown.map((r) => (
                     <tr key={r.product_id}>
-                      <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}</td>
+                      <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}</td>
                       <td className="sm-faint">{r.sku || "-"}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.qty.toLocaleString()}{r.unit}</td>
                       <td className="num b2b-money">{r.value.toLocaleString()}</td>

@@ -57,7 +57,7 @@ export default function SalesHome() {
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">채널별 이번달 (월 누적)</span></div>
               {d.channels.length ? (
-                <table className="b2b-table" style={{ fontSize: 13 }}>
+                <table className="b2b-table" style={{ fontSize: 15 }}>
                   <tbody>{d.channels.map((c) => (
                     <tr key={c.name}><td>{c.name}</td><td style={{ textAlign: "right", fontWeight: 700 }}>{won(c.month)}</td><td style={{ textAlign: "right", width: 70 }}>{pctBadge(c.prev_month === 0 ? null : (c.month - c.prev_month) / c.prev_month * 100)}</td></tr>
                   ))}</tbody>
@@ -67,7 +67,7 @@ export default function SalesHome() {
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">{d.is_sunday ? "최근 3일" : "어제"} 잘 팔린 상품 Top 5</span></div>
               {d.top10.length ? (
-                <table className="b2b-table" style={{ fontSize: 13 }}>
+                <table className="b2b-table" style={{ fontSize: 15 }}>
                   <tbody>{d.top10.map((t) => (
                     <tr key={t.rank}><td style={{ width: 28 }}>{t.rank}</td><td style={{ fontFamily: "monospace" }}>{t.code}</td><td style={{ textAlign: "right", fontWeight: 700 }}>{won(t.revenue)}</td></tr>
                   ))}</tbody>
@@ -89,7 +89,7 @@ export default function SalesHome() {
             <div className="b2b-stat-card-value" style={{ fontSize: 15 }}>{b?.min_date && b?.max_date ? `${b.min_date} ~ ${b.max_date}` : "데이터 없음"}</div>
           </div>
         </div>
-        {b && b.total_rows === 0 && <p className="sm-faint" style={{ fontSize: 13, marginTop: 10 }}>아직 매출 데이터가 없습니다. 과거 전체는 백필 스크립트로, 이후는 <Link href="/sales/upload" className="sm-link">데이터 업로드</Link>로 채우세요.</p>}
+        {b && b.total_rows === 0 && <p className="sm-faint" style={{ fontSize: 15, marginTop: 10 }}>아직 매출 데이터가 없습니다. 과거 전체는 백필 스크립트로, 이후는 <Link href="/sales/upload" className="sm-link">데이터 업로드</Link>로 채우세요.</p>}
       </section>
 
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginTop: 12 }}>
@@ -116,7 +116,7 @@ function NavCard({ href, title, desc }: { href: string; title: string; desc: str
     <Link href={href} className="b2b-card" style={{ padding: 16, textDecoration: "none", display: "block" }}>
       <div style={{ fontSize: 16, fontWeight: 800, color: "var(--sm-black)" }}>{title}</div>
       <div className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>{desc}</div>
-      <div style={{ marginTop: 8, color: "var(--sm-orange)", fontWeight: 700, fontSize: 13 }}>열기 →</div>
+      <div style={{ marginTop: 8, color: "var(--sm-orange)", fontWeight: 700, fontSize: 15 }}>열기 →</div>
     </Link>
   );
 }

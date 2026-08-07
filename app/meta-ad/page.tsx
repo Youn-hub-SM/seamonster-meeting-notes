@@ -48,7 +48,7 @@ const STAGE_SHORT: Record<string, string> = {
 const STAGE_ORDER = ["pass", "danger", "testing", "fail", "scale", "performance", "decline", "material", "sub", "insufficient"];
 
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  const s: CSSProperties = { fontSize: 13, padding: "5px 12px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", fontWeight: on ? 700 : 500, border: on ? "1px solid var(--sm-orange)" : "1px solid var(--sm-border)", background: on ? "var(--sm-orange-light)" : "var(--sm-white)", color: on ? "var(--sm-orange-hover)" : "var(--sm-text-mid)" };
+  const s: CSSProperties = { fontSize: 15, padding: "5px 12px", borderRadius: 999, cursor: "pointer", whiteSpace: "nowrap", fontWeight: on ? 700 : 500, border: on ? "1px solid var(--sm-orange)" : "1px solid var(--sm-border)", background: on ? "var(--sm-orange-light)" : "var(--sm-white)", color: on ? "var(--sm-orange-hover)" : "var(--sm-text-mid)" };
   return <button type="button" onClick={onClick} style={s}>{children}</button>;
 }
 // 단계 배지 색 — 시맨틱 토큰 fg/bg 쌍. (구 `${color}1a` hex-알파 접합은 CSS 변수와 호환 안 돼 제거)
@@ -62,7 +62,7 @@ const TONE = {
 type Tone = (typeof TONE)[keyof typeof TONE];
 
 function Badge({ tone, children }: { tone: Tone; children: React.ReactNode }) {
-  return <span style={{ fontSize: 13, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: tone.bg, color: tone.fg, whiteSpace: "nowrap" }}>{children}</span>;
+  return <span style={{ fontSize: 15, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: tone.bg, color: tone.fg, whiteSpace: "nowrap" }}>{children}</span>;
 }
 
 // 본 캠페인 진입용 광고세트 이름 만들기: "yyyy-mm-dd 메시지"
@@ -72,13 +72,13 @@ function NameHelper({ today }: { today: string }) {
   const name = `${today} ${msg}`.trim();
   return (
     <div className="sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-text-mid)" }}>세트 이름 만들기</span>
-      <code style={{ fontSize: 13, background: "var(--sm-white)", padding: "3px 7px", borderRadius: 6, border: "1px solid var(--sm-border)" }}>{today}</code>
+      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-text-mid)" }}>세트 이름 만들기</span>
+      <code style={{ fontSize: 15, background: "var(--sm-white)", padding: "3px 7px", borderRadius: 6, border: "1px solid var(--sm-border)" }}>{today}</code>
       <input value={msg} onChange={(e) => { setMsg(e.target.value); setCopied(false); }} placeholder="주요 메시지 (예: 무료배송 강조)"
-        className="b2b-input" style={{ width: 200, fontSize: 13, padding: "5px 9px" }} />
-      <button type="button" className="b2b-btn-secondary" style={{ fontSize: 13, padding: "5px 10px" }}
+        className="b2b-input" style={{ width: 200, fontSize: 15, padding: "5px 9px" }} />
+      <button type="button" className="b2b-btn-secondary" style={{ fontSize: 15, padding: "5px 10px" }}
         onClick={() => { navigator.clipboard?.writeText(name); setCopied(true); }}>{copied ? "복사됨 ✓" : "복사"}</button>
-      {msg && <span className="sm-faint" style={{ fontSize: 13 }}>→ {name}</span>}
+      {msg && <span className="sm-faint" style={{ fontSize: 15 }}>→ {name}</span>}
     </div>
   );
 }
@@ -291,7 +291,7 @@ export default function MetaAdPage() {
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
-          <span className="sm-faint" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{rangeLabel(preset)}{ov?.cached ? " · 캐시" : ""}</span>
+          <span className="sm-faint" style={{ fontSize: 15, whiteSpace: "nowrap" }}>{rangeLabel(preset)}{ov?.cached ? " · 캐시" : ""}</span>
           <button className="b2b-btn-secondary" onClick={() => load(true)} disabled={loading || !status?.connected}>{loading ? "..." : "새로고침"}</button>
           <Link href="/meta-ad/settings" className="b2b-btn-secondary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>성과 기준 설정</Link>
         </div>
@@ -364,11 +364,11 @@ export default function MetaAdPage() {
           {/* 운영 규칙(플레이북) */}
           <div className="b2b-card" style={{ padding: 0, marginBottom: 12, borderColor: "var(--sm-orange-border)" }}>
             <button type="button" onClick={() => setShowPlaybook((v) => !v)}
-              style={{ width: "100%", textAlign: "left", background: "var(--sm-orange-light)", border: "none", cursor: "pointer", padding: "10px 14px", borderRadius: showPlaybook ? "10px 10px 0 0" : 10, fontSize: 13.5, fontWeight: 800, color: "var(--sm-orange-hover)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>운영 규칙 (플레이북)</span><span style={{ fontSize: 13 }}>{showPlaybook ? "접기 ▲" : "펼치기 ▼"}</span>
+              style={{ width: "100%", textAlign: "left", background: "var(--sm-orange-light)", border: "none", cursor: "pointer", padding: "10px 14px", borderRadius: showPlaybook ? "10px 10px 0 0" : 10, fontSize: 15, fontWeight: 800, color: "var(--sm-orange-hover)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>운영 규칙 (플레이북)</span><span style={{ fontSize: 15 }}>{showPlaybook ? "접기 ▲" : "펼치기 ▼"}</span>
             </button>
             {showPlaybook && (
-              <div style={{ padding: 14, display: "grid", gap: 10, fontSize: 13, lineHeight: 1.55 }}>
+              <div style={{ padding: 14, display: "grid", gap: 10, fontSize: 15, lineHeight: 1.55 }}>
                 <div><Badge tone={TONE.info}>① 소재테스트 (ABO)</Badge> <b>1세트=1소재</b>, 소재당 <b>{won(th.testDailyPerCreative)}원/일 · {th.testDays}일</b>. AB테스트는 한 세트에 소재를 몰아넣고 소재당 예산 추가(2개=일 {won(th.testDailyPerCreative * 2)}원).</div>
                 <div><Badge tone={TONE.success}>② 우수소재</Badge> 다음 중 하나 충족 → <b>ROAS ≥ {th.aboPassRoas}</b>{th.aboMaxCpa > 0 ? <> · <b>CPA ≤ {won(th.aboMaxCpa)}원</b></> : null}{th.beatLiveCampaign ? <> · <b>현 캠페인 ROAS 상회</b>{liveCampaignRoas > 0 ? <span className="sm-faint">(현재 {roasFmt(liveCampaignRoas)})</span> : null}</> : null}.</div>
                 <div><Badge tone={TONE.brand}>③ 본 캠페인 진입 (CBO)</Badge> 우수소재는 <b>기존 본 캠페인에 새 광고세트로 추가</b>. 세트 이름은 <code>yyyy-mm-dd 주요 메시지</code>.</div>
@@ -392,10 +392,10 @@ export default function MetaAdPage() {
             <Chip on={tab === "campaign"} onClick={() => { setTab("campaign"); setStageFilter(null); }}>본 캠페인 {visN(ov?.campaigns)}</Chip>
             <Chip on={tab === "ad"} onClick={() => { setTab("ad"); setStageFilter(null); }}>소재 {visN(ov?.ads)}</Chip>
             <div style={{ flex: 1 }} />
-            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+            <label className="sm-row" style={{ gap: 5, fontSize: 15, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} />라이브만 (게재 중)
             </label>
-            <label className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
+            <label className="sm-row" style={{ gap: 5, fontSize: 15, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={resultsOnly} onChange={(e) => setResultsOnly(e.target.checked)} />결과 있는 것만 (지출&gt;0)
             </label>
           </div>
@@ -403,7 +403,7 @@ export default function MetaAdPage() {
           {/* 단계 필터 */}
           {stageGroups.length > 0 && (
             <div className="sm-row" style={{ gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>단계</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>단계</span>
               <Chip on={stageFilter === null} onClick={() => setStageFilter(null)}>전체 {filtered.length}</Chip>
               {stageGroups.map((g) => <Chip key={g.key} on={stageFilter === g.key} onClick={() => setStageFilter(g.key)}>{STAGE_SHORT[g.key] || g.key} {g.n}</Chip>)}
             </div>
@@ -427,10 +427,10 @@ export default function MetaAdPage() {
                       <tr key={r.id} style={r.effective_status !== "ACTIVE" && r.status !== "ACTIVE" ? { opacity: 0.55 } : undefined}>
                         <td><Switch id={r.id} st={r.status} name={r.name} /></td>
                         <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}
-                          {tab === "campaign" && adsetByCampaign[r.id] ? <span className="sm-faint" style={{ fontSize: 13 }}> · 세트 {adsetByCampaign[r.id]}</span> : null}</td>
+                          {tab === "campaign" && adsetByCampaign[r.id] ? <span className="sm-faint" style={{ fontSize: 15 }}> · 세트 {adsetByCampaign[r.id]}</span> : null}</td>
                         <td style={{ minWidth: 200, maxWidth: 320 }}>
                           {stage ? <Badge tone={stage.tone}>{stage.label}</Badge> : null}
-                          {stage?.action ? <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 3, lineHeight: 1.4, whiteSpace: "normal" }}>{stage.action}</div> : null}
+                          {stage?.action ? <div style={{ fontSize: 15, color: "var(--sm-text-mid)", marginTop: 3, lineHeight: 1.4, whiteSpace: "normal" }}>{stage.action}</div> : null}
                         </td>
                         <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.spend)}</td>
                         <td className="num b2b-money">{won(s.purchases)}</td>
@@ -452,7 +452,7 @@ export default function MetaAdPage() {
               </table>
             </div>
           )}
-          <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>
+          <p className="sm-faint" style={{ fontSize: 15, marginTop: 8, lineHeight: 1.6 }}>
             · ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다(확인창 있음). · ‘다음 행동’은 <Link href="/meta-ad/settings">설정</Link>의 기준값으로 계산됩니다.
             · 증액 권장은 <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상일 때만 뜹니다{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}. · 증액·세트 추가는 메타 광고관리자에서 직접 실행하세요.
           </p>

@@ -205,7 +205,7 @@ export default function FulfillStatsPage() {
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 수량표</span></div>
             <div className="b2b-table-wrap">
-              <table className="b2b-table" style={{ fontSize: 12.5 }}>
+              <table className="b2b-table" style={{ fontSize: 12 }}>
                 <thead><tr><th>월</th>{BOX_CATS.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
                 <tbody>
                   {agg.monthTotals.map((m) => (

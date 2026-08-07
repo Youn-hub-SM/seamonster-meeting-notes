@@ -134,7 +134,7 @@ export default function VocSettingsPage() {
       {/* 웹훅 방식(대안) */}
       <section className="b2b-card" style={{ marginTop: 14 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">웹훅 (대안 · 실시간)</span></div>
-        <p className="sm-muted" style={{ fontSize: 13, marginBottom: 10 }}>API 키 대신, Tally 유료 플랜의 웹훅으로 실시간 수신도 가능합니다. 아래 주소를 Tally 폼 Integrations→Webhooks 에 붙여넣고, Signing secret 을 저장하세요.</p>
+        <p className="sm-muted" style={{ fontSize: 15, marginBottom: 10 }}>API 키 대신, Tally 유료 플랜의 웹훅으로 실시간 수신도 가능합니다. 아래 주소를 Tally 폼 Integrations→Webhooks 에 붙여넣고, Signing secret 을 저장하세요.</p>
         <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           <input className="b2b-input" readOnly value={webhookUrl} style={{ flex: 1, minWidth: 240, fontFamily: "monospace" }} onFocus={(e) => e.target.select()} />
           <button className="b2b-btn-secondary" onClick={copyUrl}>{copied ? "복사됨 ✓" : "복사"}</button>
@@ -148,7 +148,7 @@ export default function VocSettingsPage() {
       {/* flow(플로우) 연동 — VOC 목록에서 '→ flow' 클릭 시 업무로 등록 */}
       <section className="b2b-card" style={{ marginTop: 14 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">flow(플로우) 연동</span></div>
-        <p className="sm-muted" style={{ fontSize: 13, marginBottom: 12 }}>
+        <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
           VOC 목록/상세에서 <strong>→ flow</strong> 버튼으로 해당 VOC를 플로우 프로젝트의 <strong>업무(task)</strong>로 등록합니다. 먼저 플로우에서 <strong>알림봇</strong>을 만들어 프로젝트에 초대하고, 관리자 API 센터에서 <strong>API 키</strong>를 발급받으세요.
         </p>
 

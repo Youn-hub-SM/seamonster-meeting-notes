@@ -123,7 +123,7 @@ export default function ProductionSettingsPage() {
       <section className="b2b-card">
         <div className="b2b-card-head"><h2 className="b2b-card-title">박스히어로 연동</h2></div>
         <div style={{ padding: "4px 2px 2px" }}>
-          <div style={{ marginBottom: 14, fontSize: 12.5, color: "var(--sm-text-mid)", lineHeight: 1.6 }}>
+          <div style={{ marginBottom: 14, fontSize: 12, color: "var(--sm-text-mid)", lineHeight: 1.6 }}>
             상태:{" "}
             {configured
               ? <span style={{ color: "var(--sm-success)", fontWeight: 600 }}>연결됨 ({masked})</span>
@@ -174,7 +174,7 @@ export default function ProductionSettingsPage() {
             onChange={(e) => setLeadInput(e.target.value)}
             style={{ width: 120 }}
           />
-          <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>일</span>
+          <span style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>일</span>
           <button className="b2b-btn-primary" onClick={saveLead} disabled={leadSaving}>
             {leadSaving ? "저장 중..." : "저장"}
           </button>
@@ -195,29 +195,29 @@ export default function ProductionSettingsPage() {
         {mnMsg && <div className={mnMsg.kind === "ok" ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}
         {mn && (
           <>
-            <label className="sm-row" style={{ gap: 6, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 15, fontWeight: 600, marginBottom: 10 }}>
               <input type="checkbox" className="b2b-checkbox" checked={mn.enabled} onChange={(e) => setMn({ ...mn, enabled: e.target.checked })} />
               상품마스터 변경알림 켜기 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 생산·재고 알림은 이 토글과 무관 — 아래 체크로만 제어</span>
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>봇 ID</span>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>봇 ID</span>
                 <input className="b2b-input" value={mn.botId} onChange={(e) => setMn({ ...mn, botId: e.target.value })} placeholder="BFLOW_300003566171" /></label>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>알림 제목</span>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>알림 제목</span>
                 <input className="b2b-input" value={mn.title} onChange={(e) => setMn({ ...mn, title: e.target.value })} placeholder="[업무도우미 변경알림]" /></label>
-              <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>수신 대상 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11.5 }}>· 쉼표로 구분(B2B 알림봇 수신자와 같은 ID 형식)</span></span>
+              <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 15, fontWeight: 600 }}>수신 대상 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 쉼표로 구분(B2B 알림봇 수신자와 같은 ID 형식)</span></span>
                 <input className="b2b-input" value={mn.receivers} onChange={(e) => setMn({ ...mn, receivers: e.target.value })} placeholder="예: user1@seamonster.kr, user2@seamonster.kr" /></label>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>Flow API 키 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11.5 }}>{mnHasKey ? "· 저장됨(입력 시 교체)" : mnFallbackKey ? "· B2B 봇 키 사용 중(입력 시 전용 키)" : "· 미설정"}</span></span>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>Flow API 키 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{mnHasKey ? "· 저장됨(입력 시 교체)" : mnFallbackKey ? "· B2B 봇 키 사용 중(입력 시 전용 키)" : "· 미설정"}</span></span>
                 <input className="b2b-input" type="password" value={mnApiKey} onChange={(e) => setMnApiKey(e.target.value)} placeholder={mnHasKey || mnFallbackKey ? "변경할 때만 입력" : "키관리에서 발급받은 API Key"} /></label>
             </div>
             <div style={{ marginTop: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>발송할 알림 목록</span>
-              <p className="sm-faint" style={{ fontSize: 11.5, margin: "3px 0 0" }}>체크 해제한 알림은 발송되지 않습니다 (변경 기록에는 남음).</p>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>발송할 알림 목록</span>
+              <p className="sm-faint" style={{ fontSize: 12, margin: "3px 0 0" }}>체크 해제한 알림은 발송되지 않습니다 (변경 기록에는 남음).</p>
               {[...new Set(mnEventDefs.map((ev) => ev.group || "기타"))].map((g) => (
                 <div key={g} style={{ marginTop: 8 }}>
                   <div className="sm-faint" style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{g}</div>
                   <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
                     {mnEventDefs.filter((ev) => (ev.group || "기타") === g).map((ev) => (
-                      <label key={ev.key} className="sm-row" style={{ gap: 5, fontSize: 13 }}>
+                      <label key={ev.key} className="sm-row" style={{ gap: 5, fontSize: 15 }}>
                         <input type="checkbox" className="b2b-checkbox" checked={mn.events[ev.key] !== false}
                           onChange={(e) => setMn({ ...mn, events: { ...mn.events, [ev.key]: e.target.checked } })} />
                         {ev.label}

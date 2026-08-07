@@ -317,7 +317,7 @@ export default function DeliveryLogPage() {
           <div className="b2b-empty">기록이 없습니다. <Link href="/fulfill">발주처리</Link>에서 &lsquo;배송일지에 기록&rsquo;하거나 위 &lsquo;+ 날짜 추가&rsquo;로 시작하세요.</div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table" style={{ fontSize: 12.5 }}>
+            <table className="b2b-table" style={{ fontSize: 12 }}>
               <thead><tr>
                 <th></th><th>날짜</th><th className="num">일반</th><th className="num">도착보장</th>
                 <th className="num">일반운임</th><th className="num">도착보장 운임</th><th className="num">파도 운임</th>
@@ -498,25 +498,25 @@ export default function DeliveryLogPage() {
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
             <div className="b2b-modal-head">
-              <h2 className="b2b-modal-title">직접수정 추가 <span className="sm-faint" style={{ fontSize: 13, fontWeight: 400 }}>· {entryFor}</span></h2>
+              <h2 className="b2b-modal-title">직접수정 추가 <span className="sm-faint" style={{ fontSize: 15, fontWeight: 400 }}>· {entryFor}</span></h2>
               <button className="b2b-modal-close" onClick={() => setEntryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body sm-col" style={{ gap: 12 }}>
               <div className="sm-row" style={{ gap: 16, flexWrap: "wrap" }}>
-                <label className="sm-col" style={{ gap: 3, fontSize: 13 }}>
+                <label className="sm-col" style={{ gap: 3, fontSize: 15 }}>
                   <span style={{ fontWeight: 600 }}>구분</span>
                   <div className="sm-tabs" style={{ margin: 0 }}>
                     <button className={`sm-tab ${eSide === "n" ? "is-active" : ""}`} onClick={() => setESide("n")}>일반</button>
                     <button className={`sm-tab ${eSide === "g" ? "is-active" : ""}`} onClick={() => setESide("g")}>도착보장</button>
                   </div>
                 </label>
-                <label className="sm-col" style={{ gap: 3, fontSize: 13 }}>
+                <label className="sm-col" style={{ gap: 3, fontSize: 15 }}>
                   <span style={{ fontWeight: 600 }}>박스종류</span>
                   <select className="b2b-select" value={eCat} onChange={(e) => setECat(e.target.value)} style={{ width: "auto", padding: "6px 10px" }}>
                     {CATS_EDIT.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </label>
-                <label className="sm-col" style={{ gap: 3, fontSize: 13 }}>
+                <label className="sm-col" style={{ gap: 3, fontSize: 15 }}>
                   <span style={{ fontWeight: 600 }}>수량</span>
                   <div className="sm-row" style={{ gap: 6 }}>
                     <div className="sm-tabs" style={{ margin: 0 }}>
@@ -527,7 +527,7 @@ export default function DeliveryLogPage() {
                   </div>
                 </label>
               </div>
-              <label className="sm-col" style={{ gap: 3, fontSize: 13 }}>
+              <label className="sm-col" style={{ gap: 3, fontSize: 15 }}>
                 <span style={{ fontWeight: 600 }}>내용 <span className="sm-faint" style={{ fontWeight: 400 }}>— 왜 보정하는지</span></span>
                 <input className="b2b-input" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="예: CS 재발송 1건 / 발주 누락 보정" autoFocus
                   onKeyDown={(e) => { if (e.key === "Enter") addEntry(); }} />
@@ -552,7 +552,7 @@ function Stepper({ value, onBump, onType, onCommit, w = 40 }: { value: string; o
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
       <button type="button" className="b2b-btn-secondary" style={btn} onClick={() => onBump(-1)} aria-label="빼기">−</button>
-      <input type="number" className="b2b-input" style={{ width: w, padding: "5px 4px", fontSize: 13, textAlign: "center" }} value={value} onChange={(e) => onType(e.target.value)} onBlur={onCommit} />
+      <input type="number" className="b2b-input" style={{ width: w, padding: "5px 4px", fontSize: 15, textAlign: "center" }} value={value} onChange={(e) => onType(e.target.value)} onBlur={onCommit} />
       <button type="button" className="b2b-btn-secondary" style={btn} onClick={() => onBump(1)} aria-label="더하기">+</button>
     </span>
   );

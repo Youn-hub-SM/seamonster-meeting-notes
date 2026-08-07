@@ -197,7 +197,7 @@ export default function TxnModal({
             <ChannelPicker value={channel} onChange={(c) => { dropInflight(); setChannel(c); setPreview(null); setError(""); setImporting(false); }}
               disabledChannels={type === "입고" ? ["도매"] : []}
               disabledHint="도매 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 도매 입고는 막았습니다" />
-            <span className="sm-faint" style={{ fontSize: 11.5 }}>
+            <span className="sm-faint" style={{ fontSize: 12 }}>
               {type === "입고" ? "입고는 소매로만 — 도매는 [소매↔도매]에서 옮깁니다" : `${channel} 재고에 기록`}
             </span>
           </div>
@@ -322,12 +322,12 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
         ) : (
           <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
             {isAdjust ? (
-              <table className="b2b-table" style={{ fontSize: 13 }}>
+              <table className="b2b-table" style={{ fontSize: 15 }}>
                 <thead><tr><th>품목</th><th>SKU</th><th className="num">현재고</th><th className="num">실사</th><th className="num">조정</th><th>메모</th></tr></thead>
                 <tbody>
                   {(preview.rows as AdjRow[]).slice(0, 300).map((r, i) => (
                     <tr key={i} style={{ color: r.delta === 0 ? "var(--sm-text-light)" : undefined }}>
-                      <td>{r.name}{r.spec ? <span className="sm-faint" style={{ marginLeft: 5, fontSize: 11 }}>{r.spec}</span> : null}</td>
+                      <td>{r.name}{r.spec ? <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{r.spec}</span> : null}</td>
                       <td className="sm-faint">{r.sku || "-"}</td>
                       <td className="num b2b-money">{r.current.toLocaleString()}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.target.toLocaleString()}</td>
@@ -338,7 +338,7 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
                 </tbody>
               </table>
             ) : (
-              <table className="b2b-table" style={{ fontSize: 13 }}>
+              <table className="b2b-table" style={{ fontSize: 15 }}>
                 <thead><tr><th>날짜</th><th>유형</th><th>품목</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th></tr></thead>
                 <tbody>
                   {(preview.rows as IoRow[]).slice(0, 300).map((r, i) => {
@@ -384,13 +384,13 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
             <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? "매입처" : "판매처"} <span className="sm-faint" style={{ fontWeight: 400 }}>· 선택</span></span>
               <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
           </div>
-          <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 13, cursor: "pointer" }}>
+          <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 15, cursor: "pointer" }}>
             <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {type}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’)</span>
           </label>
         </>
       )}
 
-      <p className="sm-faint" style={{ fontSize: 12.5, marginTop: 12, lineHeight: 1.6 }}>
+      <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
         양식에는 <strong>SKU · 품목명 · 현재고({channel})</strong>가 이미 채워져 있습니다 — <strong>{isAdjust ? "실사수량" : "수량"}</strong> 칸만 적으면 되고, 비워 둔 줄은 건너뜁니다.
         {isAdjust
           ? <> 현재고가 실사수량이 되도록 조정하며, 거래일은 오늘로 기록됩니다.</>

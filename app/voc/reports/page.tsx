@@ -114,7 +114,7 @@ export default function VocRequestPage() {
           {/* 문서 헤더 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 20 }}>
             <div>
-              <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
+              <div style={{ fontSize: 15, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
               <h2 style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>개선요청서</h2>
             </div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>
@@ -151,14 +151,14 @@ export default function VocRequestPage() {
               </div>
 
               {/* 요청문 */}
-              <div style={{ background: "var(--sm-bg-subtle)", borderRadius: 8, padding: "14px 16px", marginBottom: 22, lineHeight: 1.7, fontSize: 14 }}>
+              <div style={{ background: "var(--sm-bg-subtle)", borderRadius: 8, padding: "14px 16px", marginBottom: 22, lineHeight: 1.7, fontSize: 15 }}>
                 아래와 같이 <strong>{periodText}</strong> 동안 {productFilter ? `‘${productFilter}’ 관련 ` : ""}<strong>{summary.total}건</strong>의 클레임이 접수되어
                 총 <strong style={{ color: "var(--sm-danger)" }}>{summary.loss.toLocaleString()}원</strong>의 손해가 발생했습니다.
                 동일 문제의 재발 방지를 위해 생산·품질 공정 점검 및 개선을 요청드립니다.
               </div>
 
               {/* 상세 내역 */}
-              <h3 style={{ fontSize: 14, fontWeight: 700, margin: "8px 0 8px" }}>접수 내역</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, margin: "8px 0 8px" }}>접수 내역</h3>
               <div className="b2b-table-wrap" style={{ marginBottom: 8 }}>
               <table className="b2b-table">
                 <thead><tr><th>접수일</th><th>제품 생산일</th><th>CS 유형</th><th>내용</th><th className="num">손해(원)</th></tr></thead>

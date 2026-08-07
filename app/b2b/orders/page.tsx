@@ -959,7 +959,7 @@ export default function OrdersListPage() {
                       </td>
                       <RowCell href={`/b2b/orders/${o.id}`} nowrap>
                         <span>{o.company_name}</span>
-                        <span style={{ display: "block", fontSize: 10, color: "var(--sm-text-light)", marginTop: 2 }}>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--sm-text-light)", marginTop: 2 }}>
                           {o.order_no}{parent ? " · 복수발송" : ""}
                         </span>
                       </RowCell>
@@ -971,7 +971,7 @@ export default function OrdersListPage() {
                       {parent ? (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                           {/* 복수발송은 날짜가 차수마다 달라 한 칸에 못 적는다 — 차수 창을 여는 입구만 둔다 */}
-                          <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
+                          <button type="button" className="b2b-link-btn" style={{ fontSize: 15 }}
                             title="발송 차수 수정"
                             onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
                             {(o.shipments ?? []).length}차 · 수정
@@ -980,7 +980,7 @@ export default function OrdersListPage() {
                       ) : o.ship_date ? (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                           {/* 등록된 발송일도 눌러서 고친다 — 같은 창에서 차수 추가·삭제까지 */}
-                          <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
+                          <button type="button" className="b2b-link-btn" style={{ fontSize: 15 }}
                             title="발송일 수정"
                             onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
                             {o.ship_date}
@@ -1029,7 +1029,7 @@ export default function OrdersListPage() {
                             onClick={() => toggleExpand(o.id)}
                             title="발송 차수 펼치기/접기"
                           >
-                            {prog.done}/{prog.total} <span style={{ fontSize: 9 }}>{isCollapsed ? "▸" : "▾"}</span>
+                            {prog.done}/{prog.total} <span style={{ fontSize: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
                           </button>
                         ) : (
                           <select
@@ -1081,7 +1081,7 @@ export default function OrdersListPage() {
                         <Link
                           href={`/b2b/orders/new?from=${o.id}`}
                           className="b2b-btn-secondary"
-                          style={{ padding: "5px 10px", fontSize: 11 }}
+                          style={{ padding: "5px 10px", fontSize: 12 }}
                           title="이 발주를 복제해 새 발주 만들기"
                         >
                           복제
@@ -1089,7 +1089,7 @@ export default function OrdersListPage() {
                         <Link
                           href={`/b2b/orders/${o.id}/statement`}
                           className="b2b-btn-secondary"
-                          style={{ padding: "5px 10px", fontSize: 11, marginLeft: 6 }}
+                          style={{ padding: "5px 10px", fontSize: 12, marginLeft: 6 }}
                           title="이 발주의 거래명세표 인쇄/PDF"
                         >
                           명세표
@@ -1106,7 +1106,7 @@ export default function OrdersListPage() {
                               <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>└ {s.seq}차</span>
                               <span style={{ fontSize: 12 }}>{s.ship_date || "날짜 미정"}</span>
                               {s.items.length > 0 && (
-                                <span style={{ fontSize: 11.5, color: "var(--sm-text-mid)" }}>
+                                <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
                                   {s.items.slice(0, 2).map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`).join(", ")}
                                   {s.items.length > 2 ? ` 외 ${s.items.length - 2}종` : ""}
                                 </span>
@@ -1199,7 +1199,7 @@ export default function OrdersListPage() {
                               style={{ cursor: "pointer" }}
                               title="발송 차수 펼치기/접기"
                             >
-                              발송 {prog.done}/{prog.total} <span style={{ fontSize: 9 }}>{isCollapsed ? "▸" : "▾"}</span>
+                              발송 {prog.done}/{prog.total} <span style={{ fontSize: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
                             </span>
                           ) : (
                             <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
@@ -1216,10 +1216,10 @@ export default function OrdersListPage() {
                       <div className="b2b-order-card-children">
                         {(o.shipments ?? []).map((s) => (
                           <div key={s.id} className="b2b-order-card-child">
-                            <span style={{ color: "var(--sm-text-light)", fontSize: 11.5, whiteSpace: "nowrap" }}>└ {s.seq}차</span>
-                            <span style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
+                            <span style={{ color: "var(--sm-text-light)", fontSize: 12, whiteSpace: "nowrap" }}>└ {s.seq}차</span>
+                            <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
                             {s.items.length > 0 && (
-                              <span style={{ fontSize: 11, color: "var(--sm-text-mid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
+                              <span style={{ fontSize: 12, color: "var(--sm-text-mid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
                                 {s.items.map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""}×${formatQty(it.qty)}`).join(", ")}
                               </span>
                             )}
@@ -1366,7 +1366,7 @@ export default function OrdersListPage() {
                 const rPhone = (trackingPrompt.recipientPhone || "").trim();
                 if (!showName && !rPhone) return null;
                 return (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 12, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, fontSize: 12.5 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 12, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, fontSize: 12 }}>
                     <span style={{ color: "var(--sm-text-light)" }}>수령인</span>
                     {showName && <strong style={{ color: "var(--sm-dark)" }}>{showName}</strong>}
                     {rPhone && <span style={{ color: "var(--sm-text-mid)" }}>{rPhone}</span>}
@@ -1375,7 +1375,7 @@ export default function OrdersListPage() {
               })()}
 
               {/* 직접 배송(택배 아님): 체크 시 송장번호 불필요 */}
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, marginBottom: directDelivery ? 0 : 12, cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: directDelivery ? 0 : 12, cursor: "pointer" }}>
                 <input
                   type="checkbox"
                   className="b2b-checkbox"
@@ -1653,7 +1653,7 @@ function ExportPickModal({
                           />
                         </label>
                       ) : (
-                        <span style={{ flexShrink: 0, fontSize: 11.5, color: "var(--sm-text-light)" }}>
+                        <span style={{ flexShrink: 0, fontSize: 12, color: "var(--sm-text-light)" }}>
                           {s.status === "취소" ? "취소 — 제외" : "발송일 미정 — 제외"}
                         </span>
                       )}
@@ -1732,7 +1732,7 @@ function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange
         ) : (
           <span style={{ color: "var(--sm-text-light)" }}>날짜 선택</span>
         )}
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>
       </button>
     </div>
   );
@@ -1766,7 +1766,7 @@ function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
         </span>
       ))}
       {rest > 0 && (
-        <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>외 {rest}종</span>
+        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>외 {rest}종</span>
       )}
     </div>
   );

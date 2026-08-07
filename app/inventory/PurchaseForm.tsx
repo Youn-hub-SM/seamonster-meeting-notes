@@ -95,7 +95,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         <ChannelPicker value={channel} onChange={setChannel}
           disabledChannels={type === "입고" ? ["도매"] : []}
           disabledHint="도매 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 도매 입고는 막았습니다" />
-        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
+        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
         <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />
         <input className="b2b-input" placeholder="메모(선택)" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
@@ -104,7 +104,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       <section className="b2b-card">
         <div className="b2b-card-head" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <span className="b2b-card-title">제품 선택</span>
-          <label className="sm-row" style={{ gap: 6, fontSize: 12.5, color: "var(--sm-text-mid)", cursor: "pointer" }}>
+          <label className="sm-row" style={{ gap: 6, fontSize: 12, color: "var(--sm-text-mid)", cursor: "pointer" }}>
             <input type="checkbox" className="b2b-checkbox" checked={excludeBundles} onChange={(e) => setExcludeBundles(e.target.checked)} />
             묶음(세트) 제외
           </label>
@@ -125,7 +125,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
               ))}
             </div>
           )}
-          {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "10px 14px", fontSize: 13 }}>일치하는 제품 없음</div></div>}
+          {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "10px 14px", fontSize: 15 }}>일치하는 제품 없음</div></div>}
         </div>
 
         <div className="b2b-table-wrap">
@@ -134,7 +134,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
             <tbody>
               {lines.map((l) => (
                 <tr key={l.key}>
-                  <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 11 }}>{l.sub}</div>}</td>
+                  <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 12 }}>{l.sub}</div>}</td>
                   <td className="num"><input className="b2b-input" type="number" min={0.01} step={0.01} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 80, textAlign: "right", padding: "6px 8px" }} /></td>
                   <td className="num"><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, "price", e.target.value)} style={{ width: 120, textAlign: "right", padding: "6px 8px" }} /></td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{amountOf(l).toLocaleString()}</td>
@@ -147,7 +147,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         </div>
 
         <div className="sm-between" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--sm-border)", flexWrap: "wrap", gap: 12 }}>
-          <span className="sm-faint" style={{ fontSize: 13 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
+          <span className="sm-faint" style={{ fontSize: 15 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
           <span style={{ fontSize: 19, fontWeight: 800 }}>총액 ₩{totals.amount.toLocaleString()}</span>
         </div>
       </section>
@@ -155,7 +155,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       {error && <div className="b2b-error" style={{ marginTop: 12 }}>{error}</div>}
 
       <div className="sm-between" style={{ marginTop: 16, gap: 10, flexWrap: "wrap" }}>
-        <label className="sm-row" style={{ gap: 7, fontSize: 14, cursor: "pointer" }}>
+        <label className="sm-row" style={{ gap: 7, fontSize: 15, cursor: "pointer" }}>
           <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> 즉시 {type === "입고" ? "입고" : "출고"}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’로 저장)</span>
         </label>
         <div className="sm-row" style={{ gap: 10 }}>

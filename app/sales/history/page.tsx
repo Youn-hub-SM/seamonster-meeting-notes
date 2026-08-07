@@ -181,7 +181,7 @@ export default function SalesHistoryPage() {
                   {loadingMore ? "불러오는 중..." : "더 보기"}
                 </button>
               ) : (
-                <span style={{ fontSize: 11.5, color: "var(--sm-text-light)" }}>마지막 기록까지 모두 표시했습니다.</span>
+                <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>마지막 기록까지 모두 표시했습니다.</span>
               )}
             </div>
           </>

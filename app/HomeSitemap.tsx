@@ -68,12 +68,12 @@ export default function HomeSitemap() {
         @media (max-width: 380px) { .sm-map-grid { grid-template-columns: 1fr 1fr; } }
         .sm-map-col { break-inside: avoid; }
         /* 헤더를 브랜드색으로 — 밑줄 대신 색이 각 열을 잡아준다(레퍼런스처럼). 노이즈 줄고 위계 명확. */
-        .sm-map-cat { font-size: 13px; font-weight: 800; color: var(--sm-orange); letter-spacing: 0.3px; margin-bottom: 12px; }
+        .sm-map-cat { font-size: 15px; font-weight: 800; color: var(--sm-orange); letter-spacing: 0.3px; margin-bottom: 12px; }
         .sm-map-tool { margin-bottom: 11px; }
-        .sm-map-tool-link { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; color: var(--sm-dark); }
+        .sm-map-tool-link { display: inline-flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 700; color: var(--sm-dark); }
         .sm-map-tool-link:hover { color: var(--sm-orange); }
         .sm-map-subs { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 0 22px; }
-        .sm-map-sub { font-size: 12.5px; color: var(--sm-text-mid); padding: 1px 0; }
+        .sm-map-sub { font-size: 12px; color: var(--sm-text-mid); padding: 1px 0; }
         .sm-map-sub:hover { color: var(--sm-orange); }
       `}</style>
     </section>

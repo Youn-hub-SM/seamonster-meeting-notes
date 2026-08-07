@@ -139,7 +139,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">발주 이력</h2>
-          <span style={{ fontSize: 11, color: "var(--sm-text-light)" }}>{data.orders.length}건</span>
+          <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{data.orders.length}건</span>
         </div>
         {data.orders.length === 0 ? (
           <div className="b2b-empty">이 거래처의 발주가 없습니다.</div>

@@ -49,7 +49,7 @@ export default function ChangelogFeed() {
 
       <div className="changelog-list">
         {groups.length === 0 ? (
-          <div className="sm-faint" style={{ fontSize: 13, padding: "12px 2px" }}>해당 메뉴의 업데이트가 없습니다.</div>
+          <div className="sm-faint" style={{ fontSize: 15, padding: "12px 2px" }}>해당 메뉴의 업데이트가 없습니다.</div>
         ) : groups.map((g) => (
           <div key={g.date} className="change-day">
             <div className="change-day-head">

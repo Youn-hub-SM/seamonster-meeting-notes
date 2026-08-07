@@ -163,8 +163,8 @@ export default function VocManufacturerPage() {
 
   const [y, mm] = month.split("-");
   const exportUrl = `/api/voc/manufacturer/export?month=${month}${recipient ? `&recipient=${encodeURIComponent(recipient)}` : ""}`;
-  const cellTh: React.CSSProperties = { textAlign: "left", padding: "7px 8px", borderBottom: "2px solid var(--sm-black)", fontSize: 12.5, whiteSpace: "nowrap" };
-  const cellTd: React.CSSProperties = { padding: "7px 8px", borderBottom: "1px solid var(--sm-border)", fontSize: 13, verticalAlign: "top" };
+  const cellTh: React.CSSProperties = { textAlign: "left", padding: "7px 8px", borderBottom: "2px solid var(--sm-black)", fontSize: 12, whiteSpace: "nowrap" };
+  const cellTd: React.CSSProperties = { padding: "7px 8px", borderBottom: "1px solid var(--sm-border)", fontSize: 15, verticalAlign: "top" };
   const num: React.CSSProperties = { textAlign: "right", fontVariantNumeric: "tabular-nums" };
 
   return (
@@ -185,7 +185,7 @@ export default function VocManufacturerPage() {
 
       <section className="b2b-card no-print" style={{ marginBottom: 16 }}>
         <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>대상 월
+          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>대상 월
             <input className="b2b-input" type="month" value={month} max={THIS_MONTH()} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }} /></label>
           <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="수신 제조사명 (선택 · 문서에 표기)" style={{ width: 220 }} />
           <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
@@ -201,10 +201,10 @@ export default function VocManufacturerPage() {
         <section className="b2b-card no-print" style={{ marginBottom: 16 }}>
           <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span className="b2b-card-title">초안 편집</span>
-            <button className="b2b-btn-secondary" onClick={copy} style={{ padding: "4px 12px", fontSize: 13 }}>{copied ? "✓ 복사됨" : "텍스트 복사"}</button>
+            <button className="b2b-btn-secondary" onClick={copy} style={{ padding: "4px 12px", fontSize: 15 }}>{copied ? "✓ 복사됨" : "텍스트 복사"}</button>
           </div>
           <textarea className="b2b-textarea" value={draft} onChange={(e) => onDraftChange(e.target.value)} rows={22}
-            style={{ width: "100%", fontSize: 13.5, lineHeight: 1.7, fontFamily: "inherit" }} />
+            style={{ width: "100%", fontSize: 15, lineHeight: 1.7, fontFamily: "inherit" }} />
         </section>
       )}
 
@@ -212,20 +212,20 @@ export default function VocManufacturerPage() {
       {draft ? (
         <section className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "32px 34px", maxWidth: 860, boxShadow: "var(--sm-shadow-card)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
-            <div><div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {Number(mm)}월 고객 반응</h2></div>
+            <div><div style={{ fontSize: 15, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {Number(mm)}월 고객 반응</h2></div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>작성일 {TODAY()}{recipient && <div>수신 · {recipient}</div>}</div>
           </div>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.75 }}>{draft.replace(/^\s*\d{4}년\s*\d{1,2}월\s*고객\s*반응\s*\n?/, "")}</div>
+          <div style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.75 }}>{draft.replace(/^\s*\d{4}년\s*\d{1,2}월\s*고객\s*반응\s*\n?/, "")}</div>
 
           {/* 손해 청구 (제조사 귀책) — 개선요청서와 동일 기준. 제조사명을 넣었을 때만 */}
           {showClaim && (
             <div style={{ marginTop: 26 }}>
               <h3 style={{ fontSize: 16, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>3. 손해 청구 (제조사 귀책)</h3>
               {mfg.summary.count === 0 ? (
-                <p style={{ fontSize: 14, marginTop: 8 }}>- 해당 없음</p>
+                <p style={{ fontSize: 15, marginTop: 8 }}>- 해당 없음</p>
               ) : (
                 <>
-                  <p style={{ fontSize: 14, marginTop: 8 }}>
+                  <p style={{ fontSize: 15, marginTop: 8 }}>
                     {y}년 {Number(mm)}월 제조사 귀책 클레임은 총 <strong>{mfg.summary.count}건</strong>이며,
                     청구 손해액은 <strong style={{ color: "var(--sm-danger)" }}>{won(mfg.summary.claimable)}원</strong>입니다 (대상 제품 {mfg.summary.productCount}종).
                   </p>

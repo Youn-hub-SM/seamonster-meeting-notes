@@ -162,8 +162,8 @@ export default function ProductHistoryPage() {
                       <div key={a.id} className="b2b-history-item is-static" style={{ display: "block" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span className="b2b-status-pill" style={{ background: act.bg, color: act.fg, flexShrink: 0 }}>{act.label}</span>
-                          <strong style={{ fontSize: 13.5 }}>{name}</strong>
-                          {sku && <span className="sm-faint" style={{ fontSize: 11 }}>{sku}</span>}
+                          <strong style={{ fontSize: 15 }}>{name}</strong>
+                          {sku && <span className="sm-faint" style={{ fontSize: 12 }}>{sku}</span>}
                           {source && <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-light)" }}>{source}</span>}
                           <span className="b2b-history-meta" style={{ marginLeft: "auto" }}>
                             {a.actor ? `${a.actor} · ` : ""}{formatClock(a.created_at)}
@@ -194,7 +194,7 @@ export default function ProductHistoryPage() {
                   {loadingMore ? "불러오는 중..." : "더 보기"}
                 </button>
               ) : (
-                <span style={{ fontSize: 11.5, color: "var(--sm-text-light)" }}>마지막 기록까지 모두 표시했습니다.</span>
+                <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>마지막 기록까지 모두 표시했습니다.</span>
               )}
             </div>
           </>

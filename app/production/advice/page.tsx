@@ -66,7 +66,7 @@ export default function ProductionAdvicePage() {
         <section className="b2b-card">
           <div className="b2b-empty" style={{ padding: "44px 20px" }}>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>생산 조언 생성을 눌러 시작하세요</div>
-            <div style={{ color: "var(--sm-text-mid)", lineHeight: 1.6, fontSize: 13 }}>
+            <div style={{ color: "var(--sm-text-mid)", lineHeight: 1.6, fontSize: 15 }}>
               최근 출고 추세로 판매속도를 추정하고, 재고·안전재고·확정 발주를 합쳐<br />
               우선순위가 매겨진 생산 권장안을 만들어냅니다.
             </div>
@@ -121,7 +121,7 @@ export default function ProductionAdvicePage() {
           {advice.notes && advice.notes.length > 0 && (
             <section className="b2b-card" style={{ marginTop: 16 }}>
               <div className="b2b-card-head"><h2 className="b2b-card-title">참고</h2></div>
-              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 12.5, color: "var(--sm-text-mid)" }}>
+              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 12, color: "var(--sm-text-mid)" }}>
                 {advice.notes.map((n, i) => <li key={i}>{n}</li>)}
               </ul>
             </section>
@@ -144,7 +144,7 @@ export default function ProductionAdvicePage() {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.sku}>
-                        <td><code style={{ fontSize: 11 }}>{r.sku}</code></td>
+                        <td><code style={{ fontSize: 12 }}>{r.sku}</code></td>
                         <td>{r.name}</td>
                         <td className="num">{r.stock?.toLocaleString() ?? "-"}</td>
                         <td className="num">{r.safety?.toLocaleString() ?? "-"}</td>

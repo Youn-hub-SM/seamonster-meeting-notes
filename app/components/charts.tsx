@@ -14,7 +14,7 @@ export const CHART_LINE = PIE_COLORS[5];
 // 세로막대 3종(TrendChart/StackedBar/ComboBarLine)이 공유하는 좌표계.
 // 나란히 놓였을 때 같은 차트로 보이도록 높이·여백·막대 모양을 한 곳에서 정한다.
 const GEOM = { W: 760, H: 240, padL: 44, padT: 12, padB: 28, rx: 4, barMax: 46, barRatio: 0.55 };
-const AXIS_FS = { y: 10.5, x: 11 };
+const AXIS_FS = { y: 12, x: 12 };
 // X축 라벨 솎음 — 슬롯이 좁으면 겹치므로 일정 간격만 그린다.
 const labelStep = (n: number) => Math.ceil(n / 14);
 const showLabel = (i: number, n: number) => n <= 14 || i % labelStep(n) === 0;
@@ -74,7 +74,7 @@ export function Donut({ data, colors, size = 132, center, centerSub }: { data: [
         return seg;
       })}
       <text x={cx} y={cy - 1} textAnchor="middle" fontSize="20" fontWeight="800" fill="var(--sm-black)">{center}</text>
-      {centerSub && <text x={cx} y={cy + 15} textAnchor="middle" fontSize="11" fill="var(--sm-text-light)">{centerSub}</text>}
+      {centerSub && <text x={cx} y={cy + 15} textAnchor="middle" fontSize="12" fill="var(--sm-text-light)">{centerSub}</text>}
     </svg>
   );
 }
@@ -83,7 +83,7 @@ export function Donut({ data, colors, size = 132, center, centerSub }: { data: [
 //  accent 미지정 시 브랜드 주황. 의미축(입고=success/출고=info 등)이 있는 데이터는
 //  반드시 그 색을 넘길 것 — 안 그러면 같은 화면의 표·배지와 색이 어긋난다.
 export function TrendChart({ data, fmtAxis, accent }: { data: { label: string; value: number; tip?: string }[]; fmtAxis?: (n: number) => string; accent?: string }) {
-  if (!data.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
+  if (!data.length) return <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const top = niceCeil(Math.max(...data.map((d) => d.value), 1));
   const { W, H, padL, padT, padB, barMax, barRatio } = GEOM, padR = 10;
@@ -124,7 +124,7 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
   fmtAxis?: (n: number) => string;
   unit?: string; // 세그먼트 툴팁 값 단위(건/원 등)
 }) {
-  if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
+  if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const totals = periods.map((_, i) => series.reduce((s, ser) => s + (ser.values[i] || 0), 0));
   const top = niceCeil(Math.max(...totals, 1));
@@ -186,7 +186,7 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
   lineColor?: string;
 }) {
   const [hi, setHi] = useState<number | null>(null);
-  if (!periods.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
+  if (!periods.length) return <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>데이터 없음</div>;
   const bFmt = barFmt || ((n: number) => n.toLocaleString());
   const totals = periods.map((_, i) => barSeries.reduce((s, ser) => s + (ser.values[i] || 0), 0));
   const topL = niceCeil(Math.max(...totals, 1));
@@ -233,11 +233,11 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
         })}
         <polyline points={linePts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />
         {periods.map((_, i) => <circle key={i} cx={cx(i)} cy={yR(lineValues[i] || 0)} r={hi === i ? 4 : 2.4} fill={lineColor} />)}
-        {periods.map((p, i) => (i % labelEvery === 0 || periods.length <= 14) ? <text key={i} x={cx(i)} y={H - 9} textAnchor="middle" fontSize="10" fill="var(--sm-text-mid)">{p}</text> : null)}
+        {periods.map((p, i) => (i % labelEvery === 0 || periods.length <= 14) ? <text key={i} x={cx(i)} y={H - 9} textAnchor="middle" fontSize="12" fill="var(--sm-text-mid)">{p}</text> : null)}
         {periods.map((_, i) => <rect key={i} x={padL + slot * i} y={padT} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHi(i)} />)}
       </svg>
       {hi != null && (
-        <div style={{ position: "absolute", left: `${clamp((cx(hi) / W) * 100, lo, hex)}%`, top: 6, transform: "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 11.5, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5 }}>
+        <div style={{ position: "absolute", left: `${clamp((cx(hi) / W) * 100, lo, hex)}%`, top: 6, transform: "translateX(-50%)", background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "7px 10px", fontSize: 12, lineHeight: 1.55, boxShadow: "0 4px 14px rgba(0,0,0,0.13)", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 5 }}>
           <div style={{ fontWeight: 800, marginBottom: 2 }}>{periods[hi]}</div>
           {barSeries.map((ser, si) => <div key={si}><span style={{ color: barColors[si % barColors.length] }}>●</span> {ser.key} <strong>{(ser.values[hi] || 0).toLocaleString()}{barUnit}</strong></div>)}
           <div style={{ borderTop: "1px solid var(--sm-border)", marginTop: 3, paddingTop: 3 }}>합계 <strong>{totals[hi].toLocaleString()}{barUnit}</strong></div>
@@ -263,13 +263,13 @@ export function PieCard({ title, data, fmt, colors, size = 132 }: {
     <section className="b2b-card">
       <div className="b2b-card-head"><span className="b2b-card-title">{title}</span></div>
       {total === 0 ? (
-        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 13 }}>데이터 없음</div>
+        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 15 }}>데이터 없음</div>
       ) : (
         <div className="sm-row-wrap" style={{ gap: 16, alignItems: "center" }}>
           <Donut data={data} colors={colors} size={size} center={fmt ? fmt(total) : String(total)} />
           <div className="sm-col" style={{ gap: 5, minWidth: 150 }}>
             {data.map(([label, n], i) => (
-              <div key={i} className="sm-between" style={{ fontSize: 13, gap: 8 }}>
+              <div key={i} className="sm-between" style={{ fontSize: 15, gap: 8 }}>
                 <span className="sm-row" style={{ gap: 6, minWidth: 0 }}>
                   <span className="sm-stat-hero-dot" style={{ background: col(i) }} />
                   <span className="sm-ellipsis">{label}</span>
@@ -304,14 +304,14 @@ export function BarList({ title, caption, data, accent, fmt, sub, minPct = 0, so
       <div className="b2b-card-head"><span className="b2b-card-title">{title}</span></div>
       {caption && <div className="sm-faint" style={{ fontSize: 12, marginBottom: 12 }}>{caption}</div>}
       {rows.length === 0 ? (
-        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 13 }}>{empty || "데이터 없음"}</div>
+        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 15 }}>{empty || "데이터 없음"}</div>
       ) : (
         <div className="sm-col" style={{ gap: 8 }}>
           {rows.map(([label, n]) => {
             const pct = Math.max(minPct, Math.round((n / max) * 100));
             return (
               <div key={label} className="sm-col" style={{ gap: 3 }}>
-                <div className="sm-between" style={{ fontSize: 13 }}>
+                <div className="sm-between" style={{ fontSize: 15 }}>
                   <span className="sm-ellipsis" style={{ maxWidth: "75%" }}>{label}</span>
                   <strong>{fmt ? fmt(n) : n}</strong>
                 </div>

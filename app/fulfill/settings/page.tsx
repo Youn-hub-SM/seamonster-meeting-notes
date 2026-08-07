@@ -90,11 +90,11 @@ export default function FulfillSettingsPage() {
       {/* 배송일지 박스 종류 — 택배량 집계 단위 */}
       <div className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">배송일지 박스 종류 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 택배량을 세는 단위</span></span></div>
-        <p className="sm-faint" style={{ fontSize: 11.5, marginBottom: 8 }}>
+        <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>
           주문 총중량이 어느 구간에 드는지로 박스 종류가 정해집니다. 이름과 이하(kg)를 바꿀 수 있고, 마지막 종류는 항상 &lsquo;초과&rsquo;입니다.
           한 종류가 위 <strong>기본운임 구간 경계</strong>를 걸치면 저장되지 않습니다(같은 종류인데 운임이 달라져 배송일지 수정 시 금액이 어긋남).
         </p>
-        <table className="b2b-table" style={{ fontSize: 13 }}>
+        <table className="b2b-table" style={{ fontSize: 15 }}>
           <thead><tr><th>박스 종류</th><th className="num">이하(kg)</th><th style={{ width: 40 }}></th></tr></thead>
           <tbody>
             {boxCats.map((c, i) => (
@@ -133,7 +133,7 @@ export default function FulfillSettingsPage() {
           const errs = validateBoxCats(boxCats, history[history.length - 1]?.boxTiers ?? DEFAULT_RATES.boxTiers);
           return errs.length ? <div className="b2b-error" style={{ marginTop: 10, whiteSpace: "pre-line" }}>{errs.join("\n")}</div> : null;
         })()}
-        <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 8 }}>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
           이름을 바꾸거나 지워도 <strong>과거 배송일지 기록은 사라지지 않습니다</strong> — 예전 이름의 열이 표·엑셀에 그대로 남아 함께 표시됩니다.
           다만 새로 기록할 때는 위 목록만 고를 수 있습니다. 저장은 위 <strong>저장</strong> 버튼을 누르세요.
           <br />무게 기준(이하 kg)을 바꾸면 같은 무게의 박스가 이전과 다른 종류로 집계되니, 기간을 걸친 통계 비교 시 참고하세요.
@@ -144,25 +144,25 @@ export default function FulfillSettingsPage() {
       <div className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <span className="b2b-card-title">중복 방지 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 이미 출고 처리된 주문을 파일에서 자동 제외</span></span>
-          <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          <label className="sm-row" style={{ gap: 7, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
             <input type="checkbox" className="b2b-checkbox" checked={dedup.enabled} onChange={(e) => setDedup({ ...dedup, enabled: e.target.checked })} /> 사용
           </label>
         </div>
         <div className="sm-col" style={{ gap: 12, opacity: dedup.enabled ? 1 : 0.5, pointerEvents: dedup.enabled ? "auto" : "none" }}>
           <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 5 }}>같은 주문으로 보는 기준</div>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 5 }}>같은 주문으로 보는 기준</div>
             <div className="sm-tabs" style={{ margin: 0 }}>
               {([["order_and_items", "주문번호 + 상품 구성"], ["order_only", "주문번호만"]] as [DedupMatch, string][]).map(([v, l]) => (
                 <button key={v} className={`sm-tab ${dedup.match === v ? "is-active" : ""}`} onClick={() => setDedup({ ...dedup, match: v })}>{l}</button>
               ))}
             </div>
-            <p className="sm-faint" style={{ fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.6 }}>
+            <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.6 }}>
               {dedup.match === "order_and_items"
                 ? "주문번호와 담긴 상품·수량이 모두 같아야 중복으로 봅니다(권장). 번호만 우연히 겹치는 별개 주문은 통과합니다."
                 : "주문번호가 같으면 중복으로 봅니다. 번호가 재사용되는 채널에선 정상 주문이 막힐 수 있어 권장하지 않습니다."}
             </p>
           </div>
-          <label className="sm-row" style={{ gap: 8, fontSize: 13, alignItems: "center", flexWrap: "wrap" }}>
+          <label className="sm-row" style={{ gap: 8, fontSize: 15, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontWeight: 600 }}>대조 기간</span>
             최근 <input type="number" className="b2b-input" min={1} max={180} value={dedup.windowDays} onChange={(e) => setDedup({ ...dedup, windowDays: num(e.target.value) })} style={{ width: 70, textAlign: "right" }} /> 일 내 출고 완료분과 대조
           </label>
@@ -225,7 +225,7 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
           <span className="b2b-card-title">적용 시작일</span>
           <input type="date" className="b2b-input" value={v.effectiveFrom === DEFAULT_EFFECTIVE ? "" : v.effectiveFrom} onChange={(e) => onDate(e.target.value)} style={{ width: "auto" }} />
           {v.effectiveFrom === DEFAULT_EFFECTIVE && <span className="sm-faint" style={{ fontSize: 12 }}>(미지정 = 처음부터)</span>}
-          {active && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-orange)", border: "1px solid var(--sm-orange)", borderRadius: 999, padding: "1px 8px" }}>현재 적용 중</span>}
+          {active && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-orange)", border: "1px solid var(--sm-orange)", borderRadius: 999, padding: "1px 8px" }}>현재 적용 중</span>}
         </div>
         {canDelete && <button className="b2b-link-btn" onClick={onDelete} style={{ color: "var(--sm-danger)" }}>이 단가 삭제</button>}
       </div>
@@ -233,9 +233,9 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
       {/* 택배 기본운임 구간 */}
       <div style={{ marginTop: 4 }}>
         <div className="sm-faint" style={{ fontSize: 12, fontWeight: 700, margin: "6px 0 4px" }}>택배 기본운임 (주문 총중량 구간)</div>
-        <p className="sm-faint" style={{ fontSize: 11.5, marginBottom: 6 }}>한 주문(같은 주소)의 총중량으로 박스타입·기본운임이 정해집니다. 일반·도착보장 공통이며, 도착보장은 아래 &lsquo;박스당 추가운임&rsquo;이 더해집니다.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginBottom: 6 }}>한 주문(같은 주소)의 총중량으로 박스타입·기본운임이 정해집니다. 일반·도착보장 공통이며, 도착보장은 아래 &lsquo;박스당 추가운임&rsquo;이 더해집니다.</p>
         <div className="b2b-table-wrap">
-        <table className="b2b-table" style={{ fontSize: 13 }}>
+        <table className="b2b-table" style={{ fontSize: 15 }}>
           <thead><tr><th>박스타입</th><th className="num">이하(kg)</th><th className="num">기본운임(원)</th><th></th></tr></thead>
           <tbody>
             {bounded.map((t, i) => (
@@ -278,7 +278,7 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
           <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => onPatch((x) => ({ ...x, supplies: [...x.supplies, { name: "", price: 0 }] }))}>+ 항목 추가</button>
         </div>
         {v.supplies.length === 0 ? (
-          <p className="sm-faint" style={{ fontSize: 12.5, padding: "2px 0" }}>박스·비닐·완충재 등 자주 쓰는 부자재의 단가를 등록해 두세요.</p>
+          <p className="sm-faint" style={{ fontSize: 12, padding: "2px 0" }}>박스·비닐·완충재 등 자주 쓰는 부자재의 단가를 등록해 두세요.</p>
         ) : (
           <div className="sm-col" style={{ gap: 6 }}>
             {v.supplies.map((s, i) => (

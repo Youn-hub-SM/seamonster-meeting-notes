@@ -76,7 +76,7 @@ export default function MetaAdSettingsPage() {
           <h1 className="b2b-page-title">메타 광고 · 판정 기준 설정</h1>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center" }}>
-          {msg && <span style={{ fontSize: 13, color: "var(--sm-success)" }}>{msg}</span>}
+          {msg && <span style={{ fontSize: 15, color: "var(--sm-success)" }}>{msg}</span>}
           <button className="b2b-btn-primary" onClick={save} disabled={saving || !t}>{saving ? "저장 중..." : "저장"}</button>
         </div>
       </header>
@@ -85,11 +85,11 @@ export default function MetaAdSettingsPage() {
         <div style={{ display: "grid", gap: 14, maxWidth: 620 }}>
           {GROUPS.map((g) => (
             <div key={g.title} className="b2b-card" style={{ padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 12, color: "var(--sm-dark)" }}>{g.title}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, color: "var(--sm-dark)" }}>{g.title}</div>
               <div style={{ display: "grid", gap: 12 }}>
                 {g.fields.map((f) => (
                   <label key={f.key} className="sm-row" style={{ justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                    <span style={{ fontSize: 13 }}><b>{f.label}</b><br /><span className="sm-faint" style={{ fontSize: 13 }}>{f.hint}</span></span>
+                    <span style={{ fontSize: 15 }}><b>{f.label}</b><br /><span className="sm-faint" style={{ fontSize: 15 }}>{f.hint}</span></span>
                     <input type="number" step={f.step || 1} className="b2b-input b2b-money" style={{ width: 120, textAlign: "right" }}
                       value={t[f.key]} onChange={(e) => setT({ ...t, [f.key]: Number(e.target.value) })} />
                   </label>
@@ -97,7 +97,7 @@ export default function MetaAdSettingsPage() {
                 {/* 우수소재 ③: 현재 캠페인 상회(체크박스) — ② 그룹에만 표시 */}
                 {g.title.startsWith("②") && (
                   <label className="sm-row" style={{ justifyContent: "space-between", gap: 12, alignItems: "center", cursor: "pointer" }}>
-                    <span style={{ fontSize: 13 }}><b>ⓒ 현재 운영 캠페인 ROAS 상회</b><br /><span className="sm-faint" style={{ fontSize: 13 }}>켜면 소재 ROAS가 현재 라이브 본 캠페인 평균 ROAS 이상이면 통과</span></span>
+                    <span style={{ fontSize: 15 }}><b>ⓒ 현재 운영 캠페인 ROAS 상회</b><br /><span className="sm-faint" style={{ fontSize: 15 }}>켜면 소재 ROAS가 현재 라이브 본 캠페인 평균 ROAS 이상이면 통과</span></span>
                     <input type="checkbox" className="b2b-checkbox" checked={t.beatLiveCampaign} onChange={(e) => setT({ ...t, beatLiveCampaign: e.target.checked })} />
                   </label>
                 )}

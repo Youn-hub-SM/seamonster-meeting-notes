@@ -78,7 +78,7 @@ export default function SalesProfitPage() {
 
       <section className="b2b-card">
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <label className="sm-faint" style={{ fontSize: 13 }}>기간</label>
+          <label className="sm-faint" style={{ fontSize: 15 }}>기간</label>
           <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="b2b-input" style={{ width: 160 }} />
           <span className="sm-faint">~</span>
           <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="b2b-input" style={{ width: 160 }} />
@@ -99,7 +99,7 @@ export default function SalesProfitPage() {
               <button className="b2b-btn-primary" onClick={saveConfig} disabled={savingCfg}>{savingCfg ? "저장 중…" : "저장 + 재계산"}</button>
             </div>
           </div>
-          <div style={{ fontSize: 12.5, lineHeight: 1.7, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
+          <div style={{ fontSize: 12, lineHeight: 1.7, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
             <div style={{ fontWeight: 800, marginBottom: 4 }}>계산 방법</div>
             채널별로 기간 매출을 모아 <strong>매출총이익</strong>을 계산합니다.
             <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
@@ -120,7 +120,7 @@ export default function SalesProfitPage() {
             </div>
           </div>
           <div style={{ overflowX: "auto" }}>
-            <table className="b2b-table" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+            <table className="b2b-table" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
               <thead><tr><th>판매처</th><th style={{ textAlign: "right" }}>판매수수료율(%)</th><th style={{ textAlign: "right" }}>매출 보정율(%)</th><th></th></tr></thead>
               <tbody>
                 {cfg.map((row, i) => (
@@ -135,8 +135,8 @@ export default function SalesProfitPage() {
               </tbody>
             </table>
           </div>
-          {cfgMsg && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 6 }}>✓ {cfgMsg}</p>}
-          <p className="sm-faint" style={{ fontSize: 11, marginTop: 6 }}>미설정 채널은 수수료 0%로 계산됩니다. (도매·팔도감 등)</p>
+          {cfgMsg && <p style={{ fontSize: 15, color: "var(--sm-success)", marginTop: 6 }}>✓ {cfgMsg}</p>}
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>미설정 채널은 수수료 0%로 계산됩니다. (도매·팔도감 등)</p>
         </section>
       )}
 
@@ -146,7 +146,7 @@ export default function SalesProfitPage() {
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">채널별 요약 · {res.from} ~ {res.to}</span></div>
           <div style={{ overflowX: "auto" }}>
-            <table className="b2b-table" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+            <table className="b2b-table" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
               <thead><tr>{PROFIT_COLS.map((c) => <th key={c.key} style={{ textAlign: c.key === "channel" ? "left" : "right" }}>{c.label}</th>)}</tr></thead>
               <tbody>
                 {res.rows.map((r) => (
@@ -177,7 +177,7 @@ export default function SalesProfitPage() {
           </div>
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>products에 없거나(TD_증정·DRYICE·프로모 등), 묶음이면 <strong>구성품</strong>·단품이면 <strong>자기</strong> 원가·부피가 없는 SKU입니다(원가 0·중량 0으로 계산됨). <a href="/b2b/products" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>상품마스터</a>에서 해당 상품(또는 묶음 구성품)의 원가·부피를 채우거나 <a href="/inventory/bundles" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>묶음 구성</a>을 등록하면 매칭됩니다. 엑셀은 채울 목록 참고용입니다.</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>
-            <table className="b2b-table" style={{ fontSize: 12.5 }}>
+            <table className="b2b-table" style={{ fontSize: 12 }}>
               <thead><tr><th>관리코드</th><th style={{ textAlign: "right" }}>라인수</th><th style={{ textAlign: "right" }}>수량합</th><th style={{ textAlign: "right" }}>결제금액합</th><th>판매처</th></tr></thead>
               <tbody>
                 {res.unmatched.map((u) => (

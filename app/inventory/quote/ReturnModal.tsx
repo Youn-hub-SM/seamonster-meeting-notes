@@ -162,7 +162,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. 양식을 확인하세요.</div>
                 ) : (
                   <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
-                    <table className="b2b-table" style={{ fontSize: 13 }}>
+                    <table className="b2b-table" style={{ fontSize: 15 }}>
                       <thead><tr><th>품목</th><th>SKU</th><th className="num">반품수량</th><th className="num">단가</th><th>메모</th></tr></thead>
                       <tbody>
                         {preview.rows.slice(0, 300).map((r, i) => (
@@ -196,7 +196,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="sm-faint" style={{ fontWeight: 400 }}>· 선택</span></span>
                     <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
                 </div>
-                <p className="sm-faint" style={{ fontSize: 12.5, marginTop: 12, lineHeight: 1.6 }}>
+                <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
                   양식에는 <strong>{y}년 {mm}월에 매입한 품목</strong>의 SKU·품목명·매입수량이 채워져 있습니다 —
                   {" "}<strong>반품수량</strong> 칸만 적으면 되고, 비워 둔 줄은 건너뜁니다.
                   단가를 비우면 그 달 매입가로 계산합니다.
@@ -249,14 +249,14 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
               {/* 이 달에 이미 넣은 반품 — 잘못 넣은 건을 여기서 바로 지운다 */}
               <div style={{ marginTop: 16, borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
                 <div className="sm-between" style={{ marginBottom: 6 }}>
-                  <strong style={{ fontSize: 13 }}>{mm}월 반품 내역</strong>
+                  <strong style={{ fontSize: 15 }}>{mm}월 반품 내역</strong>
                   {rows.length > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>{rows.length}건 · {totalQty.toLocaleString()}개</span>}
                 </div>
                 {listLoading ? <div className="b2b-loading">불러오는 중...</div>
                   : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다.</p>
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
-                      <table className="b2b-table" style={{ fontSize: 12.5 }}>
+                      <table className="b2b-table" style={{ fontSize: 12 }}>
                         <thead><tr><th>날짜</th><th>품목</th><th className="num">수량</th><th className="num">단가</th><th /></tr></thead>
                         <tbody>
                           {rows.map((r) => (

@@ -447,12 +447,12 @@ export default function ProductionSchedulePage() {
                     <label className="b2b-field-label">① 생산 목표일</label>
                     <input type="date" className="b2b-input" value={addModal.productionDate} disabled={!sel} onChange={(e) => setProductionDate(e.target.value)} />
                     {sel && (
-                      <span style={{ fontSize: 11, color: "var(--sm-text-light)", marginTop: 3, display: "block" }}>
+                      <span style={{ fontSize: 12, color: "var(--sm-text-light)", marginTop: 3, display: "block" }}>
                         기본값 = 안전재고 도달일{safetyDate ? ` (${dayLabel(safetyDate)})` : sel.belowSafety ? " · 이미 안전재고 이하 → 오늘" : ""}. 목표일을 바꾸면 권장량이 다시 계산됩니다.
                       </span>
                     )}
-                    {dateWarn === "sold" && <span style={{ fontSize: 11.5, color: "var(--sm-danger)", marginTop: 3, display: "block", fontWeight: 600 }}>이 날짜엔 이미 품절 위험이 있어요. 더 이른 날짜를 권장합니다.</span>}
-                    {dateWarn === "safety" && <span style={{ fontSize: 11.5, color: "var(--sm-warning)", marginTop: 3, display: "block", fontWeight: 600 }}>이 날짜엔 재고가 안전재고 밑으로 내려갑니다. 더 이른 날짜가 안전해요.</span>}
+                    {dateWarn === "sold" && <span style={{ fontSize: 12, color: "var(--sm-danger)", marginTop: 3, display: "block", fontWeight: 600 }}>이 날짜엔 이미 품절 위험이 있어요. 더 이른 날짜를 권장합니다.</span>}
+                    {dateWarn === "safety" && <span style={{ fontSize: 12, color: "var(--sm-warning)", marginTop: 3, display: "block", fontWeight: 600 }}>이 날짜엔 재고가 안전재고 밑으로 내려갑니다. 더 이른 날짜가 안전해요.</span>}
                   </div>
 
                   <div className="b2b-field" style={{ marginTop: 12, opacity: sel ? 1 : 0.5 }}>
@@ -464,7 +464,7 @@ export default function ProductionSchedulePage() {
                       )}
                     </div>
                     {sel && recNow != null && (
-                      <div style={{ fontSize: 11, color: "var(--sm-text-light)", marginTop: 5, lineHeight: 1.55 }}>
+                      <div style={{ fontSize: 12, color: "var(--sm-text-light)", marginTop: 5, lineHeight: 1.55 }}>
                         권장 = 안전재고 {sel.safety.toLocaleString()}{sel.demand > 0 ? ` + 대기수요 ${sel.demand.toLocaleString()}` : ""}{recDeplete > 0 ? ` + 목표일까지 소진 ${recDeplete.toLocaleString()}` : ""} − 현재고 {(sel.stock ?? 0).toLocaleString()} = <strong style={{ color: "var(--sm-orange)" }}>{recNow.toLocaleString()}개</strong>
                         <br />재고가 안전재고 아래로 떨어지지 않도록 넉넉히(올림) 계산합니다.
                       </div>
@@ -507,7 +507,7 @@ export default function ProductionSchedulePage() {
               <div className="b2b-field">
                 <label className="b2b-field-label">상품별 예상 판매량</label>
                 {(promoModal.items || []).length === 0 && (
-                  <div style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginBottom: 6 }}>어떤 상품이 얼마나 나갈지 추가하세요. (MD 전달 수치)</div>
+                  <div style={{ fontSize: 12, color: "var(--sm-text-light)", marginBottom: 6 }}>어떤 상품이 얼마나 나갈지 추가하세요. (MD 전달 수치)</div>
                 )}
                 {(promoModal.items || []).map((it, i) => (
                   <div key={i} className="promo-item-row">

@@ -132,7 +132,7 @@ export default function ScanPage() {
         <div className="sm-between" style={{ alignItems: "baseline" }}>
           <label className="b2b-field-label">송장번호 스캔 <span className="sm-faint" style={{ fontWeight: 400 }}>(하이픈 있어도/없어도 인식)</span></label>
           <span className="sm-faint" style={{ fontSize: 12 }}>
-            이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 14 }}>{st?.scannedCount ?? 0}</strong>건 · 대상 {st?.totalInvoices ?? 0}건
+            이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 15 }}>{st?.scannedCount ?? 0}</strong>건 · 대상 {st?.totalInvoices ?? 0}건
             {pending > 0 && <span style={{ color: "var(--sm-info)", marginLeft: 6 }}>· 처리 중 {pending}</span>}
           </span>
         </div>
@@ -147,7 +147,7 @@ export default function ScanPage() {
           style={{ fontSize: 20, padding: "12px 14px", fontWeight: 700, letterSpacing: 0.5 }}
         />
         {msg && (
-          <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 14, fontWeight: 700,
+          <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 15, fontWeight: 700,
             background: msg.kind === "ok" ? "var(--sm-success-bg)" : msg.kind === "dup" ? "var(--sm-warning-bg)" : "var(--sm-danger-bg)",
             color: msg.kind === "ok" ? "var(--sm-success)" : msg.kind === "dup" ? "var(--sm-warning)" : "var(--sm-danger)" }}>
             {msg.kind === "ok" ? "✓ " : msg.kind === "dup" ? "· " : ""}{msg.text}
@@ -164,7 +164,7 @@ export default function ScanPage() {
             background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
             opacity: !st || st.scannedCount === 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F4)</span></button>
       </div>
-      <p className="sm-faint" style={{ fontSize: 11.5, margin: "0 0 16px", textAlign: "center" }}>단축키 — 스캔: Enter · 인쇄: F2 · 초기화: F4</p>
+      <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 16px", textAlign: "center" }}>단축키 — 스캔: Enter · 인쇄: F2 · 초기화: F4</p>
 
       <section className="b2b-card">
         <div className="b2b-card-head">
@@ -188,7 +188,7 @@ export default function ScanPage() {
             </table>
           </div>
         )}
-        {st && st.tally.some((t) => t.unknown) && <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 8, color: "var(--sm-danger)" }}>빨간 줄 = 상품마스터에 없는 단품코드. <Link href="/b2b/products">상품마스터</Link>에 등록하면 상품명으로 집계됩니다.</p>}
+        {st && st.tally.some((t) => t.unknown) && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, color: "var(--sm-danger)" }}>빨간 줄 = 상품마스터에 없는 단품코드. <Link href="/b2b/products">상품마스터</Link>에 등록하면 상품명으로 집계됩니다.</p>}
       </section>
     </div>
   );

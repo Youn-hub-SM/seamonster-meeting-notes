@@ -11,7 +11,7 @@ const PROMPT_TEXTAREA: React.CSSProperties = {
   width: "100%",
   minHeight: 300,
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-  fontSize: 12.5,
+  fontSize: 12,
   lineHeight: 1.7,
   resize: "vertical",
   whiteSpace: "pre",
@@ -169,7 +169,7 @@ export default function AiSettingsPage() {
             {featureMeta.map((f, i) => (
               <div key={f.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 0", borderTop: i === 0 ? "none" : "1px solid var(--sm-border)", flexWrap: "wrap" }}>
                 <div style={{ minWidth: 180 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "var(--sm-dark)" }}>{f.label}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: "var(--sm-dark)" }}>{f.label}</div>
                   <div style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{f.desc}</div>
                 </div>
                 <select
@@ -220,7 +220,7 @@ function PromptCard(props: {
         <h2 className="b2b-card-title">{props.title}</h2>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {props.saved && <span style={{ fontSize: 12, color: "var(--sm-success)" }}>{props.saved}</span>}
-          <span style={{ fontSize: 11.5, color: props.isDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>{props.isDefault ? "기본값" : "사용자 지정"}</span>
+          <span style={{ fontSize: 12, color: props.isDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>{props.isDefault ? "기본값" : "사용자 지정"}</span>
         </div>
       </div>
       <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>{props.desc}</p>
@@ -230,7 +230,7 @@ function PromptCard(props: {
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
             <button className="b2b-btn-primary" onClick={props.onSave} disabled={props.saving}>{props.saving ? "저장 중..." : "프롬프트 저장"}</button>
             <button className="b2b-btn-secondary" onClick={props.onReset} disabled={props.saving || props.isDefault}>기본값으로 복원</button>
-            <span style={{ fontSize: 11.5, color: "var(--sm-text-light)" }}>{props.value.length.toLocaleString()}자 · 모든 사용자 공용</span>
+            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{props.value.length.toLocaleString()}자 · 모든 사용자 공용</span>
           </div>
         </>
       )}

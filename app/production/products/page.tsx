@@ -84,7 +84,7 @@ export default function ProductsUploadPage() {
           <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
           {fileName && <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>{fileName}</span>}
         </div>
-        <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--sm-text-light)", lineHeight: 1.6 }}>
+        <div style={{ marginTop: 10, fontSize: 12, color: "var(--sm-text-light)", lineHeight: 1.6 }}>
           박스히어로 → 품목 → 내보내기(엑셀). 필요한 컬럼: <strong>SKU · 제품명 · 옵션</strong>. (구매가·판매가·재고 등은 무시)
         </div>
       </section>
@@ -132,7 +132,7 @@ export default function ProductsUploadPage() {
                   <tbody>
                     {preview.toAdd.map((r) => (
                       <tr key={r.sku}>
-                        <td><code style={{ fontSize: 11 }}>{r.sku}</code></td>
+                        <td><code style={{ fontSize: 12 }}>{r.sku}</code></td>
                         <td>{r.name}</td>
                         <td>{r.spec || "-"}</td>
                       </tr>
@@ -152,7 +152,7 @@ export default function ProductsUploadPage() {
                   <tbody>
                     {preview.toUpdate.map((r) => (
                       <tr key={r.sku}>
-                        <td><code style={{ fontSize: 11 }}>{r.sku}</code></td>
+                        <td><code style={{ fontSize: 12 }}>{r.sku}</code></td>
                         <td style={{ color: "var(--sm-text-light)" }}>{r.oldName}{r.oldSpec ? ` · ${r.oldSpec}` : ""}</td>
                         <td>{r.name}{r.spec ? ` · ${r.spec}` : ""}</td>
                       </tr>

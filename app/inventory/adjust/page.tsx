@@ -100,7 +100,7 @@ export default function AdjustPage() {
                     <tbody>
                       {preview.rows.slice(0, 300).map((r, i) => (
                         <tr key={i} style={r.delta === 0 ? { color: "var(--sm-text-light)" } : undefined}>
-                          <td>{r.name}{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}</td>
+                          <td>{r.name}{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}</td>
                           <td className="sm-faint">{r.sku || "-"}</td>
                           <td className="num b2b-money">{r.current.toLocaleString()}</td>
                           <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.target.toLocaleString()}</td>

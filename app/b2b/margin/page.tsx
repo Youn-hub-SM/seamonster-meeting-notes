@@ -131,7 +131,7 @@ export default function MarginPage() {
                             {TAX_TYPE_LABEL[p.tax_type]}
                           </span>
                           {p.sku && (
-                            <span style={{ display: "block", fontSize: 10, color: "var(--sm-text-light)" }}>{p.sku}</span>
+                            <span style={{ display: "block", fontSize: 12, color: "var(--sm-text-light)" }}>{p.sku}</span>
                           )}
                         </td>
                         <td data-label="도매가" className="num b2b-money">{won(p.sale_price)}</td>
@@ -148,7 +148,7 @@ export default function MarginPage() {
                         <td className="actions">
                           <button
                             className="b2b-btn-secondary"
-                            style={{ padding: "4px 10px", fontSize: 11 }}
+                            style={{ padding: "4px 10px", fontSize: 12 }}
                             onClick={() => setExpanded(isExp ? null : p.id)}
                           >
                             {isExp ? "닫기" : "원가"}
@@ -199,7 +199,7 @@ function CostDetail({ p, revenue, vatExcluded }: { p: Product; revenue: number; 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20 }}>
       <div>
-        <div style={{ fontWeight: 700, fontSize: 11, color: "var(--sm-text-mid)", marginBottom: 4 }}>원가 구성</div>
+        <div style={{ fontWeight: 700, fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 4 }}>원가 구성</div>
         <Row k="제품원가" v={won(p.cost_material)} />
         <Row k="내포장지" v={won(p.pkg_inner)} />
         <Row k="라벨" v={won(p.pkg_label)} />
@@ -208,7 +208,7 @@ function CostDetail({ p, revenue, vatExcluded }: { p: Product; revenue: number; 
         <Row k="제품 단위 원가" v={won(p.cost_price)} strong />
       </div>
       <div>
-        <div style={{ fontWeight: 700, fontSize: 11, color: "var(--sm-text-mid)", marginBottom: 4 }}>손익</div>
+        <div style={{ fontWeight: 700, fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 4 }}>손익</div>
         <Row k="도매가" v={won(p.sale_price)} />
         {vatExcluded && <Row k="└ 공급가 (÷1.1)" v={won(revenue)} />}
         <Row k="원가" v={won(p.cost_price)} />

@@ -271,7 +271,7 @@ export function RequestList() {
             <button className={`sm-tab ${tab === "도매" ? "is-active" : ""}`} onClick={() => setTab("도매")}>도매 요청<span className="sm-tab-count">{tabCounts.도매}</span></button>
           </div>
           <span className="sm-faint" style={{ fontSize: 12 }}>{tab === "제조사" ? "이행 = 입고 (제조사 성과)" : "이행 = 소매→도매 이전 (생산 담당자 성과)"}</span>
-          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", cursor: "pointer" }}>
+          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)", cursor: "pointer" }}>
             <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> 완료·취소 보기 <span className="sm-faint" style={{ fontSize: 12 }}>({doneCount})</span>
           </label>
         </div>
@@ -285,7 +285,7 @@ export function RequestList() {
         <section className="b2b-form-section" style={{ marginBottom: 16 }}>
           <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>도매 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 품목별 합산</span></div>
           <div className="b2b-table-wrap">
-            <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 13 }}>
+            <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
               <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>요청</th><th className="num" style={{ width: 100 }}>이전 완료</th><th className="num" style={{ width: 100 }}>잔여</th><th className="num" style={{ width: 90 }}>이행률</th></tr></thead>
               <tbody>
                 {wholesaleSummary.map((r) => {
@@ -293,7 +293,7 @@ export function RequestList() {
                   const pct = r.requested > 0 ? Math.round((r.received / r.requested) * 100) : 0;
                   return (
                     <tr key={`${r.name}-${r.sku}`}>
-                      <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{r.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.sku}</span> : null}</td>
+                      <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{r.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.sku}</span> : null}</td>
                       <td className="num b2b-money">{r.requested.toLocaleString()}</td>
                       <td className="num b2b-money">{r.received.toLocaleString()}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700, color: remain > 0 ? "var(--sm-orange)" : "var(--sm-success)" }}>{remain.toLocaleString()}</td>
@@ -362,9 +362,9 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
   const color = over ? "var(--sm-danger)" : done ? "var(--sm-success)" : "var(--sm-text-mid)";
   const pct = requested > 0 ? (received / requested) * 100 : null;
   return (
-    <span style={{ fontSize: 13, fontWeight: 600, color, whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: 15, fontWeight: 600, color, whiteSpace: "nowrap" }}>
       {received.toLocaleString()} / {requested.toLocaleString()}
-      {pct != null && <span className="sm-faint" style={{ marginLeft: 4, fontSize: 11.5, fontWeight: 400 }}>({Math.round(pct)}%)</span>}
+      {pct != null && <span className="sm-faint" style={{ marginLeft: 4, fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%)</span>}
     </span>
   );
 }
@@ -390,23 +390,23 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
         <td style={{ whiteSpace: "nowrap" }}>
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
-          {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis" }}>{req.title}</span> : null}
+          {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{req.title}</span> : null}
         </td>
-        <td style={{ fontSize: 13, color: "var(--sm-text-mid)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <td style={{ fontSize: 15, color: "var(--sm-text-mid)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {itemPreview || "품목 없음"}
           {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
         </td>
         <td className="b2b-col-date"><ProgressCell received={req.total_received} requested={req.total_requested} /></td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>
           {req.request_date}
-          {req.requested_by ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>{req.requested_by}</span> : null}
+          {req.requested_by ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{req.requested_by}</span> : null}
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{req.due_date || "-"}</td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
           {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}
           {req.assignee ? (
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{req.assignee}
-              {(req.status === "완료" || req.status === "취소") && <span className="sm-faint" style={{ marginLeft: 5, fontSize: 11 }}>{req.status}</span>}
+            <span style={{ fontSize: 15, fontWeight: 600 }}>{req.assignee}
+              {(req.status === "완료" || req.status === "취소") && <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{req.status}</span>}
             </span>
           ) : (req.status === "요청" || req.status === "진행중") ? (
             <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} disabled={busy} onClick={onConfirm}>확인</button>
@@ -429,9 +429,9 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         <tr className="b2b-child-row">
           <td></td>
           <td colSpan={7} style={{ padding: "8px 18px 16px" }}>
-            {req.memo && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 10 }}>메모: {req.memo}</p>}
+            {req.memo && <p className="sm-faint" style={{ fontSize: 15, marginBottom: 10 }}>메모: {req.memo}</p>}
 
-            <p className="sm-faint" style={{ fontSize: 12.5, marginBottom: 8 }}>
+            <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>
               {req.purpose === "도매 납품"
                 ? <>이행은 <strong>소매↔도매</strong> 화면에서 소매→도매로 옮기면 자동 연결됩니다(오래된 요청부터). 이전 취소도 그 화면에서.</>
                 : <>입고는 <strong>입고 및 출고</strong> 메뉴에서 하세요 — 같은 품목이 입고되면 이 요청에 자동으로 연결됩니다(오래된 요청부터). 잘못 연결된 입고는 아래 입고 이력에서 취소.</>}
@@ -451,8 +451,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
 
             {suggestComplete && (
               <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
-                <span style={{ fontSize: 13, color: "var(--sm-success)" }}>모든 품목이 요청 수량 이상 입고되었습니다.</span>
-                <button className="b2b-btn-primary" style={{ padding: "5px 14px", fontSize: 12.5 }} disabled={busy} onClick={() => onStatus("완료")}>생산 완료 처리</button>
+                <span style={{ fontSize: 15, color: "var(--sm-success)" }}>모든 품목이 요청 수량 이상 입고되었습니다.</span>
+                <button className="b2b-btn-primary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy} onClick={() => onStatus("완료")}>생산 완료 처리</button>
               </div>
             )}
           </td>
@@ -475,16 +475,16 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
       <tr>
         <td>
           <div style={{ fontWeight: 600 }}>{item.name}</div>
-          <div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{item.sku || ""}{item.spec ? ` · ${item.spec}` : ""}</div>
+          <div style={{ fontSize: 15, color: "var(--sm-text-light)" }}>{item.sku || ""}{item.spec ? ` · ${item.spec}` : ""}</div>
         </td>
         <td className="num">{item.requested_qty.toLocaleString()}</td>
         <td className="num" style={{ fontWeight: 700 }}>{item.received_qty.toLocaleString()}</td>
         <td className="num" style={{ color: remaining > 0 ? "var(--sm-text-mid)" : remaining < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{remaining.toLocaleString()}</td>
-        <td><span style={{ fontSize: 13, fontWeight: 700, color: PR_LINE_COLOR[st] }}>{st}</span></td>
+        <td><span style={{ fontSize: 15, fontWeight: 700, color: PR_LINE_COLOR[st] }}>{st}</span></td>
         <td>
           {item.receipts.length > 0 ? (
             <button className="b2b-btn-secondary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => setOpen((v) => !v)}>{open ? "닫기" : "입고 이력"}</button>
-          ) : <span style={{ fontSize: 13, color: "var(--sm-text-light)" }}>—</span>}
+          ) : <span style={{ fontSize: 15, color: "var(--sm-text-light)" }}>—</span>}
         </td>
       </tr>
 
@@ -494,21 +494,21 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 
             {item.receipts.length > 0 ? (
               <div style={{ marginTop: canEdit ? 10 : 2 }}>
-                <div className="sm-faint" style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>입고 이력</div>
+                <div className="sm-faint" style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>입고 이력</div>
                 {item.receipts.map((rc) => (
-                  <div key={rc.id} className="sm-row" style={{ gap: 8, alignItems: "center", fontSize: 13, padding: "3px 2px", flexWrap: "wrap" }}>
+                  <div key={rc.id} className="sm-row" style={{ gap: 8, alignItems: "center", fontSize: 15, padding: "3px 2px", flexWrap: "wrap" }}>
                     <span style={{ color: "var(--sm-text-light)" }}>{rc.receipt_date}</span>
                     <span style={{ fontWeight: 700, color: rc.qty < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{rc.qty > 0 ? "+" : ""}{rc.qty.toLocaleString()}</span>
                     {rc.received_by && <span style={{ color: "var(--sm-text-mid)" }}>{rc.received_by}</span>}
                     {rc.memo && <span style={{ color: "var(--sm-text-mid)" }}>· {rc.memo}</span>}
                     {canEdit && (rc.memo?.includes("이전 연동")
                       ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 소매↔도매 화면에서</span>
-                      : <button className="b2b-link-btn" style={{ fontSize: 13, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>)}
+                      : <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>)}
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="sm-faint" style={{ fontSize: 13, margin: "4px 2px" }}>아직 입고 기록이 없습니다.</p>
+              <p className="sm-faint" style={{ fontSize: 15, margin: "4px 2px" }}>아직 입고 기록이 없습니다.</p>
             )}
           </td>
         </tr>
@@ -571,7 +571,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
         <div className="b2b-modal-body">
           <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <div className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>요청</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>요청</span>
               <div className="sm-tabs" style={{ margin: 0 }}>
                 {PR_PURPOSES.map((pp) => (
                   <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} onClick={() => setPurpose(pp)}>{PR_PURPOSE_LABEL[pp]}</button>
@@ -579,26 +579,26 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               </div>
             </div>
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>요청자(MD)</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>요청자(MD)</span>
               <input className="b2b-input" style={{ width: 160 }} value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="이름(비우면 본인)" />
             </label>
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>요청일</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>요청일</span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
             </label>
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>생산마감일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 7영업일</span></span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>생산마감일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 7영업일</span></span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>제목(선택)</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>제목(선택)</span>
               <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 3월 2주차 도매 생산" />
             </label>
           </div>
 
           {/* 품목 추가 — 다른 검색창과 동일한 콤보박스(이름·SKU·규격 아무 글자나 검색, 한글 입력 기본) */}
           <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>생산 품목 추가</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>생산 품목 추가</span>
             <div style={{ marginTop: 3 }}>
               <Combobox
                 value=""
@@ -634,7 +634,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                     const recommend = !recReady ? null : purpose === "도매 납품" ? (recWhole.get(rk) ?? 0) : (recRetail.get(rk) ?? 0) + (recWhole.get(rk) ?? 0);
                     return (
                       <tr key={l.item_id || l.product_id}>
-                        <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
+                        <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 15, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
                         {purpose === "도매 납품" ? (
                           <>
                             <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
@@ -665,7 +665,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           )}
 
           <label className="sm-col" style={{ gap: 3, marginTop: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>요청 메모(선택)</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>요청 메모(선택)</span>
             <textarea className="b2b-input" style={{ minHeight: 56 }} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="생산 담당자에게 전달할 내용" />
           </label>
         </div>

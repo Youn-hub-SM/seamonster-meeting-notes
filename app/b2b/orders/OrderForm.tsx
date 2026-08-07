@@ -638,7 +638,7 @@ export default function OrderForm({
                 emptyText="일치하는 업체가 없습니다"
               />
               {companies.length === 0 && (
-                <span style={{ fontSize: 11, color: "var(--sm-danger)" }}>
+                <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>
                   등록된 업체가 없습니다 — <Link href="/b2b/companies" style={{ color: "var(--sm-orange)" }}>주소록에서 먼저 등록</Link>
                 </span>
               )}
@@ -671,10 +671,10 @@ export default function OrderForm({
             )}
             <div className="b2b-field">
               <label className="b2b-field-label">발송예정일</label>
-              <div style={{ fontSize: 13, padding: "10px 0", color: data.ship_date ? undefined : "var(--sm-text-light)" }}>
+              <div style={{ fontSize: 15, padding: "10px 0", color: data.ship_date ? undefined : "var(--sm-text-light)" }}>
                 {data.ship_date || "미정"}
               </div>
-              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>
+              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
                 발주 목록의 ‘+ 발송일’ 창에서 잡습니다{isMultiShipment ? " (복수발송 — 가장 이른 날짜)" : ""}
               </span>
             </div>
@@ -745,7 +745,7 @@ export default function OrderForm({
 
         {/* ───── 배송 정보 (공통) ───── */}
         <CollapsibleSection title="배송 정보" titleExtra={
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
+          <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
             업체 선택 시 자동 채움 — 모든 발송 일정에 공통 적용
           </span>
         }>
@@ -819,7 +819,7 @@ export default function OrderForm({
               {shippedInfo.map((r) => (
                 <div key={r.key} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: "10px 12px" }}>
                   <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <strong style={{ fontSize: 13 }}>
+                    <strong style={{ fontSize: 15 }}>
                       {shippedInfo.length > 1 ? `${r.seq}차 · ` : ""}{r.ship_date || "날짜미정"}
                     </strong>
                     <span className="b2b-status-pill" style={{
@@ -827,34 +827,34 @@ export default function OrderForm({
                       color: SHIPMENT_STATUS_COLORS[r.status as keyof typeof SHIPMENT_STATUS_COLORS]?.fg,
                     }}>{r.status}</span>
                   </div>
-                  <div style={{ fontSize: 12.5, color: "var(--sm-text-mid)", marginTop: 6 }}>
+                  <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginTop: 6 }}>
                     <span style={{ color: "var(--sm-text-light)", marginRight: 5 }}>발송 제품</span>
                     {r.itemsLabel || orderItemsLabel || "-"}
                   </div>
                   <div style={{ marginTop: 6 }}>
                     {r.tracking === "직접배송" ? (
-                      <span style={{ fontSize: 12.5, color: "var(--sm-text-mid)" }}>직접배송 — 택배 송장 없음</span>
+                      <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>직접배송 — 택배 송장 없음</span>
                     ) : r.tracking ? (
                       <div className="sm-col" style={{ gap: 3 }}>
                         {splitTracking(r.tracking, r.box_count).map((num, bi) => (
                           <div key={bi} className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            {r.box_count > 1 && <span style={{ fontSize: 11.5, color: "var(--sm-text-light)", width: 40, flexShrink: 0 }}>박스 {bi + 1}</span>}
+                            {r.box_count > 1 && <span style={{ fontSize: 12, color: "var(--sm-text-light)", width: 40, flexShrink: 0 }}>박스 {bi + 1}</span>}
                             {num ? (
                               <>
-                                <span style={{ fontFamily: "var(--sm-mono)", fontSize: 13.5, fontWeight: 600 }}>{num}</span>
-                                <button type="button" className="b2b-link-btn" style={{ fontSize: 11.5 }}
+                                <span style={{ fontFamily: "var(--sm-mono)", fontSize: 15, fontWeight: 600 }}>{num}</span>
+                                <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }}
                                   onClick={() => copyTracking(`${r.key}-${bi}`, num)}>
                                   {copiedTrack === `${r.key}-${bi}` ? "복사됨" : "복사"}
                                 </button>
                               </>
                             ) : (
-                              <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>미입력</span>
+                              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>미입력</span>
                             )}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <span style={{ fontSize: 12.5, color: "var(--sm-text-light)" }}>
+                      <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
                         {r.status === "발송완료" ? "송장번호 미입력" : "아직 발송 전"}
                       </span>
                     )}
@@ -982,7 +982,7 @@ export default function OrderForm({
 
         {/* ───── 이익률 (배송 박스 단위) ───── */}
         <CollapsibleSection title="이익률 (배송 박스 기준)">
-          <p style={{ margin: "0 0 12px", fontSize: 11.5, color: "var(--sm-text-mid)" }}>
+          <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--sm-text-mid)" }}>
             매출 − 제품원가 − 배송비(박스 × 아이스박스+운반비+보냉비). 과세 상품은 공급가(÷1.1) 기준.
           </p>
 
@@ -994,7 +994,7 @@ export default function OrderForm({
               <div style={{ fontSize: 15, fontWeight: 700, padding: "9px 0" }}>
                 {realScheduleCount > 0 ? `${effectiveBoxCount}박스` : "미정"}
               </div>
-              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>
+              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
                 {realScheduleCount > 0
                   ? `발송 일정 ${realScheduleCount}건의 박스 수 합 · 총 부피 ${orderMargin.volume.toLocaleString()}kg`
                   : `총 부피 ${orderMargin.volume.toLocaleString()}kg · 발주 목록에서 ‘+ 발송일’로 발송 일정과 박스 수를 넣으면 계산됩니다`}
@@ -1005,11 +1005,11 @@ export default function OrderForm({
               <div style={{ fontSize: 15, fontWeight: 700, padding: "9px 0" }}>
                 {orderMargin.season} <span style={{ fontWeight: 400, fontSize: 12, color: "var(--sm-text-mid)" }}>({SEASON_MONTHS[orderMargin.season]})</span>
               </div>
-              <span style={{ fontSize: 10.5, color: "var(--sm-text-light)" }}>발송예정일 기준 자동</span>
+              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발송예정일 기준 자동</span>
             </div>
           </div>
           {realScheduleCount === 0 && (
-            <p className="sm-faint" style={{ fontSize: 11.5, margin: "-4px 0 12px" }}>
+            <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 12px" }}>
               발송 일정이 없어 배송비를 1박스로 잡은 잠정 이익률입니다.
             </p>
           )}
@@ -1031,7 +1031,7 @@ export default function OrderForm({
               <strong className="b2b-money" style={{ color: orderMargin.profit >= 0 ? "var(--sm-success)" : "var(--sm-danger)" }}>
                 {orderMargin.profit >= 0 ? "+" : ""}{formatMoney(Math.round(orderMargin.profit))}원
                 {orderMargin.revenue > 0 && (
-                  <span style={{ marginLeft: 8, fontSize: 13 }}>
+                  <span style={{ marginLeft: 8, fontSize: 15 }}>
                     ({orderMargin.marginPct.toFixed(1)}%)
                   </span>
                 )}
@@ -1076,7 +1076,7 @@ export default function OrderForm({
               <button className="b2b-modal-close" onClick={() => setClonePrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <div style={{ fontSize: 12.5, color: "var(--sm-text-mid)", marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
                 이 업체의 <strong>가장 최근 발주</strong>를 그대로 불러올까요? (날짜·상태·송장은 새로 시작)
               </div>
               <div style={{ fontSize: 12, padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8 }}>

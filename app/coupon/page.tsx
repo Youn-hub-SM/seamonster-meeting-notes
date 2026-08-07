@@ -90,7 +90,7 @@ export default function CouponPage() {
             <button key={c.key} className="b2b-card" style={{ textAlign: "left", cursor: "pointer", padding: 18 }} onClick={() => pickChannel(c.key)}>
               <div style={{ fontSize: 17, fontWeight: 800 }}>{c.label}</div>
               <div className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>{c.intro}</div>
-              <div style={{ marginTop: 10, color: "var(--sm-orange)", fontWeight: 700, fontSize: 13 }}>시작하기 →</div>
+              <div style={{ marginTop: 10, color: "var(--sm-orange)", fontWeight: 700, fontSize: 15 }}>시작하기 →</div>
             </button>
           ))}
         </div>
@@ -102,12 +102,12 @@ export default function CouponPage() {
           <div className="sm-row" style={{ gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
             {channel.steps.map((s, i) => (
               <span key={i} className="sm-row" style={{ gap: 5, fontSize: 12, color: i === step ? "var(--sm-orange)" : i < step ? "var(--sm-text-mid)" : "var(--sm-text-light)", fontWeight: i === step ? 700 : 400 }}>
-                <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--sm-white)", background: i < step ? "var(--sm-success)" : i === step ? "var(--sm-orange)" : "var(--sm-border)" }}>{i < step ? "✓" : i + 1}</span>
+                <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--sm-white)", background: i < step ? "var(--sm-success)" : i === step ? "var(--sm-orange)" : "var(--sm-border)" }}>{i < step ? "✓" : i + 1}</span>
                 {s.title}{i < channel.steps.length - 1 && <span className="sm-faint" style={{ margin: "0 2px" }}>·</span>}
               </span>
             ))}
             <span className="sm-row" style={{ gap: 5, fontSize: 12, color: isReview ? "var(--sm-orange)" : "var(--sm-text-light)", fontWeight: isReview ? 700 : 400 }}>
-              <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "var(--sm-white)", background: isReview ? "var(--sm-orange)" : "var(--sm-border)" }}>✓</span>완료
+              <span style={{ width: 20, height: 20, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "var(--sm-white)", background: isReview ? "var(--sm-orange)" : "var(--sm-border)" }}>✓</span>완료
             </span>
           </div>
 
@@ -116,12 +116,12 @@ export default function CouponPage() {
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">{step + 1}. {cur.title}</span>{cur.desc && <span className="sm-faint" style={{ fontSize: 12, marginLeft: 8 }}>{cur.desc}</span>}</div>
 
-              {cur.note && <p className="sm-faint" style={{ fontSize: 12.5, margin: "0 0 12px", padding: "8px 10px", background: "var(--sm-bg)", borderRadius: 8, lineHeight: 1.5 }}>{cur.note}</p>}
+              {cur.note && <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", padding: "8px 10px", background: "var(--sm-bg)", borderRadius: 8, lineHeight: 1.5 }}>{cur.note}</p>}
 
               {collapsed ? (
                 <button type="button" className="b2b-btn-secondary" onClick={() => setOpenExtra(true)}>＋ 세부 설정 직접 조정</button>
               ) : visibleFields.length === 0 ? (
-                <p className="sm-faint" style={{ fontSize: 13, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다. <strong>다음</strong>을 누르세요.</p>
+                <p className="sm-faint" style={{ fontSize: 15, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다. <strong>다음</strong>을 누르세요.</p>
               ) : (
                 visibleFields.map((f) => <FieldView key={f.key} f={f} answers={answers} ch={channel!} required={!!channel && isFieldRequired(f, answers, channel)} set={set} toggle={toggle} setRange={setRange} />)
               )}
@@ -140,7 +140,7 @@ export default function CouponPage() {
               <div className="b2b-card-head"><span className="b2b-card-title">요청서 완성 — 복사해서 붙여넣으세요</span></div>
               <label className="b2b-field" style={{ maxWidth: 260 }}><span className="b2b-field-label">요청자 이름(선택)</span>
                 <input className="b2b-input" value={requester} onChange={(e) => setRequester(e.target.value)} placeholder="예: 홍길동" /></label>
-              <pre style={{ whiteSpace: "pre-wrap", background: "var(--sm-bg)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: 14, fontSize: 13, lineHeight: 1.6, marginTop: 10, fontFamily: "inherit" }}>{text}</pre>
+              <pre style={{ whiteSpace: "pre-wrap", background: "var(--sm-bg)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: 14, fontSize: 15, lineHeight: 1.6, marginTop: 10, fontFamily: "inherit" }}>{text}</pre>
               <div className="sm-between" style={{ marginTop: 14, gap: 10, flexWrap: "wrap" }}>
                 <button className="b2b-btn-secondary" onClick={() => setStep(totalSteps - 1)}>← 수정</button>
                 <div className="sm-row" style={{ gap: 8 }}>
@@ -171,21 +171,21 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
             const off = !!locked[o];
             return (
               <button key={o} type="button" className={`sm-tab ${on ? "is-active" : ""}`} disabled={off} title={off ? locked[o] : undefined} onClick={off ? undefined : () => (f.type === "radio" ? set(f.key, o) : toggle(f.key, o))}>
-                {f.type === "checkbox" && !off && <span style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, border: "1.5px solid currentColor", background: on ? "currentColor" : "transparent", opacity: on ? 1 : 0.45 }} />}{o}{off && <span style={{ fontSize: 10 }}>(잠김)</span>}
+                {f.type === "checkbox" && !off && <span style={{ display: "inline-block", width: 11, height: 11, borderRadius: 3, border: "1.5px solid currentColor", background: on ? "currentColor" : "transparent", opacity: on ? 1 : 0.45 }} />}{o}{off && <span style={{ fontSize: 12 }}>(잠김)</span>}
               </button>
             );
           })}
         </div>
       )}
-      {lockReasons.length > 0 && <p className="sm-faint" style={{ fontSize: 11, marginTop: 5, lineHeight: 1.5, color: "var(--sm-text-light)" }}>{lockReasons.join("   ·   ")}</p>}
+      {lockReasons.length > 0 && <p className="sm-faint" style={{ fontSize: 12, marginTop: 5, lineHeight: 1.5, color: "var(--sm-text-light)" }}>{lockReasons.join("   ·   ")}</p>}
       {f.type === "text" && <input className="b2b-input" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
-      {f.type === "number" && <div className="sm-row" style={{ gap: 6, alignItems: "center" }}><input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} style={{ maxWidth: 200 }} />{f.suffix && <span className="sm-faint" style={{ fontSize: 13 }}>{f.suffix}</span>}</div>}
+      {f.type === "number" && <div className="sm-row" style={{ gap: 6, alignItems: "center" }}><input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} style={{ maxWidth: 200 }} />{f.suffix && <span className="sm-faint" style={{ fontSize: 15 }}>{f.suffix}</span>}</div>}
       {f.type === "textarea" && <textarea className="b2b-input" rows={2} value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
       {f.type === "int-days" && (
         <div className="sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {f.presets?.map((p) => <button key={p} type="button" className={`sm-tab ${String(v ?? "") === String(p) ? "is-active" : ""}`} onClick={() => set(f.key, String(p))}>{p}일</button>)}
           <input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder="직접" style={{ maxWidth: 90 }} />
-          <span className="sm-faint" style={{ fontSize: 13 }}>일</span>
+          <span className="sm-faint" style={{ fontSize: 15 }}>일</span>
         </div>
       )}
       {f.type === "date" && <input className="b2b-input" type="date" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} style={{ maxWidth: 220 }} />}
@@ -199,7 +199,7 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
           {rangeInvalid(range) && <p style={{ color: "var(--sm-danger)", fontSize: 12, marginTop: 5 }}>종료가 시작보다 빨라요. 다시 확인하세요.</p>}
         </div>
       )}
-      {f.help && <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 5, lineHeight: 1.5, color: f.warn ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{f.help}</p>}
+      {f.help && <p className="sm-faint" style={{ fontSize: 12, marginTop: 5, lineHeight: 1.5, color: f.warn ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{f.help}</p>}
     </div>
   );
 }

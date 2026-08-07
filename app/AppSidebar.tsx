@@ -144,7 +144,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             <a href={t.href} target="_blank" rel="noreferrer" className="app-sb-tool" onClick={onNavigate}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
-              <span aria-hidden="true" style={{ marginLeft: "auto", fontSize: 11, color: "var(--sm-text-light)" }}>↗</span>
+              <span aria-hidden="true" style={{ marginLeft: "auto", fontSize: 12, color: "var(--sm-text-light)" }}>↗</span>
             </a>
           ) : (
             <Link href={t.href} className="app-sb-tool" onClick={onNavigate}>
@@ -230,7 +230,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
                 즐겨찾는 메뉴
               </button>
               <button type="button" onClick={() => { setEditFav((v) => !v); if (!favOpen) toggleFavOpen(); }}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, padding: 0, color: editFav ? "var(--sm-orange)" : "var(--sm-text-light)" }}>
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, padding: 0, color: editFav ? "var(--sm-orange)" : "var(--sm-text-light)" }}>
                 {editFav ? "완료" : "편집"}
               </button>
               <button
@@ -246,7 +246,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               </button>
             </div>
             {favOpen && (favorites.length === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 11, padding: "2px 12px 4px", lineHeight: 1.5 }}>
+              <div className="sm-faint" style={{ fontSize: 12, padding: "2px 12px 4px", lineHeight: 1.5 }}>
                 {editFav ? "메뉴 옆 ＋를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
               </div>
             ) : sortedFavorites.map((f) => (

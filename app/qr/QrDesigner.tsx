@@ -90,15 +90,15 @@ export default function QrDesigner({ data, name, onClose }: { data: string; name
                   <label className="b2b-btn-secondary" style={{ cursor: "pointer", fontSize: 12 }}>로고 올리기<input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogo(f); e.target.value = ""; }} /></label>
                   {logo && <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setLogo("")}>제거</button>}
                 </div>
-                {logo && <span className="sm-faint" style={{ fontSize: 11 }}>로고 삽입 시 오류보정을 높여 스캔 안정성을 유지합니다.</span>}
+                {logo && <span className="sm-faint" style={{ fontSize: 12 }}>로고 삽입 시 오류보정을 높여 스캔 안정성을 유지합니다.</span>}
               </div>
-              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer" }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer" }}>
                 <input type="checkbox" checked={frame} onChange={(e) => setFrame(e.target.checked)} /> 'SCAN ME' 프레임
               </label>
               {frame && <input className="b2b-input" style={{ marginTop: 6 }} value={frameText} onChange={(e) => setFrameText(e.target.value)} placeholder="프레임 문구" />}
             </div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 12 }}>※ 색 대비가 낮으면(전경이 밝거나 배경이 어두우면) 스캔이 안 될 수 있어요. 어두운 전경 + 밝은 배경을 권장합니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>※ 색 대비가 낮으면(전경이 밝거나 배경이 어두우면) 스캔이 안 될 수 있어요. 어두운 전경 + 밝은 배경을 권장합니다.</p>
         </div>
         <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
           <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>

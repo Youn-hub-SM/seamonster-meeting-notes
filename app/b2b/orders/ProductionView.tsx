@@ -103,7 +103,7 @@ export default function ProductionView() {
                       <td>{p.product_name}</td>
                       <td>{p.spec || "-"}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{formatQty(p.qty)}</td>
-                      <td style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
+                      <td style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>
                         {p.companies.length > 0 ? p.companies.join(", ") : "-"}
                       </td>
                       <td className="num">{p.order_count}</td>

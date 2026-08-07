@@ -197,7 +197,7 @@ export default function InvStatsPage() {
                 </tbody>
               </table>
             </div>
-            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>※ 입고·출고·조정은 불러온 원장(최근 2000건) 합계. 현재고·재고자산은 전체 기준.</p>
+            <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>※ 입고·출고·조정은 불러온 원장(최근 2000건) 합계. 현재고·재고자산은 전체 기준.</p>
           </section>
         </>
       )}

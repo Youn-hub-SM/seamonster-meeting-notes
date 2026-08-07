@@ -85,7 +85,7 @@ export default function VocMonthlyPage() {
       {error && <div className="b2b-error no-print">{error}</div>}
 
       <section className="b2b-card no-print" style={{ marginBottom: 16 }}>
-        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>대상 월
+        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>대상 월
           <input className="b2b-input" type="month" value={month} max={TODAY().slice(0, 7)} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }} /></label>
       </section>
 
@@ -95,14 +95,14 @@ export default function VocMonthlyPage() {
         <section className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "28px 30px", maxWidth: 900, boxShadow: "var(--sm-shadow-card)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
             <div>
-              <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
+              <div style={{ fontSize: 15, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
               <h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {mm}월 VOC 결산</h2>
             </div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>
               총 발생
               <div style={{ fontSize: 24, fontWeight: 800, color: "var(--sm-black)", marginTop: 2 }}>
                 {data.total}건
-                <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 8, color: diff > 0 ? "var(--sm-danger)" : diff < 0 ? "var(--sm-success)" : "var(--sm-text-mid)" }}>
+                <span style={{ fontSize: 15, fontWeight: 600, marginLeft: 8, color: diff > 0 ? "var(--sm-danger)" : diff < 0 ? "var(--sm-success)" : "var(--sm-text-mid)" }}>
                   전월 대비 {diff > 0 ? `+${diff}` : diff}건
                 </span>
               </div>
@@ -137,7 +137,7 @@ export default function VocMonthlyPage() {
           </div>
 
           {/* 유형별 표 */}
-          <strong style={{ fontSize: 14, display: "block", marginBottom: 6 }}>유형별 발생 · 개선 현황</strong>
+          <strong style={{ fontSize: 15, display: "block", marginBottom: 6 }}>유형별 발생 · 개선 현황</strong>
           <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr><th>유형</th><th className="num">전월 발생</th><th className="num">당월 발생</th><th className="num">증감</th><th className="num">손해금액</th><th>개선 상태</th><th>비고</th></tr></thead>
@@ -169,7 +169,7 @@ export default function VocMonthlyPage() {
             </tbody>
           </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 11, marginTop: 12 }}>※ 발생 = 접수일 기준. 개선완료 = 유형 단위 처리(유형별 현황판에서 상태 변경 시 시점 기록). 개선 작업 자체는 Flow 에서 진행.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>※ 발생 = 접수일 기준. 개선완료 = 유형 단위 처리(유형별 현황판에서 상태 변경 시 시점 기록). 개선 작업 자체는 Flow 에서 진행.</p>
         </section>
       )}
     </div>

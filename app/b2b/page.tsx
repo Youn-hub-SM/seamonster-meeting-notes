@@ -277,11 +277,11 @@ export default async function B2BDashboard() {
         <div className="b2b-error">
           <strong>Supabase 스키마가 아직 적용되지 않았어요.</strong>
           <br />
-          <code style={{ fontSize: 11 }}>meeting-notes/supabase/migrations/001_b2b_init.sql</code>{" "}
+          <code style={{ fontSize: 12 }}>meeting-notes/supabase/migrations/001_b2b_init.sql</code>{" "}
           파일 내용을 Supabase Dashboard {">"}  SQL Editor 에 붙여넣고 Run 해주세요.
           <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: "pointer", fontSize: 11, color: "var(--sm-text-mid)" }}>에러 자세히 보기</summary>
-            <pre style={{ marginTop: 8, fontSize: 10, whiteSpace: "pre-wrap", color: "var(--sm-text-mid)" }}>
+            <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--sm-text-mid)" }}>에러 자세히 보기</summary>
+            <pre style={{ marginTop: 8, fontSize: 12, whiteSpace: "pre-wrap", color: "var(--sm-text-mid)" }}>
               {stats.error}
             </pre>
           </details>
@@ -343,7 +343,7 @@ export default async function B2BDashboard() {
           <div className="b2b-card-head">
             <div>
               <h2 className="b2b-card-title">이번 주 일정</h2>
-              <span style={{ fontSize: 11.5, color: "var(--sm-text-light)" }}>{week.label}</span>
+              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{week.label}</span>
             </div>
             <Link href="/b2b/orders" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }}>
               발주 캘린더

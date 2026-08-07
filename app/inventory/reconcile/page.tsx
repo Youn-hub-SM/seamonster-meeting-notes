@@ -113,7 +113,7 @@ export default function InventoryReconcilePage() {
         <>
           {/* 안내 배너 */}
           {kpi.sold > 0 && kpi.coverage < 90 && (
-            <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
+            <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 15, lineHeight: 1.6 }}>
               이 기간에 실제로 <strong>{won(kpi.sold)}개</strong>가 팔렸는데, 재고에서 빠진 건 <strong>{won(kpi.out)}개({kpi.coverage}%)</strong>뿐이에요.
               판매가 재고에 <strong>거의 안 빠지고</strong> 있습니다. 매일 판매·구매·재고를 맞춰 주세요. (아래는 <strong>팔린 수를 실제 나간 수로 보고</strong> 비교한 표입니다.)
             </div>
@@ -121,7 +121,7 @@ export default function InventoryReconcilePage() {
 
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">팔린 수(판매)</div><div className="b2b-stat-card-value b2b-money">{won(kpi.sold)}</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고에서 빠진 판매</div><div className="b2b-stat-card-value b2b-money" style={{ color: kpi.coverage < 90 ? "var(--sm-danger)" : "var(--sm-success)" }}>{won(kpi.out)} <span style={{ fontSize: 13 }}>({kpi.coverage}%)</span></div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고에서 빠진 판매</div><div className="b2b-stat-card-value b2b-money" style={{ color: kpi.coverage < 90 ? "var(--sm-danger)" : "var(--sm-success)" }}>{won(kpi.out)} <span style={{ fontSize: 15 }}>({kpi.coverage}%)</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">산 기록 없이 팔린 품목</div><div className="b2b-stat-card-value" style={{ color: kpi.noBuyCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{kpi.noBuyCount}개 <span className="sm-faint" style={{ fontSize: 12 }}>· 판매 {won(kpi.noBuySold)}</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 마이너스(오류)</div><div className="b2b-stat-card-value" style={{ color: kpi.minusCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{kpi.minusCount}개</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">직접 맞춘 수(보정)</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-warning)" }}>{kpi.adj > 0 ? "+" : ""}{won(kpi.adj)}</div></div>
@@ -156,7 +156,7 @@ export default function InventoryReconcilePage() {
                   ) : shown.map((r) => (
                     <tr key={r.product_id}>
                       <td><strong>{r.name}</strong></td>
-                      <td className="sm-faint" style={{ fontSize: 11 }}>{r.sku || "-"}</td>
+                      <td className="sm-faint" style={{ fontSize: 12 }}>{r.sku || "-"}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700, color: r.current_qty < 0 ? "var(--sm-danger)" : undefined }}>{won(r.current_qty)}</td>
                       <td className="num b2b-money">{r.sold ? won(r.sold) : "-"}</td>
                       <td className="num b2b-money" style={{ color: r.ledger_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.ledger_in ? won(r.ledger_in) : "-"}</td>
@@ -168,7 +168,7 @@ export default function InventoryReconcilePage() {
                           {r.noBuy && <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>산 기록 없음</span>}
                           {r.minusStock && <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>재고 마이너스</span>}
                           {!r.minusStock && r.emptySelling && <span className="b2b-status-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>재고 0인데 팔림</span>}
-                          {!r.issue && <span className="sm-faint" style={{ fontSize: 11 }}>이상 없음</span>}
+                          {!r.issue && <span className="sm-faint" style={{ fontSize: 12 }}>이상 없음</span>}
                         </span>
                       </td>
                     </tr>
@@ -176,7 +176,7 @@ export default function InventoryReconcilePage() {
                 </tbody>
               </table>
             </div>
-            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 8, lineHeight: 1.6 }}>
+            <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>
               · <strong>팔린 수</strong>=매출 데이터에서 실제 팔린 개수(세트는 낱개로 풀어서). · <strong>산 수(구매)·재고에서 뺀 수·직접 맞춤</strong>=이 기간에 재고에 기록된 들어옴/나감/보정.
               <br />· <strong>안 빠진 판매</strong>=팔렸는데 재고에서 아직 안 뺀 수(+면 재고에 반영이 덜 된 것). · <strong>산 기록 없음</strong>=팔렸는데 구매(들어온) 기록이 하나도 없음 → 구매를 넣어 주세요. · <strong>재고 마이너스</strong>=있을 수 없는 재고라 점검이 필요해요.
             </p>

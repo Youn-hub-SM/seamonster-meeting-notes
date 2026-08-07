@@ -192,7 +192,7 @@ export default function VocLossPage() {
               <div className="sm-tabs">{(["주별", "월별"] as Unit[]).map((u) => <button key={u} className={`sm-tab ${unit === u ? "is-active" : ""}`} onClick={() => setUnit(u)}>{u}</button>)}</div>
             </div>
             <div className="sm-between" style={{ marginBottom: 6 }}>
-              <span className="sm-faint" style={{ fontSize: 11 }}>단위 : 원</span>
+              <span className="sm-faint" style={{ fontSize: 12 }}>단위 : 원</span>
               <span className="sm-chart-legend"><span><i style={{ background: "var(--sm-orange)" }} />손해금액</span></span>
             </div>
             <TrendChart data={trend.map((t) => ({ label: t.label, value: t.value, tip: `${t.label} · ${won(t.value)}원` }))} fmtAxis={moneyCompact} />

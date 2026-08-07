@@ -82,7 +82,7 @@ function QuestionComposer({ channels, products, topProducts, disabled, onCompose
               </div>
             </div>
           ))}
-          {Object.keys(pick).length > 0 && <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={reset}>선택 초기화</button>}
+          {Object.keys(pick).length > 0 && <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={reset}>선택 초기화</button>}
         </div>
       )}
     </div>
@@ -303,7 +303,7 @@ export default function MarginCalcPage() {
       {res && !loading && (
         <div className="sm-col" style={{ gap: 14 }}>
           {snapshotOf && (
-            <div className="sm-faint" style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div className="sm-faint" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               저장 시점 결과 <strong>{snapshotOf.name}</strong> ({snapshotOf.date}) — 이후 원가·수수료가 바뀌었을 수 있어요.
               <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12 }} disabled={loading} onClick={() => run(snapshotOf.question, true)}>AI로 다시 계산</button>
             </div>
@@ -311,7 +311,7 @@ export default function MarginCalcPage() {
           <div className="rp-understood">
             {res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}
             {res.results.length > 0 && (
-              <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12.5 }} onClick={openSave}>저장</button>
+              <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12 }} onClick={openSave}>저장</button>
             )}
           </div>
 
@@ -324,7 +324,7 @@ export default function MarginCalcPage() {
             </div>
           )}
 
-          <p className="sm-faint" style={{ fontSize: 11.5 }}>※ 원가·수수료·배송정책 데이터를 근거로 한 추정입니다. 실제 정산과 차이가 있을 수 있어요.</p>
+          <p className="sm-faint" style={{ fontSize: 12 }}>※ 원가·수수료·배송정책 데이터를 근거로 한 추정입니다. 실제 정산과 차이가 있을 수 있어요.</p>
         </div>
       )}
 
@@ -334,12 +334,12 @@ export default function MarginCalcPage() {
           <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-card-head"><span className="b2b-card-title">계산 저장</span></div>
             <label className="sm-col" style={{ gap: 4, marginBottom: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>이름</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>이름</span>
               <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 대구 1kg 쿠팡 20% 할인" />
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 계산 레시피가 함께 저장되어, 클릭할 때마다 AI 없이 현재 원가·수수료 기준으로 즉시 계산됩니다</span></span>
-              <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 13, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => setSaveQuestion(e.target.value)} />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 계산 레시피가 함께 저장되어, 클릭할 때마다 AI 없이 현재 원가·수수료 기준으로 즉시 계산됩니다</span></span>
+              <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 15, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => setSaveQuestion(e.target.value)} />
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
               <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>취소</button>
@@ -375,13 +375,13 @@ export default function MarginCalcPage() {
                   value={prompt}
                   onChange={(e) => { setPrompt(e.target.value); setPSaved(""); }}
                   spellCheck={false}
-                  style={{ width: "100%", minHeight: 340, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12.5, lineHeight: 1.7, resize: "vertical", whiteSpace: "pre", overflowWrap: "normal", overflowX: "auto" }}
+                  style={{ width: "100%", minHeight: 340, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12, lineHeight: 1.7, resize: "vertical", whiteSpace: "pre", overflowWrap: "normal", overflowX: "auto" }}
                 />
                 <div className="sm-row" style={{ gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
                   <button className="b2b-btn-primary" onClick={() => savePrompt()} disabled={pSaving}>{pSaving ? "저장 중…" : "지침 저장"}</button>
                   <button className="b2b-btn-secondary" onClick={resetPrompt} disabled={pSaving || promptIsDefault}>기본값으로 복원</button>
                   {pSaved && <span style={{ fontSize: 12, color: "var(--sm-success)" }}>{pSaved}</span>}
-                  <span className="sm-faint" style={{ fontSize: 11.5, marginLeft: "auto" }}>
+                  <span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>
                     {prompt.length.toLocaleString()}자 · <span style={{ color: promptIsDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>{promptIsDefault ? "기본값" : "사용자 지정"}</span> · 모든 사용자 공용
                   </span>
                 </div>
@@ -392,8 +392,8 @@ export default function MarginCalcPage() {
       </section>
 
       <style>{`
-        .mc-ai { font-size: 11px; font-weight: 700; color: var(--sm-orange); border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light); border-radius: 6px; padding: 1px 7px; vertical-align: middle; margin-left: 4px; }
-        .mc-prompt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: none; border: none; padding: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sm-text-mid); text-align: left; }
+        .mc-ai { font-size: 12px; font-weight: 700; color: var(--sm-orange); border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light); border-radius: 6px; padding: 1px 7px; vertical-align: middle; margin-left: 4px; }
+        .mc-prompt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: none; border: none; padding: 0; cursor: pointer; font-size: 15px; font-weight: 600; color: var(--sm-text-mid); text-align: left; }
       `}</style>
     </div>
   );
@@ -421,21 +421,21 @@ function ResultCard({ r }: { r: MarginResultItem }) {
 
       {/* 투명한 계산 근거 */}
       <div className="b2b-table-wrap">
-        <table className="b2b-table" style={{ fontSize: 13 }}>
+        <table className="b2b-table" style={{ fontSize: 15 }}>
           <tbody>
             <tr>
-              <td><strong>매출액</strong> <span className="sm-faint" style={{ fontSize: 11 }}>(고객 결제가)</span></td>
+              <td><strong>매출액</strong> <span className="sm-faint" style={{ fontSize: 12 }}>(고객 결제가)</span></td>
               <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.revenue)}</td>
             </tr>
             {r.supplyValue > 0 && r.supplyValue !== r.revenue && (
               <tr>
-                <td className="sm-faint">└ 공급가액 <span style={{ fontSize: 11 }}>(부가세 차감)</span></td>
+                <td className="sm-faint">└ 공급가액 <span style={{ fontSize: 12 }}>(부가세 차감)</span></td>
                 <td className="num b2b-money sm-faint">{won(r.supplyValue)}</td>
               </tr>
             )}
             {r.expenses.map((e, i) => (
               <tr key={i}>
-                <td style={{ color: "var(--sm-text-mid)" }}>− {e.label}{e.note ? <span className="sm-faint" style={{ fontSize: 11 }}> · {e.note}</span> : null}</td>
+                <td style={{ color: "var(--sm-text-mid)" }}>− {e.label}{e.note ? <span className="sm-faint" style={{ fontSize: 12 }}> · {e.note}</span> : null}</td>
                 <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>−{won(e.amount)}</td>
               </tr>
             ))}

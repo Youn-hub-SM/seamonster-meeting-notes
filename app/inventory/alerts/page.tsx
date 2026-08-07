@@ -39,7 +39,7 @@ export default function AlertsPage() {
             <tbody>
               {low.map((r) => (
                 <tr key={r.product_id} style={{ background: "var(--sm-danger-bg)" }}>
-                  <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{r.spec}</span> : null}</td>
+                  <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}</td>
                   <td className="sm-faint">{r.sku || "-"}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>{r.qty.toLocaleString()}{r.unit}</td>
                   <td className="num b2b-money">{r.min_qty.toLocaleString()}{r.unit}</td>

@@ -119,7 +119,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 700 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
                   <td>{o.partner || "-"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{o.item_count}개 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 11 }}>{isOpen ? "▲" : "▼"}</span></td>
+                  <td style={{ whiteSpace: "nowrap" }}>{o.item_count}개 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>{isOpen ? "▲" : "▼"}</span></td>
                   <td className="num b2b-money">{o.total_qty.toLocaleString()}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{o.total_amount.toLocaleString()}</td>
                   <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={o.memo || ""}>{o.memo || "-"}</td>
@@ -139,10 +139,10 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                             const bal = balances[it.id];
                             return (
                               <tr key={it.id}>
-                                <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product_name}{it.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{it.sku}</span> : null}</td>
+                                <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product_name}{it.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{it.sku}</span> : null}</td>
                                 <td className="num" style={{ whiteSpace: "nowrap" }}>
                                   <span className="b2b-money" style={{ fontWeight: 700 }}>{it.qty.toLocaleString()}</span>
-                                  {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11.5 }}>({bal.before.toLocaleString()} → {bal.after.toLocaleString()})</span>}
+                                  {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({bal.before.toLocaleString()} → {bal.after.toLocaleString()})</span>}
                                 </td>
                                 <td className="num b2b-money">{it.unit_amount ? it.unit_amount.toLocaleString() : "-"}</td>
                                 <td className="num b2b-money">₩{it.amount.toLocaleString()}</td>

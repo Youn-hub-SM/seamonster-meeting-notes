@@ -107,7 +107,7 @@ export default function ActivityPage() {
               <section key={date} className="b2b-card" style={{ padding: 0, overflow: "hidden" }}>
                 <button onClick={() => toggle(date)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                   <span style={{ color: "var(--sm-text-light)", fontSize: 12, transform: o ? "rotate(90deg)" : "none", transition: "transform .12s" }}>▶</span>
-                  <strong style={{ fontSize: 14 }}>{date}</strong>
+                  <strong style={{ fontSize: 15 }}>{date}</strong>
                   <span className="sm-faint" style={{ fontSize: 12 }}>{list.length}건</span>
                   <span className="sm-row" style={{ gap: 4, marginLeft: "auto", flexWrap: "wrap" }}>
                     {Object.entries(byType).map(([ty, n]) => { const c = INV_TYPE_COLOR[ty as keyof typeof INV_TYPE_COLOR]; return <span key={ty} className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{ty} {n}</span>; })}
@@ -130,7 +130,7 @@ export default function ActivityPage() {
                           const t = it.t; const c = INV_TYPE_COLOR[t.type];
                           return (
                             <tr key={t.id}>
-                              <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.product_name}{t.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{t.sku}</span> : null}</td>
+                              <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.product_name}{t.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{t.sku}</span> : null}</td>
                               <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span></td>
                               <td>{t.channel ? (() => { const ch = INV_CHANNEL_COLOR[t.channel as InvChannel]; return <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span>; })() : <span className="sm-faint">-</span>}</td>
                               <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>

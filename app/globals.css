@@ -53,8 +53,8 @@
 
   /* ── 타이포 스케일 (전역 -2 반영된 현재 기준) ── */
   --sm-fs-xs: 12px;
-  --sm-fs-sm: 13px;
-  --sm-fs-base: 14px;   /* 본문 기본 */
+  --sm-fs-sm: 15px;
+  --sm-fs-base: 15px;   /* 본문 기본 */
   --sm-fs-md: 15px;
   --sm-fs-lg: 17px;
   --sm-fs-xl: 19px;
@@ -137,7 +137,7 @@ body {
   background: var(--sm-bg);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -181,7 +181,7 @@ a {
 
 .header-nav-link {
   padding: 6px 14px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--sm-text-mid);
   border-radius: var(--sm-radius);
@@ -294,7 +294,7 @@ a {
 }
 
 .meeting-card-summary {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--sm-text-mid);
   line-height: 1.5;
   display: -webkit-box;
@@ -322,7 +322,7 @@ a {
   border: 1px solid transparent;
   border-radius: var(--sm-radius-btn);
   padding: 11px 18px;
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -348,7 +348,7 @@ a {
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius-btn);
   padding: 11px 18px;
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
@@ -370,7 +370,7 @@ a {
   border: 1px solid transparent;
   border-radius: var(--sm-radius-btn);
   padding: 11px 18px;
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -404,7 +404,7 @@ a {
 }
 
 .file-drop-text {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--sm-text-mid);
   font-weight: 600;
 }
@@ -426,7 +426,7 @@ a {
 }
 
 .file-name {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--sm-orange);
 }
@@ -452,7 +452,7 @@ a {
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   margin-bottom: 8px;
   color: var(--sm-dark);
@@ -488,7 +488,7 @@ a {
 }
 
 .detail-date {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--sm-text-light);
   margin-bottom: 8px;
 }
@@ -540,7 +540,7 @@ a {
   gap: 16px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--sm-border);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -571,7 +571,7 @@ a {
 }
 
 .decision-category-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   margin-bottom: 12px;
   color: var(--sm-dark);
@@ -587,7 +587,7 @@ a {
 
 .decision-label {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 2px 10px;
   border-radius: var(--sm-radius-pill);
@@ -617,7 +617,7 @@ a {
 
 .decision-item {
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.5;
   position: relative;
   padding-left: 24px;
@@ -658,7 +658,7 @@ a {
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
   margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.5;
   display: flex;
   align-items: baseline;
@@ -669,7 +669,7 @@ a {
 .todo-assignee {
   color: var(--sm-orange);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 15px;
   white-space: nowrap;
 }
 
@@ -697,7 +697,7 @@ a {
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
   padding: 16px;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   white-space: pre-wrap;
   color: var(--sm-text-mid);
@@ -731,7 +731,7 @@ a {
 
 .loading-text {
   color: var(--sm-text-mid);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 /* Empty state */
@@ -786,7 +786,7 @@ a {
 
 .markdown-text {
   font-family: inherit;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
@@ -849,12 +849,12 @@ a {
 }
 
 .model-option-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
 }
 
 .model-option-badge {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--sm-radius-pill);
@@ -924,7 +924,7 @@ a {
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 15px;
   width: 100px;
 }
 
@@ -951,7 +951,7 @@ a {
 }
 
 .correct-original {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--sm-text-mid);
   padding: 12px;
@@ -969,7 +969,7 @@ a {
 }
 
 .correct-corrected {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--sm-dark);
   padding: 12px;
@@ -980,7 +980,7 @@ a {
 
 .correct-label {
   display: inline-block;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--sm-radius-pill);
@@ -1014,13 +1014,13 @@ a {
 
 .analysis-item strong {
   display: block;
-  font-size: 13px;
+  font-size: 15px;
   margin-bottom: 6px;
   color: var(--sm-dark);
 }
 
 .analysis-item p {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--sm-text-mid);
 }
@@ -1031,7 +1031,7 @@ a {
 }
 
 .analysis-item li {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--sm-text-mid);
   padding-left: 16px;
@@ -1050,7 +1050,7 @@ a {
   background: var(--sm-bg-warm);
   padding: 16px 20px;
   border-radius: var(--sm-radius-card);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--sm-dark);
   font-weight: 600;
@@ -1098,7 +1098,7 @@ a {
   border: 1px dashed var(--sm-border);
   border-radius: var(--sm-radius);
   padding: 16px;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--sm-text-mid);
   white-space: pre-wrap;
@@ -1106,7 +1106,7 @@ a {
 
 /* CS 코치 — 조언 블록 */
 .cs-advice {
-  font-size: 14.5px;
+  font-size: 15px;
   line-height: 1.7;
   color: var(--sm-dark);
   white-space: pre-wrap;
@@ -1118,7 +1118,7 @@ a {
   border-left: 3px solid var(--sm-orange);
   border-radius: var(--sm-radius);
   padding: 14px 16px;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.7;
   color: var(--sm-text-mid);
   white-space: pre-wrap;
@@ -1134,7 +1134,7 @@ a {
 .cs-advice-list li {
   position: relative;
   padding-left: 22px;
-  font-size: 14.5px;
+  font-size: 15px;
   line-height: 1.6;
   color: var(--sm-dark);
 }
@@ -1169,7 +1169,7 @@ a {
 
 .cs-copy-sm {
   padding: 6px 14px;
-  font-size: 12.5px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
@@ -1196,7 +1196,7 @@ a {
   flex: 1;
   min-width: 200px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 15px;
   padding: 10px 14px;
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
@@ -1205,7 +1205,7 @@ a {
 .csm-search:focus { outline: none; border-color: var(--sm-orange); }
 .csm-cat-filter {
   font-family: inherit;
-  font-size: 14px;
+  font-size: 15px;
   padding: 10px 12px;
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
@@ -1219,7 +1219,7 @@ a {
   width: 130px;
   flex-shrink: 0;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 15px;
   padding: 8px 10px;
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
@@ -1277,7 +1277,7 @@ a {
 .csm-order-input {
   width: 56px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 15px;
   padding: 7px 8px;
   text-align: center;
   border: 1px solid var(--sm-border);
@@ -1285,7 +1285,7 @@ a {
 }
 .csm-content {
   min-height: 160px !important;
-  font-size: 14px !important;
+  font-size: 15px !important;
 }
 .csm-card-actions {
   display: flex;
@@ -1369,7 +1369,7 @@ a {
   gap: 6px;
   padding: 6px 14px;
   border-radius: var(--sm-radius-pill);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1422,7 +1422,7 @@ a {
 }
 
 .focus-group-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   margin: 0 0 8px;
   display: flex;
@@ -1454,7 +1454,7 @@ a {
   background: var(--sm-bg);
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
-  font-size: 13px;
+  font-size: 15px;
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -1484,7 +1484,7 @@ a {
 
 .focus-row-kind {
   color: var(--sm-white);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: var(--sm-radius);
@@ -1538,7 +1538,7 @@ a {
   .focus-row-meta,
   .focus-row-product {
     grid-column: 2;
-    font-size: 11px;
+    font-size: 12px;
   }
   .focus-row .orders-status-pill {
     grid-column: 2;
@@ -1560,7 +1560,7 @@ a {
   border: none;
   border-radius: var(--sm-radius-pill);
   padding: 6px 18px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--sm-text-mid);
   cursor: pointer;
@@ -1591,7 +1591,7 @@ a {
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 15px;
   background: var(--sm-white);
   color: var(--sm-black);
 }
@@ -1618,7 +1618,7 @@ a {
   display: inline-block;
   padding: 2px 8px;
   border-radius: var(--sm-radius-pill);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1671,7 +1671,7 @@ a {
 
 .cal-entry-note {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .week-order-row.is-overdue {
@@ -1695,7 +1695,7 @@ a {
   border-radius: var(--sm-radius);
   padding: 12px 16px;
   color: #c53030;
-  font-size: 13px;
+  font-size: 15px;
   margin-bottom: 16px;
 }
 
@@ -1728,7 +1728,7 @@ a {
 
 .cal-legend-hint {
   color: var(--sm-text-light);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   margin-right: 4px;
 }
@@ -1808,7 +1808,7 @@ a {
 }
 
 .cal-date {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--sm-text-mid);
   display: inline-flex;
@@ -1834,7 +1834,7 @@ a {
   background: var(--sm-border);
   cursor: pointer;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--sm-white);
   text-align: left;
@@ -1898,7 +1898,7 @@ a {
   border: none;
   border-left: 3px solid var(--sm-border);
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
   font-family: inherit;
@@ -1935,7 +1935,7 @@ a {
 .orders-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .orders-table thead th {
@@ -1993,7 +1993,7 @@ a {
   display: inline-block;
   padding: 3px 10px;
   border-radius: var(--sm-radius-pill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -2006,7 +2006,7 @@ a {
   border: none;
   padding: 3px 22px 3px 10px;
   border-radius: var(--sm-radius-pill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -2124,7 +2124,7 @@ a {
 }
 
 .prod-help {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--sm-text-mid);
   margin: 0 0 8px;
 }
@@ -2212,7 +2212,7 @@ a {
   text-align: center;
   padding: 24px 16px;
   color: var(--sm-text-light);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .prod-grid {
@@ -2244,13 +2244,13 @@ a {
 }
 
 .prod-card-product {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--sm-black);
 }
 
 .prod-card-spec {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--sm-text-mid);
 }
 
@@ -2272,7 +2272,7 @@ a {
 }
 
 .prod-card-stat-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--sm-text-light);
   font-weight: 600;
 }
@@ -2288,7 +2288,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .prod-card-meta-row {
@@ -2321,7 +2321,7 @@ a {
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius-pill);
   padding: 4px 10px;
-  font-size: 10px;
+  font-size: 12px;
   cursor: pointer;
   font-family: inherit;
   color: var(--sm-text-mid);
@@ -2358,7 +2358,7 @@ a {
 
 .prod-orders-toggle summary::before {
   content: "▶";
-  font-size: 9px;
+  font-size: 12px;
   transition: transform 0.15s;
 }
 
@@ -2410,12 +2410,12 @@ a {
   display: flex;
   gap: 8px;
   color: var(--sm-text-mid);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .prod-order-date {
   color: var(--sm-text-light);
-  font-size: 11px;
+  font-size: 12px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -2476,7 +2476,7 @@ a {
 .week-card-badge {
   background: var(--sm-orange);
   color: var(--sm-white);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 3px 12px;
   border-radius: var(--sm-radius-pill);
@@ -2495,7 +2495,7 @@ a {
 }
 
 .week-total-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--sm-text-light);
   font-weight: 600;
 }
@@ -2525,7 +2525,7 @@ a {
 .week-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 15px;
   background: var(--sm-white);
   table-layout: fixed;
 }
@@ -2601,7 +2601,7 @@ a {
 
 .week-orders-toggle summary {
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--sm-text-mid);
   user-select: none;
@@ -2618,7 +2618,7 @@ a {
 
 .week-orders-toggle summary::before {
   content: "▶";
-  font-size: 9px;
+  font-size: 12px;
   transition: transform 0.15s;
 }
 
@@ -2645,7 +2645,7 @@ a {
   background: var(--sm-bg);
   border: 1px solid var(--sm-border);
   border-radius: var(--sm-radius);
-  font-size: 13px;
+  font-size: 15px;
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -2742,7 +2742,7 @@ a {
 }
 
 .order-card-product {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--sm-dark);
   overflow-wrap: anywhere;
 }
@@ -2752,7 +2752,7 @@ a {
 }
 
 .order-card-meta {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--sm-text-mid);
   font-variant-numeric: tabular-nums;
 }
@@ -2813,7 +2813,7 @@ a {
 }
 
 .week-card-item-product {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--sm-black);
   overflow-wrap: anywhere;
 }
@@ -2831,7 +2831,7 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--sm-orange);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -2842,7 +2842,7 @@ a {
   font-weight: 600;
   color: var(--sm-text-light);
   margin-right: 4px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .week-card-item-clients {
@@ -2876,7 +2876,7 @@ a {
   .orders-header-actions .btn-primary {
     flex: 1;
     padding: 12px 14px;
-    font-size: 13px;
+    font-size: 15px;
     min-height: 44px;
   }
 
@@ -2896,7 +2896,7 @@ a {
   .orders-tabs::-webkit-scrollbar { display: none; }
   .orders-tab {
     padding: 10px 16px;
-    font-size: 13px;
+    font-size: 15px;
     flex-shrink: 0;
     min-height: 40px;
   }
@@ -2922,7 +2922,7 @@ a {
     grid-template-columns: 1fr auto;
     gap: 4px 8px;
     padding: 10px 12px;
-    font-size: 13px;
+    font-size: 15px;
   }
   .focus-row-kinds {
     grid-column: 1 / -1;
@@ -2930,7 +2930,7 @@ a {
   }
   .focus-row-client {
     grid-column: 1;
-    font-size: 14px;
+    font-size: 15px;
   }
   .focus-row .orders-status-pill {
     grid-column: 2;
@@ -2943,28 +2943,28 @@ a {
   }
   .focus-row-meta {
     grid-column: 1 / -1;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   /* ── 캘린더 (3주 윈도우) ── */
   .cal-nav { gap: 8px; }
   .cal-month {
-    font-size: 14px;
+    font-size: 15px;
     min-width: 0;
     flex: 1;
     text-align: center;
     font-variant-numeric: tabular-nums;
   }
   .cal-legend { gap: 4px; }
-  .cal-legend-item { padding: 4px 10px; font-size: 11px; }
-  .cal-weekday { padding: 8px 4px; font-size: 11px; }
+  .cal-legend-item { padding: 4px 10px; font-size: 12px; }
+  .cal-weekday { padding: 8px 4px; font-size: 12px; }
   .cal-cell {
     min-height: 130px;
     padding: 5px;
     gap: 3px;
   }
   .cal-date {
-    font-size: 11px;
+    font-size: 12px;
     width: 20px;
     height: 20px;
   }
@@ -2975,26 +2975,26 @@ a {
   .cal-span {
     height: 12px;
     padding: 0 5px;
-    font-size: 9px;
+    font-size: 12px;
     line-height: 12px;
   }
   .cal-span-label { display: none; }
   .cal-entries { gap: 2px; }
   .cal-entry {
     padding: 3px 5px;
-    font-size: 10px;
+    font-size: 12px;
     gap: 3px;
     border-left-width: 2px;
   }
   .cal-entry-kind {
-    font-size: 9px;
+    font-size: 12px;
   }
   .cal-entry-text {
     display: inline;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .cal-entry-note { font-size: 9px; }
+  .cal-entry-note { font-size: 12px; }
 
   /* ── 리스트 뷰: 테이블 숨김 / 카드 표시 ── */
   .orders-table-wrap { display: none; }
@@ -3021,23 +3021,23 @@ a {
   .week-cards { display: flex; }
 
   .prod-sub-header { gap: 6px; }
-  .prod-sub-title { font-size: 14px; }
+  .prod-sub-title { font-size: 15px; }
 
   /* 개별 발주 행 (focus row와 같은 layout 사용) */
   .week-order-row {
     grid-template-columns: 1fr auto;
     gap: 4px 8px;
-    font-size: 13px;
+    font-size: 15px;
     padding: 10px 12px;
   }
   .week-order-date {
     grid-column: 1 / -1;
-    font-size: 11px;
+    font-size: 12px;
     order: -1;
   }
   .week-order-client {
     grid-column: 1;
-    font-size: 14px;
+    font-size: 15px;
   }
   .week-order-row .orders-status-pill {
     grid-column: 2;
@@ -3050,7 +3050,7 @@ a {
   }
   .week-order-meta {
     grid-column: 1 / -1;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   /* ── 모달 — 풀스크린 가깝게 ── */
@@ -3101,14 +3101,14 @@ a {
 /* ── 더 좁은 화면 (≤ 480px) ── */
 @media (max-width: 480px) {
   .cal-cell { min-height: 110px; padding: 4px; }
-  .cal-weekday { padding: 6px 2px; font-size: 10px; }
-  .cal-entry { padding: 2px 4px; font-size: 9px; }
-  .cal-entry-kind { font-size: 9px; }
-  .cal-span { height: 10px; line-height: 10px; font-size: 9px; }
+  .cal-weekday { padding: 6px 2px; font-size: 12px; }
+  .cal-entry { padding: 2px 4px; font-size: 12px; }
+  .cal-entry-kind { font-size: 12px; }
+  .cal-span { height: 10px; line-height: 10px; font-size: 12px; }
   .cal-spans { margin: 1px -5px 2px; }
 
   .orders-tab { padding: 10px 12px; font-size: 12px; }
-  .focus-pill { padding: 5px 8px; font-size: 11px; }
+  .focus-pill { padding: 5px 8px; font-size: 12px; }
 }
 
 /* ─── 내부도구 홈 ─── */
@@ -3140,7 +3140,7 @@ a {
 .home-tool-name { font-size: 20px; font-weight: 700; color: var(--sm-black); letter-spacing: -0.01em; }
 .change-new {
   display: inline-block;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.3px;
   color: #fff;
@@ -3152,7 +3152,7 @@ a {
 .home-tool-card.is-external { background: var(--sm-bg-warm); border-color: var(--sm-orange-border); }
 
 .home-section-title { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 4px; }
-.home-section-sub { font-size: 13px; color: var(--sm-text-mid); margin-bottom: 20px; }
+.home-section-sub { font-size: 15px; color: var(--sm-text-mid); margin-bottom: 20px; }
 
 .changelog-list {
   display: flex;
@@ -3171,19 +3171,19 @@ a {
 .change-item:last-child { border-bottom: none; }
 .change-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; flex-wrap: wrap; }
 .change-tag {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 2px 10px;
   border-radius: var(--sm-radius-pill);
 }
-.change-date { font-size: 11.5px; color: var(--sm-text-light); font-variant-numeric: tabular-nums; }
-.change-tool { font-size: 11.5px; color: var(--sm-text-mid); font-weight: 600; }
+.change-date { font-size: 12px; color: var(--sm-text-light); font-variant-numeric: tabular-nums; }
+.change-tool { font-size: 12px; color: var(--sm-text-mid); font-weight: 600; }
 .change-title { font-size: 15.5px; font-weight: 700; color: var(--sm-black); margin-bottom: 4px; }
-.change-desc { font-size: 13px; color: var(--sm-text-mid); line-height: 1.65; }
+.change-desc { font-size: 15px; color: var(--sm-text-mid); line-height: 1.65; }
 .change-link {
   display: inline-block;
   margin-top: 8px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--sm-orange);
 }
@@ -3200,8 +3200,8 @@ a {
   background: var(--sm-bg, #fafafa);
   border-bottom: 1px solid var(--sm-border);
 }
-.change-day-date { font-size: 13px; font-weight: 700; color: var(--sm-black); font-variant-numeric: tabular-nums; }
-.change-day-count { font-size: 11px; color: var(--sm-text-light); margin-left: auto; }
+.change-day-date { font-size: 15px; font-weight: 700; color: var(--sm-black); font-variant-numeric: tabular-nums; }
+.change-day-count { font-size: 12px; color: var(--sm-text-light); margin-left: auto; }
 .change-day-items { display: flex; flex-direction: column; }
 .change-row {
   display: flex;
@@ -3213,10 +3213,10 @@ a {
 .change-row .change-tag { flex-shrink: 0; height: fit-content; margin-top: 1px; }
 .change-row-main { min-width: 0; flex: 1; }
 .change-row-title {
-  font-size: 14px; font-weight: 700; color: var(--sm-black);
+  font-size: 15px; font-weight: 700; color: var(--sm-black);
   display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
 }
-.change-row .change-desc { margin-top: 3px; font-size: 12.5px; }
+.change-row .change-desc { margin-top: 3px; font-size: 12px; }
 .change-row .change-link { margin-top: 6px; font-size: 12px; }
 
 @media (max-width: 768px) {
@@ -3250,7 +3250,7 @@ a {
 /* 즐겨찾는 메뉴 — 배경 반전 블록으로 스크롤 목록과 확실히 분리(고정 구역임을 색면으로 표시) */
 .app-sb-fav { margin-top: 8px; padding: 4px 6px 8px; background: var(--sm-bg-warm); border-radius: var(--sm-radius); }
 .app-sb-fav .app-sb-tool-row:hover { background: var(--sm-white); }  /* 반전 배경 위 호버는 흰색으로 */
-.app-sb-cat { font-size: 11px; font-weight: 700; color: var(--sm-text-light); letter-spacing: 0.4px; padding: 6px 10px 3px; }
+.app-sb-cat { font-size: 12px; font-weight: 700; color: var(--sm-text-light); letter-spacing: 0.4px; padding: 6px 10px 3px; }
 /* 카테고리 라벨을 아코디언 토글로 쓸 때(즐겨찾기) — .app-sb-cat 의 타이포를 그대로 상속 */
 .app-sb-cat-toggle { flex: 1; min-width: 0; background: none; border: none; padding: 0; font: inherit; letter-spacing: inherit; color: inherit; cursor: pointer; text-align: left; }
 .app-sb-cat-toggle:hover { color: var(--sm-text-mid); }
@@ -3264,7 +3264,7 @@ a {
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: 8px;
-  font-size: 14px; font-weight: 600; color: var(--sm-text-mid);
+  font-size: 15px; font-weight: 600; color: var(--sm-text-mid);
   transition: color 0.15s;
   background: none; border: none; cursor: pointer; text-align: left; font-family: inherit;
 }
@@ -3286,13 +3286,13 @@ a {
 .app-sb-chev svg { transition: transform 0.18s ease; }
 .app-sb-chev.is-open svg { transform: rotate(90deg); }
 .app-sb-menu { margin: 1px 0 5px; padding-left: 27px; display: flex; flex-direction: column; gap: 1px; }
-.app-sb-menu-item { padding: 6px 10px; border-radius: 7px; font-size: 13px; color: var(--sm-text-mid); transition: background 0.15s, color 0.15s; }
+.app-sb-menu-item { padding: 6px 10px; border-radius: 7px; font-size: 15px; color: var(--sm-text-mid); transition: background 0.15s, color 0.15s; }
 .app-sb-menu-item:hover { background: var(--sm-bg); color: var(--sm-black); }
 .app-sb-menu-item.is-active { color: var(--sm-orange); font-weight: 700; background: var(--sm-orange-light); }
 .app-sb-foot { border-top: 1px solid var(--sm-border); padding: 12px 10px 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.app-sb-username { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--sm-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-sb-username { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 15px; font-weight: 600; color: var(--sm-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-sb-username svg { flex-shrink: 0; color: var(--sm-text-light); }
-.app-sb-logout { background: none; border: 1px solid var(--sm-border); border-radius: 7px; padding: 4px 10px; font-size: 12.5px; color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
+.app-sb-logout { background: none; border: 1px solid var(--sm-border); border-radius: 7px; padding: 4px 10px; font-size: 12px; color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
 .app-sb-logout:hover { background: var(--sm-bg); }
 
 .app-main { flex: 1; min-width: 0; }

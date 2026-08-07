@@ -96,7 +96,7 @@ export default function SalesUploadPage() {
       {applied && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>적용 완료 ✓</span></div>
-          <p style={{ fontSize: 14 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
+          <p style={{ fontSize: 15 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
         </section>
       )}
 
@@ -127,7 +127,7 @@ export default function SalesUploadPage() {
           )}
           {preview?.sample && preview.sample.length > 0 && (
             <div style={{ overflowX: "auto", marginTop: 10 }}>
-              <table className="b2b-table" style={{ fontSize: 12.5 }}>
+              <table className="b2b-table" style={{ fontSize: 12 }}>
                 <thead><tr><th>주문일</th><th>채널</th><th>주문번호</th><th>상품</th><th>SKU</th><th style={{ textAlign: "right" }}>수량</th><th style={{ textAlign: "right" }}>결제금액</th></tr></thead>
                 <tbody>
                   {preview.sample.map((r, i) => (
@@ -135,7 +135,7 @@ export default function SalesUploadPage() {
                   ))}
                 </tbody>
               </table>
-              <p className="sm-faint" style={{ fontSize: 11, marginTop: 4 }}>상위 {preview.sample.length}건 미리보기 (전화번호·이름은 매출 원장에 저장하지 않습니다)</p>
+              <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {preview.sample.length}건 미리보기 (전화번호·이름은 매출 원장에 저장하지 않습니다)</p>
             </div>
           )}
           <div className="sm-between" style={{ marginTop: 14 }}>
@@ -150,7 +150,7 @@ export default function SalesUploadPage() {
           <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드 · 되돌리기</span></div>
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>잘못 올린 업로드는 그 배치가 추가한 행만 정확히 삭제해 되돌립니다. 되돌린 뒤 같은 파일을 다시 올리면 복구됩니다(멱등).</p>
           <div style={{ overflowX: "auto" }}>
-            <table className="b2b-table" style={{ fontSize: 12.5 }}>
+            <table className="b2b-table" style={{ fontSize: 12 }}>
               <thead><tr><th>시각</th><th>파일</th><th style={{ textAlign: "right" }}>신규</th><th>올린 사람</th><th>상태</th><th></th></tr></thead>
               <tbody>
                 {batches.map((b) => (

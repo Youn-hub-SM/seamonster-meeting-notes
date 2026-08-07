@@ -92,7 +92,7 @@ export default function VocSurveysPage() {
         {(["목록", "분석"] as View[]).map((v) => (
           <button key={v} className={`sm-tab ${view === v ? "is-active" : ""}`} onClick={() => setView(v)}>{v}</button>
         ))}
-        <span className="sm-faint" style={{ fontSize: 13, alignSelf: "center" }}>총 {rows.length}건</span>
+        <span className="sm-faint" style={{ fontSize: 15, alignSelf: "center" }}>총 {rows.length}건</span>
         {view === "목록" && <input className="b2b-input sm-tab-search" placeholder="검색" value={search} onChange={(e) => setSearch(e.target.value)} />}
       </div>
 
@@ -126,17 +126,17 @@ export default function VocSurveysPage() {
               <button className="b2b-btn-primary" onClick={runAi} disabled={aiLoading} style={{ padding: "6px 14px" }}>{aiLoading ? "분석 중…" : insight ? "다시 분석" : "AI 분석 실행"}</button>
             </div>
             {!insight ? (
-              <p className="sm-muted" style={{ fontSize: 13 }}>버튼을 누르면 자유서술 답변까지 읽어 만족 요인·개선점·인용을 정리합니다.</p>
+              <p className="sm-muted" style={{ fontSize: 15 }}>버튼을 누르면 자유서술 답변까지 읽어 만족 요인·개선점·인용을 정리합니다.</p>
             ) : (
               <div className="sm-col" style={{ gap: 12 }}>
-                <p style={{ fontSize: 14, lineHeight: 1.7 }}>{insight.summary} {insight.sentiment && <span className="sm-faint">· {insight.sentiment}</span>}</p>
+                <p style={{ fontSize: 15, lineHeight: 1.7 }}>{insight.summary} {insight.sentiment && <span className="sm-faint">· {insight.sentiment}</span>}</p>
                 <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>만족 요인</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>{(insight.highlights || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
-                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>개선점</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>{(insight.improvements || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
+                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>만족 요인</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 15 }}>{(insight.highlights || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
+                  <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>개선점</div><ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, fontSize: 15 }}>{(insight.improvements || []).map((h, i) => <li key={i}><strong>{h.point}</strong> — {h.detail}</li>)}</ul></div>
                 </div>
                 {insight.quotes?.length > 0 && (
                   <div><div className="b2b-field-label" style={{ marginBottom: 6 }}>인용</div>
-                    <div className="sm-col" style={{ gap: 6 }}>{insight.quotes.map((q, i) => <div key={i} style={{ fontSize: 13, padding: "8px 12px", background: "var(--sm-bg-subtle)", borderRadius: 8, borderLeft: "3px solid var(--sm-orange)" }}>“{q}”</div>)}</div>
+                    <div className="sm-col" style={{ gap: 6 }}>{insight.quotes.map((q, i) => <div key={i} style={{ fontSize: 15, padding: "8px 12px", background: "var(--sm-bg-subtle)", borderRadius: 8, borderLeft: "3px solid var(--sm-orange)" }}>“{q}”</div>)}</div>
                   </div>
                 )}
               </div>
@@ -149,11 +149,11 @@ export default function VocSurveysPage() {
               const max = Math.max(...q.dist.map((d) => d[1]), 1);
               return (
                 <section key={q.label} className="b2b-card">
-                  <div className="b2b-card-head"><span className="b2b-card-title" style={{ fontSize: 14 }}>{q.label}</span></div>
+                  <div className="b2b-card-head"><span className="b2b-card-title" style={{ fontSize: 15 }}>{q.label}</span></div>
                   <div className="sm-col" style={{ gap: 7 }}>
                     {q.dist.slice(0, 12).map(([val, n]) => (
                       <div key={val} className="sm-col" style={{ gap: 3 }}>
-                        <div className="sm-between" style={{ fontSize: 13, gap: 8 }}>
+                        <div className="sm-between" style={{ fontSize: 15, gap: 8 }}>
                           <span className="sm-ellipsis" style={{ maxWidth: "78%" }}>{val}</span>
                           <span style={{ whiteSpace: "nowrap" }}><strong>{n}</strong> <span className="sm-faint">{Math.round((n / rows.length) * 100)}%</span></span>
                         </div>
@@ -181,8 +181,8 @@ export default function VocSurveysPage() {
               <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, overflow: "hidden" }}>
                 {(detail.answers || []).map((a, i) => (
                   <div key={i} style={{ display: "flex", borderBottom: "1px solid var(--sm-border)" }}>
-                    <div style={{ width: 150, flexShrink: 0, padding: "8px 10px", background: "var(--sm-bg-subtle)", fontWeight: 700, fontSize: 13 }}>{a.label || "-"}</div>
-                    <div style={{ flex: 1, padding: "8px 10px", fontSize: 13, whiteSpace: "pre-wrap" }}>{a.value || "-"}</div>
+                    <div style={{ width: 150, flexShrink: 0, padding: "8px 10px", background: "var(--sm-bg-subtle)", fontWeight: 700, fontSize: 15 }}>{a.label || "-"}</div>
+                    <div style={{ flex: 1, padding: "8px 10px", fontSize: 15, whiteSpace: "pre-wrap" }}>{a.value || "-"}</div>
                   </div>
                 ))}
               </div>

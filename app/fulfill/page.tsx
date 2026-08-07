@@ -223,10 +223,10 @@ export default function FulfillPage() {
             <div key={i} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "0 0 auto" }}>
               <button onClick={() => canJump(i) && setStep(i)} disabled={!canJump(i)} title={label}
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: canJump(i) ? "pointer" : "default", padding: 0 }}>
-                <span style={{ width: 30, height: 30, borderRadius: "50%", background: state === "todo" ? "var(--sm-white)" : color, border: `2px solid ${color}`, color: state === "todo" ? "var(--sm-text-light)" : "var(--sm-white)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flex: "0 0 auto" }}>
+                <span style={{ width: 30, height: 30, borderRadius: "50%", background: state === "todo" ? "var(--sm-white)" : color, border: `2px solid ${color}`, color: state === "todo" ? "var(--sm-text-light)" : "var(--sm-white)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, flex: "0 0 auto" }}>
                   {state === "done" ? "✓" : i + 1}
                 </span>
-                <span style={{ fontSize: 11, fontWeight: state === "cur" ? 700 : 500, color: state === "cur" ? "var(--sm-dark)" : "var(--sm-text-light)", whiteSpace: "nowrap" }}>{label}</span>
+                <span style={{ fontSize: 12, fontWeight: state === "cur" ? 700 : 500, color: state === "cur" ? "var(--sm-dark)" : "var(--sm-text-light)", whiteSpace: "nowrap" }}>{label}</span>
               </button>
               {i < STEPS.length - 1 && <div style={{ flex: 1, height: 2, background: i < step ? "var(--sm-success)" : "var(--sm-border)", margin: "0 8px", alignSelf: "flex-start", marginTop: 14 }} />}
             </div>
@@ -287,7 +287,7 @@ export default function FulfillPage() {
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
                 {res.addressWarnings.slice(0, 20).map((w, i) => <li key={i}>{w.name || "(이름?)"} · {w.addr}</li>)}
               </ul>
-              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 주소들을 확인했습니다 (체크해야 다운로드·다음 진행)
               </label>
             </div>
@@ -308,7 +308,7 @@ export default function FulfillPage() {
                   </li>
                 ))}
               </ul>
-              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
                 <input type="checkbox" checked={msgAck} onChange={(e) => setMsgAck(e.target.checked)} /> 위 메시지들을 확인했습니다 (체크해야 다운로드·다음 진행)
               </label>
             </div>
@@ -324,7 +324,7 @@ export default function FulfillPage() {
               <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => res.files.guarantee && downloadB64(res.files.guarantee.name, res.files.guarantee.b64)}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
               {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소·배송메시지 경고를 확인(체크)해야 받을 수 있어요.</span>}
             </div>
-            <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 10 }}>상품마스터 택배정보 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3. 두 파일 받은 뒤 &lsquo;다음&rsquo;.</p>
+            <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>상품마스터 택배정보 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3. 두 파일 받은 뒤 &lsquo;다음&rsquo;.</p>
           </section>
         </>
       )}
@@ -366,7 +366,7 @@ export default function FulfillPage() {
               </tbody>
             </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>기본은 <strong>더하기(누적)</strong> — 하루 여러 배치를 합칩니다. 같은 발주를 다시 기록하면 이중 집계되니, 동일 데이터면 <strong>덮어쓰기</strong>로 진행하세요.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>기본은 <strong>더하기(누적)</strong> — 하루 여러 배치를 합칩니다. 같은 발주를 다시 기록하면 이중 집계되니, 동일 데이터면 <strong>덮어쓰기</strong>로 진행하세요.</p>
         </section>
       )}
 
@@ -383,7 +383,7 @@ export default function FulfillPage() {
             <div className="sm-success" style={{ lineHeight: 1.7 }}>
               ✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link>
               {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
-              <div className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>잘못 눌렀다면 <Link href="/inventory/activity">재고 활동 히스토리</Link>에서 이 출고번호 배치를 취소하면 원복됩니다. · <button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
+              <div className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>잘못 눌렀다면 <Link href="/inventory/activity">재고 활동 히스토리</Link>에서 이 출고번호 배치를 취소하면 원복됩니다. · <button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
             </div>
           ) : dispatch ? (
             <>
@@ -414,7 +414,7 @@ export default function FulfillPage() {
                     </table>
                   </div>
                   {dispatch.shortages > 0 && <p style={{ fontSize: 12, color: "var(--sm-danger)", marginTop: 6 }}>재고 부족 {dispatch.shortages}품목 — 출고는 진행되지만 마이너스 재고로 기록됩니다.</p>}
-                  <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 6 }}>재고 확인 후 <strong>출고 완료</strong>를 누르면 소매 재고에서 차감됩니다. 묶음(세트)은 구성품으로 전개, 정기배송은 제외. 같은 발주 재출고는 막습니다.</p>
+                  <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>재고 확인 후 <strong>출고 완료</strong>를 누르면 소매 재고에서 차감됩니다. 묶음(세트)은 구성품으로 전개, 정기배송은 제외. 같은 발주 재출고는 막습니다.</p>
                 </>
               )}
             </>

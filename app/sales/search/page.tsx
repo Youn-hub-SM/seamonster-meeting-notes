@@ -106,10 +106,10 @@ export default function SalesSearchPage() {
               <span className="b2b-card-title">{c.phone} {c.name ? `· ${c.name}` : ""}</span>
               <span style={{ fontSize: 12, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: c.is_repeat ? "var(--sm-success)" : "var(--sm-bg-subtle)", color: c.is_repeat ? "var(--sm-white)" : "var(--sm-text-light)" }}>{c.is_repeat ? "재구매 고객" : "신규 고객"}</span>
             </div>
-            <p style={{ fontSize: 14 }}>누적 주문 <strong>{c.order_count}</strong>건 · 첫 구매 {c.first_seen} · 최근 구매 {c.last_seen}</p>
+            <p style={{ fontSize: 15 }}>누적 주문 <strong>{c.order_count}</strong>건 · 첫 구매 {c.first_seen} · 최근 구매 {c.last_seen}</p>
           </section>
         ) : res?.mode === "phone" ? (
-          <section className="b2b-card" style={{ marginTop: 12 }}><p style={{ fontSize: 14 }}>해당 전화번호의 구매이력이 없습니다. <span className="sm-faint">(신규 또는 다른 번호)</span></p></section>
+          <section className="b2b-card" style={{ marginTop: 12 }}><p style={{ fontSize: 15 }}>해당 전화번호의 구매이력이 없습니다. <span className="sm-faint">(신규 또는 다른 번호)</span></p></section>
         ) : null
       )}
 
@@ -121,7 +121,7 @@ export default function SalesSearchPage() {
           {s.capped && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>※ 상위 {s.lines}건만 표시됩니다. 전체는 엑셀 추출을 이용하세요.</p>}
           {res?.rows && res.rows.length > 0 ? (
             <div style={{ overflowX: "auto" }}>
-              <table className="b2b-table" style={{ fontSize: 12.5 }}>
+              <table className="b2b-table" style={{ fontSize: 12 }}>
                 <thead><tr><th>주문일</th><th>채널</th><th>주문번호</th><th>상품</th><th>옵션</th><th>SKU</th><th style={{ textAlign: "right" }}>수량</th><th style={{ textAlign: "right" }}>금액</th></tr></thead>
                 <tbody>
                   {res.rows.map((r, i) => (
@@ -130,7 +130,7 @@ export default function SalesSearchPage() {
                 </tbody>
               </table>
             </div>
-          ) : <p style={{ fontSize: 14 }}>결과가 없습니다.</p>}
+          ) : <p style={{ fontSize: 15 }}>결과가 없습니다.</p>}
         </section>
       )}
     </div>
