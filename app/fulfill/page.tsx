@@ -293,7 +293,12 @@ export default function FulfillPage() {
             </div>
           )}
           {msgWarns.length > 0 && (
-            <div className="sm-warn" style={{ lineHeight: 1.6 }}>
+            // 노란 경고 배너(sm-warn)는 목록이 길면 눈이 아프다 — 모양은 배너 그대로, 색만 흰 바탕·기본 글씨로.
+            <div style={{
+              background: "var(--sm-white)", color: "var(--sm-black)",
+              border: "1px solid var(--sm-border)", borderRadius: "var(--sm-radius)",
+              padding: "12px 16px", fontSize: "var(--sm-fs-sm)", marginBottom: "var(--sm-space-4)", lineHeight: 1.6,
+            }}>
               <strong>배송메시지 {msgWarns.length}건{msgGroups.length !== msgWarns.length ? ` · ${msgGroups.length}줄` : ""}</strong>
               {" "}— 슥 훑어보고 날짜 지정·전화 요청·선물 포장 같은 특이 요청이 없는지 보세요. (같은 문장은 한 줄로 합침)
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, maxHeight: 300, overflowY: "auto" }}>
