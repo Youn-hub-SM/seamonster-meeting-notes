@@ -158,6 +158,7 @@ export async function POST(req: NextRequest) {
       fees: res.fees,
       parcelSummary: res.parcelSummary,
       addressWarnings: res.addressWarnings,
+      messageWarnings: res.messageWarnings, // 배송메시지 확인 목록 — 빠뜨리면 화면 카드가 영영 안 뜬다
       unmatched: res.unmatched,
       outbound: res.outbound, // SKU별 출고수량(재고 출고 연동용) — PII 없음
       excludedProcessed,                          // 이미 출고 처리돼 자동 제외한 주문 수
