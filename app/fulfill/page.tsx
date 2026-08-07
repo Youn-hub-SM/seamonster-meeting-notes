@@ -184,6 +184,19 @@ export default function FulfillPage() {
   function reset() { setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setRecordOk(""); setError(""); }
 
   const msgWarns = res?.messageWarnings ?? [];
+  // 완전히 같은 문장(공백 차이만 무시)은 한 줄로 합쳐 "윤현석 등 3명 · 문 앞" 으로 보인다 —
+  //  표준 문구가 수십 줄 반복되는 것을 접어 훑는 시간을 줄인다. 이름은 중복 제거해 센다.
+  const msgGroups = (() => {
+    const m = new Map<string, { msg: string; names: string[] }>();
+    for (const w of msgWarns) {
+      const key = w.msg.replace(/\s+/g, "");
+      const g = m.get(key);
+      const nm = w.name || "(이름?)";
+      if (!g) m.set(key, { msg: w.msg, names: [nm] });
+      else if (!g.names.includes(nm)) g.names.push(nm);
+    }
+    return [...m.values()];
+  })();
   // 주소 경고·배송메시지 각각 확인(체크)해야 다운로드가 풀린다
   const blocked = !!res && ((res.addressWarnings.length > 0 && !ack) || (msgWarns.length > 0 && !msgAck));
   const canJump = (i: number) => i === 0 || !!res;
@@ -281,10 +294,13 @@ export default function FulfillPage() {
           )}
           {msgWarns.length > 0 && (
             <div className="sm-warn" style={{ lineHeight: 1.6 }}>
-              <strong>배송메시지 {msgWarns.length}건</strong> — 슥 훑어보고 날짜 지정·전화 요청·선물 포장 같은 특이 요청이 없는지 보세요. (주문 단위, 같은 메시지 반복은 1건)
+              <strong>배송메시지 {msgWarns.length}건{msgGroups.length !== msgWarns.length ? ` · ${msgGroups.length}줄` : ""}</strong>
+              {" "}— 슥 훑어보고 날짜 지정·전화 요청·선물 포장 같은 특이 요청이 없는지 보세요. (같은 문장은 한 줄로 합침)
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, maxHeight: 300, overflowY: "auto" }}>
-                {msgWarns.map((w, i) => (
-                  <li key={i}>{w.name || "(이름?)"} · {w.msg}</li>
+                {msgGroups.map((g, i) => (
+                  <li key={i} title={g.names.length > 1 ? g.names.join(", ") : undefined}>
+                    {g.names[0]}{g.names.length > 1 ? ` 등 ${g.names.length}명` : ""} · {g.msg}
+                  </li>
                 ))}
               </ul>
               <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
