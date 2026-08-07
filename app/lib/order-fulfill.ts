@@ -78,7 +78,7 @@ export type FulfillResult = {
   fees: { baseNormal: number; baseGuar: number; guarExtra: number }; // baseGuar=도착보장 기본운임(중량구간 + 143×건). guarExtra=0(추가운임은 배송일지에서 제주 등 수동). 배송일지 기록용
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
-  // 무시 문구에 안 걸린 배송메시지 — 특이 요청(날짜 지정·전화·선물 등)을 발주 전에 확인시키는 용도.
+  // 이번 발주의 모든 배송메시지 — CN 파일을 받기 전에 훑어 특이 요청(날짜 지정·전화·선물)을 잡는 용도.
   //  같은 주문의 여러 상품 행은 메시지가 반복되므로 (주문번호+메시지) 로 중복 제거해 1건만 담는다.
   messageWarnings: { rowNo: number; orderNo: string; name: string; msg: string }[];
   unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
@@ -86,9 +86,8 @@ export type FulfillResult = {
 };
 
 // rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어.
-//  msgIgnores: 배송메시지 무시 문구 — 여기 걸리지 않는 메시지만 경고로 올린다(공백 무시 비교: '문 앞'='문앞').
 //  rates: 요율(기본운임 구간·도착보장 추가).
-export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], msgIgnores: string[] = [], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS): FulfillResult {
+export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS): FulfillResult {
   const catNames = cats.map((c) => c.name);
   const boxTypeR = (w: number) => boxTypeOf(w, rates.boxTiers);
   const baseFeeR = (w: number) => baseFeeOf(w, rates.boxTiers);
@@ -158,7 +157,6 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   const addressWarnings: FulfillResult["addressWarnings"] = [];
   const messageWarnings: FulfillResult["messageWarnings"] = [];
   const norm = (t: string) => t.replace(/\s+/g, "");
-  const ignoresNorm = msgIgnores.map(norm).filter(Boolean);
   const msgSeen = new Set<string>();
   kept.forEach((r, i) => {
     const info = codeMap.get(String(r[IDX.sku] ?? "").trim().toUpperCase());
@@ -176,18 +174,15 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     const addr = String(r[IDX.addr] ?? "");
     if (keywords.some((k) => k && addr.includes(k))) addressWarnings.push({ rowNo: i + 1, addr, name: String(r[IDX.name] ?? "") });
 
-    // 배송메시지 — 무시 문구에 걸리지 않는 것만 경고로. 표준 문구(문 앞 등)는 무시 목록이 거른다.
+    // 배송메시지 — 전부 담는다(주문 단위 중복만 제거). 걸러내지 않는 이유: "3일에 배송해 주세요. 문 앞"
+    //  처럼 표준 문구에 요청이 섞인 메시지를 자동 분류가 놓칠 수 있어, 사람이 목록을 훑는 쪽을 택했다.
     const msg = String(r[IDX.msg] ?? "").trim();
     if (msg) {
-      const mNorm = norm(msg);
-      const ignorable = ignoresNorm.some((ig) => mNorm.includes(ig));
-      if (!ignorable) {
-        const orderNo = String(r[IDX.orderNo] ?? "").trim();
-        const dupKey = `${orderNo}||${mNorm}`;
-        if (!msgSeen.has(dupKey)) {
-          msgSeen.add(dupKey);
-          messageWarnings.push({ rowNo: i + 1, orderNo, name: String(r[IDX.name] ?? "").trim(), msg });
-        }
+      const orderNo = String(r[IDX.orderNo] ?? "").trim();
+      const dupKey = `${orderNo}||${norm(msg)}`;
+      if (!msgSeen.has(dupKey)) {
+        msgSeen.add(dupKey);
+        messageWarnings.push({ rowNo: i + 1, orderNo, name: String(r[IDX.name] ?? "").trim(), msg });
       }
     }
   });
