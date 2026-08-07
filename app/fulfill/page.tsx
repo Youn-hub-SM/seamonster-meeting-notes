@@ -11,6 +11,7 @@ type Result = {
   fees: { baseNormal: number; baseGuar: number; guarExtra: number };
   parcelSummary: Parcel[];
   addressWarnings: Warn[];
+  messageWarnings?: { rowNo: number; orderNo: string; name: string; msg: string }[];
   unmatched: string[];
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[];
   excludedProcessed?: number;      // 이미 출고 처리돼 자동 제외된 주문 수(079)
@@ -24,6 +25,9 @@ type DispatchPreview = { items: DItem[]; products: DProd[]; shortages: number; m
 type DispatchDone = { orderNo: string; groupId: string; dispatched: number; totalQty: number; shortages: number };
 
 const KW_KEY = "fulfill_addr_keywords";
+const IG_KEY = "fulfill_msg_ignores";
+// 첫 사용 기본값 — 쇼핑몰 표준 배송메시지(무해한 반복 문구). 비교는 공백 무시라 '문 앞'='문앞'.
+const IG_DEFAULT = "문 앞, 경비실, 택배함, 무인함, 부재시 전화";
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const STEPS = ["발주엑셀 업로드", "CN 파일 다운로드", "배송일지 기록", "상품 출고"];
 
@@ -42,6 +46,8 @@ export default function FulfillPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("");
   const [keywords, setKeywords] = useState("");
+  const [ignores, setIgnores] = useState("");
+  const [msgAck, setMsgAck] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [res, setRes] = useState<Result | null>(null);
@@ -58,8 +64,13 @@ export default function FulfillPage() {
   const [dispatching, setDispatching] = useState(false);
   const [dispatchDone, setDispatchDone] = useState<DispatchDone | null>(null);
 
-  useEffect(() => { setKeywords(localStorage.getItem(KW_KEY) || ""); }, []);
+  useEffect(() => {
+    setKeywords(localStorage.getItem(KW_KEY) || "");
+    const ig = localStorage.getItem(IG_KEY);
+    setIgnores(ig === null ? IG_DEFAULT : ig); // 저장한 적 없으면 기본값, 일부러 비웠으면 빈 채로
+  }, []);
   function saveKeywords(v: string) { setKeywords(v); localStorage.setItem(KW_KEY, v); }
+  function saveIgnores(v: string) { setIgnores(v); localStorage.setItem(IG_KEY, v); }
 
   // res 갱신 시 상품 출고 미리보기(재고 확인) 자동 로드
   useEffect(() => {
@@ -81,10 +92,10 @@ export default function FulfillPage() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name); setError(""); setRes(null); setAck(false); setRecordOk(""); setLoading(true);
+    setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setRecordOk(""); setLoading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file); fd.append("keywords", keywords);
+      fd.append("file", file); fd.append("keywords", keywords); fd.append("msg_ignores", ignores);
       const j = await (await fetch("/api/fulfill/generate", { method: "POST", body: fd })).json();
       if (!j.ok) throw new Error(j.error || "생성 실패");
       setRes(j as Result);
@@ -179,9 +190,11 @@ export default function FulfillPage() {
     setDispatching(false);
   }
 
-  function reset() { setRes(null); setStep(0); setFileName(""); setAck(false); setRecordOk(""); setError(""); }
+  function reset() { setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setRecordOk(""); setError(""); }
 
-  const blocked = !!res && res.addressWarnings.length > 0 && !ack; // 주소 경고 미확인
+  const msgWarns = res?.messageWarnings ?? [];
+  // 주소 경고·배송메시지 각각 확인(체크)해야 다운로드가 풀린다
+  const blocked = !!res && ((res.addressWarnings.length > 0 && !ack) || (msgWarns.length > 0 && !msgAck));
   const canJump = (i: number) => i === 0 || !!res;
   const canNext = step === 0 ? !!res : step === 1 ? !blocked : step === 2 ? true : false;
 
@@ -227,6 +240,13 @@ export default function FulfillPage() {
             <div className="b2b-field" style={{ marginBottom: 12 }}>
               <label className="b2b-field-label">주소 경고어 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 쉼표로 구분 · 이 브라우저에 저장)</span></label>
               <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="예: 제주마루 702호, 군부대, 사서함" />
+            </div>
+            <div className="b2b-field" style={{ marginBottom: 12 }}>
+              <label className="b2b-field-label">배송메시지 무시 문구 <span className="sm-faint" style={{ fontWeight: 400 }}>(쉼표로 구분 · 이 브라우저에 저장)</span></label>
+              <input className="b2b-input" value={ignores} onChange={(e) => saveIgnores(e.target.value)} placeholder={IG_DEFAULT} />
+              <span className="sm-faint" style={{ fontSize: 11.5, marginTop: 4 }}>
+                여기 걸리지 않는 배송메시지만 ② 단계에서 확인 목록으로 뜹니다. 공백은 무시하고 비교합니다(&lsquo;문 앞&rsquo;=&lsquo;문앞&rsquo;).
+              </span>
             </div>
             <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={loading}>{loading ? "만드는 중…" : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
@@ -275,6 +295,20 @@ export default function FulfillPage() {
               </label>
             </div>
           )}
+          {msgWarns.length > 0 && (
+            <div className="sm-warn" style={{ lineHeight: 1.6 }}>
+              <strong>배송메시지 확인 {msgWarns.length}건</strong> — 무시 문구에 걸리지 않은 특이 요청입니다. 날짜 지정·전화 요청 등이 없는지 보세요.
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+                {msgWarns.slice(0, 30).map((w, i) => (
+                  <li key={i}>{w.name || "(이름?)"} · <strong>{w.msg}</strong></li>
+                ))}
+                {msgWarns.length > 30 && <li className="sm-faint">…외 {msgWarns.length - 30}건</li>}
+              </ul>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
+                <input type="checkbox" checked={msgAck} onChange={(e) => setMsgAck(e.target.checked)} /> 위 메시지들을 확인했습니다 (체크해야 다운로드·다음 진행)
+              </label>
+            </div>
+          )}
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">② CN 파일 다운로드</span></div>
             <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -284,7 +318,7 @@ export default function FulfillPage() {
               </button>
               <button className="b2b-btn-secondary" disabled={blocked || res.stats.normalCount === 0} onClick={() => downloadB64(res.files.normal.name, res.files.normal.b64)}>CNplus 일반 ({res.stats.normalCount})</button>
               <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => res.files.guarantee && downloadB64(res.files.guarantee.name, res.files.guarantee.b64)}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
-              {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소 경고를 확인(체크)해야 받을 수 있어요.</span>}
+              {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소·배송메시지 경고를 확인(체크)해야 받을 수 있어요.</span>}
             </div>
             <p className="sm-faint" style={{ fontSize: 11.5, marginTop: 10 }}>상품마스터 택배정보 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3. 두 파일 받은 뒤 &lsquo;다음&rsquo;.</p>
           </section>

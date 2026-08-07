@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const file = form.get("file") as File | null;
     const keywords = String(form.get("keywords") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const msgIgnores = String(form.get("msg_ignores") || "").split(",").map((s) => s.trim()).filter(Boolean);
     if (!file) return NextResponse.json({ ok: false, error: "엑셀 파일을 첨부하세요." }, { status: 400 });
 
     const wb = new ExcelJS.Workbook();
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
     const rates = ratesFor(normalizeHistory(rateRow?.value ?? {}), new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
     const boxCats = normalizeBoxCats((rateRow?.value as { boxCats?: unknown })?.boxCats); // 배송일지 박스 종류(설정)
 
-    const res = buildCnplus(rows, codeMap, keywords, rates, boxCats);
+    const res = buildCnplus(rows, codeMap, keywords, msgIgnores, rates, boxCats);
 
     // 이 파일의 주문 키(주문번호+구성)를 배치 서명으로 임시 보관 — 4단계 '출고 완료' 때 확정 등록(079). 실패해도 진행.
     try {

@@ -78,12 +78,17 @@ export type FulfillResult = {
   fees: { baseNormal: number; baseGuar: number; guarExtra: number }; // baseGuar=도착보장 기본운임(중량구간 + 143×건). guarExtra=0(추가운임은 배송일지에서 제주 등 수동). 배송일지 기록용
   parcelSummary: ParcelCount[]; // 박스종류별 택배량(주문 단위, 일반/도착보장)
   addressWarnings: { rowNo: number; addr: string; name: string }[];
+  // 무시 문구에 안 걸린 배송메시지 — 특이 요청(날짜 지정·전화·선물 등)을 발주 전에 확인시키는 용도.
+  //  같은 주문의 여러 상품 행은 메시지가 반복되므로 (주문번호+메시지) 로 중복 제거해 1건만 담는다.
+  messageWarnings: { rowNo: number; orderNo: string; name: string; msg: string }[];
   unmatched: string[];        // 상품마스터(택배코드)에 없는 단품코드
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[]; // (주문일 L열 × SKU)별 출고수량(정기배송 제외) — 재고 출고를 주문일 축으로 기록
 };
 
-// rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어. rates: 요율(기본운임 구간·도착보장 추가).
-export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS): FulfillResult {
+// rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어.
+//  msgIgnores: 배송메시지 무시 문구 — 여기 걸리지 않는 메시지만 경고로 올린다(공백 무시 비교: '문 앞'='문앞').
+//  rates: 요율(기본운임 구간·도착보장 추가).
+export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], msgIgnores: string[] = [], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS): FulfillResult {
   const catNames = cats.map((c) => c.name);
   const boxTypeR = (w: number) => boxTypeOf(w, rates.boxTiers);
   const baseFeeR = (w: number) => baseFeeOf(w, rates.boxTiers);
@@ -151,6 +156,10 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   // 3) 18열 생성 + 도착보장 분리 + 주소 경고
   const normal: unknown[][] = [], guarantee: unknown[][] = [];
   const addressWarnings: FulfillResult["addressWarnings"] = [];
+  const messageWarnings: FulfillResult["messageWarnings"] = [];
+  const norm = (t: string) => t.replace(/\s+/g, "");
+  const ignoresNorm = msgIgnores.map(norm).filter(Boolean);
+  const msgSeen = new Set<string>();
   kept.forEach((r, i) => {
     const info = codeMap.get(String(r[IDX.sku] ?? "").trim().toUpperCase());
     const U = groupW.get(gkey(r)) ?? 0;   // 자기 박스(주문+주소+타입) 중량 — 혼합 주문이면 일반/도착보장 각자 중량
@@ -166,6 +175,21 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
 
     const addr = String(r[IDX.addr] ?? "");
     if (keywords.some((k) => k && addr.includes(k))) addressWarnings.push({ rowNo: i + 1, addr, name: String(r[IDX.name] ?? "") });
+
+    // 배송메시지 — 무시 문구에 걸리지 않는 것만 경고로. 표준 문구(문 앞 등)는 무시 목록이 거른다.
+    const msg = String(r[IDX.msg] ?? "").trim();
+    if (msg) {
+      const mNorm = norm(msg);
+      const ignorable = ignoresNorm.some((ig) => mNorm.includes(ig));
+      if (!ignorable) {
+        const orderNo = String(r[IDX.orderNo] ?? "").trim();
+        const dupKey = `${orderNo}||${mNorm}`;
+        if (!msgSeen.has(dupKey)) {
+          msgSeen.add(dupKey);
+          messageWarnings.push({ rowNo: i + 1, orderNo, name: String(r[IDX.name] ?? "").trim(), msg });
+        }
+      }
+    }
   });
 
   // 택배량: 합배송 병합 후 박스 단위로 박스종류별 일반/도착보장 개수 집계
@@ -202,6 +226,6 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     stats: { total: rows.length, excludedNothing, normalCount: normal.length, guaranteeCount: guarantee.length, parcels, parcelsGuar, mergedParcels },
     fees: { baseNormal, baseGuar: baseGuar + rates.guarSurcharge * parcelsGuar, guarExtra: 0 }, // 도착보장 기본운임 = 중량구간 + 143×도착보장건. 추가운임은 배송일지에서 제주 등 수동
     parcelSummary,
-    addressWarnings, unmatched: [...unmatched], outbound,
+    addressWarnings, messageWarnings, unmatched: [...unmatched], outbound,
   };
 }
