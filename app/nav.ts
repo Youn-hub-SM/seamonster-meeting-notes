@@ -143,6 +143,8 @@ export const NAV: NavCategory[] = [
       { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
       { href: "/meeting", label: "회의 정리", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },
+      // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
+      { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
     ],
   },
   {

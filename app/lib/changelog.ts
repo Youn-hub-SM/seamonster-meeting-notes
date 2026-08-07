@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-08-07",
+    tag: "개선",
+    tool: "공통",
+    title: "기타 메뉴에 '베타 버전' 바로가기",
+    desc: "왼쪽 메뉴 기타에 '베타 버전' 링크를 넣었습니다. 배포 전 기능을 미리 확인하는 베타(미리보기) 사이트가 새 탭으로 열립니다. 주소는 고정이라 언제 눌러도 최신 베타입니다.",
+    href: "/updates",
+  },
+  {
+    date: "2026-08-07",
     tag: "신규",
     tool: "발주처리",
     title: "배송메시지 확인 단계",
