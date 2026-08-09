@@ -88,7 +88,8 @@ export const NAV: NavCategory[] = [
       { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
       { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
       // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
-      { href: "/factory", label: "파도소리 재고", icon: "factory" },
+      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
+      { href: "/factory", label: "파도소리 재고", icon: "factory", adminOnly: true },
     ],
   },
   {

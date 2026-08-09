@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getB2BUsers, resolveUserName, verifySessionFull } from "@/app/lib/b2b-auth";
+import { getB2BUsers, isAdminName, resolveUserName, verifySessionFull } from "@/app/lib/b2b-auth";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 
@@ -81,6 +81,17 @@ export async function middleware(req: NextRequest) {
       if (isApi) return NextResponse.json({ ok: false, error: "접근 권한이 없습니다." }, { status: 403 });
       const url = req.nextUrl.clone();
       url.pathname = "/factory";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    // 반대 방향도 막는다: 파도소리 구역(/factory·/api/factory)은 파도소리 계정과 관리자만.
+    //  일반 내부 계정은 화면·API 모두 차단(제조사 데이터 분리 — 2026-08-06 결정).
+    //  (/factory/login 은 위 공개 예외라 여기 도달하지 않는다)
+    const factoryArea = pathname === "/factory" || pathname.startsWith("/factory/") || pathname.startsWith("/api/factory");
+    if (sess?.role !== "factory" && factoryArea && !isAdminName(authed)) {
+      if (isApi) return NextResponse.json({ ok: false, error: "파도소리 계정 전용입니다." }, { status: 403 });
+      const url = req.nextUrl.clone();
+      url.pathname = "/";
       url.search = "";
       return NextResponse.redirect(url);
     }
