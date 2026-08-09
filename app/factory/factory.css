@@ -32,12 +32,12 @@
   display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.3px;
   color: var(--fac-blue); padding: 2px 10px 14px; text-decoration: none;
 }
-.fac-brand small { display: block; font-size: 11px; font-weight: 600; color: var(--sm-text-light); margin-top: 2px; }
+.fac-brand small { display: block; font-size: 12px; font-weight: 600; color: var(--sm-text-light); margin-top: 2px; }
 
 .fac-nav-item {
   display: flex; align-items: center; gap: 9px;
   padding: 9px 10px; border-radius: 8px;
-  font-size: 14px; font-weight: 600; color: var(--sm-text-mid);
+  font-size: 15px; font-weight: 600; color: var(--sm-text-mid);
   text-decoration: none; white-space: nowrap;
 }
 .fac-nav-item:hover { background: var(--sm-bg-subtle); }
@@ -46,7 +46,7 @@
 
 .fac-sb-foot {
   margin-top: auto; padding: 10px 10px 0; border-top: 1px solid var(--sm-border-light);
-  display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--sm-text-mid);
+  display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--sm-text-mid);
 }
 .fac-sb-user { font-weight: 700; color: var(--sm-dark); }
 .fac-sb-foot button, .fac-sb-foot a {
@@ -81,7 +81,7 @@
   display: inline-flex; align-items: center; gap: 8px;
   width: auto; cursor: pointer; white-space: nowrap; font-weight: 600;
 }
-.fac-wh-caret { font-size: 10px; color: var(--sm-text-light); }
+.fac-wh-caret { font-size: 12px; color: var(--sm-text-light); }
 .fac-dd-backdrop { position: fixed; inset: 0; z-index: 30; }
 .fac-wh-panel {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 31;
@@ -91,13 +91,13 @@
 }
 .fac-wh-reset {
   text-align: left; background: none; border: none; font: inherit;
-  font-size: 13px; font-weight: 700; color: var(--fac-blue);
+  font-size: 15px; font-weight: 700; color: var(--fac-blue);
   padding: 8px 10px; border-radius: 8px; cursor: pointer;
 }
 .fac-wh-reset:hover { background: var(--sm-orange-light); }
 .fac-wh-opt {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-radius: 8px; font-size: 14px; cursor: pointer; white-space: nowrap;
+  padding: 8px 10px; border-radius: 8px; font-size: 15px; cursor: pointer; white-space: nowrap;
 }
 .fac-wh-opt:hover { background: var(--sm-bg-subtle); }
 
@@ -139,14 +139,14 @@
   .fac-item-row { display: flex; align-items: center; gap: 10px; padding: 12px 2px; cursor: pointer; }
   .fac-item-main { flex: 1; min-width: 0; }
   .fac-item-name { font-size: 15px; font-weight: 700; color: var(--sm-black); }
-  .fac-item-supplier { margin-left: 6px; font-size: 11px; font-weight: 600; color: var(--sm-text-light); }
+  .fac-item-supplier { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--sm-text-light); }
   .fac-item-sub { margin-top: 3px; font-size: 12px; color: var(--sm-text-mid); overflow-wrap: anywhere; }
   .fac-item-qty { flex: 0 0 auto; font-size: 17px; font-weight: 800; color: var(--sm-black); font-variant-numeric: tabular-nums; }
   .fac-item-qty small { font-size: 12px; font-weight: 700; color: var(--sm-text-light); margin-left: 1px; }
   .fac-item-qty.is-zero { color: var(--sm-text-faint); }
   .fac-item-actions { display: flex; gap: 8px; padding: 0 2px 12px; }
   .fac-item-actions button {
-    flex: 1; padding: 9px 0; font-size: 13.5px; font-weight: 700; font-family: inherit;
+    flex: 1; padding: 9px 0; font-size: 15px; font-weight: 700; font-family: inherit;
     border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light);
     color: var(--fac-blue); border-radius: 9px; cursor: pointer;
   }
@@ -166,4 +166,4 @@
   font-size: 22px; font-weight: 800; letter-spacing: -0.3px;
   color: var(--fac-blue); margin: 0 0 4px; text-align: center;
 }
-.fac-login-sub { font-size: 12.5px; color: var(--sm-text-light); text-align: center; margin: 0 0 20px; }
+.fac-login-sub { font-size: 12px; color: var(--sm-text-light); text-align: center; margin: 0 0 20px; }

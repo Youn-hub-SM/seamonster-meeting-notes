@@ -55,7 +55,7 @@ export default function FactoryHistoryPage() {
                   <td data-label="유형">
                     <span className="b2b-status-pill" style={{ background: TXN_TYPE_COLOR[t.type].bg, color: TXN_TYPE_COLOR[t.type].fg }}>{t.type}</span>
                   </td>
-                  <td data-label="품명"><strong>{t.item_name}</strong>{t.tape_color ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{t.tape_color}</span> : null}</td>
+                  <td data-label="품명"><strong>{t.item_name}</strong>{t.tape_color ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{t.tape_color}</span> : null}</td>
                   <td data-label="규격" className="sm-faint">{t.spec || "-"}</td>
                   <td data-label="창고">{t.warehouse}</td>
                   <td data-label="수량" className="num b2b-money" style={{ fontWeight: 700, color: n0(t.qty) < 0 ? "var(--sm-info)" : "var(--sm-success)" }}>

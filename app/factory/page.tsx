@@ -128,7 +128,7 @@ export default function FactoryStockPage() {
     <th className={num ? "num" : undefined} onClick={() => toggleSort(k)}
       style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }} title="클릭하여 정렬">
       {label}
-      <span style={{ marginLeft: 3, color: sort.key === k ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 10 }}>
+      <span style={{ marginLeft: 3, color: sort.key === k ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 12 }}>
         {sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}
       </span>
     </th>
@@ -201,7 +201,7 @@ export default function FactoryStockPage() {
             </span>
           )}
           {/* .b2b-checkbox 는 input 전용 클래스(18px 정사각) — label 에 붙이면 라벨 폭이 18px 가 돼 글자가 세로로 쏟아진다 */}
-          <label className="sm-row" style={{ gap: 6, alignItems: "center", cursor: "pointer", fontSize: 13, color: "var(--sm-text-mid)" }}>
+          <label className="sm-row" style={{ gap: 6, alignItems: "center", cursor: "pointer", fontSize: 15, color: "var(--sm-text-mid)" }}>
             <input type="checkbox" className="b2b-checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} />
             소진 로트 포함
           </label>
@@ -261,7 +261,7 @@ export default function FactoryStockPage() {
             <tbody>
               {shown.map((l) => (
                 <tr key={l.id}>
-                  <td data-label="품명"><strong>{l.item_name}</strong>{l.supplier ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 11 }}>{l.supplier}</span> : null}</td>
+                  <td data-label="품명"><strong>{l.item_name}</strong>{l.supplier ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{l.supplier}</span> : null}</td>
                   <td data-label="규격" className="sm-faint">{l.spec || "-"}</td>
                   <td data-label="테잎색">{l.tape_color || "-"}</td>
                   <td data-label="원산지">{l.origin || "-"}</td>
