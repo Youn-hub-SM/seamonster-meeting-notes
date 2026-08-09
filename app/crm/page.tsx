@@ -132,6 +132,9 @@ export default function CrmPage() {
   //  타이핑 중엔 로컬만 갱신(setStr), 저장은 blur/select-change 때 해당 행 전체를 PUT.
   const setStr = (id: string, key: keyof CrmMessage, value: string) =>
     setMessages((prev) => prev.map((m) => (m.id === id ? ({ ...m, [key]: value } as CrmMessage) : m)));
+  // links 중첩값(UTM 캠페인 등) 인라인 편집 — 저장은 saveRow(전체 행 PUT) 가 links 를 통째로 보낸다.
+  const setLink = (id: string, key: string, value: string) =>
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, links: { ...m.links, [key]: value } } : m)));
 
   // override = select 처럼 로컬 반영(비동기) 전에 저장할 때 새 값을 주입.
   const saveRow = useCallback(async (id: string, override?: Partial<CrmMessage>) => {
@@ -315,6 +318,7 @@ export default function CrmPage() {
               <option value="">전체 상태</option>
               {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
+            <a className="b2b-btn-secondary crm-date-btn" href="/api/crm/export">엑셀 다운로드</a>
           </>
         )}
         {tab !== "stats" && (
@@ -368,7 +372,7 @@ export default function CrmPage() {
             {(stageSel || custSel || stSel) && (
               <p className="sm-faint crm-asof-hint">필터 결과 {tableFiltered.length}개 / 전체 {filtered.length}개</p>
             )}
-            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} opts={opts} labels={labels} savingId={savingId} onField={setStr} onSave={saveRow} onEdit={openEdit} />
+            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} opts={opts} labels={labels} savingId={savingId} onField={setStr} onLink={setLink} onSave={saveRow} onEdit={openEdit} />
           </>
         ) : (
           <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} chLabel={labels.ch} />
@@ -463,9 +467,10 @@ function FlowView({ stages, gaOf, msgOpen, labels, onCard, onAdd }: { stages: St
 }
 
 // ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·내용·링크·성과)는 '상세' 버튼→모달 ──
-function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, onField, onSave, onEdit }: {
+function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, onField, onLink, onSave, onEdit }: {
   msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; opts: CrmOptions; labels: Labels; savingId: string | null;
   onField: (id: string, key: keyof CrmMessage, value: string) => void;
+  onLink: (id: string, key: string, value: string) => void;
   onSave: (id: string, override?: Partial<CrmMessage>) => void;
   onEdit: (m: CrmMessage) => void;
 }) {
@@ -486,13 +491,15 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
             <th className="crm-col-select">발송채널</th>
             {fieldsSupported && <th className="crm-col-select">유형</th>}
             <th className="crm-col-timing">발송시점</th>
-            <th className="crm-col-select">상태</th><th className="crm-col-tags">태그</th><th className="crm-col-actions"></th>
+            <th className="crm-col-select">상태</th>
+            <th className="crm-col-utm">UTM 캠페인</th>
+            <th className="crm-col-tags">태그</th><th className="crm-col-actions"></th>
           </tr></thead>
           <tbody>
             {msgs.map((m) => (
               <tr key={m.id}>
-                <td><CellText id={m.id} value={m.stage} field="stage" placeholder="스테이지" list="crm-stage-names" onField={onField} onSave={onSave} /></td>
-                <td><CellText id={m.id} value={m.title} field="title" placeholder="메시지명" onField={onField} onSave={onSave} /></td>
+                <td><CellText value={m.stage} placeholder="스테이지" list="crm-stage-names" onLocal={(v) => onField(m.id, "stage", v)} onCommit={() => onSave(m.id)} /></td>
+                <td><CellText value={m.title} placeholder="메시지명" onLocal={(v) => onField(m.id, "title", v)} onCommit={() => onSave(m.id)} /></td>
                 {fieldsSupported && (
                   <td>
                     <select className="b2b-status-select" value={m.customer} aria-label="고객" onChange={sel(m, "customer")}>
@@ -517,13 +524,14 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
                     </select>
                   </td>
                 )}
-                <td><CellText id={m.id} value={m.timing} field="timing" placeholder="예: 결제 후 1시간" onField={onField} onSave={onSave} /></td>
+                <td><CellText value={m.timing} placeholder="예: 결제 후 1시간" onLocal={(v) => onField(m.id, "timing", v)} onCommit={() => onSave(m.id)} /></td>
                 <td>
                   <select className={stSelCls(m.status)} value={statusKey(m.status)} aria-label="상태" onChange={sel(m, "status")}>
                     {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                   </select>
                 </td>
-                <td><CellText id={m.id} value={m.tags} field="tags" placeholder="쉼표로 구분" onField={onField} onSave={onSave} /></td>
+                <td><CellText value={m.links?.utm_campaign || ""} placeholder="예: crm_60d_winback" onLocal={(v) => onLink(m.id, "utm_campaign", v)} onCommit={() => onSave(m.id)} /></td>
+                <td><CellText value={m.tags} placeholder="쉼표로 구분" onLocal={(v) => onField(m.id, "tags", v)} onCommit={() => onSave(m.id)} /></td>
                 <td className="actions">
                   {savingId === m.id
                     ? <span className="crm-saving">저장 중…</span>
@@ -534,23 +542,23 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
           </tbody>
         </table>
       </div>
-      <p className="sm-faint crm-table-hint">셀을 눌러 바로 수정하면 자동 저장됩니다. 상세 설명·메시지 내용·링크·성과는 <b>상세</b>에서 편집하세요.</p>
+      <p className="sm-faint crm-table-hint">셀을 눌러 바로 수정하면 자동 저장됩니다(UTM 캠페인 포함). 상세 설명·메시지 내용·링크·성과는 <b>상세</b>에서 편집하세요.</p>
     </>
   );
 }
 
-// 표 셀의 인라인 텍스트 — 타이핑 중엔 로컬 갱신, 값이 바뀐 채 포커스를 잃으면 저장.
-function CellText({ id, value, field, placeholder, list, onField, onSave }: {
-  id: string; value: string; field: keyof CrmMessage; placeholder?: string; list?: string;
-  onField: (id: string, key: keyof CrmMessage, value: string) => void;
-  onSave: (id: string) => void;
+// 표 셀의 인라인 텍스트 — 타이핑 중엔 로컬 갱신(onLocal), 값이 바뀐 채 포커스를 잃으면 저장(onCommit).
+//  최상위 필드든 links 중첩값(UTM)이든 커밋 방식만 주입하면 재사용된다.
+function CellText({ value, placeholder, list, onLocal, onCommit }: {
+  value: string; placeholder?: string; list?: string;
+  onLocal: (value: string) => void; onCommit: () => void;
 }) {
   const focusVal = useRef("");
   return (
     <input className="crm-cell" value={value || ""} placeholder={placeholder} list={list} spellCheck={false}
-      onChange={(e) => onField(id, field, e.target.value)}
+      onChange={(e) => onLocal(e.target.value)}
       onFocus={(e) => { focusVal.current = e.target.value; }}
-      onBlur={(e) => { if (e.target.value !== focusVal.current) onSave(id); }}
+      onBlur={(e) => { if (e.target.value !== focusVal.current) onCommit(); }}
       onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
   );
 }
