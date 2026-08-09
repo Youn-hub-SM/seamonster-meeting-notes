@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 interface Entry {
   id: string;
@@ -62,11 +63,11 @@ export default function CsManualPage() {
   }, [entries]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     return entries.filter((e) => {
       if (filterCat && (e.category || "일반") !== filterCat) return false;
       if (!q) return true;
-      return [e.title, e.content, e.category].filter(Boolean).some((v) => v.toLowerCase().includes(q));
+      return matchKoQuery([e.title, e.content, e.category].filter(Boolean).join(" "), q);
     });
   }, [entries, search, filterCat]);
 

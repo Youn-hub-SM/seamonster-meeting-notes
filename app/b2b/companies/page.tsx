@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Company, CompanyInput, EMPTY_COMPANY, formatPhone, formatBizNo, checkBizNo } from "@/app/lib/b2b-types";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 type Modal = { mode: "create" | "edit"; data: CompanyInput } | null;
 
@@ -33,13 +34,15 @@ export default function CompaniesPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     if (!q) return companies;
-    return companies.filter((c) => {
-      return [c.name, c.ceo_name, c.contact_name, c.contact_phone, c.contact_email, c.biz_no, c.address, c.payment_terms, c.notes]
-        .filter(Boolean)
-        .some((v) => v!.toLowerCase().includes(q));
-    });
+    return companies.filter((c) =>
+      matchKoQuery(
+        [c.name, c.ceo_name, c.contact_name, c.contact_phone, c.contact_email, c.biz_no, c.address, c.payment_terms, c.notes]
+          .filter(Boolean).join(" "),
+        q
+      )
+    );
   }, [companies, search]);
 
   async function handleSave() {

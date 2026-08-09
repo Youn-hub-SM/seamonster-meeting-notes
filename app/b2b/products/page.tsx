@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Product, ProductInput, EMPTY_PRODUCT, CostHistory, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import BundleEditor from "@/app/components/BundleEditor";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 type Modal = { mode: "create" | "edit"; data: ProductInput } | null;
 
@@ -56,10 +57,10 @@ export default function ProductsPage() {
     let arr = products;
     if (!showInactive) arr = arr.filter((p) => p.active);
     if (!showBundles) arr = arr.filter((p) => !p.is_bundle); // 묶음(세트) 상품 숨김
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     if (q) {
       arr = arr.filter((p) =>
-        [p.name, p.sku, p.spec, p.attrs, p.origin, p.notes].filter(Boolean).some((v) => v!.toLowerCase().includes(q))
+        matchKoQuery([p.name, p.sku, p.spec, p.attrs, p.origin, p.notes].filter(Boolean).join(" "), q)
       );
     }
     return arr;

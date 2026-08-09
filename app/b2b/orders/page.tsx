@@ -41,6 +41,7 @@ import CalendarView from "./CalendarView";
 import WeeklyView from "./WeeklyView";
 import ProductionView from "./ProductionView";
 import { pingActivityFeed } from "../ActivityFeed";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 type View = "list" | "calendar" | "weekly" | "production";
 
@@ -226,11 +227,15 @@ export default function OrdersListPage() {
     if (companyFilter) arr = arr.filter((o) => o.company_id === companyFilter);
     if (productFilter) arr = arr.filter((o) => (o.items || []).some((it) => it.product_name === productFilter));
     if (hideComplete) arr = arr.filter((o) => !isOrderComplete(o));
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     if (q) {
+      // 초성·영문자판 입력까지 받는 공용 매처 — 한/영 키를 안 눌러도 찾힌다
       arr = arr.filter((o) =>
-        [o.order_no, o.company_name, o.notes].filter(Boolean).some((v) => v!.toLowerCase().includes(q)) ||
-        (o.items || []).some((it) => it.product_name.toLowerCase().includes(q))
+        matchKoQuery(
+          [o.order_no, o.company_name, o.notes, ...(o.items || []).map((it) => it.product_name)]
+            .filter(Boolean).join(" "),
+          q
+        )
       );
     }
     return arr;
