@@ -261,6 +261,7 @@ export default function CrmPage() {
           <button className="b2b-btn-primary" onClick={() => openNew()}>+ 메시지 추가</button>
           <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리</button>
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
+          {messages.length > 0 && <a className="b2b-btn-secondary crm-xlsx-btn" href="/api/crm/export">엑셀 다운로드</a>}
         </div>
       </header>
 
@@ -318,7 +319,6 @@ export default function CrmPage() {
               <option value="">전체 상태</option>
               {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
-            <a className="b2b-btn-secondary crm-date-btn" href="/api/crm/export">엑셀 다운로드</a>
           </>
         )}
         {tab !== "stats" && (

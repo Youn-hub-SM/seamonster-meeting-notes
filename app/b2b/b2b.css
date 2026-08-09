@@ -3255,6 +3255,8 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-col-select { width: 116px; }
 .crm-col-timing { min-width: 130px; }
 .crm-col-utm { min-width: 150px; }
+/* 헤더의 엑셀 다운로드(링크를 버튼처럼) */
+.crm-xlsx-btn { text-decoration: none; display: inline-flex; align-items: center; }
 .crm-col-tags { min-width: 140px; }
 .crm-col-actions { width: 92px; }
 .crm-detail-btn { padding: 3px 10px; font-size: 12px; }
