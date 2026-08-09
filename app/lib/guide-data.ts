@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-08-06";
+export const GUIDE_UPDATED = "2026-08-07";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1959,15 +1959,18 @@ export const GUIDE: GuideCategory[] = [
           {
             "href": "/b2b/users",
             "label": "계정 관리",
-            "what": "내부도구 로그인 계정 추가·비활성·삭제",
+            "what": "내부도구 로그인 계정 추가·구분(내부/파도소리)·비밀번호·비활성·삭제",
             "steps": [
-              "'계정 추가'에 이름과 비밀번호를 넣는다",
+              "'계정 추가'에 이름·비밀번호를 넣고 구분(내부/파도소리)을 고른다",
               "'추가'를 누른다",
+              "구분을 바꾸려면 목록의 구분 칸에서 고른다 — 다음 로그인부터 적용된다",
+              "비밀번호를 바꾸려면 '비번 재설정'을 누르고 새 값을 넣는다 — 다음 로그인부터 적용된다",
               "계정을 잠시 막으려면 목록의 '활성' 배지를 눌러 '비활성'으로 바꾼다",
               "지우려면 '삭제'를 누르고 확인창에서 확인한다"
             ],
             "tips": [
               "비밀번호 자체로 사람을 구분한다. 두 사람이 같은 비밀번호를 쓰면 누가 했는지 구분이 안 된다",
+              "구분이 '파도소리'인 계정은 파도소리 재고(/factory)만 열리고, '내부' 계정은 반대로 파도소리 재고가 막힌다(관리자 제외)",
               "'환경변수(고정)' 계정은 이 화면에서 못 지운다"
             ],
             "keywords": [

@@ -52,6 +52,17 @@ export async function addUser(name: string, password: string, by?: string, role:
   if (error) throw error;
 }
 
+// 구분·비밀번호 변경(계정 관리 화면). 역할은 다음 로그인부터 적용된다(토큰에 실림).
+export async function updateUser(id: string, patch: { role?: AppRole; password?: string }): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (patch.role === "internal" || patch.role === "factory") row.role = patch.role;
+  if (patch.password && patch.password.trim()) row.password = patch.password.trim();
+  if (Object.keys(row).length === 0) return;
+  const { error } = await supabaseAdmin().from("app_users").update(row).eq("id", id);
+  if (isMissingRole(error)) throw new Error("역할 컬럼이 없습니다. supabase/migrations/088_app_users_role.sql 을 먼저 적용하세요.");
+  if (error) throw error;
+}
+
 export async function deleteUser(id: string): Promise<void> {
   const { error } = await supabaseAdmin().from("app_users").delete().eq("id", id);
   if (error) throw error;

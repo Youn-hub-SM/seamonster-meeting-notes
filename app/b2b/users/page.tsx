@@ -44,6 +44,18 @@ export default function UsersPage() {
     await fetch("/api/b2b/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: u.id, active: !u.active }) });
     await load();
   }
+  async function patch(u: AppUser, body: { role?: AppRole; password?: string }) {
+    setError("");
+    const res = await fetch("/api/b2b/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: u.id, ...body }) });
+    const j = await res.json();
+    if (!res.ok || !j.ok) setError(j.error || "변경 실패");
+    await load();
+  }
+  async function resetPassword(u: AppUser) {
+    const pw = window.prompt(`'${u.name}' 계정의 새 비밀번호 (비밀번호가 신원 — 다른 계정과 겹치면 안 됩니다)`);
+    if (!pw || !pw.trim()) return;
+    await patch(u, { password: pw.trim() });
+  }
   async function remove(u: AppUser) {
     if (!window.confirm(`'${u.name}' 계정을 삭제할까요?`)) return;
     await fetch(`/api/b2b/users?id=${encodeURIComponent(u.id)}`, { method: "DELETE" });
@@ -88,12 +100,22 @@ export default function UsersPage() {
                 {users.map((u) => (
                   <tr key={u.id}>
                     <td>{u.name}</td>
-                    <td className="sm-faint">{ROLE_LABEL[u.role] || "내부"}</td>
+                    <td>
+                      {/* 구분 변경 — 다음 로그인부터 적용(토큰에 역할이 실림) */}
+                      <select className="b2b-input" value={u.role} onChange={(e) => patch(u, { role: e.target.value as AppRole })}
+                        style={{ width: "auto", padding: "6px 8px" }}>
+                        <option value="internal">{ROLE_LABEL.internal}</option>
+                        <option value="factory">{ROLE_LABEL.factory}</option>
+                      </select>
+                    </td>
                     <td>
                       <button className="b2b-status-pill" onClick={() => toggle(u)} style={{ cursor: "pointer", border: "none", fontFamily: "inherit", background: u.active ? "var(--sm-success-bg)" : "var(--sm-bg-subtle)", color: u.active ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{u.active ? "활성" : "비활성"}</button>
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>{u.created_at?.slice(0, 10)}</td>
-                    <td><button className="b2b-link-btn" onClick={() => remove(u)} style={{ color: "var(--sm-danger)" }}>삭제</button></td>
+                    <td>
+                      <button className="b2b-link-btn" onClick={() => resetPassword(u)}>비번 재설정</button>{" "}
+                      <button className="b2b-link-btn" onClick={() => remove(u)} style={{ color: "var(--sm-danger)" }}>삭제</button>
+                    </td>
                   </tr>
                 ))}
                 {!loading && users.length === 0 && envUsers.length === 0 && <tr><td colSpan={5}><div className="b2b-empty" style={{ padding: "20px 10px" }}>계정이 없습니다.</div></td></tr>}
