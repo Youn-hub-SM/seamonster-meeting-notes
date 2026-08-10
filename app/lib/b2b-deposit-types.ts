@@ -84,3 +84,57 @@ export function formatTrdt(trdt: string): string {
   if (s.length < 12) return s;
   return `${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}`;
 }
+
+// ─────────────────────────────────────────────
+// 입금 알림 문자 파싱 (웹훅 수집 경로 — 팝빌 대신 폰의 입금 문자/푸시를 전달받는다)
+// ─────────────────────────────────────────────
+export interface ParsedDepositSms {
+  amount: number;
+  name: string | null;             // 입금자명 (파싱 실패 시 null — 확인필요로 남는다)
+  month: number | null;            // 문자에 찍힌 MM/DD HH:mm (연도 없음 — 수신 시점에 보정)
+  day: number | null;
+  hour: number | null;
+  minute: number | null;
+}
+
+// KB 입금 알림 파싱 — 형식 변형에 견디도록 키워드 기반으로 뽑는다.
+//  예) "[KB]08/10 14:32 123456**789 홍길동 입금 1,000,000 잔액 5,000,000"
+//      "[Web발신] KB국민은행 08/10 14:32 입금 1,000,000원 (주)어쩌구 잔액..."
+//  입금 문구가 없거나 금액을 못 찾으면 null (출금·인증 문자 등은 버린다).
+export function parseKbDepositSms(text: string): ParsedDepositSms | null {
+  const t = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!t || !/입금/.test(t)) return null;
+
+  // 금액: '입금' 뒤 첫 숫자 우선, 없으면 'N원' 형태 중 첫 번째
+  const amtAfter = t.match(/입금[^\d]{0,8}([\d,]+)\s*원?/);
+  const amtAny = t.match(/([\d,]{2,})\s*원/);
+  const amtStr = amtAfter?.[1] ?? amtAny?.[1];
+  const amount = amtStr ? Number(amtStr.replace(/,/g, "")) : 0;
+  if (!amount || amount <= 0) return null;
+
+  const dm = t.match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+
+  // 이름: 날짜·시각·금액·계좌 마스킹·은행 상용구를 걷어내고 남는 글자
+  const name =
+    t
+      .replace(/\[[^\]]*\]/g, " ")                       // [KB] [Web발신] 등
+      .replace(/\d{1,2}\/\d{1,2}/g, " ")                 // 날짜
+      .replace(/\d{1,2}:\d{2}/g, " ")                    // 시각
+      .replace(/[\d,]+\s*원/g, " ")                      // 금액+원
+      .replace(/입금[^\d\s]{0,2}\s*[\d,]+/g, " ")        // 입금 1,000,000 (원 없음)
+      .replace(/잔액\s*[\d,]*원?/g, " ")
+      .replace(/[\d*]{4,}[\d*-]*/g, " ")                 // 계좌번호·마스킹
+      .replace(/KB국민은행|KB국민|국민은행|KB|Web발신|전자금융|스타뱅킹|입출금|입금액?|출금|통보|알림/gi, " ")
+      .replace(/[^0-9A-Za-z가-힣() ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || null;
+
+  return {
+    amount,
+    name,
+    month: dm ? Number(dm[1]) : null,
+    day: dm ? Number(dm[2]) : null,
+    hour: dm ? Number(dm[3]) : null,
+    minute: dm ? Number(dm[4]) : null,
+  };
+}
