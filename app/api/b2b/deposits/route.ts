@@ -37,7 +37,8 @@ export async function GET(req: NextRequest) {
     if (cErr) throw cErr;
 
     const review = (reviewRows ?? []) as BankDeposit[];
-    const recent = (recentRows ?? []) as BankDeposit[];
+    // '미등록' 무시분(정책 변경 전 수집분)은 화면에 노출하지 않는다 — 등록된 업체의 입금만 뜬다
+    const recent = ((recentRows ?? []) as BankDeposit[]).filter((d) => d.matched_by !== "미등록");
 
     // 확인필요 건이 있을 때만 후보 계산 (미수금 목록은 수동 선택 드롭다운에도 쓰므로 항상 로드)
     const unpaid = await loadUnpaidOrders();

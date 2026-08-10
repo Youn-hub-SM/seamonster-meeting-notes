@@ -200,12 +200,22 @@ export async function collectDeposits(days = 7): Promise<{ fetched: number; inse
     svc.search(corpNum, jobID, ["I"], "", 1, 1000, "D", userID,
       (r: any) => resolve(r), (e: any) => reject(pbError(e)));
   });
-  const trades: PopbillTrade[] = ((result?.list ?? []) as PopbillTrade[]).filter(
+  let trades: PopbillTrade[] = ((result?.list ?? []) as PopbillTrade[]).filter(
     (t) => Number(t.accIn) > 0
   );
   if (trades.length === 0) return { fetched: 0, inserted: [] };
 
-  // 4) tid 중복 제외 후 적재
+  // 4) 허용 목록(등록된 이름만 저장, 웹훅과 동일 정책) + tid 중복 제외 후 적재
+  const aliases = await loadDepositAliases();
+  const companyNames = (await loadCompanyNames()).map((c) => c.name);
+  trades = trades.filter((t) =>
+    isKnownDepositName(
+      [t.remark1, t.remark2, t.remark3, t.remark4].map((s) => (s ?? "").trim()).filter(Boolean).join(" ") || null,
+      companyNames,
+      aliases
+    )
+  );
+  if (trades.length === 0) return { fetched: 0, inserted: [] };
   const sb = supabaseAdmin();
   const tids = trades.map((t) => String(t.tid));
   const { data: existing, error: exErr } = await sb.from("bank_deposits").select("tid").in("tid", tids);
@@ -366,10 +376,12 @@ export async function runAutoMatch(
       }
       continue;
     }
-    // 발주 매칭이 안 됐을 때만 무시·미등록 판정 — 실제 발주 입금은 매칭이 항상 우선
+    // 발주 매칭이 안 됐을 때만 무시·미등록 판정 — 실제 발주 입금은 매칭이 항상 우선.
+    //  미등록 이름은 수집 단계에서 이미 버려지지만(웹훅·팝빌 동일), 정책 변경 전 쌓인
+    //  과거 행을 조용히 치우는 방어선으로 남겨둔다. 예외 없음 — 등록한 것만 화면에 뜬다.
     const ignoredBy = matchesIgnoreRule(dep.remark, rules)
       ? "자동규칙"
-      : !isKnownDepositName(dep.remark, companyNames, aliases) && !cands.some((c) => c.amountHit)
+      : !isKnownDepositName(dep.remark, companyNames, aliases)
         ? "미등록"
         : null;
     if (ignoredBy) {

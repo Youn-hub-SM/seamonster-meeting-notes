@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { parseKbDepositSms } from "@/app/lib/b2b-deposit-types";
-import { runAutoMatch, isMissingDepositsTable } from "@/app/lib/b2b-deposits";
+import { isKnownDepositName, parseKbDepositSms } from "@/app/lib/b2b-deposit-types";
+import { isMissingDepositsTable, loadCompanyNames, loadDepositAliases, runAutoMatch } from "@/app/lib/b2b-deposits";
 import type { BankDeposit } from "@/app/lib/b2b-deposits";
 
 export const runtime = "nodejs";
@@ -58,9 +58,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "입금 문자가 아니거나 금액을 찾지 못했습니다.", parsed });
     }
 
+    // 허용 목록 — 등록된 이름(업체명·별칭·일반 등록)의 입금만 저장한다.
+    //  급여·매출 정산·사적 입금까지 내부 도구에 쌓이지 않게 수집 단계에서 버린다(대표 결정 2026-08-10).
+    //  미등록 거래처의 입금은 화면에 안 뜨므로, 그런 건은 발주 모달의 '입금 추가'로 직접 기록.
+    const known = isKnownDepositName(name, (await loadCompanyNames()).map((c) => c.name), await loadDepositAliases());
+
     const stamp = kstStamp(parsed ?? undefined);
     if (sp.get("dry") === "1") {
-      return NextResponse.json({ ok: true, dry: true, amount, name, ...stamp, parsed });
+      return NextResponse.json({ ok: true, dry: true, amount, name, known, ...stamp, parsed });
+    }
+    if (!known) {
+      return NextResponse.json({ ok: true, skipped: "미등록 입금자명 — 저장하지 않음" });
     }
 
     // 중복 방지: 원문(잔액 포함이라 거래마다 다름) 해시. 구조화 입력은 금액+이름+분 단위 시각.
