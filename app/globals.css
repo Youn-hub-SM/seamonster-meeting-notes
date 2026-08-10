@@ -3260,11 +3260,14 @@ a {
 }
 .app-sb-tool-row:hover { background: var(--sm-bg); }
 .app-sb-tool-row.is-active { background: var(--sm-orange-light); }
+/* 한 클래스를 <a>(단일 메뉴)와 <button>(하위메뉴 펼침)이 같이 쓴다. 폼 컨트롤은 부모의 글꼴을
+   물려받지 않아 line-height 를 안 적으면 버튼만 다른 줄 높이가 되어 행 높이가 어긋났다 —
+   본문과 같은 1.6 으로 못 박아 두 형태를 같은 높이로 맞춘다(단일형 기준, <a> 쪽은 값 변화 없음). */
 .app-sb-tool {
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: 8px;
-  font-size: 15px; font-weight: 600; color: var(--sm-text-mid);
+  font-size: 15px; line-height: 1.6; font-weight: 600; color: var(--sm-text-mid);
   transition: color 0.15s;
   background: none; border: none; cursor: pointer; text-align: left; font-family: inherit;
 }
