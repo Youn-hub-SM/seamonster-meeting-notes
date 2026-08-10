@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { buildB2BDigest, getDigestConfig, getDigestLastSent, setDigestLastSent, kstHour, kstDateStr } from "@/app/lib/b2b-digest";
+import { getKv, setKv } from "@/app/lib/b2b-settings";
 import { sendFlowText } from "@/app/lib/b2b-activity";
 
 export const runtime = "nodejs";
@@ -23,11 +24,23 @@ function splitTrailingLink(text: string): { text: string; url?: string } {
 }
 
 // GET — 크론(Vercel: Authorization: Bearer CRON_SECRET)이 호출.
-//  Vercel Hobby는 크론이 '하루 1회'로 제한됨 → 매일 08:00 KST(vercel.json "0 23 * * *")에 한 번 발송.
-//  시간별 트리거(Vercel Pro의 시간별 크론 또는 외부 스케줄러)를 쓸 땐 경로에 ?gate=hour 를 붙이면
-//  설정된 시각(cfg.hour)에만 발송한다. 활성(enabled)·하루 1회 dedup은 두 경우 모두 적용. 관리자 수동은 미리보기/?send=1.
+//  Vercel Hobby는 크론 1개당 '하루 1회'로 제한되지만 크론 자체는 2개까지 둘 수 있고,
+//  여러 크론이 같은 경로를 공유하는 것도 공식 지원된다(vercel.json 참고). 그래서 같은 경로를
+//  아침 06:00 · 오후 16:00 KST 두 번 호출해 하루 두 번 보낸다 — Pro 결제 없이.
+//  둘을 가르는 건 호출 시각(KST 12시 기준)이다. 크론 표현식 헤더(x-vercel-cron-schedule)를 쓰지 않는 이유는
+//  vercel.json 의 시각을 바꿀 때마다 이 파일도 같이 고쳐야 해서다. 수동 테스트는 ?slot=am|pm 로 덮어쓴다.
+//  dedup 은 슬롯마다 따로 — 아침을 보냈다고 오후가 막히면 안 된다.
+//  시간별 트리거(Vercel Pro 또는 외부 스케줄러)를 쓸 땐 ?gate=hour 로 설정 시각(cfg.hour)에만 발송.
+//  활성(enabled)·하루 1회 dedup은 두 경우 모두 적용. 관리자 수동은 미리보기/?send=1.
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams;
+  const slotParam = sp.get("slot");
+  const slot: "am" | "pm" = slotParam === "pm" || slotParam === "am" ? slotParam : kstHour() >= 12 ? "pm" : "am";
+  const lastSent = () => (slot === "pm" ? getKv("digest_last_sent_pm") : getDigestLastSent());
+  const markSent = (d: string) => (slot === "pm" ? setKv("digest_last_sent_pm", d) : setDigestLastSent(d));
+  // 오후 발송은 '남은 일'을 다시 짚는 성격이라 제목으로 구분한다(내용 계산은 아침과 동일).
+  const cfgFor = (c: Awaited<ReturnType<typeof getDigestConfig>>) =>
+    slot === "pm" ? { ...c, title: `${c.title} (오후 확인)` } : c;
   const secret = process.env.CRON_SECRET || "";
   const authz = req.headers.get("authorization") || "";
   const isCron = !!secret && (authz === `Bearer ${secret}` || sp.get("key") === secret);
@@ -42,20 +55,20 @@ export async function GET(req: NextRequest) {
     if (!cfg.enabled) return NextResponse.json({ ok: true, skipped: "disabled" });
     if (sp.get("gate") === "hour" && kstHour() !== cfg.hour) return NextResponse.json({ ok: true, skipped: `hour ${kstHour()}!=${cfg.hour}` });
     const today = kstDateStr();
-    if ((await getDigestLastSent()) === today) return NextResponse.json({ ok: true, skipped: "already-sent" });
-    const digest = await buildB2BDigest(cfg);
+    if ((await lastSent()) === today) return NextResponse.json({ ok: true, slot, skipped: "already-sent" });
+    const digest = await buildB2BDigest(cfgFor(cfg));
     const { text, url } = splitTrailingLink(digest.text);
     const r = await sendFlowText(text, { url });
-    if (r.ok) await setDigestLastSent(today);
-    return NextResponse.json({ ok: r.ok, sent: r.ok, error: r.error, counts: digest.counts });
+    if (r.ok) await markSent(today);
+    return NextResponse.json({ ok: r.ok, slot, sent: r.ok, error: r.error, counts: digest.counts });
   }
 
-  // 관리자 수동(또는 강제 send)
-  const digest = await buildB2BDigest(cfg);
+  // 관리자 수동(또는 강제 send) — ?slot=pm 으로 오후본을 그대로 미리 볼 수 있다
+  const digest = await buildB2BDigest(cfgFor(cfg));
   if (sp.get("send") === "1") {
     const { text, url } = splitTrailingLink(digest.text);
     const r = await sendFlowText(text, { url });
-    return NextResponse.json({ ok: r.ok, sent: r.ok, error: r.error, counts: digest.counts });
+    return NextResponse.json({ ok: r.ok, slot, sent: r.ok, error: r.error, counts: digest.counts });
   }
-  return NextResponse.json({ ok: true, preview: digest.text, counts: digest.counts });
+  return NextResponse.json({ ok: true, slot, preview: digest.text, counts: digest.counts });
 }
