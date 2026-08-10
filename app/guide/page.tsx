@@ -3,18 +3,20 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GUIDE, GUIDE_UPDATED, type GuideEntry } from "@/app/lib/guide-data";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 // 사용 가이드 — 전 기능의 사용 단계. 검색은 메뉴명·설명·단계·검색어 전체를 훑는다.
 //  데이터는 app/lib/guide-data.ts 하나 — 기능이 바뀌면 그 커밋에서 같이 고친다(CLAUDE.md 규칙).
 
 function matches(e: GuideEntry, q: string): boolean {
-  const hay = [e.label, e.what, ...e.steps, ...(e.tips || []), ...(e.keywords || [])].join(" ").toLowerCase();
-  return q.split(/\s+/).every((w) => hay.includes(w));
+  // 공용 매처 — 초성(ㅈㄱ)·영문자판(rocj) 입력도 받는다
+  const hay = [e.label, e.what, ...e.steps, ...(e.tips || []), ...(e.keywords || [])].join(" ");
+  return matchKoQuery(hay, q);
 }
 
 export default function GuidePage() {
   const [q, setQ] = useState("");
-  const query = q.trim().toLowerCase();
+  const query = q.trim(); // 소문자화는 공용 매처가 한다 — 미리 낮추면 시프트 자모(ㄲㅆ)를 잃는다
 
   const view = useMemo(() => {
     if (!query) return GUIDE;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, type InventoryTxn, type InvChannel, type InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelFilter } from "../ChannelTabs";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 // 생산요청 상태 변경/작성 이벤트(activity_log) — 원장과 함께 날짜별로 섞어 표시.
 type PrEvent = { id: string; date: string; created_at: string; summary: string; actor: string | null };
@@ -51,14 +52,14 @@ export default function ActivityPage() {
     await load();
   }
 
-  const q = search.trim().toLowerCase();
+  const q = search.trim();
   // 생산요청은 도매 활동 → '소매' 필터일 땐 숨김.
   const shownEvents = useMemo(() => {
     if (channel === "소매") return [];
-    return q ? events.filter((e) => e.summary.toLowerCase().includes(q)) : events;
+    return q ? events.filter((e) => matchKoQuery(e.summary, q)) : events;
   }, [events, q, channel]);
   const filteredTxns = useMemo(() => q
-    ? txns.filter((t) => `${t.product_name} ${t.sku || ""} ${t.memo || ""} ${t.partner || ""}`.toLowerCase().includes(q))
+    ? txns.filter((t) => matchKoQuery(`${t.product_name} ${t.sku || ""} ${t.memo || ""} ${t.partner || ""}`, q))
     : txns, [txns, q]);
 
   // 날짜별 묶음(최신순) — 원장 + 생산요청 이벤트 통합, 날짜 안은 시각 내림차순.

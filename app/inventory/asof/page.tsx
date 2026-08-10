@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InventoryRow, InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelFilter } from "../ChannelTabs";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -28,10 +29,10 @@ export default function AsOfPage() {
   useEffect(() => { load(date); }, [load, date]);
 
   const shown = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     return rows.filter((r) => {
       if (hideZero && r.qty === 0) return false;
-      if (q && !(`${r.name} ${r.sku || ""}`.toLowerCase().includes(q))) return false;
+      if (q && !matchKoQuery(`${r.name} ${r.sku || ""}`, q)) return false;
       return true;
     });
   }, [rows, search, hideZero]);

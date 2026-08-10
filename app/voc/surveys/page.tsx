@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { SurveyResponse } from "@/app/lib/surveys";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 type View = "목록" | "분석";
 type Insight = {
@@ -34,9 +35,9 @@ export default function VocSurveysPage() {
   useEffect(() => { load(); }, [load]);
 
   const shown = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     if (!q) return rows;
-    return rows.filter((r) => `${r.summary || ""} ${r.respondent || ""} ${r.form_name || ""}`.toLowerCase().includes(q));
+    return rows.filter((r) => matchKoQuery(`${r.summary || ""} ${r.respondent || ""} ${r.form_name || ""}`, q));
   }, [rows, search]);
 
   // 질문별 답변 분포(쉼표·줄바꿈으로 복수응답 분리해 집계)

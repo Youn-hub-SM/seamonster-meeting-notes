@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelFilter } from "../ChannelTabs";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 type Row = {
   product_id: string; sku: string | null; name: string;
@@ -68,8 +69,8 @@ export default function InventoryReconcilePage() {
   }, [enriched]);
 
   const shown = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    let arr = enriched.filter((r) => (!s || `${r.name} ${r.sku || ""}`.toLowerCase().includes(s)) && (!issuesOnly || r.issue));
+    const s = q.trim();
+    let arr = enriched.filter((r) => (!s || matchKoQuery(`${r.name} ${r.sku || ""}`, s)) && (!issuesOnly || r.issue));
     arr = [...arr].sort((a, b) =>
       sort === "gap" ? Math.abs(b.notSubtracted) - Math.abs(a.notSubtracted)
       : sort === "stock" ? a.current_qty - b.current_qty

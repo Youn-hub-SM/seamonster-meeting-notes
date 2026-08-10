@@ -8,6 +8,7 @@ import {
   DEFAULT_CRM_OPTIONS, type CrmOption, type CrmOptions,
 } from "@/app/lib/crm";
 import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/charts";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 // 기간 표시: "7/1~7/15" · 시작만 "7/1~" · 종료만 "~7/15"
@@ -152,11 +153,11 @@ export default function CrmPage() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     return messages.filter((m) => {
       if (chFilter && m.channel !== chFilter) return false;
       if (!q) return true;
-      return [m.title, m.stage, m.sub, m.timing, m.detail, m.tags].some((s) => (s || "").toLowerCase().includes(q));
+      return matchKoQuery([m.title, m.stage, m.sub, m.timing, m.detail, m.tags].filter(Boolean).join(" "), q);
     });
   }, [messages, search, chFilter]);
 

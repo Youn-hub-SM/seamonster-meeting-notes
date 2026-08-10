@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Product, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import { computeMargin } from "@/app/lib/b2b-margin";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 const won = (n: number) => Math.round(n).toLocaleString();
 
@@ -36,10 +37,10 @@ export default function MarginPage() {
   );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     if (!q) return costed;
     return costed.filter((p) =>
-      [p.name, p.sku, p.spec].filter(Boolean).some((v) => v!.toLowerCase().includes(q))
+      matchKoQuery([p.name, p.sku, p.spec].filter(Boolean).join(" "), q)
     );
   }, [costed, search]);
 

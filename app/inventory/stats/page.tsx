@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { INV_TYPE_COLOR, type InventoryRow, type InventoryTxn, type InvChannelFilter } from "@/app/lib/inventory";
 import { TrendChart, BarList } from "@/app/components/charts";
 import { ChannelFilter } from "../ChannelTabs";
+import { matchKoQuery } from "@/app/lib/hangul";
 
 export default function InvStatsPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -107,8 +108,8 @@ export default function InvStatsPage() {
   }, [rows, txnByProduct, groupBy]);
 
   const shownAgg = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return agg.filter((a) => !s || `${a.label} ${a.sub}`.toLowerCase().includes(s)).sort((a, b) => b.value - a.value || b.qty - a.qty);
+    const s = q.trim();
+    return agg.filter((a) => !s || matchKoQuery(`${a.label} ${a.sub}`, s)).sort((a, b) => b.value - a.value || b.qty - a.qty);
   }, [agg, q]);
 
   return (
