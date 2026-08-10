@@ -55,6 +55,8 @@ export default function OrdersListPage() {
   const [statusSel, setStatusSel] = useState<Set<OrderStatus>>(() => new Set(ORDER_STATUSES));
   const [paymentSel, setPaymentSel] = useState<Set<PaymentStatus>>(() => new Set(PAYMENT_STATUSES));
   const [taxSel, setTaxSel] = useState<Set<TaxInvoiceStatus>>(() => new Set(TAX_INVOICE_STATUSES));
+  // '오늘 할일' 카드에서 고른 항목 — 그 발주들만 목록에 남긴다(ids 로 직접 좁혀 필터 매핑 오차가 없다)
+  const [taskPick, setTaskPick] = useState<{ key: string; label: string; ids: Set<string> } | null>(null);
   const [companyFilter, setCompanyFilter] = useState<string>(""); // ""=전체
   const [productFilter, setProductFilter] = useState<string>(""); // ""=전체
   const [hideComplete, setHideComplete] = useState(false); // 완료(발송·입금·발행 다 끝) 숨기기
@@ -219,8 +221,29 @@ export default function OrdersListPage() {
   const paymentAll = paymentSel.size === PAYMENT_STATUSES.length;
   const taxAll = taxSel.size === TAX_INVOICE_STATUSES.length;
 
+  // 오늘 할일 — 아침 Flow 알림(b2b-digest)이 쓰는 것과 같은 기준 4가지.
+  //  화면에 이미 발주 전체가 있으므로 서버를 다시 부르지 않고 여기서 센다.
+  const todayTasks = useMemo(() => {
+    const live = orders.filter((o) => o.status !== "취소");
+    const dated = (o: OrderListItem) => (o.shipments ?? []).filter((sh) => sh.ship_date);
+    const shipToday = live.filter((o) =>
+      dated(o).some((sh) => sh.ship_date === today && sh.status !== "발송완료" && sh.status !== "취소")
+    );
+    const unscheduled = live.filter((o) => o.status === "발송대기" && dated(o).length === 0);
+    const needInvoice = live.filter((o) => o.status === "발송완료" && o.tax_invoice_status === "미발행");
+    const needPay = live.filter((o) => o.status === "발송완료" && (o.payment_status === "입금전" || o.payment_status === "일부입금"));
+    const unpaidTotal = needPay.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    return [
+      { key: "ship", label: "오늘 발송", rows: shipToday, hint: "", tone: "var(--sm-orange)" },
+      { key: "unscheduled", label: "발송일정 미등록", rows: unscheduled, hint: "일정 잡아야 함", tone: "var(--sm-warning)" },
+      { key: "invoice", label: "계산서 미발행", rows: needInvoice, hint: "", tone: "var(--sm-info)" },
+      { key: "pay", label: "입금 대기", rows: needPay, hint: unpaidTotal > 0 ? `${formatMoney(unpaidTotal)}원` : "", tone: "var(--sm-danger)" },
+    ];
+  }, [orders, today]);
+
   const filtered = useMemo(() => {
     let arr = orders;
+    if (taskPick) arr = arr.filter((o) => taskPick.ids.has(o.id));
     if (!statusAll) arr = arr.filter((o) => statusSel.has(o.status));
     if (!paymentAll) arr = arr.filter((o) => paymentSel.has(o.payment_status));
     if (!taxAll) arr = arr.filter((o) => taxSel.has(o.tax_invoice_status));
@@ -239,7 +262,7 @@ export default function OrdersListPage() {
       );
     }
     return arr;
-  }, [orders, statusSel, paymentSel, taxSel, statusAll, paymentAll, taxAll, companyFilter, productFilter, hideComplete, search]);
+  }, [taskPick, orders, statusSel, paymentSel, taxSel, statusAll, paymentAll, taxAll, companyFilter, productFilter, hideComplete, search]);
 
   // 지연/임박 카운트 (배너용)
   const urgencyCount = useMemo(() => {
@@ -724,6 +747,49 @@ export default function OrdersListPage() {
               임박 {urgencyCount.urgent}건
             </span>
           )}
+        </div>
+      )}
+
+      {/* 오늘 할일 — B2B 대시보드를 없애면서 거기서 보던 것을 여기로 올렸다.
+          카드를 누르면 그 발주들만 목록에 남는다(다시 누르면 해제). */}
+      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 }}>
+        {todayTasks.map((t) => {
+          const on = taskPick?.key === t.key;
+          const none = t.rows.length === 0;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              className="b2b-stat-card"
+              disabled={none}
+              onClick={() => {
+                setView("list");
+                setTaskPick(on ? null : { key: t.key, label: t.label, ids: new Set(t.rows.map((o) => o.id)) });
+              }}
+              style={{
+                padding: 16, textAlign: "left", font: "inherit",
+                cursor: none ? "default" : "pointer",
+                borderColor: on ? t.tone : undefined,
+                boxShadow: on ? `inset 0 0 0 1px ${t.tone}` : undefined,
+                opacity: none ? 0.6 : 1,
+              }}
+            >
+              <div className="b2b-stat-card-label" style={{ color: none ? undefined : t.tone }}>{t.label}</div>
+              <div className="b2b-stat-card-value" style={{ marginTop: 6, fontSize: none ? 17 : 27, color: none ? "var(--sm-text-light)" : t.tone }}>
+                {none ? "없음" : `${t.rows.length}건`}
+              </div>
+              {!none && t.hint && <div className="b2b-stat-card-hint">{t.hint}</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      {taskPick && (
+        <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+          <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>
+            {taskPick.label} {taskPick.ids.size}건만 보는 중
+          </span>
+          <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => setTaskPick(null)}>전체 보기</button>
         </div>
       )}
 
