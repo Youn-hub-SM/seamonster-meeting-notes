@@ -186,7 +186,6 @@ type DepositsResponse = {
   recent: BankDeposit[];
   suggestions: Record<string, DepositCandidate[]>;
   unpaid: UnpaidOrderLite[];
-  lastSync: { at: string; fetched: number; inserted: number; autoMatched: number; needReview: number } | null;
   rules: string[];
   aliases: DepositAlias[];
   companies: { id: string; name: string }[];
@@ -195,7 +194,6 @@ type DepositsResponse = {
 function DepositFeed({ onMatched }: { onMatched: () => void }) {
   const [data, setData] = useState<DepositsResponse | null>(null);
   const [error, setError] = useState("");
-  const [syncing, setSyncing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showRecent, setShowRecent] = useState(false);
   const [showManage, setShowManage] = useState(false);
@@ -216,21 +214,6 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
   useEffect(() => {
     load();
   }, []);
-
-  async function handleSync() {
-    setSyncing(true);
-    setError("");
-    try {
-      const res = await fetch("/api/b2b/deposits/sync", { cache: "no-store" });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "동기화 실패");
-      await load();
-      if (j.autoMatched > 0) onMatched();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "동기화 오류");
-    }
-    setSyncing(false);
-  }
 
   async function act(
     depositId: string,
@@ -311,23 +294,13 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
     }
   }
 
-  const lastSyncLabel = data?.lastSync?.at
-    ? new Date(data.lastSync.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
-    : "없음";
-
   return (
     <div className="b2b-card" style={{ marginBottom: 16 }}>
       <div className="b2b-card-head">
         <h2 className="b2b-card-title">
-          은행 입금 (국민은행)
+          자동 입금확인
           {data && data.review.length > 0 && <span className="pay-dep-count">{data.review.length}건 확인필요</span>}
         </h2>
-        <div className="b2b-page-actions">
-          <span className="pay-dep-sync-at">마지막 동기화 {lastSyncLabel}</span>
-          <button className="b2b-btn-secondary" onClick={handleSync} disabled={syncing}>
-            {syncing ? "동기화 중..." : "지금 동기화"}
-          </button>
-        </div>
       </div>
 
       {error && <div className="b2b-error">{error}</div>}
@@ -341,7 +314,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       ) : (
         <>
           {data.review.length === 0 && data.recent.length === 0 && (
-            <div className="b2b-empty">수집된 입금이 없습니다. 입금 문자가 도착하면 여기 쌓입니다.</div>
+            <div className="b2b-empty">등록된 입금자명의 입금 문자가 도착하면 여기 표시됩니다.</div>
           )}
           {data.review.map((d) => (
             <div key={d.id} className="pay-dep-row is-review">

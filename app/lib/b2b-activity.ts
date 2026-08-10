@@ -500,37 +500,51 @@ export async function logPaymentAdded(orderId: string, amount: number, method: s
   });
 }
 
-// ── 은행 입금 자동확인 (b2b-deposits) ──
-// 입금 매칭 확정 — 자동이면 '자동', 수동이면 화면 작업자명이 actor.
-export async function logDepositMatched(
+// ── 입금 확인 (b2b-deposits) ──
+// 입금 확인 확정 — 기존 '입금상태 변경' 알림과 같은 형식·이벤트로 발송.
+//  자동이면 작업자 '자동입금확인', 수동(화면 원클릭)이면 작업자명.
+//  상태가 안 바뀐 경우(일부입금 유지)는 입금기록 형식으로.
+export async function logDepositConfirmed(
   orderId: string,
+  fromStatus: string,
+  toStatus: string,
   amount: number,
-  remark: string | null,
-  mode: "자동" | "수동",
   actor?: string | null
 ): Promise<void> {
   const o = await loadOrderSummary(orderId);
   if (!o) return;
-  await recordActivity({
-    event_type: "deposit.matched",
-    summary: `은행입금 ${mode}매칭 · ${o.order_no} (${o.company_name}) · ${fmtMoney(amount)}원${remark ? ` · ${remark}` : ""}`,
-    order_id: o.id,
-    order_no: o.order_no,
-    meta: { amount, remark, mode },
-    actor: mode === "자동" ? "자동" : actor,
-  });
+  const who = actor ?? "자동입금확인";
+  if (fromStatus !== toStatus) {
+    await recordActivity({
+      event_type: "order.payment_status_changed",
+      summary: `입금상태 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}`,
+      order_id: o.id,
+      order_no: o.order_no,
+      meta: { from: fromStatus, to: toStatus, amount, source: "deposit" },
+      actor: who,
+    });
+  } else {
+    await recordActivity({
+      event_type: "payment.added",
+      summary: `입금기록 · ${o.order_no} (${o.company_name}) · ${fmtMoney(amount)}원 (계좌이체)`,
+      order_id: o.id,
+      order_no: o.order_no,
+      meta: { amount, source: "deposit" },
+      actor: who,
+    });
+  }
 }
 
-// 새 입금이 들어왔는데 자동 매칭이 안 됨 — 담당자가 화면에서 확인하도록 한 번에 묶어 알림.
+// 새 입금이 들어왔는데 자동 확인이 안 됨 — 담당자가 화면에서 확인하도록 한 번에 묶어 알림.
 export async function logDepositsNeedReview(deps: { amount: number; remark: string | null }[]): Promise<void> {
   if (deps.length === 0) return;
   const lines = deps.slice(0, 5).map((d) => `${fmtMoney(d.amount)}원${d.remark ? ` (${d.remark})` : ""}`);
   const more = deps.length > 5 ? ` 외 ${deps.length - 5}건` : "";
   await recordActivity({
     event_type: "deposit.review",
-    summary: `은행입금 확인필요 ${deps.length}건 · ${lines.join(", ")}${more} — 입금 확인 화면에서 매칭하세요`,
+    summary: `입금 확인 필요 ${deps.length}건 · ${lines.join(", ")}${more} — 입금 확인 화면에서 처리하세요`,
     meta: { count: deps.length },
-    actor: "자동",
+    actor: "자동입금확인",
   });
 }
 

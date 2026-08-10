@@ -13,7 +13,7 @@
 //  ※ Vercel 은 고정 IP 가 아니므로 팝빌 회원설정에서 'API 호출 IP 제한'을 해제해야 한다.
 
 import { supabaseAdmin } from "./supabase";
-import { logDepositMatched, logDepositsNeedReview } from "./b2b-activity";
+import { logDepositConfirmed, logDepositsNeedReview } from "./b2b-activity";
 import { getKv, setKv } from "./b2b-settings";
 import {
   BankDeposit,
@@ -322,13 +322,14 @@ export async function applyMatch(
       status: mode === "자동" ? "자동매칭" : "수동매칭",
       matched_order_id: order.id,
       payment_id: (pay as { id: string }).id,
-      matched_by: mode === "자동" ? "자동" : actor ?? null,
+      matched_by: mode === "자동" ? "자동입금확인" : actor ?? null,
       matched_at: new Date().toISOString(),
     })
     .eq("id", dep.id);
   if (depErr) throw depErr;
 
-  await logDepositMatched(order.id, Number(dep.amount), dep.remark, mode, actor ?? null);
+  // 알림은 기존 '입금상태 변경'과 동일한 형식 — 작업자만 자동입금확인/사용자명으로 구분
+  await logDepositConfirmed(order.id, order.payment_status, newStatus, Number(dep.amount), mode === "자동" ? null : actor ?? null);
 }
 
 // '확인필요' 전체를 자동 매칭 시도. notifyIds = 이번 수집에서 새로 들어온 입금 id —
