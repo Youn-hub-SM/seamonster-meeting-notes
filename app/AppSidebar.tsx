@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { NAV, HOME, sortByNavOrder, type NavTool, type NavMenuItem } from "./nav";
+import { NAV, sortByNavOrder, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 function itemActive(m: NavMenuItem, toolHref: string, pathname: string) {
@@ -205,23 +205,16 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             </svg>
           </button>
         )}
-        <Link href="/" className="app-sb-brand" onClick={onNavigate}>
+        {/* 이제 홈으로 가는 유일한 입구 — 파도소리 계정에게 '/' 는 막힌 경로라 자기 홈으로 보낸다 */}
+        <Link href={isFactoryUser ? "/factory" : "/"} className="app-sb-brand" onClick={onNavigate}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="씨몬스터" style={{ height: 22, width: "auto", display: "block" }} />
         </Link>
       </div>
 
       <nav className="app-sb-nav">
-        {/* 홈·즐겨찾기는 파도소리 계정에겐 전부 막힌 경로라 감춘다 */}
-        {!isFactoryUser && (
-          <div className={`app-sb-tool-row ${pathname === "/" ? "is-active" : ""}`}>
-            <Link href="/" className="app-sb-tool" title={HOME.label} aria-label={HOME.label} onClick={onNavigate}>
-              <span className="app-sb-emoji"><Icon name={HOME.icon} /></span>
-              <span className="app-sb-tool-label">{HOME.label}</span>
-            </Link>
-          </div>
-        )}
-
+        {/* 홈 버튼은 없앴다 — 위 로고가 곧 홈 링크라 같은 곳으로 가는 버튼이 둘이었다.
+            즐겨찾기는 파도소리 계정에겐 막힌 경로라 계속 감춘다. */}
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
         {!rail && userName && !isFactoryUser && (
           <div className="app-sb-group app-sb-fav">

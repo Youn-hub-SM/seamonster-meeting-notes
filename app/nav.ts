@@ -7,7 +7,6 @@ export type NavMenuItem = { href: string; label: string; adminOnly?: boolean; ex
 export type NavTool = { href: string; label: string; icon: IconName; adminOnly?: boolean; menu?: NavMenuItem[] };
 export type NavCategory = { label: string; adminOnly?: boolean; tools: NavTool[] };
 
-export const HOME: NavTool = { href: "/", label: "홈", icon: "home" };
 
 export const NAV: NavCategory[] = [
   {
