@@ -20,6 +20,7 @@
     "jszip": "^3.10.1",
     "next": "16.2.2",
     "nodemailer": "^9.0.3",
+    "popbill": "^1.64.2",
     "puppeteer-core": "^25.4.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",

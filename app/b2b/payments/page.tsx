@@ -8,6 +8,13 @@ import {
   PaymentStatus,
   formatMoney,
 } from "@/app/lib/b2b-orders";
+import {
+  BankDeposit,
+  DEPOSIT_STATUS_COLORS,
+  DepositCandidate,
+  UnpaidOrderLite,
+  formatTrdt,
+} from "@/app/lib/b2b-deposit-types";
 import { pingActivityFeed } from "../ActivityFeed";
 
 type UnpaidOrder = {
@@ -71,6 +78,8 @@ export default function PaymentsPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+
+      <DepositFeed onMatched={reload} />
 
       {data && (
         <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
@@ -161,6 +170,191 @@ export default function PaymentsPage() {
         />
       )}
     </>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 은행 입금 피드 — 팝빌 계좌조회 수집분. 확인필요 원클릭 매칭 + 최근 처리 내역.
+// ─────────────────────────────────────────────
+type DepositsResponse = {
+  ok: boolean;
+  notReady?: boolean;
+  error?: string;
+  review: BankDeposit[];
+  recent: BankDeposit[];
+  suggestions: Record<string, DepositCandidate[]>;
+  unpaid: UnpaidOrderLite[];
+  lastSync: { at: string; fetched: number; inserted: number; autoMatched: number; needReview: number } | null;
+};
+
+function DepositFeed({ onMatched }: { onMatched: () => void }) {
+  const [data, setData] = useState<DepositsResponse | null>(null);
+  const [error, setError] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [showRecent, setShowRecent] = useState(false);
+
+  async function load() {
+    try {
+      const res = await fetch("/api/b2b/deposits", { cache: "no-store" });
+      const j = (await res.json()) as DepositsResponse;
+      if (!res.ok || !j.ok) throw new Error(j.error || "입금 내역 조회 실패");
+      setData(j);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "입금 내역 조회 오류");
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handleSync() {
+    setSyncing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/deposits/sync", { cache: "no-store" });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "동기화 실패");
+      await load();
+      if (j.autoMatched > 0) onMatched();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "동기화 오류");
+    }
+    setSyncing(false);
+  }
+
+  async function act(depositId: string, action: "match" | "ignore" | "restore", orderId?: string, label?: string) {
+    if (action === "match" && !confirm(`이 입금을 ${label} 발주에 매칭할까요?\n입금 기록이 추가되고 입금 상태가 바뀝니다.`)) return;
+    setBusyId(depositId);
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/deposits", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, deposit_id: depositId, order_id: orderId }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "처리 실패");
+      await load();
+      if (action === "match") {
+        onMatched();
+        pingActivityFeed();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "처리 오류");
+    }
+    setBusyId(null);
+  }
+
+  const lastSyncLabel = data?.lastSync?.at
+    ? new Date(data.lastSync.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "없음";
+
+  return (
+    <div className="b2b-card" style={{ marginBottom: 16 }}>
+      <div className="b2b-card-head">
+        <h2 className="b2b-card-title">
+          은행 입금 (국민은행)
+          {data && data.review.length > 0 && <span className="pay-dep-count">{data.review.length}건 확인필요</span>}
+        </h2>
+        <div className="b2b-page-actions">
+          <span className="pay-dep-sync-at">마지막 동기화 {lastSyncLabel}</span>
+          <button className="b2b-btn-secondary" onClick={handleSync} disabled={syncing}>
+            {syncing ? "동기화 중..." : "지금 동기화"}
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="b2b-error">{error}</div>}
+
+      {data?.notReady ? (
+        <div className="b2b-empty">
+          마이그레이션 089_bank_deposits.sql 이 아직 적용되지 않았습니다 — Supabase SQL Editor 에서 적용하세요.
+        </div>
+      ) : !data ? (
+        <div className="b2b-loading">불러오는 중...</div>
+      ) : data.review.length === 0 && data.recent.length === 0 ? (
+        <div className="b2b-empty">수집된 입금이 없습니다. [지금 동기화]로 국민은행 입금 내역을 가져옵니다.</div>
+      ) : (
+        <>
+          {data.review.map((d) => (
+            <div key={d.id} className="pay-dep-row is-review">
+              <div className="pay-dep-main">
+                <span className="b2b-money pay-dep-amount">{formatMoney(d.amount)}원</span>
+                <span className="pay-dep-remark">{d.remark || "(입금자명 없음)"}</span>
+                <span className="pay-dep-date">{formatTrdt(d.trdt)}</span>
+              </div>
+              <div className="pay-dep-actions">
+                {(data.suggestions[d.id] ?? []).map((c) => (
+                  <button
+                    key={c.order.id}
+                    className="pay-dep-suggest"
+                    disabled={busyId === d.id}
+                    onClick={() => act(d.id, "match", c.order.id, `${c.order.order_no} (${c.order.company_name})`)}
+                    title={`청구 ${formatMoney(c.order.total)} · 잔액 ${formatMoney(c.order.remaining)}`}
+                  >
+                    → {c.order.company_name} · 잔액 {formatMoney(c.order.remaining)}
+                    {c.nameHit && c.amountHit ? " (이름·금액 일치)" : c.amountHit ? " (금액 일치)" : " (이름 일치)"}
+                  </button>
+                ))}
+                <select
+                  className="b2b-input pay-dep-select"
+                  disabled={busyId === d.id}
+                  value=""
+                  onChange={(e) => {
+                    const o = data.unpaid.find((u) => u.id === e.target.value);
+                    if (o) act(d.id, "match", o.id, `${o.order_no} (${o.company_name})`);
+                  }}
+                >
+                  <option value="">직접 선택...</option>
+                  {data.unpaid.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.company_name} · {o.order_no} · 잔액 {formatMoney(o.remaining)}
+                    </option>
+                  ))}
+                </select>
+                <button className="pay-dep-ignore" disabled={busyId === d.id} onClick={() => act(d.id, "ignore")}>
+                  무시
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {data.recent.length > 0 && (
+            <>
+              <button className="pay-dep-toggle" onClick={() => setShowRecent((v) => !v)}>
+                최근 처리 {data.recent.length}건 {showRecent ? "접기" : "펼치기"}
+              </button>
+              {showRecent &&
+                data.recent.map((d) => (
+                  <div key={d.id} className="pay-dep-row">
+                    <div className="pay-dep-main">
+                      <span className="b2b-money pay-dep-amount">{formatMoney(d.amount)}원</span>
+                      <span className="pay-dep-remark">{d.remark || "(입금자명 없음)"}</span>
+                      <span className="pay-dep-date">{formatTrdt(d.trdt)}</span>
+                    </div>
+                    <div className="pay-dep-actions">
+                      <span
+                        className="b2b-status-pill"
+                        style={{ background: DEPOSIT_STATUS_COLORS[d.status]?.bg, color: DEPOSIT_STATUS_COLORS[d.status]?.fg }}
+                      >
+                        {d.status}
+                        {d.matched_by && d.status !== "무시" ? ` · ${d.matched_by}` : ""}
+                      </span>
+                      {d.status === "무시" && (
+                        <button className="pay-dep-ignore" disabled={busyId === d.id} onClick={() => act(d.id, "restore")}>
+                          되돌리기
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

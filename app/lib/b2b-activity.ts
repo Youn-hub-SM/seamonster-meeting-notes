@@ -500,6 +500,40 @@ export async function logPaymentAdded(orderId: string, amount: number, method: s
   });
 }
 
+// ── 은행 입금 자동확인 (b2b-deposits) ──
+// 입금 매칭 확정 — 자동이면 '자동', 수동이면 화면 작업자명이 actor.
+export async function logDepositMatched(
+  orderId: string,
+  amount: number,
+  remark: string | null,
+  mode: "자동" | "수동",
+  actor?: string | null
+): Promise<void> {
+  const o = await loadOrderSummary(orderId);
+  if (!o) return;
+  await recordActivity({
+    event_type: "deposit.matched",
+    summary: `은행입금 ${mode}매칭 · ${o.order_no} (${o.company_name}) · ${fmtMoney(amount)}원${remark ? ` · ${remark}` : ""}`,
+    order_id: o.id,
+    order_no: o.order_no,
+    meta: { amount, remark, mode },
+    actor: mode === "자동" ? "자동" : actor,
+  });
+}
+
+// 새 입금이 들어왔는데 자동 매칭이 안 됨 — 담당자가 화면에서 확인하도록 한 번에 묶어 알림.
+export async function logDepositsNeedReview(deps: { amount: number; remark: string | null }[]): Promise<void> {
+  if (deps.length === 0) return;
+  const lines = deps.slice(0, 5).map((d) => `${fmtMoney(d.amount)}원${d.remark ? ` (${d.remark})` : ""}`);
+  const more = deps.length > 5 ? ` 외 ${deps.length - 5}건` : "";
+  await recordActivity({
+    event_type: "deposit.review",
+    summary: `은행입금 확인필요 ${deps.length}건 · ${lines.join(", ")}${more} — 입금 확인 화면에서 매칭하세요`,
+    meta: { count: deps.length },
+    actor: "자동",
+  });
+}
+
 // ── 매출(sales) ── 비-B2B. 전부 notify:false → 외부 웹훅(Zapier) 미발송, DB 감사기록만.
 export async function logSalesUpload(filename: string, inserted: number, skipped: number): Promise<void> {
   await recordActivity({
