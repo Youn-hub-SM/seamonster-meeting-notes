@@ -15,11 +15,46 @@
 import { supabaseAdmin } from "./supabase";
 import { logDepositMatched, logDepositsNeedReview } from "./b2b-activity";
 import { getKv, setKv } from "./b2b-settings";
-import { BankDeposit, UnpaidOrderLite, candidateOrders, normalizeDepositName, ymdToIso } from "./b2b-deposit-types";
+import {
+  BankDeposit,
+  DepositAlias,
+  UnpaidOrderLite,
+  candidateOrders,
+  isKnownDepositName,
+  normalizeDepositName,
+  ymdToIso,
+} from "./b2b-deposit-types";
 
 // 타입·상수·순수 헬퍼는 b2b-deposit-types.ts (클라이언트 안전) — 화면과 라우트가 공유.
-export type { BankDeposit, UnpaidOrderLite, DepositCandidate } from "./b2b-deposit-types";
-export { candidateOrders, normalizeDepositName, ymdToIso } from "./b2b-deposit-types";
+export type { BankDeposit, UnpaidOrderLite, DepositCandidate, DepositAlias } from "./b2b-deposit-types";
+export { candidateOrders, normalizeDepositName, ymdToIso, depositNameMatch, isKnownDepositName } from "./b2b-deposit-types";
+
+// ─────────────────────────────────────────────
+// 입금자명 등록 (bank_deposit_names, migration 090) — 허용 목록 + 업체 별칭
+// ─────────────────────────────────────────────
+// 테이블 미적용(090) 환경에서도 죽지 않게 빈 배열 폴백 — 그 경우 허용 목록 = 업체명만.
+export async function loadDepositAliases(): Promise<DepositAlias[]> {
+  try {
+    const { data, error } = await supabaseAdmin()
+      .from("bank_deposit_names")
+      .select("id, company_id, name, company:company_id(name)")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    type Row = { id: string; company_id: string | null; name: string; company: { name?: string } | { name?: string }[] | null };
+    return ((data ?? []) as unknown as Row[]).map((r) => {
+      const company = Array.isArray(r.company) ? r.company[0] : r.company;
+      return { id: r.id, company_id: r.company_id, name: r.name, company_name: company?.name ?? null };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function loadCompanyNames(): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await supabaseAdmin().from("companies").select("id, name").order("name");
+  if (error) throw error;
+  return (data ?? []) as { id: string; name: string }[];
+}
 
 // ─────────────────────────────────────────────
 // 자동무시 규칙 — 매출 정산·이자 등 B2B 와 무관한 반복 입금자명은 알림 없이 무시.
@@ -206,12 +241,12 @@ export async function loadUnpaidOrders(): Promise<UnpaidOrderLite[]> {
   const sb = supabaseAdmin();
   const { data: orders, error: oErr } = await sb
     .from("orders")
-    .select("id, order_no, payment_status, total, company:company_id(name)")
+    .select("id, order_no, payment_status, total, company_id, company:company_id(name)")
     .in("payment_status", ["입금전", "일부입금"]);
   if (oErr) throw oErr;
 
   type Row = {
-    id: string; order_no: string; payment_status: string; total: number;
+    id: string; order_no: string; payment_status: string; total: number; company_id: string;
     company: { name?: string } | { name?: string }[] | null;
   };
   const list = (orders ?? []) as unknown as Row[];
@@ -234,6 +269,7 @@ export async function loadUnpaidOrders(): Promise<UnpaidOrderLite[]> {
     return {
       id: o.id,
       order_no: o.order_no,
+      company_id: o.company_id,
       company_name: company?.name ?? "(미지정)",
       payment_status: o.payment_status,
       total,
@@ -287,7 +323,13 @@ export async function applyMatch(
 
 // '확인필요' 전체를 자동 매칭 시도. notifyIds = 이번 수집에서 새로 들어온 입금 id —
 //  자동 매칭 안 된 신규 건만 Flow 로 '확인필요' 알림(재동기화 때마다 옛 건 재알림 방지).
-//  매칭 실패 건이 자동무시 규칙에 걸리면 알림 없이 '무시' 처리(매출 정산 등 반복 입금).
+//
+// 허용 목록 정책 — 입금의 다양성이 거래처의 다양성보다 넓다(급여·매출 정산·이자 등):
+//  1) 자동 매칭: 이름(업체명·별칭) 일치 + 금액=잔액 + 후보 1개 → 입금 기록+상태 변경
+//  2) 자동무시 규칙에 걸리면 → 무시 (명시적 차단이 허용보다 우선)
+//  3) 등록된 이름(업체명·별칭·일반 등록)이면 → 확인필요 + 알림
+//  4) 미등록 이름 → 알림 없이 '무시(미등록)' — 단, 금액이 어떤 발주의 잔액과 정확히
+//     일치하면 실제 거래처일 가능성이 높아 예외로 확인필요에 올린다.
 export async function runAutoMatch(
   notifyIds: Set<string>
 ): Promise<{ autoMatched: number; needReview: number; autoIgnored: number }> {
@@ -303,12 +345,15 @@ export async function runAutoMatch(
 
   const unpaid = await loadUnpaidOrders();
   const rules = await getIgnoreRules();
+  const aliases = await loadDepositAliases();
+  const companyNames = (await loadCompanyNames()).map((c) => c.name);
   let autoMatched = 0;
   let autoIgnored = 0;
   const newReview: BankDeposit[] = [];
 
   for (const dep of pending) {
-    const sure = candidateOrders(dep, unpaid).filter((c) => c.nameHit && c.amountHit);
+    const cands = candidateOrders(dep, unpaid, aliases);
+    const sure = cands.filter((c) => c.nameHit && c.amountHit);
     if (sure.length === 1) {
       await applyMatch(dep, sure[0].order, "자동");
       autoMatched++;
@@ -321,11 +366,16 @@ export async function runAutoMatch(
       }
       continue;
     }
-    // 발주 매칭이 안 됐을 때만 무시 규칙 적용 — 거래처가 규칙에 잘못 들어가도 실제 발주 입금은 매칭이 먼저다
-    if (matchesIgnoreRule(dep.remark, rules)) {
+    // 발주 매칭이 안 됐을 때만 무시·미등록 판정 — 실제 발주 입금은 매칭이 항상 우선
+    const ignoredBy = matchesIgnoreRule(dep.remark, rules)
+      ? "자동규칙"
+      : !isKnownDepositName(dep.remark, companyNames, aliases) && !cands.some((c) => c.amountHit)
+        ? "미등록"
+        : null;
+    if (ignoredBy) {
       const { error: igErr } = await sb
         .from("bank_deposits")
-        .update({ status: "무시", matched_by: "자동규칙" })
+        .update({ status: "무시", matched_by: ignoredBy })
         .eq("id", dep.id);
       if (!igErr) {
         autoIgnored++;

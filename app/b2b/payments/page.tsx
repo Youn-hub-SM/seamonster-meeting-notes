@@ -11,8 +11,10 @@ import {
 import {
   BankDeposit,
   DEPOSIT_STATUS_COLORS,
+  DepositAlias,
   DepositCandidate,
   UnpaidOrderLite,
+  depositNameMatch,
   formatTrdt,
 } from "@/app/lib/b2b-deposit-types";
 import { pingActivityFeed } from "../ActivityFeed";
@@ -186,6 +188,8 @@ type DepositsResponse = {
   unpaid: UnpaidOrderLite[];
   lastSync: { at: string; fetched: number; inserted: number; autoMatched: number; needReview: number } | null;
   rules: string[];
+  aliases: DepositAlias[];
+  companies: { id: string; name: string }[];
 };
 
 function DepositFeed({ onMatched }: { onMatched: () => void }) {
@@ -194,6 +198,9 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
   const [syncing, setSyncing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showRecent, setShowRecent] = useState(false);
+  const [showManage, setShowManage] = useState(false);
+  const [aliasName, setAliasName] = useState("");
+  const [aliasCompany, setAliasCompany] = useState("");
 
   async function load() {
     try {
@@ -228,9 +235,21 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
   async function act(
     depositId: string,
     action: "match" | "ignore" | "restore",
-    opts?: { orderId?: string; label?: string; always?: boolean; remark?: string | null }
+    opts?: { orderId?: string; label?: string; always?: boolean; remark?: string | null; companyId?: string; companyName?: string }
   ) {
-    if (action === "match" && !confirm(`이 입금을 ${opts?.label} 발주에 매칭할까요?\n입금 기록이 추가되고 입금 상태가 바뀝니다.`)) return;
+    let saveAlias = false;
+    if (action === "match") {
+      if (!confirm(`이 입금을 ${opts?.label} 발주에 매칭할까요?\n입금 기록이 추가되고 입금 상태가 바뀝니다.`)) return;
+      // 입금자명이 이 업체의 이름·별칭과 다르면 별칭 등록 제안 — 다음부터 자동 매칭
+      if (opts?.remark && opts.companyId && data) {
+        const known =
+          depositNameMatch(opts.remark, opts.companyName) ||
+          data.aliases.some((a) => a.company_id === opts.companyId && depositNameMatch(opts.remark, a.name));
+        if (!known) {
+          saveAlias = confirm(`'${opts.remark}' 입금자명을 '${opts.companyName}' 별칭으로 등록할까요?\n등록하면 다음부터 같은 이름·정확한 잔액 입금은 자동 매칭됩니다.`);
+        }
+      }
+    }
     if (
       opts?.always &&
       !confirm(`'${opts?.remark}' 입금자명을 항상 무시할까요?\n앞으로 같은 이름의 입금은 알림 없이 자동 무시됩니다. (매출 정산·이자 등)`)
@@ -242,7 +261,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       const res = await fetch("/api/b2b/deposits", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, deposit_id: depositId, order_id: opts?.orderId, always: opts?.always }),
+        body: JSON.stringify({ action, deposit_id: depositId, order_id: opts?.orderId, always: opts?.always, save_alias: saveAlias }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "처리 실패");
@@ -255,6 +274,23 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       setError(err instanceof Error ? err.message : "처리 오류");
     }
     setBusyId(null);
+  }
+
+  // 입금자명 등록/삭제 ('입금자명 관리' 섹션)
+  async function aliasAction(body: { action: "alias_add"; name: string; company_id: string | null } | { action: "alias_del"; alias_id: string }) {
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/deposits", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "처리 실패");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "처리 오류");
+    }
   }
 
   // 자동무시 규칙 삭제 (칩 ✕)
@@ -302,10 +338,11 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
         </div>
       ) : !data ? (
         <div className="b2b-loading">불러오는 중...</div>
-      ) : data.review.length === 0 && data.recent.length === 0 ? (
-        <div className="b2b-empty">수집된 입금이 없습니다. [지금 동기화]로 국민은행 입금 내역을 가져옵니다.</div>
       ) : (
         <>
+          {data.review.length === 0 && data.recent.length === 0 && (
+            <div className="b2b-empty">수집된 입금이 없습니다. 입금 문자가 도착하면 여기 쌓입니다.</div>
+          )}
           {data.review.map((d) => (
             <div key={d.id} className="pay-dep-row is-review">
               <div className="pay-dep-main">
@@ -319,7 +356,15 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                     key={c.order.id}
                     className="pay-dep-suggest"
                     disabled={busyId === d.id}
-                    onClick={() => act(d.id, "match", { orderId: c.order.id, label: `${c.order.order_no} (${c.order.company_name})` })}
+                    onClick={() =>
+                      act(d.id, "match", {
+                        orderId: c.order.id,
+                        label: `${c.order.order_no} (${c.order.company_name})`,
+                        remark: d.remark,
+                        companyId: c.order.company_id,
+                        companyName: c.order.company_name,
+                      })
+                    }
                     title={`청구 ${formatMoney(c.order.total)} · 잔액 ${formatMoney(c.order.remaining)}`}
                   >
                     → {c.order.company_name} · 잔액 {formatMoney(c.order.remaining)}
@@ -332,7 +377,14 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                   value=""
                   onChange={(e) => {
                     const o = data.unpaid.find((u) => u.id === e.target.value);
-                    if (o) act(d.id, "match", { orderId: o.id, label: `${o.order_no} (${o.company_name})` });
+                    if (o)
+                      act(d.id, "match", {
+                        orderId: o.id,
+                        label: `${o.order_no} (${o.company_name})`,
+                        remark: d.remark,
+                        companyId: o.company_id,
+                        companyName: o.company_name,
+                      });
                   }}
                 >
                   <option value="">직접 선택...</option>
@@ -359,17 +411,76 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
             </div>
           ))}
 
-          {data.rules.length > 0 && (
-            <div className="pay-dep-rules">
-              <span className="pay-dep-rules-label">자동무시 규칙</span>
-              {data.rules.map((r) => (
-                <span key={r} className="pay-dep-rule-chip">
-                  {r}
-                  <button className="pay-dep-rule-del" onClick={() => removeRule(r)} title="규칙 삭제">
-                    ✕
-                  </button>
-                </span>
-              ))}
+          <button className="pay-dep-toggle" onClick={() => setShowManage((v) => !v)}>
+            입금자명 관리 — 등록 {data.aliases.length}건 · 자동무시 {data.rules.length}건 {showManage ? "접기" : "펼치기"}
+          </button>
+          {showManage && (
+            <div className="pay-dep-manage">
+              <div className="pay-dep-manage-hint">
+                등록된 이름(업체명 포함)의 입금만 확인필요 알림이 갑니다. 미등록 이름은 알림 없이 무시로
+                내려갑니다(금액이 발주 잔액과 정확히 일치하면 예외). 업체를 연결하면 그 업체 발주에 자동 매칭까지 됩니다.
+              </div>
+              <div className="pay-dep-manage-form">
+                <input
+                  type="text"
+                  className="b2b-input"
+                  placeholder="입금자명 (예: 홍길동, 바다무역)"
+                  value={aliasName}
+                  onChange={(e) => setAliasName(e.target.value)}
+                />
+                <select className="b2b-input pay-dep-select" value={aliasCompany} onChange={(e) => setAliasCompany(e.target.value)}>
+                  <option value="">업체 연결 안 함 (알림만 허용)</option>
+                  {data.companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="b2b-btn-secondary"
+                  disabled={!aliasName.trim()}
+                  onClick={async () => {
+                    await aliasAction({ action: "alias_add", name: aliasName.trim(), company_id: aliasCompany || null });
+                    setAliasName("");
+                    setAliasCompany("");
+                  }}
+                >
+                  + 등록
+                </button>
+              </div>
+              {data.aliases.length > 0 && (
+                <div className="pay-dep-rules">
+                  <span className="pay-dep-rules-label">등록된 입금자명</span>
+                  {data.aliases.map((a) => (
+                    <span key={a.id} className="pay-dep-rule-chip">
+                      {a.name}
+                      {a.company_name ? ` → ${a.company_name}` : ""}
+                      <button
+                        className="pay-dep-rule-del"
+                        onClick={() => {
+                          if (confirm(`'${a.name}' 등록을 삭제할까요?`)) aliasAction({ action: "alias_del", alias_id: a.id });
+                        }}
+                        title="등록 삭제"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {data.rules.length > 0 && (
+                <div className="pay-dep-rules">
+                  <span className="pay-dep-rules-label">자동무시 규칙</span>
+                  {data.rules.map((r) => (
+                    <span key={r} className="pay-dep-rule-chip">
+                      {r}
+                      <button className="pay-dep-rule-del" onClick={() => removeRule(r)} title="규칙 삭제">
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

@@ -33,11 +33,20 @@ export interface BankDeposit {
 export interface UnpaidOrderLite {
   id: string;
   order_no: string;
+  company_id: string;
   company_name: string;
   payment_status: string;
   total: number;
   paid: number;
   remaining: number;
+}
+
+// 등록된 입금자명 — company_id 있으면 업체 별칭(자동 매칭에 사용), 없으면 알림 허용 이름
+export interface DepositAlias {
+  id: string;
+  company_id: string | null;
+  name: string;
+  company_name?: string | null;  // 조회 시 조인으로 채움 (표시용)
 }
 
 export interface DepositCandidate {
@@ -54,23 +63,44 @@ export function normalizeDepositName(s: string | null | undefined): string {
     .replace(/[^0-9a-z가-힣]/g, "");
 }
 
-// 입금 1건의 매칭 후보 — 이름 일치 또는 금액=잔액. (둘 다) > 금액 > 이름 순 정렬.
+// 정규화 후 포함 관계 비교 (양방향, 2글자 미만은 불인정)
+export function depositNameMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizeDepositName(a);
+  const nb = normalizeDepositName(b);
+  return na.length >= 2 && nb.length >= 2 && (na.includes(nb) || nb.includes(na));
+}
+
+// 입금 1건의 매칭 후보 — 이름(업체명 또는 그 업체의 별칭) 일치 또는 금액=잔액.
+//  (둘 다) > 금액 > 이름 순 정렬.
 export function candidateOrders(
   dep: Pick<BankDeposit, "amount" | "remark">,
-  unpaid: UnpaidOrderLite[]
+  unpaid: UnpaidOrderLite[],
+  aliases: DepositAlias[] = []
 ): DepositCandidate[] {
-  const depName = normalizeDepositName(dep.remark);
   const score = (c: DepositCandidate) => (c.nameHit && c.amountHit ? 3 : c.amountHit ? 2 : 1);
   return unpaid
     .map((o) => {
-      const comp = normalizeDepositName(o.company_name);
       const nameHit =
-        depName.length >= 2 && comp.length >= 2 && (depName.includes(comp) || comp.includes(depName));
+        depositNameMatch(dep.remark, o.company_name) ||
+        aliases.some((a) => a.company_id === o.company_id && depositNameMatch(dep.remark, a.name));
       const amountHit = o.remaining > 0 && Number(dep.amount) === o.remaining;
       return { order: o, nameHit, amountHit };
     })
     .filter((c) => c.nameHit || c.amountHit)
     .sort((a, b) => score(b) - score(a));
+}
+
+// 등록된 이름인가 — 업체명(전체) 또는 등록 입금자명(별칭·일반)과 일치하면 true.
+//  미등록 이름의 입금은 알림 없이 무시된다(금액=잔액 예외는 호출부에서).
+export function isKnownDepositName(
+  remark: string | null,
+  companyNames: string[],
+  aliases: DepositAlias[]
+): boolean {
+  return (
+    companyNames.some((n) => depositNameMatch(remark, n)) ||
+    aliases.some((a) => depositNameMatch(remark, a.name))
+  );
 }
 
 export function ymdToIso(ymd: string): string {
