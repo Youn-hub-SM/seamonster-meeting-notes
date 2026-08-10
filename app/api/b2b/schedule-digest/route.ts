@@ -23,7 +23,11 @@ function splitTrailingLink(text: string): { text: string; url?: string } {
   return { text: text.slice(0, m.index), url: m[1] };
 }
 
-// GET — 크론(Vercel: Authorization: Bearer CRON_SECRET)이 호출.
+// GET — 크론이 호출(Authorization: Bearer CRON_SECRET 또는 ?key=).
+//  주 발송은 Supabase pg_cron(migration 091)이 06:00·16:00 KST 정각에 호출한다 —
+//  Vercel Hobby 크론은 공식적으로 ±59분 정밀도라 정시가 안 된다. vercel.json 의 크론 2개는
+//  예비로 남긴다: 슬롯별 dedup 때문에 pg_cron 이 이미 보냈으면 조용히 건너뛰고,
+//  pg_cron 이 실패한 날에만 (늦게라도) 보낸다.
 //  Vercel Hobby는 크론 1개당 '하루 1회'로 제한되지만 크론 자체는 2개까지 둘 수 있고,
 //  여러 크론이 같은 경로를 공유하는 것도 공식 지원된다(vercel.json 참고). 그래서 같은 경로를
 //  아침 06:00 · 오후 16:00 KST 두 번 호출해 하루 두 번 보낸다 — Pro 결제 없이.
@@ -42,8 +46,12 @@ export async function GET(req: NextRequest) {
   const cfgFor = (c: Awaited<ReturnType<typeof getDigestConfig>>) =>
     slot === "pm" ? { ...c, title: `${c.title} (오후 확인)` } : c;
   const secret = process.env.CRON_SECRET || "";
+  // pg_cron(정시 발송, migration 091) 전용 보조 키 — CRON_SECRET 은 Vercel 에 '민감' 변수로
+  //  저장돼 값을 다시 꺼낼 수 없어서, 기존 크론을 안 건드리고 별도 키를 하나 더 인정한다.
+  const extraKey = process.env.DIGEST_CRON_KEY || "";
   const authz = req.headers.get("authorization") || "";
-  const isCron = !!secret && (authz === `Bearer ${secret}` || sp.get("key") === secret);
+  const matches = (k: string) => !!k && (authz === `Bearer ${k}` || sp.get("key") === k);
+  const isCron = matches(secret) || matches(extraKey);
   const name = await userOf(req);
   const isAdmin = name === "관리자" || name === "현석";
   if (!isCron && !isAdmin) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
