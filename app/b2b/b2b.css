@@ -2742,6 +2742,14 @@ a.b2b-history-item:hover {
   background: none; border: none; padding: 6px 2px; cursor: pointer;
 }
 .pay-dep-toggle:hover { color: var(--sm-orange); }
+.pay-dep-rules { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 2px; }
+.pay-dep-rules-label { font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
+.pay-dep-rule-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 8px;
+  border: 1px solid var(--sm-border); border-radius: 999px; background: var(--sm-bg); color: var(--sm-text-mid);
+}
+.pay-dep-rule-del { background: none; border: none; cursor: pointer; font-size: 11px; color: var(--sm-text-light); padding: 0 2px; }
+.pay-dep-rule-del:hover { color: var(--sm-danger); }
 
 /* ═══════════════════════════════════════════════
    발주 목록 모바일 카드

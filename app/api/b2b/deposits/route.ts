@@ -7,8 +7,11 @@ import {
   UnpaidOrderLite,
   applyMatch,
   candidateOrders,
+  getIgnoreRules,
   isMissingDepositsTable,
   loadUnpaidOrders,
+  matchesIgnoreRule,
+  setIgnoreRules,
 } from "@/app/lib/b2b-deposits";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +51,8 @@ export async function GET(req: NextRequest) {
       lastSync = null;
     }
 
-    return NextResponse.json({ ok: true, review, recent, suggestions, unpaid, lastSync });
+    const rules = await getIgnoreRules();
+    return NextResponse.json({ ok: true, review, recent, suggestions, unpaid, lastSync, rules });
   } catch (err) {
     if (isMissingDepositsTable(err)) {
       return NextResponse.json({ ok: true, notReady: true, review: [], recent: [], suggestions: {}, unpaid: [], lastSync: null });
@@ -59,14 +63,30 @@ export async function GET(req: NextRequest) {
 }
 
 // ─────────────────────────────────────────────
-// PATCH /api/b2b/deposits — { action: "match"|"ignore"|"restore", deposit_id, order_id? }
+// PATCH /api/b2b/deposits — { action, deposit_id?, order_id?, always?, rules? }
 //  match: 원클릭 수동 매칭 (payments 기록 + 발주 상태 변경)
-//  ignore: 우리 업무와 무관한 입금 → 무시. restore: 무시 → 확인필요 복귀.
+//  ignore: 무시 (always:true 면 입금자명을 자동무시 규칙에 추가 + 같은 이름 대기 건 일괄 무시)
+//  restore: 무시 → 확인필요 복귀. rules: 자동무시 규칙 목록 저장(칩 삭제용).
 // ─────────────────────────────────────────────
 export async function PATCH(req: NextRequest) {
   try {
-    const body = (await req.json()) as { action?: string; deposit_id?: string; order_id?: string };
+    const body = (await req.json()) as {
+      action?: string;
+      deposit_id?: string;
+      order_id?: string;
+      always?: boolean;
+      rules?: string[];
+    };
     const { action, deposit_id: depositId, order_id: orderId } = body;
+
+    if (action === "rules") {
+      if (!Array.isArray(body.rules)) {
+        return NextResponse.json({ ok: false, error: "rules 배열 필수" }, { status: 400 });
+      }
+      await setIgnoreRules(body.rules);
+      return NextResponse.json({ ok: true, rules: await getIgnoreRules() });
+    }
+
     if (!depositId || !action) {
       return NextResponse.json({ ok: false, error: "action·deposit_id 필수" }, { status: 400 });
     }
@@ -81,7 +101,25 @@ export async function PATCH(req: NextRequest) {
       }
       const { error } = await sb.from("bank_deposits").update({ status: "무시" }).eq("id", depositId);
       if (error) throw error;
-      return NextResponse.json({ ok: true });
+
+      // 항상 무시: 입금자명을 규칙에 추가 + 같은 이름으로 대기 중인 건 일괄 무시
+      let alwaysIgnored = 0;
+      if (body.always && deposit.remark) {
+        const rules = await getIgnoreRules();
+        await setIgnoreRules([...rules, deposit.remark]);
+        const newRules = await getIgnoreRules();
+        const { data: pendingRows } = await sb.from("bank_deposits").select("id, remark").eq("status", "확인필요");
+        for (const p of (pendingRows ?? []) as { id: string; remark: string | null }[]) {
+          if (matchesIgnoreRule(p.remark, newRules)) {
+            const { error: e } = await sb
+              .from("bank_deposits")
+              .update({ status: "무시", matched_by: "자동규칙" })
+              .eq("id", p.id);
+            if (!e) alwaysIgnored++;
+          }
+        }
+      }
+      return NextResponse.json({ ok: true, alwaysIgnored });
     }
 
     if (action === "restore") {

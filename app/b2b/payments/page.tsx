@@ -185,6 +185,7 @@ type DepositsResponse = {
   suggestions: Record<string, DepositCandidate[]>;
   unpaid: UnpaidOrderLite[];
   lastSync: { at: string; fetched: number; inserted: number; autoMatched: number; needReview: number } | null;
+  rules: string[];
 };
 
 function DepositFeed({ onMatched }: { onMatched: () => void }) {
@@ -224,15 +225,24 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
     setSyncing(false);
   }
 
-  async function act(depositId: string, action: "match" | "ignore" | "restore", orderId?: string, label?: string) {
-    if (action === "match" && !confirm(`이 입금을 ${label} 발주에 매칭할까요?\n입금 기록이 추가되고 입금 상태가 바뀝니다.`)) return;
+  async function act(
+    depositId: string,
+    action: "match" | "ignore" | "restore",
+    opts?: { orderId?: string; label?: string; always?: boolean; remark?: string | null }
+  ) {
+    if (action === "match" && !confirm(`이 입금을 ${opts?.label} 발주에 매칭할까요?\n입금 기록이 추가되고 입금 상태가 바뀝니다.`)) return;
+    if (
+      opts?.always &&
+      !confirm(`'${opts?.remark}' 입금자명을 항상 무시할까요?\n앞으로 같은 이름의 입금은 알림 없이 자동 무시됩니다. (매출 정산·이자 등)`)
+    )
+      return;
     setBusyId(depositId);
     setError("");
     try {
       const res = await fetch("/api/b2b/deposits", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, deposit_id: depositId, order_id: orderId }),
+        body: JSON.stringify({ action, deposit_id: depositId, order_id: opts?.orderId, always: opts?.always }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "처리 실패");
@@ -245,6 +255,24 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       setError(err instanceof Error ? err.message : "처리 오류");
     }
     setBusyId(null);
+  }
+
+  // 자동무시 규칙 삭제 (칩 ✕)
+  async function removeRule(rule: string) {
+    if (!data || !confirm(`'${rule}' 자동무시 규칙을 삭제할까요?`)) return;
+    setError("");
+    try {
+      const res = await fetch("/api/b2b/deposits", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rules", rules: data.rules.filter((r) => r !== rule) }),
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "규칙 저장 실패");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "규칙 저장 오류");
+    }
   }
 
   const lastSyncLabel = data?.lastSync?.at
@@ -291,7 +319,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                     key={c.order.id}
                     className="pay-dep-suggest"
                     disabled={busyId === d.id}
-                    onClick={() => act(d.id, "match", c.order.id, `${c.order.order_no} (${c.order.company_name})`)}
+                    onClick={() => act(d.id, "match", { orderId: c.order.id, label: `${c.order.order_no} (${c.order.company_name})` })}
                     title={`청구 ${formatMoney(c.order.total)} · 잔액 ${formatMoney(c.order.remaining)}`}
                   >
                     → {c.order.company_name} · 잔액 {formatMoney(c.order.remaining)}
@@ -304,7 +332,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                   value=""
                   onChange={(e) => {
                     const o = data.unpaid.find((u) => u.id === e.target.value);
-                    if (o) act(d.id, "match", o.id, `${o.order_no} (${o.company_name})`);
+                    if (o) act(d.id, "match", { orderId: o.id, label: `${o.order_no} (${o.company_name})` });
                   }}
                 >
                   <option value="">직접 선택...</option>
@@ -317,9 +345,33 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                 <button className="pay-dep-ignore" disabled={busyId === d.id} onClick={() => act(d.id, "ignore")}>
                   무시
                 </button>
+                {d.remark && (
+                  <button
+                    className="pay-dep-ignore"
+                    disabled={busyId === d.id}
+                    onClick={() => act(d.id, "ignore", { always: true, remark: d.remark })}
+                    title="이 입금자명을 앞으로 알림 없이 자동 무시 (매출 정산·이자 등)"
+                  >
+                    항상 무시
+                  </button>
+                )}
               </div>
             </div>
           ))}
+
+          {data.rules.length > 0 && (
+            <div className="pay-dep-rules">
+              <span className="pay-dep-rules-label">자동무시 규칙</span>
+              {data.rules.map((r) => (
+                <span key={r} className="pay-dep-rule-chip">
+                  {r}
+                  <button className="pay-dep-rule-del" onClick={() => removeRule(r)} title="규칙 삭제">
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
           {data.recent.length > 0 && (
             <>

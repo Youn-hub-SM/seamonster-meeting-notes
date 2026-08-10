@@ -14,11 +14,51 @@
 
 import { supabaseAdmin } from "./supabase";
 import { logDepositMatched, logDepositsNeedReview } from "./b2b-activity";
-import { BankDeposit, UnpaidOrderLite, candidateOrders, ymdToIso } from "./b2b-deposit-types";
+import { getKv, setKv } from "./b2b-settings";
+import { BankDeposit, UnpaidOrderLite, candidateOrders, normalizeDepositName, ymdToIso } from "./b2b-deposit-types";
 
 // 타입·상수·순수 헬퍼는 b2b-deposit-types.ts (클라이언트 안전) — 화면과 라우트가 공유.
 export type { BankDeposit, UnpaidOrderLite, DepositCandidate } from "./b2b-deposit-types";
 export { candidateOrders, normalizeDepositName, ymdToIso } from "./b2b-deposit-types";
+
+// ─────────────────────────────────────────────
+// 자동무시 규칙 — 매출 정산·이자 등 B2B 와 무관한 반복 입금자명은 알림 없이 무시.
+//  b2b_settings KV(deposits_ignore_rules)에 이름 목록으로 저장, 정규화 후 포함 관계로 비교.
+// ─────────────────────────────────────────────
+export async function getIgnoreRules(): Promise<string[]> {
+  try {
+    const raw = await getKv("deposits_ignore_rules");
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter((s): s is string => typeof s === "string" && !!s.trim()).map((s) => s.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setIgnoreRules(rules: string[]): Promise<void> {
+  const seen = new Set<string>();
+  const clean = rules
+    .map((s) => String(s ?? "").trim())
+    .filter((s) => {
+      if (!s) return false;
+      const n = normalizeDepositName(s);
+      if (!n || seen.has(n)) return false;
+      seen.add(n);
+      return true;
+    });
+  await setKv("deposits_ignore_rules", JSON.stringify(clean));
+}
+
+// 입금자명이 규칙에 걸리면 걸린 규칙을, 아니면 null. (규칙이 이름에 포함되면 매칭)
+export function matchesIgnoreRule(remark: string | null, rules: string[]): string | null {
+  const dep = normalizeDepositName(remark);
+  if (!dep) return null;
+  for (const r of rules) {
+    const rn = normalizeDepositName(r);
+    if (rn && dep.includes(rn)) return r;
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────
 // 팝빌 클라이언트 (동적 import — 타입 선언은 popbill.d.ts)
@@ -247,7 +287,10 @@ export async function applyMatch(
 
 // '확인필요' 전체를 자동 매칭 시도. notifyIds = 이번 수집에서 새로 들어온 입금 id —
 //  자동 매칭 안 된 신규 건만 Flow 로 '확인필요' 알림(재동기화 때마다 옛 건 재알림 방지).
-export async function runAutoMatch(notifyIds: Set<string>): Promise<{ autoMatched: number; needReview: number }> {
+//  매칭 실패 건이 자동무시 규칙에 걸리면 알림 없이 '무시' 처리(매출 정산 등 반복 입금).
+export async function runAutoMatch(
+  notifyIds: Set<string>
+): Promise<{ autoMatched: number; needReview: number; autoIgnored: number }> {
   const sb = supabaseAdmin();
   const { data: pendingRows, error } = await sb
     .from("bank_deposits")
@@ -256,10 +299,12 @@ export async function runAutoMatch(notifyIds: Set<string>): Promise<{ autoMatche
     .order("trdt", { ascending: true });
   if (error) throw error;
   const pending = (pendingRows ?? []) as BankDeposit[];
-  if (pending.length === 0) return { autoMatched: 0, needReview: 0 };
+  if (pending.length === 0) return { autoMatched: 0, needReview: 0, autoIgnored: 0 };
 
   const unpaid = await loadUnpaidOrders();
+  const rules = await getIgnoreRules();
   let autoMatched = 0;
+  let autoIgnored = 0;
   const newReview: BankDeposit[] = [];
 
   for (const dep of pending) {
@@ -274,15 +319,26 @@ export async function runAutoMatch(notifyIds: Set<string>): Promise<{ autoMatche
         unpaid[idx].remaining -= Number(dep.amount);
         if (unpaid[idx].remaining <= 0) unpaid.splice(idx, 1);
       }
-    } else if (notifyIds.has(dep.id)) {
-      newReview.push(dep);
+      continue;
     }
+    // 발주 매칭이 안 됐을 때만 무시 규칙 적용 — 거래처가 규칙에 잘못 들어가도 실제 발주 입금은 매칭이 먼저다
+    if (matchesIgnoreRule(dep.remark, rules)) {
+      const { error: igErr } = await sb
+        .from("bank_deposits")
+        .update({ status: "무시", matched_by: "자동규칙" })
+        .eq("id", dep.id);
+      if (!igErr) {
+        autoIgnored++;
+        continue;
+      }
+    }
+    if (notifyIds.has(dep.id)) newReview.push(dep);
   }
 
   if (newReview.length > 0) {
     await logDepositsNeedReview(newReview.map((d) => ({ amount: Number(d.amount), remark: d.remark })));
   }
-  return { autoMatched, needReview: newReview.length };
+  return { autoMatched, needReview: newReview.length, autoIgnored };
 }
 
 // 테이블 미생성(마이그레이션 089 미적용) 판별 — 라우트 폴백용
