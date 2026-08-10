@@ -226,15 +226,22 @@ export default function OrdersListPage() {
   const todayTasks = useMemo(() => {
     const live = orders.filter((o) => o.status !== "취소");
     const dated = (o: OrderListItem) => (o.shipments ?? []).filter((sh) => sh.ship_date);
-    const shipToday = live.filter((o) =>
-      dated(o).some((sh) => sh.ship_date === today && sh.status !== "발송완료" && sh.status !== "취소")
-    );
+    // 오늘 나가는 차수 — 이미 보낸 것도 오늘 발송한 건이므로 세고, 완료 여부는 아래 hint 로 알린다.
+    //  (완료를 빼면 오후에 다 보낸 날 '없음' 으로 떠서 오늘 발송이 없었던 것처럼 보인다)
+    const todayShips = (o: OrderListItem) => dated(o).filter((sh) => sh.ship_date === today && sh.status !== "취소");
+    const shipToday = live.filter((o) => todayShips(o).length > 0);
+    const shipDone = shipToday.filter((o) => todayShips(o).every((sh) => sh.status === "발송완료"));
+    const shipLeft = shipToday.length - shipDone.length;
     const unscheduled = live.filter((o) => o.status === "발송대기" && dated(o).length === 0);
     const needInvoice = live.filter((o) => o.status === "발송완료" && o.tax_invoice_status === "미발행");
     const needPay = live.filter((o) => o.status === "발송완료" && (o.payment_status === "입금전" || o.payment_status === "일부입금"));
     const unpaidTotal = needPay.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
     return [
-      { key: "ship", label: "오늘 발송", rows: shipToday, hint: "", tone: "var(--sm-orange)" },
+      {
+        key: "ship", label: "오늘 발송", rows: shipToday,
+        hint: shipLeft === 0 ? "모두 발송완료" : shipDone.length > 0 ? `${shipDone.length}건 완료 · ${shipLeft}건 남음` : `${shipLeft}건 남음`,
+        tone: shipLeft === 0 ? "var(--sm-success)" : "var(--sm-orange)",
+      },
       { key: "unscheduled", label: "발송일정 미등록", rows: unscheduled, hint: "일정 잡아야 함", tone: "var(--sm-warning)" },
       { key: "invoice", label: "계산서 미발행", rows: needInvoice, hint: "", tone: "var(--sm-info)" },
       { key: "pay", label: "입금 대기", rows: needPay, hint: unpaidTotal > 0 ? `${formatMoney(unpaidTotal)}원` : "", tone: "var(--sm-danger)" },
