@@ -87,7 +87,8 @@ const OFFICIAL: CouponChannel = {
       { key: "dlMemberScope", label: "회원 대상", type: "radio", options: ["모든 회원", "특정 회원등급"], default: "모든 회원", showIf: { key: "dlBase", in: ["회원 대상"] }, requiredIf: { key: "dlBase", in: ["회원 대상"] }, help: "대부분 '모든 회원'. 특정 등급에게만 줄 때만 '특정 회원등급'." },
       { key: "dlMemberGrade", label: "특정 회원등급", type: "text", placeholder: "예: 우수회원, VIP", showIf: { key: "dlMemberScope", in: ["특정 회원등급"] }, requiredIf: { key: "dlMemberScope", in: ["특정 회원등급"] } },
       { key: "dlUnbuyMonths", label: "미구매 기간", type: "number", suffix: "개월", placeholder: "1~12", showIf: { key: "dlBase", in: ["미구매기간"] }, requiredIf: { key: "dlBase", in: ["미구매기간"] } },
-      { key: "dlRedup", label: "동일인 재발급", type: "radio", options: ["불가", "가능"], default: "불가", showIf: { key: "issue", in: ["고객 다운로드 발급"] }, warn: true, help: "'가능'이면 1인이 여러 번 수령 → 예산 초과 위험. 반복 이벤트만 '가능'." },
+      { key: "dlRedup", label: "동일인 재발급", type: "radio", options: ["불가", "가능"], default: "불가", showIf: { key: "issue", in: ["고객 다운로드 발급"] }, warn: true, help: "'가능'이면 1인이 여러 번 수령 → 예산 초과 위험. 반복 이벤트만 '가능'. 가능이면 아래 추가수량을 적으세요." },
+      { key: "dlRedupQty", label: "추가수량", type: "number", suffix: "매", placeholder: "예: 2", showIf: { all: [{ key: "issue", in: ["고객 다운로드 발급"] }, { key: "dlRedup", in: ["가능"] }] }, requiredIf: { all: [{ key: "issue", in: ["고객 다운로드 발급"] }, { key: "dlRedup", in: ["가능"] }] }, warn: true, help: "한 명이 추가로 받을 수 있는 쿠폰 수. 예: 2매면 기본 1매 + 추가 2매 = 총 3매까지 발급됩니다." },
       { key: "regularGrade", label: "대상 회원등급", type: "text", placeholder: "예: 우수회원", showIf: { key: "issue", in: ["정기 자동 발급"] }, requiredIf: { key: "issue", in: ["정기 자동 발급"] } },
       { key: "regularCycle", label: "정기 발급 주기", type: "radio", options: ["매일", "3일", "1주", "1개월", "3개월", "6개월"], showIf: { key: "issue", in: ["정기 자동 발급"] }, requiredIf: { key: "issue", in: ["정기 자동 발급"] } },
     ] },
@@ -416,7 +417,12 @@ function buildRisks(ch: CouponChannel, answers: Answers): string[] {
     const md = s("maxDiscount");
     if (md === "" || md === "0") risks.push("[무제한] 최대 할인금액이 설정되지 않았습니다 — 할인율에 상한이 없으면 결제금액 전액이 할인될 수 있어요. 의도된 설정인지 확인.");
   }
-  if (s("dlRedup") === "가능") risks.push("[재발급] 동일인 재발급 '가능' — 1인이 여러 번 수령해 예산이 초과될 수 있어요.");
+  if (s("dlRedup") === "가능") {
+    const extra = Number(s("dlRedupQty")) || 0;
+    risks.push(extra > 0
+      ? `[재발급] 동일인 재발급 '가능' · 추가수량 ${extra}매 — 1인 최대 기본 1매 + 추가 ${extra}매 = 총 ${1 + extra}매까지 발급됩니다.`
+      : "[재발급] 동일인 재발급 '가능'인데 추가수량이 비어 있어요 — 몇 매까지 더 받을 수 있는지 기재가 필요합니다.");
+  }
   if (s("minAmountType") === "제한없음") risks.push("[무제한] 사용 기준 금액 '제한없음' — 소액 주문에도 쿠폰이 적용됩니다.");
   // (발급 건수) 네이버 실제 옵션은 "제한 없음(1인 1회)" — 1인 1회는 정상 설정이라 경고하지 않는다.
   //  과거 "제한 없음" 문자열로 비교하던 죽은 검사가 있었으나(값이 없어 한 번도 발화 안 됨),
