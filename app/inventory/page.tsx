@@ -11,9 +11,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OverviewRow } from "@/app/api/inventory/overview/route";
-import type { InvChannelFilter } from "@/app/lib/inventory";
+import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, type InvChannelFilter, type InventoryTxn } from "@/app/lib/inventory";
 import TxnModal from "./TxnModal";
-import TxnTable from "./TxnTable";
 import { ChannelFilter, writeChannelOf } from "./ChannelTabs";
 import PromoManager from "@/app/components/PromoManager";
 import { matchKoQuery } from "@/app/lib/hangul";
@@ -399,7 +398,7 @@ export default function InventoryPage() {
                     {/* 품목명 클릭 = 히스토리. 줄의 다른 곳 클릭 = 선택 토글(기존 동작 유지) */}
                     <button type="button" onClick={() => setHistoryFor(r)}
                       style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", textAlign: "left", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      <strong style={{ borderBottom: "1px dotted var(--sm-text-light)" }}>{r.name}</strong>
+                      {r.name}
                       {r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}
                       {r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}
                     </button>
@@ -465,10 +464,10 @@ export default function InventoryPage() {
             </div>
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>
-                입고·출고·조정 원장입니다. ‘담당’이 그 처리를 한 사람이고, 발주·발송 연동 건은 메모에 출처가 적혀 있습니다.
-                [취소]는 그 거래를 지우고 재고를 원복합니다.
+                입고·출고·조정 원장입니다(관측 용도). ‘담당’이 그 처리를 한 사람이고, 발주·발송 연동 건은 메모에 출처가 적혀 있습니다.
+                ‘재고’는 도매+소매 합계 기준으로 그 거래 전후의 수량입니다.
               </p>
-              <TxnTable productId={historyFor.product_id} onChanged={load} />
+              <ProductHistory productId={historyFor.product_id} />
             </div>
             <div className="b2b-modal-foot">
               <span />
@@ -553,6 +552,78 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// 품목 변경 히스토리(관측 전용) — 원장 공용 TxnTable 과 달리 품목·단가·취소를 빼고,
+//  각 거래 전후의 재고(도매+소매 합계)를 보여준다. 취소가 필요하면 활동 히스토리 메뉴에서.
+//  재고 변화는 전체 이력의 누적합으로 계산하므로 한도(2000건)를 넘는 품목은 표시하지 않는다 —
+//  잘린 이력으로 계산하면 숫자가 통째로 틀어진다.
+function ProductHistory({ productId }: { productId: string }) {
+  const [rows, setRows] = useState<InventoryTxn[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true); setError("");
+      try {
+        const j = await (await fetch(`/api/inventory/txns?product_id=${encodeURIComponent(productId)}&limit=2000`, { cache: "no-store" })).json();
+        if (!j.ok) throw new Error(j.error || "조회 실패");
+        if (alive) setRows(j.rows || []);
+      } catch (e) { if (alive) setError(e instanceof Error ? e.message : "조회 오류"); }
+      if (alive) setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [productId]);
+
+  // API 는 최신순 — 과거→현재로 뒤집어 누적합(전후 재고)을 만들고 다시 최신순으로 보여준다
+  const withBalance = useMemo(() => {
+    const asc = [...rows].reverse();
+    let bal = 0;
+    const out = asc.map((t) => {
+      const before = bal;
+      bal = Math.round((bal + (Number(t.qty) || 0)) * 100) / 100;
+      return { ...t, before, after: bal };
+    });
+    return out.reverse();
+  }, [rows]);
+  const complete = rows.length < 2000; // 2000건 미만이면 전체 이력 = 누적합이 정확하다
+
+  if (loading) return <div className="b2b-loading">불러오는 중...</div>;
+  if (error) return <div className="b2b-error">{error}</div>;
+  if (rows.length === 0) return <div className="b2b-empty">내역이 없습니다.</div>;
+
+  return (
+    <div className="b2b-table-wrap" style={{ maxHeight: 440, overflow: "auto" }}>
+      <table className="b2b-table">
+        <thead><tr><th>거래일</th><th>유형</th><th>채널</th><th className="num">수량</th><th className="num">재고</th><th>거래처</th><th>메모</th><th>담당</th></tr></thead>
+        <tbody>
+          {withBalance.map((t) => {
+            const c = INV_TYPE_COLOR[t.type];
+            const ch = t.channel ? INV_CHANNEL_COLOR[t.channel] : null;
+            return (
+              <tr key={t.id}>
+                <td style={{ whiteSpace: "nowrap" }}>{t.txn_date?.slice(5)}</td>
+                <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span></td>
+                <td>{ch ? <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span> : <span className="sm-faint">-</span>}</td>
+                <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
+                <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>
+                  {complete
+                    ? <><span className="sm-faint">{t.before.toLocaleString()}</span> → <strong>{t.after.toLocaleString()}</strong></>
+                    : <span className="sm-faint">-</span>}
+                </td>
+                <td>{t.partner || "-"}</td>
+                <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.memo || ""}>{t.memo || "-"}</td>
+                <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{t.created_by || "-"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {!complete && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>이력이 2,000건을 넘어 재고 전후 표시는 생략했습니다.</p>}
     </div>
   );
 }
