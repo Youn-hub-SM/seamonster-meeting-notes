@@ -734,6 +734,10 @@ export default function OrdersListPage() {
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
             {loading ? "불러오는 중..." : "새로고침"}
           </button>
+          {/* 발주와 무관한 1회성 명세표 — 발주별 명세표는 각 줄의 [명세표] */}
+          <Link href="/b2b/orders/statement" className="b2b-btn-secondary">
+            거래명세표 작성
+          </Link>
           <Link href="/b2b/orders/new" className="b2b-btn-primary">
             + 새 발주
           </Link>
