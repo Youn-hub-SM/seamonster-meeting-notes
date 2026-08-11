@@ -47,6 +47,7 @@ export const NAV: NavCategory[] = [
         href: "/sales", label: "매출", icon: "bars",
         menu: [
           { href: "/sales", label: "대시보드" },
+          { href: "/sales/weekly", label: "주간 브리핑" },
           { href: "/sales/upload", label: "데이터 업로드" },
           { href: "/sales/report", label: "리포트" },
           { href: "/sales/profit", label: "채널별 이익" },

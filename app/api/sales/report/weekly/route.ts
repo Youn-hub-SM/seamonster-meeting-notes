@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
       ok: true, report_type: "weekly", base_date: base, period_start: s.week_start, period_end: s.week_end,
       subject: `[씨몬스터] 주간 매출 리포트 - ${s.week_start} ~ ${s.week_end}`,
       html: buildWeeklyHtml(s), text: buildWeeklyText(s),
+      stats: s, // 주간 브리핑 화면(/sales/weekly)이 카드·표로 그리는 원시 통계 — 메일 미리보기 쪽은 무시한다
+
     });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
