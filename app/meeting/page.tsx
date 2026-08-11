@@ -12,15 +12,35 @@ export default function MeetingPage() {
   const [result, setResult] = useState<Meeting | null>(null);
   const [copied, setCopied] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 텍스트 파일만 읽는다 — 엑셀·PDF 를 떨어뜨리면 깨진 바이트가 입력창에 쏟아지므로 먼저 거른다.
+  //  (브라우저가 .srt 에 MIME 을 안 주는 경우가 있어 확장자도 함께 본다)
+  const TEXT_EXT = /\.(srt|txt|text|vtt|md)$/i;
+  async function readFile(file: File) {
+    if (!TEXT_EXT.test(file.name) && !file.type.startsWith("text/")) {
+      setError(`텍스트 파일만 넣을 수 있어요 (.srt .txt) — '${file.name}' 은 지원하지 않습니다.`);
+      return;
+    }
+    setError("");
+    setFileName(file.name);
+    setRawText(await file.text());
+  }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) await readFile(file);
+  }
 
-    setFileName(file.name);
-    const text = await file.text();
-    setRawText(text);
+  // 드래그 앤 드롭 — 기본 동작(파일이 새 탭에서 열림)을 막아야 드롭이 우리 쪽으로 온다.
+  function onDragOver(e: React.DragEvent) { e.preventDefault(); setDragging(true); }
+  function onDragLeave(e: React.DragEvent) { e.preventDefault(); setDragging(false); }
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await readFile(file);
   }
 
   function handleFileClear() {
@@ -122,7 +142,7 @@ export default function MeetingPage() {
         {/* 파일 업로드 */}
         <div className="form-group">
           <label className="form-label">파일 첨부 (srt, txt)</label>
-          <div className="file-upload-area">
+          <div className="file-upload-area" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
             {fileName ? (
               <div className="file-attached">
                 <span className="file-name">{fileName}</span>
@@ -131,8 +151,8 @@ export default function MeetingPage() {
                 </button>
               </div>
             ) : (
-              <label className="file-drop" htmlFor="fileInput">
-                <span className="file-drop-text">클릭하여 파일 선택 또는 여기에 드래그</span>
+              <label className={`file-drop${dragging ? " is-dragging" : ""}`} htmlFor="fileInput">
+                <span className="file-drop-text">{dragging ? "여기에 놓으세요" : "클릭하여 파일 선택 또는 여기에 드래그"}</span>
                 <span className="file-drop-hint">.srt, .txt 파일 지원</span>
               </label>
             )}
