@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import type { OverviewRow } from "@/app/api/inventory/overview/route";
 import type { InvChannelFilter } from "@/app/lib/inventory";
 import TxnModal from "./TxnModal";
+import TxnTable from "./TxnTable";
 import { ChannelFilter, writeChannelOf } from "./ChannelTabs";
 import PromoManager from "@/app/components/PromoManager";
 import { matchKoQuery } from "@/app/lib/hangul";
@@ -70,6 +71,8 @@ export default function InventoryPage() {
   const [cto, setCto] = useState(TODAY());
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "depletion_days", dir: "asc" });
   const [modalFor, setModalFor] = useState<string>("");
+  // 변경 히스토리 창 — 품목명을 누르면 그 품목의 원장(누가 언제 무엇을 입·출·조정했는지)을 보여준다
+  const [historyFor, setHistoryFor] = useState<OverviewRow | null>(null);
   const [promoOpen, setPromoOpen] = useState(false);
 
   const range = useMemo(() => {
@@ -392,7 +395,15 @@ export default function InventoryPage() {
                   <td onClick={(e) => e.stopPropagation()}>{pv.has ? <input type="checkbox" checked={picked} onChange={() => toggleSel(r.product_id)} /> : null}</td>
                   <td className="sm-faint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sku || "-"}</td>
                   {/* 비례 배분이라 넓은 화면에서도 품목 폭이 무한정 늘지는 않는다 → 잘린 이름은 마우스를 올려 확인 */}
-                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${r.name}${r.spec ? ` ${r.spec}` : ""}`}><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}{r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}</td>
+                  <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${r.name}${r.spec ? ` ${r.spec}` : ""} — 누르면 변경 히스토리`} onClick={(e) => e.stopPropagation()}>
+                    {/* 품목명 클릭 = 히스토리. 줄의 다른 곳 클릭 = 선택 토글(기존 동작 유지) */}
+                    <button type="button" onClick={() => setHistoryFor(r)}
+                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", textAlign: "left", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <strong style={{ borderBottom: "1px dotted var(--sm-text-light)" }}>{r.name}</strong>
+                      {r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}
+                      {r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}
+                    </button>
+                  </td>
                   <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>{r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span></td>
                   <td className="num b2b-money" title={r.promo_qty ? `프로모션 확보분 +${r.promo_qty.toLocaleString()} 포함` : undefined}>{r.auto_safety.toLocaleString()}{r.promo_qty ? <span style={{ color: "var(--sm-orange)", fontSize: 12, marginLeft: 2 }}></span> : null}</td>
                   <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>
@@ -436,6 +447,36 @@ export default function InventoryPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 품목 변경 히스토리 — 원장 공용 테이블(TxnTable) 재사용. 행 취소 시 재고가 원복되므로 목록도 다시 읽는다 */}
+      {historyFor && (
+        <div className="b2b-modal-backdrop" onClick={() => setHistoryFor(null)}>
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 940 }}>
+            <div className="b2b-modal-head">
+              <span className="b2b-modal-title">
+                변경 히스토리 — {historyFor.name}{historyFor.spec ? ` ${historyFor.spec}` : ""}
+                <span className="sm-faint" style={{ marginLeft: 10, fontSize: 13, fontWeight: 400 }}>
+                  현재고 {historyFor.qty.toLocaleString()}{historyFor.is_bundle ? "세트" : historyFor.unit}
+                </span>
+              </span>
+              <button className="b2b-modal-close" onClick={() => setHistoryFor(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>
+                입고·출고·조정 원장입니다. ‘담당’이 그 처리를 한 사람이고, 발주·발송 연동 건은 메모에 출처가 적혀 있습니다.
+                [취소]는 그 거래를 지우고 재고를 원복합니다.
+              </p>
+              <TxnTable productId={historyFor.product_id} onChanged={load} />
+            </div>
+            <div className="b2b-modal-foot">
+              <span />
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => setHistoryFor(null)}>닫기</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
