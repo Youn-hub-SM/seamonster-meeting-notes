@@ -36,11 +36,17 @@ function Delta({ cur, prev }: { cur: number; prev: number }) {
   );
 }
 
+type AiBrief = { text: string; model: string; created_at: string; week_start: string; week_end: string };
+
 export default function WeeklyBriefPage() {
   const [base, setBase] = useState<string | null>(null); // null = 최근 완료된 주(API 기본)
   const [stats, setStats] = useState<WeeklyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // AI 브리핑 — 주 단위 캐시. 자동 생성 없음(토큰 비용) — 버튼을 눌러야 만들고, 만든 주는 저장본을 보여준다.
+  const [brief, setBrief] = useState<AiBrief | null>(null);
+  const [briefBusy, setBriefBusy] = useState(false);
+  const [briefErr, setBriefErr] = useState("");
 
   const load = useCallback(async (b: string | null) => {
     setLoading(true); setError("");
@@ -52,6 +58,32 @@ export default function WeeklyBriefPage() {
     setLoading(false);
   }, []);
   useEffect(() => { load(base); }, [load, base]);
+
+  // 주가 바뀌면 그 주의 저장된 브리핑을 불러온다(생성은 안 함)
+  useEffect(() => {
+    let alive = true;
+    setBrief(null); setBriefErr("");
+    (async () => {
+      try {
+        const j = await (await fetch(`/api/sales/weekly-brief${base ? `?base=${base}` : ""}`, { cache: "no-store" })).json();
+        if (alive && j.ok) setBrief(j.brief || null);
+      } catch { /* 저장본 없음과 동일 취급 */ }
+    })();
+    return () => { alive = false; };
+  }, [base]);
+
+  async function generateBrief(force: boolean) {
+    setBriefBusy(true); setBriefErr("");
+    try {
+      const j = await (await fetch("/api/sales/weekly-brief", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base, force }),
+      })).json();
+      if (!j.ok) throw new Error(j.error || "생성 실패");
+      setBrief(j.brief);
+    } catch (e) { setBriefErr(e instanceof Error ? e.message : "생성 실패"); }
+    setBriefBusy(false);
+  }
 
   // 다음 주 버튼 — 미래 주는 막는다(진행 중인 이번 주까지는 허용)
   const nextStart = stats ? addDays(stats.week_start, 7) : null;
@@ -87,6 +119,33 @@ export default function WeeklyBriefPage() {
       {error && <div className="b2b-error">{error}</div>}
       {loading ? <div className="b2b-loading">불러오는 중...</div> : stats && (
         <>
+          {/* AI 브리핑 — 표는 아래에, 해석은 여기에 */}
+          <section className="b2b-card" style={{ marginBottom: 20 }}>
+            <div className="b2b-card-head">
+              <span className="b2b-card-title">AI 브리핑</span>
+              {brief && (
+                <button className="b2b-btn-secondary" style={{ padding: "5px 12px", fontSize: 12 }}
+                  onClick={() => generateBrief(true)} disabled={briefBusy}>
+                  {briefBusy ? "분석 중…" : "다시 분석"}
+                </button>
+              )}
+            </div>
+            {brief ? (
+              <>
+                <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.8, fontSize: 15 }}>{brief.text}</div>
+                <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>생성 {brief.created_at} · 저장본(주 단위) — 데이터가 바뀌었으면 ‘다시 분석’</p>
+              </>
+            ) : (
+              <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <button className="b2b-btn-primary" onClick={() => generateBrief(false)} disabled={briefBusy}>
+                  {briefBusy ? "분석 중…" : "AI 브리핑 생성"}
+                </button>
+                <span className="sm-faint" style={{ fontSize: 12 }}>이 주의 숫자를 AI 가 읽고 변화·볼 지점을 글로 정리합니다. 한 번 만들면 저장돼 다시 열 때 비용이 들지 않습니다.</span>
+              </div>
+            )}
+            {briefErr && <div className="b2b-error" style={{ marginTop: 10 }}>{briefErr}</div>}
+          </section>
+
           {/* 요약 카드 */}
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: 20 }}>
             <div className="b2b-stat-card">
