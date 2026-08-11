@@ -17,9 +17,12 @@ function weekday(dateStr: string): string {
 
 // ── 설정 ──
 export type DigestSections = { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean };
-export type DigestConfig = { enabled: boolean; hour: number; days: number; sections: DigestSections; title: string };
+// times: 자동 발송 시각(KST HH:MM, 5분 단위, 최대 6개) — pg_cron 틱(migration 092)이 5분마다
+//  이 목록과 대조해 정각 발송한다. hour 는 구 버전(gate=hour) 호환용으로만 남아 있다.
+export type DigestConfig = { enabled: boolean; hour: number; days: number; times: string[]; sections: DigestSections; title: string };
 export const DIGEST_DEFAULTS: DigestConfig = {
   enabled: true, hour: 8, days: 7,
+  times: ["06:00", "16:00"],
   sections: { ship: true, unscheduled: true, invoice: true, payment: true },
   title: "씨몬스터 B2B 오늘의 할 일",
 };
@@ -38,6 +41,14 @@ export async function saveDigestConfig(patch: Partial<DigestConfig>): Promise<Di
   merged.hour = Math.min(23, Math.max(0, Math.round(Number(merged.hour) || 8)));
   merged.days = Math.min(31, Math.max(1, Math.round(Number(merged.days) || 7)));
   merged.title = String(merged.title || DIGEST_DEFAULTS.title).slice(0, 60);
+  // 발송 시각 정규화 — HH:MM 형식만, 분은 5분 단위로 내림(틱이 5분 간격이라 그 사이 시각은 영영 안 울린다),
+  //  중복 제거·정렬·최대 6개. 전부 무효면 기본값으로 되돌린다(빈 목록이면 알림이 소리 없이 죽는다).
+  const validTimes = (Array.isArray(merged.times) ? merged.times : [])
+    .map((t) => String(t).trim())
+    .filter((t) => /^([01]?\d|2[0-3]):[0-5]\d$/.test(t))
+    .map((t) => { const [h, m] = t.split(":").map(Number); return `${String(h).padStart(2, "0")}:${String(Math.floor(m / 5) * 5).padStart(2, "0")}`; });
+  merged.times = [...new Set(validTimes)].sort().slice(0, 6);
+  if (!merged.times.length) merged.times = [...DIGEST_DEFAULTS.times];
   await setKv("digest_config", JSON.stringify(merged));
   return merged;
 }

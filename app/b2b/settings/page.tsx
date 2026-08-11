@@ -43,6 +43,9 @@ export default function SettingsPage() {
   const [digestMsg, setDigestMsg] = useState<Msg | null>(null);
   type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
+  // 발송 시각 목록(KST HH:MM) — DCfg 와 별도 상태로 둔다(공용 파일 동시수정 회피 + 저장 시 함께 전송)
+  const [dtimes, setDtimes] = useState<string[]>(["06:00", "16:00"]);
+  const [newTime, setNewTime] = useState("09:00");
   const [dcfgSaving, setDcfgSaving] = useState(false);
   const [digestLastSent, setDigestLastSent] = useState<string | null>(null); // 마지막 '자동' 발송일(크론 성공 시에만 기록)
   const [cronSecretSet, setCronSecretSet] = useState(true); // Vercel CRON_SECRET 유무(없으면 크론이 매일 401)
@@ -76,7 +79,10 @@ export default function SettingsPage() {
           setZapierEnv(!!fj.zapierEnv);
         }
         const dg = await (await fetch("/api/b2b/settings/digest", { cache: "no-store" })).json();
-        if (dg.ok) { setDcfg(dg.config); setDigestLastSent(dg.lastSent || null); setCronSecretSet(dg.cronSecretSet !== false); }
+        if (dg.ok) {
+          setDcfg(dg.config); setDigestLastSent(dg.lastSent || null); setCronSecretSet(dg.cronSecretSet !== false);
+          if (Array.isArray(dg.config?.times) && dg.config.times.length) setDtimes(dg.config.times);
+        }
         const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
         if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
       } catch (e) {
@@ -143,7 +149,13 @@ export default function SettingsPage() {
   async function saveDigestCfg() {
     if (!dcfg) return;
     setDcfgSaving(true); setDigestMsg(null);
-    try { const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dcfg) })).json(); if (!j.ok) throw new Error(j.error || "저장 실패"); setDcfg(j.config); setDigestMsg({ ok: true, text: "저장됨" }); }
+    try {
+      const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...dcfg, times: dtimes }) })).json();
+      if (!j.ok) throw new Error(j.error || "저장 실패");
+      setDcfg(j.config);
+      if (Array.isArray(j.config?.times) && j.config.times.length) setDtimes(j.config.times);
+      setDigestMsg({ ok: true, text: "저장됨" });
+    }
     catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" }); }
     setDcfgSaving(false);
   }
@@ -282,27 +294,43 @@ export default function SettingsPage() {
           </span>
         </div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          매일 아침 <strong>미완료 업무</strong>를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다. 내용·기간을 아래에서 정하세요.
-          자동 발송은 Vercel 환경변수 <code>CRON_SECRET</code> 설정이 필요해요.
+          정해둔 시각마다 <strong>미완료 업무</strong>를 위 <strong>Flow 수신자</strong>에게 챗봇으로 보냅니다. 시각·내용·기간을 아래에서 정하세요.
         </p>
         {dcfg && (
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 14, marginBottom: 12, display: "grid", gap: 12 }}>
             <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
               <input type="checkbox" className="b2b-checkbox" checked={dcfg.enabled} onChange={(e) => setDcfg({ ...dcfg, enabled: e.target.checked })} /> 자동 발송 사용
             </label>
-            <div className="sm-row" style={{ gap: 16, flexWrap: "wrap", alignItems: "center" }}>
-              <span className="sm-row" style={{ gap: 6, fontSize: 13 }}>발송 시각
-                <strong>오전 06~07시</strong>
-                <span className="sm-faint" style={{ fontSize: 11 }}>(한국시간)</span>
-              </span>
-              <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>기간
-                <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
-              </label>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>발송 시각 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11 }}>(한국시간 · 5분 단위 · 최대 6개)</span></div>
+              <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {dtimes.map((t) => (
+                  <span key={t} className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    {t}
+                    {dtimes.length > 1 && (
+                      <button type="button" aria-label={`${t} 삭제`} onClick={() => setDtimes((p) => p.filter((x) => x !== t))}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, font: "inherit" }}>✕</button>
+                    )}
+                  </span>
+                ))}
+                <input type="time" className="b2b-input" step={300} value={newTime} onChange={(e) => setNewTime(e.target.value)} style={{ width: "auto", padding: "6px 10px" }} />
+                <button type="button" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }}
+                  disabled={dtimes.length >= 6}
+                  onClick={() => {
+                    // 5분 단위 내림 — 서버 정규화와 동일 규칙(그 사이 시각은 틱이 영영 안 울린다)
+                    const [h, m] = newTime.split(":").map(Number);
+                    if (Number.isNaN(h) || Number.isNaN(m)) return;
+                    const t = `${String(h).padStart(2, "0")}:${String(Math.floor(m / 5) * 5).padStart(2, "0")}`;
+                    setDtimes((p) => (p.includes(t) ? p : [...p, t].sort().slice(0, 6)));
+                  }}>+ 추가</button>
+              </div>
+              <p className="sm-faint" style={{ fontSize: 11, margin: "6px 0 0", lineHeight: 1.6 }}>
+                넣은 시각마다 정각(수 초 이내)에 발송됩니다. 하루 첫 시각은 설정한 제목 그대로, 이후 시각은 &lsquo;(중간/오후 확인)&rsquo;이 붙어요. 저장해야 반영됩니다.
+              </p>
             </div>
-            <p className="sm-faint" style={{ fontSize: 11, margin: 0, lineHeight: 1.6 }}>
-              ⓘ 현재 요금제(Hobby)는 크론이 하루 1회 + 최대 1시간 지연이라 시각을 분 단위로 지정할 수 없어요.
-              바꾸려면 시간별 크론(Vercel Pro)이 필요합니다.
-            </p>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>기간
+              <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
+            </label>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
