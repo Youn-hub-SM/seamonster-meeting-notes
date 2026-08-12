@@ -9,6 +9,15 @@ function addDays(dt: Date, n: number): Date { const x = new Date(dt); x.setDate(
 function pyWeekday(dt: Date): number { return (dt.getDay() + 6) % 7; }   // Mon=0..Sun=6
 function daysInMonth(y: number, m: number): number { return new Date(y, m, 0).getDate(); }
 function dayOfYear(dt: Date): number { return Math.floor((Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()) - Date.UTC(dt.getFullYear(), 0, 0)) / 86400_000); }
+// 같은 기간 비교용 — 해/달을 옮길 때 없는 날짜(2/29·31일)는 그 달 말일로 당긴다.
+//  당기지 않으면 JS Date 가 다음 달로 넘겨(3/31 → 3/3) 비교 구간이 통째로 틀어진다.
+function shiftClamped(dt: Date, years: number, months: number): Date {
+  const y = dt.getFullYear() + years;
+  const mIdx = dt.getMonth() + months;                 // 0-based, 음수/12초과 정규화는 아래에서
+  const ny = y + Math.floor(mIdx / 12);
+  const nm = ((mIdx % 12) + 12) % 12;
+  return new Date(ny, nm, Math.min(dt.getDate(), daysInMonth(ny, nm + 1)));
+}
 
 const WEEKDAY_KR = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
 
@@ -29,6 +38,10 @@ export type DailyStats = {
   date_str: string; is_sunday: boolean; window_start: string; window_end: string;
   this_year_sales: number; last_year_sales: number; this_month_sales: number; prev_month_sales: number;
   month_runrate: number; year_runrate: number; month_rr_pct: number | null; year_rr_pct: number | null;
+  // 실제 성장률 — 같은 기간끼리(올해 1/1~기준일 vs 작년 1/1~작년 같은 날 / 이번달 1일~기준일 vs 지난달 1일~같은 일자).
+  //  위 rr_pct(전망)는 '남은 기간도 같은 속도'를 가정한 착지 예상이라 성장률과 다르다.
+  ytd_sales: number; ytd_prev_sales: number; ytd_pct: number | null; ytd_prev_end: string;
+  mtd_sales: number; mtd_prev_sales: number; mtd_pct: number | null; mtd_prev_start: string; mtd_prev_end: string;
   window_sales: number; prevday_sales: number | null;
   channels: string[]; channel_summary: Record<string, ChannelCum>; channel_window: Record<string, number>;
   top10: { rank: number; code: string; revenue: number }[];
@@ -61,6 +74,19 @@ export async function computeDailyStats(baseIso?: string): Promise<DailyStats> {
     rpc("sales_order_extremes", { p_from: iso(wStart), p_to: iso(wEnd) }),
     isSunday ? Promise.resolve([]) : rpc("sales_summary", { p_from: iso(prevDate), p_to: iso(prevDate) }),
   ]);
+
+  // 실제 성장률 — 같은 길이 구간끼리. 누적 RPC(sales_cumulative)는 연/월 전체를 더하므로
+  //  기준일보다 뒤의 데이터까지 섞일 수 있다. 여기서는 구간을 명시해 따로 집계한다.
+  const lyEnd = shiftClamped(bd, -1, 0);
+  const pmEnd = shiftClamped(bd, 0, -1);
+  const [ytdCur, ytdPrev, mtdCur, mtdPrev] = await Promise.all([
+    rpc("sales_summary", { p_from: `${year}-01-01`, p_to: iso(bd) }),
+    rpc("sales_summary", { p_from: `${year - 1}-01-01`, p_to: iso(lyEnd) }),
+    rpc("sales_summary", { p_from: iso(new Date(year, month - 1, 1)), p_to: iso(bd) }),
+    rpc("sales_summary", { p_from: iso(new Date(pmEnd.getFullYear(), pmEnd.getMonth(), 1)), p_to: iso(pmEnd) }),
+  ]);
+  const ytdSales = n(ytdCur[0]?.revenue), ytdPrevSales = n(ytdPrev[0]?.revenue);
+  const mtdSales = n(mtdCur[0]?.revenue), mtdPrevSales = n(mtdPrev[0]?.revenue);
 
   const c = cum[0] || {};
   const thisYear = n(c.this_year), lastYear = n(c.last_year), thisMonth = n(c.this_month), prevMonth = n(c.prev_month);
@@ -95,6 +121,9 @@ export async function computeDailyStats(baseIso?: string): Promise<DailyStats> {
     date_str: base, is_sunday: isSunday, window_start: iso(wStart), window_end: iso(wEnd),
     this_year_sales: thisYear, last_year_sales: lastYear, this_month_sales: thisMonth, prev_month_sales: prevMonth,
     month_runrate: monthRunrate, year_runrate: yearRunrate, month_rr_pct: pct(monthRunrate, prevMonth), year_rr_pct: pct(yearRunrate, lastYear),
+    ytd_sales: ytdSales, ytd_prev_sales: ytdPrevSales, ytd_pct: pct(ytdSales, ytdPrevSales), ytd_prev_end: iso(lyEnd),
+    mtd_sales: mtdSales, mtd_prev_sales: mtdPrevSales, mtd_pct: pct(mtdSales, mtdPrevSales),
+    mtd_prev_start: iso(new Date(pmEnd.getFullYear(), pmEnd.getMonth(), 1)), mtd_prev_end: iso(pmEnd),
     window_sales: n(winSum[0]?.revenue), prevday_sales: isSunday ? null : n(prevSum[0]?.revenue),
     channels, channel_summary, channel_window,
     top10: top.map((t, i) => ({ rank: i + 1, code: String(t.sku_code), revenue: n(t.revenue) })),
@@ -161,8 +190,11 @@ const diffMoney = (c: number, p: number) => c > p ? `${won(c - p)} 증가` : c <
 
 export function buildDailyText(s: DailyStats): string {
   const L: string[] = [`씨몬스터 일일 매출 리포트 – ${s.date_str}`, ""];
-  L.push(`올해 누적 매출은 ${won(s.this_year_sales)}이며, 전년 대비 ${pctChange(s.this_year_sales, s.last_year_sales)}(전년 누적 ${won(s.last_year_sales)})했습니다.`);
-  L.push(`이번달 누적 매출은 ${won(s.this_month_sales)}으로, 전달 대비 ${pctChange(s.this_month_sales, s.prev_month_sales)}(전월 누적 ${won(s.prev_month_sales)})했습니다.`, "");
+  // 실제 성장률(같은 기간끼리) 먼저, 전망(연·월 환산)은 뒤에 — 둘을 섞어 읽지 않도록 문장을 분리.
+  L.push(`올해 누적 매출은 ${won(s.this_year_sales)}이며, 작년 같은 기간(1/1~${s.ytd_prev_end.slice(5)}) ${won(s.ytd_prev_sales)} 대비 ${pctChange(s.ytd_sales, s.ytd_prev_sales)}했습니다.`);
+  L.push(`지금 속도로 연말까지 가면 약 ${won(s.year_runrate)}으로, 작년 한 해 전체 ${won(s.last_year_sales)} 대비 ${pctChange(s.year_runrate, s.last_year_sales)}하는 흐름입니다.`);
+  L.push(`이번달 누적 매출은 ${won(s.this_month_sales)}으로, 지난달 같은 기간(${s.mtd_prev_start.slice(5)}~${s.mtd_prev_end.slice(5)}) ${won(s.mtd_prev_sales)} 대비 ${pctChange(s.mtd_sales, s.mtd_prev_sales)}했습니다.`);
+  L.push(`이 속도면 이번달은 약 ${won(s.month_runrate)}으로, 지난달 전체 ${won(s.prev_month_sales)} 대비 ${pctChange(s.month_runrate, s.prev_month_sales)}하는 흐름입니다.`, "");
   L.push("채널별 매출은 다음과 같습니다.", "");
   for (const ch of s.channels) { const cs = s.channel_summary[ch]; L.push(`${ch}은 올해 누적 매출 ${won(cs.year)}로 전년 대비 ${pctChange(cs.year, cs.last_year)}(전년 누적 ${won(cs.last_year)})였으며, 이번달 누적 매출은 ${won(cs.month)}으로 전달 대비 ${pctChange(cs.month, cs.prev_month)}(전월 누적 ${won(cs.prev_month)})였습니다.`, ""); }
   if (!s.is_sunday) {

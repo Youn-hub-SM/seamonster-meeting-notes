@@ -54,20 +54,29 @@ export function buildDailyHtml(s: DailyStats): string {
   // 누적 2칸
   const [yrLbl, yrCol] = pctLabel(s.year_rr_pct);
   const [moLbl, moCol] = pctLabel(s.month_rr_pct);
+  // 실제 성장률(같은 기간끼리) — 전망(run-rate)과 나란히 두어 둘을 혼동하지 않게 한다
+  const [ytdLbl, ytdCol] = pctLabel(s.ytd_pct);
+  const [mtdLbl, mtdCol] = pctLabel(s.mtd_pct);
   const cumulativeHtml = `
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
       <td width="50%" style="padding:6px;" valign="top">
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;background:#ffffff;"><tr><td style="padding:14px 16px;">
           <div style="font-size:11px;color:${C_MUTED};font-weight:700;">이번달 누적 · ${month}/1~${month}/${day}</div>
           <div style="font-size:19px;color:${C_INK};font-weight:800;margin-top:6px;">${wonEok(s.this_month_sales)}</div>
-          <div style="font-size:12px;color:${C_MUTED};margin-top:4px;line-height:1.5;">같은 기간 환산 전월 대비 <b style="color:${moCol}">${moLbl}</b><br>(30일 환산 약 ${wonEok(s.month_runrate)})</div>
+          <div style="font-size:12px;color:${C_MUTED};margin-top:4px;line-height:1.5;">
+            실제 성장률 <b style="color:${mtdCol}">${mtdLbl}</b> <span style="color:${C_MUTED};">(지난달 같은 기간 ${wonEok(s.mtd_prev_sales)})</span><br>
+            전망 성장률 <b style="color:${moCol}">${moLbl}</b> <span style="color:${C_MUTED};">(월 환산 약 ${wonEok(s.month_runrate)} vs 지난달 전체 ${wonEok(s.prev_month_sales)})</span>
+          </div>
         </td></tr></table>
       </td>
       <td width="50%" style="padding:6px;" valign="top">
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;background:#ffffff;"><tr><td style="padding:14px 16px;">
           <div style="font-size:11px;color:${C_MUTED};font-weight:700;">올해 누적 · 1/1~${month}/${day}</div>
           <div style="font-size:19px;color:${C_INK};font-weight:800;margin-top:6px;">${wonEok(s.this_year_sales)}</div>
-          <div style="font-size:12px;color:${C_MUTED};margin-top:4px;line-height:1.5;">전년 대비 페이스 <b style="color:${yrCol}">${yrLbl}</b><br>(연 환산 약 ${wonEok(s.year_runrate)} / 전년 ${wonEok(s.last_year_sales)})</div>
+          <div style="font-size:12px;color:${C_MUTED};margin-top:4px;line-height:1.5;">
+            실제 성장률 <b style="color:${ytdCol}">${ytdLbl}</b> <span style="color:${C_MUTED};">(작년 같은 기간 ${wonEok(s.ytd_prev_sales)})</span><br>
+            전망 성장률 <b style="color:${yrCol}">${yrLbl}</b> <span style="color:${C_MUTED};">(연 환산 약 ${wonEok(s.year_runrate)} vs 작년 전체 ${wonEok(s.last_year_sales)})</span>
+          </div>
         </td></tr></table>
       </td>
     </tr></table>`;
@@ -115,10 +124,10 @@ export function buildDailyHtml(s: DailyStats): string {
 
   // 요약 한 줄
   let summary: string;
-  if (s.year_rr_pct === null) summary = "올해 누적 매출이 집계되었습니다.";
-  else if (Math.abs(s.year_rr_pct) < 5) summary = "기간을 맞춰 환산하면 매출 페이스는 <b>전년 수준</b>입니다.";
-  else if (s.year_rr_pct >= 5) summary = `기간을 맞춰 환산하면 매출 페이스는 전년보다 <b style="color:${C_GOOD}">약 ${s.year_rr_pct.toFixed(0)}% 높습니다.</b>`;
-  else summary = `기간을 맞춰 환산하면 매출 페이스는 전년보다 <b style="color:${C_BAD}">약 ${Math.abs(s.year_rr_pct).toFixed(0)}% 낮습니다.</b>`;
+  if (s.ytd_pct === null) summary = "올해 누적 매출이 집계되었습니다.";
+  else if (Math.abs(s.ytd_pct) < 5) summary = "작년 같은 기간과 견주면 <b>전년 수준</b>입니다.";
+  else if (s.ytd_pct >= 5) summary = `작년 같은 기간보다 <b style="color:${C_GOOD}">약 ${s.ytd_pct.toFixed(0)}% 성장</b>했습니다.`;
+  else summary = `작년 같은 기간보다 <b style="color:${C_BAD}">약 ${Math.abs(s.ytd_pct).toFixed(0)}% 감소</b>했습니다.`;
 
   return `<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
