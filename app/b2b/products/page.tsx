@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Product, ProductInput, EMPTY_PRODUCT, CostHistory, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import BundleEditor from "@/app/components/BundleEditor";
+import CostScheduleModal from "./CostScheduleModal";
 import { matchKoQuery } from "@/app/lib/hangul";
 
 type Modal = { mode: "create" | "edit"; data: ProductInput } | null;
@@ -32,6 +33,8 @@ export default function ProductsPage() {
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [bundleFor, setBundleFor] = useState<Product | null>(null);
+  // 원가 변경 예약 — 인상일에 맞춰 사람이 고치는 걸 놓치지 않게 미리 걸어둔다(반영은 DB 크론)
+  const [schedFor, setSchedFor] = useState<Product | null>(null);
 
   async function reload() {
     setLoading(true);
@@ -359,6 +362,7 @@ export default function ProductsPage() {
                         </td>
                         <td className="actions" onClick={(e) => e.stopPropagation()}>
                           <button className="b2b-btn-secondary" onClick={() => setBundleFor(p)} style={{ padding: "4px 10px", fontSize: 12 }} title="묶음(세트) 구성 편집">묶음</button>
+                          <button className="b2b-btn-secondary" onClick={() => setSchedFor(p)} style={{ padding: "4px 10px", fontSize: 12, marginLeft: 6 }} title="n월 n일부터 적용될 원가를 미리 예약">원가 예약</button>
                           <button
                             className="b2b-btn-secondary"
                             onClick={() => toggleHistory(p.id)}
@@ -487,6 +491,18 @@ export default function ProductsPage() {
           products={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, spec: p.spec }))}
           onClose={() => setBundleFor(null)}
           onSaved={reload}
+        />
+      )}
+
+      {schedFor && (
+        <CostScheduleModal
+          product={{
+            id: schedFor.id, name: schedFor.name, sku: schedFor.sku, cost_price: schedFor.cost_price,
+            cost_material: schedFor.cost_material, pkg_inner: schedFor.pkg_inner,
+            pkg_label: schedFor.pkg_label, pkg_outer: schedFor.pkg_outer,
+          }}
+          onClose={() => setSchedFor(null)}
+          onApplied={reload}
         />
       )}
     </>
