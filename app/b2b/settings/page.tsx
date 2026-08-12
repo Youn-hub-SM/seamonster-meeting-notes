@@ -328,8 +328,9 @@ export default function SettingsPage() {
                 넣은 시각마다 정각(수 초 이내)에 발송됩니다. 하루 첫 시각은 설정한 제목 그대로, 이후 시각은 &lsquo;(중간/오후 확인)&rsquo;이 붙어요. 저장해야 반영됩니다.
               </p>
             </div>
-            <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>기간
+            <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>전후 기간
               <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
+              <span className="sm-faint" style={{ fontSize: 11 }}>과거 N일의 미처리 발송 + 향후 N일의 발송 예정 (계산서·입금은 기간 무관 전체)</span>
             </label>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>

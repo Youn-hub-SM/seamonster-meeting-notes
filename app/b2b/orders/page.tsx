@@ -232,11 +232,20 @@ export default function OrdersListPage() {
     const shipToday = live.filter((o) => todayShips(o).length > 0);
     const shipDone = shipToday.filter((o) => todayShips(o).every((sh) => sh.status === "발송완료"));
     const shipLeft = shipToday.length - shipDone.length;
+    // 발송일이 지났는데 아직 발송완료 처리가 안 된 차수 — 완료 처리든 일정 변경이든 손이 필요하다.
+    //  평소엔 0건이어야 정상이라 건수가 있을 때만 카드를 노출한다(아래 return 의 조건부 삽입).
+    const overdueShip = live.filter((o) =>
+      dated(o).some((sh) => sh.ship_date && sh.ship_date < today && sh.status !== "취소" && sh.status !== "발송완료")
+    );
     const unscheduled = live.filter((o) => o.status === "발송대기" && dated(o).length === 0);
     const needInvoice = live.filter((o) => o.status === "발송완료" && o.tax_invoice_status === "미발행");
     const needPay = live.filter((o) => o.status === "발송완료" && (o.payment_status === "입금전" || o.payment_status === "일부입금"));
     const unpaidTotal = needPay.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
     return [
+      ...(overdueShip.length ? [{
+        key: "overdue", label: "발송일 지남", rows: overdueShip,
+        hint: "발송완료 처리 또는 일정 변경", tone: "var(--sm-danger)",
+      }] : []),
       {
         key: "ship", label: "오늘 발송", rows: shipToday,
         hint: shipLeft === 0 ? "모두 발송완료" : shipDone.length > 0 ? `${shipDone.length}건 완료 · ${shipLeft}건 남음` : `${shipLeft}건 남음`,
