@@ -3046,7 +3046,8 @@ a.b2b-history-item:hover {
 .b2b-combo-opt {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  /* 보조정보(SKU·규격 등)는 품목명 바로 옆에 — 오른쪽 끝으로 밀면(space-between) 넓은 화면에서 눈이 왕복한다 */
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
   text-align: left;
