@@ -7,7 +7,7 @@ import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
-type Product = { id: string; name: string; sku: string | null; unit: string };
+type Product = { id: string; name: string; sku: string | null; unit: string; is_bundle?: boolean };
 
 // 엑셀 미리보기 — 입고/출고와 조정은 서버 응답 모양이 달라 종류로 구분해 담는다.
 type IoRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
@@ -117,7 +117,8 @@ export default function TxnModal({
   function switchMode(m: "직접" | "엑셀") { dropInflight(); setMode(m); setPreview(null); setError(""); setImporting(false); }
 
   // 품목 검색 콤보박스: 이름·SKU 로 필터(다른 상품 검색 UI 와 동일). 목록에서만 선택.
-  const productOptions = useMemo<ComboOption[]>(() => products.map((p) => ({ id: p.id, label: p.name, sub: p.sku || undefined })), [products]);
+  //  묶음(세트)은 숨긴다 — 자체 재고가 없어 입·출·조정 대상이 아니다(원장은 구성품으로만 쓴다).
+  const productOptions = useMemo<ComboOption[]>(() => products.filter((p) => !p.is_bundle).map((p) => ({ id: p.id, label: p.name, sub: p.sku || undefined })), [products]);
   const productLabel = product ? `${product.name}${product.sku ? ` (${product.sku})` : ""}` : "";
 
   // 현재고는 '선택한 채널' 기준. 부모가 넘긴 qtyOf 가 그 채널 기준일 때만 그대로 쓰고,

@@ -141,7 +141,7 @@ export default function InventoryPage() {
   }, [channel, retailMap, wholeMap]);
 
   const qtyOf = useCallback((id: string) => rows.find((r) => r.product_id === id)?.qty || 0, [rows]);
-  const products = useMemo(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, unit: r.unit })), [rows]);
+  const products = useMemo(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, unit: r.unit, is_bundle: r.is_bundle })), [rows]);
   const totals = useMemo(() => ({
     items: rows.length,
     value: rows.reduce((s, r) => s + r.value, 0),

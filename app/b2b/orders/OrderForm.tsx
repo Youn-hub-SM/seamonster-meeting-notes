@@ -885,18 +885,33 @@ export default function OrderForm({
                 {data.items.map((it, idx) => {
                   const qty = Number(it.qty) || 0;
                   const price = Number(it.unit_price) || 0;
+                  // 검색 목록: 묶음(세트) 제외 — 자체 재고가 없어 발주 라인에 직접 걸면 안 된다.
+                  //  다른 라인에 이미 담긴 상품도 제외(중복 라인 방지) — 단, 이 라인이 고른 상품은 남긴다.
+                  const usedElsewhere = new Set(data.items.filter((_, i) => i !== idx).map((x) => x.product_id).filter(Boolean));
+                  // 연결된 실제 상품 — 화면의 이름·옵션은 스냅샷이라, 재고가 빠지는 진짜 SKU 는 이걸로 확인한다
+                  //  (동명 상품을 잘못 골라 다른 SKU 재고가 나간 실제 사고의 재발 방지).
+                  const linked = it.product_id ? products.find((pp) => pp.id === it.product_id) : null;
                   return (
                     <tr key={idx}>
                       <td data-label="품목명">
                         <Combobox
                           value={it.product_name}
-                          options={products.map((p) => ({ id: p.id, label: p.name, sub: p.spec ?? "" }))}
+                          options={products
+                            .filter((p) => !p.is_bundle && (!usedElsewhere.has(p.id) || p.id === it.product_id))
+                            .map((p) => ({ id: p.id, label: p.name, sub: [p.sku, p.spec].filter(Boolean).join(" · ") }))}
                           onSelect={(o) => pickProduct(idx, o.id)}
                           onType={(text) => updateItem(idx, { product_name: text, product_id: null })}
                           allowFreeText
                           placeholder="제품 검색 또는 직접 입력"
                           ariaLabel="품목명"
                         />
+                        {it.product_id ? (
+                          <div className="sm-faint" style={{ fontSize: 12, marginTop: 3 }}>
+                            {linked ? (linked.sku || "SKU 미지정") : "연결 상품이 목록에 없음(비활성?) — 재저장 전 확인"}
+                          </div>
+                        ) : it.product_name.trim() ? (
+                          <div style={{ fontSize: 12, marginTop: 3, color: "var(--sm-warning)" }}>직접입력 — 재고 연동 안 됨</div>
+                        ) : null}
                       </td>
                       <td data-label="옵션">
                         <input
