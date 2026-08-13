@@ -81,6 +81,8 @@ export default function OrdersListPage() {
   const [shipRows, setShipRows] = useState<
     { ship_date: string; box_count: string; status: ShipmentStatus; tracking_no: string; stock_out: boolean; items: Record<number, string> }[]
   >([]);
+  // 창을 열 때 날짜가 있던 차수 수 — 0이 되도록 지우고 저장하면 '전체 삭제'로 확인 후 진행
+  const [shipInitialCount, setShipInitialCount] = useState(0);
   const [shipItems, setShipItems] = useState<{ id: string; product_name: string; spec: string | null; qty: number }[]>([]);
   const [shipSaving, setShipSaving] = useState(false);
   const [shipLoading, setShipLoading] = useState(false);
@@ -334,7 +336,7 @@ export default function OrdersListPage() {
   // 발송일 등록 창 열기 — 기존 차수가 있으면 불러와 이어서 편집(복수 발송 세팅).
   async function openShipPrompt(id: string, label: string) {
     setShipPrompt({ id, label });
-    setShipRows([]); setShipItems([]);
+    setShipRows([]); setShipItems([]); setShipInitialCount(0);
     setShipLoading(true);
     try {
       const j = await (await fetch(`/api/b2b/orders/${id}/shipments`, { cache: "no-store" })).json();
@@ -358,6 +360,7 @@ export default function OrdersListPage() {
         items: Object.fromEntries((items || []).map((it, i) => [i, String(it.qty)])),
       };
       setShipRows(rows?.length ? rows : [blank]);
+      setShipInitialCount(((rows as { ship_date?: string }[] | undefined) || []).filter((r) => r.ship_date).length);
     } catch {
       setShipRows([{ ship_date: "", box_count: "1", status: "발송대기", tracking_no: "", stock_out: true, items: {} }]);
     }
@@ -390,7 +393,11 @@ export default function OrdersListPage() {
           .map(([k, v]) => ({ order_item_index: Number(k), qty: Number(v) || 0 }))
           .filter((x) => x.qty > 0),
       }));
-    if (!schedules.length) { setError("발송예정일을 1개 이상 넣으세요."); return; }
+    if (!schedules.length) {
+      // 있던 일정을 다 지운 경우 = 전체 삭제 의도 — 확인 후 빈 목록으로 저장한다(서버가 삭제 처리).
+      if (shipInitialCount === 0) { setError("발송예정일을 1개 이상 넣으세요."); return; }
+      if (!window.confirm("등록된 발송 일정을 모두 삭제할까요?\n선점된 재고가 원복되고 '발송일정 미등록'으로 돌아갑니다.")) return;
+    }
     setShipSaving(true);
     try {
       const res = await fetch(`/api/b2b/orders/${shipPrompt.id}/shipments`, {
@@ -1363,6 +1370,11 @@ export default function OrdersListPage() {
                 <div className="b2b-loading">불러오는 중...</div>
               ) : (
                 <div className="sm-col" style={{ gap: 10 }}>
+                  {shipRows.length === 0 && shipInitialCount > 0 && (
+                    <div className="sm-warn" style={{ fontSize: 13 }}>
+                      일정을 모두 지웠습니다. 이대로 저장하면 발송 일정이 전부 삭제되고 선점 재고가 원복됩니다.
+                    </div>
+                  )}
                   {shipRows.map((r, i) => (
                     <div key={i} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 12 }}>
                       <div className="sm-row" style={{ gap: 8, alignItems: "flex-end" }}>
@@ -1383,10 +1395,8 @@ export default function OrdersListPage() {
                           ariaLabel={shipRows.length > 1 ? `${i + 1}차 발송예정일 선택` : "발송예정일 선택"}
                           onChange={(v) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, ship_date: v } : x)))} />
                       </label>
-                      {shipRows.length > 1 && (
-                        <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
-                          onClick={() => setShipRows((p) => p.filter((_, j) => j !== i))}>✕</button>
-                      )}
+                      <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
+                        onClick={() => setShipRows((p) => p.filter((_, j) => j !== i))}>✕</button>
                       </div>
                       {/* 이 차수에 담을 수량 — 발송요청 엑셀·매출 집계가 이 배분을 읽는다 */}
                       {shipItems.length > 0 && (
@@ -1795,25 +1805,30 @@ const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
 function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange: (v: string) => void; ariaLabel: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : null;
-  function open() {
+  // 탭/클릭은 투명한 input 이 직접 받는다 — 모바일(웹뷰·구형 iOS 포함)은 네이티브 피커가 그 자체로 열리고,
+  //  showPicker 를 지원하는 데스크톱 크롬은 onClick 에서 마저 열어준다.
+  //  (이전에는 버튼이 클릭을 받고 showPicker 를 불렀는데, 미지원 브라우저 폴백인
+  //   focus()+click() 이 모바일에서 피커를 못 열어 '날짜 수정이 안 되는' 증상이 났다.)
+  function tryShowPicker() {
     const el = ref.current;
     if (!el) return;
-    try { el.showPicker(); } catch { el.focus(); el.click(); } // 구형 브라우저 폴백
+    try { el.showPicker(); } catch { /* 미지원 — 네이티브 탭 동작에 맡긴다 */ }
   }
   return (
     <div style={{ position: "relative" }}>
       <input
-        ref={ref} type="date" value={value} tabIndex={-1} aria-hidden
+        ref={ref} type="date" value={value} aria-label={ariaLabel}
         onChange={(e) => onChange(e.target.value)}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, pointerEvents: "none", border: 0, padding: 0 }}
+        onClick={tryShowPicker}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, border: 0, padding: 0, cursor: "pointer" }}
       />
-      <button
-        type="button" aria-label={ariaLabel} onClick={open}
+      <div
+        aria-hidden
         style={{
           width: "100%", minHeight: 48, padding: "0 14px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
           border: "1px solid var(--sm-border)", borderRadius: "var(--sm-radius)",
-          background: "var(--sm-white)", cursor: "pointer", font: "inherit", fontSize: 15,
+          background: "var(--sm-white)", font: "inherit", fontSize: 15, pointerEvents: "none",
         }}
       >
         {d ? (
@@ -1824,7 +1839,7 @@ function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange
           <span style={{ color: "var(--sm-text-light)" }}>날짜 선택</span>
         )}
         <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>
-      </button>
+      </div>
     </div>
   );
 }

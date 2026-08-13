@@ -69,9 +69,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const body = (await req.json().catch(() => ({}))) as { schedules?: ShipmentScheduleInput[] };
     const schedules = Array.isArray(body.schedules) ? body.schedules : [];
-    if (!schedules.some((s) => s.ship_date)) {
-      return NextResponse.json({ ok: false, error: "발송예정일을 1개 이상 넣으세요." }, { status: 400 });
-    }
+    // 빈 목록 = 일정 전체 삭제(허용) — 화면이 의도를 확인하고 보낸다.
+    //  saveOrderShipments 가 기존 차수를 지우고(cascade 로 선점 재고 원복) 배송정보 행만 보존한다.
+    const clearingAll = !schedules.some((s) => s.ship_date);
     const sb = supabaseAdmin();
 
     // 배송정보는 기존 차수(또는 배송정보 전용 행)에서 물려받는다 — 이 창에서는 배송지를 고치지 않는다.
@@ -100,6 +100,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const patch: Record<string, unknown> = { ship_date: earliestShipDate };
     if (totalBoxes > 0) patch.box_count = totalBoxes;
     if (derivedStatus) patch.status = derivedStatus;
+    // 일정을 전부 지웠으면 발주를 미발송 상태로 되돌린다.
+    if (clearingAll) patch.status = "발송대기";
     const { error } = await sb.from("orders").update(patch).eq("id", id);
     if (error) throw error;
 
