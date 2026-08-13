@@ -34,11 +34,14 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const matches = useMemo(() => {
     const q = search.trim();
     if (!q) return [];
+    // 이미 담은 품목은 다시 띄우지 않는다 — 같은 상품이 여러 줄로 중복 추가되던 것 방지(수량은 줄에서 고친다).
+    const added = new Set(lines.map((l) => l.product_id));
     return products
+      .filter((p) => !added.has(p.id))
       .filter((p) => !excludeBundles || !p.is_bundle)
       .filter((p) => matchKoQuery(`${p.name} ${p.sku || ""} ${p.spec || ""} ${p.origin || ""} ${p.attrs || ""} ${p.unit}`, q))
       .slice(0, 12);
-  }, [products, search, excludeBundles]);
+  }, [products, search, excludeBundles, lines]);
 
   // 활성 항목을 보이게 스크롤
   useEffect(() => { suggestRef.current?.querySelector<HTMLElement>(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);

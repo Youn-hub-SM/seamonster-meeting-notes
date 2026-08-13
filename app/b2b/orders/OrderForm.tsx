@@ -898,7 +898,7 @@ export default function OrderForm({
                           value={it.product_name}
                           options={products
                             .filter((p) => !p.is_bundle && (!usedElsewhere.has(p.id) || p.id === it.product_id))
-                            .map((p) => ({ id: p.id, label: p.name, sub: [p.sku, p.spec].filter(Boolean).join(" · ") }))}
+                            .map((p) => ({ id: p.id, label: p.name, sub: [p.spec, p.origin, p.attrs, p.sku].filter(Boolean).join(" · ") }))}
                           onSelect={(o) => pickProduct(idx, o.id)}
                           onType={(text) => updateItem(idx, { product_name: text, product_id: null })}
                           allowFreeText
