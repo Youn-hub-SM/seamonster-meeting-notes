@@ -1845,7 +1845,6 @@ export const GUIDE: GuideCategory[] = [
     "category": "기타",
     "tools": [
       {
-      {
         "tool": "파렛트 적재",
         "entries": [
           {
@@ -1872,6 +1871,7 @@ export const GUIDE: GuideCategory[] = [
           },
         ]
       },
+      {
         "tool": "업데이트 노트",
         "entries": [
           {
