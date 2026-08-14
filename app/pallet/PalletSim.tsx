@@ -145,6 +145,7 @@ export default function PalletSim() {
     const prevOverscroll = document.documentElement.style.overscrollBehavior;
     document.documentElement.style.overscrollBehavior = "none";
     renderer.domElement.style.userSelect = "none";
+    renderer.domElement.style.display = "block"; // inline 기저선 여백 → ResizeObserver 무한 루프 방지
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.75));
     const sun = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -359,9 +360,11 @@ export default function PalletSim() {
     dom.addEventListener("pointerup", onUp);
 
     // 리사이즈
+    let lastW = 0, lastH = 0;
     const ro = new ResizeObserver(() => {
       const w = mount.clientWidth, h = mount.clientHeight;
-      if (!w || !h) return;
+      if (!w || !h || (w === lastW && h === lastH)) return;
+      lastW = w; lastH = h;
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
@@ -668,8 +671,8 @@ export default function PalletSim() {
           </section>
         </div>
 
-        {/* ── 3D 캔버스 ── */}
-        <div ref={mountRef} style={{ flex: "1 1 480px", minHeight: 560, borderRadius: 12, overflow: "hidden", border: "1px solid var(--sm-border)" }} />
+        {/* ── 3D 캔버스 — 높이를 스스로 정한다(stretch 로 형제 높이와 얽히면 크기 되먹임이 생긴다) ── */}
+        <div ref={mountRef} style={{ flex: "1 1 480px", height: "min(78vh, 760px)", minHeight: 480, alignSelf: "flex-start", borderRadius: 12, overflow: "hidden", border: "1px solid var(--sm-border)" }} />
       </div>
     </div>
   );
