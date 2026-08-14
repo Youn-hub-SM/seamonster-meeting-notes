@@ -35,6 +35,12 @@ const dims = (t: BoxType, rot: boolean) => ({ w: rot ? t.d : t.w, d: rot ? t.w :
 function overlapXZ(ax: number, az: number, aw: number, ad: number, bx: number, bz: number, bw: number, bd: number): boolean {
   return Math.abs(ax - bx) < (aw + bw) / 2 - 1 && Math.abs(az - bz) < (ad + bd) / 2 - 1;
 }
+// XZ 겹침 면적(mm2) — '확실히 포갰는지'(쌓기 의도) 판정용
+function overlapAreaXZ(ax: number, az: number, aw: number, ad: number, bx: number, bz: number, bw: number, bd: number): number {
+  const ox = Math.min(ax + aw / 2, bx + bw / 2) - Math.max(ax - aw / 2, bx - bw / 2);
+  const oz = Math.min(az + ad / 2, bz + bd / 2) - Math.max(az - ad / 2, bz - bd / 2);
+  return Math.max(0, ox) * Math.max(0, oz);
+}
 
 export default function PalletSim() {
   // ── 설정 상태 (React) ──
@@ -226,7 +232,8 @@ export default function PalletSim() {
     //  어느 각도에서든 '오른쪽으로 끌면 화면 오른쪽으로' 일관되게 움직인다(블렌더 G 방식).
     const ray = new THREE.Raycaster();
     const ptr = new THREE.Vector2();
-    let dragging: { id: string; lastX: number; lastY: number; rawX: number; rawZ: number } | null = null;
+    // validX/Z/Y = 마지막으로 '놓을 수 있던' 위치 — 무효한 곳에서 드롭하면 여기로 복귀한다
+    let dragging: { id: string; lastX: number; lastY: number; rawX: number; rawZ: number; validX: number; validZ: number; validY: number; allowed: boolean } | null = null;
     const camFwd = new THREE.Vector3();
     const camRight = new THREE.Vector3();
 
@@ -243,7 +250,7 @@ export default function PalletSim() {
       if (!box) return;
       setSelectedId(id);
       // 스냅 누적 오차가 없도록 원시 좌표(raw)를 따로 끌고 다니고, 표시는 스냅해 보여준다
-      dragging = { id, lastX: e.clientX, lastY: e.clientY, rawX: box.x, rawZ: box.z };
+      dragging = { id, lastX: e.clientX, lastY: e.clientY, rawX: box.x, rawZ: box.z, validX: box.x, validZ: box.z, validY: box.y, allowed: true };
       controls.enabled = false;
       renderer.domElement.setPointerCapture(e.pointerId);
     }
@@ -281,14 +288,57 @@ export default function PalletSim() {
       dragging.rawZ = Math.min(P.d / 2 + OUT - bd.d / 2, Math.max(-P.d / 2 - OUT + bd.d / 2, dragging.rawZ + moveZ));
       const x = Math.round(dragging.rawX / SNAP) * SNAP;
       const z = Math.round(dragging.rawZ / SNAP) * SNAP;
+      const support = supportY(x, z, bd.w, bd.d, box.id);
+
+      // 내려가거나 같은 층은 자유. 올라가야 하는 자리는 '확실히 포갠 경우'(footprint 절반 이상)만
+      //  쌓기로 인정한다 — 옆으로 밀다 남의 박스를 스치기만 해도 꼭대기로 점프하던 것 방지.
+      //  지지자가 박스가 아니라 파렛트 상판이면(대기 구역에서 복귀) 그냥 허용.
+      let allowed = support <= dragging.validY;
+      if (!allowed) {
+        let supArea = 0;
+        let hasBoxSupporter = false;
+        for (const o of boxesRef.current) {
+          if (o.id === box.id) continue;
+          const ot = typesRef.current.find((tt) => tt.id === o.typeId);
+          if (!ot) continue;
+          const od = dims(ot, o.rot);
+          if (o.y + od.h === support && overlapXZ(x, z, bd.w, bd.d, o.x, o.z, od.w, od.d)) {
+            hasBoxSupporter = true;
+            supArea += overlapAreaXZ(x, z, bd.w, bd.d, o.x, o.z, od.w, od.d);
+          }
+        }
+        allowed = !hasBoxSupporter || supArea >= bd.w * bd.d * 0.5;
+      }
+
       box.x = x; box.z = z;
-      box.y = supportY(x, z, bd.w, bd.d, box.id);
+      if (allowed) {
+        box.y = support;
+        dragging.validX = x; dragging.validZ = z; dragging.validY = support;
+      } else {
+        box.y = dragging.validY; // 층은 유지한 채 커서만 따라간다(관통해 보이는 건 '못 놓는 자리' 표시)
+      }
+      dragging.allowed = allowed;
       const mesh = meshById.get(box.id);
-      if (mesh) mesh.position.set(x * MM, (box.y + bd.h / 2) * MM, z * MM);
+      if (mesh) {
+        mesh.position.set(x * MM, (box.y + bd.h / 2) * MM, z * MM);
+        // 못 놓는 자리 = 빨간 경고색
+        const mat = mesh.material as THREE.MeshLambertMaterial;
+        if (allowed) {
+          mat.color.set(t.color);
+          mat.transparent = false; mat.opacity = 1;
+        } else {
+          mat.color.set(0xd9534f);
+          mat.transparent = true; mat.opacity = 0.6;
+        }
+      }
     }
 
     function onUp(e: PointerEvent) {
       if (!dragging) { controls.enabled = true; return; }
+      const box = boxesRef.current.find((b) => b.id === dragging!.id);
+      if (box && !dragging.allowed) {
+        box.x = dragging.validX; box.z = dragging.validZ; box.y = dragging.validY;
+      }
       settle();
       rebuild();
       persist();
