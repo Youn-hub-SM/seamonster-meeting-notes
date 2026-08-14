@@ -13,6 +13,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 const MM = 0.01; // mm → 씬 단위(1단위=100mm)
 const SNAP = 10; // 배치 스냅(mm)
 const PALLET_H = 150; // 파렛트 자체 높이(mm)
+const OUT = 1400; // 파렛트 밖 대기 구역 폭(mm) — 잠시 내려놨다가 다시 쌓는 용도
 
 type BoxType = { id: string; name: string; w: number; d: number; h: number; color: string };
 type Placed = { id: string; typeId: string; x: number; z: number; y: number; rot: boolean }; // x,z = 중심(mm, 파렛트 중심 기준), y = 바닥(mm, 상판=0), rot = 90도 회전(w↔d)
@@ -64,9 +65,11 @@ export default function PalletSim() {
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  // 지지면 높이(mm) — XZ 가 겹치는 박스들의 최고 윗면, 없으면 상판(0). self 는 제외.
+  // 지지면 높이(mm) — XZ 가 겹치는 박스들의 최고 윗면. 기본 지지면은 파렛트와 겹치면
+  //  상판(0), 완전히 밖이면 바닥(-150) — 밖은 '잠시 내려놓는 대기 구역'이다. self 는 제외.
   const supportY = useCallback((x: number, z: number, w: number, d: number, selfId?: string): number => {
-    let top = 0;
+    const P = palletRef.current;
+    let top = overlapXZ(x, z, w, d, 0, 0, P.w, P.d) ? 0 : -PALLET_H;
     for (const b of boxesRef.current) {
       if (b.id === selfId) continue;
       const t = typesRef.current.find((tt) => tt.id === b.typeId);
@@ -81,11 +84,12 @@ export default function PalletSim() {
   const settle = useCallback(() => {
     const sorted = [...boxesRef.current].sort((a, b) => a.y - b.y);
     const done: Placed[] = [];
+    const P = palletRef.current;
     for (const b of sorted) {
       const t = typesRef.current.find((tt) => tt.id === b.typeId);
       if (!t) continue;
       const bd = dims(t, b.rot);
-      let top = 0;
+      let top = overlapXZ(b.x, b.z, bd.w, bd.d, 0, 0, P.w, P.d) ? 0 : -PALLET_H;
       for (const o of done) {
         const ot = typesRef.current.find((tt) => tt.id === o.typeId);
         if (!ot) continue;
@@ -272,9 +276,9 @@ export default function PalletSim() {
       const moveX = (camRight.x * dxPx + camFwd.x * -dyPx) * worldPerPx / MM;
       const moveZ = (camRight.z * dxPx + camFwd.z * -dyPx) * worldPerPx / MM;
       const P = palletRef.current;
-      // raw 에 누적 후 경계 클램프 — 스냅은 표시 단계에서만
-      dragging.rawX = Math.min(P.w / 2 - bd.w / 2, Math.max(-P.w / 2 + bd.w / 2, dragging.rawX + moveX));
-      dragging.rawZ = Math.min(P.d / 2 - bd.d / 2, Math.max(-P.d / 2 + bd.d / 2, dragging.rawZ + moveZ));
+      // raw 에 누적 후 경계 클램프 — 파렛트 밖 대기 구역(OUT)까지 허용, 스냅은 표시 단계에서만
+      dragging.rawX = Math.min(P.w / 2 + OUT - bd.w / 2, Math.max(-P.w / 2 - OUT + bd.w / 2, dragging.rawX + moveX));
+      dragging.rawZ = Math.min(P.d / 2 + OUT - bd.d / 2, Math.max(-P.d / 2 - OUT + bd.d / 2, dragging.rawZ + moveZ));
       const x = Math.round(dragging.rawX / SNAP) * SNAP;
       const z = Math.round(dragging.rawZ / SNAP) * SNAP;
       box.x = x; box.z = z;
@@ -369,9 +373,9 @@ export default function PalletSim() {
     const nd = dims(t, !box.rot);
     if (nd.w > P.w || nd.d > P.d) return;
     box.rot = !box.rot;
-    // 회전으로 경계를 벗어나면 안으로 당기고, 지지면 다시 계산
-    box.x = Math.min(P.w / 2 - nd.w / 2, Math.max(-P.w / 2 + nd.w / 2, box.x));
-    box.z = Math.min(P.d / 2 - nd.d / 2, Math.max(-P.d / 2 + nd.d / 2, box.z));
+    // 회전으로 경계를 벗어나면 안으로 당기고, 지지면 다시 계산(대기 구역 포함 한계)
+    box.x = Math.min(P.w / 2 + OUT - nd.w / 2, Math.max(-P.w / 2 - OUT + nd.w / 2, box.x));
+    box.z = Math.min(P.d / 2 + OUT - nd.d / 2, Math.max(-P.d / 2 - OUT + nd.d / 2, box.z));
     box.y = supportY(box.x, box.z, nd.w, nd.d, box.id);
     settle();
     persist(); bump();
@@ -421,15 +425,23 @@ export default function PalletSim() {
 
   // 현재 배치를 통째로 한 층 위에 복제 — 1층을 손으로 짜고 이 버튼으로 2·3층을 만든다
   const duplicateUp = useCallback(() => {
-    if (!boxesRef.current.length) return;
+    const P = palletRef.current;
+    // 대기 구역 박스는 복제 대상이 아니다 — 파렛트 위 배치만 한 층 올린다
+    const onPallet = boxesRef.current.filter((b) => {
+      const t = typesRef.current.find((tt) => tt.id === b.typeId);
+      if (!t) return false;
+      const bd = dims(t, b.rot);
+      return overlapXZ(b.x, b.z, bd.w, bd.d, 0, 0, P.w, P.d);
+    });
+    if (!onPallet.length) return;
     let maxTop = 0;
-    for (const b of boxesRef.current) {
+    for (const b of onPallet) {
       const t = typesRef.current.find((tt) => tt.id === b.typeId);
       if (t) maxTop = Math.max(maxTop, b.y + dims(t, b.rot).h);
     }
     boxesRef.current = [
       ...boxesRef.current,
-      ...boxesRef.current.map((b) => ({ ...b, id: uid(), y: b.y + maxTop })),
+      ...onPallet.map((b) => ({ ...b, id: uid(), y: b.y + maxTop })),
     ];
     persist(); bump();
   }, [persist, bump]);
@@ -446,18 +458,22 @@ export default function PalletSim() {
   const stats = useMemo(() => {
     void version;
     const byType = new Map<string, number>();
-    let maxTop = 0, floorArea = 0;
+    let maxTop = 0, floorArea = 0, waiting = 0;
     for (const b of boxesRef.current) {
       const t = types.find((tt) => tt.id === b.typeId);
       if (!t) continue;
       byType.set(t.id, (byType.get(t.id) || 0) + 1);
       const bd = dims(t, b.rot);
+      const onPallet = overlapXZ(b.x, b.z, bd.w, bd.d, 0, 0, pallet.w, pallet.d);
+      if (!onPallet) { waiting += 1; continue; }  // 대기 구역 박스는 높이·면적 계산에서 제외
       maxTop = Math.max(maxTop, b.y + bd.h);
       if (b.y === 0) floorArea += bd.w * bd.d;
     }
     const totalH = maxTop + PALLET_H;
     return {
       total: boxesRef.current.length,
+      onPallet: boxesRef.current.length - waiting,
+      waiting,
       byType,
       totalH,
       overLimit: totalH > pallet.maxH,
@@ -484,13 +500,13 @@ export default function PalletSim() {
   function updatePallet(patch: Partial<PalletCfg>) {
     setPallet((p) => {
       const next = { ...p, ...patch };
-      // 파렛트가 줄면 밖으로 나간 박스를 안으로 당기고 다시 정착
+      // 파렛트가 줄면 한계(대기 구역 포함) 밖 박스만 안으로 당기고 다시 정착
       for (const b of boxesRef.current) {
         const t = typesRef.current.find((tt) => tt.id === b.typeId);
         if (!t) continue;
         const bd = dims(t, b.rot);
-        b.x = Math.min(next.w / 2 - bd.w / 2, Math.max(-next.w / 2 + bd.w / 2, b.x));
-        b.z = Math.min(next.d / 2 - bd.d / 2, Math.max(-next.d / 2 + bd.d / 2, b.z));
+        b.x = Math.min(next.w / 2 + OUT - bd.w / 2, Math.max(-next.w / 2 - OUT + bd.w / 2, b.x));
+        b.z = Math.min(next.d / 2 + OUT - bd.d / 2, Math.max(-next.d / 2 - OUT + bd.d / 2, b.z));
       }
       palletRef.current = next;
       settle(); persist(); bump();
@@ -504,7 +520,7 @@ export default function PalletSim() {
         <div>
           <h1 className="b2b-page-title">파렛트 적재 시뮬레이터</h1>
           <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
-            박스를 드래그해 쌓아 보세요 — 빈 곳 드래그 = 화면 회전 · 휠 = 확대 · R = 박스 회전 · Delete = 삭제
+            박스를 드래그해 쌓아 보세요 — 파렛트 밖 바닥에 잠시 내려놨다 다시 올릴 수 있습니다 · 빈 곳 드래그 = 화면 회전 · 휠 = 확대 · R = 회전 · Delete = 삭제
           </span>
         </div>
         <div className="b2b-page-actions">
@@ -573,7 +589,7 @@ export default function PalletSim() {
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">현황</span></div>
             <div className="sm-col" style={{ gap: 5, fontSize: 14 }}>
-              <div className="sm-between"><span>박스</span><strong>{stats.total}개</strong></div>
+              <div className="sm-between"><span>박스</span><strong>{stats.onPallet}개{stats.waiting > 0 ? ` · 대기 ${stats.waiting}개` : ""}</strong></div>
               <div className="sm-between"><span>총 높이 (파렛트 포함)</span>
                 <strong style={{ color: stats.overLimit ? "var(--sm-danger)" : undefined }}>{stats.totalH.toLocaleString()}mm</strong></div>
               <div className="sm-between"><span>1층 면적 사용률</span><strong>{stats.floorPct}%</strong></div>
@@ -584,7 +600,7 @@ export default function PalletSim() {
                 <div className="sm-between" style={{ gap: 8 }}>
                   <span style={{ fontSize: 13 }}>
                     선택: <strong>{selectedType.name}</strong>
-                    <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{selectedBox.y === 0 ? "1층" : `바닥 ${selectedBox.y}mm`}</span>
+                    <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{selectedBox.y < 0 ? "대기 구역" : selectedBox.y === 0 ? "1층" : `바닥 ${selectedBox.y}mm`}</span>
                   </span>
                   <span className="sm-row" style={{ gap: 6 }}>
                     <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={rotateSelected}>회전 (R)</button>
