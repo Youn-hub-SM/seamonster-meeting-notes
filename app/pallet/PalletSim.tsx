@@ -594,9 +594,9 @@ export default function PalletSim() {
         </div>
       </header>
 
-      <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 16, alignItems: "stretch", flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
         {/* ── 좌측 패널 ── */}
-        <div style={{ flex: "0 0 320px", minWidth: 280, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ flex: "1 1 300px", maxWidth: 420, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">파렛트</span></div>
             <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
@@ -678,7 +678,7 @@ export default function PalletSim() {
         </div>
 
         {/* ── 3D 캔버스 — 높이를 스스로 정한다(stretch 로 형제 높이와 얽히면 크기 되먹임이 생긴다) ── */}
-        <div ref={mountRef} style={{ flex: "1 1 480px", height: "min(78vh, 760px)", minHeight: 480, alignSelf: "flex-start", borderRadius: 12, overflow: "hidden", border: "1px solid var(--sm-border)" }} />
+        <div ref={mountRef} style={{ flex: "1 1 320px", minWidth: 0, height: "clamp(360px, 65vh, 720px)", alignSelf: "flex-start", borderRadius: 12, overflow: "hidden", border: "1px solid var(--sm-border)" }} />
       </div>
     </div>
   );
