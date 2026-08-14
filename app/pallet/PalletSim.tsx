@@ -140,6 +140,11 @@ export default function PalletSim() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);
     renderer.domElement.style.touchAction = "none"; // 모바일에서 드래그가 스크롤로 새지 않게
+    // 3D 조작(가로 드래그·휠)이 브라우저 뒤로가기 스와이프로 새어
+    //  메뉴 화면으로 넘어가던 문제 차단 — 페이지가 살아있는 동안만 전역으로 끄고 나갈 때 복원한다.
+    const prevOverscroll = document.documentElement.style.overscrollBehavior;
+    document.documentElement.style.overscrollBehavior = "none";
+    renderer.domElement.style.userSelect = "none";
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.75));
     const sun = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -381,6 +386,7 @@ export default function PalletSim() {
         if (m.material) (Array.isArray(m.material) ? m.material : [m.material]).forEach((mm) => mm.dispose());
       });
       mount.removeChild(dom);
+      document.documentElement.style.overscrollBehavior = prevOverscroll;
       rebuildRef.current = () => {};
     };
     // 씬은 한 번만 만들고, 설정 변경은 rebuildRef 로 반영한다

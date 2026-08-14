@@ -85,7 +85,6 @@ export const NAV: NavCategory[] = [
       },
       { href: "/inventory/stats", label: "통계", icon: "bars" },
       { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
-      { href: "/pallet", label: "파렛트 적재", icon: "box" },
       { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
       // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
       // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
@@ -142,6 +141,7 @@ export const NAV: NavCategory[] = [
       { href: "/updates", label: "업데이트 노트", icon: "note" },
       { href: "/report", label: "커스텀 리포트", icon: "bars" },
       { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
+      { href: "/pallet", label: "파렛트 적재", icon: "box" },
       { href: "/meeting", label: "회의 정리", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },
       // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
