@@ -204,19 +204,16 @@ export default function PalletSim() {
     rebuildRef.current = () => { buildStatic(); rebuild(); };
     rebuild();
 
-    // ── 드래그 ──
+    // ── 드래그 — 화면 델타 방식 ──
+    //  수평면 레이캐스트는 카메라가 낮게 누우면 레이가 평면을 스치듯 지나가
+    //  커서가 조금만 움직여도 박스가 멀리 튄다(= '특정 각도에서만 이동이 되는' 증상).
+    //  대신 마우스 픽셀 이동량을 카메라 기준 오른쪽/앞 방향의 수평 성분으로 환산한다 —
+    //  어느 각도에서든 '오른쪽으로 끌면 화면 오른쪽으로' 일관되게 움직인다(블렌더 G 방식).
     const ray = new THREE.Raycaster();
     const ptr = new THREE.Vector2();
-    let dragging: { id: string; offX: number; offZ: number; startX: number; startZ: number } | null = null;
-    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-
-    function pointerToScene(e: PointerEvent): THREE.Vector3 | null {
-      const rect = renderer.domElement.getBoundingClientRect();
-      ptr.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-      ray.setFromCamera(ptr, camera);
-      const hit = new THREE.Vector3();
-      return ray.ray.intersectPlane(dragPlane, hit) ? hit : null;
-    }
+    let dragging: { id: string; lastX: number; lastY: number; rawX: number; rawZ: number } | null = null;
+    const camFwd = new THREE.Vector3();
+    const camRight = new THREE.Vector3();
 
     function onDown(e: PointerEvent) {
       if (e.button !== 0) return;
@@ -229,14 +226,9 @@ export default function PalletSim() {
       const id = mesh.userData.id as string;
       const box = boxesRef.current.find((b) => b.id === id);
       if (!box) return;
-      const t = typesRef.current.find((tt) => tt.id === box.typeId);
-      if (!t) return;
       setSelectedId(id);
-      // 드래그 평면을 잡은 박스의 바닥 높이에 깔고, 잡은 지점과 중심의 차이를 기억한다
-      dragPlane.constant = -box.y * MM;
-      const hit = pointerToScene(e);
-      if (!hit) return;
-      dragging = { id, offX: box.x - hit.x / MM, offZ: box.z - hit.z / MM, startX: box.x, startZ: box.z };
+      // 스냅 누적 오차가 없도록 원시 좌표(raw)를 따로 끌고 다니고, 표시는 스냅해 보여준다
+      dragging = { id, lastX: e.clientX, lastY: e.clientY, rawX: box.x, rawZ: box.z };
       controls.enabled = false;
       renderer.domElement.setPointerCapture(e.pointerId);
     }
@@ -246,18 +238,36 @@ export default function PalletSim() {
       const box = boxesRef.current.find((b) => b.id === dragging!.id);
       const t = box && typesRef.current.find((tt) => tt.id === box.typeId);
       if (!box || !t) return;
-      const hit = pointerToScene(e);
-      if (!hit) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const dxPx = e.clientX - dragging.lastX;
+      const dyPx = e.clientY - dragging.lastY;
+      dragging.lastX = e.clientX; dragging.lastY = e.clientY;
+
+      // 픽셀 → 씬 거리: 박스까지의 거리에서 화면 1px 이 차지하는 월드 폭
       const bd = dims(t, box.rot);
+      const boxCenter = new THREE.Vector3(box.x * MM, (box.y + bd.h / 2) * MM, box.z * MM);
+      const dist = camera.position.distanceTo(boxCenter);
+      const worldPerPx = (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / rect.height;
+
+      // 카메라 기준 오른쪽/앞 방향의 수평 성분(위에서 봐도, 옆에서 봐도 동일한 감각)
+      camera.getWorldDirection(camFwd);
+      camRight.crossVectors(camFwd, camera.up).setY(0);
+      if (camRight.lengthSq() < 1e-6) camRight.set(1, 0, 0);
+      camRight.normalize();
+      camFwd.setY(0);
+      if (camFwd.lengthSq() < 1e-6) camFwd.set(0, 0, -1);
+      camFwd.normalize();
+
+      const moveX = (camRight.x * dxPx + camFwd.x * -dyPx) * worldPerPx / MM;
+      const moveZ = (camRight.z * dxPx + camFwd.z * -dyPx) * worldPerPx / MM;
       const P = palletRef.current;
-      // 스냅 + 파렛트 안쪽으로 클램프
-      let x = Math.round((hit.x / MM + dragging.offX) / SNAP) * SNAP;
-      let z = Math.round((hit.z / MM + dragging.offZ) / SNAP) * SNAP;
-      x = Math.min(P.w / 2 - bd.w / 2, Math.max(-P.w / 2 + bd.w / 2, x));
-      z = Math.min(P.d / 2 - bd.d / 2, Math.max(-P.d / 2 + bd.d / 2, z));
+      // raw 에 누적 후 경계 클램프 — 스냅은 표시 단계에서만
+      dragging.rawX = Math.min(P.w / 2 - bd.w / 2, Math.max(-P.w / 2 + bd.w / 2, dragging.rawX + moveX));
+      dragging.rawZ = Math.min(P.d / 2 - bd.d / 2, Math.max(-P.d / 2 + bd.d / 2, dragging.rawZ + moveZ));
+      const x = Math.round(dragging.rawX / SNAP) * SNAP;
+      const z = Math.round(dragging.rawZ / SNAP) * SNAP;
       box.x = x; box.z = z;
       box.y = supportY(x, z, bd.w, bd.d, box.id);
-      dragPlane.constant = -box.y * MM; // 층이 바뀌어도 손끝을 따라오게
       const mesh = meshById.get(box.id);
       if (mesh) mesh.position.set(x * MM, (box.y + bd.h / 2) * MM, z * MM);
     }
