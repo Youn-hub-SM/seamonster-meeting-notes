@@ -145,7 +145,11 @@ export default function PalletSim() {
     const prevOverscroll = document.documentElement.style.overscrollBehavior;
     document.documentElement.style.overscrollBehavior = "none";
     renderer.domElement.style.userSelect = "none";
-    renderer.domElement.style.display = "block"; // inline 기저선 여백 → ResizeObserver 무한 루프 방지
+    renderer.domElement.style.display = "block";
+    // 캔버스 CSS 크기는 항상 컨테이너 100% — JS 는 그리기 버퍼만 맞춘다(setSize 의 updateStyle=false).
+    //  CSS 픽셀을 JS 로 박으면 스크롤바 등장 등으로 컨테이너가 변할 때마다 레이아웃 진동이 생겨 페이지가 멈춘다.
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.75));
     const sun = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -360,24 +364,26 @@ export default function PalletSim() {
     dom.addEventListener("pointerup", onUp);
 
     // 리사이즈
+    // 크기 감시는 렌더 루프에서 프레임당 1회 — 레이아웃에 다시 손대지 않으므로(updateStyle=false)
+    //  되먹임이 구조적으로 불가능하다.
     let lastW = 0, lastH = 0;
-    const ro = new ResizeObserver(() => {
-      const w = mount.clientWidth, h = mount.clientHeight;
-      if (!w || !h || (w === lastW && h === lastH)) return;
-      lastW = w; lastH = h;
-      renderer.setSize(w, h);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    });
-    ro.observe(mount);
-
     let raf = 0;
-    const loop = () => { controls.update(); renderer.render(scene, camera); raf = requestAnimationFrame(loop); };
+    const loop = () => {
+      const w = mount.clientWidth, h = mount.clientHeight;
+      if (w && h && (w !== lastW || h !== lastH)) {
+        lastW = w; lastH = h;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
+      controls.update();
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(loop);
+    };
     loop();
 
     return () => {
       cancelAnimationFrame(raf);
-      ro.disconnect();
       dom.removeEventListener("pointerdown", onDown);
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup", onUp);
