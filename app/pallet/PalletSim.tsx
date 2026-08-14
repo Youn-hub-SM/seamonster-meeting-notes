@@ -164,12 +164,17 @@ export default function PalletSim() {
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = -ph;
       staticGroup.add(ground);
-      // 카메라 초기 위치도 파렛트 크기에 맞춤
-      const r = Math.max(pw, pd);
+    }
+    // 카메라 프레이밍은 파렛트 그리기와 분리 — 선택·박스 변경 때 씬을 다시 그려도
+    //  보던 각도가 유지되어야 한다(같이 묶으면 박스만 클릭해도 초기 각도로 튕긴다).
+    function frameCamera() {
+      const P = palletRef.current;
+      const r = Math.max(P.w * MM, P.d * MM);
       camera.position.set(r * 1.5, r * 1.35, r * 1.8);
       controls.target.set(0, r * 0.35, 0);
     }
     buildStatic();
+    frameCamera();
 
     // 박스 메시 — 구조 변경 시 통째로 재구성(수십 개 수준이라 충분)
     const boxGroup = new THREE.Group();
@@ -201,7 +206,13 @@ export default function PalletSim() {
         boxGroup.add(mesh);
       }
     }
-    rebuildRef.current = () => { buildStatic(); rebuild(); };
+    // 파렛트(정적 배경)는 치수가 실제로 바뀐 경우에만 다시 그리고 카메라를 다시 잡는다.
+    let palletKey = `${palletRef.current.w}x${palletRef.current.d}`;
+    rebuildRef.current = () => {
+      const key = `${palletRef.current.w}x${palletRef.current.d}`;
+      if (key !== palletKey) { palletKey = key; buildStatic(); frameCamera(); }
+      rebuild();
+    };
     rebuild();
 
     // ── 드래그 — 화면 델타 방식 ──
