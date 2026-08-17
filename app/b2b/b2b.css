@@ -3345,3 +3345,54 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .crm-ga-hint { font-size: var(--sm-fs-xs); margin: calc(-1 * var(--sm-space-1)) 0 var(--sm-space-2); }
 .crm-field-hint { font-size: 12px; margin-top: 3px; }
 .crm-active-check { font-size: var(--sm-fs-sm); margin-top: var(--sm-space-2); cursor: pointer; }
+
+/* ── 인스타 자동 DM (/instagram) ── */
+.ig-notice { background: var(--sm-success-bg); color: var(--sm-success); border-radius: var(--sm-radius);
+  padding: var(--sm-space-2) var(--sm-space-3); font-size: var(--sm-fs-sm); margin-bottom: var(--sm-space-3); }
+.ig-warn { color: var(--sm-warning); background: var(--sm-warning-bg); border-radius: var(--sm-radius);
+  padding: var(--sm-space-2) var(--sm-space-3); font-size: var(--sm-fs-sm); margin: 0 0 var(--sm-space-2); }
+.ig-setup { margin-bottom: var(--sm-space-3); }
+.ig-head-note { font-size: var(--sm-fs-xs); margin-left: var(--sm-space-2); }
+.ig-webhook-row { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--sm-space-2); }
+.ig-webhook-label { font-size: var(--sm-fs-sm); font-weight: 600; color: var(--sm-text-mid); white-space: nowrap; }
+.ig-webhook-url { font-size: var(--sm-fs-xs); background: var(--sm-bg-subtle); border-radius: 6px; padding: 4px 8px;
+  overflow-wrap: anywhere; }
+.ig-accounts { display: flex; flex-direction: column; gap: var(--sm-space-2); margin-bottom: var(--sm-space-2); }
+.ig-account { display: flex; gap: var(--sm-space-2); align-items: center; flex-wrap: wrap; }
+.ig-account-name { font-weight: 700; color: var(--sm-dark); }
+.ig-account-meta { font-size: var(--sm-fs-xs); }
+.ig-token-row { display: flex; gap: var(--sm-space-2); flex-wrap: wrap; }
+.ig-token-input { flex: 1; min-width: 260px; }
+.ig-btn-sm { padding: 4px 10px; font-size: var(--sm-fs-sm); white-space: nowrap; }
+.ig-rules-card { margin-bottom: var(--sm-space-3); }
+.ig-state { font-size: var(--sm-fs-xs); font-weight: 700; padding: 2px 8px; border-radius: var(--sm-radius-pill); white-space: nowrap;
+  background: var(--sm-bg-subtle); color: var(--sm-text-mid); }
+.ig-state.is-on { background: var(--sm-success-bg); color: var(--sm-success); }
+.ig-state.is-wait { background: var(--sm-info-bg); color: var(--sm-info); }
+.ig-state.is-off { background: var(--sm-bg-subtle); color: var(--sm-text-light); }
+.ig-state.is-fail { background: var(--sm-danger-bg); color: var(--sm-danger); }
+.ig-cell-nowrap { white-space: nowrap; }
+.ig-col-media { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ig-media-link { color: var(--sm-info); text-decoration: none; }
+.ig-media-link:hover { text-decoration: underline; }
+.ig-col-sched { white-space: nowrap; }
+.ig-sched { font-size: var(--sm-fs-xs); font-variant-numeric: tabular-nums; }
+.ig-failed { margin-left: 4px; font-size: var(--sm-fs-xs); color: var(--sm-danger); font-weight: 700; }
+.ig-col-actions { width: 150px; }
+.ig-modal { max-width: 640px; }
+.ig-media-load { max-width: 200px; }
+.ig-picked { font-size: var(--sm-fs-sm); color: var(--sm-text-mid); background: var(--sm-bg-subtle); border-radius: var(--sm-radius);
+  padding: var(--sm-space-2) var(--sm-space-3); margin: 0 0 var(--sm-space-2); }
+.ig-picked a { color: var(--sm-info); margin-left: 6px; }
+.ig-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--sm-space-2);
+  max-height: 260px; overflow-y: auto; margin-bottom: var(--sm-space-2); }
+.ig-media-item { border: 2px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white);
+  padding: 0 0 4px; cursor: pointer; text-align: left; overflow: hidden; }
+.ig-media-item:hover { border-color: var(--sm-orange); }
+.ig-media-item.is-picked { border-color: var(--sm-orange); }
+.ig-media-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sm-bg-subtle); }
+.ig-media-noimg { display: block; }
+.ig-media-cap { display: block; font-size: 11px; color: var(--sm-text-mid); padding: 3px 6px 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ig-hint { font-size: 12px; margin-top: 3px; }
+.ig-active-check { font-size: var(--sm-fs-sm); margin-top: var(--sm-space-2); cursor: pointer; }

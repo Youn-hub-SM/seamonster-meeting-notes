@@ -106,6 +106,7 @@ export const NAV: NavCategory[] = [
         ],
       },
       { href: "/crm", label: "CRM 메시지맵", icon: "megaphone" },
+      { href: "/instagram", label: "인스타 자동 DM", icon: "chat" },
       { href: "/correct", label: "문장 교정", icon: "pen" },
     ],
   },
