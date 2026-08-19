@@ -55,9 +55,7 @@ function toAdaptiveCard(text: string, opts?: { title?: string; link?: string | n
     // 기본 템플릿(카드 게시)은 attachments 만 읽어 이 필드를 무시한다.
     // 플로우를 '채널에 메시지 게시'(텍스트)로 바꾸면 body 의 text 를 본문으로 매핑해 쓸 수 있다 —
     // 일반 메시지는 모바일 목록·알림 미리보기에 본문이 그대로 보인다.
-    text: plainParts.join("
-
-"),
+    text: plainParts.join("\n\n"),
     attachments: [
       {
         contentType: "application/vnd.microsoft.card.adaptive",
