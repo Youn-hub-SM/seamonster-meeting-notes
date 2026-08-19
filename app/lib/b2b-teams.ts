@@ -45,11 +45,14 @@ function toAdaptiveCard(text: string, opts?: { title?: string; link?: string | n
   if (opts?.link) {
     body.push({ type: "TextBlock", text: `[자세히 보기](${opts.link})`, wrap: true, spacing: "Medium" });
   }
-  // plainText: 카드를 못 쓰는 자리(모바일 미리보기·텍스트 게시 플로우)용 평문 전문.
+  // text 필드: '메시지 게시(텍스트)' 플로우용 전문 — Teams 가 HTML 로 렌더하므로
+  //  본문은 이스케이프하고, 링크는 <a> 로 감싸 클릭되게 하며, 제목은 <b> 로 굵힌다.
+  //  (평문 URL 은 HTML 게시에서 자동 링크가 안 돼 '글자로만' 보였다 — 대표 보고)
+  const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const plainParts: string[] = [];
-  if (opts?.title) plainParts.push(opts.title);
-  plainParts.push(text);
-  if (opts?.link) plainParts.push(opts.link);
+  if (opts?.title) plainParts.push(`<b>${esc(opts.title)}</b>`);
+  plainParts.push(esc(text));
+  if (opts?.link) plainParts.push(`<a href="${opts.link}">자세히 보기</a>`);
   return {
     type: "message",
     // 기본 템플릿(카드 게시)은 attachments 만 읽어 이 필드를 무시한다.
