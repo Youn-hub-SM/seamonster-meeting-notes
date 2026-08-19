@@ -465,7 +465,7 @@ export default function InventoryPage() {
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>
                 입고·출고·조정 원장입니다(관측 용도). ‘담당’이 그 처리를 한 사람이고, 발주·발송 연동 건은 메모에 출처가 적혀 있습니다.
-                ‘재고’는 도매+소매 합계 기준으로 그 거래 전후의 수량입니다.
+                ‘재고’는 그 거래가 속한 채널(도매/소매) 기준으로 거래 전후의 수량입니다.
               </p>
               <ProductHistory productId={historyFor.product_id} />
             </div>
@@ -557,7 +557,7 @@ export default function InventoryPage() {
 }
 
 // 품목 변경 히스토리(관측 전용) — 원장 공용 TxnTable 과 달리 품목·단가·취소를 빼고,
-//  각 거래 전후의 재고(도매+소매 합계)를 보여준다. 취소가 필요하면 활동 히스토리 메뉴에서.
+//  각 거래 전후의 재고(그 거래 채널 기준)를 보여준다. 취소가 필요하면 활동 히스토리 메뉴에서.
 //  재고 변화는 전체 이력의 누적합으로 계산하므로 한도(2000건)를 넘는 품목은 표시하지 않는다 —
 //  잘린 이력으로 계산하면 숫자가 통째로 틀어진다.
 function ProductHistory({ productId }: { productId: string }) {
@@ -579,14 +579,18 @@ function ProductHistory({ productId }: { productId: string }) {
     return () => { alive = false; };
   }, [productId]);
 
-  // API 는 최신순 — 과거→현재로 뒤집어 누적합(전후 재고)을 만들고 다시 최신순으로 보여준다
+  // API 는 최신순 — 과거→현재로 뒤집어 누적합(전후 재고)을 만들고 다시 최신순으로 보여준다.
+  //  잔고는 '그 거래의 채널' 기준 — 합계 기준으로 보여주면 도매 출고 행에 소매까지 합친 숫자가 떠서
+  //  "도매 출고인데 소매에서 빠졌다"는 오해가 생겼다(실데이터 검증으로 채널 차감은 정상이었음).
   const withBalance = useMemo(() => {
     const asc = [...rows].reverse();
-    let bal = 0;
+    const balByCh = new Map<string, number>();
     const out = asc.map((t) => {
-      const before = bal;
-      bal = Math.round((bal + (Number(t.qty) || 0)) * 100) / 100;
-      return { ...t, before, after: bal };
+      const ch = t.channel || "소매"; // 구버전(채널 컬럼 이전) 기록은 소매로 취급 — 조회 화면과 동일 규칙
+      const before = balByCh.get(ch) || 0;
+      const after = Math.round((before + (Number(t.qty) || 0)) * 100) / 100;
+      balByCh.set(ch, after);
+      return { ...t, before, after };
     });
     return out.reverse();
   }, [rows]);
