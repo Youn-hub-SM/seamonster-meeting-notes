@@ -2136,6 +2136,31 @@ export const GUIDE: GuideCategory[] = [
             ]
           },
           {
+            "href": "/b2b/settings/swit",
+            "label": "Swit 알림",
+            "what": "Flow 로 가는 B2B 알림(발주·입금·발송·재고)을 Swit 채널로도 발송 — 도입 비교용",
+            "steps": [
+              "Swit에서 알림 받을 채널을 열고 채널 이름 클릭 > 수신 웹훅 > New webhook(게시 유형 Messages)을 만든다",
+              "hook.swit.io 주소를 복사해 'Swit 수신 웹훅 URL'에 붙여넣는다",
+              "[테스트 발송]으로 채널에 메시지가 오는지 확인한다",
+              "'B2B 알림을 Swit 로도 발송'을 체크하고 [저장]을 누른다"
+            ],
+            "tips": [
+              "기존 Flow 알림은 그대로 나간다 — 이건 병행 미러라 비교 후 한쪽만 남기면 된다",
+              "알림 종류·상태 필터는 B2B 도매 설정의 알림 체크리스트를 그대로 따른다",
+              "발송이 실패해도 업무 기록·Flow 알림에는 영향이 없다"
+            ],
+            "keywords": [
+              "swit",
+              "스윗",
+              "알림",
+              "웹훅",
+              "미러",
+              "flow 대체",
+              "메신저"
+            ]
+          },
+          {
             "href": "/b2b/settings",
             "label": "B2B 도매",
             "what": "B2B 알림봇(Flow)·아침 일정 알림·알림 이벤트·거래명세표 공급자 정보 설정",

@@ -3,6 +3,7 @@ import { supabaseAdmin } from "./supabase";
 import { resolveUserName, verifySession } from "./b2b-auth";
 import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getHelperBotConfig, isHelperBotConfigured, isHelperEventEnabled, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
+import { mirrorB2BSwit } from "./b2b-swit";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
 // 대시보드 우측 "최근 변경" 피드의 소스.
@@ -161,6 +162,13 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   // 알림 설정 게이팅 — DB 기록(히스토리)은 영향 없음, 외부 발송만 거름
   const config = await getNotifyConfig();
   if (!shouldNotify(config, input.event_type, input.meta)) return;
+
+  // Swit 미러(도입 검토, 2026-08-07) — 아래 기존 경로(헬퍼봇/Flow/Zapier)와 별개로 같은 요약을
+  // Swit 채널로도 발송. 미설정·실패는 mirrorB2BSwit 안에서 조용히 무시된다.
+  // 헬퍼 체크리스트에서 꺼진 이벤트는 아래 기존 게이팅과 같은 기준으로 미러도 건너뛴다.
+  if (!(input.bot === "helper" && input.helperEvent && !(await isHelperEventEnabled(input.helperEvent)))) {
+    void mirrorB2BSwit(input.summary, actor);
+  }
 
   // 0순위: '업무도우미 변경알림' 봇(생산관리 설정의 봇 재사용) — 생산·재고 알림 전용.
   //  체크리스트에서 해제된 이벤트는 어느 봇으로도 안 보냄. 봇 미구성이면 아래 기본 경로로 폴백.
