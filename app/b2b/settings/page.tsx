@@ -45,16 +45,22 @@ export default function SettingsPage() {
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
   // Teams 알림(Workflows 웹훅) — URL 은 서버에 저장하고 브라우저엔 유무·꼬리만 보여준다
   const [teamsUrl, setTeamsUrl] = useState("");
+  const [teamsHelperUrl, setTeamsHelperUrl] = useState("");
   const [teamsEnabled, setTeamsEnabled] = useState(false);
   const [teamsHasUrl, setTeamsHasUrl] = useState(false);
+  const [teamsHasHelper, setTeamsHasHelper] = useState(false);
   const [teamsTail, setTeamsTail] = useState("");
+  const [teamsHelperTail, setTeamsHelperTail] = useState("");
   const [teamsBusy, setTeamsBusy] = useState(false);
   const [teamsMsg, setTeamsMsg] = useState<Msg | null>(null);
   useEffect(() => {
     (async () => {
       try {
         const j = await (await fetch("/api/b2b/settings/teams", { cache: "no-store" })).json();
-        if (j.ok) { setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsTail(j.urlTail || ""); }
+        if (j.ok) {
+          setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsTail(j.urlTail || "");
+          setTeamsHasHelper(!!j.hasHelperUrl); setTeamsHelperTail(j.helperTail || "");
+        }
       } catch { /* 카드만 비활성 */ }
     })();
   }, []);
@@ -63,12 +69,13 @@ export default function SettingsPage() {
     try {
       const j = await (await fetch("/api/b2b/settings/teams", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: teamsUrl, enabled: nextEnabled ?? teamsEnabled }),
+        body: JSON.stringify({ url: teamsUrl, helperUrl: teamsHelperUrl, enabled: nextEnabled ?? teamsEnabled }),
       })).json();
       if (!j.ok) throw new Error(j.error || "저장 실패");
-      setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsUrl("");
+      setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsHasHelper(!!j.hasHelperUrl);
+      setTeamsUrl(""); setTeamsHelperUrl("");
       const j2 = await (await fetch("/api/b2b/settings/teams", { cache: "no-store" })).json();
-      if (j2.ok) setTeamsTail(j2.urlTail || "");
+      if (j2.ok) { setTeamsTail(j2.urlTail || ""); setTeamsHelperTail(j2.helperTail || ""); }
       setTeamsMsg({ ok: true, text: "저장했습니다." });
     } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" }); }
     setTeamsBusy(false);
@@ -78,7 +85,7 @@ export default function SettingsPage() {
     try {
       const j = await (await fetch("/api/b2b/settings/teams", { method: "POST" })).json();
       if (!j.ok) throw new Error(j.error || "발송 실패");
-      setTeamsMsg({ ok: true, text: "Teams로 테스트 발송 완료. 채널을 확인하세요." });
+      setTeamsMsg({ ok: true, text: `테스트 발송 완료 (${j.detail || "채널 확인"}).` });
     } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "발송 실패" }); }
     setTeamsBusy(false);
   }
@@ -339,9 +346,14 @@ export default function SettingsPage() {
         </p>
         <div className="sm-col" style={{ gap: 10, maxWidth: 640 }}>
           <label className="b2b-field">
-            <span className="b2b-field-label">웹훅 URL {teamsHasUrl && <span className="sm-faint" style={{ fontWeight: 400 }}>(저장됨 {teamsTail} — 비워두면 유지)</span>}</span>
+            <span className="b2b-field-label">B2B 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(발주 알림·일정 브리핑){teamsHasUrl ? ` · 저장됨 ${teamsTail} — 비워두면 유지` : ""}</span></span>
             <input className="b2b-input" type="password" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)}
               placeholder={teamsHasUrl ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
+          </label>
+          <label className="b2b-field">
+            <span className="b2b-field-label">업무도우미 변경알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(생산·재고 알림){teamsHasHelper ? ` · 저장됨 ${teamsHelperTail} — 비워두면 유지` : " · 비우면 B2B 채널로 함께 발송"}</span></span>
+            <input className="b2b-input" type="password" value={teamsHelperUrl} onChange={(e) => setTeamsHelperUrl(e.target.value)}
+              placeholder={teamsHasHelper ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
           </label>
           <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <label className="sm-row" style={{ gap: 6, fontSize: 13, cursor: "pointer" }}>

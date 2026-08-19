@@ -171,7 +171,7 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   if (!(input.bot === "helper" && input.helperEvent && !(await isHelperEventEnabled(input.helperEvent)))) {
     void b2bAlertLink(input.order_id).then((link) => {
       mirrorB2BSwit(input.summary, actor, link);
-      mirrorB2BTeams(input.summary, actor, link); // Teams 미러(2026-08-20 도입) — 미설정·실패는 내부에서 조용히 무시
+      mirrorB2BTeams(input.summary, actor, link, { helper: input.bot === "helper" }); // Teams 미러 — 헬퍼(생산·재고)는 변경알림 채널로
     }).catch(() => {});
   }
 

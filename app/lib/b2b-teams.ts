@@ -9,15 +9,22 @@ import { supabaseAdmin } from "./supabase";
 
 const KV_KEY = "b2b_teams";
 
-export type B2BTeamsConfig = { url: string; enabled: boolean };
+// url = 'B2B 알림' 채널(발주 알림·일정 브리핑), helperUrl = '업무도우미 변경알림' 채널(생산·재고).
+//  Flow 의 봇 2종(기본 봇 / 업무도우미 변경알림 봇) 구조를 채널 2개로 그대로 매핑한다.
+//  helperUrl 이 비어 있으면 helper 알림도 url 로 보낸다(Flow 의 '헬퍼봇 미구성 시 기본 봇 폴백'과 동일).
+export type B2BTeamsConfig = { url: string; helperUrl: string; enabled: boolean };
 
 export async function getB2BTeamsConfig(): Promise<B2BTeamsConfig> {
   try {
     const { data } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", KV_KEY).maybeSingle();
     const v = (data?.value ?? {}) as Partial<B2BTeamsConfig>;
-    return { url: typeof v.url === "string" ? v.url : "", enabled: !!v.enabled };
+    return {
+      url: typeof v.url === "string" ? v.url : "",
+      helperUrl: typeof v.helperUrl === "string" ? v.helperUrl : "",
+      enabled: !!v.enabled,
+    };
   } catch {
-    return { url: "", enabled: false };
+    return { url: "", helperUrl: "", enabled: false };
   }
 }
 
@@ -100,13 +107,21 @@ export async function sendTeamsWebhook(
 
 // 알림 미러 — Flow 와 같은 요약을 Teams 채널로. 각 게시가 채널의 새 스레드가 된다.
 //  link 는 호출부(b2b-activity)가 b2bAlertLink 로 만들어 넘긴다 — 여기서 만들면 순환 import.
-export async function mirrorB2BTeams(summary: string, actor: string | null, link?: string | null): Promise<void> {
+export async function mirrorB2BTeams(
+  summary: string,
+  actor: string | null,
+  link?: string | null,
+  opts?: { helper?: boolean },
+): Promise<void> {
   try {
     const cfg = await getB2BTeamsConfig();
-    if (!cfg.enabled || !cfg.url) return;
+    if (!cfg.enabled) return;
+    // 생산·재고(업무도우미 변경알림)는 전용 채널로, 없으면 B2B 채널로 폴백
+    const target = opts?.helper ? (cfg.helperUrl || cfg.url) : cfg.url;
+    if (!target) return;
     let text = summary;
     if (actor) text += `\n— 작업자: ${actor}`;
-    await sendTeamsWebhook(cfg.url, text, { title: "씨몬스터 B2B", link });
+    await sendTeamsWebhook(target, text, { title: opts?.helper ? "업무도우미 변경알림" : "씨몬스터 B2B", link });
   } catch {
     /* 미러 실패가 본 알림을 막지 않는다 */
   }
