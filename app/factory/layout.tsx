@@ -54,6 +54,13 @@ export default function FactoryLayout({ children }: { children: React.ReactNode 
               </Link>
             );
           })}
+          {/* 설정(Swit 알림)은 관리자 전용 — /factory 에 들어올 수 있는 internal = 관리자뿐 */}
+          {role === "internal" && (
+            <Link href="/factory/settings" className={`fac-nav-item ${pathname.startsWith("/factory/settings") ? "is-active" : ""}`}>
+              <Icon name="gear" />
+              설정
+            </Link>
+          )}
         </nav>
         <div className="fac-sb-foot">
           {userName && <span className="fac-sb-user">{userName}</span>}

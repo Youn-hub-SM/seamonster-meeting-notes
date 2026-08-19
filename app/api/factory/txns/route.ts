@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryActor } from "@/app/lib/factory-db";
-import { TXN_TYPES, SITE_DEST, type TxnType } from "@/app/lib/factory";
+import { TXN_TYPES, SITE_DEST, lotLabel, type TxnType } from "@/app/lib/factory";
+import { notifyFactory, factoryMsg } from "@/app/lib/factory-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -63,9 +64,10 @@ export async function POST(req: NextRequest) {
     const qty = type === "입고" ? Math.abs(raw) : type === "조정" ? raw : -Math.abs(raw);
 
     const db = factoryDb();
-    const { data: cur, error: ce } = await db.from("lot_stock").select("qty, item_name").eq("id", lot_id).single();
+    const { data: cur, error: ce } = await db.from("lot_stock").select("*").eq("id", lot_id).single();
     if (ce) throw ce;
-    const have = Number((cur as { qty: number }).qty) || 0;
+    const lot = cur as { qty: number; unit: string; warehouse: string; item_name: string; spec: string | null; tape_color: string | null; origin: string | null };
+    const have = Number(lot.qty) || 0;
     // 재고보다 많이 빼는 건 오타일 가능성이 높다 — 막고 현재수량을 알려준다.
     // 실물이 정말 안 맞으면 '조정'으로 맞춘다(그게 실사 보정의 정상 경로다).
     if (qty < 0 && type !== "조정" && have + qty < 0) {
@@ -76,16 +78,19 @@ export async function POST(req: NextRequest) {
     }
 
     const dest = type === "생산투입" ? SITE_DEST : String(b.dest || "").trim() || null;
+    const who = await factoryActor(req);
+    const memo = String(b.memo || "").trim() || null;
     const { data, error } = await db.from("lot_txns").insert({
       lot_id,
       txn_date: DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined,
       type,
       qty,
       dest,
-      memo: String(b.memo || "").trim() || null,
-      created_by: await factoryActor(req),
+      memo,
+      created_by: who,
     }).select("*").single();
     if (error) throw error;
+    await notifyFactory(factoryMsg({ event: type, label: lotLabel(lot), warehouse: lot.warehouse, qty, unit: lot.unit, dest, who, memo }));
     return NextResponse.json({ ok: true, row: data });
   } catch (err) {
     console.error("[factory/txns POST]", err);

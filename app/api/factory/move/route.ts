@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryActor } from "@/app/lib/factory-db";
+import { lotLabel } from "@/app/lib/factory";
+import { notifyFactory, factoryMsg } from "@/app/lib/factory-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +83,11 @@ export async function POST(req: NextRequest) {
       throw te;
     }
 
+    await notifyFactory(factoryMsg({
+      event: "창고이동",
+      label: lotLabel(s as { item_name: string; spec: string | null; tape_color: string | null; origin: string | null }),
+      warehouse: fromName, dest: toName, qty, unit: String(s.unit || "B"), who, memo,
+    }));
     return NextResponse.json({ ok: true, move_id, dest_lot_id: destLotId });
   } catch (err) {
     console.error("[factory/move POST]", err);
