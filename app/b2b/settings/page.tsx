@@ -43,6 +43,45 @@ export default function SettingsPage() {
   const [digestMsg, setDigestMsg] = useState<Msg | null>(null);
   type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
+  // Teams 알림(Workflows 웹훅) — URL 은 서버에 저장하고 브라우저엔 유무·꼬리만 보여준다
+  const [teamsUrl, setTeamsUrl] = useState("");
+  const [teamsEnabled, setTeamsEnabled] = useState(false);
+  const [teamsHasUrl, setTeamsHasUrl] = useState(false);
+  const [teamsTail, setTeamsTail] = useState("");
+  const [teamsBusy, setTeamsBusy] = useState(false);
+  const [teamsMsg, setTeamsMsg] = useState<Msg | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const j = await (await fetch("/api/b2b/settings/teams", { cache: "no-store" })).json();
+        if (j.ok) { setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsTail(j.urlTail || ""); }
+      } catch { /* 카드만 비활성 */ }
+    })();
+  }, []);
+  async function saveTeams(nextEnabled?: boolean) {
+    setTeamsBusy(true); setTeamsMsg(null);
+    try {
+      const j = await (await fetch("/api/b2b/settings/teams", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: teamsUrl, enabled: nextEnabled ?? teamsEnabled }),
+      })).json();
+      if (!j.ok) throw new Error(j.error || "저장 실패");
+      setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsUrl("");
+      const j2 = await (await fetch("/api/b2b/settings/teams", { cache: "no-store" })).json();
+      if (j2.ok) setTeamsTail(j2.urlTail || "");
+      setTeamsMsg({ ok: true, text: "저장했습니다." });
+    } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" }); }
+    setTeamsBusy(false);
+  }
+  async function testTeams() {
+    setTeamsBusy(true); setTeamsMsg(null);
+    try {
+      const j = await (await fetch("/api/b2b/settings/teams", { method: "POST" })).json();
+      if (!j.ok) throw new Error(j.error || "발송 실패");
+      setTeamsMsg({ ok: true, text: "Teams로 테스트 발송 완료. 채널을 확인하세요." });
+    } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "발송 실패" }); }
+    setTeamsBusy(false);
+  }
   // 발송 시각 목록(KST HH:MM) — DCfg 와 별도 상태로 둔다(공용 파일 동시수정 회피 + 저장 시 함께 전송)
   const [dtimes, setDtimes] = useState<string[]>(["06:00", "16:00"]);
   const [newTime, setNewTime] = useState("09:00");
@@ -282,6 +321,40 @@ export default function SettingsPage() {
             </div>
           </>
         )}
+      </section>
+
+      {/* Teams 알림 — Workflows 웹훅으로 발주 알림·일정 브리핑을 Teams 채널에 병행 발송 (2026-08-20) */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">Teams 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 채널 웹훅</span></h2>
+          <span className="b2b-status-pill" style={teamsEnabled && teamsHasUrl
+            ? { background: "var(--sm-success-bg)", color: "var(--sm-success)" }
+            : { background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>
+            {teamsEnabled && teamsHasUrl ? "발송 중" : "꺼짐"}
+          </span>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
+          발주 알림과 일정 브리핑을 <strong>Teams 채널에도</strong> 보냅니다(Flow와 병행). URL 발급: 채널 <strong>⋯ → 워크플로 → &ldquo;웹후크 요청을 받으면 채널에 게시&rdquo;</strong>.
+          URL은 게시 권한 그 자체이니 외부에 공유하지 마세요.
+        </p>
+        <div className="sm-col" style={{ gap: 10, maxWidth: 640 }}>
+          <label className="b2b-field">
+            <span className="b2b-field-label">웹훅 URL {teamsHasUrl && <span className="sm-faint" style={{ fontWeight: 400 }}>(저장됨 {teamsTail} — 비워두면 유지)</span>}</span>
+            <input className="b2b-input" type="password" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)}
+              placeholder={teamsHasUrl ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
+          </label>
+          <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, cursor: "pointer" }}>
+              <input type="checkbox" className="b2b-checkbox" checked={teamsEnabled}
+                onChange={(e) => { setTeamsEnabled(e.target.checked); saveTeams(e.target.checked); }} /> Teams로 발송 켜기
+            </label>
+            <button className="b2b-btn-primary" onClick={() => saveTeams()} disabled={teamsBusy}>{teamsBusy ? "처리 중…" : "저장"}</button>
+            <button className="b2b-btn-secondary" onClick={testTeams} disabled={teamsBusy || !teamsHasUrl} title={teamsHasUrl ? "" : "URL을 먼저 저장하세요"}>테스트 발송</button>
+          </div>
+          {teamsMsg && (
+            <div className={teamsMsg.ok ? "sm-success" : "b2b-error"} style={{ fontSize: 13 }}>{teamsMsg.text}</div>
+          )}
+        </div>
       </section>
 
       {/* 아침 일정 알림 (매일 오전 06시대 자동 Flow 발송 — 크론 0 21 * * * UTC) */}

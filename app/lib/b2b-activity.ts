@@ -4,6 +4,7 @@ import { resolveUserName, verifySession } from "./b2b-auth";
 import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getHelperBotConfig, isHelperBotConfigured, isHelperEventEnabled, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
 import { mirrorB2BSwit } from "./b2b-swit";
+import { mirrorB2BTeams } from "./b2b-teams";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
 // 대시보드 우측 "최근 변경" 피드의 소스.
@@ -168,7 +169,10 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   // 헬퍼 체크리스트에서 꺼진 이벤트는 아래 기존 게이팅과 같은 기준으로 미러도 건너뛴다.
   // 링크는 Flow 와 같은 주문 상세 주소(b2bAlertLink) — 주문 이벤트가 아니면 null.
   if (!(input.bot === "helper" && input.helperEvent && !(await isHelperEventEnabled(input.helperEvent)))) {
-    void b2bAlertLink(input.order_id).then((link) => mirrorB2BSwit(input.summary, actor, link)).catch(() => {});
+    void b2bAlertLink(input.order_id).then((link) => {
+      mirrorB2BSwit(input.summary, actor, link);
+      mirrorB2BTeams(input.summary, actor, link); // Teams 미러(2026-08-20 도입) — 미설정·실패는 내부에서 조용히 무시
+    }).catch(() => {});
   }
 
   // 0순위: '업무도우미 변경알림' 봇(생산관리 설정의 봇 재사용) — 생산·재고 알림 전용.

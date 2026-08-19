@@ -3,6 +3,7 @@ import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { buildB2BDigest, getDigestConfig, getDigestLastSent, kstDateStr } from "@/app/lib/b2b-digest";
 import { getKv, setKv } from "@/app/lib/b2b-settings";
 import { sendFlowText } from "@/app/lib/b2b-activity";
+import { sendTeamsTextSafe } from "@/app/lib/b2b-teams";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,6 +86,7 @@ export async function GET(req: NextRequest) {
     const digest = await buildB2BDigest(titled(target));
     const { text, url } = splitTrailingLink(digest.text);
     const r = await sendFlowText(text, { url });
+    await sendTeamsTextSafe(text, { link: url }); // Teams 병행 — 미설정·실패는 조용히(성공 판정은 Flow 기준 유지)
     if (r.ok) await setKv(keyFor(target), today);
     return NextResponse.json({ ok: r.ok, time: target, sent: r.ok, error: r.error, counts: digest.counts });
   }
@@ -94,6 +96,7 @@ export async function GET(req: NextRequest) {
   if (sp.get("send") === "1") {
     const { text, url } = splitTrailingLink(digest.text);
     const r = await sendFlowText(text, { url });
+    await sendTeamsTextSafe(text, { link: url });
     return NextResponse.json({ ok: r.ok, sent: r.ok, error: r.error, counts: digest.counts });
   }
   return NextResponse.json({ ok: true, preview: digest.text, counts: digest.counts, times });

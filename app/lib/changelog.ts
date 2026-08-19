@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-08-20",
+    tag: "신규",
+    tool: "B2B 도매",
+    title: "Teams 채널 알림 — 발주 알림·일정 브리핑을 Teams로",
+    desc: "관리자 › 설정 › B2B 도매의 'Teams 알림' 카드에 Teams 채널 웹훅 URL을 등록하면, 발주 알림(발송일정·발송완료·입금확인 등)과 아침·오후 일정 브리핑이 Teams 채널에 게시됩니다(각 알림이 새 스레드). Flow 발송과 병행이라 기존 알림은 그대로 유지되고, 켜고 끄기는 체크박스 하나입니다. URL 발급: 채널 ⋯ → 워크플로 → '웹후크 요청을 받으면 채널에 게시'. URL은 게시 권한 그 자체이므로 외부 공유 금지.",
+    href: "/b2b/settings",
+  },
+  {
     date: "2026-08-19",
     tag: "개선",
     tool: "재고",
