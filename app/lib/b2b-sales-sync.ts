@@ -28,6 +28,7 @@ type OrderJoin = {
   order_no: string;
   order_date: string;
   status: string;
+  discount_amount?: number; // 발주 할인(095) — 미적용 환경에선 조회에서 빠져 undefined
   order_items: ItemJoin[];
 };
 
@@ -35,14 +36,22 @@ type OrderJoin = {
 //  반환: { synced, rows }. 실패 시 throw.
 export async function syncOrderSales(orderId: string): Promise<{ synced: boolean; rows: number }> {
   const sb = supabaseAdmin();
-  const { data, error } = await sb
+  const itemsSel = "order_items(product_name, option_label, spec, qty, unit_price, sort_order, product:product_id(sku))";
+  let { data, error } = await sb
     .from("orders")
-    .select(
-      "id, order_no, order_date, status, " +
-        "order_items(product_name, option_label, spec, qty, unit_price, sort_order, product:product_id(sku))"
-    )
+    .select("id, order_no, order_date, status, discount_amount, " + itemsSel)
     .eq("id", orderId)
     .maybeSingle();
+  // 095 미적용 환경 폴백 — 할인 컬럼 없이 재조회
+  if (error && /discount/i.test(error.message || "")) {
+    const retry = await sb
+      .from("orders")
+      .select("id, order_no, order_date, status, " + itemsSel)
+      .eq("id", orderId)
+      .maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
   if (error) throw error;
   const o = data as unknown as OrderJoin | null;
   if (!o) return { synced: false, rows: 0 };
@@ -66,9 +75,26 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
     else groups.set(key, { product_name, option_name, sku, price, qty });
   }
 
+  // 발주 할인은 라인 결제금액에 비례 배분해 반영(총매출이 실제 수금액과 일치하도록).
+  //  마지막 라인이 반올림 오차를 흡수해 배분 합 = 총액 - 할인이 정확히 성립한다.
+  const entries = [...groups.values()];
+  const gross = entries.reduce((s, g) => s + g.qty * g.price, 0);
+  const disc = Math.min(Math.max(0, Number(o.discount_amount) || 0), gross);
+  const paidOf: number[] = [];
+  let allocated = 0;
+  for (let i = 0; i < entries.length; i++) {
+    const line = entries[i].qty * entries[i].price;
+    const paid = i === entries.length - 1
+      ? gross - disc - allocated
+      : Math.round(line * (gross > 0 ? 1 - disc / gross : 1));
+    paidOf.push(paid);
+    allocated += paid;
+  }
+
   // 병합 라인 → 매출집계/구시트와 동일한 한글헤더 매핑으로 정규화. 전화 미포함 → customer_key=''
   const rows: SalesOrderRow[] = [];
-  for (const g of groups.values()) {
+  for (let i = 0; i < entries.length; i++) {
+    const g = entries[i];
     const nr = normalizeRow({
       "판매처": "도매",
       "주문일자": o.order_date, // YYYY-MM-DD → normalizeRow 가 yyyymmdd 로 변환
@@ -79,7 +105,7 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
       "수량": g.qty,
       "판매가": g.price,
       "옵션금액": 0,
-      "결제금액": g.qty * g.price,
+      "결제금액": paidOf[i],
       "배송비결제금액": 0,
     });
     if (nr.ok && nr.order) rows.push(nr.order);

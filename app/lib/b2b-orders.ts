@@ -72,7 +72,9 @@ export interface Order {
   tax_invoice_status: TaxInvoiceStatus;
   subtotal: number;
   vat: number;
-  total: number;
+  total: number;                 // = subtotal + vat - discount_amount (트리거 계산)
+  discount_amount: number;       // 할인금액(원) — 총액에서 차감 (migration 095)
+  discount_reason: string | null;
   notes: string | null;
   box_count: number;   // 배송 박스 수 (발주 단위 이익률 계산용)
   tracking_no: string | null;  // 헤더 송장번호 (발송완료 시 필수)
@@ -314,6 +316,8 @@ export interface OrderInput {
   payment_status: PaymentStatus;
   tax_invoice_status: TaxInvoiceStatus;
   notes: string;
+  discount_amount: number | string;     // 할인금액(원) — 화면 % 입력은 저장 시 금액으로 환산됨
+  discount_reason: string;              // 할인 사유
   box_count: number | string;           // 배송 박스 수 (이익률 계산용)
   tracking_no: string;                   // 헤더 송장번호 (발송완료 시 필수)
   items: OrderItemInput[];
@@ -343,6 +347,8 @@ export const EMPTY_ORDER: OrderInput = {
   payment_status: "입금전",
   tax_invoice_status: "미발행",
   notes: "",
+  discount_amount: "",
+  discount_reason: "",
   box_count: 1,
   tracking_no: "",
   items: [{ ...EMPTY_ORDER_ITEM }],

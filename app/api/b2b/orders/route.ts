@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
 
     // 1) 헤더 insert (order_no 는 트리거가 자동 발번)
-    const { data: orderRow, error: orderErr } = await sb
+    let { data: orderRow, error: orderErr } = await sb
       .from("orders")
       .insert({
         company_id: body.company_id,
@@ -122,11 +122,35 @@ export async function POST(req: NextRequest) {
         payment_status: body.payment_status,
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
+        discount_amount: Math.max(0, Math.round(Number(body.discount_amount) || 0)),
+        discount_reason: body.discount_reason?.trim() || null,
         box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
         tracking_no: body.tracking_no?.trim() || null,
       })
       .select()
       .single();
+    // 095 미적용 환경 폴백 — 할인 컬럼 없이 재시도(할인 없이 저장됨)
+    if (orderErr && /discount/i.test(orderErr.message || "")) {
+      const retry = await sb
+        .from("orders")
+        .insert({
+          company_id: body.company_id,
+          order_date: body.order_date,
+          production_date: body.production_date || null,
+          ship_date: body.ship_date || null,
+          status: body.status,
+          production_status: body.production_status,
+          payment_status: body.payment_status,
+          tax_invoice_status: body.tax_invoice_status,
+          notes: body.notes?.trim() || null,
+          box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
+          tracking_no: body.tracking_no?.trim() || null,
+        })
+        .select()
+        .single();
+      orderRow = retry.data as typeof orderRow;
+      orderErr = retry.error;
+    }
     if (orderErr) {
       // 발주번호 발번 충돌 (동시 등록 등) — 재시도 안내
       if (orderErr.code === "23505") {

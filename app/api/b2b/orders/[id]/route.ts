@@ -87,7 +87,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     const prevTaxInvoice = prevOrder?.tax_invoice_status as string | undefined;
 
     // 1) 헤더 update
-    const { error: orderErr } = await sb
+    let { error: orderErr } = await sb
       .from("orders")
       .update({
         company_id: body.company_id,
@@ -99,10 +99,32 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
         payment_status: body.payment_status,
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
+        discount_amount: Math.max(0, Math.round(Number(body.discount_amount) || 0)),
+        discount_reason: body.discount_reason?.trim() || null,
         box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
         tracking_no: body.tracking_no?.trim() || null,
       })
       .eq("id", id);
+    // 095 미적용 환경 폴백 — 할인 컬럼 없이 재시도
+    if (orderErr && /discount/i.test(orderErr.message || "")) {
+      const retry = await sb
+        .from("orders")
+        .update({
+          company_id: body.company_id,
+          order_date: body.order_date,
+          production_date: body.production_date || null,
+          ship_date: body.ship_date || null,
+          status: body.status,
+          production_status: body.production_status,
+          payment_status: body.payment_status,
+          tax_invoice_status: body.tax_invoice_status,
+          notes: body.notes?.trim() || null,
+          box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
+          tracking_no: body.tracking_no?.trim() || null,
+        })
+        .eq("id", id);
+      orderErr = retry.error;
+    }
     if (orderErr) throw orderErr;
 
     // 2) 기존 라인아이템 스냅샷 (롤백용)

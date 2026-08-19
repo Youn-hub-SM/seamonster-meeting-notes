@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     const { data: completed, error: cErr } = await sb
       .from("orders")
       .select(
-        "id, order_no, order_date, ship_date, status, total, subtotal, vat, box_count, " +
+        "id, order_no, order_date, ship_date, status, total, subtotal, vat, box_count, discount_amount, " +
           "company:company_id(id, name), " +
           "order_items(id, product_name, spec, qty, unit_price, cost_at_order, tax_type, product_id, product:product_id(volume_kg)), " +
           "shipments(status, shipment_items(order_item_id, qty))"
@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
           volumeKg: Number(prod?.volume_kg) || 0,
         };
       });
-      const orderMargin = computeOrderMargin(marginLines, Number(o.box_count) || 1, season).profit;
+      const orderMargin = computeOrderMargin(marginLines, Number(o.box_count) || 1, season, Number((o as { discount_amount?: number }).discount_amount) || 0).profit;
 
       for (const it of o.order_items ?? []) {
         const qty = effQty(it); // 취소 차수 수량 차감(취소 없으면 원수량)

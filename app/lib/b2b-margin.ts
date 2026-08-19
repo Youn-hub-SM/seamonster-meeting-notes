@@ -126,18 +126,24 @@ export interface OrderMarginResult {
 export function computeOrderMargin(
   lines: OrderMarginLine[],
   boxCount: number,
-  season: Season
+  season: Season,
+  discountAmount = 0  // 발주 할인(원, 부가세 포함 총액 기준) — 매출에서 비례 차감
 ): OrderMarginResult {
   let revenue = 0,
     productCost = 0,
-    volume = 0;
+    volume = 0,
+    grossWithVat = 0;
   for (const l of lines) {
     const qty = Number(l.qty) || 0;
     const sale = (Number(l.unitPrice) || 0) * qty;
     revenue += l.taxType === "taxable" ? sale / 1.1 : sale;
+    grossWithVat += l.taxType === "taxable" ? sale * 1.0 : sale; // 단가는 부가세 포함가 기준(도매 관행)
     productCost += (Number(l.costAtOrder) || 0) * qty;
     volume += (Number(l.volumeKg) || 0) * qty;
   }
+  // 할인은 총액(부가세 포함)에서 깎이므로, 매출(공급가)에는 같은 비율만 반영한다
+  const disc = Math.max(0, Number(discountAmount) || 0);
+  if (disc > 0 && grossWithVat > 0) revenue *= Math.max(0, 1 - disc / grossWithVat);
 
   const boxes = Math.max(1, Math.floor(Number(boxCount) || 1));
   const hasVolume = volume > 0;
