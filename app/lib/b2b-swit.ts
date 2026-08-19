@@ -27,13 +27,17 @@ export async function setB2BSwitConfig(cfg: B2BSwitConfig): Promise<void> {
   if (error) throw error;
 }
 
-// 알림 미러 — Flow 와 같은 요약을 Swit 채널로. 링크는 넣지 않는다(검토용 최소 형태).
-export async function mirrorB2BSwit(summary: string, actor: string | null): Promise<void> {
+// 알림 미러 — Flow 와 같은 요약을 Swit 채널로.
+//  link 는 호출부(b2b-activity)가 b2bAlertLink 로 만들어 넘긴다 — 여기서 만들면 순환 import.
+//  Flow 는 링크를 별도 '자세히 보기' 필드로 보내지만 Swit 수신 웹훅엔 그런 필드가 없어
+//  본문 마지막 줄에 URL 을 그대로 붙인다(Swit 이 자동 링크로 렌더).
+export async function mirrorB2BSwit(summary: string, actor: string | null, link?: string | null): Promise<void> {
   try {
     const cfg = await getB2BSwitConfig();
     if (!cfg.enabled || !cfg.url) return;
     let text = `[씨몬스터 B2B] ${summary}`;
     if (actor) text += `\n— 작업자: ${actor}`;
+    if (link) text += `\n${link}`;
     await sendSwit(cfg.url, text);
   } catch {
     /* 미러 실패가 본 알림을 막지 않는다 */

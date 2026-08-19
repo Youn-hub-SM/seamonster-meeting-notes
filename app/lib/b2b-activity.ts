@@ -166,8 +166,9 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   // Swit 미러(도입 검토, 2026-08-07) — 아래 기존 경로(헬퍼봇/Flow/Zapier)와 별개로 같은 요약을
   // Swit 채널로도 발송. 미설정·실패는 mirrorB2BSwit 안에서 조용히 무시된다.
   // 헬퍼 체크리스트에서 꺼진 이벤트는 아래 기존 게이팅과 같은 기준으로 미러도 건너뛴다.
+  // 링크는 Flow 와 같은 주문 상세 주소(b2bAlertLink) — 주문 이벤트가 아니면 null.
   if (!(input.bot === "helper" && input.helperEvent && !(await isHelperEventEnabled(input.helperEvent)))) {
-    void mirrorB2BSwit(input.summary, actor);
+    void b2bAlertLink(input.order_id).then((link) => mirrorB2BSwit(input.summary, actor, link)).catch(() => {});
   }
 
   // 0순위: '업무도우미 변경알림' 봇(생산관리 설정의 봇 재사용) — 생산·재고 알림 전용.
