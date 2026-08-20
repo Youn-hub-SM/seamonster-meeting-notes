@@ -99,6 +99,9 @@ export interface Voc {
   flow_task_id?: string | null;    // flow(플로우) 업무 등록 식별자
   flow_project_id?: string | null; // 등록된 flow 프로젝트
   flow_task_at?: string | null;    // 등록 시각(값 있으면 flow에 등록됨)
+  asana_task_gid?: string | null;  // 아사나 업무 gid (migration 096, flow 대체)
+  asana_task_url?: string | null;  // 아사나 업무 바로가기(permalink)
+  asana_task_at?: string | null;   // 등록 시각(값 있으면 아사나에 등록됨)
 }
 
 // 상태별 색 (목록 뱃지·도넛·추세)

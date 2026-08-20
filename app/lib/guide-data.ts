@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-08-17";
+export const GUIDE_UPDATED = "2026-08-21";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1703,7 +1703,7 @@ export const GUIDE: GuideCategory[] = [
           {
             "href": "/voc",
             "label": "VOC 처리",
-            "what": "고객 클레임(VOC) 등록·목록 관리와 유형별 현황판, flow 업무 등록",
+            "what": "고객 클레임(VOC) 등록·목록 관리와 유형별 현황판, 아사나 업무 등록",
             "steps": [
               "'+ VOC 추가'를 누른다",
               "접수일·클레임 유형·상세내용을 입력한다(보상유형을 고르면 손해금액이 자동 계산된다)",
@@ -1713,14 +1713,15 @@ export const GUIDE: GuideCategory[] = [
               "미리보기에서 건수를 확인하고 'N건 등록'을 누른다",
               "'유형별 현황판' 탭에서 유형 줄을 클릭해 이번 달 건을 펼쳐 본다",
               "개선 상태는 현황판의 '개선 상태' 드롭다운에서 바꾼다",
-              "개선 작업이 필요하면 목록의 '→ flow'를 눌러 업무로 등록한다"
+              "개선 작업이 필요하면 목록의 '→ 아사나'를 눌러 업무로 등록한다"
             ],
             "tips": [
               "삭제하면 복구되지 않는다",
               "같은 엑셀을 두 번 업로드하면 중복 등록된다. 미리보기 건수를 확인하고 등록한다",
               "유형 이름을 바꾸면 기존 VOC의 유형도 함께 바뀐다",
               "손해금액 자동계산은 상품 마스터에 있는 상품만 된다. 없는 상품은 직접 입력한다",
-              "flow로 보내면 첨부 사진은 본문에 링크로 들어간다(클릭하면 열림). 링크가 열리려면 사진이 공개 URL이어야 한다"
+              "아사나로 보내면 첨부 사진은 본문에 링크로 들어간다(클릭하면 열림). 링크가 열리려면 사진이 공개 URL이어야 한다",
+              "등록되면 '✓ 아사나'가 뜨고, 누르면 아사나 업무가 열린다"
             ],
             "keywords": [
               "VOC",
@@ -1733,6 +1734,8 @@ export const GUIDE: GuideCategory[] = [
               "현황판",
               "flow",
               "플로우",
+              "아사나",
+              "asana",
               "녹음",
               "고객 컴플레인"
             ]
@@ -2234,18 +2237,20 @@ export const GUIDE: GuideCategory[] = [
           {
             "href": "/voc/settings",
             "label": "VOC·탈리 연동",
-            "what": "탈리(Tally) 설문 응답 가져오기와 플로우 업무 등록 연동 설정",
+            "what": "탈리(Tally) 설문 응답 가져오기와 아사나·플로우 업무 등록 연동 설정",
             "steps": [
               "API 연동(권장): Tally → 우상단 프로필 → Settings → API keys 에서 키를 발급한다",
               "키를 붙여넣고 '저장'을 누른다",
               "'폼 불러오기'를 누르고 목록에서 가져올 폼을 고른다 (고르면 자동 저장)",
               "'지금 가져오기'를 눌러 응답을 가져온다",
               "웹훅(대안): 화면의 주소를 '복사'해 Tally 폼 Integrations → Webhooks 에 붙여넣고, Signing secret 을 입력해 '시크릿 저장'을 누른다",
-              "flow 연동: flow API 키를 넣고 '저장', 기본 프로젝트 ID·기본 우선순위·기본 담당자도 각각 '저장'을 누른다"
+              "아사나 연동: 아사나에서 발급한 PAT를 넣고 '저장', 프로젝트 주소를 붙여넣고 '저장' 후 '연결 테스트'를 누른다",
+              "flow 연동(구): flow API 키를 넣고 '저장', 기본 프로젝트 ID·기본 우선순위·기본 담당자도 각각 '저장'을 누른다"
             ],
             "tips": [
               "가져오기는 이전에 가져온 응답을 자동으로 건너뛴다(중복 안 됨). 처음엔 최근 60일치만 가져온다",
               "API 키·시크릿 칸을 비운 채 저장하면 해제된다",
+              "아사나 PAT와 프로젝트가 모두 저장되면 VOC 화면의 등록 버튼이 '→ 아사나'로 바뀐다",
               "기본 담당자는 반드시 플로우 프로젝트 멤버 이메일이어야 한다. 아니면 flow가 등록을 거부한다"
             ],
             "keywords": [

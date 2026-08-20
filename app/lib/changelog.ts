@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-08-21",
+    tag: "신규",
+    tool: "VOC 관리",
+    title: "VOC를 아사나 업무로 등록 — flow 대체",
+    desc: "VOC 설정에 아사나 PAT와 프로젝트를 저장하면 VOC 목록/상세의 등록 버튼이 '→ 아사나'로 바뀝니다. 클릭 한 번으로 VOC 전체 내용이 아사나 프로젝트의 업무로 등록되고, 등록된 건은 '✓ 아사나'를 누르면 해당 업무가 바로 열립니다. 기존 flow 등록 건 표시는 그대로 유지됩니다.",
+    href: "/voc/settings",
+  },
+  {
     date: "2026-08-20",
     tag: "신규",
     tool: "B2B 도매",

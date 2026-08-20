@@ -45,7 +45,13 @@ export default function VocPage() {
   const [fTo, setFTo] = useState("");
   const [edit, setEdit] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
-  const [flowBusy, setFlowBusy] = useState("");   // flow 등록 중인 VOC id
+  const [flowBusy, setFlowBusy] = useState("");   // flow/아사나 등록 중인 VOC id
+  // 아사나 설정(PAT+프로젝트)이 완료돼 있으면 등록 버튼이 '→ 아사나'로 바뀐다(flow 는 전환기 보존).
+  const [asanaReady, setAsanaReady] = useState(false);
+  useEffect(() => {
+    fetch("/api/voc/asana-config", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => { if (j.ok) setAsanaReady(!!j.ready); }).catch(() => {});
+  }, []);
   const [uploading, setUploading] = useState(false);
   // 엑셀 일괄 등록
   const [importing, setImporting] = useState(false);
@@ -187,6 +193,22 @@ export default function VocPage() {
       if (!res.ok || !j.ok) throw new Error(j.error || "flow 등록 실패");
       setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, flow_task_at: j.flow_task_at, flow_task_id: j.flow_task_id, flow_project_id: j.flow_project_id } : x)));
     } catch (e) { setError(e instanceof Error ? e.message : "flow 등록 실패"); }
+    setFlowBusy("");
+  }
+
+  // 아사나에 업무로 등록 — flow 와 같은 규칙(클릭 1회, 성공 시 '등록됨' 표시로 중복 방지).
+  async function registerAsana(r: Voc) {
+    if (r.asana_task_at) { setError("이미 아사나에 등록된 VOC입니다."); return; }
+    if (flowBusy) { setError("다른 VOC의 업무 등록이 진행 중입니다. 잠시 후 다시 시도하세요."); return; }
+    if (!window.confirm(`이 VOC를 아사나에 업무로 등록할까요?\n제목: [VOC/${r.category}] ${r.product || "상품미상"} - ${r.customer || "고객"}`)) return;
+    setFlowBusy(r.id); setError("");
+    try {
+      const res = await fetch("/api/voc/asana-task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "아사나 등록 실패");
+      if (j.warning) setError(j.warning);
+      setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, asana_task_at: j.asana_task_at || new Date().toISOString(), asana_task_gid: j.asana_task_gid, asana_task_url: j.asana_task_url } : x)));
+    } catch (e) { setError(e instanceof Error ? e.message : "아사나 등록 실패"); }
     setFlowBusy("");
   }
 
@@ -367,7 +389,7 @@ export default function VocPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr>
-              <th>접수일</th><th>구매채널</th><th>고객명</th><th>구매</th><th>구매일</th><th>구매상품</th><th>유형</th><th>특이사항</th><th>상세내용</th><th>처리내용</th><th>flow</th>
+              <th>접수일</th><th>구매채널</th><th>고객명</th><th>구매</th><th>구매일</th><th>구매상품</th><th>유형</th><th>특이사항</th><th>상세내용</th><th>처리내용</th><th>업무</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (
@@ -383,8 +405,20 @@ export default function VocPage() {
                   <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
                   <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.resolution || ""}>{r.resolution || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
-                    {r.flow_task_at ? (
+                    {r.asana_task_at ? (
+                      r.asana_task_url ? (
+                        <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)} — 클릭하면 업무 열림`}
+                          style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
+                      ) : (
+                        <span title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
+                      )
+                    ) : r.flow_task_at ? (
                       <span title={`flow 등록됨 · ${r.flow_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
+                    ) : asanaReady ? (
+                      <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
+                        title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
+                        {flowBusy === r.id ? "등록중…" : "→ 아사나"}
+                      </button>
                     ) : (
                       <button className="b2b-link-btn" onClick={() => registerFlow(r)} disabled={flowBusy === r.id}
                         title="flow(플로우)에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
@@ -551,8 +585,14 @@ export default function VocPage() {
                 {edit.id ? <button className="b2b-btn-danger" onClick={remove} disabled={saving}>삭제</button> : <span />}
                 {edit.id && (() => {
                   const er = rows.find((r) => r.id === edit.id);
-                  return er?.flow_task_at
-                    ? <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>flow 등록됨 ✓</span>
+                  if (er?.asana_task_at) {
+                    return er.asana_task_url
+                      ? <a href={er.asana_task_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>아사나 등록됨 ✓ (열기)</a>
+                      : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>아사나 등록됨 ✓</span>;
+                  }
+                  if (er?.flow_task_at) return <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>flow 등록됨 ✓</span>;
+                  return asanaReady
+                    ? <button className="b2b-btn-secondary" onClick={() => er && registerAsana(er)} disabled={!er || flowBusy === edit.id}>{flowBusy === edit.id ? "아사나 등록중…" : "아사나에 업무 등록"}</button>
                     : <button className="b2b-btn-secondary" onClick={() => er && registerFlow(er)} disabled={!er || flowBusy === edit.id}>{flowBusy === edit.id ? "flow 등록중…" : "flow에 업무 등록"}</button>;
                 })()}
               </div>
@@ -608,7 +648,7 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
             ) : (
               <div className="b2b-table-wrap">
                 <table className="b2b-table">
-                  <thead><tr><th>접수일</th><th>고객</th><th>상품</th><th>상세내용</th><th>처리내용</th><th>flow</th></tr></thead>
+                  <thead><tr><th>접수일</th><th>고객</th><th>상품</th><th>상세내용</th><th>처리내용</th><th>업무</th></tr></thead>
                   <tbody>
                     {b.monthRows.map((r) => (
                       <tr key={r.id} onClick={() => onOpen(r)} style={{ cursor: "pointer" }}>
@@ -617,7 +657,7 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
                         <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
                         <td style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
                         <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.resolution || ""}>{r.resolution || "-"}</td>
-                        <td style={{ whiteSpace: "nowrap" }}>{r.flow_task_at ? <span style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓</span> : <span className="sm-faint">-</span>}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{r.asana_task_at || r.flow_task_at ? <span style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓</span> : <span className="sm-faint">-</span>}</td>
                       </tr>
                     ))}
                   </tbody>
