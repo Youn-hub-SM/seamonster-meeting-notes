@@ -236,6 +236,7 @@ export function RequestList() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   async function copyRequestSheet(r: ProductionRequest) {
     // 제조사 전달용 — 내부 정보(요청자·담당·제목·용도)는 빼고 번호·날짜·품목만(대표 확정 서식).
+    //  SKU·행 넘버링도 제외(2026-08-20) — 외부 공유용이고, 순서는 담당자가 붙여넣은 뒤 우선순위로 손수 재배열한다.
     const L: string[] = [];
     L.push(`[생산 요청서] ${r.req_no || ""}`.trim());
     L.push("");
@@ -244,7 +245,7 @@ export function RequestList() {
     L.push("");
     L.push("--------------------------------");
     L.push("");
-    r.items.forEach((it, i) => L.push(`${i + 1}. ${it.name}${it.spec ? ` ${it.spec}` : ""}${it.sku ? ` [${it.sku}]` : ""}  ×${it.requested_qty.toLocaleString()}${it.unit || ""}${it.memo ? ` — ${it.memo}` : ""}`));
+    r.items.forEach((it) => L.push(`${it.name}${it.spec ? ` ${it.spec}` : ""}  ×${it.requested_qty.toLocaleString()}${it.unit || ""}${it.memo ? ` — ${it.memo}` : ""}`));
     L.push("");
     L.push("--------------------------------");
     L.push("");
