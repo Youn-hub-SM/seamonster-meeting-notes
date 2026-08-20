@@ -4,9 +4,13 @@
 //  headers { x-flow-api-key }, body { receivers:[{receiverId}], title, contents }.
 //  설정은 b2b_settings KV(master_notify_*), 편집은 '생산관리 설정' 페이지.
 //  발송은 fire-and-forget — 실패해도 상품 저장을 막지 않는다(console 경고만).
+//  Teams 미러(2026-08-20) — 같은 내용을 '업무도우미 변경알림' 채널로 병행 발송(생산·재고가
+//  b2b-activity 에서 미러되는 것과 같은 규칙). Flow 수신자 미설정이어도 Teams 는 나간다 —
+//  전환 완료 시 수신자만 비우면 Flow 는 멎고 Teams 만 남는 구조.
 
-import { getKv, setKv } from "./b2b-settings";
+import { getKv, setKv, getAppBaseUrl } from "./b2b-settings";
 import { currentActor } from "./b2b-activity";
+import { mirrorB2BTeams } from "./b2b-teams";
 
 export const MASTER_NOTIFY_EVENTS = [
   { key: "created", label: "상품 등록", group: "상품마스터" },
@@ -103,11 +107,18 @@ export async function sendMasterBot(contents: string, opts?: { receivers?: strin
 }
 
 // 상품마스터 변경 알림(이벤트 게이팅 + 작업자 꼬리표). 실패는 삼키고 경고만 — 저장 흐름을 막지 않는다.
+//  켜짐·이벤트 체크리스트는 Flow·Teams 공통 관문(꺼진 이벤트는 어디로도 안 감),
+//  수신자 목록은 Flow 봇 전용 조건 — Teams 는 자체 설정(b2b_teams)으로만 추가 게이팅된다.
 export async function notifyMasterChange(event: MasterNotifyEventKey, lines: string[]): Promise<void> {
   try {
     const cfg = await getMasterNotifyConfig();
-    if (!cfg.enabled || !cfg.events[event] || !cfg.receivers.trim()) return;
+    if (!cfg.enabled || !cfg.events[event]) return;
     const actor = await currentActor();
+    // Teams 미러 — 작업자 꼬리표는 mirrorB2BTeams 가 붙인다. 링크는 상품마스터 화면.
+    void getAppBaseUrl()
+      .then((base) => mirrorB2BTeams(lines.join("\n"), actor, base ? `${base}/b2b/products` : null, { helper: true }))
+      .catch(() => {});
+    if (!cfg.receivers.trim()) return;
     const body = [...lines, actor ? `— 작업자: ${actor}` : ""].filter(Boolean).join("\n");
     await sendMasterBot(body);
   } catch (err) {
