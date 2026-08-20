@@ -43,15 +43,17 @@ export default function VocSettingsPage() {
     }).catch(() => {});
   }, []);
 
+  // 결과는 아사나 카드 안에 표시(전역 배너는 페이지 맨 위라 카드에서 안 보인다)
+  const [asanaMsg, setAsanaMsg] = useState<{ t: string; ok: boolean } | null>(null);
   async function saveAsana(body: Record<string, string | boolean>, okMsg: string, tag: string) {
-    setBusy(tag); setMsg(null);
+    setBusy(tag); setAsanaMsg(null);
     try {
       const res = await fetch("/api/voc/asana-config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const j = await res.json();
+      const j = await res.json().catch(() => ({ ok: false, error: `서버 응답 오류(HTTP ${res.status})` }));
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setMsg({ t: j.detail || okMsg, ok: true });
+      setAsanaMsg({ t: j.detail || okMsg, ok: true });
       if (typeof j.project === "string" && j.project) setAsanaProject(j.project);
-    } catch (e) { setMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
+    } catch (e) { setAsanaMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
     finally { setBusy(""); }
   }
 
@@ -204,6 +206,7 @@ export default function VocSettingsPage() {
           <button className="b2b-btn-secondary" onClick={() => saveAsana({ test: true }, "연결 OK", "asanatest")} disabled={busy === "asanatest"}>{busy === "asanatest" ? "확인 중…" : "연결 테스트"}</button>
           <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>저장된 토큰으로 내 계정과 프로젝트 접근을 확인합니다.</span>
         </div>
+        {asanaMsg && <div className={asanaMsg.ok ? "sm-success" : "b2b-error"} style={{ marginTop: 10 }}>{asanaMsg.t}</div>}
       </section>
 
       {/* flow(플로우) 연동 — VOC 목록에서 '→ flow' 클릭 시 업무로 등록. 아사나 전환기 보존(설정 비우면 미사용). */}

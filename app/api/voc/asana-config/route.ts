@@ -4,6 +4,7 @@ import { getAsanaPat, setAsanaPat, getAsanaProjectGid, setAsanaProjectGid, getAs
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // 연결 테스트(아사나 2회 호출+재시도)가 기본 함수 한도(10s)를 넘지 않도록
 
 // GET — 아사나 연동 상태(PAT 값은 노출 안 함)
 export async function GET() {
