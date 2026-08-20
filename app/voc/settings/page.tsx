@@ -172,7 +172,7 @@ export default function VocSettingsPage() {
         <div className="b2b-card-head"><span className="b2b-card-title">아사나(Asana) 연동</span></div>
         <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
           VOC 목록/상세에서 <strong>→ 아사나</strong> 버튼으로 해당 VOC를 아사나 프로젝트의 <strong>업무(task)</strong>로 등록합니다.
-          PAT와 프로젝트가 모두 저장되면 VOC 화면의 등록 버튼이 flow 대신 아사나로 바뀝니다.
+          PAT와 프로젝트가 모두 저장되면 VOC 화면에 '→ 아사나' 버튼이 나타납니다(전환기에는 '→ flow' 버튼과 병행 — 같은 건을 양쪽에 보낼 수 있음).
           토큰 발급: 아사나 <strong>내 설정 → 앱 → 개발자 앱 관리 → 개인 액세스 토큰(PAT) 만들기</strong>.
         </p>
 
@@ -211,7 +211,7 @@ export default function VocSettingsPage() {
 
       {/* flow(플로우) 연동 — VOC 목록에서 '→ flow' 클릭 시 업무로 등록. 아사나 전환기 보존(설정 비우면 미사용). */}
       <section className="b2b-card" style={{ marginTop: 14 }}>
-        <div className="b2b-card-head"><span className="b2b-card-title">flow(플로우) 연동 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>— 구 방식 · 아사나 설정이 완료되면 사용되지 않음</span></span></div>
+        <div className="b2b-card-head"><span className="b2b-card-title">flow(플로우) 연동 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>— 전환기 병행 사용 · 아사나 정착 후 중단 예정</span></span></div>
         <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
           VOC 목록/상세에서 <strong>→ flow</strong> 버튼으로 해당 VOC를 플로우 프로젝트의 <strong>업무(task)</strong>로 등록합니다. 먼저 플로우에서 <strong>알림봇</strong>을 만들어 프로젝트에 초대하고, 관리자 API 센터에서 <strong>API 키</strong>를 발급받으세요.
         </p>

@@ -405,26 +405,33 @@ export default function VocPage() {
                   <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
                   <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.resolution || ""}>{r.resolution || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
-                    {r.asana_task_at ? (
-                      r.asana_task_url ? (
-                        <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)} — 클릭하면 업무 열림`}
-                          style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
+                    {/* 전환기(~10일)에는 flow·아사나 병행 — 각각 독립 등록, 같은 건을 양쪽에 보낼 수도 있다 */}
+                    <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
+                      {asanaReady && (r.asana_task_at ? (
+                        r.asana_task_url ? (
+                          <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)} — 클릭하면 업무 열림`}
+                            style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
+                        ) : (
+                          <span title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
+                        )
                       ) : (
+                        <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
+                          title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
+                          {flowBusy === r.id ? "등록중…" : "→ 아사나"}
+                        </button>
+                      ))}
+                      {!asanaReady && r.asana_task_at && (
                         <span title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
-                      )
-                    ) : r.flow_task_at ? (
-                      <span title={`flow 등록됨 · ${r.flow_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
-                    ) : asanaReady ? (
-                      <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
-                        title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
-                        {flowBusy === r.id ? "등록중…" : "→ 아사나"}
-                      </button>
-                    ) : (
-                      <button className="b2b-link-btn" onClick={() => registerFlow(r)} disabled={flowBusy === r.id}
-                        title="flow(플로우)에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
-                        {flowBusy === r.id ? "등록중…" : "→ flow"}
-                      </button>
-                    )}
+                      )}
+                      {r.flow_task_at ? (
+                        <span title={`flow 등록됨 · ${r.flow_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
+                      ) : (
+                        <button className="b2b-link-btn" onClick={() => registerFlow(r)} disabled={flowBusy === r.id}
+                          title="flow(플로우)에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
+                          {flowBusy === r.id ? "등록중…" : "→ flow"}
+                        </button>
+                      )}
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -585,15 +592,24 @@ export default function VocPage() {
                 {edit.id ? <button className="b2b-btn-danger" onClick={remove} disabled={saving}>삭제</button> : <span />}
                 {edit.id && (() => {
                   const er = rows.find((r) => r.id === edit.id);
-                  if (er?.asana_task_at) {
-                    return er.asana_task_url
-                      ? <a href={er.asana_task_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>아사나 등록됨 ✓ (열기)</a>
-                      : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>아사나 등록됨 ✓</span>;
-                  }
-                  if (er?.flow_task_at) return <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)", alignSelf: "center" }}>flow 등록됨 ✓</span>;
-                  return asanaReady
-                    ? <button className="b2b-btn-secondary" onClick={() => er && registerAsana(er)} disabled={!er || flowBusy === edit.id}>{flowBusy === edit.id ? "아사나 등록중…" : "아사나에 업무 등록"}</button>
-                    : <button className="b2b-btn-secondary" onClick={() => er && registerFlow(er)} disabled={!er || flowBusy === edit.id}>{flowBusy === edit.id ? "flow 등록중…" : "flow에 업무 등록"}</button>;
+                  if (!er) return null;
+                  // 전환기 병행 — 아사나·flow 각각 상태/버튼 표시
+                  return (
+                    <span className="sm-row" style={{ gap: 8, alignItems: "center" }}>
+                      {er.asana_task_at ? (
+                        er.asana_task_url
+                          ? <a href={er.asana_task_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>아사나 등록됨 ✓ (열기)</a>
+                          : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>아사나 등록됨 ✓</span>
+                      ) : asanaReady ? (
+                        <button className="b2b-btn-secondary" onClick={() => registerAsana(er)} disabled={flowBusy === edit.id}>{flowBusy === edit.id ? "등록중…" : "아사나에 업무 등록"}</button>
+                      ) : null}
+                      {er.flow_task_at ? (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>flow 등록됨 ✓</span>
+                      ) : (
+                        <button className="b2b-btn-secondary" onClick={() => registerFlow(er)} disabled={flowBusy === edit.id}>{flowBusy === edit.id ? "등록중…" : "flow에 업무 등록"}</button>
+                      )}
+                    </span>
+                  );
                 })()}
               </div>
               <div className="b2b-modal-foot-right">
