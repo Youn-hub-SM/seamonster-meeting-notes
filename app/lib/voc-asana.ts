@@ -97,14 +97,11 @@ export async function getAsanaSections(pat: string, projectGid: string): Promise
   return (Array.isArray(list) ? list : []).filter((s) => s.gid).map((s) => ({ gid: String(s.gid), name: String(s.name || "") }));
 }
 
-// VOC 상태 → 섹션 선택(이름 부분일치 — 섹션명이 조금 바뀌어도 동작). 못 찾으면 null(기본 위치).
-//  현재 프로젝트 구성: 개선요청 / 개선 진행 중 / 완료 / 보류(미해결 종결)
-export function pickAsanaSection(status: string, sections: { gid: string; name: string }[]): { gid: string; name: string } | null {
+// 등록은 VOC 상태와 무관하게 항상 '개선요청' 섹션으로 — 이후 상태 관리는 아사나에서 한다(대표 확정).
+//  이름 부분일치라 섹션명이 조금 바뀌어도 동작, 못 찾으면 null(기본 위치).
+export function pickAsanaSection(sections: { gid: string; name: string }[]): { gid: string; name: string } | null {
   const norm = (s: string) => s.replace(/\s/g, "");
-  const findBy = (kws: string[]) => sections.find((s) => kws.some((k) => norm(s.name).includes(k))) || null;
-  if (status === "개선완료") return findBy(["완료"]);
-  if (status === "응대·개선중") return findBy(["진행"]);
-  return findBy(["개선요청", "요청", "접수"]); // 접수 등
+  return sections.find((s) => ["개선요청", "요청", "접수"].some((k) => norm(s.name).includes(k))) || null;
 }
 
 // 업무 생성 — 성공 시 gid·permalink 반환. sectionGid 가 있으면 생성 후 해당 섹션으로 이동(실패해도 등록은 유지).
