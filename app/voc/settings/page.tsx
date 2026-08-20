@@ -190,7 +190,7 @@ export default function VocSettingsPage() {
             <input className="b2b-input" value={asanaProject} onChange={(e) => setAsanaProject(e.target.value)} placeholder="아사나에서 프로젝트를 연 상태의 주소를 그대로 붙여넣기" style={{ flex: 1, minWidth: 240 }} />
             <button className="b2b-btn-secondary" onClick={() => saveAsana({ project: asanaProject }, "프로젝트 저장됨", "asanaproj")} disabled={busy === "asanaproj"}>{busy === "asanaproj" ? "저장 중…" : "저장"}</button>
           </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>URL을 넣으면 프로젝트 번호(gid)만 추려 저장합니다. VOC는 이 프로젝트에 업무로 등록됩니다.</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>URL을 넣으면 프로젝트 번호(gid)만 추려 저장합니다. 등록 시 VOC 상태에 따라 섹션에 자동 배치됩니다: 접수→개선요청 · 응대·개선중→개선 진행 중 · 개선완료→완료(완료 처리).</span>
         </div>
 
         <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import type { Voc } from "@/app/lib/voc";
 import { buildFlowTaskFromVoc } from "@/app/lib/voc-flow";
-import { getAsanaPat, getAsanaProjectGid, getAsanaDefaultAssignee, createAsanaTask } from "@/app/lib/voc-asana";
+import { getAsanaPat, getAsanaProjectGid, getAsanaDefaultAssignee, createAsanaTask, getAsanaSections, pickAsanaSection } from "@/app/lib/voc-asana";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,11 +27,14 @@ export async function POST(req: NextRequest) {
     if (!projectGid) return NextResponse.json({ ok: false, error: "아사나 프로젝트가 설정되지 않았습니다. VOC 설정에서 등록하세요." }, { status: 400 });
 
     const { title, contents } = buildFlowTaskFromVoc(v);
+    // VOC 상태에 맞는 섹션으로 배치 — 접수→개선요청 · 응대·개선중→개선 진행 중 · 개선완료→완료
+    const section = pickAsanaSection(v.status, await getAsanaSections(pat, projectGid));
     const r = await createAsanaTask({
       pat, projectGid,
       name: title, notes: contents,
       completed: v.status === "개선완료",
       assigneeEmail: assignee,
+      sectionGid: section?.gid || null,
     });
     if (!r.ok) return NextResponse.json({ ok: false, error: r.error || "아사나 등록 실패" }, { status: 502 });
 

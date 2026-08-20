@@ -89,11 +89,30 @@ async function asanaFetch(pat: string, path: string, init?: { method?: string; b
   return last;
 }
 
-// 업무 생성 — 성공 시 gid·permalink 반환.
+// 프로젝트의 섹션 목록 — VOC 상태별 자동 배치에 쓴다. 실패하면 빈 배열(배치 생략).
+export async function getAsanaSections(pat: string, projectGid: string): Promise<{ gid: string; name: string }[]> {
+  const r = await asanaFetch(pat, `/projects/${encodeURIComponent(projectGid)}/sections?opt_fields=name`);
+  if (!r.ok) return [];
+  const list = (r.data as unknown as { gid?: string; name?: string }[] | null) || [];
+  return (Array.isArray(list) ? list : []).filter((s) => s.gid).map((s) => ({ gid: String(s.gid), name: String(s.name || "") }));
+}
+
+// VOC 상태 → 섹션 선택(이름 부분일치 — 섹션명이 조금 바뀌어도 동작). 못 찾으면 null(기본 위치).
+//  현재 프로젝트 구성: 개선요청 / 개선 진행 중 / 완료 / 보류(미해결 종결)
+export function pickAsanaSection(status: string, sections: { gid: string; name: string }[]): { gid: string; name: string } | null {
+  const norm = (s: string) => s.replace(/\s/g, "");
+  const findBy = (kws: string[]) => sections.find((s) => kws.some((k) => norm(s.name).includes(k))) || null;
+  if (status === "개선완료") return findBy(["완료"]);
+  if (status === "응대·개선중") return findBy(["진행"]);
+  return findBy(["개선요청", "요청", "접수"]); // 접수 등
+}
+
+// 업무 생성 — 성공 시 gid·permalink 반환. sectionGid 가 있으면 생성 후 해당 섹션으로 이동(실패해도 등록은 유지).
 export async function createAsanaTask(opts: {
   pat: string; projectGid: string;
   name: string; notes: string;
   completed?: boolean; assigneeEmail?: string | null;
+  sectionGid?: string | null;
 }): Promise<{ ok: boolean; gid: string | null; url: string | null; error?: string }> {
   const data: Record<string, unknown> = {
     name: opts.name.slice(0, 1024),
@@ -102,6 +121,16 @@ export async function createAsanaTask(opts: {
   };
   if (opts.completed) data.completed = true;
   if (opts.assigneeEmail && opts.assigneeEmail.trim()) data.assignee = opts.assigneeEmail.trim();
+
+  // 생성 성공 후 마무리 — 섹션 이동(실패는 삼킴: 기본 위치에 남을 뿐 등록은 유효)
+  const finalize = async (created: { gid?: string; permalink_url?: string } | null, warn?: string) => {
+    const gid = created?.gid || null;
+    if (gid && opts.sectionGid) {
+      await asanaFetch(opts.pat, `/sections/${encodeURIComponent(opts.sectionGid)}/addTask`, { method: "POST", body: { data: { task: gid } } });
+    }
+    return { ok: true as const, gid, url: created?.permalink_url || null, error: warn };
+  };
+
   const r = await asanaFetch(opts.pat, "/tasks?opt_fields=gid,permalink_url", { method: "POST", body: { data } });
   if (!r.ok) {
     // 담당자 이메일이 워크스페이스 멤버가 아니면 400 — 담당자 없이 한 번 더 시도(등록 자체는 살린다)
@@ -109,14 +138,12 @@ export async function createAsanaTask(opts: {
       delete data.assignee;
       const r2 = await asanaFetch(opts.pat, "/tasks?opt_fields=gid,permalink_url", { method: "POST", body: { data } });
       if (r2.ok) {
-        const d2 = r2.data as { gid?: string; permalink_url?: string } | null;
-        return { ok: true, gid: d2?.gid || null, url: d2?.permalink_url || null, error: "담당자 지정 실패(워크스페이스 멤버 아님) — 담당자 없이 등록됨" };
+        return finalize(r2.data as { gid?: string; permalink_url?: string } | null, "담당자 지정 실패(워크스페이스 멤버 아님) — 담당자 없이 등록됨");
       }
     }
     return { ok: false, gid: null, url: null, error: r.error };
   }
-  const d = r.data as { gid?: string; permalink_url?: string } | null;
-  return { ok: true, gid: d?.gid || null, url: d?.permalink_url || null };
+  return finalize(r.data as { gid?: string; permalink_url?: string } | null);
 }
 
 // 연결 테스트 — 토큰(내 정보)과 프로젝트 접근을 각각 확인해 이름으로 답한다.
@@ -127,5 +154,7 @@ export async function testAsanaConnection(pat: string, projectGid: string): Prom
   const proj = await asanaFetch(pat, `/projects/${encodeURIComponent(projectGid)}?opt_fields=name`);
   if (!proj.ok) return { ok: false, error: proj.error };
   const projData = proj.data as { name?: string } | null;
-  return { ok: true, detail: `연결 OK — ${meData?.name || meData?.email || "사용자"} / 프로젝트 '${projData?.name || projectGid}'` };
+  const sections = await getAsanaSections(pat, projectGid);
+  const secNote = sections.length ? ` · 섹션 ${sections.length}개: ${sections.map((s) => s.name).join(", ")}` : "";
+  return { ok: true, detail: `연결 OK — ${meData?.name || meData?.email || "사용자"} / 프로젝트 '${projData?.name || projectGid}'${secNote}` };
 }
