@@ -417,6 +417,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         </td>
         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
           <button className="b2b-link-btn" disabled={busy} onClick={onCopySheet} title="제조사에 건넬 요청서 텍스트 복사">{copied ? "복사됨 ✓" : "요청서"}</button>
+          {/* 표 형태 요청서 — 엑셀로 받아 비고·순서를 고쳐 인쇄해 전달(하단에 품목·중량별 총중량 자동 계산) */}
+          <a className="b2b-link-btn" style={{ marginLeft: 6, textDecoration: "none" }} href={`/api/production/requests/${req.id}/sheet`} title="표 형태 요청서 엑셀 다운로드 — 편집·인쇄용">엑셀</a>
           {editable && <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} onClick={onEdit}>수정</button>}
           {(req.status === "완료" || req.status === "취소") ? (
             <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} title="진행중으로 되돌려 입고·수정을 다시 연다" onClick={() => onStatus("진행중")}>다시 열기</button>
