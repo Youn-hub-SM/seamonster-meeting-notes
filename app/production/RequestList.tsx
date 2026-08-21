@@ -232,30 +232,6 @@ export function RequestList() {
 
   const doneCount = useMemo(() => byTab.filter((r) => r.status === "완료" || r.status === "취소").length, [byTab]);
 
-  // 제조사에게 건넬 요청서 텍스트 — 담당자가 확인 후 복사해 전달(제조사 전달용, DB 저장 없음).
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  async function copyRequestSheet(r: ProductionRequest) {
-    // 제조사 전달용 — 내부 정보(요청자·담당·제목·용도)는 빼고 번호·날짜·품목만(대표 확정 서식).
-    //  SKU·행 넘버링도 제외(2026-08-20) — 외부 공유용이고, 순서는 담당자가 붙여넣은 뒤 우선순위로 손수 재배열한다.
-    const L: string[] = [];
-    L.push(`[생산 요청서] ${r.req_no || ""}`.trim());
-    L.push("");
-    L.push(`요청일 ${r.request_date}`);
-    L.push(`생산마감일 ${r.due_date || "-"}`);
-    L.push("");
-    L.push("--------------------------------");
-    L.push("");
-    r.items.forEach((it) => L.push(`${it.name}${it.spec ? ` ${it.spec}` : ""}  ×${it.requested_qty.toLocaleString()}${it.unit || ""}${it.memo ? ` — ${it.memo}` : ""}`));
-    L.push("");
-    L.push("--------------------------------");
-    L.push("");
-    L.push(`총 ${r.items.length}품목 · ${r.total_requested.toLocaleString()}개`);
-    try {
-      await navigator.clipboard.writeText(L.join("\n"));
-      setCopiedId(r.id); setTimeout(() => setCopiedId(null), 2000);
-    } catch { setError("복사 실패 — 브라우저 권한을 확인하세요."); }
-  }
-
   // 생산 담당자 확인 — 담당자=본인 기록 + 진행중 전환(제조사에 전달했다는 표시)
   async function confirmRequest(r: ProductionRequest) {
     await updateRequest(r.id, { assignee: userName || "확인", status: r.status === "요청" ? "진행중" : r.status });
@@ -338,8 +314,6 @@ export function RequestList() {
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
                   onStatus={(s) => patchStatus(r.id, s)}
                   onConfirm={() => confirmRequest(r)}
-                  onCopySheet={() => copyRequestSheet(r)}
-                  copied={copiedId === r.id}
                   onEdit={() => setEditReq(r)}
                   onDelete={() => removeRequest(r)}
                 />
@@ -371,14 +345,12 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onCopySheet, copied, onEdit, onDelete }: {
+function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onEdit, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
   onConfirm: () => void;
-  onCopySheet: () => void;
-  copied: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -416,9 +388,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           )}
         </td>
         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-          <button className="b2b-link-btn" disabled={busy} onClick={onCopySheet} title="제조사에 건넬 요청서 텍스트 복사">{copied ? "복사됨 ✓" : "요청서"}</button>
-          {/* 표 형태 요청서 — 엑셀로 받아 비고·순서를 고쳐 인쇄해 전달(하단에 품목·중량별 총중량 자동 계산) */}
-          <a className="b2b-link-btn" style={{ marginLeft: 6, textDecoration: "none" }} href={`/api/production/requests/${req.id}/sheet`} title="표 형태 요청서 엑셀 다운로드 — 편집·인쇄용">엑셀</a>
+          {/* 표 형태 요청서(엑셀) — 비고·순서를 고쳐 인쇄해 전달(하단에 품목·중량별 총중량 자동 계산). 구 텍스트 복사는 제거(대표 확정) */}
+          <a className="b2b-link-btn" style={{ textDecoration: "none" }} href={`/api/production/requests/${req.id}/sheet`} title="표 형태 요청서 엑셀 다운로드 — 편집·인쇄용">요청서</a>
           {editable && <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} onClick={onEdit}>수정</button>}
           {(req.status === "완료" || req.status === "취소") ? (
             <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} title="진행중으로 되돌려 입고·수정을 다시 연다" onClick={() => onStatus("진행중")}>다시 열기</button>
