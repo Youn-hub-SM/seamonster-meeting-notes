@@ -11,25 +11,47 @@ export const maxDuration = 30;
 //  표(상품명·수량·단위·비고·작업완료) + 하단 품목·중량별 총중량 + 확인 서명란. A4 세로 인쇄 맞춤.
 type Ctx = { params: Promise<{ id: string }> };
 
-// 규격/이름에서 옵션중량(g)을 뽑는다 — 마지막 중량 토큰 채택("참돔순살(100g)"→100).
-function parseGrams(...sources: (string | null | undefined)[]): number | null {
+// 규격/이름에서 단위당 중량을 뽑는다. 우선순위(규격 먼저, 그다음 이름):
+//  ① "1kg x 2"·"500g×2" — 단위 명시 곱셈형: v×(단위)×수
+//  ② "5x2" — 단위 없는 곱셈형은 벌크 관례로 kg 취급: 5kg×2 = 10kg (대표 확인, 2026-08-21)
+//  ③ "100g"·"1.5kg" — 단일 중량 토큰(마지막 것 채택)
+//  벌크 품목 이름에 조각 중량(140g)이 같이 적혀 있어도 곱셈형(포장 규격)이 이긴다.
+function parseWeight(...sources: (string | null | undefined)[]): { grams: number | null; label: string } {
   for (const src of sources) {
     if (!src) continue;
+    const withUnit = src.match(/(\d+(?:\.\d+)?)\s*(kg|g)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
+    if (withUnit) {
+      const v = parseFloat(withUnit[1]) * (withUnit[2].toLowerCase() === "kg" ? 1000 : 1);
+      const n = parseFloat(withUnit[3]);
+      if (v > 0 && n > 0) return { grams: v * n, label: `${unitLabel(v)}×${n}` };
+    }
+    const bare = src.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
+    if (bare) {
+      const kg = parseFloat(bare[1]);
+      const n = parseFloat(bare[2]);
+      if (kg > 0 && n > 0) return { grams: kg * 1000 * n, label: `${unitLabel(kg * 1000)}×${n}` };
+    }
     const ms = [...src.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g)/gi)];
     if (ms.length) {
       const m = ms[ms.length - 1];
-      const v = parseFloat(m[1]);
-      if (Number.isFinite(v) && v > 0) return m[2].toLowerCase() === "kg" ? v * 1000 : v;
+      const v = parseFloat(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1);
+      if (v > 0) return { grams: v, label: unitLabel(v) };
     }
   }
-  return null;
+  return { grams: null, label: "-" };
 }
-// 중량 토큰을 걷어낸 품목 이름 — 원료(품목) 단위 묶기용. "참돔순살(100g)"→"참돔순살"
+const unitLabel = (g: number) => (g >= 1000 ? `${+(g / 1000).toFixed(2)}kg` : `${+g.toFixed(0)}g`);
+// 중량·곱셈 토큰을 걷어낸 품목 이름 — 원료(품목) 단위 묶기용. "참돔순살(100g)"→"참돔순살", "대구순살 5x2"→"대구순살"
 function baseName(name: string): string {
-  const s = name.replace(/\(\s*\d+(?:\.\d+)?\s*(?:kg|g)\s*\)/gi, "").replace(/\d+(?:\.\d+)?\s*(?:kg|g)/gi, "").replace(/\s{2,}/g, " ").trim();
+  const s = name
+    .replace(/\(\s*\d+(?:\.\d+)?\s*(?:kg|g)?\s*[x×*]\s*\d+(?:\.\d+)?\s*\)/gi, "")
+    .replace(/\d+(?:\.\d+)?\s*(?:kg|g)?\s*[x×*]\s*\d+(?:\.\d+)?/gi, "")
+    .replace(/\(\s*\d+(?:\.\d+)?\s*(?:kg|g)\s*\)/gi, "")
+    .replace(/\d+(?:\.\d+)?\s*(?:kg|g)/gi, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ").trim();
   return s || name;
 }
-const weightLabel = (g: number | null) => (g == null ? "-" : g >= 1000 ? `${+(g / 1000).toFixed(2)}kg` : `${+g.toFixed(0)}g`);
 
 const THIN = { style: "thin" as const, color: { argb: "FFBBBBBB" } };
 const BOX = { top: THIN, bottom: THIN, left: THIN, right: THIN };
@@ -95,12 +117,12 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     wTitle.font = { bold: true, size: 12 };
     ws.mergeCells(wTitle.number, 1, wTitle.number, 5);
 
-    const groups = new Map<string, { base: string; grams: number | null; qty: number }>();
+    const groups = new Map<string, { base: string; grams: number | null; wLabel: string; qty: number }>();
     for (const it of r.items) {
-      const grams = parseGrams(it.spec, it.name);
+      const { grams, label: wLabel } = parseWeight(it.spec, it.name);
       const base = baseName(it.name);
-      const key = `${base}|${grams ?? "?"}`;
-      const g = groups.get(key) || { base, grams, qty: 0 };
+      const key = `${base}|${wLabel}`;
+      const g = groups.get(key) || { base, grams, wLabel, qty: 0 };
       g.qty += Number(it.requested_qty) || 0;
       groups.set(key, g);
     }
@@ -115,7 +137,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       const kg = g.grams == null ? null : (g.grams * g.qty) / 1000;
       if (kg == null) unknown++; else sumKg += kg;
       sumQty += g.qty;
-      const row = ws.addRow([g.base, weightLabel(g.grams), g.qty, kg == null ? "-" : +kg.toFixed(1), ""]);
+      const row = ws.addRow([g.base, g.wLabel, g.qty, kg == null ? "-" : +kg.toFixed(1), ""]);
       row.getCell(3).numFmt = "#,##0";
       if (kg != null) row.getCell(4).numFmt = "#,##0.0";
       for (let col = 1; col <= 4; col++) { row.getCell(col).border = BOX; if (col > 1) row.getCell(col).alignment = { horizontal: "center" }; }
