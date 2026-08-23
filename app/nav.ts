@@ -120,11 +120,9 @@ export const NAV: NavCategory[] = [
           { href: "/voc", label: "VOC 처리" },
           { href: "/voc/monthly", label: "월말 결산" },
           { href: "/voc/stats", label: "통계·보고서" },
-          { href: "/voc/insights", label: "AI 인사이트" },
           { href: "/voc/loss", label: "손해금액 산정" },
           { href: "/voc/reports", label: "개선요청서" },
           { href: "/voc/manufacturer", label: "월간 VOC 리포트" },
-          { href: "/voc/surveys", label: "설문 응답(Tally)" },
         ],
       },
     ],
@@ -140,9 +138,6 @@ export const NAV: NavCategory[] = [
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },
       // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
       { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
-      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
-      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
-      { href: "/factory", label: "파도소리 재고", icon: "factory", adminOnly: true },
     ],
   },
   {
@@ -151,6 +146,11 @@ export const NAV: NavCategory[] = [
       { href: "/htmlshot", label: "상세 이미지 변환", icon: "image" },
       { href: "/correct", label: "문장 교정", icon: "pen" },
       { href: "/pallet", label: "파렛트 적재", icon: "box" },
+      { href: "/voc/insights", label: "VOC AI 인사이트", icon: "bulb" },
+      { href: "/voc/surveys", label: "VOC 설문응답(Tally)", icon: "chat" },
+      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
+      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
+      { href: "/factory", label: "파도소리 재고", icon: "factory", adminOnly: true },
     ],
   },
   {
