@@ -11,38 +11,42 @@ export const maxDuration = 30;
 //  표(상품명·수량·단위·비고·작업완료) + 하단 품목·중량별 총중량 + 확인 서명란. A4 세로 인쇄 맞춤.
 type Ctx = { params: Promise<{ id: string }> };
 
-// 단위당 중량 판정 — 기준은 상품마스터 '속성'(대표 확정, 2026-08-21):
-//  · 속성에 '벌크'가 있으면 벌크 포장 — 규격/이름의 곱셈형("5x2"=5kg×2, "1kg x 2")을 읽고,
-//    표기가 없으면 벌크 기본 5kg×2(=10kg). 이름에 조각 중량(140g·200g)이 있어도 무시한다.
+// 단위당 중량 판정 — 기준은 상품마스터 '속성'(대표 확정, 2026-08-21~23):
+//  · 속성에 '벌크'가 있으면 단위당 중량은 벌크 포장 — 규격/이름의 곱셈형("5x2"=5kg×2, "1kg x 2")을
+//    읽고, 표기가 없으면 벌크 기본 5kg×2(=10kg). 단 '옵션중량' 표시는 상품에 적힌 조각 중량
+//    (140g·200g)을 그대로 쓴다 — 벌크 여부는 상품명 쪽에 (벌크)로 표기.
 //  · 벌크가 아니면 표기 중량 그대로 — 단위 명시 곱셈형("500g×2") 또는 단일 토큰("200g"·"1.5kg").
 function parseWeight(isBulk: boolean, ...sources: (string | null | undefined)[]): { grams: number | null; label: string } {
+  // 단일 중량 토큰(조각 중량) — 비벌크의 계산값이자, 벌크의 '옵션중량' 표시값
+  let piece: { grams: number; label: string } | null = null;
+  for (const src of sources) {
+    if (!src) continue;
+    const ms = [...src.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g)(?!\s*[x×*])/gi)];
+    if (ms.length) {
+      const m = ms[ms.length - 1];
+      const v = parseFloat(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1);
+      if (v > 0) { piece = { grams: v, label: unitLabel(v) }; break; }
+    }
+  }
   for (const src of sources) {
     if (!src) continue;
     const withUnit = src.match(/(\d+(?:\.\d+)?)\s*(kg|g)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
     if (withUnit) {
       const v = parseFloat(withUnit[1]) * (withUnit[2].toLowerCase() === "kg" ? 1000 : 1);
       const n = parseFloat(withUnit[3]);
-      if (v > 0 && n > 0) return { grams: v * n, label: `${unitLabel(v)}×${n}` };
+      if (v > 0 && n > 0) return { grams: v * n, label: isBulk && piece ? piece.label : `${unitLabel(v)}×${n}` };
     }
     if (isBulk) {
       const bare = src.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
       if (bare) {
         const kg = parseFloat(bare[1]);
         const n = parseFloat(bare[2]);
-        if (kg > 0 && n > 0) return { grams: kg * 1000 * n, label: `${unitLabel(kg * 1000)}×${n}` };
+        if (kg > 0 && n > 0) return { grams: kg * 1000 * n, label: piece ? piece.label : `${unitLabel(kg * 1000)}×${n}` };
       }
     }
   }
-  if (isBulk) return { grams: 10000, label: "5kg×2" }; // 벌크 기본 포장
-  for (const src of sources) {
-    if (!src) continue;
-    const ms = [...src.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g)/gi)];
-    if (ms.length) {
-      const m = ms[ms.length - 1];
-      const v = parseFloat(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1);
-      if (v > 0) return { grams: v, label: unitLabel(v) };
-    }
-  }
+  if (isBulk) return { grams: 10000, label: piece ? piece.label : "5kg×2" }; // 벌크 기본 포장
+  if (piece) return piece;
   return { grams: null, label: "-" };
 }
 const unitLabel = (g: number) => (g >= 1000 ? `${+(g / 1000).toFixed(2)}kg` : `${+g.toFixed(0)}g`);
@@ -138,7 +142,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     for (const it of r.items) {
       const isBulk = (attrsMap.get(String(it.product_id)) || "").includes("벌크");
       const { grams, label: wLabel } = parseWeight(isBulk, it.spec, it.name);
-      const base = baseName(it.name);
+      const nameOnly = baseName(it.name);
+      // 벌크는 상품명에 (벌크) 표기 — 이름에 이미 '벌크'가 있으면 중복해서 붙이지 않는다
+      const base = isBulk && !nameOnly.includes("벌크") ? `${nameOnly}(벌크)` : nameOnly;
       const key = `${base}|${wLabel}`;
       const g = groups.get(key) || { base, grams, wLabel, qty: 0 };
       g.qty += Number(it.requested_qty) || 0;
