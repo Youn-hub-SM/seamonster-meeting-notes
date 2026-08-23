@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주",
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-08-24",
+    tag: "개선",
+    tool: "전체 메뉴",
+    title: "설정 대청소 — 알림은 Teams로 일원화",
+    desc: "안 쓰는 설정·기능을 정리했습니다: Swit 알림(도입 중단)·박스히어로 연동(자체 재고관리로 대체)·Tally 웹훅(API 가져오기로 통일)·Zapier 폴백 제거. B2B 알림·아침 일정 알림·업무도우미 변경알림·VOC 업무 등록은 모두 Flow 대신 Teams·아사나로 발송됩니다. 기존 flow 등록 기록(✓ flow)은 그대로 보입니다.",
+    href: "/b2b/settings",
+  },
+  {
     date: "2026-08-23",
     tag: "개선",
     tool: "전체 메뉴",

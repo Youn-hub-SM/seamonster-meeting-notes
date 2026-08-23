@@ -2,35 +2,21 @@
 
 import { useEffect, useState } from "react";
 
+// 생산관리 설정 — 리드타임 + [업무도우미 변경알림](Teams 채널) 이벤트 체크리스트.
+//  2026-08-23 대청소: 박스히어로 연동(자체 재고관리로 대체)·Flow 알림봇 필드 제거.
 export default function ProductionSettingsPage() {
-  const [configured, setConfigured] = useState(false);
-  const [masked, setMasked] = useState("");
-  const [token, setToken] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-
   const [leadInput, setLeadInput] = useState("");
   const [leadSaved, setLeadSaved] = useState<number | null>(null);
   const [leadSaving, setLeadSaving] = useState(false);
   const [leadMsg, setLeadMsg] = useState("");
 
-  // [업무도우미 변경알림] — 상품마스터 변경 시 Flow 알림봇으로 수신자들에게 발송(B2B 도매 봇과 별개)
+  // [업무도우미 변경알림] — 켜기 + 이벤트 체크리스트. 발송은 Teams '업무도우미 변경알림' 채널.
   type MnConfig = { enabled: boolean; botId: string; receivers: string; title: string; events: Record<string, boolean> };
   const [mn, setMn] = useState<MnConfig | null>(null);
   const [mnEventDefs, setMnEventDefs] = useState<{ key: string; label: string; group?: string }[]>([]);
-  const [mnApiKey, setMnApiKey] = useState("");       // 입력 시에만 갱신(빈값이면 기존 키 유지)
-  const [mnHasKey, setMnHasKey] = useState(false);
-  const [mnFallbackKey, setMnFallbackKey] = useState(false); // 전용 키 없이 B2B 봇 키 폴백 중
-  const [mnTestReceiver, setMnTestReceiver] = useState("");
   const [mnBusy, setMnBusy] = useState(false);
   const [mnMsg, setMnMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  async function loadStatus() {
-    try {
-      const j = await (await fetch("/api/production/settings", { cache: "no-store" })).json();
-      if (j.ok) { setConfigured(j.configured); setMasked(j.masked || ""); }
-    } catch { /* noop */ }
-  }
   async function loadLead() {
     try {
       const j = await (await fetch("/api/production/lead-days", { cache: "no-store" })).json();
@@ -40,21 +26,18 @@ export default function ProductionSettingsPage() {
   async function loadMn() {
     try {
       const j = await (await fetch("/api/production/settings/master-notify", { cache: "no-store" })).json();
-      if (j.ok) { setMn(j.config); setMnEventDefs(j.events || []); setMnHasKey(!!j.hasApiKey); setMnFallbackKey(!!j.fallbackKey); }
+      if (j.ok) { setMn(j.config); setMnEventDefs(j.events || []); }
     } catch { /* noop */ }
   }
-  useEffect(() => { loadStatus(); loadLead(); loadMn(); }, []);
+  useEffect(() => { loadLead(); loadMn(); }, []);
 
   async function saveMn() {
     if (!mn) return;
     setMnBusy(true); setMnMsg(null);
     try {
-      const body: Record<string, unknown> = { ...mn };
-      if (mnApiKey.trim()) body.apiKey = mnApiKey.trim();
-      const r = await fetch("/api/production/settings/master-notify", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const r = await fetch("/api/production/settings/master-notify", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mn) });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      if (mnApiKey.trim()) { setMnHasKey(true); setMnFallbackKey(false); setMnApiKey(""); }
       setMnMsg({ kind: "ok", text: "저장됨" });
     } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "저장 오류" }); }
     setMnBusy(false);
@@ -62,10 +45,10 @@ export default function ProductionSettingsPage() {
   async function testMn() {
     setMnBusy(true); setMnMsg(null);
     try {
-      const r = await fetch("/api/production/settings/master-notify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mnTestReceiver.trim() ? { testReceiver: mnTestReceiver.trim() } : {}) });
+      const r = await fetch("/api/production/settings/master-notify", { method: "POST" });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
-      setMnMsg({ kind: "ok", text: "테스트 알림을 보냈습니다. Flow 를 확인하세요." });
+      setMnMsg({ kind: "ok", text: "테스트 알림을 보냈습니다. Teams 변경알림 채널을 확인하세요." });
     } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "테스트 실패" }); }
     setMnBusy(false);
   }
@@ -91,27 +74,6 @@ export default function ProductionSettingsPage() {
     setLeadSaving(false);
   }
 
-  async function save() {
-    if (!token.trim()) { setMsg({ kind: "err", text: "토큰을 입력하세요." }); return; }
-    setSaving(true);
-    setMsg(null);
-    try {
-      const res = await fetch("/api/production/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: token.trim() }),
-      });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setMsg({ kind: "ok", text: "박스히어로 연결 성공 — 토큰을 저장했습니다." });
-      setToken("");
-      await loadStatus();
-    } catch (err) {
-      setMsg({ kind: "err", text: err instanceof Error ? err.message : "저장 실패" });
-    }
-    setSaving(false);
-  }
-
   return (
     <div className="b2b-container" style={{ maxWidth: 720 }}>
       <header className="b2b-page-head">
@@ -121,44 +83,6 @@ export default function ProductionSettingsPage() {
       </header>
 
       <section className="b2b-card">
-        <div className="b2b-card-head"><h2 className="b2b-card-title">박스히어로 연동</h2></div>
-        <div style={{ padding: "4px 2px 2px" }}>
-          <div style={{ marginBottom: 14, fontSize: 12, color: "var(--sm-text-mid)", lineHeight: 1.6 }}>
-            상태:{" "}
-            {configured
-              ? <span style={{ color: "var(--sm-success)", fontWeight: 600 }}>연결됨 ({masked})</span>
-              : <span style={{ color: "var(--sm-danger)", fontWeight: 600 }}>미설정</span>}
-            <br />
-            박스히어로 앱 → 설정 &gt; 통합 설정 &gt; API 에서 토큰을 발급해 붙여넣으세요. 저장 시 자동으로 연결을 확인합니다.
-          </div>
-
-          <div className="b2b-field">
-            <label className="b2b-field-label">API 토큰</label>
-            <input
-              className="b2b-input"
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder={configured ? "새 토큰으로 교체하려면 입력" : "토큰 붙여넣기"}
-              autoComplete="off"
-            />
-          </div>
-
-          {msg && (
-            <div style={{ marginTop: 10, fontSize: 12, color: msg.kind === "ok" ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
-              {msg.text}
-            </div>
-          )}
-
-          <div style={{ marginTop: 16 }}>
-            <button className="b2b-btn-primary" onClick={save} disabled={saving}>
-              {saving ? "확인 중..." : "저장 + 연결 확인"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="b2b-card" style={{ marginTop: 16 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">생산 리드타임</h2></div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
           제조사에 생산을 요청하고 받기까지 걸리는 일수입니다. <strong>안전재고 = 하루 평균 출고 × 리드타임</strong>으로,
@@ -186,10 +110,10 @@ export default function ProductionSettingsPage() {
         )}
       </section>
 
-      {/* [업무도우미 변경알림] — 상품마스터 변경 시 Flow 알림봇으로 수신자들에게 발송 */}
+      {/* [업무도우미 변경알림] — 상품마스터 변경 + 생산·재고 알림. 발송은 Teams 변경알림 채널(Flow 제거) */}
       <section className="b2b-card" style={{ marginTop: 16 }}>
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 + 생산 요청·재고 이전(소매→도매) 알림이 이 봇으로 발송 (B2B 도매 알림봇과 별개 봇)</span></h2>
+          <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 + 생산 요청·재고 이전(소매→도매) 알림 — Teams '업무도우미 변경알림' 채널로 발송</span></h2>
           <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "저장"}</button>
         </div>
         {mnMsg && <div className={mnMsg.kind === "ok" ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}
@@ -199,17 +123,8 @@ export default function ProductionSettingsPage() {
               <input type="checkbox" className="b2b-checkbox" checked={mn.enabled} onChange={(e) => setMn({ ...mn, enabled: e.target.checked })} />
               상품마스터 변경알림 켜기 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 생산·재고 알림은 이 토글과 무관 — 아래 체크로만 제어</span>
             </label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>봇 ID</span>
-                <input className="b2b-input" value={mn.botId} onChange={(e) => setMn({ ...mn, botId: e.target.value })} placeholder="BFLOW_300003566171" /></label>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>알림 제목</span>
-                <input className="b2b-input" value={mn.title} onChange={(e) => setMn({ ...mn, title: e.target.value })} placeholder="[업무도우미 변경알림]" /></label>
-              <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 15, fontWeight: 600 }}>수신 대상 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 쉼표로 구분(B2B 알림봇 수신자와 같은 ID 형식)</span></span>
-                <input className="b2b-input" value={mn.receivers} onChange={(e) => setMn({ ...mn, receivers: e.target.value })} placeholder="예: user1@seamonster.kr, user2@seamonster.kr" /></label>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>Flow API 키 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>{mnHasKey ? "· 저장됨(입력 시 교체)" : mnFallbackKey ? "· B2B 봇 키 사용 중(입력 시 전용 키)" : "· 미설정"}</span></span>
-                <input className="b2b-input" type="password" value={mnApiKey} onChange={(e) => setMnApiKey(e.target.value)} placeholder={mnHasKey || mnFallbackKey ? "변경할 때만 입력" : "키관리에서 발급받은 API Key"} /></label>
-            </div>
-            <div style={{ marginTop: 12 }}>
+            <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 6px" }}>발송 채널 URL은 관리자 › 설정 › B2B 도매의 &apos;Teams 알림&apos; 카드에서 관리합니다.</p>
+            <div style={{ marginTop: 6 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>발송할 알림 목록</span>
               <p className="sm-faint" style={{ fontSize: 12, margin: "3px 0 0" }}>체크 해제한 알림은 발송되지 않습니다 (변경 기록에는 남음).</p>
               {[...new Set(mnEventDefs.map((ev) => ev.group || "기타"))].map((g) => (
@@ -227,8 +142,7 @@ export default function ProductionSettingsPage() {
                 </div>
               ))}
             </div>
-            <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-              <input className="b2b-input" style={{ width: 220 }} value={mnTestReceiver} onChange={(e) => setMnTestReceiver(e.target.value)} placeholder="테스트 수신자(비우면 전체)" />
+            <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12 }}>
               <button className="b2b-btn-secondary" onClick={testMn} disabled={mnBusy}>테스트 발송</button>
             </div>
           </>

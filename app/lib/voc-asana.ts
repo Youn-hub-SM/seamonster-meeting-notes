@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import type { Voc } from "./voc";
 
 // 아사나(Asana) 연동 — VOC를 아사나 프로젝트의 업무(task)로 등록 (flow.team 대체, 2026-08-21).
 //  설정은 b2b_settings 키-값에 저장(코드/깃에 두지 않음): PAT(개인 액세스 토큰)·프로젝트 gid·기본 담당자.
@@ -43,6 +44,44 @@ export function parseAsanaProjectGid(input: string): string {
   if (byLegacy) return byLegacy[1];
   const anyGid = s.match(/(\d{12,})/); // gid 는 통상 12자리 이상 — 짧은 숫자(날짜 등) 오인 방지
   return anyGid ? anyGid[1] : "";
+}
+
+const won = (n: number) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
+
+// VOC → 업무 제목·본문(본문에 VOC 전체 내용). 구 voc-flow 의 buildFlowTaskFromVoc 를 이관(대표 확정 서식).
+export function buildTaskFromVoc(v: Voc): { title: string; contents: string } {
+  const who = v.customer || "고객";
+  const what = v.product || "상품미상";
+  const title = `[VOC/${v.category}] ${what} - ${who}`.slice(0, 200);
+
+  const L: string[] = [];
+  L.push(`■ VOC 요약`);
+  L.push(`· 유형/상태: ${v.category} · ${v.status}`);
+  L.push(`· 접수일: ${v.received_at}${v.purchase_date ? ` · 구매일: ${v.purchase_date}` : ""}`);
+  L.push(`· 고객: ${who}${v.buyer_type ? ` (${v.buyer_type})` : ""}`);
+  if (v.purchase_place || v.product) L.push(`· 구매처/상품: ${v.purchase_place || "-"} / ${v.product || "-"}`);
+  if (v.production_date) L.push(`· 제품 생산일: ${v.production_date}`);
+  L.push("");
+  L.push(`■ 상세내용`); L.push(v.content || "-");
+  if (v.cause) { L.push(""); L.push(`■ 원인`); L.push(v.cause); }
+  if (v.resolution) { L.push(""); L.push(`■ 처리내용`); L.push(v.resolution); }
+  if (v.improvement) { L.push(""); L.push(`■ 개선 필요사항`); L.push(v.improvement); }
+  if (v.customer_note) { L.push(""); L.push(`■ 고객 특이사항`); L.push(v.customer_note); }
+  L.push("");
+  L.push(`■ 정산/처리`);
+  L.push(`· 손해 귀책: ${v.fault} · 보상: ${v.comp_type}${v.comp_qty ? `×${v.comp_qty}` : ""} · 손해금액: ${won(v.loss_amount)}`);
+  if (v.assignee) L.push(`· 담당자: ${v.assignee}`);
+  // 첨부 사진 — 공개 URL 링크로 넣는다(클릭하면 열림).
+  const photos = (v.photos ?? []).filter((u) => typeof u === "string" && u.trim());
+  if (photos.length) {
+    L.push("");
+    L.push(`■ 첨부 사진 (${photos.length})`);
+    photos.forEach((u, i) => L.push(`· 사진${i + 1}: ${u.trim()}`));
+  }
+  L.push("");
+  L.push(`— 씨몬스터 VOC #${v.id.slice(0, 8)} · 내부도구에서 등록`);
+
+  return { title, contents: L.join("\n").slice(0, 10000) };
 }
 
 type AsanaResult = { ok: boolean; status: number; data: Record<string, unknown> | null; error?: string };

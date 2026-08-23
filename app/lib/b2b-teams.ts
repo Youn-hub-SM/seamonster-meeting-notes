@@ -127,15 +127,17 @@ export async function mirrorB2BTeams(
   }
 }
 
-// 일정 브리핑 등 완성된 본문 발송 — 설정이 켜져 있을 때만. 실패는 조용히.
-export async function sendTeamsTextSafe(text: string, opts?: { link?: string | null }): Promise<void> {
+// 일정 브리핑 등 완성된 본문 발송 — 설정이 켜져 있을 때만. 던지지 않고 결과를 돌려준다
+//  (다이제스트 크론이 이 결과로 발송 성공을 판정한다 — Flow 제거 후 Teams 가 유일한 경로).
+export async function sendTeamsTextSafe(text: string, opts?: { link?: string | null }): Promise<{ ok: boolean; error?: string }> {
   try {
     const cfg = await getB2BTeamsConfig();
-    if (!cfg.enabled || !cfg.url) return;
+    if (!cfg.enabled || !cfg.url) return { ok: false, error: "Teams 알림이 꺼져 있거나 URL이 없습니다(B2B 설정)." };
     // 브리핑은 첫 줄이 제목이라 별도 title 없이 본문 그대로 — 첫 줄을 굵게 올린다.
     const [first, ...rest] = text.split("\n");
-    await sendTeamsWebhook(cfg.url, rest.join("\n"), { title: first, link: opts?.link });
-  } catch {
-    /* 병행 발송 실패가 Flow 발송·크론 응답을 막지 않는다 */
+    const r = await sendTeamsWebhook(cfg.url, rest.join("\n"), { title: first, link: opts?.link });
+    return r.ok ? { ok: true } : { ok: false, error: r.error || `HTTP ${r.status}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "발송 실패" };
   }
 }

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import type { Voc } from "@/app/lib/voc";
-import { buildFlowTaskFromVoc } from "@/app/lib/voc-flow";
-import { getAsanaPat, getAsanaProjectGid, getAsanaDefaultAssignee, createAsanaTask, getAsanaSections, pickAsanaSection } from "@/app/lib/voc-asana";
+import { getAsanaPat, getAsanaProjectGid, getAsanaDefaultAssignee, createAsanaTask, getAsanaSections, pickAsanaSection, buildTaskFromVoc } from "@/app/lib/voc-asana";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +25,7 @@ export async function POST(req: NextRequest) {
     if (!pat) return NextResponse.json({ ok: false, error: "아사나 PAT가 설정되지 않았습니다. VOC 설정에서 등록하세요." }, { status: 400 });
     if (!projectGid) return NextResponse.json({ ok: false, error: "아사나 프로젝트가 설정되지 않았습니다. VOC 설정에서 등록하세요." }, { status: 400 });
 
-    const { title, contents } = buildFlowTaskFromVoc(v);
+    const { title, contents } = buildTaskFromVoc(v);
     // 항상 '개선요청' 섹션으로 — 상태 변경(진행중·완료·보류)은 아사나에서 관리한다.
     const section = pickAsanaSection(await getAsanaSections(pat, projectGid));
     const r = await createAsanaTask({

@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "./supabase";
 import { resolveUserName, verifySession } from "./b2b-auth";
-import { getNotifyConfig, shouldNotify, getFlowBotConfig, isFlowBotConfigured, getHelperBotConfig, isHelperBotConfigured, isHelperEventEnabled, getAppBaseUrl, type FlowBotConfig } from "./b2b-settings";
+import { getNotifyConfig, shouldNotify, isHelperEventEnabled, getAppBaseUrl } from "./b2b-settings";
 import type { ProductFieldChange } from "./product-diff";
-import { mirrorB2BSwit } from "./b2b-swit";
 import { mirrorB2BTeams } from "./b2b-teams";
 
 // B2B 활동 로그 — 상태 변경을 activity_log 테이블에 기록.
@@ -11,8 +10,7 @@ import { mirrorB2BTeams } from "./b2b-teams";
 //
 // 모든 기록은 fire-and-forget: 에러 나도 호출 측 작업(발주 저장 등)을 실패시키지 않음.
 //
-// recordActivity() 가 ① DB 기록(대시보드 피드) + ② 외부 웹훅(Zapier) 전송을 모두 담당.
-// 외부 웹훅은 환경변수 ZAPIER_WEBHOOK_URL 설정 시에만 동작.
+// recordActivity() 가 ① DB 기록(대시보드 피드) + ② 외부 알림(Teams 채널) 발송을 모두 담당.
 
 type ActivityInput = {
   event_type: string;
@@ -61,8 +59,7 @@ async function recordActivity(input: ActivityInput): Promise<void> {
     console.error("[b2b-activity] record failed", err);
   }
 
-  // 2) Zapier(또는 호환 외부 웹훅) 전송 — ZAPIER_WEBHOOK_URL 미설정 시 스킵
-  //    notify:false(매출 등 비-B2B 감사이벤트)는 외부 알림 없이 DB 기록만.
+  // 2) 외부 알림(Teams) 발송 — notify:false(매출 등 비-B2B 감사이벤트)는 DB 기록만.
   if (input.notify !== false) await sendWebhook(input, actor);
 }
 
@@ -156,60 +153,20 @@ export async function logInventoryMovedToWholesale(name: string, sku: string | n
 }
 
 // 외부 알림 전송. fire-and-forget.
-//  설정(b2b_settings.zapier_notify)에 따라 이벤트·결과상태별로 발송을 거름.
-//  라우팅: Flow 봇(flow_bot_id·flow_bot_api_key·flow_bot_receivers) 이 모두 설정돼 있으면
-//         Flow 로 직접 발송(Zapier 완전 대체), 아니면 기존 Zapier(ZAPIER_WEBHOOK_URL) 로 폴백.
+//  설정(b2b_settings.zapier_notify 키 — 이름은 옛 경로 유산)에 따라 이벤트·결과상태별로 발송을 거름.
 async function sendWebhook(input: ActivityInput, actor: string | null): Promise<void> {
   // 알림 설정 게이팅 — DB 기록(히스토리)은 영향 없음, 외부 발송만 거름
   const config = await getNotifyConfig();
   if (!shouldNotify(config, input.event_type, input.meta)) return;
 
-  // Swit 미러(도입 검토, 2026-08-07) — 아래 기존 경로(헬퍼봇/Flow/Zapier)와 별개로 같은 요약을
-  // Swit 채널로도 발송. 미설정·실패는 mirrorB2BSwit 안에서 조용히 무시된다.
-  // 헬퍼 체크리스트에서 꺼진 이벤트는 아래 기존 게이팅과 같은 기준으로 미러도 건너뛴다.
-  // 링크는 Flow 와 같은 주문 상세 주소(b2bAlertLink) — 주문 이벤트가 아니면 null.
-  if (!(input.bot === "helper" && input.helperEvent && !(await isHelperEventEnabled(input.helperEvent)))) {
-    void b2bAlertLink(input.order_id).then((link) => {
-      mirrorB2BSwit(input.summary, actor, link);
-      mirrorB2BTeams(input.summary, actor, link, { helper: input.bot === "helper" }); // Teams 미러 — 헬퍼(생산·재고)는 변경알림 채널로
-    }).catch(() => {});
-  }
+  // 헬퍼(생산·재고) 이벤트는 체크리스트(생산관리 설정)에서 꺼져 있으면 발송하지 않는다.
+  if (input.bot === "helper" && input.helperEvent && !(await isHelperEventEnabled(input.helperEvent))) return;
 
-  // 0순위: '업무도우미 변경알림' 봇(생산관리 설정의 봇 재사용) — 생산·재고 알림 전용.
-  //  체크리스트에서 해제된 이벤트는 어느 봇으로도 안 보냄. 봇 미구성이면 아래 기본 경로로 폴백.
-  if (input.bot === "helper") {
-    if (input.helperEvent && !(await isHelperEventEnabled(input.helperEvent))) return;
-    if (await isHelperBotConfigured()) {
-      await sendFlowBotNotify(input, actor, { config: await getHelperBotConfig() });
-      return;
-    }
-  }
-
-  // 1순위: Flow 봇 알림(설정 시 Zapier 대체)
-  if (await isFlowBotConfigured()) { await sendFlowBotNotify(input, actor); return; }
-
-  // 폴백: 기존 Zapier Catch Hook
-  const url = process.env.ZAPIER_WEBHOOK_URL;
-  if (!url) return;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        event: input.event_type,
-        summary: input.summary,
-        actor,
-        order_id: input.order_id ?? null,
-        order_no: input.order_no ?? null,
-        // meta 의 from/to/amount 등을 최상위로도 펼쳐 Zapier 필드 매핑 쉽게
-        ...(input.meta ?? {}),
-        occurred_at: new Date().toISOString(),
-      }),
-    });
-    if (!res.ok) console.warn("[b2b-activity] webhook responded", res.status);
-  } catch (err) {
-    console.error("[b2b-activity] webhook failed", err);
-  }
+  // 발송은 Teams 채널로 일원화(2026-08-23 대청소) — Flow 봇·헬퍼봇·Zapier 경로 제거.
+  //  헬퍼(생산·재고)는 '업무도우미 변경알림' 채널, 나머지는 B2B 알림 채널(b2b-teams 가 분기).
+  //  링크는 주문 상세 주소(b2bAlertLink) — 주문 이벤트가 아니면 null.
+  const link = await b2bAlertLink(input.order_id);
+  await mirrorB2BTeams(input.summary, actor, link, { helper: input.bot === "helper" });
 }
 
 // 알림 메시지에 넣을 주문 상세 링크(주문 이벤트만). app_base_url 미설정 시 링크 생략.
@@ -217,89 +174,6 @@ export async function b2bAlertLink(orderId: string | null | undefined): Promise<
   if (!orderId) return null;
   const base = await getAppBaseUrl();
   return base ? `${base}/b2b/orders/${orderId}` : null;
-}
-
-// Flow 봇 알림 발송(flow.team Open API bulk). 본문(contents) = 요약 + (작업자) + 주문 상세 링크.
-//  수신자·제목·봇키는 설정값. opts 로 테스트 발송 시 수신자/설정 오버라이드 가능.
-//  성공 판정: HTTP 2xx 이고 response.success !== false.
-export async function sendFlowBotNotify(
-  input: ActivityInput,
-  actor: string | null,
-  opts?: { config?: FlowBotConfig; receivers?: string[] },
-): Promise<{ ok: boolean; status: number; error?: string }> {
-  const cfg = opts?.config ?? (await getFlowBotConfig());
-  const receivers = (opts?.receivers ?? cfg.receivers).map((r) => r.trim()).filter(Boolean);
-  if (!cfg.botId || !cfg.apiKey || !receivers.length) {
-    return { ok: false, status: 0, error: "Flow 봇 설정(봇 ID·API 키·수신자)이 완료되지 않았습니다." };
-  }
-
-  const link = await b2bAlertLink(input.order_id);
-  const lines = [input.summary];
-  if (actor) lines.push(`— 작업자: ${actor}`);
-  // 링크는 본문(contents)에 원문 URL로 넣지 않고, Flow 알림봇 body의 url(선택) 필드로 전달
-  //  → 플로우가 본문과 별개의 '자세히 보기' 클릭 링크로 렌더한다(주소 원문 노출 방지).
-
-  const endpoint = `https://api.flow.team/v1/bots/${encodeURIComponent(cfg.botId)}/notifications/bulk`;
-  const payload: Record<string, unknown> = {
-    receivers: receivers.map((r) => ({ receiverId: r })),
-    title: cfg.title || "씨몬스터 B2B 알림",
-    contents: lines.join("\n"),
-  };
-  if (link) payload.url = link; // format:url, max 2000 (문서 스펙)
-  try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-flow-api-key": cfg.apiKey },
-      body: JSON.stringify(payload),
-    });
-    const text = await res.text().catch(() => "");
-    let json: unknown = null;
-    try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
-    const resp = (json as { response?: { success?: boolean; message?: string; error?: { message?: string; verbose?: string[] } } } | null)?.response;
-    if (!res.ok || resp?.success === false) {
-      const msg = resp?.error?.message || resp?.message || text.slice(0, 200) || `HTTP ${res.status}`;
-      const verbose = resp?.error?.verbose?.length ? ` (${resp.error.verbose.join(", ")})` : "";
-      console.warn("[b2b-activity] flow bot notify failed", res.status, msg);
-      return { ok: false, status: res.status, error: `${msg}${verbose}` };
-    }
-    return { ok: true, status: res.status };
-  } catch (err) {
-    console.error("[b2b-activity] flow bot notify error", err);
-    return { ok: false, status: 0, error: (err as Error).message };
-  }
-}
-
-// Flow 봇에 임의 텍스트 발송(아침 일정 다이제스트 등). 설정값 사용.
-//  opts.url — 변동 알림(sendFlowBotNotify)과 동일하게 본문이 아니라 Flow body 의 url 필드로 전달 →
-//  플로우가 '자세히 보기' 클릭 링크로 렌더한다(본문에 주소 원문 노출 방지).
-export async function sendFlowText(contents: string, opts?: { config?: FlowBotConfig; receivers?: string[]; title?: string; url?: string }): Promise<{ ok: boolean; status: number; error?: string }> {
-  const cfg = opts?.config ?? (await getFlowBotConfig());
-  const receivers = (opts?.receivers ?? cfg.receivers).map((r) => r.trim()).filter(Boolean);
-  if (!cfg.botId || !cfg.apiKey || !receivers.length) return { ok: false, status: 0, error: "Flow 봇 설정(봇 ID·API 키·수신자)이 완료되지 않았습니다." };
-  const url = `https://api.flow.team/v1/bots/${encodeURIComponent(cfg.botId)}/notifications/bulk`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-flow-api-key": cfg.apiKey },
-      body: JSON.stringify({
-        receivers: receivers.map((r) => ({ receiverId: r })),
-        title: opts?.title || cfg.title || "씨몬스터 B2B 알림",
-        contents,
-        ...(opts?.url ? { url: opts.url } : {}), // format:url, max 2000 (문서 스펙)
-      }),
-    });
-    const text = await res.text().catch(() => "");
-    let json: unknown = null;
-    try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
-    const resp = (json as { response?: { success?: boolean; message?: string; error?: { message?: string; verbose?: string[] } } } | null)?.response;
-    if (!res.ok || resp?.success === false) {
-      const msg = resp?.error?.message || resp?.message || text.slice(0, 200) || `HTTP ${res.status}`;
-      return { ok: false, status: res.status, error: msg };
-    }
-    return { ok: true, status: res.status };
-  } catch (err) {
-    return { ok: false, status: 0, error: (err as Error).message };
-  }
 }
 
 type OrderSummary = {

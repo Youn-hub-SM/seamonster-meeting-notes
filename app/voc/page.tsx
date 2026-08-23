@@ -181,22 +181,8 @@ export default function VocPage() {
     setSaving(false);
   }
 
-  // flow(플로우)에 업무로 등록 — 클릭 1회. 성공 시 '등록됨' 표시(중복 방지).
-  async function registerFlow(r: Voc) {
-    if (r.flow_task_at) { setError("이미 flow에 등록된 VOC입니다."); return; }
-    if (flowBusy) { setError("다른 VOC의 flow 등록이 진행 중입니다. 잠시 후 다시 시도하세요."); return; }
-    if (!window.confirm(`이 VOC를 flow에 업무로 등록할까요?\n제목: [VOC/${r.category}] ${r.product || "상품미상"} - ${r.customer || "고객"}`)) return;
-    setFlowBusy(r.id); setError("");
-    try {
-      const res = await fetch("/api/voc/flow-task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "flow 등록 실패");
-      setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, flow_task_at: j.flow_task_at, flow_task_id: j.flow_task_id, flow_project_id: j.flow_project_id } : x)));
-    } catch (e) { setError(e instanceof Error ? e.message : "flow 등록 실패"); }
-    setFlowBusy("");
-  }
-
-  // 아사나에 업무로 등록 — flow 와 같은 규칙(클릭 1회, 성공 시 '등록됨' 표시로 중복 방지).
+  // 아사나에 업무로 등록 — 클릭 1회, 성공 시 '등록됨' 표시로 중복 방지.
+  //  (flow 등록은 2026-08-23 제거 — 기존 등록 건의 '✓ flow' 표시만 남긴다)
   async function registerAsana(r: Voc) {
     if (r.asana_task_at) { setError("이미 아사나에 등록된 VOC입니다."); return; }
     if (flowBusy) { setError("다른 VOC의 업무 등록이 진행 중입니다. 잠시 후 다시 시도하세요."); return; }
@@ -405,31 +391,23 @@ export default function VocPage() {
                   <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>
                   <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.resolution || ""}>{r.resolution || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
-                    {/* 전환기(~10일)에는 flow·아사나 병행 — 각각 독립 등록, 같은 건을 양쪽에 보낼 수도 있다 */}
                     <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
-                      {asanaReady && (r.asana_task_at ? (
+                      {r.asana_task_at ? (
                         r.asana_task_url ? (
                           <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)} — 클릭하면 업무 열림`}
                             style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
                         ) : (
                           <span title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
                         )
-                      ) : (
+                      ) : asanaReady ? (
                         <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
                           title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
                           {flowBusy === r.id ? "등록중…" : "→ 아사나"}
                         </button>
-                      ))}
-                      {!asanaReady && r.asana_task_at && (
-                        <span title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
-                      )}
-                      {r.flow_task_at ? (
+                      ) : null}
+                      {/* 과거 flow 등록 기록 — 표시만(등록 기능은 제거됨) */}
+                      {r.flow_task_at && (
                         <span title={`flow 등록됨 · ${r.flow_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
-                      ) : (
-                        <button className="b2b-link-btn" onClick={() => registerFlow(r)} disabled={flowBusy === r.id}
-                          title="flow(플로우)에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
-                          {flowBusy === r.id ? "등록중…" : "→ flow"}
-                        </button>
                       )}
                     </span>
                   </td>
@@ -593,7 +571,6 @@ export default function VocPage() {
                 {edit.id && (() => {
                   const er = rows.find((r) => r.id === edit.id);
                   if (!er) return null;
-                  // 전환기 병행 — 아사나·flow 각각 상태/버튼 표시
                   return (
                     <span className="sm-row" style={{ gap: 8, alignItems: "center" }}>
                       {er.asana_task_at ? (
@@ -603,11 +580,7 @@ export default function VocPage() {
                       ) : asanaReady ? (
                         <button className="b2b-btn-secondary" onClick={() => registerAsana(er)} disabled={flowBusy === edit.id}>{flowBusy === edit.id ? "등록중…" : "아사나에 업무 등록"}</button>
                       ) : null}
-                      {er.flow_task_at ? (
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>flow 등록됨 ✓</span>
-                      ) : (
-                        <button className="b2b-btn-secondary" onClick={() => registerFlow(er)} disabled={flowBusy === edit.id}>{flowBusy === edit.id ? "등록중…" : "flow에 업무 등록"}</button>
-                      )}
+                      {er.flow_task_at && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>flow 등록됨 ✓</span>}
                     </span>
                   );
                 })()}

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+// VOC 연동 설정 — Tally(응답 가져오기) + 아사나(업무 등록).
+//  2026-08-23 대청소: Tally 웹훅(대안)·flow(플로우) 연동 카드 제거 — flow 는 Teams+아사나로 전환 완료.
 export default function VocSettingsPage() {
-  const [origin, setOrigin] = useState("");
   const [loading, setLoading] = useState(true);
   // API(pull)
   const [hasApiKey, setHasApiKey] = useState(false);
@@ -12,32 +13,16 @@ export default function VocSettingsPage() {
   const [forms, setForms] = useState<{ id: string; name: string }[]>([]);
   const [busy, setBusy] = useState<string>("");
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
-  // 웹훅(대안)
-  const [hasSecret, setHasSecret] = useState(false);
-  const [secret, setSecret] = useState("");
-  const [copied, setCopied] = useState(false);
-  // flow(플로우) 연동
-  const [hasFlowKey, setHasFlowKey] = useState(false);
-  const [flowKey, setFlowKey] = useState("");
-  const [flowProject, setFlowProject] = useState("");
-  const [flowPriority, setFlowPriority] = useState("normal");
-  const [flowWorker, setFlowWorker] = useState("");
-  // 아사나 연동 (flow 대체 — 설정이 완료되면 VOC 버튼이 '→ 아사나'로 바뀐다)
+  // 아사나 연동 — 설정이 완료되면 VOC 화면에 '→ 아사나' 버튼이 나타난다
   const [hasAsanaPat, setHasAsanaPat] = useState(false);
   const [asanaPat, setAsanaPat] = useState("");
   const [asanaProject, setAsanaProject] = useState("");
   const [asanaAssignee, setAsanaAssignee] = useState("");
 
-  const webhookUrl = origin ? `${origin}/api/voc/tally` : "/api/voc/tally";
-
   useEffect(() => {
-    setOrigin(window.location.origin);
     fetch("/api/voc/tally-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
-      setHasApiKey(!!j.hasApiKey); setHasSecret(!!j.hasSecret); setFormId(j.formId || "");
+      setHasApiKey(!!j.hasApiKey); setFormId(j.formId || "");
     }).catch(() => {}).finally(() => setLoading(false));
-    fetch("/api/voc/flow-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
-      if (j.ok) { setHasFlowKey(!!j.hasApiKey); setFlowProject(j.projectId || ""); setFlowPriority(j.priority || "normal"); setFlowWorker(j.worker || ""); }
-    }).catch(() => {});
     fetch("/api/voc/asana-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (j.ok) { setHasAsanaPat(!!j.hasPat); setAsanaProject(j.project || ""); setAsanaAssignee(j.assignee || ""); }
     }).catch(() => {});
@@ -54,17 +39,6 @@ export default function VocSettingsPage() {
       setAsanaMsg({ t: j.detail || okMsg, ok: true });
       if (typeof j.project === "string" && j.project) setAsanaProject(j.project);
     } catch (e) { setAsanaMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
-    finally { setBusy(""); }
-  }
-
-  async function saveFlow(body: Record<string, string>, okMsg: string, tag: string) {
-    setBusy(tag); setMsg(null);
-    try {
-      const res = await fetch("/api/voc/flow-config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setMsg({ t: okMsg, ok: true });
-    } catch (e) { setMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
     finally { setBusy(""); }
   }
 
@@ -103,16 +77,12 @@ export default function VocSettingsPage() {
     } catch (e) { setMsg({ t: e instanceof Error ? e.message : "가져오기 실패", ok: false }); }
     finally { setBusy(""); }
   }
-  async function saveSecret() {
-    if (await save({ secret }, secret.trim() ? "시크릿 저장됨" : "시크릿 해제됨", "secret")) { setHasSecret(!!secret.trim()); setSecret(""); }
-  }
-  function copyUrl() { navigator.clipboard.writeText(webhookUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">설정 · 탈리(Tally) 연동</h1>
+          <h1 className="b2b-page-title">설정 · VOC 연동</h1>
         </div>
       </header>
 
@@ -120,7 +90,7 @@ export default function VocSettingsPage() {
 
       {/* API 키 방식(권장) */}
       <section className="b2b-card" style={{ marginTop: 14 }}>
-        <div className="b2b-card-head"><span className="b2b-card-title">API 연동 (권장)</span></div>
+        <div className="b2b-card-head"><span className="b2b-card-title">Tally API 연동</span></div>
 
         <div className="sm-col" style={{ gap: 6, marginBottom: 16 }}>
           <span className="b2b-field-label">1) Tally API 키 · 현재 {loading ? "확인 중…" : hasApiKey ? <strong style={{ color: "var(--sm-success)" }}>저장됨</strong> : <strong style={{ color: "var(--sm-warning)" }}>미설정</strong>}</span>
@@ -153,26 +123,12 @@ export default function VocSettingsPage() {
         </div>
       </section>
 
-      {/* 웹훅 방식(대안) */}
-      <section className="b2b-card" style={{ marginTop: 14 }}>
-        <div className="b2b-card-head"><span className="b2b-card-title">웹훅 (대안 · 실시간)</span></div>
-        <p className="sm-muted" style={{ fontSize: 15, marginBottom: 10 }}>API 키 대신, Tally 유료 플랜의 웹훅으로 실시간 수신도 가능합니다. 아래 주소를 Tally 폼 Integrations→Webhooks 에 붙여넣고, Signing secret 을 저장하세요.</p>
-        <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          <input className="b2b-input" readOnly value={webhookUrl} style={{ flex: 1, minWidth: 240, fontFamily: "monospace" }} onFocus={(e) => e.target.select()} />
-          <button className="b2b-btn-secondary" onClick={copyUrl}>{copied ? "복사됨 ✓" : "복사"}</button>
-        </div>
-        <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <input className="b2b-input" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={hasSecret ? "변경(비우고 저장 시 해제)" : "Signing secret (선택)"} style={{ flex: 1, minWidth: 240 }} />
-          <button className="b2b-btn-secondary" onClick={saveSecret} disabled={busy === "secret"}>{busy === "secret" ? "저장 중…" : "시크릿 저장"}</button>
-        </div>
-      </section>
-
-      {/* 아사나 연동 — 설정 완료 시 VOC 버튼이 '→ 아사나'로 바뀐다 (협업 스택 전환, flow 대체) */}
+      {/* 아사나 연동 — 설정 완료 시 VOC 화면에 '→ 아사나' 버튼이 나타난다 */}
       <section className="b2b-card" style={{ marginTop: 14 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">아사나(Asana) 연동</span></div>
         <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
           VOC 목록/상세에서 <strong>→ 아사나</strong> 버튼으로 해당 VOC를 아사나 프로젝트의 <strong>업무(task)</strong>로 등록합니다.
-          PAT와 프로젝트가 모두 저장되면 VOC 화면에 '→ 아사나' 버튼이 나타납니다(전환기에는 '→ flow' 버튼과 병행 — 같은 건을 양쪽에 보낼 수 있음).
+          PAT와 프로젝트가 모두 저장되면 VOC 화면에 버튼이 나타납니다.
           토큰 발급: 아사나 <strong>내 설정 → 앱 → 개발자 앱 관리 → 개인 액세스 토큰(PAT) 만들기</strong>.
         </p>
 
@@ -207,51 +163,6 @@ export default function VocSettingsPage() {
           <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>저장된 토큰으로 내 계정과 프로젝트 접근을 확인합니다.</span>
         </div>
         {asanaMsg && <div className={asanaMsg.ok ? "sm-success" : "b2b-error"} style={{ marginTop: 10 }}>{asanaMsg.t}</div>}
-      </section>
-
-      {/* flow(플로우) 연동 — VOC 목록에서 '→ flow' 클릭 시 업무로 등록. 아사나 전환기 보존(설정 비우면 미사용). */}
-      <section className="b2b-card" style={{ marginTop: 14 }}>
-        <div className="b2b-card-head"><span className="b2b-card-title">flow(플로우) 연동 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>— 전환기 병행 사용 · 아사나 정착 후 중단 예정</span></span></div>
-        <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
-          VOC 목록/상세에서 <strong>→ flow</strong> 버튼으로 해당 VOC를 플로우 프로젝트의 <strong>업무(task)</strong>로 등록합니다. 먼저 플로우에서 <strong>알림봇</strong>을 만들어 프로젝트에 초대하고, 관리자 API 센터에서 <strong>API 키</strong>를 발급받으세요.
-        </p>
-
-        <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
-          <span className="b2b-field-label">1) flow API 키 (x-flow-api-key) · 현재 {loading ? "확인 중…" : hasFlowKey ? <strong style={{ color: "var(--sm-success)" }}>저장됨</strong> : <strong style={{ color: "var(--sm-warning)" }}>미설정</strong>}</span>
-          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input className="b2b-input" type="password" value={flowKey} onChange={(e) => setFlowKey(e.target.value)} placeholder={hasFlowKey ? "새 키로 변경(비우고 저장 시 해제)" : "API 센터에서 발급한 키 붙여넣기"} style={{ flex: 1, minWidth: 240 }} />
-            <button className="b2b-btn-primary" onClick={async () => { await saveFlow({ apiKey: flowKey }, flowKey.trim() ? "API 키 저장됨" : "API 키 해제됨", "flowkey"); setHasFlowKey(!!flowKey.trim()); setFlowKey(""); }} disabled={busy === "flowkey"}>{busy === "flowkey" ? "저장 중…" : "저장"}</button>
-          </div>
-        </div>
-
-        <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
-          <span className="b2b-field-label">2) 기본 프로젝트 ID</span>
-          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input className="b2b-input" value={flowProject} onChange={(e) => setFlowProject(e.target.value)} placeholder="예: 940907 (플로우 프로젝트 번호)" style={{ flex: 1, minWidth: 240 }} inputMode="numeric" />
-            <button className="b2b-btn-secondary" onClick={() => saveFlow({ projectId: flowProject }, "프로젝트 ID 저장됨", "flowproj")} disabled={busy === "flowproj"}>{busy === "flowproj" ? "저장 중…" : "저장"}</button>
-          </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>플로우 프로젝트 URL/설정에서 확인. VOC는 이 프로젝트에 업무로 등록됩니다.</span>
-        </div>
-
-        <div className="sm-col" style={{ gap: 6 }}>
-          <span className="b2b-field-label">3) 기본 우선순위</span>
-          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <select className="b2b-input" value={flowPriority} onChange={(e) => setFlowPriority(e.target.value)} style={{ width: "auto" }}>
-              {["low", "normal", "high", "urgent"].map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <button className="b2b-btn-secondary" onClick={() => saveFlow({ priority: flowPriority }, "우선순위 저장됨", "flowpri")} disabled={busy === "flowpri"}>{busy === "flowpri" ? "저장 중…" : "저장"}</button>
-          </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>업무 상태는 VOC 단계에 맞춰 자동(접수→request · 응대·개선중→progress · 개선완료→complete)으로 등록됩니다.</span>
-        </div>
-
-        <div className="sm-col" style={{ gap: 6, marginTop: 14 }}>
-          <span className="b2b-field-label">4) 기본 담당자 (workerId · 이메일)</span>
-          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input className="b2b-input" type="email" value={flowWorker} onChange={(e) => setFlowWorker(e.target.value)} placeholder="예: seamonster2016@naver.com (비우면 미지정)" style={{ flex: 1, minWidth: 240 }} />
-            <button className="b2b-btn-secondary" onClick={() => saveFlow({ worker: flowWorker }, flowWorker.trim() ? "기본 담당자 저장됨" : "기본 담당자 해제됨", "flowworker")} disabled={busy === "flowworker"}>{busy === "flowworker" ? "저장 중…" : "저장"}</button>
-          </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>등록되는 업무의 담당자로 지정됩니다. <strong>반드시 플로우 프로젝트의 멤버 이메일</strong>이어야 합니다(아니면 flow가 거부). VOC별로 다르게 하려면 개별 등록 시 지정할 수 있게 추후 확장 가능.</span>
-        </div>
       </section>
     </div>
   );

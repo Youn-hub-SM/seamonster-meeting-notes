@@ -166,7 +166,6 @@ export const NAV: NavCategory[] = [
           { href: "/production/settings", label: "생산관리" },
           { href: "/fulfill/settings", label: "온라인 발주" },
           { href: "/voc/settings", label: "VOC·탈리 연동" },
-          { href: "/b2b/settings/swit", label: "Swit 알림(검토)" },
         ],
       },
     ],
