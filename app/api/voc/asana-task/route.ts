@@ -22,8 +22,8 @@ export async function POST(req: NextRequest) {
     if (v.asana_task_at) return NextResponse.json({ ok: false, error: "이미 아사나에 등록된 VOC입니다.", already: true }, { status: 409 });
 
     const [pat, projectGid, assignee] = await Promise.all([getAsanaPat(), getAsanaProjectGid(), getAsanaDefaultAssignee()]);
-    if (!pat) return NextResponse.json({ ok: false, error: "아사나 PAT가 설정되지 않았습니다. VOC 설정에서 등록하세요." }, { status: 400 });
-    if (!projectGid) return NextResponse.json({ ok: false, error: "아사나 프로젝트가 설정되지 않았습니다. VOC 설정에서 등록하세요." }, { status: 400 });
+    if (!pat) return NextResponse.json({ ok: false, error: "아사나 PAT가 설정되지 않았습니다. 관리자 › 설정 › 아사나 연동에서 등록하세요." }, { status: 400 });
+    if (!projectGid) return NextResponse.json({ ok: false, error: "아사나 프로젝트가 설정되지 않았습니다. 관리자 › 설정 › 아사나 연동에서 등록하세요." }, { status: 400 });
 
     const { title, contents } = buildTaskFromVoc(v);
     // 항상 '개선요청' 섹션으로 — 상태 변경(진행중·완료·보류)은 아사나에서 관리한다.

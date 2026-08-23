@@ -1,0 +1,83 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+// 설정 · 아사나 연동 — VOC 업무 등록용 PAT·프로젝트 연결 (구 VOC 설정에서 이관, 2026-08-24 설정 재구성).
+export default function AsanaSettingsPage() {
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string>("");
+  const [hasAsanaPat, setHasAsanaPat] = useState(false);
+  const [asanaPat, setAsanaPat] = useState("");
+  const [asanaProject, setAsanaProject] = useState("");
+  const [asanaAssignee, setAsanaAssignee] = useState("");
+  const [asanaMsg, setAsanaMsg] = useState<{ t: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/voc/asana-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (j.ok) { setHasAsanaPat(!!j.hasPat); setAsanaProject(j.project || ""); setAsanaAssignee(j.assignee || ""); }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  async function saveAsana(body: Record<string, string | boolean>, okMsg: string, tag: string) {
+    setBusy(tag); setAsanaMsg(null);
+    try {
+      const res = await fetch("/api/voc/asana-config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await res.json().catch(() => ({ ok: false, error: `서버 응답 오류(HTTP ${res.status})` }));
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setAsanaMsg({ t: j.detail || okMsg, ok: true });
+      if (typeof j.project === "string" && j.project) setAsanaProject(j.project);
+    } catch (e) { setAsanaMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
+    finally { setBusy(""); }
+  }
+
+  return (
+    <div className="b2b-container">
+      <header className="b2b-page-head">
+        <div>
+          <h1 className="b2b-page-title">설정 · 아사나 연동</h1>
+        </div>
+      </header>
+
+      <section className="b2b-card" style={{ marginTop: 14 }}>
+        <div className="b2b-card-head"><span className="b2b-card-title">아사나(Asana) 연동</span></div>
+        <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
+          VOC 목록/상세에서 <strong>→ 아사나</strong> 버튼으로 해당 VOC를 아사나 프로젝트의 <strong>업무(task)</strong>로 등록합니다.
+          PAT와 프로젝트가 모두 저장되면 VOC 화면에 버튼이 나타납니다.
+          토큰 발급: 아사나 <strong>내 설정 → 앱 → 개발자 앱 관리 → 개인 액세스 토큰(PAT) 만들기</strong>.
+        </p>
+
+        <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
+          <span className="b2b-field-label">1) 개인 액세스 토큰(PAT) · 현재 {loading ? "확인 중…" : hasAsanaPat ? <strong style={{ color: "var(--sm-success)" }}>저장됨</strong> : <strong style={{ color: "var(--sm-warning)" }}>미설정</strong>}</span>
+          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input className="b2b-input" type="password" value={asanaPat} onChange={(e) => setAsanaPat(e.target.value)} placeholder={hasAsanaPat ? "새 토큰으로 변경(비우고 저장 시 해제)" : "아사나에서 발급한 PAT 붙여넣기"} style={{ flex: 1, minWidth: 240 }} />
+            <button className="b2b-btn-primary" onClick={async () => { await saveAsana({ pat: asanaPat }, asanaPat.trim() ? "PAT 저장됨" : "PAT 해제됨", "asanapat"); setHasAsanaPat(!!asanaPat.trim()); setAsanaPat(""); }} disabled={busy === "asanapat"}>{busy === "asanapat" ? "저장 중…" : "저장"}</button>
+          </div>
+        </div>
+
+        <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
+          <span className="b2b-field-label">2) 프로젝트 (URL 또는 gid)</span>
+          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input className="b2b-input" value={asanaProject} onChange={(e) => setAsanaProject(e.target.value)} placeholder="아사나에서 프로젝트를 연 상태의 주소를 그대로 붙여넣기" style={{ flex: 1, minWidth: 240 }} />
+            <button className="b2b-btn-secondary" onClick={() => saveAsana({ project: asanaProject }, "프로젝트 저장됨", "asanaproj")} disabled={busy === "asanaproj"}>{busy === "asanaproj" ? "저장 중…" : "저장"}</button>
+          </div>
+          <span className="sm-faint" style={{ fontSize: 12 }}>URL을 넣으면 프로젝트 번호(gid)만 추려 저장합니다. 등록되는 업무는 VOC 상태와 무관하게 항상 &apos;개선요청&apos; 섹션에 들어갑니다(이후 상태 관리는 아사나에서).</span>
+        </div>
+
+        <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
+          <span className="b2b-field-label">3) 기본 담당자 (이메일 · 선택)</span>
+          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input className="b2b-input" type="email" value={asanaAssignee} onChange={(e) => setAsanaAssignee(e.target.value)} placeholder="아사나 워크스페이스 멤버 이메일 (비우면 미지정)" style={{ flex: 1, minWidth: 240 }} />
+            <button className="b2b-btn-secondary" onClick={() => saveAsana({ assignee: asanaAssignee }, asanaAssignee.trim() ? "기본 담당자 저장됨" : "기본 담당자 해제됨", "asanaassignee")} disabled={busy === "asanaassignee"}>{busy === "asanaassignee" ? "저장 중…" : "저장"}</button>
+          </div>
+          <span className="sm-faint" style={{ fontSize: 12 }}>등록되는 업무의 담당자로 지정됩니다. 멤버가 아니면 담당자 없이 등록되고 안내가 표시됩니다.</span>
+        </div>
+
+        <div className="sm-row" style={{ gap: 8 }}>
+          <button className="b2b-btn-secondary" onClick={() => saveAsana({ test: true }, "연결 OK", "asanatest")} disabled={busy === "asanatest"}>{busy === "asanatest" ? "확인 중…" : "연결 테스트"}</button>
+          <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>저장된 토큰으로 내 계정과 프로젝트 접근을 확인합니다.</span>
+        </div>
+        {asanaMsg && <div className={asanaMsg.ok ? "sm-success" : "b2b-error"} style={{ marginTop: 10 }}>{asanaMsg.t}</div>}
+      </section>
+    </div>
+  );
+}
