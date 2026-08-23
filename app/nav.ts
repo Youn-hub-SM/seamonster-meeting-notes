@@ -40,7 +40,6 @@ export const NAV: NavCategory[] = [
           { href: "/fulfill/scan", label: "송장 스캔" },
           { href: "/fulfill/log", label: "배송일지" },
           { href: "/fulfill/stats", label: "발송 통계" },
-          { href: "/fulfill/settings", label: "설정" },
         ],
       },
       {
@@ -86,9 +85,6 @@ export const NAV: NavCategory[] = [
       { href: "/inventory/stats", label: "통계", icon: "bars" },
       { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
       { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
-      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
-      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
-      { href: "/factory", label: "파도소리 재고", icon: "factory", adminOnly: true },
     ],
   },
   {
@@ -96,7 +92,6 @@ export const NAV: NavCategory[] = [
     tools: [
       { href: "/utm", label: "UTM 만들기", icon: "link" },
       { href: "/qr", label: "QR코드/브랜드링크", icon: "qrcode" },
-      { href: "/htmlshot", label: "상세 이미지 변환", icon: "image" },
       {
         href: "/naver-ad", label: "광고", icon: "trend",
         menu: [
@@ -107,7 +102,6 @@ export const NAV: NavCategory[] = [
       },
       { href: "/crm", label: "CRM 메시지맵", icon: "megaphone" },
       { href: "/instagram", label: "인스타 자동 DM", icon: "chat" },
-      { href: "/correct", label: "문장 교정", icon: "pen" },
     ],
   },
   {
@@ -142,11 +136,21 @@ export const NAV: NavCategory[] = [
       { href: "/updates", label: "업데이트 노트", icon: "note" },
       { href: "/report", label: "커스텀 리포트", icon: "bars" },
       { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
-      { href: "/pallet", label: "파렛트 적재", icon: "box" },
       { href: "/meeting", label: "회의 정리", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },
       // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
       { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
+      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
+      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
+      { href: "/factory", label: "파도소리 재고", icon: "factory", adminOnly: true },
+    ],
+  },
+  {
+    label: "베타 테스트 중",
+    tools: [
+      { href: "/htmlshot", label: "상세 이미지 변환", icon: "image" },
+      { href: "/correct", label: "문장 교정", icon: "pen" },
+      { href: "/pallet", label: "파렛트 적재", icon: "box" },
     ],
   },
   {
@@ -160,6 +164,7 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/settings/ai", label: "AI 설정" },
           { href: "/b2b/settings", label: "B2B 도매" },
           { href: "/production/settings", label: "생산관리" },
+          { href: "/fulfill/settings", label: "온라인 발주" },
           { href: "/voc/settings", label: "VOC·탈리 연동" },
           { href: "/b2b/settings/swit", label: "Swit 알림(검토)" },
         ],
