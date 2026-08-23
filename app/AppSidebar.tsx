@@ -30,6 +30,12 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const rail = !!collapsed && !hovering; // 아이콘만 보이는 레일 렌더 여부(호버 펼침 중엔 전체 메뉴 렌더)
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
+  // '베타 테스트 중' 분류 — 기본 접힘(대표 지시 2026-08-23). 펼침 상태는 즐겨찾기와 같은 방식으로 기억.
+  const [betaOpen, setBetaOpen] = useState(false);
+  useEffect(() => { try { setBetaOpen(localStorage.getItem("sb_beta_open") === "1"); } catch {} }, []);
+  function toggleBetaOpen() {
+    setBetaOpen((v) => { const next = !v; try { localStorage.setItem("sb_beta_open", next ? "1" : "0"); } catch {} return next; });
+  }
   // 즐겨찾기 아코디언 — 기본 펼침, 상태는 사이드바 접기(sb_collapsed)와 같은 방식으로 기억
   const [favOpen, setFavOpen] = useState(true);
   useEffect(() => { try { setFavOpen(localStorage.getItem("sb_fav_open") !== "0"); } catch {} }, []);
@@ -261,10 +267,31 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               .filter((t) => !t.adminOnly || isAdmin)
               .filter((t) => !isFactoryUser || t.href.startsWith("/factory"));
             if (tools.length === 0) return null;
+            // '베타 테스트 중'은 접이식(기본 접힘) — 현재 페이지가 이 분류 안이면 접혀 있어도 펼쳐 보인다
+            const collapsible = cat.label === "베타 테스트 중";
+            const catActive = collapsible && tools.some((t) => pathname === t.href || pathname.startsWith(t.href + "/"));
+            const showTools = !collapsible || betaOpen || catActive;
             return (
               <div key={cat.label} className="app-sb-group">
-                <div className="app-sb-cat">{cat.label}</div>
-                {tools.map(renderTool)}
+                {collapsible ? (
+                  <div className="app-sb-cat" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button type="button" className="app-sb-cat-toggle" onClick={toggleBetaOpen} aria-expanded={showTools}>{cat.label}</button>
+                    <button
+                      type="button"
+                      className={`app-sb-chev ${showTools ? "is-open" : ""}`}
+                      aria-label={showTools ? `${cat.label} 접기` : `${cat.label} 펼치기`}
+                      aria-expanded={showTools}
+                      onClick={toggleBetaOpen}
+                    >
+                      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+                        <path d="M5.5 3.5L10 8l-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="app-sb-cat">{cat.label}</div>
+                )}
+                {showTools && tools.map(renderTool)}
               </div>
             );
           })}
