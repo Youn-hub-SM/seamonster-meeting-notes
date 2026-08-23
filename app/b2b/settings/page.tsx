@@ -123,7 +123,7 @@ export default function SettingsEtcPage() {
       </section>
 
       {/* 생산 리드타임 (구 생산관리 설정에서 이관) */}
-      <section className="b2b-card" style={{ marginTop: 16 }}>
+      <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">생산 리드타임</h2></div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
           제조사에 생산을 요청하고 받기까지 걸리는 일수입니다. <strong>안전재고 = 하루 평균 출고 × 리드타임</strong>으로,
@@ -152,7 +152,7 @@ export default function SettingsEtcPage() {
       </section>
 
       {/* 발주 완료 → 매출 데이터(Supabase) 자동 반영 */}
-      <section className="b2b-card" style={{ marginTop: 16 }}>
+      <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">발송완료 매출 반영</h2>
           <span style={{ fontSize: 11.5, color: "var(--sm-success)" }}>● 자동 (Supabase)</span>

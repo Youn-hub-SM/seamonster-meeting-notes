@@ -265,7 +265,7 @@ export default function TeamsSettingsPage() {
       </section>
 
       {/* 아침 일정 알림 — Teams 채널(B2B 알림)로 자동 발송 */}
-      <section className="b2b-card">
+      <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">아침 일정 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 매일 오전 06~07시 자동</span></h2>
           <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
@@ -344,7 +344,7 @@ export default function TeamsSettingsPage() {
         </div>
       )}
 
-      <section className="b2b-card">
+      <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">알림 이벤트 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>(Teams 발송 공통)</span></h2>
         </div>
@@ -401,7 +401,7 @@ export default function TeamsSettingsPage() {
       </section>
 
       {/* [업무도우미 변경알림] — 상품마스터 변경 + 생산·재고 알림 체크리스트 (구 생산관리 설정에서 이관) */}
-      <section className="b2b-card" style={{ marginTop: 16 }}>
+      <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 + 생산 요청·재고 이전(소매→도매) 알림 — 위 &apos;변경알림 채널&apos;로 발송</span></h2>
           <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "저장"}</button>
