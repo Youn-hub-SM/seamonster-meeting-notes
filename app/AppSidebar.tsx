@@ -288,9 +288,9 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
                       </svg>
                     </button>
                   </div>
-                ) : (
+                ) : cat.label ? (
                   <div className="app-sb-cat">{cat.label}</div>
-                )}
+                ) : null /* 라벨 없는 최상단 그룹(사용 가이드·업데이트 노트)은 제목 없이 툴만 */}
                 {showTools && tools.map(renderTool)}
               </div>
             );

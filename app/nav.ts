@@ -10,6 +10,14 @@ export type NavCategory = { label: string; adminOnly?: boolean; tools: NavTool[]
 
 export const NAV: NavCategory[] = [
   {
+    // 라벨 없는 최상단 그룹 — 사용 가이드·업데이트 노트(대표 지시 2026-08-24). 사이드바는 빈 라벨을 그리지 않는다.
+    label: "",
+    tools: [
+      { href: "/guide", label: "사용 가이드", icon: "book" },
+      { href: "/updates", label: "업데이트 노트", icon: "note" },
+    ],
+  },
+  {
     label: "세일즈",
     tools: [
       {
@@ -130,19 +138,17 @@ export const NAV: NavCategory[] = [
   {
     label: "기타",
     tools: [
-      { href: "/guide", label: "사용 가이드", icon: "book" },
-      { href: "/updates", label: "업데이트 노트", icon: "note" },
       { href: "/report", label: "커스텀 리포트", icon: "bars" },
       { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
       { href: "/meeting", label: "회의 정리", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드", icon: "book" },
-      // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
-      { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
     ],
   },
   {
     label: "베타 테스트 중",
     tools: [
+      // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
+      { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
       { href: "/htmlshot", label: "상세 이미지 변환", icon: "image" },
       { href: "/correct", label: "문장 교정", icon: "pen" },
       { href: "/pallet", label: "파렛트 적재", icon: "box" },
