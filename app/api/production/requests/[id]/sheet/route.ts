@@ -46,6 +46,17 @@ function parseWeight(isBulk: boolean, ...sources: (string | null | undefined)[])
   return { grams: null, label: "-" };
 }
 const unitLabel = (g: number) => (g >= 1000 ? `${+(g / 1000).toFixed(2)}kg` : `${+g.toFixed(0)}g`);
+// 중량·곱셈 토큰을 걷어낸 상품명 — 총중량 표의 '상품명' 축. "참돔순살(100g)"→"참돔순살", "대구순살 5x2"→"대구순살"
+function baseName(name: string): string {
+  const s = name
+    .replace(/\(\s*\d+(?:\.\d+)?\s*(?:kg|g)?\s*[x×*]\s*\d+(?:\.\d+)?\s*\)/gi, "")
+    .replace(/\d+(?:\.\d+)?\s*(?:kg|g)?\s*[x×*]\s*\d+(?:\.\d+)?/gi, "")
+    .replace(/\(\s*\d+(?:\.\d+)?\s*(?:kg|g)\s*\)/gi, "")
+    .replace(/\d+(?:\.\d+)?\s*(?:kg|g)/gi, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ").trim();
+  return s || name;
+}
 
 const THIN = { style: "thin" as const, color: { argb: "FFBBBBBB" } };
 const BOX = { top: THIN, bottom: THIN, left: THIN, right: THIN };
@@ -105,10 +116,11 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     tRow.getCell(2).numFmt = "#,##0";
     for (let col = 1; col <= 5; col++) tRow.getCell(col).border = BOX;
 
-    // ── 옵션중량별 총중량 — 제조사가 원료 준비량을 바로 가늠하도록.
-    //  묶음 기준(대표 확정, 2026-08-21): 벌크(속성)는 별도 줄, 나머지는 품목 구분 없이 옵션중량으로 묶는다. ──
+    // ── 상품명·옵션별 총중량 — 제조사가 원료 준비량을 바로 가늠하도록.
+    //  묶음 기준(대표 확정, 2026-08-21): 상품명 + 옵션중량 두 축. 벌크(속성)는 벌크 포장 중량으로
+    //  계산돼 옵션중량 칸에 5kg×2 로 표시된다 — 같은 상품명의 소매 옵션과 줄이 나뉜다. ──
     ws.addRow([]);
-    const wTitle = ws.addRow(["옵션중량별 총중량 (벌크 별도)"]);
+    const wTitle = ws.addRow(["상품명·옵션별 총중량"]);
     wTitle.font = { bold: true, size: 12 };
     ws.mergeCells(wTitle.number, 1, wTitle.number, 5);
 
@@ -122,30 +134,30 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       } catch { /* attrs 미적용 환경 등 — 비벌크 취급 */ }
     }
 
-    const groups = new Map<string, { kind: "옵션" | "벌크"; grams: number | null; wLabel: string; qty: number }>();
+    const groups = new Map<string, { base: string; grams: number | null; wLabel: string; qty: number }>();
     for (const it of r.items) {
       const isBulk = (attrsMap.get(String(it.product_id)) || "").includes("벌크");
       const { grams, label: wLabel } = parseWeight(isBulk, it.spec, it.name);
-      const kind = isBulk ? "벌크" as const : "옵션" as const;
-      const key = `${kind}|${wLabel}`;
-      const g = groups.get(key) || { kind, grams, wLabel, qty: 0 };
+      const base = baseName(it.name);
+      const key = `${base}|${wLabel}`;
+      const g = groups.get(key) || { base, grams, wLabel, qty: 0 };
       g.qty += Number(it.requested_qty) || 0;
       groups.set(key, g);
     }
-    const wHeader = ws.addRow(["구분", "옵션중량", "수량", "총중량(kg)", ""]);
+    const wHeader = ws.addRow(["상품명", "옵션중량", "수량", "총중량(kg)", ""]);
     wHeader.font = { bold: true };
-    wHeader.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }; c.alignment = { horizontal: "center" }; });
+    wHeader.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }; c.alignment = { horizontal: "center" } });
     for (let col = 1; col <= 4; col++) wHeader.getCell(col).border = BOX;
 
     let sumKg = 0, sumQty = 0, unknown = 0;
-    // 옵션(중량 오름차순, 미인식 뒤) 먼저, 벌크는 그 아래 별도
+    // 상품명 가나다순, 같은 상품명 안에서는 중량 오름차순(벌크 5kg×2 는 자연히 뒤)
     const sorted = [...groups.values()].sort((a, b) =>
-      (a.kind === "벌크" ? 1 : 0) - (b.kind === "벌크" ? 1 : 0) || (a.grams ?? Infinity) - (b.grams ?? Infinity));
+      a.base.localeCompare(b.base, "ko") || (a.grams ?? Infinity) - (b.grams ?? Infinity));
     for (const g of sorted) {
       const kg = g.grams == null ? null : (g.grams * g.qty) / 1000;
       if (kg == null) unknown++; else sumKg += kg;
       sumQty += g.qty;
-      const row = ws.addRow([g.kind, g.wLabel, g.qty, kg == null ? "-" : +kg.toFixed(1), ""]);
+      const row = ws.addRow([g.base, g.wLabel, g.qty, kg == null ? "-" : +kg.toFixed(1), ""]);
       row.getCell(3).numFmt = "#,##0";
       if (kg != null) row.getCell(4).numFmt = "#,##0.0";
       for (let col = 1; col <= 4; col++) { row.getCell(col).border = BOX; if (col > 1) row.getCell(col).alignment = { horizontal: "center" }; }
