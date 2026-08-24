@@ -358,6 +358,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
   const editable = req.status === "요청" || req.status === "진행중";
   const itemPreview = req.items.slice(0, 2).map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join(" · ");
+  // 셀이 말줄임으로 잘리므로 전체 품목은 마우스 오버 툴팁으로 — 한 줄에 한 품목
+  const itemsFull = req.items.map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join("\n");
   return (
     <>
       <tr onClick={onToggle} style={{ cursor: "pointer" }} className={expanded ? "is-parent" : ""}>
@@ -366,7 +368,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
           {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{req.title}</span> : null}
         </td>
-        <td style={{ fontSize: 15, color: "var(--sm-text-mid)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <td title={itemsFull} style={{ fontSize: 15, color: "var(--sm-text-mid)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {itemPreview || "품목 없음"}
           {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
         </td>
