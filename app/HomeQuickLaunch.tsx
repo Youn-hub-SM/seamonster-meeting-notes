@@ -1,26 +1,24 @@
 "use client";
 
-// 홈 퀵런치 — 즐겨찾는 메뉴(사이드바와 같은 데이터)와 최근 방문을 큰 타일로.
+// 홈 퀵런치 — 즐겨찾는 메뉴(사이드바와 같은 데이터)를 큰 타일로.
 // 타일은 기존 .home-tool-card(구 홈의 런처 카드) 재사용.
+// 최근 방문 블록은 제거(2026-08-24 대표 지시) — 기록 자체(recent-pages)는 사이드바 등 다른 곳에서 쓰므로 유지.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { NAV, sortByNavOrder } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
-import { readRecents, type RecentPage } from "./lib/recent-pages";
 
 type Fav = { href: string; label: string };
 
 export default function HomeQuickLaunch() {
   const [favorites, setFavorites] = useState<Fav[]>([]);
-  const [recents, setRecents] = useState<RecentPage[]>([]);
 
   useEffect(() => {
     fetch("/api/b2b/favorites", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (j?.ok) setFavorites(j.favorites || []); })
       .catch(() => {});
-    setRecents(readRecents());
   }, []);
 
   // href → 아이콘 (사이드바와 동일 규칙: 하위 메뉴는 상위 툴 아이콘)
@@ -33,9 +31,7 @@ export default function HomeQuickLaunch() {
     return (href: string): IconName => m.get(href) || "home";
   }, []);
 
-  const shownRecents = recents.filter((r) => !favorites.some((f) => f.href === r.href)).slice(0, 4);
-
-  if (favorites.length === 0 && shownRecents.length === 0) return null;
+  if (favorites.length === 0) return null;
 
   const Tile = ({ href, label, icon }: { href: string; label: string; icon: IconName }) => (
     <Link href={href} className="home-tool-card">
@@ -54,14 +50,6 @@ export default function HomeQuickLaunch() {
           <div className="home-grid" style={{ marginTop: 14 }}>
             {/* 사이드바와 동일하게 실제 메뉴 순서로 정렬 */}
             {sortByNavOrder(favorites).map((f) => <Tile key={f.href} href={f.href} label={f.label} icon={iconForHref(f.href)} />)}
-          </div>
-        </section>
-      )}
-      {shownRecents.length > 0 && (
-        <section className="home-section">
-          <h2 className="home-section-title">최근 방문</h2>
-          <div className="home-grid" style={{ marginTop: 14 }}>
-            {shownRecents.map((r) => <Tile key={r.href} href={r.href} label={r.label} icon={r.icon || iconForHref(r.href)} />)}
           </div>
         </section>
       )}
