@@ -263,7 +263,7 @@ export function RequestList() {
           <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>도매 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 품목별 합산</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
-              <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>요청</th><th className="num" style={{ width: 100 }}>이전 완료</th><th className="num" style={{ width: 100 }}>잔여</th><th className="num" style={{ width: 90 }}>이행률</th></tr></thead>
+              <thead><tr><th>품목</th><th className="num" style={{ width: "14%" }}>요청</th><th className="num" style={{ width: "14%" }}>이전 완료</th><th className="num" style={{ width: "14%" }}>잔여</th><th className="num" style={{ width: "12%" }}>이행률</th></tr></thead>
               <tbody>
                 {wholesaleSummary.map((r) => {
                   const remain = r.requested - r.received;
@@ -297,13 +297,13 @@ export function RequestList() {
             <thead>
               <tr>
                 <th style={{ width: 28 }}></th>
-                <th style={{ width: 130 }}>요청번호</th>
+                <th style={{ width: "10%" }}>요청번호</th>
                 <th>품목</th>
-                <th className="b2b-col-date" style={{ width: 150 }}>진행</th>
-                <th className="b2b-col-date" style={{ width: 125 }}>요청일</th>
-                <th className="b2b-col-date" style={{ width: 125 }}>마감일</th>
-                <th className="b2b-col-date" style={{ width: 115 }}>담당</th>
-                <th style={{ width: 150 }}></th>
+                <th className="b2b-col-date" style={{ width: "13%" }}>진행</th>
+                <th className="b2b-col-date" style={{ width: "10%" }}>요청일</th>
+                <th className="b2b-col-date" style={{ width: "10%" }}>마감일</th>
+                <th className="b2b-col-date" style={{ width: "9%" }}>담당</th>
+                <th style={{ width: "12%" }}></th>
               </tr>
             </thead>
             <tbody>
@@ -408,7 +408,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 700 }}>
                 <thead>
-                  <tr><th>품목</th><th className="num" style={{ width: 90 }}>요청</th><th className="num" style={{ width: 90 }}>{req.purpose === "도매 납품" ? "이전" : "입고"}</th><th className="num" style={{ width: 90 }}>잔여</th><th style={{ width: 80 }}>상태</th><th style={{ width: 110 }}>입고 이력</th></tr>
+                  <tr><th>품목</th><th className="num" style={{ width: "12%" }}>요청</th><th className="num" style={{ width: "12%" }}>{req.purpose === "도매 납품" ? "이전" : "입고"}</th><th className="num" style={{ width: "12%" }}>잔여</th><th style={{ width: "10%" }}>상태</th><th style={{ width: "18%" }}>입고 이력</th></tr>
                 </thead>
                 <tbody>
                   {req.items.map((it) => (
