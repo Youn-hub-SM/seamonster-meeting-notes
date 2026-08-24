@@ -109,3 +109,42 @@ export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
     throw new Error("정리 결과 형식을 해석하지 못했습니다. 내용이 너무 길거나 형식이 특이하면 나눠서 시도해 주세요.");
   }
 }
+
+// ── OKR 1:1 체크인 — 편집된 회의록에서 비공개/공개 요약과 할 일을 분리 추출 ──
+//  비공개판: 전체 논의(개인 피드백 포함) 정리 — 본인 개인 소통방(아사나 비공개 프로젝트)용.
+//  공개판: OKR 진행·결정 중심, 개인적·민감한 대화 제외 — 공통 OKR 관리 프로젝트용.
+export type OkrExtractResult = {
+  privateSummary: string;
+  publicSummary: string;
+  todos: { text: string; scope: "personal" | "okr" }[];
+};
+
+export async function extractOkrFromMeeting(editedText: string): Promise<OkrExtractResult> {
+  const model = await getFeatureModel("meeting");
+  const system = `한국어 1:1 OKR 회의록 분리 어시스턴트. 입력은 이미 정리·편집된 회의록이다. 순수 JSON만 반환.
+
+형식:
+{"privateSummary":"비공개 요약","publicSummary":"공개 요약","todos":[{"text":"할 일(행동형 문장)","scope":"personal|okr"}]}
+
+규칙:
+[privateSummary] 전체 내용을 충실히 정리(개인 피드백·고민·사적 논의 포함). 불릿 형식의 여러 줄 허용.
+[publicSummary] 팀 전체가 보는 요약. OKR 진행 상황·수치·결정 사항만. 개인 피드백, 사적·민감한 대화, 인사 관련 내용은 제외. 불릿 형식.
+[todos] 실행 과제만. text 는 "~하기" 행동형으로. scope 는 OKR(회사 목표) 달성에 직접 관련되면 "okr", 개인 업무·개인 요청이면 "personal". 애매하면 "personal".
+할 일이 없으면 빈 배열. JSON 외 텍스트 금지.`;
+
+  const response = await anthropic.messages.create({
+    model,
+    max_tokens: 4096,
+    system,
+    messages: [{ role: "user", content: editedText }],
+  });
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+  try {
+    return JSON.parse(cleaned) as OkrExtractResult;
+  } catch {
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]) as OkrExtractResult;
+    throw new Error("분리 추출 결과를 해석하지 못했습니다. 회의록을 조금 줄여 다시 시도해 주세요.");
+  }
+}

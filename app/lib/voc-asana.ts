@@ -149,12 +149,14 @@ export async function createAsanaTask(opts: {
   name: string; notes: string;
   completed?: boolean; assigneeEmail?: string | null;
   sectionGid?: string | null;
+  dueOn?: string | null; // YYYY-MM-DD
 }): Promise<{ ok: boolean; gid: string | null; url: string | null; error?: string }> {
   const data: Record<string, unknown> = {
     name: opts.name.slice(0, 1024),
     notes: opts.notes.slice(0, 60000),
     projects: [opts.projectGid],
   };
+  if (opts.dueOn && /^\d{4}-\d{2}-\d{2}$/.test(opts.dueOn)) data.due_on = opts.dueOn;
   if (opts.completed) data.completed = true;
   if (opts.assigneeEmail && opts.assigneeEmail.trim()) data.assignee = opts.assigneeEmail.trim();
 
@@ -180,6 +182,16 @@ export async function createAsanaTask(opts: {
     return { ok: false, gid: null, url: null, error: r.error };
   }
   return finalize(r.data as { gid?: string; permalink_url?: string } | null);
+}
+
+// 태스크 완료 여부 일괄 조회 — OKR 체크인의 이행률 계산용. 실패한 gid 는 결과에서 빠진다(모름 처리).
+export async function getAsanaTasksStatus(pat: string, gids: string[]): Promise<Map<string, { completed: boolean }>> {
+  const out = new Map<string, { completed: boolean }>();
+  await Promise.all(gids.map(async (gid) => {
+    const r = await asanaFetch(pat, `/tasks/${encodeURIComponent(gid)}?opt_fields=completed`);
+    if (r.ok) out.set(gid, { completed: !!(r.data as { completed?: boolean } | null)?.completed });
+  }));
+  return out;
 }
 
 // 연결 테스트 — 토큰(내 정보)과 프로젝트 접근을 각각 확인해 이름으로 답한다.

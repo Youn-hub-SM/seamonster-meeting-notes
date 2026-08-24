@@ -12,11 +12,39 @@ export default function AsanaSettingsPage() {
   const [asanaAssignee, setAsanaAssignee] = useState("");
   const [asanaMsg, setAsanaMsg] = useState<{ t: string; ok: boolean } | null>(null);
 
+  // OKR 연동 — 공통 프로젝트 + 사용자별 개인 소통방 매핑
+  const [okrProject, setOkrProject] = useState("");
+  const [okrRows, setOkrRows] = useState<{ name: string; project: string }[]>([]);
+  const [okrMsg, setOkrMsg] = useState<{ t: string; ok: boolean } | null>(null);
+  const [okrBusy, setOkrBusy] = useState(false);
+
   useEffect(() => {
     fetch("/api/voc/asana-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (j.ok) { setHasAsanaPat(!!j.hasPat); setAsanaProject(j.project || ""); setAsanaAssignee(j.assignee || ""); }
     }).catch(() => {}).finally(() => setLoading(false));
+    fetch("/api/b2b/settings/okr", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (j.ok) {
+        setOkrProject(j.project || "");
+        const rows = Object.entries((j.map || {}) as Record<string, string>).map(([name, project]) => ({ name, project }));
+        setOkrRows(rows.length ? rows : [{ name: "", project: "" }]);
+      }
+    }).catch(() => {});
   }, []);
+
+  async function saveOkr() {
+    setOkrBusy(true); setOkrMsg(null);
+    try {
+      const map: Record<string, string> = {};
+      for (const r of okrRows) if (r.name.trim() && r.project.trim()) map[r.name.trim()] = r.project.trim();
+      const res = await fetch("/api/b2b/settings/okr", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: okrProject, map }) });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      setOkrProject(j.project || "");
+      setOkrRows(Object.entries((j.map || {}) as Record<string, string>).map(([name, project]) => ({ name, project })));
+      setOkrMsg({ t: "저장됨", ok: true });
+    } catch (e) { setOkrMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
+    finally { setOkrBusy(false); }
+  }
 
   async function saveAsana(body: Record<string, string | boolean>, okMsg: string, tag: string) {
     setBusy(tag); setAsanaMsg(null);
@@ -77,6 +105,38 @@ export default function AsanaSettingsPage() {
           <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>저장된 토큰으로 내 계정과 프로젝트 접근을 확인합니다.</span>
         </div>
         {asanaMsg && <div className={asanaMsg.ok ? "sm-success" : "b2b-error"} style={{ marginTop: 10 }}>{asanaMsg.t}</div>}
+      </section>
+
+      {/* OKR 1:1 연동 — 회의 정리의 [OKR 업로드]가 쓰는 목적지. 위 PAT 를 그대로 사용한다 */}
+      <section className="b2b-card" style={{ marginTop: 28 }}>
+        <div className="b2b-card-head">
+          <span className="b2b-card-title">OKR 1:1 연동</span>
+          <button className="b2b-btn-primary" onClick={saveOkr} disabled={okrBusy}>{okrBusy ? "저장 중…" : "저장"}</button>
+        </div>
+        <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
+          회의 정리에서 각자 업로드한 1:1 회의 결과가 들어가는 곳입니다. 공개 요약·OKR 할 일은 <strong>공통 OKR 관리 프로젝트</strong>로,
+          비공개 요약·개인 할 일은 <strong>각자의 개인 소통방</strong>(비공개, 대표+당사자)으로 갑니다.
+          모든 프로젝트에 <strong>PAT 소유자(대표)가 멤버</strong>여야 합니다.
+        </p>
+        {okrMsg && <div className={okrMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{okrMsg.t}</div>}
+
+        <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
+          <span className="b2b-field-label">공통 OKR 관리 프로젝트 (URL 또는 gid)</span>
+          <input className="b2b-input" value={okrProject} onChange={(e) => setOkrProject(e.target.value)} placeholder="아사나에서 OKR 관리 프로젝트를 연 상태의 주소 붙여넣기" style={{ maxWidth: 560 }} />
+        </div>
+
+        <div className="sm-col" style={{ gap: 6 }}>
+          <span className="b2b-field-label">개인 소통방 매핑 <span className="sm-faint" style={{ fontWeight: 400 }}>· 이름은 업무도우미 로그인 사용자명과 정확히 일치해야 합니다</span></span>
+          {okrRows.map((r, i) => (
+            <div key={i} className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <input className="b2b-input" value={r.name} onChange={(e) => setOkrRows((p) => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} placeholder="사용자명 (예: 현석)" style={{ width: 140 }} />
+              <input className="b2b-input" value={r.project} onChange={(e) => setOkrRows((p) => p.map((x, j) => j === i ? { ...x, project: e.target.value } : x))} placeholder="개인 소통방 프로젝트 URL 또는 gid" style={{ flex: 1, minWidth: 260 }} />
+              <button type="button" className="b2b-icon-btn is-danger" aria-label="행 삭제" onClick={() => setOkrRows((p) => p.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          ))}
+          <div><button type="button" className="b2b-btn-secondary" onClick={() => setOkrRows((p) => [...p, { name: "", project: "" }])}>+ 사용자 추가</button></div>
+          <span className="sm-faint" style={{ fontSize: 12 }}>저장하면 URL에서 프로젝트 번호(gid)만 추려 보관합니다. 빈 행은 무시됩니다.</span>
+        </div>
       </section>
     </div>
   );
