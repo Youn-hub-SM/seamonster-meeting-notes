@@ -17,6 +17,18 @@ export default function AsanaSettingsPage() {
   const [okrRows, setOkrRows] = useState<{ name: string; project: string }[]>([]);
   const [okrMsg, setOkrMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const [okrBusy, setOkrBusy] = useState(false);
+  const [okrTest, setOkrTest] = useState<string[]>([]);
+
+  async function testOkr() {
+    setOkrBusy(true); setOkrMsg(null); setOkrTest([]);
+    try {
+      const res = await fetch("/api/b2b/settings/okr", { method: "POST" });
+      const j = await res.json();
+      if (Array.isArray(j.lines)) setOkrTest(j.lines);
+      else throw new Error(j.error || "점검 실패");
+    } catch (e) { setOkrMsg({ t: e instanceof Error ? e.message : "점검 실패", ok: false }); }
+    finally { setOkrBusy(false); }
+  }
 
   useEffect(() => {
     fetch("/api/voc/asana-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
@@ -137,6 +149,18 @@ export default function AsanaSettingsPage() {
           <div><button type="button" className="b2b-btn-secondary" onClick={() => setOkrRows((p) => [...p, { name: "", project: "" }])}>+ 사용자 추가</button></div>
           <span className="sm-faint" style={{ fontSize: 12 }}>저장하면 URL에서 프로젝트 번호(gid)만 추려 보관합니다. 빈 행은 무시됩니다.</span>
         </div>
+
+        <div className="sm-row" style={{ gap: 8, marginTop: 14, alignItems: "center" }}>
+          <button type="button" className="b2b-btn-secondary" onClick={testOkr} disabled={okrBusy}>{okrBusy ? "확인 중…" : "연동 점검"}</button>
+          <span className="sm-faint" style={{ fontSize: 12 }}>저장된 설정으로 공통 프로젝트와 개인방 전부의 접근을 확인합니다.</span>
+        </div>
+        {okrTest.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8 }}>
+            {okrTest.map((l, i) => (
+              <div key={i} className={/실패|미설정|비어/.test(l) ? "b2b-error" : "sm-success"} style={{ padding: "2px 10px", marginBottom: 4 }}>{l}</div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

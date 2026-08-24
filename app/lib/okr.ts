@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { getAsanaPat, parseAsanaProjectGid, createAsanaTask, getAsanaTasksStatus } from "./voc-asana";
+import { getAsanaPat, parseAsanaProjectGid, createAsanaTask, getAsanaTasksStatus, getAsanaProjectName } from "./voc-asana";
 
 // OKR 1:1 체크인 — 회의 정리에서 각자 업로드한 요약·할 일을 아사나 두 곳으로 배포하고 기록한다.
 //  · 개인 소통방(비공개 프로젝트, 대표+당사자): 비공개 요약 + personal 할 일
@@ -87,13 +87,14 @@ export async function uploadOkrCheckin(input: {
   if (!personalGid) return { ok: false, error: `'${input.member}'의 개인 소통방 프로젝트가 연결되지 않았습니다 (관리자 › 설정 › 아사나 연동).`, created: 0, failed: 0 };
 
   let created = 0, failed = 0;
+  let firstError: string | null = null; // 실패 원인 진단용 — 첫 오류를 그대로 사용자에게 보여준다
   const records: OkrTodoRecord[] = [];
 
   // 요약 태스크 2건 — 완료 대상이 아니므로 기록에는 남기지 않는다(이행률 계산에서 제외)
   const sPriv = await createAsanaTask({ pat, projectGid: personalGid, name: `회의록 — ${input.meetingDate}`, notes: input.privateSummary });
-  sPriv.ok ? created++ : failed++;
+  if (sPriv.ok) created++; else { failed++; firstError ??= sPriv.error || null; }
   const sPub = await createAsanaTask({ pat, projectGid, name: `회의록(공개) — ${input.member} · ${input.meetingDate}`, notes: input.publicSummary });
-  sPub.ok ? created++ : failed++;
+  if (sPub.ok) created++; else { failed++; firstError ??= sPub.error || null; }
 
   for (const t of input.todos) {
     const text = t.text.trim();
@@ -101,8 +102,13 @@ export async function uploadOkrCheckin(input: {
     const target = t.scope === "okr" ? projectGid : personalGid;
     const name = t.scope === "okr" ? `[${input.member}] ${text}` : text;
     const r = await createAsanaTask({ pat, projectGid: target, name, notes: "", dueOn: input.dueDate });
-    if (r.ok) created++; else failed++;
+    if (r.ok) created++; else { failed++; firstError ??= r.error || null; }
     records.push({ text, scope: t.scope, gid: r.ok ? r.gid : null, project_gid: target });
+  }
+
+  // 전부 실패면 업로드 자체를 실패로 — 체크인 기록도 남기지 않는다(빈 gid 만 쌓임)
+  if (created === 0) {
+    return { ok: false, error: `아사나 생성이 모두 실패했습니다${firstError ? ` — ${firstError}` : ""}`, created, failed };
   }
 
   const { data, error } = await supabaseAdmin().from("okr_checkins").insert({
@@ -111,6 +117,25 @@ export async function uploadOkrCheckin(input: {
     todos: records,
   }).select("id").maybeSingle();
   // 기록 실패(마이그레이션 097 미적용 등)여도 아사나 업로드 자체는 유효 — 경고로 전달
-  if (error) return { ok: true, error: `아사나엔 올라갔으나 체크인 기록 저장 실패: ${error.message}`, created, failed };
-  return { ok: true, created, failed, checkinId: data?.id };
+  const partial = firstError ? `일부 실패(${failed}건) — ${firstError}` : undefined;
+  if (error) return { ok: true, error: [`체크인 기록 저장 실패: ${error.message}`, partial].filter(Boolean).join(" · "), created, failed };
+  return { ok: true, created, failed, checkinId: data?.id, error: partial };
+}
+
+// OKR 연동 점검 — 공통 프로젝트와 매핑된 개인방 전부의 접근 가능 여부를 이름으로 확인.
+export async function testOkrConnections(): Promise<{ ok: boolean; lines: string[] }> {
+  const [pat, projectGid, map] = await Promise.all([getAsanaPat(), getOkrProjectGid(), getOkrPersonalMap()]);
+  if (!pat) return { ok: false, lines: ["아사나 PAT 미설정 — 위 카드에서 먼저 저장하세요."] };
+  const lines: string[] = [];
+  let allOk = true;
+  const check = async (label: string, gid: string | null) => {
+    if (!gid) { lines.push(`${label}: 미설정`); allOk = false; return; }
+    const r = await getAsanaProjectName(pat, gid);
+    if (r.ok) lines.push(`${label}: OK — '${r.name}'`);
+    else { lines.push(`${label}: 실패 — ${r.error}`); allOk = false; }
+  };
+  await check("공통 OKR 프로젝트", projectGid);
+  for (const [user, gid] of Object.entries(map)) await check(`개인 소통방(${user})`, gid);
+  if (!Object.keys(map).length) { lines.push("개인 소통방 매핑이 비어 있습니다."); allOk = false; }
+  return { ok: allOk, lines };
 }

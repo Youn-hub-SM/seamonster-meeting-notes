@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { parseAsanaProjectGid } from "@/app/lib/voc-asana";
-import { getOkrProjectGid, setOkrProjectGid, getOkrPersonalMap, setOkrPersonalMap } from "@/app/lib/okr";
+import { getOkrProjectGid, setOkrProjectGid, getOkrPersonalMap, setOkrPersonalMap, testOkrConnections } from "@/app/lib/okr";
+
+export const maxDuration = 60; // 연동 점검이 프로젝트 수만큼 아사나를 호출한다
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,16 @@ export async function GET() {
     return NextResponse.json({ ok: true, project: project || "", map });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
+  }
+}
+
+// POST — 연동 점검: 공통 프로젝트와 매핑된 개인방 전부의 접근 가능 여부를 확인해 줄 단위로 답한다.
+export async function POST() {
+  try {
+    const r = await testOkrConnections();
+    return NextResponse.json({ ok: r.ok, lines: r.lines });
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "점검 실패") }, { status: 500 });
   }
 }
 

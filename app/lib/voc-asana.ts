@@ -184,6 +184,13 @@ export async function createAsanaTask(opts: {
   return finalize(r.data as { gid?: string; permalink_url?: string } | null);
 }
 
+// 프로젝트 이름 조회 — 연동 점검용(접근 불가·잘못된 gid 를 사람이 읽을 메시지로).
+export async function getAsanaProjectName(pat: string, gid: string): Promise<{ ok: boolean; name?: string; error?: string }> {
+  const r = await asanaFetch(pat, `/projects/${encodeURIComponent(gid)}?opt_fields=name`);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, name: (r.data as { name?: string } | null)?.name || gid };
+}
+
 // 태스크 완료 여부 일괄 조회 — OKR 체크인의 이행률 계산용. 실패한 gid 는 결과에서 빠진다(모름 처리).
 export async function getAsanaTasksStatus(pat: string, gids: string[]): Promise<Map<string, { completed: boolean }>> {
   const out = new Map<string, { completed: boolean }>();
