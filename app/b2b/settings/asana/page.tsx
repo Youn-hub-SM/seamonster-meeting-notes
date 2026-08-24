@@ -157,7 +157,7 @@ export default function AsanaSettingsPage() {
         {okrTest.length > 0 && (
           <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.8 }}>
             {okrTest.map((l, i) => (
-              <div key={i} className={/실패|미설정|비어/.test(l) ? "b2b-error" : "sm-success"} style={{ padding: "2px 10px", marginBottom: 4 }}>{l}</div>
+              <div key={i} className={/실패|미설정|비어|없어/.test(l) ? "b2b-error" : "sm-success"} style={{ padding: "2px 10px", marginBottom: 4 }}>{l}</div>
             ))}
           </div>
         )}
