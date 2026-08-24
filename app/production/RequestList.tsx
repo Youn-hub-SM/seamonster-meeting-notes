@@ -299,7 +299,7 @@ export function RequestList() {
                 <th style={{ width: 28 }}></th>
                 <th style={{ width: 130 }}>요청번호</th>
                 <th>품목</th>
-                <th className="b2b-col-date" style={{ width: 130 }}>진행</th>
+                <th className="b2b-col-date" style={{ width: 150 }}>진행</th>
                 <th className="b2b-col-date" style={{ width: 125 }}>요청일</th>
                 <th className="b2b-col-date" style={{ width: 125 }}>마감일</th>
                 <th className="b2b-col-date" style={{ width: 115 }}>담당</th>
@@ -336,10 +336,11 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
   const done = requested > 0 && received >= requested;
   const color = over ? "var(--sm-danger)" : done ? "var(--sm-success)" : "var(--sm-text-mid)";
   const pct = requested > 0 ? (received / requested) * 100 : null;
+  // 열 너비(fixed layout)를 넘지 않게 %는 둘째 줄로 — 숫자가 길어도 옆 칸을 침범하지 않는다
   return (
     <span style={{ fontSize: 15, fontWeight: 600, color, whiteSpace: "nowrap" }}>
       {received.toLocaleString()} / {requested.toLocaleString()}
-      {pct != null && <span className="sm-faint" style={{ marginLeft: 4, fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%)</span>}
+      {pct != null && <span className="sm-faint" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%)</span>}
     </span>
   );
 }
@@ -404,12 +405,6 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           <td></td>
           <td colSpan={7} style={{ padding: "8px 18px 16px" }}>
             {req.memo && <p className="sm-faint" style={{ fontSize: 15, marginBottom: 10 }}>메모: {req.memo}</p>}
-
-            <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>
-              {req.purpose === "도매 납품"
-                ? <>이행은 <strong>소매↔도매</strong> 화면에서 소매→도매로 옮기면 자동 연결됩니다(오래된 요청부터). 이전 취소도 그 화면에서.</>
-                : <>입고는 <strong>입고 및 출고</strong> 메뉴에서 하세요 — 같은 품목이 입고되면 이 요청에 자동으로 연결됩니다(오래된 요청부터). 잘못 연결된 입고는 아래 입고 이력에서 취소.</>}
-            </p>
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 700 }}>
                 <thead>
