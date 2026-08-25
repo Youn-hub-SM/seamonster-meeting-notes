@@ -1,7 +1,5 @@
 import ChangelogFeed from "@/app/components/ChangelogFeed";
 
-export const dynamic = "force-dynamic";
-
 // 업데이트 노트 — 홈에서 분리한 전용 화면. 데이터는 app/lib/changelog.ts.
 export default function UpdatesPage() {
   return (

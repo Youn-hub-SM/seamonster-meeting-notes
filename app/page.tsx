@@ -3,8 +3,6 @@ import HomeQuickLaunch from "@/app/HomeQuickLaunch";
 import HomeSitemap from "@/app/HomeSitemap";
 import Icon from "@/app/components/Icon";
 
-export const dynamic = "force-dynamic";
-
 // 고정 바로가기 — 즐겨찾기/최근 방문과 무관하게 항상 노출.
 const FIXED_LINKS = [
   { href: "/updates", label: "업데이트 노트", icon: "note" as const },

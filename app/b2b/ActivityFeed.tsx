@@ -78,11 +78,14 @@ export default function ActivityFeed() {
     const onPing = () => load();
     window.addEventListener("b2b:activity", onPing);
 
-    // 주기적 폴링(20초) — 같은 창에서 다른 사람이 바꾼 것도 반영.
+    // 주기적 폴링(60초) — 같은 창에서 다른 사람이 바꾼 것도 반영.
     // 탭이 백그라운드면 멈춰서 불필요한 요청 방지.
+    // 주기가 짧을수록 서버 실행 시간(Vercel 과금)이 그대로 늘어난다 — 화면을 하루 종일 켜두는
+    // 발주·입금 화면이라 20초→60초로 늦춰 상시 호출을 1/3로 줄였다. 즉시 반영이 필요한 경로
+    // (내 작업 직후 pingActivityFeed·탭 복귀 focus·페이지 이동)는 위 이벤트들이 이미 처리한다.
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") load();
-    }, 20000);
+    }, 60000);
 
     return () => {
       window.removeEventListener("focus", onFocus);

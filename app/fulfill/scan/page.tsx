@@ -31,7 +31,12 @@ export default function ScanPage() {
     loadState();
     setTimeout(() => scanRef.current?.focus(), 100);
     // 업로더가 추가한 데이터 반영. 단, 스캔 처리 중엔 건너뜀(진행 중 집계 덮어쓰기 방지).
-    const t = setInterval(() => { if (!processingRef.current && queueRef.current.length === 0) loadState(true); }, 8000);
+    //  유휴 상태에서만 도는 조회라 30초면 충분하다(8초는 서버 실행 시간만 4배로 쓴다).
+    //  스캔을 찍는 동안에는 각 처리가 끝날 때 집계가 갱신되므로 이 주기와 무관하다.
+    const t = setInterval(() => {
+      if (document.visibilityState !== "visible") return; // 백그라운드 탭은 조회하지 않음
+      if (!processingRef.current && queueRef.current.length === 0) loadState(true);
+    }, 30000);
     return () => clearInterval(t);
   }, [loadState]);
 
