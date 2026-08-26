@@ -2,6 +2,15 @@
 
 import { useEffect, useState } from "react";
 
+// 서버는 개인방 gid 와 담당자 이메일을 별도 맵으로 주므로 화면용 한 줄로 합친다(한쪽만 채운 사용자도 행으로 남는다).
+function toOkrRows(map: unknown, emails: unknown): { name: string; project: string; email: string }[] {
+  const m = (map || {}) as Record<string, string>;
+  const e = (emails || {}) as Record<string, string>;
+  const names = Array.from(new Set([...Object.keys(m), ...Object.keys(e)]));
+  const rows = names.map((name) => ({ name, project: m[name] || "", email: e[name] || "" }));
+  return rows.length ? rows : [{ name: "", project: "", email: "" }];
+}
+
 // 설정 · 아사나 연동 — VOC 업무 등록용 PAT·프로젝트 연결 (구 VOC 설정에서 이관, 2026-08-24 설정 재구성).
 export default function AsanaSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -14,7 +23,7 @@ export default function AsanaSettingsPage() {
 
   // OKR 연동 — 공통 프로젝트 + 사용자별 개인 소통방 매핑
   const [okrProject, setOkrProject] = useState("");
-  const [okrRows, setOkrRows] = useState<{ name: string; project: string }[]>([]);
+  const [okrRows, setOkrRows] = useState<{ name: string; project: string; email: string }[]>([]);
   const [okrMsg, setOkrMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const [okrBusy, setOkrBusy] = useState(false);
   const [okrTest, setOkrTest] = useState<string[]>([]);
@@ -37,8 +46,7 @@ export default function AsanaSettingsPage() {
     fetch("/api/b2b/settings/okr", { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (j.ok) {
         setOkrProject(j.project || "");
-        const rows = Object.entries((j.map || {}) as Record<string, string>).map(([name, project]) => ({ name, project }));
-        setOkrRows(rows.length ? rows : [{ name: "", project: "" }]);
+        setOkrRows(toOkrRows(j.map, j.emails));
       }
     }).catch(() => {});
   }, []);
@@ -47,12 +55,18 @@ export default function AsanaSettingsPage() {
     setOkrBusy(true); setOkrMsg(null);
     try {
       const map: Record<string, string> = {};
-      for (const r of okrRows) if (r.name.trim() && r.project.trim()) map[r.name.trim()] = r.project.trim();
-      const res = await fetch("/api/b2b/settings/okr", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: okrProject, map }) });
+      const emails: Record<string, string> = {};
+      for (const r of okrRows) {
+        const name = r.name.trim();
+        if (!name) continue;
+        if (r.project.trim()) map[name] = r.project.trim();
+        if (r.email.trim()) emails[name] = r.email.trim();
+      }
+      const res = await fetch("/api/b2b/settings/okr", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: okrProject, map, emails }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
       setOkrProject(j.project || "");
-      setOkrRows(Object.entries((j.map || {}) as Record<string, string>).map(([name, project]) => ({ name, project })));
+      setOkrRows(toOkrRows(j.map, j.emails));
       setOkrMsg({ t: "저장됨", ok: true });
     } catch (e) { setOkrMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
     finally { setOkrBusy(false); }
@@ -128,6 +142,7 @@ export default function AsanaSettingsPage() {
         <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
           회의 정리에서 각자 업로드한 1:1 회의 결과가 들어가는 곳입니다. 공개 요약·OKR 할 일은 <strong>공통 OKR 관리 프로젝트</strong>로,
           비공개 요약·개인 할 일은 <strong>각자의 개인 소통방</strong>(비공개, 대표+당사자)으로 갑니다.
+          할 일에는 <strong>당사자가 담당자로 지정</strong>되므로 아사나 계정 이메일을 함께 넣어야 마감 알림이 갑니다.
           모든 프로젝트에 <strong>PAT 소유자(대표)가 멤버</strong>여야 합니다.
         </p>
         {okrMsg && <div className={okrMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{okrMsg.t}</div>}
@@ -138,16 +153,17 @@ export default function AsanaSettingsPage() {
         </div>
 
         <div className="sm-col" style={{ gap: 6 }}>
-          <span className="b2b-field-label">개인 소통방 매핑 <span className="sm-faint" style={{ fontWeight: 400 }}>· 이름은 업무도우미 로그인 사용자명과 정확히 일치해야 합니다</span></span>
+          <span className="b2b-field-label">개인 소통방·담당자 매핑 <span className="sm-faint" style={{ fontWeight: 400 }}>· 이름은 업무도우미 로그인 사용자명과 정확히 일치해야 합니다</span></span>
           {okrRows.map((r, i) => (
             <div key={i} className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
               <input className="b2b-input" value={r.name} onChange={(e) => setOkrRows((p) => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} placeholder="사용자명 (예: 현석)" style={{ width: 140 }} />
-              <input className="b2b-input" value={r.project} onChange={(e) => setOkrRows((p) => p.map((x, j) => j === i ? { ...x, project: e.target.value } : x))} placeholder="개인 소통방 프로젝트 URL 또는 gid" style={{ flex: 1, minWidth: 260 }} />
+              <input className="b2b-input" value={r.project} onChange={(e) => setOkrRows((p) => p.map((x, j) => j === i ? { ...x, project: e.target.value } : x))} placeholder="개인 소통방 프로젝트 URL 또는 gid" style={{ flex: 1, minWidth: 240 }} />
+              <input className="b2b-input" type="email" value={r.email} onChange={(e) => setOkrRows((p) => p.map((x, j) => j === i ? { ...x, email: e.target.value } : x))} placeholder="아사나 계정 이메일" style={{ width: 220 }} />
               <button type="button" className="b2b-icon-btn is-danger" aria-label="행 삭제" onClick={() => setOkrRows((p) => p.filter((_, j) => j !== i))}>✕</button>
             </div>
           ))}
-          <div><button type="button" className="b2b-btn-secondary" onClick={() => setOkrRows((p) => [...p, { name: "", project: "" }])}>+ 사용자 추가</button></div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>저장하면 URL에서 프로젝트 번호(gid)만 추려 보관합니다. 빈 행은 무시됩니다.</span>
+          <div><button type="button" className="b2b-btn-secondary" onClick={() => setOkrRows((p) => [...p, { name: "", project: "", email: "" }])}>+ 사용자 추가</button></div>
+          <span className="sm-faint" style={{ fontSize: 12 }}>저장하면 URL에서 프로젝트 번호(gid)만 추려 보관합니다. 빈 행은 무시됩니다. 이메일이 비어 있으면 할 일이 담당자 없이 등록되어 아사나가 알림을 보내지 않습니다.</span>
         </div>
 
         <div className="sm-row" style={{ gap: 8, marginTop: 14, alignItems: "center" }}>

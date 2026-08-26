@@ -4,7 +4,8 @@ import { getAsanaPat, parseAsanaProjectGid, createAsanaTask, getAsanaTasksStatus
 // OKR 1:1 체크인 — 회의 정리에서 각자 업로드한 요약·할 일을 아사나 두 곳으로 배포하고 기록한다.
 //  · 개인 소통방(비공개 프로젝트, 대표+당사자): 비공개 요약 + personal 할 일
 //  · 공통 'OKR 관리' 프로젝트(팀 공개): 공개 요약 + okr 할 일(제목에 [이름] 프리픽스)
-//  설정은 b2b_settings KV: okr_project_gid(공통), okr_personal_map(JSON {사용자명: gid}).
+//  설정은 b2b_settings KV: okr_project_gid(공통), okr_personal_map(JSON {사용자명: gid}),
+//  okr_member_emails(JSON {사용자명: 아사나 계정 이메일} — 할 일의 담당자).
 //  다음 회의 때 저장된 태스크 gid 로 완료 여부를 조회해 이행률을 계산한다(okr_checkins, 097).
 
 async function getVal(key: string): Promise<string | null> {
@@ -26,8 +27,9 @@ async function setVal(key: string, value: string): Promise<void> {
 export const getOkrProjectGid = () => getVal("okr_project_gid");
 export const setOkrProjectGid = (s: string) => setVal("okr_project_gid", s);
 
-export async function getOkrPersonalMap(): Promise<Record<string, string>> {
-  const raw = await getVal("okr_personal_map");
+// b2b_settings 에 JSON 으로 담긴 {사용자명: 값} 맵 — 개인방 gid 와 담당자 이메일이 같은 형태를 쓴다.
+async function getMemberMap(key: string): Promise<Record<string, string>> {
+  const raw = await getVal(key);
   if (!raw) return {};
   try {
     const j = JSON.parse(raw) as Record<string, unknown>;
@@ -36,7 +38,13 @@ export async function getOkrPersonalMap(): Promise<Record<string, string>> {
     return out;
   } catch { return {}; }
 }
+
+export const getOkrPersonalMap = () => getMemberMap("okr_personal_map");
 export const setOkrPersonalMap = (m: Record<string, string>) => setVal("okr_personal_map", JSON.stringify(m));
+
+// 사용자명 → 아사나 계정 이메일. 담당자가 비면 아사나는 '내 작업'에 띄우지도, 마감 알림을 보내지도 않는다.
+export const getOkrMemberEmails = () => getMemberMap("okr_member_emails");
+export const setOkrMemberEmails = (m: Record<string, string>) => setVal("okr_member_emails", JSON.stringify(m));
 
 export type OkrTodoRecord = { text: string; scope: "personal" | "okr"; gid: string | null; project_gid: string };
 export type OkrCheckin = {
@@ -80,7 +88,7 @@ export async function uploadOkrCheckin(input: {
   privateSummary: string; publicSummary: string;
   todos: { text: string; scope: "personal" | "okr" }[];
 }): Promise<{ ok: boolean; error?: string; created: number; failed: number; checkinId?: string }> {
-  const [pat, projectGid, map] = await Promise.all([getAsanaPat(), getOkrProjectGid(), getOkrPersonalMap()]);
+  const [pat, projectGid, map, emails] = await Promise.all([getAsanaPat(), getOkrProjectGid(), getOkrPersonalMap(), getOkrMemberEmails()]);
   if (!pat) return { ok: false, error: "아사나 PAT가 설정되지 않았습니다 (관리자 › 설정 › 아사나 연동).", created: 0, failed: 0 };
   if (!projectGid) return { ok: false, error: "OKR 관리 프로젝트가 설정되지 않았습니다 (관리자 › 설정 › 아사나 연동).", created: 0, failed: 0 };
   const personalGid = map[input.member];
@@ -103,13 +111,17 @@ export async function uploadOkrCheckin(input: {
   const sPub = await createAsanaTask({ pat, projectGid, name: `회의록(공개) — ${input.member} · ${input.meetingDate}`, notes: input.publicSummary, sectionGid: meetingSec?.gid || null });
   if (sPub.ok) created++; else { failed++; firstError ??= sPub.error || null; }
 
+  // 할 일은 당사자를 담당자로 지정한다 — 담당자가 비면 아사나가 '내 작업'에 띄우지 않아 마감 알림이 아무에게도 안 간다.
+  //  이메일이 워크스페이스 멤버가 아니면 createAsanaTask 가 담당자 없이 재시도하므로 등록 자체는 살아남는다.
+  const assigneeEmail = emails[input.member] || null;
+
   for (const t of input.todos) {
     const text = t.text.trim();
     if (!text) continue;
     const isOkr = t.scope === "okr";
     const target = isOkr ? projectGid : personalGid;
     const name = isOkr ? `[${input.member}] ${text}` : text;
-    const r = await createAsanaTask({ pat, projectGid: target, name, notes: "", dueOn: input.dueDate, sectionGid: isOkr ? memberSec?.gid || null : null });
+    const r = await createAsanaTask({ pat, projectGid: target, name, notes: "", dueOn: input.dueDate, assigneeEmail, sectionGid: isOkr ? memberSec?.gid || null : null });
     if (r.ok) created++; else { failed++; firstError ??= r.error || null; }
     records.push({ text, scope: t.scope, gid: r.ok ? r.gid : null, project_gid: target });
   }
@@ -125,14 +137,17 @@ export async function uploadOkrCheckin(input: {
     todos: records,
   }).select("id").maybeSingle();
   // 기록 실패(마이그레이션 097 미적용 등)여도 아사나 업로드 자체는 유효 — 경고로 전달
-  const partial = firstError ? `일부 실패(${failed}건) — ${firstError}` : undefined;
+  const noAssignee = !assigneeEmail && records.length
+    ? `'${input.member}'의 아사나 이메일이 없어 할 일이 담당자 없이 등록됐습니다 (관리자 › 설정 › 아사나 연동)`
+    : null;
+  const partial = [firstError ? `일부 실패(${failed}건) — ${firstError}` : null, noAssignee].filter(Boolean).join(" · ") || undefined;
   if (error) return { ok: true, error: [`체크인 기록 저장 실패: ${error.message}`, partial].filter(Boolean).join(" · "), created, failed };
   return { ok: true, created, failed, checkinId: data?.id, error: partial };
 }
 
 // OKR 연동 점검 — 공통 프로젝트와 매핑된 개인방 전부의 접근 가능 여부를 이름으로 확인.
 export async function testOkrConnections(): Promise<{ ok: boolean; lines: string[] }> {
-  const [pat, projectGid, map] = await Promise.all([getAsanaPat(), getOkrProjectGid(), getOkrPersonalMap()]);
+  const [pat, projectGid, map, emails] = await Promise.all([getAsanaPat(), getOkrProjectGid(), getOkrPersonalMap(), getOkrMemberEmails()]);
   if (!pat) return { ok: false, lines: ["아사나 PAT 미설정 — 위 카드에서 먼저 저장하세요."] };
   const lines: string[] = [];
   let allOk = true;
@@ -151,7 +166,10 @@ export async function testOkrConnections(): Promise<{ ok: boolean; lines: string
       lines.push(`공통 프로젝트 섹션: ${secs.map((s) => s.name).join(" · ")}${hasMeeting ? "" : " — '회의록' 섹션이 없어 공개 요약은 기본 위치에 들어갑니다"}`);
     }
   }
-  for (const [user, gid] of Object.entries(map)) await check(`개인 소통방(${user})`, gid);
+  for (const [user, gid] of Object.entries(map)) {
+    await check(`개인 소통방(${user})`, gid);
+    if (!emails[user]) { lines.push(`담당자 이메일(${user}): 미설정 — 할 일이 담당자 없이 등록됩니다`); allOk = false; }
+  }
   if (!Object.keys(map).length) { lines.push("개인 소통방 매핑이 비어 있습니다."); allOk = false; }
   return { ok: allOk, lines };
 }

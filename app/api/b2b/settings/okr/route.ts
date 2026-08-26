@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { parseAsanaProjectGid } from "@/app/lib/voc-asana";
-import { getOkrProjectGid, setOkrProjectGid, getOkrPersonalMap, setOkrPersonalMap, testOkrConnections } from "@/app/lib/okr";
+import { getOkrProjectGid, setOkrProjectGid, getOkrPersonalMap, setOkrPersonalMap, getOkrMemberEmails, setOkrMemberEmails, testOkrConnections } from "@/app/lib/okr";
 
 export const maxDuration = 60; // 연동 점검이 프로젝트 수만큼 아사나를 호출한다
 
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const [project, map] = await Promise.all([getOkrProjectGid(), getOkrPersonalMap()]);
-    return NextResponse.json({ ok: true, project: project || "", map });
+    const [project, map, emails] = await Promise.all([getOkrProjectGid(), getOkrPersonalMap(), getOkrMemberEmails()]);
+    return NextResponse.json({ ok: true, project: project || "", map, emails });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
@@ -30,10 +30,11 @@ export async function POST() {
   }
 }
 
-// PUT { project?, map? } — map 은 {사용자명: URL 또는 gid} 전체 교체(빈 값 항목은 제거)
+// PUT { project?, map?, emails? } — map 은 {사용자명: URL 또는 gid}, emails 는 {사용자명: 아사나 계정 이메일}.
+//  둘 다 전체 교체(빈 값 항목은 제거).
 export async function PUT(req: NextRequest) {
   try {
-    const b = (await req.json()) as { project?: string; map?: Record<string, string> };
+    const b = (await req.json()) as { project?: string; map?: Record<string, string>; emails?: Record<string, string> };
     if (typeof b.project === "string") {
       const gid = b.project.trim() ? parseAsanaProjectGid(b.project) : "";
       if (b.project.trim() && !gid) {
@@ -53,8 +54,21 @@ export async function PUT(req: NextRequest) {
       }
       await setOkrPersonalMap(next);
     }
-    const [project, map] = await Promise.all([getOkrProjectGid(), getOkrPersonalMap()]);
-    return NextResponse.json({ ok: true, project: project || "", map });
+    if (b.emails && typeof b.emails === "object") {
+      const next: Record<string, string> = {};
+      for (const [name, raw] of Object.entries(b.emails)) {
+        const user = name.trim();
+        const v = String(raw || "").trim();
+        if (!user || !v) continue;
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+          return NextResponse.json({ ok: false, error: `'${user}'의 담당자 이메일 형식이 올바르지 않습니다 — 아사나 계정 이메일을 넣으세요.` }, { status: 400 });
+        }
+        next[user] = v;
+      }
+      await setOkrMemberEmails(next);
+    }
+    const [project, map, emails] = await Promise.all([getOkrProjectGid(), getOkrPersonalMap(), getOkrMemberEmails()]);
+    return NextResponse.json({ ok: true, project: project || "", map, emails });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "저장 실패") }, { status: 500 });
   }
