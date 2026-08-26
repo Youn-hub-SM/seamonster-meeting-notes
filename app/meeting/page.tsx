@@ -26,10 +26,6 @@ export default function MeetingPage() {
   const [fileName, setFileName] = useState("");
   const [dragging, setDragging] = useState(false);
 
-  // ── 녹음 파일 전사(리턴제로) ──
-  const [sttStage, setSttStage] = useState<"" | "uploading" | "transcribing">("");
-  const [spkCount, setSpkCount] = useState("");
-
   // ── OKR 업로드 상태 ──
   const [okrInfo, setOkrInfo] = useState<OkrInfo | null>(null);
   const [okrOpen, setOkrOpen] = useState(false);
@@ -51,72 +47,14 @@ export default function MeetingPage() {
   }, []);
 
   const TEXT_EXT = /\.(srt|txt|text|vtt|md)$/i;
-  const AUDIO_EXT = /\.(m4a|mp3|mp4|wav|flac|amr)$/i;
-
   async function readFile(file: File) {
-    if (AUDIO_EXT.test(file.name) || file.type.startsWith("audio/")) {
-      await transcribeAudio(file);
-      return;
-    }
     if (!TEXT_EXT.test(file.name) && !file.type.startsWith("text/")) {
-      setError(`녹음 파일이나 텍스트 파일만 넣을 수 있어요 — '${file.name}' 은 지원하지 않습니다.`);
+      setError(`텍스트 파일만 넣을 수 있어요 (.srt .txt) — '${file.name}' 은 지원하지 않습니다.`);
       return;
     }
     setError("");
     setFileName(file.name);
     setRawText(await file.text());
-  }
-
-  // 녹음 파일 → 화자 구분된 전사본.
-  //  파일은 브라우저가 Storage 로 직접 올린다 — 서버를 거치면 요청 본문 4.5MB 제한에 걸린다(2시간 녹음은 수십MB).
-  //  서버가 리턴제로에 넘긴 뒤 우리 쪽 사본은 지우고, 완료될 때까지 화면이 상태를 물어본다.
-  async function transcribeAudio(file: File) {
-    setError("");
-    setFileName(file.name);
-    setSttStage("uploading");
-    let path = "";
-    try {
-      const prep = await fetch("/api/meeting/audio", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, size: file.size }),
-      }).then((r) => r.json());
-      if (!prep.ok) throw new Error(prep.error || "업로드를 준비하지 못했습니다.");
-      path = prep.path;
-
-      const up = await fetch(prep.uploadUrl, { method: "PUT", body: file });
-      if (!up.ok) throw new Error("업로드에 실패했습니다. 연결을 확인하고 다시 시도해주세요.");
-
-      setSttStage("transcribing");
-      const started = await fetch("/api/meeting/transcribe", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, spkCount: spkCount ? Number(spkCount) : null }),
-      }).then((r) => r.json());
-      if (!started.ok) throw new Error(started.error || "변환을 시작하지 못했습니다.");
-      path = ""; // 서버가 리턴제로에 넘기고 지웠다
-
-      // 5초마다 확인(리턴제로 권장 주기). 최대 30분 — 2시간 녹음도 이 안에 끝난다.
-      for (let i = 0; i < 360; i++) {
-        await new Promise((r) => setTimeout(r, 5000));
-        const s = await fetch(`/api/meeting/transcribe?id=${encodeURIComponent(started.id)}`, { cache: "no-store" }).then((r) => r.json());
-        if (!s.ok) throw new Error(s.error || "변환 상태를 확인하지 못했습니다.");
-        if (s.done) {
-          setRawText(s.text || "");
-          if (!s.text) setError("변환 결과가 비어 있습니다. 녹음에 음성이 담겼는지 확인해주세요.");
-          setSttStage("");
-          return;
-        }
-      }
-      throw new Error("변환이 예상보다 오래 걸립니다. 잠시 후 다시 시도해주세요.");
-    } catch (e) {
-      if (path) {
-        fetch("/api/meeting/audio", {
-          method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }),
-        }).catch(() => {});
-      }
-      setError(e instanceof Error ? e.message : "변환 중 오류가 발생했습니다.");
-      setFileName("");
-      setSttStage("");
-    }
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -373,15 +311,9 @@ export default function MeetingPage() {
       <form onSubmit={handleSubmit}>
         {/* 파일 업로드 */}
         <div className="form-group">
-          <label className="form-label">파일 첨부 (녹음 파일 또는 텍스트)</label>
+          <label className="form-label">파일 첨부 (srt, txt)</label>
           <div className="file-upload-area" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-            {sttStage ? (
-              <div className="file-attached">
-                <span className="file-name">
-                  {sttStage === "uploading" ? "녹음 파일 올리는 중…" : "받아쓰는 중… 회의 길이만큼 걸립니다"}
-                </span>
-              </div>
-            ) : fileName ? (
+            {fileName ? (
               <div className="file-attached">
                 <span className="file-name">{fileName}</span>
                 <button type="button" className="file-remove" onClick={handleFileClear}>
@@ -391,32 +323,18 @@ export default function MeetingPage() {
             ) : (
               <label className={`file-drop${dragging ? " is-dragging" : ""}`} htmlFor="fileInput">
                 <span className="file-drop-text">{dragging ? "여기에 놓으세요" : "클릭하여 파일 선택 또는 여기에 드래그"}</span>
-                <span className="file-drop-hint">녹음 파일(.m4a .mp3 .wav)은 화자를 구분해 자동으로 받아씁니다 · 텍스트(.txt .srt .vtt)도 됩니다</span>
+                <span className="file-drop-hint">.srt, .txt 파일 지원</span>
               </label>
             )}
             <input
               ref={fileRef}
               id="fileInput"
               type="file"
-              accept=".srt,.txt,.text,.vtt,.m4a,.mp3,.mp4,.wav,.flac,.amr"
+              accept=".srt,.txt,.text"
               onChange={handleFile}
               className="file-input-hidden"
-              disabled={!!sttStage}
             />
           </div>
-          {!sttStage && (
-            <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
-              <label className="sm-faint" style={{ fontSize: 13 }} htmlFor="spkCount">참석 인원</label>
-              <input
-                id="spkCount" className="b2b-input" type="number" min={2} max={20}
-                value={spkCount} onChange={(e) => setSpkCount(e.target.value)}
-                placeholder="자동" style={{ width: 90 }}
-              />
-              <span className="sm-faint" style={{ fontSize: 12 }}>
-                녹음 파일을 올릴 때만 씁니다. 인원을 넣으면 화자 구분이 더 정확해지고, 비우면 자동으로 추정합니다.
-              </span>
-            </div>
-          )}
         </div>
 
         {/* 텍스트 직접 입력 */}
@@ -436,7 +354,7 @@ export default function MeetingPage() {
 
         {error && <div className="b2b-error">{error}</div>}
 
-        <button type="submit" className="btn-primary" disabled={!!sttStage || rawText.trim().length < 10}>
+        <button type="submit" className="btn-primary" disabled={rawText.trim().length < 10}>
           정리하기
         </button>
       </form>
