@@ -3,6 +3,7 @@ import { extractErrorMsg } from "@/app/lib/supabase";
 import {
   getRtzrClientId, setRtzrClientId,
   getRtzrClientSecret, setRtzrClientSecret,
+  getRtzrModel, setRtzrModel,
   testRtzrConnection,
 } from "@/app/lib/rtzr";
 
@@ -14,8 +15,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const [id, secret] = await Promise.all([getRtzrClientId(), getRtzrClientSecret()]);
-    return NextResponse.json({ ok: true, hasId: !!id, hasSecret: !!secret });
+    const [id, secret, model] = await Promise.all([getRtzrClientId(), getRtzrClientSecret(), getRtzrModel()]);
+    return NextResponse.json({ ok: true, hasId: !!id, hasSecret: !!secret, model });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
@@ -24,11 +25,12 @@ export async function GET() {
 // PUT { clientId?, clientSecret? } — 빈 문자열이면 지운다(연동 해제)
 export async function PUT(req: NextRequest) {
   try {
-    const b = (await req.json()) as { clientId?: string; clientSecret?: string };
+    const b = (await req.json()) as { clientId?: string; clientSecret?: string; model?: string };
     if (typeof b.clientId === "string") await setRtzrClientId(b.clientId);
     if (typeof b.clientSecret === "string") await setRtzrClientSecret(b.clientSecret);
-    const [id, secret] = await Promise.all([getRtzrClientId(), getRtzrClientSecret()]);
-    return NextResponse.json({ ok: true, hasId: !!id, hasSecret: !!secret });
+    if (typeof b.model === "string") await setRtzrModel(b.model);
+    const [id, secret, model] = await Promise.all([getRtzrClientId(), getRtzrClientSecret(), getRtzrModel()]);
+    return NextResponse.json({ ok: true, hasId: !!id, hasSecret: !!secret, model });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "저장 실패") }, { status: 500 });
   }

@@ -11,13 +11,14 @@ export default function SttSettingsPage() {
   const [hasSecret, setHasSecret] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [model, setModel] = useState("sommers");
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
   const [test, setTest] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("/api/b2b/settings/stt", { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (j.ok) { setHasId(!!j.hasId); setHasSecret(!!j.hasSecret); } })
+      .then((j) => { if (j.ok) { setHasId(!!j.hasId); setHasSecret(!!j.hasSecret); setModel(j.model || "sommers"); } })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -30,7 +31,7 @@ export default function SttSettingsPage() {
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setHasId(!!j.hasId); setHasSecret(!!j.hasSecret);
+      setHasId(!!j.hasId); setHasSecret(!!j.hasSecret); setModel(j.model || "sommers");
       setMsg({ t: okMsg, ok: true });
     } catch (e) { setMsg({ t: e instanceof Error ? e.message : "저장 실패", ok: false }); }
     finally { setBusy(""); }
@@ -98,6 +99,26 @@ export default function SttSettingsPage() {
           </div>
           <span className="sm-faint" style={{ fontSize: 12 }}>
             SECRET 은 재발급이 어려우니 콘솔에서 받은 값을 따로 보관해두세요. 저장 후에는 화면에 다시 표시되지 않습니다.
+          </span>
+        </div>
+
+        <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
+          <span className="b2b-field-label">3) 인식 엔진</span>
+          <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <select
+              className="b2b-input" value={model} onChange={(e) => setModel(e.target.value)}
+              style={{ width: 200 }}
+            >
+              <option value="sommers">sommers (리턴제로 자체)</option>
+              <option value="whisper">whisper</option>
+            </select>
+            <button className="b2b-btn-secondary" disabled={busy === "model"}
+              onClick={() => save({ model }, `인식 엔진을 ${model} 로 저장했습니다`, "model")}
+            >{busy === "model" ? "저장 중…" : "저장"}</button>
+          </div>
+          <span className="sm-faint" style={{ fontSize: 12 }}>
+            같은 녹음이라도 엔진에 따라 결과가 꽤 다릅니다. 한쪽이 아쉬우면 바꿔서 같은 파일로 비교해보세요.
+            군말 필터와 문단 나누기는 꺼둔 상태입니다 — 들린 대로 다 받아야 정리 단계에서 살릴 수 있습니다.
           </span>
         </div>
 

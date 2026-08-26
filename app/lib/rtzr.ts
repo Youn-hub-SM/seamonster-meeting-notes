@@ -30,6 +30,14 @@ export const setRtzrClientId = (s: string) => setVal("rtzr_client_id", s);
 export const getRtzrClientSecret = () => getVal("rtzr_client_secret");
 export const setRtzrClientSecret = (s: string) => setVal("rtzr_client_secret", s);
 
+// 인식 엔진 — sommers(리턴제로 자체) / whisper. 같은 녹음이라도 결과가 꽤 달라서 골라 쓸 수 있게 둔다.
+export type RtzrModel = "sommers" | "whisper";
+export async function getRtzrModel(): Promise<RtzrModel> {
+  const v = await getVal("rtzr_model");
+  return v === "whisper" ? "whisper" : "sommers";
+}
+export const setRtzrModel = (s: string) => setVal("rtzr_model", s === "whisper" ? "whisper" : "sommers");
+
 // 토큰 캐시 — 서버리스 인스턴스 안에서만 유효(재사용되면 아끼고, 아니면 새로 받는다). 만료 1분 전에 갱신.
 let cached: { token: string; expiresAt: number } | null = null;
 
@@ -81,12 +89,17 @@ export async function startTranscribe(
   const t = await getRtzrToken();
   if (!t.ok) return { ok: false, error: t.error };
 
+  // 필터는 전부 끈다 — 정리 단계 AI 가 다듬을 것이므로 전사는 들린 대로 다 받는 편이 낫다.
+  //  특히 use_disfluency_filter(기본 true)는 군말만이 아니라 말을 고쳐 다시 하는 부분을 통째로 걷어낸다.
+  //  ("혹시 한 번도 안 대보셨어요? 안 대보신 적 있나요? ..." 처럼 되풀이되는 자연스러운 대화가 사라진다.)
+  //  문단 나누기도 끈다 — 어차피 화자 단위로 다시 묶으므로 중간에 자를 이유가 없다.
   const config: Record<string, unknown> = {
-    model_name: "sommers",
+    model_name: await getRtzrModel(),
     language: "ko",
     use_diarization: true,
-    use_paragraph_splitter: true,
-    paragraph_splitter: { max: 50 },
+    use_disfluency_filter: false,
+    use_paragraph_splitter: false,
+    use_profanity_filter: false,
   };
   // 참석 인원을 주면 그 수에 맞춰 가른다. 0/미지정이면 자동 예측.
   const n = Number(cfg.spkCount);
@@ -177,6 +190,7 @@ export async function testRtzrConnection(): Promise<{ ok: boolean; lines: string
   const t = await getRtzrToken();
   if (!t.ok) return { ok: false, lines: [`인증: 실패 — ${t.error}`] };
   lines.push("인증: OK — 토큰을 발급받았습니다.");
+  lines.push(`인식 엔진: ${await getRtzrModel()}`);
   const kw = await boostKeywords();
   lines.push(
     kw.length
