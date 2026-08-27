@@ -31,6 +31,9 @@ function dbRow(clean: ProductInput) {
     pkg_label: clean.pkg_label,
     pkg_outer: clean.pkg_outer,
     volume_kg: clean.volume_kg,
+    option_weight_g: clean.option_weight_g,
+    pack_weight_g: clean.pack_weight_g,
+    sku_weight_g: clean.sku_weight_g,
     courier_name: clean.courier_name,
     courier_weight: clean.courier_weight,
     scan_name: clean.scan_name,
@@ -51,7 +54,13 @@ export async function POST(req: NextRequest) {
     for (const input of creates) {
       const clean = normalizeProduct(input);
       if (!clean.name) { errors.push("품목명 누락 행 건너뜀"); continue; }
-      const { data: ins, error } = await sb.from("products").insert(dbRow(clean)).select("id").single();
+      const row: Record<string, unknown> = dbRow(clean);
+      let { data: ins, error } = await sb.from("products").insert(row).select("id").single();
+      if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
+        // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
+        delete row.option_weight_g; delete row.pack_weight_g; delete row.sku_weight_g;
+        ({ data: ins, error } = await sb.from("products").insert(row).select("id").single());
+      }
       if (error) { errors.push(error.code === "23505" ? `${clean.name}: SKU '${clean.sku}' 가 이미 다른 품목에 등록되어 있습니다.` : `${clean.name}: ${error.message}`); continue; }
       created++;
       await logProductChange("created", clean.name, clean.sku, { source: "엑셀업로드", productId: ins?.id ?? null });
@@ -61,7 +70,13 @@ export async function POST(req: NextRequest) {
       if (!input.id) { errors.push(`${input.name || "?"}: id 없음`); continue; }
       const clean = normalizeProduct(input);
       const { data: before } = await sb.from("products").select("*").eq("id", input.id).single(); // diff 용 이전값
-      const { error } = await sb.from("products").update(dbRow(clean)).eq("id", input.id);
+      const row: Record<string, unknown> = dbRow(clean);
+      let { error } = await sb.from("products").update(row).eq("id", input.id);
+      if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
+        // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
+        delete row.option_weight_g; delete row.pack_weight_g; delete row.sku_weight_g;
+        ({ error } = await sb.from("products").update(row).eq("id", input.id));
+      }
       if (error) { errors.push(error.code === "23505" ? `${clean.name}: SKU '${clean.sku}' 가 이미 다른 품목에 등록되어 있습니다.` : `${clean.name}: ${error.message}`); continue; }
       updated++;
       const changes = diffProduct(before, dbRow(clean));

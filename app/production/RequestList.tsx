@@ -232,30 +232,6 @@ export function RequestList() {
 
   const doneCount = useMemo(() => byTab.filter((r) => r.status === "완료" || r.status === "취소").length, [byTab]);
 
-  // 제조사에게 건넬 요청서 텍스트 — 담당자가 확인 후 복사해 전달(제조사 전달용, DB 저장 없음).
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  async function copyRequestSheet(r: ProductionRequest) {
-    // 제조사 전달용 — 내부 정보(요청자·담당·제목·용도)는 빼고 번호·날짜·품목만(대표 확정 서식).
-    //  SKU·행 넘버링도 제외(2026-08-20) — 외부 공유용이고, 순서는 담당자가 붙여넣은 뒤 우선순위로 손수 재배열한다.
-    const L: string[] = [];
-    L.push(`[생산 요청서] ${r.req_no || ""}`.trim());
-    L.push("");
-    L.push(`요청일 ${r.request_date}`);
-    L.push(`생산마감일 ${r.due_date || "-"}`);
-    L.push("");
-    L.push("--------------------------------");
-    L.push("");
-    r.items.forEach((it) => L.push(`${it.name}${it.spec ? ` ${it.spec}` : ""}  ×${it.requested_qty.toLocaleString()}${it.unit || ""}${it.memo ? ` — ${it.memo}` : ""}`));
-    L.push("");
-    L.push("--------------------------------");
-    L.push("");
-    L.push(`총 ${r.items.length}품목 · ${r.total_requested.toLocaleString()}개`);
-    try {
-      await navigator.clipboard.writeText(L.join("\n"));
-      setCopiedId(r.id); setTimeout(() => setCopiedId(null), 2000);
-    } catch { setError("복사 실패 — 브라우저 권한을 확인하세요."); }
-  }
-
   // 생산 담당자 확인 — 담당자=본인 기록 + 진행중 전환(제조사에 전달했다는 표시)
   async function confirmRequest(r: ProductionRequest) {
     await updateRequest(r.id, { assignee: userName || "확인", status: r.status === "요청" ? "진행중" : r.status });
@@ -287,7 +263,7 @@ export function RequestList() {
           <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>도매 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 품목별 합산</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
-              <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>요청</th><th className="num" style={{ width: 100 }}>이전 완료</th><th className="num" style={{ width: 100 }}>잔여</th><th className="num" style={{ width: 90 }}>이행률</th></tr></thead>
+              <thead><tr><th>품목</th><th className="num" style={{ width: "14%" }}>요청</th><th className="num" style={{ width: "14%" }}>이전 완료</th><th className="num" style={{ width: "14%" }}>잔여</th><th className="num" style={{ width: "12%" }}>이행률</th></tr></thead>
               <tbody>
                 {wholesaleSummary.map((r) => {
                   const remain = r.requested - r.received;
@@ -321,13 +297,13 @@ export function RequestList() {
             <thead>
               <tr>
                 <th style={{ width: 28 }}></th>
-                <th style={{ width: 130 }}>요청번호</th>
+                <th style={{ width: "10%" }}>요청번호</th>
                 <th>품목</th>
-                <th className="b2b-col-date" style={{ width: 130 }}>진행</th>
-                <th className="b2b-col-date" style={{ width: 125 }}>요청일</th>
-                <th className="b2b-col-date" style={{ width: 125 }}>마감일</th>
-                <th className="b2b-col-date" style={{ width: 115 }}>담당</th>
-                <th style={{ width: 150 }}></th>
+                <th className="b2b-col-date" style={{ width: "13%" }}>진행</th>
+                <th className="b2b-col-date" style={{ width: "10%" }}>요청일</th>
+                <th className="b2b-col-date" style={{ width: "10%" }}>마감일</th>
+                <th className="b2b-col-date" style={{ width: "9%" }}>담당</th>
+                <th style={{ width: "12%" }}></th>
               </tr>
             </thead>
             <tbody>
@@ -338,8 +314,6 @@ export function RequestList() {
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
                   onStatus={(s) => patchStatus(r.id, s)}
                   onConfirm={() => confirmRequest(r)}
-                  onCopySheet={() => copyRequestSheet(r)}
-                  copied={copiedId === r.id}
                   onEdit={() => setEditReq(r)}
                   onDelete={() => removeRequest(r)}
                 />
@@ -362,29 +336,30 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
   const done = requested > 0 && received >= requested;
   const color = over ? "var(--sm-danger)" : done ? "var(--sm-success)" : "var(--sm-text-mid)";
   const pct = requested > 0 ? (received / requested) * 100 : null;
+  // 열 너비(fixed layout)를 넘지 않게 %는 둘째 줄로 — 숫자가 길어도 옆 칸을 침범하지 않는다
   return (
     <span style={{ fontSize: 15, fontWeight: 600, color, whiteSpace: "nowrap" }}>
       {received.toLocaleString()} / {requested.toLocaleString()}
-      {pct != null && <span className="sm-faint" style={{ marginLeft: 4, fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%)</span>}
+      {pct != null && <span className="sm-faint" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%)</span>}
     </span>
   );
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onCopySheet, copied, onEdit, onDelete }: {
+function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onEdit, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
   onConfirm: () => void;
-  onCopySheet: () => void;
-  copied: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
   const editable = req.status === "요청" || req.status === "진행중";
   const itemPreview = req.items.slice(0, 2).map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join(" · ");
+  // 셀이 말줄임으로 잘리므로 전체 품목은 마우스 오버 툴팁으로 — 한 줄에 한 품목
+  const itemsFull = req.items.map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join("\n");
   return (
     <>
       <tr onClick={onToggle} style={{ cursor: "pointer" }} className={expanded ? "is-parent" : ""}>
@@ -393,7 +368,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
           {req.title ? <span className="sm-faint" style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{req.title}</span> : null}
         </td>
-        <td style={{ fontSize: 15, color: "var(--sm-text-mid)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <td title={itemsFull} style={{ fontSize: 15, color: "var(--sm-text-mid)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {itemPreview || "품목 없음"}
           {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
         </td>
@@ -416,7 +391,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           )}
         </td>
         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-          <button className="b2b-link-btn" disabled={busy} onClick={onCopySheet} title="제조사에 건넬 요청서 텍스트 복사">{copied ? "복사됨 ✓" : "요청서"}</button>
+          {/* 표 형태 요청서(엑셀) — 비고·순서를 고쳐 인쇄해 전달(하단에 품목·중량별 총중량 자동 계산). 구 텍스트 복사는 제거(대표 확정) */}
+          <a className="b2b-link-btn" style={{ textDecoration: "none" }} href={`/api/production/requests/${req.id}/sheet`} title="표 형태 요청서 엑셀 다운로드 — 편집·인쇄용">요청서</a>
           {editable && <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} onClick={onEdit}>수정</button>}
           {(req.status === "완료" || req.status === "취소") ? (
             <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} title="진행중으로 되돌려 입고·수정을 다시 연다" onClick={() => onStatus("진행중")}>다시 열기</button>
@@ -431,16 +407,10 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           <td></td>
           <td colSpan={7} style={{ padding: "8px 18px 16px" }}>
             {req.memo && <p className="sm-faint" style={{ fontSize: 15, marginBottom: 10 }}>메모: {req.memo}</p>}
-
-            <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>
-              {req.purpose === "도매 납품"
-                ? <>이행은 <strong>소매↔도매</strong> 화면에서 소매→도매로 옮기면 자동 연결됩니다(오래된 요청부터). 이전 취소도 그 화면에서.</>
-                : <>입고는 <strong>입고 및 출고</strong> 메뉴에서 하세요 — 같은 품목이 입고되면 이 요청에 자동으로 연결됩니다(오래된 요청부터). 잘못 연결된 입고는 아래 입고 이력에서 취소.</>}
-            </p>
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 700 }}>
                 <thead>
-                  <tr><th>품목</th><th className="num" style={{ width: 90 }}>요청</th><th className="num" style={{ width: 90 }}>{req.purpose === "도매 납품" ? "이전" : "입고"}</th><th className="num" style={{ width: 90 }}>잔여</th><th style={{ width: 80 }}>상태</th><th style={{ width: 110 }}>입고 이력</th></tr>
+                  <tr><th>품목</th><th className="num" style={{ width: "12%" }}>요청</th><th className="num" style={{ width: "12%" }}>{req.purpose === "도매 납품" ? "이전" : "입고"}</th><th className="num" style={{ width: "12%" }}>잔여</th><th style={{ width: "10%" }}>상태</th><th style={{ width: "18%" }}>입고 이력</th></tr>
                 </thead>
                 <tbody>
                   {req.items.map((it) => (

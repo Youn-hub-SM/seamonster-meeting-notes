@@ -65,6 +65,11 @@ export interface Product {
   pkg_label: number;       // 라벨
   pkg_outer: number;       // 외포장지
   volume_kg: number | null; // 제품부피(kg)
+  // 중량 3단(098) — 옵션(조각 1개) ⊂ 포장(소포장 1개) ⊂ SKU(판매 단위 1개). 전부 g, 비우면 null.
+  //  생산 요청서의 총중량·소포장 개수가 이 값을 쓴다(없으면 상품명·규격 문자열에서 읽는 폴백).
+  option_weight_g: number | null; // 옵션중량 — 조각 1개(표시용)
+  pack_weight_g: number | null;   // 포장중량 — 소포장(진공팩) 1개(집계 단위)
+  sku_weight_g: number | null;    // SKU중량 — 판매 단위 1개 총중량
   courier_name: string;     // 택배(CNplus) 품목명 (migration 054)
   courier_weight: number;   // 택배 주문당 총중량(kg) — 박스타입/운임 기준(부피와 다른 값)
   scan_name: string;        // 송장 스캔 피킹 리스트 표시명 (migration 059) — 비면 name 사용
@@ -98,6 +103,9 @@ export const EMPTY_PRODUCT: ProductInput = {
   pkg_label: 0,
   pkg_outer: 0,
   volume_kg: null,
+  option_weight_g: null,
+  pack_weight_g: null,
+  sku_weight_g: null,
   courier_name: "",
   courier_weight: 0,
   scan_name: "",
@@ -189,6 +197,9 @@ export function normalizeProduct(input: ProductInput): ProductInput {
   const volume = volumeRaw === null || volumeRaw === undefined || (volumeRaw as unknown as string) === ""
     ? null
     : Number(volumeRaw) || 0;
+  // 중량 3단 — 빈 값은 null 로 남긴다(0 으로 저장하면 '0g 포장'이 되어 계산이 틀어진다)
+  const gramsOrNull = (v: unknown): number | null =>
+    v === null || v === undefined || v === "" ? null : (Number(v) > 0 ? Number(v) : null);
 
   // 원가 상세가 입력되면 cost_price(제품 단위 원가) = 제품원가 + 포장재 합으로 자동 산정.
   // 상세가 전부 0 이면 직접 입력한 cost_price 를 존중.
@@ -215,6 +226,9 @@ export function normalizeProduct(input: ProductInput): ProductInput {
     pkg_label: pkgLabel,
     pkg_outer: pkgOuter,
     volume_kg: volume,
+    option_weight_g: gramsOrNull(input.option_weight_g),
+    pack_weight_g: gramsOrNull(input.pack_weight_g),
+    sku_weight_g: gramsOrNull(input.sku_weight_g),
     courier_name: (input.courier_name ?? "").trim(),
     courier_weight: numOr0(input.courier_weight),
     scan_name: (input.scan_name ?? "").trim(),
