@@ -589,16 +589,16 @@ function ProductModal({
   const retail = Number(data.retail_price) || 0;
   const b2bDiscountPct = retail > 0 && Number(data.sale_price) > 0 ? ((retail - Number(data.sale_price)) / retail) * 100 : null;
 
-  // 중량 3단 정합 힌트 — 포장÷옵션 = 내포장 개수, SKU÷옵션 = SKU 소포장 수. 배수가 아니면 경고.
+  // 중량 3단 정합 힌트 — 옵션중량=조각당, 포장중량=소포장 1개, SKU중량=판매 단위 1개(대표 확정, 2026-08-28).
   const weightHint = (() => {
     const ow = Number(data.option_weight_g) || 0;
     const pw = Number(data.pack_weight_g) || 0;
     const sw = Number(data.sku_weight_g) || 0;
     const whole = (n: number) => Math.abs(n - Math.round(n)) < 1e-9;
     const parts: string[] = [];
-    if (ow > 0 && pw > 0) parts.push(whole(pw / ow) ? `내포장 1개 = ${ow}g × ${Math.round(pw / ow)}개` : `주의: 포장중량(${pw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
-    if (ow > 0 && sw > 0) parts.push(whole(sw / ow) ? `SKU 1개 = ${ow}g 소포장 ${Math.round(sw / ow)}개` : `주의: SKU중량(${sw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
-    if (!ow && pw > 0 && sw > 0) parts.push(whole(sw / pw) ? `SKU 1개 = 내포장 ${Math.round(sw / pw)}개` : `주의: SKU중량(${sw}g)이 포장중량(${pw}g)의 배수가 아닙니다`);
+    if (ow > 0 && pw > 0) parts.push(whole(pw / ow) ? `소포장 1개 = ${ow}g 조각 × ${Math.round(pw / ow)}개` : `주의: 포장중량(${pw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
+    if (pw > 0 && sw > 0) parts.push(whole(sw / pw) ? `SKU 1개 = 소포장 ${Math.round(sw / pw)}개` : `주의: SKU중량(${sw}g)이 포장중량(${pw}g)의 배수가 아닙니다`);
+    if (!pw && ow > 0 && sw > 0) parts.push(whole(sw / ow) ? `SKU 1개 = ${ow}g 조각 ${Math.round(sw / ow)}개` : `주의: SKU중량(${sw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
     return parts.join(" · ");
   })();
 
@@ -798,7 +798,7 @@ function ProductModal({
             중량 <span className="sm-faint" style={{ fontWeight: 400 }}>· 생산 요청서의 총중량·소포장 개수 계산 기준 (g 단위, 모르면 비워둠)</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-            <Field label="옵션중량 (g) — 소포장 1개">
+            <Field label="옵션중량 (g) — 조각 1개">
               <input
                 type="number" inputMode="decimal" className="b2b-input"
                 value={data.option_weight_g ?? ""}
@@ -806,7 +806,7 @@ function ProductModal({
                 min={0} step={1} placeholder="예: 200"
               />
             </Field>
-            <Field label="포장중량 (g) — 내포장 1개">
+            <Field label="포장중량 (g) — 소포장 1개">
               <input
                 type="number" inputMode="decimal" className="b2b-input"
                 value={data.pack_weight_g ?? ""}

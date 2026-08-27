@@ -58,19 +58,16 @@ function parseUnit(isBulk: boolean, ...sources: (string | null | undefined)[]): 
   return { grams: null, packs: 1, label: "-" };
 }
 const unitLabel = (g: number) => (g >= 1000 ? `${+(g / 1000).toFixed(2)}kg` : `${+g.toFixed(0)}g`);
-// 상품마스터 중량 3단(098)이 있으면 그 값을 우선 사용(대표 확정, 2026-08-27):
-//  옵션중량 있음 → 단위=옵션중량, 팩 수=SKU중량÷옵션중량(SKU중량 없으면 문자열의 곱셈형, 그것도 없으면 1)
-//  옵션중량 없음·포장중량 있음 → 단위=포장중량, 팩 수=SKU중량÷포장중량(없으면 1)
-//  둘 다 없으면 기존 문자열 파싱(parseUnit) 폴백.
+// 상품마스터 중량 3단(098)이 있으면 그 값을 우선 사용(대표 확정, 2026-08-28):
+//  옵션중량=조각 1개(표 '옵션중량' 칸 표시용), 포장중량=소포장 1개(집계 단위), SKU중량=판매 단위 1개.
+//  집계 단위 = 포장중량(없으면 조각 1개=소포장 1개로 보고 옵션중량), 팩 수 = SKU중량÷집계 단위
+//  (SKU중량 없으면 문자열의 곱셈형, 그것도 없으면 1). 마스터에 아무 값도 없으면 문자열 파싱(parseUnit) 폴백.
 type ProdWeights = { ow: number | null; pw: number | null; sw: number | null };
 function resolveUnit(p: ProdWeights | undefined, isBulk: boolean, ...sources: (string | null | undefined)[]): UnitSpec {
-  if (p?.ow) {
-    const packs = p.sw ? Math.max(1, Math.round(p.sw / p.ow)) : parseUnit(isBulk, ...sources).packs;
-    return { grams: p.ow, packs, label: unitLabel(p.ow) };
-  }
-  if (p?.pw) {
-    const packs = p.sw ? Math.max(1, Math.round(p.sw / p.pw)) : 1;
-    return { grams: p.pw, packs, label: unitLabel(p.pw) };
+  const unit = p?.pw || p?.ow || null;
+  if (unit) {
+    const packs = p?.sw ? Math.max(1, Math.round(p.sw / unit)) : parseUnit(isBulk, ...sources).packs;
+    return { grams: unit, packs, label: unitLabel(p?.ow || unit) };
   }
   return parseUnit(isBulk, ...sources);
 }
@@ -144,11 +141,11 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     tRow.getCell(2).numFmt = "#,##0";
     for (let col = 1; col <= 5; col++) tRow.getCell(col).border = BOX;
 
-    // ── 상품명·옵션별 총중량 — 제조사가 원료 준비량을 바로 가늠하도록.
-    //  묶음 기준: 상품명 + 옵션중량 두 축. 낱개와 묶음(1kg=100g*10)이 같은 소포장이면 한 줄로 합쳐지고,
-    //  수량은 만들어야 할 소포장 개수다. 벌크(속성)는 상품명에 (벌크)가 붙어 줄이 나뉜다. ──
+    // ── 상품명·옵션별 총중량 — 제조사가 원료 준비량을 바로 가늠하도록(대표 확정, 2026-08-28).
+    //  묶음 기준: 상품명 + 옵션중량(조각당) 두 축. 벌크(속성)는 줄을 나누지 않고 같은 줄에서
+    //  "110 + 30(벌크) = 140" 처럼 일반·벌크·합계(kg)로 표시한다. 수량(팩) 열은 뺐다. ──
     ws.addRow([]);
-    const wTitle = ws.addRow(["상품명·옵션별 총중량 (수량 = 소포장 개수)"]);
+    const wTitle = ws.addRow(["상품명·옵션별 총중량 (kg)"]);
     wTitle.font = { bold: true, size: 12 };
     ws.mergeCells(wTitle.number, 1, wTitle.number, 5);
 
@@ -172,43 +169,50 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       }
     }
 
-    const groups = new Map<string, { base: string; grams: number | null; wLabel: string; qty: number }>();
+    const groups = new Map<string, { base: string; sortG: number; wLabel: string; normalKg: number; bulkKg: number }>();
+    let unknown = 0;
     for (const it of r.items) {
       const pinfo = prodMap.get(String(it.product_id));
       const isBulk = (pinfo?.attrs || "").includes("벌크");
       const { grams, packs, label: wLabel } = resolveUnit(pinfo, isBulk, it.spec, it.name);
-      const nameOnly = baseName(it.name);
-      // 벌크는 상품명에 (벌크) 표기 — 이름에 이미 '벌크'가 있으면 중복해서 붙이지 않는다
-      const base = isBulk && !nameOnly.includes("벌크") ? `${nameOnly}(벌크)` : nameOnly;
+      if (grams == null) { unknown++; continue; } // 중량 미인식 — 각주로 알린다
+      // 상품명 축 — 벌크도 같은 줄에 합치므로 이름의 '벌크' 표기는 걷어낸다
+      const base = baseName(it.name).replace(/\(?\s*벌크\s*\)?/g, "").replace(/\s{2,}/g, " ").trim() || baseName(it.name);
       const key = `${base}|${wLabel}`;
-      const g = groups.get(key) || { base, grams, wLabel, qty: 0 };
-      // 요청 수량 × 개당 팩 수 = 만들어야 할 소포장 개수(낱개는 packs=1 이라 그대로)
-      g.qty += (Number(it.requested_qty) || 0) * packs;
+      const g = groups.get(key) || { base, sortG: pinfo?.ow || grams, wLabel, normalKg: 0, bulkKg: 0 };
+      const kg = (grams * (Number(it.requested_qty) || 0) * packs) / 1000;
+      if (isBulk) g.bulkKg += kg; else g.normalKg += kg;
       groups.set(key, g);
     }
-    const wHeader = ws.addRow(["상품명", "옵션중량", "수량(팩)", "총중량(kg)", ""]);
+    // 총중량 칸: "110 + 30(벌크) = 140" — 한쪽만 있으면 그 값만
+    const fmtKg = (kg: number) => String(+kg.toFixed(1));
+    const cellText = (normal: number, bulk: number) => {
+      const parts: string[] = [];
+      if (normal > 0) parts.push(fmtKg(normal));
+      if (bulk > 0) parts.push(`${fmtKg(bulk)}(벌크)`);
+      if (!parts.length) return "-";
+      return parts.length === 2 ? `${parts.join(" + ")} = ${fmtKg(normal + bulk)}` : parts[0];
+    };
+    const wHeader = ws.addRow(["상품명", "옵션중량", "총중량(kg)", "", ""]);
+    ws.mergeCells(wHeader.number, 3, wHeader.number, 5);
     wHeader.font = { bold: true };
-    wHeader.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }; c.alignment = { horizontal: "center" } });
-    for (let col = 1; col <= 4; col++) wHeader.getCell(col).border = BOX;
+    wHeader.eachCell({ includeEmpty: true }, (c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }; c.alignment = { horizontal: "center" } });
+    for (let col = 1; col <= 5; col++) wHeader.getCell(col).border = BOX;
 
-    let sumKg = 0, sumQty = 0, unknown = 0;
-    // 상품명 가나다순, 같은 상품명 안에서는 중량 오름차순(벌크 5kg×2 는 자연히 뒤)
+    let sumNormal = 0, sumBulk = 0;
+    // 상품명 가나다순, 같은 상품명 안에서는 조각 중량 오름차순
     const sorted = [...groups.values()].sort((a, b) =>
-      a.base.localeCompare(b.base, "ko") || (a.grams ?? Infinity) - (b.grams ?? Infinity));
+      a.base.localeCompare(b.base, "ko") || a.sortG - b.sortG);
     for (const g of sorted) {
-      const kg = g.grams == null ? null : (g.grams * g.qty) / 1000;
-      if (kg == null) unknown++; else sumKg += kg;
-      sumQty += g.qty;
-      const row = ws.addRow([g.base, g.wLabel, g.qty, kg == null ? "-" : +kg.toFixed(1), ""]);
-      row.getCell(3).numFmt = "#,##0";
-      if (kg != null) row.getCell(4).numFmt = "#,##0.0";
-      for (let col = 1; col <= 4; col++) { row.getCell(col).border = BOX; if (col > 1) row.getCell(col).alignment = { horizontal: "center" }; }
+      sumNormal += g.normalKg; sumBulk += g.bulkKg;
+      const row = ws.addRow([g.base, g.wLabel, cellText(g.normalKg, g.bulkKg), "", ""]);
+      ws.mergeCells(row.number, 3, row.number, 5);
+      for (let col = 1; col <= 5; col++) { row.getCell(col).border = BOX; if (col > 1) row.getCell(col).alignment = { horizontal: "center" }; }
     }
-    const wTotal = ws.addRow(["합계", "", sumQty, +sumKg.toFixed(1), ""]);
+    const wTotal = ws.addRow(["합계", "", cellText(sumNormal, sumBulk), "", ""]);
+    ws.mergeCells(wTotal.number, 3, wTotal.number, 5);
     wTotal.font = { bold: true };
-    wTotal.getCell(3).numFmt = "#,##0";
-    wTotal.getCell(4).numFmt = "#,##0.0";
-    for (let col = 1; col <= 4; col++) { wTotal.getCell(col).border = BOX; if (col > 1) wTotal.getCell(col).alignment = { horizontal: "center" }; }
+    for (let col = 1; col <= 5; col++) { wTotal.getCell(col).border = BOX; if (col > 1) wTotal.getCell(col).alignment = { horizontal: "center" }; }
     if (unknown) {
       const note = ws.addRow([`* 중량을 인식하지 못한 품목 ${unknown}건은 총중량 합계에서 빠져 있습니다.`]);
       note.font = { size: 9, color: { argb: "FF888888" } };

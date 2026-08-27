@@ -65,10 +65,10 @@ export interface Product {
   pkg_label: number;       // 라벨
   pkg_outer: number;       // 외포장지
   volume_kg: number | null; // 제품부피(kg)
-  // 중량 3단(098) — 옵션(소포장) ⊂ 포장(내포장) ⊂ SKU(판매 단위). 전부 g, 비우면 null.
+  // 중량 3단(098) — 옵션(조각 1개) ⊂ 포장(소포장 1개) ⊂ SKU(판매 단위 1개). 전부 g, 비우면 null.
   //  생산 요청서의 총중량·소포장 개수가 이 값을 쓴다(없으면 상품명·규격 문자열에서 읽는 폴백).
-  option_weight_g: number | null; // 옵션중량 — 소포장 1개
-  pack_weight_g: number | null;   // 포장중량 — 내포장 1개
+  option_weight_g: number | null; // 옵션중량 — 조각 1개(표시용)
+  pack_weight_g: number | null;   // 포장중량 — 소포장(진공팩) 1개(집계 단위)
   sku_weight_g: number | null;    // SKU중량 — 판매 단위 1개 총중량
   courier_name: string;     // 택배(CNplus) 품목명 (migration 054)
   courier_weight: number;   // 택배 주문당 총중량(kg) — 박스타입/운임 기준(부피와 다른 값)
