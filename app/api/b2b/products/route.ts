@@ -38,9 +38,7 @@ export async function POST(req: NextRequest) {
     }
     const clean = normalizeProduct(body);
     const sb = supabaseAdmin();
-    const { data, error } = await sb
-      .from("products")
-      .insert({
+    const payload: Record<string, unknown> = {
         sku: clean.sku,
         name: clean.name,
         spec: clean.spec,
@@ -48,6 +46,9 @@ export async function POST(req: NextRequest) {
         cost_price: clean.cost_price,
         purchase_price: clean.purchase_price,
         retail_price: clean.retail_price,
+        option_weight_g: clean.option_weight_g,
+        pack_weight_g: clean.pack_weight_g,
+        sku_weight_g: clean.sku_weight_g,
         sale_price: clean.sale_price,
         tax_type: clean.tax_type,
         active: clean.active,
@@ -62,9 +63,13 @@ export async function POST(req: NextRequest) {
         courier_name: clean.courier_name,
         courier_weight: clean.courier_weight,
         scan_name: clean.scan_name,
-      })
-      .select()
-      .single();
+      };
+    let { data, error } = await sb.from("products").insert(payload).select().single();
+    if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
+      // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
+      delete payload.option_weight_g; delete payload.pack_weight_g; delete payload.sku_weight_g;
+      ({ data, error } = await sb.from("products").insert(payload).select().single());
+    }
     if (error) {
       if (error.code === "23505") {
         // migration 073: upper(sku) 유니크 인덱스 — 대소문자만 달라도 같은 SKU 로 취급
@@ -99,9 +104,7 @@ export async function PUT(req: NextRequest) {
     const clean = normalizeProduct(body);
     const sb = supabaseAdmin();
     const { data: before } = await sb.from("products").select("*").eq("id", body.id).single(); // 변경 diff 용 이전값
-    const { data, error } = await sb
-      .from("products")
-      .update({
+    const payload: Record<string, unknown> = {
         sku: clean.sku,
         name: clean.name,
         spec: clean.spec,
@@ -109,6 +112,9 @@ export async function PUT(req: NextRequest) {
         cost_price: clean.cost_price,
         purchase_price: clean.purchase_price,
         retail_price: clean.retail_price,
+        option_weight_g: clean.option_weight_g,
+        pack_weight_g: clean.pack_weight_g,
+        sku_weight_g: clean.sku_weight_g,
         sale_price: clean.sale_price,
         tax_type: clean.tax_type,
         active: clean.active,
@@ -123,10 +129,13 @@ export async function PUT(req: NextRequest) {
         courier_name: clean.courier_name,
         courier_weight: clean.courier_weight,
         scan_name: clean.scan_name,
-      })
-      .eq("id", body.id)
-      .select()
-      .single();
+      };
+    let { data, error } = await sb.from("products").update(payload).eq("id", body.id).select().single();
+    if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
+      // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
+      delete payload.option_weight_g; delete payload.pack_weight_g; delete payload.sku_weight_g;
+      ({ data, error } = await sb.from("products").update(payload).eq("id", body.id).select().single());
+    }
     if (error) {
       if (error.code === "23505") {
         return NextResponse.json(

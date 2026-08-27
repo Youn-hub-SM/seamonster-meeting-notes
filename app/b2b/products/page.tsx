@@ -309,6 +309,9 @@ export default function ProductsPage() {
                               pkg_label: p.pkg_label ?? 0,
                               pkg_outer: p.pkg_outer ?? 0,
                               volume_kg: p.volume_kg ?? null,
+                              option_weight_g: p.option_weight_g ?? null,
+                              pack_weight_g: p.pack_weight_g ?? null,
+                              sku_weight_g: p.sku_weight_g ?? null,
                               courier_name: p.courier_name ?? "",
                               courier_weight: p.courier_weight ?? 0,
                               scan_name: p.scan_name ?? "",
@@ -586,6 +589,19 @@ function ProductModal({
   const retail = Number(data.retail_price) || 0;
   const b2bDiscountPct = retail > 0 && Number(data.sale_price) > 0 ? ((retail - Number(data.sale_price)) / retail) * 100 : null;
 
+  // 중량 3단 정합 힌트 — 포장÷옵션 = 내포장 개수, SKU÷옵션 = SKU 소포장 수. 배수가 아니면 경고.
+  const weightHint = (() => {
+    const ow = Number(data.option_weight_g) || 0;
+    const pw = Number(data.pack_weight_g) || 0;
+    const sw = Number(data.sku_weight_g) || 0;
+    const whole = (n: number) => Math.abs(n - Math.round(n)) < 1e-9;
+    const parts: string[] = [];
+    if (ow > 0 && pw > 0) parts.push(whole(pw / ow) ? `내포장 1개 = ${ow}g × ${Math.round(pw / ow)}개` : `주의: 포장중량(${pw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
+    if (ow > 0 && sw > 0) parts.push(whole(sw / ow) ? `SKU 1개 = ${ow}g 소포장 ${Math.round(sw / ow)}개` : `주의: SKU중량(${sw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
+    if (!ow && pw > 0 && sw > 0) parts.push(whole(sw / pw) ? `SKU 1개 = 내포장 ${Math.round(sw / pw)}개` : `주의: SKU중량(${sw}g)이 포장중량(${pw}g)의 배수가 아닙니다`);
+    return parts.join(" · ");
+  })();
+
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
@@ -776,6 +792,38 @@ function ProductModal({
               style={{ maxWidth: 200 }}
             />
           </Field>
+
+          {/* 중량 3단(098) — 생산 요청서가 총중량·소포장 개수를 이 값으로 계산한다 */}
+          <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
+            중량 <span className="sm-faint" style={{ fontWeight: 400 }}>· 생산 요청서의 총중량·소포장 개수 계산 기준 (g 단위, 모르면 비워둠)</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+            <Field label="옵션중량 (g) — 소포장 1개">
+              <input
+                type="number" inputMode="decimal" className="b2b-input"
+                value={data.option_weight_g ?? ""}
+                onChange={(e) => set("option_weight_g", e.target.value === "" ? null : Number(e.target.value))}
+                min={0} step={1} placeholder="예: 200"
+              />
+            </Field>
+            <Field label="포장중량 (g) — 내포장 1개">
+              <input
+                type="number" inputMode="decimal" className="b2b-input"
+                value={data.pack_weight_g ?? ""}
+                onChange={(e) => set("pack_weight_g", e.target.value === "" ? null : Number(e.target.value))}
+                min={0} step={1} placeholder="예: 1000"
+              />
+            </Field>
+            <Field label="SKU중량 (g) — 판매 단위 1개">
+              <input
+                type="number" inputMode="decimal" className="b2b-input"
+                value={data.sku_weight_g ?? ""}
+                onChange={(e) => set("sku_weight_g", e.target.value === "" ? null : Number(e.target.value))}
+                min={0} step={1} placeholder="예: 2000"
+              />
+            </Field>
+          </div>
+          {weightHint && <p className="sm-faint" style={{ fontSize: 12, margin: "-2px 0 4px" }}>{weightHint}</p>}
 
           <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
             택배 발주(CNplus) 정보

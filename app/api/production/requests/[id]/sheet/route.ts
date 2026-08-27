@@ -58,6 +58,22 @@ function parseUnit(isBulk: boolean, ...sources: (string | null | undefined)[]): 
   return { grams: null, packs: 1, label: "-" };
 }
 const unitLabel = (g: number) => (g >= 1000 ? `${+(g / 1000).toFixed(2)}kg` : `${+g.toFixed(0)}g`);
+// 상품마스터 중량 3단(098)이 있으면 그 값을 우선 사용(대표 확정, 2026-08-27):
+//  옵션중량 있음 → 단위=옵션중량, 팩 수=SKU중량÷옵션중량(SKU중량 없으면 문자열의 곱셈형, 그것도 없으면 1)
+//  옵션중량 없음·포장중량 있음 → 단위=포장중량, 팩 수=SKU중량÷포장중량(없으면 1)
+//  둘 다 없으면 기존 문자열 파싱(parseUnit) 폴백.
+type ProdWeights = { ow: number | null; pw: number | null; sw: number | null };
+function resolveUnit(p: ProdWeights | undefined, isBulk: boolean, ...sources: (string | null | undefined)[]): UnitSpec {
+  if (p?.ow) {
+    const packs = p.sw ? Math.max(1, Math.round(p.sw / p.ow)) : parseUnit(isBulk, ...sources).packs;
+    return { grams: p.ow, packs, label: unitLabel(p.ow) };
+  }
+  if (p?.pw) {
+    const packs = p.sw ? Math.max(1, Math.round(p.sw / p.pw)) : 1;
+    return { grams: p.pw, packs, label: unitLabel(p.pw) };
+  }
+  return parseUnit(isBulk, ...sources);
+}
 // 중량·곱셈 토큰을 걷어낸 상품명 — 총중량 표의 '상품명' 축. "참돔순살(100g)"→"참돔순살", "대구순살 5x2"→"대구순살"
 function baseName(name: string): string {
   const s = name
@@ -136,20 +152,31 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     wTitle.font = { bold: true, size: 12 };
     ws.mergeCells(wTitle.number, 1, wTitle.number, 5);
 
-    // 품목 속성 조회 — '벌크' 판정. 조회 실패는 비벌크로 폴백(등록 자체는 계속).
+    // 품목 속성·중량 3단 조회 — '벌크' 판정 + 마스터 중량 우선 계산. 조회 실패는 문자열 파싱 폴백.
     const ids = [...new Set(r.items.map((it) => it.product_id).filter(Boolean))];
-    const attrsMap = new Map<string, string>();
+    const numOrNull = (v: unknown) => (v == null || !(Number(v) > 0) ? null : Number(v));
+    const prodMap = new Map<string, ProdWeights & { attrs: string }>();
     if (ids.length) {
+      const sb = supabaseAdmin();
       try {
-        const { data } = await supabaseAdmin().from("products").select("id, attrs").in("id", ids);
-        for (const p of (data || []) as { id: string; attrs: string | null }[]) attrsMap.set(String(p.id), String(p.attrs || ""));
-      } catch { /* attrs 미적용 환경 등 — 비벌크 취급 */ }
+        const { data, error } = await sb.from("products").select("id, attrs, option_weight_g, pack_weight_g, sku_weight_g").in("id", ids);
+        if (error) throw error;
+        type Row = { id: string; attrs: string | null; option_weight_g: number | null; pack_weight_g: number | null; sku_weight_g: number | null };
+        for (const p of (data || []) as Row[]) prodMap.set(String(p.id), { attrs: String(p.attrs || ""), ow: numOrNull(p.option_weight_g), pw: numOrNull(p.pack_weight_g), sw: numOrNull(p.sku_weight_g) });
+      } catch {
+        // 098 미적용 환경 — 속성만 조회(중량은 문자열 파싱)
+        try {
+          const { data } = await sb.from("products").select("id, attrs").in("id", ids);
+          for (const p of (data || []) as { id: string; attrs: string | null }[]) prodMap.set(String(p.id), { attrs: String(p.attrs || ""), ow: null, pw: null, sw: null });
+        } catch { /* attrs 미적용 환경 등 — 비벌크·문자열 파싱 취급 */ }
+      }
     }
 
     const groups = new Map<string, { base: string; grams: number | null; wLabel: string; qty: number }>();
     for (const it of r.items) {
-      const isBulk = (attrsMap.get(String(it.product_id)) || "").includes("벌크");
-      const { grams, packs, label: wLabel } = parseUnit(isBulk, it.spec, it.name);
+      const pinfo = prodMap.get(String(it.product_id));
+      const isBulk = (pinfo?.attrs || "").includes("벌크");
+      const { grams, packs, label: wLabel } = resolveUnit(pinfo, isBulk, it.spec, it.name);
       const nameOnly = baseName(it.name);
       // 벌크는 상품명에 (벌크) 표기 — 이름에 이미 '벌크'가 있으면 중복해서 붙이지 않는다
       const base = isBulk && !nameOnly.includes("벌크") ? `${nameOnly}(벌크)` : nameOnly;
