@@ -11,43 +11,49 @@ export const maxDuration = 30;
 //  표(상품명·수량·단위·비고·작업완료) + 하단 품목·중량별 총중량 + 확인 서명란. A4 세로 인쇄 맞춤.
 type Ctx = { params: Promise<{ id: string }> };
 
-// 단위당 중량 판정 — 기준은 상품마스터 '속성'(대표 확정, 2026-08-21~23):
-//  · 속성에 '벌크'가 있으면 단위당 중량은 벌크 포장 — 규격/이름의 곱셈형("5x2"=5kg×2, "1kg x 2")을
-//    읽고, 표기가 없으면 벌크 기본 5kg×2(=10kg). 단 '옵션중량' 표시는 상품에 적힌 조각 중량
-//    (140g·200g)을 그대로 쓴다 — 벌크 여부는 상품명 쪽에 (벌크)로 표기.
-//  · 벌크가 아니면 표기 중량 그대로 — 단위 명시 곱셈형("500g×2") 또는 단일 토큰("200g"·"1.5kg").
-function parseWeight(isBulk: boolean, ...sources: (string | null | undefined)[]): { grams: number | null; label: string } {
-  // 단일 중량 토큰(조각 중량) — 비벌크의 계산값이자, 벌크의 '옵션중량' 표시값
-  let piece: { grams: number; label: string } | null = null;
+// 소포장 단위 판정 — 총중량 표를 '단위중량 × 팩 수'로 집계하기 위한 분해(대표 확정, 2026-08-25).
+//  같은 소포장이면 낱개 상품과 묶음 상품을 한 줄로 합쳐야 제조사가 몇 팩을 만들지 바로 안다.
+//   예) 삼치순살 100g ×900 + 삼치순살 1kg(100g*10) ×150 → 100g 팩 2400개 = 240kg (한 줄)
+//  규칙(우선순위):
+//   1. 곱셈형 "100g*10"·"500g×2" → 단위중량 100g, 팩 10개. 이름에 총량(1kg)이 함께 있어도 곱셈형이 이긴다.
+//   2. 속성이 '벌크'면 규격/이름의 "5x2"(단위 없는 곱셈)를 kg 로 읽어 5kg 팩 2개. 표기가 없으면 기본 5kg×2.
+//   3. 그 밖에는 단일 토큰("200g"·"1.5kg") = 단위중량, 팩 1개.
+type UnitSpec = { grams: number | null; packs: number; label: string };
+function parseUnit(isBulk: boolean, ...sources: (string | null | undefined)[]): UnitSpec {
+  // 1) 단위 명시 곱셈형 — 묶음 상품의 실제 소포장. "1kg(100g*10)"에서 100g×10 을 집는다.
+  for (const src of sources) {
+    if (!src) continue;
+    const m = src.match(/(\d+(?:\.\d+)?)\s*(kg|g)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
+    if (m) {
+      const v = parseFloat(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1);
+      const n = parseFloat(m[3]);
+      if (v > 0 && n > 0) return { grams: v, packs: n, label: unitLabel(v) };
+    }
+  }
+  // 2) 벌크 — 단위 없는 곱셈("5x2")은 kg 관례
+  if (isBulk) {
+    for (const src of sources) {
+      if (!src) continue;
+      const b = src.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
+      if (b) {
+        const kg = parseFloat(b[1]);
+        const n = parseFloat(b[2]);
+        if (kg > 0 && n > 0) return { grams: kg * 1000, packs: n, label: unitLabel(kg * 1000) };
+      }
+    }
+    return { grams: 5000, packs: 2, label: "5kg" }; // 표기 없는 벌크의 기본 포장
+  }
+  // 3) 단일 중량 토큰 — 낱개 상품
   for (const src of sources) {
     if (!src) continue;
     const ms = [...src.matchAll(/(\d+(?:\.\d+)?)\s*(kg|g)(?!\s*[x×*])/gi)];
     if (ms.length) {
       const m = ms[ms.length - 1];
       const v = parseFloat(m[1]) * (m[2].toLowerCase() === "kg" ? 1000 : 1);
-      if (v > 0) { piece = { grams: v, label: unitLabel(v) }; break; }
+      if (v > 0) return { grams: v, packs: 1, label: unitLabel(v) };
     }
   }
-  for (const src of sources) {
-    if (!src) continue;
-    const withUnit = src.match(/(\d+(?:\.\d+)?)\s*(kg|g)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
-    if (withUnit) {
-      const v = parseFloat(withUnit[1]) * (withUnit[2].toLowerCase() === "kg" ? 1000 : 1);
-      const n = parseFloat(withUnit[3]);
-      if (v > 0 && n > 0) return { grams: v * n, label: isBulk && piece ? piece.label : `${unitLabel(v)}×${n}` };
-    }
-    if (isBulk) {
-      const bare = src.match(/(\d+(?:\.\d+)?)\s*[x×*]\s*(\d+(?:\.\d+)?)/i);
-      if (bare) {
-        const kg = parseFloat(bare[1]);
-        const n = parseFloat(bare[2]);
-        if (kg > 0 && n > 0) return { grams: kg * 1000 * n, label: piece ? piece.label : `${unitLabel(kg * 1000)}×${n}` };
-      }
-    }
-  }
-  if (isBulk) return { grams: 10000, label: piece ? piece.label : "5kg×2" }; // 벌크 기본 포장
-  if (piece) return piece;
-  return { grams: null, label: "-" };
+  return { grams: null, packs: 1, label: "-" };
 }
 const unitLabel = (g: number) => (g >= 1000 ? `${+(g / 1000).toFixed(2)}kg` : `${+g.toFixed(0)}g`);
 // 중량·곱셈 토큰을 걷어낸 상품명 — 총중량 표의 '상품명' 축. "참돔순살(100g)"→"참돔순살", "대구순살 5x2"→"대구순살"
@@ -121,10 +127,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     for (let col = 1; col <= 5; col++) tRow.getCell(col).border = BOX;
 
     // ── 상품명·옵션별 총중량 — 제조사가 원료 준비량을 바로 가늠하도록.
-    //  묶음 기준(대표 확정, 2026-08-21): 상품명 + 옵션중량 두 축. 벌크(속성)는 벌크 포장 중량으로
-    //  계산돼 옵션중량 칸에 5kg×2 로 표시된다 — 같은 상품명의 소매 옵션과 줄이 나뉜다. ──
+    //  묶음 기준: 상품명 + 옵션중량 두 축. 낱개와 묶음(1kg=100g*10)이 같은 소포장이면 한 줄로 합쳐지고,
+    //  수량은 만들어야 할 소포장 개수다. 벌크(속성)는 상품명에 (벌크)가 붙어 줄이 나뉜다. ──
     ws.addRow([]);
-    const wTitle = ws.addRow(["상품명·옵션별 총중량"]);
+    const wTitle = ws.addRow(["상품명·옵션별 총중량 (수량 = 소포장 개수)"]);
     wTitle.font = { bold: true, size: 12 };
     ws.mergeCells(wTitle.number, 1, wTitle.number, 5);
 
@@ -141,16 +147,17 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const groups = new Map<string, { base: string; grams: number | null; wLabel: string; qty: number }>();
     for (const it of r.items) {
       const isBulk = (attrsMap.get(String(it.product_id)) || "").includes("벌크");
-      const { grams, label: wLabel } = parseWeight(isBulk, it.spec, it.name);
+      const { grams, packs, label: wLabel } = parseUnit(isBulk, it.spec, it.name);
       const nameOnly = baseName(it.name);
       // 벌크는 상품명에 (벌크) 표기 — 이름에 이미 '벌크'가 있으면 중복해서 붙이지 않는다
       const base = isBulk && !nameOnly.includes("벌크") ? `${nameOnly}(벌크)` : nameOnly;
       const key = `${base}|${wLabel}`;
       const g = groups.get(key) || { base, grams, wLabel, qty: 0 };
-      g.qty += Number(it.requested_qty) || 0;
+      // 요청 수량 × 개당 팩 수 = 만들어야 할 소포장 개수(낱개는 packs=1 이라 그대로)
+      g.qty += (Number(it.requested_qty) || 0) * packs;
       groups.set(key, g);
     }
-    const wHeader = ws.addRow(["상품명", "옵션중량", "수량", "총중량(kg)", ""]);
+    const wHeader = ws.addRow(["상품명", "옵션중량", "수량(팩)", "총중량(kg)", ""]);
     wHeader.font = { bold: true };
     wHeader.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }; c.alignment = { horizontal: "center" } });
     for (let col = 1; col <= 4; col++) wHeader.getCell(col).border = BOX;
