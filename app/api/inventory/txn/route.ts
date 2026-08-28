@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
       memo: String(b.memo || "").trim() || null,
       created_by: await actor(req),
     };
+    // 출고 사유(099) — '판매'는 null(기본). 대사에서 협찬·폐기 등 비판매 출고를 분리하는 축.
+    if (type === "출고" && ["협찬", "폐기", "기타"].includes(String(b.reason || ""))) row.reason = String(b.reason);
     if (txn_date) row.txn_date = txn_date;
     // 입고/출고 단건도 주문번호 부여(033 미적용이면 생략). 즉시처리 미체크면 대기.
     if (type === "입고" || type === "출고") {
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
     // 선택 컬럼(status=034, channel=036) 미적용 환경이면 그 컬럼만 빼고 재시도.
     let res = await sb.from("inventory_txns").insert(attempt).select();
     for (let guard = 0; res.error && guard < 2; guard++) {
-      const miss = (["channel", "status"] as const).find((c) => c in attempt[0] && new RegExp(c, "i").test(res.error!.message));
+      const miss = (["channel", "status", "reason"] as const).find((c) => c in attempt[0] && new RegExp(c, "i").test(res.error!.message));
       if (!miss) break;
       for (const r of attempt) delete r[miss];
       res = await sb.from("inventory_txns").insert(attempt).select();
