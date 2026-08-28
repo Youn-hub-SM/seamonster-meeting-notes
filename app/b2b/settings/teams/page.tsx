@@ -32,8 +32,7 @@ export default function TeamsSettingsPage() {
   const [digest, setDigest] = useState("");
   const [digestBusy, setDigestBusy] = useState(false);
   const [digestMsg, setDigestMsg] = useState<Msg | null>(null);
-  // sections.health 는 시스템 점검(084) 쪽 작업의 항목 — 서버가 모르면 저장값만 오간다(무해)
-  type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean; health: boolean }; title: string };
+  type DCfg = { enabled: boolean; hour: number; days: number; sections: { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean }; title: string };
   const [dcfg, setDcfg] = useState<DCfg | null>(null);
   // Teams 알림(Workflows 웹훅) — URL 은 서버에 저장하고 브라우저엔 유무·꼬리만 보여준다
   const [teamsUrl, setTeamsUrl] = useState("");
@@ -315,7 +314,7 @@ export default function TeamsSettingsPage() {
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
-                {([["ship", "발송 예정"], ["unscheduled", "발송일정 미등록"], ["invoice", "계산서 미발행"], ["payment", "입금 대기"], ["health", "시스템 점검"]] as const).map(([k, l]) => (
+                {([["ship", "발송 예정"], ["unscheduled", "발송일정 미등록"], ["invoice", "계산서 미발행"], ["payment", "입금 대기"]] as const).map(([k, l]) => (
                   <label key={k} className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer" }}>
                     <input type="checkbox" className="b2b-checkbox" checked={!!dcfg.sections[k]} onChange={(e) => setDcfg({ ...dcfg, sections: { ...dcfg.sections, [k]: e.target.checked } })} /> {l}
                   </label>

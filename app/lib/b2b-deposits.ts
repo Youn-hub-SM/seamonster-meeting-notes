@@ -1,16 +1,10 @@
-// 은행 입금 자동확인 — 팝빌 계좌조회 API 수집 + 미수금 발주 자동 매칭.
+// 은행 입금 자동확인 — 입금 문자 웹훅(/api/b2b/deposits/webhook) 수집 + 미수금 발주 자동 매칭.
 // supabase/migrations/089_bank_deposits.sql 의 bank_deposits 와 1:1.
 //
-// 흐름: collectDeposits() 가 팝빌에 수집 요청(requestJob) → 완료 대기(getJobState)
-//  → 거래내역 조회(search) → 입금(accIn>0)만 bank_deposits 에 저장(tid 중복 무시).
-//  runAutoMatch() 가 '확인필요' 입금을 미수금 발주(입금전·일부입금)와 대조해
-//  [입금자명 일치 + 금액=잔액 + 후보 1개] 인 것만 자동 처리(입금 기록+상태 변경).
-//  나머지는 '확인필요' 로 남아 /b2b/payments 화면에서 원클릭 매칭.
-//
-// 필요 환경변수: POPBILL_LINK_ID, POPBILL_SECRET_KEY, POPBILL_CORP_NUM(사업자번호),
-//  POPBILL_ACCOUNT_NO(계좌번호), POPBILL_USER_ID(팝빌 아이디),
-//  선택: POPBILL_BANK_CODE(기본 0004=국민), POPBILL_IS_TEST=1(테스트), POPBILL_IP_RESTRICT=1
-//  ※ Vercel 은 고정 IP 가 아니므로 팝빌 회원설정에서 'API 호출 IP 제한'을 해제해야 한다.
+// 흐름: 웹훅이 입금을 bank_deposits 에 저장 → runAutoMatch() 가 '확인필요' 입금을
+//  미수금 발주(입금전·일부입금)와 대조해 [입금자명 일치 + 금액=잔액 + 후보 1개] 인 것만
+//  자동 처리(입금 기록+상태 변경). 나머지는 '확인필요' 로 남아 /b2b/payments 에서 원클릭 매칭.
+//  ※ 팝빌(유료 계좌조회) 경로는 2026-08-28 폐기 — 웹훅이 주력.
 
 import { supabaseAdmin } from "./supabase";
 import { logDepositConfirmed, logDepositsNeedReview } from "./b2b-activity";
@@ -95,153 +89,6 @@ export function matchesIgnoreRule(remark: string | null, rules: string[]): strin
   return null;
 }
 
-// ─────────────────────────────────────────────
-// 팝빌 클라이언트 (동적 import — 타입 선언은 popbill.d.ts)
-// ─────────────────────────────────────────────
-type PopbillTrade = {
-  tid: string;
-  trdate: string;
-  trserial?: string;
-  trdt: string;
-  accIn: string | number;
-  accOut: string | number;
-  balance?: string | number;
-  remark1?: string;
-  remark2?: string;
-  remark3?: string;
-  remark4?: string;
-};
-
-function popbillEnv() {
-  return {
-    linkID: process.env.POPBILL_LINK_ID || "",
-    secretKey: process.env.POPBILL_SECRET_KEY || "",
-    corpNum: (process.env.POPBILL_CORP_NUM || "").replace(/-/g, ""),
-    userID: process.env.POPBILL_USER_ID || "",
-    bankCode: process.env.POPBILL_BANK_CODE || "0004", // 국민은행
-    accountNo: (process.env.POPBILL_ACCOUNT_NO || "").replace(/-/g, ""),
-  };
-}
-
-export function popbillConfigured(): boolean {
-  const e = popbillEnv();
-  return !!(e.linkID && e.secretKey && e.corpNum && e.accountNo);
-}
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-let cachedService: any = null;
-
-async function easyFinBank(): Promise<any> {
-  if (cachedService) return cachedService;
-  const popbill = (await import("popbill")).default as any;
-  popbill.config({
-    LinkID: popbillEnv().linkID,
-    SecretKey: popbillEnv().secretKey,
-    IsTest: process.env.POPBILL_IS_TEST === "1",
-    IPRestrictOnOff: process.env.POPBILL_IP_RESTRICT === "1", // Vercel 은 고정 IP 아님 — 기본 해제
-    UseStaticIP: false,
-    UseLocalTimeYN: true,
-    defaultErrorHandler: () => {
-      /* 각 호출부에서 error 콜백으로 처리 */
-    },
-  });
-  cachedService = popbill.EasyFinBankService();
-  return cachedService;
-}
-
-function pbError(err: any): Error {
-  const code = err?.code !== undefined ? `[${err.code}] ` : "";
-  return new Error(`팝빌: ${code}${err?.message || String(err)}`);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-// KST 기준 yyyyMMdd (오늘 + offsetDays)
-function kstYmd(offsetDays: number): string {
-  const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
-}
-
-// ─────────────────────────────────────────────
-// 수집: 최근 N일 입금 거래를 bank_deposits 에 적재
-// ─────────────────────────────────────────────
-export async function collectDeposits(days = 7): Promise<{ fetched: number; inserted: BankDeposit[] }> {
-  const svc = await easyFinBank();
-  const { corpNum, userID, bankCode, accountNo } = popbillEnv();
-  const sdate = kstYmd(-days);
-  const edate = kstYmd(0);
-
-  // 1) 수집 요청 → JobID
-  const jobID: string = await new Promise((resolve, reject) => {
-    svc.requestJob(corpNum, bankCode, accountNo, sdate, edate, userID,
-      (id: string) => resolve(id), (e: any) => reject(pbError(e)));
-  });
-
-  // 2) 완료 대기 (보통 수 초 — 최대 ~21초)
-  let state: any = null;
-  for (let i = 0; i < 14; i++) {
-    await sleep(1500);
-    state = await new Promise((resolve, reject) => {
-      svc.getJobState(corpNum, jobID, userID, (s: any) => resolve(s), (e: any) => reject(pbError(e)));
-    });
-    if (Number(state?.jobState) === 3) break;
-  }
-  if (Number(state?.jobState) !== 3) {
-    throw new Error("팝빌 수집이 제한시간 내에 끝나지 않았습니다. 잠시 후 다시 동기화하세요.");
-  }
-  if (Number(state?.errorCode) !== 1) {
-    throw new Error(`팝빌 수집 실패: ${state?.errorReason || `코드 ${state?.errorCode}`}`);
-  }
-
-  // 3) 결과 조회 — 입금(I)만, 최근순 최대 1000건
-  const result: any = await new Promise((resolve, reject) => {
-    svc.search(corpNum, jobID, ["I"], "", 1, 1000, "D", userID,
-      (r: any) => resolve(r), (e: any) => reject(pbError(e)));
-  });
-  let trades: PopbillTrade[] = ((result?.list ?? []) as PopbillTrade[]).filter(
-    (t) => Number(t.accIn) > 0
-  );
-  if (trades.length === 0) return { fetched: 0, inserted: [] };
-
-  // 4) 허용 목록(등록된 이름만 저장, 웹훅과 동일 정책) + tid 중복 제외 후 적재
-  const aliases = await loadDepositAliases();
-  const companyNames = (await loadCompanyNames()).map((c) => c.name);
-  trades = trades.filter((t) =>
-    isKnownDepositName(
-      [t.remark1, t.remark2, t.remark3, t.remark4].map((s) => (s ?? "").trim()).filter(Boolean).join(" ") || null,
-      companyNames,
-      aliases
-    )
-  );
-  if (trades.length === 0) return { fetched: 0, inserted: [] };
-  const sb = supabaseAdmin();
-  const tids = trades.map((t) => String(t.tid));
-  const { data: existing, error: exErr } = await sb.from("bank_deposits").select("tid").in("tid", tids);
-  if (exErr) throw exErr;
-  const known = new Set((existing ?? []).map((r: { tid: string }) => r.tid));
-  const rows = trades
-    .filter((t) => !known.has(String(t.tid)))
-    .map((t) => ({
-      tid: String(t.tid),
-      trdate: String(t.trdate),
-      trdt: String(t.trdt),
-      amount: Number(t.accIn),
-      balance: t.balance === undefined || t.balance === null ? null : Number(t.balance),
-      remark: [t.remark1, t.remark2, t.remark3, t.remark4]
-        .map((s) => (s ?? "").trim())
-        .filter(Boolean)
-        .join(" ") || null,
-      raw: t as unknown as Record<string, unknown>,
-    }));
-  if (rows.length === 0) return { fetched: trades.length, inserted: [] };
-
-  const { data: insertedRows, error: insErr } = await sb.from("bank_deposits").insert(rows).select();
-  if (insErr) throw insErr;
-  return { fetched: trades.length, inserted: (insertedRows ?? []) as BankDeposit[] };
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ─────────────────────────────────────────────
 // 매칭

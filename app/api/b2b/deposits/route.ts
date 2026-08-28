@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getKv } from "@/app/lib/b2b-settings";
 import { currentActor } from "@/app/lib/b2b-activity";
 import {
   BankDeposit,
@@ -41,22 +40,15 @@ export async function GET(req: NextRequest) {
     const recent = ((recentRows ?? []) as BankDeposit[]).filter((d) => d.matched_by !== "미등록");
 
     // 확인필요 건이 있을 때만 후보 계산 (미수금 목록은 수동 선택 드롭다운에도 쓰므로 항상 로드)
-    const [unpaid, aliases, companies, lastSyncRaw, rules] = await Promise.all([
-      loadUnpaidOrders(), loadDepositAliases(), loadCompanyNames(),
-      getKv("deposits_last_sync").catch(() => null), getIgnoreRules(),
+    const [unpaid, aliases, companies, rules] = await Promise.all([
+      loadUnpaidOrders(), loadDepositAliases(), loadCompanyNames(), getIgnoreRules(),
     ]);
     const suggestions: Record<string, { order: UnpaidOrderLite; nameHit: boolean; amountHit: boolean }[]> = {};
     for (const dep of review) {
       suggestions[dep.id] = candidateOrders(dep, unpaid, aliases).slice(0, 3);
     }
 
-    let lastSync: unknown = null;
-    try {
-      lastSync = lastSyncRaw ? JSON.parse(lastSyncRaw) : null;
-    } catch {
-      lastSync = null;
-    }
-    return NextResponse.json({ ok: true, review, recent, suggestions, unpaid, lastSync, rules, aliases, companies });
+    return NextResponse.json({ ok: true, review, recent, suggestions, unpaid, rules, aliases, companies });
   } catch (err) {
     if (isMissingDepositsTable(err)) {
       return NextResponse.json({ ok: true, notReady: true, review: [], recent: [], suggestions: {}, unpaid: [], lastSync: null });

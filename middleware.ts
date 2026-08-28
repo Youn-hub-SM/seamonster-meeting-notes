@@ -48,7 +48,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // 로그인 페이지·로그인 API + QR 숏링크(/q/*) + 아침 다이제스트 크론·은행입금 동기화 크론·입금문자 웹훅 + 인스타 댓글 웹훅(서명 검증) — 자체 검증이 있어 보호 제외
-  if (pathname === "/b2b/login" || pathname === "/factory/login" || pathname === "/api/b2b/auth" || pathname === "/api/b2b/schedule-digest" || pathname === "/api/b2b/deposits/sync" || pathname === "/api/b2b/deposits/webhook" || pathname === "/api/instagram/webhook" || pathname.startsWith("/q/")) {
+  if (pathname === "/b2b/login" || pathname === "/factory/login" || pathname === "/api/b2b/auth" || pathname === "/api/b2b/schedule-digest" || pathname === "/api/b2b/deposits/webhook" || pathname === "/api/instagram/webhook" || pathname.startsWith("/q/")) {
     return NextResponse.next();
   }
 
