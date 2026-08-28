@@ -261,7 +261,7 @@ export default function ReportPage() {
           {!err && (
             <section className="b2b-card">
               <div className="b2b-card-head">
-                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>{rows.length}행{rows.length >= 5000 ? " (5,000행 제한)" : ""}</span></span>
+                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>{rows.length}행{rows.length >= 5000 ? " (화면은 5,000행까지 — 전체는 '엑셀'로 내려받으세요)" : ""}</span></span>
                 <div className="sm-row" style={{ gap: 6 }}>
                   <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => { setSaveName(plan.understood?.slice(0, 40) || ""); setSaveSql(plan.sql); setSaveOpen(true); }}>저장</button>
                   <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={exportXlsx} disabled={!rows.length}>엑셀</button>

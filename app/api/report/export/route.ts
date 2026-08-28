@@ -16,7 +16,12 @@ export async function POST(req: NextRequest) {
     try { safe = validateReportSql(sql); } catch (e) { return NextResponse.json({ ok: false, error: extractErrorMsg(e, "SQL 검증 실패") }, { status: 400 }); }
 
     const sb = supabaseAdmin();
-    const { data, error } = await sb.rpc("run_report", { q: safe });
+    // 내보내기는 100,000행(사실상 전량) — 화면 조회(5,000행)와 한도 이원화(migration 100).
+    let { data, error } = await sb.rpc("run_report", { q: safe, p_limit: 100000 });
+    if (error && /p_limit|function|parameter/i.test(error.message || "")) {
+      // 100 미적용 환경 폴백 — 구버전 시그니처(5,000행 캡)로 재시도
+      ({ data, error } = await sb.rpc("run_report", { q: safe }));
+    }
     if (error) return NextResponse.json({ ok: false, error: `쿼리 실행 오류: ${error.message}` }, { status: 400 });
 
     const rows = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];

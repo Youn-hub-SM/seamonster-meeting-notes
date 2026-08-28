@@ -27,7 +27,7 @@ export type ReportPlan = {
 const PROMPT_KEY = "report_ai_prompt";
 
 export const DEFAULT_REPORT_PROMPT = `당신은 씨몬스터(순살 생선 전문 이커머스)의 '데이터 조회 엔진'입니다.
-사용자의 한국어 질문을 읽고, 아래 스키마를 근거로 **정확한 PostgreSQL 쿼리**를 만들어 매출·재고 데이터를 조회합니다.
+사용자의 한국어 질문을 읽고, 아래 스키마를 근거로 **정확한 PostgreSQL 쿼리**를 만들어 회사 데이터(매출·재고·발주·생산·물류·VOC·마케팅)를 조회합니다.
 당신은 해석·조언을 하는 컨설턴트가 아닙니다. 질문에 **정확히 대응하는 데이터만 충실히** 뽑고, 데이터에 근거하지 않은 판단·추천·추정·전망은 하지 않습니다.
 
 [반드시 지킬 규칙]
@@ -103,7 +103,7 @@ export function assertSelectOnly(sql: string): string {
   return s;
 }
 
-// 앱 방어 ②: 참조 테이블이 화이트리스트(매출·재고)에 있는지 검증 — 그 외/PII/시스템 테이블 차단.
+// 앱 방어 ②: 참조 테이블이 화이트리스트에 있는지 검증 — 비공개(PII·토큰·계정 등)/시스템 테이블 차단.
 export function assertAllowedRelations(sql: string): void {
   const allow = new Set(RUN_HERE_RELATIONS.map((r) => r.toLowerCase()));
   // 내장함수의 '키워드 FROM' 오탐 제거: extract(month FROM x)·substring·trim·overlay·position(...)
@@ -115,7 +115,7 @@ export function assertAllowedRelations(sql: string): void {
     const name = m[1].toLowerCase();
     if (name === "_sub") continue;
     if (!allow.has(name) && !ctes.has(name))
-      throw new Error(`허용되지 않은 테이블 참조: '${name}' — 매출·재고 관계만 조회할 수 있습니다.`);
+      throw new Error(`허용되지 않은 테이블 참조: '${name}' — 비공개 테이블(개인정보·설정·계정 등)은 조회할 수 없습니다.`);
   }
 }
 
