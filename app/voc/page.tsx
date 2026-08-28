@@ -304,7 +304,7 @@ export default function VocPage() {
           <div className="sm-row" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>기준 월
               <input className="b2b-input" type="month" value={month} max={TODAY().slice(0, 7)} onChange={(e) => { setMonth(e.target.value); setExpandedCat(null); }} style={{ width: "auto" }} /></label>
-            <span className="sm-faint" style={{ fontSize: 12 }}>발생 {board.reduce((s, b) => s + b.monthRows.length, 0)}건 · 유형 상태는 여기서, 개선 작업은 Flow 에서</span>
+            <span className="sm-faint" style={{ fontSize: 12 }}>발생 {board.reduce((s, b) => s + b.monthRows.length, 0)}건 · 유형 상태는 여기서, 개선 작업은 아사나에서</span>
             <button className="b2b-btn-secondary" style={{ marginLeft: "auto" }} onClick={() => setCatModal(true)}>유형 관리</button>
           </div>
 

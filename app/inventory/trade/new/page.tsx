@@ -29,7 +29,7 @@ export default function NewTradePage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">구매 / 판매 작성</h1>
+          <h1 className="b2b-page-title">입고/출고 기록</h1>
         </div>
       </header>
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}

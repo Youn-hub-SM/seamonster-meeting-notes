@@ -54,7 +54,8 @@ export default function QrDesigner({ data, name, onClose }: { data: string; name
     setRendering(false);
   }, [data, dark, light, frame, frameText, logo]);
 
-  useEffect(() => { render(); }, [render]);
+  // 색상 피커 드래그·문구 타이핑이 연속 이벤트를 내므로 250ms 묶어서 서버 QR 요청 폭주를 막는다
+  useEffect(() => { const t = setTimeout(render, 250); return () => clearTimeout(t); }, [render]);
 
   function onLogo(file: File) {
     const rd = new FileReader();

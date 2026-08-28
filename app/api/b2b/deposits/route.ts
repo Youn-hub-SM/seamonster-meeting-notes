@@ -41,9 +41,10 @@ export async function GET(req: NextRequest) {
     const recent = ((recentRows ?? []) as BankDeposit[]).filter((d) => d.matched_by !== "미등록");
 
     // 확인필요 건이 있을 때만 후보 계산 (미수금 목록은 수동 선택 드롭다운에도 쓰므로 항상 로드)
-    const unpaid = await loadUnpaidOrders();
-    const aliases = await loadDepositAliases();
-    const companies = await loadCompanyNames();
+    const [unpaid, aliases, companies, lastSyncRaw, rules] = await Promise.all([
+      loadUnpaidOrders(), loadDepositAliases(), loadCompanyNames(),
+      getKv("deposits_last_sync").catch(() => null), getIgnoreRules(),
+    ]);
     const suggestions: Record<string, { order: UnpaidOrderLite; nameHit: boolean; amountHit: boolean }[]> = {};
     for (const dep of review) {
       suggestions[dep.id] = candidateOrders(dep, unpaid, aliases).slice(0, 3);
@@ -51,13 +52,10 @@ export async function GET(req: NextRequest) {
 
     let lastSync: unknown = null;
     try {
-      const raw = await getKv("deposits_last_sync");
-      lastSync = raw ? JSON.parse(raw) : null;
+      lastSync = lastSyncRaw ? JSON.parse(lastSyncRaw) : null;
     } catch {
       lastSync = null;
     }
-
-    const rules = await getIgnoreRules();
     return NextResponse.json({ ok: true, review, recent, suggestions, unpaid, lastSync, rules, aliases, companies });
   } catch (err) {
     if (isMissingDepositsTable(err)) {

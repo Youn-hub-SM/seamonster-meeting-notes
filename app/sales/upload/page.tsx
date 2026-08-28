@@ -148,7 +148,7 @@ export default function SalesUploadPage() {
       {batches.length > 0 && (
         <section className="b2b-card" style={{ marginTop: 16 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드 · 되돌리기</span></div>
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>잘못 올린 업로드는 그 배치가 추가한 행만 정확히 삭제해 되돌립니다. 되돌린 뒤 같은 파일을 다시 올리면 복구됩니다(멱등).</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>잘못 올린 업로드는 그 배치가 추가한 행만 정확히 삭제해 되돌립니다. 되돌린 뒤 같은 파일을 다시 올리면 복구됩니다(중복은 자동 제외).</p>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table" style={{ fontSize: 12 }}>
               <thead><tr><th>시각</th><th>파일</th><th style={{ textAlign: "right" }}>신규</th><th>올린 사람</th><th>상태</th><th></th></tr></thead>

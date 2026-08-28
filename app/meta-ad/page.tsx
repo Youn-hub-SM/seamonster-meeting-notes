@@ -299,7 +299,7 @@ export default function MetaAdPage() {
 
       {status && !status.configured && (
         <div className="sm-warn">
-          <strong>메타 API 연결 대기 중.</strong> <code>META_ACCESS_TOKEN</code>·<code>META_AD_ACCOUNT_ID</code> 를 넣으세요.
+          <strong>메타 광고 연동 준비 중입니다.</strong> 연동이 완료되면 자동으로 표시됩니다 — 관리자에게 문의하세요.
         </div>
       )}
       {status?.configured && status.connected === false && <div className="b2b-error"><strong>연결 실패</strong> — {status.error}</div>}

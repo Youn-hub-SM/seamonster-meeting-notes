@@ -105,7 +105,7 @@ export default function ScanUploadPage() {
   }
 
   async function clearAll() {
-    if (!confirm("풀의 모든 송장 데이터와 스캔 내역을 비울까요? 되돌릴 수 없습니다.")) return;
+    if (!confirm("올려둔 모든 송장 데이터와 스캔 내역을 비울까요? 되돌릴 수 없습니다.")) return;
     try {
       const j = await (await fetch("/api/fulfill/scan/uploads", { method: "DELETE" })).json();
       if (!j.ok) throw new Error(j.error || "비우기 실패");
@@ -151,7 +151,7 @@ export default function ScanUploadPage() {
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">올린 파일 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 풀 라인 {poolItemCount.toLocaleString()}개</span></span>
+          <span className="b2b-card-title">올린 파일 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 송장 라인 {poolItemCount.toLocaleString()}개</span></span>
           <div className="sm-row" style={{ gap: 6 }}>
             <button className="b2b-btn-secondary" style={{ padding: "5px 10px", fontSize: 12 }} onClick={load} disabled={loading}>새로고침</button>
             {uploads.length > 0 && <button className="b2b-btn-secondary" style={{ padding: "5px 10px", fontSize: 12, color: "var(--sm-danger)" }} onClick={clearAll}>전체 비우기</button>}

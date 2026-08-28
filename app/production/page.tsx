@@ -408,7 +408,7 @@ export default function ProductionSchedulePage() {
         </aside>
       </div>
 
-      <p className="prod-note">※ 재고관리 현재고를 반영한 “실제 생산 필요량”·AI 조언은 <strong>재고/생산 조언</strong> 메뉴에서 확인하세요.</p>
+      <p className="prod-note">※ 재고관리 현재고를 반영한 “실제 생산 필요량”·AI 조언은 <strong>재고 관리 › 재고 목록</strong>의 [AI 조언] 버튼에서 확인하세요.</p>
 
       {/* 생산일정 추가 모달 */}
       {addModal && (

@@ -155,10 +155,10 @@ export default function SettingsEtcPage() {
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">발송완료 매출 반영</h2>
-          <span style={{ fontSize: 11.5, color: "var(--sm-success)" }}>● 자동 (Supabase)</span>
+          <span style={{ fontSize: 11.5, color: "var(--sm-success)" }}>● 자동</span>
         </div>
         <p style={{ fontSize: 12.5, color: "var(--sm-text-mid)", margin: 0, lineHeight: 1.8 }}>
-          발주가 <strong>발송완료</strong>되면 라인아이템별 매출이 <strong>매출 데이터(sales_orders)</strong>에 자동 반영됩니다
+          발주가 <strong>발송완료</strong>되면 라인아이템별 매출이 <strong>매출 데이터</strong>에 자동 반영됩니다
           (채널 <strong>&lsquo;도매&rsquo;</strong>, 발주별 1회, 중복 방지). <a href="/sales/report" style={{ color: "var(--sm-orange)", fontWeight: 600 }}>매출 리포트</a>·
           <a href="/sales/search" style={{ color: "var(--sm-orange)", fontWeight: 600 }}> 주문 검색</a>에서 함께 조회됩니다.
           <br />

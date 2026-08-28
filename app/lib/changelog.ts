@@ -14,14 +14,14 @@ export type ChangeEntry = {
 // 업데이트노트 tool → 메뉴(필터) 라벨. 좌측 nav 의 툴 이름 기준으로 묶음.
 export function changeMenu(tool: string): string {
   const t = tool.replace(/\s/g, "");
-  if (t.startsWith("B2B")) return "B2B 도매";
+  if (t.startsWith("B2B")) return "B2B";
   if (t.includes("상품마스터")) return "상품 마스터";
   if (t.includes("택배") || t.includes("온라인발주")) return "온라인 발주";
   if (t.includes("매출")) return "매출";
   if (t.includes("정기배송")) return "정기배송 분석";
-  if (t.includes("생산")) return "생산관리";
-  if (t.includes("재고")) return "재고관리";
-  if (t.includes("UTM")) return "UTM 빌더";
+  if (t.includes("생산")) return "생산 관리";
+  if (t.includes("재고")) return "재고 관리";
+  if (t.includes("UTM")) return "UTM 만들기";
   if (t.includes("광고")) return "광고";
   if (t.includes("VOC")) return "VOC 관리";
   if (t.includes("CS")) return "CS 코치";
@@ -30,7 +30,7 @@ export function changeMenu(tool: string): string {
   return tool;
 }
 // 필터 칩 정렬 순서(nav 순서 기준). 목록에 없는 메뉴는 뒤로.
-export const MENU_ORDER = ["B2B 도매", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "생산관리", "재고관리", "UTM 빌더", "광고", "CS 코치", "VOC 관리", "관리자", "공통"];
+export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "생산 관리", "재고 관리", "UTM 만들기", "광고", "CS 코치", "VOC 관리", "관리자", "공통"];
 
 export const CHANGELOG: ChangeEntry[] = [
   {
@@ -1426,7 +1426,6 @@ export const CHANGELOG: ChangeEntry[] = [
     tool: "생산관리",
     title: "품목 엑셀 업로드 (박스히어로 내보내기)",
     desc: "박스히어로 품목 내보내기 엑셀을 올리면 SKU 기준으로 새 품목을 추가하고 이름을 갱신합니다. 적용 전 '신규 N건 추가/전체 반영'을 미리보기로 확인할 수 있고, 금액(원가·판매가)은 건드리지 않아 B2B 원가가 보존됩니다.",
-    href: "/production/products",
   },
   {
     date: "2026-06-24",
@@ -1434,7 +1433,7 @@ export const CHANGELOG: ChangeEntry[] = [
     tool: "생산관리",
     title: "Claude 생산 조언 — 무엇을 얼마나 언제",
     desc: "박스히어로 최근 출고로 판매속도를 추정하고, 현재고·안전재고·B2B 확정 발주를 종합해 Claude가 우선순위가 매겨진 생산 권장안을 만들어줍니다. 재고 부족 위험을 먼저 짚어주니 예측이 어려워도 무엇부터 만들지 명확해집니다.",
-    href: "/production/advice",
+    href: "/inventory",
   },
   {
     date: "2026-06-24",

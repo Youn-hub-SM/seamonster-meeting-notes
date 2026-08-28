@@ -169,7 +169,7 @@ export default function VocMonthlyPage() {
             </tbody>
           </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>※ 발생 = 접수일 기준. 개선완료 = 유형 단위 처리(유형별 현황판에서 상태 변경 시 시점 기록). 개선 작업 자체는 Flow 에서 진행.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>※ 발생 = 접수일 기준. 개선완료 = 유형 단위 처리(유형별 현황판에서 상태 변경 시 시점 기록). 개선 작업 자체는 아사나에서 진행.</p>
         </section>
       )}
     </div>

@@ -71,7 +71,7 @@ export const NAV: NavCategory[] = [
     label: "생산·재고",
     tools: [
       // 2026-07-28 재편: 구매 및 판매를 상단으로, 생산/재고를 각각 묶고 나머지는 독립 메뉴.
-      //  생산 보드·제조사 요청서는 '안씀' 처리(페이지 코드만 보존).
+      //  2026-08-28 정리: 생산 보드·제조사 요청서·재고 부족 알림 페이지 삭제(재도입 시 새로 구현).
       { href: "/inventory/trade", label: "입고 및 출고", icon: "receipt" },
       {
         href: "/production", label: "생산 관리", icon: "factory",
@@ -79,7 +79,7 @@ export const NAV: NavCategory[] = [
           { href: "/production", label: "생산 일정" },
           { href: "/production/request", label: "생산 요청" },
           // 2026-07-29: '생산' 화면은 재고 목록으로 통합(권장생산·주문필요·보정·생산 요청 생성).
-          { href: "/inventory/quote", label: "월간매입 견적서" },
+          { href: "/inventory/quote", label: "월간매입 결산" },
         ],
       },
       {

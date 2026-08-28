@@ -924,21 +924,6 @@
         </div>
       </div>
 
-      <!-- 기존 구글시트 기록 가져오기 (일회성 이관) -->
-      <details class="import-box">
-        <summary>기존 구글시트 기록 가져오기</summary>
-        <div class="import-body">
-          <p class="help-text" style="margin-top:0;">
-            구글시트에서 데이터 영역을 <strong>전체 선택(Ctrl+A) → 복사(Ctrl+C)</strong> 한 뒤 아래 칸에 <strong>붙여넣기</strong> 하세요.<br>
-            열 순서: <code>생성일시 · URL · Source · Medium · Campaign · Content · Term · 전체 UTM URL</code> (헤더 행은 자동으로 건너뜁니다)
-          </p>
-          <textarea id="importPaste" placeholder="여기에 시트 내용을 붙여넣기…"></textarea>
-          <div class="btn-row" style="margin-top:10px;">
-            <button class="btn btn-primary btn-sm" onclick="importFromPaste()">가져오기</button>
-            <span id="importStatus" class="help-text" style="align-self:center;margin-top:0;"></span>
-          </div>
-        </div>
-      </details>
 
       <div id="historyContainer">
         <div class="empty-state">아직 생성된 UTM URL이 없습니다</div>
@@ -1475,56 +1460,6 @@ async function clearHistory() {
 }
 
 // ── 기존 구글시트 기록 가져오기 (붙여넣기 → 일괄 이관) ──
-async function importFromPaste() {
-  const ta = document.getElementById('importPaste');
-  const statusEl = document.getElementById('importStatus');
-  const raw = (ta.value || '').trim();
-  if (!raw) { statusEl.textContent = '붙여넣은 내용이 없습니다.'; return; }
-
-  // 시트 복사 = 탭 구분(TSV). 줄 단위로 자르고, 각 줄을 탭(없으면 콤마)으로 분리.
-  const lines = raw.split(/\r?\n/).map(l => l.replace(/\r$/, '')).filter(l => l.trim() !== '');
-  const rows = [];
-  lines.forEach((line, idx) => {
-    let cells = line.split('\t');
-    if (cells.length < 2) cells = line.split(',');
-    cells = cells.map(c => c.trim());
-    // 헤더 행 자동 건너뛰기
-    const joined = cells.join(' ').toLowerCase();
-    if (idx === 0 && (joined.includes('생성일시') || (joined.includes('source') && joined.includes('medium')) || joined.includes('utm url'))) {
-      return;
-    }
-    // 열 순서: 생성일시 · URL · Source · Medium · Campaign · Content · Term · 전체 UTM URL
-    const [date, baseUrl, source, medium, campaign, content, term, fullUrl] = cells;
-    const full = (fullUrl || '').trim();
-    if (!full) return; // 전체 URL 없는 줄은 건너뜀
-    rows.push({
-      date: date || '',
-      baseUrl: baseUrl || '',
-      source: source || '',
-      medium: medium || '',
-      campaign: campaign || '',
-      content: content || '',
-      term: term || '',
-      fullUrl: full,
-    });
-  });
-
-  if (!rows.length) { statusEl.textContent = '인식된 행이 없습니다. 열 순서를 확인해주세요.'; return; }
-
-  statusEl.textContent = `${rows.length}건 가져오는 중…`;
-  try {
-    const { inserted, skipped } = await API.importLinks(rows);
-    HISTORY = await API.getLinks();
-    renderHistory();
-    updateCampaignSuggestions();
-    ta.value = '';
-    statusEl.textContent = `완료: ${inserted}건 추가${skipped ? `, ${skipped}건 건너뜀(중복)` : ''}`;
-    showToast(`${inserted}건을 가져왔습니다`);
-  } catch (e) {
-    statusEl.textContent = '가져오기 실패: ' + (e.message || '');
-    showToast('가져오기 실패');
-  }
-}
 
 function exportCsv() {
   const history = HISTORY;

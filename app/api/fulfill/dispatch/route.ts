@@ -79,7 +79,12 @@ export async function POST(req: NextRequest) {
     // 현재 소매 재고(완료) — product_id별 합. 채널/상태 컬럼 미적용 환경 폴백.
     type Tx = { product_id: string; qty: number };
     let txns: Tx[] = [];
-    {
+    // inventory_stock RPC(품목당 1행 집계) 우선 — 원시 행 합산은 원장이 PostgREST 1,000행 캡을 넘으면 재고를 과소 계산한다.
+    const rpc = await sb.rpc("inventory_stock", { chan: "소매" });
+    if (!rpc.error) {
+      const idSet = new Set(productIds);
+      txns = ((rpc.data as Tx[]) || []).filter((t) => idSet.has(t.product_id));
+    } else {
       const r1 = await sb.from("inventory_txns").select("product_id, qty").in("product_id", productIds).eq("status", "완료").eq("channel", "소매");
       if (r1.error && /channel/i.test(r1.error.message)) {
         const r2 = await sb.from("inventory_txns").select("product_id, qty").in("product_id", productIds).eq("status", "완료");

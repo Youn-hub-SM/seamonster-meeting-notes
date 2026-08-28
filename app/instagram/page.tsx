@@ -175,7 +175,7 @@ export default function InstagramDmPage() {
       <section className="b2b-card ig-setup">
         <div className="b2b-card-head"><span className="b2b-card-title">계정 연결</span></div>
         {info && (!info.configured.appSecret || !info.configured.verifyToken) && (
-          <p className="ig-warn">서버 설정 대기 — <code>IG_APP_SECRET</code>{!info.configured.verifyToken && <> · <code>IG_WEBHOOK_VERIFY_TOKEN</code></>} env 를 넣어야 웹훅이 동작합니다.</p>
+          <p className="ig-warn">서버 연동 준비 중 — 연동이 완료되면 자동으로 동작합니다. 관리자에게 문의하세요.</p>
         )}
         <div className="ig-webhook-row">
           <span className="ig-webhook-label">웹훅 URL</span>
@@ -204,7 +204,7 @@ export default function InstagramDmPage() {
       <section className="b2b-card ig-rules-card">
         <div className="b2b-card-head"><span className="b2b-card-title">규칙</span><span className="sm-faint ig-head-note">게시물 1개 = 규칙 1개 · 발송/클릭은 실시간 집계</span></div>
         {rules.length === 0 ? (
-          <p className="sm-faint">규칙이 없습니다. 계정을 연결한 뒤 '+ 규칙 추가'로 시작하세요. (migration 094 필요)</p>
+          <p className="sm-faint">규칙이 없습니다. 계정을 연결한 뒤 '+ 규칙 추가'로 시작하세요.</p>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">

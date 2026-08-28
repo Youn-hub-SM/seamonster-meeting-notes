@@ -771,7 +771,7 @@
       </div>
       <div class="snapshot-preview" id="snapshotPreview"></div>
       <div class="snapshot-actions">
-        <button class="btn btn-primary" id="saveSupabaseBtn">💾 Supabase에 저장</button>
+        <button class="btn btn-primary" id="saveSupabaseBtn">결과 저장</button>
         <button class="btn" id="copySnapshotBtn">📋 TSV 복사</button>
         <button class="btn" id="downloadJsonBtn">JSON 다운로드</button>
         <span class="snapshot-status" id="snapshotStatus"></span>
@@ -1947,7 +1947,7 @@ document.getElementById("saveSupabaseBtn").onclick = async () => {
     });
     const j = await res.json();
     if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-    flashStatus("success", j.updated ? "✅ 같은 기준일 스냅샷을 갱신했습니다." : "✅ Supabase에 저장했습니다.");
+    flashStatus("success", j.updated ? "같은 기준일 스냅샷을 갱신했습니다." : "저장했습니다.");
     loadHistory();
   } catch (e) {
     flashStatus("error", "저장 실패: " + e.message);
@@ -1987,7 +1987,7 @@ function renderHistory() {
   const tableWrap = document.getElementById("historyTableWrap");
   if (!historyRows.length) {
     emptyEl.style.display = "";
-    emptyEl.textContent = "아직 저장된 스냅샷이 없습니다. CSV 분석 후 ‘결과 스냅샷 저장 → Supabase에 저장’을 누르면 여기에 쌓입니다.";
+    emptyEl.textContent = "아직 저장된 스냅샷이 없습니다. CSV 분석 후 ‘결과 스냅샷 저장 → 결과 저장’을 누르면 여기에 쌓입니다.";
     chartWrap.style.display = "none";
     tableWrap.style.display = "none";
     return;

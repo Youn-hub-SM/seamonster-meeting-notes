@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 // GET ?from=&to= — 미매칭 관리코드를 '원가·중량 채워넣기' 양식(xlsx)으로 추출.
-//  헤더가 cost-upload 와 동일(관리코드/상품명/중량/상품원가_단가) → 채워서 그대로 업로드하면 매칭됨.
+//  헤더: 관리코드/상품명/중량/상품원가_단가 — 채울 목록 참고용. 원가·중량 값 자체는 상품 마스터에서 관리한다.
 export async function GET(req: NextRequest) {
   try {
     const sb = supabaseAdmin();

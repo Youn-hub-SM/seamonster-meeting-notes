@@ -342,7 +342,7 @@ export default function CrmPage() {
 
       {/* utm_campaign 은 달았는데 GA env 가 없을 때만 안내(설정되면 카드에 자동 표시) */}
       {campaigns.length > 0 && ga && !ga.configured && (
-        <p className="sm-faint crm-ga-hint">GA 연동 대기 — <code>GA4_PROPERTY_ID</code>·<code>GA_SA_EMAIL</code>·<code>GA_SA_PRIVATE_KEY</code> 를 넣으면 UTM 캠페인 성과(세션·구매·매출)가 카드에 자동 표시됩니다.</p>
+        <p className="sm-faint crm-ga-hint">GA 연동 준비 중 — 연동되면 UTM 캠페인 성과(세션·구매·매출)가 카드에 자동 표시됩니다.</p>
       )}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> :
@@ -358,7 +358,7 @@ export default function CrmPage() {
             </div>
             {csvOpen && (
               <div className="crm-csv-box">
-                <p className="sm-faint crm-csv-hint">구글시트(메시지 맵)를 전체 선택 → 복사해 붙여넣으세요. 헤더(스테이지·메시지명·상태...) 포함.</p>
+                <p className="sm-faint crm-csv-hint">메시지 맵 표(엑셀 등)를 전체 선택 → 복사해 붙여넣으세요. 헤더(스테이지·메시지명·상태...) 포함.</p>
                 <textarea className="b2b-textarea" rows={6} value={csvText} onChange={(e) => setCsvText(e.target.value)} placeholder="스테이지,부제,메시지명,상태,채널,발송시점,..." spellCheck={false} />
                 <button className="b2b-btn-primary" onClick={() => runImport("csv")} disabled={importing || !csvText.trim()}>
                   {importing ? "가져오는 중..." : "CSV 가져오기"}
@@ -652,7 +652,7 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
       </div>
 
       {gaConfigured === false ? (
-        <p className="sm-faint crm-asof-hint">GA 연동 대기 — env(GA4_PROPERTY_ID·GA_SA_EMAIL·GA_SA_PRIVATE_KEY)를 넣으면 여기에 추이가 표시됩니다.</p>
+        <p className="sm-faint crm-asof-hint">GA 연동 준비 중 — 연동되면 여기에 추이가 표시됩니다.</p>
       ) : !campaignsKey ? (
         <p className="sm-faint crm-asof-hint">utm_campaign 이 달린 메시지가 없습니다 — 메시지 상세에서 UTM 캠페인을 넣으면 추이가 생깁니다.</p>
       ) : gaErr ? (

@@ -30,7 +30,7 @@ export default function SalesHome() {
   const [err, setErr] = useState("");
   useEffect(() => {
     fetch("/api/sales/bounds").then((r) => r.json()).then((j) => { if (j.ok) setB(j); else setErr(j.error || ""); }).catch((e) => setErr(String(e)));
-    fetch("/api/sales/dashboard").then((r) => r.json()).then((j) => { if (j.ok) setD(j); }).catch(() => {});
+    fetch("/api/sales/dashboard").then((r) => r.json()).then((j) => { if (j.ok) setD(j); else setErr((p) => p || j.error || "대시보드 조회 실패"); }).catch(() => setErr((p) => p || "대시보드 조회 실패"));
   }, []);
 
   const hasData = b && b.total_rows > 0;
@@ -44,6 +44,8 @@ export default function SalesHome() {
       </header>
 
       {err && <div className="b2b-error">데이터 조회 실패: {err}<br /><span className="sm-faint">마이그레이션 039를 Supabase에 아직 적용하지 않았다면 먼저 적용하세요.</span></div>}
+
+      {hasData && !d && !err && <div className="b2b-loading">불러오는 중...</div>}
 
       {hasData && d && (
         <>
@@ -97,7 +99,7 @@ export default function SalesHome() {
       </section>
 
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginTop: 12 }}>
-        <NavCard href="/sales/upload" title="데이터 업로드" desc="주문 파일 첨부 → 미리보기 → 적용(멱등)" />
+        <NavCard href="/sales/upload" title="데이터 업로드" desc="주문 파일 첨부 → 미리보기 → 적용(중복 자동 제외)" />
         <NavCard href="/sales/report" title="리포트" desc="일일·주간 매출 리포트 생성·메일 발송" />
         <NavCard href="/sales/search" title="주문 검색" desc="전화번호로 구매/재구매 이력 · 엑셀 추출" />
       </div>

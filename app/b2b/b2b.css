@@ -8,157 +8,6 @@
 }
 
 /* ─────────────────────────────────────────────
-   서브 네비
-   ───────────────────────────────────────────── */
-.b2b-subnav {
-  background: var(--sm-white);
-  border-bottom: 1px solid var(--sm-border);
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-.b2b-subnav-inner {
-  max-width: 1800px;
-  margin: 0 auto;
-  padding: 0 32px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* 좌: 햄버거+브랜드 / 중: B2B 링크(스크롤) / 우: 사용자+로그아웃 */
-.b2b-nav-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.b2b-nav-links {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.b2b-nav-links::-webkit-scrollbar {
-  display: none;
-}
-.b2b-nav-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.b2b-appmenu-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  border: 1px solid var(--sm-border);
-  border-radius: 9px;
-  background: var(--sm-white);
-  color: var(--sm-text-mid);
-  font-size: 16px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-.b2b-appmenu-btn:hover {
-  border-color: var(--sm-orange);
-  color: var(--sm-orange);
-}
-
-.b2b-brand {
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: -0.02em;
-  color: var(--sm-orange);
-  white-space: nowrap;
-  text-decoration: none;
-}
-
-.b2b-nav-user {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--sm-text-mid);
-  white-space: nowrap;
-}
-.b2b-logout-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--sm-text-light);
-}
-
-/* 햄버거 = 전체 앱 메뉴 드롭다운 */
-.b2b-appmenu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 61;
-}
-.b2b-appmenu {
-  position: absolute;
-  top: 100%;
-  left: 14px;
-  margin-top: 4px;
-  z-index: 62;
-  min-width: 200px;
-  background: var(--sm-white);
-  border: 1px solid var(--sm-border);
-  border-radius: 12px;
-  box-shadow: var(--sm-shadow-card);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-}
-.b2b-appmenu-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--sm-text-light);
-  padding: 6px 10px 4px;
-}
-.b2b-appmenu-link {
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 15px;
-  color: var(--sm-black);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.b2b-appmenu-link:hover {
-  background: var(--sm-bg);
-}
-.b2b-appmenu-link.is-current {
-  color: var(--sm-orange);
-  font-weight: 700;
-}
-
-.b2b-subnav-link {
-  padding: 16px 16px;
-  font-size: 15.5px;
-  font-weight: 600;
-  color: var(--sm-text-mid);
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
-  white-space: nowrap;
-}
-
-.b2b-subnav-link:hover {
-  color: var(--sm-orange);
-}
-
-.b2b-subnav-link.is-active {
-  color: var(--sm-orange);
-  border-bottom-color: var(--sm-orange);
-}
-
-/* ─────────────────────────────────────────────
    메인 컨테이너
    ───────────────────────────────────────────── */
 .b2b-main {
@@ -241,114 +90,6 @@
 .b2b-stat-card-hint {
   margin-top: 6px;
   font-size: 12px;
-  color: var(--sm-text-light);
-}
-
-/* ─────────────────────────────────────────────
-   대시보드 — 이번 주 일정 (월~일 한눈에)
-   ───────────────────────────────────────────── */
-.b2b-week-glance {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-}
-
-.b2b-week-glance-day {
-  background: var(--sm-bg);
-  border: 1px solid var(--sm-border);
-  border-radius: 10px;
-  padding: 8px;
-  min-height: 96px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.b2b-week-glance-day.is-today {
-  background: rgba(241, 90, 48, 0.04);
-  border-color: var(--sm-orange);
-}
-
-.b2b-week-glance-day-head {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--sm-text-mid);
-}
-
-.b2b-week-glance-day.is-today .b2b-week-glance-day-head {
-  color: var(--sm-orange);
-}
-
-.b2b-week-glance-date {
-  font-weight: 400;
-  color: var(--sm-text-light);
-}
-
-.b2b-week-glance-day.is-today .b2b-week-glance-date {
-  color: var(--sm-orange);
-}
-
-.b2b-week-glance-entries {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.b2b-week-glance-empty {
-  font-size: 12px;
-  color: var(--sm-text-light);
-}
-
-.b2b-week-glance-entry {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
-  background: var(--sm-white);
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--sm-black);
-  text-decoration: none;
-  min-width: 0;
-}
-
-.b2b-week-glance-entry:hover {
-  background: var(--sm-orange-light);
-}
-
-.b2b-week-glance-entry.is-done {
-  opacity: 0.5;
-}
-
-.b2b-week-glance-kind {
-  font-weight: 700;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.b2b-week-glance-kind.is-production {
-  color: var(--sm-info);
-}
-
-.b2b-week-glance-kind.is-ship {
-  color: var(--sm-orange);
-}
-
-.b2b-week-glance-company {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.b2b-week-glance-company em {
-  font-style: normal;
   color: var(--sm-text-light);
 }
 
@@ -1099,33 +840,6 @@ a.b2b-history-item:hover {
 .prod-cal-item-more { font-size: 12px; color: var(--sm-text-light); margin-top: 1px; }
 .prod-cal-promo { font-size: 12px !important; }
 
-/* 생산 보드 (칸반) */
-.kanban { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
-.kanban-col { background: var(--sm-bg, #fafafa); border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card, 16px); padding: 10px; }
-.kanban-col-head { font-size: 15px; font-weight: 700; padding: 4px 6px 10px; display: flex; align-items: center; gap: 6px; }
-.kanban-col-count { font-size: 12px; font-weight: 600; color: var(--sm-text-light); background: var(--sm-white, #fff); border: 1px solid var(--sm-border); border-radius: 999px; padding: 0 7px; }
-.kanban-col-body { display: flex; flex-direction: column; gap: 8px; min-height: 40px; }
-.kanban-empty { font-size: 12px; color: var(--sm-text-light); text-align: center; padding: 16px 0; }
-.kanban-card { background: var(--sm-white, #fff); border: 1px solid var(--sm-border); border-radius: 10px; padding: 10px 12px; }
-.kanban-card.is-overdue { border-color: var(--sm-warning-border); background: var(--sm-warning-bg); }
-.kanban-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.kanban-card-company { font-size: 12px; font-weight: 700; color: var(--sm-black); }
-.kanban-card-date { font-size: 12px; color: var(--sm-text-mid); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.kanban-card-date.is-overdue { color: var(--sm-danger); font-weight: 700; }
-.kanban-card-items { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.kanban-card-items li { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--sm-text-mid); }
-.ki-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ki-qty { font-weight: 700; color: var(--sm-black); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.kanban-card-actions { display: flex; gap: 6px; }
-.kanban-card-actions button { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--sm-border); background: var(--sm-white, #fff); cursor: pointer; color: var(--sm-text-mid); }
-.kanban-fwd { flex: 1; border-color: var(--sm-orange) !important; color: var(--sm-orange) !important; }
-.kanban-fwd:hover { background: var(--sm-orange-light, rgba(241, 90, 48, 0.07)); }
-.ki-spec { color: var(--sm-text-light); font-weight: 500; }
-.kanban-card-bigqty { font-size: 21px; font-weight: 800; color: var(--sm-orange); font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
-.kanban-card-bigqty span { font-size: 12px; font-weight: 600; color: var(--sm-text-mid); margin-left: 2px; }
-.kanban-card-contributors { font-size: 12px; color: var(--sm-text-light); line-height: 1.5; margin-bottom: 8px; }
-@media (max-width: 768px) { .kanban { grid-template-columns: 1fr; } }
-
 /* 설정 — 도매 de-mix 후보 */
 .demix-cand { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; padding: 6px 0; border-top: 1px solid var(--sm-border); }
 .demix-cand-name { flex: 1; min-width: 120px; color: var(--sm-black); }
@@ -1175,14 +889,6 @@ a.b2b-history-item:hover {
 .inv-modal-auto { font-size: 12px; color: var(--sm-text-mid); margin: 0; line-height: 1.55; }
 .inv-modal-preview { font-size: 15px; color: var(--sm-black); margin: 2px 0 0; padding-top: 12px; border-top: 1px solid var(--sm-border); }
 .inv-field-hint { font-size: 12px; color: var(--sm-text-light); line-height: 1.5; }
-
-/* VOC 예정 기능 로드맵 카드 */
-.voc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-.voc-card { display: block; border: 1px solid var(--sm-border); border-radius: 12px; padding: 16px 16px 18px; background: var(--sm-white); transition: border-color 0.15s, box-shadow 0.15s; }
-.voc-card:hover { border-color: var(--sm-orange-border); box-shadow: var(--sm-shadow-card); }
-.voc-card-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--sm-black); }
-.voc-soon { font-size: 12px; font-weight: 700; color: var(--sm-text-light); background: var(--sm-bg); border: 1px solid var(--sm-border); border-radius: 5px; padding: 1px 6px; }
-.voc-card-desc { margin-top: 6px; font-size: 12px; color: var(--sm-text-mid); line-height: 1.55; }
 
 /* 생산 보드 — 타임라인(백로그) 뷰 */
 .tl-summary { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--sm-text-mid); margin-bottom: 6px; flex-wrap: wrap; }
@@ -1258,21 +964,6 @@ a.b2b-history-item:hover {
 }
 
 /* VOC 처리 단계 보드 — 접수 / 응대·개선중 / 개선완료 (클릭 = 단계 필터) */
-.voc-stages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-.voc-stage {
-  text-align: left; cursor: pointer; background: var(--sm-white);
-  border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card, 16px);
-  padding: 13px 16px; display: flex; flex-direction: column; gap: 5px;
-  transition: border-color .12s, background .12s, box-shadow .12s;
-}
-.voc-stage:hover { border-color: var(--sm-orange); }
-.voc-stage.is-active { border-color: var(--sm-orange); background: var(--sm-orange-light, rgba(241, 90, 48, .06)); box-shadow: inset 0 0 0 1px var(--sm-orange); }
-.voc-stage-step { font-size: 12px; color: var(--sm-text-light); font-weight: 600; }
-.voc-stage-top { display: inline-flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 700; color: var(--sm-text-mid); }
-.voc-stage.is-active .voc-stage-top { color: var(--sm-black); }
-.voc-stage-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
-.voc-stage-num { font-size: 26px; font-weight: 800; color: var(--sm-black); line-height: 1.1; }
-.voc-stage-unit { font-size: 15px; font-weight: 600; color: var(--sm-text-light); margin-left: 3px; }
 @media (max-width: 640px) { .voc-stages { grid-template-columns: 1fr; gap: 8px; } }
 
 /* 차트 카드 — 추세 막대 범례 */
@@ -1937,78 +1628,6 @@ a.b2b-history-item:hover {
 /* ─────────────────────────────────────────────
    매출 리포트
    ───────────────────────────────────────────── */
-.b2b-preset-btn {
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 7px 12px;
-  border: 1px solid var(--sm-border);
-  background: var(--sm-white);
-  color: var(--sm-text-mid);
-  border-radius: var(--sm-radius);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.b2b-preset-btn:hover {
-  border-color: var(--sm-orange);
-  color: var(--sm-orange);
-}
-
-.b2b-preset-btn.is-active {
-  background: var(--sm-orange);
-  color: var(--sm-white);
-  border-color: var(--sm-orange);
-}
-
-.b2b-trend-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.b2b-trend-bar-row {
-  display: grid;
-  grid-template-columns: 80px 1fr 140px;
-  gap: 12px;
-  align-items: center;
-  font-size: 12px;
-}
-
-.b2b-trend-month {
-  font-weight: 600;
-  color: var(--sm-text-mid);
-  font-variant-numeric: tabular-nums;
-}
-
-.b2b-trend-bar-wrap {
-  background: var(--sm-bg);
-  border-radius: 4px;
-  height: 22px;
-  overflow: hidden;
-}
-
-.b2b-trend-bar {
-  background: linear-gradient(90deg, var(--sm-orange), #FF7B4A);
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.3s;
-}
-
-.b2b-trend-value {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--sm-black);
-  font-weight: 600;
-}
-
-@media (max-width: 600px) {
-  .b2b-trend-bar-row {
-    grid-template-columns: 60px 1fr 100px;
-    gap: 8px;
-    font-size: 12px;
-  }
-}
 
 /* 크게 만든 체크박스 (발주 목록 선택) */
 .b2b-checkbox {
@@ -2034,39 +1653,6 @@ a.b2b-history-item:hover {
 
 .b2b-selection-bar strong {
   color: var(--sm-orange);
-}
-
-/* ─────────────────────────────────────────────
-   뷰 탭 (목록 / 캘린더 / 주간)
-   ───────────────────────────────────────────── */
-.b2b-view-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--sm-border);
-}
-
-.b2b-view-tab {
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 10px 16px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--sm-text-mid);
-  cursor: pointer;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.b2b-view-tab:hover {
-  color: var(--sm-orange);
-}
-
-.b2b-view-tab.is-active {
-  color: var(--sm-orange);
-  border-bottom-color: var(--sm-orange);
 }
 
 /* ─────────────────────────────────────────────

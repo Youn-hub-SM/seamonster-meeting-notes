@@ -66,11 +66,11 @@ export default function GuidePage() {
               {t.entries.map((e, i) => (
                 <details key={e.href + e.label} open={!!query} style={{ borderTop: i > 0 ? "1px solid var(--sm-border)" : "none" }}>
                   <summary style={{ padding: "10px 4px", cursor: "pointer", fontSize: 15 }}>
-                    <strong style={{ color: "var(--sm-text)" }}>{e.label}</strong>
+                    <strong style={{ color: "var(--sm-dark)" }}>{e.label}</strong>
                     <span style={{ marginLeft: 8, fontSize: 12, color: "var(--sm-text-mid)" }}>{e.what}</span>
                   </summary>
                   <div style={{ padding: "0 4px 12px 22px" }}>
-                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 15, lineHeight: 1.9, color: "var(--sm-text)" }}>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 15, lineHeight: 1.9, color: "var(--sm-text-mid)" }}>
                       {e.steps.map((s, j) => <li key={j}>{s}</li>)}
                     </ol>
                     {(e.tips || []).length > 0 && (

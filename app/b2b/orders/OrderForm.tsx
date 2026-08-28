@@ -584,7 +584,7 @@ export default function OrderForm({
   async function handleDelete() {
     if (mode !== "edit" || !orderId) return;
     const orderLabel = originalOrder?.order_no || orderId;
-    if (!confirm(`발주 ${orderLabel} 을(를) 삭제하시겠어요?\n라인아이템·송장도 함께 삭제됩니다.`)) return;
+    if (!confirm(`발주 ${orderLabel} 을(를) 삭제하시겠어요?\n품목·송장도 함께 삭제됩니다.`)) return;
     setSaving(true);
     setError("");
     try {
@@ -629,7 +629,7 @@ export default function OrderForm({
               type="button"
               className="b2b-btn-secondary"
               onClick={() => router.push(`/b2b/orders/new?from=${orderId}`)}
-              title="이 발주의 업체·라인아이템·송장 정보를 복사해 새 발주를 만듭니다"
+              title="이 발주의 업체·품목·송장 정보를 복사해 새 발주를 만듭니다"
             >
               복제
             </button>

@@ -397,7 +397,7 @@ export default function NaverAdPage() {
 
       {status && !status.configured && (
         <div className="sm-warn">
-          <strong>네이버 광고 API 자격이 아직 없습니다.</strong> <code>NAVER_AD_API_KEY</code>·<code>NAVER_AD_SECRET</code>·<code>NAVER_AD_CUSTOMER_ID</code> 를 넣고 재배포하세요.
+          <strong>네이버 광고 연동 준비 중입니다.</strong> 연동이 완료되면 자동으로 표시됩니다 — 관리자에게 문의하세요.
         </div>
       )}
       {status?.configured && status.connected === false && <div className="b2b-error"><strong>연결 실패</strong> — {status.error || "자격 확인"}</div>}
