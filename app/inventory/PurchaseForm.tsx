@@ -24,6 +24,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const [memo, setMemo] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [done, setDone] = useState(true); // 즉시 입고/출고처리(기본 체크) — 해제 시 '대기'
+  const [reason, setReason] = useState("판매"); // 출고 사유 — '판매' 외에는 대사(구매·판매·재고 확인)에서 분리 집계(099)
   const [search, setSearch] = useState("");
   const [excludeBundles, setExcludeBundles] = useState(true); // 묶음(세트) 제외 — 기본 켜짐(세트는 자체 재고 없음)
   const [active, setActive] = useState(-1); // 키보드 하이라이트 인덱스
@@ -79,6 +80,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       const rows = valid.map((l) => ({
         type, qty: signedQty(type, Number(l.qty) || 0), product_id: l.product_id, product_name: l.name,
         unit_amount: Number(l.price) > 0 ? Math.round(Number(l.price)) : null, txn_date: date, partner: partner.trim() || null, memo: memo.trim() || null,
+        reason: type === "출고" && reason !== "판매" ? reason : null,
       }));
       const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done, channel }) });
       const j = await res.json();
@@ -92,7 +94,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
     <>
       <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div className="sm-tabs">
-          <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => { setType("입고"); if (channel === "도매") setChannel("소매"); }}>구매(입고)</button>
+          <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => { setType("입고"); setReason("판매"); if (channel === "도매") setChannel("소매"); }}>구매(입고)</button>
           <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => setType("출고")}>판매(출고)</button>
         </div>
         <ChannelPicker value={channel} onChange={setChannel}
@@ -100,7 +102,18 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
           disabledHint="도매 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 도매 입고는 막았습니다" />
         <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
-        <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />
+        {type === "출고" && (
+          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
+            <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: "auto" }}
+              title="판매가 아닌 출고(협찬·폐기 등)는 사유를 남겨야 '구매·판매·재고 확인'에서 판매와 분리됩니다">
+              <option value="판매">판매</option>
+              <option value="협찬">협찬·증정</option>
+              <option value="폐기">폐기</option>
+              <option value="기타">기타</option>
+            </select>
+          </label>
+        )}
+        <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : type === "출고" && reason !== "판매" ? "전달처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />
         <input className="b2b-input" placeholder="메모(선택)" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
       </div>
 

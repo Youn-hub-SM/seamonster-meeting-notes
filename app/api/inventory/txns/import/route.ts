@@ -24,7 +24,7 @@ function cellStr(v: unknown): string {
   return String(v).trim();
 }
 
-export type ImportTxn = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
+export type ImportTxn = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null; reason?: string | null };
 
 // 같은 유형·품목·거래일의 중복 행을 합산(수량 합, 단가는 수량가중평균). 반환 [병합결과, 합쳐진 행수].
 function mergeRows(rows: ImportTxn[]): [ImportTxn[], number] {

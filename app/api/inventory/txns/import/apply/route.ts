@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
       } catch { /* 033 미적용 — 묶음 생략 */ }
     }
 
+    const OUT_REASONS = new Set(["협찬", "폐기", "기타"]); // '판매'는 null(기본)로 저장
     const insert: Record<string, unknown>[] = expanded.map((r) => {
       const grp = orderByType.get(r.type);
       return {
@@ -70,13 +71,14 @@ export async function POST(req: NextRequest) {
         created_by: actor,
         status,
         ...(grp ? { group_id: grp.group_id, order_no: grp.order_no } : {}),
+        ...(r.type === "출고" && r.reason && OUT_REASONS.has(String(r.reason)) ? { reason: String(r.reason) } : {}),
       };
     });
 
     // 선택 컬럼(status=034, channel=036) 미적용 환경이면 그 컬럼만 빼고 재시도. group/order 는 rpc 성공 시에만 추가돼 안전.
     let ins = await sb.from("inventory_txns").insert(insert).select("id, product_id, qty, type, txn_date");
     for (let guard = 0; ins.error && guard < 2; guard++) {
-      const miss = (["channel", "status"] as const).find((c) => new RegExp(c, "i").test(ins.error!.message));
+      const miss = (["channel", "status", "reason"] as const).find((c) => new RegExp(c, "i").test(ins.error!.message));
       if (!miss) break;
       for (const row of insert) delete row[miss];
       ins = await sb.from("inventory_txns").insert(insert).select("id, product_id, qty, type, txn_date");

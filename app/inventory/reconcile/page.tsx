@@ -8,6 +8,7 @@ import { matchKoQuery } from "@/app/lib/hangul";
 type Row = {
   product_id: string; sku: string | null; name: string;
   current_qty: number; ledger_in: number; ledger_out: number; ledger_adj: number; sold: number;
+  out_nonsale?: number; // 협찬·폐기 등 비판매 출고(099) — 미적용 환경이면 없음
 };
 
 const won = (n: number) => n.toLocaleString();
@@ -46,22 +47,25 @@ export default function InventoryReconcilePage() {
 
   // 판정
   const enriched = useMemo(() => rows.map((r) => {
-    const notSubtracted = r.sold - r.ledger_out;          // 팔렸는데 재고에서 안 빠진 수
+    const nonsale = Number(r.out_nonsale) || 0;           // 협찬·폐기 등 판매 아닌 출고(099 미적용이면 0)
+    const saleOut = r.ledger_out - nonsale;               // 판매로 나간 출고만 — 매출과 비교할 값
+    const notSubtracted = r.sold - saleOut;               // 팔렸는데 재고에서 안 빠진 수
     const noBuy = r.sold > 0 && r.ledger_in === 0;        // 산 기록(구매) 없이 팔림
     const minusStock = r.current_qty < 0;                 // 재고가 마이너스(오류)
     const emptySelling = r.current_qty <= 0 && r.sold > 0;// 재고 0인데 계속 팔림
     const issue = noBuy || minusStock || emptySelling || Math.abs(notSubtracted) > 0;
-    return { ...r, notSubtracted, noBuy, minusStock, emptySelling, issue };
+    return { ...r, nonsale, saleOut, notSubtracted, noBuy, minusStock, emptySelling, issue };
   }), [rows]);
 
   const kpi = useMemo(() => {
     const sold = enriched.reduce((s, r) => s + r.sold, 0);
-    const out = enriched.reduce((s, r) => s + r.ledger_out, 0);
+    const out = enriched.reduce((s, r) => s + r.saleOut, 0); // 판매 출고만 — 협찬 등은 nonsale 로 따로
+    const nonsale = enriched.reduce((s, r) => s + r.nonsale, 0);
     const adj = enriched.reduce((s, r) => s + r.ledger_adj, 0);
     const noBuy = enriched.filter((r) => r.noBuy);
     const minus = enriched.filter((r) => r.minusStock);
     return {
-      sold, out, adj,
+      sold, out, nonsale, adj,
       coverage: sold > 0 ? Math.round((out / sold) * 1000) / 10 : (out > 0 ? 100 : 0),
       noBuyCount: noBuy.length, noBuySold: noBuy.reduce((s, r) => s + r.sold, 0),
       minusCount: minus.length,
@@ -125,6 +129,7 @@ export default function InventoryReconcilePage() {
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고에서 빠진 판매</div><div className="b2b-stat-card-value b2b-money" style={{ color: kpi.coverage < 90 ? "var(--sm-danger)" : "var(--sm-success)" }}>{won(kpi.out)} <span style={{ fontSize: 15 }}>({kpi.coverage}%)</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">산 기록 없이 팔린 품목</div><div className="b2b-stat-card-value" style={{ color: kpi.noBuyCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{kpi.noBuyCount}개 <span className="sm-faint" style={{ fontSize: 12 }}>· 판매 {won(kpi.noBuySold)}</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 마이너스(오류)</div><div className="b2b-stat-card-value" style={{ color: kpi.minusCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{kpi.minusCount}개</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">협찬·기타 출고</div><div className="b2b-stat-card-value b2b-money">{won(kpi.nonsale)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">직접 맞춘 수(보정)</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-warning)" }}>{kpi.adj > 0 ? "+" : ""}{won(kpi.adj)}</div></div>
           </div>
 
@@ -148,12 +153,12 @@ export default function InventoryReconcilePage() {
                 <thead><tr>
                   <th>품목</th><th>코드</th>
                   <th className="num">남은 재고</th><th className="num">팔린 수</th>
-                  <th className="num">산 수(구매)</th><th className="num">재고에서 뺀 수</th><th className="num">직접 맞춤</th>
+                  <th className="num">산 수(구매)</th><th className="num">뺀 수(판매)</th><th className="num">협찬·기타</th><th className="num">직접 맞춤</th>
                   <th className="num">안 빠진 판매</th><th>확인</th>
                 </tr></thead>
                 <tbody>
                   {shown.length === 0 ? (
-                    <tr><td colSpan={9}><div className="b2b-empty" style={{ padding: "20px 10px" }}>볼 품목이 없습니다.</div></td></tr>
+                    <tr><td colSpan={10}><div className="b2b-empty" style={{ padding: "20px 10px" }}>볼 품목이 없습니다.</div></td></tr>
                   ) : shown.map((r) => (
                     <tr key={r.product_id}>
                       <td><strong>{r.name}</strong></td>
@@ -161,7 +166,8 @@ export default function InventoryReconcilePage() {
                       <td className="num b2b-money" style={{ fontWeight: 700, color: r.current_qty < 0 ? "var(--sm-danger)" : undefined }}>{won(r.current_qty)}</td>
                       <td className="num b2b-money">{r.sold ? won(r.sold) : "-"}</td>
                       <td className="num b2b-money" style={{ color: r.ledger_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.ledger_in ? won(r.ledger_in) : "-"}</td>
-                      <td className="num b2b-money" style={{ color: r.ledger_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.ledger_out ? won(r.ledger_out) : "-"}</td>
+                      <td className="num b2b-money" style={{ color: r.saleOut ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.saleOut ? won(r.saleOut) : "-"}</td>
+                      <td className="num b2b-money" style={{ color: r.nonsale ? "var(--sm-text-mid)" : "var(--sm-text-light)" }}>{r.nonsale ? won(r.nonsale) : "-"}</td>
                       <td className="num b2b-money" style={{ color: r.ledger_adj ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{r.ledger_adj ? (r.ledger_adj > 0 ? "+" : "") + won(r.ledger_adj) : "-"}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700, color: r.notSubtracted > 0 ? "var(--sm-warning)" : r.notSubtracted < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.notSubtracted ? (r.notSubtracted > 0 ? "+" : "") + won(r.notSubtracted) : "0"}</td>
                       <td>
@@ -178,7 +184,7 @@ export default function InventoryReconcilePage() {
               </table>
             </div>
             <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>
-              · <strong>팔린 수</strong>=매출 데이터에서 실제 팔린 개수(세트는 낱개로 풀어서). · <strong>산 수(구매)·재고에서 뺀 수·직접 맞춤</strong>=이 기간에 재고에 기록된 들어옴/나감/보정.
+              · <strong>팔린 수</strong>=매출 데이터에서 실제 팔린 개수(세트는 낱개로 풀어서). · <strong>뺀 수(판매)</strong>=판매로 나간 출고. · <strong>협찬·기타</strong>=사유가 판매가 아닌 출고(협찬·폐기 등) — 판매와 비교하지 않고 따로 셉니다. · <strong>직접 맞춤</strong>=보정(조정) 기록.
               <br />· <strong>안 빠진 판매</strong>=팔렸는데 재고에서 아직 안 뺀 수(+면 재고에 반영이 덜 된 것). · <strong>산 기록 없음</strong>=팔렸는데 구매(들어온) 기록이 하나도 없음 → 구매를 넣어 주세요. · <strong>재고 마이너스</strong>=있을 수 없는 재고라 점검이 필요해요.
             </p>
           </section>
