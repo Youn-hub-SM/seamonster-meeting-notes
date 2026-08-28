@@ -6,7 +6,7 @@ import OrdersTable from "../OrdersTable";
 import { ChannelPicker } from "../ChannelTabs";
 import { INV_TYPE_COLOR, type InvChannel } from "@/app/lib/inventory";
 
-type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null };
+type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null; reason?: string | null };
 type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -22,6 +22,7 @@ export default function TradePage() {
   const [ioDate, setIoDate] = useState(TODAY());
   const [ioPartner, setIoPartner] = useState("");
   const [ioDone, setIoDone] = useState(true); // 즉시 입고/출고처리(기본 체크)
+  const [ioReason, setIoReason] = useState("판매"); // 출고 사유 — '판매' 외에는 대사(구매·판매·재고 확인)에서 분리 집계(099)
 
   function openUpload() { setError(""); setIoDate(TODAY()); setUploadOpen(true); } // 열 때 거래일은 오늘로 리셋
 
@@ -42,7 +43,7 @@ export default function TradePage() {
     if (!preview) return;
     setApplying(true); setError("");
     try {
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows, done: ioDone, channel: ioChannel }) });
+      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows.map((r) => (r.type === "출고" && ioReason !== "판매" ? { ...r, reason: ioReason } : r)), done: ioDone, channel: ioChannel }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "적용 실패");
       setPreview(null); setReload((n) => n + 1);
@@ -80,7 +81,7 @@ export default function TradePage() {
                 <label className="b2b-field-label">① 유형</label>
                 <div className="sm-tabs" style={{ margin: 0 }}>
                   <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => setIoType("출고")}>판매(출고)</button>
-                  <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => { setIoType("입고"); if (ioChannel === "도매") setIoChannel("소매"); }}>구매(입고)</button>
+                  <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => { setIoType("입고"); setIoReason("판매"); if (ioChannel === "도매") setIoChannel("소매"); }}>구매(입고)</button>
                 </div>
               </div>
 
@@ -100,10 +101,22 @@ export default function TradePage() {
                   <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} />
                 </div>
                 <div className="b2b-field">
-                  <label className="b2b-field-label">{ioType === "입고" ? "매입처" : "판매처"} <span className="sm-faint" style={{ fontWeight: 400 }}>(선택)</span></label>
+                  <label className="b2b-field-label">{ioType === "입고" ? "매입처" : ioReason !== "판매" ? "전달처" : "판매처"} <span className="sm-faint" style={{ fontWeight: 400 }}>(선택)</span></label>
                   <input className="b2b-input" placeholder="선택" value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} />
                 </div>
               </div>
+
+              {ioType === "출고" && (
+                <div className="b2b-field" style={{ marginTop: 12 }}>
+                  <label className="b2b-field-label">사유 <span className="sm-faint" style={{ fontWeight: 400 }}>(파일 전체 · 판매가 아니면 대사에서 분리)</span></label>
+                  <select className="b2b-input" value={ioReason} onChange={(e) => setIoReason(e.target.value)}>
+                    <option value="판매">판매</option>
+                    <option value="협찬">협찬·증정</option>
+                    <option value="폐기">폐기</option>
+                    <option value="기타">기타</option>
+                  </select>
+                </div>
+              )}
 
               <label className="sm-row" style={{ gap: 7, marginTop: 12, fontSize: 15, cursor: "pointer" }}>
                 <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’)</span>
@@ -114,7 +127,7 @@ export default function TradePage() {
                   ? <>양식 = <strong>SKU · 수량 · 단가</strong></>
                   : <>양식 = <strong>수량 · (무시) · SKU</strong> (외부 출고 파일 그대로 · 가운데 열 무시)</>}
                 {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="sm-link">양식 다운로드</a>
-                <br />거래일·거래처·채널은 파일 전체에 적용됩니다.
+                <br />거래일·거래처·채널{ioType === "출고" ? "·사유" : ""}는 파일 전체에 적용됩니다.
               </p>
 
               {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
