@@ -132,7 +132,6 @@ export default function OrdersListPage() {
           if (typeof s.company === "string") setCompanyFilter(s.company);
           if (typeof s.product === "string") setProductFilter(s.product);
           if (typeof s.hideComplete === "boolean") setHideComplete(s.hideComplete);
-          if (typeof s.search === "string") setSearch(s.search);
         }
       }
     } catch {
@@ -155,7 +154,7 @@ export default function OrdersListPage() {
           company: companyFilter,
           product: productFilter,
           hideComplete,
-          search,
+          // search 는 저장하지 않는다 — 다음날 지난 검색어로 좁혀진 목록이 떠 새 발주가 안 보이는 사고 방지(2026-08-28)
         })
       );
     } catch {
@@ -779,7 +778,7 @@ export default function OrdersListPage() {
 
       {/* 오늘 할일 — B2B 대시보드를 없애면서 거기서 보던 것을 여기로 올렸다.
           카드를 누르면 그 발주들만 목록에 남는다(다시 누르면 해제). */}
-      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 16 }}>
+      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
         {todayTasks.map((t) => {
           const on = taskPick?.key === t.key;
           const none = t.rows.length === 0;
@@ -1435,7 +1434,7 @@ export default function OrdersListPage() {
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setShipPrompt(null)} disabled={shipSaving}>취소</button>
                 <button className="b2b-btn-primary" onClick={saveShipments} disabled={shipSaving || shipLoading}>
-                  {shipSaving ? "저장 중…" : "저장"}
+                  {shipSaving ? "저장 중..." : "저장"}
                 </button>
               </div>
             </div>

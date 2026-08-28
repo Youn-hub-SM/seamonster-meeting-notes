@@ -25,6 +25,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   // 세부 내역 '전 → 후' 재고 변동 — 펼칠 때 1회 조회해 캐시
   const [balances, setBalances] = useState<Record<string, { before: number; after: number } | null>>({});
 
+  const kstDay = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - back); return d.toISOString().slice(0, 10); };
   const DATE_OK = /^\d{4}-\d{2}-\d{2}$/;
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -86,6 +87,12 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
           <button key={t} type="button" className={`sm-tab ${fType === t ? "is-active" : ""}`} onClick={() => setFType(t)}>{t}</button>
         ))}
       </div>
+      <div className="sm-tabs" style={{ margin: 0 }}>
+        <button type="button" className="sm-tab" onClick={() => { setFFrom(kstDay(0)); setFTo(kstDay(0)); }}>오늘</button>
+        <button type="button" className="sm-tab" onClick={() => { setFFrom(kstDay(1)); setFTo(kstDay(1)); }}>어제</button>
+        <button type="button" className="sm-tab" onClick={() => { setFFrom(kstDay(6)); setFTo(kstDay(0)); }}>7일</button>
+        <button type="button" className="sm-tab" onClick={() => { setFFrom(""); setFTo(""); }}>전체</button>
+      </div>
       <input className="b2b-input" type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} style={{ width: 145 }} title="시작일" />
       <span className="sm-faint">~</span>
       <input className="b2b-input" type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} style={{ width: 145 }} title="종료일" />
@@ -121,7 +128,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                   <td>{o.partner || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{o.item_count}개 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>{isOpen ? "▲" : "▼"}</span></td>
                   <td className="num b2b-money">{o.total_qty.toLocaleString()}</td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{o.total_amount.toLocaleString()}</td>
+                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{o.total_amount.toLocaleString()}</td>
                   <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={o.memo || ""}>{o.memo || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                     {!done && <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12, marginRight: 6 }} onClick={() => process(o)}>{o.type === "입고" ? "입고처리" : "출고처리"}</button>}
@@ -145,7 +152,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                                   {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({bal.before.toLocaleString()} → {bal.after.toLocaleString()})</span>}
                                 </td>
                                 <td className="num b2b-money">{it.unit_amount ? it.unit_amount.toLocaleString() : "-"}</td>
-                                <td className="num b2b-money">₩{it.amount.toLocaleString()}</td>
+                                <td className="num b2b-money">{it.amount.toLocaleString()}</td>
                               </tr>
                             );
                           })}

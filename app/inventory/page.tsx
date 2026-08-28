@@ -273,7 +273,7 @@ export default function InventoryPage() {
           <h1 className="b2b-page-title">재고 목록</h1>
         </div>
         <div className="b2b-page-actions">
-          <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>{adviceLoading ? "AI 분석 중…" : advice ? "다시 분석" : "AI 조언"}</button>
+          <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>{adviceLoading ? "AI 분석 중..." : advice ? "다시 분석" : "AI 조언"}</button>
           <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="프로모션 기간·예상판매 등록 → 안전재고에 반영">프로모션</button>
           <button className="b2b-btn-primary" onClick={goRequest} disabled={sel.size === 0}
             title={sel.size === 0 ? "아래 표에서 품목을 체크하세요"

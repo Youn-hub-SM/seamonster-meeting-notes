@@ -136,7 +136,7 @@ export default function InventoryMovePage() {
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-          <button className="b2b-btn-primary" onClick={submit} disabled={busy || !pid || nQty <= 0}>{busy ? "옮기는 중…" : "옮기기"}</button>
+          <button className="b2b-btn-primary" onClick={submit} disabled={busy || !pid || nQty <= 0}>{busy ? "옮기는 중..." : "옮기기"}</button>
         </div>
       </section>
 

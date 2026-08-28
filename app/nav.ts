@@ -91,9 +91,9 @@ export const NAV: NavCategory[] = [
           { href: "/inventory/asof", label: "과거수량 조회" },
         ],
       },
-      { href: "/inventory/stats", label: "통계", icon: "bars" },
-      { href: "/inventory/reconcile", label: "구매/판매/재고 확인", icon: "receipt" },
-      { href: "/inventory/activity", label: "변경기록", icon: "receipt" },
+      { href: "/inventory/stats", label: "재고/생산 통계", icon: "bars" },
+      { href: "/inventory/reconcile", label: "구매·판매·재고 확인", icon: "receipt" },
+      { href: "/inventory/activity", label: "변경 기록", icon: "receipt" },
     ],
   },
   {

@@ -11,11 +11,12 @@ export default function TallySettingsPage() {
   const [forms, setForms] = useState<{ id: string; name: string }[]>([]);
   const [busy, setBusy] = useState<string>("");
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null);
+  const [loadFail, setLoadFail] = useState(false); // 조회 실패 — '미설정'으로 보이면 키를 다시 발급하는 헛걸음을 유도한다
 
   useEffect(() => {
     fetch("/api/voc/tally-config", { cache: "no-store" }).then((r) => r.json()).then((j) => {
       setHasApiKey(!!j.hasApiKey); setFormId(j.formId || "");
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => setLoadFail(true)).finally(() => setLoading(false));
   }, []);
 
   async function save(body: Record<string, string>, okMsg: string, tag: string) {
@@ -69,10 +70,10 @@ export default function TallySettingsPage() {
         <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>탈리(Tally) 설문 응답을 VOC로 가져옵니다. 가져온 응답은 VOC 관리의 &apos;설문 응답(Tally)&apos; 화면에서 확인합니다.</p>
 
         <div className="sm-col" style={{ gap: 6, marginBottom: 16 }}>
-          <span className="b2b-field-label">1) Tally API 키 · 현재 {loading ? "확인 중…" : hasApiKey ? <strong style={{ color: "var(--sm-success)" }}>저장됨</strong> : <strong style={{ color: "var(--sm-warning)" }}>미설정</strong>}</span>
+          <span className="b2b-field-label">1) Tally API 키 · 현재 {loading ? "확인 중..." : loadFail ? <strong style={{ color: "var(--sm-danger)" }}>확인 실패 — 새로고침</strong> : hasApiKey ? <strong style={{ color: "var(--sm-success)" }}>저장됨</strong> : <strong style={{ color: "var(--sm-warning)" }}>미설정</strong>}</span>
           <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
             <input className="b2b-input" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={hasApiKey ? "새 키로 변경(비우고 저장 시 해제)" : "tally_xxx API 키 붙여넣기"} style={{ flex: 1, minWidth: 240 }} />
-            <button className="b2b-btn-primary" onClick={saveApiKey} disabled={busy === "key"}>{busy === "key" ? "저장 중…" : "저장"}</button>
+            <button className="b2b-btn-primary" onClick={saveApiKey} disabled={busy === "key"}>{busy === "key" ? "저장 중..." : "저장"}</button>
           </div>
           <span className="sm-faint" style={{ fontSize: 12 }}>Tally → 우상단 프로필 → Settings → API keys 에서 발급.</span>
         </div>
@@ -80,7 +81,7 @@ export default function TallySettingsPage() {
         <div className="sm-col" style={{ gap: 6, marginBottom: 16 }}>
           <span className="b2b-field-label">2) 가져올 폼 {formId && <span className="sm-faint">· 현재: {formId}</span>}</span>
           <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <button className="b2b-btn-secondary" onClick={loadForms} disabled={busy === "forms" || !hasApiKey}>{busy === "forms" ? "불러오는 중…" : "폼 불러오기"}</button>
+            <button className="b2b-btn-secondary" onClick={loadForms} disabled={busy === "forms" || !hasApiKey}>{busy === "forms" ? "불러오는 중..." : "폼 불러오기"}</button>
             {forms.length > 0 && (
               <select className="b2b-input" value={formId} onChange={(e) => selectForm(e.target.value)} style={{ flex: 1, minWidth: 240 }}>
                 <option value="">폼 선택…</option>
@@ -93,7 +94,7 @@ export default function TallySettingsPage() {
         <div className="sm-col" style={{ gap: 6 }}>
           <span className="b2b-field-label">3) 응답 가져오기</span>
           <div className="sm-row" style={{ gap: 8 }}>
-            <button className="b2b-btn-primary" onClick={importNow} disabled={busy === "import" || !hasApiKey || !formId}>{busy === "import" ? "가져오는 중…" : "지금 가져오기"}</button>
+            <button className="b2b-btn-primary" onClick={importNow} disabled={busy === "import" || !hasApiKey || !formId}>{busy === "import" ? "가져오는 중..." : "지금 가져오기"}</button>
           </div>
           <span className="sm-faint" style={{ fontSize: 12 }}>이전에 가져온 응답은 자동으로 건너뜁니다(중복 방지). 처음엔 최근 60일치를 가져옵니다.</span>
         </div>

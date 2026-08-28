@@ -210,7 +210,7 @@ export default function VocLossPage() {
               <span className="b2b-card-title">건별 정산 ({shown.length}건)</span>
               {stale.length > 0 && (
                 <button className="b2b-btn-secondary" onClick={recalcAll} disabled={busy} style={{ fontSize: 12, padding: "6px 12px" }}>
-                  {busy ? "갱신 중…" : `현재 원가로 ${stale.length}건 갱신`}
+                  {busy ? "갱신 중..." : `현재 원가로 ${stale.length}건 갱신`}
                 </button>
               )}
             </div>

@@ -480,7 +480,7 @@ export default function NaverAdPage() {
             <Chip on={convBasis === "purchase"} onClick={() => setBasis("purchase")}>구매 전환만</Chip>
             {convBasis === "purchase" && (
               <span className="sm-faint" style={{ fontSize: 15 }}>
-                {purchaseLoading ? "구매 전환 불러오는 중… (최초엔 다소 걸릴 수 있어요)"
+                {purchaseLoading ? "구매 전환 불러오는 중... (최초엔 다소 걸릴 수 있어요)"
                   : purchaseInfo ? `장바구니 제외·구매만 · ~${purchaseInfo.effectiveUntil}까지${purchaseInfo.cached === false ? " · 캐시 미적용(느림, 064 마이그레이션 권장)" : ""}` : "장바구니 제외, 구매 전환만 집계"}
               </span>
             )}

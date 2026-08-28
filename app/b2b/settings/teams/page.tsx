@@ -254,7 +254,7 @@ export default function TeamsSettingsPage() {
               <input type="checkbox" className="b2b-checkbox" checked={teamsEnabled}
                 onChange={(e) => { setTeamsEnabled(e.target.checked); saveTeams(e.target.checked); }} /> Teams로 발송 켜기
             </label>
-            <button className="b2b-btn-primary" onClick={() => saveTeams()} disabled={teamsBusy}>{teamsBusy ? "처리 중…" : "저장"}</button>
+            <button className="b2b-btn-primary" onClick={() => saveTeams()} disabled={teamsBusy}>{teamsBusy ? "처리 중..." : "저장"}</button>
             <button className="b2b-btn-secondary" onClick={testTeams} disabled={teamsBusy || !teamsHasUrl} title={teamsHasUrl ? "" : "URL을 먼저 저장하세요"}>테스트 발송</button>
           </div>
           {teamsMsg && (

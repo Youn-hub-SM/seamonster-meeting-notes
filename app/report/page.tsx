@@ -192,7 +192,7 @@ export default function ReportPage() {
                     <span>저장: {s.createdBy || "—"}</span>
                     <span>·</span>
                     <span>{new Date(new Date(s.createdAt).getTime() + 9 * 3600e3).toISOString().slice(0, 10)}</span>
-                    <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); delSaved(s.id); }}>삭제</button>
+                    <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); if (confirm("이 저장 리포트를 삭제할까요?")) delSaved(s.id); }}>삭제</button>
                   </div>
                 </div>
               ))}
@@ -217,7 +217,7 @@ export default function ReportPage() {
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(q); }} />
         <div className="rp-ask-actions">
           <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading || !q.trim()}>
-            {loading ? "분석 중…" : turns.length ? "이어서 질문" : "조회"}
+            {loading ? "분석 중..." : turns.length ? "이어서 질문" : "조회"}
             <span className="rp-kbd">Ctrl+Enter</span>
           </button>
           {turns.length > 0 && (
@@ -244,7 +244,7 @@ export default function ReportPage() {
       )}
 
       {err && <div className="b2b-error" style={{ marginBottom: 12 }}>{err}</div>}
-      {loading && <div className="b2b-loading">데이터를 조회하는 중…</div>}
+      {loading && <div className="b2b-loading">데이터를 조회하는 중...</div>}
 
       {plan && (
         <div className="sm-col" style={{ gap: 14 }}>

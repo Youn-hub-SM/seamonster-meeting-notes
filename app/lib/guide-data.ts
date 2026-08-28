@@ -1180,11 +1180,11 @@ export const GUIDE: GuideCategory[] = [
         ]
       },
       {
-        "tool": "구매/판매/재고 확인",
+        "tool": "구매·판매·재고 확인",
         "entries": [
           {
             "href": "/inventory/reconcile",
-            "label": "구매/판매/재고 확인",
+            "label": "구매·판매·재고 확인",
             "what": "기간 내 팔린 수(매출)와 재고에서 뺀 수를 비교해 안 맞는 품목을 찾는 화면",
             "steps": [
               "기간 탭(오늘·어제·최근 7일·최근 30일)이나 날짜를 고른다",

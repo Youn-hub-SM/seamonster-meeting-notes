@@ -126,7 +126,7 @@ export default function WeeklyBriefPage() {
               {brief && (
                 <button className="b2b-btn-secondary" style={{ padding: "5px 12px", fontSize: 12 }}
                   onClick={() => generateBrief(true)} disabled={briefBusy}>
-                  {briefBusy ? "분석 중…" : "다시 분석"}
+                  {briefBusy ? "분석 중..." : "다시 분석"}
                 </button>
               )}
             </div>
@@ -138,7 +138,7 @@ export default function WeeklyBriefPage() {
             ) : (
               <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                 <button className="b2b-btn-primary" onClick={() => generateBrief(false)} disabled={briefBusy}>
-                  {briefBusy ? "분석 중…" : "AI 브리핑 생성"}
+                  {briefBusy ? "분석 중..." : "AI 브리핑 생성"}
                 </button>
                 <span className="sm-faint" style={{ fontSize: 12 }}>이 주의 숫자를 AI 가 읽고 변화·볼 지점을 글로 정리합니다. 한 번 만들면 저장돼 다시 열 때 비용이 들지 않습니다.</span>
               </div>

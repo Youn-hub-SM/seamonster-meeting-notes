@@ -153,7 +153,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
                   <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 12 }}>{l.sub}</div>}</td>
                   <td className="num"><input className="b2b-input" type="number" min={0.01} step={0.01} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 80, textAlign: "right", padding: "6px 8px" }} /></td>
                   <td className="num"><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, "price", e.target.value)} style={{ width: 120, textAlign: "right", padding: "6px 8px" }} /></td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}>₩{amountOf(l).toLocaleString()}</td>
+                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{amountOf(l).toLocaleString()}</td>
                   <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>
                 </tr>
               ))}
@@ -164,7 +164,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
 
         <div className="sm-between" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--sm-border)", flexWrap: "wrap", gap: 12 }}>
           <span className="sm-faint" style={{ fontSize: 15 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
-          <span style={{ fontSize: 19, fontWeight: 800 }}>총액 ₩{totals.amount.toLocaleString()}</span>
+          <span style={{ fontSize: 19, fontWeight: 800 }}>총액 {totals.amount.toLocaleString()}</span>
         </div>
       </section>
 
@@ -176,7 +176,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         </label>
         <div className="sm-row" style={{ gap: 10 }}>
           <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>취소</button>
-          <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.items === 0}>{saving ? "저장 중…" : (done ? `${type === "입고" ? "구매" : "판매"} 저장` : "대기로 저장")}</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.items === 0}>{saving ? "저장 중..." : (done ? `${type === "입고" ? "구매" : "판매"} 저장` : "대기로 저장")}</button>
         </div>
       </div>
     </>

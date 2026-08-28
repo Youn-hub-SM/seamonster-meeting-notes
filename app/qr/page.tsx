@@ -96,7 +96,7 @@ export default function QrPage() {
                 <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="예: 여름세일 (비우면 자동)" /></label>
               <label className="b2b-field" style={{ flex: 1, minWidth: 130 }}><span className="b2b-field-label">메모 (선택)</span>
                 <input className="b2b-input" value={nTitle} onChange={(e) => setNTitle(e.target.value)} placeholder="예: 6월 라방" /></label>
-              <button className="b2b-btn-primary" onClick={create} disabled={creating} style={{ height: 40 }}>{creating ? "생성 중…" : "브랜드링크 만들기"}</button>
+              <button className="b2b-btn-primary" onClick={create} disabled={creating} style={{ height: 40 }}>{creating ? "생성 중..." : "브랜드링크 만들기"}</button>
             </div>
             <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>
               만들어질 링크: <code style={{ color: "var(--sm-text-mid)" }}>{shortDisplay(nCode.trim() || "원하는주소")}</code>
@@ -208,7 +208,7 @@ function EditModal({ link, onClose, onSaved }: { link: Link; onClose: () => void
           <div className="b2b-field"><label className="b2b-field-label">코드 <span className="sm-faint" style={{ fontWeight: 400 }}>(바꾸면 기존 QR은 무효)</span></label><input className="b2b-input" value={code} onChange={(e) => setCode(e.target.value)} /></div>
           {error && <div className="b2b-error" style={{ marginTop: 6 }}>{error}</div>}
         </div>
-        <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right"><button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button><button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "저장"}</button></div></div>
+        <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right"><button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button><button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button></div></div>
       </div>
     </div>
   );

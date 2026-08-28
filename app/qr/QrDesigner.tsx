@@ -75,7 +75,7 @@ export default function QrDesigner({ data, name, onClose }: { data: string; name
         <div className="b2b-modal-body">
           <div className="sm-row" style={{ gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
             <div style={{ flex: "0 0 auto" }}>
-              {preview ? <img src={preview} alt="QR" width={220} height={frame ? 250 : 220} style={{ border: "1px solid var(--sm-border)", borderRadius: 8, display: "block" }} /> : <div className="b2b-loading" style={{ width: 220, height: 220 }}>생성 중…</div>}
+              {preview ? <img src={preview} alt="QR" width={220} height={frame ? 250 : 220} style={{ border: "1px solid var(--sm-border)", borderRadius: 8, display: "block" }} /> : <div className="b2b-loading" style={{ width: 220, height: 220 }}>생성 중...</div>}
               <canvas ref={canvasRef} style={{ display: "none" }} />
             </div>
             <div style={{ flex: 1, minWidth: 220 }}>

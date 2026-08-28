@@ -189,7 +189,7 @@ export default function VocManufacturerPage() {
             <input className="b2b-input" type="month" value={month} max={THIS_MONTH()} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }} /></label>
           <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="수신 제조사명 (선택 · 문서에 표기)" style={{ width: 220 }} />
           <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
-          <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "AI 작성 중…" : draft ? "다시 생성" : "AI 초안 생성"}</button>
+          <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "AI 작성 중..." : draft ? "다시 생성" : "AI 초안 생성"}</button>
           {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건 · 설문 {counts.surveys}건 반영</span>}
           {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("저장 실패") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
         </div>

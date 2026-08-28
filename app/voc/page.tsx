@@ -1,5 +1,6 @@
 "use client";
 
+import { matchKoQuery } from "@/app/lib/hangul";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { VOC_CATEGORIES, VOC_CAT_STATUSES, VOC_CAT_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, VOC_FAULTS, suggestFault, computeVocLoss, type Voc, type VocCategoryRow, type VocCatStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
@@ -118,9 +119,9 @@ export default function VocPage() {
 
   // 모든 필터를 적용한 베이스(전체 목록 뷰). 날짜 필터는 접수일(received_at) 기준 — 월별 파악 전제.
   const base = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     return rows.filter((r) => {
-      if (q && !(`${r.content} ${r.customer || ""} ${r.product || ""}`.toLowerCase().includes(q))) return false;
+      if (q && !matchKoQuery(`${r.content} ${r.customer || ""} ${r.product || ""} ${r.purchase_place || ""} ${r.customer_note || ""}`, q)) return false;
       if (fCategory && r.category !== fCategory) return false;
       if (fProduct && r.product !== fProduct) return false;
       if (fPlace && r.purchase_place !== fPlace) return false;
@@ -280,7 +281,7 @@ export default function VocPage() {
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href="/api/voc/template" title="VOC 일괄 등록 엑셀 양식">엑셀 양식</a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
-            {importing ? "분석 중…" : "엑셀 업로드"}
+            {importing ? "분석 중..." : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleVocFile(f); e.target.value = ""; }} />
           </label>
@@ -466,7 +467,7 @@ export default function VocPage() {
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
-                <button className="b2b-btn-primary" onClick={applyVocImport} disabled={applying || preview.summary.valid === 0}>{applying ? "등록 중…" : `${preview.summary.valid}건 등록`}</button>
+                <button className="b2b-btn-primary" onClick={applyVocImport} disabled={applying || preview.summary.valid === 0}>{applying ? "등록 중..." : `${preview.summary.valid}건 등록`}</button>
               </div>
             </div>
           </div>

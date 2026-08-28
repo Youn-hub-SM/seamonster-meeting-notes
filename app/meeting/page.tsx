@@ -289,7 +289,7 @@ export default function MeetingPage() {
 
   return (
     <div className="container">
-      <h1 className="page-title" style={{ marginBottom: "var(--sm-space-6)" }}>회의록 정리</h1>
+      <h1 className="page-title" style={{ marginBottom: "var(--sm-space-6)" }}>회의 정리</h1>
 
       {/* OKR 체크인 현황 — 지난 업로드의 이행률(아사나 완료 기준) */}
       {okrInfo?.ready && okrInfo.last && (

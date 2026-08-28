@@ -40,6 +40,7 @@
 
 .b2b-page-actions {
   display: flex;
+  flex-wrap: wrap; /* 모바일에서 버튼 4~5개가 세로로 뭉개지지 않게 */
   gap: 10px;
 }
 
@@ -1068,7 +1069,7 @@ a.b2b-history-item:hover {
 
 .b2b-table td.num,
 .b2b-table th.num {
-  text-align: left;
+  text-align: right; /* 2026-08-28 대표 확정 — 숫자·금액 열은 우측 정렬(구 표준 left 에서 변경) */
   font-variant-numeric: tabular-nums;
 }
 
@@ -2053,41 +2054,6 @@ a.b2b-history-item:hover {
     flex: 1;
     text-align: center;
     padding: 11px 12px;
-  }
-
-  /* 서브 네비: 2줄 레이아웃
-     1줄: ☰ 씨몬스터 ……… 최근 변경 · 로그아웃
-     2줄: B2B 메뉴(가로 스크롤, 전체 폭) */
-  .b2b-subnav-inner {
-    flex-wrap: wrap;
-    padding: 0 12px;
-    column-gap: 8px;
-    row-gap: 0;
-  }
-  .b2b-nav-left { order: 1; }
-  .b2b-nav-right { order: 2; margin-left: auto; }
-  .b2b-nav-links {
-    order: 3;
-    flex-basis: 100%;
-    width: 100%;
-    gap: 2px;
-    border-top: 1px solid var(--sm-border);
-  }
-  .b2b-subnav-link {
-    padding: 13px 14px;
-    font-size: 15px;
-  }
-  /* 모바일: 사용자명 숨겨 공간 확보 */
-  .b2b-nav-user {
-    display: none;
-  }
-  .b2b-brand {
-    font-size: 16px;
-  }
-  .b2b-appmenu {
-    left: 10px;
-    right: 10px;
-    min-width: 0;
   }
 
   /* 카드/폼 섹션 패딩 축소 */

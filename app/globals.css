@@ -588,6 +588,7 @@ a {
 
 .result-actions {
   display: flex;
+  flex-wrap: wrap; /* 모바일에서 버튼 3개가 눌리지 않게 */
   gap: 8px;
   margin-top: 16px;
 }

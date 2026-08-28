@@ -24,8 +24,9 @@ export default function SalesProfitPage() {
   const [savingCfg, setSavingCfg] = useState(false);
   const [cfgMsg, setCfgMsg] = useState("");
 
+  const [cfgLoadErr, setCfgLoadErr] = useState(false); // 설정 로드 실패 — '설정 없음'으로 오인해 재입력·덮어쓰기 방지
   function loadConfig() {
-    fetch("/api/sales/profit/config").then((r) => r.json()).then((j) => { if (j.ok) { setCfg(j.rows); setDeletedCh([]); } }).catch(() => {});
+    fetch("/api/sales/profit/config").then((r) => r.json()).then((j) => { if (j.ok) { setCfg(j.rows); setDeletedCh([]); setCfgLoadErr(false); } else setCfgLoadErr(true); }).catch(() => setCfgLoadErr(true));
   }
   useEffect(() => { loadConfig(); }, []);
   const setCfgField = (i: number, k: keyof ChannelConfig, v: string | number) =>
@@ -33,6 +34,7 @@ export default function SalesProfitPage() {
   function addChannel() { setCfg((c) => [...c, { channel: "", fee_rate: 0, ship_mode: "actual", ship_fee: 4000, ship_free_over: 0, ship_free_over_sub: 0, revenue_adjust: 0 }]); }
   function delChannel(i: number) { setCfg((c) => { const row = c[i]; if (row.channel) setDeletedCh((d) => [...d, row.channel]); return c.filter((_, idx) => idx !== i); }); }
   async function saveConfig() {
+    if (cfgLoadErr) { setErr("채널 설정을 불러오지 못한 상태라 저장할 수 없습니다 — 새로고침해 주세요."); return; }
     setSavingCfg(true); setCfgMsg(""); setErr("");
     try {
       const rows = cfg.map((r) => ({ ...r, fee_rate: Number(r.fee_rate) || 0, ship_fee: Number(r.ship_fee) || 0, ship_free_over: Number(r.ship_free_over) || 0 }));
@@ -82,7 +84,7 @@ export default function SalesProfitPage() {
           <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="b2b-input" style={{ width: 160 }} />
           <span className="sm-faint">~</span>
           <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="b2b-input" style={{ width: 160 }} />
-          <button className="b2b-btn-primary" onClick={() => calc()} disabled={busy !== ""}>{busy === "calc" ? "계산 중…" : "계산"}</button>
+          <button className="b2b-btn-primary" onClick={() => calc()} disabled={busy !== ""}>{busy === "calc" ? "계산 중..." : "계산"}</button>
           {res && <button className="b2b-btn-secondary" onClick={exportXlsx} disabled={busy !== ""}>엑셀 추출</button>}
           <button className="b2b-btn-secondary" onClick={() => setShowCfg((v) => !v)}>채널 설정 · 계산 기준 {showCfg ? "▲" : "▼"}</button>
           <a className="b2b-btn-secondary" href="/b2b/products" target="_blank" rel="noreferrer" style={{ marginLeft: "auto" }}>상품마스터 열기 ↗</a>
@@ -96,7 +98,7 @@ export default function SalesProfitPage() {
             <span className="b2b-card-title">채널 설정 · 계산 기준</span>
             <div className="sm-row" style={{ gap: 8 }}>
               <button className="b2b-btn-secondary" onClick={addChannel}>+ 채널 추가</button>
-              <button className="b2b-btn-primary" onClick={saveConfig} disabled={savingCfg}>{savingCfg ? "저장 중…" : "저장 + 재계산"}</button>
+              <button className="b2b-btn-primary" onClick={saveConfig} disabled={savingCfg}>{savingCfg ? "저장 중..." : "저장 + 재계산"}</button>
             </div>
           </div>
           <div style={{ fontSize: 12, lineHeight: 1.7, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
@@ -131,7 +133,7 @@ export default function SalesProfitPage() {
                     <td style={{ textAlign: "right" }}><button className="b2b-link-btn" onClick={() => delChannel(i)} style={{ color: "var(--sm-danger)", fontSize: 12 }}>삭제</button></td>
                   </tr>
                 ))}
-                {cfg.length === 0 && <tr><td colSpan={4} className="sm-faint" style={{ padding: 12 }}>설정이 없습니다. "+ 채널 추가"로 등록하세요.</td></tr>}
+                {cfg.length === 0 && <tr><td colSpan={4} className="sm-faint" style={{ padding: 12 }}>{cfgLoadErr ? "채널 설정을 불러오지 못했습니다 — 새로고침해 주세요. (재입력하면 기존 설정을 덮어쓸 수 있습니다)" : "설정이 없습니다. \"+ 채널 추가\"로 등록하세요."}</td></tr>}
               </tbody>
             </table>
           </div>

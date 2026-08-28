@@ -82,7 +82,7 @@ export default function UsersPage() {
             <option value="internal">내부</option>
             <option value="factory">파도소리</option>
           </select>
-          <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중…" : "추가"}</button>
+          <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중..." : "추가"}</button>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호 자체가 신원이라 사람마다 서로 다른 값으로 정하세요. 파도소리 계정은 입출고 화면만 열립니다.</p>
       </section>

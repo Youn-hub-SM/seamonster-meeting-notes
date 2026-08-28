@@ -8,5 +8,5 @@ import { useRouter } from "next/navigation";
 export default function ProductionInventoryRedirect() {
   const router = useRouter();
   useEffect(() => { router.replace("/inventory"); }, [router]);
-  return <div className="b2b-container"><div className="b2b-loading">재고 목록으로 이동 중…</div></div>;
+  return <div className="b2b-container"><div className="b2b-loading">재고 목록으로 이동 중...</div></div>;
 }

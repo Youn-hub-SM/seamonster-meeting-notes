@@ -140,11 +140,11 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
       <div key={t.href}>
         <div className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
           {hasMenu ? (
-            // 하위 메뉴 있는 툴: 클릭해도 이동하지 않고 펼침/접힘만(이동은 하위 메뉴에서).
-            <button type="button" className="app-sb-tool" aria-expanded={expanded} onClick={() => toggleTool(t.href)}>
+            // 라벨 클릭 = 대표 페이지 이동(+접혀 있으면 펼침) — 매일 첫 진입 2클릭→1클릭(2026-08-28 대표 확정). 접기는 우측 화살표.
+            <Link href={t.href} className="app-sb-tool" aria-expanded={expanded} onClick={() => { if (!expanded) toggleTool(t.href); onNavigate?.(); }}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
-            </button>
+            </Link>
           ) : /^https?:\/\//.test(t.href) ? (
             // 외부 링크(가이드 등)는 새 탭으로
             <a href={t.href} target="_blank" rel="noreferrer" className="app-sb-tool" onClick={onNavigate}>

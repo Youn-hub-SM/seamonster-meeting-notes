@@ -119,7 +119,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
             <div>{draft.id && <button className="b2b-btn-secondary" onClick={() => remove(draft.id!)} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button>}</div>
             <div className="b2b-modal-foot-right">
               <button className="b2b-btn-secondary" onClick={() => setDraft(null)} disabled={saving}>뒤로</button>
-              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "저장"}</button>
+              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
             </div>
           </div>
         )}

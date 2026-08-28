@@ -59,13 +59,15 @@ export default function FulfillPage() {
   const [dispatchLoading, setDispatchLoading] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [dispatchDone, setDispatchDone] = useState<DispatchDone | null>(null);
+  const [dispatchErr, setDispatchErr] = useState(false); // 재고 미리보기 실패 — '품목 없음'과 구분(같으면 차감을 건너뛴 것으로 오인)
+  const [dispatchRetry, setDispatchRetry] = useState(0);
 
   useEffect(() => { setKeywords(localStorage.getItem(KW_KEY) || ""); }, []);
   function saveKeywords(v: string) { setKeywords(v); localStorage.setItem(KW_KEY, v); }
 
   // res 갱신 시 상품 출고 미리보기(재고 확인) 자동 로드
   useEffect(() => {
-    setDispatch(null); setDispatchDone(null);
+    setDispatch(null); setDispatchDone(null); setDispatchErr(false);
     const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty, orderDate: o.orderDate ?? null })) || [];
     if (!items.length) return;
     let cancel = false;
@@ -73,12 +75,12 @@ export default function FulfillPage() {
     (async () => {
       try {
         const j = await (await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: false }) })).json();
-        if (!cancel && j.ok) setDispatch(j);
-      } catch { /* 미리보기 실패는 무시 */ }
+        if (!cancel) { if (j.ok) setDispatch(j); else setDispatchErr(true); }
+      } catch { if (!cancel) setDispatchErr(true); }
       if (!cancel) setDispatchLoading(false);
     })();
     return () => { cancel = true; };
-  }, [res]);
+  }, [res, dispatchRetry]);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -226,7 +228,7 @@ export default function FulfillPage() {
                 <span style={{ width: 30, height: 30, borderRadius: "50%", background: state === "todo" ? "var(--sm-white)" : color, border: `2px solid ${color}`, color: state === "todo" ? "var(--sm-text-light)" : "var(--sm-white)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, flex: "0 0 auto" }}>
                   {state === "done" ? "✓" : i + 1}
                 </span>
-                <span style={{ fontSize: 12, fontWeight: state === "cur" ? 700 : 500, color: state === "cur" ? "var(--sm-dark)" : "var(--sm-text-light)", whiteSpace: "nowrap" }}>{label}</span>
+                <span style={{ fontSize: 12, fontWeight: state === "cur" ? 700 : 500, color: state === "cur" ? "var(--sm-dark)" : "var(--sm-text-light)", textAlign: "center" }}>{label}</span>
               </button>
               {i < STEPS.length - 1 && <div style={{ flex: 1, height: 2, background: i < step ? "var(--sm-success)" : "var(--sm-border)", margin: "0 8px", alignSelf: "flex-start", marginTop: 14 }} />}
             </div>
@@ -246,7 +248,7 @@ export default function FulfillPage() {
               <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="예: 제주마루 702호, 군부대, 사서함" />
             </div>
             <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={loading}>{loading ? "만드는 중…" : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
+              <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={loading}>{loading ? "만드는 중..." : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
               <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
               {fileName && <span className="sm-faint" style={{ fontSize: 12 }}>{fileName}</span>}
             </div>
@@ -340,7 +342,7 @@ export default function FulfillPage() {
                 <button className={`sm-tab ${recordMode === "add" ? "is-active" : ""}`} onClick={() => setRecordMode("add")}>더하기</button>
                 <button className={`sm-tab ${recordMode === "replace" ? "is-active" : ""}`} onClick={() => setRecordMode("replace")}>덮어쓰기</button>
               </div>
-              <button className="b2b-btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={recordLog} disabled={recording}>{recording ? "기록 중…" : "배송일지에 기록"}</button>
+              <button className="b2b-btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={recordLog} disabled={recording}>{recording ? "기록 중..." : "배송일지에 기록"}</button>
               <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
             </div>
           </div>
@@ -348,7 +350,7 @@ export default function FulfillPage() {
             <div className="sm-success" style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span>✓ {recordOk}</span>
               <Link href="/fulfill/log">배송일지 보기</Link>
-              {lastRecord && <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={undoRecord} disabled={undoing}>{undoing ? "취소 중…" : "기록 취소"}</button>}
+              {lastRecord && <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={undoRecord} disabled={undoing}>{undoing ? "취소 중..." : "기록 취소"}</button>}
             </div>
           )}
           <div className="b2b-table-wrap">
@@ -376,10 +378,10 @@ export default function FulfillPage() {
           <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <span className="b2b-card-title">④ 상품 출고 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 소매 재고에서 차감</span></span>
             {!dispatchDone && dispatch && dispatch.products.length > 0 && (
-              <button className="b2b-btn-primary" onClick={() => commitDispatch(false)} disabled={dispatching}>{dispatching ? "출고 중…" : `출고 완료 (${dispatch.products.length}품목)`}</button>
+              <button className="b2b-btn-primary" onClick={() => commitDispatch(false)} disabled={dispatching}>{dispatching ? "출고 중..." : `출고 완료 (${dispatch.products.length}품목)`}</button>
             )}
           </div>
-          {dispatchLoading ? <div className="b2b-loading">재고 확인 중…</div> : dispatchDone ? (
+          {dispatchLoading ? <div className="b2b-loading">재고 확인 중...</div> : dispatchDone ? (
             <div className="sm-success" style={{ lineHeight: 1.7 }}>
               ✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link>
               {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
@@ -418,6 +420,8 @@ export default function FulfillPage() {
                 </>
               )}
             </>
+          ) : dispatchErr ? (
+            <div className="b2b-error">재고 확인에 실패했습니다 — 출고할 품목이 없는 것이 아닙니다. <button className="b2b-link-btn" onClick={() => setDispatchRetry((n) => n + 1)}>다시 시도</button></div>
           ) : <div className="b2b-empty">출고할 품목이 없습니다.</div>}
         </section>
       )}
@@ -429,7 +433,7 @@ export default function FulfillPage() {
           {step < STEPS.length - 1 ? (
             <button className="b2b-btn-primary" onClick={onNext} disabled={!canNext || recording} title={!canNext ? "이 단계를 완료해야 넘어갈 수 있어요" : ""}>
               {step === 1 ? "CN 2종 받고 다음 →"
-                : step === 2 ? (recording ? "기록 중…" : recordOk ? "다음: 상품 출고 →" : "배송일지에 기록 후 다음 →")
+                : step === 2 ? (recording ? "기록 중..." : recordOk ? "다음: 상품 출고 →" : "배송일지에 기록 후 다음 →")
                   : `다음: ${STEPS[step + 1]} →`}
             </button>
           ) : <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>마지막 단계</span>}

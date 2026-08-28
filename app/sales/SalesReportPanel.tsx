@@ -79,7 +79,7 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <label className="sm-faint" style={{ fontSize: 15 }}>기준일</label>
           <input type="date" value={base} max={maxDate || undefined} onChange={(e) => setBase(e.target.value)} className="b2b-input" style={{ width: 170 }} />
-          <button className="b2b-btn-primary" onClick={() => generate()} disabled={busy !== ""}>{busy === "gen" ? "생성 중…" : "미리보기 생성"}</button>
+          <button className="b2b-btn-primary" onClick={() => generate()} disabled={busy !== ""}>{busy === "gen" ? "생성 중..." : "미리보기 생성"}</button>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
           {mode === "daily" ? "일일: 기준일(일요일이면 금~일) 실적 + 누적·채널·Top10." : "주간: 기준일이 속한 주(월~일) 합산 + 전주 대비."} 데이터 최신일 {maxDate || "-"}.
@@ -107,7 +107,7 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
             <label className="sm-faint" style={{ fontSize: 15, display: "block", marginBottom: 6 }}>수신자 (비우면 기본 수신자에게 발송, 쉼표로 여러 명)</label>
             <div className="sm-row" style={{ gap: 10, flexWrap: "wrap" }}>
               <input value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="예: ceo@seamonster.kr, sales@seamonster.kr" className="b2b-input" style={{ flex: 1, minWidth: 240 }} />
-              <button className="b2b-btn-primary" onClick={send} disabled={busy !== ""}>{busy === "send" ? "발송 중…" : "메일 발송"}</button>
+              <button className="b2b-btn-primary" onClick={send} disabled={busy !== ""}>{busy === "send" ? "발송 중..." : "메일 발송"}</button>
             </div>
             <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>첫 발송은 수신자 칸에 본인 주소만 넣어 1통 확인을 권장합니다. 발송 시 발송 이력에 기록됩니다.</p>
           </div>

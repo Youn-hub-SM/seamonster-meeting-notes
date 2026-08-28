@@ -26,9 +26,10 @@ export default function SalesUploadPage() {
   const [err, setErr] = useState("");
   const [batches, setBatches] = useState<Batch[]>([]);
   const [reverting, setReverting] = useState("");
+  const [batchErr, setBatchErr] = useState(false); // 이력 로드 실패 — '업로드 없음'과 구분
   const [applyNonce, setApplyNonce] = useState(0);   // 적용 성공마다 +1 → 인라인 리포트 패널 새로고침(재생성)
 
-  function loadBatches() { fetch("/api/sales/upload/batches").then((r) => r.json()).then((j) => { if (j.ok) setBatches(j.batches); }).catch(() => {}); }
+  function loadBatches() { setBatchErr(false); fetch("/api/sales/upload/batches").then((r) => r.json()).then((j) => { if (j.ok) setBatches(j.batches); else setBatchErr(true); }).catch(() => setBatchErr(true)); }
   useEffect(() => { loadBatches(); }, []);
 
   async function revert(b: Batch) {
@@ -84,7 +85,7 @@ export default function SalesUploadPage() {
       <section className="b2b-card">
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.tsv" onChange={(e) => pick(e.target.files?.[0] || null)} />
-          <button className="b2b-btn-primary" onClick={doPreview} disabled={!file || busy !== ""}>{busy === "preview" ? "분석 중…" : "미리보기"}</button>
+          <button className="b2b-btn-primary" onClick={doPreview} disabled={!file || busy !== ""}>{busy === "preview" ? "분석 중..." : "미리보기"}</button>
           <a className="b2b-btn-secondary" href="/api/sales/upload/template" title="빈 양식(xlsx) 다운로드">양식 다운로드</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장(인코딩 안전). 한글 헤더(판매처·주문일자·결제금액…) 또는 영문 헤더 모두 인식. 과거 전체(수만 행 이상)는 백필 스크립트로 이관하세요.</p>
@@ -127,7 +128,7 @@ export default function SalesUploadPage() {
           )}
           {preview?.sample && preview.sample.length > 0 && (
             <div style={{ overflowX: "auto", marginTop: 10 }}>
-              <table className="b2b-table" style={{ fontSize: 12 }}>
+              <table className="b2b-table">
                 <thead><tr><th>주문일</th><th>채널</th><th>주문번호</th><th>상품</th><th>SKU</th><th style={{ textAlign: "right" }}>수량</th><th style={{ textAlign: "right" }}>결제금액</th></tr></thead>
                 <tbody>
                   {preview.sample.map((r, i) => (
@@ -140,17 +141,18 @@ export default function SalesUploadPage() {
           )}
           <div className="sm-between" style={{ marginTop: 14 }}>
             <button className="b2b-btn-secondary" onClick={() => setPreview(null)}>취소</button>
-            <button className="b2b-btn-primary" onClick={doApply} disabled={busy !== "" || s.new_rows === 0}>{busy === "apply" ? "적용 중…" : s.new_rows === 0 ? "적재할 신규 행 없음" : `${s.new_rows.toLocaleString()}건 적용`}</button>
+            <button className="b2b-btn-primary" onClick={doApply} disabled={busy !== "" || s.new_rows === 0}>{busy === "apply" ? "적용 중..." : s.new_rows === 0 ? "적재할 신규 행 없음" : `${s.new_rows.toLocaleString()}건 적용`}</button>
           </div>
         </section>
       )}
 
-      {batches.length > 0 && (
+      {(batches.length > 0 || batchErr) && (
         <section className="b2b-card" style={{ marginTop: 16 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드 · 되돌리기</span></div>
+          {batchErr && <div className="b2b-error" style={{ marginBottom: 8 }}>업로드 이력을 불러오지 못했습니다 — 새로고침해 주세요.</div>}
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>잘못 올린 업로드는 그 배치가 추가한 행만 정확히 삭제해 되돌립니다. 되돌린 뒤 같은 파일을 다시 올리면 복구됩니다(중복은 자동 제외).</p>
           <div style={{ overflowX: "auto" }}>
-            <table className="b2b-table" style={{ fontSize: 12 }}>
+            <table className="b2b-table">
               <thead><tr><th>시각</th><th>파일</th><th style={{ textAlign: "right" }}>신규</th><th>올린 사람</th><th>상태</th><th></th></tr></thead>
               <tbody>
                 {batches.map((b) => (
@@ -159,9 +161,9 @@ export default function SalesUploadPage() {
                     <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.filename}</td>
                     <td style={{ textAlign: "right" }}>{b.inserted.toLocaleString()}</td>
                     <td>{b.uploaded_by || "-"}</td>
-                    <td>{b.status === "reverted" ? <span className="sm-faint">되돌림</span> : <span style={{ color: "var(--sm-success)", fontWeight: 700 }}>적용됨</span>}</td>
+                    <td>{b.status === "reverted" ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>되돌림</span> : <span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>적용됨</span>}</td>
                     <td style={{ textAlign: "right" }}>
-                      {b.status === "active" && <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => revert(b)} disabled={reverting !== ""}>{reverting === b.id ? "되돌리는 중…" : "되돌리기"}</button>}
+                      {b.status === "active" && <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => revert(b)} disabled={reverting !== ""}>{reverting === b.id ? "되돌리는 중..." : "되돌리기"}</button>}
                     </td>
                   </tr>
                 ))}

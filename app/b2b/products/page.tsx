@@ -35,6 +35,7 @@ export default function ProductsPage() {
   const [bundleFor, setBundleFor] = useState<Product | null>(null);
   // 원가 변경 예약 — 인상일에 맞춰 사람이 고치는 걸 놓치지 않게 미리 걸어둔다(반영은 DB 크론)
   const [schedFor, setSchedFor] = useState<Product | null>(null);
+  const [justSavedId, setJustSavedId] = useState<string | null>(null); // 방금 저장한 행 하이라이트 — 목록 어디로 갔는지 보이게
 
   async function reload() {
     setLoading(true);
@@ -99,6 +100,9 @@ export default function ProductsPage() {
         // is_bundle/bundle_count 는 PUT 응답에 없으므로(파생값) 기존 값을 보존 — 배지 유지.
         setProducts((prev) => prev.map((p) => (p.id === saved.id ? { ...saved, is_bundle: p.is_bundle, bundle_count: p.bundle_count } : p)));
       }
+      setJustSavedId(saved.id);
+      if (modal.mode === "create") setSearch(""); // 검색에 걸러져 새 상품이 안 보이는 것 방지
+      window.setTimeout(() => setJustSavedId(null), 2500);
       setModal(null);
     } catch (err) {
       setModalError(err instanceof Error ? err.message : "저장 중 오류");
@@ -200,7 +204,7 @@ export default function ProductsPage() {
             엑셀 추출
           </a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }} title="추출한 엑셀을 수정해 업로드 — 변경 내역 확인 후 반영">
-            {importing ? "분석 중…" : "엑셀 업로드"}
+            {importing ? "분석 중..." : "엑셀 업로드"}
             <input
               type="file"
               accept=".xlsx"
@@ -285,6 +289,7 @@ export default function ProductsPage() {
                   return (
                     <FragmentRows key={p.id}>
                       <tr
+                        style={justSavedId === p.id ? { background: "var(--sm-success-bg)" } : undefined}
                         onClick={() => {
                           setModalError("");
                           setModal({
@@ -480,7 +485,7 @@ export default function ProductsPage() {
                   onClick={applyImport}
                   disabled={applying || preview.summary.creates + preview.summary.updates === 0}
                 >
-                  {applying ? "적용 중…" : `${preview.summary.creates + preview.summary.updates}건 적용`}
+                  {applying ? "적용 중..." : `${preview.summary.creates + preview.summary.updates}건 적용`}
                 </button>
               </div>
             </div>

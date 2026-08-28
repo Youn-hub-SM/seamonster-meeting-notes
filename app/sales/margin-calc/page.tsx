@@ -288,7 +288,7 @@ export default function MarginCalcPage() {
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run(); }} />
         <div className="rp-ask-actions">
           <button className="b2b-btn-primary" onClick={() => run()} disabled={loading || !q.trim()}>
-            {loading ? "분석 중…" : turns.length ? "이어서 질문" : "분석하기"}
+            {loading ? "분석 중..." : turns.length ? "이어서 질문" : "분석하기"}
             <span className="rp-kbd">Ctrl+Enter</span>
           </button>
           {turns.length > 0 && (
@@ -298,7 +298,7 @@ export default function MarginCalcPage() {
       </div>
 
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
-      {loading && <div className="b2b-loading">원가표·정책을 근거로 계산 중… (최고급 모델, 10~20초)</div>}
+      {loading && <div className="b2b-loading">원가표·정책을 근거로 계산 중... (최고급 모델, 10~20초)</div>}
 
       {res && !loading && (
         <div className="sm-col" style={{ gap: 14 }}>
@@ -367,7 +367,7 @@ export default function MarginCalcPage() {
             {pError && <div className="b2b-error" style={{ marginBottom: 10 }}>{pError}</div>}
 
             {!pLoaded ? (
-              <div className="b2b-loading">불러오는 중…</div>
+              <div className="b2b-loading">불러오는 중...</div>
             ) : (
               <>
                 <textarea
@@ -378,7 +378,7 @@ export default function MarginCalcPage() {
                   style={{ width: "100%", minHeight: 340, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12, lineHeight: 1.7, resize: "vertical", whiteSpace: "pre", overflowWrap: "normal", overflowX: "auto" }}
                 />
                 <div className="sm-row" style={{ gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
-                  <button className="b2b-btn-primary" onClick={() => savePrompt()} disabled={pSaving}>{pSaving ? "저장 중…" : "지침 저장"}</button>
+                  <button className="b2b-btn-primary" onClick={() => savePrompt()} disabled={pSaving}>{pSaving ? "저장 중..." : "지침 저장"}</button>
                   <button className="b2b-btn-secondary" onClick={resetPrompt} disabled={pSaving || promptIsDefault}>기본값으로 복원</button>
                   {pSaved && <span style={{ fontSize: 12, color: "var(--sm-success)" }}>{pSaved}</span>}
                   <span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>

@@ -124,7 +124,7 @@ export default function VocSurveysPage() {
           <section className="b2b-card">
             <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span className="b2b-card-title">AI 요약</span>
-              <button className="b2b-btn-primary" onClick={runAi} disabled={aiLoading} style={{ padding: "6px 14px" }}>{aiLoading ? "분석 중…" : insight ? "다시 분석" : "AI 분석 실행"}</button>
+              <button className="b2b-btn-primary" onClick={runAi} disabled={aiLoading} style={{ padding: "6px 14px" }}>{aiLoading ? "분석 중..." : insight ? "다시 분석" : "AI 분석 실행"}</button>
             </div>
             {!insight ? (
               <p className="sm-muted" style={{ fontSize: 15 }}>버튼을 누르면 자유서술 답변까지 읽어 만족 요인·개선점·인용을 정리합니다.</p>

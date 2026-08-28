@@ -289,17 +289,17 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             {mode === "엑셀" ? (
               preview ? (
                 <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.valid === 0}>
-                  {applying ? "반영 중…" : `${preview.valid.toLocaleString()}건 반영`}
+                  {applying ? "반영 중..." : `${preview.valid.toLocaleString()}건 반영`}
                 </button>
               ) : (
                 <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
-                  {importing ? "분석 중…" : "엑셀 파일 선택"}
+                  {importing ? "분석 중..." : "엑셀 파일 선택"}
                   <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
                 </label>
               )
             ) : (
-              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "반품 기록"}</button>
+              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "반품 기록"}</button>
             )}
           </div>
         </div>

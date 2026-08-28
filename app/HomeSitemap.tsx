@@ -73,7 +73,7 @@ export default function HomeSitemap() {
         .sm-map-tool-link { display: inline-flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 700; color: var(--sm-dark); }
         .sm-map-tool-link:hover { color: var(--sm-orange); }
         .sm-map-subs { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 0 22px; }
-        .sm-map-sub { font-size: 12px; color: var(--sm-text-mid); padding: 1px 0; }
+        .sm-map-sub { font-size: 12px; color: var(--sm-text-mid); padding: 6px 0; } /* 터치 타깃 확보(모바일 오탭 방지) */
         .sm-map-sub:hover { color: var(--sm-orange); }
       `}</style>
     </section>

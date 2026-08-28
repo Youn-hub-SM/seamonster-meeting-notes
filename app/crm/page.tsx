@@ -535,7 +535,7 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
                 <td><CellText value={m.tags} placeholder="쉼표로 구분" onLocal={(v) => onField(m.id, "tags", v)} onCommit={() => onSave(m.id)} /></td>
                 <td className="actions">
                   {savingId === m.id
-                    ? <span className="crm-saving">저장 중…</span>
+                    ? <span className="crm-saving">저장 중...</span>
                     : <button className="b2b-btn-secondary crm-detail-btn" onClick={() => onEdit(m)}>상세</button>}
                 </td>
               </tr>

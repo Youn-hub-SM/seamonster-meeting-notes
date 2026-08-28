@@ -134,7 +134,7 @@ export default function ScanUploadPage() {
           <br /><strong>고객정보(받는분·전화·주소)는 이 브라우저에서 제거</strong>되고, <strong>송장번호·상품코드·수량만</strong> 저장됩니다(파일 원본은 서버로 전송되지 않아요).
         </p>
         <div className="sm-row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "업로드 중…" : "파일 선택 (여러 개 가능)"}</button>
+          <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "업로드 중..." : "파일 선택 (여러 개 가능)"}</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple style={{ display: "none" }} onChange={(e) => { const f = e.target.files; if (f && f.length) upload(f); }} />
         </div>
         {result && (
@@ -158,7 +158,7 @@ export default function ScanUploadPage() {
           </div>
         </div>
         {loading ? (
-          <div className="b2b-loading">불러오는 중…</div>
+          <div className="b2b-loading">불러오는 중...</div>
         ) : uploads.length === 0 ? (
           <div className="b2b-empty">올린 파일이 없습니다. 위에서 송장 파일을 올리세요.</div>
         ) : (

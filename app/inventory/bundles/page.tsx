@@ -72,7 +72,7 @@ export default function BundlesPage() {
           <button className="b2b-btn-primary" onClick={() => setAddOpen(true)}>+ 직접 추가</button>
           <a className="b2b-btn-secondary" href="/api/inventory/bundles/template" title="묶음SKU·묶음명·구성품SKU·수량">엑셀 양식</a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
-            {importing ? "분석 중…" : "엑셀 업로드"}
+            {importing ? "분석 중..." : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
           </label>
@@ -139,7 +139,7 @@ export default function BundlesPage() {
             </div>
             <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
               <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
-              <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중…" : `${preview.summary.valid}개 반영`}</button>
+              <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}개 반영`}</button>
             </div></div>
           </div>
         </div>
@@ -254,7 +254,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
         </div>
         <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
           <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
-          <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "저장"}</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
         </div></div>
       </div>
     </div>

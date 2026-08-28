@@ -29,7 +29,7 @@ export type TaxInvoiceStatus = (typeof TAX_INVOICE_STATUSES)[number];
 export const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
   "발송대기": { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
   "발송완료": { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
-  "취소": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  "취소": { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" }, // 2026-08-28 대표 확정 — 취소=오류 아닌 종결 상태, 중립 회색(생산요청과 통일)
 };
 
 export const STATUS_SHORT: Record<OrderStatus, string> = {

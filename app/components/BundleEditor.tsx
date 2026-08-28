@@ -79,7 +79,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
           <span />
           <div className="b2b-modal-foot-right">
             <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
-            <button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>{saving ? "저장 중…" : "저장"}</button>
+            <button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>{saving ? "저장 중..." : "저장"}</button>
           </div>
         </div>
       </div>

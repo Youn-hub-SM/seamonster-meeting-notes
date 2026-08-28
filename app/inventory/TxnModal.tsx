@@ -234,7 +234,7 @@ export default function TxnModal({
           </div>
           {product && (chanKnown
             ? <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 <strong>{current.toLocaleString()}</strong>{product.unit} → 거래 후 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{after.toLocaleString()}</strong>{product.unit}</p>
-            : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 불러오는 중…</p>)}
+            : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 불러오는 중...</p>)}
 
           {isAdjust && (
             <div className="sm-tabs" style={{ marginBottom: 8 }}>
@@ -245,7 +245,7 @@ export default function TxnModal({
 
           <div className="b2b-field-row">
             <label className="b2b-field"><span className="b2b-field-label">{isAdjust ? (adjMode === "target" ? "실사 수량" : "증감(±)") : "수량"}</span>
-              <input className="b2b-input" type="number" step={0.01} value={qty} onChange={(e) => setQty(e.target.value)} placeholder={isAdjust && adjMode === "delta" ? "예: -3" : "0"} /></label>
+              <input className="b2b-input" type="number" step={0.01} value={qty} onChange={(e) => setQty(e.target.value)} placeholder={isAdjust && adjMode === "delta" ? "예: -3" : "0"} autoFocus onKeyDown={(e) => { if (e.key === "Enter" && !saving) save(); }} /></label>
             <label className="b2b-field"><span className="b2b-field-label">거래일</span>
               <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
           </div>
@@ -284,17 +284,17 @@ export default function TxnModal({
             {mode === "엑셀" ? (
               preview ? (
                 <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.count === 0}>
-                  {applying ? "반영 중…" : `${preview.count.toLocaleString()}건 ${preview.kind === "조정" ? "조정" : "반영"}`}
+                  {applying ? "반영 중..." : `${preview.count.toLocaleString()}건 ${preview.kind === "조정" ? "조정" : "반영"}`}
                 </button>
               ) : (
                 <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
-                  {importing ? "분석 중…" : "엑셀 파일 선택"}
+                  {importing ? "분석 중..." : "엑셀 파일 선택"}
                   <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
                 </label>
               )
             ) : (
-              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "기록"}</button>
+              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "기록"}</button>
             )}
           </div>
         </div>

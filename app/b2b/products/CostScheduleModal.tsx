@@ -210,7 +210,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
           <div className="b2b-modal-foot-right">
             <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>닫기</button>
             <button className="b2b-btn-primary" onClick={save} disabled={saving || pendingMigration}>
-              {saving ? "저장 중…" : "예약 추가"}
+              {saving ? "저장 중..." : "예약 추가"}
             </button>
           </div>
         </div>

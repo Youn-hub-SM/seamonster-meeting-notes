@@ -21,9 +21,10 @@ export default function FulfillSettingsPage() {
   const [processedCount, setProcessedCount] = useState<number | null>(null);
   const [dedupSaving, setDedupSaving] = useState(false);
   const [dedupMsg, setDedupMsg] = useState("");
+  const [loadErr, setLoadErr] = useState(false); // 단가 로드 실패 — 기본값을 저장된 값처럼 보여주지 않도록 편집을 잠근다
 
   useEffect(() => {
-    fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); if (j.ok && Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats); }).catch(() => {}).finally(() => setLoading(false));
+    fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); if (j.ok && Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats); if (!j.ok) setLoadErr(true); }).catch(() => setLoadErr(true)).finally(() => setLoading(false));
     fetch("/api/fulfill/dedup", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) { setDedup(j.config); setProcessedCount(j.processedCount); } }).catch(() => {});
   }, []);
 
@@ -81,7 +82,7 @@ export default function FulfillSettingsPage() {
         <div>
           <h1 className="b2b-page-title">온라인 발주 설정</h1>
         </div>
-        <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>{saving ? "저장 중…" : "저장"}</button></div>
+        <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>{saving ? "저장 중..." : "저장"}</button></div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
@@ -172,12 +173,14 @@ export default function FulfillSettingsPage() {
           </div>
         </div>
         <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12 }}>
-          <button className="b2b-btn-primary" style={{ padding: "6px 16px" }} onClick={saveDedup} disabled={dedupSaving}>{dedupSaving ? "저장 중…" : "중복 방지 저장"}</button>
-          {dedupMsg && <span style={{ fontSize: 12, color: dedupMsg.includes("실패") ? "var(--sm-danger)" : "var(--sm-success)" }}>{dedupMsg}</span>}
+          <button className="b2b-btn-primary" style={{ padding: "6px 16px" }} onClick={saveDedup} disabled={dedupSaving}>{dedupSaving ? "저장 중..." : "중복 방지 저장"}</button>
+          {dedupMsg && <span style={{ fontSize: 12, color: /실패|오류|failed|fetch/i.test(dedupMsg) ? "var(--sm-danger)" : "var(--sm-success)" }}>{dedupMsg}</span>}
         </div>
       </div>
 
-      {loading ? <div className="b2b-loading">불러오는 중...</div> : (
+      {loading ? <div className="b2b-loading">불러오는 중...</div> : loadErr ? (
+        <div className="b2b-error">단가·박스 설정을 불러오지 못했습니다. 기본값을 덮어쓰지 않도록 편집을 잠갔습니다 — 새로고침 후 다시 시도하세요.</div>
+      ) : (
         <>
           <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
             <span className="sm-faint" style={{ fontSize: 12 }}>단가 이력 {history.length}개 · 이미 기록된 배송일지의 기본운임·도착보장 운임은 발주처리 시점에 <strong>박제</strong>되어 바뀌지 않습니다(드라이·표시 단가만 날짜별 반영).</span>
@@ -198,7 +201,7 @@ export default function FulfillSettingsPage() {
           ))}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-            <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "저장"}</button>
+            <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
           </div>
         </>
       )}

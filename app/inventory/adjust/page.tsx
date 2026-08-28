@@ -61,7 +61,7 @@ export default function AdjustPage() {
           <ChannelPicker value={channel} onChange={setChannel} style={{ marginRight: 4 }} />
           <a className="b2b-btn-secondary" href="/api/inventory/adjust/template" title="SKU·실사수량·메모 양식">엑셀 양식</a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
-            {importing ? "분석 중…" : "엑셀 업로드"}
+            {importing ? "분석 중..." : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
           </label>
@@ -125,7 +125,7 @@ export default function AdjustPage() {
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
-                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.changed === 0}>{applying ? "반영 중…" : `${preview.summary.changed}건 조정`}</button>
+                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.changed === 0}>{applying ? "반영 중..." : `${preview.summary.changed}건 조정`}</button>
               </div>
             </div>
           </div>

@@ -49,7 +49,7 @@ export default function SalesHome() {
 
       {hasData && d && (
         <>
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
+          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12 }}>
             <Kpi label={d.is_sunday ? "최근 3일(금~일)" : "어제 매출"} value={won(d.window_sales)} sub={`주문 ${d.order_count}건 · 객단가 ${won(d.aov)}`} />
             {/* 실제 = 같은 기간끼리(성장률), 전망 = 남은 기간도 같은 속도로 갔을 때의 착지 예상 */}
             <Kpi label="이번달 누적" value={`${moneyCompact(d.this_month_sales)} 원`}
@@ -98,7 +98,7 @@ export default function SalesHome() {
         {b && b.total_rows === 0 && <p className="sm-faint" style={{ fontSize: 15, marginTop: 10 }}>아직 매출 데이터가 없습니다. 과거 전체는 백필 스크립트로, 이후는 <Link href="/sales/upload" className="sm-link">데이터 업로드</Link>로 채우세요.</p>}
       </section>
 
-      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginTop: 12 }}>
+      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginTop: 12 }}>
         <NavCard href="/sales/upload" title="데이터 업로드" desc="주문 파일 첨부 → 미리보기 → 적용(중복 자동 제외)" />
         <NavCard href="/sales/report" title="리포트" desc="일일·주간 매출 리포트 생성·메일 발송" />
         <NavCard href="/sales/search" title="주문 검색" desc="전화번호로 구매/재구매 이력 · 엑셀 추출" />

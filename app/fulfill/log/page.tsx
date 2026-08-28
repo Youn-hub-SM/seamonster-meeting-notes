@@ -535,7 +535,7 @@ export default function DeliveryLogPage() {
             </div>
             <div className="b2b-modal-foot">
               <button className="b2b-btn-secondary" onClick={() => setEntryFor(null)} disabled={eBusy}>취소</button>
-              <button className="b2b-btn-primary" onClick={addEntry} disabled={eBusy || !eNote.trim() || Math.round(Number(eQty) || 0) === 0}>{eBusy ? "저장 중…" : "저장"}</button>
+              <button className="b2b-btn-primary" onClick={addEntry} disabled={eBusy || !eNote.trim() || Math.round(Number(eQty) || 0) === 0}>{eBusy ? "저장 중..." : "저장"}</button>
             </div>
           </div>
         </div>

@@ -137,7 +137,7 @@ export default function TradePage() {
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setUploadOpen(false)} disabled={importing}>취소</button>
                 <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
-                  {importing ? "분석 중…" : "④ 엑셀 첨부"}
+                  {importing ? "분석 중..." : "④ 엑셀 첨부"}
                   <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
                 </label>
@@ -195,7 +195,7 @@ export default function TradePage() {
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
-                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중…" : `${preview.summary.valid}건 반영`}</button>
+                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}건 반영`}</button>
               </div>
             </div>
           </div>
