@@ -58,7 +58,9 @@ export default function BundlesPage() {
   }
   async function removeBundle(b: BundleRow) {
     if (!confirm(`"${b.parent_name}" 묶음 구성을 삭제할까요? (상품 자체는 유지)`)) return;
-    await fetch(`/api/inventory/bundles?parent=${b.parent_id}`, { method: "DELETE" });
+    const r = await fetch(`/api/inventory/bundles?parent=${b.parent_id}`, { method: "DELETE" });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok) { alert(`삭제 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     load();
   }
 

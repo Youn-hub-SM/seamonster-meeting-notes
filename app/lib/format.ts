@@ -6,3 +6,7 @@
 /** 정수 반올림 + 천단위 콤마. null/undefined 는 "-" */
 export const won = (n: number | null | undefined): string =>
   n == null ? "-" : Math.round(Number(n) || 0).toLocaleString();
+
+/** 표 날짜 축약 "MM-DD" — 표 셀 표기가 화면마다 갈리지 않게 한 곳에(2026-08-28). YYYY-MM-DD 입력 전제.
+ *  예외: 여러 해가 섞이는 이력 화면(주문검색 등)은 연도 포함 원문 표기 유지. */
+export const dateShort = (d: string | null | undefined): string => (d ? String(d).slice(5) : "-");

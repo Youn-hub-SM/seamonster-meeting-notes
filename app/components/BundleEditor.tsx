@@ -1,6 +1,7 @@
 "use client";
 
 // 묶음(세트) 구성 편집 — 부모 상품에 '구성품 × 수량'을 지정. 저장 시 product_bundles 교체.
+import { useEscClose } from "@/app/lib/use-esc";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
 
@@ -13,6 +14,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
   onClose: () => void;
   onSaved?: () => void;
 }) {
+  useEscClose(onClose);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

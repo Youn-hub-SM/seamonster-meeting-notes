@@ -67,7 +67,9 @@ export default function InventoryMovePage() {
 
   async function cancelMove(group_id: string) {
     if (!window.confirm("이 이동을 취소할까요? 양쪽 채널 재고가 원래대로 돌아갑니다.")) return;
-    await fetch(`/api/inventory/move?group_id=${encodeURIComponent(group_id)}`, { method: "DELETE" });
+    const r = await fetch(`/api/inventory/move?group_id=${encodeURIComponent(group_id)}`, { method: "DELETE" });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     await loadStock();
   }
 

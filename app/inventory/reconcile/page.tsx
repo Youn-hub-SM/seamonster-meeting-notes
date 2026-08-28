@@ -11,7 +11,7 @@ type Row = {
   out_nonsale?: number; // 협찬·폐기 등 비판매 출고(099) — 미적용 환경이면 없음
 };
 
-const won = (n: number) => n.toLocaleString();
+const won = (n: number) => Math.round(n).toLocaleString(); // 반올림 — format.ts won 과 동일 규칙
 // KST 기준 날짜(back일 전) YYYY-MM-DD
 const kstDay = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - back); return d.toISOString().slice(0, 10); };
 

@@ -23,7 +23,7 @@ type Row = {
 };
 type EditKey = "base_fee_normal" | "base_fee_guar" | "extra_fee" | "guar_extra_fee" | "pado_fee" | "pado_extra" | "pado_cod" | "dryice_full" | "dryice_half" | "memo";
 
-const won = (n: unknown) => (Number(n) || 0).toLocaleString();
+const won = (n: unknown) => Math.round(Number(n) || 0).toLocaleString(); // 반올림 — format.ts won 과 동일 규칙
 const sumBoxes = (o: Boxes) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
 // 직접수정 최종 시각 — KST 초 단위 "YYYY-MM-DD HH:mm:ss"
 const kstStamp = (iso: string): string => {

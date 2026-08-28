@@ -65,7 +65,9 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   async function cancel(o: Order) {
     if (!window.confirm(`${o.order_no || "이 건"} (${o.item_count}개 품목)을 취소할까요? 재고가 원복됩니다.`)) return;
     const qs = o.order_no ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`;
-    await fetch(`/api/inventory/orders?${qs}`, { method: "DELETE" });
+    const r = await fetch(`/api/inventory/orders?${qs}`, { method: "DELETE" });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     await load();
   }
   async function process(o: Order) {

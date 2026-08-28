@@ -36,7 +36,7 @@ const FAULT_META: { key: string; color: string }[] = ["제조사", "물류", "�
 const FAULT_COLOR = VOC_FAULT_COLOR;
 
 type Prod = { name: string; cost_price: number | null; volume_kg: number | null };
-const won = (n: number) => n.toLocaleString();
+const won = (n: number) => Math.round(n).toLocaleString(); // 반올림 — format.ts won 과 동일 규칙
 
 export default function VocLossPage() {
   const [rows, setRows] = useState<Voc[]>([]);

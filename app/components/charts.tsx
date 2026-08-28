@@ -92,7 +92,8 @@ export function TrendChart({ data, fmtAxis, accent }: { data: { label: string; v
   const y = (v: number) => padT + plotH - (v / top) * plotH;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+    <div style={{ overflowX: "auto" }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", minWidth: 480 }}>
       {ticks.map((t, i) => (
         <g key={i}>
           <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--sm-border-light)" strokeWidth="1" />
@@ -112,6 +113,7 @@ export function TrendChart({ data, fmtAxis, accent }: { data: { label: string; v
         );
       })}
     </svg>
+    </div>
   );
 }
 
@@ -135,7 +137,8 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
   const col = (i: number) => (colors ? colors[i % colors.length] : PIE_COLORS[i % PIE_COLORS.length]);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+    <div style={{ overflowX: "auto" }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", minWidth: 480 }}>
       {ticks.map((t, i) => {
         const yy = padT + plotH - hOf(t);
         return (
@@ -170,6 +173,7 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
         );
       })}
     </svg>
+    </div>
   );
 }
 
@@ -203,8 +207,8 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
   const clamp = (v: number, lo: number, hex: number) => Math.max(lo, Math.min(hex, v));
   const hex = 92, lo = 8;
   return (
-    <div style={{ position: "relative" }} onMouseLeave={() => setHi(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+    <div style={{ position: "relative", overflowX: "auto" }} onMouseLeave={() => setHi(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" style={{ display: "block", minWidth: 480 }}>
         {ticks.map((f, i) => {
           const yy = yL(topL * f);
           return (

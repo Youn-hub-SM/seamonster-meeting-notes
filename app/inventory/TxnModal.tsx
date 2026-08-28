@@ -1,5 +1,6 @@
 "use client";
 
+import { useEscClose } from "@/app/lib/use-esc";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { INV_TXN_TYPES, INV_TYPE_COLOR, type InvTxnType, type InvChannel, type InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelPicker } from "./ChannelTabs";
@@ -42,6 +43,7 @@ export default function TxnModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  useEscClose(onClose);
   const [type, setType] = useState<InvTxnType>(defaultType);
   // 입고는 도매를 못 고른다 — 도매 재고는 소매 입고 후 [소매↔도매] 이동으로만 들어간다(실수 방지).
   //  도매 탭에서 열면 기본 채널이 도매로 오므로 입고 기본형이면 소매로 돌려놓는다.

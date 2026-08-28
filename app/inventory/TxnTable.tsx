@@ -26,7 +26,9 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
 
   async function cancel(t: InventoryTxn) {
     if (!window.confirm(`이 거래를 취소(삭제)할까요? 재고가 원복됩니다.`)) return;
-    await fetch(`/api/inventory/txn?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+    const r = await fetch(`/api/inventory/txn?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     await load();
     onChanged?.();
   }

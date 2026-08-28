@@ -1,5 +1,6 @@
 "use client";
 
+import { useEscClose } from "@/app/lib/use-esc";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 // 원가 변경 예약 — "n월 n일부터 이 원가". 인상일에 맞춰 사람이 고치는 걸 놓치지 않게 미리 걸어둔다.
@@ -21,6 +22,7 @@ const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0
 export default function CostScheduleModal({ product, onClose, onApplied }: {
   product: CostSchedProduct; onClose: () => void; onApplied: () => void;
 }) {
+  useEscClose(onClose);
   const [rows, setRows] = useState<Sched[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

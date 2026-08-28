@@ -1,5 +1,6 @@
 "use client";
 
+import { useEscClose } from "@/app/lib/use-esc";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 
@@ -23,6 +24,7 @@ function defaultDate(ym: string): string {
 }
 
 export default function ReturnModal({ month, onClose, onSaved }: { month: string; onClose: () => void; onSaved: () => void }) {
+  useEscClose(onClose);
   const [mode, setMode] = useState<"직접" | "엑셀">("직접");
   const [products, setProducts] = useState<Product[]>([]);
   const [rows, setRows] = useState<ReturnRow[]>([]);

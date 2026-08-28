@@ -2,6 +2,7 @@
 
 // 프로모션 관리 모달 — 재고/생산 공용. 프로모션 기간·상품별 예상판매를 등록하면
 //  안전재고 계산(getPromoForwardBySku)에 '남은 행사분'이 자동 반영된다.
+import { useEscClose } from "@/app/lib/use-esc";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
 
@@ -13,6 +14,7 @@ const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 1
 const EMPTY: Partial<Promotion> = { name: "", start: "", end: "", items: [], note: "" };
 
 export default function PromoManager({ products, onClose, onChanged }: { products: ProductLite[]; onClose: () => void; onChanged?: () => void }) {
+  useEscClose(onClose);
   const [list, setList] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Partial<Promotion> | null>(null);
