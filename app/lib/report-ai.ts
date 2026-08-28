@@ -100,6 +100,11 @@ export function assertSelectOnly(sql: string): string {
   if (s.includes(";")) throw new Error("여러 문장은 실행할 수 없습니다.");
   if (/\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|copy|vacuum|call|do)\b/i.test(s))
     throw new Error("쓰기/DDL 구문은 실행할 수 없습니다.");
+  // 인자 속 '문자열 SQL'을 실행하는 함수 차단 — from/join 화이트리스트 검사(assertAllowedRelations)를
+  //  우회해 비공개 테이블을 읽을 수 있는 유일한 경로(예: query_to_xml('select … from 비공개', …)).
+  //  실행 지연(pg_sleep)·파일 접근류도 함께 거부. 정상 리포트 SQL 에는 나올 일 없는 함수들이다.
+  if (/\b(query_to_xml|xmltable|dblink|pg_sleep|pg_read_file|pg_read_binary_file|lo_import|lo_export|pg_ls_dir)\b/i.test(s))
+    throw new Error("허용되지 않은 함수가 포함되어 있습니다.");
   return s;
 }
 
