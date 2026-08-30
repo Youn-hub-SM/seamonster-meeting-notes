@@ -133,10 +133,13 @@ export default function VocManufacturerPage() {
   const mfg = useMemo(() => buildManufacturerReport(claims, month), [claims, month]);
   const showClaim = !!draft;
 
+  // 손해 청구 번호 — 새 골격(1.종합/2.문의/3.설문)이면 4, 옛 초안(1.문의/2.설문)이면 3.
+  const claimNo = /(^|\n)\s*3\.\s*고객\s*설문조사/.test(draft) ? "4" : "3";
+
   // Word 용 텍스트 섹션 — 초안과 같은 구조("숫자. / 가. / - 불릿")라 docx 변환기가 그대로 서식화한다.
   const claimText = useMemo(() => {
     if (!showClaim) return "";
-    const L: string[] = ["", "3. 손해 청구 (제조사 귀책)"];
+    const L: string[] = ["", `${claimNo}. 손해 청구 (제조사 귀책)`];
     if (!mfg.summary.count) { L.push("- 해당 없음"); return L.join("\n"); }
     L.push(`- 총 ${mfg.summary.count}건 · 청구 손해액 ${won(mfg.summary.claimable)}원 · 대상 제품 ${mfg.summary.productCount}종`);
     L.push("가. 제품별");
@@ -145,7 +148,7 @@ export default function VocManufacturerPage() {
     // 내용은 자르지 않는다 — 제조사에 보내는 문서라 문장이 중간에 끊기면 안 됨(줄바꿈만 공백으로)
     for (const r of mfg.items) L.push(`- ${(r.received_at || "").slice(5)} ${r.product || "-"} · ${r.category} · ${won(r.loss_amount || 0)}원${r.content ? ` — ${String(r.content).replace(/\s*\n+\s*/g, " ")}` : ""}`);
     return L.join("\n");
-  }, [showClaim, mfg]);
+  }, [showClaim, mfg, claimNo]);
 
   async function downloadDocx() {
     setError("");
@@ -231,7 +234,7 @@ export default function VocManufacturerPage() {
           {/* 손해 청구 (제조사 귀책) — 개선요청서와 동일 기준. 제조사명을 넣었을 때만 */}
           {showClaim && (
             <div style={{ marginTop: 26 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>3. 손해 청구 (제조사 귀책)</h3>
+              <h3 style={{ fontSize: 18, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>{claimNo}. 손해 청구 (제조사 귀책)</h3>
               {mfg.summary.count === 0 ? (
                 <p style={{ fontSize: 15, marginTop: 8 }}>- 해당 없음</p>
               ) : (

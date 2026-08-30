@@ -23,20 +23,31 @@ function buildSystem(y: string, m: string): string {
 - 불릿은 명사형/간결체("~함", "~발견", "~요청"). 건수가 의미 있으면 "(N건)"처럼 덧붙여도 됨.
 - 제품이 특정되지 않은 공통 의견은 '공통'으로, 특정 제품 의견은 그 제품명으로 묶음.
 - 클레임(품질·이물·가시·포장·해동 등 문제 제기)과 단순 문의(질문: 검사 여부·원물 크기·가공 방식 등)를 구분.
-- 모든 불릿은 "- 라벨 : 내용" 형태로 시작한다. 라벨 = 분류(가시/이물·포장·해동 등) 또는 제품명, 콜론(:) 필수. 화면·Word 가 라벨을 굵게 표시하므로 형태가 어긋나면 서식이 빠진다.
+- 모든 불릿은 "- 라벨 : 내용" 형태로 시작한다. 라벨 = 분류(가시/이물·포장·해동 등) 또는 제품명, 콜론(:) 필수. 화면·Word 가 라벨을 굵게 표시하므로 형태가 어긋나면 서식이 빠진다. (단 '1. 이번 달 종합' 섹션은 서술형 불릿 허용)
+- '1. 이번 달 종합'의 비교는 입력의 prevSummary(전월 집계)만 근거로 한다. 전월 데이터가 없으면 "- 전월 데이터 없음" 한 줄. '앞으로의 요구'는 이번 달 데이터에 근거해 제조사에 요청할 개선·확인 사항만 적고, 없으면 "- 해당 없음".
 - 설문은 긍정의견과 개선/부정의견으로 나누고, 개선/부정은 공통 → 제품별 순.
 - 내용이 없는 섹션은 "- 해당 없음" 한 줄.
 
 [출력 형식] — 아래 골격의 '순수 텍스트'만 반환(코드블록·머리말·해설 금지). 제목 포함:
 ${y}년 ${m}월 고객 반응
 
-1. 고객 문의
+1. 이번 달 종합
+가. 지난달과의 비교
+- (prevSummary 와 이번 달 데이터를 대조한 증감·변화 불릿, 건수·유형 중심 1~3개)
+나. 이번 달 특이사항
+- (새로 나타났거나 특정 제품·유형에 몰린 이슈. 없으면 "- 특이사항 없음")
+다. 이번 달 주요 정리
+- (이번 달 전체를 2~4개 불릿으로 요약)
+라. 앞으로의 요구
+- (제조사에 요청할 개선·확인 사항. 없으면 "- 해당 없음")
+
+2. 고객 문의
 가. 클레임
 - (제품 공통 또는 제품별 클레임 불릿)
 나. 그 외 문의
 - (단순 문의 불릿)
 
-2. 고객 설문조사
+3. 고객 설문조사
 가. 긍정의견
 - (불릿)
 나. 개선/부정의견
@@ -91,6 +102,23 @@ export async function POST(req: NextRequest) {
       })
       .filter((s) => s.text.trim());
 
+    // 0) 전월 집계 — '1. 이번 달 종합'의 비교 근거(원문은 보내지 않고 건수·유형 분포만)
+    const prevD = new Date(Number(y), Number(m) - 2, 1);
+    const prevMonth = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, "0")}`;
+    const { data: prevVoc } = await sb
+      .from("voc").select("category")
+      .neq("source", "설문")
+      .gte("received_at", `${prevMonth}-01`)
+      .lte("received_at", new Date(prevD.getFullYear(), prevD.getMonth() + 1, 0).toISOString().slice(0, 10))
+      .limit(2000);
+    const prevCat = new Map<string, number>();
+    for (const r of prevVoc ?? []) prevCat.set(r.category || "미분류", (prevCat.get(r.category || "미분류") || 0) + 1);
+    const prevSurveyCnt = (srData ?? []).filter((r) => String((r.submitted_at as string) || (r.created_at as string) || "").slice(0, 7) === prevMonth).length;
+    const catTop = [...prevCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c, n]) => `${c} ${n}건`).join(" · ");
+    const prevSummary = (prevVoc?.length || prevSurveyCnt)
+      ? `전월(${Number(prevMonth.slice(5, 7))}월): 클레임·문의 ${prevVoc?.length ?? 0}건${catTop ? ` (${catTop})` : ""} · 설문 ${prevSurveyCnt}건`
+      : "전월 데이터 없음";
+
     if (claims.length === 0 && surveys.length === 0) {
       return NextResponse.json({ ok: false, error: `${y}년 ${m}월에 집계할 클레임·설문이 없습니다.`, counts: { claims: 0, surveys: 0 } }, { status: 400 });
     }
@@ -103,7 +131,7 @@ export async function POST(req: NextRequest) {
       model,
       max_tokens: 8000, // 데이터 많은 달에 4000 으로는 출력이 문장 중간에서 끊겼다
       system: buildSystem(y, mNum),
-      messages: [{ role: "user", content: JSON.stringify({ claims, surveys }) }],
+      messages: [{ role: "user", content: JSON.stringify({ prevSummary, claims, surveys }) }],
     });
     let draft = resp.content[0]?.type === "text" ? resp.content[0].text : "";
     draft = draft.replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/i, "").trim();
