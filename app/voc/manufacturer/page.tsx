@@ -215,12 +215,23 @@ export default function VocManufacturerPage() {
             <div><div style={{ fontSize: 15, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {Number(mm)}월 고객 반응</h2></div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>작성일 {TODAY()}{recipient && <div>수신 · {recipient}</div>}</div>
           </div>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.75 }}>{draft.replace(/^\s*\d{4}년\s*\d{1,2}월\s*고객\s*반응\s*\n?/, "")}</div>
+          {/* 줄 단위 서식 — 제목(1./2.)·소제목(가./나.)·분류 라벨을 크게·볼드로(2026-08-28 대표 지시, 가독성) */}
+          <div style={{ fontSize: 15, lineHeight: 1.75 }}>
+            {draft.replace(/^\s*\d{4}년\s*\d{1,2}월\s*고객\s*반응\s*\n?/, "").split("\n").map((line, i) => {
+              const t = line.trim();
+              if (!t) return <div key={i} style={{ height: 8 }} />;
+              if (/^\d+\.\s/.test(t)) return <div key={i} style={{ fontSize: 18, fontWeight: 800, marginTop: i === 0 ? 0 : 18, marginBottom: 4, borderBottom: "1px solid var(--sm-border)", paddingBottom: 4 }}>{t}</div>;
+              if (/^[가-힣]\.\s/.test(t)) return <div key={i} style={{ fontSize: 16, fontWeight: 700, marginTop: 10, marginBottom: 2 }}>{t}</div>;
+              const m = t.match(/^-\s*([^:：]{1,16})\s*[:：]\s*(.*)$/);
+              if (m) return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>- <strong>{m[1].trim()}</strong> : {m[2]}</div>;
+              return <div key={i} style={{ whiteSpace: "pre-wrap", paddingLeft: line.startsWith("  ") ? 18 : 0 }}>{line.trimEnd()}</div>;
+            })}
+          </div>
 
           {/* 손해 청구 (제조사 귀책) — 개선요청서와 동일 기준. 제조사명을 넣었을 때만 */}
           {showClaim && (
             <div style={{ marginTop: 26 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>3. 손해 청구 (제조사 귀책)</h3>
+              <h3 style={{ fontSize: 18, fontWeight: 800, borderTop: "2px solid var(--sm-black)", paddingTop: 14 }}>3. 손해 청구 (제조사 귀책)</h3>
               {mfg.summary.count === 0 ? (
                 <p style={{ fontSize: 15, marginTop: 8 }}>- 해당 없음</p>
               ) : (

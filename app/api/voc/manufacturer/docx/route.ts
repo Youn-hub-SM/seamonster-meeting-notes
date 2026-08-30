@@ -25,14 +25,14 @@ export async function POST(req: NextRequest) {
 
       if (!titleDone) {
         titleDone = true;
-        paras.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240 }, children: [new TextRun({ text: trimmed, bold: true, size: 32 })] }));
+        paras.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240 }, children: [new TextRun({ text: trimmed, bold: true, size: 36 })] }));
         if (recipient) paras.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 160 }, children: [new TextRun({ text: `수신: ${recipient}`, size: 18, color: "666666" })] }));
         continue;
       }
       if (/^\d+\.\s/.test(trimmed)) {
-        paras.push(new Paragraph({ spacing: { before: 240, after: 80 }, children: [new TextRun({ text: trimmed, bold: true, size: 26 })] }));
+        paras.push(new Paragraph({ spacing: { before: 280, after: 90 }, children: [new TextRun({ text: trimmed, bold: true, size: 30 })] }));
       } else if (/^[가-힣]\.\s/.test(trimmed)) {
-        paras.push(new Paragraph({ spacing: { before: 100, after: 40 }, children: [new TextRun({ text: trimmed, bold: true, size: 23 })] }));
+        paras.push(new Paragraph({ spacing: { before: 140, after: 50 }, children: [new TextRun({ text: trimmed, bold: true, size: 26 })] }));
       } else if (/^-\s/.test(trimmed)) {
         const sub = /^\s{2,}/.test(line);
         paras.push(new Paragraph({ bullet: { level: sub ? 1 : 0 }, children: [new TextRun({ text: trimmed.replace(/^-\s*/, ""), size: 22 })] }));
