@@ -18,9 +18,8 @@ export async function POST(request: Request) {
       title: result.title,
       date: result.date,
       createdAt: new Date().toISOString(),
-      timelineSummary: result.timelineSummary,
-      decisions: result.decisions,
-      todos: result.todos,
+      body: String(result.body || ""),
+      todos: Array.isArray(result.todos) ? result.todos : [],
       rawText: rawText.trim(),
     });
   } catch (error) {

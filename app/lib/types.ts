@@ -20,8 +20,7 @@ export interface Meeting {
   title: string;
   date: string;
   createdAt: string;
-  timelineSummary: TimelineSummary[];
-  decisions: Decision[];
+  body: string; // 주제별 마크다운 정리본(2026-08-28 형식 전환 — 티로풍: 도입 문단 + ## 주제 + ## 결론 및 다음 단계)
   todos: TodoItem[];
   rawText: string;
 }
