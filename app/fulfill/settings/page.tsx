@@ -94,9 +94,10 @@ export default function FulfillSettingsPage() {
         <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>
           주문 총중량이 어느 구간에 드는지로 박스 종류가 정해집니다. 이름과 이하(kg)를 바꿀 수 있고, 마지막 종류는 항상 &lsquo;초과&rsquo;입니다.
           한 종류가 위 <strong>기본운임 구간 경계</strong>를 걸치면 저장되지 않습니다(같은 종류인데 운임이 달라져 배송일지 수정 시 금액이 어긋남).
+          <strong>금액(원)</strong>은 박스 자재 단가 — 발송 통계의 박스비 계산에 쓰입니다(면세라 부가세 없음).
         </p>
         <table className="b2b-table" style={{ fontSize: 15 }}>
-          <thead><tr><th>박스 종류</th><th className="num">이하(kg)</th><th style={{ width: 40 }}></th></tr></thead>
+          <thead><tr><th>박스 종류</th><th className="num">이하(kg)</th><th className="num">금액(원)</th><th style={{ width: 40 }}></th></tr></thead>
           <tbody>
             {boxCats.map((c, i) => (
               <tr key={i}>
@@ -106,6 +107,11 @@ export default function FulfillSettingsPage() {
                   <input type="number" step="0.1" className="b2b-input b2b-money" style={{ width: 90 }} value={c.maxKg}
                     onChange={(e) => setBoxCats((cs) => cs.map((x, j) => (j === i ? { ...x, maxKg: Number(e.target.value) || 0 } : x)))} />
                 )}</td>
+                <td className="num">
+                  <input type="number" min={0} step={10} className="b2b-input b2b-money" style={{ width: 100 }} value={c.price ?? ""}
+                    placeholder="미입력"
+                    onChange={(e) => setBoxCats((cs) => cs.map((x, j) => (j === i ? { ...x, price: e.target.value === "" ? null : Math.max(0, Math.round(Number(e.target.value) || 0)) } : x)))} />
+                </td>
                 <td>{boxCats.length > 1 && (
                   <button className="b2b-link-btn" style={{ color: "var(--sm-text-light)" }} aria-label="삭제"
                     onClick={() => {

@@ -81,7 +81,7 @@ export function ratesFor(history: RateVersion[], date: string): FulfillRates {
 // 택배량 집계 단위(굴·생굴·김치8…). 단가와 달리 '적용일 이력'을 두지 않고 현재 목록 하나만 둔다 —
 //  배송일지 표는 여러 날짜를 한 화면에 뿌리므로 날짜마다 열이 달라지면 표가 성립하지 않는다.
 //  대신 과거 기록에만 있는 종류는 화면·집계에서 '버리지 않고' 그대로 함께 보여준다(delivery-log.ts).
-export type BoxCat = { name: string; maxKg: number | null }; // maxKg 이하. null = 마지막(초과) 구간
+export type BoxCat = { name: string; maxKg: number | null; price?: number | null }; // maxKg 이하(null=초과 구간). price=박스 자재 단가(원, 면세 — 발송 통계 박스비 계산용)
 
 export const DEFAULT_BOX_CATS: BoxCat[] = [
   { name: "굴", maxKg: 1.7 }, { name: "생굴", maxKg: 2.7 }, { name: "김치8", maxKg: 4 }, { name: "김치10", maxKg: 5.2 },
@@ -91,7 +91,11 @@ export const DEFAULT_BOX_CATS: BoxCat[] = [
 export function normalizeBoxCats(x: unknown): BoxCat[] {
   if (!Array.isArray(x)) return DEFAULT_BOX_CATS.map((c) => ({ ...c }));
   const cats = x
-    .map((c) => ({ name: String((c as BoxCat)?.name ?? "").trim(), maxKg: (c as BoxCat)?.maxKg == null ? null : Number((c as BoxCat).maxKg) }))
+    .map((c) => ({
+      name: String((c as BoxCat)?.name ?? "").trim(),
+      maxKg: (c as BoxCat)?.maxKg == null ? null : Number((c as BoxCat).maxKg),
+      price: Number((c as BoxCat)?.price) > 0 ? Math.round(Number((c as BoxCat).price)) : null,
+    }))
     .filter((c) => c.name && (c.maxKg === null || Number.isFinite(c.maxKg)));
   if (cats.length === 0) return DEFAULT_BOX_CATS.map((c) => ({ ...c }));
   // 이름 중복 제거(먼저 온 것 유지) + 마지막은 반드시 무제한

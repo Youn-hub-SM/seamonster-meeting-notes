@@ -88,6 +88,10 @@ export default function FulfillStatsPage() {
     const mN = new Map<string, number>(), mG = new Map<string, number>(), mFee = new Map<string, number>();
     const wN = new Map<string, number>(), wG = new Map<string, number>(), wFee = new Map<string, number>();
     const mCat: Record<string, Map<string, number>> = {}; for (const c of BOX_CATS) mCat[c] = new Map();
+    // 박스비 — 종류별 자재 단가(설정 > 박스 종류 금액) × 사용량. 단가는 현재 설정값을 전 기간에 적용(면세).
+    const priceOf = new Map(boxCats.map((c) => [c.name, Math.round(Number(c.price) || 0)]));
+    const mBoxCost = new Map<string, number>();
+    let boxCost = 0;
     const catN = new Map<string, number>(), catG = new Map<string, number>();
     const wdSum = new Array(7).fill(0), wdDays = new Array(7).fill(0);
     let totN = 0, totG = 0, fee = 0, dry = 0, days = 0;
@@ -105,6 +109,8 @@ export default function FulfillStatsPage() {
         const cn = Number(r.boxes_normal?.[c]) || 0, cg = Number(r.boxes_guar?.[c]) || 0;
         catN.set(c, (catN.get(c) || 0) + cn); catG.set(c, (catG.get(c) || 0) + cg);
         mCat[c].set(mo, (mCat[c].get(mo) || 0) + cn + cg);
+        const cost = (cn + cg) * (priceOf.get(c) || 0);
+        if (cost) { boxCost += cost; mBoxCost.set(mo, (mBoxCost.get(mo) || 0) + cost); }
       }
     }
     const mLbl = (mo: string) => mo.slice(2);
@@ -124,10 +130,12 @@ export default function FulfillStatsPage() {
         return { label: WD[d], value: Math.round(avg), days: wdDays[d], total: wdSum[d] };
       }),
       catPie: BOX_CATS.map((c) => [c, (catN.get(c) || 0) + (catG.get(c) || 0)] as [string, number]).filter(([, v]) => v > 0),
-      monthTotals: months.map((m) => ({ month: m, n: mN.get(m) || 0, g: mG.get(m) || 0, cats: BOX_CATS.map((c) => mCat[c].get(m) || 0) })),
-      totN, totG, fee, dry, days,
+      monthTotals: months.map((m) => ({ month: m, n: mN.get(m) || 0, g: mG.get(m) || 0, cats: BOX_CATS.map((c) => mCat[c].get(m) || 0), boxCost: Math.round(mBoxCost.get(m) || 0) })),
+      totN, totG, fee, dry, days, boxCost: Math.round(boxCost),
+      // 단가 미입력인데 기간에 사용된 종류 — 박스비에서 빠져 있음을 각주로 알린다
+      noPrice: BOX_CATS.filter((c) => !priceOf.get(c) && ((catN.get(c) || 0) + (catG.get(c) || 0)) > 0),
     };
-  }, [rows, from, to, history]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows, from, to, history, boxCats]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tot = agg.totN + agg.totG;
 
@@ -158,7 +166,13 @@ export default function FulfillStatsPage() {
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">일평균 발송</div><div className="b2b-stat-card-value b2b-money">{agg.days ? won(tot / agg.days) : 0}<span className="sm-faint" style={{ fontSize: 12 }}> /{agg.days}일</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계</div><div className="b2b-stat-card-value b2b-money">{won(agg.fee)}원</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(agg.dry)}원</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">박스비 합계</div><div className="b2b-stat-card-value b2b-money">{won(agg.boxCost)}원</div></div>
           </div>
+          {agg.noPrice.length > 0 && (
+            <p className="sm-faint" style={{ fontSize: 12, margin: "-8px 0 0" }}>
+              * 단가 미입력 박스 종류({agg.noPrice.join(" · ")})는 박스비에서 빠져 있습니다 — 설정 &gt; 배송일지 박스 종류에서 금액을 넣으세요.
+            </p>
+          )}
 
           {/* 1) 주차별 · 2) 월별 발송량 + 운임 — 아래 두 카드와 같은 2열 폭 */}
           <div className="fx-2col">
@@ -206,7 +220,7 @@ export default function FulfillStatsPage() {
             <div className="b2b-card-head"><span className="b2b-card-title">월별 박스종류 수량표</span></div>
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ fontSize: 12 }}>
-                <thead><tr><th>월</th>{BOX_CATS.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
+                <thead><tr><th>월</th>{BOX_CATS.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th><th className="num">박스비(원)</th></tr></thead>
                 <tbody>
                   {agg.monthTotals.map((m) => (
                     <tr key={m.month}>
@@ -215,6 +229,7 @@ export default function FulfillStatsPage() {
                       <td className="num b2b-money" style={{ color: "var(--sm-info)" }}>{won(m.n)}</td>
                       <td className="num b2b-money" style={{ color: "var(--sm-orange)" }}>{won(m.g)}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(m.n + m.g)}</td>
+                      <td className="num b2b-money">{m.boxCost ? won(m.boxCost) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
