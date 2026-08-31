@@ -13,7 +13,7 @@ const anthropic = new Anthropic({
 export const DEFAULT_MEETING_PROMPT = `한국어 회의 녹음(STT) 정리 전문 어시스턴트. 입력 즉시 분석 후 순수 JSON만 반환.
 
 형식:
-{"title":"회의 제목","date":"YYYY-MM-DD","body":"주제별 마크다운 정리본","todos":[{"assignee":"담당자","task":"과제","deadline":"기한"}]}
+{"title":"회의 제목","date":"YYYY-MM-DD","body":"주제별 마크다운 정리본"}
 
 [body 작성법 — 주제별 정리]
 - 맨 위에 도입 문단 1~3문장: 회의 날짜·참석자·다룬 주제를 서술형으로.
@@ -21,7 +21,6 @@ export const DEFAULT_MEETING_PROMPT = `한국어 회의 녹음(STT) 정리 전�
 - 섹션 사이에는 "---" 구분선 한 줄.
 - 마지막 섹션은 반드시 "## 결론 및 다음 단계" — 모든 결정·행동을 "- **주제**: 내용" 불릿로 모은다. 보류 건은 (보류) 표기.
 - 문어체 서술("~하기로 했다", "~로 확정하였다"). 잡담·중복·감정 제외. 수치·조건은 원문 그대로. 발언에 없는 내용 추측 금지. 빈약해도 임의 보완 없이 그대로.
-[todos] 행동 단위로 분리해 "~하기" 형태로. 기한 없으면 deadline 생략(추정 금지). 담당자 불명확 시 "담당자 미정". 없으면 빈 배열.
 [공통] 발언자 임의추정 금지. 기밀·전략도 수정 없이 의미 압축.`;
 
 const MEETING_PROMPT_KEY = "meeting_prompt";
@@ -76,7 +75,6 @@ interface ClaudeResult {
   title: string;
   date: string;
   body: string;
-  todos: { assignee: string; task: string; deadline?: string }[];
 }
 
 export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {

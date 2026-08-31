@@ -19,7 +19,6 @@ export async function POST(request: Request) {
       date: result.date,
       createdAt: new Date().toISOString(),
       body: String(result.body || ""),
-      todos: Array.isArray(result.todos) ? result.todos : [],
       rawText: rawText.trim(),
     });
   } catch (error) {

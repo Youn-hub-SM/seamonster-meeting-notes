@@ -1,26 +1,9 @@
-export interface TimelineSummary {
-  time: string;       // "00:11~02:29" or "1" (순서 번호)
-  content: string;    // 핵심 요약 한 줄
-}
-
-export interface Decision {
-  category: string;   // "광고" / "콘텐츠" / "CRM" 등
-  decided: string[];  // 하기로 한 것
-  rejected: string[]; // 하지 않기로 한 것
-  pending: string[];  // 보류한 것
-}
-
-export interface TodoItem {
-  assignee: string;   // 담당자 (불명확 시 "담당자 미정")
-  task: string;       // 실행 과제
-  deadline?: string;  // 기한 (있으면)
-}
-
+// 회의 정리 결과 — 2026-08-28 확정: AI 가 쓰는 '주제별 마크다운 정리본' 하나로 단순화.
+//  (할 일 추출·아사나 업로드 제거 — 정리본을 아사나에 옮겨 거기서 직접 업무 등록, 대표 결정)
 export interface Meeting {
   title: string;
   date: string;
   createdAt: string;
-  body: string; // 주제별 마크다운 정리본(2026-08-28 형식 전환 — 티로풍: 도입 문단 + ## 주제 + ## 결론 및 다음 단계)
-  todos: TodoItem[];
+  body: string; // 도입 문단 + ## 주제 섹션 + ## 결론 및 다음 단계 (티로풍)
   rawText: string;
 }
