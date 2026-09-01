@@ -24,8 +24,10 @@ type Row = {
 //  ※ 도매 채널 입고는 제외한다(2026-08-28 대표 확정) — 소매↔도매 이전이 '도매 입고 +N, 단가 null' 을
 //    원장에 남기는데 그건 외부 매입이 아니라 내부 이동이다. 세면 매입수량이 부풀고 가중평균 매입가가
 //    0원에 끌려 내려간다. 채널 컬럼(036) 이 없는 옛 기록은 전부 소매라 폴백에서도 안전.
-//  ※ '대기' 상태 입고도 제외한다(2026-08-28 대표 확정) — 아직 받지 않은 물량이라 매입이 아니다.
-//    현재고(inventory_stock)도 status='완료' 만 세므로 기준이 같아진다.
+//  ※ '대기' 상태 입고도 제외한다 — 아직 받지 않은 물량이라 매입이 아니다.
+//  ※ 채널이동(소매↔도매 이전)이 만든 입고도 제외한다 — 역이전(도매→소매)은 '소매 입고'로 남지만
+//    partner='채널이동' 마커로 구분된다. null partner 를 살리기 위해 or 필터 사용.
+//  ── 확정 기준(2026-08-28 대표): 월간매입 결산 = 그 달에 생산·입고 경로로 소매에 실제 '입고 완료'된 것만.
 export async function fetchQuoteTxns(month: string): Promise<QuoteTxn[]> {
   const sb = supabaseAdmin();
   const { from, to } = monthRange(month);
@@ -40,11 +42,12 @@ export async function fetchQuoteTxns(month: string): Promise<QuoteTxn[]> {
   for (const sel of selects) {
     const base = () => sb.from("inventory_txns").select(sel)
       .eq("type", "입고").gte("txn_date", from).lte("txn_date", to).limit(5000);
-    let res = await base().neq("channel", "도매").eq("status", "완료");
+    const noMove = (q: ReturnType<typeof base>) => q.or("partner.is.null,partner.neq.채널이동"); // neq 단독은 null partner 를 탈락시킨다
+    let res = await noMove(base().neq("channel", "도매").eq("status", "완료"));
     // 선택 컬럼 미적용 환경 폴백 — channel(036)·status(034) 순서로 조건을 덜어내며 재시도
-    if (res.error && /channel/i.test(res.error.message)) res = await base().eq("status", "완료");
-    if (res.error && /status/i.test(res.error.message)) res = await base().neq("channel", "도매");
-    if (res.error && /channel|status/i.test(res.error.message)) res = await base();
+    if (res.error && /channel/i.test(res.error.message)) res = await noMove(base().eq("status", "완료"));
+    if (res.error && /status/i.test(res.error.message)) res = await noMove(base().neq("channel", "도매"));
+    if (res.error && /channel|status/i.test(res.error.message)) res = await noMove(base());
     if (!res.error) { data = res.data as unknown as Row[]; break; }
   }
   if (!data) data = [];
