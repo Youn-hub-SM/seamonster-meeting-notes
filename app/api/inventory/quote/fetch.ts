@@ -21,6 +21,9 @@ type Row = {
 };
 
 // 해당 월의 입고(매입) 원장을 제품 마스터와 조인해 반환. 마이그레이션 미적용 환경 대비 단계적 폴백.
+//  ※ 도매 채널 입고는 제외한다(2026-08-28 대표 확정) — 소매↔도매 이전이 '도매 입고 +N, 단가 null' 을
+//    원장에 남기는데 그건 외부 매입이 아니라 내부 이동이다. 세면 매입수량이 부풀고 가중평균 매입가가
+//    0원에 끌려 내려간다. 채널 컬럼(036) 이 없는 옛 기록은 전부 소매라 폴백에서도 안전.
 export async function fetchQuoteTxns(month: string): Promise<QuoteTxn[]> {
   const sb = supabaseAdmin();
   const { from, to } = monthRange(month);
@@ -33,8 +36,11 @@ export async function fetchQuoteTxns(month: string): Promise<QuoteTxn[]> {
   ];
   let data: Row[] | null = null;
   for (const sel of selects) {
-    const res = await sb.from("inventory_txns").select(sel)
+    const base = () => sb.from("inventory_txns").select(sel)
       .eq("type", "입고").gte("txn_date", from).lte("txn_date", to).limit(5000);
+    let res = await base().neq("channel", "도매");
+    // 036(channel) 미적용 환경 — 채널 조건만 빼고 재시도(그 시절 기록은 전부 소매)
+    if (res.error && /channel/i.test(res.error.message)) res = await base();
     if (!res.error) { data = res.data as unknown as Row[]; break; }
   }
   if (!data) data = [];

@@ -100,6 +100,12 @@ export default function QuotePage() {
               <span className="sm-faint" style={{ fontSize: 12 }}>반품 {s.totalReturnQty.toLocaleString()}개 · {won(s.returnAmount)}원 차감</span>
             )}
           </div>
+          {s.noPriceQty > 0 && (
+            <div className="sm-warn" style={{ marginBottom: 10 }}>
+              단가를 적지 않은 입고가 <strong>{s.noPriceQty.toLocaleString()}개</strong> 있습니다 — 그만큼 0원으로 계산돼 매입가가 실제보다 낮게 나옵니다.
+              아래 표에서 <strong>매입가에 * 표시</strong>된 품목의 입고 기록을 확인해 단가를 채워 주세요.
+            </div>
+          )}
           <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr><th>코드명</th><th>품목명</th><th>규격(g)</th><th>원산지</th><th className="num">매입가</th><th className="num">매입수량</th><th className="num">반품수량</th><th className="num">총 매입금액</th><th>구분</th></tr></thead>
@@ -110,7 +116,9 @@ export default function QuotePage() {
                   <td>{it.name}</td>
                   <td>{it.spec || "-"}</td>
                   <td>{it.origin || "-"}</td>
-                  <td className="num b2b-money">{it.unit_price.toLocaleString()}</td>
+                  <td className="num b2b-money" title={it.no_price_qty > 0 ? `단가 미입력 ${it.no_price_qty.toLocaleString()}개가 0원으로 섞여 평균이 낮습니다` : undefined}>
+                    {it.unit_price.toLocaleString()}{it.no_price_qty > 0 && <span style={{ color: "var(--sm-danger)", fontWeight: 800 }}>*</span>}
+                  </td>
                   <td className="num b2b-money">{it.qty.toLocaleString()}</td>
                   <td className="num b2b-money" style={{ color: it.return_qty > 0 ? "var(--sm-danger)" : "var(--sm-text-light)", fontWeight: it.return_qty > 0 ? 700 : 400 }}>
                     {it.return_qty > 0 ? it.return_qty.toLocaleString() : "-"}
@@ -135,7 +143,8 @@ export default function QuotePage() {
           </table>
           </div>
           <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.7 }}>
-            ※ 매입가 = 가중평균 매입단가(1원 미만 반올림) — 단가가 여러 번이었으면 매입가 × 수량이 총 매입금액과 몇 원 어긋날 수 있습니다. 금액은 실제 매입액 기준입니다.<br />
+            ※ 매입가 = 가중평균 매입단가(1원 미만 반올림) — 단가가 여러 번이었으면 매입가 × 수량이 총 매입금액과 몇 원 어긋날 수 있습니다. 금액은 실제 매입액 기준입니다. 매입가 옆 *는 단가 미입력 입고가 섞였다는 표시입니다.<br />
+            ※ 소매↔도매 이전으로 생긴 도매 입고는 외부 매입이 아니라 내부 이동이므로 결산에서 제외합니다.<br />
             ※ 총 매입금액 = 실제 매입액 − 반품액(반품수량 × 매입가, 반품 단가를 적었으면 그 단가), 과세는 부가세 포함. 합계는 열마다 그 열을 더한 값입니다.<br />
             ※ 반품은 재고를 건드리지 않습니다 — 물건이 실제로 빠지는 처리는 재고목록에서 따로 합니다.
           </p>

@@ -38,6 +38,7 @@ export interface QuoteItem {
   unit_price: number;     // 매입가(가중평균 = round(gross_amount/qty), 순액)
   ref_price: number;      // 기준 매입가(제품 마스터 purchase_price)
   price_varies: boolean;  // 한 달 안에 단가가 여러 개였는지
+  no_price_qty: number;   // 단가를 안 적고 입고한 수량 — 가중평균 매입가를 끌어내리므로 화면에서 경고
 }
 
 // 제조사 반품 1건 — purchase_returns 행. unit_amount 가 null 이면 그 달 매입가를 쓴다.
@@ -65,6 +66,7 @@ export interface QuoteSummary {
   taxableSupply: number; taxableEtc: number; taxableVat: number; taxableTotal: number;
   deposit: number;       // 총 입금액 = 임대료 + 면세 + 과세
   itemCount: number; totalQty: number; totalAmount: number; // totalAmount = 품목표 총 매입금액 합(과세 VAT 포함)
+  noPriceQty: number;      // 단가 미입력 입고 수량 합 — 0 보다 크면 매입가가 실제보다 낮게 나온다
   totalReturnQty: number;  // 반품수량 합
   returnAmount: number;    // 반품으로 깎인 공급가액 합(순액)
 }
@@ -121,14 +123,14 @@ export function computeQuote(
 
     const cur = map.get(t.product_id);
     if (cur) {
-      cur.qty += q; cur.amount += amount; cur.gross_amount += amount; if (unit > 0) cur._prices.add(unit);
+      cur.qty += q; cur.amount += amount; cur.gross_amount += amount; if (unit > 0) cur._prices.add(unit); else cur.no_price_qty += q;
     } else {
       map.set(t.product_id, {
         product_id: t.product_id, sku: p?.sku ?? null, name: p?.name ?? "(삭제된 품목)",
         spec: p?.spec ?? null, origin: p?.origin ?? null, tax_type: normTax(p?.tax_type),
         qty: q, return_qty: 0, net_qty: 0, amount, gross_amount: amount, return_amount: 0,
         total: 0, unit_price: 0, ref_price: Math.round(Number(p?.purchase_price) || 0),
-        price_varies: false, _prices: new Set(unit > 0 ? [unit] : []),
+        price_varies: false, no_price_qty: unit > 0 ? 0 : q, _prices: new Set(unit > 0 ? [unit] : []),
       });
     }
   }
@@ -166,6 +168,7 @@ export function computeQuote(
     taxableSupply, taxableEtc, taxableVat, taxableTotal,
     deposit,
     itemCount: items.length,
+    noPriceQty: items.reduce((s, i) => s + i.no_price_qty, 0),
     // 합계는 열마다 그 열을 그대로 더한다 — 매입수량은 반품 차감 전, 총 매입금액은 차감 후.
     totalQty: items.reduce((s, i) => s + i.qty, 0),
     totalReturnQty: items.reduce((s, i) => s + i.return_qty, 0),
