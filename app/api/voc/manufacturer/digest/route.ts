@@ -20,7 +20,7 @@ function buildSystem(y: string, m: string): string {
 
 [작성 규칙]
 - 한국어. 데이터에 있는 내용만(추측·과장·창작 금지). 비슷한 의견은 묶고, 제품이 특정되면 제품별로 분류.
-- 불릿은 명사형/간결체("~함", "~발견", "~요청"). 건수가 의미 있으면 "(N건)"처럼 덧붙여도 됨.
+- 불릿은 명사형/간결체("~함", "~발견", "~요청"). 건수 표기는 입력의 catCounts(유형별 서버 집계)에 있는 값만 그대로 쓴다 — 목록을 직접 세서 (N건)을 만들지 말 것(세다 틀린다). catCounts 에 없는 임의 묶음의 건수는 표기하지 않는다.
 - 제품이 특정되지 않은 공통 의견은 '공통'으로, 특정 제품 의견은 그 제품명으로 묶음.
 - 클레임(품질·이물·가시·포장·해동 등 문제 제기)과 단순 문의(질문: 검사 여부·원물 크기·가공 방식 등)를 구분.
 - 모든 불릿은 "- 라벨 : 내용" 형태로 시작한다. 라벨 = 분류(가시/이물·포장·해동 등) 또는 제품명, 콜론(:) 필수. 화면·Word 가 라벨을 굵게 표시하므로 형태가 어긋나면 서식이 빠진다. (단 '1. 이번 달 종합' 섹션은 서술형 불릿 허용)
@@ -123,6 +123,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `${y}년 ${m}월에 집계할 클레임·설문이 없습니다.`, counts: { claims: 0, surveys: 0 } }, { status: 400 });
     }
 
+    // 유형별 서버 집계 — AI 가 목록을 직접 세다 (4건)/(3건) 식으로 틀리는 것 방지(대표 발견, 2026-08-28)
+    const catCounts: Record<string, number> = {};
+    for (const c of claims) catCounts[c.type || "미분류"] = (catCounts[c.type || "미분류"] || 0) + 1;
+
     const model = await getFeatureModel("voc");
     // SDK 는 핸들러 안에서 생성 — 모듈 초기화에서 만들면 키 미설정 시 import 자체가 죽어
     //  위의 친절한 400 응답 대신 플랫폼 오류 텍스트가 내려간다.
@@ -131,7 +135,7 @@ export async function POST(req: NextRequest) {
       model,
       max_tokens: 8000, // 데이터 많은 달에 4000 으로는 출력이 문장 중간에서 끊겼다
       system: buildSystem(y, mNum),
-      messages: [{ role: "user", content: JSON.stringify({ prevSummary, claims, surveys }) }],
+      messages: [{ role: "user", content: JSON.stringify({ prevSummary, catCounts, claims, surveys }) }],
     });
     let draft = resp.content[0]?.type === "text" ? resp.content[0].text : "";
     draft = draft.replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/i, "").trim();
