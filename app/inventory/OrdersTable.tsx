@@ -24,6 +24,10 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   const [search, setSearch] = useState("");
   // 세부 내역 '전 → 후' 재고 변동 — 펼칠 때 1회 조회해 캐시
   const [balances, setBalances] = useState<Record<string, { before: number; after: number } | null>>({});
+  // 세부 내역 단가 인라인 수정 — 단가만 고친다(수량·품목·날짜는 재고에 영향 → 취소 후 재기록)
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const kstDay = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - back); return d.toISOString().slice(0, 10); };
   const DATE_OK = /^\d{4}-\d{2}-\d{2}$/;
@@ -69,6 +73,19 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     const j = await r.json().catch(() => null);
     if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     await load();
+  }
+  async function saveUnit(it: OrderItem) {
+    if (saving) return;
+    setSaving(true);
+    const r = await fetch("/api/inventory/txn", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: it.id, unit_amount: editVal.trim() === "" ? null : Number(editVal) }),
+    });
+    const j = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok || !j?.ok) { alert(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    setEditId(null);
+    await load(); // 금액·합계는 서버 재계산분으로 갱신
   }
   async function process(o: Order) {
     const key = o.order_no ? { group_id: o.key } : { id: o.key };
@@ -153,7 +170,26 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                                   <span className="b2b-money" style={{ fontWeight: 700 }}>{it.qty.toLocaleString()}</span>
                                   {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({bal.before.toLocaleString()} → {bal.after.toLocaleString()})</span>}
                                 </td>
-                                <td className="num b2b-money">{it.unit_amount ? it.unit_amount.toLocaleString() : "-"}</td>
+                                <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>
+                                  {editId === it.id ? (
+                                    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                                      <input
+                                        autoFocus type="number" min={0} className="b2b-input" value={editVal}
+                                        onChange={(e) => setEditVal(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === "Enter") saveUnit(it); if (e.key === "Escape") setEditId(null); }}
+                                        style={{ width: 80, padding: "3px 8px", fontSize: 13, textAlign: "right" }}
+                                      />
+                                      <button className="b2b-link-btn" onClick={() => saveUnit(it)} disabled={saving}>저장</button>
+                                      <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>취소</button>
+                                    </span>
+                                  ) : (
+                                    <>
+                                      {it.unit_amount ? it.unit_amount.toLocaleString() : "-"}
+                                      <button className="b2b-link-btn sm-faint" style={{ marginLeft: 6, fontSize: 12 }} title="단가만 수정합니다 — 수량·날짜는 취소 후 다시 기록"
+                                        onClick={() => { setEditId(it.id); setEditVal(it.unit_amount ? String(it.unit_amount) : ""); }}>수정</button>
+                                    </>
+                                  )}
+                                </td>
                                 <td className="num b2b-money">{it.amount.toLocaleString()}</td>
                               </tr>
                             );

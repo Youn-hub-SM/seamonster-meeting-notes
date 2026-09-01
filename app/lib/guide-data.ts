@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-08-28";
+export const GUIDE_UPDATED = "2026-09-02";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -869,6 +869,8 @@ export const GUIDE: GuideCategory[] = [
               "입고(즉시 처리)하면 같은 품목의 열린 생산 요청에 자동 연결돼 이행률에 집계된다 — 요청에 없는 품목은 그냥 일반 입고",
               "목록 위 필터로 유형(입고/출고)·기간을 거르고, 검색창으로 품목·SKU·거래처를 찾는다(초성 가능)",
               "내역을 펼치면 수량 옆에 그 거래로 재고가 몇 개에서 몇 개로 변동됐는지 표시된다",
+              "이미 기록한 건의 단가는 내역을 펼쳐 단가 옆 '수정'으로 바로 고친다 — 수량·품목·날짜를 고치려면 취소 후 다시 기록한다",
+              "월간매입 결산에서 매입가에 * 가 붙은 품목은 단가 없이 입고된 건이 섞인 것 — 여기서 단가를 채우면 결산이 바로잡힌다",
               "같은 파일을 두 번 반영하면 재고가 이중으로 빠진다(들어온다). 반영 전 미리보기 건수를 꼭 확인한다",
               "'즉시 출고처리'를 해제하면 '대기'로 저장돼 재고가 아직 안 움직인다",
               "엑셀의 거래일·거래처·채널은 파일 전체에 한꺼번에 적용된다",

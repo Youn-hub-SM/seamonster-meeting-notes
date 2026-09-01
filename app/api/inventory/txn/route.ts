@@ -99,6 +99,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PATCH { id, unit_amount } — 이미 기록된 입고/출고의 단가만 수정. 재고에 영향 주는 값(수량·품목·날짜)은
+//  취소 후 재기록이 원칙이라 여기서 받지 않는다. 결산의 단가 미입력(*) 건을 나중에 채우는 용도. 빈값 = 단가 지움.
+export async function PATCH(req: NextRequest) {
+  try {
+    const b = (await req.json()) as Record<string, unknown>;
+    const id = String(b.id || "");
+    if (!id) return NextResponse.json({ ok: false, error: "id 가 필요합니다." }, { status: 400 });
+    const unit_amount = b.unit_amount === undefined || b.unit_amount === "" || b.unit_amount === null
+      ? null : Math.max(0, Math.round(Number(b.unit_amount) || 0));
+    const sb = supabaseAdmin();
+    const { data: cur, error: findErr } = await sb.from("inventory_txns").select("id, type").eq("id", id).maybeSingle();
+    if (findErr) throw findErr;
+    if (!cur) return NextResponse.json({ ok: false, error: "내역을 찾을 수 없습니다 — 새로고침 후 다시 시도하세요." }, { status: 404 });
+    if (cur.type === "조정") return NextResponse.json({ ok: false, error: "조정 건에는 단가가 없습니다." }, { status: 400 });
+    const { error } = await sb.from("inventory_txns").update({ unit_amount }).eq("id", id);
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[inventory/txn PATCH]", err);
+    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "단가 수정 실패") }, { status: 500 });
+  }
+}
+
 // DELETE ?id= — 거래 취소(원장에서 삭제 = 현재고 원복)
 export async function DELETE(req: NextRequest) {
   try {
