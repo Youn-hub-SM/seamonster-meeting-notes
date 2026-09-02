@@ -1664,6 +1664,9 @@ a {
   body { background: #fff !important; }
   /* 색(막대·뱃지·헤더 배경) 인쇄 강제 */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  /* 월간매입 결산서: 표 머리글·셀이 회색 토큰이라 인쇄가 옅다 — 전부 검정으로(대표 지시) */
+  .inv-quote-print .b2b-table th,
+  .inv-quote-print .b2b-table td { color: #000 !important; }
   /* 개선요청서 사진: 새 페이지부터, A4 한 장에 2컷(약 125mm) 크게 */
   .voc-photos { page-break-before: always; }
   .voc-photo-fig { page-break-inside: avoid; }
