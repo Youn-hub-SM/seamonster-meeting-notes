@@ -101,10 +101,15 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     const rid = req.nextUrl.searchParams.get("rid");
     if (!rid) return NextResponse.json({ ok: false, error: "입고 id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
-    const { data: rc, error: fe } = await sb.from("production_receipts").select("id, request_id, qty, production_request_items(products(name))").eq("id", rid).single();
+    const { data: rc, error: fe } = await sb.from("production_receipts").select("id, request_id, qty, memo, production_request_items(products(name))").eq("id", rid).single();
     if (fe || !rc) return NextResponse.json({ ok: false, error: "입고 기록을 찾을 수 없습니다." }, { status: 404 });
     if ((rc as { request_id: string }).request_id !== requestId)
       return NextResponse.json({ ok: false, error: "요청서와 입고가 일치하지 않습니다." }, { status: 400 });
+    // 링크형 입고(이전 연동·기간 자동 매칭)의 원장은 다른 화면 소유 — 여기서 취소하면
+    //  실제 재고 원장까지 지워진다(cancel_production_receipt 가 원장을 삭제). UI 는 버튼을 숨기지만
+    //  구화면 캐시·직접 호출 대비 서버에서도 거절한다.
+    if (/기간 자동 매칭|이전 연동/.test(String((rc as { memo?: string | null }).memo || "")))
+      return NextResponse.json({ ok: false, error: "자동 연결된 입고는 여기서 취소할 수 없습니다 — 원래 화면(입고 및 출고 / 소매↔도매)에서 그 입고를 취소하면 연결도 함께 원복됩니다." }, { status: 409 });
 
     // 원자적 취소: receipt + 연결 도매 입고 원장을 한 트랜잭션에서 삭제(재고 원복).
     const { error: ce } = await sb.rpc("cancel_production_receipt", { p_receipt_id: rid });

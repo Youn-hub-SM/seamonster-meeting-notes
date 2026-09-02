@@ -4,6 +4,7 @@ import { loadRequests } from "@/app/lib/wholesale-production-db";
 import { PR_STATUSES, type PrStatus } from "@/app/lib/wholesale-production";
 import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProductionRequestDeleted } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
+import { syncWindowReceipts } from "@/app/lib/production-allocate";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -121,6 +122,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (itemsIn !== null || contentKeys.length > 0) {
       await logProductionRequestUpdated(reqNo, who);
     }
+    // 창(신청일·마감일)이나 용도가 바뀌면 기존 소급 링크부터 지우고 새 기준으로 다시 매칭한다 —
+    //  안 지우면 창 밖 입고나 '도매 납품'으로 정정한 요청의 소매 입고 링크가 잔존해 이중 이행이 된다.
+    //  지우는 건 링크(증거)뿐 — 원장은 건드리지 않는다. 이벤트 매칭 링크(memo '입고/출고 연동')는 유지.
+    if (patch.request_date !== undefined || patch.due_date !== undefined || patch.purpose !== undefined) {
+      try {
+        await sb.from("production_receipts").delete().eq("request_id", id).eq("memo", "기간 자동 매칭(신청일~마감일)");
+      } catch { /* 실패해도 아래 sync 는 잔여 기준으로만 추가하므로 초과 배분은 없다 */ }
+    }
+    // 신청일·마감일·품목이 바뀌었을 수 있다 — 새 창 기준으로 소급 매칭 후 반환
+    await syncWindowReceipts(sb, { requestId: id });
     const [row] = await loadRequests(sb, { id });
     return NextResponse.json({ ok: true, request: row });
   } catch (err) {

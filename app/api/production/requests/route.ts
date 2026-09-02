@@ -4,6 +4,7 @@ import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
 import { logProductionRequestCreated } from "@/app/lib/b2b-activity";
 import { addBusinessDays } from "@/app/lib/business-days";
+import { syncWindowReceipts } from "@/app/lib/production-allocate";
 
 export const dynamic = "force-dynamic";
 
@@ -86,12 +87,14 @@ export async function POST(req: NextRequest) {
     const { error: ie } = await sb.from("production_request_items").insert(itemRows);
     if (ie) { await sb.from("production_requests").delete().eq("id", requestId); throw ie; }
 
+    // 작성 알림을 먼저(소급 매칭이 만들 '요청 → 진행중' 알림보다 등록 알림이 앞서게)
+    const label = String(b.title || "").trim() || `품목 ${items.length}종 · ${items.reduce((s, it) => s + it.requested_qty, 0).toLocaleString()}개`;
+    await logProductionRequestCreated(req_no || "", label, who);
+
+    // 신청일~마감일 창에 이미 기록된 입고를 즉시 연결 — 응답의 이행률에 바로 반영된다
+    await syncWindowReceipts(sb, { requestId });
+
     const [full] = await loadRequests(sb, { id: requestId });
-    // 작성 알림(변경기록 + Flow 봇)
-    if (full) {
-      const label = full.title || `품목 ${full.items.length}종 · ${full.total_requested.toLocaleString()}개`;
-      await logProductionRequestCreated(full.req_no || "", label, who);
-    }
     return NextResponse.json({ ok: true, request: full });
   } catch (err) {
     console.error("[production/requests POST]", err);

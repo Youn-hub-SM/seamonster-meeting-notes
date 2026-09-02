@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
+import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const dynamic = "force-dynamic";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,28 +28,51 @@ export async function GET(req: NextRequest) {
     const from = sp.get("from");
     const to = sp.get("to");
     const qWord = (sp.get("q") || "").trim();
+    // before: '이전 내역 더 보기' 커서 — 지난 페이지 경계 timestamp 보다 strictly 과거(lt)만.
+    //  경계 timestamp 블록은 지난 페이지가 끝까지 읽어 갔으므로(아래) 여기서 다시 주지 않는다.
+    const before = /^\d{4}-\d{2}-\d{2}T[0-9:.+Z-]{6,30}$/.test(sp.get("before") || "") ? sp.get("before")! : null;
     const limit = Math.min(4000, Math.max(1, Number(sp.get("limit")) || 1500));
     const sb = supabaseAdmin();
 
     let raws: Raw[];
+    let capped = false;      // 행 캡 도달 = 더 과거 내역이 있을 수 있다
+    let boundaryTs: string | null = null;
     if (qWord) {
       raws = await searchRaws(sb, { type, from, to, qWord });
     } else {
-      const sel = (withGroup: boolean) => {
-        let q = sb.from("inventory_txns")
-          .select(FULL_COLS(withGroup))
-          .in("type", ["입고", "출고"])
-          .order("created_at", { ascending: false })
-          .limit(limit);
+      const applyF = <T extends { eq: (c: string, v: string) => T; gte: (c: string, v: string) => T; lte: (c: string, v: string) => T; lt: (c: string, v: string) => T }>(q: T): T => {
         if (type === "입고" || type === "출고") q = q.eq("type", type);
         if (from && DATE_RE.test(from)) q = q.gte("txn_date", from);
         if (to && DATE_RE.test(to)) q = q.lte("txn_date", to);
+        if (before) q = q.lt("created_at", before);
         return q;
       };
-      let res = await sel(true);
-      if (res.error) res = await sel(false); // 033 미적용 폴백
-      if (res.error) throw res.error;
-      raws = (res.data ?? []) as unknown as Raw[];
+      const sel = (withGroup: boolean) =>
+        applyF(sb.from("inventory_txns").select(FULL_COLS(withGroup)).in("type", ["입고", "출고"]))
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: true });
+      // range 페이징 — 서버 Max Rows(기본 1000, 더 낮추지 말 것)가 limit 보다 작아도 전량 확보
+      let wg = true;
+      try {
+        raws = await fetchPaged<Raw>(() => sel(true), limit);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/order_no|group_id|status/i.test(msg)) { wg = false; raws = await fetchPaged<Raw>(() => sel(false), limit); } // 033 미적용 폴백
+        else throw e;
+      }
+      capped = raws.length >= limit;
+      if (capped && raws.length) {
+        // 경계 timestamp 블록을 끝까지 마저 읽는다 — 한 insert 문으로 들어온 주문(들)의 행이
+        //  캡 중간에서 잘려 품목 수·총액이 틀어지지 않게. 같은 timestamp 에 주문이 여럿(혼합 엑셀)일
+        //  수도 있으므로 블록 전체를 이 페이지가 소화하고, 다음 페이지는 lt 커서로 그보다 과거만 본다.
+        const last = raws[raws.length - 1];
+        boundaryTs = last.created_at;
+        const tail = () =>
+          applyF(sb.from("inventory_txns").select(FULL_COLS(wg)).in("type", ["입고", "출고"]))
+            .eq("created_at", last.created_at).gt("id", last.id)
+            .order("id", { ascending: true });
+        raws.push(...await fetchPaged<Raw>(() => tail(), 30000));
+      }
     }
 
     // group_id 로 묶기(없으면 id 단건)
@@ -72,23 +97,26 @@ export async function GET(req: NextRequest) {
       map.set(k, o);
     }
     const orders = [...map.values()].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-    return NextResponse.json({ ok: true, orders });
+    // capped 면 경계 블록보다 과거 내역이 남아 있을 수 있다(없으면 다음 페이지가 빈 목록으로 끝난다).
+    const more = !qWord && capped && !!boundaryTs;
+    return NextResponse.json({ ok: true, orders, more, next_before: more ? boundaryTs : null });
   } catch (err) {
     console.error("[inventory/orders GET]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "주문 조회 실패") }, { status: 500 });
   }
 }
 
-// range 페이징 — limit/서버 max-rows 캡이 결과를 조용히 자르는 것을 막는다(이 버그의 원형).
-//  maxRows 는 폭주 방어 상한. 페이징 안정성을 위해 호출부는 order 를 걸어 둔다.
+// range 페이징 — limit/서버 max-rows 캡(기본 1000)이 결과를 조용히 자르는 것을 막는다(이 버그의 원형).
+//  정확히 maxRows 행까지 읽는다. 페이징 안정성을 위해 호출부는 order 를 걸어 둔다.
 type PagedQuery = { range: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }> };
 async function fetchPaged<T>(build: () => PagedQuery, maxRows = 30000): Promise<T[]> {
   const out: T[] = [];
   for (let i = 0; i < maxRows; i += 1000) {
-    const { data, error } = await build().range(i, i + 999);
+    const upto = Math.min(i + 999, maxRows - 1);
+    const { data, error } = await build().range(i, upto);
     if (error) throw new Error(error.message);
     out.push(...((data ?? []) as T[]));
-    if (!data || data.length < 1000) break;
+    if (!data || data.length < upto - i + 1) break;
   }
   return out;
 }
@@ -191,12 +219,32 @@ export async function PATCH(req: NextRequest) {
     const b = (await req.json()) as { group_id?: string; id?: string; status?: string };
     const status = b.status === "대기" ? "대기" : "완료";
     const sb = supabaseAdmin();
-    let q = sb.from("inventory_txns").update({ status });
+    // 실제로 상태가 바뀌는 행만 갱신·반환 — 아래 생산요청 매칭이 같은 행을 두 번 연결하지 않게
+    let q = sb.from("inventory_txns").update({ status }).neq("status", status);
     if (b.group_id) q = q.eq("group_id", b.group_id);
     else if (b.id) q = q.eq("id", b.id);
     else return NextResponse.json({ ok: false, error: "group_id 또는 id 가 필요합니다." }, { status: 400 });
-    const { error } = await q;
+    const { data: flipped, error } = await q.select("id, product_id, qty, type, txn_date, partner");
     if (error) throw error;
+
+    // 대기 → 완료된 '입고'는 이 시점이 실제 입고 — 열린 생산요청(재고 보충)에 이벤트 매칭.
+    //  (기록 시점 매칭은 대기 건을 건너뛰므로 여기서 이어받는다. 실패해도 처리 자체는 성공.)
+    //  채널이동(내부 이동) 입고는 제조사 생산이 아니므로 제외 — 창 매칭과 같은 규칙.
+    if (status === "완료") {
+      const receipts = (flipped ?? []).filter((t) => t.type === "입고" && Number(t.qty) > 0 && t.partner !== "채널이동");
+      if (receipts.length) {
+        try {
+          const token = req.cookies.get("b2b_auth")?.value;
+          const who = (await verifySession(token)) || resolveUserName(token);
+          await allocateReceiptsToOpenRequests(
+            sb,
+            receipts.map((t) => ({ inv_txn_id: t.id as string, product_id: t.product_id as string, qty: Number(t.qty), receipt_date: (t.txn_date as string) || undefined })),
+            who,
+            { purpose: "재고 보충" },
+          );
+        } catch (e) { console.warn("[inventory/orders PATCH] 생산요청 매칭 실패", e); }
+      }
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[inventory/orders PATCH]", err);

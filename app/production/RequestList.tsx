@@ -472,8 +472,12 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
                     <span style={{ fontWeight: 700, color: rc.qty < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{rc.qty > 0 ? "+" : ""}{rc.qty.toLocaleString()}</span>
                     {rc.received_by && <span style={{ color: "var(--sm-text-mid)" }}>{rc.received_by}</span>}
                     {rc.memo && <span style={{ color: "var(--sm-text-mid)" }}>· {rc.memo}</span>}
+                    {/* 링크형 입고(이전 연동·기간 자동 매칭)는 원장이 다른 화면 소유 — 여기서 취소하면
+                        실제 재고 원장까지 지워지므로 버튼을 막고 원래 화면으로 안내한다 */}
                     {canEdit && (rc.memo?.includes("이전 연동")
                       ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 소매↔도매 화면에서</span>
+                      : rc.memo?.includes("기간 자동 매칭")
+                      ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 입고 및 출고 화면에서</span>
                       : <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>)}
                   </div>
                 ))}

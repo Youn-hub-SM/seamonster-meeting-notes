@@ -35,6 +35,13 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
 
   // 지금 화면의 orders 가 어떤 검색어로 서버 필터된 것인지 — 클라 재필터를 건너뛸지 판단에 쓴다
   const [loadedQ, setLoadedQ] = useState("");
+  // '이전 내역 더 보기' 페이징 — [전체] 탭은 입고+출고 합산이 행 캡을 먼저 채워 과거가 일찍 잘린다.
+  const [more, setMore] = useState(false);
+  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [moreBusy, setMoreBusy] = useState(false);
+  // 더 보기로 확장한 깊이(행 한도) — 취소·입고처리 후 재조회가 1페이지로 접히지 않게 유지.
+  //  서버 상한(4000행)까지만. 필터·검색이 바뀌면 기본으로 되돌린다.
+  const rowLimitRef = useRef(1500);
   // 요청 순번 가드 — 검색 요청(느림)과 일반 요청(빠름)이 겹칠 때 늦게 도착한 이전 응답이
   // 최신 목록을 덮어쓰지 않게 한다(검색어를 지웠는데 검색 결과가 남는 경합).
   const seqRef = useRef(0);
@@ -44,21 +51,26 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   const load = useCallback(async () => {
     const seq = ++seqRef.current;
     setLoading(true); setError("");
+    setMore(false); setNextBefore(null); // 재조회 중 '더 보기'가 옛 커서로 눌리는 것 방지 — 응답이 복원
     try {
       const qs = new URLSearchParams();
       if (fType !== "전체") qs.set("type", fType);
       if (DATE_OK.test(fFrom)) qs.set("from", fFrom);
       if (DATE_OK.test(fTo)) qs.set("to", fTo);
       if (debouncedSearch) qs.set("q", debouncedSearch);
+      if (rowLimitRef.current > 1500) qs.set("limit", String(rowLimitRef.current));
       const j = await (await fetch("/api/inventory/orders" + (qs.toString() ? "?" + qs.toString() : ""), { cache: "no-store" })).json();
       if (seq !== seqRef.current) return; // 그 사이 새 요청이 나감 — 이 응답은 버린다
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setOrders(j.orders || []);
       setLoadedQ(debouncedSearch);
+      setMore(!!j.more);
+      setNextBefore(j.next_before || null);
     } catch (e) { if (seq === seqRef.current) setError(e instanceof Error ? e.message : "조회 오류"); }
     if (seq === seqRef.current) setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fType, fFrom, fTo, debouncedSearch]);
+  useEffect(() => { rowLimitRef.current = 1500; }, [fType, fFrom, fTo, debouncedSearch]); // 필터가 바뀌면 깊이 초기화
   useEffect(() => { load(); }, [load, reloadKey]);
 
   const shown = useMemo(() => {
@@ -83,6 +95,37 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
       .then((j) => { if (j?.ok) setBalances((prev) => ({ ...prev, ...j.balances })); })
       .catch(() => {});
   }
+  async function loadMore() {
+    if (!nextBefore || moreBusy) return;
+    const seq = seqRef.current; // 필터·검색이 바뀌면(새 load 가 seq 증가) 이 응답은 버린다
+    setMoreBusy(true);
+    try {
+      const qs = new URLSearchParams();
+      if (fType !== "전체") qs.set("type", fType);
+      if (DATE_OK.test(fFrom)) qs.set("from", fFrom);
+      if (DATE_OK.test(fTo)) qs.set("to", fTo);
+      qs.set("before", nextBefore);
+      const j = await (await fetch("/api/inventory/orders?" + qs.toString(), { cache: "no-store" })).json();
+      if (seq === seqRef.current && j.ok) {
+        const incoming: Order[] = j.orders || [];
+        const seen = new Set(orders.map((o) => o.key));
+        const add = incoming.filter((o) => !seen.has(o.key)); // 커서 경계 안전망(중복 제거)
+        if (!add.length) {
+          setMore(false); setNextBefore(null); // 진전 없음 — 과거 내역 끝
+        } else {
+          setOrders((prev) => {
+            const s2 = new Set(prev.map((o) => o.key));
+            return [...prev, ...incoming.filter((o) => !s2.has(o.key))];
+          });
+          rowLimitRef.current = Math.min(4000, rowLimitRef.current + 1500);
+          setMore(!!j.more);
+          setNextBefore(j.next_before || null);
+        }
+      }
+    } catch { /* 더 보기 실패는 표시만 유지 */ }
+    setMoreBusy(false);
+  }
+
   async function cancel(o: Order) {
     if (!window.confirm(`${o.order_no || "이 건"} (${o.item_count}개 품목)을 취소할까요? 재고가 원복됩니다.`)) return;
     const qs = o.order_no ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`;
@@ -102,7 +145,14 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     setSaving(false);
     if (!r.ok || !j?.ok) { alert(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     setEditId(null);
-    await load(); // 금액·합계는 서버 재계산분으로 갱신
+    // 목록을 다시 불러오지 않고 제자리 갱신 — '더 보기'로 내려간 과거 주문을 고쳐도 화면이 접히지 않게.
+    //  금액 계산은 서버와 동일(단가 × 수량, 합계는 품목 합).
+    const v = editVal.trim() === "" ? null : Math.max(0, Math.round(Number(editVal) || 0));
+    setOrders((prev) => prev.map((o) => {
+      if (!o.items.some((x) => x.id === it.id)) return o;
+      const items = o.items.map((x) => (x.id === it.id ? { ...x, unit_amount: v, amount: (v || 0) * x.qty } : x));
+      return { ...o, items, total_amount: items.reduce((s, x) => s + x.amount, 0) };
+    }));
   }
   async function process(o: Order) {
     const key = o.order_no ? { group_id: o.key } : { id: o.key };
@@ -223,6 +273,13 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
         </tbody>
       </table>
     </div>
+    {more && !search.trim() && (
+      <div style={{ textAlign: "center", marginTop: 12 }}>
+        <button className="b2b-btn-secondary" onClick={loadMore} disabled={moreBusy || loading}>
+          {moreBusy ? "불러오는 중..." : "이전 내역 더 보기"}
+        </button>
+      </div>
+    )}
     </>
   );
 }
