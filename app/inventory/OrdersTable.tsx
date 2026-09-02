@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INV_TYPE_COLOR } from "@/app/lib/inventory";
 import { matchKoQuery } from "@/app/lib/hangul";
 
@@ -22,6 +22,10 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   const [fFrom, setFFrom] = useState("");
   const [fTo, setFTo] = useState("");
   const [search, setSearch] = useState("");
+  // 검색은 서버에서 전체 기록을 뒤진다 — 최근 N행 캡 안에서만 거르면 [전체] 탭에서 과거 매칭 건이
+  // 빠진다(입고+출고 합산이 캡을 먼저 채움). 타이핑마다 요청하지 않게 350ms 디바운스.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search.trim()), 350); return () => clearTimeout(t); }, [search]);
   // 세부 내역 '전 → 후' 재고 변동 — 펼칠 때 1회 조회해 캐시
   const [balances, setBalances] = useState<Record<string, { before: number; after: number } | null>>({});
   // 세부 내역 단가 인라인 수정 — 단가만 고친다(수량·품목·날짜는 재고에 영향 → 취소 후 재기록)
@@ -29,30 +33,43 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   const [editVal, setEditVal] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // 지금 화면의 orders 가 어떤 검색어로 서버 필터된 것인지 — 클라 재필터를 건너뛸지 판단에 쓴다
+  const [loadedQ, setLoadedQ] = useState("");
+  // 요청 순번 가드 — 검색 요청(느림)과 일반 요청(빠름)이 겹칠 때 늦게 도착한 이전 응답이
+  // 최신 목록을 덮어쓰지 않게 한다(검색어를 지웠는데 검색 결과가 남는 경합).
+  const seqRef = useRef(0);
+
   const kstDay = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - back); return d.toISOString().slice(0, 10); };
   const DATE_OK = /^\d{4}-\d{2}-\d{2}$/;
   const load = useCallback(async () => {
+    const seq = ++seqRef.current;
     setLoading(true); setError("");
     try {
       const qs = new URLSearchParams();
       if (fType !== "전체") qs.set("type", fType);
       if (DATE_OK.test(fFrom)) qs.set("from", fFrom);
       if (DATE_OK.test(fTo)) qs.set("to", fTo);
+      if (debouncedSearch) qs.set("q", debouncedSearch);
       const j = await (await fetch("/api/inventory/orders" + (qs.toString() ? "?" + qs.toString() : ""), { cache: "no-store" })).json();
+      if (seq !== seqRef.current) return; // 그 사이 새 요청이 나감 — 이 응답은 버린다
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setOrders(j.orders || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
-    setLoading(false);
+      setLoadedQ(debouncedSearch);
+    } catch (e) { if (seq === seqRef.current) setError(e instanceof Error ? e.message : "조회 오류"); }
+    if (seq === seqRef.current) setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fType, fFrom, fTo]);
+  }, [fType, fFrom, fTo, debouncedSearch]);
   useEffect(() => { load(); }, [load, reloadKey]);
 
   const shown = useMemo(() => {
     const q = search.trim();
     if (!q) return orders;
-    // 품목명·SKU·거래처·주문번호로 검색(다른 화면과 동일한 초성·다중단어 매칭)
+    // 서버가 이미 이 검색어로 거른 목록이면 그대로 쓴다 — 서버(토큰 분해 ilike)와 클라(원문
+    // matchKoQuery)의 판정 차이로 "(주)" 같은 검색어에서 찾아온 결과를 떨어뜨리는 일 방지.
+    if (q === loadedQ) return orders;
+    // 타이핑 중(디바운스 대기)엔 지금 로드된 목록에서 즉시 필터해 반응성 유지
     return orders.filter((o) => matchKoQuery(`${o.items.map((it) => `${it.product_name} ${it.sku || ""}`).join(" ")} ${o.partner || ""} ${o.order_no || ""}`, q));
-  }, [orders, search]);
+  }, [orders, search, loadedQ]);
 
   function toggle(k: string) {
     setOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
@@ -115,16 +132,17 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
       <input className="b2b-input" type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} style={{ width: 145 }} title="시작일" />
       <span className="sm-faint">~</span>
       <input className="b2b-input" type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} style={{ width: 145 }} title="종료일" />
-      <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목·SKU·거래처·주문번호 — 초성 가능" style={{ width: 280, maxWidth: "100%" }} />
+      <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목·SKU·거래처·주문번호 — 품목은 초성 가능" style={{ width: 280, maxWidth: "100%" }} />
       {(fFrom || fTo || search || fType !== "전체") && (
         <button className="b2b-link-btn" onClick={() => { setFType("전체"); setFFrom(""); setFTo(""); setSearch(""); }}>초기화</button>
       )}
     </div>
   );
 
-  if (loading) return <>{filters}<div className="b2b-loading">불러오는 중...</div></>;
+  // 재검색·재조회 중엔 기존 목록을 그대로 두고(깜빡임 방지), 첫 로드만 전체 로딩 표시
+  if (loading && orders.length === 0) return <>{filters}<div className="b2b-loading">불러오는 중...</div></>;
   if (error) return <>{filters}<div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div></>;
-  if (shown.length === 0) return <>{filters}<div className="b2b-empty">{orders.length === 0 ? "입고·출고 내역이 없습니다." : "필터에 맞는 내역이 없습니다."}</div></>;
+  if (shown.length === 0) return <>{filters}<div className="b2b-empty">{loading ? "검색 중..." : debouncedSearch ? "검색 결과가 없습니다." : orders.length === 0 ? "입고·출고 내역이 없습니다." : "필터에 맞는 내역이 없습니다."}</div></>;
 
   return (
     <>
