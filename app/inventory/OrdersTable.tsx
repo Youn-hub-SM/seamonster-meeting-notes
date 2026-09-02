@@ -6,7 +6,8 @@ import { matchKoQuery } from "@/app/lib/hangul";
 
 type OrderItem = { id: string; product_name: string; sku: string | null; qty: number; unit_amount: number | null; amount: number };
 type Order = {
-  key: string; order_no: string | null; type: "입고" | "출고"; status: "대기" | "완료"; txn_date: string; created_at: string;
+  // '이동' = 소매↔도매 이동(출고+입고 두 행이 한 묶음) — [전체] 탭에서 유형 집계가 어긋나 보이지 않게 구분
+  key: string; order_no: string | null; type: "입고" | "출고" | "이동"; status: "대기" | "완료"; txn_date: string; created_at: string;
   partner: string | null; memo: string | null; created_by: string | null;
   item_count: number; total_qty: number; total_amount: number; items: OrderItem[];
 };
@@ -202,14 +203,15 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
         <thead><tr><th>상태</th><th>일시</th><th>주문번호</th><th>거래처</th><th>품목 수</th><th className="num">총수량</th><th className="num">총액</th><th>메모</th><th></th></tr></thead>
         <tbody>
           {shown.map((o) => {
-            const c = INV_TYPE_COLOR[o.type];
+            // 이동은 유형 색 지도에 없는 파생 라벨 — 중립 배지로 표시
+            const c = o.type === "이동" ? { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" } : INV_TYPE_COLOR[o.type];
             const isOpen = open.has(o.key);
             const done = o.status === "완료";
             const badge = done ? c : { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" };
             return (
               <FragmentRows key={o.key}>
                 <tr onClick={() => toggle(o.key)} style={{ cursor: "pointer" }}>
-                  <td><span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type} {o.status}</span></td>
+                  <td><span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type === "이동" ? "이동(소매↔도매)" : `${o.type} ${o.status}`}</span></td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 700 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
                   <td>{o.partner || "-"}</td>

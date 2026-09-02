@@ -88,6 +88,9 @@ export async function GET(req: NextRequest) {
     for (const r of raws) {
       const k = r.group_id || r.id;
       const o = map.get(k) || emptyOrder(r);
+      // 소매↔도매 이동은 출고+입고 두 행이 한 묶음 — 첫 행 유형(무작위)으로 배지가 찍히면
+      //  [전체] 탭에서 입고/출고 집계가 어긋나 보인다. 두 유형이 섞이면 '이동'으로 명시.
+      if (o.type !== "이동" && r.type !== o.type) o.type = "이동";
       const absQty = Math.abs(Number(r.qty) || 0);
       const amount = (Number(r.unit_amount) || 0) * absQty;
       o.items.push({ id: r.id, product_name: r.products?.name || "(삭제됨)", sku: r.products?.sku ?? null, qty: absQty, unit_amount: r.unit_amount, amount });
