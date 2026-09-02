@@ -153,7 +153,7 @@ export default function QuotePage() {
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>과세 기타
             <input className="b2b-input" type="number" min={0} value={taxEtc || ""} onChange={(e) => setTaxEtc(Number(e.target.value) || 0)} placeholder="0" style={{ width: 130, textAlign: "right" }} /></label>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 과세는 입고 단가를 공급가액으로 보고 부가세 10%를 더합니다. 임대료·면세/과세 기타는 직접 입력(브라우저에 기억).</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 입고 단가 = 공급가액(부가세 미포함). 품목표 금액은 공급가액 그대로이고, 부가세 10%는 요약의 과세품목 세액에서 더합니다. 임대료·면세/과세 기타는 직접 입력(브라우저에 기억).</p>
       </section>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : items.length === 0 && !s?.rentTotal ? (
@@ -217,7 +217,7 @@ export default function QuotePage() {
                   <td className="num b2b-money" style={{ fontWeight: 700 }}
                     title={[
                       it.return_qty > 0 ? `정산수량 ${it.net_qty.toLocaleString()} (반품 ${it.return_qty.toLocaleString()} 제외)` : "",
-                      it.tax_type === "taxable" ? `공급가 ${Math.round(it.amount).toLocaleString()} + VAT` : "",
+                      it.tax_type === "taxable" ? `공급가액 기준 — 부가세 포함 시 ${won(it.amount * 1.1)}원` : "",
                     ].filter(Boolean).join(" · ")}>{it.total.toLocaleString()}</td>
                   <td><span className="sm-faint" style={{ fontSize: 12 }}>{it.tax_type === "exempt" ? "면세" : "과세"}</span></td>
                 </tr>
@@ -236,7 +236,7 @@ export default function QuotePage() {
           <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.7 }}>
             ※ 매입가 = 가중평균 매입단가(1원 미만 반올림) — 단가가 여러 번이었으면 매입가 × 수량이 총 매입금액과 몇 원 어긋날 수 있습니다. 금액은 실제 매입액 기준입니다. 매입가 옆 *는 단가 미입력 입고가 섞였다는 표시입니다.<br />
             ※ 결산 기준: 그 달에 소매로 실제 입고 완료된 것만 셉니다 — 소매↔도매 이전(내부 이동, 양방향)과 '대기' 상태 입고, 도매 채널 입고는 제외.<br />
-            ※ 총 매입금액 = 실제 매입액 − 반품액(반품수량 × 매입가, 반품 단가를 적었으면 그 단가), 과세는 부가세 포함. 합계는 열마다 그 열을 더한 값입니다.<br />
+            ※ 총 매입금액 = 실제 매입액 − 반품액(반품수량 × 매입가, 반품 단가를 적었으면 그 단가) — 과세·면세 모두 <strong>공급가액 기준(부가세 미포함)</strong>이며, 부가세는 위 요약의 과세품목 세액에만 붙습니다. 합계는 열마다 그 열을 더한 값입니다.<br />
             ※ 반품은 재고를 건드리지 않습니다 — 물건이 실제로 빠지는 처리는 재고목록에서 따로 합니다.<br />
             ※ 그 달 매입이 없는 품목의 반품(교차월 반품)도 품목 행으로 추가돼 차감됩니다 — 단가는 반품 단가, 없으면 그 달 매입가, 그것도 없으면 상품 마스터의 매입단가 순으로 매깁니다.
           </p>

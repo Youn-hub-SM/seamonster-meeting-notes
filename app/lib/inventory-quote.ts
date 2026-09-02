@@ -34,7 +34,9 @@ export interface QuoteItem {
   amount: number;         // 공급가액 = 매입액 − 반품액 (반품이 더 크면 음수)
   gross_amount: number;   // 반품 차감 전 공급가액 — 반품액 표시용
   return_amount: number;  // 반품 공급가액 — 반품 단가, 없으면 그 달 매입가, 교차월이면 마스터 매입단가
-  total: number;          // 총 매입금액(과세=공급가×1.1, 면세=공급가). 반품 차감 후.
+  total: number;          // 총 매입금액 = 공급가액 기준(부가세 미포함, 반품 차감 후).
+                          //  입고 단가 = 공급가액(2026-09-02 대표 확정) — 부가세는 품목표가 아니라
+                          //  요약 블록의 '과세품목 세액'에서만 붙는다.
   unit_price: number;     // 매입가(가중평균 = round(gross_amount/qty), 순액)
   ref_price: number;      // 기준 매입가(제품 마스터 purchase_price)
   price_varies: boolean;  // 한 달 안에 단가가 여러 개였는지
@@ -74,7 +76,7 @@ export interface QuoteSummary {
   exemptSupply: number; exemptEtc: number; exemptTotal: number;
   taxableSupply: number; taxableEtc: number; taxableVat: number; taxableTotal: number;
   deposit: number;       // 총 입금액 = 임대료 + 면세 + 과세
-  itemCount: number; totalQty: number; totalAmount: number; // totalAmount = 품목표 총 매입금액 합(과세 VAT 포함)
+  itemCount: number; totalQty: number; totalAmount: number; // totalAmount = 품목표 총 매입금액 합(공급가액 기준)
   noPriceQty: number;      // 단가 미입력 입고 수량 합 — 0 보다 크면 매입가가 실제보다 낮게 나온다
   totalReturnQty: number;  // 반품수량 합
   returnAmount: number;    // 반품으로 깎인 공급가액 합(순액)
@@ -173,7 +175,9 @@ export function computeQuote(
     const return_amount = (retFixed.get(it.product_id) ?? 0) + fallbackUnit * Math.max(0, return_qty - fixedQty);
     const net_qty = it.qty - return_qty;
     const amount = it.gross_amount - return_amount;
-    const total = it.tax_type === "taxable" ? Math.round(amount * 1.1) : amount; // 과세는 부가세 포함
+    // 품목표 금액은 과세·면세 모두 공급가액 그대로 — 부가세는 요약의 과세품목 세액에서만.
+    //  (이전엔 과세에 ×1.1 을 얹어 품목표가 실제 매입 원장 금액과 어긋나 보였다 — 대표 정정 지시)
+    const total = Math.round(amount);
     const { _prices, ...rest } = it;
     // 매입 없는 반품 행은 매입가 칸에 반품을 매긴 단가(마스터 매입단가)를 보여준다
     const shownUnit = it.qty > 0 ? unit_price : (return_qty > 0 ? Math.round(Math.abs(return_amount) / return_qty) : 0);
@@ -204,7 +208,7 @@ export function computeQuote(
     totalQty: items.reduce((s, i) => s + i.qty, 0),
     totalReturnQty: items.reduce((s, i) => s + i.return_qty, 0),
     returnAmount: items.reduce((s, i) => s + i.return_amount, 0),
-    totalAmount: items.reduce((s, i) => s + i.total, 0), // 품목표 총 매입금액 합(과세 VAT 포함)
+    totalAmount: items.reduce((s, i) => s + i.total, 0), // 품목표 총 매입금액 합(공급가액 기준)
   };
 
   return { month, items, raw, summary };
