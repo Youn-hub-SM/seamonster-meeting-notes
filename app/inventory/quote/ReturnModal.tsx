@@ -14,9 +14,10 @@ type Preview = { rows: PreviewRow[]; errors: { line: number; msg: string }[]; va
 
 const won = (n: number) => Math.round(n).toLocaleString();
 // 그 달의 마지막 날 — 반품일은 결산 대상 월 안에 있어야 그 달 결산에 잡힌다.
+//  Date.UTC 기준이어야 브라우저(KST)에서 말일이 하루 밀리지 않는다.
 function monthEnd(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
-  return new Date(y, m, 0).toISOString().slice(0, 10);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
 }
 function defaultDate(ym: string): string {
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -64,9 +65,9 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
   );
   const product = products.find((p) => p.id === productId);
   const productLabel = product ? `${product.spec ? `${product.name} ${product.spec}` : product.name}${product.sku ? ` (${product.sku})` : ""}` : "";
-  // 이 달에 매입한 수량 — 그보다 많이 반품하면 결산 수량이 0으로 잘리므로 미리 알린다.
+  // 이 달에 매입한 수량 — 그보다 많이 반품하면 초과분이 음수로 차감되므로 미리 알린다.
   const alreadyReturned = rows.filter((r) => r.product_id === productId).reduce((a, r) => a + r.qty, 0);
-  const overReturn = !!product && Number(qty) > 0 && alreadyReturned + Number(qty) > product.qty;
+  const overReturn = !!product && product.qty > 0 && Number(qty) > 0 && alreadyReturned + Number(qty) > product.qty;
 
   async function save() {
     if (!productId) { setError("품목을 선택하세요."); return; }
@@ -202,6 +203,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   양식에는 <strong>{y}년 {mm}월에 매입한 품목</strong>의 SKU·품목명·매입수량이 채워져 있습니다 —
                   {" "}<strong>반품수량</strong> 칸만 적으면 되고, 비워 둔 줄은 건너뜁니다.
                   단가를 비우면 그 달 매입가로 계산합니다.
+                  그 달 매입이 없는 품목도 SKU 를 적은 행을 추가하면 반품됩니다(결산에 행이 추가돼 차감).
                   <br />반품은 <strong>재고를 건드리지 않습니다</strong> — 매입 결산의 매입수량만 깎습니다.
                   {" · "}<a href={`/api/inventory/returns/template?month=${month}`} className="sm-link">양식 다운로드</a>
                 </p>
@@ -217,12 +219,13 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   onSelect={(opt) => setProductId(opt.id)}
                   placeholder="품목명 · SKU 검색 (초성도 됩니다)"
                   ariaLabel="품목 검색"
-                  emptyText={products.length === 0 ? `${mm}월 매입 내역이 없습니다` : "일치하는 품목이 없습니다"}
+                  emptyText="일치하는 품목이 없습니다"
                 />
               </div>
               {product && (
                 <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>
-                  {mm}월 매입 <strong>{product.qty.toLocaleString()}</strong>
+                  {product.qty > 0 ? <>{mm}월 매입 <strong>{product.qty.toLocaleString()}</strong></>
+                    : <>{mm}월 매입 없음 — 반품하면 결산 품목표에 행이 추가돼 차감됩니다(교차월 반품)</>}
                   {alreadyReturned > 0 && <> · 이미 반품 <strong style={{ color: "var(--sm-danger)" }}>{alreadyReturned.toLocaleString()}</strong></>}
                 </p>
               )}
@@ -244,7 +247,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
 
               {overReturn && (
                 <div className="sm-warn" style={{ marginTop: 8 }}>
-                  {mm}월 매입수량({product?.qty.toLocaleString()})보다 반품이 많습니다 — 결산의 정산수량은 0으로 잡힙니다.
+                  {mm}월 매입수량({product?.qty.toLocaleString()})보다 반품이 많습니다 — 초과분도 결산에서 그대로(음수로) 차감됩니다.
                 </div>
               )}
 

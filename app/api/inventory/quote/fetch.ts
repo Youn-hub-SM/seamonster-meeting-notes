@@ -6,7 +6,8 @@ const MONTH_RE = /^\d{4}-\d{2}$/;
 export function monthRange(ym: string) {
   const [y, m] = ym.split("-").map(Number);
   const from = `${ym}-01`;
-  const to = new Date(y, m, 0).toISOString().slice(0, 10); // 말일
+  // 말일 — Date.UTC 로 계산해야 서버 타임존과 무관하다(로컬 자정 기준이면 KST 환경에서 말일이 하루 밀린다)
+  const to = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
   return { from, to };
 }
 
@@ -63,15 +64,20 @@ export async function fetchQuoteTxns(month: string): Promise<QuoteTxn[]> {
 }
 
 // 해당 월의 제조사 반품(purchase_returns). 마이그레이션 087 미적용이면 빈 배열 — 결산은 그대로 돈다.
+//  제품 마스터를 조인해, 그 달 매입이 없는 품목의 반품(교차월)도 품목표에 행으로 만들 수 있게 한다.
 export async function fetchQuoteReturns(month: string): Promise<QuoteReturn[]> {
   const sb = supabaseAdmin();
   const { from, to } = monthRange(month);
-  const res = await sb.from("purchase_returns").select("product_id, qty, unit_amount")
+  const base = (sel: string) => sb.from("purchase_returns").select(sel)
     .gte("return_date", from).lte("return_date", to).limit(5000);
+  let res = await base("product_id, qty, unit_amount, products(sku, name, spec, origin, purchase_price, tax_type)");
+  if (res.error) res = await base("product_id, qty, unit_amount"); // 조인 실패 폴백(구 스키마)
   if (res.error) return [];
-  return (res.data ?? []).map((r) => ({
-    product_id: r.product_id as string,
+  type RetRow = { product_id: string; qty: number; unit_amount: number | null; products?: QuoteReturn["product"] };
+  return ((res.data ?? []) as unknown as RetRow[]).map((r) => ({
+    product_id: r.product_id,
     qty: Number(r.qty) || 0,
     unit_amount: r.unit_amount == null ? null : Number(r.unit_amount),
+    product: r.products ?? null,
   }));
 }

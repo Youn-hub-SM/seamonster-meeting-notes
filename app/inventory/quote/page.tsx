@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { QuoteItem, QuoteSummary } from "@/app/lib/inventory-quote";
 import ReturnModal from "./ReturnModal";
 
@@ -8,6 +8,7 @@ const THIS_MONTH = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice
 const won = (n: number) => Math.round(n).toLocaleString();
 
 type QuoteResp = { ok: boolean; month: string; items: QuoteItem[]; summary: QuoteSummary; error?: string };
+type Snapshot = { month: string; confirmed_at: string; confirmed_by: string | null; summary: QuoteSummary; items: QuoteItem[] };
 
 export default function QuotePage() {
   const [ym, setYm] = useState(THIS_MONTH());
@@ -18,6 +19,10 @@ export default function QuotePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [returnOpen, setReturnOpen] = useState(false);
+  // 결산 확정(스냅샷) — migration 101. 미적용이면 확정 UI 만 숨긴다.
+  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [snapReady, setSnapReady] = useState(false);
+  const [snapBusy, setSnapBusy] = useState(false);
 
   // 임대료·기타는 매달 고정값에 가까워 브라우저에 기억.
   useEffect(() => {
@@ -40,8 +45,71 @@ export default function QuotePage() {
   }, []);
   useEffect(() => { const t = setTimeout(() => load(ym, rent, etc, taxEtc), 250); return () => clearTimeout(t); }, [load, ym, rent, etc, taxEtc]);
 
+  // 월 전환·연속 요청 시 이전 응답이 새 화면을 덮지 않게 순번 가드
+  const snapSeq = useRef(0);
+  const loadSnap = useCallback(async (m: string) => {
+    const seq = ++snapSeq.current;
+    try {
+      const j = await (await fetch(`/api/inventory/quote/snapshot?month=${m}`, { cache: "no-store" })).json();
+      if (seq !== snapSeq.current) return;
+      if (j.ok) { setSnap(j.snapshot || null); setSnapReady(!j.unavailable); }
+    } catch { /* 확정 기능만 조용히 비활성 — 결산 자체는 그대로 */ }
+  }, []);
+  useEffect(() => { setSnap(null); loadSnap(ym); }, [loadSnap, ym]); // 이전 달 확정 배너 잔상 방지
+
+  async function confirmQuote() {
+    if (!window.confirm(snap
+      ? `${ym} 결산을 다시 확정할까요? 기존 확정본을 덮어씁니다.`
+      : `${ym} 결산을 확정할까요? 확정 후 원장이 바뀌면 이 화면에 경고가 표시됩니다.`)) return;
+    setSnapBusy(true);
+    try {
+      const r = await fetch("/api/inventory/quote/snapshot", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: ym, rent, etc, tax_etc: taxEtc }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) { alert(`확정 실패: ${j?.error || "서버 오류"}`); return; }
+      setSnap(j.snapshot);
+      // 확정본은 서버 최신 원장 기준 — 화면 데이터도 같은 기준으로 갱신해 역방향 경고 방지
+      await load(ym, rent, etc, taxEtc);
+    } catch { alert("확정 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
+    finally { setSnapBusy(false); }
+  }
+  async function unconfirmQuote() {
+    if (!window.confirm(`${ym} 결산 확정을 해제할까요?`)) return;
+    try {
+      const r = await fetch(`/api/inventory/quote/snapshot?month=${ym}`, { method: "DELETE" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) { alert(`해제 실패: ${j?.error || "서버 오류"}`); return; }
+      setSnap(null);
+    } catch { alert("해제 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
+  }
+  const dtKst = (iso: string) => {
+    try { return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16); }
+    catch { return iso.slice(0, 16).replace("T", " "); }
+  };
+
   const s = data?.summary;
   const items = data?.items ?? [];
+
+  // 반품 단가도 마스터 매입단가도 없어 0원으로 계산된 교차월 반품 — 차감 누락을 알린다
+  const zeroReturnItems = items.filter((i) => i.qty === 0 && i.return_qty > 0 && i.return_amount === 0);
+
+  // 확정본 vs 현재 재계산 — 원장에서 나오는 숫자만 비교(임대료·기타 입력값과 무관).
+  //  월 전환 직후엔 snap/data 가 서로 다른 달일 수 있어 같은 달일 때만 비교한다.
+  const snapDiffs = (() => {
+    if (!snap || !s) return [];
+    if (snap.month !== ym || data?.month !== ym) return [];
+    const c = snap.summary; const d: string[] = [];
+    const cmp = (label: string, a: number, b: number, unit = "") => {
+      if (Math.round(a) !== Math.round(b)) d.push(`${label} ${a.toLocaleString()}${unit} → ${b.toLocaleString()}${unit}`);
+    };
+    cmp("품목", c.itemCount, s.itemCount, "종");
+    cmp("매입수량", c.totalQty, s.totalQty, "개");
+    cmp("반품수량", c.totalReturnQty ?? 0, s.totalReturnQty ?? 0, "개");
+    cmp("총 매입금액", c.totalAmount, s.totalAmount, "원");
+    return d;
+  })();
   const [y, mm] = ym.split("-");
   const exportUrl = `/api/inventory/quote/export?month=${ym}&rent=${rent}&etc=${etc}&tax_etc=${taxEtc}`;
 
@@ -51,11 +119,28 @@ export default function QuotePage() {
         <div><h1 className="b2b-page-title">월간 매입 결산</h1></div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={() => setReturnOpen(true)}>제조사 반품 입력</button>
+          {snapReady && (
+            <button className="b2b-btn-secondary" onClick={confirmQuote} disabled={snapBusy || loading || !s}>
+              {snap ? "재확정" : "결산 확정"}
+            </button>
+          )}
           <a className="b2b-btn-secondary" href={exportUrl}>엑셀 다운로드</a>
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || items.length === 0}>인쇄 / PDF</button>
         </div>
       </header>
       {error && <div className="b2b-error no-print">{error}</div>}
+      {snap && (snapDiffs.length === 0 ? (
+        <div className="sm-success no-print" style={{ marginBottom: 12 }}>
+          {Number(ym.slice(5))}월 결산 확정됨 — {dtKst(snap.confirmed_at)}{snap.confirmed_by ? ` · ${snap.confirmed_by}` : ""} · 확정 총 입금액 {won(snap.summary.deposit)}원
+          <button className="b2b-link-btn sm-faint" style={{ marginLeft: 10, fontSize: 12 }} onClick={unconfirmQuote}>확정 해제</button>
+        </div>
+      ) : (
+        <div className="sm-warn no-print" style={{ marginBottom: 12 }}>
+          <strong>확정({dtKst(snap.confirmed_at)}) 이후 원장이 바뀌었습니다:</strong> {snapDiffs.join(" · ")}
+          <span> — 바뀐 내용이 맞으면 위의 [재확정]으로 갱신하세요.</span>
+          <button className="b2b-link-btn sm-faint" style={{ marginLeft: 8, fontSize: 12 }} onClick={unconfirmQuote}>확정 해제</button>
+        </div>
+      ))}
 
       <section className="b2b-card no-print" style={{ marginBottom: 16 }}>
         <div className="sm-row" style={{ gap: 16, flexWrap: "wrap", alignItems: "center" }}>
@@ -106,6 +191,12 @@ export default function QuotePage() {
               아래 표에서 <strong>매입가에 * 표시</strong>된 품목의 입고 기록을 확인해 단가를 채워 주세요.
             </div>
           )}
+          {zeroReturnItems.length > 0 && (
+            <div className="sm-warn" style={{ marginBottom: 10 }}>
+              반품 단가도 마스터 매입단가도 없어 <strong>0원으로 계산된 반품</strong>이 있습니다:{" "}
+              {zeroReturnItems.map((i) => i.name).join(", ")} — 반품 기록에 단가를 적거나 상품 마스터의 매입단가를 채워 주세요.
+            </div>
+          )}
           <div className="b2b-table-wrap">
           <table className="b2b-table">
             <thead><tr><th>코드명</th><th>품목명</th><th>규격(g)</th><th>원산지</th><th className="num">매입가</th><th className="num">매입수량</th><th className="num">반품수량</th><th className="num">총 매입금액</th><th>구분</th></tr></thead>
@@ -146,7 +237,8 @@ export default function QuotePage() {
             ※ 매입가 = 가중평균 매입단가(1원 미만 반올림) — 단가가 여러 번이었으면 매입가 × 수량이 총 매입금액과 몇 원 어긋날 수 있습니다. 금액은 실제 매입액 기준입니다. 매입가 옆 *는 단가 미입력 입고가 섞였다는 표시입니다.<br />
             ※ 결산 기준: 그 달에 소매로 실제 입고 완료된 것만 셉니다 — 소매↔도매 이전(내부 이동, 양방향)과 '대기' 상태 입고, 도매 채널 입고는 제외.<br />
             ※ 총 매입금액 = 실제 매입액 − 반품액(반품수량 × 매입가, 반품 단가를 적었으면 그 단가), 과세는 부가세 포함. 합계는 열마다 그 열을 더한 값입니다.<br />
-            ※ 반품은 재고를 건드리지 않습니다 — 물건이 실제로 빠지는 처리는 재고목록에서 따로 합니다.
+            ※ 반품은 재고를 건드리지 않습니다 — 물건이 실제로 빠지는 처리는 재고목록에서 따로 합니다.<br />
+            ※ 그 달 매입이 없는 품목의 반품(교차월 반품)도 품목 행으로 추가돼 차감됩니다 — 단가는 반품 단가, 없으면 그 달 매입가, 그것도 없으면 상품 마스터의 매입단가 순으로 매깁니다.
           </p>
         </section>
       )}

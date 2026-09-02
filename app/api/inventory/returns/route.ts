@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { fetchQuoteTxns, validMonth, monthRange } from "../quote/fetch";
+import { getAllBundles, isBundleId } from "@/app/lib/product-bundles";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ async function actor(req: NextRequest): Promise<string | null> {
   return (await verifySession(token)) || resolveUserName(token);
 }
 
-// 그 달에 매입한 품목 + 매입수량 — 반품은 매입한 것만 대상이라 선택 목록을 이걸로 좁힌다.
+// 그 달에 매입한 품목 + 매입수량.
 async function purchasedProducts(month: string) {
   const txns = await fetchQuoteTxns(month);
   const hasStatus = txns.some((t) => t.status != null);
@@ -29,6 +30,27 @@ async function purchasedProducts(month: string) {
   return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
 
+// 품목 선택 목록 — 그 달 매입 품목(매입수량 표시) 뒤에 나머지 전체 품목(매입 0)을 붙인다.
+//  그 달 매입이 없는 품목의 반품(교차월)도 입력할 수 있어야 한다(2026-09-02 대표 확정) —
+//  결산이 그런 반품을 품목 행으로 추가해 차감한다.
+async function selectableProducts(month: string) {
+  const sb = supabaseAdmin();
+  const purchased = await purchasedProducts(month);
+  const map = new Map(purchased.map((p) => [p.id, p]));
+  const [{ data }, bundles] = await Promise.all([
+    sb.from("products").select("id, name, sku, spec").eq("active", true).limit(5000),
+    getAllBundles(sb),
+  ]);
+  for (const p of data ?? []) {
+    const id = p.id as string;
+    if (map.has(id)) continue;
+    if (isBundleId(bundles, id)) continue; // 번들(세트)은 자체 매입이 없다 — 반품 대상 아님
+    map.set(id, { id, name: (p.name as string) ?? "", sku: (p.sku as string | null) ?? null, spec: (p.spec as string | null) ?? null, qty: 0 });
+  }
+  return [...map.values()].sort((a, b) =>
+    (b.qty > 0 ? 1 : 0) - (a.qty > 0 ? 1 : 0) || a.name.localeCompare(b.name, "ko"));
+}
+
 // GET /api/inventory/returns?month=YYYY-MM — 그 달 반품 내역 + 매입 품목(선택 목록)
 export async function GET(req: NextRequest) {
   try {
@@ -37,7 +59,7 @@ export async function GET(req: NextRequest) {
     const { from, to } = monthRange(month);
 
     const [products, res] = await Promise.all([
-      purchasedProducts(month),
+      selectableProducts(month),
       supabaseAdmin().from("purchase_returns")
         .select("id, product_id, return_date, qty, unit_amount, partner, memo, products(name, sku, spec)")
         .gte("return_date", from).lte("return_date", to)

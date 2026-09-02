@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { xlsxNum, cellStr } from "@/app/lib/inventory-xlsx";
+import { getAllBundles, isBundleId } from "@/app/lib/product-bundles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,12 +50,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "헤더에 'SKU' 와 '반품수량' 이 필요합니다. 양식을 다운로드해 쓰세요." }, { status: 400 });
     }
 
-    const { data: products, error } = await supabaseAdmin().from("products").select("id, sku, name, spec").eq("active", true);
+    const sb = supabaseAdmin();
+    const [{ data: products, error }, bundles] = await Promise.all([
+      sb.from("products").select("id, sku, name, spec").eq("active", true).limit(5000), // 직접입력 목록과 같은 한도
+      getAllBundles(sb),
+    ]);
     if (error) throw error;
     const bySku = new Map<string, string[]>();
     const byName = new Map<string, string[]>();
     const label = new Map<string, { name: string; sku: string | null }>();
     for (const p of products ?? []) {
+      if (isBundleId(bundles, p.id)) continue; // 번들(세트)은 자체 매입이 없다 — 반품 매칭 대상 아님
       const nm = p.spec ? `${p.name} ${p.spec}` : p.name;
       label.set(p.id, { name: nm, sku: p.sku ?? null });
       if (p.sku) { const k = String(p.sku).trim(); if (k) bySku.set(k, [...(bySku.get(k) || []), p.id]); }

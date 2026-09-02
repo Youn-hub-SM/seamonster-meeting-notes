@@ -30,10 +30,10 @@ export interface QuoteItem {
   tax_type: QuoteTax;
   qty: number;            // 매입수량(Σ, 반품 차감 전)
   return_qty: number;     // 반품수량(제조사 반품, Σ)
-  net_qty: number;        // 정산수량 = 매입수량 − 반품수량 (음수가 되면 0)
-  amount: number;         // 공급가액 = 매입가 × 정산수량 (순액)
+  net_qty: number;        // 정산수량 = 매입수량 − 반품수량 (반품이 더 많으면 음수)
+  amount: number;         // 공급가액 = 매입액 − 반품액 (반품이 더 크면 음수)
   gross_amount: number;   // 반품 차감 전 공급가액 — 반품액 표시용
-  return_amount: number;  // 반품 공급가액 = 매입가 × 반품수량
+  return_amount: number;  // 반품 공급가액 — 반품 단가, 없으면 그 달 매입가, 교차월이면 마스터 매입단가
   total: number;          // 총 매입금액(과세=공급가×1.1, 면세=공급가). 반품 차감 후.
   unit_price: number;     // 매입가(가중평균 = round(gross_amount/qty), 순액)
   ref_price: number;      // 기준 매입가(제품 마스터 purchase_price)
@@ -42,10 +42,19 @@ export interface QuoteItem {
 }
 
 // 제조사 반품 1건 — purchase_returns 행. unit_amount 가 null 이면 그 달 매입가를 쓴다.
+//  product 는 교차월 반품(그 달 매입이 없는 품목) 행을 품목표에 만들 때 쓴다.
 export interface QuoteReturn {
   product_id: string;
   qty: number;
   unit_amount: number | null;
+  product?: {
+    sku: string | null;
+    name: string;
+    spec: string | null;
+    origin: string | null;
+    purchase_price: number | null;
+    tax_type: QuoteTax | string | null;
+  } | null;
 }
 
 export interface QuoteRaw {
@@ -96,10 +105,12 @@ export function computeQuote(
   const retQty = new Map<string, number>();
   const retFixed = new Map<string, number>();   // 단가를 직접 적은 반품의 금액 합
   const retFixedQty = new Map<string, number>();
+  const retProd = new Map<string, QuoteReturn["product"]>(); // 교차월 반품용 제품 정보
   for (const r of opts.returns ?? []) {
     const q = Math.abs(Math.round((Number(r.qty) || 0) * 100) / 100);
     if (!q) continue;
     retQty.set(r.product_id, (retQty.get(r.product_id) ?? 0) + q);
+    if (r.product && !retProd.has(r.product_id)) retProd.set(r.product_id, r.product);
     if (r.unit_amount != null && Number(r.unit_amount) > 0) {
       retFixed.set(r.product_id, (retFixed.get(r.product_id) ?? 0) + Math.round(Number(r.unit_amount)) * q);
       retFixedQty.set(r.product_id, (retFixedQty.get(r.product_id) ?? 0) + q);
@@ -135,18 +146,38 @@ export function computeQuote(
     }
   }
 
+  // 교차월 반품 — 그 달 매입이 없는 품목의 반품도 품목 행(매입 0)으로 추가해 차감한다
+  //  (2026-09-02 대표 확정: 반품은 그 달 매입 유무와 무관하게 결산에 반영).
+  for (const [pid, q] of retQty) {
+    if (map.has(pid) || !q) continue;
+    const p = retProd.get(pid);
+    map.set(pid, {
+      product_id: pid, sku: p?.sku ?? null, name: p?.name ?? "(삭제된 품목)",
+      spec: p?.spec ?? null, origin: p?.origin ?? null, tax_type: normTax(p?.tax_type),
+      qty: 0, return_qty: 0, net_qty: 0, amount: 0, gross_amount: 0, return_amount: 0,
+      total: 0, unit_price: 0, ref_price: Math.round(Number(p?.purchase_price) || 0),
+      price_varies: false, no_price_qty: 0, _prices: new Set(),
+    });
+  }
+
   const items: QuoteItem[] = [...map.values()].map((it) => {
     const unit_price = it.qty > 0 ? Math.round(it.gross_amount / it.qty) : 0;
     // 반품은 수량에서 뺀다 — 반품한 만큼 애초에 안 산 것으로 친다.
-    //  단가를 적은 반품은 그 단가로, 안 적은 반품은 그 달 매입가로 금액을 매긴다.
+    //  단가를 적은 반품은 그 단가로, 안 적은 반품은 그 달 매입가로, 그 달 매입 자체가 없으면(교차월)
+    //  마스터 매입단가로 금액을 매긴다. 매입보다 반품이 많으면 음수로 그대로 차감한다.
+    //  ※ 마스터 폴백은 교차월(qty 0) 행에만 — 그 달 매입이 있는데 전부 단가 미입력인 품목까지
+    //    마스터가로 깎으면 매입은 0원인데 반품만 값이 붙어 총액이 음수로 뒤집힌다.
     const return_qty = retQty.get(it.product_id) ?? 0;
     const fixedQty = retFixedQty.get(it.product_id) ?? 0;
-    const return_amount = (retFixed.get(it.product_id) ?? 0) + unit_price * Math.max(0, return_qty - fixedQty);
-    const net_qty = Math.max(0, it.qty - return_qty);
-    const amount = Math.max(0, it.gross_amount - return_amount);
+    const fallbackUnit = unit_price > 0 ? unit_price : (it.qty === 0 ? it.ref_price : 0);
+    const return_amount = (retFixed.get(it.product_id) ?? 0) + fallbackUnit * Math.max(0, return_qty - fixedQty);
+    const net_qty = it.qty - return_qty;
+    const amount = it.gross_amount - return_amount;
     const total = it.tax_type === "taxable" ? Math.round(amount * 1.1) : amount; // 과세는 부가세 포함
     const { _prices, ...rest } = it;
-    return { ...rest, return_qty, net_qty, return_amount, amount, total, unit_price, price_varies: _prices.size > 1 };
+    // 매입 없는 반품 행은 매입가 칸에 반품을 매긴 단가(마스터 매입단가)를 보여준다
+    const shownUnit = it.qty > 0 ? unit_price : (return_qty > 0 ? Math.round(Math.abs(return_amount) / return_qty) : 0);
+    return { ...rest, return_qty, net_qty, return_amount, amount, total, unit_price: shownUnit, price_varies: _prices.size > 1 };
   }).sort((a, b) => a.name.localeCompare(b.name, "ko") || (a.sku || "").localeCompare(b.sku || ""));
 
   raw.sort((a, b) => (b.txn_date || "").localeCompare(a.txn_date || "") || (b.order_no || "").localeCompare(a.order_no || ""));
