@@ -45,7 +45,7 @@ export async function getCurrentModel(): Promise<string> {
 }
 
 // ── 기능별 모델 ──
-export type AiFeature = "meeting" | "cs" | "correct" | "voc" | "production" | "report" | "sales";
+export type AiFeature = "meeting" | "cs" | "correct" | "voc" | "production" | "report" | "sales" | "briefing";
 export const AI_FEATURES: { key: AiFeature; label: string; desc: string }[] = [
   { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리" },
   { key: "cs", label: "CS 코치", desc: "CS 응대 코칭·답변 초안" },
@@ -54,6 +54,7 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string }[] = [
   { key: "production", label: "생산·재고 조언", desc: "생산/재고 AI 조언" },
   { key: "report", label: "커스텀 리포트", desc: "자연어→SQL 데이터 조회 (기본 opus·정교)" },
   { key: "sales", label: "주간 매출 브리핑", desc: "주간 매출 AI 분석 브리핑" },
+  { key: "briefing", label: "아침 브리핑", desc: "대표 전용 일일 브리핑 생성" },
 ];
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   meeting: "ai_model_meeting",
@@ -63,6 +64,7 @@ const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   production: "ai_model_production",
   report: "ai_model_report",
   sales: "ai_model_sales",
+  briefing: "ai_model_briefing",
 };
 
 // 기능별 설정값: 'inherit'(공통 따름·기본) 또는 특정 모델 키.
