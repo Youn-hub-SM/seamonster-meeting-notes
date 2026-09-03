@@ -1,15 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin } from "./supabase";
-import { getFeatureModel } from "./ai-model";
+import { getFeatureModelKey } from "./ai-model";
+import { MODELS } from "./config";
 import { getKv } from "./b2b-settings";
 import { sendTeamsWebhook } from "./b2b-teams";
 import { CHANGELOG } from "./changelog";
+import { getLedgerVelocity } from "./production-velocity";
+import { getAllBundles, isBundleId } from "./product-bundles";
 
 // 대표 전용 아침 브리핑 (2026-09-02, migration 103) — 업무도우미 전 영역의 '어제'를 집계해
-//  변화 + AI 인사이트를 만든다. 생성 = pg_cron(06:30 KST, 운영) 또는 /briefing 화면의 수동 버튼.
-//  원칙: AI 는 여기서 집계한 숫자만 인용한다. 증감률·평균 대비 판단까지 코드가 계산해 넣는다
-//  (LLM 암산·임의 카운트로 틀리는 사고 방지 — VOC 리포트 교훈).
+//  의사결정에 쓸 브리핑을 만든다. 생성 = pg_cron(06:30 KST, 운영) 또는 /briefing 화면.
+//  원칙(대표 지시 2026-09-03 반영):
+//  · 모든 줄이 핵심 — '핵심 3줄' 같은 요약의 요약 금지, 빈약한 나열 금지
+//  · 매출은 '무엇이 많이 팔렸나 + 평소 대비' / 재고는 '품절·소진 임박' / VOC 는 '실제 내용'(탈리 설문 포함)
+//  · 숫자·배수·목록은 전부 코드가 계산해 공급 — AI 는 집계값만 인용(암산·임의 카운트 금지)
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -30,8 +35,16 @@ const kstDayUtc = (ymd: string) => {
   return { start: start.toISOString(), end: new Date(start.getTime() + 86400e3).toISOString() };
 };
 
-// 서버 Max Rows 캡(기본 1000) 대비 range 페이징. 호출부는 안정 정렬(.order("id"))을 반드시 건다 —
-//  정렬 없는 range 는 페이지 사이 동시 insert 에 행이 누락/중복될 수 있다.
+// 브리핑 기본 모델 = opus (대표: "더 큰 모델을 쓰더라도 도움이 되는 내용"). 설정에서 바꾸면 그 값.
+async function briefingModel(): Promise<string> {
+  try {
+    const k = await getFeatureModelKey("briefing");
+    if (k !== "inherit") return MODELS[k] ?? MODELS.opus;
+  } catch { /* 설정 조회 실패 → 기본 */ }
+  return MODELS.opus;
+}
+
+// 서버 Max Rows 캡(기본 1000) 대비 range 페이징. 호출부는 안정 정렬(.order("id"))을 반드시 건다.
 async function pagedRows<T>(build: () => { range: (a: number, b: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }> }, maxRows = 20000): Promise<T[]> {
   const out: T[] = [];
   for (let i = 0; i < maxRows; i += 1000) {
@@ -46,32 +59,111 @@ async function pagedRows<T>(build: () => { range: (a: number, b: number) => Prom
 // ── 영역별 집계 — 각 블록은 실패해도(테이블 미적용 등) null 로 두고 브리핑은 계속 만든다 ──
 export async function collectBriefingData(sb: SupabaseClient, briefDate: string) {
   const yst = shiftDate(briefDate, -1);
-  // 비교 기준선 = 어제를 뺀 직전 7일(briefDate-8 ~ briefDate-2) — 어제가 평균을 끌고 가지 않게
+  // 비교 기준선 = 어제를 뺀 직전 7일(briefDate-8 ~ briefDate-2)
   const weekFrom = shiftDate(briefDate, -8);
   const weekTo = shiftDate(briefDate, -2);
   const in2days = shiftDate(briefDate, 2); // 마감 3일내 = 오늘 포함 3일
 
-  // 매출(소매) — 어제 합계 + 기준선 일평균(집계는 DB RPC, 절단 없음) + 증감률(코드 계산)
+  // 매출 — 어제 총액·증감률 + '무엇이 많이 팔렸나'(상위 품목, 평소 일평균 대비 배수)
   const sales = await (async () => {
     try {
-      const rows = await pagedRows<{ subtotal_amount: number; quantity: number }>(
-        () => sb.from("sales_orders").select("subtotal_amount, quantity").eq("order_date", yst).order("id", { ascending: true }));
+      const rows = await pagedRows<{ product_name: string; option_name: string | null; sku_code: string | null; quantity: number; subtotal_amount: number }>(
+        () => sb.from("sales_orders").select("product_name, option_name, sku_code, quantity, subtotal_amount").eq("order_date", yst).order("id", { ascending: true }));
       const { data: wk, error: we } = await sb.rpc("sales_summary", { p_from: weekFrom, p_to: weekTo });
       if (we) throw new Error(we.message);
       const weekRevenue = Number((Array.isArray(wk) ? wk[0] : wk)?.revenue) || 0;
       const avg = Math.round(weekRevenue / 7);
       const total = rows.reduce((s, r) => s + (Number(r.subtotal_amount) || 0), 0);
+
+      // 품목별 집계(키 = SKU, 없으면 이름+옵션) → 금액 상위 8
+      type Agg = { 품목: string; sku: string | null; 수량: number; 금액: number };
+      const byKey = new Map<string, Agg>();
+      for (const r of rows) {
+        const label = `${r.product_name}${r.option_name ? ` ${r.option_name}` : ""}`;
+        const key = r.sku_code || label;
+        const cur = byKey.get(key) || { 품목: label, sku: r.sku_code || null, 수량: 0, 금액: 0 };
+        cur.수량 += Number(r.quantity) || 0;
+        cur.금액 += Number(r.subtotal_amount) || 0;
+        byKey.set(key, cur);
+      }
+      const top = [...byKey.values()].sort((a, b) => b.금액 - a.금액).slice(0, 8);
+
+      // 상위 품목의 평소(직전 7일) 일평균 수량 → 배수(코드 계산, AI 는 인용만)
+      const topSkus = top.map((t) => t.sku).filter((s): s is string => !!s);
+      const weekBySku = new Map<string, number>();
+      if (topSkus.length) {
+        const wkRows = await pagedRows<{ sku_code: string | null; quantity: number }>(
+          () => sb.from("sales_orders").select("sku_code, quantity").in("sku_code", topSkus).gte("order_date", weekFrom).lte("order_date", weekTo).order("id", { ascending: true }), 10000);
+        for (const r of wkRows) if (r.sku_code) weekBySku.set(r.sku_code, (weekBySku.get(r.sku_code) || 0) + (Number(r.quantity) || 0));
+      }
+      const topOut = top.map((t) => {
+        const wkAvg = t.sku ? Math.round(((weekBySku.get(t.sku) || 0) / 7) * 10) / 10 : null;
+        return {
+          ...t,
+          평소_일평균_수량: wkAvg,
+          평소대비_배수: wkAvg && wkAvg > 0 ? Math.round((t.수량 / wkAvg) * 10) / 10 : null,
+        };
+      });
+
       return {
         어제_매출액: total,
-        어제_판매행수: rows.length,
         어제_판매수량: rows.reduce((s, r) => s + (Number(r.quantity) || 0), 0),
         기준선_일평균_매출액_직전7일_어제제외: avg,
         어제_기준선대비_증감률_퍼센트: avg > 0 ? Math.round(((total - avg) / avg) * 100) : null,
+        많이_팔린_상위: topOut,
       };
     } catch { return null; }
   })();
 
-  // B2B 발주 — 어제 등록 발주 + 오늘 발송 예정/지연
+  // 재고 경보 — 품절(팔리는데 재고 0 이하) + 소진 임박(현재고 ÷ 일평균 ≤ 7일). 소매 기준.
+  const inventory = await (async () => {
+    try {
+      const stockRpc = async () => {
+        const r = await sb.rpc("inventory_stock", { asof: null, chan: "소매" });
+        if (!r.error) return r;
+        return sb.rpc("inventory_stock", { asof: null }); // 036 미적용 폴백
+      };
+      const [stockRes, prodRes, bundles, velocity] = await Promise.all([
+        stockRpc(),
+        sb.from("products").select("id, sku, name").eq("active", true).limit(5000),
+        getAllBundles(sb),
+        getLedgerVelocity(undefined, "소매").catch(() => null),
+      ]);
+      if (stockRes.error || prodRes.error) throw new Error("stock/products");
+      const stockBy = new Map<string, number>();
+      for (const t of (stockRes.data as { product_id: string; qty: number }[] | null) ?? []) stockBy.set(t.product_id, Number(t.qty) || 0);
+      const perSku = velocity?.perSku ?? {};
+
+      const soldout: { 품목: string; sku: string | null; 현재고: number }[] = [];
+      const risky: { 품목: string; sku: string | null; 현재고: number; 일평균_출고: number; 소진예상일: number }[] = [];
+      for (const p of (prodRes.data as { id: string; sku: string | null; name: string }[]) ?? []) {
+        if (isBundleId(bundles, p.id)) continue; // 세트는 자체 재고 없음(구성품에서 파생) — 오탐 방지
+        const stock = stockBy.get(p.id) ?? 0;
+        const daily = p.sku ? (perSku[p.sku.toUpperCase()] || 0) : 0;
+        if (daily <= 0) continue; // 최근 30일 출고가 없는 품목은 경보 대상 아님(소음 방지)
+        if (stock <= 0) soldout.push({ 품목: p.name, sku: p.sku, 현재고: stock });
+        else if (stock / daily <= 7) risky.push({ 품목: p.name, sku: p.sku, 현재고: stock, 일평균_출고: Math.round(daily * 10) / 10, 소진예상일: Math.round(stock / daily) });
+      }
+      risky.sort((a, b) => a.소진예상일 - b.소진예상일);
+
+      // 어제 입출고 요약(완료만) + 대기 입고
+      const txRows = await pagedRows<{ type: string; qty: number; status?: string | null }>(
+        () => sb.from("inventory_txns").select("type, qty, status").eq("txn_date", yst).order("id", { ascending: true }), 10000);
+      const done = txRows.filter((r) => r.status !== "대기");
+      const sum = (t: string) => done.filter((r) => r.type === t).reduce((s, r) => s + Math.abs(Number(r.qty) || 0), 0);
+      const { count: pendIn } = await sb.from("inventory_txns").select("id", { count: "exact", head: true }).eq("type", "입고").eq("status", "대기");
+
+      return {
+        품절_판매중인데_재고없음: soldout.slice(0, 12),
+        품절_추가건수: Math.max(0, soldout.length - 12),
+        소진임박_7일내: risky.slice(0, 12),
+        소진임박_추가건수: Math.max(0, risky.length - 12),
+        어제_입고수량: sum("입고"), 어제_출고수량: sum("출고"), 대기중_입고건수: pendIn ?? 0,
+      };
+    } catch { return null; }
+  })();
+
+  // B2B 발주·발송 — 어제 등록 + 오늘 예정/지연
   const b2b = await (async () => {
     try {
       const ords = await pagedRows<{ total: number }>(
@@ -84,18 +176,6 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
         오늘_발송예정: shipToday ?? 0,
         발송_지연: shipLate ?? 0,
       };
-    } catch { return null; }
-  })();
-
-  // 재고 — 어제 입출고(완료만), 대기 입고
-  const inventory = await (async () => {
-    try {
-      const rows = await pagedRows<{ type: string; qty: number; status?: string | null }>(
-        () => sb.from("inventory_txns").select("type, qty, status").eq("txn_date", yst).order("id", { ascending: true }), 10000);
-      const done = rows.filter((r) => r.status !== "대기");
-      const sum = (t: string) => done.filter((r) => r.type === t).reduce((s, r) => s + Math.abs(Number(r.qty) || 0), 0);
-      const { count: pendIn } = await sb.from("inventory_txns").select("id", { count: "exact", head: true }).eq("type", "입고").eq("status", "대기");
-      return { 어제_입고수량: sum("입고"), 어제_출고수량: sum("출고"), 어제_조정건수: done.filter((r) => r.type === "조정").length, 대기중_입고건수: pendIn ?? 0 };
     } catch { return null; }
   })();
 
@@ -112,24 +192,33 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
     } catch { return null; }
   })();
 
-  // VOC — 어제 신규(카테고리별) + 기준선 일평균.
-  //  ※ 건별 status 는 029 이후 '접수/응대·개선중/개선완료' 인데 072 이후 건별 상태 UI 가 없어
-  //    '미처리 잔량'은 신뢰할 수 없는 지표다 — 세지 않는다(신규량 추세만 본다).
+  // VOC — 어제 접수된 '실제 내용'(탈리 설문 포함, 내용 200자 컷) + 카테고리 집계 + 기준선
+  //  ※ 건별 status(029 접수/응대·개선중/개선완료)는 072 이후 건별 관리가 없어 '미처리' 지표는 세지 않는다.
   const voc = await (async () => {
     try {
-      const { data } = await sb.from("voc").select("category").eq("received_at", yst).limit(1000);
+      const { data } = await sb.from("voc")
+        .select("channel, source, category, product, content")
+        .eq("received_at", yst).order("created_at", { ascending: true }).limit(200);
+      const rows = data ?? [];
       const byCat: Record<string, number> = {};
-      for (const r of data ?? []) byCat[(r.category as string) || "기타"] = (byCat[(r.category as string) || "기타"] || 0) + 1;
+      for (const r of rows) byCat[(r.category as string) || "기타"] = (byCat[(r.category as string) || "기타"] || 0) + 1;
       const { count: wkCnt } = await sb.from("voc").select("id", { count: "exact", head: true }).gte("received_at", weekFrom).lte("received_at", weekTo);
       return {
-        어제_신규VOC: (data ?? []).length,
+        어제_신규VOC: rows.length,
         어제_카테고리별: byCat,
         기준선_일평균_신규VOC_직전7일_어제제외: Math.round(((wkCnt ?? 0) / 7) * 10) / 10,
+        어제_목록: rows.slice(0, 30).map((r) => ({
+          채널: (r.channel as string) || null,
+          출처: (r.source as string) || null, // '설문' = 탈리 설문 응답
+          카테고리: (r.category as string) || null,
+          제품: (r.product as string) || null,
+          내용: String(r.content || "").slice(0, 200),
+        })),
       };
     } catch { return null; }
   })();
 
-  // 팀 활동 — 어제 변경기록 수·상위 이벤트 (전 영역 피드라 대량일 수 있어 페이징)
+  // 팀 활동 — 어제 변경기록 수·상위 이벤트
   const activity = await (async () => {
     try {
       const { start, end } = kstDayUtc(yst);
@@ -154,36 +243,37 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   const toolChanges = CHANGELOG.filter((c) => c.date >= yst).slice(0, 6)
     .map((c) => ({ 날짜: c.date, 구분: c.tag, 도구: c.tool, 제목: c.title }));
 
-  return { 기준일_어제: yst, 매출: sales, 발주와발송: b2b, 재고: inventory, 생산: production, VOC: voc, 팀활동: activity, 전일_브리핑_집계: prev, 도구변경: toolChanges };
+  return { 기준일_어제: yst, 매출: sales, 재고: inventory, 발주와발송: b2b, 생산: production, VOC: voc, 팀활동: activity, 전일_브리핑_집계: prev, 도구변경: toolChanges };
 }
 
-const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 아침 브리핑 비서다. 내부 업무도구가 집계한 '어제'의 숫자(JSON)를 받아, 대표가 1분 안에 읽을 브리핑을 한국어로 쓴다.
+const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 아침 브리핑 비서다. 내부 업무도구가 집계한 '어제'의 데이터(JSON)를 받아, 대표가 아침에 읽고 바로 의사결정할 브리핑을 한국어로 쓴다.
 
 규칙:
-- 반드시 제공된 집계 숫자만 인용한다. 목록을 임의로 세거나 제공되지 않은 숫자를 만들지 않는다.
-- 증감률·평균 대비 표현은 집계에 '증감률'/'기준선' 필드가 있는 항목에서만, 그 값을 그대로 인용한다. 직접 계산·암산 금지.
-- '평소보다 많다/급증' 류의 상대 판단은 기준선 필드나 전일_브리핑_집계로 뒷받침될 때만 쓴다. 근거 없으면 절대값만 서술.
+- 모든 줄이 핵심이어야 한다. 요약의 요약('핵심 N줄'), 빈약한 한 줄 나열, 하나마나 한 문장 금지.
+- 반드시 제공된 집계 숫자·목록만 인용한다. 없는 숫자를 만들거나 목록을 임의로 세지 않는다.
+- 증감률·배수·소진예상일은 집계에 계산돼 있다 — 그대로 인용하고 직접 계산하지 않는다.
+- '평소보다' 류의 상대 판단은 기준선·배수·전일_브리핑_집계 필드가 뒷받침할 때만.
 - 값이 null 인 영역은 언급하지 않는다. 이모지 금지. 간결한 존댓말. 금액은 천 단위 콤마 + '원'.
 - 출력은 마크다운만: "## 제목" 섹션, "- 라벨 : 내용" 불릿.
 
 골격(순서 고정):
-## 핵심 3줄
-- 어제의 가장 중요한 변화 3개(매출 증감·지연·이상 신호 우선)
-## 영역별 변화
-- 매출 : 어제 매출, 기준선(직전 7일 일평균) 대비 증감률
-- 발주·발송 : 신규 발주, 오늘 발송 예정, 지연
-- 재고 : 어제 입고/출고, 대기 입고
-- 생산 : 열린 요청, 마감 지연·3일내
-- VOC : 어제 신규(주요 카테고리), 기준선 일평균 대비
-## 주의와 인사이트
-- 집계로 뒷받침되는 신호만 2~4개(지연>0, 대기>0, 증감률 큰 폭 등). 정말 없으면 "- 특이사항 없음" 한 줄.
+## 매출
+- 어제 총액과 기준선(직전 7일 일평균) 대비 증감률
+- 많이 팔린 것: 많이_팔린_상위에서 상위 3~5개를 수량·금액과 함께. 평소대비_배수가 1.5 이상이거나 0.5 이하인 품목은 반드시 짚고 해석을 한 줄 붙인다
+## 재고 경보
+- 품절: 품절_판매중인데_재고없음 목록을 품목명 그대로(추가건수 있으면 "외 N종"). 비어 있으면 "- 품절 없음" 한 줄
+- 소진 임박: 소진임박_7일내에서 소진예상일 짧은 순으로 품목·현재고·소진예상일을 적는다 — 이 목록이 오늘 발주/생산 판단 근거다
+## VOC
+- 어제_목록의 실제 내용을 주제별로 묶어 서술한다(카테고리 수치 인용). 눈에 띄는 건은 "제품 — 내용 요지" 로 한 줄씩. 출처 '설문'(탈리)은 설문 응답으로 구분해 언급
+- 0건이면 "- 어제 신규 접수 없음(기준선 일평균 X건)" 한 줄
+## 발주·발송·생산
+- 발송 지연·오늘 발송 예정·마감 지연/3일내 위주. 전부 0이면 "- 특이사항 없음" 한 줄
 ## 오늘 챙길 것
-- 오늘 실행할 일(발송 예정 처리, 마감 임박 생산 등) 2~3개
+- 위 내용에서 도출되는 실행 항목 3~5개(품절 품목 보충 발주, 지연 발송 처리, 마감 임박 생산 확인, 반복 VOC 대응 등) — 구체적 품목명·건수를 담아서
 (도구변경 배열이 비어있지 않으면 마지막에 "## 도구 업데이트" 로 한 줄씩.)`;
 
 // 브리핑 생성(하루 한 건, force = 재생성).
-//  순서가 중요: 집계를 먼저 저장(insight 는 기존 값 유지)하고 AI 는 그 뒤에 붙인다 —
-//  AI 실패·함수 타임아웃에도 집계는 남고, 103 미적용이면 AI 호출 전에 안내로 끝난다(토큰 보호).
+//  순서: 103 확인(미적용이면 AI 전에 종료 — 토큰 보호) → 집계 upsert(기존 insight 보존) → AI(update).
 export async function generateBriefing(opts?: { date?: string; force?: boolean }): Promise<{ ok: boolean; date: string; skipped?: string; error?: string }> {
   const sb = supabaseAdmin();
   const date = opts?.date && DATE_RE.test(opts.date) ? opts.date : kstDate(0);
@@ -200,9 +290,9 @@ export async function generateBriefing(opts?: { date?: string; force?: boolean }
   }
 
   try {
-    const model = await getFeatureModel("briefing");
+    const model = await briefingModel();
     const res = await anthropic.messages.create({
-      model, max_tokens: 2000, system: SYSTEM,
+      model, max_tokens: 3500, system: SYSTEM,
       messages: [{ role: "user", content: `브리핑일(오늘): ${date}\n집계:\n${JSON.stringify(data, null, 1)}` }],
     });
     const insight = res.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("\n").trim() || null;

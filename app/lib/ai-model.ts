@@ -54,7 +54,7 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string }[] = [
   { key: "production", label: "생산·재고 조언", desc: "생산/재고 AI 조언" },
   { key: "report", label: "커스텀 리포트", desc: "자연어→SQL 데이터 조회 (기본 opus·정교)" },
   { key: "sales", label: "주간 매출 브리핑", desc: "주간 매출 AI 분석 브리핑" },
-  { key: "briefing", label: "아침 브리핑", desc: "대표 전용 일일 브리핑 생성" },
+  { key: "briefing", label: "아침 브리핑", desc: "대표 전용 일일 브리핑 생성 (기본 opus·알찬 내용)" },
 ];
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   meeting: "ai_model_meeting",
