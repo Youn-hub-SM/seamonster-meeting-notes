@@ -55,6 +55,78 @@ async function pagedRows<T>(build: () => { range: (a: number, b: number) => Prom
   return out;
 }
 
+// ── 매출 수집 — 어제분이 아직 업로드 전(행 0)이면 가장 최근 입력일(최대 3일 전)로 대체하고 명시한다.
+//  매출 엑셀은 보통 다음 날 점심에 올라온다(대표 확인) — 아침 브리핑은 기다리지 않고,
+//  업로드가 반영되면 maybeSendSalesUpdate 가 후속 카드로 어제분을 따라잡는다. ──
+type SalesBrief = {
+  매출_기준일: string;
+  어제데이터_입력됨: boolean;
+  기준일_매출액: number;
+  기준일_판매수량: number;
+  기준선_일평균_매출액_직전7일: number;
+  기준일_기준선대비_증감률_퍼센트: number | null;
+  많이_팔린_상위: { 품목: string; sku: string | null; 수량: number; 금액: number; 평소_일평균_수량: number | null; 평소대비_배수: number | null }[];
+};
+
+async function collectSales(sb: SupabaseClient, briefDate: string): Promise<SalesBrief | null> {
+  try {
+    const fetchDay = (d: string) => pagedRows<{ product_name: string; option_name: string | null; sku_code: string | null; quantity: number; subtotal_amount: number }>(
+      () => sb.from("sales_orders").select("product_name, option_name, sku_code, quantity, subtotal_amount").eq("order_date", d).order("id", { ascending: true }));
+    let baseDate = shiftDate(briefDate, -1);
+    let rows = await fetchDay(baseDate);
+    if (!rows.length) {
+      for (const back of [2, 3]) {
+        const d = shiftDate(briefDate, -back);
+        const r = await fetchDay(d);
+        if (r.length) { baseDate = d; rows = r; break; }
+      }
+      if (!rows.length) return null;
+    }
+    const weekFrom = shiftDate(baseDate, -7);
+    const weekTo = shiftDate(baseDate, -1);
+    const { data: wk, error: we } = await sb.rpc("sales_summary", { p_from: weekFrom, p_to: weekTo });
+    if (we) throw new Error(we.message);
+    const avg = Math.round((Number((Array.isArray(wk) ? wk[0] : wk)?.revenue) || 0) / 7);
+    const total = rows.reduce((s, r) => s + (Number(r.subtotal_amount) || 0), 0);
+
+    // 품목별 집계(키 = SKU, 없으면 이름+옵션) → 금액 상위 8
+    type Agg = { 품목: string; sku: string | null; 수량: number; 금액: number };
+    const byKey = new Map<string, Agg>();
+    for (const r of rows) {
+      const label = `${r.product_name}${r.option_name ? ` ${r.option_name}` : ""}`;
+      const key = r.sku_code || label;
+      const cur = byKey.get(key) || { 품목: label, sku: r.sku_code || null, 수량: 0, 금액: 0 };
+      cur.수량 += Number(r.quantity) || 0;
+      cur.금액 += Number(r.subtotal_amount) || 0;
+      byKey.set(key, cur);
+    }
+    const top = [...byKey.values()].sort((a, b) => b.금액 - a.금액).slice(0, 8);
+
+    // 상위 품목의 평소(직전 7일) 일평균 수량 → 배수(코드 계산, AI 는 인용만)
+    const topSkus = top.map((t) => t.sku).filter((s): s is string => !!s);
+    const weekBySku = new Map<string, number>();
+    if (topSkus.length) {
+      const wkRows = await pagedRows<{ sku_code: string | null; quantity: number }>(
+        () => sb.from("sales_orders").select("sku_code, quantity").in("sku_code", topSkus).gte("order_date", weekFrom).lte("order_date", weekTo).order("id", { ascending: true }), 10000);
+      for (const r of wkRows) if (r.sku_code) weekBySku.set(r.sku_code, (weekBySku.get(r.sku_code) || 0) + (Number(r.quantity) || 0));
+    }
+    const topOut = top.map((t) => {
+      const wkAvg = t.sku ? Math.round(((weekBySku.get(t.sku) || 0) / 7) * 10) / 10 : null;
+      return { ...t, 평소_일평균_수량: wkAvg, 평소대비_배수: wkAvg && wkAvg > 0 ? Math.round((t.수량 / wkAvg) * 10) / 10 : null };
+    });
+
+    return {
+      매출_기준일: baseDate,
+      어제데이터_입력됨: baseDate === shiftDate(briefDate, -1),
+      기준일_매출액: total,
+      기준일_판매수량: rows.reduce((s, r) => s + (Number(r.quantity) || 0), 0),
+      기준선_일평균_매출액_직전7일: avg,
+      기준일_기준선대비_증감률_퍼센트: avg > 0 ? Math.round(((total - avg) / avg) * 100) : null,
+      많이_팔린_상위: topOut,
+    };
+  } catch { return null; }
+}
+
 // ── 영역별 집계 — 각 블록은 실패해도(테이블 미적용 등) null 로 두고 브리핑은 계속 만든다 ──
 export async function collectBriefingData(sb: SupabaseClient, briefDate: string) {
   const yst = shiftDate(briefDate, -1);
@@ -63,56 +135,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   const weekTo = shiftDate(briefDate, -2);
   const in2days = shiftDate(briefDate, 2); // 마감 3일내 = 오늘 포함 3일
 
-  // 매출 — 어제 총액·증감률 + '무엇이 많이 팔렸나'(상위 품목, 평소 일평균 대비 배수)
-  const sales = await (async () => {
-    try {
-      const rows = await pagedRows<{ product_name: string; option_name: string | null; sku_code: string | null; quantity: number; subtotal_amount: number }>(
-        () => sb.from("sales_orders").select("product_name, option_name, sku_code, quantity, subtotal_amount").eq("order_date", yst).order("id", { ascending: true }));
-      const { data: wk, error: we } = await sb.rpc("sales_summary", { p_from: weekFrom, p_to: weekTo });
-      if (we) throw new Error(we.message);
-      const weekRevenue = Number((Array.isArray(wk) ? wk[0] : wk)?.revenue) || 0;
-      const avg = Math.round(weekRevenue / 7);
-      const total = rows.reduce((s, r) => s + (Number(r.subtotal_amount) || 0), 0);
-
-      // 품목별 집계(키 = SKU, 없으면 이름+옵션) → 금액 상위 8
-      type Agg = { 품목: string; sku: string | null; 수량: number; 금액: number };
-      const byKey = new Map<string, Agg>();
-      for (const r of rows) {
-        const label = `${r.product_name}${r.option_name ? ` ${r.option_name}` : ""}`;
-        const key = r.sku_code || label;
-        const cur = byKey.get(key) || { 품목: label, sku: r.sku_code || null, 수량: 0, 금액: 0 };
-        cur.수량 += Number(r.quantity) || 0;
-        cur.금액 += Number(r.subtotal_amount) || 0;
-        byKey.set(key, cur);
-      }
-      const top = [...byKey.values()].sort((a, b) => b.금액 - a.금액).slice(0, 8);
-
-      // 상위 품목의 평소(직전 7일) 일평균 수량 → 배수(코드 계산, AI 는 인용만)
-      const topSkus = top.map((t) => t.sku).filter((s): s is string => !!s);
-      const weekBySku = new Map<string, number>();
-      if (topSkus.length) {
-        const wkRows = await pagedRows<{ sku_code: string | null; quantity: number }>(
-          () => sb.from("sales_orders").select("sku_code, quantity").in("sku_code", topSkus).gte("order_date", weekFrom).lte("order_date", weekTo).order("id", { ascending: true }), 10000);
-        for (const r of wkRows) if (r.sku_code) weekBySku.set(r.sku_code, (weekBySku.get(r.sku_code) || 0) + (Number(r.quantity) || 0));
-      }
-      const topOut = top.map((t) => {
-        const wkAvg = t.sku ? Math.round(((weekBySku.get(t.sku) || 0) / 7) * 10) / 10 : null;
-        return {
-          ...t,
-          평소_일평균_수량: wkAvg,
-          평소대비_배수: wkAvg && wkAvg > 0 ? Math.round((t.수량 / wkAvg) * 10) / 10 : null,
-        };
-      });
-
-      return {
-        어제_매출액: total,
-        어제_판매수량: rows.reduce((s, r) => s + (Number(r.quantity) || 0), 0),
-        기준선_일평균_매출액_직전7일_어제제외: avg,
-        어제_기준선대비_증감률_퍼센트: avg > 0 ? Math.round(((total - avg) / avg) * 100) : null,
-        많이_팔린_상위: topOut,
-      };
-    } catch { return null; }
-  })();
+  const sales = await collectSales(sb, briefDate);
 
   // 재고 경보 — 품절(팔리는데 재고 0 이하) + 소진 임박(현재고 ÷ 일평균 ≤ 7일). 소매 기준.
   const inventory = await (async () => {
@@ -309,8 +332,10 @@ const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 아침 
 
 골격(순서 고정):
 ## 매출
-- 어제 총액과 기준선(직전 7일 일평균) 대비 증감률
-- 많이 팔린 것: 많이_팔린_상위에서 상위 3~5개를 수량·금액과 함께. 평소대비_배수가 1.5 이상이거나 0.5 이하인 품목은 반드시 짚고 해석을 한 줄 붙인다
+- 어제데이터_입력됨이 false 면(대부분의 아침이 그렇다 — 매출은 점심에 업로드됨) 이 섹션은 딱 두 줄로:
+  "- 어제 매출은 아직 입력 전입니다 — 입력되면 '매출 업데이트' 카드로 보내드립니다"
+  "- 참고(M/D 기준): 총액 X원, 기준선 대비 ±N%" (매출_기준일 데이터. 눈에 띄는 배수 품목이 있으면 이 줄 끝에 하나만 덧붙임)
+- 어제데이터_입력됨이 true 면 정식으로: 기준일 총액과 기준선(직전 7일 일평균) 대비 증감률, 많이 팔린 것 상위 3~5개(수량·금액), 평소대비_배수 1.5 이상/0.5 이하 품목은 반드시 짚고 해석 한 줄
 ## 재고 경보
 - 품절: 품절_판매중인데_재고없음 목록을 품목명 그대로(추가건수 있으면 "외 N종"). 비어 있으면 "- 품절 없음" 한 줄
 - 소진 임박은 반드시 마크다운 표 하나로(불릿 나열 금지, 소진예상일 오름차순 전건):
@@ -411,6 +436,31 @@ function briefingCardBody(title: string, md: string): CardEl[] {
   return body;
 }
 
+const cardPayload = (body: CardEl[]) => ({
+  type: "message",
+  attachments: [{
+    contentType: "application/vnd.microsoft.card.adaptive",
+    contentUrl: null,
+    content: {
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      type: "AdaptiveCard",
+      version: "1.4",
+      body,
+      msteams: { width: "Full" },
+    },
+  }],
+});
+
+async function postCard(url: string, body: CardEl[]): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cardPayload(body)) });
+    if (!res.ok) return { ok: false, error: `발송 실패(${res.status}) — 워크플로 실행 기록을 확인하세요.` };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "발송 실패: 네트워크 오류" };
+  }
+}
+
 export async function sendBriefingToTeams(date: string): Promise<{ ok: boolean; error?: string }> {
   const url = await getKv("briefing_webhook");
   if (!url) return { ok: false, error: "브리핑 웹훅 URL이 설정되지 않았습니다 — /briefing 하단 설정에서 등록하세요." };
@@ -418,25 +468,41 @@ export async function sendBriefingToTeams(date: string): Promise<{ ok: boolean; 
   const insight = (data?.insight as string | null) || "";
   if (!insight) return { ok: false, error: "보낼 브리핑 본문이 없습니다. 먼저 생성하세요." };
   const [, m, d] = date.split("-");
-  const payload = {
-    type: "message",
-    attachments: [{
-      contentType: "application/vnd.microsoft.card.adaptive",
-      contentUrl: null,
-      content: {
-        $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-        type: "AdaptiveCard",
-        version: "1.4",
-        body: briefingCardBody(`아침 브리핑 · ${Number(m)}/${Number(d)}`, insight),
-        msteams: { width: "Full" },
-      },
-    }],
-  };
+  return postCard(url, briefingCardBody(`아침 브리핑 · ${Number(m)}/${Number(d)}`, insight));
+}
+
+// 매출 업로드 훅 — 늦게 들어온 어제 매출을 오늘 브리핑 데이터에 반영하고 '매출 업데이트' 카드를 발송.
+//  매출은 99% 다음 날 점심에 업로드된다(대표 확인) — 이 카드가 사실상의 일일 매출 브리핑이다.
+//  AI 호출 없음(숫자 조립만 — 토큰 비용 0). 오늘 브리핑이 없거나 이미 어제 기준이면 조용히 통과.
+//  실패해도 업로드 자체를 막지 않는다(fire-safe).
+export async function maybeSendSalesUpdate(): Promise<void> {
   try {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (!res.ok) return { ok: false, error: `발송 실패(${res.status}) — 워크플로 실행 기록을 확인하세요.` };
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "발송 실패: 네트워크 오류" };
-  }
+    const sb = supabaseAdmin();
+    const today = kstDate(0);
+    const yst = kstDate(1);
+    const { data: b, error } = await sb.from("briefings").select("data").eq("brief_date", today).maybeSingle();
+    if (error || !b) return; // 103 미적용·오늘 브리핑 없음(운영 전) — 통과
+    const d = (b.data as Record<string, unknown>) || {};
+    const cur = d["매출"] as { 매출_기준일?: string } | null;
+    if (cur?.매출_기준일 === yst) return; // 이미 어제 기준(재업로드 중복 발송 방지)
+    const fresh = await collectSales(sb, today);
+    if (!fresh || fresh.매출_기준일 !== yst) return; // 여전히 어제분 없음(과거분만 올린 업로드)
+    await sb.from("briefings").update({ data: { ...d, 매출: fresh } }).eq("brief_date", today);
+
+    const url = await getKv("briefing_webhook");
+    if (!url) return;
+    const [, m, dd] = yst.split("-");
+    const pct = fresh.기준일_기준선대비_증감률_퍼센트;
+    const body: CardEl[] = [
+      { type: "TextBlock", text: `매출 업데이트 · ${Number(m)}/${Number(dd)} 어제분 입력됨`, weight: "Bolder", size: "Large", wrap: true },
+      { type: "TextBlock", text: `총 ${fresh.기준일_매출액.toLocaleString()}원 · ${fresh.기준일_판매수량.toLocaleString()}개${pct != null ? ` · 평소 대비 ${pct > 0 ? "+" : ""}${pct}%` : ""}`, wrap: true, spacing: "Small" },
+      { type: "TextBlock", text: "많이 팔린 것", weight: "Bolder", spacing: "Medium", wrap: true },
+      ...fresh.많이_팔린_상위.slice(0, 5).map((t): CardEl => ({
+        type: "TextBlock",
+        text: `• ${t.품목} — ${t.수량.toLocaleString()}개 · ${t.금액.toLocaleString()}원${t.평소대비_배수 != null ? ` (평소 ${t.평소대비_배수}배)` : ""}`,
+        wrap: true, spacing: "Small",
+      })),
+    ];
+    await postCard(url, body);
+  } catch (e) { console.warn("[briefing] 매출 업데이트 카드 실패", e); }
 }

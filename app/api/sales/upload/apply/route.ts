@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/app/lib/supabase";
 import { parseSalesFile } from "@/app/lib/sales-parse";
 import { normalizeRow, type SalesOrderRow, type SalesCustomerRow } from "@/app/lib/sales-normalize";
 import { logSalesUpload, currentActor } from "@/app/lib/b2b-activity";
+import { maybeSendSalesUpdate } from "@/app/lib/briefing";
 import { randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
@@ -90,6 +91,9 @@ export async function POST(req: NextRequest) {
       });
     }
     await logSalesUpload(file.name, inserted, skipped);
+    // 어제 매출이 늦게 들어온 경우(99% 케이스) 오늘 아침 브리핑을 갱신하고 '매출 업데이트' 카드 발송.
+    //  실패해도 업로드는 성공(fire-safe). 브리핑 미생성·웹훅 미설정이면 함수가 조용히 통과한다.
+    if (inserted > 0) await maybeSendSalesUpdate();
     const { data: bounds } = await sb.rpc("sales_date_bounds");
     const totalAfter = Array.isArray(bounds) && bounds[0] ? (bounds[0].total_rows as number) : null;
     return NextResponse.json({ ok: true, inserted, skipped, total_after: totalAfter, batch_id: inserted > 0 ? batchId : null });
