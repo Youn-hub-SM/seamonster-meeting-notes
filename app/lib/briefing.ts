@@ -127,6 +127,89 @@ async function collectSales(sb: SupabaseClient, briefDate: string): Promise<Sale
   } catch { return null; }
 }
 
+// ── 매출 추세(아침용) — 어제 일 매출은 점심에나 오므로, 아침엔 이미 쌓인 데이터로 주간·월간·채널
+//  동향을 말한다(대표 지시 2026-09-03). 합계는 전부 sales_summary RPC(DB 집계, 절단 없음). ──
+async function collectSalesTrend(sb: SupabaseClient, briefDate: string) {
+  try {
+    const yst = shiftDate(briefDate, -1);
+    // 데이터가 실제로 있는 마지막 날(어제 이하)
+    const { data: lastRow, error: le } = await sb.from("sales_orders").select("order_date")
+      .lte("order_date", yst).order("order_date", { ascending: false }).limit(1);
+    if (le || !lastRow?.length) return null;
+    const lastDate = String(lastRow[0].order_date).slice(0, 10);
+
+    const sum = async (from: string, to: string, channel?: string) => {
+      const { data, error } = await sb.rpc("sales_summary", channel ? { p_from: from, p_to: to, p_channel: channel } : { p_from: from, p_to: to });
+      if (error) throw new Error(error.message);
+      return Number((Array.isArray(data) ? data[0] : data)?.revenue) || 0;
+    };
+    const pct = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null);
+
+    // 이번 주(월요일~데이터 마지막 날) vs 전주 같은 기간
+    const dow = (new Date(`${briefDate}T00:00:00Z`).getUTCDay() + 6) % 7; // 월=0
+    const weekStart = shiftDate(briefDate, -dow);
+    let 이번주: Record<string, unknown> | null = null;
+    let 지난주_전체: number | null = null;
+    if (lastDate >= weekStart) {
+      const cur = await sum(weekStart, lastDate);
+      const prev = await sum(shiftDate(weekStart, -7), shiftDate(lastDate, -7));
+      이번주 = { 기간: `${weekStart}~${lastDate}`, 합계: cur, 전주_같은기간: prev, 증감률_퍼센트: pct(cur, prev) };
+    } else {
+      지난주_전체 = await sum(shiftDate(weekStart, -7), shiftDate(weekStart, -1)); // 월요일 아침 등 이번 주 데이터 전
+    }
+
+    // 이번 달 누계 vs 전월 같은 일수 + 지난달 전체
+    const monthStart = `${briefDate.slice(0, 7)}-01`;
+    const prevMonthEnd = shiftDate(monthStart, -1);
+    const prevMonthStart = `${prevMonthEnd.slice(0, 7)}-01`;
+    let 이번달: Record<string, unknown> | null = null;
+    if (lastDate >= monthStart) {
+      const dayCount = Math.round((Date.parse(lastDate) - Date.parse(monthStart)) / 86400e3) + 1;
+      const prevSameEndRaw = shiftDate(prevMonthStart, dayCount - 1);
+      const prevSameEnd = prevSameEndRaw > prevMonthEnd ? prevMonthEnd : prevSameEndRaw; // 말일 클램프
+      const cur = await sum(monthStart, lastDate);
+      const prev = await sum(prevMonthStart, prevSameEnd);
+      이번달 = { 기간: `${monthStart}~${lastDate}`, 누계: cur, 전월_같은기간: prev, 증감률_퍼센트: pct(cur, prev) };
+    }
+    const 지난달_전체 = await sum(prevMonthStart, prevMonthEnd);
+
+    // 채널별 이번 주(비중·전주 대비) + 이번 주 상위 품목 — 행 조회는 이번 주 한 번만
+    let 채널별_이번주: { 채널: string; 합계: number; 비중_퍼센트: number; 전주대비_증감률_퍼센트: number | null }[] = [];
+    let 이번주_상위품목: { 품목: string; sku: string | null; 수량: number; 금액: number }[] = [];
+    const trendFrom = 이번주 ? weekStart : shiftDate(weekStart, -7);
+    const trendTo = 이번주 ? lastDate : shiftDate(weekStart, -1);
+    {
+      const rows = await pagedRows<{ channel: string | null; product_name: string; option_name: string | null; sku_code: string | null; quantity: number; subtotal_amount: number }>(
+        () => sb.from("sales_orders").select("channel, product_name, option_name, sku_code, quantity, subtotal_amount")
+          .gte("order_date", trendFrom).lte("order_date", trendTo).order("id", { ascending: true }), 30000);
+      const byCh = new Map<string, number>();
+      const byItem = new Map<string, { 품목: string; sku: string | null; 수량: number; 금액: number }>();
+      let total = 0;
+      for (const r of rows) {
+        const amt = Number(r.subtotal_amount) || 0;
+        total += amt;
+        const ch = r.channel || "기타";
+        byCh.set(ch, (byCh.get(ch) || 0) + amt);
+        const label = `${r.product_name}${r.option_name ? ` ${r.option_name}` : ""}`;
+        const key = r.sku_code || label;
+        const it = byItem.get(key) || { 품목: label, sku: r.sku_code || null, 수량: 0, 금액: 0 };
+        it.수량 += Number(r.quantity) || 0;
+        it.금액 += amt;
+        byItem.set(key, it);
+      }
+      const chList = [...byCh.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+      채널별_이번주 = await Promise.all(chList.map(async ([ch, amt]) => {
+        let prevCh: number | null = null;
+        try { prevCh = await sum(shiftDate(trendFrom, -7), shiftDate(trendTo, -7), ch); } catch { /* 채널 비교 실패는 생략 */ }
+        return { 채널: ch, 합계: amt, 비중_퍼센트: total > 0 ? Math.round((amt / total) * 100) : 0, 전주대비_증감률_퍼센트: prevCh != null ? pct(amt, prevCh) : null };
+      }));
+      이번주_상위품목 = [...byItem.values()].sort((a, b) => b.금액 - a.금액).slice(0, 5);
+    }
+
+    return { 데이터_기준일: lastDate, 이번주, 지난주_전체, 이번달, 지난달_전체, 채널별_이번주, 이번주_상위품목 };
+  } catch { return null; }
+}
+
 // ── 영역별 집계 — 각 블록은 실패해도(테이블 미적용 등) null 로 두고 브리핑은 계속 만든다 ──
 export async function collectBriefingData(sb: SupabaseClient, briefDate: string) {
   const yst = shiftDate(briefDate, -1);
@@ -136,6 +219,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   const in2days = shiftDate(briefDate, 2); // 마감 3일내 = 오늘 포함 3일
 
   const sales = await collectSales(sb, briefDate);
+  const salesTrend = await collectSalesTrend(sb, briefDate);
 
   // 재고 경보 — 품절(팔리는데 재고 0 이하) + 소진 임박(현재고 ÷ 일평균 ≤ 7일). 소매 기준.
   const inventory = await (async () => {
@@ -317,7 +401,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   const toolChanges = CHANGELOG.filter((c) => c.date >= yst).slice(0, 6)
     .map((c) => ({ 날짜: c.date, 구분: c.tag, 도구: c.tool, 제목: c.title }));
 
-  return { 기준일_어제: yst, 매출: sales, 재고: inventory, 발주와발송: b2b, 생산: production, VOC: voc, 팀활동: activity, 전일_브리핑_집계: prev, 도구변경: toolChanges };
+  return { 기준일_어제: yst, 매출: sales, 매출_추세: salesTrend, 재고: inventory, 발주와발송: b2b, 생산: production, VOC: voc, 팀활동: activity, 전일_브리핑_집계: prev, 도구변경: toolChanges };
 }
 
 const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 아침 브리핑 비서다. 내부 업무도구가 집계한 '어제'의 데이터(JSON)를 받아, 대표가 아침에 읽고 바로 의사결정할 브리핑을 한국어로 쓴다.
@@ -331,11 +415,13 @@ const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 아침 
 - 출력은 마크다운만: "## 제목" 섹션, "- 라벨 : 내용" 불릿.
 
 골격(순서 고정):
-## 매출
-- 어제데이터_입력됨이 false 면(대부분의 아침이 그렇다 — 매출은 점심에 업로드됨) 이 섹션은 딱 두 줄로:
-  "- 어제 매출은 아직 입력 전입니다 — 입력되면 '매출 업데이트' 카드로 보내드립니다"
-  "- 참고(M/D 기준): 총액 X원, 기준선 대비 ±N%" (매출_기준일 데이터. 눈에 띄는 배수 품목이 있으면 이 줄 끝에 하나만 덧붙임)
-- 어제데이터_입력됨이 true 면 정식으로: 기준일 총액과 기준선(직전 7일 일평균) 대비 증감률, 많이 팔린 것 상위 3~5개(수량·금액), 평소대비_배수 1.5 이상/0.5 이하 품목은 반드시 짚고 해석 한 줄
+## 매출 동향
+아침엔 어제 일 매출이 대부분 입력 전이다(점심 업로드) — 이 섹션은 매출_추세로 주간·월간·채널 동향을 정리한다:
+- 매출.어제데이터_입력됨이 false 면 첫 줄: "- 어제 일 매출은 입력 전 — 반영되면 '매출 업데이트' 카드로 보내드립니다 (데이터 기준일 M/D)". true 면 대신 어제 총액·기준선 대비 증감률 한 줄
+- 주간 : 이번주(합계·전주 같은 기간 대비 증감률). 이번주가 null 이면 지난주_전체로 "지난주 총 X원" 서술
+- 월간 : 이번달(누계·전월 같은 기간 대비 증감률)과 지난달_전체 참고
+- 채널 동향 : 채널별_이번주에서 비중 상위와 전주대비 증감이 큰(±20% 이상) 채널을 짚고 해석 한 줄 — 이것이 이커머스 채널 동향 파악이다
+- 많이 팔린 것 : 이번주_상위품목 3~5개(수량·금액)
 ## 재고 경보
 - 품절: 품절_판매중인데_재고없음 목록을 품목명 그대로(추가건수 있으면 "외 N종"). 비어 있으면 "- 품절 없음" 한 줄
 - 소진 임박은 반드시 마크다운 표 하나로(불릿 나열 금지, 소진예상일 오름차순 전건):
