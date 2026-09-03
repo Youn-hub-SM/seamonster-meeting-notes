@@ -146,11 +146,13 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
       }
       risky.sort((a, b) => a.소진예상일 - b.소진예상일);
 
-      // 어제 입출고 요약(완료만) + 대기 입고
-      const txRows = await pagedRows<{ type: string; qty: number; status?: string | null }>(
-        () => sb.from("inventory_txns").select("type, qty, status").eq("txn_date", yst).order("id", { ascending: true }), 10000);
+      // 어제 입출고 요약(완료만) + 대기 입고 + 담당자별 기록 건수(팀 활동용)
+      const txRows = await pagedRows<{ type: string; qty: number; status?: string | null; created_by?: string | null }>(
+        () => sb.from("inventory_txns").select("type, qty, status, created_by").eq("txn_date", yst).order("id", { ascending: true }), 10000);
       const done = txRows.filter((r) => r.status !== "대기");
       const sum = (t: string) => done.filter((r) => r.type === t).reduce((s, r) => s + Math.abs(Number(r.qty) || 0), 0);
+      const byPerson: Record<string, number> = {};
+      for (const r of txRows) { const k = r.created_by || "(미기재)"; byPerson[k] = (byPerson[k] || 0) + 1; }
       const { count: pendIn } = await sb.from("inventory_txns").select("id", { count: "exact", head: true }).eq("type", "입고").eq("status", "대기");
 
       return {
@@ -159,6 +161,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
         소진임박_7일내: risky.slice(0, 12),
         소진임박_추가건수: Math.max(0, risky.length - 12),
         어제_입고수량: sum("입고"), 어제_출고수량: sum("출고"), 대기중_입고건수: pendIn ?? 0,
+        어제_재고기록_담당자별_건수: byPerson,
       };
     } catch { return null; }
   })();
@@ -227,7 +230,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   const voc = await (async () => {
     try {
       const { data } = await sb.from("voc")
-        .select("channel, source, category, product, content, resolution, cause")
+        .select("channel, source, category, product, content, resolution, cause, created_by")
         .eq("received_at", yst).order("created_at", { ascending: true }).limit(200);
       const rows = data ?? [];
       const byCat: Record<string, number> = {};
@@ -245,21 +248,38 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
           내용: String(r.content || "").slice(0, 200),
           처리결과: String(r.resolution || "").slice(0, 200) || null,
           원인: String(r.cause || "").slice(0, 120) || null,
+          등록자: (r.created_by as string) || null,
         })),
       };
     } catch { return null; }
   })();
 
-  // 팀 활동 — 어제 변경기록 수·상위 이벤트
+  // 팀 활동 — 어제 '누가 무엇을 했는지'(변경기록 원문 + 담당자별 집계) + 신규 상품 등록
   const activity = await (async () => {
     try {
       const { start, end } = kstDayUtc(yst);
-      const rows = await pagedRows<{ event_type: string }>(
-        () => sb.from("activity_log").select("event_type").gte("created_at", start).lt("created_at", end).order("id", { ascending: true }), 10000);
+      const rows = await pagedRows<{ event_type: string; actor?: string | null; summary?: string | null }>(
+        () => sb.from("activity_log").select("event_type, actor, summary").gte("created_at", start).lt("created_at", end).order("id", { ascending: true }), 10000);
       const byType: Record<string, number> = {};
-      for (const r of rows) byType[r.event_type || "기타"] = (byType[r.event_type || "기타"] || 0) + 1;
-      const top = Object.entries(byType).sort((a, b) => b[1] - a[1]).slice(0, 5);
-      return { 어제_활동건수: rows.length, 상위_활동: Object.fromEntries(top) };
+      const byActor: Record<string, number> = {};
+      for (const r of rows) {
+        byType[r.event_type || "기타"] = (byType[r.event_type || "기타"] || 0) + 1;
+        const a = r.actor || "(미기재)";
+        byActor[a] = (byActor[a] || 0) + 1;
+      }
+      const top = Object.entries(byType).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      let 신규상품: { count: number; 품목: string[] } | null = null;
+      try {
+        const { data: np } = await sb.from("products").select("name").gte("created_at", start).lt("created_at", end).limit(100);
+        신규상품 = { count: (np ?? []).length, 품목: (np ?? []).slice(0, 15).map((p) => p.name as string) };
+      } catch { /* 무시 */ }
+      return {
+        어제_활동건수: rows.length,
+        상위_활동유형: Object.fromEntries(top),
+        담당자별_활동건수: byActor,
+        어제_주요활동: rows.slice(0, 40).map((r) => ({ 담당: r.actor || null, 유형: r.event_type, 내용: String(r.summary || "").slice(0, 120) })),
+        어제_등록된_신규상품: 신규상품,
+      };
     } catch { return null; }
   })();
 
@@ -305,6 +325,10 @@ const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 아침 
 ## 발주·발송·생산
 - 어제_발주_상세를 업체 맥락과 함께 건별로: "업체명 — 금액. 직전 발주 N일 만(직전 발주일), 최근 90일 발주액 M원". 직전_발주일이 null 이면 "최근 90일 내 첫 발주(신규 또는 오랜만의 재발주)" 로
 - 발송 지연·오늘 발송 예정·생산 마감 지연/3일내는 0이 아닌 것만 언급. 발주도 없고 전부 0이면 "- 특이사항 없음" 한 줄
+## 팀 활동
+- 어제_주요활동·담당자별_활동건수·어제_재고기록_담당자별_건수·VOC 등록자를 종합해 '누가 무엇을 했는지'를 사람별로 한 줄씩("현석 — 발주 2건 처리, 입고 기록 5건"). 같은 유형은 묶어서, 원문 요약(내용)에서 의미 있는 것만
+- 어제_등록된_신규상품이 있으면 "상품마스터 신규 등록 N종: 품목명…" 으로 반드시 언급
+- 활동이 적으면 "- 도구 활동 한산(N건)" 한 줄로
 ## 오늘 챙길 것
 - 위에서 도출되는 실행 항목 3~5개(품절 품목 보충 발주, 소진 임박 상위 품목, 지연 발송·마감 임박 생산 확인 등) — 구체적 품목명·건수를 담아서. VOC 는 이미 처리된 기록이므로 반복 패턴 점검 외의 대응 지시는 넣지 않는다
 (도구변경 배열이 비어있지 않으면 마지막에 "## 도구 업데이트" 로 한 줄씩.)`;
