@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 // 대표 전용 아침 브리핑 — 업무도우미 전 영역의 어제 변화 + AI 인사이트.
 //  매일 06:30(운영) 자동 생성되고, 여기서 언제든 다시 생성/팀즈 발송할 수 있다.
@@ -13,6 +13,45 @@ const dtKst = (iso: string) => {
 };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+
+// 브리핑 마크다운 렌더 — 회의정리 렌더 패턴 + 표(| … |) 지원(소진 임박 표 등)
+function renderBriefMd(md: string) {
+  const bold = (txt: string) => txt.split(/\*\*(.+?)\*\*/g).map((seg, k) => (k % 2 ? <strong key={k}>{seg}</strong> : seg));
+  const lines = md.split("\n");
+  const out: ReactNode[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    // 연속된 | 행 → 표 (구분선 |---| 은 건너뜀)
+    if (/^\|.*\|$/.test(t)) {
+      const rows: string[][] = [];
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        const raw = lines[i].trim();
+        if (!/^\|[\s|:-]+\|$/.test(raw)) rows.push(raw.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+        i++;
+      }
+      i--;
+      if (rows.length) {
+        const [head, ...body] = rows;
+        out.push(
+          <div key={`tbl${i}`} className="b2b-table-wrap" style={{ margin: "6px 0 10px" }}>
+            <table className="b2b-table" style={{ fontSize: 14 }}>
+              <thead><tr>{head.map((c, k) => <th key={k} className={k > 0 ? "num" : undefined}>{c}</th>)}</tr></thead>
+              <tbody>{body.map((r, ri) => <tr key={ri}>{r.map((c, k) => <td key={k} className={k > 0 ? "num" : undefined}>{bold(c)}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        );
+      }
+      continue;
+    }
+    if (!t) { out.push(<div key={i} style={{ height: 10 }} />); continue; }
+    if (t === "---") { out.push(<hr key={i} style={{ border: "none", borderTop: "1px solid var(--sm-border)", margin: "14px 0" }} />); continue; }
+    if (/^##\s/.test(t)) { out.push(<div key={i} style={{ fontSize: 18, fontWeight: 800, marginTop: 16, marginBottom: 6 }}>{t.replace(/^##\s*/, "")}</div>); continue; }
+    if (/^###\s/.test(t)) { out.push(<div key={i} style={{ fontSize: 16, fontWeight: 700, marginTop: 10, marginBottom: 4 }}>{t.replace(/^###\s*/, "")}</div>); continue; }
+    if (/^-\s/.test(t)) { out.push(<div key={i} style={{ paddingLeft: 18, textIndent: -12 }}>{"· "}{bold(t.replace(/^-\s*/, ""))}</div>); continue; }
+    out.push(<div key={i}>{bold(t)}</div>);
+  }
+  return <div style={{ fontSize: 15, lineHeight: 1.8 }}>{out}</div>;
+}
 
 export default function BriefingPage() {
   const [date, setDate] = useState(kstToday());
@@ -85,7 +124,7 @@ export default function BriefingPage() {
 
   if (forbidden) {
     return (
-      <div className="b2b-container">
+      <div className="b2b-container" style={{ maxWidth: 960, margin: "0 auto" }}>
         <header className="b2b-page-head"><div><h1 className="b2b-page-title">아침 브리핑</h1></div></header>
         <div className="b2b-error">대표 전용 화면입니다.</div>
       </div>
@@ -93,7 +132,8 @@ export default function BriefingPage() {
   }
 
   return (
-    <div className="b2b-container">
+    // 본문이 좌측에 쏠리지 않게 중앙 정렬(가독 폭 960)
+    <div className="b2b-container" style={{ maxWidth: 960, margin: "0 auto" }}>
       <header className="b2b-page-head">
         <div><h1 className="b2b-page-title">아침 브리핑</h1></div>
         <div className="b2b-page-actions">
@@ -121,31 +161,18 @@ export default function BriefingPage() {
           <br /><span className="sm-faint" style={{ fontSize: 12 }}>운영 서버에서는 매일 06:30 에 자동 생성됩니다(아래 설정에서 켜고 끔).</span>
         </div>
       ) : (
-        <section className="b2b-card" style={{ maxWidth: 860 }}>
+        <section className="b2b-card">
           <div className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>
             {brief.brief_date} · 생성 {dtKst(brief.created_at)}{brief.model ? ` · ${brief.model}` : ""}
             {date !== kstToday() && <span style={{ marginLeft: 8 }}>· 과거 날짜를 [다시 생성]하면 발송예정·대기 같은 상태 지표는 지금 기준으로 계산됩니다</span>}
           </div>
-          {md ? (
-            <div style={{ fontSize: 15, lineHeight: 1.8 }}>
-              {md.split("\n").map((line, i) => {
-                const t = line.trim();
-                if (!t) return <div key={i} style={{ height: 10 }} />;
-                if (t === "---") return <hr key={i} style={{ border: "none", borderTop: "1px solid var(--sm-border)", margin: "14px 0" }} />;
-                const bold = (txt: string) => txt.split(/\*\*(.+?)\*\*/g).map((seg, k) => (k % 2 ? <strong key={k}>{seg}</strong> : seg));
-                if (/^##\s/.test(t)) return <div key={i} style={{ fontSize: 18, fontWeight: 800, marginTop: 16, marginBottom: 6 }}>{t.replace(/^##\s*/, "")}</div>;
-                if (/^###\s/.test(t)) return <div key={i} style={{ fontSize: 16, fontWeight: 700, marginTop: 10, marginBottom: 4 }}>{t.replace(/^###\s*/, "")}</div>;
-                if (/^-\s/.test(t)) return <div key={i} style={{ paddingLeft: 18, textIndent: -12 }}>{"· "}{bold(t.replace(/^-\s*/, ""))}</div>;
-                return <div key={i}>{bold(t)}</div>;
-              })}
-            </div>
-          ) : (
+          {md ? renderBriefMd(md) : (
             <div className="sm-warn">집계는 저장됐지만 AI 인사이트 생성이 실패했습니다 — [다시 생성]을 눌러 주세요.</div>
           )}
         </section>
       )}
 
-      <section className="b2b-card" style={{ marginTop: 28, maxWidth: 860 }}>
+      <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">브리핑 설정 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 대표 전용</span></h2>
         </div>

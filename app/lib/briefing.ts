@@ -163,16 +163,46 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
     } catch { return null; }
   })();
 
-  // B2B 발주·발송 — 어제 등록 + 오늘 예정/지연
+  // B2B 발주·발송 — 어제 등록 발주를 '업체 맥락'(직전 발주 며칠 만인지, 최근 90일 발주액)과 함께
   const b2b = await (async () => {
     try {
-      const ords = await pagedRows<{ total: number }>(
-        () => sb.from("orders").select("total").eq("order_date", yst).order("id", { ascending: true }), 5000);
+      const ords = await pagedRows<{ company_id: string | null; order_no: string | null; total: number }>(
+        () => sb.from("orders").select("company_id, order_no, total").eq("order_date", yst).order("id", { ascending: true }), 2000);
+      const cids = [...new Set(ords.map((o) => o.company_id).filter((c): c is string => !!c))];
+      const nameBy = new Map<string, string>();
+      const lastBy = new Map<string, string>();
+      const sumBy = new Map<string, number>();
+      if (cids.length) {
+        const { data: comps } = await sb.from("companies").select("id, name").in("id", cids);
+        for (const c of comps ?? []) nameBy.set(c.id as string, (c.name as string) || "(이름 없음)");
+        const since90 = shiftDate(briefDate, -90);
+        const hist = await pagedRows<{ company_id: string; order_date: string; total: number }>(
+          () => sb.from("orders").select("company_id, order_date, total").in("company_id", cids)
+            .gte("order_date", since90).lt("order_date", yst).order("id", { ascending: true }), 5000);
+        for (const h of hist) {
+          sumBy.set(h.company_id, (sumBy.get(h.company_id) || 0) + (Number(h.total) || 0));
+          const cur = lastBy.get(h.company_id);
+          if (!cur || h.order_date > cur) lastBy.set(h.company_id, h.order_date);
+        }
+      }
+      const daysAgo = (d: string | undefined) => d ? Math.round((Date.parse(yst + "T00:00:00Z") - Date.parse(d + "T00:00:00Z")) / 86400e3) : null;
+      const detail = ords.slice(0, 10).map((o) => {
+        const last = o.company_id ? lastBy.get(o.company_id) : undefined;
+        return {
+          업체: (o.company_id && nameBy.get(o.company_id)) || "(업체 미지정)",
+          발주번호: o.order_no,
+          금액: Number(o.total) || 0,
+          직전_발주일: last ?? null,             // null = 최근 90일 내 첫 발주(신규 또는 오랜만)
+          직전_발주로부터_일수: daysAgo(last),
+          최근90일_발주액_어제제외: (o.company_id && sumBy.get(o.company_id)) || 0,
+        };
+      });
       const { count: shipToday } = await sb.from("shipments").select("id", { count: "exact", head: true }).eq("ship_date", briefDate).eq("status", "발송대기");
       const { count: shipLate } = await sb.from("shipments").select("id", { count: "exact", head: true }).lt("ship_date", briefDate).eq("status", "발송대기");
       return {
         어제_신규발주: ords.length,
         어제_신규발주_금액: ords.reduce((s, r) => s + (Number(r.total) || 0), 0),
+        어제_발주_상세: detail,
         오늘_발송예정: shipToday ?? 0,
         발송_지연: shipLate ?? 0,
       };
@@ -197,7 +227,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   const voc = await (async () => {
     try {
       const { data } = await sb.from("voc")
-        .select("channel, source, category, product, content")
+        .select("channel, source, category, product, content, resolution, cause")
         .eq("received_at", yst).order("created_at", { ascending: true }).limit(200);
       const rows = data ?? [];
       const byCat: Record<string, number> = {};
@@ -213,6 +243,8 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
           카테고리: (r.category as string) || null,
           제품: (r.product as string) || null,
           내용: String(r.content || "").slice(0, 200),
+          처리결과: String(r.resolution || "").slice(0, 200) || null,
+          원인: String(r.cause || "").slice(0, 120) || null,
         })),
       };
     } catch { return null; }
@@ -262,14 +294,19 @@ const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 아침 
 - 많이 팔린 것: 많이_팔린_상위에서 상위 3~5개를 수량·금액과 함께. 평소대비_배수가 1.5 이상이거나 0.5 이하인 품목은 반드시 짚고 해석을 한 줄 붙인다
 ## 재고 경보
 - 품절: 품절_판매중인데_재고없음 목록을 품목명 그대로(추가건수 있으면 "외 N종"). 비어 있으면 "- 품절 없음" 한 줄
-- 소진 임박: 소진임박_7일내에서 소진예상일 짧은 순으로 품목·현재고·소진예상일을 적는다 — 이 목록이 오늘 발주/생산 판단 근거다
+- 소진 임박은 반드시 마크다운 표 하나로(불릿 나열 금지, 소진예상일 오름차순 전건):
+| 품목 | 현재고 | 일평균 출고 | 소진예상 |
+|---|---|---|---|
+표 위에 필요하면 요지 한 줄만("당장 발주 판단이 필요한 품목 N종" 등).
 ## VOC
-- 어제_목록의 실제 내용을 주제별로 묶어 서술한다(카테고리 수치 인용). 눈에 띄는 건은 "제품 — 내용 요지" 로 한 줄씩. 출처 '설문'(탈리)은 설문 응답으로 구분해 언급
-- 0건이면 "- 어제 신규 접수 없음(기준선 일평균 X건)" 한 줄
+- VOC 는 담당자가 이미 응대·처리를 마친 뒤 공유·재발 방지 차원으로 등록하는 기록이다. "우선 응대 필요"/"대응하세요" 류의 지시를 만들지 말 것.
+- 어제_목록의 내용·처리결과·원인을 바탕으로 건별 한 줄: "제품 — 무슨 일(내용 요지) → 어떻게 처리(처리결과)". 처리결과가 비어 있으면 내용만 적고 처리 언급은 생략. 출처 '설문'(탈리)은 설문 응답으로 구분
+- 반복 조짐·품질 패턴이 보일 때만 그 관찰을 한 줄 덧붙인다. 0건이면 "- 어제 신규 접수 없음(기준선 일평균 X건)" 한 줄
 ## 발주·발송·생산
-- 발송 지연·오늘 발송 예정·마감 지연/3일내 위주. 전부 0이면 "- 특이사항 없음" 한 줄
+- 어제_발주_상세를 업체 맥락과 함께 건별로: "업체명 — 금액. 직전 발주 N일 만(직전 발주일), 최근 90일 발주액 M원". 직전_발주일이 null 이면 "최근 90일 내 첫 발주(신규 또는 오랜만의 재발주)" 로
+- 발송 지연·오늘 발송 예정·생산 마감 지연/3일내는 0이 아닌 것만 언급. 발주도 없고 전부 0이면 "- 특이사항 없음" 한 줄
 ## 오늘 챙길 것
-- 위 내용에서 도출되는 실행 항목 3~5개(품절 품목 보충 발주, 지연 발송 처리, 마감 임박 생산 확인, 반복 VOC 대응 등) — 구체적 품목명·건수를 담아서
+- 위에서 도출되는 실행 항목 3~5개(품절 품목 보충 발주, 소진 임박 상위 품목, 지연 발송·마감 임박 생산 확인 등) — 구체적 품목명·건수를 담아서. VOC 는 이미 처리된 기록이므로 반복 패턴 점검 외의 대응 지시는 넣지 않는다
 (도구변경 배열이 비어있지 않으면 마지막에 "## 도구 업데이트" 로 한 줄씩.)`;
 
 // 브리핑 생성(하루 한 건, force = 재생성).
@@ -310,7 +347,15 @@ export async function sendBriefingToTeams(date: string): Promise<{ ok: boolean; 
   const insight = (data?.insight as string | null) || "";
   if (!insight) return { ok: false, error: "보낼 브리핑 본문이 없습니다. 먼저 생성하세요." };
   const [, m, d] = date.split("-");
-  const body = insight.replace(/^#{2,3}\s*(.+)$/gm, "**$1**");
+  // 카드는 ## 헤더·마크다운 표를 렌더하지 못한다 — 헤더는 굵게, 표 행은 " · " 구분 줄로 변환
+  const body = insight
+    .replace(/^#{2,3}\s*(.+)$/gm, "**$1**")
+    .split("\n")
+    .filter((l) => !/^\s*\|[\s|:-]+\|\s*$/.test(l)) // 표 구분선(|---|) 제거
+    .map((l) => /^\s*\|.*\|\s*$/.test(l)
+      ? "- " + l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()).filter(Boolean).join(" · ")
+      : l)
+    .join("\n");
   const r = await sendTeamsWebhook(url, body, { title: `아침 브리핑 · ${Number(m)}/${Number(d)}` });
   return r.ok ? { ok: true } : { ok: false, error: r.error || `발송 실패(${r.status})` };
 }
