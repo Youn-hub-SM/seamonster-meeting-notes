@@ -4,7 +4,6 @@ import { supabaseAdmin } from "./supabase";
 import { getFeatureModelKey } from "./ai-model";
 import { MODELS } from "./config";
 import { getKv } from "./b2b-settings";
-import { sendTeamsWebhook } from "./b2b-teams";
 import { CHANGELOG } from "./changelog";
 import { getLedgerVelocity } from "./production-velocity";
 import { getAllBundles, isBundleId } from "./product-bundles";
@@ -363,7 +362,55 @@ export async function generateBriefing(opts?: { date?: string; force?: boolean }
   return { ok: true, date };
 }
 
-// 팀즈 발송 — 설정(briefing_webhook)의 비공개 채널 웹훅으로. 카드가 ## 를 렌더 못해 굵게로 변환.
+// ── 팀즈 발송 — 브리핑 전용 적응형 카드를 직접 조립한다 ──
+//  공용 sendTeamsWebhook(줄 단위 TextBlock)로는 표·헤더가 깨져 읽기 어려웠다(대표 피드백).
+//  섹션 헤더 = 큰 볼드, 불릿 = • 줄, 마크다운 표 = ColumnSet(숫자 열 우측 정렬)로 그린다.
+type CardEl = Record<string, unknown>;
+
+function briefingCardBody(title: string, md: string): CardEl[] {
+  const body: CardEl[] = [{ type: "TextBlock", text: title, weight: "Bolder", size: "Large", wrap: true }];
+  const lines = md.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    // 연속된 | 행 → 표(ColumnSet 묶음). 구분선(|---|)은 건너뜀.
+    if (/^\|.*\|$/.test(t)) {
+      const rows: string[][] = [];
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        const raw = lines[i].trim();
+        if (!/^\|[\s|:-]+\|$/.test(raw)) rows.push(raw.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+        i++;
+      }
+      i--;
+      if (rows.length) {
+        const [head, ...dataRows] = rows;
+        const colSet = (cells: string[], bold: boolean, sep: boolean): CardEl => ({
+          type: "ColumnSet",
+          spacing: "None",
+          separator: sep,
+          columns: cells.map((c, k) => ({
+            type: "Column",
+            width: k === 0 ? "stretch" : "auto",
+            items: [{
+              type: "TextBlock", text: c || " ", wrap: true, size: "Small",
+              weight: bold ? "Bolder" : "Default",
+              horizontalAlignment: k === 0 ? "Left" : "Right",
+            }],
+          })),
+        });
+        body.push(colSet(head, true, true));
+        for (const r of dataRows) body.push(colSet(r, false, false));
+      }
+      continue;
+    }
+    if (!t || t === "---") continue; // 간격은 섹션 헤더의 spacing 이 담당
+    if (/^##\s/.test(t)) { body.push({ type: "TextBlock", text: t.replace(/^##\s*/, ""), weight: "Bolder", size: "Medium", spacing: "Large", wrap: true }); continue; }
+    if (/^###\s/.test(t)) { body.push({ type: "TextBlock", text: t.replace(/^###\s*/, ""), weight: "Bolder", spacing: "Medium", wrap: true }); continue; }
+    if (/^-\s/.test(t)) { body.push({ type: "TextBlock", text: "• " + t.replace(/^-\s*/, ""), wrap: true, spacing: "Small" }); continue; }
+    body.push({ type: "TextBlock", text: t, wrap: true, spacing: "Small" });
+  }
+  return body;
+}
+
 export async function sendBriefingToTeams(date: string): Promise<{ ok: boolean; error?: string }> {
   const url = await getKv("briefing_webhook");
   if (!url) return { ok: false, error: "브리핑 웹훅 URL이 설정되지 않았습니다 — /briefing 하단 설정에서 등록하세요." };
@@ -371,15 +418,25 @@ export async function sendBriefingToTeams(date: string): Promise<{ ok: boolean; 
   const insight = (data?.insight as string | null) || "";
   if (!insight) return { ok: false, error: "보낼 브리핑 본문이 없습니다. 먼저 생성하세요." };
   const [, m, d] = date.split("-");
-  // 카드는 ## 헤더·마크다운 표를 렌더하지 못한다 — 헤더는 굵게, 표 행은 " · " 구분 줄로 변환
-  const body = insight
-    .replace(/^#{2,3}\s*(.+)$/gm, "**$1**")
-    .split("\n")
-    .filter((l) => !/^\s*\|[\s|:-]+\|\s*$/.test(l)) // 표 구분선(|---|) 제거
-    .map((l) => /^\s*\|.*\|\s*$/.test(l)
-      ? "- " + l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()).filter(Boolean).join(" · ")
-      : l)
-    .join("\n");
-  const r = await sendTeamsWebhook(url, body, { title: `아침 브리핑 · ${Number(m)}/${Number(d)}` });
-  return r.ok ? { ok: true } : { ok: false, error: r.error || `발송 실패(${r.status})` };
+  const payload = {
+    type: "message",
+    attachments: [{
+      contentType: "application/vnd.microsoft.card.adaptive",
+      contentUrl: null,
+      content: {
+        $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+        type: "AdaptiveCard",
+        version: "1.4",
+        body: briefingCardBody(`아침 브리핑 · ${Number(m)}/${Number(d)}`, insight),
+        msteams: { width: "Full" },
+      },
+    }],
+  };
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (!res.ok) return { ok: false, error: `발송 실패(${res.status}) — 워크플로 실행 기록을 확인하세요.` };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "발송 실패: 네트워크 오류" };
+  }
 }
