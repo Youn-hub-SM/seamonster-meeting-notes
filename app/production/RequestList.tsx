@@ -527,7 +527,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   function submit() {
     const items = lines
       .filter((l) => Number(l.requested_qty) > 0)
-      .map((l) => ({ id: l.item_id, product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty)), memo: l.memo.trim() || undefined }));
+      .map((l) => ({ id: l.item_id, product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty) * 100) / 100, memo: l.memo.trim() || undefined })); // 소수 둘째 자리 허용(104)
     onSubmit({
       title: title.trim() || (isEdit ? "" : undefined),
       purpose,
