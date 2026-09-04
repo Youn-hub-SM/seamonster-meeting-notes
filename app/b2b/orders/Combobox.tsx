@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { matchKoQuery } from "@/app/lib/hangul";
 
-export type ComboOption = { id: string; label: string; sub?: string };
+// extra: 화면에 표시하지 않고 검색 매칭에만 쓰는 추가 키워드(품목 특징 '진공/벌크' 등) — 선택 필드라 기존 사용처 무영향
+export type ComboOption = { id: string; label: string; sub?: string; extra?: string };
 
 // 입력 시 리스트가 추천 키워드처럼 필터돼 뜨는 콤보박스.
 //  - 업체: 리스트에서만 선택(allowFreeText=false) → onSelect 로 id 확정
@@ -39,7 +40,7 @@ export function Combobox({
   // 재고 목록 검색창과 같은 규칙 — 초성("ㄱㅇ")·부분일치, 공백으로 나눈 단어는 모두 만족(AND).
   //  이름과 보조정보(SKU·규격)를 한 덩어리로 훑어 "광어 1kg" 처럼 섞어 쳐도 찾힌다.
   const q = (query ?? "").trim();
-  const filtered = q ? options.filter((o) => matchKoQuery(`${o.label} ${o.sub || ""}`, q)) : options;
+  const filtered = q ? options.filter((o) => matchKoQuery(`${o.label} ${o.sub || ""} ${o.extra || ""}`, q)) : options;
 
   function updateCoords() {
     const el = inputRef.current;

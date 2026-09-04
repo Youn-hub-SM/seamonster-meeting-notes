@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 
-type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean };
+type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null };
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -48,7 +48,8 @@ export default function InventoryMovePage() {
   //  검색 결과에 안 팔리는 항목이 섞여 원하는 품목이 묻히는 것 방지(검색 자체는 공용 Combobox 초성·영문자판 지원).
   const options = useMemo(() => products
     .filter((p) => !p.is_bundle && p.active !== false)
-    .map((p) => ({ id: p.id, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })), [products]);
+    // 특징(attrs: 진공·벌크·패키지 등)도 검색에 걸리게 extra 로 전달 — 다른 화면과 동일한 검색 경험
+    .map((p) => ({ id: p.id, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "", extra: p.attrs || "" })), [products]);
 
   async function submit() {
     setError(""); setOk("");

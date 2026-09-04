@@ -14,7 +14,7 @@ export async function GET() {
   try {
     const sb = supabaseAdmin();
     const [{ data, error }, bundles] = await Promise.all([
-      sb.from("products").select("id, sku, name, spec, unit, sale_price, cost_price, volume_kg, active").order("name", { ascending: true }),
+      sb.from("products").select("id, sku, name, spec, unit, sale_price, cost_price, volume_kg, active, attrs").order("name", { ascending: true }),
       getAllBundles(sb), // parent_id → 구성품[] (037 미적용이면 빈 맵 → 치환 없음)
     ]);
     if (error) throw error;
