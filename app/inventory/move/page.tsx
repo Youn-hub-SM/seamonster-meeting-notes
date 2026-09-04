@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 
-type Prod = { id: string; sku: string | null; name: string; spec: string | null };
+type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean };
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -44,7 +44,11 @@ export default function InventoryMovePage() {
   const nQty = Math.max(0, Math.round((Number(qty) || 0) * 100) / 100);
   const shortage = pid && nQty > 0 && nQty > fromQty;
 
-  const options = useMemo(() => products.map((p) => ({ id: p.id, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })), [products]);
+  // 묶음(세트)은 자체 재고가 없어 이동 대상이 아니고, 비활성(단종) 품목도 목록에서 뺀다 —
+  //  검색 결과에 안 팔리는 항목이 섞여 원하는 품목이 묻히는 것 방지(검색 자체는 공용 Combobox 초성·영문자판 지원).
+  const options = useMemo(() => products
+    .filter((p) => !p.is_bundle && p.active !== false)
+    .map((p) => ({ id: p.id, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })), [products]);
 
   async function submit() {
     setError(""); setOk("");

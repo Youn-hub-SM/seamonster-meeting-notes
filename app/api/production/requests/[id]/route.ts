@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (b.items !== undefined) {
       if (!Array.isArray(b.items)) return NextResponse.json({ ok: false, error: "items 형식이 올바르지 않습니다." }, { status: 400 });
       itemsIn = (b.items as ItemIn[])
-        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round(Number(it.requested_qty) || 0), memo: String(it.memo || "").trim() || undefined }))
+        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined })) // 소수 둘째 자리 허용(104)
         .filter((it) => it.product_id && it.requested_qty > 0);
       if (itemsIn.length === 0) return NextResponse.json({ ok: false, error: "요청 수량이 있는 품목이 최소 1개 필요합니다." }, { status: 400 });
 

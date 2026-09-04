@@ -55,22 +55,38 @@ export async function GET(req: NextRequest) {
     const stockOf = (id: string) => stock.get(id) || 0;
 
     // 기간 원장(입고/출고). channel(036) 컬럼 없으면 전체로 폴백.
-    const txnQ = (withChannel: boolean) => {
-      let q = sb.from("inventory_txns")
-        .select(`product_id, type, qty, status${withChannel ? ", channel" : ""}`)
-        .in("type", ["입고", "출고"])
-        .gte("txn_date", from).lte("txn_date", to)
-        .limit(20000);
-      if (withChannel && chan) q = q.eq("channel", chan);
-      return q;
+    //  ※ 단발 .limit(20000)은 서버 Max Rows(기본 1000)가 우선해 조용히 잘린다 — 30일 총입고/총출고가
+    //    실제보다 적게 나오던 원인(2026-09-03 대표 보고). range 페이징으로 전량 읽는다(안정 정렬 필수).
+    type TxnRow = { product_id: string; type: string; qty: number; status?: string | null };
+    const fetchTxns = async (withChannel: boolean): Promise<TxnRow[]> => {
+      const out: TxnRow[] = [];
+      for (let i = 0; i < 100000; i += 1000) {
+        let q = sb.from("inventory_txns")
+          .select(`product_id, type, qty, status${withChannel ? ", channel" : ""}`)
+          .in("type", ["입고", "출고"])
+          .gte("txn_date", from).lte("txn_date", to)
+          .order("id", { ascending: true })
+          .range(i, i + 999);
+        if (withChannel && chan) q = q.eq("channel", chan);
+        const { data, error } = await q;
+        if (error) throw error;
+        out.push(...((data ?? []) as unknown as TxnRow[]));
+        if (!data || data.length < 1000) break;
+      }
+      return out;
     };
-    let tr = await txnQ(true);
-    if (tr.error && /channel/i.test(tr.error.message)) tr = await txnQ(false);
-    if (tr.error) throw tr.error;
+    let txRows: TxnRow[];
+    try {
+      txRows = await fetchTxns(true);
+    } catch (e) {
+      const msg = String((e as { message?: unknown })?.message ?? e);
+      if (/channel/i.test(msg)) txRows = await fetchTxns(false); // 036 미적용 폴백
+      else throw e;
+    }
 
     const inq = new Map<string, number>();
     const outq = new Map<string, number>();
-    for (const t of (tr.data as unknown as { product_id: string; type: string; qty: number; status?: string | null }[] | null) ?? []) {
+    for (const t of txRows) {
       if (t.status != null && t.status !== "완료") continue; // 대기 제외
       const q = Math.abs(Number(t.qty) || 0);
       if (t.type === "입고") inq.set(t.product_id, (inq.get(t.product_id) || 0) + q);

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const b = (await req.json()) as Record<string, unknown>;
     const rawItems = Array.isArray(b.items) ? (b.items as Record<string, unknown>[]) : [];
     const items = rawItems
-      .map((it) => ({ product_id: String(it.product_id || ""), requested_qty: Math.round(Number(it.requested_qty) || 0), memo: String(it.memo || "").trim() || null }))
+      .map((it) => ({ product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || null })) // 소수 둘째 자리 허용(104)
       .filter((it) => it.product_id && it.requested_qty > 0);
     if (!items.length) return NextResponse.json({ ok: false, error: "요청 품목과 수량을 1개 이상 입력하세요." }, { status: 400 });
 

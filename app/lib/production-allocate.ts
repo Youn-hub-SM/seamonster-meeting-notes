@@ -4,7 +4,7 @@ import { logProductionReceipt, logProductionRequestStatusChanged } from "./b2b-a
 // 입고 → 생산 요청 자동 매칭 — 입고 창구를 '입고 및 출고'로 단일화하면서 이행률 추적을 유지하는 다리.
 //  '입고'(완료) 원장이 기록될 때, 같은 품목의 열린 요청(요청·진행중)에 오래된 요청부터(FIFO)
 //  잔여 수량만큼 배분해 production_receipts 증거를 남긴다. 요청에 없는 품목·잔여 초과분은
-//  그냥 일반 입고로 남는다(연결 없음). 소수 수량은 정수 부분만 매칭(요청 수량이 정수 단위).
+//  그냥 일반 입고로 남는다(연결 없음). 수량은 소수 둘째 자리까지 매칭(104 — 요청·입고 모두 numeric).
 //
 //  취소 정합성: receipts.inv_txn_id 가 원장에 cascade(083) — 입고/출고에서 그 입고를 취소
 //  (원장 삭제)하면 증거도 함께 지워져 이행률이 자동 원복된다.
@@ -45,7 +45,7 @@ async function topUpPair(
     ]);
     if (pair.error || byTxn.error || byItem.error || !pair.data) return null;
     const sum = (rows: { qty: unknown }[] | null) => (rows ?? []).reduce((s, r) => s + (Number(r.qty) || 0), 0);
-    const freshLeft = Math.floor(txnQty) - sum(byTxn.data);
+    const freshLeft = Math.round(txnQty * 100) / 100 - sum(byTxn.data);
     const freshRem = requestedQty - sum(byItem.data);
     const inc = Math.max(0, Math.min(freshLeft, freshRem));
     if (inc > 0) {
@@ -148,7 +148,7 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
     // 5) FIFO 배분 — 오래된 입고부터, 창이 맞는 오래된 요청부터
     const started = new Set<string>();
     for (const t of txns) {
-      let left = Math.floor(Number(t.qty) || 0) - (allocated.get(t.id) || 0);
+      let left = Math.round((Number(t.qty) || 0) * 100) / 100 - (allocated.get(t.id) || 0);
       if (left <= 0) continue;
       for (const h of heads) {
         if (left <= 0) break;
@@ -201,7 +201,7 @@ export async function allocateReceiptsToOpenRequests(
   actor: string | null,
   opts?: { purpose?: "재고 보충" | "도매 납품"; memo?: string },
 ): Promise<void> {
-  const positive = entries.filter((e) => e.inv_txn_id && e.product_id && Math.floor(e.qty) > 0);
+  const positive = entries.filter((e) => e.inv_txn_id && e.product_id && Math.round(e.qty * 100) / 100 > 0);
   if (!positive.length) return;
   const pids = [...new Set(positive.map((e) => e.product_id))];
 
@@ -263,7 +263,7 @@ export async function allocateReceiptsToOpenRequests(
   const startedRequests = new Set<string>(); // 이번 호출에서 요청→진행중 전환한 요청(중복 전환 방지)
 
   for (const e of positive) {
-    let left = Math.floor(e.qty) - (priorByTxn.get(e.inv_txn_id) || 0);
+    let left = Math.round(e.qty * 100) / 100 - (priorByTxn.get(e.inv_txn_id) || 0);
     for (const it of items) {
       if (left <= 0) break;
       if (it.product_id !== e.product_id) continue;
