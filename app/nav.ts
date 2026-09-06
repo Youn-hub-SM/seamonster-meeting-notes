@@ -26,7 +26,6 @@ export const NAV: NavCategory[] = [
         menu: [
           { href: "/b2b/orders", label: "발주" },
           { href: "/b2b/companies", label: "업체 주소록" },
-          { href: "/b2b/margin", label: "이익률" },
           { href: "/b2b/reports", label: "매출 집계" },
           { href: "/b2b/payments", label: "입금 확인" },
           { href: "/b2b/history", label: "변경 기록" },
@@ -55,7 +54,6 @@ export const NAV: NavCategory[] = [
         href: "/sales", label: "매출", icon: "bars",
         menu: [
           { href: "/sales", label: "대시보드" },
-          { href: "/sales/weekly", label: "주간 브리핑" },
           { href: "/sales/upload", label: "데이터 업로드" },
           { href: "/sales/report", label: "리포트" },
           { href: "/sales/profit", label: "채널별 이익" },
@@ -91,7 +89,6 @@ export const NAV: NavCategory[] = [
           { href: "/inventory/asof", label: "과거수량 조회" },
         ],
       },
-      { href: "/inventory/stats", label: "재고/생산 통계", icon: "bars" },
       { href: "/inventory/reconcile", label: "구매·판매·재고 확인", icon: "receipt" },
       { href: "/inventory/activity", label: "변경 기록", icon: "receipt" },
     ],
@@ -163,7 +160,6 @@ export const NAV: NavCategory[] = [
     label: "관리자",
     adminOnly: true, // 관리자·현석에게만 노출
     tools: [
-      { href: "/briefing", label: "아침 브리핑", icon: "bulb" },
       { href: "/b2b/users", label: "계정 관리", icon: "user" },
       {
         href: "/b2b/settings", label: "설정", icon: "gear",
