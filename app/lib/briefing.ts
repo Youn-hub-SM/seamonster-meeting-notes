@@ -233,11 +233,22 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
     } catch { return null; }
   })();
 
-  // 전일 리포트의 집계 — '전일 대비' 판단의 근거(없으면 null)
+  // 전일 리포트의 집계 — '전일 대비' 판단의 근거(없으면 null).
+  //  숫자 필드만 남긴다: 전일 data 안에 또 그 전일이 중첩돼 날마다 입력 토큰이 불어나는 것 방지(비용),
+  //  전일 대비 판단에는 스칼라 요약이면 충분하다.
   const prev = await (async () => {
     try {
       const { data } = await sb.from("briefings").select("data").eq("brief_date", yst).maybeSingle();
-      return (data?.data as Record<string, unknown>) ?? null;
+      const raw = (data?.data as Record<string, unknown>) ?? null;
+      if (!raw) return null;
+      const slim: Record<string, unknown> = {};
+      for (const k of ["발주와발송", "재고", "생산", "VOC", "팀활동"]) {
+        const v = raw[k];
+        if (v && typeof v === "object") {
+          slim[k] = Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([, val]) => typeof val === "number"));
+        }
+      }
+      return Object.keys(slim).length ? slim : null;
     } catch { return null; }
   })();
 
