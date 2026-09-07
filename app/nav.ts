@@ -158,6 +158,7 @@ export const NAV: NavCategory[] = [
     label: "관리자",
     adminOnly: true, // 관리자·현석에게만 노출
     tools: [
+      { href: "/briefing", label: "일일 리포트", icon: "bulb" },
       { href: "/b2b/users", label: "계정 관리", icon: "user" },
       {
         href: "/b2b/settings", label: "설정", icon: "gear",
