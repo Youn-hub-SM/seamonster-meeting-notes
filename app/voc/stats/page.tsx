@@ -173,7 +173,7 @@ export default function VocStatsPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">VOC 통계·보고서</h1>
+          <h1 className="b2b-page-title">VOC 통계</h1>
           <p className="print-only" style={{ fontSize: 15, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
         </div>
         <div className="b2b-page-actions no-print">

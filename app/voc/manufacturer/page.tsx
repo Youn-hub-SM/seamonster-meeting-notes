@@ -196,7 +196,7 @@ export default function VocManufacturerPage() {
           {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건 · 설문 {counts.surveys}건 반영</span>}
           {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("저장 실패") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 클레임(VOC)·설문(Tally)을 긍정/부정·제품별로 정리합니다(리뷰 섹션 제외). 클레임 건수는 설문 소스를 뺀 값이라 월말 결산의 '총 발생'(모든 소스 합산)보다 적을 수 있습니다. 생성·편집하면 자동 저장되어 다시 열면 그대로 이어집니다. 손해 청구(제조사 귀책) 정리가 문서 끝에 항상 붙고, 제조사명은 수신 표기에 쓰입니다.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 클레임(VOC)·설문(Tally)을 긍정/부정·제품별로 정리합니다(리뷰 섹션 제외). 클레임 건수는 설문 소스를 뺀 값입니다. 생성·편집하면 자동 저장되어 다시 열면 그대로 이어집니다. 손해 청구(제조사 귀책) 정리가 문서 끝에 항상 붙고, 제조사명은 수신 표기에 쓰입니다.</p>
       </section>
 
       {/* 편집 (화면 전용) */}
@@ -286,7 +286,7 @@ export default function VocManufacturerPage() {
       )}
 
       <p className="sm-faint no-print" style={{ fontSize: 12, marginTop: 12 }}>
-        기간 단위 개선요청서는 <Link href="/voc/reports" className="sm-link">개선요청서</Link>, 전체 통계는 <Link href="/voc/stats" className="sm-link">통계·보고서</Link>에서.
+        기간 단위 개선요청서는 <Link href="/voc/reports" className="sm-link">개선요청서</Link>, 전체 통계는 <Link href="/voc/stats" className="sm-link">통계</Link>에서.
       </p>
     </div>
   );
