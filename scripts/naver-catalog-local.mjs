@@ -94,6 +94,22 @@ if (products.length === 0) {
 
 // 3) 원상품 상세 → 카탈로그 행 전개 (서버 lib 와 같은 규칙)
 const skuOf = (r) => String(r.sellerManagerCode ?? r.sellerManagementCode ?? "").trim();
+
+// 상세 조회 — 429(레이트리밋)는 지수 백오프로 최대 4회 재시도
+async function fetchDetail(originProductNo) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${BASE}/v2/products/origin-products/${originProductNo}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: timeout(),
+    });
+    if (res.status === 429 && attempt < 4) {
+      await sleep(2000 * (attempt + 1));
+      continue;
+    }
+    return res;
+  }
+}
+
 const items = [];
 let failed = 0;
 let firstError = null;
@@ -101,10 +117,7 @@ for (let i = 0; i < products.length; i++) {
   const p = products[i];
   const originNo = String(p.originProductNo);
   try {
-    const res = await fetch(`${BASE}/v2/products/origin-products/${p.originProductNo}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: timeout(),
-    });
+    const res = await fetchDetail(p.originProductNo);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
       throw new Error(`HTTP ${res.status} ${j.code || ""} ${j.message || ""}`.trim());
@@ -147,7 +160,7 @@ for (let i = 0; i < products.length; i++) {
     if (!firstError) firstError = `${originNo}: ${e.message}`;
   }
   if ((i + 1) % 20 === 0) console.log(`상세 조회 ${i + 1}/${products.length}...`);
-  await sleep(120);
+  await sleep(400); // 커머스API 레이트리밋 여유(429 방지)
 }
 console.log(`카탈로그 행 ${items.length}개 생성 (상세 실패 ${failed}건${firstError ? ` — 첫 실패: ${firstError}` : ""})`);
 
