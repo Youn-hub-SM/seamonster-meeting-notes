@@ -85,24 +85,50 @@ export async function GET(req: NextRequest) {
       if (!kindBySku.has(key)) kindBySku.set(key, { kind: "bundle", bundle_name: b.name });
     }
 
-    // 4) 리스팅 집계 (migration 105 RPC)
-    const { data, error: rErr } = await sb.rpc("sales_sku_listings", {
-      p_skus: [...kindBySku.keys()],
-      p_today: kstToday(),
-      p_days: 365,
-    });
-    if (rErr) {
+    // 4) 리스팅 집계 (migration 105 RPC) + 어미상품 추정 (106 RPC — 부가 정보라 실패해도 리스팅은 반환)
+    const rpcArgs = { p_skus: [...kindBySku.keys()], p_today: kstToday(), p_days: 365 };
+    const [listRes, compRes] = await Promise.all([
+      sb.rpc("sales_sku_listings", rpcArgs),
+      sb.rpc("sales_sku_companions", rpcArgs),
+    ]);
+    if (listRes.error) {
       // 105 미적용 환경 폴백 — 죽는 대신 적용 안내(기존 패턴)
-      if (/sales_sku_listings/i.test(rErr.message || "")) {
+      if (/sales_sku_listings/i.test(listRes.error.message || "")) {
         return NextResponse.json(
           { ok: false, error: "마이그레이션 105(sales_sku_listings) 적용이 필요합니다." },
           { status: 503 }
         );
       }
-      throw rErr;
+      throw listRes.error;
     }
 
-    const listings = ((data ?? []) as RpcRow[]).map((r) => {
+    // 어미상품 추정 — 같은 주문 동반율 40% 이상인 상위 2개만(일반 상품의 장바구니 동반 구매는
+    //  비율이 낮아 자연히 걸러진다 → 네이버 추가상품처럼 늘 본상품과 함께 찍히는 리스팅에만 뜬다).
+    //  106 미적용이면 compRes.error — 무시하고 리스팅만 반환.
+    type CompRow = {
+      channel: string; product_name: string; option_name: string; sku_code: string;
+      companion_name: string; together_orders: number; total_orders: number;
+    };
+    const compKey = (r: { channel: string; product_name: string; option_name: string; sku_code: string }) =>
+      [r.channel, r.product_name, r.option_name, r.sku_code].join("\u0001");
+    const companionsByListing = new Map<string, { name: string; share: number }[]>();
+    if (!compRes.error) {
+      for (const r of (compRes.data ?? []) as CompRow[]) {
+        const total = Number(r.total_orders) || 0;
+        const share = total > 0 ? (Number(r.together_orders) || 0) / total : 0;
+        if (share < 0.4) continue;
+        const arr = companionsByListing.get(compKey(r)) ?? [];
+        arr.push({ name: r.companion_name, share: Math.round(share * 100) });
+        companionsByListing.set(compKey(r), arr);
+      }
+      // 동반율 상위 2개 확정 — RPC 반환 행 순서에 의존하지 않는다
+      for (const [k, arr] of companionsByListing) {
+        arr.sort((a, b) => b.share - a.share);
+        companionsByListing.set(k, arr.slice(0, 2));
+      }
+    }
+
+    const listings = ((listRes.data ?? []) as RpcRow[]).map((r) => {
       const m = kindBySku.get((r.sku_code || "").trim().toUpperCase());
       return {
         ...r,
@@ -110,6 +136,7 @@ export async function GET(req: NextRequest) {
         qty_30: Number(r.qty_30) || 0,
         qty_window: Number(r.qty_window) || 0,
         via_bundle: m?.kind === "bundle",
+        companions: companionsByListing.get(compKey(r)) ?? [],
       };
     });
 

@@ -14,6 +14,7 @@ type Listing = {
   qty_window: number;
   last_sale: string | null;
   via_bundle: boolean;
+  companions?: { name: string; share: number }[]; // 어미상품 추정(같은 주문 동반율 높은 상품)
 };
 type Result = {
   ok: boolean;
@@ -170,7 +171,15 @@ function ListingTable({ rows, copied, onCopy }: { rows: Listing[]; copied: strin
             const rowKey = `${l.channel}|${l.product_name}|${l.option_name}|${l.sku_code}|${i}`;
             return (
             <tr key={rowKey}>
-              <td data-label="상품명"><strong>{l.product_name || "(상품명 없음)"}</strong></td>
+              <td data-label="상품명">
+                <strong>{l.product_name || "(상품명 없음)"}</strong>
+                {/* 네이버 추가상품 등 — 매출의 거의 모든 주문에 함께 찍힌 상품 = 이 리스팅이 붙어 있는 본상품 */}
+                {(l.companions?.length ?? 0) > 0 && (
+                  <div className="sm-faint" style={{ fontSize: 12, marginTop: 2 }}>
+                    어미상품 추정: {l.companions!.map((c) => `${c.name} (함께 주문 ${c.share}%)`).join(" · ")}
+                  </div>
+                )}
+              </td>
               <td data-label="옵션">{l.option_name || "-"}</td>
               <td data-label="관리코드">
                 {l.sku_code}
