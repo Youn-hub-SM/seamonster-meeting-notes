@@ -140,11 +140,44 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    // 6) 채널 등록 카탈로그(107, 네이버 커머스API 동기화분) — 판매 이력 없는 리스팅까지 사실 기반.
+    //  미적용·미동기화 환경이면 조용히 빈 배열(매출 기반 리스팅은 그대로 동작).
+    type CatalogRow = {
+      channel: string; listing_name: string; item_kind: string; item_name: string | null;
+      sku_code: string; sale_status: string | null; stock_qty: number | null; synced_at: string;
+    };
+    let catalog: (CatalogRow & { via_bundle: boolean })[] = [];
+    let catalogSyncedAt: string | null = null;
+    // 대소문자 무시 매칭 — 카탈로그의 관리코드는 채널 원문 그대로라 혼합 표기(Sm-a01)도 잡아야 한다.
+    //  ilike 패턴이므로 와일드카드 문자(% _ \)는 이스케이프.
+    const escLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const skuVariants = [...new Set(
+      [prod.sku, ...bundles.map((b) => b.sku as string)]
+        .filter((s): s is string => !!s && !!s.trim())
+        .map((s) => escLike(s.trim()))
+    )];
+    const catRes = await sb
+      .from("channel_catalog")
+      .select("channel, listing_name, item_kind, item_name, sku_code, sale_status, stock_qty, synced_at")
+      .ilikeAnyOf("sku_code", skuVariants)
+      .order("listing_name");
+    if (!catRes.error) {
+      catalog = ((catRes.data ?? []) as CatalogRow[]).map((r) => ({
+        ...r,
+        via_bundle: kindBySku.get((r.sku_code || "").trim().toUpperCase())?.kind === "bundle",
+      }));
+      for (const r of catalog) {
+        if (!catalogSyncedAt || r.synced_at > catalogSyncedAt) catalogSyncedAt = r.synced_at;
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       target: { id: prod.id, sku: prod.sku, name: prod.name, spec: prod.spec },
       bundles: bundles.map((b) => ({ sku: b.sku, name: b.name })),
       listings,
+      catalog,
+      catalog_synced_at: catalogSyncedAt,
     });
   } catch (err) {
     console.error("[sales/listings]", err);

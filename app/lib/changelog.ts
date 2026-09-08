@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-09-08",
+    tag: "개선",
+    tool: "매출",
+    title: "SKU 리스팅 찾기: 네이버 등록 카탈로그 연동",
+    desc: "네이버 커머스API로 등록 상품 전체(옵션·추가상품 포함)를 동기화해, 주문이 한 번도 없던 리스팅과 추가상품의 정확한 어미상품·판매상태·재고까지 보입니다. 화면의 [네이버 카탈로그 동기화] 버튼으로 갱신합니다.",
+    href: "/sales/listings",
+  },
+  {
+    date: "2026-09-08",
     tag: "신규",
     tool: "매출",
     title: "SKU 리스팅 찾기 (베타)",

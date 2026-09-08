@@ -16,13 +16,32 @@ type Listing = {
   via_bundle: boolean;
   companions?: { name: string; share: number }[]; // 어미상품 추정(같은 주문 동반율 높은 상품)
 };
+type CatalogItem = {
+  channel: string;
+  listing_name: string;
+  item_kind: string;
+  item_name: string | null;
+  sku_code: string;
+  sale_status: string | null;
+  stock_qty: number | null;
+  via_bundle: boolean;
+};
 type Result = {
   ok: boolean;
   error?: string;
   target?: { id: string; sku: string | null; name: string; spec: string | null };
   bundles?: { sku: string | null; name: string }[];
   listings?: Listing[];
+  catalog?: CatalogItem[];
+  catalog_synced_at?: string | null;
 };
+
+// 네이버 판매상태 원문 → 한글 (모르는 값은 원문 그대로)
+const SALE_STATUS_KO: Record<string, string> = {
+  SALE: "판매중", OUTOFSTOCK: "품절", SUSPENSION: "판매중지", WAIT: "판매대기",
+  UNADMISSION: "승인대기", REJECTION: "승인거부", CLOSE: "판매종료", PROHIBITION: "판매금지", UNUSABLE: "사용안함",
+};
+const KIND_KO: Record<string, string> = { product: "단일", option: "옵션", supplement: "추가상품" };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 // 최근 90일 판매가 없으면 '오래된 리스팅'으로 접는다
@@ -69,6 +88,25 @@ export default function SkuListingsPage() {
     } catch { /* 클립보드 미지원 브라우저 — 조용히 무시 */ }
   }
 
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+  // 네이버 카탈로그 동기화 — 상품이 많으면 시간 예산으로 나눠 처리되므로 remaining 이 0이 될 때까지 반복 안내
+  async function syncNaver() {
+    setSyncing(true); setSyncMsg("");
+    try {
+      const r = await fetch("/api/naver/catalog/sync", { method: "POST" });
+      const j = await r.json();
+      if (!j.ok) { setSyncMsg(`동기화 실패: ${j.error || "알 수 없는 오류"}`); return; }
+      setSyncMsg(
+        `동기화 완료 — 원상품 ${j.products}개 중 ${j.updated}개 갱신` +
+        (j.remaining > 0 ? `, 남은 ${j.remaining}개는 버튼을 다시 눌러 이어서 처리` : "") +
+        (j.first_error ? ` (일부 실패: ${j.first_error})` : "")
+      );
+      if (pid) load(pid); // 화면 갱신
+    } catch (e) { setSyncMsg(`동기화 실패: ${(e as Error).message}`); }
+    finally { setSyncing(false); }
+  }
+
   // 채널별 그룹 + 채널 내 30일 판매량 내림차순, 채널은 30일 합 내림차순
   const groups = useMemo(() => {
     const rows = res?.listings ?? [];
@@ -95,11 +133,17 @@ export default function SkuListingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">SKU 리스팅 찾기</h1>
-          <p className="b2b-page-subtitle">최근 1년 매출 기준 — 판매 이력이 없는 리스팅은 나오지 않습니다</p>
+          <p className="b2b-page-subtitle">매출 기준(최근 1년) + 네이버는 API 등록 카탈로그로 전체 확인</p>
+        </div>
+        <div className="b2b-page-actions">
+          <button className="b2b-btn-secondary" onClick={syncNaver} disabled={syncing}>
+            {syncing ? "동기화 중..." : "네이버 카탈로그 동기화"}
+          </button>
         </div>
       </header>
 
       {err && <div className="b2b-error">{err}</div>}
+      {syncMsg && <div className={syncMsg.startsWith("동기화 실패") ? "b2b-error" : "sm-success"}>{syncMsg}</div>}
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-field">
@@ -117,9 +161,60 @@ export default function SkuListingsPage() {
 
       {busy ? (
         <div className="b2b-loading">불러오는 중...</div>
-      ) : !res ? null : total === 0 ? (
-        <div className="b2b-empty">최근 1년 매출에서 이 SKU 가 팔린 리스팅이 없습니다.</div>
-      ) : (
+      ) : !res ? null : (
+        <>
+        {(res.catalog?.length ?? 0) > 0 && (
+          <section className="b2b-card" style={{ marginBottom: 16 }}>
+            <div className="b2b-card-head">
+              <span className="b2b-card-title">네이버 등록 카탈로그</span>
+              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
+                {res.catalog!.length}건{res.catalog_synced_at ? ` · 동기화 ${res.catalog_synced_at.slice(0, 10)}` : ""}
+              </span>
+            </div>
+            <div className="b2b-table-wrap">
+              <table className="b2b-table is-responsive">
+                <thead>
+                  <tr>
+                    <th>등록 상품명(어미상품)</th>
+                    <th>구분</th>
+                    <th>옵션·추가상품명</th>
+                    <th>관리코드</th>
+                    <th>판매상태</th>
+                    <th className="num">재고</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {res.catalog!.map((c, i) => {
+                    const rowKey = `cat|${c.listing_name}|${c.item_kind}|${c.item_name ?? ""}|${i}`;
+                    return (
+                      <tr key={rowKey}>
+                        <td data-label="등록 상품명"><strong>{c.listing_name}</strong></td>
+                        <td data-label="구분">{KIND_KO[c.item_kind] || c.item_kind}</td>
+                        <td data-label="옵션·추가상품명">{c.item_name || "-"}</td>
+                        <td data-label="관리코드">
+                          {c.sku_code || "-"}
+                          {c.via_bundle && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>묶음</span>}
+                        </td>
+                        <td data-label="판매상태">{c.sale_status ? (SALE_STATUS_KO[c.sale_status] || c.sale_status) : "-"}</td>
+                        <td className="num" data-label="재고">{c.stock_qty != null ? c.stock_qty.toLocaleString() : "-"}</td>
+                        <td className="actions">
+                          <button type="button" className="b2b-link-btn" onClick={() => copyName(c.listing_name, rowKey)}
+                            title="채널 관리자 검색창에 붙여넣기용">
+                            {copied === rowKey ? "복사됨" : "상품명 복사"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+        {total === 0 ? (
+          <div className="b2b-empty">최근 1년 매출에서 이 SKU 가 팔린 리스팅이 없습니다.</div>
+        ) : (
         groups.map((g) => (
           <section key={g.channel} className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head">
@@ -144,6 +239,8 @@ export default function SkuListingsPage() {
             )}
           </section>
         ))
+        )}
+        </>
       )}
     </div>
   );
