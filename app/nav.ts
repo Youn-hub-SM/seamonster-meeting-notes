@@ -144,6 +144,7 @@ export const NAV: NavCategory[] = [
     tools: [
       // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
       { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
+      { href: "/sales/listings", label: "SKU 리스팅 찾기", icon: "tag" },
       { href: "/htmlshot", label: "상세 이미지 변환", icon: "image" },
       { href: "/correct", label: "문장 교정", icon: "pen" },
       { href: "/pallet", label: "파렛트 적재", icon: "box" },

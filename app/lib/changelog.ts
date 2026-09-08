@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-09-08",
+    tag: "신규",
+    tool: "매출",
+    title: "SKU 리스팅 찾기 (베타)",
+    desc: "SKU 하나를 고르면 그 SKU가 팔리고 있는 채널별 등록 상품과 최근 판매량이 한 화면에 나옵니다. 품절이나 구매수량 제한을 걸 때 채널마다 뒤질 필요 없이 이 목록을 보고 바로 처리하면 됩니다. 구성품 SKU를 고르면 묶음 상품 리스팅까지 같이 나옵니다.",
+    href: "/sales/listings",
+  },
+  {
+    date: "2026-09-08",
     tag: "개선",
     tool: "B2B 발주 관리",
     title: "발주 할인 칸이 '할인/추가금'으로 — 음수 입력 지원",
