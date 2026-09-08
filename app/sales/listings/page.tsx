@@ -42,9 +42,9 @@ export default function SkuListingsPage() {
     fetch("/api/products", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setProducts(j.products || []); }).catch(() => {});
   }, []);
 
-  // 묶음 SKU 도 직접 검색 대상 — 구성품이든 묶음이든 고르면 그 SKU 기준으로 찾는다
+  // 검색 대상은 단품 SKU 만 — 묶음상품은 목록에서 빼고, 결과에 '그 구성품이 든 묶음 리스팅'으로만 나온다(대표 결정).
   const options = useMemo(() => products
-    .filter((p) => p.active !== false && (p.sku || "").trim())
+    .filter((p) => !p.is_bundle && p.active !== false && (p.sku || "").trim())
     .map((p) => ({ id: p.id, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "", extra: p.attrs || "" })), [products]);
 
   async function load(id: string) {
