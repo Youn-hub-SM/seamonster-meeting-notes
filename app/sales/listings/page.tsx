@@ -90,6 +90,36 @@ export default function SkuListingsPage() {
 
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  // 검색 결과(카탈로그+채널 리스팅) 엑셀 다운로드 — 화면에 보이는 데이터 그대로
+  async function exportXlsx() {
+    if (!res?.target) return;
+    setExporting(true);
+    try {
+      const r = await fetch("/api/sales/listings/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: res.target, catalog: res.catalog ?? [], listings: res.listings ?? [] }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({} as { error?: string }));
+        throw new Error(j.error || "다운로드 실패");
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = r.headers.get("Content-Disposition") || "";
+      const m = cd.match(/filename="?([^";]+)"?/);
+      a.download = m ? m[1] : "sku_listings.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) { setErr((e as Error).message); }
+    finally { setExporting(false); }
+  }
   // 네이버 카탈로그 동기화 — 상품이 많으면 시간 예산으로 나눠 처리되므로 remaining 이 0이 될 때까지 반복 안내
   async function syncNaver() {
     setSyncing(true); setSyncMsg("");
@@ -170,6 +200,11 @@ export default function SkuListingsPage() {
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={syncNaver} disabled={syncing}>
             {syncing ? "동기화 중..." : "네이버 카탈로그 동기화"}
+          </button>
+          <button className="b2b-btn-primary" onClick={exportXlsx}
+            disabled={exporting || !res || ((res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0)}
+            title={!res ? "먼저 상품을 검색하세요" : ""}>
+            {exporting ? "생성 중..." : "엑셀 다운로드"}
           </button>
         </div>
       </header>
