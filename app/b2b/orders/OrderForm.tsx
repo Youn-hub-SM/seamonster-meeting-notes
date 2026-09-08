@@ -118,7 +118,7 @@ export default function OrderForm({
   const [companies, setCompanies] = useState<Company[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [data, setData] = useState<OrderInput>({ ...EMPTY_ORDER, items: [{ ...EMPTY_ORDER_ITEM }], recipient: { ...EMPTY_RECIPIENT }, shipments: [] });
-  // 할인 입력 — 원(₩) 또는 %(합계 기준). 저장은 항상 원 금액(data 가 아니라 저장 시점에 환산 주입).
+  // 할인/추가금 입력 — 원(₩) 또는 %(합계 기준), 음수 = 추가금. 저장은 항상 원 금액(저장 시점에 환산 주입).
   const [discountMode, setDiscountMode] = useState<"won" | "pct">("won");
   const [discountRaw, setDiscountRaw] = useState("");
   const [originalOrder, setOriginalOrder] = useState<Order | null>(null);
@@ -155,7 +155,7 @@ export default function OrderForm({
           if (!orderJson.ok) throw new Error(orderJson.error || "발주 조회 실패");
           const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
           setOriginalOrder(o);
-          if (Number(o.discount_amount) > 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
+          if (Number(o.discount_amount) !== 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
           setData({
             id: o.id,
             company_id: o.company_id,
@@ -217,7 +217,7 @@ export default function OrderForm({
           const orderJson = await orderRes.json();
           if (!orderJson.ok) throw new Error(orderJson.error || "복제할 발주 조회 실패");
           const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
-          if (Number(o.discount_amount) > 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
+          if (Number(o.discount_amount) !== 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
           setData(buildCloneData(o, todayIso));
         } else {
           // create 모드: 발주일 기본값을 오늘로
@@ -250,12 +250,15 @@ export default function OrderForm({
     return { taxable, exempt, subtotal, vat, total: subtotal + vat };
   }, [data.items]);
 
-  // 할인 금액(원) — % 입력이면 할인 전 합계 기준으로 환산. 합계를 넘지 않게 잘라낸다.
+  // 할인/추가금 금액(원) — 양수 = 할인(합계 차감), 음수 = 추가금(합계 가산).
+  //  % 입력이면 할인 전 합계 기준으로 환산(-100~100% 클램프). 할인은 합계를 넘지 않게 잘라낸다.
   const discountAmount = useMemo(() => {
     const raw = Number(discountRaw) || 0;
-    if (raw <= 0) return 0;
-    const amt = discountMode === "pct" ? Math.round(totals.total * Math.min(raw, 100) / 100) : Math.round(raw);
-    return Math.min(amt, totals.total);
+    if (raw === 0) return 0;
+    const amt = discountMode === "pct"
+      ? Math.round(totals.total * Math.max(-100, Math.min(raw, 100)) / 100)
+      : Math.round(raw);
+    return amt > 0 ? Math.min(amt, totals.total) : amt;
   }, [discountRaw, discountMode, totals.total]);
   const totalAfterDiscount = totals.total - discountAmount;
 
@@ -336,7 +339,7 @@ export default function OrderForm({
     const season = seasonForDate(data.ship_date || data.order_date, currentMonth);
     const m = computeOrderMargin(lines, effectiveBoxCount, season, discountAmount);
     return { ...m, season };
-  }, [data.items, effectiveBoxCount, data.ship_date, data.order_date, products, currentMonth]);
+  }, [data.items, effectiveBoxCount, data.ship_date, data.order_date, products, currentMonth, discountAmount]);
 
   // 분할 수량 점검: 발송 일정에 배분한 수량 합계가 발주 수량과 다르면 경고 (저장은 막지 않음)
   const splitWarnings = useMemo(() => {
@@ -449,6 +452,10 @@ export default function OrderForm({
       const o = j.order as Order & { items: OrderItem[]; shipments: Shipment[] };
       const t = new Date();
       const todayIso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+      // 할인/추가금도 원본대로 복원 — 저장은 discountRaw 기반이라 여기서 안 채우면 0으로 소실되고,
+      //  반대로 프롬프트 전에 입력해 둔 값이 있으면 복제본에 섞인다(0이면 빈 값으로 리셋).
+      setDiscountMode("won");
+      setDiscountRaw(Number(o.discount_amount) !== 0 ? String(Math.round(Number(o.discount_amount))) : "");
       setData(buildCloneData(o, todayIso));
       setClonePrompt(null);
     } catch (err) {
@@ -1007,30 +1014,37 @@ export default function OrderForm({
             <div className="b2b-totals-row">
               부가세 <strong className="b2b-money">{formatMoney(totals.vat)}원</strong>
             </div>
-            {/* 할인 — 원 또는 %(합계 기준)로 넣고, 저장은 원 금액으로 확정된다 */}
+            {/* 할인/추가금 — 원 또는 %(합계 기준)로 넣고, 저장은 원 금액으로 확정된다. 음수 = 추가금(합계 가산) */}
             <div className="b2b-totals-row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ flex: "0 0 auto" }}>할인</span>
+              <span style={{ flex: "0 0 auto" }}>할인/추가금</span>
               <span className="sm-row" style={{ gap: 6, marginLeft: "auto", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <input className="b2b-input" type="number" min={0} value={discountRaw}
+                <input className="b2b-input" type="number" value={discountRaw}
                   onChange={(e) => setDiscountRaw(e.target.value)}
-                  placeholder="0" style={{ width: 110, textAlign: "right", padding: "6px 8px" }}
-                  aria-label="할인 값" />
+                  placeholder="0" title="양수 = 할인, 음수 = 추가금"
+                  style={{ width: 110, textAlign: "right", padding: "6px 8px" }}
+                  aria-label="할인/추가금 값" />
                 <select className="b2b-input" value={discountMode}
                   onChange={(e) => setDiscountMode(e.target.value as "won" | "pct")}
-                  style={{ width: "auto", padding: "6px 8px" }} aria-label="할인 단위">
+                  style={{ width: "auto", padding: "6px 8px" }} aria-label="할인/추가금 단위">
                   <option value="won">원</option>
                   <option value="pct">%</option>
                 </select>
                 <input className="b2b-input" value={data.discount_reason}
                   onChange={(e) => setData((p) => ({ ...p, discount_reason: e.target.value }))}
-                  placeholder="사유 (예: 장기거래 감사)" style={{ width: 200, padding: "6px 8px" }}
-                  aria-label="할인 사유" />
+                  placeholder="사유 (예: 장기거래 감사, 추가 포장비)" style={{ width: 200, padding: "6px 8px" }}
+                  aria-label="할인/추가금 사유" />
               </span>
             </div>
             {discountAmount > 0 && (
               <div className="b2b-totals-row" style={{ color: "var(--sm-danger)" }}>
                 할인 적용{discountMode === "pct" ? ` (${Number(discountRaw) || 0}%)` : ""}
                 <strong className="b2b-money">-{formatMoney(discountAmount)}원</strong>
+              </div>
+            )}
+            {discountAmount < 0 && (
+              <div className="b2b-totals-row">
+                추가금 적용{discountMode === "pct" ? ` (${Math.abs(Number(discountRaw) || 0)}%)` : ""}
+                <strong className="b2b-money">+{formatMoney(-discountAmount)}원</strong>
               </div>
             )}
             <div className="b2b-totals-row is-grand">

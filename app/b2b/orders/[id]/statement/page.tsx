@@ -134,11 +134,15 @@ export default function StatementPage() {
                   <td style={{ textAlign: "center", fontSize: 12, color: "var(--sm-text-mid)" }}>{it.tax_type === "exempt" ? "면세" : ""}</td>
                 </tr>
               ))}
-              {Number(order.discount_amount) > 0 && (
+              {Number(order.discount_amount) !== 0 && (
                 <tr>
                   <td style={{ textAlign: "center", color: "var(--sm-text-mid)" }}>-</td>
-                  <td colSpan={4}>할인{order.discount_reason ? ` — ${order.discount_reason}` : ""}</td>
-                  <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>-{won(Number(order.discount_amount) || 0)}</td>
+                  <td colSpan={4}>{Number(order.discount_amount) > 0 ? "할인" : "추가금"}{order.discount_reason ? ` — ${order.discount_reason}` : ""}</td>
+                  {Number(order.discount_amount) > 0 ? (
+                    <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>-{won(Number(order.discount_amount) || 0)}</td>
+                  ) : (
+                    <td className="num b2b-money">+{won(-(Number(order.discount_amount) || 0))}</td>
+                  )}
                   <td className="num">-</td>
                   <td />
                 </tr>
@@ -155,7 +159,7 @@ export default function StatementPage() {
 
           {/* 합계금액 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "2px solid var(--sm-black)", borderRadius: 8, padding: "12px 16px", marginTop: 14 }}>
-            <strong style={{ fontSize: 15 }}>합계금액 (공급가액 + 세액{Number(order.discount_amount) > 0 ? " - 할인" : ""})</strong>
+            <strong style={{ fontSize: 15 }}>합계금액 (공급가액 + 세액{Number(order.discount_amount) > 0 ? " - 할인" : Number(order.discount_amount) < 0 ? " + 추가금" : ""})</strong>
             <strong style={{ fontSize: 22 }}>{won(Number(order.total) || 0)}원</strong>
           </div>
 

@@ -91,11 +91,11 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
     else groups.set(key, { product_name, option_name, sku, price, qty });
   }
 
-  // 발주 할인은 라인 결제금액에 비례 배분해 반영(총매출이 실제 수금액과 일치하도록).
-  //  마지막 라인이 반올림 오차를 흡수해 배분 합 = 총액 - 할인이 정확히 성립한다.
+  // 발주 할인(양수)/추가금(음수)은 라인 결제금액에 비례 배분해 반영(총매출이 실제 수금액과 일치하도록).
+  //  마지막 라인이 반올림 오차를 흡수해 배분 합 = 총액 - 할인(+추가금)이 정확히 성립한다.
   const entries = [...groups.values()];
   const gross = entries.reduce((s, g) => s + g.qty * g.price, 0);
-  const disc = Math.min(Math.max(0, Number(o.discount_amount) || 0), gross);
+  const disc = Math.min(Number(o.discount_amount) || 0, gross); // 할인은 gross 상한, 음수(추가금)는 그대로 통과
   const paidOf: number[] = [];
   let allocated = 0;
   for (let i = 0; i < entries.length; i++) {

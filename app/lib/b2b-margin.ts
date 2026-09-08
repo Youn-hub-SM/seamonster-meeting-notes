@@ -141,9 +141,9 @@ export function computeOrderMargin(
     productCost += (Number(l.costAtOrder) || 0) * qty;
     volume += (Number(l.volumeKg) || 0) * qty;
   }
-  // 할인은 총액(부가세 포함)에서 깎이므로, 매출(공급가)에는 같은 비율만 반영한다
-  const disc = Math.max(0, Number(discountAmount) || 0);
-  if (disc > 0 && grossWithVat > 0) revenue *= Math.max(0, 1 - disc / grossWithVat);
+  // 할인(양수)/추가금(음수)은 총액(부가세 포함)에서 조정되므로, 매출(공급가)에는 같은 비율만 반영한다
+  const disc = Number(discountAmount) || 0;
+  if (disc !== 0 && grossWithVat > 0) revenue *= Math.max(0, 1 - disc / grossWithVat);
 
   const boxes = Math.max(1, Math.floor(Number(boxCount) || 1));
   const hasVolume = volume > 0;

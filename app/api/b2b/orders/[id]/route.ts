@@ -99,7 +99,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
         payment_status: body.payment_status,
         tax_invoice_status: body.tax_invoice_status,
         notes: body.notes?.trim() || null,
-        discount_amount: Math.max(0, Math.round(Number(body.discount_amount) || 0)),
+        discount_amount: Math.round(Number(body.discount_amount) || 0), // 양수 = 할인, 음수 = 추가금
         discount_reason: body.discount_reason?.trim() || null,
         box_count: Math.max(1, Math.floor(Number(body.box_count) || 1)),
         tracking_no: body.tracking_no?.trim() || null,

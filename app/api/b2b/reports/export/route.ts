@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     const { data: orders, error } = await sb
       .from("orders")
       .select(
-        "id, order_no, order_date, ship_date, status, " +
+        "id, order_no, order_date, ship_date, status, discount_amount, " +
           "company:company_id(name, contact_phone), " +
           "order_items(id, product_name, option_label, spec, qty, unit_price, sort_order, " +
             "product:product_id(sku)), " +
@@ -85,6 +85,7 @@ export async function GET(req: NextRequest) {
       order_no: string;
       order_date: string;
       ship_date: string | null;
+      discount_amount?: number | null;
       company: CompanyJoin | CompanyJoin[] | null;
       order_items: ItemJoin[];
       shipments: ShipmentJoin[] | null;
@@ -119,28 +120,47 @@ export async function GET(req: NextRequest) {
       }
 
       const items = (o.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      // 유효 라인(취소 차수 수량 차감, 전량 취소 제외) 수집 후 할인/추가금을 비례 배분 —
+      //  매출원장(b2b-sales-sync)과 같은 규칙이라 subtotal_amount 합 = 원장 결제금액 합이 성립한다.
+      //  (양수 = 할인 차감, 음수 = 추가금 가산. 마지막 라인이 반올림 오차를 흡수)
+      const lines: { name: string; option: string; sku: string; qty: number; price: number }[] = [];
       for (const it of items) {
         const product = Array.isArray(it.product) ? it.product[0] : it.product;
-        const sku = product?.sku ?? "";
         const qty = Math.max(0, (Number(it.qty) || 0) - (cancelledQty.get(it.id) || 0)); // 취소 차수 수량 차감
         if (qty === 0) continue; // 전량 취소된 라인은 매출 0 → 행 제외
-        const price = Number(it.unit_price) || 0;
+        lines.push({
+          name: it.product_name ?? "",
+          option: it.spec || it.option_label || "",   // option_name = 통합 옵션값(spec)
+          sku: product?.sku ?? "",
+          qty,
+          price: Number(it.unit_price) || 0,
+        });
+      }
+      const gross = lines.reduce((s, l) => s + l.qty * l.price, 0);
+      const disc = Math.min(Number(o.discount_amount) || 0, gross); // 할인은 gross 상한, 음수(추가금)는 통과
+      let allocated = 0;
+      lines.forEach((l, i) => {
+        const line = l.qty * l.price;
+        const paid = i === lines.length - 1
+          ? gross - disc - allocated
+          : Math.round(line * (gross > 0 ? 1 - disc / gross : 1));
+        allocated += paid;
         sheet.addRow([
           "도매",
           orderDateYmd,
           o.order_no,
-          it.product_name ?? "",
-          it.spec || it.option_label || "",   // option_name = 통합 옵션값(spec)
-          sku,
-          qty,
-          price,
+          l.name,
+          l.option,
+          l.sku,
+          l.qty,
+          l.price,
           0,                  // option_price (모델에 없음)
-          qty * price,        // subtotal_amount
+          paid,               // subtotal_amount = 할인/추가금 비례 배분 후 결제금액
           0,                  // shipping_fee (모델에 없음)
           customerName,
           customerPhone,
         ]);
-      }
+      });
     }
 
     // 컬럼 너비 자동 — 헤더 글자 수 + 여유

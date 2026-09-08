@@ -84,7 +84,7 @@ TABLE orders — B2B 발주 헤더. 업체명은 companies_report 로 조인(com
   id(uuid), order_no(text yyyymmdd-NNN), company_id(uuid), order_date(date 발주일), production_date(date 생산예정일),
   ship_date(date 발송예정일), production_status(text 생산대기|생산중|생산완료), status(text 발송대기|발송완료|취소),
   payment_status(text 입금전|일부입금|입금완료|불필요), tax_invoice_status(text 미발행|발행완료|불필요),
-  subtotal·vat·total(numeric), discount_amount(numeric 할인), discount_reason(text), box_count(int), notes(text), created_at
+  subtotal·vat·total(numeric), discount_amount(numeric 할인/추가금 — 양수=할인 차감, 음수=추가금 가산. 할인 총액은 sum(greatest(discount_amount,0))), discount_reason(text), box_count(int), notes(text), created_at
 
 TABLE order_items — 발주 라인(스냅샷). order_id, product_id, product_name(text), option_label(text), spec(text),
   qty(numeric), unit_price(numeric), line_total(numeric=qty×unit_price), cost_at_order(numeric 발주시점 원가), tax_type(text), sort_order
