@@ -107,13 +107,16 @@ export default function SkuListingsPage() {
     finally { setSyncing(false); }
   }
 
-  // 채널별 그룹 + 채널 내 30일 판매량 내림차순, 채널은 30일 합 내림차순
+  // 채널별 그룹 + 채널 내 30일 판매량 내림차순, 채널은 30일 합 내림차순.
+  //  스마트스토어는 등록 카탈로그 카드(API, 전체·정확)가 있으면 매출 카드에서 뺀다(중복 — 대표 결정).
   const groups = useMemo(() => {
     const rows = res?.listings ?? [];
+    const hasCatalog = (res?.catalog?.length ?? 0) > 0;
     const cut = staleCut();
     const byCh = new Map<string, { fresh: Listing[]; stale: Listing[]; qty30: number }>();
     for (const l of rows) {
       const ch = l.channel || "(판매처 미상)";
+      if (hasCatalog && ch === "스마트스토어") continue;
       const g = byCh.get(ch) ?? { fresh: [], stale: [], qty30: 0 };
       const isStale = l.qty_30 === 0 && (!l.last_sale || l.last_sale < cut);
       (isStale ? g.stale : g.fresh).push(l);
@@ -127,6 +130,35 @@ export default function SkuListingsPage() {
   }, [res]);
 
   const total = res?.listings?.length ?? 0;
+
+  // 카탈로그 행에 스마트스토어 매출 판매량(7일/30일) 병합 — (상품명|옵션명) 문자열 매칭.
+  //  추가상품은 매출에 자기 이름으로 찍히므로 이름 후보 여러 개로 시도, 못 찾으면 null(화면 '-').
+  const catalogQty = useMemo(() => {
+    const bySale = new Map<string, { q7: number; q30: number }>();
+    for (const l of res?.listings ?? []) {
+      if (l.channel !== "스마트스토어") continue;
+      const key = `${l.product_name}|${l.option_name}`;
+      const cur = bySale.get(key) ?? { q7: 0, q30: 0 };
+      cur.q7 += l.qty_7; cur.q30 += l.qty_30;
+      bySale.set(key, cur);
+    }
+    const out = new Map<number, { q7: number; q30: number }>();
+    (res?.catalog ?? []).forEach((c, i) => {
+      const nm = c.item_name ?? "";
+      const suppName = nm.includes(" - ") ? nm.slice(nm.indexOf(" - ") + 3) : nm; // 'group - name' 의 name
+      const candidates = [
+        `${c.listing_name}|${nm}`,          // 옵션: 상품명|옵션명
+        `${c.listing_name}|`,               // 단일 상품
+        `${nm}|`,                            // 추가상품이 자기 이름으로 찍힌 경우
+        `${suppName}|`,
+      ];
+      for (const k of candidates) {
+        const hit = bySale.get(k);
+        if (hit) { out.set(i, hit); break; }
+      }
+    });
+    return out;
+  }, [res]);
 
   return (
     <div className="b2b-container">
@@ -181,12 +213,15 @@ export default function SkuListingsPage() {
                     <th>관리코드</th>
                     <th>판매상태</th>
                     <th className="num">재고</th>
+                    <th className="num">7일</th>
+                    <th className="num">30일</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {res.catalog!.map((c, i) => {
                     const rowKey = `cat|${c.listing_name}|${c.item_kind}|${c.item_name ?? ""}|${i}`;
+                    const q = catalogQty.get(i);
                     return (
                       <tr key={rowKey}>
                         <td data-label="등록 상품명"><strong>{c.listing_name}</strong></td>
@@ -198,6 +233,8 @@ export default function SkuListingsPage() {
                         </td>
                         <td data-label="판매상태">{c.sale_status ? (SALE_STATUS_KO[c.sale_status] || c.sale_status) : "-"}</td>
                         <td className="num" data-label="재고">{c.stock_qty != null ? c.stock_qty.toLocaleString() : "-"}</td>
+                        <td className="num" data-label="7일">{q ? q.q7.toLocaleString() : "-"}</td>
+                        <td className="num" data-label="30일">{q ? q.q30.toLocaleString() : "-"}</td>
                         <td className="actions">
                           <button type="button" className="b2b-link-btn" onClick={() => copyName(c.listing_name, rowKey)}
                             title="채널 관리자 검색창에 붙여넣기용">
