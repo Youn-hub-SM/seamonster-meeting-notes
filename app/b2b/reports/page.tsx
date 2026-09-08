@@ -132,7 +132,7 @@ export default function ReportsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출 집계</h1>
-          <p className="b2b-page-subtitle">발주일 기준 · 취소 제외</p>
+          <p className="b2b-page-subtitle">발송일 기준 · 발송완료 발주만 집계 (미발송·취소 제외)</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
@@ -142,7 +142,7 @@ export default function ReportsPage() {
             className="b2b-btn-primary"
             onClick={handleExport}
             disabled={exporting || loading || !report || report.summary.orders_completed === 0}
-            title={report && report.summary.orders_completed === 0 ? "이 기간에 등록된 발주가 없습니다" : ""}
+            title={report && report.summary.orders_completed === 0 ? "이 기간에 발송완료된 발주가 없습니다" : ""}
           >
             {exporting ? "생성 중..." : "엑셀 다운로드"}
           </button>
@@ -201,7 +201,7 @@ export default function ReportsPage() {
               <div className="sm-stat-hero-total b2b-money">{formatMoney(report.summary.revenue)}원</div>
               <div className="sm-stat-hero-breakdown">
                 <div className="sm-stat-hero-metric">
-                  <span className="sm-stat-hero-metric-label">발주 건수</span>
+                  <span className="sm-stat-hero-metric-label">발송완료 발주</span>
                   <span className="sm-stat-hero-metric-value">{report.summary.orders_completed}건</span>
                   <span className="sm-faint" style={{ fontSize: 12 }}>건당 평균 {formatMoney(report.summary.avg_order_value)}원</span>
                 </div>
@@ -245,7 +245,7 @@ export default function ReportsPage() {
               </span>
             </div>
             {report.by_company.length === 0 ? (
-              <div className="b2b-empty">이 기간에 완료된 발주가 없습니다.</div>
+              <div className="b2b-empty">이 기간에 발송완료된 발주가 없습니다.</div>
             ) : (
               <div className="b2b-table-wrap">
                 <table className="b2b-table">
@@ -285,7 +285,7 @@ export default function ReportsPage() {
               </span>
             </div>
             {report.by_product.length === 0 ? (
-              <div className="b2b-empty">이 기간에 완료된 발주가 없습니다.</div>
+              <div className="b2b-empty">이 기간에 발송완료된 발주가 없습니다.</div>
             ) : (
               <div className="b2b-table-wrap">
                 <table className="b2b-table">

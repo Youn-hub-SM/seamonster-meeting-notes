@@ -177,9 +177,11 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
     // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
     const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)), body.ship_date, body.status);
-    // 복수발송(차수 2개 이상)이면 메인 발송일은 두지 않음(차수별 날짜로 관리). 단일/없음이면 메인 발송일 사용.
+    // 복수발송(차수 2개 이상)이면 메인 발송일 = 가장 이른 비취소 차수일(earliestShipDate).
+    //  (과거엔 null 로 뒀지만, 발송일이 매출 인식일이 된 뒤로는 null 이면 집계·원장이 발주일로 폴백해
+    //   편집 한 번에 매출 귀속 월이 바뀌는 버그가 됐다. 화면의 복수발송 표시는 차수 수 기준이라 영향 없음.)
     const splitCount = (body.shipments ?? []).filter((s) => s.ship_date || (Array.isArray(s.items) && s.items.some((i) => Number(i.qty) > 0))).length;
-    const headerShipDate = splitCount >= 2 ? null : (body.ship_date || earliestShipDate || null);
+    const headerShipDate = splitCount >= 2 ? earliestShipDate : (body.ship_date || earliestShipDate || null);
     //  + 발주 박스 수(이익률용)는 발송 차수 박스 수의 합으로 동기화 (차수가 있을 때만)
     // 생산일은 자동으로 채우지 않음 — 직접 입력한 값만 사용(헤더 update 에서 이미 저장됨).
     const headerPatch: Record<string, unknown> = { ship_date: headerShipDate };
@@ -282,7 +284,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // 변경 전 상태 캡처 (활동 로그용 + 송장번호 확인)
     const { data: prev } = await sb
       .from("orders")
-      .select("status, production_status, payment_status, tax_invoice_status, tracking_no")
+      .select("status, production_status, payment_status, tax_invoice_status, tracking_no, ship_date")
       .eq("id", id)
       .single();
 
@@ -357,9 +359,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       await logOrderTaxInvoiceChanged(id, prev.tax_invoice_status, body.tax_invoice_status);
     }
 
-    // 발주 상태가 바뀌면 매출원장 재동기화. 발송완료면 반영, 취소·되돌림이면 옛 매출행을 정리한다.
-    //  (발송완료→취소 시 매출이 남아 전사 매출·이익이 과대집계되던 것을 방지)
-    if (body.status !== undefined && prev?.status !== body.status) {
+    // 발주 상태 또는 발송일이 바뀌면 매출원장 재동기화. 발송완료면 반영, 취소·되돌림이면 옛 매출행을 정리한다.
+    //  발송일은 매출 인식일(원장 주문일자·row_hash)이라, 발송완료 발주의 발송일 단독 수정도 재적재가 필요하다.
+    const shipDateChanged =
+      body.ship_date !== undefined && ((patch.ship_date as string | null) ?? null) !== ((prev?.ship_date as string | null) ?? null);
+    if ((body.status !== undefined && prev?.status !== body.status) || shipDateChanged) {
       await syncOrderSalesSafe(id);
     }
 

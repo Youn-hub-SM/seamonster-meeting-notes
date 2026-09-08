@@ -15,6 +15,7 @@ const SEP = String.fromCharCode(1); // 병합 키 구분자(제어문자 SOH) �
 
 type ProductJoin = { sku?: string | null };
 type ItemJoin = {
+  id: string;
   product_name: string;
   option_label: string | null;
   spec: string | null;
@@ -23,30 +24,35 @@ type ItemJoin = {
   sort_order: number;
   product?: ProductJoin | ProductJoin[] | null;
 };
+type ShipmentJoin = { status: string; shipment_items: { order_item_id: string | null; qty: number }[] };
 type OrderJoin = {
   id: string;
   order_no: string;
   order_date: string;
+  ship_date: string | null;
   status: string;
   discount_amount?: number; // 발주 할인(095) — 미적용 환경에선 조회에서 빠져 undefined
   order_items: ItemJoin[];
+  shipments?: ShipmentJoin[] | null;
 };
 
 // 발주 1건을 매출원장에 반영/재동기화. status==='발송완료'일 때만 실제 반영.
 //  반환: { synced, rows }. 실패 시 throw.
 export async function syncOrderSales(orderId: string): Promise<{ synced: boolean; rows: number }> {
   const sb = supabaseAdmin();
-  const itemsSel = "order_items(product_name, option_label, spec, qty, unit_price, sort_order, product:product_id(sku))";
+  const itemsSel =
+    "order_items(id, product_name, option_label, spec, qty, unit_price, sort_order, product:product_id(sku)), " +
+    "shipments(status, shipment_items(order_item_id, qty))";
   let { data, error } = await sb
     .from("orders")
-    .select("id, order_no, order_date, status, discount_amount, " + itemsSel)
+    .select("id, order_no, order_date, ship_date, status, discount_amount, " + itemsSel)
     .eq("id", orderId)
     .maybeSingle();
   // 095 미적용 환경 폴백 — 할인 컬럼 없이 재조회
   if (error && /discount/i.test(error.message || "")) {
     const retry = await sb
       .from("orders")
-      .select("id, order_no, order_date, status, " + itemsSel)
+      .select("id, order_no, order_date, ship_date, status, " + itemsSel)
       .eq("id", orderId)
       .maybeSingle();
     data = retry.data;
@@ -60,6 +66,15 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
   //  매출원장에 옛 발송완료분이 남아 전사 매출·이익이 영구 과대집계되던 버그를 방지)
   const isCompleted = o.status === "발송완료";
 
+  // 취소 차수에 배정된 수량은 라인별로 감액 — 화면 매출집계·엑셀과 같은 규칙(부분취소 발주의 원장 과대 방지).
+  const cancelledQty = new Map<string, number>();
+  for (const sh of o.shipments ?? []) {
+    if (sh.status !== "취소") continue;
+    for (const si of sh.shipment_items ?? []) {
+      if (si.order_item_id) cancelledQty.set(si.order_item_id, (cancelledQty.get(si.order_item_id) || 0) + (Number(si.qty) || 0));
+    }
+  }
+
   // 완전 동일한 라인(상품명·옵션·SKU·단가)은 수량 합산 병합 → 동일 row_hash 충돌로 인한 매출 누락 방지
   const groups = new Map<string, { product_name: string; option_name: string; sku: string; price: number; qty: number }>();
   if (isCompleted) for (const it of (o.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))) {
@@ -68,7 +83,8 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
     const option_name = it.spec || it.option_label || "";
     const sku = product?.sku ?? "";
     const price = Number(it.unit_price) || 0;
-    const qty = Number(it.qty) || 0;
+    const qty = Math.max(0, (Number(it.qty) || 0) - (cancelledQty.get(it.id) || 0)); // 취소 차수 수량 차감
+    if (qty === 0) continue; // 전량 취소된 라인은 원장에서 제외
     const key = [product_name, option_name, sku, price].join(SEP);
     const g = groups.get(key);
     if (g) g.qty += qty;
@@ -97,7 +113,10 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
     const g = entries[i];
     const nr = normalizeRow({
       "판매처": "도매",
-      "주문일자": o.order_date, // YYYY-MM-DD → normalizeRow 가 yyyymmdd 로 변환
+      // 매출 인식일 = 발송일(발송일 미입력 옛 발주만 발주일 폴백) — 발주일이 아니다(2026-09-08).
+      //  발주 후 취소되는 건이 매출에 잡히지 않도록 발송완료 시점·발송일 기준으로 원장에 적는다.
+      //  날짜가 바뀌면 row_hash 도 바뀌므로, 기존 발주는 다음 재동기화(수정·상태변경) 때 새 기준으로 재적재된다.
+      "주문일자": o.ship_date || o.order_date, // YYYY-MM-DD → normalizeRow 가 yyyymmdd 로 변환
       "주문번호": o.order_no,
       "상품명": g.product_name,
       "옵션명": g.option_name,

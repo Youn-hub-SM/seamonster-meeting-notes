@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { saveOrderShipments, type SavedOrderItem } from "@/app/lib/b2b-shipments";
 import type { ShipmentScheduleInput, RecipientInput } from "@/app/lib/b2b-orders";
 import { logShipmentScheduled } from "@/app/lib/b2b-activity";
+import { syncOrderSalesSafe } from "@/app/lib/b2b-sales-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,6 +105,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (clearingAll) patch.status = "발송대기";
     const { error } = await sb.from("orders").update(patch).eq("id", id);
     if (error) throw error;
+
+    // 매출원장 재동기화 — 이 창은 매출 인식의 두 축(orders.ship_date·status)을 직접 바꾼다.
+    //  발송일 정정이면 원장 날짜가 따라오고, 발송완료 승격이면 적재, 전체 삭제(발송대기 되돌림)면 옛 매출행이 정리된다.
+    await syncOrderSalesSafe(id);
 
     // 알림 — 발송예정일이 실제로 달라졌을 때만. 수량 배분만 고치고 저장하는 경우가 잦아
     //  날짜가 그대로면 조용히 넘긴다(설정: 관리자 › 알림 › '발송일정 등록').

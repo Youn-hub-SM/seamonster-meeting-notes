@@ -247,7 +247,9 @@ export async function saveOrderShipments(
       if (txr.error) throw txr.error;
     }
 
-    if (sch.ship_date && (!earliest || sch.ship_date < earliest)) earliest = sch.ship_date;
+    // 취소 차수는 발송일 후보에서 제외 — earliest 는 orders.ship_date 가 되어 매출 인식일(발송일 기준)의
+    //  근거가 되므로, 아무것도 나가지 않은 취소 차수의 날짜가 잡히면 매출 귀속 월이 틀어진다.
+    if (sch.ship_date && (sch.status || "발송대기") !== "취소" && (!earliest || sch.ship_date < earliest)) earliest = sch.ship_date;
   }
 
   // 발송 일정이 하나도 없지만 배송 정보가 있으면, 배송 정보만 담은 기본 행을 생성해 보존.

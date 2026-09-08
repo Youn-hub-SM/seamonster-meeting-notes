@@ -5,7 +5,9 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 매출 엑셀 추출 — 취소 제외 발주(발주일 기준)의 라인아이템을 1행씩 펼침.
+// 매출 엑셀 추출 — '발송완료' 발주(발송일 기준, 발송일 없으면 발주일 폴백)의 라인아이템을 1행씩 펼침.
+//  화면 매출집계·매출원장(sales-sync)과 같은 기준: 발주만 하고 미발송인 건은 매출이 아니다.
+//  order_date 컬럼(양식 고정 헤더)에는 발송일이 들어간다 — 매출원장의 주문일자와 일치.
 //
 // 양식 (헤더 순서 그대로):
 //   channel | order_date | order_id | product_name | option_name | sku_code |
@@ -40,9 +42,16 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return NextResponse.json(
+        { ok: false, error: "from / to 는 YYYY-MM-DD 형식이어야 합니다" },
+        { status: 400 }
+      );
+    }
+
     const sb = supabaseAdmin();
 
-    // 취소 제외 발주(발주일 기준) + 업체 + 라인(+제품 sku)
+    // 발송완료 발주(발송일 기준, 발송일 없으면 발주일 폴백) + 업체 + 라인(+제품 sku)
     const { data: orders, error } = await sb
       .from("orders")
       .select(
@@ -52,10 +61,11 @@ export async function GET(req: NextRequest) {
             "product:product_id(sku)), " +
           "shipments(status, shipment_items(order_item_id, qty))"
       )
-      .neq("status", "취소")
-      .gte("order_date", from)
-      .lte("order_date", to)
-      .order("order_date", { ascending: true });
+      .eq("status", "발송완료")
+      .or(
+        `and(ship_date.gte.${from},ship_date.lte.${to}),and(ship_date.is.null,order_date.gte.${from},order_date.lte.${to})`
+      )
+      .order("ship_date", { ascending: true });
     if (error) throw error;
 
     type CompanyJoin = { name?: string; contact_phone?: string };
@@ -74,6 +84,7 @@ export async function GET(req: NextRequest) {
     type OrderRow = {
       order_no: string;
       order_date: string;
+      ship_date: string | null;
       company: CompanyJoin | CompanyJoin[] | null;
       order_items: ItemJoin[];
       shipments: ShipmentJoin[] | null;
@@ -86,11 +97,17 @@ export async function GET(req: NextRequest) {
     sheet.addRow(COLUMNS);
     sheet.getRow(1).font = { bold: true };
 
-    for (const o of (orders ?? []) as unknown as OrderRow[]) {
+    // 정렬은 기입되는 날짜(발송일, 폴백 발주일) 기준으로 — DB 정렬(ship_date)은 null 행을 끝으로 밀어
+    //  폴백 행이 기간 초 날짜를 달고 파일 끝에 나오는 문제가 있다.
+    const sorted = ((orders ?? []) as unknown as OrderRow[])
+      .slice()
+      .sort((a, b) => ((a.ship_date || a.order_date || "") < (b.ship_date || b.order_date || "") ? -1 : 1));
+
+    for (const o of sorted) {
       const company = Array.isArray(o.company) ? o.company[0] : o.company;
       const customerName = company?.name ?? "";
       const customerPhone = company?.contact_phone ?? "";
-      const orderDateYmd = (o.order_date ?? "").replace(/-/g, ""); // YYYY-MM-DD → YYYYMMDD
+      const orderDateYmd = (o.ship_date || o.order_date || "").replace(/-/g, ""); // 발송일(폴백 발주일) YYYY-MM-DD → YYYYMMDD
 
       // 복수 차수 중 '취소'된 차수의 수량을 order_item 별로 집계 → 유효수량에서 차감(화면 리포트와 동일 기준).
       const cancelledQty = new Map<string, number>();

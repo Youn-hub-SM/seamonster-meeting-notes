@@ -6,24 +6,31 @@ export const dynamic = "force-dynamic";
 
 // GET /api/b2b/reports?from=YYYY-MM-DD&to=YYYY-MM-DD
 //
-// 매출 정의 (발주일 기준):
-//   - 매출 = 취소 제외 발주의 total (order_date 기준 기간 필터)
+// 매출 정의 (발송일 기준, 2026-09-08 변경 — 발주만 하고 취소되는 건이 매출에 잡히지 않게):
+//   - 매출 = '발송완료' 발주의 total (발송일 ship_date 기준 기간 필터, 발송일이 비어 있으면 발주일 폴백)
+//     · 발주만 등록된 상태(발송대기)는 매출이 아니다 — 미발송 잔고에만 잡힌다.
+//     · 분할발송 발주는 모든 차수가 발송완료된 시점부터 발주 전체가 집계된다(발주 단위 인식).
 //   - 발주잔고 = status NOT IN ('발송완료','취소') 의 total (기간 무관, 미발송 잔량)
-//   - 예상마진 = Σ 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용), 취소 제외 발주
+//   - 예상마진 = Σ 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용)
 //   - by_product 마진 = Σ (unit_price − cost_at_order) × qty (배송비 제외, 제품 귀속 불가)
 //
 // 응답:
 //   { summary, backlog, by_company, by_product, trend }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const from = url.searchParams.get("from") || defaultFromIso();
-    const to = url.searchParams.get("to") || todayIso();
+    const fromRaw = url.searchParams.get("from") || "";
+    const toRaw = url.searchParams.get("to") || "";
+    // or() 필터 문자열에 값이 직접 들어가므로 형식 검증(잘못된 값은 기본 기간으로)
+    const from = DATE_RE.test(fromRaw) ? fromRaw : defaultFromIso();
+    const to = DATE_RE.test(toRaw) ? toRaw : todayIso();
 
     const sb = supabaseAdmin();
 
-    // 1) 취소 제외 발주 (기간 내, 발주일 기준)
+    // 1) 발송완료 발주 (기간 내, 발송일 기준 — 발송일이 비어 있는 옛 발주는 발주일로 폴백)
     const { data: completed, error: cErr } = await sb
       .from("orders")
       .select(
@@ -32,9 +39,10 @@ export async function GET(req: NextRequest) {
           "order_items(id, product_name, spec, qty, unit_price, cost_at_order, tax_type, product_id, product:product_id(volume_kg)), " +
           "shipments(status, shipment_items(order_item_id, qty))"
       )
-      .neq("status", "취소")
-      .gte("order_date", from)
-      .lte("order_date", to);
+      .eq("status", "발송완료")
+      .or(
+        `and(ship_date.gte.${from},ship_date.lte.${to}),and(ship_date.is.null,order_date.gte.${from},order_date.lte.${to})`
+      );
     if (cErr) throw cErr;
 
     // 2) 미발송 잔고 (전체 기간, 발송완료·취소 제외)
@@ -104,13 +112,22 @@ export async function GET(req: NextRequest) {
         }
       }
       const effQty = (it: ItemJoin) => Math.max(0, (Number(it.qty) || 0) - (cancelledQty.get(it.id) || 0));
-      // 취소분 매출(라인 단가 × 취소수량)을 발주 총액에서 차감 → 부분취소 발주의 매출 과대 방지.
-      let cancelledRevenue = 0;
-      for (const it of o.order_items ?? []) cancelledRevenue += Math.min(Number(it.qty) || 0, cancelledQty.get(it.id) || 0) * (Number(it.unit_price) || 0);
-      const effectiveTotal = Math.max(0, (Number(o.total) || 0) - cancelledRevenue);
+      // 취소분 매출을 발주 총액에서 차감 → 부분취소 발주의 매출 과대 방지.
+      //  o.total 은 부가세 포함(095 트리거: subtotal + vat - discount)이므로, 취소분도 공급가에
+      //  과세 라인의 부가세(10% 반올림 — 트리거와 같은 규칙)까지 얹어 빼야 취소분 VAT 가 매출에 남지 않는다.
+      let cancelledSupply = 0;
+      let cancelledTaxableSupply = 0;
+      for (const it of o.order_items ?? []) {
+        const cq = Math.min(Number(it.qty) || 0, cancelledQty.get(it.id) || 0);
+        const amt = cq * (Number(it.unit_price) || 0);
+        cancelledSupply += amt;
+        if (it.tax_type !== "exempt") cancelledTaxableSupply += amt;
+      }
+      const cancelledVat = Math.round(cancelledTaxableSupply * 0.1);
+      const effectiveTotal = Math.max(0, (Number(o.total) || 0) - cancelledSupply - cancelledVat);
 
       revenue += effectiveTotal;
-      vatTotal += Number(o.vat) || 0;
+      vatTotal += Math.max(0, (Number(o.vat) || 0) - cancelledVat); // 취소분 부가세도 세액 지표에서 감액
 
       const company = Array.isArray(o.company) ? o.company[0] : o.company;
       const companyName = company?.name || "(미지정)";
@@ -180,8 +197,8 @@ export async function GET(req: NextRequest) {
       c.margin += orderMargin;
       byCompanyMap.set(companyKey, c);
 
-      // trend (월별, 발주일 기준)
-      const ym = (o.order_date || "").slice(0, 7); // YYYY-MM
+      // trend (월별, 발송일 기준 — 발송일 없으면 발주일 폴백)
+      const ym = (o.ship_date || o.order_date || "").slice(0, 7); // YYYY-MM
       if (ym) {
         trendMap.set(ym, (trendMap.get(ym) || 0) + effectiveTotal);
       }

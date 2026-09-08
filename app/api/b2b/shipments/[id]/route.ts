@@ -72,11 +72,21 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     //  취소 차수는 빼고 센다 — 안 보낸 박스까지 세면 부분 취소 발주의 배송비가 과대 계산된다.
     //  상태 변경(취소↔복구)도 합계를 바꾸므로 같이 재동기화한다. 안 그러면 취소한 박스가 계속 배송비로 남는다.
     if (body.box_count !== undefined || newStatus !== ship.status) {
-      const { data: all } = await sb.from("shipments").select("box_count, status").eq("order_id", ship.order_id);
-      const total = (all ?? [])
-        .filter((s) => (s as { status: string | null }).status !== "취소")
-        .reduce((a, s) => a + Math.max(1, Number((s as { box_count: number | null }).box_count) || 1), 0);
-      if (total > 0) await sb.from("orders").update({ box_count: total }).eq("id", ship.order_id);
+      const { data: all, error: allErr } = await sb.from("shipments").select("box_count, status, ship_date").eq("order_id", ship.order_id);
+      // 재조회 실패 시(all=null) 여기서 헤더를 건드리지 않는다 — 빈 결과로 계산하면
+      //  멀쩡한 발송일이 null 로 덮여 매출 인식일이 발주일로 밀리는 사고가 된다.
+      if (!allErr && all) {
+        const live = all.filter((s) => (s as { status: string | null }).status !== "취소");
+        const total = live.reduce((a, s) => a + Math.max(1, Number((s as { box_count: number | null }).box_count) || 1), 0);
+        const headerPatch: Record<string, unknown> = {};
+        if (total > 0) headerPatch.box_count = total;
+        // 취소↔복구는 '가장 이른 비취소 발송일'도 바꾼다 — orders.ship_date 는 매출 인식일(발송일 기준)의 근거라 같이 재계산.
+        if (newStatus !== ship.status) {
+          const dates = live.map((s) => (s as { ship_date: string | null }).ship_date).filter(Boolean).sort() as string[];
+          headerPatch.ship_date = dates[0] ?? null;
+        }
+        if (Object.keys(headerPatch).length > 0) await sb.from("orders").update(headerPatch).eq("id", ship.order_id);
+      }
     }
 
     // 차수 상태 변경 이력 기록 (히스토리)
@@ -89,7 +99,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const derived = deriveParentStatus((ships ?? []).map((s) => s.status as string));
     if (derived) {
       await sb.from("orders").update({ status: derived }).eq("id", ship.order_id);
-      // 발주 상태가 재도출되면 매출원장 동기화. 발송완료면 반영, 취소(전 차수 취소)면 옛 매출행 정리.
+    }
+    // 매출원장 동기화 — 상위 상태 재도출뿐 아니라 차수 상태 변경 자체(위에서 orders.ship_date 재계산)도
+    //  매출 인식일을 바꿀 수 있다. 발송완료면 반영, 취소면 옛 매출행 정리.
+    if (derived || newStatus !== ship.status) {
       await syncOrderSalesSafe(ship.order_id as string);
     }
 

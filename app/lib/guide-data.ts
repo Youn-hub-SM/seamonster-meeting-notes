@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-09-03";
+export const GUIDE_UPDATED = "2026-09-08";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -118,12 +118,12 @@ export const GUIDE: GuideCategory[] = [
             "what": "기간별 매출·마진·업체별·제품별 집계와 엑셀 다운로드",
             "steps": [
               "위 탭에서 이번 달/지난 달/올해를 고르거나 날짜를 직접 넣는다",
-              "총 매출·발주 건수·예상 마진·미발송 잔고를 확인한다",
+              "총 매출·발송완료 발주·예상 마진·미발송 잔고를 확인한다",
               "업체별·제품별 표에서 상세를 본다",
               "[엑셀 다운로드]를 눌러 파일로 받는다"
             ],
             "tips": [
-              "집계는 발주일 기준이고 취소 발주는 빠진다 — 발송일 기준 매출과 다를 수 있다",
+              "매출은 발송완료된 발주만 발송일 기준으로 잡힌다 — 발주만 하고 미발송이면 미발송 잔고에만 보인다",
               "'원가 미입력 N건' 경고가 보이면 마진이 실제보다 크게 나온 것 — 원가를 채운 뒤 다시 본다"
             ],
             "keywords": [

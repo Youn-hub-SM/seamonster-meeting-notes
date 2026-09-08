@@ -8,7 +8,9 @@ import {
 } from "@/app/lib/b2b-orders";
 import { saveOrderShipments, SavedOrderItem } from "@/app/lib/b2b-shipments";
 import { logOrderCreated } from "@/app/lib/b2b-activity";
+import { syncOrderSalesSafe } from "@/app/lib/b2b-sales-sync";
 
+export const runtime = "nodejs"; // sales-sync 가 crypto(sales-normalize) 사용
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────
@@ -209,11 +211,12 @@ export async function POST(req: NextRequest) {
       throw shipErr;
     }
 
-    // 헤더 동기화: 복수발송(차수 2개 이상)이면 메인 발송일 null(차수별로 관리), 단일/없음이면 메인 발송일 사용.
+    // 헤더 동기화: 복수발송(차수 2개 이상)이면 메인 발송일 = 가장 이른 비취소 차수일, 단일/없음이면 메인 발송일 사용.
+    //  (발송일이 매출 인식일이라 null 로 두면 집계·원장이 발주일로 폴백한다 — PUT 과 같은 규칙)
     //  + 발주 박스 수(이익률용)는 발송 차수 박스 수의 합으로 동기화 (차수가 있을 때만)
     // 생산일은 자동으로 채우지 않음 — 직접 입력한 값만 사용(헤더 insert 에서 이미 저장됨).
     const splitCount = (body.shipments ?? []).filter((s) => s.ship_date || (Array.isArray(s.items) && s.items.some((i) => Number(i.qty) > 0))).length;
-    const headerShipDate = splitCount >= 2 ? null : (body.ship_date || earliestShipDate || null);
+    const headerShipDate = splitCount >= 2 ? earliestShipDate : (body.ship_date || earliestShipDate || null);
     const headerPatch: Record<string, unknown> = { ship_date: headerShipDate };
     if (derivedStatus) headerPatch.status = derivedStatus;
     if (totalBoxes > 0) headerPatch.box_count = totalBoxes;
@@ -229,6 +232,11 @@ export async function POST(req: NextRequest) {
 
     // 활동 로그 기록 (fire-and-forget, 실패해도 응답엔 영향 없음)
     await logOrderCreated(orderRow.id);
+
+    // 매출원장 동기화 — 과거 발송분 소급 등록(status=발송완료 직접 입력)이나 차수 전부 발송완료로
+    //  derivedStatus 가 발송완료가 된 생성 건이 원장에서 누락되지 않게(PUT 과 같은 규칙).
+    //  발송대기 생성이면 반영할 행이 없어 사실상 no-op.
+    await syncOrderSalesSafe(orderRow.id);
 
     return NextResponse.json({ ok: true, order: refreshed });
   } catch (err) {
