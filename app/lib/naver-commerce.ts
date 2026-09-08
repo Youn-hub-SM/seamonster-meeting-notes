@@ -48,6 +48,13 @@ export async function getNaverToken(): Promise<{ ok: true; token: string } | { o
   });
   const json = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; code?: string; message?: string; invalidInputs?: unknown };
   if (!res.ok || !json.access_token) {
+    // IP 제한 — Vercel 은 고정 IP 가 없어 서버 직접 호출이 막힌다. 로컬 동기화 경로를 안내.
+    if (/IP_NOT_ALLOWED/i.test(String(json.code || "") + String(json.message || ""))) {
+      return {
+        ok: false,
+        error: "네이버가 서버 IP 를 허용하지 않습니다 (GW.IP_NOT_ALLOWED). 이 버튼 대신 클로드 코드에서 로컬 동기화(node scripts/naver-catalog-local.mjs)를 실행해주세요 — 등록된 PC 에서 네이버를 호출해 서버로 적재합니다.",
+      };
+    }
     return { ok: false, error: `토큰 발급 실패 (HTTP ${res.status}) ${json.code || ""} ${json.message || ""}`.trim() };
   }
   cached = { token: json.access_token, expiresAt: Date.now() + (Number(json.expires_in) || 10800) * 1000 };
