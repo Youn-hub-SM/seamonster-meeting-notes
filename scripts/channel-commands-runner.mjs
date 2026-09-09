@@ -183,29 +183,36 @@ async function runOnce() {
         return `네이버 응답 HTTP ${res.status} ${j.code || ""} ${detail}`.trim();
       }
       if (kind !== "option") return `네이버에서 지원하지 않는 항목 유형입니다: ${kind || "(없음)"}`;
-      // 스펙 문언상 body 에 없는 필드(price·usable)는 0/기본값으로 대입될 수 있어,
-      //  현재 옵션가·사용여부를 조회해 그대로 되돌려 보낸다(재고만 변경). 조회 실패 시 기존 방식 폴백.
+      // 스펙 문언상 body 에 없는 필드(price·usable)는 0/기본값으로 대입될 수 있어 현재값을 조회해 보존한다.
+      //  단 네이버 규칙: 옵션가(price)를 보내면 판매가(productSalePrice)도 필수 — 실측 400 "옵션가 수정 시 판매가를 필수 입력".
+      //  → 옵션가+판매가+usable 전부 현재값으로 동봉(무변화 실측 검증: 판매가·옵션가·재고 보존, 200).
+      //  조회 실패 시엔 재고만 담은 body 폴백(초기 실사용에서 성공 이력이 있는 형태).
       const combo = { id: Number(itemId), stockQuantity: cmd.qty };
+      let productSalePrice = null;
       try {
         const dRes = await fetch(`${NAVER_BASE}/v2/products/origin-products/${cmd.origin_no}`, {
           headers: { Authorization: `Bearer ${token}` }, signal: timeout(),
         });
         if (dRes.ok) {
           const dj = await dRes.json().catch(() => ({}));
-          const cur = (dj.originProduct?.detailAttribute?.optionInfo?.optionCombinations ?? [])
+          const op = dj.originProduct ?? {};
+          const cur = (op.detailAttribute?.optionInfo?.optionCombinations ?? [])
             .find((c) => String(c.id) === String(itemId));
-          if (cur) {
-            if (cur.price != null) combo.price = Number(cur.price);
+          if (cur && cur.price != null && op.salePrice != null) {
+            combo.price = Number(cur.price);
             if (cur.usable != null) combo.usable = !!cur.usable;
+            productSalePrice = { salePrice: Number(op.salePrice) };
           }
         }
-      } catch { /* 조회 실패 — 재고만 담은 기존 body 로 진행 */ }
+      } catch { /* 조회 실패 — 재고만 담은 body 로 진행 */ }
       // optionInfo 는 배열이 아니라 객체(내부에 optionCombinations 배열) — 실측 400 역직렬화 오류로 확정
+      const body = { optionInfo: { optionCombinations: [combo] } };
+      if (productSalePrice) body.productSalePrice = productSalePrice;
       const res = await fetch(`${NAVER_BASE}/v1/products/origin-products/${cmd.origin_no}/option-stock`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         signal: timeout(),
-        body: JSON.stringify({ optionInfo: { optionCombinations: [combo] } }),
+        body: JSON.stringify(body),
       });
       if (res.ok) return null;
       const j = await res.json().catch(() => ({}));
