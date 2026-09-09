@@ -103,16 +103,26 @@ export default function SkuListingsPage() {
   const [syncMsg, setSyncMsg] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  // 검색 결과(카탈로그+채널 리스팅) 엑셀 다운로드 — 화면의 '판매안함' 숨김과 무관하게 전체를 담는다
-  //  (파일에 판매상태 열이 있어 구분 가능 — 전수 파일이 대사·공유에 더 유용)
+  // 검색 결과 엑셀 다운로드 — 화면과 1:1(대표 확정): 카탈로그 시트는 화면 표의 정렬·숨김 상태 그대로
+  //  (판매안함은 펼쳐서 보이는 중일 때만 포함), 매출 리스팅 시트는 카탈로그에 없는 채널만.
   async function exportXlsx() {
     if (!res?.target) return;
     setExporting(true);
     try {
+      const catRows = [...catalogRows.visible, ...(showHidden ? catalogRows.hidden : [])].map(({ c, idx }) => ({
+        ...c,
+        q7: catalogQty.get(idx)?.q7 ?? null,
+        q30: catalogQty.get(idx)?.q30 ?? null,
+      }));
+      const saleRows = groups.flatMap((g) => [...g.fresh, ...g.stale]);
+      if (catRows.length === 0 && saleRows.length === 0) {
+        // 카탈로그가 전부 '판매안함' 숨김이면 보낼 게 없다 — 서버 400 대신 상황에 맞는 안내
+        throw new Error("화면에 보이는 목록이 없습니다. [판매안함 보기]를 펼친 뒤 다시 받아 주세요.");
+      }
       const r = await fetch("/api/sales/listings/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: res.target, catalog: res.catalog ?? [], listings: res.listings ?? [] }),
+        body: JSON.stringify({ target: res.target, catalog: catRows, listings: saleRows }),
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({} as { error?: string }));
@@ -306,7 +316,7 @@ export default function SkuListingsPage() {
           </button>
           <button className="b2b-btn-primary" onClick={exportXlsx}
             disabled={exporting || !res || ((res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0)}
-            title={!res ? "먼저 상품을 검색하세요" : "판매안함 상품 포함 전체를 내려받습니다"}>
+            title={!res ? "먼저 상품을 검색하세요" : "화면 목록 그대로 내려받습니다 (접어 둔 90일 무판매 리스팅은 포함)"}>
             {exporting ? "생성 중..." : "엑셀 다운로드"}
           </button>
         </div>
