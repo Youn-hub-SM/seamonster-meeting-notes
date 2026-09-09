@@ -166,11 +166,12 @@ async function main() {
         return "네이버는 옵션 상품만 수량 수정을 지원합니다 (단일·추가상품은 스마트스토어센터에서 직접 수정)";
       }
       const token = await getNaverToken();
+      // optionInfo 는 배열이 아니라 객체(내부에 optionCombinations 배열) — 실측 400 역직렬화 오류로 확정
       const res = await fetch(`${NAVER_BASE}/v1/products/origin-products/${cmd.origin_no}/option-stock`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         signal: timeout(),
-        body: JSON.stringify({ optionInfo: [{ id: Number(itemId), stockQuantity: cmd.qty }] }),
+        body: JSON.stringify({ optionInfo: { optionCombinations: [{ id: Number(itemId), stockQuantity: cmd.qty }] } }),
       });
       if (res.ok) return null;
       const j = await res.json().catch(() => ({}));
