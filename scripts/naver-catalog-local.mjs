@@ -194,23 +194,40 @@ async function main() {
     await sleep(400); // 커머스API 레이트리밋 여유(429 방지)
   }
   console.log(`카탈로그 행 ${items.length}개 생성 (상세 실패 ${failed}건${firstError ? ` — 첫 실패: ${firstError}` : ""})`);
+  if (items.length === 0) {
+    console.error("[중단] 상세 조회가 전건 실패해 업로드할 행이 없습니다 — 크론이 성공으로 오인하지 않게 실패로 종료합니다.");
+    return finish(1);
+  }
 
-  // 4) 서버 업로드 — 500행 청크, 마지막 청크에 live_origins(절단 시 생략 → 서버가 stale 삭제 건너뜀)
+  // 4) 서버 업로드 — 500행 근처의 '상품 경계'에서만 청크를 자른다. 한 상품이 두 청크로 갈리면
+  //    뒤 청크의 origin 단위 delete 가 앞 청크가 방금 넣은 행을 지워 옵션이 소실된다(안전성 감사 확정 결함).
+  //    마지막 청크에 live_origins(절단 시 생략 → 서버가 stale 삭제 건너뜀).
+  const chunks = [];
+  {
+    let cur = [];
+    for (const r of items) {
+      if (cur.length >= 500 && r.origin_no !== cur[cur.length - 1].origin_no) { chunks.push(cur); cur = []; }
+      cur.push(r);
+    }
+    if (cur.length > 0) chunks.push(cur);
+  }
   const liveOrigins = truncated ? undefined : products.map((p) => String(p.originProductNo));
-  for (let i = 0; i < items.length; i += 500) {
-    const isLast = i + 500 >= items.length;
+  let sent = 0;
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const isLast = ci === chunks.length - 1;
     const res = await fetch(`${SERVER}/api/naver/catalog/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
       signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({ items: items.slice(i, i + 500), ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
+      body: JSON.stringify({ items: chunks[ci], ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j.ok) {
       console.error(`[중단] 업로드 실패 (HTTP ${res.status}) ${j.error || ""}`);
       return finish(1);
     }
-    console.log(`업로드 ${Math.min(i + 500, items.length)}/${items.length}${j.removed_origins ? ` (내려간 상품 ${j.removed_origins}개 정리)` : ""}`);
+    sent += chunks[ci].length;
+    console.log(`업로드 ${sent}/${items.length}${j.removed_origins ? ` (내려간 상품 ${j.removed_origins}개 정리)` : ""}`);
   }
   console.log("동기화 완료 — 화면(SKU 리스팅 찾기)에서 확인하세요.");
   return finish(0);

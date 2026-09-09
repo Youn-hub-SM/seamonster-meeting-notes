@@ -141,22 +141,33 @@ async function main() {
     process.exit(1);
   }
 
-  // 3) 서버 업로드 — 500행 청크, 마지막 청크에 live_origins
+  // 3) 서버 업로드 — 500행 근처의 '상품 경계'에서만 청크를 자른다(상품이 청크에 갈리면 옵션 소실), 마지막 청크에 live_origins
+  const chunks = [];
+  {
+    let cur = [];
+    for (const r of items) {
+      if (cur.length >= 500 && r.origin_no !== cur[cur.length - 1].origin_no) { chunks.push(cur); cur = []; }
+      cur.push(r);
+    }
+    if (cur.length > 0) chunks.push(cur);
+  }
   const liveOrigins = truncated ? undefined : products.map((p) => String(p.sellerProductId));
-  for (let i = 0; i < items.length; i += 500) {
-    const isLast = i + 500 >= items.length;
+  let sent = 0;
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const isLast = ci === chunks.length - 1;
     const res = await fetch(`${SERVER}/api/naver/catalog/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${uploadSecret}` },
       signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({ channel: CHANNEL, items: items.slice(i, i + 500), ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
+      body: JSON.stringify({ channel: CHANNEL, items: chunks[ci], ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j.ok) {
       console.error(`[중단] 업로드 실패 (HTTP ${res.status}) ${j.error || ""}`);
       process.exit(1);
     }
-    console.log(`업로드 ${Math.min(i + 500, items.length)}/${items.length}${j.removed_origins ? ` (내려간 상품 ${j.removed_origins}개 정리)` : ""}`);
+    sent += chunks[ci].length;
+    console.log(`업로드 ${sent}/${items.length}${j.removed_origins ? ` (내려간 상품 ${j.removed_origins}개 정리)` : ""}`);
   }
   console.log("쿠팡 동기화 완료");
 }

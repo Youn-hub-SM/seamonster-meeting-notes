@@ -73,9 +73,70 @@ export async function POST(req: NextRequest) {
         .from("channel_commands")
         .update({ status: "실행중", claimed_at: new Date().toISOString() })
         .or(`status.eq.대기,and(status.eq.실행중,claimed_at.lt.${orphanCut})`)
-        .select("id, channel, item_key, origin_no, qty, command");
+        .select("id, channel, item_key, origin_no, qty, command, created_at");
       if (error) throw error;
-      return NextResponse.json({ ok: true, commands: data ?? [] });
+      let claimed = data ?? [];
+
+      // 추월 정리 — 같은 (channel, item_key) 에 더 새로운 명령이 있으면 이 명령은 낡은 값이다.
+      //  (report 유실로 남은 고아가 10분 뒤 재선점될 때, 그 사이의 새 명령·완료를 옛 값으로 덮는 사고 차단)
+      //  '실패(추월됨)' 로 기록하고 실행 목록에서 뺀다. 같은 배치에 신·구가 함께 잡혀도 구가 걸러진다.
+      const alive: typeof claimed = [];
+      for (const c of claimed) {
+        const { count, error: nErr } = await sb
+          .from("channel_commands")
+          .select("id", { count: "exact", head: true })
+          .eq("channel", c.channel)
+          .eq("item_key", c.item_key)
+          .gt("created_at", c.created_at);
+        if (nErr || !count) { alive.push(c); continue; } // 확인 실패 시엔 실행 쪽으로(기존 동작 유지)
+        await sb
+          .from("channel_commands")
+          .update({ status: "실패", error: "추월됨 — 같은 상품에 더 새로운 명령이 있어 실행하지 않았습니다", executed_at: new Date().toISOString() })
+          .eq("id", c.id)
+          .eq("status", "실행중");
+      }
+      // 실행 순서 — 재고 명령이 먼저(품절이 동기화에 밀려 잠기지 않게), 그 다음 동기화. 각각 등록순.
+      alive.sort((a, b) =>
+        (a.command === "sync_catalog" ? 1 : 0) - (b.command === "sync_catalog" ? 1 : 0) || a.id - b.id);
+      return NextResponse.json({ ok: true, commands: alive });
+    }
+
+    if (sp.get("mode") === "precheck") {
+      // 실행 직전 최신 여부 확인 — 다른 실행기(2분 크론)가 더 새 명령을 먼저 적용했을 수 있다.
+      if (!bearerOk(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
+      const body = (await req.json().catch(() => ({}))) as { id?: number };
+      if (!body.id) return NextResponse.json({ ok: false, error: "id 가 필요합니다." }, { status: 400 });
+      const { data: row, error: rErr } = await sb
+        .from("channel_commands")
+        .select("id, channel, item_key, created_at")
+        .eq("id", body.id)
+        .single();
+      if (rErr || !row) return NextResponse.json({ ok: false, error: "명령을 찾을 수 없습니다." }, { status: 404 });
+      const { count, error: cErr } = await sb
+        .from("channel_commands")
+        .select("id", { count: "exact", head: true })
+        .eq("channel", row.channel)
+        .eq("item_key", row.item_key)
+        .gt("created_at", row.created_at);
+      if (cErr) throw cErr;
+      return NextResponse.json({ ok: true, superseded: (count ?? 0) > 0 });
+    }
+
+    if (sp.get("mode") === "release") {
+      // 시간 예산 초과로 실행하지 못한 명령을 '대기' 로 되돌린다 — 10분 고아 컷을 기다리지 않고
+      //  다음 폴링(10초)에서 바로 재선점되게. '실행중' 인 행만 되돌려 완료/실패 기록은 건드리지 않는다.
+      if (!bearerOk(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
+      const body = (await req.json().catch(() => ({}))) as { ids?: number[] };
+      const ids = (body.ids ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 200);
+      if (ids.length === 0) return NextResponse.json({ ok: true, released: 0 });
+      const { data, error } = await sb
+        .from("channel_commands")
+        .update({ status: "대기", claimed_at: null })
+        .in("id", ids)
+        .eq("status", "실행중")
+        .select("id");
+      if (error) throw error;
+      return NextResponse.json({ ok: true, released: (data ?? []).length });
     }
 
     if (sp.get("mode") === "report") {
@@ -128,9 +189,11 @@ export async function POST(req: NextRequest) {
 
     // 같은 아이템의 '대기' 명령이 있으면 값만 갱신(연타 방지) — 조건부 update 라 실행기가 그 사이
     //  선점('실행중')했으면 갱신되지 않고 아래 insert 로 새 명령이 생긴다(옛 값이 새 값을 덮는 경합 차단).
+    //  created_at 은 갱신하지 않는다 — 추월/precheck 판정 근거라 DB 시계(insert 기본값)로만 통일.
+    //  ('대기'가 있는 동안 새 insert 가 불가(유니크)하므로 insert 시각만으로 발행 순서가 완전하다)
     const { data: bumped, error: bumpErr } = await sb
       .from("channel_commands")
-      .update({ qty, requested_by: name, created_at: new Date().toISOString() })
+      .update({ qty, requested_by: name })
       .eq("channel", body.channel)
       .eq("item_key", body.item_key)
       .eq("status", "대기")
@@ -156,6 +219,20 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
     if (error) {
+      // 109 부분 유니크(대기 중복 금지) 충돌 — 다른 요청이 먼저 넣었다. 그 행에 값만 갱신(연타와 동일 처리).
+      if (error.code === "23505" || /duplicate key/i.test(error.message || "")) {
+        const { data: again, error: againErr } = await sb
+          .from("channel_commands")
+          .update({ qty, requested_by: name })
+          .eq("channel", body.channel)
+          .eq("item_key", body.item_key)
+          .eq("status", "대기")
+          .select("id");
+        if (!againErr && again && again.length > 0) {
+          return NextResponse.json({ ok: true, id: again[0].id, updated: true });
+        }
+        return NextResponse.json({ ok: false, error: "동시 요청이 겹쳤습니다 — 잠시 후 다시 시도하세요." }, { status: 409 });
+      }
       if (/channel_commands/i.test(error.message || "")) {
         return NextResponse.json({ ok: false, error: "마이그레이션 108(channel_commands) 적용이 필요합니다." }, { status: 503 });
       }

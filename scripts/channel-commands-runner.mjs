@@ -65,6 +65,9 @@ async function runOnce() {
   }
   const commands = listJson.commands ?? [];
   if (commands.length === 0) return; // 조용히 종료 — 크론 로그를 더럽히지 않는다
+  // 재고 명령 우선(품절이 동기화 3분에 밀려 잠기지 않게) — 서버도 정렬해 주지만 방어적으로 한 번 더
+  commands.sort((a, b) =>
+    (a.command === "sync_catalog" ? 1 : 0) - (b.command === "sync_catalog" ? 1 : 0) || a.id - b.id);
   console.log(`선점 명령 ${commands.length}건 (${new Date().toISOString()})`);
 
   // 채널별 토큰은 필요할 때 1회만
@@ -253,25 +256,71 @@ async function runOnce() {
     return `알 수 없는 채널: ${cmd.channel}`;
   }
 
-  for (const cmd of commands) {
+  // 결과 보고 — 유실되면 10분 뒤 고아 재선점으로 '이미 적용된 명령'이 재실행되므로 재시도로 지킨다
+  async function report(cmd, error) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(`${SERVER}/api/channel-commands?mode=report`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${uploadSecret}` },
+          signal: timeout(),
+          body: JSON.stringify({ id: cmd.id, ok: !error, qty: cmd.qty, error }),
+        });
+        if (res.ok) return true;
+      } catch { /* 아래 재시도 */ }
+      await sleep(1000 * (attempt + 1));
+    }
+    console.error(`[보고 실패] #${cmd.id} ${cmd.channel} ${cmd.item_key} — 결과(${error ? "실패" : "완료"})를 서버에 기록하지 못함. 10분 뒤 재선점될 수 있음`);
+    return false;
+  }
+
+  // 실행 직전 최신 여부 확인 — 다른 실행기(2분 크론)가 그 사이 더 새 명령을 적용했으면 이건 낡은 값
+  async function isSuperseded(cmd) {
+    if (cmd.command === "sync_catalog") return false; // 동기화는 값이 없어 추월 개념 무의미(claim 단계에서 걸러짐)
+    try {
+      const res = await fetch(`${SERVER}/api/channel-commands?mode=precheck`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${uploadSecret}` },
+        signal: timeout(),
+        body: JSON.stringify({ id: cmd.id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      return !!(res.ok && j.ok && j.superseded);
+    } catch { return false; } // 확인 실패 시 실행 쪽으로(구 서버 배포와도 호환)
+  }
+
+  let cutIndex = commands.length;
+  for (let ci = 0; ci < commands.length; ci++) {
+    const cmd = commands[ci];
     if (Date.now() - STARTED > TIME_BUDGET_MS) {
-      console.log(`시간 예산 초과 — 남은 명령은 10분 뒤 재선점됩니다`);
+      cutIndex = ci;
       break;
     }
     let error = null;
-    try {
-      error = await execute(cmd);
-    } catch (e) {
-      error = e?.message || String(e);
+    if (await isSuperseded(cmd)) {
+      error = "추월됨 — 같은 상품에 더 새로운 명령이 있어 실행하지 않았습니다";
+    } else {
+      try {
+        error = await execute(cmd);
+      } catch (e) {
+        error = e?.message || String(e);
+      }
     }
-    await fetch(`${SERVER}/api/channel-commands?mode=report`, {
+    await report(cmd, error);
+    console.log(`#${cmd.id} ${cmd.channel} ${cmd.item_key} → ${cmd.qty}개: ${error ? `실패 (${error})` : "완료"}`);
+    await sleep(300);
+  }
+
+  // 시간 예산 초과로 못 돌린 명령은 '대기' 로 반납 — 다음 폴링(10초)에서 바로 재선점된다
+  if (cutIndex < commands.length) {
+    const ids = commands.slice(cutIndex).map((c) => c.id);
+    const rel = await fetch(`${SERVER}/api/channel-commands?mode=release`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${uploadSecret}` },
       signal: timeout(),
-      body: JSON.stringify({ id: cmd.id, ok: !error, qty: cmd.qty, error }),
-    }).catch(() => {});
-    console.log(`#${cmd.id} ${cmd.channel} ${cmd.item_key} → ${cmd.qty}개: ${error ? `실패 (${error})` : "완료"}`);
-    await sleep(300);
+      body: JSON.stringify({ ids }),
+    }).then((r) => r.ok).catch(() => false);
+    console.log(`시간 예산 초과 — 남은 ${ids.length}건 ${rel ? "반납(다음 회차 즉시 재선점)" : "반납 실패(10분 뒤 재선점)"}`);
   }
 }
 

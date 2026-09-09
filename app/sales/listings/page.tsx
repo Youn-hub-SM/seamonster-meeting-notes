@@ -143,7 +143,7 @@ export default function SkuListingsPage() {
     finally { setExporting(false); }
   }
   // 카탈로그 동기화 — 채널 API 가 IP 제한이라 서버가 직접 못 부르고, 명령 큐에 넣으면
-  //  중계 서버가 2분 안에 가져가 채널별 동기화를 실행한다(채널당 1~2분 소요).
+  //  중계 서버가 10초 안에 가져가 채널별 동기화를 실행한다(채널당 1~2분 소요).
   async function syncCatalogs() {
     setSyncing(true); setSyncMsg("");
     try {
@@ -218,7 +218,7 @@ export default function SkuListingsPage() {
     return [...m.entries()].map(([ch, d]) => `${CATALOG_TITLE[ch] || ch} ${d.slice(5, 10)}`).join(" · ");
   }, [res]);
 
-  // ── 채널 재고 명령(수량 적용, 0 = 품절) — 중계 서버가 2분 주기로 실행 ──
+  // ── 채널 재고 명령(수량 적용, 0 = 품절) — 중계 서버 데몬이 10초 폴링으로 실행 ──
   const [cmdQty, setCmdQty] = useState<Record<string, string>>({});
   const [cmdMap, setCmdMap] = useState<Record<string, ChannelCommand>>({});
   const [showHidden, setShowHidden] = useState(false);
@@ -323,7 +323,7 @@ export default function SkuListingsPage() {
       </header>
 
       {err && <div className="b2b-error">{err}</div>}
-      {syncMsg && <div className={syncMsg.startsWith("동기화 실패") ? "b2b-error" : "sm-success"}>{syncMsg}</div>}
+      {syncMsg && <div className={syncMsg.includes("실패") ? "b2b-error" : "sm-success"}>{syncMsg}</div>}
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-field">
@@ -352,7 +352,7 @@ export default function SkuListingsPage() {
               </span>
             </div>
             <p className="sm-faint" style={{ margin: "0 0 8px", fontSize: 12 }}>
-              수량 적용(0 = 품절)은 중계 서버가 2분 안에 채널에 반영합니다
+              수량 적용(0 = 품절)은 보통 10초 안에 채널에 반영됩니다 (카탈로그 동기화와 겹치면 수 분 걸릴 수 있음)
             </p>
             <div className="b2b-table-wrap">
               <table className="b2b-table is-responsive" style={{ tableLayout: "fixed", width: "100%" }}>
