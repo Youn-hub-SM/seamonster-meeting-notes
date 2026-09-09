@@ -18,6 +18,8 @@ type Listing = {
 };
 type CatalogItem = {
   channel: string;
+  item_key: string;
+  origin_no: string;
   listing_name: string;
   item_kind: string;
   item_name: string | null;
@@ -26,6 +28,10 @@ type CatalogItem = {
   stock_qty: number | null;
   synced_at?: string;
   via_bundle: boolean;
+};
+type ChannelCommand = {
+  id: number; channel: string; item_key: string; qty: number;
+  status: string; error: string | null; created_at: string; executed_at: string | null;
 };
 type Result = {
   ok: boolean;
@@ -45,6 +51,8 @@ const SALE_STATUS_KO: Record<string, string> = {
 const KIND_KO: Record<string, string> = { product: "단일", option: "옵션", supplement: "추가상품" };
 // 카탈로그 카드 제목 — 채널 값(매출 판매처 표기)을 사용자에게 익숙한 이름으로
 const CATALOG_TITLE: Record<string, string> = { "스마트스토어": "네이버", "쿠팡": "쿠팡", "카페24": "공식몰(카페24)" };
+// 기본 숨김인 '비판매' 상태 — 품절(OUTOFSTOCK)은 조치 대상이라 항상 표시
+const HIDDEN_SALE_STATUSES = new Set(["SUSPENSION", "CLOSE", "PROHIBITION", "REJECTION", "UNUSABLE", "판매안함", "진열안함"]);
 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 // 최근 90일 판매가 없으면 '오래된 리스팅'으로 접는다
@@ -95,7 +103,8 @@ export default function SkuListingsPage() {
   const [syncMsg, setSyncMsg] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  // 검색 결과(카탈로그+채널 리스팅) 엑셀 다운로드 — 화면에 보이는 데이터 그대로
+  // 검색 결과(카탈로그+채널 리스팅) 엑셀 다운로드 — 화면의 '판매안함' 숨김과 무관하게 전체를 담는다
+  //  (파일에 판매상태 열이 있어 구분 가능 — 전수 파일이 대사·공유에 더 유용)
   async function exportXlsx() {
     if (!res?.target) return;
     setExporting(true);
@@ -165,25 +174,87 @@ export default function SkuListingsPage() {
 
   const total = res?.listings?.length ?? 0;
 
-  // 카탈로그를 채널별 카드로 — 원본 인덱스(idx)를 보존해 catalogQty 매칭에 사용.
-  //  카드 순서는 고정(네이버-쿠팡-공식몰), 동기화 시각은 채널별 최신값(채널마다 크론이 달라 어긋날 수 있음).
-  const catalogGroups = useMemo(() => {
+  // 카탈로그 단일 표 — 채널 고정 순서(네이버-쿠팡-공식몰) → 등록 상품명 정렬. 원본 idx 는 catalogQty 매칭용.
+  //  비판매 상태(판매안함·진열안함·판매중지 등)는 기본 숨김 — 품절은 조치 대상이라 항상 표시.
+  const catalogRows = useMemo(() => {
     const ORDER = ["스마트스토어", "쿠팡", "카페24"];
     const orderOf = (ch: string) => { const i = ORDER.indexOf(ch); return i < 0 ? 99 : i; };
-    const byCh = new Map<string, { c: CatalogItem; idx: number }[]>();
-    (res?.catalog ?? []).forEach((c, idx) => {
-      const arr = byCh.get(c.channel) ?? [];
-      arr.push({ c, idx });
-      byCh.set(c.channel, arr);
-    });
-    return [...byCh.entries()]
-      .map(([channel, rows]) => ({
-        channel,
-        rows,
-        syncedAt: rows.reduce<string | null>((m, r) => (r.c.synced_at && (!m || r.c.synced_at > m) ? r.c.synced_at : m), null),
-      }))
-      .sort((a, b) => orderOf(a.channel) - orderOf(b.channel));
+    const all = (res?.catalog ?? [])
+      .map((c, idx) => ({ c, idx }))
+      .sort((a, b) =>
+        orderOf(a.c.channel) - orderOf(b.c.channel) ||
+        a.c.listing_name.localeCompare(b.c.listing_name) ||
+        a.idx - b.idx
+      );
+    const isHidden = ({ c }: { c: CatalogItem }) => !!c.sale_status && HIDDEN_SALE_STATUSES.has(c.sale_status);
+    return { visible: all.filter((r) => !isHidden(r)), hidden: all.filter(isHidden) };
   }, [res]);
+
+  // 채널별 마지막 동기화 요약(캡션) — 채널마다 크론 시각이 달라 따로 보여준다
+  const syncedSummary = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of res?.catalog ?? []) {
+      const prev = m.get(c.channel);
+      if (c.synced_at && (!prev || c.synced_at > prev)) m.set(c.channel, c.synced_at);
+    }
+    return [...m.entries()].map(([ch, d]) => `${CATALOG_TITLE[ch] || ch} ${d.slice(5, 10)}`).join(" · ");
+  }, [res]);
+
+  // ── 채널 재고 명령(수량 적용, 0 = 품절) — 중계 서버가 2분 주기로 실행 ──
+  const [cmdQty, setCmdQty] = useState<Record<string, string>>({});
+  const [cmdMap, setCmdMap] = useState<Record<string, ChannelCommand>>({});
+  const [showHidden, setShowHidden] = useState(false);
+  const [applying, setApplying] = useState("");
+  const cmdKey = (ch: string, ik: string) => `${ch}|${ik}`;
+
+  async function fetchCommands() {
+    try {
+      const r = await fetch("/api/channel-commands?recent=1", { cache: "no-store" });
+      const j = await r.json();
+      if (!j.ok) return;
+      const m: Record<string, ChannelCommand> = {};
+      for (const c of (j.commands ?? []) as ChannelCommand[]) {
+        const k = cmdKey(c.channel, c.item_key);
+        if (!m[k]) m[k] = c; // 최신순 응답이라 첫 항목이 최신
+      }
+      setCmdMap(m);
+    } catch { /* 조회 실패는 조용히 — 표시만 빠진다 */ }
+  }
+  useEffect(() => { fetchCommands(); }, []);
+  const hasPendingCmd = useMemo(() => Object.values(cmdMap).some((c) => c.status === "대기" || c.status === "실행중"), [cmdMap]);
+  // UTC 저장값 → KST 표시
+  const kstStamp = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
+  useEffect(() => {
+    if (!hasPendingCmd) return;
+    const t = setInterval(fetchCommands, 15_000);
+    return () => clearInterval(t);
+  }, [hasPendingCmd]);
+
+  async function applyQty(c: CatalogItem) {
+    const raw = (cmdQty[c.item_key] ?? "").trim();
+    const qty = Number(raw);
+    if (raw === "" || !Number.isInteger(qty) || qty < 0) {
+      setErr("수량은 0 이상의 정수로 입력하세요 (0 = 품절).");
+      return;
+    }
+    const label = `${CATALOG_TITLE[c.channel] || c.channel} · ${c.listing_name}${c.item_name ? ` / ${c.item_name}` : ""}`;
+    if (!window.confirm(`${label}\n채널 재고를 ${qty}개로 변경합니다${qty === 0 ? " (품절 처리)" : ""}. 진행할까요?`)) return;
+    setApplying(c.item_key); setErr("");
+    try {
+      const r = await fetch("/api/channel-commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: c.channel, item_key: c.item_key, origin_no: c.origin_no,
+          listing_name: c.listing_name, item_name: c.item_name, sku_code: c.sku_code, qty,
+        }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "명령 등록 실패");
+      await fetchCommands();
+    } catch (e) { setErr((e as Error).message); }
+    finally { setApplying(""); }
+  }
 
   // 카탈로그 행에 같은 채널 매출 판매량(7일/30일) 병합 — (채널|상품명|옵션명) 문자열 매칭.
   //  추가상품은 매출에 자기 이름으로 찍히므로 이름 후보 여러 개로 시도, 못 찾으면 null(화면 '-').
@@ -227,7 +298,7 @@ export default function SkuListingsPage() {
           </button>
           <button className="b2b-btn-primary" onClick={exportXlsx}
             disabled={exporting || !res || ((res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0)}
-            title={!res ? "먼저 상품을 검색하세요" : ""}>
+            title={!res ? "먼저 상품을 검색하세요" : "판매안함 상품 포함 전체를 내려받습니다"}>
             {exporting ? "생성 중..." : "엑셀 다운로드"}
           </button>
         </div>
@@ -254,18 +325,34 @@ export default function SkuListingsPage() {
         <div className="b2b-loading">불러오는 중...</div>
       ) : !res ? null : (
         <>
-        {catalogGroups.map((g) => (
-          <section key={g.channel} className="b2b-card" style={{ marginBottom: 16 }}>
+        {(catalogRows.visible.length > 0 || catalogRows.hidden.length > 0) && (
+          <section className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head">
-              <span className="b2b-card-title">{CATALOG_TITLE[g.channel] || g.channel} 등록 카탈로그</span>
+              <span className="b2b-card-title">채널 등록 카탈로그</span>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                {g.rows.length}건{g.syncedAt ? ` · 동기화 ${g.syncedAt.slice(0, 10)}` : ""}
+                {catalogRows.visible.length}건{syncedSummary ? ` · 동기화 ${syncedSummary}` : ""}
               </span>
             </div>
+            <p className="sm-faint" style={{ margin: "0 0 8px", fontSize: 12 }}>
+              수량 적용(0 = 품절)은 중계 서버가 2분 안에 채널에 반영합니다
+            </p>
             <div className="b2b-table-wrap">
-              <table className="b2b-table is-responsive">
+              <table className="b2b-table is-responsive" style={{ tableLayout: "fixed", width: "100%" }}>
+                <colgroup>
+                  <col style={{ width: "8%" }} />
+                  <col style={{ width: "19%" }} />
+                  <col style={{ width: "6%" }} />
+                  <col style={{ width: "15%" }} />
+                  <col style={{ width: "9%" }} />
+                  <col style={{ width: "7%" }} />
+                  <col style={{ width: "6%" }} />
+                  <col style={{ width: "5.5%" }} />
+                  <col style={{ width: "5.5%" }} />
+                  <col style={{ width: "19%" }} />
+                </colgroup>
                 <thead>
                   <tr>
+                    <th>채널</th>
                     <th>등록 상품명(어미상품)</th>
                     <th>구분</th>
                     <th>옵션·추가상품명</th>
@@ -274,19 +361,21 @@ export default function SkuListingsPage() {
                     <th className="num">재고</th>
                     <th className="num">7일</th>
                     <th className="num">30일</th>
-                    <th></th>
+                    <th>수량 적용</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {g.rows.map(({ c, idx }) => {
-                    const rowKey = `cat|${g.channel}|${c.listing_name}|${c.item_kind}|${c.item_name ?? ""}|${idx}`;
+                  {[...catalogRows.visible, ...(showHidden ? catalogRows.hidden : [])].map(({ c, idx }) => {
+                    const rowKey = `cat|${c.channel}|${c.item_key}|${idx}`;
                     const q = catalogQty.get(idx);
+                    const cmd = cmdMap[cmdKey(c.channel, c.item_key)];
                     return (
                       <tr key={rowKey}>
-                        <td data-label="등록 상품명"><strong>{c.listing_name}</strong></td>
+                        <td data-label="채널">{CATALOG_TITLE[c.channel] || c.channel}</td>
+                        <td data-label="등록 상품명" style={{ overflowWrap: "break-word" }}><strong>{c.listing_name}</strong></td>
                         <td data-label="구분">{KIND_KO[c.item_kind] || c.item_kind}</td>
-                        <td data-label="옵션·추가상품명">{c.item_name || "-"}</td>
-                        <td data-label="관리코드">
+                        <td data-label="옵션·추가상품명" style={{ overflowWrap: "break-word" }}>{c.item_name || "-"}</td>
+                        <td data-label="관리코드" style={{ overflowWrap: "break-word" }}>
                           {c.sku_code || "-"}
                           {c.via_bundle && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>묶음</span>}
                         </td>
@@ -294,11 +383,30 @@ export default function SkuListingsPage() {
                         <td className="num" data-label="재고">{c.stock_qty != null ? c.stock_qty.toLocaleString() : "-"}</td>
                         <td className="num" data-label="7일">{q ? q.q7.toLocaleString() : "-"}</td>
                         <td className="num" data-label="30일">{q ? q.q30.toLocaleString() : "-"}</td>
-                        <td className="actions">
-                          <button type="button" className="b2b-link-btn" onClick={() => copyName(c.listing_name, rowKey)}
-                            title="채널 관리자 검색창에 붙여넣기용">
-                            {copied === rowKey ? "복사됨" : "상품명 복사"}
-                          </button>
+                        <td className="actions" data-label="수량 적용">
+                          <span className="sm-row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                            <input className="b2b-input" type="number" min={0} value={cmdQty[c.item_key] ?? ""}
+                              onChange={(e) => setCmdQty((p) => ({ ...p, [c.item_key]: e.target.value }))}
+                              placeholder="수량" aria-label="적용할 수량"
+                              style={{ width: 60, padding: "3px 6px", fontSize: 13 }} />
+                            <button type="button" className="b2b-btn-secondary" disabled={applying === c.item_key}
+                              onClick={() => applyQty(c)} style={{ padding: "3px 8px", fontSize: 12 }}>
+                              적용
+                            </button>
+                            <button type="button" className="b2b-link-btn" onClick={() => copyName(c.listing_name, rowKey)}
+                              title="채널 관리자 검색창에 붙여넣기용" style={{ fontSize: 12 }}>
+                              {copied === rowKey ? "복사됨" : "복사"}
+                            </button>
+                          </span>
+                          {cmd && (
+                            <div className="sm-faint" title={cmd.error || undefined}
+                              style={{ fontSize: 11, marginTop: 2, whiteSpace: "normal", overflowWrap: "break-word", color: cmd.status === "실패" ? "var(--sm-danger)" : undefined }}>
+                              {cmd.status === "대기" ? `${cmd.qty}개 적용 대기중` :
+                               cmd.status === "실행중" ? `${cmd.qty}개 적용 중...` :
+                               cmd.status === "완료" ? `${cmd.qty}개 적용 완료${cmd.executed_at ? ` (${kstStamp(cmd.executed_at)})` : ""}` :
+                               `실패: ${cmd.error || "오류"}`}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -306,8 +414,15 @@ export default function SkuListingsPage() {
                 </tbody>
               </table>
             </div>
+            {catalogRows.hidden.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="b2b-link-btn" onClick={() => setShowHidden((v) => !v)}>
+                  {showHidden ? "판매안함 접기" : `판매안함 ${catalogRows.hidden.length}개 보기`}
+                </button>
+              </div>
+            )}
           </section>
-        ))}
+        )}
         {total === 0 ? (
           <div className="b2b-empty">최근 1년 매출에서 이 SKU 가 팔린 리스팅이 없습니다.</div>
         ) : (

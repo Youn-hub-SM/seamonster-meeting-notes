@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // SKU 리스팅 찾기 — 검색 결과 엑셀 추출.
-//  화면이 이미 받아둔 결과(카탈로그+채널 리스팅)를 그대로 보내면 xlsx 로 만들어 준다
-//  (서버 재조회 없음 — 화면에 보이는 것과 파일 내용이 항상 일치).
+//  화면이 이미 받아둔 결과(카탈로그+채널 리스팅)를 그대로 보내면 xlsx 로 만들어 준다.
+//  서버 재조회 없음. 단 화면의 '판매안함' 숨김 필터와 달리 파일은 전체를 담는다(판매상태 열로 구분).
 
 type CatalogItem = {
   channel?: string;

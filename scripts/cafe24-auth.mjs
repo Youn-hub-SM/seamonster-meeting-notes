@@ -28,7 +28,8 @@ if (!mallId || !clientId || !clientSecret) {
 
 const code = (process.argv[2] || "").trim();
 if (!code) {
-  const url = `https://${mallId}.cafe24api.com/api/v2/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=mall.read_product&state=seamonster`;
+  // 재고 수정(channel-commands)까지 쓰므로 read+write 둘 다 요청 — 앱 권한에도 '상품 수정'이 있어야 한다
+  const url = `https://${mallId}.cafe24api.com/api/v2/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent("mall.read_product,mall.write_product")}&state=seamonster`;
   console.log("아래 URL 을 브라우저에서 열어 [허용] 후, 이동된 주소창의 code= 값을 복사해 다시 실행하세요:");
   console.log(url);
   process.exit(0);

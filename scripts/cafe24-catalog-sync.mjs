@@ -100,12 +100,15 @@ async function main() {
     const variants = Array.isArray(p.variants) ? p.variants : [];
     const hasOptions = variants.length > 1 || (variants.length === 1 && (variants[0].options ?? []).length > 0);
     if (variants.length === 0 || !hasOptions) {
+      // 옵션 없는 상품도 기본 품목(variant)이 있으면 그 코드를 키에 보존 — 재고 수정 API 가 품목코드를 요구한다
+      const v0 = variants[0];
       items.push({
-        item_key: `${originNo}:product:0`, origin_no: originNo, listing_name: listingName,
+        item_key: v0?.variant_code ? `${originNo}:variant:${v0.variant_code}` : `${originNo}:product:0`,
+        origin_no: originNo, listing_name: listingName,
         item_kind: "product", item_name: null,
-        sku_code: String(p.custom_product_code ?? "").trim(),
+        sku_code: String(v0?.custom_variant_code ?? p.custom_product_code ?? "").trim(),
         sale_status: statusOf(p.display, p.selling),
-        stock_qty: null,
+        stock_qty: v0?.quantity != null ? Number(v0.quantity) : null,
       });
       continue;
     }

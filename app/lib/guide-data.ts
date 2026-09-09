@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-09-08";
+export const GUIDE_UPDATED = "2026-09-09";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1766,7 +1766,9 @@ export const GUIDE: GuideCategory[] = [
             "what": "SKU 하나를 고르면 그 SKU가 팔리고 있는 채널별 등록 상품(리스팅)과 최근 판매량을 보여준다",
             "steps": [
               "상품 칸에서 이름이나 SKU로 검색해 상품을 고른다",
-              "채널별 등록 카탈로그 카드(네이버·쿠팡·공식몰)에서 이 SKU가 들어간 등록 상품(어미상품·옵션·추가상품)과 판매상태·재고를 확인한다",
+              "채널 등록 카탈로그 표(네이버·쿠팡·공식몰)에서 이 SKU가 들어간 등록 상품(어미상품·옵션·추가상품)과 판매상태·재고를 확인한다",
+              "채널 재고를 바꾸려면 행의 수량 칸에 숫자를 넣고 [적용]을 누른다 — 0이면 품절 처리, 원복 시 수량을 넣는다. 2분 안에 채널에 반영되고 행 아래에 처리 상태가 표시된다",
+              "판매안함·진열안함 상품은 기본으로 숨겨져 있다 — 표 아래 [판매안함 N개 보기]로 펼친다",
               "채널별 카드에서 리스팅(상품명·옵션·관리코드)과 7일/30일 판매량을 확인한다",
               "[상품명 복사]를 눌러 채널 관리자 검색창에 붙여넣고 품절·수량 제한을 처리한다",
               "목록이 필요하면 [엑셀 다운로드]를 누른다 — 카탈로그·채널 리스팅이 시트로 나뉘어 담긴다",

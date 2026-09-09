@@ -143,7 +143,8 @@ export async function GET(req: NextRequest) {
     // 6) 채널 등록 카탈로그(107, 네이버 커머스API 동기화분) — 판매 이력 없는 리스팅까지 사실 기반.
     //  미적용·미동기화 환경이면 조용히 빈 배열(매출 기반 리스팅은 그대로 동작).
     type CatalogRow = {
-      channel: string; listing_name: string; item_kind: string; item_name: string | null;
+      channel: string; item_key: string; origin_no: string;
+      listing_name: string; item_kind: string; item_name: string | null;
       sku_code: string; sale_status: string | null; stock_qty: number | null; synced_at: string;
     };
     let catalog: (CatalogRow & { via_bundle: boolean })[] = [];
@@ -158,7 +159,7 @@ export async function GET(req: NextRequest) {
     )];
     const catRes = await sb
       .from("channel_catalog")
-      .select("channel, listing_name, item_kind, item_name, sku_code, sale_status, stock_qty, synced_at")
+      .select("channel, item_key, origin_no, listing_name, item_kind, item_name, sku_code, sale_status, stock_qty, synced_at")
       .ilikeAnyOf("sku_code", skuVariants)
       .order("listing_name");
     if (!catRes.error) {

@@ -108,9 +108,11 @@ async function main() {
       const its = Array.isArray(d.items) ? d.items : [];
       for (let k = 0; k < its.length; k++) {
         const it = its[k];
-        const itemId = it.vendorItemId ?? it.sellerProductItemId ?? it.itemId ?? k;
+        // vendorItemId 는 재고 수정 API 의 필수 식별자 — 있으면 ':vi:' 로 마킹해 실행기가 구분한다
+        const vi = it.vendorItemId;
+        const itemId = vi ?? it.sellerProductItemId ?? it.itemId ?? k;
         items.push({
-          item_key: `${originNo}:item:${itemId}`,
+          item_key: vi != null ? `${originNo}:vi:${vi}` : `${originNo}:item:${itemId}`,
           origin_no: originNo,
           listing_name: listingName,
           item_kind: its.length > 1 ? "option" : "product",
