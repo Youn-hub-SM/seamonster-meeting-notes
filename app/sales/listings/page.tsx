@@ -297,7 +297,7 @@ export default function SkuListingsPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">SKU 리스팅 찾기</h1>
+          <h1 className="b2b-page-title">SKU로 재고 조정</h1>
           <p className="b2b-page-subtitle">매출 기준(최근 1년) + 네이버·쿠팡·공식몰은 API 등록 카탈로그로 전체 확인</p>
         </div>
         <div className="b2b-page-actions">
