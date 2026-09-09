@@ -101,12 +101,23 @@ export async function POST(req: NextRequest) {
     const name = await loginName(req);
     if (!name) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
     const body = (await req.json().catch(() => ({}))) as {
-      channel?: string; item_key?: string; origin_no?: string;
+      channel?: string; command?: string; item_key?: string; origin_no?: string;
       listing_name?: string; item_name?: string | null; sku_code?: string; qty?: number;
     };
     if (!body.channel || !CHANNELS.has(body.channel)) {
       return NextResponse.json({ ok: false, error: "channel 이 올바르지 않습니다." }, { status: 400 });
     }
+
+    // 카탈로그 동기화 명령 — 화면 버튼이 채널별로 등록, 실행기가 서버의 동기화 스크립트를 돌린다
+    if (body.command === "sync_catalog") {
+      body.item_key = "sync";
+      body.origin_no = "-";
+      body.listing_name = "카탈로그 동기화";
+      body.qty = 0;
+    } else if (body.command && body.command !== "set_stock") {
+      return NextResponse.json({ ok: false, error: "지원하지 않는 command 입니다." }, { status: 400 });
+    }
+
     if (!body.item_key || !body.origin_no || !body.listing_name) {
       return NextResponse.json({ ok: false, error: "item_key / origin_no / listing_name 이 필요합니다." }, { status: 400 });
     }
@@ -138,7 +149,7 @@ export async function POST(req: NextRequest) {
         listing_name: body.listing_name,
         item_name: body.item_name ?? null,
         sku_code: (body.sku_code || "").trim(),
-        command: "set_stock",
+        command: body.command === "sync_catalog" ? "sync_catalog" : "set_stock",
         qty,
         requested_by: name,
       })

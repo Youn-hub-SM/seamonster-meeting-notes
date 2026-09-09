@@ -132,20 +132,28 @@ export default function SkuListingsPage() {
     } catch (e) { setErr((e as Error).message); }
     finally { setExporting(false); }
   }
-  // 네이버 카탈로그 동기화 — 상품이 많으면 시간 예산으로 나눠 처리되므로 remaining 이 0이 될 때까지 반복 안내
-  async function syncNaver() {
+  // 카탈로그 동기화 — 채널 API 가 IP 제한이라 서버가 직접 못 부르고, 명령 큐에 넣으면
+  //  중계 서버가 2분 안에 가져가 채널별 동기화를 실행한다(채널당 1~2분 소요).
+  async function syncCatalogs() {
     setSyncing(true); setSyncMsg("");
     try {
-      const r = await fetch("/api/naver/catalog/sync", { method: "POST" });
-      const j = await r.json();
-      if (!j.ok) { setSyncMsg(`동기화 실패: ${j.error || "알 수 없는 오류"}`); return; }
-      setSyncMsg(
-        `동기화 완료 — 원상품 ${j.products}개 중 ${j.updated}개 갱신` +
-        (j.remaining > 0 ? `, 남은 ${j.remaining}개는 버튼을 다시 눌러 이어서 처리` : "") +
-        (j.first_error ? ` (일부 실패: ${j.first_error})` : "")
-      );
-      if (pid) load(pid); // 화면 갱신
-    } catch (e) { setSyncMsg(`동기화 실패: ${(e as Error).message}`); }
+      const failed: string[] = [];
+      for (const ch of ["스마트스토어", "쿠팡", "카페24"]) {
+        const r = await fetch("/api/channel-commands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel: ch, command: "sync_catalog" }),
+        });
+        const j = await r.json();
+        if (!j.ok) failed.push(`${CATALOG_TITLE[ch] || ch}: ${j.error || "실패"}`);
+      }
+      if (failed.length > 0) {
+        setSyncMsg(`동기화 요청 실패 — ${failed.join(" / ")}`);
+      } else {
+        setSyncMsg("동기화 요청 완료 — 몇 분 뒤 검색하면 최신 카탈로그와 동기화 날짜가 반영됩니다.");
+        fetchCommands();
+      }
+    } catch (e) { setSyncMsg(`동기화 요청 실패: ${(e as Error).message}`); }
     finally { setSyncing(false); }
   }
 
@@ -293,8 +301,8 @@ export default function SkuListingsPage() {
           <p className="b2b-page-subtitle">매출 기준(최근 1년) + 네이버·쿠팡·공식몰은 API 등록 카탈로그로 전체 확인</p>
         </div>
         <div className="b2b-page-actions">
-          <button className="b2b-btn-secondary" onClick={syncNaver} disabled={syncing}>
-            {syncing ? "동기화 중..." : "네이버 카탈로그 동기화"}
+          <button className="b2b-btn-secondary" onClick={syncCatalogs} disabled={syncing}>
+            {syncing ? "요청 중..." : "카탈로그 동기화"}
           </button>
           <button className="b2b-btn-primary" onClick={exportXlsx}
             disabled={exporting || !res || ((res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0)}

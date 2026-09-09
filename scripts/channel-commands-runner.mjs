@@ -9,7 +9,11 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import bcrypt from "bcryptjs";
+
+const execFileAsync = promisify(execFile);
 
 const IS_PKG = !!process.pkg;
 function rootDir() {
@@ -42,7 +46,8 @@ const timeout = () => AbortSignal.timeout(20_000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const STARTED = Date.now();
-const TIME_BUDGET_MS = 100_000; // 크론 2분 주기와 겹치지 않게 — 남은 건 '실행중' 잔류 후 10분 뒤 재선점
+// 동기화 명령(최대 3분)이 섞일 수 있어 예산을 넉넉히 — 크론 틱이 겹쳐도 claim 선점이 이중 실행을 막는다
+const TIME_BUDGET_MS = 200_000;
 
 async function main() {
   // 1) 대기 명령을 원자적으로 선점(claim → '실행중') — 없으면 즉시 종료.
@@ -128,8 +133,30 @@ async function main() {
     };
   }
 
+  // 카탈로그 동기화 — 서버에 배치된 채널별 동기화 스크립트를 그대로 실행(화면 버튼용)
+  const SYNC_SCRIPT = {
+    "스마트스토어": "naver-sync.cjs",
+    "쿠팡": "coupang-catalog-sync.mjs",
+    "카페24": "cafe24-catalog-sync.mjs",
+  };
+  async function runCatalogSync(channel) {
+    const script = SYNC_SCRIPT[channel];
+    if (!script) return `동기화 스크립트 없음: ${channel}`;
+    const file = path.join(ROOT, "bin", script);
+    if (!fs.existsSync(file)) return `서버에 스크립트가 없습니다: bin/${script}`;
+    try {
+      const { stdout } = await execFileAsync("/usr/bin/node", [file, SERVER], { timeout: 180_000, cwd: ROOT });
+      const tail = String(stdout || "").trim().split("\n").pop() || "";
+      return /완료/.test(tail) ? null : `동기화가 정상 종료 메시지 없이 끝남: ${tail.slice(0, 200)}`;
+    } catch (e) {
+      const out = `${e.stdout || ""}\n${e.stderr || ""}`.trim().split("\n").filter(Boolean).pop() || e.message;
+      return `동기화 실패: ${String(out).slice(0, 300)}`;
+    }
+  }
+
   // 채널별 실행 — 성공 시 null, 실패 시 에러 메시지 반환
   async function execute(cmd) {
+    if (cmd.command === "sync_catalog") return runCatalogSync(cmd.channel);
     const seg = String(cmd.item_key).split(":"); // origin:kind:id
     const kind = seg[1] || "";
     const itemId = seg.slice(2).join(":");
