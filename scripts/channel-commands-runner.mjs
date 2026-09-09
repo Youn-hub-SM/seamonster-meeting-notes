@@ -163,16 +163,49 @@ async function runOnce() {
     const itemId = seg.slice(2).join(":");
 
     if (cmd.channel === "스마트스토어") {
-      if (kind !== "option") {
-        return "네이버는 옵션 상품만 수량 수정을 지원합니다 (단일·추가상품은 스마트스토어센터에서 직접 수정)";
+      // 추가상품은 재고만 바꾸는 API 가 없다(원상품 '전체 수정'뿐 — 누락 필드가 삭제되는 위험한 방식이라 미지원)
+      if (kind === "supplement") {
+        return "네이버 추가상품은 API 재고 수정을 지원하지 않습니다 (스마트스토어센터 > 상품 수정에서 직접 변경)";
       }
       const token = await getNaverToken();
+      if (kind === "product") {
+        // 옵션 없는 단일 상품 — 멀티 상품 변경(부분 수정) API 로 재고(STOCK) 영역만 변경.
+        //  실측 확정: HTTP 200 + {"data":true}, 다른 필드는 보존. 0 이면 네이버가 품절 처리.
+        const res = await fetch(`${NAVER_BASE}/v1/products/origin-products/multi-update`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          signal: timeout(),
+          body: JSON.stringify({ multiProductUpdateRequestVos: [{ originProductNo: Number(cmd.origin_no), multiUpdateTypes: ["STOCK"], stockQuantity: cmd.qty }] }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (res.ok && j.data === true) return null;
+        const detail = j.message || (j.data != null ? JSON.stringify(j.data).slice(0, 200) : "");
+        return `네이버 응답 HTTP ${res.status} ${j.code || ""} ${detail}`.trim();
+      }
+      if (kind !== "option") return `네이버에서 지원하지 않는 항목 유형입니다: ${kind || "(없음)"}`;
+      // 스펙 문언상 body 에 없는 필드(price·usable)는 0/기본값으로 대입될 수 있어,
+      //  현재 옵션가·사용여부를 조회해 그대로 되돌려 보낸다(재고만 변경). 조회 실패 시 기존 방식 폴백.
+      const combo = { id: Number(itemId), stockQuantity: cmd.qty };
+      try {
+        const dRes = await fetch(`${NAVER_BASE}/v2/products/origin-products/${cmd.origin_no}`, {
+          headers: { Authorization: `Bearer ${token}` }, signal: timeout(),
+        });
+        if (dRes.ok) {
+          const dj = await dRes.json().catch(() => ({}));
+          const cur = (dj.originProduct?.detailAttribute?.optionInfo?.optionCombinations ?? [])
+            .find((c) => String(c.id) === String(itemId));
+          if (cur) {
+            if (cur.price != null) combo.price = Number(cur.price);
+            if (cur.usable != null) combo.usable = !!cur.usable;
+          }
+        }
+      } catch { /* 조회 실패 — 재고만 담은 기존 body 로 진행 */ }
       // optionInfo 는 배열이 아니라 객체(내부에 optionCombinations 배열) — 실측 400 역직렬화 오류로 확정
       const res = await fetch(`${NAVER_BASE}/v1/products/origin-products/${cmd.origin_no}/option-stock`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         signal: timeout(),
-        body: JSON.stringify({ optionInfo: { optionCombinations: [{ id: Number(itemId), stockQuantity: cmd.qty }] } }),
+        body: JSON.stringify({ optionInfo: { optionCombinations: [combo] } }),
       });
       if (res.ok) return null;
       const j = await res.json().catch(() => ({}));

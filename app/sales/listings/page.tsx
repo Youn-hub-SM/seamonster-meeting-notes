@@ -387,6 +387,8 @@ export default function SkuListingsPage() {
                     const rowKey = `cat|${c.channel}|${c.item_key}|${idx}`;
                     const q = catalogQty.get(idx);
                     const cmd = cmdMap[cmdKey(c.channel, c.item_key)];
+                    // 네이버 추가상품은 재고만 바꾸는 API 가 없다(전체 수정뿐 — 위험) — 입력 대신 안내
+                    const noApply = c.channel === "스마트스토어" && c.item_kind === "supplement";
                     return (
                       <tr key={rowKey}>
                         <td data-label="채널">{CATALOG_TITLE[c.channel] || c.channel}</td>
@@ -403,14 +405,23 @@ export default function SkuListingsPage() {
                         <td className="num" data-label="30일">{q ? q.q30.toLocaleString() : "-"}</td>
                         <td className="actions" data-label="수량 적용">
                           <span className="sm-row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                            <input className="b2b-input" type="number" min={0} value={cmdQty[c.item_key] ?? ""}
-                              onChange={(e) => setCmdQty((p) => ({ ...p, [c.item_key]: e.target.value }))}
-                              placeholder="수량" aria-label="적용할 수량"
-                              style={{ width: 60, padding: "3px 6px", fontSize: 13 }} />
-                            <button type="button" className="b2b-btn-secondary" disabled={applying === c.item_key}
-                              onClick={() => applyQty(c)} style={{ padding: "3px 8px", fontSize: 12 }}>
-                              적용
-                            </button>
+                            {noApply ? (
+                              <span className="sm-faint" style={{ fontSize: 12 }}
+                                title="네이버 API 가 추가상품 재고의 단독 수정을 지원하지 않습니다">
+                                센터에서 수정
+                              </span>
+                            ) : (
+                              <>
+                                <input className="b2b-input" type="number" min={0} value={cmdQty[c.item_key] ?? ""}
+                                  onChange={(e) => setCmdQty((p) => ({ ...p, [c.item_key]: e.target.value }))}
+                                  placeholder="수량" aria-label="적용할 수량"
+                                  style={{ width: 60, padding: "3px 6px", fontSize: 13 }} />
+                                <button type="button" className="b2b-btn-secondary" disabled={applying === c.item_key}
+                                  onClick={() => applyQty(c)} style={{ padding: "3px 8px", fontSize: 12 }}>
+                                  적용
+                                </button>
+                              </>
+                            )}
                             <button type="button" className="b2b-link-btn" onClick={() => copyName(c.listing_name, rowKey)}
                               title="채널 관리자 검색창에 붙여넣기용" style={{ fontSize: 12 }}>
                               {copied === rowKey ? "복사됨" : "복사"}
