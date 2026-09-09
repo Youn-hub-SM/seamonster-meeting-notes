@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-09-09",
+    tag: "개선",
+    tool: "매출",
+    title: "SKU 리스팅 찾기: 쿠팡·공식몰(카페24) 카탈로그 확장",
+    desc: "네이버에 이어 쿠팡·공식몰 등록 상품도 API로 동기화해 채널별 카탈로그 카드로 보입니다. 판매 이력이 없는 리스팅과 옵션별 관리코드·판매상태까지 세 채널 모두 한 화면에서 확인됩니다.",
+    href: "/sales/listings",
+  },
+  {
     date: "2026-09-08",
     tag: "개선",
     tool: "매출",

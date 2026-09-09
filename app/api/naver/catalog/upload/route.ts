@@ -5,14 +5,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const CHANNEL = "스마트스토어";
+// 채널 화이트리스트 — 매출원장의 판매처 표기와 반드시 일치시킨다(화면 병합·중복 제거 기준).
+const CHANNELS = new Set(["스마트스토어", "쿠팡", "카페24"]);
+const DEFAULT_CHANNEL = "스마트스토어"; // channel 없이 오는 기존 네이버 스크립트 하위호환
 
-// 로컬 동기화 스크립트(scripts/naver-catalog-local.mjs)의 업로드 수신.
-//  커머스API 가 등록 IP 만 허용해 Vercel 에서 직접 호출이 막히므로(GW.IP_NOT_ALLOWED),
-//  등록 IP 인 로컬 PC 가 네이버에서 읽어 이 라우트로 밀어넣는다.
-//  인증: Bearer <NAVER_COMMERCE_CLIENT_SECRET>(로컬과 서버가 같은 값을 가진 공유 시크릿) 또는 크론 키.
-//  body: { items: CatalogItem[], live_origins?: string[] } — 마지막 청크에만 live_origins 가 와서
-//  그 밖의 origin(내려간 상품)을 정리한다. items 는 origin 단위 delete+insert 로 멱등.
+// 카탈로그 동기화 스크립트(scripts/*-catalog-*.mjs, 클라우드웨이즈 서버 크론)의 업로드 수신.
+//  네이버·쿠팡은 API 가 등록 IP 만 허용해 Vercel 에서 직접 호출이 막히므로,
+//  등록 IP 인 중계 서버가 채널 API 를 읽어 이 라우트로 밀어넣는다(카페24 는 IP 무관이지만 실행처 통일).
+//  인증: Bearer <NAVER_COMMERCE_CLIENT_SECRET>(중계 서버와 공유하는 업로드 시크릿 — 채널 무관 공용) 또는 크론 키.
+//  body: { channel?, items: CatalogItem[], live_origins?: string[] } — 마지막 청크에만 live_origins 가 와서
+//  그 채널에서 내려간 origin 을 정리한다. items 는 origin 단위 delete+insert 로 멱등.
 
 type Item = {
   item_key: string; origin_no: string; listing_name: string;
@@ -30,7 +32,11 @@ export async function POST(req: NextRequest) {
   try {
     if (!authorized(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
 
-    const body = (await req.json().catch(() => ({}))) as { items?: Item[]; live_origins?: string[] };
+    const body = (await req.json().catch(() => ({}))) as { channel?: string; items?: Item[]; live_origins?: string[] };
+    const CHANNEL = body.channel || DEFAULT_CHANNEL;
+    if (!CHANNELS.has(CHANNEL)) {
+      return NextResponse.json({ ok: false, error: `허용되지 않은 channel: ${CHANNEL}` }, { status: 400 });
+    }
     const items = Array.isArray(body.items) ? body.items : [];
     const valid = items.filter(
       (it) => it && typeof it.item_key === "string" && it.item_key && typeof it.origin_no === "string" && it.origin_no && typeof it.listing_name === "string"

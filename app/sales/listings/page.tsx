@@ -24,6 +24,7 @@ type CatalogItem = {
   sku_code: string;
   sale_status: string | null;
   stock_qty: number | null;
+  synced_at?: string;
   via_bundle: boolean;
 };
 type Result = {
@@ -42,6 +43,8 @@ const SALE_STATUS_KO: Record<string, string> = {
   UNADMISSION: "승인대기", REJECTION: "승인거부", CLOSE: "판매종료", PROHIBITION: "판매금지", UNUSABLE: "사용안함",
 };
 const KIND_KO: Record<string, string> = { product: "단일", option: "옵션", supplement: "추가상품" };
+// 카탈로그 카드 제목 — 채널 값(매출 판매처 표기)을 사용자에게 익숙한 이름으로
+const CATALOG_TITLE: Record<string, string> = { "스마트스토어": "네이버", "쿠팡": "쿠팡", "카페24": "공식몰(카페24)" };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 // 최근 90일 판매가 없으면 '오래된 리스팅'으로 접는다
@@ -137,16 +140,17 @@ export default function SkuListingsPage() {
     finally { setSyncing(false); }
   }
 
+  // 카탈로그가 있는 채널 집합 — 그 채널은 매출 카드에서 뺀다(카탈로그 카드가 전체·정확이라 중복 — 대표 결정)
+  const catalogChannels = useMemo(() => new Set((res?.catalog ?? []).map((c) => c.channel)), [res]);
+
   // 채널별 그룹 + 채널 내 30일 판매량 내림차순, 채널은 30일 합 내림차순.
-  //  스마트스토어는 등록 카탈로그 카드(API, 전체·정확)가 있으면 매출 카드에서 뺀다(중복 — 대표 결정).
   const groups = useMemo(() => {
     const rows = res?.listings ?? [];
-    const hasCatalog = (res?.catalog?.length ?? 0) > 0;
     const cut = staleCut();
     const byCh = new Map<string, { fresh: Listing[]; stale: Listing[]; qty30: number }>();
     for (const l of rows) {
       const ch = l.channel || "(판매처 미상)";
-      if (hasCatalog && ch === "스마트스토어") continue;
+      if (catalogChannels.has(ch)) continue;
       const g = byCh.get(ch) ?? { fresh: [], stale: [], qty30: 0 };
       const isStale = l.qty_30 === 0 && (!l.last_sale || l.last_sale < cut);
       (isStale ? g.stale : g.fresh).push(l);
@@ -157,17 +161,37 @@ export default function SkuListingsPage() {
     return [...byCh.entries()]
       .map(([ch, g]) => ({ channel: ch, fresh: g.fresh.sort(cmp), stale: g.stale.sort(cmp), qty30: g.qty30 }))
       .sort((a, b) => b.qty30 - a.qty30);
-  }, [res]);
+  }, [res, catalogChannels]);
 
   const total = res?.listings?.length ?? 0;
 
-  // 카탈로그 행에 스마트스토어 매출 판매량(7일/30일) 병합 — (상품명|옵션명) 문자열 매칭.
+  // 카탈로그를 채널별 카드로 — 원본 인덱스(idx)를 보존해 catalogQty 매칭에 사용.
+  //  카드 순서는 고정(네이버-쿠팡-공식몰), 동기화 시각은 채널별 최신값(채널마다 크론이 달라 어긋날 수 있음).
+  const catalogGroups = useMemo(() => {
+    const ORDER = ["스마트스토어", "쿠팡", "카페24"];
+    const orderOf = (ch: string) => { const i = ORDER.indexOf(ch); return i < 0 ? 99 : i; };
+    const byCh = new Map<string, { c: CatalogItem; idx: number }[]>();
+    (res?.catalog ?? []).forEach((c, idx) => {
+      const arr = byCh.get(c.channel) ?? [];
+      arr.push({ c, idx });
+      byCh.set(c.channel, arr);
+    });
+    return [...byCh.entries()]
+      .map(([channel, rows]) => ({
+        channel,
+        rows,
+        syncedAt: rows.reduce<string | null>((m, r) => (r.c.synced_at && (!m || r.c.synced_at > m) ? r.c.synced_at : m), null),
+      }))
+      .sort((a, b) => orderOf(a.channel) - orderOf(b.channel));
+  }, [res]);
+
+  // 카탈로그 행에 같은 채널 매출 판매량(7일/30일) 병합 — (채널|상품명|옵션명) 문자열 매칭.
   //  추가상품은 매출에 자기 이름으로 찍히므로 이름 후보 여러 개로 시도, 못 찾으면 null(화면 '-').
   const catalogQty = useMemo(() => {
     const bySale = new Map<string, { q7: number; q30: number }>();
     for (const l of res?.listings ?? []) {
-      if (l.channel !== "스마트스토어") continue;
-      const key = `${l.product_name}|${l.option_name}`;
+      if (!catalogChannels.has(l.channel)) continue;
+      const key = `${l.channel}|${l.product_name}|${l.option_name}`;
       const cur = bySale.get(key) ?? { q7: 0, q30: 0 };
       cur.q7 += l.qty_7; cur.q30 += l.qty_30;
       bySale.set(key, cur);
@@ -177,10 +201,10 @@ export default function SkuListingsPage() {
       const nm = c.item_name ?? "";
       const suppName = nm.includes(" - ") ? nm.slice(nm.indexOf(" - ") + 3) : nm; // 'group - name' 의 name
       const candidates = [
-        `${c.listing_name}|${nm}`,          // 옵션: 상품명|옵션명
-        `${c.listing_name}|`,               // 단일 상품
-        `${nm}|`,                            // 추가상품이 자기 이름으로 찍힌 경우
-        `${suppName}|`,
+        `${c.channel}|${c.listing_name}|${nm}`,   // 옵션: 상품명|옵션명
+        `${c.channel}|${c.listing_name}|`,        // 단일 상품
+        `${c.channel}|${nm}|`,                     // 추가상품이 자기 이름으로 찍힌 경우
+        `${c.channel}|${suppName}|`,
       ];
       for (const k of candidates) {
         const hit = bySale.get(k);
@@ -188,14 +212,14 @@ export default function SkuListingsPage() {
       }
     });
     return out;
-  }, [res]);
+  }, [res, catalogChannels]);
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">SKU 리스팅 찾기</h1>
-          <p className="b2b-page-subtitle">매출 기준(최근 1년) + 네이버는 API 등록 카탈로그로 전체 확인</p>
+          <p className="b2b-page-subtitle">매출 기준(최근 1년) + 네이버·쿠팡·공식몰은 API 등록 카탈로그로 전체 확인</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={syncNaver} disabled={syncing}>
@@ -230,12 +254,12 @@ export default function SkuListingsPage() {
         <div className="b2b-loading">불러오는 중...</div>
       ) : !res ? null : (
         <>
-        {(res.catalog?.length ?? 0) > 0 && (
-          <section className="b2b-card" style={{ marginBottom: 16 }}>
+        {catalogGroups.map((g) => (
+          <section key={g.channel} className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head">
-              <span className="b2b-card-title">네이버 등록 카탈로그</span>
+              <span className="b2b-card-title">{CATALOG_TITLE[g.channel] || g.channel} 등록 카탈로그</span>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                {res.catalog!.length}건{res.catalog_synced_at ? ` · 동기화 ${res.catalog_synced_at.slice(0, 10)}` : ""}
+                {g.rows.length}건{g.syncedAt ? ` · 동기화 ${g.syncedAt.slice(0, 10)}` : ""}
               </span>
             </div>
             <div className="b2b-table-wrap">
@@ -254,9 +278,9 @@ export default function SkuListingsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {res.catalog!.map((c, i) => {
-                    const rowKey = `cat|${c.listing_name}|${c.item_kind}|${c.item_name ?? ""}|${i}`;
-                    const q = catalogQty.get(i);
+                  {g.rows.map(({ c, idx }) => {
+                    const rowKey = `cat|${g.channel}|${c.listing_name}|${c.item_kind}|${c.item_name ?? ""}|${idx}`;
+                    const q = catalogQty.get(idx);
                     return (
                       <tr key={rowKey}>
                         <td data-label="등록 상품명"><strong>{c.listing_name}</strong></td>
@@ -283,7 +307,7 @@ export default function SkuListingsPage() {
               </table>
             </div>
           </section>
-        )}
+        ))}
         {total === 0 ? (
           <div className="b2b-empty">최근 1년 매출에서 이 SKU 가 팔린 리스팅이 없습니다.</div>
         ) : (

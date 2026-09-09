@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 //  (서버 재조회 없음 — 화면에 보이는 것과 파일 내용이 항상 일치).
 
 type CatalogItem = {
+  channel?: string;
   listing_name: string; item_kind: string; item_name: string | null;
   sku_code: string; sale_status: string | null; stock_qty: number | null; via_bundle?: boolean;
 };
@@ -40,11 +41,24 @@ export async function POST(req: NextRequest) {
 
     const wb = new ExcelJS.Workbook();
 
-    if (catalog.length > 0) {
-      const ws = wb.addWorksheet("네이버 등록 카탈로그");
+    // 채널별 시트 분리 — 화면의 채널 카드와 1:1 (채널 순서 고정)
+    const CATALOG_TITLE: Record<string, string> = { "스마트스토어": "네이버", "쿠팡": "쿠팡", "카페24": "공식몰(카페24)" };
+    const CHANNEL_ORDER = ["스마트스토어", "쿠팡", "카페24"];
+    const byChannel = new Map<string, CatalogItem[]>();
+    for (const c of catalog) {
+      const ch = c.channel || "스마트스토어";
+      const arr = byChannel.get(ch) ?? [];
+      arr.push(c);
+      byChannel.set(ch, arr);
+    }
+    const orderOf = (ch: string) => { const i = CHANNEL_ORDER.indexOf(ch); return i < 0 ? 99 : i; };
+    const channels = [...byChannel.keys()].sort((a, b) => orderOf(a) - orderOf(b));
+    for (const ch of channels) {
+      const rows = byChannel.get(ch)!;
+      const ws = wb.addWorksheet(`${CATALOG_TITLE[ch] || ch} 등록 카탈로그`.slice(0, 31));
       ws.addRow(["등록 상품명(어미상품)", "구분", "옵션·추가상품명", "관리코드", "묶음", "판매상태", "재고"]);
       ws.getRow(1).font = { bold: true };
-      for (const c of catalog) {
+      for (const c of rows) {
         ws.addRow([
           c.listing_name,
           KIND_KO[c.item_kind] || c.item_kind,
