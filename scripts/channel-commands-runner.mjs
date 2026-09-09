@@ -25,7 +25,9 @@ function rootDir() {
   return process.cwd();
 }
 const ROOT = rootDir();
-const SERVER = (process.argv[2] || "https://meeting-notes-beryl.vercel.app").replace(/\/+$/, "");
+const args = process.argv.slice(2);
+const DAEMON = args.includes("--daemon"); // 상주 모드 — 10초 간격 폴링(체감 즉시 반영)
+const SERVER = (args.find((a) => !a.startsWith("--")) || "https://meeting-notes-beryl.vercel.app").replace(/\/+$/, "");
 const NAVER_BASE = "https://api.commerce.naver.com/external";
 const COUPANG_HOST = "https://api-gateway.coupang.com";
 
@@ -45,11 +47,10 @@ if (!uploadSecret) {
 const timeout = () => AbortSignal.timeout(20_000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const STARTED = Date.now();
-// 동기화 명령(최대 3분)이 섞일 수 있어 예산을 넉넉히 — 크론 틱이 겹쳐도 claim 선점이 이중 실행을 막는다
-const TIME_BUDGET_MS = 200_000;
-
-async function main() {
+async function runOnce() {
+  const STARTED = Date.now();
+  // 동기화 명령(최대 3분)이 섞일 수 있어 예산을 넉넉히 — 겹쳐 떠도 claim 선점이 이중 실행을 막는다
+  const TIME_BUDGET_MS = 200_000;
   // 1) 대기 명령을 원자적으로 선점(claim → '실행중') — 없으면 즉시 종료.
   //  선점 이후의 수량 변경은 새 명령으로만 생기므로, 이 스냅샷 값이 그대로 실행돼도 안전하다.
   const listRes = await fetch(`${SERVER}/api/channel-commands?mode=claim`, {
@@ -59,8 +60,8 @@ async function main() {
   });
   const listJson = await listRes.json().catch(() => ({}));
   if (!listRes.ok || !listJson.ok) {
-    console.error(`[중단] 명령 선점 실패 (HTTP ${listRes.status}) ${listJson.error || ""}`);
-    process.exit(1);
+    // 원샷 모드는 main().catch 에서 exit 1, 데몬 모드는 루프가 이어받아 다음 회차에 재시도
+    throw new Error(`명령 선점 실패 (HTTP ${listRes.status}) ${listJson.error || ""}`.trim());
   }
   const commands = listJson.commands ?? [];
   if (commands.length === 0) return; // 조용히 종료 — 크론 로그를 더럽히지 않는다
@@ -231,6 +232,21 @@ async function main() {
     }).catch(() => {});
     console.log(`#${cmd.id} ${cmd.channel} ${cmd.item_key} → ${cmd.qty}개: ${error ? `실패 (${error})` : "완료"}`);
     await sleep(300);
+  }
+}
+
+async function main() {
+  if (!DAEMON) return runOnce();
+  // 상주 모드 — 10초 폴링. 회차 단위로 실행(토큰 캐시도 회차 지역이라 만료 걱정 없음).
+  //  오류가 나도 데몬은 계속 돈다(개별 명령 실패는 report 로 이미 기록됨).
+  console.log(`데몬 시작 (10초 폴링, ${new Date().toISOString()})`);
+  for (;;) {
+    try {
+      await runOnce();
+    } catch (e) {
+      console.error(`[데몬] 회차 오류: ${e?.message || e}`);
+    }
+    await sleep(10_000);
   }
 }
 
