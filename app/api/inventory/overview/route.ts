@@ -57,12 +57,12 @@ export async function GET(req: NextRequest) {
     // 기간 원장(입고/출고). channel(036) 컬럼 없으면 전체로 폴백.
     //  ※ 단발 .limit(20000)은 서버 Max Rows(기본 1000)가 우선해 조용히 잘린다 — 30일 총입고/총출고가
     //    실제보다 적게 나오던 원인(2026-09-03 대표 보고). range 페이징으로 전량 읽는다(안정 정렬 필수).
-    type TxnRow = { product_id: string; type: string; qty: number; status?: string | null };
+    type TxnRow = { product_id: string; type: string; qty: number; status?: string | null; partner?: string | null };
     const fetchTxns = async (withChannel: boolean): Promise<TxnRow[]> => {
       const out: TxnRow[] = [];
       for (let i = 0; i < 100000; i += 1000) {
         let q = sb.from("inventory_txns")
-          .select(`product_id, type, qty, status${withChannel ? ", channel" : ""}`)
+          .select(`product_id, type, qty, status, partner${withChannel ? ", channel" : ""}`)
           .in("type", ["입고", "출고"])
           .gte("txn_date", from).lte("txn_date", to)
           .order("id", { ascending: true })
@@ -90,7 +90,12 @@ export async function GET(req: NextRequest) {
       if (t.status != null && t.status !== "완료") continue; // 대기 제외
       const q = Math.abs(Number(t.qty) || 0);
       if (t.type === "입고") inq.set(t.product_id, (inq.get(t.product_id) || 0) + q);
-      else if (t.type === "출고") outq.set(t.product_id, (outq.get(t.product_id) || 0) + q);
+      else if (t.type === "출고") {
+        // 채널이동(소매↔도매 내부 이동)은 판매가 아니다 — 총출고·일평균 소진·자동 안전재고에서 제외
+        //  (판매속도 lib getLedgerVelocity 와 같은 규칙. 총입고의 이동분은 그대로 둔다 — 대표 지시는 출고.)
+        if (t.partner === "채널이동") continue;
+        outq.set(t.product_id, (outq.get(t.product_id) || 0) + q);
+      }
     }
 
     const rows: OverviewRow[] = (pr.data ?? []).map((p) => {

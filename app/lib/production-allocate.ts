@@ -216,7 +216,7 @@ export async function allocateReceiptsToOpenRequests(
   const query = (withPurpose: boolean) => {
     let q = sb
       .from("production_request_items")
-      .select("id, request_id, requested_qty, product_id, production_requests!inner(id, req_no, status, request_date, created_at)")
+      .select("id, request_id, requested_qty, product_id, production_requests!inner(id, req_no, status, request_date, due_date, created_at)")
       .in("product_id", pids)
       .in("production_requests.status", ["요청", "진행중"]);
     if (withPurpose && opts?.purpose) q = q.eq("production_requests.purpose", opts.purpose);
@@ -226,7 +226,7 @@ export async function allocateReceiptsToOpenRequests(
   if (ie && /purpose/i.test(ie.message)) ({ data: itemsRaw, error: ie } = await query(false)); // 082 미적용 폴백
   if (ie || !itemsRaw?.length) return;
 
-  type Head = { id: string; req_no: string | null; status: string; request_date: string; created_at: string };
+  type Head = { id: string; req_no: string | null; status: string; request_date: string; due_date: string | null; created_at: string };
   type OpenItem = { id: string; request_id: string; requested_qty: number; product_id: string; head: Head };
   const items: OpenItem[] = itemsRaw
     .map((r) => {
@@ -264,7 +264,20 @@ export async function allocateReceiptsToOpenRequests(
 
   for (const e of positive) {
     let left = Math.round(e.qty * 100) / 100 - (priorByTxn.get(e.inv_txn_id) || 0);
-    for (const it of items) {
+    // 요청일 기준 매칭(대표 확정): 입고일이 요청일~마감일 창 안에 드는 요청서를 우선 배분한다.
+    //  창에 드는 요청이 없으면 기존 FIFO(오래된 요청부터) — 마감을 넘겨 도착한 지연 납품도 붙게 유지.
+    const inWindow = (it: OpenItem) =>
+      !!e.receipt_date &&
+      it.head.request_date <= e.receipt_date &&
+      (!it.head.due_date || e.receipt_date <= it.head.due_date);
+    const ordered = e.receipt_date
+      ? [...items].sort((a, b) =>
+          Number(inWindow(b)) - Number(inWindow(a)) ||
+          a.head.request_date.localeCompare(b.head.request_date) ||
+          a.head.created_at.localeCompare(b.head.created_at)
+        )
+      : items;
+    for (const it of ordered) {
       if (left <= 0) break;
       if (it.product_id !== e.product_id) continue;
       const rem = remaining.get(it.id) || 0;
