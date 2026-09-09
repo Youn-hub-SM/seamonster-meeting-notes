@@ -55,6 +55,8 @@ const CATALOG_TITLE: Record<string, string> = { "스마트스토어": "네이버
 const HIDDEN_SALE_STATUSES = new Set(["SUSPENSION", "CLOSE", "PROHIBITION", "REJECTION", "UNUSABLE", "판매안함", "진열안함"]);
 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+// UTC 저장값 → KST 'MM-DD HH:mm' 표시
+const kstStamp = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
 // 최근 90일 판매가 없으면 '오래된 리스팅'으로 접는다
 const staleCut = () => new Date(Date.now() + 9 * 3600_000 - 90 * 86400_000).toISOString().slice(0, 10);
 
@@ -72,6 +74,14 @@ export default function SkuListingsPage() {
   useEffect(() => {
     fetch("/api/products", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setProducts(j.products || []); }).catch(() => {});
   }, []);
+
+  // 채널별 마지막 카탈로그 동기화 시각 — 검색 전에도 화면 상단에 표시
+  const [lastSynced, setLastSynced] = useState<Record<string, string | null>>({});
+  const fetchLastSynced = () => {
+    fetch("/api/sales/listings?meta=1", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => { if (j.ok) setLastSynced(j.synced || {}); }).catch(() => {});
+  };
+  useEffect(() => { fetchLastSynced(); }, []);
 
   // 검색 대상은 단품 SKU 만 — 묶음상품은 목록에서 빼고, 결과에 '그 구성품이 든 묶음 리스팅'으로만 나온다(대표 결정).
   const options = useMemo(() => products
@@ -167,6 +177,13 @@ export default function SkuListingsPage() {
     finally { setSyncing(false); }
   }
 
+  // [새로고침] — 검색어는 그대로 두고 동기화 시각·명령 상태·검색 결과를 다시 불러온다
+  function refreshAll() {
+    fetchLastSynced();
+    fetchCommands();
+    if (pid) load(pid);
+  }
+
   // 카탈로그가 있는 채널 집합 — 그 채널은 매출 카드에서 뺀다(카탈로그 카드가 전체·정확이라 중복 — 대표 결정)
   const catalogChannels = useMemo(() => new Set((res?.catalog ?? []).map((c) => c.channel)), [res]);
 
@@ -208,15 +225,18 @@ export default function SkuListingsPage() {
     return { visible: all.filter((r) => !isHidden(r)), hidden: all.filter(isHidden) };
   }, [res]);
 
-  // 채널별 마지막 동기화 요약(캡션) — 채널마다 크론 시각이 달라 따로 보여준다
-  const syncedSummary = useMemo(() => {
+  // 채널별 마지막 동기화 시각(검색 결과 기준) — 캡션 표시 + '동기화 이전에 끝난 명령 상태' 숨김 판정에 사용
+  const syncedByChannel = useMemo(() => {
     const m = new Map<string, string>();
     for (const c of res?.catalog ?? []) {
       const prev = m.get(c.channel);
       if (c.synced_at && (!prev || c.synced_at > prev)) m.set(c.channel, c.synced_at);
     }
-    return [...m.entries()].map(([ch, d]) => `${CATALOG_TITLE[ch] || ch} ${d.slice(5, 10)}`).join(" · ");
+    return m;
   }, [res]);
+  const syncedSummary = useMemo(() =>
+    [...syncedByChannel.entries()].map(([ch, d]) => `${CATALOG_TITLE[ch] || ch} ${kstStamp(d)}`).join(" · "),
+  [syncedByChannel]);
 
   // ── 채널 재고 명령(수량 적용, 0 = 품절) — 중계 서버 데몬이 10초 폴링으로 실행 ──
   const [cmdQty, setCmdQty] = useState<Record<string, string>>({});
@@ -240,8 +260,6 @@ export default function SkuListingsPage() {
   }
   useEffect(() => { fetchCommands(); }, []);
   const hasPendingCmd = useMemo(() => Object.values(cmdMap).some((c) => c.status === "대기" || c.status === "실행중"), [cmdMap]);
-  // UTC 저장값 → KST 표시
-  const kstStamp = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
   useEffect(() => {
     if (!hasPendingCmd) return;
     const t = setInterval(fetchCommands, 15_000);
@@ -311,6 +329,10 @@ export default function SkuListingsPage() {
           <p className="b2b-page-subtitle">매출 기준(최근 1년) + 네이버·쿠팡·공식몰은 API 등록 카탈로그로 전체 확인</p>
         </div>
         <div className="b2b-page-actions">
+          <button className="b2b-btn-secondary" onClick={refreshAll} disabled={busy}
+            title="검색어는 그대로 두고 카탈로그·판매량·명령 상태를 다시 불러옵니다">
+            새로고침
+          </button>
           <button className="b2b-btn-secondary" onClick={syncCatalogs} disabled={syncing}>
             {syncing ? "요청 중..." : "카탈로그 동기화"}
           </button>
@@ -321,6 +343,14 @@ export default function SkuListingsPage() {
           </button>
         </div>
       </header>
+
+      {Object.values(lastSynced).some(Boolean) && (
+        <p className="sm-faint" style={{ margin: "-6px 0 12px", fontSize: 12, textAlign: "right" }}>
+          마지막 동기화: {["스마트스토어", "쿠팡", "카페24"]
+            .map((ch) => `${CATALOG_TITLE[ch]} ${lastSynced[ch] ? kstStamp(lastSynced[ch]!) : "-"}`)
+            .join(" · ")}
+        </p>
+      )}
 
       {err && <div className="b2b-error">{err}</div>}
       {syncMsg && <div className={syncMsg.includes("실패") ? "b2b-error" : "sm-success"}>{syncMsg}</div>}
@@ -387,6 +417,10 @@ export default function SkuListingsPage() {
                     const rowKey = `cat|${c.channel}|${c.item_key}|${idx}`;
                     const q = catalogQty.get(idx);
                     const cmd = cmdMap[cmdKey(c.channel, c.item_key)];
+                    // 완료·실패 표시는 그 이후 카탈로그 동기화가 돌기 전까지만 — 표 재고에 반영된 뒤엔 소음(대표 요청)
+                    const chSynced = syncedByChannel.get(c.channel);
+                    const cmdStale = !!cmd && (cmd.status === "완료" || cmd.status === "실패") &&
+                      !!cmd.executed_at && !!chSynced && cmd.executed_at < chSynced;
                     // 네이버 추가상품은 재고만 바꾸는 API 가 없다(전체 수정뿐 — 위험) — 입력 대신 안내
                     const noApply = c.channel === "스마트스토어" && c.item_kind === "supplement";
                     return (
@@ -427,7 +461,7 @@ export default function SkuListingsPage() {
                               {copied === rowKey ? "복사됨" : "복사"}
                             </button>
                           </span>
-                          {cmd && (
+                          {cmd && !cmdStale && (
                             <div className="sm-faint" title={cmd.error || undefined}
                               style={{ fontSize: 11, marginTop: 2, whiteSpace: "normal", overflowWrap: "break-word", color: cmd.status === "실패" ? "var(--sm-danger)" : undefined }}>
                               {cmd.status === "대기" ? `${cmd.qty}개 적용 대기중` :

@@ -24,7 +24,25 @@ const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0
 
 export async function GET(req: NextRequest) {
   try {
-    const productId = new URL(req.url).searchParams.get("product_id") || "";
+    const sp = new URL(req.url).searchParams;
+
+    // ?meta=1 — 검색 전 화면 진입 시 채널별 마지막 카탈로그 동기화 시각(가벼운 조회)
+    if (sp.get("meta") === "1") {
+      const sb = supabaseAdmin();
+      const channels = ["스마트스토어", "쿠팡", "카페24"];
+      const rows = await Promise.all(channels.map((ch) =>
+        sb.from("channel_catalog").select("synced_at").eq("channel", ch)
+          .order("synced_at", { ascending: false }).limit(1)
+      ));
+      const synced: Record<string, string | null> = {};
+      channels.forEach((ch, i) => {
+        const r = rows[i];
+        synced[ch] = r.error ? null : (r.data?.[0]?.synced_at ?? null);
+      });
+      return NextResponse.json({ ok: true, synced });
+    }
+
+    const productId = sp.get("product_id") || "";
     if (!productId) {
       return NextResponse.json({ ok: false, error: "product_id 가 필요합니다." }, { status: 400 });
     }
