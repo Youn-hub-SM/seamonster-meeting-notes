@@ -87,6 +87,8 @@ async function main() {
   }
   const token = tokenJson.access_token;
   console.log("토큰 발급 성공");
+  // 수집 시작 시각 — 서버가 synced_at 으로 기록('이 재고 값이 언제 캡처됐나'의 기준)
+  const collectedAt = new Date().toISOString();
 
   // 2) 등록 상품 전체 목록
   const products = [];
@@ -219,7 +221,7 @@ async function main() {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
       signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({ items: chunks[ci], ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
+      body: JSON.stringify({ items: chunks[ci], collected_at: collectedAt, ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j.ok) {

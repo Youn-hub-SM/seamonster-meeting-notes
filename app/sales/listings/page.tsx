@@ -96,7 +96,7 @@ export default function SkuListingsPage() {
       const j: Result = await r.json();
       if (seq !== seqRef.current) return; // 그 사이 다른 상품을 골랐다 — 이 응답은 버린다
       if (!j.ok) setErr(j.error || "조회 실패");
-      else setRes(j);
+      else { setRes(j); fetchLastSynced(); } // 상단 '마지막 동기화'도 같은 시점으로 — 캡션과 어긋나지 않게
     } catch (e) { if (seq === seqRef.current) setErr((e as Error).message); }
     finally { if (seq === seqRef.current) setBusy(false); }
   }
@@ -417,9 +417,11 @@ export default function SkuListingsPage() {
                     const rowKey = `cat|${c.channel}|${c.item_key}|${idx}`;
                     const q = catalogQty.get(idx);
                     const cmd = cmdMap[cmdKey(c.channel, c.item_key)];
-                    // 완료·실패 표시는 그 이후 카탈로그 동기화가 돌기 전까지만 — 표 재고에 반영된 뒤엔 소음(대표 요청)
-                    const chSynced = syncedByChannel.get(c.channel);
-                    const cmdStale = !!cmd && (cmd.status === "완료" || cmd.status === "실패") &&
+                    // '완료' 표시는 그 이후 카탈로그 동기화가 돌기 전까지만 — 표 재고에 반영된 뒤엔 소음(대표 요청).
+                    //  실패는 채널에 반영된 게 없으므로 계속 남긴다(밤새 실패를 놓치면 품절 미처리 사고).
+                    //  비교 기준은 행 자신의 synced_at(수집 시작 시각) — 채널 최대값을 쓰면 부분 업로드 행이 오판된다.
+                    const chSynced = c.synced_at;
+                    const cmdStale = !!cmd && cmd.status === "완료" &&
                       !!cmd.executed_at && !!chSynced && cmd.executed_at < chSynced;
                     // 네이버 추가상품은 재고만 바꾸는 API 가 없다(전체 수정뿐 — 위험) — 입력 대신 안내
                     const noApply = c.channel === "스마트스토어" && c.item_kind === "supplement";

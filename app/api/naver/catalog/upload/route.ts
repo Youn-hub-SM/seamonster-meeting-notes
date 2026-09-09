@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   try {
     if (!authorized(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
 
-    const body = (await req.json().catch(() => ({}))) as { channel?: string; items?: Item[]; live_origins?: string[] };
+    const body = (await req.json().catch(() => ({}))) as { channel?: string; items?: Item[]; live_origins?: string[]; collected_at?: string };
     const CHANNEL = body.channel || DEFAULT_CHANNEL;
     if (!CHANNELS.has(CHANNEL)) {
       return NextResponse.json({ ok: false, error: `허용되지 않은 channel: ${CHANNEL}` }, { status: 400 });
@@ -58,7 +58,13 @@ export async function POST(req: NextRequest) {
       arr.push(it);
       byOrigin.set(it.origin_no, arr);
     }
-    const now = new Date().toISOString();
+    // synced_at = 수집 시작 시각(스크립트가 동봉) — '이 재고 값이 언제 캡처됐나'의 정직한 기준.
+    //  업로드 시각을 쓰면 수집(3분+) 중에 실행된 재고 명령이 '반영됨'으로 오판된다(적대 검증 확정).
+    //  구 스크립트(미동봉)·미래 시각(시계 스큐)은 업로드 시각 폴백.
+    const uploadedAt = new Date().toISOString();
+    const collected = typeof body.collected_at === "string" && !isNaN(Date.parse(body.collected_at))
+      ? new Date(body.collected_at).toISOString() : null;
+    const now = collected && collected < uploadedAt ? collected : uploadedAt;
     for (const [originNo, rows] of byOrigin) {
       const { error: delErr } = await sb.from("channel_catalog").delete().eq("channel", CHANNEL).eq("origin_no", originNo);
       if (delErr) throw delErr;

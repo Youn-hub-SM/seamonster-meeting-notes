@@ -64,6 +64,8 @@ async function getAccessToken() {
 async function main() {
   const token = await getAccessToken();
   console.log("카페24 토큰 갱신 성공");
+  // 수집 시작 시각 — 서버가 synced_at 으로 기록('이 재고 값이 언제 캡처됐나'의 기준)
+  const collectedAt = new Date().toISOString();
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   // 1) 상품 전체 (variants 포함, offset 페이징)
@@ -147,7 +149,7 @@ async function main() {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${uploadSecret}` },
       signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({ channel: CHANNEL, items: chunks[ci], ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
+      body: JSON.stringify({ channel: CHANNEL, items: chunks[ci], collected_at: collectedAt, ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j.ok) {

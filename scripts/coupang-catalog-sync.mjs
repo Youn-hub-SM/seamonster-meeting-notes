@@ -58,6 +58,9 @@ async function coupangGet(fullPath) {
 }
 
 async function main() {
+  // 수집 시작 시각 — 서버가 synced_at 으로 기록('이 재고 값이 언제 캡처됐나'의 기준)
+  const collectedAt = new Date().toISOString();
+
   // 1) 상품 목록 (nextToken 페이징)
   const base = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
   const products = [];
@@ -159,7 +162,7 @@ async function main() {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${uploadSecret}` },
       signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({ channel: CHANNEL, items: chunks[ci], ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
+      body: JSON.stringify({ channel: CHANNEL, items: chunks[ci], collected_at: collectedAt, ...(isLast && liveOrigins ? { live_origins: liveOrigins } : {}) }),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok || !j.ok) {
