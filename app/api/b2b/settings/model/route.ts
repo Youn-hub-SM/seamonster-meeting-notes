@@ -29,7 +29,7 @@ export async function GET() {
 
 // PUT /api/b2b/settings/model — { scope, key }
 //  - scope "global": key 는 모델 키
-//  - scope 가 기능 키(meeting/cs/correct/voc/production): key 는 모델 키 또는 "inherit"(공통 따름)
+//  - scope 가 기능 키(meeting/cs/voc/production 등): key 는 모델 키 또는 "inherit"(공통 따름)
 export async function PUT(req: NextRequest) {
   try {
     const { scope = "global", key } = (await req.json()) as { scope?: string; key?: string };

@@ -45,11 +45,10 @@ export async function getCurrentModel(): Promise<string> {
 }
 
 // ── 기능별 모델 ──
-export type AiFeature = "meeting" | "cs" | "correct" | "voc" | "production" | "report" | "briefing";
+export type AiFeature = "meeting" | "cs" | "voc" | "production" | "report" | "briefing";
 export const AI_FEATURES: { key: AiFeature; label: string; desc: string }[] = [
   { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리" },
   { key: "cs", label: "CS 코치", desc: "CS 응대 코칭·답변 초안" },
-  { key: "correct", label: "문장 교정", desc: "문장 다듬기·교정" },
   { key: "voc", label: "VOC 인사이트", desc: "VOC 인사이트·설문 분석·제조사 리포트" },
   { key: "production", label: "생산·재고 조언", desc: "생산/재고 AI 조언" },
   { key: "report", label: "커스텀 리포트", desc: "자연어→SQL 데이터 조회 (기본 opus·정교)" },
@@ -58,7 +57,6 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string }[] = [
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   meeting: "ai_model_meeting",
   cs: "ai_model_cs", // 기존 CS 전용 키와 동일(하위호환)
-  correct: "ai_model_correct",
   voc: "ai_model_voc",
   production: "ai_model_production",
   report: "ai_model_report",

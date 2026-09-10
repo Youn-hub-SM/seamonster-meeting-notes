@@ -17,7 +17,6 @@ export default function SiteHeader() {
         <nav className="header-nav">
           <Link href="/" className="header-nav-link">홈</Link>
           <Link href="/meeting" className="header-nav-link">회의 정리</Link>
-          <Link href="/correct" className="header-nav-link">문장 교정</Link>
           <Link href="/cs" className="header-nav-link">CS 코치</Link>
           <Link href="/utm" className="header-nav-link">UTM 만들기</Link>
           <Link href="/subscription" className="header-nav-link">정기배송 분석</Link>

@@ -145,9 +145,6 @@ export const NAV: NavCategory[] = [
     tools: [
       // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
       { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
-      { href: "/htmlshot", label: "상세 이미지 변환", icon: "image" },
-      { href: "/correct", label: "문장 교정", icon: "pen" },
-      { href: "/pallet", label: "파렛트 적재", icon: "box" },
       { href: "/voc/insights", label: "VOC AI 인사이트", icon: "bulb" },
       { href: "/voc/surveys", label: "VOC 설문응답(Tally)", icon: "chat" },
       // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
