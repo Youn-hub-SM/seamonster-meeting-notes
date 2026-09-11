@@ -54,6 +54,14 @@ export async function POST(req: NextRequest) {
     const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14); // yyyymmddhhmmss(UTC)
     const batchId = `web-${stamp}-${randomUUID().slice(0, 4)}`;
 
+    // 업로드 이력을 '적재 전에' 먼저 기록 — 이력이 맨 끝이면 중간 실패/타임아웃 시 이미 삽입된 행이
+    //  되돌리기 불가 고아 배치로 남는다(감사 확정). 실패해도 이 기록으로 되돌리기가 가능하다.
+    //  (신규 0건으로 끝나면 아래에서 이력을 지워 목록을 어지럽히지 않는다 — 종전 '신규>0만 기록'과 동일 결과)
+    await sb.from("sales_uploads").insert({
+      id: batchId, filename: file.name, total_rows: rows.length,
+      inserted: 0, skipped: 0, uploaded_by: await currentActor(), status: "active",
+    });
+
     // 멱등 upsert(중복 무시)
     for (let i = 0; i < orders.length; i += 1000) {
       const chunk = orders.slice(i, i + 1000).map((o) => ({ ...o, source: "web", upload_batch: batchId }));
@@ -82,12 +90,11 @@ export async function POST(req: NextRequest) {
 
     const inserted = orders.length - existed;
     const skipped = rows.length - inserted;
-    // 되돌리기 대상이 있을 때(신규 삽입>0)만 업로드 이력 기록.
+    // 이력 확정 — 신규 삽입이 있으면 건수 갱신, 전부 중복(신규 0)이면 이력 삭제(종전 규칙 유지).
     if (inserted > 0) {
-      await sb.from("sales_uploads").insert({
-        id: batchId, filename: file.name, total_rows: rows.length,
-        inserted, skipped, uploaded_by: await currentActor(), status: "active",
-      });
+      await sb.from("sales_uploads").update({ inserted, skipped }).eq("id", batchId);
+    } else {
+      await sb.from("sales_uploads").delete().eq("id", batchId);
     }
     await logSalesUpload(file.name, inserted, skipped);
     const { data: bounds } = await sb.rpc("sales_date_bounds");

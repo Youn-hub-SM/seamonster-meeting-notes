@@ -36,9 +36,21 @@ export async function GET(req: NextRequest) {
       const rows = lines || [];
       const orderIds = new Set(rows.map((r) => r.order_id));
       const revenue = rows.reduce((a, r) => a + Number(r.subtotal_amount || 0), 0);
+      // 누적 주문수 — sales_customers.order_count 는 갱신 주체가 없어 항상 0(감사 확정: 전원이
+      //  '신규 고객'으로 표시) → 원장에서 실시간 계산(기간 필터와 무관한 전체 이력, 주문번호 distinct)
+      const seenOrders = new Set<string>();
+      for (let i = 0; i < 10000; i += 1000) {
+        const { data: oids, error: cntErr } = await sb.from("sales_orders").select("order_id")
+          .eq("customer_key", key).order("order_date", { ascending: true }).order("id", { ascending: true })
+          .range(i, i + 999);
+        if (cntErr) break;
+        for (const r of oids ?? []) seenOrders.add(String(r.order_id));
+        if ((oids ?? []).length < 1000) break;
+      }
+      const orderCount = seenOrders.size;
       return NextResponse.json({
         ok: true, mode: "phone",
-        customer: cust ? { phone: formatPhone(cust.phone), name: cust.customer_name, first_seen: cust.first_seen_date, last_seen: cust.last_seen_date, order_count: cust.order_count, is_repeat: Number(cust.order_count || 0) > 1 } : null,
+        customer: cust ? { phone: formatPhone(cust.phone), name: cust.customer_name, first_seen: cust.first_seen_date, last_seen: cust.last_seen_date, order_count: orderCount, is_repeat: orderCount > 1 } : null,
         summary: { lines: rows.length, orders: orderIds.size, revenue, capped: rows.length >= LIMIT },
         rows,
       });

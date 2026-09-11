@@ -77,8 +77,11 @@ function excelSerialToInt(serial: number): number {
 // 주문일자 → yyyymmdd 정수(파싱 실패 시 null). Date객체/엑셀시리얼/yyyymmdd/날짜시각문자열(오전·오후 포함) 대응.
 export function parseOrderDateInt(value: unknown): number | null {
   if (value == null) return null;
+  // exceljs 의 날짜 셀은 'UTC 자정' Date 로 온다 — 로컬 getter 를 쓰면 실행 머신 타임존에 따라
+  //  날짜가 하루 밀려 로컬(KST) 백필과 Vercel(UTC) 업로드의 order_date·row_hash 가 갈라진다(감사 확정).
+  //  UTC getter 로 읽으면 어느 머신에서든 같은 달력 날짜가 나온다. (문자열 분기는 리터럴이라 로컬 유지)
   if (value instanceof Date && !isNaN(value.getTime()))
-    return value.getFullYear() * 10000 + (value.getMonth() + 1) * 100 + value.getDate();
+    return value.getUTCFullYear() * 10000 + (value.getUTCMonth() + 1) * 100 + value.getUTCDate();
   if (typeof value === "number" && Number.isFinite(value)) {
     if (value >= 19000101) return Math.trunc(value);           // 이미 yyyymmdd
     if (value >= 1 && value < 100000) return excelSerialToInt(value);  // 엑셀 시리얼
