@@ -122,6 +122,26 @@ export function assertAllowedRelations(sql: string): void {
     if (!allow.has(name) && !ctes.has(name))
       throw new Error(`허용되지 않은 테이블 참조: '${name}' — 비공개 테이블(개인정보·설정·계정 등)은 조회할 수 없습니다.`);
   }
+
+  // 콤마 조인 차단 — 위 정규식은 from/join 바로 뒤 1개만 보므로 'from 허용테이블, 비공개테이블'이
+  //  검사를 통과했다(감사 확정: 화이트리스트 완전 우회). FROM 절의 괄호 밖 콤마 자체를 거부한다
+  //  (AI 프롬프트는 명시적 JOIN 을 쓰므로 정상 리포트에는 영향 없음. 함수 인자·서브쿼리 내 콤마는 괄호 안이라 무관).
+  const fromRe = /\bfrom\b/gi;
+  let fm: RegExpExecArray | null;
+  while ((fm = fromRe.exec(scan))) {
+    let depth = 0;
+    for (let i = fm.index + 4; i < scan.length; i++) {
+      const ch = scan[i];
+      if (ch === "(") { depth++; continue; }
+      if (ch === ")") { if (depth === 0) break; depth--; continue; }
+      if (depth > 0) continue;
+      if (/[a-z_]/i.test(ch) && /[^a-z0-9_]/i.test(scan[i - 1] || " ")) {
+        if (/^(?:where|group|order|having|limit|union|intersect|except|join|left|right|inner|outer|cross|natural|select)\b/i.test(scan.slice(i, i + 10))) break;
+      }
+      if (ch === ",")
+        throw new Error("FROM 절의 콤마 조인은 지원하지 않습니다 — 명시적 JOIN 구문을 사용하세요.");
+    }
+  }
 }
 
 // 단일 SELECT + 화이트리스트 통과한 정규화 SQL 반환.

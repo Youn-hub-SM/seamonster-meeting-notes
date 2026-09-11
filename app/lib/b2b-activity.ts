@@ -51,9 +51,16 @@ async function recordActivity(input: ActivityInput): Promise<void> {
       meta: input.meta ?? null,
     };
     const { error } = await sb.from("activity_log").insert({ ...row, actor });
-    // actor 컬럼이 아직 없으면(migration 009 미적용) 기존 형식으로 재시도
+    // actor 컬럼이 아직 없으면(migration 009 미적용) 기존 형식으로 재시도.
+    //  단 'actor 컬럼 문제'일 때만 — 무조건 폴백하면 일시 오류에서도 작업자 없는 감사기록이
+    //  남아 전화조회 감사 등의 추적이 무력화된다(감사 확정). 코드베이스 공통 패턴(메시지 검사).
     if (error) {
-      await sb.from("activity_log").insert(row);
+      if (/actor/i.test(error.message || "")) {
+        const retry = await sb.from("activity_log").insert(row);
+        if (retry.error) console.error("[b2b-activity] 기록 재시도 실패:", retry.error.message);
+      } else {
+        console.error("[b2b-activity] 기록 실패:", error.message);
+      }
     }
   } catch (err) {
     console.error("[b2b-activity] record failed", err);

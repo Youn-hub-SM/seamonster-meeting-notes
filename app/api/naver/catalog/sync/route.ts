@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
+import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 import { getNaverToken, naverCredsStatus, fetchAllProducts, fetchOriginItems } from "@/app/lib/naver-commerce";
 
 export const runtime = "nodejs"; // bcryptjs(naver-commerce) 사용
@@ -24,7 +24,10 @@ async function authorized(req: NextRequest): Promise<boolean> {
     if (k && (authz === `Bearer ${k}` || key === k)) return true;
   }
   const t = req.cookies.get("b2b_auth")?.value;
-  return !!((await verifySession(t)) || resolveUserName(t));
+  // factory(외부 제조사) 역할은 채널 카탈로그 조회·동기화 접근 불가(감사 확정 — 미들웨어 예외 경로라 여기서 차단)
+  const sess = await verifySessionFull(t);
+  if (sess) return sess.role !== "factory";
+  return !!resolveUserName(t);
 }
 
 export async function GET(req: NextRequest) {

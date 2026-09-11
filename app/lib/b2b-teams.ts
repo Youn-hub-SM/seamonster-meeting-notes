@@ -121,9 +121,12 @@ export async function mirrorB2BTeams(
     if (!target) return;
     let text = summary;
     if (actor) text += `\n— 작업자: ${actor}`;
-    await sendTeamsWebhook(target, text, { title: opts?.helper ? "업무도우미 변경알림" : "씨몬스터 B2B", link });
-  } catch {
-    /* 미러 실패가 본 알림을 막지 않는다 */
+    const r = await sendTeamsWebhook(target, text, { title: opts?.helper ? "업무도우미 변경알림" : "씨몬스터 B2B", link });
+    // 실패를 완전 무음으로 두면 웹훅이 죽어도(URL 회수·만료) 알림 전체가 조용히 정지한다(감사 확정)
+    //  — 발송은 막지 않되 서버 로그에는 남긴다.
+    if (!r.ok) console.error("[b2b-teams] 알림 발송 실패:", r.status ?? "", r.error ?? "", "| 요약:", summary.slice(0, 80));
+  } catch (e) {
+    console.error("[b2b-teams] 알림 발송 예외:", e instanceof Error ? e.message : e);
   }
 }
 

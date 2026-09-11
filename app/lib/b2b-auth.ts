@@ -42,7 +42,7 @@ export function isAdminName(name: string | null | undefined): boolean {
 //  환경변수 계정(B2B_PASSWORD·B2B_USERS)은 항상 internal — 외부 계정은 DB(app_users)로만 만든다.
 export const APP_ROLES = ["internal", "factory"] as const;
 export type AppRole = (typeof APP_ROLES)[number];
-export type Session = { name: string; role: AppRole };
+export type Session = { name: string; role: AppRole; exp?: number }; // exp = 만료(epoch 초, v2 토큰)
 
 // ── 서명 세션 토큰 ──────────────────────────────────────────────
 // DB 계정은 비밀번호가 환경변수에 없으므로, 로그인 시 이름을 서명한 토큰을 발급하고
@@ -62,15 +62,18 @@ async function hmac(msg: string): Promise<string> {
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(msg)));
   return b64url(sig);
 }
-// 토큰: "<urlencoded payload>.<hmac(payload)>"
-//  payload = 이름(internal) 또는 "이름|역할"(그 외). internal 은 이름만 실어 **구버전 토큰과 같은 값**이 되므로
-//  이미 발급된 쿠키가 그대로 유효하다(역할 도입으로 전원 로그아웃되지 않는다).
+// 토큰(v2): "<urlencoded payload>.<hmac(payload)>", payload = "이름|역할|x<만료 epoch 초>"
+//  만료 도입(2026-09-11 감사 후속) — 종전 v1 토큰은 만료가 없어 계정 삭제·비밀번호 변경으로도
+//  회수가 불가능했다(값을 보관하면 영구 유효). v1 은 더 이상 통과시키지 않으므로 배포 시
+//  전원 1회 재로그인이 발생한다(의도된 컷오버). 활동 중엔 미들웨어가 재서명해 계속 유지된다.
+const SESSION_TTL_S = 30 * 86400; // 30일
 export async function signSession(name: string, role: AppRole = "internal"): Promise<string> {
-  const payload = role === "internal" ? name : `${name}|${role}`;
+  const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_S;
+  const payload = `${name}|${role}|x${exp}`;
   return `${encodeURIComponent(payload)}.${await hmac(payload)}`;
 }
 
-// 서명 검증 후 이름·역할까지. 미들웨어처럼 역할이 필요한 곳에서 쓴다.
+// 서명 검증 후 이름·역할·만료까지. 미들웨어처럼 역할이 필요한 곳에서 쓴다.
 export async function verifySessionFull(token: string | undefined | null): Promise<Session | null> {
   if (!token) return null;
   const i = token.lastIndexOf(".");
@@ -84,13 +87,18 @@ export async function verifySessionFull(token: string | undefined | null): Promi
   for (let k = 0; k < sig.length; k++) diff |= sig.charCodeAt(k) ^ expect.charCodeAt(k);
   if (diff !== 0) return null;
 
-  // 역할 분리는 '알려진 역할 이름'일 때만 — 이름에 '|' 가 들어가도 오인하지 않는다.
-  const bar = payload.lastIndexOf("|");
-  if (bar > 0) {
-    const tail = payload.slice(bar + 1);
-    if ((APP_ROLES as readonly string[]).includes(tail)) return { name: payload.slice(0, bar), role: tail as AppRole };
+  // v2 형식만 인정: "...|역할|x<exp>". 이름에 '|' 가 들어가도 뒤 두 세그먼트로만 판정한다.
+  const parts = payload.split("|");
+  const tail = parts[parts.length - 1] || "";
+  if (parts.length >= 3 && /^x\d{5,}$/.test(tail)) {
+    const exp = Number(tail.slice(1));
+    if (!Number.isFinite(exp) || exp * 1000 < Date.now()) return null; // 만료
+    const roleSeg = parts[parts.length - 2];
+    if ((APP_ROLES as readonly string[]).includes(roleSeg)) {
+      return { name: parts.slice(0, -2).join("|"), role: roleSeg as AppRole, exp };
+    }
   }
-  return { name: payload, role: "internal" };
+  return null; // v1(무만료)·형식 불량 — 재로그인 필요
 }
 
 // 기존 호출부(18곳) 호환 — 이름만 돌려준다.

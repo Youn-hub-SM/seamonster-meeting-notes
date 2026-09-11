@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getB2BUsers, isAdminName, resolveUserName, verifySessionFull } from "@/app/lib/b2b-auth";
+import { getB2BUsers, isAdminName, resolveUserName, signSession, verifySessionFull } from "@/app/lib/b2b-auth";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30일
 
@@ -98,8 +98,13 @@ export async function middleware(req: NextRequest) {
     // 슬라이딩 세션: 인증된 요청마다 쿠키 만료를 30일 뒤로 재발급.
     // iOS 사파리(ITP)는 쿠키 지속 정책이 빡빡해 고정 만료면 쉽게 풀림 —
     // 방문(페이지 이동)·API 호출마다 다시 발급해 계속 쓰는 동안 안 풀리게 함.
+    //  토큰 자체 만료(v2, 30일)가 절반 이하로 남으면 재서명 — 활동 중엔 유지, 방치·회수 대상은 30일 내 만료.
+    let cookieToken = token;
+    if (sess?.exp && sess.exp * 1000 - Date.now() < 15 * 86400 * 1000) {
+      try { cookieToken = await signSession(sess.name, sess.role); } catch { /* 재서명 실패 — 기존 토큰 유지 */ }
+    }
     const res = NextResponse.next();
-    res.cookies.set("b2b_auth", token, {
+    res.cookies.set("b2b_auth", cookieToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

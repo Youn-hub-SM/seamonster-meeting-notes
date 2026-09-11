@@ -84,20 +84,32 @@ export async function POST(req: NextRequest) {
         const rule = (rules || []).find((r) => isRuleLive(r, now) && matchesKeyword(r.keyword, v.text || ""));
         if (!rule) continue;
 
-        // 멱등 — comment_id UNIQUE 선점. 중복 배달이면 여기서 끝(23505).
+        // 멱등 — comment_id UNIQUE 선점. 선점은 'pending' 으로 넣고 발송 성공 후에만 'sent' 확정 —
+        //  종전엔 sent 로 선점해 발송 실패·타임아웃이 '보낸 것'으로 남고, 재배달이 와도 unique 에
+        //  막혀 그 고객은 DM 을 영영 못 받았다(감사 확정). failed 행은 재배달 때 재시도한다.
         const { error: insErr } = await db.from("ig_dm_logs").insert({
           rule_id: rule.id, ig_user_id: igUserId, comment_id: commentId,
           commenter_id: commenterId, commenter_username: v.from?.username || "",
-          comment_text: (v.text || "").slice(0, 500), status: "sent",
+          comment_text: (v.text || "").slice(0, 500), status: "pending",
         });
-        if (insErr) continue; // unique 충돌 = 이미 처리한 댓글
+        if (insErr) {
+          // unique 충돌 = 이미 본 댓글. sent/pending 이면 끝, failed 면 이번 배달에서 재시도.
+          const { data: prev } = await db.from("ig_dm_logs").select("status").eq("comment_id", commentId).maybeSingle();
+          if (prev?.status !== "failed") continue;
+          const { data: claimed } = await db.from("ig_dm_logs")
+            .update({ status: "pending", error: null }).eq("comment_id", commentId).eq("status", "failed").select("comment_id");
+          if (!claimed || claimed.length === 0) continue; // 다른 배달이 먼저 선점
+        }
 
         try {
           await sendPrivateReply(account.token, igUserId, commentId, renderDm(rule.message, v.from?.username || ""));
+          await db.from("ig_dm_logs").update({ status: "sent" }).eq("comment_id", commentId);
         } catch (e) {
           await db.from("ig_dm_logs").update({ status: "failed", error: String(e instanceof Error ? e.message : e).slice(0, 300) })
             .eq("comment_id", commentId);
         }
+        // 댓글 폭주(이벤트 게시물) 시 인스타 API 레이트리밋 완화 — 발송 간 짧은 간격
+        await new Promise((r) => setTimeout(r, 300));
       }
     }
   } catch (e) {

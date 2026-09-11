@@ -29,8 +29,15 @@ export async function POST(req: NextRequest) {
   try {
     const raw = await req.text();
 
-    const secret = await getTallySecret();
-    if (secret) {
+    // 서명 검증은 fail-closed — 시크릿 미설정·설정 조회 실패에서 무검증으로 열리면
+    //  공개 인터넷에서 누구나 설문 응답을 주입할 수 있다(감사 확정). 시크릿을 등록해야 수신한다.
+    let secret: string | null = null;
+    try { secret = await getTallySecret(); } catch { secret = null; }
+    if (!secret) {
+      console.error("[voc/tally] 서명 시크릿 미설정 또는 조회 실패 — 요청 거부");
+      return NextResponse.json({ ok: false, error: "Tally 서명 시크릿이 설정되지 않았습니다 — VOC 설정에서 등록하세요." }, { status: 503 });
+    }
+    {
       const sig = req.headers.get("tally-signature") || "";
       const expected = crypto.createHmac("sha256", secret).update(raw).digest("base64");
       const ok = sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
