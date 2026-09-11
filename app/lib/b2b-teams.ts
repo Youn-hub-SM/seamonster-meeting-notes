@@ -12,7 +12,8 @@ const KV_KEY = "b2b_teams";
 // url = 'B2B 알림' 채널(발주 알림·일정 브리핑), helperUrl = '업무도우미 변경알림' 채널(생산·재고).
 //  Flow 의 봇 2종(기본 봇 / 업무도우미 변경알림 봇) 구조를 채널 2개로 그대로 매핑한다.
 //  helperUrl 이 비어 있으면 helper 알림도 url 로 보낸다(Flow 의 '헬퍼봇 미구성 시 기본 봇 폴백'과 동일).
-export type B2BTeamsConfig = { url: string; helperUrl: string; enabled: boolean };
+//  claimsUrl = '클레임 알림' 채널(채널 취소·반품·교환 요청). 비어 있으면 helperUrl → url 로 폴백.
+export type B2BTeamsConfig = { url: string; helperUrl: string; claimsUrl: string; enabled: boolean };
 
 export async function getB2BTeamsConfig(): Promise<B2BTeamsConfig> {
   try {
@@ -21,10 +22,11 @@ export async function getB2BTeamsConfig(): Promise<B2BTeamsConfig> {
     return {
       url: typeof v.url === "string" ? v.url : "",
       helperUrl: typeof v.helperUrl === "string" ? v.helperUrl : "",
+      claimsUrl: typeof v.claimsUrl === "string" ? v.claimsUrl : "",
       enabled: !!v.enabled,
     };
   } catch {
-    return { url: "", helperUrl: "", enabled: false };
+    return { url: "", helperUrl: "", claimsUrl: "", enabled: false };
   }
 }
 
@@ -111,17 +113,20 @@ export async function mirrorB2BTeams(
   summary: string,
   actor: string | null,
   link?: string | null,
-  opts?: { helper?: boolean },
+  opts?: { helper?: boolean; claims?: boolean },
 ): Promise<void> {
   try {
     const cfg = await getB2BTeamsConfig();
     if (!cfg.enabled) return;
-    // 생산·재고(업무도우미 변경알림)는 전용 채널로, 없으면 B2B 채널로 폴백
-    const target = opts?.helper ? (cfg.helperUrl || cfg.url) : cfg.url;
+    // 클레임=전용 채널(없으면 변경알림→B2B 폴백), 생산·재고=변경알림(없으면 B2B 폴백), 그 외=B2B
+    const target = opts?.claims ? (cfg.claimsUrl || cfg.helperUrl || cfg.url)
+      : opts?.helper ? (cfg.helperUrl || cfg.url)
+      : cfg.url;
     if (!target) return;
     let text = summary;
     if (actor) text += `\n— 작업자: ${actor}`;
-    const r = await sendTeamsWebhook(target, text, { title: opts?.helper ? "업무도우미 변경알림" : "씨몬스터 B2B", link });
+    const title = opts?.claims ? "채널 클레임 알림" : opts?.helper ? "업무도우미 변경알림" : "씨몬스터 B2B";
+    const r = await sendTeamsWebhook(target, text, { title, link });
     // 실패를 완전 무음으로 두면 웹훅이 죽어도(URL 회수·만료) 알림 전체가 조용히 정지한다(감사 확정)
     //  — 발송은 막지 않되 서버 로그에는 남긴다.
     if (!r.ok) console.error("[b2b-teams] 알림 발송 실패:", r.status ?? "", r.error ?? "", "| 요약:", summary.slice(0, 80));

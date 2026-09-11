@@ -18,6 +18,8 @@ export async function GET() {
       urlTail: cfg.url ? `…${cfg.url.slice(-12)}` : "",
       hasHelperUrl: !!cfg.helperUrl,
       helperTail: cfg.helperUrl ? `…${cfg.helperUrl.slice(-12)}` : "",
+      hasClaimsUrl: !!cfg.claimsUrl,
+      claimsTail: cfg.claimsUrl ? `…${cfg.claimsUrl.slice(-12)}` : "",
     });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
@@ -27,18 +29,19 @@ export async function GET() {
 // PUT { url?, helperUrl?, enabled? } — 저장. 각 URL 은 비어있지 않을 때만 갱신(빈값이면 기존 유지).
 export async function PUT(req: NextRequest) {
   try {
-    const b = (await req.json()) as { url?: string; helperUrl?: string; enabled?: boolean };
+    const b = (await req.json()) as { url?: string; helperUrl?: string; claimsUrl?: string; enabled?: boolean };
     const cur = await getB2BTeamsConfig();
     const nextUrl = b.url !== undefined && String(b.url).trim() ? String(b.url).trim() : cur.url;
     const nextHelper = b.helperUrl !== undefined && String(b.helperUrl).trim() ? String(b.helperUrl).trim() : cur.helperUrl;
-    for (const u of [nextUrl, nextHelper]) {
+    const nextClaims = b.claimsUrl !== undefined && String(b.claimsUrl).trim() ? String(b.claimsUrl).trim() : cur.claimsUrl;
+    for (const u of [nextUrl, nextHelper, nextClaims]) {
       if (u && !/^https:\/\//.test(u)) {
         return NextResponse.json({ ok: false, error: "https:// 로 시작하는 웹훅 URL을 넣으세요." }, { status: 400 });
       }
     }
-    const next = { url: nextUrl, helperUrl: nextHelper, enabled: b.enabled !== undefined ? !!b.enabled : cur.enabled };
+    const next = { url: nextUrl, helperUrl: nextHelper, claimsUrl: nextClaims, enabled: b.enabled !== undefined ? !!b.enabled : cur.enabled };
     await setB2BTeamsConfig(next);
-    return NextResponse.json({ ok: true, enabled: next.enabled, hasUrl: !!next.url, hasHelperUrl: !!next.helperUrl });
+    return NextResponse.json({ ok: true, enabled: next.enabled, hasUrl: !!next.url, hasHelperUrl: !!next.helperUrl, hasClaimsUrl: !!next.claimsUrl });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "저장 실패") }, { status: 500 });
   }
@@ -48,7 +51,7 @@ export async function PUT(req: NextRequest) {
 export async function POST() {
   try {
     const cfg = await getB2BTeamsConfig();
-    if (!cfg.url && !cfg.helperUrl) return NextResponse.json({ ok: false, error: "웹훅 URL을 먼저 저장하세요." }, { status: 400 });
+    if (!cfg.url && !cfg.helperUrl && !cfg.claimsUrl) return NextResponse.json({ ok: false, error: "웹훅 URL을 먼저 저장하세요." }, { status: 400 });
     const results: string[] = [];
     if (cfg.url) {
       const r = await sendTeamsWebhook(
@@ -65,6 +68,14 @@ export async function POST() {
         { title: "씨몬스터 업무도우미 — 테스트 발송" }
       );
       results.push(r.ok ? "변경알림 채널 OK" : `변경알림 채널 실패(${r.error || r.status})`);
+    }
+    if (cfg.claimsUrl) {
+      const r = await sendTeamsWebhook(
+        cfg.claimsUrl,
+        "클레임 알림 채널 연결 확인.\n네이버·쿠팡·공식몰의 취소·반품·교환 요청(판매자 처리 필요)이 이 채널로 들어옵니다.",
+        { title: "씨몬스터 업무도우미 — 테스트 발송" }
+      );
+      results.push(r.ok ? "클레임 채널 OK" : `클레임 채널 실패(${r.error || r.status})`);
     }
     const anyFail = results.some((x) => x.includes("실패"));
     if (anyFail) return NextResponse.json({ ok: false, error: results.join(" · ") }, { status: 502 });

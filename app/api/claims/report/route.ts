@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       const lines = inserted.slice(0, 15).map(lineOf);
       if (inserted.length > 15) lines.push(`- 외 ${inserted.length - 15}건`);
       const summary = `${channel} 승인·처리 필요 클레임 ${inserted.length}건 (취소/반품/교환)\n${lines.join("\n")}`;
-      await mirrorB2BTeams(summary, null, null, { helper: true });
+      await mirrorB2BTeams(summary, null, null, { claims: true });
       notified = inserted.length;
       const keys = inserted.map((c) => c.claim_key);
       await sb.from("channel_claims").update({ notified_at: new Date().toISOString() })
