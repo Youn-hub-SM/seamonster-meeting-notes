@@ -114,6 +114,21 @@ async function main() {
         // vendorItemId 는 재고 수정 API 의 필수 식별자 — 있으면 ':vi:' 로 마킹해 실행기가 구분한다
         const vi = it.vendorItemId;
         const itemId = vi ?? it.sellerProductItemId ?? it.itemId ?? k;
+        // 실재고 = 옵션별 재고 조회 API 의 amountInStock — 상세의 maximumBuyCount 는 '등록 시점
+        //  최대판매수량'이라 판매 소진을 반영하지 않는다(실측 확정: 대구살 9,868 vs 실재고 9,694).
+        //  재고 조회가 실패하면 등록값 폴백(없는 것보단 근사치가 낫다 — synced_at 으로 시점은 표시됨).
+        let stock = it.maximumBuyCount != null ? Number(it.maximumBuyCount) : null;
+        if (vi != null) {
+          try {
+            const invRes = await coupangGet(`/v2/providers/seller_api/apis/api/v1/marketplace/vendor-items/${vi}/inventories`);
+            if (invRes.ok) {
+              const invJson = await invRes.json().catch(() => ({}));
+              const amt = invJson?.data?.amountInStock;
+              if (amt != null && Number.isFinite(Number(amt))) stock = Number(amt);
+            }
+          } catch { /* 폴백 유지 */ }
+          await sleep(150);
+        }
         items.push({
           item_key: vi != null ? `${originNo}:vi:${vi}` : `${originNo}:item:${itemId}`,
           origin_no: originNo,
@@ -122,7 +137,7 @@ async function main() {
           item_name: its.length > 1 ? String(it.itemName ?? "").trim() || null : null,
           sku_code: String(it.externalVendorSku ?? "").trim(),
           sale_status: status,
-          stock_qty: it.maximumBuyCount != null ? Number(it.maximumBuyCount) : null,
+          stock_qty: stock,
         });
       }
       if (its.length === 0) {
