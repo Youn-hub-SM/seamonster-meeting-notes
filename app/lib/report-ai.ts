@@ -111,11 +111,16 @@ export function assertSelectOnly(sql: string): string {
 // 앱 방어 ②: 참조 테이블이 화이트리스트에 있는지 검증 — 비공개(PII·토큰·계정 등)/시스템 테이블 차단.
 export function assertAllowedRelations(sql: string): void {
   const allow = new Set(RUN_HERE_RELATIONS.map((r) => r.toLowerCase()));
-  // 내장함수의 '키워드 FROM' 오탐 제거: extract(month FROM x)·substring·trim·overlay·position(...)
-  const scan = sql.replace(/\b(?:extract|substring|trim|overlay|position)\s*\([^()]*\)/gi, " NULL ");
+  // 문자열 리터럴을 먼저 비운다('' 이스케이프 포함) — 리터럴 속 'from ...' 이 관계 검사·콤마 검사에
+  //  오탐되던 결함 보정. 그 다음 내장함수의 '키워드 FROM' 오탐 제거: extract(month FROM x) 등.
+  const scan = sql
+    .replace(/'(?:[^']|'')*'/g, " '' ")
+    .replace(/\b(?:extract|substring|trim|overlay|position)\s*\([^()]*\)/gi, " NULL ");
   const ctes = new Set<string>();
   for (const m of scan.matchAll(/(?:\bwith\b|,)\s+([a-z_][a-z0-9_]*)\s+as\s*\(/gi)) ctes.add(m[1].toLowerCase());
   for (const m of scan.matchAll(/\b(?:from|join)\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?(\s*\()?/gi)) {
+    // IS DISTINCT FROM 은 비교 연산 — 관계 참조가 아니다
+    if (/distinct\s*$/i.test(scan.slice(Math.max(0, m.index! - 12), m.index!))) continue;
     if (m[2]) continue;             // 뒤에 '(' → 집합반환 함수(generate_series 등) 허용
     const name = m[1].toLowerCase();
     if (name === "_sub") continue;
@@ -129,6 +134,7 @@ export function assertAllowedRelations(sql: string): void {
   const fromRe = /\bfrom\b/gi;
   let fm: RegExpExecArray | null;
   while ((fm = fromRe.exec(scan))) {
+    if (/distinct\s*$/i.test(scan.slice(Math.max(0, fm.index - 12), fm.index))) continue; // IS DISTINCT FROM
     let depth = 0;
     for (let i = fm.index + 4; i < scan.length; i++) {
       const ch = scan[i];
@@ -136,7 +142,7 @@ export function assertAllowedRelations(sql: string): void {
       if (ch === ")") { if (depth === 0) break; depth--; continue; }
       if (depth > 0) continue;
       if (/[a-z_]/i.test(ch) && /[^a-z0-9_]/i.test(scan[i - 1] || " ")) {
-        if (/^(?:where|group|order|having|limit|union|intersect|except|join|left|right|inner|outer|cross|natural|select)\b/i.test(scan.slice(i, i + 10))) break;
+        if (/^(?:where|group|order|having|limit|union|intersect|except|join|left|right|inner|outer|cross|natural|select|window|offset|fetch|for)\b/i.test(scan.slice(i, i + 10))) break;
       }
       if (ch === ",")
         throw new Error("FROM 절의 콤마 조인은 지원하지 않습니다 — 명시적 JOIN 구문을 사용하세요.");

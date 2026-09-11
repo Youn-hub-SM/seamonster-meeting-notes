@@ -93,11 +93,15 @@ export async function POST(req: NextRequest) {
           comment_text: (v.text || "").slice(0, 500), status: "pending",
         });
         if (insErr) {
-          // unique 충돌 = 이미 본 댓글. sent/pending 이면 끝, failed 면 이번 배달에서 재시도.
-          const { data: prev } = await db.from("ig_dm_logs").select("status").eq("comment_id", commentId).maybeSingle();
-          if (prev?.status !== "failed") continue;
-          const { data: claimed } = await db.from("ig_dm_logs")
-            .update({ status: "pending", error: null }).eq("comment_id", commentId).eq("status", "failed").select("comment_id");
+          // unique 충돌 = 이미 본 댓글. sent 면 끝, failed(또는 10분 넘게 방치된 pending — 함수 중단 잔재)면 재시도.
+          const { data: prev } = await db.from("ig_dm_logs").select("status, created_at").eq("comment_id", commentId).maybeSingle();
+          const stalePending = prev?.status === "pending" && prev.created_at &&
+            Date.now() - new Date(prev.created_at as string).getTime() > 10 * 60_000;
+          if (prev?.status !== "failed" && !stalePending) continue;
+          // error 컬럼은 not null(094) — null 을 넣으면 갱신 자체가 실패해 재시도가 무동작이 된다(검증 확정)
+          const { data: claimed, error: updErr } = await db.from("ig_dm_logs")
+            .update({ status: "pending", error: "" }).eq("comment_id", commentId).eq("status", prev!.status).select("comment_id");
+          if (updErr) { console.error("[instagram/webhook] 재시도 선점 실패:", updErr.message); continue; }
           if (!claimed || claimed.length === 0) continue; // 다른 배달이 먼저 선점
         }
 

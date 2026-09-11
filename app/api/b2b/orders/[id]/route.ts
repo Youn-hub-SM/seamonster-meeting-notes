@@ -284,7 +284,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // 변경 전 상태 캡처 (활동 로그용 + 송장번호 확인)
     const { data: prev } = await sb
       .from("orders")
-      .select("status, production_status, payment_status, tax_invoice_status, tracking_no, ship_date")
+      .select("status, production_status, payment_status, tax_invoice_status, tracking_no, ship_date, box_count")
       .eq("id", id)
       .single();
 
@@ -332,6 +332,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           tracking_no: (s.tracking_no as string | null) || "",
           box_count: Math.max(1, Math.floor(Number(s.box_count) || 1)),
           stock_out: (s as { stock_out?: boolean }).stock_out !== false,
+          shipped_at: (s.shipped_at as string | null) ?? null, // 기존 발송 시각 보존(재저장이 now 로 덮지 않게)
           items: (sitems ?? [])
             .map((r) => ({ order_item_index: idxOf.get(r.order_item_id as string) ?? -1, qty: Number(r.qty) || 0 }))
             .filter((x) => x.order_item_index >= 0 && x.qty > 0),
@@ -352,13 +353,22 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       const { ships, schedules } = await reconstructSchedules(savedItems);
       if (ships.length < 2) {
         // 기존 차수가 있으면 송장·박스·재고차감·수량 배분을 그대로 두고 발송일만 교체
-        if (schedules[0]) schedules[0].ship_date = body.ship_date;
-        const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count) || 1));
+        if (schedules[0]) {
+          schedules[0].ship_date = body.ship_date;
+          // 구 자동차수는 box_count=1 하드코딩이었다 — 헤더 박스 수가 더 크면 헤더값을 승격해
+          //  발송요청 양식에서 확정한 박스 수가 1로 줄지 않게 한다(검증 지적 보정).
+          const headerBoxes = Math.max(1, Math.floor(Number(prev?.box_count) || 1));
+          if (Math.max(1, Math.floor(Number(schedules[0].box_count) || 1)) === 1 && headerBoxes > 1) {
+            schedules[0].box_count = headerBoxes;
+          }
+        }
+        const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count ?? prev?.box_count) || 1));
         const { earliestShipDate, totalBoxes } = await saveOrderShipments(
           id, recipientOf(ships[0]), schedules, savedItems, boxCount, body.ship_date,
           (prev?.status as ShipmentScheduleInput["status"]) || "발송대기"
         );
-        patch.ship_date = earliestShipDate; // orders.ship_date 는 아래 update 에서 동기화
+        // 전 차수가 취소면 earliest 가 null — 입력한 날짜를 버리지 않는다(검증 확정 보정)
+        patch.ship_date = earliestShipDate ?? body.ship_date;
         if (totalBoxes > 0) patch.box_count = totalBoxes; // 헤더 박스 수도 차수 합과 일치시킨다
       }
     }
@@ -371,13 +381,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       const { ships, schedules } = await reconstructSchedules(savedItems);
       if (ships.length > 0) {
         for (const sch of schedules) {
-          if (body.status === "취소") sch.status = "취소";
-          else if (sch.status === "취소") sch.status = body.status === "발송완료" ? "발송완료" : "발송대기";
+          if (body.status === "취소") sch.status = "취소"; // shipped_at 은 보존(이미 나갔던 차수의 이력·복구 근거)
+          // 복구: 취소 전 발송완료였던 차수(shipped_at 보유)는 발송완료로, 나머지는 발송대기로 —
+          //  일괄 평탄화하면 '1차는 이미 나갔다'는 사실이 소실된다(검증 확정 보정)
+          else if (sch.status === "취소") sch.status = sch.shipped_at ? "발송완료" : (body.status === "발송완료" ? "발송완료" : "발송대기");
         }
         const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count) || 1));
         await saveOrderShipments(
           id, recipientOf(ships[0]), schedules, savedItems, boxCount,
-          (prev?.ship_date as string | null) ?? null, null
+          // 취소에는 헤더 발송일을 넘기지 않는다 — 자동차수 생성 분기가 '발송대기+전량 선점' 차수를
+          //  만들어 취소 발주가 재고를 전량 차감하는 역방향 사고를 막는다(검증 확정 보정)
+          body.status === "취소" ? null : ((prev?.ship_date as string | null) ?? null), null
         );
       }
     }

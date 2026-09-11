@@ -98,16 +98,30 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
   //  발주 할인(양수)/추가금(음수)은 VAT 포함 라인 금액에 비례 배분(orders.total = 공급가+VAT-할인 과 정합).
   //  마지막 라인이 반올림 오차를 흡수해 배분 합 = 총액 - 할인(+추가금)이 정확히 성립한다.
   const entries = [...groups.values()];
-  const lineAmt = (g: { qty: number; price: number; taxable: boolean }) => {
-    const supply = g.qty * g.price;
-    return supply + (g.taxable ? Math.round(supply * 0.1) : 0);
-  };
-  const gross = entries.reduce((s, g) => s + lineAmt(g), 0);
+  // VAT 는 발주 단위로 1회 반올림(095 트리거·명세표와 같은 규칙) 후 마지막 과세 라인이 오차를 흡수 —
+  //  라인별 반올림 합은 orders.vat 와 몇 원 어긋나 청구액과 원장 합계가 불일치한다(검증 확정).
+  const supplyOf = (g: { qty: number; price: number }) => g.qty * g.price;
+  const taxableSupply = entries.reduce((s, g) => s + (g.taxable ? supplyOf(g) : 0), 0);
+  const orderVat = Math.round(taxableSupply * 0.1);
+  const vatOf: number[] = [];
+  {
+    let vatAcc = 0;
+    const lastTaxable = entries.map((g) => g.taxable).lastIndexOf(true);
+    for (let i = 0; i < entries.length; i++) {
+      const g = entries[i];
+      if (!g.taxable) { vatOf.push(0); continue; }
+      const v = i === lastTaxable ? orderVat - vatAcc : Math.round(supplyOf(g) * 0.1);
+      vatOf.push(v);
+      vatAcc += v;
+    }
+  }
+  const lineAmt = (g: { qty: number; price: number; taxable: boolean }, i: number) => supplyOf(g) + (vatOf[i] || 0);
+  const gross = entries.reduce((s, g, i) => s + lineAmt(g, i), 0);
   const disc = Math.min(Number(o.discount_amount) || 0, gross); // 할인은 gross 상한, 음수(추가금)는 그대로 통과
   const paidOf: number[] = [];
   let allocated = 0;
   for (let i = 0; i < entries.length; i++) {
-    const line = lineAmt(entries[i]);
+    const line = lineAmt(entries[i], i);
     const paid = i === entries.length - 1
       ? gross - disc - allocated
       : Math.round(line * (gross > 0 ? 1 - disc / gross : 1));
@@ -141,15 +155,19 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
   const batch = `b2b-${o.id}`; // 발주 단위 태그(발주id — order_no 변경/충돌과 무관). 웹 업로드 되돌리기(web-*)와 무간섭
   const newHashes = new Set(rows.map((r) => r.row_hash));
 
-  // 같은 발주가 다른 배치(웹 업로드 백필 등)로도 원장에 있으면 정리 — stale-delete 가 자기 배치만
-  //  보므로 백필 행은 취소해도 남고 수정 시 이중집계된다(감사 확정). 도매 채널 + 이 주문번호 한정.
-  await sb.from("sales_orders").delete().eq("channel", "도매").eq("order_id", o.order_no).neq("upload_batch", batch);
-
   // (1) 현재 라인 upsert(멱등: 기존 동일 해시는 no-op, 변경/신규만 삽입) — 삭제보다 먼저 하여 매출 간극 없음
   if (rows.length) {
     const chunk = rows.map((r) => ({ ...r, source: "b2b", upload_batch: batch }));
     const { error: insErr } = await sb.from("sales_orders").upsert(chunk, { onConflict: "row_hash", ignoreDuplicates: true });
     if (insErr) throw insErr;
+  }
+
+  // 같은 발주가 다른 배치(웹 업로드 백필 등)로도 원장에 있으면 정리 — stale-delete 가 자기 배치만
+  //  보므로 백필 행은 취소해도 남고 수정 시 이중집계된다(감사 확정). 도매 채널 + 이 주문번호 한정.
+  //  단 '발송완료(대체 행 upsert 완료 후)'와 '취소(매출 자체가 없어야 함)'에서만 —
+  //  발송대기 등 미완료 발주의 편집·생성에서 지우면 백필 매출이 대체 없이 소실된다(검증 확정 회귀).
+  if (o.status === "발송완료" || o.status === "취소") {
+    await sb.from("sales_orders").delete().eq("channel", "도매").eq("order_id", o.order_no).neq("upload_batch", batch);
   }
 
   // (2) 이 발주의 옛 행 중 현재 구성에 없는 것 삭제(발송완료 후 수량·단가·품목 수정/삭제 반영)

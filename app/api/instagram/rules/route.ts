@@ -57,7 +57,9 @@ export async function GET() {
     for (const l of logRows || []) {
       const k = String(l.rule_id || "");
       if (!k) continue;
-      if (l.status === "sent") sent[k] = (sent[k] || 0) + 1; else failed[k] = (failed[k] || 0) + 1;
+      // pending(발송 진행중/중단 잔재)은 실패로 세지 않는다 — 실패 수가 순간적으로 부풀던 표시 결함
+      if (l.status === "sent") sent[k] = (sent[k] || 0) + 1;
+      else if (l.status === "failed") failed[k] = (failed[k] || 0) + 1;
     }
 
     // 클릭수 — 규칙 링크의 브랜드링크 코드 → short_links.scan_count (있는 것만, 한 번에 조회)

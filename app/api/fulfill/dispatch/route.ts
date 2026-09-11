@@ -111,13 +111,16 @@ export async function POST(req: NextRequest) {
 
     // ── 커밋 ──
     const sig = typeof body.sig === "string" && /^[0-9a-f]{16}$/i.test(body.sig) ? body.sig.toLowerCase() : sigOf(items);
+    // 서명 v2 전환 과도기: 구 화면(배포 전 탭)은 sig 없이 오고(itemsSig 폴백), generate 는 batchSig 로
+    //  저장한다 — 중복 가드·대기 키 조회는 두 서명을 모두 보아 혼합 버전 창을 닫는다(검증 확정 보정).
+    const sigCandidates = [...new Set([sig, sigOf(items)])];
     const today = kstToday();
     if (!body.force) {
       try {
         // 같은 배치(SKU·수량 조합)를 다른 날 재업로드해도 이중차감을 막도록 '오늘'이 아니라 최근 7일로 검사.
         //  (지연·재작업으로 이튿날 같은 엑셀을 다시 올리는 경우가 실제 이중출고 원인) 재출고가 정말 필요하면 force.
         const since = new Date(Date.now() + 9 * 3600e3 - 7 * 86400e3).toISOString().slice(0, 10);
-        const { data: dup } = await sb.from("fulfill_dispatch").select("order_no, dispatch_date").eq("sig", sig).gte("dispatch_date", since).order("dispatch_date", { ascending: false }).limit(1).maybeSingle();
+        const { data: dup } = await sb.from("fulfill_dispatch").select("order_no, dispatch_date").in("sig", sigCandidates).gte("dispatch_date", since).order("dispatch_date", { ascending: false }).limit(1).maybeSingle();
         if (dup) return NextResponse.json({ ok: false, error: `이미 최근 출고된 발주입니다(${dup.dispatch_date}, 출고번호 ${dup.order_no}). 같은 배치가 다시 출고되려 합니다 — 정말 재출고하려면 강제 출고를 선택하세요.`, duplicate: true }, { status: 409 });
       } catch { /* 065 미적용 시 스킵 */ }
     }
@@ -142,14 +145,24 @@ export async function POST(req: NextRequest) {
     const totalQty = productRows.reduce((s, r) => s + r.need, 0);
     let dispatchRecorded = false;
     try {
-      const dIns = await sb.from("fulfill_dispatch").insert({ sig, dispatch_date: today, channel: "소매", sku_count: productIds.length, total_qty: totalQty, group_id: groupId, order_no: orderNo || null, created_by: "온라인발주" });
-      if (!dIns.error) dispatchRecorded = true;
-      else if ((dIns.error as { code?: string }).code === "23505") {
-        if (!body.force) {
+      let dIns = await sb.from("fulfill_dispatch").insert({ sig, dispatch_date: today, channel: "소매", sku_count: productIds.length, total_qty: totalQty, group_id: groupId, order_no: orderNo || null, created_by: "온라인발주" });
+      if (dIns.error && (dIns.error as { code?: string }).code === "23505") {
+        // 기존 행이 '유령'(이력만 있고 재고 기록 없음 — 크래시 잔재)이면 지우고 재시도(검증 확정 보정)
+        const { data: dupRow } = await sb.from("fulfill_dispatch").select("id, group_id").eq("sig", sig).eq("dispatch_date", today).maybeSingle();
+        let hasTxn = true;
+        if (dupRow?.group_id) {
+          const { count } = await sb.from("inventory_txns").select("id", { count: "exact", head: true }).eq("group_id", dupRow.group_id);
+          hasTxn = (count ?? 0) > 0;
+        }
+        if (dupRow && !hasTxn) {
+          await sb.from("fulfill_dispatch").delete().eq("id", dupRow.id);
+          dIns = await sb.from("fulfill_dispatch").insert({ sig, dispatch_date: today, channel: "소매", sku_count: productIds.length, total_qty: totalQty, group_id: groupId, order_no: orderNo || null, created_by: "온라인발주" });
+        } else if (!body.force) {
           return NextResponse.json({ ok: false, error: "같은 배치가 방금 다른 창(또는 다른 사용자)에서 먼저 출고되었습니다 — 재고는 한 번만 차감됐습니다.", duplicate: true }, { status: 409 });
         }
         // force 재출고: 같은 날 기록이 이미 있음 — 기록은 기존 행 유지, 재고 차감만 진행
       }
+      if (!dIns.error) dispatchRecorded = true;
       // 그 외 오류(테이블 없음 등)는 종전처럼 기록 생략하고 진행
     } catch { /* 065 미적용 스킵 */ }
 
@@ -164,11 +177,12 @@ export async function POST(req: NextRequest) {
 
     // 출고 완료 = 이 배치의 주문들을 '처리됨'으로 확정(079) — 이후 파일에 섞여 오면 자동 제외됨. 실패 무시.
     try {
-      const { data: pend } = await sb.from("fulfill_pending_keys").select("keys").eq("sig", sig).maybeSingle();
+      const { data: pends } = await sb.from("fulfill_pending_keys").select("keys").in("sig", sigCandidates);
+      const pend = { keys: [...new Set((pends ?? []).flatMap((p) => (Array.isArray(p.keys) ? (p.keys as string[]) : [])))] };
       const keys = Array.isArray(pend?.keys) ? (pend!.keys as string[]).filter((k) => typeof k === "string" && k) : [];
       if (keys.length) {
         await sb.from("fulfill_order_keys").upsert(keys.map((key) => ({ key, order_no: orderNo || null, processed_at: new Date().toISOString() })), { onConflict: "key", ignoreDuplicates: true });
-        await sb.from("fulfill_pending_keys").delete().eq("sig", sig);
+        await sb.from("fulfill_pending_keys").delete().in("sig", sigCandidates);
       }
     } catch { /* 079 미적용 스킵 */ }
 

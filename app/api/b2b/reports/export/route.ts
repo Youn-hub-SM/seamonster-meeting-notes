@@ -138,16 +138,28 @@ export async function GET(req: NextRequest) {
           taxable: it.tax_type !== "exempt",
         });
       }
-      // 결제금액은 부가세 포함(과세 +10%) — 원장·화면 매출집계와 동일 기준(감사 후속: 도매만 공급가면 VAT 만큼 갈라짐)
-      const lineAmt = (l: { qty: number; price: number; taxable: boolean }) => {
-        const supply = l.qty * l.price;
-        return supply + (l.taxable ? Math.round(supply * 0.1) : 0);
-      };
-      const gross = lines.reduce((s, l) => s + lineAmt(l), 0);
+      // 결제금액은 부가세 포함 — 원장·화면 매출집계와 동일 기준(감사 후속: 도매만 공급가면 VAT 만큼 갈라짐).
+      //  VAT 는 발주 단위 1회 반올림 후 마지막 과세 라인이 오차 흡수(095 트리거·명세표·원장 sync 와 동일 규칙).
+      const supplyOf = (l: { qty: number; price: number }) => l.qty * l.price;
+      const taxableSupply = lines.reduce((s, l) => s + (l.taxable ? supplyOf(l) : 0), 0);
+      const orderVat = Math.round(taxableSupply * 0.1);
+      const vatOf: number[] = [];
+      {
+        let vatAcc = 0;
+        const lastTaxable = lines.map((l) => l.taxable).lastIndexOf(true);
+        lines.forEach((l, i) => {
+          if (!l.taxable) { vatOf.push(0); return; }
+          const v = i === lastTaxable ? orderVat - vatAcc : Math.round(supplyOf(l) * 0.1);
+          vatOf.push(v);
+          vatAcc += v;
+        });
+      }
+      const lineAmt = (l: { qty: number; price: number; taxable: boolean }, i: number) => supplyOf(l) + (vatOf[i] || 0);
+      const gross = lines.reduce((s, l, i) => s + lineAmt(l, i), 0);
       const disc = Math.min(Number(o.discount_amount) || 0, gross); // 할인은 gross 상한, 음수(추가금)는 통과
       let allocated = 0;
       lines.forEach((l, i) => {
-        const line = lineAmt(l);
+        const line = lineAmt(l, i);
         const paid = i === lines.length - 1
           ? gross - disc - allocated
           : Math.round(line * (gross > 0 ? 1 - disc / gross : 1));

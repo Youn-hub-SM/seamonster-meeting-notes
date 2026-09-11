@@ -11,7 +11,8 @@ delete from fulfill_dispatch a
 using fulfill_dispatch b
 where a.sig = b.sig
   and a.dispatch_date = b.dispatch_date
-  and a.created_at < b.created_at;
+  and (a.created_at < b.created_at
+       or (a.created_at = b.created_at and a.ctid < b.ctid)); -- 동시각 이론적 동률까지 커버
 
 drop index if exists idx_fulfill_dispatch_sig;
 create unique index if not exists fulfill_dispatch_sig_date_uniq

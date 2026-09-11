@@ -261,7 +261,7 @@ export default function InstagramDmPage() {
                     <td className="ig-col-media">{l.rule_caption}</td>
                     <td className="ig-cell-nowrap">@{l.commenter_username}</td>
                     <td className="ig-col-media sm-faint">{l.comment_text}</td>
-                    <td>{l.status === "sent" ? <span className="ig-state is-on">발송</span> : <span className="ig-state is-fail" title={l.error}>실패</span>}</td>
+                    <td>{l.status === "sent" ? <span className="ig-state is-on">발송</span> : l.status === "pending" ? <span className="ig-state">대기</span> : <span className="ig-state is-fail" title={l.error}>실패</span>}</td>
                   </tr>
                 ))}
               </tbody>

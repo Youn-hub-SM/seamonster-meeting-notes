@@ -196,7 +196,11 @@ export async function saveOrderShipments(
       courier: rec.courier,
       tracking_no: (sch.tracking_no || "").trim() || null,
       box_count: boxCount,
-      shipped_at: sch.status === "발송완료" ? new Date().toISOString() : null,
+      // 발송 시각: 재저장 경로가 넘긴 기존 값을 보존(없으면 지금). 취소 차수도 기존 발송 시각을
+      //  이력으로 유지 — 취소 복구 때 '이미 나갔던 차수'를 구분하는 근거가 된다(검증 확정 회귀 보정).
+      shipped_at: sch.status === "발송완료"
+        ? (sch.shipped_at ?? new Date().toISOString())
+        : (sch.status === "취소" ? sch.shipped_at ?? null : null),
     };
     if (canDeduct) shipInsert.stock_out = wantStockOut;
     const { data: shipRow, error: shipErr } = await sb

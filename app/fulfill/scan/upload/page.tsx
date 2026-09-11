@@ -86,8 +86,17 @@ export default function ScanUploadPage() {
       // 2) 정제된 3개 열만 서버로 전송(파일 원본·고객정보는 전송 안 함)
       const j = await (await fetch("/api/fulfill/scan/uploads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ files: payload }) })).json();
       if (!j.ok && (!j.files || j.files.length === 0)) throw new Error(j.error || "업로드 실패");
-      // 화면엔 클라이언트 파싱 요약(excludedNothing 포함) + 서버 미등록코드
-      setResult({ files: parsed, unmatched: j.unmatched || [] });
+      // 화면 표시는 서버 확정 결과 기준 — 클라이언트 요약만 보이면 서버가 걸러낸 중복(같은 파일
+      //  재업로드)도 '등록됨'처럼 보인다(검증 확정 보정). excludedNothing 등 클라이언트 정보는 병합.
+      type SrvFile = { name: string; invoiceCount: number; itemCount: number; error?: string };
+      const srv: SrvFile[] = Array.isArray(j.files) ? (j.files as SrvFile[]) : [];
+      let si = 0;
+      const merged = parsed.map((p) => {
+        if (p.error) return p; // 클라이언트 파싱 실패 파일 — 서버로 안 갔음
+        const s = srv[si++];
+        return s ? { ...p, invoiceCount: s.invoiceCount, itemCount: s.itemCount, error: s.error } : p;
+      });
+      setResult({ files: merged, unmatched: j.unmatched || [] });
       if (j.error) setError(j.error);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "업로드 실패"); }

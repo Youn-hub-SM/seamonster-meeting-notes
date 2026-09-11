@@ -229,10 +229,12 @@ export async function runAutoMatch(
     }
     // 발주 매칭이 안 됐을 때만 무시·미등록 판정 — 실제 발주 입금은 매칭이 항상 우선.
     //  미등록 이름은 수집 단계에서 이미 버려지지만(웹훅·팝빌 동일), 정책 변경 전 쌓인
-    //  과거 행을 조용히 치우는 방어선으로 남겨둔다. 예외 없음 — 등록한 것만 화면에 뜬다.
+    //  과거 행을 조용히 치우는 방어선으로 남겨둔다. 등록한 것만 화면에 뜬다.
+    //  단 입금자명 파싱 실패(remark 없음) 건은 '미등록'이 아니라 확인필요다 — 여기서 무시로 돌리면
+    //  은행 문자 양식 변경 시 입금이 다시 무음 유실된다(웹훅의 fail-open 저장 취지, 검증 확정 보정).
     const ignoredBy = matchesIgnoreRule(dep.remark, rules)
       ? "자동규칙"
-      : !isKnownDepositName(dep.remark, companyNames, aliases)
+      : dep.remark && !isKnownDepositName(dep.remark, companyNames, aliases)
         ? "미등록"
         : null;
     if (ignoredBy) {

@@ -144,10 +144,11 @@ export async function POST(req: NextRequest) {
       const keys = [...new Set(rows.flatMap((r) => { const o = String(r[1] ?? "").trim(); return o ? keyBoth(o) : []; }))];
       sig = batchSig(res.outbound, keys);
       if (keys.length && res.outbound.length) {
-        await sb.from("fulfill_pending_keys").upsert(
-          { sig, keys, created_at: new Date().toISOString() },
-          { onConflict: "sig" }
-        );
+        // 과도기 이중 저장: 배포 전 로드된 구 화면이 ④ 출고 때 sig 를 안 보내면 서버가 itemsSig 로
+        //  폴백 조회한다 — 두 서명 모두로 저장해 혼합 버전 창에서도 '처리됨' 확정이 누락되지 않게 한다.
+        const now = new Date().toISOString();
+        const sigRows = [...new Set([sig, itemsSig(res.outbound)])].map((s) => ({ sig: s, keys, created_at: now }));
+        await sb.from("fulfill_pending_keys").upsert(sigRows, { onConflict: "sig" });
       }
     } catch { /* 079 미적용 — 스킵 */ }
 

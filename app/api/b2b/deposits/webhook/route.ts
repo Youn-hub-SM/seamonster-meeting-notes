@@ -94,8 +94,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "미등록 입금자명 — 저장하지 않음" });
     }
 
-    // 중복 방지: 원문(잔액 포함이라 거래마다 다름) 해시. 구조화 입력은 금액+이름+거래시각(at 우선).
-    const dedupSrc = body.text ?? `${amount}|${name ?? ""}|${body.at ? body.at.trim() : stamp.trdt}`;
+    // 중복 방지: 원문(잔액 포함이라 거래마다 다름) 해시. 구조화 입력은 금액+이름+거래시각(분 단위 정규화 —
+    //  stamp 가 이미 at 우선이므로 at 원문의 포맷·초 지터에 흔들리지 않는다).
+    const dedupSrc = body.text ?? `${amount}|${name ?? ""}|${stamp.trdt}`;
     const tid = "sms-" + createHash("sha256").update(dedupSrc).digest("hex").slice(0, 40);
 
     const sb = supabaseAdmin();

@@ -221,6 +221,7 @@ export interface ShipmentScheduleInput {
   tracking_no: string;        // 박스 여러 개면 콤마로 이어붙임 (박스당 1개)
   box_count: number | string; // 이 차수 박스 수 (송장 출력 행·송장 입력칸 기준)
   stock_out?: boolean;        // 저장 시 재고를 즉시 출고(선점)할지 — 발송 잡는 순간 차감(오버부킹 방지)
+  shipped_at?: string | null; // 재저장 시 기존 발송 시각 보존용(서버 재구성 경로 전용 — 폼은 안 보냄)
   items: ShipmentItemInput[]; // qty>0 인 것만 저장
 }
 
