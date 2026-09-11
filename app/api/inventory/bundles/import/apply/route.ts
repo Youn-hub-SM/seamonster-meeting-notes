@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { logProductChange } from "@/app/lib/b2b-activity";
 import { notifyMasterChange } from "@/app/lib/master-notify";
+import { getAllBundles, wouldCreateCycle } from "@/app/lib/product-bundles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,6 +102,12 @@ export async function POST(req: NextRequest) {
         rows.push({ parent_id: parentId, component_id: ids[0].id, qty: c.qty });
       }
       if (compErr) { errors.push(`${parentSku}: ${compErr}`); continue; }
+
+      // 순환(A⊃B⊃A) 차단 — 순환이 저장되면 재고 전개가 그 가지를 버려 출고가 차감되지 않는다
+      if (wouldCreateCycle(await getAllBundles(sb), parentId, rows.map((r) => r.component_id))) {
+        errors.push(`${parentSku}: 묶음 순환 — 구성품이 이 세트를(직·간접) 포함`);
+        continue;
+      }
 
       // 구성 교체
       const del = await sb.from("product_bundles").delete().eq("parent_id", parentId);

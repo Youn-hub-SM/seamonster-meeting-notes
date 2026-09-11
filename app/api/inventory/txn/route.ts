@@ -23,7 +23,23 @@ export async function POST(req: NextRequest) {
     const type = String(b.type || "") as InvTxnType;
     if (!product_id) return NextResponse.json({ ok: false, error: "품목을 선택하세요." }, { status: 400 });
     if (!INV_TXN_TYPES.includes(type)) return NextResponse.json({ ok: false, error: "유형이 올바르지 않습니다." }, { status: 400 });
-    const qty = signedQty(type, Number(b.qty) || 0);
+    let qty = signedQty(type, Number(b.qty) || 0);
+    // 조정(실사 목표): 화면이 계산한 델타는 화면 로드 시점 재고 기준이라, 로드 후 재고가 움직이면
+    //  낡은 델타가 그대로 기록된다(감사 확정 TOCTOU). target_qty 가 오면 서버가 기록 시점 현재고로
+    //  델타를 재계산한다(엑셀 조정 apply 와 같은 규칙). 구 화면(qty 만 전송)은 기존 동작 유지.
+    if (type === "조정" && b.target_qty !== undefined && b.target_qty !== null && b.target_qty !== "") {
+      const target = Math.round((Number(b.target_qty) || 0) * 100) / 100;
+      const chan = b.channel === "도매" ? "도매" : "소매";
+      const { data: stockRow, error: stockErr } = await supabaseAdmin()
+        .rpc("inventory_stock", { asof: null, chan })
+        .eq("product_id", String(b.product_id || ""))
+        .maybeSingle();
+      if (!stockErr) { // RPC 구버전(chan 미지원 등) 실패 시엔 화면이 보낸 델타(qty)로 폴백 — 기존 동작 유지
+        const current = Number((stockRow as { qty?: number } | null)?.qty) || 0;
+        qty = Math.round((target - current) * 100) / 100;
+        if (qty === 0) return NextResponse.json({ ok: false, error: "현재고와 동일합니다 (변동 없음)." }, { status: 400 });
+      }
+    }
     if (qty === 0) return NextResponse.json({ ok: false, error: "수량을 입력하세요." }, { status: 400 });
     const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined;
     // 도매 입고 금지 — 도매 재고는 소매 입고 후 소매↔도매 이동으로만 들어간다(실수로 바로 도매에 넣는 사고 방지).

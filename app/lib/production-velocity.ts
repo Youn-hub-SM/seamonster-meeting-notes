@@ -40,10 +40,22 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
     "qty, txn_date, status, products(sku)",
     "qty, txn_date, products(sku)",
   ];
+  // ※ 단발 .limit(20000)은 서버 Max Rows(기본 1000)가 우선해 조용히 잘린다 — 판매속도·안전재고·
+  //   생산 마감 경보가 축소되던 원인(감사 확정). range 페이징으로 전량 읽는다(안정 정렬 필수).
   let rows: OutRow[] = [];
   for (const sel of selects) {
-    const res = await sb.from("inventory_txns").select(sel).eq("type", "출고").gte("txn_date", fromD).limit(20000);
-    if (!res.error) { rows = (res.data ?? []) as unknown as OutRow[]; break; }
+    const acc: OutRow[] = [];
+    let failed = false;
+    for (let i = 0; i < 100000; i += 1000) {
+      const res = await sb.from("inventory_txns").select(sel).eq("type", "출고").gte("txn_date", fromD)
+        .order("txn_date", { ascending: true }).order("id", { ascending: true })
+        .range(i, i + 999);
+      if (res.error) { failed = true; break; }
+      const chunk = (res.data ?? []) as unknown as OutRow[];
+      acc.push(...chunk);
+      if (chunk.length < 1000) break;
+    }
+    if (!failed) { rows = acc; break; }
   }
 
   const totals = new Map<string, number>();

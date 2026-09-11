@@ -164,7 +164,9 @@ export default function TxnModal({
     try {
       const res = await fetch("/api/inventory/txn", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product_id: productId, type, channel, qty: sendQty, unit_amount: isAdjust ? null : unitAmount, txn_date: date, partner: isAdjust ? "" : partner, memo, reason: type === "출고" && reason !== "판매" ? reason : null }),
+        // 목표(실사) 조정은 target_qty 도 함께 보낸다 — 서버가 기록 시점 현재고로 델타를 재계산해
+        //  화면 로드 후 재고가 움직여도 낡은 델타가 기록되지 않는다(TOCTOU 방지). qty 는 구 서버 폴백.
+        body: JSON.stringify({ product_id: productId, type, channel, qty: sendQty, ...(type === "조정" && adjMode === "target" ? { target_qty: Number(qty) || 0 } : {}), unit_amount: isAdjust ? null : unitAmount, txn_date: date, partner: isAdjust ? "" : partner, memo, reason: type === "출고" && reason !== "판매" ? reason : null }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "기록 실패");

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { getAllBundles, wouldCreateCycle } from "@/app/lib/product-bundles";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,10 @@ export async function PUT(req: NextRequest) {
     const uniq = new Map(rows.map((r) => [r.component_id, r]));
 
     const sb = supabaseAdmin();
+    // 순환(A⊃B⊃A) 차단 — 순환이 저장되면 재고 전개가 그 가지를 버려 출고가 차감되지 않는다(감사 확정)
+    if (uniq.size && wouldCreateCycle(await getAllBundles(sb), parent, [...uniq.keys()])) {
+      return NextResponse.json({ ok: false, error: "묶음 순환이 생깁니다 — 구성품이 이 상품을(직·간접) 포함하고 있습니다." }, { status: 400 });
+    }
     const del = await sb.from("product_bundles").delete().eq("parent_id", parent);
     if (del.error) throw del.error;
     if (uniq.size) {
