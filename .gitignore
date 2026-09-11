@@ -57,6 +57,7 @@ next-env.d.ts
 !/scripts/cafe24-catalog-sync.mjs
 !/scripts/cafe24-auth.mjs
 !/scripts/channel-commands-runner.mjs
+!/scripts/claims-poll.mjs
 
 # 외부 API 참고 문서(원문, 대용량)
 /API Reference_*.txt

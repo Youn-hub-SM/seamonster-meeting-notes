@@ -34,6 +34,13 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-09-12",
+    tag: "신규",
+    tool: "공통",
+    title: "채널 클레임(취소·반품·교환) Teams 알림",
+    desc: "네이버·쿠팡·공식몰(카페24)에서 취소, 반품, 교환 요청이 들어오면 10분 안에 Teams 채널로 알림이 옵니다. 상품명, 수량, 주문번호, 고객 사유가 함께 표시되고 같은 건은 한 번만 알립니다.",
+  },
+  {
     date: "2026-09-11",
     tag: "수정",
     tool: "공통",
