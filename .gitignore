@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# backup.env 는 .env* 에 안 걸린다(이름이 .env 로 시작 안 함) — 시크릿 키가 있으니 명시적으로 제외
+/backup.env
 
 # vercel
 .vercel
@@ -58,6 +60,9 @@ next-env.d.ts
 !/scripts/cafe24-auth.mjs
 !/scripts/channel-commands-runner.mjs
 !/scripts/claims-poll.mjs
+!/scripts/backup-supabase.mjs
+!/scripts/backup-supabase.bat
+!/backup.env.example
 
 # 외부 API 참고 문서(원문, 대용량)
 /API Reference_*.txt
