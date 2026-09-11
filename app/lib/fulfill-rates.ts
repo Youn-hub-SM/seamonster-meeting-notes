@@ -141,7 +141,13 @@ export function validateBoxCats(cats: BoxCat[], tiers: BoxTier[]): string[] {
   let prev = 0;
   for (let i = 0; i < cats.length; i++) {
     const c = cats[i];
-    if (c.maxKg == null) { if (i !== cats.length - 1) errs.push(`'${c.name}'의 이하(kg)가 비어 있습니다.`); break; }
+    if (c.maxKg == null) {
+      if (i !== cats.length - 1) { errs.push(`'${c.name}'의 이하(kg)가 비어 있습니다.`); break; }
+      // 마지막 무제한 종류의 열린 구간 (prev, ∞)도 유한한 요율 경계를 걸치면 안 된다(감사 확정 — 종전엔 미검사)
+      const crossing = tiers.filter((t) => t.maxKg != null && t.maxKg > prev).map((t) => t.maxKg);
+      if (crossing.length) errs.push(`'${c.name}'(${prev}kg 초과)가 운임 구간 경계 ${crossing.join("·")}kg를 걸칩니다 — 같은 종류인데 운임이 달라져 배송일지 수정 시 금액이 어긋납니다. ${Math.max(...(crossing as number[]))}kg 이상에서 시작하도록 종류를 나누세요.`);
+      break;
+    }
     if (c.maxKg <= prev) { errs.push(`'${c.name}'의 이하(kg) ${c.maxKg}는 앞 종류(${prev})보다 커야 합니다.`); prev = c.maxKg; continue; }
     // 이 종류의 범위 (prev, maxKg] 안에 요율 경계가 들어오면 안 됨
     const upper = c.maxKg;

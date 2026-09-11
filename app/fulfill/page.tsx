@@ -14,6 +14,7 @@ type Result = {
   messageWarnings?: { rowNo: number; orderNo: string; name: string; msg: string }[];
   unmatched: string[];
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[];
+  sig?: string; // 배치 서명(batchSig) — ④ 출고가 그대로 전달해야 대기 키·중복 검사가 이 파일과 이어진다
   excludedProcessed?: number;      // 이미 출고 처리돼 자동 제외된 주문 수(079)
   excludedOrderNos?: string[];
   codeCount: number;
@@ -74,7 +75,7 @@ export default function FulfillPage() {
     setDispatchLoading(true);
     (async () => {
       try {
-        const j = await (await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: false }) })).json();
+        const j = await (await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: false, sig: res?.sig }) })).json();
         if (!cancel) { if (j.ok) setDispatch(j); else setDispatchErr(true); }
       } catch { if (!cancel) setDispatchErr(true); }
       if (!cancel) setDispatchLoading(false);
@@ -170,7 +171,7 @@ export default function FulfillPage() {
     if (!items.length) return;
     setDispatching(true); setError("");
     try {
-      const r = await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: true, force }) });
+      const r = await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: true, force, sig: res?.sig }) });
       const j = await r.json();
       if (r.status === 409 && j.duplicate) {
         setDispatching(false);

@@ -26,11 +26,12 @@ function validOrderDate(v: string | null | undefined, today: string): string | n
   return v;
 }
 
-// POST { items:[{sku,qty}], commit?, force? }
+// POST { items:[{sku,qty}], commit?, force?, sig? }
 //  commit=false → 미리보기(재고 확인). commit=true → 소매 출고 일괄 기록. force=true → 중복(sig) 무시.
+//  sig = generate 가 준 배치 서명(batchSig) — 없으면(구 화면) SKU 합산 서명 폴백.
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { items?: Item[]; commit?: boolean; force?: boolean };
+    const body = (await req.json()) as { items?: Item[]; commit?: boolean; force?: boolean; sig?: string };
     const todayKst = kstToday();
     const items = (body.items || [])
       .filter((i) => i && i.sku && Number(i.qty) > 0)
@@ -109,7 +110,8 @@ export async function POST(req: NextRequest) {
     if (!commit) return NextResponse.json({ ok: true, committed: false, items: itemRows, products: productRows, shortages });
 
     // ── 커밋 ──
-    const sig = sigOf(items); const today = kstToday();
+    const sig = typeof body.sig === "string" && /^[0-9a-f]{16}$/i.test(body.sig) ? body.sig.toLowerCase() : sigOf(items);
+    const today = kstToday();
     if (!body.force) {
       try {
         // 같은 배치(SKU·수량 조합)를 다른 날 재업로드해도 이중차감을 막도록 '오늘'이 아니라 최근 7일로 검사.
@@ -134,13 +136,31 @@ export async function POST(req: NextRequest) {
         rows.push({ product_id: pid, type: "출고", qty: signedQty("출고", q), channel: "소매", status: "완료", group_id: groupId, order_no: orderNo || null, partner: "온라인몰", memo, txn_date: txnDate });
       }
     }
+    // 출고 기록(fulfill_dispatch)을 재고 차감보다 '먼저' — 유니크(sig, dispatch_date, migration 111)가
+    //  동시 커밋(두 창/두 사용자)의 이중 차감을 DB 차원에서 차단한다(감사 확정: 종전 select 가드는 경합에 뚫림).
+    //  065/111 미적용 환경이면 종전대로 사전 select 가드만 동작(스킵).
+    const totalQty = productRows.reduce((s, r) => s + r.need, 0);
+    let dispatchRecorded = false;
+    try {
+      const dIns = await sb.from("fulfill_dispatch").insert({ sig, dispatch_date: today, channel: "소매", sku_count: productIds.length, total_qty: totalQty, group_id: groupId, order_no: orderNo || null, created_by: "온라인발주" });
+      if (!dIns.error) dispatchRecorded = true;
+      else if ((dIns.error as { code?: string }).code === "23505") {
+        if (!body.force) {
+          return NextResponse.json({ ok: false, error: "같은 배치가 방금 다른 창(또는 다른 사용자)에서 먼저 출고되었습니다 — 재고는 한 번만 차감됐습니다.", duplicate: true }, { status: 409 });
+        }
+        // force 재출고: 같은 날 기록이 이미 있음 — 기록은 기존 행 유지, 재고 차감만 진행
+      }
+      // 그 외 오류(테이블 없음 등)는 종전처럼 기록 생략하고 진행
+    } catch { /* 065 미적용 스킵 */ }
+
     let insErr = (await sb.from("inventory_txns").insert(rows)).error;
     if (insErr && /channel/i.test(insErr.message)) { rows = rows.map(({ channel, ...r }) => r); insErr = (await sb.from("inventory_txns").insert(rows)).error; }
     if (insErr && /status/i.test(insErr.message)) { rows = rows.map(({ status, ...r }) => r); insErr = (await sb.from("inventory_txns").insert(rows)).error; }
-    if (insErr) return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
-
-    const totalQty = productRows.reduce((s, r) => s + r.need, 0);
-    try { await sb.from("fulfill_dispatch").insert({ sig, dispatch_date: today, channel: "소매", sku_count: productIds.length, total_qty: totalQty, group_id: groupId, order_no: orderNo || null, created_by: "온라인발주" }); } catch { /* 065 미적용 스킵 */ }
+    if (insErr) {
+      // 재고 기록 실패 — 방금 넣은 출고 기록을 되물려 다음 시도가 중복(409)에 막히지 않게 한다
+      if (dispatchRecorded) { try { await sb.from("fulfill_dispatch").delete().eq("group_id", groupId); } catch { /* 최선 노력 */ } }
+      return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
+    }
 
     // 출고 완료 = 이 배치의 주문들을 '처리됨'으로 확정(079) — 이후 파일에 섞여 오면 자동 제외됨. 실패 무시.
     try {

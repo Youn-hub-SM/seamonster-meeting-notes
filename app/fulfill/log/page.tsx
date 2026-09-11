@@ -107,11 +107,12 @@ export default function DeliveryLogPage() {
   const finalBoxes = (r: Row, side: "n" | "g"): Boxes =>
     mergeCounts(side === "n" ? r.boxes_normal_auto : r.boxes_guar_auto, curManualMap(r, side));
   // 최종 기본운임 = 자동 운임(발주처리 주문 단위 정밀값) + 보정분(박스종류 대표단가). 도착보장 보정엔 가산 포함.
+  //  설정 박스종류(boxCats)를 반드시 전달 — 빼먹으면 기본 8종 폴백이 렌더되어 서버 병합값과 어긋난다(감사 확정).
   const baseNormalOf = (r: Row): number =>
-    Math.max(0, (Number(r.base_fee_normal_auto) || 0) + manualFeeDelta(curManualMap(r, "n"), ratesFor(history, r.log_date).boxTiers));
+    Math.max(0, (Number(r.base_fee_normal_auto) || 0) + manualFeeDelta(curManualMap(r, "n"), ratesFor(history, r.log_date).boxTiers, boxCats));
   const baseGuarOf = (r: Row): number => {
     const rt = ratesFor(history, r.log_date); const m = curManualMap(r, "g");
-    return Math.max(0, (Number(r.base_fee_guar_auto) || 0) + manualFeeDelta(m, rt.boxTiers) + rt.guarSurcharge * sumCounts(m));
+    return Math.max(0, (Number(r.base_fee_guar_auto) || 0) + manualFeeDelta(m, rt.boxTiers, boxCats) + rt.guarSurcharge * sumCounts(m));
   };
 
   async function post(body: Record<string, unknown>) {

@@ -51,26 +51,44 @@ export async function POST(req: NextRequest) {
       if (rows.length === 0) { results.push({ name: title, invoiceCount: 0, itemCount: 0, error: "유효한 행이 없습니다." }); continue; }
 
       for (const r of rows) if (!bySku.has(r.sku_code.toUpperCase())) unmatched.add(r.sku_code);
-      const invoiceCount = new Set(rows.map((r) => r.invoice_no)).size;
+
+      // 같은 파일 재업로드 가드(감사 확정: 종전엔 그대로 다시 쌓여 피킹 수량이 이중 집계) —
+      //  이미 풀에 있는 송장번호의 행은 걸러낸다. 송장은 실물 1박스 1번호라 재등장 = 재업로드다.
+      const fileInvoices = [...new Set(rows.map((r) => r.invoice_no))];
+      const existingInv = new Set<string>();
+      try {
+        for (let i = 0; i < fileInvoices.length; i += 100) {
+          const { data: ex } = await sb.from("fulfill_scan_items").select("invoice_no").in("invoice_no", fileInvoices.slice(i, i + 100));
+          for (const r of ex ?? []) existingInv.add(String(r.invoice_no));
+        }
+      } catch { /* 조회 실패 시 가드 없이 진행(종전 동작) */ }
+      const dupRows = rows.filter((r) => existingInv.has(r.invoice_no)).length;
+      const freshRows = rows.filter((r) => !existingInv.has(r.invoice_no));
+      if (freshRows.length === 0) {
+        results.push({ name: title, invoiceCount: 0, itemCount: 0, error: `이미 등록된 송장 ${existingInv.size}건뿐입니다 — 같은 파일을 다시 올린 것 같습니다.` });
+        continue;
+      }
+      const effRows = freshRows;
+      const invoiceCount = new Set(effRows.map((r) => r.invoice_no)).size;
 
       const { data: up, error: uErr } = await sb
         .from("fulfill_scan_uploads")
-        .insert({ title, created_by: actor, invoice_count: invoiceCount, item_count: rows.length })
+        .insert({ title, created_by: actor, invoice_count: invoiceCount, item_count: effRows.length })
         .select("id")
         .single();
       if (uErr || !up) { results.push({ name: title, invoiceCount: 0, itemCount: 0, error: `${uErr?.message || "저장 실패"} (057 적용 확인)` }); continue; }
 
       const CHUNK = 500;
       let insErr: string | null = null;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const slice = rows.slice(i, i + CHUNK).map((r) => ({ upload_id: up.id, invoice_no: r.invoice_no, sku_code: r.sku_code, qty: r.qty }));
+      for (let i = 0; i < effRows.length; i += CHUNK) {
+        const slice = effRows.slice(i, i + CHUNK).map((r) => ({ upload_id: up.id, invoice_no: r.invoice_no, sku_code: r.sku_code, qty: r.qty }));
         const { error: iErr } = await sb.from("fulfill_scan_items").insert(slice);
         if (iErr) { insErr = iErr.message; break; }
       }
       if (insErr) { await sb.from("fulfill_scan_uploads").delete().eq("id", up.id); results.push({ name: title, invoiceCount: 0, itemCount: 0, error: `라인 저장 실패: ${insErr}` }); continue; }
 
       okFiles++;
-      results.push({ name: title, invoiceCount, itemCount: rows.length });
+      results.push({ name: title, invoiceCount, itemCount: effRows.length, ...(dupRows > 0 ? { error: `중복 송장 ${existingInv.size}건 제외하고 등록` } : {}) });
     }
 
     return NextResponse.json({

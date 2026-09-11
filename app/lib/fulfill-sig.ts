@@ -11,6 +11,15 @@ export function itemsSig(items: { sku: string; qty: number }[]): string {
   return createHash("sha1").update(norm).digest("hex").slice(0, 16);
 }
 
+// 배치 서명 v2 — SKU 합산(itemsSig)에 이 파일의 주문 키 집합을 섞는다. SKU 합이 우연히 같은
+//  '별개 배치'가 같은 서명이 되어 출고 중복 오탐 + 대기 키(pending_keys) 덮어쓰기가 나던
+//  결함(감사 확정) 방지. 주문 키가 없으면(구 흐름) itemsSig 그대로 — 하위호환.
+export function batchSig(items: { sku: string; qty: number }[], orderKeys: string[]): string {
+  const base = itemsSig(items);
+  if (!orderKeys.length) return base;
+  return createHash("sha1").update(base + "|" + orderKeys.slice().sort().join(",")).digest("hex").slice(0, 16);
+}
+
 // 주문 키 — '주문번호 + 상품 구성(단품코드:수량 정렬)' 해시. 이미 처리된 주문 필터의 단위.
 //  주문번호만 쓰면 우연히 번호가 겹치는 별개 주문을 오탐할 수 있어, 구성까지 같아야 중복으로 판정한다.
 //  (같은 파일 안의 동일 주문번호 여러 행은 한 주문의 라인들 — 필터 대상이 아니라 함께 집계됨)

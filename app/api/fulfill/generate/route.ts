@@ -3,7 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { buildCnplus, type CodeInfo } from "@/app/lib/order-fulfill";
 import { getAllBundles } from "@/app/lib/product-bundles";
 import { normalizeHistory, ratesFor, normalizeBoxCats } from "@/app/lib/fulfill-rates";
-import { itemsSig, orderKey } from "@/app/lib/fulfill-sig";
+import { itemsSig, batchSig, orderKey } from "@/app/lib/fulfill-sig";
 import { getDedupConfig } from "@/app/lib/fulfill-dedup";
 import ExcelJS from "exceljs";
 
@@ -74,6 +74,12 @@ export async function POST(req: NextRequest) {
     const keyOf = (orderNo: string) => dedup.match === "order_only"
       ? orderKey(orderNo)
       : orderKey(`${orderNo}|${(compByOrder.get(orderNo) || []).slice().sort().join(",")}`);
+    // 등록은 두 산식 키를 모두 저장 — 설정의 판정 기준(match)을 나중에 바꿔도 기존 처리완료 기록이
+    //  전부 미스나 '이미 처리된 주문 제외'가 조용히 무효화되던 결함(감사 확정) 방지. 조회는 현재 기준만.
+    const keyBoth = (orderNo: string): string[] => [...new Set([
+      orderKey(orderNo),
+      orderKey(`${orderNo}|${(compByOrder.get(orderNo) || []).slice().sort().join(",")}`),
+    ])];
     let excludedProcessed = 0;
     const excludedOrderNos: string[] = [];
     if (dedup.enabled) try {
@@ -131,12 +137,15 @@ export async function POST(req: NextRequest) {
 
     const res = buildCnplus(rows, codeMap, keywords, rates, boxCats);
 
-    // 이 파일의 주문 키(주문번호+구성)를 배치 서명으로 임시 보관 — 4단계 '출고 완료' 때 확정 등록(079). 실패해도 진행.
+    // 이 파일의 주문 키(주문번호+구성, 두 산식 모두)를 배치 서명으로 임시 보관 — 4단계 '출고 완료' 때
+    //  확정 등록(079). 서명은 주문 키까지 섞은 batchSig — SKU 합이 같은 별개 파일과 충돌하지 않는다.
+    let sig = itemsSig(res.outbound);
     try {
-      const keys = [...new Set(rows.map((r) => String(r[1] ?? "").trim()).filter(Boolean).map(keyOf))];
+      const keys = [...new Set(rows.flatMap((r) => { const o = String(r[1] ?? "").trim(); return o ? keyBoth(o) : []; }))];
+      sig = batchSig(res.outbound, keys);
       if (keys.length && res.outbound.length) {
         await sb.from("fulfill_pending_keys").upsert(
-          { sig: itemsSig(res.outbound), keys, created_at: new Date().toISOString() },
+          { sig, keys, created_at: new Date().toISOString() },
           { onConflict: "sig" }
         );
       }
@@ -161,6 +170,7 @@ export async function POST(req: NextRequest) {
       messageWarnings: res.messageWarnings, // 배송메시지 확인 목록 — 빠뜨리면 화면 카드가 영영 안 뜬다
       unmatched: res.unmatched,
       outbound: res.outbound, // SKU별 출고수량(재고 출고 연동용) — PII 없음
+      sig, // 배치 서명(batchSig) — 4단계 출고가 이 값을 그대로 써야 대기 키·중복 검사가 이 파일과 정확히 이어진다
       excludedProcessed,                          // 이미 출고 처리돼 자동 제외한 주문 수
       excludedOrderNos: excludedOrderNos.slice(0, 10), // 표시용 일부
       codeCount: codeMap.size,
