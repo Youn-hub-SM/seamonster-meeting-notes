@@ -279,10 +279,12 @@ async function cafe24Token() {
   }
 }
 
+// 판매자 승인/처리 대기 = '신청' 상태(C00 취소신청·R00 반품신청·E00 교환신청)만 조회한다.
+//  이 상태는 아직 claim_code 가 없다(접수·완료 후 부여) — claim_code 유무로 거르면 정작 알릴 건이 빠진다.
 const CAFE24_GROUPS = [
-  { typeKo: "취소", dateType: "cancel_request_date", statuses: "C00,C10,C34,C35,C36,C40,C41,C42,C43,C47,C49" },
-  { typeKo: "반품", dateType: "return_request_date", statuses: "R00,R10,R12,R13,R20,R30,R31,R34,R36,R40,R41,R42,R43" },
-  { typeKo: "교환", dateType: "exchange_request_date", statuses: "E00,E10,E12,E13,E20,E30,E31,E32,E33,E34,E35,E36,E40" },
+  { typeKo: "취소", dateType: "cancel_request_date", reqStatus: "C00" },
+  { typeKo: "반품", dateType: "return_request_date", reqStatus: "R00" },
+  { typeKo: "교환", dateType: "exchange_request_date", reqStatus: "E00" },
 ];
 
 async function pollCafe24() {
@@ -294,7 +296,7 @@ async function pollCafe24() {
   const claims = [];
   for (const g of CAFE24_GROUPS) {
     const qs = new URLSearchParams({
-      embed: "items", order_status: g.statuses, date_type: g.dateType,
+      embed: "items", order_status: g.reqStatus, date_type: g.dateType,
       start_date: start, end_date: end, limit: "500",
     });
     const res = await fetch(`https://${mallId}.cafe24api.com/api/v2/admin/orders?${qs}`, {
@@ -310,14 +312,15 @@ async function pollCafe24() {
       throw new Error(`카페24 주문조회(${g.typeKo}) 실패 (HTTP ${res.status}) ${msg}`.trim());
     }
     for (const o of j.orders ?? []) {
-      for (const it of o.items ?? []) {
-        if (!it.claim_code) continue;
+      const its = o.items ?? [];
+      for (let idx = 0; idx < its.length; idx++) {
+        const it = its[idx];
         const st = String(it.order_status ?? "");
-        // 이 그룹의 클레임 계열(C/R/E)이 아닌 품목(같은 주문의 정상 품목)은 제외
-        if (!st.startsWith(g.statuses.slice(0, 1))) continue;
+        if (st !== g.reqStatus) continue; // 같은 주문의 정상·타상태 품목 제외 — 이 신청 상태 품목만
+        const itemCode = it.order_item_code || it.product_no || String(idx);
         claims.push({
           claim_type: g.typeKo,
-          claim_key: `${o.order_id}:${it.order_item_code}:${it.claim_code}`,
+          claim_key: `${o.order_id}:${itemCode}:${st}`, // C00 은 claim_code 가 없어 상태로 식별
           order_id: String(o.order_id ?? ""),
           product_name: it.product_name ?? null,
           option_name: it.option_value ? String(it.option_value) : null,
@@ -325,8 +328,7 @@ async function pollCafe24() {
           reason: it.claim_reason ? String(it.claim_reason) : null,
           status: st,
           requested_at: null,
-          // 신청(C00/R00/E00) = 판매자 접수/승인 대기. 그 외(입금전취소·진행 단계)는 통보
-          action_required: st === "C00" || st === "R00" || st === "E00",
+          action_required: true, // 신청 상태만 조회하므로 전부 처리 필요
         });
       }
     }
