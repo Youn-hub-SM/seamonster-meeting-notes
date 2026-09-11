@@ -82,6 +82,8 @@ async function naverToken() {
 }
 
 const NAVER_TYPE_KO = { CANCEL: "취소", RETURN: "반품", EXCHANGE: "교환" };
+// *_REQUEST = 판매자 승인/처리 대기. 자동 환불되는 취소(요청 단계 없는 CANCEL_DONE)는 조치가 필요
+//  없는 '통보'라 대표 요청으로 알림 제외 — 아예 수집하지 않는다.
 const NAVER_REQ_STATUS = new Set(["CANCEL_REQUEST", "RETURN_REQUEST", "EXCHANGE_REQUEST"]);
 
 async function pollNaver() {
@@ -107,7 +109,7 @@ async function pollNaver() {
     moreSequence = more.moreSequence ?? null;
     await sleep(400);
   }
-  // 클레임 '요청'만 — claimType(취소/반품/교환) + claimStatus *_REQUEST
+  // 판매자 처리가 필요한 클레임 요청(*_REQUEST)만 — 자동 처리 통보는 제외
   const reqs = changed.filter((c) => NAVER_TYPE_KO[c.claimType] && NAVER_REQ_STATUS.has(String(c.claimStatus)));
   if (reqs.length === 0) return report("스마트스토어", []);
 
@@ -144,6 +146,7 @@ async function pollNaver() {
       reason: reason ? String(reason) : null,
       status: String(c.claimStatus ?? ""),
       requested_at: String(c.lastChangedDate ?? ""),
+      action_required: true, // *_REQUEST 만 남았으므로 전부 처리 필요
     };
   });
   return report("스마트스토어", claims);
@@ -174,12 +177,11 @@ async function pollCoupang() {
   const base = `/v2/providers/openapi/apis/api/v6/vendors/${vendorId}/returnRequests`;
   const k = kstNow();
   const minuteStamp = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
-  const dayStamp = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
   const from40 = minuteStamp(new Date(k.getTime() - 40 * 60_000));
   const toNow = minuteStamp(k);
   const claims = [];
 
-  const pushReturnRows = (rows, typeKo) => {
+  const pushReturnRows = (rows, typeKo, actionRequired) => {
     for (const r of rows) {
       const items = Array.isArray(r.returnItems) ? r.returnItems : [];
       const first = items[0] ?? {};
@@ -193,6 +195,7 @@ async function pollCoupang() {
         reason: r.cancelReason || r.reasonCodeText || null,
         status: String(r.receiptStatus ?? ""),
         requested_at: String(r.createdAt ?? ""),
+        action_required: actionRequired,
       });
     }
   };
@@ -202,25 +205,11 @@ async function pollCoupang() {
     const res = await coupangGet(`${base}?searchType=timeFrame&createdAtFrom=${from40}&createdAtTo=${toNow}&status=${status}`);
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`쿠팡 반품조회(${status}) 실패 (HTTP ${res.status}) ${j.code || ""} ${j.message || ""}`.trim());
-    pushReturnRows(j.data ?? [], "반품"); // RU=출고중지요청, UC=반품접수 — status 파라미터로 이미 걸러져 온다
+    pushReturnRows(j.data ?? [], "반품", true); // RU=출고중지요청, UC=반품접수 — 판매자 확인/처리 필요
     await sleep(400);
   }
 
-  // (b) 결제완료 단계 주문취소 — cancelType=CANCEL, 일단위(어제~오늘) + nextToken 페이징
-  {
-    const y = new Date(k.getTime() - 86400_000);
-    let nextToken = "";
-    for (let page = 0; page < 10; page++) {
-      const q = `${base}?cancelType=CANCEL&createdAtFrom=${dayStamp(y)}&createdAtTo=${dayStamp(k)}&maxPerPage=50` + (nextToken ? `&nextToken=${nextToken}` : "");
-      const res = await coupangGet(q);
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(`쿠팡 취소조회 실패 (HTTP ${res.status}) ${j.code || ""} ${j.message || ""}`.trim());
-      pushReturnRows(j.data ?? [], "취소");
-      nextToken = String(j.nextToken ?? "").trim();
-      if (!nextToken) break;
-      await sleep(400);
-    }
-  }
+  // (결제완료 단계 주문취소(cancelType=CANCEL)는 쿠팡이 자동 환불 처리 — 판매자 조치 불필요라 폴링 안 함)
 
   // (c) 교환 — v4, 초단위 스탬프, 최근 24시간 창
   {
@@ -246,6 +235,7 @@ async function pollCoupang() {
           reason: r.reasonEtcDetail || r.reasonCodeText || r.reasonCode || null,
           status: String(r.exchangeStatus ?? ""),
           requested_at: String(r.createdAt ?? ""),
+          action_required: String(r.exchangeStatus ?? "") === "RECEIPT", // 접수 = 판매자 처리 필요
         });
       }
       nextToken = String(j.nextToken ?? "").trim();
@@ -335,6 +325,8 @@ async function pollCafe24() {
           reason: it.claim_reason ? String(it.claim_reason) : null,
           status: st,
           requested_at: null,
+          // 신청(C00/R00/E00) = 판매자 접수/승인 대기. 그 외(입금전취소·진행 단계)는 통보
+          action_required: st === "C00" || st === "R00" || st === "E00",
         });
       }
     }

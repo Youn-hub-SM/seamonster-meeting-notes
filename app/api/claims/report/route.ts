@@ -23,6 +23,7 @@ type ClaimIn = {
   claim_type?: string; claim_key?: string; order_id?: string;
   product_name?: string; option_name?: string | null; qty?: number;
   reason?: string | null; status?: string | null; requested_at?: string | null;
+  action_required?: boolean; // true=판매자 승인/처리 필요, false=자동 처리 통보. 구 폴러 미전송 시 true 취급
 };
 
 export async function POST(req: NextRequest) {
@@ -44,8 +45,10 @@ export async function POST(req: NextRequest) {
         reason: c.reason ? String(c.reason).slice(0, 500) : null,
         status: c.status ? String(c.status).slice(0, 100) : null,
         requested_at: c.requested_at ? String(c.requested_at).slice(0, 40) : null,
+        action_required: c.action_required !== false,
       }))
-      .filter((c) => c.claim_type && c.claim_key);
+      // 판매자 승인/처리가 필요한 요청만 — 자동 처리된 '통보'성 건은 알림에서 제외(대표 요청 2026-09-12)
+      .filter((c) => c.claim_type && c.claim_key && c.action_required);
     if (claims.length === 0) return NextResponse.json({ ok: true, inserted: 0, notified: 0 });
 
     const sb = supabaseAdmin();
@@ -58,22 +61,26 @@ export async function POST(req: NextRequest) {
     //  폴링 창이 겹쳐 같은 클레임이 여러 번 와도 알림은 정확히 1회.
     const inserted: typeof claims = [];
     for (const c of claims) {
+      const { action_required, ...row } = c;
+      void action_required;
       const { data, error } = await sb
         .from("channel_claims")
-        .upsert({ channel, ...c }, { onConflict: "channel,claim_key", ignoreDuplicates: true })
+        .upsert({ channel, ...row }, { onConflict: "channel,claim_key", ignoreDuplicates: true })
         .select("id");
       if (error) throw error;
       if (data && data.length > 0) inserted.push(c);
     }
 
-    // Teams 알림 — 한 폴링분은 한 메시지로 묶는다(클레임 폭주 시 도배 방지)
+    // Teams 알림 — 한 폴링분은 한 메시지로 묶는다(클레임 폭주 시 도배 방지).
+    //  여기 오는 건 전부 '판매자 승인·처리 필요'(자동 처리 통보는 위에서 제외됨).
     let notified = 0;
     if (inserted.length > 0) {
-      const lines = inserted.slice(0, 15).map((c) =>
+      const lineOf = (c: (typeof inserted)[number]) =>
         `- [${c.claim_type}] ${c.product_name || "(상품명 미상)"}${c.option_name ? ` / ${c.option_name}` : ""}${c.qty ? ` x${c.qty}` : ""}` +
-        `${c.order_id ? ` · 주문 ${c.order_id}` : ""}${c.reason ? ` · 사유: ${c.reason}` : ""}`);
+        `${c.order_id ? ` · 주문 ${c.order_id}` : ""}${c.reason ? ` · 사유: ${c.reason}` : ""}`;
+      const lines = inserted.slice(0, 15).map(lineOf);
       if (inserted.length > 15) lines.push(`- 외 ${inserted.length - 15}건`);
-      const summary = `${channel} 클레임 ${inserted.length}건 접수 (취소/반품/교환)\n${lines.join("\n")}`;
+      const summary = `${channel} 승인·처리 필요 클레임 ${inserted.length}건 (취소/반품/교환)\n${lines.join("\n")}`;
       await mirrorB2BTeams(summary, null, null, { helper: true });
       notified = inserted.length;
       const keys = inserted.map((c) => c.claim_key);
