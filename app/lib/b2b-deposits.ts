@@ -7,6 +7,7 @@
 //  ※ 팝빌(유료 계좌조회) 경로는 2026-08-28 폐기 — 웹훅이 주력.
 
 import { supabaseAdmin } from "./supabase";
+import { cancelledDeductionByOrder } from "./b2b-cancel";
 import { logDepositConfirmed, logDepositsNeedReview } from "./b2b-activity";
 import { getKv, setKv } from "./b2b-settings";
 import {
@@ -94,12 +95,14 @@ export function matchesIgnoreRule(remark: string | null, rules: string[]): strin
 // 매칭
 // ─────────────────────────────────────────────
 // 미수금 발주(입금전·일부입금) + 입금 합계 (unpaid API 와 같은 계산 — 라우트 공용화 대신 로컬 유지)
+//  취소 발주 제외 + 부분취소 감액 반영(unpaid API 와 동일 규칙) — 자동매칭 amountHit 이 실청구액과 맞아야 한다.
 export async function loadUnpaidOrders(): Promise<UnpaidOrderLite[]> {
   const sb = supabaseAdmin();
   const { data: orders, error: oErr } = await sb
     .from("orders")
     .select("id, order_no, payment_status, total, company_id, company:company_id(name)")
-    .in("payment_status", ["입금전", "일부입금"]);
+    .in("payment_status", ["입금전", "일부입금"])
+    .neq("status", "취소");
   if (oErr) throw oErr;
 
   type Row = {
@@ -109,19 +112,19 @@ export async function loadUnpaidOrders(): Promise<UnpaidOrderLite[]> {
   const list = (orders ?? []) as unknown as Row[];
   if (list.length === 0) return [];
 
-  const { data: pays, error: pErr } = await sb
-    .from("payments")
-    .select("order_id, amount")
-    .in("order_id", list.map((o) => o.id));
-  if (pErr) throw pErr;
+  const [paysRes, dedMap] = await Promise.all([
+    sb.from("payments").select("order_id, amount").in("order_id", list.map((o) => o.id)),
+    cancelledDeductionByOrder(sb, list.map((o) => o.id)),
+  ]);
+  if (paysRes.error) throw paysRes.error;
   const paidMap = new Map<string, number>();
-  for (const p of pays ?? []) {
+  for (const p of paysRes.data ?? []) {
     paidMap.set(p.order_id, (paidMap.get(p.order_id) || 0) + Number(p.amount || 0));
   }
 
   return list.map((o) => {
     const company = Array.isArray(o.company) ? o.company[0] : o.company;
-    const total = Number(o.total) || 0;
+    const total = Math.max(0, (Number(o.total) || 0) - (dedMap.get(o.id) || 0));
     const paid = paidMap.get(o.id) || 0;
     return {
       id: o.id,

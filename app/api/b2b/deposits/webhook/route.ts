@@ -16,6 +16,26 @@ export const maxDuration = 30;
 //  ?dry=1 : 저장 없이 파싱 결과만 반환 (연동 테스트용).
 //  미들웨어 공개 예외 경로 — 여기서 직접 검증한다.
 
+// 구조화 입력의 at(거래시각) 파싱 — 지연 재전송이 '수신 시점' 기준으로 다른 거래가 되는 것을 막는다(감사 후속).
+//  타임존 표기가 없으면 폰이 보낸 KST 문자열 그대로로 해석하고, ISO(Z/+오프셋)면 절대시각→KST 변환.
+function stampFromAt(at?: string): { trdate: string; trdt: string } | null {
+  if (!at || typeof at !== "string") return null;
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(at.trim());
+  const m = at.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})[ T](\d{1,2}):(\d{2})/);
+  if (m && !hasTz) {
+    const pad = (n: string | number) => String(n).padStart(2, "0");
+    return { trdate: `${m[1]}${pad(m[2])}${pad(m[3])}`, trdt: `${m[1]}${pad(m[2])}${pad(m[3])}${pad(m[4])}${pad(m[5])}00` };
+  }
+  const t = Date.parse(at);
+  if (isNaN(t)) return null;
+  const k = new Date(t + 9 * 3600 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    trdate: `${k.getUTCFullYear()}${pad(k.getUTCMonth() + 1)}${pad(k.getUTCDate())}`,
+    trdt: `${k.getUTCFullYear()}${pad(k.getUTCMonth() + 1)}${pad(k.getUTCDate())}${pad(k.getUTCHours())}${pad(k.getUTCMinutes())}00`,
+  };
+}
+
 // KST 기준 trdate/trdt 문자열. 문자에 찍힌 MM/DD HH:mm 이 있으면 그걸 쓰고 연도는 수신 시점으로
 // 보정한다(12월 말 문자를 1월에 받는 경계만 -1년).
 function kstStamp(p?: { month: number | null; day: number | null; hour: number | null; minute: number | null }) {
@@ -63,16 +83,19 @@ export async function POST(req: NextRequest) {
     //  미등록 거래처의 입금은 화면에 안 뜨므로, 그런 건은 발주 모달의 '입금 추가'로 직접 기록.
     const known = isKnownDepositName(name, (await loadCompanyNames()).map((c) => c.name), await loadDepositAliases());
 
-    const stamp = kstStamp(parsed ?? undefined);
+    const stamp = stampFromAt(body.at) ?? kstStamp(parsed ?? undefined);
     if (sp.get("dry") === "1") {
       return NextResponse.json({ ok: true, dry: true, amount, name, known, ...stamp, parsed });
     }
-    if (!known) {
+    // 이름이 아예 없으면(파싱 실패) 버리지 않고 저장 — 은행 문자 양식이 바뀌어도 입금이 소리 없이
+    //  유실되지 않고 '확인필요'로 남는다(감사 확정 결함 보정). '등록된 이름과 다른 이름'은
+    //  기존 대표 결정(2026-08-10: 급여·사적 입금 미수집)대로 계속 버린다.
+    if (!known && name) {
       return NextResponse.json({ ok: true, skipped: "미등록 입금자명 — 저장하지 않음" });
     }
 
-    // 중복 방지: 원문(잔액 포함이라 거래마다 다름) 해시. 구조화 입력은 금액+이름+분 단위 시각.
-    const dedupSrc = body.text ?? `${amount}|${name ?? ""}|${stamp.trdt}`;
+    // 중복 방지: 원문(잔액 포함이라 거래마다 다름) 해시. 구조화 입력은 금액+이름+거래시각(at 우선).
+    const dedupSrc = body.text ?? `${amount}|${name ?? ""}|${body.at ? body.at.trim() : stamp.trdt}`;
     const tid = "sms-" + createHash("sha256").update(dedupSrc).digest("hex").slice(0, 40);
 
     const sb = supabaseAdmin();

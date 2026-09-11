@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       .select(
         "id, order_no, order_date, ship_date, status, discount_amount, " +
           "company:company_id(name, contact_phone), " +
-          "order_items(id, product_name, option_label, spec, qty, unit_price, sort_order, " +
+          "order_items(id, product_name, option_label, spec, qty, unit_price, sort_order, tax_type, " +
             "product:product_id(sku)), " +
           "shipments(status, shipment_items(order_item_id, qty))"
       )
@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
       qty: number;
       unit_price: number;
       sort_order: number;
+      tax_type?: string | null;
       product?: ProductJoin | ProductJoin[] | null;
     };
     type ShipmentJoin = { status: string; shipment_items: { order_item_id: string | null; qty: number }[] };
@@ -123,7 +124,7 @@ export async function GET(req: NextRequest) {
       // 유효 라인(취소 차수 수량 차감, 전량 취소 제외) 수집 후 할인/추가금을 비례 배분 —
       //  매출원장(b2b-sales-sync)과 같은 규칙이라 subtotal_amount 합 = 원장 결제금액 합이 성립한다.
       //  (양수 = 할인 차감, 음수 = 추가금 가산. 마지막 라인이 반올림 오차를 흡수)
-      const lines: { name: string; option: string; sku: string; qty: number; price: number }[] = [];
+      const lines: { name: string; option: string; sku: string; qty: number; price: number; taxable: boolean }[] = [];
       for (const it of items) {
         const product = Array.isArray(it.product) ? it.product[0] : it.product;
         const qty = Math.max(0, (Number(it.qty) || 0) - (cancelledQty.get(it.id) || 0)); // 취소 차수 수량 차감
@@ -134,13 +135,19 @@ export async function GET(req: NextRequest) {
           sku: product?.sku ?? "",
           qty,
           price: Number(it.unit_price) || 0,
+          taxable: it.tax_type !== "exempt",
         });
       }
-      const gross = lines.reduce((s, l) => s + l.qty * l.price, 0);
+      // 결제금액은 부가세 포함(과세 +10%) — 원장·화면 매출집계와 동일 기준(감사 후속: 도매만 공급가면 VAT 만큼 갈라짐)
+      const lineAmt = (l: { qty: number; price: number; taxable: boolean }) => {
+        const supply = l.qty * l.price;
+        return supply + (l.taxable ? Math.round(supply * 0.1) : 0);
+      };
+      const gross = lines.reduce((s, l) => s + lineAmt(l), 0);
       const disc = Math.min(Number(o.discount_amount) || 0, gross); // 할인은 gross 상한, 음수(추가금)는 통과
       let allocated = 0;
       lines.forEach((l, i) => {
-        const line = l.qty * l.price;
+        const line = lineAmt(l);
         const paid = i === lines.length - 1
           ? gross - disc - allocated
           : Math.round(line * (gross > 0 ? 1 - disc / gross : 1));

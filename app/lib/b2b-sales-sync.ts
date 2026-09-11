@@ -22,6 +22,7 @@ type ItemJoin = {
   qty: number;
   unit_price: number;
   sort_order: number;
+  tax_type?: string | null; // 'exempt' 면 면세 — 부가세 계산에서 제외
   product?: ProductJoin | ProductJoin[] | null;
 };
 type ShipmentJoin = { status: string; shipment_items: { order_item_id: string | null; qty: number }[] };
@@ -41,7 +42,7 @@ type OrderJoin = {
 export async function syncOrderSales(orderId: string): Promise<{ synced: boolean; rows: number }> {
   const sb = supabaseAdmin();
   const itemsSel =
-    "order_items(id, product_name, option_label, spec, qty, unit_price, sort_order, product:product_id(sku)), " +
+    "order_items(id, product_name, option_label, spec, qty, unit_price, sort_order, tax_type, product:product_id(sku)), " +
     "shipments(status, shipment_items(order_item_id, qty))";
   let { data, error } = await sb
     .from("orders")
@@ -75,31 +76,38 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
     }
   }
 
-  // 완전 동일한 라인(상품명·옵션·SKU·단가)은 수량 합산 병합 → 동일 row_hash 충돌로 인한 매출 누락 방지
-  const groups = new Map<string, { product_name: string; option_name: string; sku: string; price: number; qty: number }>();
+  // 완전 동일한 라인(상품명·옵션·SKU·단가·과세여부)은 수량 합산 병합 → 동일 row_hash 충돌로 인한 매출 누락 방지
+  const groups = new Map<string, { product_name: string; option_name: string; sku: string; price: number; qty: number; taxable: boolean }>();
   if (isCompleted) for (const it of (o.order_items ?? []).slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))) {
     const product = Array.isArray(it.product) ? it.product[0] : it.product;
     const product_name = it.product_name ?? "";
     const option_name = it.spec || it.option_label || "";
     const sku = product?.sku ?? "";
     const price = Number(it.unit_price) || 0;
+    const taxable = it.tax_type !== "exempt";
     const qty = Math.max(0, (Number(it.qty) || 0) - (cancelledQty.get(it.id) || 0)); // 취소 차수 수량 차감
     if (qty === 0) continue; // 전량 취소된 라인은 원장에서 제외
-    const key = [product_name, option_name, sku, price].join(SEP);
+    const key = [product_name, option_name, sku, price, taxable ? "t" : "x"].join(SEP);
     const g = groups.get(key);
     if (g) g.qty += qty;
-    else groups.set(key, { product_name, option_name, sku, price, qty });
+    else groups.set(key, { product_name, option_name, sku, price, qty, taxable });
   }
 
-  // 발주 할인(양수)/추가금(음수)은 라인 결제금액에 비례 배분해 반영(총매출이 실제 수금액과 일치하도록).
+  // 결제금액은 부가세 포함(과세 라인 +10%) — 원장(sales_orders)의 소매 행·화면 매출집계·미수금이
+  //  전부 부가세 포함 결제액 기준이라, 도매만 공급가로 적으면 같은 기간 매출이 VAT 만큼 갈라진다(감사 확정).
+  //  발주 할인(양수)/추가금(음수)은 VAT 포함 라인 금액에 비례 배분(orders.total = 공급가+VAT-할인 과 정합).
   //  마지막 라인이 반올림 오차를 흡수해 배분 합 = 총액 - 할인(+추가금)이 정확히 성립한다.
   const entries = [...groups.values()];
-  const gross = entries.reduce((s, g) => s + g.qty * g.price, 0);
+  const lineAmt = (g: { qty: number; price: number; taxable: boolean }) => {
+    const supply = g.qty * g.price;
+    return supply + (g.taxable ? Math.round(supply * 0.1) : 0);
+  };
+  const gross = entries.reduce((s, g) => s + lineAmt(g), 0);
   const disc = Math.min(Number(o.discount_amount) || 0, gross); // 할인은 gross 상한, 음수(추가금)는 그대로 통과
   const paidOf: number[] = [];
   let allocated = 0;
   for (let i = 0; i < entries.length; i++) {
-    const line = entries[i].qty * entries[i].price;
+    const line = lineAmt(entries[i]);
     const paid = i === entries.length - 1
       ? gross - disc - allocated
       : Math.round(line * (gross > 0 ? 1 - disc / gross : 1));
@@ -132,6 +140,10 @@ export async function syncOrderSales(orderId: string): Promise<{ synced: boolean
 
   const batch = `b2b-${o.id}`; // 발주 단위 태그(발주id — order_no 변경/충돌과 무관). 웹 업로드 되돌리기(web-*)와 무간섭
   const newHashes = new Set(rows.map((r) => r.row_hash));
+
+  // 같은 발주가 다른 배치(웹 업로드 백필 등)로도 원장에 있으면 정리 — stale-delete 가 자기 배치만
+  //  보므로 백필 행은 취소해도 남고 수정 시 이중집계된다(감사 확정). 도매 채널 + 이 주문번호 한정.
+  await sb.from("sales_orders").delete().eq("channel", "도매").eq("order_id", o.order_no).neq("upload_batch", batch);
 
   // (1) 현재 라인 upsert(멱등: 기존 동일 해시는 no-op, 변경/신규만 삽입) — 삭제보다 먼저 하여 매출 간극 없음
   if (rows.length) {

@@ -11,7 +11,8 @@ import type { Company } from "@/app/lib/b2b-types";
 //  라인 세액: 과세=공급가액×10%(마지막 과세 라인이 반올림 오차 흡수 → 합계가 orders.vat 와 일치), 면세=0.
 
 type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string; bank: string };
-type FullOrder = Order & { items: OrderItem[]; company: Company | null };
+type ShipLite = { status: string; items?: { order_item_id: string | null; qty: number }[] | null };
+type FullOrder = Order & { items: OrderItem[]; company: Company | null; shipments?: ShipLite[] | null };
 
 const won = (n: number) => Math.round(n).toLocaleString();
 
@@ -58,6 +59,29 @@ export default function StatementPage() {
       }
     }
     return raw;
+  }, [order]);
+
+  // 부분취소 감액 — orders.total 은 전량 기준(095 트리거)이라 취소 차수를 모른다.
+  //  취소 차수에 배정된 수량의 공급가+세액(과세만)을 별도 행으로 감액해 실발송분 청구액을 만든다.
+  const cancelled = useMemo(() => {
+    if (!order) return { supply: 0, vat: 0, total: 0 };
+    const qtyByItem = new Map<string, number>();
+    for (const s of order.shipments ?? []) {
+      if (s.status !== "취소") continue;
+      for (const si of s.items ?? []) {
+        if (si.order_item_id) qtyByItem.set(si.order_item_id, (qtyByItem.get(si.order_item_id) || 0) + (Number(si.qty) || 0));
+      }
+    }
+    let supply = 0, taxable = 0;
+    for (const it of order.items || []) {
+      const c0 = Math.min(Number(it.qty) || 0, qtyByItem.get(it.id as string) || 0);
+      if (c0 <= 0) continue;
+      const s0 = c0 * (Number(it.unit_price) || 0);
+      supply += s0;
+      if (it.tax_type !== "exempt") taxable += s0;
+    }
+    const vat = Math.round(taxable * 0.1);
+    return { supply, vat, total: supply + vat };
   }, [order]);
 
   const supplierMissing = !supplier || !supplier.name;
@@ -147,10 +171,19 @@ export default function StatementPage() {
                   <td />
                 </tr>
               )}
+              {cancelled.total > 0 && (
+                <tr>
+                  <td style={{ textAlign: "center", color: "var(--sm-text-mid)" }}>-</td>
+                  <td colSpan={4}>부분취소 감액 (취소 차수 배정분)</td>
+                  <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>-{won(cancelled.supply)}</td>
+                  <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>{cancelled.vat > 0 ? `-${won(cancelled.vat)}` : "-"}</td>
+                  <td />
+                </tr>
+              )}
               <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
                 <td colSpan={5}>합계</td>
-                <td className="num b2b-money">{won(Number(order.subtotal) || 0)}</td>
-                <td className="num b2b-money">{won(Number(order.vat) || 0)}</td>
+                <td className="num b2b-money">{won((Number(order.subtotal) || 0) - cancelled.supply)}</td>
+                <td className="num b2b-money">{won((Number(order.vat) || 0) - cancelled.vat)}</td>
                 <td />
               </tr>
             </tbody>
@@ -159,8 +192,8 @@ export default function StatementPage() {
 
           {/* 합계금액 */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "2px solid var(--sm-black)", borderRadius: 8, padding: "12px 16px", marginTop: 14 }}>
-            <strong style={{ fontSize: 15 }}>합계금액 (공급가액 + 세액{Number(order.discount_amount) > 0 ? " - 할인" : Number(order.discount_amount) < 0 ? " + 추가금" : ""})</strong>
-            <strong style={{ fontSize: 22 }}>{won(Number(order.total) || 0)}원</strong>
+            <strong style={{ fontSize: 15 }}>합계금액 (공급가액 + 세액{Number(order.discount_amount) > 0 ? " - 할인" : Number(order.discount_amount) < 0 ? " + 추가금" : ""}{cancelled.total > 0 ? " - 부분취소" : ""})</strong>
+            <strong style={{ fontSize: 22 }}>{won(Math.max(0, (Number(order.total) || 0) - cancelled.total))}원</strong>
           </div>
 
           {/* 입금 은행정보(설정에서 입력) */}

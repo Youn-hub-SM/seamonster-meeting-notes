@@ -311,20 +311,81 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       }
     }
 
+    // 기존 차수를 그대로 보존한 schedules 재구성 — 재저장 경로(saveOrderShipments)는 '전체 삭제 후
+    //  재삽입'이라, 빈 배열을 넘기면 자동 차수 생성이 송장·박스 수·재고차감 설정을 하드코딩 값으로
+    //  덮는다(감사 확정 결함). 발송일·상태만 바꿀 때도 반드시 이 재구성을 거친다.
+    async function loadSavedItems(): Promise<SavedOrderItem[]> {
+      const { data: oi } = await sb.from("order_items").select("id, product_id, product_name, spec, sort_order").eq("order_id", id).order("sort_order", { ascending: true });
+      return (oi ?? []).map((r) => ({ id: r.id as string, product_id: (r.product_id as string) ?? null, product_name: r.product_name as string, spec: (r.spec as string) ?? null }));
+    }
+    type ShipRow = Record<string, unknown> & { id: string };
+    async function reconstructSchedules(savedItems: SavedOrderItem[]): Promise<{ ships: ShipRow[]; schedules: ShipmentScheduleInput[] }> {
+      const { data: ships } = await sb.from("shipments").select("*").eq("order_id", id).order("seq", { ascending: true });
+      const rows = (ships ?? []) as ShipRow[];
+      const idxOf = new Map(savedItems.map((s, i) => [s.id, i]));
+      const schedules: ShipmentScheduleInput[] = [];
+      for (const s of rows) {
+        const { data: sitems } = await sb.from("shipment_items").select("order_item_id, qty").eq("shipment_id", s.id);
+        schedules.push({
+          ship_date: (s.ship_date as string | null) || "",
+          status: ((s.status as string) || "발송대기") as ShipmentScheduleInput["status"],
+          tracking_no: (s.tracking_no as string | null) || "",
+          box_count: Math.max(1, Math.floor(Number(s.box_count) || 1)),
+          stock_out: (s as { stock_out?: boolean }).stock_out !== false,
+          items: (sitems ?? [])
+            .map((r) => ({ order_item_index: idxOf.get(r.order_item_id as string) ?? -1, qty: Number(r.qty) || 0 }))
+            .filter((x) => x.order_item_index >= 0 && x.qty > 0),
+        });
+      }
+      return { ships: rows, schedules };
+    }
+    const recipientOf = (ship0: ShipRow | undefined) =>
+      (ship0
+        ? { recipient_name: ship0.recipient_name, recipient_phone: ship0.recipient_phone, address: ship0.address, delivery_memo: ship0.delivery_memo, courier: ship0.courier }
+        : {}) as Parameters<typeof saveOrderShipments>[1];
+
     // 발송일 인라인 등록/변경 — orders 컬럼만 바꾸면 재고가 안 빠지므로, saveOrderShipments 경로로 태워
-    //  발송 차수 생성 + 발주 전량 재고 차감(도매)을 함께 처리한다. 복수발송(차수 2개 이상)은 차수별 관리라 제외.
+    //  발송 차수 생성/발송일 교체 + 발주 전량 재고 차감(도매)을 함께 처리한다. 복수발송(차수 2개 이상)은 차수별 관리라 제외.
     //  (status 를 함께 바꾸는 발송완료 처리는 아래 별도 흐름이므로 여기선 ship_date 단독 변경만 대상)
     if (body.ship_date !== undefined && body.ship_date && body.status === undefined) {
-      const { count: shipCount } = await sb.from("shipments").select("id", { count: "exact", head: true }).eq("order_id", id);
-      if ((shipCount ?? 0) < 2) {
-        const { data: oi } = await sb.from("order_items").select("id, product_id, product_name, spec, sort_order").eq("order_id", id).order("sort_order", { ascending: true });
-        const savedItems: SavedOrderItem[] = (oi ?? []).map((r) => ({ id: r.id as string, product_id: (r.product_id as string) ?? null, product_name: r.product_name as string, spec: (r.spec as string) ?? null }));
-        const { data: ship0 } = await sb.from("shipments").select("recipient_name, recipient_phone, address, delivery_memo, courier, box_count").eq("order_id", id).limit(1).maybeSingle();
-        const recipient = (ship0 ? { recipient_name: ship0.recipient_name, recipient_phone: ship0.recipient_phone, address: ship0.address, delivery_memo: ship0.delivery_memo, courier: ship0.courier } : {}) as Parameters<typeof saveOrderShipments>[1];
-        const boxCount = Math.max(1, Math.floor(Number(ship0?.box_count) || 1));
-        const { earliestShipDate } = await saveOrderShipments(id, recipient, [], savedItems, boxCount, body.ship_date, (prev?.status as ShipmentScheduleInput["status"]) || "발송대기");
+      const savedItems = await loadSavedItems();
+      const { ships, schedules } = await reconstructSchedules(savedItems);
+      if (ships.length < 2) {
+        // 기존 차수가 있으면 송장·박스·재고차감·수량 배분을 그대로 두고 발송일만 교체
+        if (schedules[0]) schedules[0].ship_date = body.ship_date;
+        const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count) || 1));
+        const { earliestShipDate, totalBoxes } = await saveOrderShipments(
+          id, recipientOf(ships[0]), schedules, savedItems, boxCount, body.ship_date,
+          (prev?.status as ShipmentScheduleInput["status"]) || "발송대기"
+        );
         patch.ship_date = earliestShipDate; // orders.ship_date 는 아래 update 에서 동기화
+        if (totalBoxes > 0) patch.box_count = totalBoxes; // 헤더 박스 수도 차수 합과 일치시킨다
       }
+    }
+
+    // 발주 취소/취소 복구 — 차수 상태를 함께 전환하고 재고 원장을 재계산한다(감사 확정 결함:
+    //  상태만 바꾸면 선점 출고가 잔존해 현재고가 영구 왜곡). 재저장 경로가 취소 차수를 차감에서
+    //  제외하는 유일한 규칙 소유자라, 차수 상태를 바꾼 schedules 로 재저장을 태운다.
+    if (body.status !== undefined && prev && body.status !== prev.status && (body.status === "취소" || prev.status === "취소")) {
+      const savedItems = await loadSavedItems();
+      const { ships, schedules } = await reconstructSchedules(savedItems);
+      if (ships.length > 0) {
+        for (const sch of schedules) {
+          if (body.status === "취소") sch.status = "취소";
+          else if (sch.status === "취소") sch.status = body.status === "발송완료" ? "발송완료" : "발송대기";
+        }
+        const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count) || 1));
+        await saveOrderShipments(
+          id, recipientOf(ships[0]), schedules, savedItems, boxCount,
+          (prev?.ship_date as string | null) ?? null, null
+        );
+      }
+    }
+
+    // 발송완료 → 발송대기 되돌림 — 하위 차수에도 전파(감사 확정 결함: 차수가 발송완료로 남으면
+    //  이후 박스 수 저장 같은 무관한 차수 PATCH 가 상위 상태를 발송완료로 재승격해 매출이 재인식된다)
+    if (body.status === "발송대기" && prev?.status === "발송완료") {
+      await sb.from("shipments").update({ status: "발송대기", shipped_at: null }).eq("order_id", id).eq("status", "발송완료");
     }
 
     const { data, error } = await sb.from("orders").update(patch).eq("id", id).select().single();
