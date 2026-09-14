@@ -192,9 +192,163 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
   } catch (e) { console.warn("[production-allocate] syncWindowReceipts failed", e); }
 }
 
-// 이행 규칙(2026-07-29 확정):
+// ── 소매→도매 이전의 수동 배정(2026-09-14 대표 확정) ─────────────────────────
+//  자동 FIFO 대신 담당자가 '어느 도매 요청서에 얼마'를 직접 지정한다. 배정 없는 잔여는
+//  기타(요청 미연결 일반 이동 — 기본값 기타 100%). 이행 100% 도달 요청은 자동 '완료'로
+//  전환돼 도매 요청 종합(열린 요청 합산)에서 즉시 빠지고, 이동 취소(cascade 원복)로
+//  100% 아래로 내려간 완료 요청은 자동 '진행중'으로 재개된다.
+
+const ALLOC_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export type ManualAlloc = { item_id: string; qty: number };
+
+type AllocTargetRow = {
+  id: string; request_id: string; requested_qty: number; product_id: string;
+  head: { id: string; req_no: string | null; status: string };
+};
+
+// 배정 대상 품목행 로드 — 열린(요청·진행중) '도매 납품' 요청만.
+//  purpose(082) 미적용 환경은 빈 목록 — 용도 무관 폴백을 두면 제조사(재고 보충) 요청에
+//  수동 배정이 기록될 수 있다(검증 확정). targets 라우트도 같은 이유로 빈 목록을 낸다.
+async function loadAllocItems(sb: SupabaseClient, itemIds: string[]): Promise<AllocTargetRow[] | null> {
+  if (!itemIds.length) return [];
+  const { data, error } = await sb.from("production_request_items")
+    .select("id, request_id, requested_qty, product_id, production_requests!inner(id, req_no, status)")
+    .in("id", itemIds)
+    .in("production_requests.status", ["요청", "진행중"])
+    .eq("production_requests.purpose", "도매 납품");
+  if (error && /purpose/i.test(error.message)) return [];
+  if (error) return null;
+  return (data ?? [])
+    .map((r) => {
+      const rel = (r as { production_requests?: unknown }).production_requests;
+      const head = (Array.isArray(rel) ? rel[0] : rel) as AllocTargetRow["head"] | null;
+      return head ? {
+        id: r.id as string, request_id: r.request_id as string,
+        requested_qty: Number(r.requested_qty) || 0, product_id: r.product_id as string, head,
+      } : null;
+    })
+    .filter((x): x is AllocTargetRow => !!x);
+}
+
+// 저장 전 검증 — 이동(원장) 기록보다 먼저 불러 잘못된 배정이면 이동 자체를 거부한다.
+export async function validateManualAllocations(
+  sb: SupabaseClient, product_id: string, allocations: ManualAlloc[],
+): Promise<{ ok: boolean; error?: string }> {
+  const ids = allocations.map((a) => a.item_id);
+  if (new Set(ids).size !== ids.length) return { ok: false, error: "같은 요청서에 배정이 중복 입력됐습니다." };
+  const rows = await loadAllocItems(sb, ids);
+  if (rows === null) return { ok: false, error: "요청서 확인에 실패했습니다. 잠시 후 다시 시도하세요." };
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const a of allocations) {
+    const r = byId.get(a.item_id);
+    if (!r) return { ok: false, error: "배정한 요청서가 그 사이 완료·취소됐거나 대상이 아닙니다. 새로고침 후 다시 배정하세요." };
+    if (r.product_id !== product_id) return { ok: false, error: "배정한 요청서의 품목이 이동 품목과 다릅니다." };
+  }
+  return { ok: true };
+}
+
+// 이동 기록 후 배정 실행 — 실패는 이동을 되돌리지 않고 경고로 알린다(이동·배정 중 이동이 원장).
+export async function applyManualAllocations(
+  sb: SupabaseClient,
+  opts: { inv_txn_id: string; product_id: string; receipt_date?: string; allocations: ManualAlloc[]; actor: string | null },
+): Promise<{ warnings: string[]; requestIds: string[] }> {
+  const warnings: string[] = [];
+  const rows = await loadAllocItems(sb, opts.allocations.map((a) => a.item_id));
+  const byId = new Map((rows ?? []).map((r) => [r.id, r]));
+  let pname = "품목";
+  try {
+    const { data } = await sb.from("products").select("name").eq("id", opts.product_id).maybeSingle();
+    if (data?.name) pname = String(data.name);
+  } catch { /* 이름 없이 진행 */ }
+  const requestIds = new Set<string>();
+  for (const a of opts.allocations) {
+    const r = byId.get(a.item_id);
+    if (!r) { warnings.push("요청서 하나가 그 사이 닫혀 배정을 건너뛰었습니다(해당 수량은 기타로 남음)."); continue; }
+    const row: Record<string, unknown> = {
+      request_id: r.request_id, item_id: a.item_id, qty: a.qty,
+      memo: "소매→도매 이전 배정", received_by: opts.actor, inv_txn_id: opts.inv_txn_id,
+    };
+    if (opts.receipt_date && ALLOC_DATE_RE.test(opts.receipt_date)) row.receipt_date = opts.receipt_date;
+    const { error, inserted } = await insertReceiptOnce(sb, row);
+    if (error || !inserted) { warnings.push(`${r.head.req_no || "요청서"} 배정 기록 실패${error ? `: ${error.message}` : ""}`); continue; }
+    requestIds.add(r.request_id);
+    await logProductionReceipt(r.head.req_no || "", pname, a.qty, opts.actor);
+    // 상태 전환(요청→진행중/완료)은 recheckRequestCompletion 한 곳에서만 — 여기서도 전환하면
+    //  100% 배정 시 '요청→진행중→완료' 이중 전환·이중 알림이 난다(검증 확정).
+  }
+  return { warnings, requestIds: [...requestIds] };
+}
+
+// 요청 이행 현황 판독 — '도매 납품' 요청만 대상(제조사 요청은 이 자동 전환 체계 밖 — 검증 확정).
+//  완료 판정은 합계가 아니라 '모든 품목이 각자 100% 이상' — 한 품목 과배정이 다른 품목의
+//  미이행을 가리지 않게 한다(검증 확정). purpose 미적용 환경·조회 실패·절삭 위험은 null(판정 보류).
+export async function getRequestFullness(
+  sb: SupabaseClient, requestId: string,
+): Promise<{ full: boolean; status: string; req_no: string } | null> {
+  try {
+    const { data: head, error: he } = await sb.from("production_requests")
+      .select("id, req_no, status, purpose").eq("id", requestId).maybeSingle();
+    if (he || !head) return null; // purpose 컬럼 없음(082 미적용) 포함 — 자동 전환 없이 보류
+    if (head.purpose !== "도매 납품") return null;
+    const { data: items, error: ie } = await sb.from("production_request_items")
+      .select("id, requested_qty").eq("request_id", requestId).limit(2000);
+    if (ie || !items?.length) return null;
+    const recvByItem = new Map<string, number>();
+    for (let i = 0; i < items.length; i += 100) {
+      const part = items.slice(i, i + 100).map((x) => x.id as string);
+      const { data: rcs, error: re } = await sb.from("production_receipts")
+        .select("item_id, qty").in("item_id", part).limit(5000);
+      if (re) return null;
+      if ((rcs ?? []).length >= 5000) return null; // 절삭 위험 — 과소 합산으로 오판하지 않게 보류
+      for (const r of rcs ?? []) {
+        const k = r.item_id as string;
+        recvByItem.set(k, (recvByItem.get(k) || 0) + (Number(r.qty) || 0));
+      }
+    }
+    const full = items.every((it) => (recvByItem.get(it.id as string) || 0) >= (Number(it.requested_qty) || 0) - 0.001);
+    return { full, status: String(head.status), req_no: (head.req_no as string) || "" };
+  } catch { return null; }
+}
+
+// 이행률 재판정 — 상태 전환의 단일 창구.
+//  · mode "complete"(배정 직후): 전 품목 100% 이상이면 자동 '완료', 아니면 '요청'을 '진행중'으로만.
+//  · mode "reopen"(이동 취소 직후): 100% 아래로 내려간 '완료'를 '진행중'으로 재개 — 호출부(DELETE)가
+//    '삭제 전에 100%였던 요청'만 넘겨야 한다. 사람이 이행 미달인 채 수동 완료한 요청을 되살리면
+//    안 되기 때문(검증 확정 — 자동 완료 원복만 허용).
+//  실패해도 호출부를 막지 않는다.
+export async function recheckRequestCompletion(
+  sb: SupabaseClient, requestIds: string[], reason: string, mode: "complete" | "reopen" = "complete",
+): Promise<void> {
+  for (const id of [...new Set(requestIds)]) {
+    try {
+      const f = await getRequestFullness(sb, id);
+      if (!f) continue;
+      if (mode === "complete") {
+        if (f.full && (f.status === "요청" || f.status === "진행중")) {
+          const { data: flipped } = await sb.from("production_requests")
+            .update({ status: "완료", updated_at: new Date().toISOString() })
+            .eq("id", id).in("status", ["요청", "진행중"]).select("id");
+          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, f.status, "완료", `${reason} — 이행 100%`);
+        } else if (!f.full && f.status === "요청") {
+          const { data: flipped } = await sb.from("production_requests")
+            .update({ status: "진행중", updated_at: new Date().toISOString() })
+            .eq("id", id).eq("status", "요청").select("id");
+          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason);
+        }
+      } else if (!f.full && f.status === "완료") {
+        const { data: flipped } = await sb.from("production_requests")
+          .update({ status: "진행중", updated_at: new Date().toISOString() })
+          .eq("id", id).eq("status", "완료").select("id");
+        if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "완료", "진행중", reason);
+      }
+    } catch (e) { console.warn("[production-allocate] recheck failed", e); }
+  }
+}
+
+// 이행 규칙(2026-07-29 확정 · 2026-09-14 도매편 개정):
 //  · 입고(도소매 무관)          → '재고 보충'(제조사 요청) 이행 — 제조사가 만들어 보냈는가
-//  · 소매→도매 이전(도매 입고편) → '도매 납품'(도매 요청) 이행 — 생산 담당자가 도매로 옮겼는가
+//  · 소매→도매 이전(도매 입고편) → '도매 납품'(도매 요청) 이행 — 담당자가 이전 시 요청서별 수동 배정
 export async function allocateReceiptsToOpenRequests(
   sb: SupabaseClient,
   entries: AllocEntry[],
