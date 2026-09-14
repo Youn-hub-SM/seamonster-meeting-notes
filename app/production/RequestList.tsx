@@ -420,10 +420,23 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
               </table>
             </div>
 
-            {suggestComplete && (
+            {suggestComplete ? (
               <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
                 <span style={{ fontSize: 15, color: "var(--sm-success)" }}>모든 품목이 요청 수량 이상 입고되었습니다.</span>
                 <button className="b2b-btn-primary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy} onClick={() => onStatus("완료")}>생산 완료 처리</button>
+              </div>
+            ) : (req.status === "요청" || req.status === "진행중") && (
+              // 타이밍이 어긋나(요청서보다 먼저 이동·기타 처리 등) 100%를 못 채운 요청의 마감 수단 —
+              //  확인을 거친 강제 완료. 이렇게 닫은 요청은 이동 취소가 자동으로 되살리지 않는다(수동 완료 보존 규칙).
+              <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
+                <span className="sm-faint" style={{ fontSize: 13 }}>
+                  이행률 {req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0}% — 재고가 이미 넘어갔는데 배정이 안 잡힌 요청은 강제 완료로 마감할 수 있습니다.
+                </span>
+                <button className="b2b-btn-secondary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy}
+                  onClick={() => {
+                    const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
+                    if (confirm(`이행률이 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) 입니다.\n그래도 완료 처리할까요?\n\n완료하면 목록·도매 요청 종합에서 빠지고, 필요하면 '다시 열기'로 되돌릴 수 있습니다.`)) onStatus("완료");
+                  }}>강제 완료 처리</button>
               </div>
             )}
           </td>
