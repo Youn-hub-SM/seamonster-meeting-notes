@@ -69,6 +69,11 @@ async function buildSystemPrompt(): Promise<string> {
   // 팀 공유 용어집(회의 화면에서 편집) — 있으면 프롬프트에 주입
   prompt += await meetingTermsPromptBlock();
 
+  // 오늘 날짜(KST) — 모델은 현재 날짜를 모른다. 회의에 날짜 언급이 없으면 date 를 추측(엉뚱한
+  //  과거 날짜)으로 채우던 결함 보정: 오늘을 기준으로 명시하고 상대 표현도 환산하게 한다.
+  const todayKst = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  prompt += `\n\n[오늘 날짜]\n오늘은 ${todayKst} 이다. date 필드는 회의 내용에 날짜가 명시되면 그 날짜, 없으면 오늘 날짜로 한다. "어제"·"지난주 화요일" 같은 상대 표현은 오늘 기준으로 환산한다.`;
+
   return prompt;
 }
 
