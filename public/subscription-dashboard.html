@@ -1040,6 +1040,10 @@ function buildOrdersFromRows(rows) {
       raw: r["옵션"] || "",
       species: parseSpecies(r["옵션"] || ""),
       qty: Number(r["수량"] || 0),
+      // 옵션(행) 단위 상태·결제예정일 — 같은 신청번호 안에서 옵션별로 해지/이용중이 갈린다
+      // (실데이터 확인: 한 옵션만 해지하면 그 행만 해지·결제예정일 공란). 발송 일정은 이 값 기준.
+      status: r["정기배송 이용여부"] || "",
+      nextPay: r["결제예정일"] || "",
     });
   }
   return Array.from(byId.values()).sort((a, b) => b.signDate.localeCompare(a.signDate));
@@ -1277,19 +1281,23 @@ function renderKpis() {
 // 발송 일정: 향후 30일 · 상품 옵션 단위 수량 집계
 // 발송일 = 결제예정일 (D+2), 도착예정일 = 발송일 + 1일 (D+3)
 function computeShippingSchedule() {
-  const active = orders.filter(o => statusBucket(o.status) === "active" && o.nextPay);
+  // 옵션(행) 단위로 판정한다 — 신청건 첫 행 기준으로 묶으면, 한 옵션만 해지된 신청건(첫 행이
+  //  하필 해지 행)의 이용중 옵션들이 통째로 빠진다(2026-09-15 실데이터에서 확인된 과소 집계).
   const byShipDate = new Map();
-  active.forEach(o => {
-    const shipDate = o.nextPay;
-    if (!byShipDate.has(shipDate)) {
-      byShipDate.set(shipDate, { orders: [], products: new Map() });
-    }
-    const entry = byShipDate.get(shipDate);
-    entry.orders.push(o);
+  orders.forEach(o => {
+    const seenDates = new Set(); // 신청건수는 발송일당 1회만
     o.options.forEach(opt => {
+      const st = opt.status ?? o.status;         // 구 형식 데이터 폴백(옵션 필드 없으면 신청건 값)
+      const shipDate = opt.nextPay ?? o.nextPay;
+      if (statusBucket(st) !== "active" || !shipDate) return;
       const key = parseProductKey(opt.raw);
       const qty = opt.qty || 0; // CSV 수량 컬럼 = 그 SKU를 몇 번 담았는지
       if (!key || qty <= 0) return;
+      if (!byShipDate.has(shipDate)) {
+        byShipDate.set(shipDate, { orders: [], products: new Map() });
+      }
+      const entry = byShipDate.get(shipDate);
+      if (!seenDates.has(shipDate)) { seenDates.add(shipDate); entry.orders.push(o); }
       entry.products.set(key, (entry.products.get(key) || 0) + qty);
     });
   });
@@ -1370,9 +1378,11 @@ function renderShippingSchedule() {
     else if (d === 0) { klass += " today"; badge = `<span class="badge today">오늘</span>`; }
     else if (d <= 3) { badge = `<span class="badge soon">D-${d}</span>`; }
 
-    // 발송 명단도 검색에 따라 필터링 — 매칭 SKU를 보유한 신청건만
+    // 발송 명단도 검색에 따라 필터링 — '이 날짜에 실제로 나가는'(이용중 + 결제예정일 일치) 매칭 SKU 보유 신청건만
+    const shipsThisDate = (o, opt) =>
+      statusBucket(opt.status ?? o.status) === "active" && (opt.nextPay ?? o.nextPay) === date;
     const matchedOrders = search
-      ? entry.orders.filter(o => o.options.some(opt => matchKey(parseProductKey(opt.raw))))
+      ? entry.orders.filter(o => o.options.some(opt => shipsThisDate(o, opt) && matchKey(parseProductKey(opt.raw))))
       : entry.orders;
     const headSummary = search
       ? `${matchedOrders.length}건 / 총 ${entry.orders.length}건`
@@ -1399,7 +1409,7 @@ function renderShippingSchedule() {
               let extra = "";
               if (search) {
                 const matchedSkus = o.options
-                  .filter(opt => matchKey(parseProductKey(opt.raw)))
+                  .filter(opt => shipsThisDate(o, opt) && matchKey(parseProductKey(opt.raw)))
                   .map(opt => `${parseProductKey(opt.raw)} ×${opt.qty || 1}`);
                 if (matchedSkus.length) extra = ` <span style="color:var(--primary-dark)">— ${escapeHtml(matchedSkus.join(", "))}</span>`;
               }
