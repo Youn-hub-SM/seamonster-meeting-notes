@@ -605,7 +605,7 @@
         <div class="kpi-sub" id="kpiPauseMembersSub">CS 컨택 대상</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">결제 도달율 (D+2)</div>
+        <div class="kpi-label">결제 도달율</div>
         <div class="kpi-value" id="kpiFirstPay">-</div>
         <div class="kpi-sub" id="kpiFirstPaySub">결제 전 변심 이탈 제외</div>
       </div>
@@ -907,9 +907,13 @@ function weekday(iso) {
 // 예: "연어순살 100g(개별포장) × 1개" / "연어순살 100g(개별포장) × 10개 / 총 1kg"
 function parseProductKey(raw) {
   if (!raw) return "";
-  const species = (/종류=([^;]+)/.exec(raw) || [])[1]?.trim() || "";
-  const weight  = (/중량=([^;]+)/.exec(raw) || [])[1]?.trim() || "";
-  const pack    = (/수량=([^;]+)/.exec(raw) || [])[1]?.trim() || "";
+  const seg = re => {
+    const v = (re.exec(raw) || [])[1]?.trim() || "";
+    return v === "선택안함" ? "" : v; // '선택안함'은 정보가 아니라 미선택 표기 — 키에서 제외(드라이아이스 등)
+  };
+  const species = seg(/종류=([^;]+)/);
+  const weight  = seg(/중량=([^;]+)/);
+  const pack    = seg(/수량=([^;]+)/);
   const head    = [species, weight].filter(Boolean).join(" ");
   return pack ? (head ? `${head} × ${pack}` : pack) : head;
 }
@@ -1040,11 +1044,40 @@ function buildOrdersFromRows(rows) {
       raw: r["옵션"] || "",
       species: parseSpecies(r["옵션"] || ""),
       qty: Number(r["수량"] || 0),
-      // 옵션(행) 단위 상태·결제예정일 — 같은 신청번호 안에서 옵션별로 해지/이용중이 갈린다
-      // (실데이터 확인: 한 옵션만 해지하면 그 행만 해지·결제예정일 공란). 발송 일정은 이 값 기준.
+      // 옵션(행) 단위 상태·결제예정일·해지일·회차 — 같은 신청번호 안에서 옵션별로 해지/이용중이 갈린다
+      // (실데이터 확인: 한 옵션만 해지하면 그 행만 해지·결제예정일 공란). 발송 일정·파생 필드는 이 값 기준.
       status: r["정기배송 이용여부"] || "",
       nextPay: r["결제예정일"] || "",
+      cancelDate: r["해지일"] || "",
+      round: r["회차"] || "",
     });
+  }
+
+  // 신청건 필드 파생 — 첫 행 귀속은 CSV 행 순서라는 우연에 좌우된다(2026-09-15 전수 감사:
+  //  살아있는 신청건 17건이 해지로, 11회차 도달 건이 미도달로 집계되는 등 전 지표 왜곡 확정).
+  //  · status = 대표 상태(이용중 > 일시정지(구매자>관리자) > 해지(구매자>관리자)) — 하나라도 이용중이면 이용중,
+  //    해지는 '전 옵션 해지'일 때만. 원문 문자열을 유지해 상태 칩·관리자 제외 필터와 호환.
+  //  · cancelDate = 옵션 해지일의 최댓값(완전 해지 시점), round = 옵션 회차의 최댓값,
+  //  · nextPay = 이용중 옵션 결제예정일의 최솟값(첫 행이 해지 행이면 공란이 되던 것 보정).
+  const statusRank = s => {
+    const b = statusBucket(s);
+    const admin = s.includes("관리자") ? 1 : 0;
+    return b === "active" ? 0 : b === "pause" ? 1 + admin : b === "cancel" ? 3 + admin : 9;
+  };
+  for (const o of byId.values()) {
+    let best = null;
+    let maxCancel = "", maxRound = 0, minNextPay = "";
+    for (const opt of o.options) {
+      if (opt.status && (best === null || statusRank(opt.status) < statusRank(best))) best = opt.status;
+      if (opt.cancelDate && opt.cancelDate > maxCancel) maxCancel = opt.cancelDate;
+      const r = parseInt(opt.round, 10) || 0;
+      if (r > maxRound) maxRound = r;
+      if (statusBucket(opt.status) === "active" && opt.nextPay && (!minNextPay || opt.nextPay < minNextPay)) minNextPay = opt.nextPay;
+    }
+    if (best !== null) o.status = best;
+    if (maxCancel) o.cancelDate = maxCancel;
+    if (maxRound > 0) o.round = String(maxRound);
+    if (minNextPay) o.nextPay = minNextPay;
   }
   return Array.from(byId.values()).sort((a, b) => b.signDate.localeCompare(a.signDate));
 }
@@ -1197,13 +1230,16 @@ function renderKpis() {
     if (b === "pause") pauseMembers.add(k);
   });
 
-  // 첫결제 리드타임: 회차 1·이용중 신청건의 평균 (신청일 → 결제예정일)
+  // 첫결제 리드타임: 회차 1·이용중 신청건의 중앙값 (신청일 → 결제예정일)
+  //  평균은 표본이 적을 때(현재 수 건) 이상치 하나(다음 주기 날짜가 회차 1에 찍힌 건 — D+33 실측)에
+  //  끌려가 결제 도달율 기준이 통째로 밀린다(전수 감사 확정: D+11 vs 실제 D+2) — 중앙값으로 고정.
   const leadCandidates = orders
     .filter(o => statusBucket(o.status) === "active" && (parseInt(o.round, 10) || 0) === 1 && o.nextPay && o.signDate)
     .map(o => diffDays(o.signDate, o.nextPay))
-    .filter(d => d != null && d > 0);
+    .filter(d => d != null && d > 0)
+    .sort((a, b) => a - b);
   const leadTime = leadCandidates.length
-    ? Math.round(leadCandidates.reduce((s, x) => s + x, 0) / leadCandidates.length)
+    ? leadCandidates[Math.floor((leadCandidates.length - 1) / 2)]
     : 2; // fallback D+2
 
   // 첫결제 통과율: 신청 후 leadTime일 이상 경과한 신청건 중 leadTime 후에도 살아있는 건
@@ -1240,7 +1276,9 @@ function renderKpis() {
   orders.forEach(o => {
     let orderGrams = 0;
     o.options.forEach(opt => {
-      orderGrams += parseOptionGrams(opt.raw);
+      // × CSV 수량 — 옵션 문자열의 '수량=N개'는 1단위 구성이고, 같은 SKU를 몇 개 담았는지는
+      //  CSV 수량 컬럼이다(발송 일정과 동일 해석). 안 곱하면 총중량 -28% 실측(전수 감사 확정).
+      orderGrams += parseOptionGrams(opt.raw) * (opt.qty || 1);
     });
     if (orderGrams > 0) {
       totalGrams += orderGrams;
@@ -1290,7 +1328,8 @@ function computeShippingSchedule() {
       const st = opt.status ?? o.status;         // 구 형식 데이터 폴백(옵션 필드 없으면 신청건 값)
       const shipDate = opt.nextPay ?? o.nextPay;
       if (statusBucket(st) !== "active" || !shipDate) return;
-      const key = parseProductKey(opt.raw);
+      // 세트 상품은 옵션 문자열이 비어 키가 안 나온다 — 상품명 폴백(없으면 세트 발송이 계획에서 통째 누락, 감사 확정)
+      const key = parseProductKey(opt.raw) || (o.product ? `${o.product} (세트)` : "");
       const qty = opt.qty || 0; // CSV 수량 컬럼 = 그 SKU를 몇 번 담았는지
       if (!key || qty <= 0) return;
       if (!byShipDate.has(shipDate)) {
@@ -1305,7 +1344,10 @@ function computeShippingSchedule() {
 }
 
 function renderShippingSchedule() {
-  const today = dataTodayISO;
+  // 발송 일정만은 '실제 오늘(KST)' 기준 — dataTodayISO(최신 신청일)는 데이터가 하루만 묵어도
+  //  '오늘/지연/D-n' 뱃지가 통째로 한 칸 밀린다(감사 확정: 오늘 나갈 44개가 D-1 로 표시).
+  //  잔존율·코호트 등 분석 지표는 관측 종료일 의미로 dataTodayISO 를 계속 쓴다.
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const search = (document.getElementById("shipSearchInput")?.value || "").trim().toLowerCase();
   const matchKey = key => !search || key.toLowerCase().includes(search);
 
@@ -1381,8 +1423,9 @@ function renderShippingSchedule() {
     // 발송 명단도 검색에 따라 필터링 — '이 날짜에 실제로 나가는'(이용중 + 결제예정일 일치) 매칭 SKU 보유 신청건만
     const shipsThisDate = (o, opt) =>
       statusBucket(opt.status ?? o.status) === "active" && (opt.nextPay ?? o.nextPay) === date;
+    const keyOfOpt = (o, opt) => parseProductKey(opt.raw) || (o.product ? `${o.product} (세트)` : ""); // 집계와 동일 폴백
     const matchedOrders = search
-      ? entry.orders.filter(o => o.options.some(opt => shipsThisDate(o, opt) && matchKey(parseProductKey(opt.raw))))
+      ? entry.orders.filter(o => o.options.some(opt => shipsThisDate(o, opt) && matchKey(keyOfOpt(o, opt))))
       : entry.orders;
     const headSummary = search
       ? `${matchedOrders.length}건 / 총 ${entry.orders.length}건`
@@ -1409,8 +1452,8 @@ function renderShippingSchedule() {
               let extra = "";
               if (search) {
                 const matchedSkus = o.options
-                  .filter(opt => shipsThisDate(o, opt) && matchKey(parseProductKey(opt.raw)))
-                  .map(opt => `${parseProductKey(opt.raw)} ×${opt.qty || 1}`);
+                  .filter(opt => shipsThisDate(o, opt) && matchKey(keyOfOpt(o, opt)))
+                  .map(opt => `${keyOfOpt(o, opt)} ×${opt.qty || 1}`);
                 if (matchedSkus.length) extra = ` <span style="color:var(--primary-dark)">— ${escapeHtml(matchedSkus.join(", "))}</span>`;
               }
               return `<li>${escapeHtml(o.applicant)} · ${o.cycle} · ${escapeHtml(o.region || "-")}${extra}</li>`;
@@ -1436,7 +1479,7 @@ document.getElementById("shipSearchInput").addEventListener("input", () => {
 
 // TSV 복사 (발송 계획)
 document.getElementById("copyShipBtn").addEventListener("click", async () => {
-  const today = dataTodayISO;
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 화면(발송 일정)과 같은 실제 오늘 기준
   const schedule = computeShippingSchedule().filter(([date]) => {
     const d = diffDays(today, date);
     return d >= -3 && d <= 30;
@@ -1447,8 +1490,9 @@ document.getElementById("copyShipBtn").addEventListener("click", async () => {
     const wd = weekday(date);
     const arrival = addDaysISO(date, 1);
     const sorted = Array.from(entry.products.entries()).sort((a, b) => b[1] - a[1]);
-    sorted.forEach(([k, q]) => {
-      lines.push(`${date}\t${wd}\t${arrival}\t${entry.orders.length}\t${k}\t${q}`);
+    sorted.forEach(([k, q], i) => {
+      // 신청건수는 날짜당 첫 행에만 — SKU 행마다 반복하면 시트에서 SUM 시 12배 과대(감사 확정)
+      lines.push(`${date}\t${wd}\t${arrival}\t${i === 0 ? entry.orders.length : ""}\t${k}\t${q}`);
     });
   });
   try {
@@ -1546,7 +1590,7 @@ function renderAovChart() {
     const m = getMonth(o.signDate);
     if (!m) return;
     let orderGrams = 0;
-    o.options.forEach(opt => { orderGrams += parseOptionGrams(opt.raw); });
+    o.options.forEach(opt => { orderGrams += parseOptionGrams(opt.raw) * (opt.qty || 1); }); // × CSV 수량(KPI 와 동일)
     if (orderGrams > 0) {
       sumGramsByMonth.set(m, (sumGramsByMonth.get(m) || 0) + orderGrams);
       cntByMonth.set(m, (cntByMonth.get(m) || 0) + 1);
@@ -1845,7 +1889,7 @@ const SNAPSHOT_FIELDS = [
   { key: "totalOrders",    label: "전체 신청건" },
   { key: "activeMembers",  label: "활성 회원" },
   { key: "pauseMembers",   label: "일시정지 회원" },
-  { key: "firstPayRate",   label: "결제 도달율(D+2)" },
+  { key: "firstPayRate",   label: "결제 도달율" }, // 리드타임은 데이터별로 달라(중앙값 산출) 라벨에 고정 표기하지 않는다
   { key: "reach3Rate",     label: "3회 잔존율" },
   { key: "reach4Rate",     label: "4회 잔존율" },
   { key: "avgWeightKg",    label: "1신청당 평균중량(kg)" },
