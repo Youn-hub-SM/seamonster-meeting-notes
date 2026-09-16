@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       patch.status = s;
     }
     if (b.title !== undefined) patch.title = String(b.title || "").trim() || null;
-    if (b.purpose !== undefined) patch.purpose = b.purpose === "도매 납품" ? "도매 납품" : "재고 보충"; // 용도(082)
+    if (b.purpose !== undefined) patch.purpose = b.purpose === "도매 납품" ? "도매 납품" : b.purpose === "프로모션" ? "프로모션" : "재고 보충"; // 용도(082·113)
     if (b.requested_by !== undefined) patch.requested_by = String(b.requested_by || "").trim() || null;
     if (b.assignee !== undefined) patch.assignee = String(b.assignee || "").trim() || null;
     if (b.memo !== undefined) patch.memo = String(b.memo || "").trim() || null;
@@ -83,6 +83,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       reqNo = (cur as { req_no?: string } | null)?.req_no ?? "";
     }
     let { error } = await sb.from("production_requests").update(patch).eq("id", id);
+    if (error && patch.purpose === "프로모션" && /purpose/i.test(error.message))
+      return NextResponse.json({ ok: false, error: "프로모션 용도가 아직 없습니다 — migration 113 을 먼저 적용하세요." }, { status: 500 });
     if (error && "purpose" in patch && /purpose/i.test(error.message)) {
       delete patch.purpose; // 082 미적용 환경 폴백
       ({ error } = await sb.from("production_requests").update(patch).eq("id", id));

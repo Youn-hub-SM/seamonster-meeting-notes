@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { logInventoryMovedToWholesale } from "@/app/lib/b2b-activity";
+import { logInventoryMovedToWholesale, logInventoryPoolMoved } from "@/app/lib/b2b-activity";
 import { validateManualAllocations, applyManualAllocations, recheckRequestCompletion, getRequestFullness, type ManualAlloc } from "@/app/lib/production-allocate";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const dynamic = "force-dynamic";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const CHANNELS = ["도매", "소매"] as const;
+const CHANNELS = ["도매", "소매", "프로모션"] as const;
 const MARK = "채널이동"; // partner 필드에 마커로 넣어 이동 내역을 구분·조회
 
 async function actor(req: NextRequest): Promise<string | null> {
@@ -104,6 +104,9 @@ export async function POST(req: NextRequest) {
     const to = String(b.to || "");
     if (!CHANNELS.includes(from as never) || !CHANNELS.includes(to as never)) return NextResponse.json({ ok: false, error: "채널이 올바르지 않습니다." }, { status: 400 });
     if (from === to) return NextResponse.json({ ok: false, error: "옮길 채널이 서로 달라야 합니다." }, { status: 400 });
+    // 프로모션 풀은 소매하고만 주고받는다(도매↔프로모션 직행 금지 — 회계 경로 단순화, 113)
+    if ((from === "프로모션" || to === "프로모션") && from !== "소매" && to !== "소매")
+      return NextResponse.json({ ok: false, error: "프로모션 재고는 소매와만 주고받을 수 있습니다." }, { status: 400 });
 
     // 입력 정규화 — 신형 items[] 없으면 구형 단일 바디를 1줄짜리로 감싼다
     type ItemIn = { product_id: string; qty: number; allocations: ManualAlloc[] };
@@ -129,16 +132,17 @@ export async function POST(req: NextRequest) {
     const created_by = await actor(req);
     const sb = supabaseAdmin();
 
-    // 요청서 수동 배정(2026-09-14) — 소매→도매에서만. 줄마다 합계 ≤ 이동 수량(잔여=기타).
-    //  이동(원장) 기록 전에 '전 줄'을 검증해 잘못된 배정이면 아무것도 기록하지 않는다.
+    // 요청서 수동 배정(2026-09-14·113) — 소매→도매(도매 납품)·소매→프로모션(프로모션)에서만.
+    //  줄마다 합계 ≤ 이동 수량(잔여=기타). 이동(원장) 기록 전에 '전 줄'을 검증해 잘못된 배정이면 아무것도 기록하지 않는다.
+    const allocPurpose = to === "프로모션" ? "프로모션" as const : "도매 납품" as const;
     for (const it of items) {
       if (!it.allocations.length) continue;
-      if (!(from === "소매" && to === "도매"))
-        return NextResponse.json({ ok: false, error: "요청서 배정은 소매 → 도매 이동에서만 가능합니다." }, { status: 400 });
+      if (!(from === "소매" && (to === "도매" || to === "프로모션")))
+        return NextResponse.json({ ok: false, error: "요청서 배정은 소매 → 도매/프로모션 이동에서만 가능합니다." }, { status: 400 });
       const allocSum = Math.round(it.allocations.reduce((s, a) => s + a.qty, 0) * 100) / 100;
       if (allocSum > it.qty + 0.001)
         return NextResponse.json({ ok: false, error: `배정 합계(${allocSum})가 이동 수량(${it.qty})보다 많은 품목이 있습니다.` }, { status: 400 });
-      const v = await validateManualAllocations(sb, it.product_id, it.allocations);
+      const v = await validateManualAllocations(sb, it.product_id, it.allocations, allocPurpose);
       if (!v.ok) return NextResponse.json({ ok: false, error: v.error || "배정 검증 실패" }, { status: 400 });
     }
 
@@ -157,25 +161,28 @@ export async function POST(req: NextRequest) {
     // 알림 발송(성공한 줄 기준) — 정상 완료와 '중간 실패로 조기 반환' 양쪽에서 부른다.
     //  실패 경로에서 건너뛰면 앞 줄들이 원장·배정까지 반영됐는데 게시물이 0건이 된다(검증 확정).
     const notifyMove = async (doneItems: ItemIn[]) => {
-      if (!(from === "소매" && to === "도매") || !doneItems.length) return;
+      // 알림 대상: 소매→도매(도매 요청 대응) + 프로모션 관련 이동(확보·해제). 도매→소매는 종전대로 무알림.
+      const promo = from === "프로모션" || to === "프로모션";
+      if (!((from === "소매" && to === "도매") || promo) || !doneItems.length) return;
       try {
         try {
-          const [rt, wh] = await Promise.all([
-            sb.rpc("inventory_stock", { asof: null, chan: "소매" }).in("product_id", doneItems.map((it) => it.product_id)),
-            sb.rpc("inventory_stock", { asof: null, chan: "도매" }).in("product_id", doneItems.map((it) => it.product_id)),
+          const [fs, ts] = await Promise.all([
+            sb.rpc("inventory_stock", { asof: null, chan: from }).in("product_id", doneItems.map((it) => it.product_id)),
+            sb.rpc("inventory_stock", { asof: null, chan: to }).in("product_id", doneItems.map((it) => it.product_id)),
           ]);
           const toMap = (x: { data?: unknown }) => new Map(((x.data as { product_id?: string; qty?: unknown }[] | null) ?? []).map((r) => [String(r.product_id), Number(r.qty)]));
-          const rtm = toMap(rt), whm = toMap(wh);
+          const fm = toMap(fs), tm = toMap(ts);
           const stockLines = doneItems
-            .filter((it) => Number.isFinite(rtm.get(it.product_id) ?? NaN) && Number.isFinite(whm.get(it.product_id) ?? NaN))
-            .map((it) => `  ${nameById.get(it.product_id)?.name || "품목"}: 소매 ${(rtm.get(it.product_id) as number).toLocaleString()} · 도매 ${(whm.get(it.product_id) as number).toLocaleString()}`);
+            .filter((it) => Number.isFinite(fm.get(it.product_id) ?? NaN) && Number.isFinite(tm.get(it.product_id) ?? NaN))
+            .map((it) => `  ${nameById.get(it.product_id)?.name || "품목"}: ${from} ${(fm.get(it.product_id) as number).toLocaleString()} · ${to} ${(tm.get(it.product_id) as number).toLocaleString()}`);
           if (stockLines.length) notifyPerItem.push("이동 후 재고", ...stockLines);
         } catch { /* 재고 줄 생략 */ }
         const totalQty = doneItems.reduce((s, it) => s + it.qty, 0);
         const firstName = nameById.get(doneItems[0].product_id)?.name || "품목";
         const title = doneItems.length === 1 ? firstName : `${firstName} 외 ${doneItems.length - 1}종`;
         const firstSku = doneItems.length === 1 ? nameById.get(doneItems[0].product_id)?.sku ?? null : null;
-        await logInventoryMovedToWholesale(title, firstSku, totalQty, memo, created_by, notifyPerItem.join("\n"));
+        if (from === "소매" && to === "도매") await logInventoryMovedToWholesale(title, firstSku, totalQty, memo, created_by, notifyPerItem.join("\n"));
+        else await logInventoryPoolMoved(from, to, title, firstSku, totalQty, memo, created_by, notifyPerItem.join("\n"));
       } catch (e) { console.warn("[inventory/move] 이전 알림 실패", e); }
     };
 
@@ -188,6 +195,8 @@ export async function POST(req: NextRequest) {
         { ...base, type: "입고", qty: it.qty, channel: to, unit_amount: null },
       ]).select("id, type, qty");
       if (error) {
+        if (/channel_chk|check constraint/i.test(error.message) && (from === "프로모션" || to === "프로모션"))
+          return NextResponse.json({ ok: false, error: "프로모션 풀이 아직 없습니다 — migration 113 을 먼저 적용하세요." }, { status: 500 });
         if (/channel/i.test(error.message)) return NextResponse.json({ ok: false, error: "채널 컬럼이 없습니다 — migration 036 을 먼저 적용하세요." }, { status: 500 });
         const nm = nameById.get(it.product_id)?.name || `${i + 1}번째 품목`;
         const done = results.length;
@@ -204,13 +213,13 @@ export async function POST(req: NextRequest) {
       const nm = nameById.get(it.product_id)?.name || "품목";
       let allocatedSum = 0;
       const itemLines: string[] = [];
-      if (from === "소매" && to === "도매" && it.allocations.length) {
+      if (from === "소매" && (to === "도매" || to === "프로모션") && it.allocations.length) {
         try {
           const inLeg = (data ?? []).find((t) => t.type === "입고" && Number(t.qty) > 0);
           if (inLeg) {
             const r = await applyManualAllocations(sb, {
               inv_txn_id: inLeg.id as string, product_id: it.product_id, receipt_date: txn_date,
-              allocations: it.allocations, actor: created_by,
+              allocations: it.allocations, actor: created_by, purpose: allocPurpose,
             });
             warnings.push(...r.warnings.map((w) => `${nm}: ${w}`));
             itemLines.push(...r.lines.map((l) => `  ${l}`));
@@ -246,6 +255,23 @@ export async function DELETE(req: NextRequest) {
     const group_id = req.nextUrl.searchParams.get("group_id");
     if (!group_id) return NextResponse.json({ ok: false, error: "group_id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
+
+    // 취소로 입고편 채널이 마이너스가 되면 중단 — 예: 소매→프로모션 이동 후 자동 합류(풀→소매)가
+    //  이미 나간 상태에서 원본을 취소하면 프로모션 풀이 음수로 남는다(검증 확정). 이후 이동을 먼저 취소해야 한다.
+    {
+      const { data: inLegs } = await sb.from("inventory_txns")
+        .select("product_id, channel, qty").eq("group_id", group_id).eq("partner", MARK).eq("type", "입고");
+      for (const leg of inLegs ?? []) {
+        try {
+          const { data: st } = await sb.rpc("inventory_stock", { asof: null, chan: String(leg.channel) })
+            .eq("product_id", String(leg.product_id)).maybeSingle();
+          const cur = Number((st as { qty?: unknown } | null)?.qty ?? NaN);
+          if (Number.isFinite(cur) && cur - (Number(leg.qty) || 0) < -0.001) {
+            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 마이너스가 됩니다 — 이 이동 이후에 기록된 이동(행사 종료 자동 합류 등)을 먼저 취소하세요.` }, { status: 409 });
+          }
+        } catch { /* 판정 불가 시 기존 동작(취소 허용) */ }
+      }
+    }
 
     // cascade 로 사라지기 전에 영향 요청 수집 — 조회가 실패하면 취소 자체를 중단(fail-closed).
     //  여기서 삭제만 진행되면 '이행률은 내려갔는데 상태는 완료'로 굳고 재판정할 트리거가 없다(검증 확정).

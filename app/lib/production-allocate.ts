@@ -201,6 +201,8 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
 const ALLOC_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export type ManualAlloc = { item_id: string; qty: number };
+// 수동 배정 대상 용도 — 소매→도매 이동은 '도매 납품', 소매→프로모션 이동은 '프로모션'(113)
+export type AllocPurpose = "도매 납품" | "프로모션";
 
 type AllocTargetRow = {
   id: string; request_id: string; requested_qty: number; product_id: string;
@@ -210,13 +212,13 @@ type AllocTargetRow = {
 // 배정 대상 품목행 로드 — 열린(요청·진행중) '도매 납품' 요청만.
 //  purpose(082) 미적용 환경은 빈 목록 — 용도 무관 폴백을 두면 제조사(재고 보충) 요청에
 //  수동 배정이 기록될 수 있다(검증 확정). targets 라우트도 같은 이유로 빈 목록을 낸다.
-async function loadAllocItems(sb: SupabaseClient, itemIds: string[]): Promise<AllocTargetRow[] | null> {
+async function loadAllocItems(sb: SupabaseClient, itemIds: string[], purpose: AllocPurpose): Promise<AllocTargetRow[] | null> {
   if (!itemIds.length) return [];
   const { data, error } = await sb.from("production_request_items")
     .select("id, request_id, requested_qty, product_id, production_requests!inner(id, req_no, status)")
     .in("id", itemIds)
     .in("production_requests.status", ["요청", "진행중"])
-    .eq("production_requests.purpose", "도매 납품");
+    .eq("production_requests.purpose", purpose);
   if (error && /purpose/i.test(error.message)) return [];
   if (error) return null;
   return (data ?? [])
@@ -233,11 +235,11 @@ async function loadAllocItems(sb: SupabaseClient, itemIds: string[]): Promise<Al
 
 // 저장 전 검증 — 이동(원장) 기록보다 먼저 불러 잘못된 배정이면 이동 자체를 거부한다.
 export async function validateManualAllocations(
-  sb: SupabaseClient, product_id: string, allocations: ManualAlloc[],
+  sb: SupabaseClient, product_id: string, allocations: ManualAlloc[], purpose: AllocPurpose = "도매 납품",
 ): Promise<{ ok: boolean; error?: string }> {
   const ids = allocations.map((a) => a.item_id);
   if (new Set(ids).size !== ids.length) return { ok: false, error: "같은 요청서에 배정이 중복 입력됐습니다." };
-  const rows = await loadAllocItems(sb, ids);
+  const rows = await loadAllocItems(sb, ids, purpose);
   if (rows === null) return { ok: false, error: "요청서 확인에 실패했습니다. 잠시 후 다시 시도하세요." };
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const a of allocations) {
@@ -251,11 +253,11 @@ export async function validateManualAllocations(
 // 이동 기록 후 배정 실행 — 실패는 이동을 되돌리지 않고 경고로 알린다(이동·배정 중 이동이 원장).
 export async function applyManualAllocations(
   sb: SupabaseClient,
-  opts: { inv_txn_id: string; product_id: string; receipt_date?: string; allocations: ManualAlloc[]; actor: string | null },
+  opts: { inv_txn_id: string; product_id: string; receipt_date?: string; allocations: ManualAlloc[]; actor: string | null; purpose?: AllocPurpose },
 ): Promise<{ warnings: string[]; requestIds: string[]; lines: string[] }> {
   const warnings: string[] = [];
   const lines: string[] = []; // 이전 알림 게시물 본문용 — 요청서별 배정·누적 요약
-  const rows = await loadAllocItems(sb, opts.allocations.map((a) => a.item_id));
+  const rows = await loadAllocItems(sb, opts.allocations.map((a) => a.item_id), opts.purpose ?? "도매 납품");
   const byId = new Map((rows ?? []).map((r) => [r.id, r]));
   // 품목행별 기입고 합(배정 전) — 알림에 '누적/요청' 을 싣기 위한 조회. 실패해도 배정은 진행.
   const prevRecv = new Map<string, number>();
@@ -277,7 +279,7 @@ export async function applyManualAllocations(
     if (!r) { warnings.push("요청서 하나가 그 사이 닫혀 배정을 건너뛰었습니다(해당 수량은 기타로 남음)."); continue; }
     const row: Record<string, unknown> = {
       request_id: r.request_id, item_id: a.item_id, qty: a.qty,
-      memo: "소매→도매 이전 배정", received_by: opts.actor, inv_txn_id: opts.inv_txn_id,
+      memo: opts.purpose === "프로모션" ? "소매→프로모션 이전 배정" : "소매→도매 이전 배정", received_by: opts.actor, inv_txn_id: opts.inv_txn_id,
     };
     if (opts.receipt_date && ALLOC_DATE_RE.test(opts.receipt_date)) row.receipt_date = opts.receipt_date;
     const { error, inserted } = await insertReceiptOnce(sb, row);
@@ -303,7 +305,7 @@ export async function getRequestFullness(
     const { data: head, error: he } = await sb.from("production_requests")
       .select("id, req_no, status, purpose").eq("id", requestId).maybeSingle();
     if (he || !head) return null; // purpose 컬럼 없음(082 미적용) 포함 — 자동 전환 없이 보류
-    if (head.purpose !== "도매 납품") return null;
+    if (head.purpose !== "도매 납품" && head.purpose !== "프로모션") return null; // 수동 배정 용도만 자동 전환(113)
     const { data: items, error: ie } = await sb.from("production_request_items")
       .select("id, requested_qty").eq("request_id", requestId).limit(2000);
     if (ie || !items?.length) return null;

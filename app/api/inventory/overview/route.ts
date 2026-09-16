@@ -17,6 +17,7 @@ export type OverviewRow = {
   qty: number; cost_price: number; value: number;
   period_in: number; period_out: number; daily_out: number;
   auto_safety: number; promo_qty: number; depletion_days: number | null; low: boolean;
+  promo_pool: number; // 프로모션 풀 잔량(113) — 소매 탭에서 현재고 옆 병기, 그 외 채널은 0
   is_bundle: boolean; // 묶음(세트) — 현재고는 '만들 수 있는 세트 수'(가용)
 };
 
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     let from = DATE_RE.test(String(sp.get("from"))) ? String(sp.get("from")) : to;
     if (from > to) from = to;
     const chanParam = sp.get("channel");
-    const chan = chanParam === "도매" || chanParam === "소매" ? chanParam : null;
+    const chan = chanParam === "도매" || chanParam === "소매" || chanParam === "프로모션" ? chanParam : null;
     const periodDays = daysInclusive(from, to);
 
     const sb = supabaseAdmin();
@@ -53,6 +54,16 @@ export async function GET(req: NextRequest) {
     const stock = new Map<string, number>();
     for (const t of (sr.data as { product_id: string; qty: number }[] | null) ?? []) stock.set(t.product_id, Number(t.qty) || 0);
     const stockOf = (id: string) => stock.get(id) || 0;
+
+    // 소매 탭: 프로모션 풀 잔량을 별도 필드로 병기(113) — 권장 수식(getInventoryRows)이 풀을 현재고로
+    //  합산하므로, 부족(low) 판정도 소매+풀 기준으로 맞춰야 '부족인데 권장 0' 모순이 안 생긴다(검증 확정).
+    const promoPool = new Map<string, number>();
+    if (chan === "소매") {
+      try {
+        const pp = await sb.rpc("inventory_stock", { asof: null, chan: "프로모션" });
+        if (!pp.error) for (const t of (pp.data as { product_id: string; qty: number }[] | null) ?? []) promoPool.set(t.product_id, Number(t.qty) || 0);
+      } catch { /* 113 미적용 — 병기 없음 */ }
+    }
 
     // 기간 원장(입고/출고). channel(036) 컬럼 없으면 전체로 폴백.
     //  ※ 단발 .limit(20000)은 서버 Max Rows(기본 1000)가 우선해 조용히 잘린다 — 30일 총입고/총출고가
@@ -115,7 +126,8 @@ export async function GET(req: NextRequest) {
         qty, cost_price: cost, value: qty * cost,
         period_in, period_out, daily_out: Math.round(daily_out * 10) / 10,
         auto_safety, promo_qty: Math.round(promo), depletion_days,
-        low: auto_safety > 0 && qty <= auto_safety,
+        promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
+        low: auto_safety > 0 && qty + (promoPool.get(p.id) || 0) <= auto_safety,
         is_bundle: isBundle,
       };
     });

@@ -9,15 +9,18 @@ export const INV_TYPE_COLOR: Record<InvTxnType, { bg: string; fg: string }> = {
   조정: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" }, // 실사 보정(±)
 };
 
-// 재고 채널 — 같은 품목(SKU)이라도 채널별로 현재고를 따로 잡는다.
-export const INV_CHANNELS = ["도매", "소매"] as const;
+// 재고 채널(풀) — 같은 품목(SKU)이라도 풀별로 현재고를 따로 잡는다.
+//  프로모션(113) = 행사 확보분. 자동 차감 경로가 없어 행사일까지 보호되고,
+//  입고는 '재고 옮기기'(소매→프로모션)로만 — 도매의 "입고는 이동뿐" 규칙과 동일.
+export const INV_CHANNELS = ["도매", "소매", "프로모션"] as const;
 export type InvChannel = (typeof INV_CHANNELS)[number];
 export const INV_CHANNEL_COLOR: Record<InvChannel, { bg: string; fg: string }> = {
-  도매: { bg: "var(--sm-orange-light)", fg: "var(--sm-orange)" }, // B2B
-  소매: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },        // 온라인몰
+  도매: { bg: "var(--sm-orange-light)", fg: "var(--sm-orange)" },     // B2B
+  소매: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },            // 온라인몰
+  프로모션: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },  // 행사 확보분(보호)
 };
-// 읽기(조회) 화면 필터 — 전체 = 도매+소매 합산.
-export const INV_CHANNEL_FILTERS = ["전체", "도매", "소매"] as const;
+// 읽기(조회) 화면 필터 — 전체 = 전 풀 합산.
+export const INV_CHANNEL_FILTERS = ["전체", "도매", "소매", "프로모션"] as const;
 export type InvChannelFilter = (typeof INV_CHANNEL_FILTERS)[number];
 
 export interface InventoryTxn {

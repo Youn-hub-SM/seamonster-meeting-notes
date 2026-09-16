@@ -13,7 +13,7 @@ export async function GET(_req: NextRequest) {
   try {
     const all = await loadRequests(publicDb());
     const rows = all
-      .filter((r) => r.purpose !== "도매 납품" && r.status !== "취소")
+      .filter((r) => r.purpose === "재고 보충" && r.status !== "취소")
       .slice(0, 50)
       .map((r) => ({
         id: r.id,

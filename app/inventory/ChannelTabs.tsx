@@ -4,10 +4,11 @@
 import { INV_CHANNEL_FILTERS, INV_CHANNELS, type InvChannelFilter, type InvChannel } from "@/app/lib/inventory";
 
 // 조회 화면 필터 — 전체 = 도매+소매 합산.
-export function ChannelFilter({ value, onChange, style }: { value: InvChannelFilter; onChange: (v: InvChannelFilter) => void; style?: React.CSSProperties }) {
+export function ChannelFilter({ value, onChange, style, exclude }: { value: InvChannelFilter; onChange: (v: InvChannelFilter) => void; style?: React.CSSProperties; exclude?: InvChannelFilter[] }) {
+  // exclude: 이 화면에서 의미 없는 채널 숨김(예: 대사 화면의 프로모션 — 풀은 판매 소스가 없어 대사 불가)
   return (
     <div className="sm-tabs" style={{ margin: 0, ...style }} title="재고 채널">
-      {INV_CHANNEL_FILTERS.map((c) => (
+      {INV_CHANNEL_FILTERS.filter((c) => !exclude?.includes(c)).map((c) => (
         <button key={c} className={`sm-tab ${value === c ? "is-active" : ""}`} onClick={() => onChange(c)}>{c}</button>
       ))}
     </div>

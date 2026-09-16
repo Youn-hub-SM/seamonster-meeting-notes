@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { rows?: ImportTxn[]; done?: boolean; channel?: string };
     const rows = Array.isArray(body.rows) ? body.rows : [];
     const status = body.done === false ? "대기" : "완료"; // 즉시처리 미체크면 대기
-    const channel = body.channel === "도매" ? "도매" : "소매"; // 036, 기본 소매
+    const channel = body.channel === "도매" ? "도매" : body.channel === "프로모션" ? "프로모션" : "소매"; // 036·113, 기본 소매
     if (!rows.length) return NextResponse.json({ ok: false, error: "반영할 행이 없습니다." }, { status: 400 });
     const cookie = req.cookies.get("b2b_auth")?.value;
     const actor = (await verifySession(cookie)) || resolveUserName(cookie);
@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
     const valid = rows.filter((r) => r && r.product_id && (r.type === "입고" || r.type === "출고") && Number(r.qty) !== 0);
     if (!valid.length) return NextResponse.json({ ok: false, error: "유효한 행이 없습니다." }, { status: 400 });
     // 도매 입고 금지 — 화면에서 이미 막지만, 유형 열이 섞인 엑셀(입고+출고 혼재)이 도매 채널로 오는 경우까지 여기서 잡는다.
-    if (channel === "도매" && valid.some((r) => r.type === "입고"))
-      return NextResponse.json({ ok: false, error: "도매 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요. (파일에 입고 행이 있습니다)" }, { status: 400 });
+    if ((channel === "도매" || channel === "프로모션") && valid.some((r) => r.type === "입고"))
+      return NextResponse.json({ ok: false, error: `${channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요. (파일에 입고 행이 있습니다)` }, { status: 400 });
 
     // 묶음(세트)은 자체 재고가 없다 → 반드시 구성품 원장으로 남긴다. 세트 id 로 기록하면
     //  현재고가 구성품에서 파생되므로 그 원장은 무시되고 아무 재고도 줄지 않는다.

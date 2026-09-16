@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { rows?: { product_id?: string; target?: number; memo?: string | null }[]; channel?: string };
     const rows = Array.isArray(body.rows) ? body.rows : [];
     if (!rows.length) return NextResponse.json({ ok: false, error: "반영할 행이 없습니다." }, { status: 400 });
-    const chan = body.channel === "도매" ? "도매" : "소매"; // 실사 대상 채널(036, 기본 소매)
+    const chan = body.channel === "도매" ? "도매" : body.channel === "프로모션" ? "프로모션" : "소매"; // 실사 대상 채널(036·113, 기본 소매)
     const cookie = req.cookies.get("b2b_auth")?.value;
     const actor = (await verifySession(cookie)) || resolveUserName(cookie);
 
@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     if (!insert.length) return NextResponse.json({ ok: true, applied: 0, note: "변경할 재고가 없습니다(현재고와 실사수량 동일)." });
 
     let ins = await sb.from("inventory_txns").insert(insert);
+    if (ins.error && chan === "프로모션" && /channel_chk|check constraint/i.test(ins.error.message))
+      return NextResponse.json({ ok: false, error: "프로모션 풀이 아직 없습니다 — migration 113 을 먼저 적용하세요." }, { status: 500 });
     if (ins.error && /channel/i.test(ins.error.message)) { for (const r of insert) delete r.channel; ins = await sb.from("inventory_txns").insert(insert); }
     if (ins.error) throw ins.error;
     return NextResponse.json({ ok: true, applied: insert.length });

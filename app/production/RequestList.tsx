@@ -28,8 +28,8 @@ type NewLine = {
 export function RequestList() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [showDone, setShowDone] = useState(false); // 기본 진행(요청·진행중)만 — 완료·취소는 토글로
-  // 탭: 제조사 요청(재고 보충 — 이행=입고) / 도매 요청(도매 납품 — 이행=소매→도매 이전)
-  const [tab, setTab] = useState<"제조사" | "도매">("제조사");
+  // 탭: 제조사(재고 보충 — 이행=입고) / 도매(도매 납품 — 이행=소매→도매 이전) / 프로모션(행사 확보 — 이행=소매→프로모션 이전, 113)
+  const [tab, setTab] = useState<"제조사" | "도매" | "프로모션">("제조사");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [products, setProducts] = useState<Prod[]>([]);
@@ -51,14 +51,14 @@ export function RequestList() {
   useEffect(() => { load(); }, [load]);
 
   const byTab = useMemo(
-    () => requests.filter((r) => (tab === "도매" ? r.purpose === "도매 납품" : r.purpose !== "도매 납품")),
+    () => requests.filter((r) => (tab === "도매" ? r.purpose === "도매 납품" : tab === "프로모션" ? r.purpose === "프로모션" : r.purpose !== "도매 납품" && r.purpose !== "프로모션")),
     [requests, tab]);
   const displayed = useMemo(
     () => (showDone ? byTab : byTab.filter((r) => r.status === "요청" || r.status === "진행중")),
     [byTab, showDone]);
-  // 도매 탭 종합 — 열린(요청·진행중) 도매 요청을 품목별로 합산해 한눈에.
+  // 도매/프로모션 탭 종합 — 열린(요청·진행중) 요청을 품목별로 합산해 한눈에.
   const wholesaleSummary = useMemo(() => {
-    if (tab !== "도매") return [];
+    if (tab !== "도매" && tab !== "프로모션") return [];
     const agg = new Map<string, { name: string; sku: string | null; requested: number; received: number }>();
     for (const r of byTab) {
       if (r.status !== "요청" && r.status !== "진행중") continue;
@@ -74,9 +74,32 @@ export function RequestList() {
   }, [tab, byTab]);
 
   const tabCounts = useMemo(() => ({
-    제조사: requests.filter((r) => r.purpose !== "도매 납품" && (r.status === "요청" || r.status === "진행중")).length,
+    제조사: requests.filter((r) => r.purpose !== "도매 납품" && r.purpose !== "프로모션" && (r.status === "요청" || r.status === "진행중")).length,
     도매: requests.filter((r) => r.purpose === "도매 납품" && (r.status === "요청" || r.status === "진행중")).length,
+    프로모션: requests.filter((r) => r.purpose === "프로모션" && (r.status === "요청" || r.status === "진행중")).length,
   }), [requests]);
+
+  // 프로모션 주간 분배 — 열린 프로모션 요청서별 잔여를 '남은 주 수'로 나눠, 이번 주 확보 권장을 품목별 합산.
+  //  주간 생산요청서(제조사) 작성 시 "프로모션 몫으로 이만큼 더" 의 근거(2026-09-17 대표 확정 수식).
+  const promoWeekly = useMemo(() => {
+    const todayIso = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    const agg = new Map<string, { name: string; sku: string | null; remaining: number; thisWeek: number; earliestDue: string | null }>();
+    for (const r of requests) {
+      if (r.purpose !== "프로모션" || (r.status !== "요청" && r.status !== "진행중")) continue;
+      const days = r.due_date ? Math.round((new Date(r.due_date + "T00:00:00Z").getTime() - new Date(todayIso + "T00:00:00Z").getTime()) / 86400e3) : 0;
+      const weeksLeft = Math.max(1, Math.ceil((days + 1) / 7)); // 목표일 지남/임박 = 1주(전량 이번 주)
+      for (const it of r.items) {
+        const rem = Math.max(0, Math.round((it.requested_qty - it.received_qty) * 100) / 100);
+        if (rem <= 0) continue;
+        const cur = agg.get(it.product_id) ?? { name: it.name, sku: it.sku, remaining: 0, thisWeek: 0, earliestDue: null };
+        cur.remaining = Math.round((cur.remaining + rem) * 100) / 100;
+        cur.thisWeek += Math.ceil(rem / weeksLeft);
+        if (r.due_date && (!cur.earliestDue || r.due_date < cur.earliestDue)) cur.earliestDue = r.due_date;
+        agg.set(it.product_id, cur);
+      }
+    }
+    return [...agg.values()].sort((a, b) => b.thisWeek - a.thisWeek);
+  }, [requests]);
 
   // 담당자 '확인' 버튼용 로그인 사용자 이름
   const [userName, setUserName] = useState<string | null>(null);
@@ -143,7 +166,7 @@ export function RequestList() {
       const at = Number(obj?.at) || 0;
       if (at && Date.now() - at > 10 * 60_000) return;
       const arr = Array.isArray(parsed) ? parsed : Array.isArray(obj?.items) ? (obj!.items as unknown[]) : [];
-      const purpose: PrPurpose | null = obj?.purpose === "도매 납품" || obj?.purpose === "재고 보충" ? (obj.purpose as PrPurpose) : null;
+      const purpose: PrPurpose | null = obj?.purpose === "도매 납품" || obj?.purpose === "재고 보충" || obj?.purpose === "프로모션" ? (obj.purpose as PrPurpose) : null;
       const lines: NewLine[] = [];
       const missed: string[] = [];
       for (const it of arr as { sku?: unknown; qty?: unknown }[]) {
@@ -156,7 +179,7 @@ export function RequestList() {
       }
       if (missed.length) setError(`넘어온 품목 중 ${missed.length}종은 품목 목록에 없어 제외했습니다: ${missed.join(", ")} (묶음이거나 SKU 미등록)`);
       if (lines.length) {
-        if (purpose) setTab(purpose === "도매 납품" ? "도매" : "제조사"); // 모달 기본 요청도 탭을 따라간다
+        if (purpose) setTab(purpose === "도매 납품" ? "도매" : purpose === "프로모션" ? "프로모션" : "제조사"); // 모달 기본 요청도 탭을 따라간다
         setPrefill(lines); setCreateOpen(true);
       }
     } catch { /* 형식 오류 — 무시 */ }
@@ -246,8 +269,9 @@ export function RequestList() {
           <div className="sm-tabs" style={{ margin: 0 }}>
             <button className={`sm-tab ${tab === "제조사" ? "is-active" : ""}`} onClick={() => setTab("제조사")}>제조사 요청<span className="sm-tab-count">{tabCounts.제조사}</span></button>
             <button className={`sm-tab ${tab === "도매" ? "is-active" : ""}`} onClick={() => setTab("도매")}>도매 요청<span className="sm-tab-count">{tabCounts.도매}</span></button>
+            <button className={`sm-tab ${tab === "프로모션" ? "is-active" : ""}`} onClick={() => setTab("프로모션")}>프로모션<span className="sm-tab-count">{tabCounts.프로모션}</span></button>
           </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>{tab === "제조사" ? "이행 = 입고 (제조사 성과)" : "이행 = 소매→도매 이전 (생산 담당자 성과)"}</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{tab === "제조사" ? "이행 = 입고 (제조사 성과)" : tab === "프로모션" ? "이행 = 소매→프로모션 이전 (행사 확보)" : "이행 = 소매→도매 이전 (생산 담당자 성과)"}</span>
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)", cursor: "pointer" }}>
             <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> 완료·취소 보기 <span className="sm-faint" style={{ fontSize: 12 }}>({doneCount})</span>
           </label>
@@ -258,9 +282,31 @@ export function RequestList() {
         </div>
       </div>
 
-      {tab === "도매" && wholesaleSummary.length > 0 && (
+      {tab === "프로모션" && promoWeekly.length > 0 && (
         <section className="b2b-form-section" style={{ marginBottom: 16 }}>
-          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>도매 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 품목별 합산</span></div>
+          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>프로모션 주간 분배 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 잔여 ÷ 목표일까지 남은 주 — 이번 주 확보 권장</span></div>
+          <div className="b2b-table-wrap">
+            <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
+              <thead><tr><th>품목</th><th className="num" style={{ width: "16%" }}>총 잔여</th><th style={{ width: "16%" }}>가장 이른 목표일</th><th className="num" style={{ width: "18%" }}>이번 주 권장</th></tr></thead>
+              <tbody>
+                {promoWeekly.map((r) => (
+                  <tr key={`${r.name}-${r.sku}`}>
+                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{r.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.sku}</span> : null}</td>
+                    <td className="num b2b-money">{r.remaining.toLocaleString()}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{r.earliestDue || "-"}</td>
+                    <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{r.thisWeek.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>주간 제조사 생산요청서에 이 수량을 얹어 만들고, 입고되면 [소매↔도매]의 소매 → 프로모션 이동에서 요청서에 배정하세요.</p>
+        </section>
+      )}
+
+      {(tab === "도매" || tab === "프로모션") && wholesaleSummary.length > 0 && (
+        <section className="b2b-form-section" style={{ marginBottom: 16 }}>
+          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{tab} 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 품목별 합산</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
               <thead><tr><th>품목</th><th className="num" style={{ width: "14%" }}>요청</th><th className="num" style={{ width: "14%" }}>이전 완료</th><th className="num" style={{ width: "14%" }}>잔여</th><th className="num" style={{ width: "12%" }}>이행률</th></tr></thead>
@@ -324,7 +370,7 @@ export function RequestList() {
         </section>
       )}
 
-      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} recRetail={recRetail} recWhole={recWhole} recReady={recReady} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} recRetail={recRetail} recWhole={recWhole} recReady={recReady} prefill={prefill ?? undefined} defaultPurpose={tab === "도매" ? "도매 납품" : tab === "프로모션" ? "프로모션" : "재고 보충"} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
       {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} recRetail={recRetail} recWhole={recWhole} recReady={recReady} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
@@ -410,7 +456,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 700 }}>
                 <thead>
-                  <tr><th>품목</th><th className="num" style={{ width: "12%" }}>요청</th><th className="num" style={{ width: "12%" }}>{req.purpose === "도매 납품" ? "이전" : "입고"}</th><th className="num" style={{ width: "12%" }}>잔여</th><th style={{ width: "10%" }}>상태</th><th style={{ width: "18%" }}>입고 이력</th></tr>
+                  <tr><th>품목</th><th className="num" style={{ width: "12%" }}>요청</th><th className="num" style={{ width: "12%" }}>{req.purpose === "재고 보충" ? "입고" : "이전"}</th><th className="num" style={{ width: "12%" }}>잔여</th><th style={{ width: "10%" }}>상태</th><th style={{ width: "18%" }}>입고 이력</th></tr>
                 </thead>
                 <tbody>
                   {req.items.map((it) => (
@@ -619,7 +665,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                     const retail = retailQty.get(l.product_id) ?? null;
                     const need = wholesaleNeed.get(l.product_id) ?? 0;
                     const rk = (l.sku || "").toUpperCase();
-                    const recommend = !recReady ? null : purpose === "도매 납품" ? (recWhole.get(rk) ?? 0) : (recRetail.get(rk) ?? 0) + (recWhole.get(rk) ?? 0);
+                    // 프로모션 요청은 목표 수량을 MD 가 정한다(행사 계획) — 수식 권장 없음('-')
+                    const recommend = !recReady || purpose === "프로모션" ? null : purpose === "도매 납품" ? (recWhole.get(rk) ?? 0) : (recRetail.get(rk) ?? 0) + (recWhole.get(rk) ?? 0);
                     return (
                       <tr key={l.item_id || l.product_id}>
                         <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 15, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>

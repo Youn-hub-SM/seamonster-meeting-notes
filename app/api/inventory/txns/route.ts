@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: false });
       if (product_id) q = q.eq("product_id", product_id);
       if (type) q = q.eq("type", type);
-      if (withChannel && (channel === "도매" || channel === "소매")) q = q.eq("channel", channel);
+      if (withChannel && (channel === "도매" || channel === "소매" || channel === "프로모션")) q = q.eq("channel", channel);
       if (from && DATE_RE.test(from)) q = q.gte("txn_date", from);
       if (to && DATE_RE.test(to)) q = q.lte("txn_date", to);
       return q.limit(limit);

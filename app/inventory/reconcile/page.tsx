@@ -91,7 +91,8 @@ export default function InventoryReconcilePage() {
           <h1 className="b2b-page-title">구매·판매·재고 확인</h1>
           <p className="b2b-page-subtitle">세트 상품은 낱개(구성품)로 환산해 비교합니다</p>
         </div>
-        <div className="b2b-page-actions"><ChannelFilter value={channel} onChange={setChannel} /></div>
+        {/* 프로모션 풀은 판매 소스가 없어 대사 의미가 없다(RPC 도 전사 판매로 오탐 — 검증 확정) → 제외 */}
+        <div className="b2b-page-actions"><ChannelFilter value={channel} onChange={setChannel} exclude={["프로모션"]} /></div>
       </header>
 
       {/* 기간 */}

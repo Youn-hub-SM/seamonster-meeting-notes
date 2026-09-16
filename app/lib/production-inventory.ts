@@ -68,6 +68,20 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
 
   const stockByProduct = new Map<string, number>();
   for (const t of (stockRes.data as { product_id: string; qty: number }[] | null) ?? []) stockByProduct.set(t.product_id, Number(t.qty) || 0);
+  // 프로모션 풀 합산(113) — 소매 수식의 현재고에 프로모션 확보분을 포함한다. 행사 수요는 안전재고의
+  //  프로모션 일정 보정(promoForward)에 이미 들어 있고, 풀로 옮겨둔 확보분이 그 수요를 채우는 재고다.
+  //  합산하지 않으면 풀로 옮기는 즉시 소매 현재고가 줄어 권장이 다시 부풀고 이중 생산을 시킨다.
+  //  (전체(channel 미지정)는 chan null 조회가 전 풀 합산이라 이미 포함, 도매 수식은 무관)
+  if (channel === "소매") {
+    try {
+      const pr = await sb.rpc("inventory_stock", { asof: null, chan: "프로모션" });
+      if (!pr.error) {
+        for (const t of (pr.data as { product_id: string; qty: number }[] | null) ?? []) {
+          stockByProduct.set(t.product_id, (stockByProduct.get(t.product_id) || 0) + (Number(t.qty) || 0));
+        }
+      }
+    } catch { /* 113 미적용 등 — 소매 단독으로 진행 */ }
+  }
   // SKU(대문자) → {name, stock}. 원장에 거래내역이 있는(=inventory_stock 에 잡히는) 제품만 현재고 보유.
   const stockBySku = new Map<string, { name: string; stock: number }>();
   for (const p of prodRes.data ?? []) {

@@ -94,12 +94,12 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
     <>
       <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div className="sm-tabs">
-          <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => { setType("입고"); setReason("판매"); if (channel === "도매") setChannel("소매"); }}>구매(입고)</button>
+          <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => { setType("입고"); setReason("판매"); if (channel !== "소매") setChannel("소매"); }}>구매(입고)</button>
           <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => setType("출고")}>판매(출고)</button>
         </div>
         <ChannelPicker value={channel} onChange={setChannel}
-          disabledChannels={type === "입고" ? ["도매"] : []}
-          disabledHint="도매 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 도매 입고는 막았습니다" />
+          disabledChannels={type === "입고" ? ["도매", "프로모션"] : []}
+          disabledHint="도매·프로모션 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 직접 입고는 막았습니다" />
         <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
         {type === "출고" && (

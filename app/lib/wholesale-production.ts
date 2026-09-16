@@ -46,10 +46,10 @@ export interface PrItem {
 }
 
 // 요청서(헤더) + 라인
-export const PR_PURPOSES = ["재고 보충", "도매 납품"] as const;
+export const PR_PURPOSES = ["재고 보충", "도매 납품", "프로모션"] as const;
 export type PrPurpose = (typeof PR_PURPOSES)[number];
 // 화면 표시는 요청 대상 기준 제조사/도매 (DB 저장값·082 체크 제약은 기존 문자열 유지)
-export const PR_PURPOSE_LABEL: Record<PrPurpose, string> = { "재고 보충": "제조사", "도매 납품": "도매" };
+export const PR_PURPOSE_LABEL: Record<PrPurpose, string> = { "재고 보충": "제조사", "도매 납품": "도매", "프로모션": "프로모션" };
 
 export interface ProductionRequest {
   id: string;

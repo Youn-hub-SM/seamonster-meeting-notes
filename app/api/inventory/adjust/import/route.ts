@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const file = form.get("file");
     if (!file || typeof file === "string") return NextResponse.json({ ok: false, error: "엑셀 파일을 첨부하세요." }, { status: 400 });
-    const chan = form.get("channel") === "도매" ? "도매" : "소매"; // 실사 대상 채널(036, 기본 소매)
+    const chan = form.get("channel") === "도매" ? "도매" : form.get("channel") === "프로모션" ? "프로모션" : "소매"; // 실사 대상 채널(036·113, 기본 소매)
 
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const wb = new ExcelJS.Workbook();

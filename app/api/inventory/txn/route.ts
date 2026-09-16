@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     //  델타를 재계산한다(엑셀 조정 apply 와 같은 규칙). 구 화면(qty 만 전송)은 기존 동작 유지.
     if (type === "조정" && b.target_qty !== undefined && b.target_qty !== null && b.target_qty !== "") {
       const target = Math.round((Number(b.target_qty) || 0) * 100) / 100;
-      const chan = b.channel === "도매" ? "도매" : "소매";
+      const chan = b.channel === "도매" ? "도매" : b.channel === "프로모션" ? "프로모션" : "소매";
       const { data: stockRow, error: stockErr } = await supabaseAdmin()
         .rpc("inventory_stock", { asof: null, chan })
         .eq("product_id", String(b.product_id || ""))
@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined;
     // 도매 입고 금지 — 도매 재고는 소매 입고 후 소매↔도매 이동으로만 들어간다(실수로 바로 도매에 넣는 사고 방지).
     //  정당한 도매 입고(이동·생산 수령)는 이 라우트를 쓰지 않으므로 여기서 막아도 안전하다.
-    if (type === "입고" && b.channel === "도매")
-      return NextResponse.json({ ok: false, error: "도매 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요." }, { status: 400 });
+    if (type === "입고" && (b.channel === "도매" || b.channel === "프로모션"))
+      return NextResponse.json({ ok: false, error: `${b.channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요.` }, { status: 400 });
 
     const sb = supabaseAdmin();
     // 묶음(세트)은 자체 재고가 없다 → 입고/출고는 구성품으로 전개해 기록(다른 경로와 동일 규칙),
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const row: Record<string, unknown> = {
       product_id, type, qty,
-      channel: b.channel === "도매" ? "도매" : "소매", // 036, 기본 소매
+      channel: b.channel === "도매" ? "도매" : b.channel === "프로모션" ? "프로모션" : "소매", // 036·113, 기본 소매
       unit_amount: b.unit_amount === undefined || b.unit_amount === "" || b.unit_amount === null ? null : Math.max(0, Math.round(Number(b.unit_amount) || 0)),
       partner: String(b.partner || "").trim() || null,
       memo: String(b.memo || "").trim() || null,

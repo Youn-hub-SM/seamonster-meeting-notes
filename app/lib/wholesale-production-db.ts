@@ -14,7 +14,7 @@ function one<T = AnyRow>(v: unknown): T | null {
 export function formatRequestDetail(r: ProductionRequest): string {
   const lines: string[] = [];
   const head: string[] = [];
-  head.push(`용도 ${r.purpose === "도매 납품" ? "도매 납품" : "제조사(재고 보충)"}`);
+  head.push(`용도 ${r.purpose === "도매 납품" ? "도매 납품" : r.purpose === "프로모션" ? "프로모션(행사 확보)" : "제조사(재고 보충)"}`);
   if (r.due_date) head.push(`마감 ${r.due_date}`);
   if (r.assignee) head.push(`담당 ${r.assignee}`);
   lines.push(head.join(" · "));
@@ -98,7 +98,7 @@ export async function loadRequests(
     const its = itemsByReq.get(r.id as string) ?? [];
     return {
       id: r.id as string, req_no: (r.req_no as string) ?? null, title: (r.title as string) ?? null,
-      purpose: (r.purpose === "도매 납품" ? "도매 납품" : "재고 보충") as ProductionRequest["purpose"], // 082 미적용/기존 행 → 재고 보충
+      purpose: (r.purpose === "도매 납품" ? "도매 납품" : r.purpose === "프로모션" ? "프로모션" : "재고 보충") as ProductionRequest["purpose"], // 082·113 미적용/기존 행 → 재고 보충
       requested_by: (r.requested_by as string) ?? null, request_date: String(r.request_date),
       due_date: (r.due_date as string) ?? null, // 생산마감일(071 미적용이면 null)
       status: r.status as ProductionRequest["status"], assignee: (r.assignee as string) ?? null, memo: (r.memo as string) ?? null,

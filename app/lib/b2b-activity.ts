@@ -153,6 +153,20 @@ export async function logProductionReceiptCancelled(reqNo: string, itemName: str
   });
 }
 
+// ── 재고 풀 이동(프로모션 등) — 소매↔프로모션 이동 알림('업무도우미 변경알림' 봇, inv_move 체크 공용) ──
+export async function logInventoryPoolMoved(fromCh: string, toCh: string, name: string, sku: string | null, qty: number, memo: string | null, actor?: string | null, detail?: string): Promise<void> {
+  await recordActivity({
+    event_type: "inventory.pool_moved",
+    summary: `재고 이전(${fromCh}→${toCh}) · ${name}${sku ? ` [${sku}]` : ""} ×${qty.toLocaleString()}${memo ? ` · ${memo}` : ""}`,
+    meta: { sku, qty, from: fromCh, to: toCh },
+    notify: true,
+    bot: "helper",
+    helperEvent: "inv_move",
+    actor,
+    detail,
+  });
+}
+
 // ── 재고 이전(소매→도매) — 도매 요청 대응 이동만 알림('업무도우미 변경알림' 봇) ──
 export async function logInventoryMovedToWholesale(name: string, sku: string | null, qty: number, memo: string | null, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
