@@ -22,6 +22,7 @@ type ActivityInput = {
   actor?: string | null; // 지정 시 currentActor() 대신 이 값을 작업자로 사용(라우트가 이미 해석한 이름).
   bot?: "helper";     // "helper" = '업무도우미 변경알림' 봇으로 발송(생산·재고 알림 — 생산관리 설정의 봇). 미구성이면 기본 봇.
   helperEvent?: string; // 생산관리 설정 '발송할 변경 목록'의 체크 키 — 해제돼 있으면 발송 안 함(DB 기록은 유지).
+  detail?: string;    // Teams 게시물 본문에만 덧붙는 상세(여러 줄 가능) — DB 피드는 summary 한 줄 유지(2026-09-16).
 };
 
 // 요청 쿠키에서 현재 작업자 이름 (지인/예지/현석/관리자). 요청 컨텍스트 밖이면 null.
@@ -72,7 +73,7 @@ async function recordActivity(input: ActivityInput): Promise<void> {
 
 // ── 도매 생산 요청: 변경기록(활동피드) + notify:true면 Flow 봇 발송 ──
 //  둘 다 fire-and-forget(recordActivity 내부에서 실패 무시) — 호출 측 DB 작업에 영향 없음.
-export async function logProductionRequestCreated(reqNo: string, label: string, actor?: string | null): Promise<void> {
+export async function logProductionRequestCreated(reqNo: string, label: string, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "production_request.created",
     summary: `생산요청 등록 · ${reqNo || "(번호없음)"}${label ? ` · ${label}` : ""}`,
@@ -80,10 +81,11 @@ export async function logProductionRequestCreated(reqNo: string, label: string, 
     notify: true, // 작성 시 Flow 알림
     bot: "helper", // 생산 알림은 '업무도우미 변경알림' 봇으로
     helperEvent: "prod_request",
-    actor,        // 메시지에 '작업자: {actor}' 로 표시(B2B 작업과 동일)
+    actor,         // 메시지에 '작업자: {actor}' 로 표시(B2B 작업과 동일)
+    detail,
   });
 }
-export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string, actor?: string | null): Promise<void> {
+export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string, actor?: string | null, detail?: string): Promise<void> {
   if (fromStatus === toStatus) return;
   // 진행중·완료·취소는 Flow 알림(설정 체크리스트로 개별 제어), 다시열기 등은 변경기록만.
   const helperEvent = toStatus === "완료" ? "prod_completed" : toStatus === "취소" ? "prod_cancelled" : toStatus === "진행중" ? "prod_started" : null;
@@ -95,10 +97,11 @@ export async function logProductionRequestStatusChanged(reqNo: string, fromStatu
     bot: "helper", // 생산 알림은 '업무도우미 변경알림' 봇으로
     helperEvent: helperEvent ?? undefined,
     actor,
+    detail,
   });
 }
 
-export async function logProductionRequestUpdated(reqNo: string, actor?: string | null): Promise<void> {
+export async function logProductionRequestUpdated(reqNo: string, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "production_request.updated",
     summary: `생산요청 수정 · ${reqNo || "(번호없음)"} (품목·수량·마감일 등)`,
@@ -107,10 +110,11 @@ export async function logProductionRequestUpdated(reqNo: string, actor?: string 
     bot: "helper",
     helperEvent: "prod_updated",
     actor,
+    detail,
   });
 }
 
-export async function logProductionRequestDeleted(reqNo: string, label: string, actor?: string | null): Promise<void> {
+export async function logProductionRequestDeleted(reqNo: string, label: string, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "production_request.deleted",
     summary: `생산요청 삭제 · ${reqNo || "(번호없음)"}${label ? ` · ${label}` : ""}`,
@@ -119,10 +123,11 @@ export async function logProductionRequestDeleted(reqNo: string, label: string, 
     bot: "helper",
     helperEvent: "prod_deleted",
     actor,
+    detail,
   });
 }
 
-export async function logProductionReceipt(reqNo: string, itemName: string, qty: number, actor?: string | null): Promise<void> {
+export async function logProductionReceipt(reqNo: string, itemName: string, qty: number, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "production_request.receipt",
     summary: `생산 입고 · ${reqNo || "(번호없음)"} · ${itemName} ×${qty.toLocaleString()}`,
@@ -131,10 +136,11 @@ export async function logProductionReceipt(reqNo: string, itemName: string, qty:
     bot: "helper",
     helperEvent: "prod_receipt",
     actor,
+    detail,
   });
 }
 
-export async function logProductionReceiptCancelled(reqNo: string, itemName: string, qty: number, actor?: string | null): Promise<void> {
+export async function logProductionReceiptCancelled(reqNo: string, itemName: string, qty: number, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "production_request.receipt_cancelled",
     summary: `생산 입고 취소 · ${reqNo || "(번호없음)"} · ${itemName} ×${qty.toLocaleString()} (재고 원복)`,
@@ -143,11 +149,12 @@ export async function logProductionReceiptCancelled(reqNo: string, itemName: str
     bot: "helper",
     helperEvent: "prod_receipt_cancel",
     actor,
+    detail,
   });
 }
 
 // ── 재고 이전(소매→도매) — 도매 요청 대응 이동만 알림('업무도우미 변경알림' 봇) ──
-export async function logInventoryMovedToWholesale(name: string, sku: string | null, qty: number, memo: string | null, actor?: string | null): Promise<void> {
+export async function logInventoryMovedToWholesale(name: string, sku: string | null, qty: number, memo: string | null, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "inventory.moved_to_wholesale",
     summary: `재고 이전(소매→도매) · ${name}${sku ? ` [${sku}]` : ""} ×${qty.toLocaleString()}${memo ? ` · ${memo}` : ""}`,
@@ -156,6 +163,7 @@ export async function logInventoryMovedToWholesale(name: string, sku: string | n
     bot: "helper",
     helperEvent: "inv_move",
     actor,
+    detail,
   });
 }
 
@@ -173,7 +181,8 @@ async function sendWebhook(input: ActivityInput, actor: string | null): Promise<
   //  헬퍼(생산·재고)는 '업무도우미 변경알림' 채널, 나머지는 B2B 알림 채널(b2b-teams 가 분기).
   //  링크는 주문 상세 주소(b2bAlertLink) — 주문 이벤트가 아니면 null.
   const link = await b2bAlertLink(input.order_id);
-  await mirrorB2BTeams(input.summary, actor, link, { helper: input.bot === "helper" });
+  const text = input.detail ? `${input.summary}\n${input.detail}` : input.summary; // 상세는 게시물 본문에만
+  await mirrorB2BTeams(text, actor, link, { helper: input.bot === "helper" });
 }
 
 // 알림 메시지에 넣을 주문 상세 링크(주문 이벤트만). app_base_url 미설정 시 링크 생략.

@@ -145,6 +145,8 @@ export async function POST(req: NextRequest) {
     //  배정·알림 실패는 이동을 되돌리지 않고 경고로 응답(이동이 원장 — 이미 기록됨).
     const warnings: string[] = [];
     if (from === "소매" && to === "도매") {
+      const detailLines: string[] = []; // 게시물 본문 — 배정 내역·기타·이동 후 재고
+      let allocatedSum = 0;
       if (allocations.length) {
         try {
           const inLeg = (data ?? []).find((t) => t.type === "입고" && Number(t.qty) > 0);
@@ -154,6 +156,8 @@ export async function POST(req: NextRequest) {
               allocations, actor: created_by,
             });
             warnings.push(...r.warnings);
+            detailLines.push(...r.lines);
+            allocatedSum = allocations.reduce((s, a) => s + a.qty, 0);
             if (r.requestIds.length) await recheckRequestCompletion(sb, r.requestIds, "요청서 배정");
           }
         } catch (e) {
@@ -163,7 +167,20 @@ export async function POST(req: NextRequest) {
       }
       try {
         const { data: prod } = await sb.from("products").select("name, sku").eq("id", product_id).maybeSingle();
-        await logInventoryMovedToWholesale(prod?.name || "품목", (prod?.sku as string) ?? null, qty, memo, created_by);
+        const etc = Math.round((qty - allocatedSum) * 100) / 100;
+        if (detailLines.length) { if (etc > 0) detailLines.push(`- 기타(요청 미연결) ×${etc.toLocaleString()}`); }
+        else detailLines.push("요청서 배정 없음 — 전량 기타(일반 이동)");
+        // 이동 후 채널별 현재고 — 조회 실패 시 생략(알림은 그대로 발송)
+        try {
+          const [rt, wh] = await Promise.all([
+            sb.rpc("inventory_stock", { asof: null, chan: "소매" }).eq("product_id", product_id).maybeSingle(),
+            sb.rpc("inventory_stock", { asof: null, chan: "도매" }).eq("product_id", product_id).maybeSingle(),
+          ]);
+          const n = (x: { data?: unknown }) => Number((x.data as { qty?: unknown } | null)?.qty ?? NaN);
+          if (Number.isFinite(n(rt)) && Number.isFinite(n(wh)))
+            detailLines.push(`이동 후 재고 — 소매 ${n(rt).toLocaleString()} · 도매 ${n(wh).toLocaleString()}`);
+        } catch { /* 재고 줄 생략 */ }
+        await logInventoryMovedToWholesale(prod?.name || "품목", (prod?.sku as string) ?? null, qty, memo, created_by, detailLines.join("\n"));
       } catch (e) { console.warn("[inventory/move] 이전 알림 실패", e); }
     }
 

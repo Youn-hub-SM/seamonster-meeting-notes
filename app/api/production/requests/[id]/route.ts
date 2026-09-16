@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { loadRequests } from "@/app/lib/wholesale-production-db";
+import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
 import { PR_STATUSES, type PrStatus } from "@/app/lib/wholesale-production";
 import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProductionRequestDeleted } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
@@ -111,16 +111,18 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         if (de) throw de;
       }
     }
-    // 변경기록·알림. 작업자(누가 바꿨는지)를 함께 전달.
+    // 변경기록·알림. 작업자(누가 바꿨는지)를 함께 전달. 게시물 본문에 수정 후 전체 구성·이행률 첨부.
     const token = req.cookies.get("b2b_auth")?.value;
     const who = (await verifySession(token)) || resolveUserName(token);
+    let detailNow: string | undefined;
+    try { const [dr] = await loadRequests(sb, { id }); if (dr) detailNow = formatRequestDetail(dr); } catch { /* 상세 없이 발송 */ }
     if (patch.status !== undefined && prevStatus && prevStatus !== patch.status) {
-      await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status), who);
+      await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status), who, detailNow);
     }
     // 상태 외의 실질 수정(품목 교체·마감일·수량 등) → 수정 알림(설정 체크리스트로 제어)
     const contentKeys = Object.keys(patch).filter((k) => k !== "updated_at" && k !== "status");
     if (itemsIn !== null || contentKeys.length > 0) {
-      await logProductionRequestUpdated(reqNo, who);
+      await logProductionRequestUpdated(reqNo, who, detailNow);
     }
     // 창(신청일·마감일)이나 용도가 바뀌면 기존 소급 링크부터 지우고 새 기준으로 다시 매칭한다 —
     //  안 지우면 창 밖 입고나 '도매 납품'으로 정정한 요청의 소매 입고 링크가 잔존해 이중 이행이 된다.
@@ -148,11 +150,13 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     if (ce) throw ce;
     if ((count ?? 0) > 0) return NextResponse.json({ ok: false, error: "입고 기록이 있어 삭제할 수 없습니다. 입고를 먼저 취소하거나 요청서를 '취소' 처리하세요." }, { status: 400 });
     const { data: head } = await sb.from("production_requests").select("req_no, title").eq("id", id).maybeSingle(); // 삭제 알림용(삭제 전에 확보)
+    let deletedDetail: string | undefined; // 무엇이 지워졌는지 게시물 본문에 남긴다(삭제 후엔 복구 불가한 정보)
+    try { const [dr] = await loadRequests(sb, { id }); if (dr) deletedDetail = formatRequestDetail(dr); } catch { /* 상세 없이 발송 */ }
     const { error } = await sb.from("production_requests").delete().eq("id", id);
     if (error) throw error;
     const token = _req.cookies.get("b2b_auth")?.value;
     const who = (await verifySession(token)) || resolveUserName(token);
-    await logProductionRequestDeleted((head as { req_no?: string } | null)?.req_no || "", (head as { title?: string } | null)?.title || "", who);
+    await logProductionRequestDeleted((head as { req_no?: string } | null)?.req_no || "", (head as { title?: string } | null)?.title || "", who, deletedDetail);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "삭제 실패") }, { status: 500 });

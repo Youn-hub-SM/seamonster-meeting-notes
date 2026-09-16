@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { loadRequests } from "@/app/lib/wholesale-production-db";
+import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
 import { logProductionRequestStatusChanged, logProductionReceipt, logProductionReceiptCancelled } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
@@ -73,15 +73,17 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const { error: re } = await sb.from("production_receipts").insert(receiptRow);
     if (re) { await sb.from("inventory_txns").delete().eq("id", invTxnId); throw re; }
 
-    // 입고 알림(품목·수량 — 설정 체크리스트 prod_receipt 로 제어)
+    // 입고 알림(품목·수량 + 게시물 본문에 요청서 전체 이행 현황 — 설정 체크리스트 prod_receipt 로 제어)
     const prodRel = (item as { products?: { name?: string } | { name?: string }[] | null }).products;
     const itemName = (Array.isArray(prodRel) ? prodRel[0]?.name : prodRel?.name) || "품목";
-    await logProductionReceipt(reqNo, itemName, qty, who);
+    let detailNow: string | undefined;
+    try { const [dr] = await loadRequests(sb, { id: requestId }); if (dr) detailNow = formatRequestDetail(dr); } catch { /* 상세 없이 발송 */ }
+    await logProductionReceipt(reqNo, itemName, qty, who, detailNow);
 
     // 3) 상태: 요청 → 진행중 (첫 입고 = 생산 시작 알림 + 변경기록)
     if ((head as { status?: string } | null)?.status === "요청") {
       await sb.from("production_requests").update({ status: "진행중", updated_at: new Date().toISOString() }).eq("id", requestId);
-      await logProductionRequestStatusChanged(reqNo, "요청", "진행중", who);
+      await logProductionRequestStatusChanged(reqNo, "요청", "진행중", who, detailNow);
     } else {
       await sb.from("production_requests").update({ updated_at: new Date().toISOString() }).eq("id", requestId);
     }
@@ -123,7 +125,9 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
       const item0 = Array.isArray(rel) ? rel[0] : rel;
       const pr = item0?.products;
       const itemName = (Array.isArray(pr) ? pr[0]?.name : pr?.name) || "품목";
-      await logProductionReceiptCancelled((head as { req_no?: string } | null)?.req_no || "", itemName, Number((rc as RcRel).qty) || 0, await actor(req));
+      let detailNow: string | undefined; // 취소 후 이행 현황을 게시물 본문에
+      try { const [dr] = await loadRequests(sb, { id: requestId }); if (dr) detailNow = formatRequestDetail(dr); } catch { /* 상세 없이 발송 */ }
+      await logProductionReceiptCancelled((head as { req_no?: string } | null)?.req_no || "", itemName, Number((rc as RcRel).qty) || 0, await actor(req), detailNow);
     } catch { /* 알림 실패 무시 */ }
 
     const [row] = await loadRequests(sb, { id: requestId });

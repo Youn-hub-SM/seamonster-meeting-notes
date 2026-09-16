@@ -9,6 +9,27 @@ function one<T = AnyRow>(v: unknown): T | null {
   return (v ?? null) as T | null;
 }
 
+// 요청서 상세를 Teams 게시물 본문용 여러 줄 텍스트로 — 알림에 품목·수량·이행률까지 싣는다(2026-09-16 대표 요청).
+//  줄 형식은 b2b-teams 의 toAdaptiveCard(줄 단위 TextBlock)와 맞물린다. 개인정보 없음.
+export function formatRequestDetail(r: ProductionRequest): string {
+  const lines: string[] = [];
+  const head: string[] = [];
+  head.push(`용도 ${r.purpose === "도매 납품" ? "도매 납품" : "제조사(재고 보충)"}`);
+  if (r.due_date) head.push(`마감 ${r.due_date}`);
+  if (r.assignee) head.push(`담당 ${r.assignee}`);
+  lines.push(head.join(" · "));
+  for (const it of r.items.slice(0, 20)) {
+    const spec = it.spec ? ` ${it.spec}` : "";
+    const recv = it.received_qty > 0 ? ` — 입고 ${it.received_qty.toLocaleString()} · 잔여 ${Math.max(0, Math.round((it.requested_qty - it.received_qty) * 100) / 100).toLocaleString()}` : "";
+    lines.push(`- ${it.name}${spec} ×${it.requested_qty.toLocaleString()}${recv}${it.memo ? ` (${it.memo})` : ""}`);
+  }
+  if (r.items.length > 20) lines.push(`- 외 ${r.items.length - 20}개 품목`);
+  const pctv = r.total_requested > 0 ? Math.round((r.total_received / r.total_requested) * 100) : 0;
+  lines.push(`합계 ${r.items.length}품목 · 요청 ${r.total_requested.toLocaleString()} · 입고 ${r.total_received.toLocaleString()} (${pctv}%)`);
+  if (r.memo) lines.push(`메모: ${r.memo}`);
+  return lines.join("\n");
+}
+
 // opts.id 주면 단건, status 주면 상태 필터. 최신순.
 export async function loadRequests(
   sb: SupabaseClient,

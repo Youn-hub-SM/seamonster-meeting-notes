@@ -252,10 +252,20 @@ export async function validateManualAllocations(
 export async function applyManualAllocations(
   sb: SupabaseClient,
   opts: { inv_txn_id: string; product_id: string; receipt_date?: string; allocations: ManualAlloc[]; actor: string | null },
-): Promise<{ warnings: string[]; requestIds: string[] }> {
+): Promise<{ warnings: string[]; requestIds: string[]; lines: string[] }> {
   const warnings: string[] = [];
+  const lines: string[] = []; // 이전 알림 게시물 본문용 — 요청서별 배정·누적 요약
   const rows = await loadAllocItems(sb, opts.allocations.map((a) => a.item_id));
   const byId = new Map((rows ?? []).map((r) => [r.id, r]));
+  // 품목행별 기입고 합(배정 전) — 알림에 '누적/요청' 을 싣기 위한 조회. 실패해도 배정은 진행.
+  const prevRecv = new Map<string, number>();
+  try {
+    const ids = (rows ?? []).map((r) => r.id);
+    if (ids.length) {
+      const { data: rcs } = await sb.from("production_receipts").select("item_id, qty").in("item_id", ids).limit(5000);
+      for (const rc of rcs ?? []) prevRecv.set(rc.item_id as string, (prevRecv.get(rc.item_id as string) || 0) + (Number(rc.qty) || 0));
+    }
+  } catch { /* 누적 없이 표기 */ }
   let pname = "품목";
   try {
     const { data } = await sb.from("products").select("name").eq("id", opts.product_id).maybeSingle();
@@ -273,11 +283,14 @@ export async function applyManualAllocations(
     const { error, inserted } = await insertReceiptOnce(sb, row);
     if (error || !inserted) { warnings.push(`${r.head.req_no || "요청서"} 배정 기록 실패${error ? `: ${error.message}` : ""}`); continue; }
     requestIds.add(r.request_id);
-    await logProductionReceipt(r.head.req_no || "", pname, a.qty, opts.actor);
+    const cum = (prevRecv.get(a.item_id) || 0) + a.qty;
+    const cumStr = ` — 누적 ${cum.toLocaleString()}/${r.requested_qty.toLocaleString()}${r.requested_qty > 0 ? ` (${Math.round((cum / r.requested_qty) * 100)}%)` : ""}`;
+    lines.push(`- ${r.head.req_no || "요청서"} 배정 ×${a.qty.toLocaleString()}${cumStr}`);
+    await logProductionReceipt(r.head.req_no || "", pname, a.qty, opts.actor, `이번 배정 ×${a.qty.toLocaleString()}${cumStr}`);
     // 상태 전환(요청→진행중/완료)은 recheckRequestCompletion 한 곳에서만 — 여기서도 전환하면
     //  100% 배정 시 '요청→진행중→완료' 이중 전환·이중 알림이 난다(검증 확정).
   }
-  return { warnings, requestIds: [...requestIds] };
+  return { warnings, requestIds: [...requestIds], lines };
 }
 
 // 요청 이행 현황 판독 — '도매 납품' 요청만 대상(제조사 요청은 이 자동 전환 체계 밖 — 검증 확정).
@@ -285,7 +298,7 @@ export async function applyManualAllocations(
 //  미이행을 가리지 않게 한다(검증 확정). purpose 미적용 환경·조회 실패·절삭 위험은 null(판정 보류).
 export async function getRequestFullness(
   sb: SupabaseClient, requestId: string,
-): Promise<{ full: boolean; status: string; req_no: string } | null> {
+): Promise<{ full: boolean; status: string; req_no: string; requested: number; received: number } | null> {
   try {
     const { data: head, error: he } = await sb.from("production_requests")
       .select("id, req_no, status, purpose").eq("id", requestId).maybeSingle();
@@ -307,7 +320,9 @@ export async function getRequestFullness(
       }
     }
     const full = items.every((it) => (recvByItem.get(it.id as string) || 0) >= (Number(it.requested_qty) || 0) - 0.001);
-    return { full, status: String(head.status), req_no: (head.req_no as string) || "" };
+    const requested = items.reduce((s, it) => s + (Number(it.requested_qty) || 0), 0);
+    const received = [...recvByItem.values()].reduce((s, v) => s + v, 0);
+    return { full, status: String(head.status), req_no: (head.req_no as string) || "", requested, received };
   } catch { return null; }
 }
 
@@ -324,23 +339,25 @@ export async function recheckRequestCompletion(
     try {
       const f = await getRequestFullness(sb, id);
       if (!f) continue;
+      const pctv = f.requested > 0 ? Math.round((f.received / f.requested) * 100) : 0;
+      const detail = `이행 ${f.received.toLocaleString()}/${f.requested.toLocaleString()} (${pctv}%)`; // 게시물 본문용
       if (mode === "complete") {
         if (f.full && (f.status === "요청" || f.status === "진행중")) {
           const { data: flipped } = await sb.from("production_requests")
             .update({ status: "완료", updated_at: new Date().toISOString() })
             .eq("id", id).in("status", ["요청", "진행중"]).select("id");
-          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, f.status, "완료", `${reason} — 이행 100%`);
+          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, f.status, "완료", `${reason} — 이행 100%`, detail);
         } else if (!f.full && f.status === "요청") {
           const { data: flipped } = await sb.from("production_requests")
             .update({ status: "진행중", updated_at: new Date().toISOString() })
             .eq("id", id).eq("status", "요청").select("id");
-          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason);
+          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason, detail);
         }
       } else if (!f.full && f.status === "완료") {
         const { data: flipped } = await sb.from("production_requests")
           .update({ status: "진행중", updated_at: new Date().toISOString() })
           .eq("id", id).eq("status", "완료").select("id");
-        if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "완료", "진행중", reason);
+        if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "완료", "진행중", reason, detail);
       }
     } catch (e) { console.warn("[production-allocate] recheck failed", e); }
   }
