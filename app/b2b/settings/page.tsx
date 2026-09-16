@@ -159,8 +159,7 @@ export default function SettingsEtcPage() {
         </div>
         <p style={{ fontSize: 12.5, color: "var(--sm-text-mid)", margin: 0, lineHeight: 1.8 }}>
           발주가 <strong>발송완료</strong>되면 라인아이템별 매출이 <strong>매출 데이터</strong>에 자동 반영됩니다
-          (채널 <strong>&lsquo;도매&rsquo;</strong>, 발주별 1회, 중복 방지). <a href="/sales/report" style={{ color: "var(--sm-orange)", fontWeight: 600 }}>매출 리포트</a>·
-          <a href="/sales/search" style={{ color: "var(--sm-orange)", fontWeight: 600 }}> 주문 검색</a>에서 함께 조회됩니다.
+          (채널 <strong>&lsquo;도매&rsquo;</strong>, 발주별 1회, 중복 방지). <a href="/sales/report" style={{ color: "var(--sm-orange)", fontWeight: 600 }}>매출 리포트</a>에서 함께 조회됩니다.
           <br />
           별도 설정이 필요 없으며, 기존 <strong>구글시트 연동은 종료</strong>되었습니다. 재구매·고객 분석 오염을 막기 위해 도매 매출은 매출액만 반영하고 개별 고객으로는 집계하지 않습니다.
         </p>

@@ -52,13 +52,11 @@ export const NAV: NavCategory[] = [
         ],
       },
       {
-        href: "/sales", label: "매출", icon: "bars",
+        href: "/sales/upload", label: "매출", icon: "bars", // 대시보드·주문 검색 제거(2026-09-17) — 매출 홈=업로드
         menu: [
-          { href: "/sales", label: "대시보드" },
           { href: "/sales/upload", label: "데이터 업로드" },
           { href: "/sales/report", label: "리포트" },
           { href: "/sales/profit", label: "채널별 이익" },
-          { href: "/sales/search", label: "주문 검색" },
           { href: "/sales/history", label: "변경 기록" },
         ],
       },
