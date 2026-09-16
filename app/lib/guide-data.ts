@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-09-14";
+export const GUIDE_UPDATED = "2026-09-16";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1103,13 +1103,13 @@ export const GUIDE: GuideCategory[] = [
             "label": "소매↔도매",
             "what": "같은 품목의 재고를 소매 채널과 도매 채널 사이에서 이동",
             "steps": [
-              "검색창에서 품목을 고른다",
               "'소매 → 도매' 또는 '도매 → 소매' 방향을 고른다",
-              "옮길 수량을 넣는다",
-              "소매→도매면 '도매 생산 요청서 배정' 표에서 요청서별 배정 수량을 넣는다 (비우면 전량 기타)",
+              "검색창에서 품목을 고르고 옮길 수량을 넣는다",
+              "품목이 더 있으면 '+ 품목 추가'를 눌러 줄을 늘린다 (같은 품목은 한 줄로)",
+              "소매→도매면 각 줄의 요청서 표에서 요청서별 배정 수량을 넣는다 (비우면 전량 기타)",
               "옮긴 날짜를 확인한다",
               "'옮기기'를 누른다",
-              "잘못 옮겼으면 아래 '최근 옮긴 내역'에서 '취소'를 누른다"
+              "잘못 옮겼으면 아래 '최근 옮긴 내역'에서 그 품목 줄의 '취소'를 누른다 (품목별로 따로 취소된다)"
             ],
             "tips": [
               "배정한 수량만 도매 요청서 이행률에 잡힌다 — 배정 없이 옮기면 기타(요청 미연결)로 기록되고 요청서는 계속 열려 있다",

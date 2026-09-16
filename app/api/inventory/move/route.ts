@@ -93,98 +93,145 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { product_id, from, to, qty, txn_date?, memo? } — 한 품목을 from채널 재고 → to채널 재고로 이동.
-//  출고(from, −) + 입고(to, +) 두 행을 같은 group_id 로 묶어 한 번에 기록(원자적, 취소 시 함께 삭제).
+// POST — 품목 이동. 신형 { from, to, txn_date?, memo?, items:[{product_id, qty, allocations?}] } (여러 품목,
+//  2026-09-16 대표 요청) 또는 구형 { product_id, from, to, qty, ... } (단일 — 배포 전 탭 호환).
+//  품목마다 출고(−)+입고(+) 두 행을 '자기 group_id' 로 기록 — 줄 단위로 따로 취소할 수 있고
+//  내역(GET)의 group 병합도 그대로 동작한다. 알림은 한 번의 이동 = 한 게시물로 묶는다.
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as Record<string, unknown>;
-    const product_id = String(b.product_id || "");
     const from = String(b.from || "");
     const to = String(b.to || "");
-    const qty = Math.round((Number(b.qty) || 0) * 100) / 100;
-    if (!product_id) return NextResponse.json({ ok: false, error: "품목을 선택하세요." }, { status: 400 });
     if (!CHANNELS.includes(from as never) || !CHANNELS.includes(to as never)) return NextResponse.json({ ok: false, error: "채널이 올바르지 않습니다." }, { status: 400 });
     if (from === to) return NextResponse.json({ ok: false, error: "옮길 채널이 서로 달라야 합니다." }, { status: 400 });
-    if (qty <= 0) return NextResponse.json({ ok: false, error: "옮길 수량을 입력하세요." }, { status: 400 });
+
+    // 입력 정규화 — 신형 items[] 없으면 구형 단일 바디를 1줄짜리로 감싼다
+    type ItemIn = { product_id: string; qty: number; allocations: ManualAlloc[] };
+    const parseAllocs = (v: unknown): ManualAlloc[] => (Array.isArray(v) ? (v as Record<string, unknown>[]) : [])
+      .map((a) => ({ item_id: String(a.item_id || ""), qty: Math.round((Number(a.qty) || 0) * 100) / 100 }))
+      .filter((a) => a.item_id && a.qty > 0);
+    const rawItems = Array.isArray(b.items) ? (b.items as Record<string, unknown>[]) : null;
+    const items: ItemIn[] = (rawItems ?? [b]).map((it) => ({
+      product_id: String(it.product_id || ""),
+      qty: Math.round((Number(it.qty) || 0) * 100) / 100,
+      allocations: parseAllocs(it.allocations),
+    }));
+    if (!items.length) return NextResponse.json({ ok: false, error: "옮길 품목을 1개 이상 입력하세요." }, { status: 400 });
+    for (const it of items) {
+      if (!it.product_id) return NextResponse.json({ ok: false, error: "품목을 선택하세요." }, { status: 400 });
+      if (it.qty <= 0) return NextResponse.json({ ok: false, error: "옮길 수량을 입력하세요." }, { status: 400 });
+    }
+    if (new Set(items.map((it) => it.product_id)).size !== items.length)
+      return NextResponse.json({ ok: false, error: "같은 품목이 두 줄에 있습니다 — 한 줄로 합쳐 주세요." }, { status: 400 });
 
     const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const memo = String(b.memo || "").trim() || null;
-    const group_id = crypto.randomUUID();
     const created_by = await actor(req);
-    const base = { product_id, partner: MARK, memo, group_id, txn_date, status: "완료", created_by };
-
     const sb = supabaseAdmin();
 
-    // 요청서 수동 배정(2026-09-14) — 소매→도매에서만. 합계는 이동 수량 이하(잔여=기타).
-    //  이동(원장) 기록 전에 검증해 잘못된 배정이면 이동 자체를 거부한다.
-    const rawAllocs = Array.isArray(b.allocations) ? (b.allocations as Record<string, unknown>[]) : [];
-    const allocations: ManualAlloc[] = rawAllocs
-      .map((a) => ({ item_id: String(a.item_id || ""), qty: Math.round((Number(a.qty) || 0) * 100) / 100 }))
-      .filter((a) => a.item_id && a.qty > 0);
-    if (allocations.length) {
+    // 요청서 수동 배정(2026-09-14) — 소매→도매에서만. 줄마다 합계 ≤ 이동 수량(잔여=기타).
+    //  이동(원장) 기록 전에 '전 줄'을 검증해 잘못된 배정이면 아무것도 기록하지 않는다.
+    for (const it of items) {
+      if (!it.allocations.length) continue;
       if (!(from === "소매" && to === "도매"))
         return NextResponse.json({ ok: false, error: "요청서 배정은 소매 → 도매 이동에서만 가능합니다." }, { status: 400 });
-      const allocSum = Math.round(allocations.reduce((s, a) => s + a.qty, 0) * 100) / 100;
-      if (allocSum > qty + 0.001)
-        return NextResponse.json({ ok: false, error: `배정 합계(${allocSum})가 이동 수량(${qty})보다 많습니다.` }, { status: 400 });
-      const v = await validateManualAllocations(sb, product_id, allocations);
+      const allocSum = Math.round(it.allocations.reduce((s, a) => s + a.qty, 0) * 100) / 100;
+      if (allocSum > it.qty + 0.001)
+        return NextResponse.json({ ok: false, error: `배정 합계(${allocSum})가 이동 수량(${it.qty})보다 많은 품목이 있습니다.` }, { status: 400 });
+      const v = await validateManualAllocations(sb, it.product_id, it.allocations);
       if (!v.ok) return NextResponse.json({ ok: false, error: v.error || "배정 검증 실패" }, { status: 400 });
     }
-    const { data, error } = await sb.from("inventory_txns").insert([
-      { ...base, type: "출고", qty: -qty, channel: from, unit_amount: null },
-      { ...base, type: "입고", qty: qty, channel: to, unit_amount: null },
-    ]).select("id, type, qty, txn_date");
-    if (error) {
-      if (/channel/i.test(error.message)) return NextResponse.json({ ok: false, error: "채널 컬럼이 없습니다 — migration 036 을 먼저 적용하세요." }, { status: 500 });
-      throw error;
-    }
 
-    // 소매→도매 이전 = '도매 납품' 요청의 이행 — 담당자가 지정한 요청서에만 배정(2026-09-14 대표 확정,
-    //  종전 FIFO 자동 매칭 폐지 — 배정 안 하면 기타 100%). 100% 도달 요청은 자동 완료.
-    //  이전 취소는 이 화면의 '취소'(group 삭제) → cascade(083)로 배정도 함께 원복.
-    //  배정·알림 실패는 이동을 되돌리지 않고 경고로 응답(이동이 원장 — 이미 기록됨).
+    // 품목명(알림·오류 표시용)
+    const nameById = new Map<string, { name: string; sku: string | null }>();
+    try {
+      const { data: prods } = await sb.from("products").select("id, name, sku").in("id", items.map((it) => it.product_id));
+      for (const p of prods ?? []) nameById.set(p.id as string, { name: String(p.name || "품목"), sku: (p.sku as string) ?? null });
+    } catch { /* 이름 없이 진행 */ }
+
+    // ── 줄 단위 기록 — 각 줄이 독립 group(개별 취소 가능). 중간 실패 시 앞 줄들은 유지하고 알린다.
     const warnings: string[] = [];
-    if (from === "소매" && to === "도매") {
-      const detailLines: string[] = []; // 게시물 본문 — 배정 내역·기타·이동 후 재고
+    const results: { product_id: string; group_id: string }[] = [];
+    const notifyPerItem: string[] = []; // 게시물 본문 — 품목별 수량·배정 요약(성공한 줄만 쌓임)
+
+    // 알림 발송(성공한 줄 기준) — 정상 완료와 '중간 실패로 조기 반환' 양쪽에서 부른다.
+    //  실패 경로에서 건너뛰면 앞 줄들이 원장·배정까지 반영됐는데 게시물이 0건이 된다(검증 확정).
+    const notifyMove = async (doneItems: ItemIn[]) => {
+      if (!(from === "소매" && to === "도매") || !doneItems.length) return;
+      try {
+        try {
+          const [rt, wh] = await Promise.all([
+            sb.rpc("inventory_stock", { asof: null, chan: "소매" }).in("product_id", doneItems.map((it) => it.product_id)),
+            sb.rpc("inventory_stock", { asof: null, chan: "도매" }).in("product_id", doneItems.map((it) => it.product_id)),
+          ]);
+          const toMap = (x: { data?: unknown }) => new Map(((x.data as { product_id?: string; qty?: unknown }[] | null) ?? []).map((r) => [String(r.product_id), Number(r.qty)]));
+          const rtm = toMap(rt), whm = toMap(wh);
+          const stockLines = doneItems
+            .filter((it) => Number.isFinite(rtm.get(it.product_id) ?? NaN) && Number.isFinite(whm.get(it.product_id) ?? NaN))
+            .map((it) => `  ${nameById.get(it.product_id)?.name || "품목"}: 소매 ${(rtm.get(it.product_id) as number).toLocaleString()} · 도매 ${(whm.get(it.product_id) as number).toLocaleString()}`);
+          if (stockLines.length) notifyPerItem.push("이동 후 재고", ...stockLines);
+        } catch { /* 재고 줄 생략 */ }
+        const totalQty = doneItems.reduce((s, it) => s + it.qty, 0);
+        const firstName = nameById.get(doneItems[0].product_id)?.name || "품목";
+        const title = doneItems.length === 1 ? firstName : `${firstName} 외 ${doneItems.length - 1}종`;
+        const firstSku = doneItems.length === 1 ? nameById.get(doneItems[0].product_id)?.sku ?? null : null;
+        await logInventoryMovedToWholesale(title, firstSku, totalQty, memo, created_by, notifyPerItem.join("\n"));
+      } catch (e) { console.warn("[inventory/move] 이전 알림 실패", e); }
+    };
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const group_id = crypto.randomUUID();
+      const base = { product_id: it.product_id, partner: MARK, memo, group_id, txn_date, status: "완료", created_by };
+      const { data, error } = await sb.from("inventory_txns").insert([
+        { ...base, type: "출고", qty: -it.qty, channel: from, unit_amount: null },
+        { ...base, type: "입고", qty: it.qty, channel: to, unit_amount: null },
+      ]).select("id, type, qty");
+      if (error) {
+        if (/channel/i.test(error.message)) return NextResponse.json({ ok: false, error: "채널 컬럼이 없습니다 — migration 036 을 먼저 적용하세요." }, { status: 500 });
+        const nm = nameById.get(it.product_id)?.name || `${i + 1}번째 품목`;
+        const done = results.length;
+        await notifyMove(items.slice(0, done)); // 이미 이동된 앞 줄들은 게시물로 알린다
+        return NextResponse.json({
+          ok: false,
+          error: `${nm} 이동 기록에 실패했습니다(${error.message}).${done ? ` 앞의 ${done}개 품목은 이동됐습니다 — 내역에서 확인·취소할 수 있습니다.` : ""}`,
+          results, warnings,
+        }, { status: 500 });
+      }
+      results.push({ product_id: it.product_id, group_id });
+
+      // 배정(소매→도매) — 실패해도 이동은 유지, 경고로 알림
+      const nm = nameById.get(it.product_id)?.name || "품목";
       let allocatedSum = 0;
-      if (allocations.length) {
+      const itemLines: string[] = [];
+      if (from === "소매" && to === "도매" && it.allocations.length) {
         try {
           const inLeg = (data ?? []).find((t) => t.type === "입고" && Number(t.qty) > 0);
           if (inLeg) {
             const r = await applyManualAllocations(sb, {
-              inv_txn_id: inLeg.id as string, product_id, receipt_date: txn_date,
-              allocations, actor: created_by,
+              inv_txn_id: inLeg.id as string, product_id: it.product_id, receipt_date: txn_date,
+              allocations: it.allocations, actor: created_by,
             });
-            warnings.push(...r.warnings);
-            detailLines.push(...r.lines);
-            allocatedSum = allocations.reduce((s, a) => s + a.qty, 0);
+            warnings.push(...r.warnings.map((w) => `${nm}: ${w}`));
+            itemLines.push(...r.lines.map((l) => `  ${l}`));
+            allocatedSum = it.allocations.reduce((s, a) => s + a.qty, 0);
             if (r.requestIds.length) await recheckRequestCompletion(sb, r.requestIds, "요청서 배정");
           }
         } catch (e) {
           console.warn("[inventory/move] 요청서 배정 실패", e);
-          warnings.push("요청서 배정 기록에 실패했습니다 — 이동은 저장됐으니 취소 후 다시 시도하세요.");
+          warnings.push(`${nm}: 요청서 배정 기록에 실패했습니다 — 이동은 저장됐으니 취소 후 다시 시도하세요.`);
         }
       }
-      try {
-        const { data: prod } = await sb.from("products").select("name, sku").eq("id", product_id).maybeSingle();
-        const etc = Math.round((qty - allocatedSum) * 100) / 100;
-        if (detailLines.length) { if (etc > 0) detailLines.push(`- 기타(요청 미연결) ×${etc.toLocaleString()}`); }
-        else detailLines.push("요청서 배정 없음 — 전량 기타(일반 이동)");
-        // 이동 후 채널별 현재고 — 조회 실패 시 생략(알림은 그대로 발송)
-        try {
-          const [rt, wh] = await Promise.all([
-            sb.rpc("inventory_stock", { asof: null, chan: "소매" }).eq("product_id", product_id).maybeSingle(),
-            sb.rpc("inventory_stock", { asof: null, chan: "도매" }).eq("product_id", product_id).maybeSingle(),
-          ]);
-          const n = (x: { data?: unknown }) => Number((x.data as { qty?: unknown } | null)?.qty ?? NaN);
-          if (Number.isFinite(n(rt)) && Number.isFinite(n(wh)))
-            detailLines.push(`이동 후 재고 — 소매 ${n(rt).toLocaleString()} · 도매 ${n(wh).toLocaleString()}`);
-        } catch { /* 재고 줄 생략 */ }
-        await logInventoryMovedToWholesale(prod?.name || "품목", (prod?.sku as string) ?? null, qty, memo, created_by, detailLines.join("\n"));
-      } catch (e) { console.warn("[inventory/move] 이전 알림 실패", e); }
+      const etc = Math.round((it.qty - allocatedSum) * 100) / 100;
+      const skuTag = nameById.get(it.product_id)?.sku ? ` [${nameById.get(it.product_id)!.sku}]` : "";
+      notifyPerItem.push(`- ${nm}${skuTag} ×${it.qty.toLocaleString()}${allocatedSum > 0 && etc > 0 ? ` (배정 ${allocatedSum.toLocaleString()} · 기타 ${etc.toLocaleString()})` : allocatedSum > 0 ? "" : " (기타)"}`);
+      notifyPerItem.push(...itemLines);
     }
 
-    return NextResponse.json({ ok: true, group_id, count: data?.length ?? 0, warnings });
+    // ── 알림 — 한 번의 이동 = 한 게시물(품목별 요약 + 이동 후 재고). 실패해도 이동은 성공.
+    await notifyMove(items);
+
+    return NextResponse.json({ ok: true, results, group_id: results[0]?.group_id ?? null, count: results.length * 2, warnings });
   } catch (err) {
     console.error("[inventory/move POST]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "이동 실패") }, { status: 500 });
