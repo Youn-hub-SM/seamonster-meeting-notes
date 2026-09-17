@@ -1,6 +1,6 @@
-// 채널 클레임(취소·반품·교환) 폴러 — 중계 서버 크론(10분)이 실행.
-//  네이버·쿠팡·카페24에서 새 클레임 요청을 모아 업무도우미 서버(/api/claims/report)로 보내면,
-//  서버가 (channel, claim_key) 유니크로 중복을 거르고 새 건만 Teams 알림을 보낸다(migration 112).
+// 채널 클레임(취소·반품·교환) + 고객문의 폴러 — 중계 서버 크론(10분)이 실행.
+//  네이버·쿠팡·카페24에서 새 클레임 요청과 새 고객문의를 모아 업무도우미 서버(/api/claims/report)로
+//  보내면, 서버가 (channel, claim_key) 유니크로 중복을 거르고 새 건만 Teams 알림을 보낸다(migration 112).
 //  조회 창은 상태 파일 없이 '넉넉한 고정 되돌아보기'(겹침 허용) — 중복은 서버가 걸러 알림은 1회.
 //
 //  실행: node bin/claims-poll.cjs [서버URL]   (esbuild CJS 번들로 배포 — bcryptjs 포함)
@@ -8,13 +8,19 @@
 //                   CAFE24_MALL_ID/CLIENT_ID/CLIENT_SECRET (+ ../.cafe24-token.json)
 //  전송 인증: Bearer NAVER_COMMERCE_CLIENT_SECRET (카탈로그 업로드 공용 시크릿)
 //
-//  API 근거(2026-09-12 공식 문서 검증 완료):
-//  - 네이버: GET /v1/pay-order/seller/product-orders/last-changed-statuses (필터 없이 수신 후
+//  API 근거(클레임 2026-09-12, 문의 2026-09-17 공식 문서 검증 완료):
+//  - 네이버 클레임: GET /v1/pay-order/seller/product-orders/last-changed-statuses (필터 없이 수신 후
 //    claimType/claimStatus 로 분류 — 공식 답변 #701) + POST /product-orders/query (상세)
-//  - 쿠팡: GET v6 returnRequests (반품=status RU·UC 각각, 취소=cancelType=CANCEL 일단위+nextToken)
-//          GET v4 exchangeRequests (7일 창, exchangeStatus RECEIPT = 신규)
+//  - 네이버 고객문의: GET /v1/pay-user/inquiries — 주문 문의·네이버페이(고객센터 경유 포함) 통합.
+//    '고객센터 문의' 전용 API 는 없다(문의 도메인 6개 엔드포인트 전수 확인). 기간이 일 단위뿐이라
+//    2일 창 + inquiryNo dedup. 네이버톡톡은 커머스API 밖 — 대상 아님(대표 지시).
+//  - 네이버 상품 Q&A: GET /v1/contents/qnas — [문의] API 그룹 권한 필요(미추가 시 403 → 건너뜀)
+//  - 쿠팡 클레임: GET v6 returnRequests (반품=status RU·UC 각각) + GET v4 exchangeRequests (RECEIPT)
+//  - 쿠팡 고객문의: GET v5 onlineInquiries (answeredType=NOANSWER, 일 단위 → 2일 창 + inquiryId dedup)
+//  - 쿠팡 고객센터문의: GET v5 callCenterInquiries (partnerCounselingStatus NO_ANSWER=답변 필요,
+//    TRANSFER=쿠팡 상담 완료 후 이관 — 판매자 확인 필요. 둘 다 조치 필요 건이라 수집)
 //  - 카페24: GET /admin/orders?embed=items&date_type={claim}_request_date + order_status 클레임 코드
-//    (scope mall.read_order 필요 — 재인증 후 동작)
+//    (scope mall.read_order 필요 — 재인증 후 동작. 카페24 게시판형 문의는 대상 아님 — 대표 지정 채널만)
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -64,7 +70,9 @@ async function report(channel, claims) {
 }
 
 // ── 네이버 ──────────────────────────────────────────────
+let naverTokenCached = null; // 한 실행(크론 1회) 안에서 클레임·문의 폴링이 토큰을 공유
 async function naverToken() {
+  if (naverTokenCached) return naverTokenCached;
   const id = (env.NAVER_COMMERCE_CLIENT_ID || "").trim();
   const secret = (env.NAVER_COMMERCE_CLIENT_SECRET || "").trim();
   if (!id || !secret) throw new Error("네이버 자격증명 없음");
@@ -78,7 +86,8 @@ async function naverToken() {
   });
   const json = await res.json().catch(() => ({}));
   if (!json.access_token) throw new Error(`네이버 토큰 실패 (HTTP ${res.status}) ${json.code || ""} ${json.message || ""}`.trim());
-  return json.access_token;
+  naverTokenCached = json.access_token;
+  return naverTokenCached;
 }
 
 const NAVER_TYPE_KO = { CANCEL: "취소", RETURN: "반품", EXCHANGE: "교환" };
@@ -337,11 +346,173 @@ async function pollCafe24() {
   return report("카페24", claims);
 }
 
+// ── 문의 (2026-09-17 대표 요청: '고객문의' 등록 시에도 알림 — 네이버·쿠팡만, 톡톡 제외) ──────
+//  클레임과 같은 파이프라인(서버 dedup + 전용 Teams 채널)을 탄다. claim_type 으로만 구분.
+//  기간 파라미터가 일 단위뿐인 API 는 2일 창(자정 경계 누락 방지)으로 조회하고 서버가 중복을 거른다.
+//  이미 답변된 문의는 처리할 게 없으므로 알림 제외(클레임의 '통보 제외' 원칙과 동일).
+
+async function pollNaverInquiries() {
+  const token = await naverToken();
+  const k = kstNow();
+  const day = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  const claims = [];
+
+  // (a) 고객문의 — 주문 문의·네이버페이(고객센터 경유 포함) 통합. 일 단위 기간 → 2일 창 + dedup
+  for (let page = 1; page <= 5; page++) {
+    const qs = new URLSearchParams({
+      startSearchDate: day(new Date(k.getTime() - 86400_000)), endSearchDate: day(k),
+      page: String(page), size: "200",
+    });
+    const res = await fetch(`${NAVER_BASE}/v1/pay-user/inquiries?${qs}`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: timeout(),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`네이버 고객문의 조회 실패 (HTTP ${res.status}) ${j.code || ""} ${j.message || ""}`.trim());
+    for (const q of j.content ?? []) {
+      if (q.inquiryNo == null) continue;
+      let text = [q.title, q.inquiryContent].filter(Boolean).join(" — ");
+      if (q.category) text = `(${q.category})${text ? " " + text : ""}`;
+      claims.push({
+        claim_type: "고객문의",
+        claim_key: `inq:${q.inquiryNo}`,
+        order_id: q.orderId ? String(q.orderId) : "",
+        product_name: q.productName ?? null,
+        option_name: null,
+        qty: null,
+        reason: text || null,
+        status: q.answered === true ? "답변완료" : "미답변",
+        requested_at: q.inquiryRegistrationDateTime ? String(q.inquiryRegistrationDateTime) : null,
+        action_required: q.answered !== true, // 이미 답변된 건은 조치 불필요
+      });
+    }
+    if (j.last !== false) break; // last 가 명시적으로 false 일 때만 다음 페이지
+    await sleep(400);
+  }
+
+  // (b) 상품 Q&A — [문의] API 그룹 권한 필요. 미추가면 403 → 안내만 남기고 고객문의는 계속 전송
+  try {
+    for (let page = 1; page <= 5; page++) {
+      const qs = new URLSearchParams({
+        fromDate: new Date(Date.now() - 2 * 86400_000).toISOString(),
+        toDate: new Date().toISOString(),
+        page: String(page), size: "100",
+      });
+      const res = await fetch(`${NAVER_BASE}/v1/contents/qnas?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` }, signal: timeout(),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        console.error("네이버 상품 Q&A 건너뜀: [문의] API 그룹 권한 없음 — 커머스API센터 > 애플리케이션 수정에서 [문의] 그룹 추가 필요");
+        break;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${j.code || ""} ${j.message || ""}`.trim());
+      for (const q of j.contents ?? []) {
+        if (q.questionId == null) continue; // 스키마상 전 필드 비필수 — null 방어
+        claims.push({
+          claim_type: "상품문의",
+          claim_key: `qna:${q.questionId}`,
+          order_id: "",
+          product_name: q.productName ?? null,
+          option_name: null,
+          qty: null,
+          reason: q.question ? String(q.question) : null,
+          status: q.answered === true ? "답변완료" : "미답변",
+          requested_at: q.createDate ? String(q.createDate) : null,
+          action_required: q.answered !== true,
+        });
+      }
+      if (j.last !== false) break;
+      await sleep(400);
+    }
+  } catch (e) {
+    console.error(`네이버 상품문의 조회 실패(고객문의는 계속): ${e?.message || e}`);
+  }
+  return report("스마트스토어", claims);
+}
+
+async function pollCoupangInquiries() {
+  const vendorId = (env.COUPANG_VENDOR_ID || "").trim();
+  if (!vendorId) throw new Error("쿠팡 vendorId 없음");
+  const k = kstNow();
+  const day = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  const from = day(new Date(k.getTime() - 86400_000)); // 일 단위만 지원(최대 7일) → 2일 창 + dedup
+  const to = day(k);
+  const claims = [];
+
+  // (a) 고객문의(상품·주문 온라인 문의) — NOANSWER = 판매자 답변 필요 건만
+  {
+    const base = `/v2/providers/openapi/apis/api/v5/vendors/${vendorId}/onlineInquiries`;
+    for (let page = 1; page <= 10; page++) {
+      const res = await coupangGet(`${base}?vendorId=${vendorId}&answeredType=NOANSWER&inquiryStartAt=${from}&inquiryEndAt=${to}&pageNum=${page}&pageSize=50`);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(`쿠팡 고객문의 조회 실패 (HTTP ${res.status}) ${j.code || ""} ${j.message || ""}`.trim());
+      const rows = j.data?.content ?? [];
+      for (const r of rows) {
+        if (r.inquiryId == null) continue;
+        const orders = Array.isArray(r.orderIds) ? r.orderIds.filter((v) => v != null) : [];
+        claims.push({
+          claim_type: "고객문의",
+          claim_key: `oinq:${r.inquiryId}`,
+          order_id: orders.length ? String(orders[0]) : "",
+          product_name: null, // 응답에 상품명 필드 없음(productId 류만) — 내용으로 식별
+          option_name: null,
+          qty: null,
+          reason: r.content ? String(r.content) : null,
+          status: "미답변",
+          requested_at: r.inquiryAt ? String(r.inquiryAt) : null,
+          action_required: true,
+        });
+      }
+      const totalPages = Number(j.data?.pagination?.totalPages ?? 1);
+      if (!rows.length || page >= totalPages) break;
+      await sleep(400);
+    }
+  }
+
+  // (b) 고객센터문의 — NO_ANSWER(답변 필요)·TRANSFER(쿠팡 상담 후 이관, 확인 필요) 각 1회.
+  //  같은 문의가 상태를 옮겨도 claim_key 가 같아 알림은 1회. buyerPhone 등 개인정보는 싣지 않는다.
+  {
+    const base = `/v2/providers/openapi/apis/api/v5/vendors/${vendorId}/callCenterInquiries`;
+    for (const [st, label] of [["NO_ANSWER", "답변요청"], ["TRANSFER", "확인요청(이관)"]]) {
+      for (let page = 1; page <= 10; page++) {
+        const res = await coupangGet(`${base}?vendorId=${vendorId}&partnerCounselingStatus=${st}&inquiryStartAt=${from}&inquiryEndAt=${to}&pageNum=${page}&pageSize=30`);
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(`쿠팡 고객센터문의(${st}) 조회 실패 (HTTP ${res.status}) ${j.code || ""} ${j.message || ""}`.trim());
+        const rows = j.data?.content ?? [];
+        for (const r of rows) {
+          if (r.inquiryId == null) continue;
+          let text = r.content ? String(r.content) : "";
+          if (r.receiptCategory) text = `(${r.receiptCategory})${text ? " " + text : ""}`;
+          claims.push({
+            claim_type: "고객센터문의",
+            claim_key: `cs:${r.inquiryId}`,
+            order_id: r.orderId ? String(r.orderId) : "",
+            product_name: r.itemName ?? null,
+            option_name: null,
+            qty: null,
+            reason: text || null,
+            status: label,
+            requested_at: r.inquiryAt ? String(r.inquiryAt) : null,
+            action_required: true,
+          });
+        }
+        const totalPages = Number(j.data?.pagination?.totalPages ?? 1);
+        if (!rows.length || page >= totalPages) break;
+        await sleep(400);
+      }
+      await sleep(400);
+    }
+  }
+  return report("쿠팡", claims);
+}
+
 async function main() {
   const jobs = [
     ["스마트스토어", pollNaver],
     ["쿠팡", pollCoupang],
     ["카페24", pollCafe24],
+    ["스마트스토어 문의", pollNaverInquiries],
+    ["쿠팡 문의", pollCoupangInquiries],
   ];
   let failed = 0;
   for (const [name, fn] of jobs) {

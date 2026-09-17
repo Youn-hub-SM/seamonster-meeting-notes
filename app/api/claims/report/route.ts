@@ -6,12 +6,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// POST /api/claims/report — 중계 서버 클레임 폴러가 채널별 취소/반품/교환 요청을 밀어넣는다(112).
-//  새 건(중복 아님)만 Teams 로 알림. 같은 클레임의 재전송은 (channel, claim_key) 유니크로 무시.
+// POST /api/claims/report — 중계 서버 클레임 폴러가 채널별 취소/반품/교환 요청과
+//  고객문의(고객문의·상품문의·고객센터문의, 2026-09-17 확장)를 밀어넣는다(112).
+//  새 건(중복 아님)만 Teams 로 알림. 같은 건의 재전송은 (channel, claim_key) 유니크로 무시.
 //  미들웨어 예외 경로 — Bearer(카탈로그 업로드와 같은 공용 시크릿)로 직접 인증.
 
 const CHANNELS = new Set(["스마트스토어", "쿠팡", "카페24"]);
-const TYPES = new Set(["취소", "반품", "교환"]);
+const TYPES = new Set(["취소", "반품", "교환", "고객문의", "상품문의", "고객센터문의"]);
+// 문의 유형 — 게시물 제목·줄 구성이 클레임과 다르다(문의 내용은 reason 필드에 실려 온다)
+const INQUIRY_TYPES = new Set(["고객문의", "상품문의", "고객센터문의"]);
 
 function bearerOk(req: NextRequest): boolean {
   const authz = req.headers.get("authorization") || "";
@@ -72,15 +75,22 @@ export async function POST(req: NextRequest) {
     }
 
     // Teams 알림 — 한 폴링분은 한 메시지로 묶는다(클레임 폭주 시 도배 방지).
-    //  여기 오는 건 전부 '판매자 승인·처리 필요'(자동 처리 통보는 위에서 제외됨).
+    //  여기 오는 건 전부 '판매자 승인·처리 필요'(자동 처리 통보·답변 완료 문의는 위에서 제외됨).
     let notified = 0;
     if (inserted.length > 0) {
       const lineOf = (c: (typeof inserted)[number]) =>
-        `- [${c.claim_type}] ${c.product_name || "(상품명 미상)"}${c.option_name ? ` / ${c.option_name}` : ""}${c.qty ? ` x${c.qty}` : ""}` +
-        `${c.order_id ? ` · 주문 ${c.order_id}` : ""}${c.reason ? ` · 사유: ${c.reason}` : ""}`;
+        INQUIRY_TYPES.has(c.claim_type)
+          ? `- [${c.claim_type}] ${c.product_name ? `${c.product_name} — ` : ""}${(c.reason || "(내용 없음)").slice(0, 120)}${c.order_id ? ` · 주문 ${c.order_id}` : ""}`
+          : `- [${c.claim_type}] ${c.product_name || "(상품명 미상)"}${c.option_name ? ` / ${c.option_name}` : ""}${c.qty ? ` x${c.qty}` : ""}` +
+            `${c.order_id ? ` · 주문 ${c.order_id}` : ""}${c.reason ? ` · 사유: ${c.reason}` : ""}`;
       const lines = inserted.slice(0, 15).map(lineOf);
       if (inserted.length > 15) lines.push(`- 외 ${inserted.length - 15}건`);
-      const summary = `${channel} 승인·처리 필요 클레임 ${inserted.length}건 (취소/반품/교환)\n${lines.join("\n")}`;
+      // 폴러가 클레임과 문의를 따로 전송하므로 한 게시물은 보통 한 종류 — 제목을 그에 맞춘다
+      const kinds = [...new Set(inserted.map((c) => c.claim_type))];
+      const header = inserted.every((c) => INQUIRY_TYPES.has(c.claim_type))
+        ? `${channel} 새 고객문의 ${inserted.length}건 (${kinds.join("/")})`
+        : `${channel} 승인·처리 필요 클레임 ${inserted.length}건 (취소/반품/교환)`;
+      const summary = `${header}\n${lines.join("\n")}`;
       await mirrorB2BTeams(summary, null, null, { claims: true });
       notified = inserted.length;
       const keys = inserted.map((c) => c.claim_key);
