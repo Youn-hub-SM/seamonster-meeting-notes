@@ -9,7 +9,7 @@ type DayBucket = { date: string; label: string; total_qty: number; order_count: 
 type PromoItem = { sku: string; name: string; qty: number | string };
 type Promotion = { id: string; name: string; start: string; end: string; items: PromoItem[]; expectedQty: number; note?: string; color?: string };
 type Product = { sku: string | null; name: string; spec: string | null; is_bundle?: boolean };
-type ItemStat = { sku: string; name: string; stock: number | null; dailyOut: number; depletionDays: number | null; safety: number; demand: number; autoSafety: number; safetyDays: number | null; belowSafety: boolean };
+type ItemStat = { sku: string; name: string; stock: number | null; dailyOut: number; depletionDays: number | null; safety: number; demand: number; inbound?: number; autoSafety: number; safetyDays: number | null; belowSafety: boolean };
 type Manual = { id: string; sku: string; name: string; qty: number; productionDate: string; stock: number | null; dailyOut: number; depletionDate: string | null };
 type PItem = { name: string; spec: string; qty: number; manual: boolean; manualId?: string; sku?: string; request?: boolean };
 type MergedDay = { date: string; label: string; total_qty: number; hasManual: boolean; products: PItem[] };
@@ -26,13 +26,14 @@ function dayLabel(iso: string) { const d = new Date(iso + "T00:00:00"); return `
 function daysBetweenIso(a: string, b: string) { return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86400_000); }
 
 // 보수적 권장 생산량 — 생산 목표일까지 예상 소진 + 안전재고 + 대기수요를 채우고 남는 부족분(올림, 최소 0).
-//  Q = max(0, ceil(하루평균출고 × 목표일까지 남은일수) + 안전재고 + 대기수요 − 현재고)
+//  Q = max(0, ceil(하루평균출고 × 목표일까지 남은일수) + 안전재고 + 대기수요 − (현재고 + 오는 중))
 //  → 생산이 목표일에 도착할 때 재고가 '안전재고 + 대기수요' 수준으로 회복되도록 넉넉히 잡는다(쇼트 방지).
+//  오는 중(열린 제조사 요청서 잔여)은 이미 시켜 둔 물량이라 재고처럼 뺀다(재고 목록 권장과 같은 규칙).
 function recommendQty(it: ItemStat | null | undefined, productionDate: string, today: string): number | null {
   if (!it || it.stock == null || !productionDate) return null;
   const days = Math.max(0, daysBetweenIso(today, productionDate));
   const deplete = Math.ceil((it.dailyOut || 0) * days);
-  return Math.max(0, deplete + (it.safety || 0) + (it.demand || 0) - it.stock);
+  return Math.max(0, deplete + (it.safety || 0) + (it.demand || 0) - (it.stock + (it.inbound || 0)));
 }
 
 function buildWeeks(year: number, month: number): Date[][] {

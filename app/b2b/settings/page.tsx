@@ -20,6 +20,9 @@ export default function SettingsEtcPage() {
   const [leadSaved, setLeadSaved] = useState<number | null>(null);
   const [leadSaving, setLeadSaving] = useState(false);
   const [leadMsg, setLeadMsg] = useState("");
+  // 발주 주기(일) — 요청서를 내는 간격. 안전재고 지평 = 리드타임 + 발주 주기 (기본 0 = 리드타임만)
+  const [cycleInput, setCycleInput] = useState("");
+  const [cycleSaved, setCycleSaved] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -27,7 +30,11 @@ export default function SettingsEtcPage() {
         const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
         if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
         const ld = await (await fetch("/api/production/lead-days", { cache: "no-store" })).json();
-        if (ld.ok) { setLeadSaved(ld.leadDays); setLeadInput(String(ld.leadDays)); }
+        if (ld.ok) {
+          setLeadSaved(ld.leadDays); setLeadInput(String(ld.leadDays));
+          const cy = Number(ld.cycleDays ?? 0) || 0;
+          setCycleSaved(cy); setCycleInput(String(cy));
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
@@ -54,19 +61,23 @@ export default function SettingsEtcPage() {
 
   async function saveLead() {
     const n = Math.round(Number(leadInput));
-    if (!Number.isFinite(n) || n < 1 || n > 60) { setLeadMsg("1~60 사이 숫자를 입력하세요."); return; }
+    if (!Number.isFinite(n) || n < 1 || n > 60) { setLeadMsg("리드타임은 1~60 사이 숫자를 입력하세요."); return; }
+    const c = cycleInput.trim() === "" ? 0 : Math.round(Number(cycleInput));
+    if (!Number.isFinite(c) || c < 0 || c > 30) { setLeadMsg("발주 주기는 0~30 사이 숫자를 입력하세요(주 1회면 7)."); return; }
     setLeadSaving(true);
     setLeadMsg("");
     try {
       const res = await fetch("/api/production/lead-days", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: n }),
+        body: JSON.stringify({ days: n, cycleDays: c }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
       setLeadSaved(j.leadDays);
       setLeadInput(String(j.leadDays));
-      setLeadMsg(`저장됨 — 안전재고가 하루 출고 × ${j.leadDays}일로 계산됩니다.`);
+      const cy = Number(j.cycleDays ?? 0) || 0;
+      setCycleSaved(cy); setCycleInput(String(cy));
+      setLeadMsg(`저장됨 — 안전재고가 하루 출고 × ${j.leadDays + cy}일(리드타임 ${j.leadDays} + 발주 주기 ${cy})로 계산됩니다.`);
     } catch (e) {
       setLeadMsg(e instanceof Error ? e.message : "저장 실패");
     }
@@ -122,14 +133,17 @@ export default function SettingsEtcPage() {
         </div>
       </section>
 
-      {/* 생산 리드타임 (구 생산관리 설정에서 이관) */}
+      {/* 생산 리드타임 + 발주 주기 (구 생산관리 설정에서 이관) */}
       <section className="b2b-card" style={{ marginTop: 28 }}>
-        <div className="b2b-card-head"><h2 className="b2b-card-title">생산 리드타임</h2></div>
+        <div className="b2b-card-head"><h2 className="b2b-card-title">생산 리드타임 · 발주 주기</h2></div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
-          제조사에 생산을 요청하고 받기까지 걸리는 일수입니다. <strong>안전재고 = 하루 평균 출고 × 리드타임</strong>으로,
-          이 기간 팔릴 만큼은 늘 확보해 재고 쇼트를 막습니다. {leadSaved != null && <>현재 <strong>{leadSaved}일</strong>.</>}
+          리드타임 = 제조사에 생산을 요청하고 받기까지 걸리는 일수, 발주 주기 = 요청서를 내는 간격(주 1회면 7).
+          <strong> 안전재고 = 하루 평균 출고 × (리드타임 + 발주 주기)</strong>로, 이번 물량이 온 뒤 다음 물량이 올 때까지 팔릴 만큼을
+          늘 확보해 재고 쇼트를 막습니다. 권장생산은 여기서 현재고와 &lsquo;오는 중&rsquo;(시켜 두고 아직 안 온 양)을 뺀 값입니다.
+          {leadSaved != null && <> 현재 리드타임 <strong>{leadSaved}일</strong>{cycleSaved != null && <> · 발주 주기 <strong>{cycleSaved}일</strong> (지평 {leadSaved + cycleSaved}일)</>}.</>}
         </p>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>리드타임</span>
           <input
             className="b2b-input"
             type="number"
@@ -137,7 +151,19 @@ export default function SettingsEtcPage() {
             max={60}
             value={leadInput}
             onChange={(e) => setLeadInput(e.target.value)}
-            style={{ width: 120 }}
+            style={{ width: 100 }}
+          />
+          <span style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>일</span>
+          <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 12 }}>발주 주기</span>
+          <input
+            className="b2b-input"
+            type="number"
+            min={0}
+            max={30}
+            value={cycleInput}
+            onChange={(e) => setCycleInput(e.target.value)}
+            style={{ width: 100 }}
+            placeholder="0"
           />
           <span style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>일</span>
           <button className="b2b-btn-primary" onClick={saveLead} disabled={leadSaving}>

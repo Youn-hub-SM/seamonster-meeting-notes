@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getLeadDays } from "@/app/lib/production-config";
+import { getLeadDays, getCycleDays } from "@/app/lib/production-config";
 import { getPromoForwardBySku } from "@/app/lib/production-promotions";
 import { getAllBundles, bundleAvailable } from "@/app/lib/product-bundles";
+import { getOpenInboundByProduct, formatInbound, type InboundRow } from "@/app/lib/production-inbound";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,6 +19,9 @@ export type OverviewRow = {
   period_in: number; period_out: number; daily_out: number;
   auto_safety: number; promo_qty: number; depletion_days: number | null; low: boolean;
   promo_pool: number; // 프로모션 풀 잔량(113) — 소매 탭에서 현재고 옆 병기, 그 외 채널은 0
+  inbound: number;    // 오는 중 = 열린 제조사 요청서 잔여(소매·전체 탭) — 부족 판정·권장 수식이 현재고에 더해 본다. 도매 탭은 0
+  inbound_due: string | null; // 잔여가 있는 요청서 중 가장 이른 마감
+  inbound_detail: string;     // 툴팁용 요청서별 내역("PR-000123 300 (마감 09-25)")
   is_bundle: boolean; // 묶음(세트) — 현재고는 '만들 수 있는 세트 수'(가용)
 };
 
@@ -36,7 +40,8 @@ export async function GET(req: NextRequest) {
     const periodDays = daysInclusive(from, to);
 
     const sb = supabaseAdmin();
-    const leadDays = await getLeadDays();
+    const [leadDays, cycleDays] = await Promise.all([getLeadDays(), getCycleDays()]);
+    const horizonDays = leadDays + cycleDays; // 안전재고 지평 = 리드타임 + 발주 주기(권장 수식과 동일)
 
     const stockRpc = async () => {
       if (chan) { const r = await sb.rpc("inventory_stock", { asof: null, chan }); if (!r.error) return r; }
@@ -45,7 +50,7 @@ export async function GET(req: NextRequest) {
     const [pr, sr, promoFwd, bundles] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit, cost_price, attrs").eq("active", true).order("name", { ascending: true }),
       stockRpc(),
-      getPromoForwardBySku(today, leadDays),
+      getPromoForwardBySku(today, horizonDays),
       getAllBundles(sb),
     ]);
     if (pr.error) throw pr.error;
@@ -64,6 +69,13 @@ export async function GET(req: NextRequest) {
         if (!pp.error) for (const t of (pp.data as { product_id: string; qty: number }[] | null) ?? []) promoPool.set(t.product_id, Number(t.qty) || 0);
       } catch { /* 113 미적용 — 병기 없음 */ }
     }
+
+    // 오는 중(열린 제조사 요청서 잔여) — 소매·전체 탭에서 현재고 옆 병기 + 부족(low) 판정에 합산.
+    //  권장 수식(getInventoryRows)이 같은 값을 현재고에 더해 빼므로, 여기서도 더해야 '부족인데 권장 0' 모순이 없다.
+    //  도매 탭은 제조사 입고 대상이 아니라 0. 집계 실패(null)면 0 으로 두고 meta.inboundOk=false 로 알린다.
+    let inbound: Map<string, InboundRow> | null = new Map();
+    if (chan !== "도매") inbound = await getOpenInboundByProduct(sb, today);
+    const inboundOk = inbound !== null;
 
     // 기간 원장(입고/출고). channel(036) 컬럼 없으면 전체로 폴백.
     //  ※ 단발 .limit(20000)은 서버 Max Rows(기본 1000)가 우선해 조용히 잘린다 — 30일 총입고/총출고가
@@ -119,20 +131,24 @@ export async function GET(req: NextRequest) {
       const period_out = outq.get(p.id) || 0;
       const daily_out = period_out / periodDays;
       const promo = promoFwd[(p.sku || "").trim().toUpperCase()] || 0;
-      const auto_safety = Math.ceil(daily_out * leadDays) + Math.round(promo);
+      const auto_safety = Math.ceil(daily_out * horizonDays) + Math.round(promo);
       const depletion_days = daily_out > 0 ? Math.floor(qty / daily_out) : null;
+      const inb = inbound?.get(p.id);
+      const inbQty = inb?.qty ?? 0;
       return {
         product_id: p.id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, attrs: (p as { attrs?: string | null }).attrs ?? null,
         qty, cost_price: cost, value: qty * cost,
         period_in, period_out, daily_out: Math.round(daily_out * 10) / 10,
         auto_safety, promo_qty: Math.round(promo), depletion_days,
         promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
-        low: auto_safety > 0 && qty + (promoPool.get(p.id) || 0) <= auto_safety,
+        inbound: inbQty, inbound_due: inb?.earliest_due ?? null, inbound_detail: formatInbound(inb, today),
+        // 부족 = 현재고 + 프로모션 풀 + 오는 중이 안전재고 이하(권장 수식과 같은 재고 포지션 기준)
+        low: auto_safety > 0 && qty + (promoPool.get(p.id) || 0) + inbQty <= auto_safety,
         is_bundle: isBundle,
       };
     });
 
-    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays } });
+    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays, cycleDays, horizonDays, inboundOk } });
   } catch (err) {
     console.error("[inventory/overview]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "재고 개요 조회 실패") }, { status: 500 });
