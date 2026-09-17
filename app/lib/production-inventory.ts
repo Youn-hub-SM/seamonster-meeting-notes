@@ -33,7 +33,7 @@ export interface InvRow {
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
   inboundOverdue: number;       // 그중 마감이 지난 잔여(자동 제외 없음 — 표시용)
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 오는 중))
-  belowSafety: boolean;
+  belowSafety: boolean;   // 현재고 + 오는 중 < 안전재고 (권장과 같은 포지션 기준)
   requestByDays: number | null; // 생산요청 마감까지 남은 일수(0·음수=지금/이미 늦음). 출고0·재고없음이면 null
   requestBy: string | null;     // 생산요청 마감일(YYYY-MM-DD, 미래일 때만). 현재고+오는 중이 안전재고로 떨어지는 날
   inBoxhero: boolean;
@@ -67,11 +67,17 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     }
     return sb.rpc("inventory_stock", { asof: null });
   };
-  const [stockRes, prodRes, velocity] = await Promise.all([
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
+  // 오는 중 — 제조사 생산 입고는 소매 채널로 들어오므로 소매·전체 수식에서만 뺀다.
+  //  도매 수식의 부족은 소매→도매 이동으로 채워지는 몫이라 제조사 잔여를 빼면 이중 차감이 된다.
+  //  가장 무거운 원장 속도 조회와 나란히 돌려 지연을 숨긴다.
+  const [stockRes, prodRes, velocity, inboundByProduct] = await Promise.all([
     stockRpc(),
     sb.from("products").select("id, sku, name"), // 전 품목(수요 매칭은 비활성 포함)
     getLedgerVelocity(undefined, channel), // 1b) 소진 속도(최근 출고 일평균) — 채널별
+    channel === "도매" ? Promise.resolve(new Map<string, InboundRow>()) : getOpenInboundByProduct(sb, today),
   ]);
+  const inboundOk = inboundByProduct !== null;
   if (stockRes.error) throw stockRes.error;
   if (prodRes.error) throw prodRes.error;
 
@@ -98,7 +104,6 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   }
 
   // 1c) 안전재고 보정: 리드타임(설정) + 프로모션(스파이크 제거 + 남은 행사분) + 수동 보정
-  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
   const span = Math.max(1, velocity.spanDays);
   const wsD = new Date(today + "T00:00:00Z");
   wsD.setUTCDate(wsD.getUTCDate() - span); // 판매속도 집계창 시작(근사)
@@ -113,11 +118,6 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
         getPromoSoldInWindow(windowStart, today),  // 집계창에 이미 나간 행사분(속도에서 제거)
         getSafetyAdjusts(),
       ]);
-  // 오는 중 — 제조사 생산 입고는 소매 채널로 들어오므로 소매·전체 수식에서만 뺀다.
-  //  도매 수식의 부족은 소매→도매 이동으로 채워지는 몫이라 제조사 잔여를 빼면 이중 차감이 된다.
-  const inboundByProduct: Map<string, InboundRow> | null = wholesale ? new Map<string, InboundRow>() : await getOpenInboundByProduct(sb, today);
-  const inboundOk = inboundByProduct !== null;
-
   // 2) 제품표: product_id → sku / name (위에서 받은 prodRes 재사용)
   const skuByProduct = new Map<string, string>();
   const nameBySku = new Map<string, string>();
@@ -185,7 +185,8 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     // 권장 = 수요 + 안전재고 − (현재고 + 오는 중). 시켜 둔 물량(오는 중)이 도착해 현재고로 옮겨 가도 합은 그대로라
     //  권장이 튀지 않는다(불변식). 원장 기록이 없는 품목은 종전대로 수요만.
     const recommend = stock == null ? demand : Math.max(0, demand + safety - (stock + inbound));
-    const belowSafety = stock != null && stock < safety;
+    const belowSafety = stock != null && stock + inbound < safety; // 권장·주문필요와 같은 포지션(현재고+오는 중) 기준
+
     // 생산요청 마감일 = 현재고+오는 중이 안전재고 수준으로 떨어지는 날(= 리드타임만큼 앞당긴 시점).
     //  이 날을 넘기면 안전재고 밑으로 → 리드타임 안에 못 만들어 쇼트 위험.
     let requestByDays: number | null = null;

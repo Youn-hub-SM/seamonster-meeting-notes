@@ -23,6 +23,7 @@ export default function SettingsEtcPage() {
   // 발주 주기(일) — 요청서를 내는 간격. 안전재고 지평 = 리드타임 + 발주 주기 (기본 0 = 리드타임만)
   const [cycleInput, setCycleInput] = useState("");
   const [cycleSaved, setCycleSaved] = useState<number | null>(null);
+  const [defaultLead, setDefaultLead] = useState(7); // 코드 기본값(2026-09-17 대표 확정 7일) — 저장값이 다르면 힌트
 
   useEffect(() => {
     (async () => {
@@ -34,6 +35,7 @@ export default function SettingsEtcPage() {
           setLeadSaved(ld.leadDays); setLeadInput(String(ld.leadDays));
           const cy = Number(ld.cycleDays ?? 0) || 0;
           setCycleSaved(cy); setCycleInput(String(cy));
+          if (Number(ld.default) > 0) setDefaultLead(Number(ld.default));
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
@@ -170,6 +172,11 @@ export default function SettingsEtcPage() {
             {leadSaving ? "저장 중..." : "저장"}
           </button>
         </div>
+        {leadSaved != null && leadSaved !== defaultLead && (
+          <div style={{ marginTop: 8, fontSize: 12, color: "var(--sm-warning)", fontWeight: 600 }}>
+            권장 리드타임은 {defaultLead}일(수·목 요청 → 차주 월~금 입고)인데 현재 {leadSaved}일로 저장돼 있습니다. 기본값은 저장된 값을 바꾸지 않으니 여기서 {defaultLead}로 저장하세요.
+          </div>
+        )}
         {leadMsg && (
           <div style={{ marginTop: 10, fontSize: 12, color: leadMsg.startsWith("저장됨") ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
             {leadMsg}

@@ -19,8 +19,9 @@ export async function GET() {
       .filter((r) => r.inBoxhero)
       .map((r) => {
         const dailyOut = velocity.perSku[r.sku] || 0;
+        // 소진일수도 권장과 같은 포지션(현재고 + 오는 중) 기준 — 시켜 둔 물량이 곧 들어오는데 '품절 위험' 경고가 뜨지 않게
         const depletionDays =
-          dailyOut > 0 && r.stock != null ? Math.max(0, Math.floor(r.stock / dailyOut)) : null;
+          dailyOut > 0 && r.stock != null ? Math.max(0, Math.floor((r.stock + r.inbound) / dailyOut)) : null;
         return {
           sku: r.sku,
           name: r.name,

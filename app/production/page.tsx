@@ -79,7 +79,7 @@ export default function ProductionSchedulePage() {
   const [statsConfigured, setStatsConfigured] = useState(true);
   const [savingAdd, setSavingAdd] = useState(false);
   const [qtyTouched, setQtyTouched] = useState(false); // 생산량 수동 편집 여부(편집 전엔 권장값 자동반영)
-  const [leadDays, setLeadDays] = useState(10);
+  const [leadDays, setLeadDays] = useState(7);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -437,6 +437,7 @@ export default function ProductionSchedulePage() {
                   {sel && (
                     <div className="prod-add-stats">
                       <div><span>현재고</span><strong>{sel.stock?.toLocaleString() ?? "-"}</strong></div>
+                      <div><span>오는 중</span><strong title="열린 제조사 요청서에서 아직 안 들어온 양 — 권장·소진일에서 현재고처럼 뺍니다">{(sel.inbound ?? 0).toLocaleString()}</strong></div>
                       <div><span>하루 평균 출고</span><strong>{sel.dailyOut.toLocaleString()}</strong></div>
                       <div><span>안전재고</span><strong>{sel.safety.toLocaleString()}</strong></div>
                       <div><span>예상 소진일</span><strong>{depDate ? `${dayLabel(depDate)} (${sel.depletionDays}일)` : "—"}</strong></div>
@@ -466,8 +467,8 @@ export default function ProductionSchedulePage() {
                     </div>
                     {sel && recNow != null && (
                       <div style={{ fontSize: 12, color: "var(--sm-text-light)", marginTop: 5, lineHeight: 1.55 }}>
-                        권장 = 안전재고 {sel.safety.toLocaleString()}{sel.demand > 0 ? ` + 대기수요 ${sel.demand.toLocaleString()}` : ""}{recDeplete > 0 ? ` + 목표일까지 소진 ${recDeplete.toLocaleString()}` : ""} − 현재고 {(sel.stock ?? 0).toLocaleString()} = <strong style={{ color: "var(--sm-orange)" }}>{recNow.toLocaleString()}개</strong>
-                        <br />재고가 안전재고 아래로 떨어지지 않도록 넉넉히(올림) 계산합니다.
+                        권장 = 안전재고 {sel.safety.toLocaleString()}{sel.demand > 0 ? ` + 대기수요 ${sel.demand.toLocaleString()}` : ""}{recDeplete > 0 ? ` + 목표일까지 소진 ${recDeplete.toLocaleString()}` : ""} − 현재고 {(sel.stock ?? 0).toLocaleString()}{(sel.inbound ?? 0) > 0 ? ` − 오는 중 ${(sel.inbound ?? 0).toLocaleString()}` : ""} = <strong style={{ color: "var(--sm-orange)" }}>{recNow.toLocaleString()}개</strong>
+                        <br />재고가 안전재고 아래로 떨어지지 않도록 넉넉히(올림) 계산합니다. 오는 중(열린 제조사 요청서 잔여)은 이미 시켜 둔 물량이라 현재고처럼 뺍니다.
                       </div>
                     )}
                   </div>

@@ -12,12 +12,15 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const HORIZON_DAYS = 14; // 예측 지평(2주)
 
-function buildSystemPrompt(horizonDays: number): string {
+function buildSystemPrompt(horizonDays: number, inboundOk: boolean): string {
+  const inboundNote = inboundOk
+    ? `'오는중' = 이미 생산 요청서를 내서 생산·입고 예정인 미입고 물량입니다. 이 양은 다시 시키면 이중 발주가 되므로 반드시 재고처럼 빼고 판단하세요. '창고소진일수'는 현재고만, '재고소진일수'는 현재고+오는중 기준입니다.`
+    : `주의: 이번 실행은 '오는중'(이미 시켜 둔 미입고 물량) 집계에 실패해 0 으로 왔습니다. 오는중을 빼지 말고, notes 에 "오는 중 미반영 — 열린 생산 요청서를 확인하세요" 를 남기세요.`;
   return `당신은 씨몬스터(냉동 수산물 가공) 생산계획 어드바이저입니다.
 생산담당자가 수요 예측을 잘 못해 재고 부족·과잉이 잦습니다. 데이터로 "무엇을 얼마나, 언제 만들지"를 구체적으로 짚어주세요.
 
 참고: 안전재고 = 최근 일평균 출고 × ${horizonDays}일(생산 리드타임 + 발주 주기). 현재고+오는중이 안전재고보다 적으면 쇼트 위험 신호입니다.
-'오는중' = 이미 생산 요청서를 내서 생산·입고 예정인 미입고 물량입니다. 이 양은 다시 시키면 이중 발주가 되므로 반드시 재고처럼 빼고 판단하세요.
+${inboundNote}
 
 판단 근거(우선순위):
 1) 현재고+오는중 < 안전재고 / 현재고 마이너스 → 즉시 보충 (재고부족 위험 최우선)
@@ -103,6 +106,7 @@ export async function POST(req: Request) {
         안전재고: r.safety,
         B2B확정수요: r.b2bDemand,
         일평균출고: r.dailySales,
+        창고소진일수: r.stock != null && r.dailySales > 0 ? Math.round(r.stock / r.dailySales) : null,
         재고소진일수: r.daysOfCover,
         [`${HORIZON_DAYS}일예측판매`]: r.predicted14,
       })),
@@ -111,7 +115,7 @@ export async function POST(req: Request) {
     const response = await anthropic.messages.create({
       model,
       max_tokens: 8000,
-      system: buildSystemPrompt(inv.horizonDays),
+      system: buildSystemPrompt(inv.horizonDays, inv.inboundOk),
       messages: [{ role: "user", content: JSON.stringify(userPayload) }],
     });
     const text = response.content[0]?.type === "text" ? response.content[0].text : "";
