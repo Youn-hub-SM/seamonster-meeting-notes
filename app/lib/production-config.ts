@@ -31,6 +31,39 @@ export async function getLeadDays(): Promise<number> {
   }
 }
 
+// ─────────────────────────────────────────────
+// 열린 요청서 부하(production-openload)의 시한 설정 — b2b_settings 에 숫자로 저장.
+//  docs/demand-streams-plan.md 5·7·8절. 없으면 기본값으로 동작하므로 마이그레이션 불필요.
+//   · 예약 유예일   = 도매 납품 예약을 납품예정일 + N일까지 유효로 본다(그 뒤엔 계산에서 제외)
+//   · 오는중 유효일 = 마감 지난 제조사 요청서 잔여를 며칠까지 '올 것'으로 인정할지(3단의 B 구간)
+//   · 확정형 유효일 = 목표일 지난 행사·대량 잔여를 며칠까지 청구할지. 없으면 무산 요청서가
+//     매주 전량을 재청구하는 무한 루프가 된다.
+// ─────────────────────────────────────────────
+
+export const DEFAULT_RESERVE_GRACE_DAYS = 7;
+export const DEFAULT_INBOUND_STALE_DAYS = 7;
+export const DEFAULT_COMMITTED_STALE_DAYS = 14;
+
+async function getNum(key: string, fallback: number, max = 120): Promise<number> {
+  try {
+    const { data } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", key).maybeSingle();
+    const n = Number(data?.value);
+    if (!Number.isFinite(n) || n < 0) return fallback;
+    return Math.min(max, Math.round(n));
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getOpenLoadDays(): Promise<{ reserveGraceDays: number; inboundStaleDays: number; committedStaleDays: number }> {
+  const [reserveGraceDays, inboundStaleDays, committedStaleDays] = await Promise.all([
+    getNum("wholesale_reserve_grace_days", DEFAULT_RESERVE_GRACE_DAYS),
+    getNum("inbound_stale_days", DEFAULT_INBOUND_STALE_DAYS),
+    getNum("committed_stale_days", DEFAULT_COMMITTED_STALE_DAYS),
+  ]);
+  return { reserveGraceDays, inboundStaleDays, committedStaleDays };
+}
+
 export async function setLeadDays(days: number): Promise<number> {
   const sb = supabaseAdmin();
   const v = clamp(Number(days) || DEFAULT_LEAD_DAYS);
