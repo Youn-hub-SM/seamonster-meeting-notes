@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
-import { PR_STATUSES, type PrStatus } from "@/app/lib/wholesale-production";
+import { PR_STATUSES, UNREQUESTED_ITEM_MEMO, type PrStatus } from "@/app/lib/wholesale-production";
 import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProductionRequestDeleted } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { syncWindowReceipts } from "@/app/lib/production-allocate";
@@ -54,25 +54,33 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     let itemsIn: ItemIn[] | null = null;
     let toDelete: string[] = [];
     let curItemIds = new Set<string>();
+    let autoIds = new Set<string>(); // '[요청서에 없음]' 자동 줄 id
     if (b.items !== undefined) {
       if (!Array.isArray(b.items)) return NextResponse.json({ ok: false, error: "items 형식이 올바르지 않습니다." }, { status: 400 });
-      const { data: curItems, error: ciErr } = await sb.from("production_request_items").select("id").eq("request_id", id);
+      const { data: curItems, error: ciErr } = await sb.from("production_request_items").select("id, requested_qty, memo").eq("request_id", id);
       if (ciErr) throw ciErr;
       curItemIds = new Set((curItems ?? []).map((i) => i.id as string));
-      // 입고 기록이 있는 기존 줄은 수량 0 이어도 유지한다 — '[요청서에 없음]' 자동 줄(요청 0·입고 있음)을 수정 저장이
-      //  지우려다 "입고 기록이 있는 품목은 뺄 수 없습니다"로 막히지 않게. 기록 없는 줄의 0 은 종전대로 삭제(=빼기).
+      // '[요청서에 없음]' 자동 줄(요청수량 0·memo 표식) = 입고 매칭이 만든 시스템 줄. 수정 저장이 이 줄을 지우거나 훼손하지 않게
+      //  ① 클라이언트가 안 보내도(수정 창을 연 뒤 다른 사용자의 입고로 생김) 입고가 있으면 조용히 유지
+      //  ② 보내면 수량 0·표식·정렬 고정(클라이언트 memo 무시) ③ 양수 수량을 넣으면 정식 요청 줄로 승격(표식 제거).
+      //  입고 있는 '실제' 줄의 0 은 종전대로 거부 — 품목을 빼려면 그 입고를 먼저 취소한다.
+      autoIds = new Set((curItems ?? []).filter((i) => (Number(i.requested_qty) || 0) <= 0 && i.memo === UNREQUESTED_ITEM_MEMO).map((i) => i.id as string));
       const withReceipts = new Set<string>();
       if (curItemIds.size) {
         const { data: rc, error: rcErr0 } = await sb.from("production_receipts").select("item_id").in("item_id", [...curItemIds]).limit(5000);
         if (rcErr0) throw rcErr0;
         for (const r of rc ?? []) withReceipts.add(r.item_id as string);
       }
-      itemsIn = (b.items as ItemIn[])
-        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined })) // 소수 둘째 자리 허용(104)
-        .filter((it) => it.product_id && (it.requested_qty > 0 || (it.id && withReceipts.has(it.id))));
+      const rawIn = (b.items as ItemIn[])
+        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined })); // 소수 둘째 자리 허용(104)
+      if (rawIn.some((it) => it.id && curItemIds.has(it.id) && !autoIds.has(it.id) && withReceipts.has(it.id) && it.requested_qty <= 0)) {
+        return NextResponse.json({ ok: false, error: "입고 기록이 있는 품목은 수량을 0으로 할 수 없습니다. 품목을 빼려면 그 입고를 먼저 취소하세요." }, { status: 400 });
+      }
+      itemsIn = rawIn.filter((it) => it.product_id && (it.requested_qty > 0 || (it.id && autoIds.has(it.id))));
       if (!itemsIn.some((it) => it.requested_qty > 0)) return NextResponse.json({ ok: false, error: "요청 수량이 있는 품목이 최소 1개 필요합니다." }, { status: 400 });
       const keepIds = new Set(itemsIn.filter((it) => it.id && curItemIds.has(it.id)).map((it) => it.id!));
-      toDelete = [...curItemIds].filter((iid) => !keepIds.has(iid));
+      // 입고가 붙은 자동 줄은 안 보내도 유지(①). 입고 없는 자동 줄은 지운다(빈 줄 정리)
+      toDelete = [...curItemIds].filter((iid) => !keepIds.has(iid) && !(autoIds.has(iid) && withReceipts.has(iid)));
       if (toDelete.length > 0) {
         const { data: rc, error: rcErr } = await sb.from("production_receipts").select("item_id").in("item_id", toDelete).limit(1);
         if (rcErr) throw rcErr;
@@ -107,7 +115,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       let sort = 0;
       for (const it of itemsIn) {
         if (it.id && curItemIds.has(it.id)) {
-          const { error: ue } = await sb.from("production_request_items").update({ requested_qty: it.requested_qty, memo: it.memo ?? null, sort }).eq("id", it.id).eq("request_id", id);
+          if (autoIds.has(it.id) && it.requested_qty <= 0) {
+            // 자동 줄 유지(②) — 표식·정렬 고정, 정렬 번호는 소비하지 않는다
+            const { error: ue0 } = await sb.from("production_request_items").update({ requested_qty: 0, memo: UNREQUESTED_ITEM_MEMO, sort: 9000 }).eq("id", it.id).eq("request_id", id);
+            if (ue0) throw ue0;
+            continue;
+          }
+          // 자동 줄에 양수 수량을 넣으면 정식 요청 줄로 승격(③) — 표식은 제조사 엑셀 비고·알림에 찍히지 않게 걷어낸다
+          const memo = it.memo ? (it.memo.replace(UNREQUESTED_ITEM_MEMO, "").trim() || null) : null;
+          const { error: ue } = await sb.from("production_request_items").update({ requested_qty: it.requested_qty, memo, sort }).eq("id", it.id).eq("request_id", id);
           if (ue) throw ue;
         } else {
           const { error: ie } = await sb.from("production_request_items").insert({ request_id: id, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo ?? null, sort });
@@ -136,13 +152,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // 창(신청일·마감일)이나 용도가 바뀌면 기존 소급 링크부터 지우고 새 기준으로 다시 매칭한다 —
     //  안 지우면 창 밖 입고나 '도매 납품'으로 정정한 요청의 소매 입고 링크가 잔존해 이중 이행이 된다.
     //  지우는 건 링크(증거)뿐 — 원장은 건드리지 않는다. 이벤트 매칭 링크(memo '입고/출고 연동')는 유지.
-    if (patch.request_date !== undefined || patch.due_date !== undefined || patch.purpose !== undefined) {
+    const windowChanged = patch.request_date !== undefined || patch.due_date !== undefined || patch.purpose !== undefined;
+    if (windowChanged) {
       try {
         await sb.from("production_receipts").delete().eq("request_id", id).eq("memo", "기간 자동 매칭(신청일~마감일)");
-      } catch { /* 실패해도 아래 sync 는 잔여 기준으로만 추가하므로 초과 배분은 없다 */ }
+      } catch { /* 실패해도 아래 sync 가 미연결분만 붙이므로 이중 배분은 없다 */ }
     }
-    // 신청일·마감일·품목이 바뀌었을 수 있다 — 새 창 기준으로 소급 매칭 후 반환
-    await syncWindowReceipts(sb, { requestId: id });
+    // 신청일·마감일·품목이 바뀌었을 수 있다 — 새 창 기준으로 소급 매칭 후 반환.
+    //  창·용도가 바뀌었으면 풀린 입고가 다른 열린 요청서(그 주간 요청서)로 가야 하므로 열린 재고 보충 요청서 전체를 재매칭한다.
+    await (windowChanged ? syncWindowReceipts(sb) : syncWindowReceipts(sb, { requestId: id }));
     const [row] = await loadRequests(sb, { id });
     return NextResponse.json({ ok: true, request: row });
   } catch (err) {

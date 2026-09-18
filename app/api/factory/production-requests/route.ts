@@ -24,7 +24,8 @@ export async function GET(_req: NextRequest) {
         status: r.status,
         total_requested: r.total_requested,
         total_received: r.total_received,
-        items: r.items.map((it) => ({ name: it.name, sku: it.sku, unit: it.unit, requested_qty: it.requested_qty, received_qty: it.received_qty })),
+        // '[요청서에 없음]' 자동 줄(요청수량 0 — 요청서에 없던 품목의 입고 기록 자리)은 제조사에게 보이는 요청서에 넣지 않는다(엑셀 요청서와 같은 기준)
+        items: r.items.filter((it) => it.requested_qty > 0).map((it) => ({ name: it.name, sku: it.sku, unit: it.unit, requested_qty: it.requested_qty, received_qty: it.received_qty })),
       }));
     return NextResponse.json({ ok: true, rows });
   } catch (err) {

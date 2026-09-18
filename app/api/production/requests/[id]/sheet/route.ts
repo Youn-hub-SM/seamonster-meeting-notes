@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests } from "@/app/lib/wholesale-production-db";
+import { UNREQUESTED_ITEM_MEMO } from "@/app/lib/wholesale-production";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -127,7 +128,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const sheetItems = r.items.filter((it) => (Number(it.requested_qty) || 0) > 0);
     for (const it of sheetItems) {
       const nameCell = it.spec && !it.name.includes(it.spec) ? `${it.name} ${it.spec}` : it.name;
-      const row = ws.addRow([nameCell, it.requested_qty, it.unit || "개", it.memo || "", ""]);
+      const row = ws.addRow([nameCell, it.requested_qty, it.unit || "개", (it.memo || "").replace(UNREQUESTED_ITEM_MEMO, "").trim(), ""]); // 자동 줄 표식은 제조사 비고에 찍지 않는다
       row.height = 22; // 수기 메모·체크 여유
       row.getCell(2).numFmt = "#,##0";
       row.eachCell({ includeEmpty: true }, (c, col) => {

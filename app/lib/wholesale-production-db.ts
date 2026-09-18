@@ -29,7 +29,8 @@ export function formatRequestDetail(r: ProductionRequest): string {
   }
   if (r.items.length > 20) lines.push(`- 외 ${r.items.length - 20}개 품목`);
   const pctv = r.total_requested > 0 ? Math.round((r.total_received / r.total_requested) * 100) : 0;
-  lines.push(`합계 ${r.items.length}품목 · 요청 ${r.total_requested.toLocaleString()} · 입고 ${r.total_received.toLocaleString()} (${pctv}%)`);
+  const autoCount = r.items.filter((it) => it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO).length;
+  lines.push(`합계 ${r.items.length - autoCount}품목${autoCount ? ` (+요청서에 없음 ${autoCount})` : ""} · 요청 ${r.total_requested.toLocaleString()} · 입고 ${r.total_received.toLocaleString()} (${pctv}%)`);
   if (r.memo) lines.push(`메모: ${r.memo}`);
   return lines.join("\n");
 }

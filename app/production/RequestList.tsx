@@ -28,6 +28,7 @@ type NewLine = {
   product_id: string; sku: string | null; name: string; spec: string | null; unit: string;
   stock: number | null;      // 도매재고(모를 때 null 표시)
   requested_qty: string; memo: string;
+  auto?: boolean;            // 수정 모드: '[요청서에 없음]' 자동 줄(요청 0·입고 있음) — 수량을 넣으면 정식 요청 줄로 승격
 };
 
 export function RequestList() {
@@ -505,7 +506,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                   onClick={() => {
                     const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
                     const remain = openRemainQty(req.items);
-                    const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n미입고 ${remain.toLocaleString()}개는 '오는 중'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다 — 물건이 정말 안 오는 게 맞는지 확인하세요.\n(완료한 뒤 이 물량이 도착하면 입고일이 창에 드는 다른 요청서(그 주간 요청서)에 자동 연결됩니다 — 물건이 오면 이 요청서를 '다시 열기' 하세요.)` : "";
+                    const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n미입고 ${remain.toLocaleString()}개는 '오는 중'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다 — 물건이 정말 안 오는 게 맞는지 확인하세요.\n(완료한 뒤 이 물량이 도착하면 그 주간 요청서에 기록되고 이 요청서에는 오지 않습니다. 이 요청서에 받으려면 입고를 기록하기 전에 '다시 열기' 하고 생산마감일을 도착일 이후로 고치세요.)` : "";
                     if (confirm(`이행률이 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) 입니다.\n그래도 완료 처리할까요?\n\n완료하면 목록·도매 요청 종합에서 빠지고, 필요하면 '다시 열기'로 되돌릴 수 있습니다.${inbNote}`)) onStatus("완료");
                   }}>강제 완료 처리</button>
               </div>
@@ -598,7 +599,10 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
       ? initial.items.map((it) => ({
           item_id: it.id, received: it.received_qty,
           product_id: it.product_id, sku: it.sku, name: it.name, spec: it.spec, unit: it.unit,
-          stock: stockOf(it.product_id), requested_qty: String(it.requested_qty), memo: it.memo || "",
+          stock: stockOf(it.product_id), requested_qty: String(it.requested_qty),
+          // 자동 줄은 표식 memo 를 입력칸에 싣지 않는다(승격 시 엑셀 비고·알림에 찍히지 않게) — 서버가 유지 시 표식을 다시 붙인다
+          memo: it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO ? "" : (it.memo || ""),
+          auto: it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO,
         }))
       : (prefill ?? [])   // 재고 목록에서 넘어온 품목·권장수량 (없으면 빈 목록)
   );
@@ -626,8 +630,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
 
   function submit() {
     const items = lines
-      // 입고 기록이 있는 줄은 수량 0 이어도 보낸다 — '[요청서에 없음]' 자동 줄(요청 0·입고 있음)을 빼면 서버가 삭제하려다 막는다
-      .filter((l) => Number(l.requested_qty) > 0 || l.received > 0)
+      // 자동 줄·입고 있는 줄은 수량 0 이어도 보낸다 — 자동 줄은 서버가 표식 그대로 유지하고, 실제 줄의 0 은 서버가 명확한 오류로 막는다
+      .filter((l) => Number(l.requested_qty) > 0 || l.auto || l.received > 0)
       .map((l) => ({ id: l.item_id, product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty) * 100) / 100, memo: l.memo.trim() || undefined })); // 소수 둘째 자리 허용(104)
     onSubmit({
       title: title.trim() || (isEdit ? "" : undefined),
@@ -733,8 +737,12 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                             <td className="num" style={{ fontWeight: 700, color: (recommend ?? 0) > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend == null ? "-" : recommend.toLocaleString()}</td>
                           </>
                         )}
-                        <td className="num"><input type="number" step={0.01} min={0} className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder="0" /></td>
-                        <td><input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" /></td>
+                        <td className="num"><input type="number" step={0.01} min={0} className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.auto && Number(l.requested_qty) <= 0 ? "" : l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder={l.auto ? "요청 없음" : "0"} title={l.auto ? "요청서에 없던 품목이 이 주간에 입고돼 자동으로 붙은 줄 — 수량을 넣으면 정식 요청 품목이 됩니다" : undefined} /></td>
+                        <td>
+                          {l.auto && Number(l.requested_qty) <= 0
+                            ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-info)" }} title="요청서에 없던 품목의 입고 기록 자리 — 제조사 엑셀·이행률에는 들어가지 않습니다">요청서에 없음 · 입고 {l.received.toLocaleString()}</span>
+                            : <input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" />}
+                        </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           {l.received > 0 ? (
                             <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="입고 기록이 있어 뺄 수 없습니다">입고 {l.received.toLocaleString()}</span>
