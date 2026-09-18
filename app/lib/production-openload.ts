@@ -272,14 +272,17 @@ export async function getOpenLoad(
       let stale = false;
 
       if (purpose === "도매 납품" || purpose === "프로모션") {
-        const reserved = r2(Math.max(0, Math.min(alloc, requested)));
+        const reservedRaw = r2(Math.max(0, Math.min(alloc, requested)));
         const consumed = consumedByItem.get(it.id) ?? 0;
         stale = today > addDays(due, committedStale); // 확정형 잔여 시한
+        // 예약은 잔여보다 이른 시한(납품예정일 + 유예일)을 쓴다. 시한이 지난 예약은 품목 합계에서 빠지므로
+        //  요청서 배지에도 0 으로 보고하고 '시한 지남'을 켠다 — 안 그러면 툴팁 합과 셀 숫자가 어긋난다.
+        const resLive = purpose === "도매 납품" ? reserveLive.has(it.id) : true;
+        const reserved = resLive ? reservedRaw : 0;
+        if (reservedRaw > 0 && !resLive) stale = true;
         if (purpose === "도매 납품") {
-          if (reserveLive.has(it.id)) {
-            row.reservedShown = r2(row.reservedShown + reserved);
-            row.reservedConsumed = r2(row.reservedConsumed + consumed);
-          }
+          row.reservedShown = r2(row.reservedShown + reserved);
+          row.reservedConsumed = r2(row.reservedConsumed + (resLive ? consumed : 0));
           if (stale) row.staleCommitted = r2(row.staleCommitted + remain);
           else row.wholesaleRemain = r2(row.wholesaleRemain + remain);
         } else {
@@ -289,7 +292,7 @@ export async function getOpenLoad(
         }
         if (reserved > 0 || remain > 0) {
           row.reqs.push({ id: h.id, req_no: h.req_no ?? null, purpose, status: h.status, request_date: h.request_date,
-            due_date: h.due_date ?? null, company_id: h.company_id ?? null, requested, allocated: alloc, remain, reserved, consumed, stale });
+            due_date: h.due_date ?? null, company_id: h.company_id ?? null, requested, allocated: alloc, remain, reserved, consumed: resLive ? consumed : 0, stale });
         }
         continue;
       }
