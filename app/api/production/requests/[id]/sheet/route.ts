@@ -123,7 +123,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       c.border = BOX;
       c.alignment = { horizontal: "center", vertical: "middle" };
     });
-    for (const it of r.items) {
+    // '[요청서에 없음]' 자동 줄(요청수량 0 — 요청서에 없던 품목의 입고 기록 자리)은 제조사에 보내는 요청서에 넣지 않는다
+    const sheetItems = r.items.filter((it) => (Number(it.requested_qty) || 0) > 0);
+    for (const it of sheetItems) {
       const nameCell = it.spec && !it.name.includes(it.spec) ? `${it.name} ${it.spec}` : it.name;
       const row = ws.addRow([nameCell, it.requested_qty, it.unit || "개", it.memo || "", ""]);
       row.height = 22; // 수기 메모·체크 여유
@@ -135,7 +137,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       // includeEmpty 로도 마지막 열이 비면 스킵될 수 있어 명시적으로 테두리를 채운다
       for (let col = 1; col <= 5; col++) row.getCell(col).border = BOX;
     }
-    const totalQty = r.items.reduce((s, it) => s + (Number(it.requested_qty) || 0), 0);
+    const totalQty = sheetItems.reduce((s, it) => s + (Number(it.requested_qty) || 0), 0);
     const tRow = ws.addRow(["합계", totalQty, "", "", ""]);
     tRow.font = { bold: true };
     tRow.getCell(2).numFmt = "#,##0";
@@ -150,7 +152,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     ws.mergeCells(wTitle.number, 1, wTitle.number, 5);
 
     // 품목 속성·중량 3단 조회 — '벌크' 판정 + 마스터 중량 우선 계산. 조회 실패는 문자열 파싱 폴백.
-    const ids = [...new Set(r.items.map((it) => it.product_id).filter(Boolean))];
+    const ids = [...new Set(sheetItems.map((it) => it.product_id).filter(Boolean))];
     const numOrNull = (v: unknown) => (v == null || !(Number(v) > 0) ? null : Number(v));
     const prodMap = new Map<string, ProdWeights & { attrs: string }>();
     if (ids.length) {
@@ -171,7 +173,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 
     const groups = new Map<string, { base: string; sortG: number; wLabel: string; normalKg: number; bulkKg: number }>();
     let unknown = 0;
-    for (const it of r.items) {
+    for (const it of sheetItems) {
       const pinfo = prodMap.get(String(it.product_id));
       const isBulk = (pinfo?.attrs || "").includes("벌크");
       const { grams, packs, label: wLabel } = resolveUnit(pinfo, isBulk, it.spec, it.name);

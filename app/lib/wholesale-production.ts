@@ -71,9 +71,14 @@ export interface ProductionRequest {
   total_received: number;
 }
 
+// 요청서에 없던 품목이 그 주간에 입고됐을 때 자동으로 생기는 품목 줄의 메모(요청수량 0) — 2026-09-18 대표 확정.
+//  입고 매칭(production-allocate)이 만들고, 화면·엑셀·합계는 이 줄을 '요청서에 없음'으로 구분한다.
+export const UNREQUESTED_ITEM_MEMO = "[요청서에 없음]";
+
 // 라인 진행 상태 판정 — 표시 색/라벨용.
-export type PrLineState = "미입고" | "부분" | "완료" | "초과";
+export type PrLineState = "미입고" | "부분" | "완료" | "초과" | "요청서에 없음";
 export function lineState(requested: number, received: number): PrLineState {
+  if (requested <= 0 && received > 0) return "요청서에 없음"; // 요청 없이 입고만 있는 자동 줄
   if (received <= 0) return "미입고";
   if (received < requested) return "부분";
   if (received > requested) return "초과";
@@ -85,6 +90,7 @@ export const PR_LINE_COLOR: Record<PrLineState, string> = {
   부분: "var(--sm-warning)",
   완료: "var(--sm-success)",
   초과: "var(--sm-danger)",
+  "요청서에 없음": "var(--sm-info)",
 };
 
 // 요청서의 라인 입고 상황으로 '완료 제안' 여부(모든 라인 requested 이상).

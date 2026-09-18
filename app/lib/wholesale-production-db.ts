@@ -1,7 +1,7 @@
 // 도매 재고 생산 요청 — 서버 전용 로더(요청서 + 품목 + 입고집계 조립).
 //  list 라우트와 [id] 라우트가 공용으로 사용.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ProductionRequest, PrItem, PrReceipt } from "./wholesale-production";
+import { UNREQUESTED_ITEM_MEMO, type ProductionRequest, type PrItem, type PrReceipt } from "./wholesale-production";
 
 type AnyRow = Record<string, unknown>;
 function one<T = AnyRow>(v: unknown): T | null {
@@ -20,6 +20,10 @@ export function formatRequestDetail(r: ProductionRequest): string {
   lines.push(head.join(" · "));
   for (const it of r.items.slice(0, 20)) {
     const spec = it.spec ? ` ${it.spec}` : "";
+    if (it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO) {
+      lines.push(`- ${it.name}${spec} ${UNREQUESTED_ITEM_MEMO} — 입고 ${it.received_qty.toLocaleString()}`);
+      continue;
+    }
     const recv = it.received_qty > 0 ? ` — 입고 ${it.received_qty.toLocaleString()} · 잔여 ${Math.max(0, Math.round((it.requested_qty - it.received_qty) * 100) / 100).toLocaleString()}` : "";
     lines.push(`- ${it.name}${spec} ×${it.requested_qty.toLocaleString()}${recv}${it.memo ? ` (${it.memo})` : ""}`);
   }
@@ -95,7 +99,11 @@ export async function loadRequests(
   }
 
   return heads.map((r) => {
-    const its = itemsByReq.get(r.id as string) ?? [];
+    // '[요청서에 없음]' 자동 줄(요청수량 0)은 입고가 전부 취소돼 비면 없는 줄로 본다 — 어디에도 안 보이고,
+    //  수정 저장 시 자연히 정리된다(입고 기록이 없으니 삭제 가능).
+    const its = (itemsByReq.get(r.id as string) ?? []).filter((it) => !(it.requested_qty <= 0 && it.received_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO));
+    // 합계·이행률은 요청한 줄만 — 요청서에 없던 품목의 입고를 더하면 이행률이 실제보다 부풀어 보인다
+    const requestedLines = its.filter((it) => it.requested_qty > 0);
     return {
       id: r.id as string, req_no: (r.req_no as string) ?? null, title: (r.title as string) ?? null,
       purpose: (r.purpose === "도매 납품" ? "도매 납품" : r.purpose === "프로모션" ? "프로모션" : "재고 보충") as ProductionRequest["purpose"], // 082·113 미적용/기존 행 → 재고 보충
@@ -104,8 +112,8 @@ export async function loadRequests(
       status: r.status as ProductionRequest["status"], assignee: (r.assignee as string) ?? null, memo: (r.memo as string) ?? null,
       created_by: (r.created_by as string) ?? null, created_at: String(r.created_at), updated_at: String(r.updated_at),
       items: its,
-      total_requested: its.reduce((s, i) => s + i.requested_qty, 0),
-      total_received: its.reduce((s, i) => s + i.received_qty, 0),
+      total_requested: requestedLines.reduce((s, i) => s + i.requested_qty, 0),
+      total_received: requestedLines.reduce((s, i) => s + i.received_qty, 0),
     };
   });
 }

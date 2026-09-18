@@ -1,10 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logProductionReceipt, logProductionRequestStatusChanged } from "./b2b-activity";
+import { UNREQUESTED_ITEM_MEMO } from "./wholesale-production";
 
 // 입고 → 생산 요청 자동 매칭 — 입고 창구를 '입고 및 출고'로 단일화하면서 이행률 추적을 유지하는 다리.
-//  '입고'(완료) 원장이 기록될 때, 같은 품목의 열린 요청(요청·진행중)에 오래된 요청부터(FIFO)
-//  잔여 수량만큼 배분해 production_receipts 증거를 남긴다. 요청에 없는 품목·잔여 초과분은
-//  그냥 일반 입고로 남는다(연결 없음). 수량은 소수 둘째 자리까지 매칭(104 — 요청·입고 모두 numeric).
+//  '입고'(완료) 원장이 기록될 때 production_receipts 증거를 남긴다. 규칙(2026-09-18 대표 확정 — 주간 요청서 기준):
+//   ① 입고일이 요청일~생산마감일 창에 드는 열린(요청·진행중) 요청서 중 그 품목이 있는 가장 오래된 요청서에 전량
+//      (요청 수량을 넘겨도 그 요청서에 '초과'로 기록 — 종전엔 잔여만큼만, 넘치면 다음 요청서).
+//   ② 창 안 요청서에 그 품목이 없으면 그 주간(창 안 가장 오래된) 요청서에 '[요청서에 없음]' 줄(요청수량 0)을 만들어 기록.
+//   ③ 창에 드는 요청서가 없을 때만(마감 뒤 도착 등) 종전 FIFO — 잔여가 남은 오래된 요청서부터 잔여만큼, 남는 양은 일반 입고.
+//  수량은 소수 둘째 자리까지 매칭(104 — 요청·입고 모두 numeric).
 //
 //  취소 정합성: receipts.inv_txn_id 가 원장에 cascade(083) — 입고/출고에서 그 입고를 취소
 //  (원장 삭제)하면 증거도 함께 지워져 이행률이 자동 원복된다.
@@ -61,6 +65,7 @@ async function topUpPair(
 //  '대기'였다가 나중에 완료 처리된 입고는 연결되지 않는다. 이 함수가 열린 재고 보충 요청의
 //  신청일~마감일 창 안에 있는 미연결 입고를 찾아 소급 연결한다(요청 생성·수정 시 호출 —
 //  조회(GET)에서는 부르지 않는다: 읽기 화면이 쓰기·알림을 만들면 안 되고 동시 조회 경합도 커진다).
+//  · 창 안 입고는 잔여와 무관하게 전량 붙는다(2026-09-18 대표 확정 — 넘쳐도 그 요청서에 '초과').
 //  · 도매 납품 요청은 대상 아님 — 소매→도매 이전(move)이 이벤트로 연결하는 별도 메커니즘.
 //  · 이미 어떤 요청에든 연결된 수량은 제외(inv_txn_id 별 잔여만 배분) — 이중 집계 방지.
 //  · 채널이동(내부 이동) 입고는 제조사 생산이 아니므로 제외. '대기' 입고 제외(완료만).
@@ -100,9 +105,9 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
     // 2) 요청 품목 + 기존 입고 누계 → 잔여 (기본 1000행 캡에 걸리지 않게 명시 한도·청크)
     const { data: itemsRaw, error: ie } = await sb.from("production_request_items")
       .select("id, request_id, product_id, requested_qty").in("request_id", heads.map((h) => h.id)).limit(5000);
-    if (ie || !itemsRaw?.length) return;
+    if (ie) return;
     type Item = { id: string; request_id: string; product_id: string; requested_qty: number };
-    const items = itemsRaw as unknown as Item[];
+    const items = (itemsRaw ?? []) as unknown as Item[];
     const received = new Map<string, number>();
     for (let i = 0; i < items.length; i += 100) {
       const part = items.slice(i, i + 100).map((x) => x.id);
@@ -112,26 +117,44 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
     }
     const remaining = new Map<string, number>();
     for (const it of items) remaining.set(it.id, Math.max(0, (Number(it.requested_qty) || 0) - (received.get(it.id) || 0)));
-    if (![...remaining.values()].some((v) => v > 0)) return;
+    // (잔여 0 이어도 계속 — 창 안 입고는 잔여와 무관하게 그 요청서에 붙는다. 2026-09-18 대표 확정)
 
     // 3) 창 안의 입고 후보 — 완료(034 폴백)·채널이동 제외·양수만. 전체 창(min~max)으로 한 번에 읽는다.
-    const pids = [...new Set(items.map((i) => i.product_id))];
+    //    품목을 요청서 품목으로 좁히지 않는다 — 요청서에 없던 품목도 그 주간 요청서에 '[요청서에 없음]' 줄로 붙는다.
+    //    range 페이징(서버 Max Rows 1000 캡이 .limit 보다 우선해 조용히 잘리는 함정).
     const from = heads.reduce((m, h) => (windowOf(h).from < m ? windowOf(h).from : m), windowOf(heads[0]).from);
     const to = heads.reduce((m, h) => (windowOf(h).to > m ? windowOf(h).to : m), windowOf(heads[0]).to);
-    const selTxn = (withStatus: boolean) => {
+    const selTxn = (withStatus: boolean, a: number, b: number) => {
       let q = sb.from("inventory_txns").select("id, product_id, qty, txn_date")
         .eq("type", "입고").gt("qty", 0)
-        .in("product_id", pids).gte("txn_date", from).lte("txn_date", to)
+        .gte("txn_date", from).lte("txn_date", to)
         .or("partner.is.null,partner.neq.채널이동") // neq 단독은 null partner 를 탈락시킨다
-        .order("txn_date", { ascending: true }).order("id", { ascending: true }).limit(2000);
+        .order("txn_date", { ascending: true }).order("id", { ascending: true }).range(a, b);
       if (withStatus) q = q.eq("status", "완료");
       return q;
     };
-    let tres = await selTxn(true);
-    if (tres.error && /status/i.test(tres.error.message)) tres = await selTxn(false);
-    if (tres.error || !tres.data?.length) return;
     type Txn = { id: string; product_id: string; qty: number; txn_date: string };
-    const txns = tres.data as unknown as Txn[];
+    const txns: Txn[] = [];
+    let withStatus = true;
+    for (let off = 0; off < 10000; off += 1000) {
+      let tres = await selTxn(withStatus, off, off + 999);
+      if (tres.error && withStatus && /status/i.test(tres.error.message)) { withStatus = false; tres = await selTxn(false, off, off + 999); }
+      if (tres.error) return;
+      const rows = (tres.data ?? []) as unknown as Txn[];
+      txns.push(...rows);
+      if (rows.length < 1000) break;
+    }
+    if (!txns.length) return;
+
+    // 묶음(세트)은 요청서에 담을 수 없는 품목 — '[요청서에 없음]' 줄도 만들지 않는다
+    const bundleParents = new Set<string>();
+    try {
+      const tp = [...new Set(txns.map((t) => t.product_id))];
+      for (let i = 0; i < tp.length; i += 100) {
+        const { data } = await sb.from("product_bundles").select("parent_id").in("parent_id", tp.slice(i, i + 100));
+        for (const b of data ?? []) bundleParents.add(b.parent_id as string);
+      }
+    } catch { /* 037 미적용 — 묶음 없음 취급 */ }
 
     // 4) 이미 연결된 수량(어느 요청이든) → 원장 건별 잔여
     const allocated = new Map<string, number>();
@@ -145,48 +168,63 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
       }
     }
 
-    // 5) FIFO 배분 — 오래된 입고부터, 창이 맞는 오래된 요청부터
+    // 5) 창 규칙(2026-09-18 대표 확정): 오래된 입고부터, 입고일이 창(신청일~마감일)에 드는 **가장 오래된** 요청서의
+    //    해당 품목에 **미연결 수량 전량**을 붙인다 — 요청 수량을 넘겨도 그 요청서에 '초과'로 기록(종전: 잔여만큼만,
+    //    넘치면 다음 요청서). 주간 요청서 창이 겹치는 며칠(이번 주 요청일 ~ 지난주 마감일)은 지난주 요청서가 받는다.
+    //    창 안 요청서 중 그 품목이 있는 것이 없으면 창 안 가장 오래된 요청서에 '[요청서에 없음]' 줄(요청수량 0)을 만들어 붙인다.
     const started = new Set<string>();
+    const inWin = (x: Head, d: string) => { const w = windowOf(x); return d >= w.from && d <= w.to; };
     for (const t of txns) {
-      let left = Math.round((Number(t.qty) || 0) * 100) / 100 - (allocated.get(t.id) || 0);
+      const left = Math.round((Number(t.qty) || 0) * 100) / 100 - (allocated.get(t.id) || 0);
       if (left <= 0) continue;
-      for (const h of heads) {
-        if (left <= 0) break;
-        const w = windowOf(h);
-        if (t.txn_date < w.from || t.txn_date > w.to) continue;
-        for (const it of items) {
-          if (left <= 0) break;
-          if (it.request_id !== h.id || it.product_id !== t.product_id) continue;
-          const rem = remaining.get(it.id) || 0;
-          if (rem <= 0) continue;
-          const alloc = Math.min(rem, left);
-          const { error: re2, inserted } = await insertReceiptOnce(sb, {
-            request_id: h.id, item_id: it.id, qty: alloc,
-            memo: "기간 자동 매칭(신청일~마감일)", received_by: null,
-            inv_txn_id: t.id, receipt_date: t.txn_date,
-          });
-          if (re2) { console.warn("[production-allocate] window receipt insert failed", re2.message); continue; }
-          if (inserted) {
-            remaining.set(it.id, rem - alloc);
-            left -= alloc;
-          } else {
-            // 같은 쌍 링크가 이미 있음(이벤트 매칭 등) — 최신 DB 기준으로 증액분만 합산
-            const r2 = await topUpPair(sb, it.id, it.requested_qty, t.id, Number(t.qty) || 0);
-            if (!r2) continue;
-            remaining.set(it.id, r2.freshRem);
-            left = r2.freshLeft;
-            if (r2.applied <= 0) continue; // 경합 중복 — 상대 호출이 이미 처리(상태 전환 포함)
-          }
-          if (h.status === "요청" && !started.has(h.id)) {
-            started.add(h.id);
-            const { data: flipped } = await sb.from("production_requests")
-              .update({ status: "진행중", updated_at: new Date().toISOString() })
-              .eq("id", h.id).eq("status", "요청").select("id");
-            // 실제로 이 호출이 전환했을 때만 기록(동시 실행이 이미 전환했으면 로그 중복 방지)
-            if (flipped?.length) await logProductionRequestStatusChanged(h.req_no || "", "요청", "진행중", "자동 매칭");
-            h.status = "진행중";
-          }
-        }
+      let h = heads.find((x) => inWin(x, t.txn_date) && items.some((it) => it.request_id === x.id && it.product_id === t.product_id));
+      let it = h ? items.find((x) => x.request_id === h!.id && x.product_id === t.product_id) : undefined;
+      if (!h) {
+        const wk = heads.find((x) => inWin(x, t.txn_date));
+        if (!wk || bundleParents.has(t.product_id)) continue;
+        const { data: ins, error: ie2 } = await sb.from("production_request_items")
+          .insert({ request_id: wk.id, product_id: t.product_id, requested_qty: 0, memo: UNREQUESTED_ITEM_MEMO, sort: 9000 })
+          .select("id").single();
+        if (ie2 || !ins) { console.warn("[production-allocate] unrequested line insert failed", ie2?.message); continue; }
+        const line: Item = { id: ins.id as string, request_id: wk.id, product_id: t.product_id, requested_qty: 0 };
+        items.push(line);
+        remaining.set(line.id, 0);
+        h = wk; it = line;
+      }
+      if (!it) continue;
+      const { error: re2, inserted } = await insertReceiptOnce(sb, {
+        request_id: h.id, item_id: it.id, qty: left,
+        memo: "기간 자동 매칭(신청일~마감일)", received_by: null,
+        inv_txn_id: t.id, receipt_date: t.txn_date,
+      });
+      if (re2) { console.warn("[production-allocate] window receipt insert failed", re2.message); continue; }
+      if (inserted) {
+        remaining.set(it.id, Math.max(0, (remaining.get(it.id) || 0) - left));
+      } else {
+        // 같은 쌍 링크가 이미 있음(이벤트 매칭 등) — 최신 DB 기준으로 이 입고의 미연결분 전량을 합산(잔여 상한 없음)
+        const r2 = await topUpPair(sb, it.id, Number.POSITIVE_INFINITY, t.id, Number(t.qty) || 0);
+        if (!r2) continue;
+        if (r2.applied <= 0) continue; // 경합 중복 — 상대 호출이 이미 처리(상태 전환 포함)
+        remaining.set(it.id, Math.max(0, (remaining.get(it.id) || 0) - r2.applied));
+      }
+      if (h.status === "요청" && !started.has(h.id)) {
+        started.add(h.id);
+        const { data: flipped } = await sb.from("production_requests")
+          .update({ status: "진행중", updated_at: new Date().toISOString() })
+          .eq("id", h.id).eq("status", "요청").select("id");
+        // 실제로 이 호출이 전환했을 때만 기록(동시 실행이 이미 전환했으면 로그 중복 방지)
+        if (flipped?.length) await logProductionRequestStatusChanged(h.req_no || "", "요청", "진행중", "자동 매칭");
+        h.status = "진행중";
+      }
+    }
+
+    // 6) 자동 줄 정리 — 창 변경 재매칭 등으로 입고가 하나도 안 붙은 '[요청서에 없음]' 줄(요청수량 0·기록 없음)은 지운다
+    for (const h of heads) {
+      const { data: zero } = await sb.from("production_request_items").select("id")
+        .eq("request_id", h.id).eq("requested_qty", 0).eq("memo", UNREQUESTED_ITEM_MEMO).limit(500);
+      for (const z of zero ?? []) {
+        const { data: rc } = await sb.from("production_receipts").select("id").eq("item_id", z.id as string).limit(1);
+        if (!(rc ?? []).length) await sb.from("production_request_items").delete().eq("id", z.id as string);
       }
     }
   } catch (e) { console.warn("[production-allocate] syncWindowReceipts failed", e); }
@@ -365,8 +403,9 @@ export async function recheckRequestCompletion(
   }
 }
 
-// 이행 규칙(2026-07-29 확정 · 2026-09-14 도매편 개정):
-//  · 입고(도소매 무관)          → '재고 보충'(제조사 요청) 이행 — 제조사가 만들어 보냈는가
+// 이행 규칙(2026-07-29 확정 · 2026-09-14 도매편 개정 · 2026-09-18 창 규칙):
+//  · 입고(도소매 무관)          → '재고 보충'(제조사 요청) 이행 — 제조사가 만들어 보냈는가.
+//    입고일이 창(요청일~생산마감일)에 드는 요청서에 전량(초과 허용), 창 밖이면 잔여 FIFO.
 //  · 소매→도매 이전(도매 입고편) → '도매 납품'(도매 요청) 이행 — 담당자가 이전 시 요청서별 수동 배정
 export async function allocateReceiptsToOpenRequests(
   sb: SupabaseClient,
@@ -385,36 +424,52 @@ export async function allocateReceiptsToOpenRequests(
     for (const p of data ?? []) nameById.set(p.id as string, p.name as string);
   } catch { /* 이름 없이 진행 */ }
 
-  // 열린 요청 품목(요청·진행중) — 오래된 요청부터. 용도 필터(082) 미적용 환경이면 용도 무관 폴백.
-  const query = (withPurpose: boolean) => {
-    let q = sb
-      .from("production_request_items")
-      .select("id, request_id, requested_qty, product_id, production_requests!inner(id, req_no, status, request_date, due_date, created_at)")
-      .in("product_id", pids)
-      .in("production_requests.status", ["요청", "진행중"]);
-    if (withPurpose && opts?.purpose) q = q.eq("production_requests.purpose", opts.purpose);
-    return q;
-  };
-  let { data: itemsRaw, error: ie } = await query(true);
-  if (ie && /purpose/i.test(ie.message)) ({ data: itemsRaw, error: ie } = await query(false)); // 082 미적용 폴백
-  if (ie || !itemsRaw?.length) return;
-
+  // 열린 요청서(요청·진행중) — 오래된 순. 창에 드는 요청서가 그 품목을 안 가졌을 때
+  //  '[요청서에 없음]' 줄을 만들어 붙일 '그 주간 요청서'를 고르는 데 쓴다. 용도 필터(082) 미적용이면 용도 무관 폴백.
   type Head = { id: string; req_no: string | null; status: string; request_date: string; due_date: string | null; created_at: string };
+  const headQuery = (withPurpose: boolean) => {
+    let q = sb.from("production_requests").select("id, req_no, status, request_date, due_date, created_at").in("status", ["요청", "진행중"]);
+    if (withPurpose && opts?.purpose) q = q.eq("purpose", opts.purpose);
+    return q.order("request_date", { ascending: true }).order("created_at", { ascending: true }).limit(500);
+  };
+  let hres = await headQuery(true);
+  if (hres.error && /purpose/i.test(hres.error.message)) hres = await headQuery(false); // 082 미적용 폴백
+  if (hres.error || !hres.data?.length) return;
+  const heads = (hres.data as unknown as Head[]).filter((h) => /^\d{4}-\d{2}-\d{2}$/.test(h.request_date || ""));
+  if (!heads.length) return;
+  const headById = new Map(heads.map((h) => [h.id, h]));
+
+  // 열린 요청 품목(위 요청서들의 해당 품목 줄) — 오래된 요청부터
   type OpenItem = { id: string; request_id: string; requested_qty: number; product_id: string; head: Head };
-  const items: OpenItem[] = itemsRaw
+  const { data: itemsRaw, error: ie } = await sb
+    .from("production_request_items")
+    .select("id, request_id, requested_qty, product_id, production_requests!inner(id, status)")
+    .in("product_id", pids)
+    .in("production_requests.status", ["요청", "진행중"])
+    .limit(5000);
+  if (ie) return;
+  const items: OpenItem[] = (itemsRaw ?? [])
     .map((r) => {
-      const rel = (r as { production_requests?: Head | Head[] | null }).production_requests;
-      const head = Array.isArray(rel) ? rel[0] : rel;
+      const head = headById.get(r.request_id as string); // 용도 필터를 통과한 요청서만
       return head ? { id: r.id as string, request_id: r.request_id as string, requested_qty: Number(r.requested_qty) || 0, product_id: r.product_id as string, head } : null;
     })
     .filter((x): x is OpenItem => !!x)
     .sort((a, b) => a.head.request_date.localeCompare(b.head.request_date) || a.head.created_at.localeCompare(b.head.created_at));
 
+  // 묶음(세트)은 요청서에 담을 수 없는 품목 — '[요청서에 없음]' 줄도 만들지 않는다(연결 없는 일반 입고)
+  const bundleParents = new Set<string>();
+  try {
+    const { data } = await sb.from("product_bundles").select("parent_id").in("parent_id", pids);
+    for (const b of data ?? []) bundleParents.add(b.parent_id as string);
+  } catch { /* 037 미적용 — 묶음 없음 취급 */ }
+
   // 기존 입고 누계 → 잔여
   const received = new Map<string, number>();
   try {
-    const { data: rcs } = await sb.from("production_receipts").select("item_id, qty").in("item_id", items.map((i) => i.id));
-    for (const rc of rcs ?? []) received.set(rc.item_id as string, (received.get(rc.item_id as string) || 0) + (Number(rc.qty) || 0));
+    if (items.length) {
+      const { data: rcs } = await sb.from("production_receipts").select("item_id, qty").in("item_id", items.map((i) => i.id)).limit(5000);
+      for (const rc of rcs ?? []) received.set(rc.item_id as string, (received.get(rc.item_id as string) || 0) + (Number(rc.qty) || 0));
+    }
   } catch { return; }
   const remaining = new Map<string, number>();
   for (const it of items) remaining.set(it.id, Math.max(0, it.requested_qty - (received.get(it.id) || 0)));
@@ -435,50 +490,80 @@ export async function allocateReceiptsToOpenRequests(
 
   const startedRequests = new Set<string>(); // 이번 호출에서 요청→진행중 전환한 요청(중복 전환 방지)
 
+  // 한 품목행에 링크 1건 기록 + 잔여·상태 갱신. 성공 시 실제로 붙은 수량(경합 중복이면 0)을 돌려준다.
+  const linkTo = async (e: AllocEntry, it: OpenItem, qty: number, uncapped: boolean, memo?: string): Promise<number> => {
+    const row: Record<string, unknown> = {
+      request_id: it.request_id, item_id: it.id, qty,
+      memo: memo || opts?.memo || "입고/출고 연동", received_by: actor, inv_txn_id: e.inv_txn_id,
+    };
+    if (e.receipt_date && /^\d{4}-\d{2}-\d{2}$/.test(e.receipt_date)) row.receipt_date = e.receipt_date;
+    const { error: re, inserted } = await insertReceiptOnce(sb, row);
+    if (re) { console.warn("[production-allocate] receipt insert failed", re.message); return 0; }
+    let applied = qty;
+    if (!inserted) {
+      // 같은 쌍 링크가 이미 있음(창 소급 매칭·재전환 등) — 최신 DB 기준 증액분만. 창 규칙이면 잔여 상한 없이 이 입고의 미연결분 전량
+      const r2 = await topUpPair(sb, it.id, uncapped ? Number.POSITIVE_INFINITY : it.requested_qty, e.inv_txn_id, e.qty);
+      applied = r2?.applied ?? 0;
+    }
+    remaining.set(it.id, Math.max(0, (remaining.get(it.id) || 0) - applied));
+    const reqNo = it.head.req_no || "";
+    // 경합으로 무시된 중복(applied=0)엔 알림 생략 — 행은 상대 호출이 이미 만들었다
+    if (applied > 0) await logProductionReceipt(reqNo, nameById.get(e.product_id) || "품목", applied, actor, memo);
+    if (applied > 0 && it.head.status === "요청" && !startedRequests.has(it.request_id)) {
+      startedRequests.add(it.request_id);
+      const { data: flipped } = await sb.from("production_requests")
+        .update({ status: "진행중", updated_at: new Date().toISOString() })
+        .eq("id", it.request_id).eq("status", "요청").select("id");
+      if (flipped?.length) await logProductionRequestStatusChanged(reqNo, "요청", "진행중", actor);
+      it.head.status = "진행중";
+    }
+    return applied;
+  };
+
+  // '[요청서에 없음]' 줄 — 그 주간 요청서에 요청수량 0 으로 품목 줄을 만들어 입고를 붙일 자리(2026-09-18 대표 확정).
+  //  같은 호출 안에서 같은 품목이 또 오면 방금 만든 줄을 재사용한다(items 에 넣어 둔다).
+  const ensureUnrequestedLine = async (h: Head, product_id: string): Promise<OpenItem | null> => {
+    const exists = items.find((it) => it.request_id === h.id && it.product_id === product_id);
+    if (exists) return exists;
+    const { data, error } = await sb.from("production_request_items")
+      .insert({ request_id: h.id, product_id, requested_qty: 0, memo: UNREQUESTED_ITEM_MEMO, sort: 9000 })
+      .select("id").single();
+    if (error || !data) { console.warn("[production-allocate] unrequested line insert failed", error?.message); return null; }
+    const line: OpenItem = { id: data.id as string, request_id: h.id, requested_qty: 0, product_id, head: h };
+    items.push(line);
+    remaining.set(line.id, 0);
+    return line;
+  };
+
   for (const e of positive) {
     let left = Math.round(e.qty * 100) / 100 - (priorByTxn.get(e.inv_txn_id) || 0);
-    // 요청일 기준 매칭(대표 확정): 입고일이 요청일~마감일 창 안에 드는 요청서를 우선 배분한다.
-    //  창에 드는 요청이 없으면 기존 FIFO(오래된 요청부터) — 마감을 넘겨 도착한 지연 납품도 붙게 유지.
-    const inWindow = (it: OpenItem) =>
-      !!e.receipt_date &&
-      it.head.request_date <= e.receipt_date &&
-      (!it.head.due_date || e.receipt_date <= it.head.due_date);
-    const ordered = e.receipt_date
-      ? [...items].sort((a, b) =>
-          Number(inWindow(b)) - Number(inWindow(a)) ||
-          a.head.request_date.localeCompare(b.head.request_date) ||
-          a.head.created_at.localeCompare(b.head.created_at)
-        )
-      : items;
-    for (const it of ordered) {
+    if (left <= 0) continue;
+    const d = e.receipt_date && /^\d{4}-\d{2}-\d{2}$/.test(e.receipt_date) ? e.receipt_date : null;
+    const inWin = (h: Head) => !!d && h.request_date <= d && (!h.due_date || d <= h.due_date);
+
+    // 1) 창 규칙(2026-09-18 대표 확정): 입고일이 요청일~생산마감일 창 안에 드는 요청서 중 그 품목이 있는 **가장 오래된** 요청서에
+    //    **전량** 기록 — 요청 수량을 넘겨도 그 요청서에 '초과'로 남긴다(종전: 잔여만큼만, 넘치면 다음 요청서).
+    //    주간 요청서 창이 겹치는 며칠(이번 주 요청일 ~ 지난주 마감일)은 지난주(오래된) 요청서가 받는다.
+    const target = items.find((it) => it.product_id === e.product_id && inWin(it.head)); // items 는 요청일·생성 순 정렬
+    if (target) { await linkTo(e, target, left, true); continue; }
+
+    // 2) 창 안 요청서는 있는데 그 품목이 없음 → 그 주간(가장 오래된 창 안) 요청서에 '[요청서에 없음]' 줄을 만들어 전량 기록
+    const weekHead = heads.find(inWin);
+    if (weekHead && !bundleParents.has(e.product_id)) {
+      const line = await ensureUnrequestedLine(weekHead, e.product_id);
+      if (line) { await linkTo(e, line, left, true, `${UNREQUESTED_ITEM_MEMO} 입고/출고 연동`); continue; }
+    }
+
+    // 3) 창에 드는 요청서 자체가 없으면(마감을 넘겨 도착한 지연 납품 등) 종전 FIFO — 잔여가 남은 오래된 요청서부터 잔여만큼.
+    //    남는 수량은 연결 없는 일반 입고.
+    for (const it of items) {
       if (left <= 0) break;
       if (it.product_id !== e.product_id) continue;
       const rem = remaining.get(it.id) || 0;
       if (rem <= 0) continue;
       const alloc = Math.min(rem, left);
-
-      const row: Record<string, unknown> = {
-        request_id: it.request_id, item_id: it.id, qty: alloc,
-        memo: opts?.memo || "입고/출고 연동", received_by: actor, inv_txn_id: e.inv_txn_id,
-      };
-      if (e.receipt_date && /^\d{4}-\d{2}-\d{2}$/.test(e.receipt_date)) row.receipt_date = e.receipt_date;
-      const { error: re, inserted } = await insertReceiptOnce(sb, row);
-      if (re) { console.warn("[production-allocate] receipt insert failed", re.message); continue; }
-
-      remaining.set(it.id, rem - alloc);
-      left -= alloc;
-
-      const reqNo = it.head.req_no || "";
-      // 경합으로 무시된 중복(inserted=false)엔 알림 생략 — 행은 상대 호출이 이미 만들었다
-      if (inserted) await logProductionReceipt(reqNo, nameById.get(e.product_id) || "품목", alloc, actor);
-      if (it.head.status === "요청" && !startedRequests.has(it.request_id)) {
-        startedRequests.add(it.request_id);
-        const { data: flipped } = await sb.from("production_requests")
-          .update({ status: "진행중", updated_at: new Date().toISOString() })
-          .eq("id", it.request_id).eq("status", "요청").select("id");
-        if (flipped?.length) await logProductionRequestStatusChanged(reqNo, "요청", "진행중", actor);
-        it.head.status = "진행중";
-      }
+      const applied = await linkTo(e, it, alloc, false);
+      left -= applied > 0 ? applied : alloc; // 경합 중복이면 상대 호출이 이미 붙인 몫 — 여기서도 소진된 것으로 본다
     }
   }
 }

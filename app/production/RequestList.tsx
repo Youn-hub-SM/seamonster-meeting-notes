@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, lineState, allLinesFilled,
+  PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, UNREQUESTED_ITEM_MEMO, lineState, allLinesFilled,
   type ProductionRequest, type PrItem, type PrStatus, type PrPurpose,
 } from "@/app/lib/wholesale-production";
 import { addBusinessDays } from "@/app/lib/business-days";
@@ -424,9 +424,11 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
 }) {
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
   const editable = req.status === "요청" || req.status === "진행중";
-  const itemPreview = req.items.slice(0, 2).map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join(" · ");
+  // 요청수량 0 = 요청서에 없던 품목이 그 주간에 입고돼 자동으로 붙은 줄 — '×0' 대신 그 뜻을 적는다
+  const itemLabel = (it: PrItem) => `${it.name}${it.spec ? ` ${it.spec}` : ""}${it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO ? ` (요청서에 없음 +${it.received_qty.toLocaleString()})` : ` ×${it.requested_qty.toLocaleString()}`}`;
+  const itemPreview = req.items.slice(0, 2).map(itemLabel).join(" · ");
   // 셀이 말줄임으로 잘리므로 전체 품목은 마우스 오버 툴팁으로 — 한 줄에 한 품목
-  const itemsFull = req.items.map((it) => `${it.name}${it.spec ? ` ${it.spec}` : ""} ×${it.requested_qty.toLocaleString()}`).join("\n");
+  const itemsFull = req.items.map(itemLabel).join("\n");
   return (
     <>
       <tr onClick={onToggle} style={{ cursor: "pointer" }} className={expanded ? "is-parent" : ""}>
@@ -503,7 +505,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                   onClick={() => {
                     const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
                     const remain = openRemainQty(req.items);
-                    const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n미입고 ${remain.toLocaleString()}개는 '오는 중'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다 — 물건이 정말 안 오는 게 맞는지 확인하세요.\n(완료한 뒤 이 물량이 도착하면 다음 열린 요청서에 자동 연결돼 그 요청서의 오는 중이 줄어듭니다 — 물건이 오면 이 요청서를 '다시 열기' 하세요.)` : "";
+                    const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n미입고 ${remain.toLocaleString()}개는 '오는 중'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다 — 물건이 정말 안 오는 게 맞는지 확인하세요.\n(완료한 뒤 이 물량이 도착하면 입고일이 창에 드는 다른 요청서(그 주간 요청서)에 자동 연결됩니다 — 물건이 오면 이 요청서를 '다시 열기' 하세요.)` : "";
                     if (confirm(`이행률이 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) 입니다.\n그래도 완료 처리할까요?\n\n완료하면 목록·도매 요청 종합에서 빠지고, 필요하면 '다시 열기'로 되돌릴 수 있습니다.${inbNote}`)) onStatus("완료");
                   }}>강제 완료 처리</button>
               </div>
@@ -530,9 +532,9 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
           <div style={{ fontWeight: 600 }}>{item.name}</div>
           <div style={{ fontSize: 15, color: "var(--sm-text-light)" }}>{item.sku || ""}{item.spec ? ` · ${item.spec}` : ""}</div>
         </td>
-        <td className="num">{item.requested_qty.toLocaleString()}</td>
+        <td className="num">{st === "요청서에 없음" ? <span className="sm-faint" title="요청서에 없던 품목이 이 주간에 입고돼 자동으로 붙은 줄">-</span> : item.requested_qty.toLocaleString()}</td>
         <td className="num" style={{ fontWeight: 700 }}>{item.received_qty.toLocaleString()}</td>
-        <td className="num" style={{ color: remaining > 0 ? "var(--sm-text-mid)" : remaining < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{remaining.toLocaleString()}</td>
+        <td className="num" style={{ color: st === "요청서에 없음" ? "var(--sm-text-light)" : remaining > 0 ? "var(--sm-text-mid)" : remaining < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{st === "요청서에 없음" ? "-" : remaining.toLocaleString()}</td>
         <td><span style={{ fontSize: 15, fontWeight: 700, color: PR_LINE_COLOR[st] }}>{st}</span></td>
         <td>
           {item.receipts.length > 0 ? (
@@ -624,7 +626,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
 
   function submit() {
     const items = lines
-      .filter((l) => Number(l.requested_qty) > 0)
+      // 입고 기록이 있는 줄은 수량 0 이어도 보낸다 — '[요청서에 없음]' 자동 줄(요청 0·입고 있음)을 빼면 서버가 삭제하려다 막는다
+      .filter((l) => Number(l.requested_qty) > 0 || l.received > 0)
       .map((l) => ({ id: l.item_id, product_id: l.product_id, requested_qty: Math.round(Number(l.requested_qty) * 100) / 100, memo: l.memo.trim() || undefined })); // 소수 둘째 자리 허용(104)
     onSubmit({
       title: title.trim() || (isEdit ? "" : undefined),

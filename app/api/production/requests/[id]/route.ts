@@ -56,14 +56,21 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     let curItemIds = new Set<string>();
     if (b.items !== undefined) {
       if (!Array.isArray(b.items)) return NextResponse.json({ ok: false, error: "items 형식이 올바르지 않습니다." }, { status: 400 });
-      itemsIn = (b.items as ItemIn[])
-        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined })) // 소수 둘째 자리 허용(104)
-        .filter((it) => it.product_id && it.requested_qty > 0);
-      if (itemsIn.length === 0) return NextResponse.json({ ok: false, error: "요청 수량이 있는 품목이 최소 1개 필요합니다." }, { status: 400 });
-
       const { data: curItems, error: ciErr } = await sb.from("production_request_items").select("id").eq("request_id", id);
       if (ciErr) throw ciErr;
       curItemIds = new Set((curItems ?? []).map((i) => i.id as string));
+      // 입고 기록이 있는 기존 줄은 수량 0 이어도 유지한다 — '[요청서에 없음]' 자동 줄(요청 0·입고 있음)을 수정 저장이
+      //  지우려다 "입고 기록이 있는 품목은 뺄 수 없습니다"로 막히지 않게. 기록 없는 줄의 0 은 종전대로 삭제(=빼기).
+      const withReceipts = new Set<string>();
+      if (curItemIds.size) {
+        const { data: rc, error: rcErr0 } = await sb.from("production_receipts").select("item_id").in("item_id", [...curItemIds]).limit(5000);
+        if (rcErr0) throw rcErr0;
+        for (const r of rc ?? []) withReceipts.add(r.item_id as string);
+      }
+      itemsIn = (b.items as ItemIn[])
+        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined })) // 소수 둘째 자리 허용(104)
+        .filter((it) => it.product_id && (it.requested_qty > 0 || (it.id && withReceipts.has(it.id))));
+      if (!itemsIn.some((it) => it.requested_qty > 0)) return NextResponse.json({ ok: false, error: "요청 수량이 있는 품목이 최소 1개 필요합니다." }, { status: 400 });
       const keepIds = new Set(itemsIn.filter((it) => it.id && curItemIds.has(it.id)).map((it) => it.id!));
       toDelete = [...curItemIds].filter((iid) => !keepIds.has(iid));
       if (toDelete.length > 0) {
