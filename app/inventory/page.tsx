@@ -28,7 +28,6 @@ type ProdRow = {
   sku: string; name: string; stock: number | null; dailyOut: number; rawDailyOut: number;
   autoSafety: number; promoQty: number; adjust: number; adjustRaw: number; adjustExcludeRaw: number;
   adjustMemo: string; adjustUntil: string | null; safety: number; recommend: number;
-  inbound?: number; inboundDue?: string | null; // 오는 중(열린 제조사 요청서 잔여) — 권장에서 이미 뺀 양
   requestByDays: number | null; requestBy: string | null;
 };
 type Priority = { sku: string; name: string; urgency: string; qty: number; byWhen: string; reason: string };
@@ -60,7 +59,7 @@ const numKey = (r: OverviewRow, k: Exclude<SortKey, "recommend" | "request_by">)
 export default function InventoryPage() {
   const router = useRouter();
   const [rows, setRows] = useState<OverviewRow[]>([]);
-  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; inboundOk?: boolean } | null>(null);
+  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -100,7 +99,7 @@ export default function InventoryPage() {
   const prodChannel = channel === "도매" ? "도매" : "소매"; // AI 조언용(조언 API 는 단일 채널)
   const [retailMap, setRetailMap] = useState<Map<string, ProdRow>>(new Map());
   const [wholeMap, setWholeMap] = useState<Map<string, ProdRow>>(new Map());
-  const [prodLead, setProdLead] = useState(7); // 안전재고 지평(리드타임 + 발주 주기) — 보정 미리보기용
+  const [prodLead, setProdLead] = useState(10);
   const [spanDays, setSpanDays] = useState(0);
   // 한쪽 채널만 실패하면 권장이 조용히 축소되어(합인데 한쪽만) 부족한 수량을 요청하게 된다 → 경고를 띄운다.
   const [prodWarn, setProdWarn] = useState("");
@@ -112,15 +111,12 @@ export default function InventoryPage() {
       ]);
       if (r.ok) {
         setRetailMap(new Map(((r.rows || []) as ProdRow[]).map((x) => [x.sku.toUpperCase(), x])));
-        setProdLead(r.horizonDays || r.leadDays || 7);
+        setProdLead(r.leadDays || 10);
         setSpanDays(r.velocitySpanDays || 0);
       }
       if (w.ok) setWholeMap(new Map(((w.rows || []) as ProdRow[]).map((x) => [x.sku.toUpperCase(), x])));
       const bad = [!r.ok && "소매", !w.ok && "도매"].filter(Boolean).join("·");
-      // 오는 중 집계 실패는 반대 방향(권장 과대 = 시켜 둔 물량을 또 시킴) — 따로 알린다
-      const inbBad = r.ok && r.inboundOk === false;
-      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 실제보다 적게 보일 수 있습니다.`
-        : inbBad ? "'오는 중'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 권장생산이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다." : "");
+      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 실제보다 적게 보일 수 있습니다.` : "");
     } catch {
       setProdWarn("생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 비어 있거나 실제보다 적게 보일 수 있습니다.");
     }
@@ -290,7 +286,7 @@ export default function InventoryPage() {
       </header>
 
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
-      {(prodWarn || meta?.inboundOk === false) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'오는 중'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
+      {prodWarn && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn}</div>}
 
       {/* 데이터박스 6종 — 재고 4 + 생산 2 (생산 권장 품목 = 안전재고(행사·보정 반영) 미달과 동일 데이터라 통합) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
@@ -323,7 +319,7 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 안전재고 = 일평균소진 × {meta.cycleDays ? `(리드타임 ${meta.leadDays}일 + 발주 주기 ${meta.cycleDays}일)` : `리드타임 ${meta.leadDays}일`}{channel === "도매" ? "" : " + 프로모션 확보분"} · {channel === "도매" ? "권장생산 = 안전재고 − 현재고 (도매 수식은 오는 중을 빼지 않음 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채움)" : "권장생산 = 안전재고 − (현재고 + 오는 중) · 예상소진은 현재고만 기준(오는 중 미포함)"} · {channel === "전체" ? "권장생산은 소매+도매 합, 주문필요는 더 급한 채널" : `권장생산·주문필요는 ${channel}`} 기준 · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</p>}
+      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 안전재고 = 일평균소진 × 리드타임 {meta.leadDays}일 + 프로모션 확보분 · {channel === "전체" ? "권장생산은 소매+도매 합, 주문필요는 더 급한 채널" : `권장생산·주문필요는 ${channel}`} 기준 · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</p>}
 
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {advice && (
@@ -410,30 +406,10 @@ export default function InventoryPage() {
                   <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
                     {r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {(r.promo_pool ?? 0) > 0 && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 4, color: "var(--sm-warning)" }} title="프로모션 풀에 확보된 행사분(자동 출고 보호)">+프로모션 {r.promo_pool.toLocaleString()}</span>}
-                    {/* 오는 중 = 시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여). 권장생산·부족 판정은 이 양을 현재고에 더해 본다 */}
-                    {/* nowrap 금지 — 72px 열에서 이웃 셀로 넘친다(실측). 셀 안에서 줄바꿈되게 둔다 */}
-                    {(r.inbound ?? 0) > 0 && (
-                      <span style={{ display: "block", fontWeight: 400, fontSize: 11, lineHeight: 1.25, color: "var(--sm-info)" }}
-                        title={`오는 중(열린 제조사 요청서 잔여) — 권장생산에서 이미 뺀 양. 마감이 지나도 입고·강제 완료·취소 전까지는 오는 중에 남습니다\n${r.inbound_detail || ""}`}>
-                        +오는 중 {r.inbound.toLocaleString()}
-                        {r.inbound_due ? <span className="sm-faint" style={{ display: "block" }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
-                      </span>
-                    )}
                   </td>
                   <td className="num b2b-money" title={r.promo_qty ? `프로모션 확보분 +${r.promo_qty.toLocaleString()} 포함` : undefined}>{r.auto_safety.toLocaleString()}{r.promo_qty ? <span style={{ color: "var(--sm-orange)", fontSize: 12, marginLeft: 2 }}></span> : null}</td>
                   <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>
-                  {/* 예상소진 = 창고(현재고)만 기준. 오는 중이 있으면 '입고 예정일 전에 바닥나는가'로 빨강을 판정 —
-                      리드타임만 보면 시켜 둔 물량이 곧 오는데도 부족·권장(포지션 기준)과 신호가 엇갈린다 */}
-                  {(() => {
-                    const dep = r.depletion_days;
-                    const inbDays = r.inbound_due ? Math.max(0, Math.round((Date.parse(r.inbound_due + "T00:00:00Z") - Date.parse(TODAY() + "T00:00:00Z")) / 86400_000)) : null;
-                    const red = dep != null && ((r.inbound ?? 0) > 0 && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 7));
-                    const posDays = dep != null && r.daily_out > 0 ? Math.floor((r.qty + (r.inbound ?? 0)) / r.daily_out) : null;
-                    const tip = dep == null ? undefined : (r.inbound ?? 0) > 0
-                      ? `창고 기준 ${dep}일 · 오는 중 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? `, ${inbDays}일 뒤` : ""})` : ""}${red ? " — 입고 전에 바닥날 수 있음" : ""}`
-                      : `창고 기준 ${dep}일`;
-                    return <td className="num b2b-money" title={tip} style={{ color: dep == null ? "var(--sm-text-light)" : red ? "var(--sm-danger)" : "var(--sm-black)" }}>{dep == null ? "-" : `${dep}일`}</td>;
-                  })()}
+                  <td className="num b2b-money" style={{ color: r.depletion_days == null ? "var(--sm-text-light)" : r.depletion_days <= (meta?.leadDays ?? 10) ? "var(--sm-danger)" : "var(--sm-black)" }}>{r.depletion_days == null ? "-" : `${r.depletion_days}일`}</td>
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
                   <td className="num b2b-money">{r.value.toLocaleString()}</td>

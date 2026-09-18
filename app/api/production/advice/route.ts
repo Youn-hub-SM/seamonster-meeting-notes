@@ -12,21 +12,17 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const HORIZON_DAYS = 14; // 예측 지평(2주)
 
-function buildSystemPrompt(horizonDays: number, inboundOk: boolean): string {
-  const inboundNote = inboundOk
-    ? `'오는중' = 이미 생산 요청서를 내서 생산·입고 예정인 미입고 물량입니다. 이 양은 다시 시키면 이중 발주가 되므로 반드시 재고처럼 빼고 판단하세요. '창고소진일수'는 현재고만, '재고소진일수'는 현재고+오는중 기준입니다.`
-    : `주의: 이번 실행은 '오는중'(이미 시켜 둔 미입고 물량) 집계에 실패해 0 으로 왔습니다. 오는중을 빼지 말고, notes 에 "오는 중 미반영 — 열린 생산 요청서를 확인하세요" 를 남기세요.`;
+function buildSystemPrompt(leadDays: number): string {
   return `당신은 씨몬스터(냉동 수산물 가공) 생산계획 어드바이저입니다.
 생산담당자가 수요 예측을 잘 못해 재고 부족·과잉이 잦습니다. 데이터로 "무엇을 얼마나, 언제 만들지"를 구체적으로 짚어주세요.
 
-참고: 안전재고 = 최근 일평균 출고 × ${horizonDays}일(생산 리드타임 + 발주 주기). 현재고+오는중이 안전재고보다 적으면 쇼트 위험 신호입니다.
-${inboundNote}
+참고: 안전재고 = 최근 일평균 출고 × ${leadDays}일(생산 리드타임). 현재고가 안전재고보다 적으면 쇼트 위험 신호입니다.
 
 판단 근거(우선순위):
-1) 현재고+오는중 < 안전재고 / 현재고 마이너스 → 즉시 보충 (재고부족 위험 최우선)
+1) 현재고 < 안전재고 / 현재고 마이너스 → 즉시 보충 (재고부족 위험 최우선)
 2) B2B 확정 발주(생산대기·생산중) → 반드시 생산해야 하는 물량
 3) ${HORIZON_DAYS}일 예측판매(판매속도×${HORIZON_DAYS}일) → 미리 만들어둘 물량
-권장량은 대략 (B2B수요 + ${HORIZON_DAYS}일 예측판매 − 현재고 − 오는중) 기준으로, 안전재고는 시급도 판단에만 쓰고 예측판매와 합산하지 마세요. 현실적인 라운딩·우선순위로 제시.
+권장량은 대략 (B2B수요 + ${HORIZON_DAYS}일 예측판매 − 현재고) 기준으로, 안전재고는 시급도 판단에만 쓰고 예측판매와 합산하지 마세요. 현실적인 라운딩·우선순위로 제시.
 
 규칙: 한국어 존댓말. 간결하고 행동가능하게. 추측·미사여구 금지. 데이터에 없는 건 지어내지 말 것.
 priorities 는 정말 시급한 것부터 최대 12건만 추리세요(전 품목 나열 금지). qty 는 권장 생산 수량(정수).
@@ -40,7 +36,6 @@ interface AdviceRow {
   stock: number | null;
   safety: number | null;
   b2bDemand: number;
-  inbound: number;        // 오는 중(열린 제조사 요청서 잔여) — 재고처럼 빼고 판단
   dailySales: number;     // 일평균 출고
   daysOfCover: number | null;
   predicted14: number;    // 14일 예측 판매
@@ -59,15 +54,13 @@ export async function POST(req: Request) {
     const rows: AdviceRow[] = inv.rows.map((r) => {
       const dailySales = velocity.perSku[r.sku] || 0;
       const predicted14 = Math.round(dailySales * HORIZON_DAYS);
-      // 소진일수는 오는 중까지 합친 재고 포지션 기준(시켜 둔 물량이 곧 들어온다)
-      const daysOfCover = r.stock != null && dailySales > 0 ? Math.round((r.stock + r.inbound) / dailySales) : null;
+      const daysOfCover = r.stock != null && dailySales > 0 ? Math.round(r.stock / dailySales) : null;
       return {
         sku: r.sku,
         name: r.name,
         stock: r.stock,
         safety: r.safety,
         b2bDemand: r.demand,
-        inbound: r.inbound,
         dailySales: Math.round(dailySales * 10) / 10,
         daysOfCover,
         predicted14,
@@ -76,11 +69,11 @@ export async function POST(req: Request) {
 
     // Claude 에 보낼 행: 결정거리가 있는 것만(재고 매칭 + (권장>0 or 미달 or 판매有)), 우선순위순 상한 40
     const signal = rows
-      .filter((r) => r.stock != null && (r.b2bDemand > 0 || r.predicted14 > 0 || (r.safety != null && r.stock + r.inbound < r.safety)))
+      .filter((r) => r.stock != null && (r.b2bDemand > 0 || r.predicted14 > 0 || (r.safety != null && r.stock < r.safety)))
       .sort((a, b) => {
-        // 안전재고는 시급도(필터)에만 쓰고, 정렬 점수에는 예측판매만(중복 합산 방지). 오는 중은 재고처럼 뺀다
-        const na = (a.b2bDemand + a.predicted14) - ((a.stock || 0) + a.inbound);
-        const nb = (b.b2bDemand + b.predicted14) - ((b.stock || 0) + b.inbound);
+        // 안전재고는 시급도(필터)에만 쓰고, 정렬 점수에는 예측판매만(중복 합산 방지)
+        const na = (a.b2bDemand + a.predicted14) - (a.stock || 0);
+        const nb = (b.b2bDemand + b.predicted14) - (b.stock || 0);
         return nb - na;
       })
       .slice(0, 40);
@@ -102,11 +95,9 @@ export async function POST(req: Request) {
         sku: r.sku,
         name: r.name,
         현재고: r.stock,
-        오는중: r.inbound,
         안전재고: r.safety,
         B2B확정수요: r.b2bDemand,
         일평균출고: r.dailySales,
-        창고소진일수: r.stock != null && r.dailySales > 0 ? Math.round(r.stock / r.dailySales) : null,
         재고소진일수: r.daysOfCover,
         [`${HORIZON_DAYS}일예측판매`]: r.predicted14,
       })),
@@ -115,7 +106,7 @@ export async function POST(req: Request) {
     const response = await anthropic.messages.create({
       model,
       max_tokens: 8000,
-      system: buildSystemPrompt(inv.horizonDays, inv.inboundOk),
+      system: buildSystemPrompt(inv.leadDays),
       messages: [{ role: "user", content: JSON.stringify(userPayload) }],
     });
     const text = response.content[0]?.type === "text" ? response.content[0].text : "";

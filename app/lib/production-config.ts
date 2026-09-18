@@ -7,51 +7,16 @@ export const LINK_B2B_ORDERS_TO_PRODUCTION = false;
 
 // ─────────────────────────────────────────────
 // 생산 리드타임(일) — b2b_settings('production_lead_days') 에 숫자로 저장.
-//  안전재고 = 하루 평균 출고 × (리드타임 + 발주 주기). "생산이 며칠 걸리는가"를 운영자가 조정.
-//  기본 7일 = 수·목 요청 → 차주 월~금 입고(2026-09-17 대표 확정 운영 리듬).
+//  안전재고 = 하루 평균 출고 × 리드타임. "생산이 며칠 걸리는가"를 운영자가 조정.
 // ─────────────────────────────────────────────
 
 const KEY = "production_lead_days";
-export const DEFAULT_LEAD_DAYS = 7;
+export const DEFAULT_LEAD_DAYS = 10;
 const MIN_LEAD = 1;
 const MAX_LEAD = 60;
 
 function clamp(n: number): number {
   return Math.min(MAX_LEAD, Math.max(MIN_LEAD, Math.round(n)));
-}
-
-// ─────────────────────────────────────────────
-// 발주 주기(일) — b2b_settings('production_cycle_days'). 요청서를 내는 간격(주 1회 = 7).
-//  안전재고 지평 = 리드타임 + 발주 주기: 이번 물량이 도착한 뒤 '다음' 물량이 도착할 때까지 버틸 양까지
-//  목표에 넣어야 도착 직전 바닥이 안 난다(리드타임만 잡으면 주 1회 발주에서 한 주가 비는 구조).
-//  기본 0 = 종전 수식 그대로(1단계 검증은 '오는 중' 차감만 — 대표가 설정에서 켠다).
-// ─────────────────────────────────────────────
-
-const CYCLE_KEY = "production_cycle_days";
-export const DEFAULT_CYCLE_DAYS = 0;
-const MAX_CYCLE = 30;
-
-export async function getCycleDays(): Promise<number> {
-  try {
-    const sb = supabaseAdmin();
-    const { data } = await sb.from("b2b_settings").select("value").eq("key", CYCLE_KEY).maybeSingle();
-    const n = Number(data?.value);
-    if (!Number.isFinite(n) || n < 0) return DEFAULT_CYCLE_DAYS;
-    return Math.min(MAX_CYCLE, Math.round(n));
-  } catch {
-    return DEFAULT_CYCLE_DAYS;
-  }
-}
-
-export async function setCycleDays(days: number): Promise<number> {
-  const sb = supabaseAdmin();
-  const n = Number(days);
-  const v = Number.isFinite(n) && n >= 0 ? Math.min(MAX_CYCLE, Math.round(n)) : DEFAULT_CYCLE_DAYS;
-  await sb.from("b2b_settings").upsert(
-    { key: CYCLE_KEY, value: v, updated_at: new Date().toISOString() },
-    { onConflict: "key" }
-  );
-  return v;
 }
 
 export async function getLeadDays(): Promise<number> {

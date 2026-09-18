@@ -19,9 +19,8 @@ export async function GET() {
       .filter((r) => r.inBoxhero)
       .map((r) => {
         const dailyOut = velocity.perSku[r.sku] || 0;
-        // 소진일수도 권장과 같은 포지션(현재고 + 오는 중) 기준 — 시켜 둔 물량이 곧 들어오는데 '품절 위험' 경고가 뜨지 않게
         const depletionDays =
-          dailyOut > 0 && r.stock != null ? Math.max(0, Math.floor((r.stock + r.inbound) / dailyOut)) : null;
+          dailyOut > 0 && r.stock != null ? Math.max(0, Math.floor(r.stock / dailyOut)) : null;
         return {
           sku: r.sku,
           name: r.name,
@@ -31,7 +30,6 @@ export async function GET() {
           // 권장 생산량(보수적) 산정용 — 안전재고·대기수요·안전재고 도달일수
           safety: r.safety,
           demand: r.demand,
-          inbound: r.inbound,            // 오는 중(열린 제조사 요청서 잔여) — 권장 산정 시 현재고에 더해 뺀다
           autoSafety: r.autoSafety,
           safetyDays: r.requestByDays,   // 현재고가 안전재고로 내려가는 남은 일수(null=출고0/재고없음)
           belowSafety: r.belowSafety,
