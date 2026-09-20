@@ -337,7 +337,7 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 안전재고 = 일평균소진 × 리드타임 {meta.leadDays}일 + 프로모션 확보분 · {channel === "전체" ? "권장생산은 소매+도매 합, 주문필요는 더 급한 채널" : `권장생산·주문필요는 ${channel}`} 기준 · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</p>}
+      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 안전재고 = 일평균소진 × 리드타임 {meta.leadDays}일 + 프로모션 확보분 · {channel === "소매" || channel === "도매" ? `권장생산·주문필요는 ${channel} 기준` : "권장생산은 소매+도매 합, 주문필요는 더 급한 채널 기준"} · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</p>}
 
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {advice && (
@@ -432,7 +432,7 @@ export default function InventoryPage() {
                       const over = r.qty < ld.reserved - ld.reserved_consumed; // 예약 침범 상태
                       return (
                         <span style={{ display: "block", fontWeight: 400, fontSize: 11, lineHeight: 1.25, color: over ? "var(--sm-danger)" : "var(--sm-info)" }}
-                          title={`도매 대량 납품용으로 잡아둔 몫입니다${ld.reserved_consumed > 0 ? `\n그중 ${ld.reserved_consumed.toLocaleString()}은 이미 발송돼 나갔습니다 — 요청서를 '납품 완료'로 처리하세요` : ""}${over ? "\n현재고가 예약보다 적습니다(예약 침범)" : ""}\n${ld.wholesale_detail || ""}`}>
+                          title={`도매 대량 납품용으로 잡아둔 몫입니다${ld.reserved_consumed > 0 ? `\n그중 ${ld.reserved_consumed.toLocaleString()}은 이미 발송돼 나갔습니다 — 요청서를 '생산 완료 처리'로 처리하세요` : ""}${over ? "\n현재고가 예약보다 적습니다(예약 침범)" : ""}\n${ld.wholesale_detail || ""}`}>
                           예약 {ld.reserved.toLocaleString()}
                           {ld.reserved_consumed > 0 && <span className="sm-faint" style={{ display: "block" }}>그중 나감 {ld.reserved_consumed.toLocaleString()}</span>}
                         </span>

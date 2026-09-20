@@ -142,7 +142,7 @@ export function RequestList() {
   const [recReady, setRecReady] = useState(false);
 
   // 요청서별 예약 현황(표시 전용) — 도매 납품 요청서에 배정된 몫과 그중 이미 발송으로 나간 양.
-  //  '납품 완료'를 눌러야 예약이 풀리므로, 나간 뒤 안 누른 요청서를 여기서 드러낸다.
+  //  '생산 완료 처리'를 눌러야 예약이 풀리므로, 나간 뒤 안 누른 요청서를 여기서 드러낸다.
   //  (docs/demand-streams-plan.md 1단계 — 어떤 계산도 이 값을 쓰지 않는다)
   const [reqLoad, setReqLoad] = useState<Map<string, ReqLoad>>(new Map());
   useEffect(() => {
@@ -447,7 +447,7 @@ function RequestRow({ req, load, expanded, busy, onToggle, onCancelReceipt, onSt
           {/* 예약 배지(도매 납품) — 배정된 몫과 그중 나간 양. 나갔는데 완료를 안 누르면 예약이 계속 잡혀 있다 */}
           {load && load.reserved > 0 && (
             <span className="sm-faint" style={{ display: "block", fontSize: 12, color: load.consumed > 0 ? "var(--sm-warning)" : "var(--sm-info)" }}
-              title={`도매 대량 납품용으로 잡아둔 몫 ${load.reserved.toLocaleString()}${load.consumed > 0 ? `\n그중 ${load.consumed.toLocaleString()}은 이미 발송됐습니다 — '납품 완료'를 눌러야 예약이 풀립니다` : ""}`}>
+              title={`도매 대량 납품용으로 잡아둔 몫 ${load.reserved.toLocaleString()}${load.consumed > 0 ? `\n그중 ${load.consumed.toLocaleString()}은 이미 발송됐습니다 — '생산 완료 처리'를 눌러야 예약이 풀립니다` : ""}`}>
               예약 {load.reserved.toLocaleString()}{load.consumed > 0 ? ` · 나감 ${load.consumed.toLocaleString()}` : ""}
             </span>
           )}
