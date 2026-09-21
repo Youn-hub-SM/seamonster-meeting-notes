@@ -256,7 +256,17 @@ async function pollCoupang() {
 }
 
 // ── 카페24 ──────────────────────────────────────────────
-async function cafe24Token() {
+// 카페24가 돌려주는 expires_at 에는 시간대 표시가 없다 — 값은 KST 인데 Node 는 이를 서버 로컬(UTC)로
+//  읽어 9시간 뒤로 본다. 그러면 '아직 유효'로 착각해 갱신을 건너뛰고 죽은 토큰으로 401 을 계속 맞는다
+//  (2026-09-21 실측: 하루 2시간만 동작, 9시간씩 정지). 시간대 표시가 없으면 KST 로 못박아 읽는다.
+function cafe24ExpiresMs(v) {
+  const s = String(v || "").trim();
+  if (!s) return 0;
+  const t = Date.parse(/(?:Z|[+-]\d{2}:?\d{2})$/.test(s) ? s : `${s}+09:00`);
+  return Number.isFinite(t) ? t : 0;
+}
+
+async function cafe24Token(force = false) {
   const mallId = (env.CAFE24_MALL_ID || "").trim();
   const clientId = (env.CAFE24_CLIENT_ID || "").trim();
   const clientSecret = (env.CAFE24_CLIENT_SECRET || "").trim();
@@ -264,7 +274,7 @@ async function cafe24Token() {
   if (!mallId || !clientId || !clientSecret || !fs.existsSync(tokenFile)) throw new Error("카페24 자격증명/토큰 없음");
   const saved = JSON.parse(fs.readFileSync(tokenFile, "utf8"));
   // access_token 이 아직 유효하면 refresh 하지 않는다 — 토큰 파일 회전 경합(감사 확정)을 늘리지 않기 위해
-  if (saved.access_token && saved.expires_at && new Date(saved.expires_at).getTime() - Date.now() > 5 * 60_000) {
+  if (!force && saved.access_token && cafe24ExpiresMs(saved.expires_at) - Date.now() > 5 * 60_000) {
     return { token: saved.access_token, mallId };
   }
   for (let attempt = 0; ; attempt++) {
@@ -297,13 +307,15 @@ const CAFE24_GROUPS = [
 ];
 
 async function pollCafe24() {
-  const { token, mallId } = await cafe24Token();
+  let { token, mallId } = await cafe24Token();
+  let retried = false; // 401 = 만료시각을 잘못 믿은 경우 — 강제 갱신 후 한 번만 다시
   const k = kstNow();
   const day = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
   const start = day(new Date(k.getTime() - 2 * 86400_000)); // 요청일 기준 최근 3일(겹침) — 서버 dedup
   const end = day(k);
   const claims = [];
-  for (const g of CAFE24_GROUPS) {
+  for (let gi = 0; gi < CAFE24_GROUPS.length; gi++) {
+    const g = CAFE24_GROUPS[gi];
     const qs = new URLSearchParams({
       embed: "items", order_status: g.reqStatus, date_type: g.dateType,
       start_date: start, end_date: end, limit: "500",
@@ -313,6 +325,12 @@ async function pollCafe24() {
       signal: timeout(),
     });
     const j = await res.json().catch(() => ({}));
+    if (res.status === 401 && !retried) {
+      retried = true;                       // 강제 갱신은 폴링 1회당 한 번만(토큰 파일 회전 경합 방지)
+      ({ token } = await cafe24Token(true));
+      gi--;                                 // 이 그룹을 건너뛰지 않고 같은 그룹부터 다시
+      continue;
+    }
     if (!res.ok) {
       const msg = j.error?.message || j.message || "";
       if (res.status === 403 || res.status === 422) {
