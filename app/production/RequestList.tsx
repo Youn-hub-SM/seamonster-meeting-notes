@@ -17,8 +17,6 @@ function todayIso() { return new Date(Date.now() + 9 * 3600e3).toISOString().sli
 // ───────────────────────────── 도매 재고 생산 요청 ─────────────────────────────
 
 type Prod = { product_id: string; sku: string | null; name: string; spec: string | null; unit: string; qty: number };
-// 요청서별 예약 현황(표시 전용, /api/production/openload)
-type ReqLoad = { request_id: string; reserved: number; consumed: number; remain: number; stale: boolean };
 
 type NewLine = {
   item_id?: string;          // 수정 모드: 기존 라인 id (신규 추가 라인은 없음)
@@ -141,18 +139,6 @@ export function RequestList() {
   const [recWhole, setRecWhole] = useState<Map<string, number>>(new Map());
   const [recReady, setRecReady] = useState(false);
 
-  // 요청서별 예약 현황(표시 전용) — 도매 납품 요청서에 배정된 몫과 그중 이미 발송으로 나간 양.
-  //  '생산 완료 처리'를 눌러야 예약이 풀리므로, 나간 뒤 안 누른 요청서를 여기서 드러낸다.
-  //  (docs/demand-streams-plan.md 1단계 — 어떤 계산도 이 값을 쓰지 않는다)
-  const [reqLoad, setReqLoad] = useState<Map<string, ReqLoad>>(new Map());
-  useEffect(() => {
-    (async () => {
-      try {
-        const j = await (await fetch("/api/production/openload", { cache: "no-store" })).json();
-        if (j.ok) setReqLoad(new Map(((j.requests || []) as ReqLoad[]).map((x) => [x.request_id, x])));
-      } catch { /* 배지 없이 목록은 그대로 */ }
-    })();
-  }, [requests]);
   useEffect(() => {
     (async () => {
       try {
@@ -372,7 +358,7 @@ export function RequestList() {
             <tbody>
               {displayed.map((r) => (
                 <RequestRow
-                  key={r.id} req={r} load={reqLoad.get(r.id)} expanded={expandedId === r.id} busy={busy}
+                  key={r.id} req={r} expanded={expandedId === r.id} busy={busy}
                   onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)}
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
                   onStatus={(s) => patchStatus(r.id, s)}
@@ -409,8 +395,8 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, load, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onEdit, onDelete }: {
-  req: ProductionRequest; load?: ReqLoad; expanded: boolean; busy: boolean;
+function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onEdit, onDelete }: {
+  req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
@@ -444,14 +430,6 @@ function RequestRow({ req, load, expanded, busy, onToggle, onCancelReceipt, onSt
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>
           {req.due_date || "-"}
-          {/* 예약 배지(도매 납품) — 배정된 몫과 그중 나간 양. 나갔는데 완료를 안 누르면 예약이 계속 잡혀 있다 */}
-          {load && load.reserved > 0 && (
-            <span className="sm-faint" style={{ display: "block", fontSize: 12, color: load.consumed > 0 ? "var(--sm-warning)" : "var(--sm-info)" }}
-              title={`도매 대량 납품용으로 잡아둔 몫 ${load.reserved.toLocaleString()}${load.consumed > 0 ? `\n그중 ${load.consumed.toLocaleString()}은 이미 발송됐습니다 — '생산 완료 처리'를 눌러야 예약이 풀립니다` : ""}`}>
-              예약 {load.reserved.toLocaleString()}{load.consumed > 0 ? ` · 나감 ${load.consumed.toLocaleString()}` : ""}
-            </span>
-          )}
-          {load?.stale && <span style={{ display: "block", fontSize: 12, color: "var(--sm-danger)" }} title="목표일이 한참 지나 계산에서 빠졌습니다 — 완료 처리하거나 목표일을 고치세요">시한 지남 · 정리</span>}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
           {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}

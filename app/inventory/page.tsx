@@ -104,22 +104,6 @@ export default function InventoryPage() {
   // 한쪽 채널만 실패하면 권장이 조용히 축소되어(합인데 한쪽만) 부족한 수량을 요청하게 된다 → 경고를 띄운다.
   const [prodWarn, setProdWarn] = useState("");
 
-  // ── 열린 요청서 부하(예약·그중 나감) — 표시 전용. 권장 수식은 이 값을 쓰지 않는다.
-  //  (docs/demand-streams-plan.md 1단계. 대표가 2주간 실제 숫자를 눈으로 검증한 뒤 3단계에서 보유 계산에 들어간다)
-  type LoadRow = { product_id: string; reserved: number; reserved_consumed: number; wholesale_detail: string };
-  const [loadMap, setLoadMap] = useState<Map<string, LoadRow>>(new Map());
-  const [loadOk, setLoadOk] = useState(true);
-  useEffect(() => {
-    (async () => {
-      try {
-        const j = await (await fetch("/api/production/openload", { cache: "no-store" })).json();
-        if (j.ok) {
-          setLoadMap(new Map(((j.rows || []) as LoadRow[]).map((x) => [x.product_id, x])));
-          setLoadOk(j.ok_load !== false);
-        } else setLoadOk(false);
-      } catch { setLoadOk(false); }
-    })();
-  }, []);
   const prodLoad = useCallback(async () => {
     try {
       const [r, w] = await Promise.all([
@@ -304,7 +288,6 @@ export default function InventoryPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
       {prodWarn && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn}</div>}
-      {!loadOk && <div className="sm-warn" style={{ marginBottom: 12 }}>열린 생산 요청서의 예약 현황을 불러오지 못했습니다 — 현재고 옆 &lsquo;예약&rsquo; 표시가 비어 있을 수 있습니다(권장생산 계산에는 영향이 없습니다).</div>}
 
       {/* 데이터박스 6종 — 재고 4 + 생산 2 (생산 권장 품목 = 안전재고(행사·보정 반영) 미달과 동일 데이터라 통합) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
@@ -424,20 +407,6 @@ export default function InventoryPage() {
                   <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
                     {r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {(r.promo_pool ?? 0) > 0 && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 4, color: "var(--sm-warning)" }} title="프로모션 풀에 확보된 행사분(자동 출고 보호)">+프로모션 {r.promo_pool.toLocaleString()}</span>}
-                    {/* 예약 = 열린 도매 납품 요청서에 배정된 몫(임자가 있는 재고). 도매·전체 탭에만 — 소매엔 해당 없음.
-                        1단계는 표시 전용이라 권장생산·부족 판정은 아직 이 값을 쓰지 않는다. 열 폭이 좁아 줄바꿈 허용. */}
-                    {channel !== "소매" && (() => {
-                      const ld = loadMap.get(r.product_id);
-                      if (!ld || ld.reserved <= 0) return null;
-                      const over = r.qty < ld.reserved - ld.reserved_consumed; // 예약 침범 상태
-                      return (
-                        <span style={{ display: "block", fontWeight: 400, fontSize: 11, lineHeight: 1.25, color: over ? "var(--sm-danger)" : "var(--sm-info)" }}
-                          title={`도매 대량 납품용으로 잡아둔 몫입니다${ld.reserved_consumed > 0 ? `\n그중 ${ld.reserved_consumed.toLocaleString()}은 이미 발송돼 나갔습니다 — 요청서를 '생산 완료 처리'로 처리하세요` : ""}${over ? "\n현재고가 예약보다 적습니다(예약 침범)" : ""}\n${ld.wholesale_detail || ""}`}>
-                          예약 {ld.reserved.toLocaleString()}
-                          {ld.reserved_consumed > 0 && <span className="sm-faint" style={{ display: "block" }}>그중 나감 {ld.reserved_consumed.toLocaleString()}</span>}
-                        </span>
-                      );
-                    })()}
                   </td>
                   <td className="num b2b-money" title={r.promo_qty ? `프로모션 확보분 +${r.promo_qty.toLocaleString()} 포함` : undefined}>{r.auto_safety.toLocaleString()}{r.promo_qty ? <span style={{ color: "var(--sm-orange)", fontSize: 12, marginLeft: 2 }}></span> : null}</td>
                   <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>

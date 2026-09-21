@@ -23,9 +23,6 @@ export default function InventoryMovePage() {
   const [retail, setRetail] = useState<Map<string, number>>(new Map());
   const [whole, setWhole] = useState<Map<string, number>>(new Map());
   const [promo, setPromo] = useState<Map<string, number>>(new Map());
-  // 도매 예약(열린 도매 납품 요청서에 배정된 몫) — 표시 전용. 옮길 때 남의 몫을 건드리는지 눈으로 보라고 붙인다.
-  type LoadRow = { product_id: string; reserved: number; reserved_consumed: number; wholesale_detail: string };
-  const [load, setLoad] = useState<Map<string, LoadRow>>(new Map());
   const [moves, setMoves] = useState<Move[]>([]);
 
   const [lines, setLines] = useState<Line[]>([newLine(1)]);
@@ -39,14 +36,12 @@ export default function InventoryMovePage() {
   const [ok, setOk] = useState("");
 
   const loadStock = useCallback(async () => {
-    const [r, w, p, m, ol] = await Promise.all([
+    const [r, w, p, m] = await Promise.all([
       fetch("/api/inventory?channel=소매", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
       fetch("/api/inventory?channel=도매", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
       fetch("/api/inventory?channel=프로모션", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
       fetch("/api/inventory/move?limit=50", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
-      fetch("/api/production/openload", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
     ]);
-    if (ol?.ok) setLoad(new Map(((ol.rows || []) as LoadRow[]).map((x) => [x.product_id, x])));
     if (r?.ok) setRetail(new Map((r.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])));
     if (w?.ok) setWhole(new Map((w.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])));
     if (p?.ok) setPromo(new Map((p.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])));
@@ -226,11 +221,7 @@ export default function InventoryMovePage() {
               {l.pid && (
                 <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 14, flexWrap: "wrap", alignItems: "center" }}>
                   <span className="b2b-status-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>소매 {(retail.get(l.pid) ?? 0).toLocaleString()}</span>
-                  <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}
-                    title={(() => { const ld = load.get(l.pid); return ld && ld.reserved > 0 ? `그중 ${ld.reserved.toLocaleString()}은 도매 대량 납품용 예약분입니다${ld.reserved_consumed > 0 ? ` (${ld.reserved_consumed.toLocaleString()}은 이미 나감)` : ""}\n${ld.wholesale_detail || ""}` : undefined; })()}>
-                    도매 {(whole.get(l.pid) ?? 0).toLocaleString()}
-                    {(() => { const ld = load.get(l.pid); return ld && ld.reserved > 0 ? <span className="sm-faint" style={{ marginLeft: 4 }}>(예약 {ld.reserved.toLocaleString()})</span> : null; })()}
-                  </span>
+                  <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>도매 {(whole.get(l.pid) ?? 0).toLocaleString()}</span>
                   <span className="b2b-status-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>프로모션 {(promo.get(l.pid) ?? 0).toLocaleString()}</span>
                   <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={l.qty}
                     onChange={(e) => patchLine(l.key, { qty: e.target.value })}
