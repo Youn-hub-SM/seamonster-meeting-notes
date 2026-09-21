@@ -83,15 +83,23 @@ export async function POST(req: NextRequest) {
           ? `- [${c.claim_type}] ${c.product_name ? `${c.product_name} — ` : ""}${(c.reason || "(내용 없음)").slice(0, 120)}${c.order_id ? ` · 주문 ${c.order_id}` : ""}`
           : `- [${c.claim_type}] ${c.product_name || "(상품명 미상)"}${c.option_name ? ` / ${c.option_name}` : ""}${c.qty ? ` x${c.qty}` : ""}` +
             `${c.order_id ? ` · 주문 ${c.order_id}` : ""}${c.reason ? ` · 사유: ${c.reason}` : ""}`;
-      const lines = inserted.slice(0, 15).map(lineOf);
-      if (inserted.length > 15) lines.push(`- 외 ${inserted.length - 15}건`);
-      // 폴러가 클레임과 문의를 따로 전송하므로 한 게시물은 보통 한 종류 — 제목을 그에 맞춘다
-      const kinds = [...new Set(inserted.map((c) => c.claim_type))];
-      const header = inserted.every((c) => INQUIRY_TYPES.has(c.claim_type))
-        ? `${channel} 새 고객문의 ${inserted.length}건 (${kinds.join("/")})`
-        : `${channel} 승인·처리 필요 클레임 ${inserted.length}건 (취소/반품/교환)`;
-      const summary = `${header}\n${lines.join("\n")}`;
-      await mirrorB2BTeams(summary, null, null, { claims: true });
+      // 클레임과 고객문의는 채널이 다르다(2026-09-21 대표 지시) — 섞여 와도 각자 채널로 한 장씩.
+      //  폴러는 보통 한 종류씩 보내지만, 한쪽이 비면 그 게시물은 아예 만들지 않는다.
+      const groups: { rows: typeof inserted; inquiry: boolean }[] = [
+        { rows: inserted.filter((c) => !INQUIRY_TYPES.has(c.claim_type)), inquiry: false },
+        { rows: inserted.filter((c) => INQUIRY_TYPES.has(c.claim_type)), inquiry: true },
+      ];
+      for (const g of groups) {
+        if (!g.rows.length) continue;
+        const lines = g.rows.slice(0, 15).map(lineOf);
+        if (g.rows.length > 15) lines.push(`- 외 ${g.rows.length - 15}건`);
+        const kinds = [...new Set(g.rows.map((c) => c.claim_type))];
+        const header = g.inquiry
+          ? `${channel} 새 고객문의 ${g.rows.length}건 (${kinds.join("/")})`
+          : `${channel} 승인·처리 필요 클레임 ${g.rows.length}건 (${kinds.join("/")})`;
+        await mirrorB2BTeams(`${header}\n${lines.join("\n")}`, null, null,
+          g.inquiry ? { inquiry: true } : { claims: true });
+      }
       notified = inserted.length;
       const keys = inserted.map((c) => c.claim_key);
       await sb.from("channel_claims").update({ notified_at: new Date().toISOString() })

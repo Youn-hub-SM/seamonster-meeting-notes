@@ -12,8 +12,10 @@ const KV_KEY = "b2b_teams";
 // url = 'B2B 알림' 채널(발주 알림·일정 브리핑), helperUrl = '업무도우미 변경알림' 채널(생산·재고).
 //  Flow 의 봇 2종(기본 봇 / 업무도우미 변경알림 봇) 구조를 채널 2개로 그대로 매핑한다.
 //  helperUrl 이 비어 있으면 helper 알림도 url 로 보낸다(Flow 의 '헬퍼봇 미구성 시 기본 봇 폴백'과 동일).
-//  claimsUrl = '클레임 알림' 채널(채널 취소·반품·교환 요청 + 고객문의 등록). 비어 있으면 helperUrl → url 로 폴백.
-export type B2BTeamsConfig = { url: string; helperUrl: string; claimsUrl: string; enabled: boolean };
+//  claimsUrl = '클레임 알림' 채널(채널 취소·반품·교환 요청). 비어 있으면 helperUrl → url 로 폴백.
+//  inquiryUrl = '고객문의 알림' 채널(주문문의·상품Q&A·고객센터문의). 성격이 달라 클레임과 분리
+//   (2026-09-21 대표 지시). 비어 있으면 claimsUrl → helperUrl → url 로 폴백 — 미설정이어도 알림은 계속 간다.
+export type B2BTeamsConfig = { url: string; helperUrl: string; claimsUrl: string; inquiryUrl: string; enabled: boolean };
 
 export async function getB2BTeamsConfig(): Promise<B2BTeamsConfig> {
   try {
@@ -23,10 +25,11 @@ export async function getB2BTeamsConfig(): Promise<B2BTeamsConfig> {
       url: typeof v.url === "string" ? v.url : "",
       helperUrl: typeof v.helperUrl === "string" ? v.helperUrl : "",
       claimsUrl: typeof v.claimsUrl === "string" ? v.claimsUrl : "",
+      inquiryUrl: typeof v.inquiryUrl === "string" ? v.inquiryUrl : "",
       enabled: !!v.enabled,
     };
   } catch {
-    return { url: "", helperUrl: "", claimsUrl: "", enabled: false };
+    return { url: "", helperUrl: "", claimsUrl: "", inquiryUrl: "", enabled: false };
   }
 }
 
@@ -113,19 +116,23 @@ export async function mirrorB2BTeams(
   summary: string,
   actor: string | null,
   link?: string | null,
-  opts?: { helper?: boolean; claims?: boolean },
+  opts?: { helper?: boolean; claims?: boolean; inquiry?: boolean },
 ): Promise<void> {
   try {
     const cfg = await getB2BTeamsConfig();
     if (!cfg.enabled) return;
-    // 클레임=전용 채널(없으면 변경알림→B2B 폴백), 생산·재고=변경알림(없으면 B2B 폴백), 그 외=B2B
-    const target = opts?.claims ? (cfg.claimsUrl || cfg.helperUrl || cfg.url)
+    // 고객문의=전용 채널(없으면 클레임→변경알림→B2B 폴백), 클레임=전용 채널(없으면 변경알림→B2B),
+    //  생산·재고=변경알림(없으면 B2B), 그 외=B2B. inquiry 를 claims 보다 먼저 본다(둘 다 켜면 문의 우선).
+    const target = opts?.inquiry ? (cfg.inquiryUrl || cfg.claimsUrl || cfg.helperUrl || cfg.url)
+      : opts?.claims ? (cfg.claimsUrl || cfg.helperUrl || cfg.url)
       : opts?.helper ? (cfg.helperUrl || cfg.url)
       : cfg.url;
     if (!target) return;
     let text = summary;
     if (actor) text += `\n— 작업자: ${actor}`;
-    const title = opts?.claims ? "채널 클레임·문의 알림" : opts?.helper ? "업무도우미 변경알림" : "씨몬스터 B2B";
+    const title = opts?.inquiry ? "채널 고객문의 알림"
+      : opts?.claims ? "채널 클레임 알림"
+      : opts?.helper ? "업무도우미 변경알림" : "씨몬스터 B2B";
     const r = await sendTeamsWebhook(target, text, { title, link });
     // 실패를 완전 무음으로 두면 웹훅이 죽어도(URL 회수·만료) 알림 전체가 조용히 정지한다(감사 확정)
     //  — 발송은 막지 않되 서버 로그에는 남긴다.

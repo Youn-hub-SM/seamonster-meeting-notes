@@ -38,13 +38,16 @@ export default function TeamsSettingsPage() {
   const [teamsUrl, setTeamsUrl] = useState("");
   const [teamsHelperUrl, setTeamsHelperUrl] = useState("");
   const [teamsClaimsUrl, setTeamsClaimsUrl] = useState("");
+  const [teamsInquiryUrl, setTeamsInquiryUrl] = useState("");
   const [teamsEnabled, setTeamsEnabled] = useState(false);
   const [teamsHasUrl, setTeamsHasUrl] = useState(false);
   const [teamsHasHelper, setTeamsHasHelper] = useState(false);
   const [teamsHasClaims, setTeamsHasClaims] = useState(false);
+  const [teamsHasInquiry, setTeamsHasInquiry] = useState(false);
   const [teamsTail, setTeamsTail] = useState("");
   const [teamsHelperTail, setTeamsHelperTail] = useState("");
   const [teamsClaimsTail, setTeamsClaimsTail] = useState("");
+  const [teamsInquiryTail, setTeamsInquiryTail] = useState("");
   const [teamsBusy, setTeamsBusy] = useState(false);
   const [teamsMsg, setTeamsMsg] = useState<Msg | null>(null);
   useEffect(() => {
@@ -55,6 +58,7 @@ export default function TeamsSettingsPage() {
           setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsTail(j.urlTail || "");
           setTeamsHasHelper(!!j.hasHelperUrl); setTeamsHelperTail(j.helperTail || "");
           setTeamsHasClaims(!!j.hasClaimsUrl); setTeamsClaimsTail(j.claimsTail || "");
+          setTeamsHasInquiry(!!j.hasInquiryUrl); setTeamsInquiryTail(j.inquiryTail || "");
         }
       } catch { /* 카드만 비활성 */ }
     })();
@@ -64,13 +68,13 @@ export default function TeamsSettingsPage() {
     try {
       const j = await (await fetch("/api/b2b/settings/teams", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: teamsUrl, helperUrl: teamsHelperUrl, claimsUrl: teamsClaimsUrl, enabled: nextEnabled ?? teamsEnabled }),
+        body: JSON.stringify({ url: teamsUrl, helperUrl: teamsHelperUrl, claimsUrl: teamsClaimsUrl, inquiryUrl: teamsInquiryUrl, enabled: nextEnabled ?? teamsEnabled }),
       })).json();
       if (!j.ok) throw new Error(j.error || "저장 실패");
-      setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsHasHelper(!!j.hasHelperUrl); setTeamsHasClaims(!!j.hasClaimsUrl);
-      setTeamsUrl(""); setTeamsHelperUrl(""); setTeamsClaimsUrl("");
+      setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsHasHelper(!!j.hasHelperUrl); setTeamsHasClaims(!!j.hasClaimsUrl); setTeamsHasInquiry(!!j.hasInquiryUrl);
+      setTeamsUrl(""); setTeamsHelperUrl(""); setTeamsClaimsUrl(""); setTeamsInquiryUrl("");
       const j2 = await (await fetch("/api/b2b/settings/teams", { cache: "no-store" })).json();
-      if (j2.ok) { setTeamsTail(j2.urlTail || ""); setTeamsHelperTail(j2.helperTail || ""); setTeamsClaimsTail(j2.claimsTail || ""); }
+      if (j2.ok) { setTeamsTail(j2.urlTail || ""); setTeamsHelperTail(j2.helperTail || ""); setTeamsClaimsTail(j2.claimsTail || ""); setTeamsInquiryTail(j2.inquiryTail || ""); }
       setTeamsMsg({ ok: true, text: "저장했습니다." });
     } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" }); }
     setTeamsBusy(false);
@@ -257,6 +261,11 @@ export default function TeamsSettingsPage() {
             <span className="b2b-field-label">클레임 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(채널 취소·반품·교환 요청){teamsHasClaims ? ` · 저장됨 ${teamsClaimsTail} — 비워두면 유지` : " · 비우면 변경알림·B2B 채널로 폴백"}</span></span>
             <input className="b2b-input" type="password" value={teamsClaimsUrl} onChange={(e) => setTeamsClaimsUrl(e.target.value)}
               placeholder={teamsHasClaims ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
+          </label>
+          <label className="b2b-field">
+            <span className="b2b-field-label">고객문의 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(주문문의·상품Q&amp;A·고객센터문의){teamsHasInquiry ? ` · 저장됨 ${teamsInquiryTail} — 비워두면 유지` : " · 비우면 클레임 채널로 폴백"}</span></span>
+            <input className="b2b-input" type="password" value={teamsInquiryUrl} onChange={(e) => setTeamsInquiryUrl(e.target.value)}
+              placeholder={teamsHasInquiry ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
           </label>
           <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <label className="sm-row" style={{ gap: 6, fontSize: 13, cursor: "pointer" }}>
