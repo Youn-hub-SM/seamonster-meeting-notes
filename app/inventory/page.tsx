@@ -28,6 +28,7 @@ type ProdRow = {
   sku: string; name: string; stock: number | null; dailyOut: number; rawDailyOut: number;
   autoSafety: number; promoQty: number; adjust: number; adjustRaw: number; adjustExcludeRaw: number;
   adjustMemo: string; adjustUntil: string | null; safety: number; recommend: number;
+  inbound?: number; inboundDue?: string | null; // 입고 예정(열린 제조사 요청서 잔여) — 권장에서 이미 뺀 양
   requestByDays: number | null; requestBy: string | null;
 };
 type Priority = { sku: string; name: string; urgency: string; qty: number; byWhen: string; reason: string };
@@ -45,21 +46,24 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
 //  품목은 가중치를 25% 올렸다(112→140). 늘린 28px 은 여유가 남던 열에서 되가져와
 //  합계(=TABLE_MIN)는 그대로다 — 1366 창의 무스크롤을 지키기 위해. 줄인 열도 헤더·내용이 잘리지 않는 걸 실측 확인했다.
 const COL = {
-  chk: 31, sku: 108, name: 140, qty: 72, safety: 76, daily: 78, dep: 76,
-  pin: 64, pout: 64, val: 96, rec: 76, req: 78, act: 78, adj: 69,
+  chk: 31, sku: 108, name: 140, qty: 72, daily: 78, dep: 76,
+  inb: 84, req: 78, rec: 76, pin: 64, pout: 64, val: 96, act: 78, adj: 69,
 } as const;
 const TABLE_MIN = Object.values(COL).reduce((a, b) => a + b, 0); // 1106 — 사이드바(237)+스크롤바(15) 더해도 1366 창에 들어간다
 const pct = (px: number) => `${((px / TABLE_MIN) * 100).toFixed(3)}%`;
 
 // 정렬 가능한 컬럼(생산 열 포함)
-type SortKey = "name" | "qty" | "auto_safety" | "depletion_days" | "period_in" | "period_out" | "daily_out" | "value" | "recommend" | "request_by";
+type SortKey = "name" | "qty" | "inbound" | "depletion_days" | "period_in" | "period_out" | "daily_out" | "value" | "recommend" | "request_by";
 const numKey = (r: OverviewRow, k: Exclude<SortKey, "recommend" | "request_by">): number | string =>
-  k === "name" ? r.name : k === "depletion_days" ? (r.depletion_days ?? Number.POSITIVE_INFINITY) : (r[k] as number);
+  k === "name" ? r.name
+    : k === "depletion_days" ? (r.depletion_days ?? Number.POSITIVE_INFINITY)
+    : k === "inbound" ? (r.inbound ?? 0)   // 선택 필드 — 없으면 0 으로 내려야 정렬이 NaN 으로 깨지지 않는다
+    : (r[k] as number);
 
 export default function InventoryPage() {
   const router = useRouter();
   const [rows, setRows] = useState<OverviewRow[]>([]);
-  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number } | null>(null);
+  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; inboundOk?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -99,7 +103,7 @@ export default function InventoryPage() {
   const prodChannel = channel === "도매" ? "도매" : "소매"; // AI 조언용(조언 API 는 단일 채널)
   const [retailMap, setRetailMap] = useState<Map<string, ProdRow>>(new Map());
   const [wholeMap, setWholeMap] = useState<Map<string, ProdRow>>(new Map());
-  const [prodLead, setProdLead] = useState(10);
+  const [prodLead, setProdLead] = useState(7); // 안전재고 지평(리드타임 + 발주 주기) — 보정 미리보기용
   const [spanDays, setSpanDays] = useState(0);
   // 한쪽 채널만 실패하면 권장이 조용히 축소되어(합인데 한쪽만) 부족한 수량을 요청하게 된다 → 경고를 띄운다.
   const [prodWarn, setProdWarn] = useState("");
@@ -112,12 +116,15 @@ export default function InventoryPage() {
       ]);
       if (r.ok) {
         setRetailMap(new Map(((r.rows || []) as ProdRow[]).map((x) => [x.sku.toUpperCase(), x])));
-        setProdLead(r.leadDays || 10);
+        setProdLead(r.horizonDays || r.leadDays || 7);
         setSpanDays(r.velocitySpanDays || 0);
       }
       if (w.ok) setWholeMap(new Map(((w.rows || []) as ProdRow[]).map((x) => [x.sku.toUpperCase(), x])));
       const bad = [!r.ok && "소매", !w.ok && "도매"].filter(Boolean).join("·");
-      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 실제보다 적게 보일 수 있습니다.` : "");
+      // 입고 예정 집계 실패는 반대 방향(권장 과대 = 시켜 둔 물량을 또 시킴) — 따로 알린다
+      const inbBad = r.ok && r.inboundOk === false;
+      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 실제보다 적게 보일 수 있습니다.`
+        : inbBad ? "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 권장생산이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다." : "");
     } catch {
       setProdWarn("생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 비어 있거나 실제보다 적게 보일 수 있습니다.");
     }
@@ -287,7 +294,7 @@ export default function InventoryPage() {
       </header>
 
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
-      {prodWarn && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn}</div>}
+      {(prodWarn || meta?.inboundOk === false) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
 
       {/* 데이터박스 6종 — 재고 4 + 생산 2 (생산 권장 품목 = 안전재고(행사·보정 반영) 미달과 동일 데이터라 통합) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
@@ -320,8 +327,7 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 안전재고 = 일평균소진 × 리드타임 {meta.leadDays}일 + 프로모션 확보분 · {channel === "소매" || channel === "도매" ? `권장생산·주문필요는 ${channel} 기준` : "권장생산은 소매+도매 합, 주문필요는 더 급한 채널 기준"} · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</p>}
-
+      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·주문필요·권장생산은 최근 30일 기준 · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`}{channel === "도매" ? "" : " + 프로모션 확보분"} · {channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = 목표 − (현재고 + 입고 예정)"} · {channel === "소매" || channel === "도매" ? `권장생산·주문필요는 ${channel} 기준` : "권장생산은 소매+도매 합, 주문필요는 더 급한 채널 기준"} · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</p>}
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {advice && (
         <section style={{ marginBottom: 18 }}>
@@ -375,10 +381,11 @@ export default function InventoryPage() {
             <thead><tr>
               <th style={{ width: pct(COL.chk) }}><input type="checkbox" checked={allChecked} onChange={toggleAll} title="권장 생산 있는 품목 전체 선택" /></th>
               <th style={{ width: pct(COL.sku) }}>SKU</th><Th k="name" label="품목" w={pct(COL.name)} />
-              <Th k="qty" label="현재고" num w={pct(COL.qty)} /><Th k="auto_safety" label="안전재고" num w={pct(COL.safety)} /><Th k="daily_out" label="하루 출고" num w={pct(COL.daily)} /><Th k="depletion_days" label="예상소진" num w={pct(COL.dep)} />
+              {/* 상태(지금 어떤가) → 판단(무엇을 할까) → 참고(기간 실적). 결정 17 */}
+              <Th k="qty" label="현재고" num w={pct(COL.qty)} /><Th k="daily_out" label="하루 출고" num w={pct(COL.daily)} /><Th k="depletion_days" label="예상소진" num w={pct(COL.dep)} />
+              <Th k="inbound" label="입고 예정" num w={pct(COL.inb)} /><Th k="request_by" label="주문필요" num w={pct(COL.req)} /><Th k="recommend" label="권장생산" num w={pct(COL.rec)} />
               <Th k="period_in" label="총입고" num w={pct(COL.pin)} /><Th k="period_out" label="총출고" num w={pct(COL.pout)} />
               <Th k="value" label="재고자산" num w={pct(COL.val)} />
-              <Th k="recommend" label="권장생산" num w={pct(COL.rec)} /><Th k="request_by" label="주문필요" num w={pct(COL.req)} />
               <th style={{ width: pct(COL.act) }}></th><th className="num" style={{ width: pct(COL.adj) }}>보정</th>
             </tr></thead>
             <tbody>
@@ -391,7 +398,7 @@ export default function InventoryPage() {
                 <tr key={r.product_id}
                   className={`${pv.has ? "is-pick" : ""} ${picked ? "is-sel" : ""}`}
                   onClick={pv.has ? () => toggleSel(r.product_id) : undefined}
-                  style={{ background: r.low ? "var(--sm-danger-bg)" : undefined }}>
+                  >
                   <td onClick={(e) => e.stopPropagation()}>{pv.has ? <input type="checkbox" checked={picked} onChange={() => toggleSel(r.product_id)} /> : null}</td>
                   <td className="sm-faint" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sku || "-"}</td>
                   {/* 비례 배분이라 넓은 화면에서도 품목 폭이 무한정 늘지는 않는다 → 잘린 이름은 마우스를 올려 확인 */}
@@ -404,17 +411,29 @@ export default function InventoryPage() {
                       {r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}
                     </button>
                   </td>
-                  <td className="num b2b-money" style={{ fontWeight: 700, color: r.low ? "var(--sm-danger)" : "var(--sm-black)" }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
+                  <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
                     {r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {(r.promo_pool ?? 0) > 0 && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 4, color: "var(--sm-warning)" }} title="프로모션 풀에 확보된 행사분(자동 출고 보호)">+프로모션 {r.promo_pool.toLocaleString()}</span>}
                   </td>
-                  <td className="num b2b-money" title={r.promo_qty ? `프로모션 확보분 +${r.promo_qty.toLocaleString()} 포함` : undefined}>{r.auto_safety.toLocaleString()}{r.promo_qty ? <span style={{ color: "var(--sm-orange)", fontSize: 12, marginLeft: 2 }}></span> : null}</td>
                   <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>
-                  <td className="num b2b-money" style={{ color: r.depletion_days == null ? "var(--sm-text-light)" : r.depletion_days <= (meta?.leadDays ?? 10) ? "var(--sm-danger)" : "var(--sm-black)" }}>{r.depletion_days == null ? "-" : `${r.depletion_days}일`}</td>
-                  <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
-                  <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
-                  <td className="num b2b-money">{r.value.toLocaleString()}</td>
-                  <td className="num">{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>
+                  {/* 예상소진 = 창고(현재고)만 기준. 입고 예정이 있으면 '입고 예정일 전에 바닥나는가'로 빨강을 판정 —
+                      리드타임만 보면 시켜 둔 물량이 곧 오는데도 부족·권장(포지션 기준)과 신호가 엇갈린다 */}
+                  {(() => {
+                    const dep = r.depletion_days;
+                    const inbDays = r.inbound_due ? Math.max(0, Math.round((Date.parse(r.inbound_due + "T00:00:00Z") - Date.parse(TODAY() + "T00:00:00Z")) / 86400_000)) : null;
+                    const red = dep != null && ((r.inbound ?? 0) > 0 && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 7));
+                    const posDays = dep != null && r.daily_out > 0 ? Math.floor((r.qty + (r.inbound ?? 0)) / r.daily_out) : null;
+                    const tip = dep == null ? undefined : (r.inbound ?? 0) > 0
+                      ? `창고 기준 ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? `, ${inbDays}일 뒤` : ""})` : ""}${red ? " — 입고 전에 바닥날 수 있음" : ""}`
+                      : `창고 기준 ${dep}일`;
+                    return <td className="num b2b-money" title={tip} style={{ color: dep == null ? "var(--sm-text-light)" : red ? "var(--sm-danger)" : "var(--sm-black)" }}>{dep == null ? "-" : `${dep}일`}</td>;
+                  })()}
+                  {/* 입고 예정 = 시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여). 권장생산이 이미 뺀 값이다 */}
+                  <td className="num b2b-money" style={{ color: (r.inbound ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}
+                    title={(r.inbound ?? 0) > 0 ? `열린 제조사 요청서에 남은 양 — 권장생산에서 이미 뺐습니다\n${r.inbound_detail || ""}` : undefined}>
+                    {(r.inbound ?? 0) > 0 ? r.inbound.toLocaleString() : "-"}
+                    {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
+                  </td>
                   <td className="num">
                     {!pv.has || pv.requestByDays == null ? (
                       <span style={{ color: "var(--sm-text-light)" }}>-</span>
@@ -426,6 +445,10 @@ export default function InventoryPage() {
                       </span>
                     )}
                   </td>
+                  <td className="num">{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>
+                  <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
+                  <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
+                  <td className="num b2b-money">{r.value.toLocaleString()}</td>
                   <td onClick={(e) => e.stopPropagation()}><button className="b2b-btn-secondary" style={{ padding: "4px 6px", fontSize: 12, whiteSpace: "nowrap" }} onClick={() => setModalFor(r.product_id)}>입·출·조정</button></td>
                   <td className="num" onClick={(e) => e.stopPropagation()}>
                     {adj ? (

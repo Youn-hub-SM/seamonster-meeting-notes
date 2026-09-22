@@ -192,7 +192,7 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
     }
 
     // 4b) 이 요청서만 동기화할 때: 다른 열린 재고 보충 요청서에 그 품목의 잔여가 있으면 자동 줄을 만들지 않는다 —
-    //     그 몫은 입고 기록 시 이벤트 매칭이 오래된 요청서부터 채운다. 여기서 자동 줄을 만들면 그 잔여가 '오는 중'에 유령으로 남는다.
+    //     그 몫은 입고 기록 시 이벤트 매칭이 오래된 요청서부터 채운다. 여기서 자동 줄을 만들면 그 잔여가 '입고 예정'에 유령으로 남는다.
     const otherRemaining = new Map<string, number>();
     if (opts?.requestId) {
       try {
@@ -645,7 +645,7 @@ export async function allocateReceiptsToOpenRequests(
     if (target) { await linkTo(e, target, left, true); continue; }
 
     // 2) 창 안에 그 품목을 요청한 요청서가 없음 → 먼저 다른 열린 요청서(창 밖·마감 지남 포함)에 잔여가 있으면 오래된 순으로
-    //    잔여만큼 채운다('요청서는 결국 전량 생산된다' — 지난주 요청서의 늦은 도착분. 안 채우면 그 잔여가 '오는 중'에 유령으로 남는다).
+    //    잔여만큼 채운다('요청서는 결국 전량 생산된다' — 지난주 요청서의 늦은 도착분. 안 채우면 그 잔여가 '입고 예정'에 유령으로 남는다).
     for (const it of items) {
       if (left <= 0) break;
       if (it.product_id !== e.product_id || it.requested_qty <= 0) continue;
