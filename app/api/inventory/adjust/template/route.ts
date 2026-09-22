@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { ADJUST_XLSX_HEADERS, ADJUST_XLSX_EXAMPLE } from "@/app/lib/inventory-xlsx";
 import { templateProducts, appendExcludedNote } from "@/app/lib/inventory-template";
+import { toInvChannel } from "@/app/lib/inventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const maxDuration = 30;
 export async function GET(req: NextRequest) {
   try {
     const fill = req.nextUrl.searchParams.get("fill") === "1";
-    const channel = req.nextUrl.searchParams.get("channel") === "도매" ? "도매" : req.nextUrl.searchParams.get("channel") === "프로모션" ? "프로모션" : "소매";
+    const channel = toInvChannel(req.nextUrl.searchParams.get("channel"));
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("재고 조정");

@@ -46,10 +46,37 @@ export interface PrItem {
 }
 
 // 요청서(헤더) + 라인
-export const PR_PURPOSES = ["재고 보충", "도매 납품", "프로모션"] as const;
+export const PR_PURPOSES = ["재고 보충", "도매 납품", "프로모션", "도매 대량"] as const;
 export type PrPurpose = (typeof PR_PURPOSES)[number];
 // 화면 표시는 요청 대상 기준 제조사/도매 (DB 저장값·082 체크 제약은 기존 문자열 유지)
-export const PR_PURPOSE_LABEL: Record<PrPurpose, string> = { "재고 보충": "제조사", "도매 납품": "도매", "프로모션": "프로모션" };
+export const PR_PURPOSE_LABEL: Record<PrPurpose, string> = { "재고 보충": "제조사", "도매 납품": "도매", "프로모션": "프로모션", "도매 대량": "도매 대량" };
+
+/** 문자열 → 용도. 모르는 값은 '재고 보충'(제조사) — 옛 데이터·미적용 환경 폴백. */
+export function toPrPurpose(v: unknown): PrPurpose {
+  const s = typeof v === "string" ? v.trim() : "";
+  return (PR_PURPOSES as readonly string[]).includes(s) ? (s as PrPurpose) : "재고 보충";
+}
+/** 확정형 — 사람이 목표일과 수량을 알고 등록하는 용도. 이행 = 소매에서 그 칸으로 이동 + 배정. */
+export const CONFIRMED_PURPOSES: readonly PrPurpose[] = ["프로모션", "도매 대량"];
+/** 제조사 생산 대상(= 확정형도 도매 납품도 아닌 것). '도매 납품이 아니면 제조사' 식 분기를 대체한다. */
+export function isFactoryPurpose(p: unknown): boolean { return toPrPurpose(p) === "재고 보충"; }
+/** 그 용도가 확보하는 재고 칸. 재고 보충은 소매로 입고되므로 이동 대상이 아니다. */
+export const PURPOSE_CHANNEL: Partial<Record<PrPurpose, string>> = { "도매 납품": "도매", "프로모션": "프로모션", "도매 대량": "도매 대량" };
+
+/** 용도 한 줄 설명 — 요청서 상세·알림 본문용. */
+export const PURPOSE_NOTE: Record<PrPurpose, string> = {
+  "재고 보충": "제조사 생산 요청 — 입고로 이행",
+  "도매 납품": "도매 보충 — 소매→도매 이동으로 이행",
+  "프로모션": "행사 확보 — 소매→프로모션 이동으로 이행",
+  "도매 대량": "선결제 대량 발주 확보 — 소매→도매 대량 이동으로 이행",
+};
+/** 탭 아래 안내 — 그 용도의 요청서가 무엇으로 채워지는지. */
+export const FULFILL_NOTE: Record<PrPurpose, string> = {
+  "재고 보충": "제조사에서 입고되면 자동으로 이행됩니다 (입고는 소매로 들어옵니다)",
+  "도매 납품": "재고 옮기기에서 소매 → 도매 로 옮기며 배정하면 이행됩니다",
+  "프로모션": "재고 옮기기에서 소매 → 프로모션 으로 옮기며 배정하면 이행됩니다",
+  "도매 대량": "재고 옮기기에서 소매 → 도매 대량 으로 옮기며 배정하면 이행됩니다 (선결제 건이라 자동 합류는 없습니다)",
+};
 
 export interface ProductionRequest {
   id: string;

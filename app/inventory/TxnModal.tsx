@@ -2,7 +2,7 @@
 
 import { useEscClose } from "@/app/lib/use-esc";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { INV_TXN_TYPES, INV_TYPE_COLOR, type InvTxnType, type InvChannel, type InvChannelFilter } from "@/app/lib/inventory";
+import { INV_TXN_TYPES, INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvTxnType, type InvChannel, type InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelPicker } from "./ChannelTabs";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 
@@ -45,9 +45,9 @@ export default function TxnModal({
 }) {
   useEscClose(onClose);
   const [type, setType] = useState<InvTxnType>(defaultType);
-  // 입고는 도매·프로모션을 못 고른다 — 두 풀은 소매 입고 후 [소매↔도매] 이동으로만 들어간다(실수 방지).
-  //  도매/프로모션 탭에서 열면 기본 채널이 그 풀로 오므로 입고 기본형이면 소매로 돌려놓는다.
-  const [channel, setChannel] = useState<InvChannel>(defaultType === "입고" && defaultChannel !== "소매" ? "소매" : defaultChannel);
+  // 입고는 이동 전용 칸(도매·프로모션·도매 대량)을 못 고른다 — 세 칸 모두 소매 입고 후 [소매↔도매] 이동으로만 들어간다(실수 방지).
+  //  그 칸 탭에서 열면 기본 채널이 그 칸으로 오므로 입고 기본형이면 소매로 돌려놓는다.
+  const [channel, setChannel] = useState<InvChannel>(defaultType === "입고" && MOVE_ONLY_CHANNELS.includes(defaultChannel) ? "소매" : defaultChannel);
   const [productId, setProductId] = useState(defaultProductId);
   const [qty, setQty] = useState("");
   const [adjMode, setAdjMode] = useState<"target" | "delta">("target");
@@ -201,10 +201,10 @@ export default function TxnModal({
           <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12 }}>
             <span className="b2b-field-label" style={{ margin: 0 }}>채널</span>
             <ChannelPicker value={channel} onChange={(c) => { dropInflight(); setChannel(c); setPreview(null); setError(""); setImporting(false); }}
-              disabledChannels={type === "입고" ? ["도매", "프로모션"] : []}
-              disabledHint="도매·프로모션 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 직접 입고는 막았습니다" />
+              disabledChannels={type === "입고" ? MOVE_ONLY_CHANNELS : []}
+              disabledHint="도매·프로모션·도매 대량 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 직접 입고는 막았습니다" />
             <span className="sm-faint" style={{ fontSize: 12 }}>
-              {type === "입고" ? "입고는 소매로만 — 도매·프로모션은 [소매↔도매]에서 옮깁니다" : `${channel} 재고에 기록`}
+              {type === "입고" ? "입고는 소매로만 — 도매·프로모션·도매 대량은 [소매↔도매]에서 옮깁니다" : `${channel} 재고에 기록`}
             </span>
           </div>
 

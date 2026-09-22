@@ -1,7 +1,7 @@
 // 도매 재고 생산 요청 — 서버 전용 로더(요청서 + 품목 + 입고집계 조립).
 //  list 라우트와 [id] 라우트가 공용으로 사용.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { UNREQUESTED_ITEM_MEMO, type ProductionRequest, type PrItem, type PrReceipt } from "./wholesale-production";
+import { UNREQUESTED_ITEM_MEMO, toPrPurpose, type ProductionRequest, type PrItem, type PrReceipt, type PrPurpose, PURPOSE_NOTE } from "./wholesale-production";
 
 type AnyRow = Record<string, unknown>;
 function one<T = AnyRow>(v: unknown): T | null {
@@ -14,7 +14,7 @@ function one<T = AnyRow>(v: unknown): T | null {
 export function formatRequestDetail(r: ProductionRequest): string {
   const lines: string[] = [];
   const head: string[] = [];
-  head.push(`용도 ${r.purpose === "도매 납품" ? "도매 납품" : r.purpose === "프로모션" ? "프로모션(행사 확보)" : "제조사(재고 보충)"}`);
+  head.push(`용도 ${PURPOSE_NOTE[toPrPurpose(r.purpose)]}`);
   if (r.due_date) head.push(`마감 ${r.due_date}`);
   if (r.assignee) head.push(`담당 ${r.assignee}`);
   lines.push(head.join(" · "));
@@ -107,7 +107,7 @@ export async function loadRequests(
     const requestedLines = its.filter((it) => it.requested_qty > 0);
     return {
       id: r.id as string, req_no: (r.req_no as string) ?? null, title: (r.title as string) ?? null,
-      purpose: (r.purpose === "도매 납품" ? "도매 납품" : r.purpose === "프로모션" ? "프로모션" : "재고 보충") as ProductionRequest["purpose"], // 082·113 미적용/기존 행 → 재고 보충
+      purpose: toPrPurpose(r.purpose), // 082·113·115 미적용/기존 행·모르는 값 → 재고 보충
       requested_by: (r.requested_by as string) ?? null, request_date: String(r.request_date),
       due_date: (r.due_date as string) ?? null, // 생산마감일(071 미적용이면 null)
       status: r.status as ProductionRequest["status"], assignee: (r.assignee as string) ?? null, memo: (r.memo as string) ?? null,

@@ -12,7 +12,7 @@ export const maxDuration = 30;
 // 발송 일정(차수) 전용 저장 — 발주 목록의 '발송일 등록' 창이 쓴다.
 //  발주 등록 폼에서 발송 일정 섹션을 뺐으므로, 차수(날짜·박스 수·수량)는 여기 한 곳에서만 만든다.
 //  GET  → 현재 차수 + 배송정보 + 발주 라인(수량 배정용)
-//  POST → { schedules } 통째 교체. 도매 재고 차감·헤더 발송일/상태/박스 수 동기화까지 saveOrderShipments 가 처리.
+//  POST → { schedules } 통째 교체. 재고 차감(도매 — 대량 발주면 '도매 대량')·헤더 발송일/상태/박스 수 동기화까지 saveOrderShipments 가 처리.
 
 type ShipRow = {
   id: string; seq: number; ship_date: string | null; status: string; tracking_no: string | null;

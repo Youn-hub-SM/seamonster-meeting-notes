@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { toInvChannelParam } from "@/app/lib/inventory";
 
 export const dynamic = "force-dynamic";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const product_id = sp.get("product_id");
     const type = sp.get("type");
-    const channel = sp.get("channel");
+    const channel = toInvChannelParam(sp.get("channel")); // 전체·모르는 값 = null(칸 필터 없음)
     const from = sp.get("from");
     const to = sp.get("to");
     const limit = Math.min(2000, Math.max(1, Number(sp.get("limit")) || 500));
@@ -23,7 +24,8 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: false });
       if (product_id) q = q.eq("product_id", product_id);
       if (type) q = q.eq("type", type);
-      if (withChannel && (channel === "도매" || channel === "소매" || channel === "프로모션")) q = q.eq("channel", channel);
+      const chan = toInvChannelParam(channel); // 036·113·115 — 모르는 값·미지정은 전 칸
+      if (withChannel && chan) q = q.eq("channel", chan);
       if (from && DATE_RE.test(from)) q = q.gte("txn_date", from);
       if (to && DATE_RE.test(to)) q = q.lte("txn_date", to);
       return q.limit(limit);

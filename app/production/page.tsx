@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
-import type { ProductionRequest } from "../lib/wholesale-production";
+import { isFactoryPurpose, type ProductionRequest } from "../lib/wholesale-production";
 
 type ProductRow = { product_name: string; spec: string; qty: number; companies: string[]; order_count: number };
 type DayBucket = { date: string; label: string; total_qty: number; order_count: number; products: ProductRow[] };
@@ -97,7 +97,7 @@ export default function ProductionSchedulePage() {
       if (pm.ok) setPromos(pm.promotions || []);
       if (mn.ok) setManual(mn.items || []);
       if (pd.ok) setProducts((pd.products || []).map((p: Product) => ({ sku: p.sku, name: p.name, spec: p.spec, is_bundle: p.is_bundle })));
-      if (rq.ok) setRequests((rq.requests || []).filter((r: ProductionRequest) => r.status === "진행중" && r.purpose !== "도매 납품")); // 확인(진행중)된 제조사 요청만 — 도매(이전 지시) 요청은 생산 일정이 아님
+      if (rq.ok) setRequests((rq.requests || []).filter((r: ProductionRequest) => r.status === "진행중" && isFactoryPurpose(r.purpose))); // 확인(진행중)된 제조사 요청만 — 도매·프로모션·도매 대량(소매에서 이동해 채우는 확보분)은 제조사 생산 일정이 아님
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }

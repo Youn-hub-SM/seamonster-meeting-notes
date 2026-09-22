@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { signedQty } from "@/app/lib/inventory";
+import { MOVE_ONLY_CHANNELS, RESERVED_CHANNELS, signedQty, toInvChannel } from "@/app/lib/inventory";
 import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
 import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
 import type { ImportTxn } from "../route";
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { rows?: ImportTxn[]; done?: boolean; channel?: string };
     const rows = Array.isArray(body.rows) ? body.rows : [];
     const status = body.done === false ? "대기" : "완료"; // 즉시처리 미체크면 대기
-    const channel = body.channel === "도매" ? "도매" : body.channel === "프로모션" ? "프로모션" : "소매"; // 036·113, 기본 소매
+    const channel = toInvChannel(body.channel); // 036·113·115, 기본 소매
     if (!rows.length) return NextResponse.json({ ok: false, error: "반영할 행이 없습니다." }, { status: 400 });
     const cookie = req.cookies.get("b2b_auth")?.value;
     const actor = (await verifySession(cookie)) || resolveUserName(cookie);
@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
     const valid = rows.filter((r) => r && r.product_id && (r.type === "입고" || r.type === "출고") && Number(r.qty) !== 0);
     if (!valid.length) return NextResponse.json({ ok: false, error: "유효한 행이 없습니다." }, { status: 400 });
-    // 도매 입고 금지 — 화면에서 이미 막지만, 유형 열이 섞인 엑셀(입고+출고 혼재)이 도매 채널로 오는 경우까지 여기서 잡는다.
-    if ((channel === "도매" || channel === "프로모션") && valid.some((r) => r.type === "입고"))
+    // 이동 전용 칸 입고 금지 — 화면에서 이미 막지만, 유형 열이 섞인 엑셀(입고+출고 혼재)이 그 칸으로 오는 경우까지 여기서 잡는다.
+    if (MOVE_ONLY_CHANNELS.includes(channel) && valid.some((r) => r.type === "입고"))
       return NextResponse.json({ ok: false, error: `${channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요. (파일에 입고 행이 있습니다)` }, { status: 400 });
 
     // 묶음(세트)은 자체 재고가 없다 → 반드시 구성품 원장으로 남긴다. 세트 id 로 기록하면
@@ -77,6 +77,10 @@ export async function POST(req: NextRequest) {
 
     // 선택 컬럼(status=034, channel=036) 미적용 환경이면 그 컬럼만 빼고 재시도. group/order 는 rpc 성공 시에만 추가돼 안전.
     let ins = await sb.from("inventory_txns").insert(insert).select("id, product_id, qty, type, txn_date");
+    // 113·115 미적용: 보호 칸은 channel 체크 제약에 걸린다. 아래 폴백이 열을 빼고 재시도하면 엑셀 한 장이 통째로
+    //  소매 칸에 남으므로 제약 위반일 때만 먼저 잘라낸다(열이 없는 036 폴백은 그대로).
+    if (ins.error && RESERVED_CHANNELS.includes(channel) && /channel_chk|check constraint/i.test(ins.error.message))
+      return NextResponse.json({ ok: false, error: `${channel} 칸이 아직 없습니다 — migration ${channel === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.` }, { status: 500 });
     for (let guard = 0; ins.error && guard < 2; guard++) {
       const miss = (["channel", "status", "reason"] as const).find((c) => new RegExp(c, "i").test(ins.error!.message));
       if (!miss) break;

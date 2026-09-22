@@ -80,6 +80,7 @@ function buildCloneData(
     discount_reason: o.discount_reason ?? "",
     box_count: o.box_count ?? 1,
     tracking_no: "",
+    is_bulk: o.is_bulk ?? false,   // 대량 여부는 거래 성격이라 복제 때 함께 가져온다(저장 전 폼에서 눈으로 확인 가능)
     items: (o.items || []).map((it, idx) => ({
       product_id: it.product_id,
       product_name: it.product_name,
@@ -171,6 +172,7 @@ export default function OrderForm({
             discount_reason: o.discount_reason ?? "",
             box_count: o.box_count ?? 1,
             tracking_no: o.tracking_no ?? "",
+            is_bulk: o.is_bulk ?? false,
             items: (o.items || []).map((it) => ({
               id: it.id,
               product_id: it.product_id,
@@ -703,6 +705,23 @@ export default function OrderForm({
                 발주 목록의 ‘+ 발송일’ 창에서 잡습니다{isMultiShipment ? " (복수발송 — 가장 이른 날짜)" : ""}
               </span>
             </div>
+          </div>
+
+          {/* 대량 발주(선결제) — 체크하면 발송 선점 출고가 '도매 대량' 칸에서 빠진다(115).
+              도매 일반 주문이 이 물량을 가져가지 못하게 칸을 나눈 것이라, 판단은 담당자가 발주 단위로 한다. */}
+          <div className="b2b-field" style={{ marginTop: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                className="b2b-checkbox"
+                checked={!!data.is_bulk}
+                onChange={(e) => setField("is_bulk", e.target.checked)}
+              />
+              대량 발주 (선결제)
+            </label>
+            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
+              체크하면 발송 재고를 ‘도매 대량’ 칸에서 뺍니다 — 재고관리에서 소매→도매 대량으로 먼저 옮겨 두세요
+            </span>
           </div>
 
           <div className="b2b-field" style={{ marginTop: 12 }}>

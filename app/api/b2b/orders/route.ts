@@ -164,6 +164,17 @@ export async function POST(req: NextRequest) {
       throw orderErr;
     }
 
+    // 1-b) 대량 발주 표식(115) — 발송 선점을 '도매 대량' 칸에서 빼는 스위치.
+    //  3) 의 saveOrderShipments 가 DB 에서 이 값을 읽으므로 반드시 그 전에 쓴다. 신규는 기본 false 라
+    //  체크한 경우에만 쓴다. is_bulk 컬럼 미적용(115 전) 환경이면 에러에 컬럼명이 보인다 — 그때만 넘어간다(전건 도매).
+    if (body.is_bulk) {
+      const bulkRes = await sb.from("orders").update({ is_bulk: true }).eq("id", orderRow.id);
+      if (bulkRes.error && !/is_bulk/i.test(bulkRes.error.message || "")) {
+        await sb.from("orders").delete().eq("id", orderRow.id); // 보상: 헤더 롤백(라인아이템 실패와 같은 규칙)
+        throw bulkRes.error;
+      }
+    }
+
     // 2) 라인아이템 insert
     const itemsToInsert = body.items.map((it, idx) => {
       const clean = normalizeOrderItem(it);

@@ -12,16 +12,35 @@ export const INV_TYPE_COLOR: Record<InvTxnType, { bg: string; fg: string }> = {
 // 재고 채널(풀) — 같은 품목(SKU)이라도 풀별로 현재고를 따로 잡는다.
 //  프로모션(113) = 행사 확보분. 자동 차감 경로가 없어 행사일까지 보호되고,
 //  입고는 '재고 옮기기'(소매→프로모션)로만 — 도매의 "입고는 이동뿐" 규칙과 동일.
-export const INV_CHANNELS = ["도매", "소매", "프로모션"] as const;
+//  도매 대량(115) = 선결제 대량 발주 확보분. 프로모션과 같은 보호 칸이지만 **자동 합류가 없다**
+//   — 이미 팔린 물건이라 소매로 돌려보낼 근거가 없다(대표 확정 2026-09-22).
+export const INV_CHANNELS = ["도매", "소매", "프로모션", "도매 대량"] as const;
 export type InvChannel = (typeof INV_CHANNELS)[number];
 export const INV_CHANNEL_COLOR: Record<InvChannel, { bg: string; fg: string }> = {
   도매: { bg: "var(--sm-orange-light)", fg: "var(--sm-orange)" },     // B2B
   소매: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },            // 온라인몰
   프로모션: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },  // 행사 확보분(보호)
+  "도매 대량": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" }, // 선결제 확보분(보호, 합류 없음)
 };
 // 읽기(조회) 화면 필터 — 전체 = 전 풀 합산.
-export const INV_CHANNEL_FILTERS = ["전체", "도매", "소매", "프로모션"] as const;
+export const INV_CHANNEL_FILTERS = ["전체", "도매", "소매", "프로모션", "도매 대량"] as const;
 export type InvChannelFilter = (typeof INV_CHANNEL_FILTERS)[number];
+
+// 문자열 → 칸. 칸이 늘 때마다 삼항식을 파일마다 고치던 것을 한 곳으로 모은다
+//  (115 에서 '도매 대량' 을 더하며 30곳을 손대야 했던 일이 되풀이되지 않게).
+export function toInvChannel(v: unknown, fallback: InvChannel = "소매"): InvChannel {
+  const s = typeof v === "string" ? v.trim() : "";
+  return (INV_CHANNELS as readonly string[]).includes(s) ? (s as InvChannel) : fallback;
+}
+/** 조회 필터 → 칸. '전체'·빈값·모르는 값은 null(= 전 칸 합산). */
+export function toInvChannelParam(v: unknown): InvChannel | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return (INV_CHANNELS as readonly string[]).includes(s) ? (s as InvChannel) : null;
+}
+/** 입고가 직접 들어올 수 없는 칸 — 이동으로만 채운다. 제조사 입고는 언제나 소매로 들어온다. */
+export const MOVE_ONLY_CHANNELS: readonly InvChannel[] = ["도매", "프로모션", "도매 대량"];
+/** 임자가 정해진 보호 칸 — 자동 출고 경로가 닿지 않는다(도매 대량은 B2B 발송만 예외). */
+export const RESERVED_CHANNELS: readonly InvChannel[] = ["프로모션", "도매 대량"];
 
 export interface InventoryTxn {
   id: string;

@@ -78,6 +78,8 @@ export interface Order {
   notes: string | null;
   box_count: number;   // 배송 박스 수 (발주 단위 이익률 계산용)
   tracking_no: string | null;  // 헤더 송장번호 (발송완료 시 필수)
+  is_bulk?: boolean;   // 대량 발주(선결제) — 발송 선점을 '도매 대량' 칸에서 뺀다 (migration 115).
+                       //  115 미적용 환경에서는 응답에 없으므로 optional
   created_at: string;
   updated_at: string;
 }
@@ -321,6 +323,7 @@ export interface OrderInput {
   discount_reason: string;              // 할인/추가금 사유
   box_count: number | string;           // 배송 박스 수 (이익률 계산용)
   tracking_no: string;                   // 헤더 송장번호 (발송완료 시 필수)
+  is_bulk: boolean;                      // 대량 발주(선결제) — 발송 선점이 '도매 대량' 칸에서 빠진다 (migration 115)
   items: OrderItemInput[];
   recipient: RecipientInput;            // 공통 배송 정보
   shipments: ShipmentScheduleInput[];   // 발송 일정 (분할 발송)
@@ -352,6 +355,7 @@ export const EMPTY_ORDER: OrderInput = {
   discount_reason: "",
   box_count: 1,
   tracking_no: "",
+  is_bulk: false,
   items: [{ ...EMPTY_ORDER_ITEM }],
   recipient: { ...EMPTY_RECIPIENT },
   shipments: [],

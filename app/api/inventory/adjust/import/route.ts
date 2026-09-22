@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { cellStr, xlsxNum } from "@/app/lib/inventory-xlsx";
 import { getAllBundles, isBundleId } from "@/app/lib/product-bundles";
+import { toInvChannel } from "@/app/lib/inventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
     const file = form.get("file");
     if (!file || typeof file === "string") return NextResponse.json({ ok: false, error: "엑셀 파일을 첨부하세요." }, { status: 400 });
-    const chan = form.get("channel") === "도매" ? "도매" : form.get("channel") === "프로모션" ? "프로모션" : "소매"; // 실사 대상 채널(036·113, 기본 소매)
+    const chan = toInvChannel(form.get("channel")); // 실사 대상 채널(036·113·115, 기본 소매) — 조정은 네 칸 모두 허용
 
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const wb = new ExcelJS.Workbook();

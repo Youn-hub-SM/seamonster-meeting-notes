@@ -138,6 +138,11 @@ export default function InventoryPage() {
     const key = r.sku ? r.sku.toUpperCase() : null;
     const rr = key ? retailMap.get(key) : undefined;
     const ww = key ? wholeMap.get(key) : undefined;
+    // 도매 대량(115)은 선결제 확보분 — 권장 수식이 없는 칸이다. getInventoryRows 는 소매·도매만 계산하고
+    //  (production-inventory.ts 58행), 확정형 요청서 잔여는 4단계 전까지 어떤 수식에도 들어 있지 않다.
+    //  합계를 빌려 쓰면 이 칸과 무관한 수를 보여줄 뿐 아니라, 체크 → '선택 N종 생산 요청'이 발주와
+    //  연결되지 않은 제조사(재고 보충) 요청서를 만든다(115 가 order_id·company_id 를 둔 취지와 반대).
+    if (channel === "도매 대량") return { has: false, recommend: 0, requestByDays: null, requestBy: null, retail: rr };
     if (channel === "소매") return { has: !!rr, recommend: rr?.recommend ?? 0, requestByDays: rr?.requestByDays ?? null, requestBy: rr?.requestBy ?? null, retail: rr };
     if (channel === "도매") return { has: !!ww, recommend: ww?.recommend ?? 0, requestByDays: ww?.requestByDays ?? null, requestBy: ww?.requestBy ?? null, retail: rr };
     let days: number | null = null, by: string | null = null;
@@ -162,7 +167,7 @@ export default function InventoryPage() {
     const keys = new Set([...retailMap.keys(), ...wholeMap.keys()]);
     for (const k of keys) {
       const rr = retailMap.get(k), ww = wholeMap.get(k);
-      const rec = channel === "소매" ? (rr?.recommend ?? 0) : channel === "도매" ? (ww?.recommend ?? 0) : (rr?.recommend ?? 0) + (ww?.recommend ?? 0);
+      const rec = channel === "도매 대량" ? 0 : channel === "소매" ? (rr?.recommend ?? 0) : channel === "도매" ? (ww?.recommend ?? 0) : (rr?.recommend ?? 0) + (ww?.recommend ?? 0);
       if (rec > 0) { needItems++; needQty += rec; }
     }
     return { needItems, needQty };
@@ -327,7 +332,7 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·주문필요·권장생산은 최근 30일 기준 · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`}{channel === "도매" ? "" : " + 프로모션 확보분"} · {channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = 목표 − (현재고 + 입고 예정)"} · {channel === "소매" || channel === "도매" ? `권장생산·주문필요는 ${channel} 기준` : "권장생산은 소매+도매 합, 주문필요는 더 급한 채널 기준"} · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</p>}
+      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·주문필요·권장생산은 최근 30일 기준 · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`}{channel === "도매" ? "" : " + 프로모션 확보분"} · {channel === "도매 대량" ? "권장생산 수식 없음" : channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = 목표 − (현재고 + 입고 예정)"} · {channel === "도매 대량" ? "권장생산·주문필요는 도매 대량 탭에서 계산하지 않습니다(선결제로 잡아둔 칸이라 생산 수식이 없습니다)" : channel === "소매" || channel === "도매" ? `권장생산·주문필요는 ${channel} 기준` : "권장생산은 소매+도매 합, 주문필요는 더 급한 채널 기준"}{channel === "도매 대량" ? null : <> · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</>}</p>}
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {advice && (
         <section style={{ marginBottom: 18 }}>
@@ -492,7 +497,7 @@ export default function InventoryPage() {
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>
                 입고·출고·조정 원장입니다(관측 용도). ‘담당’이 그 처리를 한 사람이고, 발주·발송 연동 건은 메모에 출처가 적혀 있습니다.
-                ‘재고’는 그 거래가 속한 채널(도매/소매) 기준으로 거래 전후의 수량입니다.
+                ‘재고’는 그 거래가 속한 재고 칸(소매·도매·프로모션·도매 대량) 기준으로 거래 전후의 수량입니다.
               </p>
               <ProductHistory productId={historyFor.product_id} />
             </div>

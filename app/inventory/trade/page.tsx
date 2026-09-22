@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import OrdersTable from "../OrdersTable";
 import { ChannelPicker } from "../ChannelTabs";
-import { INV_TYPE_COLOR, type InvChannel } from "@/app/lib/inventory";
+import { INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null; reason?: string | null };
 type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
@@ -88,10 +88,10 @@ export default function TradePage() {
               <div className="b2b-field" style={{ marginTop: 12 }}>
                 <label className="b2b-field-label">② 채널 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 소매)</span></label>
                 <ChannelPicker value={ioChannel} onChange={setIoChannel}
-                  disabledChannels={ioType === "입고" ? ["도매", "프로모션"] : []}
-                  disabledHint="도매 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 도매 입고는 막았습니다" />
+                  disabledChannels={ioType === "입고" ? MOVE_ONLY_CHANNELS : []}
+                  disabledHint="도매·프로모션·도매 대량 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 그 칸 입고는 막았습니다" />
                 {ioType === "입고" && (
-                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 도매는 [소매↔도매]에서 옮깁니다.</p>
+                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 도매·프로모션·도매 대량은 [소매↔도매]에서 옮깁니다.</p>
                 )}
               </div>
 

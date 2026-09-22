@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { signedQty } from "./inventory";
+import { signedQty, type InvChannel } from "./inventory";
 import { getAllBundles, expandBundleQty, type BundleComponent } from "./product-bundles";
 import {
   RecipientInput,
@@ -82,14 +82,29 @@ export async function saveOrderShipments(
     schedules = [{ ship_date: headerShipDate, status: headerStatus || "발송대기", tracking_no: "", box_count: 1, stock_out: true, items: [] }];
   }
 
-  // 즉시출고(재고 선점) 가능 여부 + 거래처명(원장 표시용) 준비
+  // 즉시출고(재고 선점) 가능 여부 + 거래처명(원장 표시용)·대량 발주 여부(차감할 칸) 준비
   const canDeduct = await stockOutAvailable(sb);
   let partner: string | null = null;
+  let isBulk = false; // 115: 대량 발주(선결제)면 선점 출고를 '도매 대량' 칸에서 뺀다
   if (canDeduct) {
-    const { data: ord } = await sb.from("orders").select("companies:company_id(name)").eq("id", orderId).single();
-    const c = (ord as { companies?: { name?: string } | { name?: string }[] } | null)?.companies;
+    // 거래처명 때문에 이미 도는 조회에 is_bulk 한 칸만 얹는다(추가 왕복 없음).
+    //  115 미적용 환경이면 에러 메시지에 컬럼명이 보인다 — 그 컬럼만 빼고 재조회해 거래처명은 살리고
+    //  전건 '도매'로 차감한다(종전 동작). 두 select 는 응답 제네릭이 달라 그냥 재대입하면 tsc 가 막는다.
+    type OrdRes = {
+      data: { is_bulk?: boolean; companies?: { name?: string } | { name?: string }[] } | null;
+      error: { message?: string } | null;
+    };
+    let ordRes = (await sb.from("orders").select("is_bulk, companies:company_id(name)").eq("id", orderId).single()) as unknown as OrdRes;
+    if (ordRes.error && /is_bulk/i.test(ordRes.error.message || "")) {
+      ordRes = (await sb.from("orders").select("companies:company_id(name)").eq("id", orderId).single()) as unknown as OrdRes;
+    }
+    const c = ordRes.data?.companies;
     partner = (Array.isArray(c) ? c[0]?.name : c?.name) ?? null;
+    isBulk = ordRes.data?.is_bulk === true;
   }
+  // 이 발주의 선점 출고가 빠질 칸. '도매 대량'은 이동(소매→도매 대량)으로만 채워지는 보호 칸이고
+  //  나가는 길은 이 B2B 발송뿐이다 — 자동 합류는 없다(RESERVED_CHANNELS 주석과 같은 규칙).
+  const deductChannel: InvChannel = isBulk ? "도매 대량" : "도매";
   // 번들(묶음) 정의 — 발주 라인이 번들이면 즉시출고를 구성품으로 전개(번들은 자체 재고 없음).
   const bundles = canDeduct ? await getAllBundles(sb) : new Map<string, BundleComponent[]>();
   const today = kstToday();
@@ -229,21 +244,30 @@ export async function saveOrderShipments(
 
     // 재고 차감(선점) — 발주 전량을 이 차수(가장 이른 발송일) 하나에만 기록한다.
     //  shipment_id 로 묶여 있어 재저장·발주 삭제 시 cascade 로 함께 지워지며 재고가 원복된다.
-    //  '도매' 채널에서 차감(036). 컬럼 미적용 환경이면 channel 을 빼고 재시도.
+    //  차감 칸 = 대량 발주면 '도매 대량'(115), 아니면 '도매'(036).
+    //  제약 미적용(115 전) 환경이면 에러에 제약명(inventory_txns_channel_chk)이 보인다 —
+    //  '도매'로 한 칸 낮춰 보고, 그래도 안 되면 기존대로 channel 을 빼고 재시도(036 전).
     if (canDeduct && si === deductIdx && deductPerProduct.size > 0) {
       const txns: Record<string, unknown>[] = [...deductPerProduct.entries()].map(([product_id, qty]) => ({
         product_id,
         type: "출고",
-        channel: "도매",
+        channel: deductChannel,
         qty: signedQty("출고", qty),
         unit_amount: null,
         txn_date: sch.ship_date || headerShipDate || today,
         partner,
-        memo: "B2B 발송 선점(발주 전량)",
+        memo: isBulk ? "B2B 대량 발송 선점(발주 전량)" : "B2B 발송 선점(발주 전량)",
         shipment_id: shipRow.id,
         created_by: "B2B 자동출고",
       }));
       let txr = await sb.from("inventory_txns").insert(txns);
+      // 115 미적용(칸 제약이 3칸) 환경 — 제약명에 channel 이 들어 있어 아래 기존 폴백에 그대로 잡히는데,
+      //  거기서 channel 을 통째로 빼면 기본값 '소매'로 떨어져 도매 판매가 소매 재고를 깎는다.
+      //  그래서 먼저 '도매'로 한 칸만 낮춰 본다(115 적용 전 이 발주의 옛 동작과 같음).
+      if (txr.error && deductChannel !== "도매" && /channel/i.test(txr.error.message)) {
+        for (const t of txns) t.channel = "도매";
+        txr = await sb.from("inventory_txns").insert(txns);
+      }
       if (txr.error && /channel/i.test(txr.error.message)) {
         for (const t of txns) delete t.channel;
         txr = await sb.from("inventory_txns").insert(txns);

@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { TXN_XLSX_HEADERS, TXN_XLSX_EXAMPLE, OUT_TXN_XLSX_HEADERS, OUT_TXN_XLSX_EXAMPLE } from "@/app/lib/inventory-xlsx";
 import { templateProducts, appendExcludedNote } from "@/app/lib/inventory-template";
+import { toInvChannel } from "@/app/lib/inventory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
   try {
     const isOut = req.nextUrl.searchParams.get("type") === "출고";
     const fill = req.nextUrl.searchParams.get("fill") === "1";
-    const channel = req.nextUrl.searchParams.get("channel") === "도매" ? "도매" : "소매";
+    const channel = toInvChannel(req.nextUrl.searchParams.get("channel"));
     const label = isOut ? "출고" : "입고";
 
     const wb = new ExcelJS.Workbook();

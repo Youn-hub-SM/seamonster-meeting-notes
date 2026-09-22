@@ -5,6 +5,7 @@ import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-productio
 import { logProductionRequestCreated } from "@/app/lib/b2b-activity";
 import { addBusinessDays } from "@/app/lib/business-days";
 import { syncWindowReceipts } from "@/app/lib/production-allocate";
+import { toPrPurpose, CONFIRMED_PURPOSES } from "@/app/lib/wholesale-production";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     const due_date = DATE_RE.test(String(b.due_date || ""))
       ? String(b.due_date)
       : addBusinessDays(request_date || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7);
-    const purpose = b.purpose === "도매 납품" ? "도매 납품" : b.purpose === "프로모션" ? "프로모션" : "재고 보충"; // 용도(082·113) — 그 외 값은 재고 보충
+    const purpose = toPrPurpose(b.purpose); // 용도(082·113·115) — 모르는 값은 재고 보충
     // 제조사(소매) 요청을 생산 담당자 '지인'이 직접 작성하면 확인 절차 생략 — 담당 지정 + 진행중으로 시작.
     //  (작성자 본인이 담당자라 별도 확인이 무의미. 도매 요청은 이행 주체가 달라 자동 확인 없음.)
     const autoConfirm = who === "지인" && purpose === "재고 보충";
@@ -73,10 +74,10 @@ export async function POST(req: NextRequest) {
     if (due_date) head.due_date = due_date; // 생산마감일(071). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
 
     let { data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single();
-    // 113 미적용(purpose 체크에 '프로모션' 없음)이면 조용히 재고 보충으로 강등하지 않고 명시 오류 —
-    //  강등되면 파도소리 화면·자동 매칭에 잘못 흘러든다.
-    if (he && purpose === "프로모션" && /purpose/i.test(he.message))
-      return NextResponse.json({ ok: false, error: "프로모션 용도가 아직 없습니다 — migration 113 을 먼저 적용하세요." }, { status: 500 });
+    // 113·115 미적용(purpose 체크 제약에 그 용도가 없음)이면 조용히 재고 보충으로 강등하지 않고 명시 오류 —
+    //  강등되면 파도소리 화면·자동 매칭에 잘못 흘러들고, 선결제분이 소매 칸으로 섞인다.
+    if (he && CONFIRMED_PURPOSES.includes(purpose) && /purpose/i.test(he.message))
+      return NextResponse.json({ ok: false, error: `${purpose} 용도가 아직 없습니다 — migration ${purpose === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.` }, { status: 500 });
     // 선택 컬럼(071 due_date · 082 purpose) 미적용 환경 폴백 — 에러 메시지에 보이는 컬럼만 빼고 재시도.
     for (const col of ["due_date", "purpose"] as const) {
       if (he && col in head && new RegExp(col, "i").test(he.message)) {

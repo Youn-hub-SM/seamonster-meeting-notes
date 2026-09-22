@@ -127,6 +127,14 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     }
     if (orderErr) throw orderErr;
 
+    // 1-b) 대량 발주 표식(115) — 체크 해제도 반영해야 하므로 항상 쓴다.
+    //  4) 의 saveOrderShipments 가 DB 에서 이 값을 다시 읽어 차감 칸('도매' vs '도매 대량')을 정하므로
+    //  반드시 그 전에 써야 한다. 재저장은 옛 차수를 지우고(cascade 로 선점 출고 원복) 다시 넣으므로,
+    //  체크를 켜고 저장하면 그 발주의 차감이 통째로 새 칸으로 옮겨 간다.
+    //  is_bulk 컬럼 미적용(115 전) 환경이면 에러 메시지에 컬럼명이 보인다 — 그때만 건너뛴다(전건 도매).
+    const bulkRes = await sb.from("orders").update({ is_bulk: !!body.is_bulk }).eq("id", id);
+    if (bulkRes.error && !/is_bulk/i.test(bulkRes.error.message || "")) throw bulkRes.error;
+
     // 2) 기존 라인아이템 스냅샷 (롤백용)
     const { data: existingItems, error: snapErr } = await sb
       .from("order_items")
@@ -346,7 +354,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         : {}) as Parameters<typeof saveOrderShipments>[1];
 
     // 발송일 인라인 등록/변경 — orders 컬럼만 바꾸면 재고가 안 빠지므로, saveOrderShipments 경로로 태워
-    //  발송 차수 생성/발송일 교체 + 발주 전량 재고 차감(도매)을 함께 처리한다. 복수발송(차수 2개 이상)은 차수별 관리라 제외.
+    //  발송 차수 생성/발송일 교체 + 발주 전량 재고 차감(도매 — 대량 발주면 '도매 대량')을 함께 처리한다. 복수발송(차수 2개 이상)은 차수별 관리라 제외.
     //  (status 를 함께 바꾸는 발송완료 처리는 아래 별도 흐름이므로 여기선 ship_date 단독 변경만 대상)
     if (body.ship_date !== undefined && body.ship_date && body.status === undefined) {
       const savedItems = await loadSavedItems();

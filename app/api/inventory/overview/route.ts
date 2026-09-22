@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { toInvChannelParam } from "@/app/lib/inventory";
 import { getLeadDays, getCycleDays } from "@/app/lib/production-config";
 import { getPromoForwardBySku } from "@/app/lib/production-promotions";
 import { getAllBundles, bundleAvailable } from "@/app/lib/product-bundles";
@@ -19,7 +20,7 @@ export type OverviewRow = {
   period_in: number; period_out: number; daily_out: number;
   auto_safety: number; promo_qty: number; depletion_days: number | null; low: boolean;
   promo_pool: number; // 프로모션 풀 잔량(113) — 소매 탭에서 현재고 옆 병기, 그 외 채널은 0
-  inbound: number;    // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 탭) — 부족 판정·권장 수식이 현재고에 더해 본다. 도매 탭은 0
+  inbound: number;    // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 탭) — 부족 판정·권장 수식이 현재고에 더해 본다. 도매·도매 대량 탭은 0(프로모션 탭은 지금도 제조사 잔여가 보인다 — 코드와 계약이 어긋난 자리, 별건 결정 대기)
   inbound_due: string | null; // 잔여가 있는 요청서 중 가장 이른 생산마감일
   inbound_overdue: number;    // 그중 마감이 지난 잔여(서버 판정 — 자동 제외 없음, 표시용)
   inbound_detail: string;     // 툴팁용 요청서별 내역("PR-000123 300 (마감 09-25)")
@@ -36,8 +37,7 @@ export async function GET(req: NextRequest) {
     const to = DATE_RE.test(String(sp.get("to"))) ? String(sp.get("to")) : today;
     let from = DATE_RE.test(String(sp.get("from"))) ? String(sp.get("from")) : to;
     if (from > to) from = to;
-    const chanParam = sp.get("channel");
-    const chan = chanParam === "도매" || chanParam === "소매" || chanParam === "프로모션" ? chanParam : null;
+    const chan = toInvChannelParam(sp.get("channel")); // 전체·모르는 값 = null(전 칸 합산)
     const periodDays = daysInclusive(from, to);
 
     const sb = supabaseAdmin();
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       stockRpc(),
       getPromoForwardBySku(today, horizonDays),
       getAllBundles(sb),
-      chan !== "도매" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()),
+      chan !== "도매" && chan !== "도매 대량" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()), // 제조사 입고는 소매로만 온다 — 이동으로 채우는 칸엔 '입고 예정'이 없다(프로모션은 이번 변경에서 제외 — 087b1c4 선례)
     ]);
     const inboundOk = inbound !== null;
     if (pr.error) throw pr.error;

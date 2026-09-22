@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logProductionReceipt, logProductionRequestStatusChanged } from "./b2b-activity";
-import { UNREQUESTED_ITEM_MEMO } from "./wholesale-production";
+import { UNREQUESTED_ITEM_MEMO, isFactoryPurpose, PURPOSE_CHANNEL, toPrPurpose, type PrPurpose } from "./wholesale-production";
 
 // 입고 → 생산 요청 자동 매칭 — 입고 창구를 '입고 및 출고'로 단일화하면서 이행률 추적을 유지하는 다리.
 //  '입고'(완료) 원장이 기록될 때 production_receipts 증거를 남긴다. 규칙(2026-09-18 대표 확정 — 주간 요청서 기준):
@@ -328,8 +328,10 @@ export async function syncWindowReceipts(sb: SupabaseClient, opts?: { requestId?
 const ALLOC_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export type ManualAlloc = { item_id: string; qty: number };
-// 수동 배정 대상 용도 — 소매→도매 이동은 '도매 납품', 소매→프로모션 이동은 '프로모션'(113)
-export type AllocPurpose = "도매 납품" | "프로모션";
+// 수동 배정 대상 용도 — 소매→도매='도매 납품' · 소매→프로모션='프로모션'(113) · 소매→도매 대량='도매 대량'(115).
+//  = 제조사(재고 보충)를 뺀 전부. PR_PURPOSES 에 용도가 늘면 여기가 자동으로 따라오고, 제조사 요청에
+//  수동 배정이 기록되는 길은 계속 막혀 있다(PURPOSE_CHANNEL 의 키 집합과 정확히 같다).
+export type AllocPurpose = Exclude<PrPurpose, "재고 보충">;
 
 type AllocTargetRow = {
   id: string; request_id: string; requested_qty: number; product_id: string;
@@ -406,7 +408,7 @@ export async function applyManualAllocations(
     if (!r) { warnings.push("요청서 하나가 그 사이 닫혀 배정을 건너뛰었습니다(해당 수량은 기타로 남음)."); continue; }
     const row: Record<string, unknown> = {
       request_id: r.request_id, item_id: a.item_id, qty: a.qty,
-      memo: opts.purpose === "프로모션" ? "소매→프로모션 이전 배정" : "소매→도매 이전 배정", received_by: opts.actor, inv_txn_id: opts.inv_txn_id,
+      memo: `소매→${PURPOSE_CHANNEL[opts.purpose ?? "도매 납품"] ?? "도매"} 이전 배정`, received_by: opts.actor, inv_txn_id: opts.inv_txn_id,
     };
     if (opts.receipt_date && ALLOC_DATE_RE.test(opts.receipt_date)) row.receipt_date = opts.receipt_date;
     const { error, inserted } = await insertReceiptOnce(sb, row);
@@ -422,7 +424,7 @@ export async function applyManualAllocations(
   return { warnings, requestIds: [...requestIds], lines };
 }
 
-// 요청 이행 현황 판독 — '도매 납품' 요청만 대상(제조사 요청은 이 자동 전환 체계 밖 — 검증 확정).
+// 요청 이행 현황 판독 — 수동 배정 용도(도매 납품·프로모션·도매 대량)만 대상(제조사 요청은 이 자동 전환 체계 밖 — 검증 확정).
 //  완료 판정은 합계가 아니라 '모든 품목이 각자 100% 이상' — 한 품목 과배정이 다른 품목의
 //  미이행을 가리지 않게 한다(검증 확정). purpose 미적용 환경·조회 실패·절삭 위험은 null(판정 보류).
 export async function getRequestFullness(
@@ -432,7 +434,7 @@ export async function getRequestFullness(
     const { data: head, error: he } = await sb.from("production_requests")
       .select("id, req_no, status, purpose").eq("id", requestId).maybeSingle();
     if (he || !head) return null; // purpose 컬럼 없음(082 미적용) 포함 — 자동 전환 없이 보류
-    if (head.purpose !== "도매 납품" && head.purpose !== "프로모션") return null; // 수동 배정 용도만 자동 전환(113)
+    if (isFactoryPurpose(head.purpose)) return null; // 수동 배정 용도(도매 납품·프로모션·도매 대량)만 자동 전환(113·115). 제조사·용도 미적용은 판정 보류
     const { data: items, error: ie } = await sb.from("production_request_items")
       .select("id, requested_qty").eq("request_id", requestId).limit(2000);
     if (ie || !items?.length) return null;

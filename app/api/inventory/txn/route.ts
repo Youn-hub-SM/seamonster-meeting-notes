@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { INV_TXN_TYPES, signedQty, type InvTxnType } from "@/app/lib/inventory";
+import { INV_TXN_TYPES, MOVE_ONLY_CHANNELS, RESERVED_CHANNELS, signedQty, toInvChannel, type InvTxnType } from "@/app/lib/inventory";
 import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
 import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
 
@@ -23,15 +23,15 @@ export async function POST(req: NextRequest) {
     const type = String(b.type || "") as InvTxnType;
     if (!product_id) return NextResponse.json({ ok: false, error: "품목을 선택하세요." }, { status: 400 });
     if (!INV_TXN_TYPES.includes(type)) return NextResponse.json({ ok: false, error: "유형이 올바르지 않습니다." }, { status: 400 });
+    const writeChannel = toInvChannel(b.channel); // 036·113·115 — 미지정·모르는 값은 소매
     let qty = signedQty(type, Number(b.qty) || 0);
     // 조정(실사 목표): 화면이 계산한 델타는 화면 로드 시점 재고 기준이라, 로드 후 재고가 움직이면
     //  낡은 델타가 그대로 기록된다(감사 확정 TOCTOU). target_qty 가 오면 서버가 기록 시점 현재고로
     //  델타를 재계산한다(엑셀 조정 apply 와 같은 규칙). 구 화면(qty 만 전송)은 기존 동작 유지.
     if (type === "조정" && b.target_qty !== undefined && b.target_qty !== null && b.target_qty !== "") {
       const target = Math.round((Number(b.target_qty) || 0) * 100) / 100;
-      const chan = b.channel === "도매" ? "도매" : b.channel === "프로모션" ? "프로모션" : "소매";
       const { data: stockRow, error: stockErr } = await supabaseAdmin()
-        .rpc("inventory_stock", { asof: null, chan })
+        .rpc("inventory_stock", { asof: null, chan: writeChannel })
         .eq("product_id", String(b.product_id || ""))
         .maybeSingle();
       if (!stockErr) { // RPC 구버전(chan 미지원 등) 실패 시엔 화면이 보낸 델타(qty)로 폴백 — 기존 동작 유지
@@ -42,10 +42,10 @@ export async function POST(req: NextRequest) {
     }
     if (qty === 0) return NextResponse.json({ ok: false, error: "수량을 입력하세요." }, { status: 400 });
     const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined;
-    // 도매 입고 금지 — 도매 재고는 소매 입고 후 소매↔도매 이동으로만 들어간다(실수로 바로 도매에 넣는 사고 방지).
-    //  정당한 도매 입고(이동·생산 수령)는 이 라우트를 쓰지 않으므로 여기서 막아도 안전하다.
-    if (type === "입고" && (b.channel === "도매" || b.channel === "프로모션"))
-      return NextResponse.json({ ok: false, error: `${b.channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요.` }, { status: 400 });
+    // 이동 전용 칸 직접 입고 금지 — 도매·프로모션·도매 대량은 소매 입고 후 이동으로만 들어간다(실수로 바로 그 칸에 넣는 사고 방지).
+    //  정당한 입고(이동·생산 수령)는 이 라우트를 쓰지 않으므로 여기서 막아도 안전하다. 조정·출고는 네 칸 모두 허용(실사 대상).
+    if (type === "입고" && MOVE_ONLY_CHANNELS.includes(writeChannel))
+      return NextResponse.json({ ok: false, error: `${writeChannel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요.` }, { status: 400 });
 
     const sb = supabaseAdmin();
     // 묶음(세트)은 자체 재고가 없다 → 입고/출고는 구성품으로 전개해 기록(다른 경로와 동일 규칙),
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const row: Record<string, unknown> = {
       product_id, type, qty,
-      channel: b.channel === "도매" ? "도매" : b.channel === "프로모션" ? "프로모션" : "소매", // 036·113, 기본 소매
+      channel: writeChannel, // 036·113·115, 기본 소매
       unit_amount: b.unit_amount === undefined || b.unit_amount === "" || b.unit_amount === null ? null : Math.max(0, Math.round(Number(b.unit_amount) || 0)),
       partner: String(b.partner || "").trim() || null,
       memo: String(b.memo || "").trim() || null,
@@ -88,7 +88,11 @@ export async function POST(req: NextRequest) {
     }));
 
     // 선택 컬럼(status=034, channel=036) 미적용 환경이면 그 컬럼만 빼고 재시도.
+    // 113·115 미적용 환경: 보호 칸 값은 channel 체크 제약에 걸린다. 아래 폴백이 channel 열을 통째로 빼고 재시도하면
+    //  그 기록이 조용히 소매 칸에 남아 칸이 섞이므로, 제약 위반일 때만 먼저 잘라낸다(열 자체가 없는 036 폴백은 그대로).
     let res = await sb.from("inventory_txns").insert(attempt).select();
+    if (res.error && RESERVED_CHANNELS.includes(writeChannel) && /channel_chk|check constraint/i.test(res.error.message))
+      return NextResponse.json({ ok: false, error: `${writeChannel} 칸이 아직 없습니다 — migration ${writeChannel === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.` }, { status: 500 });
     for (let guard = 0; res.error && guard < 2; guard++) {
       const miss = (["channel", "status", "reason"] as const).find((c) => c in attempt[0] && new RegExp(c, "i").test(res.error!.message));
       if (!miss) break;

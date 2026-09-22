@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@/app/b2b/orders/Combobox";
+import { INV_CHANNELS, INV_CHANNEL_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
+import { PR_PURPOSES, PR_PURPOSE_LABEL, PURPOSE_CHANNEL } from "@/app/lib/wholesale-production";
 
 type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null };
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean; alloc_qty?: number; alloc_reqs?: string[] };
@@ -20,15 +22,13 @@ const allocSumOf = (l: Line) => {
 
 export default function InventoryMovePage() {
   const [products, setProducts] = useState<Prod[]>([]);
-  const [retail, setRetail] = useState<Map<string, number>>(new Map());
-  const [whole, setWhole] = useState<Map<string, number>>(new Map());
-  const [promo, setPromo] = useState<Map<string, number>>(new Map());
+  // 칸별 현재고 — 칸이 늘 때 state·fetch·표시를 세 군데씩 고치지 않게 INV_CHANNELS 로 한 번에 돈다(115)
+  const [stock, setStock] = useState<Map<InvChannel, Map<string, number>>>(new Map());
   const [moves, setMoves] = useState<Move[]>([]);
 
   const [lines, setLines] = useState<Line[]>([newLine(1)]);
   const [nextKey, setNextKey] = useState(2);
-  type Pool = "소매" | "도매" | "프로모션";
-  const [dir, setDir] = useState<{ from: Pool; to: Pool }>({ from: "소매", to: "도매" });
+  const [dir, setDir] = useState<{ from: InvChannel; to: InvChannel }>({ from: "소매", to: "도매" });
   const [date, setDate] = useState(kstToday());
   const [memo, setMemo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,15 +36,19 @@ export default function InventoryMovePage() {
   const [ok, setOk] = useState("");
 
   const loadStock = useCallback(async () => {
-    const [r, w, p, m] = await Promise.all([
-      fetch("/api/inventory?channel=소매", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
-      fetch("/api/inventory?channel=도매", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
-      fetch("/api/inventory?channel=프로모션", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
+    const [stocks, m] = await Promise.all([
+      Promise.all(INV_CHANNELS.map(async (ch) => {
+        const j = await fetch(`/api/inventory?channel=${encodeURIComponent(ch)}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
+        return [ch, j?.ok ? new Map<string, number>((j.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])) : null] as const;
+      })),
       fetch("/api/inventory/move?limit=50", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
     ]);
-    if (r?.ok) setRetail(new Map((r.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])));
-    if (w?.ok) setWhole(new Map((w.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])));
-    if (p?.ok) setPromo(new Map((p.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])));
+    // 실패한 칸은 이전 값을 그대로 둔다 — 한 칸 조회가 깨졌다고 나머지 배지까지 0 으로 보이지 않게
+    setStock((prev) => {
+      const next = new Map(prev);
+      for (const [ch, mp] of stocks) if (mp) next.set(ch, mp);
+      return next;
+    });
     if (m?.ok) setMoves(m.moves || []);
   }, []);
   useEffect(() => {
@@ -52,9 +56,10 @@ export default function InventoryMovePage() {
     loadStock();
   }, [loadStock]);
 
-  // 배정 대상 요청서 — 소매→도매면 '도매 납품', 소매→프로모션이면 '프로모션' 요청서(113)
-  const allocMode = dir.from === "소매" && (dir.to === "도매" || dir.to === "프로모션");
-  const allocPurpose = dir.to === "프로모션" ? "프로모션" : "도매 납품";
+  // 배정 대상 요청서 — 목적지 칸에 대응하는 생산 용도의 열린 요청서(113·115).
+  //  소매→도매='도매 납품' · 소매→프로모션='프로모션' · 소매→도매 대량='도매 대량'.
+  const allocMode = dir.from === "소매" && MOVE_ONLY_CHANNELS.includes(dir.to);
+  const allocPurpose = PR_PURPOSES.find((p) => PURPOSE_CHANNEL[p] === dir.to) ?? "도매 납품";
   const fetchTargets = useCallback(async (productId: string): Promise<Target[]> => {
     try {
       const j = await (await fetch(`/api/inventory/move/targets?product_id=${encodeURIComponent(productId)}&purpose=${encodeURIComponent(allocPurpose)}`, { cache: "no-store" })).json();
@@ -173,7 +178,7 @@ export default function InventoryMovePage() {
     <div className="b2b-container" style={{ maxWidth: 820 }}>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">재고 옮기기 (소매 ↔ 도매)</h1>
+          <h1 className="b2b-page-title">재고 옮기기 (소매 ↔ 도매·프로모션·도매 대량)</h1>
         </div>
       </header>
 
@@ -185,10 +190,10 @@ export default function InventoryMovePage() {
           <label className="b2b-field-label">어디로 옮길까요?</label>
           <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <div className="sm-tabs" style={{ margin: 0 }}>
-              <button className={`sm-tab ${dir.from === "소매" && dir.to === "도매" ? "is-active" : ""}`} onClick={() => setDir({ from: "소매", to: "도매" })}>소매 → 도매</button>
-              <button className={`sm-tab ${dir.from === "도매" ? "is-active" : ""}`} onClick={() => setDir({ from: "도매", to: "소매" })}>도매 → 소매</button>
-              <button className={`sm-tab ${dir.from === "소매" && dir.to === "프로모션" ? "is-active" : ""}`} onClick={() => setDir({ from: "소매", to: "프로모션" })}>소매 → 프로모션</button>
-              <button className={`sm-tab ${dir.from === "프로모션" ? "is-active" : ""}`} onClick={() => setDir({ from: "프로모션", to: "소매" })}>프로모션 → 소매</button>
+              {MOVE_ONLY_CHANNELS.flatMap((ch) => [
+                <button key={`to-${ch}`} className={`sm-tab ${dir.from === "소매" && dir.to === ch ? "is-active" : ""}`} onClick={() => setDir({ from: "소매", to: ch })}>소매 → {ch}</button>,
+                <button key={`from-${ch}`} className={`sm-tab ${dir.from === ch ? "is-active" : ""}`} onClick={() => setDir({ from: ch, to: "소매" })}>{ch} → 소매</button>,
+              ])}
             </div>
             <button className="b2b-btn-secondary" onClick={swap} style={{ padding: "6px 10px", fontSize: 12 }} title="방향 뒤집기">⇄</button>
             <span className="sm-faint" style={{ fontSize: 12 }}>{dir.from} 재고에서 빼고 → {dir.to} 재고에 더함</span>
@@ -196,7 +201,7 @@ export default function InventoryMovePage() {
         </div>
 
         {lines.map((l, idx) => {
-          const poolQty = (pool: Pool, pid: string) => (pool === "소매" ? retail.get(pid) : pool === "도매" ? whole.get(pid) : promo.get(pid)) ?? 0;
+          const poolQty = (pool: InvChannel, pid: string) => stock.get(pool)?.get(pid) ?? 0;
           const fromQty = l.pid ? poolQty(dir.from, l.pid) : 0;
           const toQty = l.pid ? poolQty(dir.to, l.pid) : 0;
           const nQty = nQtyOf(l);
@@ -220,9 +225,9 @@ export default function InventoryMovePage() {
               </div>
               {l.pid && (
                 <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 14, flexWrap: "wrap", alignItems: "center" }}>
-                  <span className="b2b-status-pill" style={{ background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>소매 {(retail.get(l.pid) ?? 0).toLocaleString()}</span>
-                  <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>도매 {(whole.get(l.pid) ?? 0).toLocaleString()}</span>
-                  <span className="b2b-status-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>프로모션 {(promo.get(l.pid) ?? 0).toLocaleString()}</span>
+                  {INV_CHANNELS.map((ch) => (
+                    <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {poolQty(ch, l.pid).toLocaleString()}</span>
+                  ))}
                   <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={l.qty}
                     onChange={(e) => patchLine(l.key, { qty: e.target.value })}
                     placeholder="옮길 수량" style={{ width: 120 }} aria-label={`품목 ${idx + 1} 수량`} />
@@ -238,7 +243,7 @@ export default function InventoryMovePage() {
               {allocMode && l.pid && (
                 <div style={{ marginTop: 10 }}>
                   {l.targets.length === 0 ? (
-                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {allocPurpose === "프로모션" ? "프로모션" : "도매"} 생산 요청 없음 — 전량 기타(요청 미연결)로 기록됩니다.</p>
+                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 생산 요청 없음 — 전량 기타(요청 미연결)로 기록됩니다.</p>
                   ) : (
                     <>
                       <div className="b2b-table-wrap">
@@ -285,10 +290,13 @@ export default function InventoryMovePage() {
         </div>
 
         {allocMode && activeLines.some((l) => l.targets.length > 0) && (
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>배정으로 요청서가 100% 채워지면 자동으로 완료되어 {allocPurpose === "프로모션" ? "프로모션" : "도매"} 요청 종합에서 빠집니다. 이동을 취소하면 배정도 함께 돌아옵니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>배정으로 요청서가 100% 채워지면 자동으로 완료되어 {PR_PURPOSE_LABEL[allocPurpose]} 요청 종합에서 빠집니다. 이동을 취소하면 배정도 함께 돌아옵니다.</p>
         )}
         {dir.to === "프로모션" && (
           <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>프로모션 재고는 행사일까지 자동 출고에서 보호됩니다. 목표일이 지나고 열린 프로모션 요청이 없으면 다음날 아침 소매로 자동 합류합니다.</p>
+        )}
+        {dir.to === "도매 대량" && (
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>도매 대량 재고는 선결제로 이미 팔린 몫입니다. 도매 일반 주문이 가져가지 못하고, 프로모션과 달리 소매로 돌아오는 자동 합류가 없습니다 — 되돌리려면 도매 대량 → 소매 방향으로 직접 옮기세요.</p>
         )}
 
         <div className="b2b-field-row" style={{ marginTop: 12 }}>

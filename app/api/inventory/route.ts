@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getAllBundles } from "@/app/lib/product-bundles";
-import type { InventoryRow } from "@/app/lib/inventory";
+import { toInvChannelParam, type InventoryRow } from "@/app/lib/inventory";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   try {
     const asof = req.nextUrl.searchParams.get("asof");
     const chanParam = req.nextUrl.searchParams.get("channel");
-    const chan = chanParam === "도매" || chanParam === "소매" || chanParam === "프로모션" ? chanParam : null; // null = 전체(전 풀 합산)
+    const chan = toInvChannelParam(chanParam); // '전체'·빈값·모르는 값 → null = 전 칸 합산
     const sb = supabaseAdmin();
     const asofParam = asof && /^\d{4}-\d{2}-\d{2}$/.test(asof) ? asof : null;
     // 채널 지정 시 inventory_stock(asof, chan). 036 미적용(2-인자 함수 없음)이면 전체로 폴백.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
-import { PR_STATUSES, UNREQUESTED_ITEM_MEMO, type PrStatus } from "@/app/lib/wholesale-production";
+import { PR_STATUSES, UNREQUESTED_ITEM_MEMO, toPrPurpose, CONFIRMED_PURPOSES, type PrStatus, type PrPurpose } from "@/app/lib/wholesale-production";
 import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProductionRequestDeleted } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { syncWindowReceipts } from "@/app/lib/production-allocate";
@@ -36,7 +36,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       patch.status = s;
     }
     if (b.title !== undefined) patch.title = String(b.title || "").trim() || null;
-    if (b.purpose !== undefined) patch.purpose = b.purpose === "도매 납품" ? "도매 납품" : b.purpose === "프로모션" ? "프로모션" : "재고 보충"; // 용도(082·113)
+    // 용도(082·113·115) — 모르는 값은 재고 보충. 아래 미적용 경고에서 다시 쓰려고 지역 변수로 잡아 둔다.
+    const nextPurpose: PrPurpose | null = b.purpose !== undefined ? toPrPurpose(b.purpose) : null;
+    if (nextPurpose) patch.purpose = nextPurpose;
     if (b.requested_by !== undefined) patch.requested_by = String(b.requested_by || "").trim() || null;
     if (b.assignee !== undefined) patch.assignee = String(b.assignee || "").trim() || null;
     if (b.memo !== undefined) patch.memo = String(b.memo || "").trim() || null;
@@ -98,8 +100,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       reqNo = (cur as { req_no?: string } | null)?.req_no ?? "";
     }
     let { error } = await sb.from("production_requests").update(patch).eq("id", id);
-    if (error && patch.purpose === "프로모션" && /purpose/i.test(error.message))
-      return NextResponse.json({ ok: false, error: "프로모션 용도가 아직 없습니다 — migration 113 을 먼저 적용하세요." }, { status: 500 });
+    if (error && nextPurpose && CONFIRMED_PURPOSES.includes(nextPurpose) && /purpose/i.test(error.message))
+      return NextResponse.json({ ok: false, error: `${nextPurpose} 용도가 아직 없습니다 — migration ${nextPurpose === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.` }, { status: 500 });
     if (error && "purpose" in patch && /purpose/i.test(error.message)) {
       delete patch.purpose; // 082 미적용 환경 폴백
       ({ error } = await sb.from("production_requests").update(patch).eq("id", id));

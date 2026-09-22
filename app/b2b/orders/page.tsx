@@ -377,7 +377,7 @@ export default function OrdersListPage() {
     return out;
   }, [shipPrompt, shipItems, shipRows]);
 
-  // 발송 일정 저장 — 차수 통째 교체. 서버가 도매 재고 차감·헤더 발송일/상태/박스 수까지 맞춘다.
+  // 발송 일정 저장 — 차수 통째 교체. 서버가 재고 차감(도매 — 대량 발주면 '도매 대량')·헤더 발송일/상태/박스 수까지 맞춘다.
   async function saveShipments() {
     if (!shipPrompt) return;
     const schedules = shipRows
@@ -1363,7 +1363,7 @@ export default function OrdersListPage() {
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
                 나눠 보내면 줄을 추가하세요. 박스 수는 실제 포장할 때 정해지므로 여기서는 넣지 않고, ‘발송요청 양식 다운로드’에서 확정합니다.
-                저장하면 도매 재고에서 발주 전량이 가장 이른 발송일에 차감됩니다.
+                저장하면 발주 전량이 가장 이른 발송일에 재고에서 차감됩니다 — ‘대량 발주(선결제)’로 체크한 발주는 ‘도매 대량’ 칸에서, 나머지는 ‘도매’ 칸에서 빠집니다.
               </p>
               {shipLoading ? (
                 <div className="b2b-loading">불러오는 중...</div>
