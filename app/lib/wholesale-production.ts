@@ -64,6 +64,13 @@ export function isFactoryPurpose(p: unknown): boolean { return toPrPurpose(p) ==
 export const PURPOSE_CHANNEL: Partial<Record<PrPurpose, string>> = { "도매 납품": "도매", "프로모션": "프로모션", "도매 대량": "도매 대량" };
 
 /** 용도 한 줄 설명 — 요청서 상세·알림 본문용. */
+/** 용도별 목표일(생산마감일 칸)의 뜻 — 확정형은 마감이 아니라 그날 물건이 있어야 하는 날이다. */
+export const DUE_LABEL: Record<PrPurpose, string> = {
+  "재고 보충": "생산마감일",
+  "도매 납품": "생산마감일",
+  "프로모션": "행사 시작일",
+  "도매 대량": "출고(납품) 예정일",
+};
 export const PURPOSE_NOTE: Record<PrPurpose, string> = {
   "재고 보충": "제조사 생산 요청 — 입고로 이행",
   "도매 납품": "도매 보충 — 소매→도매 이동으로 이행",
@@ -82,7 +89,10 @@ export interface ProductionRequest {
   id: string;
   req_no: string | null;
   title: string | null;
-  purpose: PrPurpose;           // 생산 용도(082) — 재고 보충(자동 생성) | 도매 납품(MD 직접). 미적용 환경은 기본 재고 보충
+  purpose: PrPurpose;           // 생산 용도(082·113·115). 미적용 환경은 기본 재고 보충
+  order_id?: string | null;     // 115 — 확정형(도매 대량)이 어느 발주 몫인지. 발주가 지워져도 요청서는 남는다
+  company_id?: string | null;   // 115 — 발주가 아직 시스템에 없을 때(구두 확보 당일) 거래처만
+  company_name?: string | null; // 조인 표시용(저장 안 함)
   requested_by: string | null;
   request_date: string;
   due_date: string | null;      // 생산마감일(기본 요청일+7영업일, 급발주 시 수정 가능)

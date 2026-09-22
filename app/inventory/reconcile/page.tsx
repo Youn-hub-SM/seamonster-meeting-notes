@@ -94,7 +94,7 @@ export default function InventoryReconcilePage() {
         {/* 프로모션 풀은 판매 소스가 없어 대사 의미가 없다(RPC 도 전사 판매로 오탐 — 검증 확정) → 제외.
             도매 대량(115)도 같은 이유로 제외 — RPC 의 sold 갈래가 '도매'(대량 제외)·'소매'뿐이라
             '도매 대량'은 else 로 떨어져 전사 판매를 그 칸 재고와 비교한다 */}
-        <div className="b2b-page-actions"><ChannelFilter value={channel} onChange={setChannel} exclude={["프로모션", "도매 대량"]} /></div>
+        <div className="b2b-page-actions"><ChannelFilter value={channel} onChange={setChannel} exclude={["프로모션"]} /></div>
       </header>
 
       {/* 기간 */}
@@ -111,7 +111,7 @@ export default function InventoryReconcilePage() {
         <span className="sm-faint" style={{ fontSize: 12 }}>보는 기간: {range.from} ~ {range.to}</span>
       </div>
       <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 12px" }}>
-        팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료 — 대량 발주 제외)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송 — 대량 발주 제외)"}</strong>. 채널을 바꾸면 그 채널 재고와 그 채널 판매로 비교합니다.
+        팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료 — 대량 발주 제외)" : channel === "도매 대량" ? "도매 대량(대량 발주 발송완료)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송, 대량 포함)"}</strong>. 채널을 바꾸면 그 채널 재고와 그 채널 판매로 비교합니다.
         {salesMax && <> · 매출 입력: <strong>~{salesMax}</strong></>}
       </p>
 

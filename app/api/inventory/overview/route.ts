@@ -142,7 +142,9 @@ export async function GET(req: NextRequest) {
         promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
         inbound: inbQty, inbound_due: inb?.earliest_due ?? null, inbound_overdue: inb?.overdue_qty ?? 0, inbound_detail: formatInbound(inb, today),
         // 부족 = 현재고 + 프로모션 풀 + 입고 예정이 안전재고 이하(권장 수식과 같은 재고 포지션 기준)
-        low: auto_safety > 0 && qty + (promoPool.get(p.id) || 0) + inbQty <= auto_safety,
+        // 도매 대량은 '목표만큼 늘 갖고 있는 칸'이 아니라 '요청수량을 채워 나가는 칸'이라
+        //  목표 기반 부족 판정이 맞지 않는다(발송되면 0 이 정상). 부족으로 세지 않는다(기획 2절).
+        low: chan === "도매 대량" ? false : auto_safety > 0 && qty + (promoPool.get(p.id) || 0) + inbQty <= auto_safety,
         is_bundle: isBundle,
       };
     });

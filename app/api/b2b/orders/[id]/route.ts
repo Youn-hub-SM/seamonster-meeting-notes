@@ -132,8 +132,18 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     //  반드시 그 전에 써야 한다. 재저장은 옛 차수를 지우고(cascade 로 선점 출고 원복) 다시 넣으므로,
     //  체크를 켜고 저장하면 그 발주의 차감이 통째로 새 칸으로 옮겨 간다.
     //  is_bulk 컬럼 미적용(115 전) 환경이면 에러 메시지에 컬럼명이 보인다 — 그때만 건너뛴다(전건 도매).
+    //  뒤 단계가 실패하면 표식만 바뀐 채 원장은 옛 칸에 남는다 — 되돌릴 수 있게 이전 값을 잡아 둔다.
+    let prevBulk: boolean | null = null;
+    {
+      const cur = await sb.from("orders").select("is_bulk").eq("id", id).maybeSingle();
+      if (!cur.error) prevBulk = (cur.data as { is_bulk?: boolean } | null)?.is_bulk ?? false;
+    }
     const bulkRes = await sb.from("orders").update({ is_bulk: !!body.is_bulk }).eq("id", id);
     if (bulkRes.error && !/is_bulk/i.test(bulkRes.error.message || "")) throw bulkRes.error;
+    //  이 뒤 어디서든 throw 되면 catch 에서 표식을 되돌린다(아래 catch).
+    const restoreBulk = async () => {
+      if (prevBulk !== null && prevBulk !== !!body.is_bulk) await sb.from("orders").update({ is_bulk: prevBulk }).eq("id", id);
+    };
 
     // 2) 기존 라인아이템 스냅샷 (롤백용)
     const { data: existingItems, error: snapErr } = await sb
@@ -167,6 +177,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .insert(itemsToInsert)
       .select("id, product_id, product_name, spec, sort_order");
     if (insErr) {
+      await restoreBulk(); // 표식만 바뀐 채 원장이 옛 칸에 남는 것을 막는다(115)
       // 보상: 기존 라인아이템 복구 시도
       if (existingItems && existingItems.length > 0) {
         const restoreRows = existingItems.map((it) => {

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, UNREQUESTED_ITEM_MEMO, lineState, allLinesFilled, toPrPurpose, isFactoryPurpose, CONFIRMED_PURPOSES,
-  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, FULFILL_NOTE
+  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, FULFILL_NOTE, DUE_LABEL,
 } from "@/app/lib/wholesale-production";
 import { addBusinessDays } from "@/app/lib/business-days";
 import { Combobox } from "@/app/b2b/orders/Combobox";
@@ -602,6 +602,18 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   const [title, setTitle] = useState(initial?.title || "");
   // 용도(082) — 새 요청은 현재 탭 기준(제조사 탭=재고 보충 / 도매 탭=도매 납품), 수정은 기존 값.
   const [purpose, setPurpose] = useState<PrPurpose>(initial?.purpose || defaultPurpose || "재고 보충");
+  // 확정형(도매 대량)이 어느 거래처·발주 몫인지(115). 발주는 상위가 넘겨줄 때만 찬다.
+  const [companyId, setCompanyId] = useState(initial?.company_id || "");
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    if (purpose !== "도매 대량" || companies.length) return;
+    (async () => {
+      try {
+        const j = await (await fetch("/api/b2b/companies?limit=500", { cache: "no-store" })).json();
+        if (j.ok) setCompanies((j.companies || j.rows || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+      } catch { /* 거래처 없이도 등록은 된다 */ }
+    })();
+  }, [purpose, companies.length]);
   const [memo, setMemo] = useState(initial?.memo || "");
   const [lines, setLines] = useState<NewLine[]>(() =>
     initial
@@ -648,6 +660,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
       requested_by: requestedBy.trim() || (isEdit ? "" : undefined),
       request_date: date,
       due_date: dueDate,
+      company_id: purpose === "도매 대량" ? (companyId || null) : null,
+      order_id: purpose === "도매 대량" ? (initial?.order_id || null) : null,
       memo: memo.trim() || (isEdit ? "" : undefined),
       items,
     });
@@ -676,9 +690,20 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               <input type="date" className="b2b-input" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
             </label>
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>생산마감일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 7영업일</span></span>
+              {/* 확정형은 마감이 아니라 그날 물건이 있어야 하는 날이다 — 라벨을 용도에 맞춘다(115) */}
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{DUE_LABEL[purpose]} <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>{CONFIRMED_PURPOSES.includes(purpose) ? "· 이 날까지 확보" : "· 기본 7영업일"}</span></span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
+            {purpose === "도매 대량" && (
+              <label className="sm-col" style={{ gap: 3, minWidth: 200 }}>
+                {/* 발주가 아직 없을 수 있다(영업이 구두로 확보한 당일 등록) — 그때는 거래처만 고른다 */}
+                <span style={{ fontSize: 15, fontWeight: 600 }}>거래처 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 선택</span></span>
+                <select className="b2b-input" style={{ width: 200 }} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                  <option value="">(미지정)</option>
+                  {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </label>
+            )}
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>제목(선택)</span>
               <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 3월 2주차 도매 생산" />

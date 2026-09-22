@@ -7,6 +7,7 @@ import { addBusinessDays } from "@/app/lib/business-days";
 import { syncWindowReceipts } from "@/app/lib/production-allocate";
 import { toPrPurpose, CONFIRMED_PURPOSES } from "@/app/lib/wholesale-production";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const dynamic = "force-dynamic";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -70,6 +71,11 @@ export async function POST(req: NextRequest) {
       memo: String(b.memo || "").trim() || null,
       created_by: who,
     };
+    // 확정형이 어느 발주·거래처 몫인지(115). 둘 다 선택 — 구두 확보 당일엔 발주가 아직 없어 거래처만 찬다.
+    const orderId = UUID_RE.test(String(b.order_id || "")) ? String(b.order_id) : null;
+    const companyId = UUID_RE.test(String(b.company_id || "")) ? String(b.company_id) : null;
+    if (orderId) head.order_id = orderId;
+    if (companyId) head.company_id = companyId;
     if (request_date) head.request_date = request_date;
     if (due_date) head.due_date = due_date; // 생산마감일(071). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
 
@@ -79,7 +85,7 @@ export async function POST(req: NextRequest) {
     if (he && CONFIRMED_PURPOSES.includes(purpose) && /purpose/i.test(he.message))
       return NextResponse.json({ ok: false, error: `${purpose} 용도가 아직 없습니다 — migration ${purpose === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.` }, { status: 500 });
     // 선택 컬럼(071 due_date · 082 purpose) 미적용 환경 폴백 — 에러 메시지에 보이는 컬럼만 빼고 재시도.
-    for (const col of ["due_date", "purpose"] as const) {
+    for (const col of ["order_id", "company_id", "due_date", "purpose"] as const) {
       if (he && col in head && new RegExp(col, "i").test(he.message)) {
         delete head[col];
         ({ data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single());
