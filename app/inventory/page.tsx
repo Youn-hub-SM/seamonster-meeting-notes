@@ -2,10 +2,10 @@
 
 // 재고 목록 = 재고 + 생산 통합 화면(2026-07-29 — 구 /production/inventory '생산' 흡수).
 //  기본 열(SKU·품목·현재고·안전재고·하루 출고·예상소진) + 재고(총입고·총출고·재고자산)
-//  + 생산(권장생산·주문필요) + 액션(입·출·조정 / 보정). 체크 후 '선택 N종 생산 요청'을 누르면
+//  + 판단(입고 예정·권장생산) + 액션(입·출·조정). 체크 후 '선택 N종 생산 요청'을 누르면
 //  '생산 요청' 메뉴로 이동해 새 생산 요청 창이 권장 수량 채워진 채 열린다(sessionStorage 핸드오프).
 //  AI 조언도 이 화면에서.
-//  재고 수치 = /api/inventory/overview, 생산 수치(권장·주문필요·보정) = /api/production/inventory
+//  재고 수치 = /api/inventory/overview, 생산 수치(권장생산) = /api/production/inventory
 //  (소매·도매 필터 = 그 채널 수식, 전체 = 소매+도매 권장 합) — SKU 로 조인.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -47,7 +47,7 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
 //  합계(=TABLE_MIN)는 그대로다 — 1366 창의 무스크롤을 지키기 위해. 줄인 열도 헤더·내용이 잘리지 않는 걸 실측 확인했다.
 const COL = {
   chk: 31, sku: 108, name: 140, qty: 72, daily: 78, dep: 76,
-  inb: 84, req: 78, rec: 76, pin: 64, pout: 64, val: 96, act: 78, adj: 69,
+  inb: 84, rec: 76, pin: 64, pout: 64, val: 96, act: 78,
 } as const;
 const TABLE_MIN = Object.values(COL).reduce((a, b) => a + b, 0); // 1106 — 사이드바(237)+스크롤바(15) 더해도 1366 창에 들어간다
 const pct = (px: number) => `${((px / TABLE_MIN) * 100).toFixed(3)}%`;
@@ -103,7 +103,7 @@ export default function InventoryPage() {
   const prodChannel = channel === "도매" ? "도매" : "소매"; // AI 조언용(조언 API 는 단일 채널)
   const [retailMap, setRetailMap] = useState<Map<string, ProdRow>>(new Map());
   const [wholeMap, setWholeMap] = useState<Map<string, ProdRow>>(new Map());
-  const [prodLead, setProdLead] = useState(7); // 안전재고 지평(리드타임 + 발주 주기) — 보정 미리보기용
+  const [prodLead, setProdLead] = useState(7); // 안전재고 지평(리드타임 + 발주 주기)
   const [spanDays, setSpanDays] = useState(0);
   // 한쪽 채널만 실패하면 권장이 조용히 축소되어(합인데 한쪽만) 부족한 수량을 요청하게 된다 → 경고를 띄운다.
   const [prodWarn, setProdWarn] = useState("");
@@ -123,16 +123,16 @@ export default function InventoryPage() {
       const bad = [!r.ok && "소매", !w.ok && "도매"].filter(Boolean).join("·");
       // 입고 예정 집계 실패는 반대 방향(권장 과대 = 시켜 둔 물량을 또 시킴) — 따로 알린다
       const inbBad = r.ok && r.inboundOk === false;
-      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 실제보다 적게 보일 수 있습니다.`
+      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산이 실제보다 적게 보일 수 있습니다.`
         : inbBad ? "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 권장생산이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다." : "");
     } catch {
-      setProdWarn("생산 수치를 불러오지 못했습니다 — 권장생산·주문필요가 비어 있거나 실제보다 적게 보일 수 있습니다.");
+      setProdWarn("생산 수치를 불러오지 못했습니다 — 권장생산이 비어 있거나 실제보다 적게 보일 수 있습니다.");
     }
   }, []);
   useEffect(() => { prodLoad(); }, [prodLoad]);
 
   // 채널 필터에 맞는 생산 수치 뷰 — 전체는 소매+도매 권장 합(새 생산 요청 창의 제조사 권장과 동일 기준),
-  //  주문필요는 두 채널 중 더 급한 쪽. retail 은 보정 모달용 소매 원본 행.
+  //  retail 은 소매 원본 행(전체 탭에서 소매 수치를 함께 쓰는 곳이 있다).
   type ProdView = { has: boolean; recommend: number; requestByDays: number | null; requestBy: string | null; retail?: ProdRow };
   const prodView = useCallback((r: OverviewRow): ProdView => {
     const key = r.sku ? r.sku.toUpperCase() : null;
@@ -161,7 +161,7 @@ export default function InventoryPage() {
     low: rows.filter((r) => r.low).length,
     out: rows.reduce((s, r) => s + r.period_out, 0),
   }), [rows]);
-  // 생산 카드 — 권장 생산>0 = 안전재고(행사·보정 반영) 미달과 동일 데이터라 하나만 노출. 채널 기준은 표와 동일.
+  // 생산 카드 — 권장 생산>0 = 안전재고(행사 반영) 미달과 동일 데이터라 하나만 노출. 채널 기준은 표와 동일.
   const prodStats = useMemo(() => {
     let needItems = 0, needQty = 0;
     const keys = new Set([...retailMap.keys(), ...wholeMap.keys()]);
@@ -234,35 +234,6 @@ export default function InventoryPage() {
     router.push("/production/request");
   }
 
-  // ── 안전재고 보정(소매 기준 생산 수치에만 적용) ──
-  const [editRow, setEditRow] = useState<ProdRow | null>(null);
-  const [eDelta, setEDelta] = useState("");
-  const [eExclude, setEExclude] = useState("");
-  const [eMemo, setEMemo] = useState("");
-  const [eUntil, setEUntil] = useState("");
-  const [saving, setSaving] = useState(false);
-  function openEdit(p: ProdRow) {
-    setEditRow(p);
-    setEDelta(p.adjustRaw ? String(p.adjustRaw) : "");
-    setEExclude(p.adjustExcludeRaw ? String(p.adjustExcludeRaw) : "");
-    setEMemo(p.adjustMemo || "");
-    setEUntil(p.adjustUntil || "");
-  }
-  async function saveAdjust() {
-    if (!editRow) return;
-    setSaving(true); setError("");
-    try {
-      const res = await fetch("/api/production/safety-adjust", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku: editRow.sku, delta: Number(eDelta) || 0, excludeOut: Number(eExclude) || 0, memo: eMemo, until: eUntil || null }),
-      });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setEditRow(null);
-      await prodLoad();
-    } catch (e) { setError(e instanceof Error ? e.message : "보정 저장 실패"); }
-    setSaving(false);
-  }
 
   // ── AI 조언(생산) ──
   const [advice, setAdvice] = useState<Advice | null>(null);
@@ -301,7 +272,7 @@ export default function InventoryPage() {
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
       {(prodWarn || meta?.inboundOk === false) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
 
-      {/* 데이터박스 6종 — 재고 4 + 생산 2 (생산 권장 품목 = 안전재고(행사·보정 반영) 미달과 동일 데이터라 통합) */}
+      {/* 데이터박스 6종 — 재고 4 + 생산 2 (생산 권장 품목 = 안전재고(행사 반영) 미달과 동일 데이터라 통합) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">품목 수</div><div className="b2b-stat-card-value">{totals.items}</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 자산(원가)</div><div className="b2b-stat-card-value b2b-money">{totals.value.toLocaleString()}</div></div>
@@ -332,7 +303,7 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·주문필요·권장생산은 최근 30일 기준 · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`}{channel === "도매" ? "" : " + 프로모션 확보분"} · {channel === "도매 대량" ? "권장생산 수식 없음" : channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = 목표 − (현재고 + 입고 예정)"} · {channel === "도매 대량" ? "권장생산·주문필요는 도매 대량 탭에서 계산하지 않습니다(선결제로 잡아둔 칸이라 생산 수식이 없습니다)" : channel === "소매" || channel === "도매" ? `권장생산·주문필요는 ${channel} 기준` : "권장생산은 소매+도매 합, 주문필요는 더 급한 채널 기준"}{channel === "도매 대량" ? null : <> · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</>}</p>}
+      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·권장생산은 최근 30일 기준 · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`}{channel === "도매" ? "" : " + 프로모션 확보분"} · {channel === "도매 대량" ? "권장생산 수식 없음" : channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = 목표 − (현재고 + 입고 예정)"} · {channel === "도매 대량" ? "권장생산·주문필요는 도매 대량 탭에서 계산하지 않습니다(선결제로 잡아둔 칸이라 생산 수식이 없습니다)" : channel === "소매" || channel === "도매" ? `권장생산은 ${channel} 기준` : "권장생산은 소매+도매 합"}{channel === "도매 대량" ? null : <> · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</>}</p>}
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {advice && (
         <section style={{ marginBottom: 18 }}>
@@ -388,15 +359,14 @@ export default function InventoryPage() {
               <th style={{ width: pct(COL.sku) }}>SKU</th><Th k="name" label="품목" w={pct(COL.name)} />
               {/* 상태(지금 어떤가) → 판단(무엇을 할까) → 참고(기간 실적). 결정 17 */}
               <Th k="qty" label="현재고" num w={pct(COL.qty)} /><Th k="daily_out" label="하루 출고" num w={pct(COL.daily)} /><Th k="depletion_days" label="예상소진" num w={pct(COL.dep)} />
-              <Th k="inbound" label="입고 예정" num w={pct(COL.inb)} /><Th k="request_by" label="주문필요" num w={pct(COL.req)} /><Th k="recommend" label="권장생산" num w={pct(COL.rec)} />
+              <Th k="inbound" label="입고 예정" num w={pct(COL.inb)} /><Th k="recommend" label="권장생산" num w={pct(COL.rec)} />
               <Th k="period_in" label="총입고" num w={pct(COL.pin)} /><Th k="period_out" label="총출고" num w={pct(COL.pout)} />
               <Th k="value" label="재고자산" num w={pct(COL.val)} />
-              <th style={{ width: pct(COL.act) }}></th><th className="num" style={{ width: pct(COL.adj) }}>보정</th>
+              <th style={{ width: pct(COL.act) }}></th>
             </tr></thead>
             <tbody>
               {shown.map((r) => {
                 const pv = prodView(r);
-                const adj = channel !== "도매" ? pv.retail : undefined; // 보정은 소매 수식에만 적용
                 const picked = sel.has(r.product_id);
                 return (
                 /* 줄 어디를 눌러도 선택 토글 — 체크박스·버튼 칸은 아래에서 전파를 막는다 */
@@ -439,40 +409,11 @@ export default function InventoryPage() {
                     {(r.inbound ?? 0) > 0 ? r.inbound.toLocaleString() : "-"}
                     {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
                   </td>
-                  <td className="num">
-                    {!pv.has || pv.requestByDays == null ? (
-                      <span style={{ color: "var(--sm-text-light)" }}>-</span>
-                    ) : pv.requestByDays <= 0 ? (
-                      <span className="inv-dl-cell-urgent">지금!</span>
-                    ) : (
-                      <span className={pv.requestByDays <= 7 ? "inv-dl-cell-soon" : "inv-dl-cell-ok"}>
-                        D-{pv.requestByDays}{pv.requestBy && <span className="inv-dl-cell-date"> {pv.requestBy.slice(5)}</span>}
-                      </span>
-                    )}
-                  </td>
                   <td className="num">{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
                   <td className="num b2b-money">{r.value.toLocaleString()}</td>
                   <td onClick={(e) => e.stopPropagation()}><button className="b2b-btn-secondary" style={{ padding: "4px 6px", fontSize: 12, whiteSpace: "nowrap" }} onClick={() => setModalFor(r.product_id)}>입·출·조정</button></td>
-                  <td className="num" onClick={(e) => e.stopPropagation()}>
-                    {adj ? (
-                      <button type="button" className="inv-adj-btn" onClick={() => openEdit(adj)} title={adj.adjustMemo || "안전재고 보정"}>
-                        {adj.adjustRaw !== 0 || adj.adjustExcludeRaw > 0 ? (
-                          <span className={adj.adjustRaw !== 0 && adj.adjust === 0 && adj.adjustUntil ? "inv-adj-expired" : "inv-adj-set"}>
-                            {adj.adjustExcludeRaw > 0 && <>행사−{adj.adjustExcludeRaw.toLocaleString()}</>}
-                            {adj.adjustExcludeRaw > 0 && adj.adjustRaw !== 0 ? " " : ""}
-                            {adj.adjustRaw !== 0 && <>{adj.adjustRaw > 0 ? "+" : ""}{adj.adjustRaw.toLocaleString()}</>}
-                            {adj.adjustUntil && <span className="inv-adj-until">~{adj.adjustUntil.slice(5)}</span>}
-                          </span>
-                        ) : (
-                          <span className="inv-adj-empty">+ 보정</span>
-                        )}
-                      </button>
-                    ) : (
-                      <span style={{ color: "var(--sm-text-light)" }}>-</span>
-                    )}
-                  </td>
                 </tr>
                 );
               })}
@@ -532,58 +473,6 @@ export default function InventoryPage() {
         />
       )}
 
-      {editRow && (
-        <div className="b2b-modal-backdrop">
-          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-            <div className="b2b-modal-head">
-              <span className="b2b-modal-title">안전재고 보정 — {editRow.name}</span>
-              <button className="b2b-modal-close" onClick={() => setEditRow(null)}>✕</button>
-            </div>
-            <div className="b2b-modal-body">
-              <p className="inv-modal-auto">
-                지금 <strong>평상시 하루 {editRow.dailyOut.toFixed(1)}개</strong>씩 나가서 자동 안전재고가 <strong>{editRow.autoSafety.toLocaleString()}개</strong>입니다{editRow.promoQty > 0 && <> (+ 예정 행사 {editRow.promoQty.toLocaleString()})</>}. 행사로 평소보다 많이 나갔다면 그 출고를 빼고, 더 확보할 게 있으면 더하세요.
-              </p>
-              <label className="b2b-field">
-                <span className="b2b-field-label">① 행사 출고 빼기 (개)</span>
-                <input className="b2b-input" type="number" min={0} value={eExclude} onChange={(e) => setEExclude(e.target.value)} placeholder="예: 500" />
-                <span className="inv-field-hint">최근 {spanDays}일간 <strong>행사·이벤트로</strong> 평소보다 많이 나간 출고량. 이만큼은 평상시 속도에서 빼서 안전재고를 정상치로 낮춥니다.</span>
-              </label>
-              <label className="b2b-field">
-                <span className="b2b-field-label">② 추가 확보 (개)</span>
-                <input className="b2b-input" type="number" value={eDelta} onChange={(e) => setEDelta(e.target.value)} placeholder="예: 200 (음수도 가능)" />
-                <span className="inv-field-hint">앞으로 더 만들어둘 양을 안전재고에 더합니다.</span>
-              </label>
-              <label className="b2b-field">
-                <span className="b2b-field-label">사유 (선택)</span>
-                <input className="b2b-input" type="text" value={eMemo} onChange={(e) => setEMemo(e.target.value)} placeholder="예: 여름 프로모션" />
-              </label>
-              <label className="b2b-field">
-                <span className="b2b-field-label">만료일 (선택) — 지나면 자동 해제</span>
-                <input className="b2b-input" type="date" value={eUntil} onChange={(e) => setEUntil(e.target.value)} />
-              </label>
-              <p className="inv-modal-preview">
-                {(() => {
-                  const sd = Math.max(1, spanDays);
-                  const baseDaily = editRow.dailyOut + (editRow.adjustExcludeRaw || 0) / sd; // 기존 행사출고 빼기 되돌린 평상시
-                  const newDaily = Math.max(0, baseDaily - (Number(eExclude) || 0) / sd);
-                  const newAuto = Math.ceil(newDaily * prodLead);
-                  const newSafety = Math.max(0, newAuto + editRow.promoQty + (Number(eDelta) || 0));
-                  return (
-                    <>적용 후 안전재고 ≈ <strong>{newSafety.toLocaleString()}</strong> <span style={{ color: "var(--sm-text-light)", fontWeight: 400 }}>(하루 {newDaily.toFixed(1)}×{prodLead}일{editRow.promoQty > 0 ? ` +행사 ${editRow.promoQty}` : ""}{(Number(eDelta) || 0) !== 0 ? ` +확보 ${Number(eDelta) || 0}` : ""})</span></>
-                  );
-                })()}
-              </p>
-            </div>
-            <div className="b2b-modal-foot">
-              <button className="b2b-btn-secondary" onClick={() => { setEDelta(""); setEExclude(""); setEMemo(""); setEUntil(""); }}>초기화</button>
-              <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setEditRow(null)}>취소</button>
-                <button className="b2b-btn-primary" onClick={saveAdjust} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
