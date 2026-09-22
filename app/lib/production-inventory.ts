@@ -21,13 +21,13 @@ export interface InvRow {
   dailyOut: number;       // 행사 제거한 평상시 하루 평균 출고량
   rawDailyOut: number;    // 보정 전 원 출고 일평균(참고)
   autoSafety: number;     // 자동 안전재고 = ceil(dailyOut × LEAD_DAYS)
-  promoQty: number;       // 프로모션 자동 가산(리드타임 내 행사)
+  promoQty: number;       // 앞으로 올 행사 예상판매(표시·참고용) — 목표에는 더하지 않는다(결정 9)
   adjust: number;         // 추가 확보(만료 반영된 유효 delta)
   adjustRaw: number;      // 저장된 추가확보값(만료 무관 — 편집용)
   adjustExcludeRaw: number; // 저장된 '행사 출고 빼기' 양(만료 무관 — 편집용)
   adjustMemo: string;     // 보정 사유
   adjustUntil: string | null; // 보정 만료일
-  safety: number;         // 최종 안전재고 = max(0, autoSafety + promoQty + adjust)
+  safety: number;         // 최종 목표 = max(0, autoSafety + adjust). 행사 가산은 빠졌다(결정 9)
   demand: number;         // B2B 생산대기·생산중 수요
   inbound: number;        // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
@@ -83,20 +83,9 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
 
   const stockByProduct = new Map<string, number>();
   for (const t of (stockRes.data as { product_id: string; qty: number }[] | null) ?? []) stockByProduct.set(t.product_id, Number(t.qty) || 0);
-  // 프로모션 풀 합산(113) — 소매 수식의 현재고에 프로모션 확보분을 포함한다. 행사 수요는 안전재고의
-  //  프로모션 일정 보정(promoForward)에 이미 들어 있고, 풀로 옮겨둔 확보분이 그 수요를 채우는 재고다.
-  //  합산하지 않으면 풀로 옮기는 즉시 소매 현재고가 줄어 권장이 다시 부풀고 이중 생산을 시킨다.
-  //  (전체(channel 미지정)는 chan null 조회가 전 풀 합산이라 이미 포함, 도매 수식은 무관)
-  if (channel === "소매") {
-    try {
-      const pr = await sb.rpc("inventory_stock", { asof: null, chan: "프로모션" });
-      if (!pr.error) {
-        for (const t of (pr.data as { product_id: string; qty: number }[] | null) ?? []) {
-          stockByProduct.set(t.product_id, (stockByProduct.get(t.product_id) || 0) + (Number(t.qty) || 0));
-        }
-      }
-    } catch { /* 113 미적용 등 — 소매 단독으로 진행 */ }
-  }
+  // 프로모션 풀은 소매 보유에 더하지 않는다(4단계·기획 결정 9·10). 행사는 이제 주간 요청서가 세지
+  //  않으므로(결정 7·8) 목표에서 행사 가산도 함께 뺐다 — 둘은 짝이라 한쪽만 떼면 과잉·과소로 어긋난다.
+  //  소매 = 평상시 수요 대 평상시 재고. 확보분은 자기 칸에 서고 생산은 제조사와 협의한다.
   // SKU(대문자) → {name, stock}. 원장에 거래내역이 있는(=inventory_stock 에 잡히는) 제품만 현재고 보유.
   const stockBySku = new Map<string, { name: string; stock: number }>();
   for (const p of prodRes.data ?? []) {
@@ -177,9 +166,9 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     const manualExclude = effectiveExclude(adj, today); // 사용자가 '행사 출고'로 빼라고 한 양
     const dailyOut = Math.max(0, rawDailyOut - (promoSold[sku] || 0) / span - manualExclude / span); // 행사·수동행사 제거한 평상시 일평균
     const autoSafety = Math.ceil(dailyOut * horizonDays);
-    const promoQty = Math.round(promoForward[sku] || 0);
+    const promoQty = Math.round(promoForward[sku] || 0); // 표시용(참고) — 목표에는 더하지 않는다
     const adjust = effectiveDelta(adj, today);
-    const safety = Math.max(0, autoSafety + promoQty + adjust); // 최종 안전재고
+    const safety = Math.max(0, autoSafety + adjust); // 최종 목표 = 평상시 수요(+ 남은 수동 보정)
     const inb = inboundBySku.get(sku);
     const inbound = inb?.qty ?? 0;
     // 권장 = 수요 + 안전재고 − (현재고 + 입고 예정). 시켜 둔 물량(입고 예정)이 도착해 현재고로 옮겨 가도 합은 그대로라

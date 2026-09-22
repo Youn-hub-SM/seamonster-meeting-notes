@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
       const period_out = outq.get(p.id) || 0;
       const daily_out = period_out / periodDays;
       const promo = promoFwd[(p.sku || "").trim().toUpperCase()] || 0;
-      const auto_safety = Math.ceil(daily_out * horizonDays) + Math.round(promo);
+      const auto_safety = Math.ceil(daily_out * horizonDays); // 행사 가산은 빼다(결정 9) — promo 는 표시용
       const depletion_days = daily_out > 0 ? Math.floor(qty / daily_out) : null;
       const inb = inbound?.get(p.id);
       const inbQty = inb?.qty ?? 0;
@@ -144,7 +144,9 @@ export async function GET(req: NextRequest) {
         // 부족 = 현재고 + 프로모션 풀 + 입고 예정이 안전재고 이하(권장 수식과 같은 재고 포지션 기준)
         // 도매 대량은 '목표만큼 늘 갖고 있는 칸'이 아니라 '요청수량을 채워 나가는 칸'이라
         //  목표 기반 부족 판정이 맞지 않는다(발송되면 0 이 정상). 부족으로 세지 않는다(기획 2절).
-        low: chan === "도매 대량" ? false : auto_safety > 0 && qty + (promoPool.get(p.id) || 0) + inbQty <= auto_safety,
+        // 부족 = 그 칸 안에서만 본다. 프로모션 풀을 더하지 않는 것은 목표에서 행사 가산을 뺀 것과 짝이다(결정 9).
+        //  도매 대량은 요청수량으로 채우는 칸이라 목표 기반 판정 자체가 맞지 않는다.
+        low: chan === "도매 대량" ? false : auto_safety > 0 && qty + inbQty <= auto_safety,
         is_bundle: isBundle,
       };
     });
