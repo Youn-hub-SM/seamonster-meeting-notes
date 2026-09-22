@@ -119,8 +119,15 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
   const perSku: Record<string, number> = {};
   let spanDays: number;
   if (isWholesale) {
-    // 분모 고정(기획 6절) — 원장이 창보다 짧으면 최초 거래일부터. spanDays 는 참고 표시용으로 단기 창 기준.
-    const age = Math.max(1, daysBetween(oldest, today) || 1);
+    // 분모 고정(기획 6절) — 원장이 창보다 짧으면 최초 거래일부터. '창 안의 최초 행'으로 근사하면
+    //  창 첫머리가 조용했을 때 분모가 줄어 평균이 부풀므로, 실제 최초 도매 출고일을 1행 조회로 확인한다.
+    let ledgerStart: string | null = null;
+    try {
+      const fr = await sb.from("inventory_txns").select("txn_date").eq("type", "출고").eq("channel", "도매")
+        .order("txn_date", { ascending: true }).limit(1);
+      if (!fr.error && fr.data?.length) ledgerStart = (fr.data[0] as { txn_date: string }).txn_date;
+    } catch { /* 036 미적용 등 — 창 안 근사(oldest)로 진행 */ }
+    const age = Math.max(1, daysBetween(ledgerStart && ledgerStart < oldest ? ledgerStart : oldest, today) || 1);
     const denShort = Math.min(windowDays, age);
     const denLong = Math.min(LONG_DAYS, age);
     for (const [sku, totalLong] of totals) {

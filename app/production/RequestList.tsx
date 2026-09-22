@@ -90,7 +90,7 @@ export function RequestList() {
       m.set(p, (m.get(p) || 0) + 1);
     }
     return m;
-  }, [requests, tab]);
+  }, [requests]);
 
   // 프로모션 주간 분배 — 열린 프로모션 요청서별 잔여를 '남은 주 수'로 나눠, 이번 주 확보 권장을 품목별 합산.
   //  주간 생산요청서(제조사) 작성 시 "프로모션 몫으로 이만큼 더" 의 근거(2026-09-17 대표 확정 수식).
@@ -112,7 +112,7 @@ export function RequestList() {
       }
     }
     return [...agg.values()].sort((a, b) => b.thisWeek - a.thisWeek);
-  }, [requests]);
+  }, [requests, tab]);
 
   // 담당자 '확인' 버튼용 로그인 사용자 이름
   const [userName, setUserName] = useState<string | null>(null);
@@ -144,7 +144,7 @@ export function RequestList() {
     })();
   }, []);
 
-  // 채널 수식 권장(재고 목록과 동일 출처) — 새 요청 창 권장: 제조사 = 소매+도매 합(재고 목록 '전체'의 권장), 도매 = 도매 수식.
+  // 권장 원자료 — 재고 목록 권장 열과 같은 합산식(①원값+②−⑤)을 창 안에서 재계산한다(수정 창의 자기 잔여 차감 때문).
   //  recReady=false 면 모달은 권장을 '-' 로 표시한다(로드 전/실패를 '권장 0' 으로 오독하면 수량을 깎게 된다).
   //  소매 행은 권장뿐 아니라 원값(입고 예정·현재고·안전재고·수요)까지 보관한다 — 수정 창이 자기 요청서 잔여를 빼고 다시 계산하기 위해.
   //  요청서를 만들거나 고치면(잔여가 바뀌면) 다시 조회한다 — 마운트 스냅샷만 쓰면 방금 만든 요청서가 '입고 예정 0' 으로 보여 같은 물량을 또 시킨다.
@@ -735,8 +735,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           ) : (
             <div className="b2b-table-wrap">
               <table className="b2b-table">
-                {/* 권장 = 재고 목록과 동일 수식 — 제조사: 소매 권장+도매 권장 합('전체' 필터의 권장), 도매: 도매 수식.
-                    제조사에는 입고 예정(열린 제조사 요청서 잔여 — 권장에서 이미 뺀 양)과 도매 필요량(열린 도매 요청 잔여)도 참고로 표시 */}
+                {/* 권장 = 재고 목록 권장 열과 같은 합산식 — 제조사: max(0, ①원값+② − ⑤입고 예정), 도매: ② 도매 수식.
+                    확정형(프로모션·도매 대량)은 수량을 사람이 아는 칸이라 권장 없음('-') */}
                 {/* 첫 숫자 열(재고) 폭은 두 탭 모두 100 — 탭 전환 시 표가 흔들리지 않게 */}
                 {purpose === "도매 납품" ? (
                   <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>도매 재고</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
@@ -752,9 +752,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                     // 수정 창: 이 요청서 자신의 잔여는 입고 예정에서 빼고, 권장은 clamp 전 원값으로 다시 계산(권장 0 에 잔여를 더하는 방식은 부정확)
                     const ownRem = ownRemBySku.get(rk) ?? 0;
                     const inb = rr ? Math.max(0, rr.inbound - ownRem) : 0;
-                    const recRetailShown = !rr ? 0 : rr.stock == null ? rr.demand : Math.max(0, rr.demand + rr.safety - (rr.stock + inb));
+                    // 제조사 권장 = max(0, ①원값 + ② − ⑤) — 입고 예정(⑤)을 합계에서 한 번만 뺀다(기획 14절 #8).
+                    //  항 안에서 빼면 소매가 넉넉한 주에 차감분이 통째로 사라져 이미 시킨 물량을 또 시킨다.
+                    const recRetailGross = !rr ? 0 : rr.stock == null ? rr.demand : Math.max(0, rr.demand + rr.safety - rr.stock);
                     // 확정형(프로모션·도매 대량)은 목표 수량을 사람이 안다(행사 계획·선결제 발주서) — 수식 권장 없음('-')
-                    const recommend = !recReady || CONFIRMED_PURPOSES.includes(purpose) ? null : purpose === "도매 납품" ? (recWhole.get(rk) ?? 0) : recRetailShown + (recWhole.get(rk) ?? 0);
+                    const recommend = !recReady || CONFIRMED_PURPOSES.includes(purpose) ? null
+                      : purpose === "도매 납품" ? (recWhole.get(rk) ?? 0)
+                      : Math.max(0, Math.round((recRetailGross + (recWhole.get(rk) ?? 0) - inb) * 100) / 100);
                     return (
                       <tr key={l.item_id || l.product_id}>
                         <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 15, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>

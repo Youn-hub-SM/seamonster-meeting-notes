@@ -143,10 +143,8 @@ export default function InventoryPage() {
     //  합계를 빌려 쓰면 이 칸과 무관한 수를 보여줄 뿐 아니라, 체크 → '선택 N종 생산 요청'이 발주와
     //  연결되지 않은 제조사(재고 보충) 요청서를 만든다(115 가 order_id·company_id 를 둔 취지와 반대).
     if (channel === "도매 대량") return { has: false, recommend: 0, requestByDays: null, requestBy: null, retail: rr };
-    if (channel === "소매") return {
-      has: !!rr, recommend: rr?.recommend ?? 0, requestByDays: rr?.requestByDays ?? null, requestBy: rr?.requestBy ?? null, retail: rr,
-      detail: rr ? `권장 = 목표 ${rr.safety.toLocaleString()} − (현재고 ${(rr.stock ?? 0).toLocaleString()} + 입고 예정 ${(rr.inbound ?? 0).toLocaleString()})` : undefined,
-    };
+    // 소매 탭도 합산값이다(기획 14절 '여덟 번째' — 합산값이 서는 곳은 전체 탭과 소매 탭, 둘 다
+    //  제조사 요청서를 만드는 자리). 소매 net 을 두면 화면 숫자와 요청 창 수량이 어긋난다.
     if (channel === "도매") return { has: !!ww, recommend: ww?.recommend ?? 0, requestByDays: ww?.requestByDays ?? null, requestBy: ww?.requestBy ?? null, retail: rr };
     let days: number | null = null, by: string | null = null;
     for (const p of [rr, ww]) {
@@ -179,7 +177,11 @@ export default function InventoryPage() {
     const keys = new Set([...retailMap.keys(), ...wholeMap.keys()]);
     for (const k of keys) {
       const rr = retailMap.get(k), ww = wholeMap.get(k);
-      const rec = channel === "도매 대량" ? 0 : channel === "소매" ? (rr?.recommend ?? 0) : channel === "도매" ? (ww?.recommend ?? 0) : (rr?.recommend ?? 0) + (ww?.recommend ?? 0);
+      // 카드도 표 권장 열과 같은 식 — 도매 탭만 ②, 나머지는 max(0, ①원값+② − ⑤)
+      const g1 = rr?.recommendGross ?? rr?.recommend ?? 0;
+      const rec = channel === "도매 대량" ? 0
+        : channel === "도매" ? (ww?.recommend ?? 0)
+        : Math.max(0, Math.round((g1 + (ww?.recommend ?? 0) - (rr?.inbound ?? 0)) * 100) / 100);
       if (rec > 0) { needItems++; needQty += rec; }
     }
     return { needItems, needQty };
@@ -226,14 +228,15 @@ export default function InventoryPage() {
   function goRequest() {
     const picked = rows.filter((r) => sel.has(r.product_id));
     if (!picked.length) return;
-    // 도매 필터 → 도매 요청(도매 권장), 그 외 → 제조사 요청(소매+도매 합) — 새 생산 요청 창의 권장 열과 동일 수식
+    // 도매 필터 → 도매 요청(도매 권장), 그 외 → 제조사 요청 = max(0, ①원값+② − ⑤).
+    //  화면 권장 열(prodView)과 같은 값을 넘겨야 본 숫자와 채워지는 수량이 일치한다(기획 14절 #8).
     const purpose = channel === "도매" ? "도매 납품" : "재고 보충";
     const items = picked
       .filter((r) => r.sku)
       .map((r) => {
         const key = (r.sku as string).toUpperCase();
-        const rr = retailMap.get(key), ww = wholeMap.get(key);
-        const qty = purpose === "도매 납품" ? (ww?.recommend ?? 0) : (rr?.recommend ?? 0) + (ww?.recommend ?? 0);
+        const ww = wholeMap.get(key);
+        const qty = purpose === "도매 납품" ? (ww?.recommend ?? 0) : prodView(r).recommend;
         return { sku: r.sku, qty };
       });
     // SKU 로 넘기므로 SKU 없는 품목은 못 보낸다 — 조용히 빠지지 않게 알린다
@@ -315,7 +318,7 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·권장생산은 최근 30일 기준(도매 하루출고는 30일·90일 평균 중 큰 값, 대량 발주 제외) · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`}{channel === "도매" ? "" : " + 프로모션 확보분"} · {channel === "도매 대량" ? "권장생산 수식 없음" : channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = 목표 − (현재고 + 입고 예정)"} · {channel === "도매 대량" ? "권장생산·주문필요는 도매 대량 탭에서 계산하지 않습니다(선결제로 잡아둔 칸이라 생산 수식이 없습니다)" : channel === "소매" || channel === "도매" ? `권장생산은 ${channel} 기준` : "권장생산은 소매+도매 합"}{channel === "도매 대량" ? null : <> · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 넘어갑니다</>}</p>}
+      {meta && <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·권장생산은 최근 30일 기준(도매 하루출고는 30일·90일 평균 중 큰 값, 대량 발주 제외) · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`} · {channel === "도매 대량" ? "이 칸은 선결제로 잡아둔 몫이라 권장생산 수식이 없습니다 — 요청서를 보며 제조사와 협의합니다" : channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = max(0, 소매 목표 − 소매 재고) + 도매 권장 − 입고 예정 (제조사 요청 기준 — 숫자에 마우스를 올리면 내역)"}{channel === "도매 대량" ? null : <> · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 화면 숫자 그대로 넘어갑니다</>}</p>}
       {adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {advice && (
         <section style={{ marginBottom: 18 }}>
