@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, UNREQUESTED_ITEM_MEMO, lineState, allLinesFilled, toPrPurpose, isFactoryPurpose, CONFIRMED_PURPOSES,
-  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, FULFILL_NOTE, DUE_LABEL,
+  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, FULFILL_NOTE, DUE_LABEL, PURPOSE_CHANNEL,
 } from "@/app/lib/wholesale-production";
 import { addBusinessDays } from "@/app/lib/business-days";
 import { Combobox } from "@/app/b2b/orders/Combobox";
@@ -90,7 +90,7 @@ export function RequestList() {
       m.set(p, (m.get(p) || 0) + 1);
     }
     return m;
-  }, [requests]);
+  }, [requests, tab]);
 
   // 프로모션 주간 분배 — 열린 프로모션 요청서별 잔여를 '남은 주 수'로 나눠, 이번 주 확보 권장을 품목별 합산.
   //  주간 생산요청서(제조사) 작성 시 "프로모션 몫으로 이만큼 더" 의 근거(2026-09-17 대표 확정 수식).
@@ -98,7 +98,7 @@ export function RequestList() {
     const todayIso = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const agg = new Map<string, { name: string; sku: string | null; remaining: number; thisWeek: number; earliestDue: string | null }>();
     for (const r of requests) {
-      if (r.purpose !== "프로모션" || (r.status !== "요청" && r.status !== "진행중")) continue;
+      if (r.purpose !== tab || !CONFIRMED_PURPOSES.includes(tab) || (r.status !== "요청" && r.status !== "진행중")) continue;
       const days = r.due_date ? Math.round((new Date(r.due_date + "T00:00:00Z").getTime() - new Date(todayIso + "T00:00:00Z").getTime()) / 86400e3) : 0;
       const weeksLeft = Math.max(1, Math.ceil((days + 1) / 7)); // 목표일 지남/임박 = 1주(전량 이번 주)
       for (const it of r.items) {
@@ -311,12 +311,12 @@ export function RequestList() {
         </div>
       </div>
 
-      {tab === "프로모션" && promoWeekly.length > 0 && (
+      {CONFIRMED_PURPOSES.includes(tab) && promoWeekly.length > 0 && (
         <section className="b2b-form-section" style={{ marginBottom: 16 }}>
-          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>프로모션 주간 분배 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 잔여 ÷ 목표일까지 남은 주 — 이번 주 확보 권장</span></div>
+          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 협의 참고 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 잔여 ÷ 목표일까지 남은 주 — 제조사 협의용 참고치, 주간 계산에는 들어가지 않습니다</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
-              <thead><tr><th>품목</th><th className="num" style={{ width: "16%" }}>총 잔여</th><th style={{ width: "16%" }}>가장 이른 목표일</th><th className="num" style={{ width: "18%" }}>이번 주 권장</th></tr></thead>
+              <thead><tr><th>품목</th><th className="num" style={{ width: "16%" }}>총 잔여</th><th style={{ width: "16%" }}>가장 이른 목표일</th><th className="num" style={{ width: "18%" }}>주당 참고치</th></tr></thead>
               <tbody>
                 {promoWeekly.map((r) => (
                   <tr key={`${r.name}-${r.sku}`}>
@@ -329,7 +329,7 @@ export function RequestList() {
               </tbody>
             </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>주간 제조사 생산요청서에 이 수량을 얹어 만들고, 입고되면 [소매↔도매]의 소매 → 프로모션 이동에서 요청서에 배정하세요.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>이 수량은 주간 생산 계산에 들어가지 않습니다 — 목표일을 보며 제조사와 협의해 만들고, 입고되면 [재고 옮기기]의 소매 → {PURPOSE_CHANNEL[tab] || tab} 이동에서 요청서에 배정하세요.</p>
         </section>
       )}
 

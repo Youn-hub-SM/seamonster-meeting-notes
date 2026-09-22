@@ -27,7 +27,7 @@ type PMode = (typeof PERIODS)[number][0];
 type ProdRow = {
   sku: string; name: string; stock: number | null; dailyOut: number; rawDailyOut: number;
   autoSafety: number; promoQty: number; adjust: number; adjustRaw: number; adjustExcludeRaw: number;
-  adjustMemo: string; adjustUntil: string | null; safety: number; recommend: number;
+  adjustMemo: string; adjustUntil: string | null; safety: number; recommend: number; recommendGross?: number;
   inbound?: number; inboundDue?: string | null; // 입고 예정(열린 제조사 요청서 잔여) — 권장에서 이미 뺀 양
   requestByDays: number | null; requestBy: string | null;
 };
@@ -133,7 +133,7 @@ export default function InventoryPage() {
 
   // 채널 필터에 맞는 생산 수치 뷰 — 전체는 소매+도매 권장 합(새 생산 요청 창의 제조사 권장과 동일 기준),
   //  retail 은 소매 원본 행(전체 탭에서 소매 수치를 함께 쓰는 곳이 있다).
-  type ProdView = { has: boolean; recommend: number; requestByDays: number | null; requestBy: string | null; retail?: ProdRow };
+  type ProdView = { has: boolean; recommend: number; requestByDays: number | null; requestBy: string | null; retail?: ProdRow; detail?: string };
   const prodView = useCallback((r: OverviewRow): ProdView => {
     const key = r.sku ? r.sku.toUpperCase() : null;
     const rr = key ? retailMap.get(key) : undefined;
@@ -143,14 +143,26 @@ export default function InventoryPage() {
     //  합계를 빌려 쓰면 이 칸과 무관한 수를 보여줄 뿐 아니라, 체크 → '선택 N종 생산 요청'이 발주와
     //  연결되지 않은 제조사(재고 보충) 요청서를 만든다(115 가 order_id·company_id 를 둔 취지와 반대).
     if (channel === "도매 대량") return { has: false, recommend: 0, requestByDays: null, requestBy: null, retail: rr };
-    if (channel === "소매") return { has: !!rr, recommend: rr?.recommend ?? 0, requestByDays: rr?.requestByDays ?? null, requestBy: rr?.requestBy ?? null, retail: rr };
+    if (channel === "소매") return {
+      has: !!rr, recommend: rr?.recommend ?? 0, requestByDays: rr?.requestByDays ?? null, requestBy: rr?.requestBy ?? null, retail: rr,
+      detail: rr ? `권장 = 목표 ${rr.safety.toLocaleString()} − (현재고 ${(rr.stock ?? 0).toLocaleString()} + 입고 예정 ${(rr.inbound ?? 0).toLocaleString()})` : undefined,
+    };
     if (channel === "도매") return { has: !!ww, recommend: ww?.recommend ?? 0, requestByDays: ww?.requestByDays ?? null, requestBy: ww?.requestBy ?? null, retail: rr };
     let days: number | null = null, by: string | null = null;
     for (const p of [rr, ww]) {
       if (p?.requestByDays == null) continue;
       if (days == null || p.requestByDays < days) { days = p.requestByDays; by = p.requestBy; }
     }
-    return { has: !!(rr || ww), recommend: (rr?.recommend ?? 0) + (ww?.recommend ?? 0), requestByDays: days, requestBy: by, retail: rr };
+    // 전체 = max(0, ①(소매 원값) + ②(도매) − ⑤(입고 예정)). ⑤를 항 안에서 빼면 소매가 넉넉한 주에
+    //  차감분이 통째로 사라져 이미 시킨 물량을 또 시킨다(기획 14절 '여덟 번째').
+    const g1 = rr?.recommendGross ?? rr?.recommend ?? 0; // 구 응답 폴백 — recommendGross 없으면 net 값
+    const g2 = ww?.recommend ?? 0;
+    const inb = rr?.inbound ?? 0;
+    const combined = Math.max(0, Math.round((g1 + g2 - inb) * 100) / 100);
+    return {
+      has: !!(rr || ww), recommend: combined, requestByDays: days, requestBy: by, retail: rr,
+      detail: `권장 = 온라인 일반 ${g1.toLocaleString()} + 도매 일반 ${g2.toLocaleString()} − 입고 예정 ${inb.toLocaleString()}`,
+    };
   }, [channel, retailMap, wholeMap]);
 
   const qtyOf = useCallback((id: string) => rows.find((r) => r.product_id === id)?.qty || 0, [rows]);
@@ -388,7 +400,7 @@ export default function InventoryPage() {
                   </td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
                     {r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
-                    {(r.promo_pool ?? 0) > 0 && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 4, color: "var(--sm-warning)" }} title="프로모션 풀에 확보된 행사분(자동 출고 보호)">+프로모션 {r.promo_pool.toLocaleString()}</span>}
+                    {(r.promo_pool ?? 0) > 0 && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 4, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 생산은 요청서를 보며 제조사와 협의합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
                   </td>
                   <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>
                   {/* 예상소진 = 창고(현재고)만 기준. 입고 예정이 있으면 '입고 예정일 전에 바닥나는가'로 빨강을 판정 —
@@ -409,7 +421,7 @@ export default function InventoryPage() {
                     {(r.inbound ?? 0) > 0 ? r.inbound.toLocaleString() : "-"}
                     {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
                   </td>
-                  <td className="num">{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>
+                  <td className="num" title={pv.detail}>{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
                   <td className="num b2b-money">{r.value.toLocaleString()}</td>

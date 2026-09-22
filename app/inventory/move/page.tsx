@@ -9,7 +9,21 @@ type Prod = { id: string; sku: string | null; name: string; spec: string | null;
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean; alloc_qty?: number; alloc_reqs?: string[] };
 type Target = { item_id: string; request_id: string; req_no: string | null; title: string | null; request_date: string; due_date: string | null; requested_qty: number; received_qty: number; remaining: number };
 // 이동 줄 — 여러 품목을 한 번에 옮긴다(2026-09-16 대표 요청). alloc 은 요청서(item_id)→입력값 문자열.
-type Line = { key: number; pid: string; plabel: string; qty: string; targets: Target[]; alloc: Map<string, string> };
+type Line = { key: number; pid: string; plabel: string; qty: string; targets: Target[]; alloc: Map<string, string>; allocTouched?: boolean };
+
+// 배정 기본값 = 이동 전량(기획 14절 4단계 #6). 목표일 빠른 순으로 각 요청서 잔여까지 채운다.
+//  배정 누락 경고를 두지 않기로 했으므로(결정 21) 이 기본값이 유일한 방어다.
+const prefillAlloc = (targets: Target[], qty: number): Map<string, string> => {
+  const m = new Map<string, string>();
+  let left = Math.max(0, Math.round(qty * 100) / 100);
+  const sorted = [...targets].sort((a, b) => String(a.due_date ?? "9999").localeCompare(String(b.due_date ?? "9999")));
+  for (const t of sorted) {
+    if (left <= 0) break;
+    const take = Math.round(Math.min(left, Math.max(0, t.remaining)) * 100) / 100;
+    if (take > 0) { m.set(t.item_id, String(take)); left = Math.round((left - take) * 100) / 100; }
+  }
+  return m;
+};
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const newLine = (key: number): Line => ({ key, pid: "", plabel: "", qty: "", targets: [], alloc: new Map() });
@@ -79,7 +93,7 @@ export default function InventoryMovePage() {
         targetsByKey.set(l.key, l.pid && allocMode ? await fetchTargets(l.pid) : []);
       }));
       if (!live) return;
-      setLines((prev) => prev.map((l) => ({ ...l, targets: targetsByKey.get(l.key) ?? [], alloc: new Map<string, string>() })));
+      setLines((prev) => prev.map((l) => { const tg = targetsByKey.get(l.key) ?? []; return { ...l, targets: tg, alloc: prefillAlloc(tg, nQtyOf(l)), allocTouched: false }; }));
     })();
     return () => { live = false; };
     // lines 를 deps 에 넣으면 무한 루프 — 방향 전환 시점의 lines 로만 요청서를 조회한다.
@@ -101,7 +115,7 @@ export default function InventoryMovePage() {
       const targets = await fetchTargets(id);
       // 빠른 재선택·방향 전환으로 응답이 뒤바뀌어도 이전 품목/용도의 요청서가 남지 않게
       if (allocPurposeRef.current !== purposeAtFetch) return;
-      setLines((prev) => prev.map((l) => (l.key === key && l.pid === id ? { ...l, targets } : l)));
+      setLines((prev) => prev.map((l) => (l.key === key && l.pid === id ? { ...l, targets, alloc: prefillAlloc(targets, nQtyOf(l)), allocTouched: false } : l)));
     }
   }
 
@@ -229,7 +243,10 @@ export default function InventoryMovePage() {
                     <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {poolQty(ch, l.pid).toLocaleString()}</span>
                   ))}
                   <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={l.qty}
-                    onChange={(e) => patchLine(l.key, { qty: e.target.value })}
+                    onChange={(e) => {
+                      const q = Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100);
+                      patchLine(l.key, { qty: e.target.value, ...(l.allocTouched ? {} : { alloc: prefillAlloc(l.targets, q) }) });
+                    }}
                     placeholder="옮길 수량" style={{ width: 120 }} aria-label={`품목 ${idx + 1} 수량`} />
                   {nQty > 0 && (
                     <span className="sm-faint" style={{ fontSize: 12 }}>
@@ -243,7 +260,7 @@ export default function InventoryMovePage() {
               {allocMode && l.pid && (
                 <div style={{ marginTop: 10 }}>
                   {l.targets.length === 0 ? (
-                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 생산 요청 없음 — 전량 기타(요청 미연결)로 기록됩니다.</p>
+                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 생산 요청 없음 — 전량 기타(요청 미연결)로 기록됩니다. 요청서 몫이라면 먼저 생산 요청에서 등록하세요.</p>
                   ) : (
                     <>
                       <div className="b2b-table-wrap">
@@ -263,7 +280,7 @@ export default function InventoryMovePage() {
                                   <td className="num b2b-money" style={{ fontWeight: 700 }}>{t.remaining.toLocaleString()}</td>
                                   <td className="num">
                                     <input className="b2b-input b2b-money" type="number" min={0} step={0.01} value={v}
-                                      onChange={(e) => { const m2 = new Map(l.alloc); m2.set(t.item_id, e.target.value); patchLine(l.key, { alloc: m2 }); }}
+                                      onChange={(e) => { const m2 = new Map(l.alloc); m2.set(t.item_id, e.target.value); patchLine(l.key, { alloc: m2, allocTouched: true }); }}
                                       style={{ width: 100, textAlign: "right" }} placeholder="0" aria-label={`${t.req_no || "요청서"} 배정 수량`} />
                                     {overRemain && <div style={{ fontSize: 11, color: "var(--sm-orange)" }}>잔여보다 많음</div>}
                                   </td>

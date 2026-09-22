@@ -28,6 +28,7 @@ export interface InvRow {
   adjustMemo: string;     // 보정 사유
   adjustUntil: string | null; // 보정 만료일
   safety: number;         // 최종 목표 = max(0, autoSafety + adjust). 행사 가산은 빠졌다(결정 9)
+  recommendGross: number; // 입고 예정 차감 전 권장(= max(0, 수요+목표−현재고)) — 전체 탭이 합계에서 ⑤를 한 번만 빼는 데 쓴다
   demand: number;         // B2B 생산대기·생산중 수요
   inbound: number;        // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
@@ -174,6 +175,9 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     // 권장 = 수요 + 안전재고 − (현재고 + 입고 예정). 시켜 둔 물량(입고 예정)이 도착해 현재고로 옮겨 가도 합은 그대로라
     //  권장이 튀지 않는다(불변식). 원장 기록이 없는 품목은 종전대로 수요만.
     const recommend = stock == null ? demand : Math.max(0, demand + safety - (stock + inbound));
+    // 전체 탭 합산용 원값 — 입고 예정(⑤)을 항 안에서 빼면 합산 때 max(0,①−⑤)+max(0,②)가 되어
+    //  소매가 넉넉한 주에 차감분이 통째로 소실된다(기획 14절 여덟 번째). ⑤는 합계에서 한 번만 뺀다.
+    const recommendGross = stock == null ? demand : Math.max(0, demand + safety - stock);
     const belowSafety = stock != null && stock + inbound < safety; // 권장·주문필요와 같은 포지션(현재고+입고 예정) 기준
 
     // 생산요청 마감일 = 현재고+입고 예정이 안전재고 수준으로 떨어지는 날(= 리드타임만큼 앞당긴 시점).
@@ -203,6 +207,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
       adjustUntil: adj?.until || null,
       safety,
       demand,
+      recommendGross,
       inbound,
       inboundDue: inb?.due ?? null,
       inboundOverdue: inb?.overdue ?? 0,
