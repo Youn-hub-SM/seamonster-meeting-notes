@@ -1,15 +1,17 @@
 import type { supabaseAdmin } from "./supabase";
 import { getAllBundles } from "./product-bundles";
+import { getPickZones } from "./pick-zones";
 
 // 송장 스캔 집계(단일 풀) — 파이썬 seamonster_invoice 웹 이식.
 //  파싱(헤더 자동감지) + 송장번호 정규화 + 묶음(세트) 전개 집계.
 
 export type ScanRow = { invoice_no: string; sku_code: string; qty: number };
-export type ScanProduct = { id: string; sku: string | null; name: string; scanName?: string | null };
+export type ScanProduct = { id: string; sku: string | null; name: string; scanName?: string | null; pickZone?: string | null };
 // 스캔 피킹 리스트 표시명 = scan_name(있으면) 아니면 상품명.
 const dispName = (p: ScanProduct): string => (p.scanName && p.scanName.trim() ? p.scanName.trim() : p.name);
 export type BundleComp = { component_id: string; qty: number };
-export type TallyRow = { key: string; sku: string; name: string; qty: number; unknown: boolean };
+// zone: 창고 픽업 구역(products.pick_zone). 구역 목록에 없는 값·미배정은 null(= '위치 미지정' 묶음).
+export type TallyRow = { key: string; sku: string; name: string; qty: number; unknown: boolean; zone: string | null };
 export type ScanCols = { invoice: number; code: number; qty: number };
 export type ParsedScan = {
   rows: ScanRow[];
@@ -120,30 +122,41 @@ export function parseCsv(text: string): unknown[][] {
   return out;
 }
 
-type ScanMaps = { bySku: Map<string, ScanProduct>; byId: Map<string, ScanProduct>; bundles: Map<string, BundleComp[]> };
+type ScanMaps = {
+  bySku: Map<string, ScanProduct>;
+  byId: Map<string, ScanProduct>;
+  bundles: Map<string, BundleComp[]>;
+  zoneOrder: Map<string, number>; // 구역명 → 걷는 순서(0부터). b2b_settings 'pick_zones'
+};
 
 // 상품마스터·묶음은 자주 안 바뀌므로 인메모리 캐시(60초). 스캔마다 재로드하지 않아 응답이 빨라짐.
 let _mapCache: { maps: ScanMaps; at: number } | null = null;
 const MAP_TTL = 60_000;
 
-// 상품마스터·묶음 로드 → SKU/ID 맵과 묶음 구성. (캐시 히트 시 DB 미접근)
+// 창고 위치 화면에서 저장 직후 바로 반영되게 캐시 무효화(같은 인스턴스 한정 — 다른 인스턴스는 TTL 60초 내 갱신).
+export function bustScanMapCache() {
+  _mapCache = null;
+}
+
+// 상품마스터·묶음·픽업 구역 로드 → SKU/ID 맵·묶음 구성·구역 순서. (캐시 히트 시 DB 미접근)
 export async function loadScanMaps(sb: ReturnType<typeof supabaseAdmin>): Promise<ScanMaps> {
   if (_mapCache && Date.now() - _mapCache.at < MAP_TTL) return _mapCache.maps;
   const bySku = new Map<string, ScanProduct>();
   const byId = new Map<string, ScanProduct>();
-  // scan_name(059) 미적용이어도 스캔이 안 깨지게: 컬럼 없으면 name 만으로 폴백.
-  type Row = { id: string; sku: string | null; name: string; scan_name?: string | null };
-  const withScan = await sb.from("products").select("id, sku, name, scan_name");
-  const rows: Row[] = (withScan.error
-    ? ((await sb.from("products").select("id, sku, name")).data as Row[] | null)
-    : (withScan.data as Row[] | null)) ?? [];
+  // 컬럼 미적용이어도 스캔이 안 깨지게 단계 폴백: pick_zone(117) 없으면 빼고, scan_name(059)도 없으면 name 만.
+  type Row = { id: string; sku: string | null; name: string; scan_name?: string | null; pick_zone?: string | null };
+  let res = await sb.from("products").select("id, sku, name, scan_name, pick_zone");
+  if (res.error) res = await sb.from("products").select("id, sku, name, scan_name");
+  if (res.error) res = await sb.from("products").select("id, sku, name");
+  const rows: Row[] = (res.data as Row[] | null) ?? [];
   for (const row of rows) {
-    const p: ScanProduct = { id: row.id, sku: row.sku, name: row.name, scanName: row.scan_name ?? null };
+    const p: ScanProduct = { id: row.id, sku: row.sku, name: row.name, scanName: row.scan_name ?? null, pickZone: row.pick_zone ?? null };
     byId.set(p.id, p);
     if (p.sku) bySku.set(String(p.sku).trim().toUpperCase(), p);
   }
-  const bundles = await getAllBundles(sb);
-  const maps: ScanMaps = { bySku, byId, bundles };
+  const [bundles, zones] = await Promise.all([getAllBundles(sb), getPickZones(sb)]);
+  const zoneOrder = new Map<string, number>(zones.map((z, i) => [z, i]));
+  const maps: ScanMaps = { bySku, byId, bundles, zoneOrder };
   _mapCache = { maps, at: Date.now() };
   return maps;
 }
@@ -195,7 +208,7 @@ export async function computeTally(sb: ReturnType<typeof supabaseAdmin>): Promis
   const [items, maps] = await Promise.all([fetchScannedItems(sb, scanned), loadScanMaps(sb)]);
   const scannedSet = new Set(scanned);
   const knownScanned = new Set(items.map((r) => r.invoice_no));
-  const tally = buildScanTally(items, scannedSet, maps.bySku, maps.byId, maps.bundles);
+  const tally = buildScanTally(items, scannedSet, maps.bySku, maps.byId, maps.bundles, maps.zoneOrder);
   let scannedCount = 0;
   for (const inv of scannedSet) if (knownScanned.has(inv)) scannedCount++;
   const totalUnits = tally.reduce((s, t) => s + t.qty, 0);
@@ -214,33 +227,39 @@ export async function computePoolState(sb: ReturnType<typeof supabaseAdmin>): Pr
 }
 
 // 스캔된 송장들의 라인을 묶음 전개하여 상품별 누적 수량 산출.
+//  정렬 = 픽업 동선: 구역 순(걷는 경로) → 위치 미지정 → 미등록 코드, 각 묶음 안은 가나다.
+//  구역 목록이 비어있으면(미설정) 전부 미지정 → 기존 가나다순 그대로.
 export function buildScanTally(
   items: ScanRow[],
   scanned: Set<string>,
   bySku: Map<string, ScanProduct>,
   byId: Map<string, ScanProduct>,
   bundles: Map<string, BundleComp[]>,
+  zoneOrder?: Map<string, number>,
 ): TallyRow[] {
-  const acc = new Map<string, { sku: string; name: string; qty: number; unknown: boolean }>();
-  const addLeaf = (key: string, sku: string, name: string, qty: number, unknown: boolean) => {
+  const zo = zoneOrder ?? new Map<string, number>();
+  // 구역 목록에서 지워진 구역이 품목에 남아있으면 미지정 취급(창고 위치 화면에서 경고로 표시).
+  const zoneOf = (p: ScanProduct): string | null => (p.pickZone && zo.has(p.pickZone) ? p.pickZone : null);
+  const acc = new Map<string, { sku: string; name: string; qty: number; unknown: boolean; zone: string | null }>();
+  const addLeaf = (key: string, sku: string, name: string, qty: number, unknown: boolean, zone: string | null) => {
     const cur = acc.get(key);
     if (cur) cur.qty += qty;
-    else acc.set(key, { sku, name, qty, unknown });
+    else acc.set(key, { sku, name, qty, unknown, zone });
   };
   const expand = (sku: string, qty: number, depth: number) => {
     const code = sku.trim();
     const p = bySku.get(code.toUpperCase());
-    if (!p) { addLeaf(`?:${code.toUpperCase()}`, code, `미등록 코드: ${code}`, qty, true); return; }
+    if (!p) { addLeaf(`?:${code.toUpperCase()}`, code, `미등록 코드: ${code}`, qty, true, null); return; }
     const comps = bundles.get(p.id);
     if (comps && comps.length && depth < 8) {
       for (const c of comps) {
         const cp = byId.get(c.component_id);
         if (cp && cp.sku) expand(cp.sku, qty * c.qty, depth + 1);
-        else if (cp) addLeaf(cp.id, cp.sku || "", dispName(cp), qty * c.qty, false);
-        else addLeaf(`?id:${c.component_id}`, "", "삭제된 구성품", qty * c.qty, true);
+        else if (cp) addLeaf(cp.id, cp.sku || "", dispName(cp), qty * c.qty, false, zoneOf(cp));
+        else addLeaf(`?id:${c.component_id}`, "", "삭제된 구성품", qty * c.qty, true, null);
       }
     } else {
-      addLeaf(p.id, p.sku || "", dispName(p), qty, false);
+      addLeaf(p.id, p.sku || "", dispName(p), qty, false, zoneOf(p));
     }
   };
   for (const it of items) {
@@ -248,7 +267,9 @@ export function buildScanTally(
     if (!it.qty) continue;
     expand(it.sku_code, it.qty, 0);
   }
+  const rank = (t: { unknown: boolean; zone: string | null }) =>
+    t.unknown ? Number.MAX_SAFE_INTEGER : t.zone != null ? (zo.get(t.zone) ?? Number.MAX_SAFE_INTEGER - 1) : Number.MAX_SAFE_INTEGER - 1;
   return [...acc.entries()]
-    .map(([key, v]) => ({ key, sku: v.sku, name: v.name, qty: v.qty, unknown: v.unknown }))
-    .sort((a, b) => (a.unknown === b.unknown ? a.name.localeCompare(b.name, "ko") : a.unknown ? 1 : -1));
+    .map(([key, v]) => ({ key, sku: v.sku, name: v.name, qty: v.qty, unknown: v.unknown, zone: v.zone }))
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, "ko"));
 }
