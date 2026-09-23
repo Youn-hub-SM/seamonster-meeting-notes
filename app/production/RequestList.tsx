@@ -14,8 +14,8 @@ import { Combobox } from "@/app/b2b/orders/Combobox";
 // KST 오늘 — 서버(UTC SSR)·클라이언트 모두 서울 벽시계 날짜로 일치(새벽 하이드레이션 불일치 방지)
 function todayIso() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
 
-// 행 액션 버튼 공통 모양(요청서 · 수정 · 삭제 · 마감 · 다시 열기) — 글꼴·크기 동일
-const ACT = { padding: "4px 10px", fontSize: 12, marginLeft: 6, textDecoration: "none" } as const;
+// 행 액션 버튼 공통 모양(요청서 · 수정 · 삭제 · 마감 · 다시 열기) — 글꼴·크기 동일. 좁으면 줄바꿈(가로 스크롤 금지)
+const ACT = { padding: "2px 7px", fontSize: 12, textDecoration: "none", whiteSpace: "nowrap" } as const;
 
 // 요청서의 미입고 잔여 = 품목별 max(0, 요청 − 입고) 합 — production-inbound 의 '입고 예정' 정의와 같은 규칙.
 //  (헤더 합계 차이로 세면 한 품목의 초과 입고가 다른 품목의 미입고를 상쇄해 안내가 사라진다)
@@ -379,17 +379,17 @@ export function RequestList() {
         <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 목록 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· {displayed.length}건</span></div>
         <div className="b2b-table-wrap">
           {/* tableLayout fixed — 탭(제조사/도매) 전환 시 내용 길이와 무관하게 두 탭의 표 모양 동일 */}
-          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 1000 }}>
+          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 940 }}>
             <thead>
               <tr>
                 <th style={{ width: 28 }}></th>
-                <th style={{ width: "10%" }}>요청번호</th>
+                <th style={{ width: "9%" }}>요청번호</th>
                 <th>품목</th>
-                <th className="b2b-col-date" style={{ width: "13%" }}>진행</th>
-                <th className="b2b-col-date" style={{ width: "10%" }}>요청일</th>
-                <th className="b2b-col-date" style={{ width: "10%" }}>마감일</th>
-                <th className="b2b-col-date" style={{ width: "9%" }}>담당</th>
-                <th style={{ width: "12%" }}></th>
+                <th className="b2b-col-date" style={{ width: "11%" }}>진행</th>
+                <th className="b2b-col-date" style={{ width: "9%" }}>요청일</th>
+                <th className="b2b-col-date" style={{ width: "11%" }}>마감일</th>
+                <th className="b2b-col-date" style={{ width: "8%" }}>담당</th>
+                <th style={{ width: "18%" }}></th>
               </tr>
             </thead>
             <tbody>
@@ -467,7 +467,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>
           {req.due_date || "-"}
-          {req.purpose === "재고 보충" && req.prod_start ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>생산 {req.prod_start.slice(5)}~{(req.due_date || "").slice(5)}</span> : null}
+          {req.purpose === "재고 보충" && req.prod_start ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{req.prod_start.slice(5)}~{(req.due_date || "").slice(5)}</span> : null}
           {/* 종료일이 지났는데 열려 있으면 마감(또는 종료일 수정)이 필요하다 — 잔여가 입고 예정에 남아 권장을 누른다 */}
           {req.purpose === "재고 보충" && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date < todayIso() && openRemainQty(req.items) > 0
             ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>지남 · 잔여 {openRemainQty(req.items).toLocaleString()}</span> : null}
@@ -479,13 +479,14 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
               {(req.status === "완료" || req.status === "취소") && <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{req.status}</span>}
             </span>
           ) : (req.status === "요청" || req.status === "진행중") ? (
-            <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} disabled={busy} onClick={onConfirm}>확인</button>
+            <button className="b2b-btn-secondary" style={{ padding: "2px 7px", fontSize: 12 }} disabled={busy} onClick={onConfirm}>확인</button>
           ) : (
             <span className="sm-faint" style={{ fontSize: 12 }}>{req.status}</span>
           )}
         </td>
-        <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+        <td onClick={(e) => e.stopPropagation()} style={{ paddingLeft: 8, paddingRight: 8 }}>
           {/* 행 액션 4개(요청서 · 수정 · 삭제 · 마감)는 같은 버튼 모양·글꼴 — 대표 지시. 닫힌 요청서는 마감 대신 다시 열기 */}
+          <div className="sm-row" style={{ gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <a className="b2b-btn-secondary" style={ACT} href={`/api/production/requests/${req.id}/sheet`}>요청서</a>
           {editable && <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onEdit}>수정</button>}
           {(req.status === "완료" || req.status === "취소") ? (
@@ -503,6 +504,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                 }}>마감</button>
             </>
           )}
+          </div>
         </td>
       </tr>
 
