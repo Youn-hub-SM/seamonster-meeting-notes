@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-type Tally = { key: string; sku: string; name: string; qty: number; unknown: boolean };
+type Tally = { key: string; sku: string; name: string; qty: number; unknown: boolean; zone?: string | null };
 type State = { tally: Tally[]; scannedCount: number; totalInvoices: number; totalUnits: number };
 
 const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
@@ -82,17 +82,27 @@ export default function ScanPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "초기화 실패"); }
   }
 
-  // 피킹 리스트 인쇄 — 품목명·수량만. 현재 스캔한 만큼의 상품별 수량.
+  // 피킹 리스트 인쇄 — 품목명·수량. 창고 위치(구역)가 설정돼 있으면 구역 소제목으로 묶어 걷는 순서대로.
   function printTally() {
     if (!st || !st.tally.length) return;
     const now = new Date();
     const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const rows = st.tally.map((t) => `<tr><td>${esc(t.name)}</td><td class="q">${t.qty.toLocaleString()}</td></tr>`).join("");
+    const grouped = st.tally.some((t) => t.zone); // 구역 미설정이면 소제목 없이 기존 형태 그대로
+    let rows = "";
+    let curZone: string | undefined;
+    for (const t of st.tally) {
+      if (grouped) {
+        const z = t.unknown ? "미등록 코드" : t.zone || "위치 미지정";
+        if (z !== curZone) { curZone = z; rows += `<tr class="z"><td colspan="2">${esc(z)}</td></tr>`; }
+      }
+      rows += `<tr><td>${esc(t.name)}</td><td class="q">${t.qty.toLocaleString()}</td></tr>`;
+    }
     const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>피킹 리스트</title>`
       + `<style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;margin:22px;color:#111}`
       + `h1{font-size:19px;margin:0 0 3px}.meta{color:#666;font-size:12px;margin-bottom:14px}`
       + `table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #d0d0d0;padding:10px 6px;text-align:left}`
       + `th{font-size:12px;color:#666}td{font-size:17px}th.q,td.q{text-align:right;width:90px}td.q{font-weight:800;font-size:21px}`
+      + `tr.z td{background:#ececec;font-weight:800;font-size:13px;padding:6px;border-bottom:1px solid #aaa;letter-spacing:.5px}`
       + `tfoot td{font-weight:800;border-top:2px solid #333;border-bottom:none;font-size:17px}`
       + `@media print{body{margin:6mm}}</style></head><body>`
       + `<h1>피킹 리스트</h1>`
@@ -124,7 +134,10 @@ export default function ScanPage() {
         <div>
           <h1 className="b2b-page-title">송장 스캔</h1>
         </div>
-        <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/scan/upload">송장 업로드</Link></div>
+        <div className="b2b-page-actions" style={{ display: "flex", gap: 8 }}>
+          <Link className="b2b-btn-secondary" href="/fulfill/locations">창고 위치</Link>
+          <Link className="b2b-btn-secondary" href="/fulfill/scan/upload">송장 업로드</Link>
+        </div>
       </header>
 
       {error && <div className="b2b-error">{error}{error.includes("057") ? " — supabase/migrations/057_fulfill_scan.sql 를 먼저 적용하세요." : ""}</div>}
@@ -180,10 +193,13 @@ export default function ScanPage() {
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">
-              <thead><tr><th>품목명</th><th>SKU</th><th className="num">수량</th></tr></thead>
+              <thead><tr>{st.tally.some((t) => t.zone) && <th>위치</th>}<th>품목명</th><th>SKU</th><th className="num">수량</th></tr></thead>
               <tbody>
                 {st.tally.map((t) => (
                   <tr key={t.key} style={{ background: t.unknown ? "var(--sm-danger-bg)" : undefined }}>
+                    {st.tally.some((x) => x.zone) && (
+                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t.unknown ? "-" : t.zone || <span className="sm-faint" style={{ fontWeight: 400 }}>미지정</span>}</td>
+                    )}
                     <td><strong>{t.name}</strong></td>
                     <td className="sm-faint">{t.sku || "-"}</td>
                     <td className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{t.qty.toLocaleString()}</td>
