@@ -289,7 +289,7 @@ export default function InventoryPage() {
         <div className="b2b-page-actions">
           {/* 확정형 탭엔 생산 판단 액션이 없다 — AI 조언·선택 생산 요청은 속도 기반 칸(전체·소매·도매) 전용 */}
           {!confirmedTab && <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>{adviceLoading ? "AI 분석 중..." : advice ? "다시 분석" : "AI 조언"}</button>}
-          <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="프로모션 기간·예상판매 등록 → 안전재고에 반영">프로모션</button>
+          <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="행사 기간·예상판매 등록">프로모션</button>
           {!confirmedTab && (
             <button className="b2b-btn-primary" onClick={goRequest} disabled={sel.size === 0}
               title={sel.size === 0 ? "아래 표에서 품목을 체크하세요"
@@ -340,8 +340,8 @@ export default function InventoryPage() {
       </div>
 
       {meta && (confirmedTab
-        ? <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 이 칸은 {channel === "프로모션" ? "행사에 맞춰" : "선결제 발주에 맞춰"} 채웠다가 한 번에 나가는 확정형 확보분입니다 — 하루 출고·예상소진·권장생산을 계산하지 않습니다. 생산은 생산 요청 화면에서 요청서를 보며 제조사와 협의합니다</p>
-        : <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진은 이 기간 기준 · 입고 예정·권장생산은 최근 30일 기준(도매 하루출고는 30일·90일 평균 중 큰 값, 대량 발주 제외) · 목표 = 하루출고 × {meta.cycleDays ? `지평 ${meta.leadDays + meta.cycleDays}일(리드타임 ${meta.leadDays} + 발주 주기 ${meta.cycleDays})` : `리드타임 ${meta.leadDays}일`} · {channel === "도매" ? "권장생산 = 목표 − 현재고 (도매는 입고 예정을 빼지 않습니다 — 제조사 입고는 소매로 들어오고 도매 부족은 소매→도매 이동으로 채웁니다)" : "권장생산 = max(0, 소매 목표 − 소매 재고) + 도매 권장 − 입고 예정 (제조사 요청 기준 — 숫자에 마우스를 올리면 내역)"} · ‘선택 N종 생산 요청’은 {channel === "도매" ? "도매" : "제조사"} 요청으로 화면 숫자 그대로 넘어갑니다</p>
+        ? <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 확보분 칸 — 하루 출고·예상소진·권장생산 없음</p>
+        : <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 부족 + 도매 부족 − 입고 예정"} · 목표 = 하루 출고 × {meta.leadDays + (meta.cycleDays || 0)}일{meta.cycleDays ? "" : " (발주 주기 미설정)"}</p>
       )}
       {!confirmedTab && adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {!confirmedTab && advice && (
@@ -379,7 +379,7 @@ export default function InventoryPage() {
               {advice.notes.map((n, i) => <li key={i}>{n}</li>)}
             </ul>
           )}
-          <p className="prod-note" style={{ marginTop: 8 }}>※ 아래 표가 이 조언의 근거(현재고·안전재고·권장 생산량)입니다.</p>
+          <p className="prod-note" style={{ marginTop: 8 }}>아래 표가 이 조언의 근거입니다.</p>
         </section>
       )}
 

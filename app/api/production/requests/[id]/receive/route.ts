@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
-import { logProductionRequestStatusChanged, logProductionReceipt, logProductionReceiptCancelled } from "@/app/lib/b2b-activity";
+import { logProductionReceipt, logProductionReceiptCancelled } from "@/app/lib/b2b-activity";
+import { getRequestFullness, recheckRequestCompletion } from "@/app/lib/production-allocate";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -80,13 +81,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     try { const [dr] = await loadRequests(sb, { id: requestId }); if (dr) detailNow = formatRequestDetail(dr); } catch { /* 상세 없이 발송 */ }
     await logProductionReceipt(reqNo, itemName, qty, who, detailNow);
 
-    // 3) 상태: 요청 → 진행중 (첫 입고 = 생산 시작 알림 + 변경기록)
-    if ((head as { status?: string } | null)?.status === "요청") {
-      await sb.from("production_requests").update({ status: "진행중", updated_at: new Date().toISOString() }).eq("id", requestId);
-      await logProductionRequestStatusChanged(reqNo, "요청", "진행중", who, detailNow);
-    } else {
-      await sb.from("production_requests").update({ updated_at: new Date().toISOString() }).eq("id", requestId);
-    }
+    // 3) 상태 전환은 recheckRequestCompletion 한 곳에서 — 요청→진행중(부분) 또는 →완료(전 품목 100%↑). 전환·알림 중복 방지.
+    await sb.from("production_requests").update({ updated_at: new Date().toISOString() }).eq("id", requestId);
+    try { await recheckRequestCompletion(sb, [requestId], "입고 처리"); } catch { /* 자동 마감 실패는 입고를 막지 않는다 */ }
 
     const [row] = await loadRequests(sb, { id: requestId });
     return NextResponse.json({ ok: true, request: row });
@@ -110,12 +107,15 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
     // 링크형 입고(이전 연동·기간 자동 매칭)의 원장은 다른 화면 소유 — 여기서 취소하면
     //  실제 재고 원장까지 지워진다(cancel_production_receipt 가 원장을 삭제). UI 는 버튼을 숨기지만
     //  구화면 캐시·직접 호출 대비 서버에서도 거절한다.
-    if (/기간 자동 매칭|이전 연동/.test(String((rc as { memo?: string | null }).memo || "")))
-      return NextResponse.json({ ok: false, error: "자동 연결된 입고는 여기서 취소할 수 없습니다 — 원래 화면(입고 및 출고 / 소매↔도매)에서 그 입고를 취소하면 연결도 함께 원복됩니다." }, { status: 409 });
+    if (/기간 자동 매칭|이전 연동|이전 배정|입고 연결|입고\/출고 연동/.test(String((rc as { memo?: string | null }).memo || "")))
+      return NextResponse.json({ ok: false, error: "입고 화면에서 기록한 입고입니다 — 입고 및 출고(또는 재고 옮기기)에서 그 기록을 취소하면 연결도 함께 원복됩니다." }, { status: 409 });
 
     // 원자적 취소: receipt + 연결 도매 입고 원장을 한 트랜잭션에서 삭제(재고 원복).
+    //  취소 전 100% 완료였던 요청서만 재개 대상(수동 마감 보존).
+    const fullBefore = await getRequestFullness(sb, requestId);
     const { error: ce } = await sb.rpc("cancel_production_receipt", { p_receipt_id: rid });
     if (ce) throw ce;
+    if (fullBefore?.full && fullBefore.status === "완료") { try { await recheckRequestCompletion(sb, [requestId], "입고 취소", "reopen"); } catch { /* 재개 실패는 취소를 막지 않는다 */ } }
 
     // 입고 취소 알림(설정 체크리스트 prod_receipt_cancel 로 제어)
     try {

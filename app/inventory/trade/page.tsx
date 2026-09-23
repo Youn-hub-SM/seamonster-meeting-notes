@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import OrdersTable from "../OrdersTable";
 import { ChannelPicker } from "../ChannelTabs";
 import { INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
+import { formatLinkResult } from "@/app/lib/link-result";
+
+type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean };
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null; reason?: string | null };
 type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
@@ -23,8 +26,22 @@ export default function TradePage() {
   const [ioPartner, setIoPartner] = useState("");
   const [ioDone, setIoDone] = useState(true); // 즉시 입고/출고처리(기본 체크)
   const [ioReason, setIoReason] = useState("판매"); // 출고 사유 — '판매' 외에는 대사(구매·판매·재고 확인)에서 분리 집계(099)
+  // 지정 매칭 — 엑셀 입고를 연결할 제조사 요청서. 거래일이 생산기간에 드는 요청서가 기본값(사람이 고르면 그대로).
+  const [reqs, setReqs] = useState<OpenReq[]>([]);
+  const [reqId, setReqId] = useState("");
+  const [reqTouched, setReqTouched] = useState(false);
+  useEffect(() => {
+    if (ioType !== "입고" || !uploadOpen) return;
+    let alive = true;
+    fetch(`/api/production/requests/open?date=${ioDate}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (!alive || !j?.ok) return;
+      setReqs(j.requests || []);
+      if (!reqTouched) setReqId(j.default_id || "");
+    }).catch(() => { /* 목록 없이도 입고는 된다 */ });
+    return () => { alive = false; };
+  }, [ioType, ioDate, uploadOpen, reqTouched]);
 
-  function openUpload() { setError(""); setIoDate(TODAY()); setUploadOpen(true); } // 열 때 거래일은 오늘로 리셋
+  function openUpload() { setError(""); setIoDate(TODAY()); setReqTouched(false); setUploadOpen(true); } // 열 때 거래일은 오늘로 리셋
 
   async function handleFile(file: File) {
     setImporting(true); setError("");
@@ -43,9 +60,10 @@ export default function TradePage() {
     if (!preview) return;
     setApplying(true); setError("");
     try {
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows.map((r) => (r.type === "출고" && ioReason !== "판매" ? { ...r, reason: ioReason } : r)), done: ioDone, channel: ioChannel }) });
+      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows.map((r) => (r.type === "출고" && ioReason !== "판매" ? { ...r, reason: ioReason } : r)), done: ioDone, channel: ioChannel, request_id: ioType === "입고" && ioDone ? (reqId || null) : null }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "적용 실패");
+      if (j.link) alert(formatLinkResult(j.link, (pid) => preview.rows.find((r) => r.product_id === pid)?.product_name || "품목"));
       setPreview(null); setReload((n) => n + 1);
     } catch (e) { setError(e instanceof Error ? e.message : "적용 실패"); }
     setApplying(false);
@@ -89,9 +107,9 @@ export default function TradePage() {
                 <label className="b2b-field-label">② 채널 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 소매)</span></label>
                 <ChannelPicker value={ioChannel} onChange={setIoChannel}
                   disabledChannels={ioType === "입고" ? MOVE_ONLY_CHANNELS : []}
-                  disabledHint="도매·프로모션·도매 대량 재고는 소매로 입고한 뒤 [소매↔도매]에서 옮깁니다 — 바로 그 칸 입고는 막았습니다" />
+                  disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 옮기기]에서 옮깁니다" />
                 {ioType === "입고" && (
-                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 도매·프로모션·도매 대량은 [소매↔도매]에서 옮깁니다.</p>
+                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 다른 칸은 [재고 옮기기]에서 옮깁니다.</p>
                 )}
               </div>
 
@@ -105,6 +123,16 @@ export default function TradePage() {
                   <input className="b2b-input" placeholder="선택" value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} />
                 </div>
               </div>
+
+              {ioType === "입고" && (
+                <div className="b2b-field" style={{ marginTop: 12 }}>
+                  <label className="b2b-field-label">요청서 <span className="sm-faint" style={{ fontWeight: 400 }}>(파일 전체 · 연결할 제조사 요청서)</span></label>
+                  <select className="b2b-input" value={ioDone ? reqId : ""} disabled={!ioDone} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }}>
+                    <option value="">연결 안 함</option>
+                    {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}</option>)}
+                  </select>
+                </div>
+              )}
 
               {ioType === "출고" && (
                 <div className="b2b-field" style={{ marginTop: 12 }}>

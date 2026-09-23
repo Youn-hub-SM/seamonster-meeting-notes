@@ -4,7 +4,6 @@ import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
 import { logProductionRequestCreated } from "@/app/lib/b2b-activity";
 import { addBusinessDays } from "@/app/lib/business-days";
-import { syncWindowReceipts } from "@/app/lib/production-allocate";
 import { toPrPurpose, CONFIRMED_PURPOSES } from "@/app/lib/wholesale-production";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,7 +56,7 @@ export async function POST(req: NextRequest) {
     const due_date = DATE_RE.test(String(b.due_date || ""))
       ? String(b.due_date)
       : addBusinessDays(request_date || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7);
-    // 생산시작일(118) — 입고 자동 매칭 창의 시작. 종료일보다 뒤면 무시(창이 비어 매칭이 전혀 안 붙는 사고 방지).
+    // 생산시작일(118) — 입고 화면이 기본 요청서를 고르는 기간의 시작. 종료일보다 뒤면 무시(기간이 비면 기본 선택이 안 잡힌다).
     const prod_start = DATE_RE.test(String(b.prod_start || "")) && String(b.prod_start) <= due_date ? String(b.prod_start) : undefined;
     const purpose = toPrPurpose(b.purpose); // 용도(082·113·115) — 모르는 값은 재고 보충
     // 제조사(소매) 요청을 생산 담당자 '지인'이 직접 작성하면 확인 절차 생략 — 담당 지정 + 진행중으로 시작.
@@ -108,8 +107,6 @@ export async function POST(req: NextRequest) {
     try { const [cr] = await loadRequests(sb, { id: requestId }); if (cr) createdDetail = formatRequestDetail(cr); } catch { /* 상세 없이 발송 */ }
     await logProductionRequestCreated(req_no || "", label, who, createdDetail);
 
-    // 생산기간(생산시작일~생산종료일) 창에 이미 기록된 입고를 즉시 연결 — 응답의 이행률에 바로 반영된다
-    await syncWindowReceipts(sb, { requestId });
 
     const [full] = await loadRequests(sb, { id: requestId });
     return NextResponse.json({ ok: true, request: full });

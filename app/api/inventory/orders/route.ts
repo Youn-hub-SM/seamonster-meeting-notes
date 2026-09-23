@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { matchKoQuery } from "@/app/lib/hangul";
-import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
-import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
+import { fullRequestsOfTxns, recheckRequestCompletion } from "@/app/lib/production-allocate";
 
 export const dynamic = "force-dynamic";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -227,27 +226,9 @@ export async function PATCH(req: NextRequest) {
     if (b.group_id) q = q.eq("group_id", b.group_id);
     else if (b.id) q = q.eq("id", b.id);
     else return NextResponse.json({ ok: false, error: "group_id 또는 id 가 필요합니다." }, { status: 400 });
-    const { data: flipped, error } = await q.select("id, product_id, qty, type, txn_date, partner");
+    const { error } = await q.select("id");
     if (error) throw error;
-
-    // 대기 → 완료된 '입고'는 이 시점이 실제 입고 — 열린 생산요청(재고 보충)에 이벤트 매칭.
-    //  (기록 시점 매칭은 대기 건을 건너뛰므로 여기서 이어받는다. 실패해도 처리 자체는 성공.)
-    //  채널이동(내부 이동) 입고는 제조사 생산이 아니므로 제외 — 창 매칭과 같은 규칙.
-    if (status === "완료") {
-      const receipts = (flipped ?? []).filter((t) => t.type === "입고" && Number(t.qty) > 0 && t.partner !== "채널이동");
-      if (receipts.length) {
-        try {
-          const token = req.cookies.get("b2b_auth")?.value;
-          const who = (await verifySession(token)) || resolveUserName(token);
-          await allocateReceiptsToOpenRequests(
-            sb,
-            receipts.map((t) => ({ inv_txn_id: t.id as string, product_id: t.product_id as string, qty: Number(t.qty), receipt_date: (t.txn_date as string) || undefined })),
-            who,
-            { purpose: "재고 보충" },
-          );
-        } catch (e) { console.warn("[inventory/orders PATCH] 생산요청 매칭 실패", e); }
-      }
-    }
+    // 대기 → 완료는 요청서에 연결하지 않는다(지정 매칭은 즉시 처리 입고에서만 고른다).
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[inventory/orders PATCH]", err);
@@ -267,15 +248,25 @@ export async function DELETE(req: NextRequest) {
       /production_receipts/i.test(e.message)
         ? NextResponse.json({ ok: false, error: "생산 요청과 연결된 입고가 포함돼 있습니다 — migration 083 적용 후에는 여기서 취소하면 요청 기록도 함께 원복됩니다. (지금은 생산 요청 화면의 입고 이력에서 취소하세요)" }, { status: 409 })
         : null;
+    // 삭제 전에 '지금 100% 완료'인 연결 요청서를 잡아 두고, 삭제 뒤 100% 아래로 내려갔으면 자동 재개(마감 원복).
+    const prepFail = () => NextResponse.json({ ok: false, error: "취소 준비 조회에 실패했습니다 — 다시 시도하세요." }, { status: 500 });
+    let fullBefore: string[] | null = [];
     if (groupId) {
+      const { data: ids, error: ie } = await sb.from("inventory_txns").select("id").eq("group_id", groupId).limit(5000);
+      if (ie) return prepFail();
+      fullBefore = await fullRequestsOfTxns(sb, (ids ?? []).map((r) => String(r.id)));
+      if (fullBefore === null) return prepFail();
       const { error } = await sb.from("inventory_txns").delete().eq("group_id", groupId);
       if (error) { const f = friendly(error); if (f) return f; throw error; }
     } else if (id) {
+      fullBefore = await fullRequestsOfTxns(sb, [id]);
+      if (fullBefore === null) return prepFail();
       const { error } = await sb.from("inventory_txns").delete().eq("id", id);
       if (error) { const f = friendly(error); if (f) return f; throw error; }
     } else {
       return NextResponse.json({ ok: false, error: "group_id 또는 id 가 필요합니다." }, { status: 400 });
     }
+    if (fullBefore.length) { try { await recheckRequestCompletion(sb, fullBefore, "입고 취소", "reopen"); } catch { /* 재개 실패는 취소를 막지 않는다 */ } }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[inventory/orders DELETE]", err);

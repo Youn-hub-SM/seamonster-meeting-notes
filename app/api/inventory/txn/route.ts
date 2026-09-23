@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { INV_TXN_TYPES, MOVE_ONLY_CHANNELS, RESERVED_CHANNELS, signedQty, toInvChannel, type InvTxnType } from "@/app/lib/inventory";
-import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
+import { allocateReceiptsToRequest, fullRequestsOfTxns, recheckRequestCompletion, type LinkResult } from "@/app/lib/production-allocate";
 import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     // 이동 전용 칸 직접 입고 금지 — 도매·프로모션·도매 대량은 소매 입고 후 이동으로만 들어간다(실수로 바로 그 칸에 넣는 사고 방지).
     //  정당한 입고(이동·생산 수령)는 이 라우트를 쓰지 않으므로 여기서 막아도 안전하다. 조정·출고는 네 칸 모두 허용(실사 대상).
     if (type === "입고" && MOVE_ONLY_CHANNELS.includes(writeChannel))
-      return NextResponse.json({ ok: false, error: `${writeChannel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요.` }, { status: 400 });
+      return NextResponse.json({ ok: false, error: `${writeChannel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [재고 옮기기]에서 옮기세요.` }, { status: 400 });
 
     const sb = supabaseAdmin();
     // 묶음(세트)은 자체 재고가 없다 → 입고/출고는 구성품으로 전개해 기록(다른 경로와 동일 규칙),
@@ -101,18 +101,19 @@ export async function POST(req: NextRequest) {
     }
     if (res.error) throw res.error;
 
-    // 입고(완료)면 열린 생산 요청에 자동 매칭(실패해도 입고는 성공)
-    if (type === "입고" && row.status !== "대기") {
+    // 입고(완료)에 요청서를 지정했으면 그 요청서에 연결(지정 매칭). 실패해도 입고는 성공 — 결과만 응답에 싣는다.
+    let link: LinkResult | null = null;
+    const requestId = /^[0-9a-f-]{36}$/i.test(String(b.request_id || "")) ? String(b.request_id) : null;
+    if (type === "입고" && row.status !== "대기" && requestId) {
       try {
-        await allocateReceiptsToOpenRequests(
-          sb,
+        link = await allocateReceiptsToRequest(
+          sb, requestId,
           (res.data ?? []).filter((t) => Number(t.qty) > 0).map((t) => ({ inv_txn_id: t.id as string, product_id: t.product_id as string, qty: Number(t.qty), receipt_date: (t.txn_date as string) || undefined })),
           row.created_by as string | null,
-          { purpose: "재고 보충" }, // 입고(도소매 무관) = 제조사 요청 이행
         );
-      } catch (e) { console.warn("[inventory/txn] 생산요청 매칭 실패", e); }
+      } catch (e) { console.warn("[inventory/txn] 생산요청 연결 실패", e); link = { ok: false, reason: "요청서 연결에 실패했습니다 — 생산 요청 화면에서 확인하세요.", lines: [] }; }
     }
-    return NextResponse.json({ ok: true, txn: res.data?.[0] ?? null, txns: res.data });
+    return NextResponse.json({ ok: true, txn: res.data?.[0] ?? null, txns: res.data, link });
   } catch (err) {
     console.error("[inventory/txn POST]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "기록 실패") }, { status: 500 });
@@ -150,12 +151,16 @@ export async function DELETE(req: NextRequest) {
     const sb = supabaseAdmin();
     // 083(cascade) 이후: 생산요청과 연결된 입고를 여기서 취소하면 요청 쪽 입고 기록도 함께 원복된다.
     //  083 미적용(restrict)이면 FK 오류 → 안내 문구로 변환.
+    //  삭제 전에 '지금 100% 완료'인 연결 요청서를 잡아 두고, 삭제 뒤 100% 아래로 내려갔으면 자동 재개(마감 원복).
+    const fullBefore = await fullRequestsOfTxns(sb, [id]);
+    if (fullBefore === null) return NextResponse.json({ ok: false, error: "취소 준비 조회에 실패했습니다 — 다시 시도하세요." }, { status: 500 });
     const { error } = await sb.from("inventory_txns").delete().eq("id", id);
     if (error) {
       if (/production_receipts/i.test(error.message))
         return NextResponse.json({ ok: false, error: "생산 요청과 연결된 입고입니다 — migration 083 적용 후에는 여기서 취소하면 요청 기록도 함께 원복됩니다. (지금은 생산 요청 화면의 입고 이력에서 취소하세요)" }, { status: 409 });
       throw error;
     }
+    if (fullBefore.length) { try { await recheckRequestCompletion(sb, fullBefore, "입고 취소", "reopen"); } catch { /* 재개 실패는 취소를 막지 않는다 */ } }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[inventory/txn DELETE]", err);

@@ -3,7 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { MOVE_ONLY_CHANNELS, RESERVED_CHANNELS, signedQty, toInvChannel } from "@/app/lib/inventory";
 import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
-import { allocateReceiptsToOpenRequests } from "@/app/lib/production-allocate";
+import { allocateReceiptsToRequest, type LinkResult } from "@/app/lib/production-allocate";
 import type { ImportTxn } from "../route";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export const maxDuration = 60;
 // POST /api/inventory/txns/import/apply { rows: ImportTxn[] } — 미리보기에서 확인한 입출고를 일괄 기록.
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { rows?: ImportTxn[]; done?: boolean; channel?: string };
+    const body = (await req.json()) as { rows?: ImportTxn[]; done?: boolean; channel?: string; request_id?: string | null };
     const rows = Array.isArray(body.rows) ? body.rows : [];
     const status = body.done === false ? "대기" : "완료"; // 즉시처리 미체크면 대기
     const channel = toInvChannel(body.channel); // 036·113·115, 기본 소매
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     if (!valid.length) return NextResponse.json({ ok: false, error: "유효한 행이 없습니다." }, { status: 400 });
     // 이동 전용 칸 입고 금지 — 화면에서 이미 막지만, 유형 열이 섞인 엑셀(입고+출고 혼재)이 그 칸으로 오는 경우까지 여기서 잡는다.
     if (MOVE_ONLY_CHANNELS.includes(channel) && valid.some((r) => r.type === "입고"))
-      return NextResponse.json({ ok: false, error: `${channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [소매↔도매]에서 옮기세요. (파일에 입고 행이 있습니다)` }, { status: 400 });
+      return NextResponse.json({ ok: false, error: `${channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [재고 옮기기]에서 옮기세요. (파일에 입고 행이 있습니다)` }, { status: 400 });
 
     // 묶음(세트)은 자체 재고가 없다 → 반드시 구성품 원장으로 남긴다. 세트 id 로 기록하면
     //  현재고가 구성품에서 파생되므로 그 원장은 무시되고 아무 재고도 줄지 않는다.
@@ -89,20 +89,20 @@ export async function POST(req: NextRequest) {
     }
     if (ins.error) throw ins.error;
 
-    // 입고(즉시 처리)면 열린 생산 요청에 자동 매칭 — 요청에 없는 품목·초과분은 일반 입고로 남음.
-    //  실패해도 입고는 성공(fire-and-forget).
-    if (status === "완료") {
+    // 입고(즉시 처리)에 요청서를 지정했으면 그 요청서에 연결(지정 매칭). 실패해도 입고는 성공 — 결과만 응답에.
+    let link: LinkResult | null = null;
+    const requestId = /^[0-9a-f-]{36}$/i.test(String(body.request_id || "")) ? String(body.request_id) : null;
+    if (status === "완료" && requestId) {
       try {
         const inRows = (ins.data ?? []).filter((r) => r.type === "입고" && Number(r.qty) > 0);
-        await allocateReceiptsToOpenRequests(
-          sb,
+        if (inRows.length) link = await allocateReceiptsToRequest(
+          sb, requestId,
           inRows.map((r) => ({ inv_txn_id: r.id as string, product_id: r.product_id as string, qty: Number(r.qty), receipt_date: (r.txn_date as string) || undefined })),
           actor,
-          { purpose: "재고 보충" }, // 입고(도소매 무관) = 제조사 요청 이행
         );
-      } catch (e) { console.warn("[inventory/txns import apply] 생산요청 매칭 실패", e); }
+      } catch (e) { console.warn("[inventory/txns import apply] 생산요청 연결 실패", e); link = { ok: false, reason: "요청서 연결에 실패했습니다 — 생산 요청 화면에서 확인하세요.", lines: [] }; }
     }
-    return NextResponse.json({ ok: true, applied: insert.length, status, orders: [...orderByType.values()].map((o) => o.order_no) });
+    return NextResponse.json({ ok: true, applied: insert.length, status, orders: [...orderByType.values()].map((o) => o.order_no), link });
   } catch (err) {
     console.error("[inventory/txns import apply]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "적용 실패") }, { status: 500 });

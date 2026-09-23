@@ -283,6 +283,11 @@ export function RequestList() {
   }
 
   const doneCount = useMemo(() => byTab.filter((r) => r.status === "완료" || r.status === "취소").length, [byTab]);
+  // 종료일 지난 열린 제조사 요청서 — 잔여가 입고 예정에 남아 권장을 누르므로 마감(또는 종료일 수정) 대상
+  const overdueOpen = useMemo(() => {
+    const t = todayIso();
+    return requests.filter((r) => r.purpose === "재고 보충" && (r.status === "요청" || r.status === "진행중") && !!r.due_date && r.due_date < t && openRemainQty(r.items) > 0).length;
+  }, [requests]);
 
   // 생산 담당자 확인 — 담당자=본인 기록 + 진행중 전환(제조사에 전달했다는 표시)
   async function confirmRequest(r: ProductionRequest) {
@@ -301,6 +306,9 @@ export function RequestList() {
             ))}
           </div>
           <span className="sm-faint" style={{ fontSize: 12 }}>{FULFILL_NOTE[tab]}</span>
+          {tab === "재고 보충" && overdueOpen > 0 && (
+            <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>종료일 지난 요청서 {overdueOpen}건 — 마감하거나 종료일을 고치세요</span>
+          )}
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)", cursor: "pointer" }}>
             <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> 완료·취소 보기 <span className="sm-faint" style={{ fontSize: 12 }}>({doneCount})</span>
           </label>
@@ -329,7 +337,7 @@ export function RequestList() {
               </tbody>
             </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>이 수량은 주간 생산 계산에 들어가지 않습니다 — 목표일을 보며 제조사와 협의해 만들고, 입고되면 [재고 옮기기]의 소매 → {PURPOSE_CHANNEL[tab] || tab} 이동에서 요청서에 배정하세요.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>협의한 양은 제조사 요청서로 만들지 않습니다 — 제조사와 별도 전달. 입고는 요청서 '연결 안 함'으로 기록하고, [재고 옮기기] 소매 → {PURPOSE_CHANNEL[tab] || tab}에서 이 탭의 요청서에 배정합니다.</p>
         </section>
       )}
 
@@ -456,8 +464,10 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>
           {req.due_date || "-"}
-          {/* 생산기간(입고 매칭 창) — 시작일이 있으면 병기. 이 기간의 입고가 이 요청서에 잡힌다 */}
-          {req.purpose === "재고 보충" && req.prod_start ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }} title="생산기간(입고 매칭 창)">생산 {req.prod_start.slice(5)}~{(req.due_date || "").slice(5)}</span> : null}
+          {req.purpose === "재고 보충" && req.prod_start ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>생산 {req.prod_start.slice(5)}~{(req.due_date || "").slice(5)}</span> : null}
+          {/* 종료일이 지났는데 열려 있으면 마감(또는 종료일 수정)이 필요하다 — 잔여가 입고 예정에 남아 권장을 누른다 */}
+          {req.purpose === "재고 보충" && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date < todayIso() && openRemainQty(req.items) > 0
+            ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>지남 · 잔여 {openRemainQty(req.items).toLocaleString()}</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
           {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}
@@ -503,23 +513,22 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
 
             {suggestComplete ? (
               <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
-                <span style={{ fontSize: 15, color: "var(--sm-success)" }}>모든 품목이 요청 수량 이상 입고되었습니다.</span>
-                <button className="b2b-btn-primary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy} onClick={() => onStatus("완료")}>생산 완료 처리</button>
+                <span style={{ fontSize: 15, color: "var(--sm-success)" }}>모든 품목이 요청 수량 이상 들어왔습니다.</span>
+                <button className="b2b-btn-primary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy} onClick={() => onStatus("완료")}>마감</button>
               </div>
             ) : (req.status === "요청" || req.status === "진행중") && (
-              // 타이밍이 어긋나(요청서보다 먼저 이동·기타 처리 등) 100%를 못 채운 요청의 마감 수단 —
-              //  확인을 거친 강제 완료. 이렇게 닫은 요청은 이동 취소가 자동으로 되살리지 않는다(수동 완료 보존 규칙).
+              // 마감 — 100%를 못 채운 요청서를 사람이 닫는다. 이렇게 닫은 요청은 입고 취소가 자동으로 되살리지 않는다(수동 마감 보존).
               <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
                 <span className="sm-faint" style={{ fontSize: 13 }}>
-                  이행률 {req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0}% — 재고가 이미 넘어갔는데 배정이 안 잡힌 요청은 강제 완료로 마감할 수 있습니다.
+                  이행률 {req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0}%
                 </span>
                 <button className="b2b-btn-secondary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy}
                   onClick={() => {
                     const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
                     const remain = openRemainQty(req.items);
-                    const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n미입고 ${remain.toLocaleString()}개는 '입고 예정'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다 — 물건이 정말 안 오는 게 맞는지 확인하세요.\n(완료한 뒤 이 물량이 도착하면 생산기간이 맞는 다른 요청서에 기록되고 이 요청서에는 오지 않습니다. 이 요청서에 받으려면 입고를 기록하기 전에 '다시 열기' 하고 생산종료일을 도착일 이후로 고치세요.)` : "";
-                    if (confirm(`이행률이 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) 입니다.\n그래도 완료 처리할까요?\n\n완료하면 목록·도매 요청 종합에서 빠지고, 필요하면 '다시 열기'로 되돌릴 수 있습니다.${inbNote}`)) onStatus("완료");
-                  }}>강제 완료 처리</button>
+                    const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n\n미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.` : "";
+                    if (confirm(`이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) — 마감할까요?${inbNote}`)) onStatus("완료");
+                  }}>마감</button>
               </div>
             )}
           </td>
@@ -570,9 +579,9 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
                     {rc.memo && <span style={{ color: "var(--sm-text-mid)" }}>· {rc.memo}</span>}
                     {/* 링크형 입고(이전 연동·기간 자동 매칭)는 원장이 다른 화면 소유 — 여기서 취소하면
                         실제 재고 원장까지 지워지므로 버튼을 막고 원래 화면으로 안내한다 */}
-                    {canEdit && (rc.memo?.includes("이전 연동")
-                      ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 소매↔도매 화면에서</span>
-                      : rc.memo?.includes("기간 자동 매칭")
+                    {canEdit && ((rc.memo?.includes("이전 연동") || rc.memo?.includes("이전 배정"))
+                      ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 재고 옮기기 화면에서</span>
+                      : (rc.memo?.includes("기간 자동 매칭") || rc.memo?.includes("입고 연결") || rc.memo?.includes("입고/출고 연동"))
                       ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 입고 및 출고 화면에서</span>
                       : <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>)}
                   </div>
@@ -600,7 +609,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   const [requestedBy, setRequestedBy] = useState(initial?.requested_by || "");
   const [date, setDate] = useState(initial?.request_date || todayIso());
   // 생산종료일(마감) 필수 — 기본 요청일+7영업일(급발주 시 수정). 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
-  const [dueDate, setDueDate] = useState(initial ? (initial.due_date || addBusinessDays(initial.request_date, 7)) : addBusinessDays(todayIso(), 7));
+  // 확정형(프로모션·도매 대량)은 목표일을 비워 둔다 — 기본값 +7영업일이 그대로 저장되면 8일 뒤 자동 마감·합류가 돈다.
+  const [dueDate, setDueDate] = useState(initial ? (initial.due_date || addBusinessDays(initial.request_date, 7)) : CONFIRMED_PURPOSES.includes(defaultPurpose || "재고 보충") ? "" : addBusinessDays(todayIso(), 7));
   // 생산시작일(118) — 입고 자동 매칭 창의 시작(제조사 요청 전용). 새 요청 기본 = 요청일 다음 영업일:
   //  요청 당일 기록된 무관한 입고가 새 요청서에 전량 잡히던 사고(2026-09-23)의 재발 방지 기본값.
   const [prodStart, setProdStart] = useState(initial ? (initial.prod_start || "") : addBusinessDays(todayIso(), 1));
@@ -686,7 +696,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               <span style={{ fontSize: 15, fontWeight: 600 }}>요청</span>
               <div className="sm-tabs" style={{ margin: 0 }}>
                 {PR_PURPOSES.map((pp) => (
-                  <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} onClick={() => setPurpose(pp)}>{PR_PURPOSE_LABEL[pp]}</button>
+                  <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} onClick={() => { setPurpose(pp); if (!isEdit) setDueDate(CONFIRMED_PURPOSES.includes(pp) ? "" : addBusinessDays(date || todayIso(), 7)); }}>{PR_PURPOSE_LABEL[pp]}</button>
                 ))}
               </div>
             </div>

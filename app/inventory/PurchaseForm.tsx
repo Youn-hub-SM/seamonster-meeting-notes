@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MOVE_ONLY_CHANNELS, signedQty, type InvTxnType, type InvChannel } from "@/app/lib/inventory";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { formatLinkResult } from "@/app/lib/link-result";
 import { ChannelPicker } from "./ChannelTabs";
+
+type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean };
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -24,6 +27,20 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const [memo, setMemo] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [done, setDone] = useState(true); // 즉시 입고/출고처리(기본 체크) — 해제 시 '대기'
+  // 지정 매칭 — 입고를 연결할 제조사 요청서를 사람이 고른다. 거래일이 생산기간에 드는 요청서가 기본값.
+  const [reqs, setReqs] = useState<OpenReq[]>([]);
+  const [reqId, setReqId] = useState("");
+  const [reqTouched, setReqTouched] = useState(false);
+  useEffect(() => {
+    if (type !== "입고") return;
+    let alive = true;
+    fetch(`/api/production/requests/open?date=${date}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (!alive || !j?.ok) return;
+      setReqs(j.requests || []);
+      if (!reqTouched) setReqId(j.default_id || "");
+    }).catch(() => { /* 목록 없이도 입고는 된다 */ });
+    return () => { alive = false; };
+  }, [type, date, reqTouched]);
   const [reason, setReason] = useState("판매"); // 출고 사유 — '판매' 외에는 대사(구매·판매·재고 확인)에서 분리 집계(099)
   const [search, setSearch] = useState("");
   const [excludeBundles, setExcludeBundles] = useState(true); // 묶음(세트) 제외 — 기본 켜짐(세트는 자체 재고 없음)
@@ -82,9 +99,10 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         unit_amount: Number(l.price) > 0 ? Math.round(Number(l.price)) : null, txn_date: date, partner: partner.trim() || null, memo: memo.trim() || null,
         reason: type === "출고" && reason !== "판매" ? reason : null,
       }));
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done, channel }) });
+      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done, channel, request_id: type === "입고" && done ? (reqId || null) : null }) });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (j.link) alert(formatLinkResult(j.link, (pid) => valid.find((l) => l.product_id === pid)?.name || "품목"));
       onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
@@ -99,9 +117,18 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         </div>
         <ChannelPicker value={channel} onChange={setChannel}
           disabledChannels={type === "입고" ? [...MOVE_ONLY_CHANNELS] : []}
-          disabledHint="도매·프로모션·도매 대량 재고는 소매로 입고한 뒤 [재고 옮기기]에서 옮깁니다 — 직접 입고는 막았습니다" />
+          disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 옮기기]에서 옮깁니다" />
         <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
+        {type === "입고" && (
+          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>요청서
+            <select className="b2b-input" value={done ? reqId : ""} disabled={!done} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }} style={{ width: "auto", maxWidth: 340 }}
+              title={done ? "이 입고를 연결할 제조사 요청서" : "대기 저장은 요청서에 연결되지 않습니다"}>
+              <option value="">연결 안 함</option>
+              {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}</option>)}
+            </select>
+          </label>
+        )}
         {type === "출고" && (
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
             <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: "auto" }}
