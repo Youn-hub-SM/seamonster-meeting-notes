@@ -109,7 +109,8 @@ export async function loadRequests(
       id: r.id as string, req_no: (r.req_no as string) ?? null, title: (r.title as string) ?? null,
       purpose: (r.purpose === "도매 납품" ? "도매 납품" : r.purpose === "프로모션" ? "프로모션" : "재고 보충") as ProductionRequest["purpose"], // 082·113 미적용/기존 행 → 재고 보충
       requested_by: (r.requested_by as string) ?? null, request_date: String(r.request_date),
-      due_date: (r.due_date as string) ?? null, // 생산마감일(071 미적용이면 null)
+      due_date: (r.due_date as string) ?? null, // 생산종료일=마감(071 미적용이면 null)
+      prod_start: (r.prod_start as string) ?? null, // 생산시작일(118 미적용이면 null — 창 시작은 신청일)
       status: r.status as ProductionRequest["status"], assignee: (r.assignee as string) ?? null, memo: (r.memo as string) ?? null,
       created_by: (r.created_by as string) ?? null, created_at: String(r.created_at), updated_at: String(r.updated_at),
       items: its,

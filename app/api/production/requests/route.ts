@@ -51,10 +51,12 @@ export async function POST(req: NextRequest) {
     try { const { data } = await sb.rpc("next_production_request_no"); if (data) req_no = String(data); } catch { /* 069 미적용 */ }
 
     const request_date = DATE_RE.test(String(b.request_date || "")) ? String(b.request_date) : undefined;
-    // 생산마감일은 필수 — 안 오거나 형식이 틀리면 요청일+7영업일로 서버가 채운다(일정·보드가 마감일 기준이라 비면 안 됨).
+    // 생산종료일(마감)은 필수 — 안 오거나 형식이 틀리면 요청일+7영업일로 서버가 채운다(일정·보드가 마감일 기준이라 비면 안 됨).
     const due_date = DATE_RE.test(String(b.due_date || ""))
       ? String(b.due_date)
       : addBusinessDays(request_date || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7);
+    // 생산시작일(118) — 입고 자동 매칭 창의 시작. 종료일보다 뒤면 무시(창이 비어 매칭이 전혀 안 붙는 사고 방지).
+    const prod_start = DATE_RE.test(String(b.prod_start || "")) && String(b.prod_start) <= due_date ? String(b.prod_start) : undefined;
     const purpose = b.purpose === "도매 납품" ? "도매 납품" : b.purpose === "프로모션" ? "프로모션" : "재고 보충"; // 용도(082·113) — 그 외 값은 재고 보충
     // 제조사(소매) 요청을 생산 담당자 '지인'이 직접 작성하면 확인 절차 생략 — 담당 지정 + 진행중으로 시작.
     //  (작성자 본인이 담당자라 별도 확인이 무의미. 도매 요청은 이행 주체가 달라 자동 확인 없음.)
@@ -70,15 +72,16 @@ export async function POST(req: NextRequest) {
       created_by: who,
     };
     if (request_date) head.request_date = request_date;
-    if (due_date) head.due_date = due_date; // 생산마감일(071). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
+    if (due_date) head.due_date = due_date; // 생산종료일(071). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
+    if (prod_start) head.prod_start = prod_start; // 생산시작일(118). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
 
     let { data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single();
     // 113 미적용(purpose 체크에 '프로모션' 없음)이면 조용히 재고 보충으로 강등하지 않고 명시 오류 —
     //  강등되면 파도소리 화면·자동 매칭에 잘못 흘러든다.
     if (he && purpose === "프로모션" && /purpose/i.test(he.message))
       return NextResponse.json({ ok: false, error: "프로모션 용도가 아직 없습니다 — migration 113 을 먼저 적용하세요." }, { status: 500 });
-    // 선택 컬럼(071 due_date · 082 purpose) 미적용 환경 폴백 — 에러 메시지에 보이는 컬럼만 빼고 재시도.
-    for (const col of ["due_date", "purpose"] as const) {
+    // 선택 컬럼(071 due_date · 082 purpose · 118 prod_start) 미적용 환경 폴백 — 에러 메시지에 보이는 컬럼만 빼고 재시도.
+    for (const col of ["due_date", "purpose", "prod_start"] as const) {
       if (he && col in head && new RegExp(col, "i").test(he.message)) {
         delete head[col];
         ({ data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single());
@@ -98,7 +101,7 @@ export async function POST(req: NextRequest) {
     try { const [cr] = await loadRequests(sb, { id: requestId }); if (cr) createdDetail = formatRequestDetail(cr); } catch { /* 상세 없이 발송 */ }
     await logProductionRequestCreated(req_no || "", label, who, createdDetail);
 
-    // 신청일~마감일 창에 이미 기록된 입고를 즉시 연결 — 응답의 이행률에 바로 반영된다
+    // 생산기간(생산시작일~생산종료일) 창에 이미 기록된 입고를 즉시 연결 — 응답의 이행률에 바로 반영된다
     await syncWindowReceipts(sb, { requestId });
 
     const [full] = await loadRequests(sb, { id: requestId });

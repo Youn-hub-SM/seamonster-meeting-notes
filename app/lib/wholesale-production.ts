@@ -58,7 +58,8 @@ export interface ProductionRequest {
   purpose: PrPurpose;           // 생산 용도(082) — 재고 보충(자동 생성) | 도매 납품(MD 직접). 미적용 환경은 기본 재고 보충
   requested_by: string | null;
   request_date: string;
-  due_date: string | null;      // 생산마감일(기본 요청일+7영업일, 급발주 시 수정 가능)
+  due_date: string | null;      // 생산종료일=마감(기본 요청일+7영업일, 급발주 시 수정 가능)
+  prod_start?: string | null;  // 생산시작일(118) — 입고 자동 매칭 창의 시작(없으면 신청일 폴백). 제조사(재고 보충) 전용
   status: PrStatus;
   assignee: string | null;      // 생산 담당자(변경 가능)
   memo: string | null;

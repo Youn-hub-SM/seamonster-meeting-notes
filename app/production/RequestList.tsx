@@ -430,6 +430,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
         </td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>
           {req.due_date || "-"}
+          {/* 생산기간(입고 매칭 창) — 시작일이 있으면 병기. 이 기간의 입고가 이 요청서에 잡힌다 */}
+          {req.purpose === "재고 보충" && req.prod_start ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }} title="생산기간(입고 매칭 창)">생산 {req.prod_start.slice(5)}~{(req.due_date || "").slice(5)}</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
           {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}
@@ -488,11 +490,11 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                 <button className="b2b-btn-secondary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy}
                   onClick={() => {
                     const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
-                    // 마감 뒤 도착분은 그 주간 요청서로 간다(2026-09-18 창 규칙) — 완료 전에 알린다
+                    // 기간 뒤 도착분은 생산기간이 맞는 다른 요청서로 간다(2026-09-23 생산기간 창) — 완료 전에 알린다
                     const hasRemain = req.purpose === "재고 보충" && req.items.some((it) => it.requested_qty > 0 && it.received_qty < it.requested_qty);
                     const lateNote = hasRemain ? `
 
-완료한 뒤 이 물량이 도착하면 그 주간 요청서에 기록되고 이 요청서에는 오지 않습니다. 이 요청서에 받으려면 입고를 기록하기 전에 '다시 열기' 하고 생산마감일을 도착일 이후로 고치세요.` : "";
+완료한 뒤 이 물량이 도착하면 생산기간이 맞는 다른 요청서에 기록되고 이 요청서에는 오지 않습니다. 이 요청서에 받으려면 입고를 기록하기 전에 '다시 열기' 하고 생산종료일을 도착일 이후로 고치세요.` : "";
                     if (confirm(`이행률이 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) 입니다.
 그래도 완료 처리할까요?
 
@@ -574,8 +576,12 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
   const [requestedBy, setRequestedBy] = useState(initial?.requested_by || "");
   const [date, setDate] = useState(initial?.request_date || todayIso());
-  // 생산마감일 필수 — 기본 요청일+7영업일(급발주 시 수정). 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
+  // 생산종료일(마감) 필수 — 기본 요청일+7영업일(급발주 시 수정). 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
   const [dueDate, setDueDate] = useState(initial ? (initial.due_date || addBusinessDays(initial.request_date, 7)) : addBusinessDays(todayIso(), 7));
+  // 생산시작일(118) — 입고 자동 매칭 창의 시작(제조사 요청 전용). 새 요청 기본 = 요청일 다음 영업일:
+  //  요청 당일 기록된 무관한 입고가 새 요청서에 전량 잡히던 사고(2026-09-23)의 재발 방지 기본값.
+  const [prodStart, setProdStart] = useState(initial ? (initial.prod_start || "") : addBusinessDays(todayIso(), 1));
+  const initialProdStart = initial?.prod_start || "";
   const [title, setTitle] = useState(initial?.title || "");
   // 용도(082) — 새 요청은 현재 탭 기준(제조사 탭=재고 보충 / 도매 탭=도매 납품), 수정은 기존 값.
   const [purpose, setPurpose] = useState<PrPurpose>(initial?.purpose || defaultPurpose || "재고 보충");
@@ -599,7 +605,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   function updateLine(i: number, patch: Partial<NewLine>) { setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
   function removeLine(i: number) { setLines((prev) => prev.filter((_, idx) => idx !== i)); }
 
-  const valid = lines.some((l) => Number(l.requested_qty) > 0) && !!dueDate;
+  const startAfterEnd = purpose === "재고 보충" && !!prodStart && !!dueDate && prodStart > dueDate;
+  const valid = lines.some((l) => Number(l.requested_qty) > 0) && !!dueDate && !startAfterEnd;
 
   function submit() {
     const items = lines
@@ -612,6 +619,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
       requested_by: requestedBy.trim() || (isEdit ? "" : undefined),
       request_date: date,
       due_date: dueDate,
+      // 생산시작일 — 제조사(재고 보충)만. 수정 시엔 바뀐 경우에만 보낸다(안 바뀌었는데 보내면 창 변경으로 오인해 전체 재매칭이 돈다)
+      ...(purpose === "재고 보충" && (!isEdit || prodStart !== initialProdStart) ? { prod_start: prodStart || null } : {}),
       memo: memo.trim() || (isEdit ? "" : undefined),
       items,
     });
@@ -639,10 +648,18 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               <span style={{ fontSize: 15, fontWeight: 600 }}>요청일</span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={date} onChange={(e) => setDate(e.target.value)} />
             </label>
+            {purpose === "재고 보충" && (
+              <label className="sm-col" style={{ gap: 3 }}>
+                {/* 생산기간의 시작 — 이 날부터 생산종료일까지 기록된 입고가 이 요청서에 잡힌다(넘쳐도 초과로 기록) */}
+                <span style={{ fontSize: 15, fontWeight: 600 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 입고 매칭 시작</span></span>
+                <input type="date" className="b2b-input" style={{ width: 150 }} value={prodStart} max={dueDate || undefined} onChange={(e) => setProdStart(e.target.value)} />
+              </label>
+            )}
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>생산마감일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 7영업일</span></span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{purpose === "재고 보충" ? "생산종료일" : "생산마감일"} <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>{purpose === "재고 보충" ? "· 입고 매칭 끝" : "· 기본 7영업일"}</span></span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
+            {startAfterEnd && <div className="b2b-error" style={{ flexBasis: "100%", margin: 0 }}>생산시작일이 생산종료일보다 뒤입니다 — 기간을 확인하세요.</div>}
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>제목(선택)</span>
               <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 3월 2주차 도매 생산" />

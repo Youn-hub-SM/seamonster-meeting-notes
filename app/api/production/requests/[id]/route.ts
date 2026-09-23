@@ -42,12 +42,35 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (b.memo !== undefined) patch.memo = String(b.memo || "").trim() || null;
     if (b.request_date !== undefined && DATE_RE.test(String(b.request_date))) patch.request_date = String(b.request_date);
     if (b.due_date !== undefined) {
-      // 생산마감일은 필수(일정·보드가 마감일 기준) — 빈값·형식 오류는 거부, 해제 불가.
-      if (!DATE_RE.test(String(b.due_date))) return NextResponse.json({ ok: false, error: "생산마감일을 입력하세요." }, { status: 400 });
+      // 생산종료일(마감)은 필수(일정·보드가 마감일 기준) — 빈값·형식 오류는 거부, 해제 불가.
+      if (!DATE_RE.test(String(b.due_date))) return NextResponse.json({ ok: false, error: "생산종료일을 입력하세요." }, { status: 400 });
       patch.due_date = String(b.due_date);
     }
+    // 생산시작일(118) — 입고 자동 매칭 창의 시작. 빈값 = 해제(신청일 폴백).
+    if (b.prod_start !== undefined) patch.prod_start = DATE_RE.test(String(b.prod_start)) ? String(b.prod_start) : null;
 
     const sb = supabaseAdmin();
+
+    // 창 키가 하나라도 오면 현재 값을 미리 읽는다 — (1) 시작>종료 역전을 저장 전에 차단(POST 와 동일 가드:
+    //  역전 창은 비어 있어 소급 링크만 지워지고 재매칭이 하나도 안 붙는다), (2) windowChanged 를 '키 존재'가
+    //  아니라 '실제 값 변경'으로 판정(안 바뀐 저장마다 열린 요청서 전체 재매칭이 돌던 낭비 방지 — 리뷰 확정).
+    //  컬럼 미적용(071/082/118) 환경은 에러에 보이는 컬럼만 빼고 재시도.
+    type WinCur = { request_date?: string | null; due_date?: string | null; prod_start?: string | null; purpose?: string | null };
+    let curWin: WinCur | null = null;
+    if (b.request_date !== undefined || b.due_date !== undefined || b.prod_start !== undefined || b.purpose !== undefined) {
+      const cols = ["request_date", "due_date", "prod_start", "purpose"];
+      for (let guard = 0; guard < 4; guard++) {
+        const r = await sb.from("production_requests").select(cols.join(", ")).eq("id", id).maybeSingle();
+        if (!r.error) { curWin = (r.data as WinCur) ?? {}; break; }
+        const miss = cols.find((c) => new RegExp(c, "i").test(r.error!.message));
+        if (!miss || cols.length <= 1) break;
+        cols.splice(cols.indexOf(miss), 1);
+      }
+      const effStart = patch.prod_start !== undefined ? (patch.prod_start as string | null) : (curWin?.prod_start ?? null);
+      const effDue = patch.due_date !== undefined ? (patch.due_date as string) : (curWin?.due_date ?? null);
+      if (effStart && effDue && String(effStart) > String(effDue))
+        return NextResponse.json({ ok: false, error: "생산시작일이 생산종료일보다 뒤입니다 — 기간을 확인하세요." }, { status: 400 });
+    }
 
     // 품목 교체 준비 — 헤더 갱신 전에 검증까지 끝낸다(절반만 반영되는 것 방지).
     type ItemIn = { id?: string; product_id: string; requested_qty: number; memo?: string };
@@ -108,6 +131,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       delete patch.due_date; // 071 미적용 환경 폴백
       ({ error } = await sb.from("production_requests").update(patch).eq("id", id));
     }
+    if (error && "prod_start" in patch && /prod_start/i.test(error.message)) {
+      delete patch.prod_start; // 118 미적용 환경 폴백 — 창 시작은 신청일
+      ({ error } = await sb.from("production_requests").update(patch).eq("id", id));
+    }
     if (error) throw error;
 
     // 품목 교체 실행 — 수정 → 추가 → 삭제 순(검증은 위에서 완료)
@@ -149,13 +176,23 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (itemsIn !== null || contentKeys.length > 0) {
       await logProductionRequestUpdated(reqNo, who, detailNow);
     }
-    // 창(신청일·마감일)이나 용도가 바뀌면 기존 소급 링크부터 지우고 새 기준으로 다시 매칭한다 —
+    // 창(생산시작일·생산종료일·신청일)이나 용도가 바뀌면 기존 소급 링크부터 지우고 새 기준으로 다시 매칭한다 —
     //  안 지우면 창 밖 입고나 '도매 납품'으로 정정한 요청의 소매 입고 링크가 잔존해 이중 이행이 된다.
     //  지우는 건 링크(증거)뿐 — 원장은 건드리지 않는다. 이벤트 매칭 링크(memo '입고/출고 연동')는 유지.
-    const windowChanged = patch.request_date !== undefined || patch.due_date !== undefined || patch.purpose !== undefined;
+    //  구 메모(신청일~마감일)도 함께 지운다 — 규칙 변경 전에 만들어진 링크를 새 창 기준으로 재판정.
+    //  '키 존재'가 아니라 curWin(수정 전 값)과의 실제 비교 — 안 바뀐 저장마다 전체 재매칭이 돌지 않게.
+    //  폴백으로 patch 에서 빠진 컬럼(미적용)은 비교 대상에서도 자연히 빠진다. curWin 조회 실패 시 종전(존재 기반) 판정.
+    const dnorm = (v: unknown) => (v == null || v === "" ? null : String(v).slice(0, 10));
+    const windowChanged = curWin
+      ? (("request_date" in patch && dnorm(patch.request_date) !== dnorm(curWin.request_date))
+        || ("due_date" in patch && dnorm(patch.due_date) !== dnorm(curWin.due_date))
+        || ("prod_start" in patch && dnorm(patch.prod_start) !== dnorm(curWin.prod_start ?? null))
+        || ("purpose" in patch && patch.purpose !== (curWin.purpose ?? "재고 보충")))
+      : (patch.request_date !== undefined || patch.due_date !== undefined || patch.prod_start !== undefined || patch.purpose !== undefined);
     if (windowChanged) {
       try {
-        await sb.from("production_receipts").delete().eq("request_id", id).eq("memo", "기간 자동 매칭(신청일~마감일)");
+        await sb.from("production_receipts").delete().eq("request_id", id)
+          .in("memo", ["기간 자동 매칭(신청일~마감일)", "기간 자동 매칭(생산기간)"]);
       } catch { /* 실패해도 아래 sync 가 미연결분만 붙이므로 이중 배분은 없다 */ }
     }
     // 신청일·마감일·품목이 바뀌었을 수 있다 — 새 창 기준으로 소급 매칭 후 반환.
