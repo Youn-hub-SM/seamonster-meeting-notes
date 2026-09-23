@@ -310,7 +310,7 @@ export default function InventoryMovePage() {
           <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>배정으로 요청서가 100% 채워지면 자동으로 완료되어 {PR_PURPOSE_LABEL[allocPurpose]} 요청 종합에서 빠집니다. 이동을 취소하면 배정도 함께 돌아옵니다.</p>
         )}
         {dir.to === "프로모션" && (
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>프로모션 재고는 행사일까지 자동 출고에서 보호됩니다. 목표일이 지나고 열린 프로모션 요청이 없으면 다음날 아침 소매로 자동 합류합니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>프로모션 재고는 행사 하루 전까지 자동 출고에서 보호됩니다. 행사 시작(목표일) 하루 전 아침 요청서가 자동 완료되고 남은 확보분이 소매로 합류합니다 — 그 뒤 입고분은 옮기지 말고 소매에 둡니다.</p>
         )}
         {dir.to === "도매 대량" && (
           <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>도매 대량 재고는 선결제로 이미 팔린 몫입니다. 도매 일반 주문이 가져가지 못하고, 프로모션과 달리 소매로 돌아오는 자동 합류가 없습니다 — 되돌리려면 도매 대량 → 소매 방향으로 직접 옮기세요.</p>
