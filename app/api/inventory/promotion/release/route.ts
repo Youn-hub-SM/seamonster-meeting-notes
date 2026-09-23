@@ -32,8 +32,54 @@ export async function POST(req: NextRequest) {
     const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const tomorrow = new Date(Date.now() + 33 * 3600e3).toISOString().slice(0, 10); // KST 내일 = 행사 하루 전 판정 기준
 
-    // 0) 행사 하루 전 요청서 자동 마감(2026-09-23 대표 지시) — 목표일이 내일(이하)인 열린 프로모션
-    //    요청서를 완료로 닫는다. 이행률과 무관(문을 닫는 게 목적) — 미이행 잔여는 알림 본문에 남는다.
+    // 1) 프로모션 풀 잔량 — 마감(2a)·겹침 경고·합류가 모두 쓴다. 풀이 비어도 마감은 해야 하므로
+    //    빈 풀의 이른 반환은 마감 뒤로 미룬다.
+    const pool = await sb.rpc("inventory_stock", { asof: null, chan: "프로모션" });
+    if (pool.error) {
+      if (/channel/i.test(pool.error.message)) return NextResponse.json({ ok: true, released: 0, closed: 0, note: "113 미적용 — 프로모션 풀 없음" });
+      throw pool.error;
+    }
+    const rows = ((pool.data as { product_id: string; qty: number }[] | null) ?? [])
+      .map((r) => ({ product_id: r.product_id, qty: Math.round((Number(r.qty) || 0) * 100) / 100 }))
+      .filter((r) => r.qty > 0);
+    const poolQty = new Map(rows.map((r) => [r.product_id, r.qty]));
+
+    // 2) 보류 판정(2026-09-23 개정) — 잡는 힘 = '목표일이 모레 이후(또는 목표일 없음)인 비취소 프로모션 요청'.
+    //    목표일이 내일(이하)인 요청은 아래 2a 가 닫는다 — 상태 구분이 더는 필요 없다
+    //    (2a 마감이 실패한 열린 요청도 날짜 기준으로 합류 — 행사 하루 전엔 무조건 소매에 있어야 한다).
+    //    목표일 없는 요청은 보수적으로 보류(행사 연기 시 목표일 수정을 잊어도 확보분이 사라지지 않게).
+    //    조회 실패는 무조건 throw — 1단계(풀 RPC)가 성공한 환경은 113 적용이 확정이라 폴백이 옳은 경우가 없고,
+    //    조용한 폴백은 '실패 → 보호 해제(전량 합류)' 방향 사고가 된다(검증 확정).
+    //    잡는 조건(목표일 없음 또는 모레 이후)을 SQL 로 내려보내 과거 행사 품목행 누적을 배제하고,
+    //    range 페이징으로 전량 읽는다 — 서버 Max Rows(기본 1000)가 .limit 보다 우선해 조용히 잘리면
+    //    미래 행사 품목이 보류에서 빠져 조기 합류되는 '보호 해제' 방향 사고가 된다(리뷰 확정).
+    const held = new Set<string>();
+    {
+      type Rel = { purpose?: string; status?: string; due_date?: string | null };
+      for (let off = 0; off < 20000; off += 1000) {
+        const { data: items, error: ie } = await sb.from("production_request_items")
+          .select("product_id, production_requests!inner(purpose, status, due_date)")
+          .eq("production_requests.purpose", "프로모션")
+          .neq("production_requests.status", "취소")
+          .or(`due_date.is.null,due_date.gt.${tomorrow}`, { referencedTable: "production_requests" })
+          .order("id", { ascending: true })
+          .range(off, off + 999);
+        if (ie) throw ie;
+        const rows2 = (items ?? []) as { product_id: string; production_requests?: Rel | Rel[] }[];
+        for (const it of rows2) {
+          const rel = it.production_requests;
+          const h = Array.isArray(rel) ? rel[0] : rel;
+          if (!h) continue;
+          const dueLater = !h.due_date || String(h.due_date) > tomorrow; // SQL 필터와 동일 — 이중 확인
+          if (dueLater) held.add(String(it.product_id));
+        }
+        if (rows2.length < 1000) break;
+      }
+    }
+    // 2a) 행사 하루 전 요청서 자동 마감(2026-09-23 대표 지시) — 목표일이 내일(이하)인 열린 프로모션
+    //    요청서를 완료로 닫는다. 이행률과 무관(문을 닫는 게 목적). 닫힌 요청서의 품목이 다른 미래
+    //    요청서에 묶여 오늘 합류하지 못하면 마감 알림 본문에 경고를 남긴다(리뷰 확정 — 이번 주 행사가
+    //    확보분 없이 치러질 수 있는데 조용히 넘기면 사람이 알 길이 없다).
     //    113 미적용(purpose 없음)이면 1단계 풀 RPC 가 어차피 빈손이라 여기 오류는 조용히 넘긴다.
     let closed = 0;
     try {
@@ -47,44 +93,26 @@ export async function POST(req: NextRequest) {
           .eq("id", r.id).in("status", ["요청", "진행중"]).select("id"); // 경합 시 한 번만 전환
         if (ue || !flipped?.length) continue;
         closed++;
-        try { await logProductionRequestStatusChanged(String(r.req_no || ""), String(r.status), "완료", "행사 하루 전 자동 마감"); } catch { /* 알림 실패는 마감을 막지 않는다 */ }
+        let detail: string | undefined;
+        try {
+          const { data: its } = await sb.from("production_request_items").select("product_id").eq("request_id", r.id).limit(500);
+          const stuck = [...new Set((its ?? []).map((x) => String(x.product_id)))]
+            .filter((pid) => held.has(pid) && (poolQty.get(pid) || 0) > 0);
+          if (stuck.length) {
+            const { data: ps } = await sb.from("products").select("id, name").in("id", stuck).limit(500);
+            const nm = new Map((ps ?? []).map((pr) => [String(pr.id), String(pr.name || "품목")]));
+            detail = [
+              "주의 — 확보분이 소매로 합류하지 않은 품목(다음 행사 요청서가 잡고 있음):",
+              ...stuck.map((pid) => `- ${nm.get(pid) || pid} ×${(poolQty.get(pid) || 0).toLocaleString()}`),
+              "이번 행사에 쓰려면 '재고 옮기기'에서 프로모션 → 소매 로 직접 옮기세요.",
+            ].join("\n");
+          }
+        } catch { /* 경고 없이 마감 */ }
+        try { await logProductionRequestStatusChanged(String(r.req_no || ""), String(r.status), "완료", "행사 하루 전 자동 마감", detail); } catch { /* 알림 실패는 마감을 막지 않는다 */ }
       }
-    } catch { /* 조회 실패 — 마감 없이 합류 판정으로 진행(다음 날 재시도) */ }
+    } catch { /* 조회 실패 — 마감 없이 합류로 진행(다음 날 재시도) */ }
 
-    // 1) 프로모션 풀 잔량
-    const pool = await sb.rpc("inventory_stock", { asof: null, chan: "프로모션" });
-    if (pool.error) {
-      if (/channel/i.test(pool.error.message)) return NextResponse.json({ ok: true, released: 0, closed, note: "113 미적용 — 프로모션 풀 없음" });
-      throw pool.error;
-    }
-    const rows = ((pool.data as { product_id: string; qty: number }[] | null) ?? [])
-      .map((r) => ({ product_id: r.product_id, qty: Math.round((Number(r.qty) || 0) * 100) / 100 }))
-      .filter((r) => r.qty > 0);
     if (!rows.length) return NextResponse.json({ ok: true, released: 0, closed });
-
-    // 2) 보류 판정(2026-09-23 개정) — 잡는 힘 = '목표일이 모레 이후(또는 목표일 없음)인 비취소 프로모션 요청'.
-    //    목표일이 내일(이하)인 요청은 0단계에서 이미 닫혔고 그 품목은 합류한다 — 상태 구분이 더는 필요 없다
-    //    (0단계 마감이 실패한 열린 요청도 날짜 기준으로 합류 — 행사 하루 전엔 무조건 소매에 있어야 한다).
-    //    목표일 없는 요청은 보수적으로 보류(행사 연기 시 목표일 수정을 잊어도 확보분이 사라지지 않게).
-    //    조회 실패는 무조건 throw — 1단계(풀 RPC)가 성공한 환경은 113 적용이 확정이라 폴백이 옳은 경우가 없고,
-    //    조용한 폴백은 '실패 → 보호 해제(전량 합류)' 방향 사고가 된다(검증 확정).
-    const held = new Set<string>();
-    {
-      const { data: items, error: ie } = await sb.from("production_request_items")
-        .select("product_id, production_requests!inner(purpose, status, due_date)")
-        .eq("production_requests.purpose", "프로모션")
-        .neq("production_requests.status", "취소")
-        .limit(5000);
-      if (ie) throw ie;
-      type Rel = { purpose?: string; status?: string; due_date?: string | null };
-      for (const it of items ?? []) {
-        const rel = (it as { production_requests?: Rel | Rel[] }).production_requests;
-        const h = Array.isArray(rel) ? rel[0] : rel;
-        if (!h) continue;
-        const dueLater = !h.due_date || String(h.due_date) > tomorrow; // 목표일 없음 = 보수적으로 보류
-        if (dueLater) held.add(String(it.product_id));
-      }
-    }
     let release = rows.filter((r) => !held.has(r.product_id));
     if (!release.length) return NextResponse.json({ ok: true, released: 0, closed, held: held.size });
 
