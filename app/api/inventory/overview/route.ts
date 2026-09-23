@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       stockRpc(),
       getPromoForwardBySku(today, horizonDays),
       getAllBundles(sb),
-      chan !== "도매" && chan !== "도매 대량" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()), // 제조사 입고는 소매로만 온다 — 이동으로 채우는 칸엔 '입고 예정'이 없다(프로모션은 이번 변경에서 제외 — 087b1c4 선례)
+      chan !== "도매" && chan !== "도매 대량" && chan !== "프로모션" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()), // 제조사 입고는 소매로만 온다 — 이동으로 채우는 칸엔 '입고 예정'이 없다(프로모션도 포함 — 087b1c4 때 미뤘던 별건을 확정형 탭 정리와 함께 반영)
     ]);
     const inboundOk = inbound !== null;
     if (pr.error) throw pr.error;
@@ -142,11 +142,10 @@ export async function GET(req: NextRequest) {
         promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
         inbound: inbQty, inbound_due: inb?.earliest_due ?? null, inbound_overdue: inb?.overdue_qty ?? 0, inbound_detail: formatInbound(inb, today),
         // 부족 = 현재고 + 프로모션 풀 + 입고 예정이 안전재고 이하(권장 수식과 같은 재고 포지션 기준)
-        // 도매 대량은 '목표만큼 늘 갖고 있는 칸'이 아니라 '요청수량을 채워 나가는 칸'이라
-        //  목표 기반 부족 판정이 맞지 않는다(발송되면 0 이 정상). 부족으로 세지 않는다(기획 2절).
+        // 확정형 칸(프로모션·도매 대량)은 '목표만큼 늘 갖고 있는 칸'이 아니라 '요청수량을 채워
+        //  나가는 칸'이라 목표 기반 부족 판정이 맞지 않는다(행사·발송 후 0 이 정상). 부족으로 세지 않는다(기획 2·5절).
         // 부족 = 그 칸 안에서만 본다. 프로모션 풀을 더하지 않는 것은 목표에서 행사 가산을 뺀 것과 짝이다(결정 9).
-        //  도매 대량은 요청수량으로 채우는 칸이라 목표 기반 판정 자체가 맞지 않는다.
-        low: chan === "도매 대량" ? false : auto_safety > 0 && qty + inbQty <= auto_safety,
+        low: chan === "도매 대량" || chan === "프로모션" ? false : auto_safety > 0 && qty + inbQty <= auto_safety,
         is_bundle: isBundle,
       };
     });
