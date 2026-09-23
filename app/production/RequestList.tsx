@@ -14,6 +14,9 @@ import { Combobox } from "@/app/b2b/orders/Combobox";
 // KST 오늘 — 서버(UTC SSR)·클라이언트 모두 서울 벽시계 날짜로 일치(새벽 하이드레이션 불일치 방지)
 function todayIso() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
 
+// 행 액션 버튼 공통 모양(요청서 · 수정 · 삭제 · 마감 · 다시 열기) — 글꼴·크기 동일
+const ACT = { padding: "4px 10px", fontSize: 12, marginLeft: 6, textDecoration: "none" } as const;
+
 // 요청서의 미입고 잔여 = 품목별 max(0, 요청 − 입고) 합 — production-inbound 의 '입고 예정' 정의와 같은 규칙.
 //  (헤더 합계 차이로 세면 한 품목의 초과 입고가 다른 품목의 미입고를 상쇄해 안내가 사라진다)
 const openRemainQty = (items: { requested_qty: number; received_qty: number }[]) =>
@@ -482,13 +485,23 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           )}
         </td>
         <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-          {/* 표 형태 요청서(엑셀) — 비고·순서를 고쳐 인쇄해 전달(하단에 품목·중량별 총중량 자동 계산). 구 텍스트 복사는 제거(대표 확정) */}
-          <a className="b2b-link-btn" style={{ textDecoration: "none" }} href={`/api/production/requests/${req.id}/sheet`} title="표 형태 요청서 엑셀 다운로드 — 편집·인쇄용">요청서</a>
-          {editable && <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} onClick={onEdit}>수정</button>}
+          {/* 행 액션 4개(요청서 · 수정 · 삭제 · 마감)는 같은 버튼 모양·글꼴 — 대표 지시. 닫힌 요청서는 마감 대신 다시 열기 */}
+          <a className="b2b-btn-secondary" style={ACT} href={`/api/production/requests/${req.id}/sheet`}>요청서</a>
+          {editable && <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onEdit}>수정</button>}
           {(req.status === "완료" || req.status === "취소") ? (
-            <button className="b2b-link-btn" style={{ marginLeft: 6 }} disabled={busy} title="진행중으로 되돌려 입고·수정을 다시 연다" onClick={() => onStatus("진행중")}>다시 열기</button>
+            <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={() => onStatus("진행중")}>다시 열기</button>
           ) : (
-            <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", marginLeft: 6 }} disabled={busy} onClick={onDelete}>삭제</button>
+            <>
+              <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onDelete}>삭제</button>
+              {/* 마감 — 전 품목 100%면 자동으로 닫히지만, 덜 들어온 채 끝낼 때 사람이 닫는다(수동 마감은 입고 취소로 되살아나지 않음) */}
+              <button className="b2b-btn-secondary" style={ACT} disabled={busy}
+                onClick={() => {
+                  const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
+                  const remain = openRemainQty(req.items);
+                  const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n\n미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.` : "";
+                  if (confirm(`이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) — 마감할까요?${inbNote}`)) onStatus("완료");
+                }}>마감</button>
+            </>
           )}
         </td>
       </tr>
@@ -511,25 +524,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
               </table>
             </div>
 
-            {suggestComplete ? (
-              <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
-                <span style={{ fontSize: 15, color: "var(--sm-success)" }}>모든 품목이 요청 수량 이상 들어왔습니다.</span>
-                <button className="b2b-btn-primary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy} onClick={() => onStatus("완료")}>마감</button>
-              </div>
-            ) : (req.status === "요청" || req.status === "진행중") && (
-              // 마감 — 100%를 못 채운 요청서를 사람이 닫는다. 이렇게 닫은 요청은 입고 취소가 자동으로 되살리지 않는다(수동 마감 보존).
-              <div className="sm-row" style={{ gap: 10, marginTop: 10, alignItems: "center" }}>
-                <span className="sm-faint" style={{ fontSize: 13 }}>
-                  이행률 {req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0}%
-                </span>
-                <button className="b2b-btn-secondary" style={{ padding: "5px 14px", fontSize: 12 }} disabled={busy}
-                  onClick={() => {
-                    const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
-                    const remain = openRemainQty(req.items);
-                    const inbNote = req.purpose === "재고 보충" && remain > 0 ? `\n\n미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.` : "";
-                    if (confirm(`이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) — 마감할까요?${inbNote}`)) onStatus("완료");
-                  }}>마감</button>
-              </div>
+            {suggestComplete && (req.status === "요청" || req.status === "진행중") && (
+              <p style={{ fontSize: 15, color: "var(--sm-success)", margin: "10px 0 0" }}>모든 품목이 요청 수량 이상 들어왔습니다 — 행의 '마감'을 누르세요.</p>
             )}
           </td>
         </tr>
