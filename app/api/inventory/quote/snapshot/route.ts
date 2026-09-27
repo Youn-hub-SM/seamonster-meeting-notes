@@ -10,8 +10,19 @@ export const dynamic = "force-dynamic";
 const MISSING = /quote_snapshots/i;
 
 // GET ?month=YYYY-MM — 그 달의 확정본(없으면 null)
+// GET ?list=1 — 확정본 목록(최신 월부터). 화면 아래 '확정된 결산' 표용 — 품목표(items)는 빼고 요약만.
 export async function GET(req: NextRequest) {
   try {
+    if (req.nextUrl.searchParams.get("list") === "1") {
+      const { data, error } = await supabaseAdmin().from("quote_snapshots")
+        .select("month, confirmed_at, confirmed_by, summary")
+        .order("month", { ascending: false }).limit(240);
+      if (error) {
+        if (MISSING.test(error.message)) return NextResponse.json({ ok: true, snapshots: [], unavailable: true });
+        throw error;
+      }
+      return NextResponse.json({ ok: true, snapshots: data ?? [] });
+    }
     const month = validMonth(req.nextUrl.searchParams.get("month"));
     if (!month) return NextResponse.json({ ok: false, error: "month(YYYY-MM)이 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
