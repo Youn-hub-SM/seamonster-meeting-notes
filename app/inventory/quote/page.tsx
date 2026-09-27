@@ -1,14 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { QuoteItem, QuoteSummary } from "@/app/lib/inventory-quote";
 import ReturnModal from "./ReturnModal";
+import QuoteSheet from "./QuoteSheet";
 
 const THIS_MONTH = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 7);
 const won = (n: number) => Math.round(n).toLocaleString();
 
 type QuoteResp = { ok: boolean; month: string; items: QuoteItem[]; summary: QuoteSummary; error?: string };
 type Snapshot = { month: string; confirmed_at: string; confirmed_by: string | null; summary: QuoteSummary; items: QuoteItem[] };
+type SnapRow = { month: string; confirmed_at: string; confirmed_by: string | null; summary: QuoteSummary };
 
 export default function QuotePage() {
   const [ym, setYm] = useState(THIS_MONTH());
@@ -23,6 +26,13 @@ export default function QuotePage() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [snapReady, setSnapReady] = useState(false);
   const [snapBusy, setSnapBusy] = useState(false);
+  // 확정된 결산 목록(화면 아래) + 펼쳐 본 확정본. 확정본은 확정 당시 저장한 결산서 그대로다.
+  const [snapList, setSnapList] = useState<SnapRow[]>([]);
+  const [viewMonth, setViewMonth] = useState<string | null>(null);
+  const [viewSnap, setViewSnap] = useState<Snapshot | null>(null);
+  const [viewErr, setViewErr] = useState("");
+  // 화면에 결산서가 둘(지금·확정본)일 때 인쇄할 쪽 — 나머지는 인쇄에서 빠진다
+  const [printTarget, setPrintTarget] = useState<"live" | "snap">("live");
 
   // 임대료·기타는 매달 고정값에 가까워 브라우저에 기억.
   useEffect(() => {
@@ -57,6 +67,39 @@ export default function QuotePage() {
   }, []);
   useEffect(() => { setSnap(null); loadSnap(ym); }, [loadSnap, ym]); // 이전 달 확정 배너 잔상 방지
 
+  const loadList = useCallback(async () => {
+    try {
+      const j = await (await fetch("/api/inventory/quote/snapshot?list=1", { cache: "no-store" })).json();
+      if (j.ok) setSnapList(j.snapshots || []);
+    } catch { /* 목록만 비어 보인다 — 결산 자체는 그대로 */ }
+  }, []);
+  useEffect(() => { loadList(); }, [loadList]);
+
+  // 확정본 펼치기 — 저장된 요약·품목표를 그대로 불러온다(재계산 아님)
+  const viewSeq = useRef(0);
+  const openSnap = useCallback(async (m: string) => {
+    const seq = ++viewSeq.current;
+    setViewMonth(m); setViewSnap(null); setViewErr("");
+    try {
+      const j = await (await fetch(`/api/inventory/quote/snapshot?month=${m}`, { cache: "no-store" })).json();
+      if (seq !== viewSeq.current) return;
+      if (!j.ok) throw new Error(j.error || "확정본 조회 실패");
+      if (!j.snapshot) { setViewErr("확정본이 없습니다 — 확정이 해제됐을 수 있습니다."); return; }
+      setViewSnap(j.snapshot);
+    } catch (e) { if (seq === viewSeq.current) setViewErr(e instanceof Error ? e.message : "확정본 조회 실패"); }
+  }, []);
+  function closeSnap() { viewSeq.current++; setViewMonth(null); setViewSnap(null); setViewErr(""); }
+  // 펼치면 그 자리로 스크롤 — 상단 배너의 '확정본 보기'를 눌러도 아래 결산서가 바로 보이게
+  const viewRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (viewMonth) viewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [viewMonth]);
+
+  // 인쇄할 결산서를 정해 두고 인쇄 — 끝나면 다시 '지금 결산'이 기본
+  function printSheet(target: "live" | "snap") {
+    flushSync(() => setPrintTarget(target));
+    window.print();
+    setPrintTarget("live");
+  }
+
   async function confirmQuote() {
     if (!window.confirm(snap
       ? `${ym} 결산을 다시 확정할까요? 기존 확정본을 덮어씁니다.`
@@ -70,6 +113,8 @@ export default function QuotePage() {
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) { alert(`확정 실패: ${j?.error || "서버 오류"}`); return; }
       setSnap(j.snapshot);
+      void loadList();
+      if (viewMonth === ym) void openSnap(ym); // 펼쳐 둔 확정본이 이 달이면 새 확정본으로
       // 확정본은 서버 최신 원장 기준 — 화면 데이터도 같은 기준으로 갱신해 역방향 경고 방지
       await load(ym, rent, etc, taxEtc);
     } catch { alert("확정 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
@@ -82,6 +127,8 @@ export default function QuotePage() {
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) { alert(`해제 실패: ${j?.error || "서버 오류"}`); return; }
       setSnap(null);
+      void loadList();
+      if (viewMonth === ym) closeSnap();
     } catch { alert("해제 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
   }
   const dtKst = (iso: string) => {
@@ -91,9 +138,6 @@ export default function QuotePage() {
 
   const s = data?.summary;
   const items = data?.items ?? [];
-
-  // 반품 단가도 마스터 매입단가도 없어 0원으로 계산된 교차월 반품 — 차감 누락을 알린다
-  const zeroReturnItems = items.filter((i) => i.qty === 0 && i.return_qty > 0 && i.return_amount === 0);
 
   // 확정본 vs 현재 재계산 — 원장에서 나오는 숫자만 비교(임대료·기타 입력값과 무관).
   //  월 전환 직후엔 snap/data 가 서로 다른 달일 수 있어 같은 달일 때만 비교한다.
@@ -110,7 +154,6 @@ export default function QuotePage() {
     cmp("총 매입금액", c.totalAmount, s.totalAmount, "원");
     return d;
   })();
-  const [y, mm] = ym.split("-");
   const exportUrl = `/api/inventory/quote/export?month=${ym}&rent=${rent}&etc=${etc}&tax_etc=${taxEtc}`;
 
   return (
@@ -125,19 +168,21 @@ export default function QuotePage() {
             </button>
           )}
           <a className="b2b-btn-secondary" href={exportUrl}>엑셀 다운로드</a>
-          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || items.length === 0}>인쇄 / PDF</button>
+          <button className="b2b-btn-primary" onClick={() => printSheet("live")} disabled={loading || items.length === 0}>인쇄 / PDF</button>
         </div>
       </header>
       {error && <div className="b2b-error no-print">{error}</div>}
       {snap && (snapDiffs.length === 0 ? (
         <div className="sm-success no-print" style={{ marginBottom: 12 }}>
           {Number(ym.slice(5))}월 결산 확정됨 — {dtKst(snap.confirmed_at)}{snap.confirmed_by ? ` · ${snap.confirmed_by}` : ""} · 확정 총 입금액 {won(snap.summary.deposit)}원
+          <button className="b2b-link-btn" style={{ marginLeft: 10, fontSize: 12 }} onClick={() => openSnap(ym)}>확정본 보기</button>
           <button className="b2b-link-btn sm-faint" style={{ marginLeft: 10, fontSize: 12 }} onClick={unconfirmQuote}>확정 해제</button>
         </div>
       ) : (
         <div className="sm-warn no-print" style={{ marginBottom: 12 }}>
           <strong>확정({dtKst(snap.confirmed_at)}) 이후 원장이 바뀌었습니다:</strong> {snapDiffs.join(" · ")}
           <span> — 바뀐 내용이 맞으면 위의 [재확정]으로 갱신하세요.</span>
+          <button className="b2b-link-btn" style={{ marginLeft: 8, fontSize: 12 }} onClick={() => openSnap(ym)}>확정본 보기</button>
           <button className="b2b-link-btn sm-faint" style={{ marginLeft: 8, fontSize: 12 }} onClick={unconfirmQuote}>확정 해제</button>
         </div>
       ))}
@@ -159,88 +204,49 @@ export default function QuotePage() {
       {loading ? <div className="b2b-loading">불러오는 중...</div> : items.length === 0 && !s?.rentTotal ? (
         <div className="b2b-empty">{ym} 매입 내역이 없습니다.</div>
       ) : s && (
-        <section className="voc-print inv-quote-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "28px 30px", maxWidth: 900, boxShadow: "var(--sm-shadow-card)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
-            <div><div style={{ fontSize: 15, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {mm}월 매입 결산</h2></div>
-            <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>총 입금액<div style={{ fontSize: 24, fontWeight: 800, color: "var(--sm-black)", marginTop: 2 }}>{won(s.deposit)}원</div></div>
-          </div>
+        <QuoteSheet ym={ym} s={s} items={items} printable={printTarget === "live"} />
+      )}
 
-          {/* 요약 블록 */}
-          <div className="b2b-table-wrap" style={{ marginBottom: 22 }}>
-          <table className="b2b-table">
-            <thead><tr><th>구분</th><th className="num">공급가액</th><th className="num">세액 / 기타</th><th className="num">총액</th></tr></thead>
-            <tbody>
-              <tr><td style={{ fontWeight: 700 }}>임대료</td><td className="num b2b-money">{won(s.rentSupply)}</td><td className="num b2b-money">{won(s.rentVat)}</td><td className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.rentTotal)}</td></tr>
-              <tr><td style={{ fontWeight: 700 }}>면세품목</td><td className="num b2b-money">{won(s.exemptSupply)}</td><td className="num b2b-money">{won(s.exemptEtc)}</td><td className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.exemptTotal)}</td></tr>
-              <tr><td style={{ fontWeight: 700 }}>과세품목</td><td className="num b2b-money">{won(s.taxableSupply)}</td><td className="num b2b-money">{won(s.taxableVat)}</td><td className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.taxableTotal)}</td></tr>
-              <tr style={{ background: "var(--sm-bg-subtle)" }}><td style={{ fontWeight: 800 }}>총 입금액</td><td className="num" /><td className="num" /><td className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{won(s.deposit)}</td></tr>
-            </tbody>
-          </table>
-          </div>
-
-          {/* SKU 표 */}
-          <div className="sm-between" style={{ marginBottom: 6 }}>
-            <strong style={{ fontSize: 15 }}>품목별 매입 ({s.itemCount}종 · {s.totalQty.toLocaleString()}개)</strong>
-            {s.totalReturnQty > 0 && (
-              <span className="sm-faint" style={{ fontSize: 12 }}>반품 {s.totalReturnQty.toLocaleString()}개 · {won(s.returnAmount)}원 차감</span>
-            )}
-          </div>
-          {s.noPriceQty > 0 && (
-            <div className="sm-warn" style={{ marginBottom: 10 }}>
-              단가를 적지 않은 입고가 <strong>{s.noPriceQty.toLocaleString()}개</strong> 있습니다 — 그만큼 0원으로 계산돼 매입가가 실제보다 낮게 나옵니다.
-              아래 표에서 <strong>매입가에 * 표시</strong>된 품목의 입고 기록을 확인해 단가를 채워 주세요.
-            </div>
-          )}
-          {zeroReturnItems.length > 0 && (
-            <div className="sm-warn" style={{ marginBottom: 10 }}>
-              반품 단가도 마스터 매입단가도 없어 <strong>0원으로 계산된 반품</strong>이 있습니다:{" "}
-              {zeroReturnItems.map((i) => i.name).join(", ")} — 반품 기록에 단가를 적거나 상품 마스터의 매입단가를 채워 주세요.
-            </div>
-          )}
+      {/* 확정된 결산 — 확정할 때 저장된 결산서(요약·품목표) 그대로. 원장이 나중에 바뀌어도 이 표는 그대로다 */}
+      {snapList.length > 0 && (
+        <section className="b2b-card no-print" style={{ marginTop: 24, maxWidth: 900 }}>
+          <div className="b2b-card-head"><span className="b2b-card-title">확정된 결산 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {snapList.length}건</span></span></div>
           <div className="b2b-table-wrap">
-          <table className="b2b-table">
-            <thead><tr><th>코드명</th><th>품목명</th><th>규격(g)</th><th>원산지</th><th className="num">매입가</th><th className="num">매입수량</th><th className="num">반품수량</th><th className="num">총 매입금액</th><th>구분</th></tr></thead>
-            <tbody>
-              {items.map((it) => (
-                <tr key={it.product_id}>
-                  <td style={{ fontFamily: "var(--sm-mono)", fontSize: 12 }}>{it.sku || "-"}</td>
-                  <td>{it.name}</td>
-                  <td>{it.spec || "-"}</td>
-                  <td>{it.origin || "-"}</td>
-                  <td className="num b2b-money" title={it.no_price_qty > 0 ? `단가 미입력 ${it.no_price_qty.toLocaleString()}개가 0원으로 섞여 평균이 낮습니다` : undefined}>
-                    {it.unit_price.toLocaleString()}{it.no_price_qty > 0 && <span style={{ color: "var(--sm-danger)", fontWeight: 800 }}>*</span>}
-                  </td>
-                  <td className="num b2b-money">{it.qty.toLocaleString()}</td>
-                  <td className="num b2b-money" style={{ color: it.return_qty > 0 ? "var(--sm-danger)" : "var(--sm-text-light)", fontWeight: it.return_qty > 0 ? 700 : 400 }}>
-                    {it.return_qty > 0 ? it.return_qty.toLocaleString() : "-"}
-                  </td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}
-                    title={[
-                      it.return_qty > 0 ? `정산수량 ${it.net_qty.toLocaleString()} (반품 ${it.return_qty.toLocaleString()} 제외)` : "",
-                      it.tax_type === "taxable" ? `공급가액 기준 — 부가세 포함 시 ${won(it.amount * 1.1)}원` : "",
-                    ].filter(Boolean).join(" · ")}>{it.total.toLocaleString()}</td>
-                  <td><span className="sm-faint" style={{ fontSize: 12 }}>{it.tax_type === "exempt" ? "면세" : "과세"}</span></td>
-                </tr>
-              ))}
-              <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
-                <td colSpan={4}>합계</td>
-                <td className="num" />
-                <td className="num">{s.totalQty.toLocaleString()}</td>
-                <td className="num" style={{ color: s.totalReturnQty > 0 ? "var(--sm-danger)" : undefined }}>{s.totalReturnQty > 0 ? s.totalReturnQty.toLocaleString() : "-"}</td>
-                <td className="num">{s.totalAmount.toLocaleString()}</td>
-                <td />
-              </tr>
-            </tbody>
-          </table>
+            <table className="b2b-table">
+              <thead><tr><th>대상 월</th><th>확정</th><th className="num">품목</th><th className="num">총 매입금액</th><th className="num">총 입금액</th><th style={{ width: 90 }}></th></tr></thead>
+              <tbody>
+                {snapList.map((r) => (
+                  <tr key={r.month} style={viewMonth === r.month ? { background: "var(--sm-bg-subtle)" } : undefined}>
+                    <td style={{ fontWeight: 700 }}>{r.month}</td>
+                    <td className="sm-faint" style={{ fontSize: 12 }}>{dtKst(r.confirmed_at)}{r.confirmed_by ? ` · ${r.confirmed_by}` : ""}</td>
+                    <td className="num b2b-money">{(r.summary?.itemCount ?? 0).toLocaleString()}종</td>
+                    <td className="num b2b-money">{won(r.summary?.totalAmount ?? 0)}</td>
+                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.summary?.deposit ?? 0)}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {viewMonth === r.month
+                        ? <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={closeSnap}>닫기</button>
+                        : <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => openSnap(r.month)}>보기</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.7 }}>
-            ※ 매입가 = 가중평균 매입단가(1원 미만 반올림) — 단가가 여러 번이었으면 매입가 × 수량이 총 매입금액과 몇 원 어긋날 수 있습니다. 금액은 실제 매입액 기준입니다. 매입가 옆 *는 단가 미입력 입고가 섞였다는 표시입니다.<br />
-            ※ 결산 기준: 그 달에 소매로 실제 입고 완료된 것만 셉니다 — 소매↔도매 이전(내부 이동, 양방향)과 '대기' 상태 입고, 도매 채널 입고는 제외.<br />
-            ※ 총 매입금액 = 실제 매입액 − 반품액(반품수량 × 매입가, 반품 단가를 적었으면 그 단가) — 과세·면세 모두 <strong>공급가액 기준(부가세 미포함)</strong>이며, 부가세는 위 요약의 과세품목 세액에만 붙습니다. 합계는 열마다 그 열을 더한 값입니다.<br />
-            ※ 반품은 재고를 건드리지 않습니다 — 물건이 실제로 빠지는 처리는 재고목록에서 따로 합니다.<br />
-            ※ 그 달 매입이 없는 품목의 반품(교차월 반품)도 품목 행으로 추가돼 차감됩니다 — 단가는 반품 단가, 없으면 그 달 매입가, 그것도 없으면 상품 마스터의 매입단가 순으로 매깁니다.
-          </p>
         </section>
+      )}
+
+      {viewMonth && (
+        <div ref={viewRef} style={{ marginTop: 16, scrollMarginTop: 16 }}>
+          <div className="sm-row no-print" style={{ gap: 8, marginBottom: 10, maxWidth: 900, justifyContent: "flex-end" }}>
+            <button className="b2b-btn-primary" onClick={() => printSheet("snap")} disabled={!viewSnap}>확정본 인쇄 / PDF</button>
+            <button className="b2b-btn-secondary" onClick={closeSnap}>닫기</button>
+          </div>
+          {viewErr ? <div className="b2b-error no-print">{viewErr}</div>
+            : !viewSnap ? <div className="b2b-loading no-print">확정본 불러오는 중...</div>
+            : <QuoteSheet ym={viewSnap.month} s={viewSnap.summary} items={viewSnap.items || []}
+                stamp={`확정본 · ${dtKst(viewSnap.confirmed_at)}${viewSnap.confirmed_by ? ` · ${viewSnap.confirmed_by}` : ""}`}
+                printable={printTarget === "snap"} />}
+        </div>
       )}
 
       {returnOpen && (
