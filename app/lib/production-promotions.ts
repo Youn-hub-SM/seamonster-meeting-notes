@@ -105,7 +105,7 @@ function daysInclusive(a: string, b: string): number {
   return Math.round(ms / 86400_000) + 1;
 }
 
-// 앞으로 반영할 프로모션 수요 — 지금~리드타임에 걸치는 프로모션의 '남은' 예상판매(SKU별).
+// 앞으로 반영할 프로모션 수요 — 지금~목표 일수(생산 일정 기반)에 걸치는 프로모션의 '남은' 예상판매(SKU별).
 //  진행 중인 행사는 이미 지난 만큼은 빼고 남은 기간분만(일할). 안 시작한 행사는 전량.
 //  → 행사분때문에 '미리 만들어둔 것'은 현재고로 차감되고, 남은 행사분만 추가로 확보.
 export async function getPromoForwardBySku(today: string, leadDays: number): Promise<Record<string, number>> {

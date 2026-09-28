@@ -30,11 +30,14 @@ export async function GET() {
           dailyOut: Math.round(dailyOut * 10) / 10,
           depletionDays,
           // 권장 생산량(보수적) 산정용 — 안전재고·대기수요·안전재고 도달일수
-          safety: r.safety,
+          // 이 모달은 '안전재고'·'안전재고 도달일'·'이미 안전재고 이하'를 한 기준으로 본다 — 도달일(requestByDays)과
+          //  belowSafety 가 부족 기준(leadSafety, 오늘 요청분 판매 가능일까지)이므로 표시·권장도 같은 값을 쓴다.
+          //  목표(safety, 다음 요청분까지)를 쓰면 목표일까지 소진을 또 더해 이중 계산이 된다.
+          safety: r.leadSafety,
           demand: r.demand,
           inbound: r.inbound,            // 입고 예정(열린 제조사 요청서 잔여) — 권장 산정 시 현재고에 더해 뺀다
           autoSafety: r.autoSafety,
-          safetyDays: r.requestByDays,   // 현재고가 안전재고로 내려가는 남은 일수(null=출고0/재고없음)
+          safetyDays: r.requestByDays,   // 현재고+입고 예정이 부족 기준(leadSafety)으로 내려가는 남은 일수(null=출고0/재고없음)
           belowSafety: r.belowSafety,
         };
       })

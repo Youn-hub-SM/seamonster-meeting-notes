@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { toInvChannelParam } from "@/app/lib/inventory";
-import { getLeadDays, getCycleDays } from "@/app/lib/production-config";
+import { scheduleHorizon } from "@/app/lib/production-schedule";
 import { getPromoForwardBySku } from "@/app/lib/production-promotions";
 import { getAllBundles, bundleAvailable } from "@/app/lib/product-bundles";
 import { getOpenInboundByProduct, formatInbound, type InboundRow } from "@/app/lib/production-inbound";
@@ -28,7 +28,7 @@ export type OverviewRow = {
 };
 
 // GET /api/inventory/overview?from=&to=&channel= — 재고목록 고도화 뷰.
-//  기간[from,to]의 총입고·총출고·일평균소진 + 자동 안전재고(일평균소진 × 리드타임 + 프로모션 확보분)
+//  기간[from,to]의 총입고·총출고·일평균소진 + 자동 목표(일평균소진 × 목표 일수 — 생산 일정 기반, production-schedule)
 //  + 예상소진일수(현재고 ÷ 일평균소진). 채널(도매/소매) 지정 시 그 채널 기준.
 export async function GET(req: NextRequest) {
   try {
@@ -41,8 +41,8 @@ export async function GET(req: NextRequest) {
     const periodDays = daysInclusive(from, to);
 
     const sb = supabaseAdmin();
-    const [leadDays, cycleDays] = await Promise.all([getLeadDays(), getCycleDays()]);
-    const horizonDays = leadDays + cycleDays; // 안전재고 지평 = 리드타임 + 발주 주기(권장 수식과 동일)
+    // 목표 일수(오늘 → 다음 요청분 판매 가능일)·부족 기준 일수(오늘 → 오늘 요청분 판매 가능일) — 권장 수식과 같은 일정
+    const { leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable } = scheduleHorizon(today);
 
     const stockRpc = async () => {
       // 036 미적용(chan 시그니처 없음 = PGRST202)만 전 칸 합으로 폴백. 일시 오류는 그대로 돌려 아래서 던진다 —
@@ -133,6 +133,7 @@ export async function GET(req: NextRequest) {
       const daily_out = period_out / periodDays;
       const promo = promoFwd[(p.sku || "").trim().toUpperCase()] || 0;
       const auto_safety = Math.ceil(daily_out * horizonDays); // 행사 가산은 빼다(결정 9) — promo 는 표시용
+      const lead_safety = Math.ceil(daily_out * leadDays);    // 부족 기준 — 오늘 요청분 판매 가능일까지 버틸 양
       const depletion_days = daily_out > 0 ? Math.floor(qty / daily_out) : null;
       const inb = inbound?.get(p.id);
       const inbQty = inb?.qty ?? 0;
@@ -143,16 +144,18 @@ export async function GET(req: NextRequest) {
         auto_safety, promo_qty: Math.round(promo), depletion_days,
         promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
         inbound: inbQty, inbound_due: inb?.earliest_due ?? null, inbound_overdue: inb?.overdue_qty ?? 0, inbound_detail: formatInbound(inb, today),
-        // 부족 = 현재고 + 프로모션 풀 + 입고 예정이 안전재고 이하(권장 수식과 같은 재고 포지션 기준)
+        // 부족 = 현재고 + 입고 예정이 '오늘 요청분 판매 가능일까지 버틸 양' 미만(권장 수식 belowSafety 와 같은 엄격 비교 —
+        //  '이하'면 목표 일수와 부족 일수의 올림이 같은 저회전 품목이 부족인데 권장 0 이 된다).
+        //  목표(다음 요청분까지)로 재면 매주 정상 보충 품목까지 거의 늘 부족으로 뜬다 — 부족은 '지금 시켜도 늦는가'다.
         // 확정형 칸(프로모션·도매 대량)은 '목표만큼 늘 갖고 있는 칸'이 아니라 '요청수량을 채워
         //  나가는 칸'이라 목표 기반 부족 판정이 맞지 않는다(행사·발송 후 0 이 정상). 부족으로 세지 않는다(기획 2·5절).
         // 부족 = 그 칸 안에서만 본다. 프로모션 풀을 더하지 않는 것은 목표에서 행사 가산을 뺀 것과 짝이다(결정 9).
-        low: chan === "도매 대량" || chan === "프로모션" ? false : auto_safety > 0 && qty + inbQty <= auto_safety,
+        low: chan === "도매 대량" || chan === "프로모션" ? false : lead_safety > 0 && qty + inbQty < lead_safety,
         is_bundle: isBundle,
       };
     });
 
-    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays, cycleDays, horizonDays, inboundOk } });
+    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable, inboundOk } });
   } catch (err) {
     console.error("[inventory/overview]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "재고 개요 조회 실패") }, { status: 500 });

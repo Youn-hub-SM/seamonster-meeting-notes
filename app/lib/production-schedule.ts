@@ -16,3 +16,45 @@ export function defaultDueDate(purpose: PrPurpose, requestDate: string): string 
   return addBusinessDays(requestDate, purpose === "재고 보충" ? PROD_DUE_BDAYS : WHOLESALE_DUE_BDAYS);
 }
 export function defaultProdStart(requestDate: string): string { return addBusinessDays(requestDate, PROD_START_BDAYS); }
+
+// ─────────────────────────────────────────────
+// 권장생산 목표 기간 — 위 일정에서 나온다(2026-09-28 대표 요청: 권장량에 D-day 일정 반영).
+//  요청서는 매주 수요일(AI 초안) 한 번 나간다. 오늘 시킨 물량은 판매 가능일(D+10 영업일)에야 팔 수 있고,
+//  그다음 물량은 다음 요청일(오늘 다음의 첫 수요일 — 월·화엔 이번 주 수요일) 요청분의 판매 가능일에 온다. 그래서
+//   목표 = 평상시 하루 출고 × (오늘 → 다음 요청분 판매 가능일) 일수   ← 권장생산(주문 후 재고 수준)
+//   부족 기준 = 평상시 하루 출고 × (오늘 → 오늘 요청분 판매 가능일) 일수 ← 지금 시켜도 판매 가능일 전에 바닥나는가
+//  공휴일이 없는 주: 수요일 기준 목표 21일 · 부족 기준 14일. 요일이 지날수록 목표 일수가 하루씩 줄어
+//  (재고도 하루치씩 줄므로) 같은 주 안에서는 권장이 거의 그대로이고, 다음 수요일에 새 주기가 시작된다.
+// ─────────────────────────────────────────────
+export const SELLABLE_BDAYS = 10;  // 작성 D → 판매 가능 D+10 영업일
+export const DRAFT_WEEKDAY = 3;    // 주간 요청서(AI 초안) 요일 — 수요일(0=일)
+
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400e3);
+
+/** fromIso 다음(그날 제외) 첫 요청 요일(수요일). */
+export function nextDraftDate(fromIso: string): string {
+  const d = new Date(fromIso + "T00:00:00Z");
+  const add = ((DRAFT_WEEKDAY - d.getUTCDay() + 7) % 7) || 7;
+  d.setUTCDate(d.getUTCDate() + add);
+  return d.toISOString().slice(0, 10);
+}
+
+export type ScheduleHorizon = {
+  today: string;
+  sellable: string;      // 오늘 요청하면 판매 가능한 날(D+10 영업일)
+  nextDraft: string;     // 다음 요청일(오늘 다음의 첫 수요일)
+  nextSellable: string;  // 다음 요청분의 판매 가능일
+  leadDays: number;      // 오늘 → sellable (달력 일수) — 부족·요청 마감 기준
+  cycleDays: number;     // sellable → nextSellable (달력 일수)
+  horizonDays: number;   // 오늘 → nextSellable (달력 일수) — 권장생산 목표 기준
+};
+
+/** 오늘(KST 날짜) 기준 권장 목표 기간. 공휴일은 business-days 의 KR_HOLIDAYS 를 따른다. */
+export function scheduleHorizon(today: string = kstTodayIso()): ScheduleHorizon {
+  const sellable = addBusinessDays(today, SELLABLE_BDAYS);
+  const nextDraft = nextDraftDate(today);
+  const nextSellable = addBusinessDays(nextDraft, SELLABLE_BDAYS);
+  const leadDays = Math.max(1, daysBetween(today, sellable));
+  const horizonDays = Math.max(leadDays, daysBetween(today, nextSellable));
+  return { today, sellable, nextDraft, nextSellable, leadDays, cycleDays: horizonDays - leadDays, horizonDays };
+}

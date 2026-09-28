@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { scheduleHorizon, kstTodayIso, type ScheduleHorizon } from "@/app/lib/production-schedule";
 
-// 설정 · 기타 — 거래명세표 공급자 정보 + 생산 리드타임 + 발송완료 매출 반영 안내.
+// 설정 · 기타 — 거래명세표 공급자 정보 + 권장생산 목표 기간(생산 일정 기반, 읽기 전용) + 발송완료 매출 반영 안내.
 //  2026-08-24 설정 재구성: 알림 카드들은 'Teams 연동'(/b2b/settings/teams)으로 이동.
 type Msg = { ok: boolean; text: string };
 
@@ -15,28 +16,16 @@ export default function SettingsEtcPage() {
   const [supMsg, setSupMsg] = useState<Msg | null>(null);
   const [error, setError] = useState("");
 
-  // 생산 리드타임 (구 생산관리 설정에서 이관)
-  const [leadInput, setLeadInput] = useState("");
-  const [leadSaved, setLeadSaved] = useState<number | null>(null);
-  const [leadSaving, setLeadSaving] = useState(false);
-  const [leadMsg, setLeadMsg] = useState("");
-  // 발주 주기(일) — 요청서를 내는 간격. 안전재고 지평 = 리드타임 + 발주 주기 (기본 0 = 리드타임만)
-  const [cycleInput, setCycleInput] = useState("");
-  const [cycleSaved, setCycleSaved] = useState<number | null>(null);
-  const [defaultLead, setDefaultLead] = useState(7); // 코드 기본값(2026-09-17 대표 확정 7일) — 저장값이 다르면 힌트
+  // 권장생산 목표 기간 — 예전 '리드타임 · 발주 주기' 입력은 없앴다. 생산 일정(D+10 판매 가능·매주 수요일 요청)에서
+  //  날짜로 계산된다(2026-09-28). 화면을 연 날(KST) 기준 — 빌드 시점 날짜로 미리 그려지지 않게 마운트 후 계산한다.
+  const [sched, setSched] = useState<ScheduleHorizon | null>(null);
 
   useEffect(() => {
+    setSched(scheduleHorizon(kstTodayIso()));
     (async () => {
       try {
         const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
         if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
-        const ld = await (await fetch("/api/production/lead-days", { cache: "no-store" })).json();
-        if (ld.ok) {
-          setLeadSaved(ld.leadDays); setLeadInput(String(ld.leadDays));
-          const cy = Number(ld.cycleDays ?? 0) || 0;
-          setCycleSaved(cy); setCycleInput(String(cy));
-          if (Number(ld.default) > 0) setDefaultLead(Number(ld.default));
-        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "조회 중 오류");
       }
@@ -59,31 +48,6 @@ export default function SettingsEtcPage() {
     const reader = new FileReader();
     reader.onload = () => setStamp(String(reader.result || ""));
     reader.readAsDataURL(f);
-  }
-
-  async function saveLead() {
-    const n = Math.round(Number(leadInput));
-    if (!Number.isFinite(n) || n < 1 || n > 60) { setLeadMsg("리드타임은 1~60 사이 숫자를 입력하세요."); return; }
-    const c = cycleInput.trim() === "" ? 0 : Math.round(Number(cycleInput));
-    if (!Number.isFinite(c) || c < 0 || c > 30) { setLeadMsg("발주 주기는 0~30 사이 숫자를 입력하세요(주 1회면 7)."); return; }
-    setLeadSaving(true);
-    setLeadMsg("");
-    try {
-      const res = await fetch("/api/production/lead-days", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: n, cycleDays: c }),
-      });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setLeadSaved(j.leadDays);
-      setLeadInput(String(j.leadDays));
-      const cy = Number(j.cycleDays ?? 0) || 0;
-      setCycleSaved(cy); setCycleInput(String(cy));
-      setLeadMsg(`저장됨 — 안전재고가 하루 출고 × ${j.leadDays + cy}일(리드타임 ${j.leadDays} + 발주 주기 ${cy})로 계산됩니다.`);
-    } catch (e) {
-      setLeadMsg(e instanceof Error ? e.message : "저장 실패");
-    }
-    setLeadSaving(false);
   }
 
   return (
@@ -135,53 +99,18 @@ export default function SettingsEtcPage() {
         </div>
       </section>
 
-      {/* 생산 리드타임 + 발주 주기 (구 생산관리 설정에서 이관) */}
+      {/* 권장생산 목표 기간 — 생산 일정에서 계산(읽기 전용) */}
       <section className="b2b-card" style={{ marginTop: 28 }}>
-        <div className="b2b-card-head"><h2 className="b2b-card-title">생산 리드타임 · 발주 주기</h2></div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px", lineHeight: 1.6 }}>
-          리드타임 = 제조사에 생산을 요청하고 받기까지 걸리는 일수, 발주 주기 = 요청서를 내는 간격(주 1회면 7).
-          <strong> 안전재고 = 하루 평균 출고 × (리드타임 + 발주 주기)</strong>로, 이번 물량이 온 뒤 다음 물량이 올 때까지 팔릴 만큼을
-          늘 확보해 재고 쇼트를 막습니다. 권장생산은 여기서 현재고와 &lsquo;입고 예정&rsquo;(시켜 두고 아직 안 온 양)을 뺀 값입니다.
-          {leadSaved != null && <> 현재 리드타임 <strong>{leadSaved}일</strong>{cycleSaved != null && <> · 발주 주기 <strong>{cycleSaved}일</strong> (지평 {leadSaved + cycleSaved}일)</>}.</>}
+        <div className="b2b-card-head"><h2 className="b2b-card-title">권장생산 목표 기간</h2></div>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 10px", lineHeight: 1.6 }}>
+          생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+5 → 생산 마감 D+9 → 판매 가능 D+10. 요청서는 매주 수요일에 냅니다.
         </p>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>리드타임</span>
-          <input
-            className="b2b-input"
-            type="number"
-            min={1}
-            max={60}
-            value={leadInput}
-            onChange={(e) => setLeadInput(e.target.value)}
-            style={{ width: 100 }}
-          />
-          <span style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>일</span>
-          <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 12 }}>발주 주기</span>
-          <input
-            className="b2b-input"
-            type="number"
-            min={0}
-            max={30}
-            value={cycleInput}
-            onChange={(e) => setCycleInput(e.target.value)}
-            style={{ width: 100 }}
-            placeholder="0"
-          />
-          <span style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>일</span>
-          <button className="b2b-btn-primary" onClick={saveLead} disabled={leadSaving}>
-            {leadSaving ? "저장 중..." : "저장"}
-          </button>
-        </div>
-        {leadSaved != null && leadSaved !== defaultLead && (
-          <div style={{ marginTop: 8, fontSize: 12, color: "var(--sm-warning)", fontWeight: 600 }}>
-            권장 리드타임은 {defaultLead}일(수·목 요청 → 차주 월~금 입고)인데 현재 {leadSaved}일로 저장돼 있습니다. 기본값은 저장된 값을 바꾸지 않으니 여기서 {defaultLead}로 저장하세요.
-          </div>
-        )}
-        {leadMsg && (
-          <div style={{ marginTop: 10, fontSize: 12, color: leadMsg.startsWith("저장됨") ? "var(--sm-success)" : "var(--sm-danger)", fontWeight: 600 }}>
-            {leadMsg}
-          </div>
-        )}
+        {sched && <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+          <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {sched.nextDraft.slice(5)} 요청분 판매 가능일 {sched.nextSellable.slice(5)})</li>
+          <li><strong>부족</strong> = 현재고 + 입고 예정이 하루 출고 × <strong>{sched.leadDays}일</strong> (오늘 → 오늘 요청분 판매 가능일 {sched.sellable.slice(5)}) 미만</li>
+          <li><strong>권장생산</strong> = 소매 모자란 양 + 도매 모자란 양 − 입고 예정 (모자란 양 = 목표 − 현재고, 0 미만은 0)</li>
+        </ul>}
+        <p className="sm-faint" style={{ fontSize: 12, margin: "10px 0 0" }}>판매 가능일은 주말·공휴일을 빼고 세고, 일수는 오늘부터 그날까지의 달력 일수입니다. 따로 저장할 값은 없습니다.</p>
       </section>
 
       {/* 발주 완료 → 매출 데이터(Supabase) 자동 반영 */}

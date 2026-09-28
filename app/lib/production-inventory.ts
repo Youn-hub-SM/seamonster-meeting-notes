@@ -3,15 +3,18 @@ import { getLedgerVelocity, isMissingSchemaError } from "./production-velocity";
 import { RESERVED_CHANNELS } from "./inventory";
 import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promotions";
 import { getSafetyAdjusts, effectiveDelta, effectiveExclude } from "./production-safety-adjust";
-import { getLeadDays, getCycleDays, LINK_B2B_ORDERS_TO_PRODUCTION } from "./production-config";
+import { LINK_B2B_ORDERS_TO_PRODUCTION } from "./production-config";
+import { scheduleHorizon, type ScheduleHorizon } from "./production-schedule";
 import { getOpenInboundByProduct, type InboundRow } from "./production-inbound";
 
 // 자체 재고원장(inventory_txns) 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
 //  /api/production/inventory 와 생산 조언이 공유 — 숫자 일관성 유지.
 //  (2026-06 박스히어로 API 의존 제거 → 현재고·판매속도 모두 자체 원장 기준.)
 //
-// 안전재고 = 최근 하루 평균 출고량(원장 '출고') × (생산 리드타임 + 발주 주기)(설정값).
-//  생산이 리드타임만큼 걸린다고 보고, 그 기간(+다음 발주까지) 팔릴 만큼은 늘 쌓아두자는 의미(재고 쇼트 방지).
+// 목표(안전재고) = 최근 하루 평균 출고량(원장 '출고') × 목표 일수. 목표 일수는 생산 일정에서 나온다
+//  (production-schedule scheduleHorizon — 오늘 → 다음 요청일(수요일) 요청분 판매 가능일, 수요일 21일 → 화요일 15일).
+//  오늘 시킨 물량이 판매 가능일(D+10 영업일)에 오고, 그 뒤는 다음 요청분이 올 때까지 버텨야 하므로 두 구간을 다 덮는다.
+//  부족·요청 마감은 '오늘 요청분 판매 가능일까지'(보통 14일) 기준 — 지금 시켜도 그 전에 바닥나는가.
 // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정)) — '입고 예정'은 열린 제조사 요청서의 잔여
 //  (production-inbound). 시켜 둔 물량을 또 시키던 이중 발주의 차단 항(2026-09-17 대표 확정 1단계).
 
@@ -21,7 +24,7 @@ export interface InvRow {
   stock: number | null;   // 현재고 (null = 원장에 거래내역 없음)
   dailyOut: number;       // 행사 제거한 평상시 하루 평균 출고량
   rawDailyOut: number;    // 보정 전 원 출고 일평균(참고)
-  autoSafety: number;     // 자동 안전재고 = ceil(dailyOut × LEAD_DAYS)
+  autoSafety: number;     // 자동 목표 = ceil(dailyOut × horizonDays)
   promoQty: number;       // 앞으로 올 행사 예상판매(표시·참고용) — 목표에는 더하지 않는다(결정 9)
   adjust: number;         // 추가 확보(만료 반영된 유효 delta)
   adjustRaw: number;      // 저장된 추가확보값(만료 무관 — 편집용)
@@ -29,15 +32,16 @@ export interface InvRow {
   adjustMemo: string;     // 보정 사유
   adjustUntil: string | null; // 보정 만료일
   safety: number;         // 최종 목표 = max(0, autoSafety + adjust). 행사 가산은 빠졌다(결정 9)
+  leadSafety: number;     // 부족 기준 = max(0, ceil(dailyOut × leadDays) + adjust) — 오늘 요청분 판매 가능일까지 버틸 양
   recommendGross: number; // 입고 예정 차감 전 권장(= max(0, 수요+목표−현재고)) — 전체 탭이 합계에서 ⑤를 한 번만 빼는 데 쓴다
   demand: number;         // B2B 생산대기·생산중 수요
   inbound: number;        // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
   inboundOverdue: number;       // 그중 마감이 지난 잔여(자동 제외 없음 — 표시용)
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정))
-  belowSafety: boolean;   // 현재고 + 입고 예정 < 안전재고 (권장과 같은 포지션 기준)
+  belowSafety: boolean;   // 현재고 + 입고 예정 < 부족 기준(leadSafety) — 지금 시켜도 판매 가능일 전에 바닥날 위험(권장 > 0 을 함축)
   requestByDays: number | null; // 생산요청 마감까지 남은 일수(0·음수=지금/이미 늦음). 출고0·재고없음이면 null
-  requestBy: string | null;     // 생산요청 마감일(YYYY-MM-DD, 미래일 때만). 현재고+입고 예정이 안전재고로 떨어지는 날
+  requestBy: string | null;     // 생산요청 마감일(YYYY-MM-DD, 미래일 때만). 현재고+입고 예정이 부족 기준으로 떨어지는 날
   inBoxhero: boolean;
   inB2B: boolean;
 }
@@ -46,16 +50,17 @@ export interface InventoryResult {
   rows: InvRow[];
   itemCount: number;
   noSkuDemand: number;
-  leadDays: number;          // 안전재고 산정에 쓴 리드타임
-  cycleDays: number;         // 발주 주기(설정, 기본 0)
-  horizonDays: number;       // 안전재고 지평 = 리드타임 + 발주 주기
+  leadDays: number;          // 오늘 → 오늘 요청분 판매 가능일(달력 일수) — 부족 기준
+  cycleDays: number;         // 오늘 요청분 판매 가능일 → 다음 요청분 판매 가능일
+  horizonDays: number;       // 목표 일수 = 오늘 → 다음 요청분 판매 가능일
+  schedule: ScheduleHorizon; // 위 일수의 근거 날짜(계산일·판매 가능일·다음 요청일) — 화면·메모 표시용
   inboundOk: boolean;        // 입고 예정 집계 성공 여부 — false 면 권장이 실제보다 클 수 있다(화면이 경고)
   velocitySpanDays: number;  // 출고 평균이 커버한 일수
   velocityCapped: boolean;   // 표본 상한에 걸려 일부만 집계했는지
 }
 
 // channel 미지정 = 전체 재고·레거시 속도(기존 소비처 호환). "소매"/"도매" = 그 채널의 재고·소진 속도만.
-//  도매 조언 수식 = 소매와 동일 구조(안전재고 = 하루 소진 × 리드타임)를 도매 데이터로 계산.
+//  도매 조언 수식 = 소매와 동일 구조(목표 = 하루 소진 × 목표 일수)를 도매 데이터로 계산.
 //  단 행사(프로모션)·수동 보정은 소매 판매 보정 장치라 도매 채널에는 적용하지 않는다(순수 수식).
 export async function getInventoryRows(channel?: "소매" | "도매"): Promise<InventoryResult> {
   const sb = supabaseAdmin();
@@ -113,18 +118,18 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     if (p.sku && stockByProduct.has(p.id)) stockBySku.set(String(p.sku).toUpperCase(), { name: p.name, stock: stockByProduct.get(p.id) || 0 });
   }
 
-  // 1c) 안전재고 보정: 리드타임(설정) + 프로모션(스파이크 제거 + 남은 행사분) + 수동 보정
+  // 1c) 목표 보정: 일정 기반 목표 일수 + 프로모션(스파이크 제거 + 남은 행사분) + 수동 보정
   const span = Math.max(1, velocity.spanDays);
   const wsD = new Date(today + "T00:00:00Z");
   wsD.setUTCDate(wsD.getUTCDate() - span); // 판매속도 집계창 시작(근사)
   const windowStart = wsD.toISOString().slice(0, 10);
-  const [leadDays, cycleDays] = await Promise.all([getLeadDays(), getCycleDays()]); // 생산 리드타임(기본 7) + 발주 주기(기본 0)
-  const horizonDays = leadDays + cycleDays; // 안전재고 지평
+  const sched = scheduleHorizon(today); // 생산 일정(D+10 판매 가능, 매주 수요일 요청)에서 목표·부족 기준 일수
+  const { leadDays, cycleDays, horizonDays } = sched;
   const wholesale = channel === "도매"; // 행사·수동 보정은 소매 판매 장치 — 도매 수식에는 미적용
   const [promoForward, promoSold, adjusts] = wholesale
     ? [{} as Record<string, number>, {} as Record<string, number>, {} as Awaited<ReturnType<typeof getSafetyAdjusts>>]
     : await Promise.all([
-        getPromoForwardBySku(today, horizonDays),  // 앞으로 확보할 남은 행사분(지평 = 리드타임 + 발주 주기)
+        getPromoForwardBySku(today, horizonDays),  // 앞으로 확보할 남은 행사분(목표 일수 안) — 표시용
         getPromoSoldInWindow(windowStart, today),  // 집계창에 이미 나간 행사분(속도에서 제거)
         getSafetyAdjusts(),
       ]);
@@ -190,6 +195,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     const promoQty = Math.round(promoForward[sku] || 0); // 표시용(참고) — 목표에는 더하지 않는다
     const adjust = effectiveDelta(adj, today);
     const safety = Math.max(0, autoSafety + adjust); // 최종 목표 = 평상시 수요(+ 남은 수동 보정)
+    const leadSafety = Math.max(0, Math.ceil(dailyOut * leadDays) + adjust); // 부족 기준(오늘 요청분 판매 가능일까지)
     const inb = inboundBySku.get(sku);
     const inbound = inb?.qty ?? 0;
     // 권장 = 수요 + 안전재고 − (현재고 + 입고 예정). 시켜 둔 물량(입고 예정)이 도착해 현재고로 옮겨 가도 합은 그대로라
@@ -198,14 +204,15 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     // 전체 탭 합산용 원값 — 입고 예정(⑤)을 항 안에서 빼면 합산 때 max(0,①−⑤)+max(0,②)가 되어
     //  소매가 넉넉한 주에 차감분이 통째로 소실된다(기획 14절 여덟 번째). ⑤는 합계에서 한 번만 뺀다.
     const recommendGross = stock == null ? demand : Math.max(0, demand + safety - stock);
-    const belowSafety = stock != null && stock + inbound < safety; // 권장·주문필요와 같은 포지션(현재고+입고 예정) 기준
+    // 부족 = 현재고+입고 예정이 '오늘 요청분 판매 가능일까지 버틸 양'보다 적다. 목표(다음 요청분까지)보다 작은 기준이라
+    //  부족이면 권장은 늘 0 보다 크다. 목표 기준으로 두면 매주 정상 보충 품목까지 거의 늘 부족으로 뜬다.
+    const belowSafety = stock != null && stock + inbound < leadSafety;
 
-    // 생산요청 마감일 = 현재고+입고 예정이 안전재고 수준으로 떨어지는 날(= 리드타임만큼 앞당긴 시점).
-    //  이 날을 넘기면 안전재고 밑으로 → 리드타임 안에 못 만들어 쇼트 위험.
+    // 생산요청 마감일 = 현재고+입고 예정이 부족 기준으로 떨어지는 날. 이 날을 넘겨 요청하면 판매 가능일 전에 바닥난다.
     let requestByDays: number | null = null;
     let requestBy: string | null = null;
     if (stock != null && dailyOut > 0) {
-      requestByDays = Math.floor((stock + inbound - safety) / dailyOut);
+      requestByDays = Math.floor((stock + inbound - leadSafety) / dailyOut);
       if (requestByDays > 0) {
         const rd = new Date(today + "T00:00:00Z");
         rd.setUTCDate(rd.getUTCDate() + requestByDays);
@@ -226,6 +233,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
       adjustMemo: adj?.memo || "",
       adjustUntil: adj?.until || null,
       safety,
+      leadSafety,
       demand,
       recommendGross,
       inbound,
@@ -248,6 +256,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     leadDays,
     cycleDays,
     horizonDays,
+    schedule: sched,
     inboundOk,
     velocitySpanDays: velocity.spanDays,
     velocityCapped: velocity.capped,

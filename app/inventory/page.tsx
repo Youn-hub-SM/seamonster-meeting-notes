@@ -65,7 +65,7 @@ const numKey = (r: OverviewRow, k: Exclude<SortKey, "recommend" | "request_by">)
 export default function InventoryPage() {
   const router = useRouter();
   const [rows, setRows] = useState<OverviewRow[]>([]);
-  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; inboundOk?: boolean } | null>(null);
+  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; sellable?: string; nextDraft?: string; nextSellable?: string; inboundOk?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -117,7 +117,6 @@ export default function InventoryPage() {
   const prodChannel = channel === "도매" ? "도매" : "소매"; // AI 조언용(조언 API 는 단일 채널)
   const [retailMap, setRetailMap] = useState<Map<string, ProdRow>>(new Map());
   const [wholeMap, setWholeMap] = useState<Map<string, ProdRow>>(new Map());
-  const [prodLead, setProdLead] = useState(7); // 안전재고 지평(리드타임 + 발주 주기)
   const [spanDays, setSpanDays] = useState(0);
   // 한쪽 채널만 실패하면 권장이 조용히 축소되어(합인데 한쪽만) 부족한 수량을 요청하게 된다 → 경고를 띄운다.
   const [prodWarn, setProdWarn] = useState("");
@@ -130,7 +129,6 @@ export default function InventoryPage() {
       ]);
       if (r.ok) {
         setRetailMap(new Map(((r.rows || []) as ProdRow[]).map((x) => [x.sku.toUpperCase(), x])));
-        setProdLead(r.horizonDays || r.leadDays || 7);
         setSpanDays(r.velocitySpanDays || 0);
       }
       if (w.ok) setWholeMap(new Map(((w.rows || []) as ProdRow[]).map((x) => [x.sku.toUpperCase(), x])));
@@ -344,7 +342,7 @@ export default function InventoryPage() {
         ? <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 확보분 칸 — 하루 출고·예상소진·권장생산 없음</p>
         /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
            평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
-        : <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 부족 + 도매 부족 − 입고 예정"} · 목표 = 평상시 하루 출고 × {meta.leadDays + (meta.cycleDays || 0)}일{meta.cycleDays ? "" : " (발주 주기 미설정)"}</p>
+        : <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만</p>
       )}
       {!confirmedTab && adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {!confirmedTab && advice && (
@@ -437,13 +435,13 @@ export default function InventoryPage() {
                   </td>
                   {!confirmedTab && <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>}
                   {/* 예상소진 = 창고(현재고)만 기준. 입고 예정이 있으면 '입고 예정일 전에 바닥나는가'로 빨강을 판정 —
-                      리드타임만 보면 시켜 둔 물량이 곧 오는데도 부족·권장(포지션 기준)과 신호가 엇갈린다 */}
+                      판매 가능일까지 일수만 보면 시켜 둔 물량이 곧 오는데도 부족·권장(포지션 기준)과 신호가 엇갈린다 */}
                   {!confirmedTab && (() => {
                     const dep = r.depletion_days;
                     const inbDays = r.inbound_due ? Math.max(0, Math.round((Date.parse(r.inbound_due + "T00:00:00Z") - Date.parse(TODAY() + "T00:00:00Z")) / 86400_000)) : null;
                     // 하루치 미만·품절(dep ≤ 0)은 입고 예정과 무관하게 항상 빨강 — 마감이 오늘이거나 지난 입고 예정이
                     //  있으면 inbDays=0 이라 '0 < 0' 이 거짓이 되어 창고가 빈 가장 급한 품목이 검정으로 보이던 구멍(#10)
-                    const red = dep != null && (dep <= 0 || ((r.inbound ?? 0) > 0 && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 7)));
+                    const red = dep != null && (dep <= 0 || ((r.inbound ?? 0) > 0 && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 14)));
                     const posDays = dep != null && r.daily_out > 0 ? Math.floor((r.qty + (r.inbound ?? 0)) / r.daily_out) : null;
                     const tip = dep == null ? undefined : (r.inbound ?? 0) > 0
                       ? `창고 기준 ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? " — 입고 전에 바닥날 수 있음" : ""}`
