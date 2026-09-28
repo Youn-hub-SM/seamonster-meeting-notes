@@ -97,6 +97,9 @@ export function Combobox({
           openList();
           e.currentTarget.select();
         }}
+        // 이미 포커스가 있는 칸을 다시 클릭해도 목록이 열리게 — 하나 고른 뒤(포커스 유지) 다음 품목을 고르려고
+        //  칸을 눌러도 focus 가 다시 안 일어나 목록이 안 뜨던 문제(요청 창에서 '두 번째 품목이 선택되지 않음')
+        onClick={() => { if (!open) openList(); }}
         onChange={(e) => {
           const v = e.target.value;
           setQuery(v);

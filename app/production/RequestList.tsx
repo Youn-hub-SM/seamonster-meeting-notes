@@ -126,11 +126,6 @@ export function RequestList() {
   }, []);
 
   const [retailQty, setRetailQty] = useState<Map<string, number>>(new Map()); // 소매 현재고(제조사 요청 작성 시 표시)
-  // 확정형(프로모션·도매 대량) 열린 요청서 — 제조사 요청 창에 목록으로 보여 준다(정보 표시만).
-  //  반영은 작성자가 보고 요청수량에 직접 더한다 — 생산품은 모두 소매로 입고되고 사용자가 재고 이동으로 나눈다(2026-09-28 대표 결정).
-  const reservedOpen = useMemo(
-    () => requests.filter((r) => CONFIRMED_PURPOSES.includes(toPrPurpose(r.purpose)) && (r.status === "요청" || r.status === "진행중")),
-    [requests]);
   // 도매 필요량 = 열린(요청·진행중) 도매 요청의 잔여(요청-이전) 합 — 제조사 요청 수량 판단 근거
   const wholesaleNeed = useMemo(() => {
     const m = new Map<string, number>();
@@ -425,8 +420,8 @@ export function RequestList() {
         </section>
       )}
 
-      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} reservedOpen={reservedOpen} error={error} recRetail={recRetail} recWhole={recWhole} recReady={recReady} inbOk={inbOk} prefill={prefill ?? undefined} defaultPurpose={tab} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
-      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} reservedOpen={reservedOpen} error={error} recRetail={recRetail} recWhole={recWhole} recReady={recReady} inbOk={inbOk} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
+      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recReady={recReady} inbOk={inbOk} prefill={prefill ?? undefined} defaultPurpose={tab} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recReady={recReady} inbOk={inbOk} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
 }
@@ -616,8 +611,8 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 // 소매 수식 행의 원값 — 수정 창에서 자기 요청서 잔여를 빼고 권장을 다시 계산하는 데 쓴다
 type RecRow = { recommend: number; inbound: number; stock: number | null; safety: number; demand: number };
 
-function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, reservedOpen, error, recRetail, recWhole, recReady, inbOk, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; reservedOpen: ProductionRequest[]; error?: string; recRetail: Map<string, RecRow>; recWhole: Map<string, number>; recReady: boolean; inbOk: boolean; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, error, recRetail, recWhole, recReady, inbOk, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; error?: string; recRetail: Map<string, RecRow>; recWhole: Map<string, number>; recReady: boolean; inbOk: boolean; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
@@ -665,23 +660,6 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   function addLine(p: Prod) {
     setLines((prev) => [...prev, { received: 0, product_id: p.product_id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, stock: p.qty, requested_qty: "", memo: "" }]);
   }
-  // 확정형(프로모션·도매 대량) 열린 요청서 — 품목 단위로 묶어 보여 준다(정보 표시). 권장에는 넣지 않는다 — 작성자가 보고 직접 더한다.
-  type ConfRef = { req_no: string; title: string | null; purpose: PrPurpose; due: string | null; rem: number };
-  type ConfRow = { product_id: string; name: string; sku: string | null; rem: number; earliest: string | null; refs: ConfRef[] };
-  const confByPid = useMemo(() => {
-    const m = new Map<string, ConfRow>();
-    for (const r of reservedOpen) for (const it of r.items) {
-      const rem = Math.max(0, r2(it.requested_qty - it.received_qty));
-      if (rem <= 0) continue;
-      const cur = m.get(it.product_id) ?? { product_id: it.product_id, name: it.name, sku: it.sku, rem: 0, earliest: null, refs: [] };
-      cur.rem = r2(cur.rem + rem);
-      cur.refs.push({ req_no: r.req_no || "(번호없음)", title: r.title, purpose: toPrPurpose(r.purpose), due: r.due_date, rem });
-      if (r.due_date && (!cur.earliest || r.due_date < cur.earliest)) cur.earliest = r.due_date;
-      m.set(it.product_id, cur);
-    }
-    for (const c of m.values()) c.refs.sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
-    return m;
-  }, [reservedOpen]);
   // 수정 창: 이 요청서 자신의 저장된 잔여(SKU 별) — 서버 입고 예정에서 자기 몫을 빼 '다른 요청서'만 남긴다
   const ownRawBySku = useMemo(() => {
     const m = new Map<string, number>();
@@ -692,14 +670,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
     }
     return m;
   }, [initial]);
-  // 품목별 입고 예정·권장(소매+도매)·행사·대량 잔여. 수정 창은 서버 입고 예정에서 자기 잔여를 빼 '다른 요청서'만 남긴다.
-  function planFor(pid: string, sku: string) {
+  // 품목별 입고 예정·권장(소매+도매). 수정 창은 서버 입고 예정에서 자기 잔여를 빼 '다른 요청서'만 남긴다.
+  function planFor(sku: string) {
     const rr = recRetail.get(sku);
-    const cr = confByPid.get(pid)?.rem ?? 0;
     const inb = rr ? r2(Math.max(0, rr.inbound - (ownRawBySku.get(sku) ?? 0))) : 0;
     const g = !rr ? 0 : rr.stock == null ? rr.demand : Math.max(0, rr.demand + rr.safety - rr.stock);
     const recommend = Math.max(0, r2(g + (recWhole.get(sku) ?? 0) - inb));
-    return { inb, recommend, cr };
+    return { inb, recommend };
   }
   function updateLine(i: number, patch: Partial<NewLine>) { setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
   function removeLine(i: number) { setLines((prev) => prev.filter((_, idx) => idx !== i)); }
@@ -795,40 +772,6 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             </label>
           </div>
 
-          {purpose === "재고 보충" && (
-            <section className="b2b-form-section" style={{ marginBottom: 12 }}>
-              <div className="b2b-form-section-title" style={{ marginBottom: 6 }}>프로모션·도매 대량 열린 요청서 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 이 요청서에 자동으로 들어가지 않습니다 — 제조사에 시킬 양은 요청수량에 직접 더하세요</span></div>
-              {confByPid.size === 0 ? (
-                <p className="sm-faint" style={{ fontSize: 14, margin: "2px 0 0" }}>열린 프로모션·도매 대량 요청서가 없습니다.</p>
-              ) : (
-                <div className="b2b-table-wrap">
-                  <table className="b2b-table" style={{ fontSize: 14 }}>
-                    <thead><tr><th>품목</th><th>요청서</th><th className="num" style={{ width: 90 }}>잔여</th></tr></thead>
-                    <tbody>
-                      {[...confByPid.values()].sort((a, b) => (a.earliest || "9999").localeCompare(b.earliest || "9999")).map((c) => {
-                        return (
-                          <tr key={c.product_id}>
-                            <td>{c.name}{c.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{c.sku}</span> : null}</td>
-                            <td>
-                              {c.refs.map((f) => (
-                                <div key={`${f.req_no}-${f.due}`} style={{ whiteSpace: "nowrap" }}>
-                                  <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700 }}>{f.req_no}</span>
-                                  <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", margin: "0 6px" }}>{PR_PURPOSE_LABEL[f.purpose]}</span>
-                                  {f.rem.toLocaleString()} · {DUE_LABEL[f.purpose]} {f.due || "미정"}{f.title ? <span className="sm-faint"> · {f.title}</span> : null}
-                                </div>
-                              ))}
-                            </td>
-                            <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{c.rem.toLocaleString()}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          )}
-
           {/* 품목 추가 — 다른 검색창과 동일한 콤보박스(이름·SKU·규격 아무 글자나 검색, 한글 입력 기본) */}
           <div style={{ marginBottom: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600 }}>생산 품목 추가</span>
@@ -852,15 +795,19 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           {lines.length === 0 ? (
             <div className="b2b-empty" style={{ padding: 20 }}>위에서 품목을 검색해 추가하세요.</div>
           ) : (
-            <div className="b2b-table-wrap">
+            // flexShrink 0 — 창 본문(flex 세로)이 넘치면 표가 한 줄 높이로 눌려 작은 스크롤 안에 갇힌다(추가한 품목이 안 보여 '선택이 안 된다'로 보이던 버그)
+            <div className="b2b-table-wrap" style={{ flexShrink: 0 }}>
               <table className="b2b-table">
                 {/* 권장 = 재고 목록 권장 열과 같은 합산식 — 제조사: max(0, ①원값+② − ⑤입고 예정), 도매: ② 도매 수식.
                     확정형(프로모션·도매 대량)은 수량을 사람이 아는 칸이라 권장 없음('-') */}
                 {/* 첫 숫자 열(재고) 폭은 두 탭 모두 100 — 탭 전환 시 표가 흔들리지 않게 */}
-                {purpose === "도매 납품" ? (
+                {/* 확정형(프로모션·도매 대량)은 입고 품목만 요청 — 재고·권장 열 없이 품목·요청수량·메모만 */}
+                {CONFIRMED_PURPOSES.includes(purpose) ? (
+                  <thead><tr><th>품목</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
+                ) : purpose === "도매 납품" ? (
                   <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>도매 재고</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
                 ) : (
-                  <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>소매 재고</th><th className="num" style={{ width: 84 }} title={isEdit ? "다른 열린 제조사 요청서에서 아직 안 온 양(이 요청서 자신의 잔여는 뺀 값) — 권장은 이 양을 이미 뺀 값" : "시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여) — 권장은 이 양을 이미 뺀 값"}>입고 예정</th><th className="num" style={{ width: 100 }}>도매 필요량</th><th className="num" style={{ width: 100 }} title="열린 프로모션·도매 대량 요청서의 잔여 합 — 권장에는 들어 있지 않음(수동 반영)">행사·대량 잔여</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
+                  <thead><tr><th>품목</th><th className="num" style={{ width: 100 }}>소매 재고</th><th className="num" style={{ width: 84 }} title={isEdit ? "다른 열린 제조사 요청서에서 아직 안 온 양(이 요청서 자신의 잔여는 뺀 값) — 권장은 이 양을 이미 뺀 값" : "시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여) — 권장은 이 양을 이미 뺀 값"}>입고 예정</th><th className="num" style={{ width: 100 }}>도매 필요량</th><th className="num" style={{ width: 90 }}>권장</th><th className="num" style={{ width: 110 }}>요청수량</th><th>메모</th><th style={{ width: 60 }}></th></tr></thead>
                 )}
                 <tbody>
                   {lines.map((l, i) => {
@@ -868,7 +815,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                     const need = wholesaleNeed.get(l.product_id) ?? 0;
                     const rk = (l.sku || "").toUpperCase();
                     // 제조사 권장 = max(0, ①원값 + ② − ⑤) — 입고 예정(⑤)을 합계에서 한 번만 뺀다(기획 14절 #8). 수정 창은 자기 잔여를 뺀 '다른 요청서' 기준(planFor).
-                    const pl = planFor(l.product_id, rk);
+                    const pl = planFor(rk);
                     const inb = pl.inb;
                     // 확정형(프로모션·도매 대량)은 목표 수량을 사람이 안다(행사 계획·선결제 발주서) — 수식 권장 없음('-')
                     const recommend = !recReady || CONFIRMED_PURPOSES.includes(purpose) ? null
@@ -877,7 +824,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                     return (
                       <tr key={l.item_id || l.product_id}>
                         <td style={{ overflow: "hidden", textOverflow: "ellipsis" }}><div style={{ fontWeight: 600 }}>{l.name}</div><div style={{ fontSize: 15, color: "var(--sm-text-light)" }}>{l.sku || ""}{l.spec ? ` · ${l.spec}` : ""}</div></td>
-                        {purpose === "도매 납품" ? (
+                        {CONFIRMED_PURPOSES.includes(purpose) ? null : purpose === "도매 납품" ? (
                           <>
                             <td className="num" style={{ color: "var(--sm-text-mid)" }}>{l.stock == null ? "-" : l.stock.toLocaleString()}</td>
                             <td className="num" style={{ fontWeight: 700, color: (recommend ?? 0) > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend == null ? "-" : recommend.toLocaleString()}</td>
@@ -887,10 +834,6 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                             <td className="num" style={{ color: "var(--sm-text-mid)" }}>{retail == null ? "-" : retail.toLocaleString()}</td>
                             <td className="num" style={{ color: inb > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}>{!recReady || !inbOk ? "-" : inb > 0 ? inb.toLocaleString() : "0"}</td>
                             <td className="num" style={{ color: need > 0 ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: need > 0 ? 700 : 400 }}>{need.toLocaleString()}</td>
-                            <td className="num" style={{ color: pl.cr > 0 ? "var(--sm-orange)" : "var(--sm-text-light)", fontWeight: pl.cr > 0 ? 700 : 400 }}
-                              title={pl.cr > 0 ? (confByPid.get(l.product_id)?.refs.map((f) => `${f.req_no} ${f.rem.toLocaleString()}`).join(", ") ?? undefined) : undefined}>
-                              {pl.cr.toLocaleString()}
-                            </td>
                             <td className="num" style={{ fontWeight: 700, color: (recommend ?? 0) > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend == null ? "-" : recommend.toLocaleString()}</td>
                           </>
                         )}

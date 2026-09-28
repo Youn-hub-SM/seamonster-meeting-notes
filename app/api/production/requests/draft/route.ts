@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getInventoryRows } from "@/app/lib/production-inventory";
-import { loadRequests } from "@/app/lib/wholesale-production-db";
-import { CONFIRMED_PURPOSES, DUE_LABEL, toPrPurpose, type ProductionRequest } from "@/app/lib/wholesale-production";
 import { createProductionRequest, defaultDueDate, defaultProdStart, kstTodayIso, CreateError, type CreateItem } from "@/app/lib/production-request-create";
 import { logProductionDraftNotice } from "@/app/lib/b2b-activity";
 import { getFeatureModel } from "@/app/lib/ai-model";
@@ -29,23 +27,9 @@ function bearerOk(req: NextRequest): boolean {
 
 type DraftLine = { sku: string; name: string; product_id: string; qty: number; stock: number | null; inbound: number; wholeRec: number; demand: number; safety: number; dailyOut: number };
 
-// 확정형(프로모션·도매 대량) 열린 요청서 요약 — 초안 메모·팀즈 본문에 실어 작성자가 보고 직접 반영하게 한다(수동 반영, 2026-09-28 대표 결정).
-function reservedSummary(reqs: ProductionRequest[]): string[] {
-  const out: string[] = [];
-  for (const r of reqs) {
-    const items = r.items
-      .map((it) => ({ name: it.name, rem: Math.max(0, Math.round((it.requested_qty - it.received_qty) * 100) / 100) }))
-      .filter((x) => x.rem > 0);
-    if (!items.length) continue;
-    const head = `${r.req_no || "(번호없음)"} ${toPrPurpose(r.purpose)}${r.title ? ` · ${r.title}` : ""} · ${DUE_LABEL[toPrPurpose(r.purpose)]} ${r.due_date || "미정"}`;
-    out.push(`${head}: ${items.slice(0, 8).map((x) => `${x.name} ${x.rem.toLocaleString()}`).join(", ")}${items.length > 8 ? ` 외 ${items.length - 8}종` : ""}`);
-  }
-  return out;
-}
-
 // Claude 검토 메모(선택) — 수량은 수식이 정하고, AI 는 담당자가 볼 검토 포인트만 3~5줄 적는다.
 //  b2b_settings 'production_draft_ai_note' = off 면 건너뛴다(주 1회 호출이라 비용은 작다). 실패해도 초안은 만든다.
-async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], reserved: string[], horizonDays: number): Promise<string> {
+async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], horizonDays: number): Promise<string> {
   if (!process.env.ANTHROPIC_API_KEY) return "";
   if ((await getKv("production_draft_ai_note")).toLowerCase() === "off") return "";
   const model = await getFeatureModel("production");
@@ -54,10 +38,9 @@ async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], reserve
     안전재고지평일수: horizonDays,
     초안품목: lines.slice(0, 40).map((l) => ({ sku: l.sku, name: l.name, 요청수량: l.qty, 현재고: l.stock, 입고예정: l.inbound, 도매필요량: l.wholeRec, B2B수요: l.demand, 목표재고: l.safety, 일평균출고: Math.round(l.dailyOut * 10) / 10 })),
     권장0이지만재고적은품목: zeroButLow.slice(0, 15).map((l) => ({ sku: l.sku, name: l.name, 현재고: l.stock, 입고예정: l.inbound, 목표재고: l.safety })),
-    확정형열린요청서: reserved.slice(0, 10),
   };
   const system = `당신은 씨몬스터(냉동 수산물 가공) 생산계획 검토자입니다. 주간 제조사 생산 요청서 초안(수량은 수식이 이미 정함)을 생산담당자가 확인하기 전에 검토 포인트를 적습니다.
-규칙: 한국어 존댓말, 3~5줄, 각 줄은 '- '로 시작, 한 줄 = 한 가지 확인 사항. 수량을 새로 제안하지 말고, 이상치(재고 대비 과다·과소, 입고 예정이 큰데 또 시키는 품목, 목표일이 가까운 확정형 요청서의 수동 반영 필요 등)만 짚습니다. 데이터에 없는 것은 쓰지 않습니다. 설명·머리말 없이 줄만 출력합니다.`;
+규칙: 한국어 존댓말, 3~5줄, 각 줄은 '- '로 시작, 한 줄 = 한 가지 확인 사항. 수량을 새로 제안하지 말고, 이상치(재고 대비 과다·과소, 입고 예정이 큰데 또 시키는 품목 등)만 짚습니다. 데이터에 없는 것은 쓰지 않습니다. 설명·머리말 없이 줄만 출력합니다.`;
   try {
     const res = await anthropic.messages.create({ model, max_tokens: 600, system, messages: [{ role: "user", content: JSON.stringify(payload) }] });
     const text = res.content[0]?.type === "text" ? res.content[0].text.trim() : "";
@@ -88,14 +71,8 @@ export async function POST(req: NextRequest) {
     if (de) throw de;
     if (!dry && dup && dup.length) return NextResponse.json({ ok: true, created: false, existing: dup[0] });
 
-    const [retail, whole, allReqs] = await Promise.all([
-      getInventoryRows("소매"),
-      getInventoryRows("도매"),
-      loadRequests(sb, {}),
-    ]);
+    const [retail, whole] = await Promise.all([getInventoryRows("소매"), getInventoryRows("도매")]);
     const wholeBySku = new Map(whole.rows.map((r) => [r.sku.toUpperCase(), Number(r.recommend) || 0]));
-    const reservedOpen = allReqs.filter((r) => CONFIRMED_PURPOSES.includes(toPrPurpose(r.purpose)) && (r.status === "요청" || r.status === "진행중"));
-    const reserved = reservedSummary(reservedOpen);
 
     // 권장 = max(0, ①소매 원값 + ②도매 필요량 − ⑤입고 예정) — 재고 목록·새 요청 창과 같은 합산식(합계에서 ⑤를 한 번만 뺀다).
     const cands: DraftLine[] = [];
@@ -144,25 +121,19 @@ export async function POST(req: NextRequest) {
     ];
     if (!retail.inboundOk) memoLines.push(`주의: 입고 예정(열린 요청서 잔여) 집계에 실패해 이미 시켜 둔 물량을 빼지 못했습니다 — 열린 제조사 요청서와 겹치는지 확인하세요.`);
     if (unmatched.length) memoLines.push(`품목표에 없어 뺀 SKU: ${unmatched.slice(0, 10).join(", ")}${unmatched.length > 10 ? ` 외 ${unmatched.length - 10}` : ""}`);
-    if (reserved.length) memoLines.push(lines.length
-      ? `확정형(프로모션·도매 대량) 열린 요청서 — 이 초안에는 들어 있지 않습니다. 제조사에 시킬 양은 요청수량에 직접 더하세요:`
-      : `확정형(프로모션·도매 대량) 열린 요청서 — 초안이 없으니 시킬 양이 있으면 '+ 새 생산 요청'으로 만드세요:`, ...reserved.slice(0, 10).map((s) => `· ${s}`));
-    else memoLines.push(`확정형(프로모션·도매 대량) 열린 요청서 없음.`);
 
     if (!lines.length) {
       const detail = memoLines.join("\n");
-      if (!dry) await logProductionDraftNotice(reserved.length
-        ? `생산요청 AI 초안 ${D} — 소매 권장 0(초안 없음) · 열린 행사·대량 요청서 ${reserved.length}건 확인`
-        : `생산요청 AI 초안 ${D} — 권장 0, 초안을 만들지 않았습니다`, detail);
-      return NextResponse.json({ ok: true, created: false, reason: "권장 0", date: D, reserved, unmatched });
+      if (!dry) await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 권장 0, 초안을 만들지 않았습니다`, detail);
+      return NextResponse.json({ ok: true, created: false, reason: "권장 0", date: D, unmatched });
     }
 
-    const note = await aiReviewNote(lines, zeroButLow, reserved, retail.horizonDays);
+    const note = await aiReviewNote(lines, zeroButLow, retail.horizonDays);
     if (note) memoLines.push(`AI 검토 포인트:`, note);
     const memo = memoLines.join("\n");
     const items: CreateItem[] = lines.map((l) => ({ product_id: l.product_id, requested_qty: l.qty, memo: null }));
 
-    if (dry) return NextResponse.json({ ok: true, created: false, dry: true, date: D, prod_start: prodStart, due_date: dueDate, memo, lines, reserved, unmatched });
+    if (dry) return NextResponse.json({ ok: true, created: false, dry: true, date: D, prod_start: prodStart, due_date: dueDate, memo, lines, unmatched });
 
     const full = await createProductionRequest(sb, {
       title: `AI 초안 ${D}`,
