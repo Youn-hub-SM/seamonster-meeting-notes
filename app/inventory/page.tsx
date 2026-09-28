@@ -433,7 +433,7 @@ export default function InventoryPage() {
                   <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
                     {r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {/* 소매 숫자 '아래' 줄로 — 옆에 붙이면 현재고가 두 값처럼 읽힌다(대표 지시). 입고 예정 셀의 '마감' 줄과 같은 방식 */}
-                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 창의 '담기'로 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
+                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
                   </td>
                   {!confirmedTab && <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>}
                   {/* 예상소진 = 창고(현재고)만 기준. 입고 예정이 있으면 '입고 예정일 전에 바닥나는가'로 빨강을 판정 —

@@ -105,7 +105,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return NextResponse.json({ ok: false, error: `그사이 상태가 '${prevStatus}'(으)로 바뀌었습니다 — 새로고침 후 다시 확인하세요.` }, { status: 409 });
 
     // 품목 교체 준비 — 헤더 갱신 전에 검증까지 끝낸다(절반만 반영되는 것 방지).
-    type ItemIn = { id?: string; product_id: string; requested_qty: number; memo?: string; reserved_qty?: number };
+    type ItemIn = { id?: string; product_id: string; requested_qty: number; memo?: string };
     let itemsIn: ItemIn[] | null = null;
     let toDelete: string[] = [];
     let curItemIds = new Set<string>();
@@ -131,12 +131,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         for (const r of rc ?? []) withReceipts.add(r.item_id as string);
       }
       const rawIn = (b.items as ItemIn[])
-        .map((it) => {
-          const requested_qty = Math.round((Number(it.requested_qty) || 0) * 100) / 100; // 소수 둘째 자리 허용(104)
-          // 담은 행사·대량 몫(119) — 요청수량 이하로 맞춘다. 제조사 요청서만 의미가 있다(아래에서 용도로 거른다)
-          const reserved_qty = Math.min(requested_qty, Math.max(0, Math.round((Number(it.reserved_qty) || 0) * 100) / 100));
-          return { id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty, memo: String(it.memo || "").trim() || undefined, reserved_qty };
-        });
+        .map((it) => ({ id: it.id ? String(it.id) : undefined, product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || undefined })); // 소수 둘째 자리 허용(104)
       if (rawIn.some((it) => it.id && curItemIds.has(it.id) && !autoIds.has(it.id) && withReceipts.has(it.id) && it.requested_qty <= 0)) {
         return NextResponse.json({ ok: false, error: "입고 기록이 있는 품목은 수량을 0으로 할 수 없습니다. 품목을 빼려면 그 입고를 먼저 취소하세요." }, { status: 400 });
       }
@@ -187,14 +182,6 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     // 품목 교체 실행 — 수정 → 추가 → 삭제 순(검증은 위에서 완료)
     if (itemsIn) {
-      // 담은 행사·대량 몫(119)은 제조사 요청서만 저장(다른 용도는 0). 미적용 환경이면 첫 오류에서 그 컬럼을 빼고 이어 간다.
-      const factoryReq = isFactoryPurpose(nextPurpose ?? toPrPurpose(curWin?.purpose));
-      let withReserved = true;
-      const writeItem = async (run: (extra: Record<string, unknown>) => PromiseLike<{ error: { message: string } | null }>, reserved: number) => {
-        let { error: we } = await run(withReserved ? { reserved_qty: factoryReq ? reserved : 0 } : {});
-        if (we && withReserved && /reserved_qty/i.test(we.message)) { withReserved = false; ({ error: we } = await run({})); }
-        if (we) throw we;
-      };
       let sort = 0;
       for (const it of itemsIn) {
         if (it.id && curItemIds.has(it.id)) {
@@ -206,10 +193,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           }
           // 자동 줄에 양수 수량을 넣으면 정식 요청 줄로 승격(③) — 표식은 제조사 엑셀 비고·알림에 찍히지 않게 걷어낸다
           const memo = it.memo ? (it.memo.replace(UNREQUESTED_ITEM_MEMO, "").trim() || null) : null;
-          const itemId = it.id;
-          await writeItem((extra) => sb.from("production_request_items").update({ requested_qty: it.requested_qty, memo, sort, ...extra }).eq("id", itemId).eq("request_id", id), it.reserved_qty ?? 0);
+          const { error: ue } = await sb.from("production_request_items").update({ requested_qty: it.requested_qty, memo, sort }).eq("id", it.id).eq("request_id", id);
+          if (ue) throw ue;
         } else {
-          await writeItem((extra) => sb.from("production_request_items").insert({ request_id: id, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo ?? null, sort, ...extra }), it.reserved_qty ?? 0);
+          const { error: ie } = await sb.from("production_request_items").insert({ request_id: id, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo ?? null, sort });
+          if (ie) throw ie;
         }
         sort++;
       }

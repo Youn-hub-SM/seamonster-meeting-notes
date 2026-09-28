@@ -34,7 +34,6 @@ export interface InvRow {
   inbound: number;        // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
   inboundOverdue: number;       // 그중 마감이 지난 잔여(자동 제외 없음 — 표시용)
-  inboundFolded: number;        // 입고 예정에서 뺀 '담은 행사·대량 몫'(production-inbound folded) — 창이 원래 잔여를 복원하는 데 쓴다
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정))
   belowSafety: boolean;   // 현재고 + 입고 예정 < 안전재고 (권장과 같은 포지션 기준)
   requestByDays: number | null; // 생산요청 마감까지 남은 일수(0·음수=지금/이미 늦음). 출고0·재고없음이면 null
@@ -148,14 +147,13 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   if (oErr) throw oErr;
 
   // 입고 예정을 SKU 로 합산(중복 SKU 는 수요와 같은 규칙으로 합쳐진다)
-  const inboundBySku = new Map<string, { qty: number; due: string | null; overdue: number; folded: number }>();
+  const inboundBySku = new Map<string, { qty: number; due: string | null; overdue: number }>();
   for (const [pid, row] of inboundByProduct ?? new Map<string, InboundRow>()) {
     const sku = skuByProduct.get(pid);
     if (!sku) continue;
     const k = sku.toUpperCase();
-    const cur = inboundBySku.get(k) ?? { qty: 0, due: null, overdue: 0, folded: 0 };
+    const cur = inboundBySku.get(k) ?? { qty: 0, due: null, overdue: 0 };
     cur.qty = Math.round((cur.qty + row.qty) * 100) / 100;
-    cur.folded = Math.round((cur.folded + (row.folded || 0)) * 100) / 100;
     cur.overdue = Math.round((cur.overdue + row.overdue_qty) * 100) / 100;
     if (row.earliest_due && (!cur.due || row.earliest_due < cur.due)) cur.due = row.earliest_due;
     inboundBySku.set(k, cur);
@@ -233,7 +231,6 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
       inbound,
       inboundDue: inb?.due ?? null,
       inboundOverdue: inb?.overdue ?? 0,
-      inboundFolded: inb?.folded ?? 0,
       recommend,
       belowSafety,
       requestByDays,

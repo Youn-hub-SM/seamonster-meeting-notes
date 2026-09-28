@@ -29,8 +29,7 @@ function bearerOk(req: NextRequest): boolean {
 
 type DraftLine = { sku: string; name: string; product_id: string; qty: number; stock: number | null; inbound: number; wholeRec: number; demand: number; safety: number; dailyOut: number };
 
-// 확정형(프로모션·도매 대량) 열린 요청서 요약 — 초안 메모·팀즈 본문에 실어 작성자가 무엇이 열려 있는지 본다.
-//  담김·담을 양은 요청서마다가 아니라 품목 단위로 따로 적는다(foldPlanLines) — 담은 몫이 품목 줄 단위로 저장되기 때문.
+// 확정형(프로모션·도매 대량) 열린 요청서 요약 — 초안 메모·팀즈 본문에 실어 작성자가 보고 직접 반영하게 한다(수동 반영, 2026-09-28 대표 결정).
 function reservedSummary(reqs: ProductionRequest[]): string[] {
   const out: string[] = [];
   for (const r of reqs) {
@@ -46,7 +45,7 @@ function reservedSummary(reqs: ProductionRequest[]): string[] {
 
 // Claude 검토 메모(선택) — 수량은 수식이 정하고, AI 는 담당자가 볼 검토 포인트만 3~5줄 적는다.
 //  b2b_settings 'production_draft_ai_note' = off 면 건너뛴다(주 1회 호출이라 비용은 작다). 실패해도 초안은 만든다.
-async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], reserved: string[], foldPlan: string[], horizonDays: number): Promise<string> {
+async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], reserved: string[], horizonDays: number): Promise<string> {
   if (!process.env.ANTHROPIC_API_KEY) return "";
   if ((await getKv("production_draft_ai_note")).toLowerCase() === "off") return "";
   const model = await getFeatureModel("production");
@@ -56,10 +55,9 @@ async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], reserve
     초안품목: lines.slice(0, 40).map((l) => ({ sku: l.sku, name: l.name, 요청수량: l.qty, 현재고: l.stock, 입고예정: l.inbound, 도매필요량: l.wholeRec, B2B수요: l.demand, 목표재고: l.safety, 일평균출고: Math.round(l.dailyOut * 10) / 10 })),
     권장0이지만재고적은품목: zeroButLow.slice(0, 15).map((l) => ({ sku: l.sku, name: l.name, 현재고: l.stock, 입고예정: l.inbound, 목표재고: l.safety })),
     확정형열린요청서: reserved.slice(0, 10),
-    확정형담기참고: foldPlan.slice(0, 20),
   };
   const system = `당신은 씨몬스터(냉동 수산물 가공) 생산계획 검토자입니다. 주간 제조사 생산 요청서 초안(수량은 수식이 이미 정함)을 생산담당자가 확인하기 전에 검토 포인트를 적습니다.
-규칙: 한국어 존댓말, 3~5줄, 각 줄은 '- '로 시작, 한 줄 = 한 가지 확인 사항. 수량을 새로 제안하지 말고, 이상치(재고 대비 과다·과소, 입고 예정이 큰데 또 시키는 품목, 목표일이 가까운 확정형 요청서의 수동 반영 필요 등)만 짚습니다. 확정형은 '확정형담기참고'에서 '담기 N'으로 나온 품목만 수동 반영 대상이고, '더할 양 없음'은 이미 담겼거나 소매 재고로 충당되니 짚지 않습니다. 데이터에 없는 것은 쓰지 않습니다. 설명·머리말 없이 줄만 출력합니다.`;
+규칙: 한국어 존댓말, 3~5줄, 각 줄은 '- '로 시작, 한 줄 = 한 가지 확인 사항. 수량을 새로 제안하지 말고, 이상치(재고 대비 과다·과소, 입고 예정이 큰데 또 시키는 품목, 목표일이 가까운 확정형 요청서의 수동 반영 필요 등)만 짚습니다. 데이터에 없는 것은 쓰지 않습니다. 설명·머리말 없이 줄만 출력합니다.`;
   try {
     const res = await anthropic.messages.create({ model, max_tokens: 600, system, messages: [{ role: "user", content: JSON.stringify(payload) }] });
     const text = res.content[0]?.type === "text" ? res.content[0].text.trim() : "";
@@ -97,14 +95,6 @@ export async function POST(req: NextRequest) {
     ]);
     const wholeBySku = new Map(whole.rows.map((r) => [r.sku.toUpperCase(), Number(r.recommend) || 0]));
     const reservedOpen = allReqs.filter((r) => CONFIRMED_PURPOSES.includes(toPrPurpose(r.purpose)) && (r.status === "요청" || r.status === "진행중"));
-    const foldedBy = new Map<string, number>(); // 열린 제조사 요청서에 담긴(아직 안 온) 행사·대량 몫
-    for (const r of allReqs) {
-      if (toPrPurpose(r.purpose) !== "재고 보충" || (r.status !== "요청" && r.status !== "진행중")) continue;
-      for (const it of r.items) {
-        const f = Math.min(it.reserved_qty || 0, Math.max(0, it.requested_qty - it.received_qty));
-        if (f > 0) foldedBy.set(it.product_id, Math.round(((foldedBy.get(it.product_id) || 0) + f) * 100) / 100);
-      }
-    }
     const reserved = reservedSummary(reservedOpen);
 
     // 권장 = max(0, ①소매 원값 + ②도매 필요량 − ⑤입고 예정) — 재고 목록·새 요청 창과 같은 합산식(합계에서 ⑤를 한 번만 뺀다).
@@ -146,34 +136,6 @@ export async function POST(req: NextRequest) {
     }
     lines.sort((a, b) => b.qty - a.qty || a.sku.localeCompare(b.sku));
 
-    // 품목별 담기 참고 — 요청 창의 계산과 같은 식: 담을 양 = 확정형 잔여 − 이미 담긴 몫 − 소매 여유(목표 초과 재고·권장을 넘는 입고 예정).
-    //  도착했지만 아직 옮기지 않은 행사분은 소매 재고에 들어 있어 여유로 잡힌다(두 번 시키지 않게).
-    const retailBySku = new Map(retail.rows.map((r) => [r.sku.toUpperCase(), r]));
-    const conf = new Map<string, { name: string; sku: string; pid: string; rem: number }>();
-    for (const r of reservedOpen) for (const it of r.items) {
-      const rem = Math.max(0, it.requested_qty - it.received_qty);
-      if (rem <= 0 || !it.sku) continue;
-      const k = it.sku.toUpperCase();
-      const cur = conf.get(k) ?? { name: it.name, sku: it.sku, pid: it.product_id, rem: 0 };
-      cur.rem = Math.round((cur.rem + rem) * 100) / 100;
-      conf.set(k, cur);
-    }
-    const foldPlanLines: string[] = [];
-    let addTotal = 0; // 품목별 담을 양 합 — 소매 권장이 0 이라 초안이 없어도 알려야 할 몫
-    for (const [k, c] of conf) {
-      const rr = retailBySku.get(k);
-      const fp = foldedBy.get(c.pid) ?? 0;
-      const g = !rr ? 0 : rr.stock == null ? rr.demand : rr.demand + rr.safety - rr.stock;
-      const base = Math.max(0, g) + (wholeBySku.get(k) ?? 0) - (rr?.inbound ?? 0);
-      const slack = rr ? Math.max(0, -base) + Math.max(0, -g) : 0;
-      const crLeft = Math.max(0, c.rem - fp);
-      const covered = Math.min(crLeft, slack);
-      const add = Math.max(0, Math.ceil(crLeft - covered));
-      addTotal += add;
-      const shownFold = Math.min(c.rem, fp); // 요청 창과 같은 표시(확정형 잔여를 넘지 않게)
-      foldPlanLines.push(`· ${c.name}: 잔여 ${c.rem.toLocaleString()}${shownFold ? ` · 담김 ${shownFold.toLocaleString()}` : ""}${covered > 0 ? ` · 소매 충당 ${Math.round(covered).toLocaleString()}` : ""} → ${add > 0 ? `담기 ${add.toLocaleString()}` : "더할 양 없음"}`);
-    }
-
     const prodStart = defaultProdStart(D);
     const dueDate = defaultDueDate("재고 보충", D) || prodStart;
     const memoLines = [
@@ -182,22 +144,20 @@ export async function POST(req: NextRequest) {
     ];
     if (!retail.inboundOk) memoLines.push(`주의: 입고 예정(열린 요청서 잔여) 집계에 실패해 이미 시켜 둔 물량을 빼지 못했습니다 — 열린 제조사 요청서와 겹치는지 확인하세요.`);
     if (unmatched.length) memoLines.push(`품목표에 없어 뺀 SKU: ${unmatched.slice(0, 10).join(", ")}${unmatched.length > 10 ? ` 외 ${unmatched.length - 10}` : ""}`);
-    if (reserved.length) {
-      memoLines.push(`확정형(프로모션·도매 대량) 열린 요청서:`, ...reserved.slice(0, 10).map((s) => `· ${s}`));
-      memoLines.push(lines.length
-        ? `행사·대량 담기 참고(품목별) — 이 초안에는 들어 있지 않습니다. 수정 창의 '담기'로 더하세요:`
-        : `행사·대량 담기 참고(품목별) — 초안이 없으니 '+ 새 생산 요청' 창의 '담기'로 요청서를 만드세요:`, ...foldPlanLines.slice(0, 20));
-    } else memoLines.push(`확정형(프로모션·도매 대량) 열린 요청서 없음.`);
+    if (reserved.length) memoLines.push(lines.length
+      ? `확정형(프로모션·도매 대량) 열린 요청서 — 이 초안에는 들어 있지 않습니다. 제조사에 시킬 양은 요청수량에 직접 더하세요:`
+      : `확정형(프로모션·도매 대량) 열린 요청서 — 초안이 없으니 시킬 양이 있으면 '+ 새 생산 요청'으로 만드세요:`, ...reserved.slice(0, 10).map((s) => `· ${s}`));
+    else memoLines.push(`확정형(프로모션·도매 대량) 열린 요청서 없음.`);
 
     if (!lines.length) {
       const detail = memoLines.join("\n");
-      if (!dry) await logProductionDraftNotice(addTotal > 0
-        ? `생산요청 AI 초안 ${D} — 소매 권장 0(초안 없음) · 행사·대량 담을 몫 있음`
+      if (!dry) await logProductionDraftNotice(reserved.length
+        ? `생산요청 AI 초안 ${D} — 소매 권장 0(초안 없음) · 열린 행사·대량 요청서 ${reserved.length}건 확인`
         : `생산요청 AI 초안 ${D} — 권장 0, 초안을 만들지 않았습니다`, detail);
       return NextResponse.json({ ok: true, created: false, reason: "권장 0", date: D, reserved, unmatched });
     }
 
-    const note = await aiReviewNote(lines, zeroButLow, reserved, foldPlanLines, retail.horizonDays);
+    const note = await aiReviewNote(lines, zeroButLow, reserved, retail.horizonDays);
     if (note) memoLines.push(`AI 검토 포인트:`, note);
     const memo = memoLines.join("\n");
     const items: CreateItem[] = lines.map((l) => ({ product_id: l.product_id, requested_qty: l.qty, memo: null }));

@@ -41,7 +41,6 @@ export interface PrItem {
   unit: string;
   requested_qty: number;
   received_qty: number;     // Σ receipts.qty
-  reserved_qty: number;     // 요청수량 중 '담기'로 더한 프로모션·도매 대량 몫(119, 미적용이면 0) — 입고 예정 보정용
   memo: string | null;
   receipts: PrReceipt[];
 }

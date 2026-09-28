@@ -17,13 +17,8 @@ async function actor(req: NextRequest): Promise<string | null> {
 export async function GET(req: NextRequest) {
   try {
     const status = req.nextUrl.searchParams.get("status") || undefined;
-    const sb = supabaseAdmin();
-    const [rows, probe] = await Promise.all([
-      loadRequests(sb, { status }),
-      sb.from("production_request_items").select("reserved_qty").limit(1), // migration 119 적용 여부 — 미적용이면 창이 담기 경고를 띄운다
-    ]);
-    const reserved_supported = !(probe.error && /reserved_qty/i.test(probe.error.message));
-    return NextResponse.json({ ok: true, requests: rows, reserved_supported });
+    const rows = await loadRequests(supabaseAdmin(), { status });
+    return NextResponse.json({ ok: true, requests: rows });
   } catch (err) {
     console.error("[production/requests GET]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });

@@ -80,7 +80,7 @@ export async function loadRequests(
   const ids = heads.map((r) => r.id as string);
   const [items, receipts] = await Promise.all([
     inChunks(ids, (part) => pageAll((a, b) => sb.from("production_request_items")
-      .select("*, products(sku, name, spec, unit)") // * = reserved_qty(119) 미적용이어도 안전
+      .select("id, request_id, product_id, requested_qty, memo, sort, products(sku, name, spec, unit)")
       .in("request_id", part)
       .order("sort", { ascending: true }).order("id", { ascending: true })
       .range(a, b))),
@@ -114,7 +114,6 @@ export async function loadRequests(
       sku: (p.sku as string) ?? null, name: (p.name as string) ?? "(삭제된 품목)",
       spec: (p.spec as string) ?? null, unit: (p.unit as string) ?? "개",
       requested_qty: Number(it.requested_qty) || 0, received_qty: received,
-      reserved_qty: Math.min(Number(it.requested_qty) || 0, Math.max(0, Number(it.reserved_qty) || 0)),
       memo: (it.memo as string) ?? null, receipts: rcs,
     };
     const k = it.request_id as string;

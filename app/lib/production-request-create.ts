@@ -12,7 +12,7 @@ export { defaultDueDate, defaultProdStart, kstTodayIso, PROD_START_BDAYS, PROD_D
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type CreateItem = { product_id: string; requested_qty: number; memo: string | null; reserved_qty?: number }; // reserved_qty = 담은 행사·대량 몫(119)
+export type CreateItem = { product_id: string; requested_qty: number; memo: string | null };
 export type CreateInput = {
   title?: string | null;
   requested_by?: string | null;
@@ -34,11 +34,7 @@ export class CreateError extends Error { status: number; constructor(msg: string
 export function normalizeItems(raw: unknown): CreateItem[] {
   const arr = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
   return arr
-    .map((it) => {
-      const requested_qty = Math.round((Number(it.requested_qty) || 0) * 100) / 100; // 소수 둘째 자리 허용(104)
-      const reserved_qty = Math.min(requested_qty, Math.max(0, Math.round((Number(it.reserved_qty) || 0) * 100) / 100));
-      return { product_id: String(it.product_id || ""), requested_qty, memo: String(it.memo || "").trim() || null, reserved_qty };
-    })
+    .map((it) => ({ product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || null })) // 소수 둘째 자리 허용(104)
     .filter((it) => it.product_id && it.requested_qty > 0);
 }
 
@@ -101,17 +97,8 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
   if (he) throw he;
   const requestId = (reqRow as { id: string }).id;
 
-  // 담은 행사·대량 몫(119)은 제조사 요청서에만 — 있는 줄만 컬럼을 싣고, 미적용 환경이면 그 컬럼만 빼고 재시도
-  const withReserved = purpose === "재고 보충" && items.some((it) => (it.reserved_qty ?? 0) > 0);
-  const itemRows: Record<string, unknown>[] = items.map((it, i) => ({
-    request_id: requestId, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo, sort: i,
-    ...(withReserved ? { reserved_qty: Math.min(it.requested_qty, it.reserved_qty ?? 0) } : {}),
-  }));
-  let { error: ie } = await sb.from("production_request_items").insert(itemRows);
-  if (ie && withReserved && /reserved_qty/i.test(ie.message)) {
-    for (const r of itemRows) delete r.reserved_qty;
-    ({ error: ie } = await sb.from("production_request_items").insert(itemRows));
-  }
+  const itemRows = items.map((it, i) => ({ request_id: requestId, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo, sort: i }));
+  const { error: ie } = await sb.from("production_request_items").insert(itemRows);
   if (ie) { await sb.from("production_requests").delete().eq("id", requestId); throw ie; }
 
   // 작성 알림 — 게시물 본문에 품목·수량·마감·담당 전체(팀즈 게시물 전환으로 긴 내용 허용 — 2026-09-16)
