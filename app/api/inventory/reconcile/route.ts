@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { getUntracked } from "@/app/lib/stock-tracked";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,12 +30,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const { data, error } = await sb.rpc("inventory_reconcile", {
-      p_from: from, p_to: to, p_channel: channel || null,
-    });
+    const [{ data, error }, untracked] = await Promise.all([
+      sb.rpc("inventory_reconcile", { p_from: from, p_to: to, p_channel: channel || null }),
+      getUntracked(sb), // '재고 관리 사용 안함'(121) 품목은 대사에서 뺀다 — 입고를 안 적으니 늘 차이로 뜬다
+    ]);
     if (error) return NextResponse.json({ ok: false, error: `${error.message} (051 적용 여부 확인)` }, { status: 500 });
+    const rows = ((data ?? []) as { product_id: string }[]).filter((r) => !untracked.ids.has(r.product_id));
 
-    return NextResponse.json({ ok: true, from, to, channel: channel || "전체", salesMax, rows: data ?? [] });
+    return NextResponse.json({ ok: true, from, to, channel: channel || "전체", salesMax, rows });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "대사 조회 실패") }, { status: 500 });
   }

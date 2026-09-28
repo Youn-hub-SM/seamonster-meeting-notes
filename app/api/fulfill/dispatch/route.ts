@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { signedQty } from "@/app/lib/inventory";
 import { getAllBundles, expandBundleQty } from "@/app/lib/product-bundles";
+import { getUntracked, dropUntracked } from "@/app/lib/stock-tracked";
 import { itemsSig } from "@/app/lib/fulfill-sig";
 
 export const runtime = "nodejs";
@@ -11,7 +12,7 @@ export const maxDuration = 60;
 
 type Item = { sku: string; qty: number; orderDate?: string | null };
 type ProductRow = { productId: string; name: string; option: string; need: number; current: number; after: number; short: boolean };
-type ItemRow = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" };
+type ItemRow = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" | "untracked" };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 // 중복 검사 서명 — SKU별 '합산' 수량 기준(주문일 분해와 무관). generate 의 배치 서명과 같은 산식(itemsSig).
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
       if (!k) continue;
       const a = bySku.get(k) || []; a.push({ id: p.id, name: p.name || "" }); bySku.set(k, a);
     }
-    const bundles = await getAllBundles(sb);
+    const [bundles, untracked] = await Promise.all([getAllBundles(sb), getUntracked(sb)]);
 
     // 아이템 해석 + 묶음 전개 → product_id별 수량(전체 합 = 재고 확인용) + 주문일별 수량(출고 기록용).
     //  출고 txn 은 '주문일' 축으로 기록해 매출(주문일자)과 같은 축에서 완전 대조 — 주문일 없으면 처리일.
@@ -71,17 +72,25 @@ export async function POST(req: NextRequest) {
       const dm = perDateProduct.get(dk) || new Map<string, number>();
       expandBundleQty(bundles, p.id, it.qty, dm);
       perDateProduct.set(dk, dm);
-      itemRows.push({ sku: it.sku, name: p.name, qty: it.qty, kind: isBundle ? "bundle" : "single" });
+      itemRows.push({ sku: it.sku, name: p.name, qty: it.qty, kind: isBundle ? "bundle" : untracked.ids.has(p.id) ? "untracked" : "single" });
     }
+    // '재고 관리 사용 안함'(121) 품목은 차감하지 않는다 — 구성품 단위로 뺀다(세트 안의 관리 대상 구성품은 계속 차감).
+    //  중복 출고 서명(sig)은 원래 품목 그대로 계산한다(서명 규칙을 바꾸지 않는다).
+    const matchedAny = perProduct.size > 0; // 빼기 전 — 구성품이 전부 재고 관리 안 함인 세트도 '매칭됨'으로 센다
+    dropUntracked(perProduct, untracked);
+    for (const dm of perDateProduct.values()) dropUntracked(dm, untracked);
 
     const productIds = [...perProduct.keys()];
-    if (!productIds.length) return NextResponse.json({ ok: true, committed: false, items: itemRows, products: [], shortages: 0, message: "매칭된(출고 가능) 품목이 없습니다." });
+    // 재고 관리 안 함 품목뿐인 배치 — 차감할 재고는 없지만 '출고 완료'로 주문을 처리됨으로 표시해야
+    //  다음 날 누적 주문 파일에서 같은 주문이 다시 발주되지 않는다(최종 점검 확정). 아래 커밋은 재고 행 없이 진행한다.
+    const untrackedOnly = !productIds.length && matchedAny;
+    if (!productIds.length && !untrackedOnly) return NextResponse.json({ ok: true, committed: false, items: itemRows, products: [], shortages: 0, message: "매칭된(출고 가능) 품목이 없습니다." });
 
     // 현재 소매 재고(완료) — product_id별 합. 채널/상태 컬럼 미적용 환경 폴백.
     type Tx = { product_id: string; qty: number };
     let txns: Tx[] = [];
     // inventory_stock RPC(품목당 1행 집계) 우선 — 원시 행 합산은 원장이 PostgREST 1,000행 캡을 넘으면 재고를 과소 계산한다.
-    const rpc = await sb.rpc("inventory_stock", { chan: "소매" });
+    const rpc = productIds.length ? await sb.rpc("inventory_stock", { chan: "소매" }) : { data: [], error: null }; // 재고 관리 안 함뿐이면 조회할 품목이 없다
     if (!rpc.error) {
       const idSet = new Set(productIds);
       txns = ((rpc.data as Tx[]) || []).filter((t) => idSet.has(t.product_id));
@@ -107,7 +116,8 @@ export async function POST(req: NextRequest) {
     }).sort((a, b) => a.name.localeCompare(b.name, "ko") || a.option.localeCompare(b.option, "ko")); // 가나다순
     const shortages = productRows.filter((r) => r.short).length;
 
-    if (!commit) return NextResponse.json({ ok: true, committed: false, items: itemRows, products: productRows, shortages });
+    if (!commit) return NextResponse.json({ ok: true, committed: false, items: itemRows, products: productRows, shortages, untrackedOnly,
+      ...(untrackedOnly ? { message: "재고 관리 사용 안함 품목뿐이라 재고는 차감하지 않습니다. '출고 완료'를 누르면 주문만 처리됨으로 표시됩니다." } : {}) });
 
     // ── 커밋 ──
     const sig = typeof body.sig === "string" && /^[0-9a-f]{16}$/i.test(body.sig) ? body.sig.toLowerCase() : sigOf(items);
@@ -166,7 +176,7 @@ export async function POST(req: NextRequest) {
       // 그 외 오류(테이블 없음 등)는 종전처럼 기록 생략하고 진행
     } catch { /* 065 미적용 스킵 */ }
 
-    let insErr = (await sb.from("inventory_txns").insert(rows)).error;
+    let insErr = rows.length ? (await sb.from("inventory_txns").insert(rows)).error : null; // 재고 관리 안 함뿐인 배치는 기록할 재고 행이 없다
     if (insErr && /channel/i.test(insErr.message)) { rows = rows.map(({ channel, ...r }) => r); insErr = (await sb.from("inventory_txns").insert(rows)).error; }
     if (insErr && /status/i.test(insErr.message)) { rows = rows.map(({ status, ...r }) => r); insErr = (await sb.from("inventory_txns").insert(rows)).error; }
     if (insErr) {

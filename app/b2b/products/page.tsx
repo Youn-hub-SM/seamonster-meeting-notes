@@ -36,6 +36,8 @@ export default function ProductsPage() {
   // 원가 변경 예약 — 인상일에 맞춰 사람이 고치는 걸 놓치지 않게 미리 걸어둔다(반영은 DB 크론)
   const [schedFor, setSchedFor] = useState<Product | null>(null);
   const [justSavedId, setJustSavedId] = useState<string | null>(null); // 방금 저장한 행 하이라이트 — 목록 어디로 갔는지 보이게
+  // 121(재고 관리 사용 안함) 적용 여부 — 미적용이면 체크박스를 잠근다(저장해도 값이 남지 않으므로)
+  const [stockTrackedCol, setStockTrackedCol] = useState(true);
 
   async function reload() {
     setLoading(true);
@@ -45,6 +47,7 @@ export default function ProductsPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "조회 실패");
       setProducts(data.products || []);
+      setStockTrackedCol(data.stockTrackedCol !== false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "조회 중 오류");
     }
@@ -306,6 +309,7 @@ export default function ProductsPage() {
                               sale_price: p.sale_price,
                               tax_type: p.tax_type,
                               active: p.active,
+                              stock_tracked: p.stock_tracked !== false,
                               origin: p.origin ?? "",
                               attrs: p.attrs ?? "",
                               notes: p.notes ?? "",
@@ -345,6 +349,15 @@ export default function ProductsPage() {
                               title={`묶음(세트) 상품 — 구성품 ${p.bundle_count ?? 0}종`}
                             >
                               묶음{p.bundle_count ? ` ${p.bundle_count}` : ""}
+                            </span>
+                          )}
+                          {p.stock_tracked === false && !p.is_bundle && (
+                            <span
+                              className="b2b-status-pill"
+                              style={{ marginLeft: 6, background: "var(--sm-bg)", color: "var(--sm-text-mid)", border: "1px solid var(--sm-border)" }}
+                              title="재고 관리 사용 안함 — 재고 목록·입출고·생산 요청에서 빠지고 출고 때 재고가 차감되지 않습니다"
+                            >
+                              재고 제외
                             </span>
                           )}
                         </td>
@@ -400,6 +413,7 @@ export default function ProductsPage() {
         <ProductModal
           mode={modal.mode}
           data={modal.data}
+          stockTrackedCol={stockTrackedCol}
           saving={saving}
           error={modalError}
           onChange={(data) => setModal({ ...modal, data })}
@@ -557,6 +571,7 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
 function ProductModal({
   mode,
   data,
+  stockTrackedCol,
   saving,
   error,
   onChange,
@@ -567,6 +582,7 @@ function ProductModal({
 }: {
   mode: "create" | "edit";
   data: ProductInput;
+  stockTrackedCol: boolean;
   saving: boolean;
   error?: string;
   onChange: (d: ProductInput) => void;
@@ -901,6 +917,25 @@ function ProductModal({
               />
               사용 중 (체크 해제 시 발주 등록에서 노출 안 됨)
             </label>
+            {/* 재고 관리 사용 안함(121) — 드라이아이스·이벤트 상품 등. 묶음은 자체 재고가 없어 의미가 없으므로 숨긴다 */}
+            {!isBundle && (
+              <>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, marginTop: 8, opacity: stockTrackedCol ? 1 : 0.55 }}>
+                  <input
+                    type="checkbox"
+                    checked={data.stock_tracked === false}
+                    disabled={!stockTrackedCol}
+                    onChange={(e) => set("stock_tracked", !e.target.checked)}
+                  />
+                  재고 관리 사용 안함 (재고 목록·입출고·생산 요청에서 빠짐 — 발주·판매는 그대로)
+                </label>
+                <span style={{ display: "block", fontSize: 12, color: "var(--sm-text-light)", marginTop: 4 }}>
+                  {stockTrackedCol
+                    ? "체크하면 온라인 출고·B2B 발송 때도 재고가 차감되지 않습니다. 체크 전 재고 기록은 남고 화면에서만 빠집니다."
+                    : "DB 업데이트(121) 적용 후 사용할 수 있습니다."}
+                </span>
+              </>
+            )}
           </Field>
 
           <Field label="비고">

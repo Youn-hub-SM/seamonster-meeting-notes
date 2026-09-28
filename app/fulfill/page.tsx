@@ -20,9 +20,9 @@ type Result = {
   codeCount: number;
   files: { normal: FileOut; guarantee: FileOut | null; parcel: FileOut };
 };
-type DItem = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" };
+type DItem = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" | "untracked" };
 type DProd = { productId: string; name: string; option: string; need: number; current: number; after: number; short: boolean };
-type DispatchPreview = { items: DItem[]; products: DProd[]; shortages: number; message?: string };
+type DispatchPreview = { items: DItem[]; products: DProd[]; shortages: number; message?: string; untrackedOnly?: boolean };
 type DispatchDone = { orderNo: string; groupId: string; dispatched: number; totalQty: number; shortages: number };
 
 const KW_KEY = "fulfill_addr_keywords";
@@ -175,7 +175,7 @@ export default function FulfillPage() {
       const j = await r.json();
       if (r.status === 409 && j.duplicate) {
         setDispatching(false);
-        if (window.confirm(`${j.error}\n\n그래도 다시 출고할까요? (재고가 또 차감됩니다)`)) return commitDispatch(true);
+        if (window.confirm(`${j.error}\n\n그래도 다시 출고할까요?${dispatch?.untrackedOnly ? "" : " (재고가 또 차감됩니다)"}`)) return commitDispatch(true);
         return;
       }
       if (!j.ok) throw new Error(j.error || "출고 실패");
@@ -378,15 +378,17 @@ export default function FulfillPage() {
         <section className="b2b-card">
           <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <span className="b2b-card-title">④ 상품 출고 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 소매 재고에서 차감</span></span>
-            {!dispatchDone && dispatch && dispatch.products.length > 0 && (
-              <button className="b2b-btn-primary" onClick={() => commitDispatch(false)} disabled={dispatching}>{dispatching ? "출고 중..." : `출고 완료 (${dispatch.products.length}품목)`}</button>
+            {!dispatchDone && dispatch && (dispatch.products.length > 0 || dispatch.untrackedOnly) && (
+              <button className="b2b-btn-primary" onClick={() => commitDispatch(false)} disabled={dispatching}>{dispatching ? "출고 중..." : dispatch.products.length > 0 ? `출고 완료 (${dispatch.products.length}품목)` : "출고 완료 (재고 차감 없음)"}</button>
             )}
           </div>
           {dispatchLoading ? <div className="b2b-loading">재고 확인 중...</div> : dispatchDone ? (
             <div className="sm-success" style={{ lineHeight: 1.7 }}>
-              ✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link>
+              {dispatchDone.dispatched > 0
+                ? <>✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link></>
+                : <>✓ <b>출고 완료</b> — 재고 관리 사용 안함 품목뿐이라 재고는 차감하지 않고 주문만 처리됨으로 표시했습니다.</>}
               {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
-              <div className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>잘못 눌렀다면 <Link href="/inventory/activity">생산·재고의 ‘변경 기록’</Link>에서 이 출고번호 배치를 취소하면 원복됩니다. · <button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
+              <div className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>{dispatchDone.dispatched > 0 && <>잘못 눌렀다면 <Link href="/inventory/activity">생산·재고의 ‘변경 기록’</Link>에서 이 출고번호 배치를 취소하면 원복됩니다. · </>}<button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
             </div>
           ) : dispatch ? (
             <>
@@ -394,6 +396,11 @@ export default function FulfillPage() {
                 <div className="b2b-error" style={{ marginBottom: 12, lineHeight: 1.6 }}>
                   <strong>상품마스터에 없어 출고되지 않는 코드</strong> — <Link href="/b2b/products">상품마스터</Link>에 등록하면 다음부터 출고됩니다.
                   <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{dispatch.items.filter((i) => i.kind === "unmatched" || i.kind === "ambiguous").map((i) => `${i.sku}${i.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(" · ")}</div>
+                </div>
+              )}
+              {dispatch.items.some((i) => i.kind === "untracked") && (
+                <div className="sm-faint" style={{ marginBottom: 10, fontSize: 12 }}>
+                  재고 관리 사용 안함 — 차감하지 않는 품목: {dispatch.items.filter((i) => i.kind === "untracked").map((i) => i.name || i.sku).join(" · ")}
                 </div>
               )}
               {dispatch.products.length === 0 ? (

@@ -47,6 +47,10 @@ export async function PUT(req: NextRequest) {
     if (uniq.size) {
       const ins = await sb.from("product_bundles").insert([...uniq.values()]);
       if (ins.error) throw ins.error;
+      // 세트가 되면 '재고 관리 사용 안함'(121)은 풀어 둔다 — 세트는 자체 재고가 없고 화면에서 이 표시를 보거나 되돌릴 수 없다.
+      //  121 미적용 DB 면 컬럼 오류를 무시한다.
+      const un = await sb.from("products").update({ stock_tracked: true }).eq("id", parent).eq("stock_tracked", false);
+      if (un.error && !/stock_tracked/i.test(un.error.message || "")) console.warn("[b2b/products/bundle] 재고 관리 표시 해제 실패:", un.error.message);
     }
     return NextResponse.json({ ok: true, count: uniq.size });
   } catch (err) {

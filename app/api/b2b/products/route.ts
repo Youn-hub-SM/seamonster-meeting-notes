@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { normalizeProduct, ProductInput } from "@/app/lib/b2b-types";
+import { normalizeProduct, ProductInput, stripMissingProductCols } from "@/app/lib/b2b-types";
 import { logProductChange } from "@/app/lib/b2b-activity";
 import { notifyMasterChange } from "@/app/lib/master-notify";
 import { getAllBundles } from "@/app/lib/product-bundles";
 import { diffProduct } from "@/app/lib/product-diff";
 
 export const dynamic = "force-dynamic";
+
+// 121 미적용 DB 에 '재고 관리 사용 안함'을 저장하려 한 경우 — 값을 버리고 성공으로 보이면 사용자는 됐다고 믿는다
+const unappliedStockTracked = () => NextResponse.json(
+  { ok: false, error: "'재고 관리 사용 안함'은 DB 업데이트(121) 적용 후 저장할 수 있습니다." },
+  { status: 409 }
+);
 
 export async function GET() {
   try {
@@ -20,7 +26,9 @@ export async function GET() {
       const comps = bundles.get(p.id);
       return { ...p, is_bundle: !!comps, bundle_count: comps?.length ?? 0 };
     });
-    return NextResponse.json({ ok: true, products });
+    // 121(재고 관리 사용 안함) 적용 여부 — 화면이 미적용이면 체크박스를 잠근다(저장해도 값이 사라지므로)
+    const stockTrackedCol = !data || data.length === 0 || "stock_tracked" in data[0];
+    return NextResponse.json({ ok: true, products, stockTrackedCol });
   } catch (err) {
     console.error("[b2b/products GET]", err);
     return NextResponse.json(
@@ -52,6 +60,7 @@ export async function POST(req: NextRequest) {
         sale_price: clean.sale_price,
         tax_type: clean.tax_type,
         active: clean.active,
+        stock_tracked: clean.stock_tracked,
         origin: clean.origin,
         attrs: clean.attrs,
         notes: clean.notes,
@@ -65,9 +74,9 @@ export async function POST(req: NextRequest) {
         scan_name: clean.scan_name,
       };
     let { data, error } = await sb.from("products").insert(payload).select().single();
-    if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
-      // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
-      delete payload.option_weight_g; delete payload.pack_weight_g; delete payload.sku_weight_g;
+    // 미적용 컬럼 폴백(098 중량 3단·121 재고 관리) — 빼고 재시도. '재고 관리 사용 안함'은 조용히 버리지 않는다.
+    for (let i = 0; i < 2 && error && stripMissingProductCols(payload, error.message || ""); i++) {
+      if (clean.stock_tracked === false && !("stock_tracked" in payload)) return unappliedStockTracked();
       ({ data, error } = await sb.from("products").insert(payload).select().single());
     }
     if (error) {
@@ -104,6 +113,11 @@ export async function PUT(req: NextRequest) {
     const clean = normalizeProduct(body);
     const sb = supabaseAdmin();
     const { data: before } = await sb.from("products").select("*").eq("id", body.id).single(); // 변경 diff 용 이전값
+    // 세트는 '재고 관리 사용 안함'을 걸지 않는다 — 자체 재고가 없고 수정 창에도 체크박스가 없다(엑셀로 걸린 값도 여기서 풀린다)
+    if (clean.stock_tracked === false) {
+      const { data: isParent, error: bErr } = await sb.from("product_bundles").select("parent_id").eq("parent_id", body.id).limit(1);
+      if (!bErr && (isParent ?? []).length) clean.stock_tracked = true;
+    }
     const payload: Record<string, unknown> = {
         sku: clean.sku,
         name: clean.name,
@@ -118,6 +132,7 @@ export async function PUT(req: NextRequest) {
         sale_price: clean.sale_price,
         tax_type: clean.tax_type,
         active: clean.active,
+        stock_tracked: clean.stock_tracked,
         origin: clean.origin,
         attrs: clean.attrs,
         notes: clean.notes,
@@ -131,9 +146,9 @@ export async function PUT(req: NextRequest) {
         scan_name: clean.scan_name,
       };
     let { data, error } = await sb.from("products").update(payload).eq("id", body.id).select().single();
-    if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
-      // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
-      delete payload.option_weight_g; delete payload.pack_weight_g; delete payload.sku_weight_g;
+    // 미적용 컬럼 폴백(098 중량 3단·121 재고 관리) — 빼고 재시도. '재고 관리 사용 안함'은 조용히 버리지 않는다.
+    for (let i = 0; i < 2 && error && stripMissingProductCols(payload, error.message || ""); i++) {
+      if (clean.stock_tracked === false && !("stock_tracked" in payload)) return unappliedStockTracked();
       ({ data, error } = await sb.from("products").update(payload).eq("id", body.id).select().single());
     }
     if (error) {

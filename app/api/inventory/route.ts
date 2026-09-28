@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getAllBundles } from "@/app/lib/product-bundles";
 import { toInvChannelParam, type InventoryRow } from "@/app/lib/inventory";
+import { getUntracked } from "@/app/lib/stock-tracked";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +30,12 @@ export async function GET(req: NextRequest) {
       if (!full.error) return full;
       return sb.from("products").select("id, sku, name, spec, unit, cost_price").eq("active", true).order("name", { ascending: true });
     };
-    const [pr, tr, ir, bundles] = await Promise.all([
+    const [pr, tr, ir, bundles, untracked] = await Promise.all([
       productsQ(),
       stockRpc(), // 품목당 1행 집계(1000행 제한 무관) — 채널 필터 반영
       sb.from("inventory_items").select("product_id, min_qty, barcode, location"),
       getAllBundles(sb), // 부모 product_id → 구성품[] (037 미적용이면 빈 맵 → is_bundle 전부 false)
+      getUntracked(sb), // '재고 관리 사용 안함'(121) — 입고 및 출고·조정·과거 수량·재고 이동 품목에서 뺀다
     ]);
     if (pr.error) throw pr.error;
     if (tr.error) throw tr.error;
@@ -44,7 +46,7 @@ export async function GET(req: NextRequest) {
     const itemMap = new Map<string, { min_qty: number; barcode: string | null; location: string | null }>();
     for (const it of ir.data ?? []) itemMap.set(it.product_id, { min_qty: Number(it.min_qty) || 0, barcode: it.barcode, location: it.location });
 
-    const rows: InventoryRow[] = (pr.data ?? []).map((p) => {
+    const rows: InventoryRow[] = (pr.data ?? []).filter((p) => !untracked.ids.has(p.id)).map((p) => {
       const qty = qtyMap.get(p.id) || 0;
       const meta = itemMap.get(p.id) || { min_qty: 0, barcode: null, location: null };
       const cost = Number(p.cost_price) || 0;

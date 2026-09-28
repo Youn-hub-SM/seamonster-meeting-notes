@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { cellStr, cellErrorOf } from "@/app/lib/inventory-xlsx";
 import { getAllBundles, isBundleId } from "@/app/lib/product-bundles";
+import { getUntracked } from "@/app/lib/stock-tracked";
 import { toInvChannel } from "@/app/lib/inventory";
 
 export const runtime = "nodejs";
@@ -43,11 +44,13 @@ export async function POST(req: NextRequest) {
       if (res.error?.code !== "PGRST202") return res;
       return sb.rpc("inventory_stock", { asof: today });
     };
-    const [pr, tr, bundles] = await Promise.all([
+    const [pr, tr, bundles, untracked] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit").eq("active", true),
       stockRpc(),
       getAllBundles(sb), // 세트는 자체 재고가 없어 조정 대상이 될 수 없다(단건 API 와 같은 규칙)
+      getUntracked(sb), // 재고 관리 사용 안함(121) — 조정하지 않고 건너뛴 수만 알린다
     ]);
+    let untrackedCount = 0;
     if (pr.error) throw pr.error;
     if (tr.error) throw tr.error;
     const bySku = new Map<string, { id: string; name: string; spec: string | null; unit: string }[]>();
@@ -82,6 +85,7 @@ export async function POST(req: NextRequest) {
       if (ids.length > 1) { errors.push({ line: r, msg: `SKU '${sku}' 가 ${ids.length}개 품목과 중복` }); continue; }
       // 세트 현재고는 구성품에서 파생된다 → 세트에 조정을 쓰면 화면엔 아무 변화 없이 원장만 더럽혀진다.
       if (isBundleId(bundles, ids[0].id)) { errors.push({ line: r, msg: `'${ids[0].name}' 은 묶음(세트)이라 조정할 수 없습니다 — 구성품 SKU 로 넣으세요` }); continue; }
+      if (untracked.ids.has(ids[0].id)) { untrackedCount++; continue; }
       // 엄격 파싱 — '420개'·'-'·'미확인' 을 0 으로 읽으면 그 칸 재고가 0 으로 덮어써진다(xlsxNum 의 NaN→0 은 여기서 쓰지 않는다).
       const parsed = Number(targetRaw.replace(/[,\s₩]/g, ""));
       if (!Number.isFinite(parsed)) { errors.push({ line: r, msg: `실사수량 '${targetRaw}' 이(가) 숫자가 아닙니다` }); continue; }
@@ -96,7 +100,7 @@ export async function POST(req: NextRequest) {
     for (const id of dupIds) { const ls = lineOf.get(id)!; for (const l of ls) errors.push({ line: l, msg: `같은 품목이 ${ls.join("·")}행에 중복 — 실사수량을 한 줄로 합쳐 주세요(이 품목은 전부 제외)` }); }
     if (dupIds.size) { rows = rows.filter((x) => !dupIds.has(x.product_id)); errors.sort((a, b) => a.line - b.line); }
     const changed = rows.filter((r) => r.delta !== 0).length;
-    return NextResponse.json({ ok: true, channel: chan, summary: { valid: rows.length, changed, errors: errors.length, skipped }, rows, errors });
+    return NextResponse.json({ ok: true, channel: chan, summary: { valid: rows.length, changed, errors: errors.length, skipped, untracked: untrackedCount }, rows, errors });
   } catch (err) {
     console.error("[inventory/adjust/import]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "파일 분석 실패") }, { status: 500 });

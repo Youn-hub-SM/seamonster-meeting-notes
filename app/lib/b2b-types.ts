@@ -56,6 +56,7 @@ export interface Product {
   sale_price: number;    // B2B 도매가(소비자가의 10% 할인가)
   tax_type: TaxType;
   active: boolean;
+  stock_tracked: boolean; // 재고 관리 사용(121) — false = '재고 관리 사용 안함'(드라이아이스 등). 121 전 행엔 키가 없으니 읽을 땐 !== false
   origin: string | null;  // 원산지
   attrs: string | null;   // 속성/분류
   notes: string | null;   // 비고
@@ -95,6 +96,7 @@ export const EMPTY_PRODUCT: ProductInput = {
   sale_price: 0,
   tax_type: "taxable",
   active: true,
+  stock_tracked: true,
   origin: "",
   attrs: "",
   notes: "",
@@ -182,6 +184,19 @@ export function checkBizNo(raw: string | null | undefined): BizNoCheck {
   return check === Number(d[9]) ? "valid" : "invalid";
 }
 
+// 저장 폴백 — 마이그레이션 미적용 컬럼 묶음을 오류 메시지로 찾아 빼고 재시도한다(098 중량 3단, 121 재고 관리).
+//  빼 준 게 있으면 true. 두 묶음이 다 없을 수 있어 호출부는 최대 2번 반복한다.
+const OPTIONAL_PRODUCT_COLS: string[][] = [["option_weight_g", "pack_weight_g", "sku_weight_g"], ["stock_tracked"]];
+export function stripMissingProductCols(row: Record<string, unknown>, msg: string): boolean {
+  for (const group of OPTIONAL_PRODUCT_COLS) {
+    if (group.some((c) => msg.includes(c) && c in row)) {
+      for (const c of group) delete row[c];
+      return true;
+    }
+  }
+  return false;
+}
+
 export function normalizeProduct(input: ProductInput): ProductInput {
   const clean = (v: string | null | undefined): string | null => {
     if (v === null || v === undefined) return null;
@@ -218,6 +233,7 @@ export function normalizeProduct(input: ProductInput): ProductInput {
     sale_price: numOr0(input.sale_price),
     tax_type: input.tax_type === "exempt" ? "exempt" : "taxable",
     active: input.active !== false,
+    stock_tracked: input.stock_tracked !== false,
     origin: clean(input.origin),
     attrs: clean(input.attrs),
     notes: clean(input.notes),

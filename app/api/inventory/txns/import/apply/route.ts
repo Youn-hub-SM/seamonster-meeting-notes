@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { MOVE_ONLY_CHANNELS, RESERVED_CHANNELS, signedQty, toInvChannel } from "@/app/lib/inventory";
 import { getAllBundles, expandBundleQty, isBundleId } from "@/app/lib/product-bundles";
+import { getUntracked } from "@/app/lib/stock-tracked";
 import { allocateReceiptsToRequest, type LinkResult } from "@/app/lib/production-allocate";
 import type { ImportTxn } from "../route";
 
@@ -32,12 +33,13 @@ export async function POST(req: NextRequest) {
     //  현재고가 구성품에서 파생되므로 그 원장은 무시되고 아무 재고도 줄지 않는다.
     //  엑셀 업로드는 미리보기에서 이미 전개돼 오지만 수동 '구매 및 판매' 폼은 세트 그대로 온다 →
     //  쓰기 직전인 여기서 전개해 두 경로를 한 규칙으로 통일(구성품은 재전개해도 그대로라 이중 전개 없음).
-    const bundles = await getAllBundles(sb);
+    const [bundles, untracked] = await Promise.all([getAllBundles(sb), getUntracked(sb)]);
     const expanded: ImportTxn[] = [];
     for (const r of valid) {
-      if (!isBundleId(bundles, r.product_id)) { expanded.push(r); continue; }
+      if (!isBundleId(bundles, r.product_id)) { if (!untracked.ids.has(r.product_id)) expanded.push(r); continue; } // 재고 관리 사용 안함(121) 품목은 기록 안 함
       const per = expandBundleQty(bundles, r.product_id, Math.abs(Math.round(Number(r.qty) * 100) / 100));
       for (const [pid, q] of per) {
+        if (untracked.ids.has(pid)) continue; // 세트 안의 재고 관리 안 함 구성품만 빼고 나머지는 기록
         expanded.push({
           ...r, product_id: pid, qty: signedQty(r.type, q),
           unit_amount: null, // 세트 단가는 구성품에 나눌 수 없음 → 비움(메모로 출처 보존)
@@ -45,6 +47,8 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+    if (!expanded.length) return NextResponse.json({ ok: false, error: "재고 관리 사용 안함 품목만 있어 기록할 행이 없습니다." }, { status: 400 });
 
     // 유형별로 주문번호(IN-/OUT-) + group_id 부여. migration 033 미적용이면 묶음 없이 진행(폴백).
     const orderByType = new Map<string, { group_id: string; order_no: string }>();

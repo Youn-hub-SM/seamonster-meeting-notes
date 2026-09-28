@@ -7,6 +7,7 @@ import { getKv } from "./b2b-settings";
 import { CHANGELOG } from "./changelog";
 import { getLedgerVelocity } from "./production-velocity";
 import { getAllBundles, isBundleId } from "./product-bundles";
+import { getUntracked } from "./stock-tracked";
 
 // 대표 전용 '일일 업무도우미 리포트' v2 (2026-09-03, migration 103 재사용).
 //  두 축: ① 어제 사이트 전체에서 있었던 일 ② 오늘 체크해야 할 요소(코드가 판정한 경보).
@@ -117,11 +118,12 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
         if (!r.error) return r;
         return sb.rpc("inventory_stock", { asof: null }); // 036 미적용 폴백
       };
-      const [stockRes, prodRes, bundles, velocity] = await Promise.all([
+      const [stockRes, prodRes, bundles, velocity, untracked] = await Promise.all([
         stockRpc(),
         sb.from("products").select("id, sku, name").eq("active", true).limit(5000),
         getAllBundles(sb),
         getLedgerVelocity(undefined, "소매").catch(() => null),
+        getUntracked(sb),
       ]);
       if (stockRes.error || prodRes.error) throw new Error("stock/products");
       const stockBy = new Map<string, number>();
@@ -132,6 +134,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
       const risky: { 품목: string; sku: string | null; 현재고: number; 일평균_출고: number; 소진예상일: number }[] = [];
       for (const p of (prodRes.data as { id: string; sku: string | null; name: string }[]) ?? []) {
         if (isBundleId(bundles, p.id)) continue; // 세트는 자체 재고 없음 — 오탐 방지
+        if (untracked.ids.has(p.id)) continue; // '재고 관리 사용 안함'(121) — 품절 경보 대상 아님
         const stock = stockBy.get(p.id) ?? 0;
         const daily = p.sku ? (perSku[p.sku.toUpperCase()] || 0) : 0;
         if (daily <= 0) continue; // 최근 30일 출고가 없는 품목은 경보 대상 아님(소음 방지)

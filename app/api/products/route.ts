@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getAllBundles } from "@/app/lib/product-bundles";
+import { getUntracked } from "@/app/lib/stock-tracked";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const [{ data, error }, bundles] = await Promise.all([
+    const [{ data, error }, bundles, untracked] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit, sale_price, cost_price, volume_kg, active, attrs").order("name", { ascending: true }),
       getAllBundles(sb), // parent_id → 구성품[] (037 미적용이면 빈 맵 → 치환 없음)
+      getUntracked(sb), // 재고 화면(재고 이동)이 '재고 관리 사용 안함' 품목을 빼도록 표식만 붙인다 — 여기서 거르지 않는다
     ]);
     if (error) throw error;
     const all = data ?? [];
@@ -43,7 +45,8 @@ export async function GET() {
       .filter((p) => p.active)
       .map((p) => {
         const r = resolve(p.id);
-        return r ? { ...p, cost_price: r.cost, volume_kg: r.vol, is_bundle: true } : p;
+        const base = { ...p, stock_tracked: !untracked.ids.has(p.id) };
+        return r ? { ...base, cost_price: r.cost, volume_kg: r.vol, is_bundle: true } : base;
       });
     return NextResponse.json({ ok: true, products });
   } catch (err) {

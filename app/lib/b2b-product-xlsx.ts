@@ -7,7 +7,7 @@ export const PRODUCT_XLSX_HEADERS = [
   "ID", "SKU", "품목명", "옵션", "단위", "과세유형",
   "소비자가", "b2b도매가", "매입단가",
   "제품원가", "내포장지", "라벨", "외포장지", "원가직접입력",
-  "부피kg", "옵션중량g", "포장중량g", "SKU중량g", "택배상품명", "택배중량kg", "송장스캔명", "사용(Y/N)", "원산지", "속성", "비고",
+  "부피kg", "옵션중량g", "포장중량g", "SKU중량g", "택배상품명", "택배중량kg", "송장스캔명", "사용(Y/N)", "재고관리(Y/N)", "원산지", "속성", "비고",
 ] as const;
 
 const num = (v: unknown): number => {
@@ -40,6 +40,7 @@ export function productToRow(p: Product): Record<string, string | number> {
     택배중량kg: Number(p.courier_weight) || 0,
     송장스캔명: p.scan_name ?? "",
     "사용(Y/N)": p.active ? "Y" : "N",
+    "재고관리(Y/N)": p.stock_tracked === false ? "N" : "Y",
     원산지: p.origin ?? "",
     속성: p.attrs ?? "",
     비고: p.notes ?? "",
@@ -57,6 +58,7 @@ export function rowToInput(get: (header: string) => string): { id: string; input
     return t === "" || !(Number(t) > 0) ? null : Number(t);
   };
   const activeRaw = get("사용(Y/N)").trim();
+  const trackedRaw = get("재고관리(Y/N)").trim(); // 빈 칸(구버전 양식)은 '사용' — 기존 품목은 미리보기가 원래 값을 이어받는다
   const input: ProductInput = {
     id: id || undefined,
     sku: get("SKU"),
@@ -80,6 +82,7 @@ export function rowToInput(get: (header: string) => string): { id: string; input
     courier_weight: num(get("택배중량kg")),
     scan_name: get("송장스캔명").trim(),
     active: !/^(n|no|미사용|false|0|x)$/i.test(activeRaw),
+    stock_tracked: !/^(n|no|안함|안 함|미사용|false|0|x)$/i.test(trackedRaw),
     origin: get("원산지"),
     attrs: get("속성"),
     notes: get("비고") || get("메모"), // 구버전 양식('메모') 호환
@@ -106,6 +109,7 @@ export const PRODUCT_DIFF_FIELDS: { key: keyof ProductInput; label: string }[] =
   { key: "courier_weight", label: "택배중량kg" },
   { key: "scan_name", label: "송장스캔명" },
   { key: "active", label: "사용" },
+  { key: "stock_tracked", label: "재고관리" },
   { key: "origin", label: "원산지" },
   { key: "attrs", label: "속성" },
   { key: "notes", label: "비고" },
@@ -115,6 +119,7 @@ export const PRODUCT_DIFF_FIELDS: { key: keyof ProductInput; label: string }[] =
 export function displayValue(key: keyof ProductInput, v: unknown): string {
   if (key === "tax_type") return v === "exempt" ? "면세" : "과세";
   if (key === "active") return v === false ? "미사용" : "사용";
+  if (key === "stock_tracked") return v === false ? "안 함" : "사용";
   if (v === null || v === undefined || v === "") return "-";
   if (typeof v === "number") return v.toLocaleString();
   return String(v);

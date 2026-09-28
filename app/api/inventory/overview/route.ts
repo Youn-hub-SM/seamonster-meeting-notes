@@ -5,6 +5,7 @@ import { scheduleHorizon } from "@/app/lib/production-schedule";
 import { getPromoForwardBySku } from "@/app/lib/production-promotions";
 import { getAllBundles, bundleAvailable } from "@/app/lib/product-bundles";
 import { getOpenInboundByProduct, formatInbound, type InboundRow } from "@/app/lib/production-inbound";
+import { getUntracked } from "@/app/lib/stock-tracked";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -53,12 +54,13 @@ export async function GET(req: NextRequest) {
     // 입고 예정(열린 제조사 요청서 잔여) — 소매·전체 탭에서 현재고 옆 병기 + 부족(low) 판정에 합산.
     //  권장 수식(getInventoryRows)이 같은 값을 현재고에 더해 빼므로, 여기서도 더해야 '부족인데 권장 0' 모순이 없다.
     //  도매 탭은 제조사 입고 대상이 아니라 0. 집계 실패(null)면 0 으로 두고 meta.inboundOk=false 로 알린다.
-    const [pr, sr, promoFwd, bundles, inbound] = await Promise.all([
+    const [pr, sr, promoFwd, bundles, inbound, untracked] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit, cost_price, attrs").eq("active", true).order("name", { ascending: true }),
       stockRpc(),
       getPromoForwardBySku(today, horizonDays),
       getAllBundles(sb),
       chan !== "도매" && chan !== "도매 대량" && chan !== "프로모션" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()), // 제조사 입고는 소매로만 온다 — 이동으로 채우는 칸엔 '입고 예정'이 없다(프로모션도 포함 — 087b1c4 때 미뤘던 별건을 확정형 탭 정리와 함께 반영)
+      getUntracked(sb),
     ]);
     const inboundOk = inbound !== null;
     if (pr.error) throw pr.error;
@@ -122,7 +124,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const rows: OverviewRow[] = (pr.data ?? []).map((p) => {
+    // '재고 관리 사용 안함'(121) 품목은 재고 목록에서 뺀다 — 드라이아이스 등(입·출·조정 창 품목 목록도 이 행을 쓴다)
+    const rows: OverviewRow[] = (pr.data ?? []).filter((p) => !untracked.ids.has(p.id)).map((p) => {
       const comps = bundles.get(p.id);
       const isBundle = !!comps && comps.length > 0;
       // 묶음은 자체 재고 대신 '만들 수 있는 세트 수'(구성품 현재고 ÷ 구성수량의 최소값)

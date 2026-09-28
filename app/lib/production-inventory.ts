@@ -5,6 +5,7 @@ import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promoti
 import { getSafetyAdjusts, effectiveDelta, effectiveExclude } from "./production-safety-adjust";
 import { LINK_B2B_ORDERS_TO_PRODUCTION } from "./production-config";
 import { scheduleHorizon, type ScheduleHorizon } from "./production-schedule";
+import { getUntracked } from "./stock-tracked";
 import { getOpenInboundByProduct, type InboundRow } from "./production-inbound";
 
 // 자체 재고원장(inventory_txns) 현재고 + B2B 발주(생산대기·생산중) 수요를 SKU 기준으로 머지.
@@ -92,12 +93,13 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   // 입고 예정 — 제조사 생산 입고는 소매 채널로 들어오므로 소매·전체 수식에서만 뺀다.
   //  도매 수식의 부족은 소매→도매 이동으로 채워지는 몫이라 제조사 잔여를 빼면 이중 차감이 된다.
   //  가장 무거운 원장 속도 조회와 나란히 돌려 지연을 숨긴다.
-  const [stockRes, prodRes, velocity, inboundByProduct, reservedRows] = await Promise.all([
+  const [stockRes, prodRes, velocity, inboundByProduct, reservedRows, untracked] = await Promise.all([
     stockRpc(),
     sb.from("products").select("id, sku, name"), // 전 품목(수요 매칭은 비활성 포함)
     getLedgerVelocity(undefined, channel), // 1b) 소진 속도(최근 출고 일평균) — 채널별
     channel === "도매" ? Promise.resolve(new Map<string, InboundRow>()) : getOpenInboundByProduct(sb, today),
     reservedRpc(), // 전체 조회에서만 확보분 칸(프로모션·도매 대량) 차감용
+    getUntracked(sb), // '재고 관리 사용 안함'(121) — 권장·초안·조언 행에서 뺀다(수요 매칭용 제품표는 그대로)
   ]);
   const inboundOk = inboundByProduct !== null;
   if (stockRes.error) throw stockRes.error;
@@ -184,6 +186,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   //  빠지면 전체·소매 권장과 요청 창·AI 초안이 그 품목의 입고 예정을 못 빼 같은 물량을 또 시킨다(최종 점검 확정).
   //  이런 행은 현재고 null → 권장 = 수요, 입고 예정만 실린다(도매 채널은 입고 예정 맵이 비어 영향 없음).
   const allSkus = new Set<string>([...stockBySku.keys(), ...demandBySku.keys(), ...inboundBySku.keys()]);
+  for (const k of untracked.skus) allSkus.delete(k); // 재고 관리 사용 안함 품목은 권장 대상이 아니다
   const rows: InvRow[] = [];
   for (const sku of allSkus) {
     const st = stockBySku.get(sku);

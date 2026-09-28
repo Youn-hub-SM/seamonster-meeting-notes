@@ -44,6 +44,7 @@ type Preview = {
   errCount: number;
   merged: number;   // 입출고에서 합산된 중복 행 수
   skipped: number;  // 수량을 안 적어 건너뛴 행(채워진 양식에서는 정상)
+  untracked: number; // 재고 관리 사용 안함(121) 품목이라 뺀 행
 };
 
 export default function TxnModal({
@@ -131,7 +132,7 @@ export default function TxnModal({
       const j = await res.json();
       if (seq !== reqSeq.current) return; // 그 사이 조건이 바뀜 → 폐기
       if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
-      const base = { reqType, reqChannel, rows: j.rows || [], errors: j.errors || [], valid: Number(j.summary?.valid) || 0, errCount: Number(j.summary?.errors) || 0, skipped: Number(j.summary?.skipped) || 0 };
+      const base = { reqType, reqChannel, rows: j.rows || [], errors: j.errors || [], valid: Number(j.summary?.valid) || 0, errCount: Number(j.summary?.errors) || 0, skipped: Number(j.summary?.skipped) || 0, untracked: Number(j.summary?.untracked) || 0 };
       setPreview(adj
         ? { ...base, kind: "조정", count: Number(j.summary?.changed) || 0, merged: 0 }
         : { ...base, kind: "입출", count: Number(j.summary?.valid) || 0, merged: Number(j.summary?.merged) || 0 });
@@ -387,6 +388,7 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
           )}
           {!!preview.merged && <span className="sm-faint">중복 SKU {preview.merged}건 합산됨</span>}
           {!!preview.skipped && <span className="sm-faint">미입력 {preview.skipped.toLocaleString()}행 건너뜀</span>}
+          {!!preview.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.untracked.toLocaleString()}행 제외</span>}
           {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.errCount}건(제외)</span>}
         </div>
 

@@ -14,7 +14,7 @@ const reqWarnOf = (j: { ok?: boolean; full_ok?: boolean } | null) =>
   : j.full_ok === false ? "이행률을 읽지 못해 기본 요청서를 고르지 않았습니다 — 연결할 요청서를 직접 고르세요." : "";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null; reason?: string | null };
-type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
+type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number; untracked?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 export default function TradePage() {
@@ -196,6 +196,7 @@ export default function TradePage() {
                 <span>반영 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
                 {!!preview.summary.merged && <span className="sm-faint">중복 SKU {preview.summary.merged}건 합산됨</span>}
                 {!!preview.summary.skipped && <span className="sm-faint">미입력 {preview.summary.skipped.toLocaleString()}행 건너뜀</span>}
+                {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.summary.untracked.toLocaleString()}행 제외</span>}
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
               {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>반영할 행이 없습니다.</div>}

@@ -5,7 +5,7 @@ import { Combobox } from "@/app/b2b/orders/Combobox";
 import { INV_CHANNELS, INV_CHANNEL_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
 import { PR_PURPOSES, PR_PURPOSE_LABEL, PURPOSE_CHANNEL } from "@/app/lib/wholesale-production";
 
-type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null };
+type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null; stock_tracked?: boolean };
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean; alloc_qty?: number; alloc_reqs?: string[] };
 type Target = { item_id: string; request_id: string; req_no: string | null; title: string | null; request_date: string; due_date: string | null; requested_qty: number; received_qty: number; remaining: number };
 // 이동 줄 — 여러 품목을 한 번에 옮긴다(2026-09-16 대표 요청). alloc 은 요청서(item_id)→입력값 문자열.
@@ -147,7 +147,7 @@ export default function InventoryMovePage() {
 
   // 묶음(세트)은 자체 재고가 없어 이동 대상이 아니고, 비활성(단종) 품목도 목록에서 뺀다.
   const options = useMemo(() => products
-    .filter((p) => !p.is_bundle && p.active !== false)
+    .filter((p) => !p.is_bundle && p.active !== false && p.stock_tracked !== false) // 재고 관리 사용 안함(121) 품목 제외
     .map((p) => ({ id: p.id, label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "", extra: p.attrs || "" })), [products]);
 
   const activeLines = lines.filter((l) => l.pid && nQtyOf(l) > 0);

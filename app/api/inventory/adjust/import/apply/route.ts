@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { RESERVED_CHANNELS, toInvChannel } from "@/app/lib/inventory";
+import { getUntracked } from "@/app/lib/stock-tracked";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,11 +33,13 @@ export async function POST(req: NextRequest) {
     if (tr.error) throw tr.error;
     const stock = new Map<string, number>();
     for (const t of (tr.data as { product_id: string; qty: number }[] | null) ?? []) stock.set(t.product_id, Number(t.qty) || 0);
+    const untracked = await getUntracked(sb); // 재고 관리 사용 안함(121) — 미리보기에서 이미 빠지지만 방어
 
     const insert: Record<string, unknown>[] = [];
     let invalid = 0; // 실사수량이 숫자가 아닌 행 — 0 으로 쓰지 않고 건너뛴 뒤 응답에 알린다
     for (const r of rows) {
       if (!r || !r.product_id || r.target == null) continue;
+      if (untracked.ids.has(r.product_id)) continue;
       // 엄격 파싱 — Number("") 은 0 이라 빈 문자열이 '0 개' 조정으로 둔갑한다. 숫자거나 비어 있지 않은 숫자 문자열만 받는다.
       const raw = typeof r.target === "string" ? r.target.trim() : r.target;
       const target = raw === "" ? Number.NaN : Math.round(Number(raw) * 100) / 100;

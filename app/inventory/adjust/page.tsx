@@ -8,7 +8,7 @@ import TxnTable from "../TxnTable";
 import { ChannelPicker } from "../ChannelTabs";
 
 // reqChannel = 이 미리보기를 만든 칸. 분석 중에 칸을 바꿔도 표(옛 칸 델타)와 반영(새 칸)이 어긋나지 않게 화면·반영 모두 이 값을 쓴다.
-type Preview = { reqChannel: InvChannel; summary: { valid: number; changed: number; errors: number; skipped?: number }; rows: AdjustRow[]; errors: { line: number; msg: string }[] };
+type Preview = { reqChannel: InvChannel; summary: { valid: number; changed: number; errors: number; skipped?: number; untracked?: number }; rows: AdjustRow[]; errors: { line: number; msg: string }[] };
 
 export default function AdjustPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -94,6 +94,7 @@ export default function AdjustPage() {
                 <span>실제 변경 <strong style={{ color: "var(--sm-orange)" }}>{preview.summary.changed}</strong>건</span>
                 <span className="sm-faint">일치 {preview.summary.valid}건 중</span>
                 {!!preview.summary.skipped && <span className="sm-faint">미입력 {preview.summary.skipped.toLocaleString()}행 건너뜀</span>}
+                {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.summary.untracked.toLocaleString()}행 제외</span>}
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
               {preview.rows.length === 0 && <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. 양식을 확인하세요.</div>}

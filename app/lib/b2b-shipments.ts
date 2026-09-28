@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "./supabase";
 import { signedQty, type InvChannel } from "./inventory";
 import { getAllBundles, expandBundleQty, type BundleComponent } from "./product-bundles";
+import { getUntracked, EMPTY_UNTRACKED } from "./stock-tracked";
 import {
   RecipientInput,
   ShipmentScheduleInput,
@@ -123,7 +124,10 @@ export async function saveOrderShipments(
   //  나가는 길은 이 B2B 발송뿐이다 — 자동 합류는 없다(RESERVED_CHANNELS 주석과 같은 규칙).
   const deductChannel: InvChannel = isBulk ? "도매 대량" : "도매";
   // 번들(묶음) 정의 — 발주 라인이 번들이면 즉시출고를 구성품으로 전개(번들은 자체 재고 없음).
-  const bundles = canDeduct ? await getAllBundles(sb) : new Map<string, BundleComponent[]>();
+  //  '재고 관리 사용 안함'(121) 품목은 전개 뒤 빼서 선점 행을 남기지 않는다(드라이아이스 등 — 발송·매출은 그대로).
+  const [bundles, untracked] = canDeduct
+    ? await Promise.all([getAllBundles(sb), getUntracked(sb)])
+    : [new Map<string, BundleComponent[]>(), EMPTY_UNTRACKED()];
   const today = kstToday();
 
   // 발주 라인별 주문 수량 — 재고 차감은 '발주 전량' 기준이라 항상 필요하다.
@@ -187,6 +191,14 @@ export async function saveOrderShipments(
 
   // 재저장 도중 실패 시 복원할 수 있도록 옛 발송 상태를 먼저 스냅샷(아래 catch 에서 사용).
   const snap = await snapshotOrderShipments(sb, orderId);
+
+  // '재고 관리 사용 안함'(121) 품목은 선점 행을 남기지 않는다 — 구성품 단위로(세트 안의 관리 대상 구성품은 계속 빠진다).
+  //  단 이 발주에 이미 선점 행이 있던 품목(표시 전에 차감됨)은 계속 차감한다 — 재저장은 옛 행을 지우고 다시 쓰므로,
+  //  빼 버리면 표시 전의 실제 출고 기록이 조용히 사라진다(최종 점검 확정).
+  if (untracked.ids.size && deductPerProduct.size) {
+    const prevDeducted = new Set(snap.txns.filter((t) => t.created_by === "B2B 자동출고").map((t) => String(t.product_id)));
+    for (const pid of [...deductPerProduct.keys()]) if (untracked.ids.has(pid) && !prevDeducted.has(pid)) deductPerProduct.delete(pid);
+  }
 
   // 실제 차감 칸 — 이미 나간 옛 선점 출고가 있으면 그 칸을 이어 쓴다(기획 6절).
   //  재저장은 옛 선점을 cascade 로 지우고 다시 찍으므로, is_bulk 만 따르면 발송이 끝난 발주를

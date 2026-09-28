@@ -5,6 +5,7 @@
 import type ExcelJS from "exceljs";
 import { supabaseAdmin } from "@/app/lib/supabase";
 import { getAllBundles, isBundleId } from "@/app/lib/product-bundles";
+import { getUntracked } from "@/app/lib/stock-tracked";
 import type { InvChannel } from "@/app/lib/inventory";
 
 export type TemplateProduct = { sku: string; name: string; spec: string | null; qty: number };
@@ -23,10 +24,11 @@ export async function templateProducts(channel: InvChannel): Promise<TemplateRes
     if (res.error?.code !== "PGRST202") return res;
     return sb.rpc("inventory_stock", { asof: today });
   };
-  const [pr, tr, bundles] = await Promise.all([
+  const [pr, tr, bundles, untracked] = await Promise.all([
     sb.from("products").select("id, sku, name, spec").eq("active", true).order("name", { ascending: true }),
     stockRpc(),
     getAllBundles(sb),
+    getUntracked(sb),
   ]);
   if (pr.error) throw pr.error;
   if (tr.error) throw tr.error; // 현재고를 못 읽으면 0 으로 채워 내보내지 않는다(실사 기준값이라 위험)
@@ -40,6 +42,7 @@ export async function templateProducts(channel: InvChannel): Promise<TemplateRes
   let excludedBundles = 0;
   for (const p of pr.data ?? []) {
     if (isBundleId(bundles, p.id)) { excludedBundles++; continue; }
+    if (untracked.ids.has(p.id)) continue; // '재고 관리 사용 안함'(121) — 양식에 넣지 않는다
     const sku = p.sku ? String(p.sku).trim() : "";
     if (!sku) { excludedNoSku.push(p.name); continue; }
     rows.push({ sku, name: p.name, spec: p.spec, qty: stock.get(p.id) || 0 });

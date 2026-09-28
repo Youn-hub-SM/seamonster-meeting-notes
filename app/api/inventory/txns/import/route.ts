@@ -4,6 +4,13 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { signedQty } from "@/app/lib/inventory";
 import { xlsxNum } from "@/app/lib/inventory-xlsx";
 import { getAllBundles, expandBundleQty, isBundleId, type BundleComponent } from "@/app/lib/product-bundles";
+import { getUntracked, type Untracked } from "@/app/lib/stock-tracked";
+
+// '재고 관리 사용 안함'(121) 품목 행을 뺀다 — 세트 전개 뒤 구성품 단위로(세트 안의 관리 대상 구성품은 남긴다)
+function dropUntrackedRows(rows: ImportTxn[], u: Untracked): [ImportTxn[], number] {
+  const kept = rows.filter((r) => !u.ids.has(r.product_id));
+  return [kept, rows.length - kept.length];
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,7 +110,10 @@ export async function POST(req: NextRequest) {
       return { err: `품목을 찾을 수 없음 (SKU '${sku || "-"}')` };
     };
 
-    const bundles = await getAllBundles(supabaseAdmin()); // 세트 SKU → 구성품 분해용(037 미적용이면 빈 맵)
+    const [bundles, untracked] = await Promise.all([
+      getAllBundles(supabaseAdmin()), // 세트 SKU → 구성품 분해용(037 미적용이면 빈 맵)
+      getUntracked(supabaseAdmin()),
+    ]);
     const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
     // ── 출고 위치기반 양식(수량 | (무시) | SKU) — 헤더로 SKU·수량을 못 찾으면 폴백 ──
@@ -127,8 +137,9 @@ export async function POST(req: NextRequest) {
         if (!id) { outErrors.push({ line: r, msg: err || "품목 매칭 실패" }); continue; }
         outRows.push({ type: "출고", qty: signedQty("출고", qtyMag), product_id: id, product_name: nameOf.get(id) || "", unit_amount: null, txn_date: formDate || today, partner: formPartner || null, memo: null });
       }
-      const [mOut, mergedOut] = mergeRows(expandBundles(outRows, bundles, nameOf));
-      return NextResponse.json({ ok: true, summary: { valid: mOut.length, errors: outErrors.length, merged: mergedOut }, rows: mOut, errors: outErrors });
+      const [keptOut, untrackedOut] = dropUntrackedRows(expandBundles(outRows, bundles, nameOf), untracked);
+      const [mOut, mergedOut] = mergeRows(keptOut);
+      return NextResponse.json({ ok: true, summary: { valid: mOut.length, errors: outErrors.length, merged: mergedOut, untracked: untrackedOut }, rows: mOut, errors: outErrors });
     }
 
     // 전 품목이 채워져 내려간 양식인지 판별 — 그 양식은 안 적은 줄이 대부분이라 오류가 아니라 '건너뜀'이 맞다.
@@ -173,8 +184,9 @@ export async function POST(req: NextRequest) {
         partner: (get("거래처") || formPartner) || null, memo: get("메모") || null,
       });
     }
-    const [merged, mergedCount] = mergeRows(expandBundles(rows, bundles, nameOf));
-    return NextResponse.json({ ok: true, summary: { valid: merged.length, errors: errors.length, merged: mergedCount, skipped }, rows: merged, errors });
+    const [keptRows, untrackedCount] = dropUntrackedRows(expandBundles(rows, bundles, nameOf), untracked);
+    const [merged, mergedCount] = mergeRows(keptRows);
+    return NextResponse.json({ ok: true, summary: { valid: merged.length, errors: errors.length, merged: mergedCount, skipped, untracked: untrackedCount }, rows: merged, errors });
   } catch (err) {
     console.error("[inventory/txns import]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "파일 분석 실패") }, { status: 500 });

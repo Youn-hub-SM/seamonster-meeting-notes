@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { normalizeProduct, type ProductInput } from "@/app/lib/b2b-types";
+import { normalizeProduct, stripMissingProductCols, type ProductInput } from "@/app/lib/b2b-types";
 import { logProductChange } from "@/app/lib/b2b-activity";
 import { notifyMasterChange } from "@/app/lib/master-notify";
 import { diffProduct } from "@/app/lib/product-diff";
@@ -23,6 +23,7 @@ function dbRow(clean: ProductInput) {
     sale_price: clean.sale_price,
     tax_type: clean.tax_type,
     active: clean.active,
+    stock_tracked: clean.stock_tracked,
     origin: clean.origin,
     attrs: clean.attrs,
     notes: clean.notes,
@@ -56,11 +57,11 @@ export async function POST(req: NextRequest) {
       if (!clean.name) { errors.push("품목명 누락 행 건너뜀"); continue; }
       const row: Record<string, unknown> = dbRow(clean);
       let { data: ins, error } = await sb.from("products").insert(row).select("id").single();
-      if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
-        // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
-        delete row.option_weight_g; delete row.pack_weight_g; delete row.sku_weight_g;
+      // 미적용 컬럼 폴백(098 중량 3단·121 재고 관리) — 빼고 재시도
+      for (let i = 0; i < 2 && error && stripMissingProductCols(row, error.message || ""); i++) {
         ({ data: ins, error } = await sb.from("products").insert(row).select("id").single());
       }
+      if (!error && clean.stock_tracked === false && !("stock_tracked" in row)) errors.push(`${clean.name}: '재고 관리 사용 안함'은 DB 업데이트(121) 적용 후 반영됩니다 — 이번엔 빠졌습니다.`);
       if (error) { errors.push(error.code === "23505" ? `${clean.name}: SKU '${clean.sku}' 가 이미 다른 품목에 등록되어 있습니다.` : `${clean.name}: ${error.message}`); continue; }
       created++;
       await logProductChange("created", clean.name, clean.sku, { source: "엑셀업로드", productId: ins?.id ?? null });
@@ -72,14 +73,14 @@ export async function POST(req: NextRequest) {
       const { data: before } = await sb.from("products").select("*").eq("id", input.id).single(); // diff 용 이전값
       const row: Record<string, unknown> = dbRow(clean);
       let { error } = await sb.from("products").update(row).eq("id", input.id);
-      if (error && /option_weight_g|pack_weight_g|sku_weight_g/.test(error.message || "")) {
-        // 098 미적용 환경 폴백 — 중량 3단 컬럼을 빼고 재시도
-        delete row.option_weight_g; delete row.pack_weight_g; delete row.sku_weight_g;
+      // 미적용 컬럼 폴백(098 중량 3단·121 재고 관리) — 빼고 재시도
+      for (let i = 0; i < 2 && error && stripMissingProductCols(row, error.message || ""); i++) {
         ({ error } = await sb.from("products").update(row).eq("id", input.id));
       }
+      if (!error && clean.stock_tracked === false && !("stock_tracked" in row)) errors.push(`${clean.name}: '재고 관리 사용 안함'은 DB 업데이트(121) 적용 후 반영됩니다 — 이번엔 빠졌습니다.`);
       if (error) { errors.push(error.code === "23505" ? `${clean.name}: SKU '${clean.sku}' 가 이미 다른 품목에 등록되어 있습니다.` : `${clean.name}: ${error.message}`); continue; }
       updated++;
-      const changes = diffProduct(before, dbRow(clean));
+      const changes = diffProduct(before, row); // 실제로 쓴 행 기준 — 폴백으로 뺀 컬럼을 '바뀜'으로 적지 않게
       if (changes.length) await logProductChange("updated", clean.name, clean.sku, { source: "엑셀업로드", changes, productId: input.id });
     }
 

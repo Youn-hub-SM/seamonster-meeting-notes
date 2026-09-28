@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeProduct, type Product, type ProductInput } from "@/app/lib/b2b-types";
 import { PRODUCT_DIFF_FIELDS, displayValue, rowToInput } from "@/app/lib/b2b-product-xlsx";
+import { getAllBundles } from "@/app/lib/product-bundles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
     // 기존 제품 맵(id 기준) + SKU 소유자 맵(대문자 기준 — 073 유니크 인덱스와 같은 축)
     const { data, error } = await supabaseAdmin().from("products").select("*");
     if (error) throw error;
+    const bundles = await getAllBundles(supabaseAdmin()); // 세트는 '재고관리' N 을 받지 않는다(자체 재고 없음 — 화면에서도 못 되돌림)
     const existing = new Map<string, Product>();
     const skuOwner = new Map<string, string[]>(); // upper(sku) → product id[] (마이그레이션 전 중복 대비 리스트)
     for (const p of (data ?? []) as Product[]) {
@@ -103,6 +105,9 @@ export async function POST(req: NextRequest) {
       if (!id) { creates.push({ name: clean.name, row: clean }); continue; }
       const prev = existing.get(id);
       if (!prev) { errors.push({ line: r, msg: `ID 를 찾을 수 없습니다(${id.slice(0, 8)}…). 신규면 ID 칸을 비우세요.` }); continue; }
+      // '재고관리(Y/N)' 열이 없는 구버전 양식 — 기존 값을 이어받는다(안 그러면 다시 올리는 순간 '사용'으로 되돌아간다)
+      if (!colByHeader.has("재고관리(Y/N)")) clean.stock_tracked = (prev as { stock_tracked?: boolean }).stock_tracked !== false;
+      if (bundles.has(id)) clean.stock_tracked = true;
 
       const changes: Change[] = [];
       for (const { key, label } of PRODUCT_DIFF_FIELDS) {
@@ -110,7 +115,7 @@ export async function POST(req: NextRequest) {
         const b = (clean as unknown as Record<string, unknown>)[key];
         let same: boolean;
         if (NUMERIC_KEYS.has(key)) same = (Number(a) || 0) === (Number(b) || 0); // null/undefined/"" → 0
-        else if (key === "active") same = (a !== false) === (b !== false);
+        else if (key === "active" || key === "stock_tracked") same = (a !== false) === (b !== false); // 121 전 행은 키 없음 = 사용
         else same = String(a ?? "").trim() === String(b ?? "").trim();
         if (!same) changes.push({ label, from: displayValue(key, a), to: displayValue(key, b) });
       }

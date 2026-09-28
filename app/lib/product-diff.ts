@@ -17,6 +17,7 @@ export const PRODUCT_DIFF_FIELDS: FieldDef[] = [
   { key: "retail_price", label: "소비자가", kind: "money" },
   { key: "sale_price", label: "b2b도매가", kind: "money" },
   { key: "tax_type", label: "과세유형", kind: "text" },
+  { key: "stock_tracked", label: "재고 관리", kind: "bool" },
   { key: "active", label: "사용여부", kind: "bool" },
   { key: "origin", label: "원산지", kind: "text" },
   { key: "attrs", label: "속성/분류", kind: "text" },
