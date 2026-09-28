@@ -12,9 +12,9 @@ import { getOpenInboundByProduct, type InboundRow } from "./production-inbound";
 //  (2026-06 박스히어로 API 의존 제거 → 현재고·판매속도 모두 자체 원장 기준.)
 //
 // 목표(안전재고) = 최근 하루 평균 출고량(원장 '출고') × 목표 일수. 목표 일수는 생산 일정에서 나온다
-//  (production-schedule scheduleHorizon — 오늘 → 다음 요청일(수요일) 요청분 판매 가능일, 수요일 21일 → 화요일 15일).
-//  오늘 시킨 물량이 판매 가능일(D+10 영업일)에 오고, 그 뒤는 다음 요청분이 올 때까지 버텨야 하므로 두 구간을 다 덮는다.
-//  부족·요청 마감은 '오늘 요청분 판매 가능일까지'(보통 14일) 기준 — 지금 시켜도 그 전에 바닥나는가.
+//  (production-schedule scheduleHorizon — 오늘 → 다음 요청일(수요일) 요청분 판매 가능일, 수요일 19일 → 화요일 13일).
+//  오늘 시킨 물량이 판매 가능일(D+8 영업일)에 오고, 그 뒤는 다음 요청분이 올 때까지 버텨야 하므로 두 구간을 다 덮는다.
+//  부족·요청 마감은 '오늘 요청분 판매 가능일까지'(보통 10~12일) 기준 — 지금 시켜도 그 전에 바닥나는가.
 // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정)) — '입고 예정'은 열린 제조사 요청서의 잔여
 //  (production-inbound). 시켜 둔 물량을 또 시키던 이중 발주의 차단 항(2026-09-17 대표 확정 1단계).
 
@@ -123,7 +123,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   const wsD = new Date(today + "T00:00:00Z");
   wsD.setUTCDate(wsD.getUTCDate() - span); // 판매속도 집계창 시작(근사)
   const windowStart = wsD.toISOString().slice(0, 10);
-  const sched = scheduleHorizon(today); // 생산 일정(D+10 판매 가능, 매주 수요일 요청)에서 목표·부족 기준 일수
+  const sched = scheduleHorizon(today); // 생산 일정(D+8 판매 가능, 매주 수요일 요청)에서 목표·부족 기준 일수
   const { leadDays, cycleDays, horizonDays } = sched;
   const wholesale = channel === "도매"; // 행사·수동 보정은 소매 판매 장치 — 도매 수식에는 미적용
   const [promoForward, promoSold, adjusts] = wholesale

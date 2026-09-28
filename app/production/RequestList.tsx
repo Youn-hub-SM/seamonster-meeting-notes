@@ -618,12 +618,12 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
   const [requestedBy, setRequestedBy] = useState(initial?.requested_by || "");
   const [date, setDate] = useState(initial?.request_date || todayIso());
-  // 생산 일정(영업일, 2026-09-28 대표 확정): 작성 D → 컨펌·제출 D+1 → 생산 시작 D+5 → 생산 마감 D+9 → 판매 가능 D+10.
-  //  제조사 요청 기본값 = 생산시작일 D+5 · 생산종료일 D+9. 도매 납품은 +7영업일. 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
+  // 생산 일정(영업일, 2026-09-29 대표 정정): 작성 D → 컨펌·제출 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8.
+  //  제조사 요청 기본값 = 생산시작일 D+3 · 생산종료일 D+7. 도매 납품은 +7영업일. 옛 요청서에 마감일이 비어 있으면 기본값으로 채워서 연다.
   //  확정형(프로모션·도매 대량)은 목표일을 비워 둔다 — 기본값이 그대로 저장되면 그 날짜에 자동 마감·합류가 돈다.
   const initPurpose: PrPurpose = initial?.purpose || defaultPurpose || "재고 보충";
   const [dueDate, setDueDate] = useState(initial ? (initial.due_date || defaultDueDate(initPurpose, initial.request_date) || "") : (defaultDueDate(initPurpose, todayIso()) || ""));
-  // 생산시작일(118) — 입고 화면이 기본 요청서를 고르는 기간의 시작(제조사 요청 전용). 새 요청 기본 = D+5영업일.
+  // 생산시작일(118) — 입고 화면이 기본 요청서를 고르는 기간의 시작(제조사 요청 전용). 새 요청 기본 = D+3영업일.
   //  요청일부터 잡으면 요청 당일 기록된 무관한 입고가 새 요청서에 전량 잡힌다(2026-09-23 사고).
   const [prodStart, setProdStart] = useState(initial ? (initial.prod_start || "") : defaultProdStart(todayIso()));
   const datesTouched = useRef(false); // 사람이 날짜를 손댔으면 요청일·용도를 바꿔도 기본값을 다시 채우지 않는다
@@ -746,13 +746,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             {purpose === "재고 보충" && (
               <label className="sm-col" style={{ gap: 3 }}>
                 {/* 생산기간의 시작 — 이 날부터 생산종료일까지 기록된 입고가 이 요청서에 잡힌다(넘쳐도 초과로 기록) */}
-                <span style={{ fontSize: 15, fontWeight: 600 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 D+5 영업일 · 입고 매칭 시작</span></span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 D+3 영업일 · 입고 매칭 시작</span></span>
                 <input type="date" className="b2b-input" style={{ width: 150 }} value={prodStart} max={dueDate || undefined} onChange={(e) => { datesTouched.current = true; setProdStart(e.target.value); }} />
               </label>
             )}
             <label className="sm-col" style={{ gap: 3 }}>
               {/* 확정형은 마감이 아니라 그날 물건이 있어야 하는 날이다 — 라벨을 용도에 맞춘다(115) */}
-              <span style={{ fontSize: 15, fontWeight: 600 }}>{DUE_LABEL[purpose]} <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>{CONFIRMED_PURPOSES.includes(purpose) ? "· 이 날까지 확보" : purpose === "재고 보충" ? "· 기본 D+9 영업일 · 입고 매칭 끝" : "· 기본 7영업일"}</span></span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{DUE_LABEL[purpose]} <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>{CONFIRMED_PURPOSES.includes(purpose) ? "· 이 날까지 확보" : purpose === "재고 보충" ? "· 기본 D+7 영업일 · 입고 매칭 끝" : "· 기본 7영업일"}</span></span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} onChange={(e) => { datesTouched.current = true; setDueDate(e.target.value); }} />
             </label>
             {startAfterEnd && <div className="b2b-error" style={{ flexBasis: "100%", margin: 0 }}>{prodStart ? "생산시작일" : "요청일"}이 생산종료일보다 뒤입니다 — 기간을 확인하세요.</div>}

@@ -14,7 +14,7 @@ export const maxDuration = 60;
 // 주간 생산 요청서 AI 초안 — 매주 수요일 13:50 KST(릴레이 crontab `50 4 * * 3`, 14시 전 게시) production-draft.sh 가 운영을 호출한다.
 //  재고 목록 권장(소매 수식 + 도매 필요량 − 입고 예정)으로 제조사(재고 보충) 요청서를 '요청' 상태로 만들고,
 //  팀즈에 게시한다. 생산담당자가 화면에서 수량을 고친 뒤 결재자에게 보고하는 초안이다.
-//  일정(영업일): 작성 D → 컨펌·제출 D+1 → 생산 시작 D+5 → 생산 마감 D+9 → 판매 가능 D+10.
+//  일정(영업일): 작성 D → 컨펌·제출 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8.
 //  미들웨어 예외 경로 — Bearer(카탈로그 업로드 공용 시크릿 또는 CRON_SECRET)로 인증. 같은 날 두 번 불려도 한 장만 만든다.
 const DRAFT_AUTHOR = "AI 초안";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     const dueDate = defaultDueDate("재고 보충", D) || prodStart;
     const memoLines = [
       `AI 초안(매주 수요일 14시 자동 작성) — 생산담당자가 확인·수정한 뒤 결재자에게 보고합니다.`,
-      `근거: 재고 목록 권장(소매 수식 + 도매 필요량 − 입고 예정), 작성 ${D} / 생산 시작 ${prodStart} / 생산 마감 ${dueDate} (영업일 D+5 / D+9).`,
+      `근거: 재고 목록 권장(소매 수식 + 도매 필요량 − 입고 예정), 작성 ${D} / 생산 시작 ${prodStart} / 생산 마감 ${dueDate} (영업일 D+3 / D+7).`,
       // 수량은 지금 재고로 계산하므로 목표 일수도 계산일(오늘 KST) 기준 — D 를 따로 넘긴 재실행이면 계산일을 함께 적는다
       `목표: 평상시 하루 출고 × ${retail.horizonDays}일${retail.schedule.today !== D ? ` (계산일 ${retail.schedule.today} 기준)` : ""} — 이번 요청분 판매 가능 ${retail.schedule.sellable}, 다음 요청분(${retail.schedule.nextDraft}) 판매 가능 ${retail.schedule.nextSellable}까지 버틸 양.`,
     ];

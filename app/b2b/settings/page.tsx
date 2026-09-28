@@ -16,7 +16,7 @@ export default function SettingsEtcPage() {
   const [supMsg, setSupMsg] = useState<Msg | null>(null);
   const [error, setError] = useState("");
 
-  // 권장생산 목표 기간 — 예전 '리드타임 · 발주 주기' 입력은 없앴다. 생산 일정(D+10 판매 가능·매주 수요일 요청)에서
+  // 권장생산 목표 기간 — 예전 '리드타임 · 발주 주기' 입력은 없앴다. 생산 일정(D+8 판매 가능·매주 수요일 요청)에서
   //  날짜로 계산된다(2026-09-28). 화면을 연 날(KST) 기준 — 빌드 시점 날짜로 미리 그려지지 않게 마운트 후 계산한다.
   const [sched, setSched] = useState<ScheduleHorizon | null>(null);
 
@@ -103,7 +103,7 @@ export default function SettingsEtcPage() {
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">권장생산 목표 기간</h2></div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 10px", lineHeight: 1.6 }}>
-          생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+5 → 생산 마감 D+9 → 판매 가능 D+10. 요청서는 매주 수요일에 냅니다.
+          생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8. 요청서는 매주 수요일에 냅니다.
         </p>
         {sched && <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
           <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {sched.nextDraft.slice(5)} 요청분 판매 가능일 {sched.nextSellable.slice(5)})</li>

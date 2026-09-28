@@ -6,7 +6,7 @@ import { logProductionRequestCreated } from "./b2b-activity";
 import { CONFIRMED_PURPOSES, type PrPurpose, type ProductionRequest } from "./wholesale-production";
 import { defaultDueDate, defaultProdStart, kstTodayIso } from "./production-schedule";
 
-// 일정 기본값(D+5·D+9)은 화면도 쓰므로 클라이언트 안전한 production-schedule 에 있다 — 이 파일은 서버 전용(알림·DB).
+// 일정 기본값(D+3·D+7)은 화면도 쓰므로 클라이언트 안전한 production-schedule 에 있다 — 이 파일은 서버 전용(알림·DB).
 export { defaultDueDate, defaultProdStart, kstTodayIso, PROD_START_BDAYS, PROD_DUE_BDAYS, WHOLESALE_DUE_BDAYS } from "./production-schedule";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -54,10 +54,10 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
 
   const purpose = input.purpose;
   const request_date = DATE_RE.test(String(input.request_date || "")) ? String(input.request_date) : kstTodayIso();
-  // 생산종료일(마감)은 확정형 외 필수 — 안 오거나 형식이 틀리면 용도 기본값(제조사 D+9영업일·도매 D+7영업일)으로 서버가 채운다.
+  // 생산종료일(마감)은 확정형 외 필수 — 안 오거나 형식이 틀리면 용도 기본값(제조사 D+7영업일·도매 D+7영업일)으로 서버가 채운다.
   const due_date = DATE_RE.test(String(input.due_date || "")) ? String(input.due_date) : defaultDueDate(purpose, request_date);
   // 생산시작일(118) — 입고 화면이 기본 요청서를 고르는 기간의 시작. 종료일보다 뒤면 무시(기간이 비면 기본 선택이 안 잡힌다).
-  //  제조사 요청서에 시작일이 안 오면 기본 D+5영업일(생산 일정) — 종료일보다 뒤면 비운다(요청일이 기간 시작).
+  //  제조사 요청서에 시작일이 안 오면 기본 D+3영업일(생산 일정) — 종료일보다 뒤면 비운다(요청일이 기간 시작).
   //  사람이 비워서 보낸 것("" / null)은 그대로 비운다(기간 시작 = 요청일) — 급발주에서 입고 기본 선택이 빠지지 않게.
   const startIn = DATE_RE.test(String(input.prod_start || "")) ? String(input.prod_start) : (input.prod_start === undefined && purpose === "재고 보충" ? defaultProdStart(request_date) : "");
   const prod_start = startIn && (!due_date || startIn <= due_date) ? startIn : undefined;

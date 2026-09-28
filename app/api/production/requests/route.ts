@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       requested_by: String(b.requested_by || ""),
       request_date: String(b.request_date || ""),
       due_date: String(b.due_date || ""),
-      prod_start: b.prod_start === undefined ? undefined : String(b.prod_start || ""), // 안 보냄 = 기본 D+5, 비워서 보냄 = 요청일부터
+      prod_start: b.prod_start === undefined ? undefined : String(b.prod_start || ""), // 안 보냄 = 기본 D+3, 비워서 보냄 = 요청일부터
       purpose,
       order_id: String(b.order_id || ""),
       company_id: String(b.company_id || ""),
