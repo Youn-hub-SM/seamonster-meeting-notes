@@ -77,6 +77,7 @@ export default function ProductionSchedulePage() {
   const [itemStats, setItemStats] = useState<ItemStat[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsConfigured, setStatsConfigured] = useState(true);
+  const [statsError, setStatsError] = useState(""); // 품목 통계 조회 실패 — '품목 없음'과 구분해 보여 준다
   const [savingAdd, setSavingAdd] = useState(false);
   const [qtyTouched, setQtyTouched] = useState(false); // 생산량 수동 편집 여부(편집 전엔 권장값 자동반영)
   const [leadDays, setLeadDays] = useState(7);
@@ -191,13 +192,14 @@ export default function ProductionSchedulePage() {
   async function openAdd() {
     setAddModal({ sku: "", name: "", qty: "", productionDate: today, stock: null, dailyOut: 0, depletionDate: null });
     setQtyTouched(false);
-    setStatsLoading(true); setStatsConfigured(true);
+    setStatsLoading(true); setStatsConfigured(true); setStatsError("");
     try {
       const j = await (await fetch("/api/production/item-stats", { cache: "no-store" })).json();
+      if (!j.ok) throw new Error(j.error || "품목 통계 조회 실패");
       if (j.configured === false) setStatsConfigured(false);
       else setItemStats(j.items || []);
       if (typeof j.leadDays === "number") setLeadDays(j.leadDays);
-    } catch { setStatsConfigured(false); }
+    } catch (e) { setStatsError(e instanceof Error ? e.message : "품목 통계 조회 실패"); }
     setStatsLoading(false);
   }
   function pickItem(sku: string, displayName?: string) {
@@ -409,13 +411,14 @@ export default function ProductionSchedulePage() {
         </aside>
       </div>
 
-      <p className="prod-note">※ 재고관리 현재고를 반영한 “실제 생산 필요량”·AI 조언은 <strong>재고 관리 › 재고 목록</strong>의 [AI 조언] 버튼에서 확인하세요.</p>
+      <p className="prod-note">※ 재고관리 현재고를 반영한 “실제 생산 필요량”·AI 조언은 <strong>생산 및 재고 › 재고 목록</strong>의 [AI 조언] 버튼에서 확인하세요.</p>
 
       {/* 생산일정 추가 모달 */}
       {addModal && (
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="b2b-modal-head"><h2 className="b2b-modal-title">생산일정 추가</h2></div>
+            {statsError && <div className="b2b-modal-body" style={{ paddingBottom: 0 }}><div className="b2b-error" style={{ margin: 0 }}>{statsError} — 잠시 후 창을 다시 여세요.</div></div>}
             {!statsConfigured ? (
               <div className="b2b-modal-body">
                 <div className="b2b-empty" style={{ padding: "24px 10px" }}>표시할 품목이 없습니다. 상품 마스터에 제품을 등록하세요.</div>

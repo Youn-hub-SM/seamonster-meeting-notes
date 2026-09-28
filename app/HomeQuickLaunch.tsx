@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { NAV, sortByNavOrder } from "./nav";
+import { NAV, sortByNavOrder, navLabelOf } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 type Fav = { href: string; label: string };
@@ -49,7 +49,7 @@ export default function HomeQuickLaunch() {
           <h2 className="home-section-title">즐겨찾는 메뉴</h2>
           <div className="home-grid" style={{ marginTop: 14 }}>
             {/* 사이드바와 동일하게 실제 메뉴 순서로 정렬 */}
-            {sortByNavOrder(favorites).map((f) => <Tile key={f.href} href={f.href} label={f.label} icon={iconForHref(f.href)} />)}
+            {sortByNavOrder(favorites).map((f) => <Tile key={f.href} href={f.href} label={navLabelOf(f.href, f.label)} icon={iconForHref(f.href)} />)}
           </div>
         </section>
       )}

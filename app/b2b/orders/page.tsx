@@ -405,7 +405,7 @@ export default function OrdersListPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) setError(data.error || "발송 일정 저장 실패");
-      else { setShipPrompt(null); pingActivityFeed(); await reload(); }
+      else { setShipPrompt(null); pingActivityFeed(); if (data.channel_notice) alert(data.channel_notice); await reload(); }
     } catch (err) {
       setError(err instanceof Error ? err.message : "발송 일정 저장 오류");
     }
@@ -429,6 +429,7 @@ export default function OrdersListPage() {
         setError(data.error || "발송일 등록 실패");
       } else {
         pingActivityFeed();
+        if (data.channel_notice) alert(data.channel_notice);
         await reload();
       }
     } catch (err) {
@@ -454,6 +455,7 @@ export default function OrdersListPage() {
         setError(data.error || "상태 변경 실패");
       } else {
         pingActivityFeed();
+        if (data.channel_notice) alert(data.channel_notice);
       }
     } catch (err) {
       setOrders(snapshot);
@@ -562,6 +564,7 @@ export default function OrdersListPage() {
     const snapshot = orders;
     // Optimistic
     setOrders((prev) => prev.map((o) => (selected.has(o.id) ? { ...o, status: newStatus } : o)));
+    const notices: string[] = [];
     try {
       const results = await Promise.all(
         ids.map((id) =>
@@ -569,9 +572,14 @@ export default function OrdersListPage() {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status: newStatus }),
-          }).then((r) => r.ok)
+          }).then(async (r) => {
+            const j = await r.json().catch(() => null);
+            if (r.ok && j?.channel_notice) notices.push(String(j.channel_notice)); // 취소 복구로 차감 칸이 바뀐 발주 안내
+            return r.ok;
+          })
         )
       );
+      if (notices.length) alert(notices.join("\n"));
       const failed = results.filter((ok) => !ok).length;
       if (failed > 0) {
         setOrders(snapshot);

@@ -8,16 +8,21 @@ import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { formatLinkResult } from "@/app/lib/link-result";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean };
+type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
+// 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
+const reqWarnOf = (j: { ok?: boolean; full_ok?: boolean } | null) =>
+  !j?.ok ? "요청서 목록을 불러오지 못했습니다 — 새로고침 후 다시 시도하세요. 이대로 저장하면 요청서에 연결되지 않습니다."
+  : j.full_ok === false ? "이행률을 읽지 못해 기본 요청서를 고르지 않았습니다 — 연결할 요청서를 직접 고르세요." : "";
 
 // 입고 → 요청서 선택(지정 매칭). 직접 입력·엑셀 두 모드가 같이 쓴다.
-function RequestSelect({ reqs, value, disabled, onChange }: { reqs: OpenReq[]; value: string; disabled?: boolean; onChange: (v: string) => void }) {
+function RequestSelect({ reqs, value, disabled, warn, onChange }: { reqs: OpenReq[]; value: string; disabled?: boolean; warn?: string; onChange: (v: string) => void }) {
   return (
     <label className="b2b-field"><span className="b2b-field-label">요청서 <span className="sm-faint" style={{ fontWeight: 400 }}>· 연결할 제조사 요청서</span></span>
       <select className="b2b-input" value={disabled ? "" : value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">연결 안 함</option>
-        {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}</option>)}
-      </select></label>
+        {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
+      </select>
+      {warn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{warn}</span>}</label>
   );
 }
 
@@ -58,9 +63,12 @@ export default function TxnModal({
 }) {
   useEscClose(onClose);
   const [type, setType] = useState<InvTxnType>(defaultType);
-  // 입고는 이동 전용 칸(도매·프로모션·도매 대량)을 못 고른다 — 세 칸 모두 소매 입고 후 [재고 옮기기]로만 들어간다(실수 방지).
+  // 입고는 이동 전용 칸(도매·프로모션·도매 대량)을 못 고른다 — 세 칸 모두 소매 입고 후 [재고 이동]으로만 들어간다(실수 방지).
   //  그 칸 탭에서 열면 기본 채널이 그 칸으로 오므로 입고 기본형이면 소매로 돌려놓는다.
   const [channel, setChannel] = useState<InvChannel>(defaultType === "입고" && MOVE_ONLY_CHANNELS.includes(defaultChannel) ? "소매" : defaultChannel);
+  // 사용자가 손으로 고른 칸 — 입고(소매 고정)에서 조정/출고로 돌아오면 그 칸, 안 골랐으면 연 탭의 칸(defaultChannel)으로 되돌린다
+  //  (도매 대량 탭에서 연 창이 소매에 머물러 소매 칸을 덮어쓰는 사고 방지). 입고 중 소매를 다시 누른 건 '고름'이 아니다.
+  const [picked, setPicked] = useState<InvChannel | null>(null);
   const [productId, setProductId] = useState(defaultProductId);
   const [qty, setQty] = useState("");
   const [adjMode, setAdjMode] = useState<"target" | "delta">("target");
@@ -75,14 +83,17 @@ export default function TxnModal({
   const [reqs, setReqs] = useState<OpenReq[]>([]);
   const [reqId, setReqId] = useState("");
   const [reqTouched, setReqTouched] = useState(false);
+  const [reqWarn, setReqWarn] = useState("");
   useEffect(() => {
     if (type !== "입고") return;
     let alive = true;
     fetch(`/api/production/requests/open?date=${date}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
-      if (!alive || !j?.ok) return;
+      if (!alive) return;
+      setReqWarn(reqWarnOf(j));
+      if (!j?.ok) { setReqId(""); return; } // 경고('연결되지 않습니다')와 실제 저장이 맞게 — 옛 선택을 남기지 않는다
       setReqs(j.requests || []);
       if (!reqTouched) setReqId(j.default_id || "");
-    }).catch(() => { /* 목록 없이도 입고는 된다 */ });
+    }).catch(() => { if (alive) { setReqWarn(reqWarnOf(null)); setReqId(""); } });
     return () => { alive = false; };
   }, [type, date, reqTouched]);
   const pickReq = (v: string) => { setReqId(v); setReqTouched(true); };
@@ -157,20 +168,31 @@ export default function TxnModal({
   //  아니면(다른 채널이거나 부모 목록이 '전체' 합산이면) 그 채널을 따로 조회해 캐시한다.
   //  합산 재고를 한 채널의 현재고로 쓰면 조정(목표−현재) 델타가 통째로 틀어진다.
   const qtyBase: InvChannelFilter = qtySource ?? defaultChannel;
+  //  조정은 서버가 '조정 날짜 기준' 재고로 델타를 다시 계산한다 — 화면도 같은 기준(asof=거래일)으로 따로 조회한다.
+  //  부모 목록(asof 없음)은 발송 예정 선점까지 빠진 값이라, 그걸로 실사를 맞추면 '현재고와 동일' 오판·유령 재고가 생긴다(감사 #6).
   const [chanQty, setChanQty] = useState<Record<string, number>>({});
+  const [qtyErr, setQtyErr] = useState("");
+  const datedAdjust = type === "조정" && /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const qKey = datedAdjust ? `${channel} ${date} ${productId}` : `${channel} ${productId}`;
   useEffect(() => {
-    if (!productId || channel === qtyBase) return;
-    const key = `${channel} ${productId}`;
-    if (key in chanQty) return;
+    if (!productId || (!datedAdjust && channel === qtyBase)) return;
+    if (qKey in chanQty) return;
     let alive = true;
-    fetch(`/api/inventory?channel=${encodeURIComponent(channel)}`, { cache: "no-store" })
+    setQtyErr("");
+    fetch(`/api/inventory?channel=${encodeURIComponent(channel)}${datedAdjust ? `&asof=${date}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (alive && j?.ok) { const row = (j.rows || []).find((x: { product_id: string; qty: number }) => x.product_id === productId); setChanQty((m) => ({ ...m, [key]: row ? Number(row.qty) || 0 : 0 })); } })
-      .catch(() => {});
+      .then((j) => {
+        if (!alive) return;
+        if (!j?.ok) { setQtyErr(j?.error || "현재고 조회 실패"); return; }
+        const row = (j.rows || []).find((x: { product_id: string; qty: number }) => x.product_id === productId);
+        setChanQty((m) => ({ ...m, [qKey]: row ? Number(row.qty) || 0 : 0 }));
+      })
+      .catch(() => { if (alive) setQtyErr("현재고 조회 실패"); });
     return () => { alive = false; };
-  }, [channel, productId, qtyBase, chanQty]);
-  const chanKnown = channel === qtyBase || (channel + " " + productId) in chanQty; // 조회 전에는 현재고를 모른다
-  const current = !productId ? 0 : channel === qtyBase ? qtyOf(productId) : (chanQty[`${channel} ${productId}`] ?? 0);
+  }, [channel, productId, qtyBase, chanQty, datedAdjust, date, qKey]);
+  const fromParent = !datedAdjust && channel === qtyBase;
+  const chanKnown = fromParent || qKey in chanQty; // 조회 전에는 현재고를 모른다
+  const current = !productId ? 0 : fromParent ? qtyOf(productId) : (chanQty[qKey] ?? 0);
 
   // 미리보기: 이 거래 후 재고
   const after = useMemo(() => {
@@ -184,7 +206,8 @@ export default function TxnModal({
     if (!productId) { setError("품목을 선택하세요."); return; }
     if (qty.trim() === "") { setError("수량을 입력하세요."); return; }
     // 목표(실사) 조정은 현재고를 빼서 델타를 만든다 → 그 채널 현재고를 모르면 계산 자체가 틀린다.
-    if (type === "조정" && adjMode === "target" && !chanKnown) { setError(`${channel} 현재고를 불러오는 중입니다. 잠시 후 다시 시도하세요.`); return; }
+    if (type === "조정" && date > TODAY()) { setError("조정 날짜는 오늘 이후로 할 수 없습니다."); return; }
+    if (type === "조정" && adjMode === "target" && !chanKnown) { setError(qtyErr ? `${channel} 현재고를 불러오지 못했습니다 — 창을 닫았다 다시 여세요.` : `${channel} 현재고를 불러오는 중입니다. 잠시 후 다시 시도하세요.`); return; }
     let sendQty = Number(qty) || 0;
     if (type === "조정" && adjMode === "target") sendQty = (Number(qty) || 0) - current; // 목표−현재 = 델타
     if (sendQty === 0) { setError(type === "조정" ? "현재고와 동일합니다 (변동 없음)." : "수량을 입력하세요."); return; }
@@ -224,17 +247,17 @@ export default function TxnModal({
           <div className="sm-tabs" style={{ marginBottom: 12 }}>
             {INV_TXN_TYPES.map((t) => (
               <button key={t} className={`sm-tab ${type === t ? "is-active" : ""}`} disabled={importing || applying}
-                onClick={() => { dropInflight(); setType(t); if (t !== "출고") setReason("판매"); if (t === "입고" && channel !== "소매") setChannel("소매"); setPreview(null); setError(""); setImporting(false); }}>{t}</button>
+                onClick={() => { dropInflight(); setType(t); if (t !== "출고") setReason("판매"); if (t === "입고") { if (channel !== "소매") setChannel("소매"); } else { const want = picked ?? defaultChannel; if (channel !== want) setChannel(want); } setPreview(null); setError(""); setImporting(false); }}>{t}</button>
             ))}
           </div>
 
           <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12 }}>
             <span className="b2b-field-label" style={{ margin: 0 }}>채널</span>
-            <ChannelPicker value={channel} onChange={(c) => { dropInflight(); setChannel(c); setPreview(null); setError(""); setImporting(false); }}
+            <ChannelPicker value={channel} onChange={(c) => { if (c === channel) return; dropInflight(); setChannel(c); if (type !== "입고") setPicked(c); setPreview(null); setError(""); setImporting(false); }}
               disabledChannels={type === "입고" ? MOVE_ONLY_CHANNELS : []}
-              disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 옮기기]에서 옮깁니다" />
+              disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
             <span className="sm-faint" style={{ fontSize: 12 }}>
-              {type === "입고" ? "입고는 소매로만 — 다른 칸은 [재고 옮기기]에서 옮깁니다" : `${channel} 재고에 기록`}
+              {type === "입고" ? "입고는 소매로만 — 다른 칸은 [재고 이동]에서 옮깁니다" : `${channel} 재고에 기록`}
             </span>
           </div>
 
@@ -248,7 +271,7 @@ export default function TxnModal({
               date={date} setDate={setDate} partner={partner} setPartner={setPartner}
               reason={reason} setReason={setReason}
               ioDone={ioDone} setIoDone={setIoDone}
-              reqs={reqs} reqId={reqId} setReqId={pickReq}
+              reqs={reqs} reqId={reqId} setReqId={pickReq} reqWarn={reqWarn}
               importing={importing} preview={preview}
             />
           ) : (
@@ -268,8 +291,8 @@ export default function TxnModal({
             )}
           </div>
           {product && (chanKnown
-            ? <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 <strong>{current.toLocaleString()}</strong>{product.unit} → 거래 후 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{after.toLocaleString()}</strong>{product.unit}</p>
-            : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 불러오는 중...</p>)}
+            ? <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{datedAdjust ? `${date} 기준 ` : ""}{channel} 현재고 <strong>{current.toLocaleString()}</strong>{product.unit} → 거래 후 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{after.toLocaleString()}</strong>{product.unit}</p>
+            : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px", color: qtyErr ? "var(--sm-danger)" : undefined }}>{qtyErr ? `${channel} 현재고를 불러오지 못했습니다 — ${qtyErr}` : `${channel} 현재고 불러오는 중...`}</p>)}
 
           {isAdjust && (
             <div className="sm-tabs" style={{ marginBottom: 8 }}>
@@ -282,9 +305,9 @@ export default function TxnModal({
             <label className="b2b-field"><span className="b2b-field-label">{isAdjust ? (adjMode === "target" ? "실사 수량" : "증감(±)") : "수량"}</span>
               <input className="b2b-input" type="number" step={0.01} value={qty} onChange={(e) => setQty(e.target.value)} placeholder={isAdjust && adjMode === "delta" ? "예: -3" : "0"} autoFocus onKeyDown={(e) => { if (e.key === "Enter" && !saving) save(); }} /></label>
             <label className="b2b-field"><span className="b2b-field-label">거래일</span>
-              <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+              <input className="b2b-input" type="date" value={date} max={isAdjust ? TODAY() : undefined} onChange={(e) => setDate(e.target.value)} /></label>
           </div>
-          {type === "입고" && <RequestSelect reqs={reqs} value={reqId} onChange={pickReq} />}
+          {type === "입고" && <RequestSelect reqs={reqs} value={reqId} warn={reqWarn} onChange={pickReq} />}
 
           {!isAdjust && (
             <div className="b2b-field-row">
@@ -341,14 +364,14 @@ export default function TxnModal({
 
 // 엑셀 일괄 패널 — 양식 안내·다운로드 + (입출고면) 파일 전체에 적용할 거래일·거래처·즉시처리 + 미리보기.
 //  파일 첨부 버튼은 모달 푸터에 있다(다른 업로드 화면과 같은 위치).
-function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partner, setPartner, reason, setReason, ioDone, setIoDone, importing, preview, reqs, reqId, setReqId }: {
+function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partner, setPartner, reason, setReason, ioDone, setIoDone, importing, preview, reqs, reqId, setReqId, reqWarn }: {
   type: InvTxnType; isAdjust: boolean; channel: InvChannel; templateHref: string;
   date: string; setDate: (v: string) => void;
   partner: string; setPartner: (v: string) => void;
   reason: string; setReason: (v: string) => void;
   ioDone: boolean; setIoDone: (v: boolean) => void;
   importing: boolean; preview: Preview | null;
-  reqs: OpenReq[]; reqId: string; setReqId: (v: string) => void;
+  reqs: OpenReq[]; reqId: string; setReqId: (v: string) => void; reqWarn: string;
 }) {
   if (preview) {
     return (
@@ -434,7 +457,7 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
             <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? "매입처" : reason !== "판매" ? "전달처" : "판매처"} <span className="sm-faint" style={{ fontWeight: 400 }}>· 선택</span></span>
               <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
           </div>
-          {type === "입고" && <RequestSelect reqs={reqs} value={reqId} disabled={!ioDone} onChange={setReqId} />}
+          {type === "입고" && <RequestSelect reqs={reqs} value={reqId} disabled={!ioDone} warn={ioDone ? reqWarn : ""} onChange={setReqId} />}
           {type === "출고" && (
             <label className="b2b-field"><span className="b2b-field-label">사유 <span className="sm-faint" style={{ fontWeight: 400 }}>· 파일 전체 — 판매가 아니면 대사에서 분리</span></span>
               <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)}>

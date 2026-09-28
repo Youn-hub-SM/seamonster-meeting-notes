@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { loadRequests, formatRequestDetail } from "@/app/lib/wholesale-production-db";
-import { logProductionRequestCreated } from "@/app/lib/b2b-activity";
-import { addBusinessDays } from "@/app/lib/business-days";
-import { toPrPurpose, CONFIRMED_PURPOSES } from "@/app/lib/wholesale-production";
+import { loadRequests } from "@/app/lib/wholesale-production-db";
+import { toPrPurpose } from "@/app/lib/wholesale-production";
+import { createProductionRequest, normalizeItems, CreateError } from "@/app/lib/production-request-create";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const dynamic = "force-dynamic";
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const maxDuration = 30; // 전 이력 목록(요청서·품목·입고 페이징) — 이력이 쌓여도 기본 제한에 걸리지 않게
 
 async function actor(req: NextRequest): Promise<string | null> {
   const token = req.cookies.get("b2b_auth")?.value;
@@ -20,97 +17,51 @@ async function actor(req: NextRequest): Promise<string | null> {
 export async function GET(req: NextRequest) {
   try {
     const status = req.nextUrl.searchParams.get("status") || undefined;
-    const rows = await loadRequests(supabaseAdmin(), { status });
-    return NextResponse.json({ ok: true, requests: rows });
+    const sb = supabaseAdmin();
+    const [rows, probe] = await Promise.all([
+      loadRequests(sb, { status }),
+      sb.from("production_request_items").select("reserved_qty").limit(1), // migration 119 적용 여부 — 미적용이면 창이 담기 경고를 띄운다
+    ]);
+    const reserved_supported = !(probe.error && /reserved_qty/i.test(probe.error.message));
+    return NextResponse.json({ ok: true, requests: rows, reserved_supported });
   } catch (err) {
     console.error("[production/requests GET]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
 }
 
-// POST { title?, requested_by?, request_date?, memo?, items:[{product_id, requested_qty, memo?}] } — 요청서 생성
+// POST { title?, requested_by?, request_date?, due_date?, prod_start?, purpose?, memo?, items:[{product_id, requested_qty, memo?}] } — 요청서 생성
+//  생성 규칙(폴백·알림 포함)은 production-request-create 에 — 주간 AI 초안도 같은 함수로 만든다.
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as Record<string, unknown>;
-    const rawItems = Array.isArray(b.items) ? (b.items as Record<string, unknown>[]) : [];
-    const items = rawItems
-      .map((it) => ({ product_id: String(it.product_id || ""), requested_qty: Math.round((Number(it.requested_qty) || 0) * 100) / 100, memo: String(it.memo || "").trim() || null })) // 소수 둘째 자리 허용(104)
-      .filter((it) => it.product_id && it.requested_qty > 0);
+    const items = normalizeItems(b.items);
     if (!items.length) return NextResponse.json({ ok: false, error: "요청 품목과 수량을 1개 이상 입력하세요." }, { status: 400 });
 
     const sb = supabaseAdmin();
     const who = await actor(req);
-
-    // 묶음(세트) 품목은 자체 재고가 없어(구성품 기준 도출) 도매 입고 대상이 아님 → 거부.
-    const pids = [...new Set(items.map((it) => it.product_id))];
-    const { data: bundles, error: be } = await sb.from("product_bundles").select("parent_id").in("parent_id", pids);
-    if (!be && (bundles ?? []).length)
-      return NextResponse.json({ ok: false, error: "묶음(세트) 품목은 생산 요청에 담을 수 없습니다. 구성품(단품)으로 요청하세요." }, { status: 400 });
-
-    // 요청번호(PR-000001)
-    let req_no: string | null = null;
-    try { const { data } = await sb.rpc("next_production_request_no"); if (data) req_no = String(data); } catch { /* 069 미적용 */ }
-
-    const request_date = DATE_RE.test(String(b.request_date || "")) ? String(b.request_date) : undefined;
-    // 생산종료일(마감)은 필수 — 안 오거나 형식이 틀리면 요청일+7영업일로 서버가 채운다(일정·보드가 마감일 기준이라 비면 안 됨).
-    const due_date = DATE_RE.test(String(b.due_date || ""))
-      ? String(b.due_date)
-      : addBusinessDays(request_date || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), 7);
-    // 생산시작일(118) — 입고 화면이 기본 요청서를 고르는 기간의 시작. 종료일보다 뒤면 무시(기간이 비면 기본 선택이 안 잡힌다).
-    const prod_start = DATE_RE.test(String(b.prod_start || "")) && String(b.prod_start) <= due_date ? String(b.prod_start) : undefined;
     const purpose = toPrPurpose(b.purpose); // 용도(082·113·115) — 모르는 값은 재고 보충
     // 제조사(소매) 요청을 생산 담당자 '지인'이 직접 작성하면 확인 절차 생략 — 담당 지정 + 진행중으로 시작.
     //  (작성자 본인이 담당자라 별도 확인이 무의미. 도매 요청은 이행 주체가 달라 자동 확인 없음.)
     const autoConfirm = who === "지인" && purpose === "재고 보충";
-    const head: Record<string, unknown> = {
-      req_no,
-      title: String(b.title || "").trim() || null,
-      requested_by: String(b.requested_by || "").trim() || who,
-      status: autoConfirm ? "진행중" : "요청",
+    const full = await createProductionRequest(sb, {
+      title: String(b.title || ""),
+      requested_by: String(b.requested_by || ""),
+      request_date: String(b.request_date || ""),
+      due_date: String(b.due_date || ""),
+      prod_start: b.prod_start === undefined ? undefined : String(b.prod_start || ""), // 안 보냄 = 기본 D+5, 비워서 보냄 = 요청일부터
       purpose,
-      ...(autoConfirm ? { assignee: who } : {}),
-      memo: String(b.memo || "").trim() || null,
+      order_id: String(b.order_id || ""),
+      company_id: String(b.company_id || ""),
+      memo: String(b.memo || ""),
+      items,
+      status: autoConfirm ? "진행중" : "요청",
+      assignee: autoConfirm ? who : null,
       created_by: who,
-    };
-    // 확정형이 어느 발주·거래처 몫인지(115). 둘 다 선택 — 구두 확보 당일엔 발주가 아직 없어 거래처만 찬다.
-    const orderId = UUID_RE.test(String(b.order_id || "")) ? String(b.order_id) : null;
-    const companyId = UUID_RE.test(String(b.company_id || "")) ? String(b.company_id) : null;
-    if (orderId) head.order_id = orderId;
-    if (companyId) head.company_id = companyId;
-    if (request_date) head.request_date = request_date;
-    if (due_date) head.due_date = due_date; // 생산종료일(071). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
-    if (prod_start) head.prod_start = prod_start; // 생산시작일(118). 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
-
-    let { data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single();
-    // 113·115 미적용(purpose 체크 제약에 그 용도가 없음)이면 조용히 재고 보충으로 강등하지 않고 명시 오류 —
-    //  강등되면 파도소리 화면·자동 매칭에 잘못 흘러들고, 선결제분이 소매 칸으로 섞인다.
-    if (he && CONFIRMED_PURPOSES.includes(purpose) && /purpose/i.test(he.message))
-      return NextResponse.json({ ok: false, error: `${purpose} 용도가 아직 없습니다 — migration ${purpose === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.` }, { status: 500 });
-    // 선택 컬럼(071 due_date · 082 purpose · 118 prod_start) 미적용 환경 폴백 — 에러 메시지에 보이는 컬럼만 빼고 재시도.
-    for (const col of ["order_id", "company_id", "due_date", "purpose", "prod_start"] as const) {
-      if (he && col in head && new RegExp(col, "i").test(he.message)) {
-        delete head[col];
-        ({ data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single());
-      }
-    }
-    if (he) throw he;
-    const requestId = (reqRow as { id: string }).id;
-
-    const itemRows = items.map((it, i) => ({ request_id: requestId, product_id: it.product_id, requested_qty: it.requested_qty, memo: it.memo, sort: i }));
-    const { error: ie } = await sb.from("production_request_items").insert(itemRows);
-    if (ie) { await sb.from("production_requests").delete().eq("id", requestId); throw ie; }
-
-    // 작성 알림을 먼저(소급 매칭이 만들 '요청 → 진행중' 알림보다 등록 알림이 앞서게)
-    //  게시물 본문에 품목·수량·마감·담당 전체를 싣는다(팀즈 게시물 전환으로 긴 내용 허용 — 2026-09-16)
-    const label = String(b.title || "").trim() || `품목 ${items.length}종 · ${items.reduce((s, it) => s + it.requested_qty, 0).toLocaleString()}개`;
-    let createdDetail: string | undefined;
-    try { const [cr] = await loadRequests(sb, { id: requestId }); if (cr) createdDetail = formatRequestDetail(cr); } catch { /* 상세 없이 발송 */ }
-    await logProductionRequestCreated(req_no || "", label, who, createdDetail);
-
-
-    const [full] = await loadRequests(sb, { id: requestId });
+    });
     return NextResponse.json({ ok: true, request: full });
   } catch (err) {
+    if (err instanceof CreateError) return NextResponse.json({ ok: false, error: err.message }, { status: err.status });
     console.error("[production/requests POST]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "요청서 생성 실패") }, { status: 500 });
   }

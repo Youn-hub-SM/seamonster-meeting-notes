@@ -45,7 +45,9 @@ export async function GET(req: NextRequest) {
     const horizonDays = leadDays + cycleDays; // 안전재고 지평 = 리드타임 + 발주 주기(권장 수식과 동일)
 
     const stockRpc = async () => {
-      if (chan) { const r = await sb.rpc("inventory_stock", { asof: null, chan }); if (!r.error) return r; }
+      // 036 미적용(chan 시그니처 없음 = PGRST202)만 전 칸 합으로 폴백. 일시 오류는 그대로 돌려 아래서 던진다 —
+      //  모든 오류에서 폴백하면 도매 대량 탭 등에 4칸 합이 현재고로 조용히 표시된다(#11)
+      if (chan) { const r = await sb.rpc("inventory_stock", { asof: null, chan }); if (!r.error || r.error.code !== "PGRST202") return r; }
       return sb.rpc("inventory_stock", { asof: null });
     };
     // 입고 예정(열린 제조사 요청서 잔여) — 소매·전체 탭에서 현재고 옆 병기 + 부족(low) 판정에 합산.

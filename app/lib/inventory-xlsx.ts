@@ -32,6 +32,17 @@ export const ADJUST_XLSX_EXAMPLE: (string | number)[][] = [
   ["P_DG-100X1", 120, ""],
 ];
 
+// 오류값 셀(#REF!·#N/A 등)의 오류 문자열 — 실사수량처럼 값이 중요한 칸은 이걸로 먼저 가려낸다.
+//  직접 입력한 오류값은 { error }, 수식 결과가 오류면 { formula, result: { error } } 로 온다(ExcelJS) — 둘 다 잡는다.
+export function cellErrorOf(v: unknown): string | null {
+  if (v == null || typeof v !== "object") return null;
+  const o = v as { error?: unknown; result?: unknown };
+  if (typeof o.error === "string") return o.error;
+  const r = o.result as { error?: unknown } | null | undefined;
+  return r && typeof r === "object" && typeof r.error === "string" ? r.error : null;
+}
+export function cellIsError(v: unknown): boolean { return cellErrorOf(v) !== null; }
+
 // 엑셀 셀값 → 문자열(날짜/수식/리치텍스트 대응).
 export function cellStr(v: unknown): string {
   if (v == null) return "";

@@ -6,7 +6,11 @@ import { matchKoQuery } from "@/app/lib/hangul";
 import { formatLinkResult } from "@/app/lib/link-result";
 import { ChannelPicker } from "./ChannelTabs";
 
-type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean };
+type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
+// 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
+const reqWarnOf = (j: { ok?: boolean; full_ok?: boolean } | null) =>
+  !j?.ok ? "요청서 목록을 불러오지 못했습니다 — 새로고침 후 다시 시도하세요. 이대로 저장하면 요청서에 연결되지 않습니다."
+  : j.full_ok === false ? "이행률을 읽지 못해 기본 요청서를 고르지 않았습니다 — 연결할 요청서를 직접 고르세요." : "";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -31,14 +35,17 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   const [reqs, setReqs] = useState<OpenReq[]>([]);
   const [reqId, setReqId] = useState("");
   const [reqTouched, setReqTouched] = useState(false);
+  const [reqWarn, setReqWarn] = useState("");
   useEffect(() => {
     if (type !== "입고") return;
     let alive = true;
     fetch(`/api/production/requests/open?date=${date}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
-      if (!alive || !j?.ok) return;
+      if (!alive) return;
+      setReqWarn(reqWarnOf(j));
+      if (!j?.ok) { setReqId(""); return; } // 경고('연결되지 않습니다')와 실제 저장이 맞게 — 옛 선택을 남기지 않는다
       setReqs(j.requests || []);
       if (!reqTouched) setReqId(j.default_id || "");
-    }).catch(() => { /* 목록 없이도 입고는 된다 */ });
+    }).catch(() => { if (alive) { setReqWarn(reqWarnOf(null)); setReqId(""); } });
     return () => { alive = false; };
   }, [type, date, reqTouched]);
   const [reason, setReason] = useState("판매"); // 출고 사유 — '판매' 외에는 대사(구매·판매·재고 확인)에서 분리 집계(099)
@@ -117,7 +124,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         </div>
         <ChannelPicker value={channel} onChange={setChannel}
           disabledChannels={type === "입고" ? [...MOVE_ONLY_CHANNELS] : []}
-          disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 옮기기]에서 옮깁니다" />
+          disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
         <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
         {type === "입고" && (
@@ -125,10 +132,11 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
             <select className="b2b-input" value={done ? reqId : ""} disabled={!done} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }} style={{ width: "auto", maxWidth: 340 }}
               title={done ? "이 입고를 연결할 제조사 요청서" : "대기 저장은 요청서에 연결되지 않습니다"}>
               <option value="">연결 안 함</option>
-              {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}</option>)}
+              {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
             </select>
           </label>
         )}
+        {type === "입고" && reqWarn && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", flexBasis: "100%" }}>{reqWarn}</span>}
         {type === "출고" && (
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
             <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: "auto" }}

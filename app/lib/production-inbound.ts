@@ -15,10 +15,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type InboundReq = { req_no: string | null; qty: number; due: string | null; status: string };
 export type InboundRow = {
-  qty: number;                 // 잔여 합(소수 둘째 자리)
+  qty: number;                 // 잔여 합(소수 둘째 자리) — 담은 행사·대량 몫(folded)을 뺀 소매 몫
   earliest_due: string | null; // 잔여가 있는 요청서 중 가장 이른 생산마감일(마감 없는 옛 요청서는 제외)
   overdue_qty: number;         // 그중 마감이 지난 잔여(자동 제외 없음 — 표시용)
-  reqs: InboundReq[];          // 요청서별 내역(마감 오름차순, 마감 없음은 뒤)
+  reqs: InboundReq[];          // 요청서별 내역(마감 오름차순, 마감 없음은 뒤) — 담은 몫 포함 잔여
+  folded: number;              // 뺀 몫 = min(요청서에 담은 확정형 몫 중 아직 안 온 양, 아직 옮기지 않은 확정형 잔여)
 };
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -39,8 +40,9 @@ async function pagedAll<T>(q: (from: number, to: number) => PromiseLike<Resp>): 
   return null;
 }
 
-// "column production_requests.purpose does not exist"(082 미적용)도 'does not exist' 라 — 컬럼 오류는 테이블 없음으로 보지 않는다
-const missingTable = (m: string) => !/column/i.test(m) && /does not exist|schema cache|could not find/i.test(m);
+// "column production_requests.purpose does not exist"(082 미적용)도 'does not exist' 라 — 컬럼 오류는 테이블 없음으로 보지 않는다.
+//  'schema cache' 는 넣지 않는다 — PostgREST 재연결 중 일시 오류(PGRST002 "…for the schema cache. Retrying.")를 미적용으로 오판한다.
+const missingTable = (m: string) => !/column/i.test(m) && /does not exist|could not find/i.test(m);
 
 export async function getOpenInboundByProduct(sb: SupabaseClient, today: string): Promise<Map<string, InboundRow> | null> {
   try {
@@ -70,19 +72,22 @@ export async function getOpenInboundByProduct(sb: SupabaseClient, today: string)
       return null;
     }
     if (heads === null) return null;
+    // 확정형(프로모션·도매 대량) 열린 요청서 — 제조사 요청서에 '담은 몫'을 입고 예정에서 뺄 한도(아직 옮기지 않은 잔여)
+    const confirmedIds = heads.filter((h) => h.purpose === "프로모션" || h.purpose === "도매 대량").map((h) => h.id);
     heads = heads.filter((h) => (h.purpose ?? "재고 보충") === "재고 보충");
     const out = new Map<string, InboundRow>();
     if (!heads.length) return out;
     const headById = new Map(heads.map((h) => [h.id, h]));
 
     // 2) 요청 품목 — 요청서 100건씩(URL 길이) 청크, 청크 안은 페이징 전량
-    type Item = { id: string; request_id: string; product_id: string; requested_qty: number };
+    type Item = { id: string; request_id: string; product_id: string; requested_qty: number; reserved_qty?: number | null };
     const items: Item[] = [];
     const ids = heads.map((h) => h.id);
     for (let i = 0; i < ids.length; i += 100) {
       const part = ids.slice(i, i + 100);
+      // * = reserved_qty(119) 미적용이어도 안전(없으면 담은 몫 0)
       const rows = await pagedAll<Item>((a, b) => sb.from("production_request_items")
-        .select("id, request_id, product_id, requested_qty").in("request_id", part).order("id", { ascending: true }).range(a, b));
+        .select("*").in("request_id", part).order("id", { ascending: true }).range(a, b));
       if (rows === null) return null;
       items.push(...rows);
     }
@@ -98,20 +103,54 @@ export async function getOpenInboundByProduct(sb: SupabaseClient, today: string)
       for (const rc of rows) received.set(rc.item_id, (received.get(rc.item_id) || 0) + (Number(rc.qty) || 0));
     }
 
+    // 담은 몫 중 아직 안 온 양(줄마다 min(담은 몫, 잔여) — 담은 몫이 마지막에 온다고 보는 보수적 가정)
+    const foldedPending = new Map<string, number>();
+    for (const it of items) {
+      const rem = Math.max(0, (Number(it.requested_qty) || 0) - (received.get(it.id) || 0));
+      const f = Math.min(Math.max(0, Number(it.reserved_qty) || 0), rem);
+      if (f > 0) foldedPending.set(it.product_id, (foldedPending.get(it.product_id) || 0) + f);
+    }
+    // 확정형 잔여(아직 소매에서 옮기지 않은 양) — 담은 몫을 뺄 상한. 물건이 와서 옮겨지면 잔여가 줄어 보정도 풀린다.
+    const confirmedRem = new Map<string, number>();
+    if (foldedPending.size && confirmedIds.length) {
+      const cItems: Item[] = [];
+      for (let i = 0; i < confirmedIds.length; i += 100) {
+        const rows = await pagedAll<Item>((a, b) => sb.from("production_request_items")
+          .select("id, request_id, product_id, requested_qty").in("request_id", confirmedIds.slice(i, i + 100)).order("id", { ascending: true }).range(a, b));
+        if (rows === null) return null;
+        cItems.push(...rows.filter((x) => foldedPending.has(x.product_id)));
+      }
+      const cRecv = new Map<string, number>();
+      for (let i = 0; i < cItems.length; i += 100) {
+        const rows = await pagedAll<{ item_id: string; qty: number }>((a, b) => sb.from("production_receipts")
+          .select("item_id, qty").in("item_id", cItems.slice(i, i + 100).map((x) => x.id)).order("id", { ascending: true }).range(a, b));
+        if (rows === null) return null;
+        for (const rc of rows) cRecv.set(rc.item_id, (cRecv.get(rc.item_id) || 0) + (Number(rc.qty) || 0));
+      }
+      for (const it of cItems) {
+        const rem = Math.max(0, (Number(it.requested_qty) || 0) - (cRecv.get(it.id) || 0));
+        if (rem > 0) confirmedRem.set(it.product_id, (confirmedRem.get(it.product_id) || 0) + rem);
+      }
+    }
+
     for (const it of items) {
       const rem = r2(Math.max(0, (Number(it.requested_qty) || 0) - (received.get(it.id) || 0)));
       if (rem <= 0) continue;
       const h = headById.get(it.request_id);
       if (!h) continue;
       const due = h.due_date ?? null; // 마감 없는 옛 요청서는 날짜 판정에서 제외(요청일을 마감으로 오인하지 않는다)
-      const row = out.get(it.product_id) ?? { qty: 0, earliest_due: null, overdue_qty: 0, reqs: [] };
+      const row = out.get(it.product_id) ?? { qty: 0, earliest_due: null, overdue_qty: 0, reqs: [], folded: 0 };
       row.qty = r2(row.qty + rem);
       if (due && (!row.earliest_due || due < row.earliest_due)) row.earliest_due = due;
       if (due && due < today) row.overdue_qty = r2(row.overdue_qty + rem);
       row.reqs.push({ req_no: h.req_no ?? null, qty: rem, due, status: h.status });
       out.set(it.product_id, row);
     }
-    for (const row of out.values()) row.reqs.sort((a, b) => String(a.due ?? "9999").localeCompare(String(b.due ?? "9999")));
+    for (const [pid, row] of out) {
+      row.reqs.sort((a, b) => String(a.due ?? "9999").localeCompare(String(b.due ?? "9999")));
+      const f = r2(Math.min(foldedPending.get(pid) || 0, confirmedRem.get(pid) || 0, row.qty));
+      if (f > 0) { row.folded = f; row.qty = r2(row.qty - f); }
+    }
     return out;
   } catch {
     return null;
@@ -121,7 +160,8 @@ export async function getOpenInboundByProduct(sb: SupabaseClient, today: string)
 // 툴팁·설명용 — "PR-000123 300 (마감 09-25 지남)" 형태를 줄바꿈으로 잇는다
 export function formatInbound(row: InboundRow | undefined, today: string): string {
   if (!row || !row.reqs.length) return "";
-  return row.reqs
-    .map((r) => `${r.req_no ?? "요청서"} ${r.qty.toLocaleString()}${r.due ? ` (마감 ${r.due.slice(5)}${r.due < today ? " 지남" : ""})` : " (마감 없음)"}`)
-    .join("\n");
+  const lines = row.reqs
+    .map((r) => `${r.req_no ?? "요청서"} ${r.qty.toLocaleString()}${r.due ? ` (마감 ${r.due.slice(5)}${r.due < today ? " 지남" : ""})` : " (마감 없음)"}`);
+  if (row.folded > 0) lines.push(`행사·대량 몫 −${row.folded.toLocaleString()} (도착 후 프로모션·도매 대량으로 옮길 양)`);
+  return lines.join("\n");
 }

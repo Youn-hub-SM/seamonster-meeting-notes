@@ -16,13 +16,21 @@ const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0
 // 발송 재저장은 '전체 삭제 후 재삽입'이라 도중 실패하면 옛 차수·송장·선점출고가 사라진 채 남는다.
 //  DB 트랜잭션이 없으므로(마이그레이션 없이) 삭제 전에 스냅샷을 떠 두고, 실패 시 id 그대로 복원해 원자성을 흉내낸다.
 type ShipSnapshot = { ships: Record<string, unknown>[]; items: Record<string, unknown>[]; txns: Record<string, unknown>[] };
+//  조회 오류는 던진다(삭제 전이라 저장이 깨끗이 중단된다) — 빈 스냅샷으로 넘어가면 복원도, 이미 나간 선점의 칸 유지(effChannel)도 조용히 꺼진다.
 async function snapshotOrderShipments(sb: SbClient, orderId: string): Promise<ShipSnapshot> {
-  const { data: ships } = await sb.from("shipments").select("*").eq("order_id", orderId);
+  const { data: ships, error: se } = await sb.from("shipments").select("*").eq("order_id", orderId);
+  if (se) throw se;
   const ids = (ships ?? []).map((s) => (s as { id: string }).id);
-  const items = ids.length ? ((await sb.from("shipment_items").select("*").in("shipment_id", ids)).data ?? []) : [];
+  let items: Record<string, unknown>[] = [];
+  if (ids.length) {
+    const ir = await sb.from("shipment_items").select("*").in("shipment_id", ids);
+    if (ir.error) throw ir.error;
+    items = ir.data ?? [];
+  }
   let txns: Record<string, unknown>[] = [];
   if (ids.length) {
     const r = await sb.from("inventory_txns").select("*").in("shipment_id", ids);
+    if (r.error && !/shipment_id/i.test(r.error.message || "")) throw r.error;
     txns = r.error ? [] : (r.data ?? []); // shipment_id 컬럼 미적용(035 전) 환경이면 무시
   }
   return { ships: ships ?? [], items, txns };
@@ -72,7 +80,7 @@ export async function saveOrderShipments(
   orderBoxCount = 1,
   headerShipDate?: string | null,
   headerStatus?: ShipmentScheduleInput["status"] | null
-): Promise<{ earliestShipDate: string | null; derivedStatus: string | null; totalBoxes: number }> {
+): Promise<{ earliestShipDate: string | null; derivedStatus: string | null; totalBoxes: number; channelKept: InvChannel | null; channelNotice: string | null }> {
   const sb = supabaseAdmin();
 
   // 발주 헤더의 '발송예정일'만 입력하고 발송 차수를 따로 만들지 않은 단일 발송 발주 —
@@ -171,6 +179,31 @@ export async function saveOrderShipments(
   // 재저장 도중 실패 시 복원할 수 있도록 옛 발송 상태를 먼저 스냅샷(아래 catch 에서 사용).
   const snap = await snapshotOrderShipments(sb, orderId);
 
+  // 실제 차감 칸 — 이미 나간 옛 선점 출고가 있으면 그 칸을 이어 쓴다(기획 6절).
+  //  재저장은 옛 선점을 cascade 로 지우고 다시 찍으므로, is_bulk 만 따르면 발송이 끝난 발주를
+  //  소급 체크(또는 메모 수정 같은 무관한 재저장)할 때 옛 칸의 출고가 되살아나고 새 칸이 빠진다(유령 재고).
+  //  '나갔다' = 차수가 발송완료(또는 shipped_at 보유), 또는 옛 선점일이 오늘보다 앞(엄격히 과거)이고 새 차감일도 오늘 이하.
+  //  오늘 날짜 선점(당일 정정)과, 밀린 발송대기를 미래로 다시 잡는 저장은 아직 안 나간 것으로 보고 is_bulk 를 따른다(기획 6절 '과거 날짜').
+  const shippedIds = new Set(
+    snap.ships
+      .filter((s) => (s as { status?: string }).status === "발송완료" || !!(s as { shipped_at?: string | null }).shipped_at)
+      .map((s) => (s as { id: string }).id)
+  );
+  const newDeductDate = deductIdx >= 0
+    ? ((schedules as ShipmentScheduleInput[])[deductIdx].ship_date || headerShipDate || today)
+    : today;
+  const prevOut = snap.txns.find((t) =>
+    t.created_by === "B2B 자동출고" && typeof t.channel === "string" &&
+    (shippedIds.has(t.shipment_id as string) || (String(t.txn_date) < today && newDeductDate <= today))
+  );
+  const effChannel: InvChannel = prevOut ? (prevOut.channel as InvChannel) : deductChannel;
+  // is_bulk 와 다른 칸을 유지했으면 화면이 알린다 — 유지 이유(발송완료 / 지난 발송예정일)에 따라 할 일이 다르다
+  const channelKept: InvChannel | null = prevOut && effChannel !== deductChannel ? effChannel : null;
+  const keptShipped = !!prevOut && shippedIds.has(String(prevOut.shipment_id));
+  // 저장 전 선점 칸 — 이번 저장으로 칸이 바뀌면(발송일을 다시 잡거나 대량 체크를 바꿈) 옮길 방향을 알린다
+  const prevChannel = (snap.txns.find((t) => t.created_by === "B2B 자동출고" && typeof t.channel === "string")?.channel as InvChannel | undefined) ?? null;
+  let writtenChannel: InvChannel | null = null;
+
   // 기존 발송 일정 전체 삭제 (PUT 재저장 대비).
   //  inventory_txns.shipment_id 는 on delete cascade → 이 차수들의 옛 즉시출고가 함께 삭제되어 재고가 원복됨.
   await sb.from("shipments").delete().eq("order_id", orderId);
@@ -244,19 +277,19 @@ export async function saveOrderShipments(
 
     // 재고 차감(선점) — 발주 전량을 이 차수(가장 이른 발송일) 하나에만 기록한다.
     //  shipment_id 로 묶여 있어 재저장·발주 삭제 시 cascade 로 함께 지워지며 재고가 원복된다.
-    //  차감 칸 = 대량 발주면 '도매 대량'(115), 아니면 '도매'(036).
+    //  차감 칸 = 대량 발주면 '도매 대량'(115), 아니면 '도매'(036) — 단, 이미 나간 옛 선점이 있으면 그 칸(effChannel).
     //  제약 미적용(115 전) 환경이면 에러에 제약명(inventory_txns_channel_chk)이 보인다 —
     //  '도매'로 한 칸 낮춰 보고, 그래도 안 되면 기존대로 channel 을 빼고 재시도(036 전).
     if (canDeduct && si === deductIdx && deductPerProduct.size > 0) {
       const txns: Record<string, unknown>[] = [...deductPerProduct.entries()].map(([product_id, qty]) => ({
         product_id,
         type: "출고",
-        channel: deductChannel,
+        channel: effChannel,
         qty: signedQty("출고", qty),
         unit_amount: null,
         txn_date: sch.ship_date || headerShipDate || today,
         partner,
-        memo: isBulk ? "B2B 대량 발송 선점(발주 전량)" : "B2B 발송 선점(발주 전량)",
+        memo: effChannel === "도매 대량" ? "B2B 대량 발송 선점(발주 전량)" : "B2B 발송 선점(발주 전량)",
         shipment_id: shipRow.id,
         created_by: "B2B 자동출고",
       }));
@@ -264,7 +297,7 @@ export async function saveOrderShipments(
       // 115 미적용(칸 제약이 3칸) 환경 — 제약명에 channel 이 들어 있어 아래 기존 폴백에 그대로 잡히는데,
       //  거기서 channel 을 통째로 빼면 기본값 '소매'로 떨어져 도매 판매가 소매 재고를 깎는다.
       //  그래서 먼저 '도매'로 한 칸만 낮춰 본다(115 적용 전 이 발주의 옛 동작과 같음).
-      if (txr.error && deductChannel !== "도매" && /channel/i.test(txr.error.message)) {
+      if (txr.error && effChannel !== "도매" && /channel/i.test(txr.error.message)) {
         for (const t of txns) t.channel = "도매";
         txr = await sb.from("inventory_txns").insert(txns);
       }
@@ -273,6 +306,7 @@ export async function saveOrderShipments(
         txr = await sb.from("inventory_txns").insert(txns);
       }
       if (txr.error) throw txr.error;
+      writtenChannel = (txns[0]?.channel as InvChannel | undefined) ?? null;
     }
 
     // 취소 차수는 발송일 후보에서 제외 — earliest 는 orders.ship_date 가 되어 매출 인식일(발송일 기준)의
@@ -308,7 +342,23 @@ export async function saveOrderShipments(
   //  화면엔 상위 발송상태를 표시하지 않지만, 매출집계·필터가 동작하도록 DB 값은 일관되게 유지.
   const derivedStatus = deriveParentStatus(insertedStatuses);
 
-  return { earliestShipDate: earliest, derivedStatus, totalBoxes };
+  // 화면 안내 — 칸 유지(이유별) 또는 칸 바뀜(옮길 방향). 발송된 적 있는 발주를 선점 없이 복구한 경우도 확인을 권한다.
+  let channelNotice: string | null = null;
+  if (channelKept) {
+    channelNotice = keptShipped
+      ? `이미 발송완료된 발주라 재고 차감 칸은 '${channelKept}'(으)로 유지됐습니다 — 이 발주 때문에 재고 이동을 하지 마세요.`
+      : `발송예정일이 지나 이미 나간 것으로 보고 재고 차감 칸 '${channelKept}'을(를) 유지했습니다 — 아직 안 나갔다면 발주 목록의 [+ 발송일]로 새 날짜를 잡으세요(그때 칸이 바뀌고 옮길 방법이 안내됩니다).`;
+  } else if (prevChannel && writtenChannel && prevChannel !== writtenChannel) {
+    channelNotice = writtenChannel === "도매 대량"
+      ? `재고 차감 칸이 '${prevChannel}' → '도매 대량'으로 바뀌었습니다 — [재고 이동]에서 소매 → 도매 대량으로 이 발주 수량을 옮겨 두세요.`
+      : prevChannel === "도매 대량"
+        ? `재고 차감 칸이 '도매 대량' → '${writtenChannel}'(으)로 바뀌었습니다 — 이 발주 몫으로 옮겨 둔 도매 대량 재고는 [재고 이동]에서 도매 대량 → 소매로 되돌리세요.`
+        : `재고 차감 칸이 '${prevChannel}' → '${writtenChannel}'(으)로 바뀌었습니다.`;
+  } else if (!prevChannel && writtenChannel && snap.ships.some((s) => !!(s as { shipped_at?: string | null }).shipped_at)) {
+    channelNotice = `발송된 적 있는 발주의 재고 차감을 '${writtenChannel}' 칸으로 다시 기록했습니다 — 처음 발송 때와 같은 칸인지 확인하세요.`;
+  }
+
+  return { earliestShipDate: earliest, derivedStatus, totalBoxes, channelKept, channelNotice };
   } catch (err) {
     // 재저장 도중 실패 → delete 로 사라진 옛 발송·송장·선점출고를 스냅샷에서 복원(부분 상태 방지) 후 재던짐.
     await restoreOrderShipments(sb, orderId, snap);

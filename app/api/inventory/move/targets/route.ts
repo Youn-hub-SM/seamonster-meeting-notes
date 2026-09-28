@@ -4,7 +4,7 @@ import { toPrPurpose, isFactoryPurpose } from "@/app/lib/wholesale-production";
 
 export const dynamic = "force-dynamic";
 
-// GET ?product_id=&purpose= — 재고 옮기기의 배정 대상: 이 품목이 들어 있는 열린 요청서.
+// GET ?product_id=&purpose= — 재고 이동의 배정 대상: 이 품목이 들어 있는 열린 요청서.
 //  purpose=도매 납품(기본, 소매→도매) | 프로모션(소매→프로모션, 113) | 도매 대량(소매→도매 대량, 115).
 //  오래된 요청부터(요청일 순 — 종전 FIFO 관행과 같은 순서). 전체 이력 로더 대신 품목·상태로 좁힌
 //  전용 조회(무제한 로드는 서버 1000행 캡에서 조용히 잘려 잔여가 과대 표시될 수 있음 — 검증 지적).

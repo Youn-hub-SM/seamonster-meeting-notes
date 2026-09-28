@@ -65,7 +65,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
           <button className="b2b-modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>행사 기간의 판매를 하루 출고 평균에서 뺍니다. 행사 물량 생산은 제조사와 별도 협의합니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>행사 기간의 판매를 하루 출고 평균에서 뺍니다. 행사 물량은 프로모션 요청서를 만든 뒤 제조사 요청서 창의 &lsquo;담기&rsquo;로 더합니다.</p>
 
           {!draft && (
             <>

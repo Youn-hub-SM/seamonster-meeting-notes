@@ -8,7 +8,7 @@
 //  재고 수치 = /api/inventory/overview, 생산 수치(권장생산) = /api/production/inventory
 //  (소매·도매 필터 = 그 채널 수식, 전체 = 소매+도매 권장 합) — SKU 로 조인.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OverviewRow } from "@/app/api/inventory/overview/route";
 import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, RESERVED_CHANNELS, type InvChannelFilter, type InventoryTxn } from "@/app/lib/inventory";
@@ -94,17 +94,22 @@ export default function InventoryPage() {
     return { from: shift(to, -(days - 1)), to };
   }, [pmode, cfrom, cto]);
 
+  // 마지막 요청의 응답만 반영 — 탭·기간을 빠르게 바꾸면 늦게 온 이전 탭 응답이 현재 탭 표를 덮어쓴다(#47).
+  //  TxnModal 의 reqSeq 와 같은 패턴. 늦은 응답은 setLoading(false) 도 건너뛴다(새 요청이 스스로 끈다).
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true); setError("");
     try {
       const sp = new URLSearchParams({ from: range.from, to: range.to });
       if (channel !== "전체") sp.set("channel", channel);
       const j = await (await fetch(`/api/inventory/overview?${sp}`, { cache: "no-store" })).json();
+      if (seq !== loadSeq.current) return; // 그 사이 탭·기간이 바뀜 → 늦은 응답 폐기
       if (!j.ok) throw new Error(j.error || "조회 실패");
       // 번들(세트)은 자체 재고가 없어 재고 관리에서 제외(출고는 B2B 발송 시 구성품으로 자동 차감).
       setRows((j.rows || []).filter((r: OverviewRow) => !r.is_bundle)); setMeta(j.meta || null);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
-    setLoading(false);
+    } catch (e) { if (seq === loadSeq.current) setError(e instanceof Error ? e.message : "조회 오류"); }
+    if (seq === loadSeq.current) setLoading(false);
   }, [range.from, range.to, channel]);
   useEffect(() => { load(); }, [load]);
 
@@ -179,21 +184,17 @@ export default function InventoryPage() {
     low: rows.filter((r) => r.low).length,
     out: rows.reduce((s, r) => s + r.period_out, 0),
   }), [rows]);
-  // 생산 카드 — 권장 생산>0 = 안전재고(행사 반영) 미달과 동일 데이터라 하나만 노출. 채널 기준은 표와 동일.
+  // 생산 카드 — 권장 생산>0 = 안전재고(행사 반영) 미달과 동일 데이터라 하나만 노출.
+  //  표가 보여주는 행(활성·세트 제외)만 표 권장 열과 같은 prodView 로 합산 — 생산 수치에만 있는 품목
+  //  (비활성·세트)까지 세면 카드 합과 표의 권장 합·선택 가능 수가 어긋난다(#46). 검색·부족 필터는 무시.
   const prodStats = useMemo(() => {
     let needItems = 0, needQty = 0;
-    const keys = new Set([...retailMap.keys(), ...wholeMap.keys()]);
-    for (const k of keys) {
-      const rr = retailMap.get(k), ww = wholeMap.get(k);
-      // 카드도 표 권장 열과 같은 식 — 확정형 탭 0, 도매 탭 ②, 나머지는 max(0, ①원값+② − ⑤)
-      const g1 = rr?.recommendGross ?? rr?.recommend ?? 0;
-      const rec = channel === "도매 대량" || channel === "프로모션" ? 0
-        : channel === "도매" ? (ww?.recommend ?? 0)
-        : Math.max(0, Math.round((g1 + (ww?.recommend ?? 0) - (rr?.inbound ?? 0)) * 100) / 100);
+    for (const r of rows) {
+      const rec = prodView(r).recommend; // 탭 규칙 포함(확정형 0·도매 ②·나머지 max(0, ①원값+② − ⑤))
       if (rec > 0) { needItems++; needQty += rec; }
     }
     return { needItems, needQty };
-  }, [retailMap, wholeMap, channel]);
+  }, [rows, prodView]);
 
   const shown = useMemo(() => {
     const q = search.trim();
@@ -341,7 +342,9 @@ export default function InventoryPage() {
 
       {meta && (confirmedTab
         ? <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 확보분 칸 — 하루 출고·예상소진·권장생산 없음</p>
-        : <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 부족 + 도매 부족 − 입고 예정"} · 목표 = 하루 출고 × {meta.leadDays + (meta.cycleDays || 0)}일{meta.cycleDays ? "" : " (발주 주기 미설정)"}</p>
+        /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
+           평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
+        : <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 부족 + 도매 부족 − 입고 예정"} · 목표 = 평상시 하루 출고 × {meta.leadDays + (meta.cycleDays || 0)}일{meta.cycleDays ? "" : " (발주 주기 미설정)"}</p>
       )}
       {!confirmedTab && adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {!confirmedTab && advice && (
@@ -430,7 +433,7 @@ export default function InventoryPage() {
                   <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
                     {r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {/* 소매 숫자 '아래' 줄로 — 옆에 붙이면 현재고가 두 값처럼 읽힌다(대표 지시). 입고 예정 셀의 '마감' 줄과 같은 방식 */}
-                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 생산은 요청서를 보며 제조사와 협의합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
+                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 창의 '담기'로 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
                   </td>
                   {!confirmedTab && <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>}
                   {/* 예상소진 = 창고(현재고)만 기준. 입고 예정이 있으면 '입고 예정일 전에 바닥나는가'로 빨강을 판정 —
@@ -438,10 +441,12 @@ export default function InventoryPage() {
                   {!confirmedTab && (() => {
                     const dep = r.depletion_days;
                     const inbDays = r.inbound_due ? Math.max(0, Math.round((Date.parse(r.inbound_due + "T00:00:00Z") - Date.parse(TODAY() + "T00:00:00Z")) / 86400_000)) : null;
-                    const red = dep != null && ((r.inbound ?? 0) > 0 && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 7));
+                    // 하루치 미만·품절(dep ≤ 0)은 입고 예정과 무관하게 항상 빨강 — 마감이 오늘이거나 지난 입고 예정이
+                    //  있으면 inbDays=0 이라 '0 < 0' 이 거짓이 되어 창고가 빈 가장 급한 품목이 검정으로 보이던 구멍(#10)
+                    const red = dep != null && (dep <= 0 || ((r.inbound ?? 0) > 0 && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 7)));
                     const posDays = dep != null && r.daily_out > 0 ? Math.floor((r.qty + (r.inbound ?? 0)) / r.daily_out) : null;
                     const tip = dep == null ? undefined : (r.inbound ?? 0) > 0
-                      ? `창고 기준 ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? `, ${inbDays}일 뒤` : ""})` : ""}${red ? " — 입고 전에 바닥날 수 있음" : ""}`
+                      ? `창고 기준 ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? " — 입고 전에 바닥날 수 있음" : ""}`
                       : `창고 기준 ${dep}일`;
                     return <td className="num b2b-money" title={tip} style={{ color: dep == null ? "var(--sm-text-light)" : red ? "var(--sm-danger)" : "var(--sm-black)" }}>{dep == null ? "-" : `${dep}일`}</td>;
                   })()}

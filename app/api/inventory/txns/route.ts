@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const run = async (withChannel: boolean) => {
       let q = supabaseAdmin()
         .from("inventory_txns")
-        .select(`id, product_id, type, ${withChannel ? "channel, " : ""}qty, unit_amount, txn_date, partner, memo, created_by, created_at, products(name, sku)`)
+        .select(`id, product_id, type, ${withChannel ? "channel, group_id, " : ""}qty, unit_amount, txn_date, partner, memo, created_by, created_at, products(name, sku)`)
         .order("txn_date", { ascending: false })
         .order("created_at", { ascending: false });
       if (product_id) q = q.eq("product_id", product_id);
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       return q.limit(limit);
     };
     let res = await run(true);
-    if (res.error && /channel/i.test(res.error.message)) res = await run(false);
+    if (res.error && /channel|group_id/i.test(res.error.message)) res = await run(false);
     if (res.error) throw res.error;
     const rows = ((res.data ?? []) as unknown as Record<string, unknown>[]).map((r) => {
       const p = r.products as { name?: string; sku?: string | null } | undefined;

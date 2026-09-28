@@ -9,8 +9,15 @@ type Order = {
   // '이동' = 소매↔도매 이동(출고+입고 두 행이 한 묶음) — [전체] 탭에서 유형 집계가 어긋나 보이지 않게 구분
   key: string; order_no: string | null; type: "입고" | "출고" | "이동"; status: "대기" | "완료"; txn_date: string; created_at: string;
   partner: string | null; memo: string | null; created_by: string | null;
+  grouped?: boolean;                 // key 가 group_id 인지(취소·처리 시 group_id= / id= 선택 기준). 구 서버 응답엔 없음 → order_no 로 폴백
+  move_from?: string | null; move_to?: string | null; // 이동 행의 출고 칸 → 입고 칸
   item_count: number; total_qty: number; total_amount: number; items: OrderItem[];
 };
+// 이동 행 판별 — partner 마커(채널이동)는 사람 이동·행사 자동 합류 모두 같다
+const isMoveOrder = (o: Order) => o.partner === "채널이동";
+const isGrouped = (o: Order) => o.grouped ?? !!o.order_no;
+// 원장 메모 '행사 종료 자동 합류'는 옛 이름(멱등 가드·기존 행 호환으로 값은 유지) — 지금은 행사 하루 전 합류라 표시만 바꾼다
+const displayMemo = (memo: string | null) => (memo === "행사 종료 자동 합류" ? "행사 전 자동 합류" : memo);
 
 // 입출고 '주문(묶음)' 목록 — BoxHero 구매목록 스타일. 한 번에 입력한 라인이 하나의 주문번호로 묶임.
 export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
@@ -128,11 +135,16 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   }
 
   async function cancel(o: Order) {
-    if (!window.confirm(`${o.order_no || "이 건"} (${o.item_count}개 품목)을 취소할까요? 재고가 원복됩니다.`)) return;
-    const qs = o.order_no ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`;
-    const r = await fetch(`/api/inventory/orders?${qs}`, { method: "DELETE" });
+    // 이동(채널이동 짝)은 move DELETE 로 — 음수 가드·요청서 재개 판정이 거기에만 있고, orders DELETE 는 이동을 거절한다(409).
+    const move = isMoveOrder(o);
+    const label = move ? `${o.move_from || "?"} → ${o.move_to || "?"} 이동` : (o.order_no || "이 건");
+    if (!window.confirm(`${label} (${o.item_count}개 품목)을 취소할까요? ${move ? "양쪽 칸 재고와 요청서 배정이 원복됩니다." : "재고가 원복됩니다."}`)) return;
+    const url = move
+      ? `/api/inventory/move?group_id=${encodeURIComponent(o.key)}`
+      : `/api/inventory/orders?${isGrouped(o) ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`}`;
+    const r = await fetch(url, { method: "DELETE" });
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"}${r.status === 409 ? "" : " — 새로고침 후 다시 시도하세요."}`); return; }
     await load();
   }
   async function saveUnit(it: OrderItem) {
@@ -156,7 +168,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     }));
   }
   async function process(o: Order) {
-    const key = o.order_no ? { group_id: o.key } : { id: o.key };
+    const key = isGrouped(o) ? { group_id: o.key } : { id: o.key };
     await fetch(`/api/inventory/orders`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...key, status: "완료" }) });
     await load();
   }
@@ -211,17 +223,20 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
             return (
               <FragmentRows key={o.key}>
                 <tr onClick={() => toggle(o.key)} style={{ cursor: "pointer" }}>
-                  <td><span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type === "이동" ? "이동(소매↔도매)" : `${o.type} ${o.status}`}</span></td>
+                  {/* 이동 배지는 실제 칸 방향(출고 칸 → 입고 칸) — 도매 대량·프로모션 이동을 도매 이동으로 읽지 않게 */}
+                  <td><span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type === "이동" ? (o.move_from && o.move_to ? `이동(${o.move_from}→${o.move_to})` : "이동") : `${o.type} ${o.status}`}</span></td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 700 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
                   <td>{o.partner || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{o.item_count}개 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>{isOpen ? "▲" : "▼"}</span></td>
                   <td className="num b2b-money">{o.total_qty.toLocaleString()}</td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }}>{o.total_amount.toLocaleString()}</td>
-                  <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={o.memo || ""}>{o.memo || "-"}</td>
+                  <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={displayMemo(o.memo) || ""}>{displayMemo(o.memo) || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                     {!done && <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12, marginRight: 6 }} onClick={() => process(o)}>{o.type === "입고" ? "입고처리" : "출고처리"}</button>}
-                    <button className="b2b-link-btn" onClick={() => cancel(o)} style={{ color: "var(--sm-danger)" }}>취소</button>
+                    {o.created_by === "B2B 자동출고"
+                      ? <span className="sm-faint" style={{ fontSize: 12 }} title="발주의 발송일정에서 수정·삭제하면 재고가 함께 원복됩니다">발주에서</span>
+                      : <button className="b2b-link-btn" onClick={() => cancel(o)} style={{ color: "var(--sm-danger)" }}>취소</button>}
                   </td>
                 </tr>
                 {isOpen && (

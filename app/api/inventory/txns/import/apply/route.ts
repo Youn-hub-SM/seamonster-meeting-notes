@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     if (!valid.length) return NextResponse.json({ ok: false, error: "유효한 행이 없습니다." }, { status: 400 });
     // 이동 전용 칸 입고 금지 — 화면에서 이미 막지만, 유형 열이 섞인 엑셀(입고+출고 혼재)이 그 칸으로 오는 경우까지 여기서 잡는다.
     if (MOVE_ONLY_CHANNELS.includes(channel) && valid.some((r) => r.type === "입고"))
-      return NextResponse.json({ ok: false, error: `${channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [재고 옮기기]에서 옮기세요. (파일에 입고 행이 있습니다)` }, { status: 400 });
+      return NextResponse.json({ ok: false, error: `${channel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [재고 이동]에서 옮기세요. (파일에 입고 행이 있습니다)` }, { status: 400 });
 
     // 묶음(세트)은 자체 재고가 없다 → 반드시 구성품 원장으로 남긴다. 세트 id 로 기록하면
     //  현재고가 구성품에서 파생되므로 그 원장은 무시되고 아무 재고도 줄지 않는다.

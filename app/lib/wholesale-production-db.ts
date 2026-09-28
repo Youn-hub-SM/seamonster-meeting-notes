@@ -35,39 +35,62 @@ export function formatRequestDetail(r: ProductionRequest): string {
   return lines.join("\n");
 }
 
+// range 페이징으로 전량 읽기 — 서버 Max Rows(1000)가 .limit 보다 우선해 조용히 잘리는 함정(production-inbound 과 같은 관례).
+//  전 이력을 읽는 목록에서 최신 입고·자동 줄부터 잘려 이행률·입고 예정이 틀어지던 원인. 오류는 그대로 던진다(조용한 절삭 금지).
+const PAGE = 1000;
+async function pageAll(q: (a: number, b: number) => PromiseLike<{ data: unknown; error: unknown }>): Promise<AnyRow[]> {
+  const out: AnyRow[] = [];
+  for (let off = 0; ; off += PAGE) {
+    const { data, error } = await q(off, off + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as AnyRow[];
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
+}
+
+// id 청크(100개, URL 길이)를 동시에 최대 6개씩 읽어 순서대로 합친다 — 청크마다 순차로 기다리면 이력이 쌓일수록 목록이 느려진다.
+async function inChunks(ids: string[], read: (part: string[]) => Promise<AnyRow[]>): Promise<AnyRow[]> {
+  const parts: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) parts.push(ids.slice(i, i + 100));
+  const out: AnyRow[][] = new Array(parts.length);
+  for (let i = 0; i < parts.length; i += 6) {
+    const got = await Promise.all(parts.slice(i, i + 6).map((p) => read(p)));
+    got.forEach((g, k) => { out[i + k] = g; });
+  }
+  return out.flat();
+}
+
 // opts.id 주면 단건, status 주면 상태 필터. 최신순.
+//  요청서·품목·입고 모두 페이징 전량. 품목·입고 모두 request_id 100개씩 청크 — 한 요청서의 품목·입고는 한 청크에 통째로 들어가므로
+//  청크 안 정렬(sort / created_at)이 그대로 유지된다.
 export async function loadRequests(
   sb: SupabaseClient,
   opts: { id?: string; status?: string } = {},
 ): Promise<ProductionRequest[]> {
-  let q = sb.from("production_requests").select("*").order("created_at", { ascending: false });
-  if (opts.id) q = q.eq("id", opts.id);
-  if (opts.status && opts.status !== "전체") q = q.eq("status", opts.status);
-  const { data: reqs, error } = await q;
-  if (error) throw error;
-  const heads = (reqs ?? []) as AnyRow[];
+  const heads = await pageAll((a, b) => {
+    let q = sb.from("production_requests").select("*")
+      .order("created_at", { ascending: false }).order("id", { ascending: true });
+    if (opts.id) q = q.eq("id", opts.id);
+    if (opts.status && opts.status !== "전체") q = q.eq("status", opts.status);
+    return q.range(a, b);
+  });
   if (!heads.length) return [];
 
   const ids = heads.map((r) => r.id as string);
-  const { data: itemsData, error: ie } = await sb
-    .from("production_request_items")
-    .select("id, request_id, product_id, requested_qty, memo, sort, products(sku, name, spec, unit)")
-    .in("request_id", ids)
-    .order("sort", { ascending: true });
-  if (ie) throw ie;
-  const items = (itemsData ?? []) as AnyRow[];
-
-  const itemIds = items.map((i) => i.id as string);
-  let receipts: AnyRow[] = [];
-  if (itemIds.length) {
-    const { data: rc, error: re } = await sb
-      .from("production_receipts")
+  const [items, receipts] = await Promise.all([
+    inChunks(ids, (part) => pageAll((a, b) => sb.from("production_request_items")
+      .select("*, products(sku, name, spec, unit)") // * = reserved_qty(119) 미적용이어도 안전
+      .in("request_id", part)
+      .order("sort", { ascending: true }).order("id", { ascending: true })
+      .range(a, b))),
+    // 입고도 request_id 로 청크(인덱스 prod_receipt_req_idx) — item_id 로 나누면 품목 수만큼 왕복이 늘어난다
+    inChunks(ids, (part) => pageAll((a, b) => sb.from("production_receipts")
       .select("id, item_id, qty, receipt_date, memo, received_by, created_at")
-      .in("item_id", itemIds)
-      .order("created_at", { ascending: true });
-    if (re) throw re;
-    receipts = (rc ?? []) as AnyRow[];
-  }
+      .in("request_id", part)
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(a, b))),
+  ]);
 
   const rcByItem = new Map<string, PrReceipt[]>();
   for (const r of receipts) {
@@ -91,6 +114,7 @@ export async function loadRequests(
       sku: (p.sku as string) ?? null, name: (p.name as string) ?? "(삭제된 품목)",
       spec: (p.spec as string) ?? null, unit: (p.unit as string) ?? "개",
       requested_qty: Number(it.requested_qty) || 0, received_qty: received,
+      reserved_qty: Math.min(Number(it.requested_qty) || 0, Math.max(0, Number(it.reserved_qty) || 0)),
       memo: (it.memo as string) ?? null, receipts: rcs,
     };
     const k = it.request_id as string;
@@ -111,6 +135,7 @@ export async function loadRequests(
       requested_by: (r.requested_by as string) ?? null, request_date: String(r.request_date),
       due_date: (r.due_date as string) ?? null, // 생산종료일=마감(071 미적용이면 null)
       prod_start: (r.prod_start as string) ?? null, // 생산시작일(118 미적용이면 null — 창 시작은 신청일)
+      order_id: (r.order_id as string) ?? null, company_id: (r.company_id as string) ?? null, // 115 — 도매 대량의 발주·거래처(미적용이면 null)
       status: r.status as ProductionRequest["status"], assignee: (r.assignee as string) ?? null, memo: (r.memo as string) ?? null,
       created_by: (r.created_by as string) ?? null, created_at: String(r.created_at), updated_at: String(r.updated_at),
       items: its,

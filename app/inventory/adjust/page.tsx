@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InventoryRow, InvChannel } from "@/app/lib/inventory";
+import { INV_CHANNELS, type InventoryRow, type InvChannel } from "@/app/lib/inventory";
 import type { AdjustRow } from "@/app/api/inventory/adjust/import/route";
 import TxnModal from "../TxnModal";
 import TxnTable from "../TxnTable";
 import { ChannelPicker } from "../ChannelTabs";
 
-type Preview = { summary: { valid: number; changed: number; errors: number; skipped?: number }; rows: AdjustRow[]; errors: { line: number; msg: string }[] };
+// reqChannel = 이 미리보기를 만든 칸. 분석 중에 칸을 바꿔도 표(옛 칸 델타)와 반영(새 칸)이 어긋나지 않게 화면·반영 모두 이 값을 쓴다.
+type Preview = { reqChannel: InvChannel; summary: { valid: number; changed: number; errors: number; skipped?: number }; rows: AdjustRow[]; errors: { line: number; msg: string }[] };
 
 export default function AdjustPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -28,13 +29,14 @@ export default function AdjustPage() {
   const qtyOf = useCallback((id: string) => rows.find((r) => r.product_id === id)?.qty || 0, [rows]);
 
   async function handleFile(file: File) {
+    const reqChannel = channel; // 이 요청의 칸을 고정
     setImporting(true); setError("");
     try {
-      const fd = new FormData(); fd.append("file", file); fd.append("channel", channel);
+      const fd = new FormData(); fd.append("file", file); fd.append("channel", reqChannel);
       const res = await fetch("/api/inventory/adjust/import", { method: "POST", body: fd });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
-      setPreview(j as Preview);
+      setPreview({ ...(j as Omit<Preview, "reqChannel">), reqChannel });
     } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
     setImporting(false);
   }
@@ -44,10 +46,12 @@ export default function AdjustPage() {
     try {
       const res = await fetch("/api/inventory/adjust/import/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel, rows: preview.rows.map((r) => ({ product_id: r.product_id, target: r.target, memo: r.memo })) }),
+        // 칸은 미리보기를 만든 값으로 — 화면에서 확인한 현재고·조정값과 실제 기록되는 칸이 같아야 한다.
+        body: JSON.stringify({ channel: preview.reqChannel, rows: preview.rows.map((r) => ({ product_id: r.product_id, target: r.target, memo: r.memo })) }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "반영 실패");
+      if (Number(j.invalid) > 0) setError(`${j.invalid}건은 실사수량이 숫자가 아니라 건너뛰었습니다(0 으로 쓰지 않음).`);
       setPreview(null); setReload((n) => n + 1); load();
     } catch (e) { setError(e instanceof Error ? e.message : "반영 실패"); }
     setApplying(false);
@@ -58,7 +62,7 @@ export default function AdjustPage() {
       <header className="b2b-page-head">
         <div><h1 className="b2b-page-title">재고 조정</h1></div>
         <div className="b2b-page-actions">
-          <ChannelPicker value={channel} onChange={setChannel} style={{ marginRight: 4 }} />
+          <ChannelPicker value={channel} onChange={setChannel} disabledChannels={importing ? INV_CHANNELS : undefined} disabledHint="분석 중에는 칸을 바꿀 수 없습니다" style={{ marginRight: 4 }} />
           <a className="b2b-btn-secondary" href="/api/inventory/adjust/template" title="SKU·실사수량·메모 양식">엑셀 양식</a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
             {importing ? "분석 중..." : "엑셀 업로드"}
@@ -82,7 +86,7 @@ export default function AdjustPage() {
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="b2b-modal-head">
-              <span className="b2b-modal-title">엑셀 실사 · {channel} — 미리보기</span>
+              <span className="b2b-modal-title">엑셀 실사 · {preview.reqChannel} — 미리보기</span>
               <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
@@ -110,6 +114,7 @@ export default function AdjustPage() {
                       ))}
                     </tbody>
                   </table>
+                  {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>…외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
                 </div>
               )}
               {preview.errors.length > 0 && (

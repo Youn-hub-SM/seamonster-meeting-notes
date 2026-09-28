@@ -7,7 +7,11 @@ import { ChannelPicker } from "../ChannelTabs";
 import { INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
 import { formatLinkResult } from "@/app/lib/link-result";
 
-type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean };
+type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
+// 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
+const reqWarnOf = (j: { ok?: boolean; full_ok?: boolean } | null) =>
+  !j?.ok ? "요청서 목록을 불러오지 못했습니다 — 새로고침 후 다시 시도하세요. 이대로 저장하면 요청서에 연결되지 않습니다."
+  : j.full_ok === false ? "이행률을 읽지 못해 기본 요청서를 고르지 않았습니다 — 연결할 요청서를 직접 고르세요." : "";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null; reason?: string | null };
 type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
@@ -30,14 +34,17 @@ export default function TradePage() {
   const [reqs, setReqs] = useState<OpenReq[]>([]);
   const [reqId, setReqId] = useState("");
   const [reqTouched, setReqTouched] = useState(false);
+  const [reqWarn, setReqWarn] = useState("");
   useEffect(() => {
     if (ioType !== "입고" || !uploadOpen) return;
     let alive = true;
     fetch(`/api/production/requests/open?date=${ioDate}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
-      if (!alive || !j?.ok) return;
+      if (!alive) return;
+      setReqWarn(reqWarnOf(j));
+      if (!j?.ok) { setReqId(""); return; } // 경고('연결되지 않습니다')와 실제 저장이 맞게 — 옛 선택을 남기지 않는다
       setReqs(j.requests || []);
       if (!reqTouched) setReqId(j.default_id || "");
-    }).catch(() => { /* 목록 없이도 입고는 된다 */ });
+    }).catch(() => { if (alive) { setReqWarn(reqWarnOf(null)); setReqId(""); } });
     return () => { alive = false; };
   }, [ioType, ioDate, uploadOpen, reqTouched]);
 
@@ -107,9 +114,9 @@ export default function TradePage() {
                 <label className="b2b-field-label">② 채널 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 소매)</span></label>
                 <ChannelPicker value={ioChannel} onChange={setIoChannel}
                   disabledChannels={ioType === "입고" ? MOVE_ONLY_CHANNELS : []}
-                  disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 옮기기]에서 옮깁니다" />
+                  disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
                 {ioType === "입고" && (
-                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 다른 칸은 [재고 옮기기]에서 옮깁니다.</p>
+                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 다른 칸은 [재고 이동]에서 옮깁니다.</p>
                 )}
               </div>
 
@@ -129,8 +136,9 @@ export default function TradePage() {
                   <label className="b2b-field-label">요청서 <span className="sm-faint" style={{ fontWeight: 400 }}>(파일 전체 · 연결할 제조사 요청서)</span></label>
                   <select className="b2b-input" value={ioDone ? reqId : ""} disabled={!ioDone} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }}>
                     <option value="">연결 안 함</option>
-                    {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}</option>)}
+                    {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
                   </select>
+                  {reqWarn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{reqWarn}</span>}
                 </div>
               )}
 

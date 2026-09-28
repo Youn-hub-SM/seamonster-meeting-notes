@@ -23,6 +23,11 @@ const daysBetween = (from: string, to: string) => Math.round((Date.parse(to + "T
 
 interface OutRow { qty: number; txn_date: string; status?: string | null; shipment_id?: string | null; channel?: string | null; partner?: string | null; products?: { sku: string | null } | null }
 
+// 마이그레이션 미적용(컬럼·함수·테이블 없음) 오류만 폴백 대상. 일시 오류(statement timeout·5xx)까지 폴백하면
+//  channel·partner 없는 select 로 조용히 재시도해 전 행이 소매 취급 → 도매 권장 0·소매 속도 부풂(#11).
+export const isMissingSchemaError = (e: { message?: string; code?: string } | null | undefined): boolean =>
+  !!e && (e.code === "42703" || e.code === "42P01" || e.code === "42883" || /^PGRST20[0245]$/.test(e.code || "") || /does not exist|could not find/i.test(e.message || "")); // 'schema cache' 는 넣지 않는다 — PGRST002(재연결 중 일시 오류)를 미적용으로 오판
+
 // 최근 windowDays 출고 → SKU별 일평균.
 //  channel 미지정(레거시) = 전 채널에서 B2B 발송(shipment) 제외 — 기존 소비처(생산 일정 등) 동작 유지.
 //  channel="소매"   = 소매 판매 속도: 소매 채널 출고만, B2B 발송·채널이동 제외.
@@ -51,6 +56,8 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
   // ※ 단발 .limit(20000)은 서버 Max Rows(기본 1000)가 우선해 조용히 잘린다 — 판매속도·안전재고·
   //   생산 마감 경보가 축소되던 원인(감사 확정). range 페이징으로 전량 읽는다(안정 정렬 필수).
   let rows: OutRow[] = [];
+  let loaded = false;
+  let lastErr: { message?: string; code?: string } | null = null;
   for (const sel of selects) {
     const acc: OutRow[] = [];
     let failed = false;
@@ -58,36 +65,39 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
       const res = await sb.from("inventory_txns").select(sel).eq("type", "출고").gte("txn_date", fromD)
         .order("txn_date", { ascending: true }).order("id", { ascending: true })
         .range(i, i + 999);
-      if (res.error) { failed = true; break; }
+      if (res.error) {
+        if (!isMissingSchemaError(res.error)) throw res.error; // 일시 오류 — 폴백 없이 실패(화면이 경고)
+        lastErr = res.error; failed = true; break;              // 컬럼 없음 — 다음 단계 select 로
+      }
       const chunk = (res.data ?? []) as unknown as OutRow[];
       acc.push(...chunk);
       if (chunk.length < 1000) break;
     }
-    if (!failed) { rows = acc; break; }
+    if (!failed) { rows = acc; loaded = true; break; }
   }
+  if (!loaded) throw lastErr ?? new Error("출고 원장 조회 실패"); // 전 단계 실패 — 빈 속도를 조용히 돌려주지 않는다
 
   // 도매 대량 제외(115·기획 6절) — 칸 분리 이전 출고에는 대량이 '도매' 칸에 섞여 있다.
   //  발송 경유 출고(shipment_id)만 발주로 이어지므로, 그 발주의 is_bulk 를 조회해 걸러낸다.
-  //  is_bulk 미적용·조회 실패면 전건 일반(= 종전 동작) — 속도가 조금 부풀 뿐 죽지 않는다.
+  //  is_bulk 미적용이면 전건 일반(= 종전 동작). 그 밖의 조회 실패는 던진다 — 삼키면 대량 발송이 도매 속도에
+  //  전부 섞여 권장이 수백 단위로 부푸는데 경고가 없다(#11).
   const bulkShipments = new Set<string>();
   if (isWholesale) {
-    try {
-      const shipIds = [...new Set(rows.filter((r) => (r.channel ?? "소매") === "도매" && r.shipment_id).map((r) => r.shipment_id as string))];
-      const orderByShip = new Map<string, string>();
-      for (let i = 0; i < shipIds.length; i += 100) {
-        const res = await sb.from("shipments").select("id, order_id").in("id", shipIds.slice(i, i + 100));
-        if (res.error) throw res.error;
-        for (const x of (res.data ?? []) as { id: string; order_id: string }[]) orderByShip.set(x.id, x.order_id);
-      }
-      const orderIds = [...new Set([...orderByShip.values()])];
-      const bulkOrders = new Set<string>();
-      for (let i = 0; i < orderIds.length; i += 100) {
-        const res = await sb.from("orders").select("id, is_bulk").in("id", orderIds.slice(i, i + 100));
-        if (res.error) { if (/is_bulk/i.test(res.error.message || "")) { break; } throw res.error; } // 115 미적용 → 전건 일반
-        for (const x of (res.data ?? []) as { id: string; is_bulk?: boolean }[]) if (x.is_bulk) bulkOrders.add(x.id);
-      }
-      for (const [sid, oid] of orderByShip) if (bulkOrders.has(oid)) bulkShipments.add(sid);
-    } catch { /* 조회 실패 — 전건 일반으로 진행(종전 동작) */ }
+    const shipIds = [...new Set(rows.filter((r) => (r.channel ?? "소매") === "도매" && r.shipment_id).map((r) => r.shipment_id as string))];
+    const orderByShip = new Map<string, string>();
+    for (let i = 0; i < shipIds.length; i += 100) {
+      const res = await sb.from("shipments").select("id, order_id").in("id", shipIds.slice(i, i + 100));
+      if (res.error) throw res.error;
+      for (const x of (res.data ?? []) as { id: string; order_id: string }[]) orderByShip.set(x.id, x.order_id);
+    }
+    const orderIds = [...new Set([...orderByShip.values()])];
+    const bulkOrders = new Set<string>();
+    for (let i = 0; i < orderIds.length; i += 100) {
+      const res = await sb.from("orders").select("id, is_bulk").in("id", orderIds.slice(i, i + 100));
+      if (res.error) { if (/is_bulk/i.test(res.error.message || "")) { break; } throw res.error; } // 115 미적용 → 전건 일반
+      for (const x of (res.data ?? []) as { id: string; is_bulk?: boolean }[]) if (x.is_bulk) bulkOrders.add(x.id);
+    }
+    for (const [sid, oid] of orderByShip) if (bulkOrders.has(oid)) bulkShipments.add(sid);
   }
 
   const totals = new Map<string, number>();       // 소매·레거시: 단일 창 / 도매: 장기(90일) 창
@@ -122,11 +132,11 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
     // 분모 고정(기획 6절) — 원장이 창보다 짧으면 최초 거래일부터. '창 안의 최초 행'으로 근사하면
     //  창 첫머리가 조용했을 때 분모가 줄어 평균이 부풀므로, 실제 최초 도매 출고일을 1행 조회로 확인한다.
     let ledgerStart: string | null = null;
-    try {
-      const fr = await sb.from("inventory_txns").select("txn_date").eq("type", "출고").eq("channel", "도매")
-        .order("txn_date", { ascending: true }).limit(1);
-      if (!fr.error && fr.data?.length) ledgerStart = (fr.data[0] as { txn_date: string }).txn_date;
-    } catch { /* 036 미적용 등 — 창 안 근사(oldest)로 진행 */ }
+    const fr = await sb.from("inventory_txns").select("txn_date").eq("type", "출고").eq("channel", "도매")
+      .order("txn_date", { ascending: true }).limit(1);
+    // 036 미적용(channel 컬럼 없음)만 창 안 근사(oldest)로 진행. 일시 오류는 던진다(#11)
+    if (fr.error && !isMissingSchemaError(fr.error)) throw fr.error;
+    if (!fr.error && fr.data?.length) ledgerStart = (fr.data[0] as { txn_date: string }).txn_date;
     const age = Math.max(1, daysBetween(ledgerStart && ledgerStart < oldest ? ledgerStart : oldest, today) || 1);
     const denShort = Math.min(windowDays, age);
     const denLong = Math.min(LONG_DAYS, age);

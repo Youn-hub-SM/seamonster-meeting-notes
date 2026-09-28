@@ -14,10 +14,14 @@ export type TemplateResult = { rows: TemplateProduct[]; excludedNoSku: string[];
 /** 활성 품목(세트·SKU 없는 품목 제외) + 그 채널 현재고. 품목명 오름차순. */
 export async function templateProducts(channel: InvChannel): Promise<TemplateResult> {
   const sb = supabaseAdmin();
+  // 현재고 = 오늘(KST)까지의 원장 — 실사 미리보기·반영(adjust/import)과 같은 기준이어야 양식의 '현재고'가 델타 기준값과 일치한다.
+  //  asof=null 이면 발송예정일이 미래인 선점 출고까지 빠져, 선반 실물을 적으면 선점분만큼 유령 재고가 생긴다.
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   const stockRpc = async () => {
-    const res = await sb.rpc("inventory_stock", { asof: null, chan: channel });
-    if (!res.error) return res;
-    return sb.rpc("inventory_stock", { asof: null }); // 036 미적용 폴백(채널 구분 없는 전체 합산)
+    const res = await sb.rpc("inventory_stock", { asof: today, chan: channel });
+    // 폴백은 (asof, chan) 시그니처가 없을 때(036 미적용, PGRST202)만 — 일시 오류를 4칸 합으로 대체하면 실사 기준값이 틀어진다.
+    if (res.error?.code !== "PGRST202") return res;
+    return sb.rpc("inventory_stock", { asof: today });
   };
   const [pr, tr, bundles] = await Promise.all([
     sb.from("products").select("id, sku, name, spec").eq("active", true).order("name", { ascending: true }),

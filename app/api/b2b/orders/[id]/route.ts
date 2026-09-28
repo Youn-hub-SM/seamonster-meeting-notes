@@ -65,6 +65,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
 // PUT /api/b2b/orders/[id] — 헤더 갱신 + 라인아이템 전체 교체
 // ─────────────────────────────────────────────
 export async function PUT(req: NextRequest, { params }: Ctx) {
+  // 1-b 에서 is_bulk 표식을 먼저 쓴 뒤 뒷단계가 실패하면 catch 에서 되돌린다(아래).
+  //  단, 원장이 이미 새 칸으로 옮겨진 뒤(shipmentsSaved)의 실패는 되돌리지 않는다 — 표식과 원장이 어긋난다.
+  let restoreBulk: (() => Promise<void>) | null = null;
+  let shipmentsSaved = false;
   try {
     const { id } = await params;
     const body = (await req.json()) as OrderInput;
@@ -129,8 +133,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
     // 1-b) 대량 발주 표식(115) — 체크 해제도 반영해야 하므로 항상 쓴다.
     //  4) 의 saveOrderShipments 가 DB 에서 이 값을 다시 읽어 차감 칸('도매' vs '도매 대량')을 정하므로
-    //  반드시 그 전에 써야 한다. 재저장은 옛 차수를 지우고(cascade 로 선점 출고 원복) 다시 넣으므로,
-    //  체크를 켜고 저장하면 그 발주의 차감이 통째로 새 칸으로 옮겨 간다.
+    //  반드시 그 전에 써야 한다. 재저장은 옛 차수를 지우고(cascade 로 선점 출고 원복) 다시 넣지만,
+    //  체크를 바꾸고 저장해도 발송 전 선점만 새 칸으로 가고 이미 나간 출고는 옛 칸을 유지한다(saveOrderShipments effChannel).
     //  is_bulk 컬럼 미적용(115 전) 환경이면 에러 메시지에 컬럼명이 보인다 — 그때만 건너뛴다(전건 도매).
     //  뒤 단계가 실패하면 표식만 바뀐 채 원장은 옛 칸에 남는다 — 되돌릴 수 있게 이전 값을 잡아 둔다.
     let prevBulk: boolean | null = null;
@@ -141,7 +145,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     const bulkRes = await sb.from("orders").update({ is_bulk: !!body.is_bulk }).eq("id", id);
     if (bulkRes.error && !/is_bulk/i.test(bulkRes.error.message || "")) throw bulkRes.error;
     //  이 뒤 어디서든 throw 되면 catch 에서 표식을 되돌린다(아래 catch).
-    const restoreBulk = async () => {
+    restoreBulk = async () => {
       if (prevBulk !== null && prevBulk !== !!body.is_bulk) await sb.from("orders").update({ is_bulk: prevBulk }).eq("id", id);
     };
 
@@ -177,8 +181,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .insert(itemsToInsert)
       .select("id, product_id, product_name, spec, sort_order");
     if (insErr) {
-      await restoreBulk(); // 표식만 바뀐 채 원장이 옛 칸에 남는 것을 막는다(115)
-      // 보상: 기존 라인아이템 복구 시도
+      // 보상: 기존 라인아이템 복구 시도 (is_bulk 표식은 catch 에서 되돌린다)
       if (existingItems && existingItems.length > 0) {
         const restoreRows = existingItems.map((it) => {
           const { line_total: _ignored, created_at: _c, id: _i, ...rest } = it;
@@ -195,7 +198,9 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .map((r) => ({ id: r.id, product_id: r.product_id ?? null, product_name: r.product_name, spec: r.spec }));
 
     // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
-    const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)), body.ship_date, body.status);
+    const { earliestShipDate, derivedStatus, totalBoxes, channelKept, channelNotice } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)), body.ship_date, body.status);
+    if (channelKept) console.warn(`[b2b/orders PUT] ${id} 이미 출고된 선점이라 차감 칸 '${channelKept}' 유지(is_bulk 와 다름)`);
+    shipmentsSaved = true; // 원장이 새 칸으로 옮겨졌다 — 이후 실패에 is_bulk 를 되돌리면 표식·원장이 어긋난다
     // 복수발송(차수 2개 이상)이면 메인 발송일 = 가장 이른 비취소 차수일(earliestShipDate).
     //  (과거엔 null 로 뒀지만, 발송일이 매출 인식일이 된 뒤로는 null 이면 집계·원장이 발주일로 폴백해
     //   편집 한 번에 매출 귀속 월이 바뀌는 버그가 됐다. 화면의 복수발송 표시는 차수 수 기준이라 영향 없음.)
@@ -234,8 +239,12 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     //  (상태 무관하게 항상 호출 — 발송완료→취소로 되돌렸을 때 매출이 남아 과대집계되던 것을 방지)
     await syncOrderSalesSafe(id);
 
-    return NextResponse.json({ ok: true, order: refreshed });
+    return NextResponse.json({ ok: true, order: refreshed, channel_kept: channelKept, channel_notice: channelNotice });
   } catch (err) {
+    // 1-b 에서 먼저 쓴 is_bulk 표식 되돌림 — 원장이 아직 옛 칸일 때만(멱등).
+    if (restoreBulk && !shipmentsSaved) {
+      try { await restoreBulk(); } catch (e) { console.error("[b2b/orders PUT] is_bulk 복원 실패", e); }
+    }
     console.error("[b2b/orders PUT]", err);
     return NextResponse.json(
       { ok: false, error: extractErrorMsg(err, "수정 실패") },
@@ -364,6 +373,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         ? { recipient_name: ship0.recipient_name, recipient_phone: ship0.recipient_phone, address: ship0.address, delivery_memo: ship0.delivery_memo, courier: ship0.courier }
         : {}) as Parameters<typeof saveOrderShipments>[1];
 
+    const channelNotices: string[] = []; // 재저장이 차감 칸을 유지·변경했을 때 화면에 띄울 안내
     // 발송일 인라인 등록/변경 — orders 컬럼만 바꾸면 재고가 안 빠지므로, saveOrderShipments 경로로 태워
     //  발송 차수 생성/발송일 교체 + 발주 전량 재고 차감(도매 — 대량 발주면 '도매 대량')을 함께 처리한다. 복수발송(차수 2개 이상)은 차수별 관리라 제외.
     //  (status 를 함께 바꾸는 발송완료 처리는 아래 별도 흐름이므로 여기선 ship_date 단독 변경만 대상)
@@ -382,10 +392,11 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           }
         }
         const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count ?? prev?.box_count) || 1));
-        const { earliestShipDate, totalBoxes } = await saveOrderShipments(
+        const { earliestShipDate, totalBoxes, channelNotice: cn } = await saveOrderShipments(
           id, recipientOf(ships[0]), schedules, savedItems, boxCount, body.ship_date,
           (prev?.status as ShipmentScheduleInput["status"]) || "발송대기"
         );
+        if (cn) channelNotices.push(cn);
         // 전 차수가 취소면 earliest 가 null — 입력한 날짜를 버리지 않는다(검증 확정 보정)
         patch.ship_date = earliestShipDate ?? body.ship_date;
         if (totalBoxes > 0) patch.box_count = totalBoxes; // 헤더 박스 수도 차수 합과 일치시킨다
@@ -406,12 +417,13 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           else if (sch.status === "취소") sch.status = sch.shipped_at ? "발송완료" : (body.status === "발송완료" ? "발송완료" : "발송대기");
         }
         const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count) || 1));
-        await saveOrderShipments(
+        const { channelNotice: cn2 } = await saveOrderShipments(
           id, recipientOf(ships[0]), schedules, savedItems, boxCount,
           // 취소에는 헤더 발송일을 넘기지 않는다 — 자동차수 생성 분기가 '발송대기+전량 선점' 차수를
           //  만들어 취소 발주가 재고를 전량 차감하는 역방향 사고를 막는다(검증 확정 보정)
           body.status === "취소" ? null : ((prev?.ship_date as string | null) ?? null), null
         );
+        if (cn2) channelNotices.push(cn2);
       }
     }
 
@@ -461,7 +473,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       await syncOrderSalesSafe(id);
     }
 
-    return NextResponse.json({ ok: true, order: data });
+    return NextResponse.json({ ok: true, order: data, channel_notice: channelNotices.join("\n") || null });
   } catch (err) {
     console.error("[b2b/orders PATCH]", err);
     return NextResponse.json(

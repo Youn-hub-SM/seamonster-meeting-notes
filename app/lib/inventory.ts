@@ -11,7 +11,7 @@ export const INV_TYPE_COLOR: Record<InvTxnType, { bg: string; fg: string }> = {
 
 // 재고 채널(풀) — 같은 품목(SKU)이라도 풀별로 현재고를 따로 잡는다.
 //  프로모션(113) = 행사 확보분. 자동 차감 경로가 없어 행사 하루 전 아침(자동 마감·합류)까지 보호되고,
-//  입고는 '재고 옮기기'(소매→프로모션)로만 — 도매의 "입고는 이동뿐" 규칙과 동일.
+//  입고는 '재고 이동'(소매→프로모션)로만 — 도매의 "입고는 이동뿐" 규칙과 동일.
 //  도매 대량(115) = 선결제 대량 발주 확보분. 프로모션과 같은 보호 칸이지만 **자동 합류가 없다**
 //   — 이미 팔린 물건이라 소매로 돌려보낼 근거가 없다(대표 확정 2026-09-22).
 export const INV_CHANNELS = ["도매", "소매", "프로모션", "도매 대량"] as const;
@@ -49,6 +49,7 @@ export interface InventoryTxn {
   sku?: string | null;
   type: InvTxnType;
   channel?: InvChannel;    // 도매/소매 재고 채널(migration 036, 기존행=소매)
+  group_id?: string | null; // 한 번에 기록된 묶음(재고 이동은 출발·도착 두 행이 같은 group_id)
   qty: number;             // 부호 있는 재고 변화량
   unit_amount: number | null;
   txn_date: string;

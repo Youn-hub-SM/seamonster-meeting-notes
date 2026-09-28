@@ -260,8 +260,8 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   const checks: { 항목: string; 상세: string; 확인위치: string }[] = [];
   if (b2b && b2b.발송_지연 > 0) checks.push({ 항목: "발송 지연", 상세: `발송 예정일이 지났는데 발송대기인 발주 ${b2b.발송_지연}건`, 확인위치: "B2B > 발송 일정" });
   if (b2b && b2b.오늘_발송예정 > 0) checks.push({ 항목: "오늘 발송 예정", 상세: `오늘 나가야 할 발송 ${b2b.오늘_발송예정}건`, 확인위치: "B2B > 발송 일정" });
-  if (production && production.마감_지연 > 0) checks.push({ 항목: "생산 마감 지연", 상세: `마감일이 지난 열린 생산요청 ${production.마감_지연}건`, 확인위치: "생산 관리 > 생산요청" });
-  if (production && production.마감_3일내 > 0) checks.push({ 항목: "생산 마감 임박", 상세: `3일 내 마감 생산요청 ${production.마감_3일내}건`, 확인위치: "생산 관리 > 생산요청" });
+  if (production && production.마감_지연 > 0) checks.push({ 항목: "생산 마감 지연", 상세: `마감일이 지난 열린 생산요청 ${production.마감_지연}건`, 확인위치: "생산 및 재고 > 생산 요청" });
+  if (production && production.마감_3일내 > 0) checks.push({ 항목: "생산 마감 임박", 상세: `3일 내 마감 생산요청 ${production.마감_3일내}건`, 확인위치: "생산 및 재고 > 생산 요청" });
   if (inventory && inventory.품절_판매중인데_재고없음.length > 0) checks.push({ 항목: "품절", 상세: `판매 중인데 재고가 없는 품목 ${inventory.품절_판매중인데_재고없음.length + inventory.품절_추가건수}종 — 보충 발주/생산 판단 필요`, 확인위치: "재고 목록" });
   if (inventory && inventory.소진임박_7일내.length > 0) checks.push({ 항목: "소진 임박", 상세: `7일 내 소진 예상 ${inventory.소진임박_7일내.length + inventory.소진임박_추가건수}종(아래 표)`, 확인위치: "재고 목록" });
   if (inventory && inventory.방치된_대기입고_3일초과 > 0) checks.push({ 항목: "대기 입고 방치", 상세: `3일 넘게 '대기' 상태인 입고 ${inventory.방치된_대기입고_3일초과}건 — 실물이 왔다면 입고처리`, 확인위치: "입고 및 출고" });
@@ -276,7 +276,7 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   try {
     const prevMonth = shiftDate(`${briefDate.slice(0, 7)}-01`, -1).slice(0, 7);
     const { data: snap, error: se } = await sb.from("quote_snapshots").select("month").eq("month", prevMonth).maybeSingle();
-    if (!se && !snap) checks.push({ 항목: "지난달 매입 결산 미확정", 상세: `${Number(prevMonth.slice(5))}월 결산이 아직 확정되지 않음`, 확인위치: "재고 관리 > 월간매입 결산" });
+    if (!se && !snap) checks.push({ 항목: "지난달 매입 결산 미확정", 상세: `${Number(prevMonth.slice(5))}월 결산이 아직 확정되지 않음`, 확인위치: "생산 및 재고 > 월간매입 결산" });
   } catch { /* 101 미적용 — 생략 */ }
   if (voc && voc.기준선_일평균_신규VOC_직전7일_어제제외 > 0 && voc.어제_신규VOC >= 3 && voc.어제_신규VOC >= voc.기준선_일평균_신규VOC_직전7일_어제제외 * 2)
     checks.push({ 항목: "VOC 급증", 상세: `어제 신규 ${voc.어제_신규VOC}건 — 평소 일평균 ${voc.기준선_일평균_신규VOC_직전7일_어제제외}건의 2배 이상`, 확인위치: "VOC 처리" });

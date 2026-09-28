@@ -25,27 +25,36 @@ export async function POST(req: NextRequest) {
     if (!INV_TXN_TYPES.includes(type)) return NextResponse.json({ ok: false, error: "유형이 올바르지 않습니다." }, { status: 400 });
     const writeChannel = toInvChannel(b.channel); // 036·113·115 — 미지정·모르는 값은 소매
     let qty = signedQty(type, Number(b.qty) || 0);
+    const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined;
     // 조정(실사 목표): 화면이 계산한 델타는 화면 로드 시점 재고 기준이라, 로드 후 재고가 움직이면
     //  낡은 델타가 그대로 기록된다(감사 확정 TOCTOU). target_qty 가 오면 서버가 기록 시점 현재고로
     //  델타를 재계산한다(엑셀 조정 apply 와 같은 규칙). 구 화면(qty 만 전송)은 기존 동작 유지.
+    //  기준 시점 = 조정 날짜(asof=txn_date, 미지정이면 KST 오늘) — 실사 엑셀(asof=오늘)과 같은 기준.
+    //  asof null(전 기간)이면 조정일 이후 기록까지 섞여 단건 조정과 엑셀 조정의 델타가 달라진다(감사 #6).
+    const kstToday = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    // 조정은 오늘까지만 — 미래 날짜면 기준 재고에 발송 예정 선점이 섞여 델타가 유령 재고가 된다(감사 #6)
+    if (type === "조정" && txn_date && txn_date > kstToday)
+      return NextResponse.json({ ok: false, error: "조정 날짜는 오늘 이후로 할 수 없습니다." }, { status: 400 });
     if (type === "조정" && b.target_qty !== undefined && b.target_qty !== null && b.target_qty !== "") {
       const target = Math.round((Number(b.target_qty) || 0) * 100) / 100;
+      const asof = txn_date ?? kstToday;
       const { data: stockRow, error: stockErr } = await supabaseAdmin()
-        .rpc("inventory_stock", { asof: null, chan: writeChannel })
+        .rpc("inventory_stock", { asof, chan: writeChannel })
         .eq("product_id", String(b.product_id || ""))
         .maybeSingle();
-      if (!stockErr) { // RPC 구버전(chan 미지원 등) 실패 시엔 화면이 보낸 델타(qty)로 폴백 — 기존 동작 유지
+      // RPC 구버전(asof·chan 시그니처 없음, PGRST202)일 때만 화면이 보낸 델타(qty)로 폴백 — 다른 오류는 중단(낡은 델타 기록 방지)
+      if (stockErr && stockErr.code !== "PGRST202") throw stockErr;
+      if (!stockErr) {
         const current = Number((stockRow as { qty?: number } | null)?.qty) || 0;
         qty = Math.round((target - current) * 100) / 100;
-        if (qty === 0) return NextResponse.json({ ok: false, error: "현재고와 동일합니다 (변동 없음)." }, { status: 400 });
+        if (qty === 0) return NextResponse.json({ ok: false, error: `${asof} 기준 ${writeChannel} 현재고(${current.toLocaleString()})와 같습니다 — 변동 없음.` }, { status: 400 });
       }
     }
     if (qty === 0) return NextResponse.json({ ok: false, error: "수량을 입력하세요." }, { status: 400 });
-    const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : undefined;
     // 이동 전용 칸 직접 입고 금지 — 도매·프로모션·도매 대량은 소매 입고 후 이동으로만 들어간다(실수로 바로 그 칸에 넣는 사고 방지).
     //  정당한 입고(이동·생산 수령)는 이 라우트를 쓰지 않으므로 여기서 막아도 안전하다. 조정·출고는 네 칸 모두 허용(실사 대상).
     if (type === "입고" && MOVE_ONLY_CHANNELS.includes(writeChannel))
-      return NextResponse.json({ ok: false, error: `${writeChannel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [재고 옮기기]에서 옮기세요.` }, { status: 400 });
+      return NextResponse.json({ ok: false, error: `${writeChannel} 입고는 막혀 있습니다 — 소매로 입고한 뒤 [재고 이동]에서 옮기세요.` }, { status: 400 });
 
     const sb = supabaseAdmin();
     // 묶음(세트)은 자체 재고가 없다 → 입고/출고는 구성품으로 전개해 기록(다른 경로와 동일 규칙),
@@ -149,6 +158,15 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ ok: false, error: "id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
+    // 쌍·연동 행은 여기서 단건 삭제 금지 — 이동(자동 합류 포함)은 [재고 이동] 내역에서 묶음 단위로(음수 가드·재개 판정 포함),
+    //  B2B 선점 출고는 발주의 발송일정에서(재저장·삭제 시 cascade 로 원복) 처리한다. 한쪽만 지우면 짝 없는 칸 재고가 남는다.
+    const { data: cur, error: curErr } = await sb.from("inventory_txns").select("*").eq("id", id).maybeSingle(); // * = 035 미적용(shipment_id 없음)에도 안전
+    if (curErr) throw curErr;
+    if (!cur) return NextResponse.json({ ok: false, error: "내역을 찾을 수 없습니다 — 새로고침 후 다시 시도하세요." }, { status: 404 });
+    if ((cur as { partner?: string | null }).partner === "채널이동")
+      return NextResponse.json({ ok: false, error: "재고 이동(칸 이동·행사 자동 합류) 기록입니다 — [재고 이동] 최근 내역, [입고 및 출고] 목록의 이동 행, [변경 기록]의 취소 중 한 곳에서 취소하세요(두 칸이 함께 원복됩니다)." }, { status: 409 });
+    if ((cur as { shipment_id?: string | null }).shipment_id)
+      return NextResponse.json({ ok: false, error: "B2B 발송 선점 출고입니다 — 발주의 발송일정에서 수정·삭제하세요(재고가 함께 원복됩니다)." }, { status: 409 });
     // 083(cascade) 이후: 생산요청과 연결된 입고를 여기서 취소하면 요청 쪽 입고 기록도 함께 원복된다.
     //  083 미적용(restrict)이면 FK 오류 → 안내 문구로 변환.
     //  삭제 전에 '지금 100% 완료'인 연결 요청서를 잡아 두고, 삭제 뒤 100% 아래로 내려갔으면 자동 재개(마감 원복).

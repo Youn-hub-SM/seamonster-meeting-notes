@@ -129,7 +129,11 @@ export async function POST(req: NextRequest) {
     if (new Set(items.map((it) => it.product_id)).size !== items.length)
       return NextResponse.json({ ok: false, error: "같은 품목이 두 줄에 있습니다 — 한 줄로 합쳐 주세요." }, { status: 400 });
 
-    const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    const kstToday = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : kstToday;
+    // 미래 날짜 금지 — 행사 자동 합류가 풀 잔량(날짜 무관)을 오늘 날짜로 빼므로, 미래분이 섞이면
+    //  기준일 조회에서 프로모션 음수·소매 과대가 난다(감사 #64). 이동은 '한 일'의 기록이라 오늘까지만.
+    if (txn_date > kstToday) return NextResponse.json({ ok: false, error: "옮긴 날짜는 오늘 이후로 할 수 없습니다." }, { status: 400 });
     const memo = String(b.memo || "").trim() || null;
     const created_by = await actor(req);
     const sb = supabaseAdmin();
@@ -190,6 +194,14 @@ export async function POST(req: NextRequest) {
       } catch (e) { console.warn("[inventory/move] 이전 알림 실패", e); }
     };
 
+    // 요청서 재판정은 이동 1회에 요청서당 1번 — 줄마다 돌리면 다품목 배정에서 '요청→진행중→완료' 이중 전환·이중 알림이 난다(감사 #40).
+    const recheckIds = new Set<string>();
+    const recheckOnce = async () => {
+      if (!recheckIds.size) return;
+      try { await recheckRequestCompletion(sb, [...recheckIds], "요청서 배정"); } catch (e) { console.warn("[inventory/move] 배정 재판정 실패", e); }
+    };
+    let allocatedTotal = 0; // 실제 기록된 배정 합(건너뛴 배정 제외) — 응답·화면 성공 문구용(감사 #41)
+
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       const group_id = crypto.randomUUID();
@@ -206,6 +218,7 @@ export async function POST(req: NextRequest) {
         if (/channel/i.test(error.message)) return NextResponse.json({ ok: false, error: "채널 컬럼이 없습니다 — migration 036 을 먼저 적용하세요." }, { status: 500 });
         const nm = nameById.get(it.product_id)?.name || `${i + 1}번째 품목`;
         const done = results.length;
+        await recheckOnce(); // 앞 줄에서 이미 기록된 배정의 완료 판정은 유지
         await notifyMove(items.slice(0, done)); // 이미 이동된 앞 줄들은 게시물로 알린다
         return NextResponse.json({
           ok: false,
@@ -229,24 +242,27 @@ export async function POST(req: NextRequest) {
             });
             warnings.push(...r.warnings.map((w) => `${nm}: ${w}`));
             itemLines.push(...r.lines.map((l) => `  ${l}`));
-            allocatedSum = it.allocations.reduce((s, a) => s + a.qty, 0);
-            if (r.requestIds.length) await recheckRequestCompletion(sb, r.requestIds, "요청서 배정");
+            // 실제 기록된 수량만 '배정'으로 센다 — 그 사이 닫힌 요청서로 건너뛴 배정은 기타로 남는다.
+            allocatedSum = r.applied;
+            for (const rid of r.requestIds) recheckIds.add(rid);
           }
         } catch (e) {
           console.warn("[inventory/move] 요청서 배정 실패", e);
           warnings.push(`${nm}: 요청서 배정 기록에 실패했습니다 — 이동은 저장됐으니 취소 후 다시 시도하세요.`);
         }
       }
+      allocatedTotal += allocatedSum;
       const etc = Math.round((it.qty - allocatedSum) * 100) / 100;
       const skuTag = nameById.get(it.product_id)?.sku ? ` [${nameById.get(it.product_id)!.sku}]` : "";
       notifyPerItem.push(`- ${nm}${skuTag} ×${it.qty.toLocaleString()}${allocatedSum > 0 && etc > 0 ? ` (배정 ${allocatedSum.toLocaleString()} · 기타 ${etc.toLocaleString()})` : allocatedSum > 0 ? "" : " (기타)"}`);
       notifyPerItem.push(...itemLines);
     }
 
+    await recheckOnce();
     // ── 알림 — 한 번의 이동 = 한 게시물(품목별 요약 + 이동 후 재고). 실패해도 이동은 성공.
     await notifyMove(items);
 
-    return NextResponse.json({ ok: true, results, group_id: results[0]?.group_id ?? null, count: results.length * 2, warnings });
+    return NextResponse.json({ ok: true, results, group_id: results[0]?.group_id ?? null, count: results.length * 2, warnings, allocated: Math.round(allocatedTotal * 100) / 100 });
   } catch (err) {
     console.error("[inventory/move POST]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "이동 실패") }, { status: 500 });
@@ -262,19 +278,51 @@ export async function DELETE(req: NextRequest) {
     if (!group_id) return NextResponse.json({ ok: false, error: "group_id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
 
-    // 취소로 입고편 채널이 마이너스가 되면 중단 — 예: 소매→프로모션 이동 후 자동 합류(풀→소매)가
-    //  이미 나간 상태에서 원본을 취소하면 프로모션 풀이 음수로 남는다(검증 확정). 이후 이동을 먼저 취소해야 한다.
+    // 취소로 입고편 채널이 '어느 시점에라도' 마이너스가 되면 중단 — 예: 소매→프로모션 M1 뒤 자동 합류 R(풀→소매)이
+    //  나가고 M2 로 다시 채운 상태에서 M1 을 취소하면, 현재 잔량으로는 통과하는데 R 직후가 −가 되어 M2 확보분이
+    //  장부에서 사라진다(감사 #14). 그래서 현재 잔량이 아니라 '이 입고편을 뺀' 시간순 누적 잔량의 최솟값을 본다.
+    //  루프 뒤 최종 누적값(= 현재 잔량 − 이 입고편)도 최솟값에 넣어 종전 현재고 검사를 포함한다(마지막 행 취소 대비).
+    //  시간순 검사는 이동 전용 칸(도매·프로모션·도매 대량)만 — 소매는 입고 기록이 늦게 들어와 시간순으로 잠깐 −가 되는 게
+    //  정상이라(판매가 먼저 찍힘) 시간순으로 보면 정당한 취소(행사 전 자동 합류 되돌리기 등)까지 막힌다. 소매는 현재 잔량만 본다.
     {
       const { data: inLegs } = await sb.from("inventory_txns")
-        .select("product_id, channel, qty").eq("group_id", group_id).eq("partner", MARK).eq("type", "입고");
+        .select("id, product_id, channel, qty").eq("group_id", group_id).eq("partner", MARK).eq("type", "입고");
       for (const leg of inLegs ?? []) {
+        let checked = false;
+        if (MOVE_ONLY_CHANNELS.includes(String(leg.channel) as (typeof MOVE_ONLY_CHANNELS)[number])) try {
+          // 같은 품목·칸의 완료 행 전량을 시간순으로(RPC inventory_stock 과 같은 status='완료' 기준)
+          const rows: { id: string; qty: unknown }[] = [];
+          for (let off = 0; off < 100000; off += 1000) {
+            const { data, error } = await sb.from("inventory_txns").select("id, qty")
+              .eq("product_id", String(leg.product_id)).eq("channel", String(leg.channel)).eq("status", "완료")
+              .order("txn_date", { ascending: true }).order("created_at", { ascending: true }).order("id", { ascending: true })
+              .range(off, off + 999);
+            if (error) throw error;
+            rows.push(...((data ?? []) as { id: string; qty: unknown }[]));
+            if ((data ?? []).length < 1000) break;
+          }
+          checked = true;
+          // 이 입고편이 없었다면 −가 되는 시점 중, 입고편 덕에 0 이상이던 시점만 문제로 본다 — 원래부터 −였던 시점
+          //  (발송일에 선점이 먼저 찍히고 이동이 뒤따른 도매·도매 대량의 흔한 흐름)은 이 취소 탓이 아니라 막지 않는다.
+          //  최종 잔량(현재 − 입고편)은 늘 본다(종전 현재고 검사, 마지막 행 취소 포함).
+          const legQty = Number(leg.qty) || 0;
+          let run = 0, after = false, bad = false;
+          for (const r of rows) {
+            if (r.id === leg.id) { after = true; continue; }
+            run += Number(r.qty) || 0;
+            if (after && run < -0.001 && run + legQty >= -0.001) bad = true;
+          }
+          if (after && run < -0.001) bad = true;
+          if (bad)
+            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 이후 시점에 마이너스가 됩니다 — 이 이동 이후에 기록된 ${leg.channel} 칸의 출고·이동(행사 전 자동 합류 등)을 먼저 취소하세요.` }, { status: 409 });
+        } catch { /* 시간순 조회 실패(status 미적용 등) — 아래 현재 잔량 검사로 폴백 */ }
+        if (checked) continue;
         try {
           const { data: st } = await sb.rpc("inventory_stock", { asof: null, chan: String(leg.channel) })
             .eq("product_id", String(leg.product_id)).maybeSingle();
           const cur = Number((st as { qty?: unknown } | null)?.qty ?? NaN);
-          if (Number.isFinite(cur) && cur - (Number(leg.qty) || 0) < -0.001) {
-            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 마이너스가 됩니다 — 이 이동 이후에 기록된 이동(행사 종료 자동 합류 등)을 먼저 취소하세요.` }, { status: 409 });
-          }
+          if (Number.isFinite(cur) && cur - (Number(leg.qty) || 0) < -0.001)
+            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 마이너스가 됩니다 — 이 이동 이후에 기록된 이동(행사 전 자동 합류 등)을 먼저 취소하세요.` }, { status: 409 });
         } catch { /* 판정 불가 시 기존 동작(취소 허용) */ }
       }
     }
@@ -286,7 +334,9 @@ export async function DELETE(req: NextRequest) {
       const { data: txns, error: te } = await sb.from("inventory_txns").select("id").eq("group_id", group_id).eq("partner", MARK);
       if (te) return NextResponse.json({ ok: false, error: "취소 준비 조회에 실패했습니다 — 다시 시도하세요." }, { status: 500 });
       const ids = (txns ?? []).map((t) => t.id as string);
-      if (ids.length) {
+      // 0행 = 이미 취소됐거나 이동이 아닌 group — ok:true 로 넘기면 화면이 '취소됨'으로 믿는다(감사 #19 와 같은 결함)
+      if (!ids.length) return NextResponse.json({ ok: false, error: "취소할 이동 기록을 찾지 못했습니다 — 새로고침 후 다시 시도하세요." }, { status: 404 });
+      {
         const { data: rcs, error: re } = await sb.from("production_receipts").select("request_id").in("inv_txn_id", ids).limit(2000);
         if (re) return NextResponse.json({ ok: false, error: "취소 준비 조회에 실패했습니다 — 다시 시도하세요." }, { status: 500 });
         affected = [...new Set((rcs ?? []).map((r) => r.request_id as string).filter(Boolean))];
@@ -294,11 +344,13 @@ export async function DELETE(req: NextRequest) {
     }
 
     // 재개 대상 = '삭제 전에 이행 100%였던' 요청만 — 사람이 미달인 채 수동 완료한 요청은 건드리지 않는다.
-    //  (getRequestFullness 가 제조사(재고 보충) 요청·판정 불가 건은 null 로 걸러준다 — 확정형 셋은 통과)
+    //  null = 조회 실패(receipts 가 있으니 요청서·품목은 존재) — 건너뛰고 지우면 '이행률은 내려갔는데 완료'로
+    //  굳고 재판정 트리거가 없다(감사 #30). 취소 자체를 중단(fail-closed).
     const reopenIds: string[] = [];
     for (const rid of affected) {
       const f = await getRequestFullness(sb, rid);
-      if (f?.full) reopenIds.push(rid);
+      if (!f) return NextResponse.json({ ok: false, error: "취소 준비 조회에 실패했습니다 — 다시 시도하세요." }, { status: 500 });
+      if (f.full) reopenIds.push(rid);
     }
 
     const { error } = await sb.from("inventory_txns").delete().eq("group_id", group_id).eq("partner", MARK);

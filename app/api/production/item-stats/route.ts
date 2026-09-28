@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getInventoryRows } from "@/app/lib/production-inventory";
-import { getLedgerVelocity } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -10,15 +9,17 @@ export const maxDuration = 60;
 // 생산일정 추가 모달용 — 품목별 현재고·일평균출고(최근 한달)·예상 재고소진일수 +
 //  안전재고·대기수요·안전재고 도달일수(권장 생산량 산정용).
 //  (소진일/안전재고 도달일 날짜는 클라이언트가 오늘 + 일수로 계산)
+//  현재고 = 소매 + 도매(확보분 프로모션·도매 대량 제외, #12). 하루 출고 = 행사 제거한 평상시 속도 —
+//  안전재고·권장과 같은 속도라 소진일이 권장과 어긋나지 않는다(별도 원장 재조회 없음).
 
 export async function GET() {
   try {
-    const [inv, velocity] = await Promise.all([getInventoryRows(), getLedgerVelocity()]);
+    const inv = await getInventoryRows();
 
     const items = inv.rows
       .filter((r) => r.inBoxhero)
       .map((r) => {
-        const dailyOut = velocity.perSku[r.sku] || 0;
+        const dailyOut = r.dailyOut;
         // 소진일수도 권장과 같은 포지션(현재고 + 입고 예정) 기준 — 시켜 둔 물량이 곧 들어오는데 '품절 위험' 경고가 뜨지 않게
         const depletionDays =
           dailyOut > 0 && r.stock != null ? Math.max(0, Math.floor((r.stock + r.inbound) / dailyOut)) : null;
@@ -44,7 +45,7 @@ export async function GET() {
       configured: true,
       items,
       leadDays: inv.leadDays,
-      velocitySpanDays: velocity.spanDays,
+      velocitySpanDays: inv.velocitySpanDays,
     });
   } catch (err) {
     console.error("[production/item-stats]", err);

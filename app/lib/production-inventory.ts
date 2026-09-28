@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
-import { getLedgerVelocity } from "./production-velocity";
+import { getLedgerVelocity, isMissingSchemaError } from "./production-velocity";
+import { RESERVED_CHANNELS } from "./inventory";
 import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promotions";
 import { getSafetyAdjusts, effectiveDelta, effectiveExclude } from "./production-safety-adjust";
 import { getLeadDays, getCycleDays, LINK_B2B_ORDERS_TO_PRODUCTION } from "./production-config";
@@ -33,6 +34,7 @@ export interface InvRow {
   inbound: number;        // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
   inboundOverdue: number;       // 그중 마감이 지난 잔여(자동 제외 없음 — 표시용)
+  inboundFolded: number;        // 입고 예정에서 뺀 '담은 행사·대량 몫'(production-inbound folded) — 창이 원래 잔여를 복원하는 데 쓴다
   recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정))
   belowSafety: boolean;   // 현재고 + 입고 예정 < 안전재고 (권장과 같은 포지션 기준)
   requestByDays: number | null; // 생산요청 마감까지 남은 일수(0·음수=지금/이미 늦음). 출고0·재고없음이면 null
@@ -63,20 +65,35 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   const stockRpc = async () => {
     if (channel) {
       const r = await sb.rpc("inventory_stock", { asof: null, chan: channel });
-      if (!r.error) return r;
-      // 036 미적용 폴백 — 채널 구분 없이 전체
+      // 036 미적용(chan 시그니처 없음 = PGRST202)만 전 칸 합으로 폴백. 일시 오류는 그대로 돌려 아래서 던진다 —
+      //  모든 오류에서 폴백하면 그 칸 재고에 4칸 합이 조용히 들어가 권장이 대폭 과소(#11)
+      if (!r.error || r.error.code !== "PGRST202") return r;
     }
     return sb.rpc("inventory_stock", { asof: null });
+  };
+  // 전체(채널 미지정 = 생산 일정 item-stats)는 chan null = 4칸 합. 확보분(프로모션·도매 대량)은 가용 재고가
+  //  아니다(기획 4절) — 목표에서 행사 가산을 뗐으므로 풀도 함께 빼야 짝이 맞는다(기획 9-3 표 '과소' 행, #12).
+  //  결과 = 소매 + 도매. chan 시그니처 없음(PGRST202)이면 칸 자체가 없으니 뺄 것도 없다.
+  const reservedRpc = async () => {
+    if (channel) return [] as { product_id: string; qty: number }[];
+    const rs = await Promise.all(RESERVED_CHANNELS.map((c) => sb.rpc("inventory_stock", { asof: null, chan: c })));
+    const out: { product_id: string; qty: number }[] = [];
+    for (const r of rs) {
+      if (r.error) { if (isMissingSchemaError(r.error)) continue; throw r.error; }
+      out.push(...((r.data as { product_id: string; qty: number }[] | null) ?? []));
+    }
+    return out;
   };
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
   // 입고 예정 — 제조사 생산 입고는 소매 채널로 들어오므로 소매·전체 수식에서만 뺀다.
   //  도매 수식의 부족은 소매→도매 이동으로 채워지는 몫이라 제조사 잔여를 빼면 이중 차감이 된다.
   //  가장 무거운 원장 속도 조회와 나란히 돌려 지연을 숨긴다.
-  const [stockRes, prodRes, velocity, inboundByProduct] = await Promise.all([
+  const [stockRes, prodRes, velocity, inboundByProduct, reservedRows] = await Promise.all([
     stockRpc(),
     sb.from("products").select("id, sku, name"), // 전 품목(수요 매칭은 비활성 포함)
     getLedgerVelocity(undefined, channel), // 1b) 소진 속도(최근 출고 일평균) — 채널별
     channel === "도매" ? Promise.resolve(new Map<string, InboundRow>()) : getOpenInboundByProduct(sb, today),
+    reservedRpc(), // 전체 조회에서만 확보분 칸(프로모션·도매 대량) 차감용
   ]);
   const inboundOk = inboundByProduct !== null;
   if (stockRes.error) throw stockRes.error;
@@ -84,6 +101,10 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
 
   const stockByProduct = new Map<string, number>();
   for (const t of (stockRes.data as { product_id: string; qty: number }[] | null) ?? []) stockByProduct.set(t.product_id, Number(t.qty) || 0);
+  // 4칸 합 − 확보분(프로모션·도매 대량) = 소매 + 도매 (#12). 원장에 없는 품목은 건너뜀(키 추가 안 함)
+  for (const t of reservedRows) {
+    if (stockByProduct.has(t.product_id)) stockByProduct.set(t.product_id, (stockByProduct.get(t.product_id) || 0) - (Number(t.qty) || 0));
+  }
   // 프로모션 풀은 소매 보유에 더하지 않는다(4단계·기획 결정 9·10). 행사는 이제 주간 요청서가 세지
   //  않으므로(결정 7·8) 목표에서 행사 가산도 함께 뺐다 — 둘은 짝이라 한쪽만 떼면 과잉·과소로 어긋난다.
   //  소매 = 평상시 수요 대 평상시 재고. 확보분은 자기 칸에 서고 생산은 제조사와 협의한다.
@@ -127,13 +148,14 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   if (oErr) throw oErr;
 
   // 입고 예정을 SKU 로 합산(중복 SKU 는 수요와 같은 규칙으로 합쳐진다)
-  const inboundBySku = new Map<string, { qty: number; due: string | null; overdue: number }>();
+  const inboundBySku = new Map<string, { qty: number; due: string | null; overdue: number; folded: number }>();
   for (const [pid, row] of inboundByProduct ?? new Map<string, InboundRow>()) {
     const sku = skuByProduct.get(pid);
     if (!sku) continue;
     const k = sku.toUpperCase();
-    const cur = inboundBySku.get(k) ?? { qty: 0, due: null, overdue: 0 };
+    const cur = inboundBySku.get(k) ?? { qty: 0, due: null, overdue: 0, folded: 0 };
     cur.qty = Math.round((cur.qty + row.qty) * 100) / 100;
+    cur.folded = Math.round((cur.folded + (row.folded || 0)) * 100) / 100;
     cur.overdue = Math.round((cur.overdue + row.overdue_qty) * 100) / 100;
     if (row.earliest_due && (!cur.due || row.earliest_due < cur.due)) cur.due = row.earliest_due;
     inboundBySku.set(k, cur);
@@ -211,6 +233,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
       inbound,
       inboundDue: inb?.due ?? null,
       inboundOverdue: inb?.overdue ?? 0,
+      inboundFolded: inb?.folded ?? 0,
       recommend,
       belowSafety,
       requestByDays,

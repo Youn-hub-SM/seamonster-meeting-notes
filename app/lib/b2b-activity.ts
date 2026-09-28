@@ -85,6 +85,19 @@ export async function logProductionRequestCreated(reqNo: string, label: string, 
     detail,
   });
 }
+// 주간 AI 초안(수요일 13:50 크론, 14시 전 게시)이 요청서를 못 만들었을 때(권장 0·오류)도 담당자가 알도록 — 등록 알림과 같은 봇·체크 키.
+export async function logProductionDraftNotice(summary: string, detail?: string): Promise<void> {
+  await recordActivity({
+    event_type: "production_request.draft",
+    summary,
+    meta: {},
+    notify: true,
+    bot: "helper",
+    helperEvent: "prod_request",
+    actor: "AI 초안",
+    detail,
+  });
+}
 export async function logProductionRequestStatusChanged(reqNo: string, fromStatus: string, toStatus: string, actor?: string | null, detail?: string): Promise<void> {
   if (fromStatus === toStatus) return;
   // 진행중·완료·취소는 Flow 알림(설정 체크리스트로 개별 제어), 다시열기 등은 변경기록만.

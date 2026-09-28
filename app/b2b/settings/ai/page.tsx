@@ -29,6 +29,21 @@ export default function AiSettingsPage() {
   const [global, setGlobal] = useState<ModelKey>("sonnet");
   const [features, setFeatures] = useState<Record<string, FeatureVal>>({});
   const [savingKey, setSavingKey] = useState<string>(""); // "global" | feature key
+  // 주간 생산 요청서 AI 초안의 'AI 검토 포인트'(Claude 호출) 켜기/끄기 — 꺼도 초안(수식 수량)은 만들어진다
+  const [draftAi, setDraftAi] = useState<boolean | null>(null);
+  const [draftAiSaving, setDraftAiSaving] = useState(false);
+  useEffect(() => {
+    fetch("/api/b2b/settings/draft-ai", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j?.ok) setDraftAi(!!j.enabled); }).catch(() => {});
+  }, []);
+  async function toggleDraftAi(next: boolean) {
+    setDraftAiSaving(true);
+    try {
+      const j = await (await fetch("/api/b2b/settings/draft-ai", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) })).json();
+      if (!j.ok) throw new Error(j.error || "저장 실패");
+      setDraftAi(!!j.enabled);
+    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
+    setDraftAiSaving(false);
+  }
 
   // 프롬프트(회의록·CS)
   const [meetingPrompt, setMeetingPrompt] = useState("");
@@ -186,6 +201,22 @@ export default function AiSettingsPage() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      {/* 주간 생산 요청서 AI 초안 — 검토 포인트 */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">생산 요청서 AI 초안 — 검토 포인트</h2>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px" }}>
+          매주 수요일 초안 메모에 AI 검토 포인트를 붙입니다(기능별 모델의 &lsquo;생산·재고 조언&rsquo; 모델 사용). 끄면 초안 수량·메모는 그대로이고 검토 포인트만 빠집니다.
+        </p>
+        {draftAi === null ? <div className="b2b-loading">불러오는 중...</div> : (
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, cursor: "pointer" }}>
+            <input type="checkbox" className="b2b-checkbox" checked={draftAi} disabled={draftAiSaving} onChange={(e) => toggleDraftAi(e.target.checked)} />
+            AI 검토 포인트 붙이기
+          </label>
         )}
       </section>
 

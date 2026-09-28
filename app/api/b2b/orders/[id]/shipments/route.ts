@@ -95,7 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .sort();
     const beforeDates = datesOf(prevShips);
 
-    const { earliestShipDate, derivedStatus, totalBoxes } = await saveOrderShipments(id, recipient, schedules, savedItems);
+    const { earliestShipDate, derivedStatus, totalBoxes, channelNotice } = await saveOrderShipments(id, recipient, schedules, savedItems);
 
     // 헤더 동기화 — 이익률·송장 입력칸 수가 쓰는 orders.box_count 를 실제 차수 박스 합으로 맞춘다.
     const patch: Record<string, unknown> = { ship_date: earliestShipDate };
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await logShipmentScheduled(id, beforeDates, afterDates);
     }
 
-    return NextResponse.json({ ok: true, ship_date: earliestShipDate, box_count: totalBoxes });
+    return NextResponse.json({ ok: true, ship_date: earliestShipDate, box_count: totalBoxes, channel_notice: channelNotice });
   } catch (err) {
     console.error("[b2b/orders/shipments]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "발송 일정 저장 실패") }, { status: 500 });

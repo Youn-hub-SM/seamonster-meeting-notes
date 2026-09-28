@@ -41,6 +41,7 @@ export interface PrItem {
   unit: string;
   requested_qty: number;
   received_qty: number;     // Σ receipts.qty
+  reserved_qty: number;     // 요청수량 중 '담기'로 더한 프로모션·도매 대량 몫(119, 미적용이면 0) — 입고 예정 보정용
   memo: string | null;
   receipts: PrReceipt[];
 }
@@ -80,9 +81,9 @@ export const PURPOSE_NOTE: Record<PrPurpose, string> = {
 /** 탭 아래 안내 — 그 용도의 요청서가 무엇으로 채워지는지. */
 export const FULFILL_NOTE: Record<PrPurpose, string> = {
   "재고 보충": "입고 기록에서 이 요청서를 고르면 이행됩니다 (입고는 소매로 들어옵니다)",
-  "도매 납품": "재고 옮기기에서 소매 → 도매 로 옮기며 배정하면 이행됩니다",
-  "프로모션": "재고 옮기기에서 소매 → 프로모션 으로 옮기며 배정하면 이행됩니다",
-  "도매 대량": "재고 옮기기에서 소매 → 도매 대량 으로 옮기며 배정하면 이행됩니다 (선결제 건이라 자동 합류는 없습니다)",
+  "도매 납품": "재고 이동에서 소매 → 도매 로 옮기며 배정하면 이행됩니다",
+  "프로모션": "재고 이동에서 소매 → 프로모션 으로 옮기며 배정하면 이행됩니다",
+  "도매 대량": "재고 이동에서 소매 → 도매 대량 으로 옮기며 배정하면 이행됩니다 (선결제 건이라 자동 합류는 없습니다)",
 };
 
 export interface ProductionRequest {

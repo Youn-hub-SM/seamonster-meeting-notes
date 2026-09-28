@@ -125,9 +125,10 @@ export async function validateManualAllocations(
 export async function applyManualAllocations(
   sb: SupabaseClient,
   opts: { inv_txn_id: string; product_id: string; receipt_date?: string; allocations: ManualAlloc[]; actor: string | null; purpose?: AllocPurpose },
-): Promise<{ warnings: string[]; requestIds: string[]; lines: string[] }> {
+): Promise<{ warnings: string[]; requestIds: string[]; lines: string[]; applied: number }> {
   const warnings: string[] = [];
   const lines: string[] = []; // 이전 알림 게시물 본문용 — 요청서별 배정·누적 요약
+  let applied = 0; // 실제로 기록된 배정 수량(건너뛴 배정 제외)
   const rows = await loadAllocItems(sb, opts.allocations.map((a) => a.item_id), opts.purpose ?? "도매 납품");
   const byId = new Map((rows ?? []).map((r) => [r.id, r]));
   // 품목행별 기입고 합(배정 전) — 알림에 '누적/요청' 을 싣기 위한 조회. 실패해도 배정은 진행.
@@ -156,6 +157,7 @@ export async function applyManualAllocations(
     const { error, inserted } = await insertReceiptOnce(sb, row);
     if (error || !inserted) { warnings.push(`${r.head.req_no || "요청서"} 배정 기록 실패${error ? `: ${error.message}` : ""}`); continue; }
     requestIds.add(r.request_id);
+    applied += a.qty;
     const cum = (prevRecv.get(a.item_id) || 0) + a.qty;
     const cumStr = ` — 누적 ${cum.toLocaleString()}/${r.requested_qty.toLocaleString()}${r.requested_qty > 0 ? ` (${Math.round((cum / r.requested_qty) * 100)}%)` : ""}`;
     lines.push(`- ${r.head.req_no || "요청서"} 배정 ×${a.qty.toLocaleString()}${cumStr}`);
@@ -163,7 +165,7 @@ export async function applyManualAllocations(
     // 상태 전환(요청→진행중/완료)은 recheckRequestCompletion 한 곳에서만 — 여기서도 전환하면
     //  100% 배정 시 '요청→진행중→완료' 이중 전환·이중 알림이 난다(검증 확정).
   }
-  return { warnings, requestIds: [...requestIds], lines };
+  return { warnings, requestIds: [...requestIds], lines, applied: Math.round(applied * 100) / 100 };
 }
 
 // 요청 이행 현황 판독 — 모든 용도(제조사는 입고 연결, 나머지는 수동 배정). 2026-09-23 지정 매칭과 함께 제조사도 자동 완료·재개 대상.
@@ -183,18 +185,22 @@ export async function getRequestFullness(
     const recvByItem = new Map<string, number>();
     for (let i = 0; i < items.length; i += 100) {
       const part = items.slice(i, i + 100).map((x) => x.id as string);
-      const { data: rcs, error: re } = await sb.from("production_receipts")
-        .select("item_id, qty").in("item_id", part).limit(5000);
-      if (re) return null;
-      if ((rcs ?? []).length >= 5000) return null; // 절삭 위험 — 과소 합산으로 오판하지 않게 보류
-      for (const r of rcs ?? []) {
-        const k = r.item_id as string;
-        recvByItem.set(k, (recvByItem.get(k) || 0) + (Number(r.qty) || 0));
+      // range 페이징 전량 — 서버 Max Rows(1000)가 .limit 보다 우선해 조용히 잘린다(과소 합산 → full 오판·재개 누락)
+      for (let off = 0; ; off += 1000) {
+        const { data: rcs, error: re } = await sb.from("production_receipts")
+          .select("item_id, qty").in("item_id", part).order("id", { ascending: true }).range(off, off + 999);
+        if (re) return null;
+        for (const r of rcs ?? []) {
+          const k = r.item_id as string;
+          recvByItem.set(k, (recvByItem.get(k) || 0) + (Number(r.qty) || 0));
+        }
+        if ((rcs ?? []).length < 1000) break;
       }
     }
     const full = items.every((it) => (recvByItem.get(it.id as string) || 0) >= (Number(it.requested_qty) || 0) - 0.001);
     const requested = items.reduce((s, it) => s + (Number(it.requested_qty) || 0), 0);
-    const received = [...recvByItem.values()].reduce((s, v) => s + v, 0);
+    // 알림 수치는 요청 줄만 합산(목록 total_received 와 같은 기준) — '[요청서에 없음]' 줄까지 더하면 100% 를 넘게 찍힌다
+    const received = items.filter((it) => (Number(it.requested_qty) || 0) > 0).reduce((s, it) => s + (recvByItem.get(it.id as string) || 0), 0);
     return { full, status: String(head.status), req_no: (head.req_no as string) || "", requested, received };
   } catch { return null; }
 }
@@ -246,6 +252,7 @@ export type LinkResult = {
   req_no?: string;
   status?: string;                 // 연결 후 요청서 상태(완료로 닫혔으면 '완료')
   lines: { product_id: string; qty: number; over: number; unrequested: boolean }[]; // over = 요청 초과분
+  failed?: { product_id: string; qty: number; reason: string }[]; // 연결 실패 품목(입고 원장은 저장됨 — 화면이 알려 취소·재기록을 안내)
 };
 
 // 입고 원장 행들을 사람이 고른 제조사(재고 보충) 요청서에 연결한다.
@@ -319,7 +326,8 @@ export async function allocateReceiptsToRequest(
     return line;
   };
 
-  const out: LinkResult = { ok: true, req_no: reqNo, status: head.status, lines: [] };
+  // 삽입 실패는 건너뛰되 failed 에 남긴다 — 조용히 빠지면 원장엔 있고 요청서엔 없는 입고가 되어 알아챌 길이 없다
+  const out: LinkResult = { ok: true, req_no: reqNo, status: head.status, lines: [], failed: [] };
   for (const e of positive) {
     const qty = Math.round(e.qty * 100) / 100;
     const left = qty - (priorByTxn.get(e.inv_txn_id) || 0);
@@ -329,16 +337,20 @@ export async function allocateReceiptsToRequest(
     if (!it) {
       if (bundleParents.has(e.product_id)) continue; // 묶음은 요청서에 못 담는다 — 연결 없는 일반 입고
       it = await ensureUnrequestedLine(e.product_id);
-      if (!it) continue;
+      if (!it) { out.failed!.push({ product_id: e.product_id, qty: left, reason: `'${UNREQUESTED_ITEM_MEMO}' 줄 생성 실패` }); continue; }
     }
     const row: Record<string, unknown> = {
       request_id: requestId, item_id: it.id, qty: left, memo: LINK_MEMO, received_by: actor, inv_txn_id: e.inv_txn_id,
     };
     if (e.receipt_date && /^\d{4}-\d{2}-\d{2}$/.test(e.receipt_date)) row.receipt_date = e.receipt_date;
     const { error: re, inserted } = await insertReceiptOnce(sb, row);
-    if (re) { console.warn("[production-allocate] link insert failed", re.message); continue; }
+    if (re) { console.warn("[production-allocate] link insert failed", re.message); out.failed!.push({ product_id: e.product_id, qty: left, reason: re.message }); continue; }
     let applied = left;
-    if (!inserted) { const r2 = await topUpPair(sb, it.id, Number.POSITIVE_INFINITY, e.inv_txn_id, qty); applied = r2?.applied ?? 0; }
+    if (!inserted) {
+      const r2 = await topUpPair(sb, it.id, Number.POSITIVE_INFINITY, e.inv_txn_id, qty);
+      if (!r2) { out.failed!.push({ product_id: e.product_id, qty: left, reason: "기존 연결 재확인 실패" }); continue; }
+      applied = r2.applied;
+    }
     if (applied <= 0) continue;
     const before = received.get(it.id) || 0;
     received.set(it.id, before + applied);
@@ -360,7 +372,7 @@ export async function allocateReceiptsToRequest(
 // 입고 원장 취소(삭제) 전에 부르는 준비 — 그 원장에 연결된 요청서 중 '지금 100% 완료' 인 것만 돌려준다.
 //  삭제(cascade) 뒤 recheckRequestCompletion(..., "reopen") 에 넘기면 100% 아래로 내려간 완료만 재개되고,
 //  사람이 미달인 채 마감한 요청서는 되살아나지 않는다(수동 완료 보존 규칙).
-//  조회 실패는 null — 호출부가 취소를 중단한다(삼키면 100% 아래인데 '완료'로 굳는다). 판정 보류(getRequestFullness null)는 건너뛴다.
+//  조회 실패는 null — 호출부가 취소를 중단한다(삼키면 100% 아래인데 '완료'로 굳는다). getRequestFullness null(조회 실패)도 null.
 export async function fullRequestsOfTxns(sb: SupabaseClient, txnIds: string[]): Promise<string[] | null> {
   const ids = txnIds.filter(Boolean);
   if (!ids.length) return [];
@@ -374,7 +386,8 @@ export async function fullRequestsOfTxns(sb: SupabaseClient, txnIds: string[]): 
     const out: string[] = [];
     for (const rid of reqIds) {
       const f = await getRequestFullness(sb, rid);
-      if (f?.full && f.status === "완료") out.push(rid);
+      if (!f) return null;
+      if (f.full && f.status === "완료") out.push(rid);
     }
     return out;
   } catch { return null; }

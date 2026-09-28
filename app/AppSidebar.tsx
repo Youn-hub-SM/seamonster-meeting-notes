@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { NAV, sortByNavOrder, type NavTool, type NavMenuItem } from "./nav";
+import { NAV, sortByNavOrder, navLabelOf, navHrefActive, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 function itemActive(m: NavMenuItem, toolHref: string, pathname: string) {
@@ -16,6 +16,7 @@ function toolActive(t: NavTool, pathname: string) {
   if (t.href === "/") return pathname === "/";
   const menu = t.menu || [];
   if (menu.length) return menu.some((m) => itemActive(m, t.href, pathname));
+  if (t.exact) return pathname === t.href;
   return pathname === t.href || pathname.startsWith(t.href + "/");
 }
 
@@ -249,10 +250,10 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
                 {editFav ? "메뉴 옆 ＋를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
               </div>
             ) : sortedFavorites.map((f) => (
-              <div key={f.href} className={`app-sb-tool-row ${pathname === f.href || pathname.startsWith(f.href + "/") ? "is-active" : ""}`}>
+              <div key={f.href} className={`app-sb-tool-row ${navHrefActive(f.href, pathname) ? "is-active" : ""}`}>
                 <Link href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
                   <span className="app-sb-emoji"><Icon name={iconForHref(f.href)} /></span>
-                  <span className="app-sb-tool-label">{f.label}</span>
+                  <span className="app-sb-tool-label">{navLabelOf(f.href, f.label)}</span>
                 </Link>
                 {editFav && <FavToggle href={f.href} label={f.label} />}
               </div>
@@ -269,7 +270,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             if (tools.length === 0) return null;
             // '베타 테스트 중'은 접이식(기본 접힘) — 현재 페이지가 이 분류 안이면 접혀 있어도 펼쳐 보인다
             const collapsible = cat.label === "베타 테스트 중";
-            const catActive = collapsible && tools.some((t) => pathname === t.href || pathname.startsWith(t.href + "/"));
+            const catActive = collapsible && tools.some((t) => toolActive(t, pathname));
             const showTools = !collapsible || betaOpen || catActive;
             return (
               <div key={cat.label} className="app-sb-group">

@@ -9,12 +9,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 type Raw = {
   id: string; product_id: string; type: string; qty: number; unit_amount: number | null;
   txn_date: string; partner: string | null; memo: string | null; created_by: string | null; created_at: string;
-  order_no?: string | null; group_id?: string | null; status?: string | null;
+  order_no?: string | null; group_id?: string | null; status?: string | null; channel?: string | null;
   products?: { name?: string; sku?: string | null } | null;
 };
 
+// channel(036)은 이동 행의 방향 표시용(출고 칸 → 입고 칸). 033·034 와 함께 폴백 — 한 컬럼이라도 없으면 넷 다 빼고 재시도.
 const FULL_COLS = (withGroup: boolean) =>
-  `id, product_id, type, qty, unit_amount, txn_date, partner, memo, created_by, created_at${withGroup ? ", order_no, group_id, status" : ""}, products(name, sku)`;
+  `id, product_id, type, qty, unit_amount, txn_date, partner, memo, created_by, created_at${withGroup ? ", order_no, group_id, status, channel" : ""}, products(name, sku)`;
+const GROUP_COL_RE = /order_no|group_id|status|channel/i;
 
 // GET /api/inventory/orders?type=&from=&to=&limit=&q= — 입고/출고를 '주문(묶음)' 단위로 그룹핑.
 //  group_id 로 묶고, 없으면 단건(자기 자신)으로. migration 033 미적용이면 order_no/group_id 없이 단건.
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
         raws = await fetchPaged<Raw>(() => sel(true), limit);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        if (/order_no|group_id|status/i.test(msg)) { wg = false; raws = await fetchPaged<Raw>(() => sel(false), limit); } // 033 미적용 폴백
+        if (GROUP_COL_RE.test(msg)) { wg = false; raws = await fetchPaged<Raw>(() => sel(false), limit); } // 033·036 미적용 폴백
         else throw e;
       }
       capped = raws.length >= limit;
@@ -78,8 +80,10 @@ export async function GET(req: NextRequest) {
     const map = new Map<string, ReturnType<typeof emptyOrder>>();
     function emptyOrder(r: Raw) {
       return {
-        key: r.group_id || r.id, order_no: r.order_no || null, type: r.type, status: r.status || "완료",
+        // grouped: 화면이 취소·처리 시 group_id= / id= 를 고르는 기준 — 주문번호 유무로 고르면 이동(번호 없음·group 있음)이 id 로 나가 아무것도 안 지워진다.
+        key: r.group_id || r.id, grouped: !!r.group_id, order_no: r.order_no || null, type: r.type, status: r.status || "완료",
         txn_date: r.txn_date, created_at: r.created_at, partner: r.partner, memo: r.memo, created_by: r.created_by,
+        move_from: null as string | null, move_to: null as string | null, // 이동 행의 출고 칸 → 입고 칸(배지 표시용)
         item_count: 0, total_qty: 0, total_amount: 0,
         items: [] as { id: string; product_name: string; sku: string | null; qty: number; unit_amount: number | null; amount: number }[],
       };
@@ -90,6 +94,7 @@ export async function GET(req: NextRequest) {
       // 소매↔도매 이동은 출고+입고 두 행이 한 묶음 — 첫 행 유형(무작위)으로 배지가 찍히면
       //  [전체] 탭에서 입고/출고 집계가 어긋나 보인다. 두 유형이 섞이면 '이동'으로 명시.
       if (o.type !== "이동" && r.type !== o.type) o.type = "이동";
+      if (r.channel) { if (r.type === "출고") o.move_from = o.move_from ?? r.channel; else if (r.type === "입고") o.move_to = o.move_to ?? r.channel; }
       const absQty = Math.abs(Number(r.qty) || 0);
       const amount = (Number(r.unit_amount) || 0) * absQty;
       o.items.push({ id: r.id, product_name: r.products?.name || "(삭제됨)", sku: r.products?.sku ?? null, qty: absQty, unit_amount: r.unit_amount, amount });
@@ -204,7 +209,7 @@ async function searchRaws(
     } catch (e) {
       // 033은 있는데 034(status) 만 없는 환경 — 그룹 키는 유효하니 select 만 줄여 재시도
       const msg = e instanceof Error ? e.message : String(e);
-      if (wg && /order_no|group_id|status/i.test(msg)) { wg = false; push(await fetchPaged<Raw>(() => mk(false))); }
+      if (wg && GROUP_COL_RE.test(msg)) { wg = false; push(await fetchPaged<Raw>(() => mk(false))); }
       else throw e;
     }
   };
@@ -250,19 +255,34 @@ export async function DELETE(req: NextRequest) {
         : null;
     // 삭제 전에 '지금 100% 완료'인 연결 요청서를 잡아 두고, 삭제 뒤 100% 아래로 내려갔으면 자동 재개(마감 원복).
     const prepFail = () => NextResponse.json({ ok: false, error: "취소 준비 조회에 실패했습니다 — 다시 시도하세요." }, { status: 500 });
+    // 이동(채널이동 짝)·B2B 선점 출고는 여기서 지우지 않는다 — 이동은 [재고 이동] 취소(음수 가드·재개 판정), 선점은 발송일정에서(cascade 원복).
+    //  txn DELETE 와 같은 두 조건. 화면은 이동을 move DELETE 로 보내지만, 직접 호출·구 화면을 위해 서버에서도 막는다.
+    const moveBlocked = () => NextResponse.json({ ok: false, error: "재고 이동(칸 이동·행사 자동 합류) 기록입니다 — [재고 이동] 최근 내역, [입고 및 출고] 목록의 이동 행, [변경 기록]의 취소 중 한 곳에서 취소하세요(두 칸이 함께 원복됩니다)." }, { status: 409 });
+    // 0행 삭제는 실패로 — 예전엔 ok:true 라 화면이 '취소됨'으로 믿고 다시 옮겨 이중 이동이 났다.
+    const notFound = () => NextResponse.json({ ok: false, error: "취소할 기록을 찾지 못했습니다 — 새로고침 후 다시 시도하세요." }, { status: 404 });
     let fullBefore: string[] | null = [];
     if (groupId) {
-      const { data: ids, error: ie } = await sb.from("inventory_txns").select("id").eq("group_id", groupId).limit(5000);
+      const { data: ids, error: ie } = await sb.from("inventory_txns").select("id, partner").eq("group_id", groupId).limit(5000);
       if (ie) return prepFail();
-      fullBefore = await fullRequestsOfTxns(sb, (ids ?? []).map((r) => String(r.id)));
+      if (!ids?.length) return notFound();
+      if (ids.some((r) => r.partner === "채널이동")) return moveBlocked();
+      fullBefore = await fullRequestsOfTxns(sb, ids.map((r) => String(r.id)));
       if (fullBefore === null) return prepFail();
-      const { error } = await sb.from("inventory_txns").delete().eq("group_id", groupId);
+      const { data: del, error } = await sb.from("inventory_txns").delete().eq("group_id", groupId).select("id");
       if (error) { const f = friendly(error); if (f) return f; throw error; }
+      if (!del?.length) return notFound();
     } else if (id) {
+      const { data: cur, error: ce } = await sb.from("inventory_txns").select("*").eq("id", id).maybeSingle(); // * = 035 미적용(shipment_id 없음)에도 안전
+      if (ce) return prepFail();
+      if (!cur) return notFound();
+      if ((cur as { partner?: string | null }).partner === "채널이동") return moveBlocked();
+      if ((cur as { shipment_id?: string | null }).shipment_id)
+        return NextResponse.json({ ok: false, error: "B2B 발송 선점 출고입니다 — 발주의 발송일정에서 수정·삭제하세요(재고가 함께 원복됩니다)." }, { status: 409 });
       fullBefore = await fullRequestsOfTxns(sb, [id]);
       if (fullBefore === null) return prepFail();
-      const { error } = await sb.from("inventory_txns").delete().eq("id", id);
+      const { data: del, error } = await sb.from("inventory_txns").delete().eq("id", id).select("id");
       if (error) { const f = friendly(error); if (f) return f; throw error; }
+      if (!del?.length) return notFound();
     } else {
       return NextResponse.json({ ok: false, error: "group_id 또는 id 가 필요합니다." }, { status: 400 });
     }

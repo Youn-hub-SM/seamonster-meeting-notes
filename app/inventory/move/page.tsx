@@ -88,12 +88,18 @@ export default function InventoryMovePage() {
     let live = true;
     (async () => {
       const snapshot = lines;
-      const targetsByKey = new Map<number, Target[]>();
+      // 결과에 조회 시점 pid 를 붙여, 착지 시점에 그 줄의 품목이 바뀌었으면 건드리지 않는다 — 품목 변경(selectProduct)의
+      //  새 목록이 먼저 오고 이 옛 목록이 나중에 오면 B 줄에 A 의 요청서가 남던 경합(감사 #42). 새 줄도 그대로 둔다.
+      const targetsByKey = new Map<number, { pid: string; tg: Target[] }>();
       await Promise.all(snapshot.map(async (l) => {
-        targetsByKey.set(l.key, l.pid && allocMode ? await fetchTargets(l.pid) : []);
+        targetsByKey.set(l.key, { pid: l.pid, tg: l.pid && allocMode ? await fetchTargets(l.pid) : [] });
       }));
       if (!live) return;
-      setLines((prev) => prev.map((l) => { const tg = targetsByKey.get(l.key) ?? []; return { ...l, targets: tg, alloc: prefillAlloc(tg, nQtyOf(l)), allocTouched: false }; }));
+      setLines((prev) => prev.map((l) => {
+        const e = targetsByKey.get(l.key);
+        if (!e || e.pid !== l.pid) return l;
+        return { ...l, targets: e.tg, alloc: prefillAlloc(e.tg, nQtyOf(l)), allocTouched: false };
+      }));
     })();
     return () => { live = false; };
     // lines 를 deps 에 넣으면 무한 루프 — 방향 전환 시점의 lines 로만 요청서를 조회한다.
@@ -103,18 +109,19 @@ export default function InventoryMovePage() {
   const patchLine = (key: number, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  // 현재 배정 용도 ref — 방향 전환과 품목 선택 fetch 가 겹칠 때 구 용도의 요청서 목록이
-  //  늦게 착지해 남지 않게, 착지 시점 용도가 그대로일 때만 반영한다(검증 확정 보정)
-  const allocPurposeRef = useRef(allocPurpose);
-  useEffect(() => { allocPurposeRef.current = allocPurpose; }, [allocPurpose]);
+  // 현재 방향 ref — 방향 전환과 품목 선택 fetch 가 겹칠 때 구 방향의 요청서 목록이 늦게 착지해 남지 않게,
+  //  착지 시점 방향이 그대로일 때만 반영한다. 용도(purpose)로 비교하면 역방향(도매→소매)도 기본값 '도매 납품'이라
+  //  통과해 숨은 배정이 실려 400 이 나던 경합(감사 #42) — 방향이 용도·allocMode 를 모두 결정하므로 방향으로 본다.
+  const dirRef = useRef(dir);
+  useEffect(() => { dirRef.current = dir; }, [dir]);
 
   async function selectProduct(key: number, id: string, label: string) {
     patchLine(key, { pid: id, plabel: label, targets: [], alloc: new Map() });
     if (allocMode) {
-      const purposeAtFetch = allocPurpose;
+      const dirAtFetch = dir;
       const targets = await fetchTargets(id);
-      // 빠른 재선택·방향 전환으로 응답이 뒤바뀌어도 이전 품목/용도의 요청서가 남지 않게
-      if (allocPurposeRef.current !== purposeAtFetch) return;
+      // 빠른 재선택·방향 전환으로 응답이 뒤바뀌어도 이전 품목/방향의 요청서가 남지 않게(같은 탭 재클릭은 새 객체라 필드로 비교)
+      if (dirRef.current.from !== dirAtFetch.from || dirRef.current.to !== dirAtFetch.to) return;
       setLines((prev) => prev.map((l) => (l.key === key && l.pid === id ? { ...l, targets, alloc: prefillAlloc(targets, nQtyOf(l)), allocTouched: false } : l)));
     }
   }
@@ -146,9 +153,12 @@ export default function InventoryMovePage() {
     const items = activeLines.map((l) => ({
       product_id: l.pid,
       qty: nQtyOf(l),
-      allocations: l.targets
-        .map((t) => ({ item_id: t.item_id, qty: Math.max(0, Math.round((Number(l.alloc.get(t.item_id)) || 0) * 100) / 100) }))
-        .filter((a) => a.qty > 0),
+      // 배정 표가 보이지 않는 방향(allocMode=false)에선 절대 배정을 싣지 않는다 — 경합으로 남은 숨은 배정 안전망
+      allocations: allocMode
+        ? l.targets
+          .map((t) => ({ item_id: t.item_id, qty: Math.max(0, Math.round((Number(l.alloc.get(t.item_id)) || 0) * 100) / 100) }))
+          .filter((a) => a.qty > 0)
+        : [],
     }));
     setBusy(true);
     try {
@@ -165,7 +175,8 @@ export default function InventoryMovePage() {
         setBusy(false);
         return;
       }
-      const allocTotal = Math.round(items.reduce((s, it) => s + it.allocations.reduce((a, x) => a + x.qty, 0), 0) * 100) / 100;
+      // 서버가 실제 기록한 배정 합(allocated) 우선 — 그 사이 닫힌 요청서로 건너뛴 배정을 '배정'으로 세지 않게(감사 #41). 구 서버면 요청값 폴백.
+      const allocTotal = typeof j.allocated === "number" ? j.allocated : Math.round(items.reduce((s, it) => s + it.allocations.reduce((a, x) => a + x.qty, 0), 0) * 100) / 100;
       setOk(`${items.length}개 품목 ${totalQty.toLocaleString()}개를 ${dir.from} → ${dir.to} 로 옮겼어요.${allocTotal > 0 ? ` (요청서 배정 ${allocTotal.toLocaleString()} · 기타 ${Math.max(0, Math.round((totalQty - allocTotal) * 100) / 100).toLocaleString()})` : ""}`);
       if (Array.isArray(j.warnings) && j.warnings.length) setError(j.warnings.join(" · "));
       setLines([newLine(nextKey)]); setNextKey((k) => k + 1); setMemo("");
@@ -182,7 +193,11 @@ export default function InventoryMovePage() {
     await loadStock();
     // 취소로 요청서 잔여·상태가 바뀌었을 수 있음 — 열려 있는 줄의 요청서 목록 갱신
     if (allocMode) {
-      for (const l of lines) if (l.pid) { const targets = await fetchTargets(l.pid); patchLine(l.key, { targets }); }
+      for (const l of lines) if (l.pid) {
+        const targets = await fetchTargets(l.pid);
+        // 조회 중 품목이 바뀐 줄은 건드리지 않는다(#42 와 같은 규칙)
+        setLines((prev) => prev.map((x) => (x.key === l.key && x.pid === l.pid ? { ...x, targets } : x)));
+      }
     }
   }
 
@@ -192,7 +207,7 @@ export default function InventoryMovePage() {
     <div className="b2b-container" style={{ maxWidth: 820 }}>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">재고 옮기기 (소매 ↔ 도매·프로모션·도매 대량)</h1>
+          <h1 className="b2b-page-title">재고 이동 (소매 ↔ 도매·프로모션·도매 대량)</h1>
         </div>
       </header>
 
@@ -319,7 +334,8 @@ export default function InventoryMovePage() {
         <div className="b2b-field-row" style={{ marginTop: 12 }}>
           <div className="b2b-field">
             <label className="b2b-field-label">옮긴 날짜</label>
-            <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            {/* 오늘까지만 — 미래 날짜 이동은 서버도 400 (행사 자동 합류가 미래분을 오늘 날짜로 빼는 창 차단) */}
+            <input className="b2b-input" type="date" max={kstToday()} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="b2b-field">
             <label className="b2b-field-label">메모 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 전체 공통)</span></label>
@@ -348,7 +364,8 @@ export default function InventoryMovePage() {
                     <td>
                       <strong>{m.product_name}</strong>
                       {m.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{m.sku}</span> : null}
-                      {m.memo ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>· {m.memo}</span> : null}
+                      {/* 원장 메모 '행사 종료 자동 합류'는 옛 이름(멱등 가드 호환으로 값 유지) — 지금은 행사 하루 전 합류라 표시만 바꾼다 */}
+                      {m.memo ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>· {m.memo === "행사 종료 자동 합류" ? "행사 전 자동 합류" : m.memo}</span> : null}
                       {(m.alloc_qty ?? 0) > 0 && (
                         <div className="sm-faint" style={{ fontSize: 12 }}>
                           배정 {Number(m.alloc_qty).toLocaleString()} → {(m.alloc_reqs || []).join(", ") || "요청서"}

@@ -119,6 +119,12 @@ export default function OrderForm({
   const [companies, setCompanies] = useState<Company[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [data, setData] = useState<OrderInput>({ ...EMPTY_ORDER, items: [{ ...EMPTY_ORDER_ITEM }], recipient: { ...EMPTY_RECIPIENT }, shipments: [] });
+  // 서버가 옛 차감 칸을 유지하는 조건(b2b-shipments effChannel) — 발송완료 차수, 또는 발송예정일이 오늘보다 앞(나간 것으로 봄)
+  const alreadyOut = useMemo<"shipped" | "past" | null>(() => {
+    const t = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    if (data.shipments.some((s) => s.status === "발송완료")) return "shipped";
+    return data.shipments.some((s) => !!s.ship_date && s.ship_date < t && s.status !== "취소") ? "past" : null;
+  }, [data.shipments]);
   // 할인/추가금 입력 — 원(₩) 또는 %(합계 기준), 음수 = 추가금. 저장은 항상 원 금액(저장 시점에 환산 주입).
   const [discountMode, setDiscountMode] = useState<"won" | "pct">("won");
   const [discountRaw, setDiscountRaw] = useState("");
@@ -580,6 +586,8 @@ export default function OrderForm({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "저장 실패");
+      // 차감 칸이 유지됐거나(이미 나감) 바뀌었으면(옮길 방향) 안내 — 따르지 않으면 칸마다 유령 재고가 생긴다
+      if (json.channel_notice) alert(json.channel_notice);
 
       // 저장 성공 — 리스트로 돌아감 (혹은 상세로?)
       router.push("/b2b/orders");
@@ -720,8 +728,15 @@ export default function OrderForm({
               대량 발주 (선결제)
             </label>
             <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-              체크하면 발송 재고를 ‘도매 대량’ 칸에서 뺍니다 — 재고관리에서 소매→도매 대량으로 먼저 옮겨 두세요
+              체크하면 발송 재고를 ‘도매 대량’ 칸에서 뺍니다 — [재고 이동]에서 소매 → 도매 대량으로 먼저 옮겨 두세요
             </span>
+            {alreadyOut && (
+              <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>
+                {alreadyOut === "shipped"
+                  ? "이 발주는 이미 발송완료돼 체크를 바꿔도 차감 칸이 바뀌지 않습니다 — 재고 이동을 하지 마세요"
+                  : "발송예정일이 지나 체크를 바꿔도 차감 칸이 그대로입니다 — 아직 안 나갔다면 발주 목록의 [+ 발송일]로 새 날짜를 잡으세요(그때 칸이 바뀝니다)"}
+              </span>
+            )}
           </div>
 
           <div className="b2b-field" style={{ marginTop: 12 }}>

@@ -14,11 +14,12 @@ export async function GET(req: NextRequest) {
     const chan = toInvChannelParam(chanParam); // '전체'·빈값·모르는 값 → null = 전 칸 합산
     const sb = supabaseAdmin();
     const asofParam = asof && /^\d{4}-\d{2}-\d{2}$/.test(asof) ? asof : null;
-    // 채널 지정 시 inventory_stock(asof, chan). 036 미적용(2-인자 함수 없음)이면 전체로 폴백.
+    // 채널 지정 시 inventory_stock(asof, chan). 036 미적용(2-인자 함수 없음, PGRST202)일 때만 전체로 폴백 —
+    //  다른 오류까지 폴백하면 그 칸 재고 자리에 네 칸 합이 조용히 나온다(감사 #11).
     const stockRpc = async () => {
       if (chan) {
         const res = await sb.rpc("inventory_stock", { asof: asofParam, chan });
-        if (!res.error) return res;
+        if (!res.error || res.error.code !== "PGRST202") return res;
       }
       return sb.rpc("inventory_stock", { asof: asofParam });
     };

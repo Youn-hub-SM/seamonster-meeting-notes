@@ -30,7 +30,7 @@ export default function ActivityPage() {
       const [tj, ej] = await Promise.all([
         (await fetch(txnUrl, { cache: "no-store" })).json(),
         // 생산요청 작성·상태변경 이벤트(생산=도매) — B2B 변경기록엔 제외되고 여기(생산·재고)로만 온다.
-        fetch("/api/b2b/activity?type=production_request.created,production_request.status_changed&limit=300", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false })),
+        fetch("/api/b2b/activity?type=production_request.created,production_request.status_changed,production_request.draft&limit=300", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false })),
       ]);
       if (!tj.ok) throw new Error(tj.error || "조회 실패");
       const rows: InventoryTxn[] = tj.rows || [];
@@ -47,8 +47,10 @@ export default function ActivityPage() {
   useEffect(() => { load(); }, [load]);
 
   async function cancel(t: InventoryTxn) {
-    if (!window.confirm("이 거래를 취소(삭제)할까요? 재고가 원복됩니다.")) return;
-    const r = await fetch(`/api/inventory/txn?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+    // 재고 이동은 출발·도착 두 행이 한 짝 — 짝 단위로 취소해야 두 칸이 함께 원복되고 요청서 배정도 풀린다
+    const isMove = t.partner === "채널이동" && !!t.group_id;
+    if (!window.confirm(isMove ? "이 재고 이동을 취소할까요? 출발·도착 두 칸이 함께 원복되고, 요청서 배정도 함께 풀립니다." : "이 거래를 취소(삭제)할까요? 재고가 원복됩니다.")) return;
+    const r = await fetch(isMove ? `/api/inventory/move?group_id=${encodeURIComponent(String(t.group_id))}` : `/api/inventory/txn?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     await load();
@@ -141,7 +143,15 @@ export default function ActivityPage() {
                               <td>{t.partner || "-"}</td>
                               <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.memo || ""}>{t.memo || "-"}</td>
                               <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{t.created_by || "-"}</td>
-                              <td><button className="b2b-link-btn" onClick={() => cancel(t)} style={{ color: "var(--sm-danger)" }}>취소</button></td>
+                              {/* 이동(짝 행)·B2B 선점(발송 차수 연동)은 단건 취소 금지 — 서버(txn DELETE)가 409 로 막고, 화면은 어디서 취소하는지만 안내.
+                                  shipment_id 는 txns GET 이 싣지 않아 created_by 로 판별 */}
+                              <td style={{ whiteSpace: "nowrap" }}>
+                                {t.partner === "채널이동" && !t.group_id
+                                  ? <span className="sm-faint" style={{ fontSize: 12 }} title="두 칸이 함께 원복되도록 재고 이동 화면 또는 입고 및 출고 목록의 이동 행에서 취소합니다">재고 이동에서</span>
+                                  : t.created_by === "B2B 자동출고"
+                                    ? <span className="sm-faint" style={{ fontSize: 12 }} title="발주의 발송일정에서 수정·삭제하면 재고가 함께 원복됩니다">발주에서</span>
+                                    : <button className="b2b-link-btn" onClick={() => cancel(t)} style={{ color: "var(--sm-danger)" }}>취소</button>}
+                              </td>
                             </tr>
                           );
                         })())}
