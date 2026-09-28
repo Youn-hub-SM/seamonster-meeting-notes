@@ -259,7 +259,9 @@ export async function saveOrderShipments(
         ? (sch.shipped_at ?? new Date().toISOString())
         : (sch.status === "취소" ? sch.shipped_at ?? null : null),
     };
-    if (canDeduct) shipInsert.stock_out = wantStockOut;
+    // 저장하는 값은 '요청한 선점 설정' — 취소 차수라서 이번에 안 빼는 것(wantStockOut=false)을 그대로 적으면
+    //  취소 복구 때 그 false 를 다시 읽어 선점이 영영 되살아나지 않는다(최종 점검 확정). 차감 여부는 wantStockOut 이 정한다.
+    if (canDeduct) shipInsert.stock_out = sch.stock_out !== false;
     const { data: shipRow, error: shipErr } = await sb
       .from("shipments")
       .insert(shipInsert)

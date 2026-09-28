@@ -73,7 +73,8 @@ TABLE products — 상품/원가 마스터. sku_code 매칭은 products.sku = sa
 TABLE inventory_txns — 재고 원장(입고+/출고−/조정±). 현재고 = SUM(qty) WHERE status='완료'. products(id) 로 조인.
   id(uuid), product_id(uuid FK→products.id), type(text '입고'|'출고'|'조정'), qty(int 부호있음),
   unit_amount(numeric 단가), txn_date(date), partner(text 거래처), memo(text), status(text '대기'|'완료' 재고는 완료만),
-  channel(text '도매'|'소매'), reason(text 출고사유 null=판매·'협찬'|'폐기'|'기타'), order_no(text), group_id(uuid), created_at
+  channel(text '도매'|'소매'|'프로모션'|'도매 대량' — 프로모션·도매 대량은 확보분 칸), reason(text 출고사유 null=판매·'협찬'|'폐기'|'기타'), order_no(text), group_id(uuid),
+  created_by(text — B2B 발송 선점 행은 'B2B 자동출고'), shipment_id(uuid B2B 선점 행의 발송 차수 = shipments_report.id), created_at
   ※ 현재고 예: select p.name, sum(t.qty) 재고 from inventory_txns t join products p on p.id=t.product_id where t.status='완료' group by p.name
 
 TABLE inventory_items — 품목별 재고설정(PK=product_id). product_id, min_qty(int 안전재고), barcode(text), location(text 보관위치), memo(text)
@@ -84,7 +85,8 @@ TABLE orders — B2B 발주 헤더. 업체명은 companies_report 로 조인(com
   id(uuid), order_no(text yyyymmdd-NNN), company_id(uuid), order_date(date 발주일), production_date(date 생산예정일),
   ship_date(date 발송예정일), production_status(text 생산대기|생산중|생산완료), status(text 발송대기|발송완료|취소),
   payment_status(text 입금전|일부입금|입금완료|불필요), tax_invoice_status(text 미발행|발행완료|불필요),
-  subtotal·vat·total(numeric), discount_amount(numeric 할인/추가금 — 양수=할인 차감, 음수=추가금 가산. 할인 총액은 sum(greatest(discount_amount,0))), discount_reason(text), box_count(int), notes(text), created_at
+  subtotal·vat·total(numeric), discount_amount(numeric 할인/추가금 — 양수=할인 차감, 음수=추가금 가산. 할인 총액은 sum(greatest(discount_amount,0))), discount_reason(text), box_count(int), notes(text),
+  is_bulk(bool 대량 발주(선결제) 표식 — 앞으로 잡는 선점의 칸을 정함. 이미 나간 발주의 실제 차감 칸은 inventory_txns.channel where created_by='B2B 자동출고' (shipment_id → shipments_report.id → order_id)), created_at
 
 TABLE order_items — 발주 라인(스냅샷). order_id, product_id, product_name(text), option_label(text), spec(text),
   qty(numeric), unit_price(numeric), line_total(numeric=qty×unit_price), cost_at_order(numeric 발주시점 원가), tax_type(text), sort_order

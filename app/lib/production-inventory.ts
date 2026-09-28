@@ -180,8 +180,10 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     }
   }
 
-  // 4) SKU 합집합으로 행 구성
-  const allSkus = new Set<string>([...stockBySku.keys(), ...demandBySku.keys()]);
+  // 4) SKU 합집합으로 행 구성 — 입고 예정만 있는 품목(소매 원장이 아직 없는 도매 전용 품목 등)도 넣는다.
+  //  빠지면 전체·소매 권장과 요청 창·AI 초안이 그 품목의 입고 예정을 못 빼 같은 물량을 또 시킨다(최종 점검 확정).
+  //  이런 행은 현재고 null → 권장 = 수요, 입고 예정만 실린다(도매 채널은 입고 예정 맵이 비어 영향 없음).
+  const allSkus = new Set<string>([...stockBySku.keys(), ...demandBySku.keys(), ...inboundBySku.keys()]);
   const rows: InvRow[] = [];
   for (const sku of allSkus) {
     const st = stockBySku.get(sku);

@@ -191,6 +191,7 @@ export default function TradePage() {
               <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
+              {error && <div className="b2b-error" style={{ marginBottom: 8 }}>{error}</div>}
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
                 <span>반영 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
                 {!!preview.summary.merged && <span className="sm-faint">중복 SKU {preview.summary.merged}건 합산됨</span>}

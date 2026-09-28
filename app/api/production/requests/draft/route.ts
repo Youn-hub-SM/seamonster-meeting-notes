@@ -74,29 +74,41 @@ export async function POST(req: NextRequest) {
     if (!dry && dup && dup.length) return NextResponse.json({ ok: true, created: false, existing: dup[0] });
 
     const [retail, whole] = await Promise.all([getInventoryRows("소매"), getInventoryRows("도매")]);
-    const wholeBySku = new Map(whole.rows.map((r) => [r.sku.toUpperCase(), Number(r.recommend) || 0]));
+    const retailBySku = new Map(retail.rows.map((r) => [r.sku.toUpperCase(), r]));
+    const wholeBySku = new Map(whole.rows.map((r) => [r.sku.toUpperCase(), r]));
 
-    // 권장 = max(0, ①소매 원값 + ②도매 필요량 − ⑤입고 예정) — 재고 목록·새 요청 창과 같은 합산식(합계에서 ⑤를 한 번만 뺀다).
+    // 권장 = max(0, ①소매 원값 + ②도매 필요량 − ⑤입고 예정) — 재고 목록 전체 탭·새 요청 창과 같은 합산식(합계에서 ⑤를 한 번만 뺀다).
+    //  품목은 소매·도매 행의 합집합 — 소매 원장이 없는 도매 전용 품목도 화면처럼 도매 필요량으로 들어간다(최종 점검 확정).
     const cands: DraftLine[] = [];
     const zeroButLow: DraftLine[] = [];
-    for (const r of retail.rows) {
-      const sku = r.sku.toUpperCase();
-      const gross = r.stock == null ? r.demand : Math.max(0, r.demand + r.safety - r.stock);
-      const wholeRec = wholeBySku.get(sku) ?? 0;
-      const rec = Math.max(0, Math.round((gross + wholeRec - r.inbound) * 100) / 100);
-      const line: DraftLine = { sku: r.sku, name: r.name, product_id: "", qty: Math.ceil(rec), stock: r.stock, inbound: r.inbound, wholeRec, demand: r.demand, safety: r.safety, dailyOut: r.dailyOut };
+    for (const sku of new Set([...retailBySku.keys(), ...wholeBySku.keys()])) {
+      const r = retailBySku.get(sku);
+      const w = wholeBySku.get(sku);
+      const gross = r ? (r.stock == null ? r.demand : Math.max(0, r.demand + r.safety - r.stock)) : 0;
+      const wholeRec = Number(w?.recommend) || 0;
+      const inbound = r?.inbound ?? 0;
+      const rec = Math.max(0, Math.round((gross + wholeRec - inbound) * 100) / 100);
+      const base = (r ?? w)!;
+      const line: DraftLine = { sku: base.sku, name: base.name, product_id: "", qty: Math.ceil(rec), stock: r?.stock ?? null, inbound, wholeRec, demand: r?.demand ?? 0, safety: r?.safety ?? 0, dailyOut: r?.dailyOut ?? 0 };
       if (line.qty > 0) cands.push(line);
-      else if (r.belowSafety) zeroButLow.push(line);
+      else if (r?.belowSafety) zeroButLow.push(line);
     }
 
     // SKU → product_id (요청서 품목은 product_id 기준). 묶음(세트)은 자체 재고가 없어 제외.
     //  재고 행의 SKU 는 대문자로 정규화돼 오고 products.sku 는 입력 그대로라 DB 의 .in() 은 대소문자가 다르면 못 찾는다 —
     //  제품표 전량을 읽어 대문자 키로 맞춘다(다른 화면들과 같은 대소문자 무시 규칙).
+    //  사용 중(active) 품목만 — 재고 목록·요청 창이 보여 주는 품목과 같게. 미사용 품목은 초안에서 빼고 메모에 적는다.
     const pidBySku = new Map<string, string>();
+    const inactiveSkus = new Set<string>();
     for (let off = 0; ; off += 1000) {
-      const { data, error } = await sb.from("products").select("id, sku").order("id", { ascending: true }).range(off, off + 999);
+      const { data, error } = await sb.from("products").select("id, sku, active").order("id", { ascending: true }).range(off, off + 999);
       if (error) throw error;
-      for (const p of (data ?? []) as { id: string; sku: string | null }[]) if (p.sku) pidBySku.set(String(p.sku).trim().toUpperCase(), p.id);
+      for (const p of (data ?? []) as { id: string; sku: string | null; active: boolean | null }[]) {
+        if (!p.sku) continue;
+        const k = String(p.sku).trim().toUpperCase();
+        if (p.active === false) inactiveSkus.add(k);
+        else pidBySku.set(k, p.id);
+      }
       if ((data ?? []).length < 1000) break;
     }
     const bundleIds = new Set<string>();
@@ -107,9 +119,10 @@ export async function POST(req: NextRequest) {
     }
     const lines: DraftLine[] = [];
     const unmatched: string[] = [];
+    const inactive: string[] = [];
     for (const c of cands) {
       const pid = pidBySku.get(c.sku.toUpperCase());
-      if (!pid) { unmatched.push(c.sku); continue; }
+      if (!pid) { if (inactiveSkus.has(c.sku.toUpperCase())) inactive.push(c.sku); else unmatched.push(c.sku); continue; }
       if (bundleIds.has(pid)) continue;
       lines.push({ ...c, product_id: pid });
     }
@@ -125,6 +138,7 @@ export async function POST(req: NextRequest) {
     ];
     if (!retail.inboundOk) memoLines.push(`주의: 입고 예정(열린 요청서 잔여) 집계에 실패해 이미 시켜 둔 물량을 빼지 못했습니다 — 열린 제조사 요청서와 겹치는지 확인하세요.`);
     if (unmatched.length) memoLines.push(`품목표에 없어 뺀 SKU: ${unmatched.slice(0, 10).join(", ")}${unmatched.length > 10 ? ` 외 ${unmatched.length - 10}` : ""}`);
+    if (inactive.length) memoLines.push(`미사용 품목이라 뺀 SKU: ${inactive.slice(0, 10).join(", ")}${inactive.length > 10 ? ` 외 ${inactive.length - 10}` : ""}`);
 
     if (!lines.length) {
       const detail = memoLines.join("\n");

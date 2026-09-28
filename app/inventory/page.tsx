@@ -120,6 +120,8 @@ export default function InventoryPage() {
   const [spanDays, setSpanDays] = useState(0);
   // 한쪽 채널만 실패하면 권장이 조용히 축소되어(합인데 한쪽만) 부족한 수량을 요청하게 된다 → 경고를 띄운다.
   const [prodWarn, setProdWarn] = useState("");
+  // 입고 예정 집계 실패 — 소매·전체 권장만 영향(도매 권장식엔 입고 예정이 없다) → 도매 탭에선 경고하지 않는다
+  const [prodInbBad, setProdInbBad] = useState(false);
 
   const prodLoad = useCallback(async () => {
     try {
@@ -134,9 +136,8 @@ export default function InventoryPage() {
       if (w.ok) setWholeMap(new Map(((w.rows || []) as ProdRow[]).map((x) => [x.sku.toUpperCase(), x])));
       const bad = [!r.ok && "소매", !w.ok && "도매"].filter(Boolean).join("·");
       // 입고 예정 집계 실패는 반대 방향(권장 과대 = 시켜 둔 물량을 또 시킴) — 따로 알린다
-      const inbBad = r.ok && r.inboundOk === false;
-      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산이 실제보다 적게 보일 수 있습니다.`
-        : inbBad ? "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 권장생산이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다." : "");
+      setProdInbBad(r.ok && r.inboundOk === false);
+      setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산이 실제보다 적게 보일 수 있습니다.` : "");
     } catch {
       setProdWarn("생산 수치를 불러오지 못했습니다 — 권장생산이 비어 있거나 실제보다 적게 보일 수 있습니다.");
     }
@@ -303,7 +304,7 @@ export default function InventoryPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
       {/* 확정형 탭엔 권장생산·입고 예정이 없으므로 그 얘기를 하는 경고도 띄우지 않는다 */}
-      {!confirmedTab && (prodWarn || meta?.inboundOk === false) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
+      {!confirmedTab && (prodWarn || (channel !== "도매" && (prodInbBad || meta?.inboundOk === false))) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
 
       {/* 데이터박스 — 재고 4 + 생산 2. 확정형 탭은 판단 카드(부족·생산 2종)를 뺀 3종만(판정 자체가 없다) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
@@ -508,7 +509,7 @@ export default function InventoryPage() {
           qtySource={channel}
           lockProduct={modalFor !== "__new__"}
           onClose={() => setModalFor("")}
-          onSaved={() => { setModalFor(""); load(); }}
+          onSaved={() => { setModalFor(""); load(); prodLoad(); }}
         />
       )}
 

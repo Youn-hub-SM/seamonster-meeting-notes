@@ -9,7 +9,8 @@ type Prod = { id: string; sku: string | null; name: string; spec: string | null;
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean; alloc_qty?: number; alloc_reqs?: string[] };
 type Target = { item_id: string; request_id: string; req_no: string | null; title: string | null; request_date: string; due_date: string | null; requested_qty: number; received_qty: number; remaining: number };
 // 이동 줄 — 여러 품목을 한 번에 옮긴다(2026-09-16 대표 요청). alloc 은 요청서(item_id)→입력값 문자열.
-type Line = { key: number; pid: string; plabel: string; qty: string; targets: Target[]; alloc: Map<string, string>; allocTouched?: boolean };
+// tgState — 요청서 목록 상태. 실패·로딩 중을 '열린 요청 없음'으로 보여 주면 배정 없이 저장돼 요청서가 영영 안 닫힌다(최종 점검 확정).
+type Line = { key: number; pid: string; plabel: string; qty: string; targets: Target[]; alloc: Map<string, string>; allocTouched?: boolean; tgState?: "loading" | "error" | "ok" };
 
 // 배정 기본값 = 이동 전량(기획 14절 4단계 #6). 목표일 빠른 순으로 각 요청서 잔여까지 채운다.
 //  배정 누락 경고를 두지 않기로 했으므로(결정 21) 이 기본값이 유일한 방어다.
@@ -74,11 +75,12 @@ export default function InventoryMovePage() {
   //  소매→도매='도매 납품' · 소매→프로모션='프로모션' · 소매→도매 대량='도매 대량'.
   const allocMode = dir.from === "소매" && MOVE_ONLY_CHANNELS.includes(dir.to);
   const allocPurpose = PR_PURPOSES.find((p) => PURPOSE_CHANNEL[p] === dir.to) ?? "도매 납품";
-  const fetchTargets = useCallback(async (productId: string): Promise<Target[]> => {
+  //  실패는 null — 빈 목록([])과 구분해야 '열린 요청 없음'으로 오인하지 않는다
+  const fetchTargets = useCallback(async (productId: string): Promise<Target[] | null> => {
     try {
       const j = await (await fetch(`/api/inventory/move/targets?product_id=${encodeURIComponent(productId)}&purpose=${encodeURIComponent(allocPurpose)}`, { cache: "no-store" })).json();
-      return j.ok ? (j.targets || []) : [];
-    } catch { return []; }
+      return j.ok ? (j.targets || []) : null;
+    } catch { return null; }
   }, [allocPurpose]);
 
   // 방향이 바뀌면 배정 입력 초기화(+소매→도매 복귀 시 요청서 재로드).
@@ -88,9 +90,10 @@ export default function InventoryMovePage() {
     let live = true;
     (async () => {
       const snapshot = lines;
+      if (allocMode) setLines((prev) => prev.map((l) => (l.pid ? { ...l, tgState: "loading" as const } : l)));
       // 결과에 조회 시점 pid 를 붙여, 착지 시점에 그 줄의 품목이 바뀌었으면 건드리지 않는다 — 품목 변경(selectProduct)의
       //  새 목록이 먼저 오고 이 옛 목록이 나중에 오면 B 줄에 A 의 요청서가 남던 경합(감사 #42). 새 줄도 그대로 둔다.
-      const targetsByKey = new Map<number, { pid: string; tg: Target[] }>();
+      const targetsByKey = new Map<number, { pid: string; tg: Target[] | null }>();
       await Promise.all(snapshot.map(async (l) => {
         targetsByKey.set(l.key, { pid: l.pid, tg: l.pid && allocMode ? await fetchTargets(l.pid) : [] });
       }));
@@ -98,7 +101,7 @@ export default function InventoryMovePage() {
       setLines((prev) => prev.map((l) => {
         const e = targetsByKey.get(l.key);
         if (!e || e.pid !== l.pid) return l;
-        return { ...l, targets: e.tg, alloc: prefillAlloc(e.tg, nQtyOf(l)), allocTouched: false };
+        return { ...l, targets: e.tg ?? [], tgState: e.tg === null ? "error" : "ok", alloc: prefillAlloc(e.tg ?? [], nQtyOf(l)), allocTouched: false };
       }));
     })();
     return () => { live = false; };
@@ -116,13 +119,29 @@ export default function InventoryMovePage() {
   useEffect(() => { dirRef.current = dir; }, [dir]);
 
   async function selectProduct(key: number, id: string, label: string) {
-    patchLine(key, { pid: id, plabel: label, targets: [], alloc: new Map() });
+    patchLine(key, { pid: id, plabel: label, targets: [], alloc: new Map(), tgState: allocMode ? "loading" : "ok" });
     if (allocMode) {
       const dirAtFetch = dir;
       const targets = await fetchTargets(id);
       // 빠른 재선택·방향 전환으로 응답이 뒤바뀌어도 이전 품목/방향의 요청서가 남지 않게(같은 탭 재클릭은 새 객체라 필드로 비교)
       if (dirRef.current.from !== dirAtFetch.from || dirRef.current.to !== dirAtFetch.to) return;
-      setLines((prev) => prev.map((l) => (l.key === key && l.pid === id ? { ...l, targets, alloc: prefillAlloc(targets, nQtyOf(l)), allocTouched: false } : l)));
+      setLines((prev) => prev.map((l) => (l.key === key && l.pid === id
+        ? { ...l, targets: targets ?? [], tgState: targets === null ? "error" : "ok", alloc: prefillAlloc(targets ?? [], nQtyOf(l)), allocTouched: false }
+        : l)));
+    }
+  }
+
+  // 열린 요청서 목록 다시 읽기(이동 취소·부분 실패 뒤) — 조회 중 품목이 바뀐 줄은 건드리지 않는다(#42 와 같은 규칙)
+  async function refreshTargets(target: Line[]) {
+    if (!allocMode) return;
+    const dirAtFetch = dir;
+    for (const l of target) if (l.pid) {
+      const targets = await fetchTargets(l.pid);
+      // 그사이 방향이 바뀌었으면 옛 용도의 요청서를 싣지 않는다(selectProduct 와 같은 규칙)
+      if (dirRef.current.from !== dirAtFetch.from || dirRef.current.to !== dirAtFetch.to) return;
+      setLines((prev) => prev.map((x) => (x.key === l.key && x.pid === l.pid
+        ? (targets === null ? { ...x, tgState: "error" as const } : { ...x, targets, tgState: "ok" as const })
+        : x)));
     }
   }
 
@@ -147,6 +166,10 @@ export default function InventoryMovePage() {
     if (activeLines.length === 0) { setError("품목과 수량을 1줄 이상 입력하세요."); return; }
     if (dupPids.size > 0) { setError("같은 품목이 두 줄에 있습니다 — 한 줄로 합쳐 주세요."); return; }
     if (anyAllocOver) { setError("배정 합계가 이동 수량보다 많은 품목이 있습니다. 배정을 줄이세요."); return; }
+    if (allocMode && activeLines.some((l) => l.tgState === "loading" || l.tgState === "error")) {
+      setError("요청서 목록을 아직 불러오지 못한 품목이 있습니다 — 잠시 뒤 다시 누르거나 그 줄의 '다시 불러오기'를 누르세요.");
+      return;
+    }
     // 수량 없이 배정만 입력된 줄 — 조용히 빠지면 배정이 유실된 줄 모른다(검증 확정): 명시적으로 막는다
     const allocNoQty = lines.find((l) => l.pid && nQtyOf(l) === 0 && allocSumOf(l) > 0);
     if (allocNoQty) { setError(`'${allocNoQty.plabel}' 줄에 배정만 있고 이동 수량이 없습니다 — 수량을 넣거나 줄을 삭제하세요.`); return; }
@@ -171,6 +194,18 @@ export default function InventoryMovePage() {
         // 부분 실패 응답에도 경고(앞 줄의 배정 경고 등)가 실려 온다 — 함께 표시(검증 확정 보정)
         const extra = Array.isArray(j?.warnings) && j.warnings.length ? ` · ${j.warnings.join(" · ")}` : "";
         setError(`${j?.error || "이동 실패"}${extra}`);
+        // 앞 품목은 이미 옮겨졌다 — 그 줄을 폼에 남기면 다시 누를 때 한 번 더 옮기고 배정도 두 번 들어간다
+        //  요청 중에 바꾼 입력을 덮지 않게 최신 상태에서 빼고(함수형 갱신), 남은 줄의 요청서 목록을 다시 읽는다
+        const done = new Set<string>((Array.isArray(j?.results) ? j.results : []).map((r: { product_id: string }) => r.product_id));
+        if (done.size) {
+          const fresh = nextKey;
+          setLines((prev) => {
+            const rest = prev.filter((l) => !done.has(l.pid));
+            return rest.length ? rest : [newLine(fresh)];
+          });
+          setNextKey((k) => k + 1);
+          await refreshTargets(lines.filter((l) => !done.has(l.pid)));
+        }
         await loadStock();
         setBusy(false);
         return;
@@ -192,13 +227,7 @@ export default function InventoryMovePage() {
     if (!r.ok || !j?.ok) { const tail = r.status === 409 || /새로고침|다시 시도/.test(j?.error || "") ? "" : " — 새로고침 후 다시 시도하세요."; alert(`취소 실패: ${j?.error || "서버 오류"}${tail}`); return; } // 409(규칙상 거부)엔 재시도 권유를 붙이지 않는다
     await loadStock();
     // 취소로 요청서 잔여·상태가 바뀌었을 수 있음 — 열려 있는 줄의 요청서 목록 갱신
-    if (allocMode) {
-      for (const l of lines) if (l.pid) {
-        const targets = await fetchTargets(l.pid);
-        // 조회 중 품목이 바뀐 줄은 건드리지 않는다(#42 와 같은 규칙)
-        setLines((prev) => prev.map((x) => (x.key === l.key && x.pid === l.pid ? { ...x, targets } : x)));
-      }
-    }
+    await refreshTargets(lines);
   }
 
   const swap = () => setDir((d) => ({ from: d.to, to: d.from }));
@@ -274,7 +303,14 @@ export default function InventoryMovePage() {
 
               {allocMode && l.pid && (
                 <div style={{ marginTop: 10 }}>
-                  {l.targets.length === 0 ? (
+                  {l.tgState === "loading" ? (
+                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 요청서를 불러오는 중…</p>
+                  ) : l.tgState === "error" ? (
+                    <p style={{ fontSize: 12, margin: 0, color: "var(--sm-danger)" }}>
+                      요청서 목록을 불러오지 못했습니다 — 이대로는 옮길 수 없습니다.{" "}
+                      <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => selectProduct(l.key, l.pid, l.plabel)}>다시 불러오기</button>
+                    </p>
+                  ) : l.targets.length === 0 ? (
                     <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 생산 요청 없음 — 전량 기타(요청 미연결)로 기록됩니다. 요청서 몫이라면 먼저 생산 요청에서 등록하세요.</p>
                   ) : (
                     <>
