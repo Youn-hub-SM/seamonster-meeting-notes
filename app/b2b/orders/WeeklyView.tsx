@@ -9,8 +9,7 @@ import {
   SHIPMENT_STATUS_COLORS,
   ShipmentStatus,
   formatMoney,
-  getUrgency,
-  nextPendingShipDate,
+  orderUrgency,
   URGENCY_LABEL,
 } from "@/app/lib/b2b-orders";
 
@@ -71,7 +70,7 @@ export default function WeeklyView({
             <div className="b2b-week-list">
               {w.rows.map((r, idx) => {
                 const o = r.order;
-                const urgency = getUrgency({ ...o, ship_date: nextPendingShipDate(o) }, todayIso);
+                const urgency = orderUrgency(o, todayIso);
                 const badge = r.status
                   ? { label: STATUS_SHORT[r.status] || r.status, colors: SHIPMENT_STATUS_COLORS[r.status] }
                   : { label: STATUS_SHORT[o.status], colors: STATUS_COLORS[o.status] };

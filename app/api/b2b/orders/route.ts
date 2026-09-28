@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import {
   OrderInput,
   OrderListItem,
+  computeRemaining,
   normalizeOrderItem,
   validateOrder,
 } from "@/app/lib/b2b-orders";
@@ -30,8 +31,8 @@ export async function GET(req: NextRequest) {
     let q = sb
       .from("orders")
       .select(
-        "*, companies:company_id(name), order_items(product_name, spec, qty, sort_order), " +
-          "shipments(id, seq, ship_date, status, recipient_name, recipient_phone, tracking_no, box_count, shipment_items(product_name, spec, qty))"
+        "*, companies:company_id(name), order_items(id, product_name, spec, qty, sort_order), " +
+          "shipments(id, seq, ship_date, status, recipient_name, recipient_phone, tracking_no, box_count, shipment_items(order_item_id, product_name, spec, qty))"
       )
       .order("order_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -49,8 +50,8 @@ export async function GET(req: NextRequest) {
     if (error) throw error;
 
     // 평탄화: companies.name → company_name, order_items[] → items(정렬) + item_count, shipments[] 정렬
-    type ItemRow = { product_name: string; spec: string | null; qty: number; sort_order: number };
-    type ShipItemRow = { product_name: string; spec: string | null; qty: number };
+    type ItemRow = { id: string; product_name: string; spec: string | null; qty: number; sort_order: number };
+    type ShipItemRow = { order_item_id: string | null; product_name: string; spec: string | null; qty: number };
     type ShipRow = { id: string; seq: number; ship_date: string | null; status: string; recipient_name?: string | null; recipient_phone?: string | null; tracking_no: string | null; box_count?: number; shipment_items?: ShipItemRow[] };
     type Row = Record<string, unknown> & {
       companies?: { name?: string } | null;
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
       const items = Array.isArray(order_items)
         ? [...order_items]
             .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-            .map((it) => ({ product_name: it.product_name, spec: it.spec, qty: Number(it.qty) || 0 }))
+            .map((it) => ({ id: it.id, product_name: it.product_name, spec: it.spec, qty: Number(it.qty) || 0 }))
         : [];
       const ships = Array.isArray(shipments)
         ? [...shipments]
@@ -76,15 +77,20 @@ export async function GET(req: NextRequest) {
               recipient_phone: s.recipient_phone ?? "",
               tracking_no: s.tracking_no ?? null,
               box_count: Math.max(1, Number(s.box_count) || 1),
-              items: (s.shipment_items ?? []).map((si) => ({ product_name: si.product_name, spec: si.spec, qty: Number(si.qty) || 0 })),
+              items: (s.shipment_items ?? []).map((si) => ({ order_item_id: si.order_item_id, product_name: si.product_name, spec: si.spec, qty: Number(si.qty) || 0 })),
             }))
         : [];
+      // 발송일 미정 잔여(라인별·합) — 취소 발주는 보낼 것이 없으므로 0
+      const cancelled = (rest as { status?: string }).status === "취소";
+      const rem = cancelled ? items.map(() => 0) : computeRemaining(items, ships);
+      const itemsWithRem = items.map((it, i) => ({ ...it, remaining: rem[i] }));
       return {
         ...(rest as unknown as OrderListItem),
         company_name: companies?.name ?? "(미지정)",
         item_count: items.length,
-        items,
+        items: itemsWithRem,
         shipments: ships,
+        remaining_total: rem.reduce((a, b) => a + b, 0),
       };
     });
 

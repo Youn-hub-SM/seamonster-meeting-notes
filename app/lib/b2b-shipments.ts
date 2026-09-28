@@ -62,13 +62,17 @@ async function stockOutAvailable(sb: SbClient): Promise<boolean> {
 }
 
 // 복수 발송(2건 이상) 발주의 상위 발송상태를 하위 차수 발송상태들로부터 도출.
-//  전부 취소 → 취소 / 취소 제외 전부 발송완료 → 발송완료 / 하나라도 미발송 → 발송대기.
+//  전부 취소 → 취소 / 취소 아닌 차수 중 하나라도 발송완료 → 발송완료 / 아직 하나도 안 나감 → 발송대기.
+//  첫 차수가 나가면 발송완료 = 매출 인식(발주 전량, 첫 발송일) — 2026-09-28 대표 확인: '첫 발송 시 매출 등록'.
+//  재고도 첫 발송일에 발주 전량을 차감하므로 매출과 같은 시점이 된다. 예전(전 차수 발송완료 시 인식)엔
+//  1차 발송 뒤 2차를 추가하면 발주가 발송대기로 돌아가 이미 잡힌 매출이 원장에서 지워졌다.
+//  남은 차수의 지연·완료 판정은 발주 상태가 아니라 차수로 본다(b2b-orders orderUrgency·isOrderComplete).
 //  발송이 2건 미만이면 null(도출 안 함 — 일반 발주는 메인 발송상태를 직접 관리).
 export function deriveParentStatus(statuses: string[]): string | null {
   if (statuses.length < 2) return null;
   const nonCancel = statuses.filter((s) => s !== "취소");
   if (nonCancel.length === 0) return "취소";
-  return nonCancel.every((s) => s === "발송완료") ? "발송완료" : "발송대기";
+  return nonCancel.some((s) => s === "발송완료") ? "발송완료" : "발송대기";
 }
 
 /**
@@ -130,8 +134,8 @@ export async function saveOrderShipments(
   }
 
   // 차수에 상품 수량이 하나도 배정되지 않았으면(분할발송 미사용) 발주 전량을 첫 차수에 자동 배분한다.
-  //  이 배분은 shipment_items(발송 관리·매출 리포트·재고 대사의 '팔린 수' 기준)를 위한 것이고,
-  //  재고 차감량과는 별개다 — 차감은 아래에서 발주 전량으로 따로 계산한다.
+  //  이 배분은 shipment_items(발송요청 양식·재고 대사의 '팔린 수'·발송일 미정 잔여 계산) 기준이고,
+  //  재고 차감량과는 별개다 — 차감은 아래에서 발주 전량으로 따로 계산한다. 매출은 취소 차수 배분만 읽는다.
   if (canDeduct) {
     const anyAssigned = (schedules || []).some((s) => (s.items || []).some((it) => Number(it.qty) > 0));
     if (!anyAssigned) {

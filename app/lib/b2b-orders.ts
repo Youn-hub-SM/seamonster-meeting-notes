@@ -102,9 +102,12 @@ export interface OrderItem {
 
 // 리스트 조회 응답: 업체명·라인 미리보기 포함
 export interface OrderLinePreview {
+  id?: string;                 // order_items.id — 잔여 수량 계산용(차수 배분과 id 로 맞춘다)
+  order_item_id?: string | null; // 차수에 담긴 상품일 때 원래 발주 라인 id
   product_name: string;
   spec: string | null;
   qty: number;
+  remaining?: number;          // 발주 라인: 아직 어느 차수에도 배분되지 않은 수량(발송일 미정 잔여)
 }
 
 // 목록용 발송 일정 미리보기 (날짜·상태)
@@ -125,6 +128,7 @@ export interface OrderListItem extends Order {
   item_count: number;
   items: OrderLinePreview[];
   shipments: ShipmentDatePreview[];   // 발송 일정 (캘린더·주간뷰 분할 발송 표시용)
+  remaining_total?: number;           // 발송일 미정 잔여 수량 합(라인별 remaining 합) — 0 이면 전량 일정 있음
 }
 
 // 단일 조회 응답: 풀 디테일
@@ -405,10 +409,50 @@ export function nextPendingShipDate(
   return pending[0] ?? null;
 }
 
+// 발송일 미정 잔여 — 대량 발주를 고객 요청 때마다 나눠 보내는 거래(2026-09-28 대표 요청).
+//  첫 발송일만 잡고 나머지는 날짜 없이 'N개 남음'으로 둔다. 잔여는 저장하지 않고 계산한다:
+//   라인별 잔여 = max(0, 주문 수량 − 모든 차수(취소 포함)에 배분된 수량)
+//  취소 차수 수량을 빼는 이유: 매출·재고가 취소 차수 수량을 '주문에서 빠진 양'으로 보므로(b2b-sales-sync·b2b-shipments),
+//  취소한 몫이 다시 '보낼 양'으로 살아나면 안 된다.
+//  어느 차수에도 배분이 없으면(옛 발주·자동 전량 배분 이전) 잔여 0 — 발송일정 미등록은 따로 센다.
+export function computeRemaining(
+  lines: { id?: string; qty: number }[],
+  ships: { status?: string | null; items?: { order_item_id?: string | null; qty: number }[] }[]
+): number[] {
+  const alloc = new Map<string, number>();
+  let any = false;
+  for (const s of ships ?? []) {
+    for (const it of s.items ?? []) {
+      const q = Number(it.qty) || 0;
+      if (!it.order_item_id || q <= 0) continue;
+      any = true;
+      alloc.set(it.order_item_id, (alloc.get(it.order_item_id) || 0) + q);
+    }
+  }
+  // 수량 컬럼이 소수 3자리(numeric(12,3))라 0.7+0.1 같은 부동소수 오차가 '0개 남음'으로 남지 않게 반올림
+  return (lines ?? []).map((l) => (any && l.id ? Math.max(0, Math.round(((Number(l.qty) || 0) - (alloc.get(l.id) || 0)) * 1000) / 1000) : 0));
+}
+
+// 아직 안 나간(발송완료·취소 아님) 차수가 있는가 — 날짜가 있거나, 날짜는 없어도 수량이 담긴 옛 '발송일 미정' 차수.
+//  (날짜·수량이 모두 없는 행은 배송정보 전용 기본 행이라 제외)
+export function hasPendingShipment(o: { shipments?: ShipmentDatePreview[] }): boolean {
+  return (o.shipments ?? []).some((s) =>
+    s.status !== "발송완료" && s.status !== "취소" &&
+    (!!s.ship_date || (s.items ?? []).some((it) => (Number(it.qty) || 0) > 0)));
+}
+
 // 발주 UI 에서 '생산일·생산 상태' 표시 여부. 생산 일정은 생산관리(app/production)에서 관리하므로 발주에선 숨긴다.
 //  데이터·컬럼·API·타입은 그대로 두고 '표시만' 끈다 → 되돌리려면 이 값을 true 로 바꾸면 전체 복원.
 //  발주 목록/폼/캘린더/대시보드의 생산 UI 와 '지연' 판정(생산 기준)이 모두 이 플래그를 따른다.
 export const SHOW_ORDER_PRODUCTION = false;
+
+// 목록·캘린더·주간뷰용 긴급도 — 다음 미발송 차수 날짜로 판정.
+//  복수 발송은 첫 차수가 나가면 발주가 발송완료(매출 인식)가 되지만(deriveParentStatus), 남은 차수의
+//  지연·임박은 계속 보여야 한다 → 남은 차수가 있으면 발송대기로 보고 판정한다.
+export function orderUrgency(o: OrderListItem, todayIso: string): Urgency {
+  const status = o.status === "발송완료" && hasPendingShipment(o) ? "발송대기" : o.status;
+  return getUrgency({ ...o, status, ship_date: nextPendingShipDate(o) }, todayIso);
+}
 
 // 발주의 긴급도 계산.
 // - overdue: 발송일 지났는데 미발송 / (생산 표시 시) 생산일 지났는데 대기·생산중
@@ -432,11 +476,15 @@ export function getUrgency(o: Pick<Order, "status" | "production_status" | "prod
 
 // 발주 '완료' — 발송완료 + 입금완료(또는 불필요) + 세금계산서 발행완료(또는 불필요).
 //  '더 할 일이 없는' 상태. 임박 칸 [완료] 배지 + 완료 숨기기 필터에 사용.
+//  남은 차수나 발송일 미정 잔여가 있으면 완료가 아니다 — 첫 차수 발송으로 발주가 발송완료가 돼도
+//  나머지를 보내야 하므로 숨기면 안 된다.
 export function isOrderComplete(
-  o: Pick<Order, "status" | "payment_status" | "tax_invoice_status">
+  o: Pick<Order, "status" | "payment_status" | "tax_invoice_status"> & { shipments?: ShipmentDatePreview[]; remaining_total?: number }
 ): boolean {
   return (
     o.status === "발송완료" &&
+    !hasPendingShipment(o) &&
+    !((o.remaining_total ?? 0) > 0) &&
     (o.payment_status === "입금완료" || o.payment_status === "불필요") &&
     (o.tax_invoice_status === "발행완료" || o.tax_invoice_status === "불필요")
   );
@@ -474,7 +522,9 @@ export function normalizeOrderItem(it: OrderItemInput): {
   };
 }
 
-export function validateOrder(input: OrderInput): string | null {
+//  opts.skipTracking — 복수 발송 발주는 송장이 차수(shipments)에 있고 첫 차수 발송으로 발주가 발송완료가 되므로
+//   발주 단위 송장번호를 요구하지 않는다(수정 화면에 송장 칸이 없어 저장이 영영 막힌다).
+export function validateOrder(input: OrderInput, opts?: { skipTracking?: boolean }): string | null {
   if (!input.company_id) return "업체를 선택하세요.";
   if (!input.order_date) return "발주일을 입력하세요.";
   if (!input.items || input.items.length === 0) return "라인아이템이 최소 1개 필요합니다.";
@@ -484,7 +534,7 @@ export function validateOrder(input: OrderInput): string | null {
     if (!Number(it.qty)) return `${i + 1}번째 라인의 수량을 입력하세요.`;
   }
   // 발송완료 상태면 송장번호 필수
-  if (input.status === "발송완료" && !String(input.tracking_no ?? "").trim()) {
+  if (!opts?.skipTracking && input.status === "발송완료" && !String(input.tracking_no ?? "").trim()) {
     return "발송완료로 저장하려면 송장번호를 입력하세요.";
   }
   return null;

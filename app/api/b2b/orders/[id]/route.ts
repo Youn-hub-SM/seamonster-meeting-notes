@@ -72,12 +72,20 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
   try {
     const { id } = await params;
     const body = (await req.json()) as OrderInput;
-    const validationError = validateOrder(body);
+    const sb = supabaseAdmin();
+    // 발송완료인데 발주 단위 송장번호가 없으면 — 복수 발송(차수 2개 이상)이거나 차수에 송장이 있으면 통과.
+    //  첫 차수를 차수 선택으로 발송완료하면 발주도 발송완료가 되지만 송장은 차수에만 적힌다(수정 화면엔 송장 칸이 없다).
+    let skipTracking = false;
+    if (body.status === "발송완료" && !String(body.tracking_no ?? "").trim()) {
+      const { data: shRows } = await sb.from("shipments").select("tracking_no").eq("order_id", id);
+      const rows = (shRows ?? []) as { tracking_no: string | null }[];
+      skipTracking = rows.length >= 2 || rows.some((r) => String(r.tracking_no ?? "").trim() !== "");
+    }
+    const validationError = validateOrder(body, { skipTracking });
     if (validationError) {
       return NextResponse.json({ ok: false, error: validationError }, { status: 400 });
     }
 
-    const sb = supabaseAdmin();
     // 발송 스냅샷을 읽을 수 있는지 먼저 확인 — 실패하면 헤더·품목을 바꾸기 전에 중단(뒤 단계의 반쪽 저장 방지)
     await probeOrderShipments(id);
 
@@ -200,6 +208,13 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       .map((r) => ({ id: r.id, product_id: r.product_id ?? null, product_name: r.product_name, spec: r.spec }));
 
     // 4) 발송 일정(분할 발송) 전체 교체 + 발송별 상품/수량
+    //  폼은 발송 시각(shipped_at)을 모른다 — 차수 id 로 기존 값을 찾아 넘겨 재저장이 '지금'으로 덮지 않게 한다
+    //  (취소 복구가 '이미 나갔던 차수'를 이 값으로 구분한다).
+    if (Array.isArray(body.shipments) && body.shipments.some((s) => s.id && s.shipped_at === undefined)) {
+      const { data: prevShips } = await sb.from("shipments").select("id, shipped_at").eq("order_id", id);
+      const shippedAt = new Map(((prevShips ?? []) as { id: string; shipped_at: string | null }[]).map((r) => [r.id, r.shipped_at]));
+      for (const s of body.shipments) if (s.id && s.shipped_at === undefined && shippedAt.has(s.id)) s.shipped_at = shippedAt.get(s.id) ?? null;
+    }
     const { earliestShipDate, derivedStatus, totalBoxes, channelKept, channelNotice } = await saveOrderShipments(id, body.recipient, body.shipments, savedItems, Math.max(1, Math.floor(Number(body.box_count) || 1)), body.ship_date, body.status);
     if (channelKept) console.warn(`[b2b/orders PUT] ${id} 이미 출고된 선점이라 차감 칸 '${channelKept}' 유지(is_bulk 와 다름)`);
     shipmentsSaved = true; // 원장이 새 칸으로 옮겨졌다 — 이후 실패에 is_bulk 를 되돌리면 표식·원장이 어긋난다
@@ -330,6 +345,23 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       return NextResponse.json({ ok: false, error: "변경할 필드가 없습니다." }, { status: 400 });
     }
 
+    // 복수 발송(차수 2개 이상)은 차수별로 상태를 바꾼다 — 발주 단위 발송완료는 남은 차수까지 전부 발송완료로,
+    //  발송대기 되돌림은 이미 나간 차수까지 전부 미발송으로 덮는다(첫 차수 발송 = 발주 발송완료가 된 뒤로 흔해짐).
+    //  목록은 복수 발송에 발주 상태 선택을 숨기지만 일괄 변경·직접 호출은 여기서 막는다. 취소·복구(prev=취소)는 기존 흐름 유지.
+    //  같은 상태로 다시 보내는 요청도 막는다 — 첫 차수 발송으로 이미 발송완료인 발주에 발송완료를 또 보내면
+    //  아래 동기화가 남은 차수를 전부 발송완료로 찍는다(목록이 오래된 화면에서 생길 수 있다).
+    let multiShip = false;
+    if (body.status !== undefined) {
+      const { data: shipRows, error: shipCntErr } = await sb.from("shipments").select("id").eq("order_id", id);
+      multiShip = !shipCntErr && (shipRows ?? []).length >= 2;
+    }
+    if ((body.status === "발송완료" || body.status === "발송대기") && prev && prev.status !== "취소" && multiShip) {
+      return NextResponse.json(
+        { ok: false, error: "복수 발송 발주는 차수별로 상태를 바꿉니다 — 발주 목록에서 차수를 펼쳐 변경하세요." },
+        { status: 400 }
+      );
+    }
+
     // 발송완료로 바꾸려면 송장번호 필수 (이번 요청 또는 기존 값)
     if (body.status === "발송완료") {
       const trackingNo = (body.tracking_no ?? prev?.tracking_no ?? "").toString().trim();
@@ -416,18 +448,28 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
           if (body.status === "취소") sch.status = "취소"; // shipped_at 은 보존(이미 나갔던 차수의 이력·복구 근거)
           // 복구: 취소 전 발송완료였던 차수(shipped_at 보유)는 발송완료로, 나머지는 발송대기로 —
           //  일괄 평탄화하면 '1차는 이미 나갔다'는 사실이 소실된다(검증 확정 보정)
-          else if (sch.status === "취소") sch.status = sch.shipped_at ? "발송완료" : (body.status === "발송완료" ? "발송완료" : "발송대기");
+          //  복수 발송은 안 나간 차수를 발송대기로 — 발주 단위 '발송완료 복구'가 보내지도 않은 차수를 발송완료로 만들지 않게
+          else if (sch.status === "취소") sch.status = sch.shipped_at ? "발송완료" : (body.status === "발송완료" && !multiShip ? "발송완료" : "발송대기");
         }
         const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count) || 1));
-        const { channelNotice: cn2 } = await saveOrderShipments(
+        const restored = await saveOrderShipments(
           id, recipientOf(ships[0]), schedules, savedItems, boxCount,
           // 취소에는 헤더 발송일을 넘기지 않는다 — 자동차수 생성 분기가 '발송대기+전량 선점' 차수를
           //  만들어 취소 발주가 재고를 전량 차감하는 역방향 사고를 막는다(검증 확정 보정)
           body.status === "취소" ? null : ((prev?.ship_date as string | null) ?? null), null
         );
-        if (cn2) channelNotices.push(cn2);
+        if (restored.channelNotice) channelNotices.push(restored.channelNotice);
+        // 복구: 복수 발송은 되살린 차수로 발주 상태를 다시 도출한다 — 1차가 이미 나갔으면(shipped_at) 발송완료
+        //  (= 매출 인식, 첫 차수 발송 규칙). 요청 상태(발송대기)를 그대로 쓰면 나간 물건이 있는데 매출이 빠진다.
+        //  발송일도 되살린 비취소 차수 중 가장 이른 날(매출 인식일)로 맞춘다.
+        if (body.status !== "취소") {
+          if (restored.derivedStatus) patch.status = restored.derivedStatus;
+          if (restored.earliestShipDate) patch.ship_date = restored.earliestShipDate;
+        }
       }
     }
+    // 실제로 저장되는 상태(복구 때 차수에서 다시 도출될 수 있다) — 아래 차수 동기화·로그의 기준
+    const effStatus = (patch.status as string | undefined) ?? body.status;
 
     // 발송완료 → 발송대기 되돌림 — 하위 차수에도 전파(감사 확정 결함: 차수가 발송완료로 남으면
     //  이후 박스 수 저장 같은 무관한 차수 PATCH 가 상위 상태를 발송완료로 재승격해 매출이 재인식된다)
@@ -442,7 +484,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // (캘린더·주간뷰가 일정 상태를 표시하므로 어긋나면 영구 '발송대기'로 보임)
     //  송장번호도 함께 내려준다 — 차수가 '발송완료인데 송장 없음' 으로 남으면 이후 그 차수를 건드리는
     //  요청(예: 발송요청 양식의 박스 수 저장)이 송장 검증에 걸려 막힌다.
-    if (body.status === "발송완료") {
+    //  요청이 발송완료일 때만, 그리고 단일 발송일 때만 — 복수 발송의 남은 차수는 차수별로 처리한다
+    //  (복구에서 차수로 도출된 발송완료도 남은 차수를 건드리지 않는다).
+    if (body.status === "발송완료" && !multiShip) {
       const shipPatch: Record<string, unknown> = { status: "발송완료", shipped_at: new Date().toISOString() };
       const orderTracking = (patch.tracking_no as string | null) ?? (prev?.tracking_no ?? null);
       if (orderTracking) shipPatch.tracking_no = orderTracking;
@@ -454,8 +498,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
 
     // 활동 로그
-    if (body.status && prev?.status && prev.status !== body.status) {
-      await logOrderStatusChanged(id, prev.status, body.status);
+    if (effStatus && prev?.status && prev.status !== effStatus) {
+      await logOrderStatusChanged(id, prev.status, effStatus);
     }
     if (body.production_status && prev?.production_status && prev.production_status !== body.production_status) {
       await logOrderProductionStatusChanged(id, prev.production_status, body.production_status);

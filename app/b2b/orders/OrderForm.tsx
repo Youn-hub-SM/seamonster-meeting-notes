@@ -561,13 +561,23 @@ export default function OrderForm({
     }));
   }
 
+  // 발송 차수의 상품 배분은 라인 '순번'(order_item_index)으로 묶여 있다 — 라인을 지우면 그 배분은 빼고
+  //  뒤 라인의 순번을 하나씩 당긴다. 안 그러면 저장 후 배분이 엉뚱한 라인에 붙어 'N개 남음'이 틀어진다.
+  function remapShipments(prev: OrderInput, idx: number): OrderInput["shipments"] {
+    return (prev.shipments || []).map((s) => ({
+      ...s,
+      items: (s.items || [])
+        .filter((it) => it.order_item_index !== idx)
+        .map((it) => (it.order_item_index > idx ? { ...it, order_item_index: it.order_item_index - 1 } : it)),
+    }));
+  }
   function removeItemRow(idx: number) {
     if (data.items.length === 1) {
-      // 최소 1개는 유지 — 빈 줄로 초기화
+      // 최소 1개는 유지 — 빈 줄로 초기화(같은 자리에 다른 품목을 넣는 경우라 차수 배분은 그대로 둔다)
       setData((prev) => ({ ...prev, items: [{ ...EMPTY_ORDER_ITEM }] }));
       return;
     }
-    setData((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
+    setData((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx), shipments: remapShipments(prev, idx) }));
   }
 
   // ─────────────────────────────────────────────
@@ -582,7 +592,9 @@ export default function OrderForm({
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, discount_amount: discountAmount }),
+        // 라인 순번(sort_order)을 화면 순서로 다시 매긴다 — 서버가 저장한 라인을 sort_order 로 정렬한 뒤 차수 배분의
+        //  라인 순번(order_item_index)을 그 목록에 대응시키므로, 줄을 지우고 추가해 순번이 어긋나면 배분이 엉뚱한 라인에 붙는다.
+        body: JSON.stringify({ ...data, items: data.items.map((it, i) => ({ ...it, sort_order: i })), discount_amount: discountAmount }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "저장 실패");
