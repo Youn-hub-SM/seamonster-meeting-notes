@@ -734,7 +734,7 @@ export default function OrderForm({
               <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>
                 {alreadyOut === "shipped"
                   ? "이 발주는 이미 발송완료돼 체크를 바꿔도 차감 칸이 바뀌지 않습니다 — 재고 이동을 하지 마세요"
-                  : "발송예정일이 지나 체크를 바꿔도 차감 칸이 그대로입니다 — 아직 안 나갔다면 발주 목록의 [+ 발송일]로 새 날짜를 잡으세요(그때 칸이 바뀝니다)"}
+                  : "발송예정일이 지나 체크를 바꿔도 차감 칸이 그대로입니다 — 아직 안 나갔다면 발주 목록의 발송일 칸을 눌러 오늘이나 그 뒤 날짜로 다시 잡으세요(그때 칸이 바뀝니다)"}
               </span>
             )}
           </div>

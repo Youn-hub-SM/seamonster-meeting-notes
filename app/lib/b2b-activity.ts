@@ -114,6 +114,20 @@ export async function logProductionRequestStatusChanged(reqNo: string, fromStatu
   });
 }
 
+// 자동 처리(프로모션 합류 크론)가 사람에게 확인을 요청하는 알림 — '생산요청 수정'과 구분(제목·끄기 설정·변경 기록 표시).
+//  생산 요청 등록과 같은 체크 키(prod_request)로 보낸다 — '수정' 알림을 꺼도 이 확인 요청은 간다.
+export async function logProductionRequestNotice(reqNo: string, actor: string, detail?: string): Promise<void> {
+  await recordActivity({
+    event_type: "production_request.notice",
+    summary: `생산요청 확인 필요 · ${reqNo || "(번호없음)"}`,
+    meta: { req_no: reqNo },
+    notify: true,
+    bot: "helper",
+    helperEvent: "prod_request",
+    actor,
+    detail,
+  });
+}
 export async function logProductionRequestUpdated(reqNo: string, actor?: string | null, detail?: string): Promise<void> {
   await recordActivity({
     event_type: "production_request.updated",

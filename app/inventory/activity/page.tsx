@@ -30,7 +30,7 @@ export default function ActivityPage() {
       const [tj, ej] = await Promise.all([
         (await fetch(txnUrl, { cache: "no-store" })).json(),
         // 생산요청 작성·상태변경 이벤트(생산=도매) — B2B 변경기록엔 제외되고 여기(생산·재고)로만 온다.
-        fetch("/api/b2b/activity?type=production_request.created,production_request.status_changed,production_request.draft&limit=300", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false })),
+        fetch("/api/b2b/activity?type=production_request.created,production_request.status_changed,production_request.draft,production_request.notice&limit=300", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false })),
       ]);
       if (!tj.ok) throw new Error(tj.error || "조회 실패");
       const rows: InventoryTxn[] = tj.rows || [];
@@ -52,7 +52,7 @@ export default function ActivityPage() {
     if (!window.confirm(isMove ? "이 재고 이동을 취소할까요? 출발·도착 두 칸이 함께 원복되고, 요청서 배정도 함께 풀립니다." : "이 거래를 취소(삭제)할까요? 재고가 원복됩니다.")) return;
     const r = await fetch(isMove ? `/api/inventory/move?group_id=${encodeURIComponent(String(t.group_id))}` : `/api/inventory/txn?id=${encodeURIComponent(t.id)}`, { method: "DELETE" });
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { const tail = r.status === 409 || /새로고침|다시 시도/.test(j?.error || "") ? "" : " — 새로고침 후 다시 시도하세요."; alert(`취소 실패: ${j?.error || "서버 오류"}${tail}`); return; } // 409(규칙상 거부)엔 재시도 권유를 붙이지 않는다
     await load();
   }
 

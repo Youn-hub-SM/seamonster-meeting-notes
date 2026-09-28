@@ -35,6 +35,11 @@ async function snapshotOrderShipments(sb: SbClient, orderId: string): Promise<Sh
   }
   return { ships: ships ?? [], items, txns };
 }
+// PUT 이 헤더·품목을 바꾸기 전에 먼저 부르는 점검 — 발송 스냅샷을 읽지 못하면 아무것도 바꾸기 전에 중단한다
+//  (품목 교체 뒤 스냅샷에서 실패하면 헤더·품목만 바뀐 채 발송·선점이 옛 값으로 남는다).
+export async function probeOrderShipments(orderId: string): Promise<void> {
+  await snapshotOrderShipments(supabaseAdmin(), orderId);
+}
 async function restoreOrderShipments(sb: SbClient, orderId: string, snap: ShipSnapshot): Promise<void> {
   try {
     // 부분 삽입된 새 데이터를 걷어낸 뒤 옛 데이터를 id 그대로 재삽입 → FK(shipment_id) 관계까지 원상복구.
@@ -182,8 +187,8 @@ export async function saveOrderShipments(
   // 실제 차감 칸 — 이미 나간 옛 선점 출고가 있으면 그 칸을 이어 쓴다(기획 6절).
   //  재저장은 옛 선점을 cascade 로 지우고 다시 찍으므로, is_bulk 만 따르면 발송이 끝난 발주를
   //  소급 체크(또는 메모 수정 같은 무관한 재저장)할 때 옛 칸의 출고가 되살아나고 새 칸이 빠진다(유령 재고).
-  //  '나갔다' = 차수가 발송완료(또는 shipped_at 보유), 또는 옛 선점일이 오늘보다 앞(엄격히 과거)이고 새 차감일도 오늘 이하.
-  //  오늘 날짜 선점(당일 정정)과, 밀린 발송대기를 미래로 다시 잡는 저장은 아직 안 나간 것으로 보고 is_bulk 를 따른다(기획 6절 '과거 날짜').
+  //  '나갔다' = 차수가 발송완료(또는 shipped_at 보유), 또는 옛 선점일과 새 차감일이 모두 오늘보다 앞(엄격히 과거).
+  //  오늘 날짜 선점(당일 정정)과, 밀린 발송대기를 오늘·미래로 다시 잡는 저장은 아직 안 나간 것으로 보고 is_bulk 를 따른다(기획 6절 '과거 날짜').
   const shippedIds = new Set(
     snap.ships
       .filter((s) => (s as { status?: string }).status === "발송완료" || !!(s as { shipped_at?: string | null }).shipped_at)
@@ -194,7 +199,7 @@ export async function saveOrderShipments(
     : today;
   const prevOut = snap.txns.find((t) =>
     t.created_by === "B2B 자동출고" && typeof t.channel === "string" &&
-    (shippedIds.has(t.shipment_id as string) || (String(t.txn_date) < today && newDeductDate <= today))
+    (shippedIds.has(t.shipment_id as string) || (String(t.txn_date) < today && newDeductDate < today))
   );
   const effChannel: InvChannel = prevOut ? (prevOut.channel as InvChannel) : deductChannel;
   // is_bulk 와 다른 칸을 유지했으면 화면이 알린다 — 유지 이유(발송완료 / 지난 발송예정일)에 따라 할 일이 다르다
@@ -343,22 +348,34 @@ export async function saveOrderShipments(
   const derivedStatus = deriveParentStatus(insertedStatuses);
 
   // 화면 안내 — 칸 유지(이유별) 또는 칸 바뀜(옮길 방향). 발송된 적 있는 발주를 선점 없이 복구한 경우도 확인을 권한다.
+  //  '유지'는 실제로 차감을 다시 기록했을 때만(취소·일정 삭제·재고차감 끔은 차감이 없으니 유지가 아니다).
+  const keptOut: InvChannel | null = channelKept && writtenChannel ? channelKept : null;
   let channelNotice: string | null = null;
-  if (channelKept) {
+  if (keptOut) {
     channelNotice = keptShipped
-      ? `이미 발송완료된 발주라 재고 차감 칸은 '${channelKept}'(으)로 유지됐습니다 — 이 발주 때문에 재고 이동을 하지 마세요.`
-      : `발송예정일이 지나 이미 나간 것으로 보고 재고 차감 칸 '${channelKept}'을(를) 유지했습니다 — 아직 안 나갔다면 발주 목록의 [+ 발송일]로 새 날짜를 잡으세요(그때 칸이 바뀌고 옮길 방법이 안내됩니다).`;
+      ? `이미 발송완료된 발주라 재고 차감 칸은 '${keptOut}'(으)로 유지됐습니다 — 이 발주 때문에 재고 이동을 하지 마세요.`
+      : `발송예정일이 지나 이미 나간 것으로 보고 재고 차감 칸 '${keptOut}'을(를) 유지했습니다 — 아직 안 나갔다면 발주 목록의 발송일 칸(날짜 또는 'N차 · 수정')을 눌러 오늘이나 그 뒤 날짜로 다시 잡으세요(그때 칸이 바뀌고 옮길 방법이 안내됩니다).`;
   } else if (prevChannel && writtenChannel && prevChannel !== writtenChannel) {
+    // 옮길 수량(구성품 기준 — 세트는 구성품으로 빠진다)
+    let qtyText = "";
+    try {
+      const ids = [...deductPerProduct.keys()];
+      const { data: ps } = await sb.from("products").select("id, name").in("id", ids.slice(0, 100));
+      const nm = new Map((ps ?? []).map((p) => [String(p.id), String(p.name || "품목")]));
+      qtyText = ` (${[...deductPerProduct.entries()].slice(0, 10).map(([pid, q]) => `${nm.get(pid) || "품목"} ${q.toLocaleString()}`).join(", ")}${deductPerProduct.size > 10 ? ` 외 ${deductPerProduct.size - 10}종` : ""})`;
+    } catch { /* 수량 없이 안내 */ }
     channelNotice = writtenChannel === "도매 대량"
-      ? `재고 차감 칸이 '${prevChannel}' → '도매 대량'으로 바뀌었습니다 — [재고 이동]에서 소매 → 도매 대량으로 이 발주 수량을 옮겨 두세요.`
+      ? prevChannel === "도매"
+        ? `재고 차감 칸이 '도매' → '도매 대량'으로 바뀌었습니다${qtyText} — 이 발주 몫으로 도매 칸에 옮겨 둔 수량은 [재고 이동]에서 도매 → 소매, 소매 → 도매 대량 두 번으로 옮기세요(아직 도매로 확보 전이면 소매 → 도매 대량만).`
+        : `재고 차감 칸이 '${prevChannel}' → '도매 대량'으로 바뀌었습니다${qtyText} — [재고 이동]에서 소매 → 도매 대량으로 옮겨 두세요.`
       : prevChannel === "도매 대량"
-        ? `재고 차감 칸이 '도매 대량' → '${writtenChannel}'(으)로 바뀌었습니다 — 이 발주 몫으로 옮겨 둔 도매 대량 재고는 [재고 이동]에서 도매 대량 → 소매로 되돌리세요.`
-        : `재고 차감 칸이 '${prevChannel}' → '${writtenChannel}'(으)로 바뀌었습니다.`;
+        ? `재고 차감 칸이 '도매 대량' → '${writtenChannel}'(으)로 바뀌었습니다${qtyText} — 이 발주 몫으로 옮겨 둔 도매 대량 재고는 [재고 이동]에서 도매 대량 → 소매로 되돌리세요.`
+        : `재고 차감 칸이 '${prevChannel}' → '${writtenChannel}'(으)로 바뀌었습니다${qtyText}.`;
   } else if (!prevChannel && writtenChannel && snap.ships.some((s) => !!(s as { shipped_at?: string | null }).shipped_at)) {
     channelNotice = `발송된 적 있는 발주의 재고 차감을 '${writtenChannel}' 칸으로 다시 기록했습니다 — 처음 발송 때와 같은 칸인지 확인하세요.`;
   }
 
-  return { earliestShipDate: earliest, derivedStatus, totalBoxes, channelKept, channelNotice };
+  return { earliestShipDate: earliest, derivedStatus, totalBoxes, channelKept: keptOut, channelNotice };
   } catch (err) {
     // 재저장 도중 실패 → delete 로 사라진 옛 발송·송장·선점출고를 스냅샷에서 복원(부분 상태 방지) 후 재던짐.
     await restoreOrderShipments(sb, orderId, snap);

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { logInventoryPoolMoved, logProductionRequestStatusChanged, logProductionRequestUpdated } from "@/app/lib/b2b-activity";
+import { logInventoryPoolMoved, logProductionRequestStatusChanged, logProductionRequestNotice } from "@/app/lib/b2b-activity";
 import { addBusinessDays } from "@/app/lib/business-days";
-import { getKv, setKv } from "@/app/lib/b2b-settings";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,18 +55,26 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
     const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const tomorrow = new Date(Date.now() + 33 * 3600e3).toISOString().slice(0, 10); // KST 내일 = 행사 하루 전 판정 기준
-    // 신뢰 기준 시각 — 첫 실행에 기록(이후 고정). 읽기·쓰기 실패면 상수 폴백.
-    let trustedFrom = PROMO_DUE_TRUSTED_FROM_ISO;
-    try {
-      const saved = await getKv("promo_due_trusted_from");
+    // 신뢰 기준 시각 — 첫 실행에 한 번 기록하고 이후 고정. 읽기 오류는 중단(다음 날 재시도) — 오류를 '없음'으로 보고
+    //  지금 시각으로 덮어쓰면 그 전의 사람 확인이 모두 무효가 된다. 행이 없을 때만 쓰고, 쓰기에 실패해도 이번 실행은 지금 시각(안전 쪽).
+    let trustedFrom: string;
+    {
+      const { data: kvRow, error: kvErr } = await sb.from("b2b_settings").select("value").eq("key", "promo_due_trusted_from").maybeSingle();
+      if (kvErr) throw kvErr;
+      const v = (kvRow?.value ?? null) as { v?: string } | string | null;
+      const saved = typeof v === "string" ? v : v?.v;
       if (saved && !Number.isNaN(Date.parse(saved))) trustedFrom = saved;
-      else { trustedFrom = new Date().toISOString(); await setKv("promo_due_trusted_from", trustedFrom); }
-    } catch { trustedFrom = PROMO_DUE_TRUSTED_FROM_ISO; }
+      else {
+        trustedFrom = new Date().toISOString();
+        const { error: we } = await sb.from("b2b_settings").upsert({ key: "promo_due_trusted_from", value: { v: trustedFrom }, updated_at: trustedFrom }, { onConflict: "key", ignoreDuplicates: true });
+        if (we) console.warn("[promotion/release] 기준 시각 저장 실패", we.message);
+      }
+    }
     // 최근 7일 안에 같은 작업자 문구로 같은 요청서에 남긴 알림 — 같은 경고를 매일 반복하지 않게
     const recentNotices = async (actor: string): Promise<Set<string>> => {
       try {
         const since = new Date(Date.parse(`${today}T00:00:00+09:00`) - 6 * 86400e3).toISOString();
-        const { data: w } = await sb.from("activity_log").select("meta").eq("event_type", "production_request.updated")
+        const { data: w } = await sb.from("activity_log").select("meta").eq("event_type", "production_request.notice")
           .eq("actor", actor).gte("created_at", since).limit(1000);
         return new Set((w ?? []).map((x) => String(((x as { meta?: { req_no?: string } | null }).meta || {}).req_no || "")));
       } catch { return new Set(); } // 조회 실패면 알림을 보낸다
@@ -125,19 +133,22 @@ export async function POST(req: NextRequest) {
         if (rows2.length < 1000) break;
       }
     }
+    const futureHeld = new Set(held); // 다음 행사(목표일 모레 이후·없음) 요청서가 잡는 품목 — 아래 옛 요청서 보류와 구분
     // 요청서 품목명 조회(경고 문구용) — 여러 블록이 같은 모양으로 쓴다
     const namesOf = async (ids: string[]): Promise<Map<string, string>> => {
       if (!ids.length) return new Map();
       const { data: ps } = await sb.from("products").select("id, name").in("id", ids).limit(500);
       return new Map((ps ?? []).map((pr) => [String(pr.id), String(pr.name || "품목")]));
     };
+    //  잡는 이유가 옛 요청서뿐이면 그 번호와 할 일을 적는다(없는 '다음 행사 요청서'를 찾게 하지 않게)
     const stuckLines = (stuck: string[], nm: Map<string, string>) =>
-      stuck.map((pid) => `- ${nm.get(pid) || pid} ×${(poolQty.get(pid) || 0).toLocaleString()}`);
+      stuck.map((pid) => `- ${nm.get(pid) || pid} ×${(poolQty.get(pid) || 0).toLocaleString()}${!futureHeld.has(pid) && legacyBy.has(pid) ? ` (옛 요청서 ${legacyBy.get(pid)!.join(", ")} 이(가) 잡고 있음 — 그 요청서를 '마감'하거나 '수정 저장'하면 다음 날 합류)` : ""}`);
 
     // 2-레거시) 첫 실행 안전장치(#22) — 목표일이 내일(이하)이지만 구화면 기본 마감일(요청일+7영업일)일 수 있는
     //    옛 요청서(배포 전 생성 + 배포 뒤 무저장)는 닫지도 합류시키지도 않는다: 품목을 보류에 넣고 경고만.
     //    조회 실패는 throw — 여기서 조용히 넘기면 '실패 → 보호 해제(조기 합류)' 방향 사고가 된다.
     const legacyIds = new Set<string>();
+    const legacyBy = new Map<string, string[]>(); // 품목 → 그 품목을 잡고 있는 옛 요청서 번호(경고 문구에서 '다음 행사'와 구분)
     {
       // 대상 = 2a 가 닫을 열린 요청서 + 오늘·내일이 행사인 완료 요청서(이미 끝난 행사의 완료 요청서는 옛 크론이 이미 풀었다 — 보류하면 그 품목이 영영 합류하지 않는다)
       const { data: cand, error: le } = await sb.from("production_requests")
@@ -150,10 +161,15 @@ export async function POST(req: NextRequest) {
       if (le) throw le;
       // 옛 기본값 모양(요청일 또는 작성일 +7영업일)인 것 + 목표일이 이미 지난 열린 요청서 — 옛 크론은 열린 요청서를 날짜와 무관하게
       //  잡아 두었으므로(행사 연기 시 날짜를 안 고쳐도 안전했다) 지난 날짜로 곧장 마감·합류하면 확보분이 조기에 풀린다.
-      const looksDefault = (cand ?? []).filter((r) => {
+      //  '지난 날짜'는 이 코드가 처음 돈 날 이미 지난 것만 — 그 뒤에 지난 건 새 크론이 한 번 닫았다가 사람이 다시 연 경우라 #14 로 간다.
+      const firstRunDay = kstDateOf(trustedFrom);
+      const isDefaultDue = (r: { due_date: unknown; request_date: unknown; created_at: unknown }) => {
         const due = String(r.due_date);
+        return due === addBusinessDays(String(r.request_date), 7) || due === addBusinessDays(kstDateOf(String(r.created_at)), 7);
+      };
+      const looksDefault = (cand ?? []).filter((r) => {
         const open = r.status === "요청" || r.status === "진행중";
-        return (open && due < today) || due === addBusinessDays(String(r.request_date), 7) || due === addBusinessDays(kstDateOf(String(r.created_at)), 7);
+        return (open && String(r.due_date) < firstRunDay) || isDefaultDue(r);
       });
       // 배포 뒤 사람이 수정 창에서 저장했으면 확인된 것(크론 자신의 경고 기록은 빼고 본다)
       const confirmed = new Set<string>();
@@ -177,9 +193,12 @@ export async function POST(req: NextRequest) {
           .select("request_id, product_id").in("request_id", [...legacyIds]).limit(2000);
         if (ie) throw ie;
         const byReq = new Map<string, string[]>();
+        const reqNoById = new Map(legacy.map((r) => [String(r.id), String(r.req_no || "(번호없음)")]));
         for (const it of its ?? []) {
-          held.add(String(it.product_id));
-          byReq.set(String(it.request_id), [...(byReq.get(String(it.request_id)) ?? []), String(it.product_id)]);
+          const pid = String(it.product_id);
+          held.add(pid);
+          legacyBy.set(pid, [...new Set([...(legacyBy.get(pid) ?? []), reqNoById.get(String(it.request_id)) || ""])].filter(Boolean));
+          byReq.set(String(it.request_id), [...(byReq.get(String(it.request_id)) ?? []), pid]);
         }
         // 경고 — 열린 요청서는 늘, 완료 요청서는 풀에 잔량이 잡혀 있을 때만. 같은 요청서는 7일에 한 번(매일 같은 게시물 방지)
         const recentWarned = await recentNotices(LEGACY_WARN_ACTOR);
@@ -191,14 +210,17 @@ export async function POST(req: NextRequest) {
           if (open && recentWarned.has(String(r.req_no || ""))) continue; // 완료 요청서는 보류가 곧 끝나므로 매일 알린다
           try {
             const nm = await namesOf(stuck);
+            const due = String(r.due_date);
             const detail = [
-              `목표일 ${r.due_date} 이(가) 옛 화면의 기본 마감일일 수 있어 자동 마감·합류를 건너뛰었습니다.`,
+              isDefaultDue(r)
+                ? `목표일 ${due} 이(가) 옛 화면의 기본 마감일일 수 있어 자동 마감·합류를 건너뛰었습니다.`
+                : `목표일 ${due} 이(가) 지났지만 열린 요청서라 옛 규칙(열려 있으면 보류)대로 자동 마감·합류를 건너뛰었습니다.`,
               open
-                ? "요청서 행의 '수정'에서 행사 시작일을 확인하고 '수정 저장'을 누르세요 — 다음 날부터 자동 처리됩니다('확인'·배정·다시 열기로는 풀리지 않습니다). 행사가 이미 끝났으면 '마감'을 누르세요."
+                ? `요청서 행의 '수정'에서 행사 시작일을 확인하고 '수정 저장'을 누르세요 — 다음 날부터 자동 처리됩니다('확인'·배정·다시 열기로는 풀리지 않습니다). 행사가 이미 끝났으면 '마감'을 누르세요.${due >= today && due <= tomorrow ? " 행사가 정말 이 날이면 저장해도 합류는 다음 날 아침이므로 지금 '재고 이동'에서 프로모션 → 소매 로 옮기세요." : ""}`
                 : `완료된 요청서입니다 — 이 보류는 ${new Date(Date.parse(`${r.due_date}T00:00:00Z`) + 86400e3).toISOString().slice(0, 10)} 아침에 끝나 확보분이 소매로 합류합니다. 행사가 그 뒤라면 그 전에 '완료·취소 보기' → '다시 열기' → '수정'에서 행사 시작일을 저장하세요(새 날짜 하루 전에 자동 마감). 행사가 맞다면 '재고 이동'에서 프로모션 → 소매 로 옮기세요.`,
               ...(stuck.length ? ["잡아 둔 품목:", ...stuckLines(stuck, nm)] : []),
             ].join("\n");
-            await logProductionRequestUpdated(String(r.req_no || ""), LEGACY_WARN_ACTOR, detail);
+            await logProductionRequestNotice(String(r.req_no || ""), LEGACY_WARN_ACTOR, detail);
           } catch { /* 경고 실패는 보류를 막지 않는다 */ }
         }
       }
@@ -244,7 +266,7 @@ export async function POST(req: NextRequest) {
           reclosedSkipped++;
           const rn = String(r.req_no || "");
           if (rn && !(reopenNoticed ??= await recentNotices(REOPEN_SKIP_ACTOR)).has(rn)) {
-            try { await logProductionRequestUpdated(rn, REOPEN_SKIP_ACTOR, "같은 행사로 자동 마감했던 요청서가 다시 열려 있습니다 — 행사가 끝났으면 행의 '마감'을 누르세요. 행사를 미뤘으면 '수정'에서 행사 시작일을 고치면 새 날짜 하루 전에 자동 마감됩니다."); } catch { /* 알림 실패 무시 */ }
+            try { await logProductionRequestNotice(rn, REOPEN_SKIP_ACTOR, "같은 행사로 자동 마감했던 요청서가 다시 열려 있습니다 — 행사가 끝났으면 행의 '마감'을 누르세요. 행사를 미뤘으면 '수정'에서 행사 시작일을 고치면 새 날짜 하루 전에 자동 마감됩니다."); } catch { /* 알림 실패 무시 */ }
           }
           continue;
         }
@@ -263,7 +285,7 @@ export async function POST(req: NextRequest) {
           if (stuck.length && !pastDue) {
             const nm = await namesOf(stuck);
             detail = [
-              "주의 — 확보분이 소매로 합류하지 않은 품목(다음 행사 요청서가 잡고 있음):",
+              "주의 — 확보분이 소매로 합류하지 않은 품목(다른 요청서가 잡고 있음 — 줄마다 이유):",
               ...stuckLines(stuck, nm),
               "이번 행사에 쓰려면 '재고 이동'에서 프로모션 → 소매 로 직접 옮기세요.",
             ].join("\n");
@@ -286,11 +308,11 @@ export async function POST(req: NextRequest) {
         if (!stuck.length) continue;
         const nm = await namesOf(stuck);
         const detail = [
-          "주의 — 확보분이 소매로 합류하지 않은 품목(다음 행사 요청서가 잡고 있음):",
+          "주의 — 확보분이 소매로 합류하지 않은 품목(다른 요청서가 잡고 있음 — 줄마다 이유):",
           ...stuckLines(stuck, nm),
           "이번 행사에 쓰려면 '재고 이동'에서 프로모션 → 소매 로 직접 옮기세요.",
         ].join("\n");
-        try { await logProductionRequestUpdated(String(r.req_no || ""), HOLD_WARN_ACTOR, detail); } catch { /* 알림 실패 무시 */ }
+        try { await logProductionRequestNotice(String(r.req_no || ""), HOLD_WARN_ACTOR, detail); } catch { /* 알림 실패 무시 */ }
       }
     } catch { /* 경고 없이 진행 */ }
 

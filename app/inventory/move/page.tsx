@@ -189,7 +189,7 @@ export default function InventoryMovePage() {
     if (!window.confirm("이 이동을 취소할까요? 양쪽 채널 재고가 원래대로 돌아갑니다.")) return;
     const r = await fetch(`/api/inventory/move?group_id=${encodeURIComponent(group_id)}`, { method: "DELETE" });
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { const tail = r.status === 409 || /새로고침|다시 시도/.test(j?.error || "") ? "" : " — 새로고침 후 다시 시도하세요."; alert(`취소 실패: ${j?.error || "서버 오류"}${tail}`); return; } // 409(규칙상 거부)엔 재시도 권유를 붙이지 않는다
     await loadStock();
     // 취소로 요청서 잔여·상태가 바뀌었을 수 있음 — 열려 있는 줄의 요청서 목록 갱신
     if (allocMode) {

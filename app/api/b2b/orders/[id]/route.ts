@@ -6,7 +6,7 @@ import {
   normalizeOrderItem,
   validateOrder,
 } from "@/app/lib/b2b-orders";
-import { saveOrderShipments, SavedOrderItem } from "@/app/lib/b2b-shipments";
+import { saveOrderShipments, probeOrderShipments, SavedOrderItem } from "@/app/lib/b2b-shipments";
 import {
   logOrderStatusChanged,
   logOrderProductionStatusChanged,
@@ -78,6 +78,8 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     }
 
     const sb = supabaseAdmin();
+    // 발송 스냅샷을 읽을 수 있는지 먼저 확인 — 실패하면 헤더·품목을 바꾸기 전에 중단(뒤 단계의 반쪽 저장 방지)
+    await probeOrderShipments(id);
 
     // 0) 변경 전 상태 캡처 (활동 로그용)
     const { data: prevOrder } = await sb

@@ -41,10 +41,10 @@ export default function TradePage() {
     fetch(`/api/production/requests/open?date=${ioDate}`, { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (!alive) return;
       setReqWarn(reqWarnOf(j));
-      if (!j?.ok) { setReqId(""); return; } // 경고('연결되지 않습니다')와 실제 저장이 맞게 — 옛 선택을 남기지 않는다
+      if (!j?.ok) { setReqId(""); setReqs([]); return; } // 경고('연결되지 않습니다')와 실제 저장이 맞게 — 옛 선택·옛 목록(다른 거래일 기준)을 남기지 않는다
       setReqs(j.requests || []);
       if (!reqTouched) setReqId(j.default_id || "");
-    }).catch(() => { if (alive) { setReqWarn(reqWarnOf(null)); setReqId(""); } });
+    }).catch(() => { if (alive) { setReqWarn(reqWarnOf(null)); setReqId(""); setReqs([]); } });
     return () => { alive = false; };
   }, [ioType, ioDate, uploadOpen, reqTouched]);
 

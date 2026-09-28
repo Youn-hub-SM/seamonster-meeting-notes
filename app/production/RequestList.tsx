@@ -136,6 +136,15 @@ export function RequestList() {
   const reservedOpen = useMemo(
     () => requests.filter((r) => CONFIRMED_PURPOSES.includes(toPrPurpose(r.purpose)) && (r.status === "요청" || r.status === "진행중")),
     [requests]);
+  // 확정형 품목별 잔여 — 요청서를 닫을 때 '실제로 입고 예정에서 빠져 있던 담은 몫'(서버 보정과 같은 규칙) 계산용
+  const confRemAll = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of reservedOpen) for (const it of r.items) {
+      const rem = Math.max(0, it.requested_qty - it.received_qty);
+      if (rem > 0) m.set(it.product_id, (m.get(it.product_id) || 0) + rem);
+    }
+    return m;
+  }, [reservedOpen]);
   // 이미 제조사 요청서에 담긴 몫(아직 안 온 양) — 창이 '담김'으로 표시하고 같은 몫을 두 번 담지 않게 한다
   const foldedList = useMemo(() => {
     const out: FoldedPart[] = [];
@@ -148,6 +157,21 @@ export function RequestList() {
     }
     return out;
   }, [requests]);
+  // 이 요청서의 담은 몫 중 서버가 지금 입고 예정에서 빼고 있는 양 = min(전체 담은 몫, 확정형 잔여) − min(다른 요청서 몫, 확정형 잔여)
+  const foldAppliedOf = useCallback((r: ProductionRequest): number => {
+    const own = new Map<string, number>();
+    for (const it of r.items) {
+      const q = Math.min(it.reserved_qty || 0, Math.max(0, it.requested_qty - it.received_qty));
+      if (q > 0) own.set(it.product_id, (own.get(it.product_id) || 0) + q);
+    }
+    let applied = 0;
+    for (const [pid, o] of own) {
+      const fo = foldedList.filter((f) => f.rid !== r.id && f.pid === pid).reduce((s, f) => s + f.qty, 0);
+      const cr = confRemAll.get(pid) || 0;
+      applied += Math.max(0, Math.min(fo + o, cr) - Math.min(fo, cr));
+    }
+    return r2(applied);
+  }, [foldedList, confRemAll]);
   // 도매 필요량 = 열린(요청·진행중) 도매 요청의 잔여(요청-이전) 합 — 제조사 요청 수량 판단 근거
   const wholesaleNeed = useMemo(() => {
     const m = new Map<string, number>();
@@ -288,8 +312,8 @@ export function RequestList() {
     const hasReceipts = r.items.some((it) => it.receipts.length > 0);
     // 제조사 요청의 미입고 잔여는 재고 목록 '입고 예정'으로 권장생산에서 빠져 있다 — 닫으면 그만큼 권장이 다시 올라간다
     const remain = openRemainQty(r.items);
-    // 담아 둔 행사·대량 몫(아직 안 온 만큼)은 이미 입고 예정에서 빠져 있다 — 권장은 나머지만큼 늘고, 그 몫은 다시 담아야 한다
-    const foldPend = r2(r.items.reduce((s, it) => s + Math.min(it.reserved_qty || 0, Math.max(0, it.requested_qty - it.received_qty)), 0));
+    // 담아 둔 행사·대량 몫 중 지금 입고 예정에서 빠져 있는 양 — 권장은 나머지만큼 늘고, 그 몫은 다시 담아야 한다
+    const foldPend = foldAppliedOf(r);
     const inbNote = r.purpose === "재고 보충" && remain > 0
       ? `\n\n미입고 ${remain.toLocaleString()}개 중 ${r2(remain - foldPend).toLocaleString()}개는 '입고 예정'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다.${foldPend > 0 ? `\n담아 둔 행사·대량 몫 ${foldPend.toLocaleString()}개는 다음 제조사 요청서에서 다시 '담기'해야 합니다.` : ""}`
       : "";
@@ -431,7 +455,7 @@ export function RequestList() {
             <tbody>
               {displayed.map((r) => (
                 <RequestRow
-                  key={r.id} req={r} expanded={expandedId === r.id} busy={busy}
+                  key={r.id} req={r} expanded={expandedId === r.id} busy={busy} foldApplied={foldAppliedOf(r)}
                   onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)}
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
                   onStatus={(s) => patchStatus(r.id, s, r.status)}
@@ -468,8 +492,8 @@ function ProgressCell({ received, requested }: { received: number; requested: nu
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onEdit, onDelete }: {
-  req: ProductionRequest; expanded: boolean; busy: boolean;
+function RequestRow({ req, expanded, busy, foldApplied, onToggle, onCancelReceipt, onStatus, onConfirm, onEdit, onDelete }: {
+  req: ProductionRequest; expanded: boolean; busy: boolean; foldApplied: number;
   onToggle: () => void;
   onCancelReceipt: (rid: string) => void;
   onStatus: (s: PrStatus) => void;
@@ -535,9 +559,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                 onClick={() => {
                   const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
                   const remain = openRemainQty(req.items);
-                  const foldPend = r2(req.items.reduce((s, it) => s + Math.min(it.reserved_qty || 0, Math.max(0, it.requested_qty - it.received_qty)), 0));
                   const inbNote = req.purpose === "재고 보충" && remain > 0
-                    ? `\n\n미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.${foldPend > 0 ? `\n그중 담아 둔 행사·대량 몫 ${foldPend.toLocaleString()}개는 다음 제조사 요청서에서 다시 '담기'해야 합니다.` : ""}`
+                    ? `\n\n미입고 ${remain.toLocaleString()}개 중 ${r2(remain - foldApplied).toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.${foldApplied > 0 ? `\n담아 둔 행사·대량 몫 ${foldApplied.toLocaleString()}개는 다음 제조사 요청서에서 다시 '담기'해야 합니다.` : ""}`
                     : "";
                   if (confirm(`이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) — 마감할까요?${inbNote}`)) onStatus("완료");
                 }}>마감</button>
@@ -750,7 +773,9 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
     const slack = recReady && rr ? Math.max(0, -base) + Math.max(0, -g) : 0;
     const covered = r2(Math.min(crLeft, slack));
     const toAdd = Math.max(0, r2(crLeft - covered - fw));
-    return { inb, recommend, cr, folded: r2(Math.min(cr, fo + fw)), covered, toAdd };
+    // 이 창에 담은 몫 중 지금은 행사·대량에 필요 없는 양(확정형 잔여가 줄었거나 소매 여유가 늘어남) — 자동으로 빼지 않고 알린다
+    const excess = recReady ? Math.max(0, r2(fw - Math.max(0, crLeft - covered))) : 0;
+    return { inb, recommend, cr, folded: r2(Math.min(cr, fo + fw)), covered, toAdd, excess };
   }
   // '담기' — 그 품목 줄이 있으면 수량과 담은 몫에 더하고, 없으면 줄을 만들어 담을 양만큼 넣는다
   function addReserved(pid: string, qty: number) {
@@ -765,13 +790,14 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   }
   function updateLine(i: number, patch: Partial<NewLine>) { setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
   function removeLine(i: number) { setLines((prev) => prev.filter((_, idx) => idx !== i)); }
-  // 수량을 손으로 줄이면 담은 몫도 그 안으로 — 담은 몫이 요청수량보다 크게 남으면 저장 뒤 '담김'으로 잘못 잡힌다
-  function setQty(i: number, v: string) {
-    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, requested_qty: v, reserved: Math.min(l.reserved || 0, Math.max(0, Number(v) || 0)) } : l)));
-  }
-  // '담기 취소' — 담은 몫만큼 요청수량에서 빼고(입고분 아래로는 안 내림) 담은 몫을 0 으로
+  // '담기 취소' — 담은 몫만큼 요청수량에서 빼고(입고분 아래로는 안 내림) 담은 몫을 0 으로.
+  //  수량을 칠 때마다 담은 몫을 깎지 않는다(1→12→125 입력 중간값으로 몫이 줄어 '담기'가 다시 켜진다) — 저장·표시·계산이 모두 min(담은 몫, 수량)을 쓴다.
   function undoReserved(i: number) {
-    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, requested_qty: String(Math.max(l.received, r2((Number(l.requested_qty) || 0) - (l.reserved || 0)))), reserved: 0 } : l)));
+    setLines((prev) => prev.map((l, idx) => {
+      if (idx !== i) return l;
+      const q = Number(l.requested_qty) || 0;
+      return { ...l, requested_qty: String(Math.max(l.received, r2(q - Math.min(l.reserved || 0, q)))), reserved: 0 };
+    }));
   }
 
   // 입고·배정 기록이 있는 요청서는 용도를 바꿀 수 없다(서버도 거부) — 탭을 잠근다
@@ -871,6 +897,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               {!reservedSupported && (
                 <div className="sm-warn" style={{ marginBottom: 8 }}>DB 반영(migration 119) 전이라 담은 몫이 저장되지 않습니다 — 다시 열면 &lsquo;담기&rsquo;가 또 보이니, 요청수량에 이미 더했는지 확인하세요.</div>
               )}
+              {!inbOk && <div className="sm-warn" style={{ marginBottom: 8 }}>입고 예정을 불러오지 못해 담을 양이 실제보다 클 수 있습니다.</div>}
               {confByPid.size === 0 ? (
                 <p className="sm-faint" style={{ fontSize: 14, margin: "2px 0 0" }}>열린 프로모션·도매 대량 요청서가 없습니다.</p>
               ) : (
@@ -896,9 +923,10 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                             <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{c.rem.toLocaleString()}</td>
                             <td className="num b2b-money" style={{ color: pl.folded > 0 ? "var(--sm-success)" : "var(--sm-text-light)" }}>{pl.folded.toLocaleString()}</td>
                             <td className="num b2b-money" style={{ color: pl.covered > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}>{recReady ? pl.covered.toLocaleString() : "-"}</td>
-                            <td><button type="button" className="b2b-btn-secondary" style={ACT} disabled={!known || pl.toAdd <= 0}
-                              title={!known ? "품목 목록에 없어 담을 수 없습니다" : pl.toAdd <= 0 ? (pl.folded > 0 ? "이미 제조사 요청서에 담겼습니다" : "소매 재고로 충당됩니다") : `요청수량에 ${pl.toAdd.toLocaleString()} 더하기`}
-                              onClick={() => addReserved(c.product_id, pl.toAdd)}>{pl.toAdd > 0 ? `담기 ${pl.toAdd.toLocaleString()}` : pl.folded > 0 ? "담김" : "충당"}</button></td>
+                            <td><button type="button" className="b2b-btn-secondary" style={ACT} disabled={!known || !recReady || pl.toAdd <= 0}
+                              title={!recReady ? "권장·재고를 불러오는 중입니다 — 소매 여유를 확인한 뒤 담을 수 있습니다" : !known ? "품목 목록에 없어 담을 수 없습니다" : pl.toAdd <= 0 ? (pl.folded > 0 ? "이미 제조사 요청서에 담겼습니다" : "소매 재고로 충당됩니다") : `요청수량에 ${pl.toAdd.toLocaleString()} 더하기`}
+                              onClick={() => addReserved(c.product_id, pl.toAdd)}>{!recReady ? "확인 중" : pl.toAdd > 0 ? `담기 ${pl.toAdd.toLocaleString()}` : pl.folded > 0 ? "담김" : "충당"}</button>
+                              {pl.excess > 0 && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", whiteSpace: "nowrap" }}>필요보다 {pl.excess.toLocaleString()} 더 담김</span>}</td>
                           </tr>
                         );
                       })}
@@ -976,8 +1004,9 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                             <td className="num" style={{ fontWeight: 700, color: (recommend ?? 0) > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend == null ? "-" : recommend.toLocaleString()}</td>
                           </>
                         )}
-                        <td className="num"><input type="number" step={0.01} min={0} className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.auto && Number(l.requested_qty) <= 0 ? "" : l.requested_qty} onChange={(e) => setQty(i, e.target.value)} placeholder={l.auto ? "요청 없음" : "0"} title={l.auto ? "요청서에 없던 품목이 이 주간에 입고돼 자동으로 붙은 줄 — 수량을 넣으면 정식 요청 품목이 됩니다" : undefined} />
-                          {(l.reserved || 0) > 0 && <span style={{ display: "block", fontSize: 12, color: "var(--sm-orange)" }} title="담기로 더한 프로모션·도매 대량 몫 — 요청수량에 포함">행사·대량 {Math.min(l.reserved || 0, Number(l.requested_qty) || 0).toLocaleString()} <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => undoReserved(i)}>담기 취소</button></span>}</td>
+                        <td className="num"><input type="number" step={0.01} min={0} className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.auto && Number(l.requested_qty) <= 0 ? "" : l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder={l.auto ? "요청 없음" : "0"} title={l.auto ? "요청서에 없던 품목이 이 주간에 입고돼 자동으로 붙은 줄 — 수량을 넣으면 정식 요청 품목이 됩니다" : undefined} />
+                          {(l.reserved || 0) > 0 && <span style={{ display: "block", fontSize: 12, color: "var(--sm-orange)" }} title="담기로 더한 프로모션·도매 대량 몫 — 요청수량에 포함">행사·대량 {Math.min(l.reserved || 0, Number(l.requested_qty) || 0).toLocaleString()} <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => undoReserved(i)}>담기 취소</button>
+                            {(() => { const ex = purpose === "재고 보충" ? planFor(l.product_id, rk).excess : 0; return ex > 0 ? <span style={{ display: "block", color: "var(--sm-danger)" }}>이 중 {ex.toLocaleString()}은 지금 행사·대량에 필요 없음(소매 몫으로 계산됨)</span> : null; })()}</span>}</td>
                         <td>
                           {l.auto && Number(l.requested_qty) <= 0
                             ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-info)" }} title="요청서에 없던 품목의 입고 기록 자리 — 제조사 엑셀·이행률에는 들어가지 않습니다">요청서에 없음 · 입고 {l.received.toLocaleString()}</span>

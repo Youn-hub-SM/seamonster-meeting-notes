@@ -138,13 +138,14 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     // 이동(채널이동 짝)은 move DELETE 로 — 음수 가드·요청서 재개 판정이 거기에만 있고, orders DELETE 는 이동을 거절한다(409).
     const move = isMoveOrder(o);
     const label = move ? `${o.move_from || "?"} → ${o.move_to || "?"} 이동` : (o.order_no || "이 건");
-    if (!window.confirm(`${label} (${o.item_count}개 품목)을 취소할까요? ${move ? "양쪽 칸 재고와 요청서 배정이 원복됩니다." : "재고가 원복됩니다."}`)) return;
+    const cnt = move ? Math.max(1, new Set(o.items.map((x) => `${x.sku ?? ""}|${x.product_name}`)).size) : o.item_count; // 이동은 출발·도착 두 행이라 품목 수로 센다
+    if (!window.confirm(`${label} (${cnt}개 품목)을 취소할까요? ${move ? "양쪽 칸 재고와 요청서 배정이 원복됩니다." : "재고가 원복됩니다."}`)) return;
     const url = move
       ? `/api/inventory/move?group_id=${encodeURIComponent(o.key)}`
       : `/api/inventory/orders?${isGrouped(o) ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`}`;
     const r = await fetch(url, { method: "DELETE" });
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) { alert(`취소 실패: ${j?.error || "서버 오류"}${r.status === 409 ? "" : " — 새로고침 후 다시 시도하세요."}`); return; }
+    if (!r.ok || !j?.ok) { const tail = r.status === 409 || /새로고침|다시 시도/.test(j?.error || "") ? "" : " — 새로고침 후 다시 시도하세요."; alert(`취소 실패: ${j?.error || "서버 오류"}${tail}`); return; } // 409(규칙상 거부)엔 재시도 권유를 붙이지 않는다
     await load();
   }
   async function saveUnit(it: OrderItem) {

@@ -574,7 +574,8 @@ export default function OrdersListPage() {
             body: JSON.stringify({ status: newStatus }),
           }).then(async (r) => {
             const j = await r.json().catch(() => null);
-            if (r.ok && j?.channel_notice) notices.push(String(j.channel_notice)); // 취소 복구로 차감 칸이 바뀐 발주 안내
+            // 상태 변경(취소·복구)으로 차감 칸이 바뀐 발주 안내 — 여러 건이라 어느 발주인지 붙인다
+            if (r.ok && j?.channel_notice) { const o = snapshot.find((x) => x.id === id); notices.push(`[${o?.order_no ?? id}${o?.company_name ? ` ${o.company_name}` : ""}] ${j.channel_notice}`); }
             return r.ok;
           })
         )
