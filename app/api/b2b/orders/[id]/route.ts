@@ -18,6 +18,10 @@ import { syncOrderSalesSafe } from "@/app/lib/b2b-sales-sync";
 
 export const runtime = "nodejs"; // sales-sync 가 crypto(sales-normalize) 사용
 export const dynamic = "force-dynamic";
+// 취소 복구 때 선점을 되살려도 되는 발주의 기준일 — 차수별 '재고 차감 대상' 체크박스를 없앤 날(b7174d3).
+//  035(2026-06-30) 전 발주는 선점 없이 운영됐고, 06-30~08-04 발주는 체크박스로 일부러 끈 차수(stock_out=false)가 있을 수 있다.
+//  이날 이후 만든 발주의 false 는 예전 취소가 남긴 흔적뿐이다(화면에서 끌 방법이 없다).
+const STOCK_OUT_SINCE = "2026-08-05";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -298,7 +302,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // 변경 전 상태 캡처 (활동 로그용 + 송장번호 확인)
     const { data: prev } = await sb
       .from("orders")
-      .select("status, production_status, payment_status, tax_invoice_status, tracking_no, ship_date, box_count")
+      .select("status, production_status, payment_status, tax_invoice_status, tracking_no, ship_date, box_count, created_at")
       .eq("id", id)
       .single();
 
@@ -410,13 +414,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if (body.status !== undefined && prev && body.status !== prev.status && (body.status === "취소" || prev.status === "취소")) {
       const savedItems = await loadSavedItems();
       const { ships, schedules } = await reconstructSchedules(savedItems);
+      const createdAt = String((prev as { created_at?: string | null } | null)?.created_at ?? "");
+      const stockOutEra = !createdAt || createdAt.slice(0, 10) >= STOCK_OUT_SINCE;
       if (ships.length > 0) {
         for (const sch of schedules) {
           if (body.status === "취소") sch.status = "취소"; // shipped_at 은 보존(이미 나갔던 차수의 이력·복구 근거)
           // 복구: 취소 전 발송완료였던 차수(shipped_at 보유)는 발송완료로, 나머지는 발송대기로 —
           //  일괄 평탄화하면 '1차는 이미 나갔다'는 사실이 소실된다(검증 확정 보정)
           //  복수 발송은 안 나간 차수를 발송대기로 — 발주 단위 '발송완료 복구'가 보내지도 않은 차수를 발송완료로 만들지 않게
-          else if (sch.status === "취소") sch.status = sch.shipped_at ? "발송완료" : (body.status === "발송완료" && !multiShip ? "발송완료" : "발송대기");
+          else if (sch.status === "취소") {
+            sch.status = sch.shipped_at ? "발송완료" : (body.status === "발송완료" && !multiShip ? "발송완료" : "발송대기");
+            // 예전 저장분은 취소 때 stock_out=false 가 기록돼 있다 — 되살린 차수는 다시 선점 대상으로(안 그러면 복구해도 재고가 안 빠진다).
+            //  단 기준일(STOCK_OUT_SINCE) 전에 만든 발주는 일부러 끈 차수일 수 있어 켜지 않는다.
+            if (stockOutEra) sch.stock_out = true;
+          }
         }
         const boxCount = Math.max(1, Math.floor(Number(ships[0]?.box_count) || 1));
         const restored = await saveOrderShipments(
