@@ -338,12 +338,6 @@ export default function InventoryPage() {
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {meta && (confirmedTab
-        ? <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 확보분 칸 — 하루 출고·예상소진·권장생산 없음</p>
-        /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
-           평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
-        : <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만</p>
-      )}
       {!confirmedTab && adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
       {!confirmedTab && advice && (
         <section style={{ marginBottom: 18 }}>
@@ -466,6 +460,13 @@ export default function InventoryPage() {
             </tbody>
           </table>
         </div>
+      )}
+      {/* 기간·계산식 안내줄 — 표 위에 있으면 정신없다는 요청(2026-09-28)으로 표 아래에 둔다 */}
+      {meta && (confirmedTab
+        ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 확보분 칸 — 하루 출고·예상소진·권장생산 없음</p>
+        /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
+           평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
+        : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만</p>
       )}
 
       {/* 품목 변경 히스토리 — 원장 공용 테이블(TxnTable) 재사용. 행 취소 시 재고가 원복되므로 목록도 다시 읽는다 */}
