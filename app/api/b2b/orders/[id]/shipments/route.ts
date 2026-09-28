@@ -16,7 +16,7 @@ export const maxDuration = 30;
 
 type ShipRow = {
   id: string; seq: number; ship_date: string | null; status: string; tracking_no: string | null;
-  box_count: number | null; stock_out?: boolean | null;
+  box_count: number | null; stock_out?: boolean | null; shipped_at?: string | null;
   recipient_name: string | null; recipient_phone: string | null; address: string | null;
   delivery_memo: string | null; courier: string | null;
   shipment_items?: { order_item_id: string; qty: number }[];
@@ -28,13 +28,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const sb = supabaseAdmin();
     const [oi, sh] = await Promise.all([
       sb.from("order_items").select("id, product_name, spec, qty, sort_order").eq("order_id", id).order("sort_order", { ascending: true }),
-      sb.from("shipments").select("id, seq, ship_date, status, tracking_no, box_count, stock_out, recipient_name, recipient_phone, address, delivery_memo, courier, shipment_items(order_item_id, qty)").eq("order_id", id).order("seq", { ascending: true }),
+      sb.from("shipments").select("id, seq, ship_date, status, tracking_no, box_count, stock_out, shipped_at, recipient_name, recipient_phone, address, delivery_memo, courier, shipment_items(order_item_id, qty)").eq("order_id", id).order("seq", { ascending: true }),
     ]);
     if (oi.error) throw oi.error;
     // stock_out 컬럼(035) 미적용이면 그 컬럼만 빼고 재조회
     let ships = (sh.data ?? []) as ShipRow[];
     if (sh.error) {
-      const retry = await sb.from("shipments").select("id, seq, ship_date, status, tracking_no, box_count, recipient_name, recipient_phone, address, delivery_memo, courier, shipment_items(order_item_id, qty)").eq("order_id", id).order("seq", { ascending: true });
+      const retry = await sb.from("shipments").select("id, seq, ship_date, status, tracking_no, box_count, shipped_at, recipient_name, recipient_phone, address, delivery_memo, courier, shipment_items(order_item_id, qty)").eq("order_id", id).order("seq", { ascending: true });
       if (retry.error) throw retry.error;
       ships = (retry.data ?? []) as ShipRow[];
     }
@@ -50,6 +50,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         tracking_no: s.tracking_no || "",
         box_count: Math.max(1, Number(s.box_count) || 1),
         stock_out: s.stock_out !== false,
+        // 발송 시각 — 창이 그대로 돌려보내 재저장(전체 삭제 후 재삽입)이 1차 발송 시각을 '지금'으로 덮지 않게 한다.
+        //  취소 복구가 '이미 나갔던 차수'를 이 값으로 구분한다.
+        shipped_at: s.shipped_at ?? null,
         items: (s.shipment_items || [])
           .map((x) => ({ order_item_index: idxOf.get(x.order_item_id) ?? -1, qty: Number(x.qty) || 0 }))
           .filter((x) => x.order_item_index >= 0 && x.qty > 0),
@@ -101,6 +104,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const patch: Record<string, unknown> = { ship_date: earliestShipDate };
     if (totalBoxes > 0) patch.box_count = totalBoxes;
     if (derivedStatus) patch.status = derivedStatus;
+    // 복수 발송(2개 이상)이 이 저장으로 1개가 됐으면 그 차수 상태로 헤더를 맞춘다 — 차수 1개는 도출을 안 하므로
+    //  (deriveParentStatus=null), 이미 나간 1차를 지우고 2차만 남기면 헤더가 발송완료(매출 인식)로 남는다.
+    //  원래부터 단일 발송이던 발주는 발주 단위로 상태를 관리하므로 건드리지 않는다.
+    if (!derivedStatus && !clearingAll && prevShips.length >= 2) {
+      const kept = schedules.filter((s) => s.ship_date || (s.items || []).some((it) => Number(it.qty) > 0));
+      const st = kept.length === 1 ? kept[0].status : null;
+      //  남은 1개가 취소면 발송대기로 — 나간 차수가 없는데 발송완료(매출 인식)로 남으면 안 된다.
+      //  발주 취소로 보지 않는 이유: 부분 취소 뒤 발송일 미정 잔여가 남아 있을 수 있다.
+      //  이전 차수가 전부 취소였으면(= 발주 취소) 취소 그대로 둔다 — 정리하느라 지운 것으로 발주가 되살아나면 안 된다.
+      const allPrevCancelled = prevShips.every((s) => s.status === "취소");
+      if (st === "발송완료") patch.status = "발송완료";
+      else if (st && !(st === "취소" && allPrevCancelled)) patch.status = "발송대기";
+    }
     // 일정을 전부 지웠으면 발주를 미발송 상태로 되돌린다.
     if (clearingAll) patch.status = "발송대기";
     const { error } = await sb.from("orders").update(patch).eq("id", id);
