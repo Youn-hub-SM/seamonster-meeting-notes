@@ -93,14 +93,13 @@ export default function VocSurveysPage() {
         {(["목록", "분석"] as View[]).map((v) => (
           <button key={v} className={`sm-tab ${view === v ? "is-active" : ""}`} onClick={() => setView(v)}>{v}</button>
         ))}
-        <span className="sm-faint" style={{ fontSize: 15, alignSelf: "center" }}>총 {rows.length}건</span>
         {view === "목록" && <input className="b2b-input sm-tab-search" placeholder="검색" value={search} onChange={(e) => setSearch(e.target.value)} />}
       </div>
 
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty">아직 수집된 응답이 없습니다. <Link href="/b2b/settings/tally" className="sm-link">연동 설정</Link>에서 가져오세요.</div>
+        <div className="b2b-empty">아직 수집된 응답이 없습니다.</div>
       ) : view === "목록" ? (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -126,9 +125,7 @@ export default function VocSurveysPage() {
               <span className="b2b-card-title">AI 요약</span>
               <button className="b2b-btn-primary" onClick={runAi} disabled={aiLoading} style={{ padding: "6px 14px" }}>{aiLoading ? "분석 중..." : insight ? "다시 분석" : "AI 분석 실행"}</button>
             </div>
-            {!insight ? (
-              <p className="sm-muted" style={{ fontSize: 15 }}>버튼을 누르면 자유서술 답변까지 읽어 만족 요인·개선점·인용을 정리합니다.</p>
-            ) : (
+            {insight && (
               <div className="sm-col" style={{ gap: 12 }}>
                 <p style={{ fontSize: 15, lineHeight: 1.7 }}>{insight.summary} {insight.sentiment && <span className="sm-faint">· {insight.sentiment}</span>}</p>
                 <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
@@ -189,7 +186,7 @@ export default function VocSurveysPage() {
               </div>
               {detail.photos?.length > 0 && (
                 <div className="sm-col" style={{ gap: 8, marginTop: 12 }}>
-                  <span className="b2b-field-label">첨부 사진 ({detail.photos.length})</span>
+                  <span className="b2b-field-label">첨부 사진</span>
                   <div className="sm-row-wrap" style={{ gap: 8 }}>
                     {detail.photos.map((url, i) => (
                       <a key={i} href={url} target="_blank" rel="noreferrer"><img src={url} alt="첨부" style={{ width: 90, height: 90, objectFit: "cover", borderRadius: 8, border: "1px solid var(--sm-border)" }} /></a>

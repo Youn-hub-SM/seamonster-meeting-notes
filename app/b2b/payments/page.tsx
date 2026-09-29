@@ -314,7 +314,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       ) : (
         <>
           {data.review.length === 0 && data.recent.length === 0 && (
-            <div className="b2b-empty">등록된 입금자명의 입금 문자가 도착하면 여기 표시됩니다.</div>
+            <div className="b2b-empty">입금 내역이 없습니다.</div>
           )}
           {data.review.map((d) => (
             <div key={d.id} className="pay-dep-row is-review">
@@ -390,8 +390,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
           {showManage && (
             <div className="pay-dep-manage">
               <div className="pay-dep-manage-hint">
-                등록된 이름(업체명 포함)의 입금만 확인필요 알림이 갑니다. 미등록 이름은 알림 없이 무시로
-                내려갑니다(금액이 발주 잔액과 정확히 일치하면 예외). 업체를 연결하면 그 업체 발주에 자동 매칭까지 됩니다.
+                미등록 입금자명은 알림 없이 무시(잔액과 정확히 일치하면 예외) · 업체를 연결하면 자동 매칭
               </div>
               <div className="pay-dep-manage-form">
                 <input

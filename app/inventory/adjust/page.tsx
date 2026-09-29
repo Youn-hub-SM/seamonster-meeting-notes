@@ -97,7 +97,7 @@ export default function AdjustPage() {
                 {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.summary.untracked.toLocaleString()}행 제외</span>}
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
-              {preview.rows.length === 0 && <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. 양식을 확인하세요.</div>}
+              {preview.rows.length === 0 && <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다.</div>}
               {preview.rows.length > 0 && (
                 <div className="b2b-table-wrap" style={{ maxHeight: 340, overflow: "auto", marginBottom: 12 }}>
                   <table className="b2b-table">

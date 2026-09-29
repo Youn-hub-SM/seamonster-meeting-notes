@@ -63,7 +63,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
     <section className="b2b-card" style={{ marginBottom: 16 }}>
       <div className="b2b-card-head">
         <h2 className="b2b-card-title">거래처 전용 단가</h2>
-        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발주 시 자동 적용 · 없으면 기본 판매가 · 재고는 안 나뉨</span>
+        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발주 시 자동 적용 · 없으면 기본 판매가</span>
       </div>
       {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
 
@@ -86,7 +86,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : prices.length === 0 ? (
-        <div className="b2b-empty">등록된 거래처 단가가 없습니다. 위에서 상품을 골라 단가를 정하세요.</div>
+        <div className="b2b-empty">등록된 거래처 단가가 없습니다.</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">

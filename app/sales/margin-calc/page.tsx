@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import type { MarginResult, MarginResultItem, MarginSpec, MarginTurn } from "@/app/lib/margin-calc";
 import { won as fmtWon } from "@/app/lib/format";
 import { Combobox } from "@/app/b2b/orders/Combobox";
@@ -39,7 +38,6 @@ function QuestionComposer({ channels, products, topProducts, disabled, onCompose
     <div className="rp-compose">
       <button className="rp-compose-head" onClick={() => setOpen((v) => !v)}>
         <span>{open ? "▾" : "▸"} 질문 만들기 도우미</span>
-        <span className="rp-compose-hint">칸을 눌러 조합하면 아래 질문칸에 자동으로 채워집니다. 직접 고쳐 써도 돼요.</span>
       </button>
       {open && (
         <div className="rp-compose-body">
@@ -242,7 +240,7 @@ export default function MarginCalcPage() {
           <div className="rp-saved-bar">
             <button className="rp-saved-toggle" onClick={() => setSavedOpen((v) => !v)}>
               <span className="rp-saved-chev">{savedOpen ? "▾" : "▸"}</span>
-              저장된 계산 <span className="rp-saved-count">{filteredSaved.length}개{savedFilter === "mine" && me ? " · 내 저장" : ""}</span>
+              저장된 계산
             </button>
             {savedOpen && me && (
               <div className="sm-tabs">
@@ -252,7 +250,7 @@ export default function MarginCalcPage() {
             )}
           </div>
           {savedOpen && (filteredSaved.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 계산이 없습니다. ‘전체’로 바꿔보세요." : "저장된 계산이 없습니다."}</div>
+            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 계산이 없습니다." : "저장된 계산이 없습니다."}</div>
           ) : (
             <div className="rp-saved-list">
               {filteredSaved.map((s) => (
@@ -298,7 +296,7 @@ export default function MarginCalcPage() {
       </div>
 
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
-      {loading && <div className="b2b-loading">원가표·정책을 근거로 계산 중... (최고급 모델, 10~20초)</div>}
+      {loading && <div className="b2b-loading">계산 중... (10~20초)</div>}
 
       {res && !loading && (
         <div className="sm-col" style={{ gap: 14 }}>
@@ -323,8 +321,6 @@ export default function MarginCalcPage() {
               <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>{res.assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul>
             </div>
           )}
-
-          <p className="sm-faint" style={{ fontSize: 12 }}>※ 원가·수수료·배송정책 데이터를 근거로 한 추정입니다. 실제 정산과 차이가 있을 수 있어요.</p>
         </div>
       )}
 
@@ -338,7 +334,7 @@ export default function MarginCalcPage() {
               <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 대구 1kg 쿠팡 20% 할인" />
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>질문 <span className="sm-faint" style={{ fontWeight: 400 }}>— 계산 레시피가 함께 저장되어, 클릭할 때마다 AI 없이 현재 원가·수수료 기준으로 즉시 계산됩니다</span></span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>질문</span>
               <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 15, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => setSaveQuestion(e.target.value)} />
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
@@ -352,17 +348,13 @@ export default function MarginCalcPage() {
       {/* 프롬프트(계산 지침) 설정 — 접이식 */}
       <section className="b2b-card" style={{ marginTop: 24 }}>
         <button type="button" className="mc-prompt-toggle" onClick={togglePrompt} aria-expanded={pOpen}>
-          <span>프롬프트 설정 <span className="sm-faint" style={{ fontWeight: 400 }}>· 계산 규칙 · 배송/보냉비 단가</span></span>
+          <span>프롬프트 설정</span>
           <span className="sm-faint" style={{ fontSize: 12 }}>{pOpen ? "접기 ▲" : "펼치기 ▼"}</span>
         </button>
 
         {pOpen && (
           <div style={{ marginTop: 14 }}>
-            <p className="sm-faint" style={{ fontSize: 12, lineHeight: 1.7, margin: "0 0 12px" }}>
-              이익률 계산기의 <strong>역할·계산 규칙·배송 단가/보냉비 정책</strong>을 정의하는 지침입니다. 여기서 바꾸면 코드 수정·재배포 없이 즉시 반영됩니다.
-              <br />
-              원가표·채널 수수료는 <Link href="/b2b/products">상품 마스터</Link>·<Link href="/sales/profit">채널별 이익 설정</Link>에서 관리하고, <strong>출력 형식(JSON)</strong>은 시스템이 자동으로 덧붙이므로 여기에 넣지 마세요.
-            </p>
+            <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>출력 형식(JSON)은 자동으로 붙으므로 넣지 마세요</p>
 
             {pError && <div className="b2b-error" style={{ marginBottom: 10 }}>{pError}</div>}
 

@@ -197,7 +197,6 @@ export default function ProductsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">상품 마스터 (원가표)</h1>
-          <p className="b2b-page-subtitle">여기서 수정하면 모든 도구에 반영됩니다</p>
         </div>
         <div className="b2b-page-actions">
           <a className="b2b-btn-secondary" href="/b2b/products/history" title="상품 마스터 변경(등록·수정·삭제) 기록">
@@ -265,7 +264,7 @@ export default function ProductsPage() {
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
             {products.length === 0
-              ? "등록된 제품이 없습니다. 우측 상단 [+ 제품 추가] 를 눌러 시작하세요."
+              ? "등록된 제품이 없습니다."
               : "검색 결과가 없습니다."}
           </div>
         ) : (
@@ -544,7 +543,7 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 8 }}>
-        원가 변경 이력 (최근 {history.length}건)
+        원가 변경 이력
       </div>
       <table className="b2b-table" style={{ background: "var(--sm-white)" }}>
         <thead>
@@ -634,7 +633,7 @@ function ProductModal({
         <div className="b2b-modal-body">
           {/* ── 판매담당 입력 구역 — 품목·가격·분류 ── */}
           <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 품목 정보 · 가격 · 분류</span></div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
           <Field label="품목명" required>
             <input
               type="text"
@@ -688,9 +687,6 @@ function ProductModal({
                 <option key={t} value={t}>{TAX_TYPE_LABEL[t]}</option>
               ))}
             </select>
-            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-              면세로 두면 발주 시 부가세 계산에서 제외됩니다.
-            </span>
           </Field>
 
           <div className="b2b-field-row">
@@ -748,9 +744,9 @@ function ProductModal({
 
           {/* ── 생산담당 입력 구역 — 원가 상세 · 택배 발주 · 송장 스캔 ── */}
           <div style={{ background: "var(--sm-orange-light)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 원가 상세 · 택배 발주 · 송장 스캔</span></div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력</div>
           <div className="b2b-field-label" style={{ fontWeight: 700 }}>
-            원가 상세 (이익률 계산용)
+            원가 상세
           </div>
           <div className="b2b-field-row">
             <Field label="제품원가 (원)">
@@ -800,7 +796,7 @@ function ProductModal({
               />
             </Field>
           </div>
-          <Field label="제품부피 (kg) — 포장비·배송비 산정 기준">
+          <Field label="제품부피 (kg)">
             <input
               type="number"
               inputMode="decimal"
@@ -816,7 +812,7 @@ function ProductModal({
 
           {/* 중량 3단(098) — 생산 요청서가 총중량·소포장 개수를 이 값으로 계산한다 */}
           <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
-            중량 <span className="sm-faint" style={{ fontWeight: 400 }}>· 생산 요청서의 총중량·소포장 개수 계산 기준 (g 단위, 모르면 비워둠)</span>
+            중량
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
             <Field label="옵션중량 (g) — 조각 1개">
@@ -858,7 +854,7 @@ function ProductModal({
               placeholder="발주서에 찍힐 품목명 (예: 진공 씨몬스터 참돔순살 100g)"
             />
           </Field>
-          <Field label="택배 주문당 총중량 (kg) — 박스타입·운임 기준">
+          <Field label="택배 주문당 총중량 (kg)">
             <input
               type="number"
               inputMode="decimal"
@@ -871,13 +867,13 @@ function ProductModal({
               style={{ maxWidth: 200 }}
             />
             <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-              같은 주문의 라인 중량을 합해 박스타입(≤2.7→1, ≤5.2→2, 초과→3)과 운임을 정합니다. 제품부피와 다를 수 있어요.
+              주문 내 합계 중량으로 박스타입(≤2.7→1, ≤5.2→2, 초과→3)·운임 결정
             </span>
           </Field>
           {isBundle ? (
             <Field label="송장 스캔 표시명">
               <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
-                묶음(세트)상품이라 송장 스캔 시 <strong>구성품의 합</strong>으로 나옵니다. 표시명은 각 구성품에서 지정하세요.
+                묶음 상품은 구성품 표시명으로 나옵니다
               </span>
             </Field>
           ) : (
@@ -889,9 +885,6 @@ function ProductModal({
                 onChange={(e) => set("scan_name", e.target.value)}
                 placeholder="송장 스캔 피킹 리스트에 나올 이름 (비우면 품목명 사용)"
               />
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                온라인 발주 &gt; 송장 스캔의 &lsquo;가지러 갈 상품&rsquo;·인쇄에 이 이름이 나옵니다. 비어 있으면 품목명을 씁니다.
-              </span>
             </Field>
           )}
           </div>
@@ -927,11 +920,11 @@ function ProductModal({
                     disabled={!stockTrackedCol}
                     onChange={(e) => set("stock_tracked", !e.target.checked)}
                   />
-                  재고 관리 사용 안함 (재고 목록·입출고·생산 요청에서 빠짐 — 발주·판매는 그대로)
+                  재고 관리 사용 안함
                 </label>
                 <span style={{ display: "block", fontSize: 12, color: "var(--sm-text-light)", marginTop: 4 }}>
                   {stockTrackedCol
-                    ? "체크하면 온라인 출고·B2B 발송 때도 재고가 차감되지 않습니다. 체크 전 재고 기록은 남고 화면에서만 빠집니다."
+                    ? "재고 목록·입출고·생산 요청에서 빠지고 출고 때 재고가 차감되지 않습니다"
                     : "DB 업데이트(121) 적용 후 사용할 수 있습니다."}
                 </span>
               </>

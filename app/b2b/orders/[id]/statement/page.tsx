@@ -102,7 +102,7 @@ export default function StatementPage() {
 
       {error && <div className="b2b-error no-print">{error}</div>}
       {supplierMissing && !loading && (
-        <div className="b2b-error no-print">공급자(우리 회사) 정보가 비어 있습니다. <Link href="/b2b/settings" style={{ textDecoration: "underline" }}>설정 › 거래명세표</Link>에서 상호·사업자번호 등을 입력하면 명세표에 채워집니다.</div>
+        <div className="b2b-error no-print">공급자(우리 회사) 정보가 비어 있습니다.</div>
       )}
 
       {loading ? (

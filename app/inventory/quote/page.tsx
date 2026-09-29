@@ -181,7 +181,6 @@ export default function QuotePage() {
       ) : (
         <div className="sm-warn no-print" style={{ marginBottom: 12 }}>
           <strong>확정({dtKst(snap.confirmed_at)}) 이후 원장이 바뀌었습니다:</strong> {snapDiffs.join(" · ")}
-          <span> — 바뀐 내용이 맞으면 위의 [재확정]으로 갱신하세요.</span>
           <button className="b2b-link-btn" style={{ marginLeft: 8, fontSize: 12 }} onClick={() => openSnap(ym)}>확정본 보기</button>
           <button className="b2b-link-btn sm-faint" style={{ marginLeft: 8, fontSize: 12 }} onClick={unconfirmQuote}>확정 해제</button>
         </div>
@@ -198,7 +197,6 @@ export default function QuotePage() {
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>과세 기타
             <input className="b2b-input" type="number" min={0} value={taxEtc || ""} onChange={(e) => setTaxEtc(Number(e.target.value) || 0)} placeholder="0" style={{ width: 130, textAlign: "right" }} /></label>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 입고 단가 = 공급가액(부가세 미포함). 품목표 금액은 공급가액 그대로이고, 부가세 10%는 요약의 과세품목 세액에서 더합니다. 임대료·면세/과세 기타는 직접 입력(브라우저에 기억).</p>
       </section>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : items.length === 0 && !s?.rentTotal ? (
@@ -210,7 +208,7 @@ export default function QuotePage() {
       {/* 확정된 결산 — 확정할 때 저장된 결산서(요약·품목표) 그대로. 원장이 나중에 바뀌어도 이 표는 그대로다 */}
       {snapList.length > 0 && (
         <section className="b2b-card no-print" style={{ marginTop: 24, maxWidth: 900 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">확정된 결산 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {snapList.length}건</span></span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title">확정된 결산</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table">
               <thead><tr><th>대상 월</th><th>확정</th><th className="num">품목</th><th className="num">총 매입금액</th><th className="num">총 입금액</th><th style={{ width: 90 }}></th></tr></thead>

@@ -87,7 +87,7 @@ export default function InstagramDmPage() {
     try {
       const j = await (await fetch("/api/instagram/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscribe: igUserId }) })).json();
       if (!j.ok) throw new Error(j.error);
-      setNotice(`@${j.subscribed} 웹훅 구독 완료 — 이제 이 계정 댓글이 실시간으로 들어옵니다.`);
+      setNotice(`@${j.subscribed} 웹훅 구독 완료`);
     } catch (e) { setError(e instanceof Error ? e.message : "구독 실패"); }
     setBusy(false);
   }
@@ -160,7 +160,6 @@ export default function InstagramDmPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">인스타 자동 DM</h1>
-          <p className="b2b-page-subtitle">이벤트 게시물에 댓글이 달리면 작성자에게 자동으로 DM 1회를 보냅니다. 계정별·게시물별 규칙과 켜고 끄는 일정으로 운영합니다.</p>
         </div>
         <div className="b2b-page-actions sm-row sm-gap-2">
           <button className="b2b-btn-primary" onClick={openNew} disabled={(info?.accounts.length || 0) === 0}>+ 규칙 추가</button>
@@ -175,12 +174,12 @@ export default function InstagramDmPage() {
       <section className="b2b-card ig-setup">
         <div className="b2b-card-head"><span className="b2b-card-title">계정 연결</span></div>
         {info && (!info.configured.appSecret || !info.configured.verifyToken) && (
-          <p className="ig-warn">서버 연동 준비 중 — 연동이 완료되면 자동으로 동작합니다. 관리자에게 문의하세요.</p>
+          <p className="ig-warn">서버 연동 준비 중</p>
         )}
         <div className="ig-webhook-row">
           <span className="ig-webhook-label">웹훅 URL</span>
           <code className="ig-webhook-url">{info?.webhookUrl || "..."}</code>
-          <button className="b2b-btn-secondary ig-btn-sm" onClick={() => { navigator.clipboard?.writeText(info?.webhookUrl || ""); setNotice("웹훅 URL 복사됨 — 메타 앱 대시보드에 붙여넣으세요."); }}>복사</button>
+          <button className="b2b-btn-secondary ig-btn-sm" onClick={() => { navigator.clipboard?.writeText(info?.webhookUrl || ""); setNotice("웹훅 URL 복사됨"); }}>복사</button>
         </div>
         <div className="ig-accounts">
           {(info?.accounts || []).map((a) => (
@@ -191,7 +190,7 @@ export default function InstagramDmPage() {
               <button className="b2b-icon-btn" aria-label="연결 해제" onClick={() => removeAccount(a)}>✕</button>
             </div>
           ))}
-          {(info?.accounts.length || 0) === 0 && <p className="sm-faint">연결된 계정이 없습니다. 아래에 토큰을 붙여넣어 시작하세요. (3개 계정 각각 등록)</p>}
+          {(info?.accounts.length || 0) === 0 && <p className="sm-faint">연결된 계정이 없습니다.</p>}
         </div>
         <div className="ig-token-row">
           <input className="b2b-input ig-token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)}
@@ -202,9 +201,9 @@ export default function InstagramDmPage() {
 
       {/* 규칙 */}
       <section className="b2b-card ig-rules-card">
-        <div className="b2b-card-head"><span className="b2b-card-title">규칙</span><span className="sm-faint ig-head-note">게시물 1개 = 규칙 1개 · 발송/클릭은 실시간 집계</span></div>
+        <div className="b2b-card-head"><span className="b2b-card-title">규칙</span></div>
         {rules.length === 0 ? (
-          <p className="sm-faint">규칙이 없습니다. 계정을 연결한 뒤 '+ 규칙 추가'로 시작하세요.</p>
+          <p className="sm-faint">규칙이 없습니다.</p>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">
@@ -314,10 +313,9 @@ export default function InstagramDmPage() {
               <label className="b2b-field"><span className="b2b-field-label">보낼 메시지</span>
                 <textarea className="b2b-textarea" rows={4} value={draft.message} onChange={(e) => setDraft({ ...draft, message: e.target.value })}
                   placeholder={"{닉네임}님, 참여 감사합니다! 이벤트 안내는 여기서 확인하세요 → https://link.seamonster.kr/이벤트"} />
-                <span className="sm-faint ig-hint">{"{닉네임}"} 은 댓글 작성자 이름으로 바뀝니다. 링크는 메시지 안에 직접 포함하세요.</span></label>
+                <span className="sm-faint ig-hint">{"{닉네임}"} = 댓글 작성자 이름 · 링크는 메시지에 직접 포함</span></label>
               <label className="b2b-field"><span className="b2b-field-label">링크 (클릭 집계용)</span>
-                <input className="b2b-input" value={draft.link} onChange={(e) => setDraft({ ...draft, link: e.target.value })} placeholder="https://link.seamonster.kr/이벤트 — 브랜드링크면 클릭수가 표에 집계됩니다" spellCheck={false} />
-                <span className="sm-faint ig-hint">메시지에 넣은 링크와 같은 주소를 적어두면 규칙 표에서 발송 대비 클릭을 볼 수 있습니다. QR코드/브랜드링크 메뉴에서 만들 수 있어요.</span></label>
+                <input className="b2b-input" value={draft.link} onChange={(e) => setDraft({ ...draft, link: e.target.value })} placeholder="https://link.seamonster.kr/이벤트 — 브랜드링크면 클릭수가 표에 집계됩니다" spellCheck={false} /></label>
 
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">켜는 시각 (비우면 즉시)</span>
@@ -326,7 +324,7 @@ export default function InstagramDmPage() {
                   <input type="datetime-local" className="b2b-input" value={draft.end_local} onChange={(e) => setDraft({ ...draft, end_local: e.target.value })} /></label>
               </div>
               <label className="sm-row sm-gap-2 ig-active-check">
-                <input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} /> 규칙 활성 (끄면 일정과 무관하게 발송 정지)
+                <input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} /> 규칙 활성
               </label>
             </div>
             <div className="b2b-modal-foot">

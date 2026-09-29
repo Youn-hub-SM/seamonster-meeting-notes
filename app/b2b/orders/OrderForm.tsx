@@ -649,7 +649,7 @@ export default function OrderForm({
               : `발주 수정 · ${originalOrder?.order_no ?? ""}`}
           </h1>
           {mode === "create" && cloneFromId && (
-            <p className="b2b-page-subtitle">복제된 내용입니다. 발주일·일정·상태는 초기화됐어요. 확인 후 등록하세요.</p>
+            <p className="b2b-page-subtitle">발주일·일정·상태는 초기화됐습니다.</p>
           )}
         </div>
         <div className="b2b-page-actions">
@@ -685,9 +685,7 @@ export default function OrderForm({
                 emptyText="일치하는 업체가 없습니다"
               />
               {companies.length === 0 && (
-                <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>
-                  등록된 업체가 없습니다 — <Link href="/b2b/companies" style={{ color: "var(--sm-orange)" }}>주소록에서 먼저 등록</Link>
-                </span>
+                <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>등록된 업체가 없습니다</span>
               )}
             </div>
             <div className="b2b-field">
@@ -721,9 +719,9 @@ export default function OrderForm({
               <div style={{ fontSize: 15, padding: "10px 0", color: data.ship_date ? undefined : "var(--sm-text-light)" }}>
                 {data.ship_date || "미정"}
               </div>
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                발주 목록의 ‘+ 발송일’ 창에서 잡습니다{isMultiShipment ? " (복수발송 — 가장 이른 날짜)" : ""}
-              </span>
+              {isMultiShipment && (
+                <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>복수발송 — 가장 이른 날짜</span>
+              )}
             </div>
           </div>
 
@@ -740,7 +738,7 @@ export default function OrderForm({
               대량 발주 (선결제)
             </label>
             <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-              체크하면 발송 재고를 ‘도매 대량’ 칸에서 뺍니다 — [재고 이동]에서 소매 → 도매 대량으로 먼저 옮겨 두세요
+              체크하면 발송 재고를 ‘도매 대량’ 칸에서 뺍니다
             </span>
             {alreadyOut && (
               <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>
@@ -817,7 +815,7 @@ export default function OrderForm({
         {/* ───── 배송 정보 (공통) ───── */}
         <CollapsibleSection title="배송 정보" titleExtra={
           <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "var(--sm-text-light)", textTransform: "none", letterSpacing: 0 }}>
-            업체 선택 시 자동 채움 — 모든 발송 일정에 공통 적용
+            모든 발송 일정에 공통 적용
           </span>
         }>
           <div className="b2b-field-row">
@@ -1116,7 +1114,7 @@ export default function OrderForm({
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
                 {realScheduleCount > 0
                   ? `발송 일정 ${realScheduleCount}건의 박스 수 합 · 총 부피 ${orderMargin.volume.toLocaleString()}kg`
-                  : `총 부피 ${orderMargin.volume.toLocaleString()}kg · 발주 목록에서 ‘+ 발송일’로 발송 일정과 박스 수를 넣으면 계산됩니다`}
+                  : `총 부피 ${orderMargin.volume.toLocaleString()}kg`}
               </span>
             </div>
             <div className="b2b-field" style={{ maxWidth: 220 }}>
@@ -1195,9 +1193,6 @@ export default function OrderForm({
               <button className="b2b-modal-close" onClick={() => setClonePrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
-                이 업체의 <strong>가장 최근 발주</strong>를 그대로 불러올까요? (날짜·상태·송장은 새로 시작)
-              </div>
               <div style={{ fontSize: 12, padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8 }}>
                 {clonePrompt.summary}
               </div>
@@ -1206,7 +1201,7 @@ export default function OrderForm({
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setClonePrompt(null)} disabled={cloning}>
-                  아니요
+                  취소
                 </button>
                 <button className="b2b-btn-primary" onClick={applyRecentClone} disabled={cloning}>
                   {cloning ? "불러오는 중..." : "복제하기"}

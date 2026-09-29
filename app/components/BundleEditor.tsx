@@ -59,7 +59,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
           <button className="b2b-modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>이 상품(세트) 1개가 어떤 구성품 몇 개로 이뤄지는지 지정하세요. 판매/구매 엑셀에서 이 세트 SKU가 나오면 <strong>구성품으로 분해</strong>되어 재고에 반영됩니다. (구성품이 있으면 세트는 자체 재고를 잡지 않고 <strong>가용 세트 수</strong>로 표시)</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>세트 SKU는 구성품으로 분해되어 재고에 반영됩니다.</p>
           {loading ? <div className="b2b-loading">불러오는 중...</div> : (
             <>
               {rows.map((r, i) => (
@@ -71,7 +71,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
                   <button type="button" className="promo-item-del" onClick={() => setRows((rs) => rs.filter((_, xi) => xi !== i))} title="삭제">✕</button>
                 </div>
               ))}
-              {rows.length === 0 && <div className="sm-faint" style={{ fontSize: 12, padding: "6px 0" }}>구성품이 없습니다. 아래에서 추가하세요.</div>}
+              {rows.length === 0 && <div className="sm-faint" style={{ fontSize: 12, padding: "6px 0" }}>구성품이 없습니다.</div>}
               <button type="button" className="promo-item-add" style={{ marginTop: 8 }} onClick={() => setRows((rs) => [...rs, { component_id: "", label: "", qty: 1 }])}>+ 구성품 추가</button>
               {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
             </>

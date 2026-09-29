@@ -88,7 +88,7 @@ export default function MetaLibraryPage() {
             </div>
           </label>
           <label className="sm-col" style={{ gap: 3, flex: "2 1 260px" }}>
-            <span className="mlib-lbl">광고 라이브러리 URL <span className="sm-faint">(이미지·영상 확인용)</span></span>
+            <span className="mlib-lbl">광고 라이브러리 URL</span>
             <input className="b2b-input" value={f.adLibraryUrl} onChange={(e) => set("adLibraryUrl", e.target.value)} placeholder="https://www.facebook.com/ads/library/?id=..." />
           </label>
         </div>
@@ -96,15 +96,15 @@ export default function MetaLibraryPage() {
         {/* 3요소 필수 */}
         <div className="mlib-3">
           <div className="mlib-el">
-            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-info)" }}>①</span> 후킹 <span className="sm-faint">첫 1~3초 · 시선 잡기</span></div>
+            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-info)" }}>①</span> 후킹</div>
             <textarea className="b2b-input" value={f.hook} onChange={(e) => set("hook", e.target.value)} placeholder="예: '닭가슴살 질린 분?' / 충격적 비주얼 / 질문 던지기" rows={3} />
           </div>
           <div className="mlib-el">
-            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-orange)" }}>②</span> 스토리 <span className="sm-faint">문제→공감→해결 전개</span></div>
+            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-orange)" }}>②</span> 스토리</div>
             <textarea className="b2b-input" value={f.story} onChange={(e) => set("story", e.target.value)} placeholder="예: 다이어트 단백질 고민 → 생선살로 해결 → 조리 간편함 시연" rows={3} />
           </div>
           <div className="mlib-el">
-            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-success)" }}>③</span> 제안 <span className="sm-faint">혜택 · CTA · 구매 유도</span></div>
+            <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-success)" }}>③</span> 제안</div>
             <textarea className="b2b-input" value={f.offer} onChange={(e) => set("offer", e.target.value)} placeholder="예: 첫 구매 20% + 무료배송 / '지금 맛보기 담기'" rows={3} />
           </div>
         </div>
@@ -126,9 +126,9 @@ export default function MetaLibraryPage() {
       </section>
 
       {/* 저장된 소재 */}
-      <div className="b2b-card-head" style={{ marginBottom: 10 }}><span className="b2b-card-title">저장된 소재 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>{list.length}개</span></span></div>
+      <div className="b2b-card-head" style={{ marginBottom: 10 }}><span className="b2b-card-title">저장된 소재</span></div>
       {loading ? <div className="b2b-loading">불러오는 중...</div> : list.length === 0 ? (
-        <div className="b2b-empty">아직 저장된 소재가 없습니다. 위에서 기획해 저장하거나, 보드에서 우수 소재를 저장하세요.</div>
+        <div className="b2b-empty">아직 저장된 소재가 없습니다.</div>
       ) : (
         <div className="mlib-grid">
           {list.map((c) => (

@@ -157,7 +157,7 @@ export default function MeetingPage() {
             ) : (
               <label className={`file-drop${dragging ? " is-dragging" : ""}`} htmlFor="fileInput">
                 <span className="file-drop-text">{dragging ? "여기에 놓으세요" : "클릭하여 파일 선택 또는 여기에 드래그"}</span>
-                <span className="file-drop-hint">.srt, .txt 파일 지원</span>
+                <span className="file-drop-hint">.srt, .txt</span>
               </label>
             )}
             <input

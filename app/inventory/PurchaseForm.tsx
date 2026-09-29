@@ -192,7 +192,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
                   <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>
                 </tr>
               ))}
-              {lines.length === 0 && <tr><td colSpan={5} className="sm-faint" style={{ padding: "16px 4px" }}>위 검색창에서 제품을 찾아 추가하세요.</td></tr>}
+              {lines.length === 0 && <tr><td colSpan={5} className="sm-faint" style={{ padding: "16px 4px" }}>추가한 제품이 없습니다.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -207,7 +207,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
 
       <div className="sm-between" style={{ marginTop: 16, gap: 10, flexWrap: "wrap" }}>
         <label className="sm-row" style={{ gap: 7, fontSize: 15, cursor: "pointer" }}>
-          <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> 즉시 {type === "입고" ? "입고" : "출고"}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’로 저장)</span>
+          <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> 즉시 {type === "입고" ? "입고" : "출고"}처리
         </label>
         <div className="sm-row" style={{ gap: 10 }}>
           <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>취소</button>

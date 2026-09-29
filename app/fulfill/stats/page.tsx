@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, DEFAULT_BOX_CATS, ratesFor, type RateVersion, type BoxCat } from "@/app/lib/fulfill-rates";
 import { unionCategories } from "@/app/lib/delivery-log";
 import { ComboBarLine, BarList, ChartLegend, CHART_LINE } from "@/app/components/charts";
@@ -155,7 +154,7 @@ export default function FulfillStatsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
       {loading ? <div className="b2b-loading">불러오는 중...</div> : tot === 0 ? (
-        <div className="b2b-empty">이 기간에 기록된 발송이 없습니다. <Link href="/fulfill/log">배송일지</Link>에서 먼저 기록하세요.</div>
+        <div className="b2b-empty">이 기간에 기록된 발송이 없습니다.</div>
       ) : (
         <div className="sm-col" style={{ gap: 16 }}>
           {/* KPI */}
@@ -170,7 +169,7 @@ export default function FulfillStatsPage() {
           </div>
           {agg.noPrice.length > 0 && (
             <p className="sm-faint" style={{ fontSize: 12, margin: "-8px 0 0" }}>
-              * 단가 미입력 박스 종류({agg.noPrice.join(" · ")})는 박스비에서 빠져 있습니다 — 설정 &gt; 배송일지 박스 종류에서 금액을 넣으세요.
+              * 단가 미입력 박스 종류({agg.noPrice.join(" · ")})는 박스비에서 빠져 있습니다.
             </p>
           )}
 
@@ -192,7 +191,7 @@ export default function FulfillStatsPage() {
           <div className="fx-2col">
             <BarList
               title="요일별 평균 발송량"
-              caption="발송한 날 기준 평균 · 월~일"
+              caption="발송한 날 기준 평균"
               accent="var(--sm-info)"
               minPct={7}
               data={agg.weekdayAvg.map((d) => [`${d.label}요일`, d.value] as [string, number])}
@@ -203,7 +202,6 @@ export default function FulfillStatsPage() {
             />
             <BarList
               title="박스종류 비중"
-              caption={`총 ${won(agg.catPie.reduce((s, [, n]) => s + n, 0))}건`}
               accent="var(--sm-orange)"
               minPct={7}
               sorted

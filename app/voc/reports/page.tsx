@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { VOC_CATEGORIES, type Voc } from "@/app/lib/voc";
 import { Donut } from "@/app/components/charts";
 
@@ -197,10 +196,6 @@ export default function VocRequestPage() {
           )}
         </section>
       )}
-
-      <p className="sm-faint no-print" style={{ fontSize: 12, marginTop: 12 }}>
-        통계·기간 보고서는 <Link href="/voc/stats" className="sm-link">통계·보고서</Link>에서 보고 인쇄할 수 있습니다.
-      </p>
     </div>
   );
 }

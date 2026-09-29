@@ -10,7 +10,6 @@ import { STATUS_SHORT } from "@/app/lib/b2b-orders";
 type EventMeta = {
   key: string;
   label: string;
-  desc: string;
   kind: "toggle" | "status";
   statuses?: string[];
 };
@@ -235,35 +234,31 @@ export default function TeamsSettingsPage() {
       {/* Teams 채널 웹훅 — 모든 알림의 발송 대상 */}
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">Teams 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 채널 웹훅</span></h2>
+          <h2 className="b2b-card-title">Teams 알림</h2>
           <span className="b2b-status-pill" style={teamsEnabled && teamsHasUrl
             ? { background: "var(--sm-success-bg)", color: "var(--sm-success)" }
             : { background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>
             {teamsEnabled && teamsHasUrl ? "발송 중" : "꺼짐"}
           </span>
         </div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          발주 알림과 일정 브리핑이 <strong>Teams 채널로</strong> 발송됩니다. URL 발급: 채널 <strong>⋯ → 워크플로 → &ldquo;웹후크 요청을 받으면 채널에 게시&rdquo;</strong>.
-          URL은 게시 권한 그 자체이니 외부에 공유하지 마세요.
-        </p>
         <div className="sm-col" style={{ gap: 10, maxWidth: 640 }}>
           <label className="b2b-field">
-            <span className="b2b-field-label">B2B 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(발주 알림·일정 브리핑){teamsHasUrl ? ` · 저장됨 ${teamsTail} — 비워두면 유지` : ""}</span></span>
+            <span className="b2b-field-label">B2B 알림 채널 URL {teamsHasUrl && <span className="sm-faint" style={{ fontWeight: 400 }}>· 저장됨 {teamsTail}</span>}</span>
             <input className="b2b-input" type="password" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)}
               placeholder={teamsHasUrl ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">업무도우미 변경알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(생산·재고 알림){teamsHasHelper ? ` · 저장됨 ${teamsHelperTail} — 비워두면 유지` : " · 비우면 B2B 채널로 함께 발송"}</span></span>
+            <span className="b2b-field-label">업무도우미 변경알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasHelper ? `· 저장됨 ${teamsHelperTail}` : "· 비우면 B2B 채널로 함께 발송"}</span></span>
             <input className="b2b-input" type="password" value={teamsHelperUrl} onChange={(e) => setTeamsHelperUrl(e.target.value)}
               placeholder={teamsHasHelper ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">클레임 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(채널 취소·반품·교환 요청){teamsHasClaims ? ` · 저장됨 ${teamsClaimsTail} — 비워두면 유지` : " · 비우면 변경알림·B2B 채널로 폴백"}</span></span>
+            <span className="b2b-field-label">클레임 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasClaims ? `· 저장됨 ${teamsClaimsTail}` : "· 비우면 변경알림·B2B 채널로 폴백"}</span></span>
             <input className="b2b-input" type="password" value={teamsClaimsUrl} onChange={(e) => setTeamsClaimsUrl(e.target.value)}
               placeholder={teamsHasClaims ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">고객문의 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(주문문의·상품Q&amp;A·고객센터문의){teamsHasInquiry ? ` · 저장됨 ${teamsInquiryTail} — 비워두면 유지` : " · 비우면 클레임 채널로 폴백"}</span></span>
+            <span className="b2b-field-label">고객문의 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasInquiry ? `· 저장됨 ${teamsInquiryTail}` : "· 비우면 클레임 채널로 폴백"}</span></span>
             <input className="b2b-input" type="password" value={teamsInquiryUrl} onChange={(e) => setTeamsInquiryUrl(e.target.value)}
               placeholder={teamsHasInquiry ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
           </label>
@@ -284,15 +279,12 @@ export default function TeamsSettingsPage() {
       {/* 아침 일정 알림 — Teams 채널(B2B 알림)로 자동 발송 */}
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">아침 일정 알림 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 매일 오전 06~07시 자동</span></h2>
+          <h2 className="b2b-card-title">아침 일정 알림</h2>
           <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
             마지막 자동 발송: <strong style={{ color: digestLastSent ? "var(--sm-success)" : "var(--sm-danger)" }}>{digestLastSent || "기록 없음"}</strong>
             {!cronSecretSet && <strong style={{ color: "var(--sm-danger)", marginLeft: 8 }}>CRON_SECRET 미설정 — 자동 발송이 매일 실패합니다</strong>}
           </span>
         </div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px", lineHeight: 1.7 }}>
-          정해둔 시각마다 <strong>미완료 업무</strong>를 Teams 채널(B2B 알림)로 보냅니다. 시각·내용·기간을 아래에서 정하세요.
-        </p>
         {dcfg && (
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 14, marginBottom: 12, display: "grid", gap: 12 }}>
             <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -321,13 +313,10 @@ export default function TeamsSettingsPage() {
                     setDtimes((p) => (p.includes(t) ? p : [...p, t].sort().slice(0, 6)));
                   }}>+ 추가</button>
               </div>
-              <p className="sm-faint" style={{ fontSize: 11, margin: "6px 0 0", lineHeight: 1.6 }}>
-                넣은 시각마다 정각(수 초 이내)에 발송됩니다. 하루 첫 시각은 설정한 제목 그대로, 이후 시각은 &lsquo;(중간/오후 확인)&rsquo;이 붙어요. 저장해야 반영됩니다.
-              </p>
             </div>
             <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>전후 기간
               <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
-              <span className="sm-faint" style={{ fontSize: 11 }}>과거 N일의 미처리 발송 + 향후 N일의 발송 예정 (계산서·입금은 기간 무관 전체)</span>
+              <span className="sm-faint" style={{ fontSize: 11 }}>계산서·입금은 기간 무관</span>
             </label>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
@@ -355,15 +344,13 @@ export default function TeamsSettingsPage() {
 
       {!teamsEnabled && (
         <div className="sm-warn">
-          <strong>외부 알림 대상이 없습니다.</strong>
-          <br />
-          위 <strong>Teams 알림</strong>(URL 저장 + 발송 켜기)을 설정하세요. 아래 이벤트 설정은 대상 지정 후 그대로 적용됩니다.
+          <strong>외부 알림 대상이 없습니다.</strong> 위 <strong>Teams 알림</strong>(URL 저장 + 발송 켜기)을 설정하세요.
         </div>
       )}
 
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">알림 이벤트 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>(Teams 발송 공통)</span></h2>
+          <h2 className="b2b-card-title">알림 이벤트</h2>
         </div>
 
         {loading ? (
@@ -374,7 +361,6 @@ export default function TeamsSettingsPage() {
               <div key={ev.key} className="b2b-notify-row">
                 <div className="b2b-notify-info">
                   <div className="b2b-notify-label">{ev.label}</div>
-                  <div className="b2b-notify-desc">{ev.desc}</div>
                 </div>
 
                 {ev.kind === "toggle" ? (
@@ -420,7 +406,7 @@ export default function TeamsSettingsPage() {
       {/* [업무도우미 변경알림] — 상품마스터 변경 + 생산·재고 알림 체크리스트 (구 생산관리 설정에서 이관) */}
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">[업무도우미 변경알림] <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 상품마스터 변경 + 생산 요청·재고 이전(소매→도매) 알림 — 위 &apos;변경알림 채널&apos;로 발송</span></h2>
+          <h2 className="b2b-card-title">[업무도우미 변경알림]</h2>
           <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "저장"}</button>
         </div>
         {mnMsg && <div className={mnMsg.kind === "ok" ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}
@@ -428,11 +414,10 @@ export default function TeamsSettingsPage() {
           <>
             <label className="sm-row" style={{ gap: 6, fontSize: 15, fontWeight: 600, marginBottom: 10 }}>
               <input type="checkbox" className="b2b-checkbox" checked={mn.enabled} onChange={(e) => setMn({ ...mn, enabled: e.target.checked })} />
-              상품마스터 변경알림 켜기 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 생산·재고 알림은 이 토글과 무관 — 아래 체크로만 제어</span>
+              상품마스터 변경알림 켜기 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 생산·재고 알림과 무관</span>
             </label>
             <div style={{ marginTop: 6 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>발송할 알림 목록</span>
-              <p className="sm-faint" style={{ fontSize: 12, margin: "3px 0 0" }}>체크 해제한 알림은 발송되지 않습니다 (변경 기록에는 남음).</p>
               {[...new Set(mnEventDefs.map((ev) => ev.group || "기타"))].map((g) => (
                 <div key={g} style={{ marginTop: 8 }}>
                   <div className="sm-faint" style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{g}</div>
@@ -454,11 +439,6 @@ export default function TeamsSettingsPage() {
           </>
         )}
       </section>
-
-      <p style={{ fontSize: 11.5, color: "var(--sm-text-light)", marginTop: 12 }}>
-        상태형 항목은 <strong>체크한 결과 상태로 바뀔 때만</strong> 알림이 갑니다. 예) 발주 상태에서 &lsquo;발송완료&rsquo;만 체크하면
-        중간 단계(생산중·발송대기 등)는 알림이 오지 않습니다.
-      </p>
     </>
   );
 }

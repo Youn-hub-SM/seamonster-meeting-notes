@@ -117,8 +117,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
           ) : (
             <>
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-                정한 날짜가 되면 새벽에 자동으로 원가가 바뀝니다. 지난 발주의 이익률은 그대로입니다 —
-                발주는 등록 시점 원가를 따로 저장해 두기 때문입니다.
+                적용일 새벽에 자동 반영 — 지난 발주의 이익률은 바뀌지 않습니다
               </p>
 
               <div className="b2b-field-row">

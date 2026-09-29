@@ -44,7 +44,6 @@ async function fileToCells(file: File): Promise<unknown[][]> {
 export default function ScanUploadPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
-  const [poolItemCount, setPoolItemCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -56,7 +55,6 @@ export default function ScanUploadPage() {
       const j = await (await fetch("/api/fulfill/scan/uploads", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setUploads(j.uploads || []);
-      setPoolItemCount(j.poolItemCount || 0);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 실패"); }
     setLoading(false);
   }, []);
@@ -138,10 +136,7 @@ export default function ScanUploadPage() {
         <div className="b2b-card-head"><span className="b2b-card-title">파일 올리기</span>
           <a href="/api/fulfill/scan/template" className="sm-link" style={{ fontSize: 12 }}>양식 다운로드</a>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-          택배사 <strong>&lsquo;파일접수 상세내역&rsquo;</strong> 엑셀(.xlsx)·CSV, <strong>여러 파일 선택 가능</strong>. 열 제목에서 <strong>송장번호·상품코드·수량</strong>을 자동 인식하고, NOTHING(정기배송 등)은 제외합니다. 송장번호는 하이픈이 있어도/없어도 동일하게 인식돼요.
-          <br /><strong>고객정보(받는분·전화·주소)는 이 브라우저에서 제거</strong>되고, <strong>송장번호·상품코드·수량만</strong> 저장됩니다(파일 원본은 서버로 전송되지 않아요).
-        </p>
+        <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>택배사 &lsquo;파일접수 상세내역&rsquo; 엑셀(.xlsx)·CSV</p>
         <div className="sm-row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? "업로드 중..." : "파일 선택 (여러 개 가능)"}</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple style={{ display: "none" }} onChange={(e) => { const f = e.target.files; if (f && f.length) upload(f); }} />
@@ -160,7 +155,7 @@ export default function ScanUploadPage() {
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">올린 파일 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 송장 라인 {poolItemCount.toLocaleString()}개</span></span>
+          <span className="b2b-card-title">올린 파일</span>
           <div className="sm-row" style={{ gap: 6 }}>
             <button className="b2b-btn-secondary" style={{ padding: "5px 10px", fontSize: 12 }} onClick={load} disabled={loading}>새로고침</button>
             {uploads.length > 0 && <button className="b2b-btn-secondary" style={{ padding: "5px 10px", fontSize: 12, color: "var(--sm-danger)" }} onClick={clearAll}>전체 비우기</button>}
@@ -169,7 +164,7 @@ export default function ScanUploadPage() {
         {loading ? (
           <div className="b2b-loading">불러오는 중...</div>
         ) : uploads.length === 0 ? (
-          <div className="b2b-empty">올린 파일이 없습니다. 위에서 송장 파일을 올리세요.</div>
+          <div className="b2b-empty">올린 파일이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">

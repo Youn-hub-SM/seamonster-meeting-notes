@@ -397,7 +397,7 @@ export default function NaverAdPage() {
 
       {status && !status.configured && (
         <div className="sm-warn">
-          <strong>네이버 광고 연동 준비 중입니다.</strong> 연동이 완료되면 자동으로 표시됩니다 — 관리자에게 문의하세요.
+          <strong>네이버 광고 연동 준비 중입니다.</strong>
         </div>
       )}
       {status?.configured && status.connected === false && <div className="b2b-error"><strong>연결 실패</strong> — {status.error || "자격 확인"}</div>}
@@ -415,17 +415,12 @@ export default function NaverAdPage() {
                 </Chip>
               ))}
             </div>
-            <div className="sm-faint" style={{ fontSize: 15, marginTop: 7 }}>
-              {mode === "keyword"
-                ? "파워링크·파워컨텐츠는 키워드 단위로 입찰합니다. 캠페인 → 광고그룹을 골라 키워드를 봅니다."
-                : "쇼핑검색·브랜드검색은 키워드가 없고 상품(광고그룹) 단위로 입찰합니다. 캠페인을 고르면 그룹별 성과·입찰가가 나옵니다."}
-            </div>
           </div>
 
           {/* ② 캠페인 필터(다중) */}
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
             <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)" }}>{TYPE_LABEL[adType] || adType} 캠페인 <span className="sm-faint" style={{ fontWeight: 400 }}>(여러 개 선택 가능)</span></span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)" }}>{TYPE_LABEL[adType] || adType} 캠페인</span>
               {campsOfType.length > 0 && (
                 <div className="sm-row" style={{ gap: 10 }}>
                   <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => setSelCamp(campsOfType.map((c) => c.nccCampaignId))} disabled={selCamp.length === campsOfType.length}>전체 선택</button>
@@ -480,7 +475,7 @@ export default function NaverAdPage() {
             <Chip on={convBasis === "purchase"} onClick={() => setBasis("purchase")}>구매 전환만</Chip>
             {convBasis === "purchase" && (
               <span className="sm-faint" style={{ fontSize: 15 }}>
-                {purchaseLoading ? "구매 전환 불러오는 중... (최초엔 다소 걸릴 수 있어요)"
+                {purchaseLoading ? "구매 전환 불러오는 중..."
                   : purchaseInfo ? `장바구니 제외·구매만 · ~${purchaseInfo.effectiveUntil}까지${purchaseInfo.cached === false ? " · 캐시 미적용(느림, 064 마이그레이션 권장)" : ""}` : "장바구니 제외, 구매 전환만 집계"}
               </span>
             )}
@@ -497,20 +492,16 @@ export default function NaverAdPage() {
           </div>
 
           {!hasSelection ? (
-            <div className="b2b-empty">{mode === "keyword" ? "캠페인 → 광고그룹을 선택하면 키워드가 나옵니다." : "캠페인을 선택하면 광고그룹별 성과·입찰가가 나옵니다."}
-            </div>
+            <div className="b2b-empty">{selCamp.length === 0 ? "선택된 캠페인이 없습니다." : "선택된 광고그룹이 없습니다."}</div>
           ) : loading ? <div className="b2b-loading">불러오는 중...</div> :
             shownRows.length === 0 ? (
               <div className="b2b-empty">
                 {costOnly && rows.length > 0
-                  ? <>이 기간에 <b>광고비가 나간 {mode === "keyword" ? "키워드" : "광고그룹"}</b>이 없습니다. <button className="b2b-link-btn" onClick={() => setCostOnly(false)}>전체 보기</button> 또는 기간을 넓혀보세요.</>
+                  ? <>이 기간에 <b>광고비가 나간 {mode === "keyword" ? "키워드" : "광고그룹"}</b>이 없습니다. <button className="b2b-link-btn" onClick={() => setCostOnly(false)}>전체 보기</button></>
                   : mode === "keyword" ? "키워드가 없습니다." : "광고그룹이 없습니다."}
               </div>
             ) : (
               <>
-                <div className="sm-row" style={{ justifyContent: "space-between", fontSize: 15, color: "var(--sm-text-light)", marginBottom: 6 }}>
-                  <span>{shownRows.length}개 {mode === "keyword" ? "키워드" : "광고그룹"}{costOnly ? " (지출>0)" : ""} · 비용순 상위가 최적화 우선순위</span>
-                </div>
                 <div className="b2b-table-wrap">
                   <table className="b2b-table">
                     <thead><tr>
@@ -585,10 +576,7 @@ export default function NaverAdPage() {
                   </table>
                 </div>
                 <p className="sm-faint" style={{ fontSize: 15, marginTop: 8, lineHeight: 1.6 }}>
-                  · <b>광고비</b>=기간 내 총 지출(VAT포함), <b>{roasLabel}</b>={convAmtLabel}÷광고비. <span style={{ color: "var(--sm-danger)" }}>빨강</span>=지출했지만 {convLabel} 0(입찰가↓ 검토), <span style={{ color: "var(--sm-success)" }}>초록</span>={roasLabel} 300%↑(여력 있으면 입찰가↑).<br />
-                  {convBasis === "purchase"
-                    ? <>· <b>구매 전환만</b> 집계(장바구니 등 제외) — AD_CONVERSION_DETAIL 리포트 기반, <b>오늘 제외 어제까지</b>. 광고비 기간도 자동으로 어제까지 맞춰집니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위." : ""}</>
-                    : <>· 전환·전환매출·ROAS는 <b>모든 전환유형 합</b>(구매+장바구니 등). ‘구매 전환만’으로 바꾸면 구매 기준으로 다시 계산됩니다.{mode === "adgroup" ? " 쇼핑검색은 광고그룹 단위 입찰가를 조정합니다." : ""}</>}
+                  <b>광고비</b>=기간 내 총 지출(VAT포함) · <b>{roasLabel}</b>={convAmtLabel}÷광고비 · <span style={{ color: "var(--sm-danger)" }}>빨강</span>=지출했지만 {convLabel} 0 · <span style={{ color: "var(--sm-success)" }}>초록</span>={roasLabel} 300%↑{convBasis === "all" ? <> · 전환=<b>모든 전환유형 합</b>(구매+장바구니 등)</> : null}
                 </p>
               </>
             )}
@@ -602,7 +590,7 @@ export default function NaverAdPage() {
             <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
               <div>
                 <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>검색어별 비용 — {skGroup.name}</div>
-                <div className="sm-faint" style={{ fontSize: 15 }}>최근 30일 · 이 광고그룹으로 유입된 실제 검색어(네이버 제공)</div>
+                <div className="sm-faint" style={{ fontSize: 15 }}>최근 30일</div>
               </div>
               <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setSkGroup(null)}>닫기</button>
             </div>
@@ -614,7 +602,6 @@ export default function NaverAdPage() {
                     <label className="sm-row" style={{ gap: 5, fontSize: 15, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
                       <input type="checkbox" checked={skCostOnly} onChange={(e) => setSkCostOnly(e.target.checked)} />광고비 지출만
                     </label>
-                    <span className="sm-faint" style={{ fontSize: 15 }}>{skShown.length}개 검색어 · 광고비 {won(skTot.cost)}원</span>
                   </div>
                   {skShown.length === 0 ? <div className="b2b-empty">표시할 검색어가 없습니다.</div> : (
                     <div className="b2b-table-wrap">
@@ -648,7 +635,6 @@ export default function NaverAdPage() {
                     </div>
                   )}
                   {skShown.length > 300 && <p className="sm-faint" style={{ fontSize: 15, marginTop: 6 }}>상위 300개만 표시했습니다(광고비순).</p>}
-                  <p className="sm-faint" style={{ fontSize: 15, marginTop: 6 }}>· 이 리포트는 전환수·ROAS가 없고 <b>직접전환율</b>만 제공됩니다(네이버 NPLA_SCH_KEYWORD). 전환/ROAS는 그룹 단위 표에서 확인하세요.</p>
                 </>
               )}
             </div>
@@ -663,7 +649,7 @@ export default function NaverAdPage() {
             <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", padding: "14px 16px", borderBottom: "1px solid var(--sm-border)" }}>
               <div>
                 <div style={{ fontWeight: 700, color: "var(--sm-dark)" }}>성과 리포트 — {rpt.name}</div>
-                <div className="sm-faint" style={{ fontSize: 15 }}>일/주/월별 추이 · 전체 전환 기준(네이버) · 어제까지 반영</div>
+                <div className="sm-faint" style={{ fontSize: 15 }}>어제까지 반영</div>
               </div>
               <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => setRpt(null)}>닫기</button>
             </div>
@@ -679,12 +665,12 @@ export default function NaverAdPage() {
                 <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)", marginRight: 2 }}>전환기준</span>
                 <Chip on={rptConv === "all"} onClick={() => setRptConv("all")}>전체 전환</Chip>
                 <Chip on={rptConv === "purchase"} onClick={() => setRptConv("purchase")}>구매전환만</Chip>
-                <span className="sm-faint" style={{ fontSize: 15, marginLeft: 4 }}>{rptConv === "purchase" ? "실제 구매만 집계 (최근 62일)" : "네이버 제공 전체 전환"}</span>
+                <span className="sm-faint" style={{ fontSize: 15, marginLeft: 4 }}>{rptConv === "purchase" ? "실제 구매만 집계 (최근 62일)" : "구매+장바구니 등 전체 전환"}</span>
               </div>
               {rptErr && <div className="b2b-error">{rptErr}</div>}
-              {rptConv === "purchase" && rptCapped && !rptLoading && <div className="b2b-empty" style={{ padding: "8px 10px", marginBottom: 10, fontSize: 15 }}>구매전환 기준은 리포트 부하로 <b>최근 62일</b>까지만 표시됩니다. 더 긴 기간은 전체 전환 기준을 이용하세요.</div>}
+              {rptConv === "purchase" && rptCapped && !rptLoading && <div className="b2b-empty" style={{ padding: "8px 10px", marginBottom: 10, fontSize: 15 }}>구매전환 기준은 <b>최근 62일</b>까지만 표시됩니다.</div>}
               {rptLoading ? <div className="b2b-loading">불러오는 중...</div> : rptAgg.rows.length === 0 ? (
-                <div className="b2b-empty">이 기간에 성과 데이터가 없습니다. 조회 기간을 넓혀보세요.</div>
+                <div className="b2b-empty">이 기간에 성과 데이터가 없습니다.</div>
               ) : (
                 <>
                   <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} barFmt={moneyCompact} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineColor="var(--sm-orange)" barUnit="원" />
@@ -723,7 +709,6 @@ export default function NaverAdPage() {
                       </tr></tfoot>
                     </table>
                   </div>
-                  <p className="sm-faint" style={{ fontSize: 15, marginTop: 8, lineHeight: 1.6 }}>· 막대=광고비, 선=ROAS. 전환은 {rptConv === "purchase" ? <><b>구매 전환 기준</b>(실제 구매만, 최근 62일)</> : <><b>전체 전환 기준</b>(구매+장바구니 등, 네이버 제공)</>}입니다. 그래프에 마우스를 올리면 기간별 수치가 나와요.</p>
                 </>
               )}
             </div>

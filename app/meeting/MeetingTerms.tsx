@@ -58,7 +58,6 @@ export default function MeetingTerms() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: "var(--sm-dark)" }}>
           자주 쓰는 용어
-          <span style={{ fontWeight: 400, fontSize: 12, color: "var(--sm-text-light)", marginLeft: 6 }}>· 팀 공유 · {terms.length}개</span>
         </div>
         <button type="button" onClick={() => setOpen((o) => !o)} style={{ background: "none", border: "none", color: "var(--sm-text-mid)", cursor: "pointer", fontSize: 12 }}>
           {open ? "접기" : "펼치기"}
@@ -67,10 +66,7 @@ export default function MeetingTerms() {
 
       {open && (
         <>
-          <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "6px 0 12px", lineHeight: 1.6 }}>
-            회의 정리 시 AI가 이 용어들을 <strong>정확히 인식·표기</strong>합니다. 모두가 함께 관리해요 (중복은 자동 방지).
-          </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: terms.length ? 12 : 0 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12, marginBottom: terms.length ? 12 : 0 }}>
             <input value={term} onChange={(e) => { setTerm(e.target.value); setMsg(""); }}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
               placeholder="용어 (예: 골라담기)" style={inp(180)} maxLength={100} />

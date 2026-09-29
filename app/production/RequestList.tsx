@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, UNREQUESTED_ITEM_MEMO, lineState, allLinesFilled, toPrPurpose, isFactoryPurpose, CONFIRMED_PURPOSES,
-  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, FULFILL_NOTE, DUE_LABEL,
+  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, DUE_LABEL,
 } from "@/app/lib/wholesale-production";
 import { defaultDueDate, defaultProdStart } from "@/app/lib/production-schedule";
 import { Combobox } from "@/app/b2b/orders/Combobox";
@@ -41,7 +41,7 @@ export function RequestList() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [showDone, setShowDone] = useState(false); // 기본 진행(요청·진행중)만 — 완료·취소는 토글로
   // 탭 = 용도(PR_PURPOSES) 그대로 — 제조사(재고 보충, 이행=입고) / 도매(도매 납품) / 프로모션(113) / 도매 대량(115).
-  //  라벨은 PR_PURPOSE_LABEL, 이행 설명은 FULFILL_NOTE. 용도가 늘면 탭도 같이 늘고 Record 가 빠진 설명을 잡아 준다.
+  //  라벨은 PR_PURPOSE_LABEL. 용도가 늘면 탭도 같이 는다.
   const [tab, setTab] = useState<PrPurpose>("재고 보충");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -296,7 +296,6 @@ export function RequestList() {
               <button key={pp} className={`sm-tab ${tab === pp ? "is-active" : ""}`} onClick={() => setTab(pp)}>{PR_PURPOSE_LABEL[pp]} 요청<span className="sm-tab-count">{tabCounts.get(pp) || 0}</span></button>
             ))}
           </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>{FULFILL_NOTE[tab]}</span>
           {tab === "재고 보충" && overdueOpen > 0 && (
             <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>종료일 지난 요청서 {overdueOpen}건 — 마감하거나 종료일을 고치세요</span>
           )}
@@ -312,7 +311,7 @@ export function RequestList() {
 
       {!isFactoryPurpose(tab) && wholesaleSummary.length > 0 && (
         <section className="b2b-form-section" style={{ marginBottom: 16 }}>
-          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 품목별 합산</span></div>
+          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 기준</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
               <thead><tr><th>품목</th><th className="num" style={{ width: "14%" }}>요청</th><th className="num" style={{ width: "14%" }}>이전 완료</th><th className="num" style={{ width: "14%" }}>잔여</th><th className="num" style={{ width: "12%" }}>이행률</th></tr></thead>
@@ -339,10 +338,10 @@ export function RequestList() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : displayed.length === 0 ? (
-        <div className="b2b-empty">{showDone ? `${PR_PURPOSE_LABEL[tab]} 요청이 없습니다.` : `진행 중인 ${PR_PURPOSE_LABEL[tab]} 요청이 없습니다. ‘+ 새 생산 요청’으로 시작하세요.`}</div>
+        <div className="b2b-empty">{showDone ? `${PR_PURPOSE_LABEL[tab]} 요청이 없습니다.` : `진행 중인 ${PR_PURPOSE_LABEL[tab]} 요청이 없습니다.`}</div>
       ) : (
         <section className="b2b-form-section">
-        <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 목록 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· {displayed.length}건</span></div>
+        <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 목록</div>
         <div className="b2b-table-wrap">
           {/* tableLayout fixed — 탭(제조사/도매) 전환 시 내용 길이와 무관하게 두 탭의 표 모양 동일 */}
           <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 940 }}>
@@ -702,13 +701,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             {purpose === "재고 보충" && (
               <label className="sm-col" style={{ gap: 3 }}>
                 {/* 생산기간의 시작 — 이 날부터 생산종료일까지 기록된 입고가 이 요청서에 잡힌다(넘쳐도 초과로 기록) */}
-                <span style={{ fontSize: 15, fontWeight: 600 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 기본 D+3 영업일 · 입고 매칭 시작</span></span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 입고 매칭 시작</span></span>
                 <input type="date" className="b2b-input" style={{ width: 150 }} value={prodStart} max={dueDate || undefined} onChange={(e) => { datesTouched.current = true; setProdStart(e.target.value); }} />
               </label>
             )}
             <label className="sm-col" style={{ gap: 3 }}>
               {/* 확정형은 마감이 아니라 그날 물건이 있어야 하는 날이다 — 라벨을 용도에 맞춘다(115) */}
-              <span style={{ fontSize: 15, fontWeight: 600 }}>{DUE_LABEL[purpose]} <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>{CONFIRMED_PURPOSES.includes(purpose) ? "· 이 날까지 확보" : purpose === "재고 보충" ? "· 기본 D+7 영업일 · 입고 매칭 끝" : "· 기본 7영업일"}</span></span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{DUE_LABEL[purpose]}{purpose === "재고 보충" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> · 입고 매칭 끝</span>}</span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} onChange={(e) => { datesTouched.current = true; setDueDate(e.target.value); }} />
             </label>
             {startAfterEnd && <div className="b2b-error" style={{ flexBasis: "100%", margin: 0 }}>{prodStart ? "생산시작일" : "요청일"}이 생산종료일보다 뒤입니다 — 기간을 확인하세요.</div>}
@@ -750,7 +749,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;입고 예정&rsquo;(열린 요청서 잔여)을 불러오지 못했습니다 — 권장이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다.</div>
           )}
           {lines.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: 20 }}>위에서 품목을 검색해 추가하세요.</div>
+            <div className="b2b-empty" style={{ padding: 20 }}>추가한 품목이 없습니다.</div>
           ) : (
             // flexShrink 0 — 창 본문(flex 세로)이 넘치면 표가 한 줄 높이로 눌려 작은 스크롤 안에 갇힌다(추가한 품목이 안 보여 '선택이 안 된다'로 보이던 버그)
             <div className="b2b-table-wrap" style={{ flexShrink: 0 }}>

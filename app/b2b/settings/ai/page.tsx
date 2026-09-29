@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 
 type ModelKey = "haiku" | "sonnet" | "opus";
 type FeatureVal = ModelKey | "inherit";
-type Option = { key: ModelKey; label: string; desc: string; price: string };
-type FeatureMeta = { key: string; label: string; desc: string };
+type Option = { key: ModelKey; label: string; price: string };
+type FeatureMeta = { key: string; label: string };
 
 const PROMPT_TEXTAREA: React.CSSProperties = {
   width: "100%",
@@ -154,16 +154,11 @@ export default function AiSettingsPage() {
           <h2 className="b2b-card-title">공통 기본 모델</h2>
           {savingKey === "global" && <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>적용 중...</span>}
         </div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
-          아래 기능별 설정이 <strong>‘전체(공통) 따름’</strong>일 때 사용되는 기본 모델입니다.
-          (사업자등록증 OCR 은 정확도 위해 항상 Sonnet 사용)
-        </p>
         {loading ? <div className="b2b-loading">불러오는 중...</div> : (
           <div className="ai-model-grid">
             {options.map((opt) => (
               <button key={opt.key} type="button" className={`ai-model-card ${global === opt.key ? "is-active" : ""}`} onClick={() => selectGlobal(opt.key)} disabled={!!savingKey}>
                 <div className="ai-model-label">{opt.label}{global === opt.key && <span className="ai-model-check">✓ 사용 중</span>}</div>
-                <div className="ai-model-desc">{opt.desc}</div>
                 <div className="ai-model-price">{opt.price} <span>/ 1M 토큰</span></div>
               </button>
             ))}
@@ -176,16 +171,12 @@ export default function AiSettingsPage() {
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">기능별 모델</h2>
         </div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 14px" }}>
-          각 기능이 쓸 모델을 개별 지정하거나 <strong>공통 기본({globalLabel})</strong>을 따르게 할 수 있습니다.
-        </p>
         {loading ? <div className="b2b-loading">불러오는 중...</div> : (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {featureMeta.map((f, i) => (
               <div key={f.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 0", borderTop: i === 0 ? "none" : "1px solid var(--sm-border)", flexWrap: "wrap" }}>
                 <div style={{ minWidth: 180 }}>
                   <div style={{ fontWeight: 700, fontSize: 15, color: "var(--sm-dark)" }}>{f.label}</div>
-                  <div style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{f.desc}</div>
                 </div>
                 <select
                   className="b2b-select"
@@ -209,9 +200,6 @@ export default function AiSettingsPage() {
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">생산 요청서 AI 초안 — 검토 포인트</h2>
         </div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 12px" }}>
-          매주 수요일 초안 메모에 AI 검토 포인트를 붙입니다(기능별 모델의 &lsquo;생산·재고 조언&rsquo; 모델 사용). 끄면 초안 수량·메모는 그대로이고 검토 포인트만 빠집니다.
-        </p>
         {draftAi === null ? <div className="b2b-loading">불러오는 중...</div> : (
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, cursor: "pointer" }}>
             <input type="checkbox" className="b2b-checkbox" checked={draftAi} disabled={draftAiSaving} onChange={(e) => toggleDraftAi(e.target.checked)} />
@@ -223,7 +211,7 @@ export default function AiSettingsPage() {
       {/* 회의록 정리 프롬프트 */}
       <PromptCard
         title="회의록 정리 프롬프트 (지침)"
-        desc={<>회의 녹취를 정리하는 기초 지침입니다. <strong>팀원 정보·회사 맥락·출력 형식(JSON)</strong>은 시스템이 자동으로 덧붙이므로 여기에 넣지 마세요.</>}
+        desc={<><strong>팀원 정보·회사 맥락·출력 형식(JSON)</strong>은 자동으로 덧붙습니다 — 넣지 마세요.</>}
         loading={loading} value={meetingPrompt} isDefault={meetingIsDefault} saving={meetingSaving} saved={meetingSaved}
         onChange={(v) => { setMeetingPrompt(v); setMeetingSaved(""); }}
         onSave={() => savePrompt("meeting")} onReset={() => resetPrompt("meeting")}
@@ -232,7 +220,7 @@ export default function AiSettingsPage() {
       {/* CS 코치 프롬프트 */}
       <PromptCard
         title="CS 코치 프롬프트 (지침)"
-        desc={<>CS 코치의 역할·코칭 방식·원칙을 정의합니다. <strong>매뉴얼 내용</strong>과 <strong>출력 형식(JSON)</strong>은 시스템이 자동으로 덧붙이므로 여기에 넣지 마세요 — 매뉴얼은 <a href="/cs/manual" style={{ color: "var(--sm-orange)", fontWeight: 600 }}>CS 매뉴얼</a>에서 관리합니다.</>}
+        desc={<><strong>매뉴얼 내용·출력 형식(JSON)</strong>은 자동으로 덧붙습니다 — 넣지 마세요.</>}
         loading={loading} value={csPrompt} isDefault={csIsDefault} saving={csSaving} saved={csSaved}
         onChange={(v) => { setCsPrompt(v); setCsSaved(""); }}
         onSave={() => savePrompt("cs")} onReset={() => resetPrompt("cs")}

@@ -342,7 +342,7 @@ export default function CrmPage() {
 
       {/* utm_campaign 은 달았는데 GA env 가 없을 때만 안내(설정되면 카드에 자동 표시) */}
       {campaigns.length > 0 && ga && !ga.configured && (
-        <p className="sm-faint crm-ga-hint">GA 연동 준비 중 — 연동되면 UTM 캠페인 성과(세션·구매·매출)가 카드에 자동 표시됩니다.</p>
+        <p className="sm-faint crm-ga-hint">GA 연동 준비 중</p>
       )}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> :
@@ -358,7 +358,6 @@ export default function CrmPage() {
             </div>
             {csvOpen && (
               <div className="crm-csv-box">
-                <p className="sm-faint crm-csv-hint">메시지 맵 표(엑셀 등)를 전체 선택 → 복사해 붙여넣으세요. 헤더(스테이지·메시지명·상태...) 포함.</p>
                 <textarea className="b2b-textarea" rows={6} value={csvText} onChange={(e) => setCsvText(e.target.value)} placeholder="스테이지,부제,메시지명,상태,채널,발송시점,..." spellCheck={false} />
                 <button className="b2b-btn-primary" onClick={() => runImport("csv")} disabled={importing || !csvText.trim()}>
                   {importing ? "가져오는 중..." : "CSV 가져오기"}
@@ -543,7 +542,7 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
           </tbody>
         </table>
       </div>
-      <p className="sm-faint crm-table-hint">셀을 눌러 바로 수정하면 자동 저장됩니다(UTM 캠페인 포함). 상세 설명·메시지 내용·링크·성과는 <b>상세</b>에서 편집하세요.</p>
+      <p className="sm-faint crm-table-hint">셀을 수정하면 바로 저장됩니다.</p>
     </>
   );
 }
@@ -652,9 +651,9 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
       </div>
 
       {gaConfigured === false ? (
-        <p className="sm-faint crm-asof-hint">GA 연동 준비 중 — 연동되면 여기에 추이가 표시됩니다.</p>
+        <p className="sm-faint crm-asof-hint">GA 연동 준비 중</p>
       ) : !campaignsKey ? (
-        <p className="sm-faint crm-asof-hint">utm_campaign 이 달린 메시지가 없습니다 — 메시지 상세에서 UTM 캠페인을 넣으면 추이가 생깁니다.</p>
+        <p className="sm-faint crm-asof-hint">utm_campaign 이 달린 메시지가 없습니다.</p>
       ) : gaErr ? (
         <div className="b2b-error">{gaErr}</div>
       ) : loading && !ga ? (
@@ -684,7 +683,7 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
       <h2 className="crm-stats-title crm-stats-title-2">메시지 구성</h2>
       <div className="crm-stats-grid">
         <PieCard title="발송채널별 메시지" data={byChannel} />
-        <BarList title="단계별 비활성" caption="비활성이 많은 단계 = 여정이 끊기는 곳" data={inactiveByStage} sorted minPct={4} empty="비활성 없음" />
+        <BarList title="단계별 비활성" data={inactiveByStage} sorted minPct={4} empty="비활성 없음" />
       </div>
     </div>
   );
@@ -758,7 +757,7 @@ function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onCl
               </div>
             </div>
           ))}
-          <p className="sm-faint crm-field-hint">선택지를 지워도 그 값을 쓰던 기존 메시지는 그대로 남고 "(구)" 로 표시됩니다. 상태(활성/비활성)는 기준일 필터와 연결돼 있어 고정입니다.</p>
+          <p className="sm-faint crm-field-hint">선택지를 지워도 기존 메시지 값은 남고 "(구)" 로 표시됩니다.</p>
         </div>
         <div className="b2b-modal-foot">
           <div />
@@ -840,9 +839,6 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
                 <input type="date" className="b2b-input" value={data.end_date || ""} onChange={(e) => set("end_date", e.target.value)} /></label>
             </div>
           )}
-          {datesSupported && (data.start_date || data.end_date) ? (
-            <p className="sm-faint crm-field-hint">기준일 필터에서 이 기간 안의 날짜에만 표시됩니다. 비우면 상시.</p>
-          ) : null}
           <label className="b2b-field"><span className="b2b-field-label">상세 설명</span>
             <textarea className="b2b-textarea" value={data.detail} onChange={(e) => set("detail", e.target.value)} rows={2} placeholder="어떤 메시지인지·자동화 여부 등" /></label>
           <label className="b2b-field"><span className="b2b-field-label">메시지 내용</span>
@@ -853,13 +849,13 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
           <div className="b2b-field-row">
             <label className="b2b-field"><span className="b2b-field-label">링크 (선택)</span>
               <input className="b2b-input" value={data.links.url || ""} onChange={(e) => setLink("url", e.target.value)} placeholder="https:// — 메시지 버튼/랜딩 URL 1개" spellCheck={false} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인 (GA 성과 연동)</span>
+            <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인</span>
               <input className="b2b-input" value={data.links.utm_campaign || ""} onChange={(e) => setLink("utm_campaign", e.target.value)}
                 placeholder="예: crm_60d_winback" spellCheck={false} /></label>
           </div>
-          <span className="sm-faint crm-field-hint">UTM 캠페인은 UTM 만들기에서 쓴 캠페인명과 똑같이 — GA 세션·구매·매출이 카드에 자동 표시됩니다.</span>
+          <span className="sm-faint crm-field-hint">UTM 캠페인은 UTM 만들기의 캠페인명과 똑같이 입력</span>
           <label className="sm-row sm-gap-2 crm-active-check">
-            <input type="checkbox" checked={data.active} onChange={(e) => set("active", e.target.checked)} /> 목록에 표시(체크 해제 시 숨김)
+            <input type="checkbox" checked={data.active} onChange={(e) => set("active", e.target.checked)} /> 목록에 표시
           </label>
         </div>
         <div className="b2b-modal-foot">

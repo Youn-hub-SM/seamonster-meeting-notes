@@ -53,14 +53,13 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
       </div>
       {noPriceQty > 0 && (
         <div className="sm-warn" style={{ marginBottom: 10 }}>
-          단가를 적지 않은 입고가 <strong>{noPriceQty.toLocaleString()}개</strong> 있습니다 — 그만큼 0원으로 계산돼 매입가가 실제보다 낮게 나옵니다.
-          아래 표에서 <strong>매입가에 * 표시</strong>된 품목의 입고 기록을 확인해 단가를 채워 주세요.
+          단가를 적지 않은 입고가 <strong>{noPriceQty.toLocaleString()}개</strong> 있습니다(매입가 * 표시) — 그만큼 0원으로 계산돼 매입가가 실제보다 낮게 나옵니다.
         </div>
       )}
       {zeroReturnItems.length > 0 && (
         <div className="sm-warn" style={{ marginBottom: 10 }}>
           반품 단가도 마스터 매입단가도 없어 <strong>0원으로 계산된 반품</strong>이 있습니다:{" "}
-          {zeroReturnItems.map((i) => i.name).join(", ")} — 반품 기록에 단가를 적거나 상품 마스터의 매입단가를 채워 주세요.
+          {zeroReturnItems.map((i) => i.name).join(", ")}
         </div>
       )}
       <div className="b2b-table-wrap">
@@ -104,11 +103,8 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
         </table>
       </div>
       <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.7 }}>
-        ※ 매입가 = 가중평균 매입단가(1원 미만 반올림) — 단가가 여러 번이었으면 매입가 × 수량이 총 매입금액과 몇 원 어긋날 수 있습니다. 금액은 실제 매입액 기준입니다. 매입가 옆 *는 단가 미입력 입고가 섞였다는 표시입니다.<br />
-        ※ 결산 기준: 그 달에 소매로 실제 입고 완료된 것만 셉니다 — 재고 이동(내부 이동, 양방향)과 '대기' 상태 입고, 도매 채널 입고는 제외.<br />
-        ※ 총 매입금액 = 실제 매입액 − 반품액(반품수량 × 매입가, 반품 단가를 적었으면 그 단가) — 과세·면세 모두 <strong>공급가액 기준(부가세 미포함)</strong>이며, 부가세는 위 요약의 과세품목 세액에만 붙습니다. 합계는 열마다 그 열을 더한 값입니다.<br />
-        ※ 반품은 재고를 건드리지 않습니다 — 물건이 실제로 빠지는 처리는 재고목록에서 따로 합니다.<br />
-        ※ 그 달 매입이 없는 품목의 반품(교차월 반품)도 품목 행으로 추가돼 차감됩니다 — 단가는 반품 단가, 없으면 그 달 매입가, 그것도 없으면 상품 마스터의 매입단가 순으로 매깁니다.
+        ※ 결산 기준: 그 달 소매 입고 완료분(재고 이동·'대기' 입고·도매 입고 제외) · 금액은 <strong>공급가액(부가세 미포함)</strong><br />
+        ※ 매입가 = 가중평균 매입단가(반올림, *는 단가 미입력 포함) · 총 매입금액 = 실제 매입액 − 반품수량 × 반품 단가(없으면 매입가)
       </p>
     </section>
   );

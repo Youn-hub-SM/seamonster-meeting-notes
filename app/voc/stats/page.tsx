@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { VOC_CATEGORIES, VOC_STATUS_COLOR, VOC_FAULT_COLOR, type Voc } from "@/app/lib/voc";
 import { Donut, PieCard, StackedBar, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 
@@ -202,7 +201,7 @@ export default function VocStatsPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty">아직 집계할 VOC가 없습니다. <Link href="/voc" className="sm-link">처리 상태</Link>에서 먼저 등록하세요.</div>
+        <div className="b2b-empty">아직 집계할 VOC가 없습니다.</div>
       ) : (
         <>
           <section className="b2b-card sm-stat-hero" style={{ marginBottom: 16 }}>
@@ -259,7 +258,6 @@ export default function VocStatsPage() {
                     </span>
                   ))}
                 </div>
-                <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>분류·측정·기간을 바꿔 여러 관점으로 관찰하세요. 막대에 올리면 기간·항목별 값이 표시됩니다.</p>
               </>
             )}
           </section>
@@ -280,7 +278,7 @@ export default function VocStatsPage() {
 
           {/* 상세 내역 — 보고서용 전체 목록 */}
           <section className="b2b-card" style={{ marginTop: 14 }}>
-            <div className="b2b-card-head"><span className="b2b-card-title">상세 내역 ({shown.length}건)</span></div>
+            <div className="b2b-card-head"><span className="b2b-card-title">상세 내역</span></div>
             <div className="b2b-table-wrap">
               <table className="b2b-table">
                 <thead><tr><th>접수일</th><th>구매자</th><th>유형</th><th>내용</th><th>처리내용</th><th className="num">손해(원)</th><th>상태</th></tr></thead>

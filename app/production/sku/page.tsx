@@ -112,9 +112,6 @@ export default function SkuGeneratorPage() {
                 placeholder={sp?.retailMid || "K"}
                 style={{ textTransform: "uppercase" }}
               />
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)", marginTop: 4 }}>
-                산지/가공 코드로 추정 — 비우면 어종 기본값 사용
-              </span>
             </div>
           )}
           {!usingCustom && !line.needsCut && lineKey !== "retail100" && (

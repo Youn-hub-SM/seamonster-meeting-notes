@@ -82,7 +82,7 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
           <button className="b2b-btn-primary" onClick={() => generate()} disabled={busy !== ""}>{busy === "gen" ? "생성 중..." : "미리보기 생성"}</button>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
-          {mode === "daily" ? "일일: 기준일(일요일이면 금~일) 실적 + 누적·채널·Top10." : "주간: 기준일이 속한 주(월~일) 합산 + 전주 대비."} 데이터 최신일 {maxDate || "-"}.
+          {mode === "daily" ? "일요일 기준일은 금~일 합산" : "기준일이 속한 주(월~일) 합산"} · 데이터 최신일 {maxDate || "-"}
         </p>
       </section>
 
@@ -109,7 +109,6 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
               <input value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="예: ceo@seamonster.kr, sales@seamonster.kr" className="b2b-input" style={{ flex: 1, minWidth: 240 }} />
               <button className="b2b-btn-primary" onClick={send} disabled={busy !== ""}>{busy === "send" ? "발송 중..." : "메일 발송"}</button>
             </div>
-            <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>첫 발송은 수신자 칸에 본인 주소만 넣어 1통 확인을 권장합니다. 발송 시 발송 이력에 기록됩니다.</p>
           </div>
         </section>
       )}

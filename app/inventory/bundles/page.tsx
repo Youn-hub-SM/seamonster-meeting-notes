@@ -84,7 +84,7 @@ export default function BundlesPage() {
       {error && <div className="b2b-error">{error}{(error.includes("product_bundles") || error.includes("relation")) ? " — supabase/migrations/037_product_bundles.sql 를 먼저 적용하세요." : ""}</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : bundles.length === 0 ? (
-        <div className="b2b-empty">등록된 묶음이 없습니다. 위 <strong>엑셀 양식</strong>을 받아 채운 뒤 <strong>엑셀 업로드</strong>하세요.</div>
+        <div className="b2b-empty">등록된 묶음이 없습니다.</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -212,7 +212,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
         <div className="b2b-modal-body">
           {/* ── 판매담당 입력 구역 — 묶음 정보·구성품·가격 ── */}
           <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 묶음 정보 · 구성품 · 가격</span></div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">묶음 SKU(코드)</label>
               <input className="b2b-input" value={parentSku} onChange={(e) => setParentSku(e.target.value)} placeholder="예: SET-DG-100" /></div>
@@ -241,7 +241,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
 
           {/* ── 생산담당 입력 구역 — 택배 발주 정보 ── */}
           <div style={{ background: "var(--sm-orange-light)", borderRadius: 10, padding: "12px 14px" }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력 <span style={{ fontWeight: 500, color: "var(--sm-text-mid)" }}>· 택배 발주(CNplus) — 발주파일 품목명·박스타입/운임 계산</span></div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력</div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">택배 상품명</label>
               <input className="b2b-input" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="예: 진공 씨몬스터 참돔순살 100g×3" /></div>

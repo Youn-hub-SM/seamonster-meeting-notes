@@ -305,7 +305,7 @@ export default function VocPage() {
           <div className="sm-row" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>기준 월
               <input className="b2b-input" type="month" value={month} max={TODAY().slice(0, 7)} onChange={(e) => { setMonth(e.target.value); setExpandedCat(null); }} style={{ width: "auto" }} /></label>
-            <span className="sm-faint" style={{ fontSize: 12 }}>발생 {board.reduce((s, b) => s + b.monthRows.length, 0)}건 · 유형 상태는 여기서, 개선 작업은 아사나에서</span>
+            <span className="sm-faint" style={{ fontSize: 12 }}>발생 {board.reduce((s, b) => s + b.monthRows.length, 0)}건</span>
             <button className="b2b-btn-secondary" style={{ marginLeft: "auto" }} onClick={() => setCatModal(true)}>유형 관리</button>
           </div>
 
@@ -371,7 +371,7 @@ export default function VocPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : shown.length === 0 ? (
-        <div className="b2b-empty">{rows.length === 0 ? "아직 등록된 VOC가 없습니다. '+ VOC 추가'로 시작하세요." : "조건에 맞는 VOC가 없습니다."}</div>
+        <div className="b2b-empty">{rows.length === 0 ? "아직 등록된 VOC가 없습니다." : "조건에 맞는 VOC가 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table">
@@ -433,7 +433,7 @@ export default function VocPage() {
                 <span>등록 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
-              {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>등록할 행이 없습니다. 양식을 확인하세요.</div>}
+              {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>등록할 행이 없습니다.</div>}
               {preview.rows.length > 0 && (
                 <div className="b2b-table-wrap" style={{ maxHeight: 340, overflow: "auto", marginBottom: 12 }}>
                   <table className="b2b-table">
@@ -478,7 +478,7 @@ export default function VocPage() {
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580 }}>
             <div className="b2b-modal-head">
-              <span className="b2b-modal-title">{edit.id ? "VOC 수정" : "VOC 추가 (직접 입력)"}</span>
+              <span className="b2b-modal-title">{edit.id ? "VOC 수정" : "VOC 추가"}</span>
               <button className="b2b-modal-close" onClick={() => setEdit(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
@@ -534,10 +534,10 @@ export default function VocPage() {
                     {(cats.length ? cats.filter((c) => c.active || c.name === edit.category).map((c) => c.name) : [...VOC_CATEGORIES]).map((c) => <option key={c}>{c}</option>)}
                     {cats.length > 0 && !cats.some((c) => c.name === edit.category) && <option value={edit.category}>{edit.category}</option>}
                   </select></label>
-                <label className="b2b-field"><span className="b2b-field-label">손해 귀책 <span className="sm-faint" style={{ fontWeight: 400 }}>· 정산 분리용</span></span>
+                <label className="b2b-field"><span className="b2b-field-label">손해 귀책</span>
                   <select className="b2b-input" value={edit.fault} onChange={(e) => setF("fault", e.target.value)}>{VOC_FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
               </div>
-              <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 8px" }}>제조사 = 청구 가능 · 물류/자사 = 자사 부담 · 개선 진행 상태는 유형별 현황판에서 관리합니다</p>
+              <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 8px" }}>제조사 = 청구 가능 · 물류/자사 = 자사 부담</p>
               <label className="b2b-field"><span className="b2b-field-label">상세내용 <span className="req">*</span></span>
                 <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} placeholder="고객이 말한 내용" /></label>
               <label className="b2b-field"><span className="b2b-field-label">원인</span>
@@ -734,7 +734,7 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
           ) : (
             <button className="b2b-btn-secondary" disabled={!managed} onClick={() => setDraft({ name: "", fault: "미분류", sort: String(cats.length + 1), active: true })}>+ 유형 추가</button>
           )}
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>이름을 바꾸면 기존 VOC 의 유형도 함께 바뀝니다. 삭제는 사용 중이면 비활성(새 등록에서만 숨김)으로 처리됩니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>이름을 바꾸면 기존 VOC 의 유형도 함께 바뀝니다</p>
         </div>
         <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right"><button className="b2b-btn-secondary" onClick={onClose}>닫기</button></div></div>
       </div>

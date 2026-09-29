@@ -133,7 +133,7 @@ export default function CompaniesPage() {
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
             {companies.length === 0
-              ? "등록된 업체가 없습니다. 우측 상단 [+ 업체 추가] 를 눌러 시작하세요."
+              ? "등록된 업체가 없습니다."
               : "검색 결과가 없습니다."}
           </div>
         ) : (
@@ -385,7 +385,7 @@ function CompanyModal({
               )}
             </div>
             <div style={{ fontSize: 12, color: "var(--sm-text-light)", marginTop: 6 }}>
-              이미지·PDF(최대 5MB)를 올리면 상호·사업자번호·대표자·주소를 자동으로 채웁니다. 값은 확인 후 저장하세요.
+              이미지·PDF · 최대 5MB
             </div>
             {scanMsg && (
               <div style={{ fontSize: 12, marginTop: 8, color: scanMsg.startsWith("✓") ? "var(--sm-success)" : "var(--sm-danger)" }}>{scanMsg}</div>
@@ -396,7 +396,7 @@ function CompanyModal({
           {docUrl && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 6 }}>
-                첨부 원본 — 노란 칸을 이 원본과 대조해 확인하세요
+                첨부 원본
               </div>
               {docKind === "image" ? (
                 <img
@@ -448,7 +448,7 @@ function CompanyModal({
           {(bizCheck === "invalid" || dupCompany) && (
             <div style={{ marginTop: -6, marginBottom: 12, fontSize: 12, display: "flex", flexDirection: "column", gap: 3 }}>
               {bizCheck === "invalid" && (
-                <div style={{ color: "var(--sm-danger)" }}>사업자등록번호 검증에 실패했습니다 — 숫자를 잘못 읽었을 수 있어요. 원본과 대조해 확인하세요.</div>
+                <div style={{ color: "var(--sm-danger)" }}>사업자등록번호 검증에 실패했습니다 — 원본과 대조해 확인하세요.</div>
               )}
               {dupCompany && (
                 <div style={{ color: "var(--sm-warning)" }}>이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>

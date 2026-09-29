@@ -96,7 +96,7 @@ export default function SkuListingsPage() {
       const j: Result = await r.json();
       if (seq !== seqRef.current) return; // 그 사이 다른 상품을 골랐다 — 이 응답은 버린다
       if (!j.ok) setErr(j.error || "조회 실패");
-      else { setRes(j); fetchLastSynced(); } // 상단 '마지막 동기화'도 같은 시점으로 — 캡션과 어긋나지 않게
+      else { setRes(j); fetchLastSynced(); } // 상단 '마지막 동기화'도 같은 시점으로
     } catch (e) { if (seq === seqRef.current) setErr((e as Error).message); }
     finally { if (seq === seqRef.current) setBusy(false); }
   }
@@ -225,19 +225,6 @@ export default function SkuListingsPage() {
     return { visible: all.filter((r) => !isHidden(r)), hidden: all.filter(isHidden) };
   }, [res]);
 
-  // 채널별 마지막 동기화 시각(검색 결과 기준) — 캡션 표시 + '동기화 이전에 끝난 명령 상태' 숨김 판정에 사용
-  const syncedByChannel = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const c of res?.catalog ?? []) {
-      const prev = m.get(c.channel);
-      if (c.synced_at && (!prev || c.synced_at > prev)) m.set(c.channel, c.synced_at);
-    }
-    return m;
-  }, [res]);
-  const syncedSummary = useMemo(() =>
-    [...syncedByChannel.entries()].map(([ch, d]) => `${CATALOG_TITLE[ch] || ch} ${kstStamp(d)}`).join(" · "),
-  [syncedByChannel]);
-
   // ── 채널 재고 명령(수량 적용, 0 = 품절) — 중계 서버 데몬이 10초 폴링으로 실행 ──
   const [cmdQty, setCmdQty] = useState<Record<string, string>>({});
   const [cmdMap, setCmdMap] = useState<Record<string, ChannelCommand>>({});
@@ -326,7 +313,6 @@ export default function SkuListingsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">SKU로 재고 조정</h1>
-          <p className="b2b-page-subtitle">매출 기준(최근 1년) + 네이버·쿠팡·공식몰은 API 등록 카탈로그로 전체 확인</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={refreshAll} disabled={busy}
@@ -364,7 +350,7 @@ export default function SkuListingsPage() {
         </div>
         {res?.target && (res.bundles?.length ?? 0) > 0 && (
           <p className="sm-faint" style={{ margin: "8px 0 0", fontSize: 13 }}>
-            이 상품이 들어간 묶음 {res.bundles!.map((b) => b.sku).join(", ")} 의 리스팅도 함께 나옵니다
+            묶음 포함: {res.bundles!.map((b) => b.sku).join(", ")}
           </p>
         )}
       </section>
@@ -377,12 +363,9 @@ export default function SkuListingsPage() {
           <section className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head">
               <span className="b2b-card-title">채널 등록 카탈로그</span>
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                {catalogRows.visible.length}건{syncedSummary ? ` · 동기화 ${syncedSummary}` : ""}
-              </span>
             </div>
             <p className="sm-faint" style={{ margin: "0 0 8px", fontSize: 12 }}>
-              수량 적용(0 = 품절)은 보통 10초 안에 채널에 반영됩니다 (카탈로그 동기화와 겹치면 수 분 걸릴 수 있음)
+              수량 0 = 품절 처리
             </p>
             <div className="b2b-table-wrap">
               <table className="b2b-table is-responsive" style={{ tableLayout: "fixed", width: "100%" }}>
@@ -496,7 +479,7 @@ export default function SkuListingsPage() {
             <div className="b2b-card-head">
               <span className="b2b-card-title">{g.channel}</span>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                리스팅 {g.fresh.length + g.stale.length}개 · 30일 {g.qty30.toLocaleString()}개 판매
+                30일 {g.qty30.toLocaleString()}개 판매
               </span>
             </div>
             <ListingTable rows={g.fresh} copied={copied} onCopy={copyName} />

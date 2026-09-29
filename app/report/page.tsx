@@ -28,7 +28,7 @@ function fillVars(sql: string, values: Record<string, string>): string {
 // 질문 조립 도우미 — 칸을 클릭하면 자연스러운 질문 문장이 만들어져 질문칸에 채워짐.
 const COMPOSER_FACETS = [
   { key: "period", label: "기간", opts: ["오늘", "이번 주", "이번 달", "지난 달", "최근 7일", "최근 30일", "올해", "작년"] },
-  { key: "dim", label: "무엇을 기준으로", opts: ["채널별", "상품별", "상품군별", "고객별", "지역별", "월별"] },
+  { key: "dim", label: "기준", opts: ["채널별", "상품별", "상품군별", "고객별", "지역별", "월별"] },
   { key: "metric", label: "지표", opts: ["매출", "판매수량", "주문수", "객단가", "신규·재구매 고객수", "재구매율", "재고 현황"] },
   { key: "scope", label: "범위·정렬", opts: ["상위 10개", "상위 20개", "많은 순", "적은 순", "전체"] },
 ] as const;
@@ -49,7 +49,6 @@ function QuestionComposer({ disabled, onCompose }: { disabled: boolean; onCompos
     <div className="rp-compose">
       <button className="rp-compose-head" onClick={() => setOpen((v) => !v)}>
         <span>{open ? "▾" : "▸"} 질문 만들기 도우미</span>
-        <span className="rp-compose-hint">칸을 눌러 조합하면 아래 질문칸에 자동으로 채워집니다. 직접 고쳐 써도 돼요.</span>
       </button>
       {open && (
         <div className="rp-compose-body">
@@ -171,7 +170,7 @@ export default function ReportPage() {
           <div className="rp-saved-bar">
             <button className="rp-saved-toggle" onClick={() => setSavedOpen((v) => !v)}>
               <span className="rp-saved-chev">{savedOpen ? "▾" : "▸"}</span>
-              저장된 리포트 <span className="rp-saved-count">{filteredSaved.length}개{savedFilter === "mine" && me ? " · 내 저장" : ""}</span>
+              저장된 리포트
             </button>
             {savedOpen && me && (
               <div className="sm-tabs">
@@ -181,7 +180,7 @@ export default function ReportPage() {
             )}
           </div>
           {savedOpen && (filteredSaved.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 리포트가 없습니다. ‘전체’로 바꿔보세요." : "저장된 리포트가 없습니다."}</div>
+            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 리포트가 없습니다." : "저장된 리포트가 없습니다."}</div>
           ) : (
             <div className="rp-saved-list">
               {filteredSaved.map((s) => (
@@ -229,7 +228,7 @@ export default function ReportPage() {
       {/* 저장 리포트 변수 입력 */}
       {varForm && (
         <section className="b2b-card" style={{ marginBottom: 14 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">▶ {varForm.rep.name} <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>· 값을 채우고 실행</span></span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title">▶ {varForm.rep.name}</span></div>
           <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
             {Object.keys(varForm.values).map((v) => (
               <label key={v} className="sm-col" style={{ gap: 3, fontSize: 15 }}>
@@ -288,7 +287,7 @@ export default function ReportPage() {
           {plan.looker && plan.looker.mode !== "na" && plan.looker.sql && (
             <section className="b2b-card">
               <div className="b2b-card-head">
-                <span className="b2b-card-title">루커스튜디오용 SQL <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>{plan.looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리로 붙여넣기"}</span></span>
+                <span className="b2b-card-title">루커스튜디오용 SQL <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>{plan.looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리"}</span></span>
                 <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => copy(plan.looker.sql || "", "looker")}>{copied === "looker" ? "복사됨 ✓" : "복사"}</button>
               </div>
               {plan.looker.note && <p className="sm-faint" style={{ fontSize: 15, marginBottom: 8 }}>{plan.looker.note}</p>}
@@ -318,7 +317,7 @@ export default function ReportPage() {
               <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 월별 채널 매출" />
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>SQL <span className="sm-faint" style={{ fontWeight: 400 }}>— 값을 <code>{"{{이름}}"}</code> 으로 바꾸면 재사용 때 그 값만 입력받습니다 (예: <code>order_month = {"{{월}}"}</code>)</span></span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>SQL <span className="sm-faint" style={{ fontWeight: 400 }}>— <code>{"{{이름}}"}</code> = 실행 때 입력받는 값</span></span>
               <textarea className="b2b-input" style={{ minHeight: 120, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 15 }} value={saveSql} onChange={(e) => setSaveSql(e.target.value)} />
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
@@ -337,7 +336,6 @@ export default function ReportPage() {
         </button>
         {guideOpen && (
           <div className="rp-guide-body">
-            <p className="rp-guide-lead">위 <b>「루커스튜디오용 SQL」</b>은 두 종류로 나와요. 카드에 <b>커스텀 쿼리</b>라고 적혀 있으면 A, <b>뷰 생성</b>이면 B를 따르세요.</p>
             <div className="rp-guide-block">
               <div className="rp-guide-title">A. 커스텀 쿼리 <span className="rp-guide-tag ok">Supabase 작업 불필요</span></div>
               <ol className="rp-guide-steps">
@@ -354,7 +352,6 @@ export default function ReportPage() {
                 <li>루커스튜디오 → <b>데이터 추가</b> → 아래 접속정보 → <b>테이블 목록에서 새 뷰 선택</b><br /><span className="sm-faint">(이미 데이터소스가 있으면: 데이터소스 편집 → 우측 상단 <b>필드 새로고침</b>)</span></li>
                 <li>차트에 연결</li>
               </ol>
-              <p className="rp-guide-note">루커는 읽기전용 <code>looker_ro</code> 계정이라 <b>뷰를 스스로 못 만들어요.</b> 그래서 새 데이터가 필요하면 이렇게 한 번만 Supabase에 만들어줘야 합니다.</p>
             </div>
             <div className="rp-guide-block">
               <div className="rp-guide-title">PostgreSQL 접속정보 (커넥터 최초 연결 시)</div>
@@ -368,7 +365,6 @@ export default function ReportPage() {
                   <tr><td>SSL</td><td>사용 (Enable SSL)</td></tr>
                 </tbody>
               </table>
-              <p className="sm-faint" style={{ fontSize: 15, marginTop: 6 }}>* 이미 매출 대시보드를 만들며 연결해둔 그 데이터소스와 <b>같은 접속정보</b>입니다. 새로 연결할 때만 필요해요.</p>
             </div>
             <div className="rp-guide-block">
               <div className="rp-guide-title">자주 겪는 것</div>

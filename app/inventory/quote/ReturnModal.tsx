@@ -151,6 +151,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             <button className={`sm-tab ${mode === "직접" ? "is-active" : ""}`} onClick={() => switchMode("직접")}>직접 입력</button>
             <button className={`sm-tab ${mode === "엑셀" ? "is-active" : ""}`} onClick={() => switchMode("엑셀")}>엑셀 업로드</button>
           </div>
+          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>반품은 <strong>재고를 건드리지 않습니다</strong> — 매입 결산의 매입수량만 깎습니다.</p>
 
           {mode === "엑셀" ? (
             preview ? (
@@ -162,7 +163,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.errCount}건(제외)</span>}
                 </div>
                 {preview.rows.length === 0 ? (
-                  <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. 양식을 확인하세요.</div>
+                  <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다.</div>
                 ) : (
                   <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
                     <table className="b2b-table" style={{ fontSize: 15 }}>
@@ -196,18 +197,12 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                 <div className="b2b-field-row">
                   <label className="b2b-field"><span className="b2b-field-label">반품일 <span className="sm-faint" style={{ fontWeight: 400 }}>· 파일 전체</span></span>
                     <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-                  <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="sm-faint" style={{ fontWeight: 400 }}>· 선택</span></span>
+                  <label className="b2b-field"><span className="b2b-field-label">제조사</span>
                     <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
                 </div>
-                <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
-                  양식에는 <strong>{y}년 {mm}월에 매입한 품목</strong>의 SKU·품목명·매입수량이 채워져 있습니다 —
-                  {" "}<strong>반품수량</strong> 칸만 적으면 되고, 비워 둔 줄은 건너뜁니다.
-                  단가를 비우면 그 달 매입가로 계산합니다.
-                  그 달 매입이 없는 품목도 SKU 를 적은 행을 추가하면 반품됩니다(결산에 행이 추가돼 차감).
-                  <br />반품은 <strong>재고를 건드리지 않습니다</strong> — 매입 결산의 매입수량만 깎습니다.
-                  {" · "}<a href={`/api/inventory/returns/template?month=${month}`} className="sm-link">양식 다운로드</a>
+                <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>
+                  <a href={`/api/inventory/returns/template?month=${month}`} className="sm-link">양식 다운로드</a>
                 </p>
-                <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>준비되면 아래 <strong>‘엑셀 파일 선택’</strong>을 누르세요.</p>
               </div>
             )
           ) : (
@@ -225,7 +220,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
               {product && (
                 <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>
                   {product.qty > 0 ? <>{mm}월 매입 <strong>{product.qty.toLocaleString()}</strong></>
-                    : <>{mm}월 매입 없음 — 반품하면 결산 품목표에 행이 추가돼 차감됩니다(교차월 반품)</>}
+                    : <>{mm}월 매입 없음</>}
                   {alreadyReturned > 0 && <> · 이미 반품 <strong style={{ color: "var(--sm-danger)" }}>{alreadyReturned.toLocaleString()}</strong></>}
                 </p>
               )}

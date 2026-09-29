@@ -6,7 +6,6 @@
 //    인쇄 미리보기에 붙고, Word 다운로드에도 같은 내용이 텍스트 섹션으로 들어간다.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { buildManufacturerReport } from "@/app/lib/voc-manufacturer";
 import type { Voc } from "@/app/lib/voc";
 
@@ -193,10 +192,9 @@ export default function VocManufacturerPage() {
           <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="수신 제조사명 (선택 · 문서에 표기)" style={{ width: 220 }} />
           <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
           <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "AI 작성 중..." : draft ? "다시 생성" : "AI 초안 생성"}</button>
-          {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건 · 설문 {counts.surveys}건 반영</span>}
+          {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건(설문 소스 제외) · 설문 {counts.surveys}건 반영</span>}
           {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("저장 실패") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>※ 클레임(VOC)·설문(Tally)을 긍정/부정·제품별로 정리합니다(리뷰 섹션 제외). 클레임 건수는 설문 소스를 뺀 값입니다. 생성·편집하면 자동 저장되어 다시 열면 그대로 이어집니다. 손해 청구(제조사 귀책) 정리가 문서 끝에 항상 붙고, 제조사명은 수신 표기에 쓰입니다.</p>
       </section>
 
       {/* 편집 (화면 전용) */}
@@ -282,12 +280,8 @@ export default function VocManufacturerPage() {
           )}
         </section>
       ) : (
-        !loading && <div className="b2b-empty no-print">대상 월을 고르고 ‘AI 초안 생성’을 누르세요. 이전에 만든 달은 저장본이 자동으로 열립니다.</div>
+        !loading && <div className="b2b-empty no-print">생성된 초안이 없습니다.</div>
       )}
-
-      <p className="sm-faint no-print" style={{ fontSize: 12, marginTop: 12 }}>
-        기간 단위 개선요청서는 <Link href="/voc/reports" className="sm-link">개선요청서</Link>, 전체 통계는 <Link href="/voc/stats" className="sm-link">통계</Link>에서.
-      </p>
     </div>
   );
 }

@@ -301,7 +301,7 @@ export default function DeliveryLogPage() {
         <input type="date" className="b2b-input" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(""); }} style={{ width: "auto" }} />
         <span style={{ color: "var(--sm-text-light)" }}>~</span>
         <input type="date" className="b2b-input" value={to} onChange={(e) => { setTo(e.target.value); setPreset(""); }} style={{ width: "auto" }} />
-        <span className="sm-faint" style={{ fontSize: 12 }}>{range.from} ~ {range.to} · {rows.length}일</span>
+        <span className="sm-faint" style={{ fontSize: 12 }}>{range.from} ~ {range.to}</span>
       </div>
 
       {error && <div className="b2b-error">{error}{error.includes("055") ? " — supabase/migrations/055_delivery_log.sql 를 먼저 적용하세요." : ""}</div>}
@@ -315,7 +315,7 @@ export default function DeliveryLogPage() {
 
       <div className="b2b-card">
         {loading ? <div className="b2b-loading">불러오는 중...</div> : rows.length === 0 ? (
-          <div className="b2b-empty">기록이 없습니다. <Link href="/fulfill">발주처리</Link>에서 &lsquo;배송일지에 기록&rsquo;하거나 위 &lsquo;+ 날짜 추가&rsquo;로 시작하세요.</div>
+          <div className="b2b-empty">기록이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ fontSize: 12 }}>
@@ -352,7 +352,7 @@ export default function DeliveryLogPage() {
                             <div className="sm-col" style={{ gap: 12 }}>
                               {/* ① 자동입력 — 발주처리 기록. 수정 불가 */}
                               <div>
-                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>자동입력 <span className="sm-faint" style={{ fontWeight: 400 }}>· 발주처리 기록 — 수정 불가</span></div>
+                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>자동입력</div>
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
                                   <thead><tr><th></th>{CATS_VIEW.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
                                   <tbody>
@@ -441,7 +441,7 @@ export default function DeliveryLogPage() {
                                 )}
                               </div>
                               <div>
-                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부 <span className="sm-faint" style={{ fontWeight: 400 }}>(기본운임은 <strong>자동입력+직접수정에서 자동 계산</strong> · 제주·도서산간 등 추가금만 &lsquo;추가운임&rsquo;에 직접 입력)</span></div>
+                                <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부</div>
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12, maxWidth: 480 }}>
                                   <thead><tr><th>채널</th><th className="num">기본운임 <span className="sm-faint" style={{ fontWeight: 400 }}>(자동)</span></th><th className="num">추가운임</th><th className="num">합계</th></tr></thead>
                                   <tbody>
@@ -477,7 +477,7 @@ export default function DeliveryLogPage() {
                                 </table>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))}(제주 등 수동) = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
+                                <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))} = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
                                 <span className="sm-faint">파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
                                 <span className="sm-faint">드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
@@ -529,7 +529,7 @@ export default function DeliveryLogPage() {
                 </label>
               </div>
               <label className="sm-col" style={{ gap: 3, fontSize: 15 }}>
-                <span style={{ fontWeight: 600 }}>내용 <span className="sm-faint" style={{ fontWeight: 400 }}>— 왜 보정하는지</span></span>
+                <span style={{ fontWeight: 600 }}>내용</span>
                 <input className="b2b-input" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="예: CS 재발송 1건 / 발주 누락 보정" autoFocus
                   onKeyDown={(e) => { if (e.key === "Enter") addEntry(); }} />
               </label>

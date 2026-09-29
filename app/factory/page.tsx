@@ -396,7 +396,6 @@ function LotModal({ lot, warehouses, onClose, onDone, onError }: {
             <label className="b2b-field" style={{ flex: 1 }}><span className="b2b-field-label">메모</span>
               <input className="b2b-input" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></label>
           </div>
-          {editing && <p className="sm-faint" style={{ fontSize: 12 }}>수량은 여기서 바꾸지 않습니다 — 출고·조정으로 움직입니다.</p>}
         </div>
         <div className="b2b-modal-foot b2b-modal-foot-right">
           <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>
@@ -457,7 +456,7 @@ function TxnModal({ lot, onClose, onDone, onError }: {
             )}
           </div>
           {type === "생산투입" && <p className="sm-faint" style={{ fontSize: 12 }}>행선지는 {SITE_DEST}으로 기록됩니다.</p>}
-          {type === "조정" && <p className="sm-faint" style={{ fontSize: 12 }}>실물과 장부가 다를 때만 씁니다. 줄이려면 음수로 넣습니다.</p>}
+          {type === "조정" && <p className="sm-faint" style={{ fontSize: 12 }}>줄이려면 음수로 넣습니다.</p>}
           <div className="b2b-field-row">
             <label className="b2b-field" style={{ flex: 1 }}><span className="b2b-field-label">메모</span>
               <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
@@ -519,7 +518,6 @@ function MoveModal({ lot, warehouses, onClose, onDone, onError }: {
             <label className="b2b-field" style={{ flex: 1 }}><span className="b2b-field-label">메모</span>
               <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12 }}>보내는 창고에서 줄고 받는 창고에서 늘어납니다. 전체 재고 총량은 변하지 않습니다.</p>
         </div>
         <div className="b2b-modal-foot b2b-modal-foot-right">
           <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>

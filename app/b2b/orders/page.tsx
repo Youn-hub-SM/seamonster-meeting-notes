@@ -277,17 +277,17 @@ export default function OrdersListPage() {
     return [
       ...(overdueShip.length ? [{
         key: "overdue", label: "발송일 지남", rows: overdueShip,
-        hint: "발송완료 처리 또는 일정 변경", tone: "var(--sm-danger)",
+        hint: "", tone: "var(--sm-danger)",
       }] : []),
       {
         key: "ship", label: "오늘 발송", rows: shipToday,
         hint: shipLeft === 0 ? "모두 발송완료" : shipDone.length > 0 ? `${shipDone.length}건 완료 · ${shipLeft}건 남음` : `${shipLeft}건 남음`,
         tone: shipLeft === 0 ? "var(--sm-success)" : "var(--sm-orange)",
       },
-      { key: "unscheduled", label: "발송일정 미등록", rows: unscheduled, hint: "일정 잡아야 함", tone: "var(--sm-warning)" },
+      { key: "unscheduled", label: "발송일정 미등록", rows: unscheduled, hint: "", tone: "var(--sm-warning)" },
       ...(remainOrders.length ? [{
         key: "remain", label: "발송일 미정 잔여", rows: remainOrders,
-        hint: "고객 요청 시 발송일 추가", tone: "var(--sm-warning)",
+        hint: "", tone: "var(--sm-warning)",
       }] : []),
       { key: "invoice", label: "계산서 미발행", rows: needInvoice, hint: "", tone: "var(--sm-info)" },
       { key: "pay", label: "입금 대기", rows: needPay, hint: unpaidTotal > 0 ? `${formatMoney(unpaidTotal)}원` : "", tone: "var(--sm-danger)" },
@@ -1027,17 +1027,7 @@ export default function OrdersListPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
-            {orders.length === 0 ? (
-              <>
-                등록된 발주가 없습니다.
-                <br />
-                <Link href="/b2b/orders/new" style={{ color: "var(--sm-orange)", fontWeight: 600 }}>
-                  + 첫 발주 등록하기
-                </Link>
-              </>
-            ) : (
-              "검색 결과가 없습니다."
-            )}
+            {orders.length === 0 ? "등록된 발주가 없습니다." : "검색 결과가 없습니다."}
           </div>
         ) : view === "calendar" ? (
           <CalendarView orders={filtered} todayIso={today} />
@@ -1469,9 +1459,8 @@ export default function OrdersListPage() {
               <button className="b2b-modal-close" onClick={() => setShipPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
-                나눠 보내면 줄을 추가하세요. 다음 발송일을 아직 모르면 이번에 보낼 수량만 넣고 저장하세요 — 나머지는 ‘N개 남음’으로 표시되고, 고객이 원할 때 이 창에서 줄을 추가합니다.
-                박스 수는 ‘발송요청 양식 다운로드’에서 확정합니다. 저장하면 발주 전량이 가장 이른 발송일에 재고에서 차감됩니다 — ‘대량 발주(선결제)’로 체크한 발주는 ‘도매 대량’ 칸에서, 나머지는 ‘도매’ 칸에서 빠집니다.
+              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>
+                저장하면 발주 전량이 가장 이른 발송일에 재고에서 차감됩니다.
               </p>
               {shipError && <div className="b2b-error" style={{ marginBottom: 10 }}>{shipError}</div>}
               {shipLoading ? (
@@ -1534,7 +1523,7 @@ export default function OrdersListPage() {
                   {shipAlloc.remain.length > 0 && (
                     <div style={{ fontSize: 12, padding: "8px 10px", background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, lineHeight: 1.6 }}>
                       <strong>남은 수량</strong> {shipAlloc.remain.map((x) => `${x.label} ${formatQty(x.qty)}개`).join(" · ")}
-                      <span className="sm-faint" style={{ display: "block" }}>발송일 미정 — 고객이 원할 때 ‘+ 발송 일정 추가’로 넣습니다.</span>
+                      <span className="sm-faint" style={{ display: "block" }}>발송일 미정</span>
                     </div>
                   )}
                   <div>
@@ -1570,12 +1559,7 @@ export default function OrdersListPage() {
             </div>
             <div className="b2b-modal-body">
               <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
-                <strong>{trackingPrompt.label}</strong> 을(를) 발송완료 처리합니다.{" "}
-                {directDelivery
-                  ? "직접 배송 — 송장번호 없이 처리됩니다."
-                  : trackingPrompt.boxCount > 1
-                  ? `${trackingPrompt.boxCount}박스 — 박스별 송장번호를 모두 입력하세요.`
-                  : "송장번호를 입력하세요."}
+                <strong>{trackingPrompt.label}</strong>
               </div>
 
               {/* 수령인 정보 — 발송완료 처리자가 누구에게 보내는지 확인용 */}
@@ -1762,9 +1746,6 @@ function ExportPickModal({
     for (const o of options) for (const sh of o.shipments) if (isPickable(sh)) s.add(sh.id);
     return s;
   });
-  // 분할 발송이 섞여 있을 때만 '차수를 고르라'는 안내를 붙인다.
-  const hasSplit = options.some((o) => o.shipments.length >= 2);
-
   const totalSelected = shipSel.size;
 
   // 실제 포장 박스 수 — 여기서 확정하면 저장되어 송장 출력 행 수·송장 입력칸 수·이익률에 반영된다.
@@ -1789,8 +1770,7 @@ function ExportPickModal({
           <div>
             <h2 className="b2b-modal-title">발송요청 양식 — 실제 포장 박스 수</h2>
             <div style={{ marginTop: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>
-              실제로 포장한 박스 수를 넣으세요. 저장되어 송장 매수와 이익률 배송비의 기준이 됩니다.
-              {hasSplit ? " 나눠 보내는 발주는 이번에 뽑을 차수만 남기세요." : ""}
+              박스 수는 저장되어 송장 매수와 이익률 배송비의 기준이 됩니다.
             </div>
           </div>
           <button className="b2b-modal-close" onClick={onClose}>✕</button>

@@ -89,7 +89,6 @@ export default function CouponPage() {
           {COUPON_CHANNELS.map((c) => (
             <button key={c.key} className="b2b-card" style={{ textAlign: "left", cursor: "pointer", padding: 18 }} onClick={() => pickChannel(c.key)}>
               <div style={{ fontSize: 17, fontWeight: 800 }}>{c.label}</div>
-              <div className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>{c.intro}</div>
               <div style={{ marginTop: 10, color: "var(--sm-orange)", fontWeight: 700, fontSize: 15 }}>시작하기 →</div>
             </button>
           ))}
@@ -114,14 +113,12 @@ export default function CouponPage() {
           {/* 단계 */}
           {cur && (
             <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">{step + 1}. {cur.title}</span>{cur.desc && <span className="sm-faint" style={{ fontSize: 12, marginLeft: 8 }}>{cur.desc}</span>}</div>
-
-              {cur.note && <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", padding: "8px 10px", background: "var(--sm-bg)", borderRadius: 8, lineHeight: 1.5 }}>{cur.note}</p>}
+              <div className="b2b-card-head"><span className="b2b-card-title">{step + 1}. {cur.title}</span></div>
 
               {collapsed ? (
                 <button type="button" className="b2b-btn-secondary" onClick={() => setOpenExtra(true)}>＋ 세부 설정 직접 조정</button>
               ) : visibleFields.length === 0 ? (
-                <p className="sm-faint" style={{ fontSize: 15, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다. <strong>다음</strong>을 누르세요.</p>
+                <p className="sm-faint" style={{ fontSize: 15, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다.</p>
               ) : (
                 visibleFields.map((f) => <FieldView key={f.key} f={f} answers={answers} ch={channel!} required={!!channel && isFieldRequired(f, answers, channel)} set={set} toggle={toggle} setRange={setRange} />)
               )}
@@ -137,7 +134,7 @@ export default function CouponPage() {
           {/* 완료 · 미리보기 · 복사 */}
           {isReview && (
             <section className="b2b-card">
-              <div className="b2b-card-head"><span className="b2b-card-title">요청서 완성 — 복사해서 붙여넣으세요</span></div>
+              <div className="b2b-card-head"><span className="b2b-card-title">요청서 완성</span></div>
               <label className="b2b-field" style={{ maxWidth: 260 }}><span className="b2b-field-label">요청자 이름(선택)</span>
                 <input className="b2b-input" value={requester} onChange={(e) => setRequester(e.target.value)} placeholder="예: 홍길동" /></label>
               <pre style={{ whiteSpace: "pre-wrap", background: "var(--sm-bg)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: 14, fontSize: 15, lineHeight: 1.6, marginTop: 10, fontFamily: "inherit" }}>{text}</pre>

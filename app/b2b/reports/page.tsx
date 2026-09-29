@@ -132,7 +132,7 @@ export default function ReportsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출 집계</h1>
-          <p className="b2b-page-subtitle">발송일 기준 · 발송완료 발주만 집계 (미발송·취소 제외)</p>
+          <p className="b2b-page-subtitle">발송일 기준 · 발송완료 발주만</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
@@ -240,9 +240,6 @@ export default function ReportsPage() {
           <div className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head">
               <h2 className="b2b-card-title">업체별 매출</h2>
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                {report.by_company.length}개 업체
-              </span>
             </div>
             {report.by_company.length === 0 ? (
               <div className="b2b-empty">이 기간에 발송완료된 발주가 없습니다.</div>
@@ -280,9 +277,6 @@ export default function ReportsPage() {
           <div className="b2b-card">
             <div className="b2b-card-head">
               <h2 className="b2b-card-title">제품별 매출</h2>
-              <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                {report.by_product.length}개 품목
-              </span>
             </div>
             {report.by_product.length === 0 ? (
               <div className="b2b-empty">이 기간에 발송완료된 발주가 없습니다.</div>

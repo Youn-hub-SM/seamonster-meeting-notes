@@ -63,7 +63,7 @@ export default function SettingsEtcPage() {
       {/* 거래명세표 — 공급자 정보 + 직인 */}
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">거래명세표 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 공급자(우리 회사) 정보 · 발주 목록의 &lsquo;명세표&rsquo;에서 사용</span></h2>
+          <h2 className="b2b-card-title">거래명세표</h2>
           <button className="b2b-btn-primary" onClick={saveSupplier} disabled={supSaving}>{supSaving ? "저장 중..." : "저장"}</button>
         </div>
         {supMsg && <div className={supMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{supMsg.text}</div>}
@@ -82,7 +82,7 @@ export default function SettingsEtcPage() {
             <input className="b2b-input" value={sup.biz_type} onChange={(e) => setSup({ ...sup, biz_type: e.target.value })} placeholder="예: 도소매" /></label>
           <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>종목</span>
             <input className="b2b-input" value={sup.biz_item} onChange={(e) => setSup({ ...sup, biz_item: e.target.value })} placeholder="예: 수산물" /></label>
-          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>입금 은행정보 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 명세표 하단에 표시</span></span>
+          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>입금 은행정보</span>
             <input className="b2b-input" value={sup.bank} onChange={(e) => setSup({ ...sup, bank: e.target.value })} placeholder="예: 국민은행 000000-00-000000 (예금주: 씨몬스터)" /></label>
         </div>
         <div className="sm-row" style={{ gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
@@ -94,7 +94,7 @@ export default function SettingsEtcPage() {
               <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setStamp("")}>직인 제거</button>
             </>
           ) : (
-            <span className="sm-faint" style={{ fontSize: 12 }}>배경이 투명한 PNG(500KB 이하)를 올리면 명세표 공급자란에 자동으로 찍힙니다.</span>
+            <span className="sm-faint" style={{ fontSize: 12 }}>투명 배경 PNG · 500KB 이하</span>
           )}
         </div>
       </section>
@@ -103,14 +103,13 @@ export default function SettingsEtcPage() {
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">권장생산 목표 기간</h2></div>
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 10px", lineHeight: 1.6 }}>
-          생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8. 요청서는 매주 수요일에 냅니다.
+          생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8
         </p>
         {sched && <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
           <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {sched.nextDraft.slice(5)} 요청분 판매 가능일 {sched.nextSellable.slice(5)})</li>
           <li><strong>부족</strong> = 현재고 + 입고 예정이 하루 출고 × <strong>{sched.leadDays}일</strong> (오늘 → 오늘 요청분 판매 가능일 {sched.sellable.slice(5)}) 미만</li>
           <li><strong>권장생산</strong> = 소매 모자란 양 + 도매 모자란 양 − 입고 예정 (모자란 양 = 목표 − 현재고, 0 미만은 0)</li>
         </ul>}
-        <p className="sm-faint" style={{ fontSize: 12, margin: "10px 0 0" }}>판매 가능일은 주말·공휴일을 빼고 세고, 일수는 오늘부터 그날까지의 달력 일수입니다. 따로 저장할 값은 없습니다.</p>
       </section>
 
       {/* 발주 완료 → 매출 데이터(Supabase) 자동 반영 */}
@@ -120,10 +119,7 @@ export default function SettingsEtcPage() {
           <span style={{ fontSize: 11.5, color: "var(--sm-success)" }}>● 자동</span>
         </div>
         <p style={{ fontSize: 12.5, color: "var(--sm-text-mid)", margin: 0, lineHeight: 1.8 }}>
-          발주가 <strong>발송완료</strong>되면 라인아이템별 매출이 <strong>매출 데이터</strong>에 자동 반영됩니다
-          (채널 <strong>&lsquo;도매&rsquo;</strong>, 발주별 1회, 중복 방지). <a href="/sales/report" style={{ color: "var(--sm-orange)", fontWeight: 600 }}>매출 리포트</a>에서 함께 조회됩니다.
-          <br />
-          별도 설정이 필요 없으며, 기존 <strong>구글시트 연동은 종료</strong>되었습니다. 재구매·고객 분석 오염을 막기 위해 도매 매출은 매출액만 반영하고 개별 고객으로는 집계하지 않습니다.
+          발송완료되면 매출 데이터에 반영 · 채널 &lsquo;도매&rsquo; · 발주별 1회 · 고객 집계 제외
         </p>
       </section>
     </>

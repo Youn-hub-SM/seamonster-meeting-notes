@@ -88,8 +88,7 @@ export default function SalesUploadPage() {
           <button className="b2b-btn-primary" onClick={doPreview} disabled={!file || busy !== ""}>{busy === "preview" ? "분석 중..." : "미리보기"}</button>
           <a className="b2b-btn-secondary" href="/api/sales/upload/template" title="빈 양식(xlsx) 다운로드">양식 다운로드</a>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장(인코딩 안전). 한글 헤더(판매처·주문일자·결제금액…) 또는 영문 헤더 모두 인식. 과거 전체(수만 행 이상)는 백필 스크립트로 이관하세요.</p>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>표준 주문수집 파일이 없을 땐 <strong>양식 다운로드</strong>로 빈 양식을 받아 손으로 채운 뒤 그대로 올리면 됩니다(일회성). 헤더 이름은 바꾸지 마세요.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장 · 한글·영문 헤더 모두 인식</p>
       </section>
 
       {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
@@ -103,8 +102,7 @@ export default function SalesUploadPage() {
 
       {applied && (
         <div style={{ marginTop: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 4px" }}>바로 리포트 만들기 · 발송</h2>
-          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>방금 업로드한 데이터의 <strong>최신일 기준 일일 리포트</strong>가 자동 생성됩니다. 주간 전환·기준일 변경 후 그대로 발송할 수 있어요.</p>
+          <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 10px" }}>바로 리포트 만들기 · 발송</h2>
           <SalesReportPanel key={applyNonce} autoGenerate />
         </div>
       )}
@@ -136,7 +134,7 @@ export default function SalesUploadPage() {
                   ))}
                 </tbody>
               </table>
-              <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {preview.sample.length}건 미리보기 (전화번호·이름은 매출 원장에 저장하지 않습니다)</p>
+              <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {preview.sample.length}건</p>
             </div>
           )}
           <div className="sm-between" style={{ marginTop: 14 }}>
@@ -150,7 +148,6 @@ export default function SalesUploadPage() {
         <section className="b2b-card" style={{ marginTop: 16 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드 · 되돌리기</span></div>
           {batchErr && <div className="b2b-error" style={{ marginBottom: 8 }}>업로드 이력을 불러오지 못했습니다 — 새로고침해 주세요.</div>}
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>잘못 올린 업로드는 그 배치가 추가한 행만 정확히 삭제해 되돌립니다. 되돌린 뒤 같은 파일을 다시 올리면 복구됩니다(중복은 자동 제외).</p>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table">
               <thead><tr><th>시각</th><th>파일</th><th style={{ textAlign: "right" }}>신규</th><th>올린 사람</th><th>상태</th><th></th></tr></thead>

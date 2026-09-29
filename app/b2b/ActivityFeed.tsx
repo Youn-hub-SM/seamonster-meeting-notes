@@ -146,8 +146,6 @@ export default function ActivityFeed() {
             ) : items.length === 0 ? (
               <div className="b2b-feed-empty">
                 아직 변경 내역이 없습니다.
-                <br />
-                발주 등록·상태 변경·입금이 생기면 여기에 쌓입니다.
               </div>
             ) : (
               <ul className="b2b-feed-list">

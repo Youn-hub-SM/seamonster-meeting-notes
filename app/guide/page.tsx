@@ -53,7 +53,7 @@ export default function GuidePage() {
       />
       {query && (
         <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>
-          {hitCount === 0 ? "결과 없음 — 다른 말로 검색해 보세요." : `${hitCount}개 항목`}
+          {hitCount === 0 ? "결과 없음" : `${hitCount}개 항목`}
         </p>
       )}
 

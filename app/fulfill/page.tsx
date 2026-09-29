@@ -245,7 +245,7 @@ export default function FulfillPage() {
           <section className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head"><span className="b2b-card-title">① 발주엑셀 업로드</span></div>
             <div className="b2b-field" style={{ marginBottom: 12 }}>
-              <label className="b2b-field-label">주소 경고어 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 쉼표로 구분 · 이 브라우저에 저장)</span></label>
+              <label className="b2b-field-label">주소 경고어 <span className="sm-faint" style={{ fontWeight: 400 }}>(쉼표로 구분 · 이 브라우저에만 저장)</span></label>
               <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="예: 제주마루 702호, 군부대, 사서함" />
             </div>
             <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -263,7 +263,7 @@ export default function FulfillPage() {
                   <div className="b2b-stat-card" style={{ borderColor: "var(--sm-warning)" }}>
                     <div className="b2b-stat-card-label">이미 처리된 주문 제외</div>
                     <div className="b2b-stat-card-value" style={{ color: "var(--sm-warning)" }}>{(res.excludedProcessed || 0).toLocaleString()}</div>
-                    <div className="b2b-stat-card-hint" title={(res.excludedOrderNos || []).join(", ")}>출고 완료된 주문 — CN·택배량·출고에서 자동 제외</div>
+                    <div className="b2b-stat-card-hint" title={(res.excludedOrderNos || []).join(", ")}>CN·택배량·출고에서 자동 제외</div>
                   </div>
                 )}
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">NOTHING 제외</div><div className="b2b-stat-card-value" style={{ color: res.stats.excludedNothing ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{res.stats.excludedNothing}</div></div>
@@ -291,7 +291,7 @@ export default function FulfillPage() {
                 {res.addressWarnings.slice(0, 20).map((w, i) => <li key={i}>{w.name || "(이름?)"} · {w.addr}</li>)}
               </ul>
               <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 주소들을 확인했습니다 (체크해야 다운로드·다음 진행)
+                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 주소들을 확인했습니다
               </label>
             </div>
           )}
@@ -303,7 +303,6 @@ export default function FulfillPage() {
               padding: "12px 16px", fontSize: "var(--sm-fs-sm)", marginBottom: "var(--sm-space-4)", lineHeight: 1.6,
             }}>
               <strong>배송메시지 {msgWarns.length}건{msgGroups.length !== msgWarns.length ? ` · ${msgGroups.length}줄` : ""}</strong>
-              {" "}— 슥 훑어보고 날짜 지정·전화 요청·선물 포장 같은 특이 요청이 없는지 보세요. (같은 문장은 한 줄로 합침)
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, maxHeight: 300, overflowY: "auto" }}>
                 {msgGroups.map((g, i) => (
                   <li key={i} title={g.names.length > 1 ? g.names.join(", ") : undefined}>
@@ -312,7 +311,7 @@ export default function FulfillPage() {
                 ))}
               </ul>
               <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
-                <input type="checkbox" checked={msgAck} onChange={(e) => setMsgAck(e.target.checked)} /> 위 메시지들을 확인했습니다 (체크해야 다운로드·다음 진행)
+                <input type="checkbox" checked={msgAck} onChange={(e) => setMsgAck(e.target.checked)} /> 위 메시지들을 확인했습니다
               </label>
             </div>
           )}
@@ -327,7 +326,6 @@ export default function FulfillPage() {
               <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => res.files.guarantee && downloadB64(res.files.guarantee.name, res.files.guarantee.b64)}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
               {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소·배송메시지 경고를 확인(체크)해야 받을 수 있어요.</span>}
             </div>
-            <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>상품마스터 택배정보 {res.codeCount.toLocaleString()}개 기준. 도착보장은 운임구분(Q)=3. 두 파일 받은 뒤 &lsquo;다음&rsquo;.</p>
           </section>
         </>
       )}
@@ -369,7 +367,7 @@ export default function FulfillPage() {
               </tbody>
             </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>기본은 <strong>더하기(누적)</strong> — 하루 여러 배치를 합칩니다. 같은 발주를 다시 기록하면 이중 집계되니, 동일 데이터면 <strong>덮어쓰기</strong>로 진행하세요.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>같은 발주를 다시 더하면 이중 집계됩니다.</p>
         </section>
       )}
 
@@ -388,7 +386,7 @@ export default function FulfillPage() {
                 ? <>✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link></>
                 : <>✓ <b>출고 완료</b> — 재고 관리 사용 안함 품목뿐이라 재고는 차감하지 않고 주문만 처리됨으로 표시했습니다.</>}
               {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
-              <div className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>{dispatchDone.dispatched > 0 && <>잘못 눌렀다면 <Link href="/inventory/activity">생산·재고의 ‘변경 기록’</Link>에서 이 출고번호 배치를 취소하면 원복됩니다. · </>}<button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
+              <div style={{ fontSize: 12, marginTop: 6 }}><button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
             </div>
           ) : dispatch ? (
             <>
@@ -424,7 +422,7 @@ export default function FulfillPage() {
                     </table>
                   </div>
                   {dispatch.shortages > 0 && <p style={{ fontSize: 12, color: "var(--sm-danger)", marginTop: 6 }}>재고 부족 {dispatch.shortages}품목 — 출고는 진행되지만 마이너스 재고로 기록됩니다.</p>}
-                  <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>재고 확인 후 <strong>출고 완료</strong>를 누르면 소매 재고에서 차감됩니다. 묶음(세트)은 구성품으로 전개, 정기배송은 제외. 같은 발주 재출고는 막습니다.</p>
+                  <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>묶음(세트)은 구성품으로 전개 · 정기배송 제외</p>
                 </>
               )}
             </>
@@ -444,7 +442,7 @@ export default function FulfillPage() {
                 : step === 2 ? (recording ? "기록 중..." : recordOk ? "다음: 상품 출고 →" : "배송일지에 기록 후 다음 →")
                   : `다음: ${STEPS[step + 1]} →`}
             </button>
-          ) : <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>마지막 단계</span>}
+          ) : null}
         </div>
       )}
     </div>

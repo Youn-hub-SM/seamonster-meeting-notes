@@ -299,7 +299,7 @@ export default function MetaAdPage() {
 
       {status && !status.configured && (
         <div className="sm-warn">
-          <strong>메타 광고 연동 준비 중입니다.</strong> 연동이 완료되면 자동으로 표시됩니다 — 관리자에게 문의하세요.
+          <strong>메타 광고 연동 준비 중입니다.</strong>
         </div>
       )}
       {status?.configured && status.connected === false && <div className="b2b-error"><strong>연결 실패</strong> — {status.error}</div>}
@@ -326,7 +326,7 @@ export default function MetaAdPage() {
                 {showTodo && (
                   <div className="ma-todo-body">
                     {!recos || todoN === 0 ? (
-                      <div className="ma-todo-empty">지금 특별히 조치할 항목이 없습니다 (테스트·모니터링 유지)</div>
+                      <div className="ma-todo-empty">지금 특별히 조치할 항목이 없습니다</div>
                     ) : (
                       <div className="ma-todo-list">
                         {recos.danger.length > 0 && <TodoRow danger count={recos.danger.length} title="위험소재를 교체하거나 종료하세요" items={recos.danger.map((a) => a.name)} onClick={() => { setTab("adset"); setStageFilter("danger"); }} />}
@@ -336,7 +336,7 @@ export default function MetaAdPage() {
                         {recos.library.length > 0 && (
                           <div className="ma-todo-row">
                             <span className="ma-todo-main">
-                              <span className="ma-todo-title">소재를 라이브러리에 저장하세요 <span className="ma-todo-why">ROAS {th.libraryRoas} 이상 · 재사용 아카이빙</span></span>
+                              <span className="ma-todo-title">소재를 라이브러리에 저장하세요 <span className="ma-todo-why">ROAS {th.libraryRoas} 이상</span></span>
                               <span className="ma-todo-items">
                                 {recos.library.slice(0, TODO_SHOWN).map((a, i) => (
                                   <span key={a.id}>
@@ -453,8 +453,7 @@ export default function MetaAdPage() {
             </div>
           )}
           <p className="sm-faint" style={{ fontSize: 15, marginTop: 8, lineHeight: 1.6 }}>
-            · ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다(확인창 있음). · ‘다음 행동’은 <Link href="/meta-ad/settings">설정</Link>의 기준값으로 계산됩니다.
-            · 증액 권장은 <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상일 때만 뜹니다{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}. · 증액·세트 추가는 메타 광고관리자에서 직접 실행하세요.
+            ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다 · 증액 권장 = <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}
           </p>
         </>
       )}

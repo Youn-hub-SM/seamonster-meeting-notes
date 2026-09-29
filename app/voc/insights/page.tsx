@@ -49,12 +49,7 @@ export default function VocInsightsPage() {
         <div className="b2b-card"><div className="b2b-loading">클레임을 분석하는 중입니다… (최대 1분)</div></div>
       ) : !insight ? (
         <div className="b2b-card">
-          <div className="b2b-empty">
-            <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 15 }}>아직 분석 결과가 없습니다</div>
-            <div className="sm-muted" style={{ maxWidth: 520, margin: "0 auto", lineHeight: 1.65 }}>
-              위의 <strong>AI 분석 실행</strong> 버튼을 누르면 최근 클레임을 모아 반복 패턴과 개선책을 정리해 드립니다.
-            </div>
-          </div>
+          <div className="b2b-empty">아직 분석 결과가 없습니다</div>
         </div>
       ) : (
         <div className="sm-col" style={{ gap: 14 }}>

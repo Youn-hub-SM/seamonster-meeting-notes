@@ -245,11 +245,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
                 </svg>
               </button>
             </div>
-            {favOpen && (favorites.length === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 12, padding: "2px 12px 4px", lineHeight: 1.5 }}>
-                {editFav ? "메뉴 옆 ＋를 눌러 담으세요" : "‘편집’을 눌러 자주 쓰는 메뉴를 담으세요"}
-              </div>
-            ) : sortedFavorites.map((f) => (
+            {favOpen && sortedFavorites.map((f) => (
               <div key={f.href} className={`app-sb-tool-row ${navHrefActive(f.href, pathname) ? "is-active" : ""}`}>
                 <Link href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
                   <span className="app-sb-emoji"><Icon name={iconForHref(f.href)} /></span>
@@ -257,7 +253,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
                 </Link>
                 {editFav && <FavToggle href={f.href} label={f.label} />}
               </div>
-            )))}
+            ))}
           </div>
         )}
 

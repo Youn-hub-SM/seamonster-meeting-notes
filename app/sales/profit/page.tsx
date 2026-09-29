@@ -89,7 +89,6 @@ export default function SalesProfitPage() {
           <button className="b2b-btn-secondary" onClick={() => setShowCfg((v) => !v)}>채널 설정 · 계산 기준 {showCfg ? "▲" : "▼"}</button>
           <a className="b2b-btn-secondary" href="/b2b/products" target="_blank" rel="noreferrer" style={{ marginLeft: "auto" }}>상품마스터 열기 ↗</a>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>원가·부피가 없는 SKU(또는 묶음 구성품 결측)는 아래 <strong>미매칭</strong>으로 표시됩니다.</p>
       </section>
 
       {showCfg && (
@@ -101,25 +100,9 @@ export default function SalesProfitPage() {
               <button className="b2b-btn-primary" onClick={saveConfig} disabled={savingCfg}>{savingCfg ? "저장 중..." : "저장 + 재계산"}</button>
             </div>
           </div>
-          <div style={{ fontSize: 12, lineHeight: 1.7, background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12 }}>
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>계산 방법</div>
-            채널별로 기간 매출을 모아 <strong>매출총이익</strong>을 계산합니다.
-            <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-              <li><strong>총매출</strong> = 총결제금액 + <strong>배송비매출(실제 배송비결제금액)</strong> — 원본 주문 데이터의 실제 배송비라 무료배송·정기배송이 이미 반영됩니다.</li>
-              <li><strong>총상품원가</strong> = 상품마스터(products)의 <code>cost_price</code>(제조원가+포장재) × 수량. <strong>묶음상품은 구성품(product_bundles) 합</strong>으로 자동 산출.</li>
-              <li><strong>총택배보냉비</strong> = 택배 총중량(구성품 <code>volume_kg</code> 합) → 택배포장 표(아이스박스+운반비+아이스팩+드라이아이스), <strong>택배 1건당 1회</strong>. 같은 주문자(전화)·같은 주문일은 주문번호가 여러 개여도 <strong>합배송 1건</strong>으로 묶어 계산합니다 — 톡딜처럼 주문번호가 상품별로 갈리는 채널의 과대 계산 방지. 전화번호가 없는 주문은 주문번호별 1건.</li>
-              <li><strong>판매수수료</strong> = 총매출 × <strong>채널 수수료율</strong>(아래에서 설정).</li>
-              <li><strong>매출총이익</strong> = 총매출 − (총상품원가 + 판매수수료 + 총택배보냉비) · <strong>이익률</strong> = 이익 ÷ 총매출.</li>
-            </ul>
-            <div style={{ marginTop: 6, color: "var(--sm-text-light)" }}>※ 배송비는 실제 결제 기준이라 따로 설정할 필요가 없습니다. 아래에선 <strong>채널 수수료율</strong>만 관리합니다.</div>
-            <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 6, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", color: "var(--sm-black)" }}>
-              <strong>채널별 매출(결제금액) 기준 — 할인 반영 여부</strong>
-              <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-                <li><strong>네이버(스마트스토어)·쿠팡·톡스토어</strong>: 할인금액이 <strong>반영된</strong> 실매출(순매출).</li>
-                <li><strong>카페24</strong>: 할인금액이 <strong>반영 안 됨</strong>(할인 전 금액) → 아래 <strong>매출 보정율</strong>로 자동 차감(기본 5.5%). 실제 할인율에 맞게 조정하세요.</li>
-                <li><strong>신규 채널</strong>이 생기면 그 채널 매출이 할인 반영인지 <strong>꼭 확인</strong> 후, 미반영이면 매출 보정율을 넣으세요.</li>
-              </ul>
-            </div>
+          <div className="sm-faint" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 12 }}>
+            <div>총매출 = 결제금액(매출 보정율 차감) + 배송비매출 · 매출총이익 = 총매출 − 상품원가(묶음은 구성품 합) − 판매수수료(미설정 채널 0%) − 택배보냉비(같은 주문자·주문일 = 1건)</div>
+            <div>매출 보정율은 할인 미반영 채널(카페24 등)만 입력 — 네이버·쿠팡·톡스토어는 할인 반영 금액</div>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
@@ -133,12 +116,11 @@ export default function SalesProfitPage() {
                     <td style={{ textAlign: "right" }}><button className="b2b-link-btn" onClick={() => delChannel(i)} style={{ color: "var(--sm-danger)", fontSize: 12 }}>삭제</button></td>
                   </tr>
                 ))}
-                {cfg.length === 0 && <tr><td colSpan={4} className="sm-faint" style={{ padding: 12 }}>{cfgLoadErr ? "채널 설정을 불러오지 못했습니다 — 새로고침해 주세요. (재입력하면 기존 설정을 덮어쓸 수 있습니다)" : "설정이 없습니다. \"+ 채널 추가\"로 등록하세요."}</td></tr>}
+                {cfg.length === 0 && <tr><td colSpan={4} className="sm-faint" style={{ padding: 12 }}>{cfgLoadErr ? "채널 설정을 불러오지 못했습니다 — 새로고침해 주세요. (재입력하면 기존 설정을 덮어쓸 수 있습니다)" : "설정이 없습니다."}</td></tr>}
               </tbody>
             </table>
           </div>
           {cfgMsg && <p style={{ fontSize: 15, color: "var(--sm-success)", marginTop: 6 }}>✓ {cfgMsg}</p>}
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>미설정 채널은 수수료 0%로 계산됩니다. (도매·팔도감 등)</p>
         </section>
       )}
 
@@ -177,7 +159,7 @@ export default function SalesProfitPage() {
             <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
             <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 엑셀</button>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>products에 없거나(TD_증정·DRYICE·프로모 등), 묶음이면 <strong>구성품</strong>·단품이면 <strong>자기</strong> 원가·부피가 없는 SKU입니다(원가 0·중량 0으로 계산됨). <a href="/b2b/products" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>상품마스터</a>에서 해당 상품(또는 묶음 구성품)의 원가·부피를 채우거나 <a href="/inventory/bundles" target="_blank" rel="noreferrer" style={{ color: "var(--sm-orange)" }}>묶음 구성</a>을 등록하면 매칭됩니다. 엑셀은 채울 목록 참고용입니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가 0·중량 0으로 계산됨</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>
             <table className="b2b-table" style={{ fontSize: 12 }}>
               <thead><tr><th>관리코드</th><th style={{ textAlign: "right" }}>라인수</th><th style={{ textAlign: "right" }}>수량합</th><th style={{ textAlign: "right" }}>결제금액합</th><th>판매처</th></tr></thead>

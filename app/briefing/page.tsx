@@ -156,15 +156,12 @@ export default function BriefingPage() {
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : !brief ? (
-        <div className="b2b-empty">
-          아직 이 날짜의 리포트가 없습니다. [리포트 생성]을 누르면 어제까지의 변화를 집계해 만듭니다.
-          <br /><span className="sm-faint" style={{ fontSize: 12 }}>운영 서버에서는 매일 06:30 에 자동 생성됩니다(아래 설정에서 켜고 끔).</span>
-        </div>
+        <div className="b2b-empty">아직 이 날짜의 리포트가 없습니다.</div>
       ) : (
         <section className="b2b-card">
           <div className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>
             {brief.brief_date} · 생성 {dtKst(brief.created_at)}{brief.model ? ` · ${brief.model}` : ""}
-            {date !== kstToday() && <span style={{ marginLeft: 8 }}>· 과거 날짜를 [다시 생성]하면 발송예정·대기 같은 상태 지표는 지금 기준으로 계산됩니다</span>}
+            {date !== kstToday() && <span style={{ marginLeft: 8 }}>· 다시 생성 시 상태 지표는 지금 기준</span>}
           </div>
           {md ? renderBriefMd(md) : (
             <div className="sm-warn">집계는 저장됐지만 AI 인사이트 생성이 실패했습니다 — [다시 생성]을 눌러 주세요.</div>
@@ -174,20 +171,16 @@ export default function BriefingPage() {
 
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">리포트 설정 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 대표 전용</span></h2>
+          <h2 className="b2b-card-title">리포트 설정</h2>
         </div>
         <label className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 10 }}>
           <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-          <span>매일 06:30 자동 생성 (끄면 AI 호출 없음 — 수동 [리포트 생성]만)</span>
+          <span>매일 06:30 자동 생성</span>
         </label>
-        <label className="b2b-field" style={{ maxWidth: 640 }}>
-          <span className="b2b-field-label">팀즈 웹훅 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 — 비우면 이 화면에서만 확인)</span></span>
+        <label className="b2b-field" style={{ maxWidth: 640, marginBottom: 12 }}>
+          <span className="b2b-field-label">팀즈 웹훅 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(선택)</span></span>
           <input className="b2b-input" value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://..." />
         </label>
-        <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 10px", lineHeight: 1.6 }}>
-          비공개 채널(예: 나만 있는 '대표 브리핑' 채널)에서 Workflows 앱의 "웹후크 요청을 받으면 채널에 게시"를 만들고 그 URL을 붙여 넣으세요 —
-          기존 B2B 알림 채널과 같은 방식입니다. 등록하면 자동 생성 직후와 [팀즈로 보내기]에서 발송됩니다.
-        </p>
         <div className="sm-row" style={{ gap: 10, alignItems: "center" }}>
           <button className="b2b-btn-primary" onClick={saveSettings} disabled={!settingsLoaded}>설정 저장</button>
           {settingsMsg && <span className="sm-faint" style={{ fontSize: 12 }}>{settingsMsg}</span>}

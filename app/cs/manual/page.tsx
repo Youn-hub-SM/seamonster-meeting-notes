@@ -172,7 +172,7 @@ export default function CsManualPage() {
         <div className="b2b-loading">불러오는 중...</div>
       ) : filtered.length === 0 ? (
         <div className="b2b-empty">
-          {entries.length === 0 ? "등록된 매뉴얼이 없습니다. 항목을 추가하세요." : "검색 결과가 없습니다."}
+          {entries.length === 0 ? "등록된 매뉴얼이 없습니다." : "검색 결과가 없습니다."}
         </div>
       ) : (
         <div className="csm-list">

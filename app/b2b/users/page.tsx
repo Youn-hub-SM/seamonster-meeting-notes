@@ -67,7 +67,6 @@ export default function UsersPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">로그인 계정 관리</h1>
-          <p className="b2b-page-subtitle">비밀번호로 사용자를 구분합니다</p>
         </div>
       </header>
 
@@ -84,7 +83,7 @@ export default function UsersPage() {
           </select>
           <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중..." : "추가"}</button>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호 자체가 신원이라 사람마다 서로 다른 값으로 정하세요. 파도소리 계정은 입출고 화면만 열립니다.</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호가 곧 신원이라 사람마다 다른 값으로 · 파도소리 계정은 입출고 화면만 열립니다</p>
       </section>
 
       <section className="b2b-card" style={{ marginTop: 14 }}>

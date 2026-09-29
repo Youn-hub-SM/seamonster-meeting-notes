@@ -17,7 +17,6 @@ const kstDay = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.se
 
 export default function InventoryReconcilePage() {
   const [rows, setRows] = useState<Row[]>([]);
-  const [range, setRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
   const [salesMax, setSalesMax] = useState<string | null>(null); // 매출 입력 최신일(영업일에만 입력)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -38,7 +37,6 @@ export default function InventoryReconcilePage() {
       const j = await (await fetch(`/api/inventory/reconcile?${p.toString()}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "불러오기 실패");
       setRows(j.rows || []);
-      setRange({ from: j.from, to: j.to });
       setSalesMax(j.salesMax || null);
     } catch (e) { setError(e instanceof Error ? e.message : "불러오기 오류"); }
     setLoading(false);
@@ -89,7 +87,6 @@ export default function InventoryReconcilePage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">구매·판매·재고 확인</h1>
-          <p className="b2b-page-subtitle">세트 상품은 낱개(구성품)로 환산해 비교합니다</p>
         </div>
         {/* 프로모션 풀은 판매 소스가 없어 대사 의미가 없다(RPC 도 전사 판매로 오탐 — 검증 확정) → 제외.
             도매 대량(115)도 같은 이유로 제외 — RPC 의 sold 갈래가 '도매'(대량 제외)·'소매'뿐이라
@@ -108,10 +105,9 @@ export default function InventoryReconcilePage() {
         <input type="date" className="b2b-input" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: "auto" }} title="시작일" />
         <span style={{ color: "var(--sm-text-light)" }}>~</span>
         <input type="date" className="b2b-input" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: "auto" }} title="끝일" />
-        <span className="sm-faint" style={{ fontSize: 12 }}>보는 기간: {range.from} ~ {range.to}</span>
       </div>
       <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 12px" }}>
-        팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료 — 대량 발주 제외)" : channel === "도매 대량" ? "도매 대량(대량 발주 발송완료)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송, 대량 포함)"}</strong>. 채널을 바꾸면 그 채널 재고와 그 채널 판매로 비교합니다.
+        팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료 — 대량 발주 제외)" : channel === "도매 대량" ? "도매 대량(대량 발주 발송완료)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송, 대량 포함)"}</strong> · 세트는 낱개 환산
         {salesMax && <> · 매출 입력: <strong>~{salesMax}</strong></>}
       </p>
 
@@ -123,7 +119,6 @@ export default function InventoryReconcilePage() {
           {kpi.sold > 0 && kpi.coverage < 90 && (
             <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 15, lineHeight: 1.6 }}>
               이 기간에 실제로 <strong>{won(kpi.sold)}개</strong>가 팔렸는데, 재고에서 빠진 건 <strong>{won(kpi.out)}개({kpi.coverage}%)</strong>뿐이에요.
-              판매가 재고에 <strong>거의 안 빠지고</strong> 있습니다. 매일 판매·구매·재고를 맞춰 주세요. (아래는 <strong>팔린 수를 실제 나간 수로 보고</strong> 비교한 표입니다.)
             </div>
           )}
 
@@ -138,7 +133,7 @@ export default function InventoryReconcilePage() {
 
           <section className="b2b-card">
             <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <span className="b2b-card-title">품목별로 보기 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {shown.length}개</span></span>
+              <span className="b2b-card-title">품목별로 보기</span>
               <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--sm-text-mid)" }}>
                   <input type="checkbox" checked={issuesOnly} onChange={(e) => setIssuesOnly(e.target.checked)} /> 문제만 보기
@@ -186,10 +181,7 @@ export default function InventoryReconcilePage() {
                 </tbody>
               </table>
             </div>
-            <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>
-              · <strong>팔린 수</strong>=매출 데이터에서 실제 팔린 개수(세트는 낱개로 풀어서). · <strong>뺀 수(판매)</strong>=판매로 나간 출고. · <strong>협찬·기타</strong>=사유가 판매가 아닌 출고(협찬·폐기 등) — 판매와 비교하지 않고 따로 셉니다. · <strong>직접 맞춤</strong>=보정(조정) 기록.
-              <br />· <strong>안 빠진 판매</strong>=팔렸는데 재고에서 아직 안 뺀 수(+면 재고에 반영이 덜 된 것). · <strong>산 기록 없음</strong>=팔렸는데 구매(들어온) 기록이 하나도 없음 → 구매를 넣어 주세요. · <strong>재고 마이너스</strong>=있을 수 없는 재고라 점검이 필요해요.
-            </p>
+            <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}><strong>안 빠진 판매</strong> = 팔린 수 − 뺀 수(판매)</p>
           </section>
         </>
       )}

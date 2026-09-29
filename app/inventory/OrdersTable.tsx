@@ -300,7 +300,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     ) : !loading && (
       // 버튼이 없으면 "전부 불러온 것"임을 명시 — 버튼 부재가 미완성처럼 보이지 않게
       <p className="sm-faint" style={{ textAlign: "center", marginTop: 10, fontSize: 12 }}>
-        {search.trim() ? `검색 결과 ${shown.length.toLocaleString()}건 — 전체 기록에서 찾았습니다` : `${shown.length.toLocaleString()}건 — 전체를 불러왔습니다`}
+        {search.trim() ? `검색 결과 ${shown.length.toLocaleString()}건` : `${shown.length.toLocaleString()}건 — 전체를 불러왔습니다`}
       </p>
     )}
     </>

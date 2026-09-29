@@ -48,9 +48,6 @@ export default function FactorySettingsPage() {
           <input className="b2b-input" value={url} onChange={(e) => { setUrl(e.target.value); setMsg(null); }}
             placeholder="https://hook.swit.io/chat/..." spellCheck={false} />
         </label>
-        <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>
-          Swit 채널 &gt; 연동 &gt; 수신 웹훅(Incoming webhook)을 만들면 나오는 주소를 붙여넣습니다.
-        </p>
         <label className="sm-row" style={{ gap: 6, alignItems: "center", cursor: "pointer", fontSize: 15, marginBottom: 14 }}>
           <input type="checkbox" className="b2b-checkbox" checked={enabled} onChange={(e) => { setEnabled(e.target.checked); setMsg(null); }} />
           입출고 알림 발송 (입고·출고·생산투입·이동·조정·취소)

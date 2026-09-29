@@ -94,7 +94,6 @@ export default function CustomStatementPage() {
       <header className="b2b-page-head no-print">
         <div>
           <h1 className="b2b-page-title">거래명세표 작성</h1>
-          <span style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>발주 없이 직접 채워 인쇄합니다</span>
         </div>
         <div className="b2b-page-actions">
           <Link href="/b2b/orders" className="b2b-btn-secondary">발주 목록</Link>
@@ -104,7 +103,7 @@ export default function CustomStatementPage() {
       </header>
 
       {restored && (
-        <div className="sm-warn no-print">작성 중이던 내용을 불러왔습니다. 처음부터 쓰려면 [새로 작성]을 누르세요.</div>
+        <div className="sm-warn no-print">작성 중이던 내용을 불러왔습니다.</div>
       )}
 
       {/* ───── 입력부 (인쇄 제외) ───── */}
@@ -120,7 +119,7 @@ export default function CustomStatementPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>공급자 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(설정값을 불러왔습니다 · 고쳐도 설정은 안 바뀝니다)</span></div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>공급자 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(고쳐도 설정은 안 바뀝니다)</span></div>
             <Field label="상호" value={supplier.name} onChange={(v) => setSupplier({ ...supplier, name: v })} />
             <Field label="등록번호" value={supplier.biz_no} onChange={(v) => setSupplier({ ...supplier, biz_no: v })} />
             <Field label="대표" value={supplier.ceo} onChange={(v) => setSupplier({ ...supplier, ceo: v })} />
@@ -173,7 +172,7 @@ export default function CustomStatementPage() {
               </tbody>
             </table>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>세액은 과세 품목의 공급가액 10%로 자동 계산됩니다. 면세 품목은 체크하세요.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>세액은 과세 품목의 공급가액 10%로 자동 계산됩니다.</p>
         </div>
       </section>
 
@@ -226,7 +225,7 @@ export default function CustomStatementPage() {
                 </tr>
               ))}
               {filled.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--sm-text-light)", padding: "18px 0" }}>위에서 품목을 입력하세요</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--sm-text-light)", padding: "18px 0" }}>입력된 품목이 없습니다</td></tr>
               )}
               <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
                 <td colSpan={5}>합계</td>

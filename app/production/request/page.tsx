@@ -10,7 +10,6 @@ export default function RequestPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">생산 요청</h1>
-          <p className="b2b-page-subtitle">요청서 만들기 → 확인 → 입고 기록에서 요청서 선택 → 마감</p>
         </div>
       </header>
       <RequestList />

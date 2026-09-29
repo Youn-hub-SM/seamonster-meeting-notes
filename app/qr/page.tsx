@@ -100,7 +100,6 @@ export default function QrPage() {
             </div>
             <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>
               만들어질 링크: <code style={{ color: "var(--sm-text-mid)" }}>{shortDisplay(nCode.trim() || "원하는주소")}</code>
-              {!SHORT_HOST && <> · 전용 도메인(예: app.seamonster.kr) 연결 전엔 <code>…/q/원하는주소</code> 형태로 동작합니다.</>}
             </p>
           </section>
 
@@ -140,7 +139,6 @@ export default function QrPage() {
       {tab === "static" && (
         <section className="b2b-card">
           <div className="b2b-card-head"><span className="b2b-card-title">정적 QR 생성</span></div>
-          <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>URL·텍스트를 넣으면 그 값이 그대로 담긴 QR이 생성됩니다(저장 안 됨, 목적지 변경·통계 없음).</p>
           <input className="b2b-input" value={staticText} onChange={(e) => setStaticText(e.target.value)} placeholder="https://... 또는 아무 텍스트" style={{ maxWidth: 460 }} />
           {staticText.trim() && (
             <div className="sm-col" style={{ gap: 10, marginTop: 14, alignItems: "flex-start" }}>
@@ -203,7 +201,7 @@ function EditModal({ link, onClose, onSaved }: { link: Link; onClose: () => void
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">링크 수정</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
-          <div className="b2b-field"><label className="b2b-field-label">목적지 URL <span className="sm-faint" style={{ fontWeight: 400 }}>(바꿔도 QR은 그대로)</span></label><input className="b2b-input" value={target} onChange={(e) => setTarget(e.target.value)} /></div>
+          <div className="b2b-field"><label className="b2b-field-label">목적지 URL</label><input className="b2b-input" value={target} onChange={(e) => setTarget(e.target.value)} /></div>
           <div className="b2b-field"><label className="b2b-field-label">제목</label><input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
           <div className="b2b-field"><label className="b2b-field-label">코드 <span className="sm-faint" style={{ fontWeight: 400 }}>(바꾸면 기존 QR은 무효)</span></label><input className="b2b-input" value={code} onChange={(e) => setCode(e.target.value)} /></div>
           {error && <div className="b2b-error" style={{ marginTop: 6 }}>{error}</div>}

@@ -245,7 +245,6 @@ export default function InventoryMovePage() {
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-field">
-          <label className="b2b-field-label">어디로 옮길까요?</label>
           <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <div className="sm-tabs" style={{ margin: 0 }}>
               {MOVE_ONLY_CHANNELS.flatMap((ch) => [
@@ -254,7 +253,6 @@ export default function InventoryMovePage() {
               ])}
             </div>
             <button className="b2b-btn-secondary" onClick={swap} style={{ padding: "6px 10px", fontSize: 12 }} title="방향 뒤집기">⇄</button>
-            <span className="sm-faint" style={{ fontSize: 12 }}>{dir.from} 재고에서 빼고 → {dir.to} 재고에 더함</span>
           </div>
         </div>
 
@@ -311,7 +309,7 @@ export default function InventoryMovePage() {
                       <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => selectProduct(l.key, l.pid, l.plabel)}>다시 불러오기</button>
                     </p>
                   ) : l.targets.length === 0 ? (
-                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 생산 요청 없음 — 전량 기타(요청 미연결)로 기록됩니다. 요청서 몫이라면 먼저 생산 요청에서 등록하세요.</p>
+                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 생산 요청 없음 — 전량 기타(요청 미연결)로 기록됩니다.</p>
                   ) : (
                     <>
                       <div className="b2b-table-wrap">
@@ -358,13 +356,13 @@ export default function InventoryMovePage() {
         </div>
 
         {allocMode && activeLines.some((l) => l.targets.length > 0) && (
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>배정으로 요청서가 100% 채워지면 자동으로 완료되어 {PR_PURPOSE_LABEL[allocPurpose]} 요청 종합에서 빠집니다. 이동을 취소하면 배정도 함께 돌아옵니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>배정으로 100% 채워진 요청서는 자동 완료됩니다.</p>
         )}
         {dir.to === "프로모션" && (
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>프로모션 재고는 행사 하루 전까지 자동 출고에서 보호됩니다. 행사 시작(목표일) 하루 전 아침 요청서가 자동 완료되고 남은 확보분이 소매로 합류합니다 — 그 뒤 입고분은 옮기지 말고 소매에 둡니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>행사 시작 하루 전 아침 요청서가 자동 완료되고 남은 확보분은 소매로 합류합니다.</p>
         )}
         {dir.to === "도매 대량" && (
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>도매 대량 재고는 선결제로 이미 팔린 몫입니다. 도매 일반 주문이 가져가지 못하고, 프로모션과 달리 소매로 돌아오는 자동 합류가 없습니다 — 되돌리려면 도매 대량 → 소매 방향으로 직접 옮기세요.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>도매 대량 재고는 도매 일반 주문이 가져가지 못하고, 소매로 자동 합류하지 않습니다.</p>
         )}
 
         <div className="b2b-field-row" style={{ marginTop: 12 }}>
@@ -374,19 +372,19 @@ export default function InventoryMovePage() {
             <input className="b2b-input" type="date" max={kstToday()} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="b2b-field">
-            <label className="b2b-field-label">메모 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 전체 공통)</span></label>
+            <label className="b2b-field-label">메모</label>
             <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 도매 주문 대응" />
           </div>
         </div>
 
         <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 14 }}>{activeLines.length > 0 ? <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></> : <span className="sm-faint">품목과 수량을 입력하세요</span>}</span>
+          <span style={{ fontSize: 14 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></>}</span>
           <button className="b2b-btn-primary" onClick={submit} disabled={busy || activeLines.length === 0}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${activeLines.length}개 품목)` : ""}`}</button>
         </div>
       </section>
 
       <section className="b2b-card">
-        <div className="b2b-card-head"><span className="b2b-card-title">최근 옮긴 내역 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {moves.length}건</span></span></div>
+        <div className="b2b-card-head"><span className="b2b-card-title">최근 옮긴 내역</span></div>
         {moves.length === 0 ? (
           <div className="b2b-empty" style={{ padding: 20 }}>아직 옮긴 내역이 없습니다.</div>
         ) : (

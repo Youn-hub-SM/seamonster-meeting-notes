@@ -110,7 +110,6 @@ export default function LocationsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">창고 위치</h1>
-          <p className="b2b-page-subtitle">구역 순서 = 걷는 경로. 피킹 리스트(<Link href="/fulfill/scan">송장 스캔</Link>)가 이 순서대로 정렬됩니다.</p>
         </div>
         <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/scan">송장 스캔</Link></div>
       </header>
@@ -125,7 +124,7 @@ export default function LocationsPage() {
           <span className="b2b-card-title">구역 (걷는 순서){saving && <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>저장 중…</span>}</span>
         </div>
         {zones.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>구역이 없습니다. 창고 입구부터 걷는 순서대로 추가하세요. (예: A선반, B선반, 냉장고 앞)</div>
+          <div className="b2b-empty" style={{ padding: 18 }}>구역이 없습니다.</div>
         ) : (
           <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {zones.map((z, i) => (
@@ -164,7 +163,7 @@ export default function LocationsPage() {
         {!loaded ? (
           <div className="b2b-empty" style={{ padding: 18 }}>불러오는 중…</div>
         ) : list.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다. 전부 배치됐습니다." : "표시할 품목이 없습니다."}</div>
+          <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다." : "표시할 품목이 없습니다."}</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">
@@ -192,10 +191,7 @@ export default function LocationsPage() {
             </table>
           </div>
         )}
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>
-          묶음(세트) 상품은 여기 없습니다 — 피킹 리스트에서 구성품으로 풀리므로 구성품의 위치를 따라갑니다.
-          변경은 즉시 저장되며, 스캔 화면에는 최대 1분 안에 반영됩니다.
-        </p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>묶음(세트)은 구성품 위치를 따릅니다 · 스캔 화면 반영은 최대 1분</p>
       </section>
     </div>
   );

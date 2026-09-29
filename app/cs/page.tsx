@@ -116,7 +116,7 @@ export default function CsPage() {
         <div className="cs-section">
           <div className="cs-reply-head">
             <h2 className="detail-section-title" style={{ borderBottom: "none", marginBottom: 0, paddingBottom: 0 }}>
-              ④ 추천 답변 초안 <span className="cs-reply-hint">— 고객에게 보낼 문장</span>
+              ④ 추천 답변 초안
             </h2>
             <button className="btn-secondary cs-copy-sm" onClick={handleCopy}>
               {copied ? "복사됨" : "복사"}

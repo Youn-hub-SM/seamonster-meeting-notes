@@ -17,7 +17,7 @@ const reqWarnOf = (j: { ok?: boolean; full_ok?: boolean } | null) =>
 // 입고 → 요청서 선택(지정 매칭). 직접 입력·엑셀 두 모드가 같이 쓴다.
 function RequestSelect({ reqs, value, disabled, warn, onChange }: { reqs: OpenReq[]; value: string; disabled?: boolean; warn?: string; onChange: (v: string) => void }) {
   return (
-    <label className="b2b-field"><span className="b2b-field-label">요청서 <span className="sm-faint" style={{ fontWeight: 400 }}>· 연결할 제조사 요청서</span></span>
+    <label className="b2b-field"><span className="b2b-field-label">요청서</span>
       <select className="b2b-input" value={disabled ? "" : value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">연결 안 함</option>
         {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
@@ -257,17 +257,13 @@ export default function TxnModal({
             <ChannelPicker value={channel} onChange={(c) => { if (c === channel) return; dropInflight(); setChannel(c); if (type !== "입고") setPicked(c); setPreview(null); setError(""); setImporting(false); }}
               disabledChannels={type === "입고" ? MOVE_ONLY_CHANNELS : []}
               disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
-            <span className="sm-faint" style={{ fontSize: 12 }}>
-              {type === "입고" ? "입고는 소매로만 — 다른 칸은 [재고 이동]에서 옮깁니다" : `${channel} 재고에 기록`}
-            </span>
           </div>
 
           {mode === "엑셀" ? (
-            /* 미리보기가 있으면 그 미리보기를 만든 유형·채널로 그린다(늦게 온 응답이 반대 표에 그려지지 않게) */
+            /* 미리보기가 있으면 그 미리보기를 만든 유형으로 그린다(늦게 온 응답이 반대 표에 그려지지 않게) */
             <ExcelPane
               type={preview ? preview.reqType : type}
               isAdjust={preview ? preview.kind === "조정" : isAdjust}
-              channel={preview ? preview.reqChannel : channel}
               templateHref={templateHref}
               date={date} setDate={setDate} partner={partner} setPartner={setPartner}
               reason={reason} setReason={setReason}
@@ -319,7 +315,7 @@ export default function TxnModal({
             </div>
           )}
           {type === "출고" && (
-            <label className="b2b-field"><span className="b2b-field-label">사유 <span className="sm-faint" style={{ fontWeight: 400 }}>· 판매가 아니면 대사에서 분리</span></span>
+            <label className="b2b-field"><span className="b2b-field-label">사유</span>
               <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)}>
                 <option value="판매">판매</option>
                 <option value="협찬">협찬·증정</option>
@@ -363,10 +359,10 @@ export default function TxnModal({
   );
 }
 
-// 엑셀 일괄 패널 — 양식 안내·다운로드 + (입출고면) 파일 전체에 적용할 거래일·거래처·즉시처리 + 미리보기.
+// 엑셀 일괄 패널 — 양식 다운로드 + (입출고면) 파일 전체에 적용할 거래일·거래처·즉시처리 + 미리보기.
 //  파일 첨부 버튼은 모달 푸터에 있다(다른 업로드 화면과 같은 위치).
-function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partner, setPartner, reason, setReason, ioDone, setIoDone, importing, preview, reqs, reqId, setReqId, reqWarn }: {
-  type: InvTxnType; isAdjust: boolean; channel: InvChannel; templateHref: string;
+function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPartner, reason, setReason, ioDone, setIoDone, importing, preview, reqs, reqId, setReqId, reqWarn }: {
+  type: InvTxnType; isAdjust: boolean; templateHref: string;
   date: string; setDate: (v: string) => void;
   partner: string; setPartner: (v: string) => void;
   reason: string; setReason: (v: string) => void;
@@ -393,7 +389,7 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
         </div>
 
         {preview.rows.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. 양식을 확인하세요.</div>
+          <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
             {isAdjust ? (
@@ -454,14 +450,14 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
       {!isAdjust && (
         <>
           <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">거래일 <span className="sm-faint" style={{ fontWeight: 400 }}>· 파일 전체</span></span>
+            <label className="b2b-field"><span className="b2b-field-label">거래일</span>
               <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? "매입처" : reason !== "판매" ? "전달처" : "판매처"} <span className="sm-faint" style={{ fontWeight: 400 }}>· 선택</span></span>
+            <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? "매입처" : reason !== "판매" ? "전달처" : "판매처"}</span>
               <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
           </div>
           {type === "입고" && <RequestSelect reqs={reqs} value={reqId} disabled={!ioDone} warn={ioDone ? reqWarn : ""} onChange={setReqId} />}
           {type === "출고" && (
-            <label className="b2b-field"><span className="b2b-field-label">사유 <span className="sm-faint" style={{ fontWeight: 400 }}>· 파일 전체 — 판매가 아니면 대사에서 분리</span></span>
+            <label className="b2b-field"><span className="b2b-field-label">사유</span>
               <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)}>
                 <option value="판매">판매</option>
                 <option value="협찬">협찬·증정</option>
@@ -475,16 +471,10 @@ function ExcelPane({ type, isAdjust, channel, templateHref, date, setDate, partn
         </>
       )}
 
-      <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
-        양식에는 <strong>SKU · 품목명 · 현재고({channel})</strong>가 이미 채워져 있습니다 — <strong>{isAdjust ? "실사수량" : "수량"}</strong> 칸만 적으면 되고, 비워 둔 줄은 건너뜁니다.
-        {isAdjust
-          ? <> 현재고가 실사수량이 되도록 조정하며, 거래일은 오늘로 기록됩니다.</>
-          : <> 단가는 선택입니다.{type === "출고" ? " 외부 출고 파일(수량·(무시)·SKU)도 그대로 올릴 수 있습니다." : ""}</>}
-        <br />{channel} 재고에 기록됩니다. 묶음(세트)과 <strong>SKU 가 없는 품목</strong>은 양식에서 빠집니다 — 빠진 품목은 양식 맨 아래에 적혀 있습니다.
-        {" · "}<a href={templateHref} className="sm-link">양식 다운로드</a>
+      <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>
+        <a href={templateHref} className="sm-link">양식 다운로드</a>
+        {isAdjust && " · 거래일은 오늘로 기록됩니다"}
       </p>
-
-      <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>준비되면 아래 <strong>‘엑셀 파일 선택’</strong>을 누르세요.</p>
     </div>
   );
 }

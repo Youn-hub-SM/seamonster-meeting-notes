@@ -143,7 +143,7 @@ export default function ScanPage() {
       {error && <div className="b2b-error">{error}{error.includes("057") ? " — supabase/migrations/057_fulfill_scan.sql 를 먼저 적용하세요." : ""}</div>}
 
       {st && st.totalInvoices === 0 && !error && (
-        <div className="b2b-empty" style={{ marginBottom: 16 }}>스캔할 송장 데이터가 없습니다. <Link href="/fulfill/scan/upload">송장 업로드</Link>에서 파일을 먼저 올리세요.</div>
+        <div className="b2b-empty" style={{ marginBottom: 16 }}>스캔할 송장 데이터가 없습니다.</div>
       )}
 
       <section className="b2b-card" style={{ marginBottom: 14 }}>
@@ -174,7 +174,7 @@ export default function ScanPage() {
       </section>
 
       {/* 인쇄 → 상품 가지러 → 초기화 → 다음 스캔. 두 버튼을 크고 눈에 띄게. */}
-      <div className="sm-row" style={{ gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
+      <div className="sm-row" style={{ gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <button className="b2b-btn-primary" onClick={printTally} disabled={!st || st.tally.length === 0}
           style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800 }}>인쇄 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F2)</span></button>
         <button onClick={reset} disabled={!st || st.scannedCount === 0}
@@ -182,14 +182,13 @@ export default function ScanPage() {
             background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
             opacity: !st || st.scannedCount === 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F4)</span></button>
       </div>
-      <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 16px", textAlign: "center" }}>단축키 — 스캔: Enter · 인쇄: F2 · 초기화: F4</p>
 
       <section className="b2b-card">
         <div className="b2b-card-head">
           <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 총 {st?.totalUnits.toLocaleString() ?? 0}개 · 묶음 전개 반영</span></span>
         </div>
         {!st || st.tally.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 24 }}>아직 스캔된 송장이 없습니다. 위에서 스캔을 시작하세요.</div>
+          <div className="b2b-empty" style={{ padding: 24 }}>아직 스캔된 송장이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table">
@@ -209,7 +208,7 @@ export default function ScanPage() {
             </table>
           </div>
         )}
-        {st && st.tally.some((t) => t.unknown) && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, color: "var(--sm-danger)" }}>빨간 줄 = 상품마스터에 없는 단품코드. <Link href="/b2b/products">상품마스터</Link>에 등록하면 상품명으로 집계됩니다.</p>}
+        {st && st.tally.some((t) => t.unknown) && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, color: "var(--sm-danger)" }}>빨간 줄 = <Link href="/b2b/products">상품마스터</Link>에 없는 단품코드</p>}
       </section>
     </div>
   );

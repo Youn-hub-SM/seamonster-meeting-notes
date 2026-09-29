@@ -40,11 +40,6 @@ export default function AsanaSettingsPage() {
 
       <section className="b2b-card" style={{ marginTop: 14 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">아사나(Asana) 연동</span></div>
-        <p className="sm-muted" style={{ fontSize: 15, marginBottom: 12 }}>
-          VOC 목록/상세에서 <strong>→ 아사나</strong> 버튼으로 해당 VOC를 아사나 프로젝트의 <strong>업무(task)</strong>로 등록합니다.
-          PAT와 프로젝트가 모두 저장되면 VOC 화면에 버튼이 나타납니다.
-          토큰 발급: 아사나 <strong>내 설정 → 앱 → 개발자 앱 관리 → 개인 액세스 토큰(PAT) 만들기</strong>.
-        </p>
 
         <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
           <span className="b2b-field-label">1) 개인 액세스 토큰(PAT) · 현재 {loading ? "확인 중..." : hasAsanaPat ? <strong style={{ color: "var(--sm-success)" }}>저장됨</strong> : <strong style={{ color: "var(--sm-warning)" }}>미설정</strong>}</span>
@@ -60,7 +55,7 @@ export default function AsanaSettingsPage() {
             <input className="b2b-input" value={asanaProject} onChange={(e) => setAsanaProject(e.target.value)} placeholder="아사나에서 프로젝트를 연 상태의 주소를 그대로 붙여넣기" style={{ flex: 1, minWidth: 240 }} />
             <button className="b2b-btn-primary" onClick={() => saveAsana({ project: asanaProject }, "프로젝트 저장됨", "asanaproj")} disabled={busy === "asanaproj"}>{busy === "asanaproj" ? "저장 중..." : "저장"}</button>
           </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>URL을 넣으면 프로젝트 번호(gid)만 추려 저장합니다. 등록되는 업무는 VOC 상태와 무관하게 항상 &apos;개선요청&apos; 섹션에 들어갑니다(이후 상태 관리는 아사나에서).</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>업무는 VOC 상태와 무관하게 항상 &apos;개선요청&apos; 섹션에 등록됩니다</span>
         </div>
 
         <div className="sm-col" style={{ gap: 6, marginBottom: 14 }}>
@@ -69,12 +64,10 @@ export default function AsanaSettingsPage() {
             <input className="b2b-input" type="email" value={asanaAssignee} onChange={(e) => setAsanaAssignee(e.target.value)} placeholder="아사나 워크스페이스 멤버 이메일 (비우면 미지정)" style={{ flex: 1, minWidth: 240 }} />
             <button className="b2b-btn-primary" onClick={() => saveAsana({ assignee: asanaAssignee }, asanaAssignee.trim() ? "기본 담당자 저장됨" : "기본 담당자 해제됨", "asanaassignee")} disabled={busy === "asanaassignee"}>{busy === "asanaassignee" ? "저장 중..." : "저장"}</button>
           </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>등록되는 업무의 담당자로 지정됩니다. 멤버가 아니면 담당자 없이 등록되고 안내가 표시됩니다.</span>
         </div>
 
         <div className="sm-row" style={{ gap: 8 }}>
           <button className="b2b-btn-secondary" onClick={() => saveAsana({ test: true }, "연결 OK", "asanatest")} disabled={busy === "asanatest"}>{busy === "asanatest" ? "확인 중..." : "연결 테스트"}</button>
-          <span className="sm-faint" style={{ fontSize: 12, alignSelf: "center" }}>저장된 토큰으로 내 계정과 프로젝트 접근을 확인합니다.</span>
         </div>
         {asanaMsg && <div className={asanaMsg.ok ? "sm-success" : "b2b-error"} style={{ marginTop: 10 }}>{asanaMsg.t}</div>}
       </section>

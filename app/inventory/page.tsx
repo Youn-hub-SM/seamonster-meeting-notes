@@ -334,12 +334,11 @@ export default function InventoryPage() {
               <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> 부족만 보기
             </label>
           )}
-          {sel.size > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>체크 {sel.size}종 (검색을 바꿔도 유지)</span>}
         </div>
         <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
-      {!confirmedTab && adviceLoading && <div className="b2b-loading">AI가 판매추세·재고·발주를 종합해 분석 중입니다… (최대 1분)</div>}
+      {!confirmedTab && adviceLoading && <div className="b2b-loading">AI 분석 중입니다... (최대 1분)</div>}
       {!confirmedTab && advice && (
         <section style={{ marginBottom: 18 }}>
           <div className="prod-advice-summary">
@@ -375,14 +374,13 @@ export default function InventoryPage() {
               {advice.notes.map((n, i) => <li key={i}>{n}</li>)}
             </ul>
           )}
-          <p className="prod-note" style={{ marginTop: 8 }}>아래 표가 이 조언의 근거입니다.</p>
         </section>
       )}
 
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : shown.length === 0 ? (
-        <div className="b2b-empty">{rows.length === 0 ? "활성 품목이 없습니다. 상품 마스터에 제품을 등록하세요." : "조건에 맞는 품목이 없습니다."}</div>
+        <div className="b2b-empty">{rows.length === 0 ? "활성 품목이 없습니다." : "조건에 맞는 품목이 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
           {/* tableLayout fixed + 열 폭을 % 로 — 내용 길이에 흔들리지 않으면서, 화면이 넓어지면
@@ -464,7 +462,7 @@ export default function InventoryPage() {
       )}
       {/* 기간·계산식 안내줄 — 표 위에 있으면 정신없다는 요청(2026-09-28)으로 표 아래에 둔다 */}
       {meta && (confirmedTab
-        ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 확보분 칸 — 하루 출고·예상소진·권장생산 없음</p>
+        ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일)</p>
         /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
            평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
         : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만</p>
@@ -484,10 +482,7 @@ export default function InventoryPage() {
               <button className="b2b-modal-close" onClick={() => setHistoryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>
-                입고·출고·조정 원장입니다(관측 용도). ‘담당’이 그 처리를 한 사람이고, 발주·발송 연동 건은 메모에 출처가 적혀 있습니다.
-                ‘재고’는 그 거래가 속한 재고 칸(소매·도매·프로모션·도매 대량) 기준으로 거래 전후의 수량입니다.
-              </p>
+              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>재고 = 그 거래 채널 기준 전후 수량</p>
               <ProductHistory productId={historyFor.product_id} />
             </div>
             <div className="b2b-modal-foot">

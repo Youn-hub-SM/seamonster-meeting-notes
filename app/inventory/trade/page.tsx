@@ -111,29 +111,26 @@ export default function TradePage() {
               </div>
 
               <div className="b2b-field" style={{ marginTop: 12 }}>
-                <label className="b2b-field-label">② 채널 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 소매)</span></label>
+                <label className="b2b-field-label">② 채널</label>
                 <ChannelPicker value={ioChannel} onChange={setIoChannel}
                   disabledChannels={ioType === "입고" ? MOVE_ONLY_CHANNELS : []}
                   disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
-                {ioType === "입고" && (
-                  <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0" }}>입고는 소매로만 — 다른 칸은 [재고 이동]에서 옮깁니다.</p>
-                )}
               </div>
 
               <div className="b2b-field-row" style={{ marginTop: 12 }}>
                 <div className="b2b-field">
-                  <label className="b2b-field-label">③ 거래일 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 기본 오늘)</span></label>
+                  <label className="b2b-field-label">③ 거래일</label>
                   <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} />
                 </div>
                 <div className="b2b-field">
-                  <label className="b2b-field-label">{ioType === "입고" ? "매입처" : ioReason !== "판매" ? "전달처" : "판매처"} <span className="sm-faint" style={{ fontWeight: 400 }}>(선택)</span></label>
+                  <label className="b2b-field-label">{ioType === "입고" ? "매입처" : ioReason !== "판매" ? "전달처" : "판매처"}</label>
                   <input className="b2b-input" placeholder="선택" value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} />
                 </div>
               </div>
 
               {ioType === "입고" && (
                 <div className="b2b-field" style={{ marginTop: 12 }}>
-                  <label className="b2b-field-label">요청서 <span className="sm-faint" style={{ fontWeight: 400 }}>(파일 전체 · 연결할 제조사 요청서)</span></label>
+                  <label className="b2b-field-label">요청서</label>
                   <select className="b2b-input" value={ioDone ? reqId : ""} disabled={!ioDone} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }}>
                     <option value="">연결 안 함</option>
                     {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
@@ -144,7 +141,7 @@ export default function TradePage() {
 
               {ioType === "출고" && (
                 <div className="b2b-field" style={{ marginTop: 12 }}>
-                  <label className="b2b-field-label">사유 <span className="sm-faint" style={{ fontWeight: 400 }}>(파일 전체 · 판매가 아니면 대사에서 분리)</span></label>
+                  <label className="b2b-field-label">사유</label>
                   <select className="b2b-input" value={ioReason} onChange={(e) => setIoReason(e.target.value)}>
                     <option value="판매">판매</option>
                     <option value="협찬">협찬·증정</option>
@@ -155,15 +152,15 @@ export default function TradePage() {
               )}
 
               <label className="sm-row" style={{ gap: 7, marginTop: 12, fontSize: 15, cursor: "pointer" }}>
-                <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’)</span>
+                <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리
               </label>
 
               <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.5 }}>
                 {ioType === "입고"
                   ? <>양식 = <strong>SKU · 수량 · 단가</strong></>
-                  : <>양식 = <strong>수량 · (무시) · SKU</strong> (외부 출고 파일 그대로 · 가운데 열 무시)</>}
+                  : <>양식 = <strong>수량 · (무시) · SKU</strong></>}
                 {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="sm-link">양식 다운로드</a>
-                <br />거래일·거래처·채널{ioType === "출고" ? "·사유" : ""}는 파일 전체에 적용됩니다.
+                <br />거래일·거래처·채널·{ioType === "출고" ? "사유" : "요청서"}는 파일 전체에 적용됩니다.
               </p>
 
               {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
