@@ -4,7 +4,7 @@ import { toInvChannelParam } from "@/app/lib/inventory";
 import { scheduleHorizon } from "@/app/lib/production-schedule";
 import { getPromoForwardBySku } from "@/app/lib/production-promotions";
 import { getAllBundles, bundleAvailable } from "@/app/lib/product-bundles";
-import { getOpenInboundByProduct, formatInbound, type InboundRow } from "@/app/lib/production-inbound";
+import { getOpenInboundByProduct, formatInbound, getOpenRequestedByProduct, formatRequested, type InboundRow, type RequestedRow } from "@/app/lib/production-inbound";
 import { getUntracked } from "@/app/lib/stock-tracked";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,8 @@ export type OverviewRow = {
   inbound_due: string | null; // 잔여가 있는 요청서 중 가장 이른 생산마감일
   inbound_overdue: number;    // 그중 마감이 지난 잔여(서버 판정 — 자동 제외 없음, 표시용)
   inbound_detail: string;     // 툴팁용 요청서별 내역("PR-000123 300 (마감 09-25)")
+  requested: number;          // 요청량 = 이 칸 용도(프로모션·도매 대량)의 열린 요청서 요청수량 합 — 확정형 탭만, 그 외 0
+  requested_detail: string;   // 툴팁용 요청서별 내역("PR-000123 요청 300 · 이동 120 · 목표 10-05")
   is_bundle: boolean; // 묶음(세트) — 현재고는 '만들 수 있는 세트 수'(가용)
 };
 
@@ -54,15 +56,19 @@ export async function GET(req: NextRequest) {
     // 입고 예정(열린 제조사 요청서 잔여) — 소매·전체 탭에서 현재고 옆 병기 + 부족(low) 판정에 합산.
     //  권장 수식(getInventoryRows)이 같은 값을 현재고에 더해 빼므로, 여기서도 더해야 '부족인데 권장 0' 모순이 없다.
     //  도매 탭은 제조사 입고 대상이 아니라 0. 집계 실패(null)면 0 으로 두고 meta.inboundOk=false 로 알린다.
-    const [pr, sr, promoFwd, bundles, inbound, untracked] = await Promise.all([
+    // 확정형 탭(프로모션·도매 대량)의 요청량 — 그 칸 용도의 열린 요청서(2026-09-29 대표 요청). 집계 실패(null)면 0 + meta.requestedOk=false.
+    const reqPurpose = chan === "프로모션" || chan === "도매 대량" ? chan : null;
+    const [pr, sr, promoFwd, bundles, inbound, untracked, requestedMap] = await Promise.all([
       sb.from("products").select("id, sku, name, spec, unit, cost_price, attrs").eq("active", true).order("name", { ascending: true }),
       stockRpc(),
       getPromoForwardBySku(today, horizonDays),
       getAllBundles(sb),
       chan !== "도매" && chan !== "도매 대량" && chan !== "프로모션" ? getOpenInboundByProduct(sb, today) : Promise.resolve(new Map<string, InboundRow>()), // 제조사 입고는 소매로만 온다 — 이동으로 채우는 칸엔 '입고 예정'이 없다(프로모션도 포함 — 087b1c4 때 미뤘던 별건을 확정형 탭 정리와 함께 반영)
       getUntracked(sb),
+      reqPurpose ? getOpenRequestedByProduct(sb, reqPurpose) : Promise.resolve(new Map<string, RequestedRow>()),
     ]);
     const inboundOk = inbound !== null;
+    const requestedOk = requestedMap !== null;
     if (pr.error) throw pr.error;
     if (sr.error) throw sr.error;
 
@@ -147,6 +153,7 @@ export async function GET(req: NextRequest) {
         auto_safety, promo_qty: Math.round(promo), depletion_days,
         promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
         inbound: inbQty, inbound_due: inb?.earliest_due ?? null, inbound_overdue: inb?.overdue_qty ?? 0, inbound_detail: formatInbound(inb, today),
+        requested: requestedMap?.get(p.id)?.requested ?? 0, requested_detail: formatRequested(requestedMap?.get(p.id)),
         // 부족 = 현재고 + 입고 예정이 '오늘 요청분 판매 가능일까지 버틸 양' 미만(권장 수식 belowSafety 와 같은 엄격 비교 —
         //  '이하'면 목표 일수와 부족 일수의 올림이 같은 저회전 품목이 부족인데 권장 0 이 된다).
         //  목표(다음 요청분까지)로 재면 매주 정상 보충 품목까지 거의 늘 부족으로 뜬다 — 부족은 '지금 시켜도 늦는가'다.
@@ -158,7 +165,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable, inboundOk } });
+    return NextResponse.json({ ok: true, rows, meta: { from, to, periodDays, leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable, inboundOk, requestedOk } });
   } catch (err) {
     console.error("[inventory/overview]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "재고 개요 조회 실패") }, { status: 500 });

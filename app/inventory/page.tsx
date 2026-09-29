@@ -20,7 +20,9 @@ import { matchKoQuery } from "@/app/lib/hangul";
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 function shift(iso: string, n: number) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 
-const PERIODS = [["일일", 1], ["7일", 7], ["14일", 14], ["30일", 30], ["지정", 0]] as const;
+// '전체'는 확정형 탭(프로모션·도매 대량) 전용·기본값 — 채웠다 한 번에 나가는 칸이라 누적 입출고가 의미 있다(2026-09-29 대표 요청)
+const PERIODS = [["일일", 1], ["7일", 7], ["14일", 14], ["30일", 30], ["전체", 0], ["지정", 0]] as const;
+const ALL_FROM = "2000-01-01";
 type PMode = (typeof PERIODS)[number][0];
 
 // 생산 수치(/api/production/inventory) — SKU 키 조인용
@@ -47,29 +49,33 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
 //  합계(=TABLE_MIN)는 그대로다 — 1366 창의 무스크롤을 지키기 위해. 줄인 열도 헤더·내용이 잘리지 않는 걸 실측 확인했다.
 const COL = {
   chk: 31, sku: 108, name: 140, qty: 72, daily: 78, dep: 76,
-  inb: 84, rec: 76, pin: 64, pout: 64, val: 96, act: 78,
+  inb: 84, rec: 76, req: 76, pin: 64, pout: 64, val: 96, act: 78,
 } as const;
 // 전체 열 합 1106 — 사이드바(237)+스크롤바(15) 더해도 1366 창에 들어간다.
 // 확정형 탭(프로모션·도매 대량)은 판단 열(체크·하루 출고·예상소진·입고 예정·권장생산)이 빠져 더 좁다.
-const FULL_COLS = Object.keys(COL) as (keyof typeof COL)[];
-const CONFIRMED_COLS: (keyof typeof COL)[] = ["sku", "name", "qty", "pin", "pout", "val", "act"];
+// 요청량(req)은 확정형 탭 전용 — 그 칸 용도의 열린 요청서 요청수량 합.
+const FULL_COLS = (Object.keys(COL) as (keyof typeof COL)[]).filter((k) => k !== "req");
+const CONFIRMED_COLS: (keyof typeof COL)[] = ["sku", "name", "qty", "req", "pin", "pout", "val", "act"];
 
 // 정렬 가능한 컬럼(생산 열 포함)
-type SortKey = "name" | "qty" | "inbound" | "depletion_days" | "period_in" | "period_out" | "daily_out" | "value" | "recommend" | "request_by";
+type SortKey = "name" | "qty" | "inbound" | "requested" | "depletion_days" | "period_in" | "period_out" | "daily_out" | "value" | "recommend" | "request_by";
 const numKey = (r: OverviewRow, k: Exclude<SortKey, "recommend" | "request_by">): number | string =>
   k === "name" ? r.name
     : k === "depletion_days" ? (r.depletion_days ?? Number.POSITIVE_INFINITY)
     : k === "inbound" ? (r.inbound ?? 0)   // 선택 필드 — 없으면 0 으로 내려야 정렬이 NaN 으로 깨지지 않는다
+    : k === "requested" ? (r.requested ?? 0)
     : (r[k] as number);
 
 export default function InventoryPage() {
   const router = useRouter();
   const [rows, setRows] = useState<OverviewRow[]>([]);
-  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; sellable?: string; nextDraft?: string; nextSellable?: string; inboundOk?: boolean } | null>(null);
+  const [meta, setMeta] = useState<{ from: string; to: string; periodDays: number; leadDays: number; cycleDays?: number; horizonDays?: number; sellable?: string; nextDraft?: string; nextSellable?: string; inboundOk?: boolean; requestedOk?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
+  // 확정형 탭 기본 = 요청한 품목만(열린 요청서 품목 + 이 칸에 재고가 남은 품목 — 요청이 끝나도 남은 확보분은 가리지 않는다)
+  const [onlyRequested, setOnlyRequested] = useState(true);
   const [channel, setChannel] = useState<InvChannelFilter>("전체");
   const [pmode, setPmode] = useState<PMode>("30일");
   const [cfrom, setCfrom] = useState(shift(TODAY(), -6));
@@ -89,6 +95,7 @@ export default function InventoryPage() {
 
   const range = useMemo(() => {
     if (pmode === "지정") return { from: cfrom, to: cto };
+    if (pmode === "전체") return { from: ALL_FROM, to: TODAY() };
     const days = (PERIODS.find((p) => p[0] === pmode)?.[1] as number) || 30;
     const to = TODAY();
     return { from: shift(to, -(days - 1)), to };
@@ -177,12 +184,16 @@ export default function InventoryPage() {
 
   const qtyOf = useCallback((id: string) => rows.find((r) => r.product_id === id)?.qty || 0, [rows]);
   const products = useMemo(() => rows.map((r) => ({ id: r.product_id, name: r.name, sku: r.sku, unit: r.unit, is_bundle: r.is_bundle })), [rows]);
+  // 확정형 탭 '요청한 품목만' 범위 = 열린 요청서 품목 또는 이 칸에 재고가 남은 품목. 요약 카드도 같은 범위로 세야 표와 숫자가 맞는다.
+  //  요청량 조회가 실패하면 걸지 않는다 — 요청만 되고 아직 안 옮긴(현재고 0) 품목이 조용히 숨는다.
+  const reqScopeOn = confirmedTab && onlyRequested && meta?.requestedOk !== false;
+  const scoped = useMemo(() => (reqScopeOn ? rows.filter((r) => (r.requested ?? 0) > 0 || r.qty !== 0) : rows), [rows, reqScopeOn]);
   const totals = useMemo(() => ({
-    items: rows.length,
-    value: rows.reduce((s, r) => s + r.value, 0),
-    low: rows.filter((r) => r.low).length,
-    out: rows.reduce((s, r) => s + r.period_out, 0),
-  }), [rows]);
+    items: scoped.length,
+    value: scoped.reduce((s, r) => s + r.value, 0),
+    low: scoped.filter((r) => r.low).length,
+    out: scoped.reduce((s, r) => s + r.period_out, 0),
+  }), [scoped]);
   // 생산 카드 — 권장 생산>0 = 안전재고(행사 반영) 미달과 동일 데이터라 하나만 노출.
   //  표가 보여주는 행(활성·세트 제외)만 표 권장 열과 같은 prodView 로 합산 — 생산 수치에만 있는 품목
   //  (비활성·세트)까지 세면 카드 합과 표의 권장 합·선택 가능 수가 어긋난다(#46). 검색·부족 필터는 무시.
@@ -197,7 +208,7 @@ export default function InventoryPage() {
 
   const shown = useMemo(() => {
     const q = search.trim();
-    const f = rows.filter((r) => {
+    const f = scoped.filter((r) => {
       if (onlyLow && !r.low) return false;
       if (q && !matchKoQuery(`${r.name} ${r.sku || ""} ${r.spec || ""} ${r.attrs || ""}`, q)) return false; // 속성/분류·초성 검색
       return true;
@@ -214,7 +225,7 @@ export default function InventoryPage() {
       if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb), "ko") * mul;
       return (va - vb) * mul;
     });
-  }, [rows, search, onlyLow, sort, prodView]);
+  }, [scoped, search, onlyLow, sort, prodView]);
 
   function toggleSort(key: SortKey) {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
@@ -234,11 +245,24 @@ export default function InventoryPage() {
   useEffect(() => {
     setSel(new Set()); // 채널 바꾸면 선택 초기화(기준 데이터가 다름)
     if ((RESERVED_CHANNELS as readonly string[]).includes(channel)) {
-      // 확정형 탭엔 숨긴 열이 있다 — 그 열로 정렬 중이었으면 현재고로, 부족 필터는 해제(부족 판정 없음)
-      setSort((s) => (["daily_out", "depletion_days", "inbound", "recommend", "request_by"].includes(s.key) ? { key: "qty", dir: "desc" } : s));
+      // 확정형 탭엔 숨긴 열이 있다 — 그 열로 정렬 중이었으면 요청량 순으로, 부족 필터는 해제(부족 판정 없음)
+      setSort((s) => (["daily_out", "depletion_days", "inbound", "recommend", "request_by"].includes(s.key) ? { key: "requested", dir: "desc" } : s));
       setOnlyLow(false);
+    } else {
+      setSort((s) => (s.key === "requested" ? { key: "depletion_days", dir: "asc" } : s)); // 요청량 열은 확정형 탭 전용
     }
   }, [channel]);
+  // 확정형 탭에 들어가면 기간 '전체'·요청한 품목만이 기본, 나오면 들어가기 전 기간으로 되돌린다 —
+  //  채널과 같은 렌더에 바꿔 조회를 한 번만 한다. 같은 탭을 다시 누르면 고른 기간·필터를 건드리지 않는다.
+  const prevPmode = useRef<PMode>("30일");
+  const changeChannel = (c: InvChannelFilter) => {
+    if (c === channel) return;
+    setChannel(c);
+    if ((RESERVED_CHANNELS as readonly string[]).includes(c)) {
+      if (!confirmedTab) prevPmode.current = pmode;
+      setPmode("전체"); setOnlyRequested(true);
+    } else if (pmode === "전체") setPmode(prevPmode.current);
+  };
 
   function goRequest() {
     const picked = rows.filter((r) => sel.has(r.product_id));
@@ -304,6 +328,7 @@ export default function InventoryPage() {
 
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
       {/* 확정형 탭엔 권장생산·입고 예정이 없으므로 그 얘기를 하는 경고도 띄우지 않는다 */}
+      {confirmedTab && meta?.requestedOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>요청량을 불러오지 못했습니다 — 새로고침하세요.</div>}
       {!confirmedTab && (prodWarn || (channel !== "도매" && (prodInbBad || meta?.inboundOk === false))) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
 
       {/* 데이터박스 — 재고 4 + 생산 2. 확정형 탭은 판단 카드(부족·생산 2종)를 뺀 3종만(판정 자체가 없다) */}
@@ -318,9 +343,9 @@ export default function InventoryPage() {
 
       <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <ChannelFilter value={channel} onChange={setChannel} />
+          <ChannelFilter value={channel} onChange={changeChannel} />
           <div className="sm-tabs" style={{ margin: 0 }}>
-            {PERIODS.map(([k]) => <button key={k} className={`sm-tab ${pmode === k ? "is-active" : ""}`} onClick={() => setPmode(k)}>{k === "지정" ? "날짜 지정" : k}</button>)}
+            {PERIODS.filter(([k]) => k !== "전체" || confirmedTab).map(([k]) => <button key={k} className={`sm-tab ${pmode === k ? "is-active" : ""}`} onClick={() => setPmode(k)}>{k === "지정" ? "날짜 지정" : k}</button>)}
           </div>
           {pmode === "지정" && (
             <span className="sm-row" style={{ gap: 6 }}>
@@ -332,6 +357,11 @@ export default function InventoryPage() {
           {!confirmedTab && (
             <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> 부족만 보기
+            </label>
+          )}
+          {confirmedTab && (
+            <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }} title="열린 요청서 품목과 이 칸에 재고가 남은 품목">
+              <input type="checkbox" checked={onlyRequested} onChange={(e) => setOnlyRequested(e.target.checked)} /> 요청한 품목만 보기
             </label>
           )}
         </div>
@@ -393,6 +423,7 @@ export default function InventoryPage() {
               {/* 상태(지금 어떤가) → 판단(무엇을 할까) → 참고(기간 실적). 결정 17.
                   확정형 탭은 판단 열이 통째로 빠진다 — 상태와 기간 실적만 남는다 */}
               <Th k="qty" label="현재고" num w={pct(COL.qty)} />
+              {confirmedTab && <Th k="requested" label="요청량" num w={pct(COL.req)} />}
               {!confirmedTab && <><Th k="daily_out" label="하루 출고" num w={pct(COL.daily)} /><Th k="depletion_days" label="예상소진" num w={pct(COL.dep)} />
               <Th k="inbound" label="입고 예정" num w={pct(COL.inb)} /><Th k="recommend" label="권장생산" num w={pct(COL.rec)} /></>}
               <Th k="period_in" label="총입고" num w={pct(COL.pin)} /><Th k="period_out" label="총출고" num w={pct(COL.pout)} />
@@ -426,6 +457,8 @@ export default function InventoryPage() {
                     {/* 소매 숫자 '아래' 줄로 — 옆에 붙이면 현재고가 두 값처럼 읽힌다(대표 지시). 입고 예정 셀의 '마감' 줄과 같은 방식 */}
                     {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
                   </td>
+                  {/* 요청량 = 이 칸 용도의 열린 요청서 요청수량 합(확정형 탭). 요청서별 요청·이동·목표일은 마우스를 올려 본다 */}
+                  {confirmedTab && <td className="num b2b-money" title={r.requested_detail || undefined} style={{ color: (r.requested ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}>{(r.requested ?? 0) > 0 ? r.requested.toLocaleString() : "-"}</td>}
                   {!confirmedTab && <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>}
                   {/* 예상소진 = 창고(현재고)만 기준. 입고 예정이 있으면 '입고 예정일 전에 바닥나는가'로 빨강을 판정 —
                       판매 가능일까지 일수만 보면 시켜 둔 물량이 곧 오는데도 부족·권장(포지션 기준)과 신호가 엇갈린다 */}
@@ -462,7 +495,7 @@ export default function InventoryPage() {
       )}
       {/* 기간·계산식 안내줄 — 표 위에 있으면 정신없다는 요청(2026-09-28)으로 표 아래에 둔다 */}
       {meta && (confirmedTab
-        ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일)</p>
+        ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>{pmode === "전체" ? `기간 전체 (~ ${meta.to})` : `기간 ${meta.from} ~ ${meta.to} (${meta.periodDays}일)`}</p>
         /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
            평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
         : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만</p>
