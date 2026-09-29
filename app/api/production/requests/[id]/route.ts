@@ -5,6 +5,7 @@ import { PR_STATUSES, UNREQUESTED_ITEM_MEMO, toPrPurpose, isFactoryPurpose, CONF
 import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProductionRequestDeleted } from "@/app/lib/b2b-activity";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getRequestFullness } from "@/app/lib/production-allocate";
+import { companyTitle } from "@/app/lib/production-request-create";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -93,6 +94,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       const { count: rcCnt, error: rcE } = await sb.from("production_receipts").select("id", { count: "exact", head: true }).eq("request_id", id);
       if (rcE) throw rcE;
       if ((rcCnt ?? 0) > 0) return NextResponse.json({ ok: false, error: "입고·배정 기록이 있는 요청서는 용도를 바꿀 수 없습니다 — 입고·배정을 먼저 취소하거나 새 요청서를 만드세요." }, { status: 400 });
+    }
+    // 도매 대량 요청서 제목이 비면 거래처 이름으로(생성과 같은 규칙) — 제목·거래처·용도를 건드리는 수정에서만 본다.
+    if (b.title !== undefined || b.company_id !== undefined || nextPurpose) {
+      const effPurpose = nextPurpose ?? toPrPurpose(curWin?.purpose);
+      const effTitle = patch.title !== undefined ? patch.title : (curWin?.title ?? null);
+      const effCompany = patch.company_id !== undefined ? patch.company_id : (curWin?.company_id ?? null);
+      if (effPurpose === "도매 대량" && !effTitle) {
+        const name = await companyTitle(sb, effCompany);
+        if (name) patch.title = name;
+      }
     }
 
     // 현재 상태·요청번호 — 품목 교체 전제조건·expect_status 대조·변경기록·알림에 공용(한 번만 읽는다).

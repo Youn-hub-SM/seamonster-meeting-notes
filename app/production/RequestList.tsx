@@ -716,7 +716,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               <label className="sm-col" style={{ gap: 3, minWidth: 200 }}>
                 {/* 발주가 아직 없을 수 있다(영업이 구두로 확보한 당일 등록) — 그때는 거래처만 고른다 */}
                 <span style={{ fontSize: 15, fontWeight: 600 }}>거래처 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 선택</span></span>
-                <select className="b2b-input" style={{ width: 200 }} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                {/* 제목이 옛 거래처 이름(자동 제목) 그대로면 비워서 새 거래처 이름으로 다시 채워지게 한다 — 서버가 빈 제목을 거래처 이름으로 채운다 */}
+                <select className="b2b-input" style={{ width: 200 }} value={companyId} onChange={(e) => { const prevName = companies.find((c) => c.id === companyId)?.name; if (prevName && title.trim() === prevName) setTitle(""); setCompanyId(e.target.value); }}>
                   <option value="">(미지정)</option>
                   {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -724,7 +725,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             )}
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>제목(선택)</span>
-              <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 3월 2주차 도매 생산" />
+              <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={purpose === "도매 대량" ? "비우면 거래처 이름" : "예: 3월 2주차 도매 생산"} />
             </label>
           </div>
 

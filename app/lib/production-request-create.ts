@@ -31,6 +31,15 @@ export type CreateInput = {
 
 export class CreateError extends Error { status: number; constructor(msg: string, status = 400) { super(msg); this.status = status; } }
 
+// 도매 대량 요청서 제목을 비우면 거래처 이름으로 채운다(2026-09-29 대표 지시) — 생성(POST)·수정(PATCH) 공용.
+//  거래처 미지정·조회 실패면 null(제목 없이 저장 — 저장을 막지 않는다).
+export async function companyTitle(sb: SupabaseClient, companyId: unknown): Promise<string | null> {
+  if (!UUID_RE.test(String(companyId || ""))) return null;
+  const { data, error } = await sb.from("companies").select("name").eq("id", String(companyId)).maybeSingle();
+  if (error) return null;
+  return String((data as { name?: string } | null)?.name || "").trim() || null;
+}
+
 export function normalizeItems(raw: unknown): CreateItem[] {
   const arr = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
   return arr
@@ -65,9 +74,10 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
   if (purpose === "재고 보충" && !prod_start && due_date && request_date > due_date)
     throw new CreateError("요청일이 생산종료일보다 뒤입니다 — 생산시작일·생산종료일을 확인하세요.");
   const who = input.created_by;
+  const title = String(input.title || "").trim() || (purpose === "도매 대량" ? await companyTitle(sb, input.company_id) : null);
   const head: Record<string, unknown> = {
     req_no,
-    title: String(input.title || "").trim() || null,
+    title,
     requested_by: String(input.requested_by || "").trim() || who,
     status: input.status || "요청",
     purpose,
@@ -102,7 +112,7 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
   if (ie) { await sb.from("production_requests").delete().eq("id", requestId); throw ie; }
 
   // 작성 알림 — 게시물 본문에 품목·수량·마감·담당 전체(팀즈 게시물 전환으로 긴 내용 허용 — 2026-09-16)
-  const label = String(input.title || "").trim() || `품목 ${items.length}종 · ${items.reduce((s, it) => s + it.requested_qty, 0).toLocaleString()}개`;
+  const label = title || `품목 ${items.length}종 · ${items.reduce((s, it) => s + it.requested_qty, 0).toLocaleString()}개`;
   let full: ProductionRequest | undefined;
   try { [full] = await loadRequests(sb, { id: requestId }); } catch { /* 상세 없이 발송 */ }
   await logProductionRequestCreated(req_no || "", label, who, full ? formatRequestDetail(full) : undefined);
