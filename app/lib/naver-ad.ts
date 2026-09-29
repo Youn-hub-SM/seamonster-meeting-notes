@@ -178,10 +178,18 @@ function parseConvTsv(tsv: string): ConvRow[] {
 // 하루치 전환 상세 행 조회(모든 전환유형 포함 — 필터는 호출측). statDt="YYYY-MM-DD".
 // 지표 없는 날/오늘(미지원) 등은 400을 내므로 해당 일자는 빈 배열로 처리(전체 요청 실패 방지).
 export async function fetchConvReportDay(statDt: string): Promise<ConvRow[]> {
+  return (await fetchConvReportDayStrict(statDt)) ?? [];
+}
+
+// 위와 같되 '데이터 없음'([])과 '조회 실패'(null)를 구분한다(2026-09-30) — 실패를 0건으로 캐시하면
+//  그날 구매가 0 으로 굳고(어제분은 재조회 때 기존 캐시까지 지워짐) 어제 분석이 '구매 0'으로 단정한다.
+//  [] = 400(지표 없음·미지원 일자) 또는 리포트 상태 NONE. null = 그 밖의 오류·빌드 미완료·다운로드 실패.
+export async function fetchConvReportDayStrict(statDt: string): Promise<ConvRow[] | null> {
+  let jobId: number | string | undefined;
   try {
     const job = await naverAd<{ reportJobId?: number | string; id?: number | string; status?: string; downloadUrl?: string }>("POST", "/stat-reports", { body: { reportTp: "AD_CONVERSION_DETAIL", statDt } });
-    const jobId = job.reportJobId ?? job.id;
-    if (jobId == null) return [];
+    jobId = job.reportJobId ?? job.id;
+    if (jobId == null) return null;
     let status = String(job.status || ""); let url = String(job.downloadUrl || "");
     for (let i = 0; i < 25 && status !== "BUILT" && status !== "DONE"; i++) {
       await _sleep(1200);
@@ -189,16 +197,16 @@ export async function fetchConvReportDay(statDt: string): Promise<ConvRow[]> {
       status = String(g.status || ""); url = String(g.downloadUrl || "");
       if (status === "NONE" || status === "ERROR" || status === "REGIST_ERROR") break;
     }
-    let rows: ConvRow[] = [];
-    if (url) {
-      const u = new URL(url);
-      const dl = await fetch(url, { headers: signedHeaders("GET", u.pathname), cache: "no-store" });
-      if (dl.ok) rows = parseConvTsv(await dl.text());
-    }
-    await naverAd("DELETE", `/stat-reports/${jobId}`).catch(() => {}); // 잡 정리(미삭제 시 자동 30일 후 삭제)
-    return rows;
-  } catch {
-    return []; // 지표 없음/미지원 일자 → 0건 처리
+    if (status === "NONE") return [];
+    if ((status !== "BUILT" && status !== "DONE") || !url) return null;
+    const u = new URL(url);
+    const dl = await fetch(url, { headers: signedHeaders("GET", u.pathname), cache: "no-store" });
+    if (!dl.ok) return null;
+    return parseConvTsv(await dl.text());
+  } catch (e) {
+    return /네이버 광고 API 400/.test(e instanceof Error ? e.message : "") ? [] : null; // 400 = 지표 없음/미지원 일자
+  } finally {
+    if (jobId != null) await naverAd("DELETE", `/stat-reports/${jobId}`).catch(() => {}); // 잡 정리(미삭제 시 자동 30일 후 삭제)
   }
 }
 

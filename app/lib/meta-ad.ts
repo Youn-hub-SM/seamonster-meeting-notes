@@ -130,7 +130,7 @@ export async function getInsights(level: "campaign" | "adset" | "ad", range: Sta
 // ── 일별 인사이트 ── time_increment=1 → 하루 한 행. '연속 N일 유지' 판정용.
 //  집계 인사이트는 기간 전체를 한 행으로 뭉쳐서 주므로, 하루만 반짝 잘 나온 캠페인과
 //  꾸준히 잘 나온 캠페인이 구분되지 않는다. 증액 판정은 그 차이가 곧 돈이라 일별로 본다.
-export type MetaDaily = { date: string; spend: number; purchaseValue: number; roas: number };
+export type MetaDaily = { date: string; spend: number; purchaseValue: number; roas: number; purchases?: number };
 export async function getDailyInsights(level: "campaign" | "adset", range: { since: string; until: string }): Promise<Record<string, MetaDaily[]>> {
   const { accountId } = creds();
   const key = level === "campaign" ? "campaign_id" : "adset_id";
@@ -147,7 +147,7 @@ export async function getDailyInsights(level: "campaign" | "adset", range: { sin
     const date = String(r.date_start || "");
     if (!id || !date) continue;
     const ins = parseInsight(r);
-    (out[id] ||= []).push({ date, spend: ins.spend, purchaseValue: ins.purchaseValue, roas: ins.roas });
+    (out[id] ||= []).push({ date, spend: ins.spend, purchaseValue: ins.purchaseValue, roas: ins.roas, purchases: ins.purchases });
   }
   for (const list of Object.values(out)) list.sort((a, b) => a.date.localeCompare(b.date)); // 과거→최근
   return out;

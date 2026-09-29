@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { fetchConvReportDay, type ConvRow } from "./naver-ad";
+import { fetchConvReportDayStrict, type ConvRow } from "./naver-ad";
 
 // 네이버 검색광고 '구매(purchase) 전환' 일별 집계 + 캐시.
 // AD_CONVERSION_DETAIL 리포트가 무거워 일자 단위로 naver_conv_daily 에 캐시(최근 2일은 매번 갱신).
@@ -46,18 +46,20 @@ function fmtUTC(d: Date): string {
 }
 
 // until을 '어제'까지로 캡(AD_CONVERSION_DETAIL은 당일 미지원). 어제 문자열도 반환.
+//  오늘·어제는 KST 기준 — 서버(UTC)의 날짜로 재면 KST 00~09시에 어제분이 빠지고 그저께를 '어제'로 재조회한다(2026-09-30 수정).
 function capUntil(until: string): { effUntil: string; yStr: string } {
-  const now = new Date();
-  const todayStr = fmtUTC(now);
-  const yStr = fmtUTC(new Date(now.getTime() - 864e5));
+  const kstNow = new Date(Date.now() + 9 * 3600e3);
+  const todayStr = fmtUTC(kstNow);
+  const yStr = fmtUTC(new Date(kstNow.getTime() - 864e5));
   return { effUntil: until >= todayStr ? yStr : until, yStr };
 }
 
 // 지정 기간의 일별 구매전환을 캐시에 채우고, 라이브 폴백용 rows·사용일자를 반환.
-async function ensureRange(since: string, effUntil: string, yStr: string): Promise<{ useCache: boolean; fetched: DayRows[]; toFetch: string[] }> {
+//  조회에 실패한 날(failedDays)은 캐시를 지우거나 0건으로 쓰지 않는다 — 있던 캐시는 그대로 두고 다음 조회 때 다시 받는다.
+async function ensureRange(since: string, effUntil: string, yStr: string): Promise<{ useCache: boolean; fetched: DayRows[]; toFetch: string[]; failedDays: string[] }> {
   const days = since > effUntil ? [] : dateList(since, effUntil);
   const recent = new Set([yStr]); // 어제는 전환 지연 반영 위해 항상 재조회
-  if (!days.length) return { useCache: true, fetched: [], toFetch: [] };
+  if (!days.length) return { useCache: true, fetched: [], toFetch: [], failedDays: [] };
 
   let useCache = true;
   let presentDays = new Set<string>();
@@ -68,9 +70,11 @@ async function ensureRange(since: string, effUntil: string, yStr: string): Promi
   } catch { useCache = false; }
 
   const toFetch = useCache ? days.filter((d) => !presentDays.has(d) || recent.has(d)) : days;
-  const fetched: DayRows[] = await mapPool(toFetch, 4, async (day) => ({ day, rows: await fetchConvReportDay(day) }));
+  const raw = await mapPool(toFetch, 4, async (day) => ({ day, rows: await fetchConvReportDayStrict(day) }));
+  const failedDays = raw.filter((x) => x.rows == null).map((x) => x.day);
+  const fetched: DayRows[] = raw.filter((x): x is DayRows => x.rows != null);
 
-  // 캐시 저장(있을 때): 해당 일자 삭제 후 재삽입
+  // 캐시 저장(있을 때): 해당 일자 삭제 후 재삽입 — 실패한 날은 건너뜀
   if (useCache) {
     for (const { day, rows } of fetched) {
       const agg = aggregateDay(rows);
@@ -79,21 +83,24 @@ async function ensureRange(since: string, effUntil: string, yStr: string): Promi
         ...Object.entries(agg.adgroup).map(([id, v]) => ({ stat_date: day, entity_type: "adgroup", entity_id: id, purchase_conv: v.conv, purchase_sales: v.sales })),
       ];
       try {
-        await supabaseAdmin().from("naver_conv_daily").delete().eq("stat_date", day);
-        if (inserts.length) await supabaseAdmin().from("naver_conv_daily").insert(inserts);
+        // supabase 는 오류를 던지지 않고 돌려준다 — 지우기·넣기 중 하나라도 실패하면 그날은 확정이 아니다
+        const del = await supabaseAdmin().from("naver_conv_daily").delete().eq("stat_date", day);
+        const ins = del.error || !inserts.length ? null : await supabaseAdmin().from("naver_conv_daily").insert(inserts);
+        if (del.error || ins?.error) failedDays.push(day);
       } catch { useCache = false; break; }
     }
   }
-  return { useCache, fetched, toFetch };
+  return { useCache, fetched, toFetch, failedDays };
 }
 
 // 지정 기간의 '구매 전환' 집계를 엔티티유형별로 반환.
-export async function getPurchaseConversions(since: string, until: string, entityType: "keyword" | "adgroup"): Promise<{ map: PurchaseAgg; daysFetched: number; cached: boolean; effectiveUntil: string }> {
+// failedDays = 리포트 조회에 실패한 날(그날 값은 캐시에 남아 있던 것 또는 0 — 확정이 아니다).
+export async function getPurchaseConversions(since: string, until: string, entityType: "keyword" | "adgroup"): Promise<{ map: PurchaseAgg; daysFetched: number; cached: boolean; effectiveUntil: string; failedDays: string[] }> {
   const { effUntil, yStr } = capUntil(until);
   const days = since > effUntil ? [] : dateList(since, effUntil);
-  if (!days.length) return { map: {}, daysFetched: 0, cached: true, effectiveUntil: effUntil };
+  if (!days.length) return { map: {}, daysFetched: 0, cached: true, effectiveUntil: effUntil, failedDays: [] };
 
-  const { useCache, fetched, toFetch } = await ensureRange(since, effUntil, yStr);
+  const { useCache, fetched, toFetch, failedDays } = await ensureRange(since, effUntil, yStr);
 
   const map: PurchaseAgg = {};
   if (useCache) {
@@ -112,7 +119,7 @@ export async function getPurchaseConversions(since: string, until: string, entit
       }
     }
   }
-  return { map, daysFetched: toFetch.length, cached: useCache, effectiveUntil: effUntil };
+  return { map, daysFetched: toFetch.length, cached: useCache, effectiveUntil: effUntil, failedDays };
 }
 
 export type PurchaseDay = { date: string; conv: number; sales: number };

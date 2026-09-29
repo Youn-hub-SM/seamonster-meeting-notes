@@ -16,8 +16,8 @@ async function isAdminReq(req: NextRequest): Promise<boolean> {
 export async function GET(req: NextRequest) {
   try {
     if (!(await isAdminReq(req))) return NextResponse.json({ ok: false, error: "대표 전용 설정입니다." }, { status: 403 });
-    const [auto, webhook] = await Promise.all([getKv("briefing_auto"), getKv("briefing_webhook")]);
-    return NextResponse.json({ ok: true, auto: auto !== "off", webhook });
+    const [auto, webhook, analystAuto] = await Promise.all([getKv("briefing_auto"), getKv("briefing_webhook"), getKv("analyst_auto")]);
+    return NextResponse.json({ ok: true, auto: auto !== "off", webhook, analystAuto: analystAuto !== "off" });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "설정 조회 실패") }, { status: 500 });
   }
@@ -27,8 +27,9 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     if (!(await isAdminReq(req))) return NextResponse.json({ ok: false, error: "대표 전용 설정입니다." }, { status: 403 });
-    const b = (await req.json()) as { auto?: boolean; webhook?: string };
+    const b = (await req.json()) as { auto?: boolean; webhook?: string; analystAuto?: boolean };
     if (b.auto !== undefined) await setKv("briefing_auto", b.auto ? "on" : "off");
+    if (b.analystAuto !== undefined) await setKv("analyst_auto", b.analystAuto ? "on" : "off");
     if (b.webhook !== undefined) {
       const url = String(b.webhook).trim();
       if (url && !/^https:\/\//.test(url)) return NextResponse.json({ ok: false, error: "웹훅 URL은 https:// 로 시작해야 합니다." }, { status: 400 });

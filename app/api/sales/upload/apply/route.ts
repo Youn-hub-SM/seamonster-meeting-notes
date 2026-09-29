@@ -1,18 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/app/lib/supabase";
 import { parseSalesFile } from "@/app/lib/sales-parse";
 import { normalizeRow, type SalesOrderRow, type SalesCustomerRow } from "@/app/lib/sales-normalize";
 import { logSalesUpload, currentActor } from "@/app/lib/b2b-activity";
 import { randomUUID } from "node:crypto";
+import { runDailyAnalyst, rerunIfSalesChanged, kstDay } from "@/app/lib/analyst";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300; // 적재(수십 초) + 응답 뒤 어제 분석(after, 1~3분)
 
 const MAX_APPLY = 50000;
 
 // 파일 재파싱 → row_hash 멱등 upsert(중복 무시) + 고객 조회 테이블 병합 upsert.
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now(); // 응답 뒤 어제 분석의 마감(270초)은 이 요청 시작 기준 — 적재 시간까지 포함
   try {
     const form = await req.formData();
     const file = form.get("file");
@@ -97,6 +99,23 @@ export async function POST(req: NextRequest) {
       await sb.from("sales_uploads").delete().eq("id", batchId);
     }
     await logSalesUpload(file.name, inserted, skipped);
+    // 어제(KST) 소매 매출이 새로 들어왔으면 응답을 먼저 돌려주고 어제 분석 에이전트를 돌린다(분석·팀즈 발송).
+    //  멱등 — 이미 매출까지 분석된 날은 건너뛰고, 광고만 보고했던 날은 매출을 넣어 다시 보고한다. 끄기 = kv analyst_auto=off.
+    //  2~3일 전(주말 등 광고만 보고했던 날)이 함께 올라왔으면 그 날짜는 새 실행으로 다시 분석(분석한 적 있고 매출이 바뀐 날만).
+    const yst = kstDay(1);
+    const hasYst = orders.some((o) => o.order_date === yst);
+    const older = [kstDay(2), kstDay(3)].filter((d) => orders.some((o) => o.order_date === d));
+    if (inserted > 0 && (hasYst || older.length)) {
+      after(async () => {
+        try {
+          for (const d of older) await rerunIfSalesChanged(d); // 새 함수 실행을 거는 것뿐이라 빠르다 — 어제 분석보다 먼저
+          if (hasYst) {
+            const r = await runDailyAnalyst({ trigger: "upload", date: yst, startedAt });
+            if (!r.ok) console.error("[sales upload] 어제 분석 실패", r.error);
+          }
+        } catch (e) { console.error("[sales upload] 어제 분석 오류", e); }
+      });
+    }
     const { data: bounds } = await sb.rpc("sales_date_bounds");
     const totalAfter = Array.isArray(bounds) && bounds[0] ? (bounds[0].total_rows as number) : null;
     return NextResponse.json({ ok: true, inserted, skipped, total_after: totalAfter, batch_id: inserted > 0 ? batchId : null });

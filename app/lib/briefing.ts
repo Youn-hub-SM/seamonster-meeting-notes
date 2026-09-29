@@ -410,6 +410,21 @@ const cardPayload = (body: CardEl[]) => ({
   }],
 });
 
+// 제목 + 마크다운(일일 리포트와 같은 부분집합: ## · ### · - · 표)을 적응형 카드로 팀즈에 보낸다(어제 분석 공용). 20초 안에 응답이 없으면 실패.
+export async function postTeamsMarkdown(url: string, title: string, md: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cardPayload(briefingCardBody(title, md))),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return { ok: false, error: `발송 실패(${res.status}) — 워크플로 실행 기록을 확인하세요.` };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "발송 실패: 네트워크 오류" };
+  }
+}
+
 export async function sendBriefingToTeams(date: string): Promise<{ ok: boolean; error?: string }> {
   const url = await getKv("briefing_webhook");
   if (!url) return { ok: false, error: "웹훅 URL이 설정되지 않았습니다 — /briefing 하단 설정에서 등록하세요." };
