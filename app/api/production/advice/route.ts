@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { getFeatureModel } from "@/app/lib/ai-model";
+import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 import { getInventoryRows } from "@/app/lib/production-inventory";
 import type { ScheduleHorizon } from "@/app/lib/production-schedule";
 import { getLedgerVelocity } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120; // 최대 40개 품목 표 추론 + 생각(medium)
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -125,11 +125,12 @@ export async function POST(req: Request) {
 
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 8000,
+      max_tokens: 12000, // 5.x 는 생각 토큰도 이 한도에 들어간다
+      ...effortParams(model, "medium"), // 수량 산식·긴급도 순위 — 실제 생산 수량에 영향
       system: buildSystemPrompt(inv.schedule, wholesale ? inv.wholesaleReqOk : inv.inboundOk, wholesale),
       messages: [{ role: "user", content: JSON.stringify(userPayload) }],
     });
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const text = readText(response);
     // 코드블록 제거 후 첫 '{' ~ 마지막 '}' 만 추출 (앞뒤 잡텍스트 방어)
     const stripped = text.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
     const s = stripped.indexOf("{");

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getCsModel } from "./ai-model";
+import { getCsModel, effortParams, readText, AiResponseError } from "./ai-model";
 import { fetchManualEntries, assembleManual, DEFAULT_CS_MANUAL } from "./cs-manual";
 import { supabaseAdmin } from "./supabase";
 
@@ -126,20 +126,29 @@ export async function generateCsAdvice(query: string): Promise<CsAdvice> {
 
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 2048,
-    system: systemPrompt,
+    max_tokens: 8000, // 답변 초안 + 코칭 JSON — 5.x 는 생각 토큰도 이 한도에 들어간다
+    // 지침·매뉴얼·출력 규칙은 문의마다 같다 → 프롬프트 캐시(가장 자주 쓰는 기능이라 입력 비용이 크게 준다)
+    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: query }],
+    ...effortParams(model, "low"),
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
+  const text = readText(response);
 
   const cleaned = text
     .replace(/^```json?\s*\n?/i, "")
     .replace(/\n?```\s*$/i, "")
     .trim();
 
-  const parsed = JSON.parse(cleaned) as Partial<CsAdvice>;
+  let parsed: Partial<CsAdvice>;
+  try {
+    parsed = JSON.parse(cleaned) as Partial<CsAdvice>;
+  } catch {
+    // 앞뒤 문장이 붙은 경우 — 첫 { ~ 마지막 } 만 떼어 재시도
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (!m) throw new AiResponseError("AI 응답 형식을 해석하지 못했습니다 — 다시 시도해 주세요.");
+    parsed = JSON.parse(m[0]) as Partial<CsAdvice>;
+  }
   // 모델이 일부 필드를 빠뜨려도 화면이 깨지지 않도록 정규화
   return {
     category: parsed.category || "기타",

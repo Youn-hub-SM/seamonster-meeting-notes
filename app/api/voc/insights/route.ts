@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getFeatureModel } from "@/app/lib/ai-model";
+import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120; // 입력이 큰 분석 + 생각
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -60,12 +60,13 @@ export async function POST() {
     const model = await getFeatureModel("voc");
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 6000,
+      max_tokens: 8000, // 5.x 는 생각 토큰도 이 한도에 들어간다
+      ...effortParams(model, "low"), // 분류·요약 → low
       system: SYSTEM,
       messages: [{ role: "user", content: `총 ${rows.length}건의 VOC:\n${JSON.stringify(payload)}` }],
     });
 
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const text = readText(response);
     const stripped = text.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
     const s = stripped.indexOf("{");
     const e = stripped.lastIndexOf("}");

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateCsAdvice } from "@/app/lib/cs";
+import { AiResponseError } from "@/app/lib/ai-model";
 
 export async function POST(request: Request) {
   try {
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("CS error:", error);
     return NextResponse.json(
-      { error: "답변 생성 중 오류가 발생했습니다." },
+      { error: error instanceof AiResponseError ? error.message : "답변 생성 중 오류가 발생했습니다." },
       { status: 500 }
     );
   }

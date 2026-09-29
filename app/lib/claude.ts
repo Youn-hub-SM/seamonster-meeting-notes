@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { TEAM_MEMBERS, COMPANY_CONTEXT } from "./config";
-import { getFeatureModel } from "./ai-model";
+import { getFeatureModel, effortParams, readText } from "./ai-model";
 import { meetingTermsPromptBlock } from "./meeting-terms";
 import { supabaseAdmin } from "./supabase";
 
@@ -10,7 +10,7 @@ const anthropic = new Anthropic({
 
 // 회의록 정리 기초 프롬프트(지침). /b2b/settings/ai 에서 편집하면 b2b_settings 'meeting_prompt' 에 저장돼
 // 즉시 반영됨. 팀원 정보·회사 맥락은 시스템이 자동으로 덧붙이므로 여기에 넣지 않는다.
-export const DEFAULT_MEETING_PROMPT = `한국어 회의 녹음(STT) 정리 전문 어시스턴트. 입력 즉시 분석 후 순수 JSON만 반환.
+export const DEFAULT_MEETING_PROMPT = `한국어 회의 녹음(STT) 정리 전문 어시스턴트. 회의 녹취를 분석해 순수 JSON만 반환.
 
 형식:
 {"title":"회의 제목","date":"YYYY-MM-DD","body":"주제별 마크다운 정리본"}
@@ -88,13 +88,13 @@ export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
 
   const response = await anthropic.messages.create({
     model,
-    max_tokens: 8192, // 긴 회의(결정·To-Do 많음)에서 JSON 이 잘려 파싱 실패하던 것 방지
+    max_tokens: 16000, // 긴 회의에서 JSON 이 잘리던 것 방지 — 5.x 는 생각 토큰도 이 한도에 들어간다
     system: await buildSystemPrompt(),
     messages: [{ role: "user", content: rawText }],
+    ...effortParams(model, "low"), // 요약·정리 = 콘텐츠 생성 → low
   });
 
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
+  const text = readText(response);
 
   const cleaned = text
     .replace(/^```json?\s*\n?/i, "")

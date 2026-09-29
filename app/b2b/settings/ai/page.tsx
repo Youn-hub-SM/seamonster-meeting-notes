@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type ModelKey = "haiku" | "sonnet" | "opus";
 type FeatureVal = ModelKey | "inherit";
 type Option = { key: ModelKey; label: string; price: string };
-type FeatureMeta = { key: string; label: string };
+type FeatureMeta = { key: string; label: string; inheritDefault?: ModelKey };
 
 const PROMPT_TEXTAREA: React.CSSProperties = {
   width: "100%",
@@ -186,7 +186,9 @@ export default function AiSettingsPage() {
                   style={{ maxWidth: 220 }}
                 >
                   {featureOptions.map((o) => (
-                    <option key={o.key} value={o.key}>{o.key === "inherit" ? `전체(공통) 따름 · 현재 ${globalLabel}` : o.label}</option>
+                    <option key={o.key} value={o.key}>{o.key !== "inherit" ? o.label
+                      : f.inheritDefault ? `기본 · ${options.find((x) => x.key === f.inheritDefault)?.label ?? f.inheritDefault}` // 공통 대신 이 기능의 기본 모델로 돈다(리포트·이익률 등)
+                      : `전체(공통) 따름 · 현재 ${globalLabel}`}</option>
                   ))}
                 </select>
               </div>

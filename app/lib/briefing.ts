@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin } from "./supabase";
-import { getFeatureModelKey } from "./ai-model";
+import { getFeatureModel, effortParams, readText } from "./ai-model";
 import { MODELS } from "./config";
 import { getKv } from "./b2b-settings";
 import { CHANGELOG } from "./changelog";
@@ -37,8 +37,7 @@ const kstDayUtc = (ymd: string) => {
 // 리포트 기본 모델 = opus (대표: 더 큰 모델이라도 알찬 내용). 설정(AI 설정 > 일일 리포트)에서 변경 가능.
 async function briefingModel(): Promise<string> {
   try {
-    const k = await getFeatureModelKey("briefing");
-    if (k !== "inherit") return MODELS[k] ?? MODELS.opus;
+    return await getFeatureModel("briefing"); // 미설정(inherit) = opus(AI_FEATURES inheritDefault)
   } catch { /* 설정 조회 실패 → 기본 */ }
   return MODELS.opus;
 }
@@ -333,11 +332,13 @@ export async function generateBriefing(opts?: { date?: string; force?: boolean }
 
   try {
     const model = await briefingModel();
+    // 크론(pg_net 55초)·maxDuration 60 안에서 끝나게 요청 시간 상한 45초 · 재시도 1회. 생각 강도는 low(집계 인용 서술).
     const res = await anthropic.messages.create({
-      model, max_tokens: 3000, system: SYSTEM,
+      model, max_tokens: 8000, system: SYSTEM,
       messages: [{ role: "user", content: `리포트일(오늘): ${date}\n집계:\n${JSON.stringify(data, null, 1)}` }],
-    });
-    const insight = res.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("\n").trim() || null;
+      ...effortParams(model, "low"),
+    }, { timeout: 45_000, maxRetries: 1 });
+    const insight = readText(res).trim() || null; // 거절·잘림이면 오류 → 아래에서 저장하지 않는다(잘린 리포트가 팀즈로 나가지 않게)
     if (insight) await sb.from("briefings").update({ insight, model }).eq("brief_date", date);
   } catch (e) { console.warn("[briefing] AI 생성 실패(집계는 저장됨)", e); }
 

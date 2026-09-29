@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { MODELS } from "./config";
+
+import { getFeatureModel, effortParams, readText } from "./ai-model";
 import { supabaseAdmin } from "./supabase";
 
 // AI 이익률 계산기 — 자연어 시나리오(상품·채널·판매가/할인)를 받아 순이익·이익률·전략을 산출.
@@ -251,14 +252,15 @@ export async function analyzeMargin(question: string, ref: MarginRefData, histor
   } else {
     messages.push({ role: "user", content: `${dataBlock(ref)}\n\n[질문]\n${question.trim()}` });
   }
+  const model = await getFeatureModel("margin"); // AI 설정 › 기능별 모델 › 이익률 계산기
   const resp = await anthropic.messages.create({
-    model: MODELS.opus, // 최고급 — 고급 계산·전략
-    max_tokens: 4096,
+    model,
+    max_tokens: 12000, // 다단계 계산 JSON — 5.x 는 생각 토큰도 이 한도에 들어간다
     system: `${framework}\n\n${OUTPUT_RULES}`,
     messages,
-  });
-  const block = resp.content.find((b) => b.type === "text");
-  const text = block && block.type === "text" ? block.text : "";
+    ...effortParams(model, "medium"), // 원가·수수료·배송 구간 다단계 산수 — 생각이 조금 필요
+  }, { timeout: 45_000, maxRetries: 1 });
+  const text = readText(resp); // 거절·잘림은 오류로(아래 폴백이 가리지 않게)
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   try {
     return JSON.parse(cleaned) as MarginResult;

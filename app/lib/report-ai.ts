@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./config";
-import { getFeatureModelKey } from "./ai-model";
+import { getFeatureModel, effortParams, readText, AiResponseError } from "./ai-model";
 import { supabaseAdmin } from "./supabase";
 import { SCHEMA_CATALOG, RUN_HERE_RELATIONS, LOOKER_RELATIONS } from "./report-schema";
 
@@ -159,8 +159,7 @@ export function validateReportSql(sql: string): string {
 
 // 리포트용 모델 — /b2b/settings/ai 에서 조정. 미설정(inherit)이면 opus(정교) 기본(공통기본 sonnet 아님).
 async function reportModel(): Promise<string> {
-  const k = await getFeatureModelKey("report");
-  return k !== "inherit" ? (MODELS[k] ?? MODELS.opus) : MODELS.opus;
+  return getFeatureModel("report"); // 미설정(inherit) = opus(AI_FEATURES inheritDefault)
 }
 
 export type ReportTurn = { q: string; sql: string };
@@ -190,7 +189,8 @@ export async function planReport(question: string, history?: ReportTurn[], corre
   }
   const resp = await anthropic.messages.create({
     model,
-    max_tokens: 2048,
+    max_tokens: 8000, // SQL + 설명 JSON — 5.x 는 생각 토큰도 이 한도에 들어간다
+    ...effortParams(model, "low"),
     // 스키마·규칙(정적 대용량 prefix)은 프롬프트 캐시 → 반복 질문의 입력 토큰 대폭 절감(정확도 영향 0)
     //  '오늘' 날짜는 캐시 breakpoint 뒤 별도 블록(매일 바뀌어도 정적 prefix 캐시는 유지).
     system: [
@@ -198,11 +198,17 @@ export async function planReport(question: string, history?: ReportTurn[], corre
       { type: "text" as const, text: `[오늘] 기준일(Asia/Seoul 한국시간): ${kstTodayLabel()}\n- '오늘·어제·이번 주·이번 달·올해·작년·최근 N일' 등 모든 상대 기간은 반드시 이 날짜를 기준으로 계산할 것. 학습 시점의 연도를 임의로 가정하지 말 것(예: '올해'=위 날짜의 연도).\n- SQL 에서 현재 날짜/시각이 필요하면 (now() at time zone 'Asia/Seoul')::date 를 사용할 것.` },
     ],
     messages: msgs,
-  });
-  const block = resp.content.find((b) => b.type === "text");
-  const text = block && block.type === "text" ? block.text : "";
+  }, { timeout: 40_000, maxRetries: 1 }); // 라우트 60초 안에 교정 1회까지 들어오게
+  const text = readText(resp);
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-  const plan = JSON.parse(cleaned) as ReportPlan;
+  let plan: ReportPlan;
+  try {
+    plan = JSON.parse(cleaned) as ReportPlan;
+  } catch {
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (!m) throw new AiResponseError("AI 응답 형식을 해석하지 못했습니다 — 질문을 조금 바꿔 다시 시도해 주세요.");
+    plan = JSON.parse(m[0]) as ReportPlan;
+  }
   plan.sql = validateReportSql(plan.sql); // 단일 SELECT + 화이트리스트 검증 + 정규화
   const u = resp.usage;
   plan.usage = {

@@ -4,7 +4,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getInventoryRows } from "@/app/lib/production-inventory";
 import { createProductionRequest, defaultDueDate, defaultProdStart, kstTodayIso, CreateError, type CreateItem } from "@/app/lib/production-request-create";
 import { logProductionDraftNotice } from "@/app/lib/b2b-activity";
-import { getFeatureModel } from "@/app/lib/ai-model";
+import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 import { getKv } from "@/app/lib/b2b-settings";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], horizon
   if (!process.env.ANTHROPIC_API_KEY) return "";
   if ((await getKv("production_draft_ai_note")).toLowerCase() === "off") return "";
   const model = await getFeatureModel("production");
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 40_000, maxRetries: 0 }); // 라우트 60초 안
   const payload = {
     목표일수: horizonDays, // 오늘 → 다음 요청분 판매 가능일
     다음요청일: nextDraft,
@@ -44,8 +44,9 @@ async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], horizon
   const system = `당신은 씨몬스터(냉동 수산물 가공) 생산계획 검토자입니다. 주간 제조사 생산 요청서 초안(수량은 수식이 이미 정함)을 생산담당자가 확인하기 전에 검토 포인트를 적습니다.
 규칙: 한국어 존댓말, 3~5줄, 각 줄은 '- '로 시작, 한 줄 = 한 가지 확인 사항. 수량을 새로 제안하지 말고, 이상치(재고 대비 과다·과소, 입고 예정이 큰데 또 시키는 품목 등)만 짚습니다. 데이터에 없는 것은 쓰지 않습니다. 설명·머리말 없이 줄만 출력합니다.`;
   try {
-    const res = await anthropic.messages.create({ model, max_tokens: 600, system, messages: [{ role: "user", content: JSON.stringify(payload) }] });
-    const text = res.content[0]?.type === "text" ? res.content[0].text.trim() : "";
+    // 3~5줄 메모지만 5.x 는 생각 토큰도 max_tokens 에 들어간다 — 600 이면 거의 확실히 잘린다
+    const res = await anthropic.messages.create({ model, max_tokens: 2000, system, messages: [{ role: "user", content: JSON.stringify(payload) }], ...effortParams(model, "low") });
+    const text = readText(res).trim();
     return text.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.startsWith("- ")).slice(0, 6).join("\n");
   } catch (e) {
     console.error("[production/requests/draft] AI 검토 메모 실패", e);

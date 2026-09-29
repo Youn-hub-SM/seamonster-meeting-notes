@@ -27,17 +27,19 @@ export const COMPANY_CONTEXT = `
 `.trim();
 
 // =============================================
-// AI 모델 (전 기능 공통) — 여기만 바꾸면 회의정리·문장교정·CS답변·사업자등록증
-// OCR 4개 기능이 한 번에 바뀝니다.
-//   sonnet : 균형 (기본) — $3 / $15  per 1M 토큰
+// AI 모델 — 여기 세 줄이 업무도우미의 모든 AI 기능(회의록·CS·VOC·생산 조언·리포트·이익률·사업자등록증 OCR)의
+// 실제 모델이다. 설정 화면(/b2b/settings/ai)과 DB 는 모델 ID 가 아니라 키(sonnet/haiku/opus)만 저장한다.
+//   sonnet : 균형 (기본) — $2 / $10  per 1M 토큰 (Sonnet 5.5, 2026-09-29 전환 · 이전 4.6 $3 / $15)
 //   haiku  : 저렴·빠름   — $1 / $5
-//   opus   : 최고 품질   — $5 / $25
+//   opus   : 최고 품질   — $4 / $20 (Opus 5.5, 2026-09-29 전환 · 이전 4.8 $5 / $25)
+// 5.x 는 답하기 전에 생각(adaptive thinking)한다 — 호출부는 ai-model.ts 의 effortParams(생각 강도)·readText(응답 읽기)를 쓴다.
+//  되돌릴 때는 여기 두 줄만 이전 ID(claude-sonnet-4-6 / claude-opus-4-8)로 — effortParams 가 5.x 가 아니면 effort 를 보내지 않는다.
 // 모델 ID는 별칭 그대로 사용 (날짜 접미사 붙이지 말 것).
 // =============================================
 export const MODELS = {
-  sonnet: "claude-sonnet-4-6",
+  sonnet: "claude-sonnet-5-5",
   haiku: "claude-haiku-4-5",
-  opus: "claude-opus-4-8",
+  opus: "claude-opus-5-5",
 } as const;
 
 export type ModelKey = keyof typeof MODELS;
@@ -49,8 +51,8 @@ export const DEFAULT_MODEL: ModelKey = "sonnet";
 // 설정 화면에서 모델 버튼을 그릴 때 쓰는 메타 (클라이언트 import 안전 — supabase 미포함)
 export const MODEL_OPTIONS: { key: ModelKey; label: string; desc: string; price: string }[] = [
   { key: "haiku", label: "빠름 · 저렴", desc: "간단한 작업, 가장 빠르고 저렴", price: "$1 / $5" },
-  { key: "sonnet", label: "균형 (기본)", desc: "품질과 비용의 균형", price: "$3 / $15" },
-  { key: "opus", label: "최고 품질", desc: "가장 정확·신중 (비용 ↑)", price: "$5 / $25" },
+  { key: "sonnet", label: "균형 (기본)", desc: "품질과 비용의 균형", price: "$2 / $10" },
+  { key: "opus", label: "최고 품질", desc: "가장 정확·신중 (비용 ↑)", price: "$4 / $20" },
 ];
 
 // 모델 키 → 실제 모델 ID. 잘못된 키면 sonnet 으로 폴백.

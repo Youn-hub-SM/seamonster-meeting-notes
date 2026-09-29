@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { summarizeMeeting } from "@/app/lib/claude";
+import { AiResponseError } from "@/app/lib/ai-model";
+
+export const maxDuration = 300; // 긴 녹취 + 생각 — 플랫폼 기본값에 기대지 않는다
 
 export async function POST(request: Request) {
   try {
@@ -24,7 +27,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Summarize error:", error);
     return NextResponse.json(
-      { error: "회의록 정리 중 오류가 발생했습니다." },
+      { error: error instanceof AiResponseError ? error.message : "회의록 정리 중 오류가 발생했습니다." },
       { status: 500 }
     );
   }

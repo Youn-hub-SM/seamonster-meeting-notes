@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./config";
+import { effortParams, readText } from "./ai-model";
 
 // 사업자등록증 이미지/PDF → 구조화 필드 추출 (Claude vision).
 // 추출 정확도는 높지만 100%는 아니므로 호출 측에서 사용자 확인 후 저장하도록 한다.
@@ -38,7 +39,8 @@ export async function extractBizDoc(base64: string, mediaType: string): Promise<
 
   const resp = await anthropic.messages.create({
     model: MODELS.sonnet, // 비전 OCR — 정확도 위해 sonnet 고정 (전역 모델과 별개)
-    max_tokens: 1024,
+    max_tokens: 4096, // 필드 7개 JSON — 5.x 는 생각 토큰도 이 한도에 들어간다
+    ...effortParams(MODELS.sonnet, "low"),
     system: SYSTEM,
     messages: [
       {
@@ -48,13 +50,16 @@ export async function extractBizDoc(base64: string, mediaType: string): Promise<
     ],
   });
 
-  const text = resp.content[0]?.type === "text" ? resp.content[0].text : "{}";
+  const text = readText(resp);
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   let p: Partial<BizDocFields> = {};
   try {
     p = JSON.parse(cleaned);
   } catch {
-    p = {};
+    // 빈 필드로 조용히 성공 처리하지 않는다 — 화면이 '자동 인식 실패'를 보여 준다
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error("사업자등록증 인식 결과를 해석하지 못했습니다.");
+    p = JSON.parse(m[0]);
   }
   const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   return {

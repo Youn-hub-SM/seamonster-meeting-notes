@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { getFeatureModel } from "@/app/lib/ai-model";
+import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 // 데이터가 많은 달은 AI 생성이 60초를 넘겨 플랫폼이 함수를 끊었다(클라이언트엔 JSON 아닌
@@ -131,11 +131,12 @@ export async function POST(req: NextRequest) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const resp = await anthropic.messages.create({
       model,
-      max_tokens: 8000, // 데이터 많은 달에 4000 으로는 출력이 문장 중간에서 끊겼다
+      max_tokens: 16000, // 데이터 많은 달에 4000 으로는 출력이 문장 중간에서 끊겼다 — 5.x 는 생각 토큰도 이 한도에 들어간다
+      ...effortParams(model, "low"), // 집계는 서버가 미리 함 — 이미 지연 한계에 가까워 low
       system: buildSystem(y, mNum),
       messages: [{ role: "user", content: JSON.stringify({ prevSummary, catCounts, claims, surveys }) }],
     });
-    let draft = resp.content[0]?.type === "text" ? resp.content[0].text : "";
+    let draft = readText(resp, { allowTruncated: true }); // 잘려도 초안은 보여 주고 아래에서 표시한다(거절은 오류)
     draft = draft.replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/i, "").trim();
     // 그래도 출력 한도에 걸려 끊겼으면 문서에 조용히 남기지 말고 표시 — 편집 칸에서 보고 지우거나 다시 생성
     if (resp.stop_reason === "max_tokens") {
