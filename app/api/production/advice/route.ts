@@ -129,7 +129,7 @@ export async function POST(req: Request) {
       ...effortParams(model, "medium"), // 수량 산식·긴급도 순위 — 실제 생산 수량에 영향
       system: buildSystemPrompt(inv.schedule, wholesale ? inv.wholesaleReqOk : inv.inboundOk, wholesale),
       messages: [{ role: "user", content: JSON.stringify(userPayload) }],
-    });
+    }, { timeout: 90_000, maxRetries: 0 }); // 라우트 maxDuration 120 안(재고 집계 시간 포함)
     const text = readText(response);
     // 코드블록 제거 후 첫 '{' ~ 마지막 '}' 만 추출 (앞뒤 잡텍스트 방어)
     const stripped = text.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();

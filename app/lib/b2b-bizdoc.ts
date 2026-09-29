@@ -48,7 +48,7 @@ export async function extractBizDoc(base64: string, mediaType: string): Promise<
         content: [block, { type: "text", text: "이 사업자등록증의 정보를 추출해 JSON으로 응답하세요." }],
       },
     ],
-  });
+  }, { timeout: 50_000, maxRetries: 1 }); // 스캔 라우트 maxDuration 120 안(업로드 뒤 50초 × 2)
 
   const text = readText(resp);
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();

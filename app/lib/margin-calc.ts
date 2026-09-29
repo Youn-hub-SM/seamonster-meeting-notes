@@ -259,7 +259,7 @@ export async function analyzeMargin(question: string, ref: MarginRefData, histor
     system: `${framework}\n\n${OUTPUT_RULES}`,
     messages,
     ...effortParams(model, "medium"), // 원가·수수료·배송 구간 다단계 산수 — 생각이 조금 필요
-  }, { timeout: 45_000, maxRetries: 1 });
+  }, { timeout: 100_000, maxRetries: 0 }); // 라우트 maxDuration 120 안
   const text = readText(resp); // 거절·잘림은 오류로(아래 폴백이 가리지 않게)
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   try {

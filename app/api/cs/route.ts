@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { generateCsAdvice } from "@/app/lib/cs";
 import { AiResponseError } from "@/app/lib/ai-model";
 
+export const maxDuration = 120; // AI 요청 55초 × 2회 안
+
 export async function POST(request: Request) {
   try {
     const { query } = await request.json();

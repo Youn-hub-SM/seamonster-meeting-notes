@@ -4,7 +4,7 @@ import { analyzeMargin, loadMarginRef, type MarginTurn } from "@/app/lib/margin-
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120; // 다단계 계산 + 생각(medium) — AI 요청 100초 상한
 
 // GET — 질문 만들기 도우미용: 채널 목록 + 전체 상품(검색용) + 최근 30일 잘 팔린 상품(추천 칩)
 export async function GET() {

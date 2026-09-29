@@ -42,6 +42,8 @@ export async function POST(req: NextRequest) {
     const b = (await req.json().catch(() => ({}))) as { date?: string; force?: boolean; send?: boolean };
     const r = await generateBriefing({ date: b.date, force: b.force !== false }); // 수동 버튼 = 기본 재생성
     if (!r.ok) return NextResponse.json({ ok: false, error: r.error || "생성 실패" }, { status: 500 });
+    // 집계는 저장됐지만 AI 본문이 실패 — 성공처럼 보이거나 옛 본문을 팀즈로 보내지 않게 알린다
+    if (r.aiError) return NextResponse.json({ ok: false, error: `AI 리포트 생성 실패(집계는 저장됨): ${r.aiError}` }, { status: 502 });
     let sent: { ok: boolean; error?: string } | null = null;
     if (b.send) sent = await sendBriefingToTeams(r.date);
     return NextResponse.json({ ok: true, date: r.date, sent });

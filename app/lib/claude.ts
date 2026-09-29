@@ -92,7 +92,7 @@ export async function summarizeMeeting(rawText: string): Promise<ClaudeResult> {
     system: await buildSystemPrompt(),
     messages: [{ role: "user", content: rawText }],
     ...effortParams(model, "low"), // 요약·정리 = 콘텐츠 생성 → low
-  });
+  }, { timeout: 140_000, maxRetries: 1 }); // 라우트 maxDuration 300 안(140초 × 2)
 
   const text = readText(response);
 

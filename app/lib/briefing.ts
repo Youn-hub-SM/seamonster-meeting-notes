@@ -315,13 +315,14 @@ const SYSTEM = `당신은 씨몬스터(수산물 이커머스) 대표의 '일일
 
 // 리포트 생성(하루 한 건, force = 재생성).
 //  순서: 103 확인(미적용이면 AI 전에 종료 — 토큰 보호) → 집계 upsert(기존 insight 보존) → AI(update).
-export async function generateBriefing(opts?: { date?: string; force?: boolean }): Promise<{ ok: boolean; date: string; skipped?: string; error?: string }> {
+export async function generateBriefing(opts?: { date?: string; force?: boolean }): Promise<{ ok: boolean; date: string; skipped?: string; error?: string; aiError?: string }> {
+  const t0 = Date.now(); // 크론(pg_net 55초)·maxDuration 60 — AI 요청은 시작 후 약 50초 안에 끝내야 한다
   const sb = supabaseAdmin();
   const date = opts?.date && DATE_RE.test(opts.date) ? opts.date : kstDate(0);
 
   const { data: ex, error: exErr } = await sb.from("briefings").select("brief_date, insight").eq("brief_date", date).maybeSingle();
   if (exErr && /briefings/i.test(exErr.message)) return { ok: false, date, error: "migration 103_briefings.sql 적용이 필요합니다." };
-  if (ex && !opts?.force) return { ok: true, date, skipped: "이미 생성됨" };
+  if (ex?.insight && !opts?.force) return { ok: true, date, skipped: "이미 생성됨" }; // AI 단계가 실패했던 날(본문 없음)은 다시 채운다
 
   const data = await collectBriefingData(sb, date);
   {
@@ -332,15 +333,18 @@ export async function generateBriefing(opts?: { date?: string; force?: boolean }
 
   try {
     const model = await briefingModel();
-    // 크론(pg_net 55초)·maxDuration 60 안에서 끝나게 요청 시간 상한 45초 · 재시도 1회. 생각 강도는 low(집계 인용 서술).
+    // 크론(pg_net 55초)·maxDuration 60 안에서 끝나게 — 집계에 쓴 시간을 빼고 남은 만큼만, 재시도 없음. 생각 강도는 low(집계 인용 서술).
     const res = await anthropic.messages.create({
       model, max_tokens: 8000, system: SYSTEM,
       messages: [{ role: "user", content: `리포트일(오늘): ${date}\n집계:\n${JSON.stringify(data, null, 1)}` }],
       ...effortParams(model, "low"),
-    }, { timeout: 45_000, maxRetries: 1 });
+    }, { timeout: Math.max(15_000, 50_000 - (Date.now() - t0)), maxRetries: 0 });
     const insight = readText(res).trim() || null; // 거절·잘림이면 오류 → 아래에서 저장하지 않는다(잘린 리포트가 팀즈로 나가지 않게)
     if (insight) await sb.from("briefings").update({ insight, model }).eq("brief_date", date);
-  } catch (e) { console.warn("[briefing] AI 생성 실패(집계는 저장됨)", e); }
+  } catch (e) {
+    console.warn("[briefing] AI 생성 실패(집계는 저장됨)", e);
+    return { ok: true, date, aiError: e instanceof Error ? e.message : String(e) }; // 호출부가 발송을 건너뛰고 이유를 보인다
+  }
 
   return { ok: true, date };
 }

@@ -4,11 +4,13 @@ import { planReport, type ReportTurn } from "@/app/lib/report-ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120; // 계획 + 교정(최대 2회) — 각 AI 호출은 남은 시간 안에서만
 
 // POST { question, history? } — 자연어 질문(+후속 정제) → Claude가 SQL 생성 → run_report 실행 → 표+플랜 반환.
 export async function POST(req: NextRequest) {
   try {
+    const t0 = Date.now();
+    const left = () => 110_000 - (Date.now() - t0); // maxDuration 120 에서 응답 여유 10초
     const { question, history } = (await req.json()) as { question?: string; history?: ReportTurn[] };
     const q = (question || "").trim();
     if (!q) return NextResponse.json({ ok: false, error: "질문을 입력하세요." }, { status: 400 });
@@ -17,7 +19,7 @@ export async function POST(req: NextRequest) {
     // 1) AI가 SQL·차트·루커SQL 계획 수립 (planReport 내부에서 단일 SELECT 검증)
     let plan;
     try {
-      plan = await planReport(q, Array.isArray(history) ? history : undefined);
+      plan = await planReport(q, Array.isArray(history) ? history : undefined, undefined, { timeoutMs: Math.min(60_000, left()) });
     } catch (e) {
       return NextResponse.json({ ok: false, error: extractErrorMsg(e, "질문 해석 실패 — 조금 더 구체적으로 적어보세요.") }, { status: 400 });
     }
@@ -33,8 +35,9 @@ export async function POST(req: NextRequest) {
       data = res.data; error = res.error;
       if (!error) break;
       if (attempt >= 2) break; // 최대 2회 교정
+      if (left() < 30_000) break; // 교정할 시간이 없으면 현재 오류로 끝낸다
       try {
-        plan = await planReport(q, hist, { sql: plan.sql, error: error.message });
+        plan = await planReport(q, hist, { sql: plan.sql, error: error.message }, { timeoutMs: Math.min(50_000, left() - 5_000) });
         corrected++;
       } catch {
         break; // 교정 SQL 이 검증 실패(비허용 관계 등) → 원래 오류로 종료

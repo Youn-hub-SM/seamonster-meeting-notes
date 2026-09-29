@@ -6,7 +6,7 @@ import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 export const dynamic = "force-dynamic";
 // 데이터가 많은 달은 AI 생성이 60초를 넘겨 플랫폼이 함수를 끊었다(클라이언트엔 JSON 아닌
 //  "An error occurred…" 텍스트가 내려가 파싱 오류로 보임) → 여유 있게 연장(120s 선례: sales/export).
-export const maxDuration = 120;
+export const maxDuration = 300; // 큰 달 + 생각 — AI 요청 280초 상한(2026-09-29, 5.x 전환)
 
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const MAX_CLAIMS = 300;
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
       ...effortParams(model, "low"), // 집계는 서버가 미리 함 — 이미 지연 한계에 가까워 low
       system: buildSystem(y, mNum),
       messages: [{ role: "user", content: JSON.stringify({ prevSummary, catCounts, claims, surveys }) }],
-    });
+    }, { timeout: 280_000, maxRetries: 0 }); // 라우트 maxDuration 300 안
     let draft = readText(resp, { allowTruncated: true }); // 잘려도 초안은 보여 주고 아래에서 표시한다(거절은 오류)
     draft = draft.replace(/^```[a-z]*\s*/i, "").replace(/```\s*$/i, "").trim();
     // 그래도 출력 한도에 걸려 끊겼으면 문서에 조용히 남기지 말고 표시 — 편집 칸에서 보고 지우거나 다시 생성

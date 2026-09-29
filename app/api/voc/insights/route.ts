@@ -64,7 +64,7 @@ export async function POST() {
       ...effortParams(model, "low"), // 분류·요약 → low
       system: SYSTEM,
       messages: [{ role: "user", content: `총 ${rows.length}건의 VOC:\n${JSON.stringify(payload)}` }],
-    });
+    }, { timeout: 100_000, maxRetries: 0 }); // 라우트 maxDuration 120 안
 
     const text = readText(response);
     const stripped = text.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();

@@ -27,10 +27,10 @@ export async function GET(req: NextRequest) {
 
     // 최초 생성시에만 발송(재실행·재시도에 중복 발송 방지). 웹훅 미설정이면 조용히 생략.
     let sent: { ok: boolean; error?: string } | null = null;
-    if (!r.skipped) {
+    if (!r.skipped && !r.aiError) { // AI 본문이 없으면 보내지 않는다(다음 실행이 채운다)
       try { sent = await sendBriefingToTeams(r.date); } catch { sent = { ok: false, error: "발송 실패" }; }
     }
-    return NextResponse.json({ ok: true, date: r.date, skipped: r.skipped ?? null, sent });
+    return NextResponse.json({ ok: true, date: r.date, skipped: r.skipped ?? null, aiError: r.aiError ?? null, sent });
   } catch (err) {
     console.error("[briefing cron]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "브리핑 크론 실패") }, { status: 500 });

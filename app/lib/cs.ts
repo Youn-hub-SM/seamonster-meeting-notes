@@ -131,7 +131,7 @@ export async function generateCsAdvice(query: string): Promise<CsAdvice> {
     system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: query }],
     ...effortParams(model, "low"),
-  });
+  }, { timeout: 55_000, maxRetries: 1 }); // 라우트 maxDuration 120 안(55초 × 2)
 
   const text = readText(response);
 

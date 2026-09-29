@@ -33,7 +33,7 @@ async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], horizon
   if (!process.env.ANTHROPIC_API_KEY) return "";
   if ((await getKv("production_draft_ai_note")).toLowerCase() === "off") return "";
   const model = await getFeatureModel("production");
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 40_000, maxRetries: 0 }); // 라우트 60초 안
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30_000, maxRetries: 0 }); // 라우트 60초 안(재고 집계 시간 포함)
   const payload = {
     목표일수: horizonDays, // 오늘 → 다음 요청분 판매 가능일
     다음요청일: nextDraft,

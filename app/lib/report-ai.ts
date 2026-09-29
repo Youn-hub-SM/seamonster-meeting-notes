@@ -173,7 +173,7 @@ function kstTodayLabel(): string {
   return `${d.toISOString().slice(0, 10)} (${wd})`;
 }
 
-export async function planReport(question: string, history?: ReportTurn[], correction?: ReportCorrection): Promise<ReportPlan> {
+export async function planReport(question: string, history?: ReportTurn[], correction?: ReportCorrection, opts?: { timeoutMs?: number }): Promise<ReportPlan> {
   const [framework, model] = await Promise.all([getReportPrompt(), reportModel()]);
   // 후속 대화: 직전 질문·SQL 을 메시지로 넣어 '정제' 요청을 이해시킴(시스템 캐시는 그대로 유지)
   const msgs: Anthropic.MessageParam[] = [];
@@ -198,7 +198,7 @@ export async function planReport(question: string, history?: ReportTurn[], corre
       { type: "text" as const, text: `[오늘] 기준일(Asia/Seoul 한국시간): ${kstTodayLabel()}\n- '오늘·어제·이번 주·이번 달·올해·작년·최근 N일' 등 모든 상대 기간은 반드시 이 날짜를 기준으로 계산할 것. 학습 시점의 연도를 임의로 가정하지 말 것(예: '올해'=위 날짜의 연도).\n- SQL 에서 현재 날짜/시각이 필요하면 (now() at time zone 'Asia/Seoul')::date 를 사용할 것.` },
     ],
     messages: msgs,
-  }, { timeout: 40_000, maxRetries: 1 }); // 라우트 60초 안에 교정 1회까지 들어오게
+  }, { timeout: opts?.timeoutMs ?? 50_000, maxRetries: 0 }); // 라우트가 남은 시간을 넘겨 준다(플랫폼 강제 종료 방지)
   const text = readText(resp);
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   let plan: ReportPlan;

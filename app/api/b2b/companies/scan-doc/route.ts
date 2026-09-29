@@ -4,6 +4,7 @@ import { extractBizDoc } from "@/app/lib/b2b-bizdoc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120; // 업로드 + 사업자등록증 인식(AI 요청 50초 × 2)
 
 // POST /api/b2b/companies/scan-doc  (multipart: file)
 //  사업자등록증 업로드 → 비공개 Storage 저장 + Claude 로 필드 추출.
