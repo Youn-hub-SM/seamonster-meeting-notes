@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   PR_LINE_COLOR, PR_PURPOSES, PR_PURPOSE_LABEL, UNREQUESTED_ITEM_MEMO, lineState, allLinesFilled, toPrPurpose, isFactoryPurpose, CONFIRMED_PURPOSES,
-  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, FULFILL_NOTE, DUE_LABEL, PURPOSE_CHANNEL,
+  type ProductionRequest, type PrItem, type PrStatus, type PrPurpose, FULFILL_NOTE, DUE_LABEL,
 } from "@/app/lib/wholesale-production";
 import { defaultDueDate, defaultProdStart } from "@/app/lib/production-schedule";
 import { Combobox } from "@/app/b2b/orders/Combobox";
@@ -96,28 +96,6 @@ export function RequestList() {
     }
     return m;
   }, [requests]);
-
-  // 프로모션 주간 분배 — 열린 프로모션 요청서별 잔여를 '남은 주 수'로 나눠, 이번 주 확보 권장을 품목별 합산.
-  //  주간 생산요청서(제조사) 작성 시 "프로모션 몫으로 이만큼 더" 의 근거(2026-09-17 대표 확정 수식).
-  const promoWeekly = useMemo(() => {
-    const todayIso = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-    const agg = new Map<string, { name: string; sku: string | null; remaining: number; thisWeek: number; earliestDue: string | null }>();
-    for (const r of requests) {
-      if (r.purpose !== tab || !CONFIRMED_PURPOSES.includes(tab) || (r.status !== "요청" && r.status !== "진행중")) continue;
-      const days = r.due_date ? Math.round((new Date(r.due_date + "T00:00:00Z").getTime() - new Date(todayIso + "T00:00:00Z").getTime()) / 86400e3) : 0;
-      const weeksLeft = Math.max(1, Math.ceil((days + 1) / 7)); // 목표일 지남/임박 = 1주(전량 이번 주)
-      for (const it of r.items) {
-        const rem = Math.max(0, Math.round((it.requested_qty - it.received_qty) * 100) / 100);
-        if (rem <= 0) continue;
-        const cur = agg.get(it.product_id) ?? { name: it.name, sku: it.sku, remaining: 0, thisWeek: 0, earliestDue: null };
-        cur.remaining = Math.round((cur.remaining + rem) * 100) / 100;
-        cur.thisWeek += Math.ceil(rem / weeksLeft);
-        if (r.due_date && (!cur.earliestDue || r.due_date < cur.earliestDue)) cur.earliestDue = r.due_date;
-        agg.set(it.product_id, cur);
-      }
-    }
-    return [...agg.values()].sort((a, b) => b.thisWeek - a.thisWeek);
-  }, [requests, tab]);
 
   // 담당자 '확인' 버튼용 로그인 사용자 이름
   const [userName, setUserName] = useState<string | null>(null);
@@ -331,28 +309,6 @@ export function RequestList() {
           <button className="b2b-btn-primary" onClick={() => { setError(""); setCreateOpen(true); }} disabled={busy}>+ 새 생산 요청</button>
         </div>
       </div>
-
-      {CONFIRMED_PURPOSES.includes(tab) && promoWeekly.length > 0 && (
-        <section className="b2b-form-section" style={{ marginBottom: 16 }}>
-          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 협의 참고 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 잔여 ÷ 목표일까지 남은 주 — 참고치, 주간 계산에는 들어가지 않습니다</span></div>
-          <div className="b2b-table-wrap">
-            <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 15 }}>
-              <thead><tr><th>품목</th><th className="num" style={{ width: "16%" }}>총 잔여</th><th style={{ width: "16%" }}>가장 이른 목표일</th><th className="num" style={{ width: "18%" }}>주당 참고치</th></tr></thead>
-              <tbody>
-                {promoWeekly.map((r) => (
-                  <tr key={`${r.name}-${r.sku}`}>
-                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{r.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.sku}</span> : null}</td>
-                    <td className="num b2b-money">{r.remaining.toLocaleString()}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{r.earliestDue || "-"}</td>
-                    <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{r.thisWeek.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>제조사에 시킬 양은 가장 가까운 제조사 요청서의 요청수량에 직접 더합니다. 입고는 그 제조사 요청서에 연결하고, [재고 이동] 소매 → {PURPOSE_CHANNEL[tab] || tab}에서 이 탭의 요청서에 배정합니다.</p>
-        </section>
-      )}
 
       {!isFactoryPurpose(tab) && wholesaleSummary.length > 0 && (
         <section className="b2b-form-section" style={{ marginBottom: 16 }}>

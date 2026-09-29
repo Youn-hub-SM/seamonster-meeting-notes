@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-09-29",
+    tag: "개선",
+    tool: "생산 및 재고",
+    title: "생산 요청 - 프로모션·도매 대량 탭의 '협의 참고' 표 삭제",
+    desc: "프로모션 요청·도매 대량 요청 탭 위에 있던 '협의 참고' 표(주당 참고치)를 없앴습니다. 품목별 남은 양은 같은 탭의 '요청 종합' 표에서 봅니다.",
+    href: "/production/request",
+  },
+  {
+    date: "2026-09-29",
     tag: "신규",
     tool: "상품 마스터",
     title: "재고 관리가 필요 없는 상품을 재고 화면에서 뺄 수 있습니다",
