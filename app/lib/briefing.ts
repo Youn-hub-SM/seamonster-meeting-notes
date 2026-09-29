@@ -410,12 +410,21 @@ const cardPayload = (body: CardEl[]) => ({
   }],
 });
 
+// 팀즈 카드 한도는 약 28KB — 넘으면 워크플로 웹훅이 202 를 주고 게시만 조용히 실패하므로 보내기 전에 크기를 잰다.
+export function teamsCardBytes(title: string, md: string): number {
+  return Buffer.byteLength(JSON.stringify(cardPayload(briefingCardBody(title, md))), "utf8");
+}
+
 // 제목 + 마크다운(일일 리포트와 같은 부분집합: ## · ### · - · 표)을 적응형 카드로 팀즈에 보낸다(어제 분석 공용). 20초 안에 응답이 없으면 실패.
+//  한도를 넘는 카드는 보내지 않고 실패로 돌려준다(조용히 사라지지 않게).
 export async function postTeamsMarkdown(url: string, title: string, md: string): Promise<{ ok: boolean; error?: string }> {
+  const payload = JSON.stringify(cardPayload(briefingCardBody(title, md)));
+  const bytes = Buffer.byteLength(payload, "utf8");
+  if (bytes > 27_500) return { ok: false, error: `카드가 너무 큽니다(약 ${Math.round(bytes / 1024)}KB, 팀즈 한도 약 28KB) — 화면에서 확인하세요.` };
   try {
     const res = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cardPayload(briefingCardBody(title, md))),
+      body: payload,
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) return { ok: false, error: `발송 실패(${res.status}) — 워크플로 실행 기록을 확인하세요.` };
