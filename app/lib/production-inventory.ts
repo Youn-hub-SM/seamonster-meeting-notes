@@ -18,6 +18,10 @@ import { getOpenInboundByProduct, type InboundRow } from "./production-inbound";
 //  부족·요청 마감은 '오늘 요청분 판매 가능일까지'(보통 10~12일) 기준 — 지금 시켜도 그 전에 바닥나는가.
 // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정)) — '입고 예정'은 열린 제조사 요청서의 잔여
 //  (production-inbound). 시켜 둔 물량을 또 시키던 이중 발주의 차단 항(2026-09-17 대표 확정 1단계).
+// 도매 채널은 여기에 더해 '도매 요청 잔여'(열린 도매 납품 요청서의 요청 − 이동 배정)를 recommendNet 에만 뺀다
+//  (2026-09-29 대표 요청 — 도매 담당자가 이미 낸 요청을 또 내지 않게). recommend 는 gross 그대로다:
+//  제조사 합산(재고 목록 전체·소매 탭, 제조사 요청 창, 수요일 AI 초안)이 도매 행 recommend 를 ②로 읽는데,
+//  도매 요청 잔여는 새로 들어올 물량이 아니라 소매 재고(①에 이미 반영)에 대한 청구라 빼면 제조사 생산이 그만큼 과소가 된다.
 
 export interface InvRow {
   sku: string;
@@ -39,7 +43,10 @@ export interface InvRow {
   inbound: number;        // 입고 예정 = 열린 제조사 요청서 잔여(소매·전체 수식만, 도매 수식은 0)
   inboundDue: string | null;    // 잔여가 있는 요청서 중 가장 이른 마감
   inboundOverdue: number;       // 그중 마감이 지난 잔여(자동 제외 없음 — 표시용)
-  recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정))
+  recommend: number;      // 권장 생산량 = max(0, 수요 + 안전재고 − (현재고 + 입고 예정)) — 제조사 합산 ②는 이 값(gross)
+  wholesaleReq: number;   // 도매 요청 잔여 = 열린 도매 납품 요청서의 '요청 − 이동 배정'(도매 채널만, 그 외 0) — recommendNet 에만 쓴다
+  recommendNet: number;   // 도매 화면용 권장 = max(0, recommendGross − wholesaleReq). 도매 외 채널은 recommend 와 같다.
+                          //  ※ 제조사 합산에 쓰면 도매 요청 잔여만큼 제조사 생산이 과소 — 도매 탭·도매 요청 창 전용
   belowSafety: boolean;   // 현재고 + 입고 예정 < 부족 기준(leadSafety) — 지금 시켜도 판매 가능일 전에 바닥날 위험(권장 > 0 을 함축)
   requestByDays: number | null; // 생산요청 마감까지 남은 일수(0·음수=지금/이미 늦음). 출고0·재고없음이면 null
   requestBy: string | null;     // 생산요청 마감일(YYYY-MM-DD, 미래일 때만). 현재고+입고 예정이 부족 기준으로 떨어지는 날
@@ -56,6 +63,7 @@ export interface InventoryResult {
   horizonDays: number;       // 목표 일수 = 오늘 → 다음 요청분 판매 가능일
   schedule: ScheduleHorizon; // 위 일수의 근거 날짜(계산일·판매 가능일·다음 요청일) — 화면·메모 표시용
   inboundOk: boolean;        // 입고 예정 집계 성공 여부 — false 면 권장이 실제보다 클 수 있다(화면이 경고)
+  wholesaleReqOk: boolean;   // 도매 요청 잔여 집계 성공 여부(도매 채널만 의미) — false 면 도매 권장이 이미 요청한 양을 못 뺀 값
   velocitySpanDays: number;  // 출고 평균이 커버한 일수
   velocityCapped: boolean;   // 표본 상한에 걸려 일부만 집계했는지
 }
@@ -93,15 +101,18 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   // 입고 예정 — 제조사 생산 입고는 소매 채널로 들어오므로 소매·전체 수식에서만 뺀다.
   //  도매 수식의 부족은 소매→도매 이동으로 채워지는 몫이라 제조사 잔여를 빼면 이중 차감이 된다.
   //  가장 무거운 원장 속도 조회와 나란히 돌려 지연을 숨긴다.
-  const [stockRes, prodRes, velocity, inboundByProduct, reservedRows, untracked] = await Promise.all([
+  const [stockRes, prodRes, velocity, inboundByProduct, reservedRows, untracked, wholesaleReqByProduct] = await Promise.all([
     stockRpc(),
     sb.from("products").select("id, sku, name"), // 전 품목(수요 매칭은 비활성 포함)
     getLedgerVelocity(undefined, channel), // 1b) 소진 속도(최근 출고 일평균) — 채널별
     channel === "도매" ? Promise.resolve(new Map<string, InboundRow>()) : getOpenInboundByProduct(sb, today),
     reservedRpc(), // 전체 조회에서만 확보분 칸(프로모션·도매 대량) 차감용
     getUntracked(sb), // '재고 관리 사용 안함'(121) — 권장·초안·조언 행에서 뺀다(수요 매칭용 제품표는 그대로)
+    // 도매 요청 잔여 — 도매 채널에서만. 전체(채널 미지정 = 소매+도매 합)·소매 경로에 넣으면 같은 물건을 두 번 센다.
+    channel === "도매" ? getOpenInboundByProduct(sb, today, "도매 납품") : Promise.resolve(new Map<string, InboundRow>()),
   ]);
   const inboundOk = inboundByProduct !== null;
+  const wholesaleReqOk = channel !== "도매" || wholesaleReqByProduct !== null; // 실패면 R=0(= 종전 동작) + 화면 경고
   if (stockRes.error) throw stockRes.error;
   if (prodRes.error) throw prodRes.error;
 
@@ -166,6 +177,15 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     inboundBySku.set(k, cur);
   }
 
+  // 도매 요청 잔여를 SKU 로 합산 — 행 구성(allSkus)에는 넣지 않는다(도매 원장이 없는 품목에 빈 행을 만들지 않게)
+  const wholesaleReqBySku = new Map<string, number>();
+  for (const [pid, row] of wholesaleReqByProduct ?? new Map<string, InboundRow>()) {
+    const sku = skuByProduct.get(pid);
+    if (!sku) continue;
+    const k = sku.toUpperCase();
+    wholesaleReqBySku.set(k, Math.round(((wholesaleReqBySku.get(k) || 0) + row.qty) * 100) / 100);
+  }
+
   const demandBySku = new Map<string, number>();
   let noSkuDemand = 0;
   type OItem = { product_id: string | null; qty: number };
@@ -209,6 +229,9 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     // 전체 탭 합산용 원값 — 입고 예정(⑤)을 항 안에서 빼면 합산 때 max(0,①−⑤)+max(0,②)가 되어
     //  소매가 넉넉한 주에 차감분이 통째로 소실된다(기획 14절 여덟 번째). ⑤는 합계에서 한 번만 뺀다.
     const recommendGross = stock == null ? demand : Math.max(0, demand + safety - stock);
+    // 도매 화면용 — 이미 낸 도매 요청 잔여를 뺀다(도매 채널만). 제조사 합산은 위 recommend(gross)를 쓴다.
+    const wholesaleReq = wholesale ? (wholesaleReqBySku.get(sku) ?? 0) : 0;
+    const recommendNet = wholesale ? Math.max(0, Math.round((recommendGross - wholesaleReq) * 100) / 100) : recommend;
     // 부족 = 현재고+입고 예정이 '오늘 요청분 판매 가능일까지 버틸 양'보다 적다. 목표(다음 요청분까지)보다 작은 기준이라
     //  부족이면 권장은 늘 0 보다 크다. 목표 기준으로 두면 매주 정상 보충 품목까지 거의 늘 부족으로 뜬다.
     const belowSafety = stock != null && stock + inbound < leadSafety;
@@ -245,6 +268,8 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
       inboundDue: inb?.due ?? null,
       inboundOverdue: inb?.overdue ?? 0,
       recommend,
+      wholesaleReq,
+      recommendNet,
       belowSafety,
       requestByDays,
       requestBy,
@@ -263,6 +288,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     horizonDays,
     schedule: sched,
     inboundOk,
+    wholesaleReqOk,
     velocitySpanDays: velocity.spanDays,
     velocityCapped: velocity.capped,
   };

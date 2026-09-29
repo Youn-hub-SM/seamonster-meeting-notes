@@ -31,6 +31,7 @@ type ProdRow = {
   autoSafety: number; promoQty: number; adjust: number; adjustRaw: number; adjustExcludeRaw: number;
   adjustMemo: string; adjustUntil: string | null; safety: number; recommend: number; recommendGross?: number;
   inbound?: number; inboundDue?: string | null; // 입고 예정(열린 제조사 요청서 잔여) — 권장에서 이미 뺀 양
+  recommendNet?: number; wholesaleReq?: number;  // 도매 화면용 권장(도매 요청 잔여를 뺀 값)·도매 요청 잔여 — 제조사 합산에는 쓰지 않는다
   requestByDays: number | null; requestBy: string | null;
 };
 type Priority = { sku: string; name: string; urgency: string; qty: number; byWhen: string; reason: string };
@@ -129,6 +130,7 @@ export default function InventoryPage() {
   const [prodWarn, setProdWarn] = useState("");
   // 입고 예정 집계 실패 — 소매·전체 권장만 영향(도매 권장식엔 입고 예정이 없다) → 도매 탭에선 경고하지 않는다
   const [prodInbBad, setProdInbBad] = useState(false);
+  const [prodWholeReqBad, setProdWholeReqBad] = useState(false); // 도매 요청 잔여 집계 실패 — 도매 탭 권장이 이미 요청한 양을 못 뺀 값
 
   const prodLoad = useCallback(async () => {
     try {
@@ -144,6 +146,7 @@ export default function InventoryPage() {
       const bad = [!r.ok && "소매", !w.ok && "도매"].filter(Boolean).join("·");
       // 입고 예정 집계 실패는 반대 방향(권장 과대 = 시켜 둔 물량을 또 시킴) — 따로 알린다
       setProdInbBad(r.ok && r.inboundOk === false);
+      setProdWholeReqBad(w.ok && w.wholesaleReqOk === false);
       setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산이 실제보다 적게 보일 수 있습니다.` : "");
     } catch {
       setProdWarn("생산 수치를 불러오지 못했습니다 — 권장생산이 비어 있거나 실제보다 적게 보일 수 있습니다.");
@@ -164,7 +167,11 @@ export default function InventoryPage() {
     if (channel === "도매 대량" || channel === "프로모션") return { has: false, recommend: 0, requestByDays: null, requestBy: null, retail: rr };
     // 소매 탭도 합산값이다(기획 14절 '여덟 번째' — 합산값이 서는 곳은 전체 탭과 소매 탭, 둘 다
     //  제조사 요청서를 만드는 자리). 소매 net 을 두면 화면 숫자와 요청 창 수량이 어긋난다.
-    if (channel === "도매") return { has: !!ww, recommend: ww?.recommend ?? 0, requestByDays: ww?.requestByDays ?? null, requestBy: ww?.requestBy ?? null, retail: rr };
+    // 도매 탭 = 도매 담당자 화면 — 이미 낸 도매 요청 잔여를 뺀 recommendNet(옛 응답이면 recommend 폴백 = 종전 동작).
+    if (channel === "도매") return {
+      has: !!ww, recommend: ww?.recommendNet ?? ww?.recommend ?? 0, requestByDays: ww?.requestByDays ?? null, requestBy: ww?.requestBy ?? null, retail: rr,
+      detail: ww && ww.recommendNet != null ? `권장 = 도매 모자란 양 ${(ww.recommendGross ?? ww.recommend).toLocaleString()} − 도매 요청 잔여 ${(ww.wholesaleReq ?? 0).toLocaleString()}` : undefined,
+    };
     let days: number | null = null, by: string | null = null;
     for (const p of [rr, ww]) {
       if (p?.requestByDays == null) continue;
@@ -173,7 +180,7 @@ export default function InventoryPage() {
     // 전체 = max(0, ①(소매 원값) + ②(도매) − ⑤(입고 예정)). ⑤를 항 안에서 빼면 소매가 넉넉한 주에
     //  차감분이 통째로 사라져 이미 시킨 물량을 또 시킨다(기획 14절 '여덟 번째').
     const g1 = rr?.recommendGross ?? rr?.recommend ?? 0; // 구 응답 폴백 — recommendGross 없으면 net 값
-    const g2 = ww?.recommend ?? 0;
+    const g2 = ww?.recommend ?? 0; // gross ② — recommendNet 금지: 도매 요청 잔여는 새 물량이 아니라 쓰면 제조사 생산이 과소
     const inb = rr?.inbound ?? 0;
     const combined = Math.max(0, Math.round((g1 + g2 - inb) * 100) / 100);
     return {
@@ -275,7 +282,7 @@ export default function InventoryPage() {
       .map((r) => {
         const key = (r.sku as string).toUpperCase();
         const ww = wholeMap.get(key);
-        const qty = purpose === "도매 납품" ? (ww?.recommend ?? 0) : prodView(r).recommend;
+        const qty = purpose === "도매 납품" ? (ww?.recommendNet ?? ww?.recommend ?? 0) : prodView(r).recommend;
         return { sku: r.sku, qty };
       });
     // SKU 로 넘기므로 SKU 없는 품목은 못 보낸다 — 조용히 빠지지 않게 알린다
@@ -329,6 +336,9 @@ export default function InventoryPage() {
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
       {/* 확정형 탭엔 권장생산·입고 예정이 없으므로 그 얘기를 하는 경고도 띄우지 않는다 */}
       {confirmedTab && meta?.requestedOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>요청량을 불러오지 못했습니다 — 새로고침하세요.</div>}
+      {/* 도매 탭 경고는 원인별 — 권장(생산 수치)의 잔여 집계 실패와 입고 예정 열(개요)의 집계 실패는 따로다. 소매 전용 실패(prodWarn)에 가리지 않는다 */}
+      {!confirmedTab && channel === "도매" && prodWholeReqBad && <div className="sm-warn" style={{ marginBottom: 12 }}>'도매 요청 잔여'를 불러오지 못했습니다 — 권장생산이 이미 요청한 양을 빼지 못해 실제보다 크게 보일 수 있습니다.</div>}
+      {!confirmedTab && channel === "도매" && !prodWholeReqBad && meta?.inboundOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>'입고 예정'(열린 도매 요청서 잔여)을 불러오지 못했습니다.</div>}
       {!confirmedTab && (prodWarn || (channel !== "도매" && (prodInbBad || meta?.inboundOk === false))) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
 
       {/* 데이터박스 — 재고 4 + 생산 2. 확정형 탭은 판단 카드(부족·생산 2종)를 뺀 3종만(판정 자체가 없다) */}
@@ -467,17 +477,18 @@ export default function InventoryPage() {
                     const inbDays = r.inbound_due ? Math.max(0, Math.round((Date.parse(r.inbound_due + "T00:00:00Z") - Date.parse(TODAY() + "T00:00:00Z")) / 86400_000)) : null;
                     // 하루치 미만·품절(dep ≤ 0)은 입고 예정과 무관하게 항상 빨강 — 마감이 오늘이거나 지난 입고 예정이
                     //  있으면 inbDays=0 이라 '0 < 0' 이 거짓이 되어 창고가 빈 가장 급한 품목이 검정으로 보이던 구멍(#10)
-                    const red = dep != null && (dep <= 0 || ((r.inbound ?? 0) > 0 && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 14)));
+                    // 도매 탭의 입고 예정은 이동 대기(소매에 물건이 있어야 옮긴다)라 빨강 판정에 쓰지 않는다 — 부족 판정과 같은 기준(현재고만)
+                    const red = dep != null && (dep <= 0 || ((r.inbound ?? 0) > 0 && channel !== "도매" && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 14)));
                     const posDays = dep != null && r.daily_out > 0 ? Math.floor((r.qty + (r.inbound ?? 0)) / r.daily_out) : null;
                     const tip = dep == null ? undefined : (r.inbound ?? 0) > 0
-                      ? `창고 기준 ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? " — 입고 전에 바닥날 수 있음" : ""}`
+                      ? `창고 기준 ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? (channel === "도매" ? " — 판매 가능일 전에 바닥날 수 있음" : " — 입고 전에 바닥날 수 있음") : ""}`
                       : `창고 기준 ${dep}일`;
                     return <td className="num b2b-money" title={tip} style={{ color: dep == null ? "var(--sm-text-light)" : red ? "var(--sm-danger)" : "var(--sm-black)" }}>{dep == null ? "-" : `${dep}일`}</td>;
                   })()}
                   {/* 입고 예정 = 시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여). 권장생산이 이미 뺀 값이다.
                       확정형 탭엔 없다 — 제조사 입고는 소매 칸으로 들어오므로 이 칸의 '들어올 양'이 아니다 */}
                   {!confirmedTab && <td className="num b2b-money" style={{ color: (r.inbound ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}
-                    title={(r.inbound ?? 0) > 0 ? `열린 제조사 요청서에 남은 양 — 권장생산에서 이미 뺐습니다\n${r.inbound_detail || ""}` : undefined}>
+                    title={(r.inbound ?? 0) > 0 ? `${channel === "도매" ? "열린 도매 요청서에 남은 양(소매 → 도매 이동 대기)" : "열린 제조사 요청서에 남은 양"} — 권장생산에서 이미 뺐습니다\n${r.inbound_detail || ""}` : undefined}>
                     {(r.inbound ?? 0) > 0 ? r.inbound.toLocaleString() : "-"}
                     {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
                   </td>}
@@ -498,7 +509,7 @@ export default function InventoryPage() {
         ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>{pmode === "전체" ? `기간 전체 (~ ${meta.to})` : `기간 ${meta.from} ~ ${meta.to} (${meta.periodDays}일)`}</p>
         /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
            평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
-        : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − 도매 현재고" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만</p>
+        : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − (도매 현재고 + 도매 요청 잔여)" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만{channel === "도매" ? "(도매는 현재고만)" : ""}</p>
       )}
 
       {/* 품목 변경 히스토리 — 원장 공용 테이블(TxnTable) 재사용. 행 취소 시 재고가 원복되므로 목록도 다시 읽는다 */}

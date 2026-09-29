@@ -12,9 +12,14 @@ export const maxDuration = 60;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // 예측 지평 = 권장 수식의 목표 일수(오늘 → 다음 요청일(수요일) 요청분 판매 가능일, production-schedule) — 고정 14일이던 것을 일정에 맞췄다.
-function buildSystemPrompt(sc: ScheduleHorizon, inboundOk: boolean): string {
+function buildSystemPrompt(sc: ScheduleHorizon, inboundOk: boolean, wholesale = false): string {
   const H = sc.horizonDays;
-  const inboundNote = inboundOk
+  // 도매 탭: '오는중' = 이미 낸 도매 요청 중 아직 소매에서 옮겨 오지 않은 양(2026-09-29) — 제조사 생산이 아니다
+  const inboundNote = wholesale
+    ? (inboundOk
+      ? `'오는중' = 이미 낸 도매 요청 중 아직 소매에서 옮겨 오지 않은 양입니다. 다시 요청하면 중복 요청이 되므로 권장 수량에서는 빼되, 시급도(안전재고 비교)는 현재고만으로 판단하세요(소매에 물건이 없으면 옮기지 못합니다). '창고소진일수'는 현재고만, '재고소진일수'는 현재고+오는중 기준입니다.`
+      : `주의: 이번 실행은 '오는중'(이미 낸 도매 요청 잔여) 집계에 실패해 0 으로 왔습니다. 오는중을 빼지 말고, notes 에 "도매 요청 잔여 미반영 — 열린 도매 요청서를 확인하세요" 를 남기세요.`)
+    : inboundOk
     ? `'오는중' = 이미 생산 요청서를 내서 생산·입고 예정인 미입고 물량입니다. 이 양은 다시 시키면 이중 발주가 되므로 반드시 재고처럼 빼고 판단하세요. '창고소진일수'는 현재고만, '재고소진일수'는 현재고+오는중 기준입니다.`
     : `주의: 이번 실행은 '오는중'(이미 시켜 둔 미입고 물량) 집계에 실패해 0 으로 왔습니다. 오는중을 빼지 말고, notes 에 "입고 예정 미반영 — 열린 생산 요청서를 확인하세요" 를 남기세요.`;
   return `당신은 씨몬스터(냉동 수산물 가공) 생산계획 어드바이저입니다.
@@ -59,18 +64,20 @@ export async function POST(req: Request) {
       getLedgerVelocity(undefined, channel),
     ]);
 
+    const wholesale = channel === "도매";
     const rows: AdviceRow[] = inv.rows.map((r) => {
+      const inbound = wholesale ? r.wholesaleReq : r.inbound; // 도매 = 도매 요청 잔여, 그 외 = 제조사 입고 예정
       const dailySales = velocity.perSku[r.sku] || 0;
       const predicted = Math.round(dailySales * inv.horizonDays);
       // 소진일수는 입고 예정까지 합친 재고 포지션 기준(시켜 둔 물량이 곧 들어온다)
-      const daysOfCover = r.stock != null && dailySales > 0 ? Math.round((r.stock + r.inbound) / dailySales) : null;
+      const daysOfCover = r.stock != null && dailySales > 0 ? Math.round((r.stock + inbound) / dailySales) : null;
       return {
         sku: r.sku,
         name: r.name,
         stock: r.stock,
         safety: r.leadSafety, // 시급도 기준(오늘 요청분 판매 가능일까지) — 목표(safety)는 예측판매와 겹친다
         b2bDemand: r.demand,
-        inbound: r.inbound,
+        inbound,
         dailySales: Math.round(dailySales * 10) / 10,
         daysOfCover,
         predicted,
@@ -79,7 +86,8 @@ export async function POST(req: Request) {
 
     // Claude 에 보낼 행: 결정거리가 있는 것만(재고 매칭 + (권장>0 or 미달 or 판매有)), 우선순위순 상한 40
     const signal = rows
-      .filter((r) => r.stock != null && (r.b2bDemand > 0 || r.predicted > 0 || (r.safety != null && r.stock + r.inbound < r.safety)))
+      // 시급도: 도매는 현재고만(재고 목록 도매 탭 부족 판정과 같은 기준 — 도매 요청 잔여는 옮겨야 들어온다)
+      .filter((r) => r.stock != null && (r.b2bDemand > 0 || r.predicted > 0 || (r.safety != null && (wholesale ? r.stock : r.stock + r.inbound) < r.safety)))
       .sort((a, b) => {
         // 안전재고는 시급도(필터)에만 쓰고, 정렬 점수에는 예측판매만(중복 합산 방지). 입고 예정은 재고처럼 뺀다
         const na = (a.b2bDemand + a.predicted) - ((a.stock || 0) + a.inbound);
@@ -118,7 +126,7 @@ export async function POST(req: Request) {
     const response = await anthropic.messages.create({
       model,
       max_tokens: 8000,
-      system: buildSystemPrompt(inv.schedule, inv.inboundOk),
+      system: buildSystemPrompt(inv.schedule, wholesale ? inv.wholesaleReqOk : inv.inboundOk, wholesale),
       messages: [{ role: "user", content: JSON.stringify(userPayload) }],
     });
     const text = response.content[0]?.type === "text" ? response.content[0].text : "";

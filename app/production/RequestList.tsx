@@ -132,7 +132,9 @@ export function RequestList() {
   //  소매 행은 권장뿐 아니라 원값(입고 예정·현재고·안전재고·수요)까지 보관한다 — 수정 창이 자기 요청서 잔여를 빼고 다시 계산하기 위해.
   //  요청서를 만들거나 고치면(잔여가 바뀌면) 다시 조회한다 — 마운트 스냅샷만 쓰면 방금 만든 요청서가 '입고 예정 0' 으로 보여 같은 물량을 또 시킨다.
   const [recRetail, setRecRetail] = useState<Map<string, RecRow>>(new Map());
-  const [recWhole, setRecWhole] = useState<Map<string, number>>(new Map());
+  const [recWhole, setRecWhole] = useState<Map<string, number>>(new Map()); // 도매 gross ② — 제조사 planFor 전용
+  const [recWholeReq, setRecWholeReq] = useState<Map<string, number>>(new Map()); // 도매 요청 잔여(R) — 도매 납품 권장에서만 뺀다
+  const [wholeReqOk, setWholeReqOk] = useState(true);
   const [recReady, setRecReady] = useState(false);
   const [inbOk, setInbOk] = useState(true); // 입고 예정 집계 실패면 권장이 시켜 둔 물량을 못 뺀 값 — 창에 경고
   const recSeq = useRef(0); // 순번 가드 — 늦게 온 옛 응답이 최신 입고 예정을 덮어쓰지 않게
@@ -145,7 +147,7 @@ export function RequestList() {
         (await fetch("/api/production/inventory?channel=도매", { cache: "no-store" })).json(),
       ]);
       if (seq !== recSeq.current) return; // 그 사이 새 조회가 나감 — 이 응답은 버린다
-      type Row = { sku: string; recommend: number; inbound?: number; stock?: number | null; safety?: number; demand?: number };
+      type Row = { sku: string; recommend: number; inbound?: number; stock?: number | null; safety?: number; demand?: number; wholesaleReq?: number };
       if (r.ok) {
         setRecRetail(new Map(((r.rows || []) as Row[]).map((x) => [x.sku.toUpperCase(), {
           recommend: Number(x.recommend) || 0, inbound: Number(x.inbound) || 0,
@@ -153,7 +155,11 @@ export function RequestList() {
         }])));
         setInbOk(r.inboundOk !== false);
       }
-      if (w.ok) setRecWhole(new Map(((w.rows || []) as Row[]).map((x) => [x.sku.toUpperCase(), Number(x.recommend) || 0])));
+      if (w.ok) {
+        setRecWhole(new Map(((w.rows || []) as Row[]).map((x) => [x.sku.toUpperCase(), Number(x.recommend) || 0])));
+        setRecWholeReq(new Map(((w.rows || []) as Row[]).map((x) => [x.sku.toUpperCase(), Number(x.wholesaleReq) || 0])));
+        setWholeReqOk(w.wholesaleReqOk !== false);
+      }
       if (r.ok && w.ok) setRecReady(true);
     } catch { /* 권장 없이도 요청 작성은 가능 — 권장 열은 '-' 로 남는다 */ }  }, []);
   useEffect(() => { loadRec(); }, [loadRec]);
@@ -244,7 +250,8 @@ export function RequestList() {
     const hasReceipts = r.items.some((it) => it.receipts.length > 0);
     // 제조사 요청의 미입고 잔여는 재고 목록 '입고 예정'으로 권장생산에서 빠져 있다 — 닫으면 그만큼 권장이 다시 올라간다
     const remain = openRemainQty(r.items);
-    const inbNote = r.purpose === "재고 보충" && remain > 0 ? `\n\n미입고 ${remain.toLocaleString()}개는 '입고 예정'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다.` : "";
+    const inbNote = r.purpose === "재고 보충" && remain > 0 ? `\n\n미입고 ${remain.toLocaleString()}개는 '입고 예정'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다.`
+      : r.purpose === "도매 납품" && remain > 0 ? `\n\n미이동 ${remain.toLocaleString()}개는 도매 '입고 예정'에서 빠져 도매 권장생산이 그만큼 늘어납니다.` : "";
     if (hasReceipts) {
       if (!confirm(`입고 기록이 있어 삭제할 수 없습니다.\n대신 '취소' 상태로 바꿀까요?\n(기록은 보존되고 목록·이행률에서 빠집니다)${inbNote}`)) return;
       await patchStatus(r.id, "취소", r.status);
@@ -274,11 +281,13 @@ export function RequestList() {
   }
 
   const doneCount = useMemo(() => byTab.filter((r) => r.status === "완료" || r.status === "취소").length, [byTab]);
-  // 종료일 지난 열린 제조사 요청서 — 잔여가 입고 예정에 남아 권장을 누르므로 마감(또는 종료일 수정) 대상
+  // 종료일 지난 열린 제조사·도매 요청서(현재 탭) — 잔여가 입고 예정에 남아 권장을 누르므로 마감(또는 종료일 수정) 대상.
+  //  도매 요청 잔여는 도매 탭 권장에서 빠진다(2026-09-29) — 자동 마감이 없어 잊힌 요청이 도매 권장을 누른다.
   const overdueOpen = useMemo(() => {
     const t = todayIso();
-    return requests.filter((r) => r.purpose === "재고 보충" && (r.status === "요청" || r.status === "진행중") && !!r.due_date && r.due_date < t && openRemainQty(r.items) > 0).length;
-  }, [requests]);
+    if (tab !== "재고 보충" && tab !== "도매 납품") return 0;
+    return requests.filter((r) => r.purpose === tab && (r.status === "요청" || r.status === "진행중") && !!r.due_date && r.due_date < t && openRemainQty(r.items) > 0).length;
+  }, [requests, tab]);
 
   // 생산 담당자 확인 — 담당자=본인 기록 + 진행중 전환(제조사에 전달했다는 표시)
   async function confirmRequest(r: ProductionRequest) {
@@ -296,7 +305,7 @@ export function RequestList() {
               <button key={pp} className={`sm-tab ${tab === pp ? "is-active" : ""}`} onClick={() => setTab(pp)}>{PR_PURPOSE_LABEL[pp]} 요청<span className="sm-tab-count">{tabCounts.get(pp) || 0}</span></button>
             ))}
           </div>
-          {tab === "재고 보충" && overdueOpen > 0 && (
+          {(tab === "재고 보충" || tab === "도매 납품") && overdueOpen > 0 && (
             <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>종료일 지난 요청서 {overdueOpen}건 — 마감하거나 종료일을 고치세요</span>
           )}
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)", cursor: "pointer" }}>
@@ -375,8 +384,8 @@ export function RequestList() {
         </section>
       )}
 
-      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recReady={recReady} inbOk={inbOk} prefill={prefill ?? undefined} defaultPurpose={tab} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
-      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recReady={recReady} inbOk={inbOk} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
+      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recWholeReq={recWholeReq} wholeReqOk={wholeReqOk} recReady={recReady} inbOk={inbOk} prefill={prefill ?? undefined} defaultPurpose={tab} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recWholeReq={recWholeReq} wholeReqOk={wholeReqOk} recReady={recReady} inbOk={inbOk} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
 }
@@ -434,7 +443,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           {req.due_date || "-"}
           {req.purpose === "재고 보충" && req.prod_start ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{req.prod_start.slice(5)}~{(req.due_date || "").slice(5)}</span> : null}
           {/* 종료일이 지났는데 열려 있으면 마감(또는 종료일 수정)이 필요하다 — 잔여가 입고 예정에 남아 권장을 누른다 */}
-          {req.purpose === "재고 보충" && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date < todayIso() && openRemainQty(req.items) > 0
+          {(req.purpose === "재고 보충" || req.purpose === "도매 납품") && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date < todayIso() && openRemainQty(req.items) > 0
             ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>지남 · 잔여 {openRemainQty(req.items).toLocaleString()}</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
@@ -466,6 +475,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                   const remain = openRemainQty(req.items);
                   const inbNote = req.purpose === "재고 보충" && remain > 0
                     ? `\n\n미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.`
+                    : req.purpose === "도매 납품" && remain > 0
+                    ? `\n\n미이동 ${remain.toLocaleString()}개는 도매 입고 예정에서 빠집니다. 아직 옮길 물량이면 마감하지 마세요.`
                     : "";
                   if (confirm(`이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) — 마감할까요?${inbNote}`)) onStatus("완료");
                 }}>마감</button>
@@ -566,8 +577,8 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 // 소매 수식 행의 원값 — 수정 창에서 자기 요청서 잔여를 빼고 권장을 다시 계산하는 데 쓴다
 type RecRow = { recommend: number; inbound: number; stock: number | null; safety: number; demand: number };
 
-function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, error, recRetail, recWhole, recReady, inbOk, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; error?: string; recRetail: Map<string, RecRow>; recWhole: Map<string, number>; recReady: boolean; inbOk: boolean; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, error, recRetail, recWhole, recWholeReq, wholeReqOk, recReady, inbOk, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; error?: string; recRetail: Map<string, RecRow>; recWhole: Map<string, number>; recWholeReq: Map<string, number>; wholeReqOk: boolean; recReady: boolean; inbOk: boolean; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
@@ -619,6 +630,16 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   const ownRawBySku = useMemo(() => {
     const m = new Map<string, number>();
     if (!initial || initial.purpose !== "재고 보충") return m;
+    for (const it of initial.items) {
+      const k = (it.sku || "").toUpperCase();
+      if (k) m.set(k, r2((m.get(k) || 0) + Math.max(0, it.requested_qty - it.received_qty)));
+    }
+    return m;
+  }, [initial]);
+  // 수정 창(도매 납품): 이 요청서 자신의 잔여(SKU 별) — 도매 요청 잔여(R)에서 자기 몫을 빼 '다른 요청서'만 남긴다
+  const ownWholeBySku = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!initial || initial.purpose !== "도매 납품") return m;
     for (const it of initial.items) {
       const k = (it.sku || "").toUpperCase();
       if (k) m.set(k, r2((m.get(k) || 0) + Math.max(0, it.requested_qty - it.received_qty)));
@@ -745,6 +766,9 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             </div>
           </div>
 
+          {!wholeReqOk && purpose === "도매 납품" && (
+            <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;도매 요청 잔여&rsquo;(열린 도매 요청서)를 불러오지 못했습니다 — 권장이 이미 요청한 양을 빼지 못해 실제보다 클 수 있습니다.</div>
+          )}
           {!inbOk && purpose === "재고 보충" && (
             <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;입고 예정&rsquo;(열린 요청서 잔여)을 불러오지 못했습니다 — 권장이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다.</div>
           )}
@@ -775,7 +799,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                     const inb = pl.inb;
                     // 확정형(프로모션·도매 대량)은 목표 수량을 사람이 안다(행사 계획·선결제 발주서) — 수식 권장 없음('-')
                     const recommend = !recReady || CONFIRMED_PURPOSES.includes(purpose) ? null
-                      : purpose === "도매 납품" ? (recWhole.get(rk) ?? 0)
+                      // 도매 납품 = max(0, gross ② − 다른 열린 도매 요청 잔여). 자기 잔여는 0 바닥 전에 되돌린다(net + own 은 과대)
+                      : purpose === "도매 납품" ? Math.max(0, r2((recWhole.get(rk) ?? 0) - Math.max(0, (recWholeReq.get(rk) ?? 0) - (ownWholeBySku.get(rk) ?? 0))))
                       : pl.recommend;
                     return (
                       <tr key={l.item_id || l.product_id}>
