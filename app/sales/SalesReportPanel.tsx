@@ -10,7 +10,7 @@ type Report = {
 };
 
 // 매출 리포트 패널 — 리포트 페이지(수동)와 업로드 후 인라인(자동) 양쪽에서 재사용.
-//  autoGenerate: 마운트 시 최신일 기준 일일 리포트를 자동 생성(업로드 직후용).
+//  autoGenerate: 마운트 시 최신일 기준 일일 매출 리포트를 자동 생성(업로드 직후용).
 export default function SalesReportPanel({ autoGenerate = false }: { autoGenerate?: boolean }) {
   const [mode, setMode] = useState<"daily" | "weekly">("daily");
   const [base, setBase] = useState("");
@@ -73,8 +73,8 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
     <>
       <section className="b2b-card">
         <div className="sm-tabs" style={{ marginBottom: 12 }}>
-          <button className={`sm-tab ${mode === "daily" ? "is-active" : ""}`} onClick={() => switchMode("daily")} disabled={busy !== ""}>일일 리포트</button>
-          <button className={`sm-tab ${mode === "weekly" ? "is-active" : ""}`} onClick={() => switchMode("weekly")} disabled={busy !== ""}>주간 리포트</button>
+          <button className={`sm-tab ${mode === "daily" ? "is-active" : ""}`} onClick={() => switchMode("daily")} disabled={busy !== ""}>일일 매출 리포트</button>
+          <button className={`sm-tab ${mode === "weekly" ? "is-active" : ""}`} onClick={() => switchMode("weekly")} disabled={busy !== ""}>주간 매출 리포트</button>
         </div>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <label className="sm-faint" style={{ fontSize: 15 }}>기준일</label>

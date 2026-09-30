@@ -113,7 +113,7 @@ function parseInsight(r: InsightRow): MetaInsight {
   const cpa = pickAction(r.cost_per_action_type, PURCHASE_KEYS);
   return { spend, impressions: Number(r.impressions) || 0, clicks: Number(r.clicks) || 0, ctr: Number(r.ctr) || 0, cpc: Number(r.cpc) || 0, purchases, purchaseValue, roas, cpa, ...("inline_link_clicks" in r ? { linkClicks: Number(r.inline_link_clicks) || 0 } : {}) };
 }
-// withLink: 링크 클릭(inline_link_clicks)도 받는다 — clicks/ctr/cpc 는 '전체'(좋아요·더보기 포함)라 일일 리포트는 링크 클릭 기준으로 쓴다.
+// withLink: 링크 클릭(inline_link_clicks)도 받는다 — clicks/ctr/cpc 는 '전체'(좋아요·더보기 포함)라 일일 종합 리포트는 링크 클릭 기준으로 쓴다.
 export async function getInsights(level: "campaign" | "adset" | "ad", range: StatRange = {}, debug = false, withLink = false): Promise<{ byId: Record<string, MetaInsight>; rawSample?: InsightRow }> {
   const { accountId } = creds();
   const key = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id";

@@ -61,7 +61,6 @@ export const NAV: NavCategory[] = [
           { href: "/sales/history", label: "변경 기록" },
         ],
       },
-      { href: "/briefing", label: "일일 리포트", icon: "bulb" }, // 2026-09-30 관리자 → 모두 열람(매출 업로드 뒤 담당자가 생성·발송)
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/subscription", label: "정기배송 분석", icon: "trend" },
     ],
@@ -129,6 +128,7 @@ export const NAV: NavCategory[] = [
   {
     label: "기타",
     tools: [
+      { href: "/briefing", label: "일일 종합 리포트", icon: "bulb" }, // 2026-09-30 모두 열람(매출 업로드 뒤 담당자가 생성·발송) — 같은 날 세일즈 → 기타, 이름 변경
       { href: "/report", label: "커스텀 리포트", icon: "bars" },
       { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
       { href: "/meeting", label: "회의 정리", icon: "note" },

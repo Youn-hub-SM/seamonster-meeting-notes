@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-// 일일 리포트(2026-09-30 개편) — 어제 매출·광고 분석 에이전트(app/lib/analyst.ts)의 리포트. 로그인한 모두가 보고 만들고 보낸다.
-//  흐름: 담당자가 매출 업로드 → 안내 창 '일일 리포트 생성'(?run=1) → 여기서 자동 분석 → 확인 후 [팀즈로 보내기].
+// 일일 종합 리포트(2026-09-30 개편, 메뉴 기타) — 어제 매출·광고 분석 에이전트(app/lib/analyst.ts)의 리포트. 로그인한 모두가 보고 만들고 보낸다.
+//  흐름: 담당자가 매출 업로드 → 안내 창 '일일 종합 리포트 생성'(?run=1) → 여기서 자동 분석 → 확인 후 [팀즈로 보내기].
+//  (매출 › 리포트의 '일일 매출 리포트'·'주간 매출 리포트'(메일)와 별개)
 //  14:30(운영) — 어제 매출이 있는데 아직 발송 전이면 자동 생성·발송. 06:30 업무 브리핑은 중단(관리자용은 추후 별도).
 //  [다시 분석](매출이 그대로여도 새로)과 하단 설정은 관리자만 — 서버가 판정한다(/api/analyst, /api/briefing/settings).
 
@@ -183,7 +184,7 @@ export default function DailyReportPage() {
     // 본문이 좌측에 쏠리지 않게 중앙 정렬(가독 폭 960)
     <div className="b2b-container" style={{ maxWidth: 960, margin: "0 auto" }}>
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">일일 리포트</h1></div>
+        <div><h1 className="b2b-page-title">일일 종합 리포트</h1></div>
         <div className="b2b-page-actions">
           <input type="date" className="b2b-input" style={{ width: "auto" }} value={date} max={kstYesterday()} disabled={busy !== ""}
             onChange={(e) => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { setDate(e.target.value); setError(""); setInfo(""); } }} />
@@ -204,7 +205,7 @@ export default function DailyReportPage() {
       {hasReport && report?.error && <div className="sm-warn" style={{ marginBottom: 12 }}>{report.error} — 아래는 이전 리포트입니다.</div>}
 
       {loading && !report ? <div className="b2b-loading">불러오는 중...</div> : !report || (report.status === "running" && !hasReport) ? (
-        <div className="b2b-empty">아직 이 날짜의 일일 리포트가 없습니다.</div>
+        <div className="b2b-empty">아직 이 날짜의 일일 종합 리포트가 없습니다.</div>
       ) : (
         <section className="b2b-card">
           <div className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>

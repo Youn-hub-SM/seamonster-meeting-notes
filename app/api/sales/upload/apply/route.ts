@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       await sb.from("sales_uploads").delete().eq("id", batchId);
     }
     await logSalesUpload(file.name, inserted, skipped);
-    // 최근 3일(어제~사흘 전) 매출이 파일에 있으면 화면이 날짜마다 '일일 리포트 생성' 안내 창을 띄운다(2026-09-30 — 담당자가 생성·발송, 자동 실행 없음).
+    // 최근 3일(어제~사흘 전) 매출이 파일에 있으면 화면이 날짜마다 '일일 종합 리포트 생성' 안내 창을 띄운다(2026-09-30 — 담당자가 생성·발송, 자동 실행 없음).
     //  월요일 업로드 = 금·토·일. 중복 재업로드여도 띄운다(분석은 매출이 그대로면 건너뛰어 멱등).
     const reportDates = [kstDay(1), kstDay(2), kstDay(3)].filter((d) => orders.some((o) => o.order_date === d));
     const { data: bounds } = await sb.rpc("sales_date_bounds");

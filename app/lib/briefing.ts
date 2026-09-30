@@ -13,8 +13,8 @@ import { getUntracked } from "./stock-tracked";
 //  두 축: ① 어제 사이트 전체에서 있었던 일 ② 오늘 체크해야 할 요소(코드가 판정한 경보).
 //  매출 동향은 넣지 않는다 — 별도 매출 리포트가 있다(대표 확정). 매출은 '업로드 밀림' 경보만 본다.
 //  원칙(v1에서 확립): 숫자·목록·경보는 전부 코드가 계산해 공급하고 AI 는 인용만 한다(암산·임의 카운트 금지).
-//  2026-09-30 중단 — 06:30 자동 생성(123 이 예약 삭제)과 /briefing 탭을 없앴다(/briefing 은 이제 어제 분석 = 일일 리포트).
-//   관리자용 리포트를 다시 만들 때 재활용하려고 본체와 /api/briefing 은 남겨 둔다. postTeamsMarkdown·teamsCardBytes 는 일일 리포트가 쓴다.
+//  2026-09-30 중단 — 06:30 자동 생성(123 이 예약 삭제)과 /briefing 탭을 없앴다(/briefing 은 이제 어제 분석 = 일일 종합 리포트).
+//   관리자용 리포트를 다시 만들 때 재활용하려고 본체와 /api/briefing 은 남겨 둔다. postTeamsMarkdown·teamsCardBytes 는 일일 종합 리포트가 쓴다.
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

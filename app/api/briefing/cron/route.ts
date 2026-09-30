@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 06:30 업무 브리핑 자동 생성 — 2026-09-30 중단(대표 결정: 06:30 생성은 무의미, 일일 리포트는 매출 업로드 뒤 담당자가 생성·발송).
+// 06:30 업무 브리핑 자동 생성 — 2026-09-30 중단(대표 결정: 06:30 생성은 무의미, 일일 종합 리포트는 매출 업로드 뒤 담당자가 생성·발송).
 //  migration 123 이 pg_cron 작업(daily-briefing)을 지운다. 적용 전에 호출돼도 아무것도 하지 않는다.
 //  브리핑 본체(app/lib/briefing.ts, /api/briefing)는 관리자용 리포트를 다시 만들 때 재활용하려고 남겨 둔다.
 //  인증: CRON_SECRET 또는 DIGEST_CRON_KEY (schedule-digest 와 동일 관례, 헤더/쿼리 양쪽 인정).

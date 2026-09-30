@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// 주간 리포트 '미리보기'(DB 미기록). base가 속한 주(월~일). 생략 시 데이터 최신일 기준.
+// 주간 매출 리포트 '미리보기'(DB 미기록). base가 속한 주(월~일). 생략 시 데이터 최신일 기준.
 export async function GET(req: NextRequest) {
   try {
     let base = new URL(req.url).searchParams.get("base") || "";

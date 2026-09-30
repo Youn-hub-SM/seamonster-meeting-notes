@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-// 일일 리포트 '미리보기' 생성(DB 미기록). base 생략 시 데이터 최신일.
+// 일일 매출 리포트 '미리보기' 생성(DB 미기록). base 생략 시 데이터 최신일.
 export async function GET(req: NextRequest) {
   try {
     const base = new URL(req.url).searchParams.get("base") || undefined;

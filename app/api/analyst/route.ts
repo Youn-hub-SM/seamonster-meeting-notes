@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 사실 집계 + AI 도구 루프(최대 약 4분)
 
-// 일일 리포트(2026-09-30) — 로그인한 모두가 보고, 만들고, 팀즈로 보낸다(담당자가 매출 업로드 후 생성·발송).
+// 일일 종합 리포트(2026-09-30) — 로그인한 모두가 보고, 만들고, 팀즈로 보낸다(담당자가 매출 업로드 후 생성·발송).
 //  매출이 그대로인데 새로 분석(force)은 관리자만 — 반복 AI 비용 통제. 매출이 바뀌었으면 누구나 다시 분석된다(지문 비교).
 async function who(req: NextRequest): Promise<{ name: string | null; admin: boolean }> {
   const t = req.cookies.get("b2b_auth")?.value;
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     } : null;
     return NextResponse.json({ ok: true, report, recent: (recent ?? []).map((r) => r.report_date as string), date, admin: u.admin });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "일일 리포트 조회 실패") }, { status: 500 });
+    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "일일 종합 리포트 조회 실패") }, { status: 500 });
   }
 }
 
@@ -59,6 +59,6 @@ export async function POST(req: NextRequest) {
     if (!r.ok) return NextResponse.json(r, { status: r.pending_migration ? 503 : r.skipped ? 409 : 502 });
     return NextResponse.json(r);
   } catch (err) {
-    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "일일 리포트 생성 실패") }, { status: 500 });
+    return NextResponse.json({ ok: false, error: extractErrorMsg(err, "일일 종합 리포트 생성 실패") }, { status: 500 });
   }
 }
