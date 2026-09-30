@@ -354,7 +354,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "listing_status", strict: true,
-    description: "SKU 의 채널별 현재 판매 상태·채널 재고(카탈로그, 매일 새벽 동기화)와 최근 14일 품절·재고 변경 명령. 판매가 갑자기 줄었을 때 품절·판매중지를 확인.",
+    description: "SKU 의 채널별 현재 판매 상태·채널 재고(카탈로그, 매일 새벽 동기화)와 분석 기간(최소 끝날 전 14일)의 품절·재고 변경 명령. 판매가 갑자기 줄었을 때 품절·판매중지를 확인.",
     input_schema: { type: "object", properties: { sku: { type: "string" } }, required: ["sku"], additionalProperties: false },
   },
   {
@@ -400,11 +400,12 @@ async function runTool(sb: SupabaseClient, ctx: { since: string; end: string; ma
   if (name === "listing_status") {
     const sku = String(input.sku || "").trim();
     if (!SKU_RE.test(sku)) throw new Error("SKU 형식이 올바르지 않습니다.");
+    const from = [ctx.since, shift(y, -14)].sort()[0];
     const [cat, cmd] = await Promise.all([
       sb.from("channel_catalog").select("channel, listing_name, item_name, sale_status, stock_qty, synced_at").ilike("sku_code", escLike(sku)).limit(40),
-      sb.from("channel_commands").select("channel, listing_name, item_name, command, qty, status, requested_by, created_at").ilike("sku_code", escLike(sku)).gte("created_at", `${[ctx.since, shift(y, -14)].sort()[0]}T00:00:00+09:00`).order("created_at", { ascending: false }).limit(30),
+      sb.from("channel_commands").select("channel, listing_name, item_name, command, qty, status, requested_by, created_at").ilike("sku_code", escLike(sku)).gte("created_at", `${from}T00:00:00+09:00`).lt("created_at", `${shift(y, 1)}T00:00:00+09:00`).order("created_at", { ascending: false }).limit(30),
     ]);
-    return JSON.stringify({ catalog: cat.error ? `조회 실패: ${cat.error.message}` : cat.data, commands: cmd.error ? `조회 실패: ${cmd.error.message}` : cmd.data }).slice(0, 12000);
+    return JSON.stringify({ catalog_now: cat.error ? `조회 실패: ${cat.error.message}` : cat.data, commands_period: `${from} ~ ${y}`, commands: cmd.error ? `조회 실패: ${cmd.error.message}` : cmd.data }).slice(0, 12000);
   }
   if (name === "stock_status") {
     const sku = String(input.sku || "").trim();

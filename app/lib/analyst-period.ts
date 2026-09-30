@@ -164,7 +164,7 @@ async function periodSalesFacts(sb: SupabaseClient, period: "weekly" | "monthly"
   else if (flags.length) notes.push("마지막 날 매출이 없어 이상 판정(flags)을 하지 않았습니다 — 매출이 다 들어오면 다시 분석하세요.");
   return {
     ready: true, complete: ready, period: { start: cur.since, end: cur.until, days, compare: weekly ? { prev_week: prevR, base_weeks: weeks } : { prev_month: prevR, last_year: lyR } },
-    retail_total, trend, channels, top_skus, new_repeat, wholesale, ...(notes.length ? { notes } : {}),
+    retail_total, trend, channels, top_skus, top_skus_base: baseName, new_repeat, wholesale, ...(notes.length ? { notes } : {}), // top_skus 의 base_rev·vs_base_pct 기준
   };
 }
 
