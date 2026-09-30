@@ -154,6 +154,28 @@ export async function getDailyInsights(level: "campaign" | "adset", range: { sin
   return out;
 }
 
+// ── 구간별 인사이트 ── 종합 리포트 광고 추이용(2026-09-30). increment = 1(일)·7(주, since 부터 7일씩)·"monthly"(달력 월).
+//  노출·링크 클릭까지 받는다(date_start = 구간 시작일). 캠페인 id → 구간 순서(과거→최근).
+export type MetaSeriesRow = MetaInsight & { date: string };
+export async function getInsightSeries(range: { since: string; until: string }, increment: 1 | 7 | "monthly"): Promise<Record<string, MetaSeriesRow[]>> {
+  const { accountId } = creds();
+  const rows = await metaList<InsightRow>(`/${accountId}/insights`, {
+    level: "campaign",
+    time_increment: increment,
+    time_range: JSON.stringify({ since: range.since, until: range.until }),
+    fields: "campaign_id,spend,impressions,clicks,inline_link_clicks,actions,action_values,purchase_roas,cost_per_action_type",
+  }, 100);
+  const out: Record<string, MetaSeriesRow[]> = {};
+  for (const r of rows) {
+    const id = r.campaign_id as string | undefined;
+    const date = String(r.date_start || "");
+    if (!id || !date) continue;
+    (out[id] ||= []).push({ ...parseInsight(r), date });
+  }
+  for (const list of Object.values(out)) list.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
 // ── 광고 켜기/끄기 ── campaign/adset/ad 공통(엔티티 id 로 status 변경).
 export async function setEntityStatus(id: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
   const { token } = creds();

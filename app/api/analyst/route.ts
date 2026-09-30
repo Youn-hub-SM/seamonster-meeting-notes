@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
     const spec = specFor(sp.get("period"), dateOf(sp.get("date")));
     const meta = { period: spec.period, date: spec.key, range: spec.range, label: spec.label, title: spec.title, admin: u.admin };
     const sb = supabaseAdmin();
-    const cols = "report_date, status, sales_ready, sales_fp, report_md, model, usage, trigger, error, sent_at, created_at, updated_at";
+    // 광고 추이(그래프용)는 facts 안에서 그 부분만 꺼낸다
+    const cols = "report_date, status, sales_ready, sales_fp, report_md, model, usage, trigger, error, sent_at, created_at, updated_at, trend_meta:facts->ads->meta->trend, trend_naver:facts->ads->naver->trend";
     const q = (c: string) => { let x = sb.from(spec.table).select(c); for (const [k, v] of Object.entries(rowKey(spec))) x = x.eq(k, v); return x.maybeSingle(); };
     let q1 = await q(`${cols}, sent_fp`);
     if (q1.error && /sent_fp/i.test(q1.error.message)) q1 = await q(cols); // 123 미적용

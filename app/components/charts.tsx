@@ -178,23 +178,24 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
 }
 
 // 막대(왼쪽 축, 누적) + 선(오른쪽 축) 콤보 — 발송량(막대) + 운임(선). 마우스오버 시 인터랙티브 툴팁.
-export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLabel = "운임", lineFmt = moneyCompact, barFmt, barUnit = "건", lineColor = CHART_LINE }: {
+export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLabel = "운임", lineFmt = moneyCompact, barFmt, barUnit = "건", lineColor = CHART_LINE, lineUnit = "원" }: {
   periods: string[];
   barSeries: { key: string; values: number[] }[]; // 누적 막대(왼쪽 축)
   barColors: string[];
-  lineValues: number[];                            // 선(오른쪽 축)
+  lineValues: (number | null)[];                   // 선(오른쪽 축) — null 이면 그 구간은 선을 끊는다(값 없음)
   lineLabel?: string;
   lineFmt?: (n: number) => string;
   barFmt?: (n: number) => string;                  // 왼쪽 축 포맷(금액이면 moneyCompact)
   barUnit?: string;
   lineColor?: string;
+  lineUnit?: string;                               // 선 툴팁 값 뒤 단위(기본 '원' — ROAS 처럼 단위가 다르면 넘긴다)
 }) {
   const [hi, setHi] = useState<number | null>(null);
   if (!periods.length) return <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>데이터 없음</div>;
   const bFmt = barFmt || ((n: number) => n.toLocaleString());
   const totals = periods.map((_, i) => barSeries.reduce((s, ser) => s + (ser.values[i] || 0), 0));
   const topL = niceCeil(Math.max(...totals, 1));
-  const topR = niceCeil(Math.max(...lineValues, 1));
+  const topR = niceCeil(Math.max(...lineValues.map((v) => v ?? 0), 1));
   const { W, H, padL, padT, padB, barMax, barRatio } = GEOM, padR = 56;  // 오른쪽 축 자리
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const slot = plotW / periods.length, bw = Math.min(barMax, slot * barRatio);
@@ -203,7 +204,11 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
   const cx = (i: number) => padL + slot * i + slot / 2;
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   const labelEvery = Math.ceil(periods.length / 14);
-  const linePts = periods.map((_, i) => `${cx(i)},${yR(lineValues[i] || 0)}`).join(" ");
+  // 선은 값이 있는 구간끼리만 잇는다(null 에서 끊김)
+  const lineSegs: string[] = [];
+  let seg: string[] = [];
+  periods.forEach((_, i) => { const v = lineValues[i]; if (v == null) { if (seg.length) lineSegs.push(seg.join(" ")); seg = []; } else seg.push(`${cx(i)},${yR(v)}`); });
+  if (seg.length) lineSegs.push(seg.join(" "));
   const clamp = (v: number, lo: number, hex: number) => Math.max(lo, Math.min(hex, v));
   const hex = 92, lo = 8;
   return (
@@ -235,8 +240,8 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
             </g>
           );
         })}
-        <polyline points={linePts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />
-        {periods.map((_, i) => <circle key={i} cx={cx(i)} cy={yR(lineValues[i] || 0)} r={hi === i ? 4 : 2.4} fill={lineColor} />)}
+        {lineSegs.map((pts, k) => <polyline key={k} points={pts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" />)}
+        {periods.map((_, i) => (lineValues[i] == null ? null : <circle key={i} cx={cx(i)} cy={yR(lineValues[i] as number)} r={hi === i ? 4 : 2.4} fill={lineColor} />))}
         {periods.map((p, i) => (i % labelEvery === 0 || periods.length <= 14) ? <text key={i} x={cx(i)} y={H - 9} textAnchor="middle" fontSize="12" fill="var(--sm-text-mid)">{p}</text> : null)}
         {periods.map((_, i) => <rect key={i} x={padL + slot * i} y={padT} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHi(i)} />)}
       </svg>
@@ -245,7 +250,7 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
           <div style={{ fontWeight: 800, marginBottom: 2 }}>{periods[hi]}</div>
           {barSeries.map((ser, si) => <div key={si}><span style={{ color: barColors[si % barColors.length] }}>●</span> {ser.key} <strong>{(ser.values[hi] || 0).toLocaleString()}{barUnit}</strong></div>)}
           <div style={{ borderTop: "1px solid var(--sm-border)", marginTop: 3, paddingTop: 3 }}>합계 <strong>{totals[hi].toLocaleString()}{barUnit}</strong></div>
-          <div style={{ color: lineColor, fontWeight: 700 }}>{lineLabel} {lineFmt(lineValues[hi] || 0)}원</div>
+          <div style={{ color: lineColor, fontWeight: 700 }}>{lineLabel} {lineValues[hi] == null ? "-" : `${lineFmt(lineValues[hi] as number)}${lineUnit}`}</div>
         </div>
       )}
     </div>

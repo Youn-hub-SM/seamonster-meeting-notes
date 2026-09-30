@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ComboBarLine, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 
 // 종합 리포트(2026-09-30, 메뉴 기타) — 매출·광고 분석 에이전트(app/lib/analyst.ts, 주간·월간은 analyst-period.ts)의 리포트.
 //  일일·주간·월간 탭. 로그인한 모두가 보고 만들고 보낸다.
@@ -10,7 +11,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 //  [다시 분석](매출이 그대로여도 새로)과 하단 설정은 관리자만 — 서버가 판정한다(/api/analyst, /api/briefing/settings).
 
 type AnalystUsage = { input: number; cache_read: number; cache_write: number; output: number; iterations: number; tool_calls: number; est_usd: number };
-type AnalystReport = { report_date: string; status: string; running?: boolean; sent_current?: boolean; sales_ready: boolean; report_md: string | null; model: string | null; usage: AnalystUsage | null; trigger: string | null; error: string | null; sent_at: string | null; created_at: string; updated_at: string };
+type TrendPts = { title: string; summary: string; points: { b: string; spend?: number; cost?: number; roas?: number | null; roas_all?: number | null }[] } | null;
+type AnalystReport = { report_date: string; status: string; running?: boolean; sent_current?: boolean; trend_meta?: TrendPts; trend_naver?: TrendPts; sales_ready: boolean; report_md: string | null; model: string | null; usage: AnalystUsage | null; trigger: string | null; error: string | null; sent_at: string | null; created_at: string; updated_at: string };
 const kstYesterday = () => new Date(Date.now() + 9 * 3600_000 - 86400_000).toISOString().slice(0, 10);
 const TRIGGER_LABEL: Record<string, string> = { manual: "생성", cron: "자동 발송", upload: "매출 업로드 직후", rerun: "매출 변경 재분석" };
 const SKIP_MSG: Record<string, string> = {
@@ -257,6 +259,31 @@ export default function SummaryReportPage() {
           )}
         </section>
       )}
+
+      {hasReport && (report?.trend_meta?.points?.length || report?.trend_naver?.points?.length) ? (
+        <section className="b2b-card" style={{ marginTop: 14 }}>
+          <div className="b2b-card-head">
+            <h2 className="b2b-card-title">광고 추이 · {report?.trend_meta?.title || report?.trend_naver?.title}</h2>
+          </div>
+          {[
+            { t: report?.trend_meta, name: "메타", bar: "지출", line: "ROAS", val: (p: NonNullable<TrendPts>["points"][number]) => [p.spend || 0, p.roas] as const },
+            { t: report?.trend_naver, name: "네이버", bar: "광고비", line: "전환 ROAS", val: (p: NonNullable<TrendPts>["points"][number]) => [p.cost || 0, p.roas_all] as const },
+          ].filter((x) => x.t?.points?.length).map((x) => (
+            <div key={x.name} style={{ marginBottom: 18 }}>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>{x.name} — {x.bar}(막대) · {x.line}(선)</div>
+              {x.t?.summary && <div className="sm-faint" style={{ fontSize: 12, marginBottom: 6 }}>{x.t.summary}</div>}
+              <ComboBarLine
+                periods={x.t!.points.map((p) => p.b)}
+                barSeries={[{ key: x.bar, values: x.t!.points.map((p) => x.val(p)[0]) }]}
+                barColors={[PIE_COLORS[0]]}
+                lineValues={x.t!.points.map((p) => { const v = x.val(p)[1]; return v == null ? null : Math.round(v * 100); })}
+                lineLabel={x.line} lineFmt={(n) => `${n}%`} lineUnit=""
+                barFmt={moneyCompact} barUnit="원"
+              />
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {admin && (
         <section className="b2b-card" style={{ marginTop: 28 }}>

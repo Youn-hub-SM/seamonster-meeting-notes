@@ -673,7 +673,7 @@ export default function NaverAdPage() {
                 <div className="b2b-empty">이 기간에 성과 데이터가 없습니다.</div>
               ) : (
                 <>
-                  <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} barFmt={moneyCompact} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineColor="var(--sm-orange)" barUnit="원" />
+                  <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} barFmt={moneyCompact} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineUnit="" lineColor="var(--sm-orange)" barUnit="원" />
                   <ChartLegend style={{ marginTop: 6, marginBottom: 12 }} items={[
                     ["광고비 (막대)", "var(--sm-info)"],
                     [`ROAS (선)${rptConv === "purchase" ? " · 구매기준" : ""}`, "var(--sm-orange)"],

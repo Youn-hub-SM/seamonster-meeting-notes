@@ -15,7 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "./supabase";
 import { getKv } from "./b2b-settings";
 import { getFeatureModel, effortParams, readText, AiResponseError } from "./ai-model";
-import { isMetaAdConfigured, listCampaigns as metaCampaigns, listAdsets as metaAdsets, getInsights, type MetaAdset, type MetaInsight } from "./meta-ad";
+import { isMetaAdConfigured, listCampaigns as metaCampaigns, listAdsets as metaAdsets, getInsights, getInsightSeries, type MetaAdset, type MetaInsight, type MetaSeriesRow } from "./meta-ad";
 import { isNaverAdConfigured, listCampaigns as naverCampaigns, listAdgroups as naverAdgroups, getStats as naverStats, type NaverAdgroup } from "./naver-ad";
 import { getPurchaseConversions } from "./naver-conv";
 import { bundleAvailable, type BundleComponent } from "./product-bundles";
@@ -80,6 +80,7 @@ export type ReportSpec = {
   complete: (fp: string | null | undefined) => boolean; // 이 지문이 '매출이 다 든' 리포트인가(14:30 발송 판단)
   build: (sb: SupabaseClient, ready: boolean, cache: AdsCache) => Promise<Built>;
   system: string; intro: string; toolMaxDays: number;
+  trend: TrendSpec;              // 광고 추이 구간(일일 14일·주간 8주·월간 6개월)
 };
 export type AdLabels = { cur: string; prev: string; prevRoas: string };
 
@@ -201,8 +202,8 @@ export type NaverCampFact = {
   conv_all: number; purchases: number | null; cpa: number | null; purchase_sales: number | null; roas: number | null; prev_cost: number;
 };
 export type AdsFacts = {
-  meta?: { ok: boolean; error?: string; spend: number; impressions: number; clicks: number; ctr: number | null; cpc: number | null; value: number; roas: number | null; purchases: number; cpa: number | null; prev_spend: number; prev_roas: number | null; campaigns: MetaCampFact[] };
-  naver?: { ok: boolean; error?: string; incomplete_campaigns?: string[]; cost_vat_incl: number; imp: number; clicks: number; ctr: number | null; cpc: number | null; purchases: number | null; purchase_sales: number | null; roas: number | null; purchase_status: string; prev_cost: number; campaigns: NaverCampFact[] };
+  meta?: { ok: boolean; error?: string; spend: number; impressions: number; clicks: number; ctr: number | null; cpc: number | null; value: number; roas: number | null; purchases: number; cpa: number | null; prev_spend: number; prev_roas: number | null; campaigns: MetaCampFact[]; trend?: MetaTrend | null };
+  naver?: { ok: boolean; error?: string; incomplete_campaigns?: string[]; cost_vat_incl: number; imp: number; clicks: number; ctr: number | null; cpc: number | null; purchases: number | null; purchase_sales: number | null; roas: number | null; purchase_status: string; prev_cost: number; campaigns: NaverCampFact[]; trend?: NaverTrend | null };
   spend_ex_vat_total?: number;
 };
 // 도구에서 다시 쓰는 광고 원자료(한 번의 실행 동안 메모리에)
@@ -215,16 +216,128 @@ export type AdsCache = {
 export const newCache = (cur: Range, prev: Range): AdsCache => ({ cur, prev, naverAdgroups: [], naverCur: new Map(), naverPrev: new Map(), naverPurchase: null });
 const ctrOf = (clicks: number, imp: number) => (imp > 0 ? r2((clicks / imp) * 100) : null); // %
 export const per = (cost: number, n: number | null) => (n != null && n > 0 ? r0(cost / n) : null);
+// ── 광고 추이(2026-09-30 대표 결정: 일일 최근 14일 · 주간 최근 8주 · 월간 최근 6개월) ──
+//  구간별 합계를 코드가 계산하고 방향(상승·하락·보합 — 최소제곱 기울기 ÷ 평균이 구간당 ±2% 넘는가)·연속 횟수·직전 대비를 붙인다.
+//  좋다/나쁘다 판정은 하지 않는다(대표 요청: 광고는 기준 없이). 최근 구간의 구매·전환은 늦게 잡혀 낮게 보일 수 있다.
+export type TrendBucket = { label: string; since: string; until: string };
+export type TrendSpec = { title: string; increment: 1 | 7 | "monthly"; buckets: TrendBucket[] };
+type Dir = { trend: "상승" | "하락" | "완만한 상승" | "완만한 하락" | "보합" | "-"; last_vs_prev_pct: number | null; last_vs_avg_pct: number | null; streak: number; last_missing?: boolean };
+export type MetaTrend = {
+  title: string; summary: string; dirs: Record<string, Dir>;
+  points: { b: string; spend: number; imp: number; clicks: number; ctr: number | null; cpc: number | null; purchases: number; roas: number | null }[];
+  campaigns: { name: string; points: { b: string; spend: number; ctr: number | null; roas: number | null }[] }[];
+};
+export type NaverTrend = {
+  title: string; summary: string; dirs: Record<string, Dir>;
+  points: { b: string; cost: number; imp: number; clicks: number; ctr: number | null; cpc: number | null; conv: number; conv_amt: number; roas_all: number | null }[];
+  campaigns: { name: string; points: { b: string; cost: number; ctr: number | null; roas_all: number | null }[] }[];
+};
+function describe(vals: (number | null)[]): Dir {
+  const xs = vals.map((v, i) => [i, v] as const).filter((p): p is readonly [number, number] => p[1] != null && Number.isFinite(p[1]));
+  if (xs.length < 3) return { trend: "-", last_vs_prev_pct: null, last_vs_avg_pct: null, streak: 0 };
+  const lastMissing = vals[vals.length - 1] == null; // 마지막 구간 값 없음 — 그 앞 구간을 '최근'으로 쓰지 않는다
+  const last = xs[xs.length - 1][1], prevV = xs[xs.length - 2][1];
+  const mean = avg(xs.map((p) => p[1])), mx = avg(xs.map((p) => p[0]));
+  const den = xs.reduce((s, p) => s + (p[0] - mx) ** 2, 0);
+  const slope = den > 0 ? xs.reduce((s, p) => s + (p[0] - mx) * (p[1] - mean), 0) / den : 0;
+  const slopePct = mean !== 0 ? (slope / Math.abs(mean)) * 100 : 0;
+  let streak = 0; // 끝에서부터 같은 방향으로 이어진 변화 수(+ 상승, - 하락)
+  for (let k = xs.length - 1; k > 0; k--) {
+    const d = xs[k][1] - xs[k - 1][1], sg = d > 0 ? 1 : d < 0 ? -1 : 0;
+    if (sg === 0 || (streak !== 0 && Math.sign(streak) !== sg)) break;
+    streak += sg;
+  }
+  // 기울기가 작아도(±2% 안) 끝에서 3번 이상 같은 방향으로 이어졌으면 '완만한 상승·하락' — '보합(연속 상승)' 같은 모순 문구가 나오지 않게
+  const trend = slopePct > 2 ? "상승" : slopePct < -2 ? "하락" : streak >= 3 ? "완만한 상승" : streak <= -3 ? "완만한 하락" : "보합";
+  if (lastMissing) return { trend, last_vs_prev_pct: null, last_vs_avg_pct: null, streak: 0, last_missing: true };
+  return { trend, last_vs_prev_pct: pct(last, prevV), last_vs_avg_pct: pct(last, avg(xs.slice(0, -1).map((p) => p[1]))), streak };
+}
+function summarize(dirs: Record<string, Dir>, names: [string, string][]): string {
+  return names.filter(([k]) => dirs[k] && dirs[k].trend !== "-").map(([k, nm]) => {
+    const d = dirs[k];
+    const dirSign = /상승/.test(d.trend) ? 1 : /하락/.test(d.trend) ? -1 : 0;
+    const n = Math.abs(d.streak), mv = d.streak > 0 ? "상승" : "하락";
+    if (d.last_missing) return `${nm} ${d.trend}(최근 구간 값 없음)`;
+    if (n >= 3 && dirSign !== 0 && Math.sign(d.streak) !== dirSign) return `${nm} 전체 ${d.trend}, 최근 ${n}회 연속 ${mv}`; // 방향이 바뀌는 중
+    const tail = n >= 3 ? `(최근 ${n}회 연속 ${mv})`
+      : d.last_vs_avg_pct != null ? `(최근 구간은 평균 대비 ${d.last_vs_avg_pct > 0 ? "+" : ""}${d.last_vs_avg_pct}%)` : "";
+    return `${nm} ${d.trend}${tail}`;
+  }).join(" · ");
+}
+const bucketOf = (t: TrendSpec, d: string) => t.buckets.findIndex((b) => d >= b.since && d <= b.until);
+
+function metaTrend(ser: Record<string, MetaSeriesRow[]>, t: TrendSpec, names: Map<string, { name: string }>): MetaTrend | null {
+  type A = { spend: number; imp: number; clicks: number; purchases: number; value: number };
+  const zero = (): A[] => t.buckets.map(() => ({ spend: 0, imp: 0, clicks: 0, purchases: 0, value: 0 }));
+  const tot = zero();
+  const camp: { id: string; acc: A[] }[] = [];
+  for (const [id, rows] of Object.entries(ser)) {
+    const acc = zero();
+    for (const r of rows) {
+      const i = bucketOf(t, r.date);
+      if (i < 0) continue;
+      for (const o of [tot[i], acc[i]]) { o.spend += r.spend; o.imp += r.impressions; o.clicks += r.linkClicks || 0; o.purchases += r.purchases; o.value += r.purchaseValue; }
+    }
+    camp.push({ id, acc });
+  }
+  const pt = (o: A, b: string) => ({ b, spend: r0(o.spend), imp: o.imp, clicks: o.clicks, ctr: ctrOf(o.clicks, o.imp), cpc: per(o.spend, o.clicks), purchases: o.purchases, roas: o.spend > 0 ? r2(o.value / o.spend) : null });
+  const points = tot.map((o, i) => pt(o, t.buckets[i].label));
+  if (!points.some((p) => p.spend > 0)) return null; // 기간 내내 지출 없음 — 0 줄 표·그래프를 만들지 않는다
+  const dirs: Record<string, Dir> = {
+    spend: describe(points.map((p) => p.spend)), ctr: describe(points.map((p) => p.ctr)), cpc: describe(points.map((p) => p.cpc)),
+    purchases: describe(points.map((p) => p.purchases)), roas: describe(points.map((p) => p.roas)),
+  };
+  const last = t.buckets.length - 1;
+  const campaigns = camp.filter((c) => c.acc[last].spend > 0).sort((a, b) => b.acc[last].spend - a.acc[last].spend).slice(0, 5)
+    .map((c) => ({ name: names.get(c.id)?.name || c.id, points: c.acc.map((o, i) => { const p = pt(o, t.buckets[i].label); return { b: p.b, spend: p.spend, ctr: p.ctr, roas: p.roas }; }) }));
+  return { title: t.title, summary: summarize(dirs, [["spend", "지출"], ["ctr", "CTR"], ["cpc", "CPC"], ["purchases", "구매"], ["roas", "ROAS"]]), dirs, points, campaigns };
+}
+
+async function naverTrendFetch(campIds: string[], t: TrendSpec): Promise<Map<string, Record<string, number>>[]> {
+  const out: Map<string, Record<string, number>>[] = new Array(t.buckets.length);
+  for (let i = 0; i < t.buckets.length; i += 4) { // 한 번에 4구간씩(네이버 API 과부하 방지)
+    await Promise.all(t.buckets.slice(i, i + 4).map(async (b, k) => {
+      const rows = campIds.length ? await naverStats(campIds, { since: b.since, until: b.until }) : [];
+      out[i + k] = new Map(rows.map((r) => [r.id, r as unknown as Record<string, number>]));
+    }));
+  }
+  return out;
+}
+function naverTrend(maps: Map<string, Record<string, number>>[], t: TrendSpec, camps: { nccCampaignId: string; name: string }[]): NaverTrend | null {
+  const sumAt = (i: number, ids: string[], k: string) => ids.reduce((s, id) => s + num(maps[i]?.get(id)?.[k]), 0);
+  const pt = (i: number, ids: string[]) => {
+    const cost = r0(sumAt(i, ids, "salesAmt")), imp = sumAt(i, ids, "impCnt"), clicks = sumAt(i, ids, "clkCnt"), conv_amt = r0(sumAt(i, ids, "convAmt"));
+    // 전체 전환(장바구니 포함) 매출 기준 ROAS — 날마다 받을 수 있는 값이라 추이에 쓴다(VAT 제외 광고비로 환산)
+    return { b: t.buckets[i].label, cost, imp, clicks, ctr: ctrOf(clicks, imp), cpc: per(cost, clicks), conv: sumAt(i, ids, "ccnt"), conv_amt, roas_all: cost > 0 ? r2(conv_amt / (cost / 1.1)) : null };
+  };
+  const all = camps.map((c) => c.nccCampaignId);
+  const points = t.buckets.map((_, i) => pt(i, all));
+  if (!points.some((p) => p.cost > 0 || p.imp > 0)) return null; // 기간 내내 노출·광고비 없음
+  const dirs: Record<string, Dir> = {
+    cost: describe(points.map((p) => p.cost)), ctr: describe(points.map((p) => p.ctr)), cpc: describe(points.map((p) => p.cpc)),
+    conv: describe(points.map((p) => p.conv)), roas_all: describe(points.map((p) => p.roas_all)),
+  };
+  const last = t.buckets.length - 1;
+  const campaigns = camps.map((c) => ({ c, cost: sumAt(last, [c.nccCampaignId], "salesAmt") })).filter((x) => x.cost > 0).sort((a, b) => b.cost - a.cost).slice(0, 5)
+    .map(({ c }) => ({ name: c.name, points: t.buckets.map((_, i) => { const p = pt(i, [c.nccCampaignId]); return { b: p.b, cost: p.cost, ctr: p.ctr, roas_all: p.roas_all }; }) }));
+  return { title: t.title, summary: summarize(dirs, [["cost", "광고비"], ["ctr", "CTR"], ["cpc", "CPC"], ["conv", "전환"], ["roas_all", "전환 ROAS"]]), dirs, points, campaigns };
+}
+
 export const META_FAIL = (error: string): NonNullable<AdsFacts["meta"]> => ({ ok: false, error, spend: 0, impressions: 0, clicks: 0, ctr: null, cpc: null, value: 0, roas: null, purchases: 0, cpa: null, prev_spend: 0, prev_roas: null, campaigns: [] });
 export const NAVER_FAIL = (error: string): NonNullable<AdsFacts["naver"]> => ({ ok: false, error, cost_vat_incl: 0, imp: 0, clicks: 0, ctr: null, cpc: null, purchases: null, purchase_sales: null, roas: null, purchase_status: "조회 실패", prev_cost: 0, campaigns: [] });
 
-export async function metaFacts(cur: Range, prev: Range): Promise<AdsFacts["meta"]> {
+export async function metaFacts(cur: Range, prev: Range, trend?: TrendSpec): Promise<AdsFacts["meta"]> {
   if (!isMetaAdConfigured()) return undefined;
   try {
-    const [camps, ci, pi] = await Promise.all([
+    // 추이는 따로 40초 상한 — 늦으면 추이만 빼고 나머지는 그대로
+    const trendP = trend
+      ? withTimeout(getInsightSeries({ since: trend.buckets[0].since, until: trend.buckets[trend.buckets.length - 1].until }, trend.increment), 40_000).catch(() => "timeout" as const)
+      : Promise.resolve(null);
+    const [camps, ci, pi, ser] = await Promise.all([
       metaCampaigns(false),
       getInsights("campaign", cur, false, true), // 기간 지출·노출·링크 클릭·구매·구매액
       getInsights("campaign", prev),
+      trendP,
     ]);
     const names = new Map(camps.map((c) => [c.id, c]));
     const ids = new Set([...Object.keys(ci.byId), ...Object.keys(pi.byId)]);
@@ -255,6 +368,7 @@ export async function metaFacts(cur: Range, prev: Range): Promise<AdsFacts["meta
       ok: true, spend, impressions, clicks, ctr: ctrOf(clicks, impressions), cpc: per(spend, clicks),
       value, roas: spend > 0 ? r2(value / spend) : null, purchases, cpa: per(spend, purchases),
       prev_spend: r0(pSpendAll), prev_roas: pSpendAll > 0 ? r2(pValAll / pSpendAll) : null, campaigns,
+      trend: trend && ser && ser !== "timeout" ? metaTrend(ser, trend, names) : null,
     };
   } catch (e) {
     return META_FAIL(e instanceof Error ? e.message : String(e));
@@ -263,7 +377,7 @@ export async function metaFacts(cur: Range, prev: Range): Promise<AdsFacts["meta
 
 // convTimeoutMs: 구매 전환(장바구니 제외)은 하루 단위 리포트 작업이라 느리다 — 그 안에 못 오거나 한 날이라도 실패하면 '미확정'(0 으로 단정하지 않음).
 //  시간 안에 못 끝난 조회는 뒤에서 계속 돌아 캐시(naver_conv_daily)를 채운다 — 다음 실행이 빨라진다.
-export async function naverFacts(cur: Range, prev: Range, cache: AdsCache, convTimeoutMs: number): Promise<AdsFacts["naver"]> {
+export async function naverFacts(cur: Range, prev: Range, cache: AdsCache, convTimeoutMs: number, trend?: TrendSpec): Promise<AdsFacts["naver"]> {
   if (!isNaverAdConfigured()) return undefined;
   try {
     const camps = await naverCampaigns();
@@ -271,10 +385,12 @@ export async function naverFacts(cur: Range, prev: Range, cache: AdsCache, convT
     const groups = (await Promise.all(camps.map((c) => naverAdgroups(c.nccCampaignId).catch(() => { incomplete.push(c.name); return [] as NaverAdgroup[]; })))).flat();
     cache.naverAdgroups = groups;
     const ids = groups.map((g) => g.nccAdgroupId);
-    const [sc, sp, conv] = await Promise.all([
+    const trendP = trend ? withTimeout(naverTrendFetch(camps.map((c) => c.nccCampaignId), trend), 40_000).catch(() => "timeout" as const) : Promise.resolve(null);
+    const [sc, sp, conv, tr] = await Promise.all([
       naverStats(ids, cur),
       naverStats(ids, prev),
       withTimeout(getPurchaseConversions(cur.since, cur.until, "adgroup").then((r) => (r.failedDays?.length ? null : r.map)).catch(() => null), convTimeoutMs),
+      trendP,
     ]);
     const toMap = (rows: { id: string }[]) => new Map(rows.map((r) => [r.id, r as unknown as Record<string, number>]));
     cache.naverCur = toMap(sc); cache.naverPrev = toMap(sp);
@@ -308,6 +424,7 @@ export async function naverFacts(cur: Range, prev: Range, cache: AdsCache, convT
       purchases, purchase_sales, roas: roasOf(purchase_sales, cost),
       purchase_status: purchaseMap ? "확정(구매만 · 마지막 날은 전환 지연으로 늘어날 수 있음)" : "미확정(구매 전환 리포트 지연·실패 — 전체 전환만 참고)",
       prev_cost: r0(campaigns.reduce((s, c) => s + c.prev_cost, 0)), campaigns,
+      trend: trend && tr && tr !== "timeout" ? naverTrend(tr, trend, camps) : null,
     };
   } catch (e) {
     return NAVER_FAIL(e instanceof Error ? e.message : String(e));
@@ -315,10 +432,10 @@ export async function naverFacts(cur: Range, prev: Range, cache: AdsCache, convT
 }
 
 // 매출 사실 + 광고 사실을 모아 AI 입력까지(기간 공통) — 매체별 60초 상한(멈추면 함수가 300초에 잘려 'running' 이 남는다)
-export async function collectAds(cache: AdsCache, convTimeoutMs: number): Promise<{ ads: AdsFacts; aiAds: Record<string, unknown> }> {
+export async function collectAds(cache: AdsCache, convTimeoutMs: number, trend?: TrendSpec): Promise<{ ads: AdsFacts; aiAds: Record<string, unknown> }> {
   const [metaR, naverR] = await Promise.all([
-    withTimeout(metaFacts(cache.cur, cache.prev), 60_000),
-    withTimeout(naverFacts(cache.cur, cache.prev, cache, convTimeoutMs), 60_000),
+    withTimeout(metaFacts(cache.cur, cache.prev, trend), 60_000),
+    withTimeout(naverFacts(cache.cur, cache.prev, cache, convTimeoutMs, trend), 60_000),
   ]);
   const metaF = metaR === "timeout" ? META_FAIL("조회 시간 초과(60초)") : metaR;
   const naverF = naverR === "timeout" ? NAVER_FAIL("조회 시간 초과(60초)") : naverR;
@@ -475,6 +592,8 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 이커머스: 공식몰 카
 - flags(코드가 찾은 매출 이상) 중 금액 영향이 큰 것부터 최대 4개만 도구로 확인합니다. 도구 없이 설명되는 것은 호출하지 않습니다. flags 가 없으면 도구를 쓰지 않습니다.
 - 필요한 조회는 한 번에 함께(동시에) 요청합니다. 조사 차례가 적을수록 좋습니다.
 - 광고 캠페인은 금액·ROAS 문턱 같은 기준으로 좋다/나쁘다를 판정하지 않고 사실만 적습니다. 매출 변화의 원인으로 광고가 관련될 때만 근거로 씁니다. 캠페인별 전체 표는 시스템이 붙이므로 직접 쓰지 않습니다.
+- 광고 추이(ads.meta.trend · ads.naver.trend, 최근 14일)는 코드가 계산한 방향(summary·dirs)을 그대로 인용해 사실로만 설명합니다. 매출 변화와 시기가 겹치는 흐름만 원인 후보(추정)로 연결합니다. 추이 표는 시스템이 붙입니다.
+- 네이버 추이의 conv·roas_all 은 장바구니 등 전체 전환 기준이라 naver.purchases·roas(구매만)와 비교하지 않습니다. 마지막 구간의 구매·전환·ROAS 는 전환 지연으로 낮게 잡히니 그것만으로 하락이라 단정하거나 매출 원인으로 연결하지 않습니다.
 - 매출 헤드라인은 소매(retail_total) 기준입니다. 도매는 발송완료 시점에 한꺼번에 잡혀 날마다 들쭉날쭉하니 이상으로 해석하지 않고 참고로만 적습니다.
 - 메타 ROAS·구매는 메타 픽셀 기준, 네이버는 네이버 전환 기준이라 실제 매출과 다릅니다. ROAS 는 배수(3.2 = 320%)이며 두 매체 모두 VAT 제외 광고비 기준입니다. CTR 은 %, CPC·CPA 는 원입니다(네이버는 VAT 포함 광고비 기준). 네이버 비용(cost_vat_incl)은 VAT 포함 금액입니다. 네이버 구매가 '미확정'이면 구매 0 이라고 단정하지 않습니다.
 - 신규/재구매는 식별 가능한 고객만입니다(050 안심번호·무전화는 '미분류'). 값이 없으면(null) 그 줄을 생략합니다.
@@ -490,7 +609,7 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 이커머스: 공식몰 카
 | 채널 | 어제 | 4주 평균 | 증감 |  (매출 상위 채널 5개 이하 + 소매 합계 행, 금액은 원 단위 천단위 쉼표)
 - 도매·신규/재구매·월 누적 한 줄씩
 ## 광고
-- 매체별 한 줄: 어제 비용·노출·클릭·CTR·CPC·구매·ROAS(facts 의 매체 합계 값 그대로, 판정 없이)
+- 매체별 한 줄: 어제 비용·노출·클릭·CTR·CPC·구매·ROAS(facts 의 매체 합계 값 그대로, 판정 없이) + 최근 14일 추이에서 가장 두드러진 흐름 하나(trend.summary 그대로)
 (이 섹션 뒤에 시스템이 캠페인 전체 표를 붙입니다)
 ## 눈에 띄는 변화와 원인
 - (변화) → (원인: 확인됨/추정, 근거 수치)
@@ -631,6 +750,25 @@ export function renderAdTables(ads: AdsFacts, L: AdLabels): string {
   return out.join("\n");
 }
 
+// 광고 추이 — 요약 한 줄(코드 판정 방향) + 구간별 표. 팀즈에는 요약만 간다(표는 adTablesForTeams 가 뺀다).
+export function renderTrend(ads: AdsFacts, title: string): string {
+  const m = ads.meta?.ok ? ads.meta.trend : null, n = ads.naver?.ok ? ads.naver.trend : null;
+  if (!m && !n) return "";
+  const out: string[] = [`### 광고 추이 (${title})`];
+  if (m) out.push(`- 메타: ${m.summary || "구간이 적어 방향 없음"}`);
+  if (n) out.push(`- 네이버: ${n.summary || "구간이 적어 방향 없음"}`);
+  if (m) {
+    out.push("", "| 메타 추이 | 지출 | 링크 클릭 | CTR | CPC | 구매 | ROAS |", "|---|---|---|---|---|---|---|");
+    for (const p of m.points) out.push(`| ${p.b} | ${won(p.spend)} | ${won(p.clicks)} | ${pctS(p.ctr)} | ${won(p.cpc)} | ${p.purchases} | ${x2(p.roas)} |`);
+  }
+  if (n) {
+    out.push("", "| 네이버 추이 | 광고비 | 클릭 | CTR | CPC | 전환 | 전환 ROAS |", "|---|---|---|---|---|---|---|");
+    for (const p of n.points) out.push(`| ${p.b} | ${won(p.cost)} | ${won(p.clicks)} | ${pctS(p.ctr)} | ${won(p.cpc)} | ${won(p.conv)} | ${x2(p.roas_all)} |`);
+  }
+  out.push("", "- 방향 = 구간 전체 기울기(구간당 ±2% 넘으면 상승·하락, 그 안이라도 3번 이상 이어지면 완만한 상승·하락). 최근 구간의 구매·전환은 늦게 잡혀 실제보다 낮게 보일 수 있습니다. 네이버 전환 ROAS 는 장바구니 등 전체 전환 매출 기준(VAT 제외 광고비로 환산)입니다.");
+  return out.join("\n");
+}
+
 // 팀즈용: 캠페인 표(머리 첫 칸이 '… 캠페인')를 '- 이름 · 지출 1,000 · 구매 2 …' 한 줄씩으로 바꾼다.
 //  적응형 카드는 표 한 행이 ColumnSet(약 0.9KB)이라 캠페인이 20개를 넘으면 팀즈 한도(약 28KB)를 넘고, 워크플로 웹훅은
 //  202 를 준 뒤 카드 게시만 조용히 실패한다(그날 보고 전체가 안 감). limit 을 주면 표마다 지출 상위 limit 개만 남긴다.
@@ -640,13 +778,15 @@ export function adTablesForTeams(md: string, limit?: number): string {
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
     const head = /^\|.*\|$/.test(t) ? t.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()) : null;
-    if (!head || !/캠페인$/.test(head[0])) { out.push(lines[i]); continue; }
+    if (!head || !/(캠페인|추이)$/.test(head[0])) { out.push(lines[i]); continue; }
     const rows: string[][] = [];
     for (i++; i < lines.length && /^\|.*\|$/.test(lines[i].trim()); i++) {
       const raw = lines[i].trim();
       if (!/^\|[\s|:-]+\|$/.test(raw)) rows.push(raw.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
     }
     i--;
+    // 추이 표는 팀즈 카드에 싣지 않는다(요약 줄은 위에 있다) — 한 번만 안내
+    if (/추이$/.test(head[0])) { if (!out.some((l) => l.includes("추이 표·그래프는"))) out.push("- 구간별 추이 표·그래프는 업무도우미 › 종합 리포트에서 볼 수 있습니다"); continue; }
     const line = (r: string[], bold: boolean) => `- ${bold ? `**${r[0]}**` : r[0]} · ${r.slice(1).map((c, k) => `${head[k + 1]} ${c}`).join(" · ")}`;
     const isTotal = (r: string[]) => /^합계 \d+개/.test(r[0]); // renderAdTables 의 합계 행만('합계세일' 같은 캠페인 이름은 제외)
     const body = rows.filter((r) => !isTotal(r)), total = rows.filter(isTotal);
@@ -660,8 +800,8 @@ export function adTablesForTeams(md: string, limit?: number): string {
 }
 
 // AI 리포트의 '## 광고' 섹션 끝(다음 ## 앞)에 표를 끼운다. 광고 섹션이 없으면 '## 눈에 띄는' 앞, 그것도 없으면 맨 끝.
-function withAdTables(md: string, ads: AdsFacts, L: AdLabels): string {
-  const tables = renderAdTables(ads, L);
+function withAdTables(md: string, ads: AdsFacts, L: AdLabels, trendTitle: string): string {
+  const tables = [renderAdTables(ads, L), renderTrend(ads, trendTitle)].filter(Boolean).join("\n\n");
   if (!tables) return md;
   const lines = md.split("\n");
   const adAt = lines.findIndex((l) => /^##\s*광고/.test(l.trim()));
@@ -779,7 +919,7 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
     const salesFailed = !!sfp?.ready && !built.salesReady; // 매출은 올라와 있는데 집계만 실패
     if (salesFailed && prev?.report_md) throw new Error(String(built.salesNote || "매출 집계 실패"));
     const r = await analyze(sb, spec, built.aiFacts, built.flags, cache, deadlineAt);
-    const mdText = withAdTables(r.md, built.ads, spec.adLabels);
+    const mdText = withAdTables(r.md, built.ads, spec.adLabels, spec.trend.title);
     const up = await sb.from(spec.table).upsert({
       // 집계 실패로 광고만 본 리포트는 지문을 비워 둔다 — 다음 실행이 다시 분석. 발송 기록(sent_at·sent_fp)은 그대로 둔다.
       ...insertKey(spec), status: "ok", sales_ready: built.salesReady && !!sfp?.ready, sales_fp: salesFailed ? null : fp, facts: { ...built.facts, flags: built.flags, tool_log: r.toolLog },
@@ -833,6 +973,7 @@ export async function sendReportToTeams(spec: ReportSpec): Promise<{ ok: boolean
 // ── 일일 명세 ──
 export function dailySpec(date?: string): ReportSpec {
   const y = validDate(date) ? date : kstDay(1);
+  const trend: TrendSpec = { title: "최근 14일", increment: 1, buckets: Array.from({ length: 14 }, (_, k) => { const d = shift(y, k - 13); return { label: md(d), since: d, until: d }; }) };
   return {
     period: "daily", key: y, range: { since: y, until: y }, prevRange: { since: shift(y, -7), until: shift(y, -1) },
     table: "analyst_reports", migration: "122_analyst_reports.sql",
@@ -844,11 +985,11 @@ export function dailySpec(date?: string): ReportSpec {
       const flags: string[] = [];
       const [sales, adsR] = await Promise.all([
         salesFacts(sb, y, ready, flags).catch((e) => ({ ready: false, note: `매출 집계 실패: ${e instanceof Error ? e.message : String(e)}` } as SalesFacts)),
-        collectAds(cache, 35_000),
+        collectAds(cache, 35_000, trend),
       ]);
       const facts = { date: y, weekday: weekday(y), sales, ads: adsR.ads };
       return { facts, aiFacts: { ...facts, ads: adsR.aiAds }, ads: adsR.ads, flags, salesReady: sales.ready, salesNote: sales.note };
     },
-    system: SYSTEM, intro: `분석 대상일(어제): ${y} (${weekday(y)}요일) · 비교 기준: 지난 4주 같은 요일 평균`, toolMaxDays: 28,
+    system: SYSTEM, intro: `분석 대상일(어제): ${y} (${weekday(y)}요일) · 비교 기준: 지난 4주 같은 요일 평균 · 광고 추이: 최근 14일`, toolMaxDays: 28, trend,
   };
 }
