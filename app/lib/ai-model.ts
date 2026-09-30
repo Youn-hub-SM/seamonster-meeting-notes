@@ -56,7 +56,7 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inherit
   { key: "report", label: "커스텀 리포트", desc: "자연어→SQL 데이터 조회 (기본 opus·정교)", inheritDefault: "opus" },
   { key: "briefing", label: "업무 브리핑(중단)", desc: "06:30 업무 브리핑 — 2026-09-30 자동 생성 중단, 관리자용 재구성 전까지 미사용 (기본 opus)", inheritDefault: "opus" },
   { key: "margin", label: "이익률 계산기", desc: "AI 이익률 계산 (기본 sonnet — 2026-09-29 opus 에서 전환)", inheritDefault: "sonnet" },
-  { key: "daily_analyst", label: "일일 종합 리포트(어제 분석)", desc: "어제 매출·광고 분석 에이전트 (기본 opus — 2026-09-30 대표 선택)", inheritDefault: "opus" },
+  { key: "daily_analyst", label: "종합 리포트(일일·주간·월간)", desc: "매출·광고 분석 에이전트 — 일일·주간·월간 공통 (기본 opus — 2026-09-30 대표 선택)", inheritDefault: "opus" },
 ];
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   meeting: "ai_model_meeting",

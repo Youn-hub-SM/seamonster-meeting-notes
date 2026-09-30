@@ -4,7 +4,8 @@ import { parseSalesFile } from "@/app/lib/sales-parse";
 import { normalizeRow, type SalesOrderRow, type SalesCustomerRow } from "@/app/lib/sales-normalize";
 import { logSalesUpload, currentActor } from "@/app/lib/b2b-activity";
 import { randomUUID } from "node:crypto";
-import { kstDay } from "@/app/lib/analyst";
+import { kstDay, md } from "@/app/lib/analyst";
+import { lastWeek, lastMonth, periodLabel } from "@/app/lib/analyst-period";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,10 +101,17 @@ export async function POST(req: NextRequest) {
     await logSalesUpload(file.name, inserted, skipped);
     // 최근 3일(어제~사흘 전) 매출이 파일에 있으면 화면이 날짜마다 '일일 종합 리포트 생성' 안내 창을 띄운다(2026-09-30 — 담당자가 생성·발송, 자동 실행 없음).
     //  월요일 업로드 = 금·토·일. 중복 재업로드여도 띄운다(분석은 매출이 그대로면 건너뛰어 멱등).
-    const reportDates = [kstDay(1), kstDay(2), kstDay(3)].filter((d) => orders.some((o) => o.order_date === d));
+    //  주간·월간은 그 기간 마지막 날(지난주 일요일·지난달 말일) 매출이 파일에 있으면 함께 안내한다.
+    const has = (d: string) => orders.some((o) => o.order_date === d);
+    const wk = lastWeek(), mo = lastMonth();
+    const reportItems = [
+      ...[kstDay(1), kstDay(2), kstDay(3)].filter(has).map((d) => ({ period: "daily", date: d, label: md(d) })),
+      ...(has(wk.until) ? [{ period: "weekly", date: wk.since, label: periodLabel("weekly", wk) }] : []),
+      ...(has(mo.until) ? [{ period: "monthly", date: mo.since, label: periodLabel("monthly", mo) }] : []),
+    ];
     const { data: bounds } = await sb.rpc("sales_date_bounds");
     const totalAfter = Array.isArray(bounds) && bounds[0] ? (bounds[0].total_rows as number) : null;
-    return NextResponse.json({ ok: true, inserted, skipped, total_after: totalAfter, batch_id: inserted > 0 ? batchId : null, report_dates: reportDates });
+    return NextResponse.json({ ok: true, inserted, skipped, total_after: totalAfter, batch_id: inserted > 0 ? batchId : null, report_items: reportItems });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

@@ -86,7 +86,7 @@ async function ensureRange(since: string, effUntil: string, yStr: string): Promi
         // supabase 는 오류를 던지지 않고 돌려준다 — 지우기·넣기 중 하나라도 실패하면 그날은 확정이 아니다
         const del = await supabaseAdmin().from("naver_conv_daily").delete().eq("stat_date", day);
         const ins = del.error || !inserts.length ? null : await supabaseAdmin().from("naver_conv_daily").insert(inserts);
-        if (del.error || ins?.error) failedDays.push(day);
+        if (del.error || (ins?.error && ins.error.code !== "23505")) failedDays.push(day); // 23505 = 다른 실행이 같은 날을 먼저 넣음(같은 리포트 값)
       } catch { useCache = false; break; }
     }
   }

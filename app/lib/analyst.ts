@@ -1,19 +1,21 @@
-// 일일 종합 리포트 = 어제 분석 에이전트 (2026-09-30) — 어제(KST) 매출을 지난 4주 같은 요일과 비교해 코드가 사실·이상을 계산하고,
-//  Claude 가 읽기 전용 조회 도구로 이상 항목만 파고들어 원인을 짚은 보고서를 쓴다. /briefing(일일 종합 리포트, 메뉴 기타, 모두 열람) + 팀즈.
+// 종합 리포트(일일·주간·월간) 에이전트 본체 (2026-09-30) — 매출을 비교 기준(일일: 지난 4주 같은 요일, 주간: 전주·4주 평균,
+//  월간: 전월·작년 같은 달)과 비교해 코드가 사실·이상을 계산하고, Claude 가 읽기 전용 조회 도구로 이상 항목만 파고들어 원인을 짚은
+//  리포트를 쓴다. /briefing(종합 리포트, 메뉴 기타, 모두 열람 — 일일·주간·월간 탭) + 팀즈.
+//  기간별 차이는 ReportSpec 하나로 묶는다: 일일 = dailySpec(이 파일), 주간·월간 = app/lib/analyst-period.ts. 실행기 runReport 는 공통.
 //
-//  광고(메타·네이버)는 문턱 기준으로 이상을 판정하지 않는다(대표 요청) — 어제 지출한 캠페인 전체를 지출·노출·클릭·CTR·CPC·
-//   구매·CPA·구매액·ROAS 표로 코드가 만들어 보고서에 붙인다(renderAdTables). 이상 판정(flags)은 매출만.
-//  원칙(일일 리포트와 같은 계약): 숫자는 코드가 계산하고 AI 는 인용·해석만 한다. 자유 SQL 은 쓰지 않는다(정해진 조회 도구만) —
+//  광고(메타·네이버)는 문턱 기준으로 이상을 판정하지 않는다(대표 요청) — 기간 안에 지출한 캠페인 전체를 지출·노출·클릭·CTR·CPC·
+//   구매·CPA·구매액·ROAS 표로 코드가 만들어 리포트에 붙인다(renderAdTables). 이상 판정(flags)은 매출만.
+//  원칙: 숫자는 코드가 계산하고 AI 는 인용·해석만 한다. 자유 SQL 은 쓰지 않는다(정해진 조회 도구만) —
 //   run_report 는 코드가 만든 고정 집계문에만 쓰고 입력(SKU·채널·날짜)은 정규식으로 검증한다. 쓰기(광고 끄기 등)는 없다.
-//  실행: 담당자 수동(매출 업로드 → 안내 팝업 → [분석하기] → [팀즈로 보내기]) + 14:30 KST 보험(pg_cron — 어제 매출이 있고 발송 전일 때만).
-//   같은 날짜는 'running' 행으로 먼저 점유해 겹친 실행·중복 발송을 막고, 매출이 바뀌었을 때(지문 비교)만 다시 분석한다.
-//  비용: 기능별 모델(AI 설정 › 일일 종합 리포트(어제 분석), 기본 opus) · 이상이 없으면 도구 없이 low · 조사 최대 5차례 · 14:30 끄기 kv analyst_auto=off.
+//  실행: 담당자 수동(매출 업로드 → 안내 창 → [분석하기] → [팀즈로 보내기]) + 14:30 KST 보험(pg_cron — 매출이 다 들어왔고 발송 전일 때만;
+//   일일 매일, 주간 월~수, 월간 1~5일). 같은 리포트는 'running' 행으로 먼저 점유해 겹친 실행·중복 발송을 막고, 매출 지문이 바뀌었을 때만 다시 분석.
+//  비용: 기능별 모델(AI 설정 › 종합 리포트, 기본 opus) · 이상이 없으면 도구 없이 low · 조사 최대 5차례 · 14:30 끄기 kv analyst_auto=off.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "./supabase";
 import { getKv } from "./b2b-settings";
 import { getFeatureModel, effortParams, readText, AiResponseError } from "./ai-model";
-import { isMetaAdConfigured, listCampaigns as metaCampaigns, listAdsets as metaAdsets, getDailyInsights, getInsights, type MetaDaily, type MetaAdset, type MetaInsight } from "./meta-ad";
+import { isMetaAdConfigured, listCampaigns as metaCampaigns, listAdsets as metaAdsets, getInsights, type MetaAdset, type MetaInsight } from "./meta-ad";
 import { isNaverAdConfigured, listCampaigns as naverCampaigns, listAdgroups as naverAdgroups, getStats as naverStats, type NaverAdgroup } from "./naver-ad";
 import { getPurchaseConversions } from "./naver-conv";
 import { bundleAvailable, type BundleComponent } from "./product-bundles";
@@ -21,25 +23,26 @@ import { postTeamsMarkdown, teamsCardBytes } from "./briefing";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
 
-// ── 날짜(KST) ──
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const validDate = (s?: string | null): s is string => { if (!s || !DATE_RE.test(s)) return false; const t = Date.parse(`${s}T00:00:00Z`); return !isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };
+// ── 날짜(KST)·공용 ──
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const validDate = (s?: string | null): s is string => { if (!s || !DATE_RE.test(s)) return false; const t = Date.parse(`${s}T00:00:00Z`); return !isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };
 export const kstDay = (back = 0) => new Date(Date.now() + 9 * 3600e3 - back * 86400e3).toISOString().slice(0, 10);
-const shift = (ymd: string, days: number) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+export const shift = (ymd: string, days: number) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
-const weekday = (ymd: string) => WD[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
+export const weekday = (ymd: string) => WD[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
+export const md = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`; // YYYY-MM-DD → M/D
 
-const r0 = (n: number) => Math.round(n);
-const r2 = (n: number) => Math.round(n * 100) / 100;
-const avg = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
-const pct = (now: number, base: number): number | null => (base > 0 ? Math.round(((now - base) / base) * 1000) / 10 : null);
-const num = (v: unknown) => Number(v) || 0;
-const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | "timeout"> =>
+export const r0 = (n: number) => Math.round(n);
+export const r2 = (n: number) => Math.round(n * 100) / 100;
+export const avg = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
+export const pct = (now: number, base: number): number | null => (base > 0 ? Math.round(((now - base) / base) * 1000) / 10 : null);
+export const num = (v: unknown) => Number(v) || 0;
+export const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | "timeout"> =>
   Promise.race([p, new Promise<"timeout">((res) => setTimeout(() => res("timeout"), ms))]);
 const escLike = (s: string) => s.replace(/[\\%_]/g, "\\$&"); // ilike 와일드카드 무력화(정확히 같은 SKU만)
 
 // 코드가 만든 고정 집계문만 run_report 로 — 결과는 json 배열(PostgREST 1000행 캡 없음)
-async function runSql<T>(sb: SupabaseClient, q: string, limit = 5000): Promise<T[]> {
+export async function runSql<T>(sb: SupabaseClient, q: string, limit = 5000): Promise<T[]> {
   const { data, error } = await sb.rpc("run_report", { q, p_limit: limit });
   if (error) throw new Error(`집계 실패: ${error.message}`);
   return (Array.isArray(data) ? data : []) as T[];
@@ -47,7 +50,7 @@ async function runSql<T>(sb: SupabaseClient, q: string, limit = 5000): Promise<T
 const inList = (dates: string[]) => dates.filter((d) => DATE_RE.test(d)).map((d) => `'${d}'`).join(",");
 const SKU_RE = /^[A-Za-z0-9_.\-]{1,64}$/;
 const CHANNEL_RE = /^[가-힣A-Za-z0-9 _()\-]{1,30}$/;
-const WHOLESALE = "도매"; // 발송완료 시점에 한꺼번에 잡혀 날마다 들쭉날쭉 — 전체·SKU 이상 판정에서 뺀다
+export const WHOLESALE = "도매"; // 발송완료 시점에 한꺼번에 잡혀 날마다 들쭉날쭉 — 전체·SKU 이상 판정에서 뺀다
 
 // 결과 배열을 글자 수 안에 맞춘다(앞쪽 = 최근을 남기고 뒤쪽을 버림) — JSON 이 중간에서 잘리지 않게
 function fitJson(arr: unknown[], cap: number): string {
@@ -57,7 +60,30 @@ function fitJson(arr: unknown[], cap: number): string {
   return s;
 }
 
-// ── 매출 사실 ──
+// ── 기간 명세(일일·주간·월간 공통 실행기가 받는 것) ──
+export type ReportPeriod = "daily" | "weekly" | "monthly";
+export type Range = { since: string; until: string };
+export type Built = { facts: Record<string, unknown>; aiFacts: Record<string, unknown>; ads: AdsFacts; flags: string[]; salesReady: boolean; salesNote?: string };
+export type ReportSpec = {
+  period: ReportPeriod;
+  key: string;                   // 저장 키 = 기간 시작일(일일 = 그날, 주간 = 월요일, 월간 = 1일)
+  range: Range;                  // 분석 기간
+  prevRange: Range;              // 광고 비교 기간(일일 = 직전 7일, 주간 = 전주, 월간 = 전월)
+  table: "analyst_reports" | "analyst_period_reports";
+  migration: string;             // 표가 없을 때 안내할 마이그레이션 파일
+  title: string;                 // '일일 종합 리포트' 등(팀즈 카드 제목)
+  label: string;                 // 기간 표기(9/29 · 9/22~9/28 · 2026년 9월)
+  noSalesSuffix: string;         // 매출이 덜 들어온 리포트의 팀즈 제목 꼬리
+  noSalesSkip: string;           // 14:30 이 매출이 없어 건너뛸 때 사유
+  adLabels: AdLabels;
+  fingerprint: (sb: SupabaseClient) => Promise<{ ready: boolean; fp: string }>;
+  complete: (fp: string | null | undefined) => boolean; // 이 지문이 '매출이 다 든' 리포트인가(14:30 발송 판단)
+  build: (sb: SupabaseClient, ready: boolean, cache: AdsCache) => Promise<Built>;
+  system: string; intro: string; toolMaxDays: number;
+};
+export type AdLabels = { cur: string; prev: string; prevRoas: string };
+
+// ── 매출 사실(일일) ──
 type SalesFacts = {
   ready: boolean;
   note?: string;
@@ -72,7 +98,7 @@ type SalesFacts = {
 
 // 그 날짜 소매(엑셀, source=web) 매출의 지문 — 건수:합계. 도매(b2b)는 발송완료 즉시 들어와 '업로드됨'의 근거가 못 된다
 async function salesFingerprint(sb: SupabaseClient, date: string): Promise<{ ready: boolean; fp: string }> {
-  const rows = await runSql<{ n: number; rev: number }>(sb, `select count(*)::int as n, coalesce(sum(subtotal_amount), 0)::bigint as rev from sales_orders where order_date = '${date}' and source = 'web'`, 1);
+  const rows = await runSql<{ n: number; rev: number }>(sb, `select count(*)::int as n, coalesce(sum(subtotal_amount), 0)::bigint as rev from sales_orders where order_date = '${date}' and (source = 'web' or source like 'backfill-%')`, 1);
   const n = num(rows[0]?.n), rev = num(rows[0]?.rev);
   return { ready: n > 0, fp: `${n}:${rev}` };
 }
@@ -159,71 +185,68 @@ async function salesFacts(sb: SupabaseClient, y: string, ready: boolean, flags: 
   return { ready: true, retail_total, wholesale, channels, top_skus, new_repeat, mtd, ...(notes.length ? { notes } : {}) };
 }
 
-// ── 광고 사실 ──
+// ── 광고 사실(기간 공통) ──
 // 지표(2026-09-30 대표 요청: ROAS 중심이 아니라 볼 수 있는 주요 지표 전부) — 지출·노출·클릭·CTR·CPC·구매·CPA·구매액·ROAS.
 //  메타 클릭 = 링크 클릭(광고관리자 기본, 'clicks'(전체)는 좋아요·더보기까지 센다), CTR·CPC 는 코드 계산. 네이버는 광고그룹 합산을 코드가 계산(CPC·CPA 는 VAT 포함 광고비 기준).
-type MetaCampFact = {
+//  cur = 분석 기간, prev = 비교 기간(일일 = 직전 7일, 주간 = 전주, 월간 = 전월) — prev_* 는 비교 기간 합계.
+export type MetaCampFact = {
   id: string; name: string; status: string;
   spend: number; impressions: number; clicks: number; ctr: number | null; cpc: number | null;
   purchases: number; cpa: number | null; value: number; roas: number;
-  avg7_spend: number; roas7: number; base_avg_spend: number;
+  prev_spend: number; prev_roas: number | null;
 };
-type NaverCampFact = {
+export type NaverCampFact = {
   id: string; name: string; type: string;
   cost_vat_incl: number; imp: number; clicks: number; ctr: number | null; cpc: number | null; avg_rank: number | null;
-  conv_all: number; purchases: number | null; cpa: number | null; purchase_sales: number | null; roas: number | null; avg7_cost: number;
+  conv_all: number; purchases: number | null; cpa: number | null; purchase_sales: number | null; roas: number | null; prev_cost: number;
 };
-type AdsFacts = {
-  meta?: { ok: boolean; error?: string; spend: number; impressions: number; clicks: number; ctr: number | null; cpc: number | null; value: number; roas: number | null; purchases: number; cpa: number | null; avg7_spend: number; roas7: number | null; campaigns: MetaCampFact[] };
-  naver?: { ok: boolean; error?: string; incomplete_campaigns?: string[]; cost_vat_incl: number; imp: number; clicks: number; ctr: number | null; cpc: number | null; purchases: number | null; purchase_sales: number | null; roas: number | null; purchase_status: string; avg7_cost: number; campaigns: NaverCampFact[] };
+export type AdsFacts = {
+  meta?: { ok: boolean; error?: string; spend: number; impressions: number; clicks: number; ctr: number | null; cpc: number | null; value: number; roas: number | null; purchases: number; cpa: number | null; prev_spend: number; prev_roas: number | null; campaigns: MetaCampFact[] };
+  naver?: { ok: boolean; error?: string; incomplete_campaigns?: string[]; cost_vat_incl: number; imp: number; clicks: number; ctr: number | null; cpc: number | null; purchases: number | null; purchase_sales: number | null; roas: number | null; purchase_status: string; prev_cost: number; campaigns: NaverCampFact[] };
   spend_ex_vat_total?: number;
 };
 // 도구에서 다시 쓰는 광고 원자료(한 번의 실행 동안 메모리에)
-type AdsCache = {
-  naverAdgroups: NaverAdgroup[]; naverY: Map<string, Record<string, number>>; naver7: Map<string, Record<string, number>>;
+export type AdsCache = {
+  cur: Range; prev: Range;
+  naverAdgroups: NaverAdgroup[]; naverCur: Map<string, Record<string, number>>; naverPrev: Map<string, Record<string, number>>;
   naverPurchase: Record<string, { conv: number; sales: number }> | null;
-  metaAdsets?: Promise<{ sets: MetaAdset[]; y: Record<string, MetaInsight>; w7: Record<string, MetaInsight> }>;
+  metaAdsets?: Promise<{ sets: MetaAdset[]; cur: Record<string, MetaInsight>; prev: Record<string, MetaInsight> }>;
 };
+export const newCache = (cur: Range, prev: Range): AdsCache => ({ cur, prev, naverAdgroups: [], naverCur: new Map(), naverPrev: new Map(), naverPurchase: null });
 const ctrOf = (clicks: number, imp: number) => (imp > 0 ? r2((clicks / imp) * 100) : null); // %
-const per = (cost: number, n: number | null) => (n != null && n > 0 ? r0(cost / n) : null);
-const META_FAIL = (error: string): NonNullable<AdsFacts["meta"]> => ({ ok: false, error, spend: 0, impressions: 0, clicks: 0, ctr: null, cpc: null, value: 0, roas: null, purchases: 0, cpa: null, avg7_spend: 0, roas7: null, campaigns: [] });
-const NAVER_FAIL = (error: string): NonNullable<AdsFacts["naver"]> => ({ ok: false, error, cost_vat_incl: 0, imp: 0, clicks: 0, ctr: null, cpc: null, purchases: null, purchase_sales: null, roas: null, purchase_status: "조회 실패", avg7_cost: 0, campaigns: [] });
+export const per = (cost: number, n: number | null) => (n != null && n > 0 ? r0(cost / n) : null);
+export const META_FAIL = (error: string): NonNullable<AdsFacts["meta"]> => ({ ok: false, error, spend: 0, impressions: 0, clicks: 0, ctr: null, cpc: null, value: 0, roas: null, purchases: 0, cpa: null, prev_spend: 0, prev_roas: null, campaigns: [] });
+export const NAVER_FAIL = (error: string): NonNullable<AdsFacts["naver"]> => ({ ok: false, error, cost_vat_incl: 0, imp: 0, clicks: 0, ctr: null, cpc: null, purchases: null, purchase_sales: null, roas: null, purchase_status: "조회 실패", prev_cost: 0, campaigns: [] });
 
-async function metaFacts(y: string): Promise<AdsFacts["meta"]> {
+export async function metaFacts(cur: Range, prev: Range): Promise<AdsFacts["meta"]> {
   if (!isMetaAdConfigured()) return undefined;
   try {
-    const since = shift(y, -28);
-    const [camps, daily, yIns] = await Promise.all([
+    const [camps, ci, pi] = await Promise.all([
       metaCampaigns(false),
-      getDailyInsights("campaign", { since, until: y }),
-      getInsights("campaign", { since: y, until: y }, false, true), // 어제 노출·링크 클릭(일별 인사이트에는 없다)
+      getInsights("campaign", cur, false, true), // 기간 지출·노출·링크 클릭·구매·구매액
+      getInsights("campaign", prev),
     ]);
     const names = new Map(camps.map((c) => [c.id, c]));
-    const base = [7, 14, 21, 28].map((d) => shift(y, -d));
-    const last7 = Array.from({ length: 7 }, (_, i) => shift(y, -(i + 1)));
-    const pick = (rows: MetaDaily[], d: string) => rows.find((r) => r.date === d);
+    const ids = new Set([...Object.keys(ci.byId), ...Object.keys(pi.byId)]);
     const campaigns: MetaCampFact[] = [];
-    let s7All = 0, v7All = 0;
-    for (const [id, rows] of Object.entries(daily)) {
-      const ry = pick(rows, y);
-      const s7 = last7.reduce((s, d) => s + (pick(rows, d)?.spend || 0), 0);
-      const v7 = last7.reduce((s, d) => s + (pick(rows, d)?.purchaseValue || 0), 0);
-      s7All += s7; v7All += v7;
-      if (!ry && s7 === 0) continue;
+    let pSpendAll = 0, pValAll = 0;
+    for (const id of ids) {
+      const a = ci.byId[id], b = pi.byId[id];
+      const ps = b?.spend || 0, pv = b?.purchaseValue || 0;
+      pSpendAll += ps; pValAll += pv;
+      const spend = r0(a?.spend || 0), purchases = a?.purchases || 0;
+      if (spend <= 0 && ps <= 0) continue;
       const c = names.get(id);
-      const yi = yIns.byId[id];
-      const spend = r0(ry?.spend || 0), purchases = ry?.purchases || 0;
-      const impressions = yi?.impressions || 0, clicks = yi?.linkClicks || 0;
+      const impressions = a?.impressions || 0, clicks = a?.linkClicks || 0;
       campaigns.push({
         id, name: c?.name || id, status: c?.effective_status || "",
         spend, impressions, clicks, ctr: ctrOf(clicks, impressions), cpc: per(spend, clicks),
-        purchases, cpa: per(spend, purchases), value: r0(ry?.purchaseValue || 0), roas: r2(ry?.roas || 0),
-        avg7_spend: r0(s7 / 7), roas7: s7 > 0 ? r2(v7 / s7) : 0,
-        base_avg_spend: r0(avg(base.map((d) => pick(rows, d)?.spend || 0))),
+        purchases, cpa: per(spend, purchases), value: r0(a?.purchaseValue || 0), roas: r2(a?.roas || 0),
+        prev_spend: r0(ps), prev_roas: ps > 0 ? r2(pv / ps) : null,
       });
     }
     campaigns.sort((a, b) => b.spend - a.spend);
-    // 합계는 어제 지출한 캠페인만 — 보고서 표의 합계 행과 같은 숫자(어제 지출 없는 캠페인에 늦게 잡힌 전환은 빼고)
+    // 합계는 기간 안에 지출한 캠페인만 — 리포트 표의 합계 행과 같은 숫자(지출 없는 캠페인에 늦게 잡힌 전환은 빼고)
     const spent = campaigns.filter((c) => c.spend > 0);
     const sum = (k: "spend" | "value" | "purchases" | "impressions" | "clicks") => spent.reduce((s, c) => s + c[k], 0);
     const spend = sum("spend"), value = sum("value"), purchases = sum("purchases"), impressions = sum("impressions"), clicks = sum("clicks");
@@ -231,14 +254,16 @@ async function metaFacts(y: string): Promise<AdsFacts["meta"]> {
     return {
       ok: true, spend, impressions, clicks, ctr: ctrOf(clicks, impressions), cpc: per(spend, clicks),
       value, roas: spend > 0 ? r2(value / spend) : null, purchases, cpa: per(spend, purchases),
-      avg7_spend: r0(s7All / 7), roas7: s7All > 0 ? r2(v7All / s7All) : null, campaigns,
+      prev_spend: r0(pSpendAll), prev_roas: pSpendAll > 0 ? r2(pValAll / pSpendAll) : null, campaigns,
     };
   } catch (e) {
     return META_FAIL(e instanceof Error ? e.message : String(e));
   }
 }
 
-async function naverFacts(y: string, cache: AdsCache): Promise<AdsFacts["naver"]> {
+// convTimeoutMs: 구매 전환(장바구니 제외)은 하루 단위 리포트 작업이라 느리다 — 그 안에 못 오거나 한 날이라도 실패하면 '미확정'(0 으로 단정하지 않음).
+//  시간 안에 못 끝난 조회는 뒤에서 계속 돌아 캐시(naver_conv_daily)를 채운다 — 다음 실행이 빨라진다.
+export async function naverFacts(cur: Range, prev: Range, cache: AdsCache, convTimeoutMs: number): Promise<AdsFacts["naver"]> {
   if (!isNaverAdConfigured()) return undefined;
   try {
     const camps = await naverCampaigns();
@@ -246,14 +271,13 @@ async function naverFacts(y: string, cache: AdsCache): Promise<AdsFacts["naver"]
     const groups = (await Promise.all(camps.map((c) => naverAdgroups(c.nccCampaignId).catch(() => { incomplete.push(c.name); return [] as NaverAdgroup[]; })))).flat();
     cache.naverAdgroups = groups;
     const ids = groups.map((g) => g.nccAdgroupId);
-    // 구매 전환(장바구니 제외)은 리포트 작업이라 느리다 — 35초 안에 못 오거나 그날 리포트가 실패하면 '미확정'(0 으로 단정하지 않음)
-    const [sy, s7, conv] = await Promise.all([
-      naverStats(ids, { since: y, until: y }),
-      naverStats(ids, { since: shift(y, -7), until: shift(y, -1) }),
-      withTimeout(getPurchaseConversions(y, y, "adgroup").then((r) => (r.failedDays?.includes(y) ? null : r.map)).catch(() => null), 35000),
+    const [sc, sp, conv] = await Promise.all([
+      naverStats(ids, cur),
+      naverStats(ids, prev),
+      withTimeout(getPurchaseConversions(cur.since, cur.until, "adgroup").then((r) => (r.failedDays?.length ? null : r.map)).catch(() => null), convTimeoutMs),
     ]);
     const toMap = (rows: { id: string }[]) => new Map(rows.map((r) => [r.id, r as unknown as Record<string, number>]));
-    cache.naverY = toMap(sy); cache.naver7 = toMap(s7);
+    cache.naverCur = toMap(sc); cache.naverPrev = toMap(sp);
     const purchaseMap = conv === "timeout" ? null : conv;
     cache.naverPurchase = purchaseMap;
     // ROAS = 구매 매출 ÷ VAT 제외 광고비(메타와 같은 기준, 배수)
@@ -263,17 +287,17 @@ async function naverFacts(y: string, cache: AdsCache): Promise<AdsFacts["naver"]
       const sum = (m: Map<string, Record<string, number>>, k: string) => gs.reduce((s, g) => s + num(m.get(g.nccAdgroupId)?.[k]), 0);
       const pConv = purchaseMap ? gs.reduce((s, g) => s + num(purchaseMap[g.nccAdgroupId]?.conv), 0) : null;
       const pSales = purchaseMap ? r0(gs.reduce((s, g) => s + num(purchaseMap[g.nccAdgroupId]?.sales), 0)) : null;
-      const cost = r0(sum(cache.naverY, "salesAmt")), imp = sum(cache.naverY, "impCnt"), clicks = sum(cache.naverY, "clkCnt");
+      const cost = r0(sum(cache.naverCur, "salesAmt")), imp = sum(cache.naverCur, "impCnt"), clicks = sum(cache.naverCur, "clkCnt");
       // 평균 노출 순위 = 광고그룹 순위를 노출수로 가중 평균(노출 없는 그룹 제외)
-      const rk = gs.reduce((a, g) => { const s = cache.naverY.get(g.nccAdgroupId); const i = num(s?.impCnt), r = num(s?.avgRnk); return i > 0 && r > 0 ? { w: a.w + i, v: a.v + r * i } : a; }, { w: 0, v: 0 });
+      const rk = gs.reduce((a, g) => { const s = cache.naverCur.get(g.nccAdgroupId); const i = num(s?.impCnt), r = num(s?.avgRnk); return i > 0 && r > 0 ? { w: a.w + i, v: a.v + r * i } : a; }, { w: 0, v: 0 });
       return {
         id: c.nccCampaignId, name: c.name, type: c.campaignTp,
         cost_vat_incl: cost, imp, clicks, ctr: ctrOf(clicks, imp), cpc: per(cost, clicks), avg_rank: rk.w > 0 ? Math.round((rk.v / rk.w) * 10) / 10 : null,
-        conv_all: sum(cache.naverY, "ccnt"), purchases: pConv, cpa: per(cost, pConv), purchase_sales: pSales, roas: roasOf(pSales, cost),
-        avg7_cost: r0(sum(cache.naver7, "salesAmt") / 7),
+        conv_all: sum(cache.naverCur, "ccnt"), purchases: pConv, cpa: per(cost, pConv), purchase_sales: pSales, roas: roasOf(pSales, cost),
+        prev_cost: r0(sum(cache.naverPrev, "salesAmt")),
       };
-    }).filter((c) => c.cost_vat_incl > 0 || c.imp > 0 || c.avg7_cost > 0).sort((a, b) => b.cost_vat_incl - a.cost_vat_incl || b.imp - a.imp);
-    // 합계는 어제 노출·광고비가 있었던 캠페인 — 보고서 표의 합계 행과 같은 범위(클릭 과금이라 노출만 있고 광고비 0 인 캠페인도 넣는다)
+    }).filter((c) => c.cost_vat_incl > 0 || c.imp > 0 || c.prev_cost > 0).sort((a, b) => b.cost_vat_incl - a.cost_vat_incl || b.imp - a.imp);
+    // 합계는 기간 안에 노출·광고비가 있었던 캠페인 — 리포트 표의 합계 행과 같은 범위(클릭 과금이라 노출만 있고 광고비 0 인 캠페인도 넣는다)
     const spent = campaigns.filter((c) => c.cost_vat_incl > 0 || c.imp > 0);
     const cost = spent.reduce((s, c) => s + c.cost_vat_incl, 0), imp = spent.reduce((s, c) => s + c.imp, 0), clicks = spent.reduce((s, c) => s + c.clicks, 0);
     const purchases = purchaseMap ? spent.reduce((s, c) => s + (c.purchases || 0), 0) : null;
@@ -282,12 +306,38 @@ async function naverFacts(y: string, cache: AdsCache): Promise<AdsFacts["naver"]
       ok: true, ...(incomplete.length ? { incomplete_campaigns: incomplete } : {}),
       cost_vat_incl: cost, imp, clicks, ctr: ctrOf(clicks, imp), cpc: per(cost, clicks),
       purchases, purchase_sales, roas: roasOf(purchase_sales, cost),
-      purchase_status: purchaseMap ? "확정(구매만 · 어제분은 전환 지연으로 늘어날 수 있음)" : "미확정(구매 전환 리포트 지연·실패 — 전체 전환만 참고)",
-      avg7_cost: r0(campaigns.reduce((s, c) => s + c.avg7_cost, 0)), campaigns,
+      purchase_status: purchaseMap ? "확정(구매만 · 마지막 날은 전환 지연으로 늘어날 수 있음)" : "미확정(구매 전환 리포트 지연·실패 — 전체 전환만 참고)",
+      prev_cost: r0(campaigns.reduce((s, c) => s + c.prev_cost, 0)), campaigns,
     };
   } catch (e) {
     return NAVER_FAIL(e instanceof Error ? e.message : String(e));
   }
+}
+
+// 매출 사실 + 광고 사실을 모아 AI 입력까지(기간 공통) — 매체별 60초 상한(멈추면 함수가 300초에 잘려 'running' 이 남는다)
+export async function collectAds(cache: AdsCache, convTimeoutMs: number): Promise<{ ads: AdsFacts; aiAds: Record<string, unknown> }> {
+  const [metaR, naverR] = await Promise.all([
+    withTimeout(metaFacts(cache.cur, cache.prev), 60_000),
+    withTimeout(naverFacts(cache.cur, cache.prev, cache, convTimeoutMs), 60_000),
+  ]);
+  const metaF = metaR === "timeout" ? META_FAIL("조회 시간 초과(60초)") : metaR;
+  const naverF = naverR === "timeout" ? NAVER_FAIL("조회 시간 초과(60초)") : naverR;
+  if (naverR === "timeout") cache.naverPurchase = null;
+  const ads: AdsFacts = { meta: metaF, naver: naverF };
+  ads.spend_ex_vat_total = r0((metaF?.spend || 0) + (naverF?.cost_vat_incl || 0) / 1.1);
+  // AI 에는 캠페인을 지출 상위 20개만(토큰 절약) — 전체는 코드가 표로 붙인다.
+  //  비교 기간을 밝히고, 분석 기간과 날수가 다르면(일일 = 어제 1일 vs 직전 7일) 하루 평균(*_per_day)도 준다 — 합계끼리 비교하지 않게.
+  const top = <T,>(xs: T[] | undefined) => (xs ?? []).slice(0, 20);
+  const dN = (r: Range) => Math.round((Date.parse(`${r.until}T00:00:00Z`) - Date.parse(`${r.since}T00:00:00Z`)) / 86400e3) + 1;
+  const curDays = dN(cache.cur), prevDays = dN(cache.prev), perDay = curDays !== prevDays;
+  const pd = (v: number) => r0(v / prevDays);
+  const aiAds: Record<string, unknown> = {
+    ...ads,
+    compare: { current: cache.cur, previous: cache.prev, current_days: curDays, previous_days: prevDays, note: `prev_* = 비교 기간(${prevDays}일) 합계${perDay ? ", prev_*_per_day = 비교 기간 하루 평균 — 분석 기간 값과는 하루 평균끼리 비교" : ""}` },
+    ...(metaF ? { meta: { ...metaF, ...(perDay ? { prev_spend_per_day: pd(metaF.prev_spend) } : {}), campaigns: top(metaF.campaigns).map((c) => (perDay ? { ...c, prev_spend_per_day: pd(c.prev_spend) } : c)), campaigns_total: metaF.campaigns.length } } : {}),
+    ...(naverF ? { naver: { ...naverF, ...(perDay ? { prev_cost_per_day: pd(naverF.prev_cost) } : {}), campaigns: top(naverF.campaigns).map((c) => (perDay ? { ...c, prev_cost_per_day: pd(c.prev_cost) } : c)), campaigns_total: naverF.campaigns.length } } : {}),
+  };
+  return { ads, aiAds };
 }
 
 // ── 도구(읽기 전용) ──
@@ -295,12 +345,12 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "sku_detail", strict: true,
     description: "SKU 하나의 최근 N일 날짜×채널 판매(수량·매출), 최근 날짜부터. 급락·급등이 특정 채널 때문인지, 언제부터인지 볼 때.",
-    input_schema: { type: "object", properties: { sku: { type: "string", description: "SKU 코드(대소문자 무관)" }, days: { type: "integer", description: "어제부터 거슬러 볼 일수 7~28" } }, required: ["sku", "days"], additionalProperties: false },
+    input_schema: { type: "object", properties: { sku: { type: "string", description: "SKU 코드(대소문자 무관)" }, days: { type: "integer", description: "분석 기간 마지막 날부터 거슬러 볼 일수 7~62" } }, required: ["sku", "days"], additionalProperties: false },
   },
   {
     name: "channel_trend", strict: true,
     description: "판매 채널 하나의 최근 N일 일별 매출·주문수, 최근 날짜부터. 채널 매출 변화가 하루짜리인지 추세인지 볼 때.",
-    input_schema: { type: "object", properties: { channel: { type: "string", description: "판매처 이름(예: 스마트스토어, 쿠팡, 카페24)" }, days: { type: "integer", description: "7~28" } }, required: ["channel", "days"], additionalProperties: false },
+    input_schema: { type: "object", properties: { channel: { type: "string", description: "판매처 이름(예: 스마트스토어, 쿠팡, 카페24)" }, days: { type: "integer", description: "7~62" } }, required: ["channel", "days"], additionalProperties: false },
   },
   {
     name: "listing_status", strict: true,
@@ -314,38 +364,45 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "meta_campaign_adsets", strict: true,
-    description: "메타 캠페인 하나의 광고세트별 어제·최근 7일 지출·구매·ROAS. 매출 변화가 특정 광고와 관련 있는지 세트 단위로 볼 때.",
+    description: "메타 캠페인 하나의 광고세트별 분석 기간·비교 기간 지출·구매·ROAS. 매출 변화가 특정 광고와 관련 있는지 세트 단위로 볼 때.",
     input_schema: { type: "object", properties: { campaign_id: { type: "string" } }, required: ["campaign_id"], additionalProperties: false },
   },
   {
     name: "naver_campaign_adgroups", strict: true,
-    description: "네이버 캠페인 하나의 광고그룹별 어제·7일 광고비(VAT 포함)·클릭·전환·구매. 매출 변화가 특정 광고와 관련 있는지 그룹 단위로 볼 때.",
+    description: "네이버 캠페인 하나의 광고그룹별 분석 기간 광고비(VAT 포함)·클릭·전환·구매와 비교 기간 광고비·전환. 매출 변화가 특정 광고와 관련 있는지 그룹 단위로 볼 때.",
     input_schema: { type: "object", properties: { campaign_id: { type: "string" } }, required: ["campaign_id"], additionalProperties: false },
   },
 ];
+const toolsFor = (maxDays: number): Anthropic.Tool[] => JSON.parse(JSON.stringify(TOOLS).split("7~62").join(`7~${maxDays}`));
 const INV_CHANNELS = ["소매", "도매", "프로모션", "도매 대량"] as const;
 
-async function runTool(sb: SupabaseClient, y: string, cache: AdsCache, name: string, input: Record<string, unknown>): Promise<string> {
-  const days = Math.min(28, Math.max(7, Math.round(num(input.days) || 14)));
+async function runTool(sb: SupabaseClient, ctx: { since: string; end: string; maxDays: number }, cache: AdsCache, name: string, input: Record<string, unknown>): Promise<string> {
+  const y = ctx.end;
+  const days = Math.min(ctx.maxDays, Math.max(7, Math.round(num(input.days) || 14)));
   const since = shift(y, -(days - 1));
+  const win = `조회 기간: ${since} ~ ${y}(${days}일)`;
   if (name === "sku_detail") {
     const sku = String(input.sku || "").trim().toUpperCase();
     if (!SKU_RE.test(sku)) throw new Error("SKU 형식이 올바르지 않습니다.");
-    const rows = await runSql(sb, `select order_date::text as d, channel, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where upper(sku_code) = '${sku}' and order_date between '${since}' and '${y}' group by 1, 2 order by 1 desc, 2`, 2000);
-    return fitJson(rows, 12000);
+    // 35일을 넘으면 주 단위(월요일 시작)×채널로 묶는다 — 날짜×채널 행이 글자 상한에 잘려 앞 기간이 빠지지 않게
+    const weekly = days > 35;
+    const rows = await runSql(sb, weekly
+      ? `select date_trunc('week', order_date)::date::text as week, channel, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where upper(sku_code) = '${sku}' and order_date between '${since}' and '${y}' group by 1, 2 order by 1 desc, 2`
+      : `select order_date::text as d, channel, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where upper(sku_code) = '${sku}' and order_date between '${since}' and '${y}' group by 1, 2 order by 1 desc, 2`, 3000);
+    return `${win}${weekly ? " · 주 단위(월요일 시작, 첫·끝 주는 일부)" : ""}\n${fitJson(rows, 12000)}`;
   }
   if (name === "channel_trend") {
     const ch = String(input.channel || "").trim();
     if (!CHANNEL_RE.test(ch)) throw new Error("채널 이름 형식이 올바르지 않습니다.");
     const rows = await runSql(sb, `select order_date::text as d, sum(subtotal_amount)::bigint as rev, count(distinct nullif(order_id, ''))::int as orders from sales_orders where channel = '${ch.replace(/'/g, "''")}' and order_date between '${since}' and '${y}' group by 1 order by 1 desc`, 100);
-    return fitJson(rows, 8000);
+    return `${win}\n${fitJson(rows, 8000)}`;
   }
   if (name === "listing_status") {
     const sku = String(input.sku || "").trim();
     if (!SKU_RE.test(sku)) throw new Error("SKU 형식이 올바르지 않습니다.");
     const [cat, cmd] = await Promise.all([
       sb.from("channel_catalog").select("channel, listing_name, item_name, sale_status, stock_qty, synced_at").ilike("sku_code", escLike(sku)).limit(40),
-      sb.from("channel_commands").select("channel, listing_name, item_name, command, qty, status, requested_by, created_at").ilike("sku_code", escLike(sku)).gte("created_at", `${shift(y, -14)}T00:00:00+09:00`).order("created_at", { ascending: false }).limit(20),
+      sb.from("channel_commands").select("channel, listing_name, item_name, command, qty, status, requested_by, created_at").ilike("sku_code", escLike(sku)).gte("created_at", `${[ctx.since, shift(y, -14)].sort()[0]}T00:00:00+09:00`).order("created_at", { ascending: false }).limit(30),
     ]);
     return JSON.stringify({ catalog: cat.error ? `조회 실패: ${cat.error.message}` : cat.data, commands: cmd.error ? `조회 실패: ${cmd.error.message}` : cmd.data }).slice(0, 12000);
   }
@@ -380,28 +437,29 @@ async function runTool(sb: SupabaseClient, y: string, cache: AdsCache, name: str
     const cid = String(input.campaign_id || "").trim();
     if (!/^\d{5,25}$/.test(cid)) throw new Error("캠페인 id 형식이 올바르지 않습니다.");
     // 계정 전체 세트·인사이트는 한 실행에서 한 번만 받는다(도구를 여러 번 불러도)
-    cache.metaAdsets ||= Promise.all([metaAdsets(false), getInsights("adset", { since: y, until: y }), getInsights("adset", { since: shift(y, -7), until: shift(y, -1) })])
-      .then(([sets, iy, i7]) => ({ sets, y: iy.byId, w7: i7.byId }));
+    cache.metaAdsets ||= Promise.all([metaAdsets(false), getInsights("adset", cache.cur), getInsights("adset", cache.prev)])
+      .then(([sets, ic, ip]) => ({ sets, cur: ic.byId, prev: ip.byId }));
     const m = await cache.metaAdsets;
+    const pick = (x: MetaInsight | undefined) => (x ? { spend: r0(x.spend), purchases: x.purchases, roas: r2(x.roas) } : null);
     const rows = m.sets.filter((s) => s.campaign_id === cid).map((s) => ({
-      id: s.id, name: s.name, status: s.effective_status,
-      yesterday: m.y[s.id] ? { spend: r0(m.y[s.id].spend), purchases: m.y[s.id].purchases, roas: r2(m.y[s.id].roas) } : null,
-      last7: m.w7[s.id] ? { spend: r0(m.w7[s.id].spend), purchases: m.w7[s.id].purchases, roas: r2(m.w7[s.id].roas) } : null,
-    })).filter((s) => s.yesterday || s.last7);
-    return fitJson(rows, 10000);
+      id: s.id, name: s.name, status: s.effective_status, current: pick(m.cur[s.id]), previous: pick(m.prev[s.id]),
+    })).filter((s) => s.current || s.previous);
+    return `기간: ${JSON.stringify({ current: cache.cur, previous: cache.prev })}
+${fitJson(rows, 9500)}`;
   }
   if (name === "naver_campaign_adgroups") {
     const cid = String(input.campaign_id || "").trim();
     const rows = cache.naverAdgroups.filter((g) => g.nccCampaignId === cid).map((g) => {
-      const a = cache.naverY.get(g.nccAdgroupId), b = cache.naver7.get(g.nccAdgroupId);
+      const a = cache.naverCur.get(g.nccAdgroupId), b = cache.naverPrev.get(g.nccAdgroupId);
       const pc = cache.naverPurchase?.[g.nccAdgroupId];
       return {
         id: g.nccAdgroupId, name: g.name, status: g.status,
-        yesterday: { cost_vat_incl: r0(num(a?.salesAmt)), clicks: num(a?.clkCnt), conv_all: num(a?.ccnt), purchases: cache.naverPurchase ? num(pc?.conv) : null },
-        last7_cost_vat_incl: r0(num(b?.salesAmt)), last7_conv_all: num(b?.ccnt),
+        current: { cost_vat_incl: r0(num(a?.salesAmt)), clicks: num(a?.clkCnt), conv_all: num(a?.ccnt), purchases: cache.naverPurchase ? num(pc?.conv) : null },
+        previous_cost_vat_incl: r0(num(b?.salesAmt)), previous_conv_all: num(b?.ccnt),
       };
-    }).filter((g) => g.yesterday.cost_vat_incl > 0 || g.last7_cost_vat_incl > 0).sort((a, b) => b.yesterday.cost_vat_incl - a.yesterday.cost_vat_incl);
-    return fitJson(rows, 10000);
+    }).filter((g) => g.current.cost_vat_incl > 0 || g.previous_cost_vat_incl > 0).sort((a, b) => b.current.cost_vat_incl - a.current.cost_vat_incl);
+    return `기간: ${JSON.stringify({ current: cache.cur, previous: cache.prev })}
+${fitJson(rows, 9500)}`;
   }
   throw new Error(`알 수 없는 도구: ${name}`);
 }
@@ -450,24 +508,26 @@ function priceOf(model: string): { in: number; out: number; cr: number; cw: numb
 // 일시적 과부하(429·529·5xx)는 시간이 남으면 한 번만 다시 시도
 const retryable = (e: unknown) => e instanceof Anthropic.APIError && (e.status === 429 || e.status === 529 || (typeof e.status === "number" && e.status >= 500));
 
-async function analyze(sb: SupabaseClient, y: string, facts: Record<string, unknown>, flags: string[], cache: AdsCache, deadlineAt: number):
+async function analyze(sb: SupabaseClient, spec: ReportSpec, facts: Record<string, unknown>, flags: string[], cache: AdsCache, deadlineAt: number):
   Promise<{ md: string; model: string; usage: AnalystUsage; toolLog: { name: string; input: unknown; ok: boolean }[] }> {
   const model = await getFeatureModel("daily_analyst");
   const hasFlags = flags.length > 0;
   const MAX_TOOL_ROUNDS = hasFlags ? 5 : 0;
-  // 마지막 보고서 작성에 남겨 둘 시간(opus 기준) — 조사 호출(최대 90초)과 도구(최대 25초)가 끝까지 걸려도 이만큼은 남는다
+  // 마지막 리포트 작성에 남겨 둘 시간(opus 기준) — 조사 호출(최대 90초)과 도구(최대 25초)가 끝까지 걸려도 이만큼은 남는다
   const FINAL_RESERVE = 140_000;
   const usage: AnalystUsage = { input: 0, cache_read: 0, cache_write: 0, output: 0, iterations: 0, tool_calls: 0, est_usd: 0 };
   const toolLog: { name: string; input: unknown; ok: boolean }[] = [];
+  const toolCtx = { since: spec.range.since, end: spec.range.until, maxDays: spec.toolMaxDays };
+  const tools = toolsFor(spec.toolMaxDays);
   // 첫 메시지(flags·facts)는 도구 반복 내내 같은 앞부분 — 캐시 지점을 둬 매 반복 전액 과금을 피한다
   const messages: Anthropic.MessageParam[] = [{
     role: "user",
     content: [{
       type: "text", cache_control: { type: "ephemeral" },
-      text: `분석 대상일(어제): ${y} (${weekday(y)}요일) · 비교 기준: 지난 4주 같은 요일 평균\n\n[flags — 코드가 찾은 이상]\n${hasFlags ? flags.map((f) => `- ${f}`).join("\n") : "- 없음(평소 범위)"}\n\n[facts]\n${JSON.stringify(facts)}`,
+      text: `${spec.intro}\n\n[flags — 코드가 찾은 이상]\n${hasFlags ? flags.map((f) => `- ${f}`).join("\n") : "- 없음(평소 범위)"}\n\n[facts]\n${JSON.stringify(facts)}`,
     }],
   }];
-  const system: Anthropic.TextBlockParam[] = [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }];
+  const system: Anthropic.TextBlockParam[] = [{ type: "text", text: spec.system, cache_control: { type: "ephemeral" } }];
   let forceFinal = false, retried = false;
   const addUsage = (u: Anthropic.Usage) => {
     usage.iterations++;
@@ -476,7 +536,7 @@ async function analyze(sb: SupabaseClient, y: string, facts: Record<string, unkn
   };
   for (let round = 0; ; round++) {
     const left = deadlineAt - Date.now();
-    if (left < 25_000) throw new AiResponseError("분석 시간이 부족해 보고서를 완성하지 못했습니다.");
+    if (left < 25_000) throw new AiResponseError("분석 시간이 부족해 리포트를 완성하지 못했습니다.");
     // 조사 턴 = AI 응답(30~90초) + 도구(최대 25초) — 둘 다 끝나도 최종 턴 몫(FINAL_RESERVE)이 남을 때만
     const finalTurn = forceFinal || round >= MAX_TOOL_ROUNDS || left < FINAL_RESERVE + 25_000 + 30_000;
     const timeout = finalTurn ? Math.min(180_000, left - 10_000) : Math.min(90_000, left - FINAL_RESERVE - 25_000);
@@ -484,19 +544,19 @@ async function analyze(sb: SupabaseClient, y: string, facts: Record<string, unkn
     try {
       res = await anthropic.messages.create({
         model, max_tokens: 12000, system, messages,
-        ...(hasFlags ? { tools: TOOLS, tool_choice: finalTurn ? { type: "none" as const } : { type: "auto" as const } } : {}),
+        ...(hasFlags ? { tools, tool_choice: finalTurn ? { type: "none" as const } : { type: "auto" as const } } : {}),
         ...effortParams(model, hasFlags ? "medium" : "low"),
       }, { timeout, maxRetries: 0 });
     } catch (e) {
       if (!retried && retryable(e) && deadlineAt - Date.now() > FINAL_RESERVE) { retried = true; await new Promise((r) => setTimeout(r, 3000)); round--; continue; }
-      if (!finalTurn) { forceFinal = true; continue; } // 조사 단계가 실패해도 모은 것으로 보고서를 쓴다
+      if (!finalTurn) { forceFinal = true; continue; } // 조사 단계가 실패해도 모은 것으로 리포트를 쓴다
       throw e;
     }
     addUsage(res.usage);
-    if (!finalTurn && res.stop_reason === "max_tokens") { forceFinal = true; continue; } // 조사 중 잘림 — 잘린 응답은 버리고 모은 것으로 보고서
+    if (!finalTurn && res.stop_reason === "max_tokens") { forceFinal = true; continue; } // 조사 중 잘림 — 잘린 응답은 버리고 모은 것으로 리포트
     if (res.stop_reason !== "tool_use" || finalTurn) {
       const md = readText(res).trim(); // 거절·잘림은 오류
-      if (!md) throw new AiResponseError("AI 가 빈 보고서를 돌려주었습니다.");
+      if (!md) throw new AiResponseError("AI 가 빈 리포트를 돌려주었습니다.");
       const p = priceOf(model);
       usage.est_usd = Math.round(((usage.input * p.in + usage.output * p.out + usage.cache_read * p.cr + usage.cache_write * p.cw) / 1e6) * 10000) / 10000;
       return { md, model, usage, toolLog };
@@ -506,7 +566,7 @@ async function analyze(sb: SupabaseClient, y: string, facts: Record<string, unkn
     const results: Anthropic.ToolResultBlockParam[] = await Promise.all(uses.map(async (u) => {
       usage.tool_calls++;
       try {
-        const out = await withTimeout(runTool(sb, y, cache, u.name, (u.input || {}) as Record<string, unknown>), 25_000);
+        const out = await withTimeout(runTool(sb, toolCtx, cache, u.name, (u.input || {}) as Record<string, unknown>), 25_000);
         if (out === "timeout") throw new Error("조회 시간 초과(25초)");
         toolLog.push({ name: u.name, input: u.input, ok: true });
         return { type: "tool_result" as const, tool_use_id: u.id, content: out };
@@ -520,31 +580,31 @@ async function analyze(sb: SupabaseClient, y: string, facts: Record<string, unkn
 }
 
 // ── 광고 표(코드) ──
-// 기준 없이 어제 지출한 캠페인 전체를 지출 순으로, 볼 수 있는 주요 지표를 모두. AI 가 옮겨 쓰면 숫자가 틀릴 수 있어 코드가 직접 만든다(화면·팀즈 둘 다 | 표 지원).
+// 기준 없이 기간 안에 지출한 캠페인 전체를 지출 순으로, 볼 수 있는 주요 지표를 모두. AI 가 옮겨 쓰면 숫자가 틀릴 수 있어 코드가 직접 만든다(화면·팀즈 둘 다 | 표 지원).
 const cell = (s: string) => s.replace(/[|\r\n]+/g, "/").replace(/\s+/g, " ").trim().slice(0, 40) || "-";
 const won = (n: number | null | undefined) => (n == null ? "-" : Math.round(n).toLocaleString("ko-KR"));
 const x2 = (n: number | null | undefined) => (n == null ? "-" : n.toFixed(2));
 const pctS = (n: number | null | undefined) => (n == null ? "-" : `${n.toFixed(2)}%`);
 const oneLine = (s: string | undefined) => (s || "원인 불명").replace(/\s+/g, " ").replace(/[<>|]/g, "").trim().slice(0, 120);
 
-export function renderAdTables(ads: AdsFacts): string {
+export function renderAdTables(ads: AdsFacts, L: AdLabels): string {
   const out: string[] = [];
   const m = ads.meta, n = ads.naver;
   if (!m && !n) return "";
-  out.push("### 캠페인 전체 (어제 지출 순)");
+  out.push(`### 캠페인 전체 (${L.cur} 지출 순)`);
   if (m) {
     if (!m.ok) out.push(`- 메타: 조회 실패 (${oneLine(m.error)})`);
     else {
       const rows = m.campaigns.filter((c) => c.spend > 0);
-      if (!rows.length) out.push("- 메타: 어제 지출한 캠페인 없음");
+      if (!rows.length) out.push(`- 메타: ${L.cur} 지출한 캠페인 없음`);
       else {
-        out.push("| 메타 캠페인 | 지출 | 노출 | 링크 클릭 | CTR | CPC | 구매 | CPA | 구매액 | ROAS | 7일 ROAS |", "|---|---|---|---|---|---|---|---|---|---|---|");
-        for (const c of rows) out.push(`| ${cell(c.name)} | ${won(c.spend)} | ${won(c.impressions)} | ${won(c.clicks)} | ${pctS(c.ctr)} | ${won(c.cpc)} | ${c.purchases} | ${won(c.cpa)} | ${won(c.value)} | ${x2(c.roas)} | ${c.avg7_spend > 0 ? x2(c.roas7) : "-"} |`);
-        // 합계 = 표에 보이는 행(metaFacts 합계와 같은 범위). 7일 ROAS 는 계정 전체.
-        out.push(`| 합계 ${rows.length}개 | ${won(m.spend)} | ${won(m.impressions)} | ${won(m.clicks)} | ${pctS(m.ctr)} | ${won(m.cpc)} | ${m.purchases} | ${won(m.cpa)} | ${won(m.value)} | ${x2(m.roas)} | ${x2(m.roas7)} |`);
+        out.push(`| 메타 캠페인 | 지출 | 노출 | 링크 클릭 | CTR | CPC | 구매 | CPA | 구매액 | ROAS | ${L.prevRoas} |`, "|---|---|---|---|---|---|---|---|---|---|---|");
+        for (const c of rows) out.push(`| ${cell(c.name)} | ${won(c.spend)} | ${won(c.impressions)} | ${won(c.clicks)} | ${pctS(c.ctr)} | ${won(c.cpc)} | ${c.purchases} | ${won(c.cpa)} | ${won(c.value)} | ${x2(c.roas)} | ${x2(c.prev_roas)} |`);
+        // 합계 = 표에 보이는 행(metaFacts 합계와 같은 범위). 비교 기간 ROAS 는 계정 전체.
+        out.push(`| 합계 ${rows.length}개 | ${won(m.spend)} | ${won(m.impressions)} | ${won(m.clicks)} | ${pctS(m.ctr)} | ${won(m.cpc)} | ${m.purchases} | ${won(m.cpa)} | ${won(m.value)} | ${x2(m.roas)} | ${x2(m.prev_roas)} |`);
       }
-      const idle = m.campaigns.filter((c) => c.spend <= 0 && c.avg7_spend > 0).length;
-      if (idle > 0) out.push(`- 메타: 직전 7일엔 지출했지만 어제 지출 없는 캠페인 ${idle}개`);
+      const idle = m.campaigns.filter((c) => c.spend <= 0 && c.prev_spend > 0).length;
+      if (idle > 0) out.push(`- 메타: ${L.prev}엔 지출했지만 ${L.cur} 지출 없는 캠페인 ${idle}개`);
     }
   }
   if (n) {
@@ -553,7 +613,7 @@ export function renderAdTables(ads: AdsFacts): string {
     else {
       const rows = n.campaigns.filter((c) => c.cost_vat_incl > 0 || c.imp > 0);
       const inc = n.incomplete_campaigns ?? [];
-      if (!rows.length && !inc.length) out.push("- 네이버: 어제 노출된 캠페인 없음");
+      if (!rows.length && !inc.length) out.push(`- 네이버: ${L.cur} 노출된 캠페인 없음`);
       else if (rows.length) {
         const pur = (v: number | null) => (v == null ? "미확정" : String(v));
         out.push("| 네이버 캠페인 | 광고비 | 노출 | 클릭 | CTR | CPC | 평균 순위 | 전환 | 구매 | CPA | 구매액 | ROAS |", "|---|---|---|---|---|---|---|---|---|---|---|---|");
@@ -562,8 +622,8 @@ export function renderAdTables(ads: AdsFacts): string {
         out.push(`| 합계 ${rows.length}개${inc.length ? "(일부)" : ""} | ${won(n.cost_vat_incl)} | ${won(n.imp)} | ${won(n.clicks)} | ${pctS(n.ctr)} | ${won(n.cpc)} | - | ${won(rows.reduce((s, c) => s + c.conv_all, 0))} | ${pur(n.purchases)} | ${won(per(n.cost_vat_incl, n.purchases))} | ${won(n.purchase_sales)} | ${x2(n.roas)} |`);
       }
       if (inc.length) out.push(`- 네이버: 광고그룹 조회에 실패해 표와 합계에서 빠진 캠페인 ${inc.length}개 (${inc.slice(0, 5).map(cell).join(", ")}${inc.length > 5 ? " 외" : ""})`);
-      const idle = n.campaigns.filter((c) => c.cost_vat_incl <= 0 && c.imp <= 0 && c.avg7_cost > 0).length;
-      if (idle > 0) out.push(`- 네이버: 직전 7일엔 광고비가 나갔지만 어제는 노출이 없는 캠페인 ${idle}개`);
+      const idle = n.campaigns.filter((c) => c.cost_vat_incl <= 0 && c.imp <= 0 && c.prev_cost > 0).length;
+      if (idle > 0) out.push(`- 네이버: ${L.prev}엔 광고비가 나갔지만 ${L.cur} 노출이 없는 캠페인 ${idle}개`);
     }
   }
   out.push("", "- 메타 클릭은 링크 클릭(광고관리자 기본). CTR = 클릭 ÷ 노출. CPC·CPA = 광고비 ÷ 클릭·구매(네이버는 VAT 포함 광고비, 메타는 VAT 별도). ROAS = 구매액 ÷ VAT 제외 광고비(배수). 메타는 픽셀 구매, 네이버는 네이버 구매 전환 기준이라 실제 매출과 다릅니다.");
@@ -592,15 +652,15 @@ export function adTablesForTeams(md: string, limit?: number): string {
     out.push(`**${head[0]}**`);
     const shown = limit != null ? body.slice(0, limit) : body;
     for (const r of shown) out.push(line(r, false));
-    if (shown.length < body.length) out.push(`- 외 ${body.length - shown.length}개 캠페인은 업무도우미 › 일일 종합 리포트에서 볼 수 있습니다`);
+    if (shown.length < body.length) out.push(`- 외 ${body.length - shown.length}개 캠페인은 업무도우미 › 종합 리포트에서 볼 수 있습니다`);
     for (const r of total) out.push(line(r, true));
   }
   return out.join("\n");
 }
 
-// AI 보고서의 '## 광고' 섹션 끝(다음 ## 앞)에 표를 끼운다. 광고 섹션이 없으면 '## 눈에 띄는' 앞, 그것도 없으면 맨 끝.
-function withAdTables(md: string, ads: AdsFacts): string {
-  const tables = renderAdTables(ads);
+// AI 리포트의 '## 광고' 섹션 끝(다음 ## 앞)에 표를 끼운다. 광고 섹션이 없으면 '## 눈에 띄는' 앞, 그것도 없으면 맨 끝.
+function withAdTables(md: string, ads: AdsFacts, L: AdLabels): string {
+  const tables = renderAdTables(ads, L);
   if (!tables) return md;
   const lines = md.split("\n");
   const adAt = lines.findIndex((l) => /^##\s*광고/.test(l.trim()));
@@ -611,48 +671,60 @@ function withAdTables(md: string, ads: AdsFacts): string {
   return [...lines.slice(0, at), tables, "", ...lines.slice(at)].join("\n");
 }
 
-// ── 실행 ──
-//  2026-09-30 대표 결정: 담당자가 매출 업로드 → 안내 창 → 일일 종합 리포트에서 분석 → 확인 후 [팀즈로 보내기](수동).
-//   14:30 자동(cron)은 보험 — 어제 소매 매출이 있는데 '매출이 반영된 리포트'를 아직 보낸 적이 없을 때만 생성(유효하면 기존 본문)·발송.
-//   업로드 직후 자동 실행·자동 재분석은 없앴다(담당자가 확인하기 전에 팀즈로 나가지 않게).
-//  발송 기록: sent_at(마지막 발송 시각)·sent_fp(그때 리포트의 매출 지문, migration 123)는 다시 분석해도 지우지 않는다 —
-//   '지금 버전을 보냈나' = sent_at >= updated_at(마지막 성공 생성 시각 — 실패하면 되돌린다), '매출 든 리포트를 보냈나' = sent_fp 가 매출 있음(건수 > 0).
-//   123 미적용(sent_fp 칸 없음)이면 예전처럼 다시 분석할 때 sent_at 을 지운다.
+// ── 실행(기간 공통) ──
+//  2026-09-30 대표 결정: 담당자가 매출 업로드 → 안내 창 → 종합 리포트에서 분석 → 확인 후 [팀즈로 보내기](수동).
+//   14:30 자동(cron)은 보험 — 매출이 다 들어왔는데(spec.complete) '매출이 반영된 리포트'를 아직 보낸 적이 없을 때만 생성(유효하면 기존 본문)·발송.
+//   업로드 직후 자동 실행·자동 재분석은 없다(담당자가 확인하기 전에 팀즈로 나가지 않게).
+//  발송 기록: sent_at(마지막 발송 시각)·sent_fp(그때 리포트의 매출 지문)는 다시 분석해도 지우지 않는다 —
+//   '지금 버전을 보냈나' = sent_at >= updated_at(마지막 성공 생성 시각 — 실패하면 되돌린다), '매출 든 리포트를 보냈나' = spec.complete(sent_fp).
+//   일일 표에 sent_fp(123) 가 없으면 예전처럼 다시 분석할 때 sent_at 을 지운다.
 export type AnalystTrigger = "cron" | "manual";
 export type AnalystResult = { ok: boolean; date: string; skipped?: string; status?: string; error?: string; sent?: { ok: boolean; error?: string } | null; pending_migration?: boolean };
 export const RUN_STALE_MS = 6 * 60_000; // 'running' 이 이보다 오래되면 죽은 실행으로 보고 다시 점유
 type PrevRow = { status: string; sales_ready: boolean; sales_fp: string | null; report_md: string | null; sent_at: string | null; sent_fp?: string | null; updated_at: string };
-const hasSales = (fp: string | null | undefined) => !!fp && !fp.startsWith("0:"); // 지문 = '건수:합계'
 const isRunning = (p: { status: string; updated_at: string } | null) => p?.status === "running" && Date.now() - Date.parse(p.updated_at) < RUN_STALE_MS;
 
+// 기간 표에서 이 리포트의 행만 — 일일 표(analyst_reports)는 report_date 하나, 주간·월간 표(analyst_period_reports)는 (period, report_date)
+export function rowKey(spec: ReportSpec): Record<string, string> {
+  return spec.table === "analyst_reports" ? { report_date: spec.key } : { period: spec.period, report_date: spec.key };
+}
+function keyed<Q>(q: Q, spec: ReportSpec): Q {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let r = q as any;
+  for (const [k, v] of Object.entries(rowKey(spec))) r = r.eq(k, v);
+  return r as Q;
+}
+const conflictOf = (spec: ReportSpec) => (spec.table === "analyst_reports" ? "report_date" : "period,report_date");
+const insertKey = (spec: ReportSpec) => (spec.table === "analyst_reports" ? { report_date: spec.key } : { period: spec.period, report_date: spec.key, period_end: spec.range.until });
+
 // 리포트 행 — sent_fp(123) 미적용이면 그 칸 없이 다시 읽는다(마이그레이션 전에도 동작)
-async function readRow(sb: SupabaseClient, date: string): Promise<{ row: PrevRow | null; error: string | null; noSentFp: boolean }> {
+async function readRow(sb: SupabaseClient, spec: ReportSpec): Promise<{ row: PrevRow | null; error: string | null; noSentFp: boolean }> {
   const cols = "status, sales_ready, sales_fp, report_md, sent_at, updated_at";
-  let r = await sb.from("analyst_reports").select(`${cols}, sent_fp`).eq("report_date", date).maybeSingle();
+  let r = await keyed(sb.from(spec.table).select(`${cols}, sent_fp`), spec).maybeSingle();
   let noSentFp = false;
-  if (r.error && /sent_fp/i.test(r.error.message)) { noSentFp = true; r = await sb.from("analyst_reports").select(cols).eq("report_date", date).maybeSingle(); }
+  if (r.error && /sent_fp/i.test(r.error.message)) { noSentFp = true; r = await keyed(sb.from(spec.table).select(cols), spec).maybeSingle(); }
   return { row: (r.data as PrevRow | null) ?? null, error: r.error ? r.error.message : null, noSentFp };
 }
 
-export async function runDailyAnalyst(opts: { date?: string; trigger: AnalystTrigger; force?: boolean; send?: boolean; startedAt?: number }): Promise<AnalystResult> {
+export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigger; force?: boolean; send?: boolean; startedAt?: number }): Promise<AnalystResult> {
   const startedAt = opts.startedAt ?? Date.now();
   const deadlineAt = startedAt + 270_000; // 라우트 maxDuration 300 안(요청 시작 기준)
   const sb = supabaseAdmin();
-  const date = validDate(opts.date) ? opts.date : kstDay(1);
+  const date = spec.key;
   const cron = opts.trigger === "cron";
   if (cron && (await getKv("analyst_auto")) === "off") return { ok: true, date, skipped: "14:30 자동 발송 꺼짐" };
 
-  let rd = await readRow(sb, date);
+  let rd = await readRow(sb, spec);
   if (rd.error) {
-    if (/analyst_reports|sales_fp/i.test(rd.error)) return { ok: false, date, error: "마이그레이션 122_analyst_reports.sql 적용이 필요합니다.", pending_migration: true };
+    if (new RegExp(`${spec.table}|sales_fp`, "i").test(rd.error)) return { ok: false, date, error: `마이그레이션 ${spec.migration} 적용이 필요합니다.`, pending_migration: true };
     return { ok: false, date, error: rd.error };
   }
-  const sentWithSales = (row: PrevRow | null) => !!row?.sent_at && (rd.noSentFp ? !!row.sales_ready : hasSales(row.sent_fp));
+  const sentWithSales = (row: PrevRow | null) => !!row?.sent_at && (rd.noSentFp ? !!row.sales_ready : spec.complete(row.sent_fp));
   if (cron && sentWithSales(rd.row)) return { ok: true, date, skipped: "이미 발송됨" };
   // 14:30 에 담당자 분석이 돌고 있으면 끝날 때까지 기다린다(하루 한 번뿐인 보험이 그냥 지나가지 않게) — 60초까지(그 뒤 분석할 시간을 남긴다)
   while (cron && isRunning(rd.row) && Date.now() - startedAt < 60_000) {
     await new Promise((r) => setTimeout(r, 10_000));
-    rd = await readRow(sb, date);
+    rd = await readRow(sb, spec);
     if (rd.error) return { ok: false, date, error: rd.error };
   }
   const prev = rd.row;
@@ -661,25 +733,25 @@ export async function runDailyAnalyst(opts: { date?: string; trigger: AnalystTri
     return { ok: !loud, date, skipped: "분석 진행 중", ...(loud ? { error: "분석이 진행 중입니다 — 잠시 뒤 다시 시도하세요." } : {}) };
   }
 
-  const sfp = await salesFingerprint(sb, date).catch(() => null);
+  const sfp = await spec.fingerprint(sb).catch(() => null);
   // 매출 확인이 실패했는데 이전 리포트가 있으면 건드리지 않는다(좋은 리포트를 '매출 미업로드'로 덮지 않게)
   if (!sfp && prev?.report_md) return { ok: false, date, error: "매출 확인에 실패해 이전 리포트를 유지합니다 — 잠시 뒤 다시 시도하세요." };
   const fp = sfp?.fp ?? null;
   const current = !!prev?.report_md && prev.status === "ok" && fp != null && prev.sales_fp === fp; // 지금 매출로 만든 리포트가 있다
 
-  // 14:30 자동 발송 — 어제 매출이 있고, 매출이 반영된 리포트를 아직 보낸 적이 없을 때만(광고만 먼저 보낸 것은 발송으로 치지 않는다)
+  // 14:30 자동 발송 — 매출이 다 들어왔고, 매출이 반영된 리포트를 아직 보낸 적이 없을 때만(광고만 먼저 보낸 것은 발송으로 치지 않는다)
   if (cron) {
     if (sentWithSales(prev)) return { ok: true, date, skipped: "이미 발송됨" };
-    if (!sfp?.ready) return { ok: true, date, skipped: "어제 매출 없음" };
+    if (!sfp?.ready) return { ok: true, date, skipped: spec.noSalesSkip };
     if (current) {
-      const sent = await sendAnalystToTeams(date); // 담당자가 만들어 둔 리포트를 그대로
+      const sent = await sendReportToTeams(spec); // 담당자가 만들어 둔 리포트를 그대로
       return { ok: sent.ok, date, status: "ok", sent, ...(sent.ok ? {} : { error: sent.error }) };
     }
   }
   // 지금 매출로 만든 리포트가 있으면 다시 돌지 않는다(비용) — 보내기면 그 본문을 보낸다. [다시 분석](force)은 관리자만(라우트가 막는다).
   if (!opts.force && current) {
     if (opts.send) {
-      const sent = await sendAnalystToTeams(date);
+      const sent = await sendReportToTeams(spec);
       return { ok: sent.ok, date, status: "ok", sent, ...(sent.ok ? {} : { error: sent.error }) };
     }
     return { ok: true, date, skipped: sfp?.ready ? "이미 분석됨" : "매출 업로드 대기" };
@@ -689,93 +761,93 @@ export async function runDailyAnalyst(opts: { date?: string; trigger: AnalystTri
   const nowIso = new Date().toISOString();
   const busy = { ok: !(opts.force || opts.send), date, skipped: "분석 진행 중", ...(opts.force || opts.send ? { error: "분석이 이미 진행 중입니다." } : {}) };
   if (!prev) {
-    const ins = await sb.from("analyst_reports").insert({ report_date: date, status: "running", trigger: opts.trigger, updated_at: nowIso });
+    const ins = await sb.from(spec.table).insert({ ...insertKey(spec), status: "running", trigger: opts.trigger, updated_at: nowIso });
     if (ins.error) return busy; // 동시에 다른 실행이 먼저 만듦
   } else {
     const staleIso = new Date(Date.now() - RUN_STALE_MS).toISOString();
-    const cl = await sb.from("analyst_reports").update({ status: "running", updated_at: nowIso })
-      .eq("report_date", date).or(`status.neq.running,updated_at.lt."${staleIso}"`).select("report_date");
+    const cl = await keyed(sb.from(spec.table).update({ status: "running", updated_at: nowIso }), spec)
+      .or(`status.neq.running,updated_at.lt."${staleIso}"`).select("report_date");
     if (cl.error || !(cl.data ?? []).length) return busy;
   }
 
-  // 사실 수집 — 매체별 60초 상한(멈추면 함수가 300초에 잘려 'running' 이 남는다). 이상 목록(매출만)은 따로 받아 늦게 도착한 것이 섞이지 않게.
-  const fS: string[] = [];
-  const cache: AdsCache = { naverAdgroups: [], naverY: new Map(), naver7: new Map(), naverPurchase: null };
-  const [sales, metaR, naverR] = await Promise.all([
-    salesFacts(sb, date, !!sfp?.ready, fS).catch((e) => ({ ready: false, note: `매출 집계 실패: ${e instanceof Error ? e.message : String(e)}` } as SalesFacts)),
-    withTimeout(metaFacts(date), 60_000),
-    withTimeout(naverFacts(date, cache), 60_000),
-  ]);
-  const metaF = metaR === "timeout" ? META_FAIL("조회 시간 초과(60초)") : metaR;
-  const naverF = naverR === "timeout" ? NAVER_FAIL("조회 시간 초과(60초)") : naverR;
-  if (naverR === "timeout") cache.naverPurchase = null;
-  const flags = [...fS]; // 이상 판정은 매출만(광고는 기준 없이 전체 표)
-  const ads: AdsFacts = { meta: metaF, naver: naverF };
-  ads.spend_ex_vat_total = r0((metaF?.spend || 0) + (naverF?.cost_vat_incl || 0) / 1.1);
-  const facts: Record<string, unknown> = { date, weekday: weekday(date), sales, ads };
-  // AI 에는 캠페인을 지출 상위 20개만(토큰 절약) — 전체는 코드가 표로 붙인다
-  const top = <T,>(xs: T[] | undefined) => (xs ?? []).slice(0, 20);
-  const aiFacts: Record<string, unknown> = {
-    ...facts,
-    ads: {
-      ...ads,
-      ...(metaF ? { meta: { ...metaF, campaigns: top(metaF.campaigns), campaigns_total: metaF.campaigns.length } } : {}),
-      ...(naverF ? { naver: { ...naverF, campaigns: top(naverF.campaigns), campaigns_total: naverF.campaigns.length } } : {}),
-    },
-  };
-  const salesFailed = !!sfp?.ready && !sales.ready; // 매출은 올라와 있는데 집계만 실패
-
+  const cache = newCache(spec.range, spec.prevRange);
+  let built: Built | null = null;
   let result: AnalystResult;
   try {
-    if (salesFailed && prev?.report_md) throw new Error(String(sales.note || "매출 집계 실패"));
-    const r = await analyze(sb, date, aiFacts, flags, cache, deadlineAt);
-    const md = withAdTables(r.md, ads);
-    const up = await sb.from("analyst_reports").upsert({
+    built = await spec.build(sb, !!sfp?.ready, cache);
+    const salesFailed = !!sfp?.ready && !built.salesReady; // 매출은 올라와 있는데 집계만 실패
+    if (salesFailed && prev?.report_md) throw new Error(String(built.salesNote || "매출 집계 실패"));
+    const r = await analyze(sb, spec, built.aiFacts, built.flags, cache, deadlineAt);
+    const mdText = withAdTables(r.md, built.ads, spec.adLabels);
+    const up = await sb.from(spec.table).upsert({
       // 집계 실패로 광고만 본 리포트는 지문을 비워 둔다 — 다음 실행이 다시 분석. 발송 기록(sent_at·sent_fp)은 그대로 둔다.
-      report_date: date, status: "ok", sales_ready: !!sales.ready, sales_fp: salesFailed ? null : fp, facts: { ...facts, flags, tool_log: r.toolLog },
-      report_md: md, model: r.model, usage: r.usage, trigger: opts.trigger, error: null, updated_at: new Date().toISOString(), ...(rd.noSentFp ? { sent_at: null } : {}),
-    }, { onConflict: "report_date" });
+      ...insertKey(spec), status: "ok", sales_ready: built.salesReady && !!sfp?.ready, sales_fp: salesFailed ? null : fp, facts: { ...built.facts, flags: built.flags, tool_log: r.toolLog },
+      report_md: mdText, model: r.model, usage: r.usage, trigger: opts.trigger, error: null, updated_at: new Date().toISOString(), ...(rd.noSentFp ? { sent_at: null } : {}),
+    }, { onConflict: conflictOf(spec) });
     if (up.error) throw new Error(`분석 저장 실패: ${up.error.message}`);
     let sent: AnalystResult["sent"] = null;
     if (opts.send ?? cron) {
       // 자동(14:30)은 남은 시간이 있을 때만 — 못 보냈으면 화면에서 '팀즈로 보내기'
-      if (!cron || deadlineAt + 25_000 - Date.now() > 20_000) sent = await sendAnalystToTeams(date);
+      if (!cron || deadlineAt + 25_000 - Date.now() > 20_000) sent = await sendReportToTeams(spec);
       else sent = { ok: false, error: "시간이 부족해 발송하지 못했습니다 — 화면에서 '팀즈로 보내기'를 누르세요." };
     }
     result = { ok: !sent || sent.ok, date, status: "ok", sent, ...(sent && !sent.ok ? { error: `팀즈 발송 실패: ${sent.error}` } : {}) };
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
     // 실패해도 이전 리포트는 지키고(상태만 되돌림), 없던 날만 'error' 로 남긴다
-    if (prev?.report_md) await sb.from("analyst_reports").update({ status: "ok", error: `재분석 실패: ${err}`, updated_at: prev.updated_at }).eq("report_date", date);
-    else await sb.from("analyst_reports").update({ status: "error", error: err, facts: { ...facts, flags }, trigger: opts.trigger, updated_at: new Date().toISOString() }).eq("report_date", date);
+    if (prev?.report_md) await keyed(sb.from(spec.table).update({ status: "ok", error: `재분석 실패: ${err}`, updated_at: prev.updated_at }), spec);
+    else await keyed(sb.from(spec.table).update({ status: "error", error: err, facts: built ? { ...built.facts, flags: built.flags } : {}, trigger: opts.trigger, updated_at: new Date().toISOString() }), spec);
     result = { ok: false, date, status: "error", error: err };
   }
   return result;
 }
 
-export async function sendAnalystToTeams(date: string): Promise<{ ok: boolean; error?: string }> {
-  const url = (await getKv("analyst_webhook")) || (await getKv("briefing_webhook")); // 일일 종합 리포트 하단 설정의 팀즈 웹훅
-  if (!url) return { ok: false, error: "팀즈 웹훅 URL이 설정되지 않았습니다 — 관리자가 일일 종합 리포트 하단 설정에서 등록해야 합니다." };
+export async function sendReportToTeams(spec: ReportSpec): Promise<{ ok: boolean; error?: string }> {
+  const url = (await getKv("analyst_webhook")) || (await getKv("briefing_webhook")); // 종합 리포트 하단 설정의 팀즈 웹훅
+  if (!url) return { ok: false, error: "팀즈 웹훅 URL이 설정되지 않았습니다 — 관리자가 종합 리포트 하단 설정에서 등록해야 합니다." };
   const sb = supabaseAdmin();
-  const { data } = await sb.from("analyst_reports").select("report_md, sales_ready, sales_fp, sent_at").eq("report_date", date).maybeSingle();
-  const md = (data?.report_md as string | null) || "";
-  if (!md) return { ok: false, error: "보낼 리포트가 없습니다. 먼저 분석하세요." };
-  const [, m, d] = date.split("-");
-  const title = `일일 종합 리포트 · ${Number(m)}/${Number(d)}${data?.sales_ready ? "" : " (매출 미반영)"}`;
+  const { data } = await keyed(sb.from(spec.table).select("report_md, sales_ready, sales_fp, sent_at"), spec).maybeSingle();
+  const row = data as { report_md: string | null; sales_ready: boolean; sales_fp: string | null; sent_at: string | null } | null;
+  const mdText = row?.report_md || "";
+  if (!mdText) return { ok: false, error: "보낼 리포트가 없습니다. 먼저 분석하세요." };
+  const title = `${spec.title} · ${spec.label}${row?.sales_ready ? "" : spec.noSalesSuffix}`;
   // 카드 한도(약 28KB) — 캠페인은 한 줄씩, 그래도 크면 표마다 상위 10개, 그래도 크면 화면 안내만
   const MAX = 26_000;
-  let body = adTablesForTeams(md);
-  if (teamsCardBytes(title, body) > MAX) body = adTablesForTeams(md, 10);
-  if (teamsCardBytes(title, body) > MAX) body = "- 리포트가 길어 팀즈 카드에 담지 못했습니다. 업무도우미 › 일일 종합 리포트에서 확인하세요.";
+  let body = adTablesForTeams(mdText);
+  if (teamsCardBytes(title, body) > MAX) body = adTablesForTeams(mdText, 10);
+  if (teamsCardBytes(title, body) > MAX) body = "- 리포트가 길어 팀즈 카드에 담지 못했습니다. 업무도우미 › 종합 리포트에서 확인하세요.";
   // 겹친 발송(두 사람이 동시에, 수동 + 14:30)은 한 번만 — 1분 안에 이미 잡힌 발송이 있으면 건너뛴다. 게시에 실패하면 되돌린다.
   const at = new Date().toISOString();
   const recentIso = new Date(Date.now() - 60_000).toISOString();
-  const claim = await sb.from("analyst_reports").update({ sent_at: at }).eq("report_date", date)
+  const claim = await keyed(sb.from(spec.table).update({ sent_at: at }), spec)
     .or(`sent_at.is.null,sent_at.lt."${recentIso}"`).select("report_date");
   if (!claim.error && !(claim.data ?? []).length) return { ok: false, error: "방금 발송됐습니다 — 잠시 뒤 새로고침하세요." };
   const r = await postTeamsMarkdown(url, title, body);
-  if (!r.ok) { await sb.from("analyst_reports").update({ sent_at: (data?.sent_at as string | null) ?? null }).eq("report_date", date); return r; }
-  // 보낸 버전의 매출 지문도 남긴다(123) — 미적용이면 시각만(위에서 이미 기록)
-  await sb.from("analyst_reports").update({ sent_fp: (data?.sales_fp as string | null) ?? null }).eq("report_date", date);
+  if (!r.ok) { await keyed(sb.from(spec.table).update({ sent_at: row?.sent_at ?? null }), spec); return r; }
+  // 보낸 버전의 매출 지문도 남긴다 — 칸이 없으면(123 미적용) 시각만(위에서 이미 기록)
+  await keyed(sb.from(spec.table).update({ sent_fp: row?.sales_fp ?? null }), spec);
   return r;
+}
+
+// ── 일일 명세 ──
+export function dailySpec(date?: string): ReportSpec {
+  const y = validDate(date) ? date : kstDay(1);
+  return {
+    period: "daily", key: y, range: { since: y, until: y }, prevRange: { since: shift(y, -7), until: shift(y, -1) },
+    table: "analyst_reports", migration: "122_analyst_reports.sql",
+    title: "일일 종합 리포트", label: md(y), noSalesSuffix: " (매출 미반영)", noSalesSkip: "어제 매출 없음",
+    adLabels: { cur: "어제", prev: "직전 7일", prevRoas: "7일 ROAS" },
+    fingerprint: (sb) => salesFingerprint(sb, y),
+    complete: (fp) => !!fp && !fp.startsWith("0:"), // 지문 = '건수:합계'
+    build: async (sb, ready, cache) => {
+      const flags: string[] = [];
+      const [sales, adsR] = await Promise.all([
+        salesFacts(sb, y, ready, flags).catch((e) => ({ ready: false, note: `매출 집계 실패: ${e instanceof Error ? e.message : String(e)}` } as SalesFacts)),
+        collectAds(cache, 35_000),
+      ]);
+      const facts = { date: y, weekday: weekday(y), sales, ads: adsR.ads };
+      return { facts, aiFacts: { ...facts, ads: adsR.aiAds }, ads: adsR.ads, flags, salesReady: sales.ready, salesNote: sales.note };
+    },
+    system: SYSTEM, intro: `분석 대상일(어제): ${y} (${weekday(y)}요일) · 비교 기준: 지난 4주 같은 요일 평균`, toolMaxDays: 28,
+  };
 }

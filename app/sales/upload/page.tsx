@@ -28,7 +28,7 @@ export default function SalesUploadPage() {
   const [reverting, setReverting] = useState("");
   const [batchErr, setBatchErr] = useState(false); // 이력 로드 실패 — '업로드 없음'과 구분
   const [applyNonce, setApplyNonce] = useState(0);   // 적용 성공마다 +1 → 인라인 리포트 패널 새로고침(재생성)
-  const [reportPrompt, setReportPrompt] = useState<string[] | null>(null); // 최근 3일 매출이 들어오면 '일일 종합 리포트 생성' 안내 창(2026-09-30)
+  const [reportPrompt, setReportPrompt] = useState<ReportItem[] | null>(null); // 최근 매출이 들어오면 '종합 리포트 생성' 안내 창(2026-09-30 — 일일·주간·월간)
 
   function loadBatches() { setBatchErr(false); fetch("/api/sales/upload/batches").then((r) => r.json()).then((j) => { if (j.ok) setBatches(j.batches); else setBatchErr(true); }).catch(() => setBatchErr(true)); }
   useEffect(() => { loadBatches(); }, []);
@@ -68,7 +68,7 @@ export default function SalesUploadPage() {
       const r = await fetch("/api/sales/upload/apply", { method: "POST", body: fd });
       const j = await r.json();
       if (!j.ok) setErr(j.error || "적용 실패");
-      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); setApplyNonce((n) => n + 1); if (Array.isArray(j.report_dates) && j.report_dates.length) setReportPrompt(j.report_dates); }
+      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); setApplyNonce((n) => n + 1); if (Array.isArray(j.report_items) && j.report_items.length) setReportPrompt(j.report_items); }
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
   }
@@ -174,14 +174,14 @@ export default function SalesUploadPage() {
         <div className="b2b-modal-backdrop" onClick={() => setReportPrompt(null)}>
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
             <div className="b2b-modal-head">
-              <h2 className="b2b-modal-title">일일 종합 리포트를 만들어 발송하세요</h2>
+              <h2 className="b2b-modal-title">종합 리포트를 만들어 발송하세요</h2>
               <button className="b2b-modal-close" onClick={() => setReportPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p style={{ fontSize: 15 }}>{reportPrompt.map(md).join(", ")} 매출이 반영됐습니다. 날짜마다 일일 종합 리포트를 생성하고, 확인한 뒤 팀즈로 보내 주세요.</p>
+              <p style={{ fontSize: 15 }}>{reportPrompt.filter((x) => x.period === "daily").map((x) => x.label).join(", ") || "지난 기간"} 매출이 반영됐습니다. 리포트마다 생성하고, 확인한 뒤 팀즈로 보내 주세요.</p>
               {reportPrompt.length > 1 && (
                 <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                  {reportPrompt.map((d) => <a key={d} className="b2b-btn-secondary" href={`/briefing?date=${d}&run=1`} target="_blank" rel="noopener">{md(d)} 일일 종합 리포트 생성</a>)}
+                  {reportPrompt.map((x) => <a key={`${x.period}${x.date}`} className="b2b-btn-secondary" href={reportHref(x)} target="_blank" rel="noopener">{x.label} {REPORT_NAME[x.period]} 생성</a>)}
                 </div>
               )}
             </div>
@@ -189,7 +189,7 @@ export default function SalesUploadPage() {
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setReportPrompt(null)}>나중에</button>
-                {reportPrompt.length === 1 && <a className="b2b-btn-primary" href={`/briefing?date=${reportPrompt[0]}&run=1`}>일일 종합 리포트 생성</a>}
+                {reportPrompt.length === 1 && <a className="b2b-btn-primary" href={reportHref(reportPrompt[0])}>{REPORT_NAME[reportPrompt[0].period]} 생성</a>}
               </div>
             </div>
           </div>
@@ -199,7 +199,9 @@ export default function SalesUploadPage() {
   );
 }
 
-const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`; // YYYY-MM-DD → M/D
+type ReportItem = { period: "daily" | "weekly" | "monthly"; date: string; label: string };
+const REPORT_NAME: Record<ReportItem["period"], string> = { daily: "일일 종합 리포트", weekly: "주간 종합 리포트", monthly: "월간 종합 리포트" };
+const reportHref = (x: ReportItem) => `/briefing?period=${x.period}&date=${x.date}&run=1`;
 
 function Stat({ label, v, accent, danger }: { label: string; v: string; accent?: boolean; danger?: boolean }) {
   return (
