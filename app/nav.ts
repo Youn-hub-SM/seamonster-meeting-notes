@@ -61,6 +61,7 @@ export const NAV: NavCategory[] = [
           { href: "/sales/history", label: "변경 기록" },
         ],
       },
+      { href: "/briefing", label: "일일 리포트", icon: "bulb" }, // 2026-09-30 관리자 → 모두 열람(매출 업로드 뒤 담당자가 생성·발송)
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/subscription", label: "정기배송 분석", icon: "trend" },
     ],
@@ -151,7 +152,6 @@ export const NAV: NavCategory[] = [
     label: "관리자",
     adminOnly: true, // 관리자·현석에게만 노출
     tools: [
-      { href: "/briefing", label: "일일 리포트", icon: "bulb" },
       { href: "/b2b/users", label: "계정 관리", icon: "user" },
       {
         href: "/b2b/settings", label: "설정", icon: "gear",

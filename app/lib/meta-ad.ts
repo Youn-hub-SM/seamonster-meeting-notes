@@ -68,7 +68,7 @@ async function metaList<T>(path: string, params: Record<string, string | number 
 export type MetaCampaign = { id: string; name: string; status: string; effective_status: string; objective?: string; daily_budget?: string; lifetime_budget?: string; bid_strategy?: string };
 export type MetaAdset = { id: string; name: string; status: string; effective_status: string; campaign_id: string; daily_budget?: string; lifetime_budget?: string; optimization_goal?: string };
 export type MetaAd = { id: string; name: string; status: string; effective_status: string; adset_id: string; campaign_id?: string; creative?: { id?: string; thumbnail_url?: string } };
-export type MetaInsight = { spend: number; impressions: number; clicks: number; ctr: number; cpc: number; purchases: number; purchaseValue: number; roas: number; cpa: number };
+export type MetaInsight = { spend: number; impressions: number; clicks: number; ctr: number; cpc: number; purchases: number; purchaseValue: number; roas: number; cpa: number; linkClicks?: number };
 export type StatRange = { datePreset?: string; since?: string; until?: string };
 
 // 조회 스코프 — 메타 엔티티 조회의 전용 `effective_status` 파라미터로 걸러 계정 전체 이력을 안 긁음(속도↑).
@@ -111,13 +111,14 @@ function parseInsight(r: InsightRow): MetaInsight {
   let roas = pickAction(r.purchase_roas, PURCHASE_KEYS);
   if (!roas && spend) roas = purchaseValue / spend;
   const cpa = pickAction(r.cost_per_action_type, PURCHASE_KEYS);
-  return { spend, impressions: Number(r.impressions) || 0, clicks: Number(r.clicks) || 0, ctr: Number(r.ctr) || 0, cpc: Number(r.cpc) || 0, purchases, purchaseValue, roas, cpa };
+  return { spend, impressions: Number(r.impressions) || 0, clicks: Number(r.clicks) || 0, ctr: Number(r.ctr) || 0, cpc: Number(r.cpc) || 0, purchases, purchaseValue, roas, cpa, ...("inline_link_clicks" in r ? { linkClicks: Number(r.inline_link_clicks) || 0 } : {}) };
 }
-export async function getInsights(level: "campaign" | "adset" | "ad", range: StatRange = {}, debug = false): Promise<{ byId: Record<string, MetaInsight>; rawSample?: InsightRow }> {
+// withLink: 링크 클릭(inline_link_clicks)도 받는다 — clicks/ctr/cpc 는 '전체'(좋아요·더보기 포함)라 일일 리포트는 링크 클릭 기준으로 쓴다.
+export async function getInsights(level: "campaign" | "adset" | "ad", range: StatRange = {}, debug = false, withLink = false): Promise<{ byId: Record<string, MetaInsight>; rawSample?: InsightRow }> {
   const { accountId } = creds();
   const key = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id";
   // level만으로는 breakdown id 가 안 붙는 경우가 있어 fields 에 명시.
-  const params: Record<string, string> = { level, fields: `${key},spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,cost_per_action_type` };
+  const params: Record<string, string> = { level, fields: `${key},spend,impressions,clicks,ctr,cpc,${withLink ? "inline_link_clicks," : ""}actions,action_values,purchase_roas,cost_per_action_type` };
   if (range.since && range.until) params.time_range = JSON.stringify({ since: range.since, until: range.until });
   else params.date_preset = range.datePreset || "last_7d";
   // 인사이트는 행마다 action 배열이 커서 페이지를 작게(50) — '데이터 과다' 500 방지.
