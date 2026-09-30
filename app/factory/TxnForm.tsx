@@ -21,7 +21,7 @@ const knownKgs = (p: StockRow) => [...new Set(p.lots.slice().sort((a, b) => b.bo
 function makeLines(p: StockRow, type: TxnType): Line[] {
   if (type === "입고") {
     const kg = knownKgs(p)[0];
-    return [{ key: k(), lot: false, mfg_date: "", box_kg: kg ? String(kg) : "", qty: "", have: 0, in_date: null }];
+    return [{ key: k(), lot: false, mfg_date: today(), box_kg: kg ? String(kg) : "", qty: "", have: 0, in_date: null }];
   }
   const lots = p.lots.filter((l) => (type === "출고" ? l.boxes > 0 : l.boxes !== 0));
   return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: String(l.box_kg), qty: "", have: l.boxes, in_date: l.in_date }));
@@ -92,7 +92,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
       if (b.key !== bk) return b;
       const p = byId.get(b.product_id);
       const kg = p ? knownKgs(p)[0] : undefined;
-      return { ...b, lines: [...b.lines, { key: k(), lot: false, mfg_date: "", box_kg: type === "입고" && kg ? String(kg) : "", qty: "", have: 0, in_date: null }] };
+      return { ...b, lines: [...b.lines, { key: k(), lot: false, mfg_date: today(), box_kg: type === "입고" && kg ? String(kg) : "", qty: "", have: 0, in_date: null }] };
     }));
   const removeLine = (bk: string, lk: string) =>
     setBlocks((bs) => bs.map((b) => (b.key !== bk ? b : { ...b, lines: b.lines.filter((l) => l.key !== lk) })));
