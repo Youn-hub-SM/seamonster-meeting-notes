@@ -13,7 +13,6 @@ import "./factory.css";
 const NAV = [
   { href: "/factory", label: "재고", icon: "box" as const, exact: true },
   { href: "/factory/history", label: "히스토리", icon: "receipt" as const },
-  { href: "/factory/requests", label: "생산요청", icon: "factory" as const },
 ];
 
 export default function FactoryLayout({ children }: { children: React.ReactNode }) {
@@ -56,7 +55,7 @@ export default function FactoryLayout({ children }: { children: React.ReactNode 
           })}
           {/* 설정(Swit 알림)은 관리자 전용 — /factory 에 들어올 수 있는 internal = 관리자뿐 */}
           {role === "internal" && (
-            <Link href="/factory/settings" className={`fac-nav-item ${pathname.startsWith("/factory/settings") ? "is-active" : ""}`}>
+            <Link href="/factory/settings/products" className={`fac-nav-item ${pathname.startsWith("/factory/settings") ? "is-active" : ""}`}>
               <Icon name="gear" />
               설정
             </Link>

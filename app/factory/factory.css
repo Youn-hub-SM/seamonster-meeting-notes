@@ -56,9 +56,9 @@
 .fac-sb-foot button:hover, .fac-sb-foot a:hover { color: var(--fac-blue); }
 
 .fac-main { flex: 1; min-width: 0; background: #fff; padding: 26px clamp(16px, 3vw, 44px) 80px; }
-/* 본문 폭 제한 — 풀폭이 너무 넓다는 피드백(2026-08-06). 재고 표 10컬럼 기준 1240px, 남는 공간은 가운데 정렬. */
+/* 본문 폭 제한 — 풀폭이 너무 넓다는 피드백(2026-08-06). 1240px, 남는 공간은 가운데 정렬. */
 .fac-main .b2b-container { max-width: 1240px; margin: 0 auto; }
-/* 표 안 행동 링크(출고·이동·수정)가 붙어 보이는 문제 — 링크 사이 간격 */
+/* 표 안 행동 링크가 붙어 보이는 문제 — 링크 사이 간격 */
 .fac-main .b2b-table .b2b-link-btn + .b2b-link-btn { margin-left: 10px; }
 
 /* 모바일: 사이드바를 상단 가로 바로 접는다 */
@@ -75,81 +75,162 @@
   .fac-sb-foot { margin: 0 0 0 auto; padding: 0 0 0 10px; border-top: none; flex-direction: row; align-items: center; gap: 10px; white-space: nowrap; }
 }
 
-/* ── 창고 드롭다운(체크박스 다중 선택) — 데스크톱·모바일 공용 ────── */
-.fac-wh-dd { position: relative; }
-.fac-wh-btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  width: auto; cursor: pointer; white-space: nowrap; font-weight: 600;
+/* ── 공용 조각 ─────────────────────────────────────────────────── */
+.fac-sub { font-size: 12px; font-weight: 500; color: var(--sm-text-light); }
+.fac-sku { font-family: var(--sm-mono); font-size: 12px; color: var(--sm-text-mid); white-space: nowrap; }
+.fac-zero { color: var(--sm-text-faint); }
+.fac-num { font-variant-numeric: tabular-nums; }
+.fac-check { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; cursor: pointer; white-space: nowrap; }
+.fac-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+.fac-toolbar .fac-search { flex: 1 1 240px; max-width: 360px; }
+.fac-range { display: flex; align-items: center; gap: 6px; }
+.fac-range .b2b-input { width: auto; }
+
+/* ── 재고 표(PC) ─────────────────────────────────────────────────── */
+.fac-th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.fac-row { cursor: pointer; }
+.fac-row.is-open > td { background: var(--sm-orange-light); }
+.fac-row-detail > td { background: var(--sm-bg-subtle); padding: 12px 16px; }
+.fac-stock-table td.num .fac-sub { white-space: nowrap; }
+
+/* 로트 목록 + 가격·버튼 — PC 펼침·모바일 펼침 공용 */
+.fac-detail { display: flex; flex-direction: column; gap: 10px; }
+.fac-lots { display: flex; flex-direction: column; gap: 2px; }
+.fac-lot {
+  display: grid; grid-template-columns: minmax(170px, auto) 1fr auto; align-items: baseline; gap: 12px;
+  padding: 7px 10px; background: #fff; border: 1px solid var(--sm-border-light); border-radius: 8px;
 }
-.fac-wh-caret { font-size: 12px; color: var(--sm-text-light); }
-.fac-dd-backdrop { position: fixed; inset: 0; z-index: 30; }
-.fac-wh-panel {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 31;
+.fac-lot.is-zero { opacity: .55; }
+.fac-lot-name { font-size: 15px; font-weight: 600; }
+.fac-lot-qty { font-size: 15px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fac-lot-qty small { font-size: 12px; font-weight: 600; color: var(--sm-text-light); margin-left: 6px; }
+.fac-lot-more { align-self: flex-start; font-size: 12px; }
+.fac-detail-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.fac-detail-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* 모바일 전용 요소는 PC 에서 숨김 */
+.fac-list, .fac-actbar { display: none; }
+
+/* ── 입고·출고·조정 창 ───────────────────────────────────────────── */
+.fac-txn-modal { max-width: 720px; }
+.fac-txn-meta { display: grid; grid-template-columns: 170px 1fr 1.3fr; gap: 10px; }
+.fac-txn-search { font-size: 16px; padding: 12px 14px; }
+.fac-search-wrap { position: relative; }
+.fac-suggest {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
   background: #fff; border: 1px solid var(--sm-border); border-radius: 10px;
-  box-shadow: var(--sm-shadow-float); padding: 8px; min-width: 190px;
-  display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--sm-shadow-float); max-height: 280px; overflow: auto; padding: 4px;
 }
-.fac-wh-reset {
-  text-align: left; background: none; border: none; font: inherit;
-  font-size: 15px; font-weight: 700; color: var(--fac-blue);
-  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+.fac-suggest-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  text-align: left; background: none; border: none; cursor: pointer; padding: 10px; border-radius: 7px;
+  font: inherit; font-size: 15px; line-height: 1.4; color: var(--sm-black);
 }
-.fac-wh-reset:hover { background: var(--sm-orange-light); }
-.fac-wh-opt {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-radius: 8px; font-size: 15px; cursor: pointer; white-space: nowrap;
-}
-.fac-wh-opt:hover { background: var(--sm-bg-subtle); }
+.fac-suggest-item:hover, .fac-suggest-item.is-active { background: var(--sm-orange-light); }
+.fac-suggest-none { padding: 10px 14px; font-size: 15px; color: var(--sm-text-light); }
 
-/* ── 재고 목록 모바일·태블릿(≤900px) — 검색과 시인성 최우선 ─────────
-   표 11컬럼은 좁은 화면에서 읽을 수 없다 → 이름/수량 목록으로 전환.
-   한 줄 = 품명(+매입처) / 아래 작은 특징줄(규격·테잎색·원산지·창고·입고일) / 우측 큰 수량.
-   줄을 누르면 출고·이동·수정 버튼이 펼쳐진다. */
-.fac-search-mobile { display: none; }
-.fac-list { display: none; }
+.fac-blk { border: 1px solid var(--sm-border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fac-blk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.fac-blk-name { display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+.fac-blk-empty { padding: 4px 0; }
+.fac-x { color: var(--sm-text-light); font-size: 15px; padding: 2px 6px; }
+.fac-add-line { align-self: flex-start; font-size: 15px; }
 
+.fac-line { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.fac-line.is-lot { align-items: center; justify-content: space-between; padding: 6px 0; border-top: 1px dashed var(--sm-border); }
+.fac-blk-head + .fac-line.is-lot { border-top: none; }
+.fac-line-lot { display: flex; flex-direction: column; gap: 2px; font-size: 15px; font-weight: 600; min-width: 0; }
+.fac-line-qty { display: flex; align-items: center; gap: 6px; }
+.fac-line-qty .b2b-input { width: 96px; text-align: right; font-size: 16px; }
+.fac-unit { font-size: 15px; color: var(--sm-text-mid); }
+.fac-f { display: flex; flex-direction: column; gap: 4px; }
+.fac-f > span { font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
+.fac-f .b2b-input { width: 160px; font-size: 16px; }
+.fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 110px; text-align: right; }
+.fac-kg-chips { display: flex; gap: 6px; flex-wrap: wrap; flex-basis: 100%; }
+.fac-chip {
+  font: inherit; font-size: 12px; font-weight: 700; line-height: 1.2; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--sm-border); background: #fff; color: var(--sm-text-mid);
+}
+.fac-chip.is-on { border-color: var(--fac-blue); background: var(--sm-orange-light); color: var(--fac-blue); }
+.fac-txn-total { align-self: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ── 히스토리 ───────────────────────────────────────────────────── */
+.fac-row-cancelled td, .fac-row-cancelled .fac-hist-desc { color: var(--sm-text-light); }
+.fac-row-cancelled .fac-num { text-decoration: line-through; }
+.fac-cancelled { display: inline-block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
+.fac-cancel { color: var(--sm-danger); white-space: nowrap; }
+
+/* ── 설정 ───────────────────────────────────────────────────────── */
+.fac-set-tabs { margin-bottom: 16px; }
+.fac-set-tabs .sm-tab { line-height: 1.4; text-decoration: none; }
+/* 탭 화면의 자체 제목은 숨기고(제목은 설정 레이아웃이 그린다) 폭 제한 박스는 왼쪽 정렬 */
+.fac-set-body .b2b-page-head { display: none; }
+.fac-main .fac-set-body > .b2b-container { margin-left: 0; padding: 0; }
+.fac-row-off td { color: var(--sm-text-light); }
+.fac-pill-off { background: var(--sm-bg-subtle); color: var(--sm-text-mid); }
+
+/* ── 모바일·태블릿(≤900px) — 목록 + 하단 버튼 ───────────────────── */
 @media (max-width: 900px) {
-  .fac-main { padding: 12px 14px 70px; }
-  /* 통계카드·기간탭·기준안내·표·데스크톱 검색은 숨김 — 검색+목록만 남긴다 */
-  .fac-main .b2b-dash-grid,
-  .fac-stock-periods,
-  .fac-stock-meta,
-  .fac-stock-table,
-  .fac-search-desktop { display: none !important; }
+  .fac-main { padding: 12px 14px 90px; }
+  .fac-stock-table, .fac-hist-table, .fac-head-actions { display: none !important; }
 
-  /* 검색 — 스크롤해도 상단에 붙어 있는 첫 번째 컨트롤 */
-  .fac-search-mobile {
-    display: block; width: 100%;
+  .fac-toolbar .fac-search {
+    flex: 1 1 100%; max-width: none;
     position: sticky; top: 8px; z-index: 5;
     font-size: 16px;                 /* 16px 미만이면 iOS 가 포커스 시 화면을 확대한다 */
     padding: 12px 14px; border-radius: 10px;
-    background: #fff; border: 1.5px solid var(--sm-border);
     box-shadow: 0 2px 10px rgba(0, 0, 0, .05);
-    margin-bottom: 10px;
   }
-  .fac-search-mobile:focus { border-color: var(--fac-blue); outline: none; }
-
-  /* 창고 드롭다운 + 소진 체크 한 줄 — overflow 스크롤을 쓰지 않는다(드롭다운 패널이 잘린다) */
-  .fac-stock-bar { margin-bottom: 6px; }
-  .fac-stock-bar > .sm-row { gap: 8px; }
-  .fac-stock-bar label { white-space: nowrap; }
+  .fac-range { flex: 1 1 100%; }
+  .fac-range .b2b-input { flex: 1; min-width: 0; font-size: 16px; }
 
   .fac-list { display: block; }
   .fac-item { border-bottom: 1px solid var(--sm-border-light); }
   .fac-item-row { display: flex; align-items: center; gap: 10px; padding: 12px 2px; cursor: pointer; }
   .fac-item-main { flex: 1; min-width: 0; }
-  .fac-item-name { font-size: 15px; font-weight: 700; color: var(--sm-black); }
-  .fac-item-supplier { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--sm-text-light); }
-  .fac-item-sub { margin-top: 3px; font-size: 12px; color: var(--sm-text-mid); overflow-wrap: anywhere; }
-  .fac-item-qty { flex: 0 0 auto; font-size: 17px; font-weight: 800; color: var(--sm-black); font-variant-numeric: tabular-nums; }
-  .fac-item-qty small { font-size: 12px; font-weight: 700; color: var(--sm-text-light); margin-left: 1px; }
+  .fac-item-name { font-size: 16px; font-weight: 700; color: var(--sm-black); }
+  .fac-item-sub { margin-top: 2px; font-size: 12px; color: var(--sm-text-light); overflow-wrap: anywhere; }
+  .fac-item-weights { margin-top: 4px; font-size: 15px; font-weight: 600; color: var(--sm-text-mid); overflow-wrap: anywhere; }
+  .fac-item-qty { flex: 0 0 auto; font-size: 19px; font-weight: 800; color: var(--sm-black); font-variant-numeric: tabular-nums; }
+  .fac-item-qty small { font-size: 12px; font-weight: 700; color: var(--sm-text-light); margin-left: 2px; }
   .fac-item-qty.is-zero { color: var(--sm-text-faint); }
-  .fac-item-actions { display: flex; gap: 8px; padding: 0 2px 12px; }
-  .fac-item-actions button {
-    flex: 1; padding: 9px 0; font-size: 15px; font-weight: 700; font-family: inherit;
-    border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light);
-    color: var(--fac-blue); border-radius: 9px; cursor: pointer;
+  .fac-item-more { padding: 0 2px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .fac-item-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 12px; color: var(--sm-text-light); }
+  .fac-item-facts b { font-size: 15px; font-weight: 700; color: var(--sm-black); margin-left: 4px; }
+  .fac-lot { grid-template-columns: 1fr auto; }
+  .fac-lot > .fac-sub { grid-row: 2; }
+  .fac-detail-btns { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); }
+  .fac-detail-btns > button { padding-left: 0; padding-right: 0; }
+
+  .fac-actbar {
+    display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: #fff; border-top: 1px solid var(--sm-border); box-shadow: 0 -4px 14px rgba(0, 0, 0, .06);
   }
+  .fac-actbar > button { padding-top: 13px; padding-bottom: 13px; font-size: 16px; }
+
+  .fac-hist-item { padding: 12px 2px; border-bottom: 1px solid var(--sm-border-light); display: flex; flex-direction: column; gap: 4px; }
+  .fac-hist-top { display: flex; align-items: center; gap: 8px; }
+  .fac-hist-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+  .fac-hist-qty { font-size: 17px; font-weight: 800; white-space: nowrap; }
+  .fac-hist-qty small { font-size: 12px; font-weight: 700; color: var(--sm-text-light); margin-left: 2px; }
+  .fac-hist-desc { font-size: 15px; color: var(--sm-text-mid); overflow-wrap: anywhere; }
+  .fac-hist-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--sm-text-light); }
+  .fac-hist-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+}
+
+/* 입고·출고·조정 창 — 휴대폰 폭에서는 칸을 세로로 */
+@media (max-width: 768px) {
+  .fac-txn-meta { grid-template-columns: 1fr 1fr; }
+  .fac-txn-meta .fac-txn-memo { grid-column: 1 / -1; }
+  .fac-txn-meta .b2b-input { font-size: 16px; }
+  .fac-line:not(.is-lot) { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; }
+  .fac-f .b2b-input, .fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 100%; min-width: 0; }
+  .fac-kg-chips { grid-column: 1 / -1; }
+  .fac-txn-types { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .fac-txn-types .sm-tab { justify-content: center; }
 }
 
 /* ── 로그인 화면(셸 없음) ───────────────────────────────────────── */

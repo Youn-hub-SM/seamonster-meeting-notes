@@ -1,111 +1,117 @@
-// 파도소리(제조사) 재고 원장 — 공용 타입·상수(클라이언트/서버 공용, DB 코드 없음).
-//  단위는 품목이 아니라 **로트**다. 같은 품명이라도 규격·테잎색·원산지·입고일이 다르면 별도 로트로
-//  관리한다(현재 쓰는 주간 재고장 엑셀의 한 행 = 로트 1개).
+// 파도소리(제조사) 재고 — 공용 타입·상수·표기(클라이언트/서버 공용, DB 코드 없음).
+//  품목 마스터 1행 = SKU 1개. 재고는 박스 원장(factory.stock_txns) 합계이고, 같은 품목 안에서
+//  [제조일자 × 박스 중량] 이 다르면 따로 센다(= 로트). 수량은 박스, 중량은 박스 수 × 박스 중량.
 //  DB 접근은 factory-db.ts(서버 전용). 이 파일에 supabase import 를 넣지 말 것 —
 //  화면이 이 파일을 import 하므로 서비스 키가 번들에 실린다.
 
-// ── 거래 유형 ───────────────────────────────────────────────────────
-// qty 는 부호 있는 수량(입고 +, 출고·생산투입 −, 조정 ±). 유형은 '왜'만 설명한다.
-export const TXN_TYPES = ["입고", "출고", "생산투입", "이동", "조정"] as const;
+export const TXN_TYPES = ["입고", "출고", "조정"] as const;
 export type TxnType = (typeof TXN_TYPES)[number];
 
-// 화면에서 사람이 직접 고르는 출고 유형(이동은 전용 입력, 입고는 로트 등록에서 처리)
-export const OUT_TYPES: TxnType[] = ["출고", "생산투입", "조정"];
+// 히스토리 이벤트 — 기록(입고·출고·조정) + 기록 취소 + 품목 변경(등록·수정·원가·판매가·삭제)
+export type HistKind = TxnType | "취소" | "변경";
 
-// 색 지도(디자인 시스템 §4) — 배지·표는 화면에서 색을 새로 선언하지 말고 여기를 조회한다.
-//  이동은 창고만 바뀌고 총량은 그대로라 중립색이다.
-export const TXN_TYPE_COLOR: Record<TxnType, { bg: string; fg: string }> = {
+// 색 지도(디자인 시스템 §4) — 배지·숫자는 화면에서 색을 새로 선언하지 말고 여기를 조회한다.
+//  씨몬스터 재고(INV_TYPE_COLOR)와 같은 뜻 = 같은 색. 취소·변경은 종결·기록성 이벤트라 중립 회색.
+export const HIST_COLOR: Record<HistKind, { bg: string; fg: string }> = {
   입고: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
   출고: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
-  생산투입: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
-  이동: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },
-  조정: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  조정: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  취소: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },
+  변경: { bg: "var(--sm-bg-subtle)", fg: "var(--sm-text-mid)" },
 };
 
-// 유형별 부호 — 조정만 사용자가 부호를 정한다.
-export function signOf(type: TxnType): number {
-  return type === "입고" ? 1 : type === "조정" ? 0 : -1;
-}
-
-// ── 입력 보조 목록 ──────────────────────────────────────────────────
-// 재고장에 실제로 쓰이는 값들. 자유 입력을 막지는 않되(새 값이 계속 생긴다) 목록에서 고르게 해
-// 표기 흔들림을 줄인다. 특히 원산지는 지금 국·러·원·원양산·극·구가 섞여 있어 집계가 어긋난다.
-export const TAPE_COLORS = ["황", "백", "노", "청", "적", "투명", "녹"] as const;
+// 원산지 입력 보조 — 자유 입력은 막지 않되 목록에서 고르게 해 표기 흔들림(국·국산·국내산)을 줄인다.
 export const ORIGINS = [
   "국산", "러시아", "원양산", "미국", "중국", "대만", "베트남", "인도네시아",
   "브라질", "칠레", "세네갈", "뉴질랜드", "노르웨이",
 ] as const;
 
-// 생산투입의 행선지는 늘 '현장' 하나다 — 입력에서 자동으로 채운다.
-export const SITE_DEST = "현장";
-
 // ── 행 타입 ─────────────────────────────────────────────────────────
-export interface Warehouse {
+export interface FactoryProduct {
   id: string;
+  sku: string;
   name: string;
-  is_own: boolean;
-  sort: number;
-  active: boolean;
-}
-
-// factory.lot_stock 뷰 1행 — 로트 + 현재수량
-export interface LotStock {
-  id: string;
-  warehouse_id: string;
-  warehouse: string;
-  is_own: boolean;
-  item_name: string;
-  spec: string | null;
-  tape_color: string | null;
   origin: string | null;
   note: string | null;
-  supplier: string | null;
-  box_kg: number | null;
-  unit: string;
-  first_in_date: string | null;
-  prod_date: string | null;
-  memo: string | null;
-  origin_lot_id: string | null;
-  qty: number;          // 현재수량 = Σ거래
-  first_qty: number;    // 최초입고수량 = Σ입고
-  last_out_date: string | null;
-  created_at: string;
-  updated_at: string;
-  // 기간 입출고 — lots API 에 from/to 를 주면 서버가 채운다(그 범위 거래의 +합 / −합)
-  period_in?: number;
-  period_out?: number;
+  cost: number | null;
+  price: number | null;
+  stock_tracked: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface LotTxn {
-  id: string;
-  lot_id: string;
-  txn_date: string;
-  type: TxnType;
-  qty: number;          // 부호 있는 수량
-  dest: string | null;
-  move_id: string | null;
-  memo: string | null;
-  created_by: string | null;
-  created_at: string;
+// 로트 = 품목 × 제조일자 × 박스 중량 (factory.stock_lots 뷰 1행)
+export interface StockLot {
+  mfg_date: string | null;
+  box_kg: number;
+  boxes: number;
+  in_boxes: number;
+  out_boxes: number;
+  adj_boxes: number;
+  in_date: string | null;       // 이 로트의 첫 입고일(입고 없이 조정으로 생긴 로트면 첫 기록일)
+  last_in_date: string | null;
 }
 
-// 이력 화면용 — 거래에 로트 정보를 붙인 형태
-export interface LotTxnWithLot extends LotTxn {
-  item_name: string;
-  spec: string | null;
-  tape_color: string | null;
-  origin: string | null;
-  warehouse: string;
+// 재고 화면 1행 — 품목 + 합계 + 로트
+export interface StockRow extends FactoryProduct {
+  boxes: number;                // 현재 수량(박스)
+  kg: number;                   // 현재 중량
+  in_boxes: number; in_kg: number;    // 총 입고(누적)
+  out_boxes: number; out_kg: number;  // 총 출고(누적)
+  adj_boxes: number;            // 조정 합(±)
+  last_in_date: string | null;  // 최신 입고일
+  oldest_in_date: string | null; // 최고령 입고일 = 남은 재고 중 가장 오래된 입고일
+  lots: StockLot[];             // 잔량 있는 로트 먼저, 오래된 순
 }
 
-// 로트 한 줄을 사람이 읽는 이름으로. 품명만으로는 구분이 안 된다(삼치순살이 16로트).
-export function lotLabel(l: Pick<LotStock, "item_name" | "spec" | "tape_color" | "origin">): string {
-  const tail = [l.spec, l.origin, l.tape_color].filter(Boolean).join(" · ");
-  return tail ? `${l.item_name} (${tail})` : l.item_name;
+export interface HistEvent {
+  key: string;
+  kind: HistKind;
+  date: string;                 // 기록 = 거래일, 취소·변경 = 한 날(KST)
+  at: string;                   // 정렬용 시각
+  who: string | null;
+  sku: string | null;
+  name: string | null;
+  // 기록(입고·출고·조정)·취소
+  txn_id?: string;
+  txn_type?: TxnType;
+  mfg_date?: string | null;
+  box_kg?: number;
+  boxes?: number;
+  target?: number | null;       // 조정: 실사 박스 수(직전 = target − boxes)
+  partner?: string | null;
+  memo?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  // 변경
+  field?: string;
+  old_value?: string | null;
+  new_value?: string | null;
 }
 
-// 박스 수 → 중량(kg). 박스중량이 없으면 null(0 이 아니라 '알 수 없음').
-export function toKg(qty: number, boxKg: number | null): number | null {
-  if (boxKg === null || !Number.isFinite(boxKg)) return null;
-  return Math.round(qty * boxKg * 10) / 10;
+// ── 표기 ────────────────────────────────────────────────────────────
+export const kgNum = (n: number) => Math.round(n * 100) / 100;
+export const kgStr = (n: number) => `${kgNum(n).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}kg`;
+export const boxStr = (n: number) => `${n.toLocaleString("ko-KR")}박스`;
+
+// 중량별 박스 — "16kg 3박스 · 10kg 2박스 · 총 68kg" (잔량 있는 로트만, 무거운 순)
+export function weightBreakdown(lots: Pick<StockLot, "box_kg" | "boxes">[]): string {
+  const by = new Map<number, number>();
+  for (const l of lots) if (l.boxes !== 0) by.set(Number(l.box_kg), (by.get(Number(l.box_kg)) || 0) + l.boxes);
+  if (by.size === 0) return "";
+  const parts = [...by.entries()].sort((a, b) => b[0] - a[0]).map(([kg, b]) => `${kgStr(kg)} ${boxStr(b)}`);
+  const total = [...by.entries()].reduce((s, [kg, b]) => s + kg * b, 0);
+  return `${parts.join(" · ")} · 총 ${kgStr(total)}`;
 }
+
+// 로트 이름 — "제조 2026-09-01 · 16kg" (제조일자 없으면 '제조일 미상')
+export function lotLabel(l: { mfg_date: string | null; box_kg: number }): string {
+  return `${l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상"} · ${kgStr(Number(l.box_kg))}`;
+}
+
+// 품목 변경 이력의 필드 이름
+export const FIELD_LABEL: Record<string, string> = {
+  등록: "품목 등록", 삭제: "품목 삭제",
+  sku: "SKU", name: "품목명", origin: "원산지", note: "비고",
+  cost: "제품원가", price: "판매가", stock_tracked: "재고관리",
+};

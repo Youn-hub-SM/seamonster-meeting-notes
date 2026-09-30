@@ -1,527 +1,267 @@
 "use client";
 
-// 파도소리 재고 — 로트 단위 원장(주간 재고장 엑셀의 한 행 = 로트 1개).
-//  현재수량은 저장하지 않고 거래 합계로 나온다 → 주 단위 파일 이월이 없다.
-//  히스토리·생산요청은 별도 메뉴(app/factory/history·requests).
+// 파도소리 재고장 — SKU | 품목 | 원산지 | 최신 입고일 | 최고령 입고일 | 총 입고 | 총 출고 | 현재 수량.
+//  수량은 박스, 중량은 [제조일자 × 박스 중량] 로트별 박스 수 × 박스 중량. 현재 수량은 기록 합계라 직접 고치지 않는다(조정).
+//  PC = 표(행을 누르면 로트가 펼쳐진다), 모바일(≤900px) = 목록 + 하단 입고·출고·조정 버튼.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  OUT_TYPES, TAPE_COLORS, ORIGINS, SITE_DEST, lotLabel, toKg,
-  type LotStock, type TxnType, type Warehouse,
-} from "@/app/lib/factory";
 import { matchKoQuery } from "@/app/lib/hangul";
-import { today, daysAgo, n0 } from "./util";
+import { useEscClose } from "@/app/lib/use-esc";
+import { boxStr, kgStr, lotLabel, weightBreakdown, type StockRow, type TxnType } from "@/app/lib/factory";
+import TxnForm from "./TxnForm";
 
-type Suggest = { item_names: string[]; specs: string[]; suppliers: string[]; notes: string[]; dests: string[] };
-
-// 씨몬스터 재고 목록(/inventory)과 같은 구성 — 통계카드 → 필터줄(창고탭·기간탭·날짜지정 | 검색) → 정렬 표.
-const PERIODS = [["7일", 7], ["14일", 14], ["30일", 30], ["지정", 0]] as const;
-type PMode = (typeof PERIODS)[number][0];
-
-type SortKey = "item_name" | "warehouse" | "qty" | "box_kg" | "period_in" | "period_out" | "first_in_date";
+type SortKey = "sku" | "name" | "origin" | "last_in_date" | "oldest_in_date" | "in_boxes" | "out_boxes" | "boxes";
+const COLS: { key: SortKey; label: string; num?: boolean }[] = [
+  { key: "sku", label: "SKU" }, { key: "name", label: "품목" }, { key: "origin", label: "원산지" },
+  { key: "last_in_date", label: "최신 입고일" }, { key: "oldest_in_date", label: "최고령 입고일" },
+  { key: "in_boxes", label: "총 입고", num: true }, { key: "out_boxes", label: "총 출고", num: true },
+  { key: "boxes", label: "현재 수량", num: true },
+];
+const won = (n: number | null) => (n == null ? "-" : `${n.toLocaleString("ko-KR")}원`);
 
 export default function FactoryStockPage() {
+  const [rows, setRows] = useState<StockRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [suggest, setSuggest] = useState<Suggest>({ item_names: [], specs: [], suppliers: [], notes: [], dests: [] });
-
-  const [lots, setLots] = useState<LotStock[]>([]);
-  const [whSel, setWhSel] = useState<Set<string>>(new Set()); // 체크된 창고 id — 비어 있으면 전체
-  const [whOpen, setWhOpen] = useState(false);
+  const [notice, setNotice] = useState("");
   const [kw, setKw] = useState("");
   const [showEmpty, setShowEmpty] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [pmode, setPmode] = useState<PMode>("7일");
-  const [cfrom, setCfrom] = useState(daysAgo(6));
-  const [cto, setCto] = useState(today());
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "item_name", dir: "asc" });
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [form, setForm] = useState<{ type: TxnType; productId?: string } | null>(null);
+  const [priceFor, setPriceFor] = useState<StockRow | null>(null);
 
-  const [lotForm, setLotForm] = useState<LotStock | "new" | null>(null);
-  const [txnFor, setTxnFor] = useState<LotStock | null>(null);
-  const [moveFor, setMoveFor] = useState<LotStock | null>(null);
-  const [openLot, setOpenLot] = useState<string | null>(null); // 모바일 목록에서 펼친 줄
-
-  const range = useMemo(() => {
-    if (pmode === "지정") return { from: cfrom, to: cto };
-    const days = (PERIODS.find((p) => p[0] === pmode)?.[1] as number) || 7;
-    return { from: daysAgo(days - 1), to: today() };
-  }, [pmode, cfrom, cto]);
-
-  // 서버 조회는 기간·소진 여부가 바뀔 때만. 창고 탭·검색은 클라이언트 필터(315로트 수준 — 왕복 없음).
-  const loadLots = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const p = new URLSearchParams({ from: range.from, to: range.to });
-      if (showEmpty) p.set("empty", "1");
-      const j = await (await fetch(`/api/factory/lots?${p}`, { cache: "no-store" })).json();
+      const j = await (await fetch("/api/factory/stock", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
-      setLots(j.rows || []);
+      setRows(j.rows || []);
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
-  }, [showEmpty, range.from, range.to]);
-  useEffect(() => { loadLots(); }, [loadLots]);
-
-  useEffect(() => {
-    fetch("/api/factory/warehouses", { cache: "no-store" }).then((r) => r.json())
-      .then((j) => { if (j.ok) setWarehouses(j.rows || []); }).catch(() => {});
-    fetch("/api/factory/suggest", { cache: "no-store" }).then((r) => r.json())
-      .then((j) => { if (j.ok) setSuggest(j); }).catch(() => {});
   }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const shown = useMemo(() => {
+  const list = useMemo(() => {
     const q = kw.trim();
-    const f = lots.filter((l) => {
-      if (whSel.size > 0 && !whSel.has(l.warehouse_id)) return false;
-      // 초성·다단어 검색(재고 목록과 동일한 matchKoQuery) — "ㄱㅇㄹ 국" → 가오리+국산
-      if (q && !matchKoQuery(`${l.item_name} ${l.spec || ""} ${l.supplier || ""} ${l.note || ""} ${l.origin || ""} ${l.warehouse}`, q)) return false;
-      return true;
+    const out = rows
+      .filter((r) => showEmpty || r.boxes !== 0)
+      .filter((r) => !q || matchKoQuery(`${r.name} ${r.sku} ${r.origin || ""} ${r.note || ""}`, q));
+    const v = (r: StockRow) => r[sort.key];
+    return out.sort((a, b) => {
+      const x = v(a), y = v(b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return (typeof x === "number" ? x - (y as number) : String(x).localeCompare(String(y), "ko")) * sort.dir;
     });
-    const { key, dir } = sort;
-    const mul = dir === "asc" ? 1 : -1;
-    const val = (l: LotStock): string | number => {
-      switch (key) {
-        case "item_name": return l.item_name;
-        case "warehouse": return l.warehouse;
-        case "first_in_date": return l.first_in_date || "";
-        case "box_kg": return l.box_kg ?? -1;
-        case "period_in": return n0(l.period_in);
-        case "period_out": return n0(l.period_out);
-        default: return n0(l.qty);
-      }
-    };
-    return [...f].sort((a, b) => {
-      const va = val(a), vb = val(b);
-      if (typeof va === "string" || typeof vb === "string") {
-        const c = String(va).localeCompare(String(vb), "ko") * mul;
-        // 같은 품명끼리는 입고일 오름차순 유지(주간 재고장의 정렬 관행)
-        return c !== 0 ? c : String(a.first_in_date || "").localeCompare(String(b.first_in_date || ""));
-      }
-      return (va - vb) * mul;
-    });
-  }, [lots, whSel, kw, sort]);
+  }, [rows, kw, showEmpty, sort]);
 
-  const toggleWh = (id: string) => setWhSel((s) => {
-    const n = new Set(s);
-    if (n.has(id)) n.delete(id); else n.add(id);
-    return n;
-  });
-  const whLabel = useMemo(() => {
-    if (whSel.size === 0) return "창고: 전체";
-    const names = warehouses.filter((w) => whSel.has(w.id)).map((w) => w.name);
-    return names.length === 1 ? `창고: ${names[0]}` : `창고: ${names[0]} 외 ${names.length - 1}`;
-  }, [whSel, warehouses]);
+  const total = useMemo(() => {
+    return { boxes: rows.reduce((s, r) => s + r.boxes, 0), kg: rows.reduce((s, r) => s + r.kg, 0) };
+  }, [rows]);
 
-  const totals = useMemo(() => ({
-    lots: shown.length,
-    boxes: shown.reduce((s, l) => s + n0(l.qty), 0),
-    kg: shown.reduce((s, l) => s + (toKg(n0(l.qty), l.box_kg) ?? 0), 0),
-    pin: shown.reduce((s, l) => s + n0(l.period_in), 0),
-    pout: shown.reduce((s, l) => s + n0(l.period_out), 0),
-  }), [shown]);
+  const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: 1 }));
+  const openForm = (type: TxnType, productId?: string) => { setNotice(""); setForm({ type, productId }); };
 
-  function toggleSort(key: SortKey) {
-    setSort((s) => (s.key === key
-      ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
-      : { key, dir: key === "item_name" || key === "warehouse" ? "asc" : "desc" }));
-  }
-  const Th = ({ k, label, num }: { k: SortKey; label: string; num?: boolean }) => (
-    <th className={num ? "num" : undefined} onClick={() => toggleSort(k)}
-      style={{ cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }} title="클릭하여 정렬">
-      {label}
-      <span style={{ marginLeft: 3, color: sort.key === k ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 12 }}>
-        {sort.key === k ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}
-      </span>
-    </th>
+  // 로트·가격·버튼 — PC 펼침 행과 모바일 펼침이 같이 쓴다
+  const detail = (r: StockRow) => (
+    <div className="fac-detail">
+      {r.lots.length === 0 ? <div className="fac-sub">기록이 없습니다.</div> : (
+        <div className="fac-lots">
+          {r.lots.filter((l) => l.boxes !== 0 || open.has(`${r.id}:all`)).map((l) => (
+            <div key={`${l.mfg_date}|${l.box_kg}`} className={`fac-lot ${l.boxes === 0 ? "is-zero" : ""}`}>
+              <span className="fac-lot-name">{lotLabel(l)}</span>
+              <span className="fac-sub">{l.in_date ? `입고 ${l.in_date}` : ""}{l.adj_boxes ? ` · 조정 ${l.adj_boxes > 0 ? "+" : ""}${l.adj_boxes}` : ""}</span>
+              <span className="fac-lot-qty">{boxStr(l.boxes)}<small>{kgStr(l.boxes * l.box_kg)}</small></span>
+            </div>
+          ))}
+          {r.lots.some((l) => l.boxes === 0) && (
+            <button type="button" className="b2b-link-btn fac-lot-more" onClick={() => toggle(`${r.id}:all`)}>
+              {open.has(`${r.id}:all`) ? "소진 로트 접기" : `소진 로트 ${r.lots.filter((l) => l.boxes === 0).length}개 보기`}
+            </button>
+          )}
+        </div>
+      )}
+      <div className="fac-detail-foot">
+        <span className="fac-sub">
+          원가 {won(r.cost)} · 판매가 {won(r.price)}{r.note ? ` · ${r.note}` : ""}
+        </span>
+        <div className="fac-detail-btns">
+          <button type="button" className="b2b-btn-secondary" onClick={() => openForm("입고", r.id)}>입고</button>
+          <button type="button" className="b2b-btn-secondary" onClick={() => openForm("출고", r.id)} disabled={r.boxes <= 0}>출고</button>
+          <button type="button" className="b2b-btn-secondary" onClick={() => openForm("조정", r.id)}>조정</button>
+          <button type="button" className="b2b-btn-secondary" onClick={() => setPriceFor(r)}>가격 수정</button>
+        </div>
+      </div>
+    </div>
   );
 
   return (
-    <div className="b2b-container">
+    <div className="b2b-container fac-stock">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">재고</h1></div>
-        <div className="b2b-page-actions">
-          <button className="b2b-btn-secondary" onClick={loadLots} disabled={loading}>새로고침</button>
-          <button className="b2b-btn-primary" onClick={() => setLotForm("new")}>+ 입고 등록</button>
+        <div>
+          <h1 className="b2b-page-title">재고</h1>
+          <p className="b2b-page-subtitle">총 {boxStr(total.boxes)} · {kgStr(total.kg)}</p>
+        </div>
+        <div className="b2b-page-actions fac-head-actions">
+          <button className="b2b-btn-primary" onClick={() => openForm("입고")}>입고</button>
+          <button className="b2b-btn-secondary" onClick={() => openForm("출고")}>출고</button>
+          <button className="b2b-btn-secondary" onClick={() => openForm("조정")}>조정</button>
         </div>
       </header>
 
-      {error && (
-        <div className="b2b-error">
-          {error}
-          {/schema|relation|lot_stock|factory|permission/i.test(error)
-            ? " — supabase/migrations/factory/001_factory_init.sql 적용과 Exposed schemas 에 factory 추가가 필요합니다."
-            : ""}
-        </div>
-      )}
+      {error && <div className="b2b-error">{error}</div>}
+      {notice && <div className="sm-success">{notice}</div>}
 
-      {/* 모바일 전용 검색 — 목록 위 상단 고정(데스크톱에선 숨김, 필터줄 우측 검색이 대신) */}
-      <input className="b2b-input fac-search-mobile" placeholder="제품 검색 — 초성 가능 (예: ㄱㅇㄹ 국)" value={kw}
-        onChange={(e) => setKw(e.target.value)} />
-
-      {/* 데이터박스 — 창고탭·검색을 따라간다(보이는 로트 기준) */}
-      <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">로트</div><div className="b2b-stat-card-value">{totals.lots}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 재고(박스)</div><div className="b2b-stat-card-value b2b-money">{totals.boxes.toLocaleString()}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 중량(kg)</div><div className="b2b-stat-card-value b2b-money">{Math.round(totals.kg).toLocaleString()}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">기간 입고</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-success)" }}>{totals.pin.toLocaleString()}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">기간 출고</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-info)" }}>{totals.pout.toLocaleString()}</div></div>
+      <div className="fac-toolbar">
+        <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(e.target.value)} placeholder="품목·SKU·원산지 검색 (초성 가능)" />
+        <label className="fac-check">
+          <input type="checkbox" className="b2b-checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} />
+          재고 없는 품목 포함
+        </label>
       </div>
 
-      <div className="sm-between fac-stock-bar" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
-        <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          {/* 창고 필터 — 드롭다운 + 체크박스 다중 선택(비면 전체) */}
-          <div className="fac-wh-dd">
-            <button type="button" className="b2b-input fac-wh-btn" onClick={() => setWhOpen((v) => !v)} aria-expanded={whOpen}>
-              {whLabel} <span className="fac-wh-caret">▼</span>
-            </button>
-            {whOpen && (
-              <>
-                <div className="fac-dd-backdrop" onClick={() => setWhOpen(false)} />
-                <div className="fac-wh-panel">
-                  <button type="button" className="fac-wh-reset" onClick={() => { setWhSel(new Set()); setWhOpen(false); }}>전체 창고 보기</button>
-                  {warehouses.map((w) => (
-                    <label key={w.id} className="fac-wh-opt">
-                      <input type="checkbox" className="b2b-checkbox" checked={whSel.has(w.id)} onChange={() => toggleWh(w.id)} />
-                      {w.name}{w.is_own ? " (내부)" : ""}
-                    </label>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-          <div className="sm-tabs fac-stock-periods" style={{ margin: 0 }}>
-            {PERIODS.map(([k]) => (
-              <button key={k} className={`sm-tab ${pmode === k ? "is-active" : ""}`} onClick={() => setPmode(k)}>{k === "지정" ? "날짜 지정" : k}</button>
-            ))}
-          </div>
-          {pmode === "지정" && (
-            <span className="sm-row fac-stock-periods" style={{ gap: 6 }}>
-              <input type="date" className="b2b-input" value={cfrom} max={cto} onChange={(e) => setCfrom(e.target.value)} style={{ width: "auto" }} />
-              <span className="sm-faint">~</span>
-              <input type="date" className="b2b-input" value={cto} min={cfrom} max={today()} onChange={(e) => setCto(e.target.value)} style={{ width: "auto" }} />
-            </span>
-          )}
-          {/* .b2b-checkbox 는 input 전용 클래스(18px 정사각) — label 에 붙이면 라벨 폭이 18px 가 돼 글자가 세로로 쏟아진다 */}
-          <label className="sm-row" style={{ gap: 6, alignItems: "center", cursor: "pointer", fontSize: 15, color: "var(--sm-text-mid)" }}>
-            <input type="checkbox" className="b2b-checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} />
-            소진 로트 포함
-          </label>
-        </div>
-        <input className="b2b-input fac-search-desktop" placeholder="품명·규격·매입처 — 초성 가능 (예: ㄱㅇㄹ 국)" value={kw}
-          onChange={(e) => setKw(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
-      </div>
-
-      <p className="sm-faint fac-stock-meta" style={{ fontSize: 12, marginBottom: 8 }}>기간 {range.from} ~ {range.to} · 기간 입고·출고 = 이 범위 거래의 합(이동 포함)</p>
-
-      {loading ? <div className="b2b-loading">불러오는 중...</div> : shown.length === 0 ? (
-        <div className="b2b-empty">재고가 없습니다.</div>
+      {loading ? <div className="b2b-loading">불러오는 중...</div> : list.length === 0 ? (
+        <div className="b2b-empty">{rows.length === 0 ? "등록된 품목이 없습니다." : "조건에 맞는 품목이 없습니다."}</div>
       ) : (
         <>
-        {/* 모바일(≤900px) 목록 — 이름/수량 + 작은 특징줄. 줄을 누르면 출고·이동·수정이 펼쳐진다 */}
-        <div className="fac-list">
-          {shown.map((l) => (
-            <div key={l.id} className="fac-item">
-              <div className="fac-item-row" onClick={() => setOpenLot(openLot === l.id ? null : l.id)}>
-                <div className="fac-item-main">
-                  <div className="fac-item-name">
-                    {l.item_name}
-                    {l.supplier ? <span className="fac-item-supplier">{l.supplier}</span> : null}
-                  </div>
-                  <div className="fac-item-sub">
-                    {[l.spec, l.tape_color, l.origin, l.warehouse, (l.first_in_date || "").slice(2, 10).replace(/-/g, ".")].filter(Boolean).join(" · ")}
-                  </div>
-                </div>
-                <div className={`fac-item-qty ${n0(l.qty) <= 0 ? "is-zero" : ""}`}>
-                  {n0(l.qty).toLocaleString()}<small>{l.unit}</small>
-                </div>
-              </div>
-              {openLot === l.id && (
-                <div className="fac-item-actions">
-                  <button onClick={() => setTxnFor(l)}>출고</button>
-                  <button onClick={() => setMoveFor(l)}>이동</button>
-                  <button onClick={() => setLotForm(l)}>수정</button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+          {/* PC 표 */}
+          <div className="b2b-table-wrap fac-stock-table">
+            <table className="b2b-table">
+              <thead><tr>
+                {COLS.map((c) => (
+                  <th key={c.key} className={`fac-th-sort ${c.num ? "num" : ""}`} onClick={() => sortBy(c.key)}>
+                    {c.label}{sort.key === c.key ? (sort.dir === 1 ? " ▲" : " ▼") : ""}
+                  </th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <FragmentRow key={r.id} r={r} opened={open.has(r.id)} onToggle={() => toggle(r.id)} detail={detail} />
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-        <div className="b2b-table-wrap fac-stock-table">
-          <table className="b2b-table">
-            <thead><tr>
-              <Th k="item_name" label="품명" />
-              <th>규격</th><th>테잎색</th><th>원산지</th>
-              <Th k="warehouse" label="창고" />
-              <Th k="qty" label="현재수량" num />
-              <Th k="box_kg" label="중량" num />
-              <Th k="period_in" label="기간입고" num />
-              <Th k="period_out" label="기간출고" num />
-              <Th k="first_in_date" label="최초입고일" />
-              <th></th>
-            </tr></thead>
-            <tbody>
-              {shown.map((l) => (
-                <tr key={l.id}>
-                  <td data-label="품명"><strong>{l.item_name}</strong>{l.supplier ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{l.supplier}</span> : null}</td>
-                  <td data-label="규격" className="sm-faint">{l.spec || "-"}</td>
-                  <td data-label="테잎색">{l.tape_color || "-"}</td>
-                  <td data-label="원산지">{l.origin || "-"}</td>
-                  <td data-label="창고">{l.warehouse}</td>
-                  <td data-label="현재수량" className="num b2b-money" style={{ fontWeight: 700 }}>
-                    {n0(l.qty).toLocaleString()}{l.unit}
-                  </td>
-                  <td data-label="중량" className="num b2b-money sm-faint">{l.box_kg ? `${l.box_kg}kg` : "-"}</td>
-                  <td data-label="기간입고" className={`num b2b-money ${n0(l.period_in) === 0 ? "sm-faint" : ""}`}>{n0(l.period_in).toLocaleString()}</td>
-                  <td data-label="기간출고" className={`num b2b-money ${n0(l.period_out) === 0 ? "sm-faint" : ""}`}>{n0(l.period_out).toLocaleString()}</td>
-                  <td data-label="최초입고일" style={{ whiteSpace: "nowrap" }}>{(l.first_in_date || "").slice(0, 10) || "-"}</td>
-                  <td>
-                    <button className="b2b-link-btn" onClick={() => setTxnFor(l)}>출고</button>
-                    <button className="b2b-link-btn" onClick={() => setMoveFor(l)}>이동</button>
-                    <button className="b2b-link-btn" onClick={() => setLotForm(l)}>수정</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {/* 모바일 목록 */}
+          <div className="fac-list">
+            {list.map((r) => (
+              <div key={r.id} className={`fac-item ${open.has(r.id) ? "is-open" : ""}`}>
+                <div className="fac-item-row" onClick={() => toggle(r.id)}>
+                  <div className="fac-item-main">
+                    <div className="fac-item-name">{r.name}</div>
+                    <div className="fac-item-sub">{[r.sku, r.origin].filter(Boolean).join(" · ")}</div>
+                    {r.boxes !== 0 && <div className="fac-item-weights">{weightBreakdown(r.lots)}</div>}
+                  </div>
+                  <div className={`fac-item-qty ${r.boxes === 0 ? "is-zero" : ""}`}>
+                    {r.boxes.toLocaleString()}<small>박스</small>
+                  </div>
+                </div>
+                {open.has(r.id) && (
+                  <div className="fac-item-more">
+                    <div className="fac-item-facts">
+                      <span>최신 입고 <b>{r.last_in_date || "-"}</b></span>
+                      <span>최고령 입고 <b>{r.oldest_in_date || "-"}</b></span>
+                      <span>총 입고 <b>{boxStr(r.in_boxes)}</b></span>
+                      <span>총 출고 <b>{boxStr(r.out_boxes)}</b></span>
+                    </div>
+                    {detail(r)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </>
       )}
 
-      {lotForm && (
-        <LotModal lot={lotForm === "new" ? null : lotForm} warehouses={warehouses}
-          onClose={() => setLotForm(null)} onDone={() => { setLotForm(null); loadLots(); }} onError={setError} />
-      )}
-      {txnFor && (
-        <TxnModal lot={txnFor}
-          onClose={() => setTxnFor(null)} onDone={() => { setTxnFor(null); loadLots(); }} onError={setError} />
-      )}
-      {moveFor && (
-        <MoveModal lot={moveFor} warehouses={warehouses}
-          onClose={() => setMoveFor(null)} onDone={() => { setMoveFor(null); loadLots(); }} onError={setError} />
-      )}
-
-      <datalist id="fac-items">{suggest.item_names.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="fac-specs">{suggest.specs.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="fac-suppliers">{suggest.suppliers.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="fac-notes">{suggest.notes.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="fac-dests">{suggest.dests.map((v) => <option key={v} value={v} />)}</datalist>
-    </div>
-  );
-}
-
-// ── 입고 등록 / 로트 수정 ───────────────────────────────────────────
-function LotModal({ lot, warehouses, onClose, onDone, onError }: {
-  lot: LotStock | null; warehouses: Warehouse[];
-  onClose: () => void; onDone: () => void; onError: (m: string) => void;
-}) {
-  const editing = !!lot;
-  const [f, setF] = useState({
-    warehouse_id: lot?.warehouse_id || warehouses.find((w) => w.is_own)?.id || "",
-    item_name: lot?.item_name || "",
-    spec: lot?.spec || "",
-    tape_color: lot?.tape_color || "",
-    origin: lot?.origin || "",
-    note: lot?.note || "",
-    supplier: lot?.supplier || "",
-    box_kg: lot?.box_kg === null || lot?.box_kg === undefined ? "" : String(lot.box_kg),
-    first_in_date: (lot?.first_in_date || today()).slice(0, 10),
-    prod_date: (lot?.prod_date || "").slice(0, 10),
-    memo: lot?.memo || "",
-    qty: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k: keyof typeof f, v: string) => setF((s) => ({ ...s, [k]: v }));
-
-  async function save() {
-    setSaving(true);
-    const body: Record<string, unknown> = { ...f, box_kg: f.box_kg === "" ? null : Number(f.box_kg) };
-    if (editing) delete body.qty; else body.qty = Number(f.qty);
-    const url = editing ? `/api/factory/lots/${lot!.id}` : "/api/factory/lots";
-    const j = await (await fetch(url, {
-      method: editing ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })).json();
-    setSaving(false);
-    if (!j.ok) onError(j.error || "저장 실패"); else onDone();
-  }
-
-  return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head">
-          <span className="b2b-modal-title">{editing ? "로트 수정" : "입고 등록"}</span>
-          <button className="b2b-modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="b2b-modal-body">
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">창고</span>
-              <select className="b2b-input" value={f.warehouse_id} onChange={(e) => set("warehouse_id", e.target.value)}>
-                {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select></label>
-            <label className="b2b-field"><span className="b2b-field-label">품명</span>
-              <input className="b2b-input" list="fac-items" value={f.item_name} onChange={(e) => set("item_name", e.target.value)} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">규격</span>
-              <input className="b2b-input" list="fac-specs" value={f.spec} onChange={(e) => set("spec", e.target.value)} /></label>
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">테잎색</span>
-              <select className="b2b-input" value={f.tape_color} onChange={(e) => set("tape_color", e.target.value)}>
-                <option value="">-</option>
-                {TAPE_COLORS.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select></label>
-            <label className="b2b-field"><span className="b2b-field-label">원산지</span>
-              <select className="b2b-input" value={f.origin} onChange={(e) => set("origin", e.target.value)}>
-                <option value="">-</option>
-                {ORIGINS.map((c) => <option key={c} value={c}>{c}</option>)}
-                {f.origin && !ORIGINS.includes(f.origin as (typeof ORIGINS)[number]) && <option value={f.origin}>{f.origin}</option>}
-              </select></label>
-            <label className="b2b-field"><span className="b2b-field-label">매입처</span>
-              <input className="b2b-input" list="fac-suppliers" value={f.supplier} onChange={(e) => set("supplier", e.target.value)} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">박스중량(kg)</span>
-              <input type="number" step="any" className="b2b-input" value={f.box_kg} onChange={(e) => set("box_kg", e.target.value)} /></label>
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">적요</span>
-              <input className="b2b-input" list="fac-notes" value={f.note} onChange={(e) => set("note", e.target.value)} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">최초입고일</span>
-              <input type="date" className="b2b-input" value={f.first_in_date} onChange={(e) => set("first_in_date", e.target.value)} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">생산일</span>
-              <input type="date" className="b2b-input" value={f.prod_date} onChange={(e) => set("prod_date", e.target.value)} /></label>
-            {!editing && (
-              <label className="b2b-field"><span className="b2b-field-label">입고수량(박스)</span>
-                <input type="number" step="any" className="b2b-input" value={f.qty} onChange={(e) => set("qty", e.target.value)} /></label>
-            )}
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field" style={{ flex: 1 }}><span className="b2b-field-label">메모</span>
-              <input className="b2b-input" value={f.memo} onChange={(e) => set("memo", e.target.value)} /></label>
-          </div>
-        </div>
-        <div className="b2b-modal-foot b2b-modal-foot-right">
-          <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>
-          <button className="b2b-btn-primary" onClick={save} disabled={saving}>{editing ? "수정" : "등록"}</button>
-        </div>
+      {/* 모바일 하단 고정 버튼 */}
+      <div className="fac-actbar">
+        <button className="b2b-btn-primary" onClick={() => openForm("입고")}>입고</button>
+        <button className="b2b-btn-secondary" onClick={() => openForm("출고")}>출고</button>
+        <button className="b2b-btn-secondary" onClick={() => openForm("조정")}>조정</button>
       </div>
+
+      {form && (
+        <TxnForm rows={rows} initialType={form.type} initialProductId={form.productId}
+          onClose={() => setForm(null)}
+          onSaved={(msg) => { setForm(null); setNotice(msg); load(); }} />
+      )}
+      {priceFor && (
+        <PriceModal product={priceFor} onClose={() => setPriceFor(null)}
+          onSaved={() => { setPriceFor(null); setNotice("가격을 바꿨습니다."); load(); }} />
+      )}
     </div>
   );
 }
 
-// ── 출고 / 생산투입 / 조정 ──────────────────────────────────────────
-function TxnModal({ lot, onClose, onDone, onError }: {
-  lot: LotStock; onClose: () => void; onDone: () => void; onError: (m: string) => void;
-}) {
-  const [type, setType] = useState<TxnType>("출고");
-  const [qty, setQty] = useState("");
-  const [dest, setDest] = useState("");
-  const [date, setDate] = useState(today());
-  const [memo, setMemo] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    setSaving(true);
-    const j = await (await fetch("/api/factory/txns", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lot_id: lot.id, type, qty: Number(qty), dest, txn_date: date, memo }),
-    })).json();
-    setSaving(false);
-    if (!j.ok) onError(j.error || "저장 실패"); else onDone();
-  }
-
+function FragmentRow({ r, opened, onToggle, detail }: { r: StockRow; opened: boolean; onToggle: () => void; detail: (r: StockRow) => React.ReactNode }) {
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head">
-          <span className="b2b-modal-title">출고 · 생산투입</span>
-          <button className="b2b-modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="b2b-modal-body">
-          <p style={{ marginBottom: 12 }}>
-            <strong>{lotLabel(lot)}</strong>
-            <span className="sm-faint" style={{ marginLeft: 8 }}>{lot.warehouse} · 현재 {n0(lot.qty).toLocaleString()}{lot.unit}</span>
-          </p>
-          <div className="sm-tabs" style={{ marginBottom: 12 }}>
-            {OUT_TYPES.map((t) => (
-              <button key={t} className={`sm-tab ${type === t ? "is-active" : ""}`} onClick={() => setType(t)}>{t}</button>
-            ))}
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">날짜</span>
-              <input type="date" className="b2b-input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label className="b2b-field">
-              <span className="b2b-field-label">{type === "조정" ? "조정수량(±)" : "수량(박스)"}</span>
-              <input type="number" step="any" className="b2b-input" value={qty} onChange={(e) => setQty(e.target.value)} /></label>
-            {type === "출고" && (
-              <label className="b2b-field"><span className="b2b-field-label">행선지</span>
-                <input className="b2b-input" list="fac-dests" value={dest} onChange={(e) => setDest(e.target.value)} /></label>
-            )}
-          </div>
-          {type === "생산투입" && <p className="sm-faint" style={{ fontSize: 12 }}>행선지는 {SITE_DEST}으로 기록됩니다.</p>}
-          {type === "조정" && <p className="sm-faint" style={{ fontSize: 12 }}>줄이려면 음수로 넣습니다.</p>}
-          <div className="b2b-field-row">
-            <label className="b2b-field" style={{ flex: 1 }}><span className="b2b-field-label">메모</span>
-              <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
-          </div>
-        </div>
-        <div className="b2b-modal-foot b2b-modal-foot-right">
-          <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>
-          <button className="b2b-btn-primary" onClick={save} disabled={saving}>기록</button>
-        </div>
-      </div>
-    </div>
+    <>
+      <tr className={`fac-row ${opened ? "is-open" : ""}`} onClick={onToggle}>
+        <td className="fac-sku">{r.sku}</td>
+        <td><strong>{r.name}</strong></td>
+        <td>{r.origin || "-"}</td>
+        <td className="sm-nowrap">{r.last_in_date || "-"}</td>
+        <td className="sm-nowrap">{r.oldest_in_date || "-"}</td>
+        <td className="num">{boxStr(r.in_boxes)}<div className="fac-sub">{kgStr(r.in_kg)}</div></td>
+        <td className="num">{boxStr(r.out_boxes)}<div className="fac-sub">{kgStr(r.out_kg)}</div></td>
+        <td className="num">
+          <strong className={r.boxes === 0 ? "fac-zero" : ""}>{boxStr(r.boxes)}</strong>
+          {r.boxes !== 0 && <div className="fac-sub">{weightBreakdown(r.lots)}</div>}
+        </td>
+      </tr>
+      {opened && (
+        <tr className="fac-row-detail"><td colSpan={8}>{detail(r)}</td></tr>
+      )}
+    </>
   );
 }
 
-// ── 창고 이동 ───────────────────────────────────────────────────────
-function MoveModal({ lot, warehouses, onClose, onDone, onError }: {
-  lot: LotStock; warehouses: Warehouse[]; onClose: () => void; onDone: () => void; onError: (m: string) => void;
-}) {
-  const targets = warehouses.filter((w) => w.id !== lot.warehouse_id);
-  const [toId, setToId] = useState(targets.find((w) => w.is_own)?.id || targets[0]?.id || "");
-  const [qty, setQty] = useState("");
-  const [date, setDate] = useState(today());
-  const [memo, setMemo] = useState("");
+// 제품원가·판매가 — 모든 계정이 바꿀 수 있고 히스토리에 남는다
+function PriceModal({ product, onClose, onSaved }: { product: StockRow; onClose: () => void; onSaved: () => void }) {
+  const [cost, setCost] = useState(product.cost == null ? "" : String(product.cost));
+  const [price, setPrice] = useState(product.price == null ? "" : String(product.price));
   const [saving, setSaving] = useState(false);
-
+  const [error, setError] = useState("");
+  useEscClose(onClose, saving);
   async function save() {
-    setSaving(true);
-    const j = await (await fetch("/api/factory/move", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lot_id: lot.id, to_warehouse_id: toId, qty: Number(qty), txn_date: date, memo }),
-    })).json();
+    setSaving(true); setError("");
+    try {
+      const res = await fetch(`/api/factory/products/${product.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cost, price }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      onSaved();
+    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
-    if (!j.ok) onError(j.error || "이동 실패"); else onDone();
   }
-
   return (
-    <div className="b2b-modal-backdrop" onClick={onClose}>
-      <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="b2b-modal-backdrop">
+      <div className="b2b-modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
-          <span className="b2b-modal-title">창고 이동</span>
-          <button className="b2b-modal-close" onClick={onClose}>×</button>
+          <span className="b2b-modal-title">가격 수정 · {product.name}</span>
+          <button className="b2b-modal-close" onClick={onClose} aria-label="닫기">✕</button>
         </div>
         <div className="b2b-modal-body">
-          <p style={{ marginBottom: 12 }}>
-            <strong>{lotLabel(lot)}</strong>
-            <span className="sm-faint" style={{ marginLeft: 8 }}>{lot.warehouse} · 현재 {n0(lot.qty).toLocaleString()}{lot.unit}</span>
-          </p>
-          <div className="b2b-field-row">
-            <label className="b2b-field"><span className="b2b-field-label">받을 창고</span>
-              <select className="b2b-input" value={toId} onChange={(e) => setToId(e.target.value)}>
-                {targets.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select></label>
-            <label className="b2b-field"><span className="b2b-field-label">날짜</span>
-              <input type="date" className="b2b-input" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">수량(박스)</span>
-              <input type="number" step="any" className="b2b-input" value={qty} onChange={(e) => setQty(e.target.value)} /></label>
-          </div>
-          <div className="b2b-field-row">
-            <label className="b2b-field" style={{ flex: 1 }}><span className="b2b-field-label">메모</span>
-              <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
-          </div>
+          <label className="b2b-field">
+            <span className="b2b-field-label">제품원가(원)</span>
+            <input className="b2b-input" type="number" inputMode="numeric" min={0} value={cost} onChange={(e) => setCost(e.target.value)} />
+          </label>
+          <label className="b2b-field">
+            <span className="b2b-field-label">판매가(원)</span>
+            <input className="b2b-input" type="number" inputMode="numeric" min={0} value={price} onChange={(e) => setPrice(e.target.value)} />
+          </label>
+          <div className="fac-sub">변경 내용은 히스토리에 남습니다.</div>
+          {error && <div className="b2b-error">{error}</div>}
         </div>
-        <div className="b2b-modal-foot b2b-modal-foot-right">
-          <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>
-          <button className="b2b-btn-primary" onClick={save} disabled={saving}>이동</button>
+        <div className="b2b-modal-foot">
+          <div className="b2b-modal-foot-right">
+            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>닫기</button>
+            <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+          </div>
         </div>
       </div>
     </div>
