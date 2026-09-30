@@ -14,7 +14,8 @@
 -- ■ 옛 테이블(warehouses·lots·lot_txns·lot_stock, 004 백업)은 지우지 않고 그대로 둔다 — 새 화면은 읽지 않는다.
 -- ■ factory 스키마 밖(public)은 건드리지 않는다(CLAUDE.md §3a).
 --
--- 적용: Supabase Dashboard > SQL Editor 에 붙여넣고 Run. 멱등 — 재실행 안전.
+-- 적용: 이 파일의 **내용 전체**를 Supabase Dashboard > SQL Editor 새 쿼리 창에 붙여넣고 Run(선택 영역 없이).
+--       멱등 — 재실행 안전. 성공하면 결과 창에 'Success. No rows returned'.
 
 -- ── 품목 마스터 ─────────────────────────────────────────────────────
 create table if not exists factory.products (
@@ -106,8 +107,8 @@ begin
   return new;
 end;
 $$;
-drop trigger if exists factory_products_log on factory.products;
-create trigger factory_products_log after insert or update on factory.products
+-- create or replace trigger(PG14+) — 재실행 안전. drop 문을 쓰지 않는다(SQL Editor 가 '파괴적 작업' 확인 창을 띄운다).
+create or replace trigger factory_products_log after insert or update on factory.products
   for each row execute function factory.log_product_change();
 
 -- ── 로트 잔량 뷰 — 품목 × 제조일자 × 박스 중량 ─────────────────────
@@ -246,6 +247,7 @@ set search_path = factory, pg_temp
 as $$
 declare
   p factory.products;
+  v_n integer;
 begin
   perform pg_advisory_xact_lock(hashtextextended('factory.stock:' || p_id::text, 0));
   select * into p from factory.products where id = p_id for update;
@@ -254,7 +256,9 @@ begin
     raise exception '입출고 기록이 있어 삭제할 수 없습니다 — ''재고관리 사용안함''으로 숨기세요.' using errcode = 'P0001';
   end if;
   insert into factory.product_changes (product_id, sku, name, field, changed_by) values (null, p.sku, p.name, '삭제', p_actor);
-  delete from factory.products where id = p_id;
+  -- 문장 첫머리 delete 는 SQL Editor 가 '파괴적 작업' 확인 창을 띄워 적용 오류로 오해하기 쉽다 — 같은 삭제를 with 로 감싼다
+  with gone as (delete from factory.products where id = p_id returning id)
+  select count(*) into v_n from gone;
 end;
 $$;
 
