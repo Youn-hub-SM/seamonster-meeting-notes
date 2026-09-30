@@ -1,6 +1,7 @@
 "use client";
 
-// 파도소리 품목 마스터(관리자) — SKU · 품목 · 원산지 · 비고 · 제품원가 · 판매가 · 재고관리 사용안함.
+// 파도소리 상품마스터(관리자) — SKU · 품목 · 원산지 · 비고 · 제품원가 · 판매가 · 재고관리 사용안함.
+//  엑셀 추출 → 고쳐서 엑셀 업로드 → 변경 확인 → 적용(씨몬스터 상품 마스터와 같은 방식, ID 가 매칭 키).
 //  바꾼 값은 히스토리 '변경'에 남는다. 입출고 기록이 있는 품목은 지울 수 없다(재고관리 사용안함으로 숨긴다).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -10,13 +11,32 @@ import { ORIGINS, type FactoryProduct } from "@/app/lib/factory";
 
 const won = (n: number | null) => (n == null ? "-" : `${Number(n).toLocaleString("ko-KR")}원`);
 
+type ImportRow = Record<string, unknown>;
+type ImportPreview = {
+  summary: { creates: number; updates: number; unchanged: number; errors: number };
+  creates: { name: string; row: ImportRow }[];
+  updates: { id: string; name: string; changes: { label: string; from: string; to: string }[]; row: ImportRow }[];
+  errors: { line: number; msg: string }[];
+};
+
 export default function FactoryProductsPage() {
+  const [role, setRole] = useState<string | null>(null);
   const [products, setProducts] = useState<FactoryProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [kw, setKw] = useState("");
   const [edit, setEdit] = useState<FactoryProduct | "new" | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+
+  // 관리자 전용 — 파도소리 계정은 안내만(API 도 관리자를 검사한다)
+  useEffect(() => {
+    fetch("/api/b2b/auth", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => setRole(j?.ok ? j.role || "internal" : "factory"))
+      .catch(() => setRole("factory"));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -27,21 +47,67 @@ export default function FactoryProductsPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (role === "internal") load(); }, [role, load]);
 
   const list = useMemo(() => {
     const q = kw.trim();
     return products.filter((p) => !q || matchKoQuery(`${p.name} ${p.sku} ${p.origin || ""} ${p.note || ""}`, q));
   }, [products, kw]);
 
+  async function handleImportFile(file: File) {
+    setImporting(true); setError(""); setNotice("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/factory/products/import", { method: "POST", body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) throw new Error(j.error || "파일 분석 실패");
+      setPreview(j as ImportPreview);
+    } catch (e) { setError(e instanceof Error ? e.message : "파일 분석 실패"); }
+    setImporting(false);
+  }
+
+  async function applyImport() {
+    if (!preview) return;
+    setApplying(true); setError(""); setNotice("");
+    try {
+      const res = await fetch("/api/factory/products/import/apply", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creates: preview.creates.map((c) => c.row), updates: preview.updates.map((u) => u.row) }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok && !Array.isArray(j.errors)) throw new Error(j.error || "적용 실패");
+      setPreview(null);
+      await load();
+      setNotice(`신규 ${j.created || 0}건 · 수정 ${j.updated || 0}건을 반영했습니다.`);
+      if (j.errors && j.errors.length) setError(`일부 실패: ${j.errors.join("; ")}`);
+    } catch (e) { setError(e instanceof Error ? e.message : "적용 실패"); }
+    setApplying(false);
+  }
+
+  if (role === null) return <div className="b2b-container"><div className="b2b-loading">불러오는 중...</div></div>;
+  if (role === "factory") return <div className="b2b-container"><div className="b2b-empty">관리자 전용 화면입니다.</div></div>;
+
   return (
-    <div className="fac-products">
+    <div className="b2b-container fac-products">
+      <header className="b2b-page-head">
+        <div><h1 className="b2b-page-title">상품마스터</h1></div>
+        <div className="b2b-page-actions">
+          <a className="b2b-btn-secondary" href="/api/factory/products/export" title="전 품목을 엑셀로 내려받기(ID 포함, 고쳐서 다시 업로드)">엑셀 추출</a>
+          <label className="b2b-btn-secondary fac-upload" title="추출한 엑셀을 고쳐 업로드 — 변경 내역 확인 후 반영">
+            {importing ? "분석 중..." : "엑셀 업로드"}
+            <input type="file" accept=".xlsx" hidden disabled={importing}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ""; }} />
+          </label>
+          <button className="b2b-btn-primary" onClick={() => { setNotice(""); setEdit("new"); }}>품목 등록</button>
+        </div>
+      </header>
+
       {error && <div className="b2b-error">{error}</div>}
       {notice && <div className="sm-success">{notice}</div>}
 
       <div className="fac-toolbar">
         <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(e.target.value)} placeholder="품목·SKU 검색" />
-        <button className="b2b-btn-primary" onClick={() => { setNotice(""); setEdit("new"); }}>품목 등록</button>
       </div>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : list.length === 0 ? (
@@ -76,6 +142,76 @@ export default function FactoryProductsPage() {
         <ProductModal product={edit === "new" ? null : edit} onClose={() => setEdit(null)}
           onSaved={(msg) => { setEdit(null); setNotice(msg); load(); }} />
       )}
+      {preview && (
+        <ImportPreviewModal preview={preview} applying={applying} onApply={applyImport} onClose={() => setPreview(null)} />
+      )}
+    </div>
+  );
+}
+
+// 엑셀 업로드 — 변경 확인(씨몬스터 상품 마스터와 같은 구성: 요약 → 변경(칸별 이전→이후) → 신규 → 오류)
+function ImportPreviewModal({ preview, applying, onApply, onClose }: { preview: ImportPreview; applying: boolean; onApply: () => void; onClose: () => void }) {
+  useEscClose(onClose, applying);
+  const n = preview.summary.creates + preview.summary.updates;
+  return (
+    <div className="b2b-modal-backdrop">
+      <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
+        <div className="b2b-modal-head">
+          <span className="b2b-modal-title">엑셀 업로드 — 변경 확인</span>
+          <button className="b2b-modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        </div>
+        <div className="b2b-modal-body">
+          <div className="fac-imp-sum">
+            <span>신규 <strong className="fac-imp-new">{preview.summary.creates}</strong></span>
+            <span>변경 <strong className="fac-imp-upd">{preview.summary.updates}</strong></span>
+            <span className="sm-faint">동일 {preview.summary.unchanged}</span>
+            {preview.summary.errors > 0 && <span className="fac-imp-err">오류 {preview.summary.errors}</span>}
+          </div>
+
+          {n === 0 && <div className="b2b-empty">반영할 변경이 없습니다.</div>}
+
+          {preview.updates.length > 0 && (
+            <section className="fac-imp-sec">
+              <div className="b2b-field-label">변경 ({preview.updates.length})</div>
+              {preview.updates.map((u) => (
+                <div key={u.id} className="fac-imp-item">
+                  <strong>{u.name}</strong>
+                  <ul>
+                    {u.changes.map((c, i) => (
+                      <li key={i}>{c.label}: <span className="fac-imp-from">{c.from}</span> → <strong>{c.to}</strong></li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {preview.creates.length > 0 && (
+            <section className="fac-imp-sec">
+              <div className="b2b-field-label">신규 ({preview.creates.length})</div>
+              <ul className="fac-imp-list">
+                {preview.creates.map((c, i) => <li key={i}>{c.name} <span className="fac-sub">{String(c.row.sku ?? "")}</span></li>)}
+              </ul>
+            </section>
+          )}
+
+          {preview.errors.length > 0 && (
+            <section className="fac-imp-sec">
+              <div className="b2b-field-label fac-imp-err">오류 ({preview.errors.length}) — 해당 행은 제외됩니다</div>
+              <ul className="fac-imp-list fac-imp-err">
+                {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
+              </ul>
+            </section>
+          )}
+        </div>
+        <div className="b2b-modal-foot">
+          <span />
+          <div className="b2b-modal-foot-right">
+            <button className="b2b-btn-secondary" onClick={onClose} disabled={applying}>취소</button>
+            <button className="b2b-btn-primary" onClick={onApply} disabled={applying || n === 0}>{applying ? "적용 중..." : `${n}건 적용`}</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

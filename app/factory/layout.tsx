@@ -53,16 +53,18 @@ export default function FactoryLayout({ children }: { children: React.ReactNode 
               </Link>
             );
           })}
-          {/* 설정(Swit 알림)은 관리자 전용 — /factory 에 들어올 수 있는 internal = 관리자뿐 */}
+          {/* 상품마스터는 관리자 전용 — /factory 에 들어올 수 있는 internal = 관리자뿐 */}
           {role === "internal" && (
-            <Link href="/factory/settings/products" className={`fac-nav-item ${pathname.startsWith("/factory/settings") ? "is-active" : ""}`}>
-              <Icon name="gear" />
-              설정
+            <Link href="/factory/products" className={`fac-nav-item ${pathname.startsWith("/factory/products") ? "is-active" : ""}`}>
+              <Icon name="fish" />
+              상품마스터
             </Link>
           )}
         </nav>
         <div className="fac-sb-foot">
           {userName && <span className="fac-sb-user">{userName}</span>}
+          {/* 알림 설정(Teams·아사나)은 관리자 전용 */}
+          {role === "internal" && <Link href="/factory/settings">알림 설정</Link>}
           {/* 내부(씨몬스터) 계정이 들어온 경우에만 — 파도소리 계정은 어차피 미들웨어가 막는 경로다 */}
           {role === "internal" && <Link href="/">씨몬스터 도구로</Link>}
           <button type="button" onClick={logout}>로그아웃</button>

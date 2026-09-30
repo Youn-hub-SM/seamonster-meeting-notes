@@ -161,14 +161,22 @@
 .fac-cancelled { display: inline-block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
 .fac-cancel { color: var(--sm-danger); white-space: nowrap; }
 
-/* ── 설정 ───────────────────────────────────────────────────────── */
-.fac-set-tabs { margin-bottom: 16px; }
-.fac-set-tabs .sm-tab { line-height: 1.4; text-decoration: none; }
-/* 탭 화면의 자체 제목은 숨기고(제목은 설정 레이아웃이 그린다) 폭 제한 박스는 왼쪽 정렬 */
-.fac-set-body .b2b-page-head { display: none; }
-.fac-main .fac-set-body > .b2b-container { margin-left: 0; padding: 0; }
+/* ── 상품마스터 ─────────────────────────────────────────────────── */
 .fac-row-off td { color: var(--sm-text-light); }
 .fac-pill-off { background: var(--sm-bg-subtle); color: var(--sm-text-mid); }
+.fac-upload { cursor: pointer; }
+/* 엑셀 업로드 — 변경 확인 */
+.fac-imp-sum { display: flex; gap: 14px; flex-wrap: wrap; font-size: 15px; }
+.fac-imp-new { color: var(--sm-success); }
+.fac-imp-upd { color: var(--sm-info); }
+.fac-imp-err { color: var(--sm-danger); }
+.fac-imp-sec { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.fac-imp-sec > .b2b-field-label { font-weight: 700; }
+.fac-imp-item { padding: 8px 10px; border: 1px solid var(--sm-border); border-radius: 8px; font-size: 15px; }
+.fac-imp-item ul { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
+.fac-imp-from { color: var(--sm-text-light); text-decoration: line-through; }
+.fac-imp-list { margin: 0; padding-left: 16px; font-size: 15px; }
+.fac-imp-list.fac-imp-err { font-size: 12px; }
 
 /* ── 모바일·태블릿(≤900px) — 목록 + 하단 버튼 ───────────────────── */
 @media (max-width: 900px) {

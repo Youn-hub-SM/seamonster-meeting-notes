@@ -112,6 +112,50 @@ export function lotLabel(l: { mfg_date: string | null; box_kg: number }): string
 // 품목 변경 이력의 필드 이름
 export const FIELD_LABEL: Record<string, string> = {
   등록: "품목 등록", 삭제: "품목 삭제",
-  sku: "SKU", name: "품목명", origin: "원산지", note: "비고",
+  sku: "SKU", name: "품목", origin: "원산지", note: "비고",
   cost: "제품원가", price: "판매가", stock_tracked: "재고관리",
 };
+
+// ── 품목 입력 정리(등록·수정·엑셀 업로드 공용, 서버가 다시 검사) ──────────────────────────────────
+export type ProductPatch = Partial<{
+  sku: string; name: string; origin: string | null; note: string | null;
+  cost: number | null; price: number | null; stock_tracked: boolean;
+}>;
+export const MASTER_FIELDS = ["sku", "name", "origin", "note", "stock_tracked"] as const; // 관리자만
+export const PRICE_FIELDS = ["cost", "price"] as const;                                  // 모든 계정(이력 남김)
+
+// 들어온 키만 정리한다(수정 = 부분 갱신). 잘못된 값은 error.
+export function parseProductInput(b: Record<string, unknown>): { patch: ProductPatch; error?: string } {
+  const patch: ProductPatch = {};
+  const txt = (v: unknown) => { const s = String(v ?? "").trim(); return s || null; };
+  if ("sku" in b) {
+    const s = String(b.sku ?? "").trim().toUpperCase();
+    if (!s) return { patch, error: "SKU 를 입력하세요." };
+    if (s.length > 60) return { patch, error: "SKU 가 너무 깁니다." };
+    patch.sku = s;
+  }
+  if ("name" in b) {
+    const s = String(b.name ?? "").trim();
+    if (!s) return { patch, error: "품목을 입력하세요." };
+    patch.name = s;
+  }
+  if ("origin" in b) patch.origin = txt(b.origin);
+  if ("note" in b) patch.note = txt(b.note);
+  for (const k of PRICE_FIELDS) {
+    if (!(k in b)) continue;
+    const raw = String(b[k] ?? "").replace(/[,\s원]/g, "");
+    if (!raw) { patch[k] = null; continue; }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return { patch, error: `${k === "cost" ? "제품원가" : "판매가"}는 0 이상 숫자로 입력하세요.` };
+    patch[k] = Math.round(n);
+  }
+  if ("stock_tracked" in b) patch.stock_tracked = b.stock_tracked !== false;
+  return { patch };
+}
+
+// 변경 이력 값 — 문자열로 남긴다(null = 빈 값)
+export function histValue(v: unknown): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "boolean") return v ? "사용" : "사용안함";
+  return String(v);
+}

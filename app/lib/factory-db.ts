@@ -31,46 +31,5 @@ export function isPending005(err: unknown): boolean {
 }
 export const PENDING_005 = "DB 준비 전입니다 — supabase/migrations/factory/005_products_stock_ledger.sql 을 적용하세요.";
 
-// ── 품목 입력 정리(등록·수정 공용) ──────────────────────────────────
-export type ProductPatch = Partial<{
-  sku: string; name: string; origin: string | null; note: string | null;
-  cost: number | null; price: number | null; stock_tracked: boolean;
-}>;
-export const MASTER_FIELDS = ["sku", "name", "origin", "note", "stock_tracked"] as const; // 관리자만
-export const PRICE_FIELDS = ["cost", "price"] as const;                                  // 모든 계정(이력 남김)
-
-// 들어온 키만 정리한다(수정 = 부분 갱신). 잘못된 값은 error.
-export function parseProductInput(b: Record<string, unknown>): { patch: ProductPatch; error?: string } {
-  const patch: ProductPatch = {};
-  const txt = (v: unknown) => { const s = String(v ?? "").trim(); return s || null; };
-  if ("sku" in b) {
-    const s = String(b.sku ?? "").trim().toUpperCase();
-    if (!s) return { patch, error: "SKU 를 입력하세요." };
-    if (s.length > 60) return { patch, error: "SKU 가 너무 깁니다." };
-    patch.sku = s;
-  }
-  if ("name" in b) {
-    const s = String(b.name ?? "").trim();
-    if (!s) return { patch, error: "품목을 입력하세요." };
-    patch.name = s;
-  }
-  if ("origin" in b) patch.origin = txt(b.origin);
-  if ("note" in b) patch.note = txt(b.note);
-  for (const k of PRICE_FIELDS) {
-    if (!(k in b)) continue;
-    const raw = String(b[k] ?? "").replace(/[,\s원]/g, "");
-    if (!raw) { patch[k] = null; continue; }
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n < 0) return { patch, error: `${k === "cost" ? "제품원가" : "판매가"}는 0 이상 숫자로 입력하세요.` };
-    patch[k] = Math.round(n);
-  }
-  if ("stock_tracked" in b) patch.stock_tracked = b.stock_tracked !== false;
-  return { patch };
-}
-
-// 변경 이력 값 — 문자열로 남긴다(null = 빈 값)
-export function histValue(v: unknown): string | null {
-  if (v === null || v === undefined || v === "") return null;
-  if (typeof v === "boolean") return v ? "사용" : "사용안함";
-  return String(v);
-}
+// 품목 입력 정리 — 순수 함수라 공용 파일(factory.ts)에 있다. 기존 import 경로 유지용 재수출.
+export { parseProductInput, histValue, MASTER_FIELDS, PRICE_FIELDS, type ProductPatch } from "./factory";
