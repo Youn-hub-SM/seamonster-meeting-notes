@@ -29,6 +29,8 @@ export default function SalesUploadPage() {
   const [batchErr, setBatchErr] = useState(false); // 이력 로드 실패 — '업로드 없음'과 구분
   const [applyNonce, setApplyNonce] = useState(0);   // 적용 성공마다 +1 → 인라인 리포트 패널 새로고침(재생성)
   const [reportPrompt, setReportPrompt] = useState<ReportItem[] | null>(null); // 최근 매출이 들어오면 '종합 리포트 생성' 안내 창(2026-09-30 — 일일·주간·월간)
+  // 안내 창 순서(2026-10-01 대표 요청): 적용 → 일일 매출 리포트 메일 발송 → 종합 리포트 안내 창. 적용 직후엔 대상만 담아 둔다.
+  const [pendingReports, setPendingReports] = useState<ReportItem[] | null>(null);
 
   function loadBatches() { setBatchErr(false); fetch("/api/sales/upload/batches").then((r) => r.json()).then((j) => { if (j.ok) setBatches(j.batches); else setBatchErr(true); }).catch(() => setBatchErr(true)); }
   useEffect(() => { loadBatches(); }, []);
@@ -68,7 +70,7 @@ export default function SalesUploadPage() {
       const r = await fetch("/api/sales/upload/apply", { method: "POST", body: fd });
       const j = await r.json();
       if (!j.ok) setErr(j.error || "적용 실패");
-      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); setApplyNonce((n) => n + 1); if (Array.isArray(j.report_items) && j.report_items.length) setReportPrompt(j.report_items); }
+      else { setApplied({ inserted: j.inserted, skipped: j.skipped, total_after: j.total_after }); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); setApplyNonce((n) => n + 1); setReportPrompt(null); setPendingReports(Array.isArray(j.report_items) && j.report_items.length ? j.report_items : null); }
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
   }
@@ -104,7 +106,8 @@ export default function SalesUploadPage() {
       {applied && (
         <div style={{ marginTop: 20 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 10px" }}>바로 리포트 만들기 · 발송</h2>
-          <SalesReportPanel key={applyNonce} autoGenerate />
+          <SalesReportPanel key={applyNonce} autoGenerate
+            onSent={(type) => { if (type === "daily" && pendingReports) { setReportPrompt(pendingReports); setPendingReports(null); } }} />
         </div>
       )}
 

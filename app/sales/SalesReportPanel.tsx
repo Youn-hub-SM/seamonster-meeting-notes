@@ -11,7 +11,8 @@ type Report = {
 
 // 매출 리포트 패널 — 리포트 페이지(수동)와 업로드 후 인라인(자동) 양쪽에서 재사용.
 //  autoGenerate: 마운트 시 최신일 기준 일일 매출 리포트를 자동 생성(업로드 직후용).
-export default function SalesReportPanel({ autoGenerate = false }: { autoGenerate?: boolean }) {
+//  onSent: 메일 발송 성공 시 호출(리포트 종류) — 업로드 화면이 일일 매출 리포트 발송 뒤 종합 리포트 안내 창을 띄운다.
+export default function SalesReportPanel({ autoGenerate = false, onSent }: { autoGenerate?: boolean; onSent?: (type: "daily" | "weekly") => void }) {
   const [mode, setMode] = useState<"daily" | "weekly">("daily");
   const [base, setBase] = useState("");
   const [maxDate, setMaxDate] = useState("");
@@ -62,7 +63,7 @@ export default function SalesReportPanel({ autoGenerate = false }: { autoGenerat
       });
       const j = await r.json();
       if (!j.ok) setErr(j.error || "발송 실패");
-      else setSent(j.sent_to);
+      else { setSent(j.sent_to); onSent?.(rpt.report_type === "weekly" ? "weekly" : "daily"); }
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
   }
