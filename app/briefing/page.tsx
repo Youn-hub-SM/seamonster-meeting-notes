@@ -26,12 +26,30 @@ const dtKst = (iso: string) => {
   catch { return iso.slice(0, 16).replace("T", " "); }
 };
 
+// 광고 추이 그래프를 끼울 줄 — '### 광고 추이' 아래 요약 줄(-) 다음, 추이 표 앞. 그 제목이 없으면(옛 리포트)
+//  '## (2.) 광고' 섹션 끝(다음 ## 앞 또는 맨 끝). 광고 섹션도 없으면 -1(그래프는 리포트 아래 카드로).
+function trendSlotAt(lines: string[]): number {
+  const h = lines.findIndex((l) => /^###\s*광고 추이/.test(l.trim()));
+  if (h >= 0) {
+    let i = h + 1;
+    while (i < lines.length && (/^-\s/.test(lines[i].trim()) || !lines[i].trim())) i++;
+    return i;
+  }
+  const a = lines.findIndex((l) => /^##\s*(\d+\.\s*)?광고/.test(l.trim()));
+  if (a < 0) return -1;
+  const e = lines.findIndex((l, i) => i > a && /^##\s/.test(l.trim()));
+  return e < 0 ? lines.length : e;
+}
+
 // 브리핑 마크다운 렌더 — 회의정리 렌더 패턴 + 표(| … |) 지원(소진 임박 표 등)
-function renderBriefMd(md: string) {
+//  slot(광고 추이 그래프)은 광고 섹션 안(trendSlotAt)에 끼운다 — 읽는 흐름이 매출 → 광고 → 재고 → 원인 → 확인으로 이어지게.
+function renderBriefMd(md: string, slot?: ReactNode): { node: ReactNode; placed: boolean } {
   const bold = (txt: string) => txt.split(/\*\*(.+?)\*\*/g).map((seg, k) => (k % 2 ? <strong key={k}>{seg}</strong> : seg));
   const lines = md.split("\n");
   const out: ReactNode[] = [];
+  const slotAt = slot ? trendSlotAt(lines) : -1;
   for (let i = 0; i < lines.length; i++) {
+    if (i === slotAt) out.push(<div key="trend-slot" style={{ margin: "8px 0 4px" }}>{slot}</div>);
     const t = lines[i].trim();
     // 연속된 | 행 → 표 (구분선 |---| 은 건너뜀)
     if (/^\|.*\|$/.test(t)) {
@@ -62,7 +80,31 @@ function renderBriefMd(md: string) {
     if (/^-\s/.test(t)) { out.push(<div key={i} style={{ paddingLeft: 18, textIndent: -12 }}>{"· "}{bold(t.replace(/^-\s*/, ""))}</div>); continue; }
     out.push(<div key={i}>{bold(t)}</div>);
   }
-  return <div style={{ fontSize: 15, lineHeight: 1.8 }}>{out}</div>;
+  if (slotAt === lines.length) out.push(<div key="trend-slot" style={{ margin: "8px 0 4px" }}>{slot}</div>);
+  return { node: <div style={{ fontSize: 15, lineHeight: 1.8 }}>{out}</div>, placed: slotAt >= 0 };
+}
+
+// 광고 추이 그래프(메타·네이버) — 리포트 안에 끼울 땐 요약 줄이 바로 위에 있으므로 summary 를 다시 쓰지 않는다
+function trendCharts(report: AnalystReport | null, showSummary: boolean): ReactNode {
+  const items = [
+    { t: report?.trend_meta, name: "메타", bar: "지출", line: "ROAS", val: (p: NonNullable<TrendPts>["points"][number]) => [p.spend || 0, p.roas] as const },
+    { t: report?.trend_naver, name: "네이버", bar: "광고비", line: "전환 ROAS", val: (p: NonNullable<TrendPts>["points"][number]) => [p.cost || 0, p.roas_all] as const },
+  ].filter((x) => x.t?.points?.length);
+  if (!items.length) return null;
+  return items.map((x) => (
+    <div key={x.name} style={{ marginBottom: 18 }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }}>{x.name} — {x.bar}(막대) · {x.line}(선)</div>
+      {showSummary && x.t?.summary && <div className="sm-faint" style={{ fontSize: 12, marginBottom: 6 }}>{x.t.summary}</div>}
+      <ComboBarLine
+        periods={x.t!.points.map((p) => p.b)}
+        barSeries={[{ key: x.bar, values: x.t!.points.map((p) => x.val(p)[0]) }]}
+        barColors={[PIE_COLORS[0]]}
+        lineValues={x.t!.points.map((p) => { const v = x.val(p)[1]; return v == null ? null : Math.round(v * 100); })}
+        lineLabel={x.line} lineFmt={(n) => `${n}%`} lineUnit=""
+        barFmt={moneyCompact} barUnit="원"
+      />
+    </div>
+  ));
 }
 
 type Period = "daily" | "weekly" | "monthly";
@@ -205,6 +247,8 @@ export default function SummaryReportPage() {
   const switchTo = (p: Period) => { if (p === period || busy !== "") return; setPeriod(p); setDate(defaultKey(p)); setReport(null); setError(""); setInfo(""); };
   const pickDate = (d: string) => { if (/^\d{4}-\d{2}-\d{2}$/.test(d)) { setDate(d); setError(""); setInfo(""); } };
   const hasReport = !!report?.report_md;
+  const charts = hasReport ? trendCharts(report, false) : null;
+  const briefMd = hasReport ? renderBriefMd(report?.report_md || "", charts ?? undefined) : null;
   const unsent = hasReport && !report?.sent_current && !report?.running; // 지금 버전을 아직 안 보냈다(보낸 뒤 다시 분석한 경우 포함)
   const options = period === "weekly" ? recentWeeks() : period === "monthly" ? recentMonths() : [];
 
@@ -254,34 +298,18 @@ export default function SummaryReportPage() {
             {admin && report.model ? ` · ${report.model}` : ""}
             {admin && report.usage ? ` · 조회 ${report.usage.tool_calls}회 · 약 $${report.usage.est_usd}` : ""}
           </div>
-          {hasReport ? renderBriefMd(report.report_md || "") : (
+          {hasReport ? briefMd?.node : (
             <div className="sm-warn">분석에 실패했습니다{report.error ? `: ${report.error}` : ""} — [분석하기]를 다시 눌러 주세요.</div>
           )}
         </section>
       )}
 
-      {hasReport && (report?.trend_meta?.points?.length || report?.trend_naver?.points?.length) ? (
+      {hasReport && charts && !briefMd?.placed ? (
         <section className="b2b-card" style={{ marginTop: 14 }}>
           <div className="b2b-card-head">
             <h2 className="b2b-card-title">광고 추이 · {report?.trend_meta?.title || report?.trend_naver?.title}</h2>
           </div>
-          {[
-            { t: report?.trend_meta, name: "메타", bar: "지출", line: "ROAS", val: (p: NonNullable<TrendPts>["points"][number]) => [p.spend || 0, p.roas] as const },
-            { t: report?.trend_naver, name: "네이버", bar: "광고비", line: "전환 ROAS", val: (p: NonNullable<TrendPts>["points"][number]) => [p.cost || 0, p.roas_all] as const },
-          ].filter((x) => x.t?.points?.length).map((x) => (
-            <div key={x.name} style={{ marginBottom: 18 }}>
-              <div style={{ fontWeight: 700, marginBottom: 2 }}>{x.name} — {x.bar}(막대) · {x.line}(선)</div>
-              {x.t?.summary && <div className="sm-faint" style={{ fontSize: 12, marginBottom: 6 }}>{x.t.summary}</div>}
-              <ComboBarLine
-                periods={x.t!.points.map((p) => p.b)}
-                barSeries={[{ key: x.bar, values: x.t!.points.map((p) => x.val(p)[0]) }]}
-                barColors={[PIE_COLORS[0]]}
-                lineValues={x.t!.points.map((p) => { const v = x.val(p)[1]; return v == null ? null : Math.round(v * 100); })}
-                lineLabel={x.line} lineFmt={(n) => `${n}%`} lineUnit=""
-                barFmt={moneyCompact} barUnit="원"
-              />
-            </div>
-          ))}
+          {trendCharts(report, true)}
         </section>
       ) : null}
 
