@@ -435,7 +435,8 @@ export function computeRemaining(
 
 // 아직 안 나간(발송완료·취소 아님) 차수가 있는가 — 날짜가 있거나, 날짜는 없어도 수량이 담긴 옛 '발송일 미정' 차수.
 //  (날짜·수량이 모두 없는 행은 배송정보 전용 기본 행이라 제외)
-export function hasPendingShipment(o: { shipments?: ShipmentDatePreview[] }): boolean {
+type PendingShipLike = { status: string; ship_date?: string | null; items?: { qty: number | string }[] };
+export function hasPendingShipment(o: { shipments?: PendingShipLike[] }): boolean {
   return (o.shipments ?? []).some((s) =>
     s.status !== "발송완료" && s.status !== "취소" &&
     (!!s.ship_date || (s.items ?? []).some((it) => (Number(it.qty) || 0) > 0)));
@@ -472,6 +473,63 @@ export function getUrgency(o: Pick<Order, "status" | "production_status" | "prod
     return "urgent";
   }
   return "normal";
+}
+
+// ── 화면 발송 표시(2026-10-01 대표 결정) ─────────────────────────────
+//  DB 발송 상태(발송대기·발송완료·취소)는 그대로 두고 **화면만** 바꾼다 — 매출(첫 차수 발송 때 전량)·재고·미수금·
+//  알림·리포트는 모두 DB 의 '발송완료'를 보므로 영향이 없다(새 상태 값을 저장하면 매출 원장에서 그 발주가 지워진다).
+//  '일부 발송' = 이미 나간 것이 있는데(DB 발송완료 또는 발송완료 차수) 아직 보낼 것(안 나간 차수·발송일 미정 잔여)이
+//  남은 발주 → 수량 'N/M 발송'.
+//  그 밖(발송대기·다 보낸 발송완료·취소)은 상태 이름 그대로.
+export const PARTIAL_SHIP = "일부 발송" as const;
+export const SHIP_VIEW_STATUSES = ["발송대기", PARTIAL_SHIP, "발송완료", "취소"] as const; // 목록 상태 필터
+export type ShipViewStatus = (typeof SHIP_VIEW_STATUSES)[number];
+export const PARTIAL_SHIP_COLOR = { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" }; // 진행 중(색 지도: info)
+
+type ShipViewInput = {
+  status: string;
+  items?: { id?: string; qty: number | string }[];
+  shipments?: { status: string; ship_date?: string | null; items?: { order_item_id?: string | null; qty: number | string }[] }[];
+  remaining_total?: number;
+};
+
+//  나간 것 = DB 발송완료, 또는 (취소 아닌 발주의) 발송완료 차수 — 09-28 이전 복수 발송은 전 차수가 나가야 발송완료였고
+//  백필을 안 해서, 1차만 나간 옛 발주는 DB 가 발송대기로 남아 있다(예전 화면 '1/3'). 표시 전용이라 DB 는 그대로.
+export function isPartlyShipped(o: ShipViewInput): boolean {
+  if (o.status === "취소") return false;
+  const sent = o.status === "발송완료" || (o.shipments ?? []).some((s) => s.status === "발송완료");
+  return sent && (hasPendingShipment(o) || (o.remaining_total ?? 0) > 0);
+}
+
+// 수량 진행 — 보낸 수량 = 발송완료 차수에 담긴 수량, 전체 = 주문 수량 − 취소 차수 수량(취소분은 주문에서 빠진 양 —
+//  computeRemaining·매출·재고와 같은 기준). 차수에 수량이 하나도 없거나(옛 발주), 수량 없는 차수가 섞여 있으면
+//  null — 화면은 차수 개수(1/3차)로 대신한다.
+export function shipQtyProgress(o: ShipViewInput): { shipped: number; total: number } | null {
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  const ordered = (o.items ?? []).reduce((a, it) => a + (Number(it.qty) || 0), 0);
+  let any = false, blank = false, shipped = 0, cancelled = 0;
+  for (const s of o.shipments ?? []) {
+    const q = (s.items ?? []).reduce((a, it) => a + Math.max(0, Number(it.qty) || 0), 0);
+    if (q <= 0) { if (s.status !== "취소" && s.ship_date) blank = true; continue; }
+    any = true;
+    if (s.status === "발송완료") shipped += q;
+    else if (s.status === "취소") cancelled += q;
+  }
+  if (!any || blank) return null;
+  return { shipped: r3(shipped), total: r3(Math.max(0, ordered - cancelled)) };
+}
+
+// 목록·수정 화면이 쓰는 발송 표시 한 곳 — status(필터 값)·label(보이는 글자)·color
+export function shipView(o: ShipViewInput): { status: ShipViewStatus | string; label: string; color: { bg: string; fg: string } | undefined } {
+  if (isPartlyShipped(o)) {
+    const q = shipQtyProgress(o);
+    if (q) return { status: PARTIAL_SHIP, label: `${formatQty(q.shipped)}/${formatQty(q.total)} 발송`, color: PARTIAL_SHIP_COLOR };
+    const live = (o.shipments ?? []).filter((s) => s.status !== "취소");
+    const done = live.filter((s) => s.status === "발송완료").length;
+    return { status: PARTIAL_SHIP, label: `${done}/${live.length}차 발송`, color: PARTIAL_SHIP_COLOR };
+  }
+  const st = o.status as OrderStatus;
+  return { status: o.status, label: STATUS_SHORT[st] || o.status, color: STATUS_COLORS[st] };
 }
 
 // 발주 '완료' — 발송완료 + 입금완료(또는 불필요) + 세금계산서 발행완료(또는 불필요).

@@ -27,6 +27,10 @@ import {
   formatQty,
   isOrderComplete,
   orderUrgency,
+  shipView,
+  SHIP_VIEW_STATUSES,
+  PARTIAL_SHIP,
+  ShipViewStatus,
   splitTracking,
   joinTracking,
   todayISO,
@@ -51,7 +55,8 @@ export default function OrdersListPage() {
   const [error, setError] = useState("");
   const [view, setView] = useState<View>("list");
   // 엑셀 필터식 체크박스 다중선택 (체크된 상태만 표시). 기본=전체 체크.
-  const [statusSel, setStatusSel] = useState<Set<OrderStatus>>(() => new Set(ORDER_STATUSES));
+  // 상태 필터 = 화면 발송 표시 기준(발송대기·일부 발송·발송완료·취소) — '일부 발송'은 DB 값이 아니라 shipView 가 도출
+  const [statusSel, setStatusSel] = useState<Set<ShipViewStatus>>(() => new Set(SHIP_VIEW_STATUSES));
   const [paymentSel, setPaymentSel] = useState<Set<PaymentStatus>>(() => new Set(PAYMENT_STATUSES));
   const [taxSel, setTaxSel] = useState<Set<TaxInvoiceStatus>>(() => new Set(TAX_INVOICE_STATUSES));
   // '오늘 할일' 카드에서 고른 항목 — 그 발주들만 목록에 남긴다(ids 로 직접 좁혀 필터 매핑 오차가 없다)
@@ -124,9 +129,14 @@ export default function OrdersListPage() {
           hideComplete?: boolean;
           search?: string;
         };
-        if (s && s.v === 1) {
-          if (Array.isArray(s.status))
-            setStatusSel(new Set(s.status.filter((x): x is OrderStatus => (ORDER_STATUSES as readonly string[]).includes(x))));
+        if (s && (s.v === 1 || s.v === 2)) {
+          if (Array.isArray(s.status)) {
+            const sel = new Set(s.status.filter((x): x is ShipViewStatus => (SHIP_VIEW_STATUSES as readonly string[]).includes(x)));
+            // v1(일부 발송 도입 전) 저장값: 일부 발송 발주는 그때 '발송완료'로 보였다 — 발송완료를 골라 뒀으면 같이 보이게
+            //  (09-28 이전 복수 발송은 1차가 나가도 '발송대기'였다 — 발송대기를 골라 뒀어도 같이 보이게)
+            if (s.v === 1 && (sel.has("발송완료") || sel.has("발송대기"))) sel.add(PARTIAL_SHIP);
+            setStatusSel(sel);
+          }
           if (Array.isArray(s.payment))
             setPaymentSel(new Set(s.payment.filter((x): x is PaymentStatus => (PAYMENT_STATUSES as readonly string[]).includes(x))));
           if (Array.isArray(s.tax))
@@ -149,7 +159,7 @@ export default function OrdersListPage() {
       localStorage.setItem(
         filterStoreKey,
         JSON.stringify({
-          v: 1,
+          v: 2,
           status: Array.from(statusSel),
           payment: Array.from(paymentSel),
           tax: Array.from(taxSel),
@@ -165,7 +175,7 @@ export default function OrdersListPage() {
   }, [filterStoreKey, filterRestored, statusSel, paymentSel, taxSel, companyFilter, productFilter, hideComplete, search]);
 
   function resetFilters() {
-    setStatusSel(new Set(ORDER_STATUSES));
+    setStatusSel(new Set(SHIP_VIEW_STATUSES));
     setCompanyFilter("");
     setTaxSel(new Set(TAX_INVOICE_STATUSES));
     setPaymentSel(new Set(PAYMENT_STATUSES));
@@ -248,7 +258,7 @@ export default function OrdersListPage() {
   }, [orders]);
 
   // 체크박스 필터가 전체 선택 상태인지 (전체면 그 필터는 적용 안 한 것과 동일)
-  const statusAll = statusSel.size === ORDER_STATUSES.length;
+  const statusAll = statusSel.size === SHIP_VIEW_STATUSES.length;
   const paymentAll = paymentSel.size === PAYMENT_STATUSES.length;
   const taxAll = taxSel.size === TAX_INVOICE_STATUSES.length;
 
@@ -297,7 +307,7 @@ export default function OrdersListPage() {
   const filtered = useMemo(() => {
     let arr = orders;
     if (taskPick) arr = arr.filter((o) => taskPick.ids.has(o.id));
-    if (!statusAll) arr = arr.filter((o) => statusSel.has(o.status));
+    if (!statusAll) arr = arr.filter((o) => statusSel.has(shipView(o).status as ShipViewStatus));
     if (!paymentAll) arr = arr.filter((o) => paymentSel.has(o.payment_status));
     if (!taxAll) arr = arr.filter((o) => taxSel.has(o.tax_invoice_status));
     if (companyFilter) arr = arr.filter((o) => o.company_id === companyFilter);
@@ -510,8 +520,18 @@ export default function OrdersListPage() {
 
   async function patchStatus(id: string, newStatus: OrderStatus, trackingNo?: string) {
     const snapshot = orders;
+    // 낙관적 갱신은 서버(orders/[id] PATCH)의 차수 동기화와 같게 — 단일 발송은 발송완료면 대기 차수를 발송완료로,
+    //  발송대기로 되돌리면 발송완료 차수를 대기로. 발송 칸 표시(shipView)가 차수를 보므로 응답 전에 '0/100 발송'이 뜨지 않게.
     setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) } : o))
+      prev.map((o) => {
+        if (o.id !== id) return o;
+        const single = (o.shipments?.length ?? 0) < 2;
+        const shipments = !single ? o.shipments : (o.shipments ?? []).map((s) =>
+          newStatus === "발송완료" && s.status === "발송대기" ? { ...s, status: "발송완료" as ShipmentStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) }
+          : newStatus === "발송대기" && s.status === "발송완료" ? { ...s, status: "발송대기" as ShipmentStatus }
+          : s);
+        return { ...o, status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}), shipments };
+      })
     );
     try {
       const res = await fetch(`/api/b2b/orders/${id}`, {
@@ -569,12 +589,19 @@ export default function OrdersListPage() {
       prev.map((o) =>
         o.id !== orderId
           ? o
-          : {
-              ...o,
-              shipments: (o.shipments ?? []).map((s) =>
+          : (() => {
+              // 발주 상태도 서버(deriveParentStatus)와 같게 다시 도출 — 차수 2건 이상: 전부 취소 → 취소,
+              //  하나라도 발송완료 → 발송완료, 그 밖 → 발송대기 (b2b-shipments 는 서버 전용이라 여기서 같은 규칙)
+              const shipments = (o.shipments ?? []).map((s) =>
                 s.id !== shipmentId ? s : { ...s, status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) }
-              ),
-            }
+              );
+              let status = o.status;
+              if (shipments.length >= 2) {
+                const live = shipments.filter((s) => s.status !== "취소");
+                status = live.length === 0 ? "취소" : live.some((s) => s.status === "발송완료") ? "발송완료" : "발송대기";
+              }
+              return { ...o, shipments, status };
+            })()
       )
     );
     try {
@@ -971,7 +998,7 @@ export default function OrdersListPage() {
             onChange={(e) => setSearch(e.target.value)}
             style={{ maxWidth: 280 }}
           />
-          <CheckFilter label="상태" options={ORDER_STATUSES} selected={statusSel} onChange={setStatusSel} />
+          <CheckFilter label="상태" options={SHIP_VIEW_STATUSES} selected={statusSel} onChange={setStatusSel} />
           <select
             className="b2b-select"
             value={companyFilter}
@@ -1119,7 +1146,7 @@ export default function OrdersListPage() {
                 {filtered.map((o) => {
                   const urgency = orderUrgency(o, today);
                   const parent = isParentOrder(o);
-                  const prog = parent ? shipProgress(o) : null;
+                  const sv = shipView(o); // 화면 발송 표시 — 일부 발송이면 'N/M 발송'
                   const isCollapsed = !expanded.has(o.id); // 기본 접힘
                   const complete = isOrderComplete(o);
                   return (
@@ -1216,27 +1243,27 @@ export default function OrdersListPage() {
                       </td>
                       )}
                       <td onClick={(e) => e.stopPropagation()}>
-                        {parent && prog ? (
+                        {parent ? (
                           <button
                             type="button"
                             className="b2b-parent-toggle"
                             onClick={() => toggleExpand(o.id)}
                             title="발송 차수 펼치기/접기"
+                            style={{ background: sv.color?.bg, color: sv.color?.fg }}
                           >
-                            {prog.done}/{prog.total} <span style={{ fontSize: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
+                            {sv.label} <span style={{ fontSize: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
                           </button>
                         ) : (
+                          // 일부 발송도 값은 '발송완료'(DB 그대로) — 보이는 글자·색만 'N/M 발송'
                           <select
                             className="b2b-status-select"
                             value={o.status}
                             onChange={(e) => handleStatusChange(o.id, e.target.value as OrderStatus)}
-                            style={{
-                              background: STATUS_COLORS[o.status]?.bg,
-                              color: STATUS_COLORS[o.status]?.fg,
-                            }}
+                            title={sv.status === PARTIAL_SHIP ? sv.label : undefined}
+                            style={{ background: sv.color?.bg, color: sv.color?.fg, ...(sv.status === PARTIAL_SHIP ? { maxWidth: "none" } : {}) }}
                           >
                             {ORDER_STATUSES.map((s) => (
-                              <option key={s} value={s}>{STATUS_SHORT[s] || s}</option>
+                              <option key={s} value={s}>{s === "발송완료" && sv.status === PARTIAL_SHIP ? sv.label : STATUS_SHORT[s] || s}</option>
                             ))}
                           </select>
                         )}
@@ -1334,7 +1361,7 @@ export default function OrdersListPage() {
               {filtered.map((o) => {
                 const urgency = orderUrgency(o, today);
                 const parent = isParentOrder(o);
-                const prog = parent ? shipProgress(o) : null;
+                const sv = shipView(o);
                 const isCollapsed = !expanded.has(o.id); // 기본 접힘
                 const complete = isOrderComplete(o);
                 return (
@@ -1385,20 +1412,20 @@ export default function OrdersListPage() {
                             {o.production_status}
                           </span>
                           )}
-                          {parent && prog ? (
+                          {parent ? (
                             <span
                               className="b2b-parent-toggle"
                               role="button"
                               tabIndex={0}
                               onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleExpand(o.id); }}
-                              style={{ cursor: "pointer" }}
+                              style={{ cursor: "pointer", background: sv.color?.bg, color: sv.color?.fg }}
                               title="발송 차수 펼치기/접기"
                             >
-                              발송 {prog.done}/{prog.total} <span style={{ fontSize: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
+                              {sv.label} <span style={{ fontSize: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
                             </span>
                           ) : (
-                            <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
-                              {STATUS_SHORT[o.status] || o.status}
+                            <span className="b2b-status-pill" style={{ background: sv.color?.bg, color: sv.color?.fg }}>
+                              {sv.label}
                             </span>
                           )}
                           <span className="b2b-status-pill" style={{ background: PAYMENT_COLORS[o.payment_status]?.bg, color: PAYMENT_COLORS[o.payment_status]?.fg }}>
@@ -1959,11 +1986,6 @@ function RemainLink({ o, onOpen }: { o: OrderListItem; onOpen: () => void }) {
   );
 }
 
-// 상위발주 발송 진행도: 발송완료 / 전체(취소 제외)
-function shipProgress(o: OrderListItem): { done: number; total: number } {
-  const ships = (o.shipments ?? []).filter((s) => s.status !== "취소");
-  return { done: ships.filter((s) => s.status === "발송완료").length, total: ships.length };
-}
 
 // 품목 미리보기 — 발주 상품을 "품목명 옵션 ×수량" 으로 나열, 많으면 외 N
 function ItemsPreview({ items }: { items: OrderLinePreview[] }) {

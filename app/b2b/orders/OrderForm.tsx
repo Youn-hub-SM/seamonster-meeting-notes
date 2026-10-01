@@ -25,6 +25,9 @@ import {
   formatQty,
   splitTracking,
   joinTracking,
+  computeRemaining,
+  shipView,
+  PARTIAL_SHIP,
 } from "@/app/lib/b2b-orders";
 import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import { computeOrderMargin, seasonForDate, SEASON_MONTHS } from "@/app/lib/b2b-margin";
@@ -322,6 +325,19 @@ export default function OrderForm({
     return rows;
   }, [data.shipments, data.items, data.tracking_no, data.ship_date, data.status, data.box_count]);
   const showShipInfo = mode === "edit" && shippedInfo.some((r) => r.tracking || r.status === "발송완료");
+  // 일부 발송 표시(목록과 같은 규칙 b2b-orders shipView) — 폼 데이터는 차수 상품을 라인 인덱스로 들고 있어 인덱스를 id 로 맞춘다
+  const partialView = useMemo(() => {
+    if (mode !== "edit") return null;
+    const items = data.items.map((it, i) => ({ id: String(i), qty: Number(it.qty) || 0 }));
+    const shipments = data.shipments.map((sh) => ({
+      status: sh.status as string,
+      ship_date: sh.ship_date || null,
+      items: sh.items.map((x) => ({ order_item_id: String(x.order_item_index), qty: Number(x.qty) || 0 })),
+    }));
+    const remaining_total = computeRemaining(items, shipments).reduce((a, b) => a + b, 0);
+    const v = shipView({ status: data.status as string, items, shipments, remaining_total });
+    return v.status === PARTIAL_SHIP ? v : null;
+  }, [mode, data.items, data.shipments, data.status]);
   const orderItemsLabel = data.items
     .filter((it) => it.product_id)
     .map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(Number(it.qty) || 0)}`)
@@ -882,6 +898,9 @@ export default function OrderForm({
           <section className="b2b-form-section">
             <div className="b2b-form-section-title">
               발송 · 송장번호
+              {partialView && (
+                <span className="b2b-status-pill" style={{ marginLeft: 8, background: partialView.color?.bg, color: partialView.color?.fg }}>{partialView.label}</span>
+              )}
               {data.recipient.courier ? <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: "var(--sm-text-mid)" }}>{data.recipient.courier}</span> : null}
             </div>
             <div className="sm-col" style={{ gap: 10 }}>
