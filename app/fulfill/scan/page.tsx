@@ -18,13 +18,19 @@ const MSG_COLOR: Record<Msg["kind"], { bg: string; fg: string }> = {
 };
 const hm = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 
-// PC 경고음 — 스캐너 비프음은 스캐너가 스스로 내므로 바꿀 수 없다. 정상 스캔은 소리 없음(스캐너 소리만),
-//  이번 라운드 중복 = 짧게 두 번, 이전 라운드 = 높게 세 번, 미등록 = 낮고 길게.
-const BEEPS: Record<"dup" | "prev" | "bad", [number, number][]> = {
+// PC 알림 소리 — 스캐너 비프음은 스캐너가 스스로 내므로 바꿀 수 없다. 정상 스캔은 소리 없음(스캐너 소리만).
+//  음성 = 브라우저 내장 한국어 음성(파일·비용 없음), 한국어 음성이 없는 PC 는 삐 소리로.
+//  삐 소리: 이번 라운드 중복 = 짧게 두 번, 이전 라운드 = 높게 세 번, 미등록·오류 = 낮고 길게.
+type SoundMode = "voice" | "beep" | "off";
+type Alarm = "dup" | "prev" | "bad" | "err";
+const BEEPS: Record<Alarm, [number, number][]> = {
   dup: [[660, 0.12], [0, 0.06], [660, 0.12]],
   prev: [[988, 0.14], [0, 0.06], [988, 0.14], [0, 0.06], [988, 0.22]],
   bad: [[220, 0.5]],
+  err: [[220, 0.5]],
 };
+const VOICE: Record<Alarm, string> = { dup: "중복", prev: "이전 송장", bad: "미등록", err: "오류" };
+const SOUND_KEY = "scan_sound"; // "voice" | "1"(삐 소리) | "0"(끔) — 없으면 음성
 
 const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
@@ -42,9 +48,12 @@ export default function ScanPage() {
   const [includePrev, setIncludePrev] = useState(false);
   const includePrevRef = useRef(false);
   includePrevRef.current = includePrev;
-  const [soundOn, setSoundOn] = useState(true);
-  const soundRef = useRef(true);
-  soundRef.current = soundOn;
+  const [sound, setSound] = useState<SoundMode>("voice");
+  const soundRef = useRef<SoundMode>("voice");
+  soundRef.current = sound;
+  // 한국어 음성 — null = 확인 중, false = 없음(삐 소리로 대신)
+  const koVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const [koVoice, setKoVoice] = useState<boolean | null>(null);
   const lastPrevRef = useRef<string | null>(null); // F8 로 넣을 마지막 '이전 라운드' 송장
   const audioRef = useRef<AudioContext | null>(null);
   // 소리 장치는 첫 키 입력·클릭 때 깨워 둔다(브라우저는 사용자 동작 전엔 소리를 막는다 — 스캐너 입력도 키 입력)
@@ -57,8 +66,11 @@ export default function ScanPage() {
     } catch { return null; }
   }
   useEffect(() => {
-    try { if (localStorage.getItem("scan_sound") === "0") setSoundOn(false); } catch { /* 저장소 없음 */ }
-    const wake = () => { if (soundRef.current) audio(); };
+    try {
+      const v = localStorage.getItem(SOUND_KEY);
+      if (v === "0") setSound("off"); else if (v === "1") setSound("beep");
+    } catch { /* 저장소 없음 */ }
+    const wake = () => { if (soundRef.current !== "off") audio(); };
     window.addEventListener("keydown", wake, { once: true });
     window.addEventListener("pointerdown", wake, { once: true });
     return () => {
@@ -66,8 +78,40 @@ export default function ScanPage() {
       void audioRef.current?.close().catch(() => {}); audioRef.current = null; // 화면 이동마다 소리 장치가 쌓이지 않게
     };
   }, []);
-  function beep(kind: keyof typeof BEEPS) {
-    if (!soundRef.current) return;
+  useEffect(() => {
+    const ss = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    if (!ss) { setKoVoice(false); return; }
+    const pick = () => {
+      const all = ss.getVoices();
+      if (!all.length) return; // 아직 로딩 중
+      const ko = all.filter((v) => /^ko/i.test(v.lang));
+      koVoiceRef.current = ko.find((v) => v.localService) ?? ko[0] ?? null;
+      setKoVoice(!!koVoiceRef.current);
+    };
+    pick();
+    ss.addEventListener("voiceschanged", pick);
+    const t = setTimeout(() => setKoVoice((k) => (k === null ? false : k)), 2000); // 끝내 안 채워지면 없음
+    return () => { ss.removeEventListener("voiceschanged", pick); clearTimeout(t); ss.cancel(); };
+  }, []);
+  // 음성으로 읽기 — 연달아 찍으면 앞 음성은 끊고 마지막 것만. 실패하면 삐 소리로.
+  function speak(kind: Alarm): boolean {
+    const ss = window.speechSynthesis, v = koVoiceRef.current;
+    if (!ss || !v) return false;
+    try {
+      if (ss.speaking || ss.pending) ss.cancel();
+      const u = new SpeechSynthesisUtterance(VOICE[kind]);
+      u.voice = v; u.lang = v.lang; u.rate = 1.2;
+      u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") beep(kind); };
+      ss.speak(u);
+      return true;
+    } catch { return false; }
+  }
+  function alarm(kind: Alarm, mode: SoundMode = soundRef.current) {
+    if (mode === "off") return;
+    if (mode === "voice" && speak(kind)) return;
+    beep(kind);
+  }
+  function beep(kind: Alarm) {
     try {
       const ctx = audio();
       if (!ctx) return;
@@ -124,7 +168,7 @@ export default function ScanPage() {
       const inv = q[0];
       try {
         await sendScan(inv, includePrevRef.current);
-      } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); beep("bad"); }
+      } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); alarm("err"); }
       q.shift(); // 처리 중 초기화로 큐가 바뀌었으면 옛 큐에서만 뺀다(새 라운드 첫 스캔이 사라지지 않게)
       setPending(queueRef.current.length);
     }
@@ -136,16 +180,16 @@ export default function ScanPage() {
     lastPrevRef.current = null; // F8 은 화면에 떠 있는 빨간 경고의 송장에만(다음 스캔·오류가 오면 대상 아님)
     const j = await (await fetch("/api/fulfill/scan/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice_no: inv, include_prev: include }) })).json();
     if (!j.ok) throw new Error(j.error || "스캔 실패");
-    if (!j.known) { setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` }); beep("bad"); return; }
+    if (!j.known) { setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` }); alarm("bad"); return; }
     setSt((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
     if (j.moved) { setMsg({ kind: "moved", text: `이전 라운드 송장 · 이번 라운드에 넣음 · ${inv}` }); return; }
     if (j.prevRound) {
       lastPrevRef.current = inv;
       setMsg({ kind: "prev", text: `이전 라운드에서 스캔한 송장 · ${inv} · ${hm(j.prevRound.scanned_at)}${j.prevRound.scanned_by ? ` · ${j.prevRound.scanned_by}` : ""} — 집계 제외` });
-      beep("prev");
+      alarm("prev");
       return;
     }
-    if (j.alreadyScanned) { setMsg({ kind: "dup", text: `이미 스캔한 송장 · ${inv}` }); beep("dup"); return; }
+    if (j.alreadyScanned) { setMsg({ kind: "dup", text: `이미 스캔한 송장 · ${inv}` }); alarm("dup"); return; }
     setMsg({ kind: "ok", text: `스캔 완료 · ${inv}` });
   }
   // 경고 줄의 [이번 라운드에 넣기]·F8 — 마지막 '이전 라운드' 송장 1건을 넣는다
@@ -153,7 +197,7 @@ export default function ScanPage() {
     const inv = lastPrevRef.current;
     if (!inv) return; // 두 번 눌러도 한 번만(보내기 전에 비워진다)
     scanRef.current?.focus();
-    try { await sendScan(inv, true); } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "넣기 실패" }); beep("bad"); }
+    try { await sendScan(inv, true); } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "넣기 실패" }); alarm("err"); }
   }
 
   // 스캔 초기화 — 인쇄 후 다음 라운드를 위해 자주 누르므로 확인창 없이 즉시(업로드 데이터는 유지).
@@ -281,10 +325,21 @@ export default function ScanPage() {
           </div>
         )}
         <div className="sm-row" style={{ marginTop: 10, gap: 16, flexWrap: "wrap", fontSize: 15 }}>
-          <label className="sm-row" style={{ gap: 6, cursor: "pointer" }}>
-            <input type="checkbox" className="b2b-checkbox" checked={soundOn}
-              onChange={(e) => { setSoundOn(e.target.checked); try { localStorage.setItem("scan_sound", e.target.checked ? "1" : "0"); } catch { /* 저장소 없음 */ } scanRef.current?.focus(); }} />
-            경고음
+          <label className="sm-row" style={{ gap: 6 }}>
+            소리
+            <select className="b2b-select" value={sound} style={{ width: "auto", padding: "4px 8px" }}
+              onChange={(e) => {
+                const m = e.target.value as SoundMode;
+                setSound(m);
+                try { localStorage.setItem(SOUND_KEY, m === "voice" ? "voice" : m === "beep" ? "1" : "0"); } catch { /* 저장소 없음 */ }
+                alarm("dup", m); // 미리 듣기
+                scanRef.current?.focus();
+              }}>
+              <option value="voice">음성</option>
+              <option value="beep">삐 소리</option>
+              <option value="off">끔</option>
+            </select>
+            {sound === "voice" && koVoice === false && <span className="sm-faint" style={{ fontSize: 12 }}>이 PC에 한국어 음성이 없어 삐 소리로 알립니다</span>}
           </label>
           <label className="sm-row" style={{ gap: 6, cursor: "pointer", color: includePrev ? "var(--sm-info)" : undefined, fontWeight: includePrev ? 700 : undefined }}>
             <input type="checkbox" className="b2b-checkbox" checked={includePrev} onChange={(e) => { setIncludePrev(e.target.checked); scanRef.current?.focus(); }} />
