@@ -174,11 +174,60 @@ async function fetchAllItems(sb: ReturnType<typeof supabaseAdmin>): Promise<Scan
   }
   return out;
 }
+// ── 스캔 기록 30일 보관(125) — 초기화는 지우지 않고 cleared_at(라운드 마감)을 찍는다. 이번 라운드 = cleared_at null.
+//  125 미적용(칸 없음)이면 예전처럼 동작: 전부 이번 라운드, 초기화 = 삭제.
+export const SCAN_KEEP_DAYS = 30;
+const noHistoryCol = (e: { message?: string } | null | undefined) => !!e && /cleared_at/i.test(e.message || "");
+type Sb = ReturnType<typeof supabaseAdmin>;
+
+// 라운드 마감(초기화) — 이번 라운드 전부에 같은 시각을 찍고, 마감 후 30일 지난 기록은 지운다. 칸이 없으면 삭제.
+export async function clearScanRound(sb: Sb): Promise<void> {
+  const at = new Date().toISOString();
+  const up = await sb.from("fulfill_scan_events").update({ cleared_at: at }).is("cleared_at", null);
+  if (noHistoryCol(up.error)) {
+    const del = await sb.from("fulfill_scan_events").delete().neq("invoice_no", " ");
+    if (del.error) throw del.error;
+    return;
+  }
+  if (up.error) throw up.error;
+  const old = new Date(Date.now() - SCAN_KEEP_DAYS * 86400_000).toISOString();
+  await sb.from("fulfill_scan_events").delete().lt("cleared_at", old);
+}
+
+// 직전 초기화(가장 최근 마감 묶음) — 시각·건수. 칸이 없거나 기록이 없으면 null.
+//  되돌릴 수 있는 건 '마지막 업로드 이후'의 초기화만 — 전체 비우기(업로드 삭제) 뒤나 새 업로드 뒤에 되살리면
+//  예전 스캔이 새 송장 묶음에 조용히 '스캔됨'으로 섞인다(재출력 송장이 경고 없이 집계됨).
+export async function lastScanClear(sb: Sb): Promise<{ at: string; count: number } | null> {
+  const [top, up] = await Promise.all([
+    sb.from("fulfill_scan_events").select("cleared_at").not("cleared_at", "is", null).order("cleared_at", { ascending: false }).limit(1),
+    sb.from("fulfill_scan_uploads").select("created_at").order("created_at", { ascending: false }).limit(1),
+  ]);
+  if (top.error || !top.data?.length || up.error || !up.data?.length) return null;
+  const at = (top.data[0] as { cleared_at: string }).cleared_at;
+  if (Date.parse(at) <= Date.parse((up.data[0] as { created_at: string }).created_at)) return null;
+  const { count } = await sb.from("fulfill_scan_events").select("invoice_no", { count: "exact", head: true }).eq("cleared_at", at);
+  return { at, count: count ?? 0 };
+}
+
+// 직전 초기화 되돌리기 — 그 묶음을 이번 라운드로 되살린다(이번 라운드에 이미 찍은 것과 합쳐진다).
+//  expectAt = 화면에서 확인한 초기화 시각. 그 사이 다른 PC 가 또 초기화했으면 엉뚱한 묶음을 살리지 않고 거절.
+export async function undoScanClear(sb: Sb, expectAt?: string): Promise<number> {
+  const last = await lastScanClear(sb);
+  if (!last) return 0;
+  if (expectAt && Date.parse(expectAt) !== Date.parse(last.at)) throw new Error("그 뒤에 다른 PC에서 초기화했습니다. 화면을 새로고침한 뒤 다시 확인하세요.");
+  const { data, error } = await sb.from("fulfill_scan_events").update({ cleared_at: null }).eq("cleared_at", last.at).select("invoice_no");
+  if (error) throw error;
+  return (data ?? []).length;
+}
+
 async function fetchAllScanned(sb: ReturnType<typeof supabaseAdmin>): Promise<string[]> {
   const out: string[] = [];
   const PAGE = 1000;
+  let round = true; // 이번 라운드만(125) — 칸이 없으면 전부
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb.from("fulfill_scan_events").select("invoice_no").range(from, from + PAGE - 1);
+    const q = () => sb.from("fulfill_scan_events").select("invoice_no").order("invoice_no").range(from, from + PAGE - 1);
+    let { data, error } = await (round ? q().is("cleared_at", null) : q());
+    if (round && noHistoryCol(error)) { round = false; ({ data, error } = await q()); }
     if (error) throw error;
     const rows = (data as { invoice_no: string }[] | null) ?? [];
     out.push(...rows.map((r) => r.invoice_no));

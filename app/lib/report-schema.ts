@@ -117,7 +117,7 @@ TABLE delivery_log — 날짜별 배송일지(PK=log_date date): boxes_normal·b
 TABLE fulfill_dispatch — 소매 출고 배치 이력: dispatch_date(date), channel(text), sku_count(int), total_qty(int), order_no(text OUT-...), created_at
 TABLE fulfill_scan_uploads — 송장 업로드 이력: id, title, invoice_count(int), item_count(int), created_at
 TABLE fulfill_scan_items — 송장 라인: upload_id, invoice_no(text 정규화), sku_code(text), qty(int)
-TABLE fulfill_scan_events — 스캔 완료 송장(PK=invoice_no): invoice_no, scanned_at, scanned_by
+TABLE fulfill_scan_events — 스캔 완료 송장(PK=invoice_no): invoice_no, scanned_at, scanned_by, cleared_at(스캔 초기화 시각, null=현재 스캔 중인 라운드, 초기화 후 30일 보관)
 
 ## VOC·CS  [루커 못 봄]
 

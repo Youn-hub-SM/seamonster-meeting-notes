@@ -5,6 +5,26 @@ import Link from "next/link";
 
 type Tally = { key: string; sku: string; name: string; qty: number; unknown: boolean; zone?: string | null };
 type State = { tally: Tally[]; scannedCount: number; totalInvoices: number; totalUnits: number };
+type LastReset = { at: string; count: number } | null;
+// 메시지 — dup = 이번 라운드에서 이미 찍음(무시), prev = 이전 라운드(초기화 전)에서 찍음(집계 제외, 넣기 가능),
+//  moved = 이전 라운드 송장을 이번 라운드에 넣음, bad = 미등록·오류
+type Msg = { kind: "ok" | "dup" | "prev" | "moved" | "bad"; text: string };
+const MSG_COLOR: Record<Msg["kind"], { bg: string; fg: string }> = {
+  ok: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
+  dup: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
+  prev: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  moved: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
+  bad: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+};
+const hm = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+
+// PC 경고음 — 스캐너 비프음은 스캐너가 스스로 내므로 바꿀 수 없다. 정상 스캔은 소리 없음(스캐너 소리만),
+//  이번 라운드 중복 = 짧게 두 번, 이전 라운드 = 높게 세 번, 미등록 = 낮고 길게.
+const BEEPS: Record<"dup" | "prev" | "bad", [number, number][]> = {
+  dup: [[660, 0.12], [0, 0.06], [660, 0.12]],
+  prev: [[988, 0.14], [0, 0.06], [988, 0.14], [0, 0.06], [988, 0.22]],
+  bad: [[220, 0.5]],
+};
 
 const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
@@ -14,9 +34,54 @@ export default function ScanPage() {
   const scanRef = useRef<HTMLInputElement>(null);
   const [scan, setScan] = useState("");
   const [pending, setPending] = useState(0); // 처리 대기 중인 스캔 수
-  const [msg, setMsg] = useState<{ kind: "ok" | "dup" | "bad"; text: string } | null>(null);
+  const [msg, setMsg] = useState<Msg | null>(null);
   const queueRef = useRef<string[]>([]);
   const processingRef = useRef(false);
+  const [lastReset, setLastReset] = useState<LastReset>(null);
+  // '이전 라운드 송장도 넣기' — 알면서 다시 찍어야 할 때 경고 없이 집계에 넣는다. 초기화하면 꺼진다(보호 복귀).
+  const [includePrev, setIncludePrev] = useState(false);
+  const includePrevRef = useRef(false);
+  includePrevRef.current = includePrev;
+  const [soundOn, setSoundOn] = useState(true);
+  const soundRef = useRef(true);
+  soundRef.current = soundOn;
+  const lastPrevRef = useRef<string | null>(null); // F8 로 넣을 마지막 '이전 라운드' 송장
+  const audioRef = useRef<AudioContext | null>(null);
+  // 소리 장치는 첫 키 입력·클릭 때 깨워 둔다(브라우저는 사용자 동작 전엔 소리를 막는다 — 스캐너 입력도 키 입력)
+  function audio(): AudioContext | null {
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = audioRef.current ?? (audioRef.current = new AC());
+      if (ctx.state === "suspended") void ctx.resume();
+      return ctx;
+    } catch { return null; }
+  }
+  useEffect(() => {
+    try { if (localStorage.getItem("scan_sound") === "0") setSoundOn(false); } catch { /* 저장소 없음 */ }
+    const wake = () => { if (soundRef.current) audio(); };
+    window.addEventListener("keydown", wake, { once: true });
+    window.addEventListener("pointerdown", wake, { once: true });
+    return () => {
+      window.removeEventListener("keydown", wake); window.removeEventListener("pointerdown", wake);
+      void audioRef.current?.close().catch(() => {}); audioRef.current = null; // 화면 이동마다 소리 장치가 쌓이지 않게
+    };
+  }, []);
+  function beep(kind: keyof typeof BEEPS) {
+    if (!soundRef.current) return;
+    try {
+      const ctx = audio();
+      if (!ctx) return;
+      let t = ctx.currentTime;
+      for (const [f, d] of BEEPS[kind]) {
+        if (f) {
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = "square"; o.frequency.value = f; g.gain.value = 0.12;
+          o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + d);
+        }
+        t += d;
+      }
+    } catch { /* 소리 장치 없음 — 화면 메시지로 충분 */ }
+  }
 
   const loadState = useCallback(async (silent = false) => {
     if (!silent) setError("");
@@ -24,6 +89,7 @@ export default function ScanPage() {
       const j = await (await fetch("/api/fulfill/scan/state", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
+      setLastReset(j.lastReset ?? null);
     } catch (e) { if (!silent) setError(e instanceof Error ? e.message : "조회 실패"); }
   }, []);
 
@@ -54,32 +120,72 @@ export default function ScanPage() {
     if (processingRef.current) return;
     processingRef.current = true;
     while (queueRef.current.length) {
-      const inv = queueRef.current[0];
+      const q = queueRef.current;
+      const inv = q[0];
       try {
-        const j = await (await fetch("/api/fulfill/scan/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice_no: inv }) })).json();
-        if (!j.ok) throw new Error(j.error || "스캔 실패");
-        if (!j.known) setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` });
-        else {
-          setSt((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
-          setMsg(j.alreadyScanned ? { kind: "dup", text: `이미 스캔한 송장 · ${inv}` } : { kind: "ok", text: `스캔 완료 · ${inv}` });
-        }
-      } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); }
-      queueRef.current.shift();
+        await sendScan(inv, includePrevRef.current);
+      } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); beep("bad"); }
+      q.shift(); // 처리 중 초기화로 큐가 바뀌었으면 옛 큐에서만 뺀다(새 라운드 첫 스캔이 사라지지 않게)
       setPending(queueRef.current.length);
     }
     processingRef.current = false;
   }
 
+  // 스캔 1건 처리 — include=true 면 이전 라운드 송장을 이번 라운드에 넣는다
+  async function sendScan(inv: string, include: boolean) {
+    lastPrevRef.current = null; // F8 은 화면에 떠 있는 빨간 경고의 송장에만(다음 스캔·오류가 오면 대상 아님)
+    const j = await (await fetch("/api/fulfill/scan/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice_no: inv, include_prev: include }) })).json();
+    if (!j.ok) throw new Error(j.error || "스캔 실패");
+    if (!j.known) { setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` }); beep("bad"); return; }
+    setSt((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
+    if (j.moved) { setMsg({ kind: "moved", text: `이전 라운드 송장 · 이번 라운드에 넣음 · ${inv}` }); return; }
+    if (j.prevRound) {
+      lastPrevRef.current = inv;
+      setMsg({ kind: "prev", text: `이전 라운드에서 스캔한 송장 · ${inv} · ${hm(j.prevRound.scanned_at)}${j.prevRound.scanned_by ? ` · ${j.prevRound.scanned_by}` : ""} — 집계 제외` });
+      beep("prev");
+      return;
+    }
+    if (j.alreadyScanned) { setMsg({ kind: "dup", text: `이미 스캔한 송장 · ${inv}` }); beep("dup"); return; }
+    setMsg({ kind: "ok", text: `스캔 완료 · ${inv}` });
+  }
+  // 경고 줄의 [이번 라운드에 넣기]·F8 — 마지막 '이전 라운드' 송장 1건을 넣는다
+  async function includeLast() {
+    const inv = lastPrevRef.current;
+    if (!inv) return; // 두 번 눌러도 한 번만(보내기 전에 비워진다)
+    scanRef.current?.focus();
+    try { await sendScan(inv, true); } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "넣기 실패" }); beep("bad"); }
+  }
+
   // 스캔 초기화 — 인쇄 후 다음 라운드를 위해 자주 누르므로 확인창 없이 즉시(업로드 데이터는 유지).
+  //  기록은 30일 보관(이전 라운드 송장 재스캔을 잡는다). '이전 라운드 송장도 넣기'는 꺼진다.
   async function reset() {
+    queueRef.current = []; setPending(0); // 대기 중 스캔도 취소(깨끗한 새 라운드)
+    includePrevRef.current = false; setIncludePrev(false); lastPrevRef.current = null; // 응답 전 스캔부터 다시 보호
     try {
-      queueRef.current = []; setPending(0); // 대기 중 스캔도 취소(깨끗한 새 라운드)
       const j = await (await fetch("/api/fulfill/scan/reset", { method: "POST" })).json();
       if (!j.ok) throw new Error(j.error || "초기화 실패");
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
+      setLastReset(j.lastReset ?? null);
       setMsg({ kind: "ok", text: "초기화 완료 · 새로 스캔하세요" });
       scanRef.current?.focus();
     } catch (e) { setError(e instanceof Error ? e.message : "초기화 실패"); }
+  }
+  // 직전 초기화 되돌리기 — 실수로 초기화했을 때 다시 찍지 않고 그 라운드를 되살린다(이번 라운드에 찍은 것과 합쳐진다)
+  const undoingRef = useRef(false);
+  async function undoReset() {
+    if (!lastReset || undoingRef.current) return;
+    const ok = window.confirm(`${hm(lastReset.at)}에 초기화한 ${lastReset.count.toLocaleString()}건을 이번 라운드로 되돌릴까요?`);
+    scanRef.current?.focus(); // 버튼에 포커스가 남으면 다음 스캔의 Enter 가 버튼을 또 누른다
+    if (!ok) return;
+    undoingRef.current = true;
+    try {
+      const j = await (await fetch("/api/fulfill/scan/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ undo: true, at: lastReset.at }) })).json();
+      if (!j.ok) throw new Error(j.error || "되돌리기 실패");
+      setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
+      setLastReset(j.lastReset ?? null);
+      setMsg({ kind: "ok", text: `초기화 되돌림 · ${Number(j.restored || 0).toLocaleString()}건` });
+    } catch (e) { setError(e instanceof Error ? e.message : "되돌리기 실패"); void loadState(true); }
+    finally { undoingRef.current = false; }
   }
 
   // 피킹 리스트 인쇄 — 품목명·수량. 창고 위치(구역)가 설정돼 있으면 구역 소제목으로 묶어 걷는 순서대로.
@@ -116,13 +222,14 @@ export default function ScanPage() {
     w.document.close();
   }
 
-  // 단축키: F2=인쇄, F4=초기화. 바코드 스캐너는 F키를 보내지 않아 스캔 입력과 충돌하지 않음.
-  const actRef = useRef<{ print: () => void; reset: () => void }>({ print: () => {}, reset: () => {} });
-  actRef.current = { print: printTally, reset };
+  // 단축키: F2=인쇄, F4=초기화, F8=이전 라운드 송장 넣기. 바코드 스캐너는 F키를 보내지 않아 스캔 입력과 충돌하지 않음.
+  const actRef = useRef<{ print: () => void; reset: () => void; include: () => void }>({ print: () => {}, reset: () => {}, include: () => {} });
+  actRef.current = { print: printTally, reset, include: includeLast };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "F2") { e.preventDefault(); actRef.current.print(); }
       else if (e.key === "F4") { e.preventDefault(); actRef.current.reset(); }
+      else if (e.key === "F8") { e.preventDefault(); actRef.current.include(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -165,12 +272,25 @@ export default function ScanPage() {
           style={{ fontSize: 20, padding: "12px 14px", fontWeight: 700, letterSpacing: 0.5 }}
         />
         {msg && (
-          <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 15, fontWeight: 700,
-            background: msg.kind === "ok" ? "var(--sm-success-bg)" : msg.kind === "dup" ? "var(--sm-warning-bg)" : "var(--sm-danger-bg)",
-            color: msg.kind === "ok" ? "var(--sm-success)" : msg.kind === "dup" ? "var(--sm-warning)" : "var(--sm-danger)" }}>
-            {msg.kind === "ok" ? "✓ " : msg.kind === "dup" ? "· " : ""}{msg.text}
+          <div className="sm-row" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 15, fontWeight: 700, gap: 10, flexWrap: "wrap", alignItems: "center",
+            background: MSG_COLOR[msg.kind].bg, color: MSG_COLOR[msg.kind].fg }}>
+            <span style={{ flex: "1 1 240px" }}>{msg.kind === "ok" ? "✓ " : msg.kind === "dup" ? "· " : ""}{msg.text}</span>
+            {msg.kind === "prev" && (
+              <button type="button" className="b2b-btn-secondary" onMouseDown={(e) => e.preventDefault()} onClick={includeLast} style={{ padding: "6px 12px", fontSize: 15 }}>이번 라운드에 넣기 (F8)</button>
+            )}
           </div>
         )}
+        <div className="sm-row" style={{ marginTop: 10, gap: 16, flexWrap: "wrap", fontSize: 15 }}>
+          <label className="sm-row" style={{ gap: 6, cursor: "pointer" }}>
+            <input type="checkbox" className="b2b-checkbox" checked={soundOn}
+              onChange={(e) => { setSoundOn(e.target.checked); try { localStorage.setItem("scan_sound", e.target.checked ? "1" : "0"); } catch { /* 저장소 없음 */ } scanRef.current?.focus(); }} />
+            경고음
+          </label>
+          <label className="sm-row" style={{ gap: 6, cursor: "pointer", color: includePrev ? "var(--sm-info)" : undefined, fontWeight: includePrev ? 700 : undefined }}>
+            <input type="checkbox" className="b2b-checkbox" checked={includePrev} onChange={(e) => { setIncludePrev(e.target.checked); scanRef.current?.focus(); }} />
+            이전 라운드 송장도 넣기{includePrev ? " (켜짐 — 초기화하면 꺼짐)" : ""}
+          </label>
+        </div>
       </section>
 
       {/* 인쇄 → 상품 가지러 → 초기화 → 다음 스캔. 두 버튼을 크고 눈에 띄게. */}
@@ -182,6 +302,12 @@ export default function ScanPage() {
             background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
             opacity: !st || st.scannedCount === 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F4)</span></button>
       </div>
+      {lastReset && lastReset.count > 0 && (
+        <div className="sm-row" style={{ gap: 10, marginTop: -6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <button type="button" className="b2b-link-btn" onClick={undoReset}>직전 초기화 되돌리기</button>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{hm(lastReset.at)} · {lastReset.count.toLocaleString()}건 · 스캔 기록 30일 보관</span>
+        </div>
+      )}
 
       <section className="b2b-card">
         <div className="b2b-card-head">

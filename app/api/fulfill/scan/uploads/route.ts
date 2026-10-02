@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { currentActor } from "@/app/lib/b2b-activity";
-import { loadScanMaps, normInvoice } from "@/app/lib/fulfill-scan";
+import { loadScanMaps, normInvoice, clearScanRound } from "@/app/lib/fulfill-scan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE() {
   try {
     const sb = supabaseAdmin();
-    await sb.from("fulfill_scan_events").delete().neq("invoice_no", " ");
+    await clearScanRound(sb); // 스캔 기록은 지우지 않고 라운드 마감(30일 보관 — 다음 업로드의 재출력 송장도 잡는다)
     const { error } = await sb.from("fulfill_scan_uploads").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
