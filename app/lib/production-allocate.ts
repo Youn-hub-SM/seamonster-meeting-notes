@@ -173,7 +173,7 @@ export async function applyManualAllocations(
 //  미이행을 가리지 않게 한다(검증 확정). purpose 미적용 환경·조회 실패·절삭 위험은 null(판정 보류).
 export async function getRequestFullness(
   sb: SupabaseClient, requestId: string,
-): Promise<{ full: boolean; status: string; req_no: string; requested: number; received: number } | null> {
+): Promise<{ full: boolean; status: string; req_no: string; requested: number; received: number; purpose: string } | null> {
   try {
     const { data: head, error: he } = await sb.from("production_requests")
       .select("id, req_no, status, purpose").eq("id", requestId).maybeSingle();
@@ -201,7 +201,7 @@ export async function getRequestFullness(
     const requested = items.reduce((s, it) => s + (Number(it.requested_qty) || 0), 0);
     // 알림 수치는 요청 줄만 합산(목록 total_received 와 같은 기준) — '[요청서에 없음]' 줄까지 더하면 100% 를 넘게 찍힌다
     const received = items.filter((it) => (Number(it.requested_qty) || 0) > 0).reduce((s, it) => s + (recvByItem.get(it.id as string) || 0), 0);
-    return { full, status: String(head.status), req_no: (head.req_no as string) || "", requested, received };
+    return { full, status: String(head.status), req_no: (head.req_no as string) || "", requested, received, purpose: String(head.purpose || "") };
   } catch { return null; }
 }
 
@@ -210,6 +210,8 @@ export async function getRequestFullness(
 //  · mode "reopen"(이동 취소 직후): 100% 아래로 내려간 '완료'를 '진행중'으로 재개 — 호출부(DELETE)가
 //    '삭제 전에 100%였던 요청'만 넘겨야 한다. 사람이 이행 미달인 채 수동 완료한 요청을 되살리면
 //    안 되기 때문(검증 확정 — 자동 완료 원복만 허용).
+//  · 프로모션은 완료·재개 전환을 하지 않는다(2026-10-06) — 완료는 사람의 '마감'뿐이고 마감 = 소매 합류다.
+//    배정 100% 로 자동 완료되면 '마감'을 누를 길이 없어 확보분이 프로모션 칸에 갇힌다. 요청→진행중만 한다.
 //  실패해도 호출부를 막지 않는다.
 export async function recheckRequestCompletion(
   sb: SupabaseClient, requestIds: string[], reason: string, mode: "complete" | "reopen" = "complete",
@@ -220,8 +222,16 @@ export async function recheckRequestCompletion(
       if (!f) continue;
       const pctv = f.requested > 0 ? Math.round((f.received / f.requested) * 100) : 0;
       const detail = `이행 ${f.received.toLocaleString()}/${f.requested.toLocaleString()} (${pctv}%)`; // 게시물 본문용
+      const promo = f.purpose === "프로모션";
       if (mode === "complete") {
-        if (f.full && (f.status === "요청" || f.status === "진행중")) {
+        if (promo) {
+          if (f.status === "요청") {
+            const { data: flipped } = await sb.from("production_requests")
+              .update({ status: "진행중", updated_at: new Date().toISOString() })
+              .eq("id", id).eq("status", "요청").select("id");
+            if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason, detail);
+          }
+        } else if (f.full && (f.status === "요청" || f.status === "진행중")) {
           const { data: flipped } = await sb.from("production_requests")
             .update({ status: "완료", updated_at: new Date().toISOString() })
             .eq("id", id).in("status", ["요청", "진행중"]).select("id");
@@ -232,7 +242,7 @@ export async function recheckRequestCompletion(
             .eq("id", id).eq("status", "요청").select("id");
           if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason, detail);
         }
-      } else if (!f.full && f.status === "완료") {
+      } else if (!promo && !f.full && f.status === "완료") {
         const { data: flipped } = await sb.from("production_requests")
           .update({ status: "진행중", updated_at: new Date().toISOString() })
           .eq("id", id).eq("status", "완료").select("id");

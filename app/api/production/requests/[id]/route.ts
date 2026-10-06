@@ -6,6 +6,7 @@ import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProd
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getRequestFullness } from "@/app/lib/production-allocate";
 import { companyTitle } from "@/app/lib/production-request-create";
+import { releasePromotionOnClose, type PromoRelease } from "@/app/lib/promotion-close";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -106,12 +107,18 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       }
     }
 
-    // 현재 상태·요청번호 — 품목 교체 전제조건·expect_status 대조·변경기록·알림에 공용(한 번만 읽는다).
-    const { data: cur, error: cErr } = await sb.from("production_requests").select("status, req_no").eq("id", id).maybeSingle();
+    // 현재 상태·요청번호·용도 — 품목 교체 전제조건·expect_status 대조·변경기록·알림·프로모션 마감 합류에 공용(한 번만 읽는다).
+    let curRes = await sb.from("production_requests").select("status, req_no, purpose").eq("id", id).maybeSingle();
+    if (curRes.error && /purpose/i.test(curRes.error.message)) curRes = await sb.from("production_requests").select("status, req_no").eq("id", id).maybeSingle(); // 082 미적용
+    const { data: cur, error: cErr } = curRes;
     if (cErr) throw cErr;
     if (!cur) return NextResponse.json({ ok: false, error: "요청서를 찾을 수 없습니다." }, { status: 404 });
     const prevStatus = String((cur as { status?: string }).status || "");
     const reqNo = (cur as { req_no?: string }).req_no ?? "";
+    const effPurposeNow = nextPurpose ?? toPrPurpose((cur as { purpose?: string | null }).purpose);
+    // 프로모션 '마감'·'취소'(열림 → 완료·취소) = 남은 확보분을 소매로 합류(2026-10-06 대표 결정 — 날짜 기반 자동 합류 폐지,
+    //  행사 무산 취소도 옛 크론처럼 소매로). 열린 상태에서만 전환되게 걸어(아래 runUpdate) 두 번 눌러도 합류는 한 번.
+    const closingPromo = effPurposeNow === "프로모션" && (patch.status === "완료" || patch.status === "취소") && (prevStatus === "요청" || prevStatus === "진행중");
     if (b.expect_status !== undefined && prevStatus !== String(b.expect_status))
       return NextResponse.json({ ok: false, error: `그사이 상태가 '${prevStatus}'(으)로 바뀌었습니다 — 새로고침 후 다시 확인하세요.` }, { status: 409 });
 
@@ -164,6 +171,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const runUpdate = () => {
       let q = sb.from("production_requests").update(patch).eq("id", id);
       if (b.expect_status !== undefined) q = q.eq("status", String(b.expect_status));
+      if (closingPromo) q = q.in("status", ["요청", "진행중"]);
       return q.select("id");
     };
     let { data: updRows, error } = await runUpdate();
@@ -188,7 +196,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       }
     }
     if (error) throw error;
-    if (b.expect_status !== undefined && !(updRows ?? []).length)
+    if ((b.expect_status !== undefined || closingPromo) && !(updRows ?? []).length)
       return NextResponse.json({ ok: false, error: "그사이 상태가 바뀌었습니다 — 새로고침 후 다시 확인하세요." }, { status: 409 });
 
     // 품목 교체 실행 — 수정 → 추가 → 삭제 순(검증은 위에서 완료)
@@ -220,14 +228,23 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     // 변경기록·알림. 작업자(누가 바꿨는지)를 함께 전달. 게시물 본문에 수정 후 전체 구성·이행률 첨부.
     const token = req.cookies.get("b2b_auth")?.value;
     const who = (await verifySession(token)) || resolveUserName(token);
+    // 프로모션 마감 합류 — 실패해도 마감은 유지하고 화면에 알린다(직접 옮기기 안내)
+    let promoRelease: PromoRelease | undefined;
+    if (closingPromo) promoRelease = await releasePromotionOnClose(sb, id, reqNo, who, patch.status === "취소" ? "취소" : "마감");
     let detailNow: string | undefined;
     try { const [dr] = await loadRequests(sb, { id }); if (dr) detailNow = formatRequestDetail(dr); } catch { /* 상세 없이 발송 */ }
     if (patch.status !== undefined && prevStatus && prevStatus !== patch.status) {
-      await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status), who, detailNow);
+      const rel = promoRelease
+        ? promoRelease.error ? `소매 합류 실패(${promoRelease.error}) — '재고 이동'에서 프로모션 → 소매로 직접 옮기세요`
+          : promoRelease.moved.length ? `소매로 합류: ${promoRelease.moved.map((m) => `${m.name} ×${m.qty.toLocaleString()}`).join(", ")}${promoRelease.failed.length ? ` · 실패: ${promoRelease.failed.join(", ")}` : ""}`
+          : "소매로 옮길 프로모션 재고 없음"
+        : "";
+      await logProductionRequestStatusChanged(reqNo, prevStatus, String(patch.status), who, [rel, detailNow].filter(Boolean).join("\n\n") || undefined);
     }
     // 품목 교체로 전 품목이 100% 이상이 됐으면 자동 완료 — 입고·배정과 같은 규칙(100% 일 때만).
     //  recheck 'complete' 는 미달이면 요청→진행중도 바꾸므로 여기선 이행 판독만 직접 쓴다. 실패해도 수정을 막지 않는다.
-    if (itemsIn && (patch.status === undefined || patch.status === "요청" || patch.status === "진행중")) {
+    //  프로모션은 제외 — 완료는 사람의 '마감'뿐(마감 = 소매 합류. 배정 100% 로 닫히면 합류할 길이 없다).
+    if (itemsIn && effPurposeNow !== "프로모션" && (patch.status === undefined || patch.status === "요청" || patch.status === "진행중")) {
       try {
         const f = await getRequestFullness(sb, id);
         if (f?.full && (f.status === "요청" || f.status === "진행중")) {
@@ -250,7 +267,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       await logProductionRequestUpdated(reqNo, who, detailNow);
     }
     const [row] = await loadRequests(sb, { id });
-    return NextResponse.json({ ok: true, request: row });
+    return NextResponse.json({ ok: true, request: row, ...(promoRelease ? { promo_release: promoRelease } : {}) });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "수정 실패") }, { status: 500 });
   }

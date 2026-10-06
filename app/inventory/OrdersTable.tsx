@@ -13,10 +13,10 @@ type Order = {
   move_from?: string | null; move_to?: string | null; // 이동 행의 출고 칸 → 입고 칸
   item_count: number; total_qty: number; total_amount: number; items: OrderItem[];
 };
-// 이동 행 판별 — partner 마커(채널이동)는 사람 이동·행사 자동 합류 모두 같다
+// 이동 행 판별 — partner 마커(채널이동)는 사람 이동·프로모션 마감 합류·옛 자동 합류 모두 같다
 const isMoveOrder = (o: Order) => o.partner === "채널이동";
 const isGrouped = (o: Order) => o.grouped ?? !!o.order_no;
-// 원장 메모 '행사 종료 자동 합류'는 옛 이름(멱등 가드·기존 행 호환으로 값은 유지) — 지금은 행사 하루 전 합류라 표시만 바꾼다
+// 원장 메모 '행사 종료 자동 합류' = 폐지된 자동 합류 크론(2026-10-06 삭제)의 옛 기록 — 표시만 바꾼다
 const displayMemo = (memo: string | null) => (memo === "행사 종료 자동 합류" ? "행사 전 자동 합류" : memo);
 
 // 입출고 '주문(묶음)' 목록 — BoxHero 구매목록 스타일. 한 번에 입력한 라인이 하나의 주문번호로 묶임.

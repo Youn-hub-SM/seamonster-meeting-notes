@@ -257,7 +257,7 @@ export async function DELETE(req: NextRequest) {
     const prepFail = () => NextResponse.json({ ok: false, error: "취소 준비 조회에 실패했습니다 — 다시 시도하세요." }, { status: 500 });
     // 이동(채널이동 짝)·B2B 선점 출고는 여기서 지우지 않는다 — 이동은 [재고 이동] 취소(음수 가드·재개 판정), 선점은 발송일정에서(cascade 원복).
     //  txn DELETE 와 같은 두 조건. 화면은 이동을 move DELETE 로 보내지만, 직접 호출·구 화면을 위해 서버에서도 막는다.
-    const moveBlocked = () => NextResponse.json({ ok: false, error: "재고 이동(칸 이동·행사 자동 합류) 기록입니다 — [재고 이동] 최근 내역, [입고 및 출고] 목록의 이동 행, [변경 기록]의 취소 중 한 곳에서 취소하세요(두 칸이 함께 원복됩니다)." }, { status: 409 });
+    const moveBlocked = () => NextResponse.json({ ok: false, error: "재고 이동(칸 이동·프로모션 마감 합류) 기록입니다 — [재고 이동] 최근 내역, [입고 및 출고] 목록의 이동 행, [변경 기록]의 취소 중 한 곳에서 취소하세요(두 칸이 함께 원복됩니다)." }, { status: 409 });
     // 0행 삭제는 실패로 — 예전엔 ok:true 라 화면이 '취소됨'으로 믿고 다시 옮겨 이중 이동이 났다.
     const notFound = () => NextResponse.json({ ok: false, error: "취소할 기록을 찾지 못했습니다 — 새로고침 후 다시 시도하세요." }, { status: 404 });
     let fullBefore: string[] | null = [];

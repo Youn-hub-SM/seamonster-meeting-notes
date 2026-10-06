@@ -158,13 +158,13 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ ok: false, error: "id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
-    // 쌍·연동 행은 여기서 단건 삭제 금지 — 이동(자동 합류 포함)은 [재고 이동] 내역에서 묶음 단위로(음수 가드·재개 판정 포함),
+    // 쌍·연동 행은 여기서 단건 삭제 금지 — 이동(마감 합류 포함)은 [재고 이동] 내역에서 묶음 단위로(음수 가드·재개 판정 포함),
     //  B2B 선점 출고는 발주의 발송일정에서(재저장·삭제 시 cascade 로 원복) 처리한다. 한쪽만 지우면 짝 없는 칸 재고가 남는다.
     const { data: cur, error: curErr } = await sb.from("inventory_txns").select("*").eq("id", id).maybeSingle(); // * = 035 미적용(shipment_id 없음)에도 안전
     if (curErr) throw curErr;
     if (!cur) return NextResponse.json({ ok: false, error: "내역을 찾을 수 없습니다 — 새로고침 후 다시 시도하세요." }, { status: 404 });
     if ((cur as { partner?: string | null }).partner === "채널이동")
-      return NextResponse.json({ ok: false, error: "재고 이동(칸 이동·행사 자동 합류) 기록입니다 — [재고 이동] 최근 내역, [입고 및 출고] 목록의 이동 행, [변경 기록]의 취소 중 한 곳에서 취소하세요(두 칸이 함께 원복됩니다)." }, { status: 409 });
+      return NextResponse.json({ ok: false, error: "재고 이동(칸 이동·프로모션 마감 합류) 기록입니다 — [재고 이동] 최근 내역, [입고 및 출고] 목록의 이동 행, [변경 기록]의 취소 중 한 곳에서 취소하세요(두 칸이 함께 원복됩니다)." }, { status: 409 });
     if ((cur as { shipment_id?: string | null }).shipment_id)
       return NextResponse.json({ ok: false, error: "B2B 발송 선점 출고입니다 — 발주의 발송일정에서 수정·삭제하세요(재고가 함께 원복됩니다)." }, { status: 409 });
     // 083(cascade) 이후: 생산요청과 연결된 입고를 여기서 취소하면 요청 쪽 입고 기록도 함께 원복된다.

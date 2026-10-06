@@ -45,6 +45,7 @@ export function RequestList() {
   const [tab, setTab] = useState<PrPurpose>("재고 보충");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState<{ warn: boolean; text: string } | null>(null); // 프로모션 마감 합류 결과
   const [products, setProducts] = useState<Prod[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -234,12 +235,26 @@ export function RequestList() {
 
   // expect_status = 화면이 알고 있던 상태 — 그사이 자동 완료·취소됐으면 서버가 409 로 거부하고 목록을 새로 읽는다(스냅샷으로 되살리기 방지)
   async function patchStatus(id: string, status: PrStatus, expect?: PrStatus) {
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setNotice(null);
     try {
       const res = await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...(expect ? { expect_status: expect } : {}) }) });
       const j = await res.json();
       if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "변경 실패"); }
       applyUpdated(j.request);
+      // 프로모션 마감 = 소매 합류 결과
+      const pr = j.promo_release as { moved: { name: string; qty: number }[]; kept: { name: string; qty: number }[]; failed: string[]; error?: string } | undefined;
+      if (pr) {
+        const list = (xs: { name: string; qty: number }[]) => xs.map((x) => `${x.name} ×${x.qty.toLocaleString()}`).join(", ");
+        if (pr.error) setNotice({ warn: true, text: `${status}했지만 프로모션 재고를 소매로 옮기지 못했습니다(${pr.error}) — '재고 이동'에서 프로모션 → 소매로 직접 옮기세요.` });
+        else setNotice({
+          warn: pr.failed.length > 0,
+          text: [
+            pr.moved.length ? `${status} — 프로모션 재고를 소매로 옮겼습니다: ${list(pr.moved)}` : `${status} — 소매로 옮길 프로모션 재고가 없습니다.`,
+            pr.kept.length ? `다른 열린 프로모션 요청서 몫으로 남김: ${list(pr.kept)}` : "",
+            pr.failed.length ? `옮기지 못함: ${pr.failed.join(", ")} — '재고 이동'에서 직접 옮기세요.` : "",
+          ].filter(Boolean).join(" · "),
+        });
+      }
       void loadRec(); // 완료·취소·다시 열기 = 입고 예정 변경
     } catch (e) { setError(e instanceof Error ? e.message : "변경 오류"); }
     setBusy(false);
@@ -251,7 +266,8 @@ export function RequestList() {
     // 제조사 요청의 미입고 잔여는 재고 목록 '입고 예정'으로 권장생산에서 빠져 있다 — 닫으면 그만큼 권장이 다시 올라간다
     const remain = openRemainQty(r.items);
     const inbNote = r.purpose === "재고 보충" && remain > 0 ? `\n\n미입고 ${remain.toLocaleString()}개는 '입고 예정'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다.`
-      : r.purpose === "도매 납품" && remain > 0 ? `\n\n미이동 ${remain.toLocaleString()}개는 도매 '입고 예정'에서 빠져 도매 권장생산이 그만큼 늘어납니다.` : "";
+      : r.purpose === "도매 납품" && remain > 0 ? `\n\n미이동 ${remain.toLocaleString()}개는 도매 '입고 예정'에서 빠져 도매 권장생산이 그만큼 늘어납니다.`
+      : r.purpose === "프로모션" && hasReceipts ? "\n\n취소하면 이 요청서 품목의 프로모션 재고가 소매로 넘어갑니다(같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다)." : "";
     if (hasReceipts) {
       if (!confirm(`입고 기록이 있어 삭제할 수 없습니다.\n대신 '취소' 상태로 바꿀까요?\n(기록은 보존되고 목록·이행률에서 빠집니다)${inbNote}`)) return;
       await patchStatus(r.id, "취소", r.status);
@@ -289,6 +305,13 @@ export function RequestList() {
     return requests.filter((r) => r.purpose === tab && (r.status === "요청" || r.status === "진행중") && !!r.due_date && r.due_date < t && openRemainQty(r.items) > 0).length;
   }, [requests, tab]);
 
+  // 행사일(목표일)이 된 열린 프로모션 요청서 — 자동 합류가 없으니(2026-10-06) 사람이 '마감'해야 확보분이 소매로 간다
+  const promoDue = useMemo(() => {
+    if (tab !== "프로모션") return 0;
+    const t = todayIso();
+    return requests.filter((r) => r.purpose === "프로모션" && (r.status === "요청" || r.status === "진행중") && !!r.due_date && r.due_date <= t).length;
+  }, [requests, tab]);
+
   // 생산 담당자 확인 — 담당자=본인 기록 + 진행중 전환(제조사에 전달했다는 표시)
   async function confirmRequest(r: ProductionRequest) {
     await updateRequest(r.id, { assignee: userName || "확인", status: r.status === "요청" ? "진행중" : r.status, expect_status: r.status });
@@ -297,6 +320,7 @@ export function RequestList() {
   return (
     <div>
       {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
+      {notice && <div className={notice.warn ? "sm-warn" : "sm-success"} style={{ marginBottom: 12 }}>{notice.text}</div>}
 
       <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -305,6 +329,9 @@ export function RequestList() {
               <button key={pp} className={`sm-tab ${tab === pp ? "is-active" : ""}`} onClick={() => setTab(pp)}>{PR_PURPOSE_LABEL[pp]} 요청<span className="sm-tab-count">{tabCounts.get(pp) || 0}</span></button>
             ))}
           </div>
+          {tab === "프로모션" && promoDue > 0 && (
+            <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>행사일이 된 프로모션 요청서 {promoDue}건 — '마감'을 누르면 확보분이 소매로 넘어갑니다</span>
+          )}
           {(tab === "재고 보충" || tab === "도매 납품") && overdueOpen > 0 && (
             <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>종료일 지난 요청서 {overdueOpen}건 — 마감하거나 종료일을 고치세요</span>
           )}
@@ -445,6 +472,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           {/* 종료일이 지났는데 열려 있으면 마감(또는 종료일 수정)이 필요하다 — 잔여가 입고 예정에 남아 권장을 누른다 */}
           {(req.purpose === "재고 보충" || req.purpose === "도매 납품") && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date < todayIso() && openRemainQty(req.items) > 0
             ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>지남 · 잔여 {openRemainQty(req.items).toLocaleString()}</span> : null}
+          {req.purpose === "프로모션" && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date <= todayIso()
+            ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>행사일 · 마감하면 소매로</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
           {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}
@@ -468,7 +497,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           ) : (
             <>
               <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onDelete}>삭제</button>
-              {/* 마감 — 전 품목 100%면 자동으로 닫히지만, 덜 들어온 채 끝낼 때 사람이 닫는다(수동 마감은 입고 취소로 되살아나지 않음) */}
+              {/* 마감 — 전 품목 100%면 자동으로 닫히지만, 덜 들어온 채 끝낼 때 사람이 닫는다(수동 마감은 입고 취소로 되살아나지 않음).
+                  프로모션은 자동으로 닫히지 않고 마감 = 확보분 소매 합류(2026-10-06) */}
               <button className="b2b-btn-secondary" style={ACT} disabled={busy}
                 onClick={() => {
                   const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
@@ -477,6 +507,8 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                     ? `\n\n미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.`
                     : req.purpose === "도매 납품" && remain > 0
                     ? `\n\n미이동 ${remain.toLocaleString()}개는 도매 입고 예정에서 빠집니다. 아직 옮길 물량이면 마감하지 마세요.`
+                    : req.purpose === "프로모션"
+                    ? "\n\n마감하면 이 요청서 품목의 프로모션 재고가 소매로 넘어갑니다(같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다). 행사 판매를 시작할 때 누르세요."
                     : "";
                   if (confirm(`이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) — 마감할까요?${inbNote}`)) onStatus("완료");
                 }}>마감</button>
@@ -505,7 +537,9 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
             </div>
 
             {suggestComplete && (req.status === "요청" || req.status === "진행중") && (
-              <p style={{ fontSize: 15, color: "var(--sm-success)", margin: "10px 0 0" }}>모든 품목이 요청 수량 이상 들어왔습니다 — 행의 '마감'을 누르세요.</p>
+              <p style={{ fontSize: 15, color: "var(--sm-success)", margin: "10px 0 0" }}>{req.purpose === "프로모션"
+                ? "모든 품목이 배정됐습니다 — 행사 판매를 시작할 때 행의 '마감'을 누르면 확보분이 소매로 넘어갑니다."
+                : "모든 품목이 요청 수량 이상 들어왔습니다 — 행의 '마감'을 누르세요."}</p>
             )}
           </td>
         </tr>

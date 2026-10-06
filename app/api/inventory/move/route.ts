@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
 
     const kstToday = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const txn_date = DATE_RE.test(String(b.txn_date || "")) ? String(b.txn_date) : kstToday;
-    // 미래 날짜 금지 — 행사 자동 합류가 풀 잔량(날짜 무관)을 오늘 날짜로 빼므로, 미래분이 섞이면
+    // 미래 날짜 금지 — 프로모션 마감 합류가 오늘까지의 풀을 오늘 날짜로 빼므로(옛 자동 합류 크론도 같았다), 미래분이 섞이면
     //  기준일 조회에서 프로모션 음수·소매 과대가 난다(감사 #64). 이동은 '한 일'의 기록이라 오늘까지만.
     if (txn_date > kstToday) return NextResponse.json({ ok: false, error: "옮긴 날짜는 오늘 이후로 할 수 없습니다." }, { status: 400 });
     const memo = String(b.memo || "").trim() || null;
@@ -278,12 +278,12 @@ export async function DELETE(req: NextRequest) {
     if (!group_id) return NextResponse.json({ ok: false, error: "group_id 가 필요합니다." }, { status: 400 });
     const sb = supabaseAdmin();
 
-    // 취소로 입고편 채널이 '어느 시점에라도' 마이너스가 되면 중단 — 예: 소매→프로모션 M1 뒤 자동 합류 R(풀→소매)이
+    // 취소로 입고편 채널이 '어느 시점에라도' 마이너스가 되면 중단 — 예: 소매→프로모션 M1 뒤 마감 합류 R(풀→소매)이
     //  나가고 M2 로 다시 채운 상태에서 M1 을 취소하면, 현재 잔량으로는 통과하는데 R 직후가 −가 되어 M2 확보분이
     //  장부에서 사라진다(감사 #14). 그래서 현재 잔량이 아니라 '이 입고편을 뺀' 시간순 누적 잔량의 최솟값을 본다.
     //  루프 뒤 최종 누적값(= 현재 잔량 − 이 입고편)도 최솟값에 넣어 종전 현재고 검사를 포함한다(마지막 행 취소 대비).
     //  시간순 검사는 이동 전용 칸(도매·프로모션·도매 대량)만 — 소매는 입고 기록이 늦게 들어와 시간순으로 잠깐 −가 되는 게
-    //  정상이라(판매가 먼저 찍힘) 시간순으로 보면 정당한 취소(행사 전 자동 합류 되돌리기 등)까지 막힌다. 소매는 현재 잔량만 본다.
+    //  정상이라(판매가 먼저 찍힘) 시간순으로 보면 정당한 취소(마감 합류 되돌리기 등)까지 막힌다. 소매는 현재 잔량만 본다.
     {
       const { data: inLegs } = await sb.from("inventory_txns")
         .select("id, product_id, channel, qty").eq("group_id", group_id).eq("partner", MARK).eq("type", "입고");
@@ -314,7 +314,7 @@ export async function DELETE(req: NextRequest) {
           }
           if (after && run < -0.001) bad = true;
           if (bad)
-            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 이후 시점에 마이너스가 됩니다 — 이 이동 이후에 기록된 ${leg.channel} 칸의 출고·이동(행사 전 자동 합류 등)을 먼저 취소하세요.` }, { status: 409 });
+            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 이후 시점에 마이너스가 됩니다 — 이 이동 이후에 기록된 ${leg.channel} 칸의 출고·이동(프로모션 마감 합류 등)을 먼저 취소하세요.` }, { status: 409 });
         } catch { /* 시간순 조회 실패(status 미적용 등) — 아래 현재 잔량 검사로 폴백 */ }
         if (checked) continue;
         try {
@@ -322,7 +322,7 @@ export async function DELETE(req: NextRequest) {
             .eq("product_id", String(leg.product_id)).maybeSingle();
           const cur = Number((st as { qty?: unknown } | null)?.qty ?? NaN);
           if (Number.isFinite(cur) && cur - (Number(leg.qty) || 0) < -0.001)
-            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 마이너스가 됩니다 — 이 이동 이후에 기록된 이동(행사 전 자동 합류 등)을 먼저 취소하세요.` }, { status: 409 });
+            return NextResponse.json({ ok: false, error: `취소하면 ${leg.channel} 재고가 마이너스가 됩니다 — 이 이동 이후에 기록된 이동(프로모션 마감 합류 등)을 먼저 취소하세요.` }, { status: 409 });
         } catch { /* 판정 불가 시 기존 동작(취소 허용) */ }
       }
     }

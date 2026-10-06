@@ -14,10 +14,13 @@ type Line = { key: number; pid: string; plabel: string; qty: string; targets: Ta
 
 // 배정 기본값 = 이동 전량(기획 14절 4단계 #6). 목표일 빠른 순으로 각 요청서 잔여까지 채운다.
 //  배정 누락 경고를 두지 않기로 했으므로(결정 21) 이 기본값이 유일한 방어다.
-const prefillAlloc = (targets: Target[], qty: number): Map<string, string> => {
+//  skipBefore: 그 날짜 전이 목표일인 요청서는 기본값에서 뺀다 — 프로모션은 마감 전까지 열려 있어(2026-10-06) 행사가 지난
+//  요청서가 목표일 순 맨 앞에 서서 새 확보분을 가져가고, 마감 때 곧장 소매로 돌아간다. 사람이 직접 넣는 건 막지 않는다.
+const prefillAlloc = (targets: Target[], qty: number, skipBefore?: string): Map<string, string> => {
   const m = new Map<string, string>();
   let left = Math.max(0, Math.round(qty * 100) / 100);
-  const sorted = [...targets].sort((a, b) => String(a.due_date ?? "9999").localeCompare(String(b.due_date ?? "9999")));
+  const sorted = [...targets].filter((t) => !skipBefore || !t.due_date || String(t.due_date) >= skipBefore)
+    .sort((a, b) => String(a.due_date ?? "9999").localeCompare(String(b.due_date ?? "9999")));
   for (const t of sorted) {
     if (left <= 0) break;
     const take = Math.round(Math.min(left, Math.max(0, t.remaining)) * 100) / 100;
@@ -101,7 +104,7 @@ export default function InventoryMovePage() {
       setLines((prev) => prev.map((l) => {
         const e = targetsByKey.get(l.key);
         if (!e || e.pid !== l.pid) return l;
-        return { ...l, targets: e.tg ?? [], tgState: e.tg === null ? "error" : "ok", alloc: prefillAlloc(e.tg ?? [], nQtyOf(l)), allocTouched: false };
+        return { ...l, targets: e.tg ?? [], tgState: e.tg === null ? "error" : "ok", alloc: prefillAlloc(e.tg ?? [], nQtyOf(l), skipPast()), allocTouched: false };
       }));
     })();
     return () => { live = false; };
@@ -117,6 +120,8 @@ export default function InventoryMovePage() {
   //  통과해 숨은 배정이 실려 400 이 나던 경합(감사 #42) — 방향이 용도·allocMode 를 모두 결정하므로 방향으로 본다.
   const dirRef = useRef(dir);
   useEffect(() => { dirRef.current = dir; }, [dir]);
+  // 프로모션 기본 배정은 행사일이 오늘 이후인 요청서만(위 prefillAlloc 주석) — 착지 시점의 방향으로 판정
+  const skipPast = () => (dirRef.current.to === "프로모션" ? kstToday() : undefined);
 
   async function selectProduct(key: number, id: string, label: string) {
     patchLine(key, { pid: id, plabel: label, targets: [], alloc: new Map(), tgState: allocMode ? "loading" : "ok" });
@@ -126,7 +131,7 @@ export default function InventoryMovePage() {
       // 빠른 재선택·방향 전환으로 응답이 뒤바뀌어도 이전 품목/방향의 요청서가 남지 않게(같은 탭 재클릭은 새 객체라 필드로 비교)
       if (dirRef.current.from !== dirAtFetch.from || dirRef.current.to !== dirAtFetch.to) return;
       setLines((prev) => prev.map((l) => (l.key === key && l.pid === id
-        ? { ...l, targets: targets ?? [], tgState: targets === null ? "error" : "ok", alloc: prefillAlloc(targets ?? [], nQtyOf(l)), allocTouched: false }
+        ? { ...l, targets: targets ?? [], tgState: targets === null ? "error" : "ok", alloc: prefillAlloc(targets ?? [], nQtyOf(l), skipPast()), allocTouched: false }
         : l)));
     }
   }
@@ -287,7 +292,7 @@ export default function InventoryMovePage() {
                   <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={l.qty}
                     onChange={(e) => {
                       const q = Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100);
-                      patchLine(l.key, { qty: e.target.value, ...(l.allocTouched ? {} : { alloc: prefillAlloc(l.targets, q) }) });
+                      patchLine(l.key, { qty: e.target.value, ...(l.allocTouched ? {} : { alloc: prefillAlloc(l.targets, q, skipPast()) }) });
                     }}
                     placeholder="옮길 수량" style={{ width: 120 }} aria-label={`품목 ${idx + 1} 수량`} />
                   {nQty > 0 && (
@@ -355,11 +360,11 @@ export default function InventoryMovePage() {
           <button className="b2b-btn-secondary" style={{ fontSize: 13 }} onClick={() => { setLines((prev) => [...prev, newLine(nextKey)]); setNextKey((k) => k + 1); }}>+ 품목 추가</button>
         </div>
 
-        {allocMode && activeLines.some((l) => l.targets.length > 0) && (
+        {allocMode && dir.to !== "프로모션" && activeLines.some((l) => l.targets.length > 0) && (
           <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>배정으로 100% 채워진 요청서는 자동 완료됩니다.</p>
         )}
         {dir.to === "프로모션" && (
-          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>행사 시작 하루 전 아침 요청서가 자동 완료되고 남은 확보분은 소매로 합류합니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>프로모션 요청서는 배정이 다 차도 열려 있습니다. 행사 판매를 시작할 때 생산 요청에서 그 요청서의 '마감'을 누르면 확보분이 소매로 넘어갑니다.</p>
         )}
         {dir.to === "도매 대량" && (
           <p className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>도매 대량 재고는 도매 일반 주문이 가져가지 못하고, 소매로 자동 합류하지 않습니다.</p>
@@ -368,7 +373,7 @@ export default function InventoryMovePage() {
         <div className="b2b-field-row" style={{ marginTop: 12 }}>
           <div className="b2b-field">
             <label className="b2b-field-label">옮긴 날짜</label>
-            {/* 오늘까지만 — 미래 날짜 이동은 서버도 400 (행사 자동 합류가 미래분을 오늘 날짜로 빼는 창 차단) */}
+            {/* 오늘까지만 — 미래 날짜 이동은 서버도 400 (마감 합류가 오늘까지의 풀만 옮기므로 미래분이 섞이면 어긋난다) */}
             <input className="b2b-input" type="date" max={kstToday()} value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="b2b-field">
@@ -398,7 +403,7 @@ export default function InventoryMovePage() {
                     <td>
                       <strong>{m.product_name}</strong>
                       {m.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{m.sku}</span> : null}
-                      {/* 원장 메모 '행사 종료 자동 합류'는 옛 이름(멱등 가드 호환으로 값 유지) — 지금은 행사 하루 전 합류라 표시만 바꾼다 */}
+                      {/* 원장 메모 '행사 종료 자동 합류' = 폐지된 자동 합류 크론(2026-10-06 삭제)의 옛 기록 — 표시만 바꾼다 */}
                       {m.memo ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>· {m.memo === "행사 종료 자동 합류" ? "행사 전 자동 합류" : m.memo}</span> : null}
                       {(m.alloc_qty ?? 0) > 0 && (
                         <div className="sm-faint" style={{ fontSize: 12 }}>
