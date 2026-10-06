@@ -1,8 +1,10 @@
 import { supabaseAdmin } from "./supabase";
 import { getAppBaseUrl, getKv, setKv } from "./b2b-settings";
+import { buildProductionTodo } from "./production-digest";
 
 // B2B '전후 N일 미완료 업무' 다이제스트 — 매일 지정 시각 Flow 챗봇 발송용. 내용·시간·기간은 설정에서 커스텀.
 //  섹션: ① 발송일 지남(과거 N일 미처리) ② 발송 예정(향후 N일) ③ 발송일정 미등록 ④ 계산서 미발행 ⑤ 입금 대기
+//   ⑥ 생산 요청 할 일(2026-10-06 — 확인 안 된 요청서·행사일이 된 프로모션·목표일 지난 요청서·내일 행사, production-digest.ts)
 //  창(days)은 발송 건(shipments)에만 적용 — 계산서·입금은 날짜 무관 전체를 본다(오래된 미발행이 조용히 빠지면 안 됨).
 
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
@@ -17,14 +19,14 @@ function weekday(dateStr: string): string {
 }
 
 // ── 설정 ──
-export type DigestSections = { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean };
+export type DigestSections = { ship: boolean; unscheduled: boolean; invoice: boolean; payment: boolean; prod: boolean };
 // times: 자동 발송 시각(KST HH:MM, 5분 단위, 최대 6개) — pg_cron 틱(migration 092)이 5분마다
 //  이 목록과 대조해 정각 발송한다. hour 는 구 버전(gate=hour) 호환용으로만 남아 있다.
 export type DigestConfig = { enabled: boolean; hour: number; days: number; times: string[]; sections: DigestSections; title: string };
 export const DIGEST_DEFAULTS: DigestConfig = {
   enabled: true, hour: 8, days: 7,
   times: ["06:00", "16:00"],
-  sections: { ship: true, unscheduled: true, invoice: true, payment: true },
+  sections: { ship: true, unscheduled: true, invoice: true, payment: true, prod: true },
   title: "씨몬스터 B2B 오늘의 할 일",
 };
 export async function getDigestConfig(): Promise<DigestConfig> {
@@ -58,7 +60,7 @@ export const setDigestLastSent = (d: string) => setKv("digest_last_sent", d);
 
 type OrderRow = { id: string; order_no: string; company_id: string; status: string; tax_invoice_status: string; payment_status: string; total: number };
 type ShipRow = { ship_date: string; status: string; box_count: number; order_id: string };
-export type B2BDigest = { text: string; counts: { ship: number; unscheduled: number; invoice: number; payment: number }; hasTasks: boolean };
+export type B2BDigest = { text: string; counts: { ship: number; unscheduled: number; invoice: number; payment: number; prod: number }; hasTasks: boolean };
 
 export async function buildB2BDigest(cfg?: DigestConfig): Promise<B2BDigest> {
   const c = cfg ?? (await getDigestConfig());
@@ -99,9 +101,17 @@ export async function buildB2BDigest(cfg?: DigestConfig): Promise<B2BDigest> {
   const needInvoice = orders.filter((o) => o.status === "발송완료" && o.tax_invoice_status === "미발행");
   const needPay = orders.filter((o) => o.status === "발송완료" && (o.payment_status === "입금전" || o.payment_status === "일부입금"));
 
-  const counts = { ship: ships.length, unscheduled: unscheduled.length, invoice: needInvoice.length, payment: needPay.length };
+  // 생산 요청 할 일 — 조회 실패는 B2B 알림을 막지 않고 한 줄로 알린다(조용히 빠지면 '없음'으로 읽힌다)
+  let prodLines: string[] = [];
+  let prodCount = 0;
+  let prodFailed = false;
+  if (c.sections.prod) {
+    try { const p = await buildProductionTodo(sb, today); prodLines = p.lines; prodCount = p.count; }
+    catch (e) { console.warn("[b2b-digest] 생산 요청 조회 실패", e); prodFailed = true; }
+  }
+  const counts = { ship: ships.length, unscheduled: unscheduled.length, invoice: needInvoice.length, payment: needPay.length, prod: prodCount };
   // 켜진 섹션만 '할 일'로 집계
-  const active = [c.sections.ship && counts.ship, c.sections.unscheduled && counts.unscheduled, c.sections.invoice && counts.invoice, c.sections.payment && counts.payment];
+  const active = [c.sections.ship && counts.ship, c.sections.unscheduled && counts.unscheduled, c.sections.invoice && counts.invoice, c.sections.payment && counts.payment, c.sections.prod && counts.prod];
   const hasTasks = active.some((n) => n);
 
   const cut = (arr: string[], n: number) => (arr.length > n ? `${arr.slice(0, n).join(", ")} 외 ${arr.length - n}건` : arr.join(", "));
@@ -128,7 +138,9 @@ export async function buildB2BDigest(cfg?: DigestConfig): Promise<B2BDigest> {
     if (c.sections.unscheduled && unscheduled.length) L.push("", `발송일정 미등록 (${unscheduled.length}건) — 일정 잡아야 함`, ` · ${cut(unscheduled.map((o) => nameOf(o)), 8)}`);
     if (c.sections.invoice && needInvoice.length) L.push("", `계산서 미발행 (${needInvoice.length}건)`, ` · ${cut(needInvoice.map((o) => `${nameOf(o)} ${won(o.total)}원`), 8)}`);
     if (c.sections.payment && needPay.length) L.push("", `입금 대기 (${needPay.length}건)`, ` · ${cut(needPay.map((o) => `${nameOf(o)} ${won(o.total)}원`), 8)}`);
+    if (c.sections.prod && prodLines.length) L.push(...prodLines);
   }
+  if (prodFailed) L.push("", "생산 요청 할 일을 불러오지 못했습니다 — 업무도우미 › 생산 요청에서 확인하세요");
   const base = await getAppBaseUrl();
   if (base) L.push("", `→ ${base}/b2b/orders`);
   return { text: L.join("\n"), counts, hasTasks };
