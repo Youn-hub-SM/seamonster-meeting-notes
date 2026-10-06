@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-10-06";
+export const GUIDE_UPDATED = "2026-10-07";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -809,13 +809,16 @@ export const GUIDE: GuideCategory[] = [
             "label": "정기배송 분석",
             "what": "정기배송 현황·추세를 보는 대시보드",
             "steps": [
-              "메뉴에서 '정기배송 분석'을 연다",
+              "메뉴에서 '정기배송 분석'을 연다 — 카페24 자동 수집 데이터(매일 새벽)가 바로 열린다",
+              "화면 위 줄에서 몇 시 기준 데이터인지 확인한다",
               "화면 안 대시보드에서 지표를 확인한다",
               "분석에서 뺄 이름·옵션이 있으면 필터의 '제외할 신청자/수령자 이름'과 '제외할 옵션 키워드'를 고친다 (콤마로 구분)",
               "계속 쓸 값이면 '현재 제외값을 기본값으로 저장'을 누른다 — 다음 방문부터 그 값으로 시작한다"
             ],
             "tips": [
-              "제외 기본값은 모든 사용자 공용이다 — 저장하면 다른 사람 화면의 시작값도 바뀐다"
+              "제외 기본값은 모든 사용자 공용이다 — 저장하면 다른 사람 화면의 시작값도 바뀐다",
+              "자동 수집 데이터는 이름·연락처·주소를 저장하지 않는다 — 이름 제외·검색은 이름을 정확히 써야 맞고, 일시정지 워치리스트의 연락처는 카페24 관리자에서 신청번호로 확인한다",
+              "이름·연락처가 필요하면 카페24 관리자에서 받은 CSV를 올린다 (CSV는 서버에 저장되지 않는다). 다시 자동 데이터로 보려면 '초기화' 후 '카페24 자동 수집 데이터 불러오기'를 누른다"
             ],
             "keywords": [
               "정기배송",
@@ -823,7 +826,9 @@ export const GUIDE: GuideCategory[] = [
               "정기결제",
               "대시보드",
               "유지율",
-              "해지"
+              "해지",
+              "자동 수집",
+              "CSV"
             ]
           }
         ]

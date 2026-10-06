@@ -530,7 +530,8 @@
     <h2>정기배송 CSV를 업로드해주세요</h2>
     <p>카페24 어드민에서 다운로드한 정기배송 신청 CSV를 끌어다 놓거나 위의 <strong>CSV 업로드</strong> 버튼을 누르세요.</p>
     <button class="btn btn-primary" id="emptyUploadBtn">파일 선택</button>
-    <div class="hint">데이터는 서버로 전송되지 않고 브라우저에서만 처리됩니다. 새로고침 시 즉시 사라집니다.</div>
+    <button class="btn" id="autoLoadBtn" style="display:none">카페24 자동 수집 데이터 불러오기</button>
+    <div class="hint">CSV 는 서버로 전송되지 않고 브라우저에서만 처리됩니다. 새로고침 시 즉시 사라집니다.<br>카페24 자동 수집 데이터(매일 새벽)가 있으면 열 때 자동으로 불러옵니다 — 이름·연락처·주소는 저장하지 않습니다.</div>
   </section>
 
   <div id="dashboard" style="display:none">
@@ -549,7 +550,7 @@
           <div class="filter-group">
             <label>제외할 신청자/수령자 이름 (콤마로 구분)</label>
             <input type="text" id="fExcludeNames" value="윤현석, 안예지" placeholder="예: 윤현석, 안예지">
-            <div class="hint">신청자 또는 수령자 이름이 일치하는 신청건 전체를 제외합니다.</div>
+            <div class="hint" id="excludeNamesHint">신청자 또는 수령자 이름이 일치하는 신청건 전체를 제외합니다.</div>
           </div>
           <div class="filter-group">
             <label>제외할 옵션 키워드 (콤마로 구분)</label>
@@ -708,7 +709,7 @@
       <div class="scroll-y">
         <table class="table" id="repeatTable">
           <thead>
-            <tr><th>회원ID</th><th>이름</th><th class="num">총 신청</th><th class="num">이용중</th><th class="num">일시정지</th><th class="num">해지</th><th>최근 신청</th></tr>
+            <tr><th id="repeatIdHead">회원ID</th><th>이름</th><th class="num">총 신청</th><th class="num">이용중</th><th class="num">일시정지</th><th class="num">해지</th><th>최근 신청</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -967,6 +968,40 @@ let allOrdersUnfiltered = []; // 필터 칩 옵션 생성용 (전체)
 let dataTodayISO = "";     // 데이터 최신일 (today 대용)
 let charts = {};
 let lastUploadedFileName = "";
+// 데이터 출처 — "csv"(업로드, 이름·연락처 있음) / "api"(카페24 자동 수집, 이름·아이디는 암호화 값만)
+let dataSource = "";
+let autoData = null;          // /api/subscription/data 응답(불러오기 버튼·초기화 뒤 다시 불러오기용)
+// 이름·아이디 → 암호화 값 캐시("name:홍길동" / "member:abc") — 자동 수집 데이터의 이름 제외·검색 비교용
+const hashCache = new Map();
+const hashInflight = new Set();
+let hashFailAt = 0;   // 마지막 변환 실패 시각 — 30초 안엔 다시 묻지 않는다(반복 호출 방지). 실패는 캐시하지 않아 다음 동작 때 다시 시도
+let loadGen = 0;      // 데이터 적재·초기화 세대 — 늦게 온 응답이 바뀐 화면을 덮지 않게
+// 새로 받은 값이 있으면 true(호출부가 다시 그린다)
+async function ensureHashes(values) {
+  const need = [...new Set(values.map(v => String(v || "").trim()).filter(v => v && !hashCache.has("name:" + v) && !hashInflight.has(v)))];
+  if (!need.length || Date.now() - hashFailAt < 30000) return false;
+  need.forEach(v => hashInflight.add(v));
+  try {
+    const res = await fetch("/api/subscription/hash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: need }) });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || "변환 실패");
+    need.forEach((v, i) => { hashCache.set("name:" + v, j.name[i] || ""); hashCache.set("member:" + v, j.member[i] || ""); });
+    setHashWarn(false);
+    return true;
+  } catch (e) {
+    console.warn("[subscription] 이름 변환 실패", e);
+    hashFailAt = Date.now();
+    setHashWarn(true);
+    return false;
+  } finally { need.forEach(v => hashInflight.delete(v)); }
+}
+// 변환 실패 — 이름 제외가 빠진 채 숫자가 나오므로 눈에 띄게 알린다
+function setHashWarn(on) {
+  const el = document.getElementById("excludeNamesHint");
+  if (!el) return;
+  if (on) { el.textContent = "이름 변환에 실패해 이름 제외·이름 검색이 적용되지 않았습니다 — 잠시 뒤 '필터'를 다시 적용하거나 새로고침하세요."; el.style.color = "var(--danger)"; }
+  else { el.style.color = ""; applyDataSourceUi(); }
+}
 let sortField = "signDate"; // 기본 정렬: 신청일
 let sortDir = "desc";       // 기본 내림차순
 
@@ -978,14 +1013,16 @@ document.getElementById("fileInput").addEventListener("change", e => {
   if (file) loadFile(file);
 });
 document.getElementById("resetBtn").onclick = () => {
-  rawRows = []; filteredRows = []; orders = []; allOrdersUnfiltered = [];
+  rawRows = []; filteredRows = []; orders = []; allOrdersUnfiltered = []; dataSource = ""; loadGen++;
   document.getElementById("dashboard").style.display = "none";
   document.getElementById("emptyState").style.display = "block";
   document.getElementById("resetBtn").style.display = "none";
   document.getElementById("dataBadge").textContent = "데이터 없음";
   document.getElementById("dataInfo").textContent = "CSV 파일을 업로드하면 분석이 시작됩니다.";
   document.getElementById("fileInput").value = "";
+  applyDataSourceUi();
 };
+document.getElementById("autoLoadBtn").onclick = () => { if (autoData) loadAuto(); };
 const empty = document.getElementById("emptyState");
 ["dragenter","dragover"].forEach(ev => empty.addEventListener(ev, e => { e.preventDefault(); empty.classList.add("drag-over"); }));
 ["dragleave","drop"].forEach(ev => empty.addEventListener(ev, e => { e.preventDefault(); empty.classList.remove("drag-over"); }));
@@ -995,24 +1032,49 @@ empty.addEventListener("drop", e => {
 });
 
 function loadFile(file) {
-  lastUploadedFileName = file.name;
   Papa.parse(file, {
     header: true, skipEmptyLines: true, encoding: "UTF-8",
-    complete: result => {
-      rawRows = result.data.filter(r => r["신청번호"]);
-      const dates = rawRows.map(r => r["신청일"]).filter(Boolean).sort();
-      dataTodayISO = dates[dates.length - 1] || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);  // 폴백 기준일(KST 벽시계 날짜)
-      // 전체 신청건 풀(필터 칩 옵션용)
-      allOrdersUnfiltered = buildOrdersFromRows(rawRows);
-      populateFilterChips();
-      applyFilters();
-      document.getElementById("emptyState").style.display = "none";
-      document.getElementById("dashboard").style.display = "block";
-      document.getElementById("resetBtn").style.display = "inline-block";
-      document.getElementById("dataInfo").textContent = `파일: ${file.name} · 신청일 ${dates[0]} ~ ${dates[dates.length-1]} · 데이터 기준일 ${dataTodayISO}`;
-    },
+    complete: result => ingestRows(result.data, { source: "csv", fileName: file.name }),
     error: err => alert("CSV 파싱 오류: " + err.message),
   });
+}
+// CSV·자동 수집 공용 적재 — 자동 수집은 카페24 관리자 CSV 와 같은 열로 온다(/api/subscription/data)
+function ingestRows(rows, meta) {
+  loadGen++;
+  dataSource = meta.source;
+  lastUploadedFileName = meta.source === "api" ? `카페24 자동 수집 ${meta.asOf || ""}`.trim() : meta.fileName;
+  rawRows = rows.filter(r => r["신청번호"]);
+  const dates = rawRows.map(r => r["신청일"]).filter(Boolean).sort();
+  // 기준일 — CSV 는 파일 안 최신 신청일, 자동 수집은 수집한 날(KST). 폴백은 오늘(KST 벽시계 날짜)
+  dataTodayISO = (meta.source === "api" && meta.asOf) || dates[dates.length - 1] || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  // 전체 신청건 풀(필터 칩 옵션용)
+  allOrdersUnfiltered = buildOrdersFromRows(rawRows);
+  populateFilterChips();
+  applyDataSourceUi();
+  applyFilters();
+  document.getElementById("emptyState").style.display = "none";
+  document.getElementById("dashboard").style.display = "block";
+  document.getElementById("resetBtn").style.display = "inline-block";
+  document.getElementById("dataInfo").textContent = meta.source === "api"
+    ? `카페24 자동 수집 · ${meta.label || dataTodayISO} 기준 · 신청일 ${dates[0]} ~ ${dates[dates.length-1]} · 이름·연락처·주소는 저장하지 않습니다${meta.complete === false ? " · 주의: 마지막 수집에서 일부 기간을 못 받아 그 기간 신청은 이전 상태일 수 있습니다" : ""}`
+    : `파일: ${meta.fileName} · 신청일 ${dates[0]} ~ ${dates[dates.length-1]} · 데이터 기준일 ${dataTodayISO}`;
+  // 검색칸에 이미 글자가 있으면(초기화 전 입력 등) 자동 수집 비교용 값을 받아 다시 그린다
+  const q = (document.getElementById("searchInput").value || "").trim();
+  if (meta.source === "api" && q) { const gen = loadGen; ensureHashes([q]).then(ok => { if (ok && gen === loadGen) renderOrdersTable(); }); }
+}
+function loadAuto() {
+  const at = autoData.syncedAt ? new Date(Date.parse(autoData.syncedAt) + 9 * 3600e3).toISOString().slice(5, 16).replace("T", " ") : "";
+  ingestRows(autoData.rows, { source: "api", asOf: autoData.asOf, label: at, complete: autoData.complete });
+}
+// 출처별 안내 문구 — 자동 수집은 이름을 암호화 값으로만 가져 이름 제외·검색이 '완전 일치'다
+function applyDataSourceUi() {
+  const api = dataSource === "api";
+  document.getElementById("searchInput").placeholder = api ? "신청번호, 이름·회원 아이디(정확히)로 검색" : "이름, ID, 신청번호, 전화번호로 검색";
+  document.getElementById("excludeNamesHint").textContent = api
+    ? "신청자 또는 수령자 이름이 일치하는 신청건 전체를 제외합니다. 자동 수집 데이터는 이름을 저장하지 않아 입력한 이름을 암호화해 비교합니다(완전 일치)."
+    : "신청자 또는 수령자 이름이 일치하는 신청건 전체를 제외합니다.";
+  document.getElementById("autoLoadBtn").style.display = autoData && !api ? "inline-block" : "none";
+  document.getElementById("repeatIdHead").textContent = api ? "신청번호" : "회원ID"; // 자동 수집은 아이디가 암호화 값이라 신청번호로 보여 준다
 }
 
 // =========================== 신청건 변환 ===========================
@@ -1030,6 +1092,8 @@ function buildOrdersFromRows(rows) {
         recipient: r["수령자명"] || "",
         recipientPhone: r["수령자휴대전화"] || r["수령자일반전화"] || "",
         recipientAddr: r["수령자주소"] || "",
+        applicantHash: r["신청자해시"] || "",   // 자동 수집 — 이름 암호화 값(이름 제외·검색 비교용)
+        recipientHash: r["수령자해시"] || "",
         region: parseRegion(r["수령자주소"] || ""),
         product: r["상품명"] || "",
         cycle: r["배송주기"] || "",
@@ -1149,6 +1213,11 @@ document.getElementById("resetFilterBtn").onclick = () => {
 
 function applyFilters() {
   const excludeNames = parseList(document.getElementById("fExcludeNames").value);
+  // 자동 수집 데이터 — 아직 암호화 값이 없는 이름은 받아 온 뒤 다시 거른다(받기 전엔 그 이름을 못 거른다)
+  if (dataSource === "api" && excludeNames.some(n => n && !hashCache.has("name:" + n))) {
+    const gen = loadGen;
+    ensureHashes(excludeNames).then(ok => { if (ok && gen === loadGen && dataSource === "api") applyFilters(); });
+  }
   const excludeOpts = parseList(document.getElementById("fExcludeOpts").value);
   const dateFrom = document.getElementById("fDateFrom").value;
   const dateTo = document.getElementById("fDateTo").value;
@@ -1169,7 +1238,9 @@ function applyFilters() {
   ords = ords.filter(o => {
     if (!o.options.length) return false;
     if (excludeNames.length) {
-      if (excludeNames.some(n => n && (o.applicant === n || o.recipient === n))) return false;
+      if (dataSource === "api") {
+        if (excludeNames.some(n => { const h = hashCache.get("name:" + n); return h && (o.applicantHash === h || o.recipientHash === h); })) return false;
+      } else if (excludeNames.some(n => n && (o.applicant === n || o.recipient === n))) return false;
     }
     if (dateFrom && o.signDate < dateFrom) return false;
     if (dateTo && o.signDate > dateTo) return false;
@@ -1456,7 +1527,7 @@ function renderShippingSchedule() {
                   .map(opt => `${keyOfOpt(o, opt)} ×${opt.qty || 1}`);
                 if (matchedSkus.length) extra = ` <span style="color:var(--primary-dark)">— ${escapeHtml(matchedSkus.join(", "))}</span>`;
               }
-              return `<li>${escapeHtml(o.applicant)} · ${o.cycle} · ${escapeHtml(o.region || "-")}${extra}</li>`;
+              return `<li>${escapeHtml(o.applicant || o.id)} · ${o.cycle} · ${escapeHtml(o.region || "-")}${extra}</li>`;
             }).join("")}</ul>
           </details>
         </div>
@@ -1768,8 +1839,8 @@ function renderRepeatTable() {
   if (!repeats.length) { tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-sub);padding:20px">재구매 회원 없음</td></tr>`; return; }
   tbody.innerHTML = repeats.map(r => `
     <tr>
-      <td>${escapeHtml(r.id || "-")}</td>
-      <td>${escapeHtml(r.name)}</td>
+      <td>${dataSource === "api" ? escapeHtml(r.list.map(o => o.id).join(", ")) : escapeHtml(r.id || "-")}</td>
+      <td>${escapeHtml(r.name || (dataSource === "api" ? "—" : ""))}</td>
       <td class="num"><strong>${r.total}</strong></td>
       <td class="num">${r.a}</td>
       <td class="num">${r.p}</td>
@@ -1787,8 +1858,8 @@ function renderPauseTable() {
   tbody.innerHTML = pause.map(o => `
     <tr>
       <td>${o.id}</td>
-      <td>${escapeHtml(o.applicant)} <span class="pill pill-pause">${o.status.replace("일시정지","")}</span></td>
-      <td>${escapeHtml(o.applicantPhone)}</td>
+      <td>${escapeHtml(o.applicant || (dataSource === "api" ? "—" : ""))} <span class="pill pill-pause">${o.status.replace("일시정지","")}</span></td>
+      <td>${dataSource === "api" ? `<span style="color:var(--text-sub);font-size:11px">카페24에서 신청번호로 확인</span>` : escapeHtml(o.applicantPhone)}</td>
       <td>${o.cycle}</td>
       <td class="num">${o.round || "-"}</td>
       <td>${o.signDate}</td>
@@ -1854,7 +1925,12 @@ function renderOrdersTable() {
   const st = document.getElementById("statusFilter").value;
   let list = orders.slice();
   if (st) list = list.filter(o => statusBucketLabel(o.status) === st);
-  if (q) list = list.filter(o => (o.applicant + o.applicantId + o.recipient + o.id + o.applicantPhone + o.recipientPhone).toLowerCase().includes(q));
+  if (q && dataSource === "api") {
+    // 자동 수집 — 신청번호는 부분 일치, 이름·회원 아이디는 암호화 값 완전 일치
+    const raw = (document.getElementById("searchInput").value || "").trim();
+    const hn = hashCache.get("name:" + raw), hm = hashCache.get("member:" + raw);
+    list = list.filter(o => o.id.toLowerCase().includes(q) || (hn && (o.applicantHash === hn || o.recipientHash === hn)) || (hm && o.applicantId === hm));
+  } else if (q) list = list.filter(o => (o.applicant + o.applicantId + o.recipient + o.id + o.applicantPhone + o.recipientPhone).toLowerCase().includes(q));
   list.sort(compareOrders);
   updateSortArrows();
   document.getElementById("totalCount").textContent = `${list.length}건 / 필터 ${orders.length}건`;
@@ -1869,7 +1945,7 @@ function renderOrdersTable() {
       <td>${o.id}</td>
       <td>${o.signDate}</td>
       <td>${pill}</td>
-      <td>${escapeHtml(o.applicant)}<br><span style="color:var(--text-sub);font-size:11px">${escapeHtml(o.applicantId || "")}</span></td>
+      <td>${dataSource === "api" ? "—" : `${escapeHtml(o.applicant)}<br><span style="color:var(--text-sub);font-size:11px">${escapeHtml(o.applicantId || "")}</span>`}</td>
       <td>${o.cycle}</td>
       <td class="num">${o.round || "-"}</td>
       <td>${o.cancelDate || "-"}</td>
@@ -1877,7 +1953,15 @@ function renderOrdersTable() {
     </tr>`;
   }).join("") + (list.length > 500 ? `<tr><td colspan="8" style="text-align:center;color:var(--text-sub);padding:12px">${list.length - 500}건 더 있음 — 검색으로 좁혀주세요</td></tr>` : "");
 }
-document.getElementById("searchInput").addEventListener("input", renderOrdersTable);
+let searchHashTimer = null;
+document.getElementById("searchInput").addEventListener("input", () => {
+  renderOrdersTable();
+  // 자동 수집 — 입력이 멈추면 이름·아이디를 암호화 값으로 받아 다시 그린다
+  if (dataSource !== "api") return;
+  clearTimeout(searchHashTimer);
+  const raw = (document.getElementById("searchInput").value || "").trim();
+  if (raw && !hashCache.has("name:" + raw)) searchHashTimer = setTimeout(() => { const gen = loadGen; ensureHashes([raw]).then(ok => { if (ok && gen === loadGen) renderOrdersTable(); }); }, 350);
+});
 document.getElementById("statusFilter").addEventListener("change", renderOrdersTable);
 
 // =========================== 결과 스냅샷 저장 ===========================
@@ -2150,6 +2234,19 @@ document.getElementById("saveExcludeBtn").onclick = async () => {
     el.textContent = "저장 실패: " + e.message;
   }
 };
+
+// =========================== 카페24 자동 수집 데이터(127) ===========================
+// 매일 새벽 중계 서버가 수집한 데이터가 있으면 열 때 바로 불러온다. 없거나 실패하면 예전처럼 CSV 업로드를 기다린다.
+(async function autoLoadSubscriptions() {
+  try {
+    const res = await fetch("/api/subscription/data", { cache: "no-store" });
+    const j = await res.json();
+    if (!res.ok || !j.ok || !Array.isArray(j.rows) || !j.rows.length) return;
+    autoData = j;
+    if (rawRows.length) { applyDataSourceUi(); return; } // 그사이 CSV 를 올렸으면 그대로 두고 버튼만
+    loadAuto();
+  } catch (e) { /* CSV 업로드로 진행 */ }
+})();
 
 // 분석 갱신 시 미리보기도 갱신 (render() 끝부분에서 호출)
 const _origRender = render;
