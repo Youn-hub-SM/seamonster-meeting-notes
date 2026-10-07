@@ -1,4 +1,5 @@
-// 카페24 정기배송 신청 수집 — 중계 서버(클라우드웨이즈) 크론, 매일 05:30 KST(2026-10-07 대표 결정, migration 127).
+// 카페24 정기배송 신청 수집 — 중계 서버(클라우드웨이즈) 크론, 매일 23:59 KST = 그날 마감 기준(2026-10-08 대표 결정, migration 127).
+//  수집이 2~5분 걸려 자정을 넘기므로 '시작한 날(KST)'을 기준일(asOf)로 함께 보낸다 — 서버가 그 날짜로 저장·스냅샷.
 //  실행: node scripts/cafe24-subscription-sync.mjs [서버URL] [--all-payments]
 //   · 신청 목록: GET /api/v2/admin/subscription/shipments — 신청일 기준 1개월 창으로 전 기간(시작 2025-01-01) 조회
 //   · 회차별 결제: GET /subscription/shipments/{id}/payments — 이용중·일시정지 신청과 최근 45일 안에 신청·해지된 신청만
@@ -76,7 +77,7 @@ async function get(url) {
 }
 
 // 1) 신청 목록 — 신청일 기준 1개월 창(최대 기간 제한이 문서에 없어 안전하게 나눔), 창마다 100건씩 offset 5000 까지
-const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 시작한 날(KST) = 기준일
 const subs = [];
 let complete = true;
 const errors = [];
@@ -142,7 +143,7 @@ const res = await fetch(`${SERVER}/api/subscription/sync`, {
   method: "POST",
   headers: { "Content-Type": "application/json", Authorization: `Bearer ${uploadSecret}` },
   signal: AbortSignal.timeout(90_000),
-  body: JSON.stringify({ complete, subs, payments }),
+  body: JSON.stringify({ complete, subs, payments, asOf: today }),
 });
 const out = await res.json().catch(() => ({}));
 const line = `[${stamp()}] 신청 ${subs.length} · 결제 ${payments.length}(대상 ${payTargets.length}${payErr ? `, 실패 ${payErr}` : ""}) · ${complete ? "전체" : "일부"}${errors.length ? ` · 오류: ${errors.join(" / ")}` : ""}`;

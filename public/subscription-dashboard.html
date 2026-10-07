@@ -506,7 +506,7 @@
     <div class="card-head">
       <div>
         <div class="card-title">분석 히스토리 · 추세</div>
-        <div class="card-sub">매일 새벽 카페24 자동 수집 뒤 자동 저장 · 주·월은 그 기간 마지막 날 값 (개인정보 미포함)</div>
+        <div class="card-sub">매일 밤 23:59 카페24 자동 수집 뒤 자동 저장(그날 마감 기준) · 주·월은 그 기간 마지막 날 값 (개인정보 미포함)</div>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <div id="historyUnit" style="display:flex; gap:4px;">
@@ -537,7 +537,7 @@
     <p>카페24 어드민에서 다운로드한 정기배송 신청 CSV를 끌어다 놓거나 위의 <strong>CSV 업로드</strong> 버튼을 누르세요.</p>
     <button class="btn btn-primary" id="emptyUploadBtn">파일 선택</button>
     <button class="btn" id="autoLoadBtn" style="display:none">카페24 자동 수집 데이터 불러오기</button>
-    <div class="hint">CSV 는 서버로 전송되지 않고 브라우저에서만 처리됩니다. 새로고침 시 즉시 사라집니다.<br>카페24 자동 수집 데이터(매일 새벽)가 있으면 열 때 자동으로 불러옵니다 — 이름·연락처·주소는 저장하지 않습니다.</div>
+    <div class="hint">CSV 는 서버로 전송되지 않고 브라우저에서만 처리됩니다. 새로고침 시 즉시 사라집니다.<br>카페24 자동 수집 데이터(매일 밤 23:59, 그날 마감 기준)가 있으면 열 때 자동으로 불러옵니다 — 이름·연락처·주소는 저장하지 않습니다.</div>
   </section>
 
   <div id="dashboard" style="display:none">
@@ -783,7 +783,7 @@
         <button class="btn" id="downloadJsonBtn">JSON 다운로드</button>
         <span class="snapshot-status" id="snapshotStatus"></span>
       </div>
-      <div class="card-sub" style="margin-top:8px;">매일 새벽 자동으로 저장됩니다(기본 필터 기준). 직접 누르면 지금 필터의 결과로 같은 데이터 기준일 값을 갱신합니다 — 모든 사용자 공용.</div>
+      <div class="card-sub" style="margin-top:8px;">매일 밤 23:59 자동으로 저장됩니다(그날 마감 기준, 기본 필터). 직접 누르면 지금 필터의 결과로 같은 데이터 기준일 값을 갱신합니다 — 모든 사용자 공용.</div>
     </section>
 
     <!-- 발송 일정 (보조 도구 — 운영 픽업용) -->
@@ -1070,7 +1070,8 @@ function ingestRows(rows, meta) {
 }
 function loadAuto() {
   const at = autoData.syncedAt ? new Date(Date.parse(autoData.syncedAt) + 9 * 3600e3).toISOString().slice(5, 16).replace("T", " ") : "";
-  ingestRows(autoData.rows, { source: "api", asOf: autoData.asOf, label: at, complete: autoData.complete });
+  const label = autoData.asOf ? `${autoData.asOf.slice(5)} 마감${at ? `(수집 ${at})` : ""}` : at;
+  ingestRows(autoData.rows, { source: "api", asOf: autoData.asOf, label, complete: autoData.complete });
 }
 // 출처별 안내 문구 — 자동 수집은 이름을 암호화 값으로만 가져 이름 제외·검색이 '완전 일치'다
 function applyDataSourceUi() {
@@ -2160,7 +2161,7 @@ function renderHistory() {
   const tableWrap = document.getElementById("historyTableWrap");
   if (!historyRows.length) {
     emptyEl.style.display = "";
-    emptyEl.textContent = "아직 저장된 스냅샷이 없습니다. 매일 새벽 카페24 자동 수집 뒤 자동으로 쌓입니다(직접 저장은 ‘결과 스냅샷 저장 → 결과 저장’).";
+    emptyEl.textContent = "아직 저장된 스냅샷이 없습니다. 매일 밤 23:59 카페24 자동 수집 뒤 자동으로 쌓입니다(직접 저장은 ‘결과 스냅샷 저장 → 결과 저장’).";
     chartWrap.style.display = "none";
     tableWrap.style.display = "none";
     return;
@@ -2281,7 +2282,7 @@ document.getElementById("saveExcludeBtn").onclick = async () => {
 };
 
 // =========================== 카페24 자동 수집 데이터(127) ===========================
-// 매일 새벽 중계 서버가 수집한 데이터가 있으면 열 때 바로 불러온다. 없거나 실패하면 예전처럼 CSV 업로드를 기다린다.
+// 매일 밤 23:59 중계 서버가 수집한 데이터가 있으면 열 때 바로 불러온다. 없거나 실패하면 예전처럼 CSV 업로드를 기다린다.
 (async function autoLoadSubscriptions() {
   try {
     const res = await fetch("/api/subscription/data", { cache: "no-store" });

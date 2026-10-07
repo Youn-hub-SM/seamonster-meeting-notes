@@ -7,7 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// POST /api/subscription/sync — 중계 서버(scripts/cafe24-subscription-sync.mjs)가 매일 새벽 카페24 정기배송 신청 전량을 올린다(127).
+// POST /api/subscription/sync — 중계 서버(scripts/cafe24-subscription-sync.mjs)가 매일 23:59 카페24 정기배송 신청 전량을 올린다(127).
+//  body.asOf = 수집을 시작한 날(KST) — 23:59 에 시작해 자정을 넘겨 끝나도 그날 마감 데이터로 저장한다(오늘·어제만 인정).
 //  미들웨어 예외 경로 — Bearer(업로드 공용 시크릿 또는 CRON_SECRET)로 인증.
 //  body: { complete, subs: SyncSubIn[], payments?: SyncPaymentIn[] }
 //   · 아이디·이름은 저장 전에 HMAC 으로 바꾼다(원문은 어디에도 남기지 않는다). 주소는 첫 낱말만.
@@ -24,7 +25,7 @@ const chunk = <T,>(arr: T[], n: number) => Array.from({ length: Math.ceil(arr.le
 export async function POST(req: NextRequest) {
   try {
     if (!bearerOk(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
-    const b = (await req.json()) as { complete?: boolean; subs?: SyncSubIn[]; payments?: SyncPaymentIn[] };
+    const b = (await req.json()) as { complete?: boolean; subs?: SyncSubIn[]; payments?: SyncPaymentIn[]; asOf?: string };
     const subsIn = (Array.isArray(b.subs) ? b.subs : []).filter((s) => s && typeof s.subscription_id === "string" && s.subscription_id);
     if (!subsIn.length) return NextResponse.json({ ok: false, error: "신청 데이터가 비었습니다." }, { status: 400 });
     const sb = supabaseAdmin();
@@ -71,9 +72,12 @@ export async function POST(req: NextRequest) {
       if (error) throw error;
     }
 
-    const summary = { at: runAt, asOf: kstDate(runAt), subs: subRows.length, items: itemRows.length, payments: payUniq.length, removed, complete: b.complete === true };
+    const serverDay = kstDate(runAt) ?? runAt.slice(0, 10);
+    const yesterday = new Date(Date.parse(`${serverDay}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
+    const asOf = typeof b.asOf === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.asOf) && (b.asOf === serverDay || b.asOf === yesterday) ? b.asOf : serverDay;
+    const summary = { at: runAt, asOf, subs: subRows.length, items: itemRows.length, payments: payUniq.length, removed, complete: b.complete === true };
     try { await setKv(SYNC_KV, JSON.stringify(summary)); } catch (e) { console.warn("[subscription/sync] 요약 저장 실패", e); }
-    const snap = await saveAutoSnapshot(sb, summary.asOf ?? kstDate(runAt) ?? runAt.slice(0, 10), summary.complete);
+    const snap = await saveAutoSnapshot(sb, asOf, summary.complete);
     if (!snap.ok) console.warn("[subscription/sync] 자동 스냅샷 실패", snap.error);
     return NextResponse.json({ ok: true, ...summary, snapshot: snap.ok ? (snap.updated ? "갱신" : "저장") : `실패: ${snap.error}` });
   } catch (err) {
