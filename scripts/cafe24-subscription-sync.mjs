@@ -150,6 +150,6 @@ if (!res.ok || !out.ok) {
   console.error(`${line} → 업로드 실패 HTTP ${res.status} ${out.error || ""}`);
   process.exit(1);
 }
-console.log(`${line} → 저장 신청 ${out.subs} · 품목 ${out.items} · 결제 ${out.payments}${out.removed ? ` · 삭제 ${out.removed}` : ""}`);
+console.log(`${line} → 저장 신청 ${out.subs} · 품목 ${out.items} · 결제 ${out.payments}${out.removed ? ` · 삭제 ${out.removed}` : ""}${out.snapshot ? ` · 스냅샷 ${out.snapshot}` : ""}`);
 // 일부 기간 조회 실패 — 받은 것은 저장했지만 그 기간 신청은 이전 상태로 남는다. 크론 로그에서 실패로 보이게 종료 코드 2
 if (!complete) process.exit(2);
