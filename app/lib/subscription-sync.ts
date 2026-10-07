@@ -1,4 +1,7 @@
 import { createHmac } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getKv } from "./b2b-settings";
+import { computeSubscriptionSnapshot, parseList, DEFAULT_EXCLUDE_NAMES, DEFAULT_EXCLUDE_OPTS } from "./subscription-snapshot";
 
 // 카페24 정기배송 신청 자동 수집(127) — 중계 서버 → /api/subscription/sync → 저장 → /api/subscription/data → 분석 화면.
 //  개인정보: 이름·연락처·주소·이메일은 저장하지 않는다. 회원 아이디·신청자/수령자 이름은 받는 즉시 HMAC 으로 바꾼다
@@ -141,4 +144,62 @@ export function toDashboardRows(subs: SubRow[], items: ItemRow[]): Record<string
 }
 
 export const SYNC_KV = "subscription_sync_last"; // { at, subs, items, payments, complete }
+
+// 저장된 신청·품목 전량 → 분석 화면 행(데이터 API·자동 스냅샷 공용). range 페이징 전량(서버 Max Rows 1000).
+async function pageAll<T>(q: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await q(from, from + 999);
+    if (error) throw error;
+    const rows = (data as T[] | null) ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return out;
+}
+export async function loadDashboardRows(sb: SupabaseClient): Promise<{ rows: Record<string, string>[]; subs: number }> {
+  const [subs, items] = await Promise.all([
+    pageAll<SubRow>((a, b) => sb.from("cafe24_subscriptions").select("*").order("subscription_id").range(a, b)),
+    pageAll<ItemRow>((a, b) => sb.from("cafe24_subscription_items").select("*").order("subscription_item_id").range(a, b)),
+  ]);
+  return { rows: toDashboardRows(subs, items), subs: subs.length };
+}
+
+// 자동 결과 스냅샷(2026-10-07) — 수집 직후 매일 저장해 분석 히스토리가 끊기지 않게.
+//  계산은 화면과 같은 규칙(subscription-snapshot.ts), 필터는 화면 기본값(저장된 '제외 기본값', 없으면 HTML 기본값·관리자 상태 제외).
+//  같은 기준일이 이미 있으면 갱신(화면의 '결과 저장'과 같은 규칙 — subscription_snapshots, migration 020).
+export async function saveAutoSnapshot(sb: SupabaseClient, asOf: string, complete: boolean): Promise<{ ok: boolean; updated?: boolean; error?: string }> {
+  try {
+    const { rows } = await loadDashboardRows(sb);
+    if (!rows.length) return { ok: false, error: "저장된 신청이 없습니다" };
+    let names = DEFAULT_EXCLUDE_NAMES, opts = DEFAULT_EXCLUDE_OPTS;
+    try {
+      const raw = await getKv("subscription_exclude");
+      if (raw) { const v = JSON.parse(raw) as { names?: unknown; opts?: unknown }; if (typeof v.names === "string") names = v.names; if (typeof v.opts === "string") opts = v.opts; }
+    } catch { /* 기본값으로 */ }
+    const key = hashKey();
+    const fileName = `카페24 자동 수집 ${asOf}`;
+    const snapshot = {
+      ...computeSubscriptionSnapshot({
+        rows, dataDate: asOf, fileName,
+        excludeNameHashes: parseList(names).map((n) => subHash("name", n, key) ?? "").filter(Boolean),
+        excludeOpts: parseList(opts),
+      }),
+      auto: true,          // 자동 저장(화면에서 누른 저장과 구분)
+      complete,            // false = 그날 수집에서 일부 기간을 못 받음
+    };
+    const { data: existing, error: exErr } = await sb.from("subscription_snapshots").select("id").eq("data_date", asOf).maybeSingle();
+    if (exErr) throw exErr;
+    if (existing) {
+      const { error } = await sb.from("subscription_snapshots").update({ snapshot, file_name: fileName, created_at: new Date().toISOString() }).eq("id", (existing as { id: string }).id);
+      if (error) throw error;
+      return { ok: true, updated: true };
+    }
+    const { error } = await sb.from("subscription_snapshots").insert({ data_date: asOf, file_name: fileName, snapshot });
+    if (error) throw error;
+    return { ok: true, updated: false };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String((e as { message?: unknown } | null)?.message ?? e) };
+  }
+}
 export const isMissingTable = (e: { message?: string } | null | undefined) => !!e && /cafe24_subscription|does not exist|schema cache/i.test(e.message || "");

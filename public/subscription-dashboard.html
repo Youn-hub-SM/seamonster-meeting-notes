@@ -506,9 +506,14 @@
     <div class="card-head">
       <div>
         <div class="card-title">분석 히스토리 · 추세</div>
-        <div class="card-sub">저장된 결과 스냅샷의 시계열 추이 — 관찰·인사이트용 (개인정보 미포함)</div>
+        <div class="card-sub">매일 새벽 카페24 자동 수집 뒤 자동 저장 · 주·월은 그 기간 마지막 날 값 (개인정보 미포함)</div>
       </div>
-      <button class="btn btn-sm" id="historyRefreshBtn">새로고침</button>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div id="historyUnit" style="display:flex; gap:4px;">
+          <span class="chip on" data-unit="day">일</span><span class="chip" data-unit="week">주</span><span class="chip" data-unit="month">월</span>
+        </div>
+        <button class="btn btn-sm" id="historyRefreshBtn">새로고침</button>
+      </div>
     </div>
     <div class="history-empty" id="historyEmpty">불러오는 중…</div>
     <div class="history-chart-wrap" id="historyChartWrap" style="display:none">
@@ -517,9 +522,10 @@
     <div class="history-table-wrap" id="historyTableWrap" style="display:none">
       <table class="history-table">
         <thead><tr>
-          <th>데이터 기준일</th><th class="num">활성</th><th class="num">일시정지</th>
+          <th id="historyPeriodHead">데이터 기준일</th><th class="num">활성</th><th class="num">일시정지</th>
+          <th class="num">신규 신청</th><th class="num">신규 해지</th>
           <th class="num">결제도달</th><th class="num">3회잔존</th><th class="num">4회잔존</th>
-          <th class="num">평균중량</th><th class="num">해지(건/명)</th><th>저장시각</th><th></th>
+          <th class="num">평균중량</th><th class="num">누적 해지(건/명)</th><th>저장시각</th><th></th>
         </tr></thead>
         <tbody id="historyTbody"></tbody>
       </table>
@@ -777,7 +783,7 @@
         <button class="btn" id="downloadJsonBtn">JSON 다운로드</button>
         <span class="snapshot-status" id="snapshotStatus"></span>
       </div>
-      <div class="card-sub" style="margin-top:8px;">저장하면 위 ‘분석 히스토리’에 점이 추가됩니다. 같은 데이터 기준일은 갱신됩니다. 모든 사용자 공용.</div>
+      <div class="card-sub" style="margin-top:8px;">매일 새벽 자동으로 저장됩니다(기본 필터 기준). 직접 누르면 지금 필터의 결과로 같은 데이터 기준일 값을 갱신합니다 — 모든 사용자 공용.</div>
     </section>
 
     <!-- 발송 일정 (보조 도구 — 운영 픽업용) -->
@@ -2101,6 +2107,35 @@ function numFrom(v) {
 
 let historyChart = null;
 let historyRows = [];
+// 보기 단위 — 일(스냅샷 그대로) / 주(ISO 주) / 월. 주·월은 그 기간의 마지막 기준일 스냅샷을 대표값으로 쓴다
+//  (활성·잔존율 같은 값은 '그 시점 상태'라 합치면 안 된다). 신규 신청·신규 해지 = 앞 기간 대표값과의 차이.
+let historyUnit = "day";
+try { historyUnit = localStorage.getItem("sub_history_unit") || "day"; } catch (e) { /* 저장소 없음 */ }
+function historyDayOf(r) { return r.data_date || ((r.snapshot && r.snapshot.savedAt) || "").slice(0, 10) || ""; }
+function groupHistory() {
+  const rows = historyRows.filter(r => historyDayOf(r)).slice()
+    .sort((a, b) => historyDayOf(a).localeCompare(historyDayOf(b)) || String(a.created_at || "").localeCompare(String(b.created_at || "")));
+  const byKey = new Map();
+  for (const r of rows) {
+    const d = historyDayOf(r);
+    const k = historyUnit === "week" ? getWeekKey(d) : historyUnit === "month" ? getMonth(d) : d;
+    byKey.set(k, r); // 날짜순이라 마지막 것이 남는다(그 기간 마지막 기준일)
+  }
+  const list = [...byKey.entries()].map(([k, r]) => ({
+    key: k, row: r, day: historyDayOf(r),
+    label: historyUnit === "week" ? formatWeekLabel(k) : k,
+  }));
+  // 증감 — 같은 출처끼리만(자동 수집 ↔ CSV 는 집계 범위가 달라 차이가 뜻이 없다)
+  list.forEach((g, i) => {
+    const s = g.row.snapshot || {}, p = i > 0 ? (list[i - 1].row.snapshot || {}) : null;
+    const same = p && !!p.auto === !!s.auto;
+    const d = (k) => (same && typeof s[k] === "number" && typeof p[k] === "number") ? s[k] - p[k] : null;
+    g.newOrders = d("totalOrders");
+    g.newCancels = d("totalCancels");
+  });
+  return list;
+}
+const signed = (n) => n == null ? "-" : (n > 0 ? `+${n}` : String(n));
 
 async function loadHistory() {
   const emptyEl = document.getElementById("historyEmpty");
@@ -2125,7 +2160,7 @@ function renderHistory() {
   const tableWrap = document.getElementById("historyTableWrap");
   if (!historyRows.length) {
     emptyEl.style.display = "";
-    emptyEl.textContent = "아직 저장된 스냅샷이 없습니다. CSV 분석 후 ‘결과 스냅샷 저장 → 결과 저장’을 누르면 여기에 쌓입니다.";
+    emptyEl.textContent = "아직 저장된 스냅샷이 없습니다. 매일 새벽 카페24 자동 수집 뒤 자동으로 쌓입니다(직접 저장은 ‘결과 스냅샷 저장 → 결과 저장’).";
     chartWrap.style.display = "none";
     tableWrap.style.display = "none";
     return;
@@ -2134,28 +2169,33 @@ function renderHistory() {
   chartWrap.style.display = "";
   tableWrap.style.display = "";
 
-  // 표 (최신 먼저)
+  document.querySelectorAll("#historyUnit .chip").forEach(c => c.classList.toggle("on", c.dataset.unit === historyUnit));
+  document.getElementById("historyPeriodHead").textContent = historyUnit === "week" ? "주" : historyUnit === "month" ? "월" : "데이터 기준일";
+  const groups = groupHistory();
+  // 표 (최신 먼저) — 주·월은 대표 기준일을 함께 적는다. 삭제는 일 보기에서만(한 줄 = 스냅샷 하나)
   const tbody = document.getElementById("historyTbody");
-  tbody.innerHTML = historyRows.slice().reverse().map(r => {
-    const s = r.snapshot || {};
-    const label = r.data_date || (s.savedAt || "").slice(0, 10) || "-";
+  tbody.innerHTML = groups.slice().reverse().map(g => {
+    const r = g.row, s = r.snapshot || {};
+    const label = historyUnit === "day" ? g.label : `${g.label} <span style="color:var(--text-sub);font-size:11px">(${escapeHtml(g.day.slice(5))})</span>`;
     return `<tr>
-      <td>${escapeHtml(label)}</td>
+      <td>${historyUnit === "day" ? escapeHtml(label) : label}${s.auto ? "" : ` <span style="color:var(--text-sub);font-size:11px">수동</span>`}</td>
       <td class="num">${s.activeMembers ?? "-"}</td>
       <td class="num">${s.pauseMembers ?? "-"}</td>
+      <td class="num">${signed(g.newOrders)}</td>
+      <td class="num">${signed(g.newCancels)}</td>
       <td class="num">${escapeHtml(String(s.firstPayRate ?? "-"))}</td>
       <td class="num">${escapeHtml(String(s.reach3Rate ?? "-"))}</td>
       <td class="num">${escapeHtml(String(s.reach4Rate ?? "-"))}</td>
       <td class="num">${escapeHtml(String(s.avgWeightKg ?? "-"))}</td>
       <td class="num">${s.totalCancels ?? "-"} / ${s.lostMembers ?? "-"}</td>
       <td>${escapeHtml(String(s.savedAt || r.created_at || "").slice(0, 16))}</td>
-      <td><button class="history-del" onclick="deleteSnapshot('${r.id}')">삭제</button></td>
+      <td>${historyUnit === "day" ? `<button class="history-del" onclick="deleteSnapshot('${escapeHtml(r.id)}')">삭제</button>` : ""}</td>
     </tr>`;
   }).join("");
 
   // 차트 (오래된→최신) — 좌축: 회원 수, 우축: %
-  const labels = historyRows.map(r => r.data_date || (r.snapshot && r.snapshot.savedAt || "").slice(0, 10));
-  const ds = (key) => historyRows.map(r => numFrom(r.snapshot && r.snapshot[key]));
+  const labels = groups.map(g => g.label);
+  const ds = (key) => groups.map(g => numFrom(g.row.snapshot && g.row.snapshot[key]));
   const ctx = document.getElementById("historyChart");
   if (historyChart) historyChart.destroy();
   historyChart = new Chart(ctx, {
@@ -2197,6 +2237,11 @@ async function deleteSnapshot(id) {
 }
 
 document.getElementById("historyRefreshBtn").onclick = loadHistory;
+document.querySelectorAll("#historyUnit .chip").forEach(c => c.addEventListener("click", () => {
+  historyUnit = c.dataset.unit;
+  try { localStorage.setItem("sub_history_unit", historyUnit); } catch (e) { /* 저장소 없음 */ }
+  renderHistory();
+}));
 // 페이지 로드 시 히스토리 표시 (CSV 업로드 없이도)
 loadHistory();
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { setKv } from "@/app/lib/b2b-settings";
-import { subHashKey, toSubRow, toItemRows, kstDate, isMissingTable, SYNC_KV, type SyncSubIn, type SyncPaymentIn } from "@/app/lib/subscription-sync";
+import { subHashKey, toSubRow, toItemRows, kstDate, isMissingTable, saveAutoSnapshot, SYNC_KV, type SyncSubIn, type SyncPaymentIn } from "@/app/lib/subscription-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +13,7 @@ export const maxDuration = 60;
 //   · 아이디·이름은 저장 전에 HMAC 으로 바꾼다(원문은 어디에도 남기지 않는다). 주소는 첫 낱말만.
 //   · 품목은 이번 실행 시각(synced_at)으로 덮어쓰고, 이번에 온 신청의 옛 품목(옵션 삭제 등)은 지운다.
 //   · complete=true(전 기간 조회 성공)일 때만 이번에 안 온 신청을 지운다 — 일부 기간 조회가 실패한 날 멀쩡한 기록이 사라지지 않게.
+//   · 저장이 끝나면 그날 기준일의 분석 결과 스냅샷을 자동 저장한다(히스토리 일·주·월 추세 — 실패해도 수집은 성공).
 function bearerOk(req: NextRequest): boolean {
   const authz = req.headers.get("authorization") || "";
   const keys = [process.env.NAVER_COMMERCE_CLIENT_SECRET, process.env.CRON_SECRET];
@@ -72,7 +73,9 @@ export async function POST(req: NextRequest) {
 
     const summary = { at: runAt, asOf: kstDate(runAt), subs: subRows.length, items: itemRows.length, payments: payUniq.length, removed, complete: b.complete === true };
     try { await setKv(SYNC_KV, JSON.stringify(summary)); } catch (e) { console.warn("[subscription/sync] 요약 저장 실패", e); }
-    return NextResponse.json({ ok: true, ...summary });
+    const snap = await saveAutoSnapshot(sb, summary.asOf ?? kstDate(runAt) ?? runAt.slice(0, 10), summary.complete);
+    if (!snap.ok) console.warn("[subscription/sync] 자동 스냅샷 실패", snap.error);
+    return NextResponse.json({ ok: true, ...summary, snapshot: snap.ok ? (snap.updated ? "갱신" : "저장") : `실패: ${snap.error}` });
   } catch (err) {
     console.error("[subscription/sync]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "정기배송 동기화 실패") }, { status: 500 });
