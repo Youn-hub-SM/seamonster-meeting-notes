@@ -179,6 +179,46 @@ const NAV_META: Map<string, { label: string; exact: boolean }> = (() => {
   return m;
 })();
 export const navLabelOf = (href: string, fallback: string): string => NAV_META.get(href)?.label ?? fallback;
+
+// ── 브라우저 탭 제목(2026-10-08 대표 지시 — 탭을 여러 개 띄우면 전부 같은 이름이라 헷갈림) ──
+//  '메뉴 · 툴 | 업무도우미' 순 — 좁은 탭엔 앞부분만 보이므로 구분되는 이름을 앞에 둔다. 메뉴 이름은 NAV 그대로.
+//  NAV 에 없는 화면(상세·작성·로그인·파도소리)은 아래 표. 주소는 정확히 일치 → 가장 긴 상위 주소 순으로 찾는다.
+const TITLE_SUFFIX = " | 업무도우미";
+const TITLE_EXTRA: { re: RegExp; title: string }[] = [
+  { re: /^\/b2b\/orders\/new$/, title: "새 발주 · B2B" },
+  { re: /^\/b2b\/orders\/(statement|[^/]+\/statement)$/, title: "거래명세표 · B2B" },
+  { re: /^\/b2b\/orders\/[^/]+$/, title: "발주 상세 · B2B" },
+  { re: /^\/b2b\/companies\/[^/]+$/, title: "업체 상세 · B2B" },
+  { re: /^\/inventory\/trade\/new$/, title: "입고/출고 기록" },
+  { re: /^\/meta-ad\/settings$/, title: "판정 기준 설정 · 메타 광고" },
+  { re: /^\/inventory\/activity$/, title: "변경 기록 · 재고" },
+  { re: /^\/b2b\/login$/, title: "로그인" },
+  { re: /^\/factory\/login$/, title: "로그인 · 파도소리" },
+  { re: /^\/factory$/, title: "재고 · 파도소리" },
+  { re: /^\/factory\/history$/, title: "히스토리 · 파도소리" },
+  { re: /^\/factory\/products$/, title: "상품마스터 · 파도소리" },
+  { re: /^\/factory\/settings$/, title: "알림 설정 · 파도소리" },
+];
+const TITLE_META: { href: string; title: string; exact: boolean }[] = (() => {
+  const out: { href: string; title: string; exact: boolean }[] = [];
+  const seen = new Set<string>();
+  const add = (href: string, title: string, exact: boolean) => { if (!href.startsWith("/") || seen.has(href)) return; seen.add(href); out.push({ href, title, exact }); };
+  for (const cat of NAV) for (const t of cat.tools) {
+    for (const sub of t.menu || []) add(sub.href, sub.label === t.label ? t.label : `${sub.label} · ${t.label}`, !!sub.exact);
+    add(t.href, t.label, !!t.exact);
+  }
+  return out;
+})();
+export function pageTitleOf(pathname: string): string {
+  const p = (pathname || "/").replace(/\/+$/, "") || "/";
+  if (p === "/") return "업무도우미";
+  const extra = TITLE_EXTRA.find((x) => x.re.test(p));
+  if (extra) return extra.title.includes("파도소리") ? extra.title : extra.title + TITLE_SUFFIX; // 파도소리는 별도 사이트
+  const exact = TITLE_META.find((m) => m.href === p);
+  if (exact) return exact.title + TITLE_SUFFIX;
+  const parent = TITLE_META.filter((m) => !m.exact && p.startsWith(m.href + "/")).sort((a, b) => b.href.length - a.href.length)[0];
+  return parent ? parent.title + TITLE_SUFFIX : "씨몬스터 업무 도우미";
+}
 export function navHrefActive(href: string, pathname: string): boolean {
   if (NAV_META.get(href)?.exact) return pathname === href;
   return pathname === href || pathname.startsWith(href + "/");

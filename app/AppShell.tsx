@@ -4,12 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AppSidebar from "./AppSidebar";
+import { pageTitleOf } from "./nav";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
   const [open, setOpen] = useState(false);          // 모바일 드로어 열림
   const [collapsed, setCollapsed] = useState(false); // 데스크톱 접기(아이콘만)
   const [desktop, setDesktop] = useState(true);      // 접기는 데스크톱에서만 적용
+
+  // 탭 제목 = 지금 화면 이름(여러 탭을 띄워도 구분되게). Next 가 화면 이동 뒤 루트 제목을 늦게 다시 넣으면
+  //  덮어쓰이므로, 제목이 바뀔 때마다 다시 맞춘다(같으면 아무것도 안 해 무한 반복 없음).
+  useEffect(() => {
+    const want = pageTitleOf(pathname);
+    const apply = () => { if (document.title !== want) document.title = want; };
+    apply();
+    const mo = new MutationObserver(apply);
+    mo.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => mo.disconnect();
+  }, [pathname]);
 
   // 접힘 상태 복원 + 데스크톱 여부 추적(모바일에선 접기 무시 → 드로어 그대로)
   useEffect(() => {
