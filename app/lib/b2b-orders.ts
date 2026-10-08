@@ -23,7 +23,8 @@ export const PAYMENT_STATUSES = ["입금전", "일부입금", "입금완료", "�
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export const TAX_INVOICE_STATUSES = ["미발행", "발행완료", "불필요"] as const;
-export type TaxInvoiceStatus = (typeof TAX_INVOICE_STATUSES)[number];
+// '발행대기' = 볼타로 발행 요청 후 국세청 처리 중(128) — 사람이 고르는 값이 아니라 선택지·필터 칩엔 없고 미발행으로 묶어 거른다
+export type TaxInvoiceStatus = (typeof TAX_INVOICE_STATUSES)[number] | "발행대기";
 
 // 색상 (UI 에서 status pill 에 사용).
 export const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
@@ -49,6 +50,7 @@ export const TAX_INVOICE_COLORS: Record<TaxInvoiceStatus, { bg: string; fg: stri
   "미발행": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
   "발행완료": { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
   "불필요": { bg: "var(--sm-border)", fg: "var(--sm-text-mid)" },
+  "발행대기": { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
 };
 
 // 발송 차수 상태 = 발주 발송 축과 동일 (발송대기/발송완료/취소).

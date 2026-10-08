@@ -169,6 +169,12 @@ export default function CompaniesPage() {
                           payment_terms: c.payment_terms ?? "",
                           notes: c.notes ?? "",
                           biz_doc_path: c.biz_doc_path ?? null,
+                          biz_type: c.biz_type ?? "",
+                          biz_item: c.biz_item ?? "",
+                          biz_address: c.biz_address ?? "",
+                          tax_email: c.tax_email ?? "",
+                          tax_manager_name: c.tax_manager_name ?? "",
+                          tax_manager_phone: c.tax_manager_phone ?? "",
                         },
                       })
                     }
@@ -309,13 +315,14 @@ function CompanyModal({
         if (f.name) { next.name = f.name; filled.add("name"); }
         if (f.biz_no) { next.biz_no = f.biz_no; filled.add("biz_no"); }
         if (f.ceo_name) { next.ceo_name = f.ceo_name; filled.add("ceo_name"); }
-        if (f.address) { next.address = f.address; filled.add("address"); }
-        const extra = [
-          f.biz_type && `업태: ${f.biz_type}`,
-          f.biz_item && `종목: ${f.biz_item}`,
-          f.opened_on && `개업일: ${f.opened_on}`,
-        ].filter(Boolean).join(" / ");
-        if (extra) next.notes = data.notes ? `${data.notes}\n${extra}` : extra;
+        // 사업장 소재지는 계산서용 '사업장 주소'에 — 기본 배송지는 비어 있을 때만 채운다(배송지를 덮지 않게)
+        if (f.address) {
+          next.biz_address = f.address; filled.add("biz_address");
+          if (!String(data.address ?? "").trim()) { next.address = f.address; filled.add("address"); }
+        }
+        if (f.biz_type) { next.biz_type = f.biz_type; filled.add("biz_type"); }
+        if (f.biz_item) { next.biz_item = f.biz_item; filled.add("biz_item"); }
+        if (f.opened_on) next.notes = data.notes ? `${data.notes}\n개업일: ${f.opened_on}` : `개업일: ${f.opened_on}`;
       }
       setAiFields(filled);
       onChange(next);
@@ -457,6 +464,40 @@ function CompanyModal({
           )}
 
           <div className="b2b-field-row">
+            <Field label="업태" badge={aiBadge("biz_type")}>
+              <input
+                type="text"
+                className="b2b-input"
+                style={aiStyle("biz_type")}
+                value={data.biz_type ?? ""}
+                onChange={(e) => set("biz_type", e.target.value)}
+                placeholder="예: 도소매"
+              />
+            </Field>
+            <Field label="종목" badge={aiBadge("biz_item")}>
+              <input
+                type="text"
+                className="b2b-input"
+                style={aiStyle("biz_item")}
+                value={data.biz_item ?? ""}
+                onChange={(e) => set("biz_item", e.target.value)}
+                placeholder="예: 수산물"
+              />
+            </Field>
+          </div>
+
+          <Field label="사업장 주소" badge={aiBadge("biz_address")}>
+            <input
+              type="text"
+              className="b2b-input"
+              style={aiStyle("biz_address")}
+              value={data.biz_address ?? ""}
+              onChange={(e) => set("biz_address", e.target.value)}
+              placeholder="사업자등록증의 사업장 소재지"
+            />
+          </Field>
+
+          <div className="b2b-field-row">
             <Field label="담당자명">
               <input
                 type="text"
@@ -485,6 +526,36 @@ function CompanyModal({
               placeholder="contact@example.com"
             />
           </Field>
+
+          <Field label="세금계산서 수신 이메일">
+            <input
+              type="email"
+              className="b2b-input"
+              value={data.tax_email ?? ""}
+              onChange={(e) => set("tax_email", e.target.value)}
+              placeholder="비우면 담당자 이메일로 보냅니다"
+            />
+          </Field>
+          <div className="b2b-field-row">
+            <Field label="세금계산서 담당자">
+              <input
+                type="text"
+                className="b2b-input"
+                value={data.tax_manager_name ?? ""}
+                onChange={(e) => set("tax_manager_name", e.target.value)}
+                placeholder="비우면 담당자명"
+              />
+            </Field>
+            <Field label="세금계산서 담당자 연락처">
+              <input
+                type="text"
+                className="b2b-input"
+                value={data.tax_manager_phone ?? ""}
+                onChange={(e) => set("tax_manager_phone", e.target.value)}
+                placeholder="010-0000-0000"
+              />
+            </Field>
+          </div>
 
           <Field label="기본 배송지" badge={aiBadge("address")}>
             <input

@@ -44,6 +44,7 @@ import CalendarView from "./CalendarView";
 import WeeklyView from "./WeeklyView";
 import ProductionView from "./ProductionView";
 import { pingActivityFeed } from "../ActivityFeed";
+import TaxInvoiceModal from "./TaxInvoiceModal";
 import { matchKoQuery } from "@/app/lib/hangul";
 
 type View = "list" | "calendar" | "weekly" | "production";
@@ -79,6 +80,7 @@ export default function OrdersListPage() {
   const [trackingInput, setTrackingInput] = useState<string[]>([""]);
   // 발송일 등록 창 — 차수(발송예정일 + 박스 수)를 여기서만 만든다. 발주 등록 폼에는 발송 일정이 없다.
   const [shipPrompt, setShipPrompt] = useState<{ id: string; label: string } | null>(null);
+  const [taxInvoiceFor, setTaxInvoiceFor] = useState<{ id: string; label: string } | null>(null); // 세금계산서 발행(볼타) 창
   //  status·tracking_no·stock_out 은 이 창에서 고치지 않지만 반드시 함께 실어 왕복시킨다 —
   //  저장이 차수를 통째로 지우고 다시 넣는 방식이라(saveOrderShipments), 안 실으면 송장번호가 사라지고
   //  발송완료가 발송대기로 되돌아간다.
@@ -309,7 +311,7 @@ export default function OrdersListPage() {
     if (taskPick) arr = arr.filter((o) => taskPick.ids.has(o.id));
     if (!statusAll) arr = arr.filter((o) => statusSel.has(shipView(o).status as ShipViewStatus));
     if (!paymentAll) arr = arr.filter((o) => paymentSel.has(o.payment_status));
-    if (!taxAll) arr = arr.filter((o) => taxSel.has(o.tax_invoice_status));
+    if (!taxAll) arr = arr.filter((o) => taxSel.has(o.tax_invoice_status === "발행대기" ? "미발행" : o.tax_invoice_status)); // 발행 중 = 아직 미발행으로 거른다
     if (companyFilter) arr = arr.filter((o) => o.company_id === companyFilter);
     if (productFilter) arr = arr.filter((o) => (o.items || []).some((it) => it.product_name === productFilter));
     if (hideComplete) arr = arr.filter((o) => !isOrderComplete(o));
@@ -1284,6 +1286,14 @@ export default function OrdersListPage() {
                         </select>
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
+                        {o.tax_invoice_status === "발행대기" ? (
+                          // 볼타 발행 요청 뒤 국세청 처리 중 — 사람이 고르는 값이 아니라 선택칸 대신 표시(누르면 결과 창)
+                          <button type="button" className="b2b-status-pill" title="볼타 발행 결과 보기"
+                            onClick={() => setTaxInvoiceFor({ id: o.id, label: `${o.order_no} · ${o.company_name ?? ""}` })}
+                            style={{ background: TAX_INVOICE_COLORS["발행대기"].bg, color: TAX_INVOICE_COLORS["발행대기"].fg, border: 0, cursor: "pointer" }}>
+                            발행 중
+                          </button>
+                        ) : (
                         <select
                           className="b2b-status-select"
                           value={o.tax_invoice_status}
@@ -1297,6 +1307,7 @@ export default function OrdersListPage() {
                             <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
+                        )}
                       </td>
                       <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                         <Link
@@ -1315,6 +1326,17 @@ export default function OrdersListPage() {
                         >
                           명세표
                         </Link>
+                        {o.status !== "취소" && (
+                          <button
+                            type="button"
+                            className="b2b-btn-secondary"
+                            style={{ padding: "5px 10px", fontSize: 12, marginLeft: 6 }}
+                            title="볼타로 세금계산서 발행(미리보기 → 발행)"
+                            onClick={() => setTaxInvoiceFor({ id: o.id, label: `${o.order_no} · ${o.company_name ?? ""}` })}
+                          >
+                            계산서
+                          </button>
+                        )}
                       </td>
                     </tr>
                     {parent && !isCollapsed && (o.shipments ?? []).map((s) => (
@@ -1466,6 +1488,18 @@ export default function OrdersListPage() {
           </>
         )}
       </div>
+      )}
+
+      {taxInvoiceFor && (
+        <TaxInvoiceModal
+          orderId={taxInvoiceFor.id}
+          label={taxInvoiceFor.label}
+          onClose={(changed) => {
+            const id = taxInvoiceFor.id;
+            setTaxInvoiceFor(null);
+            if (changed) { pingActivityFeed(); void refreshRows([id]); }
+          }}
+        />
       )}
 
       {exportOptions && (

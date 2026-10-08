@@ -16,9 +16,11 @@ export type StatementSupplier = {
   biz_item: string;  // 종목
   email: string;     // 이메일
   bank: string;      // 입금 은행정보 (예: 국민은행 000000-00-000000 예금주)
+  manager: string;   // 세금계산서 공급자 담당자(볼타 supplier.manager.name)
+  phone: string;     // 담당자 연락처(010-0000-0000)
 };
 
-const EMPTY: StatementSupplier = { name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr", bank: "" };
+const EMPTY: StatementSupplier = { name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr", bank: "", manager: "", phone: "" };
 
 export async function GET() {
   try {

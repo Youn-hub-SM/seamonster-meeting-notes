@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { normalizeCompany, CompanyInput } from "@/app/lib/b2b-types";
+import { normalizeCompany, CompanyInput, stripMissingCompanyCols } from "@/app/lib/b2b-types";
 import { logCompanyChange } from "@/app/lib/b2b-activity";
 
 export const dynamic = "force-dynamic";
+
+// 저장 행 — 화면이 보낸 키만이 아니라 정해진 칸 전부(계산서 칸은 128 미적용이면 빼고 재시도)
+//  undefined 키는 JSON 에서 빠져 그 칸은 그대로 남는다(키를 안 보낸 옛 화면이 새 칸을 지우지 않게).
+function companyRow(c: CompanyInput): Record<string, unknown> {
+  return {
+    name: c.name, biz_no: c.biz_no, ceo_name: c.ceo_name, contact_name: c.contact_name, contact_phone: c.contact_phone,
+    contact_email: c.contact_email, address: c.address, payment_terms: c.payment_terms, notes: c.notes, biz_doc_path: c.biz_doc_path,
+    biz_type: c.biz_type, biz_item: c.biz_item, biz_address: c.biz_address,
+    tax_email: c.tax_email, tax_manager_name: c.tax_manager_name, tax_manager_phone: c.tax_manager_phone,
+  };
+}
 
 export async function GET() {
   try {
@@ -46,22 +57,9 @@ export async function POST(req: NextRequest) {
     }
     const clean = normalizeCompany(body);
     const sb = supabaseAdmin();
-    const { data, error } = await sb
-      .from("companies")
-      .insert({
-        name: clean.name,
-        biz_no: clean.biz_no,
-        ceo_name: clean.ceo_name,
-        contact_name: clean.contact_name,
-        contact_phone: clean.contact_phone,
-        contact_email: clean.contact_email,
-        address: clean.address,
-        payment_terms: clean.payment_terms,
-        notes: clean.notes,
-        biz_doc_path: clean.biz_doc_path,
-      })
-      .select()
-      .single();
+    const row = companyRow(clean);
+    let { data, error } = await sb.from("companies").insert(row).select().single();
+    if (error && stripMissingCompanyCols(row, error.message)) ({ data, error } = await sb.from("companies").insert(row).select().single());
     if (error) throw error;
     await logCompanyChange("created", data.name);
     return NextResponse.json({ ok: true, company: data });
@@ -85,23 +83,9 @@ export async function PUT(req: NextRequest) {
     }
     const clean = normalizeCompany(body);
     const sb = supabaseAdmin();
-    const { data, error } = await sb
-      .from("companies")
-      .update({
-        name: clean.name,
-        biz_no: clean.biz_no,
-        ceo_name: clean.ceo_name,
-        contact_name: clean.contact_name,
-        contact_phone: clean.contact_phone,
-        contact_email: clean.contact_email,
-        address: clean.address,
-        payment_terms: clean.payment_terms,
-        notes: clean.notes,
-        biz_doc_path: clean.biz_doc_path,
-      })
-      .eq("id", body.id)
-      .select()
-      .single();
+    const row = companyRow(clean);
+    let { data, error } = await sb.from("companies").update(row).eq("id", body.id).select().single();
+    if (error && stripMissingCompanyCols(row, error.message)) ({ data, error } = await sb.from("companies").update(row).eq("id", body.id).select().single());
     if (error) throw error;
     await logCompanyChange("updated", data.name);
     return NextResponse.json({ ok: true, company: data });

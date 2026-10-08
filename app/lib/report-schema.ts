@@ -84,7 +84,7 @@ TABLE inventory_items — 품목별 재고설정(PK=product_id). product_id, min
 TABLE orders — B2B 발주 헤더. 업체명은 companies_report 로 조인(company_id=companies_report.id).
   id(uuid), order_no(text yyyymmdd-NNN), company_id(uuid), order_date(date 발주일), production_date(date 생산예정일),
   ship_date(date 발송예정일), production_status(text 생산대기|생산중|생산완료), status(text 발송대기|발송완료|취소),
-  payment_status(text 입금전|일부입금|입금완료|불필요), tax_invoice_status(text 미발행|발행완료|불필요),
+  payment_status(text 입금전|일부입금|입금완료|불필요), tax_invoice_status(text 미발행|발행대기(볼타 발행 요청·국세청 처리 중)|발행완료|불필요),
   subtotal·vat·total(numeric), discount_amount(numeric 할인/추가금 — 양수=할인 차감, 음수=추가금 가산. 할인 총액은 sum(greatest(discount_amount,0))), discount_reason(text), box_count(int), notes(text),
   is_bulk(bool 대량 발주(선결제) 표식 — 앞으로 잡는 선점의 칸을 정함. 이미 나간 발주의 실제 차감 칸은 inventory_txns.channel where created_by='B2B 자동출고' (shipment_id → shipments_report.id → order_id)), created_at
 

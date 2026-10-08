@@ -332,6 +332,23 @@ export async function logOrderPaymentStatusChanged(orderId: string, fromStatus: 
   });
 }
 
+// 세금계산서 발행(볼타 API, 128) — '세금계산서 상태 변경'과 같은 이벤트라 알림 설정(체크한 상태만)을 그대로 따른다.
+//  발행 요청 = 미발행 → 발행대기, 국세청 처리 결과 = 발행대기 → 발행완료/미발행(실패). detail(Teams 본문) = 문서별 금액·승인번호·사유.
+export async function logTaxInvoiceIssue(orderId: string, fromStatus: string, toStatus: string, detail: string, actor?: string | null): Promise<void> {
+  if (fromStatus === toStatus) return;
+  const o = await loadOrderSummary(orderId);
+  if (!o) return;
+  await recordActivity({
+    event_type: "order.tax_invoice_changed",
+    summary: `세금계산서 ${o.order_no} (${o.company_name}) · ${fromStatus} → ${toStatus}${toStatus === "발행대기" ? " · 볼타 발행 요청" : ""}`,
+    order_id: o.id,
+    order_no: o.order_no,
+    meta: { from: fromStatus, to: toStatus, source: "bolta" },
+    ...(actor !== undefined ? { actor } : {}),
+    detail,
+  });
+}
+
 export async function logOrderTaxInvoiceChanged(orderId: string, fromStatus: string, toStatus: string): Promise<void> {
   if (fromStatus === toStatus) return;
   const o = await loadOrderSummary(orderId);

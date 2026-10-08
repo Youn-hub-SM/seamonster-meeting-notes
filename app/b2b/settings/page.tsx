@@ -9,8 +9,8 @@ type Msg = { ok: boolean; text: string };
 
 export default function SettingsEtcPage() {
   // 거래명세표 — 공급자(우리 회사) 정보 + 직인
-  type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string; bank: string };
-  const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr", bank: "" });
+  type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string; bank: string; manager: string; phone: string };
+  const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr", bank: "", manager: "", phone: "" });
   const [stamp, setStamp] = useState("");
   const [supSaving, setSupSaving] = useState(false);
   const [supMsg, setSupMsg] = useState<Msg | null>(null);
@@ -82,6 +82,10 @@ export default function SettingsEtcPage() {
             <input className="b2b-input" value={sup.biz_type} onChange={(e) => setSup({ ...sup, biz_type: e.target.value })} placeholder="예: 도소매" /></label>
           <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>종목</span>
             <input className="b2b-input" value={sup.biz_item} onChange={(e) => setSup({ ...sup, biz_item: e.target.value })} placeholder="예: 수산물" /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>세금계산서 담당자</span>
+            <input className="b2b-input" value={sup.manager ?? ""} onChange={(e) => setSup({ ...sup, manager: e.target.value })} /></label>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>담당자 연락처</span>
+            <input className="b2b-input" value={sup.phone ?? ""} onChange={(e) => setSup({ ...sup, phone: e.target.value })} placeholder="010-0000-0000" /></label>
           <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>입금 은행정보</span>
             <input className="b2b-input" value={sup.bank} onChange={(e) => setSup({ ...sup, bank: e.target.value })} placeholder="예: 국민은행 000000-00-000000 (예금주: 씨몬스터)" /></label>
         </div>
