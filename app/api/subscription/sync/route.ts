@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { setKv } from "@/app/lib/b2b-settings";
-import { subHashKey, toSubRow, toItemRows, kstDate, isMissingTable, saveAutoSnapshot, SYNC_KV, type SyncSubIn, type SyncPaymentIn } from "@/app/lib/subscription-sync";
+import { subHashKey, toSubRow, toItemRows, kstDate, isMissingTable, saveAutoSnapshot, loadPrevStates, diffStateRows, subMetaFrom, STATE_LOG_TABLE, SYNC_KV, type SyncSubIn, type SyncPaymentIn, type SubMeta } from "@/app/lib/subscription-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +34,13 @@ export async function POST(req: NextRequest) {
 
     const subRows = subsIn.map((s) => toSubRow(s, runAt, key));
     const itemRows = subsIn.flatMap((s) => toItemRows(s, runAt)).filter((r) => r.subscription_item_id && r.subscription_item_id !== "undefined");
+
+    // 상태 변경 로그(129)용 — 덮어쓰기 전 저장돼 있던 신청 단위 상태를 먼저 읽어 둔다.
+    //  읽기가 실패하면 전부 '신규'로 오인될 수 있어, 성공했을 때만 로그를 남긴다.
+    let prevStates: Map<string, string | null> | null = null;
+    try { prevStates = await loadPrevStates(sb, subRows.map((s) => s.subscription_id)); }
+    catch (e) { console.warn("[subscription/sync] 이전 상태 조회 실패 — 상태 로그 생략", e); }
+
     for (const part of chunk(subRows, 500)) {
       const { error } = await sb.from("cafe24_subscriptions").upsert(part, { onConflict: "subscription_id" });
       if (error) {
@@ -75,7 +82,21 @@ export async function POST(req: NextRequest) {
     const serverDay = kstDate(runAt) ?? runAt.slice(0, 10);
     const yesterday = new Date(Date.parse(`${serverDay}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
     const asOf = typeof b.asOf === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.asOf) && (b.asOf === serverDay || b.asOf === yesterday) ? b.asOf : serverDay;
-    const summary = { at: runAt, asOf, subs: subRows.length, items: itemRows.length, payments: payUniq.length, removed, complete: b.complete === true };
+    // 상태 변경 로그 기록(129) — 직전 저장값과 달라진 신청만. 129 미적용이면 조용히 건너뛴다. 실패해도 수집은 성공.
+    let logged = 0;
+    if (prevStates) {
+      try {
+        const meta = new Map<string, SubMeta>(subsIn.map((s) => [String(s.subscription_id), subMetaFrom(s)]));
+        const logs = diffStateRows(subRows, prevStates, asOf, meta);
+        for (const part of chunk(logs, 500)) {
+          const { error } = await sb.from(STATE_LOG_TABLE).insert(part);
+          if (error) { if (isMissingTable(error)) { logged = -1; break; } throw error; }
+          logged += part.length;
+        }
+      } catch (e) { console.warn("[subscription/sync] 상태 로그 기록 실패", e); }
+    }
+
+    const summary = { at: runAt, asOf, subs: subRows.length, items: itemRows.length, payments: payUniq.length, removed, transitions: logged, complete: b.complete === true };
     try { await setKv(SYNC_KV, JSON.stringify(summary)); } catch (e) { console.warn("[subscription/sync] 요약 저장 실패", e); }
     const snap = await saveAutoSnapshot(sb, asOf, summary.complete);
     if (!snap.ok) console.warn("[subscription/sync] 자동 스냅샷 실패", snap.error);

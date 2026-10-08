@@ -203,3 +203,88 @@ export async function saveAutoSnapshot(sb: SupabaseClient, asOf: string, complet
   }
 }
 export const isMissingTable = (e: { message?: string } | null | undefined) => !!e && /cafe24_subscription|does not exist|schema cache/i.test(e.message || "");
+
+// ── 상태 변경 로그(129) — 신청 단위 상태(U/P/C)가 직전 저장값과 달라진 신청만 한 줄 ──
+//  prev_state=null = 최초 관측(신규 유입). 같은 데이터 재수집 시 prev==new 라 중복 기록 안 됨(멱등).
+//  이 표가 생긴 이후의 변화부터 쌓인다 — 과거 전이는 수집 이력이 없어 소급 불가.
+export type StateLogRow = { subscription_id: string; member_hash: string | null; prev_state: string | null; new_state: string; round: number | null; cycle: string | null; changed_on: string };
+export const STATE_LOG_TABLE = "cafe24_subscription_state_log";
+// 변화 시점의 대표 회차·주기 — 'n회 구독 중 정지·해지' 집계용. 회차=품목 최대 sequence, 주기=첫 품목 라벨.
+export type SubMeta = { round: number | null; cycle: string | null };
+export function subMetaFrom(s: SyncSubIn): SubMeta {
+  let maxRound = 0;
+  let cycle: string | null = null;
+  for (const it of s.items ?? []) {
+    const r = intOrNull(it.subscription_shipments_sequence);
+    if (r != null && r > maxRound) maxRound = r;
+    if (!cycle) {
+      const unit = String(it.subscription_cycle ?? "").trim().toUpperCase().slice(0, 1) || null;
+      const lbl = cycleLabel(unit, intOrNull(it.subscription_cycle_count));
+      if (lbl) cycle = lbl;
+    }
+  }
+  return { round: maxRound > 0 ? maxRound : null, cycle };
+}
+// 덮어쓰기 전 저장돼 있던 신청 단위 상태 맵(subscription_id → 'U'|'P'|'C'|null)
+export async function loadPrevStates(sb: SupabaseClient, ids: string[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += 300) {
+    const { data, error } = await sb.from("cafe24_subscriptions").select("subscription_id, state").in("subscription_id", ids.slice(i, i + 300));
+    if (error) throw error;
+    for (const r of (data ?? []) as { subscription_id: string; state: string | null }[]) map.set(r.subscription_id, r.state ?? null);
+  }
+  return map;
+}
+// 이번 수집에서 상태가 바뀐 신청의 로그 행(순수 함수 — 짝 검증 가능)
+export function diffStateRows(subRows: SubRow[], prevStates: Map<string, string | null>, asOf: string, meta?: Map<string, SubMeta>): StateLogRow[] {
+  const out: StateLogRow[] = [];
+  for (const s of subRows) {
+    const next = s.state;
+    if (!next) continue;                                   // 상태 미상 — 추적 불가
+    const seen = prevStates.has(s.subscription_id);
+    const prev = seen ? prevStates.get(s.subscription_id) ?? null : null;
+    if (seen && prev === next) continue;                   // 변화 없음
+    const m = meta?.get(s.subscription_id);
+    out.push({ subscription_id: s.subscription_id, member_hash: s.member_hash, prev_state: prev, new_state: next, round: m?.round ?? null, cycle: m?.cycle ?? null, changed_on: asOf });
+  }
+  return out;
+}
+// ── 현재(오늘) 회차 분포 — 전이 로그(129)가 쌓이기 전에도 바로 볼 수 있는 집계 ──
+//  저장된 품목(127)에서 신청 단위로 대표 상태(이용중>일시정지>해지)와 대표 회차(max sequence)를 구해 버킷팅.
+//  일시정지 건의 회차는 신뢰 가능(진행 중이라 sequence 존재). 해지 건은 원본에 회차가 비어 '미상'으로 갈 수 있다(로그가 쌓이면 정확해짐).
+export type RoundDist = { active: Record<string, number>; pause: Record<string, number>; cancel: Record<string, number> };
+export async function loadCurrentRoundDist(sb: SupabaseClient): Promise<RoundDist> {
+  const items = await pageAll<{ subscription_id: string; state: string | null; sequence: number | null }>(
+    (a, b) => sb.from("cafe24_subscription_items").select("subscription_id, state, sequence").order("subscription_item_id").range(a, b),
+  );
+  const rank: Record<string, number> = { active: 0, pause: 1, cancel: 2 };
+  const bucketOf = (s: string | null): "active" | "pause" | "cancel" | null =>
+    s === "U" ? "active" : s === "B" || s === "Q" ? "pause" : s === "M" || s === "A" || s === "O" ? "cancel" : null;
+  const bySub = new Map<string, { bucket: "active" | "pause" | "cancel" | null; round: number }>();
+  for (const it of items) {
+    const b = bucketOf(it.state);
+    const r = it.sequence != null && it.sequence > 0 ? it.sequence : 0;
+    const cur = bySub.get(it.subscription_id);
+    if (!cur) { bySub.set(it.subscription_id, { bucket: b, round: r }); continue; }
+    if (b && (cur.bucket === null || rank[b] < rank[cur.bucket])) cur.bucket = b;
+    if (r > cur.round) cur.round = r;
+  }
+  const out: RoundDist = { active: {}, pause: {}, cancel: {} };
+  const key = (r: number) => (r > 0 ? (r >= 5 ? "5+" : String(r)) : "미상");
+  for (const v of bySub.values()) {
+    if (!v.bucket) continue;
+    const k = key(v.round);
+    out[v.bucket][k] = (out[v.bucket][k] || 0) + 1;
+  }
+  return out;
+}
+
+// 상태 전이의 종류 — 화면·API 공용 라벨(prev→new)
+export type TransitionKind = "new" | "resume" | "reactivate" | "pause" | "cancel" | "other";
+export function transitionKind(prev: string | null, next: string): TransitionKind {
+  if (!prev) return "new";                 // 최초 관측(신규 유입)
+  if (next === "U") return prev === "C" ? "reactivate" : "resume"; // 해지→이용중 재활성 / 일시정지→이용중 재개
+  if (next === "P") return "pause";        // 일시정지
+  if (next === "C") return "cancel";       // 해지
+  return "other";
+}

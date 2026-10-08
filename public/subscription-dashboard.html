@@ -111,6 +111,13 @@
     border-radius: 50px; font-size: 12px; font-weight: 700;
   }
 
+  /* 상태 변화 이력 */
+  .trans-summary { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 2px; }
+  .trans-stat { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; min-width: 96px; }
+  .trans-stat .n { font-size: 20px; font-weight: 700; line-height: 1.1; }
+  .trans-stat .l { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .trans-arrow { color: var(--text-light); margin: 0 4px; }
+
   /* 분석 히스토리(추세) */
   .history-empty { font-size: 14px; color: var(--text-sub); padding: 16px 4px; }
   .history-chart-wrap { margin-bottom: 16px; height: 280px; position: relative; }
@@ -528,6 +535,49 @@
           <th class="num">평균중량</th><th class="num">누적 해지(건/명)</th><th>저장시각</th><th></th>
         </tr></thead>
         <tbody id="historyTbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" id="transitionSection">
+    <div class="card-head">
+      <div>
+        <div class="card-title">상태 변화 이력 · 일시정지→재개</div>
+        <div class="card-sub">매일 자동 수집 때 신청 단위 상태(이용중·일시정지·해지)가 바뀐 기록 · 신청번호로 카페24에서 고객 확인 (개인정보 미포함)</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <div id="transRange" style="display:flex; gap:4px;">
+          <span class="chip" data-days="7">7일</span><span class="chip on" data-days="30">30일</span><span class="chip" data-days="90">90일</span><span class="chip" data-days="0">전체</span>
+        </div>
+        <button class="btn btn-sm" id="transRefreshBtn">새로고침</button>
+      </div>
+    </div>
+    <div id="transCurrentWrap" style="display:none">
+      <div style="font-weight:700; font-size:14px; margin:6px 0 2px;">지금 몇 회차에 머물러 있나 <span style="color:var(--text-light); font-weight:400; font-size:12px;">· 오늘 기준 (전이 로그 없이도 바로 보임)</span></div>
+      <div class="history-chart-wrap" style="height:240px;"><canvas id="transCurrentChart"></canvas></div>
+    </div>
+
+    <div id="transEventHead" style="display:none; font-weight:700; font-size:14px; margin:18px 0 6px; border-top:1px solid var(--border); padding-top:16px;">변화 이력 <span style="color:var(--text-light); font-weight:400; font-size:12px;">· 기능 적용 뒤 쌓인 상태 변화 (재개·정지·해지 시점)</span></div>
+    <div class="history-empty" id="transEventEmpty" style="display:none"></div>
+    <div class="trans-summary" id="transSummary" style="display:none"></div>
+    <div class="history-chart-wrap" id="transChartWrap" style="display:none; height:240px; margin-top:14px;">
+      <canvas id="transRoundChart"></canvas>
+    </div>
+    <div class="chips" id="transTypes" style="display:none; margin:10px 0 0;">
+      <span class="chip on" data-kind="">전체</span>
+      <span class="chip" data-kind="resume">재개</span>
+      <span class="chip" data-kind="reactivate">재활성</span>
+      <span class="chip" data-kind="pause">일시정지</span>
+      <span class="chip" data-kind="cancel">해지</span>
+      <span class="chip" data-kind="new">신규</span>
+    </div>
+    <div class="history-empty" id="transEmpty">불러오는 중…</div>
+    <div class="history-table-wrap" id="transTableWrap" style="display:none; margin-top:12px;">
+      <table class="history-table">
+        <thead><tr>
+          <th>관측일</th><th>신청번호</th><th>회원</th><th>변화</th><th>유형</th>
+        </tr></thead>
+        <tbody id="transTbody"></tbody>
       </table>
     </div>
   </section>
@@ -2245,6 +2295,240 @@ document.querySelectorAll("#historyUnit .chip").forEach(c => c.addEventListener(
 }));
 // 페이지 로드 시 히스토리 표시 (CSV 업로드 없이도)
 loadHistory();
+
+// =========================== 상태 변화 이력 (상태 변경 로그 129, CSV 없이도) ===========================
+// /api/subscription/transitions 의 로그를 불러와 기간·유형으로 거르고 표·요약으로 보여준다.
+// 신청 단위 상태(U/P/C) 전이만 — 어떤 신청이 일시정지했다가 재개했는지. 정확한 고객은 신청번호로 카페24에서 확인.
+let transEvents = [];
+let transCurrent = null;   // 현재(오늘) 회차 분포 {active,pause,cancel}
+let transRoundChart = null;
+let transCurrentChart = null;
+let transDays = 30;        // 기본 최근 30일 (0 = 전체) — 변화 이력에만 적용
+let transKind = "";        // 유형 필터 (빈값 = 전체)
+try { const d = parseInt(localStorage.getItem("sub_trans_days"), 10); if ([0, 7, 30, 90].includes(d)) transDays = d; } catch (e) { /* 저장소 없음 */ }
+
+const TRANS_STATE_LABEL = { U: "이용중", P: "일시정지", C: "해지" };
+const TRANS_STATE_PILL = { U: "pill-active", P: "pill-pause", C: "pill-cancel" };
+const TRANS_KIND = {
+  resume:     { label: "재개", pill: "pill-active" },
+  reactivate: { label: "재활성", pill: "pill-active" },
+  pause:      { label: "일시정지", pill: "pill-pause" },
+  cancel:     { label: "해지", pill: "pill-cancel" },
+  new:        { label: "신규", pill: "pill-blue" },
+  other:      { label: "기타", pill: "" },
+};
+function transKindOf(prev, next) {
+  if (!prev) return "new";
+  if (next === "U") return prev === "C" ? "reactivate" : "resume";
+  if (next === "P") return "pause";
+  if (next === "C") return "cancel";
+  return "other";
+}
+function statePill(s) {
+  if (!s) return `<span style="color:var(--text-light)">신규</span>`;
+  return `<span class="pill ${TRANS_STATE_PILL[s] || ""}">${TRANS_STATE_LABEL[s] || escapeHtml(s)}</span>`;
+}
+
+async function loadTransitions() {
+  const emptyEl = document.getElementById("transEmpty");
+  try {
+    const res = await fetch("/api/subscription/transitions", { cache: "no-store" });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+    transEvents = j.events || [];
+    transCurrent = j.currentRounds || null;
+  } catch (e) {
+    emptyEl.style.display = "";
+    emptyEl.textContent = "상태 변화 이력을 불러오지 못했습니다: " + e.message;
+    document.getElementById("transCurrentWrap").style.display = "none";
+    document.getElementById("transEventHead").style.display = "none";
+    document.getElementById("transEventEmpty").style.display = "none";
+    document.getElementById("transSummary").style.display = "none";
+    document.getElementById("transChartWrap").style.display = "none";
+    document.getElementById("transTypes").style.display = "none";
+    document.getElementById("transTableWrap").style.display = "none";
+    return;
+  }
+  renderTransitions();
+}
+
+function renderTransitions() {
+  const emptyEl = document.getElementById("transEmpty");
+  const summaryEl = document.getElementById("transSummary");
+  const typesEl = document.getElementById("transTypes");
+  const tableWrap = document.getElementById("transTableWrap");
+
+  const eventHead = document.getElementById("transEventHead");
+  const eventEmpty = document.getElementById("transEventEmpty");
+
+  document.querySelectorAll("#transRange .chip").forEach(c => c.classList.toggle("on", Number(c.dataset.days) === transDays));
+
+  // 1) 현재(오늘) 회차 분포 — 기간과 무관, 전이 로그(129) 없이도 바로 보임
+  const hasCurrent = renderTransCurrent();
+
+  // 2) 변화 이력 — 기간(관측일) 거르기. 0 이면 전체
+  let rows = transEvents;
+  if (transDays > 0) {
+    const cut = new Date(Date.now() - transDays * 86400000).toISOString().slice(0, 10);
+    rows = rows.filter(r => (r.changed_on || "") >= cut);
+  }
+  rows = rows.map(r => ({ ...r, kind: transKindOf(r.prev_state, r.new_state) }));
+
+  // 전체 비어있음(현재 분포도 변화도 없음) — 섹션 최상단 안내만
+  if (!hasCurrent && !rows.length) {
+    emptyEl.style.display = "";
+    emptyEl.textContent = transEvents.length
+      ? "이 기간에는 변화가 없고, 현재 분포도 집계할 데이터가 없습니다."
+      : "아직 수집된 정기배송 데이터가 없습니다. 매일 밤 자동 수집 뒤 채워집니다.";
+    eventHead.style.display = "none"; eventEmpty.style.display = "none";
+    summaryEl.style.display = "none"; typesEl.style.display = "none"; tableWrap.style.display = "none";
+    document.getElementById("transChartWrap").style.display = "none";
+    return;
+  }
+  emptyEl.style.display = "none";
+  eventHead.style.display = "";
+
+  // 변화 이력이 아직 없을 때 — 안내만, 현재 분포는 그대로 둔다
+  if (!rows.length) {
+    eventEmpty.style.display = "";
+    eventEmpty.textContent = transEvents.length
+      ? "이 기간에는 상태 변화가 없습니다. (기간을 '전체'로 바꿔 보세요)"
+      : "아직 기록된 상태 변화가 없습니다. 매일 밤 자동 수집 때 신청 상태가 바뀌면 이때부터 쌓입니다(과거 변화는 소급되지 않습니다).";
+    summaryEl.style.display = "none"; typesEl.style.display = "none"; tableWrap.style.display = "none";
+    document.getElementById("transChartWrap").style.display = "none";
+    return;
+  }
+  eventEmpty.style.display = "none";
+  summaryEl.style.display = "";
+  typesEl.style.display = "";
+  tableWrap.style.display = "";
+
+  // 요약 — 기간 내 유형별 건수(재개 강조 순서) + 재개율(일시정지 경험 신청 중 재개 비율)
+  const counts = {};
+  for (const r of rows) counts[r.kind] = (counts[r.kind] || 0) + 1;
+  // 재개율: 이 기간에 일시정지한 신청 중, 이 기간에 재개(일시정지→이용중)한 신청의 비율
+  const pausedSubs = new Set(rows.filter(r => r.kind === "pause").map(r => r.subscription_id));
+  const resumedSubs = new Set(rows.filter(r => r.kind === "resume").map(r => r.subscription_id));
+  const resumedOfPaused = [...resumedSubs].filter(id => pausedSubs.has(id)).length;
+  const resumeRate = pausedSubs.size ? Math.round((resumedOfPaused / pausedSubs.size) * 1000) / 10 : null;
+  summaryEl.innerHTML = ["resume", "reactivate", "pause", "cancel", "new"]
+    .map(k => `<div class="trans-stat"><div class="n">${counts[k] || 0}</div><div class="l">${TRANS_KIND[k].label}</div></div>`)
+    .join("")
+    + `<div class="trans-stat" title="이 기간에 일시정지한 신청 ${pausedSubs.size}건 중 재개 ${resumedOfPaused}건">
+         <div class="n">${resumeRate === null ? "-" : resumeRate + "%"}</div>
+         <div class="l">재개율 <span style="color:var(--text-light)">(${resumedOfPaused}/${pausedSubs.size})</span></div>
+       </div>`;
+
+  renderTransRoundChart(rows);
+
+  // 유형 칩 (전체 + 건수 > 0 인 유형만 라벨에 건수 표시)
+  document.querySelectorAll("#transTypes .chip").forEach(c => c.classList.toggle("on", c.dataset.kind === transKind));
+
+  // 표 — 유형 필터 적용, 최신 먼저(API 가 이미 changed_on desc)
+  const shown = transKind ? rows.filter(r => r.kind === transKind) : rows;
+  const tbody = document.getElementById("transTbody");
+  if (!shown.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text-sub)">이 유형의 변화가 없습니다.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = shown.slice(0, 500).map(r => {
+    const k = TRANS_KIND[r.kind] || TRANS_KIND.other;
+    const member = r.member_hash ? escapeHtml(String(r.member_hash).slice(0, 10)) : "<span style='color:var(--text-light)'>—</span>";
+    return `<tr>
+      <td>${escapeHtml(r.changed_on || "")}</td>
+      <td>${escapeHtml(r.subscription_id || "")}</td>
+      <td style="font-variant-numeric:tabular-nums">${member}</td>
+      <td>${statePill(r.prev_state)}<span class="trans-arrow">→</span>${statePill(r.new_state)}</td>
+      <td><span class="pill ${k.pill}">${k.label}</span></td>
+    </tr>`;
+  }).join("") + (shown.length > 500 ? `<tr><td colspan="5" style="color:var(--text-sub)">… 외 ${shown.length - 500}건 (기간을 좁혀 보세요)</td></tr>` : "");
+}
+
+// 현재(오늘) 회차 분포 — '지금 몇 회차에 일시정지·해지 상태로 머물러 있나' (127 품목 데이터, 로그 없이도)
+function renderTransCurrent() {
+  const wrap = document.getElementById("transCurrentWrap");
+  const d = transCurrent;
+  const BUCKETS = ["1", "2", "3", "4", "5+", "미상"];
+  const sumOf = (o) => BUCKETS.reduce((s, b) => s + ((o && o[b]) || 0), 0);
+  const hasData = d && (sumOf(d.pause) + sumOf(d.cancel) > 0);
+  if (!hasData) { wrap.style.display = "none"; if (transCurrentChart) { transCurrentChart.destroy(); transCurrentChart = null; } return false; }
+  wrap.style.display = "";
+  const ctx = document.getElementById("transCurrentChart");
+  if (transCurrentChart) transCurrentChart.destroy();
+  transCurrentChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: BUCKETS.map(b => b === "미상" ? "미상" : b + "회차"),
+      datasets: [
+        { label: "현재 일시정지", data: BUCKETS.map(b => (d.pause && d.pause[b]) || 0), backgroundColor: T.warning() },
+        { label: "현재 해지", data: BUCKETS.map(b => (d.cancel && d.cancel[b]) || 0), backgroundColor: T.danger() },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" },
+        title: { display: true, text: "현재 일시정지·해지 상태인 신청의 회차 (해지 회차는 원본에 없으면 '미상')" },
+      },
+      scales: {
+        x: { title: { display: true, text: "구독 회차" } },
+        y: { beginAtZero: true, title: { display: true, text: "신청 수" }, ticks: { precision: 0 } },
+      },
+    },
+  });
+  return true;
+}
+
+// 회차별 분포 — '몇 회차에 일시정지·해지가 일어났나' (변화 시점의 대표 회차 기준)
+function renderTransRoundChart(rows) {
+  const wrap = document.getElementById("transChartWrap");
+  const BUCKETS = ["1", "2", "3", "4", "5+", "미상"];
+  const bucketOf = (r) => (r == null ? "미상" : r >= 5 ? "5+" : String(r));
+  const pause = Object.fromEntries(BUCKETS.map(b => [b, 0]));
+  const cancel = Object.fromEntries(BUCKETS.map(b => [b, 0]));
+  for (const ev of rows) {
+    if (ev.kind === "pause") pause[bucketOf(ev.round)]++;
+    else if (ev.kind === "cancel") cancel[bucketOf(ev.round)]++;
+  }
+  const total = BUCKETS.reduce((s, b) => s + pause[b] + cancel[b], 0);
+  if (!total) { wrap.style.display = "none"; if (transRoundChart) { transRoundChart.destroy(); transRoundChart = null; } return; }
+  wrap.style.display = "";
+  const ctx = document.getElementById("transRoundChart");
+  if (transRoundChart) transRoundChart.destroy();
+  transRoundChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: BUCKETS.map(b => b === "미상" ? "미상" : b + "회차"),
+      datasets: [
+        { label: "일시정지", data: BUCKETS.map(b => pause[b]), backgroundColor: T.warning() },
+        { label: "해지", data: BUCKETS.map(b => cancel[b]), backgroundColor: T.danger() },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" },
+        title: { display: true, text: "몇 회차에 일시정지·해지가 일어났나 (변화 시점 회차)" },
+      },
+      scales: {
+        x: { title: { display: true, text: "구독 회차" } },
+        y: { beginAtZero: true, title: { display: true, text: "건수" }, ticks: { precision: 0 } },
+      },
+    },
+  });
+}
+
+document.getElementById("transRefreshBtn").onclick = loadTransitions;
+document.querySelectorAll("#transRange .chip").forEach(c => c.addEventListener("click", () => {
+  transDays = Number(c.dataset.days);
+  try { localStorage.setItem("sub_trans_days", String(transDays)); } catch (e) { /* 저장소 없음 */ }
+  renderTransitions();
+}));
+document.querySelectorAll("#transTypes .chip").forEach(c => c.addEventListener("click", () => {
+  transKind = c.dataset.kind;
+  renderTransitions();
+}));
+loadTransitions();
 
 // =========================== 제외 기본값 (서버 저장, 전 사용자 공용) ===========================
 // 저장값이 있으면 필터 입력칸을 채운다. 이미 CSV 를 올린 상태라면 즉시 재적용.
