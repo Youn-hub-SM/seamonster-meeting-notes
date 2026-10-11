@@ -24,13 +24,17 @@ export const DEFAULT_RATES: FulfillRates = {
 export const DEFAULT_EFFECTIVE = "2000-01-01"; // 이력이 없을 때 모든 날짜를 커버하는 기준일
 export type RateVersion = FulfillRates & { effectiveFrom: string }; // "YYYY-MM-DD"
 
+// 구간 '이하' 비교 — 부동소수 합 오차(5.200000000000001)를 경계 안으로 본다. 세 함수가 같은 기준을 쓴다.
+const KG_EPS = 1e-6;
+const within = (w: number, maxKg: number) => w <= maxKg + KG_EPS;
+
 // 주문 총중량 → 박스타입(1부터) / 기본운임
 export function boxTypeOf(w: number, tiers: BoxTier[]): number {
-  for (let i = 0; i < tiers.length; i++) { const t = tiers[i]; if (t.maxKg == null || w <= t.maxKg) return i + 1; }
+  for (let i = 0; i < tiers.length; i++) { const t = tiers[i]; if (t.maxKg == null || within(w, t.maxKg)) return i + 1; }
   return tiers.length || 1;
 }
 export function baseFeeOf(w: number, tiers: BoxTier[]): number {
-  for (const t of tiers) { if (t.maxKg == null || w <= t.maxKg) return Number(t.fee) || 0; }
+  for (const t of tiers) { if (t.maxKg == null || within(w, t.maxKg)) return Number(t.fee) || 0; }
   return tiers.length ? Number(tiers[tiers.length - 1].fee) || 0 : 0;
 }
 
@@ -108,7 +112,7 @@ export function normalizeBoxCats(x: unknown): BoxCat[] {
 // 총중량 → 박스 종류 이름. 구간은 '이하(≤)' 기준(요율 구간 boxTiers 와 같은 규칙).
 export function boxCategoryOf(w: number, cats: BoxCat[]): string {
   const list = cats.length ? cats : DEFAULT_BOX_CATS;
-  for (const c of list) if (c.maxKg == null || w <= c.maxKg) return c.name;
+  for (const c of list) if (c.maxKg == null || within(w, c.maxKg)) return c.name;
   return list[list.length - 1].name;
 }
 

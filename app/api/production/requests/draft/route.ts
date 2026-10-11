@@ -6,6 +6,7 @@ import { createProductionRequest, defaultDueDate, defaultProdStart, kstTodayIso,
 import { logProductionDraftNotice } from "@/app/lib/b2b-activity";
 import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 import { getKv } from "@/app/lib/b2b-settings";
+import { getAllBundles } from "@/app/lib/product-bundles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +76,18 @@ export async function POST(req: NextRequest) {
     if (!dry && dup && dup.length) return NextResponse.json({ ok: true, created: false, existing: dup[0] });
 
     const [retail, whole] = await Promise.all([getInventoryRows("소매"), getInventoryRows("도매")]);
+    // 집계 실패 = 초안을 만들지 않는다(S4) — 입고 예정을 못 빼면 이미 시켜 둔 물량을 또 시키고('요청' 초안은 곧바로
+    //  다른 화면의 입고 예정에 들어가 권장을 깎는다), 행사 일정·보정·세트·재고 관리 안 함을 못 읽으면 수량이 틀린다.
+    //  메모 한 줄 경고는 검토자가 놓친다. 만들지 않았으니 재실행은 안전하다(같은 날 중복 방지는 그대로).
+    const aggFail: string[] = [];
+    if (!retail.inboundOk) aggFail.push("입고 예정(열린 요청서 잔여)");
+    if (!retail.settingsOk) aggFail.push("행사 일정·안전재고 보정");
+    {
+      // 재고 관리 사용 안함(121) — getInventoryRows 가 getUntracked 조회 오류를 던지므로(위 집계에서 멈춤) 이 확인은 중복이다.
+      //  해는 없어 남겨 둔다(컬럼 없음 = 121 미적용만 통과).
+      const { error: ue } = await sb.from("products").select("id", { count: "exact", head: true }).eq("stock_tracked", false);
+      if (ue && !/stock_tracked/i.test(ue.message)) aggFail.push("재고 관리 사용 안함 품목");
+    }
     const retailBySku = new Map(retail.rows.map((r) => [r.sku.toUpperCase(), r]));
     const wholeBySku = new Map(whole.rows.map((r) => [r.sku.toUpperCase(), r]));
 
@@ -112,12 +125,8 @@ export async function POST(req: NextRequest) {
       }
       if ((data ?? []).length < 1000) break;
     }
-    const bundleIds = new Set<string>();
-    const pids = [...new Set([...pidBySku.values()])];
-    for (let i = 0; i < pids.length; i += 100) {
-      const { data, error } = await sb.from("product_bundles").select("parent_id").in("parent_id", pids.slice(i, i + 100));
-      if (!error) for (const b of (data ?? []) as { parent_id: string }[]) bundleIds.add(b.parent_id);
-    }
+    // 세트 — 조회 오류는 던진다(getAllBundles, S4). '세트 없음'으로 보면 세트가 초안에 담긴다.
+    const bundleIds = new Set<string>((await getAllBundles(sb)).keys());
     const lines: DraftLine[] = [];
     const unmatched: string[] = [];
     const inactive: string[] = [];
@@ -137,9 +146,21 @@ export async function POST(req: NextRequest) {
       // 수량은 지금 재고로 계산하므로 목표 일수도 계산일(오늘 KST) 기준 — D 를 따로 넘긴 재실행이면 계산일을 함께 적는다
       `목표: 평상시 하루 출고 × ${retail.horizonDays}일${retail.schedule.today !== D ? ` (계산일 ${retail.schedule.today} 기준)` : ""} — 이번 요청분 판매 가능 ${retail.schedule.sellable}, 다음 요청분(${retail.schedule.nextDraft}) 판매 가능 ${retail.schedule.nextSellable}까지 버틸 양.`,
     ];
-    if (!retail.inboundOk) memoLines.push(`주의: 입고 예정(열린 요청서 잔여) 집계에 실패해 이미 시켜 둔 물량을 빼지 못했습니다 — 열린 제조사 요청서와 겹치는지 확인하세요.`);
     if (unmatched.length) memoLines.push(`품목표에 없어 뺀 SKU: ${unmatched.slice(0, 10).join(", ")}${unmatched.length > 10 ? ` 외 ${unmatched.length - 10}` : ""}`);
     if (inactive.length) memoLines.push(`미사용 품목이라 뺀 SKU: ${inactive.slice(0, 10).join(", ")}${inactive.length > 10 ? ` 외 ${inactive.length - 10}` : ""}`);
+
+    if (aggFail.length) {
+      const total = lines.reduce((a, l) => a + l.qty, 0);
+      const detail = [
+        `집계 실패: ${aggFail.join(", ")} — 이 상태로 만들면 수량이 틀려 초안을 만들지 않았습니다. 관리자에게 초안 재실행을 요청하거나 '+ 새 생산 요청'으로 직접 만드세요.`,
+        `참고(검토 안 된 계산값): ${lines.length}품목 · ${total.toLocaleString()}개`,
+        ...lines.slice(0, 15).map((l) => `- ${l.name} ×${l.qty.toLocaleString()}`),
+        ...(lines.length > 15 ? [`- 외 ${lines.length - 15}품목`] : []),
+      ].join("\n");
+      if (dry) return NextResponse.json({ ok: true, created: false, dry: true, date: D, agg_failed: aggFail, lines, unmatched });
+      await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 집계 실패, 초안 미작성(재실행 필요)`, detail);
+      return NextResponse.json({ ok: false, created: false, error: `집계 실패(${aggFail.join(", ")}) — 초안을 만들지 않았습니다. 다시 실행하세요.`, agg_failed: aggFail, date: D }, { status: 503 });
+    }
 
     if (!lines.length) {
       const detail = memoLines.join("\n");
@@ -154,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     if (dry) return NextResponse.json({ ok: true, created: false, dry: true, date: D, prod_start: prodStart, due_date: dueDate, memo, lines, unmatched });
 
-    const full = await createProductionRequest(sb, {
+    const { request: full, existing } = await createProductionRequest(sb, {
       title: `AI 초안 ${D}`,
       requested_by: DRAFT_AUTHOR,
       request_date: D,
@@ -165,7 +186,9 @@ export async function POST(req: NextRequest) {
       items,
       status: "요청",
       created_by: DRAFT_AUTHOR,
+      client_key: `ai-draft-${D}`, // 136 — 동시에 두 번 불려도 한 장(위 중복 확인은 조회 후 삽입이라 경합을 못 막는다). 취소하면 키를 비운다
     });
+    if (existing) return NextResponse.json({ ok: true, created: false, existing: { id: full.id, req_no: full.req_no, status: full.status } });
     return NextResponse.json({ ok: true, created: true, request: { id: full.id, req_no: full.req_no, items: full.items.length, total: full.total_requested }, date: D, unmatched });
   } catch (err) {
     console.error("[production/requests/draft POST]", err);

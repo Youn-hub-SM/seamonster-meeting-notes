@@ -49,6 +49,9 @@ export async function GET() {
       items,
       leadDays: inv.leadDays,
       velocitySpanDays: inv.velocitySpanDays,
+      // 집계 실패 표시(S4) — 입고 예정을 못 빼면 권장이 이미 시켜 둔 물량만큼 크다. 모달이 경고한다
+      inboundOk: inv.inboundOk,
+      settingsOk: inv.settingsOk,
     });
   } catch (err) {
     console.error("[production/item-stats]", err);

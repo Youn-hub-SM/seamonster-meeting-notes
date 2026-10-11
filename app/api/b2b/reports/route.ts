@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { computeOrderMargin, seasonForDate } from "@/app/lib/b2b-margin";
+import { fetchAllPages } from "@/app/lib/sales-paging";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,10 @@ export const dynamic = "force-dynamic";
 //   - 예상마진 = Σ 발주 단위 이익 (매출[공급가] − 제품원가 − 배송 박스 비용)
 //   - by_product 마진 = Σ (unit_price − cost_at_order) × qty (배송비 제외, 제품 귀속 불가)
 //
+//   - 매출 원장 대조 = sales_orders 도매 같은 기간 합(ledger) — 다르면 /api/b2b/reports/ledger 로 발주별 대조
+//
 // 응답:
-//   { summary, backlog, by_company, by_product, trend }
+//   { summary, backlog, ledger, by_company, by_product, trend }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -30,27 +33,33 @@ export async function GET(req: NextRequest) {
 
     const sb = supabaseAdmin();
 
-    // 1) 발송완료 발주 (기간 내, 발송일 기준 — 발송일이 비어 있는 옛 발주는 발주일로 폴백)
-    const { data: completed, error: cErr } = await sb
-      .from("orders")
-      .select(
-        "id, order_no, order_date, ship_date, status, total, subtotal, vat, box_count, discount_amount, " +
-          "company:company_id(id, name), " +
-          "order_items(id, product_name, spec, qty, unit_price, cost_at_order, tax_type, product_id, product:product_id(volume_kg)), " +
-          "shipments(status, shipment_items(order_item_id, qty))"
-      )
-      .eq("status", "발송완료")
-      .or(
-        `and(ship_date.gte.${from},ship_date.lte.${to}),and(ship_date.is.null,order_date.gte.${from},order_date.lte.${to})`
-      );
-    if (cErr) throw cErr;
+    // 1) 발송완료 발주 (기간 내, 발송일 기준 — 발송일이 비어 있는 옛 발주는 발주일로 폴백). 1,000행 상한 없이 끝까지.
+    const completedSel =
+      "id, order_no, order_date, ship_date, status, total, subtotal, vat, box_count, discount_amount, " +
+      "company:company_id(id, name), " +
+      "order_items(id, product_name, spec, qty, unit_price, cost_at_order, tax_type, product_id, product:product_id(volume_kg)), " +
+      "shipments(status, shipment_items(order_item_id, qty))";
+    const completed = await fetchAllPages<Record<string, unknown>>((lo, hi) =>
+      sb.from("orders")
+        .select(completedSel)
+        .eq("status", "발송완료")
+        .or(`and(ship_date.gte.${from},ship_date.lte.${to}),and(ship_date.is.null,order_date.gte.${from},order_date.lte.${to})`)
+        .order("id")
+        .range(lo, hi), { cap: 20000, label: "발송완료 발주" });
 
     // 2) 미발송 잔고 (전체 기간, 발송완료·취소 제외)
-    const { data: backlog, error: bErr } = await sb
-      .from("orders")
-      .select("id, total")
-      .not("status", "in", "(발송완료,취소)");
-    if (bErr) throw bErr;
+    const backlog = await fetchAllPages<{ id: string; total: number }>((lo, hi) =>
+      sb.from("orders").select("id, total").not("status", "in", "(발송완료,취소)").order("id").range(lo, hi), { label: "미발송 발주" });
+
+    // 3) 매출 원장(/sales 도매) 같은 기간 합 — 발주 기준 매출과 다르면 화면이 원장 대조를 띄운다(S12).
+    //  조회 실패는 '차이 없음'이 아니라 null + 오류로 돌려준다.
+    let ledgerRevenue: number | null = null;
+    let ledgerError: string | null = null;
+    {
+      const { data: win, error: wErr } = await sb.rpc("sales_channel_window", { p_from: from, p_to: to });
+      if (wErr) ledgerError = wErr.message;
+      else ledgerRevenue = Number(((win ?? []) as { channel: string; revenue: number }[]).find((r) => r.channel === "도매")?.revenue || 0);
+    }
 
     // 집계
     type CompanyJoin = { id?: string; name?: string };
@@ -80,8 +89,8 @@ export async function GET(req: NextRequest) {
       shipments: ShipmentJoin[] | null;
     };
 
-    const rows = (completed ?? []) as unknown as CompletedRow[];
-    const currentMonth = new Date().getMonth() + 1;
+    const rows = completed as unknown as CompletedRow[];
+    const currentMonth = Number(kstToday().slice(5, 7));
 
     // 요약
     let revenue = 0;
@@ -210,7 +219,7 @@ export async function GET(req: NextRequest) {
       .map(([month, rev]) => ({ month, revenue: rev }))
       .sort((a, b) => a.month.localeCompare(b.month));
 
-    const backlogTotal = (backlog ?? []).reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const backlogTotal = backlog.reduce((s, o) => s + (Number(o.total) || 0), 0);
 
     return NextResponse.json({
       ok: true,
@@ -226,8 +235,10 @@ export async function GET(req: NextRequest) {
         margin_cost_missing_lines: costMissingLines, // 원가 미입력 라인 수(>0이면 마진 과대 경고)
         margin_cost_missing_revenue: costMissingRevenue, // 그 라인들의 매출 합
       },
+      // 매출 원장(sales_orders 도매) 같은 기간 합 — revenue 와 다르면 원장 대조 필요
+      ledger: { revenue: ledgerRevenue, diff: ledgerRevenue == null ? null : ledgerRevenue - revenue, error: ledgerError },
       backlog: {
-        pending_orders: (backlog ?? []).length,
+        pending_orders: backlog.length,
         pending_total: backlogTotal,
       },
       by_company: byCompany,
@@ -243,13 +254,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 기본값: 이번 달 1일
-function defaultFromIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+// 기본값: 이번 달 1일 ~ 오늘 (KST — 서버는 UTC 라 그대로 쓰면 자정~09시에 하루 밀린다)
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 }
-
+function defaultFromIso(): string {
+  return `${kstToday().slice(0, 7)}-01`;
+}
 function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return kstToday();
 }

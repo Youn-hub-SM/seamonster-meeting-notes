@@ -8,6 +8,7 @@ import { CHANGELOG } from "./changelog";
 import { getLedgerVelocity } from "./production-velocity";
 import { getAllBundles, isBundleId } from "./product-bundles";
 import { getUntracked } from "./stock-tracked";
+import { readAll, readStockMap } from "./inventory-template";
 
 // 대표 전용 '일일 업무도우미 리포트' v2 (2026-09-03, migration 103 재사용).
 //  두 축: ① 어제 사이트 전체에서 있었던 일 ② 오늘 체크해야 할 요소(코드가 판정한 경보).
@@ -113,26 +114,21 @@ export async function collectBriefingData(sb: SupabaseClient, briefDate: string)
   // 재고 — 품절·소진임박 경보(판매속도 기반, 세트·비판매 제외) + 어제 입출고 + 대기 입고
   const inventory = await (async () => {
     try {
-      const stockRpc = async () => {
-        const r = await sb.rpc("inventory_stock", { asof: null, chan: "소매" });
-        if (!r.error) return r;
-        return sb.rpc("inventory_stock", { asof: null }); // 036 미적용 폴백
-      };
-      const [stockRes, prodRes, bundles, velocity, untracked] = await Promise.all([
-        stockRpc(),
-        sb.from("products").select("id, sku, name").eq("active", true).limit(5000),
+      // 재고·품목 = 공용 readStockMap·readAll(페이지 끝까지, S1·S4) — 단발 조회는 서버 Max Rows(1000)에 잘려
+      //  뒤쪽 품목이 '재고 0 = 품절'로 경보에 섞였다. 036 미적용(PGRST202)만 칸 없이 읽고, 그 밖의 오류는 이 블록을 비운다(null).
+      type P = { id: string; sku: string | null; name: string };
+      const [stockBy, prods, bundles, velocity, untracked] = await Promise.all([
+        readStockMap(sb, { asof: null, chan: "소매" }),
+        readAll<P>((a, b) => sb.from("products").select("id, sku, name").eq("active", true).order("id", { ascending: true }).range(a, b)),
         getAllBundles(sb),
         getLedgerVelocity(undefined, "소매").catch(() => null),
         getUntracked(sb),
       ]);
-      if (stockRes.error || prodRes.error) throw new Error("stock/products");
-      const stockBy = new Map<string, number>();
-      for (const t of (stockRes.data as { product_id: string; qty: number }[] | null) ?? []) stockBy.set(t.product_id, Number(t.qty) || 0);
       const perSku = velocity?.perSku ?? {};
 
       const soldout: { 품목: string; sku: string | null; 현재고: number }[] = [];
       const risky: { 품목: string; sku: string | null; 현재고: number; 일평균_출고: number; 소진예상일: number }[] = [];
-      for (const p of (prodRes.data as { id: string; sku: string | null; name: string }[]) ?? []) {
+      for (const p of prods) {
         if (isBundleId(bundles, p.id)) continue; // 세트는 자체 재고 없음 — 오탐 방지
         if (untracked.ids.has(p.id)) continue; // '재고 관리 사용 안함'(121) — 품절 경보 대상 아님
         const stock = stockBy.get(p.id) ?? 0;

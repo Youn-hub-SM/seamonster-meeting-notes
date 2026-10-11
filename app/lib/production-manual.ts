@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { supabaseAdmin } from "./supabase";
+import { mutateKv, readKvStrict } from "./production-kv";
 
 // ─────────────────────────────────────────────
 // 수동 생산일정 — b2b_settings('production_manual') 에 배열로 저장.
@@ -23,23 +23,12 @@ export interface ManualProduction {
   createdAt: string;
 }
 
-export async function getManualProductions(): Promise<ManualProduction[]> {
-  try {
-    const sb = supabaseAdmin();
-    const { data, error } = await sb.from("b2b_settings").select("value").eq("key", KEY).maybeSingle();
-    if (error || !data) return [];
-    return Array.isArray(data.value) ? (data.value as ManualProduction[]) : [];
-  } catch {
-    return [];
-  }
-}
+// 읽기 오류는 던진다(S4) — '빈 목록'으로 보면 추가·상태 변경·삭제가 '빈 목록 + 이번 변경'으로 전체 일정을 덮어쓴다.
+//  행이 없으면(아직 저장 전) 빈 목록. 저장은 mutateKv(낙관적 잠금 + 저장 오류 확인).
+const asList = (v: unknown): ManualProduction[] => (Array.isArray(v) ? (v as ManualProduction[]) : []);
 
-async function save(list: ManualProduction[]): Promise<void> {
-  const sb = supabaseAdmin();
-  await sb.from("b2b_settings").upsert(
-    { key: KEY, value: list, updated_at: new Date().toISOString() },
-    { onConflict: "key" }
-  );
+export async function getManualProductions(): Promise<ManualProduction[]> {
+  return asList((await readKvStrict<ManualProduction[]>(KEY)).value);
 }
 
 export async function addManualProduction(input: Partial<ManualProduction>): Promise<ManualProduction[]> {
@@ -51,8 +40,7 @@ export async function addManualProduction(input: Partial<ManualProduction>): Pro
   if (!qty) throw new Error("생산량을 입력하세요.");
   if (!productionDate) throw new Error("생산 목표일이 필요합니다.");
 
-  const list = await getManualProductions();
-  list.push({
+  const entry: ManualProduction = {
     id: randomUUID(),
     sku,
     name,
@@ -63,23 +51,16 @@ export async function addManualProduction(input: Partial<ManualProduction>): Pro
     dailyOut: Number(input.dailyOut) || 0,
     depletionDate: input.depletionDate || null,
     createdAt: new Date().toISOString(),
-  });
-  await save(list);
-  return list;
+  };
+  return mutateKv<ManualProduction[]>(KEY, (cur) => [...asList(cur), entry]);
 }
 
 const VALID_STATUS: ProdStatus[] = ["생산대기", "생산중", "생산완료"];
 export async function updateManualStatus(id: string, status: string): Promise<ManualProduction[]> {
   if (!VALID_STATUS.includes(status as ProdStatus)) throw new Error("잘못된 상태입니다.");
-  const list = await getManualProductions();
-  const it = list.find((x) => x.id === id);
-  if (it) it.status = status as ProdStatus;
-  await save(list);
-  return list;
+  return mutateKv<ManualProduction[]>(KEY, (cur) => asList(cur).map((x) => (x.id === id ? { ...x, status: status as ProdStatus } : x)));
 }
 
 export async function deleteManualProduction(id: string): Promise<ManualProduction[]> {
-  const list = (await getManualProductions()).filter((x) => x.id !== id);
-  await save(list);
-  return list;
+  return mutateKv<ManualProduction[]>(KEY, (cur) => asList(cur).filter((x) => x.id !== id));
 }

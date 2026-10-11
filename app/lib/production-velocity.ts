@@ -21,7 +21,22 @@ const dayMs = 86400_000;
 const dateAt = (base: string, deltaDays: number) => new Date(Date.parse(base + "T00:00:00Z") + deltaDays * dayMs).toISOString().slice(0, 10);
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / dayMs);
 
-interface OutRow { qty: number; txn_date: string; status?: string | null; shipment_id?: string | null; channel?: string | null; partner?: string | null; products?: { sku: string | null } | null }
+interface OutRow { qty: number; txn_date: string; status?: string | null; shipment_id?: string | null; channel?: string | null; partner?: string | null; order_no?: string | null; reason?: string | null; source?: string | null; products?: { sku: string | null } | null }
+// 판매·납품이 아닌 출고 사유(099) — 속도에 넣으면 재고 감소로 한 번, 속도로 한 번 권장이 이중으로 는다.
+//  제조사 반품 = 매입을 되돌린 것(반품 창 [재고에서도 빼기], 2026-10-11 D4c). 협찬·폐기를 뺄지는 대표 결정 대기(종전대로 포함).
+//  재고 목록(overview)의 총출고·일평균 소진도 이 목록을 쓴다 — 두 화면의 소진 속도가 같은 규칙이어야 한다(S1).
+export const NON_DEMAND_REASONS: ReadonlySet<string> = new Set(["제조사 반품"]);
+
+// 칸 이동·프로모션 합류 행인가(S11 — 판정은 출처 칸으로). 판매·납품·매입이 아니라 칸 사이 내부 이동이다.
+//  source(131, 서버만 기록)가 있으면 그것만 본다: move(재고 이동) · promo_close(프로모션 마감·취소 합류).
+//  source 가 없으면(131 이전 기록·131 미적용) 종전 표식 '주문번호 없는 partner 채널이동'으로 본다.
+//  주문번호가 있는 '채널이동' 행은 예전에 사람이 거래처 칸에 그 글자를 적은 입출고다(이동·합류엔 주문번호가 없다) —
+//  131 백필도 이 행을 move 로 두지 않았고, 한 줄 취소 잠금(ledger-write lockKindOf)도 일반 행으로 본다. 두 판정기가 같은 답을 내야 한다(S1·S11).
+//  사람은 거래처에 '채널이동'을 쓸 수 없으므로(입출고 POST·엑셀 400) 새 기록은 늘 source 로 판정된다.
+//  호출부는 order_no 를 함께 읽어 넘긴다(033) — 못 읽으면(undefined) 종전처럼 partner 만으로 이동 판정.
+export const MOVE_SOURCES: ReadonlySet<string> = new Set(["move", "promo_close"]);
+export const isMoveRow = (r: { source?: string | null; partner?: string | null; order_no?: string | null }): boolean =>
+  r.source != null ? MOVE_SOURCES.has(r.source) : (r.partner === "채널이동" && !r.order_no);
 
 // 마이그레이션 미적용(컬럼·함수·테이블 없음) 오류만 폴백 대상. 일시 오류(statement timeout·5xx)까지 폴백하면
 //  channel·partner 없는 select 로 조용히 재시도해 전 행이 소매 취급 → 도매 권장 0·소매 속도 부풂(#11).
@@ -38,7 +53,9 @@ export const isMissingSchemaError = (e: { message?: string; code?: string } | nu
 //    · 미래 컷(txn_date ≤ 오늘) — 발송예정일로 미리 찍힌 선점 출고가 오늘의 속도를 부풀리지 않게.
 //    · 대량 제외 — 칸 분리(115) 이전 출고에는 대량이 '도매' 칸에 섞여 있으므로
 //      shipment_id → shipments.order_id → orders.is_bulk 로 걸러낸다(이후 출고는 칸이 갈라 자동).
-//  status(034)·shipment_id(035)·channel(036)·is_bulk(115) 컬럼 유무에 따라 단계적 폴백.
+//  사유 '제조사 반품'(099·D4c) 출고는 수요가 아니므로 모든 채널에서 뺀다.
+//  칸 이동·프로모션 합류는 isMoveRow(출처 칸 source, 없으면 주문번호 없는 partner '채널이동')로 판정해 뺀다.
+//  status(034)·shipment_id(035)·channel(036)·reason(099)·source(131)·is_bulk(115) 컬럼 유무에 따라 단계적 폴백.
 export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소매" | "도매"): Promise<VelocitySnapshot> {
   const sb = supabaseAdmin();
   const today = kstToday();
@@ -48,6 +65,9 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
   const fromD = dateAt(today, -fetchDays);
 
   const selects = [
+    "qty, txn_date, status, shipment_id, channel, partner, order_no, reason, source, products(sku)", // source(131) 미적용이면 다음 단계
+    "qty, txn_date, status, shipment_id, channel, partner, order_no, reason, products(sku)", // reason(099) 미적용이면 다음 단계
+    "qty, txn_date, status, shipment_id, channel, partner, order_no, products(sku)", // order_no(033)는 channel(036)보다 먼저라 함께 읽는다
     "qty, txn_date, status, shipment_id, channel, partner, products(sku)",
     "qty, txn_date, status, shipment_id, products(sku)",
     "qty, txn_date, status, products(sku)",
@@ -107,7 +127,8 @@ export async function getLedgerVelocity(windowDays = WINDOW_DAYS, channel?: "소
   let txCount = 0;
   for (const r of rows) {
     if (r.status != null && r.status !== "완료") continue; // 대기 출고 제외
-    if (r.partner === "채널이동") continue;                 // 소매↔도매 이동은 판매/납품이 아님
+    if (isMoveRow(r)) continue;                            // 칸 이동·프로모션 합류는 판매/납품이 아님(위)
+    if (r.reason && NON_DEMAND_REASONS.has(r.reason)) continue; // 제조사 반품 출고는 수요가 아님(위)
     if (channel) {
       if ((r.channel ?? "소매") !== channel) continue;      // 채널 필터(036 미적용 행은 소매 취급)
       if (channel === "소매" && r.shipment_id != null) continue; // 소매 속도에서 B2B 발송 제외

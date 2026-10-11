@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 import { INV_CHANNELS, INV_CHANNEL_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
 import { PR_PURPOSES, PR_PURPOSE_LABEL, PURPOSE_CHANNEL } from "@/app/lib/wholesale-production";
+import { deleteLedger } from "../TxnTable";
 
 type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null; stock_tracked?: boolean };
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean; alloc_qty?: number; alloc_reqs?: string[] };
@@ -11,6 +12,8 @@ type Target = { item_id: string; request_id: string; req_no: string | null; titl
 // 이동 줄 — 여러 품목을 한 번에 옮긴다(2026-09-16 대표 요청). alloc 은 요청서(item_id)→입력값 문자열.
 // tgState — 요청서 목록 상태. 실패·로딩 중을 '열린 요청 없음'으로 보여 주면 배정 없이 저장돼 요청서가 영영 안 닫힌다(최종 점검 확정).
 type Line = { key: number; pid: string; plabel: string; qty: string; targets: Target[]; alloc: Map<string, string>; allocTouched?: boolean; tgState?: "loading" | "error" | "ok" };
+// 프로모션 → 소매 이동이 열린 프로모션 요청서 몫을 건드린 품목(서버 409 promo_reserved 의 reserved[]) — 줄마다 몫·몫 밖 수량 표시용
+type ReservedHit = { product_id: string; qty: number; reserved: number; free?: number; req_nos: string[] };
 
 // 배정 기본값 = 이동 전량(기획 14절 4단계 #6). 목표일 빠른 순으로 각 요청서 잔여까지 채운다.
 //  배정 누락 경고를 두지 않기로 했으므로(결정 21) 이 기본값이 유일한 방어다.
@@ -30,6 +33,9 @@ const prefillAlloc = (targets: Target[], qty: number, skipBefore?: string): Map<
 };
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+// 제출 키(131) — 옮기기 한 번 = 키 하나. 응답이 끊겨 다시 눌러도 이미 옮긴 줄은 다시 옮기지 않는다(서버가 품목별로 알아본다).
+//  성공하면 새 키, 실패하면 그대로(재시도가 같은 키로 가야 중복이 막힌다).
+const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 const newLine = (key: number): Line => ({ key, pid: "", plabel: "", qty: "", targets: [], alloc: new Map() });
 const nQtyOf = (l: Line) => Math.max(0, Math.round((Number(l.qty) || 0) * 100) / 100);
 const allocSumOf = (l: Line) => {
@@ -40,8 +46,11 @@ const allocSumOf = (l: Line) => {
 
 export default function InventoryMovePage() {
   const [products, setProducts] = useState<Prod[]>([]);
-  // 칸별 현재고 — 칸이 늘 때 state·fetch·표시를 세 군데씩 고치지 않게 INV_CHANNELS 로 한 번에 돈다(115)
-  const [stock, setStock] = useState<Map<InvChannel, Map<string, number>>>(new Map());
+  // 칸별 재고 — 칸이 늘 때 state·fetch·표시를 세 군데씩 고치지 않게 INV_CHANNELS 로 한 번에 돈다(115)
+  //  qty = 가용(미래 발송일 선점까지 뺀 값 — 이동 상한·부족 경고의 기준), onHand = 현재고(오늘까지), sched = 출고 예정(D1·S6).
+  //  onHand 가 없으면(구 서버) qty 를 현재고로 보인다.
+  type Pool = { qty: number; onHand: number | null; sched: number };
+  const [stock, setStock] = useState<Map<InvChannel, Map<string, Pool>>>(new Map());
   const [moves, setMoves] = useState<Move[]>([]);
 
   const [lines, setLines] = useState<Line[]>([newLine(1)]);
@@ -52,12 +61,20 @@ export default function InventoryMovePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
+  const submitKey = useRef(newKey());
+  // 마지막 promo_reserved 응답의 품목별 몫 — 방향·품목이 바뀌거나 다시 누르면 지운다
+  const [reservedHits, setReservedHits] = useState<Map<string, ReservedHit>>(new Map());
+  useEffect(() => { setReservedHits(new Map()); }, [dir.from, dir.to]);
 
   const loadStock = useCallback(async () => {
     const [stocks, m] = await Promise.all([
       Promise.all(INV_CHANNELS.map(async (ch) => {
         const j = await fetch(`/api/inventory?channel=${encodeURIComponent(ch)}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
-        return [ch, j?.ok ? new Map<string, number>((j.rows || []).map((x: { product_id: string; qty: number }) => [x.product_id, x.qty])) : null] as const;
+        return [ch, j?.ok ? new Map<string, Pool>((j.rows || []).map((x: { product_id: string; qty: number; on_hand?: number | null; scheduled_out?: number | null }) => [x.product_id, {
+          qty: Number(x.qty) || 0,
+          onHand: x.on_hand != null && Number.isFinite(Number(x.on_hand)) ? Number(x.on_hand) : null,
+          sched: Math.max(0, Number(x.scheduled_out) || 0),
+        }])) : null] as const;
       })),
       fetch("/api/inventory/move?limit=50", { cache: "no-store" }).then((x) => x.json()).catch(() => null),
     ]);
@@ -70,7 +87,10 @@ export default function InventoryMovePage() {
     if (m?.ok) setMoves(m.moves || []);
   }, []);
   useEffect(() => {
-    fetch("/api/products", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setProducts(j.products || []); }).catch(() => {});
+    // 품목 목록을 못 읽으면 빈 목록으로 두지 않고 알린다(S4) — '재고 관리 사용 안함' 표식을 못 읽은 경우도 서버가 실패로 준다
+    fetch("/api/products", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => { if (j.ok) setProducts(j.products || []); else setError(`품목 목록을 불러오지 못했습니다${j.error ? ` — ${j.error}` : ""} 새로고침하세요.`); })
+      .catch(() => setError("품목 목록을 불러오지 못했습니다 — 새로고침하세요."));
     loadStock();
   }, [loadStock]);
 
@@ -189,12 +209,36 @@ export default function InventoryMovePage() {
         : [],
     }));
     setBusy(true);
+    setReservedHits(new Map());
     try {
-      const res = await fetch("/api/inventory/move", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: dir.from, to: dir.to, txn_date: date, memo, items }),
-      });
-      const j = await res.json();
+      type MoveRes = { ok?: boolean; error?: string; code?: string; confirm?: string; replay?: boolean; warnings?: string[]; results?: { product_id: string }[]; allocated?: number; reserved?: ReservedHit[] } | null;
+      // 응답을 못 받으면(시간 초과·네트워크) 줄을 그대로 두고 같은 키로 다시 누르게 한다 — 이미 옮긴 줄은 서버가 건너뛴다
+      const lost = "응답을 받지 못했습니다 — 옮겨졌을 수 있으니 아래 '최근 옮긴 내역'을 먼저 확인하세요.";
+      const body = { from: dir.from, to: dir.to, txn_date: date, memo, items, request_key: submitKey.current };
+      const post = async (b: Record<string, unknown>): Promise<{ res: Response; j: MoveRes }> => {
+        try {
+          const res = await fetch("/api/inventory/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+          return { res, j: (await res.json().catch(() => null)) as MoveRes };
+        } catch { throw new Error(lost); }
+      };
+      let { res, j } = await post(body);
+      if (!j) throw new Error(lost);
+      // 프로모션 → 소매가 열린 프로모션 요청서 몫까지 빼는 경우 — 서버는 아무것도 쓰지 않고 409 를 준다.
+      //  확인하면 같은 내용·같은 제출 키에 confirm_reserved 만 붙여 다시 보낸다(키를 새로 만들면 재시도 중복 방지가 끊긴다).
+      //  거절하면 줄은 그대로 두고 안내만 남긴다(몫 밖 수량으로 줄이거나 요청서 '마감').
+      if (res.status === 409 && j.code === "promo_reserved") {
+        const hits = Array.isArray(j.reserved) ? j.reserved : [];
+        setReservedHits(new Map(hits.map((h) => [h.product_id, h])));
+        if (!window.confirm(j.confirm || j.error || "열린 프로모션 요청서 몫까지 소매로 나갑니다. 그래도 옮길까요?")) {
+          setError(j.error || "열린 프로모션 요청서 몫까지 소매로 나갑니다.");
+          setBusy(false);
+          return;
+        }
+        ({ res, j } = await post({ ...body, confirm_reserved: true }));
+        if (!j) throw new Error(lost);
+        setReservedHits(new Map());
+      }
+      if (j.code === "request_key_conflict") submitKey.current = newKey(); // 다음 누름은 새 이동
       if (!res.ok || !j.ok) {
         // 부분 실패 응답에도 경고(앞 줄의 배정 경고 등)가 실려 온다 — 함께 표시(검증 확정 보정)
         const extra = Array.isArray(j?.warnings) && j.warnings.length ? ` · ${j.warnings.join(" · ")}` : "";
@@ -217,9 +261,10 @@ export default function InventoryMovePage() {
       }
       // 서버가 실제 기록한 배정 합(allocated) 우선 — 그 사이 닫힌 요청서로 건너뛴 배정을 '배정'으로 세지 않게(감사 #41). 구 서버면 요청값 폴백.
       const allocTotal = typeof j.allocated === "number" ? j.allocated : Math.round(items.reduce((s, it) => s + it.allocations.reduce((a, x) => a + x.qty, 0), 0) * 100) / 100;
-      setOk(`${items.length}개 품목 ${totalQty.toLocaleString()}개를 ${dir.from} → ${dir.to} 로 옮겼어요.${allocTotal > 0 ? ` (요청서 배정 ${allocTotal.toLocaleString()} · 기타 ${Math.max(0, Math.round((totalQty - allocTotal) * 100) / 100).toLocaleString()})` : ""}`);
+      setOk(`${j.replay ? "이미 옮겨져 있던 이동입니다(다시 옮기지 않음) — " : ""}${items.length}개 품목 ${totalQty.toLocaleString()}개를 ${dir.from} → ${dir.to} 로 옮겼어요.${allocTotal > 0 ? ` (요청서 배정 ${allocTotal.toLocaleString()} · 기타 ${Math.max(0, Math.round((totalQty - allocTotal) * 100) / 100).toLocaleString()})` : ""}`);
       if (Array.isArray(j.warnings) && j.warnings.length) setError(j.warnings.join(" · "));
       setLines([newLine(nextKey)]); setNextKey((k) => k + 1); setMemo("");
+      submitKey.current = newKey(); // 다음 이동은 새 키
       await loadStock();
     } catch (e) { setError(e instanceof Error ? e.message : "이동 실패"); await loadStock(); }
     setBusy(false);
@@ -227,9 +272,11 @@ export default function InventoryMovePage() {
 
   async function cancelMove(group_id: string) {
     if (!window.confirm("이 이동을 취소할까요? 양쪽 채널 재고가 원래대로 돌아갑니다.")) return;
-    const r = await fetch(`/api/inventory/move?group_id=${encodeURIComponent(group_id)}`, { method: "DELETE" });
-    const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) { const tail = r.status === 409 || /새로고침|다시 시도/.test(j?.error || "") ? "" : " — 새로고침 후 다시 시도하세요."; alert(`취소 실패: ${j?.error || "서버 오류"}${tail}`); return; } // 409(규칙상 거부)엔 재시도 권유를 붙이지 않는다
+    // 409(규칙상 거부)엔 재시도 권유를 붙이지 않고, 응답이 끊기면 취소됐을 수 있다고 알린다(deleteLedger 공용)
+    const res = await deleteLedger(`/api/inventory/move?group_id=${encodeURIComponent(group_id)}`);
+    if (!res.ok) return;
+    // 서버 안내(성공 notice·부분 성공 경고)는 배너로 남긴다 — 지금 move DELETE 는 싣지 않지만 공용 계약(deleteLedger)을 따른다
+    if (res.notice) { if (res.warn) { setOk(""); setError(res.notice); } else { setError(""); setOk(res.notice); } }
     await loadStock();
     // 취소로 요청서 잔여·상태가 바뀌었을 수 있음 — 열려 있는 줄의 요청서 목록 갱신
     await refreshTargets(lines);
@@ -262,9 +309,11 @@ export default function InventoryMovePage() {
         </div>
 
         {lines.map((l, idx) => {
-          const poolQty = (pool: InvChannel, pid: string) => stock.get(pool)?.get(pid) ?? 0;
-          const fromQty = l.pid ? poolQty(dir.from, l.pid) : 0;
-          const toQty = l.pid ? poolQty(dir.to, l.pid) : 0;
+          const poolOf = (pool: InvChannel, pid: string): Pool => stock.get(pool)?.get(pid) ?? { qty: 0, onHand: null, sched: 0 };
+          const onHandOf = (p: Pool) => p.onHand ?? p.qty;
+          const fromPool = l.pid ? poolOf(dir.from, l.pid) : { qty: 0, onHand: null, sched: 0 };
+          const toPool = l.pid ? poolOf(dir.to, l.pid) : { qty: 0, onHand: null, sched: 0 };
+          const fromQty = fromPool.qty; // 가용 — 이동 상한
           const nQty = nQtyOf(l);
           const shortage = l.pid && nQty > 0 && nQty > fromQty;
           const allocSum = allocSumOf(l);
@@ -286,9 +335,11 @@ export default function InventoryMovePage() {
               </div>
               {l.pid && (
                 <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 14, flexWrap: "wrap", alignItems: "center" }}>
-                  {INV_CHANNELS.map((ch) => (
-                    <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {poolQty(ch, l.pid).toLocaleString()}</span>
-                  ))}
+                  {/* 칸 배지 = 현재고(오늘까지). 출고 예정(미래 발송일 선점)이 있으면 함께 — 옮길 수 있는 건 가용(현재고 − 출고 예정)까지 */}
+                  {INV_CHANNELS.map((ch) => {
+                    const p = poolOf(ch, l.pid);
+                    return <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {onHandOf(p).toLocaleString()}{p.sched > 0 ? ` · 출고 예정 ${p.sched.toLocaleString()}` : ""}</span>;
+                  })}
                   <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={l.qty}
                     onChange={(e) => {
                       const q = Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100);
@@ -297,12 +348,27 @@ export default function InventoryMovePage() {
                     placeholder="옮길 수량" style={{ width: 120 }} aria-label={`품목 ${idx + 1} 수량`} />
                   {nQty > 0 && (
                     <span className="sm-faint" style={{ fontSize: 12 }}>
-                      옮긴 뒤 — {dir.from} {(fromQty - nQty).toLocaleString()} · {dir.to} {(toQty + nQty).toLocaleString()}
+                      옮긴 뒤 현재고 — {dir.from} {(Math.round((onHandOf(fromPool) - nQty) * 100) / 100).toLocaleString()} · {dir.to} {(Math.round((onHandOf(toPool) + nQty) * 100) / 100).toLocaleString()}
                     </span>
                   )}
                 </div>
               )}
-              {shortage && <p style={{ fontSize: 12, color: "var(--sm-danger)", margin: "6px 0 0" }}>{dir.from} 재고({fromQty.toLocaleString()})보다 많아요. 그래도 옮기면 {dir.from}가 마이너스가 됩니다.</p>}
+              {l.pid && reservedHits.has(l.pid) && (() => {
+                const h = reservedHits.get(l.pid)!;
+                return (
+                  <p style={{ fontSize: 12, color: "var(--sm-warning)", margin: "6px 0 0" }}>
+                    프로모션 요청서 몫 {h.reserved.toLocaleString()}개{h.req_nos.length ? `(${h.req_nos.join("·")})` : ""}
+                    {typeof h.free === "number" ? ` · 몫 밖 ${h.free.toLocaleString()}개` : ""}
+                  </p>
+                );
+              })()}
+              {shortage && (
+                <p style={{ fontSize: 12, color: "var(--sm-danger)", margin: "6px 0 0" }}>
+                  {fromPool.sched > 0
+                    ? `${dir.from} 가용 재고(${fromQty.toLocaleString()} = 현재고 ${onHandOf(fromPool).toLocaleString()} − 출고 예정 ${fromPool.sched.toLocaleString()})보다 많아요. 그래도 옮기면 출고 예정분이 모자라거나 ${dir.from}가 마이너스가 됩니다.`
+                    : `${dir.from} 재고(${fromQty.toLocaleString()})보다 많아요. 그래도 옮기면 ${dir.from}가 마이너스가 됩니다.`}
+                </p>
+              )}
 
               {allocMode && l.pid && (
                 <div style={{ marginTop: 10 }}>

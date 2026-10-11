@@ -21,10 +21,12 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
 
     // 풀에 존재하는 송장인지 — 없으면 상태 변화가 없으니 재계산 없이 즉시 반환(빠름).
-    const { count: known } = await sb
+    //  조회 오류는 '미등록'이 아니다 — 오류로 알려 다시 찍게 한다(미등록으로 안내하면 그 박스 품목이 피킹에서 빠진다).
+    const { count: known, error: ke } = await sb
       .from("fulfill_scan_items")
       .select("invoice_no", { count: "exact", head: true })
       .eq("invoice_no", inv);
+    if (ke) throw ke;
     if (!known) return NextResponse.json({ ok: true, known: false, alreadyScanned: false });
 
     // 이벤트 삽입 + 중복여부를 한 번에: ignoreDuplicates 라 충돌 시 빈 배열 반환 → 이미 스캔.
@@ -39,9 +41,11 @@ export async function POST(req: NextRequest) {
     let prevRound: { scanned_at: string; scanned_by: string | null } | null = null;
     let moved = false;
     if (alreadyScanned) {
-      const { data: row, error: re } = await sb.from("fulfill_scan_events").select("scanned_at, scanned_by, cleared_at").eq("invoice_no", inv).maybeSingle();
-      const r = row as { scanned_at: string; scanned_by: string | null; cleared_at: string | null } | null;
-      if (!re && r?.cleared_at) {
+      let { data: row, error: re } = await sb.from("fulfill_scan_events").select("scanned_at, scanned_by, cleared_at").eq("invoice_no", inv).maybeSingle();
+      if (re && /cleared_at/i.test(re.message || "")) ({ data: row, error: re } = await sb.from("fulfill_scan_events").select("scanned_at, scanned_by").eq("invoice_no", inv).maybeSingle()); // 125 미적용 = 전부 이번 라운드
+      if (re) throw re; // 일시 오류를 '이번 라운드 중복'으로 안내하지 않는다
+      const r = row as { scanned_at: string; scanned_by: string | null; cleared_at?: string | null } | null;
+      if (r?.cleared_at) {
         prevRound = { scanned_at: r.scanned_at, scanned_by: r.scanned_by };
         if (include_prev) {
           // 알고 다시 찍음 — 이번 라운드로(스캔 시각·담당은 지금 것으로). 마감된 행만 바꿔 동시 요청에도 한 번만.

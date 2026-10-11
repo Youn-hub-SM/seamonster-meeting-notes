@@ -74,7 +74,9 @@ TABLE inventory_txns — 재고 원장(입고+/출고−/조정±). 현재고 = 
   id(uuid), product_id(uuid FK→products.id), type(text '입고'|'출고'|'조정'), qty(int 부호있음),
   unit_amount(numeric 단가), txn_date(date), partner(text 거래처), memo(text), status(text '대기'|'완료' 재고는 완료만),
   channel(text '도매'|'소매'|'프로모션'|'도매 대량' — 프로모션·도매 대량은 확보분 칸), reason(text 출고사유 null=판매·'협찬'|'폐기'|'기타'), order_no(text), group_id(uuid),
-  created_by(text — B2B 발송 선점 행은 'B2B 자동출고'), shipment_id(uuid B2B 선점 행의 발송 차수 = shipments_report.id), created_at
+  created_by(text — B2B 발송 선점 행은 'B2B 자동출고'), shipment_id(uuid B2B 선점 행의 발송 차수 = shipments_report.id), created_at,
+  source(text 행 출처 131 — manual|import|move|promo_close|b2b_ship|b2b_cancel_kept(발송 뒤 취소했지만 반품 안 된 출고, shipment_id 없음)|fulfill|fulfill_unmatched, null=131 이전), source_ref(text 출처 참조 — b2b_*=발주 id, move=group_id, promo_close=요청서 id), request_key(text 중복 방지 키)
+  ※ 오늘 재고는 txn_date <= 오늘(KST) 인 완료 행만 — 미래 날짜 완료 행(B2B 선점)은 '출고 예정'
   ※ 현재고 예: select p.name, sum(t.qty) 재고 from inventory_txns t join products p on p.id=t.product_id where t.status='완료' group by p.name
 
 TABLE inventory_items — 품목별 재고설정(PK=product_id). product_id, min_qty(int 안전재고), barcode(text), location(text 보관위치), memo(text)
@@ -114,7 +116,9 @@ TABLE purchase_returns — 제조사 반품(매입 차감): product_id, return_d
 TABLE delivery_log — 날짜별 배송일지(PK=log_date date): boxes_normal·boxes_guar(jsonb {박스종류:개수}),
   base_fee_normal·base_fee_guar·extra_fee·guar_extra_fee·pado_fee·pado_extra·pado_cod(bigint 운임원),
   dryice_full·dryice_half(numeric), memo
-TABLE fulfill_dispatch — 소매 출고 배치 이력: dispatch_date(date), channel(text), sku_count(int), total_qty(int), order_no(text OUT-...), created_at
+TABLE fulfill_dispatch — 소매 출고 배치 이력: dispatch_date(date), channel(text), sku_count(int), total_qty(int), order_no(text OUT-...), created_at,
+  unmatched(jsonb 135 — 재고가 빠지지 않은 코드 [{sku,qty,kind unmatched|ambiguous}]), unmatched_done_at(timestamptz 그 목록 처리 시각, null=미처리)
+  ※ sku_count=0 = 재고 행 없이 처리완료된 배치(재고 관리 안 함·미등록 코드뿐이거나, 한 줄 취소로 마지막 재고 행까지 지운 배치) — 품목 수 집계에서 뺀다
 TABLE fulfill_scan_uploads — 송장 업로드 이력: id, title, invoice_count(int), item_count(int), created_at
 TABLE fulfill_scan_items — 송장 라인: upload_id, invoice_no(text 정규화), sku_code(text), qty(int)
 TABLE fulfill_scan_events — 스캔 완료 송장(PK=invoice_no): invoice_no, scanned_at, scanned_by, cleared_at(스캔 초기화 시각, null=현재 스캔 중인 라운드, 초기화 후 30일 보관)

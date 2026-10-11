@@ -78,6 +78,7 @@ export default function ProductionSchedulePage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsConfigured, setStatsConfigured] = useState(true);
   const [statsError, setStatsError] = useState(""); // 품목 통계 조회 실패 — '품목 없음'과 구분해 보여 준다
+  const [statsWarn, setStatsWarn] = useState(""); // 입고 예정·행사 일정 집계 실패 — 권장이 실제보다 클 수 있다
   const [savingAdd, setSavingAdd] = useState(false);
   const [qtyTouched, setQtyTouched] = useState(false); // 생산량 수동 편집 여부(편집 전엔 권장값 자동반영)
   const [leadDays, setLeadDays] = useState(7);
@@ -97,6 +98,8 @@ export default function ProductionSchedulePage() {
       setDays(pr.days || []);
       if (pm.ok) setPromos(pm.promotions || []);
       if (mn.ok) setManual(mn.items || []);
+      // 행사·수동 일정 조회 실패는 '없음'과 구분해 알린다 — 빈 캘린더를 보고 다시 등록하면 중복이 된다
+      if (!pm.ok || !mn.ok) setError(`${!pm.ok ? "프로모션 일정" : "수동 생산일정"}을 불러오지 못했습니다 — 새로고침하세요.`);
       if (pd.ok) setProducts((pd.products || []).map((p: Product) => ({ sku: p.sku, name: p.name, spec: p.spec, is_bundle: p.is_bundle })));
       if (rq.ok) setRequests((rq.requests || []).filter((r: ProductionRequest) => r.status === "진행중" && isFactoryPurpose(r.purpose))); // 확인(진행중)된 제조사 요청만 — 도매·프로모션·도매 대량(소매에서 이동해 채우는 확보분)은 제조사 생산 일정이 아님
     } catch (err) {
@@ -192,10 +195,12 @@ export default function ProductionSchedulePage() {
   async function openAdd() {
     setAddModal({ sku: "", name: "", qty: "", productionDate: today, stock: null, dailyOut: 0, depletionDate: null });
     setQtyTouched(false);
-    setStatsLoading(true); setStatsConfigured(true); setStatsError("");
+    setStatsLoading(true); setStatsConfigured(true); setStatsError(""); setStatsWarn("");
     try {
       const j = await (await fetch("/api/production/item-stats", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "품목 통계 조회 실패");
+      const failed = [j.inboundOk === false && "입고 예정", j.settingsOk === false && "행사 일정·보정"].filter(Boolean);
+      if (failed.length) setStatsWarn(`${failed.join("·")} 집계에 실패해 권장 생산량이 실제보다 클 수 있습니다 — 열린 생산 요청서와 겹치는지 확인하세요.`);
       if (j.configured === false) setStatsConfigured(false);
       else setItemStats(j.items || []);
       if (typeof j.leadDays === "number") setLeadDays(j.leadDays);
@@ -417,6 +422,7 @@ export default function ProductionSchedulePage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <div className="b2b-modal-head"><h2 className="b2b-modal-title">생산일정 추가</h2></div>
             {statsError && <div className="b2b-modal-body" style={{ paddingBottom: 0 }}><div className="b2b-error" style={{ margin: 0 }}>{statsError} — 잠시 후 창을 다시 여세요.</div></div>}
+            {statsWarn && <div className="b2b-modal-body" style={{ paddingBottom: 0 }}><div className="sm-warn" style={{ margin: 0 }}>{statsWarn}</div></div>}
             {!statsConfigured ? (
               <div className="b2b-modal-body">
                 <div className="b2b-empty" style={{ padding: "24px 10px" }}>표시할 품목이 없습니다.</div>

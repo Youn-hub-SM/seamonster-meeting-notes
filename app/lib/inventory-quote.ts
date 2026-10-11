@@ -1,7 +1,15 @@
 // 월간 매입 결산(견적서) 계산 — 서버 전용. 입고 원장 + 제품 마스터 → 면세/과세/임대료 요약 + SKU별 집계.
 // 사용자 실제 양식(씨몬스터_매입 결산) 기준: 코드명·품목명·규격(g)·원산지·매입가·매입수량·반품수량·총 매입금액.
+import { isMoveRow } from "./production-velocity";
 
 export type QuoteTax = "taxable" | "exempt";
+
+// 매입으로 셀 입고 행인가(조회 조건 — 입고·완료·도매 칸 제외 — 을 통과한 행에 적용). 매입이 아닌 입고:
+//  · 칸 이동·프로모션 합류(isMoveRow — 출처 칸 source move·promo_close, 131 이전 기록은 주문번호 없는 partner '채널이동'. S11)
+//  · 고객 반품 재입고(reason '고객 반품' 또는 source 'customer_return' — 2026-10-11 수동 절차, D4b)
+//  종합 리포트의 월 매입액(analyst-inventory purchaseSql)도 같은 규칙이다 — 한쪽을 바꾸면 둘 다 바꾼다.
+export const isQuotePurchase = (r: { source?: string | null; partner?: string | null; order_no?: string | null; reason?: string | null }): boolean =>
+  !isMoveRow(r) && r.reason !== "고객 반품" && r.source !== "customer_return";
 
 export interface QuoteTxn {
   product_id: string;
@@ -111,7 +119,7 @@ export function computeQuote(
   for (const r of opts.returns ?? []) {
     const q = Math.abs(Math.round((Number(r.qty) || 0) * 100) / 100);
     if (!q) continue;
-    retQty.set(r.product_id, (retQty.get(r.product_id) ?? 0) + q);
+    retQty.set(r.product_id, Math.round(((retQty.get(r.product_id) ?? 0) + q) * 100) / 100);
     if (r.product && !retProd.has(r.product_id)) retProd.set(r.product_id, r.product);
     if (r.unit_amount != null && Number(r.unit_amount) > 0) {
       retFixed.set(r.product_id, (retFixed.get(r.product_id) ?? 0) + Math.round(Number(r.unit_amount)) * q);
@@ -122,11 +130,14 @@ export function computeQuote(
   const map = new Map<string, QuoteItem & { _prices: Set<number> }>();
   const raw: QuoteRaw[] = [];
 
+  // 수량은 소수 둘째 자리까지(080·104 — kg 단위 입고). 정수로 반올림하면 12.5kg 이 13 으로 부풀고 0.4kg 은 통째로 빠진다.
+  const r2 = (n: number) => Math.round(n * 100) / 100;
   for (const t of txns) {
-    const q = Math.abs(Math.round(Number(t.qty) || 0));
+    const q = Math.abs(r2(Number(t.qty) || 0));
     if (!q) continue;
     const unit = t.unit_amount == null ? 0 : Math.round(Number(t.unit_amount) || 0);
-    const amount = unit * q;
+    const amount = Math.round(unit * q); // 원 단위
+
     const p = t.product;
     raw.push({
       order_no: t.order_no ?? null, status: t.status ?? null, txn_date: t.txn_date,
@@ -136,7 +147,7 @@ export function computeQuote(
 
     const cur = map.get(t.product_id);
     if (cur) {
-      cur.qty += q; cur.amount += amount; cur.gross_amount += amount; if (unit > 0) cur._prices.add(unit); else cur.no_price_qty += q;
+      cur.qty = r2(cur.qty + q); cur.amount += amount; cur.gross_amount += amount; if (unit > 0) cur._prices.add(unit); else cur.no_price_qty = r2(cur.no_price_qty + q);
     } else {
       map.set(t.product_id, {
         product_id: t.product_id, sku: p?.sku ?? null, name: p?.name ?? "(삭제된 품목)",
@@ -172,8 +183,8 @@ export function computeQuote(
     const return_qty = retQty.get(it.product_id) ?? 0;
     const fixedQty = retFixedQty.get(it.product_id) ?? 0;
     const fallbackUnit = unit_price > 0 ? unit_price : (it.qty === 0 ? it.ref_price : 0);
-    const return_amount = (retFixed.get(it.product_id) ?? 0) + fallbackUnit * Math.max(0, return_qty - fixedQty);
-    const net_qty = it.qty - return_qty;
+    const return_amount = Math.round((retFixed.get(it.product_id) ?? 0) + fallbackUnit * Math.max(0, return_qty - fixedQty)); // 원 단위(소수 수량)
+    const net_qty = r2(it.qty - return_qty);
     const amount = it.gross_amount - return_amount;
     // 품목표 금액은 과세·면세 모두 공급가액 그대로 — 부가세는 요약의 과세품목 세액에서만.
     //  (이전엔 과세에 ×1.1 을 얹어 품목표가 실제 매입 원장 금액과 어긋나 보였다 — 대표 정정 지시)
@@ -203,10 +214,10 @@ export function computeQuote(
     taxableSupply, taxableEtc, taxableVat, taxableTotal,
     deposit,
     itemCount: items.length,
-    noPriceQty: items.reduce((s, i) => s + i.no_price_qty, 0),
+    noPriceQty: r2(items.reduce((s, i) => s + i.no_price_qty, 0)),
     // 합계는 열마다 그 열을 그대로 더한다 — 매입수량은 반품 차감 전, 총 매입금액은 차감 후.
-    totalQty: items.reduce((s, i) => s + i.qty, 0),
-    totalReturnQty: items.reduce((s, i) => s + i.return_qty, 0),
+    totalQty: r2(items.reduce((s, i) => s + i.qty, 0)),
+    totalReturnQty: r2(items.reduce((s, i) => s + i.return_qty, 0)),
     returnAmount: items.reduce((s, i) => s + i.return_amount, 0),
     totalAmount: items.reduce((s, i) => s + i.total, 0), // 품목표 총 매입금액 합(공급가액 기준)
   };

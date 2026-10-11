@@ -4,21 +4,32 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { cellStr, cellErrorOf } from "@/app/lib/inventory-xlsx";
 import { getAllBundles, isBundleId } from "@/app/lib/product-bundles";
 import { getUntracked } from "@/app/lib/stock-tracked";
-import { toInvChannel } from "@/app/lib/inventory";
+import { toInvChannelParam } from "@/app/lib/inventory";
+import { readAll, readStockMap } from "@/app/lib/inventory-template";
+import { kstTodayIso } from "@/app/lib/production-schedule";
+import { countChecks, countDateError } from "../count-check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-export type AdjustRow = { product_id: string; sku: string | null; name: string; spec: string | null; unit: string; current: number; target: number; delta: number; memo: string | null };
+// current = 실사일 마감 기준 장부 수량, pending = 이 품목·칸의 '대기' 행 수(실사 뒤 처리하면 이중 반영)
+export type AdjustRow = { product_id: string; sku: string | null; name: string; spec: string | null; unit: string; current: number; target: number; delta: number; memo: string | null; pending?: number };
 
-// POST /api/inventory/adjust/import (multipart) — 실사 엑셀 파싱 → 델타 미리보기.
+// POST /api/inventory/adjust/import (multipart: file, channel, count_date) — 실사 엑셀 파싱 → 델타 미리보기 + 실사 전 점검(양식 칸·기준일 대조 포함).
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const file = form.get("file");
     if (!file || typeof file === "string") return NextResponse.json({ ok: false, error: "엑셀 파일을 첨부하세요." }, { status: 400 });
-    const chan = toInvChannel(form.get("channel")); // 실사 대상 채널(036·113·115, 기본 소매) — 조정은 네 칸 모두 허용
+    // 실사 칸은 명시해야 한다(S8) — 없거나 모르는 값을 소매로 받으면, 한 무더기를 센 수량이 소매에 덮어써져 다른 칸만큼 이중 계상된다.
+    const chan = toInvChannelParam(form.get("channel"));
+    if (!chan) return NextResponse.json({ ok: false, error: "실사할 칸을 고르세요." }, { status: 400 });
+    // 실사일 = 센 수량이 맞아야 하는 날(그날 마감 기준). 생략하면 오늘 — 구 화면 호환.
+    const today = kstTodayIso();
+    const countDate = String(form.get("count_date") || "").trim() || today;
+    const badDate = countDateError(countDate, today);
+    if (badDate) return NextResponse.json({ ok: false, error: badDate }, { status: 400 });
 
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const wb = new ExcelJS.Workbook();
@@ -32,31 +43,30 @@ export async function POST(req: NextRequest) {
     if (!col.has("SKU") || !col.has("실사수량")) return NextResponse.json({ ok: false, error: "헤더에 'SKU'·'실사수량'이 필요합니다. (양식을 받아 사용하세요)" }, { status: 400 });
     // 전 품목이 채워져 내려간 양식인지 판별 — 그 양식은 안 적은 줄이 대부분이라 오류가 아니라 '건너뜀'이 맞다.
     //  손으로 만든 파일이면 적어 넣은 행만 있는 것이므로 실사수량 누락은 실수 → 예전처럼 오류로 알린다.
-    const isFilledForm = col.has("품목명") && [...col.keys()].some((h) => h.startsWith("현재고"));
+    const stockHead = [...col.keys()].find((h) => h.startsWith("현재고")) || "";
+    const isFilledForm = col.has("품목명") && !!stockHead;
+    // 양식의 칸·기준일 대조(S8) — 채워진 양식 헤더 = '현재고(<칸> <기준일> 마감)', 옛 양식은 '현재고(<칸>)'(칸만 대조).
+    //  칸이 다르면 다른 칸을 센 수량이 이 칸에 덮어써진다 → 막는다. '도매 대량'을 '도매'보다 먼저 맞춘다.
+    //  기준일이 다르면 막지 않고 확인만 받는다 — 아침에 받아 두고 저녁에 세는 경우가 있다.
+    const hm = /^현재고\((도매 대량|소매|도매|프로모션)(?:\s+(\d{4}-\d{2}-\d{2}))?[\s)]/.exec(stockHead);
+    const formChan = hm?.[1] ?? null;
+    const formDate = hm?.[2] ?? null;
+    if (formChan && formChan !== chan)
+      return NextResponse.json({ ok: false, error: `이 양식은 ${formChan} 칸 양식입니다 — ${formChan} 칸을 고르거나 ${chan} 칸 양식을 다시 받으세요.` }, { status: 400 });
 
     const sb = supabaseAdmin();
-    // 기준 재고 = 오늘(KST)까지의 원장. 발송예정일이 미래인 선점 출고(도매·도매 대량)는 아직 선반에 있으므로 빼면 안 된다 —
-    //  반영(apply)도 같은 기준·같은 거래일(오늘)로 기록해 미리보기의 현재고·조정값과 실제 기록이 일치한다.
-    const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-    const stockRpc = async () => {
-      const res = await sb.rpc("inventory_stock", { asof: today, chan });
-      // 폴백은 (asof, chan) 시그니처가 없을 때(036 미적용, PGRST202)만 — 일시 오류까지 4칸 합으로 대체하면 델타가 통째로 틀어진다.
-      if (res.error?.code !== "PGRST202") return res;
-      return sb.rpc("inventory_stock", { asof: today });
-    };
-    const [pr, tr, bundles, untracked] = await Promise.all([
-      sb.from("products").select("id, sku, name, spec, unit").eq("active", true),
-      stockRpc(),
+    // 기준 재고 = 실사일(KST)까지의 원장. 발송예정일이 실사일 뒤인 선점 출고(도매·도매 대량)는 아직 선반에 있으므로 빼면 안 된다 —
+    //  반영(apply)도 같은 기준·같은 거래일(실사일)로 기록해 미리보기의 현재고·조정값과 실제 기록이 일치한다.
+    type P = { id: string; sku: string | null; name: string; spec: string | null; unit: string };
+    const [products, stock, bundles, untracked] = await Promise.all([
+      readAll<P>((a, b) => sb.from("products").select("id, sku, name, spec, unit").eq("active", true).order("id", { ascending: true }).range(a, b)),
+      readStockMap(sb, { asof: countDate, chan }), // 페이지 끝까지 — 잘린 품목을 0 으로 보면 실사 수량 전부가 +조정이 된다(S4)
       getAllBundles(sb), // 세트는 자체 재고가 없어 조정 대상이 될 수 없다(단건 API 와 같은 규칙)
       getUntracked(sb), // 재고 관리 사용 안함(121) — 조정하지 않고 건너뛴 수만 알린다
     ]);
     let untrackedCount = 0;
-    if (pr.error) throw pr.error;
-    if (tr.error) throw tr.error;
     const bySku = new Map<string, { id: string; name: string; spec: string | null; unit: string }[]>();
-    for (const p of pr.data ?? []) { const k = p.sku ? String(p.sku).trim() : ""; if (k) bySku.set(k, [...(bySku.get(k) || []), { id: p.id, name: p.name, spec: p.spec, unit: p.unit }]); }
-    const stock = new Map<string, number>();
-    for (const t of (tr.data as { product_id: string; qty: number }[] | null) ?? []) stock.set(t.product_id, Number(t.qty) || 0);
+    for (const p of products) { const k = p.sku ? String(p.sku).trim() : ""; if (k) bySku.set(k, [...(bySku.get(k) || []), { id: p.id, name: p.name, spec: p.spec, unit: p.unit }]); }
 
     let rows: AdjustRow[] = [];
     const errors: { line: number; msg: string }[] = [];
@@ -99,8 +109,13 @@ export async function POST(req: NextRequest) {
     const dupIds = new Set([...lineOf].filter(([, ls]) => ls.length > 1).map(([id]) => id));
     for (const id of dupIds) { const ls = lineOf.get(id)!; for (const l of ls) errors.push({ line: l, msg: `같은 품목이 ${ls.join("·")}행에 중복 — 실사수량을 한 줄로 합쳐 주세요(이 품목은 전부 제외)` }); }
     if (dupIds.size) { rows = rows.filter((x) => !dupIds.has(x.product_id)); errors.sort((a, b) => a.line - b.line); }
+    // 실사 전 점검(이 파일의 품목만) — 행마다 대기 건수를 붙이고, B2B 선점·당일 입출고는 화면이 확인을 받는다
+    const names = new Map(products.map((p) => [p.id, p.spec ? `${p.name} ${p.spec}` : p.name]));
+    const checks = await countChecks(sb, { chan, date: countDate, today, productIds: new Set(rows.map((r) => r.product_id)), names });
+    for (const r of rows) { const n = checks.pendingBy[r.product_id]; if (n) r.pending = n; }
+    if (formDate && formDate !== countDate) checks.formDate = formDate; // 화면이 확인을 받는다(needsAck)
     const changed = rows.filter((r) => r.delta !== 0).length;
-    return NextResponse.json({ ok: true, channel: chan, summary: { valid: rows.length, changed, errors: errors.length, skipped, untracked: untrackedCount }, rows, errors });
+    return NextResponse.json({ ok: true, channel: chan, count_date: countDate, form_date: formDate, summary: { valid: rows.length, changed, errors: errors.length, skipped, untracked: untrackedCount }, rows, errors, checks });
   } catch (err) {
     console.error("[inventory/adjust/import]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "파일 분석 실패") }, { status: 500 });

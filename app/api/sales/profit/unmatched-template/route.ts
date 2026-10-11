@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/app/lib/supabase";
+import { maxOrderDate } from "@/app/lib/sales-report";
 import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
@@ -14,8 +15,7 @@ export async function GET(req: NextRequest) {
     const p = new URL(req.url).searchParams;
     let from = p.get("from") || "", to = p.get("to") || "";
     if (!from || !to) {
-      const { data: b } = await sb.rpc("sales_date_bounds");
-      const max = Array.isArray(b) && b[0]?.max_date ? String(b[0].max_date) : null;
+      const max = await maxOrderDate(); // 오늘(KST) 이하 최신일 — 미래 날짜 행을 기본 기간으로 잡지 않는다
       if (!max) return NextResponse.json({ ok: false, error: "매출 데이터가 없습니다." }, { status: 400 });
       to = to || max; from = from || `${max.slice(0, 7)}-01`;
     }

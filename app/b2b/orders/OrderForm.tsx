@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -34,6 +34,129 @@ import { computeOrderMargin, seasonForDate, SEASON_MONTHS } from "@/app/lib/b2b-
 import { Combobox } from "./Combobox";
 
 type Mode = "create" | "edit";
+
+// 라인 수량 ↔ 차수 배분 점검(수정 화면을 열 때 읽은 차수 기준) — 서버 b2b-shipments planLineAllocCut 과 같은 계산이다(서버 모듈이라 가져올 수 없다).
+//  잠긴 몫 = 취소 차수 + 발송된 차수(발송완료·발송 시각 있음). 안 나간 차수 하나에만 있으면 그 차수가 함께 줄어든다.
+//  단일 발송 전량(취소 아닌 차수 하나에 이 라인 전량, 취소 배분 없음)이면 배분이 새 수량을 따른다 — 발송된 차수면 저장 전에 확인을 받는다.
+//  저장된 수량부터 배분보다 작은 옛 데이터는 수량을 그대로 두면 막지 않고 알리기만 한다.
+//  품목 칸에서 연결 상품만 바꾼 줄(줄 id 유지)은 지운 줄과 같이 본다 — 발송된·안 돌아옴 배분이 있으면 막고,
+//  미연동 줄에 처음 연결하는 것은 저장 전에 확인을 받는다(발송된 수량이 그 상품 재고에서 빠진다).
+type AllocShip = {
+  id: string; seq?: number; status: string; shipped_at: string | null; ship_date: string | null;
+  items: { order_item_id: string; qty: number }[];
+};
+type AllocBase = { ships: AllocShip[]; prev: Map<string, number>; label: Map<string, string>; product: Map<string, string | null> };
+type AllocLine = { id: string; qty: number; prev: number | null; label: string; product?: string | null; prevProduct?: string | null; prevLabel?: string };
+type AllocCut = { shipId: string; seq: number | null; lineId: string; label: string; from: number; to: number; shipped: boolean };
+type AllocRelink = { lineId: string; label: string; qty: number };
+type AllocIssue = { kind: "short" | "split" | "empty" | "removed" | "stale" | "product"; lineId?: string; text: string };
+const ALLOC_GUIDE =
+  "취소한 차수 몫은 이미 재고·매출·청구에서 빠져 있으니 수량은 그대로 두세요. 실제로 덜 나갔거나 차수를 나눠 줄여야 하면 발주 목록의 발송일 칸에서 그 차수 수량을 먼저 고치세요.";
+const ALLOC_STALE_GUIDE =
+  "배분이 맞으면 수량을 배분 합으로 고치고(취소 몫은 재고·매출에서 자동으로 빠집니다), 수량이 맞으면 발주 목록의 발송일 칸에서 차수 수량을 줄이거나 취소 차수를 지우세요.";
+const ALLOC_PRODUCT_GUIDE =
+  "잘못 고른 품목이면 발주 목록에서 그 발송을 '발송대기'로 되돌려 품목을 고친 뒤 다시 '발송완료'로 바꾸세요(취소한 발주는 먼저 복구). 다른 품목을 더 보낸 것이면 줄을 새로 추가하세요.";
+const lineLabelOf = (name: string, spec: string | null | undefined) => `${name.trim() || "품목"}${spec ? ` ${spec}` : ""}`;
+const EPS = 1e-9;
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
+const allocKind = (s: AllocShip) =>
+  s.status === "취소" ? "cancelled" : s.status === "발송완료" || !!s.shipped_at ? "shipped" : "pending";
+const isAllocReal = (s: AllocShip) => !!s.ship_date || s.items.some((it) => Number(it.qty) > 0);
+function lineAllocOf(ships: AllocShip[], lineId: string) {
+  const a = { total: 0, cancelled: 0, kept: 0, shipped: 0, pending: new Map<string, number>() };
+  for (const s of ships) {
+    const q = s.items.filter((it) => it.order_item_id === lineId).reduce((x, it) => x + (Number(it.qty) || 0), 0);
+    if (q <= 0) continue;
+    a.total += q;
+    const k = allocKind(s);
+    if (k === "cancelled") {
+      a.cancelled += q;
+      if (s.shipped_at) a.kept += q;
+    } else if (k === "shipped") a.shipped += q;
+    else a.pending.set(s.id, (a.pending.get(s.id) || 0) + q);
+  }
+  return a;
+}
+function planLineAlloc(lines: AllocLine[], removed: AllocLine[], ships: AllocShip[]) {
+  const removedIds = new Set(removed.map((l) => l.id));
+  const after = ships.map((s) => ({ ...s, items: s.items.filter((it) => !removedIds.has(it.order_item_id)) }));
+  const real = after.filter(isAllocReal);
+  const live = real.filter((s) => allocKind(s) !== "cancelled");
+  const sole = live.length === 1 ? live[0] : null;
+  const errors: AllocIssue[] = [];
+  const stale: AllocIssue[] = [];
+  const cuts: AllocCut[] = [];
+  const relinks: AllocRelink[] = [];
+  for (const l of lines) {
+    const a = lineAllocOf(real, l.id);
+    if (a.total <= EPS) continue;
+    if (l.product !== undefined && l.prevProduct !== undefined && (l.product || null) !== (l.prevProduct || null)) {
+      if (a.kept > EPS || (a.shipped > EPS && l.prevProduct)) {
+        const where = [
+          a.shipped > EPS ? `발송된 차수에 ${formatQty(r3(a.shipped))}` : "",
+          a.kept > EPS ? `발송 뒤 취소(안 돌아옴)한 차수에 ${formatQty(r3(a.kept))}` : "",
+        ].filter(Boolean).join(" · ");
+        const name = l.prevLabel && l.prevLabel !== l.label ? `${l.prevLabel} → ${l.label}` : l.label;
+        errors.push({ kind: "product", lineId: l.id, text: `${name}: ${where} 배분` });
+      } else if (a.shipped > EPS) {
+        relinks.push({ lineId: l.id, label: l.label, qty: r3(a.shipped) });
+      }
+    }
+    const q = l.qty;
+    const prev = l.prev;
+    if (sole && a.cancelled <= EPS && prev !== null && Math.abs(a.total - prev) <= EPS && q > EPS) {
+      if (Math.abs(q - a.total) > EPS) {
+        cuts.push({ shipId: sole.id, seq: sole.seq ?? null, lineId: l.id, label: l.label, from: r3(a.total), to: r3(q), shipped: allocKind(sole) === "shipped" });
+      }
+      continue;
+    }
+    if (q >= a.total - EPS) continue;
+    const parts = [a.shipped > 0 ? `발송 ${formatQty(r3(a.shipped))}` : "", a.cancelled > 0 ? `취소 ${formatQty(r3(a.cancelled))}` : ""].filter(Boolean).join(" · ");
+    const wasShort = prev !== null && prev < a.total - EPS;
+    if (wasShort) {
+      const same = Math.abs(q - (prev as number)) <= EPS;
+      const issue: AllocIssue = {
+        kind: "stale", lineId: l.id,
+        text: `${l.label}: 발주 ${formatQty(r3(q))}${same ? "" : `(저장된 수량 ${formatQty(r3(prev as number))})`} / 배분 ${formatQty(r3(a.total))}${parts ? `(${parts})` : ""}`,
+      };
+      if (same) { stale.push(issue); continue; }
+      if (q < a.cancelled + a.shipped - EPS || a.pending.size !== 1) { errors.push(issue); continue; }
+    } else if (q < a.cancelled + a.shipped - EPS) {
+      errors.push({ kind: "short", lineId: l.id, text: `${l.label}: 발주 ${formatQty(r3(q))} / 배분 ${formatQty(r3(a.total))}(${parts} 포함)` });
+      continue;
+    } else if (a.pending.size !== 1) {
+      errors.push({ kind: "split", lineId: l.id, text: `${l.label}: 발주 ${formatQty(r3(q))} / 배분 ${formatQty(r3(a.total))} — 안 나간 차수 ${a.pending.size}곳에 나뉘어 있습니다` });
+      continue;
+    }
+    const [shipId, from] = [...a.pending.entries()][0];
+    const ship = real.find((s) => s.id === shipId);
+    cuts.push({ shipId, seq: ship?.seq ?? null, lineId: l.id, label: l.label, from: r3(from), to: r3(Math.max(0, from - (a.total - q))), shipped: false });
+  }
+  const leftOf = (s: AllocShip) => {
+    const mine = cuts.filter((c) => c.shipId === s.id);
+    return s.items.reduce((x, it) => x + (mine.some((m) => m.lineId === it.order_item_id) ? 0 : Number(it.qty) || 0), 0)
+      + mine.reduce((x, c) => x + c.to, 0);
+  };
+  const lostFrom = new Set(ships.filter((s) => s.items.some((it) => removedIds.has(it.order_item_id) && Number(it.qty) > 0)).map((s) => s.id));
+  const autoRefill = !real.some((s) => leftOf(s) > EPS) && live.filter((s) => !!s.ship_date).length <= 1;
+  if (!autoRefill) {
+    for (const s of real) {
+      if (allocKind(s) !== "pending" || !s.ship_date) continue;
+      if (!cuts.some((c) => c.shipId === s.id) && !lostFrom.has(s.id)) continue;
+      if (leftOf(s) <= EPS) errors.push({ kind: "empty", text: `${s.seq ? `${s.seq}차` : "안 나간 차수"}(${s.ship_date})에 보낼 수량이 0 이 됩니다 — 발송일 창에서 그 차수를 먼저 지우세요` });
+    }
+  }
+  const realBefore = ships.filter(isAllocReal);
+  for (const l of removed) {
+    const a = lineAllocOf(realBefore, l.id);
+    const where = [
+      a.shipped > EPS ? `발송된 차수에 ${formatQty(r3(a.shipped))}` : "",
+      a.kept > EPS ? `발송 뒤 취소(안 돌아옴)한 차수에 ${formatQty(r3(a.kept))}` : "",
+    ].filter(Boolean).join(" · ");
+    if (where) errors.push({ kind: "removed", lineId: l.id, text: `${l.label}: ${where} 배분 — 지울 수 없습니다` });
+  }
+  return { errors, stale, cuts, relinks, multi: real.length >= 2 };
+}
 
 // 모바일에서는 접히는 섹션(아코디언), 데스크톱에서는 항상 펼침.
 function CollapsibleSection({ title, titleExtra, children }: { title: React.ReactNode; titleExtra?: React.ReactNode; children: React.ReactNode }) {
@@ -135,10 +258,105 @@ export default function OrderForm({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [salesWarn, setSalesWarn] = useState(""); // 매출 원장 반영 실패(수정 저장 뒤) — 다시 [수정]을 누르면 다시 맞춰진다
+  // 저장 뒤 다시 불러오기 실패 — 화면 값이 DB 와 어긋났다(새 줄에 id 없음). 새로고침 전까지 [수정]을 막는다
+  const [reloadFailed, setReloadFailed] = useState(false);
   // 거래처 선택 시 "최근 발주 복제?" 프롬프트 (신규 등록에서만)
   const [clonePrompt, setClonePrompt] = useState<{ orderId: string; summary: string } | null>(null);
   const [cloning, setCloning] = useState(false);
   const [companyPrices, setCompanyPrices] = useState<Record<string, number>>({}); // 거래처별 상품 단가(product_id→단가)
+  // 복제로 채운 거래처 — 그 회차의 단가 재도출을 건너뛴다(복제 원본 단가 유지, '최근 발주 복제'와 같은 결과)
+  const clonePriceKeep = useRef<string | null>(null);
+  // 등록 요청 키 — 응답이 끊겨 [등록]을 다시 눌러도 같은 발주가 두 번 생기지 않게 서버가 이 키로 막는다(134)
+  const [requestKey] = useState(() =>
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+  );
+  // 이미 발송된 발주(발송완료 또는 발송 시각이 남은 차수) — 삭제하지 않고 취소한다(D3)
+  const [shippedOrder, setShippedOrder] = useState(false);
+  const [allocBase, setAllocBase] = useState<AllocBase | null>(null); // 열 때 읽은 차수 배분(취소 포함)·저장된 수량
+
+  // 수정 화면의 발주 불러오기 — 첫 로드와, 저장 뒤 매출 반영 실패로 이 화면에 남을 때(라인 id·updated_at 을 서버 값으로 맞춘다).
+  //  다시 [수정]할 때 옛 화면 값(새 줄에 id 없음)으로 보내면 방금 넣은 줄을 지우고 또 넣어 차수 배분이 끊긴다.
+  async function loadEditOrder(id: string) {
+    const orderRes = await fetch(`/api/b2b/orders/${id}`, { cache: "no-store" });
+    const orderJson = await orderRes.json();
+    if (!orderJson.ok) throw new Error(orderJson.error || "발주 조회 실패");
+    const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
+    setOriginalOrder(o);
+    setShippedOrder(o.status === "발송완료" || (o.shipments || []).some((sh) => sh.status === "발송완료" || !!sh.shipped_at));
+    setAllocBase({
+      ships: (o.shipments || []).map((sh) => ({
+        id: sh.id,
+        seq: Number(sh.seq) || undefined,
+        status: sh.status,
+        shipped_at: sh.shipped_at ?? null,
+        ship_date: sh.ship_date ?? null,
+        items: (sh.items || [])
+          .filter((si) => !!si.order_item_id)
+          .map((si) => ({ order_item_id: String(si.order_item_id), qty: Number(si.qty) || 0 })),
+      })),
+      prev: new Map((o.items || []).map((it) => [it.id, Number(it.qty) || 0])),
+      label: new Map((o.items || []).map((it) => [it.id, lineLabelOf(it.product_name || "", it.spec)])),
+      product: new Map((o.items || []).map((it) => [it.id, it.product_id || null])),
+    });
+    if (Number(o.discount_amount) !== 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
+    setData({
+      id: o.id,
+      company_id: o.company_id,
+      order_date: o.order_date,
+      production_date: o.production_date ?? "",
+      ship_date: o.ship_date ?? "",
+      status: o.status,
+      production_status: o.production_status ?? "생산대기",
+      payment_status: o.payment_status,
+      tax_invoice_status: o.tax_invoice_status,
+      notes: o.notes ?? "",
+      discount_amount: o.discount_amount ?? "",
+      discount_reason: o.discount_reason ?? "",
+      box_count: o.box_count ?? 1,
+      tracking_no: o.tracking_no ?? "",
+      is_bulk: o.is_bulk ?? false,
+      items: (o.items || []).map((it) => ({
+        id: it.id,
+        product_id: it.product_id,
+        product_name: it.product_name,
+        option_label: it.option_label ?? "",
+        spec: it.spec ?? "",
+        qty: it.qty,
+        unit_price: it.unit_price,
+        cost_at_order: it.cost_at_order ?? "",
+        tax_type: it.tax_type,
+        sort_order: it.sort_order,
+      })),
+      recipient: o.shipments?.[0]
+        ? {
+            recipient_name: o.shipments[0].recipient_name ?? "",
+            recipient_phone: o.shipments[0].recipient_phone ?? "",
+            address: o.shipments[0].address ?? "",
+            delivery_memo: o.shipments[0].delivery_memo ?? "",
+            courier: o.shipments[0].courier ?? "",
+          }
+        : { ...EMPTY_RECIPIENT },
+      shipments: (o.shipments || [])
+        // 날짜·상품이 모두 없는 행은 '배송 정보 전용' 기본 행 → 발송 일정 카드로는 노출 안 함
+        .filter((sh) => sh.ship_date || (sh.items && sh.items.length > 0))
+        .map((sh) => ({
+        id: sh.id,
+        ship_date: sh.ship_date ?? "",
+        status: sh.status,
+        tracking_no: sh.tracking_no ?? "",
+        box_count: sh.box_count ?? 1,
+        stock_out: (sh as { stock_out?: boolean }).stock_out ?? false,
+        items: (sh.items || []).map((si) => ({
+          // order_item_id → 현재 items 배열의 인덱스로 매핑
+          order_item_index: (o.items || []).findIndex((oi) => oi.id === si.order_item_id),
+          qty: si.qty,
+        })).filter((x) => x.order_item_index >= 0),
+      })),
+    });
+  }
 
   // ─────────────────────────────────────────────
   // 초기 데이터 로드
@@ -160,66 +378,7 @@ export default function OrderForm({
         setProducts((prodJson.products as Product[] || []).filter((p) => p.active));
 
         if (mode === "edit" && orderId) {
-          const orderRes = await fetch(`/api/b2b/orders/${orderId}`, { cache: "no-store" });
-          const orderJson = await orderRes.json();
-          if (!orderJson.ok) throw new Error(orderJson.error || "발주 조회 실패");
-          const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
-          setOriginalOrder(o);
-          if (Number(o.discount_amount) !== 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
-          setData({
-            id: o.id,
-            company_id: o.company_id,
-            order_date: o.order_date,
-            production_date: o.production_date ?? "",
-            ship_date: o.ship_date ?? "",
-            status: o.status,
-            production_status: o.production_status ?? "생산대기",
-            payment_status: o.payment_status,
-            tax_invoice_status: o.tax_invoice_status,
-            notes: o.notes ?? "",
-            discount_amount: o.discount_amount ?? "",
-            discount_reason: o.discount_reason ?? "",
-            box_count: o.box_count ?? 1,
-            tracking_no: o.tracking_no ?? "",
-            is_bulk: o.is_bulk ?? false,
-            items: (o.items || []).map((it) => ({
-              id: it.id,
-              product_id: it.product_id,
-              product_name: it.product_name,
-              option_label: it.option_label ?? "",
-              spec: it.spec ?? "",
-              qty: it.qty,
-              unit_price: it.unit_price,
-              cost_at_order: it.cost_at_order ?? "",
-              tax_type: it.tax_type,
-              sort_order: it.sort_order,
-            })),
-            recipient: o.shipments?.[0]
-              ? {
-                  recipient_name: o.shipments[0].recipient_name ?? "",
-                  recipient_phone: o.shipments[0].recipient_phone ?? "",
-                  address: o.shipments[0].address ?? "",
-                  delivery_memo: o.shipments[0].delivery_memo ?? "",
-                  courier: o.shipments[0].courier ?? "",
-                }
-              : { ...EMPTY_RECIPIENT },
-            shipments: (o.shipments || [])
-              // 날짜·상품이 모두 없는 행은 '배송 정보 전용' 기본 행 → 발송 일정 카드로는 노출 안 함
-              .filter((sh) => sh.ship_date || (sh.items && sh.items.length > 0))
-              .map((sh) => ({
-              id: sh.id,
-              ship_date: sh.ship_date ?? "",
-              status: sh.status,
-              tracking_no: sh.tracking_no ?? "",
-              box_count: sh.box_count ?? 1,
-              stock_out: (sh as { stock_out?: boolean }).stock_out ?? false,
-              items: (sh.items || []).map((si) => ({
-                // order_item_id → 현재 items 배열의 인덱스로 매핑
-                order_item_index: (o.items || []).findIndex((oi) => oi.id === si.order_item_id),
-                qty: si.qty,
-              })).filter((x) => x.order_item_index >= 0),
-            })),
-          });
+          await loadEditOrder(orderId);
         } else if (mode === "create" && cloneFromId) {
           // 복제 모드: 원본 발주를 불러와 업체·라인·송장은 복사, 날짜·상태는 초기화
           const t = new Date();
@@ -229,6 +388,8 @@ export default function OrderForm({
           if (!orderJson.ok) throw new Error(orderJson.error || "복제할 발주 조회 실패");
           const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
           if (Number(o.discount_amount) !== 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
+          // 거래처가 ''→원본 거래처로 바뀌어 단가 재도출이 돌면 원본 단가가 거래처·기본 단가로 덮인다(점검 확정) — 이번 한 번은 건너뛴다
+          clonePriceKeep.current = o.company_id;
           setData(buildCloneData(o, todayIso));
         } else {
           // create 모드: 발주일 기본값을 오늘로
@@ -241,6 +402,7 @@ export default function OrderForm({
       }
       setLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadEditOrder 는 상태 setter 만 쓴다
   }, [mode, orderId, cloneFromId]);
 
   // ─────────────────────────────────────────────
@@ -365,24 +527,33 @@ export default function OrderForm({
     return { ...m, season };
   }, [data.items, effectiveBoxCount, data.ship_date, data.order_date, products, currentMonth, discountAmount]);
 
-  // 분할 수량 점검: 발송 일정에 배분한 수량 합계가 발주 수량과 다르면 경고 (저장은 막지 않음)
-  const splitWarnings = useMemo(() => {
-    const out: string[] = [];
-    const active = data.shipments.filter((s) => s.status !== "취소");
-    if (active.length === 0) return out;
-    data.items.forEach((it, idx) => {
-      if (!it.product_name.trim()) return;
-      const allocated = active.reduce((sum, s) => {
-        const f = s.items.find((x) => x.order_item_index === idx);
-        return sum + (f ? Number(f.qty) || 0 : 0);
-      }, 0);
-      const ordered = Number(it.qty) || 0;
-      if (allocated > 0 && allocated !== ordered) {
-        out.push(`${it.product_name}${it.spec ? ` ${it.spec}` : ""}: 발주 ${formatQty(ordered)}개인데 발송 일정에 ${formatQty(allocated)}개 배분됨`);
-      }
-    });
-    return out;
-  }, [data.items, data.shipments]);
+  // 수량 ↔ 차수 배분 점검 — 발송·취소된 몫보다 줄이거나, 안 나간 차수 여럿에 걸친 수량을 줄이거나, 대기 차수를 비우거나,
+  //  발송된(안 돌아옴 취소 포함) 품목을 지우면 저장을 막는다(서버도 같은 규칙으로 막는다 — 그대로 저장되면 재고·매출·청구가
+  //  실제로 나간 것보다 적게 잡힌다). 이미 어긋난 옛 데이터(stale)는 막지 않고 알린다. cuts 중 shipped 는 저장 전에 확인을 받는다.
+  const allocPlan = useMemo(() => {
+    if (mode !== "edit" || !allocBase) return null;
+    const seen = new Set<string>();
+    const lines: AllocLine[] = [];
+    for (const it of data.items) {
+      if (!it.id || !allocBase.prev.has(it.id) || seen.has(it.id)) continue; // 서버와 같은 규칙 — 같은 id 의 두 번째 줄은 새 줄
+      seen.add(it.id);
+      lines.push({
+        id: it.id, qty: Number(it.qty) || 0, prev: allocBase.prev.get(it.id) ?? null, label: lineLabelOf(it.product_name, it.spec),
+        product: it.product_id || null, prevProduct: allocBase.product.get(it.id) ?? null, prevLabel: allocBase.label.get(it.id),
+      });
+    }
+    const removed: AllocLine[] = [...allocBase.prev.keys()]
+      .filter((id) => !seen.has(id))
+      .map((id) => ({ id, qty: 0, prev: null, label: allocBase.label.get(id) || "품목" }));
+    return planLineAlloc(lines, removed, allocBase.ships);
+  }, [mode, data.items, allocBase]);
+  const allocErrors = allocPlan?.errors ?? [];
+  const allocShort = allocErrors.filter((e) => e.kind !== "stale" && e.kind !== "product").map((e) => e.text);
+  const allocStaleErr = allocErrors.filter((e) => e.kind === "stale").map((e) => e.text);
+  const allocProduct = allocErrors.filter((e) => e.kind === "product").map((e) => e.text);
+  const allocStale = (allocPlan?.stale ?? []).map((e) => e.text);
+  const shippedMoves = (allocPlan?.cuts ?? []).filter((c) => c.shipped);
+  const shippedRelinks = allocPlan?.relinks ?? [];
 
   // ─────────────────────────────────────────────
   // 폼 필드 수정 핸들러
@@ -407,6 +578,8 @@ export default function OrderForm({
         const map: Record<string, number> = {};
         for (const r of (j.prices || []) as { product_id: string; unit_price: number }[]) map[r.product_id] = Number(r.unit_price) || 0;
         setCompanyPrices(map);
+        // 복제로 채운 거래처면 원본 단가를 그대로 둔다(맵만 갱신 — 새로 고르는 품목에는 거래처 단가가 들어간다)
+        if (clonePriceKeep.current && clonePriceKeep.current === cid) { clonePriceKeep.current = null; return; }
         if (mode === "create") {
           // 거래처가 바뀌면 담긴 라인의 단가를 '무조건' 재도출한다. 새 거래처 전용단가가 있으면 그 값,
           //  없으면 기본판매가로 리셋 — 옛 거래처 단가만 갱신하면(있는 것만) 옛 협상단가가 잔존해
@@ -427,6 +600,7 @@ export default function OrderForm({
 
   // 업체 변경 시 공통 배송 정보 자동 채움 (담당자·연락처·주소 → 수령인)
   function selectCompany(companyId: string) {
+    clonePriceKeep.current = null; // 사람이 거래처를 고르면 그 거래처 단가로 다시 맞춘다
     setData((prev) => {
       const c = companies.find((cc) => cc.id === companyId);
       if (!c) return { ...prev, company_id: companyId };
@@ -600,8 +774,27 @@ export default function OrderForm({
   // 저장 / 삭제
   // ─────────────────────────────────────────────
   async function handleSave() {
+    // 상품을 고르지 않고 이름만 친 품목은 재고에서 빠지지 않는다 — 조용히 저장하지 않고 확인을 받는다(서버도 확인 없이는 막는다)
+    const unlinked = data.items.filter((it) => !it.product_id && it.product_name.trim()).map((it) => it.product_name.trim());
+    let allowUnlinked = false;
+    if (unlinked.length) {
+      if (!window.confirm(`다음 품목은 상품이 연결되지 않아 재고에서 빠지지 않습니다:\n${unlinked.join("\n")}\n\n그대로 저장할까요? 재고 품목이면 [취소]를 누르고 품목칸에서 목록의 상품을 고르세요.`)) return;
+      allowUnlinked = true;
+    }
+    // 단일 발송 발주의 발송된 수량을 고치면 그 차수에 나간 수량을 다시 기록한다 — 선점·매출이 새 수량을 따르므로 확인을 받는다.
+    //  발송된 미연동 줄에 상품을 처음 연결하는 것도 같다(그 수량이 그 상품 재고에서 빠진다)
+    let allowShippedQty = false;
+    if (mode === "edit" && (shippedMoves.length || shippedRelinks.length)) {
+      const lines = [
+        ...shippedMoves.map((c) => `${c.label}: 발송된 수량을 ${formatQty(c.from)} → ${formatQty(c.to)} 으로 고칩니다`),
+        ...shippedRelinks.map((r) => `${r.label}: 상품을 연결해 발송된 ${formatQty(r.qty)} 이 그 상품 재고에서 빠집니다`),
+      ].join("\n");
+      if (!window.confirm(`${lines}\n— 재고·매출이 함께 바뀝니다.\n\n저장할까요?`)) return;
+      allowShippedQty = true;
+    }
     setSaving(true);
     setError("");
+    setSalesWarn("");
     try {
       const url = mode === "create" ? "/api/b2b/orders" : `/api/b2b/orders/${orderId}`;
       const method = mode === "create" ? "POST" : "PUT";
@@ -610,12 +803,38 @@ export default function OrderForm({
         headers: { "Content-Type": "application/json" },
         // 라인 순번(sort_order)을 화면 순서로 다시 매긴다 — 서버가 저장한 라인을 sort_order 로 정렬한 뒤 차수 배분의
         //  라인 순번(order_item_index)을 그 목록에 대응시키므로, 줄을 지우고 추가해 순번이 어긋나면 배분이 엉뚱한 라인에 붙는다.
-        body: JSON.stringify({ ...data, items: data.items.map((it, i) => ({ ...it, sort_order: i })), discount_amount: discountAmount }),
+        //  updated_at = 열 때 읽은 값 — 그 사이 다른 곳에서 바뀌었으면 서버가 409 로 덮지 않는다.
+        body: JSON.stringify({
+          ...data,
+          items: data.items.map((it, i) => ({ ...it, sort_order: i })),
+          discount_amount: discountAmount,
+          allow_unlinked: allowUnlinked,
+          ...(mode === "create"
+            ? { client_request_id: requestKey }
+            : { updated_at: originalOrder?.updated_at ?? null, allow_shipped_qty: allowShippedQty }),
+        }),
       });
       const json = await res.json();
+      if (res.status === 409 && json.stale) throw new Error(json.error || "다른 곳에서 이 발주가 바뀌었습니다 — 새로고침한 뒤 다시 고쳐 저장하세요.");
       if (!res.ok || !json.ok) throw new Error(json.error || "저장 실패");
       // 차감 칸이 유지됐거나(이미 나감) 바뀌었으면(옮길 방향) 안내 — 따르지 않으면 칸마다 유령 재고가 생긴다
       if (json.channel_notice) alert(json.channel_notice);
+      // 매출 원장 반영 실패(수정) — 품목·차수·재고는 저장됐다. 목록으로 가면 경고가 사라지므로 이 화면에 남아
+      //  배너를 띄우고, 다시 [수정]을 누르면 매출이 다시 맞춰진다. 화면 값·updated_at 은 다시 불러오기로만 맞춘다 —
+      //  응답의 updated_at 만 먼저 받아 두면 다시 불러오기가 실패해도 409 검사가 통과해, 옛 화면 값(새 줄에 id 없음)이
+      //  방금 넣은 줄을 지우고 또 넣어 차수 배분이 끊긴다. 실패하면 새로고침 전까지 [수정]을 막는다.
+      //  등록(POST)은 새 발주가 항상 발송대기라 매출 행이 없어 실패해도 원장에 남는 것이 없다 — 목록으로 간다.
+      if (mode === "edit" && orderId && json.sales_sync_failed) {
+        setSalesWarn(json.sales_sync_message || "매출 반영 실패");
+        try {
+          await loadEditOrder(orderId);
+        } catch {
+          setReloadFailed(true);
+          setError("발주를 다시 불러오지 못했습니다 — 새로고침한 뒤 [수정]을 누르세요.");
+        }
+        setSaving(false);
+        return;
+      }
 
       // 저장 성공 — 리스트로 돌아감 (혹은 상세로?)
       router.push("/b2b/orders");
@@ -628,8 +847,13 @@ export default function OrderForm({
 
   async function handleDelete() {
     if (mode !== "edit" || !orderId) return;
+    // 발송된 발주를 지우면 실제로 나간 물건이 장부에 되살아난다 — 취소로 바꾼다(서버도 막는다)
+    if (shippedOrder) {
+      setError("발송된 발주는 삭제할 수 없습니다 — 발주 목록에서 상태를 '취소'로 바꾸세요. 발송완료로 잘못 바꾼 것이면 먼저 '발송대기'로 되돌린 뒤 삭제하세요.");
+      return;
+    }
     const orderLabel = originalOrder?.order_no || orderId;
-    if (!confirm(`발주 ${orderLabel} 을(를) 삭제하시겠어요?\n품목·송장도 함께 삭제됩니다.`)) return;
+    if (!confirm(`발주 ${orderLabel} 을(를) 삭제하시겠어요?\n품목·발송 일정이 함께 삭제되고 선점된 재고가 원복됩니다.`)) return;
     setSaving(true);
     setError("");
     try {
@@ -652,6 +876,9 @@ export default function OrderForm({
   const canSave =
     !!data.company_id && !!data.order_date && data.items.length > 0 &&
     data.items.every((it) => it.product_name.trim() && Number(it.qty) > 0);
+  // 취소된 발주에 취소 안 된 실제 차수가 남은 옛 데이터 — 서버가 저장을 막는다(재저장하면 발주가 되살아나거나 선점만 다시 기록된다)
+  const cancelledLive = mode === "edit" && originalOrder?.status === "취소" &&
+    data.shipments.some((s) => s.status !== "취소" && (!!s.ship_date || (s.items || []).some((it) => Number(it.qty) > 0)));
 
   return (
     <>
@@ -684,6 +911,10 @@ export default function OrderForm({
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+      {salesWarn && <div className="sm-warn">{salesWarn}</div>}
+      {cancelledLive && (
+        <div className="sm-warn">취소된 발주에 취소되지 않은 차수가 있어 저장할 수 없습니다 — 발주 목록에서 차수 상태를 먼저 맞추세요.</div>
+      )}
 
       <div className="b2b-form-sections">
         {/* ───── 기본 정보 ───── */}
@@ -1000,6 +1231,13 @@ export default function OrderForm({
                         ) : it.product_name.trim() ? (
                           <div style={{ fontSize: 12, marginTop: 3, color: "var(--sm-warning)" }}>직접입력 — 재고 연동 안 됨</div>
                         ) : null}
+                        {it.id && data.items.findIndex((x) => x.id === it.id) === idx && (
+                          allocPlan?.errors.some((e) => e.kind === "product" && e.lineId === it.id) ? (
+                            <div style={{ fontSize: 12, marginTop: 3, color: "var(--sm-danger)" }}>발송된 품목 — 바꿀 수 없음</div>
+                          ) : allocPlan?.relinks.some((r) => r.lineId === it.id) ? (
+                            <div style={{ fontSize: 12, marginTop: 3, color: "var(--sm-warning)" }}>발송된 수량이 이 상품 재고에서 빠짐</div>
+                          ) : null
+                        )}
                       </td>
                       <td data-label="옵션">
                         <input
@@ -1018,6 +1256,32 @@ export default function OrderForm({
                           min={0}
                           style={{ textAlign: "right" }}
                         />
+                        {(() => {
+                          // 발송·취소된 차수 배분(줄일 수 없는 몫), 여러 차수에 나뉜 배분, 어긋난 옛 데이터, 발송 수량 다시 기록이면
+                          //  수량 칸 아래에 보인다. 빨강 = 이대로 저장 안 됨, 노랑 = 저장 때 확인(발송 수량)·어긋난 데이터
+                          if (mode !== "edit" || !it.id || !allocBase || !allocPlan) return null;
+                          const firstIdx = data.items.findIndex((x) => x.id === it.id);
+                          if (firstIdx !== idx || !allocBase.prev.has(it.id)) return null; // 같은 id 의 두 번째 줄은 새 줄
+                          const a = lineAllocOf(allocBase.ships.filter(isAllocReal), it.id);
+                          if (a.total <= EPS) return null;
+                          const cut = allocPlan.cuts.find((c) => c.lineId === it.id);
+                          const bad = allocPlan.errors.some((e) => e.lineId === it.id);
+                          const stale = allocPlan.stale.some((e) => e.lineId === it.id);
+                          const shown = a.cancelled + a.shipped > EPS || a.pending.size >= 2 || bad || stale || (!!cut && (cut.shipped || allocPlan.multi));
+                          if (!shown) return null;
+                          const pending = a.total - a.cancelled - a.shipped;
+                          const parts = [
+                            a.shipped > 0 ? `발송 ${formatQty(r3(a.shipped))}` : "",
+                            a.cancelled > 0 ? `취소 ${formatQty(r3(a.cancelled))}` : "",
+                            pending > EPS ? `대기 ${formatQty(r3(pending))}` : "",
+                          ].filter(Boolean).join(" · ");
+                          const color = bad ? "var(--sm-danger)" : stale || cut?.shipped ? "var(--sm-warning)" : null;
+                          return (
+                            <div className={color ? undefined : "sm-faint"} style={{ fontSize: 12, marginTop: 3, textAlign: "right", ...(color ? { color } : {}) }}>
+                              배분 {formatQty(r3(a.total))}{cut ? ` → ${formatQty(r3(a.total - cut.from + cut.to))}` : ""} ({parts})
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td data-label="단가">
                         <input
@@ -1119,7 +1383,7 @@ export default function OrderForm({
         {/* ───── 이익률 (배송 박스 단위) ───── */}
         <CollapsibleSection title="이익률 (배송 박스 기준)">
           <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--sm-text-mid)" }}>
-            매출 − 제품원가 − 배송비(박스 × 아이스박스+운반비+보냉비). 과세 상품은 공급가(÷1.1) 기준.
+            매출 − 제품원가 − 배송비(박스 × 아이스박스+운반비+보냉비). 단가 = 공급가(부가세 별도) 기준.
           </p>
 
           {/* 박스 수는 여기서 고치지 않는다 — 실제 발송한 박스 수(발송일 등록에서 입력)만 이익률에 반영한다.
@@ -1152,7 +1416,8 @@ export default function OrderForm({
 
           <div className="b2b-totals">
             <div className="b2b-totals-row">
-              매출{orderMargin.revenue !== totals.subtotal ? " (공급가)" : ""}{" "}
+              {/* 매출 = 단가(공급가) × 수량 — 합계와 다르면 할인·추가금이 비율로 반영된 것 */}
+              매출{orderMargin.revenue !== totals.subtotal ? (discountAmount < 0 ? " (추가금 반영)" : " (할인 반영)") : ""}{" "}
               <strong className="b2b-money">{formatMoney(Math.round(orderMargin.revenue))}원</strong>
             </div>
             <div className="b2b-totals-row">
@@ -1176,6 +1441,37 @@ export default function OrderForm({
           </div>
         </CollapsibleSection>
 
+        {allocProduct.length > 0 && (
+          <div className="sm-warn">
+            발송된 품목은 바꿀 수 없습니다 — {allocProduct.join(" / ")}. {ALLOC_PRODUCT_GUIDE}
+          </div>
+        )}
+        {allocShort.length > 0 && (
+          <div className="sm-warn">
+            수량을 차수 배분보다 줄일 수 없습니다 — {allocShort.join(" / ")}. {ALLOC_GUIDE}
+          </div>
+        )}
+        {allocStaleErr.length > 0 && (
+          <div className="sm-warn">
+            저장된 수량이 이미 차수 배분과 어긋난 품목입니다 — {allocStaleErr.join(" / ")}. {ALLOC_STALE_GUIDE}
+          </div>
+        )}
+        {allocStale.length > 0 && (
+          <div className="sm-warn">
+            저장된 수량이 차수 배분과 어긋나 있습니다(다른 칸은 그대로 저장됩니다) — {allocStale.join(" / ")}. {ALLOC_STALE_GUIDE}
+          </div>
+        )}
+        {shippedMoves.length > 0 && (
+          <div className="sm-warn">
+            발송된 수량을 고칩니다 — {shippedMoves.map((c) => `${c.label} ${formatQty(c.from)} → ${formatQty(c.to)}`).join(", ")}. 재고·매출이 함께 바뀝니다.
+          </div>
+        )}
+        {shippedRelinks.length > 0 && (
+          <div className="sm-warn">
+            발송된 품목에 상품을 연결합니다 — {shippedRelinks.map((r) => `${r.label} ${formatQty(r.qty)}`).join(", ")}. 그 수량이 발송일 기준으로 재고에서 빠집니다.
+          </div>
+        )}
+
         {/* ───── 푸터 ───── */}
         <div className="b2b-form-foot">
           {mode === "edit" ? (
@@ -1195,7 +1491,7 @@ export default function OrderForm({
               type="button"
               className="b2b-btn-primary"
               onClick={handleSave}
-              disabled={saving || !canSave}
+              disabled={saving || !canSave || reloadFailed || allocErrors.length > 0}
             >
               {saving ? "저장 중..." : mode === "create" ? "등록" : "수정"}
             </button>

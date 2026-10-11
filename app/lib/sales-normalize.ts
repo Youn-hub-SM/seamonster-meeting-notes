@@ -67,6 +67,17 @@ export function toInt(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// 숫자 칸 엄격 해석 — 빈칸·'nan' 은 0(toInt 와 같음), 쉼표를 뺀 뒤 숫자가 아니면 null(오류 행).
+//  '25,800원'·'2개'·'₩25,800' 이 조용히 0원·0개 매출로 적재되던 것을 막는다(원장 기준 S9).
+//  숫자로 읽히는 입력은 toInt 와 같은 값을 돌려주므로 기존 행의 row_hash 는 바뀌지 않는다.
+export function toIntStrict(v: unknown): number | null {
+  if (v == null) return 0;
+  const s = String(v).replace(/,/g, "").trim();
+  if (s === "" || s.toLowerCase() === "nan") return 0;
+  const n = Math.trunc(Number(s));
+  return Number.isFinite(n) ? n : null;
+}
+
 // 엑셀 시리얼 → yyyymmdd (origin 1899-12-30, UTC로 날짜부만 추출해 TZ 이동 방지).
 function excelSerialToInt(serial: number): number {
   const ms = Date.UTC(1899, 11, 30) + Math.round(serial) * 86400_000;
@@ -131,7 +142,9 @@ export type SalesCustomerRow = { customer_key: string; phone: string; phone_digi
 export type NormalizedRow = { ok: boolean; error?: string; order?: SalesOrderRow; customer?: SalesCustomerRow };
 
 // 원본 행(키=원본 헤더) → 정규화된 sales_orders/sales_customers 행. 웹업로드·백필 공용.
-export function normalizeRow(raw: Record<string, unknown>): NormalizedRow {
+//  opts.occurrence: 한 파일 안 완전 동일 라인의 n번째(2 이상)를 별개 행으로 넣을 때 — row_hash 입력의 주문번호 뒤에 '#n'을 붙인다
+//  (저장되는 order_id 는 그대로). 첫 행은 해시가 같아 기존 데이터·재업로드 멱등이 유지된다.
+export function normalizeRow(raw: Record<string, unknown>, opts: { occurrence?: number } = {}): NormalizedRow {
   const en: Record<string, unknown> = {};
   for (const k of Object.keys(raw)) {
     const nk = normalizeColname(k);
@@ -143,6 +156,14 @@ export function normalizeRow(raw: Record<string, unknown>): NormalizedRow {
   const odi = parseOrderDateInt(en["order_date"]);
   if (odi == null) return { ok: false, error: `주문일자 파싱 실패: ${JSON.stringify(en["order_date"] ?? "")}` };
 
+  // 금액·수량 칸 — 빈칸은 0, 숫자가 아니면 오류 행(0으로 적재하지 않는다)
+  const num: Record<string, number> = {};
+  for (const [col, label] of [["quantity", "수량"], ["selling_price", "판매가"], ["option_price", "옵션금액"], ["subtotal_amount", "결제금액"], ["shipping_fee", "배송비결제금액"]] as const) {
+    const v = toIntStrict(en[col]);
+    if (v == null) return { ok: false, error: `${label} 숫자 아님: ${JSON.stringify(String(en[col]))}${s("order_id") ? ` (주문번호 ${s("order_id")})` : ""}` };
+    num[col] = v;
+  }
+
   const order: SalesOrderRow = {
     channel: s("channel"),
     order_date: intToIsoDate(odi),
@@ -151,16 +172,17 @@ export function normalizeRow(raw: Record<string, unknown>): NormalizedRow {
     product_name: s("product_name"),
     option_name: s("option_name"),
     sku_code: s("sku_code"),
-    quantity: toInt(en["quantity"]),
-    selling_price: toInt(en["selling_price"]),
-    option_price: toInt(en["option_price"]),
-    subtotal_amount: toInt(en["subtotal_amount"]),
-    shipping_fee: toInt(en["shipping_fee"]),
+    quantity: num.quantity,
+    selling_price: num.selling_price,
+    option_price: num.option_price,
+    subtotal_amount: num.subtotal_amount,
+    shipping_fee: num.shipping_fee,
     customer_key: "",
     row_hash: "",
   };
   order.customer_key = customerKey(en["customer_phone"]);
-  order.row_hash = rowHash(order);
+  const occ = Math.floor(Number(opts.occurrence) || 1);
+  order.row_hash = rowHash(occ > 1 ? { ...order, order_id: `${order.order_id}#${occ}` } : order);
 
   let customer: SalesCustomerRow | undefined;
   const digits = normalizePhoneDigits(en["customer_phone"]);

@@ -1,9 +1,10 @@
-import { supabaseAdmin } from "./supabase";
+import { mutateKv, readKvSoft } from "./production-kv";
 
 // ─────────────────────────────────────────────
 // 안전재고 수동 보정 — b2b_settings('production_safety_adjust') 에 SKU별로 저장.
 //  자동 목표(출고×목표 일수 — 생산 일정 기반) 위에 사람이 직접 더/덜 잡는 값.
 //  만료일(until)을 지정하면 그날이 지나면 자동으로 무시(0 처리)된다.
+//  저장은 production-kv mutateKv — 읽기 실패면 저장을 거절한다(빈 값 + 이번 1건으로 다른 SKU 보정을 지우지 않게, S4).
 // ─────────────────────────────────────────────
 
 const KEY = "production_safety_adjust";
@@ -15,36 +16,35 @@ export interface SafetyAdjust {
   until?: string | null;  // YYYY-MM-DD — 이 날짜가 지나면 무시
 }
 
-export async function getSafetyAdjusts(): Promise<Record<string, SafetyAdjust>> {
-  try {
-    const sb = supabaseAdmin();
-    const { data } = await sb.from("b2b_settings").select("value").eq("key", KEY).maybeSingle();
-    const v = data?.value;
-    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, SafetyAdjust>) : {};
-  } catch {
-    return {};
-  }
+type AdjMap = Record<string, SafetyAdjust>;
+const asMap = (v: unknown): AdjMap => (v && typeof v === "object" && !Array.isArray(v) ? (v as AdjMap) : {});
+
+// 계산 경로용 — 실패해도 빈 값으로 계속 돌되 ok=false(호출부가 경고·초안 중단)
+export async function getSafetyAdjustsWithOk(): Promise<{ adjusts: AdjMap; ok: boolean }> {
+  const r = await readKvSoft<AdjMap>(KEY);
+  return { adjusts: asMap(r.value), ok: r.ok };
 }
 
-export async function setSafetyAdjust(sku: string, adj: SafetyAdjust): Promise<Record<string, SafetyAdjust>> {
-  const sb = supabaseAdmin();
-  const cur = await getSafetyAdjusts();
+export async function getSafetyAdjusts(): Promise<AdjMap> {
+  return (await getSafetyAdjustsWithOk()).adjusts;
+}
+
+export async function setSafetyAdjust(sku: string, adj: SafetyAdjust): Promise<AdjMap> {
   const key = (sku || "").trim().toUpperCase();
-  if (!key) return cur;
+  if (!key) throw new Error("sku 가 필요합니다.");
   const delta = Math.round(Number(adj.delta) || 0);
   const excludeOut = Math.max(0, Math.round(Number(adj.excludeOut) || 0));
   const memo = (adj.memo || "").trim();
   const until = (adj.until || "").trim() || null;
-  if (delta === 0 && excludeOut === 0 && !memo) {
-    delete cur[key]; // 보정값·행사출고·메모 모두 없으면 제거(기본 복귀)
-  } else {
-    cur[key] = { delta, ...(excludeOut ? { excludeOut } : {}), ...(memo ? { memo } : {}), ...(until ? { until } : {}) };
-  }
-  await sb.from("b2b_settings").upsert(
-    { key: KEY, value: cur, updated_at: new Date().toISOString() },
-    { onConflict: "key" }
-  );
-  return cur;
+  return mutateKv<AdjMap>(KEY, (raw) => {
+    const cur = { ...asMap(raw) };
+    if (delta === 0 && excludeOut === 0 && !memo) {
+      delete cur[key]; // 보정값·행사출고·메모 모두 없으면 제거(기본 복귀)
+    } else {
+      cur[key] = { delta, ...(excludeOut ? { excludeOut } : {}), ...(memo ? { memo } : {}), ...(until ? { until } : {}) };
+    }
+    return cur;
+  });
 }
 
 // 만료가 지나지 않은 유효 보정값만 반환(만료 지났으면 0).

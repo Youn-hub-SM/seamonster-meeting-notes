@@ -32,7 +32,8 @@ export function toInvChannel(v: unknown, fallback: InvChannel = "소매"): InvCh
   const s = typeof v === "string" ? v.trim() : "";
   return (INV_CHANNELS as readonly string[]).includes(s) ? (s as InvChannel) : fallback;
 }
-/** 조회 필터 → 칸. '전체'·빈값·모르는 값은 null(= 전 칸 합산). */
+/** 조회 필터 → 칸. '전체'·빈값·모르는 값은 null(= 전 칸 합산).
+ *  실사(조정)는 이 함수로 받아 null 이면 거절한다 — toInvChannel 의 소매 폴백으로 받으면 칸을 안 고른 실사가 소매에 덮어써진다(S8). */
 export function toInvChannelParam(v: unknown): InvChannel | null {
   const s = typeof v === "string" ? v.trim() : "";
   return (INV_CHANNELS as readonly string[]).includes(s) ? (s as InvChannel) : null;
@@ -57,6 +58,7 @@ export interface InventoryTxn {
   memo: string | null;
   created_by: string | null;
   created_at: string;
+  status?: "대기" | "완료" | null; // 034 — '대기'는 현재고에 안 들어간다. 구 응답(status 없음)은 완료로 본다
 }
 
 // 품목 + 현재고 (제품목록·부족알림 공용)
@@ -70,7 +72,9 @@ export interface InventoryRow {
   purchase_price: number;  // 매입단가(구매 단가)
   origin: string | null;   // 원산지
   attrs: string | null;    // 속성/분류
-  qty: number;             // 현재고 = Σ txn.qty
+  qty: number;             // Σ txn.qty(완료). asof 없으면 전체 원장 = 미래 발송일 선점까지 뺀 '가용'
+  on_hand?: number;        // 현재고 = 오늘(KST)까지 원장 — asof 없이 조회했을 때만
+  scheduled_out?: number;  // 출고 예정 = on_hand − qty(오늘 뒤 거래일로 이미 기록된 출고, 대부분 B2B 선점)
   min_qty: number;         // 안전재고(재고부족 기준)
   value: number;           // 재고자산 = qty × cost_price
   barcode: string | null;

@@ -2,7 +2,9 @@
 //  (1) 제품 단위 이익률 — computeMargin: 매출(도매가) 대비 제품 단위 원가(제품원가+포장재).
 //  (2) 발주 단위 이익률 — computeOrderMargin: 발주 전체 매출 − 제품원가 − 배송 박스 비용.
 //      배송비 = 박스 수 × (아이스박스 + 운반비 + 보냉비). 보통 배송 박스 단위로 계산.
-//  과세 제품은 매출을 공급가(÷1.1)로 환산.
+//  입력 기준: (1) salePrice 는 부가세 포함 판매가(과세면 ÷1.1 로 공급가 환산).
+//            (2) 발주 단가(order_items.unit_price)는 공급가 — 095 트리거·명세표·매출원장이 그 위에 부가세 10%를 얹는다.
+//                그래서 발주 이익은 단가를 그대로 매출로 쓴다(÷1.1 하면 과세 매출이 약 9% 적게 잡힌다 — 2026-10-11 수정).
 
 // ─────────────────────────────────────────────
 // (1) 제품 단위
@@ -109,7 +111,7 @@ export interface OrderMarginLine {
   volumeKg: number; // 제품 1개 부피 (모르면 0)
 }
 export interface OrderMarginResult {
-  revenue: number;      // 매출 (과세=공급가)
+  revenue: number;      // 매출 (공급가 = 단가 × 수량, 할인 비례 차감)
   productCost: number;  // 제품원가 합계 (제품 단위 원가 × 수량)
   volume: number;       // 총 부피(kg)
   boxes: number;        // 박스 수
@@ -132,15 +134,17 @@ export function computeOrderMargin(
   let revenue = 0,
     productCost = 0,
     volume = 0,
-    grossWithVat = 0;
+    taxableSupply = 0;
   for (const l of lines) {
     const qty = Number(l.qty) || 0;
-    const sale = (Number(l.unitPrice) || 0) * qty;
-    revenue += l.taxType === "taxable" ? sale / 1.1 : sale;
-    grossWithVat += l.taxType === "taxable" ? sale * 1.0 : sale; // 단가는 부가세 포함가 기준(도매 관행)
+    const sale = (Number(l.unitPrice) || 0) * qty; // 단가 = 공급가
+    revenue += sale;
+    if (l.taxType === "taxable") taxableSupply += sale;
     productCost += (Number(l.costAtOrder) || 0) * qty;
     volume += (Number(l.volumeKg) || 0) * qty;
   }
+  // 청구 총액 = 공급가 + 부가세(과세 공급가 × 10%, 발주 단위 1회 반올림 — 095 트리거와 같은 규칙)
+  const grossWithVat = revenue + Math.round(taxableSupply * 0.1);
   // 할인(양수)/추가금(음수)은 총액(부가세 포함)에서 조정되므로, 매출(공급가)에는 같은 비율만 반영한다
   const disc = Number(discountAmount) || 0;
   if (disc !== 0 && grossWithVat > 0) revenue *= Math.max(0, 1 - disc / grossWithVat);

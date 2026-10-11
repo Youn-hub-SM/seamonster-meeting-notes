@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
       const max = await maxOrderDate();
       if (!max) return NextResponse.json({ ok: false, error: "매출 데이터가 없습니다." }, { status: 400 });
       // 기본값: 미완성(진행중) 주가 잡혀 전주 대비가 왜곡되지 않도록, 최근 '완료된 주'(가장 최근 일요일 ≤ 최신일)로 앵커.
-      const d = new Date(`${max}T00:00:00`);
-      d.setDate(d.getDate() - d.getDay());   // getDay: 일=0 → 그 주(또는 직전 주)의 일요일
+      //  UTC 자정 기준으로 계산 — 로컬 자정 Date 를 toISOString 하면 KST 머신에서 하루 밀린다.
+      const d = new Date(`${max}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - d.getUTCDay());   // getUTCDay: 일=0 → 그 주(또는 직전 주)의 일요일
       base = d.toISOString().slice(0, 10);
     }
     const s = await computeWeeklyStats(base);

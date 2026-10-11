@@ -5,6 +5,9 @@ import { signedQty } from "@/app/lib/inventory";
 import { xlsxNum } from "@/app/lib/inventory-xlsx";
 import { getAllBundles, expandBundleQty, isBundleId, type BundleComponent } from "@/app/lib/product-bundles";
 import { getUntracked, type Untracked } from "@/app/lib/stock-tracked";
+import { kstTodayIso } from "@/app/lib/production-schedule";
+import { readAll } from "@/app/lib/inventory-template";
+import { isReservedPartner, RESERVED_PARTNER } from "../../txn/ledger-write";
 
 // '재고 관리 사용 안함'(121) 품목 행을 뺀다 — 세트 전개 뒤 구성품 단위로(세트 안의 관리 대상 구성품은 남긴다)
 function dropUntrackedRows(rows: ImportTxn[], u: Untracked): [ImportTxn[], number] {
@@ -71,7 +74,7 @@ function expandBundles(rows: ImportTxn[], bundles: Map<string, BundleComponent[]
 }
 
 // POST /api/inventory/txns/import (multipart)
-//  필드: file, type(입고|출고, 양식에 유형 컬럼 없을 때 적용), txn_date(선택), partner(선택)
+//  필드: file, type(입고|출고, 양식에 유형 컬럼 없을 때 적용), txn_date(선택), partner(선택), done(선택, "0"=대기 저장 예정)
 //  양식: 'SKU | 수량 | 단가' (BoxHero Order Items). 유형/날짜/거래처/메모 컬럼이 있으면 행값이 우선.
 export async function POST(req: NextRequest) {
   try {
@@ -82,6 +85,10 @@ export async function POST(req: NextRequest) {
     const formDateRaw = String(form.get("txn_date") || "");
     const formDate = DATE_RE.test(formDateRaw) ? formDateRaw : "";
     const formPartner = String(form.get("partner") || "").trim();
+    // 즉시 처리(완료)로 반영할 파일이면 미래 날짜 행은 오류로 보여 준다(apply 도 400, S6). 대기 저장이면 예정 건이라 허용.
+    const willComplete = String(form.get("done") ?? "1") !== "0";
+    if (isReservedPartner(formPartner))
+      return NextResponse.json({ ok: false, error: `거래처에 '${RESERVED_PARTNER}'은 쓸 수 없습니다 — 칸 이동은 [재고 이동]에서 기록하세요.` }, { status: 400 });
 
     const buf = Buffer.from(await (file as File).arrayBuffer());
     const wb = new ExcelJS.Workbook();
@@ -94,27 +101,37 @@ export async function POST(req: NextRequest) {
     headerRow.eachCell((cell, c) => col.set(cellStr(cell.value), c));
     const hasSkuHeader = col.has("SKU") && col.has("수량");
 
-    const { data: products, error } = await supabaseAdmin().from("products").select("id, sku, name").eq("active", true);
-    if (error) throw error;
+    // 활성 품목 전부 — 단발 조회는 서버 Max Rows(1000)에 잘려, 잘린 품목의 행이 '없음' 또는 다른 품목으로 붙는다(S4).
+    type P = { id: string; sku: string | null; name: string };
+    const products = await readAll<P>((a, b) => supabaseAdmin().from("products").select("id, sku, name").eq("active", true)
+      .order("id", { ascending: true }).range(a, b));
     const bySku = new Map<string, string[]>();
     const byName = new Map<string, string[]>();
     const nameOf = new Map<string, string>();
-    for (const p of products ?? []) {
+    for (const p of products) {
       nameOf.set(p.id, p.name);
       if (p.sku) { const k = String(p.sku).trim(); if (k) bySku.set(k, [...(bySku.get(k) || []), p.id]); }
       const nk = String(p.name).trim(); byName.set(nk, [...(byName.get(nk) || []), p.id]);
     }
+    // SKU 를 적은 행은 SKU 로만 맞춘다 — 못 찾으면 오류 행(S9). 품목명으로 넘어가면 오타·비활성 SKU 가
+    //  같은 이름의 다른 품목(규격 다름 등)으로 조용히 기록된다. 품목명 매칭은 SKU 칸이 빈 손작성 행에만.
     const resolve = (sku: string, name: string): { id?: string; err?: string } => {
-      if (sku) { const ids = bySku.get(sku); if (ids?.length === 1) return { id: ids[0] }; if (ids && ids.length > 1) return { err: `SKU '${sku}' 가 ${ids.length}개 품목과 중복` }; }
+      if (sku) {
+        const ids = bySku.get(sku);
+        if (ids?.length === 1) return { id: ids[0] };
+        if (ids && ids.length > 1) return { err: `SKU '${sku}' 가 ${ids.length}개 품목과 중복` };
+        return { err: `SKU '${sku}' 품목을 찾을 수 없음(비활성·삭제 또는 오타) — 상품 마스터 확인` };
+      }
       if (name) { const ids = byName.get(name); if (ids?.length === 1) return { id: ids[0] }; if (ids && ids.length > 1) return { err: `품목명 '${name}' 이 ${ids.length}개와 중복 — SKU 로 지정` }; }
-      return { err: `품목을 찾을 수 없음 (SKU '${sku || "-"}')` };
+      return { err: name ? `품목명 '${name}' 품목을 찾을 수 없음 — SKU 를 적어 주세요` : "SKU가 비었습니다." };
     };
 
     const [bundles, untracked] = await Promise.all([
       getAllBundles(supabaseAdmin()), // 세트 SKU → 구성품 분해용(037 미적용이면 빈 맵)
       getUntracked(supabaseAdmin()),
     ]);
-    const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    const today = kstTodayIso();
+    const futureMsg = "미래 날짜 — 즉시 처리를 해제해 대기로 저장하거나 날짜를 고치세요";
 
     // ── 출고 위치기반 양식(수량 | (무시) | SKU) — 헤더로 SKU·수량을 못 찾으면 폴백 ──
     //  1열=수량, 3열=SKU, 2열은 무시. 헤더/합계 행(수량 비숫자)은 자동 스킵. 단가 없음, 거래일은 업로드 지정값.
@@ -135,6 +152,7 @@ export async function POST(req: NextRequest) {
         if (!skuRaw) { outErrors.push({ line: r, msg: "SKU(3열)가 비었습니다" }); continue; }
         const { id, err } = resolve(skuRaw, "");
         if (!id) { outErrors.push({ line: r, msg: err || "품목 매칭 실패" }); continue; }
+        if (willComplete && (formDate || today) > today) { outErrors.push({ line: r, msg: futureMsg }); continue; }
         outRows.push({ type: "출고", qty: signedQty("출고", qtyMag), product_id: id, product_name: nameOf.get(id) || "", unit_amount: null, txn_date: formDate || today, partner: formPartner || null, memo: null });
       }
       const [keptOut, untrackedOut] = dropUntrackedRows(expandBundles(outRows, bundles, nameOf), untracked);
@@ -177,11 +195,15 @@ export async function POST(req: NextRequest) {
       const dateRaw = get("날짜") || get("일자") || get("거래일") || get("발주일");
       const dm = dateRaw.match(/^\d{4}-\d{2}-\d{2}/);
       const txn_date = dm ? dm[0] : (formDate || today);
+      if (willComplete && txn_date > today) { errors.push({ line: r, msg: futureMsg }); continue; }
+      const partner = (get("거래처") || formPartner) || null;
+      // 거래처 '채널이동'은 이동 표식이라 사람이 쓸 수 없다 — 내보낸 이동 내역을 다시 올린 파일 등(S11)
+      if (isReservedPartner(partner)) { errors.push({ line: r, msg: `거래처 '${RESERVED_PARTNER}'은 쓸 수 없습니다 — 칸 이동은 [재고 이동]에서` }); continue; }
       const amt = xlsxNum(get("단가"));
       rows.push({
         type, qty: signedQty(type, qtyMag), product_id: id, product_name: nameOf.get(id) || name,
         unit_amount: amt > 0 ? Math.round(amt) : null, txn_date,
-        partner: (get("거래처") || formPartner) || null, memo: get("메모") || null,
+        partner, memo: get("메모") || null,
       });
     }
     const [keptRows, untrackedCount] = dropUntrackedRows(expandBundles(rows, bundles, nameOf), untracked);

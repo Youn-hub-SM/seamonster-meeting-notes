@@ -106,11 +106,18 @@ export default function QuotePage() {
       : `${ym} 결산을 확정할까요? 확정 후 원장이 바뀌면 이 화면에 경고가 표시됩니다.`)) return;
     setSnapBusy(true);
     try {
-      const r = await fetch("/api/inventory/quote/snapshot", {
+      const post = (confirmDrop: boolean) => fetch("/api/inventory/quote/snapshot", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ month: ym, rent, etc, tax_etc: taxEtc }),
+        body: JSON.stringify({ month: ym, rent, etc, tax_etc: taxEtc, ...(confirmDrop ? { confirm_drop: true } : {}) }),
       });
-      const j = await r.json().catch(() => null);
+      let r = await post(false);
+      let j = await r.json().catch(() => null);
+      // 기존 확정본보다 매입이 크게 줄었으면 서버가 409 로 멈춘다 — 확인한 사람만 덮어쓴다
+      if (r.status === 409 && j?.need_confirm) {
+        if (!window.confirm(`${j.error}\n\n그래도 이 값으로 다시 확정할까요?`)) return;
+        r = await post(true);
+        j = await r.json().catch(() => null);
+      }
       if (!r.ok || !j?.ok) { alert(`확정 실패: ${j?.error || "서버 오류"}`); return; }
       setSnap(j.snapshot);
       void loadList();

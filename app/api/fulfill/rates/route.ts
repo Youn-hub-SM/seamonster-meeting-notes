@@ -12,8 +12,10 @@ const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 
 export async function GET() {
   try {
     const { data, error } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", KEY).maybeSingle();
-    const stored = error ? {} : (data?.value ?? {});
-    const history = normalizeHistory(stored); // 미설정/조회실패 → 기본값 1벌
+    // 조회 오류를 기본값으로 내려주면 화면이 그 기본값을 저장된 값처럼 보여 주고, 저장 한 번에 단가 이력이 통째로 바뀐다.
+    if (error) return NextResponse.json({ ok: false, error: `단가 설정을 읽지 못했습니다(${error.message})` }, { status: 500 });
+    const stored = data?.value ?? {};
+    const history = normalizeHistory(stored); // 미설정 → 기본값 1벌
     const boxCats = normalizeBoxCats((stored as { boxCats?: unknown })?.boxCats);
     return NextResponse.json({ ok: true, history, rates: ratesFor(history, kstToday()), boxCats });
   } catch (e) {

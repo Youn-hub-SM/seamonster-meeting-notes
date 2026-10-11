@@ -21,12 +21,24 @@ type Report = {
     pending_orders: number;
     pending_total: number;
   };
+  ledger?: { revenue: number | null; diff: number | null; error: string | null };
   by_company: { company_name: string; orders: number; revenue: number; margin: number }[];
   by_product: { product_name: string; spec: string | null; qty: number; revenue: number; cost: number; margin: number }[];
   trend: { month: string; revenue: number }[];
 };
 
 type Preset = "this_month" | "last_month" | "this_year" | "custom";
+
+type MismatchKind = "missing" | "differs" | "backfill_dup" | "backfill_only" | "not_completed" | "stale_date";
+type Mismatch = { order_id: string; order_no: string; status: string; date: string | null; kind: MismatchKind; expected: number; ledger: number };
+const MISMATCH_LABEL: Record<MismatchKind, string> = {
+  missing: "원장에 없음",
+  differs: "금액·구성 다름",
+  backfill_dup: "백필 행 중복",
+  backfill_only: "백필 행만 있음",
+  not_completed: "발송완료 아님",
+  stale_date: "원장 날짜가 발송일과 다름",
+};
 
 function presetRange(preset: Preset): { from: string; to: string } {
   const now = new Date();
@@ -57,6 +69,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
+  const [ledgerList, setLedgerList] = useState<{ checked: number; mismatches: Mismatch[] } | null>(null);
+  const [ledgerBusy, setLedgerBusy] = useState("");
+  const [ledgerErr, setLedgerErr] = useState("");
 
   function applyPreset(p: Preset) {
     setPreset(p);
@@ -83,8 +98,47 @@ export default function ReportsPage() {
 
   useEffect(() => {
     reload();
+    setLedgerList(null);
+    setLedgerErr("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to]);
+
+  // 매출 원장 대조 — 발주 기준 매출과 sales_orders(도매)를 발주 단위로 비교(고치지 않음)
+  async function loadLedger() {
+    setLedgerBusy("load");
+    setLedgerErr("");
+    try {
+      const res = await fetch(`/api/b2b/reports/ledger?from=${from}&to=${to}`, { cache: "no-store" });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "원장 대조 실패");
+      setLedgerList({ checked: j.checked, mismatches: j.mismatches });
+    } catch (err) {
+      setLedgerErr(err instanceof Error ? err.message : "원장 대조 실패");
+    }
+    setLedgerBusy("");
+  }
+
+  async function resyncOrder(m: Mismatch) {
+    const legacy = m.kind === "backfill_dup" || m.kind === "backfill_only";
+    const msg = legacy
+      ? `${m.order_no} 매출 원장을 지금 발주 상태로 다시 맞춥니다.
+백필 행은 지워지고 발송일·부가세 포함 기준으로 다시 들어가 귀속 월·금액이 바뀔 수 있습니다.`
+      : `${m.order_no} 매출 원장을 지금 발주 상태로 다시 맞춥니다.`;
+    if (!window.confirm(msg)) return;
+    setLedgerBusy(m.order_id);
+    setLedgerErr("");
+    try {
+      const res = await fetch("/api/b2b/reports/ledger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order_id: m.order_id }) });
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || "다시 맞추기 실패");
+    } catch (err) {
+      setLedgerErr(err instanceof Error ? err.message : "다시 맞추기 실패");
+      setLedgerBusy("");
+      return;
+    }
+    setLedgerBusy("");
+    await Promise.all([loadLedger(), reload()]);
+  }
 
   async function handleExport() {
     setExporting(true);
@@ -138,6 +192,9 @@ export default function ReportsPage() {
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
             {loading ? "불러오는 중..." : "새로고침"}
           </button>
+          <button className="b2b-btn-secondary" onClick={loadLedger} disabled={loading || ledgerBusy !== ""}>
+            {ledgerBusy === "load" ? "대조 중..." : "원장 대조"}
+          </button>
           <button
             className="b2b-btn-primary"
             onClick={handleExport}
@@ -150,6 +207,58 @@ export default function ReportsPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+      {report?.ledger && (report.ledger.error || (report.ledger.diff ?? 0) !== 0) && !ledgerList && (
+        <div className="sm-warn">
+          {report.ledger.error
+            ? `매출 원장 합계를 불러오지 못했습니다 — ${report.ledger.error}`
+            : `매출 원장(/sales 도매)과 ${formatMoney(Math.abs(report.ledger.diff ?? 0))}원 차이 — 원장 대조로 발주를 확인하세요`}
+        </div>
+      )}
+      {ledgerErr && <div className="b2b-error">{ledgerErr}</div>}
+      {ledgerList && (
+        <div className="b2b-card" style={{ marginBottom: 16 }}>
+          <div className="b2b-card-head">
+            <h2 className="b2b-card-title">매출 원장 대조</h2>
+            <button className="b2b-link-btn" onClick={() => setLedgerList(null)}>닫기</button>
+          </div>
+          {ledgerList.mismatches.length === 0 ? (
+            <div className="b2b-empty">발송완료 {ledgerList.checked}건 모두 원장과 같습니다.</div>
+          ) : (
+            <div className="b2b-table-wrap">
+              <table className="b2b-table">
+                <thead>
+                  <tr>
+                    <th>발주번호</th>
+                    <th>발송일</th>
+                    <th>상태</th>
+                    <th>내용</th>
+                    <th className="num">발주 기준</th>
+                    <th className="num">원장</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerList.mismatches.map((m) => (
+                    <tr key={`${m.order_id}-${m.kind}`}>
+                      <td data-label="발주번호">{m.status === "삭제됨" ? m.order_no : <a className="sm-link" href={`/b2b/orders/${m.order_id}`}>{m.order_no}</a>}</td>
+                      <td data-label="발송일">{m.date || "-"}</td>
+                      <td data-label="상태">{m.status}</td>
+                      <td data-label="내용">{MISMATCH_LABEL[m.kind]}</td>
+                      <td data-label="발주 기준" className="num b2b-money">{formatMoney(m.expected)}</td>
+                      <td data-label="원장" className="num b2b-money">{formatMoney(m.ledger)}</td>
+                      <td style={{ textAlign: "right" }}>
+                        <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => resyncOrder(m)} disabled={ledgerBusy !== ""}>
+                          {ledgerBusy === m.order_id ? "맞추는 중..." : "다시 맞추기"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head" style={{ gap: 10, flexWrap: "wrap", justifyContent: "flex-start" }}>

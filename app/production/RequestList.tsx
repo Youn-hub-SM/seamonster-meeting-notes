@@ -10,6 +10,8 @@ import {
 } from "@/app/lib/wholesale-production";
 import { defaultDueDate, defaultProdStart } from "@/app/lib/production-schedule";
 import { Combobox } from "@/app/b2b/orders/Combobox";
+import { useEscClose } from "@/app/lib/use-esc";
+import { dateShort } from "@/app/lib/format";
 
 // KST 오늘 — 서버(UTC SSR)·클라이언트 모두 서울 벽시계 날짜로 일치(새벽 하이드레이션 불일치 방지)
 function todayIso() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
@@ -50,6 +52,7 @@ export function RequestList() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editReq, setEditReq] = useState<ProductionRequest | null>(null); // 수정 모달 대상
+  const [linkReq, setLinkReq] = useState<ProductionRequest | null>(null); // [입고 연결] 창 대상
   const [busy, setBusy] = useState(false);
   const [prefill, setPrefill] = useState<NewLine[] | null>(null); // 재고 목록에서 넘어온 품목·권장수량
 
@@ -138,6 +141,7 @@ export function RequestList() {
   const [wholeReqOk, setWholeReqOk] = useState(true);
   const [recReady, setRecReady] = useState(false);
   const [inbOk, setInbOk] = useState(true); // 입고 예정 집계 실패면 권장이 시켜 둔 물량을 못 뺀 값 — 창에 경고
+  const [settingsOk, setSettingsOk] = useState(true); // 행사 일정·안전재고 보정 조회 실패면 권장이 행사 출고·보정을 못 뺀 값 — 창에 경고(S4)
   const recSeq = useRef(0); // 순번 가드 — 늦게 온 옛 응답이 최신 입고 예정을 덮어쓰지 않게
   const loadRec = useCallback(async () => {
     const seq = ++recSeq.current;
@@ -155,6 +159,7 @@ export function RequestList() {
           stock: x.stock == null ? null : Number(x.stock), safety: Number(x.safety) || 0, demand: Number(x.demand) || 0,
         }])));
         setInbOk(r.inboundOk !== false);
+        setSettingsOk(r.settingsOk !== false);
       }
       if (w.ok) {
         setRecWhole(new Map(((w.rows || []) as Row[]).map((x) => [x.sku.toUpperCase(), Number(x.recommend) || 0])));
@@ -233,30 +238,75 @@ export function RequestList() {
     setBusy(false);
   }
 
+  // 프로모션 마감·취소·[합류 다시 실행] = 소매 합류 결과 배너
+  type PromoRel = { moved: { name: string; qty: number }[]; kept: { name: string; qty: number }[]; failed: string[]; unlinked?: string[]; error?: string };
+  function showRelease(label: string, pr: PromoRel) {
+    const list = (xs: { name: string; qty: number }[]) => xs.map((x) => `${x.name} ×${x.qty.toLocaleString()}`).join(", ");
+    if (pr.error) { setNotice({ warn: true, text: `${label}했지만 프로모션 재고를 소매로 옮기지 못했습니다(${pr.error}) — 행의 [합류 다시 실행]을 누르거나 '재고 이동'에서 프로모션 → 소매로 직접 옮기세요.` }); return; }
+    setNotice({
+      warn: pr.failed.length > 0 || (pr.unlinked?.length ?? 0) > 0,
+      text: [
+        pr.moved.length ? `${label} — 프로모션 재고를 소매로 옮겼습니다: ${list(pr.moved)}` : `${label} — 소매로 옮길 프로모션 재고가 없습니다.`,
+        pr.kept.length ? `다른 열린 프로모션 요청서 몫으로 남김: ${list(pr.kept)}` : "",
+        pr.failed.length ? `옮기지 못함: ${pr.failed.join(", ")} — 행의 [합류 다시 실행]을 누르거나 '재고 이동'에서 직접 옮기세요.` : "",
+        pr.unlinked?.length ? `이행 정리 실패: ${pr.unlinked.join(", ")} — 다시 열면 확보분이 남은 것처럼 보일 수 있습니다.` : "",
+      ].filter(Boolean).join(" · "),
+    });
+  }
+
   // expect_status = 화면이 알고 있던 상태 — 그사이 자동 완료·취소됐으면 서버가 409 로 거부하고 목록을 새로 읽는다(스냅샷으로 되살리기 방지)
-  async function patchStatus(id: string, status: PrStatus, expect?: PrStatus) {
+  //  프로모션 다시 열기는 소매로 넘어간 확보분이 있으면 서버가 확인을 요구한다(need_confirm) — 확인하면 confirm_reopen 으로 다시 보낸다.
+  async function patchStatus(id: string, status: PrStatus, expect?: PrStatus, extra?: Record<string, unknown>) {
+    setBusy(true); setError(""); setNotice(null);
+    let retry: Record<string, unknown> | null = null;
+    try {
+      const res = await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...(expect ? { expect_status: expect } : {}), ...(extra || {}) }) });
+      const j = await res.json();
+      if (!j.ok && res.status === 409 && j.need_confirm === "reopen_promo") {
+        if (window.confirm(`${j.error}\n\n그래도 다시 열까요?`)) retry = { confirm_reopen: true };
+      } else {
+        if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "변경 실패"); }
+        applyUpdated(j.request);
+        if (j.promo_release) showRelease(status, j.promo_release as PromoRel);
+        if (j.warning) setNotice({ warn: true, text: String(j.warning) });
+        void loadRec(); // 완료·취소·다시 열기 = 입고 예정 변경
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "변경 오류"); }
+    setBusy(false);
+    if (retry) await patchStatus(id, status, expect, retry);
+  }
+
+  // [합류 다시 실행] — 닫힌 프로모션 요청서인데 소매 합류가 끝나지 않은 것(합류 미확인)
+  async function rerunRelease(r: ProductionRequest) {
+    if (!confirm(`${r.req_no || "이 요청서"}의 프로모션 재고를 소매로 다시 합류할까요?\n\n같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다.`)) return;
     setBusy(true); setError(""); setNotice(null);
     try {
-      const res = await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...(expect ? { expect_status: expect } : {}) }) });
-      const j = await res.json();
-      if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "변경 실패"); }
-      applyUpdated(j.request);
-      // 프로모션 마감 = 소매 합류 결과
-      const pr = j.promo_release as { moved: { name: string; qty: number }[]; kept: { name: string; qty: number }[]; failed: string[]; error?: string } | undefined;
-      if (pr) {
-        const list = (xs: { name: string; qty: number }[]) => xs.map((x) => `${x.name} ×${x.qty.toLocaleString()}`).join(", ");
-        if (pr.error) setNotice({ warn: true, text: `${status}했지만 프로모션 재고를 소매로 옮기지 못했습니다(${pr.error}) — '재고 이동'에서 프로모션 → 소매로 직접 옮기세요.` });
-        else setNotice({
-          warn: pr.failed.length > 0,
-          text: [
-            pr.moved.length ? `${status} — 프로모션 재고를 소매로 옮겼습니다: ${list(pr.moved)}` : `${status} — 소매로 옮길 프로모션 재고가 없습니다.`,
-            pr.kept.length ? `다른 열린 프로모션 요청서 몫으로 남김: ${list(pr.kept)}` : "",
-            pr.failed.length ? `옮기지 못함: ${pr.failed.join(", ")} — '재고 이동'에서 직접 옮기세요.` : "",
-          ].filter(Boolean).join(" · "),
-        });
+      let res = await fetch(`/api/production/requests/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "promo_release" }) });
+      let j = await res.json();
+      // 합류 시작 기록이 없는 요청서(이전 버전에서 마감) — 합류는 그때 돌았다. 다시 돌리지 않고 완료 표시만 할지 묻는다
+      if (!j.ok && j.code === "promo_legacy") {
+        if (!confirm(String(j.confirm || j.error))) { setBusy(false); return; }
+        res = await fetch(`/api/production/requests/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "promo_release", mark_released: true }) });
+        j = await res.json();
       }
-      void loadRec(); // 완료·취소·다시 열기 = 입고 예정 변경
-    } catch (e) { setError(e instanceof Error ? e.message : "변경 오류"); }
+      if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "합류 실패"); }
+      applyUpdated(j.request);
+      if (j.marked) setNotice({ warn: false, text: `${r.req_no || "요청서"} 합류 완료로 표시했습니다 — 프로모션 칸에 남은 재고가 있으면 [재고 이동]에서 옮기세요.` });
+      if (j.promo_release) showRelease("합류", j.promo_release as PromoRel);
+    } catch (e) { setError(e instanceof Error ? e.message : "합류 오류"); }
+    setBusy(false);
+  }
+
+  // 입고 연결 해제 — 원장(재고)은 그대로, 이 요청서 연결만 뺀다(S11)
+  async function unlinkReceipt(id: string, rid: string) {
+    if (!confirm("이 입고의 요청서 연결을 해제할까요?\n\n재고(입고 기록)는 그대로이고, 이 요청서의 입고 수량에서만 빠집니다.")) return;
+    setBusy(true); setError(""); setNotice(null);
+    try {
+      const j = await (await fetch(`/api/production/requests/${id}/link?rid=${rid}`, { method: "DELETE" })).json();
+      if (!j.ok) throw new Error(j.error || "해제 실패");
+      applyUpdated(j.request);
+      void loadRec(); // 연결 해제 = 잔여 복원
+    } catch (e) { setError(e instanceof Error ? e.message : "해제 오류"); }
     setBusy(false);
   }
 
@@ -399,6 +449,9 @@ export function RequestList() {
                   key={r.id} req={r} expanded={expandedId === r.id} busy={busy}
                   onToggle={() => setExpandedId(expandedId === r.id ? null : r.id)}
                   onCancelReceipt={(rid) => cancelReceipt(r.id, rid)}
+                  onUnlink={(rid) => unlinkReceipt(r.id, rid)}
+                  onLink={() => { setError(""); setLinkReq(r); }}
+                  onRerunRelease={() => rerunRelease(r)}
                   onStatus={(s) => patchStatus(r.id, s, r.status)}
                   onConfirm={() => confirmRequest(r)}
                   onEdit={() => { setError(""); setEditReq(r); }}
@@ -411,32 +464,43 @@ export function RequestList() {
         </section>
       )}
 
-      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recWholeReq={recWholeReq} wholeReqOk={wholeReqOk} recReady={recReady} inbOk={inbOk} prefill={prefill ?? undefined} defaultPurpose={tab} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
-      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recWholeReq={recWholeReq} wholeReqOk={wholeReqOk} recReady={recReady} inbOk={inbOk} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
+      {createOpen && <RequestModal products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recWholeReq={recWholeReq} wholeReqOk={wholeReqOk} recReady={recReady} inbOk={inbOk} settingsOk={settingsOk} prefill={prefill ?? undefined} defaultPurpose={tab} busy={busy} onClose={() => { setCreateOpen(false); setPrefill(null); }} onSubmit={createRequest} />}
+      {linkReq && (
+        <LinkModal
+          req={linkReq}
+          onClose={() => setLinkReq(null)}
+          onLinked={(updated, text, warn) => { applyUpdated(updated); setLinkReq(null); setNotice({ warn, text }); void loadRec(); }}
+        />
+      )}
+      {editReq && <RequestModal initial={editReq} products={products} retailQty={retailQty} wholesaleNeed={wholesaleNeed} error={error} recRetail={recRetail} recWhole={recWhole} recWholeReq={recWholeReq} wholeReqOk={wholeReqOk} recReady={recReady} inbOk={inbOk} settingsOk={settingsOk} busy={busy} onClose={() => setEditReq(null)} onSubmit={(payload) => updateRequest(editReq.id, payload)} />}
     </div>
   );
 }
 
 // 진행(입고/요청) 표시 — 테이블 셀용 텍스트. 초과=danger, 완료=success, 그 외 회색.
-function ProgressCell({ received, requested }: { received: number; requested: number }) {
+function ProgressCell({ received, requested, released }: { received: number; requested: number; released?: number }) {
   const over = received > requested;
   const done = requested > 0 && received >= requested;
   const color = over ? "var(--sm-danger)" : done ? "var(--sm-success)" : "var(--sm-text-mid)";
   const pct = requested > 0 ? (received / requested) * 100 : null;
   // 열 너비(fixed layout)를 넘지 않게 %는 둘째 줄로 — 숫자가 길어도 옆 칸을 침범하지 않는다
+  //  프로모션은 이행 = 순확보(마감·취소로 소매에 넘어간 양을 뺀 값) — 넘어간 양은 둘째 줄에 따로
   return (
     <span style={{ fontSize: 15, fontWeight: 600, color, whiteSpace: "nowrap" }}>
       {received.toLocaleString()} / {requested.toLocaleString()}
-      {pct != null && <span className="sm-faint" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%)</span>}
+      {pct != null && <span className="sm-faint" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%){released ? ` · 소매 합류 ${released.toLocaleString()}` : ""}</span>}
     </span>
   );
 }
 
 // 발주관리 테이블과 동일한 형태 — 한 줄=한 요청, 클릭하면 그 아래 확장 행으로 입고 처리 상세가 펼쳐짐.
-function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, onConfirm, onEdit, onDelete }: {
+function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, onLink, onRerunRelease, onStatus, onConfirm, onEdit, onDelete }: {
   req: ProductionRequest; expanded: boolean; busy: boolean;
   onToggle: () => void;
   onCancelReceipt: (rid: string) => void;
+  onUnlink: (rid: string) => void;
+  onLink: () => void;
+  onRerunRelease: () => void;
   onStatus: (s: PrStatus) => void;
   onConfirm: () => void;
   onEdit: () => void;
@@ -444,6 +508,9 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
 }) {
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
   const editable = req.status === "요청" || req.status === "진행중";
+  // 합류 미확인 — 닫힌 프로모션인데 소매 합류 완료 표시(136)가 비어 있다(마감 중 끊김·일부 실패). 미적용이면 undefined → 표시 안 함
+  //  이전 버전에서 마감된 건(시작 기록 없음)도 여기 뜬다 — [합류 다시 실행]을 누르면 서버가 다시 돌리지 않고 '완료로 표시만'을 묻는다(promo_legacy)
+  const releasePending = req.purpose === "프로모션" && (req.status === "완료" || req.status === "취소") && req.promo_released_at === null;
   // 요청수량 0 = 요청서에 없던 품목이 그 주간에 입고돼 자동으로 붙은 줄 — '×0' 대신 그 뜻을 적는다
   const itemLabel = (it: PrItem) => `${it.name}${it.spec ? ` ${it.spec}` : ""}${it.requested_qty <= 0 && it.memo === UNREQUESTED_ITEM_MEMO ? ` (요청서에 없음 +${it.received_qty.toLocaleString()})` : ` ×${it.requested_qty.toLocaleString()}`}`;
   const itemPreview = req.items.slice(0, 2).map(itemLabel).join(" · ");
@@ -461,7 +528,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           {itemPreview || "품목 없음"}
           {req.items.length > 2 ? <span className="sm-faint"> 외 {req.items.length - 2}종</span> : null}
         </td>
-        <td className="b2b-col-date"><ProgressCell received={req.total_received} requested={req.total_requested} /></td>
+        <td className="b2b-col-date"><ProgressCell received={req.total_received} requested={req.total_requested} released={req.total_released} /></td>
         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>
           {req.request_date}
           {req.requested_by ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{req.requested_by}</span> : null}
@@ -474,6 +541,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
             ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>지남 · 잔여 {openRemainQty(req.items).toLocaleString()}</span> : null}
           {req.purpose === "프로모션" && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date <= todayIso()
             ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>행사일 · 마감하면 소매로</span> : null}
+          {releasePending ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>합류 미확인</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
           {/* 생산 담당자 확인 — 확인하면 담당=본인 기록(+진행중 전환). 요청서를 제조사에 건네는 사람이 담당. */}
@@ -493,7 +561,10 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           <a className="b2b-btn-secondary" style={ACT} href={`/api/production/requests/${req.id}/sheet`}>요청서</a>
           {editable && <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onEdit}>수정</button>}
           {(req.status === "완료" || req.status === "취소") ? (
-            <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={() => onStatus("진행중")}>다시 열기</button>
+            <>
+              {releasePending && <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onRerunRelease}>합류 다시 실행</button>}
+              <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={() => onStatus("진행중")}>다시 열기</button>
+            </>
           ) : (
             <>
               <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onDelete}>삭제</button>
@@ -523,6 +594,12 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
           <td></td>
           <td colSpan={7} style={{ padding: "8px 18px 16px" }}>
             {req.memo && <p className="sm-faint" style={{ fontSize: 15, marginBottom: 10, whiteSpace: "pre-line" }}>메모: {req.memo}</p>}
+            {/* 연결 안 된 소매 입고(조기 납품·'연결 안 함'·연결 실패)를 이 요청서에 붙인다 — 원장은 그대로, 연결만 */}
+            {req.purpose === "재고 보충" && editable && (
+              <div className="sm-row" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
+                <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onLink}>입고 연결</button>
+              </div>
+            )}
             <div className="b2b-table-wrap">
               <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 700 }}>
                 <thead>
@@ -530,7 +607,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
                 </thead>
                 <tbody>
                   {req.items.map((it) => (
-                    <ItemRow key={it.id} item={it} canEdit={req.status !== "완료" && req.status !== "취소"} busy={busy} onCancelReceipt={onCancelReceipt} />
+                    <ItemRow key={it.id} item={it} factory={req.purpose === "재고 보충"} canEdit={req.status !== "완료" && req.status !== "취소"} busy={busy} onCancelReceipt={onCancelReceipt} onUnlink={onUnlink} />
                   ))}
                 </tbody>
               </table>
@@ -548,9 +625,10 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onStatus, 
   );
 }
 
-function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
-  item: PrItem; canEdit: boolean; busy: boolean;
+function ItemRow({ item, factory, canEdit, busy, onCancelReceipt, onUnlink }: {
+  item: PrItem; factory: boolean; canEdit: boolean; busy: boolean;
   onCancelReceipt: (rid: string) => void;
+  onUnlink: (rid: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const remaining = item.requested_qty - item.received_qty;
@@ -587,13 +665,16 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
                     <span style={{ fontWeight: 700, color: rc.qty < 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>{rc.qty > 0 ? "+" : ""}{rc.qty.toLocaleString()}</span>
                     {rc.received_by && <span style={{ color: "var(--sm-text-mid)" }}>{rc.received_by}</span>}
                     {rc.memo && <span style={{ color: "var(--sm-text-mid)" }}>· {rc.memo}</span>}
-                    {/* 링크형 입고(이전 연동·기간 자동 매칭)는 원장이 다른 화면 소유 — 여기서 취소하면
-                        실제 재고 원장까지 지워지므로 버튼을 막고 원래 화면으로 안내한다 */}
-                    {canEdit && ((rc.memo?.includes("이전 연동") || rc.memo?.includes("이전 배정"))
-                      ? <span className="sm-faint" style={{ fontSize: 12 }} title="재고 이동 최근 내역, 입고 및 출고 목록의 이동 행, 변경 기록에서 취소하면 두 칸이 함께 원복됩니다">취소는 이동 행에서</span>
+                    {/* 원장과 연결된 기록(inv_txn_id)은 원장이 다른 화면 소유 — 여기서 '취소'하면 실제 재고 원장까지 지워진다(S11).
+                        제조사 입고 연결은 [연결 해제](연결만 빼고 재고는 그대로), 이동 배정·프로모션 합류는 이동 행에서 취소한다 */}
+                    {rc.inv_txn_id && factory
+                      ? <button className="b2b-link-btn" style={{ fontSize: 15 }} disabled={busy} title="재고(입고 기록)는 그대로 두고 이 요청서 연결만 뺍니다 — 실물 입고 취소는 입고 및 출고에서" onClick={() => onUnlink(rc.id)}>연결 해제</button>
+                      : (rc.inv_txn_id || rc.memo?.includes("이전 연동") || rc.memo?.includes("이전 배정"))
+                      ? (canEdit || rc.qty < 0) && <span className="sm-faint" style={{ fontSize: 12 }} title="재고 이동 최근 내역, 입고 및 출고 목록의 이동 행, 변경 기록에서 취소하면 두 칸이 함께 원복됩니다">취소는 이동 행에서</span>
+                      : !canEdit ? null
                       : (rc.memo?.includes("기간 자동 매칭") || rc.memo?.includes("입고 연결") || rc.memo?.includes("입고/출고 연동"))
                       ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 입고 및 출고 화면에서</span>
-                      : <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>)}
+                      : <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>}
                   </div>
                 ))}
               </div>
@@ -611,10 +692,12 @@ function ItemRow({ item, canEdit, busy, onCancelReceipt }: {
 // 소매 수식 행의 원값 — 수정 창에서 자기 요청서 잔여를 빼고 권장을 다시 계산하는 데 쓴다
 type RecRow = { recommend: number; inbound: number; stock: number | null; safety: number; demand: number };
 
-function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, error, recRetail, recWhole, recWholeReq, wholeReqOk, recReady, inbOk, busy, onClose, onSubmit }: {
-  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; error?: string; recRetail: Map<string, RecRow>; recWhole: Map<string, number>; recWholeReq: Map<string, number>; wholeReqOk: boolean; recReady: boolean; inbOk: boolean; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
+function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, wholesaleNeed, error, recRetail, recWhole, recWholeReq, wholeReqOk, recReady, inbOk, settingsOk, busy, onClose, onSubmit }: {
+  initial?: ProductionRequest; prefill?: NewLine[]; defaultPurpose?: PrPurpose; products: Prod[]; retailQty: Map<string, number>; wholesaleNeed: Map<string, number>; error?: string; recRetail: Map<string, RecRow>; recWhole: Map<string, number>; recWholeReq: Map<string, number>; wholeReqOk: boolean; recReady: boolean; inbOk: boolean; settingsOk: boolean; busy: boolean; onClose: () => void; onSubmit: (payload: unknown) => void;
 }) {
   const isEdit = !!initial;
+  // 재시도 키(136) — 창을 열 때 하나 만들어 재시도에도 같은 키를 보낸다. 응답을 잃고 다시 눌러도 요청서는 한 장(S2)
+  const [clientKey] = useState(() => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`));
   const stockOf = (pid: string): number | null => { const p = products.find((x) => x.product_id === pid); return p ? p.qty : null; };
   const [requestedBy, setRequestedBy] = useState(initial?.requested_by || "");
   const [date, setDate] = useState(initial?.request_date || todayIso());
@@ -718,6 +801,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
       order_id: purpose === "도매 대량" ? (initial?.order_id || null) : null,
       memo: memo.trim() || (isEdit ? "" : undefined),
       items,
+      ...(isEdit ? {} : { client_key: clientKey }),
     });
   }
 
@@ -806,6 +890,9 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           {!inbOk && purpose === "재고 보충" && (
             <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;입고 예정&rsquo;(열린 요청서 잔여)을 불러오지 못했습니다 — 권장이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다.</div>
           )}
+          {!settingsOk && purpose === "재고 보충" && (
+            <div className="sm-warn" style={{ marginBottom: 8 }}>행사 일정·안전재고 보정을 불러오지 못했습니다 — 권장에 행사 출고가 섞이고 보정이 빠져 실제와 다를 수 있습니다. 새로고침 후 다시 확인하세요.</div>
+          )}
           {lines.length === 0 ? (
             <div className="b2b-empty" style={{ padding: 20 }}>추가한 품목이 없습니다.</div>
           ) : (
@@ -881,6 +968,84 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
         <div className="b2b-modal-foot">
           <button className="b2b-btn-secondary" onClick={onClose}>취소</button>
           <button className="b2b-btn-primary" disabled={busy || !valid} onClick={submit}>{isEdit ? "수정 저장" : "요청서 만들기"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// [입고 연결] — 이 제조사 요청서 품목의 '연결 안 된' 소매 입고를 골라 붙인다(원장은 그대로, 연결만 — S11).
+//  '연결 안 함'으로 저장된 조기 납품, 연결 실패 줄, 대기 → 입고처리된 입고가 대상. 이미 다른 요청서에 붙은 입고는 서버가 막는다.
+type LinkCand = { id: string; product_id: string; name: string; sku: string | null; qty: number; left: number; txn_date: string; partner: string | null; memo: string | null; order_no: string | null };
+function LinkModal({ req, onClose, onLinked }: { req: ProductionRequest; onClose: () => void; onLinked: (r: ProductionRequest, text: string, warn: boolean) => void }) {
+  const [cands, setCands] = useState<LinkCand[] | null>(null);
+  const [from, setFrom] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEscClose(onClose, saving);
+  useEffect(() => {
+    (async () => {
+      try {
+        const j = await (await fetch(`/api/production/requests/${req.id}/link`, { cache: "no-store" })).json();
+        if (!j.ok) throw new Error(j.error || "조회 실패");
+        setCands(j.candidates || []); setFrom(String(j.from || ""));
+      } catch (e) { setErr(e instanceof Error ? e.message : "조회 오류"); setCands([]); }
+    })();
+  }, [req.id]);
+  const toggle = (id: string) => setPicked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const all = (cands ?? []).length > 0 && picked.size === (cands ?? []).length;
+  async function save() {
+    if (!picked.size) return;
+    setSaving(true); setErr("");
+    try {
+      const j = await (await fetch(`/api/production/requests/${req.id}/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inv_txn_ids: [...picked] }) })).json();
+      if (!j.ok) throw new Error(j.error || "연결 실패");
+      const lines = (j.link?.lines || []) as { qty: number }[];
+      const failed = (j.link?.failed || []) as { reason: string }[];
+      const total = r2(lines.reduce((a, l) => a + (Number(l.qty) || 0), 0));
+      const text = [
+        `${req.req_no || "요청서"}에 입고 ${lines.length}건(${total.toLocaleString()}) 연결${j.link?.status === "완료" ? " — 전 품목 100%로 완료" : ""}`,
+        failed.length ? `연결 못 함 ${failed.length}건: ${[...new Set(failed.map((f) => f.reason))].join(", ")}` : "",
+      ].filter(Boolean).join(" · ");
+      onLinked(j.request, text, failed.length > 0);
+    } catch (e) { setErr(e instanceof Error ? e.message : "연결 오류"); }
+    setSaving(false);
+  }
+  return (
+    <div className="b2b-modal-backdrop">
+      <div className="b2b-modal" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()}>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">입고 연결 · {req.req_no || ""}</h2><button className="b2b-modal-close" onClick={onClose} disabled={saving}>✕</button></div>
+        <div className="b2b-modal-body">
+          {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
+          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>연결 안 된 소매 입고{from ? ` · ${from}부터` : ""} · 재고는 그대로</p>
+          {cands === null ? <div className="b2b-loading">불러오는 중...</div>
+            : cands.length === 0 ? <div className="b2b-empty">연결할 입고가 없습니다.</div>
+            : (
+              <div className="b2b-table-wrap" style={{ maxHeight: 420, overflow: "auto" }}>
+                <table className="b2b-table">
+                  <thead><tr>
+                    <th style={{ width: 36 }}><input type="checkbox" checked={all} onChange={() => setPicked(all ? new Set() : new Set(cands.map((c) => c.id)))} aria-label="전체 선택" /></th>
+                    <th className="b2b-col-date">거래일</th><th>품목</th><th className="num">수량</th><th>거래처·메모</th>
+                  </tr></thead>
+                  <tbody>
+                    {cands.map((c) => (
+                      <tr key={c.id} onClick={() => toggle(c.id)} style={{ cursor: "pointer" }}>
+                        <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={picked.has(c.id)} onChange={() => toggle(c.id)} aria-label={`${c.name} 선택`} /></td>
+                        <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{dateShort(c.txn_date)}{c.order_no ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{c.order_no}</span> : null}</td>
+                        <td><div style={{ fontWeight: 600 }}>{c.name}</div>{c.sku ? <div className="sm-faint" style={{ fontSize: 12 }}>{c.sku}</div> : null}</td>
+                        <td className="num b2b-money">{c.left.toLocaleString()}{c.left < c.qty ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>/ {c.qty.toLocaleString()}</span> : null}</td>
+                        <td className="sm-faint" style={{ fontSize: 12 }}>{[c.partner, c.memo].filter(Boolean).join(" · ") || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </div>
+        <div className="b2b-modal-foot">
+          <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving || !picked.size}>{saving ? "연결 중..." : `${picked.size}건 연결`}</button>
         </div>
       </div>
     </div>

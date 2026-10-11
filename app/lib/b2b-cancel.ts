@@ -6,23 +6,45 @@ import { supabaseAdmin } from "./supabase";
 //  (전량 취소 발주는 미수금 집계에서 status=취소로 아예 제외되므로 여기 대상은 '부분'취소가 주다)
 type Sb = ReturnType<typeof supabaseAdmin>;
 
+// 발주 id 를 나눠(.in URL 길이) 페이지 끝까지 읽는다 — 단발 select 는 1000행에서 조용히 잘린다(S4).
+async function readAll<T>(ids: string[], page: (part: string[], lo: number, hi: number) => PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let c = 0; c < ids.length; c += 100) {
+    const part = ids.slice(c, c + 100);
+    for (let lo = 0; ; lo += 1000) {
+      const { data, error } = await page(part, lo, lo + 999);
+      if (error) throw error;
+      const rows = (data as T[] | null) ?? [];
+      out.push(...rows);
+      if (rows.length < 1000) break;
+    }
+  }
+  return out;
+}
+
+// 조회 실패는 던진다 — 감액 0(전액 청구)으로 보고 입금 자동매칭·미수금이 그 금액으로 판정하면 안 된다(S4).
 export async function cancelledDeductionByOrder(sb: Sb, orderIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (orderIds.length === 0) return out;
-  const [shipsRes, itemsRes] = await Promise.all([
-    sb.from("shipments")
-      .select("order_id, status, items:shipment_items(order_item_id, qty)")
-      .in("order_id", orderIds)
-      .eq("status", "취소"),
-    sb.from("order_items").select("id, order_id, qty, unit_price, tax_type").in("order_id", orderIds),
+  const [ships, items] = await Promise.all([
+    readAll<{ order_id: string; items?: { order_item_id: string | null; qty: number }[] }>(orderIds, (part, lo, hi) =>
+      sb.from("shipments")
+        .select("id, order_id, status, items:shipment_items(order_item_id, qty)")
+        .in("order_id", part)
+        .eq("status", "취소")
+        .order("id", { ascending: true })
+        .range(lo, hi)),
+    readAll<{ id: string; order_id: string; qty: number; unit_price: number; tax_type: string | null }>(orderIds, (part, lo, hi) =>
+      sb.from("order_items")
+        .select("id, order_id, qty, unit_price, tax_type")
+        .in("order_id", part)
+        .order("id", { ascending: true })
+        .range(lo, hi)),
   ]);
-  // 조회 실패 시 감액 0(전액 청구 유지) — 미수금이 줄어드는 방향의 오류보다 안전
-  if (shipsRes.error || itemsRes.error) return out;
 
   const cancelledQty = new Map<string, number>(); // order_item_id → 취소 배정 수량 합
-  for (const s of shipsRes.data ?? []) {
-    const items = (s as { items?: { order_item_id: string | null; qty: number }[] }).items ?? [];
-    for (const si of items) {
+  for (const s of ships) {
+    for (const si of s.items ?? []) {
       if (!si.order_item_id) continue;
       cancelledQty.set(si.order_item_id, (cancelledQty.get(si.order_item_id) || 0) + (Number(si.qty) || 0));
     }
@@ -31,8 +53,7 @@ export async function cancelledDeductionByOrder(sb: Sb, orderIds: string[]): Pro
 
   const supplyByOrder = new Map<string, number>();
   const taxableByOrder = new Map<string, number>();
-  for (const raw of itemsRes.data ?? []) {
-    const it = raw as { id: string; order_id: string; qty: number; unit_price: number; tax_type: string | null };
+  for (const it of items) {
     const c = Math.min(Number(it.qty) || 0, cancelledQty.get(it.id) || 0);
     if (c <= 0) continue;
     const supply = c * (Number(it.unit_price) || 0);

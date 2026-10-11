@@ -1,23 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { toInvChannelParam } from "@/app/lib/inventory";
-import { scheduleHorizon } from "@/app/lib/production-schedule";
+import { scheduleHorizon, kstTodayIso } from "@/app/lib/production-schedule";
 import { getPromoForwardBySku } from "@/app/lib/production-promotions";
 import { getAllBundles, bundleAvailable } from "@/app/lib/product-bundles";
 import { getOpenInboundByProduct, formatInbound, getOpenRequestedByProduct, formatRequested, type InboundRow, type RequestedRow } from "@/app/lib/production-inbound";
 import { getUntracked } from "@/app/lib/stock-tracked";
+import { readAll, readStockMap, readScheduledOut } from "@/app/lib/inventory-template";
+import { isMoveRow, isMissingSchemaError, NON_DEMAND_REASONS } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const KST_TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const daysInclusive = (a: string, b: string) => Math.max(1, Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400_000) + 1);
 
 export type OverviewRow = {
   product_id: string; sku: string | null; name: string; spec: string | null; unit: string;
   attrs: string | null; // 속성/분류(상품마스터 자유 입력) — 재고 목록 검색용
-  qty: number; cost_price: number; value: number;
+  // qty = 가용(전체 원장 합 = 오늘 뒤 발송일 선점까지 뺀 값) — 부족·예상소진·생산 요청 창(RequestList)의 기준. 종전 '현재고' 값 그대로(D1: 생산 쪽 기준 불변)
+  qty: number; cost_price: number;
+  value: number;      // 재고자산 = 현재고(on_hand) × 원가 — 아직 안 나간 선점분도 창고에 있는 자산이다
+  on_hand: number;    // 현재고 = 오늘(KST)까지 원장(D1) — 재고 목록 '현재고' 열, 실사 화면과 같은 기준
+  scheduled_out: number;          // 출고 예정 = on_hand − qty(오늘 뒤 거래일로 이미 기록된 출고 — 대부분 B2B 선점). 0 미만은 0
+  scheduled_first: string | null; // 그중 가장 이른 거래일
+  scheduled_detail: string;       // 툴팁용 "10-20 거래처 300" 줄
   period_in: number; period_out: number; daily_out: number;
   auto_safety: number; promo_qty: number; depletion_days: number | null; low: boolean;
   promo_pool: number; // 프로모션 풀 잔량(113) — 소매 탭에서 현재고 옆 병기, 그 외 채널은 0
@@ -32,11 +39,12 @@ export type OverviewRow = {
 
 // GET /api/inventory/overview?from=&to=&channel= — 재고목록 고도화 뷰.
 //  기간[from,to]의 총입고·총출고·일평균소진 + 자동 목표(일평균소진 × 목표 일수 — 생산 일정 기반, production-schedule)
-//  + 예상소진일수(현재고 ÷ 일평균소진). 채널(도매/소매) 지정 시 그 채널 기준.
+//  + 예상소진일수(가용 ÷ 일평균소진). 채널(도매/소매) 지정 시 그 채널 기준.
+//  현재고(on_hand) = 오늘까지, 출고 예정 = 오늘 뒤 날짜로 이미 뺀 출고, 가용(qty) = 둘의 차 — 부족·예상소진·권장은 가용 기준 그대로(D1).
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
-    const today = KST_TODAY();
+    const today = kstTodayIso();
     const to = DATE_RE.test(String(sp.get("to"))) ? String(sp.get("to")) : today;
     let from = DATE_RE.test(String(sp.get("from"))) ? String(sp.get("from")) : to;
     if (from > to) from = to;
@@ -47,21 +55,22 @@ export async function GET(req: NextRequest) {
     // 목표 일수(오늘 → 다음 요청분 판매 가능일)·부족 기준 일수(오늘 → 오늘 요청분 판매 가능일) — 권장 수식과 같은 일정
     const { leadDays, cycleDays, horizonDays, sellable, nextDraft, nextSellable } = scheduleHorizon(today);
 
-    const stockRpc = async () => {
-      // 036 미적용(chan 시그니처 없음 = PGRST202)만 전 칸 합으로 폴백. 일시 오류는 그대로 돌려 아래서 던진다 —
-      //  모든 오류에서 폴백하면 도매 대량 탭 등에 4칸 합이 현재고로 조용히 표시된다(#11)
-      if (chan) { const r = await sb.rpc("inventory_stock", { asof: null, chan }); if (!r.error || r.error.code !== "PGRST202") return r; }
-      return sb.rpc("inventory_stock", { asof: null });
-    };
     // 입고 예정(열린 제조사 요청서 잔여) — 소매·전체 탭에서 현재고 옆 병기 + 부족(low) 판정에 합산.
     //  권장 수식(getInventoryRows)이 같은 값을 현재고에 더해 빼므로, 여기서도 더해야 '부족인데 권장 0' 모순이 없다.
     //  도매 탭은 제조사 잔여 대신 열린 도매 요청서 잔여(이동 대기)를 보인다 — 부족 판정에는 넣지 않는다(아래 low).
     //  집계 실패(null)면 0 으로 두고 meta.inboundOk=false 로 알린다.
     // 확정형 탭(프로모션·도매 대량)의 요청량 — 그 칸 용도의 열린 요청서(2026-09-29 대표 요청). 집계 실패(null)면 0 + meta.requestedOk=false.
     const reqPurpose = chan === "프로모션" || chan === "도매 대량" ? chan : null;
-    const [pr, sr, promoFwd, bundles, inbound, untracked, requestedMap] = await Promise.all([
-      sb.from("products").select("id, sku, name, spec, unit, cost_price, attrs").eq("active", true).order("name", { ascending: true }),
-      stockRpc(),
+    // 재고 = inventory_stock 을 페이지 끝까지(S1·S4). 036 미적용(chan 시그니처 없음 = PGRST202)만 전 칸 합으로 폴백하고
+    //  일시 오류는 던진다 — 모든 오류에서 폴백하면 도매 대량 탭 등에 4칸 합이 현재고로 조용히 표시된다(#11).
+    //  가용(asof 없음) = 부족·예상소진·생산 창 기준(종전 그대로), 현재고(asof 오늘) = 표시. 차이 = 출고 예정(S6·D1).
+    type P = { id: string; sku: string | null; name: string; spec: string | null; unit: string; cost_price: number; attrs: string | null };
+    const [products, stock, stockToday, schedOut, promoFwd, bundles, inbound, untracked, requestedMap] = await Promise.all([
+      readAll<P>((a, b) => sb.from("products").select("id, sku, name, spec, unit, cost_price, attrs").eq("active", true)
+        .order("name", { ascending: true }).order("id", { ascending: true }).range(a, b)),
+      readStockMap(sb, { asof: null, chan }),
+      readStockMap(sb, { asof: today, chan }),
+      readScheduledOut(sb, today, chan),
       getPromoForwardBySku(today, horizonDays),
       getAllBundles(sb),
       chan === "도매" ? getOpenInboundByProduct(sb, today, "도매 납품") // 도매 탭 = 열린 도매 요청서 잔여(소매→도매 이동 대기, 2026-09-29)
@@ -71,51 +80,43 @@ export async function GET(req: NextRequest) {
     ]);
     const inboundOk = inbound !== null;
     const requestedOk = requestedMap !== null;
-    if (pr.error) throw pr.error;
-    if (sr.error) throw sr.error;
-
-    const stock = new Map<string, number>();
-    for (const t of (sr.data as { product_id: string; qty: number }[] | null) ?? []) stock.set(t.product_id, Number(t.qty) || 0);
     const stockOf = (id: string) => stock.get(id) || 0;
+    const todayOf = (id: string) => stockToday.get(id) || 0;
 
     // 소매 탭: 프로모션 풀 잔량을 별도 필드로 병기(113) — 권장 수식(getInventoryRows)이 풀을 현재고로
     //  합산하므로, 부족(low) 판정도 소매+풀 기준으로 맞춰야 '부족인데 권장 0' 모순이 안 생긴다(검증 확정).
-    const promoPool = new Map<string, number>();
+    //  표시 전용이라 현재고와 같은 기준(오늘까지)으로 읽는다. 읽기 실패면 병기 없음(판정에 쓰지 않는다).
+    let promoPool = new Map<string, number>();
     if (chan === "소매") {
-      try {
-        const pp = await sb.rpc("inventory_stock", { asof: null, chan: "프로모션" });
-        if (!pp.error) for (const t of (pp.data as { product_id: string; qty: number }[] | null) ?? []) promoPool.set(t.product_id, Number(t.qty) || 0);
-      } catch { /* 113 미적용 — 병기 없음 */ }
+      //  036 미적용이면 칸이 없으니 풀도 없다(빈 맵) — 전 칸 합을 풀로 병기하지 않게
+      try { promoPool = await readStockMap(sb, { asof: today, chan: "프로모션", onMissingChan: "empty" }); } catch { /* 113 미적용·일시 오류 — 병기 없음 */ }
     }
 
-    // 기간 원장(입고/출고). channel(036) 컬럼 없으면 전체로 폴백.
+    // 기간 원장(입고/출고).
     //  ※ 단발 .limit(20000)은 서버 Max Rows(기본 1000)가 우선해 조용히 잘린다 — 30일 총입고/총출고가
     //    실제보다 적게 나오던 원인(2026-09-03 대표 보고). range 페이징으로 전량 읽는다(안정 정렬 필수).
-    type TxnRow = { product_id: string; type: string; qty: number; status?: string | null; partner?: string | null };
-    const fetchTxns = async (withChannel: boolean): Promise<TxnRow[]> => {
-      const out: TxnRow[] = [];
-      for (let i = 0; i < 100000; i += 1000) {
-        let q = sb.from("inventory_txns")
-          .select(`product_id, type, qty, status, partner${withChannel ? ", channel" : ""}`)
-          .in("type", ["입고", "출고"])
-          .gte("txn_date", from).lte("txn_date", to)
-          .order("id", { ascending: true })
-          .range(i, i + 999);
-        if (withChannel && chan) q = q.eq("channel", chan);
-        const { data, error } = await q;
-        if (error) throw error;
-        out.push(...((data ?? []) as unknown as TxnRow[]));
-        if (!data || data.length < 1000) break;
+    //  선택 칸: channel(036)·reason(099)·source(131)·order_no(033). 미적용 칸만 그 칸을 빼고 다시 읽는다(오류 메시지에 칸 이름이 보일 때).
+    //  그 밖의 오류는 던진다 — 칸 없이 조용히 다시 읽으면 전 칸 합·이동 포함 소진이 표시된다(S4).
+    //  channel 이 없으면(036 미적용) 칸 조건 없이 전체 — 그때는 칸이 소매 하나뿐이다.
+    type TxnRow = { product_id: string; type: string; qty: number; status?: string | null; partner?: string | null; order_no?: string | null; reason?: string | null; source?: string | null };
+    const optCols = new Set<string>(["channel", "reason", "source", "order_no"]); // order_no(033) — 옛 이동 판정(isMoveRow)에 쓴다
+    const fetchTxns = () => readAll<TxnRow>((a, b) => {
+      let q = sb.from("inventory_txns")
+        .select(`product_id, type, qty, status, partner${[...optCols].map((c) => `, ${c}`).join("")}`)
+        .in("type", ["입고", "출고"])
+        .gte("txn_date", from).lte("txn_date", to);
+      if (optCols.has("channel") && chan) q = q.eq("channel", chan);
+      return q.order("id", { ascending: true }).range(a, b);
+    });
+    let txRows: TxnRow[] = [];
+    for (;;) {
+      try { txRows = await fetchTxns(); break; }
+      catch (e) {
+        const err = e as { message?: string; code?: string };
+        const col = isMissingSchemaError(err) ? [...optCols].find((c) => new RegExp(`\\b${c}\\b`, "i").test(err.message || "")) : undefined;
+        if (!col) throw e;
+        optCols.delete(col);
       }
-      return out;
-    };
-    let txRows: TxnRow[];
-    try {
-      txRows = await fetchTxns(true);
-    } catch (e) {
-      const msg = String((e as { message?: unknown })?.message ?? e);
-      if (/channel/i.test(msg)) txRows = await fetchTxns(false); // 036 미적용 폴백
-      else throw e;
     }
 
     const inq = new Map<string, number>();
@@ -125,19 +126,23 @@ export async function GET(req: NextRequest) {
       const q = Math.abs(Number(t.qty) || 0);
       if (t.type === "입고") inq.set(t.product_id, (inq.get(t.product_id) || 0) + q);
       else if (t.type === "출고") {
-        // 채널이동(소매↔도매 내부 이동)은 판매가 아니다 — 총출고·일평균 소진·자동 안전재고에서 제외
-        //  (판매속도 lib getLedgerVelocity 와 같은 규칙. 총입고의 이동분은 그대로 둔다 — 대표 지시는 출고.)
-        if (t.partner === "채널이동") continue;
+        // 판매·납품이 아닌 출고는 총출고·일평균 소진·자동 안전재고에서 뺀다 — 판매속도 lib(getLedgerVelocity)와 같은 규칙(S1):
+        //  칸 이동·프로모션 합류(isMoveRow — 출처 칸 source, 131 이전 기록은 주문번호 없는 partner '채널이동'), 사유 '제조사 반품'(NON_DEMAND_REASONS).
+        //  총입고의 이동분은 그대로 둔다 — 대표 지시는 출고.
+        if (isMoveRow(t)) continue;
+        if (t.reason && NON_DEMAND_REASONS.has(t.reason)) continue;
         outq.set(t.product_id, (outq.get(t.product_id) || 0) + q);
       }
     }
 
     // '재고 관리 사용 안함'(121) 품목은 재고 목록에서 뺀다 — 드라이아이스 등(입·출·조정 창 품목 목록도 이 행을 쓴다)
-    const rows: OverviewRow[] = (pr.data ?? []).filter((p) => !untracked.ids.has(p.id)).map((p) => {
+    const rows: OverviewRow[] = products.filter((p) => !untracked.ids.has(p.id)).map((p) => {
       const comps = bundles.get(p.id);
       const isBundle = !!comps && comps.length > 0;
       // 묶음은 자체 재고 대신 '만들 수 있는 세트 수'(구성품 현재고 ÷ 구성수량의 최소값)
-      const qty = isBundle ? bundleAvailable(comps!, stockOf) : (stock.get(p.id) || 0);
+      const qty = isBundle ? bundleAvailable(comps!, stockOf) : stockOf(p.id);
+      const onHand = isBundle ? bundleAvailable(comps!, todayOf) : todayOf(p.id);
+      const sched = schedOut.get(p.id);
       const cost = Number(p.cost_price) || 0;
       const period_in = inq.get(p.id) || 0;
       const period_out = outq.get(p.id) || 0;
@@ -149,14 +154,16 @@ export async function GET(req: NextRequest) {
       const inb = inbound?.get(p.id);
       const inbQty = inb?.qty ?? 0;
       return {
-        product_id: p.id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, attrs: (p as { attrs?: string | null }).attrs ?? null,
-        qty, cost_price: cost, value: qty * cost,
+        product_id: p.id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit, attrs: p.attrs ?? null,
+        qty, cost_price: cost, value: onHand * cost,
+        on_hand: onHand, scheduled_out: Math.max(0, Math.round((onHand - qty) * 100) / 100),
+        scheduled_first: sched?.first ?? null, scheduled_detail: sched ? sched.lines.join("\n") + (sched.more ? `\n외 ${sched.more}건` : "") : "",
         period_in, period_out, daily_out: Math.round(daily_out * 10) / 10,
         auto_safety, promo_qty: Math.round(promo), depletion_days,
         promo_pool: Math.round((promoPool.get(p.id) || 0) * 100) / 100, // 프로모션 풀 잔량(소매 탭 병기용)
         inbound: inbQty, inbound_due: inb?.earliest_due ?? null, inbound_overdue: inb?.overdue_qty ?? 0, inbound_detail: formatInbound(inb, today),
         requested: requestedMap?.get(p.id)?.requested ?? 0, requested_detail: formatRequested(requestedMap?.get(p.id)),
-        // 부족 = 현재고 + 입고 예정이 '오늘 요청분 판매 가능일까지 버틸 양' 미만(권장 수식 belowSafety 와 같은 엄격 비교 —
+        // 부족 = 가용(qty — 권장 수식과 같은 asof 없음 기준) + 입고 예정이 '오늘 요청분 판매 가능일까지 버틸 양' 미만(권장 수식 belowSafety 와 같은 엄격 비교 —
         //  '이하'면 목표 일수와 부족 일수의 올림이 같은 저회전 품목이 부족인데 권장 0 이 된다).
         //  목표(다음 요청분까지)로 재면 매주 정상 보충 품목까지 거의 늘 부족으로 뜬다 — 부족은 '지금 시켜도 늦는가'다.
         // 확정형 칸(프로모션·도매 대량)은 '목표만큼 늘 갖고 있는 칸'이 아니라 '요청수량을 채워

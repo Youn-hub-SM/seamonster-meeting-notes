@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { logProductChange } from "@/app/lib/b2b-activity";
 import { notifyMasterChange } from "@/app/lib/master-notify";
-import { getAllBundles, wouldCreateCycle } from "@/app/lib/product-bundles";
+import { replaceBundleComponents } from "@/app/lib/product-bundles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +20,8 @@ type InBundle = {
 
 // POST /api/inventory/bundles/import/apply { bundles: [{parentSku, name, components:[{sku, qty}], courier_name?, courier_weight?, retail_price?, sale_price?}] }
 //  묶음 부모SKU 가 상품에 없으면 생성(택배·가격 필드 포함). 이미 있으면 '입력된 값만' 갱신. 구성 교체(전체 대체).
+//  구성 교체는 replaceBundleComponents 한 곳(131 RPC — 한 트랜잭션)에서. 구성품 검증(없음·중복·미사용·같은 구성품 두 줄)은
+//  부모 생성·갱신보다 먼저 해서, 잘못된 묶음 때문에 빈 세트 상품이 생기거나 기존 구성이 지워지지 않게 한다.
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as { bundles?: InBundle[] };
@@ -41,6 +43,22 @@ export async function POST(req: NextRequest) {
       const parentSku = String(b.parentSku || "").trim();
       const comps = (Array.isArray(b.components) ? b.components : []).map((c) => ({ sku: String(c.sku || "").trim(), qty: Math.max(1, Math.round(Number(c.qty) || 1)) })).filter((c) => c.sku);
       if (!parentSku || !comps.length) { errors.push(`${parentSku || "?"}: 정보 부족`); continue; }
+
+      // 구성품 확인 — 부모를 만들거나 고치기 전에(실패한 묶음이 빈 세트 상품·구성 삭제를 남기지 않게)
+      const compRows: { component_id: string; qty: number; sku: string }[] = [];
+      let compErr = "";
+      const seenSku = new Set<string>();
+      for (const c of comps) {
+        if (c.sku === parentSku) { compErr = "자기 자신을 구성품으로 넣을 수 없음"; break; }
+        if (seenSku.has(c.sku)) { compErr = `구성품 '${c.sku}' 가 두 줄 — 한 줄로 합치세요`; break; }
+        seenSku.add(c.sku);
+        const ids = bySku.get(c.sku);
+        if (!ids || ids.length === 0) { compErr = `구성품 '${c.sku}' 없음`; break; }
+        if (ids.length > 1) { compErr = `구성품 '${c.sku}' 중복`; break; }
+        if (!ids[0].active) { compErr = `구성품 '${c.sku}' 는 미사용 상품`; break; }
+        compRows.push({ component_id: ids[0].id, qty: c.qty, sku: c.sku });
+      }
+      if (compErr) { errors.push(`${parentSku}: ${compErr}`); continue; }
 
       // 선택 필드(택배·가격) — 입력된 것만 반영(빈값/0 은 기존값 유지)
       const extras: Record<string, unknown> = {};
@@ -90,30 +108,10 @@ export async function POST(req: NextRequest) {
         await logProductChange("created", name, parentSku);
       }
 
-      // 구성품 확인
-      const rows: { parent_id: string; component_id: string; qty: number }[] = [];
-      let compErr = "";
-      for (const c of comps) {
-        if (c.sku === parentSku) { compErr = "자기 자신을 구성품으로 넣을 수 없음"; break; }
-        const ids = bySku.get(c.sku);
-        if (!ids || ids.length === 0) { compErr = `구성품 '${c.sku}' 없음`; break; }
-        if (ids.length > 1) { compErr = `구성품 '${c.sku}' 중복`; break; }
-        if (!ids[0].active) { compErr = `구성품 '${c.sku}' 는 미사용 상품`; break; }
-        rows.push({ parent_id: parentId, component_id: ids[0].id, qty: c.qty });
-      }
-      if (compErr) { errors.push(`${parentSku}: ${compErr}`); continue; }
-
-      // 순환(A⊃B⊃A) 차단 — 순환이 저장되면 재고 전개가 그 가지를 버려 출고가 차감되지 않는다
-      if (wouldCreateCycle(await getAllBundles(sb), parentId, rows.map((r) => r.component_id))) {
-        errors.push(`${parentSku}: 묶음 순환 — 구성품이 이 세트를(직·간접) 포함`);
-        continue;
-      }
-
-      // 구성 교체
-      const del = await sb.from("product_bundles").delete().eq("parent_id", parentId);
-      if (del.error) { errors.push(`${parentSku}: ${del.error.message}`); continue; }
-      const insb = await sb.from("product_bundles").insert(rows);
-      if (insb.error) { errors.push(`${parentSku}: ${insb.error.message}`); continue; }
+      // 구성 교체 — 검증·순환 검사·삭제·넣기가 한 번에(실패하면 기존 구성 그대로)
+      const skuOf = new Map(compRows.map((r) => [r.component_id, r.sku]));
+      const rr = await replaceBundleComponents(sb, parentId, compRows.map((r) => ({ component_id: r.component_id, qty: r.qty })), (id) => `'${skuOf.get(id) || id}'`);
+      if (!rr.ok) { errors.push(`${parentSku}: ${rr.error}`); continue; }
       applied++;
       appliedLabels.push(`${String(b.name || "").trim() || parentSku} (${parentSku}) — 구성 ${comps.length}종`);
     }

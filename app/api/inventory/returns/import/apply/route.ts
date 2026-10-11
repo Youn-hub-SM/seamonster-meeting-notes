@@ -36,9 +36,10 @@ export async function POST(req: NextRequest) {
       .filter((r) => r.product_id && r.qty > 0);
     if (rows.length === 0) return NextResponse.json({ ok: false, error: "반영할 행이 없습니다." }, { status: 400 });
 
-    const { error } = await supabaseAdmin().from("purchase_returns").insert(rows);
+    const { data: ins, error } = await supabaseAdmin().from("purchase_returns").insert(rows).select("id, product_id, qty, return_date");
     if (error) throw error;
-    return NextResponse.json({ ok: true, inserted: rows.length });
+    // 저장된 행(id) — 화면의 '재고에서도 빼기'가 반품마다 id 를 제출 키로 같은 품목·수량·날짜 출고를 남긴다(반품 삭제가 이 키로 출고를 찾는다)
+    return NextResponse.json({ ok: true, inserted: rows.length, rows: ins ?? [] });
   } catch (err) {
     console.error("[inventory/returns/import/apply]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "반영 실패") }, { status: 500 });

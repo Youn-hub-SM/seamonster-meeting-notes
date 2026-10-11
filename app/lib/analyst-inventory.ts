@@ -4,6 +4,7 @@
 //  재고 경보는 flags 에 넣지 않는다 — flags 가 있으면 AI 조사 도구가 켜져 비용이 오른다(사실로만 넘긴다).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getInventoryRows } from "./production-inventory";
+import { MOVE_SOURCES } from "./production-velocity";
 import type { InventoryFacts, InvFlowRow, InvWatchRow } from "./report-sections";
 
 type Range = { since: string; until: string };
@@ -18,18 +19,43 @@ async function sql<T>(sb: SupabaseClient, q: string, limit = 200): Promise<T[]> 
   return (Array.isArray(data) ? data : []) as T[];
 }
 
-// 기간 원장 흐름 — 출고는 사유(폐기·협찬·기타)·B2B(차수 출고)·판매로 나눈다. 칸 이동(partner='채널이동')은 입·출고를 부풀리므로 뺀다.
+// 출처 칸(source, 131)을 쓰는 집계문 — 131 미적용(칸 없음)이면 그 칸 없이 한 번 더(종전 판정). 그 밖의 오류는 던진다.
+async function sqlWithSource<T>(sb: SupabaseClient, build: (withSource: boolean) => string, limit = 200): Promise<T[]> {
+  try { return await sql<T>(sb, build(true), limit); }
+  catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    if (/\bsource\b/i.test(m) && /does not exist|could not find/i.test(m)) return sql<T>(sb, build(false), limit);
+    throw e;
+  }
+}
+
+// 칸 이동·프로모션 합류 행 — 판매속도·재고 목록·매입 결산과 같은 규칙(production-velocity isMoveRow, S11):
+//  source 가 있으면 그것만(move·promo_close), 없으면(131 이전 기록) 주문번호 없는 partner '채널이동'(주문번호 있는 행은 사람이 쓴 일반 입출고).
+const MOVE_IN = [...MOVE_SOURCES].map((s) => `'${s}'`).join(", ");
+const legacyMoveCond = (a: string) => `(coalesce(${a}.partner, '') = '채널이동' and ${a}.order_no is null)`;
+const moveCond = (withSource: boolean, a: string) => withSource
+  ? `(case when ${a}.source is not null then ${a}.source in (${MOVE_IN}) else ${legacyMoveCond(a)} end)`
+  : legacyMoveCond(a);
+// 고객 반품 재입고(D4b) — 매입이 아니라 돌아온 물건(매입 결산 isQuotePurchase 와 같은 규칙)
+const custReturnCond = (withSource: boolean, a: string) =>
+  `(coalesce(${a}.reason, '') = '고객 반품'${withSource ? ` or coalesce(${a}.source, '') = 'customer_return'` : ""})`;
+
+// 기간 원장 흐름 — 입고는 고객 반품을 따로, 출고는 사유(폐기·협찬·제조사 반품·기타)·B2B(차수 출고)·판매로 나눈다.
+//  칸 이동·프로모션 합류(moveCond)는 입·출고를 부풀리므로 뺀다.
 //  금액은 현재 원가(products.cost_price) 기준 — 기간 중 원가 변경은 반영되지 않는다.
-function flowSql(cur: Range, prev?: Range): string {
+function flowSql(cur: Range, prev: Range | undefined, withSource: boolean): string {
   const inCur = `t.txn_date between '${cur.since}' and '${cur.until}'`;
   const inPrev = prev ? `t.txn_date between '${prev.since}' and '${prev.until}'` : "false";
   return `select case when ${inCur} then 'cur' else 'prev' end as per,
-  case when t.type <> '출고' then t.type when t.reason in ('폐기','협찬','기타') then t.reason when t.shipment_id is not null then 'B2B 출고' else '판매 출고' end as kind,
+  case when t.type = '입고' and ${custReturnCond(withSource, "t")} then '고객 반품'
+    when t.type <> '출고' then t.type
+    when t.reason in ('폐기','협찬','제조사 반품','기타') then t.reason
+    when t.shipment_id is not null then 'B2B 출고' else '판매 출고' end as kind,
   coalesce(sum(abs(t.qty)), 0)::bigint as qty, coalesce(sum(t.qty), 0)::bigint as net, count(distinct t.product_id)::int as items,
   round(coalesce(sum(abs(t.qty) * coalesce(p.cost_price, 0)), 0))::bigint as cost
 from inventory_txns t join products p on p.id = t.product_id
 where t.status = '완료' and (${inCur} or ${inPrev})
-  and coalesce(t.partner, '') <> '채널이동' and coalesce(p.stock_tracked, true)
+  and not ${moveCond(withSource, "t")} and coalesce(p.stock_tracked, true)
 group by 1, 2`;
 }
 
@@ -60,24 +86,27 @@ from s join products p on p.id = s.product_id
 where coalesce(p.stock_tracked, true) and not exists (select 1 from product_bundles b where b.parent_id = p.id)`;
 }
 
-// 월 매입액(잠정) — 매입 결산(computeQuote)과 같은 계산: 입고·완료·도매 칸 제외·칸 이동 제외, 단가 × 수량에서
-//  제조사 반품을 뺀다(단가 적은 반품은 그 단가, 안 적은 반품은 그 달 매입가, 그 달 매입이 없으면 마스터 매입단가).
-function purchaseSql(cur: Range): string {
-  return `with t as (select product_id, sum(round(abs(qty))) as q, sum(round(abs(qty)) * round(coalesce(unit_amount, 0))) as amt,
-    sum(round(abs(qty))) filter (where coalesce(unit_amount, 0) <= 0) as npq
-  from inventory_txns
-  where type = '입고' and status = '완료' and channel <> '도매' and coalesce(partner, '') <> '채널이동'
-    and txn_date between '${cur.since}' and '${cur.until}' group by 1),
+// 월 매입액(잠정) — 매입 결산(fetchQuoteTxns + computeQuote)과 같은 계산: 입고·완료·도매 칸 제외·칸 이동/합류 제외·
+//  고객 반품 재입고 제외, 수량은 소수 둘째 자리·행 금액은 원 단위(round(단가) × 수량을 반올림). 그 값에서
+//  제조사 반품을 품목별로 뺀다(단가 적은 반품은 그 단가, 안 적은 반품은 그 달 매입가, 그 달 매입이 없으면 마스터 매입단가 — 품목별 원 단위).
+function purchaseSql(cur: Range, withSource: boolean): string {
+  return `with t as (select x.product_id, sum(abs(round(x.qty, 2))) as q,
+    sum(round(round(coalesce(x.unit_amount, 0)) * abs(round(x.qty, 2)))) as amt,
+    sum(abs(round(x.qty, 2))) filter (where round(coalesce(x.unit_amount, 0)) <= 0) as npq
+  from inventory_txns x
+  where x.type = '입고' and x.status = '완료' and x.channel <> '도매'
+    and not ${moveCond(withSource, "x")} and not ${custReturnCond(withSource, "x")}
+    and x.txn_date between '${cur.since}' and '${cur.until}' group by 1),
 r as (select product_id, sum(abs(round(qty, 2))) as rq, sum(round(unit_amount) * abs(round(qty, 2))) filter (where unit_amount > 0) as rfix,
     sum(abs(round(qty, 2))) filter (where unit_amount > 0) as rfq
   from purchase_returns where return_date between '${cur.since}' and '${cur.until}' group by 1)
-select round(coalesce(sum(coalesce(t.amt, 0) - coalesce(r.rfix, 0)
-    - (case when coalesce(t.q, 0) > 0 then round(t.amt / t.q) else round(coalesce(p.purchase_price, 0)) end) * greatest(0, coalesce(r.rq, 0) - coalesce(r.rfq, 0))), 0))::bigint as amount,
-  coalesce(sum(t.npq), 0)::bigint as no_price_qty
+select round(coalesce(sum(coalesce(t.amt, 0) - round(coalesce(r.rfix, 0)
+    + (case when coalesce(t.q, 0) > 0 then round(t.amt / t.q) else round(coalesce(p.purchase_price, 0)) end) * greatest(0, coalesce(r.rq, 0) - coalesce(r.rfq, 0)))), 0))::bigint as amount,
+  round(coalesce(sum(t.npq), 0), 2)::numeric as no_price_qty
 from t full join r using (product_id) left join products p on p.id = product_id`;
 }
 
-const FLOW_ORDER = ["입고", "판매 출고", "B2B 출고", "폐기", "협찬", "기타", "조정"];
+const FLOW_ORDER = ["입고", "고객 반품", "판매 출고", "B2B 출고", "폐기", "협찬", "제조사 반품", "기타", "조정"];
 const sortFlow = (rows: InvFlowRow[]) => rows.sort((a, b) => FLOW_ORDER.indexOf(a.kind) - FLOW_ORDER.indexOf(b.kind));
 
 export async function collectInventory(
@@ -122,7 +151,7 @@ export async function collectInventory(
     };
   })() : Promise.resolve(null);
 
-  const flowP = sql<{ per: string; kind: string; qty: number; net: number; items: number; cost: number }>(sb, flowSql(range, period === "daily" ? undefined : prevRange));
+  const flowP = sqlWithSource<{ per: string; kind: string; qty: number; net: number; items: number; cost: number }>(sb, (src) => flowSql(range, period === "daily" ? undefined : prevRange, src));
   const zeroP = period === "daily" ? Promise.resolve(null) : sql<{ name: string; zero_days: number; first_zero: string }>(sb, zeroedSql(range), 5);
   const valueP = period === "monthly" && opts.prevMonthEnd ? sql<{ v1: number; v0: number; neg: number }>(sb, valueSql(range.until, opts.prevMonthEnd), 1) : Promise.resolve(null);
   const purchaseP = period === "monthly" ? (async () => {
@@ -130,7 +159,7 @@ export async function collectInventory(
     const snap = await sb.from("quote_snapshots").select("summary").eq("month", month).maybeSingle();
     const total = Number((snap.data as { summary?: { totalAmount?: number } } | null)?.summary?.totalAmount);
     if (!snap.error && Number.isFinite(total)) return { amount: Math.round(total), basis: "확정" as const };
-    const [r] = await sql<{ amount: number; no_price_qty: number }>(sb, purchaseSql(range), 1);
+    const [r] = await sqlWithSource<{ amount: number; no_price_qty: number }>(sb, (src) => purchaseSql(range, src), 1);
     return { amount: Number(r?.amount) || 0, basis: "잠정" as const, no_price_qty: Number(r?.no_price_qty) || 0 };
   })() : Promise.resolve(null);
 
@@ -147,7 +176,7 @@ export async function collectInventory(
     basis: [
       now ? `품절 = 소매 현재고 0 이하·최근 30일 출고 있음, 부족 = 지금 요청해도 판매 가능일 전에 바닥날 품목(생산요청 화면과 같은 기준). 하루 출고 = 최근 30일 평균(행사 제외). 지금 = ${now.at} 리포트 생성 시각` : "",
       !withNow ? "끝난 지 7일이 지난 기간이라 지금 기준 품절·부족 목록은 생략" : "",
-      "기간 입출고 = 재고 원장 완료분(칸 이동 제외), 판매 출고는 택배 발주처리 때 주문일로 기록되어 매출과 날짜가 어긋날 수 있음, 금액 = 현재 원가",
+      "기간 입출고 = 재고 원장 완료분(칸 이동 제외), 고객 반품 입고·제조사 반품 출고는 따로, 판매 출고는 택배 출고 처리일(이전 기록은 주문일)로 기록되어 매출과 날짜가 어긋날 수 있음, 금액 = 현재 원가",
     ].filter(Boolean).join(". "),
     now,
     ...(flowR.status === "fulfilled" ? {

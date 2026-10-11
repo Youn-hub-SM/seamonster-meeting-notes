@@ -25,8 +25,9 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { title?, requested_by?, request_date?, due_date?, prod_start?, purpose?, memo?, items:[{product_id, requested_qty, memo?}] } — 요청서 생성
+// POST { title?, requested_by?, request_date?, due_date?, prod_start?, purpose?, memo?, items:[{product_id, requested_qty, memo?}], client_key? } — 요청서 생성
 //  생성 규칙(폴백·알림 포함)은 production-request-create 에 — 주간 AI 초안도 같은 함수로 만든다.
+//  client_key = 화면이 창을 열 때 만든 재시도 키(136). 응답을 잃고 다시 눌러도 같은 키면 첫 요청서를 돌려준다(existing).
 export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as Record<string, unknown>;
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     // 제조사(소매) 요청을 생산 담당자 '지인'이 직접 작성하면 확인 절차 생략 — 담당 지정 + 진행중으로 시작.
     //  (작성자 본인이 담당자라 별도 확인이 무의미. 도매 요청은 이행 주체가 달라 자동 확인 없음.)
     const autoConfirm = who === "지인" && purpose === "재고 보충";
-    const full = await createProductionRequest(sb, {
+    const { request: full, existing } = await createProductionRequest(sb, {
       title: String(b.title || ""),
       requested_by: String(b.requested_by || ""),
       request_date: String(b.request_date || ""),
@@ -53,8 +54,9 @@ export async function POST(req: NextRequest) {
       status: autoConfirm ? "진행중" : "요청",
       assignee: autoConfirm ? who : null,
       created_by: who,
+      client_key: typeof b.client_key === "string" ? b.client_key : null,
     });
-    return NextResponse.json({ ok: true, request: full });
+    return NextResponse.json({ ok: true, request: full, existing });
   } catch (err) {
     if (err instanceof CreateError) return NextResponse.json({ ok: false, error: err.message }, { status: err.status });
     console.error("[production/requests POST]", err);

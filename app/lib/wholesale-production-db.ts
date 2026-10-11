@@ -86,7 +86,7 @@ export async function loadRequests(
       .range(a, b))),
     // 입고도 request_id 로 청크(인덱스 prod_receipt_req_idx) — item_id 로 나누면 품목 수만큼 왕복이 늘어난다
     inChunks(ids, (part) => pageAll((a, b) => sb.from("production_receipts")
-      .select("id, item_id, qty, receipt_date, memo, received_by, created_at")
+      .select("id, item_id, qty, receipt_date, memo, received_by, created_at, inv_txn_id")
       .in("request_id", part)
       .order("created_at", { ascending: true }).order("id", { ascending: true })
       .range(a, b))),
@@ -100,6 +100,7 @@ export async function loadRequests(
       id: r.id as string, item_id: k, qty: Number(r.qty) || 0,
       receipt_date: String(r.receipt_date), memo: (r.memo as string) ?? null,
       received_by: (r.received_by as string) ?? null, created_at: String(r.created_at),
+      inv_txn_id: (r.inv_txn_id as string) ?? null,
     });
     rcByItem.set(k, arr);
   }
@@ -109,11 +110,14 @@ export async function loadRequests(
     const p = one<AnyRow>(it.products) ?? {};
     const rcs = rcByItem.get(it.id as string) ?? [];
     const received = rcs.reduce((s, r) => s + r.qty, 0);
+    // 프로모션의 음수 연결 = 마감·취소 소매 합류(promotion-close) — 표시용으로 따로 센다(이행은 순합 그대로)
+    const released = Math.round(rcs.reduce((s, r) => s + (r.qty < 0 && r.inv_txn_id ? -r.qty : 0), 0) * 100) / 100;
     const pi: PrItem = {
       id: it.id as string, product_id: it.product_id as string,
       sku: (p.sku as string) ?? null, name: (p.name as string) ?? "(삭제된 품목)",
       spec: (p.spec as string) ?? null, unit: (p.unit as string) ?? "개",
       requested_qty: Number(it.requested_qty) || 0, received_qty: received,
+      ...(released > 0 ? { released_qty: released } : {}),
       memo: (it.memo as string) ?? null, receipts: rcs,
     };
     const k = it.request_id as string;
@@ -140,6 +144,8 @@ export async function loadRequests(
       items: its,
       total_requested: requestedLines.reduce((s, i) => s + i.requested_qty, 0),
       total_received: requestedLines.reduce((s, i) => s + i.received_qty, 0),
+      ...(toPrPurpose(r.purpose) === "프로모션" ? { total_released: Math.round(its.reduce((s, i) => s + (i.released_qty || 0), 0) * 100) / 100 } : {}),
+      ...("promo_released_at" in r ? { promo_released_at: (r.promo_released_at as string | null) ?? null } : {}),
     };
   });
 }

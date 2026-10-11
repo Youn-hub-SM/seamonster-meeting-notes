@@ -3,7 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeProduct, ProductInput, stripMissingProductCols } from "@/app/lib/b2b-types";
 import { logProductChange } from "@/app/lib/b2b-activity";
 import { notifyMasterChange } from "@/app/lib/master-notify";
-import { getAllBundles } from "@/app/lib/product-bundles";
+import { getAllBundles, bundlesTableMissing } from "@/app/lib/product-bundles";
 import { diffProduct } from "@/app/lib/product-diff";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +116,7 @@ export async function PUT(req: NextRequest) {
     // 세트는 '재고 관리 사용 안함'을 걸지 않는다 — 자체 재고가 없고 수정 창에도 체크박스가 없다(엑셀로 걸린 값도 여기서 풀린다)
     if (clean.stock_tracked === false) {
       const { data: isParent, error: bErr } = await sb.from("product_bundles").select("parent_id").eq("parent_id", body.id).limit(1);
+      if (bErr && !bundlesTableMissing(bErr)) throw bErr; // 세트인지 모르면 저장하지 않는다(S4) — 세트에 '사용 안함'이 걸리면 화면에서 못 푼다
       if (!bErr && (isParent ?? []).length) clean.stock_tracked = true;
     }
     const payload: Record<string, unknown> = {
@@ -186,20 +187,32 @@ export async function DELETE(req: NextRequest) {
     }
     const sb = supabaseAdmin();
     const { data: snap } = await sb.from("products").select("name, sku").eq("id", id).single();
-    // 재고 원장이 있으면 삭제 차단 — inventory_txns FK 는 on delete cascade(031)라
-    //  그냥 지우면 입출고 이력 전체가 조용히 소멸해 현재고·대사 기준이 무너진다. (031 미적용 환경이면 count=null 로 통과)
-    const { count: txnCount } = await sb.from("inventory_txns").select("id", { count: "exact", head: true }).eq("product_id", id);
-    if ((txnCount ?? 0) > 0) {
+    // 재고 원장이 있으면 삭제 차단 — 131 전에는 inventory_txns FK 가 on delete cascade(031)라
+    //  그냥 지우면 입출고 이력 전체가 조용히 소멸해 현재고·대사 기준이 무너진다(131 부터는 DB 도 restrict 로 거부).
+    //  조회 실패는 '이력 없음'이 아니다(S4) — 멈춘다(031 은 오래전 적용돼 테이블 없음 폴백은 두지 않는다).
+    const { count: txnCount, error: cntErr } = await sb.from("inventory_txns").select("id", { count: "exact", head: true }).eq("product_id", id);
+    if (cntErr || txnCount === null)
+      return NextResponse.json({ ok: false, error: "재고 이력 확인에 실패했습니다 — 잠시 뒤 다시 시도하세요." }, { status: 503 });
+    if (txnCount > 0) {
       return NextResponse.json(
         { ok: false, error: `이 품목은 재고 입출고 이력(${txnCount}건)이 있어 삭제할 수 없습니다. 삭제하면 재고 기록이 함께 사라집니다. 대신 '미사용' 처리하세요.` },
         { status: 409 }
       );
     }
+    // 제조사 반품(087)도 131 전에는 cascade — 매입 결산의 반품이 조용히 사라진다. 테이블 없음(087 미적용)만 통과.
+    {
+      const { data: rets, error: retErr } = await sb.from("purchase_returns").select("id").eq("product_id", id).limit(1);
+      const missing = retErr && (retErr.code === "42P01" || retErr.code === "PGRST205" || /purchase_returns/i.test(retErr.message || "") && /does not exist|schema cache|could not find/i.test(retErr.message || ""));
+      if (retErr && !missing)
+        return NextResponse.json({ ok: false, error: "반품 이력 확인에 실패했습니다 — 잠시 뒤 다시 시도하세요." }, { status: 503 });
+      if ((rets ?? []).length)
+        return NextResponse.json({ ok: false, error: "이 품목은 제조사 반품 기록이 있어 삭제할 수 없습니다. 대신 '미사용' 처리하세요." }, { status: 409 });
+    }
     const { error } = await sb.from("products").delete().eq("id", id);
     if (error) {
       if (error.code === "23503") {
         return NextResponse.json(
-          { ok: false, error: "이 제품이 들어있는 발주가 있어 삭제할 수 없습니다. 대신 '미사용' 처리하세요." },
+          { ok: false, error: "발주 또는 재고·반품 이력이 있어 삭제할 수 없습니다. 대신 '미사용' 처리하세요." },
           { status: 409 }
         );
       }

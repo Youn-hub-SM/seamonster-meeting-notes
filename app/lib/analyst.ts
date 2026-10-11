@@ -19,6 +19,7 @@ import { isMetaAdConfigured, listCampaigns as metaCampaigns, listAdsets as metaA
 import { isNaverAdConfigured, listCampaigns as naverCampaigns, listAdgroups as naverAdgroups, getStats as naverStats, type NaverAdgroup } from "./naver-ad";
 import { getPurchaseConversions } from "./naver-conv";
 import { bundleAvailable, type BundleComponent } from "./product-bundles";
+import { readStockMap } from "./inventory-template";
 import { postTeamsMarkdown, teamsCardBytes } from "./briefing";
 import { collectInventory } from "./analyst-inventory";
 import { withCodeTables, renderInventoryTable, stripCodeBlocks, inventoryForAi, type InventoryFacts } from "./report-sections";
@@ -535,9 +536,12 @@ async function runTool(sb: SupabaseClient, ctx: { since: string; end: string; ma
     if (!list.length) return JSON.stringify({ error: "상품 마스터에 없는 SKU" });
     if (list.length > 1) return JSON.stringify({ error: "같은 SKU 가 여러 상품에 있음 — 상품 마스터 확인 필요", products: list.map((p) => p.name) });
     const p = list[0];
-    const [bq, ...stocks] = await Promise.all([
+    //  재고 = 공용 readStockMap(S1·S4) — RPC 결과도 서버 Max Rows(1000)에 잘리므로 페이지 끝까지 읽는다
+    //  (잘린 뒤쪽 품목을 0 으로 보면 AI 가 품절로 단정한다). 기준은 종전대로 asof 없음(오늘 뒤 선점까지 뺀 가용).
+    const [bq, stocks] = await Promise.all([
       sb.from("product_bundles").select("component_id, qty").eq("parent_id", p.id),
-      ...INV_CHANNELS.map((c) => sb.rpc("inventory_stock", { asof: null, chan: c })),
+      // 036 미적용(칸 없음)이면 전부 소매 — 다른 칸에 전 칸 합을 되풀이해 보이지 않게 빈 맵
+      Promise.allSettled(INV_CHANNELS.map((c) => readStockMap(sb, { asof: null, chan: c, onMissingChan: c === "소매" ? "all" : "empty" }))),
     ]);
     // 세트 구성 조회 실패를 '세트 아님(재고 0)'으로 넘기면 AI 가 품절로 단정한다 — 테이블 없음(037 미적용)만 세트 아님으로 본다
     if (bq.error && !/product_bundles/i.test(bq.error.message)) throw new Error(`세트 구성 조회 실패: ${bq.error.message}`);
@@ -545,10 +549,13 @@ async function runTool(sb: SupabaseClient, ctx: { since: string; end: string; ma
       .map((r) => ({ component_id: r.component_id, qty: Math.max(1, Math.round(Number(r.qty) || 1)) }));
     const out: Record<string, unknown> = { name: p.name, spec: p.spec, active: p.active, stock_tracked: p.stock_tracked !== false, is_bundle: comps.length > 0 };
     INV_CHANNELS.forEach((c, i) => {
-      const r = stocks[i] as { data: unknown; error: { message: string } | null };
-      if (r.error) { out[c] = `조회 실패: ${r.error.message}`; return; }
-      const rows = (r.data as { product_id: string; qty: number }[] | null) ?? [];
-      const stockOf = (id: string) => num(rows.find((x) => x.product_id === id)?.qty);
+      const r = stocks[i];
+      if (r.status === "rejected") {
+        const m = r.reason instanceof Error ? r.reason.message : String((r.reason as { message?: string } | null)?.message ?? r.reason);
+        out[c] = `조회 실패: ${m}`;
+        return;
+      }
+      const stockOf = (id: string) => num(r.value.get(id));
       out[c] = comps.length ? bundleAvailable(comps, stockOf) : stockOf(p.id); // 세트 = 구성품으로 만들 수 있는 수
     });
     return JSON.stringify(out);
@@ -596,7 +603,7 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 이커머스: 공식몰 카
 - 필요한 조회는 한 번에 함께(동시에) 요청합니다. 조사 차례가 적을수록 좋습니다.
 - 광고 캠페인은 금액·ROAS 문턱 같은 기준으로 좋다/나쁘다를 판정하지 않고 사실만 적습니다. 매출 변화의 원인으로 광고가 관련될 때만 근거로 씁니다. 캠페인별 전체 표는 시스템이 붙이므로 직접 쓰지 않습니다.
 - 광고 추이(ads.meta.trend · ads.naver.trend, 최근 14일)는 시스템이 광고 섹션 끝에 요약·그래프·표로 붙이므로 광고 섹션에 다시 쓰지 않습니다. 매출 변화와 시기가 겹치는 흐름만 '눈에 띄는 변화와 원인'에서 원인 후보(추정)로 연결합니다(방향은 summary·dirs 그대로 인용).
-- 재고(inventory)는 코드가 집계한 사실만 인용합니다. now 는 리포트를 만든 시각의 현재 상태(품절·부족·오는 중 — 분석일이 7일 넘게 지났으면 없음), flow 는 어제 재고 원장 합계(완료분, 칸 이동 제외)입니다. 판매 출고는 택배 발주처리 때 주문일로 기록돼 덜 잡힐 수 있으니 매출과 직접 비교하지 않습니다. 금액은 현재 원가 기준입니다. 재고 주의 품목 표는 시스템이 붙이므로 직접 쓰지 않습니다. inventory 가 없거나 ok=false 면 재고 섹션은 note 한 줄만, ok=true 인데 note 가 있으면 재고 섹션 끝에 그 내용을 한 줄로 밝힙니다. null 인 값은 생략합니다.
+- 재고(inventory)는 코드가 집계한 사실만 인용합니다. now 는 리포트를 만든 시각의 현재 상태(품절·부족·오는 중 — 분석일이 7일 넘게 지났으면 없음), flow 는 어제 재고 원장 합계(완료분, 칸 이동 제외)입니다. 판매 출고는 택배 출고 처리일로 기록돼(이전 기록은 주문일) 매출과 날짜가 어긋날 수 있으니 매출과 직접 비교하지 않습니다. 금액은 현재 원가 기준입니다. 재고 주의 품목 표는 시스템이 붙이므로 직접 쓰지 않습니다. inventory 가 없거나 ok=false 면 재고 섹션은 note 한 줄만, ok=true 인데 note 가 있으면 재고 섹션 끝에 그 내용을 한 줄로 밝힙니다. null 인 값은 생략합니다.
 - 어제 매출이 줄어든 품목이 now 품절과 겹치고 now.at 이 분석일 다음 날일 때만 '눈에 띄는 변화와 원인'에서 원인 후보(추정)로 연결합니다. now.at 이 그보다 늦으면(지난 날짜 재생성) 연결하지 않습니다. 부족 품목은 재고가 있으니 원인으로 쓰지 않습니다.
 - 네이버 추이의 conv·roas_all 은 장바구니 등 전체 전환 기준이라 naver.purchases·roas(구매만)와 비교하지 않습니다. 마지막 구간의 구매·전환·ROAS 는 전환 지연으로 낮게 잡히니 그것만으로 하락이라 단정하거나 매출 원인으로 연결하지 않습니다.
 - 매출 헤드라인은 소매(retail_total) 기준입니다. 도매는 발송완료 시점에 한꺼번에 잡혀 날마다 들쭉날쭉하니 이상으로 해석하지 않고 참고로만 적습니다.

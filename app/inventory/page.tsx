@@ -49,19 +49,26 @@ const URG_STYLE: Record<string, { bg: string; fg: string }> = {
 //  품목은 가중치를 25% 올렸다(112→140). 늘린 28px 은 여유가 남던 열에서 되가져와
 //  합계(=TABLE_MIN)는 그대로다 — 1366 창의 무스크롤을 지키기 위해. 줄인 열도 헤더·내용이 잘리지 않는 걸 실측 확인했다.
 const COL = {
-  chk: 31, sku: 108, name: 140, qty: 72, daily: 78, dep: 76,
+  chk: 31, sku: 108, name: 140, qty: 72, sch: 76, daily: 78, dep: 76,
   inb: 84, rec: 76, req: 76, pin: 64, pout: 64, val: 96, act: 78,
 } as const;
 // 전체 열 합 1106 — 사이드바(237)+스크롤바(15) 더해도 1366 창에 들어간다.
 // 확정형 탭(프로모션·도매 대량)은 판단 열(체크·하루 출고·예상소진·입고 예정·권장생산)이 빠져 더 좁다.
 // 요청량(req)은 확정형 탭 전용 — 그 칸 용도의 열린 요청서 요청수량 합.
-const FULL_COLS = (Object.keys(COL) as (keyof typeof COL)[]).filter((k) => k !== "req");
-const CONFIRMED_COLS: (keyof typeof COL)[] = ["sku", "name", "qty", "req", "pin", "pout", "val", "act"];
+// 출고 예정(sch)은 그 탭에 오늘 뒤 날짜로 이미 뺀 출고가 있을 때만 현재고 바로 뒤에 붙는다(대개 도매·도매 대량·전체의 B2B 선점).
+type ColKey = keyof typeof COL;
+const FULL_COLS = (Object.keys(COL) as ColKey[]).filter((k) => k !== "req" && k !== "sch");
+const CONFIRMED_COLS: ColKey[] = ["sku", "name", "qty", "req", "pin", "pout", "val", "act"];
+const withSched = (cs: ColKey[], on: boolean): ColKey[] => (on ? cs.flatMap((k): ColKey[] => (k === "qty" ? ["qty", "sch"] : [k])) : cs);
 
 // 정렬 가능한 컬럼(생산 열 포함)
-type SortKey = "name" | "qty" | "inbound" | "requested" | "depletion_days" | "period_in" | "period_out" | "daily_out" | "value" | "recommend" | "request_by";
+type SortKey = "name" | "qty" | "scheduled_out" | "inbound" | "requested" | "depletion_days" | "period_in" | "period_out" | "daily_out" | "value" | "recommend" | "request_by";
+// 현재고 = 오늘까지(on_hand). qty 는 가용(출고 예정까지 뺀 값) — 옛 응답(on_hand 없음)이면 qty 로 폴백.
+const onHandOf = (r: OverviewRow) => r.on_hand ?? r.qty;
 const numKey = (r: OverviewRow, k: Exclude<SortKey, "recommend" | "request_by">): number | string =>
   k === "name" ? r.name
+    : k === "qty" ? onHandOf(r)
+    : k === "scheduled_out" ? (r.scheduled_out ?? 0)
     : k === "depletion_days" ? (r.depletion_days ?? Number.POSITIVE_INFINITY)
     : k === "inbound" ? (r.inbound ?? 0)   // 선택 필드 — 없으면 0 으로 내려야 정렬이 NaN 으로 깨지지 않는다
     : k === "requested" ? (r.requested ?? 0)
@@ -87,7 +94,8 @@ export default function InventoryPage() {
   //  (하루 출고 평균·예상소진·권장생산·부족)이 무의미하다. 생산은 요청서에서 제조사와 협의(기획 5절).
   //  입고 예정도 숨긴다: 제조사 입고는 소매 칸으로 들어오므로 이 칸의 '들어올 양'이 아니다.
   const confirmedTab = (RESERVED_CHANNELS as readonly string[]).includes(channel);
-  const cols = confirmedTab ? CONFIRMED_COLS : FULL_COLS;
+  const hasSched = rows.some((r) => (r.scheduled_out ?? 0) > 0);
+  const cols = withSched(confirmedTab ? CONFIRMED_COLS : FULL_COLS, hasSched);
   const tableMin = cols.reduce((a, k) => a + COL[k], 0);
   const pct = (px: number) => `${((px / tableMin) * 100).toFixed(3)}%`;
   // 변경 히스토리 창 — 품목명을 누르면 그 품목의 원장(누가 언제 무엇을 입·출·조정했는지)을 보여준다
@@ -131,6 +139,8 @@ export default function InventoryPage() {
   // 입고 예정 집계 실패 — 소매·전체 권장만 영향(도매 권장식엔 입고 예정이 없다) → 도매 탭에선 경고하지 않는다
   const [prodInbBad, setProdInbBad] = useState(false);
   const [prodWholeReqBad, setProdWholeReqBad] = useState(false); // 도매 요청 잔여 집계 실패 — 도매 탭 권장이 이미 요청한 양을 못 뺀 값
+  // 행사 일정·안전재고 보정 조회 실패(소매 응답 settingsOk) — 소매·전체 권장이 행사 출고·보정을 못 뺀 값(S4). 도매 수식엔 미적용
+  const [prodSettingsBad, setProdSettingsBad] = useState(false);
 
   const prodLoad = useCallback(async () => {
     try {
@@ -146,6 +156,7 @@ export default function InventoryPage() {
       const bad = [!r.ok && "소매", !w.ok && "도매"].filter(Boolean).join("·");
       // 입고 예정 집계 실패는 반대 방향(권장 과대 = 시켜 둔 물량을 또 시킴) — 따로 알린다
       setProdInbBad(r.ok && r.inboundOk === false);
+      setProdSettingsBad(r.ok && r.settingsOk === false);
       setProdWholeReqBad(w.ok && w.wholesaleReqOk === false);
       setProdWarn(bad ? `${bad} 생산 수치를 불러오지 못했습니다 — 권장생산이 실제보다 적게 보일 수 있습니다.` : "");
     } catch {
@@ -194,7 +205,7 @@ export default function InventoryPage() {
   // 확정형 탭 '요청한 품목만' 범위 = 열린 요청서 품목 또는 이 칸에 재고가 남은 품목. 요약 카드도 같은 범위로 세야 표와 숫자가 맞는다.
   //  요청량 조회가 실패하면 걸지 않는다 — 요청만 되고 아직 안 옮긴(현재고 0) 품목이 조용히 숨는다.
   const reqScopeOn = confirmedTab && onlyRequested && meta?.requestedOk !== false;
-  const scoped = useMemo(() => (reqScopeOn ? rows.filter((r) => (r.requested ?? 0) > 0 || r.qty !== 0) : rows), [rows, reqScopeOn]);
+  const scoped = useMemo(() => (reqScopeOn ? rows.filter((r) => (r.requested ?? 0) > 0 || r.qty !== 0 || onHandOf(r) !== 0) : rows), [rows, reqScopeOn]);
   const totals = useMemo(() => ({
     items: scoped.length,
     value: scoped.reduce((s, r) => s + r.value, 0),
@@ -340,6 +351,8 @@ export default function InventoryPage() {
       {!confirmedTab && channel === "도매" && prodWholeReqBad && <div className="sm-warn" style={{ marginBottom: 12 }}>'도매 요청 잔여'를 불러오지 못했습니다 — 권장생산이 이미 요청한 양을 빼지 못해 실제보다 크게 보일 수 있습니다.</div>}
       {!confirmedTab && channel === "도매" && !prodWholeReqBad && meta?.inboundOk === false && <div className="sm-warn" style={{ marginBottom: 12 }}>'입고 예정'(열린 도매 요청서 잔여)을 불러오지 못했습니다.</div>}
       {!confirmedTab && (prodWarn || (channel !== "도매" && (prodInbBad || meta?.inboundOk === false))) && <div className="sm-warn" style={{ marginBottom: 12 }}>{prodWarn || "'입고 예정'(열린 생산 요청서 잔여)을 불러오지 못했습니다 — 부족 판정·권장생산이 시켜 둔 물량을 빼지 못해 실제보다 크게 보일 수 있습니다."}</div>}
+      {/* 행사 일정·보정 실패 — 여기서 고른 권장이 '선택 N종 생산 요청'으로 새 요청 창에 채워진다(그 창도 같은 경고를 띄운다) */}
+      {!confirmedTab && channel !== "도매" && prodSettingsBad && <div className="sm-warn" style={{ marginBottom: 12 }}>행사 일정·안전재고 보정을 불러오지 못했습니다 — 권장생산에 행사 출고가 섞이고 보정이 빠져 실제와 다를 수 있습니다. 새로고침 후 다시 확인하세요.</div>}
 
       {/* 데이터박스 — 재고 4 + 생산 2. 확정형 탭은 판단 카드(부족·생산 2종)를 뺀 3종만(판정 자체가 없다) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
@@ -433,6 +446,7 @@ export default function InventoryPage() {
               {/* 상태(지금 어떤가) → 판단(무엇을 할까) → 참고(기간 실적). 결정 17.
                   확정형 탭은 판단 열이 통째로 빠진다 — 상태와 기간 실적만 남는다 */}
               <Th k="qty" label="현재고" num w={pct(COL.qty)} />
+              {hasSched && <Th k="scheduled_out" label="출고 예정" num w={pct(COL.sch)} />}
               {confirmedTab && <Th k="requested" label="요청량" num w={pct(COL.req)} />}
               {!confirmedTab && <><Th k="daily_out" label="하루 출고" num w={pct(COL.daily)} /><Th k="depletion_days" label="예상소진" num w={pct(COL.dep)} />
               <Th k="inbound" label="입고 예정" num w={pct(COL.inb)} /><Th k="recommend" label="권장생산" num w={pct(COL.rec)} /></>}
@@ -462,11 +476,20 @@ export default function InventoryPage() {
                       {r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}
                     </button>
                   </td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수(가용)" : undefined}>
-                    {r.qty.toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
+                  <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수" : "오늘까지 원장 기준"}>
+                    {onHandOf(r).toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {/* 소매 숫자 '아래' 줄로 — 옆에 붙이면 현재고가 두 값처럼 읽힌다(대표 지시). 입고 예정 셀의 '마감' 줄과 같은 방식 */}
                     {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
                   </td>
+                  {/* 출고 예정 = 오늘 뒤 거래일로 이미 뺀 출고(대개 발송예정일이 미래인 B2B 선점, 발주 전량). 현재고에는 안 들어가고
+                      예상소진·부족·권장은 이 양까지 뺀 가용으로 판단한다(D1). 거래처·날짜별 내역은 마우스를 올려 본다 */}
+                  {hasSched && (
+                    <td className="num b2b-money" style={{ color: (r.scheduled_out ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}
+                      title={(r.scheduled_out ?? 0) > 0 ? `가용 ${r.qty.toLocaleString()} (현재고 − 출고 예정)${r.scheduled_detail ? `\n${r.scheduled_detail}` : ""}` : undefined}>
+                      {(r.scheduled_out ?? 0) > 0 ? `−${r.scheduled_out.toLocaleString()}` : "-"}
+                      {(r.scheduled_out ?? 0) > 0 && r.scheduled_first ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{r.scheduled_first.slice(5)}부터</span> : null}
+                    </td>
+                  )}
                   {/* 요청량 = 이 칸 용도의 열린 요청서 요청수량 합(확정형 탭). 요청서별 요청·이동·목표일은 마우스를 올려 본다 */}
                   {confirmedTab && <td className="num b2b-money" title={r.requested_detail || undefined} style={{ color: (r.requested ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}>{(r.requested ?? 0) > 0 ? r.requested.toLocaleString() : "-"}</td>}
                   {!confirmedTab && <td className="num b2b-money">{r.daily_out ? r.daily_out.toLocaleString() : "-"}</td>}
@@ -480,9 +503,10 @@ export default function InventoryPage() {
                     // 도매 탭의 입고 예정은 이동 대기(소매에 물건이 있어야 옮긴다)라 빨강 판정에 쓰지 않는다 — 부족 판정과 같은 기준(현재고만)
                     const red = dep != null && (dep <= 0 || ((r.inbound ?? 0) > 0 && channel !== "도매" && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 14)));
                     const posDays = dep != null && r.daily_out > 0 ? Math.floor((r.qty + (r.inbound ?? 0)) / r.daily_out) : null;
+                    const base = (r.scheduled_out ?? 0) > 0 ? "가용(현재고 − 출고 예정) 기준" : "창고 기준";
                     const tip = dep == null ? undefined : (r.inbound ?? 0) > 0
-                      ? `창고 기준 ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? (channel === "도매" ? " — 판매 가능일 전에 바닥날 수 있음" : " — 입고 전에 바닥날 수 있음") : ""}`
-                      : `창고 기준 ${dep}일`;
+                      ? `${base} ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? (channel === "도매" ? " — 판매 가능일 전에 바닥날 수 있음" : " — 입고 전에 바닥날 수 있음") : ""}`
+                      : `${base} ${dep}일`;
                     return <td className="num b2b-money" title={tip} style={{ color: dep == null ? "var(--sm-text-light)" : red ? "var(--sm-danger)" : "var(--sm-black)" }}>{dep == null ? "-" : `${dep}일`}</td>;
                   })()}
                   {/* 입고 예정 = 시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여). 권장생산이 이미 뺀 값이다.
@@ -506,10 +530,10 @@ export default function InventoryPage() {
       )}
       {/* 기간·계산식 안내줄 — 표 위에 있으면 정신없다는 요청(2026-09-28)으로 표 아래에 둔다 */}
       {meta && (confirmedTab
-        ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>{pmode === "전체" ? `기간 전체 (~ ${meta.to})` : `기간 ${meta.from} ~ ${meta.to} (${meta.periodDays}일)`}</p>
-        /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함), 권장(production/inventory)은
+        ? <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>{pmode === "전체" ? `기간 전체 (~ ${meta.to})` : `기간 ${meta.from} ~ ${meta.to} (${meta.periodDays}일)`}{hasSched ? " · 현재고 = 오늘까지 · 출고 예정 = 오늘 뒤 발송일로 이미 뺀 수량" : ""}</p>
+        /* 하루 출고·예상소진·부족(overview)은 이 기간·이 칸 원장 그대로(행사·대량 포함, 칸 이동·제조사 반품 출고 제외 — NON_DEMAND_REASONS·isMoveRow), 권장(production/inventory)은
            평상시 속도(행사·대량 제외) — 두 하루출고가 다르다는 것을 안내줄이 밝힌다(#45, 기획 10-2) */
-        : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − (도매 현재고 + 도매 요청 잔여)" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만{channel === "도매" ? "(도매는 현재고만)" : ""}</p>
+        : <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>기간 {meta.from} ~ {meta.to} ({meta.periodDays}일){hasSched ? " · 현재고 = 오늘까지 · 출고 예정 = 오늘 뒤 발송일로 이미 뺀 수량 · 예상소진·부족·권장은 출고 예정까지 뺀 가용 기준" : ""} · 하루 출고·예상소진·부족은 이 기간·이 칸 원장 기준(행사·대량 발송 포함, 칸 이동·제조사 반품 출고 제외) · 권장생산은 {channel === "도매" ? "최근 30·90일 중 큰 도매 평균" : "최근 30일"} 평상시 속도 기준(행사·대량 발송 제외) · 권장생산 = {channel === "도매" ? "도매 목표 − (도매 현재고 + 도매 요청 잔여)" : "소매 모자란 양 + 도매 모자란 양 − 입고 예정(모자란 양 = 목표 − 현재고, 0 미만은 0)"} · 목표 = 평상시 하루 출고 × {meta.horizonDays ?? meta.leadDays}일(다음 요청일{meta.nextDraft ? ` ${meta.nextDraft.slice(5)}` : ""} 요청분 판매 가능일{meta.nextSellable ? ` ${meta.nextSellable.slice(5)}` : ""}까지) · 부족 = 오늘 요청분 판매 가능일{meta.sellable ? ` ${meta.sellable.slice(5)}` : ""}({meta.leadDays}일)까지 버틸 양 미만{channel === "도매" ? "(도매는 현재고만)" : ""}</p>
       )}
 
       {/* 품목 변경 히스토리 — 원장 공용 테이블(TxnTable) 재사용. 행 취소 시 재고가 원복되므로 목록도 다시 읽는다 */}
@@ -519,14 +543,15 @@ export default function InventoryPage() {
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">
                 변경 히스토리 — {historyFor.name}{historyFor.spec ? ` ${historyFor.spec}` : ""}
-                <span className="sm-faint" style={{ marginLeft: 10, fontSize: 13, fontWeight: 400 }}>
-                  현재고 {historyFor.qty.toLocaleString()}{historyFor.is_bundle ? "세트" : historyFor.unit}
+                <span className="sm-faint" style={{ marginLeft: 10, fontSize: 12, fontWeight: 400 }}>
+                  현재고 {onHandOf(historyFor).toLocaleString()}{historyFor.is_bundle ? "세트" : historyFor.unit}
+                  {(historyFor.scheduled_out ?? 0) > 0 ? ` · 출고 예정 ${historyFor.scheduled_out.toLocaleString()}` : ""}
                 </span>
               </span>
               <button className="b2b-modal-close" onClick={() => setHistoryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>재고 = 그 거래 채널 기준 전후 수량</p>
+              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>재고 = 그 거래 채널 기준 전후 수량 · 대기 행은 재고에 넣지 않음</p>
               <ProductHistory productId={historyFor.product_id} />
             </div>
             <div className="b2b-modal-foot">
@@ -544,6 +569,7 @@ export default function InventoryPage() {
           products={products}
           qtyOf={qtyOf}
           defaultProductId={modalFor === "__new__" ? "" : modalFor}
+          // '전체' 탭은 칸을 넘기지 않는다(undefined) — 네 칸 합 화면에서 기록할 칸을 대신 정하면 실사가 소매에 덮어써진다(S8)
           defaultChannel={writeChannelOf(channel)}
           qtySource={channel}
           lockProduct={modalFor !== "__new__"}
@@ -566,8 +592,9 @@ export default function InventoryPage() {
 
 // 품목 변경 히스토리(관측 전용) — 원장 공용 TxnTable 과 달리 품목·단가·취소를 빼고,
 //  각 거래 전후의 재고(그 거래 채널 기준)를 보여준다. 취소가 필요하면 활동 히스토리 메뉴에서.
-//  재고 변화는 전체 이력의 누적합으로 계산하므로 한도(2000건)를 넘는 품목은 표시하지 않는다 —
-//  잘린 이력으로 계산하면 숫자가 통째로 틀어진다.
+//  재고 변화는 전체 이력의 누적합으로 계산하므로 한도(1000건 — 서버 Max Rows)에 닿은 품목은 표시하지 않는다 —
+//  잘린 이력으로 계산하면 숫자가 통째로 틀어진다. '대기' 행은 현재고(inventory_stock, 완료만)와 같게 누적에서 뺀다.
+const HISTORY_LIMIT = 1000;
 function ProductHistory({ productId }: { productId: string }) {
   const [rows, setRows] = useState<InventoryTxn[]>([]);
   const [loading, setLoading] = useState(true);
@@ -578,7 +605,7 @@ function ProductHistory({ productId }: { productId: string }) {
     (async () => {
       setLoading(true); setError("");
       try {
-        const j = await (await fetch(`/api/inventory/txns?product_id=${encodeURIComponent(productId)}&limit=2000`, { cache: "no-store" })).json();
+        const j = await (await fetch(`/api/inventory/txns?product_id=${encodeURIComponent(productId)}&limit=${HISTORY_LIMIT}`, { cache: "no-store" })).json();
         if (!j.ok) throw new Error(j.error || "조회 실패");
         if (alive) setRows(j.rows || []);
       } catch (e) { if (alive) setError(e instanceof Error ? e.message : "조회 오류"); }
@@ -596,13 +623,17 @@ function ProductHistory({ productId }: { productId: string }) {
     const out = asc.map((t) => {
       const ch = t.channel || "소매"; // 구버전(채널 컬럼 이전) 기록은 소매로 취급 — 조회 화면과 동일 규칙
       const before = balByCh.get(ch) || 0;
-      const after = Math.round((before + (Number(t.qty) || 0)) * 100) / 100;
+      // 대기 = 아직 재고에 안 들어간 행 — 누적에 넣지 않는다(status 를 안 싣는 옛 응답은 완료로 본다)
+      const pending = t.status === "대기";
+      const after = pending ? before : Math.round((before + (Number(t.qty) || 0)) * 100) / 100;
       balByCh.set(ch, after);
-      return { ...t, before, after };
+      return { ...t, before, after, pending };
     });
     return out.reverse();
   }, [rows]);
-  const complete = rows.length < 2000; // 2000건 미만이면 전체 이력 = 누적합이 정확하다
+  // 상한 미만이면 전체 이력 = 누적합이 정확하다. 서버는 요청 한도보다 적게(1000) 줄 수 있으니 같은 값으로 묻고 같은 값으로 판정
+  const complete = rows.length < HISTORY_LIMIT;
+  const today = TODAY();
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}</div>;
@@ -617,13 +648,20 @@ function ProductHistory({ productId }: { productId: string }) {
             const c = INV_TYPE_COLOR[t.type];
             const ch = t.channel ? INV_CHANNEL_COLOR[t.channel] : null;
             return (
-              <tr key={t.id}>
-                <td style={{ whiteSpace: "nowrap" }}>{t.txn_date?.slice(5)}</td>
-                <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span></td>
+              <tr key={t.id} style={t.pending ? { color: "var(--sm-text-light)" } : undefined}>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  {t.txn_date?.slice(5)}
+                  {/* 오늘 뒤 거래일(대개 B2B 선점) — 현재고에는 아직 안 들어간 예정 행이다(S6) */}
+                  {!t.pending && t.txn_date > today && <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>예정</span>}
+                </td>
+                <td>
+                  <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span>
+                  {t.pending && <span className="b2b-status-pill" style={{ marginLeft: 4, background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>대기</span>}
+                </td>
                 <td>{ch ? <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span> : <span className="sm-faint">-</span>}</td>
                 <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
                 <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>
-                  {complete
+                  {complete && !t.pending
                     ? <><span className="sm-faint">{t.before.toLocaleString()}</span> → <strong>{t.after.toLocaleString()}</strong></>
                     : <span className="sm-faint">-</span>}
                 </td>
@@ -635,7 +673,7 @@ function ProductHistory({ productId }: { productId: string }) {
           })}
         </tbody>
       </table>
-      {!complete && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>이력이 2,000건을 넘어 재고 전후 표시는 생략했습니다.</p>}
+      {!complete && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>이력이 {HISTORY_LIMIT.toLocaleString()}건 이상이라 재고 전후 표시는 생략했습니다.</p>}
     </div>
   );
 }

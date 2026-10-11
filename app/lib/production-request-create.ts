@@ -27,6 +27,7 @@ export type CreateInput = {
   status?: "요청" | "진행중";
   assignee?: string | null;
   created_by: string | null;
+  client_key?: string | null;     // 재시도 키(136) — 같은 키 두 번째 저장은 첫 요청서를 돌려준다. 미적용이면 키 없이 생성
 };
 
 export class CreateError extends Error { status: number; constructor(msg: string, status = 400) { super(msg); this.status = status; } }
@@ -47,14 +48,37 @@ export function normalizeItems(raw: unknown): CreateItem[] {
     .filter((it) => it.product_id && it.requested_qty > 0);
 }
 
+const CLIENT_KEY_RE = /^[A-Za-z0-9:_-]{8,80}$/;
+const missingCol = (m: string, col: string) => new RegExp(col, "i").test(m) && /column|schema cache|could not find/i.test(m);
+
+// 재시도 키(136)로 이미 만든 요청서 — 없거나 컬럼 미적용이면 null. 그 밖의 조회 오류는 던진다(모르고 또 만들지 않게).
+async function findByClientKey(sb: SupabaseClient, key: string): Promise<string | null> {
+  const { data, error } = await sb.from("production_requests").select("id").eq("client_key", key).limit(1);
+  if (error) { if (missingCol(error.message, "client_key")) return null; throw error; }
+  return (data?.[0]?.id as string | undefined) ?? null;
+}
+
 // 요청서 한 장 생성 → 전체본(loadRequests) 반환. 알림(팀즈 게시물)까지 보낸다.
-export async function createProductionRequest(sb: SupabaseClient, input: CreateInput): Promise<ProductionRequest> {
+//  client_key 가 오면 같은 키로 이미 만든 요청서를 그대로 돌려준다(existing=true, 알림 없음) — 응답을 잃고 다시 눌러도 한 장(S2).
+export async function createProductionRequest(sb: SupabaseClient, input: CreateInput): Promise<{ request: ProductionRequest; existing: boolean }> {
   const items = input.items.filter((it) => it.product_id && it.requested_qty > 0);
   if (!items.length) throw new CreateError("요청 품목과 수량을 1개 이상 입력하세요.");
 
+  const clientKey = CLIENT_KEY_RE.test(String(input.client_key || "")) ? String(input.client_key) : null;
+  if (clientKey) {
+    const exId = await findByClientKey(sb, clientKey);
+    if (exId) {
+      const [ex] = await loadRequests(sb, { id: exId });
+      if (ex) return { request: ex, existing: true };
+    }
+  }
+
   // 묶음(세트) 품목은 자체 재고가 없어(구성품 기준 도출) 입고 대상이 아님 → 거부.
+  //  조회 오류는 멈춘다(S4) — '세트 없음'으로 보면 세트가 요청서에 담겨 입고 연결·잔여가 틀어진다. 037 미적용(테이블 없음)만 통과.
   const pids = [...new Set(items.map((it) => it.product_id))];
   const { data: bundles, error: be } = await sb.from("product_bundles").select("parent_id").in("parent_id", pids);
+  if (be && !(be.code === "42P01" || be.code === "PGRST205" || (/product_bundles/i.test(be.message) && /does not exist|could not find/i.test(be.message))))
+    throw new CreateError(`세트 구성을 확인하지 못했습니다(${be.message}) — 잠시 뒤 다시 시도하세요.`, 500);
   if (!be && (bundles ?? []).length) throw new CreateError("묶음(세트) 품목은 생산 요청에 담을 수 없습니다. 구성품(단품)으로 요청하세요.");
 
   // 요청번호(PR-000001)
@@ -91,6 +115,7 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
   if (UUID_RE.test(String(input.company_id || ""))) head.company_id = String(input.company_id);
   if (due_date) head.due_date = due_date;     // 071. 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
   if (prod_start) head.prod_start = prod_start; // 118. 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
+  if (clientKey) head.client_key = clientKey;   // 136. 미적용 환경이면 아래에서 컬럼만 빼고 재시도.
 
   let { data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single();
   // 113·115 미적용(purpose 체크 제약에 그 용도가 없음)이면 조용히 재고 보충으로 강등하지 않고 명시 오류 —
@@ -98,10 +123,18 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
   if (he && CONFIRMED_PURPOSES.includes(purpose) && /purpose/i.test(he.message))
     throw new CreateError(`${purpose} 용도가 아직 없습니다 — migration ${purpose === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.`, 500);
   // 선택 컬럼(071 due_date · 082 purpose · 118 prod_start) 미적용 환경 폴백 — 에러 메시지에 보이는 컬럼만 빼고 재시도.
-  for (const col of ["order_id", "company_id", "due_date", "purpose", "prod_start"] as const) {
-    if (he && col in head && new RegExp(col, "i").test(he.message)) {
+  for (const col of ["order_id", "company_id", "due_date", "purpose", "prod_start", "client_key"] as const) {
+    if (he && col in head && he.code !== "23505" && new RegExp(col, "i").test(he.message)) {
       delete head[col];
       ({ data: reqRow, error: he } = await sb.from("production_requests").insert(head).select("id").single());
+    }
+  }
+  // 같은 키가 동시에 두 번 들어와 유니크(136)에 걸렸다 — 먼저 들어간 요청서를 돌려준다
+  if (he && clientKey && (he.code === "23505" || /duplicate key/i.test(he.message)) && /client_key/i.test(he.message)) {
+    const exId = await findByClientKey(sb, clientKey);
+    if (exId) {
+      const [ex] = await loadRequests(sb, { id: exId });
+      if (ex) return { request: ex, existing: true };
     }
   }
   if (he) throw he;
@@ -118,5 +151,5 @@ export async function createProductionRequest(sb: SupabaseClient, input: CreateI
   await logProductionRequestCreated(req_no || "", label, who, full ? formatRequestDetail(full) : undefined);
 
   if (!full) [full] = await loadRequests(sb, { id: requestId });
-  return full;
+  return { request: full, existing: false };
 }

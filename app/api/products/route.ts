@@ -14,13 +14,28 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const [{ data, error }, bundles, untracked] = await Promise.all([
-      sb.from("products").select("id, sku, name, spec, unit, sale_price, cost_price, volume_kg, active, attrs").order("name", { ascending: true }),
+    // '재고 관리 사용 안함'(121) 표식 — 재고 이동 화면의 품목 고르기가 이 값으로 빼고(여기서 거르지 않는다),
+    //  이동 POST 는 다시 확인하지 않는다. getUntracked 는 조회 오류를 던지고(121 미적용만 빈 집합, S4) 그대로 목록 전체 500 이다.
+    //  표식만 빼고 ok 로 내리면 이동 화면이 표식 없는 품목을 '관리함'으로 보고 드라이아이스 등을 옮길 수 있다(fail open).
+    //  이동 화면의 untracked_error 처리와 이동 POST 의 getUntracked 거절이 들어오기 전까지는 완화하지 않는다.
+    // 전 품목 — 서버 Max Rows(1000)에 잘리면 뒤쪽 품목이 모든 도구의 고르기 목록에서 조용히 빠진다(S4). 이름·id 순으로 끝까지.
+    type Row = { id: string; sku: string | null; name: string; spec: string | null; unit: string | null; sale_price: number | null; cost_price: number | null; volume_kg: number | null; active: boolean | null; attrs: unknown };
+    const readAll = async (): Promise<Row[]> => {
+      const out: Row[] = [];
+      for (let off = 0; off < 100000; off += 1000) {
+        const { data, error } = await sb.from("products").select("id, sku, name, spec, unit, sale_price, cost_price, volume_kg, active, attrs")
+          .order("name", { ascending: true }).order("id", { ascending: true }).range(off, off + 999);
+        if (error) throw error;
+        out.push(...((data ?? []) as Row[]));
+        if ((data ?? []).length < 1000) break;
+      }
+      return out;
+    };
+    const [all, bundles, untracked] = await Promise.all([
+      readAll(),
       getAllBundles(sb), // parent_id → 구성품[] (037 미적용이면 빈 맵 → 치환 없음)
-      getUntracked(sb), // 재고 화면(재고 이동)이 '재고 관리 사용 안함' 품목을 빼도록 표식만 붙인다 — 여기서 거르지 않는다
+      getUntracked(sb), // 실패하면 던진다 → 아래 catch 에서 500(위 주석)
     ]);
-    if (error) throw error;
-    const all = data ?? [];
 
     // 구성품 원가/부피 조회용 전체 맵(비활성 포함 — 구성품이 비활성일 수 있음)
     const byId = new Map<string, { cost: number; vol: number | null }>();

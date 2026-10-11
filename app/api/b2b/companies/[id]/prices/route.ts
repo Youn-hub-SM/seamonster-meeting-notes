@@ -50,7 +50,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const b = (await req.json()) as { product_id?: string; unit_price?: unknown; memo?: string };
     const product_id = String(b.product_id || "");
     if (!product_id) return NextResponse.json({ ok: false, error: "상품을 선택하세요." }, { status: 400 });
-    const unit_price = Math.max(0, Math.round(Number(b.unit_price) || 0));
+    // 빈 값·숫자 아님은 0원으로 저장하지 않는다 — 0원 단가가 이후 발주에 자동으로 채워진다(기본가 복귀는 '삭제')
+    const rawPrice = b.unit_price == null ? "" : String(b.unit_price).replace(/,/g, "").trim();
+    const parsed = Number(rawPrice);
+    if (rawPrice === "" || !Number.isFinite(parsed) || parsed < 0) {
+      return NextResponse.json({ ok: false, error: "단가를 숫자로 입력하세요." }, { status: 400 });
+    }
+    const unit_price = Math.round(parsed);
     const sb = supabaseAdmin();
     const { error } = await sb.from("company_product_prices").upsert(
       { company_id: id, product_id, unit_price, memo: String(b.memo || "").trim() || null, updated_at: new Date().toISOString() },

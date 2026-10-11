@@ -22,8 +22,8 @@ export const GUARANTEE_LABEL = "네이버 도착보장";
 const IDX = { dbNo: 0, orderNo: 1, name: 2, zip: 3, addr: 4, phone1: 5, phone2: 6, product: 7, qty: 8, msg: 9, sku: 10, date: 11, prop: 12 };
 
 // 박스타입/기본운임 구간 (주문 총중량 kg). 값 바뀌면 여기만 수정.
-export function boxType(w: number): number { return w <= 2.7 ? 1 : w <= 5.2 ? 2 : 3; }
-export function baseFee(w: number): number { return w <= 2.7 ? 2700 : w <= 5.2 ? 3300 : 3900; }
+export function boxType(w: number): number { return boxTypeOf(w, DEFAULT_RATES.boxTiers); }
+export function baseFee(w: number): number { return baseFeeOf(w, DEFAULT_RATES.boxTiers); }
 export const GUAR_SURCHARGE = 143; // 도착보장 건당 운임(원). 이제 도착보장 '기본운임'에 143×건이 포함됨(추가운임은 제주 등 수동).
 
 // 택배량 집계용 박스종류(주문 총중량 구간). 배송일지 '해당 주문건 박스 종류'와 동일.
@@ -85,6 +85,10 @@ export type FulfillResult = {
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[]; // (주문일 L열 × SKU)별 출고수량(정기배송 제외) — 재고 출고를 주문일 축으로 기록
 };
 
+// 중량 합 정규화(g 단위) — 부동소수 합(1.6×3+0.4 = 5.200000000000001)이 구간 경계(≤5.2·≤1.7)를 넘어
+//  박스타입·기본운임·박스 종류가 한 단계 위로 잡히던 결함 방지.
+const kg3 = (w: number) => Math.round(w * 1000) / 1000;
+
 // rows: 헤더 제외한 데이터행(A~M). codeMap: 단품코드(대문자) → CodeInfo. keywords: 주소 경고어.
 //  rates: 요율(기본운임 구간·도착보장 추가).
 export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, keywords: string[], rates: FulfillRates = DEFAULT_RATES, cats: BoxCat[] = DEFAULT_BOX_CATS): FulfillResult {
@@ -114,7 +118,7 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
     if (!info && raw) unmatched.add(raw);
     const t = (info?.order_weight ?? 0) * (Number(r[IDX.qty]) || 0);
     const k = gkey(r);
-    groupW.set(k, (groupW.get(k) ?? 0) + t);
+    groupW.set(k, kg3((groupW.get(k) ?? 0) + t));
     const db = String(r[IDX.dbNo] ?? "").trim();
     if (db) { const s = groupDb.get(k) ?? new Set<string>(); s.add(db); groupDb.set(k, s); }
     if (!groupAddr.has(k)) groupAddr.set(k, String(r[IDX.addr] ?? "").replace(/\s+/g, ""));
@@ -148,7 +152,7 @@ export function buildCnplus(rows: unknown[][], codeMap: Map<string, CodeInfo>, k
   const superW = new Map<string, number>();       // 병합 후 박스별 총중량 (키의 타입 접미사 G/N = 도착보장 여부)
   for (const [k, U] of groupW) {
     const r0 = find(k);
-    superW.set(r0, (superW.get(r0) ?? 0) + U);
+    superW.set(r0, kg3((superW.get(r0) ?? 0) + U));
   }
   const mergedParcels = groupW.size - superW.size; // 병합으로 줄어든 박스 수
 

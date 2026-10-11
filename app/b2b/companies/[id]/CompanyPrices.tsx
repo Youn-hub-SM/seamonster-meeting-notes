@@ -104,7 +104,9 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
 function PriceRow({ p, busy, onSave, onRemove }: { p: Price; busy: boolean; onSave: (v: number) => void; onRemove: () => void }) {
   const [v, setV] = useState(String(p.unit_price));
   useEffect(() => { setV(String(p.unit_price)); }, [p.unit_price]);
-  const changed = Math.round(Number(v) || 0) !== p.unit_price;
+  // 빈 칸은 저장 대상이 아니다(0원 단가로 저장되면 이후 발주에 0원이 채워진다 — 기본가 복귀는 '삭제')
+  const valid = v.trim() !== "" && Number.isFinite(Number(v)) && Number(v) >= 0;
+  const changed = valid && Math.round(Number(v)) !== p.unit_price;
   return (
     <tr>
       <td><strong>{p.name}</strong>{p.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{p.sku}</span> : null}{p.spec ? <span className="sm-faint" style={{ marginLeft: 4, fontSize: 12 }}>· {p.spec}</span> : null}</td>
@@ -112,7 +114,7 @@ function PriceRow({ p, busy, onSave, onRemove }: { p: Price; busy: boolean; onSa
       <td className="num sm-faint">{p.default_price.toLocaleString()}</td>
       <td>
         <div className="sm-row" style={{ gap: 6, justifyContent: "flex-end" }}>
-          {changed && <button className="b2b-btn-primary" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => onSave(Math.round(Number(v) || 0))}>저장</button>}
+          {changed && <button className="b2b-btn-primary" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => onSave(Math.round(Number(v)))}>저장</button>}
           <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} disabled={busy} onClick={onRemove}>삭제</button>
         </div>
       </td>

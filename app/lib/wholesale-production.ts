@@ -29,6 +29,7 @@ export interface PrReceipt {
   memo: string | null;
   received_by: string | null;
   created_at: string;
+  inv_txn_id?: string | null; // 연결된 재고 원장 — 있으면 원장 주인은 입고 및 출고·재고 이동(여기선 연결 해제만, S11)
 }
 
 // 요청 품목(라인) + 입고 집계
@@ -40,7 +41,8 @@ export interface PrItem {
   spec: string | null;
   unit: string;
   requested_qty: number;
-  received_qty: number;     // Σ receipts.qty
+  received_qty: number;     // Σ receipts.qty — 프로모션은 소매 합류(음수 연결)를 뺀 순확보
+  released_qty?: number;    // 프로모션: 마감·취소로 소매에 넘어간 자기 몫(음수 연결 합의 절댓값) — 표시용
   memo: string | null;
   receipts: PrReceipt[];
 }
@@ -99,6 +101,8 @@ export interface ProductionRequest {
   // 진행 집계(목록용)
   total_requested: number;
   total_received: number;
+  total_released?: number;      // 프로모션: 소매로 합류한 자기 몫 합(표시용)
+  promo_released_at?: string | null; // 136 — 프로모션 마감·취소의 소매 합류 완료 시각. 닫혔는데 null = 합류 미확인(미적용이면 undefined)
 }
 
 // 요청서에 없던 품목이 그 주간에 입고됐을 때 자동으로 생기는 품목 줄의 메모(요청수량 0) — 2026-09-18 대표 확정.

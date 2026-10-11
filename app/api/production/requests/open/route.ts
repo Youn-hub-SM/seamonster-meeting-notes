@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { isFactoryPurpose } from "@/app/lib/wholesale-production";
+import { getOpenInboundByProduct, type InboundRow } from "@/app/lib/production-inbound";
 
 export const dynamic = "force-dynamic";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -89,7 +90,18 @@ export async function GET(req: NextRequest) {
       for (const r of rows) r.full = false;
     }
     const def = fullOk ? rows.find((r) => r.in_window && !r.full) : undefined;
-    return NextResponse.json({ ok: true, date, requests: rows, default_id: def?.id ?? null, full_ok: fullOk });
+    // ?remain=1 — 품목별 열린 제조사 요청서 잔여(입고 예정과 같은 규칙). 입고 화면이 '연결 안 함'으로 저장하려는 품목에
+    //  잔여가 있으면 확인을 띄우는 데 쓴다(S9 — 조기 납품을 연결 없이 넣으면 현재고와 입고 예정에 이중으로 잡혀 권장이 과소).
+    //  집계 실패면 remain_ok:false(화면은 경고 없이 저장하지 말고 알린다).
+    let remain: Record<string, { qty: number; reqs: { req_no: string | null; qty: number }[] }> | undefined;
+    let remainOk: boolean | undefined;
+    if (req.nextUrl.searchParams.get("remain") === "1") {
+      const m = await getOpenInboundByProduct(sb, today);
+      remainOk = m !== null;
+      remain = {};
+      for (const [pid, row] of m ?? new Map<string, InboundRow>()) remain[pid] = { qty: row.qty, reqs: row.reqs.map((x) => ({ req_no: x.req_no, qty: x.qty })) };
+    }
+    return NextResponse.json({ ok: true, date, requests: rows, default_id: def?.id ?? null, full_ok: fullOk, ...(remain ? { remain_by_product: remain, remain_ok: remainOk } : {}) });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }

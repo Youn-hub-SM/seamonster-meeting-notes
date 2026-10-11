@@ -28,9 +28,17 @@ async function rpc<T = Record<string, unknown>>(fn: string, args: Record<string,
 }
 const n = (v: unknown) => Number(v || 0);
 
+// 최신 매출일 = 오늘(KST) 이하 최신 주문일 — 미래 날짜 행(미리 발송완료한 도매, 연도 오타)을 기준일로 쓰지 않는다.
+//  133 은 RPC 가 이미 미래를 뺀다. 미적용이면 미래 포함 max 가 오므로 오늘 이하 최신일을 직접 찾는다.
 export async function maxOrderDate(): Promise<string | null> {
   const b = await rpc("sales_date_bounds", {});
-  return b[0]?.max_date ? String(b[0].max_date) : null;
+  const max = b[0]?.max_date ? String(b[0].max_date) : null;
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  if (!max || max <= today) return max;
+  const { data, error } = await supabaseAdmin().from("sales_orders").select("order_date")
+    .lte("order_date", today).order("order_date", { ascending: false }).limit(1);
+  if (error) throw new Error(`sales_orders: ${error.message}`);
+  return data?.[0]?.order_date ? String(data[0].order_date) : null;
 }
 
 export type ChannelCum = { name: string; year: number; last_year: number; month: number; prev_month: number };
@@ -64,9 +72,13 @@ export async function computeDailyStats(baseIso?: string): Promise<DailyStats> {
   const year = bd.getFullYear(), month = bd.getMonth() + 1, day = bd.getDate();
   const prevDate = addDays(bd, -1);
 
-  const [cum, chCum, winSum, chWin, top, nr, ext, prevSum] = await Promise.all([
+  const monthStart = iso(new Date(year, month - 1, 1));
+  const [cum, chCum, chYtd, chMtd, winSum, chWin, top, nr, ext, prevSum] = await Promise.all([
     rpc("sales_cumulative", { p_year: year, p_month: month }),
     rpc("sales_channel_cumulative", { p_year: year, p_month: month }),
+    // 채널별 올해·이번달 누적은 기준일까지만(연·월 전체 RPC 는 기준일 뒤 매출까지 더한다)
+    rpc("sales_channel_window", { p_from: `${year}-01-01`, p_to: iso(bd) }),
+    rpc("sales_channel_window", { p_from: monthStart, p_to: iso(bd) }),
     rpc("sales_summary", { p_from: iso(wStart), p_to: iso(wEnd) }),
     rpc("sales_channel_window", { p_from: iso(wStart), p_to: iso(wEnd) }),
     rpc("sales_top_sku", { p_from: iso(wStart), p_to: iso(wEnd), p_limit: 10 }),
@@ -82,21 +94,25 @@ export async function computeDailyStats(baseIso?: string): Promise<DailyStats> {
   const [ytdCur, ytdPrev, mtdCur, mtdPrev] = await Promise.all([
     rpc("sales_summary", { p_from: `${year}-01-01`, p_to: iso(bd) }),
     rpc("sales_summary", { p_from: `${year - 1}-01-01`, p_to: iso(lyEnd) }),
-    rpc("sales_summary", { p_from: iso(new Date(year, month - 1, 1)), p_to: iso(bd) }),
+    rpc("sales_summary", { p_from: monthStart, p_to: iso(bd) }),
     rpc("sales_summary", { p_from: iso(new Date(pmEnd.getFullYear(), pmEnd.getMonth(), 1)), p_to: iso(pmEnd) }),
   ]);
   const ytdSales = n(ytdCur[0]?.revenue), ytdPrevSales = n(ytdPrev[0]?.revenue);
   const mtdSales = n(mtdCur[0]?.revenue), mtdPrevSales = n(mtdPrev[0]?.revenue);
 
   const c = cum[0] || {};
-  const thisYear = n(c.this_year), lastYear = n(c.last_year), thisMonth = n(c.this_month), prevMonth = n(c.prev_month);
+  // 올해·이번달 누적과 런레이트 분자는 기준일까지(ytd·mtd) — 이른 기준일로 만들면 그 뒤 매출이 섞여 전망이 부풀던 것 수정.
+  //  작년·지난달 '전체' 합은 비교 대상이라 연·월 전체 그대로.
+  const thisYear = ytdSales, lastYear = n(c.last_year), thisMonth = mtdSales, prevMonth = n(c.prev_month);
   const monthRunrate = day > 0 ? thisMonth / day * daysInMonth(year, month) : 0;
   const yearDays = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;  // 윤년 인식(분모 dayOfYear도 윤년 반영)
   const yearRunrate = dayOfYear(bd) > 0 ? thisYear / dayOfYear(bd) * yearDays : 0;
 
   const channels = chCum.map((r) => String(r.channel)).filter(Boolean).sort();
   const channel_summary: Record<string, ChannelCum> = {};
-  for (const r of chCum) channel_summary[String(r.channel)] = { name: String(r.channel), year: n(r.this_year), last_year: n(r.last_year), month: n(r.this_month), prev_month: n(r.prev_month) };
+  const ytdBy = new Map(chYtd.map((r) => [String(r.channel), n(r.revenue)]));
+  const mtdBy = new Map(chMtd.map((r) => [String(r.channel), n(r.revenue)]));
+  for (const r of chCum) channel_summary[String(r.channel)] = { name: String(r.channel), year: ytdBy.get(String(r.channel)) || 0, last_year: n(r.last_year), month: mtdBy.get(String(r.channel)) || 0, prev_month: n(r.prev_month) };
   const channel_window: Record<string, number> = {};
   for (const r of chWin) channel_window[String(r.channel)] = n(r.revenue);
 

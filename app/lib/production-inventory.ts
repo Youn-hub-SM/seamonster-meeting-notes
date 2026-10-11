@@ -1,8 +1,9 @@
 import { supabaseAdmin } from "./supabase";
-import { getLedgerVelocity, isMissingSchemaError } from "./production-velocity";
+import { getLedgerVelocity } from "./production-velocity";
+import { readAll, readStockMap } from "./inventory-template";
 import { RESERVED_CHANNELS } from "./inventory";
-import { getPromoForwardBySku, getPromoSoldInWindow } from "./production-promotions";
-import { getSafetyAdjusts, effectiveDelta, effectiveExclude } from "./production-safety-adjust";
+import { getPromotionsWithOk, promoForwardFrom, promoSoldFrom } from "./production-promotions";
+import { getSafetyAdjustsWithOk, effectiveDelta, effectiveExclude, type SafetyAdjust } from "./production-safety-adjust";
 import { LINK_B2B_ORDERS_TO_PRODUCTION } from "./production-config";
 import { scheduleHorizon, type ScheduleHorizon } from "./production-schedule";
 import { getUntracked } from "./stock-tracked";
@@ -64,6 +65,7 @@ export interface InventoryResult {
   schedule: ScheduleHorizon; // 위 일수의 근거 날짜(계산일·판매 가능일·다음 요청일) — 화면·메모 표시용
   inboundOk: boolean;        // 입고 예정 집계 성공 여부 — false 면 권장이 실제보다 클 수 있다(화면이 경고)
   wholesaleReqOk: boolean;   // 도매 요청 잔여 집계 성공 여부(도매 채널만 의미) — false 면 도매 권장이 이미 요청한 양을 못 뺀 값
+  settingsOk: boolean;       // 행사 일정·안전재고 보정 조회 성공 여부(소매·전체만 의미) — false 면 행사 스파이크·보정이 빠진 값(S4)
   velocitySpanDays: number;  // 출고 평균이 커버한 일수
   velocityCapped: boolean;   // 표본 상한에 걸려 일부만 집계했는지
 }
@@ -75,35 +77,27 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   const sb = supabaseAdmin();
 
   // 1) 자체 원장 현재고(품목당 1행 집계) + 제품표(sku·name) — 박스히어로 API 대신.
-  const stockRpc = async () => {
-    if (channel) {
-      const r = await sb.rpc("inventory_stock", { asof: null, chan: channel });
-      // 036 미적용(chan 시그니처 없음 = PGRST202)만 전 칸 합으로 폴백. 일시 오류는 그대로 돌려 아래서 던진다 —
-      //  모든 오류에서 폴백하면 그 칸 재고에 4칸 합이 조용히 들어가 권장이 대폭 과소(#11)
-      if (!r.error || r.error.code !== "PGRST202") return r;
-    }
-    return sb.rpc("inventory_stock", { asof: null });
-  };
+  //  공용 readStockMap(S1·S4) — RPC 결과도 서버 Max Rows(1000)에 잘리므로 페이지 끝까지 읽는다(잘린 품목은 '원장 없음'이 되어
+  //  권장이 과대). 036 미적용(chan 시그니처 없음 = PGRST202)만 전 칸 합으로 폴백하고 일시 오류는 던진다 —
+  //  모든 오류에서 폴백하면 그 칸 재고에 4칸 합이 조용히 들어가 권장이 대폭 과소(#11).
+  //  기준은 asof 없음(오늘 뒤 발송일 선점까지 뺀 가용) 그대로 — D1(생산 권장·주간 계산 기준 유지).
+  const stockRpc = () => readStockMap(sb, { asof: null, chan: channel ?? null });
   // 전체(채널 미지정 = 생산 일정 item-stats)는 chan null = 4칸 합. 확보분(프로모션·도매 대량)은 가용 재고가
   //  아니다(기획 4절) — 목표에서 행사 가산을 뗐으므로 풀도 함께 빼야 짝이 맞는다(기획 9-3 표 '과소' 행, #12).
-  //  결과 = 소매 + 도매. chan 시그니처 없음(PGRST202)이면 칸 자체가 없으니 뺄 것도 없다.
+  //  결과 = 소매 + 도매. chan 시그니처 없음(PGRST202)이면 칸 자체가 없으니 뺄 것도 없다(빈 맵).
   const reservedRpc = async () => {
-    if (channel) return [] as { product_id: string; qty: number }[];
-    const rs = await Promise.all(RESERVED_CHANNELS.map((c) => sb.rpc("inventory_stock", { asof: null, chan: c })));
-    const out: { product_id: string; qty: number }[] = [];
-    for (const r of rs) {
-      if (r.error) { if (isMissingSchemaError(r.error)) continue; throw r.error; }
-      out.push(...((r.data as { product_id: string; qty: number }[] | null) ?? []));
-    }
-    return out;
+    if (channel) return [] as Map<string, number>[];
+    return Promise.all(RESERVED_CHANNELS.map((c) => readStockMap(sb, { asof: null, chan: c, onMissingChan: "empty" })));
   };
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
   // 입고 예정 — 제조사 생산 입고는 소매 채널로 들어오므로 소매·전체 수식에서만 뺀다.
   //  도매 수식의 부족은 소매→도매 이동으로 채워지는 몫이라 제조사 잔여를 빼면 이중 차감이 된다.
   //  가장 무거운 원장 속도 조회와 나란히 돌려 지연을 숨긴다.
-  const [stockRes, prodRes, velocity, inboundByProduct, reservedRows, untracked, wholesaleReqByProduct] = await Promise.all([
+  type P = { id: string; sku: string | null; name: string };
+  const [stockByProduct, prodRows, velocity, inboundByProduct, reservedMaps, untracked, wholesaleReqByProduct] = await Promise.all([
     stockRpc(),
-    sb.from("products").select("id, sku, name"), // 전 품목(수요 매칭은 비활성 포함)
+    // 전 품목(수요 매칭은 비활성 포함) — 1000행에 잘리면 잘린 품목의 재고·수요가 통째로 빠진다(S4)
+    readAll<P>((a, b) => sb.from("products").select("id, sku, name").order("id", { ascending: true }).range(a, b)),
     getLedgerVelocity(undefined, channel), // 1b) 소진 속도(최근 출고 일평균) — 채널별
     channel === "도매" ? Promise.resolve(new Map<string, InboundRow>()) : getOpenInboundByProduct(sb, today),
     reservedRpc(), // 전체 조회에서만 확보분 칸(프로모션·도매 대량) 차감용
@@ -113,21 +107,19 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   ]);
   const inboundOk = inboundByProduct !== null;
   const wholesaleReqOk = channel !== "도매" || wholesaleReqByProduct !== null; // 실패면 R=0(= 종전 동작) + 화면 경고
-  if (stockRes.error) throw stockRes.error;
-  if (prodRes.error) throw prodRes.error;
 
-  const stockByProduct = new Map<string, number>();
-  for (const t of (stockRes.data as { product_id: string; qty: number }[] | null) ?? []) stockByProduct.set(t.product_id, Number(t.qty) || 0);
   // 4칸 합 − 확보분(프로모션·도매 대량) = 소매 + 도매 (#12). 원장에 없는 품목은 건너뜀(키 추가 안 함)
-  for (const t of reservedRows) {
-    if (stockByProduct.has(t.product_id)) stockByProduct.set(t.product_id, (stockByProduct.get(t.product_id) || 0) - (Number(t.qty) || 0));
+  for (const m of reservedMaps) {
+    for (const [pid, q] of m) {
+      if (stockByProduct.has(pid)) stockByProduct.set(pid, (stockByProduct.get(pid) || 0) - q);
+    }
   }
   // 프로모션 풀은 소매 보유에 더하지 않는다(4단계·기획 결정 9·10). 행사는 이제 주간 요청서가 세지
   //  않으므로(결정 7·8) 목표에서 행사 가산도 함께 뺐다 — 둘은 짝이라 한쪽만 떼면 과잉·과소로 어긋난다.
   //  소매 = 평상시 수요 대 평상시 재고. 확보분은 자기 칸에 서고 생산은 제조사와 협의한다.
   // SKU(대문자) → {name, stock}. 원장에 거래내역이 있는(=inventory_stock 에 잡히는) 제품만 현재고 보유.
   const stockBySku = new Map<string, { name: string; stock: number }>();
-  for (const p of prodRes.data ?? []) {
+  for (const p of prodRows) {
     if (p.sku && stockByProduct.has(p.id)) stockBySku.set(String(p.sku).toUpperCase(), { name: p.name, stock: stockByProduct.get(p.id) || 0 });
   }
 
@@ -139,17 +131,21 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   const sched = scheduleHorizon(today); // 생산 일정(D+8 판매 가능, 매주 수요일 요청)에서 목표·부족 기준 일수
   const { leadDays, cycleDays, horizonDays } = sched;
   const wholesale = channel === "도매"; // 행사·수동 보정은 소매 판매 장치 — 도매 수식에는 미적용
-  const [promoForward, promoSold, adjusts] = wholesale
-    ? [{} as Record<string, number>, {} as Record<string, number>, {} as Awaited<ReturnType<typeof getSafetyAdjusts>>]
-    : await Promise.all([
-        getPromoForwardBySku(today, horizonDays),  // 앞으로 확보할 남은 행사분(목표 일수 안) — 표시용
-        getPromoSoldInWindow(windowStart, today),  // 집계창에 이미 나간 행사분(속도에서 제거)
-        getSafetyAdjusts(),
-      ]);
-  // 2) 제품표: product_id → sku / name (위에서 받은 prodRes 재사용)
+  //  조회 실패는 빈 값으로 계속 돌되 settingsOk=false 로 알린다 — 행사 출고를 속도에서 못 빼 목표가 부풀 수 있다(S4).
+  let promoForward: Record<string, number> = {}, promoSold: Record<string, number> = {};
+  let adjusts: Record<string, SafetyAdjust> = {};
+  let settingsOk = true;
+  if (!wholesale) {
+    const [promos, adj] = await Promise.all([getPromotionsWithOk(), getSafetyAdjustsWithOk()]);
+    promoForward = promoForwardFrom(promos.list, today, horizonDays); // 앞으로 확보할 남은 행사분(목표 일수 안) — 표시용
+    promoSold = promoSoldFrom(promos.list, windowStart, today);       // 집계창에 이미 나간 행사분(속도에서 제거)
+    adjusts = adj.adjusts;
+    settingsOk = promos.ok && adj.ok;
+  }
+  // 2) 제품표: product_id → sku / name (위에서 받은 prodRows 재사용)
   const skuByProduct = new Map<string, string>();
   const nameBySku = new Map<string, string>();
-  for (const p of prodRes.data ?? []) {
+  for (const p of prodRows) {
     if (p.sku) {
       skuByProduct.set(p.id, p.sku);
       const k = String(p.sku).toUpperCase();
@@ -289,6 +285,7 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
     schedule: sched,
     inboundOk,
     wholesaleReqOk,
+    settingsOk,
     velocitySpanDays: velocity.spanDays,
     velocityCapped: velocity.capped,
   };

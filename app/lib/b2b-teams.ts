@@ -88,6 +88,9 @@ function toAdaptiveCard(text: string, opts?: { title?: string; link?: string | n
 }
 
 // 저수준 발송 — Workflows 웹훅은 접수 시 200/202 를 반환한다.
+//  타임아웃 필수(2026-10-11 원장 점검) — 저장 API 대부분이 알림을 await 하므로 웹훅이 멈추면
+//  함수 시간 제한까지 매달려 뒤 단계(상태 재도출·매출 동기화·연결)가 실행되지 않는다. 접수는 즉시라 8초면 충분.
+const TEAMS_TIMEOUT_MS = 8000;
 export async function sendTeamsWebhook(
   url: string,
   text: string,
@@ -99,6 +102,7 @@ export async function sendTeamsWebhook(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(toAdaptiveCard(text, opts)),
+      signal: AbortSignal.timeout(TEAMS_TIMEOUT_MS),
     });
     if (!res.ok) {
       const detail = (await res.text().catch(() => "")).slice(0, 200);

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, DEFAULT_BOX_CATS, validateBoxCats, type RateVersion, type BoxTier, type BoxCat } from "@/app/lib/fulfill-rates";
-import { DEDUP_DEFAULT, type DedupConfig, type DedupMatch } from "@/app/lib/fulfill-dedup";
+import { DEDUP_DEFAULT, DEDUP_MIN_DAYS, DEDUP_MAX_DAYS, type DedupConfig, type DedupMatch } from "@/app/lib/fulfill-dedup";
 
 const num = (v: string) => Math.max(0, Math.round(Number(v) || 0));
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -18,6 +18,7 @@ export default function FulfillSettingsPage() {
 
   // 중복 방지 설정
   const [dedup, setDedup] = useState<DedupConfig>(DEDUP_DEFAULT);
+  const [savedDedup, setSavedDedup] = useState<DedupConfig | null>(null); // 저장된 값 — 끄기·기간 축소 경고 기준
   const [processedCount, setProcessedCount] = useState<number | null>(null);
   const [dedupSaving, setDedupSaving] = useState(false);
   const [dedupMsg, setDedupMsg] = useState("");
@@ -25,26 +26,23 @@ export default function FulfillSettingsPage() {
 
   useEffect(() => {
     fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); if (j.ok && Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats); if (!j.ok) setLoadErr(true); }).catch(() => setLoadErr(true)).finally(() => setLoading(false));
-    fetch("/api/fulfill/dedup", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) { setDedup(j.config); setProcessedCount(j.processedCount); } }).catch(() => {});
+    fetch("/api/fulfill/dedup", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) { setDedup(j.config); setSavedDedup(j.config); setProcessedCount(j.processedCount); } }).catch(() => {});
   }, []);
 
   async function saveDedup() {
+    // 끄거나 대조 기간을 줄이면 이미 출고한 주문이 다음 누적 파일에서 걸러지지 않아 CN·출고·재고 차감이 다시 된다
+    const prev = savedDedup ?? DEDUP_DEFAULT;
+    const warn = [
+      prev.enabled && !dedup.enabled ? "중복 방지를 끄면 이미 출고한 주문이 섞인 파일을 올려도 걸러지지 않습니다." : "",
+      dedup.enabled && dedup.windowDays < prev.windowDays ? `대조 기간을 ${prev.windowDays}일 → ${dedup.windowDays}일로 줄이면 그보다 오래 전에 출고한 주문은 걸러지지 않습니다.` : "",
+    ].filter(Boolean);
+    if (warn.length && !window.confirm(`${warn.join("\n")}\n그 주문은 CN 파일·출고·재고 차감에 다시 들어갑니다.\n\n그래도 저장할까요?`)) return;
     setDedupSaving(true); setDedupMsg("");
     try {
       const r = await fetch("/api/fulfill/dedup", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dedup) });
       const j = await r.json(); if (!j.ok) throw new Error(j.error || "저장 실패");
-      setDedup(j.config); setDedupMsg("저장됨");
+      setDedup(j.config); setSavedDedup(j.config); setDedupMsg("저장됨");
     } catch (e) { setDedupMsg(e instanceof Error ? e.message : "저장 실패"); }
-    setDedupSaving(false);
-  }
-  async function clearProcessed() {
-    if (!window.confirm("처리완료 주문 기록을 모두 지울까요?\n중복 판정 기준이 비워집니다(재고·배송일지에는 영향 없음). 이후 출고 완료분부터 다시 쌓입니다.")) return;
-    setDedupSaving(true); setDedupMsg("");
-    try {
-      const r = await fetch("/api/fulfill/dedup", { method: "DELETE" });
-      const j = await r.json(); if (!j.ok) throw new Error(j.error || "초기화 실패");
-      setProcessedCount(0); setDedupMsg("처리완료 기록을 비웠습니다");
-    } catch (e) { setDedupMsg(e instanceof Error ? e.message : "초기화 실패"); }
     setDedupSaving(false);
   }
 
@@ -82,14 +80,14 @@ export default function FulfillSettingsPage() {
         <div>
           <h1 className="b2b-page-title">온라인 발주 설정</h1>
         </div>
-        <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>{saving ? "저장 중..." : "저장"}</button></div>
+        <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading || loadErr}>{saving ? "저장 중..." : "저장"}</button></div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
       {ok && <div className="sm-success">✓ {ok}</div>}
 
-      {/* 배송일지 박스 종류 — 택배량 집계 단위 */}
-      <div className="b2b-card" style={{ marginBottom: 16 }}>
+      {/* 배송일지 박스 종류 — 택배량 집계 단위. 단가 로드 실패·로딩 중엔 잠근다(기본값이 저장값을 덮어쓰지 않게) */}
+      <fieldset className="b2b-card" disabled={loading || loadErr} style={{ marginBottom: 16, border: 0, padding: 0, minWidth: 0, opacity: loadErr ? 0.5 : 1 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">배송일지 박스 종류</span></div>
         <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>이하(kg) = 주문 총중량 · 금액(원) = 박스 자재 단가(면세)</p>
         <table className="b2b-table" style={{ fontSize: 15 }}>
@@ -137,7 +135,7 @@ export default function FulfillSettingsPage() {
           return errs.length ? <div className="b2b-error" style={{ marginTop: 10, whiteSpace: "pre-line" }}>{errs.join("\n")}</div> : null;
         })()}
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>이름을 바꾸거나 지워도 과거 배송일지 기록은 그대로 남습니다.</p>
-      </div>
+      </fieldset>
 
       {/* 중복 방지 — 이미 출고 처리된 주문 자동 제외 기준 */}
       <div className="b2b-card" style={{ marginBottom: 16 }}>
@@ -161,11 +159,12 @@ export default function FulfillSettingsPage() {
           </div>
           <label className="sm-row" style={{ gap: 8, fontSize: 15, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontWeight: 600 }}>대조 기간</span>
-            최근 <input type="number" className="b2b-input" min={1} max={180} value={dedup.windowDays} onChange={(e) => setDedup({ ...dedup, windowDays: num(e.target.value) })} style={{ width: 70, textAlign: "right" }} /> 일
+            최근 <input type="number" className="b2b-input" min={DEDUP_MIN_DAYS} max={DEDUP_MAX_DAYS} value={dedup.windowDays} onChange={(e) => setDedup({ ...dedup, windowDays: num(e.target.value) })}
+              onBlur={() => setDedup((d) => ({ ...d, windowDays: Math.min(DEDUP_MAX_DAYS, Math.max(DEDUP_MIN_DAYS, d.windowDays || DEDUP_DEFAULT.windowDays)) }))} style={{ width: 70, textAlign: "right" }} /> 일
+            <span className="sm-faint" style={{ fontSize: 12 }}>최소 {DEDUP_MIN_DAYS}일</span>
           </label>
           <div className="sm-faint" style={{ fontSize: 12 }}>
-            현재 등록된 처리완료 주문: <strong>{processedCount == null ? "—" : processedCount.toLocaleString()}</strong>건
-            {processedCount != null && processedCount > 0 && <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8, color: "var(--sm-danger)" }} onClick={clearProcessed} disabled={dedupSaving}>기록 비우기</button>}
+            현재 등록된 처리완료 주문 키: <strong>{processedCount == null ? "—" : processedCount.toLocaleString()}</strong>건
           </div>
         </div>
         <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12 }}>

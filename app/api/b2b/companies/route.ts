@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { fetchAllPages } from "@/app/lib/sales-paging";
 import { normalizeCompany, CompanyInput } from "@/app/lib/b2b-types";
 import { logCompanyChange } from "@/app/lib/b2b-activity";
 
@@ -8,22 +9,21 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const sb = supabaseAdmin();
-    const [companiesRes, ordersRes] = await Promise.all([
-      sb.from("companies").select("*").order("name", { ascending: true }),
-      sb.from("orders").select("company_id, order_date"),
+    // 1,000행 상한 없이 끝까지 — 잘리면 거래처 '최근 발주일'이 조용히 틀어진다
+    const [companies0, orders] = await Promise.all([
+      fetchAllPages<{ id: string }>((lo, hi) => sb.from("companies").select("*").order("name", { ascending: true }).order("id").range(lo, hi), { label: "거래처" }),
+      fetchAllPages<{ company_id: string; order_date: string }>((lo, hi) => sb.from("orders").select("id, company_id, order_date").order("id").range(lo, hi), { label: "발주" }),
     ]);
-    if (companiesRes.error) throw companiesRes.error;
-    if (ordersRes.error) throw ordersRes.error;
 
     // 업체별 최근 발주일 계산
     const lastOrderByCompany = new Map<string, string>();
-    for (const o of (ordersRes.data ?? []) as { company_id: string; order_date: string }[]) {
+    for (const o of orders) {
       if (!o.company_id || !o.order_date) continue;
       const prev = lastOrderByCompany.get(o.company_id);
       if (!prev || o.order_date > prev) lastOrderByCompany.set(o.company_id, o.order_date);
     }
 
-    const companies = ((companiesRes.data ?? []) as { id: string }[]).map((c) => ({
+    const companies = companies0.map((c) => ({
       ...c,
       last_order_date: lastOrderByCompany.get(c.id) ?? null,
     }));

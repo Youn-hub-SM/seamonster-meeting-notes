@@ -4,7 +4,6 @@ import { extractErrorMsg } from "@/app/lib/supabase";
 import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 import { getInventoryRows } from "@/app/lib/production-inventory";
 import type { ScheduleHorizon } from "@/app/lib/production-schedule";
-import { getLedgerVelocity } from "@/app/lib/production-velocity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // 최대 40개 품목 표 추론 + 생각(medium)
@@ -58,16 +57,16 @@ export async function POST(req: Request) {
   try {
     let channel: "소매" | "도매" | undefined;
     try { const b = await req.json(); channel = b?.channel === "도매" ? "도매" : b?.channel === "소매" ? "소매" : undefined; } catch { /* body 없음 */ }
-    // 재고(공유 로직) + 소진속도(자체 원장) 병렬 — 채널별
-    const [inv, velocity] = await Promise.all([
-      getInventoryRows(channel),
-      getLedgerVelocity(undefined, channel),
-    ]);
+    // 재고(공유 로직) — 판매속도도 같은 행의 평상시 속도(r.dailyOut)를 쓴다. 원장 속도를 따로 다시 읽으면
+    //  행사 판매·'행사 출고 빼기'가 안 빠진 원 속도가 들어가, 같은 행의 안전재고(평상시 기준)와 어긋나고
+    //  예측판매가 행사분만큼 부풀어 과잉 생산을 권한다(item-stats·주간 초안과 같은 기준).
+    const inv = await getInventoryRows(channel);
+    const velocity = { spanDays: inv.velocitySpanDays, capped: inv.velocityCapped };
 
     const wholesale = channel === "도매";
     const rows: AdviceRow[] = inv.rows.map((r) => {
       const inbound = wholesale ? r.wholesaleReq : r.inbound; // 도매 = 도매 요청 잔여, 그 외 = 제조사 입고 예정
-      const dailySales = velocity.perSku[r.sku] || 0;
+      const dailySales = r.dailyOut;
       const predicted = Math.round(dailySales * inv.horizonDays);
       // 소진일수는 입고 예정까지 합친 재고 포지션 기준(시켜 둔 물량이 곧 들어온다)
       const daysOfCover = r.stock != null && dailySales > 0 ? Math.round((r.stock + inbound) / dailySales) : null;
@@ -100,7 +99,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         ok: true,
         advice: { summary: "지금 추가로 생산하거나 보충할 품목이 없습니다. 재고가 안정적입니다.", priorities: [], notes: [] },
-        velocity: { computedAt: velocity.computedAt, spanDays: velocity.spanDays, txCount: velocity.txCount, capped: velocity.capped },
+        velocity,
         rows: signal,
       });
     }
@@ -148,7 +147,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       advice,
-      velocity: { computedAt: velocity.computedAt, spanDays: velocity.spanDays, txCount: velocity.txCount, capped: velocity.capped },
+      velocity,
       rows: signal,
     });
   } catch (err) {

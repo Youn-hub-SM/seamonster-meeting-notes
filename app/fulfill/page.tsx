@@ -15,19 +15,38 @@ type Result = {
   unmatched: string[];
   outbound: { sku: string; name: string; qty: number; orderDate: string | null }[];
   sig?: string; // 배치 서명(batchSig) — ④ 출고가 그대로 전달해야 대기 키·중복 검사가 이 파일과 이어진다
+  hasKeys?: boolean;               // 대기 키 저장됨 — ④ 출고에 expectKeys 로 전달
+  dedupEnabled?: boolean;          // false = 중복 방지 꺼짐(이미 출고한 주문을 거르지 않음)
+  openOverlap?: { orders: number; batches: { fileName: string | null; at: string }[] } | { error: true } | null; // CN 받은 미출고 배치와 겹침
   excludedProcessed?: number;      // 이미 출고 처리돼 자동 제외된 주문 수(079)
   excludedOrderNos?: string[];
+  interruptedResume?: boolean;     // 재고가 안 빠진 중단된 출고의 파일을 다시 올림 — ④에서 이어서 차감
+  interruptedExcluded?: number;    // 제외한 주문 중 중단된 출고(재고 미차감)의 주문 수
   codeCount: number;
   files: { normal: FileOut; guarantee: FileOut | null; parcel: FileOut };
 };
 type DItem = { sku: string; name: string; qty: number; kind: "single" | "bundle" | "unmatched" | "ambiguous" | "untracked" };
 type DProd = { productId: string; name: string; option: string; need: number; current: number; after: number; short: boolean };
-type DispatchPreview = { items: DItem[]; products: DProd[]; shortages: number; message?: string; untrackedOnly?: boolean };
-type DispatchDone = { orderNo: string; groupId: string; dispatched: number; totalQty: number; shortages: number };
+type Unm = { sku: string; qty: number; kind: "unmatched" | "ambiguous" };
+type DispatchPreview = { items: DItem[]; products: DProd[]; shortages: number; message?: string; untrackedOnly?: boolean; unmatchedOnly?: boolean; unmatched?: Unm[] };
+type DispatchDone = { orderNo: string; groupId: string; dispatched: number; totalQty: number; shortages: number; already?: boolean; resumed?: number; closed?: number; unmatched?: Unm[]; unmatchedSaved?: boolean;
+  unmatchedNotSaved?: "no_column" | "no_table" | "same_day_force" }; // 목록을 못 남긴 이유(서버)
+// 재고가 빠지지 않은 코드 목록을 저장하지 못했을 때 안내 — 이유별(같은 날 다시 출고는 135 적용과 무관하게 남길 행이 없다)
+const UNM_NOT_SAVED: Record<NonNullable<DispatchDone["unmatchedNotSaved"]>, string> = {
+  same_day_force: "같은 날 다시 출고한 배치라 이 목록은 저장되지 않습니다 — 코드를 적어 두고, 상품마스터에 등록한 뒤 [입고 및 출고]에서 직접 출고하세요.",
+  no_column: "목록이 저장되지 않았습니다(migration 135 미적용) — 코드를 적어 두세요.",
+  no_table: "목록이 저장되지 않았습니다(출고 이력 표 없음, migration 065 미적용) — 코드를 적어 두세요.",
+};
+type OpenBatch = { sig: string; file_name: string | null; order_count: number | null; total_qty: number | null; downloaded_at: string; interrupted?: boolean };
+type UnmRow = { id: string; dispatch_date: string; order_no: string | null; codes: { sku: string; qty: number; registered: boolean }[] };
 
 const KW_KEY = "fulfill_addr_keywords";
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const STEPS = ["발주엑셀 업로드", "CN 파일 다운로드", "배송일지 기록", "상품 출고"];
+const hm = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
+const LEAVE_MSG = "CN 파일을 받았지만 ④ 상품 출고(재고 차감)를 아직 안 했습니다.\n\n그래도 나갈까요?";
+// 중단된 출고를 이어서 차감하지 않기로 했을 때 — 재고를 이미 맞췄으면 차감 없이 닫는다(서버 closeInterrupted)
+const CLOSE_GHOST_MSG = "그 사이 [입고 및 출고]에서 직접 기록했거나 실사로 재고를 이미 맞췄나요?\n\n[확인]을 누르면 재고를 차감하지 않고 앞선 출고를 '처리됨'으로 닫습니다. 모르면 [취소] 후 [입고 및 출고]에서 먼저 확인하세요.";
 
 function downloadB64(name: string, b64: string) {
   const bin = atob(b64);
@@ -62,13 +81,77 @@ export default function FulfillPage() {
   const [dispatchDone, setDispatchDone] = useState<DispatchDone | null>(null);
   const [dispatchErr, setDispatchErr] = useState(false); // 재고 미리보기 실패 — '품목 없음'과 구분(같으면 차감을 건너뛴 것으로 오인)
   const [dispatchRetry, setDispatchRetry] = useState(0);
+  const [cnDownloaded, setCnDownloaded] = useState(false); // CN 파일을 받음 — ④ 전에 나가면 확인
+  const [unmatchedAck, setUnmatchedAck] = useState(false);  // 재고가 안 빠지는 코드 동의
+  const [overlapAck, setOverlapAck] = useState(false);      // 미출고 배치와 겹침 확인
+  const [openBatches, setOpenBatches] = useState<OpenBatch[]>([]);
+  const [unmRows, setUnmRows] = useState<UnmRow[]>([]);
+  const [sideBusy, setSideBusy] = useState("");
 
   useEffect(() => { setKeywords(localStorage.getItem(KW_KEY) || ""); }, []);
+
+  // CN 을 받았지만 출고 안 한 배치 · 재고가 빠지지 않은 코드 — ① 화면에 계속 띄운다(S9·S12)
+  async function loadSide() {
+    try {
+      const [a, b] = await Promise.all([
+        fetch("/api/fulfill/pending", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/fulfill/unmatched", { cache: "no-store" }).then((r) => r.json()),
+      ]);
+      if (a.ok) setOpenBatches(a.batches || []);
+      if (b.ok) setUnmRows(b.rows || []);
+    } catch { /* 표시용 — 다음 로드 때 다시 */ }
+  }
+  useEffect(() => { void loadSide(); }, []);
+  async function discardBatch(b: OpenBatch) {
+    if (!window.confirm(`${b.file_name || "이 배치"}(${hm(b.downloaded_at)})를 발송하지 않았나요?\n목록에서 뺍니다.`)) return;
+    setSideBusy(b.sig);
+    try {
+      const j = await (await fetch("/api/fulfill/pending", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sig: b.sig, action: "discard" }) })).json();
+      if (!j.ok) throw new Error(j.error || "처리 실패");
+    } catch (e) { setError(e instanceof Error ? e.message : "처리 실패"); }
+    setSideBusy(""); void loadSide();
+  }
+  async function resolveUnm(row: UnmRow, action: "record" | "done") {
+    const msg = action === "record"
+      ? `${row.dispatch_date} 출고분 중 등록된 코드를 그날 날짜로 소매 재고에서 차감할까요?`
+      : `${row.dispatch_date} 출고분을 재고 기록 없이 목록에서 뺄까요?`;
+    if (!window.confirm(msg)) return;
+    setSideBusy(row.id);
+    try {
+      // 출고일 뒤 실사 조정이 있으면 서버가 409 countAfter 로 멈춘다 — 실사에 반영되지 않은 게 확실할 때만 ackCount 로 다시
+      let ackCount = false;
+      for (let i = 0; i < 2; i++) {
+        const r = await fetch("/api/fulfill/unmatched", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: row.id, action, ackCount }) });
+        const j = await r.json();
+        if (r.status === 409 && j.countAfter && !ackCount) {
+          if (!window.confirm(`${j.error}\n\n실사에 반영되지 않은 게 확실하면 [확인] — ${row.dispatch_date} 날짜로 차감합니다.`)) break;
+          ackCount = true; continue;
+        }
+        if (!j.ok) throw new Error(j.error || "처리 실패");
+        break;
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "처리 실패"); }
+    setSideBusy(""); void loadSide();
+  }
+
+  // CN 다운로드 기록 — 출고 완료 전까지 '미출고 배치'로 남는다
+  function markDownloaded() {
+    setCnDownloaded(true);
+    if (res?.hasKeys && res.sig) void fetch("/api/fulfill/pending", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sig: res.sig, action: "downloaded" }) }).catch(() => {});
+  }
+  const leaveRisk = cnDownloaded && !dispatchDone;
+  useEffect(() => {
+    if (!leaveRisk) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [leaveRisk]);
+  const okToLeave = () => !leaveRisk || window.confirm(LEAVE_MSG);
   function saveKeywords(v: string) { setKeywords(v); localStorage.setItem(KW_KEY, v); }
 
   // res 갱신 시 상품 출고 미리보기(재고 확인) 자동 로드
   useEffect(() => {
-    setDispatch(null); setDispatchDone(null); setDispatchErr(false);
+    setDispatch(null); setDispatchDone(null); setDispatchErr(false); setUnmatchedAck(false);
     const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty, orderDate: o.orderDate ?? null })) || [];
     if (!items.length) return;
     let cancel = false;
@@ -86,7 +169,7 @@ export default function FulfillPage() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setRecordOk(""); setLoading(true);
+    setFileName(file.name); setError(""); setRes(null); setAck(false); setMsgAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setLoading(true);
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("keywords", keywords);
@@ -157,6 +240,7 @@ export default function FulfillPage() {
         const g = res.files.guarantee;
         if (res.stats.normalCount > 0) downloadB64(res.files.normal.name, res.files.normal.b64);
         if (g) setTimeout(() => downloadB64(g.name, g.b64), 400);
+        if (res.stats.normalCount > 0 || g) markDownloaded();
       }
       setStep(2); return;
     }
@@ -166,25 +250,55 @@ export default function FulfillPage() {
     }
   }
 
-  async function commitDispatch(force = false) {
+  // 서버가 409 로 멈추면(같은 배치·중간에 끊긴 앞선 출고·이미 처리된 주문·중복 방지 꺼짐) 사람에게 묻고 그 플래그를 켜서 다시 보낸다.
+  //  inFlight(같은 배치가 방금 진행 중)는 묻지 않고 오류로 보여 준다 — 잠시 뒤 다시 누르면 끝났거나 '끊긴 출고'로 판정된다.
+  //  중단된 출고(interrupted)·그 뒤 실사·직접 기록(countAfter)에서 이어서 차감을 [취소]하면 '차감 없이 정리'를 한 번 더 묻는다.
+  async function commitDispatch() {
     const items = res?.outbound?.map((o) => ({ sku: o.sku, qty: o.qty, orderDate: o.orderDate ?? null })) || [];
     if (!items.length) return;
+    const flags = { force: false, allowOverlap: false, allowUnmatched: unmatchedAck, ackDedupOff: false, resumeInterrupted: false, ackCount: false, closeInterrupted: false };
+    const again = dispatch && dispatch.products.length > 0 ? " (재고가 또 차감됩니다)" : "";
     setDispatching(true); setError("");
     try {
-      const r = await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: true, force, sig: res?.sig }) });
-      const j = await r.json();
-      if (r.status === 409 && j.duplicate) {
-        setDispatching(false);
-        if (window.confirm(`${j.error}\n\n그래도 다시 출고할까요?${dispatch?.untrackedOnly ? "" : " (재고가 또 차감됩니다)"}`)) return commitDispatch(true);
-        return;
+      for (let i = 0; i < 9; i++) {
+        const r = await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: true, sig: res?.sig, expectKeys: !!res?.hasKeys, ...flags }) });
+        const j = await r.json();
+        if (r.status === 409 && j.duplicate && !flags.force) {
+          if (!window.confirm(`${j.error}\n\n그래도 다시 출고할까요?${again}`)) break;
+          flags.force = true; continue;
+        }
+        if (r.status === 409 && j.interrupted && !flags.resumeInterrupted && !flags.closeInterrupted) {
+          if (window.confirm(`${j.error}\n\n[확인]을 누르면 그 기록을 정리하고 지금(오늘 날짜로) 재고를 차감합니다. [취소]를 누르면 차감 없이 닫을지 묻습니다.`)) { flags.resumeInterrupted = true; continue; }
+          if (!window.confirm(CLOSE_GHOST_MSG)) break;
+          flags.closeInterrupted = true; continue;
+        }
+        if (r.status === 409 && j.countAfter && !flags.ackCount && !flags.closeInterrupted) {
+          if (window.confirm(`${j.error}\n\n그 기록에 이 출고분이 반영되지 않은 게 확실하면 [확인] — 오늘 날짜로 차감합니다. [취소]를 누르면 차감 없이 닫을지 묻습니다.`)) { flags.ackCount = true; continue; }
+          if (!window.confirm(CLOSE_GHOST_MSG)) break;
+          flags.resumeInterrupted = false; flags.closeInterrupted = true; continue;
+        }
+        if (r.status === 409 && j.overlap && !flags.allowOverlap) {
+          if (!window.confirm(`${j.error}\n\n실제로 다시 보냈으면 [확인], 아니면 [취소] 후 발주엑셀을 다시 올리세요.${again}`)) break;
+          flags.allowOverlap = true; continue;
+        }
+        if (r.status === 409 && j.dedupOff && !flags.ackDedupOff) {
+          if (!window.confirm(`${j.error}\n\n그래도 출고할까요?`)) break;
+          flags.ackDedupOff = true; continue;
+        }
+        if (r.status === 409 && j.needUnmatchedAck) setUnmatchedAck(false);
+        if (!j.ok) throw new Error(j.error || "출고 실패");
+        setDispatchDone(j); void loadSide();
+        break;
       }
-      if (!j.ok) throw new Error(j.error || "출고 실패");
-      setDispatchDone(j);
     } catch (e) { setError(e instanceof Error ? e.message : "출고 실패"); }
     setDispatching(false);
   }
 
-  function reset() { setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setRecordOk(""); setError(""); }
+  function reset() {
+    if (!okToLeave()) return;
+    setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setError("");
+    void loadSide();
+  }
 
   const msgWarns = res?.messageWarnings ?? [];
   // 완전히 같은 문장(공백 차이만 무시)은 한 줄로 합쳐 "윤현석 등 3명 · 문 앞" 으로 보인다 —
@@ -201,7 +315,13 @@ export default function FulfillPage() {
     return [...m.values()];
   })();
   // 주소 경고·배송메시지 각각 확인(체크)해야 다운로드가 풀린다
-  const blocked = !!res && ((res.addressWarnings.length > 0 && !ack) || (msgWarns.length > 0 && !msgAck));
+  const overlapWarn = !!res?.openOverlap && ("error" in res.openOverlap || res.openOverlap.orders > 0);
+  const blocked = !!res && ((res.addressWarnings.length > 0 && !ack) || (msgWarns.length > 0 && !msgAck) || (overlapWarn && !overlapAck));
+  const unm = dispatch?.unmatched ?? [];
+  const unmQty = unm.reduce((s, u) => s + u.qty, 0);
+  const dedupOffBanner = res && res.dedupEnabled === false && (
+    <div className="sm-warn"><strong>중복 방지 꺼짐</strong> — 이미 출고한 주문이 섞여도 걸러지지 않습니다. <Link className="sm-link" href="/fulfill/settings">설정</Link></div>
+  );
   const canJump = (i: number) => i === 0 || !!res;
   const canNext = step === 0 ? !!res : step === 1 ? !blocked : step === 2 ? true : false;
 
@@ -213,7 +333,7 @@ export default function FulfillPage() {
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6 }}>
           {res && <button className="b2b-btn-secondary" onClick={reset}>새 발주 시작</button>}
-          <Link className="b2b-btn-secondary" href="/fulfill/log">배송일지</Link>
+          <Link className="b2b-btn-secondary" href="/fulfill/log" onClick={(e) => { if (!okToLeave()) e.preventDefault(); }}>배송일지</Link>
         </div>
       </header>
 
@@ -249,14 +369,49 @@ export default function FulfillPage() {
               <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="예: 제주마루 702호, 군부대, 사서함" />
             </div>
             <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="b2b-btn-primary" onClick={() => fileRef.current?.click()} disabled={loading}>{loading ? "만드는 중..." : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
+              <button className="b2b-btn-primary" onClick={() => { if (okToLeave()) fileRef.current?.click(); }} disabled={loading}>{loading ? "만드는 중..." : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
               <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
               {fileName && <span className="sm-faint" style={{ fontSize: 12 }}>{fileName}</span>}
             </div>
           </section>
 
+          {openBatches.filter((b) => b.sig !== res?.sig).length > 0 && (
+            <div className="sm-warn" style={{ lineHeight: 1.6 }}>
+              <strong>CN 파일을 받았지만 출고 완료 안 한 배치 {openBatches.filter((b) => b.sig !== res?.sig).length}건</strong> — 발송했으면 같은 파일을 다시 올려 ④ 상품 출고까지 끝내세요.
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+                {openBatches.filter((b) => b.sig !== res?.sig).map((b) => (
+                  <li key={b.sig}>
+                    {b.file_name || "(파일명 없음)"} · {hm(b.downloaded_at)}{b.order_count != null ? ` · 주문 ${b.order_count.toLocaleString()}건` : ""}{b.total_qty != null ? ` · ${Number(b.total_qty).toLocaleString()}개` : ""}{b.interrupted ? " · 출고가 중간에 끊김(재고 미차감)" : ""}
+                    <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8 }} onClick={() => discardBatch(b)} disabled={sideBusy === b.sig}>발송 안 함</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {unmRows.length > 0 && (
+            <div className="b2b-error" style={{ lineHeight: 1.6 }}>
+              <strong>재고가 빠지지 않은 코드 {unmRows.length}건</strong> — 상품마스터에 등록한 뒤 [재고 차감 기록]. 그 사이 실사를 했으면 [확인 완료]만 누르세요(출고일 뒤 실사가 있으면 차감 전에 한 번 더 묻습니다).
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+                {unmRows.map((u) => (
+                  <li key={u.id}>
+                    {u.dispatch_date}{u.order_no ? ` · ${u.order_no}` : ""} · {u.codes.map((c) => `${c.sku} ${c.qty.toLocaleString()}개${c.registered ? "" : "(미등록)"}`).join(" · ")}
+                    <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8 }} onClick={() => resolveUnm(u, "record")} disabled={sideBusy === u.id || !u.codes.some((c) => c.registered)}>재고 차감 기록</button>
+                    <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8 }} onClick={() => resolveUnm(u, "done")} disabled={sideBusy === u.id}>확인 완료</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {res && (
             <>
+              {dedupOffBanner}
+              {res.interruptedResume && (
+                <div className="sm-warn"><strong>재고가 안 빠진 중단된 출고의 파일입니다</strong> — CN 파일을 이미 발송했으면 다시 올리지 말고 ④ 상품 출고로 바로 가세요. 그 사이 [입고 및 출고]에서 직접 기록했거나 실사로 맞췄으면 ④에서 차감 없이 닫으세요.</div>
+              )}
+              {(res.interruptedExcluded || 0) > 0 && (
+                <div className="sm-warn">제외한 주문 중 {res.interruptedExcluded}건은 재고가 안 빠진 중단된 출고의 주문입니다 — 그 배치의 원래 파일을 그대로 다시 올려 ④ 상품 출고를 마치세요.</div>
+              )}
               <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">전체 주문행</div><div className="b2b-stat-card-value">{res.stats.total.toLocaleString()}</div></div>
                 {(res.excludedProcessed || 0) > 0 && (
@@ -272,7 +427,7 @@ export default function FulfillPage() {
               </div>
               {res.unmatched.length > 0 && (
                 <div className="b2b-error" style={{ lineHeight: 1.6 }}>
-                  <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있어요. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
+                  <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있고, ④ 출고 때 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
                   <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(" · ")}{res.unmatched.length > 30 ? " …" : ""}</div>
                 </div>
               )}
@@ -284,6 +439,21 @@ export default function FulfillPage() {
       {/* STEP 1 — CN 다운로드 */}
       {step === 1 && res && (
         <>
+          {overlapWarn && res.openOverlap && (
+            <div className="b2b-error" style={{ lineHeight: 1.6 }}>
+              {"error" in res.openOverlap
+                ? <strong>CN 받고 출고 안 한 다른 배치와 겹치는지 확인하지 못했습니다</strong>
+                : <>
+                    <strong>이 파일의 주문 {res.openOverlap.orders.toLocaleString()}건이 아직 출고 완료 안 한 다른 배치에 들어 있습니다</strong> — 그 배치를 먼저 ④ 출고 완료하거나 ① 화면에서 [발송 안 함]으로 정리하세요.
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+                      {res.openOverlap.batches.map((b, i) => <li key={i}>{b.fileName || "(파일명 없음)"} · {hm(b.at)}</li>)}
+                    </ul>
+                  </>}
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
+                <input type="checkbox" checked={overlapAck} onChange={(e) => setOverlapAck(e.target.checked)} /> 확인했습니다
+              </label>
+            </div>
+          )}
           {res.addressWarnings.length > 0 && (
             <div className="sm-warn" style={{ lineHeight: 1.6 }}>
               <strong>주소 경고 {res.addressWarnings.length}건</strong> — 발주 전 반드시 확인하세요.
@@ -319,12 +489,12 @@ export default function FulfillPage() {
             <div className="b2b-card-head"><span className="b2b-card-title">② CN 파일 다운로드</span></div>
             <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button className="b2b-btn-primary" style={{ padding: "10px 20px", fontSize: 15, fontWeight: 700 }} disabled={blocked || res.stats.normalCount === 0}
-                onClick={() => { const g = res.files.guarantee; downloadB64(res.files.normal.name, res.files.normal.b64); if (g) setTimeout(() => downloadB64(g.name, g.b64), 400); }}>
+                onClick={() => { const g = res.files.guarantee; downloadB64(res.files.normal.name, res.files.normal.b64); if (g) setTimeout(() => downloadB64(g.name, g.b64), 400); markDownloaded(); }}>
                 모두 받기{res.files.guarantee ? " (2종)" : ""}
               </button>
-              <button className="b2b-btn-secondary" disabled={blocked || res.stats.normalCount === 0} onClick={() => downloadB64(res.files.normal.name, res.files.normal.b64)}>CNplus 일반 ({res.stats.normalCount})</button>
-              <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => res.files.guarantee && downloadB64(res.files.guarantee.name, res.files.guarantee.b64)}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
-              {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>주소·배송메시지 경고를 확인(체크)해야 받을 수 있어요.</span>}
+              <button className="b2b-btn-secondary" disabled={blocked || res.stats.normalCount === 0} onClick={() => { downloadB64(res.files.normal.name, res.files.normal.b64); markDownloaded(); }}>CNplus 일반 ({res.stats.normalCount})</button>
+              <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => { if (res.files.guarantee) { downloadB64(res.files.guarantee.name, res.files.guarantee.b64); markDownloaded(); } }}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
+              {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>위 경고를 확인(체크)해야 받을 수 있어요.</span>}
             </div>
           </section>
         </>
@@ -376,24 +546,38 @@ export default function FulfillPage() {
         <section className="b2b-card">
           <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <span className="b2b-card-title">④ 상품 출고 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 소매 재고에서 차감</span></span>
-            {!dispatchDone && dispatch && (dispatch.products.length > 0 || dispatch.untrackedOnly) && (
-              <button className="b2b-btn-primary" onClick={() => commitDispatch(false)} disabled={dispatching}>{dispatching ? "출고 중..." : dispatch.products.length > 0 ? `출고 완료 (${dispatch.products.length}품목)` : "출고 완료 (재고 차감 없음)"}</button>
+            {!dispatchDone && dispatch && (dispatch.products.length > 0 || dispatch.untrackedOnly || dispatch.unmatchedOnly) && (
+              <button className="b2b-btn-primary" onClick={commitDispatch} disabled={dispatching || (unm.length > 0 && !unmatchedAck)} title={unm.length > 0 && !unmatchedAck ? "재고가 빠지지 않는 코드를 확인(체크)하세요" : ""}>{dispatching ? "출고 중..." : dispatch.products.length > 0 ? `출고 완료 (${dispatch.products.length}품목)` : "출고 완료 (재고 차감 없음)"}</button>
             )}
           </div>
+          {!dispatchDone && dedupOffBanner}
           {dispatchLoading ? <div className="b2b-loading">재고 확인 중...</div> : dispatchDone ? (
             <div className="sm-success" style={{ lineHeight: 1.7 }}>
-              {dispatchDone.dispatched > 0
+              {(dispatchDone.closed ?? 0) > 0
+                ? <>✓ <b>정리 완료</b> — 앞선 출고 {dispatchDone.closed}건을 재고 차감 없이 처리됨으로 닫았습니다{dispatchDone.orderNo ? <> (출고번호 <b>{dispatchDone.orderNo}</b>)</> : null}.</>
+                : dispatchDone.dispatched > 0
                 ? <>✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 · {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link></>
-                : <>✓ <b>출고 완료</b> — 재고 관리 사용 안함 품목뿐이라 재고는 차감하지 않고 주문만 처리됨으로 표시했습니다.</>}
+                : <>✓ <b>출고 완료</b> — 차감할 재고 품목이 없어 주문만 처리됨으로 표시했습니다.</>}
+              {dispatchDone.already ? <span> · 이미 기록돼 있던 출고에 이어 붙였습니다</span> : null}
+              {dispatchDone.resumed ? <span> · 재고 기록이 없던 앞선 출고 기록 {dispatchDone.resumed}건을 정리했습니다</span> : null}
               {dispatchDone.shortages > 0 ? <span style={{ color: "var(--sm-danger)" }}> · 재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</span> : null}
+              {(dispatchDone.unmatched?.length ?? 0) > 0 && (
+                <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>
+                  재고가 빠지지 않은 코드 {dispatchDone.unmatched!.length}개 · {dispatchDone.unmatched!.reduce((s, u) => s + u.qty, 0).toLocaleString()}개 — {dispatchDone.unmatchedSaved ? "상품마스터에 등록한 뒤 ① 화면의 [재고 차감 기록]으로 넣으세요." : UNM_NOT_SAVED[dispatchDone.unmatchedNotSaved ?? "no_column"]}
+                  <div style={{ fontSize: 12 }}>{dispatchDone.unmatched!.map((u) => `${u.sku} ${u.qty.toLocaleString()}개`).join(" · ")}</div>
+                </div>
+              )}
               <div style={{ fontSize: 12, marginTop: 6 }}><button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
             </div>
           ) : dispatch ? (
             <>
-              {dispatch.items.some((i) => i.kind === "unmatched" || i.kind === "ambiguous") && (
+              {unm.length > 0 && (
                 <div className="b2b-error" style={{ marginBottom: 12, lineHeight: 1.6 }}>
-                  <strong>상품마스터에 없어 출고되지 않는 코드</strong> — <Link href="/b2b/products">상품마스터</Link>에 등록하면 다음부터 출고됩니다.
-                  <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{dispatch.items.filter((i) => i.kind === "unmatched" || i.kind === "ambiguous").map((i) => `${i.sku}${i.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(" · ")}</div>
+                  <strong>상품마스터에 없어 재고가 빠지지 않는 코드 {unm.length}개</strong> — 이번 출고분은 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에 등록한 뒤 <button className="b2b-link-btn" onClick={() => setDispatchRetry((n) => n + 1)}>다시 확인</button>
+                  <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{unm.map((u) => `${u.sku} ${u.qty.toLocaleString()}개${u.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(" · ")}</div>
+                  <label className="sm-row" style={{ gap: 7, marginTop: 8, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
+                    <input type="checkbox" checked={unmatchedAck} onChange={(e) => setUnmatchedAck(e.target.checked)} /> 이 코드 {unm.length}개 · {unmQty.toLocaleString()}개는 재고 차감 없이 출고합니다
+                  </label>
                 </div>
               )}
               {dispatch.items.some((i) => i.kind === "untracked") && (

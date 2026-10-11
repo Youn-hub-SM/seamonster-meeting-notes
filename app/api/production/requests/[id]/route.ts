@@ -6,12 +6,27 @@ import { logProductionRequestStatusChanged, logProductionRequestUpdated, logProd
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 import { getRequestFullness } from "@/app/lib/production-allocate";
 import { companyTitle } from "@/app/lib/production-request-create";
-import { releasePromotionOnClose, type PromoRelease } from "@/app/lib/promotion-close";
+import { releasePromotionOnClose, markPromoReleased, promoReleasedQty, backfillReleaseReceipts, claimPromoRelease, promoClaimFilter, PROMO_RELEASE_CLAIM_MS, type PromoRelease } from "@/app/lib/promotion-close";
 
 export const dynamic = "force-dynamic";
+// 프로모션 마감·취소는 상태 저장 뒤 합류 계산(페이징 조회 여러 번)·품목별 이동·알림까지 한 요청에서 돈다 —
+//  기본 제한에 끊기면 '닫혔는데 확보분은 프로모션 칸' 이 남는다(S3). 끊겨도 promo_released_at(136)이 비어 '합류 미확인'으로 뜬다.
+export const maxDuration = 60;
 type Ctx = { params: Promise<{ id: string }> };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// 합류가 끝까지 가지 못했으면(조회 실패·일부 실패) 클레임을 만료된 시각으로 돌려 바로 [합류 다시 실행]이 되게 한다 — 비우지 않는다.
+//  시작 시각(136)이 남아 있어야 '이 버전이 합류를 시작했는데 끝나지 않음'과 '이전 버전이 마감(시작 기록 없음, 아래 promo_legacy)'이 구분된다.
+//  내 클레임일 때만. 칸 미적용이면 조용히 넘어간다.
+async function expirePromoClaim(sb: ReturnType<typeof supabaseAdmin>, id: string, startedAt: string): Promise<void> {
+  const past = new Date(Date.now() - PROMO_RELEASE_CLAIM_MS - 1000).toISOString();
+  const { error } = await sb.from("production_requests").update({ promo_release_started_at: past })
+    .eq("id", id).eq("promo_release_started_at", startedAt);
+  if (error && !/promo_release_started_at/i.test(error.message)) console.warn("[production/requests] 합류 클레임 만료 실패", error.message);
+}
+const PROMO_LEGACY_MSG = "합류 시작 기록이 없는 요청서입니다(이전 버전에서 마감) — 합류는 그 마감 때 실행됐습니다. 다시 실행하면 마감 뒤 배정 없이 프로모션 칸에 옮겨 둔 재고까지 소매로 넘어갑니다.";
+const PROMO_LEGACY_CONFIRM = "합류 시작 기록이 없는 요청서입니다(이전 버전에서 마감). 합류는 그 마감 때 실행됐고, 다시 실행하면 마감 뒤 배정 없이 프로모션 칸에 옮겨 둔 재고까지 소매로 넘어갑니다.\n\n합류 완료로 표시만 할까요? 프로모션 칸에 이 요청서 재고가 남아 있으면 [재고 이동]에서 직접 옮기세요.";
 
 // GET — 요청서 단건(품목·입고 이력 포함)
 export async function GET(_req: NextRequest, { params }: Ctx) {
@@ -33,6 +48,51 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   try {
     const { id } = await params;
     const b = (await req.json()) as Record<string, unknown>;
+
+    // [합류 다시 실행] — 닫힌 프로모션 요청서의 소매 합류가 끝나지 않았을 때(promo_released_at 비어 있음 = 합류 미확인) 합류만 다시 돌린다.
+    //  합류는 '지금 풀 − 다른 열린 요청서 몫' 기준이라 다시 돌려도 이미 옮긴 것을 또 옮기지 않는다. 상태는 바꾸지 않는다.
+    //  단 원래 마감이 아직 합류 중이거나 두 사람이 함께 누르면 같은 풀을 두 번 옮기므로 실행 클레임(136)을 먼저 잡는다(S2).
+    //  시작 시각(136)이 비어 있는 닫힌 요청서 = 이전 버전이 마감한 것(이 버전의 마감은 늘 시작 시각을 남기고, 끝나면 완료 표시를 채운다).
+    //  합류는 그때 이미 돌았으므로 다시 돌리지 않는다 — 다시 돌리면 마감 뒤 배정 없이('기타') 옮겨 둔 재고까지 소매로 넘어간다.
+    //  409 code 'promo_legacy' + 확인 문구, mark_released=true 면 합류 완료 표시만 채운다(재고는 그대로, S12 수동).
+    if (b.action === "promo_release") {
+      const sb0 = supabaseAdmin();
+      type Head = { id: string; req_no: string | null; status: string; purpose: string | null; promo_released_at: string | null; promo_release_started_at?: string | null };
+      const readHead = (cols: string) => sb0.from("production_requests").select(cols).eq("id", id).maybeSingle();
+      let hr = await readHead("id, req_no, status, purpose, promo_released_at, promo_release_started_at");
+      if (hr.error && /promo_release_started_at/i.test(hr.error.message) && !/promo_released_at/i.test(hr.error.message))
+        hr = await readHead("id, req_no, status, purpose, promo_released_at"); // 시작 시각 칸만 미적용 — 종전 동작(구분 없이 다시 실행)
+      const he0 = hr.error;
+      const h = hr.data as unknown as Head | null;
+      if (he0) {
+        if (/promo_released_at/i.test(he0.message)) return NextResponse.json({ ok: false, error: "migration 136 을 먼저 적용하세요." }, { status: 400 });
+        throw he0;
+      }
+      if (!h) return NextResponse.json({ ok: false, error: "요청서를 찾을 수 없습니다." }, { status: 404 });
+      if (toPrPurpose(h.purpose) !== "프로모션" || (h.status !== "완료" && h.status !== "취소"))
+        return NextResponse.json({ ok: false, error: "마감·취소된 프로모션 요청서만 합류를 다시 실행할 수 있습니다." }, { status: 400 });
+      if (h.promo_released_at) return NextResponse.json({ ok: false, error: "이미 합류가 끝난 요청서입니다 — 새로고침하세요." }, { status: 409 });
+      if (h.promo_release_started_at === null) {
+        if (b.mark_released !== true) return NextResponse.json({ ok: false, code: "promo_legacy", error: PROMO_LEGACY_MSG, confirm: PROMO_LEGACY_CONFIRM }, { status: 409 });
+        const { data: mk, error: me } = await sb0.from("production_requests").update({ promo_released_at: new Date().toISOString() })
+          .eq("id", id).in("status", ["완료", "취소"]).is("promo_released_at", null).is("promo_release_started_at", null).select("id");
+        if (me) throw me;
+        if (!(mk ?? []).length) return NextResponse.json({ ok: false, error: "그사이 상태가 바뀌었습니다 — 새로고침 후 다시 확인하세요." }, { status: 409 });
+        const [rowM] = await loadRequests(sb0, { id });
+        return NextResponse.json({ ok: true, request: rowM, marked: true });
+      }
+      const startedAt = new Date().toISOString();
+      const claim = await claimPromoRelease(sb0, id, startedAt); // 'unsupported' = 시작 시각 칸 미적용 — 클레임 없이 종전 동작
+      if (claim === "busy") return NextResponse.json({ ok: false, error: "합류가 진행 중입니다 — 1분 뒤 새로고침하세요." }, { status: 409 });
+      const tk = req.cookies.get("b2b_auth")?.value;
+      const who0 = (await verifySession(tk)) || resolveUserName(tk);
+      const rel = await releasePromotionOnClose(sb0, id, String(h.req_no || ""), who0, h.status === "취소" ? "취소" : "마감");
+      if (!rel.error && !rel.failed.length) await markPromoReleased(sb0, id);
+      else if (claim === "ok") await expirePromoClaim(sb0, id, startedAt);
+      const [row0] = await loadRequests(sb0, { id });
+      return NextResponse.json({ ok: true, request: row0, promo_release: rel });
+    }
+
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (b.status !== undefined) {
       const s = String(b.status) as PrStatus;
@@ -121,6 +181,23 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const closingPromo = effPurposeNow === "프로모션" && (patch.status === "완료" || patch.status === "취소") && (prevStatus === "요청" || prevStatus === "진행중");
     if (b.expect_status !== undefined && prevStatus !== String(b.expect_status))
       return NextResponse.json({ ok: false, error: `그사이 상태가 '${prevStatus}'(으)로 바뀌었습니다 — 새로고침 후 다시 확인하세요.` }, { status: 409 });
+    // 136 — 합류가 실패 없이 끝나면 아래에서 채운다(끊기면 비어 있어 '합류 미확인'). 시작 시각 = 실행 클레임([합류 다시 실행]과 겹치지 않게)
+    const releaseStartedAt = new Date().toISOString();
+    if (closingPromo) { patch.promo_released_at = null; patch.promo_release_started_at = releaseStartedAt; }
+    if (patch.status === "취소") patch.client_key = null; // 136 — 취소한 요청서(주간 초안 포함)의 재시도 키를 비워 같은 키로 다시 만들 수 있게
+
+    // 프로모션 '다시 열기'(완료·취소 → 열림) — 마감·취소 때 소매로 넘어간 확보분은 돌아오지 않는다(S11 가드).
+    //  모르고 다시 열면 '확보돼 있다'고 믿고 행사일을 맞는다. 넘어간 양이 있으면 확인(confirm_reopen)을 받는다.
+    const reopeningPromo = effPurposeNow === "프로모션" && (prevStatus === "완료" || prevStatus === "취소") && (patch.status === "요청" || patch.status === "진행중");
+    if (reopeningPromo && b.confirm_reopen !== true) {
+      const released = await promoReleasedQty(sb, id, reqNo);
+      if (released === null) return NextResponse.json({ ok: false, error: "소매로 넘어간 확보분을 확인하지 못했습니다 — 잠시 뒤 다시 시도하세요." }, { status: 503 });
+      if (released > 0)
+        return NextResponse.json({
+          ok: false, need_confirm: "reopen_promo", released,
+          error: `이 요청서의 확보분 ${released.toLocaleString()}개는 이미 소매로 넘어갔습니다 — 다시 열어도 프로모션 칸으로 돌아오지 않고, 이행은 그만큼 뺀 값으로 보입니다. 되돌리려면 다시 연 뒤 [재고 이동] 최근 내역에서 그 합류 이동을 취소하거나, 소매 → 프로모션으로 다시 옮겨 이 요청서에 배정하세요.`,
+        }, { status: 409 });
+    }
 
     // 품목 교체 준비 — 헤더 갱신 전에 검증까지 끝낸다(절반만 반영되는 것 방지).
     type ItemIn = { id?: string; product_id: string; requested_qty: number; memo?: string };
@@ -172,9 +249,17 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       let q = sb.from("production_requests").update(patch).eq("id", id);
       if (b.expect_status !== undefined) q = q.eq("status", String(b.expect_status));
       if (closingPromo) q = q.in("status", ["요청", "진행중"]);
+      // 직전 마감의 합류가 아직 도는 중(마감 → 곧바로 다시 열기 → 다시 마감)이면 같은 풀을 두 번 옮긴다 — 70초 안이면 0건 → 409
+      if (closingPromo && "promo_release_started_at" in patch) q = q.or(promoClaimFilter(Date.parse(releaseStartedAt)));
       return q.select("id");
     };
     let { data: updRows, error } = await runUpdate();
+    for (let guard = 0; error && guard < 3; guard++) {
+      const col = ["promo_released_at", "promo_release_started_at", "client_key"].find((c) => c in patch && new RegExp(c, "i").test(error!.message));
+      if (!col) break;
+      delete patch[col]; // 136 미적용 환경 폴백 — 합류 미확인 표시·재시도 키 없이 종전 동작
+      ({ data: updRows, error } = await runUpdate());
+    }
     if (error && nextPurpose && CONFIRMED_PURPOSES.includes(nextPurpose) && /purpose/i.test(error.message))
       return NextResponse.json({ ok: false, error: `${nextPurpose} 용도가 아직 없습니다 — migration ${nextPurpose === "프로모션" ? "113" : "115"} 을 먼저 적용하세요.` }, { status: 500 });
     if (error && "purpose" in patch && /purpose/i.test(error.message)) {
@@ -197,7 +282,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
     if (error) throw error;
     if ((b.expect_status !== undefined || closingPromo) && !(updRows ?? []).length)
-      return NextResponse.json({ ok: false, error: "그사이 상태가 바뀌었습니다 — 새로고침 후 다시 확인하세요." }, { status: 409 });
+      return NextResponse.json({ ok: false, error: closingPromo ? "그사이 상태가 바뀌었거나 직전 합류가 아직 진행 중입니다 — 1분 뒤 새로고침 후 다시 확인하세요." : "그사이 상태가 바뀌었습니다 — 새로고침 후 다시 확인하세요." }, { status: 409 });
 
     // 품목 교체 실행 — 수정 → 추가 → 삭제 순(검증은 위에서 완료)
     if (itemsIn) {
@@ -230,7 +315,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const who = (await verifySession(token)) || resolveUserName(token);
     // 프로모션 마감 합류 — 실패해도 마감은 유지하고 화면에 알린다(직접 옮기기 안내)
     let promoRelease: PromoRelease | undefined;
-    if (closingPromo) promoRelease = await releasePromotionOnClose(sb, id, reqNo, who, patch.status === "취소" ? "취소" : "마감");
+    if (closingPromo) {
+      promoRelease = await releasePromotionOnClose(sb, id, reqNo, who, patch.status === "취소" ? "취소" : "마감");
+      if (!promoRelease.error && !promoRelease.failed.length) await markPromoReleased(sb, id);
+      else if ("promo_release_started_at" in patch) await expirePromoClaim(sb, id, releaseStartedAt); // 바로 [합류 다시 실행] 가능하게(시작 기록은 남김)
+    }
+    // 다시 연 프로모션 — 옛 마감(음수 연결 정리 전)의 합류분을 이행에서 빼 순확보로 맞춘다. 실패해도 다시 열기는 유지(경고만).
+    let reopenWarn: string | undefined;
+    if (reopeningPromo && !(await backfillReleaseReceipts(sb, id, reqNo)).ok)
+      reopenWarn = "다시 열었지만 예전 소매 합류분을 이행에서 빼지 못했습니다 — 이행 수치가 실제 확보분보다 클 수 있습니다.";
     let detailNow: string | undefined;
     try { const [dr] = await loadRequests(sb, { id }); if (dr) detailNow = formatRequestDetail(dr); } catch { /* 상세 없이 발송 */ }
     if (patch.status !== undefined && prevStatus && prevStatus !== patch.status) {
@@ -260,14 +353,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
     // 상태 외의 실질 수정(품목 교체·마감일·수량 등) → 수정 알림(설정 체크리스트로 제어).
     //  담당자 지정([확인])·상태만 바뀐 건 제외, 값이 그대로인 키도 제외 — 아니면 [확인] 한 번에 알림 2건.
+    //  상태 변경이 함께 쓰는 시스템 칸(재시도 키·합류 표시, 136)도 수정이 아니다 — [취소]·[마감] 한 번에 알림 2건이 된다.
+    const SYSTEM_KEYS = new Set(["updated_at", "status", "assignee", "client_key", "promo_released_at", "promo_release_started_at"]);
     const norm = (k: string, v: unknown) => (k === "purpose" ? toPrPurpose(v) : (v === undefined || v === null || v === "" ? null : String(v)));
-    const contentKeys = Object.keys(patch).filter((k) => k !== "updated_at" && k !== "status" && k !== "assignee"
+    const contentKeys = Object.keys(patch).filter((k) => !SYSTEM_KEYS.has(k)
       && (!curWin || !(k in curWin) || norm(k, patch[k]) !== norm(k, (curWin as Record<string, unknown>)[k])));
     if (itemsIn !== null || contentKeys.length > 0) {
       await logProductionRequestUpdated(reqNo, who, detailNow);
     }
     const [row] = await loadRequests(sb, { id });
-    return NextResponse.json({ ok: true, request: row, ...(promoRelease ? { promo_release: promoRelease } : {}) });
+    return NextResponse.json({ ok: true, request: row, ...(promoRelease ? { promo_release: promoRelease } : {}), ...(reopenWarn ? { warning: reopenWarn } : {}) });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "수정 실패") }, { status: 500 });
   }

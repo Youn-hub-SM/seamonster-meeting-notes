@@ -5,12 +5,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 
 // 제조사 반품 입력 — 재고목록의 '입출조정' 창과 같은 짜임(직접 입력 / 엑셀 업로드 탭 + 미리보기).
-//  반품은 재고를 건드리지 않는다. 매입 결산에서 매입수량을 깎는 기록일 뿐이다.
+//  반품 기록 자체는 재고를 건드리지 않는다(087) — 매입 결산에서 매입수량을 깎는 기록이다.
+//  실물을 제조사로 보냈으면 저장 직후 뜨는 [재고에서도 빼기]가 같은 품목·수량·반품일로 소매 출고(사유 '제조사 반품')를
+//  남긴다(2026-10-11 대표 결정 D4c). 반품 id 를 제출 키로 써서 다시 눌러도 출고는 한 번만 기록된다(엑셀 반영도 반품마다 따로).
+//  반품을 지울 때 그 키로 남은 출고가 있으면 서버가 확인을 받고 출고까지 함께 취소한다 — 반품만 지우고 다시 넣어 또 빼면 이중 차감.
+//  단, 그 출고 뒤에 실사가 있었으면 실사가 출고를 이미 반영했다 — 서버가 '반품만 지우고 출고는 둘까요?'를 묻는다(confirm_as keep).
+//  반품일 뒤에 그 품목의 소매 실사(조정)가 있으면 실사가 이미 실물 감소를 반영했을 수 있어(이중 차감, S8) 그 품목은 기본 제외하고
+//  [그래도 빼기]로만 남긴다. 실사 확인이 실패하면 출고를 남기지 않는다(S4).
+//  [재고에서도 빼기]와 반품 삭제는 동시에 돌지 않는다(busy 잠금) — 기록 중에 지운 반품의 출고가 남거나, 지우는 중에 출고가 새로 남지 않게.
+//  기록 중에는 저장·엑셀 반영·닫기도 막는다. 대기 목록은 pendingRef 가 원본 — 기다리는 사이 바뀐 목록을 덮어쓰지 않는다.
+//  저장·삭제·반영을 한 번이라도 했으면 어떤 닫기(✕·Esc·닫기)로 닫아도 결산을 다시 계산한다(onSaved).
 
 type Product = { id: string; name: string; sku: string | null; spec: string | null; qty: number };
 type ReturnRow = { id: string; product_id: string; name: string; sku: string | null; return_date: string; qty: number; unit_amount: number | null; partner: string | null; memo: string | null };
 type PreviewRow = { product_id: string; name: string; sku: string | null; qty: number; unit_amount: number | null; memo: string | null };
 type Preview = { rows: PreviewRow[]; errors: { line: number; msg: string }[]; valid: number; errCount: number; skipped: number; merged: number };
+// 방금 저장한 반품 — 재고 출고 제안 대상. key = 출고 제출 키(반품 id, 실사 뒤 묶음은 '<id>-held' — 제출 키 형식 [A-Za-z0-9-]), src = 반품 id
+//  엑셀 반영도 반품 1건 = 항목 1개 — 목록에서 지운 반품이 src 로 빠지고, 반품 삭제가 키로 딸린 출고를 찾는다.
+//  checked = 실사 확인을 마침(이후 같은 키로 다시 보내도 내용이 같게 — 재시도는 replay), held = 반품일 뒤 실사가 있어 기본 제외
+type PendingOut = { key: string; src: string; partner: string | null; date: string; checked?: boolean; held?: boolean; rows: { product_id: string; name: string; qty: number; countDate?: string }[] };
 
 const won = (n: number) => Math.round(n).toLocaleString();
 // 그 달의 마지막 날 — 반품일은 결산 대상 월 안에 있어야 그 달 결산에 잡힌다.
@@ -25,8 +38,23 @@ function defaultDate(ym: string): string {
 }
 
 export default function ReturnModal({ month, onClose, onSaved }: { month: string; onClose: () => void; onSaved: () => void }) {
-  useEscClose(onClose);
+  // 반품을 저장·삭제·반영했으면 닫을 때 결산 재계산 — ✕·Esc 로 닫아도 반품 전 숫자가 화면·인쇄에 남지 않게
+  const dirty = useRef(false);
+  const close = useCallback(() => { if (dirty.current) onSaved(); else onClose(); }, [onSaved, onClose]);
   const [mode, setMode] = useState<"직접" | "엑셀">("직접");
+  const [pending, setPendingState] = useState<PendingOut[]>([]); // 출고를 아직 안 남긴 반품(저장 순) — 여러 건 저장해도 쌓인다
+  // 대기 목록의 원본 — 비동기 사이(실사 확인·출고 전송)에도 지금 목록을 바로 읽고, 바꿀 때는 항상 이전 값에서 고친다(통째로 덮어쓰지 않음)
+  const pendingRef = useRef<PendingOut[]>([]);
+  const setPending = useCallback((fn: (prev: PendingOut[]) => PendingOut[]) => {
+    pendingRef.current = fn(pendingRef.current);
+    setPendingState(pendingRef.current);
+  }, []);
+  // [재고에서도 빼기] ↔ 반품 삭제 상호 잠금 — 상태 반영 전 연타도 막도록 ref 로 먼저 잡는다
+  const busyRef = useRef<"out" | "remove" | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [outBusy, setOutBusy] = useState(false);
+  const [outDone, setOutDone] = useState("");
+  const [warn, setWarn] = useState(""); // 반품 삭제 뒤 남은 확인 거리(키로 못 찾은 같은 날 출고 등)
   const [products, setProducts] = useState<Product[]>([]);
   const [rows, setRows] = useState<ReturnRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -44,6 +72,9 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const reqSeq = useRef(0);
+  // 닫기(✕·Esc·닫기) 잠금 — 기록·삭제 중에 닫으면 남은 출고가 화면 밖에서 계속 기록되거나 결과(경고)를 못 본다
+  const closeBlocked = saving || applying || importing || outBusy || !!removingId;
+  useEscClose(close, closeBlocked);
 
   const [y, mm] = month.split("-");
 
@@ -70,9 +101,10 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
   const overReturn = !!product && product.qty > 0 && Number(qty) > 0 && alreadyReturned + Number(qty) > product.qty;
 
   async function save() {
+    if (busyRef.current === "out") return; // 출고 기록 중 — 버튼도 막혀 있다
     if (!productId) { setError("품목을 선택하세요."); return; }
     if (!(Number(qty) > 0)) { setError("반품수량을 입력하세요."); return; }
-    setSaving(true); setError("");
+    setSaving(true); setError(""); setOutDone("");
     try {
       const res = await fetch("/api/inventory/returns", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -80,21 +112,100 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      dirty.current = true;
+      const src = typeof j.id === "string" ? j.id : crypto.randomUUID();
+      const entry: PendingOut = {
+        key: src, src,
+        partner: partner.trim() || null, date,
+        rows: [{ product_id: productId, name: productLabel || "품목", qty: Math.round(Number(qty) * 100) / 100 }],
+      };
+      setPending((prev) => [...prev, entry]);
       setQty(""); setUnitAmount(""); setMemo("");
       await loadList();
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
   }
 
-  async function remove(id: string) {
-    if (!window.confirm("이 반품 기록을 지울까요?")) return;
-    setError("");
+  // 재고에서도 빼기 — 같은 품목·수량·반품일로 소매 출고(사유 '제조사 반품'). 제출 키 = 반품 id(일괄은 UUID) — 다시 눌러도 한 번만.
+  //  처음 누를 때 실사 확인 — 반품일 뒤 실사가 있는 품목은 떼어 내 '실사 뒤' 묶음(held)으로 남긴다. held=true 면 그 묶음만 기록([그래도 빼기]).
+  async function recordOutflow(held = false) {
+    if (busyRef.current || !pendingRef.current.length) return; // 삭제 중이거나 이미 기록 중
+    busyRef.current = "out";
+    setOutBusy(true); setError(""); setOutDone("");
+    let done = 0;
     try {
-      const res = await fetch(`/api/inventory/returns/${id}`, { method: "DELETE" });
-      const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "삭제 실패");
+      const unchecked = pendingRef.current.filter((p) => !p.checked);
+      if (!held && unchecked.length) {
+        const fail = "실사 기록을 확인하지 못해 출고를 남기지 않았습니다 — 잠시 뒤 다시 누르세요.";
+        const res = await fetch("/api/inventory/returns/count-check", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: unchecked.flatMap((p) => p.rows.map((r) => ({ product_id: r.product_id, date: p.date }))) }),
+        }).catch(() => null);
+        const j = res ? await res.json().catch(() => null) : null;
+        if (!res || !res.ok || !j?.ok) throw new Error(j?.error ? `${fail} (${j.error})` : fail);
+        const countAt = new Map(((j.held || []) as { product_id: string; date: string; count_date: string }[]).map((h) => [`${h.product_id}|${h.date}`, h.count_date]));
+        // 확인한 항목만 key 로 갈라 끼운다 — 기다리는 사이 저장된 반품은 그대로 남고(확인 전), 지워진 반품은 되살아나지 않는다
+        const split = new Map(unchecked.map((p): [string, PendingOut[]] => {
+          const go = p.rows.filter((r) => !countAt.has(`${r.product_id}|${p.date}`));
+          const hold = p.rows.filter((r) => countAt.has(`${r.product_id}|${p.date}`)).map((r) => ({ ...r, countDate: countAt.get(`${r.product_id}|${p.date}`) }));
+          return [p.key, [
+            ...(go.length ? [{ ...p, rows: go, checked: true }] : []),
+            ...(hold.length ? [{ ...p, key: `${p.key}-held`, rows: hold, checked: true, held: true }] : []),
+          ]];
+        }));
+        setPending((prev) => prev.flatMap((p) => (!p.checked && split.has(p.key) ? split.get(p.key)! : [p])));
+      }
+      for (const po of pendingRef.current.filter((p) => p.checked && !!p.held === held)) {
+        if (!pendingRef.current.some((x) => x.key === po.key)) continue; // 그 사이 목록에서 빠짐(반품 삭제·건너뛰기) — 보내지 않는다
+        const res = await fetch("/api/inventory/txns/import/apply", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            channel: "소매", done: true, request_key: po.key,
+            rows: po.rows.map((r) => ({
+              type: "출고", qty: -Math.abs(r.qty), product_id: r.product_id, product_name: r.name, unit_amount: null,
+              txn_date: po.date, partner: po.partner, memo: "제조사 반품", reason: "제조사 반품",
+            })),
+          }),
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j?.ok) throw new Error(j?.error || "출고 기록 실패 — [입고 및 출고] 목록에서 기록됐는지 먼저 확인하세요.");
+        done += po.rows.length;
+        setPending((prev) => prev.filter((x) => x.key !== po.key));
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "출고 기록 실패"); }
+    finally { busyRef.current = null; }
+    if (done) setOutDone(`재고에서 뺐습니다 — 출고 ${done}건(사유 제조사 반품).`);
+    setOutBusy(false);
+  }
+
+  // 반품 삭제 — 이 반품으로 재고에서 뺀 출고가 있으면 서버가 409 + 확인 문구 + confirm_as 를 준다. 확인하면 그 값으로 다시 보낸다
+  //  (1 = 출고까지 함께 취소, keep = 반품만 — 출고 뒤 실사가 있거나 키로 못 찾는 같은 날 출고). 확인 사이에 상황이 바뀌면 서버가 다른 질문을 다시 준다.
+  //  조회 실패면 서버가 지우지 않는다(S4). [재고에서도 빼기] 기록 중에는 지우지 않는다(busy 잠금).
+  async function remove(id: string) {
+    if (busyRef.current) return;
+    if (!window.confirm("이 반품 기록을 지울까요?")) return;
+    if (busyRef.current) return; // 확인 창을 띄운 사이 다른 동작이 시작됨
+    busyRef.current = "remove"; setRemovingId(id);
+    setError(""); setWarn(""); setOutDone("");
+    try {
+      let res = await fetch(`/api/inventory/returns/${id}`, { method: "DELETE" });
+      let j = await res.json().catch(() => null);
+      for (let n = 0; n < 3 && res.status === 409 && typeof j?.confirm === "string"; n++) {
+        if (!window.confirm(j.confirm)) return;
+        const as = j.confirm_as === "keep" ? "keep" : "1";
+        res = await fetch(`/api/inventory/returns/${id}?confirm=${as}`, { method: "DELETE" });
+        j = await res.json().catch(() => null);
+      }
+      if (res.status === 404) { setPending((prev) => prev.filter((x) => x.src !== id)); await loadList(); }
+      if (!res.ok || !j?.ok) throw new Error(j?.error || "삭제 실패");
+      dirty.current = true;
+      setPending((prev) => prev.filter((x) => x.src !== id));
+      if (j.canceled) setOutDone(`반품 기록과 출고(${j.canceled})를 함께 지웠습니다 — 재고가 원복됐습니다.`);
+      else if (j.kept) setOutDone("반품 기록만 지웠습니다.");
+      if (j.warning) setWarn(String(j.warning));
       await loadList();
     } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
+    finally { busyRef.current = null; setRemovingId(null); }
   }
 
   async function handleFile(file: File) {
@@ -119,7 +230,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
   }
 
   async function applyImport() {
-    if (!preview) return;
+    if (!preview || busyRef.current === "out") return; // 출고 기록 중 — 버튼도 막혀 있다
     setApplying(true); setError("");
     try {
       const res = await fetch("/api/inventory/returns/import/apply", {
@@ -128,6 +239,16 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "반영 실패");
+      dirty.current = true;
+      setOutDone("");
+      const nameOf = new Map(preview.rows.map((r) => [r.product_id, r.name]));
+      const saved = (Array.isArray(j.rows) ? j.rows : []) as { id?: string; product_id: string; qty: number }[];
+      // 반품 1건 = 출고 항목 1개(키 = 반품 id) — 목록에서 한 건을 지우면 그 항목만 빠지고, 반품 삭제가 키로 딸린 출고를 찾는다
+      const who = partner.trim() || null;
+      if (saved.length) setPending((prev) => [...prev, ...saved.map((r): PendingOut => {
+        const src = typeof r.id === "string" && r.id ? r.id : crypto.randomUUID();
+        return { key: src, src, partner: who, date, rows: [{ product_id: r.product_id, name: nameOf.get(r.product_id) || "품목", qty: Math.round((Number(r.qty) || 0) * 100) / 100 }] };
+      })]);
       setPreview(null);
       await loadList();
       setMode("직접");
@@ -144,14 +265,46 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: preview ? 760 : 520 }}>
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">제조사 반품 · {y}년 {mm}월</span>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" onClick={close} disabled={closeBlocked}>✕</button>
         </div>
         <div className="b2b-modal-body">
           <div className="sm-tabs" style={{ marginBottom: 12 }}>
             <button className={`sm-tab ${mode === "직접" ? "is-active" : ""}`} onClick={() => switchMode("직접")}>직접 입력</button>
             <button className={`sm-tab ${mode === "엑셀" ? "is-active" : ""}`} onClick={() => switchMode("엑셀")}>엑셀 업로드</button>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>반품은 <strong>재고를 건드리지 않습니다</strong> — 매입 결산의 매입수량만 깎습니다.</p>
+          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>반품 기록은 매입 결산만 깎습니다 — 실물을 제조사로 보냈으면 <strong>[재고에서도 빼기]</strong>로 출고를 남기세요.</p>
+
+          {pending.some((p) => !p.held) && (() => {
+            const rowsAll = pending.filter((p) => !p.held).flatMap((p) => p.rows);
+            return (
+            <div className="sm-warn" style={{ marginBottom: 10 }}>
+              <div className="sm-between" style={{ gap: 8, flexWrap: "wrap" }}>
+                <span>실물을 보냈으면 소매 재고에서 {rowsAll.length === 1 ? `${rowsAll[0].name} ${rowsAll[0].qty.toLocaleString()}` : `${rowsAll.length}품목`} 출고(사유 제조사 반품, 반품일)</span>
+                <span className="sm-row" style={{ gap: 6 }}>
+                  <button className="b2b-btn-secondary" onClick={() => setPending((prev) => prev.filter((p) => p.held))} disabled={outBusy}>건너뛰기</button>
+                  <button className="b2b-btn-primary" onClick={() => recordOutflow(false)} disabled={outBusy || !!removingId}>{outBusy ? "기록 중..." : "재고에서도 빼기"}</button>
+                </span>
+              </div>
+            </div>
+            );
+          })()}
+          {pending.some((p) => p.held) && (() => {
+            const heldRows = pending.filter((p) => p.held).flatMap((p) => p.rows);
+            const list = heldRows.slice(0, 3).map((r) => `${r.name} ${r.qty.toLocaleString()}(실사 ${String(r.countDate || "").slice(5)})`).join(", ");
+            return (
+            <div className="sm-warn" style={{ marginBottom: 10 }}>
+              <div className="sm-between" style={{ gap: 8, flexWrap: "wrap" }}>
+                <span>반품일 뒤 실사가 있어 이미 재고에 반영됐을 수 있습니다 — [입고 및 출고]에서 확인하세요: {list}{heldRows.length > 3 ? ` 외 ${heldRows.length - 3}품목` : ""}</span>
+                <span className="sm-row" style={{ gap: 6 }}>
+                  <button className="b2b-btn-secondary" onClick={() => setPending((prev) => prev.filter((p) => !p.held))} disabled={outBusy}>건너뛰기</button>
+                  <button className="b2b-btn-secondary" onClick={() => recordOutflow(true)} disabled={outBusy || !!removingId}>그래도 빼기</button>
+                </span>
+              </div>
+            </div>
+            );
+          })()}
+          {outDone && <div className="sm-success" style={{ marginBottom: 10 }}>{outDone}</div>}
+          {warn && <div className="sm-warn" style={{ marginBottom: 10 }}>{warn}</div>}
 
           {mode === "엑셀" ? (
             preview ? (
@@ -266,7 +419,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                               <td className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 700 }}>{r.qty.toLocaleString()}</td>
                               <td className="num b2b-money">{r.unit_amount ? won(r.unit_amount) : <span className="sm-faint">매입가</span>}</td>
                               <td style={{ textAlign: "right" }}>
-                                <button type="button" className="b2b-icon-btn is-danger" aria-label="삭제" onClick={() => remove(r.id)}>✕</button>
+                                <button type="button" className="b2b-icon-btn is-danger" aria-label="삭제" onClick={() => remove(r.id)} disabled={outBusy || !!removingId}>{removingId === r.id ? "..." : "✕"}</button>
                               </td>
                             </tr>
                           ))}
@@ -285,10 +438,10 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             ? <button className="b2b-btn-secondary" onClick={() => { setPreview(null); setError(""); }} disabled={applying}>← 다시 선택</button>
             : <span />}
           <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onSaved} disabled={saving || applying || importing}>닫기</button>
+            <button className="b2b-btn-secondary" onClick={close} disabled={closeBlocked}>닫기</button>
             {mode === "엑셀" ? (
               preview ? (
-                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.valid === 0}>
+                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.valid === 0 || outBusy}>
                   {applying ? "반영 중..." : `${preview.valid.toLocaleString()}건 반영`}
                 </button>
               ) : (
@@ -299,7 +452,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                 </label>
               )
             ) : (
-              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "반품 기록"}</button>
+              <button className="b2b-btn-primary" onClick={save} disabled={saving || outBusy}>{saving ? "저장 중..." : "반품 기록"}</button>
             )}
           </div>
         </div>

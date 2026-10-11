@@ -17,7 +17,8 @@ const kstDay = (back = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.se
 
 export default function InventoryReconcilePage() {
   const [rows, setRows] = useState<Row[]>([]);
-  const [salesMax, setSalesMax] = useState<string | null>(null); // 매출 입력 최신일(영업일에만 입력)
+  const [salesMax, setSalesMax] = useState<string | null>(null); // 매출 입력 최신일(영업일에만 입력, 오늘 이하 · 소매·전체 탭은 소매 매출만)
+  const [salesMaxErr, setSalesMaxErr] = useState(false);          // 최신일을 확인하지 못함(시차 안내를 못 함)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [channel, setChannel] = useState<InvChannelFilter>("소매"); // 도매는 B2B 발주에서 따로 관리 — 이 화면 기본은 소매만
@@ -38,6 +39,7 @@ export default function InventoryReconcilePage() {
       if (!j.ok) throw new Error(j.error || "불러오기 실패");
       setRows(j.rows || []);
       setSalesMax(j.salesMax || null);
+      setSalesMaxErr(!!j.salesMaxError);
     } catch (e) { setError(e instanceof Error ? e.message : "불러오기 오류"); }
     setLoading(false);
   }, [from, to, channel]);
@@ -81,6 +83,12 @@ export default function InventoryReconcilePage() {
   }, [enriched, q, issuesOnly, sort]);
 
   const setPreset = (f: string, t: string) => { setFrom(f); setTo(t); };
+  // 날짜 축 안내(S6) — 소매 온라인 출고는 처리한 날(④ 출고, KST), 매출은 주문일. 주말·휴일 주문은 다음 처리일에 빠지므로
+  //  하루·며칠 단위로는 '안 빠진 판매'가 생겼다 없어진다. 도매는 원장 차감일 = 판매일이라 어긋나지 않는다.
+  const spanDays = from && to ? Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400e3) + 1 : 0;
+  const retailAxis = channel === "소매" || channel === "전체";
+  const shortSpan = retailAxis && spanDays > 0 && spanDays < 7;
+  const beyondSales = retailAxis && !!salesMax && !!to && to > salesMax;
 
   return (
     <div className="b2b-container">
@@ -89,8 +97,7 @@ export default function InventoryReconcilePage() {
           <h1 className="b2b-page-title">구매·판매·재고 확인</h1>
         </div>
         {/* 프로모션 풀은 판매 소스가 없어 대사 의미가 없다(RPC 도 전사 판매로 오탐 — 검증 확정) → 제외.
-            도매 대량(115)도 같은 이유로 제외 — RPC 의 sold 갈래가 '도매'(대량 제외)·'소매'뿐이라
-            '도매 대량'은 else 로 떨어져 전사 판매를 그 칸 재고와 비교한다 */}
+            도매·도매 대량 판매는 원장 차감과 같은 규칙(발주 전량 · 첫 발송일 · 세트 전개, 132) */}
         <div className="b2b-page-actions"><ChannelFilter value={channel} onChange={setChannel} exclude={["프로모션"]} /></div>
       </header>
 
@@ -107,11 +114,17 @@ export default function InventoryReconcilePage() {
         <input type="date" className="b2b-input" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: "auto" }} title="끝일" />
       </div>
       <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 12px" }}>
-        팔린 수 기준 — <strong>{channel === "도매" ? "도매(B2B 발송완료 — 대량 발주 제외)" : channel === "도매 대량" ? "도매 대량(대량 발주 발송완료)" : channel === "소매" ? "소매(매출 데이터)" : "전체(소매 매출 + 도매 B2B 발송, 대량 포함)"}</strong> · 세트는 낱개 환산
-        {salesMax && <> · 매출 입력: <strong>~{salesMax}</strong></>}
+        팔린 수 기준 — <strong>{channel === "도매" ? "도매(발송완료 발주 전량 · 첫 발송일 · 대량 발주 제외)" : channel === "도매 대량" ? "도매 대량(대량 발주 발송완료 전량 · 첫 발송일)" : channel === "소매" ? "소매(매출 데이터 · 도매 제외)" : "전체(소매 매출 + 도매 발송완료 발주 전량, 대량 포함)"}</strong> · 세트는 낱개 환산 · 남은 재고 = 끝일 기준
+        {retailAxis && <> · 소매 매출은 주문일, 소매 출고는 처리한 날</>}
+        {/* 소매·전체 탭의 최신일 = 소매 매출만(API salesMaxScope 'retail') — 도매 매출 행은 발송일(오늘)로 들어와 소매 입력 지연을 가린다 */}
+        {salesMax && <> · {retailAxis ? "소매 매출 입력" : "매출 입력"}: <strong>~{salesMax}</strong>{beyondSales && " (그 뒤 소매 출고는 매출 없이 잡혀 '안 빠진 판매'가 마이너스로 보임)"}</>}
+        {salesMaxErr && <> · {retailAxis ? "소매 매출 입력" : "매출 입력"} 최신일 확인 못 함</>}
       </p>
+      {!loading && !error && shortSpan && (
+        <div className="sm-warn">기간이 {spanDays}일입니다 — 소매는 주문일(매출)과 처리한 날(출고)이 달라 짧은 기간에는 &apos;안 빠진 판매&apos;가 생겼다 없어집니다. 차이는 최근 7일 이상으로 보세요.</div>
+      )}
 
-      {error && <div className="b2b-error">{error}{error.includes("051") ? " — supabase/migrations/051_inventory_reconcile.sql 를 먼저 적용하세요." : ""}</div>}
+      {error && <div className="b2b-error">{error}{error.includes("051") ? " — supabase/migrations/132_reconcile_fix_ledger_check.sql 를 적용하세요." : ""}</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : (
         <>

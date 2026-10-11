@@ -84,6 +84,7 @@ export const NAV: NavCategory[] = [
         ],
       },
       { href: "/inventory/reconcile", label: "구매·판매·재고 확인", icon: "receipt" },
+      { href: "/inventory/ledger-check", label: "원장 점검", icon: "receipt" }, // 2026-10-11 대표 결정 D4d — 주 1회 장부 이상 확인(읽기 전용)
       { href: "/inventory/activity", label: "변경 기록", icon: "receipt" },
     ],
   },

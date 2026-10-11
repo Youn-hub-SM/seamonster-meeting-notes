@@ -144,11 +144,23 @@ export async function loadScanMaps(sb: ReturnType<typeof supabaseAdmin>): Promis
   const bySku = new Map<string, ScanProduct>();
   const byId = new Map<string, ScanProduct>();
   // 컬럼 미적용이어도 스캔이 안 깨지게 단계 폴백: pick_zone(117) 없으면 빼고, scan_name(059)도 없으면 name 만.
+  //  페이지 나눠 전량(1000행 캡에 잘리면 뒤쪽 SKU 가 '미등록 코드'로 보인다). 조회 오류는 던진다 — 빈 맵을 60초 캐시하면
+  //  그동안 모든 송장이 미등록으로 집계된다(S4).
   type Row = { id: string; sku: string | null; name: string; scan_name?: string | null; pick_zone?: string | null };
-  let res = await sb.from("products").select("id, sku, name, scan_name, pick_zone");
-  if (res.error) res = await sb.from("products").select("id, sku, name, scan_name");
-  if (res.error) res = await sb.from("products").select("id, sku, name");
-  const rows: Row[] = (res.data as Row[] | null) ?? [];
+  const colSets = ["id, sku, name, scan_name, pick_zone", "id, sku, name, scan_name", "id, sku, name"];
+  let ci = 0;
+  const rows: Row[] = [];
+  for (let i = 0; i < 100000; ) {
+    const res = await sb.from("products").select(colSets[ci]).order("id", { ascending: true }).range(i, i + 999);
+    if (res.error) {
+      if (ci < colSets.length - 1 && /scan_name|pick_zone/i.test(res.error.message || "")) { ci++; rows.length = 0; i = 0; continue; }
+      throw new Error(`상품 마스터를 읽지 못했습니다(${res.error.message})`);
+    }
+    const page = (res.data as unknown as Row[] | null) ?? [];
+    rows.push(...page);
+    if (page.length < 1000) break;
+    i += 1000;
+  }
   for (const row of rows) {
     const p: ScanProduct = { id: row.id, sku: row.sku, name: row.name, scanName: row.scan_name ?? null, pickZone: row.pick_zone ?? null };
     byId.set(p.id, p);

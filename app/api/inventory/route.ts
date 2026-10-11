@@ -3,11 +3,15 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getAllBundles } from "@/app/lib/product-bundles";
 import { toInvChannelParam, type InventoryRow } from "@/app/lib/inventory";
 import { getUntracked } from "@/app/lib/stock-tracked";
+import { readAll, readStockMap } from "@/app/lib/inventory-template";
+import { kstTodayIso } from "@/app/lib/production-schedule";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/inventory[?asof=YYYY-MM-DD] — 품목 + 현재고(Σ txn.qty) + 안전재고.
+// GET /api/inventory[?asof=YYYY-MM-DD&channel=] — 품목 + 재고(Σ txn.qty, 완료) + 안전재고.
 //  asof 지정 시 그 날짜까지의 누적 수량(과거 수량 조회). 제품목록·부족알림·과거조회 공용.
+//  asof 없으면 qty = 전체 원장(미래 발송일 선점까지 뺀 가용 — 이동·출고 경고의 기준, 종전과 같음)이고,
+//  on_hand = 오늘(KST)까지(현재고), scheduled_out = on_hand − qty(출고 예정)를 함께 싣는다(S6).
 export async function GET(req: NextRequest) {
   try {
     const asof = req.nextUrl.searchParams.get("asof");
@@ -15,46 +19,40 @@ export async function GET(req: NextRequest) {
     const chan = toInvChannelParam(chanParam); // '전체'·빈값·모르는 값 → null = 전 칸 합산
     const sb = supabaseAdmin();
     const asofParam = asof && /^\d{4}-\d{2}-\d{2}$/.test(asof) ? asof : null;
-    // 채널 지정 시 inventory_stock(asof, chan). 036 미적용(2-인자 함수 없음, PGRST202)일 때만 전체로 폴백 —
-    //  다른 오류까지 폴백하면 그 칸 재고 자리에 네 칸 합이 조용히 나온다(감사 #11).
-    const stockRpc = async () => {
-      if (chan) {
-        const res = await sb.rpc("inventory_stock", { asof: asofParam, chan });
-        if (!res.error || res.error.code !== "PGRST202") return res;
-      }
-      return sb.rpc("inventory_stock", { asof: asofParam });
-    };
     // 매입단가·원산지·속성은 migration 032 컬럼 — 미적용 환경에선 기본 컬럼으로 폴백(재고 페이지 안 죽게).
+    //  페이지 끝까지 읽는다 — 단발 조회는 1000행에서 잘린다(S4).
+    type P = { id: string; sku: string | null; name: string; spec: string | null; unit: string; cost_price: number; purchase_price?: number; origin?: string | null; attrs?: string | null };
     const productsQ = async () => {
-      const full = await sb.from("products").select("id, sku, name, spec, unit, cost_price, purchase_price, origin, attrs").eq("active", true).order("name", { ascending: true });
-      if (!full.error) return full;
-      return sb.from("products").select("id, sku, name, spec, unit, cost_price").eq("active", true).order("name", { ascending: true });
+      const page = (cols: string) => readAll<P>((a, b) => sb.from("products").select(cols).eq("active", true)
+        .order("name", { ascending: true }).order("id", { ascending: true }).range(a, b));
+      try { return await page("id, sku, name, spec, unit, cost_price, purchase_price, origin, attrs"); }
+      catch { return page("id, sku, name, spec, unit, cost_price"); }
     };
-    const [pr, tr, ir, bundles, untracked] = await Promise.all([
+    type I = { product_id: string; min_qty: number; barcode: string | null; location: string | null };
+    const [products, qtyMap, todayMap, items, bundles, untracked] = await Promise.all([
       productsQ(),
-      stockRpc(), // 품목당 1행 집계(1000행 제한 무관) — 채널 필터 반영
-      sb.from("inventory_items").select("product_id, min_qty, barcode, location"),
-      getAllBundles(sb), // 부모 product_id → 구성품[] (037 미적용이면 빈 맵 → is_bundle 전부 false)
+      // 채널 지정 시 inventory_stock(asof, chan). 036 미적용(PGRST202)일 때만 전체로 폴백 — 다른 오류는 던진다(감사 #11)
+      readStockMap(sb, { asof: asofParam, chan }),
+      asofParam ? Promise.resolve(null) : readStockMap(sb, { asof: kstTodayIso(), chan }),
+      readAll<I>((a, b) => sb.from("inventory_items").select("product_id, min_qty, barcode, location").order("product_id", { ascending: true }).range(a, b)),
+      getAllBundles(sb), // 부모 product_id → 구성품[] (037 미적용이면 빈 맵 → is_bundle 전부 false, 그 밖의 오류는 던진다)
       getUntracked(sb), // '재고 관리 사용 안함'(121) — 입고 및 출고·조정·과거 수량·재고 이동 품목에서 뺀다
     ]);
-    if (pr.error) throw pr.error;
-    if (tr.error) throw tr.error;
-    if (ir.error) throw ir.error;
 
-    const qtyMap = new Map<string, number>();
-    for (const t of (tr.data as { product_id: string; qty: number }[] | null) ?? []) qtyMap.set(t.product_id, Number(t.qty) || 0);
     const itemMap = new Map<string, { min_qty: number; barcode: string | null; location: string | null }>();
-    for (const it of ir.data ?? []) itemMap.set(it.product_id, { min_qty: Number(it.min_qty) || 0, barcode: it.barcode, location: it.location });
+    for (const it of items) itemMap.set(it.product_id, { min_qty: Number(it.min_qty) || 0, barcode: it.barcode, location: it.location });
 
-    const rows: InventoryRow[] = (pr.data ?? []).filter((p) => !untracked.ids.has(p.id)).map((p) => {
+    const rows: InventoryRow[] = products.filter((p) => !untracked.ids.has(p.id)).map((p) => {
       const qty = qtyMap.get(p.id) || 0;
       const meta = itemMap.get(p.id) || { min_qty: 0, barcode: null, location: null };
       const cost = Number(p.cost_price) || 0;
+      const onHand = todayMap ? todayMap.get(p.id) || 0 : null;
       return {
         product_id: p.id, sku: p.sku, name: p.name, spec: p.spec, unit: p.unit,
-        cost_price: cost, purchase_price: Number((p as { purchase_price?: number }).purchase_price) || 0,
-        origin: (p as { origin?: string | null }).origin ?? null, attrs: (p as { attrs?: string | null }).attrs ?? null,
+        cost_price: cost, purchase_price: Number(p.purchase_price) || 0,
+        origin: p.origin ?? null, attrs: p.attrs ?? null,
         qty, min_qty: meta.min_qty, value: qty * cost,
+        ...(onHand != null ? { on_hand: onHand, scheduled_out: Math.max(0, Math.round((onHand - qty) * 100) / 100) } : {}),
         barcode: meta.barcode, location: meta.location,
         low: meta.min_qty > 0 && qty <= meta.min_qty,
         is_bundle: bundles.has(p.id),

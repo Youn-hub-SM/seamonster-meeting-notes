@@ -72,20 +72,27 @@ export default function OrdersListPage() {
   // 발송완료 변경 시 송장번호 입력 프롬프트 (발주 or 발송 차수)
   //  boxCount 만큼 송장 입력칸을 띄움 (박스당 1개).
   const [trackingPrompt, setTrackingPrompt] = useState<
-    | { kind: "order"; id: string; label: string; boxCount: number; recipientName?: string; recipientPhone?: string }
-    | { kind: "shipment"; id: string; orderId: string; label: string; boxCount: number; recipientName?: string; recipientPhone?: string }
+    | { kind: "order"; id: string; label: string; boxCount: number; recipientName?: string; recipientPhone?: string; origDate?: string | null }
+    | { kind: "shipment"; id: string; orderId: string; label: string; boxCount: number; recipientName?: string; recipientPhone?: string; origDate?: string | null }
     | null
   >(null);
   const [trackingInput, setTrackingInput] = useState<string[]>([""]);
+  // 실제 발송일(기본 오늘, 미래 불가) — 저장된 발송일과 다르면 서버가 차수 날짜를 옮겨 선점일·매출 인식일이 따라간다(D2)
+  const [shippedDate, setShippedDate] = useState("");
+  // 발송된 발주·차수 취소 — 반품으로 실제 돌아왔는지 묻는다(D3). 답은 Promise 로 돌려준다(null = 닫음)
+  const [returnPrompt, setReturnPrompt] = useState<{ label: string; resolve: (v: boolean | null) => void } | null>(null);
   // 발송일 등록 창 — 차수(발송예정일 + 박스 수)를 여기서만 만든다. 발주 등록 폼에는 발송 일정이 없다.
   const [shipPrompt, setShipPrompt] = useState<{ id: string; label: string } | null>(null);
   //  status·tracking_no·stock_out 은 이 창에서 고치지 않지만 반드시 함께 실어 왕복시킨다 —
   //  저장이 차수를 통째로 지우고 다시 넣는 방식이라(saveOrderShipments), 안 실으면 송장번호가 사라지고
   //  발송완료가 발송대기로 되돌아간다.
   //  shipped_at(발송 시각)도 같은 이유로 왕복 — 안 실으면 2차를 추가할 때 1차 발송 시각이 '지금'으로 바뀐다.
+  //  id(차수)도 싣는다 — 서버는 이 id 로 상태·송장·발송 시각을 DB 값 그대로 쓰고, 열어 둔 사이 바뀌었으면 저장을 막는다.
   const [shipRows, setShipRows] = useState<
-    { ship_date: string; box_count: string; status: ShipmentStatus; tracking_no: string; stock_out: boolean; shipped_at?: string | null; items: Record<number, string> }[]
+    { id?: string; ship_date: string; box_count: string; status: ShipmentStatus; tracking_no: string; stock_out: boolean; shipped_at?: string | null; kept_out?: boolean; items: Record<number, string> }[]
   >([]);
+  const [shipOrderStatus, setShipOrderStatus] = useState<string | null>(null); // 창을 연 발주의 상태(취소 발주는 일정을 고칠 수 없다)
+  const [shipLoadFailed, setShipLoadFailed] = useState(false); // 차수 조회 실패 — 빈 창으로 저장하면 기존 차수가 지워지므로 저장을 막는다
   // 창을 열 때 날짜가 있던 차수 수 — 0이 되도록 지우고 저장하면 '전체 삭제'로 확인 후 진행
   const [shipInitialCount, setShipInitialCount] = useState(0);
   const [shipItems, setShipItems] = useState<{ id: string; product_name: string; spec: string | null; qty: number }[]>([]);
@@ -197,6 +204,24 @@ export default function OrdersListPage() {
   }
 
   const today = useMemo(() => todayISO(), []);
+  // 서버와 같은 KST 오늘 — 실제 발송일 기본값·상한
+  const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+
+  function askReturned(label: string): Promise<boolean | null> {
+    return new Promise((resolve) => setReturnPrompt({ label, resolve }));
+  }
+  function answerReturn(v: boolean | null) {
+    const p = returnPrompt;
+    setReturnPrompt(null);
+    p?.resolve(v);
+  }
+  // 발송 뒤 취소(안 돌아옴)해 발송 시각이 남은 차수의 원래 발송일 — 발송완료로 되살릴 때 실제 발송일 기본값(오늘 이후면 오늘)
+  const keptShipDate = (s: ShipmentDatePreview | undefined): string | null => {
+    const at = (s as (ShipmentDatePreview & { shipped_at?: string | null }) | undefined)?.shipped_at;
+    return s && s.status === "취소" && at && s.ship_date ? s.ship_date : null;
+  };
+  // 이미 나간 물건이 있는 발주 — 취소하면 반품 여부를 묻는다(서버도 409 로 한 번 더 확인)
+  const isShippedOrder = (o: OrderListItem) => o.status === "발송완료" || (o.shipments ?? []).some((s) => s.status === "발송완료");
 
   async function reload() {
     setLoading(true);
@@ -228,6 +253,37 @@ export default function OrdersListPage() {
     rowSeq.current.set(id, n);
     return n;
   }
+  // 발송 상태·차수를 다시 저장 중인 발주 — 응답 전에 같은 발주의 다른 변경을 또 보내지 않는다.
+  //  서버는 차수를 통째로 지우고 다시 넣으므로, 겹치면 앞 요청의 발송완료가 사라지거나 차수가 두 벌 생길 수 있다(서버도 409 로 막는다).
+  const busyRef = useRef(new Set<string>());
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  function lockOrders(ids: string[]): boolean {
+    if (ids.some((id) => busyRef.current.has(id))) return false;
+    for (const id of ids) busyRef.current.add(id);
+    setBusyIds(new Set(busyRef.current));
+    return true;
+  }
+  function unlockOrders(ids: string[]) {
+    for (const id of ids) busyRef.current.delete(id);
+    setBusyIds(new Set(busyRef.current));
+  }
+  const BUSY_MSG = "이 발주는 아직 저장 중입니다 — 끝난 뒤 다시 시도하세요.";
+
+  // 매출 원장 반영에 실패한 발주 — 창(alert)은 지나가 버리므로 목록 위에 남는 경고 배너로 둔다.
+  //  재고·차수는 이미 저장됐다. 그 발주를 열어 다시 저장하면(PUT) 매출이 다시 맞춰지고, 성공한 응답이 오면 배너에서 빠진다.
+  //  문구는 서버가 보낸다(sales_sync_message — 매출 동기화 모듈은 서버 전용).
+  const [salesFail, setSalesFail] = useState<{ id: string; label: string; message: string }[]>([]);
+  type SalesSyncResp = { sales_sync_failed?: boolean; sales_sync_message?: string } | null | undefined;
+  function noteSalesSync(id: string, data: SalesSyncResp, from: OrderListItem[] = orders) {
+    if (!data || typeof data.sales_sync_failed !== "boolean") return;
+    const o = from.find((x) => x.id === id);
+    const label = o ? `${o.order_no}${o.company_name ? ` ${o.company_name}` : ""}` : "발주";
+    setSalesFail((prev) => {
+      const rest = prev.filter((f) => f.id !== id);
+      return data.sales_sync_failed ? [...rest, { id, label, message: data.sales_sync_message || "매출 반영 실패" }] : rest;
+    });
+  }
+
   async function refreshRows(ids: string[]) {
     if (!ids.length) return;
     const seqs = new Map(ids.map((id) => [id, bumpRow(id)]));
@@ -285,9 +341,10 @@ export default function OrdersListPage() {
     const needPay = live.filter((o) => o.status === "발송완료" && (o.payment_status === "입금전" || o.payment_status === "일부입금"));
     const unpaidTotal = needPay.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
     return [
+      // 지난 발송예정일에 선점이 잡혀 있어 실사 기준 재고에서 이미 빠져 있다 — 실사 입력 전에 발송완료나 날짜 변경으로 정리(수동 절차 D4)
       ...(overdueShip.length ? [{
         key: "overdue", label: "발송일 지남", rows: overdueShip,
-        hint: "", tone: "var(--sm-danger)",
+        hint: "실사 전에 정리", tone: "var(--sm-danger)",
       }] : []),
       {
         key: "ship", label: "오늘 발송", rows: shipToday,
@@ -342,13 +399,26 @@ export default function OrdersListPage() {
   async function handleStatusChange(id: string, newStatus: OrderStatus) {
     const target = orders.find((o) => o.id === id);
     if (!target || target.status === newStatus) return;
-    // 발송완료로 바꾸는데 송장번호가 없으면 입력 프롬프트 (박스 수만큼 칸)
-    if (newStatus === "발송완료" && !String(target.tracking_no ?? "").trim()) {
+    // 발송완료 — 송장번호(박스 수만큼 칸)와 실제 발송일을 받는다. 송장이 이미 있으면 채워서 연다.
+    if (newStatus === "발송완료") {
       const boxCount = Math.max(1, Number(target.box_count) || 1);
       const rcpt = (target.shipments ?? [])[0];   // 발송정보는 차수 공통 → 첫 차수의 수령인 사용
-      setTrackingInput(splitTracking(target.tracking_no, boxCount));
-      setDirectDelivery(false);
-      setTrackingPrompt({ kind: "order", id, label: target.order_no, boxCount, recipientName: rcpt?.recipient_name, recipientPhone: rcpt?.recipient_phone });
+      const tn = String(target.tracking_no ?? "").trim();
+      setTrackingInput(splitTracking(tn === "직접배송" ? "" : target.tracking_no, boxCount));
+      setDirectDelivery(tn === "직접배송");
+      // 단일 발송 취소 발주를 되살림 — 발송 뒤 취소(안 돌아옴)였으면 원래 발송일이 실제 발송일이다(서버는 고른 날짜로 옮긴다)
+      const orig = target.status === "취소" && (target.shipments ?? []).length < 2
+        ? keptShipDate((target.shipments ?? []).find((s) => keptShipDate(s)))
+        : null;
+      setShippedDate(orig && orig <= kstToday() ? orig : kstToday());
+      setTrackingPrompt({ kind: "order", id, label: target.order_no, boxCount, recipientName: rcpt?.recipient_name, recipientPhone: rcpt?.recipient_phone, origDate: orig });
+      return;
+    }
+    // 발송된 발주 취소 — 반품으로 돌아왔으면 재고 복구, 안 돌아왔으면 출고는 그대로 두고 발주·매출만 취소
+    if (newStatus === "취소" && isShippedOrder(target)) {
+      const returned = await askReturned(`${target.order_no}${target.company_name ? ` · ${target.company_name}` : ""}`);
+      if (returned === null) return;
+      await patchStatus(id, "취소", { returned });
       return;
     }
     await patchStatus(id, newStatus);
@@ -383,23 +453,28 @@ export default function OrdersListPage() {
   async function openShipPrompt(id: string, label: string) {
     setShipPrompt({ id, label });
     setShipError("");
-    setShipRows([]); setShipItems([]); setShipInitialCount(0);
+    setShipRows([]); setShipItems([]); setShipInitialCount(0); setShipOrderStatus(null);
     setShipLoading(true);
     try {
       const j = await (await fetch(`/api/b2b/orders/${id}/shipments`, { cache: "no-store" })).json();
-      const items = (j?.ok ? j.items : []) as typeof shipItems;
+      // 조회 실패를 '차수 없음'으로 보고 빈 창을 띄우면 저장이 기존 차수를 지운다 — 오류를 보여 주고 저장을 막는다
+      if (!j?.ok) throw new Error(j?.error || "발송 일정 조회 실패");
+      const items = (j.items || []) as typeof shipItems;
       setShipItems(items || []);
+      setShipOrderStatus(j.order_status ?? null);
       type Sch = {
-        ship_date: string; box_count: number; status?: ShipmentStatus; tracking_no?: string; stock_out?: boolean; shipped_at?: string | null;
-        items: { order_item_index: number; qty: number }[];
+        id?: string; ship_date: string; box_count: number; status?: ShipmentStatus; tracking_no?: string; stock_out?: boolean; shipped_at?: string | null;
+        kept_out?: boolean; items: { order_item_index: number; qty: number }[];
       };
-      const rows = ((j?.ok ? j.schedules : []) as Sch[] | undefined)?.map((s) => ({
+      const rows = ((j.schedules || []) as Sch[] | undefined)?.map((s) => ({
+        id: s.id,
         ship_date: s.ship_date || "",
         box_count: String(Math.max(1, Number(s.box_count) || 1)),
         status: (s.status || "발송대기") as ShipmentStatus,
         tracking_no: s.tracking_no || "",
         stock_out: s.stock_out !== false,
         shipped_at: s.shipped_at ?? null,
+        kept_out: s.kept_out === true,
         items: Object.fromEntries((s.items || []).map((x) => [x.order_item_index, String(x.qty)])),
       }));
       // 새로 만드는 첫 차수는 발주 전량을 미리 담아 둔다(그대로 저장하면 단일 발송).
@@ -409,8 +484,10 @@ export default function OrdersListPage() {
       };
       setShipRows(rows?.length ? rows : [blank]);
       setShipInitialCount(((rows as { ship_date?: string }[] | undefined) || []).filter((r) => r.ship_date).length);
-    } catch {
-      setShipRows([{ ship_date: "", box_count: "1", status: "발송대기", tracking_no: "", stock_out: true, items: {} }]);
+      setShipLoadFailed(false);
+    } catch (err) {
+      setShipLoadFailed(true);
+      setShipError(err instanceof Error ? err.message : "발송 일정 조회 오류");
     }
     setShipLoading(false);
   }
@@ -459,9 +536,22 @@ export default function OrdersListPage() {
       setShipError(`${emptyIdx + 1}번째 줄에 보낼 수량을 넣으세요. 다른 줄에 전량이 담겨 있으면 그 줄 수량을 나눠 옮기세요.`);
       return;
     }
+    // 배분 합이 발주 수량을 넘으면 저장하지 않는다(서버도 막는다) — 취소 차수 배분은 '주문에서 빠진 양'이라
+    //  남긴 채 새 줄에 같은 수량을 넣으면 재고 차감·매출·청구가 0 이 된다
+    if (shipAlloc.over.length) {
+      setShipError(`배분 수량이 발주 수량보다 많습니다 — ${shipAlloc.over.join(" / ")}. 취소 차수 몫을 다시 보내려면 그 차수를 지우세요.`);
+      return;
+    }
+    // 발송완료 차수의 날짜는 실제로 나간 날 — 미래로 옮길 수 없다
+    const futureShipped = shipRows.findIndex((r) => r.status === "발송완료" && r.ship_date > kstToday());
+    if (futureShipped >= 0) {
+      setShipError(`${futureShipped + 1}번째 줄은 발송완료 차수라 발송일을 오늘보다 뒤로 잡을 수 없습니다.`);
+      return;
+    }
     const schedules = shipRows
       .filter((r) => r.ship_date)
       .map((r) => ({
+        id: r.id,
         ship_date: r.ship_date,
         status: r.status,
         tracking_no: r.tracking_no,
@@ -477,17 +567,21 @@ export default function OrdersListPage() {
       if (shipInitialCount === 0) { setShipError("발송예정일을 1개 이상 넣으세요."); return; }
       if (!window.confirm("등록된 발송 일정을 모두 삭제할까요?\n선점된 재고가 원복되고 '발송일정 미등록'으로 돌아갑니다.")) return;
     }
+    const orderId = shipPrompt.id;
+    if (!lockOrders([orderId])) { setShipError(BUSY_MSG); return; }
     setShipSaving(true);
     try {
-      const res = await fetch(`/api/b2b/orders/${shipPrompt.id}/shipments`, {
+      const res = await fetch(`/api/b2b/orders/${orderId}/shipments`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ schedules }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) setShipError(data.error || "발송 일정 저장 실패");
-      else { setShipPrompt(null); pingActivityFeed(); if (data.channel_notice) alert(data.channel_notice); await reload(); }
+      else { setShipPrompt(null); pingActivityFeed(); noteSalesSync(orderId, data); if (data.channel_notice) alert(data.channel_notice); await reload(); }
     } catch (err) {
       setShipError(err instanceof Error ? err.message : "발송 일정 저장 오류");
+    } finally {
+      unlockOrders([orderId]);
     }
     setShipSaving(false);
   }
@@ -509,6 +603,7 @@ export default function OrdersListPage() {
         setError(data.error || "발송일 등록 실패");
       } else {
         pingActivityFeed();
+        noteSalesSync(id, data, snapshot);
         if (data.channel_notice) alert(data.channel_notice);
         await reload();
       }
@@ -518,7 +613,15 @@ export default function OrdersListPage() {
     }
   }
 
-  async function patchStatus(id: string, newStatus: OrderStatus, trackingNo?: string) {
+  // extra.shippedDate = 실제 발송일(발송완료), extra.returned = 발송된 발주 취소의 반품 여부(D3)
+  async function patchStatus(id: string, newStatus: OrderStatus, extra: { trackingNo?: string; shippedDate?: string; returned?: boolean } = {}) {
+    if (!lockOrders([id])) { setError(BUSY_MSG); return; }
+    let again: boolean | null = null; // 서버가 반품 여부를 다시 물었을 때의 답 — 잠금을 푼 뒤 다시 보낸다
+    try { again = await patchStatusLocked(id, newStatus, extra); } finally { unlockOrders([id]); }
+    if (again !== null) await patchStatus(id, newStatus, { ...extra, returned: again });
+  }
+  async function patchStatusLocked(id: string, newStatus: OrderStatus, extra: { trackingNo?: string; shippedDate?: string; returned?: boolean }): Promise<boolean | null> {
+    const { trackingNo, shippedDate: actualDate, returned } = extra;
     const snapshot = orders;
     // 낙관적 갱신은 서버(orders/[id] PATCH)의 차수 동기화와 같게 — 단일 발송은 발송완료면 대기 차수를 발송완료로,
     //  발송대기로 되돌리면 발송완료 차수를 대기로. 발송 칸 표시(shipView)가 차수를 보므로 응답 전에 '0/100 발송'이 뜨지 않게.
@@ -537,14 +640,27 @@ export default function OrdersListPage() {
       const res = await fetch(`/api/b2b/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) }),
+        body: JSON.stringify({
+          status: newStatus,
+          ...(trackingNo ? { tracking_no: trackingNo } : {}),
+          ...(actualDate ? { shipped_date: actualDate } : {}),
+          ...(typeof returned === "boolean" ? { returned } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
+        // 화면이 오래돼 발송 여부를 몰랐던 경우 — 서버가 반품 여부를 다시 묻는다
+        if (res.status === 409 && data.need_return) {
+          const o = snapshot.find((x) => x.id === id);
+          return await askReturned(o ? `${o.order_no}${o.company_name ? ` · ${o.company_name}` : ""}` : "발주");
+        }
         setError(data.error || "상태 변경 실패");
+        // 다른 곳에서 차수가 바뀌었다(409) — 그 줄을 다시 읽어 둔다
+        if (res.status === 409) await refreshRows([id]);
       } else {
         pingActivityFeed();
+        noteSalesSync(id, data, snapshot);
         if (data.channel_notice) alert(data.channel_notice);
         // 서버가 차수 상태·송장까지 함께 바꾼다 — 긴급도·완료 판정이 차수를 보므로 그 줄만 다시 읽어 맞춘다
         await refreshRows([id]);
@@ -553,37 +669,56 @@ export default function OrdersListPage() {
       setOrders(snapshot);
       setError(err instanceof Error ? err.message : "상태 변경 오류");
     }
+    return null;
   }
 
-  // 발송완료 처리 가능 여부: 직접 배송이거나, 박스 수만큼 송장이 다 채워졌을 때
-  const trackingComplete =
-    directDelivery || (trackingInput.length > 0 && trackingInput.every((t) => t.trim() !== ""));
+  // 발송완료 처리 가능 여부: 직접 배송이거나 박스 수만큼 송장이 다 채워졌고, 실제 발송일이 오늘 이전일 때
+  const shippedDateOk = /^\d{4}-\d{2}-\d{2}$/.test(shippedDate) && shippedDate <= kstToday();
+  const trackingComplete = shippedDateOk &&
+    (directDelivery || (trackingInput.length > 0 && trackingInput.every((t) => t.trim() !== "")));
 
   async function confirmTracking() {
     if (!trackingPrompt || !trackingComplete) return;
+    if (busyRef.current.has(trackingPrompt.kind === "order" ? trackingPrompt.id : trackingPrompt.orderId)) return; // 저장 중 — 창을 닫지 않고 둔다
     // 직접 배송이면 송장 자리에 '직접배송' 마커 저장
     const tracking = directDelivery ? "직접배송" : joinTracking(trackingInput);
     const p = trackingPrompt;
     setTrackingPrompt(null);
     setDirectDelivery(false);
-    if (p.kind === "order") await patchStatus(p.id, "발송완료", tracking);
-    else await patchShipment(p.orderId, p.id, "발송완료", tracking);
+    if (p.kind === "order") await patchStatus(p.id, "발송완료", { trackingNo: tracking, shippedDate });
+    else await patchShipment(p.orderId, p.id, "발송완료", { trackingNo: tracking, shippedDate });
   }
 
-  // 하위 차수(발송 일정) 상태 변경 — 발송완료면 송장번호 필요 (박스 수만큼 칸)
-  function handleShipmentStatus(o: OrderListItem, ship: ShipmentDatePreview, newStatus: ShipmentStatus) {
+  // 하위 차수(발송 일정) 상태 변경 — 발송완료면 송장번호(박스 수만큼 칸)와 실제 발송일, 발송된 차수 취소면 반품 여부
+  async function handleShipmentStatus(o: OrderListItem, ship: ShipmentDatePreview, newStatus: ShipmentStatus) {
     if (ship.status === newStatus) return;
-    if (newStatus === "발송완료" && !String(ship.tracking_no ?? "").trim()) {
+    if (newStatus === "발송완료") {
       const boxCount = Math.max(1, Number(ship.box_count) || 1);
-      setTrackingInput(splitTracking(ship.tracking_no, boxCount));
-      setDirectDelivery(false);
-      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송`, boxCount, recipientName: ship.recipient_name, recipientPhone: ship.recipient_phone });
+      const tn = String(ship.tracking_no ?? "").trim();
+      setTrackingInput(splitTracking(tn === "직접배송" ? "" : ship.tracking_no, boxCount));
+      setDirectDelivery(tn === "직접배송");
+      const orig = keptShipDate(ship); // 발송 뒤 취소한 차수를 되살림 — 원래 발송일이 기본값
+      setShippedDate(orig && orig <= kstToday() ? orig : kstToday());
+      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송`, boxCount, recipientName: ship.recipient_name, recipientPhone: ship.recipient_phone, origDate: orig });
       return;
     }
-    void patchShipment(o.id, ship.id, newStatus);
+    if (newStatus === "취소" && ship.status === "발송완료") {
+      const returned = await askReturned(`${o.order_no} · ${ship.seq}차`);
+      if (returned === null) return;
+      await patchShipment(o.id, ship.id, newStatus, { returned });
+      return;
+    }
+    await patchShipment(o.id, ship.id, newStatus);
   }
 
-  async function patchShipment(orderId: string, shipmentId: string, newStatus: ShipmentStatus, trackingNo?: string) {
+  async function patchShipment(orderId: string, shipmentId: string, newStatus: ShipmentStatus, extra: { trackingNo?: string; shippedDate?: string; returned?: boolean } = {}) {
+    if (!lockOrders([orderId])) { setError(BUSY_MSG); return; }
+    let again: boolean | null = null; // 서버가 반품 여부를 다시 물었을 때의 답 — 잠금을 푼 뒤 다시 보낸다
+    try { again = await patchShipmentLocked(orderId, shipmentId, newStatus, extra); } finally { unlockOrders([orderId]); }
+    if (again !== null) await patchShipment(orderId, shipmentId, newStatus, { ...extra, returned: again });
+  }
+  async function patchShipmentLocked(orderId: string, shipmentId: string, newStatus: ShipmentStatus, extra: { trackingNo?: string; shippedDate?: string; returned?: boolean }): Promise<boolean | null> {
+    const { trackingNo, shippedDate: actualDate, returned } = extra;
     const snapshot = orders;
     setOrders((prev) =>
       prev.map((o) =>
@@ -608,21 +743,35 @@ export default function OrdersListPage() {
       const res = await fetch(`/api/b2b/shipments/${shipmentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, ...(trackingNo ? { tracking_no: trackingNo } : {}) }),
+        body: JSON.stringify({
+          status: newStatus,
+          ...(trackingNo ? { tracking_no: trackingNo } : {}),
+          ...(actualDate ? { shipped_date: actualDate } : {}),
+          ...(typeof returned === "boolean" ? { returned } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
+        if (res.status === 409 && data.need_return) {
+          const o = snapshot.find((x) => x.id === orderId);
+          return await askReturned(o ? o.order_no : "발송 차수");
+        }
         setError(data.error || "발송 상태 변경 실패");
+        // 차수 id 가 바뀌었을 수 있다(다른 저장이 차수를 새로 만듦) — 그 줄을 다시 읽어 둔다
+        if (res.status === 404 || res.status === 409) await refreshRows([orderId]);
       } else {
         pingActivityFeed();
-        // 첫 차수 발송이면 서버가 발주를 발송완료(매출 인식)로 바꾼다 — 그 줄만 다시 읽는다
+        noteSalesSync(orderId, data, snapshot);
+        if (data.channel_notice) alert(data.channel_notice);
+        // 서버가 차수를 다시 저장한다(차수 id 가 바뀐다) — 그 줄만 다시 읽는다
         await refreshRows([orderId]);
       }
     } catch (err) {
       setOrders(snapshot);
       setError(err instanceof Error ? err.message : "발송 상태 변경 오류");
     }
+    return null;
   }
 
   function toggleSelectOne(id: string) {
@@ -672,24 +821,42 @@ export default function OrdersListPage() {
       if (!ids.length) return;
     }
     if (!confirm(`선택한 ${ids.length}건의 발주 상태를 "${newStatus}" 로 변경할까요?`)) return;
+    // 발송된 발주를 함께 취소 — 반품 여부를 한 번 묻고 그 발주들에 같이 적용한다(안 나간 발주는 서버가 무시)
+    let returned: boolean | undefined;
+    if (newStatus === "취소") {
+      const shippedSel = orders.filter((o) => ids.includes(o.id) && isShippedOrder(o));
+      if (shippedSel.length) {
+        const names = shippedSel.slice(0, 3).map((o) => o.company_name || o.order_no).join(", ");
+        const ans = await askReturned(`발송된 발주 ${shippedSel.length}건 — ${names}${shippedSel.length > 3 ? ` 외 ${shippedSel.length - 3}건` : ""}`);
+        if (ans === null) return;
+        returned = ans;
+      }
+    }
+    // 저장 중인 발주는 이번 일괄 변경에서 뺀다 — 응답 전에 같은 발주로 또 보내지 않는다
+    const busyCount = ids.filter((id) => busyRef.current.has(id)).length;
+    const runIds = ids.filter((id) => !busyRef.current.has(id));
+    const note = [skipMsg, busyCount ? `저장 중인 발주 ${busyCount}건은 뺐습니다 — 끝난 뒤 다시 시도하세요.` : ""].filter(Boolean).join(" / ");
+    if (!runIds.length) { setError(note); return; }
+    lockOrders(runIds);
     setBulkSaving(true);
-    setError(skipMsg);
+    setError(note);
     const snapshot = orders;
-    const idSet = new Set(ids);
+    const idSet = new Set(runIds);
     // Optimistic
     setOrders((prev) => prev.map((o) => (idSet.has(o.id) ? { ...o, status: newStatus } : o)));
     const notices: string[] = [];
     try {
       const results = await Promise.all(
-        ids.map((id) =>
+        runIds.map((id) =>
           fetch(`/api/b2b/orders/${id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: newStatus }),
+            body: JSON.stringify({ status: newStatus, ...(typeof returned === "boolean" ? { returned } : {}) }),
           }).then(async (r) => {
             const j = await r.json().catch(() => null);
             // 상태 변경(취소·복구)으로 차감 칸이 바뀐 발주 안내 — 여러 건이라 어느 발주인지 붙인다
             if (r.ok && j?.channel_notice) { const o = snapshot.find((x) => x.id === id); notices.push(`[${o?.order_no ?? id}${o?.company_name ? ` ${o.company_name}` : ""}] ${j.channel_notice}`); }
+            if (r.ok) noteSalesSync(id, j, snapshot); // 매출 반영 실패는 목록 위 경고 배너로(어느 발주인지 함께)
             return r.ok ? null : String(j?.error || "변경 실패");
           })
             // 네트워크 오류도 그 건만 실패로 — 하나가 끊겨도 성공한 건까지 되돌리지 않게
@@ -697,14 +864,14 @@ export default function OrdersListPage() {
         )
       );
       if (notices.length) alert(notices.join("\n"));
-      const failedIds = new Set(ids.filter((_, i) => !!results[i]));
-      const okIds = ids.filter((id) => !failedIds.has(id));
+      const failedIds = new Set(runIds.filter((_, i) => !!results[i]));
+      const okIds = runIds.filter((id) => !failedIds.has(id));
       const errors = results.filter((e): e is string => !!e);
       if (errors.length > 0) {
         // 실패 건만 원래 값으로 되돌린다 — 성공한 건은 서버에 이미 반영됐다
         const before = new Map(snapshot.map((o) => [o.id, o]));
         setOrders((prev) => prev.map((o) => (failedIds.has(o.id) ? before.get(o.id) ?? o : o)));
-        setError([`${errors.length}건 변경 실패 — ${errors[0]}`, skipMsg].filter(Boolean).join(" / "));
+        setError([`${errors.length}건 변경 실패 — ${errors[0]}`, note].filter(Boolean).join(" / "));
       } else {
         setSelected(new Set());
         pingActivityFeed();
@@ -713,6 +880,8 @@ export default function OrdersListPage() {
     } catch (err) {
       setOrders(snapshot);
       setError(err instanceof Error ? err.message : "일괄 변경 오류");
+    } finally {
+      unlockOrders(runIds);
     }
     setBulkSaving(false);
   }
@@ -892,6 +1061,21 @@ export default function OrdersListPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+
+      {salesFail.length > 0 && (
+        <div className="sm-warn sm-between sm-gap-3">
+          <span>
+            {salesFail[0].message}:{" "}
+            {salesFail.map((f, i) => (
+              <Fragment key={f.id}>
+                {i > 0 && ", "}
+                <Link href={`/b2b/orders/${f.id}`} className="sm-link">{f.label}</Link>
+              </Fragment>
+            ))}
+          </span>
+          <button type="button" className="b2b-link-btn sm-nowrap" onClick={() => setSalesFail([])}>닫기</button>
+        </div>
+      )}
 
       {(urgencyCount.overdue > 0 || urgencyCount.urgent > 0) && (
         <div className="b2b-urgency-banner">
@@ -1196,6 +1380,7 @@ export default function OrdersListPage() {
                             {(o.shipments ?? []).length}차 · 수정
                           </button>
                           <RemainLink o={o} onOpen={() => openShipPrompt(o.id, o.company_name || o.order_no)} />
+                          <UnlinkedNote o={o} />
                         </td>
                       ) : o.ship_date ? (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
@@ -1206,6 +1391,7 @@ export default function OrdersListPage() {
                             {o.ship_date}
                           </button>
                           <RemainLink o={o} onOpen={() => openShipPrompt(o.id, o.company_name || o.order_no)} />
+                          <UnlinkedNote o={o} />
                         </td>
                       ) : (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ position: "relative" }}>
@@ -1220,6 +1406,7 @@ export default function OrdersListPage() {
                           >
                             + 발송일
                           </button>
+                          <UnlinkedNote o={o} />
                         </td>
                       )}
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
@@ -1258,8 +1445,9 @@ export default function OrdersListPage() {
                           <select
                             className="b2b-status-select"
                             value={o.status}
+                            disabled={busyIds.has(o.id)}
                             onChange={(e) => handleStatusChange(o.id, e.target.value as OrderStatus)}
-                            title={sv.status === PARTIAL_SHIP ? sv.label : undefined}
+                            title={busyIds.has(o.id) ? "저장 중" : sv.status === PARTIAL_SHIP ? sv.label : undefined}
                             style={{ background: sv.color?.bg, color: sv.color?.fg, ...(sv.status === PARTIAL_SHIP ? { maxWidth: "none" } : {}) }}
                           >
                             {ORDER_STATUSES.map((s) => (
@@ -1336,6 +1524,7 @@ export default function OrdersListPage() {
                             <select
                               className="b2b-status-select"
                               value={s.status}
+                              disabled={busyIds.has(o.id)}
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => handleShipmentStatus(o, s, e.target.value as ShipmentStatus)}
                               style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg }}
@@ -1388,6 +1577,7 @@ export default function OrdersListPage() {
                       </div>
                       <div className="b2b-order-card-items">
                         <ItemsPreview items={o.items} />
+                        <UnlinkedNote o={o} />
                       </div>
                       <div className="b2b-order-card-dates">
                         <span><em>발주</em>{o.order_date?.slice(5) || "-"}</span>
@@ -1448,6 +1638,7 @@ export default function OrdersListPage() {
                             <select
                               className="b2b-status-select"
                               value={s.status}
+                              disabled={busyIds.has(o.id)}
                               onChange={(e) => handleShipmentStatus(o, s, e.target.value as ShipmentStatus)}
                               style={{ background: SHIPMENT_STATUS_COLORS[s.status]?.bg, color: SHIPMENT_STATUS_COLORS[s.status]?.fg, marginLeft: "auto", flexShrink: 0 }}
                             >
@@ -1494,6 +1685,11 @@ export default function OrdersListPage() {
                 <div className="b2b-loading">불러오는 중...</div>
               ) : (
                 <div className="sm-col" style={{ gap: 10 }}>
+                  {shipOrderStatus === "취소" && (
+                    <div className="sm-warn" style={{ fontSize: 12 }}>
+                      취소된 발주입니다 — 일정을 고치려면 발송 상태를 먼저 되돌리세요(전부 지우는 정리만 됩니다).
+                    </div>
+                  )}
                   {shipRows.length === 0 && shipInitialCount > 0 && (
                     <div className="sm-warn" style={{ fontSize: 13 }}>
                       일정을 모두 지웠습니다. 이대로 저장하면 발송 일정이 전부 삭제되고 선점 재고가 원복됩니다.
@@ -1517,11 +1713,30 @@ export default function OrdersListPage() {
                         <ShipDateField
                           value={r.ship_date}
                           ariaLabel={shipRows.length > 1 ? `${i + 1}차 발송예정일 선택` : "발송예정일 선택"}
+                          disabled={isKeptCancelRow(r)}
+                          title={isKeptCancelRow(r) ? KEPT_CANCEL_LOCK : undefined}
                           onChange={(v) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, ship_date: v } : x)))} />
                       </label>
-                      <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
-                        onClick={() => setShipRows((p) => p.filter((_, j) => j !== i))}>✕</button>
+                      {/* 발송된 차수(발송완료·발송 시각 보유)는 지울 수 없다 — 취소로 바꾼다(서버도 막는다).
+                          취소 차수를 지우면 그 수량이 다시 발주에 들어가므로 확인을 받는다. */}
+                      {(() => {
+                        const shippedRow = r.status === "발송완료" || !!r.shipped_at;
+                        return (
+                          <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
+                            disabled={shippedRow}
+                            title={shippedRow ? "발송된 차수는 지울 수 없습니다 — 목록에서 취소로 바꾸세요" : undefined}
+                            onClick={() => {
+                              if (r.status === "취소" && !window.confirm("취소 차수를 지우면 그 수량이 다시 발주 수량에 들어갑니다(재고 차감·매출·청구에 포함). 지울까요?")) return;
+                              setShipRows((p) => p.filter((_, j) => j !== i));
+                            }}>✕</button>
+                        );
+                      })()}
                       </div>
+                      {isKeptCancelRow(r) && (
+                        <div className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>
+                          발송 뒤 취소(안 돌아옴) — 발송일·수량은 고칠 수 없습니다.
+                        </div>
+                      )}
                       {/* 이 차수에 담을 수량 — 발송요청 양식·남은 수량 계산이 이 배분을 읽는다(매출·재고는 발주 전량 기준) */}
                       {shipItems.length > 0 && (
                         <div className="sm-col" style={{ gap: 6, marginTop: 8, paddingLeft: 2 }}>
@@ -1533,7 +1748,9 @@ export default function OrdersListPage() {
                                 <span className="sm-faint" style={{ marginLeft: 6 }}>(주문 {it.qty})</span>
                               </span>
                               <input type="number" inputMode="numeric" min={0} className="b2b-input" placeholder="0"
-                                style={{ width: 90, textAlign: "right" }}
+                                style={{ width: 90, textAlign: "right", ...(isKeptCancelRow(r) ? { background: "var(--sm-bg-subtle)" } : {}) }}
+                                disabled={isKeptCancelRow(r)}
+                                title={isKeptCancelRow(r) ? KEPT_CANCEL_LOCK : undefined}
                                 value={r.items[oi] ?? ""}
                                 onChange={(e) => setShipRows((p) => p.map((x, j) => (j === i ? { ...x, items: { ...x.items, [oi]: e.target.value } } : x)))} />
                             </div>
@@ -1544,7 +1761,7 @@ export default function OrdersListPage() {
                   ))}
                   {shipAlloc.over.length > 0 && (
                     <div className="sm-warn" style={{ fontSize: 12 }}>
-                      배분 수량이 발주 수량보다 많습니다 — {shipAlloc.over.join(" / ")}
+                      배분 수량이 발주 수량보다 많아 저장할 수 없습니다 — {shipAlloc.over.join(" / ")}
                     </div>
                   )}
                   {shipAlloc.remain.length > 0 && (
@@ -1556,6 +1773,7 @@ export default function OrdersListPage() {
                   <div>
                     {/* 새 줄은 남은 수량을 미리 담는다 — 날짜만 고르면 나머지 전량 발송 */}
                     <button type="button" className="b2b-btn-secondary"
+                      disabled={shipOrderStatus === "취소" || shipLoadFailed}
                       onClick={() => setShipRows((p) => [...p, {
                         ship_date: "", box_count: "1", status: "발송대기", tracking_no: "", stock_out: true,
                         items: Object.fromEntries(shipAlloc.remainQty.map((q, i) => [i, q > 0 ? String(q) : ""]).filter(([, v]) => v !== "")),
@@ -1568,7 +1786,7 @@ export default function OrdersListPage() {
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setShipPrompt(null)} disabled={shipSaving}>취소</button>
-                <button className="b2b-btn-primary" onClick={saveShipments} disabled={shipSaving || shipLoading}>
+                <button className="b2b-btn-primary" onClick={saveShipments} disabled={shipSaving || shipLoading || shipLoadFailed || busyIds.has(shipPrompt.id)}>
                   {shipSaving ? "저장 중..." : "저장"}
                 </button>
               </div>
@@ -1581,7 +1799,7 @@ export default function OrdersListPage() {
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
             <div className="b2b-modal-head">
-              <h2 className="b2b-modal-title">발송완료 — 송장번호 입력</h2>
+              <h2 className="b2b-modal-title">발송완료 — 발송일·송장번호 입력</h2>
               <button className="b2b-modal-close" onClick={() => setTrackingPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
@@ -1603,6 +1821,30 @@ export default function OrdersListPage() {
                   </div>
                 );
               })()}
+
+              {/* 실제 발송일 — 기본 오늘, 미래 불가. 발송예정일과 다르면 차수 날짜가 이 날로 옮겨진다(D2) */}
+              <label className="b2b-field" style={{ marginBottom: 12 }}>
+                <span className="b2b-field-label">실제 발송일</span>
+                <input
+                  type="date"
+                  className="b2b-input"
+                  value={shippedDate}
+                  max={kstToday()}
+                  onChange={(e) => setShippedDate(e.target.value)}
+                  aria-label="실제 발송일"
+                />
+                {shippedDate && !shippedDateOk ? (
+                  <span className="sm-faint" style={{ fontSize: 12 }}>오늘보다 뒤로 잡을 수 없습니다</span>
+                ) : trackingPrompt.origDate && shippedDate !== trackingPrompt.origDate ? (
+                  <span style={{ fontSize: 12, color: "var(--sm-warning)" }}>
+                    원래 발송일 {trackingPrompt.origDate} — 바꾸면 재고 차감일·매출 인식일이 옮겨집니다
+                  </span>
+                ) : trackingPrompt.origDate ? (
+                  <span className="sm-faint" style={{ fontSize: 12 }}>원래 발송일 {trackingPrompt.origDate} 그대로 되살립니다</span>
+                ) : (
+                  <span className="sm-faint" style={{ fontSize: 12 }}>가장 이른 발송일 = 재고 차감일·매출 인식일</span>
+                )}
+              </label>
 
               {/* 직접 배송(택배 아님): 체크 시 송장번호 불필요 */}
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: directDelivery ? 0 : 12, cursor: "pointer" }}>
@@ -1638,9 +1880,39 @@ export default function OrdersListPage() {
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setTrackingPrompt(null)}>취소</button>
-                <button className="b2b-btn-primary" onClick={confirmTracking} disabled={!trackingComplete}>
+                <button className="b2b-btn-primary" onClick={confirmTracking}
+                  disabled={!trackingComplete || busyIds.has(trackingPrompt.kind === "order" ? trackingPrompt.id : trackingPrompt.orderId)}>
                   발송완료 처리
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 발송된 발주·차수 취소 — 반품으로 실제 돌아왔는지(대표 결정 D3) */}
+      {returnPrompt && (
+        <div className="b2b-modal-backdrop">
+          <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <div className="b2b-modal-head">
+              <h2 className="b2b-modal-title">발송된 발주 취소</h2>
+              <button className="b2b-modal-close" onClick={() => answerReturn(null)}>✕</button>
+            </div>
+            <div className="b2b-modal-body">
+              <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
+                <strong>{returnPrompt.label}</strong>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>반품으로 실제 돌아왔나요?</div>
+              <div className="sm-col" style={{ gap: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>
+                <span><strong>돌아왔음</strong> — 재고를 되돌립니다</span>
+                <span><strong>안 돌아옴</strong> — 출고는 그대로 두고 발주·매출만 취소합니다</span>
+              </div>
+            </div>
+            <div className="b2b-modal-foot">
+              <button className="b2b-btn-secondary" onClick={() => answerReturn(null)}>닫기</button>
+              <div className="b2b-modal-foot-right">
+                <button className="b2b-btn-secondary" onClick={() => answerReturn(false)}>안 돌아옴</button>
+                <button className="b2b-btn-primary" onClick={() => answerReturn(true)}>돌아왔음</button>
               </div>
             </div>
           </div>
@@ -1927,7 +2199,11 @@ function ExportPickModal({
 //  input 을 필드 크기로 깔아 두는 이유: 데스크톱 크롬의 달력이 input 위치에 열리므로
 //  0×0 으로 두면 달력이 엉뚱한 곳에 뜬다. 클릭은 pointerEvents 로 버튼만 받는다.
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"] as const;
-function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange: (v: string) => void; ariaLabel: string }) {
+// 발송 뒤 '안 돌아옴'으로 취소한 차수 — 출고 유지 행이 그때의 배분·발송일로 남아 있어 발송일·수량을 고치지 않는다(서버도 막는다)
+const isKeptCancelRow = (r: { status: string; kept_out?: boolean }) => r.status === "취소" && r.kept_out === true;
+const KEPT_CANCEL_LOCK = "발송 뒤 취소한 차수는 발송일·수량을 바꿀 수 없습니다 — 목록에서 그 차수를 되돌린 뒤 고치세요";
+
+function ShipDateField({ value, onChange, ariaLabel, disabled, title }: { value: string; onChange: (v: string) => void; ariaLabel: string; disabled?: boolean; title?: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : null;
   // 탭/클릭은 투명한 input 이 직접 받는다 — 모바일(웹뷰·구형 iOS 포함)은 네이티브 피커가 그 자체로 열리고,
@@ -1940,12 +2216,12 @@ function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange
     try { el.showPicker(); } catch { /* 미지원 — 네이티브 탭 동작에 맡긴다 */ }
   }
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative" }} title={title}>
       <input
-        ref={ref} type="date" value={value} aria-label={ariaLabel}
+        ref={ref} type="date" value={value} aria-label={ariaLabel} disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         onClick={tryShowPicker}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, border: 0, padding: 0, cursor: "pointer" }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, border: 0, padding: 0, cursor: disabled ? "not-allowed" : "pointer" }}
       />
       <div
         aria-hidden
@@ -1953,7 +2229,7 @@ function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange
           width: "100%", minHeight: 48, padding: "0 14px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
           border: "1px solid var(--sm-border)", borderRadius: "var(--sm-radius)",
-          background: "var(--sm-white)", font: "inherit", fontSize: 15, pointerEvents: "none",
+          background: disabled ? "var(--sm-bg-subtle)" : "var(--sm-white)", font: "inherit", fontSize: 15, pointerEvents: "none",
         }}
       >
         {d ? (
@@ -1963,7 +2239,7 @@ function ShipDateField({ value, onChange, ariaLabel }: { value: string; onChange
         ) : (
           <span style={{ color: "var(--sm-text-light)" }}>날짜 선택</span>
         )}
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>
+        {!disabled && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--sm-orange)", flexShrink: 0 }}>{d ? "변경" : "선택"}</span>}
       </div>
     </div>
   );
@@ -1986,6 +2262,18 @@ function RemainLink({ o, onOpen }: { o: OrderListItem; onOpen: () => void }) {
   );
 }
 
+
+// 상품을 고르지 않고 이름만 친 품목 — 재고에서 빠지지 않는다(S9). 목록 응답의 unlinked_count
+function UnlinkedNote({ o }: { o: OrderListItem }) {
+  const n = (o as OrderListItem & { unlinked_count?: number }).unlinked_count ?? 0;
+  if (n <= 0 || o.status === "취소") return null;
+  return (
+    <span style={{ display: "block", fontSize: 12, color: "var(--sm-warning)", marginTop: 2 }}
+      title="발주 수정 화면에서 품목을 목록에서 골라야 재고가 빠집니다">
+      재고 미연동 {n}줄
+    </span>
+  );
+}
 
 // 품목 미리보기 — 발주 상품을 "품목명 옵션 ×수량" 으로 나열, 많으면 외 N
 function ItemsPreview({ items }: { items: OrderLinePreview[] }) {

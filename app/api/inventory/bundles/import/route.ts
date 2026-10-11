@@ -59,7 +59,12 @@ export async function POST(req: NextRequest) {
       let err: string | undefined;
       if (pIds && pIds.length > 1) err = `묶음SKU '${parentSku}' 가 ${pIds.length}개 상품과 중복`;
       else if (pIds && pIds.length === 1 && !pIds[0].active) err = `묶음SKU '${parentSku}' 는 미사용 상품 — 사용 처리 후 반영하세요`;
+      // 같은 구성품SKU 두 줄 — 반영하면 거절된다(수량을 합칠지 덮을지 사람이 정한다). 미리보기에서 먼저 알린다.
+      const skuCount = new Map<string, number>();
+      for (const c of g.comps) skuCount.set(c.sku, (skuCount.get(c.sku) || 0) + 1);
       const components: BundleComp[] = g.comps.map((c) => {
+        if (c.sku === parentSku) return { sku: c.sku, qty: c.qty, name: null, ok: false, err: "자기 자신" };
+        if ((skuCount.get(c.sku) || 0) > 1) return { sku: c.sku, qty: c.qty, name: bySku.get(c.sku)?.[0]?.name ?? null, ok: false, err: "두 줄 — 한 줄로 합치세요" };
         const ids = bySku.get(c.sku);
         if (!ids || ids.length === 0) return { sku: c.sku, qty: c.qty, name: null, ok: false, err: "구성품 SKU 없음" };
         if (ids.length > 1) return { sku: c.sku, qty: c.qty, name: ids[0].name, ok: false, err: `${ids.length}개와 중복` };

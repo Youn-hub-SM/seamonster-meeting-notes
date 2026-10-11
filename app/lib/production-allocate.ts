@@ -1,6 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 import { logProductionReceipt, logProductionRequestStatusChanged } from "./b2b-activity";
 import { UNREQUESTED_ITEM_MEMO, isFactoryPurpose, PURPOSE_CHANNEL, type PrPurpose } from "./wholesale-production";
+
+// 알림(활동 기록 + 팀즈)은 응답 뒤로 — 저장 경로가 팀즈 지연을 품목 수만큼 기다리다 함수 시간 제한에 걸려
+//  '원장은 저장, 연결은 일부만' 으로 끊기던 것(2026-10-11 원장 점검 S2)을 막는다. 요청 컨텍스트 밖이면 바로 보낸다.
+export function deferNotify(fn: () => Promise<void>): void {
+  const run = async () => { try { await fn(); } catch (e) { console.warn("[production-allocate] 알림 실패", e); } };
+  try { after(run); } catch { void run(); }
+}
 
 // 입고 → 생산 요청 연결(지정 매칭, 2026-09-23 대표 확정) — 입고를 기록하는 사람이 요청서를 고른다.
 //  화면이 거래일 기준으로 생산기간(생산시작일~생산종료일)에 드는 열린 제조사 요청서를 기본 선택해 두고,
@@ -146,6 +154,7 @@ export async function applyManualAllocations(
     if (data?.name) pname = String(data.name);
   } catch { /* 이름 없이 진행 */ }
   const requestIds = new Set<string>();
+  const notes: { reqNo: string; qty: number; detail: string }[] = []; // 요청서별 알림 — 루프 안에서 기다리지 않고 응답 뒤에 보낸다
   for (const a of opts.allocations) {
     const r = byId.get(a.item_id);
     if (!r) { warnings.push("요청서 하나가 그 사이 닫혀 배정을 건너뛰었습니다(해당 수량은 기타로 남음)."); continue; }
@@ -161,10 +170,11 @@ export async function applyManualAllocations(
     const cum = (prevRecv.get(a.item_id) || 0) + a.qty;
     const cumStr = ` — 누적 ${cum.toLocaleString()}/${r.requested_qty.toLocaleString()}${r.requested_qty > 0 ? ` (${Math.round((cum / r.requested_qty) * 100)}%)` : ""}`;
     lines.push(`- ${r.head.req_no || "요청서"} 배정 ×${a.qty.toLocaleString()}${cumStr}`);
-    await logProductionReceipt(r.head.req_no || "", pname, a.qty, opts.actor, `이번 배정 ×${a.qty.toLocaleString()}${cumStr}`);
+    notes.push({ reqNo: r.head.req_no || "", qty: a.qty, detail: `이번 배정 ×${a.qty.toLocaleString()}${cumStr}` });
     // 상태 전환(요청→진행중/완료)은 recheckRequestCompletion 한 곳에서만 — 여기서도 전환하면
     //  100% 배정 시 '요청→진행중→완료' 이중 전환·이중 알림이 난다(검증 확정).
   }
+  if (notes.length) deferNotify(async () => { for (const n of notes) await logProductionReceipt(n.reqNo, pname, n.qty, opts.actor, n.detail); });
   return { warnings, requestIds: [...requestIds], lines, applied: Math.round(applied * 100) / 100 };
 }
 
@@ -212,7 +222,7 @@ export async function getRequestFullness(
 //    안 되기 때문(검증 확정 — 자동 완료 원복만 허용).
 //  · 프로모션은 완료·재개 전환을 하지 않는다(2026-10-06) — 완료는 사람의 '마감'뿐이고 마감 = 소매 합류다.
 //    배정 100% 로 자동 완료되면 '마감'을 누를 길이 없어 확보분이 프로모션 칸에 갇힌다. 요청→진행중만 한다.
-//  실패해도 호출부를 막지 않는다.
+//  실패해도 호출부를 막지 않는다. 상태 변경 알림은 응답 뒤에(deferNotify) — 저장 경로가 팀즈를 기다리지 않게.
 export async function recheckRequestCompletion(
   sb: SupabaseClient, requestIds: string[], reason: string, mode: "complete" | "reopen" = "complete",
 ): Promise<void> {
@@ -229,24 +239,24 @@ export async function recheckRequestCompletion(
             const { data: flipped } = await sb.from("production_requests")
               .update({ status: "진행중", updated_at: new Date().toISOString() })
               .eq("id", id).eq("status", "요청").select("id");
-            if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason, detail);
+            if (flipped?.length) deferNotify(() => logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason, detail));
           }
         } else if (f.full && (f.status === "요청" || f.status === "진행중")) {
           const { data: flipped } = await sb.from("production_requests")
             .update({ status: "완료", updated_at: new Date().toISOString() })
             .eq("id", id).in("status", ["요청", "진행중"]).select("id");
-          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, f.status, "완료", `${reason} — 이행 100%`, detail);
+          if (flipped?.length) deferNotify(() => logProductionRequestStatusChanged(f.req_no, f.status, "완료", `${reason} — 이행 100%`, detail));
         } else if (!f.full && f.status === "요청") {
           const { data: flipped } = await sb.from("production_requests")
             .update({ status: "진행중", updated_at: new Date().toISOString() })
             .eq("id", id).eq("status", "요청").select("id");
-          if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason, detail);
+          if (flipped?.length) deferNotify(() => logProductionRequestStatusChanged(f.req_no, "요청", "진행중", reason, detail));
         }
       } else if (!promo && !f.full && f.status === "완료") {
         const { data: flipped } = await sb.from("production_requests")
           .update({ status: "진행중", updated_at: new Date().toISOString() })
           .eq("id", id).eq("status", "완료").select("id");
-        if (flipped?.length) await logProductionRequestStatusChanged(f.req_no, "완료", "진행중", reason, detail);
+        if (flipped?.length) deferNotify(() => logProductionRequestStatusChanged(f.req_no, "완료", "진행중", reason, detail));
       }
     } catch (e) { console.warn("[production-allocate] recheck failed", e); }
   }
@@ -262,18 +272,51 @@ export type LinkResult = {
   req_no?: string;
   status?: string;                 // 연결 후 요청서 상태(완료로 닫혔으면 '완료')
   lines: { product_id: string; qty: number; over: number; unrequested: boolean }[]; // over = 요청 초과분
-  failed?: { product_id: string; qty: number; reason: string }[]; // 연결 실패 품목(입고 원장은 저장됨 — 화면이 알려 취소·재기록을 안내)
+  failed?: { product_id: string; qty: number; reason: string }[]; // 연결 실패 품목(입고 원장은 저장됨 — 원장은 지우지 말고 생산 요청 화면 [입고 연결]로 다시 연결, S11)
 };
+
+// 원장 건별로 이미 연결된 양 — 모든 요청서에 걸쳐(inv_txn_id 기준) 본다. 대상 요청서 품목만 보면 A 에 붙은 입고를
+//  B 에 또 붙여 이행이 두 번 잡힌다(재연결 API·재시도 공용). 100개씩 청크 + range 페이징 전량. 오류는 null(연결 보류).
+export async function linkedQtyByTxn(sb: SupabaseClient, txnIds: string[]): Promise<Map<string, { qty: number; requestIds: Set<string> }> | null> {
+  const out = new Map<string, { qty: number; requestIds: Set<string> }>();
+  const ids = [...new Set(txnIds.filter(Boolean))];
+  for (let i = 0; i < ids.length; i += 100) {
+    const part = ids.slice(i, i + 100);
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await sb.from("production_receipts").select("inv_txn_id, request_id, qty")
+        .in("inv_txn_id", part).order("id", { ascending: true }).range(off, off + 999);
+      if (error) return null;
+      for (const r of data ?? []) {
+        const k = String(r.inv_txn_id);
+        const cur = out.get(k) ?? { qty: 0, requestIds: new Set<string>() };
+        cur.qty = Math.round((cur.qty + (Number(r.qty) || 0)) * 100) / 100;
+        if (r.request_id) cur.requestIds.add(String(r.request_id));
+        out.set(k, cur);
+      }
+      if ((data ?? []).length < 1000) break;
+    }
+  }
+  return out;
+}
 
 // 입고 원장 행들을 사람이 고른 제조사(재고 보충) 요청서에 연결한다.
 //  · 열린(요청·진행중) 제조사 요청서만. 완료·취소·확정형이면 연결하지 않고 reason 을 돌려준다.
 //  · 품목 줄이 있으면 그 줄에 전량(초과 허용), 없으면 '[요청서에 없음]' 줄 생성(묶음 제외).
-//  · 같은 (item, txn) 쌍이 이미 있으면(재호출) 증액분만(topUpPair) — 이중 집계 없음.
+//  · 정확히 한 번(S2) — 원장 건별 기연결을 모든 요청서에 걸쳐 읽어(linkedQtyByTxn) 남은 양만 붙인다. 다시 불러도
+//    (재시도·재연결) 이중 집계가 없다. 기연결 조회가 실패하면 아무것도 붙이지 않는다(모르고 또 붙이지 않게).
+//  · 연결 행은 한 번의 배열 upsert(102 유니크 충돌 무시) — 전부 들어가거나 전혀 안 들어간다. 줄마다 기다리지 않는다.
+//    충돌로 빠진 쌍(같은 품목 줄·같은 원장에 이미 일부 연결)만 증액분을 따로 맞춘다(topUpPair).
+//  · 알림은 요청서당 한 건으로 묶어 응답 뒤에(deferNotify) — 줄마다 팀즈를 기다리면 함수 시간 제한에 걸려 일부만 연결된다.
 //  · 연결 뒤 요청 → 진행중, 전 품목 100% 이상이면 자동 완료(마감).
 export async function allocateReceiptsToRequest(
   sb: SupabaseClient, requestId: string, entries: AllocEntry[], actor: string | null,
 ): Promise<LinkResult> {
-  const positive = entries.filter((e) => e.inv_txn_id && e.product_id && Math.round(e.qty * 100) / 100 > 0);
+  const seen = new Set<string>();
+  const positive = entries.filter((e) => {
+    if (!e.inv_txn_id || !e.product_id || !(Math.round(e.qty * 100) / 100 > 0) || seen.has(e.inv_txn_id)) return false;
+    seen.add(e.inv_txn_id);
+    return true;
+  });
   if (!positive.length) return { ok: true, lines: [] };
 
   // 요청서 확인 — purpose(082) 미적용이면 전부 제조사로 본다
@@ -295,14 +338,21 @@ export async function allocateReceiptsToRequest(
   if (ie) return { ok: false, reason: "요청 품목을 읽지 못했습니다.", req_no: reqNo, lines: [] };
   const items = (itemsRaw ?? []) as Item[];
 
-  // 기존 입고 누계(초과분 계산용) + 원장 건별 기배분(재호출 멱등)
+  // 원장 건별 기연결(전 요청서) — 실패면 보류(failed 로 알려 '다시 연결'로 잇게 한다)
+  const prior = await linkedQtyByTxn(sb, positive.map((e) => e.inv_txn_id));
+  if (!prior) return {
+    ok: false, reason: "기존 연결을 확인하지 못해 연결하지 않았습니다 — 생산 요청 화면의 [입고 연결]로 다시 연결하세요.", req_no: reqNo, lines: [],
+    failed: positive.map((e) => ({ product_id: e.product_id, qty: Math.round(e.qty * 100) / 100, reason: "기존 연결 확인 실패" })),
+  };
+  // 품목 줄별 기존 입고 누계 — 초과분 표시용(조회 실패는 초과 표시만 빠진다)
   const received = new Map<string, number>();
-  const priorByTxn = new Map<string, number>();
-  if (items.length) {
-    const { data: rcs } = await sb.from("production_receipts").select("item_id, inv_txn_id, qty").in("item_id", items.map((i) => i.id)).limit(5000);
-    for (const rc of rcs ?? []) {
-      received.set(rc.item_id as string, (received.get(rc.item_id as string) || 0) + (Number(rc.qty) || 0));
-      if (rc.inv_txn_id) priorByTxn.set(rc.inv_txn_id as string, (priorByTxn.get(rc.inv_txn_id as string) || 0) + (Number(rc.qty) || 0));
+  for (let i = 0; i < items.length; i += 100) {
+    const part = items.slice(i, i + 100).map((x) => x.id);
+    for (let off = 0; ; off += 1000) {
+      const { data: rcs, error } = await sb.from("production_receipts").select("item_id, qty").in("item_id", part).order("id", { ascending: true }).range(off, off + 999);
+      if (error) break;
+      for (const rc of rcs ?? []) received.set(rc.item_id as string, (received.get(rc.item_id as string) || 0) + (Number(rc.qty) || 0));
+      if ((rcs ?? []).length < 1000) break;
     }
   }
   const pids = [...new Set(positive.map((e) => e.product_id))];
@@ -336,12 +386,19 @@ export async function allocateReceiptsToRequest(
     return line;
   };
 
-  // 삽입 실패는 건너뛰되 failed 에 남긴다 — 조용히 빠지면 원장엔 있고 요청서엔 없는 입고가 되어 알아챌 길이 없다
+  // 1) 붙일 행 준비 — 삽입 실패는 건너뛰되 failed 에 남긴다(조용히 빠지면 원장엔 있고 요청서엔 없는 입고가 된다)
   const out: LinkResult = { ok: true, req_no: reqNo, status: head.status, lines: [], failed: [] };
+  type Plan = { e: AllocEntry; it: Item; qty: number; left: number };
+  const plans: Plan[] = [];
   for (const e of positive) {
     const qty = Math.round(e.qty * 100) / 100;
-    const left = qty - (priorByTxn.get(e.inv_txn_id) || 0);
-    if (left <= 0) continue; // 이미 이 원장이 연결됨(재호출)
+    const pr = prior.get(e.inv_txn_id);
+    const left = Math.round((qty - (pr?.qty || 0)) * 100) / 100;
+    if (left <= 0) {
+      // 이미 연결됨 — 이 요청서면 재호출(조용히 건너뜀), 다른 요청서면 알린다(옮기려면 그쪽 연결을 먼저 해제)
+      if (pr && ![...pr.requestIds].includes(requestId)) out.failed!.push({ product_id: e.product_id, qty, reason: "이미 다른 요청서에 연결된 입고" });
+      continue;
+    }
     const real = items.find((it) => it.product_id === e.product_id && it.requested_qty > 0);
     let it: Item | null = real ?? null;
     if (!it) {
@@ -349,31 +406,65 @@ export async function allocateReceiptsToRequest(
       it = await ensureUnrequestedLine(e.product_id);
       if (!it) { out.failed!.push({ product_id: e.product_id, qty: left, reason: `'${UNREQUESTED_ITEM_MEMO}' 줄 생성 실패` }); continue; }
     }
-    const row: Record<string, unknown> = {
-      request_id: requestId, item_id: it.id, qty: left, memo: LINK_MEMO, received_by: actor, inv_txn_id: e.inv_txn_id,
-    };
-    if (e.receipt_date && /^\d{4}-\d{2}-\d{2}$/.test(e.receipt_date)) row.receipt_date = e.receipt_date;
-    const { error: re, inserted } = await insertReceiptOnce(sb, row);
-    if (re) { console.warn("[production-allocate] link insert failed", re.message); out.failed!.push({ product_id: e.product_id, qty: left, reason: re.message }); continue; }
-    let applied = left;
-    if (!inserted) {
-      const r2 = await topUpPair(sb, it.id, Number.POSITIVE_INFINITY, e.inv_txn_id, qty);
-      if (!r2) { out.failed!.push({ product_id: e.product_id, qty: left, reason: "기존 연결 재확인 실패" }); continue; }
-      applied = r2.applied;
-    }
-    if (applied <= 0) continue;
-    const before = received.get(it.id) || 0;
-    received.set(it.id, before + applied);
-    const over = it.requested_qty > 0 ? Math.min(applied, Math.max(0, Math.round((before + applied - it.requested_qty) * 100) / 100)) : 0;
-    out.lines.push({ product_id: e.product_id, qty: applied, over, unrequested: it.requested_qty <= 0 });
-    await logProductionReceipt(reqNo, nameById.get(e.product_id) || "품목", applied, actor, it.requested_qty <= 0 ? `${UNREQUESTED_ITEM_MEMO} ${LINK_MEMO}` : LINK_MEMO);
+    plans.push({ e, it, qty, left });
   }
+
+  // 2) 한 번에 넣기 — 102 유니크(item_id, inv_txn_id) 충돌은 무시. 미적용 환경은 일반 insert(한 문장)로 폴백.
+  const rowOf = (p: Plan): Record<string, unknown> => ({
+    request_id: requestId, item_id: p.it.id, qty: p.left, memo: LINK_MEMO, received_by: actor, inv_txn_id: p.e.inv_txn_id,
+    ...(p.e.receipt_date && /^\d{4}-\d{2}-\d{2}$/.test(p.e.receipt_date) ? { receipt_date: p.e.receipt_date } : {}),
+  });
+  const appliedBy = new Map<Plan, number>();
+  if (plans.length) {
+    const rows = plans.map(rowOf);
+    let up = await sb.from("production_receipts").upsert(rows, { onConflict: "item_id,inv_txn_id", ignoreDuplicates: true }).select("item_id, inv_txn_id");
+    let plain = false;
+    if (up.error && /no unique|exclusion constraint|on conflict/i.test(up.error.message)) {
+      up = await sb.from("production_receipts").insert(rows).select("item_id, inv_txn_id");
+      plain = true;
+    }
+    if (up.error) {
+      console.warn("[production-allocate] link insert failed", up.error.message);
+      for (const p of plans) out.failed!.push({ product_id: p.e.product_id, qty: p.left, reason: up.error.message });
+    } else {
+      const got = new Set((up.data ?? []).map((r) => `${r.item_id}|${r.inv_txn_id}`));
+      for (const p of plans) {
+        if (plain || got.has(`${p.it.id}|${p.e.inv_txn_id}`)) { appliedBy.set(p, p.left); continue; }
+        // 충돌로 빠진 쌍 — 같은 줄·같은 원장에 일부만 붙어 있던 경우의 증액(드묾, 줄 단위로 맞춘다)
+        const r2 = await topUpPair(sb, p.it.id, Number.POSITIVE_INFINITY, p.e.inv_txn_id, p.qty);
+        if (!r2) { out.failed!.push({ product_id: p.e.product_id, qty: p.left, reason: "기존 연결 재확인 실패" }); continue; }
+        if (r2.applied > 0) appliedBy.set(p, r2.applied);
+      }
+    }
+  }
+  for (const [p, applied] of appliedBy) {
+    const before = received.get(p.it.id) || 0;
+    received.set(p.it.id, before + applied);
+    const over = p.it.requested_qty > 0 ? Math.min(applied, Math.max(0, Math.round((before + applied - p.it.requested_qty) * 100) / 100)) : 0;
+    out.lines.push({ product_id: p.e.product_id, qty: applied, over, unrequested: p.it.requested_qty <= 0 });
+  }
+
+  // 3) 알림 한 건(요청서당) — 응답 뒤에. 요약 형식은 그대로('생산 입고 · 번호 · 품목 ×수량'), 품목별 내역은 본문에.
+  if (out.lines.length) {
+    const nm = (pid: string) => nameById.get(pid) || "품목";
+    const first = nm(out.lines[0].product_id);
+    const title = out.lines.length === 1 ? first : `${first} 외 ${out.lines.length - 1}종`;
+    const total = Math.round(out.lines.reduce((a, l) => a + l.qty, 0) * 100) / 100;
+    const detail = [
+      LINK_MEMO,
+      ...out.lines.slice(0, 30).map((l) => `- ${nm(l.product_id)} ×${l.qty.toLocaleString()}${l.unrequested ? ` ${UNREQUESTED_ITEM_MEMO}` : l.over > 0 ? ` (초과 ${l.over.toLocaleString()})` : ""}`),
+      ...(out.lines.length > 30 ? [`- 외 ${out.lines.length - 30}품목`] : []),
+      ...(out.failed!.length ? [`연결 실패 ${out.failed!.length}품목 — 생산 요청 화면의 [입고 연결]로 다시 연결하세요`] : []),
+    ].join("\n");
+    deferNotify(() => logProductionReceipt(reqNo, title, total, actor, detail));
+  }
+
   // 상태 전환은 recheckRequestCompletion 한 곳에서 — 요청→진행중(부분) 또는 →완료(전 품목 100%↑, 도매 요청서와 같은 규칙)
   if (out.lines.length) {
     await recheckRequestCompletion(sb, [requestId], "입고 기록");
     try {
-      const { data: after } = await sb.from("production_requests").select("status").eq("id", requestId).maybeSingle();
-      if (after?.status) out.status = String(after.status);
+      const { data: afterRow } = await sb.from("production_requests").select("status").eq("id", requestId).maybeSingle();
+      if (afterRow?.status) out.status = String(afterRow.status);
     } catch { /* 상태 모름 — 화면은 목록 재조회 */ }
   }
   return out;

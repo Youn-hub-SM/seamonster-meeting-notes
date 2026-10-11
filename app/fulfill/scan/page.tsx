@@ -7,14 +7,15 @@ type Tally = { key: string; sku: string; name: string; qty: number; unknown: boo
 type State = { tally: Tally[]; scannedCount: number; totalInvoices: number; totalUnits: number };
 type LastReset = { at: string; count: number } | null;
 // 메시지 — dup = 이번 라운드에서 이미 찍음(무시), prev = 이전 라운드(초기화 전)에서 찍음(집계 제외, 넣기 가능),
-//  moved = 이전 라운드 송장을 이번 라운드에 넣음, bad = 미등록·오류
-type Msg = { kind: "ok" | "dup" | "prev" | "moved" | "bad"; text: string };
+//  moved = 이전 라운드 송장을 이번 라운드에 넣음, bad = 미등록·오류, wait = 처리 중이라 인쇄·초기화를 미룸
+type Msg = { kind: "ok" | "dup" | "prev" | "moved" | "bad" | "wait"; text: string };
 const MSG_COLOR: Record<Msg["kind"], { bg: string; fg: string }> = {
   ok: { bg: "var(--sm-success-bg)", fg: "var(--sm-success)" },
   dup: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" },
   prev: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
   moved: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
   bad: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
+  wait: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
 };
 const hm = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 
@@ -41,8 +42,14 @@ export default function ScanPage() {
   const [scan, setScan] = useState("");
   const [pending, setPending] = useState(0); // 처리 대기 중인 스캔 수
   const [msg, setMsg] = useState<Msg | null>(null);
-  const queueRef = useRef<string[]>([]);
+  // include: true = 이전 라운드 송장을 이번 라운드에 넣기(F8). 없으면 처리 시점의 '이전 라운드 송장도 넣기' 스위치.
+  const queueRef = useRef<{ inv: string; include?: boolean }[]>([]);
   const processingRef = useRef(false);
+  // 집계 세대 — 스캔을 넣을 때·초기화할 때 올린다. 늦게 도착한 폴링 응답이 그 뒤의 새 집계를 덮어쓰지 않게(응답 순서 미보장).
+  const seqRef = useRef(0);
+  // 초기화·되돌리기 요청 중 — 그동안 찍은 스캔은 끝난 뒤 보낸다(옛 라운드로 마감되거나 응답이 서로 덮어쓰지 않게)
+  const roundOpRef = useRef(false);
+  const busy = () => processingRef.current || roundOpRef.current || queueRef.current.length > 0;
   const [lastReset, setLastReset] = useState<LastReset>(null);
   // '이전 라운드 송장도 넣기' — 알면서 다시 찍어야 할 때 경고 없이 집계에 넣는다. 초기화하면 꺼진다(보호 복귀).
   const [includePrev, setIncludePrev] = useState(false);
@@ -129,9 +136,15 @@ export default function ScanPage() {
 
   const loadState = useCallback(async (silent = false) => {
     if (!silent) setError("");
+    const seq0 = seqRef.current;
     try {
       const j = await (await fetch("/api/fulfill/scan/state", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
+      // 출발 뒤 스캔·초기화가 있었거나 처리 중이면 이 응답은 낡았다 — 대상 건수만 반영
+      if (seqRef.current !== seq0 || processingRef.current || queueRef.current.length > 0) {
+        setSt((s) => (s ? { ...s, totalInvoices: j.totalInvoices } : s));
+        return;
+      }
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
       setLastReset(j.lastReset ?? null);
     } catch (e) { if (!silent) setError(e instanceof Error ? e.message : "조회 실패"); }
@@ -155,21 +168,26 @@ export default function ScanPage() {
     const inv = scan.trim();
     if (!inv) return;
     setScan("");
-    queueRef.current.push(inv);
-    setPending(queueRef.current.length);
+    enqueue({ inv });
     scanRef.current?.focus();
+  }
+  // 스캔·F8 넣기는 모두 이 큐 하나로 순서대로 — 동시에 보내면 늦게 온 응답이 새 집계를 덮어쓴다
+  function enqueue(item: { inv: string; include?: boolean }) {
+    seqRef.current++;
+    queueRef.current.push(item);
+    setPending(queueRef.current.length);
     pump();
   }
   async function pump() {
-    if (processingRef.current) return;
+    if (processingRef.current || roundOpRef.current) return;
     processingRef.current = true;
     while (queueRef.current.length) {
       const q = queueRef.current;
-      const inv = q[0];
+      const it = q[0];
       try {
-        await sendScan(inv, includePrevRef.current);
+        await sendScan(it.inv, it.include ?? includePrevRef.current);
       } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); alarm("err"); }
-      q.shift(); // 처리 중 초기화로 큐가 바뀌었으면 옛 큐에서만 뺀다(새 라운드 첫 스캔이 사라지지 않게)
+      q.shift();
       setPending(queueRef.current.length);
     }
     processingRef.current = false;
@@ -181,6 +199,7 @@ export default function ScanPage() {
     const j = await (await fetch("/api/fulfill/scan/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice_no: inv, include_prev: include }) })).json();
     if (!j.ok) throw new Error(j.error || "스캔 실패");
     if (!j.known) { setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` }); alarm("bad"); return; }
+    seqRef.current++;
     setSt((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
     if (j.moved) { setMsg({ kind: "moved", text: `이전 라운드 송장 · 이번 라운드에 넣음 · ${inv}` }); return; }
     if (j.prevRound) {
@@ -193,18 +212,28 @@ export default function ScanPage() {
     setMsg({ kind: "ok", text: `스캔 완료 · ${inv}` });
   }
   // 경고 줄의 [이번 라운드에 넣기]·F8 — 마지막 '이전 라운드' 송장 1건을 넣는다
-  async function includeLast() {
+  function includeLast() {
     const inv = lastPrevRef.current;
-    if (!inv) return; // 두 번 눌러도 한 번만(보내기 전에 비워진다)
+    if (!inv) return;
+    lastPrevRef.current = null; // 두 번 눌러도 한 번만
     scanRef.current?.focus();
-    try { await sendScan(inv, true); } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "넣기 실패" }); alarm("err"); }
+    enqueue({ inv, include: true });
+  }
+  // 처리 중(서버 응답 전) 스캔이 있으면 인쇄·초기화를 미룬다 — 그 송장 품목이 빠진 리스트가 인쇄되거나 대기 스캔이 버려진다
+  function waitBusy(what: string): boolean {
+    if (!busy()) return false;
+    setMsg({ kind: "wait", text: `처리 중 ${Math.max(1, queueRef.current.length)}건 — 끝난 뒤 다시 ${what}하세요` });
+    scanRef.current?.focus();
+    return true;
   }
 
   // 스캔 초기화 — 인쇄 후 다음 라운드를 위해 자주 누르므로 확인창 없이 즉시(업로드 데이터는 유지).
   //  기록은 30일 보관(이전 라운드 송장 재스캔을 잡는다). '이전 라운드 송장도 넣기'는 꺼진다.
   async function reset() {
-    queueRef.current = []; setPending(0); // 대기 중 스캔도 취소(깨끗한 새 라운드)
-    includePrevRef.current = false; setIncludePrev(false); lastPrevRef.current = null; // 응답 전 스캔부터 다시 보호
+    if (waitBusy("초기화")) return;
+    seqRef.current++;
+    roundOpRef.current = true;
+    includePrevRef.current = false; setIncludePrev(false); lastPrevRef.current = null; // 다음 스캔부터 다시 보호
     try {
       const j = await (await fetch("/api/fulfill/scan/reset", { method: "POST" })).json();
       if (!j.ok) throw new Error(j.error || "초기화 실패");
@@ -213,15 +242,18 @@ export default function ScanPage() {
       setMsg({ kind: "ok", text: "초기화 완료 · 새로 스캔하세요" });
       scanRef.current?.focus();
     } catch (e) { setError(e instanceof Error ? e.message : "초기화 실패"); }
+    finally { roundOpRef.current = false; void pump(); }
   }
   // 직전 초기화 되돌리기 — 실수로 초기화했을 때 다시 찍지 않고 그 라운드를 되살린다(이번 라운드에 찍은 것과 합쳐진다)
   const undoingRef = useRef(false);
   async function undoReset() {
     if (!lastReset || undoingRef.current) return;
+    if (waitBusy("되돌리기")) return;
     const ok = window.confirm(`${hm(lastReset.at)}에 초기화한 ${lastReset.count.toLocaleString()}건을 이번 라운드로 되돌릴까요?`);
     scanRef.current?.focus(); // 버튼에 포커스가 남으면 다음 스캔의 Enter 가 버튼을 또 누른다
     if (!ok) return;
-    undoingRef.current = true;
+    undoingRef.current = true; roundOpRef.current = true;
+    seqRef.current++;
     try {
       const j = await (await fetch("/api/fulfill/scan/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ undo: true, at: lastReset.at }) })).json();
       if (!j.ok) throw new Error(j.error || "되돌리기 실패");
@@ -229,11 +261,12 @@ export default function ScanPage() {
       setLastReset(j.lastReset ?? null);
       setMsg({ kind: "ok", text: `초기화 되돌림 · ${Number(j.restored || 0).toLocaleString()}건` });
     } catch (e) { setError(e instanceof Error ? e.message : "되돌리기 실패"); void loadState(true); }
-    finally { undoingRef.current = false; }
+    finally { undoingRef.current = false; roundOpRef.current = false; void pump(); }
   }
 
   // 피킹 리스트 인쇄 — 품목명·수량. 창고 위치(구역)가 설정돼 있으면 구역 소제목으로 묶어 걷는 순서대로.
   function printTally() {
+    if (waitBusy("인쇄")) return;
     if (!st || !st.tally.length) return;
     const now = new Date();
     const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -350,12 +383,12 @@ export default function ScanPage() {
 
       {/* 인쇄 → 상품 가지러 → 초기화 → 다음 스캔. 두 버튼을 크고 눈에 띄게. */}
       <div className="sm-row" style={{ gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <button className="b2b-btn-primary" onClick={printTally} disabled={!st || st.tally.length === 0}
+        <button className="b2b-btn-primary" onClick={printTally} disabled={!st || st.tally.length === 0 || pending > 0}
           style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800 }}>인쇄 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F2)</span></button>
-        <button onClick={reset} disabled={!st || st.scannedCount === 0}
+        <button onClick={reset} disabled={!st || st.scannedCount === 0 || pending > 0}
           style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800, cursor: "pointer",
             background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
-            opacity: !st || st.scannedCount === 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F4)</span></button>
+            opacity: !st || st.scannedCount === 0 || pending > 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F4)</span></button>
       </div>
       {lastReset && lastReset.count > 0 && (
         <div className="sm-row" style={{ gap: 10, marginTop: -6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>

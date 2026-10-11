@@ -18,10 +18,10 @@ async function purchasedProducts(month: string) {
   const used = hasStatus ? txns.filter((t) => t.status === "완료") : txns;
   const m = new Map<string, { id: string; name: string; sku: string | null; spec: string | null; qty: number }>();
   for (const t of used) {
-    const q = Math.abs(Math.round(Number(t.qty) || 0));
+    const q = Math.abs(Math.round((Number(t.qty) || 0) * 100) / 100); // 소수 둘째 자리(kg 단위 입고) — 정수 반올림 금지
     if (!q) continue;
     const cur = m.get(t.product_id);
-    if (cur) cur.qty += q;
+    if (cur) cur.qty = Math.round((cur.qty + q) * 100) / 100;
     else m.set(t.product_id, {
       id: t.product_id, name: t.product?.name ?? "(삭제된 품목)",
       sku: t.product?.sku ?? null, spec: t.product?.spec ?? null, qty: q,
@@ -66,8 +66,11 @@ export async function GET(req: NextRequest) {
         .order("return_date", { ascending: false }).limit(2000),
     ]);
     // 087 미적용이면 테이블이 없다 — 화면이 죽지 않게 빈 목록으로 돌려주고 안내만 띄운다.
+    //  그 밖의 오류는 실패로 — 빈 목록으로 보이면 이미 넣은 반품을 다시 넣는다(S4).
     if (res.error) {
-      return NextResponse.json({ ok: true, rows: [], products, pending_migration: true });
+      if (/purchase_returns/i.test(res.error.message) && /does not exist|could not find|schema cache/i.test(res.error.message) && !/column|relationship/i.test(res.error.message))
+        return NextResponse.json({ ok: true, rows: [], products, pending_migration: true });
+      throw res.error;
     }
 
     type Join = { name?: string; sku?: string | null; spec?: string | null };
@@ -107,15 +110,16 @@ export async function POST(req: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ ok: false, error: "반품일이 올바르지 않습니다." }, { status: 400 });
     const unit = Math.round(Number(b.unit_amount) || 0);
 
-    const { error } = await supabaseAdmin().from("purchase_returns").insert({
+    const { data: ins, error } = await supabaseAdmin().from("purchase_returns").insert({
       product_id: productId, return_date: date, qty,
       unit_amount: unit > 0 ? unit : null,
       partner: String(b.partner || "").trim() || null,
       memo: String(b.memo || "").trim() || null,
       created_by: await actor(req),
-    });
+    }).select("id").single();
     if (error) throw error;
-    return NextResponse.json({ ok: true });
+    // id = 화면의 '재고에서도 빼기'가 출고 제출 키(request_key '<id>:<순번>')로 쓴다 — 반품 삭제가 이 키로 딸린 출고를 찾는다
+    return NextResponse.json({ ok: true, id: (ins as { id?: string } | null)?.id ?? null });
   } catch (err) {
     console.error("[inventory/returns POST]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "반품 기록 실패") }, { status: 500 });

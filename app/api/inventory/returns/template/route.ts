@@ -20,12 +20,12 @@ export async function GET(req: NextRequest) {
 
     const m = new Map<string, { sku: string | null; name: string; qty: number }>();
     for (const t of used) {
-      const q = Math.abs(Math.round(Number(t.qty) || 0));
+      const q = Math.abs(Math.round((Number(t.qty) || 0) * 100) / 100); // 소수 둘째 자리(kg 단위 입고) — 정수 반올림 금지
       if (!q) continue;
       const p = t.product;
       const key = t.product_id;
       const cur = m.get(key);
-      if (cur) cur.qty += q;
+      if (cur) cur.qty = Math.round((cur.qty + q) * 100) / 100;
       else m.set(key, {
         sku: p?.sku ?? null,
         name: p?.spec ? `${p.name} ${p.spec}` : (p?.name ?? "(삭제된 품목)"),

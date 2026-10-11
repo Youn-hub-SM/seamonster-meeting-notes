@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
+import { cancelledDeductionByOrder } from "@/app/lib/b2b-cancel";
+import { fetchAllPages, fetchInChunks } from "@/app/lib/sales-paging";
 
 export const dynamic = "force-dynamic";
 
@@ -20,17 +22,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     if (cErr) throw cErr;
     if (!company) return NextResponse.json({ ok: false, error: "거래처를 찾을 수 없습니다." }, { status: 404 });
 
-    const { data: orders, error: oErr } = await sb
-      .from("orders")
-      .select(
-        "id, order_no, order_date, ship_date, status, payment_status, total, " +
-          "order_items(product_name, spec, qty)"
-      )
-      .eq("company_id", id)
-      .order("order_date", { ascending: false });
-    if (oErr) throw oErr;
-
-    const orderRows = (orders ?? []) as unknown as {
+    // 1,000행 상한 없이 끝까지(정렬 끝에 id — 페이지 경계 고정)
+    const orderRows = await fetchAllPages<{
       id: string;
       order_no: string;
       order_date: string;
@@ -39,28 +32,39 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       payment_status: string;
       total: number;
       order_items: { product_name: string; spec: string | null; qty: number }[];
-    }[];
+    }>((lo, hi) =>
+      sb.from("orders")
+        .select("id, order_no, order_date, ship_date, status, payment_status, total, order_items(product_name, spec, qty)")
+        .eq("company_id", id)
+        .order("order_date", { ascending: false })
+        .order("id", { ascending: false })
+        .range(lo, hi), { label: "발주" });
 
-    // 입금전/일부입금 발주의 입금 합계 → 미수금
-    const unpaidIds = orderRows.filter((o) => o.payment_status === "입금전" || o.payment_status === "일부입금").map((o) => o.id);
-    let paidByOrder = new Map<string, number>();
-    if (unpaidIds.length > 0) {
-      const { data: pays, error: pErr } = await sb.from("payments").select("order_id, amount").in("order_id", unpaidIds);
-      if (pErr) throw pErr;
-      paidByOrder = new Map();
-      for (const p of pays ?? []) paidByOrder.set(p.order_id, (paidByOrder.get(p.order_id) || 0) + Number(p.amount || 0));
+    // 미수금 = 입금 확인 화면(/api/b2b/payments/unpaid)과 같은 규칙:
+    //  입금전·일부입금 · 취소 제외 · 실효 청구액(total − 취소 차수 감액) − 입금 합
+    const isUnpaid = (o: { status: string; payment_status: string }) =>
+      o.status !== "취소" && (o.payment_status === "입금전" || o.payment_status === "일부입금");
+    const unpaidIds = orderRows.filter(isUnpaid).map((o) => o.id);
+    const dedIds = orderRows.filter((o) => isUnpaid(o) || o.status === "발송완료").map((o) => o.id);
+    const dedMap = new Map<string, number>();
+    for (let i = 0; i < dedIds.length; i += 100) {
+      const part = await cancelledDeductionByOrder(sb, dedIds.slice(i, i + 100));
+      for (const [k, v] of part) dedMap.set(k, v);
     }
+    const effTotal = (o: { id: string; total: number }) => Math.max(0, (Number(o.total) || 0) - (dedMap.get(o.id) || 0));
 
-    let revenue = 0; // 발송완료 합
+    const paidByOrder = new Map<string, number>();
+    const pays = await fetchInChunks<{ order_id: string; amount: number }>(unpaidIds, (part, lo, hi) =>
+      sb.from("payments").select("id, order_id, amount").in("order_id", part).order("id").range(lo, hi));
+    for (const p of pays) paidByOrder.set(p.order_id, (paidByOrder.get(p.order_id) || 0) + Number(p.amount || 0));
+
+    let revenue = 0; // 발송완료 실효 청구액 합(부분취소 감액 반영)
     let outstanding = 0; // 미수금
     const productMap = new Map<string, { product_name: string; qty: number; orders: number }>();
 
     for (const o of orderRows) {
-      if (o.status === "발송완료") revenue += Number(o.total) || 0;
-      if (o.payment_status === "입금전" || o.payment_status === "일부입금") {
-        const paid = paidByOrder.get(o.id) || 0;
-        outstanding += Math.max(0, (Number(o.total) || 0) - paid);
-      }
+      if (o.status === "발송완료") revenue += effTotal(o);
+      if (isUnpaid(o)) outstanding += effTotal(o) - (paidByOrder.get(o.id) || 0);
       const seenInThisOrder = new Set<string>();
       for (const it of o.order_items ?? []) {
         const key = it.product_name;

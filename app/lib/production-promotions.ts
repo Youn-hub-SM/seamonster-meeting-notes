@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { supabaseAdmin } from "./supabase";
+import { mutateKv, readKvSoft, readKvStrict } from "./production-kv";
 
 // ─────────────────────────────────────────────
 // 생산 캘린더용 프로모션 일정 — b2b_settings('production_promotions') 에 배열로 저장.
@@ -27,24 +27,18 @@ export interface Promotion {
 
 const COLORS = ["#F15A30", "#0A66C2", "#22863A", "#B86E00", "#7C3AED", "#C92A2A"];
 
+// 읽기는 두 갈래(S4) — 쓰기·목록 화면은 getPromotions(오류면 던진다: '빈 목록 + 이번 1건'으로 전체 일정을 덮어쓰지 않게),
+//  계산 경로(권장·판매속도)는 getPromotionsWithOk(실패해도 빈 목록으로 계속 돌되 ok=false — 호출부가 경고·초안 중단).
+//  저장은 mutateKv(낙관적 잠금 + 저장 오류 확인).
+const asList = (v: unknown): Promotion[] => (Array.isArray(v) ? (v as Promotion[]) : []);
+
 export async function getPromotions(): Promise<Promotion[]> {
-  try {
-    const sb = supabaseAdmin();
-    const { data, error } = await sb.from("b2b_settings").select("value").eq("key", KEY).maybeSingle();
-    if (error || !data) return [];
-    const v = data.value;
-    return Array.isArray(v) ? (v as Promotion[]) : [];
-  } catch {
-    return [];
-  }
+  return asList((await readKvStrict<Promotion[]>(KEY)).value);
 }
 
-async function savePromotions(list: Promotion[]): Promise<void> {
-  const sb = supabaseAdmin();
-  await sb.from("b2b_settings").upsert(
-    { key: KEY, value: list, updated_at: new Date().toISOString() },
-    { onConflict: "key" }
-  );
+export async function getPromotionsWithOk(): Promise<{ list: Promotion[]; ok: boolean }> {
+  const r = await readKvSoft<Promotion[]>(KEY);
+  return { list: asList(r.value), ok: r.ok };
 }
 
 function normalize(p: Partial<Promotion>): Omit<Promotion, "id"> {
@@ -73,25 +67,25 @@ function normalize(p: Partial<Promotion>): Omit<Promotion, "id"> {
 
 // 추가 또는 수정(id 있으면 수정). 반환: 갱신된 전체 목록.
 export async function upsertPromotion(input: Partial<Promotion>): Promise<Promotion[]> {
-  const list = await getPromotions();
   const norm = normalize(input);
   if (!norm.start) throw new Error("시작일을 입력하세요.");
-  if (input.id) {
-    const idx = list.findIndex((x) => x.id === input.id);
-    if (idx >= 0) list[idx] = { ...list[idx], ...norm, id: input.id };
-  } else {
-    const color = norm.color || COLORS[list.length % COLORS.length];
-    list.push({ ...norm, color, id: randomUUID() });
-  }
-  list.sort((a, b) => a.start.localeCompare(b.start));
-  await savePromotions(list);
-  return list;
+  const newId = randomUUID();
+  return mutateKv<Promotion[]>(KEY, (cur) => {
+    const list = [...asList(cur)];
+    if (input.id) {
+      const idx = list.findIndex((x) => x.id === input.id);
+      if (idx >= 0) list[idx] = { ...list[idx], ...norm, id: input.id };
+    } else {
+      const color = norm.color || COLORS[list.length % COLORS.length];
+      list.push({ ...norm, color, id: newId });
+    }
+    list.sort((a, b) => a.start.localeCompare(b.start));
+    return list;
+  });
 }
 
 export async function deletePromotion(id: string): Promise<Promotion[]> {
-  const list = (await getPromotions()).filter((x) => x.id !== id);
-  await savePromotions(list);
-  return list;
+  return mutateKv<Promotion[]>(KEY, (cur) => asList(cur).filter((x) => x.id !== id));
 }
 
 function addDaysIso(iso: string, n: number): string {
@@ -109,7 +103,9 @@ function daysInclusive(a: string, b: string): number {
 //  진행 중인 행사는 이미 지난 만큼은 빼고 남은 기간분만(일할). 안 시작한 행사는 전량.
 //  → 행사분때문에 '미리 만들어둔 것'은 현재고로 차감되고, 남은 행사분만 추가로 확보.
 export async function getPromoForwardBySku(today: string, leadDays: number): Promise<Record<string, number>> {
-  const list = await getPromotions();
+  return promoForwardFrom((await getPromotionsWithOk()).list, today, leadDays);
+}
+export function promoForwardFrom(list: Promotion[], today: string, leadDays: number): Record<string, number> {
   const horizon = addDaysIso(today, Math.max(0, leadDays));
   const out: Record<string, number> = {};
   for (const p of list) {
@@ -131,7 +127,9 @@ export async function getPromoForwardBySku(today: string, leadDays: number): Pro
 //  이 값을 평상시 판매속도에서 빼서, 행사때 과하게 나간 스파이크를 제거한다.
 //  → 행사분때문에 '과하게 많이 나간 것'이 평상시 안전재고를 부풀리지 않게.
 export async function getPromoSoldInWindow(from: string, to: string): Promise<Record<string, number>> {
-  const list = await getPromotions();
+  return promoSoldFrom((await getPromotionsWithOk()).list, from, to);
+}
+export function promoSoldFrom(list: Promotion[], from: string, to: string): Record<string, number> {
   const out: Record<string, number> = {};
   if (!from || !to || to < from) return out;
   for (const p of list) {

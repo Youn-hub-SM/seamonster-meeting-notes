@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MOVE_ONLY_CHANNELS, signedQty, type InvTxnType, type InvChannel } from "@/app/lib/inventory";
 import { matchKoQuery } from "@/app/lib/hangul";
-import { formatLinkResult } from "@/app/lib/link-result";
+import type { LinkResultLite } from "@/app/lib/link-result";
 import { ChannelPicker } from "./ChannelTabs";
+import { LOST_MSG, linkMessage, confirmUnlinkedInbound } from "./TxnModal";
 
 type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
 // 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
@@ -13,6 +14,9 @@ const reqWarnOf = (j: { ok?: boolean; full_ok?: boolean } | null) =>
   : j.full_ok === false ? "이행률을 읽지 못해 기본 요청서를 고르지 않았습니다 — 연결할 요청서를 직접 고르세요." : "";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+const DAYS_AGO = (n: number) => new Date(Date.now() + 9 * 3600_000 - n * 86400_000).toISOString().slice(0, 10);
+// 제출 키(131) — 이 폼 한 번 = 키 하나. 응답이 끊겨 다시 눌러도 서버가 같은 키를 알아보고 한 번만 기록한다.
+const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 
 export type PickProduct = { id: string; name: string; sku: string | null; spec: string | null; unit: string; cost_price: number; purchase_price: number; origin: string | null; attrs: string | null; qty: number; is_bundle?: boolean };
 type Line = { key: string; product_id: string; name: string; sub: string; unit: string; qty: string; price: string };
@@ -49,6 +53,9 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
     return () => { alive = false; };
   }, [type, date, reqTouched]);
   const [reason, setReason] = useState("판매"); // 출고 사유 — '판매' 외에는 대사(구매·판매·재고 확인)에서 분리 집계(099)
+  const [inReason, setInReason] = useState(""); // 입고 사유 — '' = 매입·생산, '고객 반품'(D4b) = 요청서 연결·단가 없음
+  const customerReturn = type === "입고" && inReason === "고객 반품";
+  const submitKey = useRef(newKey());
   const [search, setSearch] = useState("");
   const [excludeBundles, setExcludeBundles] = useState(true); // 묶음(세트) 제외 — 기본 켜짐(세트는 자체 재고 없음)
   const [active, setActive] = useState(-1); // 키보드 하이라이트 인덱스
@@ -99,17 +106,30 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   async function save() {
     const valid = lines.filter((l) => (Number(l.qty) || 0) > 0);
     if (valid.length === 0) { setError("제품과 수량을 입력하세요."); return; }
+    // 미래 날짜 '완료'는 서버도 막는다(S6) — 예정 건은 즉시 처리를 해제해 대기로
+    if (done && date > TODAY()) { setError("미래 날짜는 '즉시 처리'를 해제해 대기로 저장하세요."); return; }
+    if (date < DAYS_AGO(7) && !window.confirm(`거래일이 ${date} 입니다(7일 이상 전). 이 날짜로 기록할까요?`)) return;
     setSaving(true); setError("");
+    // 제조사 입고를 '연결 안 함'으로 저장 — 열린 요청서 잔여가 있는 품목이면 확인(S9)
+    if (type === "입고" && done && !customerReturn && !reqId && !(await confirmUnlinkedInbound(date, valid.map((l) => ({ product_id: l.product_id, name: l.name }))))) { setSaving(false); return; }
     try {
       const rows = valid.map((l) => ({
         type, qty: signedQty(type, Number(l.qty) || 0), product_id: l.product_id, product_name: l.name,
-        unit_amount: Number(l.price) > 0 ? Math.round(Number(l.price)) : null, txn_date: date, partner: partner.trim() || null, memo: memo.trim() || null,
-        reason: type === "출고" && reason !== "판매" ? reason : null,
+        unit_amount: !customerReturn && Number(l.price) > 0 ? Math.round(Number(l.price)) : null, txn_date: date, partner: partner.trim() || null, memo: memo.trim() || null,
+        reason: type === "출고" && reason !== "판매" ? reason : customerReturn ? inReason : null,
       }));
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done, channel, request_id: type === "입고" && done ? (reqId || null) : null }) });
-      const j = await res.json();
+      let res: Response;
+      let j: { ok?: boolean; error?: string; code?: string; replay?: boolean; link?: LinkResultLite } | null = null;
+      const lost = LOST_MSG;
+      try {
+        res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, done, channel, request_key: submitKey.current, request_id: type === "입고" && done && !customerReturn ? (reqId || null) : null }) });
+        j = await res.json().catch(() => null);
+      } catch { throw new Error(lost); }
+      if (!j) throw new Error(lost);
+      if (j.code === "request_key_conflict") submitKey.current = newKey(); // 다음 누름은 새 기록
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      if (j.link) alert(formatLinkResult(j.link, (pid) => valid.find((l) => l.product_id === pid)?.name || "품목"));
+      if (j.replay) alert("이미 저장돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      if (j.link) alert(linkMessage(j.link, (pid) => valid.find((l) => l.product_id === pid)?.name || "품목"));
       onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
@@ -120,23 +140,32 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div className="sm-tabs">
           <button className={`sm-tab ${type === "입고" ? "is-active" : ""}`} onClick={() => { setType("입고"); setReason("판매"); if (channel !== "소매") setChannel("소매"); }}>구매(입고)</button>
-          <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => setType("출고")}>판매(출고)</button>
+          <button className={`sm-tab ${type === "출고" ? "is-active" : ""}`} onClick={() => { setType("출고"); setInReason(""); }}>판매(출고)</button>
         </div>
         <ChannelPicker value={channel} onChange={setChannel}
           disabledChannels={type === "입고" ? [...MOVE_ONLY_CHANNELS] : []}
           disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
         <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>거래일
-          <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
+          <input className="b2b-input" type="date" value={date} max={done ? TODAY() : undefined} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
+        {type === "입고" && (
+          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
+            <select className="b2b-input" value={inReason} onChange={(e) => setInReason(e.target.value)} style={{ width: "auto" }}
+              title="고객 반품·교환으로 돌아온 물건은 '고객 반품' — 요청서 연결·매입 단가 없이 기록됩니다">
+              <option value="">입고(매입·생산)</option>
+              <option value="고객 반품">고객 반품·교환 회수</option>
+            </select>
+          </label>
+        )}
         {type === "입고" && (
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>요청서
-            <select className="b2b-input" value={done ? reqId : ""} disabled={!done} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }} style={{ width: "auto", maxWidth: 340 }}
-              title={done ? "이 입고를 연결할 제조사 요청서" : "대기 저장은 요청서에 연결되지 않습니다"}>
+            <select className="b2b-input" value={done && !customerReturn ? reqId : ""} disabled={!done || customerReturn} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }} style={{ width: "auto", maxWidth: 340 }}
+              title={customerReturn ? "고객 반품은 요청서에 연결되지 않습니다" : done ? "이 입고를 연결할 제조사 요청서" : "대기 저장은 요청서에 연결되지 않습니다"}>
               <option value="">연결 안 함</option>
               {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
             </select>
           </label>
         )}
-        {type === "입고" && reqWarn && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", flexBasis: "100%" }}>{reqWarn}</span>}
+        {type === "입고" && !customerReturn && reqWarn && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", flexBasis: "100%" }}>{reqWarn}</span>}
         {type === "출고" && (
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
             <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: "auto" }}
@@ -144,11 +173,12 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
               <option value="판매">판매</option>
               <option value="협찬">협찬·증정</option>
               <option value="폐기">폐기</option>
+              <option value="제조사 반품">제조사 반품</option>
               <option value="기타">기타</option>
             </select>
           </label>
         )}
-        <input className="b2b-input" placeholder={type === "입고" ? "매입처(선택)" : type === "출고" && reason !== "판매" ? "전달처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />
+        <input className="b2b-input" placeholder={type === "입고" ? (customerReturn ? "고객(선택)" : "매입처(선택)") : type === "출고" && reason !== "판매" ? "전달처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />
         <input className="b2b-input" placeholder="메모(선택)" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
       </div>
 
@@ -208,6 +238,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       <div className="sm-between" style={{ marginTop: 16, gap: 10, flexWrap: "wrap" }}>
         <label className="sm-row" style={{ gap: 7, fontSize: 15, cursor: "pointer" }}>
           <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> 즉시 {type === "입고" ? "입고" : "출고"}처리
+          <span className="sm-faint" style={{ fontSize: 12 }}>(미래 날짜는 해제해 대기로)</span>
         </label>
         <div className="sm-row" style={{ gap: 10 }}>
           <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>취소</button>

@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import OrdersTable from "../OrdersTable";
 import { ChannelPicker } from "../ChannelTabs";
+import { LOST_MSG, linkMessage, confirmUnlinkedInbound } from "../TxnModal";
 import { INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
-import { formatLinkResult } from "@/app/lib/link-result";
+import type { LinkResultLite } from "@/app/lib/link-result";
 
 type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
 // 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
@@ -14,8 +15,10 @@ const reqWarnOf = (j: { ok?: boolean; full_ok?: boolean } | null) =>
   : j.full_ok === false ? "이행률을 읽지 못해 기본 요청서를 고르지 않았습니다 — 연결할 요청서를 직접 고르세요." : "";
 
 type ImportRow = { type: "입고" | "출고"; qty: number; product_id: string; product_name: string; unit_amount: number | null; txn_date: string; partner: string | null; memo: string | null; reason?: string | null };
-type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number; untracked?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[] };
+// key = 이 미리보기의 제출 키(131) — 반영을 다시 눌러도 한 번만 기록된다
+type Preview = { summary: { valid: number; errors: number; merged?: number; skipped?: number; untracked?: number }; rows: ImportRow[]; errors: { line: number; msg: string }[]; key: string };
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 
 export default function TradePage() {
   const [reload, setReload] = useState(0);
@@ -30,6 +33,8 @@ export default function TradePage() {
   const [ioPartner, setIoPartner] = useState("");
   const [ioDone, setIoDone] = useState(true); // 즉시 입고/출고처리(기본 체크)
   const [ioReason, setIoReason] = useState("판매"); // 출고 사유 — '판매' 외에는 대사(구매·판매·재고 확인)에서 분리 집계(099)
+  const [inReason, setInReason] = useState(""); // 입고 사유 — '' = 매입·생산, '고객 반품'(D4b) = 요청서 연결·단가 없음
+  const customerReturn = ioType === "입고" && inReason === "고객 반품";
   // 지정 매칭 — 엑셀 입고를 연결할 제조사 요청서. 거래일이 생산기간에 드는 요청서가 기본값(사람이 고르면 그대로).
   const [reqs, setReqs] = useState<OpenReq[]>([]);
   const [reqId, setReqId] = useState("");
@@ -55,10 +60,11 @@ export default function TradePage() {
     try {
       const fd = new FormData();
       fd.append("file", file); fd.append("type", ioType); fd.append("txn_date", ioDate); fd.append("partner", ioPartner);
+      fd.append("done", ioDone ? "1" : "0"); // 즉시 처리면 미래 날짜 행은 오류로(S6)
       const res = await fetch("/api/inventory/txns/import", { method: "POST", body: fd });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
-      setPreview(j as Preview);
+      setPreview({ ...(j as Omit<Preview, "key">), key: newKey() });
       setUploadOpen(false); // 분석 성공 → 설정 모달 닫고 미리보기로
     } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
     setImporting(false);
@@ -67,10 +73,28 @@ export default function TradePage() {
     if (!preview) return;
     setApplying(true); setError("");
     try {
-      const res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows.map((r) => (r.type === "출고" && ioReason !== "판매" ? { ...r, reason: ioReason } : r)), done: ioDone, channel: ioChannel, request_id: ioType === "입고" && ioDone ? (reqId || null) : null }) });
-      const j = await res.json();
+      // 제조사 입고를 '연결 안 함'으로 반영 — 열린 요청서 잔여가 있는 품목이면 확인(S9)
+      if (ioType === "입고" && ioDone && !customerReturn && !reqId) {
+        const seen = new Set<string>();
+        const items = preview.rows.filter((r) => r.type === "입고" && !seen.has(r.product_id) && seen.add(r.product_id)).map((r) => ({ product_id: r.product_id, name: r.product_name }));
+        if (!(await confirmUnlinkedInbound(ioDate, items))) { setApplying(false); return; }
+      }
+      const lost = LOST_MSG;
+      let res: Response;
+      let j: { ok?: boolean; error?: string; code?: string; replay?: boolean; link?: LinkResultLite } | null = null;
+      try {
+        res = await fetch("/api/inventory/txns/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          rows: preview.rows.map((r) => (r.type === "출고" && ioReason !== "판매" ? { ...r, reason: ioReason } : r.type === "입고" && customerReturn ? { ...r, reason: inReason, unit_amount: null } : r)),
+          done: ioDone, channel: ioChannel, request_key: preview.key,
+          request_id: ioType === "입고" && ioDone && !customerReturn ? (reqId || null) : null,
+        }) });
+        j = await res.json().catch(() => null);
+      } catch { throw new Error(lost); }
+      if (!j) throw new Error(lost);
+      if (j.code === "request_key_conflict") setPreview((p) => (p ? { ...p, key: newKey() } : p)); // 다음 누름은 새 기록
       if (!res.ok || !j.ok) throw new Error(j.error || "적용 실패");
-      if (j.link) alert(formatLinkResult(j.link, (pid) => preview.rows.find((r) => r.product_id === pid)?.product_name || "품목"));
+      if (j.replay) alert("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      if (j.link) alert(linkMessage(j.link, (pid) => preview.rows.find((r) => r.product_id === pid)?.product_name || "품목"));
       setPreview(null); setReload((n) => n + 1);
     } catch (e) { setError(e instanceof Error ? e.message : "적용 실패"); }
     setApplying(false);
@@ -105,7 +129,7 @@ export default function TradePage() {
               <div className="b2b-field">
                 <label className="b2b-field-label">① 유형</label>
                 <div className="sm-tabs" style={{ margin: 0 }}>
-                  <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => setIoType("출고")}>판매(출고)</button>
+                  <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => { setIoType("출고"); setInReason(""); }}>판매(출고)</button>
                   <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => { setIoType("입고"); setIoReason("판매"); if (ioChannel !== "소매") setIoChannel("소매"); }}>구매(입고)</button>
                 </div>
               </div>
@@ -120,22 +144,33 @@ export default function TradePage() {
               <div className="b2b-field-row" style={{ marginTop: 12 }}>
                 <div className="b2b-field">
                   <label className="b2b-field-label">③ 거래일</label>
-                  <input className="b2b-input" type="date" value={ioDate} onChange={(e) => setIoDate(e.target.value)} />
+                  <input className="b2b-input" type="date" value={ioDate} max={ioDone ? TODAY() : undefined} onChange={(e) => setIoDate(e.target.value)} />
                 </div>
                 <div className="b2b-field">
-                  <label className="b2b-field-label">{ioType === "입고" ? "매입처" : ioReason !== "판매" ? "전달처" : "판매처"}</label>
+                  <label className="b2b-field-label">{ioType === "입고" ? (customerReturn ? "고객" : "매입처") : ioReason !== "판매" ? "전달처" : "판매처"}</label>
                   <input className="b2b-input" placeholder="선택" value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} />
                 </div>
               </div>
 
               {ioType === "입고" && (
                 <div className="b2b-field" style={{ marginTop: 12 }}>
+                  <label className="b2b-field-label">사유</label>
+                  <select className="b2b-input" value={inReason} onChange={(e) => setInReason(e.target.value)}>
+                    <option value="">입고(매입·생산)</option>
+                    <option value="고객 반품">고객 반품·교환 회수</option>
+                  </select>
+                  {customerReturn && <span className="sm-faint" style={{ display: "block", fontSize: 12, marginTop: 4 }}>요청서 연결·매입 단가 없이 기록됩니다</span>}
+                </div>
+              )}
+
+              {ioType === "입고" && (
+                <div className="b2b-field" style={{ marginTop: 12 }}>
                   <label className="b2b-field-label">요청서</label>
-                  <select className="b2b-input" value={ioDone ? reqId : ""} disabled={!ioDone} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }}>
+                  <select className="b2b-input" value={ioDone && !customerReturn ? reqId : ""} disabled={!ioDone || customerReturn} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }}>
                     <option value="">연결 안 함</option>
                     {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
                   </select>
-                  {reqWarn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{reqWarn}</span>}
+                  {reqWarn && !customerReturn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{reqWarn}</span>}
                 </div>
               )}
 
@@ -146,6 +181,7 @@ export default function TradePage() {
                     <option value="판매">판매</option>
                     <option value="협찬">협찬·증정</option>
                     <option value="폐기">폐기</option>
+                    <option value="제조사 반품">제조사 반품</option>
                     <option value="기타">기타</option>
                   </select>
                 </div>
@@ -153,6 +189,7 @@ export default function TradePage() {
 
               <label className="sm-row" style={{ gap: 7, marginTop: 12, fontSize: 15, cursor: "pointer" }}>
                 <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리
+                <span className="sm-faint" style={{ fontSize: 12 }}>(미래 날짜는 해제해 대기로)</span>
               </label>
 
               <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.5 }}>
