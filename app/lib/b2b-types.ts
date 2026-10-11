@@ -13,13 +13,6 @@ export interface Company {
   payment_terms: string | null;
   notes: string | null;
   biz_doc_path: string | null;   // 사업자등록증 첨부 (Storage 경로)
-  // 세금계산서 공급받는자 정보(128) — address 는 '기본 배송지', 계산서에는 biz_address(사업장 소재지)
-  biz_type?: string | null;          // 업태
-  biz_item?: string | null;          // 종목
-  biz_address?: string | null;       // 사업장 주소
-  tax_email?: string | null;         // 계산서 수신 이메일
-  tax_manager_name?: string | null;  // 계산서 담당자
-  tax_manager_phone?: string | null; // 계산서 담당자 전화
   created_at: string;
   updated_at: string;
   // 목록 API 에서만 채워짐 (업체별 가장 최근 발주일)
@@ -41,12 +34,6 @@ export const EMPTY_COMPANY: CompanyInput = {
   payment_terms: "",
   notes: "",
   biz_doc_path: null,
-  biz_type: "",
-  biz_item: "",
-  biz_address: "",
-  tax_email: "",
-  tax_manager_name: "",
-  tax_manager_phone: "",
 };
 
 export const TAX_TYPES = ["taxable", "exempt"] as const;
@@ -154,21 +141,7 @@ export function normalizeCompany(input: CompanyInput): CompanyInput {
     payment_terms: clean("payment_terms"),
     notes: clean("notes"),
     biz_doc_path: clean("biz_doc_path"),
-    biz_type: clean("biz_type"),
-    biz_item: clean("biz_item"),
-    biz_address: clean("biz_address"),
-    tax_email: clean("tax_email"),
-    tax_manager_name: clean("tax_manager_name"),
-    tax_manager_phone: clean("tax_manager_phone"),
   };
-}
-
-// 업체 저장 폴백 — 128 미적용이면 계산서 칸 묶음을 빼고 다시 저장(앱이 죽지 않게)
-export const COMPANY_TAX_COLS = ["biz_type", "biz_item", "biz_address", "tax_email", "tax_manager_name", "tax_manager_phone"] as const;
-export function stripMissingCompanyCols(row: Record<string, unknown>, msg: string): boolean {
-  if (!COMPANY_TAX_COLS.some((c) => msg.includes(c) && c in row)) return false;
-  for (const c of COMPANY_TAX_COLS) delete row[c];
-  return true;
 }
 
 // ─────────────────────────────────────────────

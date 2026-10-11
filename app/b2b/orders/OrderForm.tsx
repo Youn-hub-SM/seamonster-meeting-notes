@@ -819,10 +819,7 @@ export default function OrderForm({
                 className="b2b-select"
                 value={data.tax_invoice_status}
                 onChange={(e) => setField("tax_invoice_status", e.target.value as OrderInput["tax_invoice_status"])}
-                disabled={data.tax_invoice_status === "발행대기"}
               >
-                {/* 발행대기 = 볼타 발행 요청 뒤 국세청 처리 중 — 결과가 오면 자동으로 바뀐다(저장해도 이 칸은 서버가 지킨다) */}
-                {data.tax_invoice_status === "발행대기" && <option value="발행대기">발행 중</option>}
                 {TAX_INVOICE_STATUSES.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}

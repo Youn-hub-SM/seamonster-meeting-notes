@@ -15,7 +15,6 @@ import {
   logOrderDeleted,
 } from "@/app/lib/b2b-activity";
 import { syncOrderSalesSafe } from "@/app/lib/b2b-sales-sync";
-import { taxInvoiceLocked } from "@/app/lib/tax-invoice";
 
 export const runtime = "nodejs"; // sales-sync 가 crypto(sales-normalize) 사용
 export const dynamic = "force-dynamic";
@@ -104,10 +103,6 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
     const prevProduction = prevOrder?.production_status as string | undefined;
     const prevPayment = prevOrder?.payment_status as string | undefined;
     const prevTaxInvoice = prevOrder?.tax_invoice_status as string | undefined;
-    // 볼타로 발행(요청)된 계산서가 있거나 '발행대기'(볼타 처리 중)면 세금계산서 상태는 폼 값으로 덮지 않는다
-    //  (발행 전에 열어 둔 폼이 '미발행'으로 되돌리는 것 방지). '발행대기'는 볼타 흐름만 쓰는 값이라 폼에서 받지 않는다.
-    if (prevTaxInvoice && (prevTaxInvoice === "발행대기" || String(body.tax_invoice_status) === "발행대기" || (await taxInvoiceLocked(sb, id))))
-      body.tax_invoice_status = prevTaxInvoice as typeof body.tax_invoice_status;
 
     // 1) 헤더 update
     let { error: orderErr } = await sb
@@ -287,10 +282,6 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     const { id } = await params;
     const sb = supabaseAdmin();
 
-    // 볼타로 발행(요청)된 세금계산서가 있는 발주는 지우지 않는다(국세청에 남은 문서와 발주가 끊긴다) — 매출원장 등 무엇이든 지우기 전에 확인
-    if (await taxInvoiceLocked(sb, id))
-      return NextResponse.json({ ok: false, error: "볼타로 발행(요청)된 세금계산서가 있어 삭제할 수 없습니다 — 취소로 바꾸고 수정발행(취소)으로 처리하세요." }, { status: 409 });
-
     // 삭제 전 스냅샷 (이력 기록용 — 삭제되면 못 읽음)
     const { data: snap } = await sb
       .from("orders")
@@ -345,11 +336,6 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       .select("status, production_status, payment_status, tax_invoice_status, tracking_no, ship_date, box_count, created_at")
       .eq("id", id)
       .single();
-
-    if (body.tax_invoice_status === "발행대기" && prev?.tax_invoice_status !== "발행대기")
-      return NextResponse.json({ ok: false, error: "'발행 중'은 볼타 발행으로만 바뀝니다 — [계산서]에서 발행하세요." }, { status: 400 });
-    if (body.tax_invoice_status !== undefined && body.tax_invoice_status !== prev?.tax_invoice_status && (prev?.tax_invoice_status === "발행대기" || (await taxInvoiceLocked(sb, id))))
-      return NextResponse.json({ ok: false, error: "볼타로 발행(요청)된 세금계산서가 있어 상태를 직접 바꿀 수 없습니다 — 고칠 내용은 수정발행으로 처리합니다." }, { status: 409 });
 
     const patch: Record<string, unknown> = {};
     if (body.status !== undefined) patch.status = body.status;
