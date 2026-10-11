@@ -3,196 +3,262 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-// 원장 점검(대표 결정 D4d) — 장부 이상을 종류별로 모아 사람이 확인·처리한다. 화면은 읽기만 하고 고치지 않는다(S12).
+// 원장 점검(대표 결정 D4d) — 장부 이상을 사람이 확인·처리한다. 화면은 읽기만 하고 고치지 않는다(S12).
 //  판정은 /api/inventory/ledger-check → inventory_ledger_check RPC(132) 한 곳(B2B 매출 원장 대조만 reconcileB2BSales).
 //  확인하지 못한 항목(마이그레이션 미적용·조회 실패)은 0건이 아니라 '확인 못 함'으로 보인다(S4).
+//  2026-10-11 대표 피드백 "보기 어렵다" — 고치는 화면별로 묶고, 항목마다 쉬운 제목 + 할 일 한 줄만. 목록·예외는 펼쳐서 본다.
 
 type Item = {
   ref_id: string | null; ref_no: string | null; partner: string | null;
   product_id: string | null; product_name: string | null; sku: string | null; channel: string | null;
   qty: number | null; txn_date: string | null; detail: string | null;
-  tags?: string[]; // 처리 안내를 고르는 표식(132) — live·counted·multi·dup·old·covered·finished·deleted·b2b·backfill
+  tags?: string[]; // 132 표식 — live·counted·multi·dup·old·covered·finished·deleted·b2b·backfill
 };
 type Group = { kind: string; count: number; items: Item[]; unavailable?: string; error?: string };
 
 type Fix = { href: string; label: string };
-// 처리 안내 한 줄 — when 이 있으면 그 경우의 행이 있을 때만 보인다(행 표시 상한에 잘렸으면 전부 보인다)
-type Line = string | { when: (r: Item) => boolean; text: string; fix?: Fix };
-type Area = "재고" | "입고" | "매출";
-//  view: order = 발주 단위(발주번호 링크), product = 품목 단위, ref = 출고 배치·요청서·채널 단위
-type Meta = { label: string; view: "order" | "product" | "ref"; area: Area; guide: Line[]; fix?: Fix };
-const TRADE = { href: "/inventory/trade", label: "입고 및 출고" };
-const MOVE = { href: "/inventory/move", label: "재고 이동" };
-const ADJUST = { href: "/inventory/adjust", label: "재고 조정" };
-const PRODUCTS = { href: "/b2b/products", label: "상품 목록" };
-const ORDERS = { href: "/b2b/orders", label: "발주" };
-const FULFILL = { href: "/fulfill", label: "발주처리" };
-const PRODUCTION = { href: "/production/request", label: "생산 요청" };
-const QUOTE = { href: "/inventory/quote", label: "월간매입 결산" };
-const SALES_REPORT = { href: "/b2b/reports", label: "매출 집계" };
-const SALES_UPLOAD = { href: "/sales/upload", label: "데이터 업로드" };
-const tagged = (t: string) => (r: Item) => (r.tags ?? []).includes(t);
-const notTagged = (t: string) => (r: Item) => !(r.tags ?? []).includes(t);
-const isWholesale = (r: Item) => r.channel === "도매" || r.channel === "도매 대량";
-// 차감일 뒤 실사(S12) — 그 실사가 이미 차감·복구를 대신했을 수 있어 재저장이 두 번 반영한다. 사람이 판단한다.
-const COUNTED_DEDUCT: Line = { when: tagged("counted"), fix: ADJUST,
-  text: "'발송일 뒤 실사 있음': 실사 때 그 물건이 이미 나가고 없었다면 다시 저장하면 두 번 빠집니다 — 저장한 뒤 같은 수량을 [재고 조정]으로 되돌리세요" };
-// 처리 = 수동 절차(docs/ledger-standard.md §3) — 화면의 실제 버튼·메뉴 이름 그대로. 표시 순서 = 이 객체의 순서
+const TRADE: Fix = { href: "/inventory/trade", label: "입고 및 출고" };
+const MOVE: Fix = { href: "/inventory/move", label: "재고 이동" };
+const ADJUST: Fix = { href: "/inventory/adjust", label: "재고 조정" };
+const PRODUCTS: Fix = { href: "/b2b/products", label: "상품 목록" };
+const ORDERS: Fix = { href: "/b2b/orders", label: "발주" };
+const FULFILL: Fix = { href: "/fulfill", label: "발주처리" };
+const PRODUCTION: Fix = { href: "/production/request", label: "생산 요청" };
+const QUOTE: Fix = { href: "/inventory/quote", label: "월간매입 결산" };
+const SALES_REPORT: Fix = { href: "/b2b/reports", label: "매출 집계" };
+const SALES_UPLOAD: Fix = { href: "/sales/upload", label: "데이터 업로드" };
+
+// 고치는 곳 — 화면은 이 순서로 묶는다
+type Where = "발주" | "택배" | "재고" | "생산" | "매출";
+const WHERE: { key: Where; title: string; fix: Fix }[] = [
+  { key: "발주", title: "발주에서 고칠 것", fix: ORDERS },
+  { key: "택배", title: "발주처리(택배)에서 고칠 것", fix: FULFILL },
+  { key: "재고", title: "재고 화면에서 고칠 것", fix: TRADE },
+  { key: "생산", title: "생산 요청에서 고칠 것", fix: PRODUCTION },
+  { key: "매출", title: "매출에서 고칠 것", fix: SALES_REPORT },
+];
+
+// 표식 → 행 배지(짧게) · 그런 행이 있을 때만 펼친 곳에 한 줄 주의(데이터가 틀어지는 경우만)
+const TAG: Record<string, { badge: string; tone: "warn" | "info"; note?: string; fix?: Fix }> = {
+  counted: { badge: "발송일 뒤 실사 있음", tone: "warn", fix: ADJUST,
+    note: "'발송일 뒤 실사 있음' — 실사가 이미 맞췄을 수 있어 다시 저장하면 두 번 반영됩니다. 저장한 뒤 같은 수량을 [재고 조정]으로 되돌리세요." },
+  live: { badge: "살아 있는 회차", tone: "warn",
+    note: "'살아 있는 회차' — [수정]으로 저장하지 마세요. 발주 목록에서 '발송대기'로 되돌린 뒤 다시 '취소'하세요." },
+  dup: { badge: "회차 두 벌", tone: "warn",
+    note: "'회차 두 벌' — [수정] 대신 발송일 칸에서 겹친(안 나간) 회차를 ✕로 지우고 [저장]하세요." },
+  multi: { badge: "회차 두 벌", tone: "warn",
+    note: "'회차 두 벌' — [수정] 대신 발송일 칸에서 겹친(안 나간) 회차를 ✕로 지우고 [저장]하세요." },
+  finished: { badge: "출고 끝난 뒤 재고만 취소됨", tone: "warn", fix: TRADE,
+    note: "'출고 끝난 뒤 재고만 취소됨' — 원래 파일을 다시 올리지 마세요(두 번 빠집니다). 실제로 나갔으면 [입고 및 출고]에서 직접 출고를 기록하세요." },
+  covered: { badge: "다른 배치로 출고됨", tone: "info",
+    note: "'다른 배치로 출고됨' — 재고는 이미 빠졌습니다. [발송 안 함]으로 정리만 하세요." },
+  old: { badge: "오래됨", tone: "info",
+    note: "'오래됨' — [발주처리] 목록에 안 보입니다. [입고 및 출고]에서 확인해 직접 정리하세요." },
+  deleted: { badge: "발주 삭제됨", tone: "info", fix: SALES_REPORT,
+    note: "'발주 삭제됨' — [매출 집계]에서 [원장 대조] → [다시 맞추기]로 지우세요." },
+  backfill: { badge: "옛 시트 매출", tone: "info",
+    note: "'옛 시트 매출' — 다시 맞추면 귀속 월·금액이 바뀔 수 있습니다. 대표 확인 후 하세요." },
+  b2b: { badge: "도매", tone: "info" },
+};
+
+// 항목 — 제목은 쉬운 말, 할 일은 한 줄. first = 다른 정리·실사보다 먼저 할 것.
+//  view: order = 발주 단위, product = 품목 단위, ref = 출고 배치·요청서·채널 단위
+type Meta = {
+  label: string; where: Where; view: "order" | "product" | "ref"; todo: string; fix: Fix; also?: Fix[]; first?: boolean;
+  todoFor?: (r: Item) => string | null; // 행마다 할 일이 다를 때(예: 칸에 따라)
+  notes?: Record<string, string>;        // 이 항목에서 표식별 주의를 다르게 할 때(같은 표식도 항목마다 처리 방향이 다르다)
+};
 const META: Record<string, Meta> = {
-  b2b_overdue: { label: "발송일 지난 발송대기", view: "order", area: "재고", fix: ORDERS,
-    guide: ["나갔으면 발송완료로 바꾸고 실제 발송일 입력, 안 나갔으면 발송일 칸에서 날짜를 다시 잡기 — 재고 실사 전에 먼저 정리"] },
-  b2b_cancelled: { label: "취소에 남은 B2B 선점", view: "order", area: "재고", fix: ORDERS,
-    guide: [
-      // 옛 발주 취소는 헤더만 바꿔 차수가 살아 있다 — [수정] 재저장은 선점을 다시 쓰고, 복수 발송이면 발주를 '발송대기'로 되살린다
-      { when: tagged("live"),
-        text: "'살아 있는 차수': [수정]으로 저장하지 마세요(발주가 다시 살아납니다) — 발주 목록에서 상태를 '발송대기'로 되돌린 뒤 다시 '취소'(복수 발송은 체크 후 '상태 일괄 변경')" },
-      { when: (r) => !tagged("live")(r), text: "그 밖: 발주를 열어 [수정]으로 다시 저장하면 선점이 지워집니다" },
-      "실제로 나갔는데 안 돌아온 물건이면: 그 발주(복수 발송은 차수)를 '발송완료'(실제 발송일)로 되돌린 뒤 다시 '취소' → '안 돌아옴'",
-      { when: tagged("counted"), fix: ADJUST,
-        text: "'발송일 뒤 실사 있음': 실사 때 그 물건이 창고에 있었다면 선점을 지우면 두 번 되살아납니다 — 정리한 뒤 같은 수량을 [재고 조정]으로 빼세요" },
-    ] },
-  b2b_no_deduct: { label: "선점이 없는 B2B 발주", view: "order", area: "재고", fix: ORDERS,
-    guide: ["발주를 열어 발송일을 확인하고 [수정]으로 다시 저장 · 2026-08-05 이후 발주만", COUNTED_DEDUCT] },
-  b2b_stock_off: { label: "재고 차감이 꺼진 B2B 차수", view: "order", area: "재고", fix: ORDERS,
-    guide: ["발주를 열어 [수정]으로 다시 저장하면 차감이 켜지고 선점이 다시 기록됩니다 · 2026-08-05 이후 발주만", COUNTED_DEDUCT] },
-  b2b_qty_mismatch: { label: "선점 수량·칸이 발주와 다름", view: "order", area: "재고", fix: ORDERS,
-    guide: [
-      { when: notTagged("dup"), text: "발주를 열어 [수정]으로 다시 저장하면 발주 전량(취소 차수 뺌)으로 다시 기록됩니다 · 수량 = 기대 − 선점(양수면 덜 빠짐)" },
-      // [수정] 재저장은 DB 차수를 그대로 다시 저장한다 — 두 벌인 차수·넘친 배분이 남아 다른 항목이 계속 뜬다
-      { when: tagged("dup"),
-        text: "'차수 두 벌'·'배분 초과': [수정] 대신 발주 목록의 발송일 칸에서 겹친(안 나간) 차수를 ✕로 지우거나 차수별 수량을 발주 수량 안으로 고친 뒤 [저장] — 선점이 발주 전량 한 번으로 다시 기록됩니다" },
-      { when: tagged("counted"), fix: ADJUST,
-        text: "'발송일 뒤 실사 있음': 실사가 이미 그 차이를 맞췄을 수 있습니다 — 다시 저장하면 두 번 반영되니 저장한 뒤 차이만큼 [재고 조정]으로 되돌리세요" },
-    ] },
-  b2b_date_mismatch: { label: "선점 날짜가 첫 발송일과 다름", view: "order", area: "재고", fix: ORDERS,
-    guide: [
-      // 차수별로 빠진 옛 분할 발주(2026-07-31 전)도 여기 — 정상 차수를 지우게 하지 않는다. 'multi' = 이중 선점 증거가 있을 때만(132)
-      { when: notTagged("multi"), text: "발주를 열어 [수정]으로 다시 저장하면 첫 발송일 하루로 다시 기록됩니다(차수마다 빠졌던 옛 분할 발주도 합쳐짐 · 재고 총량 그대로)" },
-      { when: tagged("multi"),
-        text: "'차수 두 벌'·'선점이 기대보다 많음': 두 저장이 겹쳐 선점이 두 벌입니다 — [수정] 대신 발주 목록의 발송일 칸에서 겹친(안 나간) 차수를 ✕로 지우고 [저장] · 겹친 차수가 없으면 차수별 수량을 발주 수량 안으로 고친 뒤 [저장]" },
-    ] },
-  b2b_dup_shipment: { label: "차수가 두 벌인 발주", view: "order", area: "재고", fix: ORDERS,
-    guide: ["발주 목록의 발송일 칸에서 겹친(안 나간) 차수를 ✕로 지우고 [저장] — 선점이 발주 전량 한 번으로 다시 기록됩니다 · 발송완료 차수는 지우지 마세요"] },
-  b2b_over_alloc: { label: "배분이 발주 수량보다 많은 발주", view: "order", area: "재고", fix: ORDERS,
-    guide: ["발주 목록의 발송일 칸에서 차수별 수량을 발주 수량 안으로 고치거나 겹친 차수를 지운 뒤 [저장] — 그 전에는 저장이 막힙니다"] },
-  b2b_unlinked_line: { label: "재고와 연결 안 된 발주 라인", view: "order", area: "재고", fix: ORDERS,
-    guide: ["재고 품목이면 발주를 열어 품목칸에서 목록 상품을 다시 고른 뒤 [수정] · 배송비 같은 비재고 줄은 그대로 두기 · 2026-08-05 이후·최근 60일 발주만"] },
-  b2b_kept_orphan: { label: "주인 없는 '출고 유지' 기록", view: "order", area: "재고", fix: TRADE,
-    guide: ["발주가 지워졌거나 발송한 취소 차수가 없어 발주 복구로 정리되지 않는 출고입니다 — 물건이 정말 안 돌아왔으면 그대로 두고, 돌아왔으면 [입고 및 출고]에서 사유 '고객 반품'으로 입고"] },
-  fulfill_interrupted: { label: "중단된 온라인 출고", view: "ref", area: "재고",
-    guide: [
-      // 'finished'(132 v5) = 대기 키 없음 + 그 배치 처리완료 키 있음 — ④는 끝났고 재고만 나중에 지워졌다(대개 옛 화면 묶음 취소).
-      //  generate 는 대기 키로만 이어받기를 판정해 중복 확인 기간 안에는 그 주문을 처리됨으로 빼고(400), 기간이 지나면 통과해 ④가 이어서 차감한다.
-      { when: tagged("finished"), fix: TRADE,
-        text: "'출고 완료 뒤 재고만 취소됨': 원래 파일을 다시 올리지 마세요 — 대조 기간(기본 45일) 안에는 이미 처리된 주문으로 막히고, 그 뒤에는 이어서 차감돼 두 번 빠집니다 · 실물이 나갔는데 안 빠졌으면 [입고 및 출고]에서 소매 출고를 직접 기록한 뒤 관리자에게 출고 이력 정리 요청" },
-      // 일부러 취소한 배치(옛 화면 묶음 취소 · 1품목 배치의 한 줄 취소)도 같은 모양일 수 있다 — 다시 출고·기록하면 두 번 빠진다
-      { when: notTagged("finished"), fix: TRADE,
-        text: "[입고 및 출고]에서 일부러 취소했거나 한 줄만 정정한 배치면 다시 출고·기록하지 마세요(관리자에게 출고 이력 정리 요청)" },
-      // 대기 키가 남은 중단만 — ④ 출고는 중단 이력을 출고일과 무관하게 이어받는다(dispatch 1단계, 132 v4 — 기간 표식 없음).
-      //  그 사이 실사·직접 기록이 있으면 ④가 묻고, 이미 맞췄으면 두 번째 확인창 [확인]으로 차감 없이 닫는다(closeInterrupted).
-      { when: notTagged("finished"), fix: FULFILL,
-        text: "그 밖: 원래 발주엑셀을 [발주처리]에 다시 올려 ④ [출고 완료] — 출고일과 무관하게 이어서 차감됩니다 · 그 사이 직접 기록했거나 실사로 맞췄으면 확인창에서 [취소] → '재고를 이미 맞췄나요?'에 [확인](차감 없이 닫힘)" },
-      { when: notTagged("finished"), fix: TRADE,
-        text: "원래 파일이 없을 때만: [입고 및 출고]에서 소매 출고를 직접 기록한 뒤 관리자에게 출고 이력 정리 요청 · 나중에 그 파일을 다시 올리면 이어서 차감하지 말고 차감 없이 닫기(두 번 빠집니다)" },
-    ] },
-  fulfill_not_dispatched: { label: "CN 받고 출고 안 한 배치", view: "ref", area: "재고", fix: FULFILL,
-    guide: [
-      { when: notTagged("covered"), text: "나갔으면 원래 발주엑셀을 [발주처리]에 다시 올려 ④ [출고 완료], 안 보냈으면 [발주처리] 목록의 [발송 안 함]" },
-      // 누적 파일을 다시 받아 다른 배치로 ④ 출고한 경우 — 그 주문은 이미 빠졌다(132 pk_cov). 14일 지난 것은 목록에서 뺀다
-      { when: tagged("covered"),
-        text: "'주문 모두 다른 배치로 출고됨': 재고는 그 배치로 빠졌습니다 — 다시 출고·기록하지 말고 [발주처리] 목록의 [발송 안 함]으로 정리" },
-      { when: tagged("old"), fix: TRADE,
-        text: "'14일 지남': [발주처리] 목록에 안 보입니다 — 그 주문이 다른 배치로 나갔는지 [입고 및 출고]에서 먼저 확인하고, 안 나간 것만 소매 출고로 직접 기록한 뒤 관리자에게 정리 요청" },
-    ] },
-  fulfill_unmatched: { label: "재고가 빠지지 않은 온라인 출고 코드", view: "ref", area: "재고", fix: FULFILL,
-    guide: [
-      { when: () => true, fix: PRODUCTS, text: "[상품 목록]에 코드를 등록한 뒤 [발주처리]의 [재고 차감 기록] · 그 사이 실사했으면 [확인 완료]" },
-      { when: tagged("old"), fix: ADJUST,
-        text: "'60일 지남': [발주처리] 목록에 안 보입니다 — 그 품목을 [재고 조정]으로 맞춘 뒤 관리자에게 정리 요청" },
-    ] },
-  fulfill_late_orphan: { label: "연결 끊긴 늦은 출고", view: "product", area: "재고", fix: TRADE,
-    guide: ["배치는 취소됐는데 [재고 차감 기록]분만 남아 이중 차감됩니다 — [입고 및 출고]에서 이 출고를 취소"] },
-  move_unpaired: { label: "짝이 안 맞는 재고 이동", view: "product", area: "재고", fix: MOVE,
-    guide: ["실물을 보고 빠진 쪽을 [재고 이동]으로 보충하거나, 남은 쪽을 [재고 조정]으로 상쇄"] },
-  bundle_row: { label: "세트에 남은 원장 행", view: "product", area: "재고", fix: TRADE,
-    guide: ["구성품으로 다시 기록한 뒤 원래 행을 취소"] },
-  old_pending: { label: "7일 넘은 대기", view: "product", area: "재고", fix: TRADE,
-    guide: ["실제로 들어오거나 나갔으면 입고처리·출고처리, 아니면 취소"] },
-  future_done: { label: "오늘 이후 날짜로 완료된 기록", view: "product", area: "재고", fix: TRADE,
-    guide: ["아직 안 일어난 일이면 취소하고 그날 다시 기록 · B2B 선점(출고 예정)은 제외"] },
-  promo_stranded: { label: "요청서 없는 프로모션 재고", view: "product", area: "재고", fix: MOVE,
-    guide: ["행사 몫이 아니면 [재고 이동]에서 프로모션 → 소매로 옮기기"] },
-  promo_unreleased: { label: "합류 확인 안 된 프로모션 요청서", view: "ref", area: "재고", fix: PRODUCTION,
-    guide: ["[생산 요청]에서 '완료·취소 보기'를 켜고 그 요청서의 [합류 다시 실행]"] },
-  return_no_out: { label: "재고 출고가 없는 제조사 반품", view: "product", area: "재고", fix: TRADE,
-    guide: [
-      "실물을 보냈으면 [입고 및 출고]에서 반품일 날짜로 소매 출고(사유 '제조사 반품') 기록 · 결산만 고친 반품이면 그대로",
-      { when: () => true, fix: QUOTE, text: "반품 기록은 [월간매입 결산]의 제조사 반품에서 확인 · 최근 90일(9월 이후)만" },
-    ] },
-  return_after_count: { label: "실사 뒤 소급된 제조사 반품 출고", view: "product", area: "재고", fix: TRADE,
-    guide: ["실사 때 그 물건이 이미 나가 있었다면 실사가 반품을 반영했습니다 — [입고 및 출고]에서 이 출고를 취소 · 실사 때 창고에 있었다면 그대로"] },
-  // 도매·도매 대량은 소매에서 옮겨 채우는 칸 — 마이너스면 옮기기를 빠뜨린 것이고 물건은 소매에서 나갔다.
-  //  그 칸을 조정으로 0 맞추면 소매가 그만큼 부풀어 유령 재고가 생긴다.
-  negative_balance: { label: "마이너스 재고", view: "product", area: "재고",
-    guide: [
-      { when: isWholesale, fix: MOVE,
-        text: "도매·도매 대량: 발송일 지난 발송대기부터 정리한 뒤 [재고 이동]에서 소매 → 이 칸으로 모자란 만큼 옮기기(물건은 소매에서 나갔습니다, 조정으로 0 맞추지 마세요) · 소매도 모자라면 두 칸을 함께 실사" },
-      { when: (r) => !isWholesale(r), fix: ADJUST,
-        text: "소매·프로모션: 발송일 지난 발송대기부터 정리한 뒤 실물을 세어 [재고 조정]" },
-    ] },
-  inactive_balance: { label: "미사용 품목에 남은 재고", view: "product", area: "재고", fix: PRODUCTS,
-    guide: ["[상품 목록]에서 잠시 '사용 중'으로 바꾸고 [재고 조정]으로 0 맞춘 뒤 다시 해제"] },
-  untracked_balance: { label: "재고 관리 안 함 품목에 남은 재고", view: "product", area: "재고", fix: PRODUCTS,
-    guide: ["[상품 목록]에서 '재고 관리 사용 안함'을 잠시 풀고 [재고 조정]으로 0 맞춘 뒤 다시 체크"] },
-  receipt_unlinked: { label: "요청서에 연결 안 된 제조사 입고", view: "product", area: "입고", fix: PRODUCTION,
-    guide: ["[생산 요청]에서 그 요청서의 [입고 연결]로 붙이기(재고는 그대로, 입고 예정만 줄어듭니다) · 협의 생산분이면 그대로 · 최근 21일 입고만"] },
-  shipped_no_sales: { label: "매출이 없는 발송완료 발주", view: "order", area: "매출", fix: ORDERS,
-    guide: ["발주를 열어 [수정]으로 다시 저장하면 매출이 다시 기록됩니다"] },
-  sales_not_shipped: { label: "발송완료가 아닌데 매출이 있는 발주", view: "order", area: "매출", fix: ORDERS,
-    guide: [
-      { when: notTagged("deleted"), text: "발주를 열어 [수정]으로 다시 저장하면 매출 행이 지워집니다" },
-      { when: tagged("deleted"), fix: SALES_REPORT, text: "'발주 삭제됨': [매출 집계]에서 그 날짜가 든 기간으로 [원장 대조] → [다시 맞추기]" },
-    ] },
-  b2b_sales_ledger: { label: "B2B 매출 원장 대조", view: "order", area: "매출", fix: SALES_REPORT,
-    guide: [
-      "[매출 집계]에서 그 날짜가 든 기간으로 [원장 대조] → 그 발주의 [다시 맞추기] · 최근 90일 발송분",
-      { when: tagged("backfill"), text: "'백필 행': 다시 맞추면 귀속 월·금액이 바뀔 수 있습니다 — 대표 확인 후" },
-    ] },
-  sales_future: { label: "오늘 이후 날짜의 매출", view: "ref", area: "매출",
-    guide: [
-      { when: tagged("b2b"), fix: ORDERS, text: "도매: 발주 목록에서 그 발주의 발송일을 실제 발송일로 고쳐 저장(매출 인식일이 함께 옮겨집니다)" },
-      { when: notTagged("b2b"), fix: SALES_UPLOAD, text: "업로드 날짜 오타면 [데이터 업로드]의 최근 업로드에서 [되돌리기]한 뒤 고친 파일로 다시 올리기" },
-    ] },
+  b2b_overdue: { label: "발송일이 지났는데 아직 발송대기인 발주", where: "발주", view: "order", fix: ORDERS, first: true,
+    todo: "나갔으면 '발송완료'(실제 발송일 입력), 안 나갔으면 발송일 칸에서 날짜를 다시 잡으세요." },
+  b2b_cancelled: { label: "취소했는데 재고가 빠진 채인 발주", where: "발주", view: "order", fix: ORDERS,
+    notes: { counted: "'발송일 뒤 실사 있음' — 실사 때 그 물건이 창고에 있었다면, 정리하면 재고가 두 번 되살아납니다. 정리한 뒤 같은 수량을 [재고 조정]으로 빼세요." },
+    todo: "발주를 열어 [수정]으로 다시 저장하세요. 실제로 나갔는데 안 돌아왔으면 '발송완료'로 되돌린 뒤 다시 '취소' → '안 돌아옴'." },
+  b2b_no_deduct: { label: "발송했는데 재고가 안 빠진 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주를 열어 발송일을 확인하고 [수정]으로 다시 저장하세요." },
+  b2b_stock_off: { label: "재고 차감이 꺼진 발송 회차", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주를 열어 [수정]으로 다시 저장하세요(차감이 켜집니다)." },
+  b2b_qty_mismatch: { label: "빠진 재고 수량이 발주와 다른 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주를 열어 [수정]으로 다시 저장하세요. 수량 = 빠져야 할 수량 − 빠진 수량." },
+  b2b_date_mismatch: { label: "재고가 빠진 날짜가 첫 발송일과 다른 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주를 열어 [수정]으로 다시 저장하세요(첫 발송일 하루로 합쳐지고 재고 총량은 그대로)." },
+  b2b_dup_shipment: { label: "발송 회차가 두 번 잡힌 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주 목록의 발송일 칸에서 겹친(안 나간) 회차를 ✕로 지우고 [저장]하세요. 발송완료 회차는 지우지 마세요." },
+  b2b_over_alloc: { label: "회차별 수량 합이 발주 수량보다 많은 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발송일 칸에서 회차별 수량을 발주 수량 안으로 고치거나 겹친 회차를 지우고 [저장]하세요." },
+  b2b_unlinked_line: { label: "상품과 연결 안 된 발주 줄", where: "발주", view: "order", fix: ORDERS,
+    todo: "재고 품목이면 발주를 열어 품목을 목록에서 다시 고르고 [수정]하세요. 배송비 같은 줄은 그대로 둡니다." },
+  shipped_no_sales: { label: "매출이 빠진 발송완료 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주를 열어 [수정]으로 다시 저장하세요." },
+  sales_not_shipped: { label: "발송 안 됐는데 매출이 잡힌 발주", where: "발주", view: "order", fix: ORDERS, also: [SALES_REPORT],
+    todo: "발주를 열어 [수정]으로 다시 저장하세요.",
+    todoFor: (r) => ((r.tags ?? []).includes("deleted") ? "[매출 집계]에서 [원장 대조] → [다시 맞추기]" : null) },
+
+  fulfill_interrupted: { label: "중간에 끊긴 택배 출고", where: "택배", view: "ref", fix: FULFILL, also: [TRADE],
+    todo: "원래 발주엑셀을 다시 올려 ④ [출고 완료]를 누르세요. 그 사이 재고를 직접 맞췄으면 확인창에서 [취소] → '재고를 이미 맞췄나요?' [확인]." },
+  fulfill_not_dispatched: { label: "CN 파일만 받고 출고 완료 안 한 배치", where: "택배", view: "ref", fix: FULFILL, also: [TRADE],
+    notes: { old: "'오래됨'(14일 지남) — [발주처리] 목록에 안 보입니다. 그 주문이 다른 배치로 나갔는지 [입고 및 출고]에서 먼저 확인하고, 안 나간 것만 소매 출고로 직접 기록하세요." },
+    todo: "나갔으면 원래 발주엑셀을 다시 올려 ④ [출고 완료], 안 보냈으면 [발송 안 함]." },
+  fulfill_unmatched: { label: "재고가 안 빠진 택배 상품 코드", where: "택배", view: "ref", fix: FULFILL, also: [PRODUCTS, ADJUST],
+    notes: { old: "'오래됨'(60일 지남) — [발주처리] 목록에 안 보입니다. 그 품목을 [재고 조정]으로 맞추세요." },
+    todo: "[상품 목록]에 코드를 등록한 뒤 [발주처리]의 [재고 차감 기록]. 그 사이 실사했으면 [확인 완료]." },
+
+  negative_balance: { label: "마이너스 재고", where: "재고", view: "product", fix: ADJUST, also: [MOVE], first: true,
+    todo: "발송일 지난 발송대기부터 정리한 뒤 맞추세요.",
+    todoFor: (r) => (r.channel === "도매" || r.channel === "도매 대량"
+      ? "[재고 이동]에서 소매 → 이 칸으로 모자란 만큼 옮기기(조정으로 0 맞추지 않기)"
+      : "실물을 세어 [재고 조정]") },
+  move_unpaired: { label: "한쪽만 남은 재고 이동", where: "재고", view: "product", fix: MOVE, also: [ADJUST],
+    todo: "실물을 보고 빠진 쪽을 [재고 이동]으로 보충하거나, 남은 쪽을 [재고 조정]으로 상쇄하세요." },
+  old_pending: { label: "7일 넘게 대기 중인 입출고", where: "재고", view: "product", fix: TRADE,
+    todo: "실제로 들어오거나 나갔으면 [입고처리]·[출고처리], 아니면 취소하세요." },
+  future_done: { label: "오늘 이후 날짜로 완료된 입출고", where: "재고", view: "product", fix: TRADE,
+    todo: "아직 안 일어난 일이면 취소하고 그날 다시 기록하세요." },
+  bundle_row: { label: "세트 이름으로 남은 재고 기록", where: "재고", view: "product", fix: TRADE,
+    todo: "구성품으로 다시 기록한 뒤 원래 기록을 취소하세요." },
+  fulfill_late_orphan: { label: "취소된 배치에 남은 늦은 출고", where: "재고", view: "product", fix: TRADE,
+    todo: "[입고 및 출고]에서 이 출고를 취소하세요(두 번 빠진 상태)." },
+  b2b_kept_orphan: { label: "발주 없이 남은 '안 돌아옴' 출고", where: "재고", view: "order", fix: TRADE,
+    todo: "물건이 정말 안 돌아왔으면 그대로, 돌아왔으면 사유 '고객 반품'으로 입고하세요." },
+  return_no_out: { label: "재고에서 안 뺀 제조사 반품", where: "재고", view: "product", fix: TRADE, also: [QUOTE],
+    todo: "실물을 보냈으면 반품일 날짜로 출고(사유 '제조사 반품')를 기록하세요. 결산만 고친 반품이면 그대로." },
+  return_after_count: { label: "실사 뒤에 기록된 제조사 반품 출고", where: "재고", view: "product", fix: TRADE,
+    todo: "실사 때 이미 나가 있었다면 이 출고를 취소하세요. 실사 때 창고에 있었다면 그대로." },
+  promo_stranded: { label: "요청서 없이 남은 프로모션 재고", where: "재고", view: "product", fix: MOVE,
+    todo: "행사 몫이 아니면 [재고 이동]에서 프로모션 → 소매로 옮기세요." },
+  inactive_balance: { label: "미사용 품목에 남은 재고", where: "재고", view: "product", fix: PRODUCTS, also: [ADJUST],
+    todo: "[상품 목록]에서 잠시 '사용 중'으로 바꾸고 [재고 조정]으로 0을 맞춘 뒤 다시 해제하세요." },
+  untracked_balance: { label: "'재고 관리 안 함' 품목에 남은 재고", where: "재고", view: "product", fix: PRODUCTS, also: [ADJUST],
+    todo: "'재고 관리 사용 안함'을 잠시 풀고 [재고 조정]으로 0을 맞춘 뒤 다시 체크하세요." },
+
+  promo_unreleased: { label: "소매 합류 확인 안 된 프로모션 요청서", where: "생산", view: "ref", fix: PRODUCTION,
+    todo: "'완료·취소 보기'를 켜고 그 요청서의 [합류 다시 실행]을 누르세요." },
+  receipt_unlinked: { label: "요청서에 연결 안 된 제조사 입고", where: "생산", view: "product", fix: PRODUCTION,
+    todo: "그 요청서의 [입고 연결]로 붙이세요(재고는 그대로). 협의 생산분이면 그대로." },
+
+  b2b_sales_ledger: { label: "매출 원장과 다른 B2B 발주", where: "매출", view: "order", fix: SALES_REPORT,
+    todo: "[매출 집계]에서 그 날짜가 든 기간으로 [원장 대조] → [다시 맞추기]." },
+  sales_future: { label: "오늘 이후 날짜의 매출", where: "매출", view: "ref", fix: SALES_UPLOAD, also: [ORDERS],
+    todo: "업로드 날짜 오타면 최근 업로드에서 [되돌리기] 후 다시 올리세요.",
+    todoFor: (r) => ((r.tags ?? []).includes("b2b") ? "발주의 발송일을 실제 발송일로 고쳐 저장" : null) },
 };
 const ORDER = Object.keys(META);
-const AREAS: Area[] = ["재고", "입고", "매출"];
 
-type CaseLine = Exclude<Line, string>;
-const allLines = (m: Meta): CaseLine[] => m.guide.map((l) => (typeof l === "string" ? { when: () => true, text: l } : l));
-// 이 종류에서 보여 줄 안내 줄 — 행 표시 상한에 잘렸으면 어떤 경우가 숨었는지 몰라 전부 보인다
-function guideLines(m: Meta, g: Group): CaseLine[] {
-  const all = g.count > g.items.length;
-  return allLines(m).filter((l) => all || g.items.some(l.when));
-}
-// 처리 화면 링크 — 기본 + 안내 줄의 링크(같은 화면은 한 번)
-function fixLinks(m: Meta, lines: CaseLine[]): Fix[] {
-  const out: Fix[] = [];
-  for (const f of [m.fix, ...lines.map((l) => l.fix)]) if (f && !out.some((o) => o.href === f.href)) out.push(f);
-  return out;
-}
 // 확인하지 못한 항목(마이그레이션 미적용·조회 실패) — 건수를 믿을 수 없다
 const unknownOf = (g: Group) => g.error || g.unavailable || "";
-
 const num = (n: number | null) => (n === null || !Number.isFinite(n) ? "-" : (Math.round(n * 100) / 100).toLocaleString());
+// 서버 설명(132)의 내부 용어를 이 화면 용어로 — 차수 → 회차, 선점 → 미리 빠진 재고
+const plain = (s: string | null) => (s ? s.replace(/차수/g, "회차").replace(/선점/g, "미리 빠진 재고") : s);
+const tagsOf = (r: Item) => [...new Set((r.tags ?? []).filter((t) => TAG[t]).map((t) => (t === "multi" ? "dup" : t)))];
+
+function TagPills({ r }: { r: Item }) {
+  const ts = tagsOf(r);
+  if (!ts.length) return null;
+  return (
+    <span className="sm-row-wrap" style={{ gap: "var(--sm-space-1)" }}>
+      {ts.map((t) => (
+        <span key={t} className="b2b-status-pill" style={{
+          background: TAG[t].tone === "warn" ? "var(--sm-warning-bg)" : "var(--sm-info-bg)",
+          color: TAG[t].tone === "warn" ? "var(--sm-warning)" : "var(--sm-info)",
+        }}>{TAG[t].badge}</span>
+      ))}
+    </span>
+  );
+}
+
+function KindRows({ m, g }: { m: Meta; g: Group }) {
+  const rowTodo = (r: Item) => m.todoFor?.(r) ?? null;
+  const showTodoCol = !!m.todoFor && g.items.some((r) => rowTodo(r));
+  // 이 항목에서 값이 하나도 없는 열은 숨긴다
+  const showDate = g.items.some((r) => r.txn_date);
+  const showMark = g.items.some((r) => r.detail || tagsOf(r).length);
+  return (
+    <div className="b2b-table-wrap">
+      <table className="b2b-table is-responsive">
+        <thead>
+          <tr>
+            {m.view === "product" ? <><th>품목</th><th>칸</th></> : <><th>{m.view === "order" ? "발주" : "번호"}</th><th>{m.view === "order" ? "거래처" : "구분"}</th></>}
+            {showDate && <th>날짜</th>}<th className="num">수량</th>{showMark && <th>표시</th>}{showTodoCol && <th>할 일</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {g.items.map((r, i) => (
+            <tr key={`${r.ref_id || r.product_id || r.ref_no}-${r.channel}-${r.txn_date}-${i}`}>
+              {m.view === "product" ? (
+                <>
+                  <td data-label="품목"><strong>{r.product_name || "(품목 없음)"}</strong>{r.sku && <div className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)" }}>{r.sku}</div>}</td>
+                  <td data-label="칸">{r.channel || "-"}</td>
+                </>
+              ) : (
+                <>
+                  <td data-label={m.view === "order" ? "발주" : "번호"}>
+                    {m.view === "order" && r.ref_id
+                      ? <Link className="sm-link" href={`/b2b/orders/${r.ref_id}`}>{r.ref_no || "발주"}</Link>
+                      : <strong>{r.ref_no || "-"}</strong>}
+                  </td>
+                  <td data-label={m.view === "order" ? "거래처" : "구분"}>{r.partner || r.channel || "-"}</td>
+                </>
+              )}
+              {showDate && <td data-label="날짜" className="sm-nowrap">{r.txn_date || "-"}</td>}
+              <td data-label="수량" className="num b2b-money" style={{ color: (r.qty ?? 0) < 0 ? "var(--sm-danger)" : undefined }}>{num(r.qty)}</td>
+              {showMark && (
+                <td data-label="표시">
+                  <TagPills r={r} />
+                  {r.detail && <div className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)" }}>{plain(r.detail)}</div>}
+                </td>
+              )}
+              {showTodoCol && <td data-label="할 일">{rowTodo(r) || "-"}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function KindBlock({ kind, g, itemCap }: { kind: string; g: Group; itemCap: number }) {
+  const m = META[kind];
+  const [open, setOpen] = useState(false);
+  // 이 항목 행에 붙은 표식의 주의 한 줄(그런 행이 있을 때만 — 행 상한에 잘렸으면 다 보인다)
+  const cut = g.count > g.items.length;
+  const notes = [...new Set(g.items.flatMap(tagsOf))].map((t) => m.notes?.[t] ?? TAG[t].note).filter((n): n is string => !!n);
+  const links = [m.fix, ...(m.also ?? [])];
+  return (
+    <div style={{ borderTop: "1px solid var(--sm-border)", padding: "var(--sm-space-3) 0" }}>
+      <div className="sm-between" style={{ gap: "var(--sm-space-3)", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div className="sm-col" style={{ gap: "var(--sm-space-1)", minWidth: 0, flex: "1 1 320px" }}>
+          <div className="sm-row-wrap" style={{ gap: "var(--sm-space-2)", alignItems: "center" }}>
+            <strong>{m.label}</strong>
+            <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>{g.count.toLocaleString()}건</span>
+            {m.first && <span className="b2b-status-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>먼저</span>}
+          </div>
+          <span className="sm-muted">{m.todo}</span>
+        </div>
+        <div className="sm-row-wrap" style={{ gap: "var(--sm-space-2)" }}>
+          <button type="button" className="b2b-btn-secondary" onClick={() => setOpen((v) => !v)}>{open ? "목록 닫기" : "목록 보기"}</button>
+          {links.map((f) => <Link key={f.href} className="b2b-btn-secondary" href={f.href}>{f.label}</Link>)}
+        </div>
+      </div>
+      {open && (
+        <div className="sm-col" style={{ gap: "var(--sm-space-2)", marginTop: "var(--sm-space-3)" }}>
+          {notes.length > 0 && <div className="sm-warn sm-col" style={{ gap: "var(--sm-space-1)" }}>{notes.map((n) => <span key={n}>{n}</span>)}</div>}
+          <KindRows m={m} g={g} />
+          {cut && <p className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)" }}>앞 {itemCap.toLocaleString()}건만 표시</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LedgerCheckPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [today, setToday] = useState("");
   const [truncated, setTruncated] = useState(false);
-  const [fnStale, setFnStale] = useState(false); // 원장 점검 함수가 옛 판(132 다시 적용 필요 — 처리 안내 표식이 다름)
+  const [fnStale, setFnStale] = useState(false); // 원장 점검 함수가 옛 판(132 다시 적용 필요)
   const [itemCap, setItemCap] = useState(200);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showClean, setShowClean] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -214,17 +280,18 @@ export default function LedgerCheckPage() {
 
   const byKind = useMemo(() => new Map(groups.map((g) => [g.kind, g])), [groups]);
   const sorted = useMemo(() => ORDER.map((k) => byKind.get(k)).filter((g): g is Group => !!g), [byKind]);
-  const known = sorted.filter((g) => !unknownOf(g));
   const unknown = sorted.filter((g) => !!unknownOf(g));
-  const total = known.reduce((s, g) => s + g.count, 0);
-  const areaTotal = (a: Area) => known.filter((g) => META[g.kind]?.area === a).reduce((s, g) => s + g.count, 0);
+  const bad = sorted.filter((g) => !unknownOf(g) && g.count > 0);
+  const clean = sorted.filter((g) => !unknownOf(g) && g.count === 0);
+  const total = bad.reduce((s, g) => s + g.count, 0);
+  const firsts = bad.filter((g) => META[g.kind].first);
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">원장 점검</h1>
-          <p className="b2b-page-subtitle">매주 수요일 생산 요청 전 확인 · 화면은 읽기만 하고 고치지 않습니다{today ? ` · 기준일 ${today}` : ""}</p>
+          <p className="b2b-page-subtitle">매주 수요일 생산 요청 전 · 읽기 전용{today ? ` · 기준일 ${today}` : ""}</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "확인 중..." : "다시 확인"}</button>
@@ -232,126 +299,72 @@ export default function LedgerCheckPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
-      {!loading && !error && fnStale && <div className="sm-warn">원장 점검 함수가 옛 판입니다 — supabase/migrations/132_reconcile_fix_ledger_check.sql 을 한 번 더 적용해야 처리 안내가 맞습니다.</div>}
-      {truncated && <div className="sm-warn">이상 행이 너무 많아 일부만 읽었습니다 — 위 항목부터 정리한 뒤 다시 확인하세요.</div>}
-      {!loading && !error && unknown.length > 0 && (
-        <div className="sm-warn">확인하지 못한 항목 {unknown.length}개 — {unknown.map((g) => `${META[g.kind].label}(${unknownOf(g)})`).join(" · ")}</div>
-      )}
+      {!loading && !error && fnStale && <div className="sm-warn">원장 점검 함수가 옛 판입니다 — supabase/migrations/132_reconcile_fix_ledger_check.sql 을 한 번 더 적용하세요.</div>}
+      {truncated && <div className="sm-warn">이상 기록이 많아 일부만 읽었습니다 — 위 항목부터 정리한 뒤 [다시 확인]을 누르세요.</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : !error && (
         <>
-          <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: "var(--sm-space-4)" }}>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">이상 합계</div><div className="b2b-stat-card-value" style={{ color: total ? "var(--sm-danger)" : unknown.length ? "var(--sm-warning)" : "var(--sm-success)" }}>{total.toLocaleString()}건</div></div>
-            {AREAS.map((a) => {
-              const n = areaTotal(a);
-              return <div key={a} className="b2b-stat-card"><div className="b2b-stat-card-label">{a}</div><div className="b2b-stat-card-value" style={{ color: n ? "var(--sm-danger)" : "var(--sm-black)" }}>{n.toLocaleString()}건</div></div>;
-            })}
-          </div>
+          {/* 한 줄 요약 */}
+          {total === 0 && unknown.length === 0
+            ? <div className="sm-success">이상이 없습니다.</div>
+            : (
+              <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: "var(--sm-space-4)" }}>
+                <div className="b2b-stat-card">
+                  <div className="b2b-stat-card-label">정리할 것</div>
+                  <div className="b2b-stat-card-value" style={{ color: total ? "var(--sm-danger)" : "var(--sm-black)" }}>{total.toLocaleString()}건</div>
+                  <div className="b2b-stat-card-hint">{bad.length}개 항목</div>
+                </div>
+                {unknown.length > 0 && (
+                  <div className="b2b-stat-card">
+                    <div className="b2b-stat-card-label">확인 못 함</div>
+                    <div className="b2b-stat-card-value" style={{ color: "var(--sm-warning)" }}>{unknown.length}개 항목</div>
+                    <div className="b2b-stat-card-hint">0건이 아닙니다</div>
+                  </div>
+                )}
+              </div>
+            )}
 
-          {total === 0 && unknown.length === 0 && <div className="sm-success">이상이 없습니다.</div>}
-
-          {/* 항목별 건수 — 0건도 보여 준다(무엇을 봤는지 알 수 있게). 확인 못 한 항목은 건수 대신 '확인 못 함' */}
-          <section className="b2b-card">
-            <div className="b2b-card-head"><span className="b2b-card-title">점검 항목</span></div>
-            <div className="b2b-table-wrap">
-              <table className="b2b-table">
-                <thead><tr><th>항목</th><th>구분</th><th className="num">건수</th><th>처리 화면</th></tr></thead>
-                <tbody>
-                  {sorted.map((g) => {
-                    const m = META[g.kind];
-                    const links = fixLinks(m, allLines(m));
-                    const why = unknownOf(g);
-                    return (
-                      <tr key={g.kind}>
-                        <td>{g.count && !why ? <a className="sm-link" href={`#lc-${g.kind}`}>{m.label}</a> : <span className="sm-faint">{m.label}</span>}</td>
-                        <td className="sm-faint">{m.area}</td>
-                        {why
-                          ? <td className="num" style={{ color: "var(--sm-warning)", fontWeight: 700 }} title={why}>확인 못 함</td>
-                          : <td className="num b2b-money" style={{ fontWeight: 700, color: g.count ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{g.count.toLocaleString()}</td>}
-                        <td>{links.length ? links.map((f, i) => (
-                          <span key={f.href}>{i > 0 && <span className="sm-faint"> · </span>}<Link className="sm-link" href={f.href}>{f.label}</Link></span>
-                        )) : "-"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          {firsts.length > 0 && (
+            <div className="sm-warn" style={{ marginBottom: "var(--sm-space-4)" }}>
+              먼저 정리: {firsts.map((g) => `${META[g.kind].label} ${g.count.toLocaleString()}건`).join(" · ")} — 실사·다른 정리보다 먼저
             </div>
-          </section>
+          )}
 
-          {known.filter((g) => g.count > 0).map((g) => {
-            const m = META[g.kind];
-            const lines = guideLines(m, g);
-            const links = fixLinks(m, lines);
+          {WHERE.map((w) => {
+            const list = bad.filter((g) => META[g.kind].where === w.key);
+            if (!list.length) return null;
+            const n = list.reduce((s, g) => s + g.count, 0);
             return (
-              <section key={g.kind} id={`lc-${g.kind}`} className="b2b-card" style={{ marginTop: "var(--sm-space-5)" }}>
+              <section key={w.key} className="b2b-card" style={{ marginBottom: "var(--sm-space-5)" }}>
                 <div className="b2b-card-head sm-between" style={{ flexWrap: "wrap", gap: "var(--sm-space-2)" }}>
-                  <span className="b2b-card-title">{m.label} <span style={{ color: "var(--sm-danger)" }}>{g.count.toLocaleString()}건</span></span>
-                  {links.length > 0 && (
-                    <div className="sm-row-wrap" style={{ gap: "var(--sm-space-2)" }}>
-                      {links.map((f) => <Link key={f.href} className="b2b-btn-secondary" href={f.href}>{f.label}</Link>)}
-                    </div>
-                  )}
+                  <span className="b2b-card-title">{w.title} <span style={{ color: "var(--sm-danger)" }}>{n.toLocaleString()}건</span></span>
                 </div>
-                <div className="sm-muted sm-col" style={{ fontSize: "var(--sm-fs-sm)", gap: "var(--sm-space-1)", margin: "0 0 var(--sm-space-2)" }}>
-                  {lines.map((l, i) => <span key={i}>{i === 0 ? "처리: " : "· "}{l.text}</span>)}
-                </div>
-                <div className="b2b-table-wrap">
-                  <table className="b2b-table is-responsive">
-                    {m.view === "order" ? (
-                      <>
-                        <thead><tr><th>발주번호</th><th>거래처</th><th>날짜</th><th className="num">수량</th><th>칸</th><th>내용</th></tr></thead>
-                        <tbody>
-                          {g.items.map((r, i) => (
-                            <tr key={`${r.ref_id}-${i}`}>
-                              <td data-label="발주번호">{r.ref_id ? <Link className="sm-link" href={`/b2b/orders/${r.ref_id}`}>{r.ref_no || "발주"}</Link> : (r.ref_no || "-")}</td>
-                              <td data-label="거래처">{r.partner || "-"}</td>
-                              <td data-label="날짜" className="sm-nowrap">{r.txn_date || "-"}</td>
-                              <td data-label="수량" className="num b2b-money">{num(r.qty)}</td>
-                              <td data-label="칸">{r.channel || "-"}</td>
-                              <td data-label="내용" className="sm-faint">{r.detail || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </>
-                    ) : m.view === "ref" ? (
-                      <>
-                        <thead><tr><th>번호</th><th>구분</th><th>날짜</th><th className="num">수량</th><th>내용</th></tr></thead>
-                        <tbody>
-                          {g.items.map((r, i) => (
-                            <tr key={`${r.ref_id || r.partner}-${r.txn_date}-${i}`}>
-                              <td data-label="번호"><strong>{r.ref_no || "-"}</strong></td>
-                              <td data-label="구분">{r.partner || r.channel || "-"}</td>
-                              <td data-label="날짜" className="sm-nowrap">{r.txn_date || "-"}</td>
-                              <td data-label="수량" className="num b2b-money">{num(r.qty)}</td>
-                              <td data-label="내용" className="sm-faint">{r.detail || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </>
-                    ) : (
-                      <>
-                        <thead><tr><th>품목</th><th>코드</th><th>칸</th><th className="num">수량</th><th>날짜</th><th>내용</th></tr></thead>
-                        <tbody>
-                          {g.items.map((r, i) => (
-                            <tr key={`${r.ref_id || r.product_id}-${r.channel}-${i}`}>
-                              <td data-label="품목"><strong>{r.product_name || "(품목 없음)"}</strong></td>
-                              <td data-label="코드" className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)" }}>{r.sku || "-"}</td>
-                              <td data-label="칸">{r.channel || "-"}</td>
-                              <td data-label="수량" className="num b2b-money" style={{ color: (r.qty ?? 0) < 0 ? "var(--sm-danger)" : undefined }}>{num(r.qty)}</td>
-                              <td data-label="날짜" className="sm-nowrap">{r.txn_date || "-"}</td>
-                              <td data-label="내용" className="sm-faint">{[r.detail, r.ref_no, r.partner].filter(Boolean).join(" · ") || "-"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </>
-                    )}
-                  </table>
-                </div>
-                {g.count > g.items.length && <p className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)", marginTop: "var(--sm-space-2)" }}>앞 {itemCap.toLocaleString()}건만 표시</p>}
+                {list.map((g) => <KindBlock key={g.kind} kind={g.kind} g={g} itemCap={itemCap} />)}
               </section>
             );
           })}
+
+          {unknown.length > 0 && (
+            <section className="b2b-card" style={{ marginBottom: "var(--sm-space-5)" }}>
+              <div className="b2b-card-head"><span className="b2b-card-title">확인 못 한 항목</span></div>
+              <div className="sm-warn sm-col" style={{ gap: "var(--sm-space-1)" }}>
+                {unknown.map((g) => <span key={g.kind}>{META[g.kind].label} — {unknownOf(g)}</span>)}
+              </div>
+            </section>
+          )}
+
+          {clean.length > 0 && (
+            <section className="b2b-card">
+              <button type="button" className="b2b-link-btn" onClick={() => setShowClean((v) => !v)}>
+                {showClean ? "이상 없는 항목 닫기" : `이상 없는 항목 ${clean.length}개 보기`}
+              </button>
+              {showClean && (
+                <div className="sm-faint sm-col" style={{ gap: "var(--sm-space-1)", marginTop: "var(--sm-space-2)" }}>
+                  {clean.map((g) => <span key={g.kind}>{META[g.kind].label}</span>)}
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
     </div>
