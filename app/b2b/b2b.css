@@ -2948,3 +2948,17 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ig-hint { font-size: 12px; margin-top: 3px; }
 .ig-active-check { font-size: var(--sm-fs-sm); margin-top: var(--sm-space-2); cursor: pointer; }
+
+/* ─────────────────────────────────────────────
+   공지 작성기 (/notice) — 페이지 전용 .ntc-*  (값은 전부 var(--sm-*))
+   ───────────────────────────────────────────── */
+.ntc-stack { display: flex; flex-direction: column; gap: var(--sm-space-5); }
+.ntc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-3) var(--sm-space-4); }
+.ntc-grid .ntc-wide { grid-column: 1 / -1; }
+.ntc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-3); margin-top: var(--sm-space-4); }
+.ntc-note { font-size: var(--sm-fs-xs); }
+.ntc-note.is-over { color: var(--sm-danger); font-weight: 700; }
+.ntc-result, .ntc-prompt { margin-top: var(--sm-space-4); line-height: 1.6; } /* 높이는 rows 가 정한다 */
+@media (max-width: 768px) {
+  .ntc-grid { grid-template-columns: 1fr; }
+}

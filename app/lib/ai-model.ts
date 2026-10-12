@@ -46,7 +46,7 @@ export async function getCurrentModel(): Promise<string> {
 }
 
 // ── 기능별 모델 ──
-export type AiFeature = "meeting" | "cs" | "voc" | "production" | "report" | "briefing" | "margin" | "daily_analyst";
+export type AiFeature = "meeting" | "cs" | "voc" | "production" | "report" | "briefing" | "margin" | "daily_analyst" | "notice";
 // inheritDefault: 기능 설정이 'inherit' 일 때 공통 기본 대신 쓰는 모델(정확도가 중요한 기능). 없으면 공통 기본을 따른다.
 export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inheritDefault?: ModelKey }[] = [
   { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리" },
@@ -57,6 +57,7 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inherit
   { key: "briefing", label: "업무 브리핑(중단)", desc: "06:30 업무 브리핑 — 2026-09-30 자동 생성 중단, 관리자용 재구성 전까지 미사용 (기본 opus)", inheritDefault: "opus" },
   { key: "margin", label: "이익률 계산기", desc: "AI 이익률 계산 (기본 sonnet — 2026-09-29 opus 에서 전환)", inheritDefault: "sonnet" },
   { key: "daily_analyst", label: "종합 리포트(일일·주간·월간)", desc: "매출·광고 분석 에이전트 — 일일·주간·월간 공통 (기본 opus — 2026-09-30 대표 선택)", inheritDefault: "opus" },
+  { key: "notice", label: "공지 작성기", desc: "상황 항목 → 씨몬스터 톤 공지문 (기본 sonnet)", inheritDefault: "sonnet" },
 ];
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   meeting: "ai_model_meeting",
@@ -67,6 +68,7 @@ const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
   briefing: "ai_model_briefing",
   margin: "ai_model_margin",
   daily_analyst: "ai_model_daily_analyst",
+  notice: "ai_model_notice",
 };
 
 // 기능별 설정값: 'inherit'(공통 따름·기본) 또는 특정 모델 키.

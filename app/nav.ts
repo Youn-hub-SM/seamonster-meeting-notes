@@ -115,6 +115,7 @@ export const NAV: NavCategory[] = [
           { href: "/cs/manual", label: "매뉴얼" },
         ],
       },
+      { href: "/notice", label: "공지 작성기", icon: "pen" }, // 2026-10-13 상황 항목 → 씨몬스터 톤 공지문(고객·B2B)
       {
         href: "/voc", label: "VOC 관리", icon: "megaphone",
         menu: [
