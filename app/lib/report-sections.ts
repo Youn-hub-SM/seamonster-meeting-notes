@@ -1,6 +1,8 @@
 // 종합 리포트(일일·주간·월간) 구성 — 섹션 순서·코드 표 끼우기·재고 표·팀즈 축약(순수 함수, DB 코드 없음).
 //  2026-10-01 대표 결정: 데이터(1. 매출 → 2. 광고 → 3. 재고) → 4. 눈에 띄는 변화와 원인 → 5. 확인할 것. '한 줄 요약'은 맨 위 유지.
 //  AI 는 각 섹션의 글만 쓰고, 숫자 표(광고 추이·캠페인·재고 주의 품목)는 코드가 그 섹션 끝에 끼운다.
+//  2026-10-12 대표 요청: 주간만 3. 재고 다음에 '4. 고객의 소리'(스마트스토어 문의·VOC, report-voice.ts) — 변화와 원인·확인할 것은 5·6.
+//   그 섹션 끝의 '고객의 소리 집계' 표는 주간 명세가 Built.sectionBlocks 로 넘기고 runReport 가 끼운다(일일·월간은 그대로).
 
 // ── 재고 사실(analyst-inventory 가 모은다) ──
 export type InvFlowRow = { kind: string; qty: number; net: number; items: number; cost: number };
@@ -53,6 +55,7 @@ export function renderInventoryTable(inv: InventoryFacts | null | undefined): st
 export const SEC = {
   ad: /^##\s*(\d+\.\s*)?광고/,
   inv: /^##\s*(\d+\.\s*)?재고/,
+  voice: /^##\s*(\d+\.\s*)?고객의 소리/, // 주간만
   change: /^##\s*(\d+\.\s*)?눈에 띄는/,
   todo: /^##\s*(\d+\.\s*)?(오늘\s*)?확인할 것/,
 };
@@ -67,23 +70,55 @@ export function insertAtSectionEnd(md: string, section: RegExp, block: string, f
   return [...lines.slice(0, at), block, "", ...lines.slice(at)].join("\n");
 }
 
-// 광고(추이 → 캠페인 상세) + 재고 표를 각 섹션 끝에. 광고 섹션이 없으면 재고·변화 앞, 재고 섹션이 없으면 변화·확인 앞.
+// 광고(추이 → 캠페인 상세) + 재고 표를 각 섹션 끝에. 광고 섹션이 없으면 재고·(주간)고객의 소리·변화 앞, 재고 섹션이 없으면 (주간)고객의 소리·변화·확인 앞.
+//  고객의 소리 헤딩은 주간에만 있어 일일·월간은 종전 순서(변화·확인 앞) 그대로다.
 export function withCodeTables(md: string, adBlocks: { trend: string; campaigns: string }, invBlock: string): string {
   const ad = [adBlocks.trend, adBlocks.campaigns].filter(Boolean).join("\n\n");
-  let out = insertAtSectionEnd(md, SEC.ad, ad, [SEC.inv, SEC.change, SEC.todo]);
-  out = insertAtSectionEnd(out, SEC.inv, invBlock, [SEC.change, SEC.todo]);
+  let out = insertAtSectionEnd(md, SEC.ad, ad, [SEC.inv, SEC.voice, SEC.change, SEC.todo]);
+  out = insertAtSectionEnd(out, SEC.inv, invBlock, [SEC.voice, SEC.change, SEC.todo]);
   return out;
 }
 
-// 팀즈 마지막 안전장치 — 코드 표 블록(### 캠페인 전체·광고 추이·재고 주의 품목)을 통째로 빼고 AI 글만 남긴다.
-//  예전엔 한도를 넘으면 본문 전체를 안내 한 줄로 바꿔 AI 분석까지 사라졌다.
-export function stripCodeBlocks(md: string): string {
+// ── 팀즈 축약 ──
+//  '고객의 소리 집계'(주간만) — 적응형 카드에서 표 한 행이 ColumnSet 이라 줄글보다 훨씬 크다. 카드 한도를 넘으면
+//  sendReportToTeams 가 ① 이 표만 한 줄씩 → ② 이 블록만 빼기 → ③ 코드 표 전부 빼기 순으로 줄인다(블록이 없는 일일·월간은 ①② 건너뜀).
+export const VOICE_BLOCK = "고객의 소리 집계";
+const VOICE_HEAD = new RegExp(`^###\\s*${VOICE_BLOCK}`);
+const tableRow = (t: string) => /^\|.*\|$/.test(t);
+const splitRow = (t: string) => t.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+export const hasVoiceBlock = (md: string) => md.split("\n").some((l) => VOICE_HEAD.test(l.trim()));
+// ① '고객의 소리 집계' 표만 '- 구분 · {기간} N · 전주 M' 한 줄씩으로(표 아래 기준·주의 줄은 그대로). 다른 표는 건드리지 않는다.
+export function voiceTableAsLines(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inVoice = false;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^##/.test(t)) inVoice = VOICE_HEAD.test(t); // 다음 헤딩(## · ###)에서 블록이 끝난다
+    if (!inVoice || !tableRow(t)) { out.push(lines[i]); continue; }
+    const rows: string[][] = [];
+    for (; i < lines.length && tableRow(lines[i].trim()); i++) {
+      const raw = lines[i].trim();
+      if (!/^\|[\s|:-]+\|$/.test(raw)) rows.push(splitRow(raw));
+    }
+    i--;
+    const [head = [], ...body] = rows;
+    for (const r of body) out.push(`- ${r[0]} · ${r.slice(1).map((c, k) => `${head[k + 1] ?? ""} ${c}`.trim()).join(" · ")}`);
+  }
+  return out.join("\n");
+}
+
+// 팀즈 마지막 안전장치 — 코드 표 블록(### 캠페인 전체·광고 추이·재고 주의 품목·고객의 소리 집계)을 통째로 빼고 AI 글만 남긴다.
+//  예전엔 한도를 넘으면 본문 전체를 안내 한 줄로 바꿔 AI 분석까지 사라졌다. names 를 주면 그 블록만 뺀다(② 단계).
+const CODE_BLOCKS = ["캠페인 전체", "광고 추이", "재고 주의 품목", VOICE_BLOCK] as const;
+export function stripCodeBlocks(md: string, names: readonly string[] = CODE_BLOCKS): string {
+  const head = new RegExp(`^###\\s*(${names.join("|")})`);
   const lines = md.split("\n");
   const out: string[] = [];
   let skip = false;
   for (const l of lines) {
     const t = l.trim();
-    if (/^###\s*(캠페인 전체|광고 추이|재고 주의 품목)/.test(t)) { skip = true; continue; }
+    if (head.test(t)) { skip = true; continue; }
     if (skip && /^##/.test(t)) skip = false;
     if (!skip) out.push(l);
   }

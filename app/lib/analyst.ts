@@ -22,7 +22,7 @@ import { bundleAvailable, type BundleComponent } from "./product-bundles";
 import { readStockMap } from "./inventory-template";
 import { postTeamsMarkdown, teamsCardBytes } from "./briefing";
 import { collectInventory } from "./analyst-inventory";
-import { withCodeTables, renderInventoryTable, stripCodeBlocks, inventoryForAi, type InventoryFacts } from "./report-sections";
+import { withCodeTables, insertAtSectionEnd, renderInventoryTable, stripCodeBlocks, hasVoiceBlock, voiceTableAsLines, VOICE_BLOCK, inventoryForAi, type InventoryFacts } from "./report-sections";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
 
@@ -66,7 +66,11 @@ function fitJson(arr: unknown[], cap: number): string {
 // ── 기간 명세(일일·주간·월간 공통 실행기가 받는 것) ──
 export type ReportPeriod = "daily" | "weekly" | "monthly";
 export type Range = { since: string; until: string };
-export type Built = { facts: Record<string, unknown>; aiFacts: Record<string, unknown>; ads: AdsFacts; flags: string[]; salesReady: boolean; salesNote?: string; inventory?: InventoryFacts | null };
+export type Built = {
+  facts: Record<string, unknown>; aiFacts: Record<string, unknown>; ads: AdsFacts; flags: string[]; salesReady: boolean; salesNote?: string; inventory?: InventoryFacts | null;
+  // 기간 전용 코드 블록 — 섹션 끝에 끼운다(주간 '고객의 소리 집계'). 없으면 일일·월간처럼 광고·재고 표만.
+  sectionBlocks?: { section: RegExp; block: string; fallbacks: RegExp[] }[];
+};
 export type ReportSpec = {
   period: ReportPeriod;
   key: string;                   // 저장 키 = 기간 시작일(일일 = 그날, 주간 = 월요일, 월간 = 1일)
@@ -923,7 +927,8 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
     if (salesFailed && prev?.report_md) throw new Error(String(built.salesNote || "매출 집계 실패"));
     const r = await analyze(sb, spec, built.aiFacts, built.flags, cache, deadlineAt);
     // 코드 표: 광고 섹션 끝에 추이 → 캠페인 상세, 재고 섹션 끝에 재고 주의 품목(report-sections)
-    const mdText = withCodeTables(r.md, { trend: renderTrend(built.ads, spec.trend.title), campaigns: renderAdTables(built.ads, spec.adLabels) }, renderInventoryTable(built.inventory));
+    let mdText = withCodeTables(r.md, { trend: renderTrend(built.ads, spec.trend.title), campaigns: renderAdTables(built.ads, spec.adLabels) }, renderInventoryTable(built.inventory));
+    for (const b of built.sectionBlocks ?? []) mdText = insertAtSectionEnd(mdText, b.section, b.block, b.fallbacks); // 주간 고객의 소리 집계
     const up = await sb.from(spec.table).upsert({
       // 집계 실패로 광고만 본 리포트는 지문을 비워 둔다 — 다음 실행이 다시 분석. 발송 기록(sent_at·sent_fp)은 그대로 둔다.
       ...insertKey(spec), status: "ok", sales_ready: built.salesReady && !!sfp?.ready, sales_fp: salesFailed ? null : fp, facts: { ...built.facts, flags: built.flags, tool_log: r.toolLog },
@@ -956,12 +961,17 @@ export async function sendReportToTeams(spec: ReportSpec): Promise<{ ok: boolean
   const mdText = row?.report_md || "";
   if (!mdText) return { ok: false, error: "보낼 리포트가 없습니다. 먼저 분석하세요." };
   const title = `${spec.title} · ${spec.label}${row?.sales_ready ? "" : spec.noSalesSuffix}`;
-  // 카드 한도(약 28KB) — 표는 한 줄씩, 그래도 크면 표마다 상위 10개, 그래도 크면 코드 표를 빼고 AI 글만, 그래도 크면 화면 안내만
+  // 카드 한도(약 28KB) — 표는 한 줄씩, 그래도 크면 표마다 상위 10개, (주간) 고객의 소리 집계 표를 한 줄씩 → 그 블록만 빼기,
+  //  그래도 크면 코드 표를 빼고 AI 글만, 그래도 크면 화면 안내만. 고객의 소리 블록이 없는 일일·월간은 종전과 같은 단계·결과.
   const MAX = 26_000;
+  const over = (b: string) => teamsCardBytes(title, b) > MAX;
+  const voice = hasVoiceBlock(mdText);
   let body = adTablesForTeams(mdText);
-  if (teamsCardBytes(title, body) > MAX) body = adTablesForTeams(mdText, 10);
-  if (teamsCardBytes(title, body) > MAX) body = `${stripCodeBlocks(mdText)}\n\n- 광고·재고 표는 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
-  if (teamsCardBytes(title, body) > MAX) body = "- 리포트가 길어 팀즈 카드에 담지 못했습니다. 업무도우미 › 종합 리포트에서 확인하세요.";
+  if (over(body)) body = adTablesForTeams(mdText, 10);
+  if (voice && over(body)) body = adTablesForTeams(voiceTableAsLines(mdText), 10);
+  if (voice && over(body)) body = `${adTablesForTeams(stripCodeBlocks(mdText, [VOICE_BLOCK]), 10)}\n\n- 고객의 소리 집계 표는 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
+  if (over(body)) body = `${stripCodeBlocks(mdText)}\n\n- ${voice ? "광고·재고·고객의 소리 표는" : "광고·재고 표는"} 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
+  if (over(body)) body = "- 리포트가 길어 팀즈 카드에 담지 못했습니다. 업무도우미 › 종합 리포트에서 확인하세요.";
   // 겹친 발송(두 사람이 동시에, 수동 + 14:30)은 한 번만 — 1분 안에 이미 잡힌 발송이 있으면 건너뛴다. 게시에 실패하면 되돌린다.
   const at = new Date().toISOString();
   const recentIso = new Date(Date.now() - 60_000).toISOString();
