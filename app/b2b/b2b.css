@@ -2953,12 +2953,22 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
    공지 작성기 (/notice) — 페이지 전용 .ntc-*  (값은 전부 var(--sm-*))
    ───────────────────────────────────────────── */
 .ntc-stack { display: flex; flex-direction: column; gap: var(--sm-space-5); }
-.ntc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-3) var(--sm-space-4); }
+.ntc-form { display: flex; flex-direction: column; gap: var(--sm-space-3); }    /* 채널 select + 공지할 내용 */
+.ntc-type { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-3); } /* 유형 배지 + 유형 select */
+.ntc-type > .b2b-input { width: auto; }
+.ntc-type-pill { background: var(--sm-info-bg); color: var(--sm-info); }
+.ntc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sm-space-3) var(--sm-space-4); } /* 빠진 항목 입력칸 */
 .ntc-grid .ntc-wide { grid-column: 1 / -1; }
+.ntc-gaps > .ntc-grid, .ntc-gaps > .sm-success { margin-top: var(--sm-space-4); }
+.ntc-fold { margin-top: var(--sm-space-4); }                                     /* '선택 항목 N개'·'채워진 항목 N개' 접기 — .brf-fold 와 같은 모양 */
+.ntc-fold > summary { cursor: pointer; font-size: var(--sm-fs-sm); font-weight: 600; color: var(--sm-text-mid); padding: var(--sm-space-1) 0; }
+.ntc-fold > summary:hover { color: var(--sm-orange); }
+.ntc-fold[open] > summary { margin-bottom: var(--sm-space-3); }
 .ntc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-3); margin-top: var(--sm-space-4); }
 .ntc-note { font-size: var(--sm-fs-xs); }
 .ntc-note.is-over { color: var(--sm-danger); font-weight: 700; }
 .ntc-result, .ntc-prompt { margin-top: var(--sm-space-4); line-height: 1.6; } /* 높이는 rows 가 정한다 */
 @media (max-width: 768px) {
   .ntc-grid { grid-template-columns: 1fr; }
+  .ntc-type > .b2b-input { width: 100%; }
 }

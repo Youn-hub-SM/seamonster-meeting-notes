@@ -1,5 +1,8 @@
 // 공지 작성기 — 유형·항목 정의(데이터 구동).
-//  화면(app/notice/page.tsx)과 서버(app/lib/notice.ts)는 이 파일의 배열만 읽는다.
+//  2026-10-13 대표 피드백으로 '칸 나눈 폼' 은 없어졌다. 직원은 공지할 내용을 자유롭게 쓰고,
+//  AI 가 유형을 판단해 아래 항목을 글에서 추출한다. 이 파일의 유형·항목은 그때의 '필수 항목 기준' 이다:
+//   · 서버(app/lib/notice.ts)는 유형·항목 목록을 출력 규칙 프롬프트에 넣고, 추출값을 항목 기준으로 정리한다.
+//   · 화면(app/notice/page.tsx)은 빠진 필수·선택 항목을 '추가로 넣으면 좋은 것' 으로 권장한다.
 //  유형을 추가하거나 항목을 바꾸는 일은 이 파일 안에서 끝난다(선례: app/lib/coupon-form.ts).
 //  DB 없음 — 입력은 화면 상태, 결과는 복사해서 쓴다.
 
@@ -47,20 +50,22 @@ export function channelLimit(channel: string | undefined): number {
   return channel ? CHANNEL_LIMITS[channel] ?? 0 : 0;
 }
 
-// 필드당 값 길이 상한(서버·화면 공통)
+// 필드당 값 길이 상한(서버·화면 공통) — '공지할 내용' 자유 입력도 같은 상한
 export const NOTICE_VALUE_MAX = 2000;
 
 export const AUDIENCE_LABEL: Record<Exclude<NoticeAudience, "both">, string> = { customer: "고객", b2b: "B2B" };
 
-// ── 공통 항목(모든 유형 앞) — audience 는 유형의 audience 가 both 일 때만 노출 ──
+// ── 공통 항목(모든 유형 앞) ──
+//  audience: 유형의 audience 가 both 일 때만 — AI 가 글에서 '대상' 도 판단한다.
+//  channel : 화면 select 로 받는다(AI 추출·권장 대상 아님 → promptFieldsFor 가 뺀다).
+//  contact·sender: 유형 항목처럼 추출·권장. contact 는 필수, sender 는 선택(비면 '씨몬스터').
 const COMMON_AUDIENCE: NoticeField = { key: "audience", label: "대상", kind: "select", required: true, options: ["고객", "B2B"] };
+export const CHANNEL_KEY = "channel";
 export const COMMON_FIELDS: NoticeField[] = [
-  { key: "channel", label: "채널", kind: "select", required: true, options: [...NOTICE_CHANNELS] },
+  { key: CHANNEL_KEY, label: "채널", kind: "select", required: true, options: [...NOTICE_CHANNELS] },
   { key: "contact", label: "문의처", kind: "text", required: true, placeholder: "예: 카카오 채널 @씨몬스터 / 070-0000-0000" },
-  { key: "sender", label: "발신명", kind: "text", required: true, defaultValue: "씨몬스터" },
+  { key: "sender", label: "발신명", kind: "text", required: false, defaultValue: "씨몬스터" },
 ];
-// 공통 항목 키 — 화면이 유형을 바꿔도 공유하는 값(유형별 저장 대상이 아님). 화면은 이 집합을 import 한다.
-export const COMMON_KEYS: ReadonlySet<string> = new Set([COMMON_AUDIENCE.key, ...COMMON_FIELDS.map((f) => f.key)]);
 
 // 보상 select + 내용(보상이 '없음'이 아니면 필수) — 여러 유형이 같은 짝을 쓴다
 const COMPENSATION_OPTIONS = ["없음", "적립금", "쿠폰", "배송비 환불", "기타"];
@@ -148,10 +153,41 @@ export function findNoticeType(key: string | undefined): NoticeType | null {
   return NOTICE_TYPES.find((t) => t.key === key) ?? null;
 }
 
-// 유형 하나가 화면에 보여 주고 서버가 검증하는 항목 전체(공통 → 유형 항목 순).
+// 유형 하나의 항목 전체(공통 → 유형 항목 순).
 export function fieldsFor(type: NoticeType): NoticeField[] {
   const common = type.audience === "both" ? [COMMON_AUDIENCE, ...COMMON_FIELDS] : COMMON_FIELDS;
   return [...common, ...type.fields];
+}
+
+// AI 가 글에서 추출하고 화면이 '빠진 항목' 으로 권장하는 항목 — 채널만 뺀다(채널은 화면 select).
+export function promptFieldsFor(type: NoticeType): NoticeField[] {
+  return fieldsFor(type).filter((f) => f.key !== CHANNEL_KEY);
+}
+
+// 키로 항목 찾기 — 그 유형의 추출·권장 항목 안에서(채널 제외).
+//  유형은 필수: 추가 입력(extras)은 유형이 정해진 뒤에만 받는다. 같은 키가 유형마다 다른 항목인 경우가 있어
+//  (alternative: 품절 select '대안' / 수급 textarea '대체안', reason: 품절 text / 가격 select) 유형 없이 찾으면 엉뚱한 항목이 잡힌다.
+export function findFieldByKey(key: string, type: NoticeType): NoticeField | null {
+  return promptFieldsFor(type).find((f) => f.key === key) ?? null;
+}
+
+// 직원 추가 입력(extras)을 유형 `to` 로 보낼 때 남길 것 — 화면이 서버에 보내기 전·응답 뒤에 정리한다.
+//  · `to` 에 있는 키만. 이전 유형 `from` 에 같은 키가 다른 kind 로 있었으면 버린다(위 findFieldByKey 의 충돌 예).
+//  · select 는 선택지 안의 값만(선택지 밖은 서버가 버려 바뀌는 게 없다).
+//  · 빈 값은 버린다 — 화면은 '비웠다' 표시로 "" 를 들고 있지만 서버는 빈 값을 '추출값 유지' 로 보므로 보낼 것이 없다.
+//  결과 순서는 `to` 의 항목 순서(프롬프트 [추가 입력] 줄 순서).
+export function carryExtras(extras: NoticeValues, from: NoticeType | null, to: NoticeType): NoticeValues {
+  const fromFields = from ? promptFieldsFor(from) : [];
+  const out: NoticeValues = {};
+  for (const nf of promptFieldsFor(to)) {
+    const v = (extras[nf.key] ?? "").trim();
+    if (!v) continue;
+    const of = fromFields.find((f) => f.key === nf.key);
+    if (of && of.kind !== nf.kind) continue;
+    if (nf.kind === "select" && !nf.options?.includes(v)) continue;
+    out[nf.key] = v;
+  }
+  return out;
 }
 
 // 유형의 초기값(defaultValue 가 있는 항목만)
@@ -173,9 +209,24 @@ export function isNoticeFieldRequired(f: NoticeField, values: NoticeValues): boo
   return !!f.requiredIf && condMet(f.requiredIf, values);
 }
 
-// 비어 있는 필수 항목(조건부 포함). 화면은 개수로 버튼을 잠그고, 서버는 라벨로 400 을 만든다.
-export function missingRequired(type: NoticeType, values: NoticeValues): NoticeField[] {
-  return fieldsFor(type).filter((f) => isNoticeFieldRequired(f, values) && !(values[f.key] ?? "").trim());
+// 비어 있는 필수 항목(조건부 포함). fields 를 주면 그 안에서만 본다(서버는 promptFieldsFor 를 준다).
+export function missingRequired(type: NoticeType, values: NoticeValues, fields: NoticeField[] = fieldsFor(type)): NoticeField[] {
+  return fields.filter((f) => isNoticeFieldRequired(f, values) && !(values[f.key] ?? "").trim());
+}
+
+// 비어 있는 선택 항목(지금 값 기준으로 필수가 아닌 것) — 화면의 '선택 항목 N개'.
+export function emptyOptional(type: NoticeType, values: NoticeValues, fields: NoticeField[] = fieldsFor(type)): NoticeField[] {
+  return fields.filter((f) => !isNoticeFieldRequired(f, values) && !(values[f.key] ?? "").trim());
+}
+
+// 화면에 돌려주는 항목 요약 — 입력칸을 그릴 만큼만(hint 는 입력 형식 예시: hint 가 없으면 placeholder).
+export type NoticeFieldInfo = { key: string; label: string; kind: NoticeFieldKind; options?: string[]; hint?: string };
+export function fieldInfo(f: NoticeField): NoticeFieldInfo {
+  const out: NoticeFieldInfo = { key: f.key, label: f.label, kind: f.kind };
+  if (f.options) out.options = [...f.options];
+  const hint = f.hint ?? f.placeholder;
+  if (hint) out.hint = hint;
+  return out;
 }
 
 // 받는 사람 라벨 — 유형이 both 면 입력의 '대상', 아니면 유형이 정한 쪽.
