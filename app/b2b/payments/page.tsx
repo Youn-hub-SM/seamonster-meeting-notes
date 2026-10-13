@@ -196,13 +196,15 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showRecent, setShowRecent] = useState(false);
+  const [recentLimit, setRecentLimit] = useState(30);   // 최근 처리 내역 — 기본 30건, [더 보기]로 100건(서버 상한)
+  const [recentQuery, setRecentQuery] = useState("");   // 입금자명·금액으로 거르기(특정 입금이 들어왔는지 찾을 때)
   const [showManage, setShowManage] = useState(false);
   const [aliasName, setAliasName] = useState("");
   const [aliasCompany, setAliasCompany] = useState("");
 
-  async function load() {
+  async function load(limit = recentLimit) {
     try {
-      const res = await fetch("/api/b2b/deposits", { cache: "no-store" });
+      const res = await fetch(`/api/b2b/deposits?limit=${limit}`, { cache: "no-store" });
       const j = (await res.json()) as DepositsResponse;
       if (!res.ok || !j.ok) throw new Error(j.error || "입금 내역 조회 실패");
       setData(j);
@@ -461,8 +463,18 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
               <button className="pay-dep-toggle" onClick={() => setShowRecent((v) => !v)}>
                 최근 처리 {data.recent.length}건 {showRecent ? "접기" : "펼치기"}
               </button>
+              {showRecent && (
+                <div className="sm-row-wrap sm-gap-2 pay-dep-filter">
+                  <input className="b2b-input" value={recentQuery} onChange={(e) => setRecentQuery(e.target.value)} placeholder="입금자명 · 금액" />
+                  {data.recent.length >= recentLimit && recentLimit < 100 && (
+                    <button className="b2b-btn-secondary" onClick={() => { setRecentLimit(100); load(100); }}>더 보기 (100건)</button>
+                  )}
+                </div>
+              )}
               {showRecent &&
-                data.recent.map((d) => (
+                data.recent
+                  .filter((d) => { const q = recentQuery.trim().replace(/,/g, ""); return !q || (d.remark || "").includes(q) || String(d.amount).includes(q); })
+                  .map((d) => (
                   <div key={d.id} className="pay-dep-row">
                     <div className="pay-dep-main">
                       <span className="b2b-money pay-dep-amount">{formatMoney(d.amount)}원</span>

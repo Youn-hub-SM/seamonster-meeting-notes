@@ -2293,6 +2293,8 @@ a.b2b-history-item:hover {
   background: none; border: none; padding: 6px 2px; cursor: pointer;
 }
 .pay-dep-toggle:hover { color: var(--sm-orange); }
+.pay-dep-filter { padding: var(--sm-space-1) 2px var(--sm-space-2); align-items: center; }
+.pay-dep-filter .b2b-input { width: auto; min-width: 200px; }
 .pay-dep-rules { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 2px; }
 .pay-dep-rules-label { font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
 .pay-dep-rule-chip {
