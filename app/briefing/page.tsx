@@ -622,7 +622,7 @@ export default function SummaryReportPage() {
           </div>
           <label className="sm-row brf-settings-row">
             <input type="checkbox" checked={analystAuto} onChange={(e) => setAnalystAuto(e.target.checked)} />
-            <span>자동 발송 (매출이 있고 발송 전일 때 · 일일 매일 14:30, 주간 월~수 14:35, 월간 1~5일 14:40)</span>
+            <span>자동 발송 (메일만 · 매출이 있고 발송 전일 때 · 일일 매일 14:30, 주간 월~수 14:35, 월간 1~5일 14:40)</span>
           </label>
           <label className="b2b-field brf-settings-field">
             <span className="b2b-field-label">팀즈 웹훅 URL</span>

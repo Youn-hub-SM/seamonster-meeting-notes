@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// 종합 리포트 14:30 자동 발송 — 담당자가 발송하지 못한 날의 보험. pg_cron 이 호출:
+// 종합 리포트 14:30 자동 발송(메일만 — 팀즈는 담당자 [보내기] 때만, 2026-10-13 대표 결정) — 담당자가 발송하지 못한 날의 보험. pg_cron 이 호출:
 //  일일 = 매일 14:30(122 'daily-analyst', 어제) · 주간 = 월~수 14:35(124 'weekly-analyst', ?period=weekly — 지난주)
 //  · 월간 = 매월 1~5일 14:40(124 'monthly-analyst', ?period=monthly — 지난달).
 //  매출이 다 들어왔고 '매출이 반영된 리포트'를 보낸 적이 없을 때만 생성(담당자 리포트가 그대로 유효하면 그 본문)·발송한다.

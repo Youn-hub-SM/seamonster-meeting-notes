@@ -896,7 +896,7 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
     if (sentWithSales(prev)) return { ok: true, date, skipped: "이미 발송됨" };
     if (!sfp?.ready) return { ok: true, date, skipped: spec.noSalesSkip };
     if (current) {
-      const sent = await sendReport(spec); // 담당자가 만들어 둔 리포트를 그대로
+      const sent = await sendReport(spec, { teams: false }); // 담당자가 만들어 둔 리포트를 그대로 — 자동 발송은 메일만(2026-10-13 대표 결정)
       return { ok: sent.ok, date, status: "ok", sent, ...sendError(sent) };
     }
   }
@@ -941,9 +941,10 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
     if (up.error) throw new Error(`분석 저장 실패: ${up.error.message}`);
     let sent: AnalystResult["sent"] = null;
     if (opts.send ?? cron) {
-      // 자동(14:30)은 남은 시간이 있을 때만 — 팀즈(20초)·메일(25초 상한)을 동시에 보내고 기록까지 maxDuration 300 안에 끝나게
+      // 자동(14:30)은 남은 시간이 있을 때만 — 메일(25초 상한)을 보내고 기록까지 maxDuration 300 안에 끝나게
       //  (마감 + 25초 = 295초 시점까지 30초 넘게 남았을 때). 못 보냈으면 화면에서 '보내기'.
-      if (!cron || deadlineAt + 25_000 - Date.now() > 30_000) sent = await sendReport(spec);
+      //  자동 발송은 메일만, 팀즈는 담당자가 [보내기]를 누를 때만(2026-10-13 대표 결정).
+      if (!cron || deadlineAt + 25_000 - Date.now() > 30_000) sent = await sendReport(spec, { teams: !cron });
       else sent = { ok: false, error: "시간이 부족해 발송하지 못했습니다 — 화면에서 '보내기'를 누르세요.", teams: null, mail: null };
     }
     result = { ok: !sent || sent.ok, date, status: "ok", sent, ...(sent ? sendError(sent) : {}) };
@@ -990,9 +991,11 @@ async function readMailKv(): Promise<{ flag: string; to: string } | null> {
 }
 const MAIL_KV_ERR = "메일 설정을 읽지 못해 보내지 않았습니다 — 잠시 뒤 다시 보내세요";
 
-export async function sendReport(spec: ReportSpec): Promise<SendResult> {
+// opts.teams=false — 팀즈는 건너뛰고 메일만(14:30 자동 발송, 2026-10-13 대표 결정). 수동 [보내기]는 기본(팀즈 + 메일).
+export async function sendReport(spec: ReportSpec, opts?: { teams?: boolean }): Promise<SendResult> {
+  const teamsOn = opts?.teams !== false;
   const [url, mailKv] = await Promise.all([
-    getKv("analyst_webhook").then((u) => u || getKv("briefing_webhook")), // 종합 리포트 하단 설정의 팀즈 웹훅
+    teamsOn ? getKv("analyst_webhook").then((u) => u || getKv("briefing_webhook")) : Promise.resolve(""), // 종합 리포트 하단 설정의 팀즈 웹훅
     readMailKv(),
   ]);
   const mailOn = !!mailKv && mailKv.flag !== "off";
@@ -1002,6 +1005,9 @@ export async function sendReport(spec: ReportSpec): Promise<SendResult> {
   if (!url && !mailGo) {
     const where = "관리자가 종합 리포트 하단 '리포트 설정'에서";
     const error = !mailKv ? `${MAIL_KV_ERR}.`
+      : !teamsOn ? (!mailOn ? `자동 발송은 메일로만 가는데 메일 발송이 꺼져 있습니다 — ${where} 켜야 합니다.`
+        : !to.length ? `자동 발송은 메일로만 가는데 메일 수신자가 없습니다 — ${where} 등록해야 합니다.`
+          : "자동 발송은 메일로만 가는데 메일 서버(SALES_SMTP_*) 설정이 없습니다.")
       : !mailOn ? `팀즈 웹훅이 없고 메일 발송이 꺼져 있습니다 — ${where} 바꿔야 합니다.`
       : !to.length ? `팀즈 웹훅과 메일 수신자가 모두 없습니다 — ${where} 등록해야 합니다.`
         : `팀즈 웹훅이 없고 메일 서버(SALES_SMTP_*) 설정이 없습니다 — ${where} 웹훅을 등록하거나 메일 서버를 설정해야 합니다.`;
