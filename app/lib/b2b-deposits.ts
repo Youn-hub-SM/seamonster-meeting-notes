@@ -232,9 +232,11 @@ export async function runAutoMatch(
     //  과거 행을 조용히 치우는 방어선으로 남겨둔다. 등록한 것만 화면에 뜬다.
     //  단 입금자명 파싱 실패(remark 없음) 건은 '미등록'이 아니라 확인필요다 — 여기서 무시로 돌리면
     //  은행 문자 양식 변경 시 입금이 다시 무음 유실된다(웹훅의 fail-open 저장 취지, 검증 확정 보정).
+    //  미등록 이름이라도 금액이 어떤 발주의 잔액과 같으면(cands 에 amountHit) 무시하지 않고 확인필요로 둔다 — 웹훅이 그 조건으로
+    //  저장한 건을 여기서 다시 '미등록'으로 치우면 화면에 영영 안 보인다(2026-10-13).
     const ignoredBy = matchesIgnoreRule(dep.remark, rules)
       ? "자동규칙"
-      : dep.remark && !isKnownDepositName(dep.remark, companyNames, aliases)
+      : dep.remark && !isKnownDepositName(dep.remark, companyNames, aliases) && !cands.some((c) => c.amountHit)
         ? "미등록"
         : null;
     if (ignoredBy) {

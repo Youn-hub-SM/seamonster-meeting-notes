@@ -63,11 +63,20 @@ export function normalizeDepositName(s: string | null | undefined): string {
     .replace(/[^0-9a-z가-힣]/g, "");
 }
 
-// 정규화 후 포함 관계 비교 (양방향, 2글자 미만은 불인정)
+// 법인 접두어를 떼지 않은 정규화 — 은행 문자가 입금자명을 앞에서 자른 경우('주식회사플' ← 주식회사플라잉닥터)의 앞부분 비교용
+const rawDepositName = (s: string | null | undefined): string => (s ?? "").toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
+
+// 정규화 후 포함 관계 비교 (양방향, 2글자 미만은 불인정).
+//  예외(2026-10-13 플라잉닥터 건): 법인 접두어를 떼고 나면 2글자가 안 되는 잘린 이름('주식회사플')은 접두어를 둔 채
+//  업체명의 앞부분과 같은지로 본다 — 접두어 뒤에 글자가 하나라도 남아야 한다('주식회사'만으로는 어느 업체도 맞지 않는다).
 export function depositNameMatch(a: string | null | undefined, b: string | null | undefined): boolean {
   const na = normalizeDepositName(a);
   const nb = normalizeDepositName(b);
-  return na.length >= 2 && nb.length >= 2 && (na.includes(nb) || nb.includes(na));
+  if (na.length >= 2 && nb.length >= 2) return na.includes(nb) || nb.includes(na);
+  if (!na.length || !nb.length) return false;
+  const ra = rawDepositName(a), rb = rawDepositName(b);
+  const [short, long] = ra.length <= rb.length ? [ra, rb] : [rb, ra];
+  return short.length >= 5 && long.startsWith(short);
 }
 
 // 입금 1건의 매칭 후보 — 이름(업체명 또는 그 업체의 별칭) 일치 또는 금액=잔액.

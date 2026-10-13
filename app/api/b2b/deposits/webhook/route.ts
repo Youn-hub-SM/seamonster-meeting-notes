@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { isKnownDepositName, parseKbDepositSms } from "@/app/lib/b2b-deposit-types";
-import { isMissingDepositsTable, loadCompanyNames, loadDepositAliases, runAutoMatch } from "@/app/lib/b2b-deposits";
-import type { BankDeposit } from "@/app/lib/b2b-deposits";
+import { isMissingDepositsTable, loadCompanyNames, loadDepositAliases, loadUnpaidOrders, runAutoMatch } from "@/app/lib/b2b-deposits";
+import type { BankDeposit, UnpaidOrderLite } from "@/app/lib/b2b-deposits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,8 +90,19 @@ export async function POST(req: NextRequest) {
     // 이름이 아예 없으면(파싱 실패) 버리지 않고 저장 — 은행 문자 양식이 바뀌어도 입금이 소리 없이
     //  유실되지 않고 '확인필요'로 남는다(감사 확정 결함 보정). '등록된 이름과 다른 이름'은
     //  기존 대표 결정(2026-08-10: 급여·사적 입금 미수집)대로 계속 버린다.
+    //  단 금액이 어떤 미수금 발주의 잔액(또는 한 거래처 미수금 합계)과 정확히 같으면 실제 거래처 입금일 가능성이 높아
+    //  저장해 '확인필요'로 올린다(2026-10-13 — 거래처가 법인 전환으로 입금자명이 바뀐 건이 소리 없이 빠졌다).
+    //  버린 건은 콘솔에 한 줄 남긴다(이름은 앞 두 글자만) — "들어왔는데 안 보인다"를 서버 기록으로 확인할 수 있게.
     if (!known && name) {
-      return NextResponse.json({ ok: true, skipped: "미등록 입금자명 — 저장하지 않음" });
+      const unpaid = await loadUnpaidOrders().catch(() => [] as UnpaidOrderLite[]);
+      const byCompany = new Map<string, number>();
+      for (const o of unpaid) byCompany.set(o.company_id, (byCompany.get(o.company_id) || 0) + o.remaining);
+      const amountHit = unpaid.some((o) => o.remaining > 0 && o.remaining === amount) || [...byCompany.values()].some((s) => s > 0 && s === amount);
+      if (!amountHit) {
+        console.log(`[deposits webhook] 미등록 입금자명 — 저장 안 함: ${name.slice(0, 2)}* · ${amount.toLocaleString()}원 · ${stamp.trdt}`);
+        return NextResponse.json({ ok: true, skipped: "미등록 입금자명 — 저장하지 않음" });
+      }
+      console.log(`[deposits webhook] 미등록 입금자명이지만 금액이 미수금과 일치 — 확인필요로 저장: ${name.slice(0, 2)}* · ${amount.toLocaleString()}원`);
     }
 
     // 중복 방지: 원문(잔액 포함이라 거래마다 다름) 해시. 구조화 입력은 금액+이름+거래시각(분 단위 정규화 —
