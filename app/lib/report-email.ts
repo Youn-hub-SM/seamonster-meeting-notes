@@ -1,5 +1,5 @@
 // 종합 리포트(일일·주간·월간) 메일 본문 (2026-10-13 대표 요청: "종합리포트도 일일매출리포트와 동일하게 이메일로 발송").
-//  analyst.ts sendReport 가 팀즈와 함께 보낸다(수동 [보내기]·14:30 자동). buildReportEmail 은 순수 함수(DB·네트워크 없음).
+//  analyst.ts sendReport 가 보낸다(수동 [보내기]만 — 2026-10-13 자동 발송·팀즈 중단). buildReportEmail 은 순수 함수(DB·네트워크 없음).
 //  모양: 일일 매출 리포트 메일(sales-report-html.ts)의 팔레트(MAIL_COLORS)·구조(600px 테이블·헤더 띠·KPI 칸·섹션 제목)를 따른다 — '같은 회사 메일'.
 //   이메일은 CSS 변수를 못 쓴다 → 색은 하드코딩(디자인 토큰 예외, sales-report-html 과 같은 값). 링크·이모지 없음.
 //   모든 글은 이스케이프(mailEsc = sales-report-html esc — AI 글·캠페인명·상품명이 들어간다).
@@ -31,7 +31,7 @@ export type ReportEmail = { subject: string; html: string; text: string; bytes: 
 export type ReportEmailInput = { title: string; md: string; lead: LeadLine[]; period: KpiPeriod; label: string };
 
 // ── 수신자·SMTP(sendReport·설정 API 공용) ──
-//  수신자 = kv 'analyst_mail_to'(쉼표 구분) — 비어 있으면 일일 매출 리포트와 같은 수신자(SALES_MAIL_TO). 끄기 = kv 'analyst_mail' = 'off'.
+//  수신자 = kv 'analyst_mail_to'(쉼표 구분) — 비어 있으면 일일 매출 리포트와 같은 수신자(SALES_MAIL_TO).
 export const MAIL_ADDR_RE = /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/;
 export const splitMailList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 export const reportMailRecipients = (kv: string): string[] => { const own = splitMailList(kv); return own.length ? own : defaultRecipients(); };

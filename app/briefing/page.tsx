@@ -8,7 +8,7 @@ import { INV_WATCH_COLOR, type InvWatchState } from "@/app/lib/inventory";
 
 // 종합 리포트(2026-09-30, 메뉴 기타) — 매출·광고 분석 에이전트(app/lib/analyst.ts, 주간·월간은 analyst-period.ts)의 리포트.
 //  일일·주간·월간 탭. 로그인한 모두가 보고 만들고 보낸다.
-//  흐름: 담당자가 매출 업로드 → 안내 창 '… 종합 리포트 생성'(?period=&date=&run=1) → 여기서 자동 분석 → 확인 후 [보내기](팀즈 + 메일, 2026-10-13).
+//  흐름: 담당자가 매출 업로드 → 안내 창 '… 종합 리포트 생성'(?period=&date=&run=1) → 여기서 자동 분석 → 확인 후 [보내기](메일, 2026-10-13 — 자동 발송·팀즈 없음).
 //  (매출 › 리포트의 '일일 매출 리포트'·'주간 매출 리포트'(메일)와 별개 메일 — 수신자를 비우면 그 리포트와 같은 사람들)
 //  14:30(운영) — 매출이 다 들어왔는데 아직 발송 전이면 자동 생성·발송(일일 매일, 주간 월~수, 월간 1~5일). 06:30 업무 브리핑은 중단.
 //  [다시 분석](매출이 그대로여도 새로)과 하단 설정은 관리자만 — 서버가 판정한다(/api/analyst, /api/briefing/settings).
@@ -19,7 +19,7 @@ import { INV_WATCH_COLOR, type InvWatchState } from "@/app/lib/inventory";
 
 type AnalystUsage = { input: number; cache_read: number; cache_write: number; output: number; iterations: number; tool_calls: number; est_usd: number };
 type TrendPts = { title: string; summary: string; points: { b: string; spend?: number; cost?: number; roas?: number | null; roas_all?: number | null }[] } | null;
-type SendRes = { ok: boolean; error?: string; teams: { ok: boolean; error?: string } | null; mail: { ok: boolean; error?: string; to?: number } | null };
+type SendRes = { ok: boolean; error?: string; mail: { ok: boolean; error?: string; to?: number } | null };
 type AnalystReport = { report_date: string; status: string; running?: boolean; sent_current?: boolean; trend_meta?: TrendPts; trend_naver?: TrendPts; kpi?: ReportKpi | null; sales_ready: boolean; report_md: string | null; model: string | null; usage: AnalystUsage | null; trigger: string | null; error: string | null; sent_at: string | null; created_at: string; updated_at: string };
 const kstYesterday = () => new Date(Date.now() + 9 * 3600_000 - 86400_000).toISOString().slice(0, 10);
 const TRIGGER_LABEL: Record<string, string> = { manual: "생성", cron: "자동 발송", upload: "매출 업로드 직후", rerun: "매출 변경 재분석" };
@@ -421,10 +421,7 @@ export default function SummaryReportPage() {
   const autoRun = useRef(false); // 매출 업로드 안내 창에서 넘어오면(?run=1) 한 번 자동 분석
   const viewRef = useRef(`${period}:${date}`); // 늦게 도착한 다른 기간 응답은 버린다
   useEffect(() => { viewRef.current = `${period}:${date}`; }, [period, date]);
-  // 설정(관리자) — 로드 성공 전에는 저장을 막는다(기존 웹훅이 빈 값으로 덮이지 않게)
-  const [webhook, setWebhook] = useState("");
-  const [analystAuto, setAnalystAuto] = useState(true);
-  const [mail, setMail] = useState(true);
+  // 설정(관리자) — 로드 성공 전에는 저장을 막는다(기존 수신자가 빈 값으로 덮이지 않게)
   const [mailTo, setMailTo] = useState("");
   const [mailDefault, setMailDefault] = useState<string[]>([]);
   const [smtpReady, setSmtpReady] = useState(true);
@@ -494,7 +491,7 @@ export default function SummaryReportPage() {
     return () => { alive = false; };
   }, [ready, period, date, load, run]);
 
-  // 보내기 — 팀즈·메일 두 채널(서버 sendReport). 보낸 채널은 안내, 실패한 채널(일부 실패 포함)은 오류 배너.
+  // 보내기 — 메일(서버 sendReport, 일일 매출 리포트와 같은 수동 발송).
   async function send() {
     if (report?.sent_current && report.sent_at && !window.confirm(`이미 ${dtKst(report.sent_at)}에 보냈습니다. 다시 보낼까요?`)) return;
     setBusy("send"); setError(""); setInfo("");
@@ -505,10 +502,8 @@ export default function SummaryReportPage() {
       });
       const j = await r.json().catch(() => null);
       const s = (j?.sent ?? null) as SendRes | null;
-      const done = [s?.teams?.ok ? "팀즈" : "", s?.mail?.ok ? "메일" : ""].filter(Boolean);
-      if (done.length) setInfo(`${done.join("·")}로 보냈습니다.`);
       if (!r.ok || !j?.ok) throw new Error(j?.error || s?.error || "발송 실패");
-      if (j.error) setError(j.error); // 한 채널만 실패 — '메일 발송 실패: …(팀즈는 보냄)'
+      if (s?.mail?.ok) setInfo(`메일로 보냈습니다${s.mail.to ? `(${s.mail.to}명)` : ""}.`);
     } catch (e) { setError(e instanceof Error ? e.message : "발송 실패"); }
     await load(period, date);
     setBusy("");
@@ -520,8 +515,7 @@ export default function SummaryReportPage() {
       try {
         const j = await (await fetch("/api/briefing/settings", { cache: "no-store" })).json();
         if (j.ok) {
-          setWebhook(j.webhook || ""); setAnalystAuto(j.analystAuto !== false);
-          setMail(j.mail !== false); setMailTo(j.mailTo || ""); setMailDefault(Array.isArray(j.mailDefault) ? j.mailDefault : []); setSmtpReady(j.smtpReady !== false);
+          setMailTo(j.mailTo || ""); setMailDefault(Array.isArray(j.mailDefault) ? j.mailDefault : []); setSmtpReady(j.smtpReady !== false);
           setSettingsLoaded(true);
         }
       } catch { /* 로드 실패 시 저장 버튼 비활성 유지 */ }
@@ -533,7 +527,7 @@ export default function SummaryReportPage() {
     try {
       const r = await fetch("/api/briefing/settings", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ webhook, analystAuto, mail, mailTo }),
+        body: JSON.stringify({ mailTo }),
       });
       const j = await r.json().catch(() => null);
       setSettingsMsg(r.ok && j?.ok ? "저장됐습니다." : `저장 실패: ${j?.error || "서버 오류"}`);
@@ -620,18 +614,6 @@ export default function SummaryReportPage() {
           <div className="b2b-card-head">
             <h2 className="b2b-card-title">리포트 설정</h2>
           </div>
-          <label className="sm-row brf-settings-row">
-            <input type="checkbox" checked={analystAuto} onChange={(e) => setAnalystAuto(e.target.checked)} />
-            <span>자동 발송 (메일만 · 매출이 있고 발송 전일 때 · 일일 매일 14:30, 주간 월~수 14:35, 월간 1~5일 14:40)</span>
-          </label>
-          <label className="b2b-field brf-settings-field">
-            <span className="b2b-field-label">팀즈 웹훅 URL</span>
-            <input className="b2b-input" value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://..." />
-          </label>
-          <label className="sm-row brf-settings-row">
-            <input type="checkbox" checked={mail} onChange={(e) => setMail(e.target.checked)} />
-            <span>메일 발송</span>
-          </label>
           <label className="b2b-field brf-settings-field">
             <span className="b2b-field-label">메일 수신자</span>
             <input className="b2b-input" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder={mailDefault.join(", ")} />

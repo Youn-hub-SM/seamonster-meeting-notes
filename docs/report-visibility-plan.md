@@ -89,6 +89,8 @@ AI 본문(모든 섹션)은 전부 그대로. 접히는 것은 코드 표 두 �
 
 ## 5. 팀즈 카드(별개 렌더, briefing.ts briefingCardBody — 줄 = TextBlock, 표 행 = ColumnSet ≈0.4~0.9KB, 그래프 불가)
 
+> **2026-10-13 이후**: 종합 리포트의 팀즈 발송과 14:30 자동 발송은 대표 결정으로 중단 — 발송은 화면 [보내기] = 메일만(app/lib/report-email.ts). 아래 팀즈 항목은 기록으로만 남긴다.
+
 2차(항목 12, +≈600B):
 1. 제목에 헤드라인 — '일일 종합 리포트 · 10/12 · 소매 3,210만(+8%)'. 알림 미리보기만으로 어제가 보인다(≈30B).
 2. 제목 아래 핵심 TextBlock 3~4줄 — 매출(color Good/Attention, |값|<3 Default) · 광고비(Default) · 재고(soldout>0 Attention, short 만 Warning) · 주간 고객의 소리(미답변>0 Warning) ≈500B. ColumnSet 2×2 는 휴대폰에서 열이 세로로 쪼개져 쓰지 않는다.

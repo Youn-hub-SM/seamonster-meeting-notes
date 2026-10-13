@@ -9,8 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 사실 집계 + AI 도구 루프(최대 약 4분)
 
-// 종합 리포트(일일·주간·월간, 2026-09-30) — 로그인한 모두가 보고, 만들고, 팀즈·메일로 보낸다(담당자가 매출 업로드 후 생성·발송).
-//  send 응답의 sent = analyst.ts SendResult { ok, error?, teams, mail } 그대로(화면이 채널별 안내·오류를 그린다). 일부 채널만 실패하면 ok + error.
+// 종합 리포트(일일·주간·월간, 2026-09-30) — 로그인한 모두가 보고, 만들고, 메일로 보낸다(담당자가 매출 업로드 후 생성·발송).
+//  send 응답의 sent = analyst.ts SendResult { ok, error?, mail } 그대로(화면이 안내·오류를 그린다).
 //  매출이 그대로인데 새로 분석(force)은 관리자만 — 반복 AI 비용 통제. 매출이 바뀌었으면 누구나 다시 분석된다(지문 비교).
 //  period = daily(기본)|weekly|monthly, date = 그 기간 안의 아무 날(주간·월간은 그 주·달로 맞춘다). 주간·월간은 끝난 기간만.
 async function who(req: NextRequest): Promise<{ name: string | null; admin: boolean }> {
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     const spec = specFor(sp.get("period"), dateOf(sp.get("date")));
     const meta = { period: spec.period, date: spec.key, range: spec.range, label: spec.label, title: spec.title, admin: u.admin };
     const sb = supabaseAdmin();
-    // 광고 추이(그래프용)와 KPI 띠 재료(report-kpi.ts KPI_FACTS_SELECT, 팀즈 발송과 공용)는 facts 안에서 그 경로만 꺼낸다 — 캠페인 배열·tool_log 는 DB 에서 꺼내지 않는다
+    // 광고 추이(그래프용)와 KPI 띠 재료(report-kpi.ts KPI_FACTS_SELECT, 메일 발송과 공용)는 facts 안에서 그 경로만 꺼낸다 — 캠페인 배열·tool_log 는 DB 에서 꺼내지 않는다
     const cols = [
       "report_date, status, sales_ready, sales_fp, report_md, model, usage, trigger, error, sent_at, created_at, updated_at",
       "trend_meta:facts->ads->meta->trend, trend_naver:facts->ads->naver->trend",
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       throw error;
     }
     // running = 지금 도는 중(6분 넘은 'running' 은 죽은 실행 — 다시 분석 가능)
-    // sent_current = 지금 버전을 팀즈로 보냈다 = 마지막 생성(updated_at) 뒤에 보냈다 — 다시 분석했으면 false
+    // sent_current = 지금 버전을 보냈다 = 마지막 생성(updated_at) 뒤에 보냈다 — 다시 분석했으면 false
     // kpi = 화면 KPI 띠·매출 추이·재고 주의 행(옛 리포트는 facts 가 없어 null → 띠 생략)
     const report = data ? (() => {
       const { parts, row } = takeKpiParts(data);

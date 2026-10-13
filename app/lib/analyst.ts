@@ -1,15 +1,16 @@
 // 종합 리포트(일일·주간·월간) 에이전트 본체 (2026-09-30) — 매출을 비교 기준(일일: 지난 4주 같은 요일, 주간: 전주·4주 평균,
 //  월간: 전월·작년 같은 달)과 비교해 코드가 사실·이상을 계산하고, Claude 가 읽기 전용 조회 도구로 이상 항목만 파고들어 원인을 짚은
-//  리포트를 쓴다. /briefing(종합 리포트, 메뉴 기타, 모두 열람 — 일일·주간·월간 탭) + 팀즈·메일(2026-10-13, sendReport).
+//  리포트를 쓴다. /briefing(종합 리포트, 메뉴 기타, 모두 열람 — 일일·주간·월간 탭) + 메일(2026-10-13, sendReport — 팀즈 발송은 같은 날 중단).
 //  기간별 차이는 ReportSpec 하나로 묶는다: 일일 = dailySpec(이 파일), 주간·월간 = app/lib/analyst-period.ts. 실행기 runReport 는 공통.
 //
 //  광고(메타·네이버)는 문턱 기준으로 이상을 판정하지 않는다(대표 요청) — 기간 안에 지출한 캠페인 전체를 지출·노출·클릭·CTR·CPC·
 //   구매·CPA·구매액·ROAS 표로 코드가 만들어 리포트에 붙인다(renderAdTables). 이상 판정(flags)은 매출만.
 //  원칙: 숫자는 코드가 계산하고 AI 는 인용·해석만 한다. 자유 SQL 은 쓰지 않는다(정해진 조회 도구만) —
 //   run_report 는 코드가 만든 고정 집계문에만 쓰고 입력(SKU·채널·날짜)은 정규식으로 검증한다. 쓰기(광고 끄기 등)는 없다.
-//  실행: 담당자 수동(매출 업로드 → 안내 창 → [분석하기] → [보내기]) + 14:30 KST 보험(pg_cron — 매출이 다 들어왔고 발송 전일 때만;
-//   일일 매일, 주간 월~수, 월간 1~5일). 같은 리포트는 'running' 행으로 먼저 점유해 겹친 실행·중복 발송을 막고, 매출 지문이 바뀌었을 때만 다시 분석.
-//  비용: 기능별 모델(AI 설정 › 종합 리포트, 기본 opus) · 이상이 없으면 도구 없이 low · 조사 최대 5차례 · 14:30 끄기 kv analyst_auto=off.
+//  실행: 담당자 수동만(매출 업로드 → 안내 창 → [분석하기] → [보내기] = 메일). 14:30 자동 생성·발송(pg_cron)은 2026-10-13 대표 결정으로
+//   폐지(migration 138 이 예약 해제, /api/analyst/cron 은 아무것도 하지 않음) — 아래 runReport 의 cron 분기는 남아 있지만 쓰이지 않는다.
+//   같은 리포트는 'running' 행으로 먼저 점유해 겹친 실행·중복 발송을 막고, 매출 지문이 바뀌었을 때만 다시 분석.
+//  비용: 기능별 모델(AI 설정 › 종합 리포트, 기본 opus) · 이상이 없으면 도구 없이 low · 조사 최대 5차례.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "./supabase";
@@ -20,12 +21,11 @@ import { isNaverAdConfigured, listCampaigns as naverCampaigns, listAdgroups as n
 import { getPurchaseConversions } from "./naver-conv";
 import { bundleAvailable, type BundleComponent } from "./product-bundles";
 import { readStockMap } from "./inventory-template";
-import { postTeamsMarkdown, teamsCardBytes } from "./briefing";
 import { sendSalesMail } from "./sales-mailer";
 import { buildReportEmail, reportMailRecipients, smtpReady } from "./report-email";
 import { reportKpi, takeKpiParts, teamsLead, KPI_FACTS_SELECT } from "./report-kpi";
 import { collectInventory } from "./analyst-inventory";
-import { withCodeTables, insertAtSectionEnd, renderInventoryTable, stripCodeBlocks, hasVoiceBlock, voiceTableAsLines, VOICE_BLOCK, inventoryForAi, tableKindOf, TOTAL_ROW, tableRow, tableRule, splitRow, type InventoryFacts } from "./report-sections";
+import { withCodeTables, insertAtSectionEnd, renderInventoryTable, inventoryForAi, type InventoryFacts } from "./report-sections";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
 
@@ -81,9 +81,9 @@ export type ReportSpec = {
   prevRange: Range;              // 광고 비교 기간(일일 = 직전 7일, 주간 = 전주, 월간 = 전월)
   table: "analyst_reports" | "analyst_period_reports";
   migration: string;             // 표가 없을 때 안내할 마이그레이션 파일
-  title: string;                 // '일일 종합 리포트' 등(팀즈 카드 제목)
+  title: string;                 // '일일 종합 리포트' 등(메일 제목 앞)
   label: string;                 // 기간 표기(9/29 · 9/22~9/28 · 2026년 9월)
-  noSalesSuffix: string;         // 매출이 덜 들어온 리포트의 팀즈 제목 꼬리
+  noSalesSuffix: string;         // 매출이 덜 들어온 리포트의 메일 제목 꼬리
   noSalesSkip: string;           // 14:30 이 매출이 없어 건너뛸 때 사유
   adLabels: AdLabels;
   fingerprint: (sb: SupabaseClient) => Promise<{ ready: boolean; fp: string }>;
@@ -772,7 +772,7 @@ export function renderAdTables(ads: AdsFacts, L: AdLabels): string {
   return out.join("\n");
 }
 
-// 광고 추이 — 요약 한 줄(코드 판정 방향) + 구간별 표. 팀즈에는 요약만 간다(표는 adTablesForTeams 가 뺀다).
+// 광고 추이 — 요약 한 줄(코드 판정 방향) + 구간별 표.
 export function renderTrend(ads: AdsFacts, title: string): string {
   const m = ads.meta?.ok ? ads.meta.trend : null, n = ads.naver?.ok ? ads.naver.trend : null;
   if (!m && !n) return "";
@@ -791,42 +791,10 @@ export function renderTrend(ads: AdsFacts, title: string): string {
   return out.join("\n");
 }
 
-// 팀즈용: 캠페인 표(머리 첫 칸이 '… 캠페인')를 '- 이름 · 지출 1,000 · 구매 2 …' 한 줄씩으로 바꾼다.
-//  적응형 카드는 표 한 행이 ColumnSet(약 0.9KB)이라 캠페인이 20개를 넘으면 팀즈 한도(약 28KB)를 넘고, 워크플로 웹훅은
-//  202 를 준 뒤 카드 게시만 조용히 실패한다(그날 보고 전체가 안 감). limit 을 주면 표마다 지출 상위 limit 개만 남긴다.
-export function adTablesForTeams(md: string, limit?: number): string {
-  const lines = md.split("\n");
-  const out: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const t = lines[i].trim();
-    const head = tableRow(t) ? splitRow(t) : null;
-    const kind = head ? tableKindOf(head[0]) : null; // 표 종류 규칙은 report-sections TABLE_KIND(화면 접기와 공유)
-    if (!head || !kind) { out.push(lines[i]); continue; }
-    const rows: string[][] = [];
-    for (i++; i < lines.length && tableRow(lines[i].trim()); i++) {
-      const raw = lines[i].trim();
-      if (!tableRule(raw)) rows.push(splitRow(raw));
-    }
-    i--;
-    // 추이 표는 팀즈 카드에 싣지 않는다(요약 줄은 위에 있다) — 한 번만 안내
-    if (kind === "trend") { if (!out.some((l) => l.includes("추이 표·그래프는"))) out.push("- 구간별 추이 표·그래프는 업무도우미 › 종합 리포트에서 볼 수 있습니다"); continue; }
-    const line = (r: string[], bold: boolean) => `- ${bold ? `**${r[0]}**` : r[0]} · ${r.slice(1).map((c, k) => `${head[k + 1]} ${c}`).join(" · ")}`;
-    const isTotal = (r: string[]) => TOTAL_ROW.test(r[0]); // renderAdTables 의 합계 행만('합계세일' 같은 캠페인 이름은 제외)
-    const body = rows.filter((r) => !isTotal(r)), total = rows.filter(isTotal);
-    out.push(`**${head[0]}**`);
-    const shown = limit != null ? body.slice(0, limit) : body;
-    for (const r of shown) out.push(line(r, false));
-    if (shown.length < body.length) out.push(`- 외 ${body.length - shown.length}개는 업무도우미 › 종합 리포트에서 볼 수 있습니다`);
-    for (const r of total) out.push(line(r, true));
-  }
-  return out.join("\n");
-}
-
-
 // ── 실행(기간 공통) ──
-//  2026-09-30 대표 결정: 담당자가 매출 업로드 → 안내 창 → 종합 리포트에서 분석 → 확인 후 [보내기](수동 — 팀즈·메일, 2026-10-13).
-//   14:30 자동(cron)은 보험 — 매출이 다 들어왔는데(spec.complete) '매출이 반영된 리포트'를 아직 보낸 적이 없을 때만 생성(유효하면 기존 본문)·발송.
-//   업로드 직후 자동 실행·자동 재분석은 없다(담당자가 확인하기 전에 팀즈로 나가지 않게).
+//  2026-09-30 대표 결정: 담당자가 매출 업로드 → 안내 창 → 종합 리포트에서 분석 → 확인 후 [보내기](수동 — 메일, 2026-10-13).
+//   14:30 자동(cron) 분기는 2026-10-13 폐지 뒤 쓰이지 않는다(크론 라우트가 runReport 를 부르지 않음).
+//   업로드 직후 자동 실행·자동 재분석은 없다(담당자가 확인하기 전에 나가지 않게).
 //  발송 기록: sent_at(마지막 발송 시각)·sent_fp(그때 리포트의 매출 지문)는 다시 분석해도 지우지 않는다 —
 //   '지금 버전을 보냈나' = sent_at >= updated_at(마지막 성공 생성 시각 — 실패하면 되돌린다), '매출 든 리포트를 보냈나' = spec.complete(sent_fp).
 //   일일 표에 sent_fp(123) 가 없으면 예전처럼 다시 분석할 때 sent_at 을 지운다.
@@ -896,7 +864,7 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
     if (sentWithSales(prev)) return { ok: true, date, skipped: "이미 발송됨" };
     if (!sfp?.ready) return { ok: true, date, skipped: spec.noSalesSkip };
     if (current) {
-      const sent = await sendReport(spec, { teams: false }); // 담당자가 만들어 둔 리포트를 그대로 — 자동 발송은 메일만(2026-10-13 대표 결정)
+      const sent = await sendReport(spec); // 담당자가 만들어 둔 리포트를 그대로(14:30 크론은 2026-10-13 폐지 — 이 경로는 쓰이지 않는다)
       return { ok: sent.ok, date, status: "ok", sent, ...sendError(sent) };
     }
   }
@@ -909,7 +877,7 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
     return { ok: true, date, skipped: sfp?.ready ? "이미 분석됨" : "매출 업로드 대기" };
   }
 
-  // 점유 — 겹친 실행(수동 두 번, 수동 + 14:30)이 둘 다 AI 를 부르고 둘 다 보내지 않게(팀즈·메일)
+  // 점유 — 겹친 실행(수동 두 번)이 둘 다 AI 를 부르고 둘 다 보내지 않게
   const nowIso = new Date().toISOString();
   const busy = { ok: !(opts.force || opts.send), date, skipped: "분석 진행 중", ...(opts.force || opts.send ? { error: "분석이 이미 진행 중입니다." } : {}) };
   if (!prev) {
@@ -941,11 +909,9 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
     if (up.error) throw new Error(`분석 저장 실패: ${up.error.message}`);
     let sent: AnalystResult["sent"] = null;
     if (opts.send ?? cron) {
-      // 자동(14:30)은 남은 시간이 있을 때만 — 메일(25초 상한)을 보내고 기록까지 maxDuration 300 안에 끝나게
-      //  (마감 + 25초 = 295초 시점까지 30초 넘게 남았을 때). 못 보냈으면 화면에서 '보내기'.
-      //  자동 발송은 메일만, 팀즈는 담당자가 [보내기]를 누를 때만(2026-10-13 대표 결정).
-      if (!cron || deadlineAt + 25_000 - Date.now() > 30_000) sent = await sendReport(spec, { teams: !cron });
-      else sent = { ok: false, error: "시간이 부족해 발송하지 못했습니다 — 화면에서 '보내기'를 누르세요.", teams: null, mail: null };
+      // 발송은 담당자 [보내기]로만(2026-10-13 대표 결정 — 14:30 크론 폐지). 아래 cron 분기는 쓰이지 않는다.
+      if (!cron || deadlineAt + 25_000 - Date.now() > 30_000) sent = await sendReport(spec);
+      else sent = { ok: false, error: "시간이 부족해 발송하지 못했습니다 — 화면에서 '보내기'를 누르세요.", mail: null };
     }
     result = { ok: !sent || sent.ok, date, status: "ok", sent, ...(sent ? sendError(sent) : {}) };
   } catch (e) {
@@ -958,61 +924,42 @@ export async function runReport(spec: ReportSpec, opts: { trigger: AnalystTrigge
   return result;
 }
 
-// ── 발송: 팀즈 + 메일(2026-10-13 대표 요청 "종합리포트도 일일매출리포트와 동일하게 이메일로") ──
-//  같은 발송 동작(수동 [보내기]·14:30 자동)이 두 채널로 간다. 팀즈는 웹훅이 있으면, 메일은 켜져 있고(kv analyst_mail ≠ 'off')
-//   수신자가 있고(kv analyst_mail_to 쉼표 구분 — 비면 SALES_MAIL_TO = 일일 매출 리포트 수신자) SMTP env 가 있으면.
-//  흐름: 행 읽기(KPI_FACTS_SELECT 포함) → 팀즈 본문·제목(카드 한도 축약) + 메일 내용(report-email.ts, 축약 전 원본 md) →
-//   sent_at 점유 한 번(1분 중복 방지) → 두 채널 동시(Promise.allSettled) → 시도한 채널이 전부 실패하면 sent_at 되돌림,
-//   하나라도 성공하면 sent_fp 기록. 일부만 실패하면 ok + error('메일 발송 실패: …(팀즈는 보냄)').
+// ── 발송: 메일(2026-10-13 대표 결정 — "일일 매출 리포트와 동일하게": 수동 [보내기]만, 메일만, 자동 발송·팀즈 없음) ──
+//  수신자(kv analyst_mail_to 쉼표 구분 — 비면 SALES_MAIL_TO = 일일 매출 리포트 수신자)와 SMTP env 가 있을 때만. 흐름: 행 읽기(KPI_FACTS_SELECT 포함) → 메일 내용(report-email.ts) → sent_at 점유(1분 중복 방지) →
+//   발송 → 실패하면 sent_at 되돌림, 성공하면 sent_fp 기록.
 //  메일 기록은 콘솔 로그만(sales_reports.report_type check 가 daily|weekly 라 넣지 않는다 — 마이그레이션 없음). 수신자 주소는 로그·응답에 남기지 않는다(SMTP 오류 글 속 주소도 scrubAddr).
-//  메일 설정을 못 읽으면 메일은 보내지 않는다(readMailKv — fail-closed).
-export type SendChannelResult = { ok: boolean; error?: string };
-export type SendResult = { ok: boolean; error?: string; teams: SendChannelResult | null; mail: (SendChannelResult & { to?: number }) | null };
-const MAIL_CAP_MS = 25_000;      // 메일 한 통 상한 — 14:30 크론(maxDuration 300) 안에서 끝나게
+//  메일 설정을 못 읽으면 보내지 않는다(readMailKv — fail-closed).
+export type SendResult = { ok: boolean; error?: string; mail: { ok: boolean; error?: string; to?: number } | null };
+const MAIL_CAP_MS = 25_000;      // 메일 한 통 상한
 const MAIL_SMTP_MS = 15_000;     // nodemailer 연결·인사·소켓 대기 상한
-// 실패 문구 — 채널 이름이 이미 든 것('팀즈 발송 실패: …')은 그대로, 아니면 '발송 실패: …'. 일부 실패(ok)는 그 문구 그대로.
-const sendError = (s: SendResult): { error?: string } => (!s.error ? {} : s.ok || /발송 실패/.test(s.error) ? { error: s.error } : { error: `발송 실패: ${s.error}` });
+// 실패 문구 — '메일 발송 실패: …' 처럼 이미 든 것은 그대로, 아니면 '발송 실패: …'
+const sendError = (s: SendResult): { error?: string } => (!s.error ? {} : /발송 실패/.test(s.error) ? { error: s.error } : { error: `발송 실패: ${s.error}` });
 // 메일 오류 글에서 주소를 지운다 — SMTP 거부 응답 원문('550 5.1.1 <a@b>: Recipient address rejected')이 nodemailer 메시지에 붙어
 //  POST /api/analyst 응답(로그인한 누구나)·화면 .b2b-error·콘솔로 가므로. 주소 자리는 '<주소>'.
 const scrubAddr = (s: string) => s.replace(/<?[^\s<>@,;:()"'[\]]+@[^\s<>@,;:()"'[\]]+>?/g, "<주소>");
-// 메일 설정(켜기·수신자)은 오류를 구분해 읽는다 — getKv 는 DB 오류를 ""(= 켜짐·기본 수신자)로 삼켜, 꺼 두거나 좁혀 둔 메일이
-//  조회 한 번 실패로 일일 매출 리포트 수신자 전원에게 나갈 수 있다(fail-open). 못 읽으면 null → 메일은 보내지 않는다(팀즈 웹훅과 같은 fail-closed).
-async function readMailKv(): Promise<{ flag: string; to: string } | null> {
+// 메일 수신자 설정은 오류를 구분해 읽는다 — getKv 는 DB 오류를 ""(= 기본 수신자)로 삼켜, 좁혀 둔 수신자가
+//  조회 한 번 실패로 일일 매출 리포트 수신자 전원에게 나갈 수 있다(fail-open). 못 읽으면 null → 보내지 않는다(fail-closed).
+async function readMailKv(): Promise<{ to: string } | null> {
   try {
-    const { data, error } = await supabaseAdmin().from("b2b_settings").select("key, value").in("key", ["analyst_mail", "analyst_mail_to"]);
+    const { data, error } = await supabaseAdmin().from("b2b_settings").select("key, value").in("key", ["analyst_mail_to"]);
     if (error) return null;
     const val = (k: string) => {
       const v = ((data ?? []) as { key: string; value: unknown }[]).find((r) => r.key === k)?.value as { v?: string } | string | null | undefined;
       const s = typeof v === "string" ? v : v?.v; // getKv 와 같은 저장 형식({v}·문자열)
       return s ? String(s).trim() : "";
     };
-    return { flag: val("analyst_mail"), to: val("analyst_mail_to") };
+    return { to: val("analyst_mail_to") };
   } catch { return null; }
 }
 const MAIL_KV_ERR = "메일 설정을 읽지 못해 보내지 않았습니다 — 잠시 뒤 다시 보내세요";
 
-// opts.teams=false — 팀즈는 건너뛰고 메일만(14:30 자동 발송, 2026-10-13 대표 결정). 수동 [보내기]는 기본(팀즈 + 메일).
-export async function sendReport(spec: ReportSpec, opts?: { teams?: boolean }): Promise<SendResult> {
-  const teamsOn = opts?.teams !== false;
-  const [url, mailKv] = await Promise.all([
-    teamsOn ? getKv("analyst_webhook").then((u) => u || getKv("briefing_webhook")) : Promise.resolve(""), // 종합 리포트 하단 설정의 팀즈 웹훅
-    readMailKv(),
-  ]);
-  const mailOn = !!mailKv && mailKv.flag !== "off";
-  const to = mailOn ? reportMailRecipients(mailKv.to) : [];
-  const smtp = smtpReady();
-  const mailGo = mailOn && to.length > 0 && smtp;
-  if (!url && !mailGo) {
-    const where = "관리자가 종합 리포트 하단 '리포트 설정'에서";
-    const error = !mailKv ? `${MAIL_KV_ERR}.`
-      : !teamsOn ? (!mailOn ? `자동 발송은 메일로만 가는데 메일 발송이 꺼져 있습니다 — ${where} 켜야 합니다.`
-        : !to.length ? `자동 발송은 메일로만 가는데 메일 수신자가 없습니다 — ${where} 등록해야 합니다.`
-          : "자동 발송은 메일로만 가는데 메일 서버(SALES_SMTP_*) 설정이 없습니다.")
-      : !mailOn ? `팀즈 웹훅이 없고 메일 발송이 꺼져 있습니다 — ${where} 바꿔야 합니다.`
-      : !to.length ? `팀즈 웹훅과 메일 수신자가 모두 없습니다 — ${where} 등록해야 합니다.`
-        : `팀즈 웹훅이 없고 메일 서버(SALES_SMTP_*) 설정이 없습니다 — ${where} 웹훅을 등록하거나 메일 서버를 설정해야 합니다.`;
-    return { ok: false, error, teams: null, mail: null };
-  }
+export async function sendReport(spec: ReportSpec): Promise<SendResult> {
+  const mailKv = await readMailKv();
+  const where = "관리자가 종합 리포트 하단 '리포트 설정'에서";
+  if (!mailKv) return { ok: false, error: `${MAIL_KV_ERR}.`, mail: null };
+  const to = reportMailRecipients(mailKv.to);
+  if (!to.length) return { ok: false, error: `메일 수신자가 없습니다 — ${where} 등록하거나 SALES_MAIL_TO 를 설정해야 합니다.`, mail: null };
+  if (!smtpReady()) return { ok: false, error: "메일 서버(SALES_SMTP_*) 설정이 없습니다.", mail: null };
   const sb = supabaseAdmin();
   // KPI 재료(facts 경로 별칭, 화면 GET 과 같은 KPI_FACTS_SELECT)도 함께 — 제목 헤드라인·핵심 줄(report-kpi.ts teamsLead). 옛 리포트는 facts 가 비어 둘 다 없다.
   const { data } = await keyed(sb.from(spec.table).select(`report_md, sales_ready, sales_fp, sent_at, ${KPI_FACTS_SELECT}`), spec).maybeSingle();
@@ -1020,58 +967,33 @@ export async function sendReport(spec: ReportSpec, opts?: { teams?: boolean }): 
   const taken = raw ? takeKpiParts(raw) : null;
   const row = (taken?.row ?? null) as { report_md: string | null; sales_ready: boolean; sales_fp: string | null; sent_at: string | null } | null;
   const mdText = row?.report_md || "";
-  if (!mdText) return { ok: false, error: "보낼 리포트가 없습니다. 먼저 분석하세요.", teams: null, mail: null };
+  if (!mdText) return { ok: false, error: "보낼 리포트가 없습니다. 먼저 분석하세요.", mail: null };
   const { headline, lead } = teamsLead(spec.period, reportKpi(spec.period, taken?.parts));
-  // 제목: 매출이 반영된 리포트면 '… · 소매 2,140만(-5%)'(알림 미리보기만으로 숫자가 보이게), 미반영이면 종전 꼬리 그대로
+  // 제목: 매출이 반영된 리포트면 '… · 소매 2,140만(-5%)'(받은편지함 미리보기만으로 숫자가 보이게), 미반영이면 종전 꼬리 그대로
   const title = `${spec.title} · ${spec.label}${row?.sales_ready ? (headline ? ` · ${headline}` : "") : spec.noSalesSuffix}`;
-  const card = { lead }; // 핵심 줄은 한도 계산과 발송이 같은 payload 로(어긋나면 26KB 를 넘겨 웹훅이 202 뒤 조용히 실패)
-  // 카드 한도(약 28KB) — 표는 한 줄씩, 그래도 크면 표마다 상위 10개, (주간) 고객의 소리 집계 표를 한 줄씩 → 그 블록만 빼기,
-  //  그래도 크면 코드 표를 빼고 AI 글만, 그래도 크면 화면 안내만. 고객의 소리 블록이 없는 일일·월간은 종전과 같은 단계·결과.
-  let body = "";
-  if (url) {
-    const MAX = 26_000;
-    const over = (b: string) => teamsCardBytes(title, b, card) > MAX;
-    const voice = hasVoiceBlock(mdText);
-    body = adTablesForTeams(mdText);
-    if (over(body)) body = adTablesForTeams(mdText, 10);
-    if (voice && over(body)) body = adTablesForTeams(voiceTableAsLines(mdText), 10);
-    //  꼬리 안내는 '• '로 — 본문 끝 = '확인할 것' 섹션이라 '- '면 카드의 번호 목록(1. 2. 3.) 마지막 항목으로 붙는다. '• ' 줄은 목록 밖 일반 TextBlock(요소 하나라 약 60B, 아래 over 가 같은 본문을 재므로 한도 계산은 어긋나지 않는다).
-    if (voice && over(body)) body = `${adTablesForTeams(stripCodeBlocks(mdText, [VOICE_BLOCK]), 10)}\n\n• 고객의 소리 집계 표는 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
-    if (over(body)) body = `${stripCodeBlocks(mdText)}\n\n• ${voice ? "광고·재고·고객의 소리 표는" : "광고·재고 표는"} 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
-    if (over(body)) body = "- 리포트가 길어 팀즈 카드에 담지 못했습니다. 업무도우미 › 종합 리포트에서 확인하세요.";
-  }
-  // 메일 — 팀즈처럼 줄이지 않은 원본 md(Gmail 자르기 전 95KB 에서만 단계 축약, report-email.ts). 제목 = 팀즈 카드 제목.
-  const mail = mailGo ? buildReportEmail({ title, md: mdText, lead, period: spec.period, label: spec.label }) : null;
-  // 겹친 발송(두 사람이 동시에, 수동 + 14:30)은 한 번만 — 1분 안에 이미 잡힌 발송이 있으면 건너뛴다(점유는 두 채널 합쳐 한 번). 전부 실패하면 되돌린다.
+  // 원본 md 그대로(Gmail 자르기 전 95KB 에서만 단계 축약, report-email.ts)
+  const mail = buildReportEmail({ title, md: mdText, lead, period: spec.period, label: spec.label });
+  // 겹친 발송(두 사람이 동시에)은 한 번만 — 1분 안에 이미 잡힌 발송이 있으면 건너뛴다. 실패하면 되돌린다.
   const at = new Date().toISOString();
   const recentIso = new Date(Date.now() - 60_000).toISOString();
   const claim = await keyed(sb.from(spec.table).update({ sent_at: at }), spec)
     .or(`sent_at.is.null,sent_at.lt."${recentIso}"`).select("report_date");
-  if (!claim.error && !(claim.data ?? []).length) return { ok: false, error: "방금 발송됐습니다 — 잠시 뒤 새로고침하세요.", teams: null, mail: null };
-  const [tr, mr] = await Promise.allSettled([
-    url ? postTeamsMarkdown(url, title, body, card) : Promise.resolve(null),
-    mail ? withTimeout(sendSalesMail({ subject: mail.subject, text: mail.text, html: mail.html, to }, { timeoutMs: MAIL_SMTP_MS }), MAIL_CAP_MS) : Promise.resolve(null),
-  ]);
-  const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
-  const teams: SendChannelResult | null = !url ? null
-    : tr.status === "rejected" ? { ok: false, error: errText(tr.reason) } : tr.value ?? { ok: false, error: "팀즈 응답 없음" };
-  // 메일 설정을 못 읽었으면(위 fail-closed) 시도한 채널의 실패로 센다 — 팀즈만 나가면 '메일 발송 실패: 메일 설정을 … (팀즈는 보냄)'
-  const mailR: SendResult["mail"] = !mailKv ? { ok: false, error: MAIL_KV_ERR } : !mail ? null
-    : mr.status === "rejected" ? { ok: false, error: scrubAddr(errText(mr.reason)), to: to.length }
-      : mr.value === "timeout" ? { ok: false, error: `시간 초과(${MAIL_CAP_MS / 1000}초)`, to: to.length } : { ok: true, to: to.length };
-  const tried = [{ name: "팀즈", r: teams }, { name: "메일", r: mailR }].filter((c): c is { name: string; r: SendChannelResult } => !!c.r);
-  const okNames = tried.filter((c) => c.r.ok).map((c) => c.name);
-  // postTeamsMarkdown 오류는 이미 '발송 실패(400) — …'·'발송 실패: 네트워크 오류' 꼴 → 채널 이름만 앞에('팀즈 발송 실패(400) — …')
-  const failed = tried.filter((c) => !c.r.ok).map((c) => { const e = c.r.error || "원인 불명"; return /^발송 실패/.test(e) ? `${c.name} ${e}` : `${c.name} 발송 실패: ${e}`; });
-  console.log(`[analyst send ${spec.period} ${spec.key}] 팀즈 ${teams ? (teams.ok ? "ok" : `실패(${teams.error})`) : "-"} · 메일 ${mailR ? (mailR.ok ? "ok" : `실패(${mailR.error})`) : mailOn ? (to.length ? "-(SMTP 없음)" : "-(수신자 없음)") : "-(꺼짐)"}${mail ? ` · ${to.length}명 · ${mail.bytes}B · ${mail.stage}` : ""}`);
-  if (!okNames.length) {
+  if (!claim.error && !(claim.data ?? []).length) return { ok: false, error: "방금 발송됐습니다 — 잠시 뒤 새로고침하세요.", mail: null };
+  let mailR: NonNullable<SendResult["mail"]>;
+  try {
+    const r = await withTimeout(sendSalesMail({ subject: mail.subject, text: mail.text, html: mail.html, to }, { timeoutMs: MAIL_SMTP_MS }), MAIL_CAP_MS);
+    mailR = r === "timeout" ? { ok: false, error: `시간 초과(${MAIL_CAP_MS / 1000}초)`, to: to.length } : { ok: true, to: to.length };
+  } catch (e) {
+    mailR = { ok: false, error: scrubAddr(e instanceof Error ? e.message : String(e)), to: to.length };
+  }
+  console.log(`[analyst send ${spec.period} ${spec.key}] 메일 ${mailR.ok ? "ok" : `실패(${mailR.error})`} · ${to.length}명 · ${mail.bytes}B · ${mail.stage}`);
+  if (!mailR.ok) {
     await keyed(sb.from(spec.table).update({ sent_at: row?.sent_at ?? null }), spec);
-    return { ok: false, error: failed.join(" · "), teams, mail: mailR };
+    return { ok: false, error: `메일 발송 실패: ${mailR.error || "원인 불명"}`, mail: mailR };
   }
   // 보낸 버전의 매출 지문도 남긴다 — 칸이 없으면(123 미적용) 시각만(위에서 이미 기록)
   await keyed(sb.from(spec.table).update({ sent_fp: row?.sales_fp ?? null }), spec);
-  const done = okNames[0] === "팀즈" ? "팀즈는" : "메일은";
-  return { ok: true, teams, mail: mailR, ...(failed.length ? { error: `${failed.join(" · ")} (${done} 보냄)` } : {}) };
+  return { ok: true, mail: mailR };
 }
 
 // 재고 사실(기간 공통) — 30초 상한, 실패·초과여도 리포트는 계속(재고 섹션이 note 한 줄로)
