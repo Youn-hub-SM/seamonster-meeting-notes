@@ -186,7 +186,7 @@ export default function NoticePage() {
   const gapValue = (f: NoticeFieldInfo) => extras[f.key] ?? result?.fields[f.key] ?? "";
 
   return (
-    <div className="b2b-container">
+    <div className="b2b-container ntc-page">
       <header className="b2b-page-head">
         <h1 className="b2b-page-title">공지 작성기</h1>
       </header>
@@ -196,7 +196,7 @@ export default function NoticePage() {
           <div className="ntc-form">
             <div className="b2b-field">
               <label className="b2b-field-label" htmlFor="ntc-channel">채널</label>
-              <select id="ntc-channel" className="b2b-input" value={channel} onChange={(e) => setChannel(e.target.value)} disabled={locked}>
+              <select id="ntc-channel" className="b2b-input ntc-channel" value={channel} onChange={(e) => setChannel(e.target.value)} disabled={locked}>
                 {NOTICE_CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -309,26 +309,27 @@ export default function NoticePage() {
           </>
         )}
 
+        {/* 톤 프롬프트 — 매번 쓰는 게 아니라 접어 둔다(펼치면 다른 카드 제목과 같은 모양) */}
         <section className="b2b-card">
-          <div className="b2b-card-head">
-            <span className="b2b-card-title">톤 프롬프트</span>
-          </div>
-          <textarea
-            className="b2b-input b2b-textarea ntc-prompt"
-            rows={16}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={!promptLoaded || promptSaving}
-          />
-          <div className="ntc-foot">
-            <button type="button" className="b2b-btn-primary" onClick={() => savePrompt()} disabled={!promptLoaded || promptSaving}>
-              {promptSaving ? "저장 중..." : "저장"}
-            </button>
-            <button type="button" className="b2b-btn-secondary" onClick={() => savePrompt("")} disabled={!promptLoaded || promptSaving || (!!promptDefault && prompt === promptDefault)}>
-              기본값으로
-            </button>
-            {promptMsg && <span className="sm-faint ntc-note">{promptMsg}</span>}
-          </div>
+          <details className="ntc-prompt-fold">
+            <summary>톤 프롬프트</summary>
+            <textarea
+              className="b2b-input b2b-textarea ntc-prompt"
+              rows={16}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              disabled={!promptLoaded || promptSaving}
+            />
+            <div className="ntc-foot">
+              <button type="button" className="b2b-btn-primary" onClick={() => savePrompt()} disabled={!promptLoaded || promptSaving}>
+                {promptSaving ? "저장 중..." : "저장"}
+              </button>
+              <button type="button" className="b2b-btn-secondary" onClick={() => savePrompt("")} disabled={!promptLoaded || promptSaving || (!!promptDefault && prompt === promptDefault)}>
+                기본값으로
+              </button>
+              {promptMsg && <span className="sm-faint ntc-note">{promptMsg}</span>}
+            </div>
+          </details>
         </section>
       </div>
     </div>

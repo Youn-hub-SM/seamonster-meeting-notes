@@ -2964,6 +2964,10 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .ntc-fold > summary { cursor: pointer; font-size: var(--sm-fs-sm); font-weight: 600; color: var(--sm-text-mid); padding: var(--sm-space-1) 0; }
 .ntc-fold > summary:hover { color: var(--sm-orange); }
 .ntc-fold[open] > summary { margin-bottom: var(--sm-space-3); }
+.ntc-page { max-width: 960px; margin: 0 auto; }                                  /* 읽는 폭 — /briefing(.brf-page) 과 같게, 본문이 좌측에 쏠리지 않게 */
+.ntc-channel { width: auto; min-width: 240px; }                                  /* 채널 select 는 내용 폭만 */
+.ntc-prompt-fold > summary { cursor: pointer; padding: 14px 0; border-bottom: 1px solid var(--sm-border); font-size: var(--sm-fs-lg); font-weight: 700; letter-spacing: -0.01em; color: var(--sm-black); } /* .b2b-card-head + .b2b-card-title 과 같은 모양 */
+.ntc-prompt-fold > summary:hover { color: var(--sm-orange); }
 .ntc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sm-space-3); margin-top: var(--sm-space-4); }
 .ntc-note { font-size: var(--sm-fs-xs); }
 .ntc-note.is-over { color: var(--sm-danger); font-weight: 700; }
