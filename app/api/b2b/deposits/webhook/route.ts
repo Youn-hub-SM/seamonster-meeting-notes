@@ -107,9 +107,11 @@ export async function POST(req: NextRequest) {
       console.log(`[deposits webhook] 미등록 입금자명이지만 금액이 미수금과 일치 — 확인필요로 저장: ${name.slice(0, 2)}* · ${amount.toLocaleString()}원`);
     }
 
-    // 중복 방지: 원문(잔액 포함이라 거래마다 다름) 해시. 구조화 입력은 금액+이름+거래시각(분 단위 정규화 —
-    //  stamp 가 이미 at 우선이므로 at 원문의 포맷·초 지터에 흔들리지 않는다).
-    const dedupSrc = body.text ?? `${amount}|${name ?? ""}|${stamp.trdt}`;
+    // 중복 방지: 원문 해시. 원문에 거래 시각이 찍혀 있으면(SMS — 잔액도 있어 거래마다 다름) 원문만으로 충분하지만,
+    //  앱 푸시처럼 '주식회사플라잉닥터 입금 1,272,200' 뿐인 글은 같은 거래처가 같은 금액을 다시 보내면 글자가 똑같아
+    //  진짜 새 입금이 '재전송'으로 버려진다(2026-10-13) — 시각이 없는 원문은 수신 시각(분)을 붙여 구분한다.
+    //  구조화 입력은 금액+이름+거래시각(분 단위 정규화 — stamp 가 이미 at 우선이므로 at 원문의 포맷·초 지터에 흔들리지 않는다).
+    const dedupSrc = body.text ? (parsed?.month ? body.text : `${body.text}|${stamp.trdt}`) : `${amount}|${name ?? ""}|${stamp.trdt}`;
     const tid = "sms-" + createHash("sha256").update(dedupSrc).digest("hex").slice(0, 40);
 
     const sb = supabaseAdmin();
@@ -128,6 +130,7 @@ export async function POST(req: NextRequest) {
       .single();
     if (error) {
       if ((error as { code?: string }).code === "23505") {
+        console.log(`[deposits webhook] 같은 알림 재전송 — 무시: ${(name ?? "").slice(0, 2)}* · ${amount.toLocaleString()}원 · ${stamp.trdt}`);
         return NextResponse.json({ ok: true, dup: true }); // 같은 알림 재전송 — 정상 무시
       }
       throw error;
