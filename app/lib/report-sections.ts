@@ -32,18 +32,21 @@ const won = (n: number | null | undefined) => (n == null ? "-" : Math.round(n).t
 const qty = (n: number) => (Math.round(n * 10) / 10).toLocaleString("ko-KR");
 const cell = (s: string) => s.replace(/[|\r\n]+/g, "/").replace(/\s+/g, " ").trim().slice(0, 40) || "-";
 
-// '재고 주의 품목' 표 — 머리 첫 칸이 '… 품목'이라 팀즈에선 adTablesForTeams 가 한 줄씩으로 바꾼다
+// '재고 주의 품목' 표 — 머리 첫 칸이 '… 품목'이라 팀즈에선 adTablesForTeams 가 한 줄씩으로 바꾼다.
+//  머리·행 칸은 화면(/briefing)이 facts.inventory.now.watch 로 같은 표를 직접 그릴 때도 쓴다(상태 배지·data-label 을 정확히).
+export const INV_WATCH_HEAD = ["재고 품목", "현재고", "하루 출고", "버티는 날", "입고 예정", "상태"] as const;
+export function watchCells(r: InvWatchRow): string[] {
+  const due = r.inbound > 0 ? `${qty(r.inbound)}${r.due ? ` (${r.due.slice(5)})` : ""}` : "-";
+  return [cell(r.name), qty(r.stock), qty(r.daily), r.days == null ? "-" : `${r.days}일`, due, r.state];
+}
 export function renderInventoryTable(inv: InventoryFacts | null | undefined): string {
   const w = inv?.ok ? inv.now?.watch ?? [] : [];
   if (!inv?.ok || !inv.now) return "";
   const out = [`### 재고 주의 품목 (지금 기준)`];
   if (!w.length) out.push("- 품절·부족 품목 없음");
   else {
-    out.push("| 재고 품목 | 현재고 | 하루 출고 | 버티는 날 | 입고 예정 | 상태 |", "|---|---|---|---|---|---|");
-    for (const r of w) {
-      const due = r.inbound > 0 ? `${qty(r.inbound)}${r.due ? ` (${r.due.slice(5)})` : ""}` : "-";
-      out.push(`| ${cell(r.name)} | ${qty(r.stock)} | ${qty(r.daily)} | ${r.days == null ? "-" : `${r.days}일`} | ${due} | ${r.state} |`);
-    }
+    out.push(`| ${INV_WATCH_HEAD.join(" | ")} |`, `|${INV_WATCH_HEAD.map(() => "---").join("|")}|`);
+    for (const r of w) out.push(`| ${watchCells(r).join(" | ")} |`);
   }
   out.push("", `- ${inv.basis}`);
   if (inv.note) out.push(`- 주의: ${inv.note}`);
@@ -52,13 +55,45 @@ export function renderInventoryTable(inv: InventoryFacts | null | undefined): st
 
 // ── 섹션 끝에 블록 끼우기 ──
 //  heading 이 '## 2. 광고'·'## 광고' 둘 다 맞게 번호는 선택. 섹션이 없으면 fallbacks 순서로 그 헤딩 앞, 다 없으면 맨 끝.
+//  summary·sales 는 화면(/briefing) 섹션 분할용(2026-10-13) — 끼우기엔 쓰지 않는다.
 export const SEC = {
+  summary: /^##\s*(\d+\.\s*)?한 줄 요약/,
+  sales: /^##\s*(\d+\.\s*)?매출/,
   ad: /^##\s*(\d+\.\s*)?광고/,
   inv: /^##\s*(\d+\.\s*)?재고/,
   voice: /^##\s*(\d+\.\s*)?고객의 소리/, // 주간만
   change: /^##\s*(\d+\.\s*)?눈에 띄는/,
   todo: /^##\s*(\d+\.\s*)?(오늘\s*)?확인할 것/,
 };
+export type SectionKind = keyof typeof SEC | "other" | "pre";
+export type ReportSection = { kind: SectionKind; heading: string; lines: string[] }; // lines = 헤딩 줄 뺀 본문(원문 그대로)
+const SEC_ORDER = Object.keys(SEC) as (keyof typeof SEC)[];
+export const sectionKindOf = (heading: string): SectionKind => SEC_ORDER.find((k) => SEC[k].test(heading)) ?? "other";
+// '## ' 헤딩마다 섹션으로 나눈다(순수 함수, 재배열 없음). 첫 헤딩 앞 글은 kind 'pre'(헤딩이 하나도 없으면 전체가 'pre' 하나 = 평탄 렌더 폴백).
+export function splitSections(md: string): ReportSection[] {
+  const out: ReportSection[] = [];
+  let cur: ReportSection = { kind: "pre", heading: "", lines: [] };
+  for (const l of md.split("\n")) {
+    const t = l.trim();
+    if (/^##\s/.test(t)) {
+      if (cur.kind !== "pre" || cur.lines.some((x) => x.trim())) out.push(cur);
+      cur = { kind: sectionKindOf(t), heading: t.replace(/^##\s*/, ""), lines: [] };
+      continue;
+    }
+    cur.lines.push(l);
+  }
+  if (cur.kind !== "pre" || cur.lines.some((x) => x.trim()) || !out.length) out.push(cur);
+  return out;
+}
+
+// ── 코드 표 식별 — 화면(접기·배지)과 팀즈 축약(adTablesForTeams)이 같은 규칙을 쓴다 ──
+//  머리 첫 칸: '메타 캠페인'·'네이버 캠페인'(캠페인 전체) / '메타 추이'·'네이버 추이'(광고 추이) / '재고 품목'(재고 주의 품목).
+//  합계 행 = renderAdTables 의 '합계 N개'('합계세일' 같은 캠페인 이름은 제외).
+export const TABLE_KIND = { campaign: /캠페인$/, trend: /추이$/, inventory: /품목$/ } as const;
+export type TableKind = keyof typeof TABLE_KIND;
+export const tableKindOf = (head0: string): TableKind | null => (Object.keys(TABLE_KIND) as TableKind[]).find((k) => TABLE_KIND[k].test(head0)) ?? null;
+export const TOTAL_ROW = /^합계 \d+개/;
+export const CAMPAIGN_TOP = 5; // 캠페인 전체 표 기본 표시 = 합계 + 지출 상위 N(대표 결정 4)
 export function insertAtSectionEnd(md: string, section: RegExp, block: string, fallbacks: RegExp[]): string {
   if (!block) return md;
   const lines = md.split("\n");
@@ -83,9 +118,11 @@ export function withCodeTables(md: string, adBlocks: { trend: string; campaigns:
 //  '고객의 소리 집계'(주간만) — 적응형 카드에서 표 한 행이 ColumnSet 이라 줄글보다 훨씬 크다. 카드 한도를 넘으면
 //  sendReportToTeams 가 ① 이 표만 한 줄씩 → ② 이 블록만 빼기 → ③ 코드 표 전부 빼기 순으로 줄인다(블록이 없는 일일·월간은 ①② 건너뜀).
 export const VOICE_BLOCK = "고객의 소리 집계";
-const VOICE_HEAD = new RegExp(`^###\\s*${VOICE_BLOCK}`);
-const tableRow = (t: string) => /^\|.*\|$/.test(t);
-const splitRow = (t: string) => t.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+export const VOICE_HEAD = new RegExp(`^###\\s*${VOICE_BLOCK}`);
+// 마크다운 표 줄 — 화면 렌더러·팀즈 축약 공용('| … |' 한 줄, 구분선 |---| 은 건너뛴다)
+export const tableRow = (t: string) => /^\|.*\|$/.test(t);
+export const tableRule = (t: string) => /^\|[\s|:-]+\|$/.test(t);
+export const splitRow = (t: string) => t.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
 export const hasVoiceBlock = (md: string) => md.split("\n").some((l) => VOICE_HEAD.test(l.trim()));
 // ① '고객의 소리 집계' 표만 '- 구분 · {기간} N · 전주 M' 한 줄씩으로(표 아래 기준·주의 줄은 그대로). 다른 표는 건드리지 않는다.
 export function voiceTableAsLines(md: string): string {

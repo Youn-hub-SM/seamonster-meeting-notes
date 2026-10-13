@@ -9,6 +9,7 @@ import { getLedgerVelocity } from "./production-velocity";
 import { getAllBundles, isBundleId } from "./product-bundles";
 import { getUntracked } from "./stock-tracked";
 import { readAll, readStockMap } from "./inventory-template";
+import { SEC } from "./report-sections"; // 종합 리포트 카드의 '확인할 것' 섹션 판정(순수 모듈)
 
 // 대표 전용 '일일 업무도우미 리포트' v2 (2026-09-03, migration 103 재사용).
 //  두 축: ① 어제 사이트 전체에서 있었던 일 ② 오늘 체크해야 할 요소(코드가 판정한 경보).
@@ -349,11 +350,26 @@ export async function generateBriefing(opts?: { date?: string; force?: boolean }
 // ── 팀즈 발송 — 리포트 전용 적응형 카드(모바일 wrap, 표 = ColumnSet 숫자 우측정렬) ──
 type CardEl = Record<string, unknown>;
 
-function briefingCardBody(title: string, md: string): CardEl[] {
+// 종합 리포트 카드 옵션(2026-10-13, docs/report-visibility-plan.md §5 2차) — 선택 인자. 주지 않으면(06:30 브리핑) 종전 카드 그대로.
+//  lead = 제목 아래 핵심 줄(매출·광고비·재고·주간 고객의 소리, report-kpi.ts teamsLead) — 줄마다 TextBlock, color 는 적응형 카드 색 이름.
+//  옵션이 있으면 ## 제목 TextBlock 에 구분선(separator), '확인할 것' 섹션의 '- ' 줄은 '1. 2. 3.' 번호 목록 한 블록.
+export type TeamsColor = "Good" | "Attention" | "Warning" | "Default";
+export type LeadLine = { text: string; color?: TeamsColor };
+export type ReportCardOpts = { lead?: LeadLine[] };
+
+function briefingCardBody(title: string, md: string, opts?: ReportCardOpts): CardEl[] {
   const body: CardEl[] = [{ type: "TextBlock", text: title, weight: "Bolder", size: "Large", wrap: true }];
+  for (const l of opts?.lead ?? []) body.push({ type: "TextBlock", text: l.text, wrap: true, spacing: "Small", ...(l.color && l.color !== "Default" ? { color: l.color } : {}) });
+  const report = !!opts;
+  let inTodo = false;
+  const todo: string[] = [];
+  const flushTodo = () => { if (todo.length) body.push({ type: "TextBlock", text: todo.map((t, k) => `${k + 1}. ${t}`).join("\n"), wrap: true, spacing: "Small" }); todo.length = 0; };
   const lines = md.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
+    if (!t || t === "---") continue; // 빈 줄은 표·헤딩 어디에도 맞지 않아 종전과 같은 결과(번호 목록 사이 빈 줄도 목록을 끊지 않게 먼저)
+    if (inTodo && /^-\s/.test(t)) { todo.push(t.replace(/^-\s*/, "")); continue; }
+    flushTodo();
     if (/^\|.*\|$/.test(t)) {
       const rows: string[][] = [];
       while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
@@ -383,12 +399,16 @@ function briefingCardBody(title: string, md: string): CardEl[] {
       }
       continue;
     }
-    if (!t || t === "---") continue;
-    if (/^##\s/.test(t)) { body.push({ type: "TextBlock", text: t.replace(/^##\s*/, ""), weight: "Bolder", size: "Medium", spacing: "Large", wrap: true }); continue; }
+    if (/^##\s/.test(t)) {
+      inTodo = report && SEC.todo.test(t); // 리포트 카드: '확인할 것' 섹션의 '- ' 줄은 번호 목록
+      body.push({ type: "TextBlock", text: t.replace(/^##\s*/, ""), weight: "Bolder", size: "Medium", spacing: "Large", wrap: true, ...(report ? { separator: true } : {}) });
+      continue;
+    }
     if (/^###\s/.test(t)) { body.push({ type: "TextBlock", text: t.replace(/^###\s*/, ""), weight: "Bolder", spacing: "Medium", wrap: true }); continue; }
     if (/^-\s/.test(t)) { body.push({ type: "TextBlock", text: "• " + t.replace(/^-\s*/, ""), wrap: true, spacing: "Small" }); continue; }
     body.push({ type: "TextBlock", text: t, wrap: true, spacing: "Small" });
   }
+  flushTodo();
   return body;
 }
 
@@ -408,14 +428,15 @@ const cardPayload = (body: CardEl[]) => ({
 });
 
 // 팀즈 카드 한도는 약 28KB — 넘으면 워크플로 웹훅이 202 를 주고 게시만 조용히 실패하므로 보내기 전에 크기를 잰다.
-export function teamsCardBytes(title: string, md: string): number {
-  return Buffer.byteLength(JSON.stringify(cardPayload(briefingCardBody(title, md))), "utf8");
+//  opts(핵심 줄 등)는 postTeamsMarkdown 과 같은 payload 로 재야 한도 계산(26,000 측정 · 27,500 거부)이 어긋나지 않는다.
+export function teamsCardBytes(title: string, md: string, opts?: ReportCardOpts): number {
+  return Buffer.byteLength(JSON.stringify(cardPayload(briefingCardBody(title, md, opts))), "utf8");
 }
 
 // 제목 + 마크다운(일일 리포트와 같은 부분집합: ## · ### · - · 표)을 적응형 카드로 팀즈에 보낸다(어제 분석 공용). 20초 안에 응답이 없으면 실패.
 //  한도를 넘는 카드는 보내지 않고 실패로 돌려준다(조용히 사라지지 않게).
-export async function postTeamsMarkdown(url: string, title: string, md: string): Promise<{ ok: boolean; error?: string }> {
-  const payload = JSON.stringify(cardPayload(briefingCardBody(title, md)));
+export async function postTeamsMarkdown(url: string, title: string, md: string, opts?: ReportCardOpts): Promise<{ ok: boolean; error?: string }> {
+  const payload = JSON.stringify(cardPayload(briefingCardBody(title, md, opts)));
   const bytes = Buffer.byteLength(payload, "utf8");
   if (bytes > 27_500) return { ok: false, error: `카드가 너무 큽니다(약 ${Math.round(bytes / 1024)}KB, 팀즈 한도 약 28KB) — 화면에서 확인하세요.` };
   try {
