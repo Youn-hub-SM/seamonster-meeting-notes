@@ -182,7 +182,7 @@ export function reportKpi(period: KpiPeriod, parts: KpiParts | null | undefined)
   return k;
 }
 
-// ── DB 에서 KPI 재료만 꺼내는 select 별칭 — GET /api/analyst(화면)와 sendReportToTeams(팀즈)가 같은 경로를 쓴다 ──
+// ── DB 에서 KPI 재료만 꺼내는 select 별칭 — GET /api/analyst(화면)와 sendReport(팀즈·메일)가 같은 경로를 쓴다 ──
 //  facts 안에서 이 경로만(캠페인 배열·tool_log 는 꺼내지 않는다). 옛 리포트는 facts 가 비어 전부 null → reportKpi null.
 export const KPI_FACTS_SELECT = [
   "k_sales:facts->sales, k_inventory:facts->inventory, k_voice:facts->voice, k_ads_total:facts->ads->spend_ex_vat_total",

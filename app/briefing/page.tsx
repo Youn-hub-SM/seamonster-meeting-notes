@@ -8,8 +8,8 @@ import { INV_WATCH_COLOR, type InvWatchState } from "@/app/lib/inventory";
 
 // 종합 리포트(2026-09-30, 메뉴 기타) — 매출·광고 분석 에이전트(app/lib/analyst.ts, 주간·월간은 analyst-period.ts)의 리포트.
 //  일일·주간·월간 탭. 로그인한 모두가 보고 만들고 보낸다.
-//  흐름: 담당자가 매출 업로드 → 안내 창 '… 종합 리포트 생성'(?period=&date=&run=1) → 여기서 자동 분석 → 확인 후 [팀즈로 보내기].
-//  (매출 › 리포트의 '일일 매출 리포트'·'주간 매출 리포트'(메일)와 별개)
+//  흐름: 담당자가 매출 업로드 → 안내 창 '… 종합 리포트 생성'(?period=&date=&run=1) → 여기서 자동 분석 → 확인 후 [보내기](팀즈 + 메일, 2026-10-13).
+//  (매출 › 리포트의 '일일 매출 리포트'·'주간 매출 리포트'(메일)와 별개 메일 — 수신자를 비우면 그 리포트와 같은 사람들)
 //  14:30(운영) — 매출이 다 들어왔는데 아직 발송 전이면 자동 생성·발송(일일 매일, 주간 월~수, 월간 1~5일). 06:30 업무 브리핑은 중단.
 //  [다시 분석](매출이 그대로여도 새로)과 하단 설정은 관리자만 — 서버가 판정한다(/api/analyst, /api/briefing/settings).
 //  2026-10-13 가시성 개선(docs/report-visibility-plan.md) — 코드 렌더만: KPI 띠(report.kpi = facts, report-kpi.ts)·섹션 카드·
@@ -19,6 +19,7 @@ import { INV_WATCH_COLOR, type InvWatchState } from "@/app/lib/inventory";
 
 type AnalystUsage = { input: number; cache_read: number; cache_write: number; output: number; iterations: number; tool_calls: number; est_usd: number };
 type TrendPts = { title: string; summary: string; points: { b: string; spend?: number; cost?: number; roas?: number | null; roas_all?: number | null }[] } | null;
+type SendRes = { ok: boolean; error?: string; teams: { ok: boolean; error?: string } | null; mail: { ok: boolean; error?: string; to?: number } | null };
 type AnalystReport = { report_date: string; status: string; running?: boolean; sent_current?: boolean; trend_meta?: TrendPts; trend_naver?: TrendPts; kpi?: ReportKpi | null; sales_ready: boolean; report_md: string | null; model: string | null; usage: AnalystUsage | null; trigger: string | null; error: string | null; sent_at: string | null; created_at: string; updated_at: string };
 const kstYesterday = () => new Date(Date.now() + 9 * 3600_000 - 86400_000).toISOString().slice(0, 10);
 const TRIGGER_LABEL: Record<string, string> = { manual: "생성", cron: "자동 발송", upload: "매출 업로드 직후", rerun: "매출 변경 재분석" };
@@ -423,6 +424,10 @@ export default function SummaryReportPage() {
   // 설정(관리자) — 로드 성공 전에는 저장을 막는다(기존 웹훅이 빈 값으로 덮이지 않게)
   const [webhook, setWebhook] = useState("");
   const [analystAuto, setAnalystAuto] = useState(true);
+  const [mail, setMail] = useState(true);
+  const [mailTo, setMailTo] = useState("");
+  const [mailDefault, setMailDefault] = useState<string[]>([]);
+  const [smtpReady, setSmtpReady] = useState(true);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState("");
 
@@ -489,8 +494,9 @@ export default function SummaryReportPage() {
     return () => { alive = false; };
   }, [ready, period, date, load, run]);
 
+  // 보내기 — 팀즈·메일 두 채널(서버 sendReport). 보낸 채널은 안내, 실패한 채널(일부 실패 포함)은 오류 배너.
   async function send() {
-    if (report?.sent_current && report.sent_at && !window.confirm(`이미 ${dtKst(report.sent_at)}에 팀즈로 보냈습니다. 다시 보낼까요?`)) return;
+    if (report?.sent_current && report.sent_at && !window.confirm(`이미 ${dtKst(report.sent_at)}에 보냈습니다. 다시 보낼까요?`)) return;
     setBusy("send"); setError(""); setInfo("");
     try {
       const r = await fetch("/api/analyst", {
@@ -498,9 +504,11 @@ export default function SummaryReportPage() {
         body: JSON.stringify({ period, date, send: true }),
       });
       const j = await r.json().catch(() => null);
-      if (j?.sent && !j.sent.ok) throw new Error(`팀즈 발송 실패: ${j.sent.error}`);
-      if (!r.ok || !j?.ok) throw new Error(j?.error || "발송 실패");
-      if (j.sent?.ok) setInfo("팀즈로 보냈습니다.");
+      const s = (j?.sent ?? null) as SendRes | null;
+      const done = [s?.teams?.ok ? "팀즈" : "", s?.mail?.ok ? "메일" : ""].filter(Boolean);
+      if (done.length) setInfo(`${done.join("·")}로 보냈습니다.`);
+      if (!r.ok || !j?.ok) throw new Error(j?.error || s?.error || "발송 실패");
+      if (j.error) setError(j.error); // 한 채널만 실패 — '메일 발송 실패: …(팀즈는 보냄)'
     } catch (e) { setError(e instanceof Error ? e.message : "발송 실패"); }
     await load(period, date);
     setBusy("");
@@ -511,7 +519,11 @@ export default function SummaryReportPage() {
     (async () => {
       try {
         const j = await (await fetch("/api/briefing/settings", { cache: "no-store" })).json();
-        if (j.ok) { setWebhook(j.webhook || ""); setAnalystAuto(j.analystAuto !== false); setSettingsLoaded(true); }
+        if (j.ok) {
+          setWebhook(j.webhook || ""); setAnalystAuto(j.analystAuto !== false);
+          setMail(j.mail !== false); setMailTo(j.mailTo || ""); setMailDefault(Array.isArray(j.mailDefault) ? j.mailDefault : []); setSmtpReady(j.smtpReady !== false);
+          setSettingsLoaded(true);
+        }
       } catch { /* 로드 실패 시 저장 버튼 비활성 유지 */ }
     })();
   }, [admin]);
@@ -521,7 +533,7 @@ export default function SummaryReportPage() {
     try {
       const r = await fetch("/api/briefing/settings", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ webhook, analystAuto }),
+        body: JSON.stringify({ webhook, analystAuto, mail, mailTo }),
       });
       const j = await r.json().catch(() => null);
       setSettingsMsg(r.ok && j?.ok ? "저장됐습니다." : `저장 실패: ${j?.error || "서버 오류"}`);
@@ -538,7 +550,7 @@ export default function SummaryReportPage() {
   const unsent = hasReport && !report?.sent_current && !report?.running; // 지금 버전을 아직 안 보냈다(보낸 뒤 다시 분석한 경우 포함)
   const options = period === "weekly" ? recentWeeks() : period === "monthly" ? recentMonths() : [];
   const sentPill: KpiPill = report?.sent_at
-    ? (report.sent_current ? { text: `팀즈 발송 ${dtKst(report.sent_at)}`, tone: "success" } : { text: `이전 버전 발송 ${dtKst(report.sent_at)}`, tone: "warning" })
+    ? (report.sent_current ? { text: `발송 ${dtKst(report.sent_at)}`, tone: "success" } : { text: `이전 버전 발송 ${dtKst(report.sent_at)}`, tone: "warning" })
     : { text: "발송 전", tone: "warning" };
 
   return (
@@ -558,7 +570,7 @@ export default function SummaryReportPage() {
             {busy === "run" ? "분석 중... (1~4분)" : hasReport ? "다시 분석" : "분석하기"}
           </button>
           <button className={hasReport ? "b2b-btn-primary" : "b2b-btn-secondary"} onClick={send} disabled={busy !== "" || loading || !hasReport || !!report?.running}>
-            {busy === "send" ? "보내는 중..." : "팀즈로 보내기"}
+            {busy === "send" ? "보내는 중..." : "보내기"}
           </button>
         </div>
       </header>
@@ -573,7 +585,7 @@ export default function SummaryReportPage() {
       {error && <div className="b2b-error brf-banner">{error}</div>}
       {info && <div className="sm-success brf-banner">{info}</div>}
       {report?.running && busy !== "run" && <div className="sm-warn brf-banner">분석이 진행 중입니다. 잠시 뒤 새로고침하세요.</div>}
-      {unsent && busy === "" && <div className="sm-warn brf-banner">{report?.sent_at ? "보낸 뒤 다시 분석했습니다." : "아직 발송 전입니다."} 확인 후 [팀즈로 보내기]를 누르세요.</div>}
+      {unsent && busy === "" && <div className="sm-warn brf-banner">{report?.sent_at ? "보낸 뒤 다시 분석했습니다." : "아직 발송 전입니다."} 확인 후 [보내기]를 누르세요.</div>}
       {hasReport && report?.error && <div className="sm-warn brf-banner">{report.error} — 아래는 이전 리포트입니다.</div>}
 
       {loading && !report ? <div className="b2b-loading">불러오는 중...</div> : !report || (report.status === "running" && !hasReport) ? (
@@ -616,6 +628,16 @@ export default function SummaryReportPage() {
             <span className="b2b-field-label">팀즈 웹훅 URL</span>
             <input className="b2b-input" value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://..." />
           </label>
+          <label className="sm-row brf-settings-row">
+            <input type="checkbox" checked={mail} onChange={(e) => setMail(e.target.checked)} />
+            <span>메일 발송</span>
+          </label>
+          <label className="b2b-field brf-settings-field">
+            <span className="b2b-field-label">메일 수신자</span>
+            <input className="b2b-input" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder={mailDefault.join(", ")} />
+            <span className="sm-faint brf-xs">비우면 일일 매출 리포트 수신자({mailDefault.length}명)</span>
+          </label>
+          {settingsLoaded && !smtpReady && <div className="sm-warn brf-banner">메일 서버(SALES_SMTP_*) 설정이 없습니다</div>}
           <div className="sm-row brf-settings-row">
             <button className="b2b-btn-primary" onClick={saveSettings} disabled={!settingsLoaded}>설정 저장</button>
             {settingsMsg && <span className="sm-faint brf-xs">{settingsMsg}</span>}

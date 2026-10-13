@@ -116,7 +116,7 @@ export function withCodeTables(md: string, adBlocks: { trend: string; campaigns:
 
 // ── 팀즈 축약 ──
 //  '고객의 소리 집계'(주간만) — 적응형 카드에서 표 한 행이 ColumnSet 이라 줄글보다 훨씬 크다. 카드 한도를 넘으면
-//  sendReportToTeams 가 ① 이 표만 한 줄씩 → ② 이 블록만 빼기 → ③ 코드 표 전부 빼기 순으로 줄인다(블록이 없는 일일·월간은 ①② 건너뜀).
+//  sendReport(analyst.ts, 팀즈 본문) 가 ① 이 표만 한 줄씩 → ② 이 블록만 빼기 → ③ 코드 표 전부 빼기 순으로 줄인다(블록이 없는 일일·월간은 ①② 건너뜀).
 export const VOICE_BLOCK = "고객의 소리 집계";
 export const VOICE_HEAD = new RegExp(`^###\\s*${VOICE_BLOCK}`);
 // 마크다운 표 줄 — 화면 렌더러·팀즈 축약 공용('| … |' 한 줄, 구분선 |---| 은 건너뛴다)

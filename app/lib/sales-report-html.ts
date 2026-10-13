@@ -8,6 +8,9 @@ const C_DEEP = "#0d3b52", C_TIDE = "#1b6e8c", C_FOAM = "#eef6f8", C_LINE = "#d4e
 
 // 업로드 원본에서 온 문자열(채널명·SKU·코드·날짜)은 HTML로 렌더되므로 반드시 이스케이프(마크업 깨짐·주입 방지).
 const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"));
+// 종합 리포트 메일(report-email.ts)이 같은 팔레트·이스케이프를 쓴다 — '같은 회사 메일'로 보이게(색을 두 곳에 적지 않는다)
+export const MAIL_COLORS = { C_DEEP, C_TIDE, C_FOAM, C_LINE, C_INK, C_MUTED, C_GOOD, C_WARN, C_BAD } as const;
+export const mailEsc = esc;
 const won = (v: number) => `${Math.round(v).toLocaleString()}원`;
 function wonEok(v: number): string {
   v = Math.round(v);

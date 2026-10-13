@@ -427,7 +427,7 @@ export default function SalesUploadPage() {
               <button className="b2b-modal-close" onClick={() => setReportPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p style={{ fontSize: 15 }}>{reportPrompt.filter((x) => x.period === "daily").map((x) => x.label).join(", ") || "지난 기간"} 매출이 반영됐습니다. 리포트마다 생성하고, 확인한 뒤 팀즈로 보내 주세요.</p>
+              <p style={{ fontSize: 15 }}>{reportPrompt.filter((x) => x.period === "daily").map((x) => x.label).join(", ") || "지난 기간"} 매출이 반영됐습니다. 리포트마다 생성하고, 확인한 뒤 [보내기]를 눌러 주세요.</p>
               {reportPrompt.length > 1 && (
                 <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12 }}>
                   {reportPrompt.map((x) => <a key={`${x.period}${x.date}`} className="b2b-btn-secondary" href={reportHref(x)} target="_blank" rel="noopener">{x.label} {REPORT_NAME[x.period]} 생성</a>)}

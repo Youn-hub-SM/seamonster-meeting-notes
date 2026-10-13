@@ -9,7 +9,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 사실 집계 + AI 도구 루프(최대 약 4분)
 
-// 종합 리포트(일일·주간·월간, 2026-09-30) — 로그인한 모두가 보고, 만들고, 팀즈로 보낸다(담당자가 매출 업로드 후 생성·발송).
+// 종합 리포트(일일·주간·월간, 2026-09-30) — 로그인한 모두가 보고, 만들고, 팀즈·메일로 보낸다(담당자가 매출 업로드 후 생성·발송).
+//  send 응답의 sent = analyst.ts SendResult { ok, error?, teams, mail } 그대로(화면이 채널별 안내·오류를 그린다). 일부 채널만 실패하면 ok + error.
 //  매출이 그대로인데 새로 분석(force)은 관리자만 — 반복 AI 비용 통제. 매출이 바뀌었으면 누구나 다시 분석된다(지문 비교).
 //  period = daily(기본)|weekly|monthly, date = 그 기간 안의 아무 날(주간·월간은 그 주·달로 맞춘다). 주간·월간은 끝난 기간만.
 async function who(req: NextRequest): Promise<{ name: string | null; admin: boolean }> {
