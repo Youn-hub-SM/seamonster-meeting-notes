@@ -133,14 +133,14 @@ const VoiceTable = ({ head, body }: { head: string[]; body: string[][] }) => (
 );
 
 // 캠페인 전체 표 — 합계 + 지출 상위 5 기본, 나머지는 <details>(펼치면 지금과 똑같은 전체 표). 광고는 어디에도 판정 색 없음.
-function CampaignTable({ head, body, open }: { head: string[]; body: string[][]; open: boolean | null }) {
+function CampaignTable({ head, body }: { head: string[]; body: string[][] }) {
   const rows = body.filter((r) => !TOTAL_ROW.test(r[0])), total = body.filter((r) => TOTAL_ROW.test(r[0]));
   const totalCls = (r: string[]) => (TOTAL_ROW.test(r[0]) ? "brf-total" : undefined);
   if (rows.length <= CAMPAIGN_TOP) return <Table head={head} body={body} rowClass={totalCls} />;
   return (
     <div className="brf-camp">
       <div className="brf-short"><Table head={head} body={[...rows.slice(0, CAMPAIGN_TOP), ...total]} rowClass={totalCls} /></div>
-      <details className="brf-fold" open={open ?? false}>
+      <details className="brf-fold">
         <summary>캠페인 전체 {rows.length}개</summary>
         <Table head={head} body={body} rowClass={totalCls} />
       </details>
@@ -186,7 +186,7 @@ const VoiceLine = ({ s }: { s: string }) => {
 //  같은 자리의 경고 줄(- 주의: / - 참고: / - 메타: …지출 없는 캠페인 / - 네이버: 광고그룹 조회에 실패해 …)은 본문 15px 그대로.
 const CODE_SUB = /^###\s*(캠페인 전체|광고 추이|재고 주의 품목|고객의 소리 집계)/;
 const BASIS_LINE = /^(품절 =|방향 =|문의 =|메타 클릭은|문의 (?:마지막 수집|대장 마지막 저장):)/;
-type BodyOpts = { kind: SectionKind; open: boolean | null; slot?: ReactNode; hasCharts: boolean; watch?: ReportKpi["watch"]; rising?: ReportKpi["rising"]; chart?: ReactNode };
+type BodyOpts = { kind: SectionKind; slot?: ReactNode; hasCharts: boolean; watch?: ReportKpi["watch"]; rising?: ReportKpi["rising"]; chart?: ReactNode };
 function renderBody(lines: string[], o: BodyOpts): ReactNode[] {
   const out: ReactNode[] = [];
   const blocks = toBlocks(lines);
@@ -205,14 +205,14 @@ function renderBody(lines: string[], o: BodyOpts): ReactNode[] {
         for (; j < blocks.length; j++) { const n = blocks[j]; if (n.t === "table" && tableKindOf(n.head[0]) === "trend") group.push(n); else if (!(n.t === "line" && !n.s)) break; }
         b = j - 1;
         out.push(
-          <details key={`fold${blk.i}`} className="brf-fold" open={o.open ?? !o.hasCharts}>
+          <details key={`fold${blk.i}`} className="brf-fold" open={!o.hasCharts}>
             <summary>구간별 표 {blk.body.length}구간</summary>
             {group.map((g) => (g.t === "table" ? <Table key={g.i} head={g.head} body={g.body} /> : null))}
           </details>
         );
         continue;
       }
-      if (kind === "campaign") { out.push(<CampaignTable key={blk.i} head={blk.head} body={blk.body} open={o.open} />); continue; }
+      if (kind === "campaign") { out.push(<CampaignTable key={blk.i} head={blk.head} body={blk.body} />); continue; }
       if (kind === "inventory") { if (!usedWatch) out.push(<InvTable key={blk.i} head={blk.head} body={blk.body} />); continue; }
       if (voiceSub) {
         out.push(<VoiceTable key={blk.i} head={blk.head} body={blk.body} />);
@@ -297,14 +297,9 @@ function KpiBand({ kpi }: { kpi: ReportKpi }) {
 const NAV_LABEL: Partial<Record<SectionKind, string>> = { summary: "요약", sales: "매출", ad: "광고", inv: "재고", voice: "고객의 소리", change: "변화", todo: "확인" };
 const secId = (s: ReportSection, idx: number) => (s.kind === "other" || s.kind === "pre" ? `brf-${s.kind}-${idx}` : `brf-${s.kind}`);
 const todoLines = (s: ReportSection | undefined) => (s ? s.lines.map((l) => l.trim()).filter((l) => /^-\s/.test(l)).map((l) => l.replace(/^-\s*/, "")) : []);
-const foldCount = (md: string) => toBlocks(md.split("\n")).reduce((n, b) => {
-  if (b.t !== "table") return n;
-  const k = tableKindOf(b.head[0]);
-  return n + (k === "trend" ? 1 : k === "campaign" && b.body.filter((r) => !TOTAL_ROW.test(r[0])).length > CAMPAIGN_TOP ? 1 : 0);
-}, 0);
-
 // 리포트 본문 — KPI 띠 → 이동 바 → 한 줄 요약(테두리) → 섹션 카드들 → 확인할 것(테두리). ## 헤딩이 없는 옛 리포트는 평탄 렌더.
-function ReportView({ md, kpi, charts, open, onToggle, folds }: { md: string; kpi: ReportKpi | null; charts: ReactNode; open: boolean | null; onToggle: () => void; folds: number }) {
+//  접힌 표(캠페인 전체·추이 구간별)는 각자 눌러 펼친다 — [전부 펼치기] 버튼은 쓸모없다는 대표 피드백(2026-10-13)으로 뺐다.
+function ReportView({ md, kpi, charts }: { md: string; kpi: ReportKpi | null; charts: ReactNode }) {
   const sections = useMemo(() => splitSections(md), [md]);
   const flat = sections.length === 1 && sections[0].kind === "pre";
   const hasCharts = !!charts;
@@ -327,7 +322,7 @@ function ReportView({ md, kpi, charts, open, onToggle, folds }: { md: string; kp
   const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const body = flat
-    ? <div className="brf-md">{renderBody(sections[0].lines, { kind: "pre", open, slot: charts ?? undefined, hasCharts })}</div>
+    ? <div className="brf-md">{renderBody(sections[0].lines, { kind: "pre", slot: charts ?? undefined, hasCharts })}</div>
     : sections.map((s, i) => {
       const id = secId(s, i);
       if (s.kind === "summary") {
@@ -361,7 +356,7 @@ function ReportView({ md, kpi, charts, open, onToggle, folds }: { md: string; kp
           {!pre && <div className="b2b-card-head"><span className="b2b-card-title">{s.heading}</span></div>}
           <div className="brf-md">
             {renderBody(s.lines, {
-              kind: s.kind, open, hasCharts,
+              kind: s.kind, hasCharts,
               slot: s.kind === "ad" ? charts ?? undefined : undefined,
               watch: s.kind === "inv" ? kpi?.watch : undefined,
               rising: s.kind === "voice" ? kpi?.rising : undefined,
@@ -374,10 +369,9 @@ function ReportView({ md, kpi, charts, open, onToggle, folds }: { md: string; kp
 
   return (
     <div>
-      {(kpi || folds > 0) && (
-        <div className={`brf-kpi-row${kpi ? "" : " is-bare"}`}>
-          {kpi && <div className="brf-kpi-wrap"><KpiBand kpi={kpi} /></div>}
-          {folds > 0 && <button type="button" className="b2b-btn-secondary brf-toggle" onClick={onToggle}>{open === true ? "접기" : "전부 펼치기"}</button>}
+      {kpi && (
+        <div className="brf-kpi-row">
+          <div className="brf-kpi-wrap"><KpiBand kpi={kpi} /></div>
         </div>
       )}
       {!flat && navItems.length > 2 && (
@@ -423,11 +417,9 @@ export default function SummaryReportPage() {
   const [busy, setBusy] = useState<"" | "run" | "send">("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
-  const [openAll, setOpenAll] = useState<boolean | null>(null); // 코드 표 접기 — null = 표마다 기본(캠페인 접힘·추이 표는 그래프 없을 때만 펼침)
   const autoRun = useRef(false); // 매출 업로드 안내 창에서 넘어오면(?run=1) 한 번 자동 분석
   const viewRef = useRef(`${period}:${date}`); // 늦게 도착한 다른 기간 응답은 버린다
-  const bodyRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { viewRef.current = `${period}:${date}`; setOpenAll(null); }, [period, date]);
+  useEffect(() => { viewRef.current = `${period}:${date}`; }, [period, date]);
   // 설정(관리자) — 로드 성공 전에는 저장을 막는다(기존 웹훅이 빈 값으로 덮이지 않게)
   const [webhook, setWebhook] = useState("");
   const [analystAuto, setAnalystAuto] = useState(true);
@@ -543,9 +535,6 @@ export default function SummaryReportPage() {
   const charts = hasReport ? trendCharts(report, false) : null;
   // 그래프 자리: ## 광고 섹션(또는 헤딩 없는 옛 리포트의 광고 자리)이 있으면 리포트 안, 없으면 아래 별도 카드
   const placed = hasReport && (splitSections(md).some((s) => s.kind === "ad") || trendSlotAt(md.split("\n")) >= 0);
-  const folds = hasReport ? foldCount(md) : 0;
-  // [전부 펼치기]/[접기] — 상태로 open 을 내리고, 손으로 연 것까지 한 번에 맞추려 DOM 의 <details> 도 같이 바꾼다
-  const toggleAll = () => { const v = openAll !== true; setOpenAll(v); bodyRef.current?.querySelectorAll("details").forEach((d) => { d.open = v; }); };
   const unsent = hasReport && !report?.sent_current && !report?.running; // 지금 버전을 아직 안 보냈다(보낸 뒤 다시 분석한 경우 포함)
   const options = period === "weekly" ? recentWeeks() : period === "monthly" ? recentMonths() : [];
   const sentPill: KpiPill = report?.sent_at
@@ -590,7 +579,7 @@ export default function SummaryReportPage() {
       {loading && !report ? <div className="b2b-loading">불러오는 중...</div> : !report || (report.status === "running" && !hasReport) ? (
         <div className="b2b-empty">아직 이 기간의 종합 리포트가 없습니다.</div>
       ) : (
-        <section className="b2b-card" ref={bodyRef}>
+        <section className="b2b-card">
           <div className="sm-faint brf-meta">
             <span>{label || report.report_date} · {report.sales_ready ? "매출 반영" : period === "daily" ? "매출 없음(광고만)" : "마지막 날 매출 미반영"} · {TRIGGER_LABEL[report.trigger || ""] || report.trigger || ""} {dtKst(report.updated_at)}</span>
             <Pill p={sentPill} />
@@ -598,7 +587,7 @@ export default function SummaryReportPage() {
             {admin && report.usage ? <span>조회 {report.usage.tool_calls}회 · 약 ${report.usage.est_usd}</span> : null}
           </div>
           {hasReport ? (
-            <ReportView md={md} kpi={report.kpi ?? null} charts={placed ? charts : null} open={openAll} onToggle={toggleAll} folds={folds} />
+            <ReportView md={md} kpi={report.kpi ?? null} charts={placed ? charts : null} />
           ) : (
             <div className="sm-warn">분석에 실패했습니다{report.error ? `: ${report.error}` : ""} — [분석하기]를 다시 눌러 주세요.</div>
           )}

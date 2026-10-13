@@ -2983,11 +2983,10 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .brf-input-auto { width: auto; }
 .brf-xs { font-size: var(--sm-fs-xs); }
 .brf-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-1) var(--sm-space-2); font-size: var(--sm-fs-xs); margin-bottom: var(--sm-space-3); }
-/* KPI 띠 + [전부 펼치기] 토글(오른쪽, 모바일은 아래).
-   열 수는 뷰포트가 아니라 띠 자체 폭(.brf-kpi-wrap = 컨테이너)으로 — 사이드바 236·토글 버튼이 폭을 나눠 써서
+/* KPI 띠([전부 펼치기] 토글은 2026-10-13 대표 피드백으로 제거).
+   열 수는 뷰포트가 아니라 띠 자체 폭(.brf-kpi-wrap = 컨테이너)으로 — 사이드바 236 이 폭을 나눠 써서
    뷰포트 기준 4열은 1024~1150px 노트북에서 9자리 금액이 타일 밖으로 넘쳤다. 띠 폭 800px 미만은 2열. */
 .brf-kpi-row { display: flex; align-items: flex-start; gap: var(--sm-space-4); margin-bottom: var(--sm-space-5); }
-.brf-kpi-row.is-bare { justify-content: flex-end; }
 .brf-kpi-row > .brf-kpi-wrap { flex: 1; min-width: 0; container-type: inline-size; }
 .brf-kpi { gap: var(--sm-space-3); margin-bottom: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .brf-kpi .b2b-stat-card { padding: var(--sm-space-4); min-width: 0; }
@@ -2997,7 +2996,6 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 .brf-kpi .b2b-stat-card-value.is-light { color: var(--sm-text-light); }
 .brf-kpi-delta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-1) var(--sm-space-2); margin-top: var(--sm-space-2); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .brf-kpi .b2b-stat-card-hint { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-1) var(--sm-space-2); margin-top: var(--sm-space-2); line-height: 1.5; }
-.brf-toggle { flex-shrink: 0; white-space: nowrap; }
 /* 섹션 이동 바 — 스크롤 시 상단 고정(상단바 .app-topbar z-index 40 아래), 모바일은 한 줄 가로 스크롤 */
 .brf-nav { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: nowrap; overflow-x: auto; background: var(--sm-bg); padding: var(--sm-space-2) 0; margin-bottom: var(--sm-space-2); }
 .brf-nav .sm-tab { flex-shrink: 0; }
@@ -3058,7 +3056,6 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-orange); }
 }
 @media (max-width: 768px) {
   .brf-kpi-row { flex-direction: column; align-items: stretch; }
-  .brf-toggle { align-self: flex-end; }
   .brf-kpi .b2b-stat-card-value.is-long { font-size: var(--sm-fs-lg); } /* 9자리 금액('123,456,789원')은 공용 20px(≈144px)·19px(137px)에서 타일 내용폭(375px 폰 134·360px 폰 132)을 넘어 '원' 만 둘째 줄로 떨어진다 — 17px(≈123px)로 한 줄 */
   .brf-box { padding: var(--sm-space-4); grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "text" "pill"; }
   .brf-box-pill { justify-self: start; margin-top: var(--sm-space-2); }
