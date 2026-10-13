@@ -51,6 +51,7 @@
 | iframe 도구 전체 높이 | `.sm-iframe-fill` | 모바일 상단바 높이까지 계산돼 있음 |
 | VOC 미구현 메뉴 | `VocPlaceholder` 컴포넌트 | |
 | 체크박스식 다중 필터 | `.b2b-checkfilter-row` | |
+| 긴 화면의 섹션 이동 바(스크롤 고정) | `.sm-tabs > .sm-tab` + `is-active` = 지금 보는 섹션(IntersectionObserver) | /briefing `.brf-nav` 선례. 상단바(52px) 아래 `top: 52px`·`z-index` 40 미만 |
 
 사이드바(전역): `.app-sb-*` — `app/globals.css`.
 
@@ -97,6 +98,7 @@
 12. **한 클래스를 `<button>` 과 `<a>` 가 같이 쓰면 `line-height` 를 반드시 명시** — 폼 컨트롤은 부모의 글꼴을
     물려받지 않아, `font-size` 만 맞추고 `line-height` 를 빼면 버튼 쪽만 줄 높이가 달라져 같은 목록인데 행 높이가
     어긋난다. 좌측 메뉴(`.app-sb-tool`)가 실제로 이 상태였다 — 하위메뉴 있는 항목은 `<button>`, 없는 항목은 `<a>`.
+13. **상단바 높이 52px 는 두 곳에 적혀 있다** — `globals.css .app-topbar`(sticky, ≤900px) 와 `b2b.css .brf-nav / .brf-sec`(@media ≤900px, 그 아래 붙는 이동 바). 토큰이 없어 리터럴이다 — 한쪽을 바꾸면 `grep -n "52px"` 로 다른 쪽도.
 
 ---
 
@@ -108,7 +110,7 @@
 
 | 의미 | 텍스트 | -bg | -border | 용도 |
 |---|---|---|---|---|
-| `--sm-danger` | #C92A2A | #FCE4E4 | #F5C6C6 | 오류·삭제·미입금 + **진짜 이상치**(재고 마이너스·부족). 정상 흐름(출고 등)에 쓰지 않는다 |
+| `--sm-danger` | #C92A2A | #FCE4E4 | #F5C6C6 | 오류·삭제·미입금 + **진짜 이상치**(재고 마이너스·품절). '부족'은 재고가 아직 있어 warning(2026-10-13 결정, `INV_WATCH_COLOR`). 정상 흐름(출고 등)에 쓰지 않는다 |
 | `--sm-success` | #22863A | #E6FFED | #C6EDD3 | 완료·성공·입금완료 |
 | `--sm-warning` | #B08800 | #FFF4E0 | #F0D9A8 | 대기·주의 |
 | `--sm-info` | #1971C2 | #E0F0FF | #B8D6F2 | 정보·진행중·링크강조 |
@@ -149,6 +151,7 @@
 | 발주 상태·생산·입금·세금계산서·발송 | `STATUS_COLORS` `PRODUCTION_COLORS` `PAYMENT_COLORS` `TAX_INVOICE_COLORS` `SHIPMENT_STATUS_COLORS` | `app/lib/b2b-orders.ts` |
 | VOC 상태 (접수=info · 응대개선중=warning · 개선완료=success) | `VOC_STATUS_COLOR` | `app/lib/voc.ts` |
 | VOC 귀책 (제조사=success · 물류=warning · 자사=danger · 고객=info · 미분류=text-light) | `VOC_FAULT_COLOR` | `app/lib/voc.ts` |
+| 재고 주의 상태 (품절=danger · 부족=warning — 2026-10-13 대표 결정, 종합 리포트·KPI) | `INV_WATCH_COLOR` | `app/lib/inventory.ts` |
 | 생산요청 상태 | `PR_STATUS_COLOR` | `app/lib/wholesale-production.ts` |
 
 **categorical 예외** (서열 없는 구분용 — 의도적으로 토큰이 아님): `PIE_COLORS`(charts.tsx) ·

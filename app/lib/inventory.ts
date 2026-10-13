@@ -9,6 +9,14 @@ export const INV_TYPE_COLOR: Record<InvTxnType, { bg: string; fg: string }> = {
   조정: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" }, // 실사 보정(±)
 };
 
+// 재고 주의 상태(종합 리포트 '재고 주의 품목' 표·KPI, 2026-10-13 대표 결정 3) — 품절 = danger, 부족 = warning.
+//  같은 빨강이면 급한 것을 못 가른다. row = 표 행 톤(.b2b-table tr.is-overdue / .is-urgent). 화면에서 색을 새로 선언하지 않는다.
+export type InvWatchState = "품절" | "부족";
+export const INV_WATCH_COLOR: Record<InvWatchState, { bg: string; fg: string; row: "is-overdue" | "is-urgent" }> = {
+  품절: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)", row: "is-overdue" },
+  부족: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)", row: "is-urgent" },
+};
+
 // 재고 채널(풀) — 같은 품목(SKU)이라도 풀별로 현재고를 따로 잡는다.
 //  프로모션(113) = 행사 확보분. 자동 차감 경로가 없어 프로모션 요청서를 '마감'(= 소매 합류, 2026-10-06)할 때까지 보호되고,
 //  입고는 '재고 이동'(소매→프로모션)로만 — 도매의 "입고는 이동뿐" 규칙과 동일.

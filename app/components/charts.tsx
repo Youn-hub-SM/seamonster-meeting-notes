@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { moneyCompact } from "../lib/format";
 
 // 내부도구 공용 차트 프리미티브 — 도넛 / 세로막대 추세 / 분포 도넛카드 / 가로바 리스트.
 // 디자인시스템: 카테고리 구분 색은 토큰이 아닌 전용 팔레트(PIE_COLORS) 예외. 레이아웃은 .b2b-card / .sm-* 사용.
@@ -46,13 +47,8 @@ export function niceCeil(n: number): number {
   return m * p;
 }
 
-// 금액 축약(억/만) — 차트 축 라벨용
-export function moneyCompact(n: number): string {
-  const a = Math.abs(n);
-  if (a >= 1e8) return `${(n / 1e8).toFixed(a % 1e8 === 0 ? 0 : 1)}억`;
-  if (a >= 1e4) return `${Math.round(n / 1e4).toLocaleString()}만`;
-  return n.toLocaleString();
-}
+// 금액 축약(억/만) — 차트 축 라벨용. 정의는 app/lib/format.ts(서버 팀즈 카드도 같은 표기) — 여기서 다시 내보내 화면 import 경로는 그대로.
+export { moneyCompact };
 
 // 도넛(중앙 총계). colors 미지정 시 PIE_COLORS 순환.
 export function Donut({ data, colors, size = 132, center, centerSub }: { data: [string, number][]; colors?: string[]; size?: number; center: string; centerSub?: string }) {

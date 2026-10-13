@@ -3,6 +3,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
 import { runReport, rowKey, RUN_STALE_MS } from "@/app/lib/analyst";
 import { specFor, isFinished } from "@/app/lib/analyst-period";
+import { reportKpi, takeKpiParts, KPI_FACTS_SELECT } from "@/app/lib/report-kpi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +28,12 @@ export async function GET(req: NextRequest) {
     const spec = specFor(sp.get("period"), dateOf(sp.get("date")));
     const meta = { period: spec.period, date: spec.key, range: spec.range, label: spec.label, title: spec.title, admin: u.admin };
     const sb = supabaseAdmin();
-    // 광고 추이(그래프용)는 facts 안에서 그 부분만 꺼낸다
-    const cols = "report_date, status, sales_ready, sales_fp, report_md, model, usage, trigger, error, sent_at, created_at, updated_at, trend_meta:facts->ads->meta->trend, trend_naver:facts->ads->naver->trend";
+    // 광고 추이(그래프용)와 KPI 띠 재료(report-kpi.ts KPI_FACTS_SELECT, 팀즈 발송과 공용)는 facts 안에서 그 경로만 꺼낸다 — 캠페인 배열·tool_log 는 DB 에서 꺼내지 않는다
+    const cols = [
+      "report_date, status, sales_ready, sales_fp, report_md, model, usage, trigger, error, sent_at, created_at, updated_at",
+      "trend_meta:facts->ads->meta->trend, trend_naver:facts->ads->naver->trend",
+      KPI_FACTS_SELECT,
+    ].join(", ");
     const q = (c: string) => { let x = sb.from(spec.table).select(c); for (const [k, v] of Object.entries(rowKey(spec))) x = x.eq(k, v); return x.maybeSingle(); };
     let q1 = await q(`${cols}, sent_fp`);
     if (q1.error && /sent_fp/i.test(q1.error.message)) q1 = await q(cols); // 123 미적용
@@ -39,11 +44,16 @@ export async function GET(req: NextRequest) {
     }
     // running = 지금 도는 중(6분 넘은 'running' 은 죽은 실행 — 다시 분석 가능)
     // sent_current = 지금 버전을 팀즈로 보냈다 = 마지막 생성(updated_at) 뒤에 보냈다 — 다시 분석했으면 false
-    const report = data ? {
-      ...data,
-      running: data.status === "running" && Date.now() - Date.parse(String(data.updated_at)) < RUN_STALE_MS,
-      sent_current: !!data.sent_at && Date.parse(String(data.sent_at)) >= Date.parse(String(data.updated_at)),
-    } : null;
+    // kpi = 화면 KPI 띠·매출 추이·재고 주의 행(옛 리포트는 facts 가 없어 null → 띠 생략)
+    const report = data ? (() => {
+      const { parts, row } = takeKpiParts(data);
+      return {
+        ...row,
+        running: row.status === "running" && Date.now() - Date.parse(String(row.updated_at)) < RUN_STALE_MS,
+        sent_current: !!row.sent_at && Date.parse(String(row.sent_at)) >= Date.parse(String(row.updated_at)),
+        kpi: reportKpi(spec.period, parts),
+      };
+    })() : null;
     return NextResponse.json({ ok: true, report, ...meta });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "종합 리포트 조회 실패") }, { status: 500 });

@@ -21,8 +21,9 @@ import { getPurchaseConversions } from "./naver-conv";
 import { bundleAvailable, type BundleComponent } from "./product-bundles";
 import { readStockMap } from "./inventory-template";
 import { postTeamsMarkdown, teamsCardBytes } from "./briefing";
+import { reportKpi, takeKpiParts, teamsLead, KPI_FACTS_SELECT } from "./report-kpi";
 import { collectInventory } from "./analyst-inventory";
-import { withCodeTables, insertAtSectionEnd, renderInventoryTable, stripCodeBlocks, hasVoiceBlock, voiceTableAsLines, VOICE_BLOCK, inventoryForAi, type InventoryFacts } from "./report-sections";
+import { withCodeTables, insertAtSectionEnd, renderInventoryTable, stripCodeBlocks, hasVoiceBlock, voiceTableAsLines, VOICE_BLOCK, inventoryForAi, tableKindOf, TOTAL_ROW, tableRow, tableRule, splitRow, type InventoryFacts } from "./report-sections";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
 
@@ -796,18 +797,19 @@ export function adTablesForTeams(md: string, limit?: number): string {
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
-    const head = /^\|.*\|$/.test(t) ? t.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()) : null;
-    if (!head || !/(캠페인|추이|품목)$/.test(head[0])) { out.push(lines[i]); continue; }
+    const head = tableRow(t) ? splitRow(t) : null;
+    const kind = head ? tableKindOf(head[0]) : null; // 표 종류 규칙은 report-sections TABLE_KIND(화면 접기와 공유)
+    if (!head || !kind) { out.push(lines[i]); continue; }
     const rows: string[][] = [];
-    for (i++; i < lines.length && /^\|.*\|$/.test(lines[i].trim()); i++) {
+    for (i++; i < lines.length && tableRow(lines[i].trim()); i++) {
       const raw = lines[i].trim();
-      if (!/^\|[\s|:-]+\|$/.test(raw)) rows.push(raw.replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+      if (!tableRule(raw)) rows.push(splitRow(raw));
     }
     i--;
     // 추이 표는 팀즈 카드에 싣지 않는다(요약 줄은 위에 있다) — 한 번만 안내
-    if (/추이$/.test(head[0])) { if (!out.some((l) => l.includes("추이 표·그래프는"))) out.push("- 구간별 추이 표·그래프는 업무도우미 › 종합 리포트에서 볼 수 있습니다"); continue; }
+    if (kind === "trend") { if (!out.some((l) => l.includes("추이 표·그래프는"))) out.push("- 구간별 추이 표·그래프는 업무도우미 › 종합 리포트에서 볼 수 있습니다"); continue; }
     const line = (r: string[], bold: boolean) => `- ${bold ? `**${r[0]}**` : r[0]} · ${r.slice(1).map((c, k) => `${head[k + 1]} ${c}`).join(" · ")}`;
-    const isTotal = (r: string[]) => /^합계 \d+개/.test(r[0]); // renderAdTables 의 합계 행만('합계세일' 같은 캠페인 이름은 제외)
+    const isTotal = (r: string[]) => TOTAL_ROW.test(r[0]); // renderAdTables 의 합계 행만('합계세일' 같은 캠페인 이름은 제외)
     const body = rows.filter((r) => !isTotal(r)), total = rows.filter(isTotal);
     out.push(`**${head[0]}**`);
     const shown = limit != null ? body.slice(0, limit) : body;
@@ -956,21 +958,28 @@ export async function sendReportToTeams(spec: ReportSpec): Promise<{ ok: boolean
   const url = (await getKv("analyst_webhook")) || (await getKv("briefing_webhook")); // 종합 리포트 하단 설정의 팀즈 웹훅
   if (!url) return { ok: false, error: "팀즈 웹훅 URL이 설정되지 않았습니다 — 관리자가 종합 리포트 하단 설정에서 등록해야 합니다." };
   const sb = supabaseAdmin();
-  const { data } = await keyed(sb.from(spec.table).select("report_md, sales_ready, sales_fp, sent_at"), spec).maybeSingle();
-  const row = data as { report_md: string | null; sales_ready: boolean; sales_fp: string | null; sent_at: string | null } | null;
+  // KPI 재료(facts 경로 별칭, 화면 GET 과 같은 KPI_FACTS_SELECT)도 함께 — 제목 헤드라인·핵심 줄(report-kpi.ts teamsLead). 옛 리포트는 facts 가 비어 둘 다 없다.
+  const { data } = await keyed(sb.from(spec.table).select(`report_md, sales_ready, sales_fp, sent_at, ${KPI_FACTS_SELECT}`), spec).maybeSingle();
+  const raw = data as unknown as Record<string, unknown> | null; // select 의 JSON 경로 별칭은 supabase 타입 파서가 못 읽는다(GET 라우트와 같은 우회)
+  const taken = raw ? takeKpiParts(raw) : null;
+  const row = (taken?.row ?? null) as { report_md: string | null; sales_ready: boolean; sales_fp: string | null; sent_at: string | null } | null;
   const mdText = row?.report_md || "";
   if (!mdText) return { ok: false, error: "보낼 리포트가 없습니다. 먼저 분석하세요." };
-  const title = `${spec.title} · ${spec.label}${row?.sales_ready ? "" : spec.noSalesSuffix}`;
+  const { headline, lead } = teamsLead(spec.period, reportKpi(spec.period, taken?.parts));
+  // 제목: 매출이 반영된 리포트면 '… · 소매 2,140만(-5%)'(알림 미리보기만으로 숫자가 보이게), 미반영이면 종전 꼬리 그대로
+  const title = `${spec.title} · ${spec.label}${row?.sales_ready ? (headline ? ` · ${headline}` : "") : spec.noSalesSuffix}`;
+  const card = { lead }; // 핵심 줄은 한도 계산과 발송이 같은 payload 로(어긋나면 26KB 를 넘겨 웹훅이 202 뒤 조용히 실패)
   // 카드 한도(약 28KB) — 표는 한 줄씩, 그래도 크면 표마다 상위 10개, (주간) 고객의 소리 집계 표를 한 줄씩 → 그 블록만 빼기,
   //  그래도 크면 코드 표를 빼고 AI 글만, 그래도 크면 화면 안내만. 고객의 소리 블록이 없는 일일·월간은 종전과 같은 단계·결과.
   const MAX = 26_000;
-  const over = (b: string) => teamsCardBytes(title, b) > MAX;
+  const over = (b: string) => teamsCardBytes(title, b, card) > MAX;
   const voice = hasVoiceBlock(mdText);
   let body = adTablesForTeams(mdText);
   if (over(body)) body = adTablesForTeams(mdText, 10);
   if (voice && over(body)) body = adTablesForTeams(voiceTableAsLines(mdText), 10);
-  if (voice && over(body)) body = `${adTablesForTeams(stripCodeBlocks(mdText, [VOICE_BLOCK]), 10)}\n\n- 고객의 소리 집계 표는 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
-  if (over(body)) body = `${stripCodeBlocks(mdText)}\n\n- ${voice ? "광고·재고·고객의 소리 표는" : "광고·재고 표는"} 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
+  //  꼬리 안내는 '• '로 — 본문 끝 = '확인할 것' 섹션이라 '- '면 카드의 번호 목록(1. 2. 3.) 마지막 항목으로 붙는다. '• ' 줄은 목록 밖 일반 TextBlock(요소 하나라 약 60B, 아래 over 가 같은 본문을 재므로 한도 계산은 어긋나지 않는다).
+  if (voice && over(body)) body = `${adTablesForTeams(stripCodeBlocks(mdText, [VOICE_BLOCK]), 10)}\n\n• 고객의 소리 집계 표는 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
+  if (over(body)) body = `${stripCodeBlocks(mdText)}\n\n• ${voice ? "광고·재고·고객의 소리 표는" : "광고·재고 표는"} 업무도우미 › 종합 리포트에서 볼 수 있습니다`;
   if (over(body)) body = "- 리포트가 길어 팀즈 카드에 담지 못했습니다. 업무도우미 › 종합 리포트에서 확인하세요.";
   // 겹친 발송(두 사람이 동시에, 수동 + 14:30)은 한 번만 — 1분 안에 이미 잡힌 발송이 있으면 건너뛴다. 게시에 실패하면 되돌린다.
   const at = new Date().toISOString();
@@ -978,7 +987,7 @@ export async function sendReportToTeams(spec: ReportSpec): Promise<{ ok: boolean
   const claim = await keyed(sb.from(spec.table).update({ sent_at: at }), spec)
     .or(`sent_at.is.null,sent_at.lt."${recentIso}"`).select("report_date");
   if (!claim.error && !(claim.data ?? []).length) return { ok: false, error: "방금 발송됐습니다 — 잠시 뒤 새로고침하세요." };
-  const r = await postTeamsMarkdown(url, title, body);
+  const r = await postTeamsMarkdown(url, title, body, card);
   if (!r.ok) { await keyed(sb.from(spec.table).update({ sent_at: row?.sent_at ?? null }), spec); return r; }
   // 보낸 버전의 매출 지문도 남긴다 — 칸이 없으면(123 미적용) 시각만(위에서 이미 기록)
   await keyed(sb.from(spec.table).update({ sent_fp: row?.sales_fp ?? null }), spec);
