@@ -1553,7 +1553,7 @@ export default function OrdersListPage() {
                       <tr key={s.id} className="b2b-child-row">
                         <td></td>
                         <td></td>
-                        <td colSpan={SHOW_ORDER_PRODUCTION ? 13 : 11} style={{ padding: "8px 18px 8px 30px" }}>
+                        <td colSpan={SHOW_ORDER_PRODUCTION ? 11 : 9} style={{ padding: "8px 18px 8px 30px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                             <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                               <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>└ {s.seq}차</span>

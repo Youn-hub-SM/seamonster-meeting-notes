@@ -154,8 +154,9 @@ export default function VocPage() {
   const hasFilter = !!(search || fCategory || fProduct || fPlace || fBuyer || fFrom || fTo);
   const resetFilters = () => { setSearch(""); setFCategory(""); setFProduct(""); setFPlace(""); setFBuyer(""); setFFrom(""); setFTo(""); };
 
-  function openNew() { setEdit(emptyForm()); }
+  function openNew() { setFieldErr({}); setEdit(emptyForm()); } // 이전 창의 검증 오류가 새 창에 남지 않게(✕ 닫기는 지우지 않는다)
   function openEdit(r: Voc) {
+    setFieldErr({});
     setEdit({
       id: r.id, received_at: r.received_at, customer: r.customer || "", buyer_type: r.buyer_type || "",
       purchase_date: r.purchase_date || "", production_date: r.production_date || "", purchase_place: r.purchase_place || "", product: r.product || "",

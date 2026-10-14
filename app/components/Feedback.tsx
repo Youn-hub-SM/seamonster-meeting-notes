@@ -68,9 +68,10 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!pending) return;
     cancelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") answer(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // 캡처 단계에서 받고 전파를 끊는다 — 부모 모달의 useEscClose(window 버블)가 같은 Esc 로 같이 닫히지 않게(2026-10-14 검토)
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); answer(false); } };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [pending, answer]);
 
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);

@@ -104,10 +104,12 @@ export default function InstagramDmPage() {
 
   function openNew() {
     const first = info?.accounts[0]?.igUserId || "";
+    setFieldErr({}); // 이전 규칙 창의 검증 오류가 새 창에 남지 않게(✕ 닫기는 지우지 않는다)
     setDraft({ ...EMPTY_DRAFT, ig_user_id: first });
     setMedia(null);
   }
   function openEdit(r: Rule) {
+    setFieldErr({});
     setDraft({
       id: r.id, ig_user_id: r.ig_user_id, media_id: r.media_id, media_permalink: r.media_permalink, media_caption: r.media_caption,
       keyword: r.keyword, message: r.message, link: r.link, active: r.active,

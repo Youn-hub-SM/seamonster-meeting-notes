@@ -776,7 +776,11 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
     const recommend = Math.max(0, r2(g + (recWhole.get(sku) ?? 0) - inb));
     return { inb, recommend };
   }
-  function updateLine(i: number, patch: Partial<NewLine>) { setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
+  function updateLine(i: number, patch: Partial<NewLine>) {
+    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+    // 요청수량을 넣으면 '품목·수량 비어 있음' 오류를 지운다(E5 — 입력 수정 시 칸 오류 해제)
+    if (patch.requested_qty !== undefined && Number(patch.requested_qty) > 0) setFormErr((x) => (x.lines ? { ...x, lines: undefined } : x));
+  }
   function removeLine(i: number) { setLines((prev) => prev.filter((_, idx) => idx !== i)); }
 
   // 입고·배정 기록이 있는 요청서는 용도를 바꿀 수 없다(서버도 거부) — 탭을 잠근다
