@@ -127,7 +127,7 @@
 - `.b2b-status-select` = strong 테두리 + ▾ 화살표(공용이 `background-image !important` 로 지킴) — 배지(`.b2b-status-pill`)와 모양이 다르다. 인라인 `background` 단축을 써도 화살표는 남는다.
 - 행 클릭이 있는 표만 `.b2b-table.is-clickable`(손 커서 + 회색 호버). 전역 `tbody tr { cursor:pointer }` 는 없다 — 빠뜨리면 눌리는데 손 커서가 없다.
 - 아이콘 버튼은 `app/components/IconButton`(`label` 필수 = aria-label·title, 32×32). `.b2b-modal-close` 32×32 + `aria-label="닫기"`. 텍스트 버튼 최소 높이 24px.
-- 사이드바 현재 위치 = 왼쪽 3px 주황 막대(inset shadow) + 연주황 바탕 + 검정 700 글자. 접힌 레일은 아이콘 + 3~4자 라벨(`NavTool.short`). 베타 기능은 분류 안에 회색 'BETA' 배지(`beta: true`).
+- 사이드바 현재 위치 = 연주황 바탕 + 주황 700 글자(막대 없음 — 대표 결정, 1차에 넣었던 inset 막대·검정 글자는 되돌림). 접기 «/펼치기 » 버튼이 맨 위, 접힌 레일 60px 은 아이콘만(짧은 라벨은 4자에서 잘려 폐기) + 마우스 오버 임시 펼침. 베타 기능은 분류 안에 회색 'BETA' 배지(`beta: true`).
 
 **함정 추가**
 - 별칭 토큰(`--sm-warning: var(--sm-text-mid)`)은 `scripts/sync-design-tokens.mjs` 가 실제 값으로 풀어 정적 HTML 에 옮긴다. 정적 HTML 에 `var(--sm-*)` 가 보이면 스크립트가 깨진 것.

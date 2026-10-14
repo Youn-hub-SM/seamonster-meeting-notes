@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { NAV, sortByNavOrder, navLabelOf, navHrefActive, railLabelOf, type NavTool, type NavMenuItem } from "./nav";
+import { NAV, sortByNavOrder, navLabelOf, navHrefActive, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 function itemActive(m: NavMenuItem, toolHref: string, pathname: string) {
@@ -28,7 +28,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   // 고정 끄기(collapsed) 상태에서 마우스 오버 시 임시 펼침. 고정을 끄는 순간에도
   //  포인터가 안에 있으므로 바로 레일로 줄지 않고, 마우스가 떠날 때 접힌다.
   const [hovering, setHovering] = useState(false);
-  const rail = !!collapsed && !hovering; // 아이콘+짧은 라벨만 보이는 레일 렌더 여부(호버 펼침 중엔 전체 메뉴 렌더)
+  const rail = !!collapsed && !hovering; // 아이콘만 보이는 레일 렌더 여부(호버 펼침 중엔 전체 메뉴 렌더)
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
   // '베타 테스트 중' 접이식 분류는 2026-10-14 C6 으로 해체 — 베타 항목은 각 분류 안에 BETA 배지(nav.ts beta)로 표시.
@@ -116,15 +116,10 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
   function renderTool(t: NavTool) {
     const active = toolActive(t, pathname);
-    // 레일(아이콘 + 3~4자 짧은 라벨 — 아이콘만 두지 않는다, 2026-10-14 C2): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 전체 이름은 툴팁.
+    // 레일(아이콘만 — 글자는 마우스를 올리면 펼쳐지는 전체 메뉴로 본다, 2026-10-14 대표 결정): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 전체 이름은 툴팁.
     if (rail) {
       const external = /^https?:\/\//.test(t.href);
-      const inner = (
-        <>
-          <span className="app-sb-emoji"><Icon name={t.icon} /></span>
-          <span className="app-sb-short" aria-hidden="true">{railLabelOf(t)}</span>
-        </>
-      );
+      const inner = <span className="app-sb-emoji"><Icon name={t.icon} /></span>;
       return (
         <div key={t.href} className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
           {external ? (
@@ -209,10 +204,13 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
     >
       <div className="app-sb-head">
         {onToggleCollapse && (
+          // 접기 «  / 펼치기 » — 햄버거는 '메뉴'로 읽혀 접기 기능이 안 보였다(2026-10-14). 접힌 레일에선 이 버튼만 위에 남는다.
           <button type="button" className="app-sb-collapse" onClick={onToggleCollapse}
-            aria-label="사이드바 고정 끄기/켜기" title="사이드바 고정 끄기/켜기">
+            aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"} title={collapsed ? "사이드바 펼치기" : "사이드바 접기"}>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-              <path d="M2.5 4h11M2.5 8h11M2.5 12h11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              {collapsed
+                ? <path d="M3 3.5L7.5 8 3 12.5M8.5 3.5L13 8l-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                : <path d="M13 3.5L8.5 8l4.5 4.5M7.5 3.5L3 8l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />}
             </svg>
           </button>
         )}
