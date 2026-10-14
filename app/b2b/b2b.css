@@ -663,6 +663,13 @@ a.b2b-history-item:hover {
 .b2b-table.is-compact .b2b-status-select { max-width: 92px !important; }
 .b2b-table.is-compact .b2b-parent-toggle { max-width: 92px; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .b2b-table.is-compact th.b2b-col-status { width: 92px; max-width: 92px; }
+/* 열 폭 고정(2026-10-14 대표 "큰 모니터에서 열 범위가 제각각"): fixed 레이아웃 — th 에 적은 px 열은 그 폭, 폭 없는 열(업체·품목)은 남은 폭을 똑같이 나눈다.
+   창이 좁아지면 업체·품목만 줄어들고(말줄임), 나머지는 그대로 — 900px 이상에선 가로 스크롤이 생기지 않는다. */
+.b2b-table.is-compact { table-layout: fixed; }
+.b2b-table.is-compact td, .b2b-table.is-compact th { overflow: hidden; text-overflow: ellipsis; }
+.b2b-table.is-compact td .b2b-row-link { overflow: hidden; text-overflow: ellipsis; }
+.b2b-table.is-compact td .b2b-row-link > span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.b2b-table.is-compact .sm-col > .sm-nowrap { min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* 품목 미리보기 줄 */
 
 /* ═══════════════════════════════════════════════
    생산관리 (/production)

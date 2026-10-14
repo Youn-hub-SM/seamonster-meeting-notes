@@ -1346,7 +1346,8 @@ export default function OrdersListPage() {
             <table className="b2b-table is-clickable is-compact">
               <thead>
                 <tr>
-                  <th style={{ width: 44, textAlign: "center" }}>
+                  {/* 고정 레이아웃(.is-compact table-layout: fixed): 폭을 적은 열은 그 폭, 업체·품목은 남은 폭을 똑같이 나눈다 — 큰 모니터에서 열마다 제각각 넓어지던 것(2026-10-14 대표) */}
+                  <th style={{ width: 28, textAlign: "center" }}>
                     <input
                       type="checkbox"
                       className="b2b-checkbox"
@@ -1355,18 +1356,18 @@ export default function OrdersListPage() {
                       title="이 페이지의 발주 전체 선택"
                     />
                   </th>
-                  <th style={{ width: 1 }}></th>
-                  <th style={{ minWidth: 88 }}>업체</th>
-                  <th style={{ minWidth: 120 }}>품목</th>
-                  <th className="b2b-col-date">발주일</th>
+                  <th style={{ width: 40 }}></th>
+                  <th>업체</th>
+                  <th>품목</th>
+                  <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
-                  <th className="b2b-col-date">발송일</th>
-                  <th className="num">합계</th>
+                  <th className="b2b-col-date" style={{ width: 104 }}>발송일</th>
+                  <th className="num" style={{ width: 76 }}>합계</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-status">생산</th>}
                   <th className="b2b-col-status">발송</th>
                   <th className="b2b-col-status">입금</th>
                   <th className="b2b-col-status">세금계산서</th>
-                  <th></th>
+                  <th style={{ width: 112 }}></th>
                 </tr>
               </thead>
               <tbody>
