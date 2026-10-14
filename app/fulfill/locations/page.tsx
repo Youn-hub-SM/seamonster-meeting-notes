@@ -121,7 +121,7 @@ export default function LocationsPage() {
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head">
-          <span className="b2b-card-title">구역 (걷는 순서){saving && <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>저장 중…</span>}</span>
+          <span className="b2b-card-title">구역 (걷는 순서){saving && <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>저장 중...</span>}</span>
         </div>
         {zones.length === 0 ? (
           <div className="b2b-empty" style={{ padding: 18 }}>구역이 없습니다.</div>
@@ -153,15 +153,15 @@ export default function LocationsPage() {
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
           <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목명·SKU 검색" style={{ flex: "1 1 220px" }} />
-          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 15, cursor: "pointer" }}>
             <input type="checkbox" checked={onlyUnzoned} onChange={(e) => setOnlyUnzoned(e.target.checked)} /> 미지정만
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 15, cursor: "pointer" }}>
             <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> 중단 품목 표시
           </label>
         </div>
         {!loaded ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>불러오는 중…</div>
+          <div className="b2b-empty" style={{ padding: 18 }}>불러오는 중...</div>
         ) : list.length === 0 ? (
           <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다." : "표시할 품목이 없습니다."}</div>
         ) : (
@@ -173,7 +173,7 @@ export default function LocationsPage() {
                   const stale = !!p.pick_zone && !zones.includes(p.pick_zone); // 구역 목록에서 지워진 값
                   return (
                     <tr key={p.id} style={{ opacity: p.active ? 1 : 0.55 }}>
-                      <td><strong>{p.name}</strong>{!p.active && <span className="sm-faint" style={{ fontSize: 11, marginLeft: 6 }}>중단</span>}</td>
+                      <td><strong>{p.name}</strong>{!p.active && <span className="sm-faint" style={{ fontSize: 12, marginLeft: 6 }}>중단</span>}</td>
                       <td className="sm-faint">{p.sku || "-"}</td>
                       <td>
                         <select className="b2b-input" value={p.pick_zone ?? ""} disabled={!zoneCol}

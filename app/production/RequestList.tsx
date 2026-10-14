@@ -430,7 +430,7 @@ export function RequestList() {
         <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 목록</div>
         <div className="b2b-table-wrap">
           {/* tableLayout fixed — 탭(제조사/도매) 전환 시 내용 길이와 무관하게 두 탭의 표 모양 동일 */}
-          <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 940 }}>
+          <table className="b2b-table is-clickable" style={{ tableLayout: "fixed", minWidth: 940 }}>
             <thead>
               <tr>
                 <th style={{ width: 28 }}></th>
@@ -518,7 +518,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
   const itemsFull = req.items.map(itemLabel).join("\n");
   return (
     <>
-      <tr onClick={onToggle} style={{ cursor: "pointer" }} className={expanded ? "is-parent" : ""}>
+      <tr onClick={onToggle} className={expanded ? "is-parent" : ""}>
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
         <td style={{ whiteSpace: "nowrap" }}>
           <span style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontWeight: 700, color: "var(--sm-dark)" }}>{req.req_no || "—"}</span>
@@ -808,7 +808,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" style={{ maxWidth: "min(1400px, 96vw)" }} onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">{isEdit ? `요청서 수정 ${initial?.req_no || ""}` : "새 생산 요청"}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">{isEdit ? `요청서 수정 ${initial?.req_no || ""}` : "새 생산 요청"}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           {/* 저장 오류는 창 안에도 — 페이지 위 배너는 창에 가려 보이지 않는다 */}
           {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
@@ -1015,7 +1015,7 @@ function LinkModal({ req, onClose, onLinked }: { req: ProductionRequest; onClose
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">입고 연결 · {req.req_no || ""}</h2><button className="b2b-modal-close" onClick={onClose} disabled={saving}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">입고 연결 · {req.req_no || ""}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose} disabled={saving}>✕</button></div>
         <div className="b2b-modal-body">
           {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
           <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>연결 안 된 소매 입고{from ? ` · ${from}부터` : ""} · 재고는 그대로</p>
@@ -1023,14 +1023,14 @@ function LinkModal({ req, onClose, onLinked }: { req: ProductionRequest; onClose
             : cands.length === 0 ? <div className="b2b-empty">연결할 입고가 없습니다.</div>
             : (
               <div className="b2b-table-wrap" style={{ maxHeight: 420, overflow: "auto" }}>
-                <table className="b2b-table">
+                <table className="b2b-table is-clickable">
                   <thead><tr>
                     <th style={{ width: 36 }}><input type="checkbox" checked={all} onChange={() => setPicked(all ? new Set() : new Set(cands.map((c) => c.id)))} aria-label="전체 선택" /></th>
                     <th className="b2b-col-date">거래일</th><th>품목</th><th className="num">수량</th><th>거래처·메모</th>
                   </tr></thead>
                   <tbody>
                     {cands.map((c) => (
-                      <tr key={c.id} onClick={() => toggle(c.id)} style={{ cursor: "pointer" }}>
+                      <tr key={c.id} onClick={() => toggle(c.id)}>
                         <td onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={picked.has(c.id)} onChange={() => toggle(c.id)} aria-label={`${c.name} 선택`} /></td>
                         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{dateShort(c.txn_date)}{c.order_no ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{c.order_no}</span> : null}</td>
                         <td><div style={{ fontWeight: 600 }}>{c.name}</div>{c.sku ? <div className="sm-faint" style={{ fontSize: 12 }}>{c.sku}</div> : null}</td>

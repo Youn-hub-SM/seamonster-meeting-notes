@@ -169,7 +169,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         {type === "출고" && (
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
             <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: "auto" }}
-              title="판매가 아닌 출고(협찬·폐기 등)는 사유를 남겨야 '구매·판매·재고 확인'에서 판매와 분리됩니다">
+              title="판매가 아닌 출고(협찬·폐기 등)는 사유를 남겨야 '재고 대사'에서 판매와 분리됩니다">
               <option value="판매">판매</option>
               <option value="협찬">협찬·증정</option>
               <option value="폐기">폐기</option>

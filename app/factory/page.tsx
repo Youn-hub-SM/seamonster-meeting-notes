@@ -129,7 +129,7 @@ export default function FactoryStockPage() {
         <>
           {/* PC 표 */}
           <div className="b2b-table-wrap fac-stock-table">
-            <table className="b2b-table">
+            <table className="b2b-table is-clickable">
               <thead><tr>
                 {COLS.map((c) => (
                   <th key={c.key} className={`fac-th-sort ${c.num ? "num" : ""}`} onClick={() => sortBy(c.key)}>

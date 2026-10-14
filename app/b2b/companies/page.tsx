@@ -138,7 +138,7 @@ export default function CompaniesPage() {
           </div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table is-responsive">
+            <table className="b2b-table is-clickable is-responsive">
               <thead>
                 <tr>
                   <th>업체명</th>
@@ -343,7 +343,7 @@ function CompanyModal({
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{mode === "create" ? "새 업체 등록" : "업체 수정"}</h2>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
 
         <div className="b2b-modal-body">

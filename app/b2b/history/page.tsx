@@ -124,7 +124,7 @@ export default function HistoryPage() {
     <>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">변경 기록</h1>
+          <h1 className="b2b-page-title">B2B 변경 기록</h1>
         </div>
       </header>
 

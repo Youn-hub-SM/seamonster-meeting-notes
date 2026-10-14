@@ -479,7 +479,7 @@ export default function InventoryPage() {
                   <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수" : "오늘까지 원장 기준"}>
                     {onHandOf(r).toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {/* 소매 숫자 '아래' 줄로 — 옆에 붙이면 현재고가 두 값처럼 읽힌다(대표 지시). 입고 예정 셀의 '마감' 줄과 같은 방식 */}
-                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 11, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
+                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 12, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
                   </td>
                   {/* 출고 예정 = 오늘 뒤 거래일로 이미 뺀 출고(대개 발송예정일이 미래인 B2B 선점, 발주 전량). 현재고에는 안 들어가고
                       예상소진·부족·권장은 이 양까지 뺀 가용으로 판단한다(D1). 거래처·날짜별 내역은 마우스를 올려 본다 */}
@@ -514,7 +514,7 @@ export default function InventoryPage() {
                   {!confirmedTab && <td className="num b2b-money" style={{ color: (r.inbound ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}
                     title={(r.inbound ?? 0) > 0 ? `${channel === "도매" ? "열린 도매 요청서에 남은 양(소매 → 도매 이동 대기)" : "열린 제조사 요청서에 남은 양"} — 권장생산에서 이미 뺐습니다\n${r.inbound_detail || ""}` : undefined}>
                     {(r.inbound ?? 0) > 0 ? r.inbound.toLocaleString() : "-"}
-                    {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 11 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
+                    {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
                   </td>}
                   {!confirmedTab && <td className="num" title={pv.detail}>{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>}
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
@@ -548,7 +548,7 @@ export default function InventoryPage() {
                   {(historyFor.scheduled_out ?? 0) > 0 ? ` · 출고 예정 ${historyFor.scheduled_out.toLocaleString()}` : ""}
                 </span>
               </span>
-              <button className="b2b-modal-close" onClick={() => setHistoryFor(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setHistoryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>재고 = 그 거래 채널 기준 전후 수량 · 대기 행은 재고에 넣지 않음</p>

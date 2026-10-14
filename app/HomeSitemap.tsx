@@ -38,17 +38,17 @@ export default function HomeSitemap() {
                 <div key={tool.href} className="sm-map-tool">
                   {external(tool.href) ? (
                     <a href={tool.href} target="_blank" rel="noreferrer" className="sm-map-tool-link">
-                      <Icon name={tool.icon} size={15} /> <span>{tool.label}</span>
+                      <Icon name={tool.icon} size={15} /> <span>{tool.label}</span>{tool.beta && <span className="sm-map-beta">BETA</span>}
                     </a>
                   ) : (
                     <Link href={tool.href} className="sm-map-tool-link">
-                      <Icon name={tool.icon} size={15} /> <span>{tool.label}</span>
+                      <Icon name={tool.icon} size={15} /> <span>{tool.label}</span>{tool.beta && <span className="sm-map-beta">BETA</span>}
                     </Link>
                   )}
                   {menu.length > 0 && (
                     <div className="sm-map-subs">
                       {menu.map((m) => (
-                        <Link key={m.href} href={m.href} className="sm-map-sub">{m.label}</Link>
+                        <Link key={m.href} href={m.href} className="sm-map-sub">{m.label}{m.beta && <span className="sm-map-beta">BETA</span>}</Link>
                       ))}
                     </div>
                   )}
@@ -75,6 +75,8 @@ export default function HomeSitemap() {
         .sm-map-subs { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 0 22px; }
         .sm-map-sub { font-size: 12px; color: var(--sm-text-mid); padding: 6px 0; } /* 터치 타깃 확보(모바일 오탭 방지) */
         .sm-map-sub:hover { color: var(--sm-orange); }
+        /* 베타 배지 — 회색 글자만(색 없음, 2026-10-14 C6). 사이드바 .app-sb-beta 와 같은 모양 */
+        .sm-map-beta { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0.02em; color: var(--sm-text-mid); vertical-align: 1px; }
       `}</style>
     </section>
   );

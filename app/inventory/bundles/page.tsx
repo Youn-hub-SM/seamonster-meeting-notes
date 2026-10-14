@@ -115,7 +115,7 @@ export default function BundlesPage() {
       {preview && (
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
-            <div className="b2b-modal-head"><span className="b2b-modal-title">묶음 업로드 — 미리보기</span><button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button></div>
+            <div className="b2b-modal-head"><span className="b2b-modal-title">묶음 업로드 — 미리보기</span><button className="b2b-modal-close" aria-label="닫기" onClick={() => setPreview(null)}>✕</button></div>
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
                 <span>반영 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>개</span>
@@ -208,7 +208,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">묶음 직접 추가</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">묶음 직접 추가</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           {/* ── 판매담당 입력 구역 — 묶음 정보·구성품·가격 ── */}
           <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>

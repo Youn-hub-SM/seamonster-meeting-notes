@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import IconButton from "@/app/components/IconButton";
 
 // 거래명세표 — 커스텀 작성. 발주 없이 손으로 채워 인쇄/PDF 로 뽑는다.
 //  발주 1건짜리 명세표(/b2b/orders/[id]/statement)와 '보이는 결과'는 같아야 해서 레이아웃·세액 규칙을 맞췄다.
@@ -119,7 +120,7 @@ export default function CustomStatementPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>공급자 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(고쳐도 설정은 안 바뀝니다)</span></div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>공급자 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(고쳐도 설정은 안 바뀝니다)</span></div>
             <Field label="상호" value={supplier.name} onChange={(v) => setSupplier({ ...supplier, name: v })} />
             <Field label="등록번호" value={supplier.biz_no} onChange={(v) => setSupplier({ ...supplier, biz_no: v })} />
             <Field label="대표" value={supplier.ceo} onChange={(v) => setSupplier({ ...supplier, ceo: v })} />
@@ -129,13 +130,13 @@ export default function CustomStatementPage() {
             <Field label="이메일" value={supplier.email} onChange={(v) => setSupplier({ ...supplier, email: v })} />
             <Field label="입금계좌" value={supplier.bank} onChange={(v) => setSupplier({ ...supplier, bank: v })} placeholder="예: 국민 123-45-6789 (예금주)" />
             {stamp && (
-              <label className="sm-row" style={{ gap: 7, marginTop: 8, fontSize: 13, cursor: "pointer" }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 8, fontSize: 15, cursor: "pointer" }}>
                 <input type="checkbox" className="b2b-checkbox" checked={useStamp} onChange={(e) => setUseStamp(e.target.checked)} /> 직인 표시
               </label>
             )}
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>공급받는자</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>공급받는자</div>
             <Field label="상호" value={buyer.name} onChange={(v) => setBuyer({ ...buyer, name: v })} />
             <Field label="등록번호" value={buyer.biz_no} onChange={(v) => setBuyer({ ...buyer, biz_no: v })} />
             <Field label="성명" value={buyer.ceo} onChange={(v) => setBuyer({ ...buyer, ceo: v })} />
@@ -145,7 +146,7 @@ export default function CustomStatementPage() {
 
         <div style={{ marginTop: 18 }}>
           <div className="sm-between" style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>품목</span>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>품목</span>
             <button className="b2b-btn-secondary" style={{ padding: "5px 12px", fontSize: 12 }} onClick={() => setLines((p) => [...p, newLine()])}>+ 품목 추가</button>
           </div>
           <div className="b2b-table-wrap">
@@ -164,7 +165,7 @@ export default function CustomStatementPage() {
                     <td className="num b2b-money">{won(supply)}</td>
                     <td style={{ textAlign: "center" }}>
                       {lines.length > 1 && (
-                        <button type="button" className="b2b-icon-btn is-danger" aria-label="줄 삭제" onClick={() => setLines((p) => p.filter((x) => x.key !== l.key))}>✕</button>
+                        <IconButton className="is-danger" label="줄 삭제" onClick={() => setLines((p) => p.filter((x) => x.key !== l.key))}>✕</IconButton>
                       )}
                     </td>
                   </tr>
@@ -191,7 +192,7 @@ export default function CustomStatementPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, marginBottom: 16 }}>
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
             <InfoRow label="등록번호" value={supplier.biz_no} strong />
             <InfoRow label="상호" value={supplier.name} stampSrc={useStamp && stamp ? stamp : undefined} extraLabel="대표" extra={supplier.ceo} />
             <InfoRow label="사업장" value={supplier.addr} />
@@ -199,7 +200,7 @@ export default function CustomStatementPage() {
             <InfoRow label="이메일" value={supplier.email} />
           </div>
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
             <InfoRow label="등록번호" value={buyer.biz_no} strong />
             <InfoRow label="상호" value={buyer.name} extraLabel="성명" extra={buyer.ceo} />
             <InfoRow label="주소" value={buyer.addr} />
@@ -244,7 +245,7 @@ export default function CustomStatementPage() {
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 14px", marginTop: 10 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", flex: "0 0 auto" }}>입금계좌</span>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{supplier.bank || "-"}</span>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>{supplier.bank || "-"}</span>
         </div>
 
         <p style={{ marginTop: 14, fontSize: 12, color: "var(--sm-text-mid)" }}>위와 같이 거래하였음을 확인합니다.</p>
@@ -264,7 +265,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 
 function InfoRow({ label, value, strong, extraLabel, extra, stampSrc }: { label: string; value?: string | null; strong?: boolean; extraLabel?: string; extra?: string | null; stampSrc?: string }) {
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "3px 0", borderTop: "1px solid var(--sm-border-light)" }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "3px 0", borderTop: "1px solid var(--sm-border-light)" }}>
       <span style={{ width: 52, flex: "0 0 auto", color: "var(--sm-text-mid)", fontSize: 12 }}>{label}</span>
       <span style={{ fontWeight: strong ? 700 : 500, flex: 1 }}>{value || "-"}</span>
       {stampSrc ? (

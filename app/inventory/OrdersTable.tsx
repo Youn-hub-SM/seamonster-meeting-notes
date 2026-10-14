@@ -250,7 +250,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     <>
     {head}
     <div className="b2b-table-wrap">
-      <table className="b2b-table">
+      <table className="b2b-table is-clickable">
         <thead><tr><th>상태</th><th>일시</th><th>주문번호</th><th>거래처</th><th>품목 수</th><th className="num">총수량</th><th className="num">총액</th><th>메모</th><th></th></tr></thead>
         <tbody>
           {shown.map((o) => {
@@ -263,7 +263,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
             const badge = !done ? { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" } : future ? { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" } : c;
             return (
               <FragmentRows key={o.key}>
-                <tr onClick={() => toggle(o.key)} style={{ cursor: "pointer" }}>
+                <tr onClick={() => toggle(o.key)}>
                   {/* 이동 배지는 실제 칸 방향(출고 칸 → 입고 칸) — 도매 대량·프로모션 이동을 도매 이동으로 읽지 않게 */}
                   <td style={{ whiteSpace: "nowrap" }}>
                     <span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type === "이동" ? (o.move_from && o.move_to ? `이동(${o.move_from}→${o.move_to})` : "이동") : future ? `${o.type} 예정 ${o.txn_date.slice(5)}` : `${o.type} ${o.status}`}</span>
@@ -306,7 +306,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                                         autoFocus type="number" min={0} className="b2b-input" value={editVal}
                                         onChange={(e) => setEditVal(e.target.value)}
                                         onKeyDown={(e) => { if (e.key === "Enter") saveUnit(it); if (e.key === "Escape") setEditId(null); }}
-                                        style={{ width: 80, padding: "3px 8px", fontSize: 13, textAlign: "right" }}
+                                        style={{ width: 80, padding: "3px 8px", fontSize: 15, textAlign: "right" }}
                                       />
                                       <button className="b2b-link-btn" onClick={() => saveUnit(it)} disabled={saving}>저장</button>
                                       <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>취소</button>
@@ -431,7 +431,7 @@ function ProcessModal({ o, onClose, onDone }: { o: Order; onClose: () => void; o
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: linkable ? 480 : 400 }}>
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">{label} · {o.order_no || "단건"}</span>
-          <button className="b2b-modal-close" onClick={onClose} disabled={busy}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose} disabled={busy}>✕</button>
         </div>
         <div className="b2b-modal-body">
           <label className="b2b-field"><span className="b2b-field-label">처리일</span>

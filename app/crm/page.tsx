@@ -733,7 +733,7 @@ function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onCl
       <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">선택지 관리</h2>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
           {error && <div className="b2b-error">{error}</div>}
@@ -787,7 +787,7 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
       <div className="b2b-modal crm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{data.id ? "메시지 수정" : "새 메시지"}</h2>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
           <div className="b2b-field-row">

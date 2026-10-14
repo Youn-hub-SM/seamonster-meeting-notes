@@ -110,7 +110,7 @@ export default function SalesHistoryPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">변경 기록</h1>
+          <h1 className="b2b-page-title">매출 변경 기록</h1>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={() => setTick((t) => t + 1)} disabled={loading}>

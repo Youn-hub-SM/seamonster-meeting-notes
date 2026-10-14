@@ -36,6 +36,17 @@ for (const m of rootBlock[1].matchAll(/(--sm-[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
   tokens.set(m[1], m[2].trim());
 }
 if (tokens.size === 0) fail(":root 에서 --sm-* 토큰을 하나도 읽지 못했습니다");
+// 별칭 토큰(예: --sm-warning: var(--sm-text-mid))은 실제 값으로 풀어서 옮긴다 —
+// 정적 HTML 은 --sm-* 이름이 없고, 차트의 alpha(hex) 가 리터럴 hex 를 요구한다.
+function resolveToken(value, depth = 0) {
+  if (depth > 8) fail(`토큰 별칭이 순환합니다: ${value}`);
+  return value.replace(/var\((--sm-[a-z0-9-]+)\)/g, (whole, name) => {
+    const v = tokens.get(name);
+    if (v === undefined) fail(`별칭이 가리키는 토큰이 :root 에 없습니다: ${name}`);
+    return resolveToken(v, depth + 1);
+  });
+}
+for (const [name, value] of tokens) tokens.set(name, resolveToken(value));
 
 // ── 2) 대상 파일과 매핑 (대상 :root 변수 → 소스 --sm-* 토큰) ──
 const COMMON = {

@@ -123,7 +123,7 @@ export default function StatementPage() {
           {/* 공급자 / 공급받는자 2단 */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10, marginBottom: 16 }}>
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급자</div>
               <InfoRow label="등록번호" value={supplier?.biz_no} strong />
               {/* 직인은 상호와 대표 사이에 인라인 배치(행 높이를 늘리지 않게 음수 마진) */}
               <InfoRow label="상호" value={supplier?.name} stampSrc={stamp || undefined} extraLabel="대표" extra={supplier?.ceo || ""} />
@@ -132,7 +132,7 @@ export default function StatementPage() {
               <InfoRow label="이메일" value={supplier?.email} />
             </div>
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 6 }}>공급받는자</div>
               <InfoRow label="등록번호" value={c?.biz_no} strong />
               <InfoRow label="상호" value={c?.name} extraLabel="성명" extra={c?.ceo_name ?? ""} />
               <InfoRow label="주소" value={c?.address} />
@@ -199,7 +199,7 @@ export default function StatementPage() {
           {/* 입금 은행정보(설정에서 입력) */}
           <div style={{ display: "flex", gap: 10, alignItems: "center", border: "1px solid var(--sm-border)", borderRadius: 8, padding: "10px 14px", marginTop: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", flex: "0 0 auto" }}>입금계좌</span>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{supplier?.bank || "-"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>{supplier?.bank || "-"}</span>
           </div>
 
           <p style={{ marginTop: 14, fontSize: 12, color: "var(--sm-text-mid)" }}>위와 같이 거래하였음을 확인합니다.</p>
@@ -211,7 +211,7 @@ export default function StatementPage() {
 
 function InfoRow({ label, value, strong, extraLabel, extra, stampSrc }: { label: string; value?: string | null; strong?: boolean; extraLabel?: string; extra?: string | null; stampSrc?: string }) {
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, padding: "3px 0", borderTop: "1px solid var(--sm-border-light)" }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "3px 0", borderTop: "1px solid var(--sm-border-light)" }}>
       <span style={{ width: 52, flex: "0 0 auto", color: "var(--sm-text-mid)", fontSize: 12 }}>{label}</span>
       <span style={{ fontWeight: strong ? 700 : 500, flex: 1 }}>{value || "-"}</span>
       {/* 직인 — 행 높이를 늘리지 않도록 음수 마진, 값과 extra 사이에 배치 */}

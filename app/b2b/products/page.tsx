@@ -269,7 +269,7 @@ export default function ProductsPage() {
           </div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table is-responsive">
+            <table className="b2b-table is-clickable is-responsive">
               <thead>
                 <tr>
                   <th>품목명</th>
@@ -441,7 +441,7 @@ export default function ProductsPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">엑셀 업로드 — 변경 확인</h2>
-              <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
@@ -555,7 +555,7 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
         </thead>
         <tbody>
           {history.map((h) => (
-            <tr key={h.id} style={{ cursor: "default" }}>
+            <tr key={h.id}>
               <td>{new Date(h.changed_at).toLocaleString("ko-KR")}</td>
               <td className="num b2b-money">{h.cost_price.toLocaleString()}</td>
               <td>{h.reason || "-"}</td>
@@ -627,7 +627,7 @@ function ProductModal({
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">{mode === "create" ? "새 제품 등록" : "제품 수정"}</h2>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
 
         <div className="b2b-modal-body">

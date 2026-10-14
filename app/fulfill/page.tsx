@@ -428,7 +428,7 @@ export default function FulfillPage() {
               {res.unmatched.length > 0 && (
                 <div className="b2b-error" style={{ lineHeight: 1.6 }}>
                   <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있고, ④ 출고 때 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
-                  <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(" · ")}{res.unmatched.length > 30 ? " …" : ""}</div>
+                  <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(" · ")}{res.unmatched.length > 30 ? " ..." : ""}</div>
                 </div>
               )}
             </>

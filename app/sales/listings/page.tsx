@@ -312,7 +312,7 @@ export default function SkuListingsPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">SKU로 재고 조정</h1>
+          <h1 className="b2b-page-title">채널 재고 조정</h1>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={refreshAll} disabled={busy}
@@ -349,7 +349,7 @@ export default function SkuListingsPage() {
             placeholder="상품 검색 — 이름 또는 SKU" ariaLabel="상품" />
         </div>
         {res?.target && (res.bundles?.length ?? 0) > 0 && (
-          <p className="sm-faint" style={{ margin: "8px 0 0", fontSize: 13 }}>
+          <p className="sm-faint" style={{ margin: "8px 0 0", fontSize: 12 }}>
             묶음 포함: {res.bundles!.map((b) => b.sku).join(", ")}
           </p>
         )}
@@ -434,7 +434,7 @@ export default function SkuListingsPage() {
                                 <input className="b2b-input" type="number" min={0} value={cmdQty[c.item_key] ?? ""}
                                   onChange={(e) => setCmdQty((p) => ({ ...p, [c.item_key]: e.target.value }))}
                                   placeholder="수량" aria-label="적용할 수량"
-                                  style={{ width: 60, padding: "3px 6px", fontSize: 13 }} />
+                                  style={{ width: 60, padding: "3px 6px", fontSize: 15 }} />
                                 <button type="button" className="b2b-btn-secondary" disabled={applying === c.item_key}
                                   onClick={() => applyQty(c)} style={{ padding: "3px 8px", fontSize: 12 }}>
                                   적용
@@ -448,7 +448,7 @@ export default function SkuListingsPage() {
                           </span>
                           {cmd && !cmdStale && (
                             <div className="sm-faint" title={cmd.error || undefined}
-                              style={{ fontSize: 11, marginTop: 2, whiteSpace: "normal", overflowWrap: "break-word", color: cmd.status === "실패" ? "var(--sm-danger)" : undefined }}>
+                              style={{ fontSize: 12, marginTop: 2, whiteSpace: "normal", overflowWrap: "break-word", color: cmd.status === "실패" ? "var(--sm-danger)" : undefined }}>
                               {cmd.status === "대기" ? `${cmd.qty}개 적용 대기중` :
                                cmd.status === "실행중" ? `${cmd.qty}개 적용 중...` :
                                cmd.status === "완료" ? `${cmd.qty}개 적용 완료${cmd.executed_at ? ` (${kstStamp(cmd.executed_at)})` : ""}` :

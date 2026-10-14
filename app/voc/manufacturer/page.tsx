@@ -107,8 +107,8 @@ export default function VocManufacturerPage() {
     setLoading(true); setError(""); setCopied(false);
     try {
       const res = await fetch("/api/voc/manufacturer/digest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ month }) });
-      // 함수가 시간 초과 등으로 끊기면 Vercel 이 JSON 아닌 텍스트("An error occurred…")를 내려보낸다
-      //  → 무조건 res.json() 하면 "Unexpected token 'A'…" 파싱 오류만 보였다. 텍스트로 받고 직접 판별.
+      // 함수가 시간 초과 등으로 끊기면 Vercel 이 JSON 아닌 텍스트("An error occurred...")를 내려보낸다
+      //  → 무조건 res.json() 하면 "Unexpected token 'A'..." 파싱 오류만 보였다. 텍스트로 받고 직접 판별.
       const raw = await res.text();
       let j: { ok?: boolean; draft?: string; counts?: { claims: number; surveys: number }; error?: string } | null = null;
       try { j = JSON.parse(raw); } catch { /* 플랫폼 오류 텍스트 */ }

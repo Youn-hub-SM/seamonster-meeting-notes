@@ -99,7 +99,7 @@ export default function ProductionView() {
                 </thead>
                 <tbody>
                   {d.products.map((p) => (
-                    <tr key={`${p.product_name}__${p.spec}`} style={{ cursor: "default" }}>
+                    <tr key={`${p.product_name}__${p.spec}`}>
                       <td>{p.product_name}</td>
                       <td>{p.spec || "-"}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{formatQty(p.qty)}</td>

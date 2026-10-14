@@ -313,7 +313,7 @@ export default function VocPage() {
             <div className="b2b-loading">불러오는 중...</div>
           ) : (
             <div className="b2b-table-wrap">
-              <table className="b2b-table">
+              <table className="b2b-table is-clickable">
                 <thead>
                   <tr>
                     <th style={{ width: 1 }}></th>
@@ -374,13 +374,13 @@ export default function VocPage() {
         <div className="b2b-empty">{rows.length === 0 ? "아직 등록된 VOC가 없습니다." : "조건에 맞는 VOC가 없습니다."}</div>
       ) : (
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          <table className="b2b-table is-clickable">
             <thead><tr>
               <th>접수일</th><th>구매채널</th><th>고객명</th><th>구매</th><th>구매일</th><th>구매상품</th><th>유형</th><th>특이사항</th><th>상세내용</th><th>처리내용</th><th>업무</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (
-                <tr key={r.id} onClick={() => openEdit(r)} style={{ cursor: "pointer" }}>
+                <tr key={r.id} onClick={() => openEdit(r)}>
                   <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
                   <td>{r.purchase_place || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
@@ -403,7 +403,7 @@ export default function VocPage() {
                       ) : asanaReady ? (
                         <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
                           title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
-                          {flowBusy === r.id ? "등록중…" : "→ 아사나"}
+                          {flowBusy === r.id ? "등록중..." : "→ 아사나"}
                         </button>
                       ) : null}
                       {/* 과거 flow 등록 기록 — 표시만(등록 기능은 제거됨) */}
@@ -426,7 +426,7 @@ export default function VocPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">엑셀 업로드 — 미리보기</span>
-              <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
@@ -451,7 +451,7 @@ export default function VocPage() {
                       ))}
                     </tbody>
                   </table>
-                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>…외 {preview.rows.length - 200}건(전체 등록됩니다)</p>}
+                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 200}건(전체 등록됩니다)</p>}
                 </div>
               )}
               {preview.errors.length > 0 && (
@@ -479,7 +479,7 @@ export default function VocPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">{edit.id ? "VOC 수정" : "VOC 추가"}</span>
-              <button className="b2b-modal-close" onClick={() => setEdit(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setEdit(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="b2b-field-row">
@@ -559,7 +559,7 @@ export default function VocPage() {
                     </div>
                   ))}
                   <label style={{ width: 74, height: 74, borderRadius: 8, border: "1px dashed var(--sm-border)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--sm-text-light)", fontSize: 22, flexShrink: 0 }}>
-                    {uploading ? "…" : "+"}
+                    {uploading ? "..." : "+"}
                     <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={uploading}
                       onChange={(e) => { uploadPhotos(e.target.files); e.target.value = ""; }} />
                   </label>
@@ -579,7 +579,7 @@ export default function VocPage() {
                           ? <a href={er.asana_task_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>아사나 등록됨 ✓ (열기)</a>
                           : <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>아사나 등록됨 ✓</span>
                       ) : asanaReady ? (
-                        <button className="b2b-btn-secondary" onClick={() => registerAsana(er)} disabled={flowBusy === edit.id}>{flowBusy === edit.id ? "등록중…" : "아사나에 업무 등록"}</button>
+                        <button className="b2b-btn-secondary" onClick={() => registerAsana(er)} disabled={flowBusy === edit.id}>{flowBusy === edit.id ? "등록중..." : "아사나에 업무 등록"}</button>
                       ) : null}
                       {er.flow_task_at && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-success)" }}>flow 등록됨 ✓</span>}
                     </span>
@@ -612,7 +612,7 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
   const sc = VOC_CAT_STATUS_COLOR[st];
   return (
     <>
-      <tr onClick={onToggle} style={{ cursor: "pointer" }} className={expanded ? "is-parent" : ""}>
+      <tr onClick={onToggle} className={expanded ? "is-parent" : ""}>
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
         <td style={{ fontWeight: 700 }}>{b.name}{b.cat && !b.cat.active ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>(비활성)</span> : null}</td>
         <td className="num" style={{ fontWeight: 700 }}>{b.monthRows.length > 0 ? `${b.monthRows.length}건` : <span className="sm-faint">-</span>}</td>
@@ -637,11 +637,11 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
               <p className="sm-faint" style={{ fontSize: 15, margin: "6px 0" }}>이 달에 접수된 건이 없습니다.</p>
             ) : (
               <div className="b2b-table-wrap">
-                <table className="b2b-table">
+                <table className="b2b-table is-clickable">
                   <thead><tr><th>접수일</th><th>고객</th><th>상품</th><th>상세내용</th><th>처리내용</th><th>업무</th></tr></thead>
                   <tbody>
                     {b.monthRows.map((r) => (
-                      <tr key={r.id} onClick={() => onOpen(r)} style={{ cursor: "pointer" }}>
+                      <tr key={r.id} onClick={() => onOpen(r)}>
                         <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
                         <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
@@ -693,7 +693,7 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">문제 유형 관리</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">문제 유형 관리</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           {!managed && <div className="b2b-error" style={{ marginBottom: 10 }}>072_voc_categories.sql 마이그레이션을 적용해야 유형을 편집할 수 있습니다.</div>}
           {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}

@@ -120,7 +120,7 @@ export default function PaymentsPage() {
         ) : (
           <div className="b2b-table-wrap">
             {/* is-responsive + pay-table: 모바일은 카드(업체·발주일·청구액·입금상태만) */}
-            <table className="b2b-table is-responsive pay-table">
+            <table className="b2b-table is-clickable is-responsive pay-table">
               <thead>
                 <tr>
                   <th>발주번호</th>
@@ -633,7 +633,7 @@ function PaymentModal({
               </strong>
             </div>
           </div>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
 
         <div className="b2b-modal-body">

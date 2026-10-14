@@ -488,7 +488,7 @@ export default function TxnModal({
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: preview ? 760 : 460 }}>
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">입고 · 출고 · 조정</span>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
           {/* 한 품목만 기록하는 창(행에서 열었을 때)에는 엑셀 일괄이 맞지 않아 숨긴다 */}
@@ -701,7 +701,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                 </tbody>
               </table>
             )}
-            {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>…외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
+            {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
           </div>
         )}
 

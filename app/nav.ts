@@ -3,9 +3,13 @@
 
 import type { IconName } from "./components/Icon";
 
-export type NavMenuItem = { href: string; label: string; adminOnly?: boolean; exact?: boolean }; // exact: 정확히 일치할 때만 활성(다른 독립 툴이 이 경로 아래에 있을 때)
-export type NavTool = { href: string; label: string; icon: IconName; adminOnly?: boolean; exact?: boolean; menu?: NavMenuItem[] }; // exact: 하위 메뉴 없는 툴이 자기 주소일 때만 활성(아래 주소의 다른 화면에서 켜지지 않게)
+// beta: 사이드바·홈 사이트맵에 회색 'BETA' 글자 배지(2026-10-14 C6 — '베타 테스트 중' 분류 해체, 상태는 배지로).
+export type NavMenuItem = { href: string; label: string; adminOnly?: boolean; exact?: boolean; beta?: true }; // exact: 정확히 일치할 때만 활성(다른 독립 툴이 이 경로 아래에 있을 때)
+// short: 접힌 레일(아이콘 아래 3~4자) 라벨 — 없으면 label 의 공백 뺀 앞 4자(railLabelOf).
+// icon: 같은 분류 안에서 겹치지 않게(2026-10-14 C2) — Icon.tsx 에 있는 키만.
+export type NavTool = { href: string; label: string; short?: string; icon: IconName; adminOnly?: boolean; exact?: boolean; beta?: true; menu?: NavMenuItem[] }; // exact: 하위 메뉴 없는 툴이 자기 주소일 때만 활성(아래 주소의 다른 화면에서 켜지지 않게)
 export type NavCategory = { label: string; adminOnly?: boolean; tools: NavTool[] };
+export const railLabelOf = (t: Pick<NavTool, "label" | "short">): string => t.short ?? t.label.replace(/\s+/g, "").slice(0, 4);
 
 
 export const NAV: NavCategory[] = [
@@ -13,9 +17,9 @@ export const NAV: NavCategory[] = [
     // 라벨 없는 최상단 그룹 — 사용 가이드·업데이트 노트(대표 지시 2026-08-24). 사이드바는 빈 라벨을 그리지 않는다.
     label: "",
     tools: [
-      { href: "/guide", label: "사용 가이드", icon: "book" },
-      { href: "/updates", label: "업데이트 노트", icon: "note" },
-      { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드(GitBook)", icon: "book" },
+      { href: "/guide", label: "사용 가이드", short: "가이드", icon: "book" },
+      { href: "/updates", label: "업데이트 노트", short: "업데이트", icon: "note" },
+      { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드(GitBook)", short: "GitBook", icon: "link" },
     ],
   },
   {
@@ -28,21 +32,21 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/companies", label: "업체 주소록" },
           { href: "/b2b/reports", label: "매출 집계" },
           { href: "/b2b/payments", label: "입금 확인" },
-          { href: "/b2b/history", label: "변경 기록" },
+          { href: "/b2b/history", label: "B2B 변경 기록" },
         ],
       },
       {
-        href: "/b2b/products", label: "상품 마스터", icon: "fish",
+        href: "/b2b/products", label: "상품 마스터", short: "상품", icon: "fish",
         menu: [
           { href: "/b2b/products", label: "상품 목록" },
-          { href: "/b2b/products/history", label: "변경 기록" },
+          { href: "/b2b/products/history", label: "상품 변경 기록" },
           { href: "/inventory/bundles", label: "묶음 상품" },
           { href: "/production/sku", label: "SKU 생성" },
-          { href: "/sales/listings", label: "SKU로 재고 조정" },
+          { href: "/sales/listings", label: "채널 재고 조정" }, // 네이버·쿠팡·공식몰에 등록된 판매 재고를 SKU 로 찾아 바꾸는 화면(구 'SKU로 재고 조정')
         ],
       },
       {
-        href: "/fulfill", label: "온라인 발주", icon: "truck",
+        href: "/fulfill", label: "온라인 발주", short: "온라인", icon: "truck",
         menu: [
           { href: "/fulfill", label: "발주처리" },
           { href: "/fulfill/scan/upload", label: "송장 업로드" },
@@ -58,11 +62,11 @@ export const NAV: NavCategory[] = [
           { href: "/sales/upload", label: "데이터 업로드" },
           { href: "/sales/report", label: "리포트" },
           { href: "/sales/profit", label: "채널별 이익" },
-          { href: "/sales/history", label: "변경 기록" },
+          { href: "/sales/history", label: "매출 변경 기록" },
         ],
       },
-      { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
-      { href: "/subscription", label: "정기배송 분석", icon: "trend" },
+      { href: "/coupon", label: "쿠폰 요청서", short: "쿠폰", icon: "ticket" },
+      { href: "/subscription", label: "정기배송 분석", short: "정기배송", icon: "trend" },
     ],
   },
   {
@@ -70,29 +74,34 @@ export const NAV: NavCategory[] = [
     tools: [
       // 2026-07-28 재편: 구매 및 판매를 상단으로, 생산/재고를 각각 묶고 나머지는 독립 메뉴.
       //  2026-08-28 정리: 생산 보드·제조사 요청서·재고 부족 알림 페이지 삭제(재도입 시 새로 구현).
-      { href: "/inventory/trade", label: "입고 및 출고", icon: "receipt" },
+      { href: "/inventory/trade", label: "입고 및 출고", short: "입출고", icon: "box" },
       {
-        // 2026-09-28: 생산 관리 + 재고 관리를 '생산 및 재고' 하나로(대표 지시). 생산 일정은 '베타 테스트 중'으로 이동(미사용).
-        href: "/production/request", label: "생산 및 재고", icon: "factory",
+        // 2026-09-28: 생산 관리 + 재고 관리를 '생산 및 재고' 하나로(대표 지시). 생산 일정은 미사용이라 아래 BETA 배지 항목으로.
+        href: "/production/request", label: "생산 및 재고", short: "생산재고", icon: "factory",
         menu: [
           { href: "/production/request", label: "생산 요청" },
           { href: "/inventory/quote", label: "월간매입 결산" },
           { href: "/inventory", label: "재고 목록", exact: true }, // /inventory/* 에 다른 하위 메뉴가 있어 정확히 일치할 때만
           { href: "/inventory/adjust", label: "재고 조정" },
           { href: "/inventory/move", label: "재고 이동" },
-          { href: "/inventory/asof", label: "과거수량 조회" },
+          { href: "/inventory/asof", label: "날짜별 재고" },
         ],
       },
-      { href: "/inventory/reconcile", label: "구매·판매·재고 확인", icon: "receipt" },
-      { href: "/inventory/ledger-check", label: "원장 점검", icon: "receipt" }, // 2026-10-11 대표 결정 D4d — 주 1회 장부 이상 확인(읽기 전용)
-      { href: "/inventory/activity", label: "변경 기록", icon: "receipt" },
+      { href: "/inventory/reconcile", label: "재고 대사", short: "재고대사", icon: "receipt" }, // 구매·판매·재고 확인(대사)
+      { href: "/inventory/ledger-check", label: "원장 점검", short: "원장점검", icon: "book" }, // 2026-10-11 대표 결정 D4d — 주 1회 장부 이상 확인(읽기 전용)
+      { href: "/inventory/activity", label: "재고 변경 기록", short: "재고기록", icon: "note" },
+      { href: "/production", label: "생산 일정", short: "생산일정", icon: "bars", exact: true, beta: true }, // 2026-09-28 생산 및 재고에서 뺌 — 현재 미사용, 재검토 전까지 BETA. exact: /production/request 등에서 켜지지 않게
+
+      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
+      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
+      { href: "/factory", label: "파도소리 재고", short: "파도소리", icon: "fish", adminOnly: true, beta: true },
     ],
   },
   {
     label: "마케팅",
     tools: [
-      { href: "/utm", label: "UTM 만들기", icon: "link" },
-      { href: "/qr", label: "QR코드/브랜드링크", icon: "qrcode" },
+      { href: "/utm", label: "UTM 만들기", short: "UTM", icon: "link" },
+      { href: "/qr", label: "QR코드/브랜드링크", short: "QR", icon: "qrcode" },
       {
         href: "/naver-ad", label: "광고", icon: "trend",
         menu: [
@@ -101,23 +110,23 @@ export const NAV: NavCategory[] = [
           { href: "/meta-ad/library", label: "메타 소재 라이브러리" },
         ],
       },
-      { href: "/crm", label: "CRM 메시지맵", icon: "megaphone" },
-      { href: "/instagram", label: "인스타 자동 DM", icon: "chat" },
+      { href: "/crm", label: "CRM 메시지맵", short: "CRM", icon: "megaphone" },
+      { href: "/instagram", label: "인스타 자동 DM", short: "인스타", icon: "chat" },
     ],
   },
   {
     label: "CS",
     tools: [
       {
-        href: "/cs", label: "CS 코치", icon: "chat",
+        href: "/cs", label: "CS 코치", short: "CS", icon: "chat",
         menu: [
           { href: "/cs", label: "코치" },
           { href: "/cs/manual", label: "매뉴얼" },
         ],
       },
-      { href: "/notice", label: "공지 작성기", icon: "pen" }, // 2026-10-13 상황 항목 → 씨몬스터 톤 공지문(고객·B2B)
+      { href: "/notice", label: "공지 작성기", short: "공지", icon: "pen" }, // 2026-10-13 상황 항목 → 씨몬스터 톤 공지문(고객·B2B)
       {
-        href: "/voc", label: "VOC 관리", icon: "megaphone",
+        href: "/voc", label: "VOC 관리", short: "VOC", icon: "megaphone",
         menu: [
           { href: "/voc", label: "VOC 처리" },
           { href: "/voc/stats", label: "통계" },
@@ -125,36 +134,25 @@ export const NAV: NavCategory[] = [
           { href: "/voc/manufacturer", label: "월간 VOC 리포트" },
         ],
       },
+      // 2026-10-14 C6: '베타 테스트 중' 분류 해체 — VOC 베타 두 개는 CS 로, BETA 배지로 상태 표시
+      { href: "/voc/insights", label: "VOC AI 인사이트", short: "인사이트", icon: "bulb", beta: true },
+      { href: "/voc/surveys", label: "VOC 설문응답(Tally)", short: "설문", icon: "note", beta: true },
     ],
   },
   {
     label: "기타",
     tools: [
-      { href: "/briefing", label: "종합 리포트", icon: "bulb" }, // 2026-09-30 모두 열람, 일일·주간·월간 탭(매출 업로드 뒤 담당자가 생성·발송)
-      { href: "/report", label: "커스텀 리포트", icon: "bars" },
-      { href: "/sales/margin-calc", label: "이익률 계산기", icon: "bulb" },
-      { href: "/meeting", label: "회의 정리", icon: "note" },
-    ],
-  },
-  {
-    label: "베타 테스트 중",
-    tools: [
-      // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변)
-      { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
-      { href: "/voc/insights", label: "VOC AI 인사이트", icon: "bulb" },
-      { href: "/voc/surveys", label: "VOC 설문응답(Tally)", icon: "chat" },
-      { href: "/production", label: "생산 일정", icon: "factory", exact: true }, // 2026-09-28 생산 및 재고에서 뺌 — 현재 미사용, 재검토 전까지 베타에만. exact: /production/request 등에서 켜지지 않게
-
-      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
-      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
-      { href: "/factory", label: "파도소리 재고", icon: "factory", adminOnly: true },
+      { href: "/briefing", label: "종합 리포트", short: "종합", icon: "bulb" }, // 2026-09-30 모두 열람, 일일·주간·월간 탭(매출 업로드 뒤 담당자가 생성·발송)
+      { href: "/report", label: "커스텀 리포트", short: "커스텀", icon: "bars" },
+      { href: "/sales/margin-calc", label: "이익률 계산기", short: "이익률", icon: "tag" },
+      { href: "/meeting", label: "회의 정리", short: "회의", icon: "note" },
     ],
   },
   {
     label: "관리자",
     adminOnly: true, // 관리자·현석에게만 노출
     tools: [
-      { href: "/b2b/users", label: "계정 관리", icon: "user" },
+      { href: "/b2b/users", label: "계정 관리", short: "계정", icon: "user" },
       {
         href: "/b2b/settings", label: "설정", icon: "gear",
         menu: [
@@ -162,10 +160,12 @@ export const NAV: NavCategory[] = [
           { href: "/b2b/settings/teams", label: "Teams 연동" },
           { href: "/b2b/settings/asana", label: "아사나 연동" },
           { href: "/b2b/settings/tally", label: "Tally 연동" },
-          { href: "/fulfill/settings", label: "온라인 발주" },
-          { href: "/b2b/settings", label: "기타", exact: true },
+          { href: "/fulfill/settings", label: "온라인 발주 설정" },
+          { href: "/b2b/settings", label: "일반 설정", exact: true },
         ],
       },
+      // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변). 2026-10-14 C6: 베타 분류 해체로 관리자 분류로 이동
+      { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", short: "베타", icon: "link" },
     ],
   },
 ];
@@ -193,7 +193,6 @@ const TITLE_EXTRA: { re: RegExp; title: string }[] = [
   { re: /^\/b2b\/companies\/[^/]+$/, title: "업체 상세 · B2B" },
   { re: /^\/inventory\/trade\/new$/, title: "입고/출고 기록" },
   { re: /^\/meta-ad\/settings$/, title: "판정 기준 설정 · 메타 광고" },
-  { re: /^\/inventory\/activity$/, title: "변경 기록 · 재고" },
   { re: /^\/b2b\/login$/, title: "로그인" },
   { re: /^\/factory\/login$/, title: "로그인 · 파도소리" },
   { re: /^\/factory$/, title: "재고 · 파도소리" },

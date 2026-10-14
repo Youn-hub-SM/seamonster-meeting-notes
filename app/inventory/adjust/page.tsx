@@ -168,7 +168,7 @@ export default function AdjustPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">엑셀 실사 · {preview.reqChannel} · {preview.reqDate} 마감 — 미리보기</span>
-              <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>

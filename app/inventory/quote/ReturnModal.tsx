@@ -1,6 +1,7 @@
 "use client";
 
 import { useEscClose } from "@/app/lib/use-esc";
+import IconButton from "@/app/components/IconButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 
@@ -265,7 +266,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: preview ? 760 : 520 }}>
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">제조사 반품 · {y}년 {mm}월</span>
-          <button className="b2b-modal-close" onClick={close} disabled={closeBlocked}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={close} disabled={closeBlocked}>✕</button>
         </div>
         <div className="b2b-modal-body">
           <div className="sm-tabs" style={{ marginBottom: 12 }}>
@@ -333,7 +334,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                         ))}
                       </tbody>
                     </table>
-                    {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>…외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
+                    {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
                   </div>
                 )}
                 {preview.errors.length > 0 && (
@@ -419,7 +420,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                               <td className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 700 }}>{r.qty.toLocaleString()}</td>
                               <td className="num b2b-money">{r.unit_amount ? won(r.unit_amount) : <span className="sm-faint">매입가</span>}</td>
                               <td style={{ textAlign: "right" }}>
-                                <button type="button" className="b2b-icon-btn is-danger" aria-label="삭제" onClick={() => remove(r.id)} disabled={outBusy || !!removingId}>{removingId === r.id ? "..." : "✕"}</button>
+                                <IconButton className="is-danger" label="삭제" onClick={() => remove(r.id)} disabled={outBusy || !!removingId}>{removingId === r.id ? "..." : "✕"}</IconButton>
                               </td>
                             </tr>
                           ))}

@@ -334,7 +334,7 @@ export default function InventoryMovePage() {
                 {isDup && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>같은 품목이 다른 줄에도 있습니다 — 한 줄로 합쳐 주세요.</span>}
               </div>
               {l.pid && (
-                <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 14, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 15, flexWrap: "wrap", alignItems: "center" }}>
                   {/* 칸 배지 = 현재고(오늘까지). 출고 예정(미래 발송일 선점)이 있으면 함께 — 옮길 수 있는 건 가용(현재고 − 출고 예정)까지 */}
                   {INV_CHANNELS.map((ch) => {
                     const p = poolOf(ch, l.pid);
@@ -373,7 +373,7 @@ export default function InventoryMovePage() {
               {allocMode && l.pid && (
                 <div style={{ marginTop: 10 }}>
                   {l.tgState === "loading" ? (
-                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 요청서를 불러오는 중…</p>
+                    <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>열린 {PR_PURPOSE_LABEL[allocPurpose]} 요청서를 불러오는 중...</p>
                   ) : l.tgState === "error" ? (
                     <p style={{ fontSize: 12, margin: 0, color: "var(--sm-danger)" }}>
                       요청서 목록을 불러오지 못했습니다 — 이대로는 옮길 수 없습니다.{" "}
@@ -402,7 +402,7 @@ export default function InventoryMovePage() {
                                     <input className="b2b-input b2b-money" type="number" min={0} step={0.01} value={v}
                                       onChange={(e) => { const m2 = new Map(l.alloc); m2.set(t.item_id, e.target.value); patchLine(l.key, { alloc: m2, allocTouched: true }); }}
                                       style={{ width: 100, textAlign: "right" }} placeholder="0" aria-label={`${t.req_no || "요청서"} 배정 수량`} />
-                                    {overRemain && <div style={{ fontSize: 11, color: "var(--sm-orange)" }}>잔여보다 많음</div>}
+                                    {overRemain && <div style={{ fontSize: 12, color: "var(--sm-orange)" }}>잔여보다 많음</div>}
                                   </td>
                                 </tr>
                               );
@@ -423,7 +423,7 @@ export default function InventoryMovePage() {
         })}
 
         <div className="sm-row" style={{ marginTop: 10 }}>
-          <button className="b2b-btn-secondary" style={{ fontSize: 13 }} onClick={() => { setLines((prev) => [...prev, newLine(nextKey)]); setNextKey((k) => k + 1); }}>+ 품목 추가</button>
+          <button className="b2b-btn-secondary" style={{ fontSize: 15 }} onClick={() => { setLines((prev) => [...prev, newLine(nextKey)]); setNextKey((k) => k + 1); }}>+ 품목 추가</button>
         </div>
 
         {allocMode && dir.to !== "프로모션" && activeLines.some((l) => l.targets.length > 0) && (
@@ -449,7 +449,7 @@ export default function InventoryMovePage() {
         </div>
 
         <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 14 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></>}</span>
+          <span style={{ fontSize: 15 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></>}</span>
           <button className="b2b-btn-primary" onClick={submit} disabled={busy || activeLines.length === 0}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${activeLines.length}개 품목)` : ""}`}</button>
         </div>
       </section>

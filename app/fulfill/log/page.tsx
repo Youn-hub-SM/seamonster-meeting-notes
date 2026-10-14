@@ -500,7 +500,7 @@ export default function DeliveryLogPage() {
           <div className="b2b-modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">직접수정 추가 <span className="sm-faint" style={{ fontSize: 15, fontWeight: 400 }}>· {entryFor}</span></h2>
-              <button className="b2b-modal-close" onClick={() => setEntryFor(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setEntryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body sm-col" style={{ gap: 12 }}>
               <div className="sm-row" style={{ gap: 16, flexWrap: "wrap" }}>

@@ -439,7 +439,7 @@ export default function NaverAdPage() {
           {mode === "keyword" && selCamp.length > 0 && (
             <div style={{ border: "1px solid var(--sm-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
               <div className="sm-row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)" }}>광고그룹 {loadingGrp ? "…" : `(${adgroups.length})`}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)" }}>광고그룹 {loadingGrp ? "..." : `(${adgroups.length})`}</span>
                 <div className="sm-row" style={{ gap: 10 }}>
                   <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => setSelGrp(adgroups.map((g) => g.nccAdgroupId))}>전체 선택</button>
                   {selGrp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => setSelGrp([])}>해제</button>}
@@ -534,9 +534,9 @@ export default function NaverAdPage() {
                             <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(st?.salesAmt)}</td>
                             <td className="num b2b-money">{won(st?.cpc)}</td>
                             {(() => { const m = metric(r); const loadingP = convBasis === "purchase" && purchaseLoading; return (<>
-                              <td className="num b2b-money">{loadingP ? "…" : num(m.conv)}</td>
-                              <td className="num b2b-money">{loadingP ? "…" : won(m.convAmt)}</td>
-                              <td className="num" style={roasColor(r)}>{loadingP ? "…" : ((st?.salesAmt ?? 0) > 0 ? `${Math.round(m.roas)}%` : "-")}</td>
+                              <td className="num b2b-money">{loadingP ? "..." : num(m.conv)}</td>
+                              <td className="num b2b-money">{loadingP ? "..." : won(m.convAmt)}</td>
+                              <td className="num" style={roasColor(r)}>{loadingP ? "..." : ((st?.salesAmt ?? 0) > 0 ? `${Math.round(m.roas)}%` : "-")}</td>
                             </>); })()}
                             <td className="num">{st?.avgRnk != null ? st.avgRnk.toFixed(1) : "-"}</td>
                             {mode === "keyword" && <td className="num" style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>{r.adRel ?? "-"}/{r.expClick ?? "-"}</td>}

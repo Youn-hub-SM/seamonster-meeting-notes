@@ -71,7 +71,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">묶음 구성 — {parent.name}{parent.sku ? ` (${parent.sku})` : ""}</h2>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>세트 SKU는 구성품으로 분해되어 재고에 반영됩니다.</p>

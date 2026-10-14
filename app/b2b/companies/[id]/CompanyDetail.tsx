@@ -120,7 +120,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
               </thead>
               <tbody>
                 {data.top_products.map((p) => (
-                  <tr key={p.product_name} style={{ cursor: "default" }}>
+                  <tr key={p.product_name}>
                     <td><strong>{p.product_name}</strong></td>
                     <td className="num">{formatQty(p.qty)}</td>
                     <td className="num">{p.orders}</td>
@@ -158,7 +158,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
               </thead>
               <tbody>
                 {data.orders.map((o) => (
-                  <tr key={o.id} style={{ cursor: "default" }}>
+                  <tr key={o.id}>
                     <td style={{ padding: 0 }}>
                       <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "block", padding: "12px 14px" }}>
                         <strong>{o.order_no}</strong>

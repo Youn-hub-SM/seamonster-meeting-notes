@@ -82,7 +82,7 @@ export default function TallySettingsPage() {
             <button className="b2b-btn-secondary" onClick={loadForms} disabled={busy === "forms" || !hasApiKey}>{busy === "forms" ? "불러오는 중..." : "폼 불러오기"}</button>
             {forms.length > 0 && (
               <select className="b2b-input" value={formId} onChange={(e) => selectForm(e.target.value)} style={{ flex: 1, minWidth: 240 }}>
-                <option value="">폼 선택…</option>
+                <option value="">폼 선택...</option>
                 {forms.map((f) => <option key={f.id} value={f.id}>{f.name} ({f.id})</option>)}
               </select>
             )}

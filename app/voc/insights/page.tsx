@@ -46,7 +46,7 @@ export default function VocInsightsPage() {
       {error && <div className="b2b-error">{error}</div>}
 
       {loading ? (
-        <div className="b2b-card"><div className="b2b-loading">클레임을 분석하는 중입니다… (최대 1분)</div></div>
+        <div className="b2b-card"><div className="b2b-loading">클레임을 분석하는 중입니다... (최대 1분)</div></div>
       ) : !insight ? (
         <div className="b2b-card">
           <div className="b2b-empty">아직 분석 결과가 없습니다</div>

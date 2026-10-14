@@ -108,7 +108,7 @@ export default function ProductHistoryPage() {
     <>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">상품 마스터 변경 기록</h1>
+          <h1 className="b2b-page-title">상품 변경 기록</h1>
         </div>
         <div className="b2b-page-actions">
           <Link className="b2b-btn-secondary" href="/b2b/products">← 상품 목록</Link>

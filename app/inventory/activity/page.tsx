@@ -97,7 +97,7 @@ export default function ActivityPage() {
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div><h1 className="b2b-page-title">변경 기록</h1></div>
+        <div><h1 className="b2b-page-title">재고 변경 기록</h1></div>
         <div className="b2b-page-actions"><button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button></div>
       </header>
 

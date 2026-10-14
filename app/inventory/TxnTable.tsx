@@ -18,7 +18,7 @@ export const isMoveTxn = (r: { source?: string | null; partner?: string | null; 
 //  문구를 닫을 때까지 남는 경고 배너로 보인다(적어 둘 코드가 들어 있다, S9). 실패로 다루면 '다시 시도'로 읽혀 404 를 받거나 따로 보정해 이중 반영된다.
 export type LedgerDeleteResult = { ok: boolean; notice?: string; warn?: boolean };
 type LedgerJ = { ok?: boolean; error?: string; code?: string; confirm?: string; notice?: string; deleted?: boolean; partial?: boolean } | null;
-// 서버 표식(deleted·partial)을 우선 보고, 표식이 없는 응답은 문구 머리로 본다 — '재고는 원복됐지만 …' 은 txn·orders DELETE 가
+// 서버 표식(deleted·partial)을 우선 보고, 표식이 없는 응답은 문구 머리로 본다 — '재고는 원복됐지만 ...' 은 txn·orders DELETE 가
 //  행을 지운 뒤에만 내는 문구다(FULFILL_MARK_FAIL·미반영분 출고 취소 실패·135 폴백 키/이력 삭제 실패·[재고 차감 기록] 목록 재오픈 실패).
 const isPartial = (j: LedgerJ): boolean =>
   !!j && (j.deleted === true || j.partial === true || (!j.code && /^재고는 원복됐지만/.test(j.error || "")));
@@ -137,7 +137,7 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
                         autoFocus type="number" min={0} className="b2b-input" value={editVal}
                         onChange={(e) => setEditVal(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") saveUnit(t); if (e.key === "Escape") setEditId(null); }}
-                        style={{ width: 90, padding: "3px 8px", fontSize: 13, textAlign: "right" }}
+                        style={{ width: 90, padding: "3px 8px", fontSize: 15, textAlign: "right" }}
                       />
                       <button className="b2b-link-btn" onClick={() => saveUnit(t)} disabled={saving}>저장</button>
                       <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>취소</button>

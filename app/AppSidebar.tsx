@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { NAV, sortByNavOrder, navLabelOf, navHrefActive, type NavTool, type NavMenuItem } from "./nav";
+import { NAV, sortByNavOrder, navLabelOf, navHrefActive, railLabelOf, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 function itemActive(m: NavMenuItem, toolHref: string, pathname: string) {
@@ -28,15 +28,10 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   // 고정 끄기(collapsed) 상태에서 마우스 오버 시 임시 펼침. 고정을 끄는 순간에도
   //  포인터가 안에 있으므로 바로 레일로 줄지 않고, 마우스가 떠날 때 접힌다.
   const [hovering, setHovering] = useState(false);
-  const rail = !!collapsed && !hovering; // 아이콘만 보이는 레일 렌더 여부(호버 펼침 중엔 전체 메뉴 렌더)
+  const rail = !!collapsed && !hovering; // 아이콘+짧은 라벨만 보이는 레일 렌더 여부(호버 펼침 중엔 전체 메뉴 렌더)
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
-  // '베타 테스트 중' 분류 — 기본 접힘(대표 지시 2026-08-23). 펼침 상태는 즐겨찾기와 같은 방식으로 기억.
-  const [betaOpen, setBetaOpen] = useState(false);
-  useEffect(() => { try { setBetaOpen(localStorage.getItem("sb_beta_open") === "1"); } catch {} }, []);
-  function toggleBetaOpen() {
-    setBetaOpen((v) => { const next = !v; try { localStorage.setItem("sb_beta_open", next ? "1" : "0"); } catch {} return next; });
-  }
+  // '베타 테스트 중' 접이식 분류는 2026-10-14 C6 으로 해체 — 베타 항목은 각 분류 안에 BETA 배지(nav.ts beta)로 표시.
   // 즐겨찾기 아코디언 — 기본 펼침, 상태는 사이드바 접기(sb_collapsed)와 같은 방식으로 기억
   const [favOpen, setFavOpen] = useState(true);
   useEffect(() => { try { setFavOpen(localStorage.getItem("sb_fav_open") !== "0"); } catch {} }, []);
@@ -104,13 +99,14 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
       if (j?.ok) setFavorites(j.favorites || []);
     } catch { /* 실패 시 다음 로드에서 정정 */ }
   }
+  // 대상 크기 24px 이상(WCAG 2.5.8) — 모양은 .app-sb-favstar(globals.css)
   const FavToggle = ({ href, label }: { href: string; label: string }) => (
-    <button type="button" className="app-sb-favstar" aria-label={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"} title={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(href, label); }}
-      style={{ marginLeft: "auto", flex: "0 0 auto", background: "none", border: "none", cursor: "pointer", color: isFav(href) ? "var(--sm-orange)" : "var(--sm-text-light)", fontSize: 16, lineHeight: 1, padding: "0 6px" }}>
+    <button type="button" className={`app-sb-favstar ${isFav(href) ? "is-on" : ""}`} aria-label={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"} title={isFav(href) ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFav(href, label); }}>
       {isFav(href) ? "✕" : "＋"}
     </button>
   );
+  const Beta = () => <span className="app-sb-beta" title="베타 기능">BETA</span>;
 
   async function handleLogout() {
     await fetch("/api/b2b/auth", { method: "DELETE" });
@@ -120,10 +116,15 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
   function renderTool(t: NavTool) {
     const active = toolActive(t, pathname);
-    // 레일(아이콘만): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 라벨은 툴팁.
+    // 레일(아이콘 + 3~4자 짧은 라벨 — 아이콘만 두지 않는다, 2026-10-14 C2): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 전체 이름은 툴팁.
     if (rail) {
       const external = /^https?:\/\//.test(t.href);
-      const inner = <span className="app-sb-emoji"><Icon name={t.icon} /></span>;
+      const inner = (
+        <>
+          <span className="app-sb-emoji"><Icon name={t.icon} /></span>
+          <span className="app-sb-short" aria-hidden="true">{railLabelOf(t)}</span>
+        </>
+      );
       return (
         <div key={t.href} className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
           {external ? (
@@ -145,18 +146,21 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             <Link href={t.href} className="app-sb-tool" aria-expanded={expanded} onClick={() => { if (!expanded) toggleTool(t.href); onNavigate?.(); }}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
+              {t.beta && <Beta />}
             </Link>
           ) : /^https?:\/\//.test(t.href) ? (
             // 외부 링크(가이드 등)는 새 탭으로
             <a href={t.href} target="_blank" rel="noreferrer" className="app-sb-tool" onClick={onNavigate}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
-              <span aria-hidden="true" style={{ marginLeft: "auto", fontSize: 12, color: "var(--sm-text-light)" }}>↗</span>
+              {t.beta && <Beta />}
+              <span className="app-sb-ext" aria-hidden="true">↗</span>
             </a>
           ) : (
             <Link href={t.href} className="app-sb-tool" onClick={onNavigate}>
               <span className="app-sb-emoji"><Icon name={t.icon} /></span>
               <span className="app-sb-tool-label">{t.label}</span>
+              {t.beta && <Beta />}
             </Link>
           )}
           {hasMenu && (
@@ -177,8 +181,8 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
         {expanded && (
           <div className="app-sb-menu">
             {menu.map((m) => editFav ? (
-              <div key={m.href} className="app-sb-menu-row" style={{ display: "flex", alignItems: "center" }}>
-                <Link href={m.href} className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`} style={{ flex: 1 }} onClick={onNavigate}>{m.label}</Link>
+              <div key={m.href} className="app-sb-menu-row">
+                <Link href={m.href} className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`} onClick={onNavigate}>{m.label}{m.beta && <Beta />}</Link>
                 <FavToggle href={m.href} label={`${t.label} · ${m.label}`} />
               </div>
             ) : (
@@ -188,7 +192,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
                 className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`}
                 onClick={onNavigate}
               >
-                {m.label}
+                {m.label}{m.beta && <Beta />}
               </Link>
             ))}
           </div>
@@ -225,12 +229,11 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
         {!rail && userName && !isFactoryUser && (
           <div className="app-sb-group app-sb-fav">
-            <div className="app-sb-cat" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="app-sb-cat app-sb-cat-row">
               <button type="button" className="app-sb-cat-toggle" onClick={toggleFavOpen} aria-expanded={favOpen}>
                 즐겨찾는 메뉴
               </button>
-              <button type="button" onClick={() => { setEditFav((v) => !v); if (!favOpen) toggleFavOpen(); }}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, padding: 0, color: editFav ? "var(--sm-orange)" : "var(--sm-text-light)" }}>
+              <button type="button" className={`app-sb-fav-edit ${editFav ? "is-on" : ""}`} onClick={() => { setEditFav((v) => !v); if (!favOpen) toggleFavOpen(); }}>
                 {editFav ? "완료" : "편집"}
               </button>
               <button
@@ -264,31 +267,12 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               .filter((t) => !t.adminOnly || isAdmin)
               .filter((t) => !isFactoryUser || t.href.startsWith("/factory"));
             if (tools.length === 0) return null;
-            // '베타 테스트 중'은 접이식(기본 접힘) — 현재 페이지가 이 분류 안이면 접혀 있어도 펼쳐 보인다
-            const collapsible = cat.label === "베타 테스트 중";
-            const catActive = collapsible && tools.some((t) => toolActive(t, pathname));
-            const showTools = !collapsible || betaOpen || catActive;
             return (
               <div key={cat.label} className="app-sb-group">
-                {collapsible ? (
-                  <div className="app-sb-cat" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <button type="button" className="app-sb-cat-toggle" onClick={toggleBetaOpen} aria-expanded={showTools}>{cat.label}</button>
-                    <button
-                      type="button"
-                      className={`app-sb-chev ${showTools ? "is-open" : ""}`}
-                      aria-label={showTools ? `${cat.label} 접기` : `${cat.label} 펼치기`}
-                      aria-expanded={showTools}
-                      onClick={toggleBetaOpen}
-                    >
-                      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
-                        <path d="M5.5 3.5L10 8l-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : cat.label ? (
+                {cat.label ? (
                   <div className="app-sb-cat">{cat.label}</div>
                 ) : null /* 라벨 없는 최상단 그룹(사용 가이드·업데이트 노트)은 제목 없이 툴만 */}
-                {showTools && tools.map(renderTool)}
+                {tools.map(renderTool)}
               </div>
             );
           })}

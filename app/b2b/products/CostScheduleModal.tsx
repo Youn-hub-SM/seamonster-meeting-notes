@@ -1,6 +1,7 @@
 "use client";
 
 import { useEscClose } from "@/app/lib/use-esc";
+import IconButton from "@/app/components/IconButton";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 // 원가 변경 예약 — "n월 n일부터 이 원가". 인상일에 맞춰 사람이 고치는 걸 놓치지 않게 미리 걸어둔다.
@@ -107,9 +108,9 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">
             원가 변경 예약 — {product.name}
-            <span className="sm-faint" style={{ marginLeft: 10, fontSize: 13, fontWeight: 400 }}>현재 {won(product.cost_price)}원</span>
+            <span className="sm-faint" style={{ marginLeft: 10, fontSize: 12, fontWeight: 400 }}>현재 {won(product.cost_price)}원</span>
           </span>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
           {pendingMigration ? (
@@ -149,7 +150,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
               )}
 
               <div className="sm-row" style={{ gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14 }}>
+                <span style={{ fontSize: 15 }}>
                   {won(product.cost_price)}원 → <strong>{won(nextCost)}원</strong>
                 </span>
                 {nextCost > 0 && diff !== 0 && (
@@ -165,7 +166,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
 
               <div style={{ marginTop: 18, borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
                 <div className="sm-between" style={{ marginBottom: 6 }}>
-                  <strong style={{ fontSize: 13 }}>예약 내역</strong>
+                  <strong style={{ fontSize: 15 }}>예약 내역</strong>
                   {dueNow && (
                     <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={applyNow} disabled={saving}>
                       지금 반영
@@ -176,7 +177,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                   : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다.</p>
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
-                      <table className="b2b-table" style={{ fontSize: 13 }}>
+                      <table className="b2b-table" style={{ fontSize: 15 }}>
                         <thead><tr><th>적용일</th><th className="num">원가</th><th>상태</th><th>메모</th><th /></tr></thead>
                         <tbody>
                           {rows.map((r) => (
@@ -191,7 +192,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                               <td className="sm-faint" style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.memo || ""}>{r.memo || "-"}</td>
                               <td style={{ textAlign: "right" }}>
                                 {!r.applied_at && (
-                                  <button type="button" className="b2b-icon-btn is-danger" aria-label="예약 취소" onClick={() => cancel(r.id)}>✕</button>
+                                  <IconButton className="is-danger" label="예약 취소" onClick={() => cancel(r.id)}>✕</IconButton>
                                 )}
                               </td>
                             </tr>

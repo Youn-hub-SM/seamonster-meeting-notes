@@ -32,6 +32,7 @@ import {
 import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import { computeOrderMargin, seasonForDate, SEASON_MONTHS } from "@/app/lib/b2b-margin";
 import { Combobox } from "./Combobox";
+import IconButton from "@/app/components/IconButton";
 
 type Mode = "create" | "edit";
 
@@ -975,7 +976,7 @@ export default function OrderForm({
           {/* 대량 발주(선결제) — 체크하면 발송 선점 출고가 '도매 대량' 칸에서 빠진다(115).
               도매 일반 주문이 이 물량을 가져가지 못하게 칸을 나눈 것이라, 판단은 담당자가 발주 단위로 한다. */}
           <div className="b2b-field" style={{ marginTop: 12 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, cursor: "pointer" }}>
               <input
                 type="checkbox"
                 className="b2b-checkbox"
@@ -1307,14 +1308,9 @@ export default function OrderForm({
                         {formatMoney(qty * price)}
                       </td>
                       <td className="b2b-item-remove">
-                        <button
-                          type="button"
-                          className="b2b-icon-btn is-danger"
-                          onClick={() => removeItemRow(idx)}
-                          title="상품 삭제"
-                        >
+                        <IconButton className="is-danger" label="상품 삭제" onClick={() => removeItemRow(idx)}>
                           ✕
-                        </button>
+                        </IconButton>
                       </td>
                     </tr>
                   );
@@ -1505,7 +1501,7 @@ export default function OrderForm({
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">최근 발주 복제</h2>
-              <button className="b2b-modal-close" onClick={() => setClonePrompt(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setClonePrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div style={{ fontSize: 12, padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8 }}>

@@ -102,11 +102,11 @@ export default function VocSurveysPage() {
         <div className="b2b-empty">아직 수집된 응답이 없습니다.</div>
       ) : view === "목록" ? (
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          <table className="b2b-table is-clickable">
             <thead><tr><th>제출일</th><th>응답자</th><th>폼</th><th>응답 요약</th><th className="num">사진</th></tr></thead>
             <tbody>
               {shown.map((r) => (
-                <tr key={r.id} onClick={() => setDetail(r)} style={{ cursor: "pointer" }}>
+                <tr key={r.id} onClick={() => setDetail(r)}>
                   <td style={{ whiteSpace: "nowrap" }}>{(r.submitted_at || r.created_at)?.slice(0, 10)}</td>
                   <td>{r.respondent || "-"}</td>
                   <td>{r.form_name || r.form_id || "-"}</td>
@@ -172,7 +172,7 @@ export default function VocSurveysPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
             <div className="b2b-modal-head">
               <span className="b2b-modal-title">설문 응답 · {(detail.submitted_at || detail.created_at)?.slice(0, 10)}</span>
-              <button className="b2b-modal-close" onClick={() => setDetail(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setDetail(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>{detail.form_name || detail.form_id || "설문"} · 응답자 {detail.respondent || "미상"}</div>

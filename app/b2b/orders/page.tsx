@@ -43,6 +43,7 @@ import { Company } from "@/app/lib/b2b-types";
 import CalendarView from "./CalendarView";
 import WeeklyView from "./WeeklyView";
 import ProductionView from "./ProductionView";
+import IconButton from "@/app/components/IconButton";
 import { pingActivityFeed } from "../ActivityFeed";
 import { matchKoQuery } from "@/app/lib/hangul";
 
@@ -1300,7 +1301,7 @@ export default function OrdersListPage() {
               </div>
             )}
             <div className="b2b-table-wrap b2b-orders-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-clickable">
               <thead>
                 <tr>
                   <th style={{ width: 44, textAlign: "center" }}>
@@ -1674,7 +1675,7 @@ export default function OrdersListPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">발송일 등록 — {shipPrompt.label}</h2>
-              <button className="b2b-modal-close" onClick={() => setShipPrompt(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setShipPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>
@@ -1691,7 +1692,7 @@ export default function OrdersListPage() {
                     </div>
                   )}
                   {shipRows.length === 0 && shipInitialCount > 0 && (
-                    <div className="sm-warn" style={{ fontSize: 13 }}>
+                    <div className="sm-warn" style={{ fontSize: 15 }}>
                       일정을 모두 지웠습니다. 이대로 저장하면 발송 일정이 전부 삭제되고 선점 재고가 원복됩니다.
                     </div>
                   )}
@@ -1722,13 +1723,13 @@ export default function OrdersListPage() {
                       {(() => {
                         const shippedRow = r.status === "발송완료" || !!r.shipped_at;
                         return (
-                          <button type="button" className="b2b-icon-btn is-danger" aria-label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
+                          <IconButton className="is-danger" label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
                             disabled={shippedRow}
                             title={shippedRow ? "발송된 차수는 지울 수 없습니다 — 목록에서 취소로 바꾸세요" : undefined}
                             onClick={() => {
                               if (r.status === "취소" && !window.confirm("취소 차수를 지우면 그 수량이 다시 발주 수량에 들어갑니다(재고 차감·매출·청구에 포함). 지울까요?")) return;
                               setShipRows((p) => p.filter((_, j) => j !== i));
-                            }}>✕</button>
+                            }}>✕</IconButton>
                         );
                       })()}
                       </div>
@@ -1800,7 +1801,7 @@ export default function OrdersListPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">발송완료 — 발송일·송장번호 입력</h2>
-              <button className="b2b-modal-close" onClick={() => setTrackingPrompt(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setTrackingPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
@@ -1896,7 +1897,7 @@ export default function OrdersListPage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">발송된 발주 취소</h2>
-              <button className="b2b-modal-close" onClick={() => answerReturn(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => answerReturn(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
@@ -2072,7 +2073,7 @@ function ExportPickModal({
               박스 수는 저장되어 송장 매수와 이익률 배송비의 기준이 됩니다.
             </div>
           </div>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
 
         <div className="b2b-modal-body sm-col" style={{ gap: 14 }}>

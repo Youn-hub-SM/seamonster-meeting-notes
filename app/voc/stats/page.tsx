@@ -17,7 +17,7 @@ type Unit = "일별" | "주별" | "월별";
 // 해당 날짜가 속한 주의 월요일(YYYY-MM-DD). 주별 집계 키.
 function weekStart(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  const dow = (d.getDay() + 6) % 7; // 월=0 … 일=6
+  const dow = (d.getDay() + 6) % 7; // 월=0 ... 일=6
   d.setDate(d.getDate() - dow);
   return d.toISOString().slice(0, 10);
 }

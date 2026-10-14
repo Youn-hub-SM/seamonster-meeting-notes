@@ -62,7 +62,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <div className="b2b-modal-head">
           <h2 className="b2b-modal-title">프로모션 관리</h2>
-          <button className="b2b-modal-close" onClick={onClose}>✕</button>
+          <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>행사 기간의 판매를 하루 출고 평균에서 뺍니다.</p>

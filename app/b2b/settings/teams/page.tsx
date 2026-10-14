@@ -263,7 +263,7 @@ export default function TeamsSettingsPage() {
               placeholder={teamsHasInquiry ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
           </label>
           <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <label className="sm-row" style={{ gap: 6, fontSize: 13, cursor: "pointer" }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 15, cursor: "pointer" }}>
               <input type="checkbox" className="b2b-checkbox" checked={teamsEnabled}
                 onChange={(e) => { setTeamsEnabled(e.target.checked); saveTeams(e.target.checked); }} /> Teams로 발송 켜기
             </label>
@@ -271,7 +271,7 @@ export default function TeamsSettingsPage() {
             <button className="b2b-btn-secondary" onClick={testTeams} disabled={teamsBusy || !teamsHasUrl} title={teamsHasUrl ? "" : "URL을 먼저 저장하세요"}>테스트 발송</button>
           </div>
           {teamsMsg && (
-            <div className={teamsMsg.ok ? "sm-success" : "b2b-error"} style={{ fontSize: 13 }}>{teamsMsg.text}</div>
+            <div className={teamsMsg.ok ? "sm-success" : "b2b-error"} style={{ fontSize: 15 }}>{teamsMsg.text}</div>
           )}
         </div>
       </section>
@@ -287,11 +287,11 @@ export default function TeamsSettingsPage() {
         </div>
         {dcfg && (
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 14, marginBottom: 12, display: "grid", gap: 12 }}>
-            <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            <label className="sm-row" style={{ gap: 7, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
               <input type="checkbox" className="b2b-checkbox" checked={dcfg.enabled} onChange={(e) => setDcfg({ ...dcfg, enabled: e.target.checked })} /> 자동 발송 사용
             </label>
             <div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>발송 시각 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 11 }}>(한국시간 · 5분 단위 · 최대 6개)</span></div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>발송 시각 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>(한국시간 · 5분 단위 · 최대 6개)</span></div>
               <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 {dtimes.map((t) => (
                   <span key={t} className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -314,21 +314,21 @@ export default function TeamsSettingsPage() {
                   }}>+ 추가</button>
               </div>
             </div>
-            <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>전후 기간
+            <label className="sm-row" style={{ gap: 6, fontSize: 15 }}>전후 기간
               <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
-              <span className="sm-faint" style={{ fontSize: 11 }}>계산서·입금은 기간 무관</span>
+              <span className="sm-faint" style={{ fontSize: 12 }}>계산서·입금은 기간 무관</span>
             </label>
             <div>
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
                 {([["ship", "발송 예정"], ["unscheduled", "발송일정 미등록"], ["invoice", "계산서 미발행"], ["payment", "입금 대기"], ["prod", "생산 요청"]] as const).map(([k, l]) => (
-                  <label key={k} className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer" }}>
+                  <label key={k} className="sm-row" style={{ gap: 5, fontSize: 15, cursor: "pointer" }}>
                     <input type="checkbox" className="b2b-checkbox" checked={!!dcfg.sections[k]} onChange={(e) => setDcfg({ ...dcfg, sections: { ...dcfg.sections, [k]: e.target.checked } })} /> {l}
                   </label>
                 ))}
               </div>
             </div>
-            <label style={{ fontSize: 13 }}>제목
+            <label style={{ fontSize: 15 }}>제목
               <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="씨몬스터 B2B 오늘의 할 일" />
             </label>
             <div><button className="b2b-btn-primary" onClick={saveDigestCfg} disabled={dcfgSaving}>{dcfgSaving ? "저장 중..." : "설정 저장"}</button></div>

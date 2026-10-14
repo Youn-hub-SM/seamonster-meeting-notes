@@ -157,7 +157,7 @@ export default function QrPage() {
       {qrFor && (
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div className="b2b-modal-head"><h2 className="b2b-modal-title">{qrFor.title || qrFor.code}</h2><button className="b2b-modal-close" onClick={() => setQrFor(null)}>✕</button></div>
+            <div className="b2b-modal-head"><h2 className="b2b-modal-title">{qrFor.title || qrFor.code}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={() => setQrFor(null)}>✕</button></div>
             <div className="b2b-modal-body" style={{ textAlign: "center" }}>
               <img src={qrSrc(shortUrl(qrFor.code), 280)} alt="QR" width={260} height={260} style={{ border: "1px solid var(--sm-border)", borderRadius: 8 }} />
               <div className="sm-row" style={{ gap: 6, justifyContent: "center", marginTop: 10 }}>
@@ -199,7 +199,7 @@ function EditModal({ link, onClose, onSaved }: { link: Link; onClose: () => void
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">링크 수정</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">링크 수정</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <div className="b2b-field"><label className="b2b-field-label">목적지 URL</label><input className="b2b-input" value={target} onChange={(e) => setTarget(e.target.value)} /></div>
           <div className="b2b-field"><label className="b2b-field-label">제목</label><input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
@@ -245,7 +245,7 @@ function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">스캔 통계 — {link.title || link.code}</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">스캔 통계 — {link.title || link.code}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <p style={{ marginBottom: 10 }}>누적 스캔 <strong style={{ color: "var(--sm-orange)" }}>{link.scan_count.toLocaleString()}</strong>회 {data && data.sampleSize < link.scan_count && <span className="sm-faint" style={{ fontSize: 12 }}>(아래 분석은 최근 {data.sampleSize.toLocaleString()}건 기준)</span>}</p>
           {loading ? <div className="b2b-loading">불러오는 중...</div> : !data || data.sampleSize === 0 ? <div className="sm-faint" style={{ fontSize: 15, padding: "10px 0" }}>아직 스캔 기록이 없습니다.</div> : (

@@ -102,6 +102,37 @@
 
 ---
 
+## 2026-10-14 어포던스 1차 결정 (대표 확정) — 아래 §1·§3 과 어긋나면 이 절이 우선
+
+근거·배경: `docs/ux-affordance-plan.md`.
+
+**색 — 유채색 3개 + 회색만**
+- 주황 `--sm-orange` #F15A30 = **채움 전용**(1차 버튼·활성 탭·현재 위치 막대·로고). 글자로 쓰는 주황은 `--sm-orange-text` #C8431C(흰 바탕 4.9:1)뿐 — 호버 글자·필수 `*`. 링크·강조 숫자·아이콘·행 호버에 주황 금지.
+- 빨강 `--sm-danger` = 오류·삭제·진짜 이상치(품절·재고 마이너스·실패). 초록 `--sm-success` = 완료·입금·발송완료.
+- **노랑(`--sm-warning*`)·파랑(`--sm-info*`)은 폐지** — 토큰 이름은 lib 색 지도·배너 호환용으로 남겼고 값은 회색 세트(`text-mid / bg-subtle / border`)의 별칭이다. 대기·진행 중·일부·부족·정보·베타·AI 는 **회색 배지 + 글자**로만 구분한다. 색 지도를 고칠 때 danger·success 만 유채색이라는 전제로 판단할 것.
+- 중립: `--sm-border` #E3E3E3(기본 경계) · `--sm-border-strong` #C9C9C9(입력·select·2차 버튼·칩 테두리) · `--sm-border-light` #EEEEEE(차트 격자·캘린더 칸). 12px 보조 글 색은 `--sm-text-mid`(`--sm-text-light` 는 15px 이상에서만).
+- 호버는 `--sm-bg-subtle`, 선택된 행·켜진 칩·키보드로 고른 항목은 `--sm-orange-light` + 검정 글자(= 지금 다루는 것). `.sm-warn` 배너 = 회색 바탕 + 검정 글자 + 왼쪽 3px 검정 막대.
+
+**글자 — Pretendard, 5단·3단·4값·3값**
+- 크기 `--sm-fs-xs` 12(보조) · `base` 15(본문) · `lg` 17(카드 제목·강조) · `xl` 21(섹션 제목) · `2xl` 28(페이지 제목). KPI 값만 예외(28, 압축 23). `--sm-fs-sm`·`--sm-fs-md` 는 base 의 별칭 — 새 코드에서 쓰지 않는다.
+- 굵기 400 본문 · 600 라벨·버튼·강조 · 700 제목. 800 은 KPI 값만.
+- 줄 간격 `--sm-lh-body` 1.6 · `ui` 1.5(표·버튼·목록·배지) · `heading` 1.3 · `kpi` 1.2. 자간 `--sm-ls-heading` -0.01em(17px 이상 제목) · `--sm-ls-label` 0.02em(12px 분류 라벨), 본문 0.
+- `body` 는 `word-break: keep-all; overflow-wrap: anywhere`. 숫자는 `.num`·`.b2b-money`·`.b2b-stat-card-value`·`.b2b-status-pill` 에 `tabular-nums` 기본.
+- 표: 머리글 12px/600 `--sm-text-mid` · 셀 15/400 · 행 패딩 12(≈44px). 밀집 표(`.inv-table` 등)만 자체 패딩.
+
+**눌리는 것이 눌리게**
+- 공용 `:focus-visible` 링(주황 2px, offset 2px)이 button·a·input·select·textarea·[role=button]·.sm-tab·summary 에 붙는다. 입력칸에 `outline:none` 을 쓰지 않는다.
+- `.b2b-btn-primary` 글자 16px/700 · `.b2b-btn-secondary` 흰 + strong 테두리 · `.b2b-btn-danger` 흰 + 빨강 1px 테두리 + 빨강 글자(2차와 같은 틀). 화면당 1차 버튼 하나.
+- `.sm-link`·`.b2b-link-btn` = 검정 + 밑줄(offset 2px), 호버 `--sm-orange-text`.
+- `.b2b-status-select` = strong 테두리 + ▾ 화살표(공용이 `background-image !important` 로 지킴) — 배지(`.b2b-status-pill`)와 모양이 다르다. 인라인 `background` 단축을 써도 화살표는 남는다.
+- 행 클릭이 있는 표만 `.b2b-table.is-clickable`(손 커서 + 회색 호버). 전역 `tbody tr { cursor:pointer }` 는 없다 — 빠뜨리면 눌리는데 손 커서가 없다.
+- 아이콘 버튼은 `app/components/IconButton`(`label` 필수 = aria-label·title, 32×32). `.b2b-modal-close` 32×32 + `aria-label="닫기"`. 텍스트 버튼 최소 높이 24px.
+- 사이드바 현재 위치 = 왼쪽 3px 주황 막대(inset shadow) + 연주황 바탕 + 검정 700 글자. 접힌 레일은 아이콘 + 3~4자 라벨(`NavTool.short`). 베타 기능은 분류 안에 회색 'BETA' 배지(`beta: true`).
+
+**함정 추가**
+- 별칭 토큰(`--sm-warning: var(--sm-text-mid)`)은 `scripts/sync-design-tokens.mjs` 가 실제 값으로 풀어 정적 HTML 에 옮긴다. 정적 HTML 에 `var(--sm-*)` 가 보이면 스크립트가 깨진 것.
+- `/subscription` Chart.js 의 노랑·파랑 계열은 회색이 됐다 — 두 계열을 같이 그리는 차트는 선 모양·라벨로 갈라야 한다.
+
 ## 3. 토큰
 
 ### 색 — 시맨틱은 텍스트 / -bg / -border 3종 세트

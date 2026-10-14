@@ -148,7 +148,7 @@ export default function ScanUploadPage() {
                 {f.error ? "" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${f.invoiceCount.toLocaleString()}건 · 라인 ${f.itemCount.toLocaleString()}개${f.excludedNothing ? ` · NOTHING ${f.excludedNothing} 제외` : ""}`}
               </div>
             ))}
-            {result.unmatched.length > 0 && <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>미등록 단품코드 {result.unmatched.length}개: {result.unmatched.slice(0, 15).join(", ")}{result.unmatched.length > 15 ? " …" : ""} — <Link href="/b2b/products">상품마스터</Link>에 없으면 스캔 집계에 빨간 줄로 표시됩니다.</div>}
+            {result.unmatched.length > 0 && <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>미등록 단품코드 {result.unmatched.length}개: {result.unmatched.slice(0, 15).join(", ")}{result.unmatched.length > 15 ? " ..." : ""} — <Link href="/b2b/products">상품마스터</Link>에 없으면 스캔 집계에 빨간 줄로 표시됩니다.</div>}
           </div>
         )}
       </section>

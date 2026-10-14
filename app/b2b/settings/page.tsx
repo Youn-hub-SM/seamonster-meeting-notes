@@ -54,7 +54,7 @@ export default function SettingsEtcPage() {
     <>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">설정 · 기타</h1>
+          <h1 className="b2b-page-title">설정 · 일반</h1>
         </div>
       </header>
 
@@ -68,25 +68,25 @@ export default function SettingsEtcPage() {
         </div>
         {supMsg && <div className={supMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{supMsg.text}</div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>상호</span>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>상호</span>
             <input className="b2b-input" value={sup.name} onChange={(e) => setSup({ ...sup, name: e.target.value })} placeholder="예: 씨몬스터" /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>사업자등록번호</span>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>사업자등록번호</span>
             <input className="b2b-input" value={sup.biz_no} onChange={(e) => setSup({ ...sup, biz_no: e.target.value })} placeholder="000-00-00000" /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>대표자</span>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>대표자</span>
             <input className="b2b-input" value={sup.ceo} onChange={(e) => setSup({ ...sup, ceo: e.target.value })} /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>이메일</span>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>이메일</span>
             <input className="b2b-input" value={sup.email} onChange={(e) => setSup({ ...sup, email: e.target.value })} placeholder="youn@seamonster.kr" /></label>
-          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>사업장 소재지</span>
+          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 12, fontWeight: 600 }}>사업장 소재지</span>
             <input className="b2b-input" value={sup.addr} onChange={(e) => setSup({ ...sup, addr: e.target.value })} /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>업태</span>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>업태</span>
             <input className="b2b-input" value={sup.biz_type} onChange={(e) => setSup({ ...sup, biz_type: e.target.value })} placeholder="예: 도소매" /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 13, fontWeight: 600 }}>종목</span>
+          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>종목</span>
             <input className="b2b-input" value={sup.biz_item} onChange={(e) => setSup({ ...sup, biz_item: e.target.value })} placeholder="예: 수산물" /></label>
-          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 13, fontWeight: 600 }}>입금 은행정보</span>
+          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 12, fontWeight: 600 }}>입금 은행정보</span>
             <input className="b2b-input" value={sup.bank} onChange={(e) => setSup({ ...sup, bank: e.target.value })} placeholder="예: 국민은행 000000-00-000000 (예금주: 씨몬스터)" /></label>
         </div>
         <div className="sm-row" style={{ gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>직인(도장) 이미지</span>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>직인(도장) 이미지</span>
           <input type="file" accept="image/png,image/jpeg" onChange={onStampFile} style={{ fontSize: 12 }} />
           {stamp ? (
             <>
@@ -105,7 +105,7 @@ export default function SettingsEtcPage() {
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 10px", lineHeight: 1.6 }}>
           생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8
         </p>
-        {sched && <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+        {sched && <ul style={{ fontSize: 15, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
           <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {sched.nextDraft.slice(5)} 요청분 판매 가능일 {sched.nextSellable.slice(5)})</li>
           <li><strong>부족</strong> = 현재고 + 입고 예정이 하루 출고 × <strong>{sched.leadDays}일</strong> (오늘 → 오늘 요청분 판매 가능일 {sched.sellable.slice(5)}) 미만</li>
           <li><strong>권장생산</strong> = 소매 모자란 양 + 도매 모자란 양 − 입고 예정 (모자란 양 = 목표 − 현재고, 0 미만은 0)</li>
@@ -116,7 +116,7 @@ export default function SettingsEtcPage() {
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">발송완료 매출 반영</h2>
-          <span style={{ fontSize: 11.5, color: "var(--sm-success)" }}>● 자동</span>
+          <span style={{ fontSize: 12, color: "var(--sm-success)" }}>● 자동</span>
         </div>
         <p style={{ fontSize: 12.5, color: "var(--sm-text-mid)", margin: 0, lineHeight: 1.8 }}>
           발송완료되면 매출 데이터에 반영 · 채널 &lsquo;도매&rsquo; · 발주별 1회 · 고객 집계 제외

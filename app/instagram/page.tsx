@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import IconButton from "@/app/components/IconButton";
 
 // 인스타 자동 DM — 특정 게시물에 댓글이 달리면(선택: 키워드) 그 작성자에게 1회 DM(Private Reply).
 //  계정 3개 운영 · 규칙별 켜고 끄는 일정(start/end) · 브랜드링크(link.seamonster.kr)면 클릭수 자동 집계.
@@ -187,7 +188,7 @@ export default function InstagramDmPage() {
               <span className="ig-account-name">@{a.username}</span>
               <span className="sm-faint ig-account-meta">{a.tokenMasked} · 토큰 {fmtKst(a.updatedAt).slice(0, 10)}</span>
               <button className="b2b-btn-secondary ig-btn-sm" onClick={() => subscribe(a.igUserId)} disabled={busy}>웹훅 구독</button>
-              <button className="b2b-icon-btn" aria-label="연결 해제" onClick={() => removeAccount(a)}>✕</button>
+              <IconButton label="연결 해제" onClick={() => removeAccount(a)}>✕</IconButton>
             </div>
           ))}
           {(info?.accounts.length || 0) === 0 && <p className="sm-faint">연결된 계정이 없습니다.</p>}
@@ -234,7 +235,7 @@ export default function InstagramDmPage() {
                       <td className="actions ig-cell-nowrap">
                         <button className="b2b-btn-secondary ig-btn-sm" onClick={() => toggleRule(r)}>{r.active ? "끄기" : "켜기"}</button>
                         <button className="b2b-btn-secondary ig-btn-sm" onClick={() => openEdit(r)}>편집</button>
-                        <button className="b2b-icon-btn" aria-label="삭제" onClick={() => removeRule(r)}>✕</button>
+                        <IconButton label="삭제" onClick={() => removeRule(r)}>✕</IconButton>
                       </td>
                     </tr>
                   );
@@ -275,7 +276,7 @@ export default function InstagramDmPage() {
           <div className="b2b-modal ig-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">{draft.id ? "규칙 수정" : "새 규칙"}</h2>
-              <button className="b2b-modal-close" onClick={() => setDraft(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setDraft(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="b2b-field-row">

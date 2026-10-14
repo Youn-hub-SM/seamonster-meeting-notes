@@ -94,7 +94,7 @@ export default function InventoryReconcilePage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">구매·판매·재고 확인</h1>
+          <h1 className="b2b-page-title">재고 대사</h1>
         </div>
         {/* 프로모션 풀은 판매 소스가 없어 대사 의미가 없다(RPC 도 전사 판매로 오탐 — 검증 확정) → 제외.
             도매·도매 대량 판매는 원장 차감과 같은 규칙(발주 전량 · 첫 발송일 · 세트 전개, 132) */}

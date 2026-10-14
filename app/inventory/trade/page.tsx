@@ -123,7 +123,7 @@ export default function TradePage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">엑셀 일괄 업로드</h2>
-              <button className="b2b-modal-close" onClick={() => setUploadOpen(false)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setUploadOpen(false)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="b2b-field">
@@ -222,7 +222,7 @@ export default function TradePage() {
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
             <div className="b2b-modal-head">
               <h2 className="b2b-modal-title">엑셀 업로드 — 미리보기</h2>
-              <button className="b2b-modal-close" onClick={() => setPreview(null)}>✕</button>
+              <button className="b2b-modal-close" aria-label="닫기" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               {error && <div className="b2b-error" style={{ marginBottom: 8 }}>{error}</div>}
@@ -251,7 +251,7 @@ export default function TradePage() {
                       ); })}
                     </tbody>
                   </table>
-                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>…외 {preview.rows.length - 200}건(전체 반영됩니다)</p>}
+                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 200}건(전체 반영됩니다)</p>}
                 </div>
               )}
               {preview.errors.length > 0 && (

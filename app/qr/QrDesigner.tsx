@@ -71,7 +71,7 @@ export default function QrDesigner({ data, name, onClose }: { data: string; name
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">QR 디자인</h2><button className="b2b-modal-close" onClick={onClose}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">QR 디자인</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <div className="sm-row" style={{ gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
             <div style={{ flex: "0 0 auto" }}>
