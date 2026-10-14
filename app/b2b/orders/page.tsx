@@ -46,6 +46,10 @@ import ProductionView from "./ProductionView";
 import IconButton from "@/app/components/IconButton";
 import { pingActivityFeed } from "../ActivityFeed";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { useConfirm } from "@/app/components/Feedback";
+
+// 발주 등록·수정 화면(OrderForm)이 저장 뒤 목록으로 넘어오면서 sessionStorage 에 남긴 차감 칸 안내 — 이 화면의 경고 배너로 이어받는다(키는 OrderForm.tsx 와 같아야 한다)
+const CHANNEL_NOTICE_KEY = "b2b.orders.channelNotice";
 
 type View = "list" | "calendar" | "weekly" | "production";
 
@@ -274,6 +278,17 @@ export default function OrdersListPage() {
   //  재고·차수는 이미 저장됐다. 그 발주를 열어 다시 저장하면(PUT) 매출이 다시 맞춰지고, 성공한 응답이 오면 배너에서 빠진다.
   //  문구는 서버가 보낸다(sales_sync_message — 매출 동기화 모듈은 서버 전용).
   const [salesFail, setSalesFail] = useState<{ id: string; label: string; message: string }[]>([]);
+  // 차감 칸 안내(channel_notice) — 따르지 않으면 칸마다 유령 재고가 생기므로 창 대신 목록 위에 남는 경고 배너로 둔다. [닫기]로 지운다.
+  //  OrderForm 이 저장 뒤 넘겨준 안내(sessionStorage)도 처음 그릴 때 이어받는다.
+  const [channelNotices, setChannelNotices] = useState<string[]>([]);
+  const noteChannel = (notice: string | null | undefined) => { if (notice) setChannelNotices((prev) => [...prev, ...notice.split("\n").filter(Boolean)]); };
+  useEffect(() => {
+    try {
+      const carried = sessionStorage.getItem(CHANNEL_NOTICE_KEY);
+      if (carried) { sessionStorage.removeItem(CHANNEL_NOTICE_KEY); noteChannel(carried); }
+    } catch { /* 저장소를 못 쓰는 환경 — 안내만 건너뛴다 */ }
+  }, []);
+  const confirmModal = useConfirm();
   type SalesSyncResp = { sales_sync_failed?: boolean; sales_sync_message?: string } | null | undefined;
   function noteSalesSync(id: string, data: SalesSyncResp, from: OrderListItem[] = orders) {
     if (!data || typeof data.sales_sync_failed !== "boolean") return;
@@ -566,7 +581,7 @@ export default function OrdersListPage() {
     if (!schedules.length) {
       // 있던 일정을 다 지운 경우 = 전체 삭제 의도 — 확인 후 빈 목록으로 저장한다(서버가 삭제 처리).
       if (shipInitialCount === 0) { setShipError("발송예정일을 1개 이상 넣으세요."); return; }
-      if (!window.confirm("등록된 발송 일정을 모두 삭제할까요?\n선점된 재고가 원복되고 '발송일정 미등록'으로 돌아갑니다.")) return;
+      if (!(await confirmModal({ title: "발송 일정 모두 삭제", body: "선점된 재고가 원복되고 '발송일정 미등록'으로 돌아갑니다.", action: "일정 삭제" }))) return;
     }
     const orderId = shipPrompt.id;
     if (!lockOrders([orderId])) { setShipError(BUSY_MSG); return; }
@@ -578,7 +593,7 @@ export default function OrdersListPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) setShipError(data.error || "발송 일정 저장 실패");
-      else { setShipPrompt(null); pingActivityFeed(); noteSalesSync(orderId, data); if (data.channel_notice) alert(data.channel_notice); await reload(); }
+      else { setShipPrompt(null); pingActivityFeed(); noteSalesSync(orderId, data); noteChannel(data.channel_notice); await reload(); }
     } catch (err) {
       setShipError(err instanceof Error ? err.message : "발송 일정 저장 오류");
     } finally {
@@ -605,7 +620,7 @@ export default function OrdersListPage() {
       } else {
         pingActivityFeed();
         noteSalesSync(id, data, snapshot);
-        if (data.channel_notice) alert(data.channel_notice);
+        noteChannel(data.channel_notice);
         await reload();
       }
     } catch (err) {
@@ -662,7 +677,7 @@ export default function OrdersListPage() {
       } else {
         pingActivityFeed();
         noteSalesSync(id, data, snapshot);
-        if (data.channel_notice) alert(data.channel_notice);
+        noteChannel(data.channel_notice);
         // 서버가 차수 상태·송장까지 함께 바꾼다 — 긴급도·완료 판정이 차수를 보므로 그 줄만 다시 읽어 맞춘다
         await refreshRows([id]);
       }
@@ -764,7 +779,7 @@ export default function OrdersListPage() {
       } else {
         pingActivityFeed();
         noteSalesSync(orderId, data, snapshot);
-        if (data.channel_notice) alert(data.channel_notice);
+        noteChannel(data.channel_notice);
         // 서버가 차수를 다시 저장한다(차수 id 가 바뀐다) — 그 줄만 다시 읽는다
         await refreshRows([orderId]);
       }
@@ -821,7 +836,12 @@ export default function OrdersListPage() {
       setError(skipMsg);
       if (!ids.length) return;
     }
-    if (!confirm(`선택한 ${ids.length}건의 발주 상태를 "${newStatus}" 로 변경할까요?`)) return;
+    if (!(await confirmModal({
+      title: `발주 ${ids.length}건 상태 변경`,
+      body: `선택한 발주 ${ids.length}건의 상태가 "${newStatus}" 로 바뀝니다.`,
+      action: newStatus === "취소" ? "취소 처리" : `${newStatus}로 변경`,
+      danger: newStatus === "취소",
+    }))) return;
     // 발송된 발주를 함께 취소 — 반품 여부를 한 번 묻고 그 발주들에 같이 적용한다(안 나간 발주는 서버가 무시)
     let returned: boolean | undefined;
     if (newStatus === "취소") {
@@ -864,7 +884,7 @@ export default function OrdersListPage() {
             .catch((e) => (e instanceof Error ? e.message : "변경 실패"))
         )
       );
-      if (notices.length) alert(notices.join("\n"));
+      if (notices.length) noteChannel(notices.join("\n"));
       const failedIds = new Set(runIds.filter((_, i) => !!results[i]));
       const okIds = runIds.filter((id) => !failedIds.has(id));
       const errors = results.filter((e): e is string => !!e);
@@ -1075,6 +1095,20 @@ export default function OrdersListPage() {
             ))}
           </span>
           <button type="button" className="b2b-link-btn sm-nowrap" onClick={() => setSalesFail([])}>닫기</button>
+        </div>
+      )}
+
+      {channelNotices.length > 0 && (
+        <div className="sm-warn sm-between sm-gap-3">
+          <span>
+            {channelNotices.map((n, i) => (
+              <Fragment key={i}>
+                {i > 0 && <br />}
+                {n}
+              </Fragment>
+            ))}
+          </span>
+          <button type="button" className="b2b-link-btn sm-nowrap" onClick={() => setChannelNotices([])}>닫기</button>
         </div>
       )}
 
@@ -1726,8 +1760,8 @@ export default function OrdersListPage() {
                           <IconButton className="is-danger" label={`${i + 1}차 삭제`} style={{ marginBottom: 2 }}
                             disabled={shippedRow}
                             title={shippedRow ? "발송된 차수는 지울 수 없습니다 — 목록에서 취소로 바꾸세요" : undefined}
-                            onClick={() => {
-                              if (r.status === "취소" && !window.confirm("취소 차수를 지우면 그 수량이 다시 발주 수량에 들어갑니다(재고 차감·매출·청구에 포함). 지울까요?")) return;
+                            onClick={async () => {
+                              if (r.status === "취소" && !(await confirmModal({ title: `${i + 1}차(취소) 삭제`, body: "취소 차수를 지우면 그 수량이 다시 발주 수량에 들어갑니다(재고 차감·매출·청구에 포함).", action: "차수 삭제" }))) return;
                               setShipRows((p) => p.filter((_, j) => j !== i));
                             }}>✕</IconButton>
                         );

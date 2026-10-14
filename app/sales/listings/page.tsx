@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@/app/b2b/orders/Combobox";
+import { useConfirm } from "@/app/components/Feedback";
 
 type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null };
 type Listing = {
@@ -61,6 +62,7 @@ const kstStamp = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600_00
 const staleCut = () => new Date(Date.now() + 9 * 3600_000 - 90 * 86400_000).toISOString().slice(0, 10);
 
 export default function SkuListingsPage() {
+  const confirm = useConfirm();
   const [products, setProducts] = useState<Prod[]>([]);
   const [plabel, setPlabel] = useState("");
   const [pid, setPid] = useState("");
@@ -261,7 +263,8 @@ export default function SkuListingsPage() {
       return;
     }
     const label = `${CATALOG_TITLE[c.channel] || c.channel} · ${c.listing_name}${c.item_name ? ` / ${c.item_name}` : ""}`;
-    if (!window.confirm(`${label}\n채널 재고를 ${qty}개로 변경합니다${qty === 0 ? " (품절 처리)" : ""}. 진행할까요?`)) return;
+    // 채널(외부)로 나가는 명령 — 되돌리기 토스트가 아니라 모달. 0 = 품절 처리라 빨간 버튼
+    if (!(await confirm({ title: `${label} 채널 재고 변경`, body: `채널 재고를 ${qty}개로 변경합니다${qty === 0 ? " (품절 처리)" : ""}.`, action: qty === 0 ? "품절 처리" : `${qty}개로 변경`, danger: qty === 0 }))) return;
     setApplying(c.item_key); setErr("");
     try {
       const r = await fetch("/api/channel-commands", {
@@ -509,7 +512,7 @@ function ListingTable({ rows, copied, onCopy }: { rows: Listing[]; copied: strin
   if (rows.length === 0) return null;
   const today = kstToday();
   return (
-    <div className="b2b-table-wrap">
+    <div className="b2b-table-wrap is-sticky-head">
       <table className="b2b-table is-responsive">
         <thead>
           <tr>

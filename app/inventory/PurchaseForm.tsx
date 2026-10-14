@@ -6,6 +6,7 @@ import { matchKoQuery } from "@/app/lib/hangul";
 import type { LinkResultLite } from "@/app/lib/link-result";
 import { ChannelPicker } from "./ChannelTabs";
 import { LOST_MSG, linkMessage, confirmUnlinkedInbound } from "./TxnModal";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 
 type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
 // 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
@@ -28,6 +29,8 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [type, setType] = useState<InvTxnType>(defaultType);
   const [channel, setChannel] = useState<InvChannel>("소매");
   const [date, setDate] = useState(TODAY());
@@ -108,10 +111,10 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
     if (valid.length === 0) { setError("제품과 수량을 입력하세요."); return; }
     // 미래 날짜 '완료'는 서버도 막는다(S6) — 예정 건은 즉시 처리를 해제해 대기로
     if (done && date > TODAY()) { setError("미래 날짜는 '즉시 처리'를 해제해 대기로 저장하세요."); return; }
-    if (date < DAYS_AGO(7) && !window.confirm(`거래일이 ${date} 입니다(7일 이상 전). 이 날짜로 기록할까요?`)) return;
+    if (date < DAYS_AGO(7) && !(await confirm({ title: "7일 이상 전 날짜로 기록", body: `거래일이 ${date} 입니다.`, action: `${date} 로 기록`, danger: false }))) return;
     setSaving(true); setError("");
     // 제조사 입고를 '연결 안 함'으로 저장 — 열린 요청서 잔여가 있는 품목이면 확인(S9)
-    if (type === "입고" && done && !customerReturn && !reqId && !(await confirmUnlinkedInbound(date, valid.map((l) => ({ product_id: l.product_id, name: l.name }))))) { setSaving(false); return; }
+    if (type === "입고" && done && !customerReturn && !reqId && !(await confirmUnlinkedInbound(date, valid.map((l) => ({ product_id: l.product_id, name: l.name })), confirm))) { setSaving(false); return; }
     try {
       const rows = valid.map((l) => ({
         type, qty: signedQty(type, Number(l.qty) || 0), product_id: l.product_id, product_name: l.name,
@@ -128,8 +131,11 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       if (!j) throw new Error(lost);
       if (j.code === "request_key_conflict") submitKey.current = newKey(); // 다음 누름은 새 기록
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      if (j.replay) alert("이미 저장돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
-      if (j.link) alert(linkMessage(j.link, (pid) => valid.find((l) => l.product_id === pid)?.name || "품목"));
+      if (j.replay) toast.success("이미 저장돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      if (j.link) {
+        const m = linkMessage(j.link, (pid) => valid.find((l) => l.product_id === pid)?.name || "품목");
+        if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
+      }
       onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);

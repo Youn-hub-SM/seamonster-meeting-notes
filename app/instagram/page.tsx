@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import IconButton from "@/app/components/IconButton";
 
 // 인스타 자동 DM — 특정 게시물에 댓글이 달리면(선택: 키워드) 그 작성자에게 1회 DM(Private Reply).
@@ -39,6 +40,8 @@ export default function InstagramDmPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
+  const toast = useToast();
   const [notice, setNotice] = useState("");
 
   const [tokenInput, setTokenInput] = useState("");
@@ -93,7 +96,7 @@ export default function InstagramDmPage() {
     setBusy(false);
   }
   async function removeAccount(a: Account) {
-    if (!confirm(`@${a.username} 연결을 해제할까요? 이 계정의 규칙은 남지만 발송이 멈춥니다.`)) return;
+    if (!(await confirmModal({ title: `@${a.username} 연결 해제`, body: "이 계정의 규칙은 남지만 DM 발송이 멈춥니다.", action: "연결 해제" }))) return;
     await fetch(`/api/instagram/accounts?id=${encodeURIComponent(a.igUserId)}`, { method: "DELETE" });
     load();
   }
@@ -138,12 +141,15 @@ export default function InstagramDmPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
   }
-  async function toggleRule(r: Rule) {
+  // 켜기/끄기 — 확인창 없이 바로 반영하고 되돌리기 토스트(같은 호출로 원래 값)
+  async function toggleRule(r: Rule, quiet = false) {
     const j = await (await fetch("/api/instagram/rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...r, active: !r.active }) })).json();
-    if (j.ok) setRules((prev) => prev.map((x) => (x.id === r.id ? { ...x, active: !r.active } : x)));
+    if (!j.ok) return;
+    setRules((prev) => prev.map((x) => (x.id === r.id ? { ...x, active: !r.active } : x)));
+    if (!quiet) toast.undo(r.active ? "규칙을 껐습니다" : "규칙을 켰습니다", () => toggleRule({ ...r, active: !r.active }, true));
   }
   async function removeRule(r: Rule) {
-    if (!confirm(`이 규칙을 삭제할까요?\n${r.media_caption || r.media_permalink}`)) return;
+    if (!(await confirmModal({ title: "규칙 삭제", body: `${r.media_caption || r.media_permalink} — 이 게시물의 자동 DM 규칙과 클릭 집계가 지워집니다.`, action: "규칙 삭제" }))) return;
     await fetch(`/api/instagram/rules?id=${encodeURIComponent(r.id)}`, { method: "DELETE" });
     load();
   }
@@ -250,7 +256,7 @@ export default function InstagramDmPage() {
       <section className="b2b-card">
         <div className="b2b-card-head"><span className="b2b-card-title">최근 발송</span><span className="sm-faint ig-head-note">최근 100건</span></div>
         {logs.length === 0 ? <p className="sm-faint">아직 발송 기록이 없습니다.</p> : (
-          <div className="b2b-table-wrap">
+          <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
               <thead><tr><th>시각</th><th>계정</th><th>게시물</th><th>댓글 작성자</th><th className="ig-col-media">댓글</th><th>상태</th></tr></thead>
               <tbody>

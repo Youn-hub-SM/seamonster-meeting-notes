@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import SalesReportPanel from "../SalesReportPanel";
 import { won as fmtWon, dateShort } from "@/app/lib/format";
+import { useConfirm } from "@/app/components/Feedback";
 
 type Preview = {
   ok: boolean; error?: string;
@@ -31,6 +32,7 @@ const won = (n: number) => `${fmtWon(n)}원`;
 const fmtTime = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
 
 export default function SalesUploadPage() {
+  const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -69,8 +71,8 @@ export default function SalesUploadPage() {
       if (!c.ok) { setErr(c.error || "되돌릴 행 수를 확인하지 못했습니다"); return; }
       const n = Number(c.rows) || 0;
       const diff = n !== b.inserted ? ` (이력 기록 ${b.inserted.toLocaleString()}건과 다름)` : "";
-      const replaced = (b.note || "").includes("기간 교체") ? "\n기간 교체로 지운 기존 행은 복구되지 않습니다 — 그 기간 매출이 줄어듭니다." : "";
-      if (!window.confirm(`'${b.filename}' 업로드로 추가된 ${n.toLocaleString()}건을 삭제해 되돌립니다.${diff}${replaced}\n되돌릴 수 없습니다. 진행할까요?`)) return;
+      const replaced = (b.note || "").includes("기간 교체") ? " 기간 교체로 지운 기존 행은 복구되지 않습니다 — 그 기간 매출이 줄어듭니다." : "";
+      if (!(await confirm({ title: `'${b.filename}' 업로드 되돌리기`, body: `이 업로드로 추가된 ${n.toLocaleString()}건을 삭제합니다.${diff}${replaced} 되돌릴 수 없습니다.`, action: `${n.toLocaleString()}건 삭제` }))) return;
       const r = await fetch("/api/sales/upload/revert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batch_id: b.id, expect_rows: n }) });
       const j = await r.json();
       if (!j.ok) setErr(j.error || "되돌리기 실패");
@@ -128,7 +130,11 @@ export default function SalesUploadPage() {
       return `${x.channel} 파일 ${dateShort(x.file_from)}~${dateShort(x.file_to)} / 교체 ${dateShort(x.win_from ?? po.replaceFrom)}~${dateShort(x.win_to ?? po.replaceTo)} · ${x.to_delete.toLocaleString()}행`
         + (thin.length ? `\n  파일 행이 없거나 적은 날: ${thin.slice(0, 6).join(", ")}${thin.length > 6 ? ` 외 ${thin.length - 6}일` : ""}` : "");
     });
-    if (del > 0 && !window.confirm(`기간 교체로 기존 ${del.toLocaleString()}행을 지웁니다.\n${lines.join("\n")}\n되돌리기로 복구되지 않습니다. 진행할까요?`)) return;
+    if (del > 0 && !(await confirm({
+      title: `기간 교체 — 기존 ${del.toLocaleString()}행 삭제`,
+      body: <span style={{ whiteSpace: "pre-line" }}>{`${lines.join("\n")}\n되돌리기로 복구되지 않습니다.`}</span>,
+      action: "지우고 적용",
+    }))) return;
     setBusy("apply"); setErr("");
     try {
       const fd = formData(po);
@@ -398,18 +404,18 @@ export default function SalesUploadPage() {
         <section className="b2b-card" style={{ marginTop: 16 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드 · 되돌리기</span></div>
           {batchErr && <div className="b2b-error" style={{ marginBottom: 8 }}>업로드 이력을 불러오지 못했습니다 — 새로고침해 주세요.</div>}
-          <div style={{ overflowX: "auto" }}>
-            <table className="b2b-table">
-              <thead><tr><th>시각</th><th>파일</th><th style={{ textAlign: "right" }}>신규</th><th>올린 사람</th><th>상태</th><th></th></tr></thead>
+          <div className="b2b-table-wrap">
+            <table className="b2b-table is-responsive">
+              <thead><tr><th>시각</th><th>파일</th><th className="num">신규</th><th>올린 사람</th><th>상태</th><th></th></tr></thead>
               <tbody>
                 {batches.map((b) => (
                   <tr key={b.id}>
-                    <td>{fmtTime(b.created_at)}</td>
-                    <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.note || undefined}>{b.filename}{b.note && <div className="sm-faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{b.note}</div>}</td>
-                    <td style={{ textAlign: "right" }}>{b.inserted.toLocaleString()}</td>
-                    <td>{b.uploaded_by || "-"}</td>
-                    <td>{b.status === "reverted" ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>되돌림</span> : <span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>적용됨</span>}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td data-label="시각">{fmtTime(b.created_at)}</td>
+                    <td data-label="파일" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.note || undefined}>{b.filename}{b.note && <div className="sm-faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{b.note}</div>}</td>
+                    <td data-label="신규" className="num">{b.inserted.toLocaleString()}</td>
+                    <td data-label="올린 사람">{b.uploaded_by || "-"}</td>
+                    <td data-label="상태">{b.status === "reverted" ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>되돌림</span> : <span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>적용됨</span>}</td>
+                    <td className="actions">
                       {b.status === "active" && <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => revert(b)} disabled={reverting !== ""}>{reverting === b.id ? "되돌리는 중..." : "되돌리기"}</button>}
                     </td>
                   </tr>

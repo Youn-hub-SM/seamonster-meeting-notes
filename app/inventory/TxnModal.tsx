@@ -6,6 +6,12 @@ import { INV_TXN_TYPES, INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvTxnType, typ
 import { ChannelPicker } from "./ChannelTabs";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { formatLinkResult, type LinkResultLite } from "@/app/lib/link-result";
+import { useConfirm, useToast, type ConfirmOptions } from "@/app/components/Feedback";
+
+// 공용 확인 모달 호출 함수 — 훅(useConfirm)은 컴포넌트 안에서만 부를 수 있어, 입고 화면 3곳이 함께 쓰는 유틸에는 호출부가 넘겨 준다.
+export type ConfirmFn = (o: ConfirmOptions) => Promise<boolean>;
+// 줄바꿈이 있는 본문(품목 목록 등) — 모달 본문은 white-space 기본값이라 줄을 살려 넣는다
+export const preLines = (s: string) => <span style={{ whiteSpace: "pre-line" }}>{s}</span>;
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const DAYS_AGO = (n: number) => new Date(Date.now() + 9 * 3600_000 - n * 86400_000).toISOString().slice(0, 10);
@@ -35,9 +41,9 @@ export function linkMessage(link: LinkResultLite, nameOf: (productId: string) =>
 //  잔여를 못 읽으면(remain_ok=false·조회 실패) 경고 없이 저장하지 않고 확인을 받는다(S4). true = 저장 진행.
 //  품목 id 를 모르는 줄이 있으면(구 서버 응답 — 입출고 목록의 대기 입고처리) 잔여를 셀 수 없으니 같은 확인을 받는다.
 type RemainMap = Record<string, { qty: number; reqs: { req_no: string | null; qty: number }[] }>;
-export async function confirmUnlinkedInbound(date: string, items: { product_id: string; name: string }[]): Promise<boolean> {
+export async function confirmUnlinkedInbound(date: string, items: { product_id: string; name: string }[], confirm: ConfirmFn): Promise<boolean> {
   if (!items.length) return true;
-  const unknown = () => window.confirm("열린 생산 요청서의 남은 수량을 확인하지 못했습니다.\n\n요청서로 들어온 물건이면 [취소]를 누르고 요청서를 고르세요 — 연결 없이 넣으면 현재고와 입고 예정에 두 번 잡힙니다.\n\n협의분·일반 입고면 [확인] — 요청서 연결 없이 저장합니다.");
+  const unknown = () => confirm({ title: "요청서 연결 없이 입고", body: "열린 생산 요청서의 남은 수량을 확인하지 못했습니다. 요청서로 들어온 물건이면 그만두고 요청서를 고르세요 — 연결 없이 넣으면 현재고와 입고 예정에 두 번 잡힙니다. 협의분·일반 입고면 요청서 연결 없이 저장합니다.", action: "연결 없이 저장" });
   if (items.some((x) => !x.product_id)) return unknown();
   let j: { ok?: boolean; remain_by_product?: RemainMap; remain_ok?: boolean } | null = null;
   try { j = await (await fetch(`/api/production/requests/open?date=${encodeURIComponent(date)}&remain=1`, { cache: "no-store" })).json(); } catch { j = null; }
@@ -50,7 +56,11 @@ export async function confirmUnlinkedInbound(date: string, items: { product_id: 
     const reqs = (r.reqs || []).slice(0, 3).map((q) => `${q.req_no || "요청서"} ${Number(q.qty).toLocaleString()}`).join(", ");
     return `- ${x.name}: 남은 ${Number(r.qty).toLocaleString()}${reqs ? ` (${reqs}${r.reqs.length > 3 ? " 외" : ""})` : ""}`;
   });
-  return window.confirm(`열린 요청서에 남은 수량이 있는 품목입니다.\n\n${lines.join("\n")}${hits.length > 8 ? `\n- 외 ${hits.length - 8}개 품목` : ""}\n\n요청서로 들어온 물건이면 [취소]를 누르고 요청서를 고르세요.\n협의분·일반 입고면 [확인] — 요청서 연결 없이 저장합니다.`);
+  return confirm({
+    title: "요청서 연결 없이 입고",
+    body: preLines(`열린 요청서에 남은 수량이 있는 품목입니다.\n${lines.join("\n")}${hits.length > 8 ? `\n- 외 ${hits.length - 8}개 품목` : ""}\n요청서로 들어온 물건이면 그만두고 요청서를 고르세요. 협의분·일반 입고면 요청서 연결 없이 저장합니다.`),
+    action: "연결 없이 저장",
+  });
 }
 
 // 실사 전 점검(D4a·S8) — /api/inventory/adjust/precheck · 엑셀 실사 미리보기가 돌려주는 점검 중 이 창이 쓰는 부분.
@@ -69,7 +79,8 @@ const holdRemain = (h: B2bHold, pid?: string): number | null | undefined => {
   return it ? it.remaining : undefined;
 };
 const remainText = (v: number | null | undefined) => (v === undefined ? "" : v === null ? "안 나간 수량 확인 필요" : `안 나간 ${v.toLocaleString()}`);
-const checkConfirmText = (c: ShownChecks) => {
+// 실사 전 점검 확인 모달 — 걸린 것이 없으면 null(묻지 않음)
+const checkConfirmAsk = (c: ShownChecks): ConfirmOptions | null => {
   const parts: string[] = [];
   if (c.formDate) parts.push(`양식 기준일(${c.formDate}) ≠ 실사일(${c.date}) — 표의 재고는 실사일 기준입니다. 센 날 마감이 실사일이 맞는지 확인하세요.`);
   if (c.b2b.length) {
@@ -82,7 +93,7 @@ const checkConfirmText = (c: ShownChecks) => {
   }
   if (c.pending) parts.push(`'대기' 입출고 ${c.pending}건 — 실물이 이미 움직였다면 실사 뒤 처리할 때 이중 반영됩니다(먼저 처리·취소).`);
   if (c.sameDay) parts.push(`${c.sameDayChan ? "이 칸 " : ""}실사일 당일 입출고 ${c.sameDay}건 — 실사 전 움직임인지 확인하세요.`);
-  return parts.length ? `실사 전 점검\n\n- ${parts.join("\n- ")}\n\n정리했나요? 이대로 반영할까요?` : "";
+  return parts.length ? { title: "실사 전 점검", body: preLines(`- ${parts.join("\n- ")}\n정리했으면 이대로 반영합니다.`), action: "이대로 반영" } : null;
 };
 export type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
 // 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
@@ -195,6 +206,8 @@ export default function TxnModal({
   onSaved: () => void;
 }) {
   useEscClose(onClose);
+  const confirm = useConfirm();
+  const toast = useToast();
   const defaultChannel: InvChannel = defaultChannelProp ?? "소매";
   const chanGiven = defaultChannelProp !== undefined;
   const [type, setType] = useState<InvTxnType>(defaultType);
@@ -324,8 +337,8 @@ export default function TxnModal({
     // 실사 전 점검(D4a·S8) — 걸린 것이 있으면 확인, 점검을 못 읽었으면 막는다(S4)
     if (preview.kind === "조정") {
       if (!shownChecks) { setError(checksErr || "실사 전 점검을 불러오는 중입니다 — 잠시 뒤 다시 누르세요."); return; }
-      const w = checkConfirmText(shownChecks);
-      if (w && !window.confirm(w)) return;
+      const w = checkConfirmAsk(shownChecks);
+      if (w && !(await confirm(w))) return;
     }
     setApplying(true); setError("");
     try {
@@ -334,7 +347,7 @@ export default function TxnModal({
       if (preview.kind === "입출" && preview.reqType === "입고" && ioDone && !inR && !reqId) {
         const seen = new Set<string>();
         const items = (preview.rows as IoRow[]).filter((r) => r.type === "입고" && !seen.has(r.product_id) && seen.add(r.product_id)).map((r) => ({ product_id: r.product_id, name: r.product_name }));
-        if (!(await confirmUnlinkedInbound(date, items))) { setApplying(false); return; }
+        if (!(await confirmUnlinkedInbound(date, items, confirm))) { setApplying(false); return; }
       }
       const [url, body] = preview.kind === "조정"
         ? ["/api/inventory/adjust/import/apply", { channel: ch, count_date: preview.countDate, batch_key: preview.key, rows: (preview.rows as AdjRow[]).map((r) => ({ product_id: r.product_id, target: r.target, memo: r.memo })) }]
@@ -360,9 +373,13 @@ export default function TxnModal({
         if (Number(j.invalid) > 0) parts.push(`${j.invalid}건은 실사수량이 숫자가 아니라 건너뛰었습니다.`);
         const mm = Array.isArray(j.mismatch) ? j.mismatch : [];
         if (mm.length) parts.push(`반영 직후 ${mm.length}종이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.\n${mm.slice(0, 8).map((m) => `- ${nameOf(m.product_id)}: 실사 ${Number(m.target).toLocaleString()} · 지금 ${Number(m.actual).toLocaleString()}`).join("\n")}${mm.length > 8 ? `\n- 외 ${mm.length - 8}종` : ""}`);
-        if (parts.length) alert(parts.join("\n\n"));
-      } else if (j.replay) alert("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
-      if (j.link) alert(linkMessage(j.link, (pid) => (preview.rows as IoRow[]).find((r) => r.product_id === pid)?.product_name || "품목"));
+        // 건너뜀·어긋남이 있으면 오류 토스트(7초), 안내만이면 성공 토스트
+        if (parts.length) (Number(j.invalid) > 0 || mm.length ? toast.error : toast.success)(parts.join(" "));
+      } else if (j.replay) toast.success("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      if (j.link) {
+        const m = linkMessage(j.link, (pid) => (preview.rows as IoRow[]).find((r) => r.product_id === pid)?.product_name || "품목");
+        if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
+      }
       onSaved(); // 부모가 목록을 다시 읽고 이 창을 닫는다
     } catch (e) { setError(e instanceof Error ? e.message : "반영 실패"); }
     setApplying(false);
@@ -441,17 +458,21 @@ export default function TxnModal({
     if (isAdjust) {
       if (checksErr) { setError(checksErr); return; }
       if (!shownChecks) { setError("실사 전 점검을 불러오는 중입니다 — 잠시 뒤 다시 누르세요."); return; }
-      const w = checkConfirmText(shownChecks);
-      if (w && !window.confirm(w)) return;
+      const w = checkConfirmAsk(shownChecks);
+      if (w && !(await confirm(w))) return;
     }
-    if (type !== "조정" && date < DAYS_AGO(7) && !window.confirm(`거래일이 ${date} 입니다(7일 이상 전). 이 날짜로 기록할까요?`)) return;
+    if (type !== "조정" && date < DAYS_AGO(7) && !(await confirm({ title: "7일 이상 전 날짜로 기록", body: `거래일이 ${date} 입니다.`, action: `${date} 로 기록`, danger: false }))) return;
     // 출고 초과는 가용(출고 예정 선점까지 뺀 값) 기준 — 현재고만 보면 이미 잡힌 B2B 발송분을 다시 내보낸다
-    if (type === "출고" && after < 0 && !window.confirm(splitStock
-      ? `가용 재고(${current.toLocaleString()} = 현재고 ${(onHand ?? 0).toLocaleString()} − 출고 예정 ${sched.toLocaleString()})보다 많은 출고입니다. 가용이 ${after.toLocaleString()} 가 됩니다. 진행할까요?`
-      : `현재고(${current.toLocaleString()})보다 많은 출고입니다. 재고가 ${after.toLocaleString()} 가 됩니다. 진행할까요?`)) return;
+    if (type === "출고" && after < 0 && !(await confirm({
+      title: "재고보다 많은 출고",
+      body: splitStock
+        ? `가용 재고(${current.toLocaleString()} = 현재고 ${(onHand ?? 0).toLocaleString()} − 출고 예정 ${sched.toLocaleString()})보다 많은 출고입니다. 가용이 ${after.toLocaleString()} 가 됩니다.`
+        : `현재고(${current.toLocaleString()})보다 많은 출고입니다. 재고가 ${after.toLocaleString()} 가 됩니다.`,
+      action: "그래도 출고",
+    }))) return;
     setSaving(true); setError("");
     // 제조사 입고를 '연결 안 함'으로 저장 — 열린 요청서 잔여가 있는 품목이면 확인(S9)
-    if (type === "입고" && ioDone && !customerReturn && !reqId && !(await confirmUnlinkedInbound(date, [{ product_id: productId, name: product?.name || "품목" }]))) { setSaving(false); return; }
+    if (type === "입고" && ioDone && !customerReturn && !reqId && !(await confirmUnlinkedInbound(date, [{ product_id: productId, name: product?.name || "품목" }], confirm))) { setSaving(false); return; }
     try {
       let res: Response;
       let j: { ok?: boolean; error?: string; code?: string; replay?: boolean; link?: LinkResultLite } | null = null;
@@ -476,8 +497,11 @@ export default function TxnModal({
       if (!j) throw new Error(LOST_MSG);
       if (j.code === "request_key_conflict") submitKey.current = newKey(); // 다음 누름은 새 기록
       if (!res.ok || !j.ok) throw new Error(j.error || "기록 실패");
-      if (j.replay) alert("이미 기록돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
-      if (j.link) alert(linkMessage(j.link, () => product?.name || "품목"));
+      if (j.replay) toast.success("이미 기록돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      if (j.link) {
+        const m = linkMessage(j.link, () => product?.name || "품목");
+        if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
+      }
       onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }
     setSaving(false);

@@ -57,14 +57,14 @@ export const NAV: NavCategory[] = [
       {
         href: "/sales/upload", label: "매출", icon: "bars", // 대시보드·주문 검색 제거(2026-09-17) — 매출 홈=업로드
         menu: [
+          // 리포트·채널별 이익은 2026-10-14 C3 로 '리포트' 분류로 — 한 주소가 두 곳에 있으면 활성 표시가 둘 켜지므로 여기선 뺀다
           { href: "/sales/upload", label: "데이터 업로드" },
-          { href: "/sales/report", label: "리포트" },
-          { href: "/sales/profit", label: "채널별 이익" },
           { href: "/sales/history", label: "매출 변경 기록" },
         ],
       },
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/subscription", label: "정기배송 분석", icon: "trend" },
+      { href: "/sales/margin-calc", label: "이익률 계산기", icon: "tag" }, // 2026-10-14 C3: '기타' 해체 → 세일즈
     ],
   },
   {
@@ -126,24 +126,28 @@ export const NAV: NavCategory[] = [
       {
         href: "/voc", label: "VOC 관리", icon: "megaphone",
         menu: [
+          // 월간 VOC 리포트는 2026-10-14 C3 로 '리포트' 분류로(중복 활성 방지로 여기선 뺌)
           { href: "/voc", label: "VOC 처리" },
           { href: "/voc/stats", label: "통계" },
           { href: "/voc/reports", label: "개선요청서" },
-          { href: "/voc/manufacturer", label: "월간 VOC 리포트" },
         ],
       },
       // 2026-10-14 C6: '베타 테스트 중' 분류 해체 — VOC 베타 두 개는 CS 로, BETA 배지로 상태 표시
       { href: "/voc/insights", label: "VOC AI 인사이트", icon: "bulb", beta: true },
       { href: "/voc/surveys", label: "VOC 설문응답(Tally)", icon: "note", beta: true },
+      { href: "/meeting", label: "회의 정리", icon: "book" }, // 2026-10-14 C3: '기타' 해체 → CS 맨 끝
     ],
   },
   {
-    label: "기타",
+    // 2026-10-14 C3(대표 확정): 세 분류에 흩어져 있던 리포트 다섯 개를 한 분류로. '기타' 분류는 해체.
+    //  각 주소는 여기에만 둔다 — 원래 자리(매출·VOC 메뉴)에도 두면 활성 표시가 둘 켜진다.
+    label: "리포트",
     tools: [
       { href: "/briefing", label: "종합 리포트", icon: "bulb" }, // 2026-09-30 모두 열람, 일일·주간·월간 탭(매출 업로드 뒤 담당자가 생성·발송)
       { href: "/report", label: "커스텀 리포트", icon: "bars" },
-      { href: "/sales/margin-calc", label: "이익률 계산기", icon: "tag" },
-      { href: "/meeting", label: "회의 정리", icon: "note" },
+      { href: "/sales/report", label: "매출 리포트", icon: "trend" },
+      { href: "/sales/profit", label: "채널별 이익", icon: "receipt" },
+      { href: "/voc/manufacturer", label: "월간 VOC 리포트", icon: "megaphone" },
     ],
   },
   {

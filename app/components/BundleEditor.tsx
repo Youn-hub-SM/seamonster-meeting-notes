@@ -3,6 +3,7 @@
 // 묶음(세트) 구성 편집 — 부모 상품에 '구성품 × 수량'을 지정. 저장 시 product_bundles 교체.
 import { useEscClose } from "@/app/lib/use-esc";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
 
 type ProductLite = { id: string; sku: string | null; name: string; spec?: string | null };
@@ -22,6 +23,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
   const [loadErr, setLoadErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true); setLoadErr("");
@@ -52,7 +54,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
     const seen = new Set<string>();
     const dup = picked.find((r) => { if (seen.has(r.component_id)) return true; seen.add(r.component_id); return false; });
     if (dup) { setError(`'${dup.label}'이(가) 두 줄 있습니다 — 한 줄로 합치세요.`); return; }
-    if (!picked.length && loadedCount > 0 && !window.confirm("구성품을 모두 지우면 묶음이 풀려 일반 품목이 됩니다. 저장할까요?")) return;
+    if (!picked.length && loadedCount > 0 && !(await confirmModal({ title: "묶음 풀기", body: `구성품 ${loadedCount}개를 모두 지우면 묶음이 풀려 일반 품목이 됩니다.`, action: "묶음 풀고 저장" }))) return;
     setSaving(true); setError("");
     try {
       const res = await fetch("/api/b2b/products/bundle", {

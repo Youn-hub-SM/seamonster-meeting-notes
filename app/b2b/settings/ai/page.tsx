@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useToast } from "@/app/components/Feedback";
 
 type ModelKey = "haiku" | "sonnet" | "opus";
 type FeatureVal = ModelKey | "inherit";
@@ -22,6 +23,7 @@ const PROMPT_TEXTAREA: React.CSSProperties = {
 export default function AiSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const toast = useToast();
 
   // 모델
   const [options, setOptions] = useState<Option[]>([]);
@@ -126,11 +128,16 @@ export default function AiSettingsPage() {
     setSaving(false);
   }
 
-  function resetPrompt(kind: "meeting" | "cs") {
+  // 기본값 복원 — 확인창 없이 바로 반영하고 되돌리기 토스트(이전 지침을 같은 저장 호출로 다시 저장)
+  async function resetPrompt(kind: "meeting" | "cs") {
     const label = kind === "meeting" ? "회의록 정리 지침" : "CS 코치 지침";
-    if (!confirm(`${label}을 기본값으로 되돌릴까요? 저장한 내용은 사라집니다.`)) return;
+    const prev = kind === "meeting" ? meetingPrompt : csPrompt;
     if (kind === "meeting") setMeetingPrompt(meetingDefault); else setCsPrompt(csDefault);
-    savePrompt(kind, ""); // 빈 값 → 기본값 복원
+    await savePrompt(kind, ""); // 빈 값 → 기본값 복원
+    toast.undo(`${label}을 기본값으로 되돌렸습니다`, async () => {
+      if (kind === "meeting") setMeetingPrompt(prev); else setCsPrompt(prev);
+      await savePrompt(kind, prev);
+    });
   }
 
   const featureOptions: { key: FeatureVal; label: string }[] = [

@@ -241,6 +241,7 @@ export default function VocManufacturerPage() {
                     {y}년 {Number(mm)}월 제조사 귀책 클레임은 총 <strong>{mfg.summary.count}건</strong>이며,
                     청구 손해액은 <strong style={{ color: "var(--sm-danger)" }}>{won(mfg.summary.claimable)}원</strong>입니다 (대상 제품 {mfg.summary.productCount}종).
                   </p>
+                  <div className="b2b-table-wrap">
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10 }}>
                     <thead><tr><th style={cellTh}>제품</th><th style={{ ...cellTh, ...num }}>건수</th><th style={cellTh}>주요 유형</th><th style={{ ...cellTh, ...num }}>청구 손해액(원)</th></tr></thead>
                     <tbody>
@@ -260,6 +261,8 @@ export default function VocManufacturerPage() {
                       </tr>
                     </tbody>
                   </table>
+                  </div>
+                  <div className="b2b-table-wrap">
                   <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 16 }}>
                     <thead><tr><th style={cellTh}>접수일</th><th style={cellTh}>제품</th><th style={cellTh}>유형</th><th style={cellTh}>내용</th><th style={{ ...cellTh, ...num }}>손해(원)</th></tr></thead>
                     <tbody>
@@ -274,6 +277,7 @@ export default function VocManufacturerPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </>
               )}
             </div>

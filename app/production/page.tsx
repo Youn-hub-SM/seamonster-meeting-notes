@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
 import { isFactoryPurpose, type ProductionRequest } from "../lib/wholesale-production";
+import { useConfirm } from "@/app/components/Feedback";
 
 type ProductRow = { product_name: string; spec: string; qty: number; companies: string[]; order_count: number };
 type DayBucket = { date: string; label: string; total_qty: number; order_count: number; products: ProductRow[] };
@@ -54,6 +55,7 @@ function buildWeeks(year: number, month: number): Date[][] {
 const EMPTY_PROMO: Partial<Promotion> = { name: "", start: "", end: "", items: [], expectedQty: 0, note: "" };
 
 export default function ProductionSchedulePage() {
+  const confirm = useConfirm();
   const [days, setDays] = useState<DayBucket[]>([]);
   const [manual, setManual] = useState<Manual[]>([]);
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
@@ -185,7 +187,7 @@ export default function ProductionSchedulePage() {
     setSavingPromo(false);
   }
   async function deletePromo(id: string) {
-    if (!confirm("이 프로모션을 삭제할까요?")) return;
+    if (!(await confirm({ title: `${promoModal?.name || "이 프로모션"} 삭제`, body: "프로모션 일정과 품목 목록이 지워집니다.", action: "프로모션 삭제" }))) return;
     setSavingPromo(true);
     try { const j = await (await fetch(`/api/production/promotions?id=${id}`, { method: "DELETE" })).json(); if (j.ok) setPromos(j.promotions || []); setPromoModal(null); } catch { /* noop */ }
     setSavingPromo(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 
 type Chart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 type Looker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
@@ -73,6 +74,7 @@ export default function ReportPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const confirmModal = useConfirm();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [cols, setCols] = useState<string[]>([]);
@@ -191,7 +193,7 @@ export default function ReportPage() {
                     <span>저장: {s.createdBy || "—"}</span>
                     <span>·</span>
                     <span>{new Date(new Date(s.createdAt).getTime() + 9 * 3600e3).toISOString().slice(0, 10)}</span>
-                    <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); if (confirm("이 저장 리포트를 삭제할까요?")) delSaved(s.id); }}>삭제</button>
+                    <button className="rp-saved-del2" onClick={async (e) => { e.stopPropagation(); if (await confirmModal({ title: `'${s.name}' 저장 리포트 삭제`, body: "저장한 질문과 SQL이 지워집니다. 되돌릴 수 없습니다.", action: "리포트 삭제" })) delSaved(s.id); }}>삭제</button>
                   </div>
                 </div>
               ))}
@@ -355,6 +357,7 @@ export default function ReportPage() {
             </div>
             <div className="rp-guide-block">
               <div className="rp-guide-title">PostgreSQL 접속정보 (커넥터 최초 연결 시)</div>
+              <div className="b2b-table-wrap">
               <table className="rp-guide-conn">
                 <tbody>
                   <tr><td>호스트</td><td><code>aws-1-ap-northeast-2.pooler.supabase.com</code></td></tr>
@@ -365,6 +368,7 @@ export default function ReportPage() {
                   <tr><td>SSL</td><td>사용 (Enable SSL)</td></tr>
                 </tbody>
               </table>
+              </div>
             </div>
             <div className="rp-guide-block">
               <div className="rp-guide-title">자주 겪는 것</div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { STATUS_SHORT } from "@/app/lib/b2b-orders";
 
 // 설정 · Teams 연동 — 알림 관련 설정을 한 페이지로(2026-08-24 설정 재구성).
@@ -26,6 +27,7 @@ export default function TeamsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [savedAt, setSavedAt] = useState<string>("");
   // 아침 일정 다이제스트
   const [digest, setDigest] = useState("");
@@ -130,7 +132,7 @@ export default function TeamsSettingsPage() {
     setDigestBusy(false);
   }
   async function sendDigestNow() {
-    if (!window.confirm("지금 '아침 일정 알림'을 Teams 채널로 보낼까요?")) return;
+    if (!(await confirmModal({ title: "'아침 일정 알림' 지금 보내기", body: "Teams 채널로 바로 발송됩니다. 보낸 메시지는 거둘 수 없습니다.", action: "지금 보내기", danger: false }))) return;
     setDigestBusy(true); setDigestMsg(null);
     try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg({ ok: true, text: "발송 완료" }); }
     catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "발송 실패" }); }

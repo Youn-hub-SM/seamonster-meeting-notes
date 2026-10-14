@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { formatMoney } from "@/app/lib/b2b-orders";
 import { Donut, TrendChart, ChartLegend, moneyCompact } from "@/app/components/charts";
 
@@ -69,6 +70,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [ledgerList, setLedgerList] = useState<{ checked: number; mismatches: Mismatch[] } | null>(null);
   const [ledgerBusy, setLedgerBusy] = useState("");
   const [ledgerErr, setLedgerErr] = useState("");
@@ -120,11 +122,14 @@ export default function ReportsPage() {
 
   async function resyncOrder(m: Mismatch) {
     const legacy = m.kind === "backfill_dup" || m.kind === "backfill_only";
-    const msg = legacy
-      ? `${m.order_no} 매출 원장을 지금 발주 상태로 다시 맞춥니다.
-백필 행은 지워지고 발송일·부가세 포함 기준으로 다시 들어가 귀속 월·금액이 바뀔 수 있습니다.`
-      : `${m.order_no} 매출 원장을 지금 발주 상태로 다시 맞춥니다.`;
-    if (!window.confirm(msg)) return;
+    if (!(await confirmModal({
+      title: `${m.order_no} 매출 원장 다시 맞추기`,
+      body: legacy
+        ? "지금 발주 상태로 다시 맞춥니다. 백필 행은 지워지고 발송일·부가세 포함 기준으로 다시 들어가 귀속 월·금액이 바뀔 수 있습니다."
+        : "지금 발주 상태로 다시 맞춥니다.",
+      action: "다시 맞추기",
+      danger: legacy,
+    }))) return;
     setLedgerBusy(m.order_id);
     setLedgerErr("");
     try {
@@ -354,7 +359,7 @@ export default function ReportsPage() {
               <div className="b2b-empty">이 기간에 발송완료된 발주가 없습니다.</div>
             ) : (
               <div className="b2b-table-wrap">
-                <table className="b2b-table">
+                <table className="b2b-table is-responsive">
                   <thead>
                     <tr>
                       <th>업체</th>
@@ -367,11 +372,11 @@ export default function ReportsPage() {
                   <tbody>
                     {report.by_company.map((c) => (
                       <tr key={c.company_name}>
-                        <td><strong>{c.company_name}</strong></td>
-                        <td className="num">{c.orders}</td>
-                        <td className="num b2b-money">{formatMoney(c.revenue)}</td>
-                        <td className="num b2b-money">{formatMoney(c.margin)}</td>
-                        <td className="num">
+                        <td data-label="업체"><strong>{c.company_name}</strong></td>
+                        <td data-label="발주 수" className="num">{c.orders}</td>
+                        <td data-label="매출" className="num b2b-money">{formatMoney(c.revenue)}</td>
+                        <td data-label="마진" className="num b2b-money">{formatMoney(c.margin)}</td>
+                        <td data-label="마진율" className="num">
                           {c.revenue > 0 ? `${Math.round((c.margin / c.revenue) * 100)}%` : "-"}
                         </td>
                       </tr>

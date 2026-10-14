@@ -33,13 +33,13 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
 
       {/* 요약 블록 */}
       <div className="b2b-table-wrap" style={{ marginBottom: 22 }}>
-        <table className="b2b-table">
+        <table className="b2b-table is-responsive">
           <thead><tr><th>구분</th><th className="num">공급가액</th><th className="num">세액 / 기타</th><th className="num">총액</th></tr></thead>
           <tbody>
-            <tr><td style={{ fontWeight: 700 }}>임대료</td><td className="num b2b-money">{won(s.rentSupply)}</td><td className="num b2b-money">{won(s.rentVat)}</td><td className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.rentTotal)}</td></tr>
-            <tr><td style={{ fontWeight: 700 }}>면세품목</td><td className="num b2b-money">{won(s.exemptSupply)}</td><td className="num b2b-money">{won(s.exemptEtc)}</td><td className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.exemptTotal)}</td></tr>
-            <tr><td style={{ fontWeight: 700 }}>과세품목</td><td className="num b2b-money">{won(s.taxableSupply)}</td><td className="num b2b-money">{won(s.taxableVat)}</td><td className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.taxableTotal)}</td></tr>
-            <tr style={{ background: "var(--sm-bg-subtle)" }}><td style={{ fontWeight: 800 }}>총 입금액</td><td className="num" /><td className="num" /><td className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{won(s.deposit)}</td></tr>
+            <tr><td data-label="구분" style={{ fontWeight: 700 }}>임대료</td><td data-label="공급가액" className="num b2b-money">{won(s.rentSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.rentVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.rentTotal)}</td></tr>
+            <tr><td data-label="구분" style={{ fontWeight: 700 }}>면세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.exemptSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.exemptEtc)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.exemptTotal)}</td></tr>
+            <tr><td data-label="구분" style={{ fontWeight: 700 }}>과세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.taxableSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.taxableVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.taxableTotal)}</td></tr>
+            <tr style={{ background: "var(--sm-bg-subtle)" }}><td data-label="구분" style={{ fontWeight: 800 }}>총 입금액</td><td className="num" /><td className="num" /><td data-label="총액" className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{won(s.deposit)}</td></tr>
           </tbody>
         </table>
       </div>

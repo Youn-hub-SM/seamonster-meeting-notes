@@ -2,6 +2,7 @@
 
 import { matchKoQuery } from "@/app/lib/hangul";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { VOC_CATEGORIES, VOC_CAT_STATUSES, VOC_CAT_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, VOC_FAULTS, suggestFault, computeVocLoss, type Voc, type VocCategoryRow, type VocCatStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 import { type VocImportRow } from "@/app/lib/voc-xlsx";
@@ -28,6 +29,7 @@ export default function VocPage() {
   const [rows, setRows] = useState<Voc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   // 보기: 유형별 현황판(기본) / 전체 목록. 건별 상태 관리는 제거 — 개선 추적은 유형 단위(개선 작업은 Flow).
   const [view, setView] = useState<"현황판" | "목록">("현황판");
   const [month, setMonth] = useState(() => TODAY().slice(0, 7)); // 현황판 기준 월(YYYY-MM)
@@ -187,7 +189,7 @@ export default function VocPage() {
   async function registerAsana(r: Voc) {
     if (r.asana_task_at) { setError("이미 아사나에 등록된 VOC입니다."); return; }
     if (flowBusy) { setError("다른 VOC의 업무 등록이 진행 중입니다. 잠시 후 다시 시도하세요."); return; }
-    if (!window.confirm(`이 VOC를 아사나에 업무로 등록할까요?\n제목: [VOC/${r.category}] ${r.product || "상품미상"} - ${r.customer || "고객"}`)) return;
+    if (!(await confirmModal({ title: "아사나에 업무로 등록", body: `제목: [VOC/${r.category}] ${r.product || "상품미상"} - ${r.customer || "고객"} — 아사나에 업무가 만들어집니다.`, action: "아사나에 등록", danger: false }))) return;
     setFlowBusy(r.id); setError("");
     try {
       const res = await fetch("/api/voc/asana-task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) });
@@ -201,7 +203,7 @@ export default function VocPage() {
 
   async function remove() {
     if (!edit?.id) return;
-    if (!window.confirm("이 VOC를 삭제할까요? 복구되지 않습니다.")) return;
+    if (!(await confirmModal({ title: "VOC 삭제", body: "이 VOC가 지워집니다. 복구되지 않습니다.", action: "VOC 삭제" }))) return;
     setSaving(true); setError("");
     try {
       const res = await fetch(`/api/voc?id=${encodeURIComponent(edit.id)}`, { method: "DELETE" });
@@ -665,6 +667,7 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
 function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[]; managed: boolean; onClose: () => void; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const confirmModal = useConfirm();
   const [draft, setDraft] = useState<{ id?: string; name: string; fault: string; sort: string; active: boolean } | null>(null);
 
   async function saveDraft() {
@@ -680,7 +683,7 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
     setBusy(false);
   }
   async function removeCat(c: VocCategoryRow) {
-    if (!confirm(`'${c.name}' 유형을 삭제할까요? (사용 중이면 삭제 대신 비활성 처리됩니다)`)) return;
+    if (!(await confirmModal({ title: `'${c.name}' 유형 삭제`, body: "유형이 목록에서 빠집니다. 사용 중이면 삭제 대신 비활성 처리됩니다.", action: "유형 삭제" }))) return;
     setBusy(true); setErr("");
     try {
       const j = await (await fetch(`/api/voc/categories?id=${c.id}`, { method: "DELETE" })).json();
@@ -698,16 +701,16 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
           {!managed && <div className="b2b-error" style={{ marginBottom: 10 }}>072_voc_categories.sql 마이그레이션을 적용해야 유형을 편집할 수 있습니다.</div>}
           {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
           <div className="b2b-table-wrap" style={{ marginBottom: 12 }}>
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr><th>유형</th><th>귀책 기본값</th><th className="num">정렬</th><th>활성</th><th></th></tr></thead>
               <tbody>
                 {cats.map((c) => (
                   <tr key={c.id}>
-                    <td style={{ fontWeight: 600 }}>{c.name}</td>
-                    <td>{c.fault}</td>
-                    <td className="num">{c.sort}</td>
-                    <td>{c.active ? "활성" : <span className="sm-faint">비활성</span>}</td>
-                    <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                    <td data-label="유형" style={{ fontWeight: 600 }}>{c.name}</td>
+                    <td data-label="귀책 기본값">{c.fault}</td>
+                    <td data-label="정렬" className="num">{c.sort}</td>
+                    <td data-label="활성">{c.active ? "활성" : <span className="sm-faint">비활성</span>}</td>
+                    <td className="actions">
                       <button className="b2b-link-btn" disabled={busy || !managed} onClick={() => setDraft({ id: c.id, name: c.name, fault: c.fault, sort: String(c.sort), active: c.active })}>수정</button>
                       <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", marginLeft: 8 }} disabled={busy || !managed} onClick={() => removeCat(c)}>삭제</button>
                     </td>

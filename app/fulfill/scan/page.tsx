@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useConfirm } from "@/app/components/Feedback";
 
 type Tally = { key: string; sku: string; name: string; qty: number; unknown: boolean; zone?: string | null };
 type State = { tally: Tally[]; scannedCount: number; totalInvoices: number; totalUnits: number };
@@ -36,6 +37,7 @@ const SOUND_KEY = "scan_sound"; // "voice" | "1"(삐 소리) | "0"(끔) — 없�
 const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
 export default function ScanPage() {
+  const confirm = useConfirm();
   const [st, setSt] = useState<State | null>(null);
   const [error, setError] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
@@ -249,7 +251,7 @@ export default function ScanPage() {
   async function undoReset() {
     if (!lastReset || undoingRef.current) return;
     if (waitBusy("되돌리기")) return;
-    const ok = window.confirm(`${hm(lastReset.at)}에 초기화한 ${lastReset.count.toLocaleString()}건을 이번 라운드로 되돌릴까요?`);
+    const ok = await confirm({ title: "초기화 되돌리기", body: `${hm(lastReset.at)}에 초기화한 ${lastReset.count.toLocaleString()}건이 이번 라운드로 돌아와 지금 찍은 것과 합쳐집니다.`, action: `${lastReset.count.toLocaleString()}건 되돌리기`, danger: false });
     scanRef.current?.focus(); // 버튼에 포커스가 남으면 다음 스캔의 Enter 가 버튼을 또 누른다
     if (!ok) return;
     undoingRef.current = true; roundOpRef.current = true;
@@ -294,7 +296,7 @@ export default function ScanPage() {
       + `<tfoot><tr><td>합계</td><td class="q">${st.totalUnits.toLocaleString()}</td></tr></tfoot></table>`
       + `<script>window.onload=function(){setTimeout(function(){window.print()},80)}</script></body></html>`;
     const w = window.open("", "_blank", "width=560,height=880");
-    if (!w) { alert("팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 인쇄하세요."); return; }
+    if (!w) { setError("팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 인쇄하세요."); return; }
     w.document.write(html);
     w.document.close();
   }
@@ -405,17 +407,17 @@ export default function ScanPage() {
           <div className="b2b-empty" style={{ padding: 24 }}>아직 스캔된 송장이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr>{st.tally.some((t) => t.zone) && <th>위치</th>}<th>품목명</th><th>SKU</th><th className="num">수량</th></tr></thead>
               <tbody>
                 {st.tally.map((t) => (
                   <tr key={t.key} style={{ background: t.unknown ? "var(--sm-danger-bg)" : undefined }}>
                     {st.tally.some((x) => x.zone) && (
-                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t.unknown ? "-" : t.zone || <span className="sm-faint" style={{ fontWeight: 400 }}>미지정</span>}</td>
+                      <td data-label="위치" style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{t.unknown ? "-" : t.zone || <span className="sm-faint" style={{ fontWeight: 400 }}>미지정</span>}</td>
                     )}
-                    <td><strong>{t.name}</strong></td>
-                    <td className="sm-faint">{t.sku || "-"}</td>
-                    <td className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{t.qty.toLocaleString()}</td>
+                    <td data-label="품목명"><strong>{t.name}</strong></td>
+                    <td data-label="SKU" className="sm-faint">{t.sku || "-"}</td>
+                    <td data-label="수량" className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{t.qty.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>

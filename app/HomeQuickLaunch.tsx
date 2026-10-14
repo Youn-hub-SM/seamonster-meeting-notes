@@ -2,7 +2,9 @@
 
 // 홈 퀵런치 — 즐겨찾는 메뉴(사이드바와 같은 데이터)를 큰 타일로.
 // 타일은 기존 .home-tool-card(구 홈의 런처 카드) 재사용.
-// 최근 방문 블록은 제거(2026-08-24 대표 지시) — 기록 자체(recent-pages)는 사이드바 등 다른 곳에서 쓰므로 유지.
+// 최근 방문 블록은 제거(2026-08-24 대표 지시) — 최근 사용은 사이드바 '최근'(2026-10-14 C4)이 맡는다.
+// 즐겨찾기가 비어 있으면(로그인했고 목록이 0) 역할 묶음 바로가기 4개(세일즈 / 생산·재고 / 마케팅 / CS — 2026-10-14 D3):
+//  각 분류의 첫 툴로 가는 카드, 라벨은 분류명. NAV 에서 파생.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -10,15 +12,17 @@ import { NAV, sortByNavOrder, navLabelOf } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 type Fav = { href: string; label: string };
+const ROLE_CATS = ["세일즈", "생산·재고", "마케팅", "CS"];
 
 export default function HomeQuickLaunch() {
-  const [favorites, setFavorites] = useState<Fav[]>([]);
+  // null = 아직 모름(불러오는 중 아무것도 안 그림), false = 로그인 안 됨
+  const [favorites, setFavorites] = useState<Fav[] | null | false>(null);
 
   useEffect(() => {
     fetch("/api/b2b/favorites", { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (j?.ok) setFavorites(j.favorites || []); })
-      .catch(() => {});
+      .then((j) => setFavorites(j?.ok ? (j.favorites || []) : false))
+      .catch(() => setFavorites(false));
   }, []);
 
   // href → 아이콘 (사이드바와 동일 규칙: 하위 메뉴는 상위 툴 아이콘)
@@ -31,7 +35,17 @@ export default function HomeQuickLaunch() {
     return (href: string): IconName => m.get(href) || "home";
   }, []);
 
-  if (favorites.length === 0) return null;
+  // 역할 묶음 바로가기 — 분류의 첫 툴(관리자 전용 제외) 주소
+  const roleShortcuts = useMemo(
+    () => ROLE_CATS
+      .map((label) => NAV.find((c) => c.label === label))
+      .filter((c): c is NonNullable<typeof c> => !!c)
+      .map((c) => ({ label: c.label, tool: c.tools.find((t) => !t.adminOnly && t.href.startsWith("/")) }))
+      .filter((x): x is { label: string; tool: NonNullable<typeof x.tool> } => !!x.tool),
+    []
+  );
+
+  if (favorites === null || favorites === false) return null;
 
   const Tile = ({ href, label, icon }: { href: string; label: string; icon: IconName }) => (
     <Link href={href} className="home-tool-card">
@@ -42,17 +56,24 @@ export default function HomeQuickLaunch() {
     </Link>
   );
 
+  if (favorites.length === 0) {
+    return (
+      <section className="home-section">
+        <h2 className="home-section-title">바로가기</h2>
+        <div className="home-grid" style={{ marginTop: 14 }}>
+          {roleShortcuts.map((s) => <Tile key={s.label} href={s.tool.href} label={s.label} icon={s.tool.icon} />)}
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <>
-      {favorites.length > 0 && (
-        <section className="home-section">
-          <h2 className="home-section-title">즐겨찾는 메뉴</h2>
-          <div className="home-grid" style={{ marginTop: 14 }}>
-            {/* 사이드바와 동일하게 실제 메뉴 순서로 정렬 */}
-            {sortByNavOrder(favorites).map((f) => <Tile key={f.href} href={f.href} label={navLabelOf(f.href, f.label)} icon={iconForHref(f.href)} />)}
-          </div>
-        </section>
-      )}
-    </>
+    <section className="home-section">
+      <h2 className="home-section-title">즐겨찾는 메뉴</h2>
+      <div className="home-grid" style={{ marginTop: 14 }}>
+        {/* 사이드바와 동일하게 실제 메뉴 순서로 정렬 */}
+        {sortByNavOrder(favorites).map((f) => <Tile key={f.href} href={f.href} label={navLabelOf(f.href, f.label)} icon={iconForHref(f.href)} />)}
+      </div>
+    </section>
   );
 }

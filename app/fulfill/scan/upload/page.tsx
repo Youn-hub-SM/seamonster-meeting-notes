@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useConfirm } from "@/app/components/Feedback";
 import { parseScanCells, parseCsv } from "@/app/lib/fulfill-scan";
 
 type Upload = { id: string; title: string; created_by: string | null; created_at: string; invoice_count: number; item_count: number };
@@ -42,6 +43,7 @@ async function fileToCells(file: File): Promise<unknown[][]> {
 }
 
 export default function ScanUploadPage() {
+  const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +105,7 @@ export default function ScanUploadPage() {
   }
 
   async function removeUpload(id: string) {
-    if (!confirm("이 업로드 파일의 송장 데이터를 삭제할까요?")) return;
+    if (!(await confirm({ title: "업로드 파일의 송장 데이터 삭제", body: "이 파일로 올린 송장 데이터가 지워집니다.", action: "송장 데이터 삭제" }))) return;
     try {
       const j = await (await fetch(`/api/fulfill/scan/uploads/${id}`, { method: "DELETE" })).json();
       if (!j.ok) throw new Error(j.error || "삭제 실패");
@@ -112,7 +114,7 @@ export default function ScanUploadPage() {
   }
 
   async function clearAll() {
-    if (!confirm("올려둔 모든 송장 데이터와 스캔 내역을 비울까요? 되돌릴 수 없습니다.")) return;
+    if (!(await confirm({ title: "모든 송장 데이터 비우기", body: "올려둔 모든 송장 데이터와 스캔 내역이 지워집니다. 되돌릴 수 없습니다.", action: "전체 비우기" }))) return;
     try {
       const j = await (await fetch("/api/fulfill/scan/uploads", { method: "DELETE" })).json();
       if (!j.ok) throw new Error(j.error || "비우기 실패");
@@ -167,17 +169,17 @@ export default function ScanUploadPage() {
           <div className="b2b-empty">올린 파일이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr><th>파일</th><th className="num">송장</th><th className="num">라인</th><th>올린이</th><th>올린 시각</th><th></th></tr></thead>
               <tbody>
                 {uploads.map((u) => (
                   <tr key={u.id}>
-                    <td><strong>{u.title || "(제목 없음)"}</strong></td>
-                    <td className="num b2b-money">{u.invoice_count.toLocaleString()}</td>
-                    <td className="num b2b-money">{u.item_count.toLocaleString()}</td>
-                    <td className="sm-faint">{u.created_by || "-"}</td>
-                    <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{fmtTime(u.created_at)}</td>
-                    <td><button className="b2b-btn-secondary" style={{ padding: "4px 8px", fontSize: 12, color: "var(--sm-danger)" }} onClick={() => removeUpload(u.id)}>삭제</button></td>
+                    <td data-label="파일"><strong>{u.title || "(제목 없음)"}</strong></td>
+                    <td data-label="송장" className="num b2b-money">{u.invoice_count.toLocaleString()}</td>
+                    <td data-label="라인" className="num b2b-money">{u.item_count.toLocaleString()}</td>
+                    <td data-label="올린이" className="sm-faint">{u.created_by || "-"}</td>
+                    <td data-label="올린 시각" className="sm-faint" style={{ whiteSpace: "nowrap" }}>{fmtTime(u.created_at)}</td>
+                    <td className="actions"><button className="b2b-btn-secondary" style={{ padding: "4px 8px", fontSize: 12, color: "var(--sm-danger)" }} onClick={() => removeUpload(u.id)}>삭제</button></td>
                   </tr>
                 ))}
               </tbody>

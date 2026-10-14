@@ -33,6 +33,10 @@ import { Company, Product, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types
 import { computeOrderMargin, seasonForDate, SEASON_MONTHS } from "@/app/lib/b2b-margin";
 import { Combobox } from "./Combobox";
 import IconButton from "@/app/components/IconButton";
+import { useConfirm } from "@/app/components/Feedback";
+
+// 저장 뒤 목록으로 가면서 차감 칸 안내(channel_notice)를 넘기는 sessionStorage 키 — 목록(page.tsx)이 경고 배너로 이어받는다(키는 page.tsx 와 같아야 한다)
+const CHANNEL_NOTICE_KEY = "b2b.orders.channelNotice";
 
 type Mode = "create" | "edit";
 
@@ -259,6 +263,7 @@ export default function OrderForm({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [salesWarn, setSalesWarn] = useState(""); // 매출 원장 반영 실패(수정 저장 뒤) — 다시 [수정]을 누르면 다시 맞춰진다
   // 저장 뒤 다시 불러오기 실패 — 화면 값이 DB 와 어긋났다(새 줄에 id 없음). 새로고침 전까지 [수정]을 막는다
   const [reloadFailed, setReloadFailed] = useState(false);
@@ -779,7 +784,17 @@ export default function OrderForm({
     const unlinked = data.items.filter((it) => !it.product_id && it.product_name.trim()).map((it) => it.product_name.trim());
     let allowUnlinked = false;
     if (unlinked.length) {
-      if (!window.confirm(`다음 품목은 상품이 연결되지 않아 재고에서 빠지지 않습니다:\n${unlinked.join("\n")}\n\n그대로 저장할까요? 재고 품목이면 [취소]를 누르고 품목칸에서 목록의 상품을 고르세요.`)) return;
+      if (!(await confirmModal({
+        title: "상품 미연결 품목 그대로 저장",
+        body: (
+          <>
+            <div>다음 품목은 상품이 연결되지 않아 재고에서 빠지지 않습니다. 재고 품목이면 그만두고 품목칸에서 목록의 상품을 고르세요.</div>
+            {unlinked.map((n) => <div key={n}>- {n}</div>)}
+          </>
+        ),
+        action: "그대로 저장",
+        danger: false,
+      }))) return;
       allowUnlinked = true;
     }
     // 단일 발송 발주의 발송된 수량을 고치면 그 차수에 나간 수량을 다시 기록한다 — 선점·매출이 새 수량을 따르므로 확인을 받는다.
@@ -789,8 +804,18 @@ export default function OrderForm({
       const lines = [
         ...shippedMoves.map((c) => `${c.label}: 발송된 수량을 ${formatQty(c.from)} → ${formatQty(c.to)} 으로 고칩니다`),
         ...shippedRelinks.map((r) => `${r.label}: 상품을 연결해 발송된 ${formatQty(r.qty)} 이 그 상품 재고에서 빠집니다`),
-      ].join("\n");
-      if (!window.confirm(`${lines}\n— 재고·매출이 함께 바뀝니다.\n\n저장할까요?`)) return;
+      ];
+      if (!(await confirmModal({
+        title: "발송된 수량 수정 저장",
+        body: (
+          <>
+            {lines.map((l) => <div key={l}>- {l}</div>)}
+            <div>재고·매출이 함께 바뀝니다.</div>
+          </>
+        ),
+        action: "저장",
+        danger: false,
+      }))) return;
       allowShippedQty = true;
     }
     setSaving(true);
@@ -819,7 +844,10 @@ export default function OrderForm({
       if (res.status === 409 && json.stale) throw new Error(json.error || "다른 곳에서 이 발주가 바뀌었습니다 — 새로고침한 뒤 다시 고쳐 저장하세요.");
       if (!res.ok || !json.ok) throw new Error(json.error || "저장 실패");
       // 차감 칸이 유지됐거나(이미 나감) 바뀌었으면(옮길 방향) 안내 — 따르지 않으면 칸마다 유령 재고가 생긴다
-      if (json.channel_notice) alert(json.channel_notice);
+      //  창 대신 목록 화면의 경고 배너로 — 목록으로 넘어가므로 sessionStorage 로 건넨다(매출 실패로 이 화면에 남으면 다음에 목록을 열 때 뜬다)
+      if (json.channel_notice) {
+        try { sessionStorage.setItem(CHANNEL_NOTICE_KEY, String(json.channel_notice)); } catch { /* 저장소를 못 쓰면 안내만 건너뛴다 */ }
+      }
       // 매출 원장 반영 실패(수정) — 품목·차수·재고는 저장됐다. 목록으로 가면 경고가 사라지므로 이 화면에 남아
       //  배너를 띄우고, 다시 [수정]을 누르면 매출이 다시 맞춰진다. 화면 값·updated_at 은 다시 불러오기로만 맞춘다 —
       //  응답의 updated_at 만 먼저 받아 두면 다시 불러오기가 실패해도 409 검사가 통과해, 옛 화면 값(새 줄에 id 없음)이
@@ -854,7 +882,7 @@ export default function OrderForm({
       return;
     }
     const orderLabel = originalOrder?.order_no || orderId;
-    if (!confirm(`발주 ${orderLabel} 을(를) 삭제하시겠어요?\n품목·발송 일정이 함께 삭제되고 선점된 재고가 원복됩니다.`)) return;
+    if (!(await confirmModal({ title: `발주 ${orderLabel} 삭제`, body: "품목·발송 일정이 함께 삭제되고 선점된 재고가 원복됩니다. 되돌릴 수 없습니다.", action: "발주 삭제" }))) return;
     setSaving(true);
     setError("");
     try {

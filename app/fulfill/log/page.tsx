@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useConfirm } from "@/app/components/Feedback";
 import { DEFAULT_BOX_CATS, type BoxCat } from "@/app/lib/fulfill-rates";
 import { unionCategories } from "@/app/lib/delivery-log";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
@@ -46,6 +47,7 @@ const PRESETS: { key: string; range: () => { from: string; to: string } }[] = [
 ];
 
 export default function DeliveryLogPage() {
+  const confirm = useConfirm();
   const [rows, setRows] = useState<Row[]>([]);
   const [boxCats, setBoxCats] = useState<BoxCat[]>(DEFAULT_BOX_CATS); // 설정에서 편집한 박스 종류
   const [range, setRange] = useState({ from: "", to: "" });
@@ -159,7 +161,7 @@ export default function DeliveryLogPage() {
   // 자동입력 배치 기록 되돌리기 — 그 배치의 박스·운임 기여분이 합계에서 빠진다
   async function delRecord(date: string, entry: RecordEntry) {
     const label = entry.mode === "baseline" ? "이전 기록 합계" : entry.mode === "replace" ? "덮어쓰기 기록" : "더하기 기록";
-    if (!window.confirm(`이 ${label}을 되돌릴까요?\n일반 ${sumBoxes(entry.boxes_normal)}박스 · 도착보장 ${sumBoxes(entry.boxes_guar)}박스 · 운임 ${won(entry.base_fee_normal + entry.base_fee_guar)}원이 합계에서 빠집니다.`)) return;
+    if (!(await confirm({ title: `${date} ${label} 되돌리기`, body: `일반 ${sumBoxes(entry.boxes_normal)}박스 · 도착보장 ${sumBoxes(entry.boxes_guar)}박스 · 운임 ${won(entry.base_fee_normal + entry.base_fee_guar)}원이 합계에서 빠집니다.`, action: "기록 되돌리기" }))) return;
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: date, del_record: { id: entry.id } }) });
       const j = await res.json(); if (!j.ok) throw new Error(j.error || "되돌리기 실패");
@@ -173,7 +175,7 @@ export default function DeliveryLogPage() {
   }
 
   async function delEntry(date: string, entry: ManualEntry) {
-    if (!window.confirm(`이 보정을 삭제할까요?\n${entry.side === "n" ? "일반" : "도착보장"} · ${entry.category} · ${entry.qty > 0 ? "+" : ""}${entry.qty} · ${entry.note}`)) return;
+    if (!(await confirm({ title: `${date} 보정 삭제`, body: `${entry.side === "n" ? "일반" : "도착보장"} · ${entry.category} · ${entry.qty > 0 ? "+" : ""}${entry.qty} · ${entry.note} — 이 보정분이 합계에서 빠집니다.`, action: "보정 삭제" }))) return;
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: date, del_entry: { id: entry.id } }) });
       const j = await res.json(); if (!j.ok) throw new Error(j.error || "삭제 실패");
@@ -221,7 +223,7 @@ export default function DeliveryLogPage() {
   }
 
   async function removeDay(date: string) {
-    if (!window.confirm(`${date} 배송일지 행을 삭제할까요?`)) return;
+    if (!(await confirm({ title: `${date} 배송일지 행 삭제`, body: "그날의 박스 수·운임·드라이아이스·메모가 모두 지워집니다.", action: "행 삭제" }))) return;
     try {
       const res = await fetch(`/api/fulfill/log?log_date=${date}`, { method: "DELETE" });
       const j = await res.json(); if (!j.ok) throw new Error(j.error);
@@ -353,6 +355,7 @@ export default function DeliveryLogPage() {
                               {/* ① 자동입력 — 발주처리 기록. 수정 불가 */}
                               <div>
                                 <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>자동입력</div>
+                                <div className="b2b-table-wrap">
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
                                   <thead><tr><th></th>{CATS_VIEW.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
                                   <tbody>
@@ -370,6 +373,7 @@ export default function DeliveryLogPage() {
                                     })}
                                   </tbody>
                                 </table>
+                                </div>
                                 {(r.record_entries || []).length > 0 && (
                                   <div style={{ marginTop: 6 }}>
                                     {[...r.record_entries].reverse().map((e) => (
@@ -395,6 +399,7 @@ export default function DeliveryLogPage() {
                                   {r.manual_updated_at && <span className="sm-faint" style={{ fontSize: 12 }}>수정일 {kstStamp(r.manual_updated_at)}</span>}
                                   <button className="b2b-btn-secondary" style={{ padding: "3px 12px", fontSize: 12 }} onClick={() => openEntry(r.log_date)}>+ 추가</button>
                                 </div>
+                                <div className="b2b-table-wrap">
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
                                   <thead><tr><th></th>{CATS_VIEW.map((c) => <th key={c} className="num">{c}</th>)}<th className="num">합계</th></tr></thead>
                                   <tbody>
@@ -424,6 +429,7 @@ export default function DeliveryLogPage() {
                                     })}
                                   </tbody>
                                 </table>
+                                </div>
                                 {(r.manual_entries || []).length > 0 && (
                                   <div style={{ marginTop: 6 }}>
                                     {[...r.manual_entries].reverse().map((e) => (
@@ -442,6 +448,7 @@ export default function DeliveryLogPage() {
                               </div>
                               <div>
                                 <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부</div>
+                                <div className="b2b-table-wrap">
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12, maxWidth: 480 }}>
                                   <thead><tr><th>채널</th><th className="num">기본운임 <span className="sm-faint" style={{ fontWeight: 400 }}>(자동)</span></th><th className="num">추가운임</th><th className="num">합계</th></tr></thead>
                                   <tbody>
@@ -475,6 +482,7 @@ export default function DeliveryLogPage() {
                                     <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(feeTotal(r))}</td>
                                   </tr></tfoot>
                                 </table>
+                                </div>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
                                 <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))} = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>

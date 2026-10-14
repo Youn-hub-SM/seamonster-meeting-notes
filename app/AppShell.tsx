@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AppSidebar from "./AppSidebar";
+import { FeedbackProvider } from "./components/Feedback";
 import { pageTitleOf } from "./nav";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isCollapsed = collapsed && desktop;
 
   return (
+    <FeedbackProvider>
     <div className={`app-shell ${isCollapsed ? "is-collapsed" : ""}`}>
       <AppSidebar open={open} collapsed={isCollapsed} onToggleCollapse={toggleCollapse} onNavigate={() => setOpen(false)} />
       {open && <div className="app-sb-backdrop" onClick={() => setOpen(false)} />}
@@ -63,5 +65,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </div>
+    </FeedbackProvider>
   );
 }

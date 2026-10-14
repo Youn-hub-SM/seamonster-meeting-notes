@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, type InventoryTxn, type InvTxnType, type InvChannel } from "@/app/lib/inventory";
+import { useConfirm, useToast, type ConfirmOptions } from "@/app/components/Feedback";
 
 // 칸 이동·프로모션 합류 행인가 — app/lib/production-velocity.ts isMoveRow 와 같은 규칙(S1·S11, 화면용 순수 함수 — supabase 를 끌어오지 않는다).
 //  source(131)가 있으면 move·promo_close 만 이동, 없으면(131 이전 기록·미적용) 주문번호 없는 partner '채널이동'.
@@ -22,7 +23,9 @@ type LedgerJ = { ok?: boolean; error?: string; code?: string; confirm?: string; 
 //  행을 지운 뒤에만 내는 문구다(FULFILL_MARK_FAIL·미반영분 출고 취소 실패·135 폴백 키/이력 삭제 실패·[재고 차감 기록] 목록 재오픈 실패).
 const isPartial = (j: LedgerJ): boolean =>
   !!j && (j.deleted === true || j.partial === true || (!j.code && /^재고는 원복됐지만/.test(j.error || "")));
-export async function deleteLedger(url: string): Promise<LedgerDeleteResult> {
+// ui = 호출 컴포넌트의 공용 피드백(useConfirm·useToast) — 훅은 컴포넌트 안에서만 부를 수 있어 유틸에는 넘겨 받는다.
+export type LedgerUi = { confirm: (o: ConfirmOptions) => Promise<boolean>; error: (text: string) => void };
+export async function deleteLedger(url: string, ui: LedgerUi): Promise<LedgerDeleteResult> {
   type J = LedgerJ;
   const send = async (u: string): Promise<{ r: Response | null; j: J }> => {
     try {
@@ -32,14 +35,14 @@ export async function deleteLedger(url: string): Promise<LedgerDeleteResult> {
   };
   let { r, j } = await send(url);
   if (r?.status === 409 && j?.code === "confirm_required") {
-    if (!window.confirm(j.confirm || j.error || "이 기록을 취소할까요?")) return { ok: false };
+    if (!(await ui.confirm({ title: "기록 취소 — 한 번 더 확인", body: j.confirm || j.error || "이 기록을 취소합니다.", action: "그래도 취소" }))) return { ok: false };
     ({ r, j } = await send(`${url}${url.includes("?") ? "&" : "?"}confirm=1`));
   }
-  if (!r) { alert("응답을 받지 못했습니다 — 취소됐을 수 있으니 새로고침해 먼저 확인하세요."); return { ok: false }; }
+  if (!r) { ui.error("응답을 받지 못했습니다 — 취소됐을 수 있으니 새로고침해 먼저 확인하세요."); return { ok: false }; }
   if (!r.ok || !j?.ok) {
     if (isPartial(j)) return { ok: true, warn: true, notice: j?.error || "재고는 원복됐지만 뒤처리 일부를 마치지 못했습니다 — 새로고침해 목록을 확인하세요." };
     const tail = r.status === 409 || /새로고침|다시 시도/.test(j?.error || "") ? "" : " — 새로고침 후 다시 시도하세요.";
-    alert(`취소 실패: ${j?.error || "서버 오류"}${tail}`);
+    ui.error(`취소 실패: ${j?.error || "서버 오류"}${tail}`);
     return { ok: false };
   }
   return { ok: true, notice: j.notice || undefined };
@@ -47,6 +50,8 @@ export async function deleteLedger(url: string): Promise<LedgerDeleteResult> {
 
 // 재고 원장 테이블 — 활동 히스토리·구매판매·조정 공용. type/types 필터·품목 필터 지원, 행 취소.
 export default function TxnTable({ type, types, productId, reloadKey = 0, onChanged }: { type?: InvTxnType; types?: InvTxnType[]; productId?: string; reloadKey?: number; onChanged?: () => void }) {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [rows, setRows] = useState<InventoryTxn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -73,9 +78,9 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
   useEffect(() => { load(); }, [load, reloadKey]);
 
   async function cancel(t: InventoryTxn) {
-    if (!window.confirm(`이 거래를 취소(삭제)할까요? ${t.status === "대기" ? "대기 기록이 지워집니다." : "재고가 원복됩니다."}`)) return;
+    if (!(await confirm({ title: `${t.type} 기록 취소`, body: t.status === "대기" ? "대기 기록이 지워집니다." : "이 기록이 지워지고 재고가 원복됩니다.", action: "기록 취소" }))) return;
     setFlash(null);
-    const res = await deleteLedger(`/api/inventory/txn?id=${encodeURIComponent(t.id)}`);
+    const res = await deleteLedger(`/api/inventory/txn?id=${encodeURIComponent(t.id)}`, { confirm, error: toast.error });
     if (!res.ok) return;
     if (res.notice) setFlash({ ok: !res.warn, text: res.notice });
     await load();
@@ -91,7 +96,7 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
     });
     const j = await r.json().catch(() => null);
     setSaving(false);
-    if (!r.ok || !j?.ok) { alert(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { toast.error(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     setEditId(null);
     await load();
     onChanged?.();

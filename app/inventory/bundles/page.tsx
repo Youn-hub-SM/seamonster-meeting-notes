@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BundlePreview } from "@/app/api/inventory/bundles/import/route";
 import { Combobox, ComboOption } from "../../b2b/orders/Combobox";
 import BundleEditor from "@/app/components/BundleEditor";
+import { useConfirm } from "@/app/components/Feedback";
 
 type BundleRow = { parent_id: string; parent_sku: string | null; parent_name: string; components: { component_id: string; sku: string | null; name: string; spec: string | null; qty: number }[] };
 type PreviewResp = { summary: { bundles: number; valid: number; willCreate: number; errors: number }; previews: BundlePreview[] };
 type ProdLite = { id: string; sku: string | null; name: string; spec: string | null; courier_weight?: number | null };
 
 export default function BundlesPage() {
+  const confirm = useConfirm();
   const [bundles, setBundles] = useState<BundleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -57,10 +59,10 @@ export default function BundlesPage() {
     setApplying(false);
   }
   async function removeBundle(b: BundleRow) {
-    if (!confirm(`"${b.parent_name}" 묶음 구성을 삭제할까요? (상품 자체는 유지)`)) return;
+    if (!(await confirm({ title: `"${b.parent_name}" 묶음 구성 삭제`, body: `구성품 ${b.components.length}종 연결이 지워집니다. 상품 자체는 유지됩니다.`, action: "구성 삭제" }))) return;
     const r = await fetch(`/api/inventory/bundles?parent=${b.parent_id}`, { method: "DELETE" });
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) { alert(`삭제 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { setError(`삭제 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     load();
   }
 
@@ -87,21 +89,21 @@ export default function BundlesPage() {
         <div className="b2b-empty">등록된 묶음이 없습니다.</div>
       ) : (
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          <table className="b2b-table is-responsive">
             <thead><tr><th>묶음(세트)</th><th>SKU</th><th>구성품</th><th></th></tr></thead>
             <tbody>
               {bundles.map((b) => (
                 <tr key={b.parent_id}>
-                  <td><strong>{b.parent_name}</strong> <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span></td>
-                  <td className="sm-faint">{b.parent_sku || "-"}</td>
-                  <td>
+                  <td data-label="묶음(세트)"><strong>{b.parent_name}</strong> <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span></td>
+                  <td data-label="SKU" className="sm-faint">{b.parent_sku || "-"}</td>
+                  <td data-label="구성품">
                     <div className="sm-col" style={{ gap: 2 }}>
                       {b.components.map((c) => (
                         <span key={c.component_id} style={{ fontSize: 15 }}>{c.name}{c.spec ? <span className="sm-faint" style={{ fontSize: 12 }}> {c.spec}</span> : null} <strong>× {c.qty}</strong> {c.sku ? <span className="sm-faint" style={{ fontSize: 12 }}>({c.sku})</span> : null}</span>
                       ))}
                     </div>
                   </td>
-                  <td style={{ whiteSpace: "nowrap" }}><button className="b2b-link-btn" onClick={() => setEditFor(b)}>수정</button> <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => removeBundle(b)}>삭제</button></td>
+                  <td className="actions"><button className="b2b-link-btn" onClick={() => setEditFor(b)}>수정</button> <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => removeBundle(b)}>삭제</button></td>
                 </tr>
               ))}
             </tbody>
@@ -123,16 +125,16 @@ export default function BundlesPage() {
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}개(제외)</span>}
               </div>
               <div className="b2b-table-wrap" style={{ maxHeight: 380, overflow: "auto" }}>
-                <table className="b2b-table">
+                <table className="b2b-table is-responsive">
                   <thead><tr><th>묶음SKU</th><th>구성</th><th>상태</th></tr></thead>
                   <tbody>
                     {preview.previews.map((p, i) => (
                       <tr key={i} style={p.ok ? undefined : { background: "var(--sm-danger-bg)" }}>
-                        <td><strong>{p.parentSku}</strong><div className="sm-faint" style={{ fontSize: 12 }}>{p.name}{!p.parentExists ? " · 신규생성" : ""}</div></td>
-                        <td><div className="sm-col" style={{ gap: 1 }}>{p.components.map((c, ci) => (
+                        <td data-label="묶음SKU"><strong>{p.parentSku}</strong><div className="sm-faint" style={{ fontSize: 12 }}>{p.name}{!p.parentExists ? " · 신규생성" : ""}</div></td>
+                        <td data-label="구성"><div className="sm-col" style={{ gap: 1 }}>{p.components.map((c, ci) => (
                           <span key={ci} style={{ fontSize: 12, color: c.ok ? undefined : "var(--sm-danger)" }}>{c.name || c.sku} × {c.qty} {c.ok ? "" : `— ${c.err}`}</span>
                         ))}</div></td>
-                        <td style={{ whiteSpace: "nowrap" }}>{p.ok ? <span style={{ color: "var(--sm-success)" }}>OK</span> : <span style={{ color: "var(--sm-danger)", fontSize: 12 }}>{p.err || "구성품 오류"}</span>}</td>
+                        <td data-label="상태" style={{ whiteSpace: "nowrap" }}>{p.ok ? <span style={{ color: "var(--sm-success)" }}>OK</span> : <span style={{ color: "var(--sm-danger)", fontSize: 12 }}>{p.err || "구성품 오류"}</span>}</td>
                       </tr>
                     ))}
                   </tbody>

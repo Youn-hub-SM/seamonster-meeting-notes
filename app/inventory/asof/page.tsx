@@ -63,7 +63,7 @@ export default function AsOfPage() {
           {shown.length === 0 ? (
             <div className="b2b-empty">{rows.length === 0 ? "해당 날짜 기준 재고 기록이 없습니다." : "조건에 맞는 품목이 없습니다."}</div>
           ) : (
-            <div className="b2b-table-wrap">
+            <div className="b2b-table-wrap is-sticky-head">
               <table className="b2b-table">
                 <thead><tr><th>품목</th><th>SKU</th><th className="num">수량</th><th className="num">재고자산</th></tr></thead>
                 <tbody>

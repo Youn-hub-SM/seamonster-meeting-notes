@@ -5,6 +5,7 @@ import { Combobox } from "@/app/b2b/orders/Combobox";
 import { INV_CHANNELS, INV_CHANNEL_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
 import { PR_PURPOSES, PR_PURPOSE_LABEL, PURPOSE_CHANNEL } from "@/app/lib/wholesale-production";
 import { deleteLedger } from "../TxnTable";
+import { useConfirm } from "@/app/components/Feedback";
 
 type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null; stock_tracked?: boolean };
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean; alloc_qty?: number; alloc_reqs?: string[] };
@@ -45,6 +46,7 @@ const allocSumOf = (l: Line) => {
 };
 
 export default function InventoryMovePage() {
+  const confirm = useConfirm();
   const [products, setProducts] = useState<Prod[]>([]);
   // 칸별 재고 — 칸이 늘 때 state·fetch·표시를 세 군데씩 고치지 않게 INV_CHANNELS 로 한 번에 돈다(115)
   //  qty = 가용(미래 발송일 선점까지 뺀 값 — 이동 상한·부족 경고의 기준), onHand = 현재고(오늘까지), sched = 출고 예정(D1·S6).
@@ -229,7 +231,7 @@ export default function InventoryMovePage() {
       if (res.status === 409 && j.code === "promo_reserved") {
         const hits = Array.isArray(j.reserved) ? j.reserved : [];
         setReservedHits(new Map(hits.map((h) => [h.product_id, h])));
-        if (!window.confirm(j.confirm || j.error || "열린 프로모션 요청서 몫까지 소매로 나갑니다. 그래도 옮길까요?")) {
+        if (!(await confirm({ title: "프로모션 요청서 몫까지 옮기기", body: j.confirm || j.error || "열린 프로모션 요청서 몫까지 소매로 나갑니다.", action: "그래도 옮기기" }))) {
           setError(j.error || "열린 프로모션 요청서 몫까지 소매로 나갑니다.");
           setBusy(false);
           return;
@@ -271,9 +273,9 @@ export default function InventoryMovePage() {
   }
 
   async function cancelMove(group_id: string) {
-    if (!window.confirm("이 이동을 취소할까요? 양쪽 채널 재고가 원래대로 돌아갑니다.")) return;
-    // 409(규칙상 거부)엔 재시도 권유를 붙이지 않고, 응답이 끊기면 취소됐을 수 있다고 알린다(deleteLedger 공용)
-    const res = await deleteLedger(`/api/inventory/move?group_id=${encodeURIComponent(group_id)}`);
+    if (!(await confirm({ title: "재고 이동 취소", body: "양쪽 채널 재고가 원래대로 돌아갑니다.", action: "이동 취소" }))) return;
+    // 409(규칙상 거부)엔 재시도 권유를 붙이지 않고, 응답이 끊기면 취소됐을 수 있다고 알린다(deleteLedger 공용) — 오류는 이 화면의 배너로
+    const res = await deleteLedger(`/api/inventory/move?group_id=${encodeURIComponent(group_id)}`, { confirm, error: (t) => { setOk(""); setError(t); } });
     if (!res.ok) return;
     // 서버 안내(성공 notice·부분 성공 경고)는 배너로 남긴다 — 지금 move DELETE 는 싣지 않지만 공용 계약(deleteLedger)을 따른다
     if (res.notice) { if (res.warn) { setOk(""); setError(res.notice); } else { setError(""); setOk(res.notice); } }
@@ -459,7 +461,7 @@ export default function InventoryMovePage() {
         {moves.length === 0 ? (
           <div className="b2b-empty" style={{ padding: 20 }}>아직 옮긴 내역이 없습니다.</div>
         ) : (
-          <div className="b2b-table-wrap">
+          <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
               <thead><tr><th>날짜</th><th>품목</th><th className="num">수량</th><th>방향</th><th>담당</th><th></th></tr></thead>
               <tbody>

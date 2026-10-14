@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import Link from "next/link";
 
 type Format = "영상" | "이미지";
@@ -18,6 +19,7 @@ export default function MetaLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const confirmModal = useConfirm();
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
@@ -53,7 +55,7 @@ export default function MetaLibraryPage() {
     setSaving(false);
   }
   async function del(id: string) {
-    if (!window.confirm("이 소재를 삭제할까요?")) return;
+    if (!(await confirmModal({ title: "소재 삭제", body: "이 소재가 라이브러리에서 지워집니다. 되돌릴 수 없습니다.", action: "소재 삭제" }))) return;
     await fetch(`/api/meta-ad/creatives?id=${id}`, { method: "DELETE" }); load();
   }
   function reuse(c: Creative) {

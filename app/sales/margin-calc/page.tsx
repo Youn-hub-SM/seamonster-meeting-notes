@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MarginResult, MarginResultItem, MarginSpec, MarginTurn } from "@/app/lib/margin-calc";
 import { won as fmtWon } from "@/app/lib/format";
 import { Combobox } from "@/app/b2b/orders/Combobox";
+import { useToast } from "@/app/components/Feedback";
 
 const won = (n: number) => `${fmtWon(n)}원`;
 
@@ -88,6 +89,7 @@ function QuestionComposer({ channels, products, topProducts, disabled, onCompose
 }
 
 export default function MarginCalcPage() {
+  const toast = useToast();
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -220,10 +222,12 @@ export default function MarginCalcPage() {
     setPSaving(false);
   }
 
-  function resetPrompt() {
-    if (!confirm("계산 지침을 기본값으로 되돌릴까요? 저장한 내용은 사라집니다.")) return;
+  // 기본값 복원 — 같은 PUT 한 번으로 이전 지침을 되살릴 수 있어 확인창 대신 되돌리기 토스트
+  async function resetPrompt() {
+    const prev = prompt;
     setPrompt(promptDefault);
-    savePrompt(""); // 빈 값 저장 → 서버에서 설정 삭제(기본값 복원)
+    await savePrompt(""); // 빈 값 저장 → 서버에서 설정 삭제(기본값 복원)
+    toast.undo("계산 지침을 기본값으로 되돌렸습니다", async () => { setPrompt(prev); await savePrompt(prev); });
   }
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import {
   CrmMessage, CrmMessageInput, CrmPerf, EMPTY_CRM_MESSAGE,
   CRM_CHANNEL_LABEL, CRM_CUSTOMER_LABEL, CRM_MSG_TYPE_LABEL,
@@ -60,6 +61,7 @@ export default function CrmPage() {
   const [fieldsSupported, setFieldsSupported] = useState(true); // migration 077 미적용이면 false → 고객·유형 숨김
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [tab, setTab] = useState<"flow" | "table" | "stats">("flow");
   const [search, setSearch] = useState("");
   const [chFilter, setChFilter] = useState("");
@@ -226,7 +228,7 @@ export default function CrmPage() {
   }
   async function remove(id?: string) {
     if (!id) { setEdit(null); return; }
-    if (!confirm("이 메시지를 삭제할까요?")) return;
+    if (!(await confirmModal({ title: "메시지 삭제", body: "이 메시지가 CRM 맵에서 지워집니다. 되돌릴 수 없습니다.", action: "메시지 삭제" }))) return;
     setSaving(true);
     try {
       await fetch("/api/crm/messages?id=" + encodeURIComponent(id), { method: "DELETE" });
@@ -240,7 +242,7 @@ export default function CrmPage() {
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState("");
   async function runImport(mode: "seed" | "csv") {
-    if (mode === "seed" && !confirm("원본 CRM 맵 데이터(8단계 · 30개 메시지)를 가져올까요?")) return;
+    if (mode === "seed" && !(await confirmModal({ title: "원본 CRM 맵 가져오기", body: "8단계 · 30개 메시지가 등록됩니다.", action: "가져오기", danger: false }))) return;
     setImporting(true); setError("");
     try {
       const r = await fetch("/api/crm/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mode === "csv" ? { mode, csv: csvText } : { mode }) });

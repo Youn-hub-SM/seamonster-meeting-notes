@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import Link from "next/link";
 
 type Stat = { spend: number; impressions: number; clicks: number; ctr: number; cpc: number; purchases: number; purchaseValue: number; roas: number; cpa: number };
@@ -109,6 +110,7 @@ export default function MetaAdPage() {
   const [tab, setTab] = useState<"campaign" | "adset" | "ad">("adset");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [liveOnly, setLiveOnly] = useState(true);
   const [resultsOnly, setResultsOnly] = useState(true);
@@ -237,7 +239,12 @@ export default function MetaAdPage() {
 
   async function toggle(id: string, current: string, name: string) {
     const next = current === "ACTIVE" ? "PAUSED" : "ACTIVE";
-    if (!window.confirm(`"${name}"\n\n실제 메타 광고를 ${next === "ACTIVE" ? "켤까요? (ON)" : "끌까요? (OFF)"}`)) return;
+    if (!(await confirmModal({
+      title: `"${name}" 광고 ${next === "ACTIVE" ? "켜기" : "끄기"}`,
+      body: next === "ACTIVE" ? "실제 메타 광고가 바로 켜지고(ON) 예산이 집행됩니다." : "실제 메타 광고가 바로 꺼집니다(OFF).",
+      action: next === "ACTIVE" ? "광고 켜기" : "광고 끄기",
+      danger: false,
+    }))) return;
     setBusyId(id); setError("");
     try {
       const j = await (await fetch("/api/meta-ad/toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: next }) })).json();

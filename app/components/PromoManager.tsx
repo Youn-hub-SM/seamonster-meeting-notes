@@ -4,6 +4,7 @@
 //  안전재고 계산(getPromoForwardBySku)에 '남은 행사분'이 자동 반영된다.
 import { useEscClose } from "@/app/lib/use-esc";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { Combobox, ComboOption } from "../b2b/orders/Combobox";
 
 type PromoItem = { sku: string; name: string; qty: number | string };
@@ -20,6 +21,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
   const [draft, setDraft] = useState<Partial<Promotion> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,7 +53,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
     setSaving(false);
   }
   async function remove(id: string) {
-    if (!confirm("이 프로모션을 삭제할까요?")) return;
+    if (!(await confirmModal({ title: "프로모션 삭제", body: "프로모션이 목록에서 지워집니다. 되돌릴 수 없습니다.", action: "프로모션 삭제" }))) return;
     setSaving(true);
     try { const j = await (await fetch(`/api/production/promotions?id=${id}`, { method: "DELETE" })).json(); if (j.ok) { setList(j.promotions || []); setDraft(null); onChanged?.(); } } catch { /* noop */ }
     setSaving(false);

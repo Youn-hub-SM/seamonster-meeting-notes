@@ -110,7 +110,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
             <h2 className="b2b-card-title">주력 품목</h2>
           </div>
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead>
                 <tr>
                   <th>품목</th>
@@ -121,9 +121,9 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
               <tbody>
                 {data.top_products.map((p) => (
                   <tr key={p.product_name}>
-                    <td><strong>{p.product_name}</strong></td>
-                    <td className="num">{formatQty(p.qty)}</td>
-                    <td className="num">{p.orders}</td>
+                    <td data-label="품목"><strong>{p.product_name}</strong></td>
+                    <td data-label="누적 수량" className="num">{formatQty(p.qty)}</td>
+                    <td data-label="발주 건수" className="num">{p.orders}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 
 type AppRole = "internal" | "factory";
 type AppUser = { id: string; name: string; active: boolean; role: AppRole; created_at: string };
@@ -12,6 +13,7 @@ export default function UsersPage() {
   const [envUsers, setEnvUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AppRole>("internal");
@@ -57,7 +59,7 @@ export default function UsersPage() {
     await patch(u, { password: pw.trim() });
   }
   async function remove(u: AppUser) {
-    if (!window.confirm(`'${u.name}' 계정을 삭제할까요?`)) return;
+    if (!(await confirmModal({ title: `'${u.name}' 계정 삭제`, body: "이 계정으로는 더 이상 로그인할 수 없습니다. 되돌릴 수 없습니다.", action: "계정 삭제" }))) return;
     await fetch(`/api/b2b/users?id=${encodeURIComponent(u.id)}`, { method: "DELETE" });
     await load();
   }
@@ -90,16 +92,16 @@ export default function UsersPage() {
         <div className="b2b-card-head"><span className="b2b-card-title">계정 목록</span></div>
         {loading ? <div className="b2b-loading">불러오는 중...</div> : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr><th>이름</th><th>구분</th><th>상태</th><th>추가일</th><th></th></tr></thead>
               <tbody>
                 {envUsers.map((n) => (
-                  <tr key={`env-${n}`}><td>{n}</td><td className="sm-faint">환경변수(고정)</td><td><span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>활성</span></td><td>-</td><td></td></tr>
+                  <tr key={`env-${n}`}><td data-label="이름">{n}</td><td data-label="구분" className="sm-faint">환경변수(고정)</td><td data-label="상태"><span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>활성</span></td><td data-label="추가일">-</td><td className="actions"></td></tr>
                 ))}
                 {users.map((u) => (
                   <tr key={u.id}>
-                    <td>{u.name}</td>
-                    <td>
+                    <td data-label="이름">{u.name}</td>
+                    <td data-label="구분">
                       {/* 구분 변경 — 다음 로그인부터 적용(토큰에 역할이 실림) */}
                       <select className="b2b-input" value={u.role} onChange={(e) => patch(u, { role: e.target.value as AppRole })}
                         style={{ width: "auto", padding: "6px 8px" }}>
@@ -107,11 +109,11 @@ export default function UsersPage() {
                         <option value="factory">{ROLE_LABEL.factory}</option>
                       </select>
                     </td>
-                    <td>
+                    <td data-label="상태">
                       <button className="b2b-status-pill" onClick={() => toggle(u)} style={{ cursor: "pointer", border: "none", fontFamily: "inherit", background: u.active ? "var(--sm-success-bg)" : "var(--sm-bg-subtle)", color: u.active ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{u.active ? "활성" : "비활성"}</button>
                     </td>
-                    <td style={{ whiteSpace: "nowrap" }}>{u.created_at?.slice(0, 10)}</td>
-                    <td>
+                    <td data-label="추가일" style={{ whiteSpace: "nowrap" }}>{u.created_at?.slice(0, 10)}</td>
+                    <td className="actions">
                       <button className="b2b-link-btn" onClick={() => resetPassword(u)}>비번 재설정</button>{" "}
                       <button className="b2b-link-btn" onClick={() => remove(u)} style={{ color: "var(--sm-danger)" }}>삭제</button>
                     </td>

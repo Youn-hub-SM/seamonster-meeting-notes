@@ -12,6 +12,7 @@ import { defaultDueDate, defaultProdStart } from "@/app/lib/production-schedule"
 import { Combobox } from "@/app/b2b/orders/Combobox";
 import { useEscClose } from "@/app/lib/use-esc";
 import { dateShort } from "@/app/lib/format";
+import { useConfirm } from "@/app/components/Feedback";
 
 // KST 오늘 — 서버(UTC SSR)·클라이언트 모두 서울 벽시계 날짜로 일치(새벽 하이드레이션 불일치 방지)
 function todayIso() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
@@ -40,6 +41,7 @@ type NewLine = {
 };
 
 export function RequestList() {
+  const confirm = useConfirm();
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [showDone, setShowDone] = useState(false); // 기본 진행(요청·진행중)만 — 완료·취소는 토글로
   // 탭 = 용도(PR_PURPOSES) 그대로 — 제조사(재고 보충, 이행=입고) / 도매(도매 납품) / 프로모션(113) / 도매 대량(115).
@@ -263,7 +265,7 @@ export function RequestList() {
       const res = await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...(expect ? { expect_status: expect } : {}), ...(extra || {}) }) });
       const j = await res.json();
       if (!j.ok && res.status === 409 && j.need_confirm === "reopen_promo") {
-        if (window.confirm(`${j.error}\n\n그래도 다시 열까요?`)) retry = { confirm_reopen: true };
+        if (await confirm({ title: "프로모션 요청서 다시 열기", body: String(j.error), action: "그래도 다시 열기" })) retry = { confirm_reopen: true };
       } else {
         if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "변경 실패"); }
         applyUpdated(j.request);
@@ -278,14 +280,14 @@ export function RequestList() {
 
   // [합류 다시 실행] — 닫힌 프로모션 요청서인데 소매 합류가 끝나지 않은 것(합류 미확인)
   async function rerunRelease(r: ProductionRequest) {
-    if (!confirm(`${r.req_no || "이 요청서"}의 프로모션 재고를 소매로 다시 합류할까요?\n\n같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다.`)) return;
+    if (!(await confirm({ title: `${r.req_no || "이 요청서"} 프로모션 재고 소매 합류`, body: "프로모션 칸의 확보분이 소매로 옮겨집니다. 같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다.", action: "합류 다시 실행" }))) return;
     setBusy(true); setError(""); setNotice(null);
     try {
       let res = await fetch(`/api/production/requests/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "promo_release" }) });
       let j = await res.json();
       // 합류 시작 기록이 없는 요청서(이전 버전에서 마감) — 합류는 그때 돌았다. 다시 돌리지 않고 완료 표시만 할지 묻는다
       if (!j.ok && j.code === "promo_legacy") {
-        if (!confirm(String(j.confirm || j.error))) { setBusy(false); return; }
+        if (!(await confirm({ title: "합류 완료로 표시", body: String(j.confirm || j.error), action: "완료로 표시", danger: false }))) { setBusy(false); return; }
         res = await fetch(`/api/production/requests/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "promo_release", mark_released: true }) });
         j = await res.json();
       }
@@ -299,7 +301,7 @@ export function RequestList() {
 
   // 입고 연결 해제 — 원장(재고)은 그대로, 이 요청서 연결만 뺀다(S11)
   async function unlinkReceipt(id: string, rid: string) {
-    if (!confirm("이 입고의 요청서 연결을 해제할까요?\n\n재고(입고 기록)는 그대로이고, 이 요청서의 입고 수량에서만 빠집니다.")) return;
+    if (!(await confirm({ title: "입고의 요청서 연결 해제", body: "재고(입고 기록)는 그대로이고, 이 요청서의 입고 수량에서만 빠집니다.", action: "연결 해제" }))) return;
     setBusy(true); setError(""); setNotice(null);
     try {
       const j = await (await fetch(`/api/production/requests/${id}/link?rid=${rid}`, { method: "DELETE" })).json();
@@ -315,15 +317,16 @@ export function RequestList() {
     const hasReceipts = r.items.some((it) => it.receipts.length > 0);
     // 제조사 요청의 미입고 잔여는 재고 목록 '입고 예정'으로 권장생산에서 빠져 있다 — 닫으면 그만큼 권장이 다시 올라간다
     const remain = openRemainQty(r.items);
-    const inbNote = r.purpose === "재고 보충" && remain > 0 ? `\n\n미입고 ${remain.toLocaleString()}개는 '입고 예정'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다.`
-      : r.purpose === "도매 납품" && remain > 0 ? `\n\n미이동 ${remain.toLocaleString()}개는 도매 '입고 예정'에서 빠져 도매 권장생산이 그만큼 늘어납니다.`
-      : r.purpose === "프로모션" && hasReceipts ? "\n\n취소하면 이 요청서 품목의 프로모션 재고가 소매로 넘어갑니다(같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다)." : "";
+    const inbNote = r.purpose === "재고 보충" && remain > 0 ? ` 미입고 ${remain.toLocaleString()}개는 '입고 예정'에서 빠져 재고 목록의 권장생산이 그만큼 늘어납니다.`
+      : r.purpose === "도매 납품" && remain > 0 ? ` 미이동 ${remain.toLocaleString()}개는 도매 '입고 예정'에서 빠져 도매 권장생산이 그만큼 늘어납니다.`
+      : r.purpose === "프로모션" && hasReceipts ? " 취소하면 이 요청서 품목의 프로모션 재고가 소매로 넘어갑니다(같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다)." : "";
+    const name = r.req_no || "이 요청서";
     if (hasReceipts) {
-      if (!confirm(`입고 기록이 있어 삭제할 수 없습니다.\n대신 '취소' 상태로 바꿀까요?\n(기록은 보존되고 목록·이행률에서 빠집니다)${inbNote}`)) return;
+      if (!(await confirm({ title: `${name} 취소 처리`, body: `입고 기록이 있어 삭제할 수 없습니다. 대신 '취소' 상태로 바꾸면 기록은 보존되고 목록·이행률에서 빠집니다.${inbNote}`, action: "취소 처리" }))) return;
       await patchStatus(r.id, "취소", r.status);
       return;
     }
-    if (!confirm(`이 요청서를 삭제할까요?${inbNote}`)) return;
+    if (!(await confirm({ title: `${name} 삭제`, body: `요청서가 지워집니다.${inbNote}`, action: "요청서 삭제" }))) return;
     setBusy(true); setError("");
     try {
       const j = await (await fetch(`/api/production/requests/${r.id}`, { method: "DELETE" })).json();
@@ -335,7 +338,7 @@ export function RequestList() {
   }
 
   async function cancelReceipt(id: string, rid: string) {
-    if (!confirm("이 입고를 취소할까요? 도매 재고에서도 원복됩니다.")) return;
+    if (!(await confirm({ title: "입고 취소", body: "이 입고 기록이 지워지고 도매 재고에서도 원복됩니다.", action: "입고 취소" }))) return;
     setBusy(true); setError("");
     try {
       const j = await (await fetch(`/api/production/requests/${id}/receive?rid=${rid}`, { method: "DELETE" })).json();
@@ -506,6 +509,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const confirm = useConfirm();
   const suggestComplete = req.status === "진행중" && allLinesFilled(req.items);
   const editable = req.status === "요청" || req.status === "진행중";
   // 합류 미확인 — 닫힌 프로모션인데 소매 합류 완료 표시(136)가 비어 있다(마감 중 끊김·일부 실패). 미적용이면 undefined → 표시 안 함
@@ -571,17 +575,18 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
               {/* 마감 — 전 품목 100%면 자동으로 닫히지만, 덜 들어온 채 끝낼 때 사람이 닫는다(수동 마감은 입고 취소로 되살아나지 않음).
                   프로모션은 자동으로 닫히지 않고 마감 = 확보분 소매 합류(2026-10-06) */}
               <button className="b2b-btn-secondary" style={ACT} disabled={busy}
-                onClick={() => {
+                onClick={async () => {
                   const pct = req.total_requested > 0 ? Math.round((req.total_received / req.total_requested) * 100) : 0;
                   const remain = openRemainQty(req.items);
                   const inbNote = req.purpose === "재고 보충" && remain > 0
-                    ? `\n\n미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.`
+                    ? ` 미입고 ${remain.toLocaleString()}개는 입고 예정에서 빠집니다. 아직 올 물량이면 마감하지 마세요.`
                     : req.purpose === "도매 납품" && remain > 0
-                    ? `\n\n미이동 ${remain.toLocaleString()}개는 도매 입고 예정에서 빠집니다. 아직 옮길 물량이면 마감하지 마세요.`
+                    ? ` 미이동 ${remain.toLocaleString()}개는 도매 입고 예정에서 빠집니다. 아직 옮길 물량이면 마감하지 마세요.`
                     : req.purpose === "프로모션"
-                    ? "\n\n마감하면 이 요청서 품목의 프로모션 재고가 소매로 넘어갑니다(같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다). 행사 판매를 시작할 때 누르세요."
+                    ? " 마감하면 이 요청서 품목의 프로모션 재고가 소매로 넘어갑니다(같은 품목의 다른 열린 프로모션 요청서에 배정된 수량은 남깁니다). 행사 판매를 시작할 때 누르세요."
                     : "";
-                  if (confirm(`이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}) — 마감할까요?${inbNote}`)) onStatus("완료");
+                  // 마감은 입고 예정·프로모션 합류(원장)가 바뀌어 되돌리기 토스트가 아니라 모달
+                  if (await confirm({ title: `${req.req_no || "요청서"} 마감`, body: `이행률 ${pct}% (${req.total_received.toLocaleString()}/${req.total_requested.toLocaleString()}).${inbNote}`, action: "마감" })) onStatus("완료");
                 }}>마감</button>
             </>
           )}

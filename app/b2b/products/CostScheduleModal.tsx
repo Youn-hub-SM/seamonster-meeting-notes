@@ -3,6 +3,7 @@
 import { useEscClose } from "@/app/lib/use-esc";
 import IconButton from "@/app/components/IconButton";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 
 // 원가 변경 예약 — "n월 n일부터 이 원가". 인상일에 맞춰 사람이 고치는 걸 놓치지 않게 미리 걸어둔다.
 //  반영은 DB 함수(apply_due_cost_schedules)가 매일 00:10 KST 에 한다. 여기서는 걸고·보고·취소한다.
@@ -28,6 +29,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [pendingMigration, setPendingMigration] = useState(false);
 
   // 입력 — 현재 원가를 초기값으로 채워 '얼마에서 얼마로' 가 바로 보이게 한다.
@@ -80,7 +82,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
   }
 
   async function cancel(id: string) {
-    if (!window.confirm("이 예약을 취소할까요?")) return;
+    if (!(await confirmModal({ title: "원가 변경 예약 취소", body: "예약이 지워지고 적용일에 원가가 바뀌지 않습니다.", action: "예약 취소" }))) return;
     setError("");
     try {
       const j = await (await fetch(`/api/b2b/products/cost-schedules?id=${id}`, { method: "DELETE" })).json();
@@ -177,20 +179,20 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                   : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다.</p>
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
-                      <table className="b2b-table" style={{ fontSize: 15 }}>
+                      <table className="b2b-table is-responsive" style={{ fontSize: 15 }}>
                         <thead><tr><th>적용일</th><th className="num">원가</th><th>상태</th><th>메모</th><th /></tr></thead>
                         <tbody>
                           {rows.map((r) => (
                             <tr key={r.id}>
-                              <td style={{ whiteSpace: "nowrap" }}>{r.effective_date}</td>
-                              <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.cost_price)}</td>
-                              <td>
+                              <td data-label="적용일" style={{ whiteSpace: "nowrap" }}>{r.effective_date}</td>
+                              <td data-label="원가" className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.cost_price)}</td>
+                              <td data-label="상태">
                                 {r.applied_at
                                   ? <span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>반영됨</span>
                                   : <span className="b2b-status-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>대기</span>}
                               </td>
-                              <td className="sm-faint" style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.memo || ""}>{r.memo || "-"}</td>
-                              <td style={{ textAlign: "right" }}>
+                              <td data-label="메모" className="sm-faint" style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.memo || ""}>{r.memo || "-"}</td>
+                              <td className="actions">
                                 {!r.applied_at && (
                                   <IconButton className="is-danger" label="예약 취소" onClick={() => cancel(r.id)}>✕</IconButton>
                                 )}

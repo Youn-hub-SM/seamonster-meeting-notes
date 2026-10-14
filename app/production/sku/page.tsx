@@ -141,17 +141,17 @@ export default function SkuGeneratorPage() {
       <section className="b2b-card" style={{ marginTop: 20 }}>
         <div className="b2b-card-head"><h2 className="b2b-card-title">SKU 규칙 요약</h2></div>
         <div className="b2b-table-wrap">
-          <table className="b2b-table">
+          <table className="b2b-table is-responsive">
             <thead>
               <tr><th>라인</th><th>패턴</th><th>예시</th></tr>
             </thead>
             <tbody>
-              <tr><td>100g 소매</td><td><code>{"{어종}-100-{mid}-100"}</code></td><td>GA-100-K-100</td></tr>
-              <tr><td>1kg 팩</td><td><code>{"P_{어종}-{규격}X1"}</code></td><td>P_GA-100X1</td></tr>
-              <tr><td>5kg×2 벌크</td><td><code>{"BULK-{어종}-{규격}"}</code></td><td>BULK-GA-200</td></tr>
-              <tr><td>더간편한 (85g)</td><td><code>{"R-{어종}"}</code></td><td>R-YA</td></tr>
-              <tr><td>더간편한 (425g)</td><td><code>{"P_R-{어종}"}</code></td><td>P_R-YA</td></tr>
-              <tr><td>더 깨끗한</td><td><code>{"{어종}-20-K-120"}</code></td><td>DG-20-K-120</td></tr>
+              <tr><td data-label="라인">100g 소매</td><td data-label="패턴"><code>{"{어종}-100-{mid}-100"}</code></td><td data-label="예시">GA-100-K-100</td></tr>
+              <tr><td data-label="라인">1kg 팩</td><td data-label="패턴"><code>{"P_{어종}-{규격}X1"}</code></td><td data-label="예시">P_GA-100X1</td></tr>
+              <tr><td data-label="라인">5kg×2 벌크</td><td data-label="패턴"><code>{"BULK-{어종}-{규격}"}</code></td><td data-label="예시">BULK-GA-200</td></tr>
+              <tr><td data-label="라인">더간편한 (85g)</td><td data-label="패턴"><code>{"R-{어종}"}</code></td><td data-label="예시">R-YA</td></tr>
+              <tr><td data-label="라인">더간편한 (425g)</td><td data-label="패턴"><code>{"P_R-{어종}"}</code></td><td data-label="예시">P_R-YA</td></tr>
+              <tr><td data-label="라인">더 깨끗한</td><td data-label="패턴"><code>{"{어종}-20-K-120"}</code></td><td data-label="예시">DG-20-K-120</td></tr>
             </tbody>
           </table>
         </div>

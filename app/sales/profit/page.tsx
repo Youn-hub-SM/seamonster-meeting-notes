@@ -162,10 +162,10 @@ export default function SalesProfitPage() {
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가 0·중량 0으로 계산됨</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>
             <table className="b2b-table" style={{ fontSize: 12 }}>
-              <thead><tr><th>관리코드</th><th style={{ textAlign: "right" }}>라인수</th><th style={{ textAlign: "right" }}>수량합</th><th style={{ textAlign: "right" }}>결제금액합</th><th>판매처</th></tr></thead>
+              <thead><tr><th>관리코드</th><th className="num">라인수</th><th className="num">수량합</th><th className="num">결제금액합</th><th>판매처</th></tr></thead>
               <tbody>
                 {res.unmatched.map((u) => (
-                  <tr key={u.sku_code}><td style={{ fontFamily: "monospace" }}>{u.sku_code}</td><td style={{ textAlign: "right" }}>{u.line_count}</td><td style={{ textAlign: "right" }}>{u.qty_sum.toLocaleString()}</td><td style={{ textAlign: "right" }}>{won(u.amount_sum)}</td><td className="sm-faint">{u.channels}</td></tr>
+                  <tr key={u.sku_code}><td style={{ fontFamily: "monospace" }}>{u.sku_code}</td><td className="num">{u.line_count}</td><td className="num">{u.qty_sum.toLocaleString()}</td><td className="num">{won(u.amount_sum)}</td><td className="sm-faint">{u.channels}</td></tr>
                 ))}
               </tbody>
             </table>

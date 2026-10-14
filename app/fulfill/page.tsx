@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useConfirm, type ConfirmOptions } from "@/app/components/Feedback";
 
 type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
@@ -44,9 +46,14 @@ const KW_KEY = "fulfill_addr_keywords";
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const STEPS = ["발주엑셀 업로드", "CN 파일 다운로드", "배송일지 기록", "상품 출고"];
 const hm = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
-const LEAVE_MSG = "CN 파일을 받았지만 ④ 상품 출고(재고 차감)를 아직 안 했습니다.\n\n그래도 나갈까요?";
+// 확인 모달(공용 useConfirm) 문구 — 나가기는 파괴가 아니라 danger:false
+const LEAVE_ASK: ConfirmOptions = { title: "상품 출고 전에 나가기", body: "CN 파일을 받았지만 ④ 상품 출고(재고 차감)를 아직 안 했습니다.", action: "그래도 나가기", danger: false };
 // 중단된 출고를 이어서 차감하지 않기로 했을 때 — 재고를 이미 맞췄으면 차감 없이 닫는다(서버 closeInterrupted)
-const CLOSE_GHOST_MSG = "그 사이 [입고 및 출고]에서 직접 기록했거나 실사로 재고를 이미 맞췄나요?\n\n[확인]을 누르면 재고를 차감하지 않고 앞선 출고를 '처리됨'으로 닫습니다. 모르면 [취소] 후 [입고 및 출고]에서 먼저 확인하세요.";
+const CLOSE_GHOST_ASK: ConfirmOptions = {
+  title: "앞선 출고를 차감 없이 닫기",
+  body: "그 사이 [입고 및 출고]에서 직접 기록했거나 실사로 재고를 이미 맞췄을 때만 — 재고를 차감하지 않고 앞선 출고를 '처리됨'으로 닫습니다. 모르면 그만두고 [입고 및 출고]에서 먼저 확인하세요.",
+  action: "차감 없이 닫기",
+};
 
 function downloadB64(name: string, b64: string) {
   const bin = atob(b64);
@@ -60,6 +67,8 @@ function downloadB64(name: string, b64: string) {
 }
 
 export default function FulfillPage() {
+  const confirm = useConfirm();
+  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("");
   const [keywords, setKeywords] = useState("");
@@ -103,7 +112,7 @@ export default function FulfillPage() {
   }
   useEffect(() => { void loadSide(); }, []);
   async function discardBatch(b: OpenBatch) {
-    if (!window.confirm(`${b.file_name || "이 배치"}(${hm(b.downloaded_at)})를 발송하지 않았나요?\n목록에서 뺍니다.`)) return;
+    if (!(await confirm({ title: `${b.file_name || "이 배치"}(${hm(b.downloaded_at)}) 목록에서 빼기`, body: "발송하지 않은 배치일 때만 — 미출고 배치 목록에서 빠지고 재고는 차감하지 않습니다.", action: "목록에서 빼기" }))) return;
     setSideBusy(b.sig);
     try {
       const j = await (await fetch("/api/fulfill/pending", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sig: b.sig, action: "discard" }) })).json();
@@ -112,10 +121,10 @@ export default function FulfillPage() {
     setSideBusy(""); void loadSide();
   }
   async function resolveUnm(row: UnmRow, action: "record" | "done") {
-    const msg = action === "record"
-      ? `${row.dispatch_date} 출고분 중 등록된 코드를 그날 날짜로 소매 재고에서 차감할까요?`
-      : `${row.dispatch_date} 출고분을 재고 기록 없이 목록에서 뺄까요?`;
-    if (!window.confirm(msg)) return;
+    const ask: ConfirmOptions = action === "record"
+      ? { title: `${row.dispatch_date} 출고분 재고 차감 기록`, body: `등록된 코드를 ${row.dispatch_date} 날짜로 소매 재고에서 차감합니다.`, action: "재고 차감 기록" }
+      : { title: `${row.dispatch_date} 출고분 목록에서 빼기`, body: "재고 기록 없이 목록에서만 뺍니다.", action: "기록 없이 빼기" };
+    if (!(await confirm(ask))) return;
     setSideBusy(row.id);
     try {
       // 출고일 뒤 실사 조정이 있으면 서버가 409 countAfter 로 멈춘다 — 실사에 반영되지 않은 게 확실할 때만 ackCount 로 다시
@@ -124,7 +133,7 @@ export default function FulfillPage() {
         const r = await fetch("/api/fulfill/unmatched", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: row.id, action, ackCount }) });
         const j = await r.json();
         if (r.status === 409 && j.countAfter && !ackCount) {
-          if (!window.confirm(`${j.error}\n\n실사에 반영되지 않은 게 확실하면 [확인] — ${row.dispatch_date} 날짜로 차감합니다.`)) break;
+          if (!(await confirm({ title: "실사 뒤 재고 차감", body: `${j.error} 실사에 반영되지 않은 게 확실할 때만 — ${row.dispatch_date} 날짜로 차감합니다.`, action: `${row.dispatch_date} 날짜로 차감` }))) break;
           ackCount = true; continue;
         }
         if (!j.ok) throw new Error(j.error || "처리 실패");
@@ -146,7 +155,7 @@ export default function FulfillPage() {
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
   }, [leaveRisk]);
-  const okToLeave = () => !leaveRisk || window.confirm(LEAVE_MSG);
+  const okToLeave = async () => !leaveRisk || (await confirm(LEAVE_ASK));
   function saveKeywords(v: string) { setKeywords(v); localStorage.setItem(KW_KEY, v); }
 
   // res 갱신 시 상품 출고 미리보기(재고 확인) 자동 로드
@@ -183,7 +192,7 @@ export default function FulfillPage() {
 
   async function recordLog(): Promise<boolean> {
     if (!res || !recordDate) return false;
-    if (res.unmatched.length > 0 && !window.confirm(`미매칭 SKU ${res.unmatched.length}개가 있어 기본운임이 실제보다 적게 기록될 수 있어요.\n상품마스터에서 택배 정보를 채운 뒤 다시 만드는 걸 권장합니다.\n\n그래도 지금 기록할까요?`)) return false;
+    if (res.unmatched.length > 0 && !(await confirm({ title: "미매칭 SKU 가 있는 채로 배송일지 기록", body: `미매칭 SKU ${res.unmatched.length}개가 있어 기본운임이 실제보다 적게 기록될 수 있습니다. 상품마스터에서 택배 정보를 채운 뒤 다시 만드는 것을 권장합니다.`, action: "지금 기록", danger: false }))) return false;
     setRecording(true); setRecordOk(""); setError(""); setLastRecord(null);
     let ok = false;
     try {
@@ -193,8 +202,8 @@ export default function FulfillPage() {
       // 동일 데이터 감지 시 덮어쓰기 권유
       if (hasData) {
         if (recordMode === "add") {
-          if (!window.confirm(`${recordDate}에 이미 배송일지 기록이 있습니다.\n\n같은 발주를 또 '더하기'하면 이중 집계됩니다. 동일한 데이터라면 '덮어쓰기'를 권장해요.\n\n그래도 '더하기'로 진행할까요?\n(취소 후 '덮어쓰기'로 바꿔 다시 눌러주세요)`)) { setRecording(false); return false; }
-        } else if (!window.confirm(`${recordDate}에 이미 기록이 있습니다. 덮어쓸까요?`)) { setRecording(false); return false; }
+          if (!(await confirm({ title: `${recordDate} 배송일지에 더하기`, body: `${recordDate}에 이미 배송일지 기록이 있습니다. 같은 발주를 또 '더하기'하면 이중 집계됩니다 — 동일한 데이터라면 그만두고 '덮어쓰기'로 바꿔 다시 누르세요.`, action: "그래도 더하기" }))) { setRecording(false); return false; }
+        } else if (!(await confirm({ title: `${recordDate} 배송일지 덮어쓰기`, body: `${recordDate}에 이미 기록이 있습니다. 기존 기록이 이 발주 내용으로 바뀝니다.`, action: "덮어쓰기" }))) { setRecording(false); return false; }
       }
       const boxes_normal: Record<string, number> = {}, boxes_guar: Record<string, number> = {};
       for (const p of res.parcelSummary) { if (p.normal) boxes_normal[p.category] = p.normal; if (p.guarantee) boxes_guar[p.category] = p.guarantee; }
@@ -204,7 +213,7 @@ export default function FulfillPage() {
         const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: recordDate, record: true, mode: recordMode, force, boxes_normal, boxes_guar, base_fee_normal: res.fees.baseNormal, base_fee_guar: res.fees.baseGuar, guar_extra_fee: res.fees.guarExtra }) });
         const j = await r.json();
         if (r.status === 409 && j.duplicate) {
-          if (!window.confirm(`${j.error}\n\n그래도 기록할까요? (이중 집계됩니다)`)) { setRecording(false); return false; }
+          if (!(await confirm({ title: "같은 내용 다시 기록", body: `${j.error} 그래도 기록하면 이중 집계됩니다.`, action: "그래도 기록" }))) { setRecording(false); return false; }
           force = true; continue;
         }
         if (!j.ok) throw new Error(j.error || "기록 실패");
@@ -221,7 +230,7 @@ export default function FulfillPage() {
   // 방금 기록한 배송일지 취소 — 그 배치 이력 1건을 되돌린다(합계·운임 재계산).
   async function undoRecord() {
     if (!lastRecord) return;
-    if (!window.confirm(`방금 기록한 ${lastRecord.date} 배송일지를 취소할까요?`)) return;
+    if (!(await confirm({ title: `${lastRecord.date} 배송일지 기록 취소`, body: "방금 기록한 배치 이력 1건이 빠지고 합계·운임을 다시 계산합니다.", action: "기록 취소" }))) return;
     setUndoing(true); setError("");
     try {
       const r = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: lastRecord.date, del_record: { id: lastRecord.id } }) });
@@ -264,25 +273,26 @@ export default function FulfillPage() {
         const r = await fetch("/api/fulfill/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, commit: true, sig: res?.sig, expectKeys: !!res?.hasKeys, ...flags }) });
         const j = await r.json();
         if (r.status === 409 && j.duplicate && !flags.force) {
-          if (!window.confirm(`${j.error}\n\n그래도 다시 출고할까요?${again}`)) break;
+          if (!(await confirm({ title: "같은 배치 다시 출고", body: `${j.error}${again}`, action: "다시 출고" }))) break;
           flags.force = true; continue;
         }
         if (r.status === 409 && j.interrupted && !flags.resumeInterrupted && !flags.closeInterrupted) {
-          if (window.confirm(`${j.error}\n\n[확인]을 누르면 그 기록을 정리하고 지금(오늘 날짜로) 재고를 차감합니다. [취소]를 누르면 차감 없이 닫을지 묻습니다.`)) { flags.resumeInterrupted = true; continue; }
-          if (!window.confirm(CLOSE_GHOST_MSG)) break;
+          // 1차: 이어서 차감 — 그만두면 2차로 '차감 없이 닫기'를 묻는다
+          if (await confirm({ title: "중단된 앞선 출고 이어서 차감", body: `${j.error} 그 기록을 정리하고 지금(오늘 날짜로) 재고를 차감합니다. 그만두면 차감 없이 닫을지 다시 묻습니다.`, action: "오늘 날짜로 차감", cancel: "차감 안 함" })) { flags.resumeInterrupted = true; continue; }
+          if (!(await confirm(CLOSE_GHOST_ASK))) break;
           flags.closeInterrupted = true; continue;
         }
         if (r.status === 409 && j.countAfter && !flags.ackCount && !flags.closeInterrupted) {
-          if (window.confirm(`${j.error}\n\n그 기록에 이 출고분이 반영되지 않은 게 확실하면 [확인] — 오늘 날짜로 차감합니다. [취소]를 누르면 차감 없이 닫을지 묻습니다.`)) { flags.ackCount = true; continue; }
-          if (!window.confirm(CLOSE_GHOST_MSG)) break;
+          if (await confirm({ title: "실사 뒤 재고 차감", body: `${j.error} 그 기록에 이 출고분이 반영되지 않은 게 확실할 때만 — 오늘 날짜로 차감합니다. 그만두면 차감 없이 닫을지 다시 묻습니다.`, action: "오늘 날짜로 차감", cancel: "차감 안 함" })) { flags.ackCount = true; continue; }
+          if (!(await confirm(CLOSE_GHOST_ASK))) break;
           flags.resumeInterrupted = false; flags.closeInterrupted = true; continue;
         }
         if (r.status === 409 && j.overlap && !flags.allowOverlap) {
-          if (!window.confirm(`${j.error}\n\n실제로 다시 보냈으면 [확인], 아니면 [취소] 후 발주엑셀을 다시 올리세요.${again}`)) break;
+          if (!(await confirm({ title: "미출고 배치와 겹치는 주문 출고", body: `${j.error} 실제로 다시 보냈을 때만 출고하세요. 아니면 그만두고 발주엑셀을 다시 올리세요.${again}`, action: "다시 보냈음 — 출고" }))) break;
           flags.allowOverlap = true; continue;
         }
         if (r.status === 409 && j.dedupOff && !flags.ackDedupOff) {
-          if (!window.confirm(`${j.error}\n\n그래도 출고할까요?`)) break;
+          if (!(await confirm({ title: "중복 방지가 꺼진 채 출고", body: String(j.error), action: "그래도 출고" }))) break;
           flags.ackDedupOff = true; continue;
         }
         if (r.status === 409 && j.needUnmatchedAck) setUnmatchedAck(false);
@@ -294,8 +304,8 @@ export default function FulfillPage() {
     setDispatching(false);
   }
 
-  function reset() {
-    if (!okToLeave()) return;
+  async function reset() {
+    if (!(await okToLeave())) return;
     setRes(null); setStep(0); setFileName(""); setAck(false); setMsgAck(false); setOverlapAck(false); setCnDownloaded(false); setRecordOk(""); setError("");
     void loadSide();
   }
@@ -333,7 +343,8 @@ export default function FulfillPage() {
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6 }}>
           {res && <button className="b2b-btn-secondary" onClick={reset}>새 발주 시작</button>}
-          <Link className="b2b-btn-secondary" href="/fulfill/log" onClick={(e) => { if (!okToLeave()) e.preventDefault(); }}>배송일지</Link>
+          {/* 출고 전 나가기 — 모달 답이 비동기라 링크 이동을 먼저 막고, 확인하면 router 로 이동 */}
+          <Link className="b2b-btn-secondary" href="/fulfill/log" onClick={(e) => { if (!leaveRisk) return; e.preventDefault(); void okToLeave().then((ok) => { if (ok) router.push("/fulfill/log"); }); }}>배송일지</Link>
         </div>
       </header>
 
@@ -369,7 +380,7 @@ export default function FulfillPage() {
               <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="예: 제주마루 702호, 군부대, 사서함" />
             </div>
             <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="b2b-btn-primary" onClick={() => { if (okToLeave()) fileRef.current?.click(); }} disabled={loading}>{loading ? "만드는 중..." : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
+              <button className="b2b-btn-primary" onClick={async () => { if (await okToLeave()) fileRef.current?.click(); }} disabled={loading}>{loading ? "만드는 중..." : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
               <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: "none" }} />
               {fileName && <span className="sm-faint" style={{ fontSize: 12 }}>{fileName}</span>}
             </div>
@@ -523,15 +534,15 @@ export default function FulfillPage() {
             </div>
           )}
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr><th>박스종류</th><th className="num">일반</th><th className="num">도착보장</th><th className="num">합계</th></tr></thead>
               <tbody>
                 {res.parcelSummary.filter((p) => p.normal || p.guarantee).map((p) => (
                   <tr key={p.category}>
-                    <td><strong>{p.category}</strong></td>
-                    <td className="num b2b-money">{p.normal || "-"}</td>
-                    <td className="num b2b-money" style={{ color: p.guarantee ? "var(--sm-orange)" : "var(--sm-text-light)" }}>{p.guarantee || "-"}</td>
-                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{p.normal + p.guarantee}</td>
+                    <td data-label="박스종류"><strong>{p.category}</strong></td>
+                    <td data-label="일반" className="num b2b-money">{p.normal || "-"}</td>
+                    <td data-label="도착보장" className="num b2b-money" style={{ color: p.guarantee ? "var(--sm-orange)" : "var(--sm-text-light)" }}>{p.guarantee || "-"}</td>
+                    <td data-label="합계" className="num b2b-money" style={{ fontWeight: 700 }}>{p.normal + p.guarantee}</td>
                   </tr>
                 ))}
               </tbody>
@@ -590,16 +601,16 @@ export default function FulfillPage() {
               ) : (
                 <>
                   <div className="b2b-table-wrap">
-                    <table className="b2b-table">
+                    <table className="b2b-table is-responsive">
                       <thead><tr><th>상품</th><th>옵션</th><th className="num">출고수량</th><th className="num">현재 재고</th><th className="num">출고 후</th></tr></thead>
                       <tbody>
                         {dispatch.products.map((p) => (
                           <tr key={p.productId} style={p.short ? { background: "var(--sm-danger-bg)" } : undefined}>
-                            <td><strong>{p.name}</strong></td>
-                            <td style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>{p.option || "-"}</td>
-                            <td className="num b2b-money">{p.need.toLocaleString()}</td>
-                            <td className="num b2b-money">{p.current.toLocaleString()}</td>
-                            <td className="num b2b-money" style={{ fontWeight: 700, color: p.short ? "var(--sm-danger)" : undefined }}>{p.after.toLocaleString()}</td>
+                            <td data-label="상품"><strong>{p.name}</strong></td>
+                            <td data-label="옵션" style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>{p.option || "-"}</td>
+                            <td data-label="출고수량" className="num b2b-money">{p.need.toLocaleString()}</td>
+                            <td data-label="현재 재고" className="num b2b-money">{p.current.toLocaleString()}</td>
+                            <td data-label="출고 후" className="num b2b-money" style={{ fontWeight: 700, color: p.short ? "var(--sm-danger)" : undefined }}>{p.after.toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>

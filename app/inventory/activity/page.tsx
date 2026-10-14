@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, type InventoryTxn, type InvChannel, type InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelFilter } from "../ChannelTabs";
 import { deleteLedger, isMoveTxn } from "../TxnTable";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import { matchKoQuery } from "@/app/lib/hangul";
 
 // 생산요청 상태 변경/작성 이벤트(activity_log) — 원장과 함께 날짜별로 섞어 표시.
@@ -22,6 +23,8 @@ type Feed =
 
 // 활동 히스토리 — 날짜별 아코디언. 입고·출고·조정 원장 + 생산요청 상태 변경을 함께 표시.
 export default function ActivityPage() {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [txns, setTxns] = useState<Txn[]>([]);
   const [events, setEvents] = useState<PrEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,10 +61,12 @@ export default function ActivityPage() {
   async function cancel(t: Txn) {
     // 재고 이동은 출발·도착 두 행이 한 짝 — 짝 단위로 취소해야 두 칸이 함께 원복되고 요청서 배정도 풀린다(판정 = isMoveTxn, isMoveRow 와 같은 규칙)
     const isMove = isMoveTxn(t) && !!t.group_id;
-    if (!window.confirm(isMove ? "이 재고 이동을 취소할까요? 출발·도착 두 칸이 함께 원복되고, 요청서 배정도 함께 풀립니다." : `이 거래를 취소(삭제)할까요? ${t.status === "대기" ? "대기 기록이 지워집니다." : "재고가 원복됩니다."}`)) return;
+    if (!(await (isMove
+      ? confirm({ title: "재고 이동 취소", body: "출발·도착 두 칸이 함께 원복되고, 요청서 배정도 함께 풀립니다.", action: "이동 취소" })
+      : confirm({ title: `${t.type} 기록 취소`, body: t.status === "대기" ? "대기 기록이 지워집니다." : "이 기록이 지워지고 재고가 원복됩니다.", action: "기록 취소" })))) return;
     // 온라인발주 배치 한 줄은 서버가 확인(409 confirm_required)을 한 번 더 받는다 — deleteLedger 가 묻고 confirm=1 로 다시 보낸다
     setFlash(null);
-    const res = await deleteLedger(isMove ? `/api/inventory/move?group_id=${encodeURIComponent(String(t.group_id))}` : `/api/inventory/txn?id=${encodeURIComponent(t.id)}`);
+    const res = await deleteLedger(isMove ? `/api/inventory/move?group_id=${encodeURIComponent(String(t.group_id))}` : `/api/inventory/txn?id=${encodeURIComponent(t.id)}`, { confirm, error: toast.error });
     if (!res.ok) return;
     // 부분 성공(행은 지웠고 뒤처리만 실패)도 ok — 다시 읽고 서버 문구를 경고로 남긴다
     if (res.notice) setFlash({ ok: !res.warn, text: res.notice });

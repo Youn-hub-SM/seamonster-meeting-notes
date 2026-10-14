@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import QrDesigner from "./QrDesigner";
 
 type Link = { id: string; code: string; target_url: string; title: string | null; active: boolean; scan_count: number; created_by: string | null; created_at: string };
@@ -15,6 +16,8 @@ export default function QrPage() {
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
+  const toast = useToast();
   const [tab, setTab] = useState<"brand" | "static">("brand");
   const [origin, setOrigin] = useState("");
 
@@ -59,12 +62,14 @@ export default function QrPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "생성 실패"); }
     setCreating(false);
   }
-  async function toggleActive(l: Link) {
+  // 켜기/끄기 — 확인창 없이 바로 반영하고 되돌리기 토스트(같은 호출로 원래 값)
+  async function toggleActive(l: Link, quiet = false) {
     setLinks((ls) => ls.map((x) => (x.id === l.id ? { ...x, active: !x.active } : x)));
     await fetch("/api/qr/links", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: l.id, active: !l.active }) });
+    if (!quiet) toast.undo(l.active ? `"${l.title || l.code}" 링크를 껐습니다` : `"${l.title || l.code}" 링크를 켰습니다`, () => toggleActive({ ...l, active: !l.active }, true));
   }
   async function remove(l: Link) {
-    if (!confirm(`"${l.title || l.code}" 링크를 삭제할까요? QR도 더는 동작하지 않습니다.`)) return;
+    if (!(await confirmModal({ title: `"${l.title || l.code}" 링크 삭제`, body: "인쇄한 QR도 더는 동작하지 않습니다. 되돌릴 수 없습니다.", action: "링크 삭제" }))) return;
     await fetch(`/api/qr/links?id=${l.id}`, { method: "DELETE" });
     load();
   }
@@ -106,7 +111,7 @@ export default function QrPage() {
           {loading ? <div className="b2b-loading">불러오는 중...</div> : links.length === 0 ? (
             <div className="b2b-empty">아직 만든 링크가 없습니다.{error.includes("short_links") || error.includes("relation") ? " — supabase/migrations/038_qr_short_links.sql 를 먼저 적용하세요." : ""}</div>
           ) : (
-            <div className="b2b-table-wrap">
+            <div className="b2b-table-wrap is-sticky-head">
               <table className="b2b-table">
                 <thead><tr><th></th><th>제목 · 짧은 주소</th><th>목적지</th><th className="num">스캔</th><th>상태</th><th></th></tr></thead>
                 <tbody>

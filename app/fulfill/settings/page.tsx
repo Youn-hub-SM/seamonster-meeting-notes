@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, DEFAULT_BOX_CATS, validateBoxCats, type RateVersion, type BoxTier, type BoxCat } from "@/app/lib/fulfill-rates";
 import { DEDUP_DEFAULT, DEDUP_MIN_DAYS, DEDUP_MAX_DAYS, type DedupConfig, type DedupMatch } from "@/app/lib/fulfill-dedup";
 
@@ -9,6 +10,8 @@ const num = (v: string) => Math.max(0, Math.round(Number(v) || 0));
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
 export default function FulfillSettingsPage() {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [history, setHistory] = useState<RateVersion[]>([{ ...DEFAULT_RATES, effectiveFrom: DEFAULT_EFFECTIVE }]);
   const [boxCats, setBoxCats] = useState<BoxCat[]>(DEFAULT_BOX_CATS);
   const [loading, setLoading] = useState(true);
@@ -36,7 +39,7 @@ export default function FulfillSettingsPage() {
       prev.enabled && !dedup.enabled ? "중복 방지를 끄면 이미 출고한 주문이 섞인 파일을 올려도 걸러지지 않습니다." : "",
       dedup.enabled && dedup.windowDays < prev.windowDays ? `대조 기간을 ${prev.windowDays}일 → ${dedup.windowDays}일로 줄이면 그보다 오래 전에 출고한 주문은 걸러지지 않습니다.` : "",
     ].filter(Boolean);
-    if (warn.length && !window.confirm(`${warn.join("\n")}\n그 주문은 CN 파일·출고·재고 차감에 다시 들어갑니다.\n\n그래도 저장할까요?`)) return;
+    if (warn.length && !(await confirm({ title: "중복 방지 설정 저장", body: `${warn.join(" ")} 그 주문은 CN 파일·출고·재고 차감에 다시 들어갑니다.`, action: "그래도 저장" }))) return;
     setDedupSaving(true); setDedupMsg("");
     try {
       const r = await fetch("/api/fulfill/dedup", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dedup) });
@@ -90,6 +93,7 @@ export default function FulfillSettingsPage() {
       <fieldset className="b2b-card" disabled={loading || loadErr} style={{ marginBottom: 16, border: 0, padding: 0, minWidth: 0, opacity: loadErr ? 0.5 : 1 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">배송일지 박스 종류</span></div>
         <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>이하(kg) = 주문 총중량 · 금액(원) = 박스 자재 단가(면세)</p>
+        <div className="b2b-table-wrap">
         <table className="b2b-table" style={{ fontSize: 15 }}>
           <thead><tr><th>박스 종류</th><th className="num">이하(kg)</th><th className="num">금액(원)</th><th style={{ width: 40 }}></th></tr></thead>
           <tbody>
@@ -109,20 +113,19 @@ export default function FulfillSettingsPage() {
                 <td>{boxCats.length > 1 && (
                   <button className="b2b-link-btn" style={{ color: "var(--sm-text-light)" }} aria-label="삭제"
                     onClick={() => {
-                      // 기본 8종은 대표중량 폴백이 있어 과거 보정분 운임이 유지되지만, 직접 만든 종류는 환산액이 0원이 된다.
+                      // 편집 중 목록에서만 빠진다([저장] 전) — 확인창 대신 바로 빼고 되돌리기 토스트(이전 목록 복원).
+                      //  기본 8종은 대표중량 폴백이 있어 과거 보정분 운임이 유지되지만, 직접 만든 종류는 저장 뒤 환산액이 0원이 된다 — 토스트에 적는다.
                       const known = DEFAULT_BOX_CATS.some((d) => d.name === c.name);
-                      const msg = `'${c.name}' 을 목록에서 뺄까요?\n\n`
-                        + `과거 배송일지의 이 종류 기록(수량·직접수정 내역)은 그대로 남고 표·엑셀에도 계속 보입니다.\n`
-                        + `새 발주처리에서는 더 이상 이 종류로 분류되지 않습니다.`
-                        + (known ? "" : "\n\n※ 직접 추가한 종류라, 이 종류로 된 직접수정 보정의 운임 환산액은 0원이 됩니다(수량은 유지).");
-                      if (!window.confirm(msg)) return;
+                      const prev = boxCats;
                       setBoxCats((cs) => { const next = cs.filter((_, j) => j !== i); next[next.length - 1] = { ...next[next.length - 1], maxKg: null }; return next; });
+                      toast.undo(`'${c.name}' 종류를 목록에서 뺐습니다${known ? "" : " — 직접 추가한 종류라 저장하면 이 종류 보정의 운임 환산액은 0원이 됩니다"}`, () => setBoxCats(prev));
                     }}>✕</button>
                 )}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
         <button className="b2b-btn-secondary" style={{ marginTop: 8, padding: "5px 12px", fontSize: 12 }}
           onClick={() => setBoxCats((cs) => {
             const lastBounded = [...cs].reverse().find((x) => x.maxKg != null)?.maxKg ?? 0;

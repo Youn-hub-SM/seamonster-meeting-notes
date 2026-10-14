@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useToast } from "@/app/components/Feedback";
 
 // 창고 위치(픽업 구역) 관리 — 송장 스캔 피킹 리스트를 걷는 순서대로 뽑기 위한 설정.
 //  · 구역 목록의 위·아래 순서 = 창고를 걷는 경로 (피킹 리스트가 이 순서로 정렬됨)
@@ -11,6 +12,7 @@ import Link from "next/link";
 type Prod = { id: string; sku: string | null; name: string; active: boolean; pick_zone: string | null };
 
 export default function LocationsPage() {
+  const toast = useToast();
   const [zones, setZones] = useState<string[]>([]);
   const [products, setProducts] = useState<Prod[]>([]);
   const [zoneCol, setZoneCol] = useState(true);
@@ -63,11 +65,14 @@ export default function LocationsPage() {
     [next[i], next[j]] = [next[j], next[i]];
     saveZones(next);
   }
+  // 구역 삭제 — 목록 저장(PUT)만 바뀌고 품목의 pick_zone 값은 그대로라, 같은 PUT 으로 이전 목록을 되살리면 배정도 돌아온다 → 확인창 대신 되돌리기 토스트
   function removeZone(i: number) {
+    if (saving) return;
     const z = zones[i];
     const n = products.filter((p) => p.pick_zone === z).length;
-    if (n > 0 && !confirm(`'${z}' 구역에 품목 ${n}개가 배정돼 있습니다. 삭제하면 해당 품목은 '위치 미지정'으로 뽑힙니다. 삭제할까요?`)) return;
+    const prev = zones;
     saveZones(zones.filter((_, k) => k !== i));
+    toast.undo(`'${z}' 구역을 삭제했습니다${n > 0 ? ` — 품목 ${n}개는 '위치 미지정'으로 뽑힙니다` : ""}`, () => saveZones(prev));
   }
 
   // 품목 구역 배정 — 변경 즉시 저장. 실패 시 그 품목만 이전 값 복구
@@ -165,7 +170,7 @@ export default function LocationsPage() {
         ) : list.length === 0 ? (
           <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다." : "표시할 품목이 없습니다."}</div>
         ) : (
-          <div className="b2b-table-wrap">
+          <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
               <thead><tr><th>품목명</th><th>SKU</th><th style={{ width: 190 }}>구역</th></tr></thead>
               <tbody>

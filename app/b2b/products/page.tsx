@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { Product, ProductInput, EMPTY_PRODUCT, CostHistory, TAX_TYPES, TAX_TYPE_LABEL } from "@/app/lib/b2b-types";
 import BundleEditor from "@/app/components/BundleEditor";
 import CostScheduleModal from "./CostScheduleModal";
@@ -20,6 +21,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [showBundles, setShowBundles] = useState(false); // 묶음(세트) 상품 표시 여부 — 기본 숨김
@@ -114,7 +116,7 @@ export default function ProductsPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`"${name}" 제품을 삭제하시겠어요?\n발주 이력이 있으면 삭제 안 됨 — 대신 '미사용' 처리하세요.`)) return;
+    if (!(await confirmModal({ title: `"${name}" 제품 삭제`, body: "제품이 목록에서 지워집니다. 발주 이력이 있으면 삭제되지 않습니다 — 그때는 '미사용' 처리하세요.", action: "제품 삭제" }))) return;
     setError("");
     const snapshot = products;
     setProducts((prev) => prev.filter((p) => p.id !== id));
@@ -545,7 +547,8 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", marginBottom: 8 }}>
         원가 변경 이력
       </div>
-      <table className="b2b-table" style={{ background: "var(--sm-white)" }}>
+      <div className="b2b-table-wrap">
+      <table className="b2b-table is-responsive" style={{ background: "var(--sm-white)" }}>
         <thead>
           <tr>
             <th>변경 시각</th>
@@ -556,13 +559,14 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
         <tbody>
           {history.map((h) => (
             <tr key={h.id}>
-              <td>{new Date(h.changed_at).toLocaleString("ko-KR")}</td>
-              <td className="num b2b-money">{h.cost_price.toLocaleString()}</td>
-              <td>{h.reason || "-"}</td>
+              <td data-label="변경 시각">{new Date(h.changed_at).toLocaleString("ko-KR")}</td>
+              <td data-label="원가" className="num b2b-money">{h.cost_price.toLocaleString()}</td>
+              <td data-label="사유">{h.reason || "-"}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

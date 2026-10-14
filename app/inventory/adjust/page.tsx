@@ -246,17 +246,17 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
         <div className="sm-warn">
           <div><strong>장부에서 이미 빠졌지만 아직 안 나간 B2B 발주 {checks.b2b.length}건</strong> — 실사 전에 발송완료(실제 발송일)로 바꾸거나 발송일을 다시 잡으세요. 그대로 세면 그만큼 재고가 늘어납니다. 일부 발송 건은 &apos;안 나간 수량&apos;을 선반 수량에서 빼고 넣으세요.</div>
           <div className="b2b-table-wrap" style={{ maxHeight: listMax, overflow: "auto", marginTop: 8 }}>
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr><th>발주</th><th>거래처</th><th>차감일</th><th>남은 발송일</th><th>상태</th><th className="num">안 나간 수량</th></tr></thead>
               <tbody>
                 {checks.b2b.map((h) => (
                   <tr key={h.order_id}>
-                    <td style={{ whiteSpace: "nowrap" }}><a className="sm-link" href={`/b2b/orders/${h.order_id}`} target="_blank" rel="noreferrer">{h.order_no || "발주"}</a></td>
-                    <td>{h.company || "-"}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{h.deduct_date.slice(5)}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{h.open_dates.length ? h.open_dates.map((d) => d.slice(5)).join(", ") : "-"}</td>
-                    <td>{h.partial ? "일부 발송" : "미발송"}</td>
-                    <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}
+                    <td data-label="발주" style={{ whiteSpace: "nowrap" }}><a className="sm-link" href={`/b2b/orders/${h.order_id}`} target="_blank" rel="noreferrer">{h.order_no || "발주"}</a></td>
+                    <td data-label="거래처">{h.company || "-"}</td>
+                    <td data-label="차감일" style={{ whiteSpace: "nowrap" }}>{h.deduct_date.slice(5)}</td>
+                    <td data-label="남은 발송일" style={{ whiteSpace: "nowrap" }}>{h.open_dates.length ? h.open_dates.map((d) => d.slice(5)).join(", ") : "-"}</td>
+                    <td data-label="상태">{h.partial ? "일부 발송" : "미발송"}</td>
+                    <td data-label="안 나간 수량" className="num b2b-money" style={{ whiteSpace: "nowrap" }}
                       title={h.remaining === null ? "발송완료 차수에 품목 수량이 없어 남은 수량을 알 수 없습니다 — 발주에서 확인하세요" : h.items.map((x) => `${nm(x.product_id)} ${rem(x.remaining)}${h.partial ? ` / 차감 ${x.qty.toLocaleString()}` : ""}`).join("\n")}>
                       {rem(h.remaining)}{h.partial && <span className="sm-faint" style={{ fontSize: 12, marginLeft: 4 }}>/ 차감 {h.qty.toLocaleString()}</span>}
                     </td>
@@ -271,7 +271,7 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
         <div className="sm-warn">
           <div><strong>대기 {checks.pendingTotal}건</strong> — 현재고에 안 들어간 입출고입니다. 실물이 이미 움직였으면 실사 전에 &apos;입고 및 출고&apos;에서 처리하거나 취소하세요. 실사 뒤에 처리하면 두 번 반영됩니다.</div>
           <div className="b2b-table-wrap" style={{ maxHeight: listMax, overflow: "auto", marginTop: 8 }}>
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr><th>거래일</th><th>유형</th><th>품목</th><th className="num">수량</th><th>거래처</th></tr></thead>
               <tbody>
                 {checks.pending.map((t) => <CheckRow key={t.id} t={t} name={nm(t.product_id)} />)}
@@ -286,7 +286,7 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
           <div><strong>실사일({checks.date.slice(5)}) 당일 입출고 {checks.sameDay}건</strong> — 실사일 재고에 들어가 있습니다. 그날 입출고 전에 셌다면 실사일을 전날로 고르세요.</div>
           {!compact && (
             <div className="b2b-table-wrap" style={{ maxHeight: listMax, overflow: "auto", marginTop: 8 }}>
-              <table className="b2b-table">
+              <table className="b2b-table is-responsive">
                 <thead><tr><th>거래일</th><th>유형</th><th>품목</th><th className="num">수량</th><th>거래처</th></tr></thead>
                 <tbody>
                   {checks.moved.filter((t) => t.txn_date === checks.date).map((t) => <CheckRow key={t.id} t={t} name={nm(t.product_id)} />)}
@@ -305,11 +305,11 @@ function CheckRow({ t, name }: { t: CountChecks["pending"][number]; name: string
   const c = INV_TYPE_COLOR[t.type as InvTxnType] || INV_TYPE_COLOR["조정"];
   return (
     <tr>
-      <td style={{ whiteSpace: "nowrap" }}>{t.txn_date.slice(5)}</td>
-      <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span></td>
-      <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
-      <td className="num b2b-money">{Number(t.qty) > 0 ? "+" : ""}{Number(t.qty).toLocaleString()}</td>
-      <td>{t.partner || "-"}</td>
+      <td data-label="거래일" style={{ whiteSpace: "nowrap" }}>{t.txn_date.slice(5)}</td>
+      <td data-label="유형"><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span></td>
+      <td data-label="품목" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
+      <td data-label="수량" className="num b2b-money">{Number(t.qty) > 0 ? "+" : ""}{Number(t.qty).toLocaleString()}</td>
+      <td data-label="거래처">{t.partner || "-"}</td>
     </tr>
   );
 }

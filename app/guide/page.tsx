@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { GUIDE, GUIDE_UPDATED, type GuideEntry } from "@/app/lib/guide-data";
 import { matchKoQuery } from "@/app/lib/hangul";
 
 // 사용 가이드 — 전 기능의 사용 단계. 검색은 메뉴명·설명·단계·검색어 전체를 훑는다.
 //  데이터는 app/lib/guide-data.ts 하나 — 기능이 바뀌면 그 커밋에서 같이 고친다(CLAUDE.md 규칙).
+//  ?q= 는 홈 '가이드 검색'(2026-10-14 D4)이 넘기는 검색어 — 검색칸 초기값으로만 쓴다(useSearchParams 는 Suspense 경계 필요, 로그인 화면과 같은 구조).
 
 function matches(e: GuideEntry, q: string): boolean {
   // 공용 매처 — 초성(ㅈㄱ)·영문자판(rocj) 입력도 받는다
@@ -15,7 +17,16 @@ function matches(e: GuideEntry, q: string): boolean {
 }
 
 export default function GuidePage() {
-  const [q, setQ] = useState("");
+  return (
+    <Suspense fallback={<div className="b2b-loading">불러오는 중...</div>}>
+      <GuideInner />
+    </Suspense>
+  );
+}
+
+function GuideInner() {
+  const params = useSearchParams();
+  const [q, setQ] = useState(params.get("q") || "");
   const query = q.trim(); // 소문자화는 공용 매처가 한다 — 미리 낮추면 시프트 자모(ㄲㅆ)를 잃는다
 
   const view = useMemo(() => {

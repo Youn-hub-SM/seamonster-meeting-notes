@@ -5,6 +5,7 @@ import Link from "next/link";
 import OrdersTable from "../OrdersTable";
 import { ChannelPicker } from "../ChannelTabs";
 import { LOST_MSG, linkMessage, confirmUnlinkedInbound } from "../TxnModal";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import { INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
 import type { LinkResultLite } from "@/app/lib/link-result";
 
@@ -21,6 +22,8 @@ const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 1
 const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);
 
 export default function TradePage() {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
@@ -77,7 +80,7 @@ export default function TradePage() {
       if (ioType === "입고" && ioDone && !customerReturn && !reqId) {
         const seen = new Set<string>();
         const items = preview.rows.filter((r) => r.type === "입고" && !seen.has(r.product_id) && seen.add(r.product_id)).map((r) => ({ product_id: r.product_id, name: r.product_name }));
-        if (!(await confirmUnlinkedInbound(ioDate, items))) { setApplying(false); return; }
+        if (!(await confirmUnlinkedInbound(ioDate, items, confirm))) { setApplying(false); return; }
       }
       const lost = LOST_MSG;
       let res: Response;
@@ -93,8 +96,11 @@ export default function TradePage() {
       if (!j) throw new Error(lost);
       if (j.code === "request_key_conflict") setPreview((p) => (p ? { ...p, key: newKey() } : p)); // 다음 누름은 새 기록
       if (!res.ok || !j.ok) throw new Error(j.error || "적용 실패");
-      if (j.replay) alert("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
-      if (j.link) alert(linkMessage(j.link, (pid) => preview.rows.find((r) => r.product_id === pid)?.product_name || "품목"));
+      if (j.replay) toast.success("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      if (j.link) {
+        const m = linkMessage(j.link, (pid) => preview.rows.find((r) => r.product_id === pid)?.product_name || "품목");
+        if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
+      }
       setPreview(null); setReload((n) => n + 1);
     } catch (e) { setError(e instanceof Error ? e.message : "적용 실패"); }
     setApplying(false);

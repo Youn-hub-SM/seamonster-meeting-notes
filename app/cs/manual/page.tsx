@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import Link from "next/link";
 import { matchKoQuery } from "@/app/lib/hangul";
 
@@ -20,6 +21,7 @@ export default function CsManualPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("");
   const newCounter = useRef(0);
@@ -121,7 +123,7 @@ export default function CsManualPage() {
       setEntries((prev) => prev.filter((x) => x.id !== e.id));
       return;
     }
-    if (!confirm(`"${e.title}" 항목을 삭제할까요?`)) return;
+    if (!(await confirmModal({ title: `"${e.title}" 항목 삭제`, body: "매뉴얼에서 이 항목이 지워집니다. 되돌릴 수 없습니다.", action: "항목 삭제" }))) return;
     try {
       const res = await fetch(`/api/cs/manual?id=${encodeURIComponent(e.id)}`, { method: "DELETE" });
       const j = await res.json();

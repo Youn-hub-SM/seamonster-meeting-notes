@@ -4,6 +4,7 @@ import { useEscClose } from "@/app/lib/use-esc";
 import IconButton from "@/app/components/IconButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
+import { useConfirm } from "@/app/components/Feedback";
 
 // 제조사 반품 입력 — 재고목록의 '입출조정' 창과 같은 짜임(직접 입력 / 엑셀 업로드 탭 + 미리보기).
 //  반품 기록 자체는 재고를 건드리지 않는다(087) — 매입 결산에서 매입수량을 깎는 기록이다.
@@ -39,6 +40,7 @@ function defaultDate(ym: string): string {
 }
 
 export default function ReturnModal({ month, onClose, onSaved }: { month: string; onClose: () => void; onSaved: () => void }) {
+  const confirm = useConfirm();
   // 반품을 저장·삭제·반영했으면 닫을 때 결산 재계산 — ✕·Esc 로 닫아도 반품 전 숫자가 화면·인쇄에 남지 않게
   const dirty = useRef(false);
   const close = useCallback(() => { if (dirty.current) onSaved(); else onClose(); }, [onSaved, onClose]);
@@ -184,7 +186,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
   //  조회 실패면 서버가 지우지 않는다(S4). [재고에서도 빼기] 기록 중에는 지우지 않는다(busy 잠금).
   async function remove(id: string) {
     if (busyRef.current) return;
-    if (!window.confirm("이 반품 기록을 지울까요?")) return;
+    if (!(await confirm({ title: "반품 기록 삭제", body: "이 반품 기록이 지워집니다. 재고에서 뺀 출고가 있으면 한 번 더 묻습니다.", action: "반품 삭제" }))) return;
     if (busyRef.current) return; // 확인 창을 띄운 사이 다른 동작이 시작됨
     busyRef.current = "remove"; setRemovingId(id);
     setError(""); setWarn(""); setOutDone("");
@@ -192,7 +194,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       let res = await fetch(`/api/inventory/returns/${id}`, { method: "DELETE" });
       let j = await res.json().catch(() => null);
       for (let n = 0; n < 3 && res.status === 409 && typeof j?.confirm === "string"; n++) {
-        if (!window.confirm(j.confirm)) return;
+        if (!(await confirm({ title: "반품 삭제 — 한 번 더 확인", body: j.confirm, action: j.confirm_as === "keep" ? "반품만 삭제" : "출고까지 함께 취소" }))) return;
         const as = j.confirm_as === "keep" ? "keep" : "1";
         res = await fetch(`/api/inventory/returns/${id}?confirm=${as}`, { method: "DELETE" });
         j = await res.json().catch(() => null);
@@ -410,16 +412,16 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다.</p>
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
-                      <table className="b2b-table" style={{ fontSize: 12 }}>
+                      <table className="b2b-table is-responsive" style={{ fontSize: 12 }}>
                         <thead><tr><th>날짜</th><th>품목</th><th className="num">수량</th><th className="num">단가</th><th /></tr></thead>
                         <tbody>
                           {rows.map((r) => (
                             <tr key={r.id}>
-                              <td style={{ whiteSpace: "nowrap" }}>{r.return_date.slice(5)}</td>
-                              <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.memo || ""}>{r.name}</td>
-                              <td className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 700 }}>{r.qty.toLocaleString()}</td>
-                              <td className="num b2b-money">{r.unit_amount ? won(r.unit_amount) : <span className="sm-faint">매입가</span>}</td>
-                              <td style={{ textAlign: "right" }}>
+                              <td data-label="날짜" style={{ whiteSpace: "nowrap" }}>{r.return_date.slice(5)}</td>
+                              <td data-label="품목" style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.memo || ""}>{r.name}</td>
+                              <td data-label="수량" className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 700 }}>{r.qty.toLocaleString()}</td>
+                              <td data-label="단가" className="num b2b-money">{r.unit_amount ? won(r.unit_amount) : <span className="sm-faint">매입가</span>}</td>
+                              <td className="actions">
                                 <IconButton className="is-danger" label="삭제" onClick={() => remove(r.id)} disabled={outBusy || !!removingId}>{removingId === r.id ? "..." : "✕"}</IconButton>
                               </td>
                             </tr>

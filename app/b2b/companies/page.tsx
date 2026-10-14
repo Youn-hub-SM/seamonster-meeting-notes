@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import Link from "next/link";
 import { Company, CompanyInput, EMPTY_COMPANY, formatPhone, formatBizNo, checkBizNo } from "@/app/lib/b2b-types";
 import { matchKoQuery } from "@/app/lib/hangul";
@@ -11,6 +12,7 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<Modal>(null);
   const [saving, setSaving] = useState(false);
@@ -77,7 +79,7 @@ export default function CompaniesPage() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`"${name}" 업체를 삭제하시겠어요?\n(이 업체의 발주가 있으면 삭제 안 됨)`)) return;
+    if (!(await confirmModal({ title: `"${name}" 업체 삭제`, body: "업체 정보와 거래처 단가가 지워집니다. 이 업체의 발주가 있으면 삭제되지 않습니다.", action: "업체 삭제" }))) return;
     setError("");
     const snapshot = companies;
     setCompanies((prev) => prev.filter((c) => c.id !== id));
@@ -137,7 +139,7 @@ export default function CompaniesPage() {
               : "검색 결과가 없습니다."}
           </div>
         ) : (
-          <div className="b2b-table-wrap">
+          <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table is-clickable is-responsive">
               <thead>
                 <tr>

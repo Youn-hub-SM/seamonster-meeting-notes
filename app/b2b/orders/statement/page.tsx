@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import IconButton from "@/app/components/IconButton";
+import { useConfirm } from "@/app/components/Feedback";
 
 // 거래명세표 — 커스텀 작성. 발주 없이 손으로 채워 인쇄/PDF 로 뽑는다.
 //  발주 1건짜리 명세표(/b2b/orders/[id]/statement)와 '보이는 결과'는 같아야 해서 레이아웃·세액 규칙을 맞췄다.
@@ -30,6 +31,7 @@ export default function CustomStatementPage() {
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const [loading, setLoading] = useState(true);
   const [restored, setRestored] = useState(false);
+  const confirmModal = useConfirm();
 
   // 설정의 공급자·직인을 초기값으로. 브라우저에 남은 작성 중 내용이 있으면 그걸 우선한다.
   useEffect(() => {
@@ -79,8 +81,8 @@ export default function CustomStatementPage() {
   const filled = lines.filter(hasContent);
   const setLine = (key: string, patch: Partial<Line>) => setLines((p) => p.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  function resetAll() {
-    if (!window.confirm("작성 중인 내용을 모두 지울까요? (공급자 정보는 설정값으로 되돌립니다)")) return;
+  async function resetAll() {
+    if (!(await confirmModal({ title: "작성 중인 내용 모두 지우기", body: "입력한 구매자·품목이 지워지고 공급자 정보는 설정값으로 돌아갑니다.", action: "모두 지우기" }))) return;
     localStorage.removeItem(DRAFT_KEY);
     setBuyer({ name: "", biz_no: "", ceo: "", addr: "" });
     setDate(kstToday()); setDocNo(""); setLines([newLine()]); setRestored(false);
@@ -98,7 +100,7 @@ export default function CustomStatementPage() {
         </div>
         <div className="b2b-page-actions">
           <Link href="/b2b/orders" className="b2b-btn-secondary">발주 목록</Link>
-          <button className="b2b-btn-secondary" onClick={resetAll}>새로 작성</button>
+          <button className="b2b-btn-secondary" onClick={() => void resetAll()}>새로 작성</button>
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading}>인쇄 / PDF</button>
         </div>
       </header>

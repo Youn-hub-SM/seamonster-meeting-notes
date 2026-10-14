@@ -557,6 +557,31 @@ a.b2b-history-item:hover {
   overflow-x: auto;
 }
 
+/* 표 머리 고정(E3) — .b2b-table-wrap 은 overflow-x:auto 라 스크롤 컨테이너가 되어 sticky 머리가 페이지 스크롤에 안 붙는다.
+   그래서 is-sticky-head 는 감싸개의 overflow 를 풀어 머리를 페이지에 붙인다 = 가로 스크롤 보호가 사라지므로
+   열이 적어 1100px 안에 들어가는 긴 목록 표에만 붙인다(넓은 표에 붙이면 페이지가 옆으로 밀린다).
+   top:0 = 데스크톱(>900px)엔 고정 상단바가 없다(.app-topbar 는 ≤900px 에서만 sticky 52px).
+   ≤900px 는 폰 폭에서 4열만 넘어도 넘치므로 감싸개를 다시 스크롤 컨테이너로 돌려 머리 고정을 포기한다(함정 10 우선). */
+.b2b-table-wrap.is-sticky-head {
+  overflow: visible;
+}
+
+.b2b-table-wrap.is-sticky-head .b2b-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--sm-bg-subtle);
+}
+
+@media (max-width: 900px) {
+  .b2b-table-wrap.is-sticky-head {
+    overflow-x: auto;
+  }
+  .b2b-table-wrap.is-sticky-head .b2b-table thead th {
+    position: static;
+  }
+}
+
 .b2b-table {
   width: 100%;
   border-collapse: collapse;

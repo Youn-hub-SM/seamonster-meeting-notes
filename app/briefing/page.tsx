@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { ComboBarLine, TrendChart, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 import { splitSections, tableKindOf, TOTAL_ROW, CAMPAIGN_TOP, VOICE_HEAD, INV_WATCH_HEAD, watchCells, tableRow, tableRule, splitRow, type ReportSection, type SectionKind } from "@/app/lib/report-sections";
 import { KPI_TONE_COLOR, pctTone, type ReportKpi, type KpiPill, type KpiTile } from "@/app/lib/report-kpi";
@@ -417,6 +418,7 @@ export default function SummaryReportPage() {
   const [admin, setAdmin] = useState(false);
   const [busy, setBusy] = useState<"" | "run" | "send">("");
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [info, setInfo] = useState("");
   const autoRun = useRef(false); // 매출 업로드 안내 창에서 넘어오면(?run=1) 한 번 자동 분석
   const viewRef = useRef(`${period}:${date}`); // 늦게 도착한 다른 기간 응답은 버린다
@@ -493,7 +495,7 @@ export default function SummaryReportPage() {
 
   // 보내기 — 메일(서버 sendReport, 일일 매출 리포트와 같은 수동 발송).
   async function send() {
-    if (report?.sent_current && report.sent_at && !window.confirm(`이미 ${dtKst(report.sent_at)}에 보냈습니다. 다시 보낼까요?`)) return;
+    if (report?.sent_current && report.sent_at && !(await confirmModal({ title: "리포트 다시 보내기", body: `이미 ${dtKst(report.sent_at)}에 보냈습니다. 같은 리포트가 메일로 한 번 더 나갑니다.`, action: "다시 보내기", danger: false }))) return;
     setBusy("send"); setError(""); setInfo("");
     try {
       const r = await fetch("/api/analyst", {

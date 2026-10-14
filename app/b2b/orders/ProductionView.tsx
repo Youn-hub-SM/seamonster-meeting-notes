@@ -87,7 +87,7 @@ export default function ProductionView() {
             </div>
 
             <div className="b2b-table-wrap">
-              <table className="b2b-table">
+              <table className="b2b-table is-responsive">
                 <thead>
                   <tr>
                     <th>품목</th>
@@ -100,13 +100,13 @@ export default function ProductionView() {
                 <tbody>
                   {d.products.map((p) => (
                     <tr key={`${p.product_name}__${p.spec}`}>
-                      <td>{p.product_name}</td>
-                      <td>{p.spec || "-"}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{formatQty(p.qty)}</td>
-                      <td style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>
+                      <td data-label="품목">{p.product_name}</td>
+                      <td data-label="옵션">{p.spec || "-"}</td>
+                      <td data-label="생산 수량" className="num b2b-money" style={{ fontWeight: 700 }}>{formatQty(p.qty)}</td>
+                      <td data-label="거래처" style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>
                         {p.companies.length > 0 ? p.companies.join(", ") : "-"}
                       </td>
-                      <td className="num">{p.order_count}</td>
+                      <td data-label="발주 수" className="num">{p.order_count}</td>
                     </tr>
                   ))}
                 </tbody>

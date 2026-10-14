@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import { Combobox } from "../../orders/Combobox";
 
 type Price = { product_id: string; unit_price: number; memo: string | null; name: string; sku: string | null; spec: string | null; default_price: number };
@@ -14,6 +15,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
   const [price, setPrice] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const confirmModal = useConfirm();
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -49,7 +51,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
     setBusy(false);
   }
   async function remove(product_id: string) {
-    if (!confirm("이 상품의 거래처 단가를 삭제할까요? (발주 시 기본 판매가로 돌아갑니다)")) return;
+    if (!(await confirmModal({ title: "거래처 단가 삭제", body: "이 상품은 발주 시 기본 판매가로 돌아갑니다.", action: "단가 삭제" }))) return;
     setBusy(true); setErr("");
     try {
       const j = await (await fetch(`/api/b2b/companies/${companyId}/prices?product_id=${product_id}`, { method: "DELETE" })).json();

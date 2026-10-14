@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import type { QuoteItem, QuoteSummary } from "@/app/lib/inventory-quote";
 import ReturnModal from "./ReturnModal";
 import QuoteSheet from "./QuoteSheet";
+import { useConfirm } from "@/app/components/Feedback";
 
 const THIS_MONTH = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 7);
 const won = (n: number) => Math.round(n).toLocaleString();
@@ -14,6 +15,7 @@ type Snapshot = { month: string; confirmed_at: string; confirmed_by: string | nu
 type SnapRow = { month: string; confirmed_at: string; confirmed_by: string | null; summary: QuoteSummary };
 
 export default function QuotePage() {
+  const confirm = useConfirm();
   const [ym, setYm] = useState(THIS_MONTH());
   const [rent, setRent] = useState(0);
   const [etc, setEtc] = useState(0);
@@ -101,9 +103,9 @@ export default function QuotePage() {
   }
 
   async function confirmQuote() {
-    if (!window.confirm(snap
-      ? `${ym} 결산을 다시 확정할까요? 기존 확정본을 덮어씁니다.`
-      : `${ym} 결산을 확정할까요? 확정 후 원장이 바뀌면 이 화면에 경고가 표시됩니다.`)) return;
+    if (!(await confirm(snap
+      ? { title: `${ym} 결산 다시 확정`, body: "기존 확정본을 덮어씁니다.", action: "다시 확정" }
+      : { title: `${ym} 결산 확정`, body: "확정 후 원장이 바뀌면 이 화면에 경고가 표시됩니다.", action: "결산 확정", danger: false }))) return;
     setSnapBusy(true);
     try {
       const post = (confirmDrop: boolean) => fetch("/api/inventory/quote/snapshot", {
@@ -114,29 +116,29 @@ export default function QuotePage() {
       let j = await r.json().catch(() => null);
       // 기존 확정본보다 매입이 크게 줄었으면 서버가 409 로 멈춘다 — 확인한 사람만 덮어쓴다
       if (r.status === 409 && j?.need_confirm) {
-        if (!window.confirm(`${j.error}\n\n그래도 이 값으로 다시 확정할까요?`)) return;
+        if (!(await confirm({ title: `${ym} 결산 다시 확정`, body: String(j.error), action: "이 값으로 다시 확정" }))) return;
         r = await post(true);
         j = await r.json().catch(() => null);
       }
-      if (!r.ok || !j?.ok) { alert(`확정 실패: ${j?.error || "서버 오류"}`); return; }
+      if (!r.ok || !j?.ok) { setError(`확정 실패: ${j?.error || "서버 오류"}`); return; }
       setSnap(j.snapshot);
       void loadList();
       if (viewMonth === ym) void openSnap(ym); // 펼쳐 둔 확정본이 이 달이면 새 확정본으로
       // 확정본은 서버 최신 원장 기준 — 화면 데이터도 같은 기준으로 갱신해 역방향 경고 방지
       await load(ym, rent, etc, taxEtc);
-    } catch { alert("확정 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
+    } catch { setError("확정 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
     finally { setSnapBusy(false); }
   }
   async function unconfirmQuote() {
-    if (!window.confirm(`${ym} 결산 확정을 해제할까요?`)) return;
+    if (!(await confirm({ title: `${ym} 결산 확정 해제`, body: "확정본이 지워지고 이 달은 미확정으로 돌아갑니다.", action: "확정 해제" }))) return;
     try {
       const r = await fetch(`/api/inventory/quote/snapshot?month=${ym}`, { method: "DELETE" });
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.ok) { alert(`해제 실패: ${j?.error || "서버 오류"}`); return; }
+      if (!r.ok || !j?.ok) { setError(`해제 실패: ${j?.error || "서버 오류"}`); return; }
       setSnap(null);
       void loadList();
       if (viewMonth === ym) closeSnap();
-    } catch { alert("해제 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
+    } catch { setError("해제 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
   }
   const dtKst = (iso: string) => {
     try { return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16); }
@@ -217,17 +219,17 @@ export default function QuotePage() {
         <section className="b2b-card no-print" style={{ marginTop: 24, maxWidth: 900 }}>
           <div className="b2b-card-head"><span className="b2b-card-title">확정된 결산</span></div>
           <div className="b2b-table-wrap">
-            <table className="b2b-table">
+            <table className="b2b-table is-responsive">
               <thead><tr><th>대상 월</th><th>확정</th><th className="num">품목</th><th className="num">총 매입금액</th><th className="num">총 입금액</th><th style={{ width: 90 }}></th></tr></thead>
               <tbody>
                 {snapList.map((r) => (
                   <tr key={r.month} style={viewMonth === r.month ? { background: "var(--sm-bg-subtle)" } : undefined}>
-                    <td style={{ fontWeight: 700 }}>{r.month}</td>
-                    <td className="sm-faint" style={{ fontSize: 12 }}>{dtKst(r.confirmed_at)}{r.confirmed_by ? ` · ${r.confirmed_by}` : ""}</td>
-                    <td className="num b2b-money">{(r.summary?.itemCount ?? 0).toLocaleString()}종</td>
-                    <td className="num b2b-money">{won(r.summary?.totalAmount ?? 0)}</td>
-                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.summary?.deposit ?? 0)}</td>
-                    <td style={{ textAlign: "right" }}>
+                    <td data-label="대상 월" style={{ fontWeight: 700 }}>{r.month}</td>
+                    <td data-label="확정" className="sm-faint" style={{ fontSize: 12 }}>{dtKst(r.confirmed_at)}{r.confirmed_by ? ` · ${r.confirmed_by}` : ""}</td>
+                    <td data-label="품목" className="num b2b-money">{(r.summary?.itemCount ?? 0).toLocaleString()}종</td>
+                    <td data-label="총 매입금액" className="num b2b-money">{won(r.summary?.totalAmount ?? 0)}</td>
+                    <td data-label="총 입금액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.summary?.deposit ?? 0)}</td>
+                    <td className="actions">
                       {viewMonth === r.month
                         ? <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={closeSnap}>닫기</button>
                         : <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => openSnap(r.month)}>보기</button>}

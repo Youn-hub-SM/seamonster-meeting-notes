@@ -18,6 +18,7 @@ import {
   formatTrdt,
 } from "@/app/lib/b2b-deposit-types";
 import { pingActivityFeed } from "../ActivityFeed";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 
 type UnpaidOrder = {
   id: string;
@@ -201,6 +202,8 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
   const [showManage, setShowManage] = useState(false);
   const [aliasName, setAliasName] = useState("");
   const [aliasCompany, setAliasCompany] = useState("");
+  const toast = useToast();
+  const confirmModal = useConfirm();
 
   async function load(limit = recentLimit) {
     try {
@@ -220,26 +223,47 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
   async function act(
     depositId: string,
     action: "match" | "ignore" | "restore",
-    opts?: { orderId?: string; label?: string; always?: boolean; remark?: string | null; companyId?: string; companyName?: string }
+    opts?: { orderId?: string; label?: string; always?: boolean; remark?: string | null; companyId?: string; companyName?: string; quiet?: boolean }
   ) {
     let saveAlias = false;
     if (action === "match") {
-      if (!confirm(`이 입금을 ${opts?.label} 발주에 매칭할까요?\n입금 기록이 추가되고 입금 상태가 바뀝니다.`)) return;
-      // 입금자명이 이 업체의 이름·별칭과 다르면 별칭 등록 제안 — 다음부터 자동 매칭
+      // 입금자명이 이 업체의 이름·별칭과 다르면 같은 창의 체크박스로 별칭 등록 제안 — 다음부터 자동 매칭
+      let offerAlias = false;
       if (opts?.remark && opts.companyId && data) {
         const known =
           depositNameMatch(opts.remark, opts.companyName) ||
           data.aliases.some((a) => a.company_id === opts.companyId && depositNameMatch(opts.remark, a.name));
-        if (!known) {
-          saveAlias = confirm(`'${opts.remark}' 입금자명을 '${opts.companyName}' 별칭으로 등록할까요?\n등록하면 다음부터 같은 이름·정확한 잔액 입금은 자동 매칭됩니다.`);
-        }
+        offerAlias = !known;
       }
+      const aliasPick = { current: offerAlias }; // 체크박스 기본 켬
+      const ok = await confirmModal({
+        title: `${opts?.label} 발주에 입금 매칭`,
+        body: (
+          <>
+            <div>입금 기록이 추가되고 발주의 입금 상태가 바뀝니다. 매칭은 되돌릴 수 없습니다.</div>
+            {offerAlias && (
+              <div>
+                <label>
+                  <input type="checkbox" defaultChecked onChange={(e) => { aliasPick.current = e.target.checked; }} />{" "}
+                  &apos;{opts?.remark}&apos; 입금자명을 &apos;{opts?.companyName}&apos; 별칭으로 등록 — 다음부터 같은 이름·정확한 잔액 입금은 자동 매칭
+                </label>
+              </div>
+            )}
+          </>
+        ),
+        action: "입금 매칭",
+        danger: false,
+      });
+      if (!ok) return;
+      saveAlias = offerAlias && aliasPick.current;
     }
-    if (
-      opts?.always &&
-      !confirm(`'${opts?.remark}' 입금자명을 항상 무시할까요?\n앞으로 같은 이름의 입금은 알림 없이 자동 무시됩니다. (매출 정산·이자 등)`)
-    )
-      return;
+    // 항상 무시 = 규칙 추가 + 같은 이름 대기 건 일괄 무시 — 한 번에 되돌릴 수 없어 확인창으로 둔다(그냥 '무시'는 되돌리기 토스트)
+    if (opts?.always && !(await confirmModal({
+      title: `'${opts?.remark}' 입금자명 항상 무시`,
+      body: "앞으로 같은 이름의 입금은 알림 없이 자동 무시됩니다(매출 정산·이자 등). 지금 확인필요인 같은 이름 입금도 함께 무시됩니다.",
+      action: "항상 무시",
+      danger: false,
+    }))) return;
     setBusyId(depositId);
     setError("");
     try {
@@ -254,6 +278,10 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       if (action === "match") {
         onMatched();
         pingActivityFeed();
+      } else if (!opts?.quiet) {
+        // 무시 ↔ 확인필요 복귀는 같은 API 한 번으로 되돌아간다 — 확인창 없이 바로 반영 + 되돌리기 토스트
+        if (action === "ignore" && !opts?.always) toast.undo("무시했습니다", () => act(depositId, "restore", { quiet: true }));
+        else if (action === "restore") toast.undo("확인필요로 되돌렸습니다", () => act(depositId, "ignore", { quiet: true }));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "처리 오류");
@@ -273,27 +301,36 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "처리 실패");
       await load();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "처리 오류");
+      return false;
     }
   }
 
-  // 자동무시 규칙 삭제 (칩 ✕)
-  async function removeRule(rule: string) {
-    if (!data || !confirm(`'${rule}' 자동무시 규칙을 삭제할까요?`)) return;
+  // 자동무시 규칙 목록 저장 — 칩 ✕ 삭제와 그 되돌리기가 같은 호출
+  async function saveRules(rules: string[]) {
     setError("");
     try {
       const res = await fetch("/api/b2b/deposits", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "rules", rules: data.rules.filter((r) => r !== rule) }),
+        body: JSON.stringify({ action: "rules", rules }),
       });
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "규칙 저장 실패");
       await load();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "규칙 저장 오류");
+      return false;
     }
+  }
+  // 자동무시 규칙 삭제 (칩 ✕) — 확인창 없이 바로 지우고 되돌리기 토스트(이전 목록을 그대로 다시 저장)
+  async function removeRule(rule: string) {
+    if (!data) return;
+    const before = data.rules;
+    if (await saveRules(before.filter((r) => r !== rule))) toast.undo(`'${rule}' 자동무시 규칙을 삭제했습니다`, async () => { await saveRules(before); });
   }
 
   return (
@@ -431,8 +468,9 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                       {a.company_name ? ` → ${a.company_name}` : ""}
                       <button
                         className="pay-dep-rule-del"
-                        onClick={() => {
-                          if (confirm(`'${a.name}' 등록을 삭제할까요?`)) aliasAction({ action: "alias_del", alias_id: a.id });
+                        onClick={async () => {
+                          // 확인창 없이 바로 삭제 + 되돌리기(같은 이름·업체로 다시 등록)
+                          if (await aliasAction({ action: "alias_del", alias_id: a.id })) toast.undo(`'${a.name}' 등록을 삭제했습니다`, async () => { await aliasAction({ action: "alias_add", name: a.name, company_id: a.company_id }); });
                         }}
                         title="등록 삭제"
                       >
@@ -522,6 +560,7 @@ function PaymentModal({
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
   const [curStatus, setCurStatus] = useState<PaymentStatus>(order.payment_status);
+  const confirmModal = useConfirm();
   const [statusSaving, setStatusSaving] = useState(false);
   const [form, setForm] = useState<PaymentInput>({
     order_id: order.id,
@@ -605,7 +644,7 @@ function PaymentModal({
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("이 입금 내역을 삭제할까요?")) return;
+    if (!(await confirmModal({ title: "입금 내역 삭제", body: "이 입금 기록이 지워지고 잔액이 다시 늘어납니다. 되돌릴 수 없습니다.", action: "입금 삭제" }))) return;
     try {
       const res = await fetch(`/api/b2b/payments?id=${id}`, { method: "DELETE" });
       const j = await res.json();

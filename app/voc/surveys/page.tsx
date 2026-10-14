@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useConfirm } from "@/app/components/Feedback";
 import Link from "next/link";
 import type { SurveyResponse } from "@/app/lib/surveys";
 import { matchKoQuery } from "@/app/lib/hangul";
@@ -17,6 +18,7 @@ export default function VocSurveysPage() {
   const [rows, setRows] = useState<SurveyResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const confirmModal = useConfirm();
   const [view, setView] = useState<View>("목록");
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<SurveyResponse | null>(null);
@@ -66,7 +68,7 @@ export default function VocSurveysPage() {
   }
 
   async function remove(r: SurveyResponse) {
-    if (!window.confirm("이 응답을 삭제할까요?")) return;
+    if (!(await confirmModal({ title: "설문 응답 삭제", body: "이 응답이 지워집니다. 되돌릴 수 없습니다.", action: "응답 삭제" }))) return;
     try {
       const res = await fetch(`/api/voc/surveys?id=${encodeURIComponent(r.id)}`, { method: "DELETE" });
       const j = await res.json();
@@ -101,7 +103,7 @@ export default function VocSurveysPage() {
       ) : rows.length === 0 ? (
         <div className="b2b-empty">아직 수집된 응답이 없습니다.</div>
       ) : view === "목록" ? (
-        <div className="b2b-table-wrap">
+        <div className="b2b-table-wrap is-sticky-head">
           <table className="b2b-table is-clickable">
             <thead><tr><th>제출일</th><th>응답자</th><th>폼</th><th>응답 요약</th><th className="num">사진</th></tr></thead>
             <tbody>

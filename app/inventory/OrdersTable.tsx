@@ -7,6 +7,7 @@ import { useEscClose } from "@/app/lib/use-esc";
 import type { LinkResultLite } from "@/app/lib/link-result";
 import { RequestSelect, reqWarnOf, confirmUnlinkedInbound, linkMessage, type OpenReq } from "./TxnModal";
 import { deleteLedger, isMoveTxn } from "./TxnTable";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 
 // product_id·reason 은 대기 입고처리(요청서 잔여 확인·고객 반품 판정)에 쓴다 — 구 서버 응답엔 없다(없으면 잔여를 모른다고 확인을 받는다)
 type OrderItem = { id: string; product_name: string; sku: string | null; qty: number; unit_amount: number | null; amount: number; product_id?: string | null; reason?: string | null };
@@ -40,6 +41,8 @@ const displayMemo = (memo: string | null) => (memo === "행사 종료 자동 합
 
 // 입출고 '주문(묶음)' 목록 — BoxHero 구매목록 스타일. 한 번에 입력한 라인이 하나의 주문번호로 묶임.
 export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -161,18 +164,18 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     const label = move ? `${o.move_from || "?"} → ${o.move_to || "?"} 이동` : (o.order_no || "이 건");
     const cnt = move ? Math.max(1, new Set(o.items.map((x) => `${x.sku ?? ""}|${x.product_name}`)).size) : o.item_count; // 이동은 출발·도착 두 행이라 품목 수로 센다
     const fulfillTail = move ? "" : isFulfillBatch(o)
-      ? "\n\n온라인발주 출고 묶음입니다 — 처리완료 주문 기록도 지워져 같은 주문을 다시 올리면 다시 출고됩니다(다른 배치로도 출고된 주문은 처리완료로 남습니다). 이 배치의 [재고 차감 기록]분도 함께 취소됩니다."
+      ? " 온라인발주 출고 묶음입니다 — 처리완료 주문 기록도 지워져 같은 주문을 다시 올리면 다시 출고됩니다(다른 배치로도 출고된 주문은 처리완료로 남습니다). 이 배치의 [재고 차감 기록]분도 함께 취소됩니다."
       : isLateBatch(o) && isGrouped(o)
-        ? "\n\n한 번에 기록한 묶음이면 그 코드가 [재고 차감 기록] 목록에 다시 올라갑니다."
+        ? " 한 번에 기록한 묶음이면 그 코드가 [재고 차감 기록] 목록에 다시 올라갑니다."
         : "";
-    if (!window.confirm(`${label} (${cnt}개 품목)을 취소할까요? ${move ? "양쪽 칸 재고와 요청서 배정이 원복됩니다." : o.status === "대기" ? "대기 기록이 지워집니다." : "재고가 원복됩니다."}${fulfillTail}`)) return;
+    if (!(await confirm({ title: `${label} (${cnt}개 품목) 취소`, body: `${move ? "양쪽 칸 재고와 요청서 배정이 원복됩니다." : o.status === "대기" ? "대기 기록이 지워집니다." : "재고가 원복됩니다."}${fulfillTail}`, action: move ? "이동 취소" : "기록 취소" }))) return;
     const url = move
       ? `/api/inventory/move?group_id=${encodeURIComponent(o.key)}`
       : `/api/inventory/orders?${isGrouped(o) ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`}`;
     setFlash(null);
     // 409 confirm_required(배치 한 줄·되살릴 수 없는 [재고 차감 기록] 묶음)는 서버 문구로 한 번 더 묻고 confirm=1 로 다시 보낸다.
     //  locked_* 등 규칙상 거부는 문구만 보인다(deleteLedger).
-    const res = await deleteLedger(url);
+    const res = await deleteLedger(url, { confirm, error: toast.error });
     if (!res.ok) return;
     // 부분 성공(재고 행은 지웠고 처리완료 기록·[재고 차감 기록] 목록 재오픈 등 뒤처리만 실패)도 ok — 다시 읽고, 적어 둘 코드가 든 서버 문구를 경고로 남긴다(S9)
     if (res.notice) setFlash({ ok: !res.warn, text: res.notice });
@@ -187,7 +190,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     });
     const j = await r.json().catch(() => null);
     setSaving(false);
-    if (!r.ok || !j?.ok) { alert(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { toast.error(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
     setEditId(null);
     // 목록을 다시 불러오지 않고 제자리 갱신 — '더 보기'로 내려간 과거 주문을 고쳐도 화면이 접히지 않게.
     //  금액 계산은 서버와 동일(단가 × 수량, 합계는 품목 합).
@@ -287,6 +290,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                   <tr>
                     <td colSpan={9} style={{ background: "var(--sm-bg-subtle)", padding: "10px 16px" }}>
                       {/* tableLayout fixed — 어느 주문을 펼쳐도 세부 표 셀 폭 동일 */}
+                      <div className="b2b-table-wrap">
                       <table className="b2b-table" style={{ background: "var(--sm-white)", tableLayout: "fixed", minWidth: 640 }}>
                         <thead><tr><th>제품</th><th className="num" style={{ width: 210 }}>수량</th><th className="num" style={{ width: 120 }}>단가</th><th className="num" style={{ width: 140 }}>금액</th></tr></thead>
                         <tbody>
@@ -325,6 +329,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                           })}
                         </tbody>
                       </table>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -359,6 +364,7 @@ function FragmentRows({ children }: { children: React.ReactNode }) { return <>{c
 //  '연결 안 함'이면 열린 요청서 잔여 확인(S9) — 대기로 저장할 때는 요청서를 고를 수 없어 여기가 유일한 확인 지점이다.
 //  고객 반품(D4b)은 매입이 아니라 연결하지 않는다(서버도 연결 대상에서 뺀다).
 function ProcessModal({ o, onClose, onDone }: { o: Order; onClose: () => void; onDone: (flash: Flash | null) => void }) {
+  const confirm = useConfirm();
   const today = KST_TODAY();
   const [date, setDate] = useState(today);
   const [busy, setBusy] = useState(false);
@@ -407,7 +413,7 @@ function ProcessModal({ o, onClose, onDone }: { o: Order; onClose: () => void; o
       const requestId = linkable ? reqId : "";
       // 연결 안 함 — 열린 요청서에 남은 수량이 있는 품목이면 확인(S9). 이미 물었으니 서버의 같은 안내(notice)는 다시 띄우지 않는다.
       const asked = linkable && !requestId;
-      if (asked && !(await confirmUnlinkedInbound(date, checkItems))) { setBusy(false); return; }
+      if (asked && !(await confirmUnlinkedInbound(date, checkItems, confirm))) { setBusy(false); return; }
       const key = isGrouped(o) ? { group_id: o.key } : { id: o.key };
       let r: Response;
       let j: { ok?: boolean; error?: string; link?: LinkResultLite | null; notice?: string | null } | null = null;
