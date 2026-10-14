@@ -1346,7 +1346,7 @@ export default function OrdersListPage() {
             <table className="b2b-table is-clickable is-compact">
               <thead>
                 <tr>
-                  {/* 고정 레이아웃(.is-compact table-layout: fixed): 폭을 적은 열은 그 폭, 업체·품목은 남은 폭을 똑같이 나눈다 — 큰 모니터에서 열마다 제각각 넓어지던 것(2026-10-14 대표) */}
+                  {/* 고정 레이아웃(.is-compact table-layout: fixed): 체크·표시 열만 px, 나머지는 % — 재고 목록처럼 모든 열이 창 폭에 비례해 고르게 퍼진다(2026-10-14 대표). 상태 select 는 칸 폭을 채운다 */}
                   <th style={{ width: 28, textAlign: "center" }}>
                     <input
                       type="checkbox"
@@ -1357,19 +1357,17 @@ export default function OrdersListPage() {
                     />
                   </th>
                   <th style={{ width: 40 }}></th>
-                  <th style={{ width: "14%" }}>업체</th>
-                  <th style={{ width: "22%" }}>품목</th>
-                  <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>
+                  <th style={{ width: "16%" }}>업체</th>
+                  <th style={{ width: "21%" }}>품목</th>
+                  <th className="b2b-col-date" style={{ width: "8%" }}>발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
-                  <th className="b2b-col-date" style={{ width: 104 }}>발송일</th>
-                  <th className="num" style={{ width: 76 }}>합계</th>
+                  <th className="b2b-col-date" style={{ width: "9%" }}>발송일</th>
+                  <th className="num" style={{ width: "8%" }}>합계</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-status">생산</th>}
                   <th className="b2b-col-status">발송</th>
                   <th className="b2b-col-status">입금</th>
                   <th className="b2b-col-status">세금계산서</th>
-                  <th style={{ width: 112 }}></th>
-                  {/* 채움 열 — 남는 폭을 여기에 몰아 표가 다른 화면과 같이 컨테이너 폭을 채우되 업체·품목은 비율대로만 */}
-                  <th aria-hidden="true"></th>
+                  <th style={{ width: "12%" }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -1550,7 +1548,6 @@ export default function OrdersListPage() {
                           명세표
                         </Link>
                       </td>
-                      <td aria-hidden="true" />
                     </tr>
                     {parent && !isCollapsed && (o.shipments ?? []).map((s) => (
                       <tr key={s.id} className="b2b-child-row">

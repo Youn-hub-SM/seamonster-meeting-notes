@@ -654,18 +654,19 @@ a.b2b-history-item:hover {
 .b2b-table.is-compact th.b2b-col-date, .b2b-table.is-compact td.b2b-col-date { padding-left: 4px; padding-right: 4px; }
 .b2b-table.is-compact td.b2b-col-date .b2b-row-link { padding-left: 4px !important; padding-right: 4px !important; }
 .b2b-table.is-compact td:has(> .b2b-status-select) { padding-left: 6px; padding-right: 2px; }
-.b2b-table.is-compact th.b2b-col-status { width: 92px; min-width: 92px; padding-left: 6px; padding-right: 2px; }
+.b2b-table.is-compact th.b2b-col-status { padding-left: 6px; padding-right: 2px; }
 .b2b-table.is-compact .b2b-status-select { max-width: 92px; padding: 3px 20px 3px 8px; background-position: right 7px center !important; }
 .b2b-table.is-compact td.cell-flag { padding-left: 2px; padding-right: 2px; }
 .b2b-table.is-compact td.actions { padding-left: 4px; }
 /* 발송 열이 다른 상태 열보다 넓어지던 원인: 복수발송 행의 토글 버튼('2/3 발송 ▾')과 일부 발송 select 의 인라인 maxWidth:none 이
    열 전체를 늘렸다. 촘촘한 표에선 세 상태 열을 같은 92px 로 못 박는다(인라인을 이기려 !important). */
-.b2b-table.is-compact .b2b-status-select { max-width: 92px !important; }
-.b2b-table.is-compact .b2b-parent-toggle { max-width: 92px; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.b2b-table.is-compact th.b2b-col-status { width: 92px; max-width: 92px; }
+.b2b-table.is-compact .b2b-status-select { width: 100%; min-width: 0; max-width: none !important; } /* 칸 폭을 채운다 — 열이 넓어지면 같이 넓어져 열마다 간격이 같다 */
+.b2b-table.is-compact .b2b-parent-toggle { width: 100%; max-width: none; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b2b-table.is-compact th.b2b-col-status { width: 8%; min-width: 0; max-width: none; }
 /* 열 폭 고정(2026-10-14 대표 "큰 모니터에서 열 범위가 제각각"): fixed 레이아웃 — th 에 적은 px 열은 그 폭, 폭 없는 열(업체·품목)은 남은 폭을 똑같이 나눈다.
    창이 좁아지면 업체·품목만 줄어들고(말줄임), 나머지는 그대로 — 900px 이상에선 가로 스크롤이 생기지 않는다. */
-.b2b-table.is-compact { table-layout: fixed; } /* 표는 다른 화면과 같이 컨테이너 폭 100%. 업체·품목은 %로, 남는 폭은 마지막 채움 열(aria-hidden)이 가져간다 — 큰 모니터에서 두 열만 한없이 넓어지지 않게 */
+.b2b-table.is-compact { table-layout: fixed; } /* 표는 다른 화면과 같이 컨테이너 폭 100%. 열은 전부 %(체크·표시 열만 px)라 창 폭에 비례해 고르게 퍼진다 */
+.b2b-table.is-compact td:last-child { overflow: visible; } /* 버튼 열은 잘리지 않게 */
 .b2b-table.is-compact td, .b2b-table.is-compact th { overflow: hidden; text-overflow: ellipsis; }
 .b2b-table.is-compact td .b2b-row-link { overflow: hidden; text-overflow: ellipsis; }
 .b2b-table.is-compact td .b2b-row-link > span { display: block; overflow: hidden; text-overflow: ellipsis; }
