@@ -160,7 +160,7 @@ export default function FulfillStatsPage() {
           {/* KPI */}
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 0 }}>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 발송(택배)</div><div className="b2b-stat-card-value b2b-money">{won(tot)}</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 18 }}><span style={{ color: "var(--sm-info)" }}>{won(agg.totN)}</span> <span className="sm-faint">/</span> <span style={{ color: "var(--sm-orange)" }}>{won(agg.totG)}</span></div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 16 }}><span style={{ color: "var(--sm-info)" }}>{won(agg.totN)}</span> <span className="sm-faint">/</span> <span style={{ color: "var(--sm-orange)" }}>{won(agg.totG)}</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 비율</div><div className="b2b-stat-card-value">{tot ? Math.round((agg.totG / tot) * 100) : 0}%</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">일평균 발송</div><div className="b2b-stat-card-value b2b-money">{agg.days ? won(tot / agg.days) : 0}<span className="sm-faint" style={{ fontSize: 12 }}> /{agg.days}일</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계</div><div className="b2b-stat-card-value b2b-money">{won(agg.fee)}원</div></div>

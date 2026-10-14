@@ -1017,7 +1017,7 @@ export default function OrderForm({
             )}
             <div className="b2b-field">
               <label className="b2b-field-label">발송예정일</label>
-              <div style={{ fontSize: 15, padding: "10px 0", color: data.ship_date ? undefined : "var(--sm-text-light)" }}>
+              <div style={{ fontSize: 13, padding: "10px 0", color: data.ship_date ? undefined : "var(--sm-text-light)" }}>
                 {data.ship_date || "미정"}
               </div>
               {isMultiShipment && (
@@ -1029,7 +1029,7 @@ export default function OrderForm({
           {/* 대량 발주(선결제) — 체크하면 발송 선점 출고가 '도매 대량' 칸에서 빠진다(115).
               도매 일반 주문이 이 물량을 가져가지 못하게 칸을 나눈 것이라, 판단은 담당자가 발주 단위로 한다. */}
           <div className="b2b-field" style={{ marginTop: 12 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
               <input
                 type="checkbox"
                 className="b2b-checkbox"
@@ -1192,7 +1192,7 @@ export default function OrderForm({
               {shippedInfo.map((r) => (
                 <div key={r.key} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: "10px 12px" }}>
                   <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <strong style={{ fontSize: 15 }}>
+                    <strong style={{ fontSize: 13 }}>
                       {shippedInfo.length > 1 ? `${r.seq}차 · ` : ""}{r.ship_date || "날짜미정"}
                     </strong>
                     <span className="b2b-status-pill" style={{
@@ -1214,7 +1214,7 @@ export default function OrderForm({
                             {r.box_count > 1 && <span style={{ fontSize: 12, color: "var(--sm-text-light)", width: 40, flexShrink: 0 }}>박스 {bi + 1}</span>}
                             {num ? (
                               <>
-                                <span style={{ fontFamily: "var(--sm-mono)", fontSize: 15, fontWeight: 600 }}>{num}</span>
+                                <span style={{ fontFamily: "var(--sm-mono)", fontSize: 13, fontWeight: 600 }}>{num}</span>
                                 <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }}
                                   onClick={() => copyTracking(`${r.key}-${bi}`, num)}>
                                   {copiedTrack === `${r.key}-${bi}` ? "복사됨" : "복사"}
@@ -1445,7 +1445,7 @@ export default function OrderForm({
           <div className="b2b-field-row" style={{ marginBottom: 12 }}>
             <div className="b2b-field" style={{ maxWidth: 220 }}>
               <label className="b2b-field-label">배송 박스 수</label>
-              <div style={{ fontSize: 15, fontWeight: 700, padding: "9px 0" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, padding: "9px 0" }}>
                 {realScheduleCount > 0 ? `${effectiveBoxCount}박스` : "미정"}
               </div>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
@@ -1456,7 +1456,7 @@ export default function OrderForm({
             </div>
             <div className="b2b-field" style={{ maxWidth: 220 }}>
               <label className="b2b-field-label">계절 (보냉비)</label>
-              <div style={{ fontSize: 15, fontWeight: 700, padding: "9px 0" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, padding: "9px 0" }}>
                 {orderMargin.season} <span style={{ fontWeight: 400, fontSize: 12, color: "var(--sm-text-mid)" }}>({SEASON_MONTHS[orderMargin.season]})</span>
               </div>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발송예정일 기준 자동</span>
@@ -1486,7 +1486,7 @@ export default function OrderForm({
               <strong className="b2b-money" style={{ color: orderMargin.profit >= 0 ? "var(--sm-success)" : "var(--sm-danger)" }}>
                 {orderMargin.profit >= 0 ? "+" : ""}{formatMoney(Math.round(orderMargin.profit))}원
                 {orderMargin.revenue > 0 && (
-                  <span style={{ marginLeft: 8, fontSize: 15 }}>
+                  <span style={{ marginLeft: 8, fontSize: 13 }}>
                     ({orderMargin.marginPct.toFixed(1)}%)
                   </span>
                 )}

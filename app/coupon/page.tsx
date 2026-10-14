@@ -88,8 +88,8 @@ export default function CouponPage() {
         <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           {COUPON_CHANNELS.map((c) => (
             <button key={c.key} className="b2b-card" style={{ textAlign: "left", cursor: "pointer", padding: 18 }} onClick={() => pickChannel(c.key)}>
-              <div style={{ fontSize: 17, fontWeight: 800 }}>{c.label}</div>
-              <div style={{ marginTop: 10, color: "var(--sm-orange)", fontWeight: 700, fontSize: 15 }}>시작하기 →</div>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>{c.label}</div>
+              <div style={{ marginTop: 10, color: "var(--sm-orange)", fontWeight: 700, fontSize: 13 }}>시작하기 →</div>
             </button>
           ))}
         </div>
@@ -118,7 +118,7 @@ export default function CouponPage() {
               {collapsed ? (
                 <button type="button" className="b2b-btn-secondary" onClick={() => setOpenExtra(true)}>＋ 세부 설정 직접 조정</button>
               ) : visibleFields.length === 0 ? (
-                <p className="sm-faint" style={{ fontSize: 15, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다.</p>
+                <p className="sm-faint" style={{ fontSize: 13, padding: "6px 0" }}>이 단계에서 입력할 항목이 없습니다.</p>
               ) : (
                 visibleFields.map((f) => <FieldView key={f.key} f={f} answers={answers} ch={channel!} required={!!channel && isFieldRequired(f, answers, channel)} set={set} toggle={toggle} setRange={setRange} />)
               )}
@@ -139,7 +139,7 @@ export default function CouponPage() {
               <div className="b2b-card-head"><span className="b2b-card-title">요청서 완성</span></div>
               <label className="b2b-field" style={{ maxWidth: 260 }}><span className="b2b-field-label">요청자 이름(선택)</span>
                 <input className="b2b-input" value={requester} onChange={(e) => setRequester(e.target.value)} placeholder="예: 홍길동" /></label>
-              <pre style={{ whiteSpace: "pre-wrap", background: "var(--sm-bg)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: 14, fontSize: 15, lineHeight: 1.6, marginTop: 10, fontFamily: "inherit" }}>{text}</pre>
+              <pre style={{ whiteSpace: "pre-wrap", background: "var(--sm-bg)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: 14, fontSize: 13, lineHeight: 1.6, marginTop: 10, fontFamily: "inherit" }}>{text}</pre>
               <div className="sm-between" style={{ marginTop: 14, gap: 10, flexWrap: "wrap" }}>
                 <button className="b2b-btn-secondary" onClick={() => setStep(totalSteps - 1)}>← 답변 수정</button>
                 <div className="sm-row" style={{ gap: 8 }}>
@@ -178,13 +178,13 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
       )}
       {lockReasons.length > 0 && <p className="sm-faint" style={{ fontSize: 12, marginTop: 5, lineHeight: 1.5, color: "var(--sm-text-light)" }}>{lockReasons.join("   ·   ")}</p>}
       {f.type === "text" && <input className="b2b-input" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
-      {f.type === "number" && <div className="sm-row" style={{ gap: 6, alignItems: "center" }}><input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} style={{ maxWidth: 200 }} />{f.suffix && <span className="sm-faint" style={{ fontSize: 15 }}>{f.suffix}</span>}</div>}
+      {f.type === "number" && <div className="sm-row" style={{ gap: 6, alignItems: "center" }}><input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} style={{ maxWidth: 200 }} />{f.suffix && <span className="sm-faint" style={{ fontSize: 13 }}>{f.suffix}</span>}</div>}
       {f.type === "textarea" && <textarea className="b2b-input" rows={2} value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder={f.placeholder} />}
       {f.type === "int-days" && (
         <div className="sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {f.presets?.map((p) => <button key={p} type="button" className={`sm-tab ${String(v ?? "") === String(p) ? "is-active" : ""}`} onClick={() => set(f.key, String(p))}>{p}일</button>)}
           <input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} aria-label="직접 입력(일)" style={{ maxWidth: 90 }} />
-          <span className="sm-faint" style={{ fontSize: 15 }}>일</span>
+          <span className="sm-faint" style={{ fontSize: 13 }}>일</span>
         </div>
       )}
       {f.type === "date" && <input className="b2b-input" type="date" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} style={{ maxWidth: 220 }} />}

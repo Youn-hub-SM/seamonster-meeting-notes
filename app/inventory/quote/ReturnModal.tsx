@@ -326,7 +326,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다.</div>
                 ) : (
                   <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
-                    <table className="b2b-table" style={{ fontSize: 15 }}>
+                    <table className="b2b-table" style={{ fontSize: 13 }}>
                       <thead><tr><th>품목</th><th>SKU</th><th className="num">반품수량</th><th className="num">단가</th><th>메모</th></tr></thead>
                       <tbody>
                         {preview.rows.slice(0, 300).map((r, i) => (
@@ -413,7 +413,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
               {/* 이 달에 이미 넣은 반품 — 잘못 넣은 건을 여기서 바로 지운다 */}
               <div style={{ marginTop: 16, borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
                 <div className="sm-between" style={{ marginBottom: 6 }}>
-                  <strong style={{ fontSize: 15 }}>{mm}월 반품 내역</strong>
+                  <strong style={{ fontSize: 13 }}>{mm}월 반품 내역</strong>
                   {rows.length > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>{rows.length}건 · {totalQty.toLocaleString()}개</span>}
                 </div>
                 {listLoading ? <div className="b2b-loading">불러오는 중...</div>

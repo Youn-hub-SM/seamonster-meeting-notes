@@ -485,7 +485,7 @@ export default function ProductsPage() {
               {preview.creates.length > 0 && (
                 <section style={{ marginBottom: 12 }}>
                   <div className="b2b-field-label" style={{ fontWeight: 700 }}>신규 ({preview.creates.length})</div>
-                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 15 }}>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 13 }}>
                     {preview.creates.map((c, i) => <li key={i}>{c.name}</li>)}
                   </ul>
                 </section>
@@ -918,7 +918,7 @@ function ProductModal({
           )}
 
           <Field label="상태">
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
               <input
                 type="checkbox"
                 checked={data.active}
@@ -929,7 +929,7 @@ function ProductModal({
             {/* 재고 관리 사용 안함(121) — 드라이아이스·이벤트 상품 등. 묶음은 자체 재고가 없어 의미가 없으므로 숨긴다 */}
             {!isBundle && (
               <>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, marginTop: 8, opacity: stockTrackedCol ? 1 : 0.55 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 8, opacity: stockTrackedCol ? 1 : 0.55 }}>
                   <input
                     type="checkbox"
                     checked={data.stock_tracked === false}

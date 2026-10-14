@@ -173,7 +173,7 @@ export default function VocStatsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">VOC 통계</h1>
-          <p className="print-only" style={{ fontSize: 15, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
+          <p className="print-only" style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
         </div>
         <div className="b2b-page-actions no-print">
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || rows.length === 0}>보고서 인쇄 / PDF 저장</button>
@@ -237,7 +237,7 @@ export default function VocStatsPage() {
               </div>
             </div>
             <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-              <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>분류
+              <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>분류
                 <select className="b2b-input" value={dim} onChange={(e) => setDim(e.target.value as Dim)} style={{ width: "auto" }}>
                   {DIMS.map((d) => <option key={d} value={d}>{d === "없음" ? "전체(분류 없음)" : `${d}별`}</option>)}
                 </select></label>
@@ -246,7 +246,7 @@ export default function VocStatsPage() {
               </div>
             </div>
             {explore.series.length === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>이 기간에 집계할 데이터가 없습니다.</div>
+              <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>이 기간에 집계할 데이터가 없습니다.</div>
             ) : (
               <>
                 <StackedBar periods={explore.labels} series={explore.series} colors={explore.colors} unit={isMoney ? "원" : "건"} fmtAxis={isMoney ? moneyCompact : undefined} />

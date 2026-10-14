@@ -167,7 +167,7 @@ export default function ProductHistoryPage() {
                       <div key={a.id} className="b2b-history-item is-static" style={{ display: "block" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span className="b2b-status-pill" style={{ background: act.bg, color: act.fg, flexShrink: 0 }}>{act.label}</span>
-                          <strong style={{ fontSize: 15 }}>{name}</strong>
+                          <strong style={{ fontSize: 13 }}>{name}</strong>
                           {sku && <span className="sm-faint" style={{ fontSize: 12 }}>{sku}</span>}
                           {source && <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-light)" }}>{source}</span>}
                           <span className="b2b-history-meta" style={{ marginLeft: "auto" }}>

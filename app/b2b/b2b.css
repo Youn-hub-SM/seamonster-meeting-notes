@@ -452,7 +452,7 @@ a.b2b-history-item:hover {
 .b2b-btn-primary {
   background: var(--sm-orange);
   color: var(--sm-white);
-  font-size: 16px;   /* 1차 버튼 예외 — 흰/주황 3.4:1 이라 16px/700 '큰 글자' 기준(3:1)으로 맞춘다 */
+  font-size: 14px;   /* 1차 버튼 — 본문(13)보다 한 단계 크게, 700. (1차의 16px '큰 글자' 기준은 2026-10-14 전체 2px 축소로 포기) */
   font-weight: 700;
 }
 
@@ -2270,7 +2270,7 @@ a.b2b-history-item:hover {
   .b2b-search,
   .b2b-combo-input,
   .rp-input {
-    font-size: 16px !important;
+    font-size: 14px !important;
   }
 }
 
@@ -2344,7 +2344,7 @@ a.b2b-history-item:hover {
 .pay-status-label { font-size: var(--sm-fs-xs); font-weight: 700; color: var(--sm-text-mid); margin-bottom: 8px; }
 .pay-paid-btn {
   width: 100%; min-height: 52px; border-radius: 12px; border: none;
-  background: var(--sm-success); color: var(--sm-white); font-size: 16px; font-weight: 700;  /* 1차 버튼과 같은 16/700 */
+  background: var(--sm-success); color: var(--sm-white); font-size: 14px; font-weight: 700;  /* 1차 버튼과 같은 16/700 */
   line-height: var(--sm-lh-ui);
   cursor: pointer; font-family: inherit; transition: opacity 0.12s;
 }
@@ -2573,7 +2573,7 @@ a.b2b-history-item:hover {
     width: 100%;
     min-width: 0;
     text-align: left !important;
-    font-size: 16px; /* iOS 줌 방지 — 16px 미만이면 발동 */
+    font-size: 14px; /* iOS 줌 방지 — 16px 미만이면 발동 */
     padding: 9px 11px;
   }
   /* 금액(계산값) 행 */
@@ -3151,7 +3151,7 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-black); }
 .brf-settings-row { gap: var(--sm-space-2); margin-bottom: var(--sm-space-2); }
 .brf-settings-field { max-width: 640px; margin-bottom: var(--sm-space-3); }
 @media (min-width: 769px) {
-  .brf-kpi .b2b-stat-card-value { font-size: 23px; overflow-wrap: anywhere; } /* KPI 압축 예외(28/23 의 23) — 4열 띠에서 9자리 금액이 한 줄. 백스톱 overflow-wrap */
+  .brf-kpi .b2b-stat-card-value { font-size: 21px; overflow-wrap: anywhere; } /* KPI 압축 예외(28/23 의 23) — 4열 띠에서 9자리 금액이 한 줄. 백스톱 overflow-wrap */
   @container (min-width: 800px) {
     .brf-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); }  /* 띠 폭 800 = 타일 191, 값 23px 9자리(≈146px) 가 들어간다 */
   }

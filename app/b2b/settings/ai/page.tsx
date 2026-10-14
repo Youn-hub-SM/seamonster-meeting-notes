@@ -183,7 +183,7 @@ export default function AiSettingsPage() {
             {featureMeta.map((f, i) => (
               <div key={f.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 0", borderTop: i === 0 ? "none" : "1px solid var(--sm-border)", flexWrap: "wrap" }}>
                 <div style={{ minWidth: 180 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: "var(--sm-dark)" }}>{f.label}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "var(--sm-dark)" }}>{f.label}</div>
                 </div>
                 <select
                   className="b2b-select"
@@ -210,7 +210,7 @@ export default function AiSettingsPage() {
           <h2 className="b2b-card-title">생산 요청서 AI 초안 — 검토 포인트</h2>
         </div>
         {draftAi === null ? <div className="b2b-loading">불러오는 중...</div> : (
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, cursor: "pointer" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" className="b2b-checkbox" checked={draftAi} disabled={draftAiSaving} onChange={(e) => toggleDraftAi(e.target.checked)} />
             AI 검토 포인트 붙이기
           </label>

@@ -151,10 +151,10 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         <ChannelPicker value={channel} onChange={setChannel}
           disabledChannels={type === "입고" ? [...MOVE_ONLY_CHANNELS] : []}
           disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
-        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>거래일
+        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>거래일
           <input className="b2b-input" type="date" value={date} max={done ? TODAY() : undefined} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} /></label>
         {type === "입고" && (
-          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>사유
             <select className="b2b-input" value={inReason} onChange={(e) => setInReason(e.target.value)} style={{ width: "auto" }}
               title="고객 반품·교환으로 돌아온 물건은 '고객 반품' — 요청서 연결·매입 단가 없이 기록됩니다">
               <option value="">입고(매입·생산)</option>
@@ -163,7 +163,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
           </label>
         )}
         {type === "입고" && (
-          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>요청서
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>요청서
             <select className="b2b-input" value={done && !customerReturn ? reqId : ""} disabled={!done || customerReturn} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }} style={{ width: "auto", maxWidth: 340 }}
               title={customerReturn ? "고객 반품은 요청서에 연결되지 않습니다" : done ? "이 입고를 연결할 제조사 요청서" : "대기 저장은 요청서에 연결되지 않습니다"}>
               <option value="">연결 안 함</option>
@@ -173,7 +173,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         )}
         {type === "입고" && !customerReturn && reqWarn && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", flexBasis: "100%" }}>{reqWarn}</span>}
         {type === "출고" && (
-          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>사유
+          <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>사유
             <select className="b2b-input" value={reason} onChange={(e) => setReason(e.target.value)} style={{ width: "auto" }}
               title="판매가 아닌 출고(협찬·폐기 등)는 사유를 남겨야 '재고 대사'에서 판매와 분리됩니다">
               <option value="판매">판매</option>
@@ -184,9 +184,9 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
             </select>
           </label>
         )}
-        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>{type === "입고" ? (customerReturn ? "고객" : "매입처") : type === "출고" && reason !== "판매" ? "전달처" : "판매처"}
+        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>{type === "입고" ? (customerReturn ? "고객" : "매입처") : type === "출고" && reason !== "판매" ? "전달처" : "판매처"}
           <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} /></label>
-        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)", flex: 1, minWidth: 200 }}>메모
+        <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)", flex: 1, minWidth: 200 }}>메모
           <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 160 }} /></label>
       </div>
 
@@ -203,7 +203,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         <div style={{ position: "relative", marginBottom: 12 }}>
           <input className="b2b-input" value={search} onChange={(e) => { setSearch(e.target.value); setActive(-1); }} onKeyDown={onSearchKey} autoComplete="off"
             placeholder="품목·SKU 검색" aria-label="제품 검색"
-            style={{ fontSize: 15, padding: "13px 16px" }} />
+            style={{ fontSize: 13, padding: "13px 16px" }} />
           <div className="b2b-field-hint is-below">이름·옵션·SKU·초성(ㄱㅇ)·여러 단어(광어 100 1kg) · ↓↑ 이동, Enter 추가</div>
           {matches.length > 0 && (
             <div className="inv-buy-suggest" ref={suggestRef}>
@@ -215,7 +215,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
               ))}
             </div>
           )}
-          {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "10px 14px", fontSize: 15 }}>일치하는 제품 없음</div></div>}
+          {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "10px 14px", fontSize: 13 }}>일치하는 제품 없음</div></div>}
         </div>
 
         <div className="b2b-table-wrap">
@@ -237,15 +237,15 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         </div>
 
         <div className="sm-between" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--sm-border)", flexWrap: "wrap", gap: 12 }}>
-          <span className="sm-faint" style={{ fontSize: 15 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
-          <span style={{ fontSize: 19, fontWeight: 800 }}>총액 {totals.amount.toLocaleString()}</span>
+          <span className="sm-faint" style={{ fontSize: 13 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
+          <span style={{ fontSize: 17, fontWeight: 800 }}>총액 {totals.amount.toLocaleString()}</span>
         </div>
       </section>
 
       {error && <div className="b2b-error" style={{ marginTop: 12 }}>{error}</div>}
 
       <div className="sm-between" style={{ marginTop: 16, gap: 10, flexWrap: "wrap" }}>
-        <label className="sm-row" style={{ gap: 7, fontSize: 15, cursor: "pointer" }}>
+        <label className="sm-row" style={{ gap: 7, fontSize: 13, cursor: "pointer" }}>
           <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> 즉시 {type === "입고" ? "입고" : "출고"}처리
           <span className="sm-faint" style={{ fontSize: 12 }}>(미래 날짜는 해제해 대기로)</span>
         </label>

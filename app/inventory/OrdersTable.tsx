@@ -315,7 +315,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                                         autoFocus type="number" min={0} className="b2b-input" value={editVal}
                                         onChange={(e) => setEditVal(e.target.value)}
                                         onKeyDown={(e) => { if (e.key === "Enter") saveUnit(it); if (e.key === "Escape") setEditId(null); }}
-                                        style={{ width: 80, padding: "3px 8px", fontSize: 15, textAlign: "right" }}
+                                        style={{ width: 80, padding: "3px 8px", fontSize: 13, textAlign: "right" }}
                                       />
                                       <button className="b2b-link-btn" onClick={() => saveUnit(it)} disabled={saving}>단가 저장</button>
                                       <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>그만두기</button>

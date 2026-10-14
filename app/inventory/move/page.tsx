@@ -336,7 +336,7 @@ export default function InventoryMovePage() {
                 {isDup && <span className="b2b-field-error">같은 품목이 다른 줄에도 있습니다 — 한 줄로 합쳐 주세요</span>}
               </div>
               {l.pid && (
-                <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 15, flexWrap: "wrap", alignItems: "center" }}>
+                <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 13, flexWrap: "wrap", alignItems: "center" }}>
                   {/* 칸 배지 = 현재고(오늘까지). 출고 예정(미래 발송일 선점)이 있으면 함께 — 옮길 수 있는 건 가용(현재고 − 출고 예정)까지 */}
                   {INV_CHANNELS.map((ch) => {
                     const p = poolOf(ch, l.pid);
@@ -425,7 +425,7 @@ export default function InventoryMovePage() {
         })}
 
         <div className="sm-row" style={{ marginTop: 10 }}>
-          <button className="b2b-btn-secondary" style={{ fontSize: 15 }} onClick={() => { setLines((prev) => [...prev, newLine(nextKey)]); setNextKey((k) => k + 1); }}>+ 품목 추가</button>
+          <button className="b2b-btn-secondary" style={{ fontSize: 13 }} onClick={() => { setLines((prev) => [...prev, newLine(nextKey)]); setNextKey((k) => k + 1); }}>+ 품목 추가</button>
         </div>
 
         {allocMode && dir.to !== "프로모션" && activeLines.some((l) => l.targets.length > 0) && (
@@ -451,7 +451,7 @@ export default function InventoryMovePage() {
         </div>
 
         <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 15 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></>}</span>
+          <span style={{ fontSize: 13 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></>}</span>
           <button className="b2b-btn-primary" onClick={submit} disabled={busy}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${activeLines.length}개 품목)` : ""}`}</button>
         </div>
       </section>

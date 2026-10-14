@@ -55,7 +55,7 @@ function GuideInner() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         autoFocus
-        style={{ width: "100%", marginBottom: 6, fontSize: 15, padding: "11px 14px" }}
+        style={{ width: "100%", marginBottom: 6, fontSize: 13, padding: "11px 14px" }}
       />
       {query && (
         <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>
@@ -65,18 +65,18 @@ function GuideInner() {
 
       {view.map((cat) => (
         <section key={cat.category} style={{ marginTop: 18 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 800, color: "var(--sm-text-mid)", margin: "0 0 8px 2px", letterSpacing: 0.3 }}>{cat.category}</h2>
+          <h2 style={{ fontSize: 13, fontWeight: 800, color: "var(--sm-text-mid)", margin: "0 0 8px 2px", letterSpacing: 0.3 }}>{cat.category}</h2>
           {cat.tools.map((t) => (
             <div key={t.tool} className="b2b-card" style={{ marginBottom: 10 }}>
               <div className="b2b-card-head"><span className="b2b-card-title">{t.tool}</span></div>
               {t.entries.map((e, i) => (
                 <details key={e.href + e.label} open={!!query} style={{ borderTop: i > 0 ? "1px solid var(--sm-border)" : "none" }}>
-                  <summary style={{ padding: "10px 4px", cursor: "pointer", fontSize: 15 }}>
+                  <summary style={{ padding: "10px 4px", cursor: "pointer", fontSize: 13 }}>
                     <strong style={{ color: "var(--sm-dark)" }}>{e.label}</strong>
                     <span style={{ marginLeft: 8, fontSize: 12, color: "var(--sm-text-mid)" }}>{e.what}</span>
                   </summary>
                   <div style={{ padding: "0 4px 12px 22px" }}>
-                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 15, lineHeight: 1.9, color: "var(--sm-text-mid)" }}>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.9, color: "var(--sm-text-mid)" }}>
                       {e.steps.map((s, j) => <li key={j}>{s}</li>)}
                     </ol>
                     {(e.tips || []).length > 0 && (

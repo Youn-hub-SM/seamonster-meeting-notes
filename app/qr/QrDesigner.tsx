@@ -92,7 +92,7 @@ export default function QrDesigner({ data, name, onClose }: { data: string; name
                   {logo && <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setLogo("")}>로고 제거</button>}
                 </div>
               </div>
-              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer" }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={frame} onChange={(e) => setFrame(e.target.checked)} /> 'SCAN ME' 프레임
               </label>
               {frame && <input className="b2b-input" style={{ marginTop: 6 }} value={frameText} onChange={(e) => setFrameText(e.target.value)} placeholder="예: SCAN ME" aria-label="프레임 문구" />}

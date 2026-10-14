@@ -439,7 +439,7 @@ export default function SkuListingsPage() {
                                 <input className="b2b-input" type="number" min={0} value={cmdQty[c.item_key] ?? ""}
                                   onChange={(e) => setCmdQty((p) => ({ ...p, [c.item_key]: e.target.value }))}
                                   placeholder="수량" aria-label="적용할 수량"
-                                  style={{ width: 60, padding: "3px 6px", fontSize: 15 }} />
+                                  style={{ width: 60, padding: "3px 6px", fontSize: 13 }} />
                                 <button type="button" className="b2b-btn-secondary" disabled={applying === c.item_key}
                                   onClick={() => applyQty(c)} style={{ padding: "3px 8px", fontSize: 12 }}>
                                   적용

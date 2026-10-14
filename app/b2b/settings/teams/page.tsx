@@ -265,7 +265,7 @@ export default function TeamsSettingsPage() {
               placeholder={teamsHasInquiry ? "" : "https://..."} autoComplete="off" />
           </label>
           <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <label className="sm-row" style={{ gap: 6, fontSize: 15, cursor: "pointer" }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, cursor: "pointer" }}>
               <input type="checkbox" className="b2b-checkbox" checked={teamsEnabled}
                 onChange={(e) => { setTeamsEnabled(e.target.checked); saveTeams(e.target.checked); }} /> Teams로 발송 켜기
             </label>
@@ -274,7 +274,7 @@ export default function TeamsSettingsPage() {
             {!teamsHasUrl && !loading && <span className="b2b-btn-why">URL 을 저장하면 켜집니다</span>}
           </div>
           {teamsMsg && (
-            <div className={teamsMsg.ok ? "sm-success" : "b2b-error"} style={{ fontSize: 15 }}>{teamsMsg.text}</div>
+            <div className={teamsMsg.ok ? "sm-success" : "b2b-error"} style={{ fontSize: 13 }}>{teamsMsg.text}</div>
           )}
         </div>
       </section>
@@ -290,7 +290,7 @@ export default function TeamsSettingsPage() {
         </div>
         {dcfg && (
           <div style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: 14, marginBottom: 12, display: "grid", gap: 12 }}>
-            <label className="sm-row" style={{ gap: 7, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+            <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
               <input type="checkbox" className="b2b-checkbox" checked={dcfg.enabled} onChange={(e) => setDcfg({ ...dcfg, enabled: e.target.checked })} /> 자동 발송 사용
             </label>
             <div>
@@ -318,7 +318,7 @@ export default function TeamsSettingsPage() {
                 {dtimes.length >= 6 && <span className="b2b-btn-why">최대 6개까지</span>}
               </div>
             </div>
-            <label className="sm-row" style={{ gap: 6, fontSize: 15 }}>전후 기간
+            <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>전후 기간
               <input type="number" className="b2b-input" style={{ width: 70 }} min={1} max={31} value={dcfg.days} onChange={(e) => setDcfg({ ...dcfg, days: Number(e.target.value) })} />일
               <span className="sm-faint" style={{ fontSize: 12 }}>계산서·입금은 기간 무관</span>
             </label>
@@ -326,13 +326,13 @@ export default function TeamsSettingsPage() {
               <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>보낼 내용</div>
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
                 {([["ship", "발송 예정"], ["unscheduled", "발송일정 미등록"], ["invoice", "계산서 미발행"], ["payment", "입금 대기"], ["prod", "생산 요청"]] as const).map(([k, l]) => (
-                  <label key={k} className="sm-row" style={{ gap: 5, fontSize: 15, cursor: "pointer" }}>
+                  <label key={k} className="sm-row" style={{ gap: 5, fontSize: 13, cursor: "pointer" }}>
                     <input type="checkbox" className="b2b-checkbox" checked={!!dcfg.sections[k]} onChange={(e) => setDcfg({ ...dcfg, sections: { ...dcfg.sections, [k]: e.target.checked } })} /> {l}
                   </label>
                 ))}
               </div>
             </div>
-            <label style={{ fontSize: 15 }}>제목
+            <label style={{ fontSize: 13 }}>제목
               <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="예: 씨몬스터 B2B 오늘의 할 일" />
             </label>
             <div><button className="b2b-btn-primary" onClick={saveDigestCfg} disabled={dcfgSaving}>{dcfgSaving ? "저장 중..." : "설정 저장"}</button></div>
@@ -417,18 +417,18 @@ export default function TeamsSettingsPage() {
         {mnMsg && <div className={mnMsg.kind === "ok" ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}
         {mn && (
           <>
-            <label className="sm-row" style={{ gap: 6, fontSize: 15, fontWeight: 600, marginBottom: 10 }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
               <input type="checkbox" className="b2b-checkbox" checked={mn.enabled} onChange={(e) => setMn({ ...mn, enabled: e.target.checked })} />
               상품마스터 변경알림 켜기 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 12 }}>· 생산·재고 알림과 무관</span>
             </label>
             <div style={{ marginTop: 6 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>발송할 알림 목록</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>발송할 알림 목록</span>
               {[...new Set(mnEventDefs.map((ev) => ev.group || "기타"))].map((g) => (
                 <div key={g} style={{ marginTop: 8 }}>
                   <div className="sm-faint" style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{g}</div>
                   <div className="sm-row" style={{ gap: 14, flexWrap: "wrap" }}>
                     {mnEventDefs.filter((ev) => (ev.group || "기타") === g).map((ev) => (
-                      <label key={ev.key} className="sm-row" style={{ gap: 5, fontSize: 15 }}>
+                      <label key={ev.key} className="sm-row" style={{ gap: 5, fontSize: 13 }}>
                         <input type="checkbox" className="b2b-checkbox" checked={mn.events[ev.key] !== false}
                           onChange={(e) => setMn({ ...mn, events: { ...mn.events, [ev.key]: e.target.checked } })} />
                         {ev.label}

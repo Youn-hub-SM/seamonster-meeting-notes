@@ -78,7 +78,7 @@ export default function SalesReportPanel({ autoGenerate = false, onSent }: { aut
           <button className={`sm-tab ${mode === "weekly" ? "is-active" : ""}`} onClick={() => switchMode("weekly")} disabled={busy !== ""}>주간 매출 리포트</button>
         </div>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <label className="sm-faint" style={{ fontSize: 15 }}>기준일</label>
+          <label className="sm-faint" style={{ fontSize: 13 }}>기준일</label>
           <input type="date" value={base} max={maxDate || undefined} onChange={(e) => setBase(e.target.value)} className="b2b-input" style={{ width: 170 }} />
           <button className="b2b-btn-primary" onClick={() => generate()} disabled={busy !== ""}>{busy === "gen" ? "생성 중..." : "미리보기 생성"}</button>
         </div>
@@ -92,7 +92,7 @@ export default function SalesReportPanel({ autoGenerate = false, onSent }: { aut
       {sent && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>발송 완료 ✓</span></div>
-          <p style={{ fontSize: 15 }}>수신: {sent.join(", ")}</p>
+          <p style={{ fontSize: 13 }}>수신: {sent.join(", ")}</p>
         </section>
       )}
 
@@ -102,10 +102,10 @@ export default function SalesReportPanel({ autoGenerate = false, onSent }: { aut
           {rpt.html ? (
             <iframe title="리포트 미리보기" srcDoc={rpt.html} style={{ width: "100%", height: 640, border: "1px solid var(--sm-border)", borderRadius: 8, background: "var(--sm-white)" }} />
           ) : (
-            <pre style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.7, background: "var(--sm-bg-subtle)", padding: 16, borderRadius: 8, border: "1px solid var(--sm-border)", fontFamily: "inherit" }}>{rpt.text}</pre>
+            <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.7, background: "var(--sm-bg-subtle)", padding: 16, borderRadius: 8, border: "1px solid var(--sm-border)", fontFamily: "inherit" }}>{rpt.text}</pre>
           )}
           <div style={{ marginTop: 14, borderTop: "1px solid var(--sm-border)", paddingTop: 14 }}>
-            <label className="sm-faint" style={{ fontSize: 15, display: "block", marginBottom: 6 }}>수신자 (비우면 기본 수신자에게 발송, 쉼표로 여러 명)</label>
+            <label className="sm-faint" style={{ fontSize: 13, display: "block", marginBottom: 6 }}>수신자 (비우면 기본 수신자에게 발송, 쉼표로 여러 명)</label>
             <div className="sm-row" style={{ gap: 10, flexWrap: "wrap" }}>
               <input value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="ceo@seamonster.kr, sales@seamonster.kr" className="b2b-input" style={{ flex: 1, minWidth: 240 }} />
               <button className="b2b-btn-primary" onClick={send} disabled={busy !== ""}>{busy === "send" ? "발송 중..." : "메일 발송"}</button>

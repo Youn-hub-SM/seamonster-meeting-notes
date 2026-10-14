@@ -193,7 +193,7 @@ export default function TradePage() {
                 </div>
               )}
 
-              <label className="sm-row" style={{ gap: 7, marginTop: 12, fontSize: 15, cursor: "pointer" }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 12, fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {ioType === "입고" ? "입고" : "출고"}처리
                 <span className="sm-faint" style={{ fontSize: 12 }}>(미래 날짜는 해제해 대기로)</span>
               </label>

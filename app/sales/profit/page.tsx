@@ -80,7 +80,7 @@ export default function SalesProfitPage() {
 
       <section className="b2b-card">
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <label className="sm-faint" style={{ fontSize: 15 }}>기간</label>
+          <label className="sm-faint" style={{ fontSize: 13 }}>기간</label>
           <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="b2b-input" style={{ width: 160 }} />
           <span className="sm-faint">~</span>
           <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="b2b-input" style={{ width: 160 }} />
@@ -120,7 +120,7 @@ export default function SalesProfitPage() {
               </tbody>
             </table>
           </div>
-          {cfgMsg && <p style={{ fontSize: 15, color: "var(--sm-success)", marginTop: 6 }}>✓ {cfgMsg}</p>}
+          {cfgMsg && <p style={{ fontSize: 13, color: "var(--sm-success)", marginTop: 6 }}>✓ {cfgMsg}</p>}
         </section>
       )}
 

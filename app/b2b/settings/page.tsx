@@ -105,7 +105,7 @@ export default function SettingsEtcPage() {
         <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 10px", lineHeight: 1.6 }}>
           생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8
         </p>
-        {sched && <ul style={{ fontSize: 15, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+        {sched && <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
           <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {sched.nextDraft.slice(5)} 요청분 판매 가능일 {sched.nextSellable.slice(5)})</li>
           <li><strong>부족</strong> = 현재고 + 입고 예정이 하루 출고 × <strong>{sched.leadDays}일</strong> (오늘 → 오늘 요청분 판매 가능일 {sched.sellable.slice(5)}) 미만</li>
           <li><strong>권장생산</strong> = 소매 모자란 양 + 도매 모자란 양 − 입고 예정 (모자란 양 = 목표 − 현재고, 0 미만은 0)</li>

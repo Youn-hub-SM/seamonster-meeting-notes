@@ -1417,7 +1417,7 @@ export default function OrdersListPage() {
                       {parent ? (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                           {/* 복수발송은 날짜가 차수마다 달라 한 칸에 못 적는다 — 차수 창을 여는 입구만 둔다 */}
-                          <button type="button" className="b2b-link-btn" style={{ fontSize: 15 }}
+                          <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
                             title="발송 차수 수정"
                             onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
                             {(o.shipments ?? []).length}차 · 일정 수정
@@ -1428,7 +1428,7 @@ export default function OrdersListPage() {
                       ) : o.ship_date ? (
                         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                           {/* 등록된 발송일도 눌러서 고친다 — 같은 창에서 차수 추가·삭제까지 */}
-                          <button type="button" className="b2b-link-btn" style={{ fontSize: 15 }}
+                          <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
                             title="발송일 수정"
                             onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
                             {o.ship_date}
@@ -1734,7 +1734,7 @@ export default function OrdersListPage() {
                     </div>
                   )}
                   {shipRows.length === 0 && shipInitialCount > 0 && (
-                    <div className="sm-warn" style={{ fontSize: 15 }}>
+                    <div className="sm-warn" style={{ fontSize: 13 }}>
                       일정을 모두 지웠습니다. 이대로 저장하면 발송 일정이 전부 삭제되고 선점 재고가 원복됩니다.
                     </div>
                   )}
@@ -1951,7 +1951,7 @@ export default function OrdersListPage() {
               <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginBottom: 10 }}>
                 <strong>{returnPrompt.label}</strong>
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>반품으로 실제 돌아왔나요?</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>반품으로 실제 돌아왔나요?</div>
               <div className="sm-col" style={{ gap: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>
                 <span><strong>돌아왔음</strong> — 재고를 되돌립니다</span>
                 <span><strong>안 돌아옴</strong> — 출고는 그대로 두고 발주·매출만 취소합니다</span>
@@ -2279,7 +2279,7 @@ function ShipDateField({ value, onChange, ariaLabel, disabled, title }: { value:
           width: "100%", minHeight: 48, padding: "0 14px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
           border: "1px solid var(--sm-border)", borderRadius: "var(--sm-radius)",
-          background: disabled ? "var(--sm-bg-subtle)" : "var(--sm-white)", font: "inherit", fontSize: 15, pointerEvents: "none",
+          background: disabled ? "var(--sm-bg-subtle)" : "var(--sm-white)", font: "inherit", fontSize: 13, pointerEvents: "none",
         }}
       >
         {d ? (

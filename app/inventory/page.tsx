@@ -379,12 +379,12 @@ export default function InventoryPage() {
             </span>
           )}
           {!confirmedTab && (
-            <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} /> 부족만 보기
             </label>
           )}
           {confirmedTab && (
-            <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }} title="열린 요청서 품목과 이 칸에 재고가 남은 품목">
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }} title="열린 요청서 품목과 이 칸에 재고가 남은 품목">
               <input type="checkbox" checked={onlyRequested} onChange={(e) => setOnlyRequested(e.target.checked)} /> 요청한 품목만 보기
             </label>
           )}

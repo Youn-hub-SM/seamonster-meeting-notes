@@ -203,13 +203,13 @@ export default function SalesUploadPage() {
       {applied && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>적용 완료 ✓</span></div>
-          <p style={{ fontSize: 15 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.deleted > 0 && <> 기간 교체로 기존 {applied.deleted.toLocaleString()}행 삭제.</>}{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
+          <p style={{ fontSize: 13 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.deleted > 0 && <> 기간 교체로 기존 {applied.deleted.toLocaleString()}행 삭제.</>}{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
         </section>
       )}
 
       {applied && (
         <div style={{ marginTop: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 10px" }}>바로 리포트 만들기 · 발송</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 800, margin: "0 0 10px" }}>바로 리포트 만들기 · 발송</h2>
           <SalesReportPanel key={applyNonce} autoGenerate
             onSent={(type) => { if (type === "daily" && pendingReports) { setReportPrompt(pendingReports); setPendingReports(null); } }} />
         </div>
@@ -242,7 +242,7 @@ export default function SalesUploadPage() {
             <div style={{ marginTop: 8, fontSize: 12, color: "var(--sm-warning)" }}>오류 예시: {preview.errors.slice(0, 5).join(" / ")}{preview.errors.length > 5 ? " ..." : ""}</div>
           )}
           {s.invalid > 0 && (
-            <label className="sm-row" style={{ marginTop: 8, gap: 6, fontSize: 15 }}>
+            <label className="sm-row" style={{ marginTop: 8, gap: 6, fontSize: 13 }}>
               <input type="checkbox" className="b2b-checkbox" checked={skipInvalid} onChange={(e) => setSkipInvalid(e.target.checked)} />
               오류 행 {s.invalid.toLocaleString()}건 빼고 적용
             </label>
@@ -267,8 +267,8 @@ export default function SalesUploadPage() {
           {dupGroupCount > 0 && (
             <div style={{ marginTop: 12 }}>
               <div className="sm-between" style={{ gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>파일 안 동일 라인 {dupGroupCount.toLocaleString()}묶음</span>
-                <label className="sm-row" style={{ gap: 6, fontSize: 15 }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>파일 안 동일 라인 {dupGroupCount.toLocaleString()}묶음</span>
+                <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>
                   <input type="checkbox" className="b2b-checkbox" checked={opts.dupMode === "separate"} disabled={busy !== ""}
                     onChange={(e) => changeOpts({ ...opts, dupMode: e.target.checked ? "separate" : "merge" })} />
                   동일 라인 따로 넣기
@@ -290,7 +290,7 @@ export default function SalesUploadPage() {
           )}
 
           <div style={{ marginTop: 12 }}>
-            <label className="sm-row" style={{ gap: 6, fontSize: 15, fontWeight: 700 }}>
+            <label className="sm-row" style={{ gap: 6, fontSize: 13, fontWeight: 700 }}>
               {/* 오류 행이 있으면 켤 수 없다 — 빠진 행의 기존 원장 행이 '파일에 없음'으로 지워진다(서버도 거절) */}
               <input type="checkbox" className="b2b-checkbox" checked={opts.replace} disabled={busy !== "" || (s.invalid > 0 && !opts.replace)}
                 onChange={(e) => changeOpts({ ...opts, replace: e.target.checked, replaceFrom: "", replaceTo: "", widen: false })} />
@@ -299,7 +299,7 @@ export default function SalesUploadPage() {
             <p className="sm-faint" style={{ fontSize: 12, margin: "4px 0 0" }}>채널마다 파일 날짜 안의 기존 행 중 파일에 없는 행을 지움(도매 제외, 되돌리기로 복구 안 됨) — 교체 기간 밖 파일 행은 추가만</p>
             {s.invalid > 0 && !opts.replace && <p style={{ fontSize: 12, margin: "4px 0 0", color: "var(--sm-warning)" }}>오류 행이 있어 기간 교체를 할 수 없습니다 — 파일을 고친 뒤 다시 올리세요</p>}
             {opts.replace && (defPeriod || monthPeriod) && (
-              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8, fontSize: 15 }}>
+              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8, fontSize: 13 }}>
                 <span>교체 범위</span>
                 <div className="sm-tabs">
                   {defPeriod && (
@@ -317,7 +317,7 @@ export default function SalesUploadPage() {
               <p className="sm-faint" style={{ fontSize: 12, margin: "4px 0 0" }}>월 정산 대조 파일이면 그 달 전체 — 파일에 행이 없는 날의 기존 행도 지웁니다(날짜 확인 필요)</p>
             )}
             {opts.replace && (
-              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8, fontSize: 15 }}>
+              <div className="sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8, fontSize: 13 }}>
                 <span>교체 기간</span>
                 <input type="date" className="b2b-input" style={{ width: 160 }} value={periodDraft.from} max={periodDraft.to || undefined} disabled={busy !== ""}
                   onChange={(e) => { const v = e.target.value; setPeriodDraft((p) => ({ ...p, from: v })); }} />
@@ -355,7 +355,7 @@ export default function SalesUploadPage() {
             )}
             {preview?.replace && !preview.replace.blocked && (replaceShort || opts.widen) && (
               <div style={{ marginTop: 6 }}>
-                <label className="sm-row" style={{ gap: 6, fontSize: 15 }}>
+                <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>
                   <input type="checkbox" className="b2b-checkbox" checked={opts.widen} disabled={busy !== "" || periodDirty}
                     onChange={(e) => changeOpts({ ...opts, widen: e.target.checked })} />
                   파일에 없는 날짜도 교체 기간 전체로 지우기
@@ -370,7 +370,7 @@ export default function SalesUploadPage() {
                   <div key={x.channel} style={{ fontSize: 12, marginTop: 4 }}>{x.channel}: {(x.uncovered ?? []).map((u) => `${dateShort(u.date)} 파일 ${(u.file_rows ?? 0).toLocaleString()}행 · 지울 ${u.rows.toLocaleString()}행`).join(", ")}</div>
                 ))}
                 <div style={{ fontSize: 12, marginTop: 4 }}>앞뒤 끝 날짜는 교체 기간을 좁혀 빼면 그 날은 추가만 합니다</div>
-                <label className="sm-row" style={{ gap: 6, fontSize: 15, marginTop: 6 }}>
+                <label className="sm-row" style={{ gap: 6, fontSize: 13, marginTop: 6 }}>
                   <input type="checkbox" className="b2b-checkbox" checked={confirmUncovered} disabled={busy !== ""} onChange={(e) => setConfirmUncovered(e.target.checked)} />
                   위 날짜의 기존 행도 지웁니다
                 </label>
@@ -440,7 +440,7 @@ export default function SalesUploadPage() {
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setReportPrompt(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p style={{ fontSize: 15 }}>{reportPrompt.filter((x) => x.period === "daily").map((x) => x.label).join(", ") || "지난 기간"} 매출이 반영됐습니다. 리포트마다 생성하고, 확인한 뒤 [보내기]를 눌러 주세요.</p>
+              <p style={{ fontSize: 13 }}>{reportPrompt.filter((x) => x.period === "daily").map((x) => x.label).join(", ") || "지난 기간"} 매출이 반영됐습니다. 리포트마다 생성하고, 확인한 뒤 [보내기]를 눌러 주세요.</p>
               {reportPrompt.length > 1 && (
                 <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12 }}>
                   {reportPrompt.map((x) => <a key={`${x.period}${x.date}`} className="b2b-btn-secondary" href={reportHref(x)} target="_blank" rel="noopener">{x.label} {REPORT_NAME[x.period]} 생성</a>)}

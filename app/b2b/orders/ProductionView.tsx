@@ -103,7 +103,7 @@ export default function ProductionView() {
                       <td data-label="품목">{p.product_name}</td>
                       <td data-label="옵션">{p.spec || "-"}</td>
                       <td data-label="생산 수량" className="num b2b-money" style={{ fontWeight: 700 }}>{formatQty(p.qty)}</td>
-                      <td data-label="거래처" style={{ fontSize: 15, color: "var(--sm-text-mid)" }}>
+                      <td data-label="거래처" style={{ fontSize: 13, color: "var(--sm-text-mid)" }}>
                         {p.companies.length > 0 ? p.companies.join(", ") : "-"}
                       </td>
                       <td data-label="발주 수" className="num">{p.order_count}</td>

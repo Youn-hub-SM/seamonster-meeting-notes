@@ -164,10 +164,10 @@ export default function LocationsPage() {
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
           <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목·SKU 검색" aria-label="품목·SKU 검색" style={{ flex: "1 1 220px" }} />
-          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 15, cursor: "pointer" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={onlyUnzoned} onChange={(e) => setOnlyUnzoned(e.target.checked)} /> 미지정만
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 15, cursor: "pointer" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> 중단 품목 표시
           </label>
         </div>

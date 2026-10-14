@@ -81,7 +81,7 @@ function QuestionComposer({ channels, products, topProducts, disabled, onCompose
               </div>
             </div>
           ))}
-          {Object.keys(pick).length > 0 && <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={reset}>선택 초기화</button>}
+          {Object.keys(pick).length > 0 && <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={reset}>선택 초기화</button>}
         </div>
       )}
     </div>
@@ -342,13 +342,13 @@ export default function MarginCalcPage() {
             <div className="b2b-card-head"><span className="b2b-card-title">계산 저장</span></div>
             {saveErr.name && saveErr.question && <div className="b2b-error" style={{ marginBottom: 10 }}><ul><li>{saveErr.name}</li><li>{saveErr.question}</li></ul></div>}
             <label className="sm-col" style={{ gap: 4, marginBottom: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>이름</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>이름</span>
               <input className="b2b-input" value={saveName} onChange={(e) => { setSaveName(e.target.value); if (saveErr.name) setSaveErr((x) => ({ ...x, name: undefined })); }} placeholder="대구 1kg 쿠팡 20% 할인" aria-invalid={saveErr.name ? "true" : undefined} />
               {saveErr.name && <span className="b2b-field-error">{saveErr.name}</span>}
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>질문</span>
-              <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 15, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => { setSaveQuestion(e.target.value); if (saveErr.question) setSaveErr((x) => ({ ...x, question: undefined })); }} aria-invalid={saveErr.question ? "true" : undefined} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>질문</span>
+              <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 13, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => { setSaveQuestion(e.target.value); if (saveErr.question) setSaveErr((x) => ({ ...x, question: undefined })); }} aria-invalid={saveErr.question ? "true" : undefined} />
               {saveErr.question && <span className="b2b-field-error">{saveErr.question}</span>}
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
@@ -427,7 +427,7 @@ function ResultCard({ r }: { r: MarginResultItem }) {
 
       {/* 투명한 계산 근거 */}
       <div className="b2b-table-wrap">
-        <table className="b2b-table" style={{ fontSize: 15 }}>
+        <table className="b2b-table" style={{ fontSize: 13 }}>
           <tbody>
             <tr>
               <td><strong>매출액</strong> <span className="sm-faint" style={{ fontSize: 12 }}>(고객 결제가)</span></td>

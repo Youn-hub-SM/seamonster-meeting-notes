@@ -79,7 +79,7 @@ export function Donut({ data, colors, size = 132, center, centerSub }: { data: [
 //  accent 미지정 시 브랜드 주황. 의미축(입고=success/출고=info 등)이 있는 데이터는
 //  반드시 그 색을 넘길 것 — 안 그러면 같은 화면의 표·배지와 색이 어긋난다.
 export function TrendChart({ data, fmtAxis, accent }: { data: { label: string; value: number; tip?: string }[]; fmtAxis?: (n: number) => string; accent?: string }) {
-  if (!data.length) return <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>데이터 없음</div>;
+  if (!data.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const top = niceCeil(Math.max(...data.map((d) => d.value), 1));
   const { W, H, padL, padT, padB, barMax, barRatio } = GEOM, padR = 10;
@@ -122,7 +122,7 @@ export function StackedBar({ periods, series, colors, fmtAxis, unit = "건" }: {
   fmtAxis?: (n: number) => string;
   unit?: string; // 세그먼트 툴팁 값 단위(건/원 등)
 }) {
-  if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>데이터 없음</div>;
+  if (!periods.length || !series.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const fmt = fmtAxis || ((n: number) => n.toLocaleString());
   const totals = periods.map((_, i) => series.reduce((s, ser) => s + (ser.values[i] || 0), 0));
   const top = niceCeil(Math.max(...totals, 1));
@@ -187,7 +187,7 @@ export function ComboBarLine({ periods, barSeries, barColors, lineValues, lineLa
   lineUnit?: string;                               // 선 툴팁 값 뒤 단위(기본 '원' — ROAS 처럼 단위가 다르면 넘긴다)
 }) {
   const [hi, setHi] = useState<number | null>(null);
-  if (!periods.length) return <div className="sm-faint" style={{ fontSize: 15, padding: "8px 2px" }}>데이터 없음</div>;
+  if (!periods.length) return <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>데이터 없음</div>;
   const bFmt = barFmt || ((n: number) => n.toLocaleString());
   const totals = periods.map((_, i) => barSeries.reduce((s, ser) => s + (ser.values[i] || 0), 0));
   const topL = niceCeil(Math.max(...totals, 1));
@@ -268,13 +268,13 @@ export function PieCard({ title, data, fmt, colors, size = 132 }: {
     <section className="b2b-card">
       <div className="b2b-card-head"><span className="b2b-card-title">{title}</span></div>
       {total === 0 ? (
-        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 15 }}>데이터 없음</div>
+        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 13 }}>데이터 없음</div>
       ) : (
         <div className="sm-row-wrap" style={{ gap: 16, alignItems: "center" }}>
           <Donut data={data} colors={colors} size={size} center={fmt ? fmt(total) : String(total)} />
           <div className="sm-col" style={{ gap: 5, minWidth: 150 }}>
             {data.map(([label, n], i) => (
-              <div key={i} className="sm-between" style={{ fontSize: 15, gap: 8 }}>
+              <div key={i} className="sm-between" style={{ fontSize: 13, gap: 8 }}>
                 <span className="sm-row" style={{ gap: 6, minWidth: 0 }}>
                   <span className="sm-stat-hero-dot" style={{ background: col(i) }} />
                   <span className="sm-ellipsis">{label}</span>
@@ -309,14 +309,14 @@ export function BarList({ title, caption, data, accent, fmt, sub, minPct = 0, so
       <div className="b2b-card-head"><span className="b2b-card-title">{title}</span></div>
       {caption && <div className="sm-faint" style={{ fontSize: 12, marginBottom: 12 }}>{caption}</div>}
       {rows.length === 0 ? (
-        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 15 }}>{empty || "데이터 없음"}</div>
+        <div className="sm-faint" style={{ padding: "8px 2px", fontSize: 13 }}>{empty || "데이터 없음"}</div>
       ) : (
         <div className="sm-col" style={{ gap: 8 }}>
           {rows.map(([label, n]) => {
             const pct = Math.max(minPct, Math.round((n / max) * 100));
             return (
               <div key={label} className="sm-col" style={{ gap: 3 }}>
-                <div className="sm-between" style={{ fontSize: 15 }}>
+                <div className="sm-between" style={{ fontSize: 13 }}>
                   <span className="sm-ellipsis" style={{ maxWidth: "75%" }}>{label}</span>
                   <strong>{fmt ? fmt(n) : n}</strong>
                 </div>

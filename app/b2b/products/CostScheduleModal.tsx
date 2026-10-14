@@ -164,7 +164,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
               )}
 
               <div className="sm-row" style={{ gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 15 }}>
+                <span style={{ fontSize: 13 }}>
                   {won(product.cost_price)}원 → <strong>{won(nextCost)}원</strong>
                 </span>
                 {nextCost > 0 && diff !== 0 && (
@@ -180,7 +180,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
 
               <div style={{ marginTop: 18, borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
                 <div className="sm-between" style={{ marginBottom: 6 }}>
-                  <strong style={{ fontSize: 15 }}>예약 내역</strong>
+                  <strong style={{ fontSize: 13 }}>예약 내역</strong>
                   {dueNow && (
                     <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={applyNow} disabled={saving}>
                       지금 반영
@@ -191,7 +191,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                   : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>예약이 없습니다.</p>
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
-                      <table className="b2b-table is-responsive" style={{ fontSize: 15 }}>
+                      <table className="b2b-table is-responsive" style={{ fontSize: 13 }}>
                         <thead><tr><th>적용일</th><th className="num">원가</th><th>상태</th><th>메모</th><th /></tr></thead>
                         <tbody>
                           {rows.map((r) => (

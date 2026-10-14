@@ -24,7 +24,7 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
     <section className={`${printable ? "voc-print" : "no-print"} inv-quote-print`} style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "28px 30px", maxWidth: 900, boxShadow: "var(--sm-shadow-card)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 15, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
+          <div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div>
           <h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {mm}월 매입 결산</h2>
           {stamp && <div style={{ fontSize: 12, color: "var(--sm-text-mid)", marginTop: 4 }}>{stamp}</div>}
         </div>
@@ -39,14 +39,14 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
             <tr><td data-label="구분" style={{ fontWeight: 700 }}>임대료</td><td data-label="공급가액" className="num b2b-money">{won(s.rentSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.rentVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.rentTotal)}</td></tr>
             <tr><td data-label="구분" style={{ fontWeight: 700 }}>면세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.exemptSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.exemptEtc)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.exemptTotal)}</td></tr>
             <tr><td data-label="구분" style={{ fontWeight: 700 }}>과세품목</td><td data-label="공급가액" className="num b2b-money">{won(s.taxableSupply)}</td><td data-label="세액 / 기타" className="num b2b-money">{won(s.taxableVat)}</td><td data-label="총액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(s.taxableTotal)}</td></tr>
-            <tr style={{ background: "var(--sm-bg-subtle)" }}><td data-label="구분" style={{ fontWeight: 800 }}>총 입금액</td><td className="num" /><td className="num" /><td data-label="총액" className="num b2b-money" style={{ fontWeight: 800, fontSize: 15 }}>{won(s.deposit)}</td></tr>
+            <tr style={{ background: "var(--sm-bg-subtle)" }}><td data-label="구분" style={{ fontWeight: 800 }}>총 입금액</td><td className="num" /><td className="num" /><td data-label="총액" className="num b2b-money" style={{ fontWeight: 800, fontSize: 13 }}>{won(s.deposit)}</td></tr>
           </tbody>
         </table>
       </div>
 
       {/* SKU 표 */}
       <div className="sm-between" style={{ marginBottom: 6 }}>
-        <strong style={{ fontSize: 15 }}>품목별 매입 ({(s.itemCount ?? 0).toLocaleString()}종 · {(s.totalQty ?? 0).toLocaleString()}개)</strong>
+        <strong style={{ fontSize: 13 }}>품목별 매입 ({(s.itemCount ?? 0).toLocaleString()}종 · {(s.totalQty ?? 0).toLocaleString()}개)</strong>
         {totalReturnQty > 0 && (
           <span className="sm-faint" style={{ fontSize: 12 }}>반품 {totalReturnQty.toLocaleString()}개 · {won(s.returnAmount)}원 차감</span>
         )}

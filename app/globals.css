@@ -61,12 +61,12 @@
      12 보조 · 15 본문 · 17 카드 제목·강조 · 21 섹션 제목 · 28 페이지 제목. KPI 값만 예외 28/23.
      --sm-fs-sm / --sm-fs-md 는 base 의 별칭(사용처 호환) — 새 코드에서는 base 를 쓴다. ── */
   --sm-fs-xs: 12px;
-  --sm-fs-base: 15px;   /* 본문 기본 */
+  --sm-fs-base: 13px;   /* 본문 기본 — 2026-10-14 대표: 전체 2px 낮춤(15→13), 12 는 그대로 */
   --sm-fs-sm: var(--sm-fs-base);
   --sm-fs-md: var(--sm-fs-base);
-  --sm-fs-lg: 17px;
-  --sm-fs-xl: 19px;              /* 섹션 제목 — 2026-10-14 대표: 21→19 ("매우 크다") */
-  --sm-fs-2xl: 26px;             /* 페이지 제목·KPI 값 — 2026-10-14 대표: 28→26 */
+  --sm-fs-lg: 15px;              /* 카드 제목·강조 — 17→15 */
+  --sm-fs-xl: 17px;              /* 섹션 제목 — 2026-10-14 대표: 21→19→17 */
+  --sm-fs-2xl: 24px;             /* 페이지 제목·KPI 값 — 2026-10-14 대표: 28→26→24 */
 
   /* ── 줄 간격 4값 · 자간 3값(본문 0은 토큰 없음) ── */
   --sm-lh-body: 1.6;      /* 읽는 글 */
@@ -274,7 +274,7 @@ a {
   .page-subtitle { font-size: var(--sm-fs-xs); }
   /* 레거시(AI툴) 입력도 iOS 자동 확대 방지 — 16px 미만이면 포커스 시 발동 */
   .form-textarea, .csm-search, .csm-cat-input, .csm-order-input, .member-input {
-    font-size: 16px !important;
+    font-size: 14px !important;
   }
 }
 
@@ -306,7 +306,7 @@ a {
   border: 1px solid transparent;
   border-radius: var(--sm-radius-btn);
   padding: 11px 18px;
-  font-size: 16px;   /* 1차 버튼 예외 — 흰/주황 3.4:1 이라 16px/700 '큰 글자' 기준(3:1)으로 맞춘다 */
+  font-size: 14px;   /* 1차 버튼 예외 — 흰/주황 3.4:1 이라 16px/700 '큰 글자' 기준(3:1)으로 맞춘다 */
   font-weight: 700;
   line-height: var(--sm-lh-ui);
   cursor: pointer;
@@ -1215,7 +1215,7 @@ a {
   .orders-header-actions .btn-primary {
     flex: 1;
     padding: 12px 14px;
-    font-size: 15px;
+    font-size: 13px;
     min-height: 44px;
   }
 
@@ -1235,7 +1235,7 @@ a {
   .orders-tabs::-webkit-scrollbar { display: none; }
   .orders-tab {
     padding: 10px 16px;
-    font-size: 15px;
+    font-size: 13px;
     flex-shrink: 0;
     min-height: 40px;
   }
@@ -1261,7 +1261,7 @@ a {
     grid-template-columns: 1fr auto;
     gap: 4px 8px;
     padding: 10px 12px;
-    font-size: 15px;
+    font-size: 13px;
   }
   .focus-row-kinds {
     grid-column: 1 / -1;
@@ -1269,7 +1269,7 @@ a {
   }
   .focus-row-client {
     grid-column: 1;
-    font-size: 15px;
+    font-size: 13px;
   }
   .focus-row .orders-status-pill {
     grid-column: 2;
@@ -1288,7 +1288,7 @@ a {
   /* ── 캘린더 (3주 윈도우) ── */
   .cal-nav { gap: 8px; }
   .cal-month {
-    font-size: 15px;
+    font-size: 13px;
     min-width: 0;
     flex: 1;
     text-align: center;
@@ -1360,13 +1360,13 @@ a {
   .week-cards { display: flex; }
 
   .prod-sub-header { gap: 6px; }
-  .prod-sub-title { font-size: 15px; }
+  .prod-sub-title { font-size: 13px; }
 
   /* 개별 발주 행 (focus row와 같은 layout 사용) */
   .week-order-row {
     grid-template-columns: 1fr auto;
     gap: 4px 8px;
-    font-size: 15px;
+    font-size: 13px;
     padding: 10px 12px;
   }
   .week-order-date {
@@ -1376,7 +1376,7 @@ a {
   }
   .week-order-client {
     grid-column: 1;
-    font-size: 15px;
+    font-size: 13px;
   }
   .week-order-row .orders-status-pill {
     grid-column: 2;
@@ -1422,7 +1422,7 @@ a {
   .orders-input,
   .orders-select,
   .orders-textarea {
-    font-size: 15px;
+    font-size: 13px;
     padding: 12px 14px;
     min-height: 44px;
   }
@@ -1611,7 +1611,7 @@ a {
   padding: 12px 10px;
   z-index: 60;
 }
-.app-sb-brand { font-size: 18px; font-weight: 800; color: var(--sm-orange); padding: 8px 10px 8px; display: block; }
+.app-sb-brand { font-size: 16px; font-weight: 800; color: var(--sm-orange); padding: 8px 10px 8px; display: block; }
 .app-sb-nav { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1px; }
 /* 스크롤 구역 — 즐겨찾기 반전 블록이 이미 고정/스크롤 경계를 색면으로 보여주므로 선은 두지 않음 */
 .app-sb-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
@@ -1630,7 +1630,7 @@ a {
 .app-sb-fav-edit:hover { background: var(--sm-white); color: var(--sm-black); }
 .app-sb-fav-edit.is-on { color: var(--sm-black); text-decoration: underline; text-underline-offset: 2px; }
 /* 즐겨찾기 담기(＋)/빼기(✕) — 24×24 이상 */
-.app-sb-favstar { margin-left: auto; flex: 0 0 auto; min-width: 28px; min-height: 28px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 6px; font-size: 16px; line-height: 1; color: var(--sm-text-mid); cursor: pointer; }
+.app-sb-favstar { margin-left: auto; flex: 0 0 auto; min-width: 28px; min-height: 28px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 6px; font-size: 14px; line-height: 1; color: var(--sm-text-mid); cursor: pointer; }
 .app-sb-favstar:hover { background: var(--sm-bg); color: var(--sm-black); }
 .app-sb-favstar.is-on { color: var(--sm-black); }
 .app-sb-tool-row {
@@ -1647,7 +1647,7 @@ a {
   flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: 8px;
-  font-size: 15px; line-height: 1.6; font-weight: 600; color: var(--sm-text-mid);
+  font-size: 13px; line-height: 1.6; font-weight: 600; color: var(--sm-text-mid);
   transition: color 0.15s;
   background: none; border: none; cursor: pointer; text-align: left; font-family: inherit;
 }
@@ -1678,11 +1678,11 @@ a {
 .app-sb-menu { margin: 1px 0 5px; padding-left: 27px; display: flex; flex-direction: column; gap: 1px; }
 .app-sb-menu-row { display: flex; align-items: center; }  /* 즐겨찾기 편집 모드: 메뉴 링크 + ＋/✕ 버튼 */
 .app-sb-menu-row .app-sb-menu-item { flex: 1; min-width: 0; }
-.app-sb-menu-item { display: flex; align-items: center; padding: 6px 10px; border-radius: 7px; font-size: 15px; color: var(--sm-text-mid); transition: background 0.15s, color 0.15s; }
+.app-sb-menu-item { display: flex; align-items: center; padding: 6px 10px; border-radius: 7px; font-size: 13px; color: var(--sm-text-mid); transition: background 0.15s, color 0.15s; }
 .app-sb-menu-item:hover { background: var(--sm-bg); color: var(--sm-black); }
 .app-sb-menu-item.is-active { color: var(--sm-orange); font-weight: 700; background: var(--sm-orange-light); }
 .app-sb-foot { border-top: 1px solid var(--sm-border); padding: 12px 10px 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.app-sb-username { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 15px; font-weight: 600; color: var(--sm-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-sb-username { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 13px; font-weight: 600; color: var(--sm-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-sb-username svg { flex-shrink: 0; color: var(--sm-text-light); }
 /* 로그아웃 — 높이 28px(24px 이상, WCAG 2.5.8) */
 .app-sb-logout { min-height: 28px; background: none; border: 1px solid var(--sm-border); border-radius: 7px; padding: 4px 10px; font-size: 12px; line-height: 1.5; color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
@@ -1723,15 +1723,15 @@ a {
    성공=회색 테두리, 오류=빨간 테두리, 되돌리기=검정 밑줄 버튼. 색은 뜻이 있을 때만(기획 3-C).
    ─────────────────────────────────────────────── */
 .sm-toast-stack { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: min(560px, calc(100vw - 32px)); }
-.sm-toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: 100%; padding: 10px 10px 10px 16px; background: var(--sm-white); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius-btn); box-shadow: var(--sm-shadow-float); font-size: 15px; line-height: 1.5; color: var(--sm-black); }
+.sm-toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: 100%; padding: 10px 10px 10px 16px; background: var(--sm-white); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius-btn); box-shadow: var(--sm-shadow-float); font-size: 13px; line-height: 1.5; color: var(--sm-black); }
 .sm-toast.is-error { border-color: var(--sm-danger); color: var(--sm-danger); }
 .sm-toast-text { flex: 1; min-width: 0; }
 .sm-toast-undo { flex: 0 0 auto; min-height: 28px; padding: 0 8px; background: none; border: none; font: inherit; font-weight: 700; color: var(--sm-black); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; border-radius: 6px; }
 .sm-toast-undo:hover { background: var(--sm-bg-subtle); }
-.sm-toast-close { flex: 0 0 auto; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 6px; font-size: 14px; line-height: 1; color: var(--sm-text-mid); cursor: pointer; }
+.sm-toast-close { flex: 0 0 auto; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; border-radius: 6px; font-size: 12px; line-height: 1; color: var(--sm-text-mid); cursor: pointer; }
 .sm-toast-close:hover { background: var(--sm-bg-subtle); color: var(--sm-black); }
 .sm-confirm { max-width: 440px; }
-.sm-confirm .b2b-modal-body { font-size: 15px; color: var(--sm-text-mid); white-space: pre-line; } /* 품목 목록처럼 줄바꿈 든 본문 */
+.sm-confirm .b2b-modal-body { font-size: 13px; color: var(--sm-text-mid); white-space: pre-line; } /* 품목 목록처럼 줄바꿈 든 본문 */
 .sm-confirm .b2b-modal-foot-right { flex-wrap: wrap; } /* 긴 동사 버튼('출고까지 함께 취소')이 좁은 폭에서 줄바꿈 */
 @media print { .sm-toast-stack { display: none !important; } }
 
@@ -1754,8 +1754,8 @@ a {
     height: 52px; padding: 0 12px;
     background: var(--sm-white); border-bottom: 1px solid var(--sm-border);
   }
-  .app-sb-toggle { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--sm-border); border-radius: 8px; background: var(--sm-white); font-size: 18px; cursor: pointer; color: var(--sm-orange); }
-  .app-topbar-brand { font-size: 17px; font-weight: 800; color: var(--sm-orange); }
+  .app-sb-toggle { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid var(--sm-border); border-radius: 8px; background: var(--sm-white); font-size: 16px; cursor: pointer; color: var(--sm-orange); }
+  .app-topbar-brand { font-size: 15px; font-weight: 800; color: var(--sm-orange); }
 }
 
 .print-only { display: none; }  /* 화면엔 숨기고 인쇄 시에만 노출 */

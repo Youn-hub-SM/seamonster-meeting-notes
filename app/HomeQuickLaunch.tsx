@@ -51,7 +51,7 @@ export default function HomeQuickLaunch() {
     <Link href={href} className="home-tool-card">
       <span className="sm-row" style={{ gap: 10, minWidth: 0 }}>
         <Icon name={icon} size={20} />
-        <span className="home-tool-name sm-ellipsis" style={{ fontSize: 17 }}>{label}</span>
+        <span className="home-tool-name sm-ellipsis" style={{ fontSize: 15 }}>{label}</span>
       </span>
     </Link>
   );

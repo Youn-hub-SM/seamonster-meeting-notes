@@ -216,7 +216,7 @@ export default function AdjustPage() {
             </div>
             <div className="b2b-modal-foot">
               {needsAck(preview.checks)
-                ? <label className="sm-row" style={{ gap: 6, fontSize: 15 }}><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 점검을 확인했습니다</label>
+                ? <label className="sm-row" style={{ gap: 6, fontSize: 13 }}><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 점검을 확인했습니다</label>
                 : <span />}
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>

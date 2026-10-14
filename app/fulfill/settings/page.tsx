@@ -94,7 +94,7 @@ export default function FulfillSettingsPage() {
         <div className="b2b-card-head"><span className="b2b-card-title">배송일지 박스 종류</span></div>
         <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>이하(kg) = 주문 총중량 · 금액(원) = 박스 자재 단가(면세)</p>
         <div className="b2b-table-wrap">
-        <table className="b2b-table" style={{ fontSize: 15 }}>
+        <table className="b2b-table" style={{ fontSize: 13 }}>
           <thead><tr><th>박스 종류</th><th className="num">이하(kg)</th><th className="num">금액(원)</th><th style={{ width: 40 }}></th></tr></thead>
           <tbody>
             {boxCats.map((c, i) => (
@@ -145,7 +145,7 @@ export default function FulfillSettingsPage() {
       <div className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <span className="b2b-card-title">중복 방지</span>
-          <label className="sm-row" style={{ gap: 7, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+          <label className="sm-row" style={{ gap: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             <input type="checkbox" className="b2b-checkbox" checked={dedup.enabled} onChange={(e) => setDedup({ ...dedup, enabled: e.target.checked })} /> 사용
           </label>
         </div>
@@ -161,7 +161,7 @@ export default function FulfillSettingsPage() {
               <p className="sm-faint" style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.6 }}>번호가 재사용되는 채널에선 정상 주문도 제외될 수 있습니다.</p>
             )}
           </div>
-          <label className="sm-row" style={{ gap: 8, fontSize: 15, alignItems: "center", flexWrap: "wrap" }}>
+          <label className="sm-row" style={{ gap: 8, fontSize: 13, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontWeight: 600 }}>대조 기간</span>
             최근 <input type="number" className="b2b-input" min={DEDUP_MIN_DAYS} max={DEDUP_MAX_DAYS} value={dedup.windowDays} onChange={(e) => setDedup({ ...dedup, windowDays: num(e.target.value) })}
               onBlur={() => setDedup((d) => ({ ...d, windowDays: Math.min(DEDUP_MAX_DAYS, Math.max(DEDUP_MIN_DAYS, d.windowDays || DEDUP_DEFAULT.windowDays)) }))} style={{ width: 70, textAlign: "right" }} /> 일
@@ -236,7 +236,7 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
       <div style={{ marginTop: 4 }}>
         <div className="sm-faint" style={{ fontSize: 12, fontWeight: 700, margin: "6px 0 6px" }}>택배 기본운임 (주문 총중량 구간)</div>
         <div className="b2b-table-wrap">
-        <table className="b2b-table" style={{ fontSize: 15 }}>
+        <table className="b2b-table" style={{ fontSize: 13 }}>
           <thead><tr><th>박스타입</th><th className="num">이하(kg)</th><th className="num">기본운임(원)</th><th></th></tr></thead>
           <tbody>
             {bounded.map((t, i) => (

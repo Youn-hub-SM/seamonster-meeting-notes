@@ -99,7 +99,7 @@ export default function BundlesPage() {
                   <td data-label="구성품">
                     <div className="sm-col" style={{ gap: 2 }}>
                       {b.components.map((c) => (
-                        <span key={c.component_id} style={{ fontSize: 15 }}>{c.name}{c.spec ? <span className="sm-faint" style={{ fontSize: 12 }}> {c.spec}</span> : null} <strong>× {c.qty}</strong> {c.sku ? <span className="sm-faint" style={{ fontSize: 12 }}>({c.sku})</span> : null}</span>
+                        <span key={c.component_id} style={{ fontSize: 13 }}>{c.name}{c.spec ? <span className="sm-faint" style={{ fontSize: 12 }}> {c.spec}</span> : null} <strong>× {c.qty}</strong> {c.sku ? <span className="sm-faint" style={{ fontSize: 12 }}>({c.sku})</span> : null}</span>
                       ))}
                     </div>
                   </td>

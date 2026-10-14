@@ -357,7 +357,7 @@ export default function FulfillPage() {
             <div key={i} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "0 0 auto" }}>
               <button onClick={() => canJump(i) && setStep(i)} disabled={!canJump(i)} title={label}
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: canJump(i) ? "pointer" : "default", padding: 0 }}>
-                <span style={{ width: 30, height: 30, borderRadius: "50%", background: state === "todo" ? "var(--sm-white)" : color, border: `2px solid ${color}`, color: state === "todo" ? "var(--sm-text-light)" : "var(--sm-white)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, flex: "0 0 auto" }}>
+                <span style={{ width: 30, height: 30, borderRadius: "50%", background: state === "todo" ? "var(--sm-white)" : color, border: `2px solid ${color}`, color: state === "todo" ? "var(--sm-text-light)" : "var(--sm-white)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flex: "0 0 auto" }}>
                   {state === "done" ? "✓" : i + 1}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: state === "cur" ? 700 : 500, color: state === "cur" ? "var(--sm-dark)" : "var(--sm-text-light)", textAlign: "center" }}>{label}</span>
@@ -460,7 +460,7 @@ export default function FulfillPage() {
                       {res.openOverlap.batches.map((b, i) => <li key={i}>{b.fileName || "(파일명 없음)"} · {hm(b.at)}</li>)}
                     </ul>
                   </>}
-              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
                 <input type="checkbox" checked={overlapAck} onChange={(e) => setOverlapAck(e.target.checked)} /> 확인했습니다
               </label>
             </div>
@@ -471,7 +471,7 @@ export default function FulfillPage() {
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
                 {res.addressWarnings.slice(0, 20).map((w, i) => <li key={i}>{w.name || "(이름?)"} · {w.addr}</li>)}
               </ul>
-              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 주소들을 확인했습니다
               </label>
             </div>
@@ -491,7 +491,7 @@ export default function FulfillPage() {
                   </li>
                 ))}
               </ul>
-              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
+              <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
                 <input type="checkbox" checked={msgAck} onChange={(e) => setMsgAck(e.target.checked)} /> 위 메시지들을 확인했습니다
               </label>
             </div>
@@ -499,7 +499,7 @@ export default function FulfillPage() {
           <section className="b2b-card">
             <div className="b2b-card-head"><span className="b2b-card-title">② CN 파일 다운로드</span></div>
             <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="b2b-btn-primary" style={{ padding: "10px 20px", fontSize: 15, fontWeight: 700 }} disabled={blocked || res.stats.normalCount === 0}
+              <button className="b2b-btn-primary" style={{ padding: "10px 20px", fontSize: 13, fontWeight: 700 }} disabled={blocked || res.stats.normalCount === 0}
                 onClick={() => { const g = res.files.guarantee; downloadB64(res.files.normal.name, res.files.normal.b64); if (g) setTimeout(() => downloadB64(g.name, g.b64), 400); markDownloaded(); }}>
                 모두 내려받기{res.files.guarantee ? " (2종)" : ""}
               </button>
@@ -591,7 +591,7 @@ export default function FulfillPage() {
                 <div className="b2b-error" style={{ marginBottom: 12, lineHeight: 1.6 }}>
                   <strong>상품마스터에 없어 재고가 빠지지 않는 코드 {unm.length}개</strong> — 이번 출고분은 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에 등록한 뒤 <button className="b2b-link-btn" onClick={() => setDispatchRetry((n) => n + 1)}>다시 확인</button>
                   <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{unm.map((u) => `${u.sku} ${u.qty.toLocaleString()}개${u.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(" · ")}</div>
-                  <label className="sm-row" style={{ gap: 7, marginTop: 8, fontSize: 15, cursor: "pointer", fontWeight: 700 }}>
+                  <label className="sm-row" style={{ gap: 7, marginTop: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
                     <input type="checkbox" checked={unmatchedAck} onChange={(e) => setUnmatchedAck(e.target.checked)} /> 이 코드 {unm.length}개 · {unmQty.toLocaleString()}개는 재고 차감 없이 출고합니다
                   </label>
                 </div>

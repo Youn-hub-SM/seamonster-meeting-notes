@@ -259,7 +259,7 @@ function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">스캔 통계 — {link.title || link.code}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <p style={{ marginBottom: 10 }}>누적 스캔 <strong style={{ color: "var(--sm-orange)" }}>{link.scan_count.toLocaleString()}</strong>회 {data && data.sampleSize < link.scan_count && <span className="sm-faint" style={{ fontSize: 12 }}>(아래 분석은 최근 {data.sampleSize.toLocaleString()}건 기준)</span>}</p>
-          {loading ? <div className="b2b-loading">불러오는 중...</div> : !data || data.sampleSize === 0 ? <div className="sm-faint" style={{ fontSize: 15, padding: "10px 0" }}>아직 스캔 기록이 없습니다.</div> : (
+          {loading ? <div className="b2b-loading">불러오는 중...</div> : !data || data.sampleSize === 0 ? <div className="sm-faint" style={{ fontSize: 13, padding: "10px 0" }}>아직 스캔 기록이 없습니다.</div> : (
             <>
               {data.daily.length > 0 && (
                 <div style={{ marginBottom: 14 }}>

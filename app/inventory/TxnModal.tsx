@@ -622,7 +622,7 @@ export default function TxnModal({
           <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">{isAdjust ? "· 조정 사유" : "(선택)"}</span></span>
             <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
           {!isAdjust && (
-            <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 15, cursor: "pointer" }}>
+            <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 13, cursor: "pointer" }}>
               <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {type}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’ — 미래 날짜는 대기로만)</span>
             </label>
           )}
@@ -701,7 +701,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
         ) : (
           <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
             {isAdjust ? (
-              <table className="b2b-table" style={{ fontSize: 15 }}>
+              <table className="b2b-table" style={{ fontSize: 13 }}>
                 <thead><tr><th>품목</th><th>SKU</th><th className="num">현재고</th><th className="num">실사</th><th className="num">조정</th><th>메모</th></tr></thead>
                 <tbody>
                   {(preview.rows as AdjRow[]).slice(0, 300).map((r, i) => (
@@ -717,7 +717,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                 </tbody>
               </table>
             ) : (
-              <table className="b2b-table" style={{ fontSize: 15 }}>
+              <table className="b2b-table" style={{ fontSize: 13 }}>
                 <thead><tr><th>날짜</th><th>유형</th><th>품목</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th></tr></thead>
                 <tbody>
                   {(preview.rows as IoRow[]).slice(0, 300).map((r, i) => {
@@ -775,7 +775,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                 <option value="기타">기타</option>
               </select></label>
           )}
-          <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 15, cursor: "pointer" }}>
+          <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {type}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’)</span>
           </label>
         </>

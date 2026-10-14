@@ -6,7 +6,7 @@ type Term = { term: string; note?: string };
 
 const inp = (w: number): CSSProperties => ({
   width: w, maxWidth: "100%", padding: "8px 10px",
-  border: "1px solid var(--sm-border)", borderRadius: 8, fontSize: 15, fontFamily: "inherit",
+  border: "1px solid var(--sm-border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
 });
 
 // 회의정리봇 공유 용어집 — 모든 구성원이 편집. 중복 자동 방지. 회의 요약 시 AI 프롬프트에 반영됨.
@@ -56,7 +56,7 @@ export default function MeetingTerms() {
   return (
     <section style={{ border: "1px solid var(--sm-orange-border, var(--sm-border))", borderRadius: 12, padding: "14px 16px", marginBottom: 22, background: "var(--sm-bg-warm)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ fontWeight: 700, fontSize: 15, color: "var(--sm-dark)" }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--sm-dark)" }}>
           자주 쓰는 용어
         </div>
         <button type="button" onClick={() => setOpen((o) => !o)} style={{ background: "none", border: "none", color: "var(--sm-text-mid)", cursor: "pointer", fontSize: 12 }}>
