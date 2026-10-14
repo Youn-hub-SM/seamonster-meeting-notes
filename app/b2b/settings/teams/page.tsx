@@ -226,7 +226,7 @@ export default function TeamsSettingsPage() {
         <div className="b2b-page-actions">
           {savedAt && <span style={{ fontSize: 12, color: "var(--sm-success)", alignSelf: "center" }}>{savedAt}</span>}
           <button className="b2b-btn-primary" onClick={save} disabled={saving || loading}>
-            {saving ? "저장 중..." : "저장"}
+            {saving ? "저장 중..." : "알림 이벤트 저장"}
           </button>
         </div>
       </header>
@@ -245,32 +245,33 @@ export default function TeamsSettingsPage() {
         </div>
         <div className="sm-col" style={{ gap: 10, maxWidth: 640 }}>
           <label className="b2b-field">
-            <span className="b2b-field-label">B2B 알림 채널 URL {teamsHasUrl && <span className="sm-faint" style={{ fontWeight: 400 }}>· 저장됨 {teamsTail}</span>}</span>
+            <span className="b2b-field-label">B2B 알림 채널 URL {teamsHasUrl && <span className="sm-faint" style={{ fontWeight: 400 }}>· 저장됨 {teamsTail} · 새 URL로 바꿀 때만 입력</span>}</span>
             <input className="b2b-input" type="password" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)}
-              placeholder={teamsHasUrl ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
+              placeholder={teamsHasUrl ? "" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">업무도우미 변경알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasHelper ? `· 저장됨 ${teamsHelperTail}` : "· 비우면 B2B 채널로 함께 발송"}</span></span>
+            <span className="b2b-field-label">업무도우미 변경알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasHelper ? `· 저장됨 ${teamsHelperTail} · 새 URL로 바꿀 때만 입력` : "· 비우면 B2B 채널로 함께 발송"}</span></span>
             <input className="b2b-input" type="password" value={teamsHelperUrl} onChange={(e) => setTeamsHelperUrl(e.target.value)}
-              placeholder={teamsHasHelper ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
+              placeholder={teamsHasHelper ? "" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">클레임 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasClaims ? `· 저장됨 ${teamsClaimsTail}` : "· 비우면 변경알림·B2B 채널로 폴백"}</span></span>
+            <span className="b2b-field-label">클레임 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasClaims ? `· 저장됨 ${teamsClaimsTail} · 새 URL로 바꿀 때만 입력` : "· 비우면 변경알림·B2B 채널로 폴백"}</span></span>
             <input className="b2b-input" type="password" value={teamsClaimsUrl} onChange={(e) => setTeamsClaimsUrl(e.target.value)}
-              placeholder={teamsHasClaims ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
+              placeholder={teamsHasClaims ? "" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">고객문의 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasInquiry ? `· 저장됨 ${teamsInquiryTail}` : "· 비우면 클레임 채널로 폴백"}</span></span>
+            <span className="b2b-field-label">고객문의 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasInquiry ? `· 저장됨 ${teamsInquiryTail} · 새 URL로 바꿀 때만 입력` : "· 비우면 클레임 채널로 폴백"}</span></span>
             <input className="b2b-input" type="password" value={teamsInquiryUrl} onChange={(e) => setTeamsInquiryUrl(e.target.value)}
-              placeholder={teamsHasInquiry ? "새 URL로 바꿀 때만 입력" : "https://..."} autoComplete="off" />
+              placeholder={teamsHasInquiry ? "" : "https://..."} autoComplete="off" />
           </label>
           <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <label className="sm-row" style={{ gap: 6, fontSize: 15, cursor: "pointer" }}>
               <input type="checkbox" className="b2b-checkbox" checked={teamsEnabled}
                 onChange={(e) => { setTeamsEnabled(e.target.checked); saveTeams(e.target.checked); }} /> Teams로 발송 켜기
             </label>
-            <button className="b2b-btn-primary" onClick={() => saveTeams()} disabled={teamsBusy}>{teamsBusy ? "처리 중..." : "저장"}</button>
-            <button className="b2b-btn-secondary" onClick={testTeams} disabled={teamsBusy || !teamsHasUrl} title={teamsHasUrl ? "" : "URL을 먼저 저장하세요"}>테스트 발송</button>
+            <button className="b2b-btn-primary" onClick={() => saveTeams()} disabled={teamsBusy}>{teamsBusy ? "처리 중..." : "채널 설정 저장"}</button>
+            <button className="b2b-btn-secondary" onClick={testTeams} disabled={teamsBusy || !teamsHasUrl}>테스트 발송</button>
+            {!teamsHasUrl && !loading && <span className="b2b-btn-why">URL 을 저장하면 켜집니다</span>}
           </div>
           {teamsMsg && (
             <div className={teamsMsg.ok ? "sm-success" : "b2b-error"} style={{ fontSize: 15 }}>{teamsMsg.text}</div>
@@ -313,7 +314,8 @@ export default function TeamsSettingsPage() {
                     if (Number.isNaN(h) || Number.isNaN(m)) return;
                     const t = `${String(h).padStart(2, "0")}:${String(Math.floor(m / 5) * 5).padStart(2, "0")}`;
                     setDtimes((p) => (p.includes(t) ? p : [...p, t].sort().slice(0, 6)));
-                  }}>+ 추가</button>
+                  }}>+ 시각 추가</button>
+                {dtimes.length >= 6 && <span className="b2b-btn-why">최대 6개까지</span>}
               </div>
             </div>
             <label className="sm-row" style={{ gap: 6, fontSize: 15 }}>전후 기간
@@ -331,14 +333,15 @@ export default function TeamsSettingsPage() {
               </div>
             </div>
             <label style={{ fontSize: 15 }}>제목
-              <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="씨몬스터 B2B 오늘의 할 일" />
+              <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="예: 씨몬스터 B2B 오늘의 할 일" />
             </label>
             <div><button className="b2b-btn-primary" onClick={saveDigestCfg} disabled={dcfgSaving}>{dcfgSaving ? "저장 중..." : "설정 저장"}</button></div>
           </div>
         )}
         <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: digest ? 10 : 0 }}>
-          <button className="b2b-btn-secondary" onClick={loadDigest} disabled={digestBusy}>{digestBusy ? "..." : "미리보기"}</button>
-          <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !teamsEnabled} title={teamsEnabled ? "" : "먼저 Teams 알림을 켜세요"}>지금 보내기</button>
+          <button className="b2b-btn-secondary" onClick={loadDigest} disabled={digestBusy}>{digestBusy ? "..." : "알림 미리 보기"}</button>
+          <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !teamsEnabled}>지금 보내기</button>
+          {!teamsEnabled && <span className="b2b-btn-why">Teams 알림을 켜면 켜집니다</span>}
           {digestMsg && <span style={{ fontSize: 12, color: digestMsg.ok ? "var(--sm-success)" : "var(--sm-danger)" }}>{digestMsg.text}</span>}
         </div>
         {digest && <pre style={{ fontSize: 12, background: "var(--sm-bg)", padding: 12, borderRadius: 8, whiteSpace: "pre-wrap", lineHeight: 1.6, margin: 0, fontFamily: "inherit" }}>{digest}</pre>}
@@ -409,7 +412,7 @@ export default function TeamsSettingsPage() {
       <section className="b2b-card" style={{ marginTop: 28 }}>
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">[업무도우미 변경알림]</h2>
-          <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "저장"}</button>
+          <button className="b2b-btn-primary" onClick={saveMn} disabled={mnBusy || !mn}>{mnBusy ? "저장 중..." : "변경알림 설정 저장"}</button>
         </div>
         {mnMsg && <div className={mnMsg.kind === "ok" ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{mnMsg.text}</div>}
         {mn && (

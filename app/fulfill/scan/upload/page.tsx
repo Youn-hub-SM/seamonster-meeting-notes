@@ -136,7 +136,7 @@ export default function ScanUploadPage() {
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">파일 올리기</span>
-          <a href="/api/fulfill/scan/template" className="sm-link" style={{ fontSize: 12 }}>양식 다운로드</a>
+          <a href="/api/fulfill/scan/template" className="sm-link" style={{ fontSize: 12 }}>양식 내려받기</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>택배사 &lsquo;파일접수 상세내역&rsquo; 엑셀(.xlsx)·CSV</p>
         <div className="sm-row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -159,14 +159,14 @@ export default function ScanUploadPage() {
         <div className="b2b-card-head">
           <span className="b2b-card-title">올린 파일</span>
           <div className="sm-row" style={{ gap: 6 }}>
-            <button className="b2b-btn-secondary" style={{ padding: "5px 10px", fontSize: 12 }} onClick={load} disabled={loading}>새로고침</button>
+            <button className="b2b-btn-secondary" style={{ padding: "5px 10px", fontSize: 12 }} onClick={load} disabled={loading}>다시 불러오기</button>
             {uploads.length > 0 && <button className="b2b-btn-secondary" style={{ padding: "5px 10px", fontSize: 12, color: "var(--sm-danger)" }} onClick={clearAll}>전체 비우기</button>}
           </div>
         </div>
         {loading ? (
           <div className="b2b-loading">불러오는 중...</div>
         ) : uploads.length === 0 ? (
-          <div className="b2b-empty">올린 파일이 없습니다.</div>
+          <div className="b2b-empty">올린 파일이 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => fileRef.current?.click()} disabled={uploading}>파일 선택</button></div></div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table is-responsive">

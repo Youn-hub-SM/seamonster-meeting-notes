@@ -332,8 +332,8 @@ export default function InventoryMovePage() {
               <div className="b2b-field">
                 <Combobox value={l.plabel} options={options}
                   onSelect={(o) => { void selectProduct(l.key, o.id, o.label); }}
-                  placeholder="제품 검색 — 이름 또는 SKU" ariaLabel={`품목 ${idx + 1}`} />
-                {isDup && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>같은 품목이 다른 줄에도 있습니다 — 한 줄로 합쳐 주세요.</span>}
+                  placeholder="품목·SKU 검색" ariaLabel={`품목 ${idx + 1}`} />
+                {isDup && <span className="b2b-field-error">같은 품목이 다른 줄에도 있습니다 — 한 줄로 합쳐 주세요</span>}
               </div>
               {l.pid && (
                 <div className="sm-row" style={{ gap: 12, margin: "8px 0 0", fontSize: 15, flexWrap: "wrap", alignItems: "center" }}>
@@ -446,20 +446,20 @@ export default function InventoryMovePage() {
           </div>
           <div className="b2b-field">
             <label className="b2b-field-label">메모</label>
-            <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 도매 주문 대응" />
+            <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="도매 주문 대응" />
           </div>
         </div>
 
         <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
           <span style={{ fontSize: 15 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></>}</span>
-          <button className="b2b-btn-primary" onClick={submit} disabled={busy || activeLines.length === 0}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${activeLines.length}개 품목)` : ""}`}</button>
+          <button className="b2b-btn-primary" onClick={submit} disabled={busy}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${activeLines.length}개 품목)` : ""}`}</button>
         </div>
       </section>
 
       <section className="b2b-card">
         <div className="b2b-card-head"><span className="b2b-card-title">최근 옮긴 내역</span></div>
         {moves.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 20 }}>아직 옮긴 내역이 없습니다.</div>
+          <div className="b2b-empty" style={{ padding: 20 }}>옮긴 내역이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
@@ -483,7 +483,7 @@ export default function InventoryMovePage() {
                     <td className="num b2b-money" style={{ fontWeight: 700 }}>{m.qty.toLocaleString()}</td>
                     <td><span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{m.from} → {m.to}</span>{!m.complete && <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-danger)" }}>불완전</span>}</td>
                     <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{m.created_by || "-"}</td>
-                    <td><button className="b2b-link-btn" onClick={() => cancelMove(m.group_id)} style={{ color: "var(--sm-danger)" }}>취소</button></td>
+                    <td><button className="b2b-link-btn" onClick={() => cancelMove(m.group_id)} style={{ color: "var(--sm-danger)" }}>이동 취소</button></td>
                   </tr>
                 ))}
               </tbody>

@@ -977,7 +977,7 @@ export default function OrdersListPage() {
   async function handleExportShipping() {
     if (selected.size === 0) return;
     if (noScheduleSelected.length > 0) {
-      setError(`뽑을 발송이 없는 발주가 있습니다: ${noScheduleSelected.join(", ")} — 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요.`);
+      setError(`뽑을 발송이 없는 발주가 있습니다: ${noScheduleSelected.join(", ")} — 목록의 발송일 칸에서 ‘+ 발송일 등록’로 먼저 등록하세요.`);
       return;
     }
     setExporting(true);
@@ -998,7 +998,7 @@ export default function OrdersListPage() {
         setExporting(false);
         setError(
           `뽑을 발송이 없는 발주가 있습니다(발송일정 미등록 또는 전 차수 취소): ${missing.map((o) => o.company_name || o.order_no).join(", ")}` +
-            " — 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요."
+            " — 목록의 발송일 칸에서 ‘+ 발송일 등록’로 먼저 등록하세요."
         );
         return;
       }
@@ -1069,7 +1069,7 @@ export default function OrdersListPage() {
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={() => reload()} disabled={loading}>
-            {loading ? "불러오는 중..." : "새로고침"}
+            {loading ? "불러오는 중..." : "다시 불러오기"}
           </button>
           {/* 발주와 무관한 1회성 명세표 — 발주별 명세표는 각 줄의 [명세표] */}
           <Link href="/b2b/orders/statement" className="b2b-btn-secondary">
@@ -1212,7 +1212,8 @@ export default function OrdersListPage() {
           <input
             type="text"
             className="b2b-search"
-            placeholder="발주번호·업체·메모 검색"
+            placeholder="검색"
+            aria-label="발주 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{ maxWidth: 280 }}
@@ -1261,7 +1262,7 @@ export default function OrdersListPage() {
               style={{ padding: "6px 12px", fontSize: 12 }}
               onClick={resetFilters}
             >
-              필터 초기화
+              조건 지우기
             </button>
           )}
           <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--sm-text-light)" }}>
@@ -1273,7 +1274,14 @@ export default function OrdersListPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
-            {orders.length === 0 ? "등록된 발주가 없습니다." : "검색 결과가 없습니다."}
+            {orders.length === 0 ? "등록된 발주가 없습니다." : "조건에 맞는 발주가 없습니다."}
+            <div className="b2b-empty-action">
+              {orders.length === 0 ? (
+                <Link href="/b2b/orders/new" className="b2b-btn-secondary">+ 새 발주</Link>
+              ) : (
+                <button type="button" className="b2b-btn-secondary" onClick={() => { resetFilters(); setTaskPick(null); }}>조건 지우기</button>
+              )}
+            </div>
           </div>
         ) : view === "calendar" ? (
           <CalendarView orders={filtered} todayIso={today} />
@@ -1318,18 +1326,18 @@ export default function OrdersListPage() {
                     disabled={exporting || noScheduleSelected.length > 0}
                     title={
                       noScheduleSelected.length > 0
-                        ? "뽑을 발송이 없는 발주가 선택되어 있습니다 — 목록에서 ‘+ 발송일’로 먼저 등록하세요"
+                        ? "뽑을 발송이 없는 발주가 선택되어 있습니다 — 목록에서 ‘+ 발송일 등록’로 먼저 등록하세요"
                         : undefined
                     }
                   >
-                    {exporting ? "생성 중..." : "발송요청 양식 다운로드"}
+                    {exporting ? "생성 중..." : "발송요청 양식 내려받기"}
                   </button>
                 </div>
                 {noScheduleSelected.length > 0 && (
                   // 양식은 발송 차수 단위로 뽑히고 박스 수도 차수에 저장된다 — 일정 없이는 뽑을 것이 없다.
                   <div style={{ flexBasis: "100%", fontSize: 12, color: "var(--sm-text-mid)" }}>
                     뽑을 발송이 없어 양식을 만들 수 없는 발주: <strong>{noScheduleSelected.join(", ")}</strong>
-                    {" "}— 목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요.
+                    {" "}— 목록의 발송일 칸에서 ‘+ 발송일 등록’로 먼저 등록하세요.
                   </div>
                 )}
               </div>
@@ -1412,7 +1420,7 @@ export default function OrdersListPage() {
                           <button type="button" className="b2b-link-btn" style={{ fontSize: 15 }}
                             title="발송 차수 수정"
                             onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
-                            {(o.shipments ?? []).length}차 · 수정
+                            {(o.shipments ?? []).length}차 · 일정 수정
                           </button>
                           <RemainLink o={o} onOpen={() => openShipPrompt(o.id, o.company_name || o.order_no)} />
                           <UnlinkedNote o={o} />
@@ -1439,7 +1447,7 @@ export default function OrdersListPage() {
                             title="발송일 등록(재고 차감)"
                             onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}
                           >
-                            + 발송일
+                            + 발송일 등록
                           </button>
                           <UnlinkedNote o={o} />
                         </td>
@@ -1624,7 +1632,7 @@ export default function OrdersListPage() {
                           <button type="button" className="b2b-link-btn"
                             style={{ fontSize: "inherit", padding: "4px 2px", margin: "-4px 0" }}
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); openShipPrompt(o.id, o.company_name || o.order_no); }}>
-                            {parent ? `${(o.shipments ?? []).length}차 · 수정` : o.ship_date ? o.ship_date.slice(5) : "+ 발송일"}
+                            {parent ? `${(o.shipments ?? []).length}차 · 일정 수정` : o.ship_date ? o.ship_date.slice(5) : "+ 발송일 등록"}
                             {(o.remaining_total ?? 0) > 0 ? ` · ${formatQty(o.remaining_total)}개 남음` : ""}
                           </button>
                         </span>
@@ -1820,10 +1828,11 @@ export default function OrdersListPage() {
             <div className="b2b-modal-foot">
               <span />
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setShipPrompt(null)} disabled={shipSaving}>취소</button>
+                <button className="b2b-btn-secondary" onClick={() => setShipPrompt(null)} disabled={shipSaving}>그만두기</button>
                 <button className="b2b-btn-primary" onClick={saveShipments} disabled={shipSaving || shipLoading || shipLoadFailed || busyIds.has(shipPrompt.id)}>
-                  {shipSaving ? "저장 중..." : "저장"}
+                  {shipSaving ? "저장 중..." : "발송 일정 저장"}
                 </button>
+                {shipLoadFailed && !shipLoading && <span className="b2b-btn-why">일정을 불러오지 못해 저장할 수 없습니다</span>}
               </div>
             </div>
           </div>
@@ -1895,18 +1904,20 @@ export default function OrdersListPage() {
               {!directDelivery && (
                 <div className="sm-col sm-gap-2">
                   {trackingInput.map((tn, bi) => (
-                    <input
-                      key={bi}
-                      type="text"
-                      className="b2b-input"
-                      value={tn}
-                      onChange={(e) =>
-                        setTrackingInput((prev) => prev.map((v, i) => (i === bi ? e.target.value : v)))
-                      }
-                      placeholder={trackingPrompt.boxCount > 1 ? `박스 ${bi + 1} 송장번호` : "송장번호"}
-                      autoFocus={bi === 0}
-                      onKeyDown={(e) => { if (e.key === "Enter" && trackingComplete) confirmTracking(); }}
-                    />
+                    <label key={bi} className="b2b-field">
+                      <span className="b2b-field-label">{trackingPrompt.boxCount > 1 ? `박스 ${bi + 1} 송장번호` : "송장번호"}</span>
+                      <input
+                        type="text"
+                        className="b2b-input"
+                        value={tn}
+                        onChange={(e) =>
+                          setTrackingInput((prev) => prev.map((v, i) => (i === bi ? e.target.value : v)))
+                        }
+                        placeholder="예: 123456789012"
+                        autoFocus={bi === 0}
+                        onKeyDown={(e) => { if (e.key === "Enter" && trackingComplete) confirmTracking(); }}
+                      />
+                    </label>
                   ))}
                 </div>
               )}
@@ -1914,11 +1925,14 @@ export default function OrdersListPage() {
             <div className="b2b-modal-foot">
               <span />
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setTrackingPrompt(null)}>취소</button>
+                <button className="b2b-btn-secondary" onClick={() => setTrackingPrompt(null)}>그만두기</button>
                 <button className="b2b-btn-primary" onClick={confirmTracking}
                   disabled={!trackingComplete || busyIds.has(trackingPrompt.kind === "order" ? trackingPrompt.id : trackingPrompt.orderId)}>
                   발송완료 처리
                 </button>
+                {!trackingComplete && (
+                  <span className="b2b-btn-why">{!shippedDateOk ? "실제 발송일을 오늘 이전으로 넣으면 켜집니다" : "송장번호를 모두 넣으면 켜집니다"}</span>
+                )}
               </div>
             </div>
           </div>
@@ -2139,7 +2153,7 @@ function ExportPickModal({
                       발송일정 없음 — 뽑을 수 없음
                     </span>
                     <span className="b2b-export-pick-items">
-                      목록의 발송일 칸에서 ‘+ 발송일’로 먼저 등록하세요
+                      목록의 발송일 칸에서 ‘+ 발송일 등록’로 먼저 등록하세요
                     </span>
                   </span>
                 </div>
@@ -2204,7 +2218,7 @@ function ExportPickModal({
           </span>
           <div className="b2b-modal-foot-right">
             <button type="button" className="b2b-btn-secondary" onClick={onClose}>
-              취소
+              그만두기
             </button>
             <button
               type="button"
@@ -2220,8 +2234,9 @@ function ExportPickModal({
                 })
               }
             >
-              {exporting ? "생성 중..." : "선택 발송 양식 다운로드"}
+              {exporting ? "생성 중..." : "선택 발송 양식 내려받기"}
             </button>
+            {!exporting && totalSelected === 0 && <span className="b2b-btn-why">발송을 고르면 켜집니다</span>}
           </div>
         </div>
       </div>

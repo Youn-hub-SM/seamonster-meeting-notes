@@ -67,6 +67,7 @@ export default function DeliveryLogPage() {
   const [eMode, setEMode] = useState<"add" | "sub">("add");
   const [eQty, setEQty] = useState("1");
   const [eNote, setENote] = useState("");
+  const [eErr, setEErr] = useState<{ qty?: string; note?: string }>({}); // 보정 추가 모달 칸별 오류(E5)
   const [eBusy, setEBusy] = useState(false);
   const [history, setHistory] = useState<RateVersion[]>([{ ...DEFAULT_RATES, effectiveFrom: DEFAULT_EFFECTIVE }]);
   useEffect(() => { fetch("/api/fulfill/rates", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok && j.history?.length) setHistory(j.history); }).catch(() => {}); }, []);
@@ -136,12 +137,16 @@ export default function DeliveryLogPage() {
 
   // 직접수정 내역 추가 모달 열기
   function openEntry(date: string) {
-    setEntryFor(date); setESide("n"); setECat(CATS_EDIT[0] || DEFAULT_BOX_CATS[0].name); setEMode("add"); setEQty("1"); setENote("");
+    setEntryFor(date); setESide("n"); setECat(CATS_EDIT[0] || DEFAULT_BOX_CATS[0].name); setEMode("add"); setEQty("1"); setENote(""); setEErr({});
   }
   async function addEntry() {
     if (!entryFor) return;
     const qty = Math.abs(Math.round(Number(eQty) || 0)) * (eMode === "sub" ? -1 : 1);
-    if (qty === 0 || !eNote.trim()) return;
+    const errs: { qty?: string; note?: string } = {};
+    if (qty === 0) errs.qty = "수량을 입력하세요";
+    if (!eNote.trim()) errs.note = "내용을 입력하세요";
+    setEErr(errs);
+    if (errs.qty || errs.note) return;
     setEBusy(true);
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: entryFor, add_entry: { side: eSide, category: eCat, qty, note: eNote.trim() } }) });
@@ -279,9 +284,9 @@ export default function DeliveryLogPage() {
           <div className="dlog-desk sm-row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <input type="date" className="b2b-input" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ width: "auto" }} title="추가할 날짜" />
             <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
-            <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계</Link>
-            <Link className="b2b-btn-secondary" href="/fulfill/settings">설정</Link>
-            <a className="b2b-btn-secondary" href={exportHref()} style={rows.length ? undefined : { pointerEvents: "none", opacity: 0.5 }} title="현재 기간을 엑셀로 추출">엑셀 추출</a>
+            <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계 보기</Link>
+            <Link className="b2b-btn-secondary" href="/fulfill/settings">설정 열기</Link>
+            <a className="b2b-btn-secondary" href={exportHref()} style={rows.length ? undefined : { pointerEvents: "none", opacity: 0.5 }} title="현재 기간을 엑셀로 내려받기">엑셀 내려받기</a>
           </div>
           {/* 새로고침 — 모바일에서도 유일하게 남는 버튼(아이콘형) */}
           <button className="b2b-btn-secondary dlog-refresh" onClick={load} disabled={loading} aria-label="새로고침" title="새로고침"
@@ -317,7 +322,7 @@ export default function DeliveryLogPage() {
 
       <div className="b2b-card">
         {loading ? <div className="b2b-loading">불러오는 중...</div> : rows.length === 0 ? (
-          <div className="b2b-empty">기록이 없습니다.</div>
+          <div className="b2b-empty">이 기간에 배송 기록이 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={addDay}>날짜 추가</button></div></div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ fontSize: 12 }}>
@@ -397,7 +402,7 @@ export default function DeliveryLogPage() {
                                 <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
                                   <span style={{ fontWeight: 700, fontSize: 12 }}>직접수정</span>
                                   {r.manual_updated_at && <span className="sm-faint" style={{ fontSize: 12 }}>수정일 {kstStamp(r.manual_updated_at)}</span>}
-                                  <button className="b2b-btn-secondary" style={{ padding: "3px 12px", fontSize: 12 }} onClick={() => openEntry(r.log_date)}>+ 추가</button>
+                                  <button className="b2b-btn-secondary" style={{ padding: "3px 12px", fontSize: 12 }} onClick={() => openEntry(r.log_date)}>+ 보정 추가</button>
                                 </div>
                                 <div className="b2b-table-wrap">
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12 }}>
@@ -532,19 +537,21 @@ export default function DeliveryLogPage() {
                       <button className={`sm-tab ${eMode === "add" ? "is-active" : ""}`} onClick={() => setEMode("add")}>추가 +</button>
                       <button className={`sm-tab ${eMode === "sub" ? "is-active" : ""}`} onClick={() => setEMode("sub")}>빼기 −</button>
                     </div>
-                    <input type="number" className="b2b-input" min={1} value={eQty} onChange={(e) => setEQty(e.target.value)} style={{ width: 70, textAlign: "right" }} />
+                    <input type="number" className="b2b-input" min={1} value={eQty} onChange={(e) => { setEQty(e.target.value); if (eErr.qty) setEErr((x) => ({ ...x, qty: undefined })); }} aria-invalid={eErr.qty ? "true" : undefined} style={{ width: 70, textAlign: "right" }} />
                   </div>
+                  {eErr.qty && <span className="b2b-field-error">{eErr.qty}</span>}
                 </label>
               </div>
               <label className="sm-col" style={{ gap: 3, fontSize: 15 }}>
                 <span style={{ fontWeight: 600 }}>내용</span>
-                <input className="b2b-input" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="예: CS 재발송 1건 / 발주 누락 보정" autoFocus
-                  onKeyDown={(e) => { if (e.key === "Enter") addEntry(); }} />
+                <input className="b2b-input" value={eNote} onChange={(e) => { setENote(e.target.value); if (eErr.note) setEErr((x) => ({ ...x, note: undefined })); }} placeholder="CS 재발송 1건" autoFocus
+                  aria-invalid={eErr.note ? "true" : undefined} onKeyDown={(e) => { if (e.key === "Enter") addEntry(); }} />
+                {eErr.note && <span className="b2b-field-error">{eErr.note}</span>}
               </label>
             </div>
             <div className="b2b-modal-foot">
-              <button className="b2b-btn-secondary" onClick={() => setEntryFor(null)} disabled={eBusy}>취소</button>
-              <button className="b2b-btn-primary" onClick={addEntry} disabled={eBusy || !eNote.trim() || Math.round(Number(eQty) || 0) === 0}>{eBusy ? "저장 중..." : "저장"}</button>
+              <button className="b2b-btn-secondary" onClick={() => setEntryFor(null)} disabled={eBusy}>그만두기</button>
+              <button className="b2b-btn-primary" onClick={addEntry} disabled={eBusy}>{eBusy ? "저장 중..." : "보정 저장"}</button>
             </div>
           </div>
         </div>

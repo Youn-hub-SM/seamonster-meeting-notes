@@ -21,6 +21,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
   const [draft, setDraft] = useState<Partial<Promotion> | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErr, setFieldErr] = useState<{ name?: string; start?: string; end?: string }>({}); // 칸별 검증 오류
   const confirmModal = useConfirm();
 
   const load = useCallback(async () => {
@@ -42,8 +43,12 @@ export default function PromoManager({ products, onClose, onChanged }: { product
 
   async function save() {
     if (!draft) return;
-    if (!draft.name?.trim()) { setError("프로모션 이름을 입력하세요."); return; }
-    if (!draft.start || !draft.end) { setError("시작일·종료일을 입력하세요."); return; }
+    const fe: { name?: string; start?: string; end?: string } = {};
+    if (!draft.name?.trim()) fe.name = "프로모션 이름을 입력하세요";
+    if (!draft.start) fe.start = "시작일을 입력하세요";
+    if (!draft.end) fe.end = "종료일을 입력하세요";
+    setFieldErr(fe);
+    if (fe.name || fe.start || fe.end) return;
     setSaving(true); setError("");
     try {
       const j = await (await fetch("/api/production/promotions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) })).json();
@@ -89,21 +94,29 @@ export default function PromoManager({ products, onClose, onChanged }: { product
 
           {draft && (
             <>
-              <div className="b2b-field"><label className="b2b-field-label">이름</label>
-                <input className="b2b-input" value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="예: 6월 라방 특가" /></div>
+              {(() => {
+                const msgs = [fieldErr.name, fieldErr.start, fieldErr.end].filter(Boolean) as string[];
+                if (!msgs.length && !error) return null;
+                return <div className="b2b-error" style={{ marginBottom: 8 }}>{msgs.length > 1 ? <ul>{msgs.map((m) => <li key={m}>{m}</li>)}</ul> : (msgs[0] || error)}</div>;
+              })()}
+              <div className="b2b-field"><label className="b2b-field-label">이름<span className="req">*</span></label>
+                <input className="b2b-input" value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="예: 6월 라방 특가" aria-invalid={fieldErr.name ? "true" : undefined} />
+                {fieldErr.name && <span className="b2b-field-error">{fieldErr.name}</span>}</div>
               <div className="b2b-field-row">
-                <div className="b2b-field"><label className="b2b-field-label">시작일</label>
-                  <input type="date" className="b2b-input" value={draft.start || ""} onChange={(e) => setDraft({ ...draft, start: e.target.value })} /></div>
-                <div className="b2b-field"><label className="b2b-field-label">종료일</label>
-                  <input type="date" className="b2b-input" value={draft.end || ""} onChange={(e) => setDraft({ ...draft, end: e.target.value })} /></div>
+                <div className="b2b-field"><label className="b2b-field-label">시작일<span className="req">*</span></label>
+                  <input type="date" className="b2b-input" value={draft.start || ""} onChange={(e) => setDraft({ ...draft, start: e.target.value })} aria-invalid={fieldErr.start ? "true" : undefined} />
+                  {fieldErr.start && <span className="b2b-field-error">{fieldErr.start}</span>}</div>
+                <div className="b2b-field"><label className="b2b-field-label">종료일<span className="req">*</span></label>
+                  <input type="date" className="b2b-input" value={draft.end || ""} onChange={(e) => setDraft({ ...draft, end: e.target.value })} aria-invalid={fieldErr.end ? "true" : undefined} />
+                  {fieldErr.end && <span className="b2b-field-error">{fieldErr.end}</span>}</div>
               </div>
               <div className="b2b-field"><label className="b2b-field-label">상품별 예상 판매량</label>
                 {(draft.items || []).map((it, i) => (
                   <div key={i} className="promo-item-row">
                     <div className="promo-item-combo">
-                      <Combobox value={it.name} options={productOptions} onSelect={(o) => setItems((items) => items.map((x, xi) => (xi === i ? { ...x, sku: o.id, name: o.label } : x)))} placeholder="상품 검색" ariaLabel="상품" />
+                      <Combobox value={it.name} options={productOptions} onSelect={(o) => setItems((items) => items.map((x, xi) => (xi === i ? { ...x, sku: o.id, name: o.label } : x)))} placeholder="품목·SKU 검색" ariaLabel="상품" />
                     </div>
-                    <input type="number" className="b2b-input promo-item-qty" value={it.qty} onChange={(e) => setItems((items) => items.map((x, xi) => (xi === i ? { ...x, qty: e.target.value } : x)))} placeholder="수량" />
+                    <input type="number" className="b2b-input promo-item-qty" value={it.qty} onChange={(e) => setItems((items) => items.map((x, xi) => (xi === i ? { ...x, qty: e.target.value } : x)))} aria-label="수량" />
                     <button type="button" className="promo-item-del" onClick={() => setItems((items) => items.filter((_, xi) => xi !== i))} title="삭제">✕</button>
                   </div>
                 ))}
@@ -113,8 +126,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
                 </div>
               </div>
               <div className="b2b-field"><label className="b2b-field-label">메모 (선택)</label>
-                <input className="b2b-input" value={draft.note || ""} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder="대상 채널 등" /></div>
-              {error && <div className="b2b-error" style={{ marginTop: 6 }}>{error}</div>}
+                <input className="b2b-input" value={draft.note || ""} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder="예: 라이브 방송" /></div>
             </>
           )}
         </div>
@@ -122,8 +134,8 @@ export default function PromoManager({ products, onClose, onChanged }: { product
           <div className="b2b-modal-foot">
             <div>{draft.id && <button className="b2b-btn-secondary" onClick={() => remove(draft.id!)} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button>}</div>
             <div className="b2b-modal-foot-right">
-              <button className="b2b-btn-secondary" onClick={() => setDraft(null)} disabled={saving}>뒤로</button>
-              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+              <button className="b2b-btn-secondary" onClick={() => { setFieldErr({}); setError(""); setDraft(null); }} disabled={saving}>목록으로 돌아가기</button>
+              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "프로모션 저장"}</button>
             </div>
           </div>
         )}

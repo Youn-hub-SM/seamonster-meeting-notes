@@ -111,9 +111,9 @@ export default function ProductHistoryPage() {
           <h1 className="b2b-page-title">상품 변경 기록</h1>
         </div>
         <div className="b2b-page-actions">
-          <Link className="b2b-btn-secondary" href="/b2b/products">← 상품 목록</Link>
+          <Link className="b2b-btn-secondary" href="/b2b/products">← 상품 목록으로 돌아가기</Link>
           <button className="b2b-btn-secondary" onClick={() => setTick((t) => t + 1)} disabled={loading}>
-            {loading ? "..." : "새로고침"}
+            {loading ? "..." : "다시 불러오기"}
           </button>
         </div>
       </header>
@@ -122,7 +122,7 @@ export default function ProductHistoryPage() {
 
       <div className="b2b-card">
         <div className="b2b-card-head" style={{ gap: 10, flexWrap: "wrap", justifyContent: "flex-start" }}>
-          <input type="text" className="b2b-search" placeholder="품목명·SKU 검색"
+          <input type="text" className="b2b-search" placeholder="품목·SKU 검색" aria-label="품목 검색"
             value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 240 }} />
           <select className="b2b-select" value={type} onChange={(e) => setType(e.target.value)} style={{ width: "auto" }}>
             {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -135,7 +135,7 @@ export default function ProductHistoryPage() {
           <input type="date" className="b2b-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: "auto" }} title="종료일" />
           {hasFilter && (
             <button type="button" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={reset}>
-              필터 초기화
+              조건 지우기
             </button>
           )}
         </div>
@@ -144,7 +144,12 @@ export default function ProductHistoryPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : items.length === 0 ? (
           <div className="b2b-empty">
-            {hasFilter ? "조건에 맞는 변경 기록이 없습니다." : "아직 기록된 변경이 없습니다."}
+            {hasFilter ? "조건에 맞는 변경 기록이 없습니다." : "기록된 변경이 없습니다."}
+            {hasFilter && (
+              <div className="b2b-empty-action">
+                <button type="button" className="b2b-btn-secondary" onClick={reset}>조건 지우기</button>
+              </div>
+            )}
           </div>
         ) : (
           <>

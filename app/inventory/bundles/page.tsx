@@ -73,8 +73,8 @@ export default function BundlesPage() {
           <h1 className="b2b-page-title">묶음 상품</h1>
         </div>
         <div className="b2b-page-actions">
-          <button className="b2b-btn-primary" onClick={() => setAddOpen(true)}>+ 직접 추가</button>
-          <a className="b2b-btn-secondary" href="/api/inventory/bundles/template" title="묶음SKU·묶음명·구성품SKU·수량">엑셀 양식</a>
+          <button className="b2b-btn-primary" onClick={() => setAddOpen(true)}>+ 묶음 직접 추가</button>
+          <a className="b2b-btn-secondary" href="/api/inventory/bundles/template" title="묶음SKU·묶음명·구성품SKU·수량">양식 내려받기</a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
             {importing ? "분석 중..." : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
@@ -86,7 +86,7 @@ export default function BundlesPage() {
       {error && <div className="b2b-error">{error}{(error.includes("product_bundles") || error.includes("relation")) ? " — supabase/migrations/037_product_bundles.sql 를 먼저 적용하세요." : ""}</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : bundles.length === 0 ? (
-        <div className="b2b-empty">등록된 묶음이 없습니다.</div>
+        <div className="b2b-empty">등록된 묶음이 없습니다.<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => setAddOpen(true)}>+ 묶음 직접 추가</button></div></div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table is-responsive">
@@ -142,7 +142,8 @@ export default function BundlesPage() {
               </div>
             </div>
             <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
-              <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
+              <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
+              {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
               <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}개 반영`}</button>
             </div></div>
           </div>
@@ -168,6 +169,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
   const [salePrice, setSalePrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErr, setFieldErr] = useState<{ sku?: string; comps?: string }>({});
 
   const options: ComboOption[] = useMemo(
     () => products.map((p) => ({ id: p.sku || "", label: p.spec ? `${p.name} | ${p.spec}` : p.name, sub: p.sku || "" })).filter((o) => o.id),
@@ -187,9 +189,13 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
   useEffect(() => { if (!weightTouched) setCourierWeight(weightSum > 0 ? String(weightSum) : ""); }, [weightSum, weightTouched]);
 
   async function save() {
-    if (!parentSku.trim()) { setError("묶음 SKU(코드)를 입력하세요."); return; }
+    // 제출 때 빈 칸 — 창 맨 위 요약 + 칸 아래 한 줄(E5)
     const comps = rows.filter((r) => r.sku && Number(r.qty) > 0).map((r) => ({ sku: r.sku, qty: Number(r.qty) }));
-    if (!comps.length) { setError("구성품을 1개 이상 추가하세요."); return; }
+    const errs: { sku?: string; comps?: string } = {};
+    if (!parentSku.trim()) errs.sku = "묶음 SKU(코드)를 입력하세요";
+    if (!comps.length) errs.comps = "구성품을 1개 이상 추가하세요";
+    setFieldErr(errs);
+    if (errs.sku || errs.comps) { setError(errs.sku && errs.comps ? "" : (errs.sku || errs.comps || "")); return; }
     setSaving(true); setError("");
     try {
       const res = await fetch("/api/inventory/bundles/import/apply", {
@@ -212,26 +218,31 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">묶음 직접 추가</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
+          {fieldErr.sku && fieldErr.comps
+            ? <div className="b2b-error" style={{ marginBottom: 8 }}><ul><li>{fieldErr.sku}</li><li>{fieldErr.comps}</li></ul></div>
+            : error ? <div className="b2b-error" style={{ marginBottom: 8 }}>{error}</div> : null}
           {/* ── 판매담당 입력 구역 — 묶음 정보·구성품·가격 ── */}
           <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">묶음 SKU(코드)</label>
-              <input className="b2b-input" value={parentSku} onChange={(e) => setParentSku(e.target.value)} placeholder="예: SET-DG-100" /></div>
+              <input className="b2b-input" value={parentSku} onChange={(e) => { setParentSku(e.target.value); if (fieldErr.sku) setFieldErr((x) => ({ ...x, sku: undefined })); }} placeholder="SET-DG-100" aria-invalid={fieldErr.sku ? "true" : undefined} />
+              {fieldErr.sku && <span className="b2b-field-error">{fieldErr.sku}</span>}</div>
             <div className="b2b-field"><label className="b2b-field-label">품목명(묶음명)</label>
-              <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 대구 실속세트" /></div>
+              <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="대구 실속세트" /></div>
           </div>
           <p className="sm-faint" style={{ fontSize: 12, margin: "-2px 0 8px" }}>SKU가 상품 마스터에 없으면 자동 생성됩니다</p>
           <div className="b2b-field-label" style={{ fontWeight: 700 }}>구성품</div>
           {rows.map((r, i) => (
             <div key={i} className="promo-item-row">
               <div className="promo-item-combo">
-                <Combobox value={r.label} options={options} onSelect={(o) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, sku: o.id, label: o.label } : x)))} placeholder="상품 검색(이름·SKU)" ariaLabel="구성품" />
+                <Combobox invalid={!!fieldErr.comps && !r.sku} value={r.label} options={options} onSelect={(o) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, sku: o.id, label: o.label } : x)))} placeholder="품목·SKU 검색" ariaLabel="구성품" />
               </div>
               <input type="number" min={1} className="b2b-input promo-item-qty" value={r.qty} onChange={(e) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, qty: e.target.value } : x)))} placeholder="수량" />
               <button type="button" className="promo-item-del" onClick={() => setRows((rs) => rs.filter((_, xi) => xi !== i))} title="삭제">✕</button>
             </div>
           ))}
+          {fieldErr.comps && <div className="b2b-field-error">{fieldErr.comps}</div>}
           <button type="button" className="promo-item-add" style={{ marginTop: 8 }} onClick={() => setRows((rs) => [...rs, { sku: "", label: "", qty: 1 }])}>+ 구성품 추가</button>
           <div className="b2b-field-row" style={{ marginTop: 10 }}>
             <div className="b2b-field"><label className="b2b-field-label">소비자가(원, 선택)</label>
@@ -246,7 +257,7 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
             <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력</div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">택배 상품명</label>
-              <input className="b2b-input" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="예: 진공 씨몬스터 참돔순살 100g×3" /></div>
+              <input className="b2b-input" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="진공 씨몬스터 참돔순살 100g×3" /></div>
             <div className="b2b-field"><label className="b2b-field-label">주문당 총중량(kg)</label>
               <input className="b2b-input" type="number" min={0} step={0.1} value={courierWeight}
                 onChange={(e) => { setWeightTouched(true); setCourierWeight(e.target.value); }}
@@ -254,11 +265,10 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
               {weightSum > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>구성품 합 {weightSum}kg {weightTouched ? "" : "자동 반영 중"}</span>}</div>
           </div>
           </div>
-          {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
         </div>
         <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
-          <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
-          <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+          <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>그만두기</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "묶음 저장"}</button>
         </div></div>
       </div>
     </div>

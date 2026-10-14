@@ -5,11 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AppSidebar from "./AppSidebar";
 import { FeedbackProvider } from "./components/Feedback";
+import GlobalSearch from "./components/GlobalSearch";
 import { pageTitleOf } from "./nav";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
   const [open, setOpen] = useState(false);          // 모바일 드로어 열림
+  const [searchOpen, setSearchOpen] = useState(false); // 전역 검색(Ctrl+K) 열림 — 로그인·역할 확인은 GlobalSearch 가 한다
   const [collapsed, setCollapsed] = useState(false); // 데스크톱 접기(아이콘만)
   const [desktop, setDesktop] = useState(true);      // 접기는 데스크톱에서만 적용
 
@@ -52,8 +54,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <FeedbackProvider>
     <div className={`app-shell ${isCollapsed ? "is-collapsed" : ""}`}>
-      <AppSidebar open={open} collapsed={isCollapsed} onToggleCollapse={toggleCollapse} onNavigate={() => setOpen(false)} />
+      <AppSidebar open={open} collapsed={isCollapsed} onToggleCollapse={toggleCollapse} onNavigate={() => setOpen(false)} onOpenSearch={() => { setOpen(false); setSearchOpen(true); }} />
       {open && <div className="app-sb-backdrop" onClick={() => setOpen(false)} />}
+      {/* 전역 검색(2026-10-14 C5) — 로그인 화면·파도소리 셸은 위 분기에서 이미 빠졌고, 비로그인·파도소리 계정은 컴포넌트 안에서 스스로 꺼진다 */}
+      <GlobalSearch open={searchOpen} onOpen={() => setSearchOpen(true)} onClose={() => setSearchOpen(false)} />
       <div className="app-main">
         <div className="app-topbar">
           <button type="button" className="app-sb-toggle" onClick={() => setOpen(true)} aria-label="메뉴" aria-expanded={open}>☰</button>

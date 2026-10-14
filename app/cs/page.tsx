@@ -13,6 +13,7 @@ export default function CsPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (query.trim().length < 5) { setError("상황을 5자 이상 입력하세요"); return; }
     setLoading(true);
     setError("");
     setResult(null);
@@ -119,7 +120,7 @@ export default function CsPage() {
               ④ 추천 답변 초안
             </h2>
             <button className="btn-secondary cs-copy-sm" onClick={handleCopy}>
-              {copied ? "복사됨" : "복사"}
+              {copied ? "복사됨" : "초안 복사"}
             </button>
           </div>
           <div className={`cs-reply ${result.manualMissing ? "cs-reply--missing" : ""}`}>
@@ -162,20 +163,23 @@ export default function CsPage() {
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label className="form-label" htmlFor="query">상황 / 고객 문의</label>
+          <div className="b2b-field-hint">고객 문의를 붙여넣거나 지금 상황을 직접 설명 · 5자 이상</div>
           <textarea
             id="query"
             className="form-textarea"
             style={{ minHeight: 180 }}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`고객 문의를 붙여넣거나, 지금 상황을 직접 설명하세요.\n\n예시\n· 고객이 2번째로 녹았다고 연락왔어. 어떻게 해야 해?\n· 주문한 대구순살에서 가시가 나왔다고 해요.`}
+            placeholder={`예: 고객이 2번째로 녹았다고 연락왔어. 어떻게 해야 해?\n예: 주문한 대구순살에서 가시가 나왔다고 해요.`}
+            aria-invalid={error === "상황을 5자 이상 입력하세요" ? "true" : undefined}
             required
           />
+          {error === "상황을 5자 이상 입력하세요" && <div className="b2b-field-error">{error}</div>}
         </div>
 
         {error && <div className="b2b-error">{error}</div>}
 
-        <button type="submit" className="btn-primary" disabled={query.trim().length < 5}>
+        <button type="submit" className="btn-primary" disabled={loading}>
           조언 받기
         </button>
       </form>

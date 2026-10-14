@@ -176,7 +176,8 @@ export default function VocStatsPage() {
           <p className="print-only" style={{ fontSize: 15, color: "var(--sm-text-mid)", marginTop: 4 }}>씨몬스터 · 작성일 {TODAY()} · 대상 {period.label}</p>
         </div>
         <div className="b2b-page-actions no-print">
-          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || rows.length === 0}>보고서 인쇄 / PDF</button>
+          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || rows.length === 0}>보고서 인쇄 / PDF 저장</button>
+          {!loading && rows.length === 0 && <span className="b2b-btn-why">집계할 VOC가 없습니다</span>}
         </div>
       </header>
 
@@ -201,7 +202,7 @@ export default function VocStatsPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty">아직 집계할 VOC가 없습니다.</div>
+        <div className="b2b-empty">집계할 VOC가 없습니다.</div>
       ) : (
         <>
           <section className="b2b-card sm-stat-hero" style={{ marginBottom: 16 }}>

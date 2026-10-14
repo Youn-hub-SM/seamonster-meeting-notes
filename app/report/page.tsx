@@ -74,6 +74,8 @@ export default function ReportPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [qErr, setQErr] = useState(""); // 질문 칸 검증 오류
+  const [saveErr, setSaveErr] = useState<{ name?: string; sql?: string }>({}); // 저장 다이얼로그 칸별 오류
   const confirmModal = useConfirm();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -106,7 +108,9 @@ export default function ReportPage() {
 
   async function ask(question: string, fresh = false) {
     const qq = question.trim();
-    if (!qq || loading) return;
+    if (loading) return;
+    if (!qq) { setQErr("질문을 입력하세요"); return; }
+    setQErr("");
     const hist = fresh ? [] : turns;
     setLoading(true); setErr(""); setVarForm(null); setPlan(null); setRows([]); setCols([]); setShowSql(false); setCorrected(0);
     try {
@@ -142,7 +146,11 @@ export default function ReportPage() {
     await fetch(`/api/report/saved?id=${id}`, { method: "DELETE" }); loadSaved();
   }
   async function doSave() {
-    if (!saveName.trim()) return;
+    const fe: { name?: string; sql?: string } = {};
+    if (!saveName.trim()) fe.name = "이름을 입력하세요";
+    if (!saveSql.trim()) fe.sql = "SQL 을 입력하세요";
+    setSaveErr(fe);
+    if (fe.name || fe.sql) return;
     const r = await fetch("/api/report/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: plan?.understood || "", sql: saveSql, chart: plan?.chart, looker: plan?.looker }) });
     const j = await r.json();
     if (!j.ok) { setErr(j.error || "저장 실패"); return; }
@@ -213,11 +221,14 @@ export default function ReportPage() {
       <QuestionComposer disabled={loading} onCompose={setQ} />
 
       <div className="rp-ask">
-        <textarea className="b2b-input rp-input" rows={2} value={q}
-          placeholder={turns.length ? "이어서: 도매만 빼줘 / 월별로 바꿔줘 / 상위 20개로" : "질문을 한국어로 적어주세요. 예: 이번 달 채널별 매출 상위 10개"}
-          onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(q); }} />
+        {qErr && <div className="b2b-error">{qErr}</div>}
+        <textarea className="b2b-input rp-input" rows={2} value={q} aria-label="질문"
+          placeholder={turns.length ? "예: 도매만 빼줘 / 월별로 바꿔줘 / 상위 20개로" : "예: 이번 달 채널별 매출 상위 10개"}
+          aria-invalid={qErr ? "true" : undefined}
+          onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(q); }} />
+        {qErr && <div className="b2b-field-error">{qErr}</div>}
         <div className="rp-ask-actions">
-          <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading || !q.trim()}>
+          <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading}>
             {loading ? "분석 중..." : turns.length ? "이어서 질문" : "조회"}
             <span className="rp-kbd">Ctrl+Enter</span>
           </button>
@@ -235,11 +246,11 @@ export default function ReportPage() {
             {Object.keys(varForm.values).map((v) => (
               <label key={v} className="sm-col" style={{ gap: 3, fontSize: 15 }}>
                 <span style={{ fontWeight: 600, color: "var(--sm-dark)" }}>{v}</span>
-                <input className="b2b-input" style={{ width: 150 }} value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} placeholder={`${v} 값`} />
+                <input className="b2b-input" style={{ width: 150 }} value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} aria-label={`${v} 값`} />
               </label>
             ))}
-            <button className="b2b-btn-primary" disabled={loading} onClick={() => runSql(varForm.rep, fillVars(varForm.rep.sql, varForm.values))}>실행</button>
-            <button className="b2b-btn-secondary" onClick={() => setVarForm(null)}>취소</button>
+            <button className="b2b-btn-primary" disabled={loading} onClick={() => runSql(varForm.rep, fillVars(varForm.rep.sql, varForm.values))}>리포트 실행</button>
+            <button className="b2b-btn-secondary" onClick={() => setVarForm(null)}>닫기</button>
           </div>
         </section>
       )}
@@ -262,13 +273,13 @@ export default function ReportPage() {
           {!err && (
             <section className="b2b-card">
               <div className="b2b-card-head">
-                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>{rows.length}행{rows.length >= 5000 ? " (화면은 5,000행까지 — 전체는 '엑셀'로 내려받으세요)" : ""}</span></span>
+                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 15 }}>{rows.length}행{rows.length >= 5000 ? " (화면은 5,000행까지 — 전체는 [엑셀 내려받기]로)" : ""}</span></span>
                 <div className="sm-row" style={{ gap: 6 }}>
-                  <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => { setSaveName(plan.understood?.slice(0, 40) || ""); setSaveSql(plan.sql); setSaveOpen(true); }}>저장</button>
-                  <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={exportXlsx} disabled={!rows.length}>엑셀</button>
+                  <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => { setSaveErr({}); setSaveName(plan.understood?.slice(0, 40) || ""); setSaveSql(plan.sql); setSaveOpen(true); }}>리포트 저장</button>
+                  <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={exportXlsx} disabled={!rows.length}>엑셀 내려받기</button>
                 </div>
               </div>
-              {rows.length === 0 ? <div className="b2b-empty">결과가 없습니다.</div> : (
+              {rows.length === 0 ? <div className="b2b-empty">조회 결과가 없습니다.</div> : (
                 <div className="b2b-table-wrap" style={{ maxHeight: 480, overflow: "auto" }}>
                   <table className="b2b-table">
                     <thead><tr>{cols.map((c) => <th key={c} className={typeof rows[0][c] === "number" ? "num" : ""}>{c}</th>)}</tr></thead>
@@ -314,17 +325,24 @@ export default function ReportPage() {
         <div className="rp-modal-bg" onClick={() => setSaveOpen(false)}>
           <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-card-head"><span className="b2b-card-title">리포트 저장</span></div>
+            {(saveErr.name || saveErr.sql) && (
+              <div className="b2b-error" style={{ marginBottom: 10 }}>
+                {saveErr.name && saveErr.sql ? <ul><li>{saveErr.name}</li><li>{saveErr.sql}</li></ul> : (saveErr.name || saveErr.sql)}
+              </div>
+            )}
             <label className="sm-col" style={{ gap: 4, marginBottom: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>이름</span>
-              <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 월별 채널 매출" />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>이름<span className="req">*</span></span>
+              <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 월별 채널 매출" aria-invalid={saveErr.name ? "true" : undefined} />
+              {saveErr.name && <span className="b2b-field-error">{saveErr.name}</span>}
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>SQL <span className="sm-faint" style={{ fontWeight: 400 }}>— <code>{"{{이름}}"}</code> = 실행 때 입력받는 값</span></span>
-              <textarea className="b2b-input" style={{ minHeight: 120, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 15 }} value={saveSql} onChange={(e) => setSaveSql(e.target.value)} />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>SQL<span className="req">*</span> <span className="sm-faint" style={{ fontWeight: 400 }}>— <code>{"{{이름}}"}</code> = 실행 때 입력받는 값</span></span>
+              <textarea className="b2b-input" style={{ minHeight: 120, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 15 }} value={saveSql} onChange={(e) => setSaveSql(e.target.value)} aria-invalid={saveErr.sql ? "true" : undefined} />
+              {saveErr.sql && <span className="b2b-field-error">{saveErr.sql}</span>}
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>취소</button>
-              <button className="b2b-btn-primary" onClick={doSave} disabled={!saveName.trim() || !saveSql.trim()}>저장</button>
+              <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>그만두기</button>
+              <button className="b2b-btn-primary" onClick={doSave}>리포트 저장</button>
             </div>
           </div>
         </div>

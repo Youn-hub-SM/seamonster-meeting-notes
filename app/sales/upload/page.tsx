@@ -186,8 +186,9 @@ export default function SalesUploadPage() {
       <section className="b2b-card">
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.tsv" onChange={(e) => pick(e.target.files?.[0] || null)} />
-          <button className="b2b-btn-primary" onClick={() => doPreview()} disabled={!file || busy !== ""}>{busy === "preview" ? "분석 중..." : "미리보기"}</button>
-          <a className="b2b-btn-secondary" href="/api/sales/upload/template" title="빈 양식(xlsx) 다운로드">양식 다운로드</a>
+          <button className="b2b-btn-primary" onClick={() => doPreview()} disabled={!file || busy !== ""}>{busy === "preview" ? "분석 중..." : "미리보기 만들기"}</button>
+          {!file && busy === "" && <span className="b2b-btn-why">파일을 올리면 켜집니다</span>}
+          <a className="b2b-btn-secondary" href="/api/sales/upload/template" title="빈 양식(xlsx) 내려받기">양식 내려받기</a>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장 · 한글·영문 헤더 모두 인식</p>
       </section>
@@ -391,11 +392,17 @@ export default function SalesUploadPage() {
               <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {preview.sample.length}건</p>
             </div>
           )}
-          <div className="sm-between" style={{ marginTop: 14 }}>
-            <button className="b2b-btn-secondary" onClick={() => setPreview(null)}>취소</button>
-            <button className="b2b-btn-primary" onClick={doApply} disabled={busy !== "" || nothingToDo || blockedByInvalid || replaceNotReady || previewStale}>
-              {busy === "apply" ? "적용 중..." : nothingToDo ? "적재할 신규 행 없음" : toDelete > 0 ? `${s.new_rows.toLocaleString()}건 적용 · ${toDelete.toLocaleString()}행 삭제` : `${s.new_rows.toLocaleString()}건 적용`}
-            </button>
+          <div className="sm-between" style={{ marginTop: 14, flexWrap: "wrap", gap: 8 }}>
+            <button className="b2b-btn-secondary" onClick={() => setPreview(null)}>그만두기</button>
+            <span className="sm-row">
+              {busy === "" && (previewStale ? <span className="b2b-btn-why is-before">옵션이 바뀌었습니다 — [다시 미리보기]를 누르면 켜집니다</span>
+                : blockedByInvalid ? <span className="b2b-btn-why is-before">오류 행을 건너뛰기로 하면 켜집니다</span>
+                  : replaceNotReady ? <span className="b2b-btn-why is-before">교체 기간·채널을 확인하면 켜집니다</span>
+                    : nothingToDo ? <span className="b2b-btn-why is-before">적재할 신규 행이 없습니다</span> : null)}
+              <button className="b2b-btn-primary" onClick={doApply} disabled={busy !== "" || nothingToDo || blockedByInvalid || replaceNotReady || previewStale}>
+                {busy === "apply" ? "적용 중..." : nothingToDo ? "적재할 신규 행 없음" : toDelete > 0 ? `${s.new_rows.toLocaleString()}건 적용 · ${toDelete.toLocaleString()}행 삭제` : `${s.new_rows.toLocaleString()}건 적용`}
+              </button>
+            </span>
           </div>
         </section>
       )}

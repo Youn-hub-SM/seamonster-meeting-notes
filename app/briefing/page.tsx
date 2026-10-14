@@ -566,8 +566,9 @@ export default function SummaryReportPage() {
             {busy === "run" ? "분석 중... (1~4분)" : hasReport ? "다시 분석" : "분석하기"}
           </button>
           <button className={hasReport ? "b2b-btn-primary" : "b2b-btn-secondary"} onClick={send} disabled={busy !== "" || loading || !hasReport || !!report?.running}>
-            {busy === "send" ? "보내는 중..." : "보내기"}
+            {busy === "send" ? "보내는 중..." : "메일 보내기"}
           </button>
+          {!loading && busy === "" && !hasReport && <span className="b2b-btn-why">분석하면 켜집니다</span>}
         </div>
       </header>
 
@@ -581,11 +582,16 @@ export default function SummaryReportPage() {
       {error && <div className="b2b-error brf-banner">{error}</div>}
       {info && <div className="sm-success brf-banner">{info}</div>}
       {report?.running && busy !== "run" && <div className="sm-warn brf-banner">분석이 진행 중입니다. 잠시 뒤 새로고침하세요.</div>}
-      {unsent && busy === "" && <div className="sm-warn brf-banner">{report?.sent_at ? "보낸 뒤 다시 분석했습니다." : "아직 발송 전입니다."} 확인 후 [보내기]를 누르세요.</div>}
+      {unsent && busy === "" && <div className="sm-warn brf-banner">{report?.sent_at ? "보낸 뒤 다시 분석했습니다." : "아직 발송 전입니다."} 확인 후 [메일 보내기]를 누르세요.</div>}
       {hasReport && report?.error && <div className="sm-warn brf-banner">{report.error} — 아래는 이전 리포트입니다.</div>}
 
       {loading && !report ? <div className="b2b-loading">불러오는 중...</div> : !report || (report.status === "running" && !hasReport) ? (
-        <div className="b2b-empty">아직 이 기간의 종합 리포트가 없습니다.</div>
+        <div className="b2b-empty">
+          이 기간의 종합 리포트가 없습니다.
+          <div className="b2b-empty-action">
+            <button type="button" className="b2b-btn-secondary" onClick={() => run(period, date, admin)} disabled={busy !== "" || loading}>분석하기</button>
+          </div>
+        </div>
       ) : (
         <section className="b2b-card">
           <div className="sm-faint brf-meta">

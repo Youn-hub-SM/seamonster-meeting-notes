@@ -156,7 +156,7 @@ export default function InventoryReconcilePage() {
                     <button key={v} className={`sm-tab ${sort === v ? "is-active" : ""}`} onClick={() => setSort(v)}>{l}</button>
                   ))}
                 </div>
-                <input className="b2b-input" placeholder="품목·코드 검색" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 150 }} />
+                <input className="b2b-input" placeholder="품목·SKU 검색" aria-label="품목·SKU 검색" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 150 }} />
               </div>
             </div>
             <div className="b2b-table-wrap">
@@ -169,7 +169,7 @@ export default function InventoryReconcilePage() {
                 </tr></thead>
                 <tbody>
                   {shown.length === 0 ? (
-                    <tr><td colSpan={10}><div className="b2b-empty" style={{ padding: "20px 10px" }}>볼 품목이 없습니다.</div></td></tr>
+                    <tr><td colSpan={10}><div className="b2b-empty" style={{ padding: "20px 10px" }}>{q.trim() || issuesOnly ? "조건에 맞는 품목이 없습니다." : "품목이 없습니다."}</div></td></tr>
                   ) : shown.map((r) => (
                     <tr key={r.product_id}>
                       <td><strong>{r.name}</strong></td>

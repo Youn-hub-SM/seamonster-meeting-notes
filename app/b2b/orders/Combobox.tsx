@@ -19,6 +19,7 @@ export function Combobox({
   allowFreeText = false,
   emptyText,
   ariaLabel,
+  invalid = false,
 }: {
   value: string;
   options: ComboOption[];
@@ -28,6 +29,7 @@ export function Combobox({
   allowFreeText?: boolean;
   emptyText?: string;
   ariaLabel?: string;
+  invalid?: boolean; // 폼 검증 오류 — 빨강 테두리(.b2b-combo.is-invalid) + aria-invalid
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -84,7 +86,7 @@ export function Combobox({
   }, [open]);
 
   return (
-    <div className="b2b-combo" ref={wrapRef}>
+    <div className={`b2b-combo${invalid ? " is-invalid" : ""}`} ref={wrapRef}>
       <input
         ref={inputRef}
         className="b2b-combo-input"
@@ -92,6 +94,7 @@ export function Combobox({
         value={text}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        aria-invalid={invalid ? "true" : undefined}
         autoComplete="off"
         onFocus={(e) => {
           openList();

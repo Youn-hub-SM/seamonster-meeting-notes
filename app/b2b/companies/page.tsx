@@ -16,6 +16,8 @@ export default function CompaniesPage() {
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<Modal>(null);
   const [saving, setSaving] = useState(false);
+  // 폼 검증 오류(칸별) — 모달 안 요약 + 칸 아래 표시
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof CompanyInput, string>>>({});
 
   async function reload() {
     setLoading(true);
@@ -50,9 +52,10 @@ export default function CompaniesPage() {
   async function handleSave() {
     if (!modal) return;
     if (!modal.data.name.trim()) {
-      setError("업체명은 필수입니다.");
+      setFieldErrors({ name: "업체명을 입력하세요" });
       return;
     }
+    setFieldErrors({});
     setSaving(true);
     setError("");
     try {
@@ -106,25 +109,26 @@ export default function CompaniesPage() {
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
-            {loading ? "불러오는 중..." : "새로고침"}
+            {loading ? "불러오는 중..." : "다시 불러오기"}
           </button>
           <button
             className="b2b-btn-primary"
-            onClick={() => setModal({ mode: "create", data: { ...EMPTY_COMPANY } })}
+            onClick={() => { setFieldErrors({}); setModal({ mode: "create", data: { ...EMPTY_COMPANY } }); }}
           >
             + 업체 추가
           </button>
         </div>
       </header>
 
-      {error && <div className="b2b-error">{error}</div>}
+      {error && !modal && <div className="b2b-error">{error}</div>}
 
       <div className="b2b-card">
         <div className="b2b-card-head">
           <input
             type="text"
             className="b2b-search"
-            placeholder="업체명·대표자·담당자·연락처·이메일·사업자번호·주소·결제조건·메모 검색"
+            placeholder="검색"
+            aria-label="업체 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -134,9 +138,21 @@ export default function CompaniesPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
-            {companies.length === 0
-              ? "등록된 업체가 없습니다."
-              : "검색 결과가 없습니다."}
+            {companies.length === 0 ? (
+              <>
+                등록된 업체가 없습니다.
+                <div className="b2b-empty-action">
+                  <button type="button" className="b2b-btn-secondary" onClick={() => { setFieldErrors({}); setModal({ mode: "create", data: { ...EMPTY_COMPANY } }); }}>+ 업체 추가</button>
+                </div>
+              </>
+            ) : (
+              <>
+                조건에 맞는 업체가 없습니다.
+                <div className="b2b-empty-action">
+                  <button type="button" className="b2b-btn-secondary" onClick={() => setSearch("")}>조건 지우기</button>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
@@ -193,7 +209,7 @@ export default function CompaniesPage() {
                         className="b2b-btn-secondary"
                         style={{ padding: "5px 10px", fontSize: 12, marginRight: 6 }}
                       >
-                        상세
+                        상세 보기
                       </Link>
                       <button className="b2b-btn-danger" onClick={() => handleDelete(c.id, c.name)}>
                         삭제
@@ -213,9 +229,11 @@ export default function CompaniesPage() {
           data={modal.data}
           companies={companies}
           saving={saving}
+          error={error}
+          fieldErrors={fieldErrors}
           onChange={(data) => setModal({ ...modal, data })}
           onSave={handleSave}
-          onClose={() => setModal(null)}
+          onClose={() => { setFieldErrors({}); setModal(null); }}
           onDelete={
             modal.mode === "edit" && modal.data.id
               ? () => handleDelete(modal.data.id!, modal.data.name)
@@ -232,6 +250,8 @@ function CompanyModal({
   data,
   companies,
   saving,
+  error,
+  fieldErrors,
   onChange,
   onSave,
   onClose,
@@ -241,6 +261,8 @@ function CompanyModal({
   data: CompanyInput;
   companies: Company[];
   saving: boolean;
+  error: string;
+  fieldErrors: Partial<Record<keyof CompanyInput, string>>;
   onChange: (d: CompanyInput) => void;
   onSave: () => void;
   onClose: () => void;
@@ -374,14 +396,14 @@ function CompanyModal({
               {data.biz_doc_path && (
                 <>
                   <span style={{ fontSize: 12, color: "var(--sm-success)", fontWeight: 600 }}>✓ 첨부됨</span>
-                  <button type="button" className="b2b-link-btn" onClick={viewDoc} style={{ fontSize: 12 }}>보기</button>
+                  <button type="button" className="b2b-link-btn" onClick={viewDoc} style={{ fontSize: 12 }}>원본 보기</button>
                   <button
                     type="button"
                     className="b2b-link-btn"
                     onClick={() => set("biz_doc_path", null)}
                     style={{ fontSize: 12, color: "var(--sm-danger)" }}
                   >
-                    제거
+                    첨부 제거
                   </button>
                 </>
               )}
@@ -413,6 +435,10 @@ function CompanyModal({
             </div>
           )}
 
+          {(error || fieldErrors.name) && (
+            <div className="b2b-error">{fieldErrors.name || error}</div>
+          )}
+
           <Field label="업체명" required badge={aiBadge("name")}>
             <input
               type="text"
@@ -421,8 +447,10 @@ function CompanyModal({
               value={data.name}
               onChange={(e) => set("name", e.target.value)}
               placeholder="예: 마린푸드"
+              aria-invalid={fieldErrors.name ? "true" : undefined}
               autoFocus
             />
+            {fieldErrors.name && <div className="b2b-field-error">{fieldErrors.name}</div>}
           </Field>
 
           <div className="b2b-field-row">
@@ -434,7 +462,10 @@ function CompanyModal({
                 value={data.biz_no ?? ""}
                 onChange={(e) => set("biz_no", e.target.value)}
                 placeholder="123-45-67890"
+                aria-invalid={bizCheck === "invalid" ? "true" : undefined}
               />
+              {bizCheck === "invalid" && <div className="b2b-field-error">사업자등록번호 형식이 맞지 않습니다 — 원본과 대조하세요</div>}
+              {dupCompany && <div className="b2b-field-hint">이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>}
             </Field>
             <Field label="대표자명" badge={aiBadge("ceo_name")}>
               <input
@@ -447,16 +478,6 @@ function CompanyModal({
               />
             </Field>
           </div>
-          {(bizCheck === "invalid" || dupCompany) && (
-            <div style={{ marginTop: -6, marginBottom: 12, fontSize: 12, display: "flex", flexDirection: "column", gap: 3 }}>
-              {bizCheck === "invalid" && (
-                <div style={{ color: "var(--sm-danger)" }}>사업자등록번호 검증에 실패했습니다 — 원본과 대조해 확인하세요.</div>
-              )}
-              {dupCompany && (
-                <div style={{ color: "var(--sm-warning)" }}>이미 ‘{dupCompany.name}’ 에 등록된 사업자번호입니다.</div>
-              )}
-            </div>
-          )}
 
           <div className="b2b-field-row">
             <Field label="담당자명">
@@ -488,14 +509,14 @@ function CompanyModal({
             />
           </Field>
 
-          <Field label="기본 배송지" badge={aiBadge("address")}>
+          <Field label="기본 배송지" badge={aiBadge("address")} hint="우편번호 · 시/도 · 시/군/구 · 도로명 · 상세 순">
             <input
               type="text"
               className="b2b-input"
               style={aiStyle("address")}
               value={data.address ?? ""}
               onChange={(e) => set("address", e.target.value)}
-              placeholder="(우편번호) 시/도 시/군/구 도로명 + 상세"
+              placeholder="예: (06236) 서울 강남구 테헤란로 1, 2층"
             />
           </Field>
 
@@ -515,7 +536,6 @@ function CompanyModal({
               value={data.notes ?? ""}
               onChange={(e) => set("notes", e.target.value)}
               rows={3}
-              placeholder="자유 메모"
             />
           </Field>
         </div>
@@ -530,10 +550,10 @@ function CompanyModal({
           )}
           <div className="b2b-modal-foot-right">
             <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>
-              취소
+              그만두기
             </button>
-            <button className="b2b-btn-primary" onClick={onSave} disabled={saving || !data.name.trim()}>
-              {saving ? "저장 중..." : mode === "create" ? "등록" : "수정"}
+            <button className="b2b-btn-primary" onClick={onSave} disabled={saving}>
+              {saving ? "저장 중..." : mode === "create" ? "업체 등록" : "변경 저장"}
             </button>
           </div>
         </div>
@@ -546,11 +566,13 @@ function Field({
   label,
   required,
   badge,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
   badge?: React.ReactNode;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -560,6 +582,7 @@ function Field({
         {required && <span className="req">*</span>}
         {badge}
       </label>
+      {hint && <div className="b2b-field-hint">{hint}</div>}
       {children}
     </div>
   );

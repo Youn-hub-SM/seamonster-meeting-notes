@@ -19,6 +19,7 @@ export default function LocationsPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [newZone, setNewZone] = useState("");
+  const [newZoneErr, setNewZoneErr] = useState(""); // 빈 이름으로 눌렀을 때 칸 아래 안내(E5)
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
   const [onlyUnzoned, setOnlyUnzoned] = useState(false);
@@ -52,8 +53,9 @@ export default function LocationsPage() {
   function addZone() {
     if (saving) return; // Enter 연타로 PUT 이 겹치면 실패 롤백이 서버와 어긋난다
     const z = newZone.trim();
-    if (!z) return;
-    if (zones.includes(z)) { setError(`'${z}' 구역이 이미 있습니다.`); return; }
+    if (!z) { setNewZoneErr("구역 이름을 입력하세요"); return; }
+    if (zones.includes(z)) { setNewZoneErr(`'${z}' 구역이 이미 있습니다`); return; }
+    setNewZoneErr("");
     setError("");
     setNewZone("");
     saveZones([...zones, z]);
@@ -144,11 +146,15 @@ export default function LocationsPage() {
             ))}
           </ol>
         )}
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input className="b2b-input" value={newZone} onChange={(e) => setNewZone(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addZone(); } }}
-            placeholder="새 구역 이름 (예: A선반)" style={{ flex: 1 }} />
-          <button className="b2b-btn-primary" onClick={addZone} disabled={!newZone.trim() || saving}>추가</button>
+        <div className="b2b-field" style={{ marginTop: 12 }}>
+          <span className="b2b-field-label">새 구역 이름</span>
+          <div className="sm-row sm-gap-2">
+            <input className="b2b-input" value={newZone} onChange={(e) => { setNewZone(e.target.value); if (newZoneErr) setNewZoneErr(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addZone(); } }}
+              placeholder="A선반" aria-label="새 구역 이름" aria-invalid={newZoneErr ? "true" : undefined} style={{ flex: 1 }} />
+            <button className="b2b-btn-primary" onClick={addZone} disabled={saving}>구역 추가</button>
+          </div>
+          {newZoneErr && <div className="b2b-field-error">{newZoneErr}</div>}
         </div>
       </section>
 
@@ -157,7 +163,7 @@ export default function LocationsPage() {
           <span className="b2b-card-title">품목 배치 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 미지정 {unzonedCount}개</span></span>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-          <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목명·SKU 검색" style={{ flex: "1 1 220px" }} />
+          <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목·SKU 검색" aria-label="품목·SKU 검색" style={{ flex: "1 1 220px" }} />
           <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 15, cursor: "pointer" }}>
             <input type="checkbox" checked={onlyUnzoned} onChange={(e) => setOnlyUnzoned(e.target.checked)} /> 미지정만
           </label>
@@ -166,9 +172,9 @@ export default function LocationsPage() {
           </label>
         </div>
         {!loaded ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>불러오는 중...</div>
+          <div className="b2b-loading">불러오는 중...</div>
         ) : list.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다." : "표시할 품목이 없습니다."}</div>
+          <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다." : q.trim() ? "조건에 맞는 품목이 없습니다." : "품목이 없습니다."}</div>
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">

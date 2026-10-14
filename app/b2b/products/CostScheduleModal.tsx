@@ -29,6 +29,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErr, setFieldErr] = useState<{ date?: string; cost?: string }>({}); // 예약 폼 칸별 오류
   const confirmModal = useConfirm();
   const [pendingMigration, setPendingMigration] = useState(false);
 
@@ -63,9 +64,12 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
   const diff = nextCost - (product.cost_price || 0);
 
   async function save() {
-    if (!date) { setError("적용일을 고르세요."); return; }
-    if (date < kstToday()) { setError("지난 날짜로는 예약할 수 없습니다."); return; }
-    if (nextCost <= 0) { setError("원가를 입력하세요."); return; }
+    const fe: { date?: string; cost?: string } = {};
+    if (!date) fe.date = "적용일을 입력하세요";
+    else if (date < kstToday()) fe.date = "오늘 이후 날짜만";
+    if (nextCost <= 0) fe.cost = "원가를 입력하세요";
+    setFieldErr(fe);
+    if (fe.date || fe.cost) return;
     setSaving(true); setError("");
     try {
       const body = mode === "detail"
@@ -122,10 +126,16 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px", lineHeight: 1.6 }}>
                 적용일 새벽에 자동 반영 — 지난 발주의 이익률은 바뀌지 않습니다
               </p>
+              {(fieldErr.date || fieldErr.cost) && (
+                <div className="b2b-error">
+                  {fieldErr.date && fieldErr.cost ? <ul><li>{fieldErr.date}</li><li>{fieldErr.cost}</li></ul> : (fieldErr.date || fieldErr.cost)}
+                </div>
+              )}
 
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">적용일</span>
-                  <input className="b2b-input" type="date" min={kstToday()} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+                  <input className="b2b-input" type="date" min={kstToday()} value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={fieldErr.date ? "true" : undefined} />
+                  {fieldErr.date && <span className="b2b-field-error">{fieldErr.date}</span>}</label>
                 <label className="b2b-field"><span className="b2b-field-label">메모 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택)</span></span>
                   <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 제조사 단가 인상 통보" /></label>
               </div>
@@ -138,7 +148,8 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
               {mode === "detail" ? (
                 <div className="b2b-field-row" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}>
                   <label className="b2b-field"><span className="b2b-field-label">제품원가</span>
-                    <input className="b2b-input" type="number" min={0} value={cm} onChange={(e) => setCm(e.target.value)} style={{ textAlign: "right" }} /></label>
+                    <input className="b2b-input" type="number" min={0} value={cm} onChange={(e) => setCm(e.target.value)} style={{ textAlign: "right" }} aria-invalid={fieldErr.cost ? "true" : undefined} />
+                    {fieldErr.cost && <span className="b2b-field-error">{fieldErr.cost}</span>}</label>
                   <label className="b2b-field"><span className="b2b-field-label">내포장지</span>
                     <input className="b2b-input" type="number" min={0} value={pi} onChange={(e) => setPi(e.target.value)} style={{ textAlign: "right" }} /></label>
                   <label className="b2b-field"><span className="b2b-field-label">라벨</span>
@@ -148,7 +159,8 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                 </div>
               ) : (
                 <label className="b2b-field" style={{ maxWidth: 220 }}><span className="b2b-field-label">원가</span>
-                  <input className="b2b-input" type="number" min={0} value={flat} onChange={(e) => setFlat(e.target.value)} style={{ textAlign: "right" }} /></label>
+                  <input className="b2b-input" type="number" min={0} value={flat} onChange={(e) => setFlat(e.target.value)} style={{ textAlign: "right" }} aria-invalid={fieldErr.cost ? "true" : undefined} />
+                  {fieldErr.cost && <span className="b2b-field-error">{fieldErr.cost}</span>}</label>
               )}
 
               <div className="sm-row" style={{ gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
@@ -176,7 +188,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                   )}
                 </div>
                 {loading ? <div className="b2b-loading">불러오는 중...</div>
-                  : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다.</p>
+                  : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>예약이 없습니다.</p>
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
                       <table className="b2b-table is-responsive" style={{ fontSize: 15 }}>

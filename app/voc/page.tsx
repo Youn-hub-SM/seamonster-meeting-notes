@@ -48,6 +48,7 @@ export default function VocPage() {
   const [fTo, setFTo] = useState("");
   const [edit, setEdit] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
+  const [fieldErr, setFieldErr] = useState<{ received_at?: string; content?: string }>({}); // VOC 폼 칸별 검증 오류
   const [flowBusy, setFlowBusy] = useState("");   // flow/아사나 등록 중인 VOC id
   // 아사나 설정(PAT+프로젝트)이 완료돼 있으면 등록 버튼이 '→ 아사나'로 바뀐다(flow 는 전환기 보존).
   const [asanaReady, setAsanaReady] = useState(false);
@@ -166,8 +167,11 @@ export default function VocPage() {
 
   async function save() {
     if (!edit) return;
-    if (!edit.received_at) { setError("접수일을 입력하세요."); return; }
-    if (!edit.content.trim()) { setError("상세내용을 입력하세요."); return; }
+    const fe: { received_at?: string; content?: string } = {};
+    if (!edit.received_at) fe.received_at = "접수일을 입력하세요";
+    if (!edit.content.trim()) fe.content = "상세내용을 입력하세요";
+    setFieldErr(fe);
+    if (fe.received_at || fe.content) return;
     setSaving(true); setError("");
     try {
       const method = edit.id ? "PATCH" : "POST";
@@ -281,7 +285,7 @@ export default function VocPage() {
           <h1 className="b2b-page-title">VOC 처리</h1>
         </div>
         <div className="b2b-page-actions">
-          <a className="b2b-btn-secondary" href="/api/voc/template" title="VOC 일괄 등록 엑셀 양식">엑셀 양식</a>
+          <a className="b2b-btn-secondary" href="/api/voc/template" title="VOC 일괄 등록 엑셀 양식">양식 내려받기</a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }}>
             {importing ? "분석 중..." : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
@@ -298,7 +302,7 @@ export default function VocPage() {
         <button className={`sm-tab ${view === "목록" ? "is-active" : ""}`} onClick={() => setView("목록")}>
           전체 목록<span className="sm-tab-count">{rows.length}</span>
         </button>
-        {view === "목록" && <input className="b2b-input sm-tab-search" placeholder="내용·고객·상품 검색" value={search} onChange={(e) => setSearch(e.target.value)} />}
+        {view === "목록" && <input className="b2b-input sm-tab-search" placeholder="검색" aria-label="VOC 검색" value={search} onChange={(e) => setSearch(e.target.value)} />}
       </div>
 
       {/* ───── 유형별 현황판 — 이번 달 유형별 발생 + 유형 개선 상태(개선 작업은 Flow) ───── */}
@@ -308,7 +312,7 @@ export default function VocPage() {
             <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>기준 월
               <input className="b2b-input" type="month" value={month} max={TODAY().slice(0, 7)} onChange={(e) => { setMonth(e.target.value); setExpandedCat(null); }} style={{ width: "auto" }} /></label>
             <span className="sm-faint" style={{ fontSize: 12 }}>발생 {board.reduce((s, b) => s + b.monthRows.length, 0)}건</span>
-            <button className="b2b-btn-secondary" style={{ marginLeft: "auto" }} onClick={() => setCatModal(true)}>유형 관리</button>
+            <button className="b2b-btn-secondary" style={{ marginLeft: "auto" }} onClick={() => setCatModal(true)}>유형 관리하기</button>
           </div>
 
           {loading ? (
@@ -373,7 +377,14 @@ export default function VocPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : shown.length === 0 ? (
-        <div className="b2b-empty">{rows.length === 0 ? "아직 등록된 VOC가 없습니다." : "조건에 맞는 VOC가 없습니다."}</div>
+        <div className="b2b-empty">
+          {rows.length === 0 ? "등록된 VOC가 없습니다." : "조건에 맞는 VOC가 없습니다."}
+          <div className="b2b-empty-action">
+            {rows.length === 0
+              ? <button type="button" className="b2b-btn-secondary" onClick={openNew}>+ VOC 추가</button>
+              : <button type="button" className="b2b-btn-secondary" onClick={resetFilters}>조건 지우기</button>}
+          </div>
+        </div>
       ) : (
         <div className="b2b-table-wrap">
           <table className="b2b-table is-clickable">
@@ -405,7 +416,7 @@ export default function VocPage() {
                       ) : asanaReady ? (
                         <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
                           title="아사나에 업무로 등록" style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-info)" }}>
-                          {flowBusy === r.id ? "등록중..." : "→ 아사나"}
+                          {flowBusy === r.id ? "등록중..." : "아사나 등록"}
                         </button>
                       ) : null}
                       {/* 과거 flow 등록 기록 — 표시만(등록 기능은 제거됨) */}
@@ -468,7 +479,7 @@ export default function VocPage() {
             <div className="b2b-modal-foot">
               <span />
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
+                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>닫기</button>
                 <button className="b2b-btn-primary" onClick={applyVocImport} disabled={applying || preview.summary.valid === 0}>{applying ? "등록 중..." : `${preview.summary.valid}건 등록`}</button>
               </div>
             </div>
@@ -484,9 +495,15 @@ export default function VocPage() {
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setEdit(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
+              {(() => {
+                const msgs = [fieldErr.received_at, fieldErr.content].filter(Boolean) as string[];
+                if (!msgs.length && !error) return null;
+                return <div className="b2b-error">{msgs.length > 1 ? <ul>{msgs.map((m) => <li key={m}>{m}</li>)}</ul> : (msgs[0] || error)}</div>;
+              })()}
               <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">접수일</span>
-                  <input className="b2b-input" type="date" required value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">접수일<span className="req">*</span></span>
+                  <input className="b2b-input" type="date" required value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} aria-invalid={fieldErr.received_at ? "true" : undefined} />
+                  {fieldErr.received_at && <span className="b2b-field-error">{fieldErr.received_at}</span>}</label>
                 <label className="b2b-field"><span className="b2b-field-label">구매자 구분</span>
                   <select className="b2b-input" value={edit.buyer_type} onChange={(e) => setF("buyer_type", e.target.value)}>
                     <option value="">선택 안 함</option>
@@ -495,22 +512,25 @@ export default function VocPage() {
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">고객명</span>
-                  <input className="b2b-input" value={edit.customer} onChange={(e) => setF("customer", e.target.value)} placeholder="이름/연락처" /></label>
+                  <span className="b2b-field-hint">이름 또는 연락처</span>
+                  <input className="b2b-input" value={edit.customer} onChange={(e) => setF("customer", e.target.value)} placeholder="예: 홍길동" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">구매일</span>
                   <input className="b2b-input" type="date" value={edit.purchase_date} onChange={(e) => setF("purchase_date", e.target.value)} /></label>
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">구매처</span>
+                  <span className="b2b-field-hint">기존 구매처에서 고르거나 직접 입력</span>
                   {/* 이미 등록된 VOC 의 구매처를 선택지로 — 표기가 흩어지지 않게(구매상품과 같은 콤보박스) */}
                   <Combobox value={edit.purchase_place}
                     options={placeOpts.map((p) => ({ id: p, label: p }))}
                     onSelect={(o) => setF("purchase_place", o.label)} onType={(t) => setF("purchase_place", t)}
-                    allowFreeText placeholder="기존 구매처에서 선택 또는 직접 입력" ariaLabel="구매처" /></label>
+                    allowFreeText placeholder="검색" ariaLabel="구매처" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">구매상품</span>
+                  <span className="b2b-field-hint">상품 마스터에서 고르거나 직접 입력</span>
                   <Combobox value={edit.product}
                     options={products.map((p) => ({ id: p.id, label: p.name, sub: p.sku || p.spec || undefined }))}
                     onSelect={(o) => setF("product", o.label)} onType={(t) => setF("product", t)}
-                    allowFreeText placeholder="상품 마스터에서 선택 또는 직접 입력" ariaLabel="구매상품" /></label>
+                    allowFreeText placeholder="품목·SKU 검색" ariaLabel="구매상품" /></label>
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">제품 생산일</span>
@@ -541,15 +561,21 @@ export default function VocPage() {
               </div>
               <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 8px" }}>제조사 = 청구 가능 · 물류/자사 = 자사 부담</p>
               <label className="b2b-field"><span className="b2b-field-label">상세내용 <span className="req">*</span></span>
-                <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} placeholder="고객이 말한 내용" /></label>
+                <span className="b2b-field-hint">고객이 말한 내용</span>
+                <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} aria-invalid={fieldErr.content ? "true" : undefined} />
+                {fieldErr.content && <span className="b2b-field-error">{fieldErr.content}</span>}</label>
               <label className="b2b-field"><span className="b2b-field-label">원인</span>
-                <textarea className="b2b-textarea" rows={2} value={edit.cause} onChange={(e) => setF("cause", e.target.value)} placeholder="왜 발생했는지 (분석)" /></label>
+                <span className="b2b-field-hint">왜 발생했는지(분석)</span>
+                <textarea className="b2b-textarea" rows={2} value={edit.cause} onChange={(e) => setF("cause", e.target.value)} /></label>
               <label className="b2b-field"><span className="b2b-field-label">처리내용</span>
-                <textarea className="b2b-textarea" rows={2} value={edit.resolution} onChange={(e) => setF("resolution", e.target.value)} placeholder="어떻게 처리했는지" /></label>
+                <span className="b2b-field-hint">어떻게 처리했는지</span>
+                <textarea className="b2b-textarea" rows={2} value={edit.resolution} onChange={(e) => setF("resolution", e.target.value)} /></label>
               <label className="b2b-field"><span className="b2b-field-label">개선 필요사항</span>
-                <textarea className="b2b-textarea" rows={2} value={edit.improvement} onChange={(e) => setF("improvement", e.target.value)} placeholder="재발 방지를 위해 바꿔야 할 것" /></label>
+                <span className="b2b-field-hint">재발 방지를 위해 바꿔야 할 것</span>
+                <textarea className="b2b-textarea" rows={2} value={edit.improvement} onChange={(e) => setF("improvement", e.target.value)} /></label>
               <label className="b2b-field"><span className="b2b-field-label">고객 특이사항</span>
-                <textarea className="b2b-textarea" rows={2} value={edit.customer_note} onChange={(e) => setF("customer_note", e.target.value)} placeholder="VIP·과거 클레임 이력·연락 시 주의할 점 등" /></label>
+                <span className="b2b-field-hint">VIP · 과거 클레임 이력 · 연락 시 주의할 점</span>
+                <textarea className="b2b-textarea" rows={2} value={edit.customer_note} onChange={(e) => setF("customer_note", e.target.value)} /></label>
               <div className="b2b-field">
                 <span className="b2b-field-label">사진 첨부 <span className="sm-faint" style={{ fontWeight: 400 }}>· 개선요청서에 자동 첨부됩니다</span></span>
                 <div className="sm-row-wrap" style={{ gap: 8 }}>
@@ -589,8 +615,8 @@ export default function VocPage() {
                 })()}
               </div>
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setEdit(null)}>취소</button>
-                <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+                <button className="b2b-btn-secondary" onClick={() => { setFieldErr({}); setEdit(null); }}>그만두기</button>
+                <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "VOC 저장"}</button>
               </div>
             </div>
           </div>
@@ -667,11 +693,13 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
 function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[]; managed: boolean; onClose: () => void; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [nameErr, setNameErr] = useState(""); // 유형 이름 칸 오류
   const confirmModal = useConfirm();
   const [draft, setDraft] = useState<{ id?: string; name: string; fault: string; sort: string; active: boolean } | null>(null);
 
   async function saveDraft() {
-    if (!draft || !draft.name.trim()) { setErr("유형 이름을 입력하세요."); return; }
+    if (!draft || !draft.name.trim()) { setNameErr("유형 이름을 입력하세요"); return; }
+    setNameErr("");
     setBusy(true); setErr("");
     try {
       const res = await fetch("/api/voc/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, sort: Number(draft.sort) || 0 }) });
@@ -699,7 +727,7 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">문제 유형 관리</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           {!managed && <div className="b2b-error" style={{ marginBottom: 10 }}>072_voc_categories.sql 마이그레이션을 적용해야 유형을 편집할 수 있습니다.</div>}
-          {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
+          {(err || nameErr) && <div className="b2b-error" style={{ marginBottom: 10 }}>{nameErr || err}</div>}
           <div className="b2b-table-wrap" style={{ marginBottom: 12 }}>
             <table className="b2b-table is-responsive">
               <thead><tr><th>유형</th><th>귀책 기본값</th><th className="num">정렬</th><th>활성</th><th></th></tr></thead>
@@ -721,8 +749,9 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
           </div>
           {draft ? (
             <div className="sm-row" style={{ gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>이름</span>
-                <input className="b2b-input" style={{ width: 140 }} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
+              <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>이름<span className="req">*</span></span>
+                <input className="b2b-input" style={{ width: 140 }} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} aria-invalid={nameErr ? "true" : undefined} />
+                {nameErr && <span className="b2b-field-error">{nameErr}</span>}</label>
               <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 15, fontWeight: 600 }}>귀책 기본값</span>
                 <select className="b2b-input" value={draft.fault} onChange={(e) => setDraft({ ...draft, fault: e.target.value })}>
                   {VOC_FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -731,8 +760,8 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
                 <input className="b2b-input" type="number" style={{ width: 70 }} value={draft.sort} onChange={(e) => setDraft({ ...draft, sort: e.target.value })} /></label>
               <label className="sm-row" style={{ gap: 5, fontSize: 15, paddingBottom: 9 }}>
                 <input type="checkbox" className="b2b-checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />활성</label>
-              <button className="b2b-btn-primary" disabled={busy || !managed} onClick={saveDraft}>{draft.id ? "수정 저장" : "추가"}</button>
-              <button className="b2b-btn-secondary" disabled={busy} onClick={() => setDraft(null)}>취소</button>
+              <button className="b2b-btn-primary" disabled={busy || !managed} onClick={saveDraft}>{draft.id ? "수정 저장" : "유형 추가"}</button>
+              <button className="b2b-btn-secondary" disabled={busy} onClick={() => { setNameErr(""); setDraft(null); }}>그만두기</button>
             </div>
           ) : (
             <button className="b2b-btn-secondary" disabled={!managed} onClick={() => setDraft({ name: "", fault: "미분류", sort: String(cats.length + 1), active: true })}>+ 유형 추가</button>

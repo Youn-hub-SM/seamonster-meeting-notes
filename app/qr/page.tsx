@@ -26,6 +26,7 @@ export default function QrPage() {
   const [nTitle, setNTitle] = useState("");
   const [nCode, setNCode] = useState("");
   const [creating, setCreating] = useState(false);
+  const [targetErr, setTargetErr] = useState(""); // 연결할 주소 칸 오류
 
   const [edit, setEdit] = useState<Link | null>(null);
   const [qrFor, setQrFor] = useState<Link | null>(null);
@@ -53,7 +54,8 @@ export default function QrPage() {
   const qrSrc = (data: string, size = 200) => `/api/qr?data=${encodeURIComponent(data)}&size=${size}`;
 
   async function create() {
-    if (!nTarget.trim()) { setError("목적지 URL 을 입력하세요."); return; }
+    if (!nTarget.trim()) { setTargetErr("연결할 주소를 입력하세요"); return; }
+    setTargetErr("");
     setCreating(true); setError("");
     try {
       const j = await (await fetch("/api/qr/links", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target_url: nTarget, title: nTitle, code: nCode }) })).json();
@@ -89,16 +91,18 @@ export default function QrPage() {
       </div>
 
       {error && <div className="b2b-error">{error}</div>}
+      {targetErr && tab === "brand" && <div className="b2b-error">{targetErr}</div>}
 
       {tab === "brand" && (
         <>
           <section className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head"><span className="b2b-card-title">브랜드링크 만들기</span></div>
             <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <label className="b2b-field" style={{ flex: 2, minWidth: 220 }}><span className="b2b-field-label">연결할 주소 (목적지)</span>
-                <input className="b2b-input" value={nTarget} onChange={(e) => setNTarget(e.target.value)} placeholder="https://예: 이벤트·상품 페이지 주소" /></label>
-              <label className="b2b-field" style={{ width: 190 }}><span className="b2b-field-label">원하는 링크 주소 (선택)</span>
-                <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="예: 여름세일 (비우면 자동)" /></label>
+              <label className="b2b-field" style={{ flex: 2, minWidth: 220 }}><span className="b2b-field-label">연결할 주소 (목적지)<span className="req">*</span></span>
+                <input className="b2b-input" value={nTarget} onChange={(e) => setNTarget(e.target.value)} placeholder="예: https://seamonster.kr/event" aria-invalid={targetErr ? "true" : undefined} />
+                {targetErr && <span className="b2b-field-error">{targetErr}</span>}</label>
+              <label className="b2b-field" style={{ width: 190 }}><span className="b2b-field-label">원하는 링크 주소 (선택 · 비우면 자동)</span>
+                <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="예: 여름세일" /></label>
               <label className="b2b-field" style={{ flex: 1, minWidth: 130 }}><span className="b2b-field-label">메모 (선택)</span>
                 <input className="b2b-input" value={nTitle} onChange={(e) => setNTitle(e.target.value)} placeholder="예: 6월 라방" /></label>
               <button className="b2b-btn-primary" onClick={create} disabled={creating} style={{ height: 40 }}>{creating ? "생성 중..." : "브랜드링크 만들기"}</button>
@@ -109,7 +113,7 @@ export default function QrPage() {
           </section>
 
           {loading ? <div className="b2b-loading">불러오는 중...</div> : links.length === 0 ? (
-            <div className="b2b-empty">아직 만든 링크가 없습니다.{error.includes("short_links") || error.includes("relation") ? " — supabase/migrations/038_qr_short_links.sql 를 먼저 적용하세요." : ""}</div>
+            <div className="b2b-empty">만든 링크가 없습니다.{error.includes("short_links") || error.includes("relation") ? " — supabase/migrations/038_qr_short_links.sql 를 먼저 적용하세요." : ""}</div>
           ) : (
             <div className="b2b-table-wrap is-sticky-head">
               <table className="b2b-table">
@@ -122,14 +126,14 @@ export default function QrPage() {
                         <strong>{l.title || l.code}</strong>
                         <div className="sm-row" style={{ gap: 6, marginTop: 2 }}>
                           <code style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>{shortDisplay(l.code)}</code>
-                          <button className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => copy(shortUrl(l.code))}>복사</button>
+                          <button className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => copy(shortUrl(l.code))}>주소 복사</button>
                         </div>
                       </td>
                       <td style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><a href={l.target_url} target="_blank" rel="noreferrer" className="sm-link" style={{ fontSize: 12 }}>{l.target_url}</a></td>
                       <td className="num b2b-money"><button className="b2b-link-btn" onClick={() => setStatsFor(l)} title="스캔 통계">{l.scan_count.toLocaleString()}</button></td>
                       <td><label className="sm-row" style={{ gap: 5, fontSize: 12, cursor: "pointer" }}><input type="checkbox" checked={l.active} onChange={() => toggleActive(l)} />{l.active ? "활성" : "비활성"}</label></td>
                       <td style={{ whiteSpace: "nowrap" }}>
-                        <button className="b2b-btn-secondary" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => setEdit(l)}>수정</button>
+                        <button className="b2b-btn-secondary" style={{ padding: "3px 8px", fontSize: 12 }} onClick={() => setEdit(l)}>링크 수정</button>
                         <button className="b2b-link-btn" style={{ marginLeft: 8, color: "var(--sm-danger)" }} onClick={() => remove(l)}>삭제</button>
                       </td>
                     </tr>
@@ -144,14 +148,16 @@ export default function QrPage() {
       {tab === "static" && (
         <section className="b2b-card">
           <div className="b2b-card-head"><span className="b2b-card-title">정적 QR 생성</span></div>
-          <input className="b2b-input" value={staticText} onChange={(e) => setStaticText(e.target.value)} placeholder="https://... 또는 아무 텍스트" style={{ maxWidth: 460 }} />
+          <label className="b2b-field" style={{ maxWidth: 460 }}><span className="b2b-field-label">QR 에 담을 내용</span>
+            <span className="b2b-field-hint">주소 또는 아무 텍스트</span>
+            <input className="b2b-input" value={staticText} onChange={(e) => setStaticText(e.target.value)} placeholder="예: https://seamonster.kr" /></label>
           {staticText.trim() && (
             <div className="sm-col" style={{ gap: 10, marginTop: 14, alignItems: "flex-start" }}>
               <img src={qrSrc(staticText.trim(), 240)} alt="QR" width={220} height={220} style={{ border: "1px solid var(--sm-border)", borderRadius: 8 }} />
               <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&size=1024&download=1&format=png`}>PNG 다운로드</a>
-                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&download=1&format=svg`}>SVG 다운로드</a>
-                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: staticText.trim(), name: "static" })}>디자인</button>
+                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&size=1024&download=1&format=png`}>PNG 내려받기</a>
+                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(staticText.trim())}&download=1&format=svg`}>SVG 내려받기</a>
+                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: staticText.trim(), name: "static" })}>QR 디자인하기</button>
               </div>
             </div>
           )}
@@ -167,12 +173,12 @@ export default function QrPage() {
               <img src={qrSrc(shortUrl(qrFor.code), 280)} alt="QR" width={260} height={260} style={{ border: "1px solid var(--sm-border)", borderRadius: 8 }} />
               <div className="sm-row" style={{ gap: 6, justifyContent: "center", marginTop: 10 }}>
                 <code style={{ fontSize: 12 }}>{shortUrl(qrFor.code)}</code>
-                <button className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => copy(shortUrl(qrFor.code))}>복사</button>
+                <button className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => copy(shortUrl(qrFor.code))}>주소 복사</button>
               </div>
               <div className="sm-row" style={{ gap: 8, justifyContent: "center", marginTop: 12, flexWrap: "wrap" }}>
-                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&size=1024&download=1&format=png&name=${qrFor.code}`}>PNG</a>
-                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&download=1&format=svg&name=${qrFor.code}`}>SVG</a>
-                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: shortUrl(qrFor.code), name: qrFor.code })}>디자인</button>
+                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&size=1024&download=1&format=png&name=${qrFor.code}`}>PNG 내려받기</a>
+                <a className="b2b-btn-secondary" href={`/api/qr?data=${encodeURIComponent(shortUrl(qrFor.code))}&download=1&format=svg&name=${qrFor.code}`}>SVG 내려받기</a>
+                <button className="b2b-btn-primary" onClick={() => setDesigner({ data: shortUrl(qrFor.code), name: qrFor.code })}>QR 디자인하기</button>
               </div>
             </div>
           </div>
@@ -211,7 +217,7 @@ function EditModal({ link, onClose, onSaved }: { link: Link; onClose: () => void
           <div className="b2b-field"><label className="b2b-field-label">코드 <span className="sm-faint" style={{ fontWeight: 400 }}>(바꾸면 기존 QR은 무효)</span></label><input className="b2b-input" value={code} onChange={(e) => setCode(e.target.value)} /></div>
           {error && <div className="b2b-error" style={{ marginTop: 6 }}>{error}</div>}
         </div>
-        <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right"><button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button><button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button></div></div>
+        <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right"><button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>그만두기</button><button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "링크 저장"}</button></div></div>
       </div>
     </div>
   );

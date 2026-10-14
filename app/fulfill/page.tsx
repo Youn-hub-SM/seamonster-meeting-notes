@@ -344,7 +344,7 @@ export default function FulfillPage() {
         <div className="b2b-page-actions sm-row" style={{ gap: 6 }}>
           {res && <button className="b2b-btn-secondary" onClick={reset}>새 발주 시작</button>}
           {/* 출고 전 나가기 — 모달 답이 비동기라 링크 이동을 먼저 막고, 확인하면 router 로 이동 */}
-          <Link className="b2b-btn-secondary" href="/fulfill/log" onClick={(e) => { if (!leaveRisk) return; e.preventDefault(); void okToLeave().then((ok) => { if (ok) router.push("/fulfill/log"); }); }}>배송일지</Link>
+          <Link className="b2b-btn-secondary" href="/fulfill/log" onClick={(e) => { if (!leaveRisk) return; e.preventDefault(); void okToLeave().then((ok) => { if (ok) router.push("/fulfill/log"); }); }}>배송일지 보기</Link>
         </div>
       </header>
 
@@ -376,8 +376,8 @@ export default function FulfillPage() {
           <section className="b2b-card" style={{ marginBottom: 16 }}>
             <div className="b2b-card-head"><span className="b2b-card-title">① 발주엑셀 업로드</span></div>
             <div className="b2b-field" style={{ marginBottom: 12 }}>
-              <label className="b2b-field-label">주소 경고어 <span className="sm-faint" style={{ fontWeight: 400 }}>(쉼표로 구분 · 이 브라우저에만 저장)</span></label>
-              <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="예: 제주마루 702호, 군부대, 사서함" />
+              <label className="b2b-field-label">주소 경고어 <span className="opt">(쉼표로 구분 · 이 브라우저에만 저장)</span></label>
+              <input className="b2b-input" value={keywords} onChange={(e) => saveKeywords(e.target.value)} placeholder="제주마루 702호, 군부대, 사서함" />
             </div>
             <div className="sm-row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <button className="b2b-btn-primary" onClick={async () => { if (await okToLeave()) fileRef.current?.click(); }} disabled={loading}>{loading ? "만드는 중..." : res ? "다른 엑셀로 다시" : "주문 엑셀 올리기"}</button>
@@ -501,11 +501,13 @@ export default function FulfillPage() {
             <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button className="b2b-btn-primary" style={{ padding: "10px 20px", fontSize: 15, fontWeight: 700 }} disabled={blocked || res.stats.normalCount === 0}
                 onClick={() => { const g = res.files.guarantee; downloadB64(res.files.normal.name, res.files.normal.b64); if (g) setTimeout(() => downloadB64(g.name, g.b64), 400); markDownloaded(); }}>
-                모두 받기{res.files.guarantee ? " (2종)" : ""}
+                모두 내려받기{res.files.guarantee ? " (2종)" : ""}
               </button>
-              <button className="b2b-btn-secondary" disabled={blocked || res.stats.normalCount === 0} onClick={() => { downloadB64(res.files.normal.name, res.files.normal.b64); markDownloaded(); }}>CNplus 일반 ({res.stats.normalCount})</button>
-              <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => { if (res.files.guarantee) { downloadB64(res.files.guarantee.name, res.files.guarantee.b64); markDownloaded(); } }}>CNplus [도착보장] ({res.stats.guaranteeCount})</button>
-              {blocked && <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>위 경고를 확인(체크)해야 받을 수 있어요.</span>}
+              <button className="b2b-btn-secondary" disabled={blocked || res.stats.normalCount === 0} onClick={() => { downloadB64(res.files.normal.name, res.files.normal.b64); markDownloaded(); }}>CNplus 일반 내려받기 ({res.stats.normalCount})</button>
+              <button className="b2b-btn-secondary" disabled={blocked || !res.files.guarantee} onClick={() => { if (res.files.guarantee) { downloadB64(res.files.guarantee.name, res.files.guarantee.b64); markDownloaded(); } }}>CNplus [도착보장] 내려받기 ({res.stats.guaranteeCount})</button>
+              {blocked ? <span className="b2b-btn-why">위 경고를 확인(체크)하면 켜집니다</span>
+                : res.stats.normalCount === 0 ? <span className="b2b-btn-why">일반 주문이 없어 받을 파일이 없습니다</span>
+                  : !res.files.guarantee ? <span className="b2b-btn-why">도착보장 주문 없음</span> : null}
             </div>
           </section>
         </>
@@ -523,7 +525,7 @@ export default function FulfillPage() {
                 <button className={`sm-tab ${recordMode === "replace" ? "is-active" : ""}`} onClick={() => setRecordMode("replace")}>덮어쓰기</button>
               </div>
               <button className="b2b-btn-primary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={recordLog} disabled={recording}>{recording ? "기록 중..." : "배송일지에 기록"}</button>
-              <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀</button>
+              <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀 내려받기</button>
             </div>
           </div>
           {recordOk && (
@@ -558,7 +560,10 @@ export default function FulfillPage() {
           <div className="b2b-card-head" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <span className="b2b-card-title">④ 상품 출고 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 소매 재고에서 차감</span></span>
             {!dispatchDone && dispatch && (dispatch.products.length > 0 || dispatch.untrackedOnly || dispatch.unmatchedOnly) && (
-              <button className="b2b-btn-primary" onClick={commitDispatch} disabled={dispatching || (unm.length > 0 && !unmatchedAck)} title={unm.length > 0 && !unmatchedAck ? "재고가 빠지지 않는 코드를 확인(체크)하세요" : ""}>{dispatching ? "출고 중..." : dispatch.products.length > 0 ? `출고 완료 (${dispatch.products.length}품목)` : "출고 완료 (재고 차감 없음)"}</button>
+              <span className="sm-row">
+                <button className="b2b-btn-primary" onClick={commitDispatch} disabled={dispatching || (unm.length > 0 && !unmatchedAck)} title={unm.length > 0 && !unmatchedAck ? "재고가 빠지지 않는 코드를 확인(체크)하세요" : ""}>{dispatching ? "출고 중..." : dispatch.products.length > 0 ? `출고 완료 (${dispatch.products.length}품목)` : "출고 완료 (재고 차감 없음)"}</button>
+                {unm.length > 0 && !unmatchedAck && !dispatching && <span className="b2b-btn-why">아래 코드를 확인(체크)하면 켜집니다</span>}
+              </span>
             )}
           </div>
           {!dispatchDone && dedupOffBanner}
@@ -632,11 +637,14 @@ export default function FulfillPage() {
         <div className="sm-row" style={{ justifyContent: "space-between", marginTop: 18 }}>
           <button className="b2b-btn-secondary" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>← 이전</button>
           {step < STEPS.length - 1 ? (
-            <button className="b2b-btn-primary" onClick={onNext} disabled={!canNext || recording} title={!canNext ? "이 단계를 완료해야 넘어갈 수 있어요" : ""}>
-              {step === 1 ? "CN 2종 받고 다음 →"
-                : step === 2 ? (recording ? "기록 중..." : recordOk ? "다음: 상품 출고 →" : "배송일지에 기록 후 다음 →")
-                  : `다음: ${STEPS[step + 1]} →`}
-            </button>
+            <span className="sm-row">
+              {!canNext && <span className="b2b-btn-why is-before">{step === 0 ? "①을 먼저 — 엑셀을 올리면 켜집니다" : "②의 경고를 확인(체크)하면 켜집니다"}</span>}
+              <button className="b2b-btn-primary" onClick={onNext} disabled={!canNext || recording} title={!canNext ? "이 단계를 완료해야 넘어갈 수 있어요" : ""}>
+                {step === 1 ? "CN 2종 받고 다음 →"
+                  : step === 2 ? (recording ? "기록 중..." : recordOk ? "다음: 상품 출고 →" : "배송일지에 기록 후 다음 →")
+                    : `다음: ${STEPS[step + 1]} →`}
+              </button>
+            </span>
           ) : null}
         </div>
       )}

@@ -110,7 +110,7 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
   );
   if (loading) return <>{flashEl}<div className="b2b-loading">불러오는 중...</div></>;
   if (error) return <>{flashEl}<div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div></>;
-  if (rows.length === 0) return <>{flashEl}<div className="b2b-empty">내역이 없습니다.</div></>;
+  if (rows.length === 0) return <>{flashEl}<div className="b2b-empty">{type ? `${type} 기록이 없습니다.` : "입고·출고 기록이 없습니다."}</div></>;
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
   return (
@@ -144,15 +144,15 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
                         onKeyDown={(e) => { if (e.key === "Enter") saveUnit(t); if (e.key === "Escape") setEditId(null); }}
                         style={{ width: 90, padding: "3px 8px", fontSize: 15, textAlign: "right" }}
                       />
-                      <button className="b2b-link-btn" onClick={() => saveUnit(t)} disabled={saving}>저장</button>
-                      <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>취소</button>
+                      <button className="b2b-link-btn" onClick={() => saveUnit(t)} disabled={saving}>단가 저장</button>
+                      <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>그만두기</button>
                     </span>
                   ) : (
                     <>
                       {t.unit_amount ? t.unit_amount.toLocaleString() : "-"}
                       {t.type !== "조정" && (
                         <button className="b2b-link-btn sm-faint" style={{ marginLeft: 6, fontSize: 12 }} title="단가만 수정합니다 — 수량·날짜는 취소 후 다시 기록"
-                          onClick={() => { setEditId(t.id); setEditVal(t.unit_amount ? String(t.unit_amount) : ""); }}>수정</button>
+                          onClick={() => { setEditId(t.id); setEditVal(t.unit_amount ? String(t.unit_amount) : ""); }}>단가 수정</button>
                       )}
                     </>
                   )}
@@ -160,7 +160,7 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
                 <td>{t.partner || "-"}</td>
                 <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.memo || ""}>{t.memo || "-"}</td>
                 <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{t.created_by || "-"}</td>
-                <td><button className="b2b-link-btn" onClick={() => cancel(t)} style={{ color: "var(--sm-danger)" }}>취소</button></td>
+                <td><button className="b2b-link-btn" onClick={() => cancel(t)} style={{ color: "var(--sm-danger)" }}>기록 취소</button></td>
               </tr>
             );
           })}

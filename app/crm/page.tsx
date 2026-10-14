@@ -262,9 +262,9 @@ export default function CrmPage() {
         </div>
         <div className="b2b-page-actions sm-row sm-gap-2">
           <button className="b2b-btn-primary" onClick={() => openNew()}>+ 메시지 추가</button>
-          <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리</button>
-          <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
-          {messages.length > 0 && <a className="b2b-btn-secondary crm-xlsx-btn" href="/api/crm/export">엑셀 다운로드</a>}
+          <button className="b2b-btn-secondary" onClick={() => setShowOpts(true)}>선택지 관리하기</button>
+          <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "다시 불러오기"}</button>
+          {messages.length > 0 && <a className="b2b-btn-secondary crm-xlsx-btn" href="/api/crm/export">엑셀 내려받기</a>}
         </div>
       </header>
 
@@ -301,8 +301,8 @@ export default function CrmPage() {
           <div className="sm-row crm-datebar">
             <span className="crm-datebar-label">기준일</span>
             <input type="date" className="b2b-input crm-date-input" value={asof} onChange={(e) => setAsof(e.target.value)} aria-label="기준일" />
-            {asof !== kstToday() && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof(kstToday())}>오늘</button>}
-            {asof && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof("")}>전체</button>}
+            {asof !== kstToday() && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof(kstToday())}>오늘로 이동</button>}
+            {asof && <button className="b2b-btn-secondary crm-date-btn" onClick={() => setAsof("")}>전체 보기</button>}
           </div>
         )}
         {/* 표: 스테이지·고객·상태 필터 — 원하는 메시지만 좁혀서 편집 */}
@@ -330,7 +330,7 @@ export default function CrmPage() {
               <option value="">전체 발송채널</option>
               {opts.channels.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
-            <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="메시지·스테이지·태그 검색" />
+            <input className="b2b-input crm-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" aria-label="메시지 검색" />
           </>
         )}
       </div>
@@ -350,7 +350,7 @@ export default function CrmPage() {
       {loading ? <div className="b2b-loading">불러오는 중...</div> :
         messages.length === 0 ? (
           <div className="b2b-empty">
-            <p className="crm-empty-lead">아직 등록된 메시지가 없습니다.</p>
+            <p className="crm-empty-lead">등록된 메시지가 없습니다.</p>
             <div className="sm-row-wrap crm-empty-actions">
               <button className="b2b-btn-primary" onClick={() => runImport("seed")} disabled={importing}>
                 {importing ? "가져오는 중..." : "원본 맵 데이터 가져오기 (8단계 · 30개)"}
@@ -500,8 +500,8 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
           <tbody>
             {msgs.map((m) => (
               <tr key={m.id}>
-                <td><CellText value={m.stage} placeholder="스테이지" list="crm-stage-names" onLocal={(v) => onField(m.id, "stage", v)} onCommit={() => onSave(m.id)} /></td>
-                <td><CellText value={m.title} placeholder="메시지명" onLocal={(v) => onField(m.id, "title", v)} onCommit={() => onSave(m.id)} /></td>
+                <td><CellText value={m.stage} placeholder="예: 유입/인지" list="crm-stage-names" onLocal={(v) => onField(m.id, "stage", v)} onCommit={() => onSave(m.id)} /></td>
+                <td><CellText value={m.title} placeholder="예: 체험단 안내" onLocal={(v) => onField(m.id, "title", v)} onCommit={() => onSave(m.id)} /></td>
                 {fieldsSupported && (
                   <td>
                     <select className="b2b-status-select" value={m.customer} aria-label="고객" onChange={sel(m, "customer")}>
@@ -533,11 +533,11 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
                   </select>
                 </td>
                 <td><CellText value={m.links?.utm_campaign || ""} placeholder="예: crm_60d_winback" onLocal={(v) => onLink(m.id, "utm_campaign", v)} onCommit={() => onSave(m.id)} /></td>
-                <td><CellText value={m.tags} placeholder="쉼표로 구분" onLocal={(v) => onField(m.id, "tags", v)} onCommit={() => onSave(m.id)} /></td>
+                <td><CellText value={m.tags} placeholder="예: 신규, 자동화" onLocal={(v) => onField(m.id, "tags", v)} onCommit={() => onSave(m.id)} /></td>
                 <td className="actions">
                   {savingId === m.id
                     ? <span className="crm-saving">저장 중...</span>
-                    : <button className="b2b-btn-secondary crm-detail-btn" onClick={() => onEdit(m)}>상세</button>}
+                    : <button className="b2b-btn-secondary crm-detail-btn" onClick={() => onEdit(m)}>상세 보기</button>}
                 </td>
               </tr>
             ))}
@@ -752,10 +752,10 @@ function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onCl
                 {draft[key].length === 0 && <span className="sm-faint crm-opt-empty">비어 있음 — 저장하면 기본값으로 돌아갑니다</span>}
               </div>
               <div className="sm-row crm-opt-add">
-                <input className="b2b-input" value={adding[key] || ""} placeholder={`새 ${title} 이름`} maxLength={20}
+                <input className="b2b-input" value={adding[key] || ""} aria-label={`새 ${title} 이름`} maxLength={20}
                   onChange={(e) => setAdding((a) => ({ ...a, [key]: e.target.value }))}
                   onKeyDown={(e) => { if (e.key === "Enter") add(key); }} />
-                <button type="button" className="b2b-btn-secondary" onClick={() => add(key)}>추가</button>
+                <button type="button" className="b2b-btn-secondary" onClick={() => add(key)}>{title} 추가</button>
               </div>
             </div>
           ))}
@@ -764,8 +764,8 @@ function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onCl
         <div className="b2b-modal-foot">
           <div />
           <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose}>취소</button>
-            <button className="b2b-btn-primary" onClick={saveOpts} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+            <button className="b2b-btn-secondary" onClick={onClose}>그만두기</button>
+            <button className="b2b-btn-primary" onClick={saveOpts} disabled={saving}>{saving ? "저장 중..." : "선택지 저장"}</button>
           </div>
         </div>
       </div>
@@ -842,15 +842,18 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
             </div>
           )}
           <label className="b2b-field"><span className="b2b-field-label">상세 설명</span>
-            <textarea className="b2b-textarea" value={data.detail} onChange={(e) => set("detail", e.target.value)} rows={2} placeholder="어떤 메시지인지·자동화 여부 등" /></label>
+            <span className="b2b-field-hint">어떤 메시지인지 · 자동화 여부</span>
+            <textarea className="b2b-textarea" value={data.detail} onChange={(e) => set("detail", e.target.value)} rows={2} /></label>
           <label className="b2b-field"><span className="b2b-field-label">메시지 내용</span>
-            <textarea className="b2b-textarea" value={data.msg} onChange={(e) => set("msg", e.target.value)} rows={3} placeholder="발송되는 메시지 전문 — 흐름 탭 '메시지 열기'에서 나란히 검수됩니다" /></label>
+            <span className="b2b-field-hint">발송되는 메시지 전문 — 흐름 탭 [메시지 열기]에서 나란히 검수</span>
+            <textarea className="b2b-textarea" value={data.msg} onChange={(e) => set("msg", e.target.value)} rows={3} /></label>
           <label className="b2b-field"><span className="b2b-field-label">태그(콤마 구분)</span>
             <input className="b2b-input" value={data.tags} onChange={(e) => set("tags", e.target.value)} placeholder="예: 신규, 자동화" /></label>
 
           <div className="b2b-field-row">
             <label className="b2b-field"><span className="b2b-field-label">링크 (선택)</span>
-              <input className="b2b-input" value={data.links.url || ""} onChange={(e) => setLink("url", e.target.value)} placeholder="https:// — 메시지 버튼/랜딩 URL 1개" spellCheck={false} /></label>
+              <span className="b2b-field-hint">메시지 버튼/랜딩 URL 1개</span>
+              <input className="b2b-input" value={data.links.url || ""} onChange={(e) => setLink("url", e.target.value)} placeholder="https://" spellCheck={false} /></label>
             <label className="b2b-field"><span className="b2b-field-label">UTM 캠페인</span>
               <input className="b2b-input" value={data.links.utm_campaign || ""} onChange={(e) => setLink("utm_campaign", e.target.value)}
                 placeholder="예: crm_60d_winback" spellCheck={false} /></label>
@@ -863,8 +866,8 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
         <div className="b2b-modal-foot">
           <div>{data.id && <button className="b2b-btn-danger" onClick={onDelete} disabled={saving}>삭제</button>}</div>
           <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose}>취소</button>
-            <button className="b2b-btn-primary" onClick={onSave} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+            <button className="b2b-btn-secondary" onClick={onClose}>그만두기</button>
+            <button className="b2b-btn-primary" onClick={onSave} disabled={saving}>{saving ? "저장 중..." : "메시지 저장"}</button>
           </div>
         </div>
       </div>

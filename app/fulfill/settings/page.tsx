@@ -83,7 +83,7 @@ export default function FulfillSettingsPage() {
         <div>
           <h1 className="b2b-page-title">온라인 발주 설정</h1>
         </div>
-        <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading || loadErr}>{saving ? "저장 중..." : "저장"}</button></div>
+        <div className="b2b-page-actions"><button className="b2b-btn-primary" onClick={save} disabled={saving || loading || loadErr}>{saving ? "저장 중..." : "설정 저장"}</button></div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
@@ -135,7 +135,8 @@ export default function FulfillSettingsPage() {
           })}>+ 종류 추가</button>
         {(() => {
           const errs = validateBoxCats(boxCats, history[history.length - 1]?.boxTiers ?? DEFAULT_RATES.boxTiers);
-          return errs.length ? <div className="b2b-error" style={{ marginTop: 10, whiteSpace: "pre-line" }}>{errs.join("\n")}</div> : null;
+          if (!errs.length) return null;
+          return <div className="b2b-error" style={{ marginTop: 10 }}>{errs.length === 1 ? errs[0] : <ul>{errs.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>;
         })()}
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>이름을 바꾸거나 지워도 과거 배송일지 기록은 그대로 남습니다.</p>
       </fieldset>
@@ -199,7 +200,7 @@ export default function FulfillSettingsPage() {
           ))}
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-            <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
+            <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "설정 저장"}</button>
           </div>
         </>
       )}
@@ -281,8 +282,8 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
           <div className="sm-col" style={{ gap: 6 }}>
             {v.supplies.map((s, i) => (
               <div key={i} className="sm-row" style={{ gap: 8, alignItems: "center" }}>
-                <input className="b2b-input" placeholder="이름 (예: 박스 大)" value={s.name} onChange={(e) => onPatch((x) => ({ ...x, supplies: x.supplies.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)) }))} style={{ flex: 1 }} />
-                <input type="number" className="b2b-input b2b-money" placeholder="단가" value={s.price || ""} onChange={(e) => onPatch((x) => ({ ...x, supplies: x.supplies.map((y, j) => (j === i ? { ...y, price: num(e.target.value) } : y)) }))} style={{ width: 120 }} />
+                <input className="b2b-input" placeholder="박스 大" aria-label="부자재 이름" value={s.name} onChange={(e) => onPatch((x) => ({ ...x, supplies: x.supplies.map((y, j) => (j === i ? { ...y, name: e.target.value } : y)) }))} style={{ flex: 1 }} />
+                <input type="number" className="b2b-input b2b-money" placeholder="단가" aria-label="부자재 단가" value={s.price || ""} onChange={(e) => onPatch((x) => ({ ...x, supplies: x.supplies.map((y, j) => (j === i ? { ...y, price: num(e.target.value) } : y)) }))} style={{ width: 120 }} />
                 <button className="b2b-link-btn" onClick={() => onPatch((x) => ({ ...x, supplies: x.supplies.filter((_, j) => j !== i) }))} style={{ color: "var(--sm-danger)" }}>삭제</button>
               </div>
             ))}

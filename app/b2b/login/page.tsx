@@ -21,6 +21,10 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!password) {
+      setError("비밀번호를 입력하세요");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -72,7 +76,7 @@ function LoginForm() {
               className="b2b-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호를 입력하세요"
+              aria-invalid={error === "비밀번호를 입력하세요" ? "true" : undefined}
               autoComplete="current-password"
               autoFocus
               disabled={loading}
@@ -82,7 +86,7 @@ function LoginForm() {
             <button
               type="submit"
               className="b2b-btn-primary"
-              disabled={loading || !password}
+              disabled={loading}
               style={{ width: "100%" }}
             >
               {loading ? "확인 중..." : "들어가기"}

@@ -13,6 +13,7 @@ interface Entry {
   sort_order: number;
   _new?: boolean;
   _saving?: boolean;
+  _invalid?: boolean; // 저장 때 제목이 비어 있던 항목(제목 칸 빨강)
   _dirty?: boolean;
   _saved?: boolean;
 }
@@ -90,11 +91,12 @@ export default function CsManualPage() {
 
   async function save(e: Entry) {
     if (!e.title.trim()) {
-      setError("제목을 입력하세요.");
+      setError("제목을 입력하세요");
+      patchById(e.id, { _invalid: true });
       return;
     }
     setError("");
-    patchById(e.id, { _saving: true });
+    patchById(e.id, { _saving: true, _invalid: false });
     try {
       const isNew = e._new;
       const res = await fetch("/api/cs/manual", {
@@ -150,7 +152,8 @@ export default function CsManualPage() {
         <div className="csm-toolbar">
           <input
             className="csm-search"
-            placeholder="제목·내용·카테고리 검색"
+            placeholder="검색"
+            aria-label="매뉴얼 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -174,7 +177,12 @@ export default function CsManualPage() {
         <div className="b2b-loading">불러오는 중...</div>
       ) : filtered.length === 0 ? (
         <div className="b2b-empty">
-          {entries.length === 0 ? "등록된 매뉴얼이 없습니다." : "검색 결과가 없습니다."}
+          {entries.length === 0 ? "등록된 매뉴얼이 없습니다." : "조건에 맞는 매뉴얼이 없습니다."}
+          <div className="b2b-empty-action">
+            {entries.length === 0
+              ? <button type="button" className="btn-secondary" onClick={() => addNew()}>+ 항목 추가</button>
+              : <button type="button" className="btn-secondary" onClick={() => { setSearch(""); setFilterCat(""); }}>조건 지우기</button>}
+          </div>
         </div>
       ) : (
         <div className="csm-list">
@@ -184,14 +192,17 @@ export default function CsManualPage() {
                 <input
                   className="csm-title-input"
                   value={e.title}
-                  placeholder="항목 제목 (예: 배송 지연, 이유식 가시 보상)"
+                  placeholder="예: 배송 지연"
+                  aria-label="항목 제목"
+                  aria-invalid={e._invalid && !e.title.trim() ? "true" : undefined}
                   onChange={(ev) => patchById(e.id, { title: ev.target.value, _dirty: true })}
                 />
                 <input
                   className="csm-cat-input"
                   list="cs-cats"
                   value={e.category}
-                  placeholder="카테고리"
+                  placeholder="예: 배송"
+                  aria-label="카테고리"
                   onChange={(ev) => patchById(e.id, { category: ev.target.value, _dirty: true })}
                 />
                 <span className="csm-order">
@@ -204,10 +215,11 @@ export default function CsManualPage() {
                   />
                 </span>
               </div>
+              {e._invalid && !e.title.trim() && <div className="b2b-field-error">제목을 입력하세요</div>}
               <textarea
                 className="form-textarea csm-content"
                 value={e.content}
-                placeholder="이 항목의 매뉴얼 내용을 입력하세요."
+                aria-label="매뉴얼 내용"
                 onChange={(ev) => patchById(e.id, { content: ev.target.value, _dirty: true })}
               />
               <div className="csm-card-actions">

@@ -233,6 +233,7 @@ export default function TxnModal({
   const customerReturn = type === "입고" && inReason === "고객 반품";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErr, setFieldErr] = useState<{ product?: string; qty?: string }>({}); // 칸 아래 한 줄(E5)
   // 지정 매칭 — 입고를 연결할 제조사 요청서. 거래일이 생산기간에 드는 요청서가 기본값(사람이 고르면 그대로).
   const [reqs, setReqs] = useState<OpenReq[]>([]);
   const [reqId, setReqId] = useState("");
@@ -440,8 +441,11 @@ export default function TxnModal({
   }, [type, qty, current, adjMode]);
 
   async function save() {
-    if (!productId) { setError("품목을 선택하세요."); return; }
-    if (qty.trim() === "") { setError("수량을 입력하세요."); return; }
+    const errs: { product?: string; qty?: string } = {};
+    if (!productId) errs.product = "품목을 선택하세요";
+    if (qty.trim() === "") errs.qty = "수량을 입력하세요";
+    setFieldErr(errs);
+    if (errs.product || errs.qty) { setError(errs.product && errs.qty ? "" : (errs.product || errs.qty || "")); return; }
     if (pickMissing) { setError(isAdjust ? "조정할 칸을 고르세요." : "출고할 칸을 고르세요."); return; }
     // 목표(실사) 조정은 현재고를 빼서 델타를 만든다 → 그 채널 현재고를 모르면 계산 자체가 틀린다.
     if (type === "조정" && date > TODAY()) { setError("조정 날짜는 오늘 이후로 할 수 없습니다."); return; }
@@ -560,14 +564,16 @@ export default function TxnModal({
               <input className="b2b-input" value={productLabel} disabled readOnly />
             ) : (
               <Combobox
+                invalid={!!fieldErr.product}
                 value={productLabel}
                 options={productOptions}
-                onSelect={(opt) => setProductId(opt.id)}
-                placeholder="품목명 · SKU 검색"
+                onSelect={(opt) => { setProductId(opt.id); if (fieldErr.product) setFieldErr((x) => ({ ...x, product: undefined })); }}
+                placeholder="품목·SKU 검색"
                 ariaLabel="품목 검색"
                 emptyText="일치하는 품목이 없습니다"
               />
             )}
+            {fieldErr.product && <span className="b2b-field-error">{fieldErr.product}</span>}
           </div>
           {product && (pickMissing ? null : chanKnown
             ? (splitStock
@@ -585,7 +591,8 @@ export default function TxnModal({
 
           <div className="b2b-field-row">
             <label className="b2b-field"><span className="b2b-field-label">{isAdjust ? (adjMode === "target" ? "실사 수량" : "증감(±)") : "수량"}</span>
-              <input className="b2b-input" type="number" step={0.01} value={qty} onChange={(e) => setQty(e.target.value)} placeholder={isAdjust && adjMode === "delta" ? "예: -3" : "0"} autoFocus onKeyDown={(e) => { if (e.key === "Enter" && !saving) save(); }} /></label>
+              <input className="b2b-input" type="number" step={0.01} value={qty} onChange={(e) => { setQty(e.target.value); if (fieldErr.qty) setFieldErr((x) => ({ ...x, qty: undefined })); }} placeholder={isAdjust && adjMode === "delta" ? "-3" : "0"} aria-invalid={fieldErr.qty ? "true" : undefined} autoFocus onKeyDown={(e) => { if (e.key === "Enter" && !saving) save(); }} />
+              {fieldErr.qty && <span className="b2b-field-error">{fieldErr.qty}</span>}</label>
             <label className="b2b-field"><span className="b2b-field-label">거래일</span>
               <input className="b2b-input" type="date" value={date} max={isAdjust || ioDone ? TODAY() : undefined} onChange={(e) => setDate(e.target.value)} /></label>
           </div>
@@ -595,11 +602,11 @@ export default function TxnModal({
           {!isAdjust && (
             <div className="b2b-field-row">
               {!customerReturn && (
-              <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? "매입 단가(원)" : "판매 단가(원)"}</span>
-                <input className="b2b-input" type="number" min={0} value={unitAmount} onChange={(e) => setUnitAmount(e.target.value)} placeholder="선택" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? "매입 단가(원)" : "판매 단가(원)"} <span className="opt">(선택)</span></span>
+                <input className="b2b-input" type="number" min={0} value={unitAmount} onChange={(e) => setUnitAmount(e.target.value)} placeholder="0" /></label>
               )}
-              <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? (customerReturn ? "고객" : "매입처") : reason !== "판매" ? "전달처" : "판매처"}</span>
-                <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? (customerReturn ? "고객" : "매입처") : reason !== "판매" ? "전달처" : "판매처"} <span className="opt">(선택)</span></span>
+                <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
             </div>
           )}
           {type === "출고" && (
@@ -612,8 +619,8 @@ export default function TxnModal({
                 <option value="기타">기타</option>
               </select></label>
           )}
-          <label className="b2b-field"><span className="b2b-field-label">메모</span>
-            <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={isAdjust ? "조정 사유" : "선택"} /></label>
+          <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">{isAdjust ? "· 조정 사유" : "(선택)"}</span></span>
+            <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
           {!isAdjust && (
             <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 15, cursor: "pointer" }}>
               <input type="checkbox" checked={ioDone} onChange={(e) => setIoDone(e.target.checked)} /> 즉시 {type}처리 <span className="sm-faint" style={{ fontSize: 12 }}>(해제 시 ‘대기’ — 미래 날짜는 대기로만)</span>
@@ -622,7 +629,9 @@ export default function TxnModal({
           </>
           )}
 
-          {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
+          {fieldErr.product && fieldErr.qty
+            ? <div className="b2b-error" style={{ marginTop: 8 }}><ul><li>{fieldErr.product}</li><li>{fieldErr.qty}</li></ul></div>
+            : error ? <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div> : null}
         </div>
         <div className="b2b-modal-foot">
           {/* 미리보기에서 파일·설정을 다시 고를 수 있는 유일한 경로 */}
@@ -630,12 +639,15 @@ export default function TxnModal({
             ? <button className="b2b-btn-secondary" onClick={() => { setPreview(null); setError(""); }} disabled={applying}>← 다시 선택</button>
             : <span />}
           <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving || applying || importing}>취소</button>
+            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving || applying || importing}>그만두기</button>
             {mode === "엑셀" ? (
               preview ? (
-                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.count === 0}>
-                  {applying ? "반영 중..." : `${preview.count.toLocaleString()}건 ${preview.kind === "조정" ? "조정" : "반영"}`}
-                </button>
+                <>
+                  {preview.count === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
+                  <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.count === 0}>
+                    {applying ? "반영 중..." : `${preview.count.toLocaleString()}건 ${preview.kind === "조정" ? "조정" : "반영"}`}
+                  </button>
+                </>
               ) : (
                 <label className="b2b-btn-primary" style={{ cursor: importing || pickMissing ? "default" : "pointer", opacity: pickMissing ? 0.5 : undefined }}
                   onClick={(e) => { if (pickMissing) { e.preventDefault(); setError("칸을 고르세요."); } }}>
@@ -645,7 +657,7 @@ export default function TxnModal({
                 </label>
               )
             ) : (
-              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "기록"}</button>
+              <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : `${type} 기록`}</button>
             )}
           </div>
         </div>
@@ -748,8 +760,8 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
           <div className="b2b-field-row">
             <label className="b2b-field"><span className="b2b-field-label">거래일</span>
               <input className="b2b-input" type="date" value={date} max={ioDone ? new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10) : undefined} onChange={(e) => setDate(e.target.value)} /></label>
-            <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? (inReason === "고객 반품" ? "고객" : "매입처") : reason !== "판매" ? "전달처" : "판매처"}</span>
-              <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
+            <label className="b2b-field"><span className="b2b-field-label">{type === "입고" ? (inReason === "고객 반품" ? "고객" : "매입처") : reason !== "판매" ? "전달처" : "판매처"} <span className="opt">(선택)</span></span>
+              <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
           </div>
           {type === "입고" && <InReasonSelect value={inReason} onChange={setInReason} />}
           {type === "입고" && <RequestSelect reqs={reqs} value={reqId} disabled={!ioDone || inReason === "고객 반품"} warn={ioDone && inReason !== "고객 반품" ? reqWarn : ""} onChange={setReqId} />}
@@ -774,7 +786,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
           <input className="b2b-input" type="date" value={date} max={new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} /></label>
       )}
       <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>
-        {templateHref ? <a href={templateHref} className="sm-link">양식 다운로드</a> : <span>칸을 고르면 양식을 받을 수 있습니다</span>}
+        {templateHref ? <a href={templateHref} className="sm-link">양식 내려받기</a> : <span>칸을 고르면 양식을 받을 수 있습니다</span>}
         {isAdjust && " · 실사한 날 마감 기준으로 계산·기록됩니다"}
       </p>
     </div>

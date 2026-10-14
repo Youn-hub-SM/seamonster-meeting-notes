@@ -114,7 +114,7 @@ export default function SalesHistoryPage() {
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={() => setTick((t) => t + 1)} disabled={loading}>
-            {loading ? "..." : "새로고침"}
+            {loading ? "불러오는 중..." : "다시 불러오기"}
           </button>
         </div>
       </header>
@@ -123,7 +123,7 @@ export default function SalesHistoryPage() {
 
       <div className="b2b-card">
         <div className="b2b-card-head" style={{ gap: 10, flexWrap: "wrap", justifyContent: "flex-start" }}>
-          <input type="text" className="b2b-search" placeholder="내용 검색 (파일명·수신자 등)"
+          <input type="text" className="b2b-search" placeholder="검색" aria-label="내용 검색(파일명·수신자 등)"
             value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 240 }} />
           <select className="b2b-select" value={type} onChange={(e) => setType(e.target.value)} style={{ width: "auto" }}>
             {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -136,7 +136,7 @@ export default function SalesHistoryPage() {
           <input type="date" className="b2b-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: "auto" }} title="종료일" />
           {hasFilter && (
             <button type="button" className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={reset}>
-              필터 초기화
+              조건 지우기
             </button>
           )}
         </div>
@@ -145,7 +145,8 @@ export default function SalesHistoryPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : items.length === 0 ? (
           <div className="b2b-empty">
-            {hasFilter ? "조건에 맞는 이력이 없습니다." : "아직 기록된 매출 활동이 없습니다."}
+            {hasFilter ? "조건에 맞는 기록이 없습니다." : "매출 변경 기록이 없습니다."}
+            {hasFilter && <div className="b2b-empty-action"><button type="button" className="b2b-btn-secondary" onClick={reset}>조건 지우기</button></div>}
           </div>
         ) : (
           <>

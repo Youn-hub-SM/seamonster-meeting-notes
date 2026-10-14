@@ -216,6 +216,7 @@ export default function NoticePage() {
             <button type="button" className="b2b-btn-primary" onClick={() => generate({ busy: "make" })} disabled={noText || locked}>
               {label("make", "공지 만들기")}
             </button>
+            {noText && !locked && <span className="b2b-btn-why">공지할 내용을 넣으면 켜집니다</span>}
           </div>
         </section>
 
@@ -253,7 +254,7 @@ export default function NoticePage() {
                   글자 수 {count.toLocaleString()}{limit > 0 ? ` / 한도 ${limit.toLocaleString()}` : ""}
                 </span>
                 <div className="sm-row-wrap sm-gap-2">
-                  <button type="button" className="b2b-btn-primary" onClick={copy} disabled={!draft || locked}>{copied ? "복사됨" : "복사"}</button>
+                  <button type="button" className="b2b-btn-primary" onClick={copy} disabled={!draft || locked}>{copied ? "복사됨" : "공지 복사"}</button>
                   <button type="button" className="b2b-btn-secondary" onClick={() => generate({ busy: "shorter", type: result.type, refine: "shorter" })} disabled={locked || noText || !draft.trim()}>{label("shorter", "더 짧게")}</button>
                   <button type="button" className="b2b-btn-secondary" onClick={() => generate({ busy: "politer", type: result.type, refine: "politer" })} disabled={locked || noText || !draft.trim()}>{label("politer", "더 정중하게")}</button>
                   {typeDef?.apology && (
@@ -322,10 +323,10 @@ export default function NoticePage() {
             />
             <div className="ntc-foot">
               <button type="button" className="b2b-btn-primary" onClick={() => savePrompt()} disabled={!promptLoaded || promptSaving}>
-                {promptSaving ? "저장 중..." : "저장"}
+                {promptSaving ? "저장 중..." : "프롬프트 저장"}
               </button>
               <button type="button" className="b2b-btn-secondary" onClick={() => savePrompt("")} disabled={!promptLoaded || promptSaving || (!!promptDefault && prompt === promptDefault)}>
-                기본값으로
+                기본값으로 되돌리기
               </button>
               {promptMsg && <span className="sm-faint ntc-note">{promptMsg}</span>}
             </div>

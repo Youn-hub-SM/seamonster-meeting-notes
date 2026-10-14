@@ -320,7 +320,7 @@ export default function SkuListingsPage() {
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={refreshAll} disabled={busy}
             title="검색어는 그대로 두고 카탈로그·판매량·명령 상태를 다시 불러옵니다">
-            새로고침
+            다시 불러오기
           </button>
           <button className="b2b-btn-secondary" onClick={syncCatalogs} disabled={syncing}>
             {syncing ? "요청 중..." : "카탈로그 동기화"}
@@ -328,8 +328,10 @@ export default function SkuListingsPage() {
           <button className="b2b-btn-primary" onClick={exportXlsx}
             disabled={exporting || !res || ((res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0)}
             title={!res ? "먼저 상품을 검색하세요" : "화면 목록 그대로 내려받습니다 (접어 둔 90일 무판매 리스팅은 포함)"}>
-            {exporting ? "생성 중..." : "엑셀 다운로드"}
+            {exporting ? "생성 중..." : "엑셀 내려받기"}
           </button>
+          {!exporting && (!res ? <span className="b2b-btn-why">상품을 고르면 켜집니다</span>
+            : (res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0 ? <span className="b2b-btn-why">내려받을 목록이 없습니다</span> : null)}
         </div>
       </header>
 
@@ -349,7 +351,7 @@ export default function SkuListingsPage() {
           <label className="b2b-field-label">상품</label>
           <Combobox value={plabel} options={options}
             onSelect={(o) => { setPid(o.id); setPlabel(o.label); load(o.id); }}
-            placeholder="상품 검색 — 이름 또는 SKU" ariaLabel="상품" />
+            placeholder="품목·SKU 검색" ariaLabel="상품" />
         </div>
         {res?.target && (res.bundles?.length ?? 0) > 0 && (
           <p className="sm-faint" style={{ margin: "8px 0 0", fontSize: 12 }}>

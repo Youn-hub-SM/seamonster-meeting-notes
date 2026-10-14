@@ -75,10 +75,10 @@ function NameHelper({ today }: { today: string }) {
     <div className="sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-text-mid)" }}>세트 이름 만들기</span>
       <code style={{ fontSize: 15, background: "var(--sm-white)", padding: "3px 7px", borderRadius: 6, border: "1px solid var(--sm-border)" }}>{today}</code>
-      <input value={msg} onChange={(e) => { setMsg(e.target.value); setCopied(false); }} placeholder="주요 메시지 (예: 무료배송 강조)"
+      <input value={msg} onChange={(e) => { setMsg(e.target.value); setCopied(false); }} placeholder="예: 무료배송 강조" aria-label="주요 메시지"
         className="b2b-input" style={{ width: 200, fontSize: 15, padding: "5px 9px" }} />
       <button type="button" className="b2b-btn-secondary" style={{ fontSize: 15, padding: "5px 10px" }}
-        onClick={() => { navigator.clipboard?.writeText(name); setCopied(true); }}>{copied ? "복사됨 ✓" : "복사"}</button>
+        onClick={() => { navigator.clipboard?.writeText(name); setCopied(true); }}>{copied ? "복사됨 ✓" : "이름 복사"}</button>
       {msg && <span className="sm-faint" style={{ fontSize: 15 }}>→ {name}</span>}
     </div>
   );
@@ -299,8 +299,9 @@ export default function MetaAdPage() {
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
           <span className="sm-faint" style={{ fontSize: 15, whiteSpace: "nowrap" }}>{rangeLabel(preset)}{ov?.cached ? " · 캐시" : ""}</span>
-          <button className="b2b-btn-secondary" onClick={() => load(true)} disabled={loading || !status?.connected}>{loading ? "..." : "새로고침"}</button>
-          <Link href="/meta-ad/settings" className="b2b-btn-secondary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>성과 기준 설정</Link>
+          <button className="b2b-btn-secondary" onClick={() => load(true)} disabled={loading || !status?.connected}>{loading ? "..." : "다시 불러오기"}</button>
+          {status && !status.connected && <span className="b2b-btn-why">연동 뒤 켜집니다</span>}
+          <Link href="/meta-ad/settings" className="b2b-btn-secondary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>성과 기준 설정 열기</Link>
         </div>
       </header>
 

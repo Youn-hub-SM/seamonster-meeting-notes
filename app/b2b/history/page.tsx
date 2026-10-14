@@ -135,7 +135,8 @@ export default function HistoryPage() {
           <input
             type="text"
             className="b2b-search"
-            placeholder="내용 검색 (발주번호·업체·메모)"
+            placeholder="검색"
+            aria-label="이력 검색"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             style={{ maxWidth: 240 }}
@@ -164,7 +165,12 @@ export default function HistoryPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : items.length === 0 ? (
           <div className="b2b-empty">
-            {hasFilter ? "조건에 맞는 이력이 없습니다." : "아직 기록된 이력이 없습니다."}
+            {hasFilter ? "조건에 맞는 이력이 없습니다." : "기록된 이력이 없습니다."}
+            {hasFilter && (
+              <div className="b2b-empty-action">
+                <button type="button" className="b2b-btn-secondary" onClick={reset}>조건 지우기</button>
+              </div>
+            )}
           </div>
         ) : (
           <>

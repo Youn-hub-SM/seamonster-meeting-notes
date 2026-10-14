@@ -393,7 +393,7 @@ export function RequestList() {
           </label>
         </div>
         <div className="sm-row" style={{ gap: 8 }}>
-          <button className="b2b-btn-secondary" onClick={() => { load(); void loadRec(); }} disabled={loading}>{loading ? "불러오는 중..." : "새로고침"}</button>
+          <button className="b2b-btn-secondary" onClick={() => { load(); void loadRec(); }} disabled={loading}>{loading ? "불러오는 중..." : "다시 불러오기"}</button>
           <button className="b2b-btn-primary" onClick={() => { setError(""); setCreateOpen(true); }} disabled={busy}>+ 새 생산 요청</button>
         </div>
       </div>
@@ -427,7 +427,7 @@ export function RequestList() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : displayed.length === 0 ? (
-        <div className="b2b-empty">{showDone ? `${PR_PURPOSE_LABEL[tab]} 요청이 없습니다.` : `진행 중인 ${PR_PURPOSE_LABEL[tab]} 요청이 없습니다.`}</div>
+        <div className="b2b-empty">{showDone ? `${PR_PURPOSE_LABEL[tab]} 요청이 없습니다.` : `진행 중인 ${PR_PURPOSE_LABEL[tab]} 요청이 없습니다.`}<div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={() => { setError(""); setCreateOpen(true); }} disabled={busy}>+ 새 생산 요청</button></div></div>
       ) : (
         <section className="b2b-form-section">
         <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 목록</div>
@@ -554,7 +554,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
               {(req.status === "완료" || req.status === "취소") && <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{req.status}</span>}
             </span>
           ) : (req.status === "요청" || req.status === "진행중") ? (
-            <button className="b2b-btn-secondary" style={{ padding: "2px 7px", fontSize: 12 }} disabled={busy} onClick={onConfirm}>확인</button>
+            <button className="b2b-btn-secondary" style={{ padding: "2px 7px", fontSize: 12 }} disabled={busy} onClick={onConfirm}>담당 확인</button>
           ) : (
             <span className="sm-faint" style={{ fontSize: 12 }}>{req.status}</span>
           )}
@@ -562,7 +562,7 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
         <td onClick={(e) => e.stopPropagation()} style={{ paddingLeft: 8, paddingRight: 8 }}>
           {/* 행 액션 4개(요청서 · 수정 · 삭제 · 마감)는 같은 버튼 모양·글꼴 — 대표 지시. 닫힌 요청서는 마감 대신 다시 열기 */}
           <div className="sm-row" style={{ gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <a className="b2b-btn-secondary" style={ACT} href={`/api/production/requests/${req.id}/sheet`}>요청서</a>
+          <a className="b2b-btn-secondary" style={ACT} href={`/api/production/requests/${req.id}/sheet`}>요청서 보기</a>
           {editable && <button className="b2b-btn-secondary" style={ACT} disabled={busy} onClick={onEdit}>수정</button>}
           {(req.status === "완료" || req.status === "취소") ? (
             <>
@@ -652,7 +652,7 @@ function ItemRow({ item, factory, canEdit, busy, onCancelReceipt, onUnlink }: {
         <td><span style={{ fontSize: 15, fontWeight: 700, color: PR_LINE_COLOR[st] }}>{st}</span></td>
         <td>
           {item.receipts.length > 0 ? (
-            <button className="b2b-btn-secondary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => setOpen((v) => !v)}>{open ? "닫기" : "입고 이력"}</button>
+            <button className="b2b-btn-secondary" style={{ padding: "4px 12px" }} disabled={busy} onClick={() => setOpen((v) => !v)}>{open ? "입고 이력 닫기" : "입고 이력 보기"}</button>
           ) : <span style={{ fontSize: 15, color: "var(--sm-text-light)" }}>—</span>}
         </td>
       </tr>
@@ -679,12 +679,12 @@ function ItemRow({ item, factory, canEdit, busy, onCancelReceipt, onUnlink }: {
                       : !canEdit ? null
                       : (rc.memo?.includes("기간 자동 매칭") || rc.memo?.includes("입고 연결") || rc.memo?.includes("입고/출고 연동"))
                       ? <span className="sm-faint" style={{ fontSize: 12 }}>취소는 입고 및 출고 화면에서</span>
-                      : <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>취소</button>}
+                      : <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-danger)" }} disabled={busy} onClick={() => onCancelReceipt(rc.id)}>입고 취소</button>}
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="sm-faint" style={{ fontSize: 15, margin: "4px 2px" }}>아직 입고 기록이 없습니다.</p>
+              <p className="sm-faint" style={{ fontSize: 15, margin: "4px 2px" }}>입고 기록이 없습니다.</p>
             )}
           </td>
         </tr>
@@ -784,9 +784,16 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
   // 시작일이 비면 요청일이 기간 시작이다(서버 규칙과 동일) — 요청일 > 종료일 역전도 막는다
   const startAfterEnd = purpose === "재고 보충" && !!dueDate && (prodStart || date) > dueDate;
   const valid = lines.some((l) => Number(l.requested_qty) > 0) && !!dueDate && !startAfterEnd;
-
+  // 제출 때 비거나 어긋난 칸 — 창 맨 위 요약 + 칸 아래 한 줄(E5). 버튼은 늘 켜 두고 누르면 무엇이 비었는지 보여 준다(E6)
+  const [formErr, setFormErr] = useState<{ lines?: string; due?: string }>({});
 
   function submit() {
+    const errs: { lines?: string; due?: string } = {};
+    if (!lines.some((l) => Number(l.requested_qty) > 0)) errs.lines = "생산 품목을 추가하고 요청수량을 입력하세요";
+    if (!dueDate) errs.due = `${DUE_LABEL[purpose]}을(를) 입력하세요`;
+    else if (startAfterEnd) errs.due = `${prodStart ? "생산시작일" : "요청일"}이 생산종료일보다 뒤입니다`;
+    setFormErr(errs);
+    if (!valid) return;
     const items = lines
       // 자동 줄·입고 있는 줄은 수량 0 이어도 보낸다 — 자동 줄은 서버가 표식 그대로 유지하고, 실제 줄의 0 은 서버가 명확한 오류로 막는다
       .filter((l) => Number(l.requested_qty) > 0 || l.auto || l.received > 0)
@@ -817,6 +824,11 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
         <div className="b2b-modal-body">
           {/* 저장 오류는 창 안에도 — 페이지 위 배너는 창에 가려 보이지 않는다 */}
           {error && <div className="b2b-error" style={{ marginBottom: 12 }}>{error}</div>}
+          {(formErr.lines || formErr.due) && (
+            <div className="b2b-error" style={{ marginBottom: 12 }}>
+              {formErr.lines && formErr.due ? <ul><li>{formErr.due}</li><li>{formErr.lines}</li></ul> : (formErr.due || formErr.lines)}
+            </div>
+          )}
           <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <div className="sm-col" style={{ gap: 3 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>요청</span>
@@ -835,8 +847,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               </div>
             </div>
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>요청자(MD)</span>
-              <input className="b2b-input" style={{ width: 160 }} value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="이름(비우면 본인)" />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>요청자(MD) <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 비우면 본인</span></span>
+              <input className="b2b-input" style={{ width: 160 }} value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
             </label>
             <label className="sm-col" style={{ gap: 3 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>요청일</span>
@@ -852,7 +864,8 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             <label className="sm-col" style={{ gap: 3 }}>
               {/* 확정형은 마감이 아니라 그날 물건이 있어야 하는 날이다 — 라벨을 용도에 맞춘다(115) */}
               <span style={{ fontSize: 15, fontWeight: 600 }}>{DUE_LABEL[purpose]}{purpose === "재고 보충" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> · 입고 매칭 끝</span>}</span>
-              <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} onChange={(e) => { datesTouched.current = true; setDueDate(e.target.value); }} />
+              <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} aria-invalid={formErr.due ? "true" : undefined} onChange={(e) => { datesTouched.current = true; setDueDate(e.target.value); if (formErr.due) setFormErr((x) => ({ ...x, due: undefined })); }} />
+              {formErr.due && <span className="b2b-field-error">{formErr.due}</span>}
             </label>
             {startAfterEnd && <div className="b2b-error" style={{ flexBasis: "100%", margin: 0 }}>{prodStart ? "생산시작일" : "요청일"}이 생산종료일보다 뒤입니다 — 기간을 확인하세요.</div>}
             {purpose === "도매 대량" && (
@@ -867,25 +880,28 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               </label>
             )}
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>제목(선택)</span>
-              <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={purpose === "도매 대량" ? "비우면 거래처 이름" : "예: 3월 2주차 도매 생산"} />
+              <span style={{ fontSize: 15, fontWeight: 600 }}>제목(선택){purpose === "도매 대량" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> · 비우면 거래처 이름</span>}</span>
+              <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={purpose === "도매 대량" ? undefined : "3월 2주차 도매 생산"} />
             </label>
           </div>
 
           {/* 품목 추가 — 다른 검색창과 동일한 콤보박스(이름·SKU·규격 아무 글자나 검색, 한글 입력 기본) */}
           <div style={{ marginBottom: 8 }}>
             <span style={{ fontSize: 15, fontWeight: 600 }}>생산 품목 추가</span>
+            <div className="b2b-field-hint">품목명·SKU·규격 아무 글자나 검색해 고르면 아래 표에 추가됩니다</div>
             <div style={{ marginTop: 3 }}>
               <Combobox
+                invalid={!!formErr.lines}
                 value=""
                 options={products
                   .filter((p) => !lines.some((l) => l.product_id === p.product_id))
                   .map((p) => ({ id: p.product_id, label: `${p.name}${p.spec ? ` — ${p.spec}` : ""}`, sub: p.sku ?? "" }))}
                 onSelect={(o) => { const p = products.find((x) => x.product_id === o.id); if (p) addLine(p); }}
-                placeholder="품목명·SKU·규격으로 검색해서 선택"
+                placeholder="품목·SKU 검색"
                 ariaLabel="생산 품목 추가"
                 emptyText="일치하는 품목이 없습니다"
               />
+              {formErr.lines && <div className="b2b-field-error">{formErr.lines}</div>}
             </div>
           </div>
 
@@ -948,7 +964,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                         <td>
                           {l.auto && Number(l.requested_qty) <= 0
                             ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-info)" }} title="요청서에 없던 품목의 입고 기록 자리 — 제조사 엑셀·이행률에는 들어가지 않습니다">요청서에 없음 · 입고 {l.received.toLocaleString()}</span>
-                            : <input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="(선택)" />}
+                            : <input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} aria-label="품목 메모(선택)" />}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           {l.received > 0 ? (
@@ -966,13 +982,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           )}
 
           <label className="sm-col" style={{ gap: 3, marginTop: 12 }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>요청 메모(선택)</span>
-            <textarea className="b2b-input" style={{ minHeight: memo.split("\n").length > 3 ? 180 : 72 }} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="생산 담당자에게 전달할 내용" />
+            <span style={{ fontSize: 15, fontWeight: 600 }}>요청 메모(선택) <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 생산 담당자에게 전달할 내용</span></span>
+            <textarea className="b2b-input" style={{ minHeight: memo.split("\n").length > 3 ? 180 : 72 }} value={memo} onChange={(e) => setMemo(e.target.value)} />
           </label>
         </div>
         <div className="b2b-modal-foot">
-          <button className="b2b-btn-secondary" onClick={onClose}>취소</button>
-          <button className="b2b-btn-primary" disabled={busy || !valid} onClick={submit}>{isEdit ? "수정 저장" : "요청서 만들기"}</button>
+          <button className="b2b-btn-secondary" onClick={onClose}>그만두기</button>
+          <button className="b2b-btn-primary" disabled={busy} onClick={submit}>{isEdit ? "수정 저장" : "요청서 만들기"}</button>
         </div>
       </div>
     </div>
@@ -1049,7 +1065,8 @@ function LinkModal({ req, onClose, onLinked }: { req: ProductionRequest; onClose
             )}
         </div>
         <div className="b2b-modal-foot">
-          <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
+          <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>그만두기</button>
+          {!picked.size && !saving && <span className="b2b-btn-why">입고를 체크하면 켜집니다</span>}
           <button className="b2b-btn-primary" onClick={save} disabled={saving || !picked.size}>{saving ? "연결 중..." : `${picked.size}건 연결`}</button>
         </div>
       </div>

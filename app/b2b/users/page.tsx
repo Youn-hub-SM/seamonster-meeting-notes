@@ -18,6 +18,8 @@ export default function UsersPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AppRole>("internal");
   const [saving, setSaving] = useState(false);
+  // 계정 추가 폼 검증 오류(칸별)
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; password?: string }>({});
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -32,7 +34,11 @@ export default function UsersPage() {
   useEffect(() => { load(); }, [load]);
 
   async function add() {
-    if (!name.trim() || !password.trim()) { setError("이름과 비밀번호를 입력하세요."); return; }
+    const fe: { name?: string; password?: string } = {};
+    if (!name.trim()) fe.name = "이름을 입력하세요";
+    if (!password.trim()) fe.password = "비밀번호를 입력하세요";
+    setFieldErrors(fe);
+    if (fe.name || fe.password) return;
     setSaving(true); setError("");
     try {
       const res = await fetch("/api/b2b/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, password, role }) });
@@ -76,14 +82,36 @@ export default function UsersPage() {
 
       <section className="b2b-card">
         <div className="b2b-card-head"><span className="b2b-card-title">계정 추가</span></div>
-        <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름(예: 민수)" style={{ flex: 1, minWidth: 160 }} />
-          <input className="b2b-input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호(서로 달라야 함)" style={{ flex: 1, minWidth: 160 }} />
-          <select className="b2b-input" value={role} onChange={(e) => setRole(e.target.value as AppRole)} style={{ minWidth: 120 }}>
-            <option value="internal">내부</option>
-            <option value="factory">파도소리</option>
-          </select>
-          <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중..." : "추가"}</button>
+        {(fieldErrors.name || fieldErrors.password) && (
+          <div className="b2b-error">
+            {fieldErrors.name && fieldErrors.password ? (
+              <ul><li>{fieldErrors.name}</li><li>{fieldErrors.password}</li></ul>
+            ) : (fieldErrors.name || fieldErrors.password)}
+          </div>
+        )}
+        <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 160 }}>
+            <span className="b2b-field-label">이름<span className="req">*</span></span>
+            <input className="b2b-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 민수" aria-invalid={fieldErrors.name ? "true" : undefined} />
+            {fieldErrors.name && <span className="b2b-field-error">{fieldErrors.name}</span>}
+          </label>
+          <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 160 }}>
+            <span className="b2b-field-label">비밀번호<span className="req">*</span></span>
+            <span className="b2b-field-hint">다른 계정과 달라야 합니다</span>
+            <input className="b2b-input" value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={fieldErrors.password ? "true" : undefined} />
+            {fieldErrors.password && <span className="b2b-field-error">{fieldErrors.password}</span>}
+          </label>
+          <label className="sm-col" style={{ gap: 3, minWidth: 120 }}>
+            <span className="b2b-field-label">구분</span>
+            <select className="b2b-input" value={role} onChange={(e) => setRole(e.target.value as AppRole)}>
+              <option value="internal">내부</option>
+              <option value="factory">파도소리</option>
+            </select>
+          </label>
+          <div className="sm-col" style={{ gap: 3 }}>
+            <span className="b2b-field-label">&nbsp;</span>
+            <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중..." : "계정 추가"}</button>
+          </div>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호가 곧 신원이라 사람마다 다른 값으로 · 파도소리 계정은 입출고 화면만 열립니다</p>
       </section>
@@ -114,7 +142,7 @@ export default function UsersPage() {
                     </td>
                     <td data-label="추가일" style={{ whiteSpace: "nowrap" }}>{u.created_at?.slice(0, 10)}</td>
                     <td className="actions">
-                      <button className="b2b-link-btn" onClick={() => resetPassword(u)}>비번 재설정</button>{" "}
+                      <button className="b2b-link-btn" onClick={() => resetPassword(u)}>비밀번호 재설정</button>{" "}
                       <button className="b2b-link-btn" onClick={() => remove(u)} style={{ color: "var(--sm-danger)" }}>삭제</button>
                     </td>
                   </tr>

@@ -124,10 +124,12 @@ export default function CouponPage() {
               )}
 
               <div className="sm-between" style={{ marginTop: 18, gap: 10 }}>
-                <button className="b2b-btn-secondary" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>이전</button>
-                <button className="b2b-btn-primary" onClick={() => setStep((s) => s + 1)} disabled={!stepValid()}>{step === totalSteps - 1 ? "요청서 만들기 →" : "다음 →"}</button>
+                <button className="b2b-btn-secondary" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>이전 단계</button>
+                <span className="sm-row" style={{ gap: 0 }}>
+                  <button className="b2b-btn-primary" onClick={() => setStep((s) => s + 1)} disabled={!stepValid()}>{step === totalSteps - 1 ? "요청서 만들기 →" : "다음 단계 →"}</button>
+                  {!stepValid() && <span className="b2b-btn-why">필수 항목(*)을 채우면 켜집니다 · 기간은 종료가 시작보다 늦게</span>}
+                </span>
               </div>
-              {!stepValid() && <p className="sm-faint" style={{ fontSize: 12, marginTop: 8, color: "var(--sm-danger)" }}>필수 항목(*)을 입력하고, 기간은 종료가 시작보다 늦어야 합니다.</p>}
             </section>
           )}
 
@@ -139,9 +141,9 @@ export default function CouponPage() {
                 <input className="b2b-input" value={requester} onChange={(e) => setRequester(e.target.value)} placeholder="예: 홍길동" /></label>
               <pre style={{ whiteSpace: "pre-wrap", background: "var(--sm-bg)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: 14, fontSize: 15, lineHeight: 1.6, marginTop: 10, fontFamily: "inherit" }}>{text}</pre>
               <div className="sm-between" style={{ marginTop: 14, gap: 10, flexWrap: "wrap" }}>
-                <button className="b2b-btn-secondary" onClick={() => setStep(totalSteps - 1)}>← 수정</button>
+                <button className="b2b-btn-secondary" onClick={() => setStep(totalSteps - 1)}>← 답변 수정</button>
                 <div className="sm-row" style={{ gap: 8 }}>
-                  <button className="b2b-btn-secondary" onClick={reset}>처음부터</button>
+                  <button className="b2b-btn-secondary" onClick={reset}>처음부터 다시</button>
                   <button className="b2b-btn-primary" onClick={copy}>{copied ? "복사됨 ✓" : "요청서 복사"}</button>
                 </div>
               </div>
@@ -181,7 +183,7 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
       {f.type === "int-days" && (
         <div className="sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {f.presets?.map((p) => <button key={p} type="button" className={`sm-tab ${String(v ?? "") === String(p) ? "is-active" : ""}`} onClick={() => set(f.key, String(p))}>{p}일</button>)}
-          <input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} placeholder="직접" style={{ maxWidth: 90 }} />
+          <input className="b2b-input" type="number" value={(v as string) || ""} onChange={(e) => set(f.key, e.target.value)} aria-label="직접 입력(일)" style={{ maxWidth: 90 }} />
           <span className="sm-faint" style={{ fontSize: 15 }}>일</span>
         </div>
       )}
@@ -193,7 +195,7 @@ function FieldView({ f, answers, ch, required, set, toggle, setRange }: { f: Cou
             <span className="sm-faint">~</span>
             <input className="b2b-input" type="datetime-local" value={range.end} onChange={(e) => setRange(f.key, "end", e.target.value)} style={{ maxWidth: 220 }} />
           </div>
-          {rangeInvalid(range) && <p style={{ color: "var(--sm-danger)", fontSize: 12, marginTop: 5 }}>종료가 시작보다 빨라요. 다시 확인하세요.</p>}
+          {rangeInvalid(range) && <p className="b2b-field-error" style={{ marginTop: 5 }}>종료는 시작보다 늦게</p>}
         </div>
       )}
       {f.help && <p className="sm-faint" style={{ fontSize: 12, marginTop: 5, lineHeight: 1.5, color: f.warn ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{f.help}</p>}

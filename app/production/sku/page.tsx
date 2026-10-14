@@ -87,9 +87,10 @@ export default function SkuGeneratorPage() {
                 className="b2b-input"
                 value={customCode}
                 onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
-                placeholder="예: MK (고등어)"
+                placeholder="MK"
                 style={{ textTransform: "uppercase" }}
               />
+              <span className="b2b-field-hint">영문 2자 — 예: MK(고등어)</span>
             </div>
           )}
           {line.needsCut && (
@@ -125,8 +126,9 @@ export default function SkuGeneratorPage() {
         <div className="prod-sku-label">생성된 SKU</div>
         <div className="prod-sku-value">{sku || "—"}</div>
         <button className="b2b-btn-primary" onClick={copy} disabled={!sku}>
-          {copied ? "복사됨 ✓" : "복사"}
+          {copied ? "복사됨 ✓" : "SKU 복사"}
         </button>
+        {!sku && <span className="b2b-btn-why">{usingCustom ? "새 어종 코드를 입력하면 켜집니다" : "항목을 고르면 켜집니다"}</span>}
         {sku && existing.length > 0 && (
           <div className="prod-sku-warn">
             이미 사용 중인 SKU입니다 — {existing.map((p) => `${p.name}${p.spec ? ` (${p.spec})` : ""}`).join(", ")}

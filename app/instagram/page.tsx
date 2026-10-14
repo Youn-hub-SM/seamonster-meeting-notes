@@ -51,6 +51,7 @@ export default function InstagramDmPage() {
   const [media, setMedia] = useState<Media[] | null>(null);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fieldErr, setFieldErr] = useState<{ media?: string; message?: string }>({}); // 규칙 폼 칸별 검증 오류
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -126,6 +127,11 @@ export default function InstagramDmPage() {
   }
   async function saveRule() {
     if (!draft) return;
+    const fe: { media?: string; message?: string } = {};
+    if (!draft.media_id) fe.media = "게시물을 선택하세요";
+    if (!draft.message.trim()) fe.message = "보낼 메시지를 입력하세요";
+    setFieldErr(fe);
+    if (fe.media || fe.message) return;
     setSaving(true); setError("");
     try {
       const body = {
@@ -170,7 +176,8 @@ export default function InstagramDmPage() {
         </div>
         <div className="b2b-page-actions sm-row sm-gap-2">
           <button className="b2b-btn-primary" onClick={openNew} disabled={(info?.accounts.length || 0) === 0}>+ 규칙 추가</button>
-          <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button>
+          {info && info.accounts.length === 0 && <span className="b2b-btn-why">계정을 연결하면 켜집니다</span>}
+          <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "다시 불러오기"}</button>
         </div>
       </header>
 
@@ -186,7 +193,7 @@ export default function InstagramDmPage() {
         <div className="ig-webhook-row">
           <span className="ig-webhook-label">웹훅 URL</span>
           <code className="ig-webhook-url">{info?.webhookUrl || "..."}</code>
-          <button className="b2b-btn-secondary ig-btn-sm" onClick={() => { navigator.clipboard?.writeText(info?.webhookUrl || ""); setNotice("웹훅 URL 복사됨"); }}>복사</button>
+          <button className="b2b-btn-secondary ig-btn-sm" onClick={() => { navigator.clipboard?.writeText(info?.webhookUrl || ""); setNotice("웹훅 URL 복사됨"); }}>URL 복사</button>
         </div>
         <div className="ig-accounts">
           {(info?.accounts || []).map((a) => (
@@ -199,10 +206,12 @@ export default function InstagramDmPage() {
           ))}
           {(info?.accounts.length || 0) === 0 && <p className="sm-faint">연결된 계정이 없습니다.</p>}
         </div>
+        <span className="b2b-field-hint">인스타그램 로그인 장기 토큰을 계정별로 붙여넣는다</span>
         <div className="ig-token-row">
           <input className="b2b-input ig-token-input" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)}
-            placeholder="인스타그램 로그인 장기 토큰 붙여넣기 (계정별)" spellCheck={false} />
+            aria-label="인스타그램 장기 토큰" placeholder="예: IGQVJ..." spellCheck={false} />
           <button className="b2b-btn-secondary" onClick={addToken} disabled={busy || !tokenInput.trim()}>{busy ? "..." : "계정 연결"}</button>
+          {!busy && !tokenInput.trim() && <span className="b2b-btn-why">토큰을 넣으면 켜집니다</span>}
         </div>
       </section>
 
@@ -240,7 +249,7 @@ export default function InstagramDmPage() {
                       <td className="num b2b-money">{r.clicks == null ? <span className="sm-faint" title="브랜드링크(link.seamonster.kr)를 쓰면 클릭이 집계됩니다">-</span> : r.clicks}</td>
                       <td className="actions ig-cell-nowrap">
                         <button className="b2b-btn-secondary ig-btn-sm" onClick={() => toggleRule(r)}>{r.active ? "끄기" : "켜기"}</button>
-                        <button className="b2b-btn-secondary ig-btn-sm" onClick={() => openEdit(r)}>편집</button>
+                        <button className="b2b-btn-secondary ig-btn-sm" onClick={() => openEdit(r)}>규칙 편집</button>
                         <IconButton label="삭제" onClick={() => removeRule(r)}>✕</IconButton>
                       </td>
                     </tr>
@@ -285,16 +294,22 @@ export default function InstagramDmPage() {
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setDraft(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
+              {(() => {
+                const msgs = [fieldErr.media, fieldErr.message].filter(Boolean) as string[];
+                if (!msgs.length && !error) return null;
+                return <div className="b2b-error">{msgs.length > 1 ? <ul>{msgs.map((m) => <li key={m}>{m}</li>)}</ul> : (msgs[0] || error)}</div>;
+              })()}
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">계정</span>
                   <select className="b2b-select" value={draft.ig_user_id} onChange={(e) => { setDraft({ ...draft, ig_user_id: e.target.value, media_id: "", media_caption: "", media_permalink: "" }); setMedia(null); }}>
                     {(info?.accounts || []).map((a) => <option key={a.igUserId} value={a.igUserId}>@{a.username}</option>)}
                   </select></label>
                 <div className="b2b-field ig-media-load">
-                  <span className="b2b-field-label">게시물</span>
+                  <span className="b2b-field-label">게시물<span className="req">*</span></span>
                   <button type="button" className="b2b-btn-secondary" onClick={() => loadMedia(draft.ig_user_id)} disabled={mediaLoading || !draft.ig_user_id}>
                     {mediaLoading ? "불러오는 중..." : media ? "다시 불러오기" : "최근 게시물 불러오기"}
                   </button>
+                  {fieldErr.media && !draft.media_id && <span className="b2b-field-error">{fieldErr.media}</span>}
                 </div>
               </div>
 
@@ -316,13 +331,16 @@ export default function InstagramDmPage() {
               )}
 
               <label className="b2b-field"><span className="b2b-field-label">키워드 (선택, 쉼표 구분)</span>
-                <input className="b2b-input" value={draft.keyword} onChange={(e) => setDraft({ ...draft, keyword: e.target.value })} placeholder="비우면 모든 댓글에 발송 · 예: 신청, 참여" /></label>
-              <label className="b2b-field"><span className="b2b-field-label">보낼 메시지</span>
+                <span className="b2b-field-hint">비우면 모든 댓글에 발송</span>
+                <input className="b2b-input" value={draft.keyword} onChange={(e) => setDraft({ ...draft, keyword: e.target.value })} placeholder="예: 신청, 참여" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">보낼 메시지<span className="req">*</span></span>
                 <textarea className="b2b-textarea" rows={4} value={draft.message} onChange={(e) => setDraft({ ...draft, message: e.target.value })}
-                  placeholder={"{닉네임}님, 참여 감사합니다! 이벤트 안내는 여기서 확인하세요 → https://link.seamonster.kr/이벤트"} />
+                  placeholder={"예: {닉네임}님, 참여 감사합니다! 이벤트 안내는 여기서 확인하세요 → https://link.seamonster.kr/이벤트"} aria-invalid={fieldErr.message ? "true" : undefined} />
+                {fieldErr.message && <span className="b2b-field-error">{fieldErr.message}</span>}
                 <span className="sm-faint ig-hint">{"{닉네임}"} = 댓글 작성자 이름 · 링크는 메시지에 직접 포함</span></label>
               <label className="b2b-field"><span className="b2b-field-label">링크 (클릭 집계용)</span>
-                <input className="b2b-input" value={draft.link} onChange={(e) => setDraft({ ...draft, link: e.target.value })} placeholder="https://link.seamonster.kr/이벤트 — 브랜드링크면 클릭수가 표에 집계됩니다" spellCheck={false} /></label>
+                <span className="b2b-field-hint">브랜드링크면 클릭수가 표에 집계된다</span>
+                <input className="b2b-input" value={draft.link} onChange={(e) => setDraft({ ...draft, link: e.target.value })} placeholder="예: https://link.seamonster.kr/이벤트" spellCheck={false} /></label>
 
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">켜는 시각 (비우면 즉시)</span>
@@ -337,8 +355,8 @@ export default function InstagramDmPage() {
             <div className="b2b-modal-foot">
               <div />
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setDraft(null)}>취소</button>
-                <button className="b2b-btn-primary" onClick={saveRule} disabled={saving || !draft.media_id || !draft.message.trim()}>{saving ? "저장 중..." : "저장"}</button>
+                <button className="b2b-btn-secondary" onClick={() => { setFieldErr({}); setDraft(null); }}>그만두기</button>
+                <button className="b2b-btn-primary" onClick={saveRule} disabled={saving}>{saving ? "저장 중..." : "규칙 저장"}</button>
               </div>
             </div>
           </div>

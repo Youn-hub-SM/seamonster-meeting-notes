@@ -19,6 +19,7 @@ export default function MetaLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [fieldErr, setFieldErr] = useState<{ name?: string; hook?: string; story?: string; offer?: string }>({}); // 소재 기획 칸별 검증 오류
   const confirmModal = useConfirm();
   const [msg, setMsg] = useState("");
 
@@ -43,8 +44,14 @@ export default function MetaLibraryPage() {
 
   async function save() {
     setErr(""); setMsg("");
-    const miss = [!f.name.trim() && "이름", !f.hook.trim() && "후킹", !f.story.trim() && "스토리", !f.offer.trim() && "제안"].filter(Boolean);
-    if (miss.length) { setErr(`${miss.join("·")} 을(를) 채워주세요. (모든 소재는 후킹+스토리+제안 3요소 필수)`); return; }
+    // 후킹+스토리+제안 3요소 필수 — 칸별 지시문으로 보여 준다
+    const fe: { name?: string; hook?: string; story?: string; offer?: string } = {};
+    if (!f.name.trim()) fe.name = "소재 이름을 입력하세요";
+    if (!f.hook.trim()) fe.hook = "후킹을 입력하세요";
+    if (!f.story.trim()) fe.story = "스토리를 입력하세요";
+    if (!f.offer.trim()) fe.offer = "제안을 입력하세요";
+    setFieldErr(fe);
+    if (fe.name || fe.hook || fe.story || fe.offer) return;
     setSaving(true);
     try {
       const body = { ...f, roas: f.roas ? Number(f.roas) : undefined, sourceAdId, ...prefillMetrics };
@@ -75,10 +82,16 @@ export default function MetaLibraryPage() {
       {/* 기획 폼 */}
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">소재 기획</span></div>
+        {(() => {
+          const msgs = [fieldErr.name, fieldErr.hook, fieldErr.story, fieldErr.offer].filter(Boolean) as string[];
+          if (!msgs.length) return null;
+          return <div className="b2b-error" style={{ marginBottom: 10 }}>{msgs.length > 1 ? <ul>{msgs.map((m) => <li key={m}>{m}</li>)}</ul> : msgs[0]}</div>;
+        })()}
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           <label className="sm-col" style={{ gap: 3, flex: "2 1 220px" }}>
-            <span className="mlib-lbl">소재 이름 / 컨셉</span>
-            <input className="b2b-input" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 대구살 이유식 후기형 15초" />
+            <span className="mlib-lbl">소재 이름 / 컨셉<span className="req">*</span></span>
+            <input className="b2b-input" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="예: 대구살 이유식 후기형 15초" aria-invalid={fieldErr.name ? "true" : undefined} />
+            {fieldErr.name && <span className="b2b-field-error">{fieldErr.name}</span>}
           </label>
           <label className="sm-col" style={{ gap: 3 }}>
             <span className="mlib-lbl">유형</span>
@@ -99,22 +112,25 @@ export default function MetaLibraryPage() {
         <div className="mlib-3">
           <div className="mlib-el">
             <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-info)" }}>①</span> 후킹</div>
-            <textarea className="b2b-input" value={f.hook} onChange={(e) => set("hook", e.target.value)} placeholder="예: '닭가슴살 질린 분?' / 충격적 비주얼 / 질문 던지기" rows={3} />
+            <textarea className="b2b-input" value={f.hook} onChange={(e) => set("hook", e.target.value)} placeholder="예: '닭가슴살 질린 분?' / 충격적 비주얼 / 질문 던지기" rows={3} aria-invalid={fieldErr.hook ? "true" : undefined} />
+            {fieldErr.hook && <span className="b2b-field-error">{fieldErr.hook}</span>}
           </div>
           <div className="mlib-el">
             <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-orange)" }}>②</span> 스토리</div>
-            <textarea className="b2b-input" value={f.story} onChange={(e) => set("story", e.target.value)} placeholder="예: 다이어트 단백질 고민 → 생선살로 해결 → 조리 간편함 시연" rows={3} />
+            <textarea className="b2b-input" value={f.story} onChange={(e) => set("story", e.target.value)} placeholder="예: 다이어트 단백질 고민 → 생선살로 해결 → 조리 간편함 시연" rows={3} aria-invalid={fieldErr.story ? "true" : undefined} />
+            {fieldErr.story && <span className="b2b-field-error">{fieldErr.story}</span>}
           </div>
           <div className="mlib-el">
             <div className="mlib-el-h"><span className="mlib-num" style={{ background: "var(--sm-success)" }}>③</span> 제안</div>
-            <textarea className="b2b-input" value={f.offer} onChange={(e) => set("offer", e.target.value)} placeholder="예: 첫 구매 20% + 무료배송 / '지금 맛보기 담기'" rows={3} />
+            <textarea className="b2b-input" value={f.offer} onChange={(e) => set("offer", e.target.value)} placeholder="예: 첫 구매 20% + 무료배송 / '지금 맛보기 담기'" rows={3} aria-invalid={fieldErr.offer ? "true" : undefined} />
+            {fieldErr.offer && <span className="b2b-field-error">{fieldErr.offer}</span>}
           </div>
         </div>
 
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12 }}>
           <label className="sm-col" style={{ gap: 3, flex: "3 1 240px" }}>
             <span className="mlib-lbl">메모 <span className="sm-faint">(선택)</span></span>
-            <input className="b2b-input" value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="타깃·배경·러닝 등" />
+            <input className="b2b-input" value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="예: 30대 육아맘 타깃" />
           </label>
           <label className="sm-col" style={{ gap: 3 }}>
             <span className="mlib-lbl">참고 ROAS <span className="sm-faint">(선택)</span></span>
@@ -130,7 +146,7 @@ export default function MetaLibraryPage() {
       {/* 저장된 소재 */}
       <div className="b2b-card-head" style={{ marginBottom: 10 }}><span className="b2b-card-title">저장된 소재</span></div>
       {loading ? <div className="b2b-loading">불러오는 중...</div> : list.length === 0 ? (
-        <div className="b2b-empty">아직 저장된 소재가 없습니다.</div>
+        <div className="b2b-empty">저장된 소재가 없습니다.</div>
       ) : (
         <div className="mlib-grid">
           {list.map((c) => (
@@ -152,7 +168,7 @@ export default function MetaLibraryPage() {
               </div>
               {c.note && <div className="sm-faint" style={{ fontSize: 15, marginTop: 6 }}>{c.note}</div>}
               <div className="sm-row" style={{ gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
-                <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => reuse(c)}>재사용(복제)</button>
+                <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => reuse(c)}>복제해 재사용</button>
                 <button className="b2b-link-btn" style={{ fontSize: 15, color: "var(--sm-orange)" }} onClick={() => del(c.id)}>삭제</button>
               </div>
             </div>

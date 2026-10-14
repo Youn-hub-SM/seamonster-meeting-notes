@@ -3,18 +3,13 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { GUIDE, GUIDE_UPDATED, type GuideEntry } from "@/app/lib/guide-data";
-import { matchKoQuery } from "@/app/lib/hangul";
+import { GUIDE, GUIDE_UPDATED } from "@/app/lib/guide-data";
+import { matchesGuideEntry as matches } from "@/app/lib/guide-search";
 
 // 사용 가이드 — 전 기능의 사용 단계. 검색은 메뉴명·설명·단계·검색어 전체를 훑는다.
 //  데이터는 app/lib/guide-data.ts 하나 — 기능이 바뀌면 그 커밋에서 같이 고친다(CLAUDE.md 규칙).
-//  ?q= 는 홈 '가이드 검색'(2026-10-14 D4)이 넘기는 검색어 — 검색칸 초기값으로만 쓴다(useSearchParams 는 Suspense 경계 필요, 로그인 화면과 같은 구조).
-
-function matches(e: GuideEntry, q: string): boolean {
-  // 공용 매처 — 초성(ㅈㄱ)·영문자판(rocj) 입력도 받는다
-  const hay = [e.label, e.what, ...e.steps, ...(e.tips || []), ...(e.keywords || [])].join(" ");
-  return matchKoQuery(hay, q);
-}
+//  ?q= 는 홈 '가이드 검색'(2026-10-14 D4)·전역 검색(Ctrl+K)이 넘기는 검색어 — 검색칸 초기값으로만 쓴다(useSearchParams 는 Suspense 경계 필요, 로그인 화면과 같은 구조).
+//  매처(초성·영문자판)는 app/lib/guide-search.ts — 전역 검색 '가이드' 묶음과 같은 규칙을 쓴다.
 
 export default function GuidePage() {
   return (
@@ -56,7 +51,7 @@ function GuideInner() {
       <input
         type="search"
         className="b2b-input"
-        placeholder="검색 — 예: 재고 조정, 발주 등록, 매출 업로드"
+        placeholder="검색"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         autoFocus

@@ -70,6 +70,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErr, setFieldErr] = useState<{ product?: string; qty?: string }>({}); // 칸 아래 한 줄(E5)
 
   const [importing, setImporting] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -105,8 +106,11 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
 
   async function save() {
     if (busyRef.current === "out") return; // 출고 기록 중 — 버튼도 막혀 있다
-    if (!productId) { setError("품목을 선택하세요."); return; }
-    if (!(Number(qty) > 0)) { setError("반품수량을 입력하세요."); return; }
+    const errs: { product?: string; qty?: string } = {};
+    if (!productId) errs.product = "품목을 선택하세요";
+    if (!(Number(qty) > 0)) errs.qty = "반품수량을 입력하세요";
+    setFieldErr(errs);
+    if (errs.product || errs.qty) { setError(errs.product && errs.qty ? "" : (errs.product || errs.qty || "")); return; }
     setSaving(true); setError(""); setOutDone("");
     try {
       const res = await fetch("/api/inventory/returns", {
@@ -351,27 +355,30 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             ) : (
               <div>
                 <div className="b2b-field-row">
-                  <label className="b2b-field"><span className="b2b-field-label">반품일 <span className="sm-faint" style={{ fontWeight: 400 }}>· 파일 전체</span></span>
+                  <label className="b2b-field"><span className="b2b-field-label">반품일 <span className="opt">· 파일 전체</span></span>
                     <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-                  <label className="b2b-field"><span className="b2b-field-label">제조사</span>
-                    <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
+                  <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="opt">(선택)</span></span>
+                    <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
                 </div>
                 <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>
-                  <a href={`/api/inventory/returns/template?month=${month}`} className="sm-link">양식 다운로드</a>
+                  <a href={`/api/inventory/returns/template?month=${month}`} className="sm-link">양식 내려받기</a>
                 </p>
               </div>
             )
           ) : (
             <>
               <div className="b2b-field"><span className="b2b-field-label">품목</span>
+                <span className="b2b-field-hint">초성으로도 검색됩니다</span>
                 <Combobox
+                  invalid={!!fieldErr.product}
                   value={productLabel}
                   options={productOptions}
-                  onSelect={(opt) => setProductId(opt.id)}
-                  placeholder="품목명 · SKU 검색 (초성도 됩니다)"
+                  onSelect={(opt) => { setProductId(opt.id); if (fieldErr.product) setFieldErr((x) => ({ ...x, product: undefined })); }}
+                  placeholder="품목·SKU 검색"
                   ariaLabel="품목 검색"
                   emptyText="일치하는 품목이 없습니다"
                 />
+                {fieldErr.product && <span className="b2b-field-error">{fieldErr.product}</span>}
               </div>
               {product && (
                 <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>
@@ -383,18 +390,19 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
 
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">반품수량</span>
-                  <input className="b2b-input" type="number" step={0.01} min={0} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" /></label>
+                  <input className="b2b-input" type="number" step={0.01} min={0} value={qty} onChange={(e) => { setQty(e.target.value); if (fieldErr.qty) setFieldErr((x) => ({ ...x, qty: undefined })); }} placeholder="0" aria-invalid={fieldErr.qty ? "true" : undefined} />
+                  {fieldErr.qty && <span className="b2b-field-error">{fieldErr.qty}</span>}</label>
                 <label className="b2b-field"><span className="b2b-field-label">반품일</span>
                   <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
               </div>
               <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">반품 단가(원)</span>
-                  <input className="b2b-input" type="number" min={0} value={unitAmount} onChange={(e) => setUnitAmount(e.target.value)} placeholder="비우면 매입가" /></label>
-                <label className="b2b-field"><span className="b2b-field-label">제조사</span>
-                  <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="선택" /></label>
+                <label className="b2b-field"><span className="b2b-field-label">반품 단가(원) <span className="opt">· 비우면 매입가</span></span>
+                  <input className="b2b-input" type="number" min={0} value={unitAmount} onChange={(e) => setUnitAmount(e.target.value)} placeholder="0" /></label>
+                <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="opt">(선택)</span></span>
+                  <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
               </div>
-              <label className="b2b-field"><span className="b2b-field-label">메모</span>
-                <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="반품 사유" /></label>
+              <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">· 반품 사유</span></span>
+                <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
 
               {overReturn && (
                 <div className="sm-warn" style={{ marginTop: 8 }}>
@@ -434,7 +442,9 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             </>
           )}
 
-          {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
+          {fieldErr.product && fieldErr.qty
+            ? <div className="b2b-error" style={{ marginTop: 8 }}><ul><li>{fieldErr.product}</li><li>{fieldErr.qty}</li></ul></div>
+            : error ? <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div> : null}
         </div>
         <div className="b2b-modal-foot">
           {mode === "엑셀" && preview
@@ -444,9 +454,12 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             <button className="b2b-btn-secondary" onClick={close} disabled={closeBlocked}>닫기</button>
             {mode === "엑셀" ? (
               preview ? (
-                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.valid === 0 || outBusy}>
-                  {applying ? "반영 중..." : `${preview.valid.toLocaleString()}건 반영`}
-                </button>
+                <>
+                  {preview.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
+                  <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.valid === 0 || outBusy}>
+                    {applying ? "반영 중..." : `${preview.valid.toLocaleString()}건 반영`}
+                  </button>
+                </>
               ) : (
                 <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
                   {importing ? "분석 중..." : "엑셀 파일 선택"}

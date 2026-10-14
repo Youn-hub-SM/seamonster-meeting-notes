@@ -263,6 +263,8 @@ export default function OrderForm({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // 폼 검증 오류(저장 때 계산) — 맨 위 요약 + 칸별 표시. 비활성 버튼 대신 눌렀을 때 무엇이 비었는지 보여 준다(3차 E5·E6)
+  const [fieldErrors, setFieldErrors] = useState<{ company?: string; order_date?: string; items?: string; rows: Record<number, { name?: string; qty?: string }> }>({ rows: {} });
   const confirmModal = useConfirm();
   const [salesWarn, setSalesWarn] = useState(""); // 매출 원장 반영 실패(수정 저장 뒤) — 다시 [수정]을 누르면 다시 맞춰진다
   // 저장 뒤 다시 불러오기 실패 — 화면 값이 DB 와 어긋났다(새 줄에 id 없음). 새로고침 전까지 [수정]을 막는다
@@ -780,6 +782,19 @@ export default function OrderForm({
   // 저장 / 삭제
   // ─────────────────────────────────────────────
   async function handleSave() {
+    // 필수 입력 검증 — canSave 와 같은 조건을 칸별 문구로 풀어 보여 준다(규칙은 그대로)
+    const fe: typeof fieldErrors = { rows: {} };
+    if (!data.company_id) fe.company = "업체를 선택하세요";
+    if (!data.order_date) fe.order_date = "발주일을 입력하세요";
+    if (data.items.length === 0) fe.items = "발주 상품을 한 줄 이상 추가하세요";
+    data.items.forEach((it, i) => {
+      const row: { name?: string; qty?: string } = {};
+      if (!it.product_name.trim()) row.name = "품목명을 입력하세요";
+      if (!(Number(it.qty) > 0)) row.qty = "수량은 1 이상";
+      if (row.name || row.qty) fe.rows[i] = row;
+    });
+    setFieldErrors(fe);
+    if (fe.company || fe.order_date || fe.items || Object.keys(fe.rows).length > 0) return;
     // 상품을 고르지 않고 이름만 친 품목은 재고에서 빠지지 않는다 — 조용히 저장하지 않고 확인을 받는다(서버도 확인 없이는 막는다)
     const unlinked = data.items.filter((it) => !it.product_id && it.product_name.trim()).map((it) => it.product_name.trim());
     let allowUnlinked = false;
@@ -932,14 +947,20 @@ export default function OrderForm({
               onClick={() => router.push(`/b2b/orders/new?from=${orderId}`)}
               title="이 발주의 업체·품목·송장 정보를 복사해 새 발주를 만듭니다"
             >
-              복제
+              발주 복제
             </button>
           )}
-          <Link href="/b2b/orders" className="b2b-btn-secondary">목록으로</Link>
+          <Link href="/b2b/orders" className="b2b-btn-secondary">목록으로 돌아가기</Link>
         </div>
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
+      {(() => {
+        const rowMsgs = Object.entries(fieldErrors.rows).flatMap(([i, r]) => [r.name && `${Number(i) + 1}번째 줄: ${r.name}`, r.qty && `${Number(i) + 1}번째 줄: 수량을 입력하세요`].filter(Boolean) as string[]);
+        const msgs = [fieldErrors.company, fieldErrors.order_date, fieldErrors.items, ...rowMsgs].filter(Boolean) as string[];
+        if (msgs.length === 0) return null;
+        return <div className="b2b-error">{msgs.length === 1 ? msgs[0] : <ul>{msgs.map((m) => <li key={m}>{m}</li>)}</ul>}</div>;
+      })()}
       {salesWarn && <div className="sm-warn">{salesWarn}</div>}
       {cancelledLive && (
         <div className="sm-warn">취소된 발주에 취소되지 않은 차수가 있어 저장할 수 없습니다 — 발주 목록에서 차수 상태를 먼저 맞추세요.</div>
@@ -956,10 +977,12 @@ export default function OrderForm({
                 value={companies.find((c) => c.id === data.company_id)?.name ?? ""}
                 options={companies.map((c) => ({ id: c.id, label: c.name }))}
                 onSelect={(o) => selectCompany(o.id)}
-                placeholder="업체 검색 또는 선택"
+                placeholder="검색"
                 ariaLabel="업체"
                 emptyText="일치하는 업체가 없습니다"
+                invalid={!!fieldErrors.company}
               />
+              {fieldErrors.company && <div className="b2b-field-error">{fieldErrors.company}</div>}
               {companies.length === 0 && (
                 <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>등록된 업체가 없습니다</span>
               )}
@@ -971,7 +994,9 @@ export default function OrderForm({
                 className="b2b-input"
                 value={data.order_date}
                 onChange={(e) => setField("order_date", e.target.value)}
+                aria-invalid={fieldErrors.order_date ? "true" : undefined}
               />
+              {fieldErrors.order_date && <div className="b2b-field-error">{fieldErrors.order_date}</div>}
             </div>
           </div>
 
@@ -1032,7 +1057,6 @@ export default function OrderForm({
               value={data.notes}
               onChange={(e) => setField("notes", e.target.value)}
               rows={2}
-              placeholder="포장 요청·전달 사항·결제 메모 등"
             />
           </div>
         </section>
@@ -1118,12 +1142,13 @@ export default function OrderForm({
           </div>
           <div className="b2b-field" style={{ marginTop: 12 }}>
             <label className="b2b-field-label">배송지 주소</label>
+            <div className="b2b-field-hint">우편번호 · 시/도 · 시/군/구 · 도로명 · 상세 순</div>
             <input
               type="text"
               className="b2b-input"
               value={data.recipient.address}
               onChange={(e) => setRecipient({ address: e.target.value })}
-              placeholder="(우편번호) 시/도 시/군/구 도로명 + 상세"
+              placeholder="예: (06236) 서울 강남구 테헤란로 1, 2층"
             />
           </div>
           <div className="b2b-field-row" style={{ marginTop: 12 }}>
@@ -1134,7 +1159,7 @@ export default function OrderForm({
                 className="b2b-input"
                 value={data.recipient.delivery_memo}
                 onChange={(e) => setRecipient({ delivery_memo: e.target.value })}
-                placeholder="문 앞 / 부재 시 경비실 등"
+                placeholder="예: 부재 시 경비실에 맡겨 주세요"
               />
             </div>
             <div className="b2b-field">
@@ -1144,7 +1169,7 @@ export default function OrderForm({
                 className="b2b-input"
                 value={data.recipient.courier}
                 onChange={(e) => setRecipient({ courier: e.target.value })}
-                placeholder="CJ대한통운"
+                placeholder="예: CJ대한통운"
               />
             </div>
           </div>
@@ -1250,9 +1275,11 @@ export default function OrderForm({
                           onSelect={(o) => pickProduct(idx, o.id)}
                           onType={(text) => updateItem(idx, { product_name: text, product_id: null })}
                           allowFreeText
-                          placeholder="제품 검색 또는 직접 입력"
+                          placeholder="품목·SKU 검색"
                           ariaLabel="품목명"
+                          invalid={!!fieldErrors.rows[idx]?.name}
                         />
+                        {fieldErrors.rows[idx]?.name && <div className="b2b-field-error">{fieldErrors.rows[idx]?.name}</div>}
                         {it.product_id ? (
                           <div className="sm-faint" style={{ fontSize: 12, marginTop: 3 }}>
                             {linked ? (linked.sku || "SKU 미지정") : "연결 상품이 목록에 없음(비활성?) — 재저장 전 확인"}
@@ -1273,7 +1300,7 @@ export default function OrderForm({
                           type="text"
                           value={it.spec}
                           onChange={(e) => updateItem(idx, { spec: e.target.value })}
-                          placeholder="100g / 옵션"
+                          placeholder="예: 100g"
                         />
                       </td>
                       <td data-label="수량">
@@ -1284,7 +1311,9 @@ export default function OrderForm({
                           onChange={(e) => updateItem(idx, { qty: e.target.value })}
                           min={0}
                           style={{ textAlign: "right" }}
+                          aria-invalid={fieldErrors.rows[idx]?.qty ? "true" : undefined}
                         />
+                        {fieldErrors.rows[idx]?.qty && <div className="b2b-field-error">{fieldErrors.rows[idx]?.qty}</div>}
                         {(() => {
                           // 발송·취소된 차수 배분(줄일 수 없는 몫), 여러 차수에 나뉜 배분, 어긋난 옛 데이터, 발송 수량 다시 기록이면
                           //  수량 칸 아래에 보인다. 빨강 = 이대로 저장 안 됨, 노랑 = 저장 때 확인(발송 수량)·어긋난 데이터
@@ -1346,6 +1375,7 @@ export default function OrderForm({
               </tbody>
             </table>
           </div>
+          {fieldErrors.items && <div className="b2b-field-error">{fieldErrors.items}</div>}
           <div className="b2b-items-add-row">
             <button type="button" className="b2b-btn-secondary" onClick={addItemRow}>
               + 상품 추가
@@ -1382,7 +1412,7 @@ export default function OrderForm({
                 </select>
                 <input className="b2b-input" value={data.discount_reason}
                   onChange={(e) => setData((p) => ({ ...p, discount_reason: e.target.value }))}
-                  placeholder="사유 (예: 장기거래 감사, 추가 포장비)" style={{ width: 200, padding: "6px 8px" }}
+                  placeholder="예: 장기거래 감사" style={{ width: 200, padding: "6px 8px" }}
                   aria-label="할인/추가금 사유" />
               </span>
             </div>
@@ -1510,15 +1540,18 @@ export default function OrderForm({
             </button>
           ) : <span />}
           <div className="b2b-form-foot-right">
-            <Link href="/b2b/orders" className="b2b-btn-secondary">취소</Link>
+            <Link href="/b2b/orders" className="b2b-btn-secondary">그만두기</Link>
             <button
               type="button"
               className="b2b-btn-primary"
               onClick={handleSave}
-              disabled={saving || !canSave || reloadFailed || allocErrors.length > 0}
+              disabled={saving || reloadFailed || allocErrors.length > 0}
             >
-              {saving ? "저장 중..." : mode === "create" ? "등록" : "수정"}
+              {saving ? "저장 중..." : mode === "create" ? "발주 등록" : "변경 저장"}
             </button>
+            {!saving && (reloadFailed || allocErrors.length > 0) && (
+              <span className="b2b-btn-why">{reloadFailed ? "새로고침한 뒤 다시 여세요" : "위 경고를 먼저 해결하세요"}</span>
+            )}
           </div>
         </div>
       </div>
@@ -1540,7 +1573,7 @@ export default function OrderForm({
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setClonePrompt(null)} disabled={cloning}>
-                  취소
+                  닫기
                 </button>
                 <button className="b2b-btn-primary" onClick={applyRecentClone} disabled={cloning}>
                   {cloning ? "불러오는 중..." : "복제하기"}

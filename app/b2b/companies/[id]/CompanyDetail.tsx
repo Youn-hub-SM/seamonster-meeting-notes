@@ -56,7 +56,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}</div>;
-  if (!data) return <div className="b2b-empty">데이터 없음</div>;
+  if (!data) return <div className="b2b-empty">거래처 정보가 없습니다.</div>;
 
   const c = data.company;
 
@@ -72,7 +72,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
           </p>
         </div>
         <div className="b2b-page-actions">
-          <Link href="/b2b/companies" className="b2b-btn-secondary">주소록으로</Link>
+          <Link href="/b2b/companies" className="b2b-btn-secondary">주소록으로 돌아가기</Link>
         </div>
       </header>
 

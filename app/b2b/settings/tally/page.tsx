@@ -70,8 +70,9 @@ export default function TallySettingsPage() {
 
         <div className="sm-col" style={{ gap: 6, marginBottom: 16 }}>
           <span className="b2b-field-label">1) Tally API 키 · 현재 {loading ? "확인 중..." : loadFail ? <strong style={{ color: "var(--sm-danger)" }}>확인 실패 — 새로고침</strong> : hasApiKey ? <strong style={{ color: "var(--sm-success)" }}>저장됨</strong> : <strong style={{ color: "var(--sm-warning)" }}>미설정</strong>}</span>
+          <span className="b2b-field-hint">{hasApiKey ? "새 키를 넣고 저장하면 변경 · 비우고 저장하면 해제" : "Tally 에서 발급한 API 키를 붙여넣는다"}</span>
           <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input className="b2b-input" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={hasApiKey ? "새 키로 변경(비우고 저장 시 해제)" : "tally_xxx API 키 붙여넣기"} style={{ flex: 1, minWidth: 240 }} />
+            <input className="b2b-input" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="예: tally_xxxxxxxx" aria-label="Tally API 키" style={{ flex: 1, minWidth: 240 }} />
             <button className="b2b-btn-primary" onClick={saveApiKey} disabled={busy === "key"}>{busy === "key" ? "저장 중..." : "저장"}</button>
           </div>
         </div>
@@ -80,6 +81,7 @@ export default function TallySettingsPage() {
           <span className="b2b-field-label">2) 가져올 폼 {formId && <span className="sm-faint">· 현재: {formId}</span>}</span>
           <div className="sm-row" style={{ gap: 8, flexWrap: "wrap" }}>
             <button className="b2b-btn-secondary" onClick={loadForms} disabled={busy === "forms" || !hasApiKey}>{busy === "forms" ? "불러오는 중..." : "폼 불러오기"}</button>
+            {!hasApiKey && !loading && <span className="b2b-btn-why">API 키를 저장하면 켜집니다</span>}
             {forms.length > 0 && (
               <select className="b2b-input" value={formId} onChange={(e) => selectForm(e.target.value)} style={{ flex: 1, minWidth: 240 }}>
                 <option value="">폼 선택...</option>
@@ -93,6 +95,7 @@ export default function TallySettingsPage() {
           <span className="b2b-field-label">3) 응답 가져오기</span>
           <div className="sm-row" style={{ gap: 8 }}>
             <button className="b2b-btn-primary" onClick={importNow} disabled={busy === "import" || !hasApiKey || !formId}>{busy === "import" ? "가져오는 중..." : "지금 가져오기"}</button>
+            {!loading && (!hasApiKey || !formId) && <span className="b2b-btn-why">{!hasApiKey ? "API 키를 저장하면 켜집니다" : "가져올 폼을 고르면 켜집니다"}</span>}
           </div>
           <span className="sm-faint" style={{ fontSize: 12 }}>이미 가져온 응답은 건너뜀 · 첫 가져오기는 최근 60일</span>
         </div>

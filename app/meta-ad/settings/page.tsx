@@ -77,7 +77,7 @@ export default function MetaAdSettingsPage() {
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center" }}>
           {msg && <span style={{ fontSize: 15, color: "var(--sm-success)" }}>{msg}</span>}
-          <button className="b2b-btn-primary" onClick={save} disabled={saving || !t}>{saving ? "저장 중..." : "저장"}</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving || !t}>{saving ? "저장 중..." : "기준 저장"}</button>
         </div>
       </header>
       {err && <div className="b2b-error">{err}</div>}

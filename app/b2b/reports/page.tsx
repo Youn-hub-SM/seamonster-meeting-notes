@@ -195,19 +195,19 @@ export default function ReportsPage() {
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
-            {loading ? "불러오는 중..." : "새로고침"}
+            {loading ? "불러오는 중..." : "다시 불러오기"}
           </button>
           <button className="b2b-btn-secondary" onClick={loadLedger} disabled={loading || ledgerBusy !== ""}>
-            {ledgerBusy === "load" ? "대조 중..." : "원장 대조"}
+            {ledgerBusy === "load" ? "대조 중..." : "원장 대조하기"}
           </button>
           <button
             className="b2b-btn-primary"
             onClick={handleExport}
             disabled={exporting || loading || !report || report.summary.orders_completed === 0}
-            title={report && report.summary.orders_completed === 0 ? "이 기간에 발송완료된 발주가 없습니다" : ""}
           >
-            {exporting ? "생성 중..." : "엑셀 다운로드"}
+            {exporting ? "생성 중..." : "엑셀 내려받기"}
           </button>
+          {!loading && report && report.summary.orders_completed === 0 && <span className="b2b-btn-why">이 기간에 발송완료 발주가 없습니다</span>}
         </div>
       </header>
 
@@ -302,7 +302,7 @@ export default function ReportsPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : !report ? (
-        <div className="b2b-empty">데이터 없음</div>
+        <div className="b2b-empty">집계할 발주가 없습니다.</div>
       ) : (
         <>
           {/* 현황 히어로 — 업체별 매출 도넛 + 총매출 + 지표 */}

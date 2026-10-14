@@ -153,8 +153,8 @@ export default function TradePage() {
                   <input className="b2b-input" type="date" value={ioDate} max={ioDone ? TODAY() : undefined} onChange={(e) => setIoDate(e.target.value)} />
                 </div>
                 <div className="b2b-field">
-                  <label className="b2b-field-label">{ioType === "입고" ? (customerReturn ? "고객" : "매입처") : ioReason !== "판매" ? "전달처" : "판매처"}</label>
-                  <input className="b2b-input" placeholder="선택" value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} />
+                  <label className="b2b-field-label">{ioType === "입고" ? (customerReturn ? "고객" : "매입처") : ioReason !== "판매" ? "전달처" : "판매처"} <span className="opt">(선택)</span></label>
+                  <input className="b2b-input" value={ioPartner} onChange={(e) => setIoPartner(e.target.value)} />
                 </div>
               </div>
 
@@ -202,7 +202,7 @@ export default function TradePage() {
                 {ioType === "입고"
                   ? <>양식 = <strong>SKU · 수량 · 단가</strong></>
                   : <>양식 = <strong>수량 · (무시) · SKU</strong></>}
-                {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="sm-link">양식 다운로드</a>
+                {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="sm-link">양식 내려받기</a>
                 <br />거래일·거래처·채널·{ioType === "출고" ? "사유" : "요청서"}는 파일 전체에 적용됩니다.
               </p>
 
@@ -211,7 +211,7 @@ export default function TradePage() {
             <div className="b2b-modal-foot">
               <span />
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setUploadOpen(false)} disabled={importing}>취소</button>
+                <button className="b2b-btn-secondary" onClick={() => setUploadOpen(false)} disabled={importing}>그만두기</button>
                 <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
                   {importing ? "분석 중..." : "④ 엑셀 첨부"}
                   <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
@@ -272,7 +272,8 @@ export default function TradePage() {
             <div className="b2b-modal-foot">
               <span />
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
+                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
+                {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
                 <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}건 반영`}</button>
               </div>
             </div>

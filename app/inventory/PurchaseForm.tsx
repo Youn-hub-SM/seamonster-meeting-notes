@@ -184,8 +184,10 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
             </select>
           </label>
         )}
-        <input className="b2b-input" placeholder={type === "입고" ? (customerReturn ? "고객(선택)" : "매입처(선택)") : type === "출고" && reason !== "판매" ? "전달처(선택)" : "판매처(선택)"} value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} />
-        <input className="b2b-input" placeholder="메모(선택)" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>{type === "입고" ? (customerReturn ? "고객" : "매입처") : type === "출고" && reason !== "판매" ? "전달처" : "판매처"}
+          <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} style={{ width: 170 }} /></label>
+        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)", flex: 1, minWidth: 200 }}>메모
+          <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} style={{ flex: 1, minWidth: 160 }} /></label>
       </div>
 
       <section className="b2b-card">
@@ -200,8 +202,9 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         {/* 큰 검색창 — 이름·옵션·SKU·초성·여러 단어("광어 100 1kg") */}
         <div style={{ position: "relative", marginBottom: 12 }}>
           <input className="b2b-input" value={search} onChange={(e) => { setSearch(e.target.value); setActive(-1); }} onKeyDown={onSearchKey} autoComplete="off"
-            placeholder="제품 검색 — 예: 광어 100 1kg / 초성 ㄱㅇ  (↓↑ 이동, Enter 추가)"
+            placeholder="품목·SKU 검색" aria-label="제품 검색"
             style={{ fontSize: 15, padding: "13px 16px" }} />
+          <div className="b2b-field-hint is-below">이름·옵션·SKU·초성(ㄱㅇ)·여러 단어(광어 100 1kg) · ↓↑ 이동, Enter 추가</div>
           {matches.length > 0 && (
             <div className="inv-buy-suggest" ref={suggestRef}>
               {matches.map((p, i) => (
@@ -247,8 +250,8 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
           <span className="sm-faint" style={{ fontSize: 12 }}>(미래 날짜는 해제해 대기로)</span>
         </label>
         <div className="sm-row" style={{ gap: 10 }}>
-          <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>취소</button>
-          <button className="b2b-btn-primary" onClick={save} disabled={saving || totals.items === 0}>{saving ? "저장 중..." : (done ? `${type === "입고" ? "구매" : "판매"} 저장` : "대기로 저장")}</button>
+          <button className="b2b-btn-secondary" onClick={onCancel} disabled={saving}>그만두기</button>
+          <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : (done ? `${type === "입고" ? "구매" : "판매"} 저장` : "대기로 저장")}</button>
         </div>
       </div>
     </>

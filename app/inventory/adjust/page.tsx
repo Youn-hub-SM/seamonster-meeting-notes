@@ -124,14 +124,15 @@ export default function AdjustPage() {
               onChange={(e) => { setCountDate(e.target.value); setNotice(null); }} style={{ width: "auto" }} />
           </label>
           {ready
-            ? <a className="b2b-btn-secondary" href={templateHref} title="SKU·품목명·실사일 기준 현재고가 채워진 양식">엑셀 양식</a>
-            : <button className="b2b-btn-secondary" disabled title="칸·실사일을 먼저 고르세요">엑셀 양식</button>}
+            ? <a className="b2b-btn-secondary" href={templateHref} title="SKU·품목명·실사일 기준 현재고가 채워진 양식">양식 내려받기</a>
+            : <button className="b2b-btn-secondary" disabled title="칸·실사일을 먼저 고르세요">양식 내려받기</button>}
           <label className="b2b-btn-secondary" style={{ cursor: canCount && !importing ? "pointer" : "not-allowed", opacity: canCount ? 1 : 0.5 }} title={!ready ? "칸·실사일을 먼저 고르세요" : preHint}>
             {importing ? "분석 중..." : "엑셀 업로드"}
             <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing || !canCount}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
           </label>
           <button className="b2b-btn-primary" onClick={() => setOpen(true)} disabled={!canCount} title={!ready ? "칸·실사일을 먼저 고르세요" : preHint || "한 품목 조정 — 이 칸·실사일로 열립니다"}>+ 조정 기록</button>
+          {!canCount && <span className="b2b-btn-why">{!ready ? "칸·실사일을 먼저 고르면 켜집니다" : "실사 전 점검을 읽으면 켜집니다"}</span>}
         </div>
       </header>
 
@@ -143,7 +144,7 @@ export default function AdjustPage() {
       <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>실사 전: 발송 안 된 B2B 발주 정리 · 대기 건 처리 · 고객 반품은 입고(사유 &apos;고객 반품&apos;)로 먼저 기록 · 실사일 = 그날 마감 기준(그날 입출고 전에 셌다면 전날)</p>
 
       {!channel ? (
-        <div className="b2b-empty" style={{ marginBottom: 16 }}>실사할 칸을 고르세요.</div>
+        <div className="b2b-empty" style={{ marginBottom: 16 }}>선택한 칸이 없습니다.</div>
       ) : pre.loading ? (
         <div className="b2b-loading" style={{ marginBottom: 16 }}>실사 전 점검 중...</div>
       ) : pre.error ? (
@@ -218,7 +219,10 @@ export default function AdjustPage() {
                 ? <label className="sm-row" style={{ gap: 6, fontSize: 15 }}><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> 위 점검을 확인했습니다</label>
                 : <span />}
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
+                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
+                {!applying && (preview.summary.changed === 0 ? <span className="b2b-btn-why">바뀐 행이 없습니다</span>
+                  : !preview.checks ? <span className="b2b-btn-why">점검을 확인하지 못해 반영할 수 없습니다</span>
+                    : needsAck(preview.checks) && !ack ? <span className="b2b-btn-why">위 점검을 확인(체크)하면 켜집니다</span> : null)}
                 <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.changed === 0 || !preview.checks || (needsAck(preview.checks) && !ack)}>{applying ? "반영 중..." : `${preview.summary.changed}건 조정`}</button>
               </div>
             </div>

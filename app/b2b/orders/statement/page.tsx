@@ -99,9 +99,9 @@ export default function CustomStatementPage() {
           <h1 className="b2b-page-title">거래명세표 작성</h1>
         </div>
         <div className="b2b-page-actions">
-          <Link href="/b2b/orders" className="b2b-btn-secondary">발주 목록</Link>
+          <Link href="/b2b/orders" className="b2b-btn-secondary">발주 목록으로 돌아가기</Link>
           <button className="b2b-btn-secondary" onClick={() => void resetAll()}>새로 작성</button>
-          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading}>인쇄 / PDF</button>
+          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading}>인쇄 / PDF 저장</button>
         </div>
       </header>
 
@@ -116,8 +116,8 @@ export default function CustomStatementPage() {
         <div className="b2b-field-row" style={{ marginBottom: 14 }}>
           <label className="b2b-field"><span className="b2b-field-label">거래일자</span>
             <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-          <label className="b2b-field"><span className="b2b-field-label">문서번호 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택)</span></span>
-            <input className="b2b-input" value={docNo} onChange={(e) => setDocNo(e.target.value)} placeholder="비우면 표시 안 함" /></label>
+          <label className="b2b-field"><span className="b2b-field-label">문서번호 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 비우면 표시 안 함)</span></span>
+            <input className="b2b-input" value={docNo} onChange={(e) => setDocNo(e.target.value)} /></label>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
@@ -157,8 +157,8 @@ export default function CustomStatementPage() {
               <tbody>
                 {calc.rows.map(({ l, supply }) => (
                   <tr key={l.key}>
-                    <td><input className="b2b-input" value={l.name} onChange={(e) => setLine(l.key, { name: e.target.value })} placeholder="품목명" /></td>
-                    <td><input className="b2b-input" value={l.spec} onChange={(e) => setLine(l.key, { spec: e.target.value })} placeholder="규격" /></td>
+                    <td><input className="b2b-input" value={l.name} onChange={(e) => setLine(l.key, { name: e.target.value })} placeholder="예: 참돔순살" aria-label="품목명" /></td>
+                    <td><input className="b2b-input" value={l.spec} onChange={(e) => setLine(l.key, { spec: e.target.value })} placeholder="예: 100g" aria-label="규격" /></td>
                     <td><input className="b2b-input" type="number" min={0} step="0.01" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} style={{ textAlign: "right" }} /></td>
                     <td><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, { price: e.target.value })} style={{ textAlign: "right" }} placeholder="0" /></td>
                     <td style={{ textAlign: "center" }}>

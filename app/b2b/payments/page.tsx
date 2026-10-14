@@ -75,7 +75,7 @@ export default function PaymentsPage() {
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
-            {loading ? "불러오는 중..." : "새로고침"}
+            {loading ? "불러오는 중..." : "다시 불러오기"}
           </button>
         </div>
       </header>
@@ -435,7 +435,8 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                 <input
                   type="text"
                   className="b2b-input"
-                  placeholder="입금자명 (예: 홍길동, 바다무역)"
+                  placeholder="예: 홍길동"
+                  aria-label="입금자명"
                   value={aliasName}
                   onChange={(e) => setAliasName(e.target.value)}
                 />
@@ -456,8 +457,9 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                     setAliasCompany("");
                   }}
                 >
-                  + 등록
+                  + 입금자명 등록
                 </button>
+                {!aliasName.trim() && <span className="b2b-btn-why">입금자명을 넣으면 켜집니다</span>}
               </div>
               {data.aliases.length > 0 && (
                 <div className="pay-dep-rules">
@@ -503,7 +505,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
               </button>
               {showRecent && (
                 <div className="sm-row-wrap sm-gap-2 pay-dep-filter">
-                  <input className="b2b-input" value={recentQuery} onChange={(e) => setRecentQuery(e.target.value)} placeholder="입금자명 · 금액" />
+                  <input className="b2b-input" value={recentQuery} onChange={(e) => setRecentQuery(e.target.value)} placeholder="검색" aria-label="최근 처리 검색" />
                   {data.recent.length >= recentLimit && recentLimit < 100 && (
                     <button className="b2b-btn-secondary" onClick={() => { setRecentLimit(100); load(100); }}>더 보기 (100건)</button>
                   )}
@@ -558,6 +560,7 @@ function PaymentModal({
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [amountError, setAmountError] = useState(""); // 입금 추가 폼 칸 오류(금액)
   const [adding, setAdding] = useState(false);
   const [curStatus, setCurStatus] = useState<PaymentStatus>(order.payment_status);
   const confirmModal = useConfirm();
@@ -620,9 +623,10 @@ function PaymentModal({
 
   async function handleAdd() {
     if (!Number(form.amount) || Number(form.amount) <= 0) {
-      setError("금액은 0보다 커야 합니다.");
+      setAmountError(String(form.amount).trim() === "" ? "금액을 입력하세요" : "0보다 큰 금액");
       return;
     }
+    setAmountError("");
     setAdding(true);
     setError("");
     try {
@@ -676,7 +680,7 @@ function PaymentModal({
         </div>
 
         <div className="b2b-modal-body">
-          {error && <div className="b2b-error">{error}</div>}
+          {(error || amountError) && <div className="b2b-error">{error || amountError}</div>}
 
           {/* ① 입금 상태 변경 — 가장 중요, 최상단 큰 버튼 */}
           <section className="pay-status-box">
@@ -717,7 +721,9 @@ function PaymentModal({
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
                   min={0}
+                  aria-invalid={amountError ? "true" : undefined}
                 />
+                {amountError && <div className="b2b-field-error">{amountError}</div>}
               </div>
               <div className="b2b-field">
                 <label className="b2b-field-label">입금일</label>
@@ -736,7 +742,7 @@ function PaymentModal({
                 className="b2b-input"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="예) 세금계산서 발행분 / 부분입금"
+                placeholder="예: 세금계산서 발행분"
               />
             </div>
             <div style={{ marginTop: 12 }}>
@@ -744,7 +750,7 @@ function PaymentModal({
                 type="button"
                 className="b2b-btn-primary"
                 onClick={handleAdd}
-                disabled={adding || !Number(form.amount) || Number(form.amount) <= 0}
+                disabled={adding}
                 style={{ width: "100%" }}
               >
                 {adding ? "추가 중..." : "+ 입금 추가"}

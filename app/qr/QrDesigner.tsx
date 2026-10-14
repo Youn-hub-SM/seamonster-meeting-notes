@@ -89,19 +89,19 @@ export default function QrDesigner({ data, name, onClose }: { data: string; name
                 <span className="b2b-field-label">가운데 로고(선택)</span>
                 <div className="sm-row" style={{ gap: 8 }}>
                   <label className="b2b-btn-secondary" style={{ cursor: "pointer", fontSize: 12 }}>로고 올리기<input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) onLogo(f); e.target.value = ""; }} /></label>
-                  {logo && <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setLogo("")}>제거</button>}
+                  {logo && <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setLogo("")}>로고 제거</button>}
                 </div>
               </div>
               <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 15, cursor: "pointer" }}>
                 <input type="checkbox" checked={frame} onChange={(e) => setFrame(e.target.checked)} /> 'SCAN ME' 프레임
               </label>
-              {frame && <input className="b2b-input" style={{ marginTop: 6 }} value={frameText} onChange={(e) => setFrameText(e.target.value)} placeholder="프레임 문구" />}
+              {frame && <input className="b2b-input" style={{ marginTop: 6 }} value={frameText} onChange={(e) => setFrameText(e.target.value)} placeholder="예: SCAN ME" aria-label="프레임 문구" />}
             </div>
           </div>
         </div>
         <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
           <button className="b2b-btn-secondary" onClick={onClose}>닫기</button>
-          <button className="b2b-btn-primary" onClick={download} disabled={rendering || !preview}>PNG 다운로드</button>
+          <button className="b2b-btn-primary" onClick={download} disabled={rendering || !preview}>PNG 내려받기</button>
         </div></div>
       </div>
     </div>

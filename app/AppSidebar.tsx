@@ -21,8 +21,11 @@ function toolActive(t: NavTool, pathname: string) {
   return pathname === t.href || pathname.startsWith(t.href + "/");
 }
 
-export default function AppSidebar({ open, collapsed, onToggleCollapse, onNavigate }: { open: boolean; collapsed?: boolean; onToggleCollapse?: () => void; onNavigate?: () => void }) {
+export default function AppSidebar({ open, collapsed, onToggleCollapse, onNavigate, onOpenSearch }: { open: boolean; collapsed?: boolean; onToggleCollapse?: () => void; onNavigate?: () => void; onOpenSearch?: () => void }) {
   const pathname = usePathname() || "/";
+  // 전역 검색 버튼의 단축키 표기 — 맥은 Cmd. (렌더 뒤에 판정해 서버/클라이언트 첫 화면이 어긋나지 않게)
+  const [macKeys, setMacKeys] = useState(false);
+  useEffect(() => { setMacKeys(/Mac|iPhone|iPad/.test(navigator.userAgent)); }, []);
   const router = useRouter();
   const [userName, setUserName] = useState<string | null>(null);
   const [role, setRole] = useState<string>("internal");
@@ -217,6 +220,18 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
       </div>
 
       {!rail && <nav className="app-sb-nav">
+        {/* 전역 검색 진입(2026-10-14 C5) — 로고 아래·즐겨찾기 위 한 줄. 접힌 띠(rail)에선 nav 자체가 없어 안 보이고, 호버 펼침 땐 보인다.
+            파도소리 계정은 검색 대상(메뉴·발주·거래처)이 전부 막힌 경로라 감춘다. */}
+        {userName && !isFactoryUser && onOpenSearch && (
+          <button type="button" className="sm-search-open" onClick={onOpenSearch} aria-label="전역 검색 열기" aria-keyshortcuts={macKeys ? "Meta+K" : "Control+K"}>
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+              <circle cx="6.8" cy="6.8" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M10.3 10.3L14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            <span className="sm-search-open-label">검색</span>
+            <span className="sm-search-open-kbd" aria-hidden="true">{macKeys ? "Cmd K" : "Ctrl K"}</span>
+          </button>
+        )}
         {/* 홈 버튼은 없앴다 — 위 로고가 곧 홈 링크라 같은 곳으로 가는 버튼이 둘이었다.
             즐겨찾기는 파도소리 계정에겐 막힌 경로라 계속 감춘다. */}
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}

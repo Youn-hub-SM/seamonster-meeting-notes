@@ -79,6 +79,7 @@ export default function VocRequestPage() {
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || items.length === 0}>인쇄 / PDF 저장</button>
+          {!loading && items.length === 0 && <span className="b2b-btn-why">인쇄할 클레임이 없습니다</span>}
         </div>
       </header>
 
@@ -103,7 +104,8 @@ export default function VocRequestPage() {
           <option value="">전체 제품</option>
           {products.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
-        <input className="b2b-input" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="수신처(제조사명) — 선택" style={{ width: 220 }} />
+        <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>수신(선택)
+          <input className="b2b-input" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="예: 바다식품" style={{ width: 200 }} /></label>
       </div>
 
       {loading ? (

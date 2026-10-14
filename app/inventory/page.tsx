@@ -331,7 +331,7 @@ export default function InventoryPage() {
         <div className="b2b-page-actions">
           {/* 확정형 탭엔 생산 판단 액션이 없다 — AI 조언·선택 생산 요청은 속도 기반 칸(전체·소매·도매) 전용 */}
           {!confirmedTab && <button className="b2b-btn-secondary" onClick={genAdvice} disabled={adviceLoading}>{adviceLoading ? "AI 분석 중..." : advice ? "다시 분석" : "AI 조언"}</button>}
-          <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="행사 기간·예상판매 등록">프로모션</button>
+          <button className="b2b-btn-secondary" onClick={() => setPromoOpen(true)} title="행사 기간·예상판매 등록">프로모션 보기</button>
           {!confirmedTab && (
             <button className="b2b-btn-primary" onClick={goRequest} disabled={sel.size === 0}
               title={sel.size === 0 ? "아래 표에서 품목을 체크하세요"
@@ -340,7 +340,8 @@ export default function InventoryPage() {
               {`선택 ${sel.size}종 생산 요청`}
             </button>
           )}
-          <button className="b2b-btn-primary" onClick={() => setModalFor("__new__")}>+ 입·출·조정</button>
+          {!confirmedTab && sel.size === 0 && <span className="b2b-btn-why">아래 표에서 품목을 체크하면 켜집니다</span>}
+          <button className="b2b-btn-primary" onClick={() => setModalFor("__new__")}>+ 입·출·조정 기록</button>
         </div>
       </header>
 
@@ -388,7 +389,7 @@ export default function InventoryPage() {
             </label>
           )}
         </div>
-        <input className="b2b-input" placeholder="품목·SKU·옵션·속성/분류 — 초성 가능 (예: ㄱㅇ)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
+        <input className="b2b-input" placeholder="품목·SKU 검색" aria-label="품목·SKU·옵션·속성/분류 검색(초성 가능)" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 300, maxWidth: "100%" }} />
       </div>
 
       {!confirmedTab && adviceLoading && <div className="b2b-loading">AI 분석 중입니다... (최대 1분)</div>}
@@ -520,7 +521,7 @@ export default function InventoryPage() {
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
                   <td className="num b2b-money">{r.value.toLocaleString()}</td>
-                  <td onClick={(e) => e.stopPropagation()}><button className="b2b-btn-secondary" style={{ padding: "4px 6px", fontSize: 12, whiteSpace: "nowrap" }} onClick={() => setModalFor(r.product_id)}>입·출·조정</button></td>
+                  <td onClick={(e) => e.stopPropagation()}><button className="b2b-btn-secondary" style={{ padding: "4px 6px", fontSize: 12, whiteSpace: "nowrap" }} onClick={() => setModalFor(r.product_id)}>입·출·조정 기록</button></td>
                 </tr>
                 );
               })}
@@ -637,7 +638,7 @@ function ProductHistory({ productId }: { productId: string }) {
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}</div>;
-  if (rows.length === 0) return <div className="b2b-empty">내역이 없습니다.</div>;
+  if (rows.length === 0) return <div className="b2b-empty">변경 기록이 없습니다.</div>;
 
   return (
     <div className="b2b-table-wrap" style={{ maxHeight: 440, overflow: "auto" }}>

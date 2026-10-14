@@ -210,6 +210,8 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     catch { return iso.slice(0, 16).replace("T", " "); }
   };
 
+  const filtered = !!(fFrom || fTo || search || fType !== "전체");
+  const clearFilters = () => { setFType("전체"); setFFrom(""); setFTo(""); setSearch(""); };
   const filters = (
     <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
       <div className="sm-tabs" style={{ margin: 0 }}>
@@ -226,9 +228,9 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
       <input className="b2b-input" type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} style={{ width: 145 }} title="시작일" />
       <span className="sm-faint">~</span>
       <input className="b2b-input" type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} style={{ width: 145 }} title="종료일" />
-      <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목·SKU·거래처·주문번호 — 품목은 초성 가능" style={{ width: 280, maxWidth: "100%" }} />
-      {(fFrom || fTo || search || fType !== "전체") && (
-        <button className="b2b-link-btn" onClick={() => { setFType("전체"); setFFrom(""); setFTo(""); setSearch(""); }}>초기화</button>
+      <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="품목·SKU 검색" aria-label="품목·SKU·거래처·주문번호 검색(품목은 초성 가능)" style={{ width: 280, maxWidth: "100%" }} />
+      {filtered && (
+        <button className="b2b-link-btn" onClick={clearFilters}>조건 지우기</button>
       )}
     </div>
   );
@@ -247,7 +249,10 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   // 재검색·재조회 중엔 기존 목록을 그대로 두고(깜빡임 방지), 첫 로드만 전체 로딩 표시
   if (loading && orders.length === 0) return <>{head}<div className="b2b-loading">불러오는 중...</div></>;
   if (error) return <>{head}<div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div></>;
-  if (shown.length === 0) return <>{head}<div className="b2b-empty">{loading ? "검색 중..." : debouncedSearch ? "검색 결과가 없습니다." : orders.length === 0 ? "입고·출고 내역이 없습니다." : "필터에 맞는 내역이 없습니다."}</div></>;
+  if (shown.length === 0) {
+    if (loading) return <>{head}<div className="b2b-loading">검색 중...</div></>;
+    return <>{head}<div className="b2b-empty">{orders.length === 0 && !filtered ? "입고·출고 기록이 없습니다." : "조건에 맞는 기록이 없습니다."}{filtered && <div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={clearFilters}>조건 지우기</button></div>}</div></>;
+  }
 
   return (
     <>
@@ -283,7 +288,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                     {!done && <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12, marginRight: 6 }} onClick={() => setProc(o)}>{o.type === "입고" ? "입고처리" : "출고처리"}</button>}
                     {isB2bOrder(o)
                       ? <span className="sm-faint" style={{ fontSize: 12 }} title={o.source === "b2b_cancel_kept" ? "발송 후 취소(미반품) 출고 — 발주를 복구하면 함께 정리됩니다" : "발주의 발송일정에서 수정·삭제하면 재고가 함께 원복됩니다"}>발주에서</span>
-                      : <button className="b2b-link-btn" onClick={() => cancel(o)} style={{ color: "var(--sm-danger)" }}>취소</button>}
+                      : <button className="b2b-link-btn" onClick={() => cancel(o)} style={{ color: "var(--sm-danger)" }}>기록 취소</button>}
                   </td>
                 </tr>
                 {isOpen && (
@@ -312,14 +317,14 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                                         onKeyDown={(e) => { if (e.key === "Enter") saveUnit(it); if (e.key === "Escape") setEditId(null); }}
                                         style={{ width: 80, padding: "3px 8px", fontSize: 15, textAlign: "right" }}
                                       />
-                                      <button className="b2b-link-btn" onClick={() => saveUnit(it)} disabled={saving}>저장</button>
-                                      <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>취소</button>
+                                      <button className="b2b-link-btn" onClick={() => saveUnit(it)} disabled={saving}>단가 저장</button>
+                                      <button className="b2b-link-btn sm-faint" onClick={() => setEditId(null)}>그만두기</button>
                                     </span>
                                   ) : (
                                     <>
                                       {it.unit_amount ? it.unit_amount.toLocaleString() : "-"}
                                       <button className="b2b-link-btn sm-faint" style={{ marginLeft: 6, fontSize: 12 }} title="단가만 수정합니다 — 수량·날짜는 취소 후 다시 기록"
-                                        onClick={() => { setEditId(it.id); setEditVal(it.unit_amount ? String(it.unit_amount) : ""); }}>수정</button>
+                                        onClick={() => { setEditId(it.id); setEditVal(it.unit_amount ? String(it.unit_amount) : ""); }}>단가 수정</button>
                                     </>
                                   )}
                                 </td>
@@ -455,7 +460,7 @@ function ProcessModal({ o, onClose, onDone }: { o: Order; onClose: () => void; o
         <div className="b2b-modal-foot">
           <span />
           <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose} disabled={busy}>취소</button>
+            <button className="b2b-btn-secondary" onClick={onClose} disabled={busy}>그만두기</button>
             <button className="b2b-btn-primary" onClick={submit} disabled={busy || (linkable && reqLoading)}>{busy ? "처리 중..." : linkable && reqLoading ? "요청서 확인 중..." : label}</button>
           </div>
         </div>

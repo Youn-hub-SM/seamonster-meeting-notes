@@ -23,6 +23,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
   const [loadErr, setLoadErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [badRow, setBadRow] = useState<number | null>(null); // 검증에 걸린 줄(수량 칸 빨강)
   const confirmModal = useConfirm();
 
   const load = useCallback(async () => {
@@ -49,11 +50,12 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
     const picked = rows.filter((r) => r.component_id);
     // 수량은 1 이상 정수만 — 서버가 반올림·1 로 바꿔 저장하므로 화면에서 먼저 막는다(조용히 다른 수량이 되지 않게)
     const badQty = picked.find((r) => { const n = Number(String(r.qty).trim()); return String(r.qty).trim() === "" || !Number.isInteger(n) || n < 1; });
-    if (badQty) { setError(`'${badQty.label}' 수량을 1 이상 정수로 넣으세요.`); return; }
+    if (badQty) { setBadRow(rows.indexOf(badQty)); setError(`'${badQty.label}' 수량은 1 이상 정수`); return; }
     // 같은 구성품 두 줄은 서버도 거절한다 — 한 줄로 합치게 먼저 알린다
     const seen = new Set<string>();
     const dup = picked.find((r) => { if (seen.has(r.component_id)) return true; seen.add(r.component_id); return false; });
-    if (dup) { setError(`'${dup.label}'이(가) 두 줄 있습니다 — 한 줄로 합치세요.`); return; }
+    if (dup) { setBadRow(rows.indexOf(dup)); setError(`'${dup.label}'이(가) 두 줄 있습니다 — 한 줄로 합치세요`); return; }
+    setBadRow(null);
     if (!picked.length && loadedCount > 0 && !(await confirmModal({ title: "묶음 풀기", body: `구성품 ${loadedCount}개를 모두 지우면 묶음이 풀려 일반 품목이 됩니다.`, action: "묶음 풀고 저장" }))) return;
     setSaving(true); setError("");
     try {
@@ -77,6 +79,7 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
         </div>
         <div className="b2b-modal-body">
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 10 }}>세트 SKU는 구성품으로 분해되어 재고에 반영됩니다.</p>
+          {error && <div className="b2b-error" style={{ marginBottom: 8 }}>{error}</div>}
           {loading ? <div className="b2b-loading">불러오는 중...</div> : loadErr ? (
             <div className="b2b-error">
               구성을 불러오지 못했습니다 — {loadErr}. 이대로는 저장할 수 없습니다.{" "}
@@ -87,9 +90,9 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
               {rows.map((r, i) => (
                 <div key={i} className="promo-item-row">
                   <div className="promo-item-combo">
-                    <Combobox value={r.label} options={options} onSelect={(o) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, component_id: o.id, label: o.label } : x)))} placeholder="구성품 검색" ariaLabel="구성품" />
+                    <Combobox value={r.label} options={options} onSelect={(o) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, component_id: o.id, label: o.label } : x)))} placeholder="품목·SKU 검색" ariaLabel="구성품" invalid={badRow === i && !r.component_id} />
                   </div>
-                  <input type="number" min={1} step={1} className="b2b-input promo-item-qty" value={r.qty} onChange={(e) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, qty: e.target.value } : x)))} placeholder="수량" />
+                  <input type="number" min={1} step={1} className="b2b-input promo-item-qty" value={r.qty} onChange={(e) => setRows((rs) => rs.map((x, xi) => (xi === i ? { ...x, qty: e.target.value } : x)))} aria-label="수량" aria-invalid={badRow === i ? "true" : undefined} />
                   <button type="button" className="promo-item-del" onClick={() => setRows((rs) => rs.filter((_, xi) => xi !== i))} title="삭제">✕</button>
                 </div>
               ))}
@@ -97,13 +100,13 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
               <button type="button" className="promo-item-add" style={{ marginTop: 8 }} onClick={() => setRows((rs) => [...rs, { component_id: "", label: "", qty: 1 }])}>+ 구성품 추가</button>
             </>
           )}
-          {error && <div className="b2b-error" style={{ marginTop: 8 }}>{error}</div>}
         </div>
         <div className="b2b-modal-foot">
           <span />
           <div className="b2b-modal-foot-right">
-            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>취소</button>
-            <button className="b2b-btn-primary" onClick={save} disabled={saving || loading || !!loadErr}>{saving ? "저장 중..." : "저장"}</button>
+            <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>그만두기</button>
+            <button className="b2b-btn-primary" onClick={save} disabled={saving || loading || !!loadErr}>{saving ? "저장 중..." : "구성 저장"}</button>
+            {!!loadErr && !loading && <span className="b2b-btn-why">구성을 불러오지 못해 저장할 수 없습니다</span>}
           </div>
         </div>
       </div>

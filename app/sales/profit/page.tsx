@@ -84,8 +84,8 @@ export default function SalesProfitPage() {
           <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="b2b-input" style={{ width: 160 }} />
           <span className="sm-faint">~</span>
           <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="b2b-input" style={{ width: 160 }} />
-          <button className="b2b-btn-primary" onClick={() => calc()} disabled={busy !== ""}>{busy === "calc" ? "계산 중..." : "계산"}</button>
-          {res && <button className="b2b-btn-secondary" onClick={exportXlsx} disabled={busy !== ""}>엑셀 추출</button>}
+          <button className="b2b-btn-primary" onClick={() => calc()} disabled={busy !== ""}>{busy === "calc" ? "계산 중..." : "이익 계산"}</button>
+          {res && <button className="b2b-btn-secondary" onClick={exportXlsx} disabled={busy !== ""}>엑셀 내려받기</button>}
           <button className="b2b-btn-secondary" onClick={() => setShowCfg((v) => !v)}>채널 설정 · 계산 기준 {showCfg ? "▲" : "▼"}</button>
           <a className="b2b-btn-secondary" href="/b2b/products" target="_blank" rel="noreferrer" style={{ marginLeft: "auto" }}>상품마스터 열기 ↗</a>
         </div>
@@ -110,7 +110,7 @@ export default function SalesProfitPage() {
               <tbody>
                 {cfg.map((row, i) => (
                   <tr key={i}>
-                    <td><input className="b2b-input" value={row.channel} onChange={(e) => setCfgField(i, "channel", e.target.value)} placeholder="판매처명" style={{ width: 160 }} /></td>
+                    <td><input className="b2b-input" value={row.channel} onChange={(e) => setCfgField(i, "channel", e.target.value)} placeholder="쿠팡" aria-label="판매처명" style={{ width: 160 }} /></td>
                     <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" step="0.1" min={0} value={Number((row.fee_rate * 100).toFixed(2))} onChange={(e) => setCfgField(i, "fee_rate", (Number(e.target.value) || 0) / 100)} style={{ width: 90, textAlign: "right" }} /></td>
                     <td style={{ textAlign: "right" }}><input className="b2b-input" type="number" step="0.1" min={0} value={Number((row.revenue_adjust * 100).toFixed(2))} onChange={(e) => setCfgField(i, "revenue_adjust", (Number(e.target.value) || 0) / 100)} style={{ width: 90, textAlign: "right" }} title="총결제금액에서 차감(할인 미반영 보정). 예: 카페24 5.5" /></td>
                     <td style={{ textAlign: "right" }}><button className="b2b-link-btn" onClick={() => delChannel(i)} style={{ color: "var(--sm-danger)", fontSize: 12 }}>삭제</button></td>
@@ -157,7 +157,7 @@ export default function SalesProfitPage() {
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
             <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
-            <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 엑셀</button>
+            <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 내려받기</button>
           </div>
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가 0·중량 0으로 계산됨</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>

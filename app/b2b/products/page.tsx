@@ -27,7 +27,8 @@ export default function ProductsPage() {
   const [showBundles, setShowBundles] = useState(false); // 묶음(세트) 상품 표시 여부 — 기본 숨김
   const [modal, setModal] = useState<Modal>(null);
   const [saving, setSaving] = useState(false);
-  const [modalError, setModalError] = useState(""); // 모달 안에서 보여줄 저장 오류(SKU 중복 등) — 페이지 배너가 모달 뒤에 가려지는 문제 대응
+  const [modalError, setModalError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({}); // 제품 모달 칸별 검증 오류 // 모달 안에서 보여줄 저장 오류(SKU 중복 등) — 페이지 배너가 모달 뒤에 가려지는 문제 대응
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [history, setHistory] = useState<CostHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -78,9 +79,10 @@ export default function ProductsPage() {
   async function handleSave() {
     if (!modal) return;
     if (!modal.data.name.trim()) {
-      setModalError("품목명은 필수입니다.");
+      setFieldErrors({ name: "품목명을 입력하세요" });
       return;
     }
+    setFieldErrors({});
     setSaving(true);
     setModalError("");
     try {
@@ -205,7 +207,7 @@ export default function ProductsPage() {
             변경 기록
           </a>
           <a className="b2b-btn-secondary" href="/api/b2b/products/export" title="전 품목을 엑셀로 내려받기(ID 포함, 수정 후 재업로드 가능)">
-            엑셀 추출
+            엑셀 내려받기
           </a>
           <label className="b2b-btn-secondary" style={{ cursor: importing ? "default" : "pointer" }} title="추출한 엑셀을 수정해 업로드 — 변경 내역 확인 후 반영">
             {importing ? "분석 중..." : "엑셀 업로드"}
@@ -218,11 +220,11 @@ export default function ProductsPage() {
             />
           </label>
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
-            {loading ? "불러오는 중..." : "새로고침"}
+            {loading ? "불러오는 중..." : "다시 불러오기"}
           </button>
           <button
             className="b2b-btn-primary"
-            onClick={() => { setModalError(""); setModal({ mode: "create", data: { ...EMPTY_PRODUCT } }); }}
+            onClick={() => { setModalError(""); setFieldErrors({}); setModal({ mode: "create", data: { ...EMPTY_PRODUCT } }); }}
           >
             + 제품 추가
           </button>
@@ -236,7 +238,8 @@ export default function ProductsPage() {
           <input
             type="text"
             className="b2b-search"
-            placeholder="품목명·SKU·옵션·속성·원산지·메모 검색"
+            placeholder="품목·SKU 검색"
+            aria-label="품목 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -265,9 +268,14 @@ export default function ProductsPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div className="b2b-empty">
-            {products.length === 0
-              ? "등록된 제품이 없습니다."
-              : "검색 결과가 없습니다."}
+            {products.length === 0 ? "등록된 제품이 없습니다." : "조건에 맞는 제품이 없습니다."}
+            <div className="b2b-empty-action">
+              {products.length === 0 ? (
+                <button type="button" className="b2b-btn-secondary" onClick={() => { setModalError(""); setFieldErrors({}); setModal({ mode: "create", data: { ...EMPTY_PRODUCT } }); }}>+ 제품 추가</button>
+              ) : (
+                <button type="button" className="b2b-btn-secondary" onClick={() => setSearch("")}>조건 지우기</button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="b2b-table-wrap">
@@ -383,14 +391,14 @@ export default function ProductsPage() {
                           )}
                         </td>
                         <td className="actions" onClick={(e) => e.stopPropagation()}>
-                          <button className="b2b-btn-secondary" onClick={() => setBundleFor(p)} style={{ padding: "4px 10px", fontSize: 12 }} title="묶음(세트) 구성 편집">묶음</button>
+                          <button className="b2b-btn-secondary" onClick={() => setBundleFor(p)} style={{ padding: "4px 10px", fontSize: 12 }} title="묶음(세트) 구성 편집">묶음 편집</button>
                           <button className="b2b-btn-secondary" onClick={() => setSchedFor(p)} style={{ padding: "4px 10px", fontSize: 12, marginLeft: 6 }} title="n월 n일부터 적용될 원가를 미리 예약">원가 예약</button>
                           <button
                             className="b2b-btn-secondary"
                             onClick={() => toggleHistory(p.id)}
                             style={{ padding: "4px 10px", fontSize: 12, marginLeft: 6 }}
                           >
-                            {isExpanded ? "이력 닫기" : "원가 이력"}
+                            {isExpanded ? "이력 닫기" : "원가 이력 보기"}
                           </button>
                         </td>
                       </tr>
@@ -417,9 +425,10 @@ export default function ProductsPage() {
           stockTrackedCol={stockTrackedCol}
           saving={saving}
           error={modalError}
+          fieldErrors={fieldErrors}
           onChange={(data) => setModal({ ...modal, data })}
           onSave={handleSave}
-          onClose={() => { setModalError(""); setModal(null); }}
+          onClose={() => { setModalError(""); setFieldErrors({}); setModal(null); }}
           onDelete={
             modal.mode === "edit" && modal.data.id
               ? () => handleDelete(modal.data.id!, modal.data.name)
@@ -494,7 +503,7 @@ export default function ProductsPage() {
             <div className="b2b-modal-foot">
               <span />
               <div className="b2b-modal-foot-right">
-                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>취소</button>
+                <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>닫기</button>
                 <button
                   className="b2b-btn-primary"
                   onClick={applyImport}
@@ -577,6 +586,7 @@ function ProductModal({
   stockTrackedCol,
   saving,
   error,
+  fieldErrors,
   onChange,
   onSave,
   onClose,
@@ -588,6 +598,7 @@ function ProductModal({
   stockTrackedCol: boolean;
   saving: boolean;
   error?: string;
+  fieldErrors: { name?: string };
   onChange: (d: ProductInput) => void;
   onSave: () => void;
   onClose: () => void;
@@ -635,6 +646,7 @@ function ProductModal({
         </div>
 
         <div className="b2b-modal-body">
+          {(error || fieldErrors.name) && <div className="b2b-error">{fieldErrors.name || error}</div>}
           {/* ── 판매담당 입력 구역 — 품목·가격·분류 ── */}
           <div style={{ background: "var(--sm-info-bg)", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-info)", marginBottom: 10 }}>판매담당 입력</div>
@@ -645,8 +657,10 @@ function ProductModal({
               value={data.name}
               onChange={(e) => set("name", e.target.value)}
               placeholder="예: 대구순살"
+              aria-invalid={fieldErrors.name ? "true" : undefined}
               autoFocus
             />
+            {fieldErrors.name && <div className="b2b-field-error">{fieldErrors.name}</div>}
           </Field>
 
           <div className="b2b-field-row">
@@ -665,7 +679,7 @@ function ProductModal({
                 className="b2b-input"
                 value={data.unit}
                 onChange={(e) => set("unit", e.target.value)}
-                placeholder="개, kg, 박스"
+                placeholder="예: 개"
               />
             </Field>
           </div>
@@ -708,7 +722,6 @@ function ProductModal({
                 }}
                 min={0}
                 step={1}
-                placeholder="소비자몰 판매가"
               />
             </Field>
             <Field label="b2b 도매가 (원)">
@@ -731,11 +744,11 @@ function ProductModal({
           )}
 
           <div className="b2b-field-row">
-            <Field label="매입단가 (원)">
+            <Field label="매입단가 (원)" hint="구매 단가 · 외포장 등 제외">
               <input type="number" inputMode="numeric" className="b2b-input b2b-money"
                 value={data.purchase_price}
                 onChange={(e) => set("purchase_price", Number(e.target.value) || 0)}
-                min={0} step={1} placeholder="구매 단가(외포장 등 제외)" />
+                min={0} step={1} />
             </Field>
             <Field label="원산지">
               <input type="text" className="b2b-input" value={data.origin ?? ""} onChange={(e) => set("origin", e.target.value)} placeholder="예: 국내산 · 수입" />
@@ -849,13 +862,13 @@ function ProductModal({
           <div className="b2b-field-label" style={{ marginTop: 4, fontWeight: 700 }}>
             택배 발주(CNplus) 정보
           </div>
-          <Field label="택배 상품명">
+          <Field label="택배 상품명" hint="택배 발주서에 찍히는 품목명">
             <input
               type="text"
               className="b2b-input"
               value={data.courier_name ?? ""}
               onChange={(e) => set("courier_name", e.target.value)}
-              placeholder="발주서에 찍힐 품목명 (예: 진공 씨몬스터 참돔순살 100g)"
+              placeholder="예: 진공 씨몬스터 참돔순살 100g"
             />
           </Field>
           <Field label="택배 주문당 총중량 (kg)">
@@ -881,13 +894,12 @@ function ProductModal({
               </span>
             </Field>
           ) : (
-            <Field label="송장 스캔 표시명">
+            <Field label="송장 스캔 표시명" hint="송장 스캔 피킹 리스트에 나오는 이름 · 비우면 품목명">
               <input
                 type="text"
                 className="b2b-input"
                 value={data.scan_name ?? ""}
                 onChange={(e) => set("scan_name", e.target.value)}
-                placeholder="송장 스캔 피킹 리스트에 나올 이름 (비우면 품목명 사용)"
               />
             </Field>
           )}
@@ -945,8 +957,6 @@ function ProductModal({
           </Field>
         </div>
 
-        {error && <div className="b2b-error" style={{ margin: "0 0 10px" }}>{error}</div>}
-
         <div className="b2b-modal-foot">
           <div style={{ display: "flex", gap: 8 }}>
             {onDelete && (
@@ -967,10 +977,10 @@ function ProductModal({
           </div>
           <div className="b2b-modal-foot-right">
             <button className="b2b-btn-secondary" onClick={onClose} disabled={saving}>
-              취소
+              그만두기
             </button>
-            <button className="b2b-btn-primary" onClick={onSave} disabled={saving || !data.name.trim()}>
-              {saving ? "저장 중..." : mode === "create" ? "등록" : "수정"}
+            <button className="b2b-btn-primary" onClick={onSave} disabled={saving}>
+              {saving ? "저장 중..." : mode === "create" ? "제품 등록" : "변경 저장"}
             </button>
           </div>
         </div>
@@ -982,10 +992,12 @@ function ProductModal({
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -994,6 +1006,7 @@ function Field({
         {label}
         {required && <span className="req">*</span>}
       </label>
+      {hint && <div className="b2b-field-hint">{hint}</div>}
       {children}
     </div>
   );

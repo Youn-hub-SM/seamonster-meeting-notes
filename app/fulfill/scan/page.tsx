@@ -321,7 +321,7 @@ export default function ScanPage() {
           <h1 className="b2b-page-title">송장 스캔</h1>
         </div>
         <div className="b2b-page-actions" style={{ display: "flex", gap: 8 }}>
-          <Link className="b2b-btn-secondary" href="/fulfill/locations">창고 위치</Link>
+          <Link className="b2b-btn-secondary" href="/fulfill/locations">창고 위치 보기</Link>
           <Link className="b2b-btn-secondary" href="/fulfill/scan/upload">송장 업로드</Link>
         </div>
       </header>
@@ -329,12 +329,12 @@ export default function ScanPage() {
       {error && <div className="b2b-error">{error}{error.includes("057") ? " — supabase/migrations/057_fulfill_scan.sql 를 먼저 적용하세요." : ""}</div>}
 
       {st && st.totalInvoices === 0 && !error && (
-        <div className="b2b-empty" style={{ marginBottom: 16 }}>스캔할 송장 데이터가 없습니다.</div>
+        <div className="b2b-empty" style={{ marginBottom: 16 }}>스캔할 송장 데이터가 없습니다.<div className="b2b-empty-action"><Link className="b2b-btn-secondary" href="/fulfill/scan/upload">송장 업로드</Link></div></div>
       )}
 
       <section className="b2b-card" style={{ marginBottom: 14 }}>
         <div className="sm-between" style={{ alignItems: "baseline" }}>
-          <label className="b2b-field-label">송장번호 스캔 <span className="sm-faint" style={{ fontWeight: 400 }}>(하이픈 있어도/없어도 인식)</span></label>
+          <label className="b2b-field-label">송장번호 스캔</label>
           <span className="sm-faint" style={{ fontSize: 12 }}>
             이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 15 }}>{st?.scannedCount ?? 0}</strong>건 · 대상 {st?.totalInvoices ?? 0}건
             {pending > 0 && <span style={{ color: "var(--sm-info)", marginLeft: 6 }}>· 처리 중 {pending}</span>}
@@ -346,10 +346,11 @@ export default function ScanPage() {
           value={scan}
           onChange={(e) => setScan(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitScan(); } }}
-          placeholder="바코드를 스캔하거나 송장번호 입력 후 Enter"
+          aria-label="송장번호 스캔"
           autoFocus
           style={{ fontSize: 20, padding: "12px 14px", fontWeight: 700, letterSpacing: 0.5 }}
         />
+        <div className="b2b-field-hint is-below">바코드를 스캔하거나 송장번호를 입력하고 Enter · 하이픈 있어도/없어도 인식</div>
         {msg && (
           <div className="sm-row" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 15, fontWeight: 700, gap: 10, flexWrap: "wrap", alignItems: "center",
             background: MSG_COLOR[msg.kind].bg, color: MSG_COLOR[msg.kind].fg }}>
@@ -391,6 +392,7 @@ export default function ScanPage() {
           style={{ flex: "1 1 200px", padding: "16px", fontSize: 17, fontWeight: 800, cursor: "pointer",
             background: "var(--sm-warning-bg)", color: "var(--sm-warning)", border: "2px solid var(--sm-warning)", borderRadius: 10,
             opacity: !st || st.scannedCount === 0 || pending > 0 ? 0.5 : 1 }}>↺ 초기화 <span style={{ opacity: 0.8, fontWeight: 600 }}>(F4)</span></button>
+        {(!st || st.tally.length === 0) && pending === 0 && <span className="b2b-btn-why is-block">송장을 스캔하면 켜집니다</span>}
       </div>
       {lastReset && lastReset.count > 0 && (
         <div className="sm-row" style={{ gap: 10, marginTop: -6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
@@ -404,7 +406,7 @@ export default function ScanPage() {
           <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 총 {st?.totalUnits.toLocaleString() ?? 0}개 · 묶음 전개 반영</span></span>
         </div>
         {!st || st.tally.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 24 }}>아직 스캔된 송장이 없습니다.</div>
+          <div className="b2b-empty" style={{ padding: 24 }}>스캔한 송장이 없습니다.</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table is-responsive">

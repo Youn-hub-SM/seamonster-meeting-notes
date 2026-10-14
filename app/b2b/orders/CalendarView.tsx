@@ -120,6 +120,7 @@ export default function CalendarView({
             if (isMobile) setWeekStart((prev) => addDaysDate(prev, -7));
             else setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1));
           }}
+          aria-label="이전"
         >
           ←
         </button>
@@ -131,6 +132,7 @@ export default function CalendarView({
             if (isMobile) setWeekStart((prev) => addDaysDate(prev, 7));
             else setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1));
           }}
+          aria-label="다음"
         >
           →
         </button>
@@ -143,7 +145,7 @@ export default function CalendarView({
             else setCursor(new Date(d.getFullYear(), d.getMonth(), 1));
           }}
         >
-          오늘
+          오늘로 이동
         </button>
       </div>
 

@@ -176,9 +176,10 @@ export default function VocManufacturerPage() {
           <h1 className="b2b-page-title">월간 VOC 리포트</h1>
         </div>
         <div className="b2b-page-actions">
-          <a className="b2b-btn-secondary" href={exportUrl} title="제조사 귀책 건수·청구 손해액(정산용)">정산 데이터(엑셀)</a>
-          <button className="b2b-btn-secondary" onClick={downloadDocx} disabled={!draft}>Word 다운로드</button>
-          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={!draft}>인쇄 / PDF</button>
+          <a className="b2b-btn-secondary" href={exportUrl} title="제조사 귀책 건수·청구 손해액(정산용)">정산 엑셀 내려받기</a>
+          <button className="b2b-btn-secondary" onClick={downloadDocx} disabled={!draft}>Word 내려받기</button>
+          <button className="b2b-btn-primary" onClick={() => window.print()} disabled={!draft}>인쇄 / PDF 저장</button>
+          {!draft && !loading && <span className="b2b-btn-why">초안을 만들면 켜집니다</span>}
         </div>
       </header>
 
@@ -189,7 +190,8 @@ export default function VocManufacturerPage() {
         <div className="sm-row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>대상 월
             <input className="b2b-input" type="month" value={month} max={THIS_MONTH()} onChange={(e) => setMonth(e.target.value)} style={{ width: "auto" }} /></label>
-          <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="수신 제조사명 (선택 · 문서에 표기)" style={{ width: 220 }} />
+          <label className="sm-row" style={{ gap: 6, fontSize: 15, color: "var(--sm-text-mid)" }}>수신(선택)
+            <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="예: 바다식품" style={{ width: 200 }} /></label>
           <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
           <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "AI 작성 중..." : draft ? "다시 생성" : "AI 초안 생성"}</button>
           {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건(설문 소스 제외) · 설문 {counts.surveys}건 반영</span>}

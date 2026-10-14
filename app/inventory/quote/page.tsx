@@ -176,8 +176,9 @@ export default function QuotePage() {
               {snap ? "재확정" : "결산 확정"}
             </button>
           )}
-          <a className="b2b-btn-secondary" href={exportUrl}>엑셀 다운로드</a>
+          <a className="b2b-btn-secondary" href={exportUrl}>엑셀 내려받기</a>
           <button className="b2b-btn-primary" onClick={() => printSheet("live")} disabled={loading || items.length === 0}>인쇄 / PDF</button>
+          {!loading && items.length === 0 && <span className="b2b-btn-why">매입 내역이 없어 인쇄할 수 없습니다</span>}
         </div>
       </header>
       {error && <div className="b2b-error no-print">{error}</div>}
@@ -232,7 +233,7 @@ export default function QuotePage() {
                     <td className="actions">
                       {viewMonth === r.month
                         ? <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={closeSnap}>닫기</button>
-                        : <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => openSnap(r.month)}>보기</button>}
+                        : <button className="b2b-btn-secondary" style={{ padding: "2px 10px", fontSize: 12 }} onClick={() => openSnap(r.month)}>확정본 보기</button>}
                     </td>
                   </tr>
                 ))}

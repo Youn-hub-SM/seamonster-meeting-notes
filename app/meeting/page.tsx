@@ -52,6 +52,7 @@ export default function MeetingPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (rawText.trim().length < 10) { setError("회의 내용을 10자 이상 입력하세요"); return; }
     setLoading(true);
     setError("");
     setResult(null);
@@ -151,7 +152,7 @@ export default function MeetingPage() {
               <div className="file-attached">
                 <span className="file-name">{fileName}</span>
                 <button type="button" className="file-remove" onClick={handleFileClear}>
-                  제거
+                  파일 제거
                 </button>
               </div>
             ) : (
@@ -176,19 +177,21 @@ export default function MeetingPage() {
           <label className="form-label" htmlFor="rawText">
             {fileName ? "파일 내용 (수정 가능)" : "또는 직접 입력"}
           </label>
+          <div className="b2b-field-hint">회의 녹취록·메모·대화 내용 · 타임코드가 있으면 활용하고 없으면 흐름 순서로 정리 · 10자 이상</div>
           <textarea
             id="rawText"
             className="form-textarea"
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
-            placeholder={`회의 녹취록, 메모, 대화 내용 등을 자유롭게 붙여넣으세요.\n\n타임코드가 있으면 활용하고, 없으면 흐름 순서로 정리합니다.`}
+            aria-invalid={error === "회의 내용을 10자 이상 입력하세요" ? "true" : undefined}
             required
           />
+          {error === "회의 내용을 10자 이상 입력하세요" && <div className="b2b-field-error">{error}</div>}
         </div>
 
         {error && <div className="b2b-error">{error}</div>}
 
-        <button type="submit" className="btn-primary" disabled={rawText.trim().length < 10}>
+        <button type="submit" className="btn-primary" disabled={loading}>
           정리하기
         </button>
       </form>

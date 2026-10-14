@@ -103,7 +103,7 @@ export default function ActivityPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div><h1 className="b2b-page-title">재고 변경 기록</h1></div>
-        <div className="b2b-page-actions"><button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "..." : "새로고침"}</button></div>
+        <div className="b2b-page-actions"><button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "불러오는 중..." : "다시 불러오기"}</button></div>
       </header>
 
       {error && <div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div>}
@@ -117,7 +117,7 @@ export default function ActivityPage() {
       <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
         <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <ChannelFilter value={channel} onChange={setChannel} />
-          <input className="b2b-input" placeholder="품목·SKU·메모·거래처 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260, maxWidth: "100%" }} />
+          <input className="b2b-input" placeholder="품목·SKU 검색" aria-label="품목·SKU·메모·거래처 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260, maxWidth: "100%" }} />
         </div>
         {q && <span className="sm-faint" style={{ fontSize: 12 }}>{groups.length}일 · {totalCount}건</span>}
       </div>
@@ -125,7 +125,7 @@ export default function ActivityPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : groups.length === 0 ? (
-        <div className="b2b-empty">{txns.length === 0 && events.length === 0 ? "내역이 없습니다." : "검색 결과가 없습니다."}</div>
+        <div className="b2b-empty">{txns.length === 0 && events.length === 0 ? "재고 변경 기록이 없습니다." : "조건에 맞는 기록이 없습니다."}</div>
       ) : (
         <div className="sm-col" style={{ gap: 8 }}>
           {groups.map(([date, list]) => {
@@ -180,7 +180,7 @@ export default function ActivityPage() {
                                   ? <span className="sm-faint" style={{ fontSize: 12 }} title="두 칸이 함께 원복되도록 재고 이동 화면 또는 입고 및 출고 목록의 이동 행에서 취소합니다">재고 이동에서</span>
                                   : isB2bTxn(t)
                                     ? <span className="sm-faint" style={{ fontSize: 12 }} title={t.source === "b2b_cancel_kept" ? "발송 후 취소(미반품) 출고 — 발주를 복구하면 함께 정리됩니다" : "발주의 발송일정에서 수정·삭제하면 재고가 함께 원복됩니다"}>발주에서</span>
-                                    : <button className="b2b-link-btn" onClick={() => cancel(t)} style={{ color: "var(--sm-danger)" }}>취소</button>}
+                                    : <button className="b2b-link-btn" onClick={() => cancel(t)} style={{ color: "var(--sm-danger)" }}>기록 취소</button>}
                               </td>
                             </tr>
                           );

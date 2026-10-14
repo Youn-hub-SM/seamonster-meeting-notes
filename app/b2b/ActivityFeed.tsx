@@ -134,7 +134,7 @@ export default function ActivityFeed() {
           <div className="b2b-feed-pop" role="dialog" aria-label="최근 변경">
             <div className="b2b-feed-head">
               <h2 className="b2b-feed-title">최근 변경</h2>
-              <button type="button" className="b2b-feed-refresh" onClick={load} title="새로고침">
+              <button type="button" className="b2b-feed-refresh" onClick={load} title="다시 불러오기" aria-label="다시 불러오기">
                 ↻
               </button>
             </div>
@@ -145,7 +145,7 @@ export default function ActivityFeed() {
               <div className="b2b-feed-empty">불러오는 중...</div>
             ) : items.length === 0 ? (
               <div className="b2b-feed-empty">
-                아직 변경 내역이 없습니다.
+                변경 내역이 없습니다.
               </div>
             ) : (
               <ul className="b2b-feed-list">

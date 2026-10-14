@@ -442,7 +442,7 @@ export default function NaverAdPage() {
                 <span style={{ fontSize: 15, fontWeight: 700, color: "var(--sm-dark)" }}>광고그룹 {loadingGrp ? "..." : `(${adgroups.length})`}</span>
                 <div className="sm-row" style={{ gap: 10 }}>
                   <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => setSelGrp(adgroups.map((g) => g.nccAdgroupId))}>전체 선택</button>
-                  {selGrp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => setSelGrp([])}>해제</button>}
+                  {selGrp.length > 0 && <button className="b2b-link-btn" style={{ fontSize: 15 }} onClick={() => setSelGrp([])}>선택 해제</button>}
                 </div>
               </div>
               {adgroups.length === 0 ? <span className="sm-faint" style={{ fontSize: 15 }}>{loadingGrp ? "불러오는 중..." : "그룹이 없습니다."}</span> : (
@@ -486,9 +486,10 @@ export default function NaverAdPage() {
             <label className="sm-row" style={{ gap: 5, fontSize: 15, cursor: "pointer", fontWeight: 600, color: "var(--sm-text-mid)" }}>
               <input type="checkbox" checked={costOnly} onChange={(e) => setCostOnly(e.target.checked)} />광고비 지출만
             </label>
-            <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={mode === "keyword" ? "키워드 검색" : "광고그룹 검색"} style={{ width: 180 }} />
+            <input className="b2b-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" aria-label={mode === "keyword" ? "키워드 검색" : "광고그룹 검색"} style={{ width: 180 }} />
             <div style={{ flex: 1 }} />
-            <button className="b2b-btn-secondary" onClick={loadData} disabled={loading || !hasSelection}>{loading ? "..." : "새로고침"}</button>
+            <button className="b2b-btn-secondary" onClick={loadData} disabled={loading || !hasSelection}>{loading ? "..." : "다시 불러오기"}</button>
+            {!hasSelection && <span className="b2b-btn-why">{selCamp.length === 0 ? "캠페인을 고르면 켜집니다" : "광고그룹을 고르면 켜집니다"}</span>}
           </div>
 
           {!hasSelection ? (

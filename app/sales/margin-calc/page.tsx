@@ -63,8 +63,8 @@ function QuestionComposer({ channels, products, topProducts, disabled, onCompose
                       const next = { ...pick, product: p.name };
                       setPick(next); onCompose(compose(next));
                     }}
-                    placeholder="다른 상품 검색"
-                    ariaLabel="상품 검색"
+                    placeholder="검색"
+                    ariaLabel="다른 상품 검색"
                     emptyText="일치하는 상품이 없습니다"
                   />
                 </div>
@@ -105,6 +105,7 @@ export default function MarginCalcPage() {
   const [savedFilter, setSavedFilter] = useState<"mine" | "all">("mine");
   const [me, setMe] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [saveErr, setSaveErr] = useState<{ name?: string; question?: string }>({}); // 저장 창 칸별 오류(E5)
   const [saveName, setSaveName] = useState("");
   const [saveQuestion, setSaveQuestion] = useState("");
   // 저장본을 '스냅샷'으로 열었을 때의 출처(스펙 없는 저장본) — 'AI로 다시 계산'으로 최신화 가능
@@ -179,10 +180,15 @@ export default function MarginCalcPage() {
     const joined = turns.map((t) => t.q).join(" — 이어서: ");
     setSaveName((res?.scenario || joined).slice(0, 40));
     setSaveQuestion(joined);
+    setSaveErr({});
     setSaveOpen(true);
   }
   async function doSave() {
-    if (!saveName.trim() || !saveQuestion.trim()) return;
+    const errs: { name?: string; question?: string } = {};
+    if (!saveName.trim()) errs.name = "이름을 입력하세요";
+    if (!saveQuestion.trim()) errs.question = "질문을 입력하세요";
+    setSaveErr(errs);
+    if (errs.name || errs.question) return;
     const specs = (res?.results || []).map((r) => r.spec).filter(Boolean);
     const r = await fetch("/api/sales/margin-calc/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveQuestion.trim(), specs, result: res }) });
     const j = await r.json();
@@ -286,10 +292,11 @@ export default function MarginCalcPage() {
 
       <div className="rp-ask">
         <textarea className="b2b-input rp-input" rows={2} value={q}
-          placeholder={turns.length ? "이어서: 택배비를 4,000원으로 바꾸면? / 30% 할인이면? / 스마트스토어와 비교해줘" : "예: 대구순살 1kg을 20% 할인가로 쿠팡에서 판매하면 이익률이 어때?"}
+          aria-label={turns.length ? "이어서 질문" : "질문"}
+          placeholder={turns.length ? "택배비를 4,000원으로 바꾸면? / 30% 할인이면? / 스마트스토어와 비교해줘" : "대구순살 1kg을 20% 할인가로 쿠팡에서 판매하면 이익률이 어때?"}
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run(); }} />
         <div className="rp-ask-actions">
-          <button className="b2b-btn-primary" onClick={() => run()} disabled={loading || !q.trim()}>
+          <button className="b2b-btn-primary" onClick={() => { if (!q.trim()) { setError("질문을 입력하세요"); return; } run(); }} disabled={loading}>
             {loading ? "분석 중..." : turns.length ? "이어서 질문" : "분석하기"}
             <span className="rp-kbd">Ctrl+Enter</span>
           </button>
@@ -313,7 +320,7 @@ export default function MarginCalcPage() {
           <div className="rp-understood">
             {res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}
             {res.results.length > 0 && (
-              <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12 }} onClick={openSave}>저장</button>
+              <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12 }} onClick={openSave}>계산 저장</button>
             )}
           </div>
 
@@ -333,17 +340,20 @@ export default function MarginCalcPage() {
         <div className="rp-modal-bg" onClick={() => setSaveOpen(false)}>
           <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-card-head"><span className="b2b-card-title">계산 저장</span></div>
+            {saveErr.name && saveErr.question && <div className="b2b-error" style={{ marginBottom: 10 }}><ul><li>{saveErr.name}</li><li>{saveErr.question}</li></ul></div>}
             <label className="sm-col" style={{ gap: 4, marginBottom: 10 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>이름</span>
-              <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 대구 1kg 쿠팡 20% 할인" />
+              <input className="b2b-input" value={saveName} onChange={(e) => { setSaveName(e.target.value); if (saveErr.name) setSaveErr((x) => ({ ...x, name: undefined })); }} placeholder="대구 1kg 쿠팡 20% 할인" aria-invalid={saveErr.name ? "true" : undefined} />
+              {saveErr.name && <span className="b2b-field-error">{saveErr.name}</span>}
             </label>
             <label className="sm-col" style={{ gap: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>질문</span>
-              <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 15, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => setSaveQuestion(e.target.value)} />
+              <textarea className="b2b-input" style={{ minHeight: 90, fontSize: 15, lineHeight: 1.6 }} value={saveQuestion} onChange={(e) => { setSaveQuestion(e.target.value); if (saveErr.question) setSaveErr((x) => ({ ...x, question: undefined })); }} aria-invalid={saveErr.question ? "true" : undefined} />
+              {saveErr.question && <span className="b2b-field-error">{saveErr.question}</span>}
             </label>
             <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-              <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>취소</button>
-              <button className="b2b-btn-primary" onClick={doSave} disabled={!saveName.trim() || !saveQuestion.trim()}>저장</button>
+              <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>그만두기</button>
+              <button className="b2b-btn-primary" onClick={doSave}>계산 저장</button>
             </div>
           </div>
         </div>

@@ -1789,3 +1789,43 @@ a {
   .dlog-desk { display: none !important; }
   .b2b-page-head .dlog-refresh { margin-left: auto; }   /* 헤더 우측에 단정하게 */
 }
+
+/* ───────────────────────────────────────────────
+   전역 검색(Ctrl+K) — app/components/GlobalSearch.tsx. 2026-10-14 UX 3차 C5.
+   b2b.css .b2b-modal-backdrop 위에 덧씌워 상단 정렬(위에서 12vh), 폭 640px 패널. 결과 세 묶음(이동/가이드/데이터).
+   현재 항목 = --sm-orange-light 바탕 + 검정 글자(2차 결정 '키보드로 고른 항목'), 호버 = --sm-bg-subtle.
+   ─────────────────────────────────────────────── */
+.b2b-modal-backdrop.sm-search-backdrop { align-items: flex-start; padding-top: 12vh; }
+.sm-search {
+  width: 100%; max-width: 640px; max-height: 70vh; max-height: 70dvh;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--sm-white); border-radius: var(--sm-radius-card); box-shadow: var(--sm-shadow-float);
+}
+.sm-search-input {
+  width: 100%; flex-shrink: 0; padding: var(--sm-space-4) var(--sm-space-5);
+  font-family: inherit; font-size: var(--sm-fs-lg); font-weight: 400; line-height: var(--sm-lh-ui); color: var(--sm-black);
+  background: var(--sm-white); border: none; border-bottom: 1px solid var(--sm-border); border-radius: 0;
+}
+.sm-search-input::placeholder { color: var(--sm-text-light); }
+.sm-search-input:focus-visible { outline-offset: -2px; } /* 공용 주황 링을 칸 안쪽으로 — 패널이 overflow:hidden 이라 바깥 링은 잘린다. outline:none 은 쓰지 않는다(1차 결정) */
+.sm-search-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sm-space-2) var(--sm-space-2) var(--sm-space-3); }
+.sm-search-group + .sm-search-group { margin-top: var(--sm-space-2); border-top: 1px solid var(--sm-border); padding-top: var(--sm-space-2); }
+.sm-search-group-title { padding: var(--sm-space-2) var(--sm-space-3) var(--sm-space-1); font-size: var(--sm-fs-xs); font-weight: 600; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); }
+.sm-search-item {
+  display: flex; align-items: baseline; gap: var(--sm-space-3); min-height: 40px;
+  padding: var(--sm-space-2) var(--sm-space-3); border-radius: var(--sm-radius); cursor: pointer;
+  font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-black);
+}
+.sm-search-item:hover { background: var(--sm-bg-subtle); }
+.sm-search-item.is-active { background: var(--sm-orange-light); color: var(--sm-black); }
+.sm-search-item-label { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-search-item-sub { flex: 0 1 auto; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-search-ext { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }  /* 외부 링크 ↗ — 사이드바 .app-sb-ext 와 같은 뜻 */
+.sm-search-empty { padding: var(--sm-space-4) var(--sm-space-3); font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
+/* 사이드바 진입 버튼(로고 아래·즐겨찾기 위) — 입력칸처럼 보이는 한 줄: 돋보기 + '검색' + 오른쪽 끝 회색 12px 단축키 */
+.sm-search-open { display: flex; align-items: center; gap: var(--sm-space-2); width: 100%; min-height: 36px; margin: var(--sm-space-1) 0 var(--sm-space-1); padding: 6px 10px; background: var(--sm-white); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius); font-family: inherit; font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-ui); color: var(--sm-text-mid); cursor: pointer; text-align: left; }
+.sm-search-open:hover { background: var(--sm-bg-subtle); color: var(--sm-black); }
+.sm-search-open svg { flex-shrink: 0; display: block; }
+.sm-search-open-label { flex: 1; min-width: 0; }
+.sm-search-open-kbd { flex-shrink: 0; font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); }
+@media (max-width: 900px) { .sm-search-open-kbd { display: none; } .b2b-modal-backdrop.sm-search-backdrop { padding: var(--sm-space-3); padding-top: var(--sm-space-5); align-items: flex-start; } .sm-search { max-width: none; border-radius: var(--sm-radius-card); } }
