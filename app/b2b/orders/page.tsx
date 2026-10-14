@@ -1357,8 +1357,8 @@ export default function OrdersListPage() {
                     />
                   </th>
                   <th style={{ width: 40 }}></th>
-                  <th>업체</th>
-                  <th>품목</th>
+                  <th style={{ width: "14%" }}>업체</th>
+                  <th style={{ width: "22%" }}>품목</th>
                   <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
                   <th className="b2b-col-date" style={{ width: 104 }}>발송일</th>
@@ -1368,6 +1368,8 @@ export default function OrdersListPage() {
                   <th className="b2b-col-status">입금</th>
                   <th className="b2b-col-status">세금계산서</th>
                   <th style={{ width: 112 }}></th>
+                  {/* 채움 열 — 남는 폭을 여기에 몰아 표가 다른 화면과 같이 컨테이너 폭을 채우되 업체·품목은 비율대로만 */}
+                  <th aria-hidden="true"></th>
                 </tr>
               </thead>
               <tbody>
@@ -1548,12 +1550,13 @@ export default function OrdersListPage() {
                           명세표
                         </Link>
                       </td>
+                      <td aria-hidden="true" />
                     </tr>
                     {parent && !isCollapsed && (o.shipments ?? []).map((s) => (
                       <tr key={s.id} className="b2b-child-row">
                         <td></td>
                         <td></td>
-                        <td colSpan={SHOW_ORDER_PRODUCTION ? 11 : 9} style={{ padding: "8px 18px 8px 30px" }}>
+                        <td colSpan={SHOW_ORDER_PRODUCTION ? 13 : 11} style={{ padding: "8px 18px 8px 30px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                             <Link href={`/b2b/orders/${o.id}`} className="b2b-row-link" style={{ display: "inline-flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                               <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>└ {s.seq}차</span>
