@@ -1356,7 +1356,7 @@ export default function OrdersListPage() {
                       title="이 페이지의 발주 전체 선택"
                     />
                   </th>
-                  <th style={{ width: 40 }}></th>
+                  <th style={{ width: 52 }}></th>
                   <th style={{ width: "17%" }}>업체</th>
                   <th style={{ width: "23%" }}>품목</th>
                   <th className="b2b-col-date" style={{ width: "8%" }}>발주일</th>
