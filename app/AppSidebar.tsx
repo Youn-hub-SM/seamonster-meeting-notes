@@ -28,7 +28,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   // 고정 끄기(collapsed) 상태에서 마우스 오버 시 임시 펼침. 고정을 끄는 순간에도
   //  포인터가 안에 있으므로 바로 레일로 줄지 않고, 마우스가 떠날 때 접힌다.
   const [hovering, setHovering] = useState(false);
-  const rail = !!collapsed && !hovering; // 아이콘만 보이는 레일 렌더 여부(호버 펼침 중엔 전체 메뉴 렌더)
+  const rail = !!collapsed && !hovering; // 접힌 띠(» 버튼만) 렌더 여부 — 메뉴는 아예 렌더하지 않는다(호버 펼침 중엔 전체 메뉴 렌더)
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
   // '베타 테스트 중' 접이식 분류는 2026-10-14 C6 으로 해체 — 베타 항목은 각 분류 안에 BETA 배지(nav.ts beta)로 표시.
@@ -116,20 +116,6 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
   function renderTool(t: NavTool) {
     const active = toolActive(t, pathname);
-    // 레일(아이콘만 — 글자는 마우스를 올리면 펼쳐지는 전체 메뉴로 본다, 2026-10-14 대표 결정): 하위 메뉴가 있어도 아코디언 대신 대표 페이지로 바로 이동, 전체 이름은 툴팁.
-    if (rail) {
-      const external = /^https?:\/\//.test(t.href);
-      const inner = <span className="app-sb-emoji"><Icon name={t.icon} /></span>;
-      return (
-        <div key={t.href} className={`app-sb-tool-row ${active ? "is-active" : ""}`}>
-          {external ? (
-            <a href={t.href} target="_blank" rel="noreferrer" className="app-sb-tool" title={t.label} aria-label={t.label} onClick={onNavigate}>{inner}</a>
-          ) : (
-            <Link href={t.href} className="app-sb-tool" title={t.label} aria-label={t.label} onClick={onNavigate}>{inner}</Link>
-          )}
-        </div>
-      );
-    }
     const menu = (t.menu || []).filter((m) => !m.adminOnly || isAdmin);
     const hasMenu = menu.length > 0;
     const expanded = hasMenu && isToolOpen(t.href);
@@ -204,7 +190,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
     >
       <div className="app-sb-head">
         {onToggleCollapse && (
-          // 접기 «  / 펼치기 » — 햄버거는 '메뉴'로 읽혀 접기 기능이 안 보였다(2026-10-14). 접힌 레일에선 이 버튼만 위에 남는다.
+          // 접기 « / 펼치기 » — 햄버거는 '메뉴'로 읽혀 접기 기능이 안 보였다(2026-10-14). 접힌 상태엔 이 버튼만 남고 메뉴·아이콘은 없다(마우스를 올리면 펼쳐진다).
           <button type="button" className="app-sb-collapse" onClick={onToggleCollapse}
             aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"} title={collapsed ? "사이드바 펼치기" : "사이드바 접기"}>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -221,11 +207,11 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
         </Link>
       </div>
 
-      <nav className="app-sb-nav">
+      {!rail && <nav className="app-sb-nav">
         {/* 홈 버튼은 없앴다 — 위 로고가 곧 홈 링크라 같은 곳으로 가는 버튼이 둘이었다.
             즐겨찾기는 파도소리 계정에겐 막힌 경로라 계속 감춘다. */}
         {/* 즐겨찾는 메뉴 (아이디별). 편집 모드에서만 담기(＋)/빼기(✕) 버튼이 나타남 */}
-        {!rail && userName && !isFactoryUser && (
+        {userName && !isFactoryUser && (
           <div className="app-sb-group app-sb-fav">
             <div className="app-sb-cat app-sb-cat-row">
               <button type="button" className="app-sb-cat-toggle" onClick={toggleFavOpen} aria-expanded={favOpen}>
@@ -275,9 +261,9 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             );
           })}
         </div>
-      </nav>
+      </nav>}
 
-      {userName && (
+      {!rail && userName && (
         <div className="app-sb-foot">
           <span className="app-sb-username" title="현재 로그인 사용자"><Icon name="user" size={14} /> {userName}</span>
           <button type="button" className="app-sb-logout" onClick={handleLogout}>로그아웃</button>
