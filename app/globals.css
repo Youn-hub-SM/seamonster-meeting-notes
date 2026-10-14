@@ -65,8 +65,8 @@
   --sm-fs-sm: var(--sm-fs-base);
   --sm-fs-md: var(--sm-fs-base);
   --sm-fs-lg: 17px;
-  --sm-fs-xl: 21px;
-  --sm-fs-2xl: 28px;
+  --sm-fs-xl: 19px;              /* 섹션 제목 — 2026-10-14 대표: 21→19 ("매우 크다") */
+  --sm-fs-2xl: 26px;             /* 페이지 제목·KPI 값 — 2026-10-14 대표: 28→26 */
 
   /* ── 줄 간격 4값 · 자간 3값(본문 0은 토큰 없음) ── */
   --sm-lh-body: 1.6;      /* 읽는 글 */

@@ -114,7 +114,7 @@
 - 호버는 `--sm-bg-subtle`, 선택된 행·켜진 칩·키보드로 고른 항목은 `--sm-orange-light` + 검정 글자(= 지금 다루는 것). `.sm-warn` 배너 = 회색 바탕 + 검정 글자 + 왼쪽 3px 검정 막대.
 
 **글자 — Pretendard, 5단·3단·4값·3값**
-- 크기 `--sm-fs-xs` 12(보조) · `base` 15(본문) · `lg` 17(카드 제목·강조) · `xl` 21(섹션 제목) · `2xl` 28(페이지 제목). KPI 값만 예외(28, 압축 23). `--sm-fs-sm`·`--sm-fs-md` 는 base 의 별칭 — 새 코드에서 쓰지 않는다.
+- 크기 `--sm-fs-xs` 12(보조) · `base` 15(본문) · `lg` 17(카드 제목·강조) · `xl` 19(섹션 제목) · `2xl` 26(페이지 제목). KPI 값만 예외(26, 압축 23). 2026-10-14 대표 지시로 21→19·28→26 낮춤("매우 크다"). `--sm-fs-sm`·`--sm-fs-md` 는 base 의 별칭 — 새 코드에서 쓰지 않는다.
 - 굵기 400 본문 · 600 라벨·버튼·강조 · 700 제목. 800 은 KPI 값만.
 - 줄 간격 `--sm-lh-body` 1.6 · `ui` 1.5(표·버튼·목록·배지) · `heading` 1.3 · `kpi` 1.2. 자간 `--sm-ls-heading` -0.01em(17px 이상 제목) · `--sm-ls-label` 0.02em(12px 분류 라벨), 본문 0.
 - `body` 는 `word-break: keep-all; overflow-wrap: anywhere`. 숫자는 `.num`·`.b2b-money`·`.b2b-stat-card-value`·`.b2b-status-pill` 에 `tabular-nums` 기본.
