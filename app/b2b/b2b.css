@@ -658,6 +658,11 @@ a.b2b-history-item:hover {
 .b2b-table.is-compact .b2b-status-select { max-width: 92px; padding: 3px 20px 3px 8px; background-position: right 7px center !important; }
 .b2b-table.is-compact td.cell-flag { padding-left: 2px; padding-right: 2px; }
 .b2b-table.is-compact td.actions { padding-left: 4px; }
+/* 발송 열이 다른 상태 열보다 넓어지던 원인: 복수발송 행의 토글 버튼('2/3 발송 ▾')과 일부 발송 select 의 인라인 maxWidth:none 이
+   열 전체를 늘렸다. 촘촘한 표에선 세 상태 열을 같은 92px 로 못 박는다(인라인을 이기려 !important). */
+.b2b-table.is-compact .b2b-status-select { max-width: 92px !important; }
+.b2b-table.is-compact .b2b-parent-toggle { max-width: 92px; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.b2b-table.is-compact th.b2b-col-status { width: 92px; max-width: 92px; }
 
 /* ═══════════════════════════════════════════════
    생산관리 (/production)
