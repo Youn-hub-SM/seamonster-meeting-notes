@@ -1170,6 +1170,7 @@ a.b2b-history-item:hover {
   text-align: right; /* 2026-08-28 대표 확정 — 숫자·금액 열은 우측 정렬(구 표준 left 에서 변경) */
   font-variant-numeric: tabular-nums;
 }
+.b2b-table th.num { text-align: left; } /* 2026-10-14 대표: 머리글(열 이름)은 전부 좌측, 값만 우측 */
 
 .b2b-table td.actions {
   width: 1%;
