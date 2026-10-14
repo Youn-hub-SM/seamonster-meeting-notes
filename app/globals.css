@@ -1499,12 +1499,22 @@ a {
 .home-guide-open { flex: 0 0 auto; display: inline-flex; align-items: center; text-decoration: none; }
 .home-updates-link { flex: 0 0 auto; margin-left: auto; font-size: var(--sm-fs-base); font-variant-numeric: tabular-nums; }
 
-/* 홈 '오늘 할 일'(2026-10-14 D1) — .b2b-stat-card 를 링크로. 색 없음: 라벨 회색 12px + 건수 검정 28px(tabular-nums). 0건 카드는 그리지 않는다 */
-.home-todo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin: 14px 0 44px; }
-.home-todo-card { display: block; min-width: 0; color: inherit; text-decoration: none; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
-a.home-todo-card:hover { border-color: var(--sm-border-strong); transform: translateY(-2px); box-shadow: var(--sm-shadow-float); }
-.home-todo-card.is-static { box-shadow: none; } /* 갈 화면이 없는 카드(미답변 문의) — 눌리지 않으니 그림자도 없다 */
-.home-todo-unit { margin-left: 2px; font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-text-mid); letter-spacing: 0; }
+/* 홈 전체 메뉴(2026-10-14 대표 지시 "가독성") — 분류 구역(위 선 + 17px 제목) 안에 툴 카드(흰 바탕 + 경계), 카드 안에 하위 메뉴 세로 목록.
+   색 없음: 이름 검정 600, 하위 메뉴 회색 15px, 호버는 밑줄. 분류 경계가 보여야 '어디에 있는지'를 안다. */
+.home-map { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.home-map-cat { border-top: 1px solid var(--sm-border); padding: 18px 0 22px; }
+.home-map-cat-title { margin: 0 0 12px; font-size: var(--sm-fs-lg); font-weight: 700; line-height: var(--sm-lh-heading); letter-spacing: var(--sm-ls-heading); color: var(--sm-black); }
+.home-map-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; align-items: start; }
+.home-map-tool { min-width: 0; background: var(--sm-white); border: 1px solid var(--sm-border); border-radius: var(--sm-radius); padding: 12px 14px; }
+.home-map-tool-link { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: var(--sm-fs-base); font-weight: 600; line-height: var(--sm-lh-ui); color: var(--sm-black); text-decoration: none; }
+.home-map-tool-link:hover .home-map-name { text-decoration: underline; text-underline-offset: 2px; }
+.home-map-icon { flex: 0 0 auto; display: inline-flex; color: var(--sm-text-mid); }
+.home-map-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-map-ext { margin-left: auto; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.home-map-subs { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 0 24px; }
+.home-map-sub { display: block; padding: 4px 0; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); text-decoration: none; }
+.home-map-sub:hover { color: var(--sm-black); text-decoration: underline; text-underline-offset: 2px; }
+.home-map-beta { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: var(--sm-fs-xs); font-weight: 600; line-height: 1.4; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); vertical-align: 1px; }
 
 .changelog-list {
   display: flex;
@@ -1577,8 +1587,8 @@ a.home-todo-card:hover { border-color: var(--sm-border-strong); transform: trans
 
 @media (max-width: 768px) {
   .home-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 32px; }
-  .home-todo-grid { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 32px; }
-  .home-todo-card.b2b-stat-card { padding: 16px 14px; }
+  .home-map-tools { grid-template-columns: 1fr; gap: 8px; }
+  .home-map-cat { padding: 14px 0 16px; }
   .home-updates-link { margin-left: 0; }
   .home-tool-card { padding: 16px 14px; min-height: 56px; }
   .home-tool-name { font-size: var(--sm-fs-lg); }
@@ -1644,14 +1654,13 @@ a.home-todo-card:hover { border-color: var(--sm-border-strong); transform: trans
 .app-sb-tool-row:hover .app-sb-tool { color: var(--sm-black); }
 .app-sb-tool-row.is-active .app-sb-tool { color: var(--sm-orange); font-weight: 700; }
 .app-sb-tool-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 베타 배지 — 회색 글자만(색 없음, 기획 3-C 색 줄이기). 홈 사이트맵 .sm-map-beta 와 같은 모양 */
+/* 베타 배지 — 회색 글자만(색 없음, 기획 3-C 색 줄이기). 홈 전체 메뉴 .home-map-beta 와 같은 모양 */
 .app-sb-beta { flex: 0 0 auto; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0.02em; color: var(--sm-text-mid); }
 .app-sb-ext { margin-left: auto; font-size: 12px; color: var(--sm-text-mid); }  /* 외부 링크 표시 ↗ */
 /* 새 업데이트 수 배지(2026-10-14 D2) — '업데이트 노트' 행 오른쪽, 회색 바탕 검정 글자 12px(색 없음). 0이면 안 그린다 */
 .app-sb-count { flex: 0 0 auto; margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--sm-bg-subtle); font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--sm-black); text-align: center; font-variant-numeric: tabular-nums; }
 .app-sb-tool-row.is-active .app-sb-count { background: var(--sm-white); }
 /* '최근'(2026-10-14 C4) — 즐겨찾기 아래, 이 브라우저에서 마지막으로 연 화면 5개. 행 모양은 즐겨찾기와 같다(.app-sb-tool-row) */
-.app-sb-recent { margin-top: 6px; }
 .app-sb-emoji { width: 18px; height: 18px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--sm-text-light); }
 .app-sb-tool-row:hover .app-sb-emoji { color: var(--sm-text-mid); }
 .app-sb-tool-row.is-active .app-sb-emoji { color: var(--sm-orange); }

@@ -18,6 +18,7 @@ export const NAV: NavCategory[] = [
       { href: "/guide", label: "사용 가이드", icon: "book" },
       { href: "/updates", label: "업데이트 노트", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드(GitBook)", icon: "link" },
+      { href: "/meeting", label: "회의 정리", icon: "note" }, // 2026-10-14 대표 결정: 분류 없이 최상단
     ],
   },
   {
@@ -57,8 +58,9 @@ export const NAV: NavCategory[] = [
       {
         href: "/sales/upload", label: "매출", icon: "bars", // 대시보드·주문 검색 제거(2026-09-17) — 매출 홈=업로드
         menu: [
-          // 리포트·채널별 이익은 2026-10-14 C3 로 '리포트' 분류로 — 한 주소가 두 곳에 있으면 활성 표시가 둘 켜지므로 여기선 뺀다
+          // 리포트는 2026-10-14 C3 로 '리포트' 분류로(한 주소가 두 곳에 있으면 활성 표시가 둘 켜지므로 여기선 뺀다). 채널별 이익은 대표 결정으로 여기 남는다
           { href: "/sales/upload", label: "데이터 업로드" },
+          { href: "/sales/profit", label: "채널별 이익" }, // 2026-10-14 대표 결정: 리포트 분류가 아니라 매출 아래
           { href: "/sales/history", label: "매출 변경 기록" },
         ],
       },
@@ -74,7 +76,7 @@ export const NAV: NavCategory[] = [
       //  2026-08-28 정리: 생산 보드·제조사 요청서·재고 부족 알림 페이지 삭제(재도입 시 새로 구현).
       { href: "/inventory/trade", label: "입고 및 출고", icon: "box" },
       {
-        // 2026-09-28: 생산 관리 + 재고 관리를 '생산 및 재고' 하나로(대표 지시). 생산 일정은 미사용이라 아래 BETA 배지 항목으로.
+        // 2026-09-28: 생산 관리 + 재고 관리를 '생산 및 재고' 하나로(대표 지시). 생산 일정 화면은 미사용이라 2026-10-14 대표 결정으로 삭제.
         href: "/production/request", label: "생산 및 재고", icon: "factory",
         menu: [
           { href: "/production/request", label: "생산 요청" },
@@ -88,7 +90,6 @@ export const NAV: NavCategory[] = [
       { href: "/inventory/reconcile", label: "재고 대사", icon: "receipt" }, // 구매·판매·재고 확인(대사)
       { href: "/inventory/ledger-check", label: "원장 점검", icon: "book" }, // 2026-10-11 대표 결정 D4d — 주 1회 장부 이상 확인(읽기 전용)
       { href: "/inventory/activity", label: "재고 변경 기록", icon: "note" },
-      { href: "/production", label: "생산 일정", icon: "bars", exact: true, beta: true }, // 2026-09-28 생산 및 재고에서 뺌 — 현재 미사용, 재검토 전까지 BETA. exact: /production/request 등에서 켜지지 않게
 
       // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
       // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
@@ -130,12 +131,9 @@ export const NAV: NavCategory[] = [
           { href: "/voc", label: "VOC 처리" },
           { href: "/voc/stats", label: "통계" },
           { href: "/voc/reports", label: "개선요청서" },
+          { href: "/voc/surveys", label: "설문응답(Tally)" }, // 2026-10-14 대표 결정: 베타 떼고 VOC 관리 아래
         ],
       },
-      // 2026-10-14 C6: '베타 테스트 중' 분류 해체 — VOC 베타 두 개는 CS 로, BETA 배지로 상태 표시
-      { href: "/voc/insights", label: "VOC AI 인사이트", icon: "bulb", beta: true },
-      { href: "/voc/surveys", label: "VOC 설문응답(Tally)", icon: "note", beta: true },
-      { href: "/meeting", label: "회의 정리", icon: "book" }, // 2026-10-14 C3: '기타' 해체 → CS 맨 끝
     ],
   },
   {
@@ -146,7 +144,6 @@ export const NAV: NavCategory[] = [
       { href: "/briefing", label: "종합 리포트", icon: "bulb" }, // 2026-09-30 모두 열람, 일일·주간·월간 탭(매출 업로드 뒤 담당자가 생성·발송)
       { href: "/report", label: "커스텀 리포트", icon: "bars" },
       { href: "/sales/report", label: "매출 리포트", icon: "trend" },
-      { href: "/sales/profit", label: "채널별 이익", icon: "receipt" },
       { href: "/voc/manufacturer", label: "월간 VOC 리포트", icon: "megaphone" },
     ],
   },

@@ -7,27 +7,6 @@ import { NAV, sortByNavOrder, navLabelOf, navHrefActive, type NavTool, type NavM
 import Icon, { type IconName } from "./components/Icon";
 import { countNewUpdates, markUpdatesSeen, readUpdatesSeenAt } from "./lib/updates-seen";
 
-// '최근'(2026-10-14 C4) — 이 브라우저에서 마지막으로 연 화면. NAV 의 툴·하위 메뉴 주소와 정확히 일치할 때만 기록한다
-//  (홈·사용 가이드·업데이트 노트·외부 링크 제외). 저장은 10개, 화면엔 즐겨찾기에 없는 것 5개.
-const RECENT_KEY = "sb_recent";
-const RECENT_KEEP = 10;
-const RECENT_SHOW = 5;
-const RECENT_SKIP = new Set(["/", "/guide", "/updates"]);
-const RECENT_HREFS: Set<string> = (() => {
-  const s = new Set<string>();
-  for (const cat of NAV) for (const t of cat.tools) {
-    if (t.href.startsWith("/") && !RECENT_SKIP.has(t.href)) s.add(t.href);
-    for (const sub of t.menu || []) if (sub.href.startsWith("/") && !RECENT_SKIP.has(sub.href)) s.add(sub.href);
-  }
-  return s;
-})();
-function readRecent(): string[] {
-  try {
-    const a = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
-    return Array.isArray(a) ? a.filter((x): x is string => typeof x === "string" && RECENT_HREFS.has(x)) : [];
-  } catch { return []; }
-}
-
 function itemActive(m: NavMenuItem, toolHref: string, pathname: string) {
   if (m.exact || m.href === toolHref) return pathname === m.href; // 인덱스·exact 메뉴는 정확히 일치할 때만
   return pathname === m.href || pathname.startsWith(m.href + "/");
@@ -53,19 +32,11 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const rail = !!collapsed && !hovering; // 접힌 띠(» 버튼만) 렌더 여부 — 메뉴는 아예 렌더하지 않는다(호버 펼침 중엔 전체 메뉴 렌더)
   const [favorites, setFavorites] = useState<{ href: string; label: string }[]>([]);
   const [editFav, setEditFav] = useState(false);
-  // 최근 사용(C4) + 새 업데이트 수(D2) — 둘 다 이 브라우저(localStorage) 기준. 경로가 바뀔 때마다 갱신.
-  const [recent, setRecent] = useState<string[]>([]);
+  // 새 업데이트 수(D2) — 이 브라우저(localStorage) 기준. 경로가 바뀔 때마다 갱신. ('최근' 섹션은 2026-10-14 대표 결정으로 삭제)
   const [newUpdates, setNewUpdates] = useState(0);
   useEffect(() => {
     if (pathname === "/updates") markUpdatesSeen(); // 업데이트 노트에 들어오면 '본 시각' 갱신 → 배지 0
     setNewUpdates(countNewUpdates(readUpdatesSeenAt()));
-    if (RECENT_HREFS.has(pathname)) {
-      const next = [pathname, ...readRecent().filter((h) => h !== pathname)].slice(0, RECENT_KEEP);
-      try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch {}
-      setRecent(next);
-    } else {
-      setRecent(readRecent());
-    }
   }, [pathname]);
   // '베타 테스트 중' 접이식 분류는 2026-10-14 C6 으로 해체 — 베타 항목은 각 분류 안에 BETA 배지(nav.ts beta)로 표시.
   // 즐겨찾기 아코디언 — 기본 펼침, 상태는 사이드바 접기(sb_collapsed)와 같은 방식으로 기억
@@ -127,8 +98,6 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
   const sortedFavorites = useMemo(() => sortByNavOrder(favorites), [favorites]);
 
   const isFav = (href: string) => favorites.some((f) => f.href === href);
-  // 화면에 보일 최근 — 즐겨찾기에 이미 있는 항목은 뺀다(같은 행이 두 번 보이지 않게)
-  const recentShown = useMemo(() => recent.filter((h) => !favorites.some((f) => f.href === h)).slice(0, RECENT_SHOW), [recent, favorites]);
   async function toggleFav(href: string, label: string) {
     const on = !isFav(href);
     setFavorites((prev) => (on ? [...prev, { href, label }] : prev.filter((f) => f.href !== href))); // 낙관적
@@ -286,20 +255,6 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
 
         {/* 카테고리 목록만 스크롤 — 브랜드·홈·즐겨찾기(위)와 로그아웃(아래)은 항상 보임 */}
         <div className="app-sb-scroll">
-          {/* 최근(C4) — 즐겨찾기 바로 아래, 스크롤 구역 맨 위. 비어 있으면 섹션 자체를 그리지 않는다. 편집 모드 없음 */}
-          {userName && !isFactoryUser && recentShown.length > 0 && (
-            <div className="app-sb-group app-sb-recent">
-              <div className="app-sb-cat">최근</div>
-              {recentShown.map((href) => (
-                <div key={href} className={`app-sb-tool-row ${navHrefActive(href, pathname) ? "is-active" : ""}`}>
-                  <Link href={href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
-                    <span className="app-sb-emoji"><Icon name={iconForHref(href)} /></span>
-                    <span className="app-sb-tool-label">{navLabelOf(href, href)}</span>
-                  </Link>
-                </div>
-              ))}
-            </div>
-          )}
           {NAV.filter((cat) => !cat.adminOnly || isAdmin).map((cat) => {
             const tools = cat.tools
               .filter((t) => !t.adminOnly || isAdmin)
