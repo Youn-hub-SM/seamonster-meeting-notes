@@ -1357,8 +1357,8 @@ export default function OrdersListPage() {
                     />
                   </th>
                   <th style={{ width: 40 }}></th>
-                  <th style={{ width: "16%" }}>업체</th>
-                  <th style={{ width: "21%" }}>품목</th>
+                  <th style={{ width: "17%" }}>업체</th>
+                  <th style={{ width: "23%" }}>품목</th>
                   <th className="b2b-col-date" style={{ width: "8%" }}>발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
                   <th className="b2b-col-date" style={{ width: "9%" }}>발송일</th>
