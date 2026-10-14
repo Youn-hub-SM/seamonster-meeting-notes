@@ -646,6 +646,19 @@ a.b2b-history-item:hover {
   min-width: 104px;
 }
 
+/* 촘촘한 표(.is-compact) — 열이 많은 목록(발주 목록)을 한 화면에: 셀 패딩 12/16 → 8/10, 날짜·상태 칸은 더 좁게, 상태 select 92px.
+   2026-10-14 대표 지시 "여백을 줄이더라도 한 화면에". 숫자 열은 어디서나 줄바꿈 금지(금액이 세 줄로 꺾이던 것). */
+.b2b-table td.num, .b2b-table th.num { white-space: nowrap; }
+.b2b-table.is-compact th, .b2b-table.is-compact td { padding: 8px 10px; }
+.b2b-table.is-compact td .b2b-row-link { padding: 8px 10px !important; }
+.b2b-table.is-compact th.b2b-col-date, .b2b-table.is-compact td.b2b-col-date { padding-left: 4px; padding-right: 4px; }
+.b2b-table.is-compact td.b2b-col-date .b2b-row-link { padding-left: 4px !important; padding-right: 4px !important; }
+.b2b-table.is-compact td:has(> .b2b-status-select) { padding-left: 6px; padding-right: 2px; }
+.b2b-table.is-compact th.b2b-col-status { width: 92px; min-width: 92px; padding-left: 6px; padding-right: 2px; }
+.b2b-table.is-compact .b2b-status-select { max-width: 92px; padding: 3px 20px 3px 8px; background-position: right 7px center !important; }
+.b2b-table.is-compact td.cell-flag { padding-left: 2px; padding-right: 2px; }
+.b2b-table.is-compact td.actions { padding-left: 4px; }
+
 /* ═══════════════════════════════════════════════
    생산관리 (/production)
    ═══════════════════════════════════════════════ */

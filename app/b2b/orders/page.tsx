@@ -1343,7 +1343,7 @@ export default function OrdersListPage() {
               </div>
             )}
             <div className="b2b-table-wrap b2b-orders-table-wrap">
-            <table className="b2b-table is-clickable">
+            <table className="b2b-table is-clickable is-compact">
               <thead>
                 <tr>
                   <th style={{ width: 44, textAlign: "center" }}>
@@ -1357,7 +1357,7 @@ export default function OrdersListPage() {
                   </th>
                   <th style={{ width: 1 }}></th>
                   <th style={{ minWidth: 88 }}>업체</th>
-                  <th style={{ minWidth: 150 }}>품목</th>
+                  <th style={{ minWidth: 120 }}>품목</th>
                   <th className="b2b-col-date">발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
                   <th className="b2b-col-date">발송일</th>
