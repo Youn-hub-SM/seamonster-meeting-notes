@@ -1467,6 +1467,20 @@ a.b2b-history-item:hover {
   }
 }
 
+/* 모든 select 의 화살표를 한 모양으로(2026-10-14 대표: "아래 방향 아이콘이 달라") — 브라우저 기본 쉐브론 대신 상태 select·필터 버튼과 같은 ▾ 삼각형.
+   .b2b-status-select 와 같은 SVG(8×6, #555). 오른쪽 여백 32px 안에 화살표가 앉는다. */
+select.b2b-select,
+select.b2b-input {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='6' viewBox='0 0 8 6'><path fill='%23555555' d='M0 0l4 6 4-6z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 8px 6px;
+}
+select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
+
 .b2b-input:focus,
 .b2b-textarea:focus,
 .b2b-select:focus {
