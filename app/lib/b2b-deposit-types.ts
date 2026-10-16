@@ -144,12 +144,18 @@ export function parseKbDepositSms(text: string): ParsedDepositSms | null {
   const t = (text ?? "").replace(/\s+/g, " ").trim();
   if (!t || !/입금/.test(t)) return null;
 
-  // 금액: '입금' 뒤 첫 금액 모양(천단위 쉼표 또는 4자리 이상 — 이름 속 한 자리 숫자('3M코리아')는 건너뛴다) 우선, 없으면 'N원' 형태 중 첫 번째.
-  //  '입금'과 금액 사이에 입금자명이 오는 양식('입금 주식회사플라잉닥터 1,250,000')에서 이름 길이 제한을 두지 않는다 —
-  //  예전 [^\d]{0,8} 은 8자 넘는 법인명이면 금액을 못 찾아 입금 문자 자체를 버렸다(2026-10-13 플라잉닥터 건).
-  const amtAfter = t.match(/입금.*?(\d{1,3}(?:,\d{3})+|\d{4,})\s*원?/);
-  const amtAny = t.match(/([\d,]{2,})\s*원/);
-  const amtStr = amtAfter?.[1] ?? amtAny?.[1];
+  // 금액 — 2026-10-16 잔액이 입금액으로 잡힌 건 수정: 먼저 '잔액/잔고 N원' 구간을 지운 뒤(이 숫자는 절대 입금액이 아니다),
+  //  ① '입금' 뒤 첫 금액 모양(천단위 쉼표 또는 4자리 이상 — 이름 속 한 자리 숫자('3M코리아')는 건너뛴다)
+  //  ② 없으면 '입금' 바로 앞 금액('홍길동 1,000,000원 입금' 양식)
+  //  ③ 없으면 'N원' 아무 곳.
+  //  계좌 마스킹('123456**789')의 숫자 덩어리는 앞뒤에 숫자·*·- 가 붙어 금액으로 보지 않는다.
+  //  '입금'과 금액 사이의 입금자명 길이 제한은 두지 않는다(2026-10-13 플라잉닥터 건).
+  const noBal = t.replace(/(잔액|잔고)\s*:?\s*[\d,]+\s*원?/g, " ");
+  const NUM = "(\\d{1,3}(?:,\\d{3})+|\\d{4,})";
+  const amtAfter = noBal.match(new RegExp(`입금.*?(?<![\\d*-])${NUM}(?![\\d*-])\\s*원?`));
+  const amtBefore = noBal.match(new RegExp(`(?<![\\d*-])${NUM}(?![\\d*-])\\s*원?\\s*(?:이|가)?\\s*입금`));
+  const amtAny = noBal.match(/(?<![\d*-])([\d,]{2,})\s*원/);
+  const amtStr = amtAfter?.[1] ?? amtBefore?.[1] ?? amtAny?.[1];
   const amount = amtStr ? Number(amtStr.replace(/,/g, "")) : 0;
   if (!amount || amount <= 0) return null;
 
@@ -165,7 +171,8 @@ export function parseKbDepositSms(text: string): ParsedDepositSms | null {
       .replace(/\d{1,2}:\d{2}/g, " ")                    // 시각
       .replace(/[\d,]+\s*원/g, " ")                      // 금액+원
       .replace(/입금[^\d\s]{0,2}\s*(?:\d{1,3}(?:,\d{3})+|\d{4,})/g, " ") // 입금 1,000,000 (원 없음 — '입금 3M코리아'의 한 자리 숫자는 이름)
-      .replace(/잔액\s*[\d,]*원?/g, " ")
+      .replace(/(잔액|잔고)\s*:?\s*[\d,]*\s*원?/g, " ")
+      .replace(/\(\s*\)/g, " ")                           // 잔액을 지우고 남은 빈 괄호
       .replace(/[\d*]{4,}[\d*-]*/g, " ")                 // 계좌번호·마스킹
       .replace(/KB국민은행|KB국민|국민은행|KB|Web발신|전자금융|스타뱅킹|입출금|입금액?|출금|통보|알림/gi, " ")
       .replace(/[^0-9A-Za-z가-힣() ]/g, " ")

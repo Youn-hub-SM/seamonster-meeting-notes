@@ -71,7 +71,15 @@ export async function POST(req: NextRequest) {
 
     // 원문 파싱 또는 구조화 입력 — 구조화 값이 있으면 우선
     const parsed = body.text ? parseKbDepositSms(body.text) : null;
-    const amount = Number(body.amount ?? parsed?.amount ?? 0);
+    let amount = Number(body.amount ?? parsed?.amount ?? 0);
+    // 폰 매크로가 금액을 따로 보냈는데 그 값이 원문의 '잔액'과 같고 원문 파싱 금액과 다르면 — 매크로가 잔액을 집은 것(2026-10-16). 원문 파싱을 믿는다.
+    if (body.text && parsed && body.amount != null && Number(body.amount) !== parsed.amount) {
+      const balRe = new RegExp(`(잔액|잔고)\\s*:?\\s*${Number(body.amount).toLocaleString("ko-KR")}(?!\\d)`);
+      if (balRe.test(body.text)) {
+        console.log(`[deposits webhook] 구조화 amount 가 원문의 잔액과 같음 — 원문 파싱값으로 교체: ${Number(body.amount).toLocaleString()} → ${parsed.amount.toLocaleString()}`);
+        amount = parsed.amount;
+      }
+    }
     const name = (body.name ?? parsed?.name ?? null) || null;
     if (!amount || amount <= 0) {
       // 입금 문자가 아님(출금·인증 등) — 폰 매크로가 걸러도 되고 여기서 걸러도 된다.
