@@ -523,10 +523,10 @@ export function shipQtyProgress(o: ShipViewInput): { shipped: number; total: num
 export function shipView(o: ShipViewInput): { status: ShipViewStatus | string; label: string; color: { bg: string; fg: string } | undefined } {
   if (isPartlyShipped(o)) {
     const q = shipQtyProgress(o);
-    if (q) return { status: PARTIAL_SHIP, label: `${formatQty(q.shipped)}/${formatQty(q.total)} 발송`, color: PARTIAL_SHIP_COLOR };
+    if (q) return { status: PARTIAL_SHIP, label: `${formatQty(q.shipped)}/${formatQty(q.total)}`, color: PARTIAL_SHIP_COLOR };
     const live = (o.shipments ?? []).filter((s) => s.status !== "취소");
     const done = live.filter((s) => s.status === "발송완료").length;
-    return { status: PARTIAL_SHIP, label: `${done}/${live.length}차 발송`, color: PARTIAL_SHIP_COLOR };
+    return { status: PARTIAL_SHIP, label: `${done}/${live.length}차`, color: PARTIAL_SHIP_COLOR };
   }
   const st = o.status as OrderStatus;
   return { status: o.status, label: STATUS_SHORT[st] || o.status, color: STATUS_COLORS[st] };
