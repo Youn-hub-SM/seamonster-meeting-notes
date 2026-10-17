@@ -662,7 +662,7 @@ a.b2b-history-item:hover {
    열 전체를 늘렸다. 촘촘한 표에선 세 상태 열을 같은 92px 로 못 박는다(인라인을 이기려 !important). */
 .b2b-table.is-compact .b2b-status-select { width: auto; min-width: 0; max-width: 96px !important; } /* 칸을 채우지 않는다(대표: "너무 넓다") — 세 열이 같은 %라 간격도 같다 */
 .b2b-table.is-compact .b2b-parent-toggle { max-width: 96px; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.b2b-table.is-compact th.b2b-col-status { width: 7%; min-width: 0; max-width: none; }
+.b2b-table.is-compact th.b2b-col-status { width: 100px; min-width: 0; max-width: none; } /* 글자 수가 고정된 열은 px(노트북 폭에서 '발송대…'로 잘리던 것) — 10-17 비평 */
 /* 열 폭 고정(2026-10-14 대표 "큰 모니터에서 열 범위가 제각각"): fixed 레이아웃 — th 에 적은 px 열은 그 폭, 폭 없는 열(업체·품목)은 남은 폭을 똑같이 나눈다.
    창이 좁아지면 업체·품목만 줄어들고(말줄임), 나머지는 그대로 — 900px 이상에선 가로 스크롤이 생기지 않는다. */
 .b2b-table.is-compact { table-layout: fixed; } /* 표는 다른 화면과 같이 컨테이너 폭 100%. 열은 전부 %(체크·표시 열만 px)라 창 폭에 비례해 고르게 퍼진다 */

@@ -1362,12 +1362,12 @@ export default function OrdersListPage() {
                   <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
                   <th className="b2b-col-date" style={{ width: 104 }}>발송일</th>
-                  <th className="num" style={{ width: "8%" }}>합계</th>
+                  <th className="num" style={{ width: 84 }}>합계</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-status">생산</th>}
                   <th className="b2b-col-status">발송</th>
                   <th className="b2b-col-status">입금</th>
                   <th className="b2b-col-status">세금계산서</th>
-                  <th style={{ width: "12%" }}></th>
+                  <th style={{ width: 112 }}></th>
                 </tr>
               </thead>
               <tbody>
