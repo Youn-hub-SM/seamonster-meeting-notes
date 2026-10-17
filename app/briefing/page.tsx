@@ -453,13 +453,13 @@ export default function SummaryReportPage() {
       const r = await fetch(`/api/analyst?period=${p}&date=${d}`, { cache: "no-store" });
       const j = await r.json();
       if (stale()) return null;
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "리포트를 불러오지 못했습니다. 새로고침하세요");
       setReport(j.report || null);
       setPending(typeof j.pending_migration === "string" ? j.pending_migration : j.pending_migration ? "마이그레이션" : "");
       setAdmin(!!j.admin);
       setLabel(j.label || "");
       return j.report || null;
-    } catch (e) { if (!stale()) setError(e instanceof Error ? e.message : "조회 오류"); return null; }
+    } catch (e) { if (!stale()) setError(e instanceof Error ? e.message : "리포트를 불러오지 못했습니다. 새로고침하세요"); return null; }
     finally { if (!stale()) setLoading(false); }
   }, []);
 
@@ -472,9 +472,9 @@ export default function SummaryReportPage() {
         body: JSON.stringify({ period: p, date: d, force, send: false }),
       });
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.ok) throw new Error(j?.error || (r.status === 504 ? "시간이 초과됐습니다 — 잠시 뒤 다시 시도하세요." : "분석 실패"));
+      if (!r.ok || !j?.ok) throw new Error(j?.error || (r.status === 504 ? "시간이 초과돼 분석하지 못했습니다. [분석하기]를 다시 누르세요" : "분석하지 못했습니다. [분석하기]를 다시 누르세요"));
       if (j.skipped) setInfo(p !== "daily" && j.skipped === "매출 업로드 대기" ? "마지막 날 매출이 아직 없어 기존 리포트를 유지합니다." : SKIP_MSG[j.skipped] || j.skipped);
-    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "분석하지 못했습니다. [분석하기]를 다시 누르세요"); }
     await load(p, d); // 실패해도 최신 상태(진행 중·이전 리포트)를 다시 보여 준다
     setBusy("");
   }, [load]);
@@ -495,7 +495,7 @@ export default function SummaryReportPage() {
 
   // 보내기 — 메일(서버 sendReport, 일일 매출 리포트와 같은 수동 발송).
   async function send() {
-    if (report?.sent_current && report.sent_at && !(await confirmModal({ title: "리포트 다시 보내기", body: `이미 ${dtKst(report.sent_at)}에 보냈습니다. 같은 리포트가 메일로 한 번 더 나갑니다.`, action: "다시 보내기", danger: false }))) return;
+    if (report?.sent_current && report.sent_at && !(await confirmModal({ title: "리포트 다시 보내기", body: `이미 ${dtKst(report.sent_at)}에 보냈습니다. 같은 리포트가 메일로 한 번 더 나갑니다.`, action: "메일 보내기", danger: false }))) return;
     setBusy("send"); setError(""); setInfo("");
     try {
       const r = await fetch("/api/analyst", {
@@ -504,9 +504,9 @@ export default function SummaryReportPage() {
       });
       const j = await r.json().catch(() => null);
       const s = (j?.sent ?? null) as SendRes | null;
-      if (!r.ok || !j?.ok) throw new Error(j?.error || s?.error || "발송 실패");
-      if (s?.mail?.ok) setInfo(`메일로 보냈습니다${s.mail.to ? `(${s.mail.to}명)` : ""}.`);
-    } catch (e) { setError(e instanceof Error ? e.message : "발송 실패"); }
+      if (!r.ok || !j?.ok) throw new Error(j?.error || s?.error || "메일을 보내지 못했습니다. 아래 메일 설정을 확인하세요");
+      if (s?.mail?.ok) setInfo(`메일을 보냈습니다${s.mail.to ? `(${s.mail.to}명)` : ""}`);
+    } catch (e) { setError(e instanceof Error ? e.message : "메일을 보내지 못했습니다. 아래 메일 설정을 확인하세요"); }
     await load(period, date);
     setBusy("");
   }
@@ -532,8 +532,8 @@ export default function SummaryReportPage() {
         body: JSON.stringify({ mailTo }),
       });
       const j = await r.json().catch(() => null);
-      setSettingsMsg(r.ok && j?.ok ? "저장됐습니다." : `저장 실패: ${j?.error || "서버 오류"}`);
-    } catch { setSettingsMsg("저장 실패: 네트워크 오류"); }
+      setSettingsMsg(r.ok && j?.ok ? "설정을 저장했습니다" : `설정을 저장하지 못했습니다 — ${j?.error || "서버 오류"}. 수신자를 확인하세요`);
+    } catch { setSettingsMsg("설정을 저장하지 못했습니다. 네트워크를 확인하세요"); }
   }
 
   const switchTo = (p: Period) => { if (p === period || busy !== "") return; setPeriod(p); setDate(defaultKey(p)); setReport(null); setError(""); setInfo(""); };
@@ -565,10 +565,10 @@ export default function SummaryReportPage() {
           <button className={hasReport ? "b2b-btn-secondary" : "b2b-btn-primary"} onClick={() => run(period, date, admin)} disabled={busy !== "" || loading || !!report?.running}>
             {busy === "run" ? "분석 중... (1~4분)" : hasReport ? "다시 분석" : "분석하기"}
           </button>
+          {!loading && busy === "" && !hasReport && <span className="b2b-btn-why is-before">분석하면 켜집니다</span>}
           <button className={hasReport ? "b2b-btn-primary" : "b2b-btn-secondary"} onClick={send} disabled={busy !== "" || loading || !hasReport || !!report?.running}>
             {busy === "send" ? "보내는 중..." : "메일 보내기"}
           </button>
-          {!loading && busy === "" && !hasReport && <span className="b2b-btn-why">분석하면 켜집니다</span>}
         </div>
       </header>
 
@@ -582,7 +582,7 @@ export default function SummaryReportPage() {
       {error && <div className="b2b-error brf-banner">{error}</div>}
       {info && <div className="sm-success brf-banner">{info}</div>}
       {report?.running && busy !== "run" && <div className="sm-warn brf-banner">분석이 진행 중입니다. 잠시 뒤 새로고침하세요.</div>}
-      {unsent && busy === "" && <div className="sm-warn brf-banner">{report?.sent_at ? "보낸 뒤 다시 분석했습니다." : "아직 발송 전입니다."} 확인 후 [메일 보내기]를 누르세요.</div>}
+      {unsent && busy === "" && <div className="sm-warn brf-banner">{report?.sent_at ? "보낸 뒤 다시 분석했습니다." : "발송 전입니다."} 확인 후 [메일 보내기]를 누르세요.</div>}
       {hasReport && report?.error && <div className="sm-warn brf-banner">{report.error} — 아래는 이전 리포트입니다.</div>}
 
       {loading && !report ? <div className="b2b-loading">불러오는 중...</div> : !report || (report.status === "running" && !hasReport) ? (
@@ -595,7 +595,9 @@ export default function SummaryReportPage() {
       ) : (
         <section className="b2b-card">
           <div className="sm-faint brf-meta">
-            <span>{label || report.report_date} · {report.sales_ready ? "매출 반영" : period === "daily" ? "매출 없음(광고만)" : "마지막 날 매출 미반영"} · {TRIGGER_LABEL[report.trigger || ""] || report.trigger || ""} {dtKst(report.updated_at)}</span>
+            <span>{label || report.report_date}</span>
+            <span>{report.sales_ready ? "매출 반영" : period === "daily" ? "매출 없음(광고만)" : "마지막 날 매출 미반영"}</span>
+            <span>{TRIGGER_LABEL[report.trigger || ""] || report.trigger || ""} {dtKst(report.updated_at)}</span>
             <Pill p={sentPill} />
             {admin && report.model ? <span>{report.model}</span> : null}
             {admin && report.usage ? <span>조회 {report.usage.tool_calls}회 · 약 ${report.usage.est_usd}</span> : null}
@@ -603,7 +605,7 @@ export default function SummaryReportPage() {
           {hasReport ? (
             <ReportView md={md} kpi={report.kpi ?? null} charts={placed ? charts : null} />
           ) : (
-            <div className="sm-warn">분석에 실패했습니다{report.error ? `: ${report.error}` : ""} — [분석하기]를 다시 눌러 주세요.</div>
+            <div className="sm-warn">분석하지 못했습니다{report.error ? `: ${report.error}` : ""} — [분석하기]를 다시 누르세요</div>
           )}
         </section>
       )}
@@ -611,7 +613,7 @@ export default function SummaryReportPage() {
       {hasReport && charts && !placed ? (
         <section className="b2b-card brf-sec">
           <div className="b2b-card-head">
-            <h2 className="b2b-card-title">광고 추이 · {report?.trend_meta?.title || report?.trend_naver?.title}</h2>
+            <h2 className="b2b-card-title">광고 추이 <span className="sm-faint" style={{ fontWeight: 400 }}>{report?.trend_meta?.title || report?.trend_naver?.title}</span></h2>
           </div>
           {trendCharts(report, true)}
         </section>
@@ -627,7 +629,7 @@ export default function SummaryReportPage() {
             <input className="b2b-input" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder={mailDefault.join(", ")} />
             <span className="sm-faint brf-xs">비우면 일일 매출 리포트 수신자({mailDefault.length}명)</span>
           </label>
-          {settingsLoaded && !smtpReady && <div className="sm-warn brf-banner">메일 서버(SALES_SMTP_*) 설정이 없습니다</div>}
+          {settingsLoaded && !smtpReady && <div className="sm-warn brf-banner">메일 서버(SALES_SMTP_*) 설정이 없습니다. Vercel 환경변수에 넣으세요</div>}
           <div className="sm-row brf-settings-row">
             <button className="b2b-btn-primary" onClick={saveSettings} disabled={!settingsLoaded}>설정 저장</button>
             {settingsMsg && <span className="sm-faint brf-xs">{settingsMsg}</span>}

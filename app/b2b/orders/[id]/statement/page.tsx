@@ -34,10 +34,10 @@ export default function StatementPage() {
           (await fetch(`/api/b2b/orders/${id}`, { cache: "no-store" })).json(),
           (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json(),
         ]);
-        if (!oj.ok) throw new Error(oj.error || "발주 조회 실패");
+        if (!oj.ok) throw new Error(oj.error || "발주를 불러오지 못했습니다. 새로고침하세요");
         setOrder(oj.order as FullOrder);
         if (sj.ok) { setSupplier(sj.supplier as Supplier); setStamp(sj.stamp || ""); }
-      } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+      } catch (e) { setError(e instanceof Error ? e.message : "발주를 불러오지 못했습니다. 새로고침하세요"); }
       setLoading(false);
     })();
   }, [id]);
@@ -102,13 +102,13 @@ export default function StatementPage() {
 
       {error && <div className="b2b-error no-print">{error}</div>}
       {supplierMissing && !loading && (
-        <div className="b2b-error no-print">공급자(우리 회사) 정보가 비어 있습니다.</div>
+        <div className="b2b-error no-print">공급자(우리 회사) 정보가 비어 있습니다. 설정 &gt; 일반 설정의 거래명세표 칸을 채우세요</div>
       )}
 
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : !order ? (
-        <div className="b2b-empty">발주를 찾을 수 없습니다.</div>
+        <div className="b2b-empty">발주를 찾을 수 없습니다. 발주 목록에서 다시 여세요</div>
       ) : (
         <section className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "30px 34px", maxWidth: 860, boxShadow: "var(--sm-shadow-card)" }}>
           {/* 제목 */}

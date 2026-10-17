@@ -87,8 +87,8 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
     try {
       const j = await (await fetch(`/api/inventory/returns?month=${month}`, { cache: "no-store" })).json();
       if (j?.ok) { setRows(j.rows || []); setProducts(j.products || []); }
-      else setError(j?.error || "반품 내역 조회 실패");
-    } catch { setError("반품 내역 조회 실패"); }
+      else setError(j?.error || "반품 내역을 불러오지 못했습니다. 창을 닫았다 다시 여세요.");
+    } catch { setError("반품 내역을 불러오지 못했습니다. 창을 닫았다 다시 여세요."); }
     setListLoading(false);
   }, [month]);
   useEffect(() => { loadList(); }, [loadList]);
@@ -118,7 +118,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
         body: JSON.stringify({ product_id: productId, qty: Number(qty), unit_amount: unitAmount, return_date: date, partner, memo }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "반품을 기록하지 못했습니다. [반품 기록]을 다시 누르세요.");
       dirty.current = true;
       const src = typeof j.id === "string" ? j.id : crypto.randomUUID();
       const entry: PendingOut = {
@@ -129,7 +129,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       setPending((prev) => [...prev, entry]);
       setQty(""); setUnitAmount(""); setMemo("");
       await loadList();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "반품을 기록하지 못했습니다. [반품 기록]을 다시 누르세요."); }
     setSaving(false);
   }
 
@@ -143,7 +143,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
     try {
       const unchecked = pendingRef.current.filter((p) => !p.checked);
       if (!held && unchecked.length) {
-        const fail = "실사 기록을 확인하지 못해 출고를 남기지 않았습니다 — 잠시 뒤 다시 누르세요.";
+        const fail = "실사 기록을 확인하지 못해 출고를 남기지 않았습니다. [재고에서도 빼기]를 다시 누르세요.";
         const res = await fetch("/api/inventory/returns/count-check", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rows: unchecked.flatMap((p) => p.rows.map((r) => ({ product_id: r.product_id, date: p.date }))) }),
@@ -175,11 +175,11 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
           }),
         });
         const j = await res.json().catch(() => null);
-        if (!res.ok || !j?.ok) throw new Error(j?.error || "출고 기록 실패 — [입고 및 출고] 목록에서 기록됐는지 먼저 확인하세요.");
+        if (!res.ok || !j?.ok) throw new Error(j?.error || "출고를 기록하지 못했습니다. [입고 및 출고] 목록에서 기록됐는지 먼저 확인하세요.");
         done += po.rows.length;
         setPending((prev) => prev.filter((x) => x.key !== po.key));
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "출고 기록 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "출고를 기록하지 못했습니다. [입고 및 출고] 목록에서 기록됐는지 먼저 확인하세요."); }
     finally { busyRef.current = null; }
     if (done) setOutDone(`재고에서 뺐습니다 — 출고 ${done}건(사유 제조사 반품).`);
     setOutBusy(false);
@@ -204,14 +204,14 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
         j = await res.json().catch(() => null);
       }
       if (res.status === 404) { setPending((prev) => prev.filter((x) => x.src !== id)); await loadList(); }
-      if (!res.ok || !j?.ok) throw new Error(j?.error || "삭제 실패");
+      if (!res.ok || !j?.ok) throw new Error(j?.error || "반품을 삭제하지 못했습니다. 다시 누르세요.");
       dirty.current = true;
       setPending((prev) => prev.filter((x) => x.src !== id));
       if (j.canceled) setOutDone(`반품 기록과 출고(${j.canceled})를 함께 지웠습니다 — 재고가 원복됐습니다.`);
       else if (j.kept) setOutDone("반품 기록만 지웠습니다.");
       if (j.warning) setWarn(String(j.warning));
       await loadList();
-    } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "반품을 삭제하지 못했습니다. 다시 누르세요."); }
     finally { busyRef.current = null; setRemovingId(null); }
   }
 
@@ -226,13 +226,13 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       const res = await fetch("/api/inventory/returns/import", { method: "POST", body: fd });
       const j = await res.json();
       if (seq !== reqSeq.current) return;
-      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "엑셀을 분석하지 못했습니다. 파일을 다시 선택하세요.");
       setPreview({
         rows: j.rows || [], errors: j.errors || [],
         valid: Number(j.summary?.valid) || 0, errCount: Number(j.summary?.errors) || 0,
         skipped: Number(j.summary?.skipped) || 0, merged: Number(j.summary?.merged) || 0,
       });
-    } catch (e) { if (seq === reqSeq.current) setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { if (seq === reqSeq.current) setError(e instanceof Error ? e.message : "엑셀을 분석하지 못했습니다. 파일을 다시 선택하세요."); }
     if (seq === reqSeq.current) setImporting(false);
   }
 
@@ -245,7 +245,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
         body: JSON.stringify({ rows: preview.rows, return_date: date, partner }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "반영 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "반품을 반영하지 못했습니다. 다시 누르세요.");
       dirty.current = true;
       setOutDone("");
       const nameOf = new Map(preview.rows.map((r) => [r.product_id, r.name]));
@@ -259,7 +259,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       setPreview(null);
       await loadList();
       setMode("직접");
-    } catch (e) { setError(e instanceof Error ? e.message : "반영 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "반품을 반영하지 못했습니다. 다시 누르세요."); }
     setApplying(false);
   }
 
@@ -271,7 +271,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: preview ? 760 : 520 }}>
         <div className="b2b-modal-head">
-          <span className="b2b-modal-title">제조사 반품 · {y}년 {mm}월</span>
+          <span className="b2b-modal-title">{y}년 {mm}월 제조사 반품</span>
           <button className="b2b-modal-close" aria-label="닫기" onClick={close} disabled={closeBlocked}>✕</button>
         </div>
         <div className="b2b-modal-body">
@@ -323,7 +323,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.errCount}건(제외)</span>}
                 </div>
                 {preview.rows.length === 0 ? (
-                  <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다.</div>
+                  <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. SKU 열을 확인해 파일을 다시 선택하세요.</div>
                 ) : (
                   <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
                     <table className="b2b-table" style={{ fontSize: 13 }}>
@@ -355,7 +355,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             ) : (
               <div>
                 <div className="b2b-field-row">
-                  <label className="b2b-field"><span className="b2b-field-label">반품일 <span className="opt">· 파일 전체</span></span>
+                  <label className="b2b-field"><span className="b2b-field-label">반품일 <span className="opt">(파일 전체)</span></span>
                     <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
                   <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="opt">(선택)</span></span>
                     <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
@@ -376,7 +376,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   onSelect={(opt) => { setProductId(opt.id); if (fieldErr.product) setFieldErr((x) => ({ ...x, product: undefined })); }}
                   placeholder="품목·SKU 검색"
                   ariaLabel="품목 검색"
-                  emptyText="일치하는 품목이 없습니다"
+                  emptyText="일치하는 품목이 없습니다. 다른 글자로 검색하세요"
                 />
                 {fieldErr.product && <span className="b2b-field-error">{fieldErr.product}</span>}
               </div>
@@ -384,7 +384,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                 <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>
                   {product.qty > 0 ? <>{mm}월 매입 <strong>{product.qty.toLocaleString()}</strong></>
                     : <>{mm}월 매입 없음</>}
-                  {alreadyReturned > 0 && <> · 이미 반품 <strong style={{ color: "var(--sm-danger)" }}>{alreadyReturned.toLocaleString()}</strong></>}
+                  {alreadyReturned > 0 && <>, 이미 반품 <strong style={{ color: "var(--sm-danger)" }}>{alreadyReturned.toLocaleString()}</strong></>}
                 </p>
               )}
 
@@ -396,12 +396,12 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                   <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
               </div>
               <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">반품 단가(원) <span className="opt">· 비우면 매입가</span></span>
+                <label className="b2b-field"><span className="b2b-field-label">반품 단가(원) <span className="opt">(비우면 매입가)</span></span>
                   <input className="b2b-input" type="number" min={0} value={unitAmount} onChange={(e) => setUnitAmount(e.target.value)} placeholder="0" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">제조사 <span className="opt">(선택)</span></span>
                   <input className="b2b-input" value={partner} onChange={(e) => setPartner(e.target.value)} /></label>
               </div>
-              <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">· 반품 사유</span></span>
+              <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">(반품 사유)</span></span>
                 <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
 
               {overReturn && (
@@ -414,10 +414,10 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
               <div style={{ marginTop: 16, borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
                 <div className="sm-between" style={{ marginBottom: 6 }}>
                   <strong style={{ fontSize: 13 }}>{mm}월 반품 내역</strong>
-                  {rows.length > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>{rows.length}건 · {totalQty.toLocaleString()}개</span>}
+                  {rows.length > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>{rows.length}건 {totalQty.toLocaleString()}개</span>}
                 </div>
                 {listLoading ? <div className="b2b-loading">불러오는 중...</div>
-                  : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다.</p>
+                  : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다. 위에서 반품을 기록하세요.</p>
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
                       <table className="b2b-table is-responsive" style={{ fontSize: 12 }}>
@@ -448,14 +448,14 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
         </div>
         <div className="b2b-modal-foot">
           {mode === "엑셀" && preview
-            ? <button className="b2b-btn-secondary" onClick={() => { setPreview(null); setError(""); }} disabled={applying}>← 다시 선택</button>
+            ? <button className="b2b-btn-secondary" onClick={() => { setPreview(null); setError(""); }} disabled={applying}>파일 다시 선택</button>
             : <span />}
           <div className="b2b-modal-foot-right">
             <button className="b2b-btn-secondary" onClick={close} disabled={closeBlocked}>닫기</button>
             {mode === "엑셀" ? (
               preview ? (
                 <>
-                  {preview.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
+                  {preview.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 선택하세요</span>}
                   <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.valid === 0 || outBusy}>
                     {applying ? "반영 중..." : `${preview.valid.toLocaleString()}건 반영`}
                   </button>

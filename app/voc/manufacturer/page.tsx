@@ -85,14 +85,14 @@ export default function VocManufacturerPage() {
       });
       const j = await res.json().catch(() => null);
       if (j?.needsMigration) { setNeedsMigration(true); setSaveNote(""); return; }
-      if (!res.ok || !j?.ok) throw new Error(j?.error || "저장 실패");
+      if (!res.ok || !j?.ok) throw new Error(j?.error || "초안을 자동 저장하지 못했습니다");
       setSaveNote(`자동 저장됨 ${new Date(Date.now() + 9 * 3600_000).toISOString().slice(11, 16)}`);
       setSavedReports((prev) => {
         const rest = prev.filter((r) => r.recipient !== rcpt);
         return [{ recipient: rcpt, draft: text, counts: cts, updated_at: new Date().toISOString() }, ...rest];
       });
       if (rcpt && !recipients.includes(rcpt)) setRecipients((p) => [...p, rcpt].sort((a, b) => a.localeCompare(b, "ko")));
-    } catch (e) { setSaveNote(`저장 실패: ${e instanceof Error ? e.message : ""}`); }
+    } catch (e) { setSaveNote(`자동 저장하지 못했습니다 — ${e instanceof Error ? e.message : ""}. [다시 생성]을 누르면 다시 저장합니다`); }
   }
 
   // 편집 자동 저장(1.5초 디바운스) — 생성했거나 저장본을 불러온 문서만
@@ -112,19 +112,19 @@ export default function VocManufacturerPage() {
       const raw = await res.text();
       let j: { ok?: boolean; draft?: string; counts?: { claims: number; surveys: number }; error?: string } | null = null;
       try { j = JSON.parse(raw); } catch { /* 플랫폼 오류 텍스트 */ }
-      if (!j) throw new Error(`서버가 응답을 완성하지 못했습니다 (HTTP ${res.status}). 데이터가 많은 달은 AI 생성이 제한시간을 넘길 수 있어요 — 잠시 후 다시 시도하거나, 관리자 > 설정 > AI 설정에서 'VOC 인사이트' 모델을 빠른 모델로 바꿔보세요.`);
-      if (!res.ok || !j.ok) throw new Error(j.error || "초안 생성 실패");
+      if (!j) throw new Error(`초안을 생성하지 못했습니다 (HTTP ${res.status}). 데이터가 많은 달은 제한시간을 넘깁니다 — 관리자 > 설정 > AI 설정에서 'VOC 인사이트' 모델을 빠른 모델로 바꾸거나 [초안 생성]을 다시 누르세요`);
+      if (!res.ok || !j.ok) throw new Error(j.error || "초안을 생성하지 못했습니다. [초안 생성]을 다시 누르세요");
       const text = j.draft || "";
       setDraft(text);
       setCounts(j.counts || null);
       loadedKey.current = `${month}|${recipient}`;
       if (!needsMigration && text.trim()) persist(text, recipient, j.counts || null); // 생성 즉시 자동 저장
-    } catch (e) { setError(e instanceof Error ? e.message : "초안 생성 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "초안을 생성하지 못했습니다. [초안 생성]을 다시 누르세요"); }
     setLoading(false);
   }
 
   async function copy() {
-    try { await navigator.clipboard.writeText(draft); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { setError("복사 실패 — 텍스트를 직접 선택해 복사하세요."); }
+    try { await navigator.clipboard.writeText(draft); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { setError("복사하지 못했습니다 — 텍스트를 직접 선택해 복사하세요"); }
   }
 
   // ── 손해 청구 섹션 (개선요청서와 동일 기준: 제조사 귀책 · 설문 제외 · 해당 월) ──
@@ -154,13 +154,13 @@ export default function VocManufacturerPage() {
     try {
       const body = { month, recipient, draft: claimText ? `${draft.trimEnd()}\n${claimText}` : draft };
       const res = await fetch("/api/voc/manufacturer/docx", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error((j as { error?: string }).error || "Word 생성 실패"); }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error((j as { error?: string }).error || "Word 파일을 만들지 못했습니다. 초안을 다시 생성하세요"); }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = `씨몬스터_고객반응_${month}.docx`; document.body.appendChild(a); a.click();
       a.remove(); URL.revokeObjectURL(url);
-    } catch (e) { setError(e instanceof Error ? e.message : "Word 생성 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Word 파일을 만들지 못했습니다. 초안을 다시 생성하세요"); }
   }
 
   const [y, mm] = month.split("-");
@@ -179,7 +179,7 @@ export default function VocManufacturerPage() {
           <a className="b2b-btn-secondary" href={exportUrl} title="제조사 귀책 건수·청구 손해액(정산용)">정산 엑셀 내려받기</a>
           <button className="b2b-btn-secondary" onClick={downloadDocx} disabled={!draft}>Word 내려받기</button>
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={!draft}>인쇄 / PDF 저장</button>
-          {!draft && !loading && <span className="b2b-btn-why">초안을 만들면 켜집니다</span>}
+          {!draft && !loading && <span className="b2b-btn-why">초안을 생성하면 켜집니다</span>}
         </div>
       </header>
 
@@ -193,9 +193,9 @@ export default function VocManufacturerPage() {
           <label className="sm-row" style={{ gap: 6, fontSize: 13, color: "var(--sm-text-mid)" }}>수신(선택)
             <input className="b2b-input" list="voc-mfg-recipients" value={recipient} onChange={(e) => onRecipientChange(e.target.value)} placeholder="예: 바다식품" style={{ width: 200 }} /></label>
           <datalist id="voc-mfg-recipients">{recipients.map((r) => <option key={r} value={r} />)}</datalist>
-          <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "AI 작성 중..." : draft ? "다시 생성" : "AI 초안 생성"}</button>
+          <button className="b2b-btn-primary" onClick={generate} disabled={loading}>{loading ? "작성 중..." : draft ? "다시 생성" : "초안 생성"}</button>
           {counts && <span className="sm-faint" style={{ fontSize: 12 }}>클레임 {counts.claims}건(설문 소스 제외) · 설문 {counts.surveys}건 반영</span>}
-          {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("저장 실패") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
+          {saveNote && <span className="sm-faint" style={{ fontSize: 12, color: saveNote.startsWith("자동 저장하지") ? "var(--sm-danger)" : undefined }}>{saveNote}</span>}
         </div>
       </section>
 
@@ -216,7 +216,7 @@ export default function VocManufacturerPage() {
         <section className="voc-print" style={{ background: "var(--sm-white)", border: "1px solid var(--sm-border)", borderRadius: 12, padding: "32px 34px", maxWidth: 860, boxShadow: "var(--sm-shadow-card)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderBottom: "2px solid var(--sm-black)", paddingBottom: 12, marginBottom: 18 }}>
             <div><div style={{ fontSize: 13, color: "var(--sm-text-mid)", fontWeight: 700 }}>씨몬스터</div><h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{y}년 {Number(mm)}월 고객 반응</h2></div>
-            <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>작성일 {TODAY()}{recipient && <div>수신 · {recipient}</div>}</div>
+            <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>작성일 {TODAY()}{recipient && <div>수신 {recipient}</div>}</div>
           </div>
           {/* 줄 단위 서식 — 제목(1./2.)·소제목(가./나.)·분류 라벨을 크게·볼드로(2026-08-28 대표 지시, 가독성) */}
           <div style={{ fontSize: 13, lineHeight: 1.75 }}>

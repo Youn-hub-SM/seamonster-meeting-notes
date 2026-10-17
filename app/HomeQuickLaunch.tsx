@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { NAV, sortByNavOrder, navLabelOf } from "./nav";
+import { NAV, sortByNavOrder, navLabelParts } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 
 type Fav = { href: string; label: string };
@@ -47,11 +47,15 @@ export default function HomeQuickLaunch() {
 
   if (favorites === null || favorites === false) return null;
 
-  const Tile = ({ href, label, icon }: { href: string; label: string; icon: IconName }) => (
+  // sub = 상위 툴 이름(하위 메뉴를 담았을 때) — 12px 회색으로 아래 줄. '툴 · 메뉴' 중점 결합은 2026-10-17 디자인 1차에서 없앴다.
+  const Tile = ({ href, label, sub, icon }: { href: string; label: string; sub?: string | null; icon: IconName }) => (
     <Link href={href} className="home-tool-card">
       <span className="sm-row" style={{ gap: 10, minWidth: 0 }}>
         <Icon name={icon} size={20} />
-        <span className="home-tool-name sm-ellipsis" style={{ fontSize: 15 }}>{label}</span>
+        <span className="sm-col" style={{ minWidth: 0 }}>
+          <span className="home-tool-name sm-ellipsis" style={{ fontSize: 15 }}>{label}</span>
+          {sub && <span className="home-tool-sub sm-ellipsis">{sub}</span>}
+        </span>
       </span>
     </Link>
   );
@@ -72,7 +76,7 @@ export default function HomeQuickLaunch() {
       <h2 className="home-section-title">즐겨찾는 메뉴</h2>
       <div className="home-grid" style={{ marginTop: 14 }}>
         {/* 사이드바와 동일하게 실제 메뉴 순서로 정렬 */}
-        {sortByNavOrder(favorites).map((f) => <Tile key={f.href} href={f.href} label={navLabelOf(f.href, f.label)} icon={iconForHref(f.href)} />)}
+        {sortByNavOrder(favorites).map((f) => { const p = navLabelParts(f.href, f.label); return <Tile key={f.href} href={f.href} label={p.main} sub={p.sub} icon={iconForHref(f.href)} />; })}
       </div>
     </section>
   );

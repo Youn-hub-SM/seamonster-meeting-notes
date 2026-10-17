@@ -238,12 +238,12 @@ export default function OrdersListPage() {
       ]);
       const ordersJson = await ordersRes.json();
       const compJson = await compRes.json();
-      if (!ordersJson.ok) throw new Error(ordersJson.error || "발주 조회 실패");
-      if (!compJson.ok) throw new Error(compJson.error || "업체 조회 실패");
+      if (!ordersJson.ok) throw new Error(ordersJson.error || "발주 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
+      if (!compJson.ok) throw new Error(compJson.error || "업체 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setOrders(ordersJson.orders || []);
       setCompanies(compJson.companies || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "발주 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
     }
     setLoading(false);
   }
@@ -296,7 +296,7 @@ export default function OrdersListPage() {
     const label = o ? `${o.order_no}${o.company_name ? ` ${o.company_name}` : ""}` : "발주";
     setSalesFail((prev) => {
       const rest = prev.filter((f) => f.id !== id);
-      return data.sales_sync_failed ? [...rest, { id, label, message: data.sales_sync_message || "매출 반영 실패" }] : rest;
+      return data.sales_sync_failed ? [...rest, { id, label, message: data.sales_sync_message || "매출 원장에 반영하지 못했습니다. 발주 수정에서 다시 저장하세요" }] : rest;
     });
   }
 
@@ -432,7 +432,7 @@ export default function OrdersListPage() {
     }
     // 발송된 발주 취소 — 반품으로 돌아왔으면 재고 복구, 안 돌아왔으면 출고는 그대로 두고 발주·매출만 취소
     if (newStatus === "취소" && isShippedOrder(target)) {
-      const returned = await askReturned(`${target.order_no}${target.company_name ? ` · ${target.company_name}` : ""}`);
+      const returned = await askReturned(`${target.order_no}${target.company_name ? ` (${target.company_name})` : ""}`);
       if (returned === null) return;
       await patchStatus(id, "취소", { returned });
       return;
@@ -455,13 +455,13 @@ export default function OrdersListPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
-        setError(data.error || "생산상태 변경 실패");
+        setError(data.error || "생산 상태를 변경하지 못했습니다. 다시 고르세요");
       } else {
         pingActivityFeed();
       }
     } catch (err) {
       setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "생산상태 변경 오류");
+      setError(err instanceof Error ? err.message : "생산 상태를 변경하지 못했습니다. 다시 고르세요");
     }
   }
 
@@ -474,7 +474,7 @@ export default function OrdersListPage() {
     try {
       const j = await (await fetch(`/api/b2b/orders/${id}/shipments`, { cache: "no-store" })).json();
       // 조회 실패를 '차수 없음'으로 보고 빈 창을 띄우면 저장이 기존 차수를 지운다 — 오류를 보여 주고 저장을 막는다
-      if (!j?.ok) throw new Error(j?.error || "발송 일정 조회 실패");
+      if (!j?.ok) throw new Error(j?.error || "발송 일정을 불러오지 못했습니다. 창을 닫고 다시 여세요");
       const items = (j.items || []) as typeof shipItems;
       setShipItems(items || []);
       setShipOrderStatus(j.order_status ?? null);
@@ -503,7 +503,7 @@ export default function OrdersListPage() {
       setShipLoadFailed(false);
     } catch (err) {
       setShipLoadFailed(true);
-      setShipError(err instanceof Error ? err.message : "발송 일정 조회 오류");
+      setShipError(err instanceof Error ? err.message : "발송 일정을 불러오지 못했습니다. 창을 닫고 다시 여세요");
     }
     setShipLoading(false);
   }
@@ -561,7 +561,7 @@ export default function OrdersListPage() {
     // 발송완료 차수의 날짜는 실제로 나간 날 — 미래로 옮길 수 없다
     const futureShipped = shipRows.findIndex((r) => r.status === "발송완료" && r.ship_date > kstToday());
     if (futureShipped >= 0) {
-      setShipError(`${futureShipped + 1}번째 줄은 발송완료 차수라 발송일을 오늘보다 뒤로 잡을 수 없습니다.`);
+      setShipError(`${futureShipped + 1}번째 줄은 발송완료 차수라 발송일을 오늘보다 뒤로 잡을 수 없습니다. 오늘 이전 날짜로 넣으세요`);
       return;
     }
     const schedules = shipRows
@@ -592,10 +592,10 @@ export default function OrdersListPage() {
         body: JSON.stringify({ schedules }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) setShipError(data.error || "발송 일정 저장 실패");
+      if (!res.ok || !data.ok) setShipError(data.error || "발송 일정을 저장하지 못했습니다. 입력값을 확인하세요");
       else { setShipPrompt(null); pingActivityFeed(); noteSalesSync(orderId, data); noteChannel(data.channel_notice); await reload(); }
     } catch (err) {
-      setShipError(err instanceof Error ? err.message : "발송 일정 저장 오류");
+      setShipError(err instanceof Error ? err.message : "발송 일정을 저장하지 못했습니다. 입력값을 확인하세요");
     } finally {
       unlockOrders([orderId]);
     }
@@ -616,7 +616,7 @@ export default function OrdersListPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
-        setError(data.error || "발송일 등록 실패");
+        setError(data.error || "발송일을 등록하지 못했습니다. 다시 고르세요");
       } else {
         pingActivityFeed();
         noteSalesSync(id, data, snapshot);
@@ -625,7 +625,7 @@ export default function OrdersListPage() {
       }
     } catch (err) {
       setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "발송일 등록 오류");
+      setError(err instanceof Error ? err.message : "발송일을 등록하지 못했습니다. 다시 고르세요");
     }
   }
 
@@ -669,9 +669,9 @@ export default function OrdersListPage() {
         // 화면이 오래돼 발송 여부를 몰랐던 경우 — 서버가 반품 여부를 다시 묻는다
         if (res.status === 409 && data.need_return) {
           const o = snapshot.find((x) => x.id === id);
-          return await askReturned(o ? `${o.order_no}${o.company_name ? ` · ${o.company_name}` : ""}` : "발주");
+          return await askReturned(o ? `${o.order_no}${o.company_name ? ` (${o.company_name})` : ""}` : "발주");
         }
-        setError(data.error || "상태 변경 실패");
+        setError(data.error || "상태를 변경하지 못했습니다. 다시 고르세요");
         // 다른 곳에서 차수가 바뀌었다(409) — 그 줄을 다시 읽어 둔다
         if (res.status === 409) await refreshRows([id]);
       } else {
@@ -683,7 +683,7 @@ export default function OrdersListPage() {
       }
     } catch (err) {
       setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "상태 변경 오류");
+      setError(err instanceof Error ? err.message : "상태를 변경하지 못했습니다. 다시 고르세요");
     }
     return null;
   }
@@ -715,11 +715,11 @@ export default function OrdersListPage() {
       setDirectDelivery(tn === "직접배송");
       const orig = keptShipDate(ship); // 발송 뒤 취소한 차수를 되살림 — 원래 발송일이 기본값
       setShippedDate(orig && orig <= kstToday() ? orig : kstToday());
-      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} · ${ship.seq}차 발송`, boxCount, recipientName: ship.recipient_name, recipientPhone: ship.recipient_phone, origDate: orig });
+      setTrackingPrompt({ kind: "shipment", id: ship.id, orderId: o.id, label: `${o.order_no} ${ship.seq}차 발송`, boxCount, recipientName: ship.recipient_name, recipientPhone: ship.recipient_phone, origDate: orig });
       return;
     }
     if (newStatus === "취소" && ship.status === "발송완료") {
-      const returned = await askReturned(`${o.order_no} · ${ship.seq}차`);
+      const returned = await askReturned(`${o.order_no} ${ship.seq}차`);
       if (returned === null) return;
       await patchShipment(o.id, ship.id, newStatus, { returned });
       return;
@@ -773,7 +773,7 @@ export default function OrdersListPage() {
           const o = snapshot.find((x) => x.id === orderId);
           return await askReturned(o ? o.order_no : "발송 차수");
         }
-        setError(data.error || "발송 상태 변경 실패");
+        setError(data.error || "발송 상태를 변경하지 못했습니다. 다시 고르세요");
         // 차수 id 가 바뀌었을 수 있다(다른 저장이 차수를 새로 만듦) — 그 줄을 다시 읽어 둔다
         if (res.status === 404 || res.status === 409) await refreshRows([orderId]);
       } else {
@@ -785,7 +785,7 @@ export default function OrdersListPage() {
       }
     } catch (err) {
       setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "발송 상태 변경 오류");
+      setError(err instanceof Error ? err.message : "발송 상태를 변경하지 못했습니다. 다시 고르세요");
     }
     return null;
   }
@@ -820,7 +820,7 @@ export default function OrdersListPage() {
     if (selected.size === 0) return;
     // 발송완료는 발주마다 송장번호가 달라 일괄 변경 불가 — 개별로 처리
     if (newStatus === "발송완료") {
-      setError("발송완료는 송장번호가 발주마다 달라 일괄 변경할 수 없습니다. 발주별로 변경해주세요.");
+      setError("발송완료는 송장번호가 발주마다 달라 일괄 변경할 수 없습니다. 발주별 상태 칸에서 바꾸세요");
       return;
     }
     // 복수발송 발주는 차수별로 상태를 바꾼다(서버도 거부) — 발송대기 일괄 변경에서 미리 빼고 알린다.
@@ -878,10 +878,10 @@ export default function OrdersListPage() {
             // 상태 변경(취소·복구)으로 차감 칸이 바뀐 발주 안내 — 여러 건이라 어느 발주인지 붙인다
             if (r.ok && j?.channel_notice) { const o = snapshot.find((x) => x.id === id); notices.push(`[${o?.order_no ?? id}${o?.company_name ? ` ${o.company_name}` : ""}] ${j.channel_notice}`); }
             if (r.ok) noteSalesSync(id, j, snapshot); // 매출 반영 실패는 목록 위 경고 배너로(어느 발주인지 함께)
-            return r.ok ? null : String(j?.error || "변경 실패");
+            return r.ok ? null : String(j?.error || "변경하지 못했습니다");
           })
             // 네트워크 오류도 그 건만 실패로 — 하나가 끊겨도 성공한 건까지 되돌리지 않게
-            .catch((e) => (e instanceof Error ? e.message : "변경 실패"))
+            .catch((e) => (e instanceof Error ? e.message : "변경하지 못했습니다"))
         )
       );
       if (notices.length) noteChannel(notices.join("\n"));
@@ -892,7 +892,7 @@ export default function OrdersListPage() {
         // 실패 건만 원래 값으로 되돌린다 — 성공한 건은 서버에 이미 반영됐다
         const before = new Map(snapshot.map((o) => [o.id, o]));
         setOrders((prev) => prev.map((o) => (failedIds.has(o.id) ? before.get(o.id) ?? o : o)));
-        setError([`${errors.length}건 변경 실패 — ${errors[0]}`, note].filter(Boolean).join(" / "));
+        setError([`${errors.length}건을 변경하지 못했습니다 — ${errors[0]}. 그 발주는 개별로 바꾸세요`, note].filter(Boolean).join(" / "));
       } else {
         setSelected(new Set());
         pingActivityFeed();
@@ -900,7 +900,7 @@ export default function OrdersListPage() {
       await refreshRows(okIds); // 서버가 차수 상태까지 바꾼다(취소·복구) — 잔여·완료 판정을 맞춘다
     } catch (err) {
       setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "일괄 변경 오류");
+      setError(err instanceof Error ? err.message : "상태를 일괄 변경하지 못했습니다. 새로고침한 뒤 다시 하세요");
     } finally {
       unlockOrders(runIds);
     }
@@ -938,7 +938,7 @@ export default function OrdersListPage() {
             body: JSON.stringify({ box_count: n }),
           }).then((r) => r.ok).catch(() => false)
         ));
-        if (saved.some((ok) => !ok)) throw new Error("박스 수 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        if (saved.some((ok) => !ok)) throw new Error("박스 수를 저장하지 못했습니다. 박스 수를 확인한 뒤 다시 내려받으세요");
       }
       const res = await fetch("/api/b2b/orders/export-shipping", {
         method: "POST",
@@ -949,9 +949,9 @@ export default function OrdersListPage() {
         const text = await res.text();
         try {
           const j = JSON.parse(text);
-          throw new Error(j.error || "다운로드 실패");
+          throw new Error(j.error || "발송 파일을 내려받지 못했습니다. 선택한 발주를 확인하세요");
         } catch {
-          throw new Error("다운로드 실패 (HTTP " + res.status + ")");
+          throw new Error("발송 파일을 내려받지 못했습니다 (HTTP " + res.status + "). 선택한 발주를 확인하세요");
         }
       }
       const blob = await res.blob();
@@ -968,7 +968,7 @@ export default function OrdersListPage() {
       setExportOptions(null);
       if (Object.keys(payload.boxes || {}).length) await reload(); // 확정 박스 수 반영
     } catch (err) {
-      setError(err instanceof Error ? err.message : "다운로드 중 오류");
+      setError(err instanceof Error ? err.message : "발송 파일을 내려받지 못했습니다. 선택한 발주를 확인하세요");
     }
     setExporting(false);
   }
@@ -989,7 +989,7 @@ export default function OrdersListPage() {
         body: JSON.stringify({ order_ids: Array.from(selected) }),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "발송 정보 조회 실패");
+      if (!res.ok || !json.ok) throw new Error(json.error || "발송 정보를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       const options: OrderExportOption[] = json.options || [];
 
       // 목록 데이터가 오래됐을 수 있으니 서버 응답으로 한 번 더 막는다.
@@ -1006,7 +1006,7 @@ export default function OrdersListPage() {
       setExporting(false);
       setExportOptions(options); // 박스 수 확정 + 차수 선택 모달
     } catch (err) {
-      setError(err instanceof Error ? err.message : "다운로드 중 오류");
+      setError(err instanceof Error ? err.message : "발송 파일을 내려받지 못했습니다. 선택한 발주를 확인하세요");
       setExporting(false);
     }
   }
@@ -1026,13 +1026,13 @@ export default function OrdersListPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
-        setError(data.error || "세금계산서 상태 변경 실패");
+        setError(data.error || "세금계산서 상태를 변경하지 못했습니다. 다시 고르세요");
       } else {
         pingActivityFeed();
       }
     } catch (err) {
       setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "세금계산서 상태 변경 오류");
+      setError(err instanceof Error ? err.message : "세금계산서 상태를 변경하지 못했습니다. 다시 고르세요");
     }
   }
 
@@ -1051,13 +1051,13 @@ export default function OrdersListPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setOrders(snapshot);
-        setError(data.error || "입금 상태 변경 실패");
+        setError(data.error || "입금 상태를 변경하지 못했습니다. 다시 고르세요");
       } else {
         pingActivityFeed();
       }
     } catch (err) {
       setOrders(snapshot);
-      setError(err instanceof Error ? err.message : "입금 상태 변경 오류");
+      setError(err instanceof Error ? err.message : "입금 상태를 변경하지 못했습니다. 다시 고르세요");
     }
   }
 
@@ -1307,7 +1307,7 @@ export default function OrdersListPage() {
                     style={{ width: "auto" }}
                     title="선택한 발주의 상태를 한 번에 변경"
                   >
-                    <option value="">{bulkSaving ? "변경 중..." : "상태 일괄 변경 →"}</option>
+                    <option value="">{bulkSaving ? "변경 중..." : "상태 일괄 변경"}</option>
                     {ORDER_STATUSES.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
@@ -1407,7 +1407,7 @@ export default function OrdersListPage() {
                       <RowCell href={`/b2b/orders/${o.id}`} nowrap>
                         <span>{o.company_name}</span>
                         <span style={{ display: "block", fontSize: 12, color: "var(--sm-text-light)", marginTop: 2 }}>
-                          {o.order_no}{parent ? " · 복수발송" : ""}
+                          {o.order_no}{parent ? <span className="b2b-status-pill" style={{ marginLeft: 6 }}>복수발송</span> : null}
                         </span>
                       </RowCell>
                       <RowCell href={`/b2b/orders/${o.id}`}>
@@ -1421,7 +1421,7 @@ export default function OrdersListPage() {
                           <button type="button" className="b2b-link-btn" style={{ fontSize: 13 }}
                             title="발송 차수 수정"
                             onClick={() => openShipPrompt(o.id, o.company_name || o.order_no)}>
-                            {(o.shipments ?? []).length}차 · 일정 수정
+                            {(o.shipments ?? []).length}차 일정 수정
                           </button>
                           <RemainLink o={o} onOpen={() => openShipPrompt(o.id, o.company_name || o.order_no)} />
                           <UnlinkedNote o={o} />
@@ -1633,8 +1633,8 @@ export default function OrdersListPage() {
                           <button type="button" className="b2b-link-btn"
                             style={{ fontSize: "inherit", padding: "4px 2px", margin: "-4px 0" }}
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); openShipPrompt(o.id, o.company_name || o.order_no); }}>
-                            {parent ? `${(o.shipments ?? []).length}차 · 일정 수정` : o.ship_date ? o.ship_date.slice(5) : "+ 발송일 등록"}
-                            {(o.remaining_total ?? 0) > 0 ? ` · ${formatQty(o.remaining_total)}개 남음` : ""}
+                            {parent ? `${(o.shipments ?? []).length}차 일정 수정` : o.ship_date ? o.ship_date.slice(5) : "+ 발송일 등록"}
+                            {(o.remaining_total ?? 0) > 0 ? ` (${formatQty(o.remaining_total)}개 남음)` : ""}
                           </button>
                         </span>
                       </div>
@@ -1778,7 +1778,7 @@ export default function OrdersListPage() {
                       </div>
                       {isKeptCancelRow(r) && (
                         <div className="sm-faint" style={{ fontSize: 12, marginTop: 6 }}>
-                          발송 뒤 취소(안 돌아옴) — 발송일·수량은 고칠 수 없습니다.
+                          발송 뒤 취소(안 돌아옴) — 발송일·수량은 고칠 수 없습니다. 목록에서 그 차수를 되돌린 뒤 고치세요
                         </div>
                       )}
                       {/* 이 차수에 담을 수량 — 발송요청 양식·남은 수량 계산이 이 배분을 읽는다(매출·재고는 발주 전량 기준) */}
@@ -1805,7 +1805,7 @@ export default function OrdersListPage() {
                   ))}
                   {shipAlloc.over.length > 0 && (
                     <div className="sm-warn" style={{ fontSize: 12 }}>
-                      배분 수량이 발주 수량보다 많아 저장할 수 없습니다 — {shipAlloc.over.join(" / ")}
+                      배분 수량이 발주 수량보다 많아 저장할 수 없습니다 — {shipAlloc.over.join(" / ")}. 배분 수량을 줄이세요
                     </div>
                   )}
                   {shipAlloc.remain.length > 0 && (
@@ -1833,7 +1833,7 @@ export default function OrdersListPage() {
                 <button className="b2b-btn-primary" onClick={saveShipments} disabled={shipSaving || shipLoading || shipLoadFailed || busyIds.has(shipPrompt.id)}>
                   {shipSaving ? "저장 중..." : "발송 일정 저장"}
                 </button>
-                {shipLoadFailed && !shipLoading && <span className="b2b-btn-why">일정을 불러오지 못해 저장할 수 없습니다</span>}
+                {shipLoadFailed && !shipLoading && <span className="b2b-btn-why">일정을 불러오지 못했습니다. 창을 닫고 다시 열면 켜집니다</span>}
               </div>
             </div>
           </div>
@@ -1879,7 +1879,7 @@ export default function OrdersListPage() {
                   aria-label="실제 발송일"
                 />
                 {shippedDate && !shippedDateOk ? (
-                  <span className="sm-faint" style={{ fontSize: 12 }}>오늘보다 뒤로 잡을 수 없습니다</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>오늘보다 뒤로 잡을 수 없습니다. 오늘 이전 날짜로 넣으세요</span>
                 ) : trackingPrompt.origDate && shippedDate !== trackingPrompt.origDate ? (
                   <span style={{ fontSize: 12, color: "var(--sm-warning)" }}>
                     원래 발송일 {trackingPrompt.origDate} — 바꾸면 재고 차감일·매출 인식일이 옮겨집니다
@@ -2308,7 +2308,7 @@ function RemainLink({ o, onOpen }: { o: OrderListItem; onOpen: () => void }) {
     <button type="button" className="b2b-link-btn" onClick={onOpen}
       style={{ display: "block", fontSize: 12, color: "var(--sm-warning)", marginTop: 2 }}
       title="남은 수량 — 고객이 원할 때 발송일 추가">
-      {formatQty(n)}개 남음 · 발송일 미정
+      {formatQty(n)}개 남음, 발송일 미정
     </button>
   );
 }

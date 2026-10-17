@@ -91,8 +91,8 @@ export default function InventoryMovePage() {
   useEffect(() => {
     // 품목 목록을 못 읽으면 빈 목록으로 두지 않고 알린다(S4) — '재고 관리 사용 안함' 표식을 못 읽은 경우도 서버가 실패로 준다
     fetch("/api/products", { cache: "no-store" }).then((r) => r.json())
-      .then((j) => { if (j.ok) setProducts(j.products || []); else setError(`품목 목록을 불러오지 못했습니다${j.error ? ` — ${j.error}` : ""} 새로고침하세요.`); })
-      .catch(() => setError("품목 목록을 불러오지 못했습니다 — 새로고침하세요."));
+      .then((j) => { if (j.ok) setProducts(j.products || []); else setError(`품목 목록을 불러오지 못했습니다${j.error ? ` (${j.error})` : ""}. 새로고침하세요.`); })
+      .catch(() => setError("품목 목록을 불러오지 못했습니다. 새로고침하세요."));
     loadStock();
   }, [loadStock]);
 
@@ -194,7 +194,7 @@ export default function InventoryMovePage() {
     if (dupPids.size > 0) { setError("같은 품목이 두 줄에 있습니다 — 한 줄로 합쳐 주세요."); return; }
     if (anyAllocOver) { setError("배정 합계가 이동 수량보다 많은 품목이 있습니다. 배정을 줄이세요."); return; }
     if (allocMode && activeLines.some((l) => l.tgState === "loading" || l.tgState === "error")) {
-      setError("요청서 목록을 아직 불러오지 못한 품목이 있습니다 — 잠시 뒤 다시 누르거나 그 줄의 '다시 불러오기'를 누르세요.");
+      setError("요청서 목록을 아직 불러오지 못한 품목이 있습니다. 그 줄의 '다시 불러오기'를 누른 뒤 다시 옮기세요.");
       return;
     }
     // 수량 없이 배정만 입력된 줄 — 조용히 빠지면 배정이 유실된 줄 모른다(검증 확정): 명시적으로 막는다
@@ -243,8 +243,8 @@ export default function InventoryMovePage() {
       if (j.code === "request_key_conflict") submitKey.current = newKey(); // 다음 누름은 새 이동
       if (!res.ok || !j.ok) {
         // 부분 실패 응답에도 경고(앞 줄의 배정 경고 등)가 실려 온다 — 함께 표시(검증 확정 보정)
-        const extra = Array.isArray(j?.warnings) && j.warnings.length ? ` · ${j.warnings.join(" · ")}` : "";
-        setError(`${j?.error || "이동 실패"}${extra}`);
+        const extra = Array.isArray(j?.warnings) && j.warnings.length ? ` ${j.warnings.join(" ")}` : "";
+        setError(`${j?.error || "재고를 옮기지 못했습니다. [옮기기]를 다시 누르세요."}${extra}`);
         // 앞 품목은 이미 옮겨졌다 — 그 줄을 폼에 남기면 다시 누를 때 한 번 더 옮기고 배정도 두 번 들어간다
         //  요청 중에 바꾼 입력을 덮지 않게 최신 상태에서 빼고(함수형 갱신), 남은 줄의 요청서 목록을 다시 읽는다
         const done = new Set<string>((Array.isArray(j?.results) ? j.results : []).map((r: { product_id: string }) => r.product_id));
@@ -263,12 +263,12 @@ export default function InventoryMovePage() {
       }
       // 서버가 실제 기록한 배정 합(allocated) 우선 — 그 사이 닫힌 요청서로 건너뛴 배정을 '배정'으로 세지 않게(감사 #41). 구 서버면 요청값 폴백.
       const allocTotal = typeof j.allocated === "number" ? j.allocated : Math.round(items.reduce((s, it) => s + it.allocations.reduce((a, x) => a + x.qty, 0), 0) * 100) / 100;
-      setOk(`${j.replay ? "이미 옮겨져 있던 이동입니다(다시 옮기지 않음) — " : ""}${items.length}개 품목 ${totalQty.toLocaleString()}개를 ${dir.from} → ${dir.to} 로 옮겼어요.${allocTotal > 0 ? ` (요청서 배정 ${allocTotal.toLocaleString()} · 기타 ${Math.max(0, Math.round((totalQty - allocTotal) * 100) / 100).toLocaleString()})` : ""}`);
-      if (Array.isArray(j.warnings) && j.warnings.length) setError(j.warnings.join(" · "));
+      setOk(`${j.replay ? "이미 옮겨져 있던 이동입니다(다시 옮기지 않음) — " : ""}${items.length}개 품목 ${totalQty.toLocaleString()}개를 ${dir.from}에서 ${dir.to}로 옮겼습니다.${allocTotal > 0 ? ` (요청서 배정 ${allocTotal.toLocaleString()}, 기타 ${Math.max(0, Math.round((totalQty - allocTotal) * 100) / 100).toLocaleString()})` : ""}`);
+      if (Array.isArray(j.warnings) && j.warnings.length) setError(j.warnings.join(" "));
       setLines([newLine(nextKey)]); setNextKey((k) => k + 1); setMemo("");
       submitKey.current = newKey(); // 다음 이동은 새 키
       await loadStock();
-    } catch (e) { setError(e instanceof Error ? e.message : "이동 실패"); await loadStock(); }
+    } catch (e) { setError(e instanceof Error ? e.message : "재고를 옮기지 못했습니다. [옮기기]를 다시 누르세요."); await loadStock(); }
     setBusy(false);
   }
 
@@ -290,7 +290,7 @@ export default function InventoryMovePage() {
     <div className="b2b-container" style={{ maxWidth: 820 }}>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">재고 이동 (소매 ↔ 도매·프로모션·도매 대량)</h1>
+          <h1 className="b2b-page-title">재고 이동</h1>
         </div>
       </header>
 
@@ -302,8 +302,8 @@ export default function InventoryMovePage() {
           <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <div className="sm-tabs" style={{ margin: 0 }}>
               {MOVE_ONLY_CHANNELS.flatMap((ch) => [
-                <button key={`to-${ch}`} className={`sm-tab ${dir.from === "소매" && dir.to === ch ? "is-active" : ""}`} onClick={() => setDir({ from: "소매", to: ch })}>소매 → {ch}</button>,
-                <button key={`from-${ch}`} className={`sm-tab ${dir.from === ch ? "is-active" : ""}`} onClick={() => setDir({ from: ch, to: "소매" })}>{ch} → 소매</button>,
+                <button key={`to-${ch}`} className={`sm-tab ${dir.from === "소매" && dir.to === ch ? "is-active" : ""}`} onClick={() => setDir({ from: "소매", to: ch })}>소매에서 {ch}로</button>,
+                <button key={`from-${ch}`} className={`sm-tab ${dir.from === ch ? "is-active" : ""}`} onClick={() => setDir({ from: ch, to: "소매" })}>{ch}에서 소매로</button>,
               ])}
             </div>
             <button className="b2b-btn-secondary" onClick={swap} style={{ padding: "6px 10px", fontSize: 12 }} title="방향 뒤집기">⇄</button>
@@ -340,7 +340,7 @@ export default function InventoryMovePage() {
                   {/* 칸 배지 = 현재고(오늘까지). 출고 예정(미래 발송일 선점)이 있으면 함께 — 옮길 수 있는 건 가용(현재고 − 출고 예정)까지 */}
                   {INV_CHANNELS.map((ch) => {
                     const p = poolOf(ch, l.pid);
-                    return <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {onHandOf(p).toLocaleString()}{p.sched > 0 ? ` · 출고 예정 ${p.sched.toLocaleString()}` : ""}</span>;
+                    return <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {onHandOf(p).toLocaleString()}{p.sched > 0 ? ` (출고 예정 ${p.sched.toLocaleString()})` : ""}</span>;
                   })}
                   <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={l.qty}
                     onChange={(e) => {
@@ -350,7 +350,7 @@ export default function InventoryMovePage() {
                     placeholder="옮길 수량" style={{ width: 120 }} aria-label={`품목 ${idx + 1} 수량`} />
                   {nQty > 0 && (
                     <span className="sm-faint" style={{ fontSize: 12 }}>
-                      옮긴 뒤 현재고 — {dir.from} {(Math.round((onHandOf(fromPool) - nQty) * 100) / 100).toLocaleString()} · {dir.to} {(Math.round((onHandOf(toPool) + nQty) * 100) / 100).toLocaleString()}
+                      옮긴 뒤 현재고 — {dir.from} {(Math.round((onHandOf(fromPool) - nQty) * 100) / 100).toLocaleString()}, {dir.to} {(Math.round((onHandOf(toPool) + nQty) * 100) / 100).toLocaleString()}
                     </span>
                   )}
                 </div>
@@ -360,15 +360,15 @@ export default function InventoryMovePage() {
                 return (
                   <p style={{ fontSize: 12, color: "var(--sm-warning)", margin: "6px 0 0" }}>
                     프로모션 요청서 몫 {h.reserved.toLocaleString()}개{h.req_nos.length ? `(${h.req_nos.join("·")})` : ""}
-                    {typeof h.free === "number" ? ` · 몫 밖 ${h.free.toLocaleString()}개` : ""}
+                    {typeof h.free === "number" ? `, 몫 밖 ${h.free.toLocaleString()}개` : ""}
                   </p>
                 );
               })()}
               {shortage && (
                 <p style={{ fontSize: 12, color: "var(--sm-danger)", margin: "6px 0 0" }}>
                   {fromPool.sched > 0
-                    ? `${dir.from} 가용 재고(${fromQty.toLocaleString()} = 현재고 ${onHandOf(fromPool).toLocaleString()} − 출고 예정 ${fromPool.sched.toLocaleString()})보다 많아요. 그래도 옮기면 출고 예정분이 모자라거나 ${dir.from}가 마이너스가 됩니다.`
-                    : `${dir.from} 재고(${fromQty.toLocaleString()})보다 많아요. 그래도 옮기면 ${dir.from}가 마이너스가 됩니다.`}
+                    ? `${dir.from} 가용 재고(${fromQty.toLocaleString()} = 현재고 ${onHandOf(fromPool).toLocaleString()} − 출고 예정 ${fromPool.sched.toLocaleString()})보다 많습니다. 그래도 옮기면 출고 예정분이 모자라거나 ${dir.from}가 마이너스가 됩니다.`
+                    : `${dir.from} 재고(${fromQty.toLocaleString()})보다 많습니다. 그래도 옮기면 ${dir.from}가 마이너스가 됩니다.`}
                 </p>
               )}
 
@@ -404,7 +404,7 @@ export default function InventoryMovePage() {
                                     <input className="b2b-input b2b-money" type="number" min={0} step={0.01} value={v}
                                       onChange={(e) => { const m2 = new Map(l.alloc); m2.set(t.item_id, e.target.value); patchLine(l.key, { alloc: m2, allocTouched: true }); }}
                                       style={{ width: 100, textAlign: "right" }} placeholder="0" aria-label={`${t.req_no || "요청서"} 배정 수량`} />
-                                    {overRemain && <div style={{ fontSize: 12, color: "var(--sm-orange)" }}>잔여보다 많음</div>}
+                                    {overRemain && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)" }}>잔여보다 많음</div>}
                                   </td>
                                 </tr>
                               );
@@ -451,7 +451,7 @@ export default function InventoryMovePage() {
         </div>
 
         <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 13 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 · {totalQty.toLocaleString()}개</strong></>}</span>
+          <span style={{ fontSize: 13 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 {totalQty.toLocaleString()}개</strong></>}</span>
           <button className="b2b-btn-primary" onClick={submit} disabled={busy}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${activeLines.length}개 품목)` : ""}`}</button>
         </div>
       </section>
@@ -459,7 +459,7 @@ export default function InventoryMovePage() {
       <section className="b2b-card">
         <div className="b2b-card-head"><span className="b2b-card-title">최근 옮긴 내역</span></div>
         {moves.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 20 }}>옮긴 내역이 없습니다.</div>
+          <div className="b2b-empty" style={{ padding: 20 }}>옮긴 내역이 없습니다. 위에서 품목과 수량을 넣고 [옮기기]를 누르세요.</div>
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
@@ -472,16 +472,16 @@ export default function InventoryMovePage() {
                       <strong>{m.product_name}</strong>
                       {m.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{m.sku}</span> : null}
                       {/* 원장 메모 '행사 종료 자동 합류' = 폐지된 자동 합류 크론(2026-10-06 삭제)의 옛 기록 — 표시만 바꾼다 */}
-                      {m.memo ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>· {m.memo === "행사 종료 자동 합류" ? "행사 전 자동 합류" : m.memo}</span> : null}
+                      {m.memo ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({m.memo === "행사 종료 자동 합류" ? "행사 전 자동 합류" : m.memo})</span> : null}
                       {(m.alloc_qty ?? 0) > 0 && (
                         <div className="sm-faint" style={{ fontSize: 12 }}>
-                          배정 {Number(m.alloc_qty).toLocaleString()} → {(m.alloc_reqs || []).join(", ") || "요청서"}
-                          {m.qty - (m.alloc_qty ?? 0) > 0.001 ? ` · 기타 ${(Math.round((m.qty - (m.alloc_qty ?? 0)) * 100) / 100).toLocaleString()}` : ""}
+                          배정 {Number(m.alloc_qty).toLocaleString()} ({(m.alloc_reqs || []).join(", ") || "요청서"})
+                          {m.qty - (m.alloc_qty ?? 0) > 0.001 ? `, 기타 ${(Math.round((m.qty - (m.alloc_qty ?? 0)) * 100) / 100).toLocaleString()}` : ""}
                         </div>
                       )}
                     </td>
                     <td className="num b2b-money" style={{ fontWeight: 700 }}>{m.qty.toLocaleString()}</td>
-                    <td><span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{m.from} → {m.to}</span>{!m.complete && <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-danger)" }}>불완전</span>}</td>
+                    <td><span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{m.from}에서 {m.to}로</span>{!m.complete && <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-danger)" }}>불완전</span>}</td>
                     <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{m.created_by || "-"}</td>
                     <td><button className="b2b-link-btn" onClick={() => cancelMove(m.group_id)} style={{ color: "var(--sm-danger)" }}>이동 취소</button></td>
                   </tr>

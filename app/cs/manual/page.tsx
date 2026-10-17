@@ -34,10 +34,10 @@ export default function CsManualPage() {
     try {
       const res = await fetch("/api/cs/manual", { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "매뉴얼을 불러오지 못했습니다. 새로고침하세요");
       setEntries((j.entries || []).map((e: Entry) => ({ ...e, category: e.category || "일반" })));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "매뉴얼을 불러오지 못했습니다. 새로고침하세요");
     }
     setLoading(false);
   }
@@ -111,12 +111,12 @@ export default function CsManualPage() {
         }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "항목을 저장하지 못했습니다. 제목과 내용을 확인하세요");
       patchById(e.id, { id: j.entry.id, _new: false, _saving: false, _dirty: false, _saved: true });
       setTimeout(() => patchById(j.entry.id, { _saved: false }), 1800);
     } catch (err) {
       patchById(e.id, { _saving: false });
-      setError(err instanceof Error ? err.message : "저장 중 오류");
+      setError(err instanceof Error ? err.message : "항목을 저장하지 못했습니다. 제목과 내용을 확인하세요");
     }
   }
 
@@ -129,10 +129,10 @@ export default function CsManualPage() {
     try {
       const res = await fetch(`/api/cs/manual?id=${encodeURIComponent(e.id)}`, { method: "DELETE" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "삭제 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "항목을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       setEntries((prev) => prev.filter((x) => x.id !== e.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "삭제 중 오류");
+      setError(err instanceof Error ? err.message : "항목을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
     }
   }
 
@@ -142,7 +142,7 @@ export default function CsManualPage() {
         <div>
           <h1 className="page-title">CS 매뉴얼 (지식베이스)</h1>
         </div>
-        <Link href="/cs" className="btn-secondary csm-back">← CS 코치로</Link>
+        <Link href="/cs" className="btn-secondary csm-back">CS 코치로 돌아가기</Link>
       </div>
 
       {error && <div className="b2b-error" style={{ margin: "12px 0" }}>{error}</div>}
@@ -228,9 +228,9 @@ export default function CsManualPage() {
                   onClick={() => save(e)}
                   disabled={e._saving || (!e._dirty && !e._new)}
                 >
-                  {e._saving ? "저장 중..." : e._saved ? "저장됨 ✓" : e._dirty || e._new ? "저장" : "변경 없음"}
+                  {e._saving ? "저장 중..." : e._saved ? "저장했습니다" : e._new ? "항목 저장" : e._dirty ? "변경 저장" : "변경 없음"}
                 </button>
-                <button className="btn-danger" onClick={() => remove(e)}>삭제</button>
+                <button className="btn-danger" onClick={() => remove(e)}>항목 삭제</button>
               </div>
             </div>
           ))}

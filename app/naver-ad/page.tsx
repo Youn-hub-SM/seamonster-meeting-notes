@@ -114,7 +114,7 @@ export default function NaverAdPage() {
             if (present.length && !present.includes("WEB_SITE")) setAdType(present[0]);
           }
         }
-      } catch (e) { setError(e instanceof Error ? e.message : "상태 조회 오류"); }
+      } catch (e) { setError(e instanceof Error ? e.message : "연동 상태를 불러오지 못했습니다. 새로고침하세요"); }
     })();
   }, []);
 
@@ -142,10 +142,10 @@ export default function NaverAdPage() {
       setLoadingGrp(true); setError("");
       try {
         const j = await (await fetch(`/api/naver-ad/adgroups?campaignIds=${encodeURIComponent(selCampKey)}`, { cache: "no-store" })).json();
-        if (!j.ok) throw new Error(j.error || "광고그룹 조회 실패");
+        if (!j.ok) throw new Error(j.error || "광고그룹을 불러오지 못했습니다. 캠페인을 다시 고르세요");
         setAdgroups(j.adgroups || []);
         setSelGrp((prev) => prev.filter((id) => (j.adgroups || []).some((g: Adgroup) => g.nccAdgroupId === id)));
-      } catch (e) { setError(e instanceof Error ? e.message : "그룹 조회 오류"); }
+      } catch (e) { setError(e instanceof Error ? e.message : "광고그룹을 불러오지 못했습니다. 캠페인을 다시 고르세요"); }
       setLoadingGrp(false);
     })();
   }, [mode, selCampKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -159,7 +159,7 @@ export default function NaverAdPage() {
         setLoading(true);
         const p = new URLSearchParams({ adgroupIds: selGrpKey }); applyRange(p);
         const j = await (await fetch(`/api/naver-ad/keywords?${p}`, { cache: "no-store" })).json();
-        if (!j.ok) throw new Error(j.error || "키워드 조회 실패");
+        if (!j.ok) throw new Error(j.error || "키워드를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
         setRows((j.keywords || []).map((k: ApiKeyword): Row => ({
           id: k.nccKeywordId, name: k.keyword, group: grpName[k.nccAdgroupId] || "-", bidAmt: k.bidAmt, useGroupBidAmt: k.useGroupBidAmt,
           adRel: k.adRelevanceScore, expClick: k.expectedClickScore, userLock: k.userLock, stat: k.stat, kind: "keyword",
@@ -169,13 +169,13 @@ export default function NaverAdPage() {
         setLoading(true);
         const p = new URLSearchParams({ campaignIds: selCampKey }); applyRange(p);
         const j = await (await fetch(`/api/naver-ad/adgroup-stats?${p}`, { cache: "no-store" })).json();
-        if (!j.ok) throw new Error(j.error || "광고그룹 성과 조회 실패");
+        if (!j.ok) throw new Error(j.error || "광고그룹 성과를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
         setRows((j.adgroups || []).map((g: ApiAdgroupStat): Row => ({
           id: g.nccAdgroupId, name: g.name, group: campName[g.nccCampaignId] || "-", bidAmt: g.bidAmt ?? 0,
           userLock: g.userLock, stat: g.stat, kind: "adgroup",
         })));
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "성과를 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     setLoading(false);
   }, [mode, selGrpKey, selCampKey, rangeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadData(); }, [loadData]);
@@ -192,10 +192,10 @@ export default function NaverAdPage() {
         const p = new URLSearchParams({ type: mode, since, until });
         const j = await (await fetch(`/api/naver-ad/purchase-conv?${p}`, { cache: "no-store" })).json();
         if (cancelled) return;
-        if (!j.ok) throw new Error(j.error || "구매 전환 조회 실패");
+        if (!j.ok) throw new Error(j.error || "구매 전환을 불러오지 못했습니다. 기간을 줄여 다시 불러오세요");
         setPurchaseMap(j.map || {});
         setPurchaseInfo({ effectiveUntil: j.effectiveUntil, cached: j.cached, days: j.daysFetched });
-      } catch (e) { if (!cancelled) setError(e instanceof Error ? e.message : "구매 전환 오류"); }
+      } catch (e) { if (!cancelled) setError(e instanceof Error ? e.message : "구매 전환을 불러오지 못했습니다. 기간을 줄여 다시 불러오세요"); }
       if (!cancelled) setPurchaseLoading(false);
     })();
     return () => { cancelled = true; };
@@ -269,10 +269,10 @@ export default function NaverAdPage() {
         r = await fetch("/api/naver-ad/adgroup-stats", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ updates }) });
       }
       j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "입찰가 변경 실패");
-      setSavedMsg(`입찰가 ${j.updated}개 변경${j.failed ? ` (${j.failed}개 실패: ${j.error || ""})` : ""}`);
+      if (!r.ok || !j.ok) throw new Error(j.error || "입찰가를 저장하지 못했습니다. 금액을 확인하세요");
+      setSavedMsg(`입찰가 ${j.updated}개를 저장했습니다${j.failed ? ` (${j.failed}개는 저장하지 못했습니다: ${j.error || ""})` : ""}`);
       loadData();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "입찰가를 저장하지 못했습니다. 금액을 확인하세요"); }
     setSaving(false);
   }
 
@@ -305,9 +305,9 @@ export default function NaverAdPage() {
     setSkGroup({ id: r.id, name: r.name }); setSkRows([]); setSkErr(""); setSkLoading(true); setSkCostOnly(true);
     try {
       const j = await (await fetch(`/api/naver-ad/search-keywords?id=${encodeURIComponent(r.id)}`, { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "검색어 조회 실패");
+      if (!j.ok) throw new Error(j.error || "검색어를 불러오지 못했습니다. 창을 닫고 다시 여세요");
       setSkRows(j.keywords || []);
-    } catch (e) { setSkErr(e instanceof Error ? e.message : "검색어 조회 오류"); }
+    } catch (e) { setSkErr(e instanceof Error ? e.message : "검색어를 불러오지 못했습니다. 창을 닫고 다시 여세요"); }
     setSkLoading(false);
   }
   const skShown = useMemo(() => {
@@ -329,10 +329,10 @@ export default function NaverAdPage() {
         const p = new URLSearchParams({ id: rpt.id, since: sinceD, until, type: rpt.kind, conv: rptConv });
         const j = await (await fetch(`/api/naver-ad/report?${p}`, { cache: "no-store" })).json();
         if (cancelled) return;
-        if (!j.ok) throw new Error(j.error || "리포트 조회 실패");
+        if (!j.ok) throw new Error(j.error || "리포트를 불러오지 못했습니다. 창을 닫고 다시 여세요");
         setRptDays(j.days || []);
         setRptCapped(!!j.capped);
-      } catch (e) { if (!cancelled) setRptErr(e instanceof Error ? e.message : "리포트 오류"); }
+      } catch (e) { if (!cancelled) setRptErr(e instanceof Error ? e.message : "리포트를 불러오지 못했습니다. 창을 닫고 다시 여세요"); }
       if (!cancelled) setRptLoading(false);
     })();
     return () => { cancelled = true; };
@@ -400,7 +400,7 @@ export default function NaverAdPage() {
           <strong>네이버 광고 연동 준비 중입니다.</strong>
         </div>
       )}
-      {status?.configured && status.connected === false && <div className="b2b-error"><strong>연결 실패</strong> — {status.error || "자격 확인"}</div>}
+      {status?.configured && status.connected === false && <div className="b2b-error">네이버에 연결하지 못했습니다 — {status.error || "자격 확인"}. 환경변수의 API 자격을 확인하세요</div>}
       {error && <div className="b2b-error">{error}</div>}
 
       {status?.connected && (
@@ -428,7 +428,7 @@ export default function NaverAdPage() {
                 </div>
               )}
             </div>
-            {campsOfType.length === 0 ? <span className="sm-faint" style={{ fontSize: 13 }}>이 유형의 캠페인이 없습니다.</span> : (
+            {campsOfType.length === 0 ? <span className="sm-faint" style={{ fontSize: 13 }}>이 유형의 캠페인이 없습니다. 광고유형을 바꾸세요</span> : (
               <div className="sm-row" style={{ gap: 6, flexWrap: "wrap" }}>
                 {campsOfType.map((c) => <Chip key={c.nccCampaignId} on={selCamp.includes(c.nccCampaignId)} onClick={() => toggle(selCamp, setSelCamp, c.nccCampaignId)}>{c.name}</Chip>)}
               </div>
@@ -476,7 +476,7 @@ export default function NaverAdPage() {
             {convBasis === "purchase" && (
               <span className="sm-faint" style={{ fontSize: 13 }}>
                 {purchaseLoading ? "구매 전환 불러오는 중..."
-                  : purchaseInfo ? `장바구니 제외·구매만 · ~${purchaseInfo.effectiveUntil}까지${purchaseInfo.cached === false ? " · 캐시 미적용(느림, 064 마이그레이션 권장)" : ""}` : "장바구니 제외, 구매 전환만 집계"}
+                  : purchaseInfo ? `장바구니 제외·구매만, ~${purchaseInfo.effectiveUntil}까지${purchaseInfo.cached === false ? " (캐시 미적용 — 느림, 064 마이그레이션 권장)" : ""}` : "장바구니 제외, 구매 전환만 집계"}
               </span>
             )}
           </div>
@@ -493,13 +493,13 @@ export default function NaverAdPage() {
           </div>
 
           {!hasSelection ? (
-            <div className="b2b-empty">{selCamp.length === 0 ? "선택된 캠페인이 없습니다." : "선택된 광고그룹이 없습니다."}</div>
+            <div className="b2b-empty">{selCamp.length === 0 ? "선택된 캠페인이 없습니다. 위에서 캠페인을 고르세요" : "선택된 광고그룹이 없습니다. 위에서 광고그룹을 고르세요"}</div>
           ) : loading ? <div className="b2b-loading">불러오는 중...</div> :
             shownRows.length === 0 ? (
               <div className="b2b-empty">
                 {costOnly && rows.length > 0
                   ? <>이 기간에 <b>광고비가 나간 {mode === "keyword" ? "키워드" : "광고그룹"}</b>이 없습니다. <button className="b2b-link-btn" onClick={() => setCostOnly(false)}>전체 보기</button></>
-                  : mode === "keyword" ? "키워드가 없습니다." : "광고그룹이 없습니다."}
+                  : mode === "keyword" ? "키워드가 없습니다. 다른 광고그룹을 고르세요" : "광고그룹이 없습니다. 다른 캠페인을 고르세요"}
               </div>
             ) : (
               <>
@@ -524,7 +524,7 @@ export default function NaverAdPage() {
                         return (
                           <tr key={r.id} style={changed ? { background: "var(--sm-orange-light)" } : undefined}>
                             <td>
-                              <strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 13 }}> · OFF</span> : null}
+                              <strong>{r.name}</strong>{r.userLock ? <span className="sm-faint" style={{ fontSize: 13 }}> (OFF)</span> : null}
                               <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 13 }} onClick={() => { setRpt({ id: r.id, name: r.name, kind: r.kind }); setRptGran("week"); setRptBack(90); setRptConv("all"); }} title="이 대상의 주/월/일별 성과 리포트">리포트</button>
                               {r.kind === "adgroup" && <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 13 }} onClick={() => openSearchKeywords(r)} title="이 그룹으로 유입된 검색어별 비용">검색어</button>}
                             </td>
@@ -604,7 +604,7 @@ export default function NaverAdPage() {
                       <input type="checkbox" checked={skCostOnly} onChange={(e) => setSkCostOnly(e.target.checked)} />광고비 지출만
                     </label>
                   </div>
-                  {skShown.length === 0 ? <div className="b2b-empty">표시할 검색어가 없습니다.</div> : (
+                  {skShown.length === 0 ? <div className="b2b-empty">표시할 검색어가 없습니다. 기간을 늘리세요</div> : (
                     <div className="b2b-table-wrap">
                       <table className="b2b-table">
                         <thead><tr>
@@ -671,13 +671,13 @@ export default function NaverAdPage() {
               {rptErr && <div className="b2b-error">{rptErr}</div>}
               {rptConv === "purchase" && rptCapped && !rptLoading && <div className="b2b-empty" style={{ padding: "8px 10px", marginBottom: 10, fontSize: 13 }}>구매전환 기준은 <b>최근 62일</b>까지만 표시됩니다.</div>}
               {rptLoading ? <div className="b2b-loading">불러오는 중...</div> : rptAgg.rows.length === 0 ? (
-                <div className="b2b-empty">이 기간에 성과 데이터가 없습니다.</div>
+                <div className="b2b-empty">이 기간에 성과 데이터가 없습니다. 기간을 바꾸세요</div>
               ) : (
                 <>
                   <ComboBarLine periods={rptAgg.periods} barSeries={[{ key: "광고비", values: rptAgg.costs }]} barColors={["var(--sm-info)"]} barFmt={moneyCompact} lineValues={rptAgg.roas} lineLabel="ROAS" lineFmt={(n) => `${n}%`} lineUnit="" lineColor="var(--sm-orange)" barUnit="원" />
                   <ChartLegend style={{ marginTop: 6, marginBottom: 12 }} items={[
                     ["광고비 (막대)", "var(--sm-info)"],
-                    [`ROAS (선)${rptConv === "purchase" ? " · 구매기준" : ""}`, "var(--sm-orange)"],
+                    [`ROAS (선${rptConv === "purchase" ? ", 구매기준" : ""})`, "var(--sm-orange)"],
                   ]} />
                   <div className="b2b-table-wrap">
                     <table className="b2b-table">

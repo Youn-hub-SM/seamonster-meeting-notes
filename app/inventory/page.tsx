@@ -121,10 +121,10 @@ export default function InventoryPage() {
       if (channel !== "전체") sp.set("channel", channel);
       const j = await (await fetch(`/api/inventory/overview?${sp}`, { cache: "no-store" })).json();
       if (seq !== loadSeq.current) return; // 그 사이 탭·기간이 바뀜 → 늦은 응답 폐기
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "재고 목록을 불러오지 못했습니다. 새로고침하세요.");
       // 번들(세트)은 자체 재고가 없어 재고 관리에서 제외(출고는 B2B 발송 시 구성품으로 자동 차감).
       setRows((j.rows || []).filter((r: OverviewRow) => !r.is_bundle)); setMeta(j.meta || null);
-    } catch (e) { if (seq === loadSeq.current) setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { if (seq === loadSeq.current) setError(e instanceof Error ? e.message : "재고 목록을 불러오지 못했습니다. 새로고침하세요."); }
     if (seq === loadSeq.current) setLoading(false);
   }, [range.from, range.to, channel]);
   useEffect(() => { load(); }, [load]);
@@ -316,9 +316,9 @@ export default function InventoryPage() {
     try {
       const res = await fetch("/api/production/advice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel: prodChannel }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "AI 조언 생성 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "AI 조언을 만들지 못했습니다. [AI 조언]을 다시 누르세요.");
       setAdvice(j.advice);
-    } catch (e) { setError(e instanceof Error ? e.message : "AI 조언 생성 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "AI 조언을 만들지 못했습니다. [AI 조언]을 다시 누르세요."); }
     setAdviceLoading(false);
   }
 
@@ -361,7 +361,7 @@ export default function InventoryPage() {
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 자산(원가)</div><div className="b2b-stat-card-value b2b-money">{totals.value.toLocaleString()}</div></div>
         {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 부족</div><div className="b2b-stat-card-value" style={{ color: totals.low ? "var(--sm-danger)" : "var(--sm-black)" }}>{totals.low}건</div></div>}
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">기간 총출고</div><div className="b2b-stat-card-value b2b-money">{totals.out.toLocaleString()}</div></div>
-        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">생산 권장 품목</div><div className="b2b-stat-card-value" style={{ color: prodStats.needItems ? "var(--sm-orange)" : "var(--sm-black)" }}>{prodStats.needItems}종</div></div>}
+        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">생산 권장 품목</div><div className="b2b-stat-card-value">{prodStats.needItems}종</div></div>}
         {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 권장 생산량</div><div className="b2b-stat-card-value b2b-money">{prodStats.needQty.toLocaleString()}</div></div>}
       </div>
 
@@ -474,7 +474,7 @@ export default function InventoryPage() {
                       style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", textAlign: "left", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.name}
                       {r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}
-                      {r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span> : null}
+                      {r.is_bundle ? <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>세트</span> : null}
                     </button>
                   </td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수" : "오늘까지 원장 기준"}>
@@ -513,11 +513,11 @@ export default function InventoryPage() {
                   {/* 입고 예정 = 시켜 두고 아직 안 온 양(열린 제조사 요청서 잔여). 권장생산이 이미 뺀 값이다.
                       확정형 탭엔 없다 — 제조사 입고는 소매 칸으로 들어오므로 이 칸의 '들어올 양'이 아니다 */}
                   {!confirmedTab && <td className="num b2b-money" style={{ color: (r.inbound ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}
-                    title={(r.inbound ?? 0) > 0 ? `${channel === "도매" ? "열린 도매 요청서에 남은 양(소매 → 도매 이동 대기)" : "열린 제조사 요청서에 남은 양"} — 권장생산에서 이미 뺐습니다\n${r.inbound_detail || ""}` : undefined}>
+                    title={(r.inbound ?? 0) > 0 ? `${channel === "도매" ? "열린 도매 요청서에 남은 양(소매에서 도매로 이동 대기)" : "열린 제조사 요청서에 남은 양"} — 권장생산에서 이미 뺐습니다\n${r.inbound_detail || ""}` : undefined}>
                     {(r.inbound ?? 0) > 0 ? r.inbound.toLocaleString() : "-"}
                     {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
                   </td>}
-                  {!confirmedTab && <td className="num" title={pv.detail}>{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong style={{ color: "var(--sm-orange)" }}>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>}
+                  {!confirmedTab && <td className="num" title={pv.detail}>{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>}
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
                   <td className="num b2b-money">{r.value.toLocaleString()}</td>
@@ -546,13 +546,13 @@ export default function InventoryPage() {
                 변경 히스토리 — {historyFor.name}{historyFor.spec ? ` ${historyFor.spec}` : ""}
                 <span className="sm-faint" style={{ marginLeft: 10, fontSize: 12, fontWeight: 400 }}>
                   현재고 {onHandOf(historyFor).toLocaleString()}{historyFor.is_bundle ? "세트" : historyFor.unit}
-                  {(historyFor.scheduled_out ?? 0) > 0 ? ` · 출고 예정 ${historyFor.scheduled_out.toLocaleString()}` : ""}
+                  {(historyFor.scheduled_out ?? 0) > 0 ? `, 출고 예정 ${historyFor.scheduled_out.toLocaleString()}` : ""}
                 </span>
               </span>
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setHistoryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
-              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>재고 = 그 거래 채널 기준 전후 수량 · 대기 행은 재고에 넣지 않음</p>
+              <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 10px" }}>재고 = 그 거래 채널 기준 전후 수량. 대기 행은 재고에 넣지 않음</p>
               <ProductHistory productId={historyFor.product_id} />
             </div>
             <div className="b2b-modal-foot">
@@ -607,9 +607,9 @@ function ProductHistory({ productId }: { productId: string }) {
       setLoading(true); setError("");
       try {
         const j = await (await fetch(`/api/inventory/txns?product_id=${encodeURIComponent(productId)}&limit=${HISTORY_LIMIT}`, { cache: "no-store" })).json();
-        if (!j.ok) throw new Error(j.error || "조회 실패");
+        if (!j.ok) throw new Error(j.error || "변경 기록을 불러오지 못했습니다. 창을 닫았다 다시 여세요.");
         if (alive) setRows(j.rows || []);
-      } catch (e) { if (alive) setError(e instanceof Error ? e.message : "조회 오류"); }
+      } catch (e) { if (alive) setError(e instanceof Error ? e.message : "변경 기록을 불러오지 못했습니다. 창을 닫았다 다시 여세요."); }
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
@@ -638,7 +638,7 @@ function ProductHistory({ productId }: { productId: string }) {
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}</div>;
-  if (rows.length === 0) return <div className="b2b-empty">변경 기록이 없습니다.</div>;
+  if (rows.length === 0) return <div className="b2b-empty">변경 기록이 없습니다. [입·출·조정 기록]으로 첫 기록을 남기세요.</div>;
 
   return (
     <div className="b2b-table-wrap" style={{ maxHeight: 440, overflow: "auto" }}>

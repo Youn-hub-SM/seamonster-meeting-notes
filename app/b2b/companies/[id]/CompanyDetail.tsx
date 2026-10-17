@@ -45,10 +45,10 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
       try {
         const res = await fetch(`/api/b2b/companies/${companyId}`, { cache: "no-store" });
         const j = await res.json();
-        if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        if (!res.ok || !j.ok) throw new Error(j.error || "거래처를 불러오지 못했습니다. 새로고침하세요");
         setData(j);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "조회 중 오류");
+        setError(err instanceof Error ? err.message : "거래처를 불러오지 못했습니다. 새로고침하세요");
       }
       setLoading(false);
     })();
@@ -56,7 +56,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
 
   if (loading) return <div className="b2b-loading">불러오는 중...</div>;
   if (error) return <div className="b2b-error">{error}</div>;
-  if (!data) return <div className="b2b-empty">거래처 정보가 없습니다.</div>;
+  if (!data) return <div className="b2b-empty">거래처 정보가 없습니다. 주소록에서 다시 고르세요</div>;
 
   const c = data.company;
 

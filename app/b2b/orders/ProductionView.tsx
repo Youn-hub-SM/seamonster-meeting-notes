@@ -31,10 +31,10 @@ export default function ProductionView() {
       try {
         const res = await fetch("/api/b2b/orders/production-summary", { cache: "no-store" });
         const j = await res.json();
-        if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        if (!res.ok || !j.ok) throw new Error(j.error || "생산 현황을 불러오지 못했습니다. 새로고침하세요");
         setDays(j.days || []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "조회 중 오류");
+        setError(err instanceof Error ? err.message : "생산 현황을 불러오지 못했습니다. 새로고침하세요");
       }
       setLoading(false);
     })();

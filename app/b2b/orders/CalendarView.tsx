@@ -122,7 +122,7 @@ export default function CalendarView({
           }}
           aria-label="이전"
         >
-          ←
+          이전
         </button>
         <div className="b2b-cal-label">{navLabel}</div>
         <button
@@ -134,7 +134,7 @@ export default function CalendarView({
           }}
           aria-label="다음"
         >
-          →
+          다음
         </button>
         <button
           type="button"

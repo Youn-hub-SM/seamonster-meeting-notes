@@ -31,10 +31,10 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
     try {
       const r = await fetch(`/api/b2b/products/bundle?parent=${encodeURIComponent(parent.id)}`, { cache: "no-store" });
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.ok) throw new Error(j?.error || "구성 조회 실패");
+      if (!r.ok || !j?.ok) throw new Error(j?.error || "구성을 불러오지 못했습니다");
       const list: Row[] = (j.components || []).map((c: { component_id: string; name: string; spec: string | null; qty: number }) => ({ component_id: c.component_id, label: c.spec ? `${c.name} | ${c.spec}` : c.name, qty: c.qty }));
       setRows(list); setLoadedCount(list.length);
-    } catch (e) { setRows([]); setLoadedCount(0); setLoadErr(e instanceof Error ? e.message : "구성 조회 실패"); }
+    } catch (e) { setRows([]); setLoadedCount(0); setLoadErr(e instanceof Error ? e.message : "구성을 불러오지 못했습니다"); }
     setLoading(false);
   }, [parent.id]);
   useEffect(() => { load(); }, [load]);
@@ -64,9 +64,9 @@ export default function BundleEditor({ parent, products, onClose, onSaved }: {
         body: JSON.stringify({ parent_id: parent.id, components: picked.map((r) => ({ component_id: r.component_id, qty: Number(r.qty) })) }),
       });
       const j = await res.json().catch(() => null);
-      if (!res.ok || !j?.ok) throw new Error(j?.error || "저장 실패 — 기존 구성은 그대로입니다.");
+      if (!res.ok || !j?.ok) throw new Error(j?.error || "구성을 저장하지 못했습니다. 기존 구성은 그대로이니 다시 저장하세요");
       onSaved?.(); onClose();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "구성을 저장하지 못했습니다. 기존 구성은 그대로이니 다시 저장하세요"); }
     setSaving(false);
   }
 

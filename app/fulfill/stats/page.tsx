@@ -66,9 +66,9 @@ export default function FulfillStatsPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch(`/api/fulfill/log?from=${from}&to=${to}`, { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "발송 통계를 불러오지 못했습니다. 새로고침하세요.");
       setRows(j.rows || []); if (Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "발송 통계를 불러오지 못했습니다. 새로고침하세요."); }
     setLoading(false);
   }, [from, to]);
   useEffect(() => { load(); }, [load]);
@@ -154,13 +154,13 @@ export default function FulfillStatsPage() {
 
       {error && <div className="b2b-error">{error}</div>}
       {loading ? <div className="b2b-loading">불러오는 중...</div> : tot === 0 ? (
-        <div className="b2b-empty">이 기간에 기록된 발송이 없습니다.</div>
+        <div className="b2b-empty">이 기간에 기록된 발송이 없습니다. 기간을 늘리거나 배송일지에 기록하세요.</div>
       ) : (
         <div className="sm-col" style={{ gap: 16 }}>
           {/* KPI */}
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 0 }}>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 발송(택배)</div><div className="b2b-stat-card-value b2b-money">{won(tot)}</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 16 }}><span style={{ color: "var(--sm-info)" }}>{won(agg.totN)}</span> <span className="sm-faint">/</span> <span style={{ color: "var(--sm-orange)" }}>{won(agg.totG)}</span></div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 16 }}>{won(agg.totN)} <span className="sm-faint">/</span> {won(agg.totG)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 비율</div><div className="b2b-stat-card-value">{tot ? Math.round((agg.totG / tot) * 100) : 0}%</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">일평균 발송</div><div className="b2b-stat-card-value b2b-money">{agg.days ? won(tot / agg.days) : 0}<span className="sm-faint" style={{ fontSize: 12 }}> /{agg.days}일</span></div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계</div><div className="b2b-stat-card-value b2b-money">{won(agg.fee)}원</div></div>
@@ -169,7 +169,7 @@ export default function FulfillStatsPage() {
           </div>
           {agg.noPrice.length > 0 && (
             <p className="sm-faint" style={{ fontSize: 12, margin: "-8px 0 0" }}>
-              * 단가 미입력 박스 종류({agg.noPrice.join(" · ")})는 박스비에서 빠져 있습니다.
+              * 단가 미입력 박스 종류({agg.noPrice.join(", ")})는 박스비에서 빠져 있습니다.
             </p>
           )}
 
@@ -224,8 +224,8 @@ export default function FulfillStatsPage() {
                     <tr key={m.month}>
                       <td><strong>{m.month.slice(2)}</strong></td>
                       {m.cats.map((v, i) => <td key={i} className="num b2b-money">{v || "-"}</td>)}
-                      <td className="num b2b-money" style={{ color: "var(--sm-info)" }}>{won(m.n)}</td>
-                      <td className="num b2b-money" style={{ color: "var(--sm-orange)" }}>{won(m.g)}</td>
+                      <td className="num b2b-money">{won(m.n)}</td>
+                      <td className="num b2b-money">{won(m.g)}</td>
                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(m.n + m.g)}</td>
                       <td className="num b2b-money">{m.boxCost ? won(m.boxCost) : "-"}</td>
                     </tr>

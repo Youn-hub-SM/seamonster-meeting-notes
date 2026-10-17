@@ -16,9 +16,9 @@ export default function NewTradePage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/inventory", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "품목 목록을 불러오지 못했습니다. 새로고침하세요.");
       setRows(j.rows || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "품목 목록을 불러오지 못했습니다. 새로고침하세요."); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);

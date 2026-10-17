@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { NAV, sortByNavOrder, navLabelOf, navHrefActive, type NavTool, type NavMenuItem } from "./nav";
+import { NAV, sortByNavOrder, navLabelParts, navHrefActive, type NavTool, type NavMenuItem } from "./nav";
 import Icon, { type IconName } from "./components/Icon";
 import { countNewUpdates, markUpdatesSeen, readUpdatesSeenAt } from "./lib/updates-seen";
 
@@ -176,7 +176,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
             {menu.map((m) => editFav ? (
               <div key={m.href} className="app-sb-menu-row">
                 <Link href={m.href} className={`app-sb-menu-item ${itemActive(m, t.href, pathname) ? "is-active" : ""}`} onClick={onNavigate}>{m.label}{m.beta && <Beta />}</Link>
-                <FavToggle href={m.href} label={`${t.label} · ${m.label}`} />
+                <FavToggle href={m.href} label={`${m.label} (${t.label})`} />
               </div>
             ) : (
               <Link
@@ -260,7 +260,7 @@ export default function AppSidebar({ open, collapsed, onToggleCollapse, onNaviga
               <div key={f.href} className={`app-sb-tool-row ${navHrefActive(f.href, pathname) ? "is-active" : ""}`}>
                 <Link href={f.href} className="app-sb-tool" onClick={() => { skipAutoOpen.current = true; onNavigate?.(); }}>
                   <span className="app-sb-emoji"><Icon name={iconForHref(f.href)} /></span>
-                  <span className="app-sb-tool-label">{navLabelOf(f.href, f.label)}</span>
+                  {(() => { const p = navLabelParts(f.href, f.label); return <span className="app-sb-tool-label">{p.main}{p.sub && <span className="app-sb-tool-sub">{p.sub}</span>}</span>; })()}
                 </Link>
                 {editFav && <FavToggle href={f.href} label={f.label} />}
               </div>

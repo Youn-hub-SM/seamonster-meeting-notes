@@ -25,10 +25,10 @@ export default function CompaniesPage() {
     try {
       const res = await fetch("/api/b2b/companies", { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "조회 실패");
+      if (!res.ok || !data.ok) throw new Error(data.error || "업체 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setCompanies(data.companies || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "업체 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
     }
     setLoading(false);
   }
@@ -66,7 +66,7 @@ export default function CompaniesPage() {
         body: JSON.stringify(modal.data),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "저장 실패");
+      if (!res.ok || !data.ok) throw new Error(data.error || "업체를 저장하지 못했습니다. 입력값을 확인하세요");
 
       const saved = data.company as Company;
       if (modal.mode === "create") {
@@ -76,7 +76,7 @@ export default function CompaniesPage() {
       }
       setModal(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "저장 중 오류");
+      setError(err instanceof Error ? err.message : "업체를 저장하지 못했습니다. 입력값을 확인하세요");
     }
     setSaving(false);
   }
@@ -93,11 +93,11 @@ export default function CompaniesPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setCompanies(snapshot);
-        throw new Error(data.error || "삭제 실패");
+        throw new Error(data.error || "업체를 삭제하지 못했습니다. 이 업체의 발주가 있으면 먼저 정리하세요");
       }
       if (modal && modal.data.id === id) setModal(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "삭제 중 오류");
+      setError(err instanceof Error ? err.message : "업체를 삭제하지 못했습니다. 이 업체의 발주가 있으면 먼저 정리하세요");
     }
   }
 
@@ -324,7 +324,7 @@ function CompanyModal({
       fd.append("file", file);
       const res = await fetch("/api/b2b/companies/scan-doc", { method: "POST", body: fd });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "업로드 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "파일을 올리지 못했습니다. 5MB 이하 이미지·PDF 인지 확인하세요");
 
       const next: CompanyInput = { ...data, biz_doc_path: j.path };
       const filled = new Set<keyof CompanyInput>();
@@ -343,9 +343,9 @@ function CompanyModal({
       }
       setAiFields(filled);
       onChange(next);
-      setScanMsg(j.extractError ? "파일은 첨부됐지만 자동 인식에 실패했어요. 직접 입력해주세요." : "✓ 인식 완료 — 노란 칸을 원본과 대조해 확인 후 저장하세요.");
+      setScanMsg(j.extractError ? "파일은 첨부했지만 내용을 인식하지 못했습니다. 칸을 직접 입력하세요" : "✓ 내용을 인식했습니다 — 노란 칸을 원본과 대조한 뒤 저장하세요");
     } catch (err) {
-      setScanMsg(err instanceof Error ? err.message : "오류");
+      setScanMsg(err instanceof Error ? err.message : "파일을 올리지 못했습니다. 5MB 이하 이미지·PDF 인지 확인하세요");
     }
     setScanning(false);
   }
@@ -356,9 +356,9 @@ function CompanyModal({
       const res = await fetch(`/api/b2b/companies/doc?path=${encodeURIComponent(data.biz_doc_path)}`);
       const j = await res.json();
       if (j.ok) window.open(j.url, "_blank");
-      else setScanMsg(j.error || "파일 열기 실패");
+      else setScanMsg(j.error || "파일을 열지 못했습니다. 첨부를 다시 올리세요");
     } catch {
-      setScanMsg("파일 열기 실패");
+      setScanMsg("파일을 열지 못했습니다. 첨부를 다시 올리세요");
     }
   }
 
@@ -409,7 +409,7 @@ function CompanyModal({
               )}
             </div>
             <div style={{ fontSize: 12, color: "var(--sm-text-light)", marginTop: 6 }}>
-              이미지·PDF · 최대 5MB
+              이미지·PDF, 최대 5MB
             </div>
             {scanMsg && (
               <div style={{ fontSize: 12, marginTop: 8, color: scanMsg.startsWith("✓") ? "var(--sm-success)" : "var(--sm-danger)" }}>{scanMsg}</div>

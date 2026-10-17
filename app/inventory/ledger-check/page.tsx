@@ -55,7 +55,7 @@ const TAG: Record<string, { badge: string; tone: "warn" | "info"; note?: string;
   old: { badge: "오래됨", tone: "info",
     note: "'오래됨' — [발주처리] 목록에 안 보입니다. [입고 및 출고]에서 확인해 직접 정리하세요." },
   deleted: { badge: "발주 삭제됨", tone: "info", fix: SALES_REPORT,
-    note: "'발주 삭제됨' — [매출 집계]에서 [원장 대조] → [다시 맞추기]로 지우세요." },
+    note: "'발주 삭제됨' — [매출 집계]에서 [원장 대조] 뒤 [다시 맞추기]로 지우세요." },
   backfill: { badge: "옛 시트 매출", tone: "info",
     note: "'옛 시트 매출' — 다시 맞추면 귀속 월·금액이 바뀔 수 있습니다. 대표 확인 후 하세요." },
   b2b: { badge: "도매", tone: "info" },
@@ -73,7 +73,7 @@ const META: Record<string, Meta> = {
     todo: "나갔으면 '발송완료'(실제 발송일 입력), 안 나갔으면 발송일 칸에서 날짜를 다시 잡으세요." },
   b2b_cancelled: { label: "취소했는데 재고가 빠진 채인 발주", where: "발주", view: "order", fix: ORDERS,
     notes: { counted: "'발송일 뒤 실사 있음' — 실사 때 그 물건이 창고에 있었다면, 정리하면 재고가 두 번 되살아납니다. 정리한 뒤 같은 수량을 [재고 조정]으로 빼세요." },
-    todo: "발주를 열어 [수정]으로 다시 저장하세요. 실제로 나갔는데 안 돌아왔으면 '발송완료'로 되돌린 뒤 다시 '취소' → '안 돌아옴'." },
+    todo: "발주를 열어 [수정]으로 다시 저장하세요. 실제로 나갔는데 안 돌아왔으면 '발송완료'로 되돌린 뒤 다시 '취소', 이어서 '안 돌아옴'." },
   b2b_no_deduct: { label: "발송했는데 재고가 안 빠진 발주", where: "발주", view: "order", fix: ORDERS,
     todo: "발주를 열어 발송일을 확인하고 [수정]으로 다시 저장하세요." },
   b2b_stock_off: { label: "재고 차감이 꺼진 발송 회차", where: "발주", view: "order", fix: ORDERS,
@@ -92,10 +92,10 @@ const META: Record<string, Meta> = {
     todo: "발주를 열어 [수정]으로 다시 저장하세요." },
   sales_not_shipped: { label: "발송 안 됐는데 매출이 잡힌 발주", where: "발주", view: "order", fix: ORDERS, also: [SALES_REPORT],
     todo: "발주를 열어 [수정]으로 다시 저장하세요.",
-    todoFor: (r) => ((r.tags ?? []).includes("deleted") ? "[매출 집계]에서 [원장 대조] → [다시 맞추기]" : null) },
+    todoFor: (r) => ((r.tags ?? []).includes("deleted") ? "[매출 집계]에서 [원장 대조] 뒤 [다시 맞추기]" : null) },
 
   fulfill_interrupted: { label: "중간에 끊긴 택배 출고", where: "택배", view: "ref", fix: FULFILL, also: [TRADE],
-    todo: "원래 발주엑셀을 다시 올려 ④ [출고 완료]를 누르세요. 그 사이 재고를 직접 맞췄으면 확인창에서 [취소] → '재고를 이미 맞췄나요?' [확인]." },
+    todo: "원래 발주엑셀을 다시 올려 ④ [출고 완료]를 누르세요. 그 사이 재고를 직접 맞췄으면 확인창에서 [취소]를 누르고 '재고를 이미 맞췄나요?'에 [확인]." },
   fulfill_not_dispatched: { label: "CN 파일만 받고 출고 완료 안 한 배치", where: "택배", view: "ref", fix: FULFILL, also: [TRADE],
     notes: { old: "'오래됨'(14일 지남) — [발주처리] 목록에 안 보입니다. 그 주문이 다른 배치로 나갔는지 [입고 및 출고]에서 먼저 확인하고, 안 나간 것만 소매 출고로 직접 기록하세요." },
     todo: "나갔으면 원래 발주엑셀을 다시 올려 ④ [출고 완료], 안 보냈으면 [발송 안 함]." },
@@ -106,7 +106,7 @@ const META: Record<string, Meta> = {
   negative_balance: { label: "마이너스 재고", where: "재고", view: "product", fix: ADJUST, also: [MOVE], first: true,
     todo: "발송일 지난 발송대기부터 정리한 뒤 맞추세요.",
     todoFor: (r) => (r.channel === "도매" || r.channel === "도매 대량"
-      ? "[재고 이동]에서 소매 → 이 칸으로 모자란 만큼 옮기기(조정으로 0 맞추지 않기)"
+      ? "[재고 이동]에서 소매에서 이 칸으로 모자란 만큼 옮기기(조정으로 0 맞추지 않기)"
       : "실물을 세어 [재고 조정]") },
   move_unpaired: { label: "한쪽만 남은 재고 이동", where: "재고", view: "product", fix: MOVE, also: [ADJUST],
     todo: "실물을 보고 빠진 쪽을 [재고 이동]으로 보충하거나, 남은 쪽을 [재고 조정]으로 상쇄하세요." },
@@ -125,7 +125,7 @@ const META: Record<string, Meta> = {
   return_after_count: { label: "실사 뒤에 기록된 제조사 반품 출고", where: "재고", view: "product", fix: TRADE,
     todo: "실사 때 이미 나가 있었다면 이 출고를 취소하세요. 실사 때 창고에 있었다면 그대로." },
   promo_stranded: { label: "요청서 없이 남은 프로모션 재고", where: "재고", view: "product", fix: MOVE,
-    todo: "행사 몫이 아니면 [재고 이동]에서 프로모션 → 소매로 옮기세요." },
+    todo: "행사 몫이 아니면 [재고 이동]에서 프로모션에서 소매로 옮기세요." },
   inactive_balance: { label: "미사용 품목에 남은 재고", where: "재고", view: "product", fix: PRODUCTS, also: [ADJUST],
     todo: "[상품 목록]에서 잠시 '사용 중'으로 바꾸고 [재고 조정]으로 0을 맞춘 뒤 다시 해제하세요." },
   untracked_balance: { label: "'재고 관리 안 함' 품목에 남은 재고", where: "재고", view: "product", fix: PRODUCTS, also: [ADJUST],
@@ -137,7 +137,7 @@ const META: Record<string, Meta> = {
     todo: "그 요청서의 [입고 연결]로 붙이세요(재고는 그대로). 협의 생산분이면 그대로." },
 
   b2b_sales_ledger: { label: "매출 원장과 다른 B2B 발주", where: "매출", view: "order", fix: SALES_REPORT,
-    todo: "[매출 집계]에서 그 날짜가 든 기간으로 [원장 대조] → [다시 맞추기]." },
+    todo: "[매출 집계]에서 그 날짜가 든 기간으로 [원장 대조] 뒤 [다시 맞추기]." },
   sales_future: { label: "오늘 이후 날짜의 매출", where: "매출", view: "ref", fix: SALES_UPLOAD, also: [ORDERS],
     todo: "업로드 날짜 오타면 최근 업로드에서 [되돌리기] 후 다시 올리세요.",
     todoFor: (r) => ((r.tags ?? []).includes("b2b") ? "발주의 발송일을 실제 발송일로 고쳐 저장" : null) },
@@ -264,7 +264,7 @@ export default function LedgerCheckPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/inventory/ledger-check", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "불러오기 실패");
+      if (!j.ok) throw new Error(j.error || "원장 점검 결과를 불러오지 못했습니다. [다시 확인]을 누르세요.");
       setGroups(j.groups || []);
       setToday(j.today || "");
       setTruncated(!!j.truncated);
@@ -272,7 +272,7 @@ export default function LedgerCheckPage() {
       if (j.itemCap) setItemCap(Number(j.itemCap));
     } catch (e) {
       setGroups([]);
-      setError(e instanceof Error ? e.message : "불러오기 오류");
+      setError(e instanceof Error ? e.message : "원장 점검 결과를 불러오지 못했습니다. [다시 확인]을 누르세요.");
     }
     setLoading(false);
   }, []);
@@ -291,7 +291,7 @@ export default function LedgerCheckPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">원장 점검</h1>
-          <p className="b2b-page-subtitle">매주 수요일 생산 요청 전 · 읽기 전용{today ? ` · 기준일 ${today}` : ""}</p>
+          <p className="b2b-page-subtitle">매주 수요일 생산 요청 전에 봅니다. 읽기 전용{today ? `, 기준일 ${today}` : ""}</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={load} disabled={loading}>{loading ? "확인 중..." : "다시 확인"}</button>
@@ -326,7 +326,7 @@ export default function LedgerCheckPage() {
 
           {firsts.length > 0 && (
             <div className="sm-warn" style={{ marginBottom: "var(--sm-space-4)" }}>
-              먼저 정리: {firsts.map((g) => `${META[g.kind].label} ${g.count.toLocaleString()}건`).join(" · ")} — 실사·다른 정리보다 먼저
+              먼저 정리: {firsts.map((g) => `${META[g.kind].label} ${g.count.toLocaleString()}건`).join(", ")} — 실사·다른 정리보다 먼저
             </div>
           )}
 

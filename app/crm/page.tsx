@@ -119,14 +119,14 @@ export default function CrmPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/crm/messages", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "메시지를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       // 폴백 응답엔 선택 컬럼이 없음 → ""로 채워 화면 로직을 단일화
       setMessages(((j.messages || []) as CrmMessage[]).map((m) => ({
         ...m, start_date: m.start_date || "", end_date: m.end_date || "", customer: m.customer || "", msg_type: m.msg_type || "",
       })));
       setDatesSupported(j.datesSupported !== false);
       setFieldsSupported(j.fieldsSupported !== false);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "메시지를 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -148,9 +148,9 @@ export default function CrmPage() {
     try {
       const r = await fetch("/api/crm/messages", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!r.ok || !j.ok) throw new Error(j.error || "메시지를 저장하지 못했습니다. 셀 값을 다시 입력하세요");
       setMessages((prev) => prev.map((m) => (m.id === id ? (j.message as CrmMessage) : m))); // 서버 정규화 결과로 교체
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); load(); } // 실패 시 서버 상태로 재동기
+    } catch (e) { setError(e instanceof Error ? e.message : "메시지를 저장하지 못했습니다. 셀 값을 다시 입력하세요"); load(); } // 실패 시 서버 상태로 재동기
     setSavingId(null);
   }, [load]);
 
@@ -221,9 +221,9 @@ export default function CrmPage() {
       const method = edit.id ? "PUT" : "POST";
       const r = await fetch("/api/crm/messages", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!r.ok || !j.ok) throw new Error(j.error || "메시지를 저장하지 못했습니다. 입력값을 확인하세요");
       setEdit(null); load();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "메시지를 저장하지 못했습니다. 입력값을 확인하세요"); }
     setSaving(false);
   }
   async function remove(id?: string) {
@@ -242,15 +242,15 @@ export default function CrmPage() {
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState("");
   async function runImport(mode: "seed" | "csv") {
-    if (mode === "seed" && !(await confirmModal({ title: "원본 CRM 맵 가져오기", body: "8단계 · 30개 메시지가 등록됩니다.", action: "가져오기", danger: false }))) return;
+    if (mode === "seed" && !(await confirmModal({ title: "원본 CRM 맵 가져오기", body: "8단계, 30개 메시지가 등록됩니다.", action: "원본 맵 데이터 가져오기", danger: false }))) return;
     setImporting(true); setError("");
     try {
       const r = await fetch("/api/crm/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mode === "csv" ? { mode, csv: csvText } : { mode }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "가져오기 실패");
+      if (!r.ok || !j.ok) throw new Error(j.error || (mode === "csv" ? "CSV를 가져오지 못했습니다. 내용을 확인하세요" : "원본 맵을 가져오지 못했습니다. [다시 불러오기] 뒤 다시 누르세요"));
       setCsvOpen(false); setCsvText("");
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "가져오기 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : (mode === "csv" ? "CSV를 가져오지 못했습니다. 내용을 확인하세요" : "원본 맵을 가져오지 못했습니다. [다시 불러오기] 뒤 다시 누르세요")); }
     setImporting(false);
   }
 
@@ -353,7 +353,7 @@ export default function CrmPage() {
             <p className="crm-empty-lead">등록된 메시지가 없습니다.</p>
             <div className="sm-row-wrap crm-empty-actions">
               <button className="b2b-btn-primary" onClick={() => runImport("seed")} disabled={importing}>
-                {importing ? "가져오는 중..." : "원본 맵 데이터 가져오기 (8단계 · 30개)"}
+                {importing ? "가져오는 중..." : "원본 맵 데이터 가져오기 (8단계, 30개)"}
               </button>
               <button className="b2b-btn-secondary" onClick={() => openNew()}>+ 빈 상태에서 직접 추가</button>
               <button className="b2b-link-btn" onClick={() => setCsvOpen((v) => !v)}>시트 CSV 붙여넣기</button>
@@ -448,7 +448,7 @@ function FlowView({ stages, gaOf, msgOpen, labels, onCard, onAdd }: { stages: St
                             : <span className="crm-fdraft is-empty">(초안 없음)</span>
                         )}
                         {perf && <span className="crm-fperf">{perf}</span>}
-                        {gl && <span className="crm-ga" title="GA · utm_campaign 세션 귀속 · 최근 90일">GA {gl}</span>}
+                        {gl && <span className="crm-ga" title="GA utm_campaign 세션 귀속, 최근 90일">GA {gl}</span>}
                         {m.links?.url && (
                           <span className="sm-row-wrap crm-flinks">
                             <a className="crm-link" href={m.links.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>링크 ↗</a>
@@ -585,9 +585,9 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
       try {
         const j = await (await fetch(`/api/crm/ga-stats?campaigns=${encodeURIComponent(campaignsKey)}&days=${days}&daily=1`, { cache: "no-store" })).json();
         if (!alive) return;
-        if (!j.ok) throw new Error(j.error || "GA 조회 실패");
+        if (!j.ok) throw new Error(j.error || "GA 성과를 불러오지 못했습니다. GA 연동 설정을 확인하세요");
         setDaily(j.configured ? (j.daily || []) : null);
-      } catch (e) { if (alive) { setDaily(null); setGaErr(e instanceof Error ? e.message : "GA 조회 실패"); } }
+      } catch (e) { if (alive) { setDaily(null); setGaErr(e instanceof Error ? e.message : "GA 성과를 불러오지 못했습니다. GA 연동 설정을 확인하세요"); } }
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
@@ -643,7 +643,7 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
     <div className="sm-col crm-stats">
       {/* GA 추이 */}
       <div className="sm-row-wrap crm-stats-head">
-        <h2 className="crm-stats-title">캠페인 성과 추이 <span className="sm-faint crm-stats-note">GA · utm_campaign 세션 귀속 · 어제까지</span></h2>
+        <h2 className="crm-stats-title">캠페인 성과 추이 <span className="sm-faint crm-stats-note">GA utm_campaign 세션 귀속, 어제까지</span></h2>
         <div className="crm-summary-spacer" />
         <div className="sm-tabs">
           {STATS_RANGES.map((r) => (
@@ -655,7 +655,7 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
       {gaConfigured === false ? (
         <p className="sm-faint crm-asof-hint">GA 연동 준비 중</p>
       ) : !campaignsKey ? (
-        <p className="sm-faint crm-asof-hint">utm_campaign 이 달린 메시지가 없습니다.</p>
+        <p className="sm-faint crm-asof-hint">utm_campaign 이 달린 메시지가 없습니다. 메시지 링크에 utm_campaign 을 넣으세요</p>
       ) : gaErr ? (
         <div className="b2b-error">{gaErr}</div>
       ) : loading && !ga ? (
@@ -676,7 +676,7 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
               <div className="b2b-card-head"><span className="b2b-card-title">일자별 매출</span></div>
               <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.revenue, tip: `${p.label} · ${p.revenue.toLocaleString("ko-KR")}원` }))} fmtAxis={moneyCompact} />
             </section>
-            <BarList title="캠페인별 매출" caption={`최근 ${days}일 · 막대 = 매출`} data={ga.rank} fmt={moneyCompact} sub={ga.rankSub} sorted minPct={2} empty="기간 내 매출 없음" />
+            <BarList title="캠페인별 매출" caption={`최근 ${days}일, 막대 = 매출`} data={ga.rank} fmt={moneyCompact} sub={ga.rankSub} sorted minPct={2} empty="기간 내 매출 없음" />
           </div>
         </>
       )}
@@ -724,9 +724,9 @@ function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onCl
     try {
       const r = await fetch("/api/crm/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ options: draft }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!r.ok || !j.ok) throw new Error(j.error || "선택지를 저장하지 못했습니다. 이름을 확인하세요");
       onSaved(j.options as CrmOptions); // 서버 정제 결과(중복 제거 등)로 반영
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "선택지를 저장하지 못했습니다. 이름을 확인하세요"); }
     setSaving(false);
   }
 
@@ -842,7 +842,7 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
             </div>
           )}
           <label className="b2b-field"><span className="b2b-field-label">상세 설명</span>
-            <span className="b2b-field-hint">어떤 메시지인지 · 자동화 여부</span>
+            <span className="b2b-field-hint">어떤 메시지인지, 자동화 여부</span>
             <textarea className="b2b-textarea" value={data.detail} onChange={(e) => set("detail", e.target.value)} rows={2} /></label>
           <label className="b2b-field"><span className="b2b-field-label">메시지 내용</span>
             <span className="b2b-field-hint">발송되는 메시지 전문 — 흐름 탭 [메시지 열기]에서 나란히 검수</span>

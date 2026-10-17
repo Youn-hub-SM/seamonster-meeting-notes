@@ -37,9 +37,9 @@ export default function MeetingTerms() {
         body: JSON.stringify({ term: t, note }),
       });
       const j = await r.json();
-      if (!j.ok) { setMsg(j.error || "추가 실패"); if (Array.isArray(j.terms)) setTerms(j.terms); }
+      if (!j.ok) { setMsg(j.error || "용어를 추가하지 못했습니다. 이미 있는 용어인지 확인하세요"); if (Array.isArray(j.terms)) setTerms(j.terms); }
       else { setTerms(j.terms || []); setTerm(""); setNote(""); }
-    } catch { setMsg("추가 중 오류가 발생했어요."); }
+    } catch { setMsg("용어를 추가하지 못했습니다. 이미 있는 용어인지 확인하세요"); }
     setBusy(false);
   }
 

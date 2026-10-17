@@ -21,9 +21,9 @@ export default function AsOfPage() {
     try {
       const cq = channel === "전체" ? "" : `&channel=${encodeURIComponent(channel)}`;
       const j = await (await fetch(`/api/inventory?asof=${d}${cq}`, { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "날짜별 재고를 불러오지 못했습니다. 새로고침하세요.");
       setRows(j.rows || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "날짜별 재고를 불러오지 못했습니다. 새로고침하세요."); }
     setLoading(false);
   }, [channel]);
   useEffect(() => { load(date); }, [load, date]);
@@ -61,7 +61,7 @@ export default function AsOfPage() {
         <>
           <p className="sm-faint" style={{ fontSize: 13, marginBottom: 8 }}>{date} 마감 기준 · {shown.length}개 품목 · 재고자산 <strong className="b2b-money">{totalValue.toLocaleString()}원</strong></p>
           {shown.length === 0 ? (
-            <div className="b2b-empty">{rows.length === 0 ? "해당 날짜 기준 재고 기록이 없습니다." : "조건에 맞는 품목이 없습니다."}</div>
+            <div className="b2b-empty">{rows.length === 0 ? "해당 날짜 기준 재고 기록이 없습니다. 기준일을 바꾸세요." : "조건에 맞는 품목이 없습니다. 검색어를 지우거나 '0 숨기기'를 끄세요."}</div>
           ) : (
             <div className="b2b-table-wrap is-sticky-head">
               <table className="b2b-table">

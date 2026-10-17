@@ -48,11 +48,11 @@ export default function ProductsPage() {
     try {
       const res = await fetch("/api/b2b/products", { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "조회 실패");
+      if (!res.ok || !data.ok) throw new Error(data.error || "제품 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setProducts(data.products || []);
       setStockTrackedCol(data.stockTrackedCol !== false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "제품 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
     }
     setLoading(false);
   }
@@ -93,7 +93,7 @@ export default function ProductsPage() {
         body: JSON.stringify(modal.data),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "저장 실패");
+      if (!res.ok || !data.ok) throw new Error(data.error || "제품을 저장하지 못했습니다. 입력값을 확인하세요");
 
       const saved = data.product as Product;
       if (modal.mode === "create") {
@@ -112,7 +112,7 @@ export default function ProductsPage() {
       window.setTimeout(() => setJustSavedId(null), 2500);
       setModal(null);
     } catch (err) {
-      setModalError(err instanceof Error ? err.message : "저장 중 오류");
+      setModalError(err instanceof Error ? err.message : "제품을 저장하지 못했습니다. 입력값을 확인하세요");
     }
     setSaving(false);
   }
@@ -127,11 +127,11 @@ export default function ProductsPage() {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setProducts(snapshot);
-        throw new Error(data.error || "삭제 실패");
+        throw new Error(data.error || "제품을 삭제하지 못했습니다. 발주 이력이 있으면 '미사용' 처리하세요");
       }
       if (modal && modal.data.id === id) setModal(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "삭제 중 오류");
+      setError(err instanceof Error ? err.message : "제품을 삭제하지 못했습니다. 발주 이력이 있으면 '미사용' 처리하세요");
     }
   }
 
@@ -147,10 +147,10 @@ export default function ProductsPage() {
     try {
       const res = await fetch(`/api/b2b/products/cost-history?product_id=${productId}`, { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "이력 조회 실패");
+      if (!res.ok || !data.ok) throw new Error(data.error || "원가 이력을 불러오지 못했습니다. 행을 다시 누르세요");
       setHistory(data.history || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "이력 조회 중 오류");
+      setError(err instanceof Error ? err.message : "원가 이력을 불러오지 못했습니다. 행을 다시 누르세요");
       setHistoryFor(null);
     }
     setHistoryLoading(false);
@@ -164,10 +164,10 @@ export default function ProductsPage() {
       fd.append("file", file);
       const res = await fetch("/api/b2b/products/import", { method: "POST", body: fd });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "파일 분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "파일을 읽지 못했습니다. 엑셀 내려받기로 받은 양식인지 확인하세요");
       setPreview(j as ImportPreview);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "파일 분석 실패");
+      setError(e instanceof Error ? e.message : "파일을 읽지 못했습니다. 엑셀 내려받기로 받은 양식인지 확인하세요");
     }
     setImporting(false);
   }
@@ -186,12 +186,12 @@ export default function ProductsPage() {
         }),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.error || "적용 실패");
+      if (!res.ok) throw new Error(j.error || "변경을 반영하지 못했습니다. 파일을 다시 올리세요");
       setPreview(null);
       await reload();
-      if (j.errors && j.errors.length) setError(`일부 실패: ${j.errors.join("; ")}`);
+      if (j.errors && j.errors.length) setError(`일부 행을 반영하지 못했습니다. 해당 행을 고쳐 다시 올리세요 — ${j.errors.join("; ")}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "적용 실패");
+      setError(e instanceof Error ? e.message : "변경을 반영하지 못했습니다. 파일을 다시 올리세요");
     }
     setApplying(false);
   }
@@ -279,7 +279,7 @@ export default function ProductsPage() {
           </div>
         ) : (
           <div className="b2b-table-wrap">
-            <table className="b2b-table is-clickable is-responsive">
+            <table className="b2b-table is-clickable" style={{ minWidth: 1100 }}>
               <thead>
                 <tr>
                   <th>품목명</th>
@@ -739,12 +739,12 @@ function ProductModal({
           {b2bDiscountPct !== null && (
             <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 4px" }}>
               b2b 도매가는 소비자가 대비 {b2bDiscountPct >= 0 ? "−" : "+"}{Math.abs(b2bDiscountPct).toFixed(0)}% 할인
-              {Math.abs(b2bDiscountPct - 10) > 0.5 ? " · 기준(10%)과 다름" : ""}
+              {Math.abs(b2bDiscountPct - 10) > 0.5 ? " (기준 10%와 다름)" : ""}
             </p>
           )}
 
           <div className="b2b-field-row">
-            <Field label="매입단가 (원)" hint="구매 단가 · 외포장 등 제외">
+            <Field label="매입단가 (원)" hint="구매 단가, 외포장 등 제외">
               <input type="number" inputMode="numeric" className="b2b-input b2b-money"
                 value={data.purchase_price}
                 onChange={(e) => set("purchase_price", Number(e.target.value) || 0)}
@@ -894,7 +894,7 @@ function ProductModal({
               </span>
             </Field>
           ) : (
-            <Field label="송장 스캔 표시명" hint="송장 스캔 피킹 리스트에 나오는 이름 · 비우면 품목명">
+            <Field label="송장 스캔 표시명" hint="송장 스캔 피킹 리스트에 나오는 이름, 비우면 품목명">
               <input
                 type="text"
                 className="b2b-input"

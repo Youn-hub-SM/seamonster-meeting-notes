@@ -55,9 +55,9 @@ export default function ScanUploadPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/fulfill/scan/uploads", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "올린 파일 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요.");
       setUploads(j.uploads || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "올린 파일 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요."); }
     setLoading(false);
   }, []);
 
@@ -75,17 +75,17 @@ export default function ScanUploadPage() {
           const cells = await fileToCells(file);
           const p = parseScanCells(cells);
           if (p.error) { parsed.push({ name: title, invoiceCount: 0, itemCount: 0, excludedNothing: 0, error: p.error }); continue; }
-          if (p.rows.length === 0) { parsed.push({ name: title, invoiceCount: 0, itemCount: 0, excludedNothing: 0, error: "읽을 데이터 행이 없습니다." }); continue; }
+          if (p.rows.length === 0) { parsed.push({ name: title, invoiceCount: 0, itemCount: 0, excludedNothing: 0, error: "읽을 데이터 행이 없습니다. 양식을 확인하세요." }); continue; }
           parsed.push({ name: title, invoiceCount: p.invoiceCount, itemCount: p.itemCount, excludedNothing: p.excludedNothing });
           payload.push({ title, rows: p.rows });
-        } catch { parsed.push({ name: title, invoiceCount: 0, itemCount: 0, excludedNothing: 0, error: "파일을 읽지 못했습니다." }); }
+        } catch { parsed.push({ name: title, invoiceCount: 0, itemCount: 0, excludedNothing: 0, error: "파일을 읽지 못했습니다. xlsx 또는 CSV 로 다시 저장해 올리세요." }); }
       }
 
-      if (payload.length === 0) { setResult({ files: parsed, unmatched: [] }); setError("업로드할 유효한 파일이 없습니다."); setUploading(false); if (fileRef.current) fileRef.current.value = ""; return; }
+      if (payload.length === 0) { setResult({ files: parsed, unmatched: [] }); setError("업로드할 유효한 파일이 없습니다. 양식에 맞는 파일을 고르세요."); setUploading(false); if (fileRef.current) fileRef.current.value = ""; return; }
 
       // 2) 정제된 3개 열만 서버로 전송(파일 원본·고객정보는 전송 안 함)
       const j = await (await fetch("/api/fulfill/scan/uploads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ files: payload }) })).json();
-      if (!j.ok && (!j.files || j.files.length === 0)) throw new Error(j.error || "업로드 실패");
+      if (!j.ok && (!j.files || j.files.length === 0)) throw new Error(j.error || "파일을 업로드하지 못했습니다. 다시 선택하세요.");
       // 화면 표시는 서버 확정 결과 기준 — 클라이언트 요약만 보이면 서버가 걸러낸 중복(같은 파일
       //  재업로드)도 '등록됨'처럼 보인다(검증 확정 보정). excludedNothing 등 클라이언트 정보는 병합.
       type SrvFile = { name: string; invoiceCount: number; itemCount: number; error?: string };
@@ -99,7 +99,7 @@ export default function ScanUploadPage() {
       setResult({ files: merged, unmatched: j.unmatched || [] });
       if (j.error) setError(j.error);
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "업로드 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "파일을 업로드하지 못했습니다. 다시 선택하세요."); }
     setUploading(false);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -108,19 +108,19 @@ export default function ScanUploadPage() {
     if (!(await confirm({ title: "업로드 파일의 송장 데이터 삭제", body: "이 파일로 올린 송장 데이터가 지워집니다.", action: "송장 데이터 삭제" }))) return;
     try {
       const j = await (await fetch(`/api/fulfill/scan/uploads/${id}`, { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "삭제 실패");
+      if (!j.ok) throw new Error(j.error || "송장 데이터를 삭제하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요.");
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "송장 데이터를 삭제하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
   }
 
   async function clearAll() {
     if (!(await confirm({ title: "모든 송장 데이터 비우기", body: "올려둔 모든 송장 데이터와 스캔 내역이 지워집니다. 되돌릴 수 없습니다.", action: "전체 비우기" }))) return;
     try {
       const j = await (await fetch("/api/fulfill/scan/uploads", { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "비우기 실패");
+      if (!j.ok) throw new Error(j.error || "송장 데이터를 비우지 못했습니다. [다시 불러오기] 뒤 다시 누르세요.");
       setResult(null);
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "비우기 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "송장 데이터를 비우지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
   }
 
   return (
@@ -129,7 +129,7 @@ export default function ScanUploadPage() {
         <div>
           <h1 className="b2b-page-title">송장 업로드</h1>
         </div>
-        <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/scan">송장 스캔 →</Link></div>
+        <div className="b2b-page-actions"><Link className="b2b-btn-secondary" href="/fulfill/scan">송장 스캔 열기</Link></div>
       </header>
 
       {error && <div className="b2b-error">{error}{error.includes("057") ? " — supabase/migrations/057_fulfill_scan.sql 를 먼저 적용하세요." : ""}</div>}
@@ -147,7 +147,7 @@ export default function ScanUploadPage() {
           <div className="sm-success" style={{ marginTop: 12 }}>
             {result.files.map((f, i) => (
               <div key={i} style={{ color: f.error ? "var(--sm-danger)" : undefined }}>
-                {f.error ? "" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${f.invoiceCount.toLocaleString()}건 · 라인 ${f.itemCount.toLocaleString()}개${f.excludedNothing ? ` · NOTHING ${f.excludedNothing} 제외` : ""}`}
+                {f.error ? "" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${f.invoiceCount.toLocaleString()}건, 라인 ${f.itemCount.toLocaleString()}개${f.excludedNothing ? `, NOTHING ${f.excludedNothing} 제외` : ""}`}
               </div>
             ))}
             {result.unmatched.length > 0 && <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>미등록 단품코드 {result.unmatched.length}개: {result.unmatched.slice(0, 15).join(", ")}{result.unmatched.length > 15 ? " ..." : ""} — <Link href="/b2b/products">상품마스터</Link>에 없으면 스캔 집계에 빨간 줄로 표시됩니다.</div>}

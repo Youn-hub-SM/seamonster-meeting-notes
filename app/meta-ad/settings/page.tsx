@@ -29,7 +29,7 @@ const GROUPS: { title: string; fields: NumField[] }[] = [
     ],
   },
   {
-    title: "③④ 본 캠페인 운영 · 증액 (CBO)",
+    title: "③④ 본 캠페인 운영과 증액 (CBO)",
     fields: [
       { key: "scaleRoas", label: "증액 권장 ROAS ≥", step: 0.1 },
       { key: "scalePct", label: "증액 비율(%)" },
@@ -38,7 +38,7 @@ const GROUPS: { title: string; fields: NumField[] }[] = [
     ],
   },
   {
-    title: "⑤ 소재 라이브러리",
+    title: "소재 라이브러리",
     fields: [
       { key: "libraryRoas", label: "라이브러리 저장 추천 ROAS ≥", step: 0.1 },
     ],
@@ -54,7 +54,7 @@ export default function MetaAdSettingsPage() {
   useEffect(() => {
     (async () => {
       try { const j = await (await fetch("/api/meta-ad/settings", { cache: "no-store" })).json(); if (j.ok) setT(j.thresholds); }
-      catch (e) { setErr(e instanceof Error ? e.message : "조회 오류"); }
+      catch (e) { setErr(e instanceof Error ? e.message : "기준을 불러오지 못했습니다. 새로고침하세요"); }
     })();
   }, []);
 
@@ -64,8 +64,8 @@ export default function MetaAdSettingsPage() {
     try {
       const j = await (await fetch("/api/meta-ad/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(t) })).json();
       if (!j.ok) throw new Error(j.error);
-      setT(j.thresholds); setMsg("저장됨");
-    } catch (e) { setErr(e instanceof Error ? e.message : "저장 오류"); }
+      setT(j.thresholds); setMsg("기준을 저장했습니다");
+    } catch (e) { setErr(e instanceof Error ? e.message : "기준을 저장하지 못했습니다. 숫자를 확인하세요"); }
     setSaving(false);
   }
 
@@ -73,7 +73,7 @@ export default function MetaAdSettingsPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">메타 광고 · 판정 기준 설정</h1>
+          <h1 className="b2b-page-title">판정 기준 설정</h1>
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 8, alignItems: "center" }}>
           {msg && <span style={{ fontSize: 13, color: "var(--sm-success)" }}>{msg}</span>}

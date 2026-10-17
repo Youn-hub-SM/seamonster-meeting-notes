@@ -219,7 +219,6 @@ a {
   font-weight: 600;
   color: var(--sm-text-mid);
   border-radius: var(--sm-radius);
-  transition: background 0.2s, color 0.2s;
 }
 
 .header-nav-link:hover {
@@ -381,9 +380,8 @@ a {
   justify-content: center;
   padding: 24px;
   border: 2px dashed var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
 }
 
 .file-drop:hover,
@@ -416,7 +414,7 @@ a {
   padding: 12px 16px;
   background: var(--sm-bg-warm);
   border: 1px solid var(--sm-orange-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
 }
 
 .file-name {
@@ -464,7 +462,6 @@ a {
   font-size: var(--sm-fs-base);
   line-height: var(--sm-lh-body);
   resize: vertical;
-  transition: border-color 0.2s;
   color: var(--sm-black);
   background: var(--sm-white);
 }
@@ -639,9 +636,8 @@ a {
 .markdown-preview {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   padding: 24px;
-  box-shadow: var(--sm-shadow-card);
 }
 
 .markdown-text {
@@ -658,7 +654,7 @@ a {
 .settings-section {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   padding: 24px;
   margin-bottom: 20px;
 }
@@ -685,7 +681,7 @@ a {
 .correct-item {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   padding: 20px;
   margin-bottom: 12px;
 }
@@ -741,7 +737,7 @@ a {
 .correct-analysis {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   padding: 20px;
 }
 
@@ -790,7 +786,7 @@ a {
 .correct-tip {
   background: var(--sm-bg-warm);
   padding: 16px 20px;
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   font-size: var(--sm-fs-base);
   line-height: var(--sm-lh-body);
   color: var(--sm-dark);
@@ -822,7 +818,7 @@ a {
 .cs-reply {
   background: var(--sm-bg-warm);
   border: 1px solid var(--sm-orange-border);
-  border-radius: 12px;
+  border-radius: var(--sm-radius);
   padding: 20px;
   font-size: var(--sm-fs-base);
   line-height: var(--sm-lh-body);
@@ -983,7 +979,7 @@ a {
 .csm-card {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: 12px;
+  border-radius: var(--sm-radius);
   padding: 16px;
 }
 .csm-card-row {
@@ -1043,8 +1039,7 @@ a {
 .focus-banner {
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
-  box-shadow: var(--sm-shadow-card);
+  border-radius: var(--sm-radius);
   margin-bottom: 16px;
   overflow: hidden;
 }
@@ -1057,10 +1052,6 @@ a {
   font-weight: 700;
   line-height: var(--sm-lh-ui);
   white-space: nowrap;
-}
-@keyframes urgency-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
 }
 .cell-flag {
   width: 56px;
@@ -1079,8 +1070,7 @@ a {
   overflow-x: auto;
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
-  box-shadow: var(--sm-shadow-card);
+  border-radius: var(--sm-radius);
 }
 /* 인라인 상태 변경 select — pill 형태 */
 .status-select {
@@ -1100,7 +1090,6 @@ a {
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 8px;
-  transition: opacity 0.15s;
 }
 /* Modal */
 .modal-backdrop {
@@ -1465,17 +1454,15 @@ a {
   min-height: 78px;
   background: var(--sm-white);
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
-  box-shadow: var(--sm-shadow-card);
+  border-radius: var(--sm-radius);
   padding: 22px 18px;
-  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
+/* 호버 = 바탕 한 단계만(2026-10-17 선·면 결정 — 떠오름·그림자 전환 없음) */
 .home-tool-card:hover {
-  border-color: var(--sm-border-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--sm-shadow-float);
+  background: var(--sm-bg-subtle);
 }
 .home-tool-name { font-size: var(--sm-fs-xl); font-weight: 700; color: var(--sm-black); letter-spacing: var(--sm-ls-heading); line-height: var(--sm-lh-heading); }
+.home-tool-sub { font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 /* NEW 배지 — 주황은 1차 버튼·현재 위치·로고 전용이라 검정 배지로 */
 .change-new {
   display: inline-block;
@@ -1521,9 +1508,8 @@ a {
   flex-direction: column;
   gap: 0;
   border: 1px solid var(--sm-border);
-  border-radius: var(--sm-radius-card);
+  border-radius: var(--sm-radius);
   background: var(--sm-white);
-  box-shadow: var(--sm-shadow-card);
   overflow: hidden;
 }
 .change-item {
@@ -1635,7 +1621,6 @@ a {
 .app-sb-favstar.is-on { color: var(--sm-black); }
 .app-sb-tool-row {
   display: flex; align-items: center; border-radius: 8px;
-  transition: background 0.15s;
 }
 .app-sb-tool-row:hover { background: var(--sm-bg); }
 /* 현재 위치: 연주황 바탕 + 주황 700 글자(2026-10-14 대표 결정 — 막대 없이 색으로만, 굵기는 700 유지). */
@@ -1648,12 +1633,12 @@ a {
   display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: 8px;
   font-size: 13px; line-height: 1.6; font-weight: 600; color: var(--sm-text-mid);
-  transition: color 0.15s;
   background: none; border: none; cursor: pointer; text-align: left; font-family: inherit;
 }
 .app-sb-tool-row:hover .app-sb-tool { color: var(--sm-black); }
 .app-sb-tool-row.is-active .app-sb-tool { color: var(--sm-orange); font-weight: 700; }
 .app-sb-tool-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-sb-tool-sub { margin-left: 6px; font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); } /* 즐겨찾기의 상위 툴 이름(옛 'B2B · 발주' 결합 대신) */
 /* 베타 배지 — 회색 글자만(색 없음, 기획 3-C 색 줄이기). 홈 전체 메뉴 .home-map-beta 와 같은 모양 */
 .app-sb-beta { flex: 0 0 auto; margin-left: 6px; padding: 0 4px; border: 1px solid var(--sm-border); border-radius: 4px; font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0.02em; color: var(--sm-text-mid); }
 .app-sb-ext { margin-left: auto; font-size: 12px; color: var(--sm-text-mid); }  /* 외부 링크 표시 ↗ */
@@ -1669,16 +1654,16 @@ a {
   flex-shrink: 0; display: flex; align-items: center; justify-content: center;
   background: none; border: none; cursor: pointer;
   padding: 6px 9px; margin-right: 1px; border-radius: 7px;
-  color: var(--sm-text-light); transition: color 0.15s;
+  color: var(--sm-text-light);
 }
 .app-sb-chev:hover { color: var(--sm-text-mid); }
 .app-sb-tool-row.is-active .app-sb-chev { color: var(--sm-orange); }
-.app-sb-chev svg { transition: transform 0.18s ease; }
+.app-sb-chev svg { transition: transform 0.18s ease; }  /* 남기는 모션 (2) 펼침 화살표 회전 */
 .app-sb-chev.is-open svg { transform: rotate(90deg); }
 .app-sb-menu { margin: 1px 0 5px; padding-left: 27px; display: flex; flex-direction: column; gap: 1px; }
 .app-sb-menu-row { display: flex; align-items: center; }  /* 즐겨찾기 편집 모드: 메뉴 링크 + ＋/✕ 버튼 */
 .app-sb-menu-row .app-sb-menu-item { flex: 1; min-width: 0; }
-.app-sb-menu-item { display: flex; align-items: center; padding: 6px 10px; border-radius: 7px; font-size: 13px; color: var(--sm-text-mid); transition: background 0.15s, color 0.15s; }
+.app-sb-menu-item { display: flex; align-items: center; padding: 6px 10px; border-radius: 7px; font-size: 13px; color: var(--sm-text-mid); }
 .app-sb-menu-item:hover { background: var(--sm-bg); color: var(--sm-black); }
 .app-sb-menu-item.is-active { color: var(--sm-orange); font-weight: 700; background: var(--sm-orange-light); }
 .app-sb-foot { border-top: 1px solid var(--sm-border); padding: 12px 10px 4px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1697,22 +1682,22 @@ a {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; flex-shrink: 0; margin-right: 2px;
   background: none; border: 1px solid var(--sm-border); border-radius: 7px;
-  color: var(--sm-text-light); cursor: pointer; transition: background 0.15s, color 0.15s;
+  color: var(--sm-text-light); cursor: pointer;
 }
 .app-sb-collapse:hover { background: var(--sm-bg); color: var(--sm-text-mid); }
-.app-sb-collapse svg { display: block; transition: transform 0.18s ease; }
+.app-sb-collapse svg { display: block; transition: transform 0.18s ease; }  /* 남기는 모션 (2) 접기 화살표 회전 */
 @media (max-width: 900px) { .app-sb-collapse { display: none; } } /* 모바일은 드로어 — 접기 없음 */
 
 /* 접힘 — 데스크톱 전용, 40px 띠에 » 버튼 하나만(메뉴·아이콘·스크롤 없음 — 2026-10-14 대표 결정). 모바일 드로어엔 미적용 */
 @media (min-width: 901px) {
-  .app-shell.is-collapsed .app-sidebar { width: 40px; padding: 12px 6px; transition: width 0.18s ease, margin-right 0.18s ease, padding 0.18s ease; }
+  .app-shell.is-collapsed .app-sidebar { width: 40px; padding: 12px 6px; transition: width 0.18s ease, margin-right 0.18s ease, padding 0.18s ease; }  /* 남기는 모션 (3) 사이드바 접힘 폭 */
   .app-shell.is-collapsed .app-sb-brand { display: none; }
   .app-shell.is-collapsed .app-sb-head { justify-content: center; }
   .app-shell.is-collapsed .app-sb-collapse { margin-right: 0; }
 
   /* 접힌 상태에서 마우스 오버 → 임시 펼침(메뉴는 이때만 렌더). 레이아웃 자리는 40px 그대로 두고
      (margin-right 음수 = 236 − 40) 본문 위로 겹쳐 펼친다 — 본문이 밀리지 않음. */
-  .app-shell.is-collapsed .app-sidebar.is-hover-open { width: 236px; padding: 12px 10px; margin-right: -196px; box-shadow: 2px 0 16px rgba(0, 0, 0, 0.12); }
+  .app-shell.is-collapsed .app-sidebar.is-hover-open { width: 236px; padding: 12px 10px; margin-right: -196px; box-shadow: var(--sm-shadow-float); }  /* 떠 있는 면(ⓒ) */
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-brand { display: block; }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-head { justify-content: flex-start; }
   .app-shell.is-collapsed .app-sidebar.is-hover-open .app-sb-collapse { margin-right: 2px; }
@@ -1723,7 +1708,9 @@ a {
    성공=회색 테두리, 오류=빨간 테두리, 되돌리기=검정 밑줄 버튼. 색은 뜻이 있을 때만(기획 3-C).
    ─────────────────────────────────────────────── */
 .sm-toast-stack { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: min(560px, calc(100vw - 32px)); }
-.sm-toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: 100%; padding: 10px 10px 10px 16px; background: var(--sm-white); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius-btn); box-shadow: var(--sm-shadow-float); font-size: 13px; line-height: 1.5; color: var(--sm-black); }
+.sm-toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: 100%; padding: 10px 10px 10px 16px; background: var(--sm-white); border: 1px solid var(--sm-border-strong); border-radius: var(--sm-radius-btn); box-shadow: var(--sm-shadow-float); font-size: 13px; line-height: 1.5; color: var(--sm-black); animation: sm-toast-in 0.15s ease-out; }
+/* 남기는 모션 (1) 토스트 등장 — 아래서 8px 올라온다. 사용자가 한 일에 대한 응답이라 움직인다(기획 원칙 5) */
+@keyframes sm-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .sm-toast.is-error { border-color: var(--sm-danger); color: var(--sm-danger); }
 .sm-toast-text { flex: 1; min-width: 0; }
 .sm-toast-undo { flex: 0 0 auto; min-height: 28px; padding: 0 8px; background: none; border: none; font: inherit; font-weight: 700; color: var(--sm-black); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; border-radius: 6px; }
@@ -1743,8 +1730,8 @@ a {
 @media (max-width: 900px) {
   .app-sidebar {
     position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; height: 100dvh; /* iOS 하단 툴바가 로그아웃 풋을 가리지 않게 */
-    transform: translateX(-100%); transition: transform 0.22s ease;
-    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.12);
+    transform: translateX(-100%); transition: transform 0.22s ease;  /* 남기는 모션 (3) 사이드바 — 모바일 드로어 */
+    box-shadow: var(--sm-shadow-float);
   }
   .app-sidebar.is-open { transform: translateX(0); }
   .app-sb-backdrop { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); z-index: 55; }
@@ -1829,3 +1816,11 @@ a {
 .sm-search-open-label { flex: 1; min-width: 0; }
 .sm-search-open-kbd { flex-shrink: 0; font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); }
 @media (max-width: 900px) { .sm-search-open-kbd { display: none; } .b2b-modal-backdrop.sm-search-backdrop { padding: var(--sm-space-3); padding-top: var(--sm-space-5); align-items: flex-start; } .sm-search { max-width: none; border-radius: var(--sm-radius-card); } }
+
+/* ───────────────────────────────────────────────
+   움직임 끄기 — 2026-10-17 선·면·모션 결정. 남긴 모션은 셋(토스트 등장·펼침 화살표 회전·사이드바 접힘)뿐이고,
+   OS 가 '동작 줄이기'를 켜면 그것도 전부 끈다. 로딩 스피너(.spinner/.dlog-spin)도 함께 멈춘다 — 정지된 고리로 보인다.
+   ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

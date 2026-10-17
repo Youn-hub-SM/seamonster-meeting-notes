@@ -130,14 +130,15 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
       } catch { throw new Error(lost); }
       if (!j) throw new Error(lost);
       if (j.code === "request_key_conflict") submitKey.current = newKey(); // 다음 누름은 새 기록
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || `${done ? `${type === "입고" ? "구매" : "판매"}를` : "대기로"} 저장하지 못했습니다. 다시 누르세요.`);
       if (j.replay) toast.success("이미 저장돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      else toast.success(done ? `${type === "입고" ? "구매" : "판매"}를 저장했습니다` : "대기로 저장했습니다");
       if (j.link) {
         const m = linkMessage(j.link, (pid) => valid.find((l) => l.product_id === pid)?.name || "품목");
         if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
       }
       onSaved();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : `${done ? `${type === "입고" ? "구매" : "판매"}를` : "대기로"} 저장하지 못했습니다. 다시 누르세요.`); }
     setSaving(false);
   }
 
@@ -167,7 +168,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
             <select className="b2b-input" value={done && !customerReturn ? reqId : ""} disabled={!done || customerReturn} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }} style={{ width: "auto", maxWidth: 340 }}
               title={customerReturn ? "고객 반품은 요청서에 연결되지 않습니다" : done ? "이 입고를 연결할 제조사 요청서" : "대기 저장은 요청서에 연결되지 않습니다"}>
               <option value="">연결 안 함</option>
-              {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
+              {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` ${r.title}` : ""} — 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
             </select>
           </label>
         )}
@@ -204,7 +205,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
           <input className="b2b-input" value={search} onChange={(e) => { setSearch(e.target.value); setActive(-1); }} onKeyDown={onSearchKey} autoComplete="off"
             placeholder="품목·SKU 검색" aria-label="제품 검색"
             style={{ fontSize: 13, padding: "13px 16px" }} />
-          <div className="b2b-field-hint is-below">이름·옵션·SKU·초성(ㄱㅇ)·여러 단어(광어 100 1kg) · ↓↑ 이동, Enter 추가</div>
+          <div className="b2b-field-hint is-below">이름·옵션·SKU·초성(ㄱㅇ)·여러 단어(광어 100 1kg). ↓↑ 이동, Enter 추가</div>
           {matches.length > 0 && (
             <div className="inv-buy-suggest" ref={suggestRef}>
               {matches.map((p, i) => (
@@ -215,7 +216,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
               ))}
             </div>
           )}
-          {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "10px 14px", fontSize: 13 }}>일치하는 제품 없음</div></div>}
+          {search.trim() && matches.length === 0 && <div className="inv-buy-suggest"><div className="sm-faint" style={{ padding: "10px 14px", fontSize: 13 }}>일치하는 제품 없음 — 다른 글자로 검색하세요</div></div>}
         </div>
 
         <div className="b2b-table-wrap">
@@ -231,13 +232,13 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
                   <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>
                 </tr>
               ))}
-              {lines.length === 0 && <tr><td colSpan={5} className="sm-faint" style={{ padding: "16px 4px" }}>추가한 제품이 없습니다.</td></tr>}
+              {lines.length === 0 && <tr><td colSpan={5} className="sm-faint" style={{ padding: "16px 4px" }}>추가한 제품이 없습니다. 위 검색창에서 제품을 고르세요.</td></tr>}
             </tbody>
           </table>
         </div>
 
         <div className="sm-between" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--sm-border)", flexWrap: "wrap", gap: 12 }}>
-          <span className="sm-faint" style={{ fontSize: 13 }}>{totals.items}개 품목 · 총 {totals.qty.toLocaleString()}개</span>
+          <span className="sm-faint" style={{ fontSize: 13 }}>{totals.items}개 품목, 총 {totals.qty.toLocaleString()}개</span>
           <span style={{ fontSize: 17, fontWeight: 800 }}>총액 {totals.amount.toLocaleString()}</span>
         </div>
       </section>

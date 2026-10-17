@@ -66,12 +66,12 @@ export default function SalesHistoryPage() {
         const res = await fetch(buildUrl(0), { cache: "no-store" });
         const j = await res.json();
         if (cancelled) return;
-        if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        if (!res.ok || !j.ok) throw new Error(j.error || "변경 기록을 불러오지 못했습니다. [다시 불러오기]를 누르세요.");
         setItems(j.activities || []);
         setHasMore(!!j.hasMore);
         setError("");
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "조회 중 오류");
+        if (!cancelled) setError(e instanceof Error ? e.message : "변경 기록을 불러오지 못했습니다. [다시 불러오기]를 누르세요.");
       }
       if (!cancelled) setLoading(false);
     }, 250);
@@ -145,7 +145,7 @@ export default function SalesHistoryPage() {
           <div className="b2b-loading">불러오는 중...</div>
         ) : items.length === 0 ? (
           <div className="b2b-empty">
-            {hasFilter ? "조건에 맞는 기록이 없습니다." : "매출 변경 기록이 없습니다."}
+            {hasFilter ? "조건에 맞는 기록이 없습니다." : "매출 변경 기록이 없습니다. 매출 데이터 업로드에서 파일을 올리세요."}
             {hasFilter && <div className="b2b-empty-action"><button type="button" className="b2b-btn-secondary" onClick={reset}>조건 지우기</button></div>}
           </div>
         ) : (
@@ -167,7 +167,7 @@ export default function SalesHistoryPage() {
                           <span>{a.summary}</span>
                         </span>
                         <span className="b2b-history-meta">
-                          {a.actor ? `${a.actor} · ` : ""}{formatClock(a.created_at)}
+                          {a.actor ? `${a.actor} ` : ""}{formatClock(a.created_at)}
                         </span>
                       </div>
                     );

@@ -61,11 +61,11 @@ export default function InstagramDmPage() {
         (await fetch("/api/instagram/rules", { cache: "no-store" })).json(),
         (await fetch("/api/instagram/logs", { cache: "no-store" })).json(),
       ]);
-      if (!a.ok) throw new Error(a.error || "계정 조회 실패");
+      if (!a.ok) throw new Error(a.error || "계정을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setInfo(a as AccountsRes);
       if (r.ok) setRules(r.rules || []); else if (!/does not exist|찾을 수 없|relation/i.test(r.error || "")) setError(r.error || "");
       if (l.ok) setLogs(l.logs || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "계정을 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -81,10 +81,10 @@ export default function InstagramDmPage() {
     try {
       const j = await (await fetch("/api/instagram/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: tokenInput.trim() }) })).json();
       if (!j.ok) throw new Error(j.error);
-      setNotice(`@${j.added} 연결됨 — '웹훅 구독'까지 눌러야 댓글 알림이 옵니다.`);
+      setNotice(`@${j.added} 계정을 연결했습니다 — [웹훅 구독]까지 눌러야 댓글 알림이 옵니다`);
       setTokenInput("");
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "등록 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "계정을 연결하지 못했습니다. 토큰을 확인하세요"); }
     setBusy(false);
   }
   async function subscribe(igUserId: string) {
@@ -92,8 +92,8 @@ export default function InstagramDmPage() {
     try {
       const j = await (await fetch("/api/instagram/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscribe: igUserId }) })).json();
       if (!j.ok) throw new Error(j.error);
-      setNotice(`@${j.subscribed} 웹훅 구독 완료`);
-    } catch (e) { setError(e instanceof Error ? e.message : "구독 실패"); }
+      setNotice(`@${j.subscribed} 웹훅을 구독했습니다`);
+    } catch (e) { setError(e instanceof Error ? e.message : "웹훅을 구독하지 못했습니다. 토큰 권한을 확인하세요"); }
     setBusy(false);
   }
   async function removeAccount(a: Account) {
@@ -124,7 +124,7 @@ export default function InstagramDmPage() {
       const j = await (await fetch(`/api/instagram/media?account=${encodeURIComponent(igUserId)}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error);
       setMedia(j.media || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "게시물 조회 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "게시물을 불러오지 못했습니다. 계정을 다시 고르세요"); }
     setMediaLoading(false);
   }
   async function saveRule() {
@@ -146,7 +146,7 @@ export default function InstagramDmPage() {
       if (!j.ok) throw new Error(j.error);
       setDraft(null);
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "규칙을 저장하지 못했습니다. 입력값을 확인하세요"); }
     setSaving(false);
   }
   // 켜기/끄기 — 확인창 없이 바로 반영하고 되돌리기 토스트(같은 호출로 원래 값)
@@ -195,7 +195,7 @@ export default function InstagramDmPage() {
         <div className="ig-webhook-row">
           <span className="ig-webhook-label">웹훅 URL</span>
           <code className="ig-webhook-url">{info?.webhookUrl || "..."}</code>
-          <button className="b2b-btn-secondary ig-btn-sm" onClick={() => { navigator.clipboard?.writeText(info?.webhookUrl || ""); setNotice("웹훅 URL 복사됨"); }}>URL 복사</button>
+          <button className="b2b-btn-secondary ig-btn-sm" onClick={() => { navigator.clipboard?.writeText(info?.webhookUrl || ""); setNotice("웹훅 URL을 복사했습니다"); }}>URL 복사</button>
         </div>
         <div className="ig-accounts">
           {(info?.accounts || []).map((a) => (
@@ -206,7 +206,7 @@ export default function InstagramDmPage() {
               <IconButton label="연결 해제" onClick={() => removeAccount(a)}>✕</IconButton>
             </div>
           ))}
-          {(info?.accounts.length || 0) === 0 && <p className="sm-faint">연결된 계정이 없습니다.</p>}
+          {(info?.accounts.length || 0) === 0 && <p className="sm-faint">연결된 계정이 없습니다. 아래에 토큰을 넣어 연결하세요</p>}
         </div>
         <span className="b2b-field-hint">인스타그램 로그인 장기 토큰을 계정별로 붙여넣는다</span>
         <div className="ig-token-row">
@@ -266,7 +266,7 @@ export default function InstagramDmPage() {
       {/* 발송 로그 */}
       <section className="b2b-card">
         <div className="b2b-card-head"><span className="b2b-card-title">최근 발송</span><span className="sm-faint ig-head-note">최근 100건</span></div>
-        {logs.length === 0 ? <p className="sm-faint">아직 발송 기록이 없습니다.</p> : (
+        {logs.length === 0 ? <p className="sm-faint">발송 기록이 없습니다.</p> : (
           <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
               <thead><tr><th>시각</th><th>계정</th><th>게시물</th><th>댓글 작성자</th><th className="ig-col-media">댓글</th><th>상태</th></tr></thead>
@@ -339,7 +339,7 @@ export default function InstagramDmPage() {
                 <textarea className="b2b-textarea" rows={4} value={draft.message} onChange={(e) => setDraft({ ...draft, message: e.target.value })}
                   placeholder={"예: {닉네임}님, 참여 감사합니다! 이벤트 안내는 여기서 확인하세요 → https://link.seamonster.kr/이벤트"} aria-invalid={fieldErr.message ? "true" : undefined} />
                 {fieldErr.message && <span className="b2b-field-error">{fieldErr.message}</span>}
-                <span className="sm-faint ig-hint">{"{닉네임}"} = 댓글 작성자 이름 · 링크는 메시지에 직접 포함</span></label>
+                <span className="sm-faint ig-hint">{"{닉네임}"} = 댓글 작성자 이름, 링크는 메시지에 직접 포함</span></label>
               <label className="b2b-field"><span className="b2b-field-label">링크 (클릭 집계용)</span>
                 <span className="b2b-field-hint">브랜드링크면 클릭수가 표에 집계된다</span>
                 <input className="b2b-input" value={draft.link} onChange={(e) => setDraft({ ...draft, link: e.target.value })} placeholder="예: https://link.seamonster.kr/이벤트" spellCheck={false} /></label>

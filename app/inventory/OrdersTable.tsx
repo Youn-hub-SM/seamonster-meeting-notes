@@ -93,12 +93,12 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
       if (rowLimitRef.current > 1500) qs.set("limit", String(rowLimitRef.current));
       const j = await (await fetch("/api/inventory/orders" + (qs.toString() ? "?" + qs.toString() : ""), { cache: "no-store" })).json();
       if (seq !== seqRef.current) return; // 그 사이 새 요청이 나감 — 이 응답은 버린다
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "입고·출고 목록을 불러오지 못했습니다. 새로고침하세요.");
       setOrders(j.orders || []);
       setLoadedQ(debouncedSearch);
       setMore(!!j.more);
       setNextBefore(j.next_before || null);
-    } catch (e) { if (seq === seqRef.current) setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { if (seq === seqRef.current) setError(e instanceof Error ? e.message : "입고·출고 목록을 불러오지 못했습니다. 새로고침하세요."); }
     if (seq === seqRef.current) setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fType, fFrom, fTo, debouncedSearch]);
@@ -161,7 +161,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   async function cancel(o: Order) {
     // 이동(채널이동 짝)은 move DELETE 로 — 음수 가드·요청서 재개 판정이 거기에만 있고, orders DELETE 는 이동을 거절한다(409).
     const move = isMoveOrder(o);
-    const label = move ? `${o.move_from || "?"} → ${o.move_to || "?"} 이동` : (o.order_no || "이 건");
+    const label = move ? `${o.move_from || "?"}에서 ${o.move_to || "?"}로 이동` : (o.order_no || "이 건");
     const cnt = move ? Math.max(1, new Set(o.items.map((x) => `${x.sku ?? ""}|${x.product_name}`)).size) : o.item_count; // 이동은 출발·도착 두 행이라 품목 수로 센다
     const fulfillTail = move ? "" : isFulfillBatch(o)
       ? " 온라인발주 출고 묶음입니다 — 처리완료 주문 기록도 지워져 같은 주문을 다시 올리면 다시 출고됩니다(다른 배치로도 출고된 주문은 처리완료로 남습니다). 이 배치의 [재고 차감 기록]분도 함께 취소됩니다."
@@ -190,7 +190,8 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     });
     const j = await r.json().catch(() => null);
     setSaving(false);
-    if (!r.ok || !j?.ok) { toast.error(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { toast.error(`단가를 저장하지 못했습니다(${j?.error || "서버 오류"}). 새로고침 뒤 다시 누르세요.`); return; }
+    toast.success("단가를 저장했습니다");
     setEditId(null);
     // 목록을 다시 불러오지 않고 제자리 갱신 — '더 보기'로 내려간 과거 주문을 고쳐도 화면이 접히지 않게.
     //  금액 계산은 서버와 동일(단가 × 수량, 합계는 품목 합).
@@ -251,7 +252,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
   if (error) return <>{head}<div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div></>;
   if (shown.length === 0) {
     if (loading) return <>{head}<div className="b2b-loading">검색 중...</div></>;
-    return <>{head}<div className="b2b-empty">{orders.length === 0 && !filtered ? "입고·출고 기록이 없습니다." : "조건에 맞는 기록이 없습니다."}{filtered && <div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={clearFilters}>조건 지우기</button></div>}</div></>;
+    return <>{head}<div className="b2b-empty">{orders.length === 0 && !filtered ? "입고·출고 기록이 없습니다. [입·출·조정 기록]으로 기록하세요." : "조건에 맞는 기록이 없습니다."}{filtered && <div className="b2b-empty-action"><button className="b2b-btn-secondary" onClick={clearFilters}>조건 지우기</button></div>}</div></>;
   }
 
   return (
@@ -274,7 +275,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                 <tr onClick={() => toggle(o.key)}>
                   {/* 이동 배지는 실제 칸 방향(출고 칸 → 입고 칸) — 도매 대량·프로모션 이동을 도매 이동으로 읽지 않게 */}
                   <td style={{ whiteSpace: "nowrap" }}>
-                    <span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type === "이동" ? (o.move_from && o.move_to ? `이동(${o.move_from}→${o.move_to})` : "이동") : future ? `${o.type} 예정 ${o.txn_date.slice(5)}` : `${o.type} ${o.status}`}</span>
+                    <span className="b2b-status-pill" style={{ background: badge.bg, color: badge.fg }}>{o.type === "이동" ? (o.move_from && o.move_to ? `${o.move_from}에서 ${o.move_to}로 이동` : "이동") : future ? `${o.type} 예정 ${o.txn_date.slice(5)}` : `${o.type} ${o.status}`}</span>
                     {!done && o.txn_date && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{o.txn_date.slice(5)}</span>}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
@@ -426,29 +427,29 @@ function ProcessModal({ o, onClose, onDone }: { o: Order; onClose: () => void; o
         r = await fetch(`/api/inventory/orders`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...key, status: "완료", date, ...(requestId ? { request_id: requestId } : {}) }) });
         j = await r.json().catch(() => null);
       } catch { throw new Error("응답을 받지 못했습니다 — 처리됐을 수 있으니 목록을 새로고침해 먼저 확인하세요."); }
-      if (!r.ok || !j?.ok) throw new Error(`${label} 실패: ${j?.error || "서버 오류"}`);
+      if (!r.ok || !j?.ok) throw new Error(`${label}하지 못했습니다(${j?.error || "서버 오류"}). 다시 누르세요.`);
       // 처리는 끝났다 — 연결 결과(실패 포함)·서버 안내(notice)는 목록 위 배너로 남기고 목록을 다시 불러온다.
       //  연결이 빠지면 입고는 그대로 두고 [입고 연결]로 다시 잇는다(S11). 연결 안 함을 이미 확인받았으면 같은 안내를 다시 띄우지 않는다.
-      const title = `${label} ${o.order_no || "단건"} · `;
+      const title = `${label} ${o.order_no || "단건"}: `;
       if (j.link) onDone({ ok: !!j.link.ok && !(j.link.failed?.length), text: title + linkMessage(j.link, nameOf) });
       else if (j.notice && !asked) onDone({ ok: false, text: title + j.notice });
       else onDone(null);
       return;
-    } catch (e) { setError(e instanceof Error ? e.message : `${label} 실패`); }
+    } catch (e) { setError(e instanceof Error ? e.message : `${label}하지 못했습니다. 다시 누르세요.`); }
     setBusy(false);
   }
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: linkable ? 480 : 400 }}>
         <div className="b2b-modal-head">
-          <span className="b2b-modal-title">{label} · {o.order_no || "단건"}</span>
+          <span className="b2b-modal-title">{label} {o.order_no || "단건"}</span>
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose} disabled={busy}>✕</button>
         </div>
         <div className="b2b-modal-body">
           <label className="b2b-field"><span className="b2b-field-label">처리일</span>
             <input className="b2b-input" type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} autoFocus /></label>
           <p className="sm-faint" style={{ fontSize: 12, margin: "4px 0 0" }}>
-            거래일이 처리일로 바뀝니다{o.txn_date ? `(대기 날짜 ${o.txn_date.slice(5)})` : ""}{customerReturn ? " · 고객 반품이라 요청서에 연결하지 않습니다" : ""}
+            거래일이 처리일로 바뀝니다{o.txn_date ? `(대기 날짜 ${o.txn_date.slice(5)})` : ""}{customerReturn ? ". 고객 반품이라 요청서에 연결하지 않습니다" : ""}
           </p>
           {linkable && (
             <div style={{ marginTop: 12 }}>

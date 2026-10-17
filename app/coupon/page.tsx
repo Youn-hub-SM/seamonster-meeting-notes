@@ -89,7 +89,7 @@ export default function CouponPage() {
           {COUPON_CHANNELS.map((c) => (
             <button key={c.key} className="b2b-card" style={{ textAlign: "left", cursor: "pointer", padding: 18 }} onClick={() => pickChannel(c.key)}>
               <div style={{ fontSize: 15, fontWeight: 800 }}>{c.label}</div>
-              <div style={{ marginTop: 10, color: "var(--sm-orange)", fontWeight: 700, fontSize: 13 }}>시작하기 →</div>
+              <div style={{ marginTop: 10, color: "var(--sm-orange-text)", fontWeight: 700, fontSize: 13 }}>시작하기</div>
             </button>
           ))}
         </div>
@@ -126,8 +126,8 @@ export default function CouponPage() {
               <div className="sm-between" style={{ marginTop: 18, gap: 10 }}>
                 <button className="b2b-btn-secondary" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>이전 단계</button>
                 <span className="sm-row" style={{ gap: 0 }}>
-                  <button className="b2b-btn-primary" onClick={() => setStep((s) => s + 1)} disabled={!stepValid()}>{step === totalSteps - 1 ? "요청서 만들기 →" : "다음 단계 →"}</button>
-                  {!stepValid() && <span className="b2b-btn-why">필수 항목(*)을 채우면 켜집니다 · 기간은 종료가 시작보다 늦게</span>}
+                  <button className="b2b-btn-primary" onClick={() => setStep((s) => s + 1)} disabled={!stepValid()}>{step === totalSteps - 1 ? "요청서 만들기" : "다음 단계"}</button>
+                  {!stepValid() && <span className="b2b-btn-why">필수 항목(*)을 채우면 켜집니다, 기간은 종료가 시작보다 늦게</span>}
                 </span>
               </div>
             </section>
@@ -141,7 +141,7 @@ export default function CouponPage() {
                 <input className="b2b-input" value={requester} onChange={(e) => setRequester(e.target.value)} placeholder="예: 홍길동" /></label>
               <pre style={{ whiteSpace: "pre-wrap", background: "var(--sm-bg)", border: "1px solid var(--sm-border)", borderRadius: 8, padding: 14, fontSize: 13, lineHeight: 1.6, marginTop: 10, fontFamily: "inherit" }}>{text}</pre>
               <div className="sm-between" style={{ marginTop: 14, gap: 10, flexWrap: "wrap" }}>
-                <button className="b2b-btn-secondary" onClick={() => setStep(totalSteps - 1)}>← 답변 수정</button>
+                <button className="b2b-btn-secondary" onClick={() => setStep(totalSteps - 1)}>답변 수정</button>
                 <div className="sm-row" style={{ gap: 8 }}>
                   <button className="b2b-btn-secondary" onClick={reset}>처음부터 다시</button>
                   <button className="b2b-btn-primary" onClick={copy}>{copied ? "복사됨 ✓" : "요청서 복사"}</button>

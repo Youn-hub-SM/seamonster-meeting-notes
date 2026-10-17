@@ -41,8 +41,8 @@ export async function deleteLedger(url: string, ui: LedgerUi): Promise<LedgerDel
   if (!r) { ui.error("응답을 받지 못했습니다 — 취소됐을 수 있으니 새로고침해 먼저 확인하세요."); return { ok: false }; }
   if (!r.ok || !j?.ok) {
     if (isPartial(j)) return { ok: true, warn: true, notice: j?.error || "재고는 원복됐지만 뒤처리 일부를 마치지 못했습니다 — 새로고침해 목록을 확인하세요." };
-    const tail = r.status === 409 || /새로고침|다시 시도/.test(j?.error || "") ? "" : " — 새로고침 후 다시 시도하세요.";
-    ui.error(`취소 실패: ${j?.error || "서버 오류"}${tail}`);
+    const tail = r.status === 409 || /새로고침|다시 시도|다시 누르/.test(j?.error || "") ? "" : " 새로고침 뒤 다시 누르세요.";
+    ui.error(`기록을 취소하지 못했습니다(${j?.error || "서버 오류"}).${tail}`);
     return { ok: false };
   }
   return { ok: true, notice: j.notice || undefined };
@@ -69,10 +69,10 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
       if (type) sp.set("type", type);
       if (productId) sp.set("product_id", productId);
       const j = await (await fetch(`/api/inventory/txns?${sp.toString()}`, { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "기록 목록을 불러오지 못했습니다. 새로고침하세요.");
       const all: InventoryTxn[] = j.rows || [];
       setRows(types && types.length ? all.filter((t) => types.includes(t.type)) : all);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "기록 목록을 불러오지 못했습니다. 새로고침하세요."); }
     setLoading(false);
   }, [type, types, productId]);
   useEffect(() => { load(); }, [load, reloadKey]);
@@ -96,7 +96,8 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
     });
     const j = await r.json().catch(() => null);
     setSaving(false);
-    if (!r.ok || !j?.ok) { toast.error(`단가 수정 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { toast.error(`단가를 저장하지 못했습니다(${j?.error || "서버 오류"}). 새로고침 뒤 다시 누르세요.`); return; }
+    toast.success("단가를 저장했습니다");
     setEditId(null);
     await load();
     onChanged?.();
@@ -110,7 +111,7 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
   );
   if (loading) return <>{flashEl}<div className="b2b-loading">불러오는 중...</div></>;
   if (error) return <>{flashEl}<div className="b2b-error">{error}{(error.includes("inventory") || error.includes("relation")) ? " — supabase/migrations/031_inventory.sql 를 먼저 적용하세요." : ""}</div></>;
-  if (rows.length === 0) return <>{flashEl}<div className="b2b-empty">{type ? `${type} 기록이 없습니다.` : "입고·출고 기록이 없습니다."}</div></>;
+  if (rows.length === 0) return <>{flashEl}<div className="b2b-empty">{type ? `${type} 기록이 없습니다. 재고 목록의 [입·출·조정 기록]으로 기록하세요.` : "입고·출고 기록이 없습니다. 재고 목록의 [입·출·조정 기록]으로 기록하세요."}</div></>;
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
   return (

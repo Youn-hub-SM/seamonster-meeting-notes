@@ -108,7 +108,7 @@ export default function NoticePage() {
         }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j.ok) throw new Error(j.error || "공지 생성 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "공지를 만들지 못했습니다. 내용을 확인하고 [공지 만들기]를 다시 누르세요");
       setResult({
         type: typeof j.type === "string" ? j.type : "general",
         typeLabel: typeof j.typeLabel === "string" ? j.typeLabel : "",
@@ -120,7 +120,7 @@ export default function NoticePage() {
       setDraft(typeof j.text === "string" ? j.text : "");
       setExtras(sent); // 서버가 받은 것만 남긴다 — 비운 값·다른 유형의 값은 여기서 정리된다
     } catch (e) {
-      setError(e instanceof Error ? e.message : "공지 생성 중 오류");
+      setError(e instanceof Error ? e.message : "공지를 만들지 못했습니다. 내용을 확인하고 [공지 만들기]를 다시 누르세요");
     } finally {
       setBusy("");
       setPendingType(null); // 실패해도 지운다 — select 가 result.type 으로 돌아가야 같은 유형을 다시 고를 수 있다(onChange)
@@ -150,12 +150,12 @@ export default function NoticePage() {
     try {
       const res = await fetch("/api/notice/prompt", { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "프롬프트 조회 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "프롬프트를 불러오지 못했습니다. 새로고침하세요");
       setPrompt(j.prompt || "");
       setPromptDefault(j.default || "");
       setPromptLoaded(true); // 성공했을 때만 편집·저장을 연다 — 조회 실패 뒤 빈 칸을 저장하면 남이 저장한 프롬프트가 지워진다
     } catch (e) {
-      setPromptMsg(e instanceof Error ? e.message : "프롬프트 조회 실패");
+      setPromptMsg(e instanceof Error ? e.message : "프롬프트를 불러오지 못했습니다. 새로고침하세요");
     }
   }, []);
   useEffect(() => { loadPrompt(); }, [loadPrompt]);
@@ -171,11 +171,11 @@ export default function NoticePage() {
         body: JSON.stringify({ prompt: next !== undefined ? next : prompt }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "프롬프트를 저장하지 못했습니다. 내용을 확인하세요");
       setPrompt(j.prompt || "");
-      setPromptMsg(j.isDefault ? "저장됨 · 기본값 사용 중" : "저장됨");
+      setPromptMsg(j.isDefault ? "프롬프트를 저장했습니다 (기본값 사용 중)" : "프롬프트를 저장했습니다");
     } catch (e) {
-      setPromptMsg(e instanceof Error ? e.message : "저장 실패");
+      setPromptMsg(e instanceof Error ? e.message : "프롬프트를 저장하지 못했습니다. 내용을 확인하세요");
     } finally {
       setPromptSaving(false);
     }

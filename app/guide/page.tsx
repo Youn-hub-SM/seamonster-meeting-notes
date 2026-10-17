@@ -84,7 +84,7 @@ function GuideInner() {
                         {e.tips!.map((tip, j) => <li key={j}>{tip}</li>)}
                       </ul>
                     )}
-                    <Link href={e.href} className="sm-link" style={{ display: "inline-block", marginTop: 8, fontSize: 12 }}>화면 열기 →</Link>
+                    <Link href={e.href} className="sm-link" style={{ display: "inline-block", marginTop: 8, fontSize: 12 }}>화면 열기</Link>
                   </div>
                 </details>
               ))}

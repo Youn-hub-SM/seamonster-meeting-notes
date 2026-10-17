@@ -55,10 +55,10 @@ export default function PaymentsPage() {
     try {
       const res = await fetch("/api/b2b/payments/unpaid", { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "미수금 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setData(j);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "미수금 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
     }
     setLoading(false);
   }
@@ -209,10 +209,10 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
     try {
       const res = await fetch(`/api/b2b/deposits?limit=${limit}`, { cache: "no-store" });
       const j = (await res.json()) as DepositsResponse;
-      if (!res.ok || !j.ok) throw new Error(j.error || "입금 내역 조회 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "입금 내역을 불러오지 못했습니다. 새로고침하세요");
       setData(j);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "입금 내역 조회 오류");
+      setError(err instanceof Error ? err.message : "입금 내역을 불러오지 못했습니다. 새로고침하세요");
     }
   }
 
@@ -273,7 +273,8 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
         body: JSON.stringify({ action, deposit_id: depositId, order_id: opts?.orderId, always: opts?.always, save_alias: saveAlias }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "처리 실패");
+      const failMsg = action === "match" ? "입금을 매칭하지 못했습니다. 새로고침한 뒤 다시 하세요" : action === "ignore" ? "입금을 무시하지 못했습니다. 새로고침한 뒤 다시 하세요" : "확인필요로 되돌리지 못했습니다. 새로고침한 뒤 다시 하세요";
+      if (!res.ok || !j.ok) throw new Error(j.error || failMsg);
       await load();
       if (action === "match") {
         onMatched();
@@ -284,7 +285,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
         else if (action === "restore") toast.undo("확인필요로 되돌렸습니다", () => act(depositId, "ignore", { quiet: true }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "처리 오류");
+      setError(err instanceof Error ? err.message : "입금을 처리하지 못했습니다. 새로고침한 뒤 다시 하세요");
     }
     setBusyId(null);
   }
@@ -299,11 +300,12 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
         body: JSON.stringify(body),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "처리 실패");
+      const failMsg = body.action === "alias_add" ? "입금자명을 등록하지 못했습니다. 이름을 확인하세요" : "등록을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요";
+      if (!res.ok || !j.ok) throw new Error(j.error || failMsg);
       await load();
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "처리 오류");
+      setError(err instanceof Error ? err.message : body.action === "alias_add" ? "입금자명을 등록하지 못했습니다. 이름을 확인하세요" : "등록을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       return false;
     }
   }
@@ -318,11 +320,11 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
         body: JSON.stringify({ action: "rules", rules }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "규칙 저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "자동무시 규칙을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요");
       await load();
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "규칙 저장 오류");
+      setError(err instanceof Error ? err.message : "자동무시 규칙을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요");
       return false;
     }
   }
@@ -379,7 +381,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                     }
                     title={`청구 ${formatMoney(c.order.total)} · 잔액 ${formatMoney(c.order.remaining)}`}
                   >
-                    → {c.order.company_name} · 잔액 {formatMoney(c.order.remaining)}
+                    {c.order.company_name} · 잔액 {formatMoney(c.order.remaining)}
                     {c.nameHit && c.amountHit ? " (이름·금액 일치)" : c.amountHit ? " (금액 일치)" : " (이름 일치)"}
                   </button>
                 ))}
@@ -429,7 +431,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
           {showManage && (
             <div className="pay-dep-manage">
               <div className="pay-dep-manage-hint">
-                미등록 입금자명은 알림 없이 무시(잔액과 정확히 일치하면 예외) · 업체를 연결하면 자동 매칭
+                미등록 입금자명은 알림 없이 무시(잔액과 정확히 일치하면 예외), 업체를 연결하면 자동 매칭
               </div>
               <div className="pay-dep-manage-form">
                 <input
@@ -580,10 +582,10 @@ function PaymentModal({
     try {
       const res = await fetch(`/api/b2b/payments?order_id=${order.id}`, { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "입금 내역을 불러오지 못했습니다. 창을 닫고 다시 여세요");
       setPayments(j.payments || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "입금 내역을 불러오지 못했습니다. 창을 닫고 다시 여세요");
     }
     setLoading(false);
   }
@@ -609,14 +611,14 @@ function PaymentModal({
         body: JSON.stringify({ payment_status: newStatus }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "상태 변경 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "입금 상태를 변경하지 못했습니다. 다시 누르세요");
       onChanged();
       pingActivityFeed();
       // 미수금 목록에서 빠지는 상태면 모달 닫기(완료감)
       if (newStatus === "입금완료" || newStatus === "불필요") onClose();
     } catch (err) {
       setCurStatus(prev); // 롤백
-      setError(err instanceof Error ? err.message : "상태 변경 오류");
+      setError(err instanceof Error ? err.message : "입금 상태를 변경하지 못했습니다. 다시 누르세요");
     }
     setStatusSaving(false);
   }
@@ -636,13 +638,13 @@ function PaymentModal({
         body: JSON.stringify({ ...form, method: "", reference: "" }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "입금 추가 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "입금을 추가하지 못했습니다. 금액과 입금일을 확인하세요");
       setForm({ order_id: order.id, amount: "", paid_at: todayIso(), method: "", reference: "", notes: "" });
       await loadPayments();
       onChanged();
       pingActivityFeed();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "추가 중 오류");
+      setError(err instanceof Error ? err.message : "입금을 추가하지 못했습니다. 금액과 입금일을 확인하세요");
     }
     setAdding(false);
   }
@@ -652,11 +654,11 @@ function PaymentModal({
     try {
       const res = await fetch(`/api/b2b/payments?id=${id}`, { method: "DELETE" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "삭제 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "입금을 삭제하지 못했습니다. 창을 닫고 다시 여세요");
       await loadPayments();
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "삭제 중 오류");
+      setError(err instanceof Error ? err.message : "입금을 삭제하지 못했습니다. 창을 닫고 다시 여세요");
     }
   }
 

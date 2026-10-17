@@ -116,7 +116,7 @@ export default function CustomStatementPage() {
         <div className="b2b-field-row" style={{ marginBottom: 14 }}>
           <label className="b2b-field"><span className="b2b-field-label">거래일자</span>
             <input className="b2b-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-          <label className="b2b-field"><span className="b2b-field-label">문서번호 <span className="sm-faint" style={{ fontWeight: 400 }}>(선택 · 비우면 표시 안 함)</span></span>
+          <label className="b2b-field"><span className="b2b-field-label">문서번호 <span className="opt">(선택, 비우면 표시 안 함)</span></span>
             <input className="b2b-input" value={docNo} onChange={(e) => setDocNo(e.target.value)} /></label>
         </div>
 
@@ -228,7 +228,7 @@ export default function CustomStatementPage() {
                 </tr>
               ))}
               {filled.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--sm-text-light)", padding: "18px 0" }}>입력된 품목이 없습니다</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--sm-text-light)", padding: "18px 0" }}>입력된 품목이 없습니다. 위 [+ 품목 추가]로 넣으세요</td></tr>
               )}
               <tr style={{ fontWeight: 800, background: "var(--sm-bg-subtle)" }}>
                 <td colSpan={5}>합계</td>

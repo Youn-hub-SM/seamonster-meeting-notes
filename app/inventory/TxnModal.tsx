@@ -107,7 +107,7 @@ export function RequestSelect({ reqs, value, disabled, warn, onChange }: { reqs:
     <label className="b2b-field"><span className="b2b-field-label">요청서</span>
       <select className="b2b-input" value={disabled ? "" : value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">연결 안 함</option>
-        {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
+        {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` ${r.title}` : ""} — 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
       </select>
       {warn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{warn}</span>}</label>
   );
@@ -145,8 +145,8 @@ function CountCheckWarn({ c, err }: { c: ShownChecks | null; err: string }) {
               return (
                 <li key={h.order_id}>
                   <a className="sm-link" href={`/b2b/orders/${h.order_id}`} target="_blank" rel="noreferrer">{h.order_no || "발주"}</a>
-                  {` · ${h.company || "-"} · 차감 ${h.deduct_date.slice(5)}${h.open_dates[0] ? ` · 발송 ${h.open_dates[0].slice(5)}` : ""}${h.partial ? " · 일부 발송" : ""}`}
-                  {rt && <strong>{` · ${rt}`}</strong>}
+                  {` ${h.company || "-"}: 차감 ${h.deduct_date.slice(5)}${h.open_dates[0] ? `, 발송 ${h.open_dates[0].slice(5)}` : ""}${h.partial ? ", 일부 발송" : ""}`}
+                  {rt && <strong>{`, ${rt}`}</strong>}
                 </li>
               );
             })}
@@ -322,12 +322,12 @@ export default function TxnModal({
       const res = await fetch(adj ? "/api/inventory/adjust/import" : "/api/inventory/txns/import", { method: "POST", body: fd });
       const j = await res.json();
       if (seq !== reqSeq.current) return; // 그 사이 조건이 바뀜 → 폐기
-      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "엑셀을 분석하지 못했습니다. 파일을 다시 선택하세요.");
       const base = { reqType, reqChannel, rows: j.rows || [], errors: j.errors || [], valid: Number(j.summary?.valid) || 0, errCount: Number(j.summary?.errors) || 0, skipped: Number(j.summary?.skipped) || 0, untracked: Number(j.summary?.untracked) || 0, key: newKey() };
       setPreview(adj
         ? { ...base, kind: "조정", count: Number(j.summary?.changed) || 0, merged: 0, countDate: String(j.count_date || date), checks: j.checks as CountChecks | undefined }
         : { ...base, kind: "입출", count: Number(j.summary?.valid) || 0, merged: Number(j.summary?.merged) || 0 });
-    } catch (e) { if (seq === reqSeq.current) setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { if (seq === reqSeq.current) setError(e instanceof Error ? e.message : "엑셀을 분석하지 못했습니다. 파일을 다시 선택하세요."); }
     if (seq === reqSeq.current) setImporting(false);
   }
 
@@ -337,7 +337,7 @@ export default function TxnModal({
     const ch = preview.reqChannel;
     // 실사 전 점검(D4a·S8) — 걸린 것이 있으면 확인, 점검을 못 읽었으면 막는다(S4)
     if (preview.kind === "조정") {
-      if (!shownChecks) { setError(checksErr || "실사 전 점검을 불러오는 중입니다 — 잠시 뒤 다시 누르세요."); return; }
+      if (!shownChecks) { setError(checksErr || "실사 전 점검을 불러오는 중입니다. 끝나면 다시 누르세요."); return; }
       const w = checkConfirmAsk(shownChecks);
       if (w && !(await confirm(w))) return;
     }
@@ -365,7 +365,7 @@ export default function TxnModal({
       } catch { throw new Error(LOST_MSG); }
       if (!j) throw new Error(LOST_MSG);
       if (j.code === "request_key_conflict") setPreview((p) => (p ? { ...p, key: newKey() } : p)); // 다음 누름은 새 기록
-      if (!res.ok || !j.ok) throw new Error(j.error || "반영 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "엑셀 내용을 반영하지 못했습니다. 다시 누르세요.");
       if (preview.kind === "조정") {
         // 조정 반영 결과 — 안내(이미 반영됨·변경 없음)·숫자가 아닌 실사수량·반영 직후 실사수량과 다른 품목(S12)
         const nameOf = (pid: string) => (preview.rows as AdjRow[]).find((r) => r.product_id === pid)?.name || "품목";
@@ -373,16 +373,18 @@ export default function TxnModal({
         if (j.note) parts.push(j.note);
         if (Number(j.invalid) > 0) parts.push(`${j.invalid}건은 실사수량이 숫자가 아니라 건너뛰었습니다.`);
         const mm = Array.isArray(j.mismatch) ? j.mismatch : [];
-        if (mm.length) parts.push(`반영 직후 ${mm.length}종이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.\n${mm.slice(0, 8).map((m) => `- ${nameOf(m.product_id)}: 실사 ${Number(m.target).toLocaleString()} · 지금 ${Number(m.actual).toLocaleString()}`).join("\n")}${mm.length > 8 ? `\n- 외 ${mm.length - 8}종` : ""}`);
+        if (mm.length) parts.push(`반영 직후 ${mm.length}종이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.\n${mm.slice(0, 8).map((m) => `- ${nameOf(m.product_id)}: 실사 ${Number(m.target).toLocaleString()}, 지금 ${Number(m.actual).toLocaleString()}`).join("\n")}${mm.length > 8 ? `\n- 외 ${mm.length - 8}종` : ""}`);
         // 건너뜀·어긋남이 있으면 오류 토스트(7초), 안내만이면 성공 토스트
         if (parts.length) (Number(j.invalid) > 0 || mm.length ? toast.error : toast.success)(parts.join(" "));
+        else toast.success(`${preview.count.toLocaleString()}건을 조정했습니다`);
       } else if (j.replay) toast.success("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      else toast.success(`${preview.count.toLocaleString()}건을 반영했습니다`);
       if (j.link) {
         const m = linkMessage(j.link, (pid) => (preview.rows as IoRow[]).find((r) => r.product_id === pid)?.product_name || "품목");
         if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
       }
       onSaved(); // 부모가 목록을 다시 읽고 이 창을 닫는다
-    } catch (e) { setError(e instanceof Error ? e.message : "반영 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "엑셀 내용을 반영하지 못했습니다. 다시 누르세요."); }
     setApplying(false);
   }
 
@@ -451,7 +453,7 @@ export default function TxnModal({
     if (type === "조정" && date > TODAY()) { setError("조정 날짜는 오늘 이후로 할 수 없습니다."); return; }
     // 미래 날짜 '완료'는 서버도 막는다(S6) — 예정 건은 즉시 처리를 해제해 대기로
     if (type !== "조정" && ioDone && date > TODAY()) { setError("미래 날짜는 '즉시 처리'를 해제해 대기로 저장하세요."); return; }
-    if (type === "조정" && adjMode === "target" && !chanKnown) { setError(qtyErr ? `${channel} 현재고를 불러오지 못했습니다 — 창을 닫았다 다시 여세요.` : `${channel} 현재고를 불러오는 중입니다. 잠시 후 다시 시도하세요.`); return; }
+    if (type === "조정" && adjMode === "target" && !chanKnown) { setError(qtyErr ? `${channel} 현재고를 불러오지 못했습니다 — 창을 닫았다 다시 여세요.` : `${channel} 현재고를 불러오는 중입니다. 끝나면 다시 누르세요.`); return; }
     // 실사 수량은 0 이상의 숫자만(S8) — '420개'·빈칸·음수를 0 으로 읽으면 전량 0 조정이 된다. 서버도 같은 규칙으로 400.
     const targetRaw = qty.trim();
     if (type === "조정" && adjMode === "target" && !/^\d+(\.\d+)?$/.test(targetRaw)) { setError("실사 수량은 0 이상의 숫자로 입력하세요."); return; }
@@ -461,7 +463,7 @@ export default function TxnModal({
     // 실사 전 점검(D4a·S8) — 확인 실패면 막고(S4), 걸린 것이 있으면 정리했는지 묻는다
     if (isAdjust) {
       if (checksErr) { setError(checksErr); return; }
-      if (!shownChecks) { setError("실사 전 점검을 불러오는 중입니다 — 잠시 뒤 다시 누르세요."); return; }
+      if (!shownChecks) { setError("실사 전 점검을 불러오는 중입니다. 끝나면 다시 누르세요."); return; }
       const w = checkConfirmAsk(shownChecks);
       if (w && !(await confirm(w))) return;
     }
@@ -500,14 +502,15 @@ export default function TxnModal({
       } catch { throw new Error(LOST_MSG); }
       if (!j) throw new Error(LOST_MSG);
       if (j.code === "request_key_conflict") submitKey.current = newKey(); // 다음 누름은 새 기록
-      if (!res.ok || !j.ok) throw new Error(j.error || "기록 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || `기록하지 못했습니다. [${type} 기록]을 다시 누르세요.`);
       if (j.replay) toast.success("이미 기록돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      else toast.success(`${type}${type === "조정" ? "을" : "를"} 기록했습니다`);
       if (j.link) {
         const m = linkMessage(j.link, () => product?.name || "품목");
         if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
       }
       onSaved();
-    } catch (e) { setError(e instanceof Error ? e.message : "기록 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : `기록하지 못했습니다. [${type} 기록]을 다시 누르세요.`); }
     setSaving(false);
   }
 
@@ -515,7 +518,7 @@ export default function TxnModal({
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: preview ? 760 : 460 }}>
         <div className="b2b-modal-head">
-          <span className="b2b-modal-title">입고 · 출고 · 조정</span>
+          <span className="b2b-modal-title">입·출·조정 기록</span>
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
         <div className="b2b-modal-body">
@@ -570,7 +573,7 @@ export default function TxnModal({
                 onSelect={(opt) => { setProductId(opt.id); if (fieldErr.product) setFieldErr((x) => ({ ...x, product: undefined })); }}
                 placeholder="품목·SKU 검색"
                 ariaLabel="품목 검색"
-                emptyText="일치하는 품목이 없습니다"
+                emptyText="일치하는 품목이 없습니다. 다른 글자로 검색하세요"
               />
             )}
             {fieldErr.product && <span className="b2b-field-error">{fieldErr.product}</span>}
@@ -580,7 +583,7 @@ export default function TxnModal({
               // 현재고 = 오늘까지 실제로 움직인 것, 출고 예정 = 미래 발송일로 이미 잡힌 출고(대부분 B2B 선점), 거래 후 = 가용 기준
               ? <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 <strong>{(onHand ?? 0).toLocaleString()}</strong>{product.unit} · 출고 예정 {sched.toLocaleString()} · 가용 {current.toLocaleString()} → 거래 후 가용 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{after.toLocaleString()}</strong>{product.unit}</p>
               : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{datedAdjust ? `${date} 기준 ` : ""}{channel} 현재고 <strong>{current.toLocaleString()}</strong>{product.unit} → 거래 후 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{after.toLocaleString()}</strong>{product.unit}</p>)
-            : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px", color: qtyErr ? "var(--sm-danger)" : undefined }}>{qtyErr ? `${channel} 현재고를 불러오지 못했습니다 — ${qtyErr}` : `${channel} 현재고 불러오는 중...`}</p>)}
+            : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px", color: qtyErr ? "var(--sm-danger)" : undefined }}>{qtyErr ? `${channel} 현재고를 불러오지 못했습니다 — ${qtyErr}. 창을 닫았다 다시 여세요.` : `${channel} 현재고 불러오는 중...`}</p>)}
 
           {isAdjust && (
             <div className="sm-tabs" style={{ marginBottom: 8 }}>
@@ -619,7 +622,7 @@ export default function TxnModal({
                 <option value="기타">기타</option>
               </select></label>
           )}
-          <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">{isAdjust ? "· 조정 사유" : "(선택)"}</span></span>
+          <label className="b2b-field"><span className="b2b-field-label">메모 <span className="opt">{isAdjust ? "(조정 사유)" : "(선택)"}</span></span>
             <input className="b2b-input" value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
           {!isAdjust && (
             <label className="sm-row" style={{ gap: 7, marginTop: 4, fontSize: 13, cursor: "pointer" }}>
@@ -636,14 +639,14 @@ export default function TxnModal({
         <div className="b2b-modal-foot">
           {/* 미리보기에서 파일·설정을 다시 고를 수 있는 유일한 경로 */}
           {mode === "엑셀" && preview
-            ? <button className="b2b-btn-secondary" onClick={() => { setPreview(null); setError(""); }} disabled={applying}>← 다시 선택</button>
+            ? <button className="b2b-btn-secondary" onClick={() => { setPreview(null); setError(""); }} disabled={applying}>파일 다시 선택</button>
             : <span />}
           <div className="b2b-modal-foot-right">
             <button className="b2b-btn-secondary" onClick={onClose} disabled={saving || applying || importing}>그만두기</button>
             {mode === "엑셀" ? (
               preview ? (
                 <>
-                  {preview.count === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
+                  {preview.count === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 선택하세요</span>}
                   <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.count === 0}>
                     {applying ? "반영 중..." : `${preview.count.toLocaleString()}건 ${preview.kind === "조정" ? "조정" : "반영"}`}
                   </button>
@@ -684,7 +687,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
         <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
           {isAdjust ? (
             <>
-              <span>실제 변경 <strong style={{ color: "var(--sm-orange)" }}>{preview.count.toLocaleString()}</strong>건</span>
+              <span>실제 변경 <strong>{preview.count.toLocaleString()}</strong>건</span>
               <span className="sm-faint">일치 {preview.valid.toLocaleString()}건 중</span>
             </>
           ) : (
@@ -697,7 +700,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
         </div>
 
         {preview.rows.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다.</div>
+          <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. SKU 열을 확인해 파일을 다시 선택하세요.</div>
         ) : (
           <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
             {isAdjust ? (
@@ -787,7 +790,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
       )}
       <p className="sm-faint" style={{ fontSize: 12, marginTop: 12 }}>
         {templateHref ? <a href={templateHref} className="sm-link">양식 내려받기</a> : <span>칸을 고르면 양식을 받을 수 있습니다</span>}
-        {isAdjust && " · 실사한 날 마감 기준으로 계산·기록됩니다"}
+        {isAdjust && " — 실사한 날 마감 기준으로 계산·기록됩니다"}
       </p>
     </div>
   );

@@ -52,9 +52,9 @@ export default function PromoManager({ products, onClose, onChanged }: { product
     setSaving(true); setError("");
     try {
       const j = await (await fetch("/api/production/promotions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "프로모션을 저장하지 못했습니다. 이름과 기간을 확인하세요");
       setList(j.promotions || []); setDraft(null); onChanged?.();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "프로모션을 저장하지 못했습니다. 이름과 기간을 확인하세요"); }
     setSaving(false);
   }
   async function remove(id: string) {
@@ -83,7 +83,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
                   {list.map((p) => (
                     <button key={p.id} className="b2b-card" style={{ textAlign: "left", cursor: "pointer", padding: "10px 12px" }} onClick={() => setDraft(p)}>
                       <div className="sm-between"><strong>{p.name}</strong><span className="sm-faint" style={{ fontSize: 12 }}>예상 {p.expectedQty.toLocaleString()}개</span></div>
-                      <div className="sm-faint" style={{ fontSize: 12 }}>{p.start} ~ {p.end} · {(p.items || []).length}개 품목</div>
+                      <div className="sm-faint" style={{ fontSize: 12 }}>{p.start} ~ {p.end}, {(p.items || []).length}개 품목</div>
                     </button>
                   ))}
                 </div>
@@ -132,7 +132,7 @@ export default function PromoManager({ products, onClose, onChanged }: { product
         </div>
         {draft && (
           <div className="b2b-modal-foot">
-            <div>{draft.id && <button className="b2b-btn-secondary" onClick={() => remove(draft.id!)} disabled={saving} style={{ color: "var(--sm-danger)" }}>삭제</button>}</div>
+            <div>{draft.id && <button className="b2b-btn-secondary" onClick={() => remove(draft.id!)} disabled={saving} style={{ color: "var(--sm-danger)" }}>프로모션 삭제</button>}</div>
             <div className="b2b-modal-foot-right">
               <button className="b2b-btn-secondary" onClick={() => { setFieldErr({}); setError(""); setDraft(null); }} disabled={saving}>목록으로 돌아가기</button>
               <button className="b2b-btn-primary" onClick={save} disabled={saving}>{saving ? "저장 중..." : "프로모션 저장"}</button>

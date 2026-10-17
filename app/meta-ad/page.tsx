@@ -79,7 +79,7 @@ function NameHelper({ today }: { today: string }) {
         className="b2b-input" style={{ width: 200, fontSize: 13, padding: "5px 9px" }} />
       <button type="button" className="b2b-btn-secondary" style={{ fontSize: 13, padding: "5px 10px" }}
         onClick={() => { navigator.clipboard?.writeText(name); setCopied(true); }}>{copied ? "복사됨 ✓" : "이름 복사"}</button>
-      {msg && <span className="sm-faint" style={{ fontSize: 13 }}>→ {name}</span>}
+      {msg && <span className="sm-faint" style={{ fontSize: 13 }}>이름: {name}</span>}
     </div>
   );
 }
@@ -132,9 +132,9 @@ export default function MetaAdPage() {
       // 라이브만=게재 중(active)만 가져와 빠름. 해제 시 전체(all, 느림·온디맨드).
       const scope = liveOnly ? "active" : "all";
       const j: Overview = await (await fetch(`/api/meta-ad/overview?datePreset=${preset}&scope=${scope}${force ? "&fresh=1" : ""}`, { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "광고 성과를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setOv(j);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "광고 성과를 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     setLoading(false);
   }, [preset, liveOnly]);
   useEffect(() => { if (status?.connected) load(); }, [status?.connected, load]);
@@ -179,7 +179,7 @@ export default function MetaAdPage() {
     if (!c.cbo) return { key: "material", label: "① 소재테스트 캠페인", tone: TONE.info, action: "광고세트 탭에서 소재별로 판정" };
     const budget = Number(c.daily_budget) || 0;
     const up = Math.round(budget * (1 + (th?.scalePct ?? 0) / 100));
-    if (s.spend < (th?.minSpend ?? 0)) return { key: "insufficient", label: "성과테스트 · 데이터 부족", tone: TONE.muted, action: `지출 ${won(th?.minSpend)}원까지 대기 후 판정` };
+    if (s.spend < (th?.minSpend ?? 0)) return { key: "insufficient", label: "성과테스트(데이터 부족)", tone: TONE.muted, action: `지출 ${won(th?.minSpend)}원까지 대기 후 판정` };
     if (s.roas >= (th?.scaleRoas ?? 99)) {
       // 고른 기간의 평균만 보면 하루 반짝 성과에도 증액 권장이 뜬다. 최근 N일 연속 충족을 함께 본다.
       const need = Math.max(1, th?.scaleDays ?? 1);
@@ -187,8 +187,8 @@ export default function MetaAdPage() {
       if (streak < need) return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: `증액 대기 — ROAS ${th?.scaleRoas} 이상 ${streak}/${need}일 연속 (${need}일 채우면 증액 권장)` };
       return { key: "scale", label: `③ 증액 권장 +${th?.scalePct}%`, tone: TONE.success, action: budget ? `광고관리자에서 일 ${won(budget)}원 → ${won(up)}원 (+${th?.scalePct}%, ${need}일 연속 ROAS ${th?.scaleRoas}↑)` : `예산 +${th?.scalePct}% 증액 — 총 예산 캠페인이라 메타에서 직접 조정` };
     }
-    if (s.roas < (th?.declineRoas ?? 0)) return { key: "decline", label: "④ 효율 하락", tone: TONE.danger, action: "소재 점검 후 교체 · 개선 없으면 예산 축소/종료" };
-    return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: "운영 유지 · 모니터링" };
+    if (s.roas < (th?.declineRoas ?? 0)) return { key: "decline", label: "④ 효율 하락", tone: TONE.danger, action: "소재 점검 후 교체, 개선 없으면 예산 축소/종료" };
+    return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: "운영 유지, 모니터링" };
   }, [th, scaleStreak]);
 
   const classifyAdset = useCallback((a: Adset): StageInfo => {
@@ -197,14 +197,14 @@ export default function MetaAdPage() {
     const creatives = adsByAdset[a.id] || 1;
     const recBudget = (th?.testDailyPerCreative || 0) * creatives;
     const budgetNote = `권장 일예산 ${won(recBudget)}원 (소재 ${creatives}개 × ${won(th?.testDailyPerCreative)}원)`;
-    if (s.spend < (th?.minSpend ?? 0)) return { key: "testing", label: "① 테스트 중", tone: TONE.muted, action: `${th?.testDays}일/지출 ${won(th?.minSpend)}원까지 유지 · ${budgetNote}` };
+    if (s.spend < (th?.minSpend ?? 0)) return { key: "testing", label: "① 테스트 중", tone: TONE.muted, action: `${th?.testDays}일/지출 ${won(th?.minSpend)}원까지 유지, ${budgetNote}` };
     const roasOk = s.roas >= (th?.aboPassRoas ?? 99);
     const cpaOk = (th?.aboMaxCpa ?? 0) > 0 && s.cpa > 0 && s.cpa <= (th?.aboMaxCpa ?? 0);
     const beatOk = !!th?.beatLiveCampaign && liveCampaignRoas > 0 && s.roas >= liveCampaignRoas;
     const pass = s.purchases >= (th?.aboMinPurchases ?? 1) && (roasOk || cpaOk || beatOk);
     if (pass) {
       const why = roasOk ? `ROAS ${roasFmt(s.roas)}≥${th?.aboPassRoas}` : beatOk ? `현 캠페인 ROAS ${roasFmt(liveCampaignRoas)} 상회` : cpaOk ? `CPA ${won(s.cpa)}≤${won(th?.aboMaxCpa)}` : "기준 충족";
-      return { key: "pass", label: "우수소재 → 본 캠페인", tone: TONE.success, action: `본 캠페인(CBO)에 새 세트로 추가 · 이름 "${today} 메시지" (${why})` };
+      return { key: "pass", label: "우수소재 → 본 캠페인", tone: TONE.success, action: `본 캠페인(CBO)에 새 세트로 추가, 이름 "${today} 메시지" (${why})` };
     }
     // 위험: 전환은 충분한데 ROAS가 하락 기준 미만 → 교체/종료
     if (s.purchases >= (th?.aboMinPurchases ?? 1) && s.roas < (th?.declineRoas ?? 0)) {
@@ -250,7 +250,7 @@ export default function MetaAdPage() {
       const j = await (await fetch("/api/meta-ad/toggle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: next }) })).json();
       if (!j.ok) throw new Error(j.error);
       await load(true); // 방금 바꾼 값이라 캐시(90초)를 건너뛰어야 반영된 상태가 보인다
-    } catch (e) { setError(e instanceof Error ? e.message : "상태 변경 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "광고를 켜거나 끄지 못했습니다. 메타 광고관리자에서 상태를 확인하세요"); }
     setBusyId(null);
   }
 
@@ -294,13 +294,13 @@ export default function MetaAdPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">메타 광고</h1>
-          {status?.account?.name && <p className="b2b-page-subtitle">연결 계정 · {status.account.name}</p>}
+          {status?.account?.name && <p className="b2b-page-subtitle">연결 계정 {status.account.name}</p>}
         </div>
         <div className="b2b-page-actions sm-row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           {PRESETS.map((p) => <Chip key={p.key} on={preset === p.key} onClick={() => setPreset(p.key)}>{p.label}</Chip>)}
-          <span className="sm-faint" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{rangeLabel(preset)}{ov?.cached ? " · 캐시" : ""}</span>
+          <span className="sm-faint" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{rangeLabel(preset)}{ov?.cached ? " (캐시)" : ""}</span>
           <button className="b2b-btn-secondary" onClick={() => load(true)} disabled={loading || !status?.connected}>{loading ? "..." : "다시 불러오기"}</button>
-          {status && !status.connected && <span className="b2b-btn-why">연동 뒤 켜집니다</span>}
+          {status && !status.connected && <span className="b2b-btn-why">메타를 연동하면 켜집니다</span>}
           <Link href="/meta-ad/settings" className="b2b-btn-secondary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>성과 기준 설정 열기</Link>
         </div>
       </header>
@@ -310,7 +310,7 @@ export default function MetaAdPage() {
           <strong>메타 광고 연동 준비 중입니다.</strong>
         </div>
       )}
-      {status?.configured && status.connected === false && <div className="b2b-error"><strong>연결 실패</strong> — {status.error}</div>}
+      {status?.configured && status.connected === false && <div className="b2b-error">메타에 연결하지 못했습니다 — {status.error}. 토큰 설정을 확인하세요</div>}
       {error && <div className="b2b-error">{error}</div>}
 
       {status?.connected && th && (
@@ -422,7 +422,7 @@ export default function MetaAdPage() {
               <table className="b2b-table">
                 <thead><tr>
                   <th>ON</th><th>{tab === "campaign" ? "본 캠페인" : tab === "adset" ? "광고세트(소재테스트)" : "소재"}</th>
-                  <th style={{ minWidth: 200 }}>단계 · 다음 행동</th>
+                  <th style={{ minWidth: 200 }}>단계 / 다음 행동</th>
                   <th className="num">지출</th><th className="num">구매</th><th className="num">매출</th><th className="num">ROAS</th><th className="num">CPA</th><th className="num">CTR</th>
                   {tab !== "ad" && <th className="num">예산</th>}
                 </tr></thead>
@@ -435,7 +435,7 @@ export default function MetaAdPage() {
                       <tr key={r.id} style={r.effective_status !== "ACTIVE" && r.status !== "ACTIVE" ? { opacity: 0.55 } : undefined}>
                         <td><Switch id={r.id} st={r.status} name={r.name} /></td>
                         <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}
-                          {tab === "campaign" && adsetByCampaign[r.id] ? <span className="sm-faint" style={{ fontSize: 13 }}> · 세트 {adsetByCampaign[r.id]}</span> : null}</td>
+                          {tab === "campaign" && adsetByCampaign[r.id] ? <span className="sm-faint" style={{ fontSize: 13 }}> (세트 {adsetByCampaign[r.id]})</span> : null}</td>
                         <td style={{ minWidth: 200, maxWidth: 320 }}>
                           {stage ? <Badge tone={stage.tone}>{stage.label}</Badge> : null}
                           {stage?.action ? <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 3, lineHeight: 1.4, whiteSpace: "normal" }}>{stage.action}</div> : null}
@@ -461,7 +461,7 @@ export default function MetaAdPage() {
             </div>
           )}
           <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>
-            ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다 · 증액 권장 = <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}
+            ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다. 증액 권장 = <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}
           </p>
         </>
       )}

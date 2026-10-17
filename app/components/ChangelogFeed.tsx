@@ -54,7 +54,7 @@ export default function ChangelogFeed() {
           <div key={g.date} className="change-day">
             <div className="change-day-head">
               <span className="change-day-date">{g.date}</span>
-              {isNew(g.date) && <span className="change-new">NEW</span>}
+              {isNew(g.date) && <span className="change-new">새 기능</span>}
             </div>
             <div className="change-day-items">
               {g.items.map((c, i) => {

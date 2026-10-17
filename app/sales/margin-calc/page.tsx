@@ -142,11 +142,11 @@ export default function MarginCalcPage() {
     try {
       const r = await fetch("/api/sales/margin-calc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, history: hist }) });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "분석 실패");
+      if (!j.ok) throw new Error(j.error || "분석하지 못했습니다. [분석하기]를 다시 누르세요.");
       setRes(j.result as MarginResult);
       setTurns([...hist, { q: text, result: j.result as MarginResult }]);
       setQ("");
-    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "분석하지 못했습니다. [분석하기]를 다시 누르세요."); }
     setLoading(false);
   }
 
@@ -161,10 +161,10 @@ export default function MarginCalcPage() {
       try {
         const r = await fetch("/api/sales/margin-calc/replay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ specs: s.specs, name: s.name }) });
         const j = await r.json();
-        if (!j.ok) throw new Error(j.error || "재계산 실패");
+        if (!j.ok) throw new Error(j.error || "다시 계산하지 못했습니다. 저장된 계산을 다시 누르세요.");
         setRes(j.result as MarginResult);
         setTurns([{ q: s.question, result: j.result as MarginResult }]); // 이어서 질문 가능
-      } catch (e) { setError(e instanceof Error ? e.message : "재계산 실패"); }
+      } catch (e) { setError(e instanceof Error ? e.message : "다시 계산하지 못했습니다. 저장된 계산을 다시 누르세요."); }
       setLoading(false);
     } else if (s.result) {
       setError(""); setQ("");
@@ -192,7 +192,8 @@ export default function MarginCalcPage() {
     const specs = (res?.results || []).map((r) => r.spec).filter(Boolean);
     const r = await fetch("/api/sales/margin-calc/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveQuestion.trim(), specs, result: res }) });
     const j = await r.json();
-    if (!j.ok) { setError(j.error || "저장 실패"); return; }
+    if (!j.ok) { setError(j.error || "계산을 저장하지 못했습니다. [계산 저장]을 다시 누르세요."); return; }
+    toast.success("계산을 저장했습니다");
     setSaveOpen(false); loadSaved();
   }
   async function delSaved(id: string) {
@@ -207,10 +208,10 @@ export default function MarginCalcPage() {
       try {
         const r = await fetch("/api/sales/margin-calc/prompt", { cache: "no-store" });
         const j = await r.json();
-        if (!r.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        if (!r.ok || !j.ok) throw new Error(j.error || "프롬프트를 불러오지 못했습니다. 접었다 다시 펼치세요.");
         setPrompt(j.prompt || ""); setPromptDefault(j.default || ""); setPromptIsDefault(!!j.isDefault);
         setPLoaded(true);
-      } catch (e) { setPError(e instanceof Error ? e.message : "조회 실패"); }
+      } catch (e) { setPError(e instanceof Error ? e.message : "프롬프트를 불러오지 못했습니다. 접었다 다시 펼치세요."); }
     }
   }
 
@@ -220,11 +221,11 @@ export default function MarginCalcPage() {
     try {
       const r = await fetch("/api/sales/margin-calc/prompt", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: body }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!r.ok || !j.ok) throw new Error(j.error || "지침을 저장하지 못했습니다. [지침 저장]을 다시 누르세요.");
       setPrompt(j.prompt || ""); setPromptIsDefault(!!j.isDefault);
       const d = new Date();
-      setPSaved(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 저장됨`);
-    } catch (e) { setPError(e instanceof Error ? e.message : "저장 실패"); }
+      setPSaved(`지침을 저장했습니다 (${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")})`);
+    } catch (e) { setPError(e instanceof Error ? e.message : "지침을 저장하지 못했습니다. [지침 저장]을 다시 누르세요."); }
     setPSaving(false);
   }
 
@@ -233,14 +234,14 @@ export default function MarginCalcPage() {
     const prev = prompt;
     setPrompt(promptDefault);
     await savePrompt(""); // 빈 값 저장 → 서버에서 설정 삭제(기본값 복원)
-    toast.undo("계산 지침을 기본값으로 되돌렸습니다", async () => { setPrompt(prev); await savePrompt(prev); });
+    toast.undo("지침을 기본값으로 복원했습니다", async () => { setPrompt(prev); await savePrompt(prev); });
   }
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">이익률 계산기 <span className="mc-ai">AI</span></h1>
+          <h1 className="b2b-page-title">이익률 계산기</h1>
         </div>
       </header>
 
@@ -260,7 +261,7 @@ export default function MarginCalcPage() {
             )}
           </div>
           {savedOpen && (filteredSaved.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 계산이 없습니다." : "저장된 계산이 없습니다."}</div>
+            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 계산이 없습니다. 계산한 뒤 [계산 저장]을 누르세요." : "저장된 계산이 없습니다. 계산한 뒤 [계산 저장]을 누르세요."}</div>
           ) : (
             <div className="rp-saved-list">
               {filteredSaved.map((s) => (
@@ -269,7 +270,6 @@ export default function MarginCalcPage() {
                   <div className="rp-saved-q">{s.question}</div>
                   <div className="rp-saved-meta">
                     <span>저장: {s.createdBy || "—"}</span>
-                    <span>·</span>
                     <span>{s.createdAt.slice(0, 10)}</span>
                     <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); delSaved(s.id); }}>삭제</button>
                   </div>
@@ -313,12 +313,12 @@ export default function MarginCalcPage() {
         <div className="sm-col" style={{ gap: 14 }}>
           {snapshotOf && (
             <div className="sm-faint" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              저장 시점 결과 <strong>{snapshotOf.name}</strong> ({snapshotOf.date}) — 이후 원가·수수료가 바뀌었을 수 있어요.
+              저장 시점 결과 <strong>{snapshotOf.name}</strong> ({snapshotOf.date}) — 이후 원가·수수료가 바뀌었을 수 있습니다.
               <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12 }} disabled={loading} onClick={() => run(snapshotOf.question, true)}>AI로 다시 계산</button>
             </div>
           )}
           <div className="rp-understood">
-            {res.scenario}{res.product ? <> · 상품: <strong>{res.product}</strong></> : null}
+            {res.scenario}{res.product ? <> (상품: <strong>{res.product}</strong>)</> : null}
             {res.results.length > 0 && (
               <button className="b2b-btn-secondary" style={{ padding: "4px 10px", marginLeft: 10, fontSize: 12 }} onClick={openSave}>계산 저장</button>
             )}
@@ -388,7 +388,7 @@ export default function MarginCalcPage() {
                   <button className="b2b-btn-secondary" onClick={resetPrompt} disabled={pSaving || promptIsDefault}>기본값으로 복원</button>
                   {pSaved && <span style={{ fontSize: 12, color: "var(--sm-success)" }}>{pSaved}</span>}
                   <span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>
-                    {prompt.length.toLocaleString()}자 · <span style={{ color: promptIsDefault ? "var(--sm-text-light)" : "var(--sm-orange)" }}>{promptIsDefault ? "기본값" : "사용자 지정"}</span> · 모든 사용자 공용
+                    {prompt.length.toLocaleString()}자, <span style={{ color: promptIsDefault ? "var(--sm-text-light)" : "var(--sm-text-mid)", fontWeight: promptIsDefault ? 400 : 700 }}>{promptIsDefault ? "기본값" : "사용자 지정"}</span>, 모든 사용자 공용
                   </span>
                 </div>
               </>
@@ -398,7 +398,6 @@ export default function MarginCalcPage() {
       </section>
 
       <style>{`
-        .mc-ai { font-size: 12px; font-weight: 700; color: var(--sm-orange); border: 1px solid var(--sm-orange-border); background: var(--sm-orange-light); border-radius: 6px; padding: 1px 7px; vertical-align: middle; margin-left: 4px; }
         .mc-prompt-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; background: none; border: none; padding: 0; cursor: pointer; font-size: 15px; font-weight: 600; color: var(--sm-text-mid); text-align: left; }
       `}</style>
     </div>
@@ -441,7 +440,7 @@ function ResultCard({ r }: { r: MarginResultItem }) {
             )}
             {r.expenses.map((e, i) => (
               <tr key={i}>
-                <td style={{ color: "var(--sm-text-mid)" }}>− {e.label}{e.note ? <span className="sm-faint" style={{ fontSize: 12 }}> · {e.note}</span> : null}</td>
+                <td style={{ color: "var(--sm-text-mid)" }}>− {e.label}{e.note ? <span className="sm-faint" style={{ fontSize: 12 }}> ({e.note})</span> : null}</td>
                 <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>−{won(e.amount)}</td>
               </tr>
             ))}

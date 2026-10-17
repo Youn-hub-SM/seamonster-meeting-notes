@@ -65,12 +65,12 @@ export default function ProductHistoryPage() {
         const res = await fetch(buildUrl(0), { cache: "no-store" });
         const j = await res.json();
         if (cancelled) return;
-        if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        if (!res.ok || !j.ok) throw new Error(j.error || "변경 기록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
         setItems(j.activities || []);
         setHasMore(!!j.hasMore);
         setError("");
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "조회 중 오류");
+        if (!cancelled) setError(e instanceof Error ? e.message : "변경 기록을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       }
       if (!cancelled) setLoading(false);
     }, 250);
@@ -111,7 +111,7 @@ export default function ProductHistoryPage() {
           <h1 className="b2b-page-title">상품 변경 기록</h1>
         </div>
         <div className="b2b-page-actions">
-          <Link className="b2b-btn-secondary" href="/b2b/products">← 상품 목록으로 돌아가기</Link>
+          <Link className="b2b-btn-secondary" href="/b2b/products">상품 목록으로 돌아가기</Link>
           <button className="b2b-btn-secondary" onClick={() => setTick((t) => t + 1)} disabled={loading}>
             {loading ? "..." : "다시 불러오기"}
           </button>

@@ -34,12 +34,12 @@ function LoginForm() {
         body: JSON.stringify({ password }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "로그인 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "로그인하지 못했습니다. 비밀번호를 확인하세요");
       // 인증 성공 → redirect 로 이동. router.refresh 로 서버 컴포넌트 다시 로드.
       router.push(redirect);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "로그인 중 오류");
+      setError(err instanceof Error ? err.message : "로그인하지 못했습니다. 비밀번호를 확인하세요");
       setLoading(false);
     }
   }

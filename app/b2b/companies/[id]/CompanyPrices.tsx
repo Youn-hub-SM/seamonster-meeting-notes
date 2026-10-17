@@ -44,10 +44,10 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
     setBusy(true); setErr("");
     try {
       const j = await (await fetch(`/api/b2b/companies/${companyId}/prices`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_id, unit_price }) })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "단가를 저장하지 못했습니다. 금액을 확인하세요");
       await load();
       setPick(null); setPrice("");
-    } catch (e) { setErr(e instanceof Error ? e.message : "저장 오류"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "단가를 저장하지 못했습니다. 금액을 확인하세요"); }
     setBusy(false);
   }
   async function remove(product_id: string) {
@@ -55,9 +55,9 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
     setBusy(true); setErr("");
     try {
       const j = await (await fetch(`/api/b2b/companies/${companyId}/prices?product_id=${product_id}`, { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "삭제 실패");
+      if (!j.ok) throw new Error(j.error || "단가를 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       await load();
-    } catch (e) { setErr(e instanceof Error ? e.message : "삭제 오류"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "단가를 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
     setBusy(false);
   }
 
@@ -65,7 +65,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
     <section className="b2b-card" style={{ marginBottom: 16 }}>
       <div className="b2b-card-head">
         <h2 className="b2b-card-title">거래처 전용 단가</h2>
-        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발주 시 자동 적용 · 없으면 기본 판매가</span>
+        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>발주 시 자동 적용, 없으면 기본 판매가</span>
       </div>
       {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
 
@@ -117,8 +117,8 @@ function PriceRow({ p, busy, onSave, onRemove }: { p: Price; busy: boolean; onSa
       <td className="num sm-faint">{p.default_price.toLocaleString()}</td>
       <td>
         <div className="sm-row" style={{ gap: 6, justifyContent: "flex-end" }}>
-          {changed && <button className="b2b-btn-primary" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => onSave(Math.round(Number(v)))}>저장</button>}
-          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} disabled={busy} onClick={onRemove}>삭제</button>
+          {changed && <button className="b2b-btn-primary" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => onSave(Math.round(Number(v)))}>단가 저장</button>}
+          <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} disabled={busy} onClick={onRemove}>단가 삭제</button>
         </div>
       </td>
     </tr>

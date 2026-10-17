@@ -71,22 +71,22 @@ export default function TeamsSettingsPage() {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: teamsUrl, helperUrl: teamsHelperUrl, claimsUrl: teamsClaimsUrl, inquiryUrl: teamsInquiryUrl, enabled: nextEnabled ?? teamsEnabled }),
       })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "채널 설정을 저장하지 못했습니다. URL 을 확인하세요");
       setTeamsEnabled(!!j.enabled); setTeamsHasUrl(!!j.hasUrl); setTeamsHasHelper(!!j.hasHelperUrl); setTeamsHasClaims(!!j.hasClaimsUrl); setTeamsHasInquiry(!!j.hasInquiryUrl);
       setTeamsUrl(""); setTeamsHelperUrl(""); setTeamsClaimsUrl(""); setTeamsInquiryUrl("");
       const j2 = await (await fetch("/api/b2b/settings/teams", { cache: "no-store" })).json();
       if (j2.ok) { setTeamsTail(j2.urlTail || ""); setTeamsHelperTail(j2.helperTail || ""); setTeamsClaimsTail(j2.claimsTail || ""); setTeamsInquiryTail(j2.inquiryTail || ""); }
-      setTeamsMsg({ ok: true, text: "저장했습니다." });
-    } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" }); }
+      setTeamsMsg({ ok: true, text: "채널 설정을 저장했습니다" });
+    } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "채널 설정을 저장하지 못했습니다. URL 을 확인하세요" }); }
     setTeamsBusy(false);
   }
   async function testTeams() {
     setTeamsBusy(true); setTeamsMsg(null);
     try {
       const j = await (await fetch("/api/b2b/settings/teams", { method: "POST" })).json();
-      if (!j.ok) throw new Error(j.error || "발송 실패");
-      setTeamsMsg({ ok: true, text: `테스트 발송 완료 (${j.detail || "채널 확인"}).` });
-    } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "발송 실패" }); }
+      if (!j.ok) throw new Error(j.error || "테스트를 발송하지 못했습니다. 채널 URL 을 확인하세요");
+      setTeamsMsg({ ok: true, text: `테스트를 발송했습니다 (${j.detail || "채널 확인"})` });
+    } catch (e) { setTeamsMsg({ ok: false, text: e instanceof Error ? e.message : "테스트를 발송하지 못했습니다. 채널 URL 을 확인하세요" }); }
     setTeamsBusy(false);
   }
   // 발송 시각 목록(KST HH:MM)
@@ -108,7 +108,7 @@ export default function TeamsSettingsPage() {
       try {
         const notifyRes = await fetch("/api/b2b/settings/notify", { cache: "no-store" });
         const j = await notifyRes.json();
-        if (!notifyRes.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        if (!notifyRes.ok || !j.ok) throw new Error(j.error || "설정을 불러오지 못했습니다. 새로고침하세요");
         setConfig(j.config || {});
         setEvents(j.events || []);
         const dg = await (await fetch("/api/b2b/settings/digest", { cache: "no-store" })).json();
@@ -119,7 +119,7 @@ export default function TeamsSettingsPage() {
         const mnRes = await (await fetch("/api/production/settings/master-notify", { cache: "no-store" })).json();
         if (mnRes.ok) { setMn(mnRes.config); setMnEventDefs(mnRes.events || []); }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "조회 중 오류");
+        setError(e instanceof Error ? e.message : "설정을 불러오지 못했습니다. 새로고침하세요");
       }
       setLoading(false);
     })();
@@ -127,15 +127,15 @@ export default function TeamsSettingsPage() {
 
   async function loadDigest() {
     setDigestBusy(true); setDigestMsg(null);
-    try { const j = await (await fetch("/api/b2b/schedule-digest", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "미리보기 실패"); setDigest(j.preview || ""); }
-    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "미리보기 실패" }); }
+    try { const j = await (await fetch("/api/b2b/schedule-digest", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "알림을 미리 보지 못했습니다. 새로고침하세요"); setDigest(j.preview || ""); }
+    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "알림을 미리 보지 못했습니다. 새로고침하세요" }); }
     setDigestBusy(false);
   }
   async function sendDigestNow() {
-    if (!(await confirmModal({ title: "'아침 일정 알림' 지금 보내기", body: "Teams 채널로 바로 발송됩니다. 보낸 메시지는 거둘 수 없습니다.", action: "지금 보내기", danger: false }))) return;
+    if (!(await confirmModal({ title: "'아침 일정 알림' 보내기", body: "Teams 채널로 바로 발송됩니다. 보낸 메시지는 거둘 수 없습니다.", action: "알림 보내기", danger: false }))) return;
     setDigestBusy(true); setDigestMsg(null);
-    try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "발송 실패"); setDigestMsg({ ok: true, text: "발송 완료" }); }
-    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "발송 실패" }); }
+    try { const j = await (await fetch("/api/b2b/schedule-digest?send=1", { cache: "no-store" })).json(); if (!j.ok) throw new Error(j.error || "알림을 보내지 못했습니다. 채널 URL 을 확인하세요"); setDigestMsg({ ok: true, text: "알림을 보냈습니다" }); }
+    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "알림을 보내지 못했습니다. 채널 URL 을 확인하세요" }); }
     setDigestBusy(false);
   }
   async function saveDigestCfg() {
@@ -143,12 +143,12 @@ export default function TeamsSettingsPage() {
     setDcfgSaving(true); setDigestMsg(null);
     try {
       const j = await (await fetch("/api/b2b/settings/digest", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...dcfg, times: dtimes }) })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "알림 설정을 저장하지 못했습니다. 입력값을 확인하세요");
       setDcfg(j.config);
       if (Array.isArray(j.config?.times) && j.config.times.length) setDtimes(j.config.times);
-      setDigestMsg({ ok: true, text: "저장됨" });
+      setDigestMsg({ ok: true, text: "알림 설정을 저장했습니다" });
     }
-    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" }); }
+    catch (e) { setDigestMsg({ ok: false, text: e instanceof Error ? e.message : "알림 설정을 저장하지 못했습니다. 입력값을 확인하세요" }); }
     setDcfgSaving(false);
   }
 
@@ -158,9 +158,9 @@ export default function TeamsSettingsPage() {
     try {
       const r = await fetch("/api/production/settings/master-notify", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(mn) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setMnMsg({ kind: "ok", text: "저장됨" });
-    } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "저장 오류" }); }
+      if (!r.ok || !j.ok) throw new Error(j.error || "변경알림 설정을 저장하지 못했습니다. 입력값을 확인하세요");
+      setMnMsg({ kind: "ok", text: "변경알림 설정을 저장했습니다" });
+    } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "변경알림 설정을 저장하지 못했습니다. 입력값을 확인하세요" }); }
     setMnBusy(false);
   }
   async function testMn() {
@@ -168,9 +168,9 @@ export default function TeamsSettingsPage() {
     try {
       const r = await fetch("/api/production/settings/master-notify", { method: "POST" });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "테스트 실패");
-      setMnMsg({ kind: "ok", text: "테스트 알림을 보냈습니다. Teams 변경알림 채널을 확인하세요." });
-    } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "테스트 실패" }); }
+      if (!r.ok || !j.ok) throw new Error(j.error || "테스트를 발송하지 못했습니다. 변경알림 채널 URL 을 확인하세요");
+      setMnMsg({ kind: "ok", text: "테스트를 발송했습니다. Teams 변경알림 채널을 확인하세요" });
+    } catch (e) { setMnMsg({ kind: "err", text: e instanceof Error ? e.message : "테스트를 발송하지 못했습니다. 변경알림 채널 URL 을 확인하세요" }); }
     setMnBusy(false);
   }
 
@@ -208,11 +208,11 @@ export default function TeamsSettingsPage() {
         body: JSON.stringify({ config }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "알림 이벤트를 저장하지 못했습니다. 새로고침한 뒤 다시 저장하세요");
       const d = new Date();
-      setSavedAt(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 저장됨`);
+      setSavedAt(`알림 이벤트를 저장했습니다 (${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")})`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "저장 중 오류");
+      setError(e instanceof Error ? e.message : "알림 이벤트를 저장하지 못했습니다. 새로고침한 뒤 다시 저장하세요");
     }
     setSaving(false);
   }
@@ -221,7 +221,7 @@ export default function TeamsSettingsPage() {
     <>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">설정 · Teams 연동</h1>
+          <h1 className="b2b-page-title">Teams 연동</h1>
         </div>
         <div className="b2b-page-actions">
           {savedAt && <span style={{ fontSize: 12, color: "var(--sm-success)", alignSelf: "center" }}>{savedAt}</span>}
@@ -245,22 +245,22 @@ export default function TeamsSettingsPage() {
         </div>
         <div className="sm-col" style={{ gap: 10, maxWidth: 640 }}>
           <label className="b2b-field">
-            <span className="b2b-field-label">B2B 알림 채널 URL {teamsHasUrl && <span className="sm-faint" style={{ fontWeight: 400 }}>· 저장됨 {teamsTail} · 새 URL로 바꿀 때만 입력</span>}</span>
+            <span className="b2b-field-label">B2B 알림 채널 URL {teamsHasUrl && <span className="opt">저장됨 {teamsTail} — 새 URL로 바꿀 때만 입력</span>}</span>
             <input className="b2b-input" type="password" value={teamsUrl} onChange={(e) => setTeamsUrl(e.target.value)}
               placeholder={teamsHasUrl ? "" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">업무도우미 변경알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasHelper ? `· 저장됨 ${teamsHelperTail} · 새 URL로 바꿀 때만 입력` : "· 비우면 B2B 채널로 함께 발송"}</span></span>
+            <span className="b2b-field-label">업무도우미 변경알림 채널 URL <span className="opt">{teamsHasHelper ? `저장됨 ${teamsHelperTail} — 새 URL로 바꿀 때만 입력` : "비우면 B2B 채널로 함께 발송"}</span></span>
             <input className="b2b-input" type="password" value={teamsHelperUrl} onChange={(e) => setTeamsHelperUrl(e.target.value)}
               placeholder={teamsHasHelper ? "" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">클레임 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasClaims ? `· 저장됨 ${teamsClaimsTail} · 새 URL로 바꿀 때만 입력` : "· 비우면 변경알림·B2B 채널로 폴백"}</span></span>
+            <span className="b2b-field-label">클레임 알림 채널 URL <span className="opt">{teamsHasClaims ? `저장됨 ${teamsClaimsTail} — 새 URL로 바꿀 때만 입력` : "비우면 변경알림·B2B 채널로 폴백"}</span></span>
             <input className="b2b-input" type="password" value={teamsClaimsUrl} onChange={(e) => setTeamsClaimsUrl(e.target.value)}
               placeholder={teamsHasClaims ? "" : "https://..."} autoComplete="off" />
           </label>
           <label className="b2b-field">
-            <span className="b2b-field-label">고객문의 알림 채널 URL <span className="sm-faint" style={{ fontWeight: 400 }}>{teamsHasInquiry ? `· 저장됨 ${teamsInquiryTail} · 새 URL로 바꿀 때만 입력` : "· 비우면 클레임 채널로 폴백"}</span></span>
+            <span className="b2b-field-label">고객문의 알림 채널 URL <span className="opt">{teamsHasInquiry ? `저장됨 ${teamsInquiryTail} — 새 URL로 바꿀 때만 입력` : "비우면 클레임 채널로 폴백"}</span></span>
             <input className="b2b-input" type="password" value={teamsInquiryUrl} onChange={(e) => setTeamsInquiryUrl(e.target.value)}
               placeholder={teamsHasInquiry ? "" : "https://..."} autoComplete="off" />
           </label>
@@ -335,12 +335,12 @@ export default function TeamsSettingsPage() {
             <label style={{ fontSize: 13 }}>제목
               <input className="b2b-input" style={{ marginTop: 4 }} value={dcfg.title} onChange={(e) => setDcfg({ ...dcfg, title: e.target.value })} placeholder="예: 씨몬스터 B2B 오늘의 할 일" />
             </label>
-            <div><button className="b2b-btn-primary" onClick={saveDigestCfg} disabled={dcfgSaving}>{dcfgSaving ? "저장 중..." : "설정 저장"}</button></div>
+            <div><button className="b2b-btn-primary" onClick={saveDigestCfg} disabled={dcfgSaving}>{dcfgSaving ? "저장 중..." : "알림 설정 저장"}</button></div>
           </div>
         )}
         <div className="sm-row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: digest ? 10 : 0 }}>
           <button className="b2b-btn-secondary" onClick={loadDigest} disabled={digestBusy}>{digestBusy ? "..." : "알림 미리 보기"}</button>
-          <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !teamsEnabled}>지금 보내기</button>
+          <button className="b2b-btn-primary" onClick={sendDigestNow} disabled={digestBusy || !teamsEnabled}>알림 보내기</button>
           {!teamsEnabled && <span className="b2b-btn-why">Teams 알림을 켜면 켜집니다</span>}
           {digestMsg && <span style={{ fontSize: 12, color: digestMsg.ok ? "var(--sm-success)" : "var(--sm-danger)" }}>{digestMsg.text}</span>}
         </div>
@@ -349,7 +349,7 @@ export default function TeamsSettingsPage() {
 
       {!teamsEnabled && (
         <div className="sm-warn">
-          <strong>외부 알림 대상이 없습니다.</strong> 위 <strong>Teams 알림</strong>(URL 저장 + 발송 켜기)을 설정하세요.
+          <strong>외부 알림 대상이 없습니다.</strong> 위 Teams 알림에서 URL 을 저장하고 발송을 켜세요.
         </div>
       )}
 

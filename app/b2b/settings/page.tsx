@@ -27,7 +27,7 @@ export default function SettingsEtcPage() {
         const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
         if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "조회 중 오류");
+        setError(e instanceof Error ? e.message : "설정을 불러오지 못했습니다. 새로고침하세요");
       }
     })();
   }, []);
@@ -37,14 +37,14 @@ export default function SettingsEtcPage() {
     try {
       const r = await fetch("/api/b2b/settings/statement", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: sup, stamp }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setSupMsg({ ok: true, text: "저장됨" });
-    } catch (e) { setSupMsg({ ok: false, text: e instanceof Error ? e.message : "저장 오류" }); }
+      if (!r.ok || !j.ok) throw new Error(j.error || "변경을 저장하지 못했습니다. 입력값을 확인하세요");
+      setSupMsg({ ok: true, text: "변경을 저장했습니다" });
+    } catch (e) { setSupMsg({ ok: false, text: e instanceof Error ? e.message : "변경을 저장하지 못했습니다. 입력값을 확인하세요" }); }
     setSupSaving(false);
   }
   function onStampFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; if (!f) return;
-    if (f.size > 500_000) { setSupMsg({ ok: false, text: "직인 이미지는 500KB 이하 PNG 로 올려주세요." }); return; }
+    if (f.size > 500_000) { setSupMsg({ ok: false, text: "직인을 올리지 못했습니다. 500KB 이하 PNG 로 다시 고르세요" }); return; }
     const reader = new FileReader();
     reader.onload = () => setStamp(String(reader.result || ""));
     reader.readAsDataURL(f);
@@ -54,7 +54,7 @@ export default function SettingsEtcPage() {
     <>
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">설정 · 일반</h1>
+          <h1 className="b2b-page-title">일반 설정</h1>
         </div>
       </header>
 
@@ -64,7 +64,7 @@ export default function SettingsEtcPage() {
       <section className="b2b-card">
         <div className="b2b-card-head">
           <h2 className="b2b-card-title">거래명세표</h2>
-          <button className="b2b-btn-primary" onClick={saveSupplier} disabled={supSaving}>{supSaving ? "저장 중..." : "저장"}</button>
+          <button className="b2b-btn-primary" onClick={saveSupplier} disabled={supSaving}>{supSaving ? "저장 중..." : "변경 저장"}</button>
         </div>
         {supMsg && <div className={supMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{supMsg.text}</div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
@@ -94,7 +94,7 @@ export default function SettingsEtcPage() {
               <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setStamp("")}>직인 제거</button>
             </>
           ) : (
-            <span className="sm-faint" style={{ fontSize: 12 }}>투명 배경 PNG · 500KB 이하</span>
+            <span className="sm-faint" style={{ fontSize: 12 }}>투명 배경 PNG, 500KB 이하</span>
           )}
         </div>
       </section>

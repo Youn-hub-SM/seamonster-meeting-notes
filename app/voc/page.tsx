@@ -69,11 +69,11 @@ export default function VocPage() {
         (await fetch("/api/voc", { cache: "no-store" })).json(),
         (await fetch("/api/voc/categories", { cache: "no-store" })).json().catch(() => ({ ok: false })),
       ]);
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "VOC 목록을 불러오지 못했습니다. 새로고침하세요");
       setRows(j.rows || []);
       if (cj.ok) { setCats(cj.categories || []); setCatManaged(cj.managed !== false); }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "조회 오류");
+      setError(e instanceof Error ? e.message : "VOC 목록을 불러오지 못했습니다. 새로고침하세요");
     }
     setLoading(false);
   }, []);
@@ -88,9 +88,9 @@ export default function VocPage() {
     try {
       const res = await fetch("/api/voc/categories", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cat.id, status }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "변경 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "유형 상태를 변경하지 못했습니다. 다시 고르세요");
       if (j.category) setCats((cs) => cs.map((c) => (c.id === cat.id ? j.category : c)));
-    } catch (e) { setError(e instanceof Error ? e.message : "변경 실패"); await load(); }
+    } catch (e) { setError(e instanceof Error ? e.message : "유형 상태를 변경하지 못했습니다. 다시 고르세요"); await load(); }
     finally { catBusy.current.delete(cat.id); }
   }
 
@@ -180,11 +180,11 @@ export default function VocPage() {
         method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(edit),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "VOC를 저장하지 못했습니다. 입력값을 확인하세요");
       setEdit(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "저장 실패");
+      setError(e instanceof Error ? e.message : "VOC를 저장하지 못했습니다. 입력값을 확인하세요");
     }
     setSaving(false);
   }
@@ -193,16 +193,16 @@ export default function VocPage() {
   //  (flow 등록은 2026-08-23 제거 — 기존 등록 건의 '✓ flow' 표시만 남긴다)
   async function registerAsana(r: Voc) {
     if (r.asana_task_at) { setError("이미 아사나에 등록된 VOC입니다."); return; }
-    if (flowBusy) { setError("다른 VOC의 업무 등록이 진행 중입니다. 잠시 후 다시 시도하세요."); return; }
-    if (!(await confirmModal({ title: "아사나에 업무로 등록", body: `제목: [VOC/${r.category}] ${r.product || "상품미상"} - ${r.customer || "고객"} — 아사나에 업무가 만들어집니다.`, action: "아사나에 등록", danger: false }))) return;
+    if (flowBusy) { setError("다른 VOC의 업무 등록이 진행 중입니다. 끝난 뒤 다시 누르세요"); return; }
+    if (!(await confirmModal({ title: "아사나에 업무로 등록", body: `제목: [VOC/${r.category}] ${r.product || "상품미상"} - ${r.customer || "고객"} — 아사나에 업무가 만들어집니다.`, action: "아사나에 업무 등록", danger: false }))) return;
     setFlowBusy(r.id); setError("");
     try {
       const res = await fetch("/api/voc/asana-task", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: r.id }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "아사나 등록 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "아사나에 업무를 등록하지 못했습니다. 설정 > 아사나 연동을 확인하세요");
       if (j.warning) setError(j.warning);
       setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, asana_task_at: j.asana_task_at || new Date().toISOString(), asana_task_gid: j.asana_task_gid, asana_task_url: j.asana_task_url } : x)));
-    } catch (e) { setError(e instanceof Error ? e.message : "아사나 등록 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "아사나에 업무를 등록하지 못했습니다. 설정 > 아사나 연동을 확인하세요"); }
     setFlowBusy("");
   }
 
@@ -213,9 +213,9 @@ export default function VocPage() {
     try {
       const res = await fetch(`/api/voc?id=${encodeURIComponent(edit.id)}`, { method: "DELETE" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "삭제 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "VOC를 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       setEdit(null); await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "VOC를 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
     setSaving(false);
   }
 
@@ -230,10 +230,10 @@ export default function VocPage() {
         fd.append("file", file);
         const res = await fetch("/api/voc/photo", { method: "POST", body: fd });
         const j = await res.json();
-        if (!res.ok || !j.ok) throw new Error(j.error || "업로드 실패");
+        if (!res.ok || !j.ok) throw new Error(j.error || "사진을 올리지 못했습니다. 파일 크기를 줄여 다시 올리세요");
         setEdit((f) => (f ? { ...f, photos: [...f.photos, j.url] } : f));
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "사진 업로드 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "사진을 올리지 못했습니다. 파일 크기를 줄여 다시 올리세요"); }
     setUploading(false);
   }
   const removePhoto = (url: string) => setEdit((f) => (f ? { ...f, photos: f.photos.filter((p) => p !== url) } : f));
@@ -244,9 +244,9 @@ export default function VocPage() {
       const fd = new FormData(); fd.append("file", file);
       const res = await fetch("/api/voc/import", { method: "POST", body: fd });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "파일을 읽지 못했습니다. [양식 내려받기]로 받은 엑셀인지 확인하세요");
       setPreview(j as NonNullable<typeof preview>);
-    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "파일을 읽지 못했습니다. [양식 내려받기]로 받은 엑셀인지 확인하세요"); }
     setImporting(false);
   }
   async function applyVocImport() {
@@ -255,9 +255,9 @@ export default function VocPage() {
     try {
       const res = await fetch("/api/voc/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: preview.rows }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "등록 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "VOC를 등록하지 못했습니다. 파일을 다시 올리세요");
       setPreview(null); await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "등록 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "VOC를 등록하지 못했습니다. 파일을 다시 올리세요"); }
     setApplying(false);
   }
 
@@ -266,16 +266,16 @@ export default function VocPage() {
   const isManualType = edit ? VOC_COMP_MANUAL.has(edit.comp_type) : false;
   let lossHint = "";
   if (edit) {
-    if (edit.comp_type === "없음") lossHint = "보상 없음 → 0원";
+    if (edit.comp_type === "없음") lossHint = "보상 없음 = 0원";
     else if (isManualType) lossHint = "직접 입력 유형 (자동계산 없음)";
-    else if (!matched) lossHint = "상품 단가 미확인 (마스터에 없는 상품) → 직접 입력";
+    else if (!matched) lossHint = "상품 단가 미확인(마스터에 없는 상품), 직접 입력";
     else {
       const cost = Number(matched.cost_price) || 0;
       const qn = Math.max(1, Number(edit.comp_qty) || 1);
       const r = computeVocLoss({ compType: edit.comp_type, qty: qn, costPrice: cost, volumeKg: Number(matched.volume_kg) || 0, receivedAt: edit.received_at, fallbackMonth: nowMonth });
       lossHint = r.shipping > 0
         ? `원가 ${cost.toLocaleString()}×${qn} + 배송 ${r.shipping.toLocaleString()}(${r.boxes}박스) = ${r.amount.toLocaleString()}원 (자동)`
-        : `원가 ${cost.toLocaleString()}×${qn} = ${r.productCost.toLocaleString()}원 · 배송원가 제외(부피 미입력)`;
+        : `원가 ${cost.toLocaleString()}×${qn} = ${r.productCost.toLocaleString()}원, 배송원가 제외(부피 미입력)`;
     }
   }
 
@@ -409,10 +409,10 @@ export default function VocPage() {
                     <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
                       {r.asana_task_at ? (
                         r.asana_task_url ? (
-                          <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)} — 클릭하면 업무 열림`}
+                          <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 (${r.asana_task_at.slice(0, 10)}) — 클릭하면 업무 열림`}
                             style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
                         ) : (
-                          <span title={`아사나 등록됨 · ${r.asana_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
+                          <span title={`아사나 등록됨 (${r.asana_task_at.slice(0, 10)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
                         )
                       ) : asanaReady ? (
                         <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
@@ -422,7 +422,7 @@ export default function VocPage() {
                       ) : null}
                       {/* 과거 flow 등록 기록 — 표시만(등록 기능은 제거됨) */}
                       {r.flow_task_at && (
-                        <span title={`flow 등록됨 · ${r.flow_task_at.slice(0, 10)}`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
+                        <span title={`flow 등록됨 (${r.flow_task_at.slice(0, 10)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
                       )}
                     </span>
                   </td>
@@ -447,7 +447,7 @@ export default function VocPage() {
                 <span>등록 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
-              {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>등록할 행이 없습니다.</div>}
+              {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>등록할 행이 없습니다. 오류 행을 고쳐 다시 올리세요</div>}
               {preview.rows.length > 0 && (
                 <div className="b2b-table-wrap" style={{ maxHeight: 340, overflow: "auto", marginBottom: 12 }}>
                   <table className="b2b-table">
@@ -560,7 +560,7 @@ export default function VocPage() {
                 <label className="b2b-field"><span className="b2b-field-label">손해 귀책</span>
                   <select className="b2b-input" value={edit.fault} onChange={(e) => setF("fault", e.target.value)}>{VOC_FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
               </div>
-              <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 8px" }}>제조사 = 청구 가능 · 물류/자사 = 자사 부담</p>
+              <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 8px" }}>제조사 = 청구 가능, 물류/자사 = 자사 부담</p>
               <label className="b2b-field"><span className="b2b-field-label">상세내용 <span className="req">*</span></span>
                 <span className="b2b-field-hint">고객이 말한 내용</span>
                 <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} aria-invalid={fieldErr.content ? "true" : undefined} />
@@ -705,10 +705,10 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
     try {
       const res = await fetch("/api/voc/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, sort: Number(draft.sort) || 0 }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "유형을 저장하지 못했습니다. 이름을 확인하세요");
       setDraft(null);
       onChanged();
-    } catch (e) { setErr(e instanceof Error ? e.message : "저장 오류"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "유형을 저장하지 못했습니다. 이름을 확인하세요"); }
     setBusy(false);
   }
   async function removeCat(c: VocCategoryRow) {
@@ -716,9 +716,9 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
     setBusy(true); setErr("");
     try {
       const j = await (await fetch(`/api/voc/categories?id=${c.id}`, { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "삭제 실패");
+      if (!j.ok) throw new Error(j.error || "유형을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       onChanged();
-    } catch (e) { setErr(e instanceof Error ? e.message : "삭제 오류"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "유형을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
     setBusy(false);
   }
 
@@ -761,7 +761,7 @@ function CatModal({ cats, managed, onClose, onChanged }: { cats: VocCategoryRow[
                 <input className="b2b-input" type="number" style={{ width: 70 }} value={draft.sort} onChange={(e) => setDraft({ ...draft, sort: e.target.value })} /></label>
               <label className="sm-row" style={{ gap: 5, fontSize: 13, paddingBottom: 9 }}>
                 <input type="checkbox" className="b2b-checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />활성</label>
-              <button className="b2b-btn-primary" disabled={busy || !managed} onClick={saveDraft}>{draft.id ? "수정 저장" : "유형 추가"}</button>
+              <button className="b2b-btn-primary" disabled={busy || !managed} onClick={saveDraft}>{draft.id ? "변경 저장" : "유형 추가"}</button>
               <button className="b2b-btn-secondary" disabled={busy} onClick={() => { setNameErr(""); setDraft(null); }}>그만두기</button>
             </div>
           ) : (

@@ -136,7 +136,7 @@ export function Combobox({
         >
           {filtered.length === 0 ? (
             <div className="b2b-combo-empty">
-              {emptyText ?? (allowFreeText ? "일치 없음 — 입력한 대로 사용됩니다" : "결과 없음")}
+              {emptyText ?? (allowFreeText ? "일치 없음 — 입력한 대로 사용됩니다" : "일치하는 항목이 없습니다")}
             </div>
           ) : (
             filtered.map((o, i) => (

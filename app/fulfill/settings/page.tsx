@@ -37,15 +37,15 @@ export default function FulfillSettingsPage() {
     const prev = savedDedup ?? DEDUP_DEFAULT;
     const warn = [
       prev.enabled && !dedup.enabled ? "중복 방지를 끄면 이미 출고한 주문이 섞인 파일을 올려도 걸러지지 않습니다." : "",
-      dedup.enabled && dedup.windowDays < prev.windowDays ? `대조 기간을 ${prev.windowDays}일 → ${dedup.windowDays}일로 줄이면 그보다 오래 전에 출고한 주문은 걸러지지 않습니다.` : "",
+      dedup.enabled && dedup.windowDays < prev.windowDays ? `대조 기간을 ${prev.windowDays}일에서 ${dedup.windowDays}일로 줄이면 그보다 오래 전에 출고한 주문은 걸러지지 않습니다.` : "",
     ].filter(Boolean);
     if (warn.length && !(await confirm({ title: "중복 방지 설정 저장", body: `${warn.join(" ")} 그 주문은 CN 파일·출고·재고 차감에 다시 들어갑니다.`, action: "그래도 저장" }))) return;
     setDedupSaving(true); setDedupMsg("");
     try {
       const r = await fetch("/api/fulfill/dedup", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dedup) });
-      const j = await r.json(); if (!j.ok) throw new Error(j.error || "저장 실패");
-      setDedup(j.config); setSavedDedup(j.config); setDedupMsg("저장됨");
-    } catch (e) { setDedupMsg(e instanceof Error ? e.message : "저장 실패"); }
+      const j = await r.json(); if (!j.ok) throw new Error(j.error || "중복 방지 설정을 저장하지 못했습니다. 다시 누르세요.");
+      setDedup(j.config); setSavedDedup(j.config); setDedupMsg("중복 방지 설정을 저장했습니다");
+    } catch (e) { setDedupMsg(e instanceof Error ? e.message : "중복 방지 설정을 저장하지 못했습니다. 다시 누르세요."); }
     setDedupSaving(false);
   }
 
@@ -62,10 +62,10 @@ export default function FulfillSettingsPage() {
     setSaving(true); setError(""); setOk("");
     try {
       const res = await fetch("/api/fulfill/rates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ versions: history, boxCats }) });
-      const j = await res.json(); if (!j.ok) throw new Error(j.error || "저장 실패");
+      const j = await res.json(); if (!j.ok) throw new Error(j.error || "설정을 저장하지 못했습니다. 다시 누르세요.");
       setHistory(j.history); if (Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats);
-      setOk("저장했어요. 각 날짜의 배송일지는 그 날짜에 유효했던 단가로 계산됩니다.");
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+      setOk("설정을 저장했습니다. 각 날짜의 배송일지는 그 날짜에 유효했던 단가로 계산됩니다.");
+    } catch (e) { setError(e instanceof Error ? e.message : "설정을 저장하지 못했습니다. 다시 누르세요."); }
     setSaving(false);
   }
 
@@ -92,7 +92,7 @@ export default function FulfillSettingsPage() {
       {/* 배송일지 박스 종류 — 택배량 집계 단위. 단가 로드 실패·로딩 중엔 잠근다(기본값이 저장값을 덮어쓰지 않게) */}
       <fieldset className="b2b-card" disabled={loading || loadErr} style={{ marginBottom: 16, border: 0, padding: 0, minWidth: 0, opacity: loadErr ? 0.5 : 1 }}>
         <div className="b2b-card-head"><span className="b2b-card-title">배송일지 박스 종류</span></div>
-        <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>이하(kg) = 주문 총중량 · 금액(원) = 박스 자재 단가(면세)</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>이하(kg) = 주문 총중량, 금액(원) = 박스 자재 단가(면세)</p>
         <div className="b2b-table-wrap">
         <table className="b2b-table" style={{ fontSize: 13 }}>
           <thead><tr><th>박스 종류</th><th className="num">이하(kg)</th><th className="num">금액(원)</th><th style={{ width: 40 }}></th></tr></thead>
@@ -173,7 +173,7 @@ export default function FulfillSettingsPage() {
         </div>
         <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12 }}>
           <button className="b2b-btn-primary" style={{ padding: "6px 16px" }} onClick={saveDedup} disabled={dedupSaving}>{dedupSaving ? "저장 중..." : "중복 방지 저장"}</button>
-          {dedupMsg && <span style={{ fontSize: 12, color: /실패|오류|failed|fetch/i.test(dedupMsg) ? "var(--sm-danger)" : "var(--sm-success)" }}>{dedupMsg}</span>}
+          {dedupMsg && <span style={{ fontSize: 12, color: /실패|오류|못했|failed|fetch/i.test(dedupMsg) ? "var(--sm-danger)" : "var(--sm-success)" }}>{dedupMsg}</span>}
         </div>
       </div>
 
@@ -227,7 +227,7 @@ function VersionCard({ v, active, canDelete, onDate, onPatch, onDelete, num }: {
           <span className="b2b-card-title">적용 시작일</span>
           <input type="date" className="b2b-input" value={v.effectiveFrom === DEFAULT_EFFECTIVE ? "" : v.effectiveFrom} onChange={(e) => onDate(e.target.value)} style={{ width: "auto" }} />
           {v.effectiveFrom === DEFAULT_EFFECTIVE && <span className="sm-faint" style={{ fontSize: 12 }}>(미지정 = 처음부터)</span>}
-          {active && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-orange)", border: "1px solid var(--sm-orange)", borderRadius: 999, padding: "1px 8px" }}>현재 적용 중</span>}
+          {active && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sm-text-mid)", border: "1px solid var(--sm-border-strong)", borderRadius: 999, padding: "1px 8px" }}>현재 적용 중</span>}
         </div>
         {canDelete && <button className="b2b-link-btn" onClick={onDelete} style={{ color: "var(--sm-danger)" }}>이 단가 삭제</button>}
       </div>

@@ -79,7 +79,7 @@ export default function DeliveryLogPage() {
       const j = await (await fetch(`/api/fulfill/log?${p.toString()}`, { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "조회 실패");
       setRows(j.rows || []); if (Array.isArray(j.boxCats) && j.boxCats.length) setBoxCats(j.boxCats); setRange({ from: j.from, to: j.to }); setDraft({});
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "배송일지를 불러오지 못했습니다. 새로고침하세요."); }
     setLoading(false);
   }, [from, to]);
   useEffect(() => { load(); }, [load]);
@@ -120,7 +120,7 @@ export default function DeliveryLogPage() {
 
   async function post(body: Record<string, unknown>) {
     const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const j = await res.json(); if (!j.ok) throw new Error(j.error || "저장 실패");
+    const j = await res.json(); if (!j.ok) throw new Error(j.error || "배송일지를 저장하지 못했습니다. 새로고침 뒤 다시 입력하세요.");
   }
 
   async function save(date: string) {
@@ -131,7 +131,7 @@ export default function DeliveryLogPage() {
         setRows((rs) => rs.map((r) => (r.log_date === date ? applyDraft(r, snap) : r)));
         // 방금 저장한 값과 같은 칸만 초기화 — 저장 중 바꾼 값은 유지(원복 방지)
         setDraft((prev) => reconcileFieldDraft(prev, date, snap));
-      } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+      } catch (e) { setError(e instanceof Error ? e.message : "배송일지를 저장하지 못했습니다. 새로고침 뒤 다시 입력하세요."); }
     });
   }
 
@@ -150,7 +150,7 @@ export default function DeliveryLogPage() {
     setEBusy(true);
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: entryFor, add_entry: { side: eSide, category: eCat, qty, note: eNote.trim() } }) });
-      const j = await res.json(); if (!j.ok) throw new Error(j.error || "추가 실패");
+      const j = await res.json(); if (!j.ok) throw new Error(j.error || "보정을 저장하지 못했습니다. 다시 누르세요.");
       const stamp = new Date().toISOString();
       setRows((rs) => rs.map((r) => {
         if (r.log_date !== entryFor) return r;
@@ -160,30 +160,30 @@ export default function DeliveryLogPage() {
         return { ...r, [key]: agg, manual_entries: j.entries || [...(r.manual_entries || []), j.entry], manual_updated_at: stamp };
       }));
       setEntryFor(null);
-    } catch (e) { setError(e instanceof Error ? e.message : "추가 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "보정을 저장하지 못했습니다. 다시 누르세요."); }
     setEBusy(false);
   }
   // 자동입력 배치 기록 되돌리기 — 그 배치의 박스·운임 기여분이 합계에서 빠진다
   async function delRecord(date: string, entry: RecordEntry) {
     const label = entry.mode === "baseline" ? "이전 기록 합계" : entry.mode === "replace" ? "덮어쓰기 기록" : "더하기 기록";
-    if (!(await confirm({ title: `${date} ${label} 되돌리기`, body: `일반 ${sumBoxes(entry.boxes_normal)}박스 · 도착보장 ${sumBoxes(entry.boxes_guar)}박스 · 운임 ${won(entry.base_fee_normal + entry.base_fee_guar)}원이 합계에서 빠집니다.`, action: "기록 되돌리기" }))) return;
+    if (!(await confirm({ title: `${date} ${label} 되돌리기`, body: `일반 ${sumBoxes(entry.boxes_normal)}박스, 도착보장 ${sumBoxes(entry.boxes_guar)}박스, 운임 ${won(entry.base_fee_normal + entry.base_fee_guar)}원이 합계에서 빠집니다.`, action: "기록 되돌리기" }))) return;
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: date, del_record: { id: entry.id } }) });
-      const j = await res.json(); if (!j.ok) throw new Error(j.error || "되돌리기 실패");
+      const j = await res.json(); if (!j.ok) throw new Error(j.error || "기록을 되돌리지 못했습니다. 새로고침 뒤 다시 누르세요.");
       setRows((rs) => rs.map((r) => (r.log_date === date ? {
         ...r,
         record_entries: j.entries || [],
         boxes_normal_auto: j.boxes_normal || {}, boxes_guar_auto: j.boxes_guar || {},
         base_fee_normal_auto: j.base_fee_normal || 0, base_fee_guar_auto: j.base_fee_guar || 0,
       } : r)));
-    } catch (e) { setError(e instanceof Error ? e.message : "되돌리기 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "기록을 되돌리지 못했습니다. 새로고침 뒤 다시 누르세요."); }
   }
 
   async function delEntry(date: string, entry: ManualEntry) {
-    if (!(await confirm({ title: `${date} 보정 삭제`, body: `${entry.side === "n" ? "일반" : "도착보장"} · ${entry.category} · ${entry.qty > 0 ? "+" : ""}${entry.qty} · ${entry.note} — 이 보정분이 합계에서 빠집니다.`, action: "보정 삭제" }))) return;
+    if (!(await confirm({ title: `${date} 보정 삭제`, body: `${entry.side === "n" ? "일반" : "도착보장"} ${entry.category} ${entry.qty > 0 ? "+" : ""}${entry.qty} (${entry.note}) — 이 보정분이 합계에서 빠집니다.`, action: "보정 삭제" }))) return;
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: date, del_entry: { id: entry.id } }) });
-      const j = await res.json(); if (!j.ok) throw new Error(j.error || "삭제 실패");
+      const j = await res.json(); if (!j.ok) throw new Error(j.error || "보정을 삭제하지 못했습니다. 새로고침 뒤 다시 누르세요.");
       const stamp = new Date().toISOString();
       setRows((rs) => rs.map((r) => {
         if (r.log_date !== date) return r;
@@ -192,7 +192,7 @@ export default function DeliveryLogPage() {
         const v = (agg[entry.category] || 0) - entry.qty; if (v === 0) delete agg[entry.category]; else agg[entry.category] = v;
         return { ...r, [key]: agg, manual_entries: (r.manual_entries || []).filter((e) => e.id !== entry.id), manual_updated_at: stamp };
       }));
-    } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "보정을 삭제하지 못했습니다. 새로고침 뒤 다시 누르세요."); }
   }
 
   // 디바운스 저장(연타 후 한 번만 저장)
@@ -213,7 +213,7 @@ export default function DeliveryLogPage() {
   );
   async function addDay() {
     if (!newDate) return;
-    if (rows.some((r) => r.log_date === newDate)) { setError("이미 있는 날짜입니다."); setOpen((s) => new Set(s).add(newDate)); return; }
+    if (rows.some((r) => r.log_date === newDate)) { setError("이미 있는 날짜입니다. 아래 펼친 행에서 수정하세요."); setOpen((s) => new Set(s).add(newDate)); return; }
     try {
       await post({ log_date: newDate });
       const blank: Row = {
@@ -224,7 +224,7 @@ export default function DeliveryLogPage() {
       };
       setRows((rs) => [blank, ...rs.filter((r) => r.log_date !== newDate)].sort((a, b) => b.log_date.localeCompare(a.log_date)));
       setOpen((s) => new Set(s).add(newDate));
-    } catch (e) { setError(e instanceof Error ? e.message : "추가 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "날짜를 추가하지 못했습니다. 다시 누르세요."); }
   }
 
   async function removeDay(date: string) {
@@ -234,7 +234,7 @@ export default function DeliveryLogPage() {
       const j = await res.json(); if (!j.ok) throw new Error(j.error);
       setRows((rs) => rs.filter((r) => r.log_date !== date));
       setDraft((prev) => { const n = { ...prev }; delete n[date]; return n; });
-    } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "행을 삭제하지 못했습니다. 새로고침 뒤 다시 누르세요."); }
   }
 
   // 채널별 운임 = 기본운임 + 추가운임(제주·도서산간 등 수동 가산). 파도는 착불 포함. 총 운임 공식은 기존과 동일.
@@ -315,7 +315,7 @@ export default function DeliveryLogPage() {
 
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 택배량</div><div className="b2b-stat-card-value b2b-money">{won(totals.normal)}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 택배량</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-orange)" }}>{won(totals.guar)}</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 택배량</div><div className="b2b-stat-card-value b2b-money">{won(totals.guar)}</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계</div><div className="b2b-stat-card-value b2b-money">{won(totals.fee)}원</div></div>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(totals.dry)}원</div></div>
       </div>
@@ -343,9 +343,9 @@ export default function DeliveryLogPage() {
                         <td><button className="b2b-link-btn" onClick={() => toggle(r.log_date)} style={{ color: "var(--sm-text-light)" }}>{o ? "▾" : "▸"}</button></td>
                         <td style={{ whiteSpace: "nowrap" }}><strong>{r.log_date.slice(5)}</strong> <span className="sm-faint">({weekday(r.log_date)})</span></td>
                         <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(finalBoxes(r, "n")))}</td>
-                        <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{won(sumBoxes(finalBoxes(r, "g")))}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(finalBoxes(r, "g")))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700, cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(normalFee(r))}</td>
-                        <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)", cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(guarFee(r))}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 700, cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(guarFee(r))}</td>
                         <td className="num b2b-money" style={{ cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(padoFee(r))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(feeTotal(r))}</td>
                         <td className="num" style={{ whiteSpace: "nowrap" }}>{stepField(r, "dryice_full", 46)}<span style={{ margin: "0 5px", color: "var(--sm-text-light)" }}>/</span>{stepField(r, "dryice_half", 46)}</td>
@@ -368,7 +368,7 @@ export default function DeliveryLogPage() {
                                       const auto = side === "n" ? r.boxes_normal_auto : r.boxes_guar_auto;
                                       return (
                                         <tr key={side}>
-                                          <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반" : "도착보장"}</td>
+                                          <td style={{ whiteSpace: "nowrap" }}>{side === "n" ? "일반" : "도착보장"}</td>
                                           {CATS_VIEW.map((c) => (
                                             <td key={c} className="num b2b-money" style={{ color: auto?.[c] ? undefined : "var(--sm-text-light)" }}>{auto?.[c] || "-"}</td>
                                           ))}
@@ -387,7 +387,7 @@ export default function DeliveryLogPage() {
                                         <span style={{ fontWeight: 600, color: e.mode === "baseline" ? "var(--sm-text-light)" : "var(--sm-text-mid)" }}>
                                           {e.mode === "baseline" ? "이전 기록 합계" : e.mode === "replace" ? "덮어쓰기" : "더하기"}
                                         </span>
-                                        <span>일반 {sumBoxes(e.boxes_normal)} · 도착보장 {sumBoxes(e.boxes_guar)}박스</span>
+                                        <span>일반 {sumBoxes(e.boxes_normal)}박스, 도착보장 {sumBoxes(e.boxes_guar)}박스</span>
                                         <span className="b2b-money">{won(e.base_fee_normal + e.base_fee_guar)}원</span>
                                         {e.by && <span className="sm-faint">{e.by}</span>}
                                         <button className="b2b-link-btn" style={{ fontSize: 12, color: "var(--sm-danger)" }} onClick={() => delRecord(r.log_date, e)}>되돌리기</button>
@@ -414,7 +414,7 @@ export default function DeliveryLogPage() {
                                       return (
                                         <FragmentRows key={side}>
                                           <tr>
-                                            <td style={{ color: side === "g" ? "var(--sm-orange)" : undefined, whiteSpace: "nowrap" }}>{side === "n" ? "일반 보정" : "도착보장 보정"}</td>
+                                            <td style={{ whiteSpace: "nowrap" }}>{side === "n" ? "일반 보정" : "도착보장 보정"}</td>
                                             {CATS_VIEW.map((c) => (
                                               <td key={c} className="num b2b-money" style={{ color: man[c] ? (man[c] > 0 ? "var(--sm-success)" : "var(--sm-danger)") : "var(--sm-text-light)" }}>
                                                 {man[c] ? (man[c] > 0 ? `+${man[c]}` : man[c]) : "-"}
@@ -427,7 +427,7 @@ export default function DeliveryLogPage() {
                                             {CATS_VIEW.map((c) => (
                                               <td key={c} className="num b2b-money" style={{ color: fin[c] ? undefined : "var(--sm-text-light)" }}>{fin[c] || "-"}</td>
                                             ))}
-                                            <td className="num b2b-money" style={{ fontWeight: 700, color: side === "g" ? "var(--sm-orange)" : undefined }}>{won(sumBoxes(fin))}</td>
+                                            <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(fin))}</td>
                                           </tr>
                                         </FragmentRows>
                                       );
@@ -440,7 +440,7 @@ export default function DeliveryLogPage() {
                                     {[...r.manual_entries].reverse().map((e) => (
                                       <div key={e.id} className="sm-row" style={{ gap: 8, alignItems: "center", fontSize: 12, padding: "3px 2px", flexWrap: "wrap" }}>
                                         <span className="sm-faint">{e.at ? kstStamp(e.at) : "-"}</span>
-                                        <span style={{ color: e.side === "g" ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: 600 }}>{e.side === "n" ? "일반" : "도착보장"}</span>
+                                        <span style={{ color: "var(--sm-text-mid)", fontWeight: 600 }}>{e.side === "n" ? "일반" : "도착보장"}</span>
                                         <span style={{ fontWeight: 600 }}>{e.category}</span>
                                         <span style={{ fontWeight: 700, color: e.qty > 0 ? "var(--sm-success)" : "var(--sm-danger)" }}>{e.qty > 0 ? `+${e.qty}` : e.qty}</span>
                                         <span style={{ color: "var(--sm-text-mid)" }}>{e.note}</span>
@@ -464,10 +464,10 @@ export default function DeliveryLogPage() {
                                       <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(normalFee(r))}</td>
                                     </tr>
                                     <tr>
-                                      <td style={{ whiteSpace: "nowrap", color: "var(--sm-orange)" }}>도착보장</td>
-                                      <td className="num b2b-money" title="택배량 + 도착보장 가산 자동 계산" style={{ color: "var(--sm-orange)" }}>{won(baseGuarOf(r))}</td>
+                                      <td style={{ whiteSpace: "nowrap" }}>도착보장</td>
+                                      <td className="num b2b-money" title="택배량 + 도착보장 가산 자동 계산">{won(baseGuarOf(r))}</td>
                                       <td className="num">{numInput(r, "guar_extra_fee")}</td>
-                                      <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-orange)" }}>{won(guarFee(r))}</td>
+                                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(guarFee(r))}</td>
                                     </tr>
                                     <tr>
                                       <td style={{ whiteSpace: "nowrap" }}>파도</td>
@@ -490,7 +490,7 @@ export default function DeliveryLogPage() {
                                 </div>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))} = <strong style={{ color: "var(--sm-orange)" }}>{won(guarFee(r))}원</strong></span>
+                                <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))} = <strong>{won(guarFee(r))}원</strong></span>
                                 <span className="sm-faint">파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
                                 <span className="sm-faint">드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
@@ -512,7 +512,7 @@ export default function DeliveryLogPage() {
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
             <div className="b2b-modal-head">
-              <h2 className="b2b-modal-title">직접수정 추가 <span className="sm-faint" style={{ fontSize: 13, fontWeight: 400 }}>· {entryFor}</span></h2>
+              <h2 className="b2b-modal-title">직접수정 추가 <span className="sm-faint" style={{ fontSize: 13, fontWeight: 400 }}>{entryFor}</span></h2>
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setEntryFor(null)}>✕</button>
             </div>
             <div className="b2b-modal-body sm-col" style={{ gap: 12 }}>

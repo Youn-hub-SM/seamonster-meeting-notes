@@ -168,6 +168,20 @@
 
 **전역 검색(명령 팔레트)** — `app/components/GlobalSearch.tsx`, Ctrl+K / 사이드바 `.sm-search-open`. `.b2b-modal-backdrop.sm-search-backdrop` > `.sm-search`(상단 12vh·640px) + `-input` / `-list` > `-group` > `-group-title`(12px/600 회색) + `-item`(`.is-active` = `--sm-orange-light` + 검정). 세 묶음 이동/가이드/데이터(`/api/search`, 각 5건). 검색은 보조 — 메뉴를 대신하지 않는다(기획 §1-1). 함정: 패널이 overflow hidden 이라 입력칸 초점 링은 `outline-offset: -2px`(outline:none 금지는 그대로). 가이드 매처는 `app/lib/guide-search.ts` 하나를 가이드 화면과 같이 쓴다.
 
+## 2026-10-17 디자인 결정 (frontend-design 기획, 대표 확정 6건) — 면·모션·글
+
+**면은 3단, 그림자는 떠 있는 면에만**
+- ⓐ `.b2b-card` 투명 래퍼(선·그림자 없음) ⓑ 경계 카드(`.b2b-stat-card`·`.b2b-form-section`·홈 카드·그 밖의 흰 바탕 면) = 1px `--sm-border` + `--sm-radius`(8), 그림자 없음 ⓒ 떠 있는 면(모달·토스트·검색 패널·드롭다운·알림 팝오버·사이드바 호버 펼침) = `--sm-shadow-float` + `--sm-radius-card`(16). `--sm-shadow-card` 는 사용처 0 — 새 코드에서 쓰지 않는다(정적 HTML 동기 때문에 토큰은 남김). 12 는 버튼·토스트, 50 은 배지 전용. 그라데이션 금지(주간 카드 `.is-current` 도 단색).
+- 호버는 바탕 한 단계(`--sm-bg-subtle`)만 — translateY 떠오름·그림자 전환·테두리 진해짐 금지. 선택됨은 `--sm-orange-light` 바탕으로 말한다.
+- 모션은 셋뿐: 토스트 등장(`sm-toast-in`, 아래서 8px 0.15s)·펼침 화살표 회전·사이드바 접힘 폭. 카드·행·셀·입력칸에 `transition` 을 쓰지 않는다(버튼·탭의 0.15s 색 전환만 허용). 등장 애니메이션·펄스 금지, `prefers-reduced-motion` 에서 전부 꺼진다(globals.css 끝 블록, 스피너도 멈춤).
+
+**글 — 동사 체인·메타 문자열**
+- 같은 동작은 흐름 내내 같은 이름: 버튼 '발주 등록' → 확인 창 action '발주 등록' → 토스트 "발주를 등록했습니다" → 가이드 [발주 등록]. 오류는 "OO을(를) 등록하지 못했습니다. <다음 행동>".
+- 중점(·)은 뜻이 있을 때만: 품목 표기 '상품명 · 규격 ×수량'과 경로 '분류 › 툴 › 하위'. 라벨 두 개 붙이기('입금자명 · 금액')·날짜와 시각·메타 줄에는 쓰지 않는다. 즐겨찾기는 '메뉴 이름 + 12px 회색 툴 이름'(`navLabelParts`), 한 줄이 필요하면 '메뉴 (툴)'(`navLabelOf`).
+- 버튼·링크 글자 끝의 '→'·'←' 금지(외부 링크 '↗' 만). 대문자 라벨은 상태 코드(BETA)·키 이름(Ctrl K)·형식(PDF·CSV)만 — AI 가 만든 글은 '초안'.
+- 오류·빈 상태 문구는 다음 행동 한 토막으로 끝난다("…없습니다. 발송일을 먼저 등록하세요"). 사과·'잠시 후 다시' 금지.
+- 숫자 값(`.b2b-stat-card-value`·`.num`)은 줄바꿈 금지 — body 의 `overflow-wrap: anywhere` 가 자릿수 중간을 꺾는다.
+
 ## 3. 토큰
 
 ### 색 — 시맨틱은 텍스트 / -bg / -border 3종 세트

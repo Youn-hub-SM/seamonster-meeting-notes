@@ -40,8 +40,8 @@ export default function SalesProfitPage() {
       const rows = cfg.map((r) => ({ ...r, fee_rate: Number(r.fee_rate) || 0, ship_fee: Number(r.ship_fee) || 0, ship_free_over: Number(r.ship_free_over) || 0 }));
       const r = await fetch("/api/sales/profit/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows, deleted: deletedCh }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      setCfgMsg("저장됨 · 재계산합니다");
+      if (!r.ok || !j.ok) throw new Error(j.error || "채널 설정을 저장하지 못했습니다. [저장 + 재계산]을 다시 누르세요.");
+      setCfgMsg("채널 설정을 저장했습니다. 재계산합니다");
       loadConfig();
       await calc();
     } catch (e) { setErr((e as Error).message); }
@@ -54,7 +54,7 @@ export default function SalesProfitPage() {
       const q = f && t ? `?from=${f}&to=${t}` : "";
       const r = await fetch(`/api/sales/profit${q}`);
       const j: Result = await r.json();
-      if (!j.ok) { setErr(j.error || "계산 실패"); setRes(null); }
+      if (!j.ok) { setErr(j.error || "이익을 계산하지 못했습니다. [이익 계산]을 다시 누르세요."); setRes(null); }
       else { setRes(j); setFrom(j.from); setTo(j.to); }
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
@@ -86,7 +86,7 @@ export default function SalesProfitPage() {
           <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="b2b-input" style={{ width: 160 }} />
           <button className="b2b-btn-primary" onClick={() => calc()} disabled={busy !== ""}>{busy === "calc" ? "계산 중..." : "이익 계산"}</button>
           {res && <button className="b2b-btn-secondary" onClick={exportXlsx} disabled={busy !== ""}>엑셀 내려받기</button>}
-          <button className="b2b-btn-secondary" onClick={() => setShowCfg((v) => !v)}>채널 설정 · 계산 기준 {showCfg ? "▲" : "▼"}</button>
+          <button className="b2b-btn-secondary" onClick={() => setShowCfg((v) => !v)}>채널 설정과 계산 기준 {showCfg ? "▲" : "▼"}</button>
           <a className="b2b-btn-secondary" href="/b2b/products" target="_blank" rel="noreferrer" style={{ marginLeft: "auto" }}>상품마스터 열기 ↗</a>
         </div>
       </section>
@@ -94,14 +94,14 @@ export default function SalesProfitPage() {
       {showCfg && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <span className="b2b-card-title">채널 설정 · 계산 기준</span>
+            <span className="b2b-card-title">채널 설정과 계산 기준</span>
             <div className="sm-row" style={{ gap: 8 }}>
               <button className="b2b-btn-secondary" onClick={addChannel}>+ 채널 추가</button>
               <button className="b2b-btn-primary" onClick={saveConfig} disabled={savingCfg}>{savingCfg ? "저장 중..." : "저장 + 재계산"}</button>
             </div>
           </div>
           <div className="sm-faint" style={{ fontSize: 12, lineHeight: 1.7, marginBottom: 12 }}>
-            <div>총매출 = 결제금액(매출 보정율 차감) + 배송비매출 · 매출총이익 = 총매출 − 상품원가(묶음은 구성품 합) − 판매수수료(미설정 채널 0%) − 택배보냉비(같은 주문자·주문일 = 1건)</div>
+            <div>총매출 = 결제금액(매출 보정율 차감) + 배송비매출. 매출총이익 = 총매출 − 상품원가(묶음은 구성품 합) − 판매수수료(미설정 채널 0%) − 택배보냉비(같은 주문자·주문일 = 1건)</div>
             <div>매출 보정율은 할인 미반영 채널(카페24 등)만 입력 — 네이버·쿠팡·톡스토어는 할인 반영 금액</div>
           </div>
           <div style={{ overflowX: "auto" }}>
@@ -116,7 +116,7 @@ export default function SalesProfitPage() {
                     <td style={{ textAlign: "right" }}><button className="b2b-link-btn" onClick={() => delChannel(i)} style={{ color: "var(--sm-danger)", fontSize: 12 }}>삭제</button></td>
                   </tr>
                 ))}
-                {cfg.length === 0 && <tr><td colSpan={4} className="sm-faint" style={{ padding: 12 }}>{cfgLoadErr ? "채널 설정을 불러오지 못했습니다 — 새로고침해 주세요. (재입력하면 기존 설정을 덮어쓸 수 있습니다)" : "설정이 없습니다."}</td></tr>}
+                {cfg.length === 0 && <tr><td colSpan={4} className="sm-faint" style={{ padding: 12 }}>{cfgLoadErr ? "채널 설정을 불러오지 못했습니다 — 새로고침해 주세요. (재입력하면 기존 설정을 덮어쓸 수 있습니다)" : "설정이 없습니다. [+ 채널 추가]로 판매처를 넣으세요."}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -128,7 +128,7 @@ export default function SalesProfitPage() {
 
       {res && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">채널별 요약 · {res.from} ~ {res.to}</span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title">채널별 요약 ({res.from} ~ {res.to})</span></div>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
               <thead><tr>{PROFIT_COLS.map((c) => <th key={c.key} style={{ textAlign: c.key === "channel" ? "left" : "right" }}>{c.label}</th>)}</tr></thead>
@@ -156,7 +156,7 @@ export default function SalesProfitPage() {
       {res && res.unmatched.length > 0 && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 · 금액 {won(res.unmatched_amount)}</span>
+            <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 (금액 {won(res.unmatched_amount)})</span>
             <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 내려받기</button>
           </div>
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가 0·중량 0으로 계산됨</p>

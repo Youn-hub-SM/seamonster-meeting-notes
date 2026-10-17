@@ -45,7 +45,7 @@ export default function ActivityFeed() {
     try {
       const res = await fetch("/api/b2b/activity?limit=30", { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "변경 내역을 불러오지 못했습니다. 새로고침하세요");
       const acts: Activity[] = j.activities || [];
       setItems(acts);
       // 첫 로드 시 기준이 없으면 현재 최신 시각을 '봤음'으로 설정(배지 0에서 시작)
@@ -59,7 +59,7 @@ export default function ActivityFeed() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "변경 내역을 불러오지 못했습니다. 새로고침하세요");
     }
     setLoading(false);
   }, []);

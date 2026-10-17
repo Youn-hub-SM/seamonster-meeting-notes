@@ -78,10 +78,10 @@ export default function AdjustPage() {
       const fd = new FormData(); fd.append("file", file); fd.append("channel", reqChannel); fd.append("count_date", reqDate);
       const res = await fetch("/api/inventory/adjust/import", { method: "POST", body: fd });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "엑셀을 분석하지 못했습니다. 파일을 다시 올리세요.");
       setAck(false);
       setPreview({ summary: j.summary, rows: j.rows || [], errors: j.errors || [], checks: j.checks, reqChannel, reqDate, batchKey: newBatchKey() });
-    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "엑셀을 분석하지 못했습니다. 파일을 다시 올리세요."); }
     setImporting(false);
   }
   async function applyImport() {
@@ -96,15 +96,15 @@ export default function AdjustPage() {
         body: JSON.stringify({ channel: preview.reqChannel, count_date: preview.reqDate, batch_key: preview.batchKey, rows: preview.rows.map((r) => ({ product_id: r.product_id, target: r.target, memo: r.memo })) }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "반영 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "조정을 반영하지 못했습니다. 다시 누르세요.");
       const parts: string[] = [];
-      if (j.note) parts.push(j.note); else parts.push(`${Number(j.applied) || 0}건 조정했습니다.`);
+      if (j.note) parts.push(j.note); else parts.push(`${Number(j.applied) || 0}건을 조정했습니다.`);
       if (Number(j.invalid) > 0) parts.push(`${j.invalid}건은 실사수량이 숫자가 아니라 건너뛰었습니다.`);
       const mm = Array.isArray(j.mismatch) ? j.mismatch.length : 0;
       if (mm > 0) parts.push(`반영 직후 ${mm}종이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.`);
       setNotice({ ok: mm === 0 && !(Number(j.invalid) > 0), text: parts.join(" ") });
       setPreview(null); setReload((n) => n + 1); load(); loadPre();
-    } catch (e) { setError(e instanceof Error ? e.message : "반영 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "조정을 반영하지 못했습니다. 다시 누르세요."); }
     setApplying(false);
   }
 
@@ -141,10 +141,10 @@ export default function AdjustPage() {
       {!dateOk && <div className="b2b-error">실사일은 최근 31일 안, 오늘까지 고를 수 있습니다.</div>}
 
       {/* 수동 절차(D4) — 실사가 장부와 선반의 원래 어긋남을 덮지 않게 세기 전에 정리할 것 */}
-      <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>실사 전: 발송 안 된 B2B 발주 정리 · 대기 건 처리 · 고객 반품은 입고(사유 &apos;고객 반품&apos;)로 먼저 기록 · 실사일 = 그날 마감 기준(그날 입출고 전에 셌다면 전날)</p>
+      <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>실사 전: 발송 안 된 B2B 발주 정리, 대기 건 처리, 고객 반품은 입고(사유 &apos;고객 반품&apos;)로 먼저 기록. 실사일 = 그날 마감 기준(그날 입출고 전에 셌다면 전날)</p>
 
       {!channel ? (
-        <div className="b2b-empty" style={{ marginBottom: 16 }}>선택한 칸이 없습니다.</div>
+        <div className="b2b-empty" style={{ marginBottom: 16 }}>선택한 칸이 없습니다. 위에서 칸을 고르세요.</div>
       ) : pre.loading ? (
         <div className="b2b-loading" style={{ marginBottom: 16 }}>실사 전 점검 중...</div>
       ) : pre.error ? (
@@ -168,19 +168,19 @@ export default function AdjustPage() {
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
             <div className="b2b-modal-head">
-              <span className="b2b-modal-title">엑셀 실사 · {preview.reqChannel} · {preview.reqDate} 마감 — 미리보기</span>
+              <span className="b2b-modal-title">엑셀 실사 미리보기 — {preview.reqChannel} {preview.reqDate} 마감</span>
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
-                <span>실제 변경 <strong style={{ color: "var(--sm-orange)" }}>{preview.summary.changed}</strong>건</span>
+                <span>실제 변경 <strong>{preview.summary.changed}</strong>건</span>
                 <span className="sm-faint">일치 {preview.summary.valid}건 중</span>
                 {!!preview.summary.skipped && <span className="sm-faint">미입력 {preview.summary.skipped.toLocaleString()}행 건너뜀</span>}
                 {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.summary.untracked.toLocaleString()}행 제외</span>}
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
               {preview.checks && <CountCheckPanel checks={preview.checks} channel={preview.reqChannel} compact />}
-              {preview.rows.length === 0 && <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다.</div>}
+              {preview.rows.length === 0 && <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. SKU 열을 확인해 파일을 다시 올리세요.</div>}
               {preview.rows.length > 0 && (
                 // flex 세로 본문 안의 스크롤 표 — flexShrink 0 이 없으면 점검 패널이 길 때 이 표가 한 줄 높이로 눌린다
                 <div className="b2b-table-wrap" style={{ flexShrink: 0, maxHeight: 340, overflow: "auto", marginBottom: 12 }}>
@@ -220,8 +220,8 @@ export default function AdjustPage() {
                 : <span />}
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
-                {!applying && (preview.summary.changed === 0 ? <span className="b2b-btn-why">바뀐 행이 없습니다</span>
-                  : !preview.checks ? <span className="b2b-btn-why">점검을 확인하지 못해 반영할 수 없습니다</span>
+                {!applying && (preview.summary.changed === 0 ? <span className="b2b-btn-why">바뀐 행이 없습니다 — [그만두기]로 닫으세요</span>
+                  : !preview.checks ? <span className="b2b-btn-why">점검을 확인하지 못해 반영할 수 없습니다 — 파일을 다시 올리세요</span>
                     : needsAck(preview.checks) && !ack ? <span className="b2b-btn-why">위 점검을 확인(체크)하면 켜집니다</span> : null)}
                 <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.changed === 0 || !preview.checks || (needsAck(preview.checks) && !ack)}>{applying ? "반영 중..." : `${preview.summary.changed}건 조정`}</button>
               </div>
@@ -239,7 +239,7 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
   const nm = (id: string) => checks.names[id] || "(품목)";
   const listMax = compact ? 160 : 220;
   const nothing = !checks.b2b.length && !checks.pendingTotal && !checks.sameDay && !checks.after && !checks.formDate;
-  if (nothing) return compact ? null : <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>{channel} · {checks.date} 기준 점검 이상 없음</p>;
+  if (nothing) return compact ? null : <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>{channel} {checks.date} 기준 점검 이상 없음</p>;
   const rem = (n: number | null) => (n === null ? "확인 필요" : n.toLocaleString());
   return (
     <div className="sm-col" style={{ gap: 8, marginBottom: 12, flexShrink: 0 }}>

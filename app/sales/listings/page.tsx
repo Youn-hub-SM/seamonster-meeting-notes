@@ -97,7 +97,7 @@ export default function SkuListingsPage() {
       const r = await fetch(`/api/sales/listings?product_id=${id}`, { cache: "no-store" });
       const j: Result = await r.json();
       if (seq !== seqRef.current) return; // 그 사이 다른 상품을 골랐다 — 이 응답은 버린다
-      if (!j.ok) setErr(j.error || "조회 실패");
+      if (!j.ok) setErr(j.error || "리스팅을 불러오지 못했습니다. [다시 불러오기]를 누르세요.");
       else { setRes(j); fetchLastSynced(); } // 상단 '마지막 동기화'도 같은 시점으로
     } catch (e) { if (seq === seqRef.current) setErr((e as Error).message); }
     finally { if (seq === seqRef.current) setBusy(false); }
@@ -138,7 +138,7 @@ export default function SkuListingsPage() {
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({} as { error?: string }));
-        throw new Error(j.error || "다운로드 실패");
+        throw new Error(j.error || "엑셀을 만들지 못했습니다. [엑셀 내려받기]를 다시 누르세요.");
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -170,12 +170,12 @@ export default function SkuListingsPage() {
         if (!j.ok) failed.push(`${CATALOG_TITLE[ch] || ch}: ${j.error || "실패"}`);
       }
       if (failed.length > 0) {
-        setSyncMsg(`동기화 요청 실패 — ${failed.join(" / ")}`);
+        setSyncMsg(`동기화를 요청하지 못했습니다 — ${failed.join(" / ")}. [카탈로그 동기화]를 다시 누르세요.`);
       } else {
-        setSyncMsg("동기화 요청 완료 — 몇 분 뒤 검색하면 최신 카탈로그와 동기화 날짜가 반영됩니다.");
+        setSyncMsg("동기화를 요청했습니다 — 몇 분 뒤 검색하면 최신 카탈로그와 동기화 날짜가 반영됩니다.");
         fetchCommands();
       }
-    } catch (e) { setSyncMsg(`동기화 요청 실패: ${(e as Error).message}`); }
+    } catch (e) { setSyncMsg(`동기화를 요청하지 못했습니다(${(e as Error).message}). [카탈로그 동기화]를 다시 누르세요.`); }
     finally { setSyncing(false); }
   }
 
@@ -262,7 +262,7 @@ export default function SkuListingsPage() {
       setErr("수량은 0 이상의 정수로 입력하세요 (0 = 품절).");
       return;
     }
-    const label = `${CATALOG_TITLE[c.channel] || c.channel} · ${c.listing_name}${c.item_name ? ` / ${c.item_name}` : ""}`;
+    const label = `${CATALOG_TITLE[c.channel] || c.channel} ${c.listing_name}${c.item_name ? ` / ${c.item_name}` : ""}`;
     // 채널(외부)로 나가는 명령 — 되돌리기 토스트가 아니라 모달. 0 = 품절 처리라 빨간 버튼
     if (!(await confirm({ title: `${label} 채널 재고 변경`, body: `채널 재고를 ${qty}개로 변경합니다${qty === 0 ? " (품절 처리)" : ""}.`, action: qty === 0 ? "품절 처리" : `${qty}개로 변경`, danger: qty === 0 }))) return;
     setApplying(c.item_key); setErr("");
@@ -276,7 +276,7 @@ export default function SkuListingsPage() {
         }),
       });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "명령 등록 실패");
+      if (!j.ok) throw new Error(j.error || "수량 적용을 등록하지 못했습니다. [적용]을 다시 누르세요.");
       await fetchCommands();
     } catch (e) { setErr((e as Error).message); }
     finally { setApplying(""); }
@@ -331,7 +331,7 @@ export default function SkuListingsPage() {
             {exporting ? "생성 중..." : "엑셀 내려받기"}
           </button>
           {!exporting && (!res ? <span className="b2b-btn-why">상품을 고르면 켜집니다</span>
-            : (res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0 ? <span className="b2b-btn-why">내려받을 목록이 없습니다</span> : null)}
+            : (res.catalog?.length ?? 0) === 0 && (res.listings?.length ?? 0) === 0 ? <span className="b2b-btn-why">내려받을 목록이 없습니다 — 다른 상품을 고르세요</span> : null)}
         </div>
       </header>
 
@@ -339,12 +339,12 @@ export default function SkuListingsPage() {
         <p className="sm-faint" style={{ margin: "-6px 0 12px", fontSize: 12, textAlign: "right" }}>
           마지막 동기화: {["스마트스토어", "쿠팡", "카페24"]
             .map((ch) => `${CATALOG_TITLE[ch]} ${lastSynced[ch] ? kstStamp(lastSynced[ch]!) : "-"}`)
-            .join(" · ")}
+            .join(", ")}
         </p>
       )}
 
       {err && <div className="b2b-error">{err}</div>}
-      {syncMsg && <div className={syncMsg.includes("실패") ? "b2b-error" : "sm-success"}>{syncMsg}</div>}
+      {syncMsg && <div className={/실패|못했/.test(syncMsg) ? "b2b-error" : "sm-success"}>{syncMsg}</div>}
 
       <section className="b2b-card" style={{ marginBottom: 16 }}>
         <div className="b2b-field">
@@ -457,7 +457,7 @@ export default function SkuListingsPage() {
                               {cmd.status === "대기" ? `${cmd.qty}개 적용 대기중` :
                                cmd.status === "실행중" ? `${cmd.qty}개 적용 중...` :
                                cmd.status === "완료" ? `${cmd.qty}개 적용 완료${cmd.executed_at ? ` (${kstStamp(cmd.executed_at)})` : ""}` :
-                               `실패: ${cmd.error || "오류"}`}
+                               `적용하지 못했습니다(${cmd.error || "오류"}). [적용]을 다시 누르세요`}
                             </div>
                           )}
                         </td>
@@ -477,7 +477,7 @@ export default function SkuListingsPage() {
           </section>
         )}
         {total === 0 ? (
-          <div className="b2b-empty">최근 1년 매출에서 이 SKU 가 팔린 리스팅이 없습니다.</div>
+          <div className="b2b-empty">최근 1년 매출에서 이 SKU 가 팔린 리스팅이 없습니다. 다른 상품을 고르세요.</div>
         ) : (
         groups.map((g) => (
           <section key={g.channel} className="b2b-card" style={{ marginBottom: 16 }}>
@@ -537,7 +537,7 @@ function ListingTable({ rows, copied, onCopy }: { rows: Listing[]; copied: strin
                 {/* 네이버 추가상품 등 — 매출의 거의 모든 주문에 함께 찍힌 상품 = 이 리스팅이 붙어 있는 본상품 */}
                 {(l.companions?.length ?? 0) > 0 && (
                   <div className="sm-faint" style={{ fontSize: 12, marginTop: 2 }}>
-                    어미상품 추정: {l.companions!.map((c) => `${c.name} (함께 주문 ${c.share}%)`).join(" · ")}
+                    어미상품 추정: {l.companions!.map((c) => `${c.name} (함께 주문 ${c.share}%)`).join(", ")}
                   </div>
                 )}
               </td>

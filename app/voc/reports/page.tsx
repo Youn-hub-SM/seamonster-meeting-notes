@@ -26,9 +26,9 @@ export default function VocRequestPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/voc", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "클레임을 불러오지 못했습니다. 새로고침하세요");
       setRows(j.rows || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "클레임을 불러오지 못했습니다. 새로고침하세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -66,7 +66,7 @@ export default function VocRequestPage() {
   }, [items]);
 
   // 기간 내 모든 사진(어느 건의 것인지 캡션과 함께)
-  const photos = useMemo(() => items.flatMap((r) => (r.photos || []).map((url) => ({ url, label: `${r.received_at?.slice(5)} · ${r.category}` }))), [items]);
+  const photos = useMemo(() => items.flatMap((r) => (r.photos || []).map((url) => ({ url, label: `${r.received_at?.slice(5)} ${r.category}` }))), [items]);
 
   const rangeLabel = mode === "custom" ? "직접지정" : `최근 ${mode}`;
   const periodText = `${from === "0000-00-00" ? "처음" : from} ~ ${to}`;
@@ -120,14 +120,14 @@ export default function VocRequestPage() {
             </div>
             <div style={{ textAlign: "right", fontSize: 12, color: "var(--sm-text-mid)" }}>
               <div>작성일 {TODAY()}</div>
-              <div>대상 기간 · {rangeLabel}</div>
-              {recipient && <div>수신 · {recipient}</div>}
-              {productFilter && <div>대상 제품 · {productFilter}</div>}
+              <div>대상 기간 {rangeLabel}</div>
+              {recipient && <div>수신 {recipient}</div>}
+              {productFilter && <div>대상 제품 {productFilter}</div>}
             </div>
           </div>
 
           {items.length === 0 ? (
-            <div className="b2b-empty">해당 기간에 접수된 클레임이 없습니다.</div>
+            <div className="b2b-empty">해당 기간에 접수된 클레임이 없습니다. 기간을 바꾸세요</div>
           ) : (
             <>
               {/* 요약 통계 — 유형별 접수 도넛 + 지표 */}

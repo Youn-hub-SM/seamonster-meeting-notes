@@ -46,9 +46,9 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
 
       {/* SKU 표 */}
       <div className="sm-between" style={{ marginBottom: 6 }}>
-        <strong style={{ fontSize: 13 }}>품목별 매입 ({(s.itemCount ?? 0).toLocaleString()}종 · {(s.totalQty ?? 0).toLocaleString()}개)</strong>
+        <strong style={{ fontSize: 13 }}>품목별 매입 ({(s.itemCount ?? 0).toLocaleString()}종, {(s.totalQty ?? 0).toLocaleString()}개)</strong>
         {totalReturnQty > 0 && (
-          <span className="sm-faint" style={{ fontSize: 12 }}>반품 {totalReturnQty.toLocaleString()}개 · {won(s.returnAmount)}원 차감</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>반품 {totalReturnQty.toLocaleString()}개, {won(s.returnAmount)}원 차감</span>
         )}
       </div>
       {noPriceQty > 0 && (
@@ -86,7 +86,7 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
                     title={[
                       rq > 0 ? `정산수량 ${(it.net_qty ?? 0).toLocaleString()} (반품 ${rq.toLocaleString()} 제외)` : "",
                       it.tax_type === "taxable" ? `공급가액 기준 — 부가세 포함 시 ${won((it.amount ?? 0) * 1.1)}원` : "",
-                    ].filter(Boolean).join(" · ")}>{(it.total ?? 0).toLocaleString()}</td>
+                    ].filter(Boolean).join(" / ")}>{(it.total ?? 0).toLocaleString()}</td>
                   <td><span className="sm-faint" style={{ fontSize: 12 }}>{it.tax_type === "exempt" ? "면세" : "과세"}</span></td>
                 </tr>
               );
@@ -103,8 +103,8 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
         </table>
       </div>
       <p className="sm-faint" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.7 }}>
-        ※ 결산 기준: 그 달 소매 입고 완료분(재고 이동·'대기' 입고·도매 입고 제외) · 금액은 <strong>공급가액(부가세 미포함)</strong><br />
-        ※ 매입가 = 가중평균 매입단가(반올림, *는 단가 미입력 포함) · 총 매입금액 = 실제 매입액 − 반품수량 × 반품 단가(없으면 매입가)
+        ※ 결산 기준: 그 달 소매 입고 완료분(재고 이동·'대기' 입고·도매 입고 제외). 금액은 <strong>공급가액(부가세 미포함)</strong><br />
+        ※ 매입가 = 가중평균 매입단가(반올림, *는 단가 미입력 포함). 총 매입금액 = 실제 매입액 − 반품수량 × 반품 단가(없으면 매입가)
       </p>
     </section>
   );

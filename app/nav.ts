@@ -170,16 +170,22 @@ export const NAV: NavCategory[] = [
 ];
 
 // ── 즐겨찾기 표시 — 담을 때 저장한 이름 대신 지금 메뉴 이름으로(메뉴 개편 뒤 옛 이름이 남지 않게), 활성 판정도 메뉴와 같은 규칙 ──
-//  하위 메뉴 없는 툴 = 툴 이름, 하위 메뉴 = '툴 · 메뉴'. 같은 href 는 먼저 나온 자리.
-const NAV_META: Map<string, { label: string; exact: boolean }> = (() => {
-  const m = new Map<string, { label: string; exact: boolean }>();
+//  하위 메뉴 없는 툴 = 툴 이름, 하위 메뉴 = 메뉴 이름 + 작은 글자로 툴 이름(2026-10-17 디자인 1차 A2 — '툴 · 메뉴' 중점 결합을 없앰). 같은 href 는 먼저 나온 자리.
+const NAV_META: Map<string, { main: string; sub: string | null; exact: boolean }> = (() => {
+  const m = new Map<string, { main: string; sub: string | null; exact: boolean }>();
   for (const cat of NAV) for (const t of cat.tools) {
-    if (!t.menu?.length) { if (!m.has(t.href)) m.set(t.href, { label: t.label, exact: !!t.exact }); continue; }
-    for (const sub of t.menu) if (!m.has(sub.href)) m.set(sub.href, { label: `${t.label} · ${sub.label}`, exact: !!sub.exact || sub.href === t.href });
+    if (!t.menu?.length) { if (!m.has(t.href)) m.set(t.href, { main: t.label, sub: null, exact: !!t.exact }); continue; }
+    for (const sub of t.menu) if (!m.has(sub.href)) m.set(sub.href, { main: sub.label, sub: sub.href === t.href && sub.label === t.label ? null : t.label, exact: !!sub.exact || sub.href === t.href });
   }
   return m;
 })();
-export const navLabelOf = (href: string, fallback: string): string => NAV_META.get(href)?.label ?? fallback;
+// 표시용 두 토막 — main(메뉴 이름) + sub(상위 툴 이름, 없으면 null). 화면은 main 을 크게, sub 를 12px 회색으로.
+export const navLabelParts = (href: string, fallback: string): { main: string; sub: string | null } => {
+  const x = NAV_META.get(href);
+  return x ? { main: x.main, sub: x.sub } : { main: fallback.replace(/^.* · /, ""), sub: fallback.includes(" · ") ? fallback.split(" · ")[0] : null };
+};
+// 한 줄 이름(검색·제목용) — sub 가 있으면 '메뉴 (툴)'
+export const navLabelOf = (href: string, fallback: string): string => { const p = navLabelParts(href, fallback); return p.sub ? `${p.main} (${p.sub})` : p.main; };
 
 // ── 브라우저 탭 제목(2026-10-08 대표 지시 — 탭을 여러 개 띄우면 전부 같은 이름이라 헷갈림) ──
 //  '메뉴 · 툴 | 업무도우미' 순 — 좁은 탭엔 앞부분만 보이므로 구분되는 이름을 앞에 둔다. 메뉴 이름은 NAV 그대로.

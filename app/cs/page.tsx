@@ -27,13 +27,13 @@ export default function CsPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "오류가 발생했습니다.");
+        throw new Error(data.error || "답변을 만들지 못했습니다. 상황을 다시 입력하세요");
       }
 
       const data = await res.json();
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      setError(err instanceof Error ? err.message : "답변을 만들지 못했습니다. 상황을 다시 입력하세요");
     }
     setLoading(false);
   }
@@ -85,26 +85,26 @@ export default function CsPage() {
           </div>
         </div>
 
-        {/* ① 상황 진단 */}
+        {/* 상황 진단 */}
         {result.situation && (
           <div className="cs-section">
-            <h2 className="detail-section-title">① 상황 진단</h2>
+            <h2 className="detail-section-title">상황 진단</h2>
             <div className="cs-advice">{result.situation}</div>
           </div>
         )}
 
-        {/* ② 적용 매뉴얼·기준 (= 지금 매뉴얼은 이렇다) */}
+        {/* 적용 매뉴얼·기준 (= 지금 매뉴얼은 이렇다) */}
         {result.policy && (
           <div className="cs-section">
-            <h2 className="detail-section-title">② 지금 매뉴얼은</h2>
+            <h2 className="detail-section-title">지금 매뉴얼은</h2>
             <div className="cs-policy">{result.policy}</div>
           </div>
         )}
 
-        {/* ③ 이렇게 행동하세요 (= 그러니 너는 이렇게) */}
+        {/* 이렇게 행동하세요 (= 그러니 너는 이렇게) */}
         {result.approach.length > 0 && (
           <div className="cs-section">
-            <h2 className="detail-section-title">③ 그러니 이렇게 행동하세요</h2>
+            <h2 className="detail-section-title">그러니 이렇게 행동하세요</h2>
             <ul className="cs-advice-list">
               {result.approach.map((a, i) => (
                 <li key={i}>{a}</li>
@@ -113,11 +113,11 @@ export default function CsPage() {
           </div>
         )}
 
-        {/* ④ 추천 답변 초안 (복붙용) */}
+        {/* 추천 답변 초안 (복붙용) */}
         <div className="cs-section">
           <div className="cs-reply-head">
             <h2 className="detail-section-title" style={{ borderBottom: "none", marginBottom: 0, paddingBottom: 0 }}>
-              ④ 추천 답변 초안
+              추천 답변 초안
             </h2>
             <button className="btn-secondary cs-copy-sm" onClick={handleCopy}>
               {copied ? "복사됨" : "초안 복사"}
@@ -128,10 +128,10 @@ export default function CsPage() {
           </div>
         </div>
 
-        {/* ⑤ 주의·리스크 */}
+        {/* 주의·리스크 */}
         {result.cautions.length > 0 && (
           <div className="cs-section">
-            <h2 className="detail-section-title">⑤ 주의 · 리스크</h2>
+            <h2 className="detail-section-title">주의·리스크</h2>
             <ul className="cs-advice-list cs-caution-list">
               {result.cautions.map((c, i) => (
                 <li key={i}>{c}</li>
@@ -163,7 +163,7 @@ export default function CsPage() {
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label className="form-label" htmlFor="query">상황 / 고객 문의</label>
-          <div className="b2b-field-hint">고객 문의를 붙여넣거나 지금 상황을 직접 설명 · 5자 이상</div>
+          <div className="b2b-field-hint">고객 문의를 붙여넣거나 지금 상황을 직접 설명, 5자 이상</div>
           <textarea
             id="query"
             className="form-textarea"

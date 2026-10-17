@@ -26,9 +26,9 @@ export default function UsersPage() {
     try {
       const res = await fetch("/api/b2b/users", { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "계정 목록을 불러오지 못했습니다. 새로고침하세요");
       setUsers(j.users || []); setEnvUsers(j.envUsers || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "계정 목록을 불러오지 못했습니다. 새로고침하세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -43,9 +43,9 @@ export default function UsersPage() {
     try {
       const res = await fetch("/api/b2b/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, password, role }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "추가 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "계정을 추가하지 못했습니다. 이름과 비밀번호를 확인하세요");
       setName(""); setPassword(""); setRole("internal"); await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "추가 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "계정을 추가하지 못했습니다. 이름과 비밀번호를 확인하세요"); }
     setSaving(false);
   }
   async function toggle(u: AppUser) {
@@ -56,7 +56,7 @@ export default function UsersPage() {
     setError("");
     const res = await fetch("/api/b2b/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: u.id, ...body }) });
     const j = await res.json();
-    if (!res.ok || !j.ok) setError(j.error || "변경 실패");
+    if (!res.ok || !j.ok) setError(j.error || "계정을 변경하지 못했습니다. 새로고침한 뒤 다시 하세요");
     await load();
   }
   async function resetPassword(u: AppUser) {
@@ -113,7 +113,7 @@ export default function UsersPage() {
             <button className="b2b-btn-primary" onClick={add} disabled={saving}>{saving ? "추가 중..." : "계정 추가"}</button>
           </div>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호가 곧 신원이라 사람마다 다른 값으로 · 파도소리 계정은 입출고 화면만 열립니다</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>비밀번호가 곧 신원이라 사람마다 다른 값으로. 파도소리 계정은 입출고 화면만 열립니다</p>
       </section>
 
       <section className="b2b-card" style={{ marginTop: 14 }}>

@@ -41,9 +41,9 @@ export default function AiSettingsPage() {
     setDraftAiSaving(true);
     try {
       const j = await (await fetch("/api/b2b/settings/draft-ai", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: next }) })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요");
       setDraftAi(!!j.enabled);
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
     setDraftAiSaving(false);
   }
 
@@ -69,7 +69,7 @@ export default function AiSettingsPage() {
           fetch("/api/b2b/settings/cs-prompt", { cache: "no-store" }),
         ]);
         const mj = await modelRes.json();
-        if (!modelRes.ok || !mj.ok) throw new Error(mj.error || "조회 실패");
+        if (!modelRes.ok || !mj.ok) throw new Error(mj.error || "설정을 불러오지 못했습니다. 새로고침하세요");
         setOptions(mj.options || []);
         setFeatureMeta(mj.featureMeta || []);
         setGlobal(mj.global);
@@ -79,7 +79,7 @@ export default function AiSettingsPage() {
         const cj = await csRes.json();
         if (csRes.ok && cj.ok) { setCsPrompt(cj.prompt || ""); setCsDefault(cj.default || ""); setCsIsDefault(!!cj.isDefault); }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "조회 중 오류");
+        setError(e instanceof Error ? e.message : "설정을 불러오지 못했습니다. 새로고침하세요");
       }
       setLoading(false);
     })();
@@ -94,8 +94,8 @@ export default function AiSettingsPage() {
     try {
       const r = await fetch("/api/b2b/settings/model", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "global", key }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
-    } catch (e) { setGlobal(prev); setError(e instanceof Error ? e.message : "저장 오류"); }
+      if (!r.ok || !j.ok) throw new Error(j.error || "모델을 저장하지 못했습니다. 다시 고르세요");
+    } catch (e) { setGlobal(prev); setError(e instanceof Error ? e.message : "모델을 저장하지 못했습니다. 다시 고르세요"); }
     setSavingKey("");
   }
 
@@ -106,8 +106,8 @@ export default function AiSettingsPage() {
     try {
       const r = await fetch("/api/b2b/settings/model", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: feature, key }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
-    } catch (e) { setFeatures((f) => ({ ...f, [feature]: prev })); setError(e instanceof Error ? e.message : "저장 오류"); }
+      if (!r.ok || !j.ok) throw new Error(j.error || "모델을 저장하지 못했습니다. 다시 고르세요");
+    } catch (e) { setFeatures((f) => ({ ...f, [feature]: prev })); setError(e instanceof Error ? e.message : "모델을 저장하지 못했습니다. 다시 고르세요"); }
     setSavingKey("");
   }
 
@@ -119,12 +119,12 @@ export default function AiSettingsPage() {
     try {
       const r = await fetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: body }) });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "저장 실패");
+      if (!r.ok || !j.ok) throw new Error(j.error || "프롬프트를 저장하지 못했습니다. 내용을 확인하세요");
       const d = new Date();
-      const stamp = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 저장됨`;
+      const stamp = `프롬프트를 저장했습니다 (${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")})`;
       if (kind === "meeting") { setMeetingPrompt(j.prompt || ""); setMeetingIsDefault(!!j.isDefault); setMeetingSaved(stamp); }
       else { setCsPrompt(j.prompt || ""); setCsIsDefault(!!j.isDefault); setCsSaved(stamp); }
-    } catch (e) { setError(e instanceof Error ? e.message : "프롬프트 저장 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "프롬프트를 저장하지 못했습니다. 내용을 확인하세요"); }
     setSaving(false);
   }
 
@@ -134,7 +134,7 @@ export default function AiSettingsPage() {
     const prev = kind === "meeting" ? meetingPrompt : csPrompt;
     if (kind === "meeting") setMeetingPrompt(meetingDefault); else setCsPrompt(csDefault);
     await savePrompt(kind, ""); // 빈 값 → 기본값 복원
-    toast.undo(`${label}을 기본값으로 되돌렸습니다`, async () => {
+    toast.undo(`${label}을 기본값으로 복원했습니다`, async () => {
       if (kind === "meeting") setMeetingPrompt(prev); else setCsPrompt(prev);
       await savePrompt(kind, prev);
     });
@@ -194,8 +194,8 @@ export default function AiSettingsPage() {
                 >
                   {featureOptions.map((o) => (
                     <option key={o.key} value={o.key}>{o.key !== "inherit" ? o.label
-                      : f.inheritDefault ? `기본 · ${options.find((x) => x.key === f.inheritDefault)?.label ?? f.inheritDefault}` // 공통 대신 이 기능의 기본 모델로 돈다(리포트·이익률 등)
-                      : `전체(공통) 따름 · 현재 ${globalLabel}`}</option>
+                      : f.inheritDefault ? `기본 (${options.find((x) => x.key === f.inheritDefault)?.label ?? f.inheritDefault})` // 공통 대신 이 기능의 기본 모델로 돈다(리포트·이익률 등)
+                      : `전체(공통) 따름 (현재 ${globalLabel})`}</option>
                   ))}
                 </select>
               </div>
@@ -204,10 +204,10 @@ export default function AiSettingsPage() {
         )}
       </section>
 
-      {/* 주간 생산 요청서 AI 초안 — 검토 포인트 */}
+      {/* 주간 생산 요청서 초안 — 검토 포인트 */}
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">생산 요청서 AI 초안 — 검토 포인트</h2>
+          <h2 className="b2b-card-title">생산 요청서 초안 검토 포인트</h2>
         </div>
         {draftAi === null ? <div className="b2b-loading">불러오는 중...</div> : (
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
@@ -258,7 +258,7 @@ function PromptCard(props: {
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
             <button className="b2b-btn-primary" onClick={props.onSave} disabled={props.saving}>{props.saving ? "저장 중..." : "프롬프트 저장"}</button>
             <button className="b2b-btn-secondary" onClick={props.onReset} disabled={props.saving || props.isDefault}>기본값으로 복원</button>
-            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{props.value.length.toLocaleString()}자 · 모든 사용자 공용</span>
+            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{props.value.length.toLocaleString()}자, 모든 사용자 공용</span>
           </div>
         </>
       )}

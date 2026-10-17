@@ -68,14 +68,14 @@ export default function SalesUploadPage() {
     try {
       // 확인창 숫자 = 실제로 지워질 행 — 이력의 신규 건수는 적용이 중간에 끊기면 실제와 다를 수 있어 서버가 센다
       const c = await fetch(`/api/sales/upload/revert?batch_id=${encodeURIComponent(b.id)}`).then((r) => r.json());
-      if (!c.ok) { setErr(c.error || "되돌릴 행 수를 확인하지 못했습니다"); return; }
+      if (!c.ok) { setErr(c.error || "되돌릴 행 수를 확인하지 못했습니다. 새로고침 뒤 다시 누르세요."); return; }
       const n = Number(c.rows) || 0;
       const diff = n !== b.inserted ? ` (이력 기록 ${b.inserted.toLocaleString()}건과 다름)` : "";
       const replaced = (b.note || "").includes("기간 교체") ? " 기간 교체로 지운 기존 행은 복구되지 않습니다 — 그 기간 매출이 줄어듭니다." : "";
       if (!(await confirm({ title: `'${b.filename}' 업로드 되돌리기`, body: `이 업로드로 추가된 ${n.toLocaleString()}건을 삭제합니다.${diff}${replaced} 되돌릴 수 없습니다.`, action: `${n.toLocaleString()}건 삭제` }))) return;
       const r = await fetch("/api/sales/upload/revert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batch_id: b.id, expect_rows: n }) });
       const j = await r.json();
-      if (!j.ok) setErr(j.error || "되돌리기 실패");
+      if (!j.ok) setErr(j.error || "업로드를 되돌리지 못했습니다. [되돌리기]를 다시 누르세요.");
       loadBatches();
     } catch (e) { setErr((e as Error).message); }
     finally { setReverting(""); }
@@ -107,7 +107,7 @@ export default function SalesUploadPage() {
       const fd = formData(o);
       const r = await fetch("/api/sales/upload/preview", { method: "POST", body: fd });
       const j: Preview = await r.json();
-      if (!j.ok) { setErr(j.error || "미리보기 실패"); setPreviewFailed(true); }
+      if (!j.ok) { setErr(j.error || "미리보기를 만들지 못했습니다. 파일을 확인하고 [미리보기 만들기]를 다시 누르세요."); setPreviewFailed(true); }
       else {
         setPreview(j); setPreviewFailed(false);
         // 서버가 정한(또는 받은) 교체 기간을 옵션·입력칸에 맞춘다 — 적용은 이 기간으로만
@@ -127,7 +127,7 @@ export default function SalesUploadPage() {
     // 채널마다 파일 날짜와 실제로 지우는 날짜를 같이 보여 준다(파일 행이 없거나 적은 날이 있으면 그 날짜도)
     const lines = sc.filter((x) => x.to_delete > 0).map((x) => {
       const thin = (x.uncovered ?? []).map((u) => dateShort(u.date));
-      return `${x.channel} 파일 ${dateShort(x.file_from)}~${dateShort(x.file_to)} / 교체 ${dateShort(x.win_from ?? po.replaceFrom)}~${dateShort(x.win_to ?? po.replaceTo)} · ${x.to_delete.toLocaleString()}행`
+      return `${x.channel} 파일 ${dateShort(x.file_from)}~${dateShort(x.file_to)} / 교체 ${dateShort(x.win_from ?? po.replaceFrom)}~${dateShort(x.win_to ?? po.replaceTo)}, ${x.to_delete.toLocaleString()}행`
         + (thin.length ? `\n  파일 행이 없거나 적은 날: ${thin.slice(0, 6).join(", ")}${thin.length > 6 ? ` 외 ${thin.length - 6}일` : ""}` : "");
     });
     if (del > 0 && !(await confirm({
@@ -144,7 +144,7 @@ export default function SalesUploadPage() {
       if (po.replace && preview.replace && !preview.replace.blocked) fd.append("expect_delete", String(del));
       const r = await fetch("/api/sales/upload/apply", { method: "POST", body: fd });
       const j = await r.json();
-      if (!j.ok) { setErr(j.error || "적용 실패"); loadBatches(); loadBounds(); } // 중간 실패여도 이미 쓴 행·이력이 있을 수 있다
+      if (!j.ok) { setErr(j.error || "적용하지 못했습니다. 최근 업로드를 확인한 뒤 다시 누르세요."); loadBatches(); loadBounds(); } // 중간 실패여도 이미 쓴 행·이력이 있을 수 있다
       else { setApplied({ inserted: j.inserted, skipped: j.skipped, deleted: Number(j.deleted) || 0, total_after: j.total_after }); loadBounds(); setPreview(null); setFile(null); if (fileRef.current) fileRef.current.value = ""; loadBatches(); setApplyNonce((n) => n + 1); setReportPrompt(null); setPendingReports(Array.isArray(j.report_items) && j.report_items.length ? j.report_items : null); }
     } catch (e) { setErr(`${(e as Error).message} — 적용이 중간에 끊겼을 수 있습니다. 최근 업로드를 확인하고 같은 파일로 미리보기를 다시 하세요.`); loadBatches(); loadBounds(); }
     finally { setBusy(""); }
@@ -190,7 +190,7 @@ export default function SalesUploadPage() {
           {!file && busy === "" && <span className="b2b-btn-why">파일을 올리면 켜집니다</span>}
           <a className="b2b-btn-secondary" href="/api/sales/upload/template" title="빈 양식(xlsx) 내려받기">양식 내려받기</a>
         </div>
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장 · 한글·영문 헤더 모두 인식</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>xlsx 권장. 한글·영문 헤더 모두 인식</p>
       </section>
 
       {future && (
@@ -202,14 +202,14 @@ export default function SalesUploadPage() {
 
       {applied && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>적용 완료 ✓</span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>{applied.inserted.toLocaleString()}건을 적용했습니다 ✓</span></div>
           <p style={{ fontSize: 13 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.deleted > 0 && <> 기간 교체로 기존 {applied.deleted.toLocaleString()}행 삭제.</>}{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
         </section>
       )}
 
       {applied && (
         <div style={{ marginTop: 20 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 800, margin: "0 0 10px" }}>바로 리포트 만들기 · 발송</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 800, margin: "0 0 10px" }}>바로 리포트 만들어 발송</h2>
           <SalesReportPanel key={applyNonce} autoGenerate
             onSent={(type) => { if (type === "daily" && pendingReports) { setReportPrompt(pendingReports); setPendingReports(null); } }} />
         </div>
@@ -334,7 +334,7 @@ export default function SalesUploadPage() {
               <div className="b2b-error" style={{ marginTop: 6 }}>{preview.replace.blocked}</div>
             ) : preview?.replace && (
               preview.replace.scopes.length === 0 ? (
-                <div className="b2b-empty" style={{ marginTop: 6 }}>교체할 채널이 없습니다.</div>
+                <div className="b2b-empty" style={{ marginTop: 6 }}>교체할 채널이 없습니다. '기간 교체'를 끄세요.</div>
               ) : (
                 <div className="b2b-table-wrap" style={{ marginTop: 6 }}>
                   <table className="b2b-table">
@@ -367,7 +367,7 @@ export default function SalesUploadPage() {
               <div className="sm-warn" style={{ marginTop: 8 }}>
                 <div style={{ fontWeight: 700 }}>파일 행이 없거나 적은 날짜 {uncoveredDays.toLocaleString()}일 — 기존 {uncoveredRows.toLocaleString()}행이 지워집니다</div>
                 {uncoveredScopes.map((x) => (
-                  <div key={x.channel} style={{ fontSize: 12, marginTop: 4 }}>{x.channel}: {(x.uncovered ?? []).map((u) => `${dateShort(u.date)} 파일 ${(u.file_rows ?? 0).toLocaleString()}행 · 지울 ${u.rows.toLocaleString()}행`).join(", ")}</div>
+                  <div key={x.channel} style={{ fontSize: 12, marginTop: 4 }}>{x.channel}: {(x.uncovered ?? []).map((u) => `${dateShort(u.date)} 파일 ${(u.file_rows ?? 0).toLocaleString()}행, 지울 ${u.rows.toLocaleString()}행`).join(", ")}</div>
                 ))}
                 <div style={{ fontSize: 12, marginTop: 4 }}>앞뒤 끝 날짜는 교체 기간을 좁혀 빼면 그 날은 추가만 합니다</div>
                 <label className="sm-row" style={{ gap: 6, fontSize: 13, marginTop: 6 }}>
@@ -398,9 +398,9 @@ export default function SalesUploadPage() {
               {busy === "" && (previewStale ? <span className="b2b-btn-why is-before">옵션이 바뀌었습니다 — [다시 미리보기]를 누르면 켜집니다</span>
                 : blockedByInvalid ? <span className="b2b-btn-why is-before">오류 행을 건너뛰기로 하면 켜집니다</span>
                   : replaceNotReady ? <span className="b2b-btn-why is-before">교체 기간·채널을 확인하면 켜집니다</span>
-                    : nothingToDo ? <span className="b2b-btn-why is-before">적재할 신규 행이 없습니다</span> : null)}
+                    : nothingToDo ? <span className="b2b-btn-why is-before">적재할 신규 행이 없습니다 — 다른 파일을 올리세요</span> : null)}
               <button className="b2b-btn-primary" onClick={doApply} disabled={busy !== "" || nothingToDo || blockedByInvalid || replaceNotReady || previewStale}>
-                {busy === "apply" ? "적용 중..." : nothingToDo ? "적재할 신규 행 없음" : toDelete > 0 ? `${s.new_rows.toLocaleString()}건 적용 · ${toDelete.toLocaleString()}행 삭제` : `${s.new_rows.toLocaleString()}건 적용`}
+                {busy === "apply" ? "적용 중..." : nothingToDo ? "적재할 신규 행 없음" : toDelete > 0 ? `${s.new_rows.toLocaleString()}건 적용 (${toDelete.toLocaleString()}행 삭제)` : `${s.new_rows.toLocaleString()}건 적용`}
               </button>
             </span>
           </div>
@@ -409,7 +409,7 @@ export default function SalesUploadPage() {
 
       {(batches.length > 0 || batchErr) && (
         <section className="b2b-card" style={{ marginTop: 16 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드 · 되돌리기</span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title">최근 업로드와 되돌리기</span></div>
           {batchErr && <div className="b2b-error" style={{ marginBottom: 8 }}>업로드 이력을 불러오지 못했습니다 — 새로고침해 주세요.</div>}
           <div className="b2b-table-wrap">
             <table className="b2b-table is-responsive">
@@ -469,7 +469,7 @@ function Stat({ label, v, accent, danger }: { label: string; v: string; accent?:
   return (
     <div className="b2b-stat-card">
       <div className="b2b-stat-card-label">{label}</div>
-      <div className="b2b-stat-card-value b2b-money" style={danger ? { color: "var(--sm-danger)" } : accent ? { color: "var(--sm-orange)" } : undefined}>{v}</div>
+      <div className="b2b-stat-card-value b2b-money" style={danger ? { color: "var(--sm-danger)" } : accent ? { fontWeight: 800 } : undefined}>{v}</div>
     </div>
   );
 }

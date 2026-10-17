@@ -41,7 +41,7 @@ export default function SalesReportPanel({ autoGenerate = false, onSent }: { aut
       const q = b ? `?base=${b}` : "";
       const r = await fetch(`/api/sales/report/${m}${q}`);
       const j: Report = await r.json();
-      if (!j.ok) setErr(j.error || "생성 실패");
+      if (!j.ok) setErr(j.error || "리포트를 만들지 못했습니다. [미리보기 생성]을 다시 누르세요.");
       else setRpt(j);
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
@@ -62,7 +62,7 @@ export default function SalesReportPanel({ autoGenerate = false, onSent }: { aut
         }),
       });
       const j = await r.json();
-      if (!j.ok) setErr(j.error || "발송 실패");
+      if (!j.ok) setErr(j.error || "메일을 발송하지 못했습니다. [메일 발송]을 다시 누르세요.");
       else { setSent(j.sent_to); onSent?.(rpt.report_type === "weekly" ? "weekly" : "daily"); }
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(""); }
@@ -83,7 +83,7 @@ export default function SalesReportPanel({ autoGenerate = false, onSent }: { aut
           <button className="b2b-btn-primary" onClick={() => generate()} disabled={busy !== ""}>{busy === "gen" ? "생성 중..." : "미리보기 생성"}</button>
         </div>
         <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>
-          {mode === "daily" ? "일요일 기준일은 금~일 합산" : "기준일이 속한 주(월~일) 합산"} · 데이터 최신일 {maxDate || "-"}
+          {mode === "daily" ? "일요일 기준일은 금~일 합산" : "기준일이 속한 주(월~일) 합산"}. 데이터 최신일 {maxDate || "-"}
         </p>
       </section>
 
@@ -91,7 +91,7 @@ export default function SalesReportPanel({ autoGenerate = false, onSent }: { aut
 
       {sent && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>발송 완료 ✓</span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>메일을 발송했습니다 ✓</span></div>
           <p style={{ fontSize: 13 }}>수신: {sent.join(", ")}</p>
         </section>
       )}

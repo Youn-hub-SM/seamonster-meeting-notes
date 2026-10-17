@@ -44,7 +44,7 @@ export default function ActivityPage() {
         // 생산요청 작성·상태변경 이벤트(생산=도매) — B2B 변경기록엔 제외되고 여기(생산·재고)로만 온다.
         fetch("/api/b2b/activity?type=production_request.created,production_request.status_changed,production_request.draft,production_request.notice&limit=300", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ ok: false })),
       ]);
-      if (!tj.ok) throw new Error(tj.error || "조회 실패");
+      if (!tj.ok) throw new Error(tj.error || "변경 기록을 불러오지 못했습니다. [다시 불러오기]를 누르세요.");
       const rows: Txn[] = tj.rows || [];
       setTxns(rows);
       const evs: PrEvent[] = ej.ok
@@ -53,7 +53,7 @@ export default function ActivityPage() {
       setEvents(evs);
       const firstDate = rows[0]?.txn_date || evs[0]?.date;
       setOpen(new Set(firstDate ? [firstDate] : [])); // 가장 최근 날짜만 펼침
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "변경 기록을 불러오지 못했습니다. [다시 불러오기]를 누르세요."); }
     setLoading(false);
   }, [channel]);
   useEffect(() => { load(); }, [load]);
@@ -125,7 +125,7 @@ export default function ActivityPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : groups.length === 0 ? (
-        <div className="b2b-empty">{txns.length === 0 && events.length === 0 ? "재고 변경 기록이 없습니다." : "조건에 맞는 기록이 없습니다."}</div>
+        <div className="b2b-empty">{txns.length === 0 && events.length === 0 ? "재고 변경 기록이 없습니다. 재고 목록의 [입·출·조정 기록]으로 기록하세요." : "조건에 맞는 기록이 없습니다. 검색어를 지우거나 채널을 바꾸세요."}</div>
       ) : (
         <div className="sm-col" style={{ gap: 8 }}>
           {groups.map(([date, list]) => {
@@ -140,7 +140,7 @@ export default function ActivityPage() {
                   <span className="sm-faint" style={{ fontSize: 12 }}>{list.length}건</span>
                   <span className="sm-row" style={{ gap: 4, marginLeft: "auto", flexWrap: "wrap" }}>
                     {Object.entries(byType).map(([ty, n]) => { const c = INV_TYPE_COLOR[ty as keyof typeof INV_TYPE_COLOR]; return <span key={ty} className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{ty} {n}</span>; })}
-                    {evCount > 0 && <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>생산요청 {evCount}</span>}
+                    {evCount > 0 && <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>생산요청 {evCount}</span>}
                   </span>
                 </button>
                 {o && (
@@ -150,7 +150,7 @@ export default function ActivityPage() {
                       <tbody>
                         {list.map((it) => it.kind === "event" ? (
                           <tr key={`ev-${it.e.id}`}>
-                            <td colSpan={6}><span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)", marginRight: 8 }}>생산요청</span>{it.e.summary}</td>
+                            <td colSpan={6}><span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)", marginRight: 8 }}>생산요청</span>{it.e.summary}</td>
                             <td>-</td>
                             <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{it.e.actor || "-"}</td>
                             <td></td>

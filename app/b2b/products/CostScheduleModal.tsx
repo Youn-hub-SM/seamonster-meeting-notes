@@ -51,8 +51,8 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
     try {
       const j = await (await fetch(`/api/b2b/products/cost-schedules?product_id=${product.id}`, { cache: "no-store" })).json();
       if (j.ok) { setRows(j.schedules || []); setPendingMigration(!!j.pending_migration); }
-      else setError(j.error || "조회 실패");
-    } catch { setError("조회 실패"); }
+      else setError(j.error || "예약 내역을 불러오지 못했습니다. 창을 닫고 다시 여세요");
+    } catch { setError("예약 내역을 불러오지 못했습니다. 창을 닫고 다시 여세요"); }
     setLoading(false);
   }, [product.id]);
   useEffect(() => { load(); }, [load]);
@@ -78,10 +78,10 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
       const j = await (await fetch("/api/b2b/products/cost-schedules", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       })).json();
-      if (!j.ok) throw new Error(j.error || "예약 실패");
+      if (!j.ok) throw new Error(j.error || "예약을 추가하지 못했습니다. 적용일과 원가를 확인하세요");
       setDate(""); setMemo("");
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "예약 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "예약을 추가하지 못했습니다. 적용일과 원가를 확인하세요"); }
     setSaving(false);
   }
 
@@ -90,9 +90,9 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
     setError("");
     try {
       const j = await (await fetch(`/api/b2b/products/cost-schedules?id=${id}`, { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "취소 실패");
+      if (!j.ok) throw new Error(j.error || "예약을 취소하지 못했습니다. 창을 닫고 다시 여세요");
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "취소 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "예약을 취소하지 못했습니다. 창을 닫고 다시 여세요"); }
   }
 
   // 적용일이 이미 됐는데 크론 전이면 여기서 밀어 넣는다
@@ -101,10 +101,10 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
     setSaving(true); setError("");
     try {
       const j = await (await fetch("/api/b2b/products/cost-schedules", { method: "PATCH" })).json();
-      if (!j.ok) throw new Error(j.error || "반영 실패");
+      if (!j.ok) throw new Error(j.error || "원가를 반영하지 못했습니다. 창을 닫고 다시 여세요");
       await load();
       onApplied();
-    } catch (e) { setError(e instanceof Error ? e.message : "반영 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "원가를 반영하지 못했습니다. 창을 닫고 다시 여세요"); }
     setSaving(false);
   }
 
@@ -183,7 +183,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                   <strong style={{ fontSize: 13 }}>예약 내역</strong>
                   {dueNow && (
                     <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={applyNow} disabled={saving}>
-                      지금 반영
+                      원가 반영
                     </button>
                   )}
                 </div>

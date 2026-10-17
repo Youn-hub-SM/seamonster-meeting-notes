@@ -29,26 +29,29 @@ export default function LocationsPage() {
     setError("");
     try {
       const j = await (await fetch("/api/fulfill/locations", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "창고 위치를 불러오지 못했습니다. 새로고침하세요.");
       setZones(j.zones);
       setProducts(j.products);
       setZoneCol(j.zoneCol !== false);
       setLoaded(true);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "창고 위치를 불러오지 못했습니다. 새로고침하세요."); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   // 구역 목록 저장(추가·삭제·순서변경 즉시 저장). 실패 시 이전 목록 복구.
-  async function saveZones(next: string[]) {
+  async function saveZones(next: string[]): Promise<boolean> {
     const prev = zones;
     setZones(next);
     setSaving(true);
+    let ok = false;
     try {
       const j = await (await fetch("/api/fulfill/locations", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ zones: next }) })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "구역 목록을 저장하지 못했습니다. 다시 누르세요.");
       setZones(j.zones);
-    } catch (e) { setZones(prev); setError(e instanceof Error ? e.message : "저장 실패"); }
+      ok = true;
+    } catch (e) { setZones(prev); setError(e instanceof Error ? e.message : "구역 목록을 저장하지 못했습니다. 다시 누르세요."); }
     setSaving(false);
+    return ok;
   }
   function addZone() {
     if (saving) return; // Enter 연타로 PUT 이 겹치면 실패 롤백이 서버와 어긋난다
@@ -58,7 +61,7 @@ export default function LocationsPage() {
     setNewZoneErr("");
     setError("");
     setNewZone("");
-    saveZones([...zones, z]);
+    void saveZones([...zones, z]).then((ok) => { if (ok) toast.success("구역을 추가했습니다"); });
   }
   function moveZone(i: number, d: -1 | 1) {
     const j = i + d;
@@ -74,7 +77,7 @@ export default function LocationsPage() {
     const n = products.filter((p) => p.pick_zone === z).length;
     const prev = zones;
     saveZones(zones.filter((_, k) => k !== i));
-    toast.undo(`'${z}' 구역을 삭제했습니다${n > 0 ? ` — 품목 ${n}개는 '위치 미지정'으로 뽑힙니다` : ""}`, () => saveZones(prev));
+    toast.undo(`'${z}' 구역을 삭제했습니다${n > 0 ? ` — 품목 ${n}개는 '위치 미지정'으로 뽑힙니다` : ""}`, () => { void saveZones(prev); });
   }
 
   // 품목 구역 배정 — 변경 즉시 저장. 실패 시 그 품목만 이전 값 복구
@@ -84,11 +87,11 @@ export default function LocationsPage() {
     setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, pick_zone: zone } : p)));
     try {
       const j = await (await fetch("/api/fulfill/locations", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_id: id, zone }) })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "구역 배정을 저장하지 못했습니다. 다시 고르세요.");
       setError("");
     } catch (e) {
       setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, pick_zone: prevZone } : p)));
-      setError(e instanceof Error ? e.message : "저장 실패");
+      setError(e instanceof Error ? e.message : "구역 배정을 저장하지 못했습니다. 다시 고르세요.");
     }
   }
 
@@ -131,7 +134,7 @@ export default function LocationsPage() {
           <span className="b2b-card-title">구역 (걷는 순서){saving && <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>저장 중...</span>}</span>
         </div>
         {zones.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>구역이 없습니다.</div>
+          <div className="b2b-empty" style={{ padding: 18 }}>구역이 없습니다. 아래에 새 구역 이름을 입력해 추가하세요.</div>
         ) : (
           <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {zones.map((z, i) => (
@@ -160,7 +163,7 @@ export default function LocationsPage() {
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">품목 배치 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 미지정 {unzonedCount}개</span></span>
+          <span className="b2b-card-title">품목 배치 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>미지정 {unzonedCount}개</span></span>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
           <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목·SKU 검색" aria-label="품목·SKU 검색" style={{ flex: "1 1 220px" }} />
@@ -174,7 +177,7 @@ export default function LocationsPage() {
         {!loaded ? (
           <div className="b2b-loading">불러오는 중...</div>
         ) : list.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다." : q.trim() ? "조건에 맞는 품목이 없습니다." : "품목이 없습니다."}</div>
+          <div className="b2b-empty" style={{ padding: 18 }}>{onlyUnzoned ? "미지정 품목이 없습니다. '미지정만'을 끄면 전체가 보입니다." : q.trim() ? "조건에 맞는 품목이 없습니다. 검색어를 지우세요." : "품목이 없습니다. 상품마스터에서 품목을 등록하세요."}</div>
         ) : (
           <div className="b2b-table-wrap is-sticky-head">
             <table className="b2b-table">
@@ -202,7 +205,7 @@ export default function LocationsPage() {
             </table>
           </div>
         )}
-        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>묶음(세트)은 구성품 위치를 따릅니다 · 스캔 화면 반영은 최대 1분</p>
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 10 }}>묶음(세트)은 구성품 위치를 따릅니다. 스캔 화면 반영은 최대 1분.</p>
       </section>
     </div>
   );

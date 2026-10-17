@@ -42,9 +42,9 @@ export default function QrPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/qr/links", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "링크를 불러오지 못했습니다. 새로고침하세요");
       setLinks(j.links || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "링크를 불러오지 못했습니다. 새로고침하세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -59,9 +59,9 @@ export default function QrPage() {
     setCreating(true); setError("");
     try {
       const j = await (await fetch("/api/qr/links", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target_url: nTarget, title: nTitle, code: nCode }) })).json();
-      if (!j.ok) throw new Error(j.error || "생성 실패");
+      if (!j.ok) throw new Error(j.error || "브랜드링크를 만들지 못했습니다. 목적지 주소를 확인하세요");
       setNTarget(""); setNTitle(""); setNCode(""); load();
-    } catch (e) { setError(e instanceof Error ? e.message : "생성 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "브랜드링크를 만들지 못했습니다. 목적지 주소를 확인하세요"); }
     setCreating(false);
   }
   // 켜기/끄기 — 확인창 없이 바로 반영하고 되돌리기 토스트(같은 호출로 원래 값)
@@ -101,7 +101,7 @@ export default function QrPage() {
               <label className="b2b-field" style={{ flex: 2, minWidth: 220 }}><span className="b2b-field-label">연결할 주소 (목적지)<span className="req">*</span></span>
                 <input className="b2b-input" value={nTarget} onChange={(e) => setNTarget(e.target.value)} placeholder="예: https://seamonster.kr/event" aria-invalid={targetErr ? "true" : undefined} />
                 {targetErr && <span className="b2b-field-error">{targetErr}</span>}</label>
-              <label className="b2b-field" style={{ width: 190 }}><span className="b2b-field-label">원하는 링크 주소 (선택 · 비우면 자동)</span>
+              <label className="b2b-field" style={{ width: 190 }}><span className="b2b-field-label">원하는 링크 주소 <span className="opt">(선택, 비우면 자동)</span></span>
                 <input className="b2b-input" value={nCode} onChange={(e) => setNCode(e.target.value)} placeholder="예: 여름세일" /></label>
               <label className="b2b-field" style={{ flex: 1, minWidth: 130 }}><span className="b2b-field-label">메모 (선택)</span>
                 <input className="b2b-input" value={nTitle} onChange={(e) => setNTitle(e.target.value)} placeholder="예: 6월 라방" /></label>
@@ -117,7 +117,7 @@ export default function QrPage() {
           ) : (
             <div className="b2b-table-wrap is-sticky-head">
               <table className="b2b-table">
-                <thead><tr><th></th><th>제목 · 짧은 주소</th><th>목적지</th><th className="num">스캔</th><th>상태</th><th></th></tr></thead>
+                <thead><tr><th></th><th>제목 / 짧은 주소</th><th>목적지</th><th className="num">스캔</th><th>상태</th><th></th></tr></thead>
                 <tbody>
                   {links.map((l) => (
                     <tr key={l.id} style={{ opacity: l.active ? 1 : 0.55 }}>
@@ -202,9 +202,9 @@ function EditModal({ link, onClose, onSaved }: { link: Link; onClose: () => void
     setSaving(true); setError("");
     try {
       const j = await (await fetch("/api/qr/links", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: link.id, target_url: target, title, code }) })).json();
-      if (!j.ok) throw new Error(j.error || "저장 실패");
+      if (!j.ok) throw new Error(j.error || "링크를 저장하지 못했습니다. 목적지 주소를 확인하세요");
       onSaved();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "링크를 저장하지 못했습니다. 목적지 주소를 확인하세요"); }
     setSaving(false);
   }
   return (
@@ -259,7 +259,7 @@ function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
         <div className="b2b-modal-head"><h2 className="b2b-modal-title">스캔 통계 — {link.title || link.code}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button></div>
         <div className="b2b-modal-body">
           <p style={{ marginBottom: 10 }}>누적 스캔 <strong style={{ color: "var(--sm-orange)" }}>{link.scan_count.toLocaleString()}</strong>회 {data && data.sampleSize < link.scan_count && <span className="sm-faint" style={{ fontSize: 12 }}>(아래 분석은 최근 {data.sampleSize.toLocaleString()}건 기준)</span>}</p>
-          {loading ? <div className="b2b-loading">불러오는 중...</div> : !data || data.sampleSize === 0 ? <div className="sm-faint" style={{ fontSize: 13, padding: "10px 0" }}>아직 스캔 기록이 없습니다.</div> : (
+          {loading ? <div className="b2b-loading">불러오는 중...</div> : !data || data.sampleSize === 0 ? <div className="sm-faint" style={{ fontSize: 13, padding: "10px 0" }}>스캔 기록이 없습니다.</div> : (
             <>
               {data.daily.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
@@ -287,7 +287,7 @@ function StatsModal({ link, onClose }: { link: Link; onClose: () => void }) {
               <div className="b2b-field-label" style={{ fontWeight: 700, marginBottom: 4 }}>시간대(시)</div>
               <div className="sm-row" style={{ gap: 2, alignItems: "flex-end", height: 44, marginBottom: 14 }}>
                 {data.hourly.map((h) => (
-                  <div key={h.hour} title={`${h.hour}시 · ${h.count}회`} style={{ flex: 1, height: `${(h.count / hmax) * 100}%`, minHeight: h.count ? 3 : 0, background: "var(--sm-info)", borderRadius: 2 }} />
+                  <div key={h.hour} title={`${h.hour}시 ${h.count}회`} style={{ flex: 1, height: `${(h.count / hmax) * 100}%`, minHeight: h.count ? 3 : 0, background: "var(--sm-info)", borderRadius: 2 }} />
                 ))}
               </div>
 

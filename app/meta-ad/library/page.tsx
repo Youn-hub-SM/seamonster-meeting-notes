@@ -57,8 +57,8 @@ export default function MetaLibraryPage() {
       const body = { ...f, roas: f.roas ? Number(f.roas) : undefined, sourceAdId, ...prefillMetrics };
       const j = await (await fetch("/api/meta-ad/creatives", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
       if (!j.ok) throw new Error(j.error);
-      setMsg("저장됨"); setF({ ...EMPTY }); setSourceAdId(""); setPrefillMetrics({}); load();
-    } catch (e) { setErr(e instanceof Error ? e.message : "저장 오류"); }
+      setMsg("라이브러리에 저장했습니다"); setF({ ...EMPTY }); setSourceAdId(""); setPrefillMetrics({}); load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "소재를 저장하지 못했습니다. 입력값을 확인하세요"); }
     setSaving(false);
   }
   async function del(id: string) {

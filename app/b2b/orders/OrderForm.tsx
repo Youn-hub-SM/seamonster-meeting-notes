@@ -290,7 +290,7 @@ export default function OrderForm({
   async function loadEditOrder(id: string) {
     const orderRes = await fetch(`/api/b2b/orders/${id}`, { cache: "no-store" });
     const orderJson = await orderRes.json();
-    if (!orderJson.ok) throw new Error(orderJson.error || "발주 조회 실패");
+    if (!orderJson.ok) throw new Error(orderJson.error || "발주를 불러오지 못했습니다. 새로고침하세요");
     const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
     setOriginalOrder(o);
     setShippedOrder(o.status === "발송완료" || (o.shipments || []).some((sh) => sh.status === "발송완료" || !!sh.shipped_at));
@@ -380,8 +380,8 @@ export default function OrderForm({
         ]);
         const compJson = await compRes.json();
         const prodJson = await prodRes.json();
-        if (!compJson.ok) throw new Error(compJson.error || "업체 조회 실패");
-        if (!prodJson.ok) throw new Error(prodJson.error || "제품 조회 실패");
+        if (!compJson.ok) throw new Error(compJson.error || "업체 목록을 불러오지 못했습니다. 새로고침하세요");
+        if (!prodJson.ok) throw new Error(prodJson.error || "제품 목록을 불러오지 못했습니다. 새로고침하세요");
         setCompanies(compJson.companies || []);
         setProducts((prodJson.products as Product[] || []).filter((p) => p.active));
 
@@ -393,7 +393,7 @@ export default function OrderForm({
           const todayIso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
           const orderRes = await fetch(`/api/b2b/orders/${cloneFromId}`, { cache: "no-store" });
           const orderJson = await orderRes.json();
-          if (!orderJson.ok) throw new Error(orderJson.error || "복제할 발주 조회 실패");
+          if (!orderJson.ok) throw new Error(orderJson.error || "복제할 발주를 불러오지 못했습니다. 발주 목록에서 다시 복제하세요");
           const o = orderJson.order as Order & { items: OrderItem[]; company: Company; shipments: Shipment[] };
           if (Number(o.discount_amount) !== 0) { setDiscountMode("won"); setDiscountRaw(String(Math.round(Number(o.discount_amount)))); }
           // 거래처가 ''→원본 거래처로 바뀌어 단가 재도출이 돌면 원본 단가가 거래처·기본 단가로 덮인다(점검 확정) — 이번 한 번은 건너뛴다
@@ -406,7 +406,7 @@ export default function OrderForm({
           setData((prev) => ({ ...prev, order_date: iso }));
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "데이터 조회 중 오류");
+        setError(err instanceof Error ? err.message : "발주 정보를 불러오지 못했습니다. 새로고침하세요");
       }
       setLoading(false);
     })();
@@ -654,7 +654,7 @@ export default function OrderForm({
     try {
       const res = await fetch(`/api/b2b/orders/${clonePrompt.orderId}`, { cache: "no-store" });
       const j = await res.json();
-      if (!j.ok) throw new Error(j.error || "복제할 발주 조회 실패");
+      if (!j.ok) throw new Error(j.error || "복제할 발주를 불러오지 못했습니다. 빈 폼에 직접 입력하세요");
       const o = j.order as Order & { items: OrderItem[]; shipments: Shipment[] };
       const t = new Date();
       const todayIso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
@@ -665,7 +665,7 @@ export default function OrderForm({
       setData(buildCloneData(o, todayIso));
       setClonePrompt(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "복제 중 오류");
+      setError(err instanceof Error ? err.message : "최근 발주를 복제하지 못했습니다. 빈 폼에 직접 입력하세요");
     }
     setCloning(false);
   }
@@ -807,7 +807,7 @@ export default function OrderForm({
             {unlinked.map((n) => <div key={n}>- {n}</div>)}
           </>
         ),
-        action: "그대로 저장",
+        action: mode === "create" ? "발주 등록" : "변경 저장",
         danger: false,
       }))) return;
       allowUnlinked = true;
@@ -828,7 +828,7 @@ export default function OrderForm({
             <div>재고·매출이 함께 바뀝니다.</div>
           </>
         ),
-        action: "저장",
+        action: "변경 저장",
         danger: false,
       }))) return;
       allowShippedQty = true;
@@ -857,7 +857,7 @@ export default function OrderForm({
       });
       const json = await res.json();
       if (res.status === 409 && json.stale) throw new Error(json.error || "다른 곳에서 이 발주가 바뀌었습니다 — 새로고침한 뒤 다시 고쳐 저장하세요.");
-      if (!res.ok || !json.ok) throw new Error(json.error || "저장 실패");
+      if (!res.ok || !json.ok) throw new Error(json.error || (mode === "create" ? "발주를 등록하지 못했습니다. 입력값을 확인하세요" : "변경을 저장하지 못했습니다. 입력값을 확인하세요"));
       // 차감 칸이 유지됐거나(이미 나감) 바뀌었으면(옮길 방향) 안내 — 따르지 않으면 칸마다 유령 재고가 생긴다
       //  창 대신 목록 화면의 경고 배너로 — 목록으로 넘어가므로 sessionStorage 로 건넨다(매출 실패로 이 화면에 남으면 다음에 목록을 열 때 뜬다)
       if (json.channel_notice) {
@@ -869,7 +869,7 @@ export default function OrderForm({
       //  방금 넣은 줄을 지우고 또 넣어 차수 배분이 끊긴다. 실패하면 새로고침 전까지 [수정]을 막는다.
       //  등록(POST)은 새 발주가 항상 발송대기라 매출 행이 없어 실패해도 원장에 남는 것이 없다 — 목록으로 간다.
       if (mode === "edit" && orderId && json.sales_sync_failed) {
-        setSalesWarn(json.sales_sync_message || "매출 반영 실패");
+        setSalesWarn(json.sales_sync_message || "매출 원장에 반영하지 못했습니다. [수정]을 다시 눌러 저장하세요");
         try {
           await loadEditOrder(orderId);
         } catch {
@@ -884,7 +884,7 @@ export default function OrderForm({
       router.push("/b2b/orders");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "저장 중 오류");
+      setError(err instanceof Error ? err.message : (mode === "create" ? "발주를 등록하지 못했습니다. 입력값을 확인하세요" : "변경을 저장하지 못했습니다. 입력값을 확인하세요"));
       setSaving(false);
     }
   }
@@ -903,11 +903,11 @@ export default function OrderForm({
     try {
       const res = await fetch(`/api/b2b/orders/${orderId}`, { method: "DELETE" });
       const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error || "삭제 실패");
+      if (!res.ok || !json.ok) throw new Error(json.error || "발주를 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       router.push("/b2b/orders");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "삭제 중 오류");
+      setError(err instanceof Error ? err.message : "발주를 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       setSaving(false);
     }
   }
@@ -933,8 +933,11 @@ export default function OrderForm({
               ? cloneFromId
                 ? "발주 복제"
                 : "새 발주 등록"
-              : `발주 수정 · ${originalOrder?.order_no ?? ""}`}
+              : "발주 수정"}
           </h1>
+          {mode === "edit" && originalOrder?.order_no && (
+            <p className="b2b-page-subtitle">{originalOrder.order_no}</p>
+          )}
           {mode === "create" && cloneFromId && (
             <p className="b2b-page-subtitle">발주일·일정·상태는 초기화됐습니다.</p>
           )}
@@ -984,7 +987,7 @@ export default function OrderForm({
               />
               {fieldErrors.company && <div className="b2b-field-error">{fieldErrors.company}</div>}
               {companies.length === 0 && (
-                <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>등록된 업체가 없습니다</span>
+                <span style={{ fontSize: 12, color: "var(--sm-danger)" }}>등록된 업체가 없습니다. 업체 주소록에서 먼저 등록하세요</span>
               )}
             </div>
             <div className="b2b-field">
@@ -1178,11 +1181,11 @@ export default function OrderForm({
         {/* 발송 일정(차수)은 발주 목록의 '+ 발송일' 창에서만 만든다 —
             실제 발송 기준으로 날짜·박스 수·수량을 한 곳에서 잡기 위해 이 폼에서는 뺐다. */}
 
-        {/* ───── 발송 · 송장번호 (읽기 전용) ───── */}
+        {/* ───── 발송 정보 (읽기 전용) ───── */}
         {showShipInfo && (
           <section className="b2b-form-section">
             <div className="b2b-form-section-title">
-              발송 · 송장번호
+              발송 정보
               {partialView && (
                 <span className="b2b-status-pill" style={{ marginLeft: 8, background: partialView.color?.bg, color: partialView.color?.fg }}>{partialView.label}</span>
               )}
@@ -1193,7 +1196,7 @@ export default function OrderForm({
                 <div key={r.key} style={{ border: "1px solid var(--sm-border)", borderRadius: 10, padding: "10px 12px" }}>
                   <div className="sm-row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     <strong style={{ fontSize: 13 }}>
-                      {shippedInfo.length > 1 ? `${r.seq}차 · ` : ""}{r.ship_date || "날짜미정"}
+                      {shippedInfo.length > 1 ? `${r.seq}차 ` : ""}{r.ship_date || "날짜미정"}
                     </strong>
                     <span className="b2b-status-pill" style={{
                       background: SHIPMENT_STATUS_COLORS[r.status as keyof typeof SHIPMENT_STATUS_COLORS]?.bg,

@@ -50,9 +50,9 @@ export default function QuotePage() {
     setLoading(true); setError("");
     try {
       const j: QuoteResp = await (await fetch(`/api/inventory/quote?month=${m}&rent=${r}&etc=${e}&tax_etc=${tx}`, { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "결산을 불러오지 못했습니다. 새로고침하세요.");
       setData(j);
-    } catch (err) { setError(err instanceof Error ? err.message : "조회 오류"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "결산을 불러오지 못했습니다. 새로고침하세요."); }
     setLoading(false);
   }, []);
   useEffect(() => { const t = setTimeout(() => load(ym, rent, etc, taxEtc), 250); return () => clearTimeout(t); }, [load, ym, rent, etc, taxEtc]);
@@ -85,10 +85,10 @@ export default function QuotePage() {
     try {
       const j = await (await fetch(`/api/inventory/quote/snapshot?month=${m}`, { cache: "no-store" })).json();
       if (seq !== viewSeq.current) return;
-      if (!j.ok) throw new Error(j.error || "확정본 조회 실패");
-      if (!j.snapshot) { setViewErr("확정본이 없습니다 — 확정이 해제됐을 수 있습니다."); return; }
+      if (!j.ok) throw new Error(j.error || "확정본을 불러오지 못했습니다. [확정본 보기]를 다시 누르세요.");
+      if (!j.snapshot) { setViewErr("확정본이 없습니다 — 확정이 해제됐을 수 있습니다. [결산 확정]으로 다시 확정하세요."); return; }
       setViewSnap(j.snapshot);
-    } catch (e) { if (seq === viewSeq.current) setViewErr(e instanceof Error ? e.message : "확정본 조회 실패"); }
+    } catch (e) { if (seq === viewSeq.current) setViewErr(e instanceof Error ? e.message : "확정본을 불러오지 못했습니다. [확정본 보기]를 다시 누르세요."); }
   }, []);
   function closeSnap() { viewSeq.current++; setViewMonth(null); setViewSnap(null); setViewErr(""); }
   // 펼치면 그 자리로 스크롤 — 상단 배너의 '확정본 보기'를 눌러도 아래 결산서가 바로 보이게
@@ -120,13 +120,13 @@ export default function QuotePage() {
         r = await post(true);
         j = await r.json().catch(() => null);
       }
-      if (!r.ok || !j?.ok) { setError(`확정 실패: ${j?.error || "서버 오류"}`); return; }
+      if (!r.ok || !j?.ok) { setError(`결산을 확정하지 못했습니다(${j?.error || "서버 오류"}). 다시 누르세요.`); return; }
       setSnap(j.snapshot);
       void loadList();
       if (viewMonth === ym) void openSnap(ym); // 펼쳐 둔 확정본이 이 달이면 새 확정본으로
       // 확정본은 서버 최신 원장 기준 — 화면 데이터도 같은 기준으로 갱신해 역방향 경고 방지
       await load(ym, rent, etc, taxEtc);
-    } catch { setError("확정 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
+    } catch { setError("결산을 확정하지 못했습니다(네트워크 오류). 연결을 확인한 뒤 다시 누르세요."); }
     finally { setSnapBusy(false); }
   }
   async function unconfirmQuote() {
@@ -134,11 +134,11 @@ export default function QuotePage() {
     try {
       const r = await fetch(`/api/inventory/quote/snapshot?month=${ym}`, { method: "DELETE" });
       const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.ok) { setError(`해제 실패: ${j?.error || "서버 오류"}`); return; }
+      if (!r.ok || !j?.ok) { setError(`확정을 해제하지 못했습니다(${j?.error || "서버 오류"}). 다시 누르세요.`); return; }
       setSnap(null);
       void loadList();
       if (viewMonth === ym) closeSnap();
-    } catch { setError("해제 실패: 네트워크 오류 — 잠시 후 다시 시도하세요."); }
+    } catch { setError("확정을 해제하지 못했습니다(네트워크 오류). 연결을 확인한 뒤 다시 누르세요."); }
   }
   const dtKst = (iso: string) => {
     try { return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16); }
@@ -178,19 +178,19 @@ export default function QuotePage() {
           )}
           <a className="b2b-btn-secondary" href={exportUrl}>엑셀 내려받기</a>
           <button className="b2b-btn-primary" onClick={() => printSheet("live")} disabled={loading || items.length === 0}>인쇄 / PDF</button>
-          {!loading && items.length === 0 && <span className="b2b-btn-why">매입 내역이 없어 인쇄할 수 없습니다</span>}
+          {!loading && items.length === 0 && <span className="b2b-btn-why">매입 내역이 없어 인쇄할 수 없습니다 — 다른 달을 고르세요</span>}
         </div>
       </header>
       {error && <div className="b2b-error no-print">{error}</div>}
       {snap && (snapDiffs.length === 0 ? (
         <div className="sm-success no-print" style={{ marginBottom: 12 }}>
-          {Number(ym.slice(5))}월 결산 확정됨 — {dtKst(snap.confirmed_at)}{snap.confirmed_by ? ` · ${snap.confirmed_by}` : ""} · 확정 총 입금액 {won(snap.summary.deposit)}원
+          {Number(ym.slice(5))}월 결산 확정됨 — {dtKst(snap.confirmed_at)}{snap.confirmed_by ? ` ${snap.confirmed_by}` : ""}, 확정 총 입금액 {won(snap.summary.deposit)}원
           <button className="b2b-link-btn" style={{ marginLeft: 10, fontSize: 12 }} onClick={() => openSnap(ym)}>확정본 보기</button>
           <button className="b2b-link-btn sm-faint" style={{ marginLeft: 10, fontSize: 12 }} onClick={unconfirmQuote}>확정 해제</button>
         </div>
       ) : (
         <div className="sm-warn no-print" style={{ marginBottom: 12 }}>
-          <strong>확정({dtKst(snap.confirmed_at)}) 이후 원장이 바뀌었습니다:</strong> {snapDiffs.join(" · ")}
+          <strong>확정({dtKst(snap.confirmed_at)}) 이후 원장이 바뀌었습니다:</strong> {snapDiffs.join(", ")}
           <button className="b2b-link-btn" style={{ marginLeft: 8, fontSize: 12 }} onClick={() => openSnap(ym)}>확정본 보기</button>
           <button className="b2b-link-btn sm-faint" style={{ marginLeft: 8, fontSize: 12 }} onClick={unconfirmQuote}>확정 해제</button>
         </div>
@@ -210,7 +210,7 @@ export default function QuotePage() {
       </section>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : items.length === 0 && !s?.rentTotal ? (
-        <div className="b2b-empty">{ym} 매입 내역이 없습니다.</div>
+        <div className="b2b-empty">{ym} 매입 내역이 없습니다. 다른 달을 고르세요.</div>
       ) : s && (
         <QuoteSheet ym={ym} s={s} items={items} printable={printTarget === "live"} />
       )}
@@ -226,7 +226,7 @@ export default function QuotePage() {
                 {snapList.map((r) => (
                   <tr key={r.month} style={viewMonth === r.month ? { background: "var(--sm-bg-subtle)" } : undefined}>
                     <td data-label="대상 월" style={{ fontWeight: 700 }}>{r.month}</td>
-                    <td data-label="확정" className="sm-faint" style={{ fontSize: 12 }}>{dtKst(r.confirmed_at)}{r.confirmed_by ? ` · ${r.confirmed_by}` : ""}</td>
+                    <td data-label="확정" className="sm-faint" style={{ fontSize: 12 }}>{dtKst(r.confirmed_at)}{r.confirmed_by ? ` ${r.confirmed_by}` : ""}</td>
                     <td data-label="품목" className="num b2b-money">{(r.summary?.itemCount ?? 0).toLocaleString()}종</td>
                     <td data-label="총 매입금액" className="num b2b-money">{won(r.summary?.totalAmount ?? 0)}</td>
                     <td data-label="총 입금액" className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.summary?.deposit ?? 0)}</td>
@@ -252,7 +252,7 @@ export default function QuotePage() {
           {viewErr ? <div className="b2b-error no-print">{viewErr}</div>
             : !viewSnap ? <div className="b2b-loading no-print">확정본 불러오는 중...</div>
             : <QuoteSheet ym={viewSnap.month} s={viewSnap.summary} items={viewSnap.items || []}
-                stamp={`확정본 · ${dtKst(viewSnap.confirmed_at)}${viewSnap.confirmed_by ? ` · ${viewSnap.confirmed_by}` : ""}`}
+                stamp={`확정본 ${dtKst(viewSnap.confirmed_at)}${viewSnap.confirmed_by ? ` ${viewSnap.confirmed_by}` : ""}`}
                 printable={printTarget === "snap"} />}
         </div>
       )}

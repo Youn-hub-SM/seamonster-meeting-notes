@@ -29,9 +29,9 @@ export default function VocSurveysPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/voc/surveys", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "설문 응답을 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setRows(j.rows || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "설문 응답을 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -61,9 +61,9 @@ export default function VocSurveysPage() {
     try {
       const res = await fetch("/api/voc/surveys/insights", { method: "POST" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "응답을 분석하지 못했습니다. [분석 실행]을 다시 누르세요");
       setInsight(j.insight);
-    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "응답을 분석하지 못했습니다. [분석 실행]을 다시 누르세요"); }
     setAiLoading(false);
   }
 
@@ -72,9 +72,9 @@ export default function VocSurveysPage() {
     try {
       const res = await fetch(`/api/voc/surveys?id=${encodeURIComponent(r.id)}`, { method: "DELETE" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "삭제 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "응답을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요");
       setDetail(null); await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "삭제 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "응답을 삭제하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
   }
 
   return (
@@ -124,11 +124,11 @@ export default function VocSurveysPage() {
         </div>
       ) : (
         <>
-          {/* AI 요약 */}
+          {/* 요약 초안 */}
           <section className="b2b-card">
             <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="b2b-card-title">AI 요약</span>
-              <button className="b2b-btn-primary" onClick={runAi} disabled={aiLoading} style={{ padding: "6px 14px" }}>{aiLoading ? "분석 중..." : insight ? "다시 분석" : "AI 분석 실행"}</button>
+              <span className="b2b-card-title">요약 초안</span>
+              <button className="b2b-btn-primary" onClick={runAi} disabled={aiLoading} style={{ padding: "6px 14px" }}>{aiLoading ? "분석 중..." : insight ? "다시 분석" : "분석 실행"}</button>
             </div>
             {insight && (
               <div className="sm-col" style={{ gap: 12 }}>
@@ -176,7 +176,7 @@ export default function VocSurveysPage() {
         <div className="b2b-modal-backdrop">
           <div className="b2b-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
             <div className="b2b-modal-head">
-              <span className="b2b-modal-title">설문 응답 · {(detail.submitted_at || detail.created_at)?.slice(0, 10)}</span>
+              <span className="b2b-modal-title">설문 응답 <span className="sm-faint" style={{ fontWeight: 400 }}>{(detail.submitted_at || detail.created_at)?.slice(0, 10)}</span></span>
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setDetail(null)}>✕</button>
             </div>
             <div className="b2b-modal-body">

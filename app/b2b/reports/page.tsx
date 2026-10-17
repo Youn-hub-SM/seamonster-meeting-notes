@@ -90,10 +90,10 @@ export default function ReportsPage() {
     try {
       const res = await fetch(`/api/b2b/reports?from=${from}&to=${to}`, { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "조회 실패");
+      if (!res.ok || !data.ok) throw new Error(data.error || "리포트를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
       setReport(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "조회 중 오류");
+      setError(err instanceof Error ? err.message : "리포트를 불러오지 못했습니다. [다시 불러오기]를 누르세요");
     }
     setLoading(false);
   }
@@ -112,10 +112,10 @@ export default function ReportsPage() {
     try {
       const res = await fetch(`/api/b2b/reports/ledger?from=${from}&to=${to}`, { cache: "no-store" });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "원장 대조 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "원장을 대조하지 못했습니다. [원장 대조하기]를 다시 누르세요");
       setLedgerList({ checked: j.checked, mismatches: j.mismatches });
     } catch (err) {
-      setLedgerErr(err instanceof Error ? err.message : "원장 대조 실패");
+      setLedgerErr(err instanceof Error ? err.message : "원장을 대조하지 못했습니다. [원장 대조하기]를 다시 누르세요");
     }
     setLedgerBusy("");
   }
@@ -135,9 +135,9 @@ export default function ReportsPage() {
     try {
       const res = await fetch("/api/b2b/reports/ledger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order_id: m.order_id }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "다시 맞추기 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "원장을 다시 맞추지 못했습니다. [원장 대조하기]를 다시 누르세요");
     } catch (err) {
-      setLedgerErr(err instanceof Error ? err.message : "다시 맞추기 실패");
+      setLedgerErr(err instanceof Error ? err.message : "원장을 다시 맞추지 못했습니다. [원장 대조하기]를 다시 누르세요");
       setLedgerBusy("");
       return;
     }
@@ -154,9 +154,9 @@ export default function ReportsPage() {
         const text = await res.text();
         try {
           const j = JSON.parse(text);
-          throw new Error(j.error || "다운로드 실패");
+          throw new Error(j.error || "엑셀을 내려받지 못했습니다. 기간을 줄여 다시 내려받으세요");
         } catch {
-          throw new Error("다운로드 실패 (HTTP " + res.status + ")");
+          throw new Error("엑셀을 내려받지 못했습니다 (HTTP " + res.status + "). 기간을 줄여 다시 내려받으세요");
         }
       }
       const blob = await res.blob();
@@ -171,7 +171,7 @@ export default function ReportsPage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "다운로드 중 오류");
+      setError(err instanceof Error ? err.message : "엑셀을 내려받지 못했습니다. 기간을 줄여 다시 내려받으세요");
     }
     setExporting(false);
   }
@@ -191,7 +191,7 @@ export default function ReportsPage() {
       <header className="b2b-page-head">
         <div>
           <h1 className="b2b-page-title">매출 집계</h1>
-          <p className="b2b-page-subtitle">발송일 기준 · 발송완료 발주만</p>
+          <p className="b2b-page-subtitle">발송일 기준, 발송완료 발주만</p>
         </div>
         <div className="b2b-page-actions">
           <button className="b2b-btn-secondary" onClick={reload} disabled={loading}>
@@ -302,7 +302,7 @@ export default function ReportsPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : !report ? (
-        <div className="b2b-empty">집계할 발주가 없습니다.</div>
+        <div className="b2b-empty">집계할 발주가 없습니다. 기간을 바꾸세요</div>
       ) : (
         <>
           {/* 현황 히어로 — 업체별 매출 도넛 + 총매출 + 지표 */}
@@ -311,7 +311,7 @@ export default function ReportsPage() {
               <Donut data={companyDonut} center={moneyCompact(report.summary.revenue)} centerSub="총 매출" />
             </div>
             <div className="sm-stat-hero-body">
-              <div className="sm-stat-hero-label">총 매출 <span className="sm-faint">· 과세 {formatMoney(report.summary.revenue_taxable)} · 면세 {formatMoney(report.summary.revenue_exempt)}</span></div>
+              <div className="sm-stat-hero-label">총 매출 <span className="sm-faint">과세 {formatMoney(report.summary.revenue_taxable)} · 면세 {formatMoney(report.summary.revenue_exempt)}</span></div>
               <div className="sm-stat-hero-total b2b-money">{formatMoney(report.summary.revenue)}원</div>
               <div className="sm-stat-hero-breakdown">
                 <div className="sm-stat-hero-metric">
@@ -324,7 +324,7 @@ export default function ReportsPage() {
                   <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-success)" }}>{formatMoney(report.summary.margin)}원</span>
                   {(report.summary.margin_cost_missing_lines ?? 0) > 0 ? (
                     <span className="sm-faint" style={{ fontSize: 12, color: "var(--sm-danger)" }}>
-                      원가 미입력 {report.summary.margin_cost_missing_lines}건(매출 {formatMoney(report.summary.margin_cost_missing_revenue ?? 0)}원) · 마진 과대 가능
+                      원가 미입력 {report.summary.margin_cost_missing_lines}건(매출 {formatMoney(report.summary.margin_cost_missing_revenue ?? 0)}원), 마진 과대 가능
                     </span>
                   ) : (
                     <span className="sm-faint" style={{ fontSize: 12 }}>매출 대비 {report.summary.revenue > 0 ? Math.round((report.summary.margin / report.summary.revenue) * 100) : 0}%</span>

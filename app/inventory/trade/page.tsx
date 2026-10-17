@@ -66,10 +66,10 @@ export default function TradePage() {
       fd.append("done", ioDone ? "1" : "0"); // 즉시 처리면 미래 날짜 행은 오류로(S6)
       const res = await fetch("/api/inventory/txns/import", { method: "POST", body: fd });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "엑셀을 분석하지 못했습니다. 파일을 다시 첨부하세요.");
       setPreview({ ...(j as Omit<Preview, "key">), key: newKey() });
       setUploadOpen(false); // 분석 성공 → 설정 모달 닫고 미리보기로
-    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "엑셀을 분석하지 못했습니다. 파일을 다시 첨부하세요."); }
     setImporting(false);
   }
   async function applyImport() {
@@ -95,14 +95,15 @@ export default function TradePage() {
       } catch { throw new Error(lost); }
       if (!j) throw new Error(lost);
       if (j.code === "request_key_conflict") setPreview((p) => (p ? { ...p, key: newKey() } : p)); // 다음 누름은 새 기록
-      if (!res.ok || !j.ok) throw new Error(j.error || "적용 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "엑셀 내용을 반영하지 못했습니다. 다시 누르세요.");
       if (j.replay) toast.success("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
+      else toast.success(`${preview.summary.valid}건을 반영했습니다`);
       if (j.link) {
         const m = linkMessage(j.link, (pid) => preview.rows.find((r) => r.product_id === pid)?.product_name || "품목");
         if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
       }
       setPreview(null); setReload((n) => n + 1);
-    } catch (e) { setError(e instanceof Error ? e.message : "적용 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "엑셀 내용을 반영하지 못했습니다. 다시 누르세요."); }
     setApplying(false);
   }
 
@@ -133,7 +134,7 @@ export default function TradePage() {
             </div>
             <div className="b2b-modal-body">
               <div className="b2b-field">
-                <label className="b2b-field-label">① 유형</label>
+                <label className="b2b-field-label">유형</label>
                 <div className="sm-tabs" style={{ margin: 0 }}>
                   <button className={`sm-tab ${ioType === "출고" ? "is-active" : ""}`} onClick={() => { setIoType("출고"); setInReason(""); }}>판매(출고)</button>
                   <button className={`sm-tab ${ioType === "입고" ? "is-active" : ""}`} onClick={() => { setIoType("입고"); setIoReason("판매"); if (ioChannel !== "소매") setIoChannel("소매"); }}>구매(입고)</button>
@@ -141,7 +142,7 @@ export default function TradePage() {
               </div>
 
               <div className="b2b-field" style={{ marginTop: 12 }}>
-                <label className="b2b-field-label">② 채널</label>
+                <label className="b2b-field-label">채널</label>
                 <ChannelPicker value={ioChannel} onChange={setIoChannel}
                   disabledChannels={ioType === "입고" ? MOVE_ONLY_CHANNELS : []}
                   disabledHint="도매·프로모션·도매 대량은 소매로 입고한 뒤 [재고 이동]에서 옮깁니다" />
@@ -149,7 +150,7 @@ export default function TradePage() {
 
               <div className="b2b-field-row" style={{ marginTop: 12 }}>
                 <div className="b2b-field">
-                  <label className="b2b-field-label">③ 거래일</label>
+                  <label className="b2b-field-label">거래일</label>
                   <input className="b2b-input" type="date" value={ioDate} max={ioDone ? TODAY() : undefined} onChange={(e) => setIoDate(e.target.value)} />
                 </div>
                 <div className="b2b-field">
@@ -174,7 +175,7 @@ export default function TradePage() {
                   <label className="b2b-field-label">요청서</label>
                   <select className="b2b-input" value={ioDone && !customerReturn ? reqId : ""} disabled={!ioDone || customerReturn} onChange={(e) => { setReqId(e.target.value); setReqTouched(true); }}>
                     <option value="">연결 안 함</option>
-                    {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` · ${r.title}` : ""} · 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
+                    {reqs.map((r) => <option key={r.id} value={r.id}>{r.req_no || "요청서"}{r.title ? ` ${r.title}` : ""} — 생산 {r.prod_start.slice(5)}~{(r.due_date || "").slice(5)}{r.in_window ? "" : " (기간 밖)"}{r.full ? " (이행 100%)" : ""}</option>)}
                   </select>
                   {reqWarn && !customerReturn && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)", marginTop: 4 }}>{reqWarn}</span>}
                 </div>
@@ -202,7 +203,7 @@ export default function TradePage() {
                 {ioType === "입고"
                   ? <>양식 = <strong>SKU · 수량 · 단가</strong></>
                   : <>양식 = <strong>수량 · (무시) · SKU</strong></>}
-                {" · "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="sm-link">양식 내려받기</a>
+                {" — "}<a href={`/api/inventory/txns/template?type=${ioType}`} className="sm-link">양식 내려받기</a>
                 <br />거래일·거래처·채널·{ioType === "출고" ? "사유" : "요청서"}는 파일 전체에 적용됩니다.
               </p>
 
@@ -213,7 +214,7 @@ export default function TradePage() {
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setUploadOpen(false)} disabled={importing}>그만두기</button>
                 <label className="b2b-btn-primary" style={{ cursor: importing ? "default" : "pointer" }}>
-                  {importing ? "분석 중..." : "④ 엑셀 첨부"}
+                  {importing ? "분석 중..." : "엑셀 첨부"}
                   <input type="file" accept=".xlsx" style={{ display: "none" }} disabled={importing}
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
                 </label>
@@ -239,7 +240,7 @@ export default function TradePage() {
                 {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.summary.untracked.toLocaleString()}행 제외</span>}
                 {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
               </div>
-              {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>반영할 행이 없습니다.</div>}
+              {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>반영할 행이 없습니다. 파일을 다시 첨부하세요.</div>}
               {preview.rows.length > 0 && (
                 <div className="b2b-table-wrap" style={{ maxHeight: 320, overflow: "auto", marginBottom: 12 }}>
                   <table className="b2b-table">
@@ -273,7 +274,7 @@ export default function TradePage() {
               <span />
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
-                {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
+                {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 첨부하세요</span>}
                 <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}건 반영`}</button>
               </div>
             </div>

@@ -62,9 +62,9 @@ export function RequestList() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/production/requests", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "요청서 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요.");
       setRequests(j.requests || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "요청서 목록을 불러오지 못했습니다. [다시 불러오기]를 누르세요."); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -215,14 +215,14 @@ export function RequestList() {
     setBusy(true); setError("");
     try {
       const j = await (await fetch("/api/production/requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).json();
-      if (!j.ok) throw new Error(j.error || "생성 실패");
+      if (!j.ok) throw new Error(j.error || "요청서를 만들지 못했습니다. [요청서 만들기]를 다시 누르세요.");
       setCreateOpen(false);
       setPrefill(null); // 소비 완료 — 안 지우면 다음 '+ 새 생산 요청'에 방금 요청한 품목이 다시 채워져 중복 요청이 된다
       void loadRec(); // 방금 만든 요청서 잔여가 '입고 예정'에 반영되도록 권장 재조회
       await load();
       if (j.request?.purpose) setTab(toPrPurpose(j.request.purpose)); // 창에서 용도를 바꿔 만들었으면 그 탭으로 — 안 보이면 또 만든다
       setExpandedId(j.request?.id ?? null);
-    } catch (e) { setError(e instanceof Error ? e.message : "생성 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "요청서를 만들지 못했습니다. [요청서 만들기]를 다시 누르세요."); }
     setBusy(false);
   }
 
@@ -232,11 +232,11 @@ export function RequestList() {
       const res = await fetch(`/api/production/requests/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const j = await res.json();
       // 409(그사이 완료·취소·상태 변경) — 창을 닫아 새로 읽은 목록과 오류가 보이게 한다(창이 가리면 같은 저장을 되풀이한다)
-      if (!j.ok) { if (res.status === 409) { setEditReq(null); setCreateOpen(false); void load(); window.scrollTo({ top: 0, behavior: "smooth" }); } throw new Error(j.error || "수정 실패"); }
+      if (!j.ok) { if (res.status === 409) { setEditReq(null); setCreateOpen(false); void load(); window.scrollTo({ top: 0, behavior: "smooth" }); } throw new Error(j.error || "수정을 저장하지 못했습니다. [수정 저장]을 다시 누르세요."); }
       applyUpdated(j.request);
       setEditReq(null);
       void loadRec(); // 수량·상태 변경 = 잔여 변경 → 입고 예정·권장 재조회
-    } catch (e) { setError(e instanceof Error ? e.message : "수정 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "수정을 저장하지 못했습니다. [수정 저장]을 다시 누르세요."); }
     setBusy(false);
   }
 
@@ -244,15 +244,15 @@ export function RequestList() {
   type PromoRel = { moved: { name: string; qty: number }[]; kept: { name: string; qty: number }[]; failed: string[]; unlinked?: string[]; error?: string };
   function showRelease(label: string, pr: PromoRel) {
     const list = (xs: { name: string; qty: number }[]) => xs.map((x) => `${x.name} ×${x.qty.toLocaleString()}`).join(", ");
-    if (pr.error) { setNotice({ warn: true, text: `${label}했지만 프로모션 재고를 소매로 옮기지 못했습니다(${pr.error}) — 행의 [합류 다시 실행]을 누르거나 '재고 이동'에서 프로모션 → 소매로 직접 옮기세요.` }); return; }
+    if (pr.error) { setNotice({ warn: true, text: `${label}했지만 프로모션 재고를 소매로 옮기지 못했습니다(${pr.error}) — 행의 [합류 다시 실행]을 누르거나 '재고 이동'에서 프로모션에서 소매로 직접 옮기세요.` }); return; }
     setNotice({
       warn: pr.failed.length > 0 || (pr.unlinked?.length ?? 0) > 0,
       text: [
-        pr.moved.length ? `${label} — 프로모션 재고를 소매로 옮겼습니다: ${list(pr.moved)}` : `${label} — 소매로 옮길 프로모션 재고가 없습니다.`,
-        pr.kept.length ? `다른 열린 프로모션 요청서 몫으로 남김: ${list(pr.kept)}` : "",
+        pr.moved.length ? `${label} — 프로모션 재고를 소매로 옮겼습니다: ${list(pr.moved)}.` : `${label} — 소매로 옮길 프로모션 재고가 없습니다.`,
+        pr.kept.length ? `다른 열린 프로모션 요청서 몫으로 남김: ${list(pr.kept)}.` : "",
         pr.failed.length ? `옮기지 못함: ${pr.failed.join(", ")} — 행의 [합류 다시 실행]을 누르거나 '재고 이동'에서 직접 옮기세요.` : "",
         pr.unlinked?.length ? `이행 정리 실패: ${pr.unlinked.join(", ")} — 다시 열면 확보분이 남은 것처럼 보일 수 있습니다.` : "",
-      ].filter(Boolean).join(" · "),
+      ].filter(Boolean).join(" "),
     });
   }
 
@@ -267,13 +267,13 @@ export function RequestList() {
       if (!j.ok && res.status === 409 && j.need_confirm === "reopen_promo") {
         if (await confirm({ title: "프로모션 요청서 다시 열기", body: String(j.error), action: "그래도 다시 열기" })) retry = { confirm_reopen: true };
       } else {
-        if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "변경 실패"); }
+        if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "상태를 바꾸지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
         applyUpdated(j.request);
         if (j.promo_release) showRelease(status, j.promo_release as PromoRel);
         if (j.warning) setNotice({ warn: true, text: String(j.warning) });
         void loadRec(); // 완료·취소·다시 열기 = 입고 예정 변경
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "변경 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "상태를 바꾸지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
     setBusy(false);
     if (retry) await patchStatus(id, status, expect, retry);
   }
@@ -291,11 +291,11 @@ export function RequestList() {
         res = await fetch(`/api/production/requests/${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "promo_release", mark_released: true }) });
         j = await res.json();
       }
-      if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "합류 실패"); }
+      if (!j.ok) { if (res.status === 409) void load(); throw new Error(j.error || "합류를 다시 실행하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
       applyUpdated(j.request);
       if (j.marked) setNotice({ warn: false, text: `${r.req_no || "요청서"} 합류 완료로 표시했습니다 — 프로모션 칸에 남은 재고가 있으면 [재고 이동]에서 옮기세요.` });
       if (j.promo_release) showRelease("합류", j.promo_release as PromoRel);
-    } catch (e) { setError(e instanceof Error ? e.message : "합류 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "합류를 다시 실행하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
     setBusy(false);
   }
 
@@ -305,10 +305,10 @@ export function RequestList() {
     setBusy(true); setError(""); setNotice(null);
     try {
       const j = await (await fetch(`/api/production/requests/${id}/link?rid=${rid}`, { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "해제 실패");
+      if (!j.ok) throw new Error(j.error || "연결을 해제하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요.");
       applyUpdated(j.request);
       void loadRec(); // 연결 해제 = 잔여 복원
-    } catch (e) { setError(e instanceof Error ? e.message : "해제 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "연결을 해제하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
     setBusy(false);
   }
 
@@ -330,10 +330,10 @@ export function RequestList() {
     setBusy(true); setError("");
     try {
       const j = await (await fetch(`/api/production/requests/${r.id}`, { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "삭제 실패");
+      if (!j.ok) throw new Error(j.error || "요청서를 삭제하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요.");
       setRequests((prev) => prev.filter((x) => x.id !== r.id));
       void loadRec();
-    } catch (e) { setError(e instanceof Error ? e.message : "삭제 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "요청서를 삭제하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
     setBusy(false);
   }
 
@@ -342,10 +342,10 @@ export function RequestList() {
     setBusy(true); setError("");
     try {
       const j = await (await fetch(`/api/production/requests/${id}/receive?rid=${rid}`, { method: "DELETE" })).json();
-      if (!j.ok) throw new Error(j.error || "취소 실패");
+      if (!j.ok) throw new Error(j.error || "입고를 취소하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요.");
       applyUpdated(j.request);
       void loadRec(); // 입고 취소 = 잔여 복원
-    } catch (e) { setError(e instanceof Error ? e.message : "취소 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "입고를 취소하지 못했습니다. [다시 불러오기] 뒤 다시 누르세요."); }
     setBusy(false);
   }
 
@@ -400,7 +400,7 @@ export function RequestList() {
 
       {!isFactoryPurpose(tab) && wholesaleSummary.length > 0 && (
         <section className="b2b-form-section" style={{ marginBottom: 16 }}>
-          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>· 열린 요청 기준</span></div>
+          <div className="b2b-form-section-title" style={{ marginBottom: 10 }}>{PR_PURPOSE_LABEL[tab]} 요청 종합 <span className="sm-faint" style={{ fontWeight: 400, textTransform: "none" }}>(열린 요청 기준)</span></div>
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ tableLayout: "fixed", minWidth: 560, fontSize: 13 }}>
               <thead><tr><th>품목</th><th className="num" style={{ width: "14%" }}>요청</th><th className="num" style={{ width: "14%" }}>이전 완료</th><th className="num" style={{ width: "14%" }}>잔여</th><th className="num" style={{ width: "12%" }}>이행률</th></tr></thead>
@@ -413,7 +413,7 @@ export function RequestList() {
                       <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}{r.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.sku}</span> : null}</td>
                       <td className="num b2b-money">{r.requested.toLocaleString()}</td>
                       <td className="num b2b-money">{r.received.toLocaleString()}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700, color: remain > 0 ? "var(--sm-orange)" : "var(--sm-success)" }}>{remain.toLocaleString()}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700, color: remain > 0 ? undefined : "var(--sm-success)" }}>{remain.toLocaleString()}</td>
                       <td className="num" style={{ color: pct >= 100 ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{pct}%</td>
                     </tr>
                   );
@@ -491,7 +491,7 @@ function ProgressCell({ received, requested, released }: { received: number; req
   return (
     <span style={{ fontSize: 13, fontWeight: 600, color, whiteSpace: "nowrap" }}>
       {received.toLocaleString()} / {requested.toLocaleString()}
-      {pct != null && <span className="sm-faint" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%){released ? ` · 소매 합류 ${released.toLocaleString()}` : ""}</span>}
+      {pct != null && <span className="sm-faint" style={{ display: "block", fontSize: 12, fontWeight: 400 }}>({Math.round(pct)}%{released ? `, 소매 합류 ${released.toLocaleString()}` : ""})</span>}
     </span>
   );
 }
@@ -542,9 +542,9 @@ function RequestRow({ req, expanded, busy, onToggle, onCancelReceipt, onUnlink, 
           {req.purpose === "재고 보충" && req.prod_start ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{req.prod_start.slice(5)}~{(req.due_date || "").slice(5)}</span> : null}
           {/* 종료일이 지났는데 열려 있으면 마감(또는 종료일 수정)이 필요하다 — 잔여가 입고 예정에 남아 권장을 누른다 */}
           {(req.purpose === "재고 보충" || req.purpose === "도매 납품") && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date < todayIso() && openRemainQty(req.items) > 0
-            ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>지남 · 잔여 {openRemainQty(req.items).toLocaleString()}</span> : null}
+            ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>지남 (잔여 {openRemainQty(req.items).toLocaleString()})</span> : null}
           {req.purpose === "프로모션" && (req.status === "요청" || req.status === "진행중") && req.due_date && req.due_date <= todayIso()
-            ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>행사일 · 마감하면 소매로</span> : null}
+            ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>행사일 — 마감하면 소매로</span> : null}
           {releasePending ? <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--sm-danger)" }}>합류 미확인</span> : null}
         </td>
         <td className="b2b-col-date" onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
@@ -684,7 +684,7 @@ function ItemRow({ item, factory, canEdit, busy, onCancelReceipt, onUnlink }: {
                 ))}
               </div>
             ) : (
-              <p className="sm-faint" style={{ fontSize: 13, margin: "4px 2px" }}>입고 기록이 없습니다.</p>
+              <p className="sm-faint" style={{ fontSize: 13, margin: "4px 2px" }}>입고 기록이 없습니다. 입고 및 출고에서 기록하세요.</p>
             )}
           </td>
         </tr>
@@ -838,7 +838,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               <span style={{ fontSize: 13, fontWeight: 600 }}>요청</span>
               <div className="sm-tabs" style={{ margin: 0 }}>
                 {PR_PURPOSES.map((pp) => (
-                  <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} disabled={purposeLocked && pp !== purpose} title={purposeLocked && pp !== purpose ? "입고·배정 기록이 있어 용도를 바꿀 수 없습니다" : undefined} onClick={() => {
+                  <button key={pp} type="button" className={`sm-tab ${purpose === pp ? "is-active" : ""}`} disabled={purposeLocked && pp !== purpose} title={purposeLocked && pp !== purpose ? "입고·배정 기록이 있어 용도를 바꿀 수 없습니다 — 새 요청서를 만드세요" : undefined} onClick={() => {
                     setPurpose(pp);
                     // 수정 창에서 확정형으로 바꾸면 옛 생산종료일이 행사 시작일로 남지 않게 비운다(사람이 넣게)
                     if (isEdit) { if (CONFIRMED_PURPOSES.includes(pp) && !CONFIRMED_PURPOSES.includes(purpose)) setDueDate(""); return; }
@@ -851,7 +851,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               </div>
             </div>
             <label className="sm-col" style={{ gap: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>요청자(MD) <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 비우면 본인</span></span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>요청자(MD) <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>(비우면 본인)</span></span>
               <input className="b2b-input" style={{ width: 160 }} value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
             </label>
             <label className="sm-col" style={{ gap: 3 }}>
@@ -861,13 +861,13 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             {purpose === "재고 보충" && (
               <label className="sm-col" style={{ gap: 3 }}>
                 {/* 생산기간의 시작 — 이 날부터 생산종료일까지 기록된 입고가 이 요청서에 잡힌다(넘쳐도 초과로 기록) */}
-                <span style={{ fontSize: 13, fontWeight: 600 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 입고 매칭 시작</span></span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>생산시작일 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>(입고 매칭 시작)</span></span>
                 <input type="date" className="b2b-input" style={{ width: 150 }} value={prodStart} max={dueDate || undefined} onChange={(e) => { datesTouched.current = true; setProdStart(e.target.value); }} />
               </label>
             )}
             <label className="sm-col" style={{ gap: 3 }}>
               {/* 확정형은 마감이 아니라 그날 물건이 있어야 하는 날이다 — 라벨을 용도에 맞춘다(115) */}
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{DUE_LABEL[purpose]}{purpose === "재고 보충" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> · 입고 매칭 끝</span>}</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{DUE_LABEL[purpose]}{purpose === "재고 보충" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> (입고 매칭 끝)</span>}</span>
               <input type="date" className="b2b-input" style={{ width: 150 }} value={dueDate} aria-invalid={formErr.due ? "true" : undefined} onChange={(e) => { datesTouched.current = true; setDueDate(e.target.value); if (formErr.due) setFormErr((x) => ({ ...x, due: undefined })); }} />
               {formErr.due && <span className="b2b-field-error">{formErr.due}</span>}
             </label>
@@ -875,7 +875,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
             {purpose === "도매 대량" && (
               <label className="sm-col" style={{ gap: 3, minWidth: 200 }}>
                 {/* 발주가 아직 없을 수 있다(영업이 구두로 확보한 당일 등록) — 그때는 거래처만 고른다 */}
-                <span style={{ fontSize: 13, fontWeight: 600 }}>거래처 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 선택</span></span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>거래처 <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>(선택)</span></span>
                 {/* 제목이 옛 거래처 이름(자동 제목) 그대로면 비워서 새 거래처 이름으로 다시 채워지게 한다 — 서버가 빈 제목을 거래처 이름으로 채운다 */}
                 <select className="b2b-input" style={{ width: 200 }} value={companyId} onChange={(e) => { const prevName = companies.find((c) => c.id === companyId)?.name; if (prevName && title.trim() === prevName) setTitle(""); setCompanyId(e.target.value); }}>
                   <option value="">(미지정)</option>
@@ -884,7 +884,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
               </label>
             )}
             <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 180 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>제목(선택){purpose === "도매 대량" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> · 비우면 거래처 이름</span>}</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>제목(선택){purpose === "도매 대량" && <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}> (비우면 거래처 이름)</span>}</span>
               <input className="b2b-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={purpose === "도매 대량" ? undefined : "3월 2주차 도매 생산"} />
             </label>
           </div>
@@ -903,23 +903,23 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                 onSelect={(o) => { const p = products.find((x) => x.product_id === o.id); if (p) addLine(p); }}
                 placeholder="품목·SKU 검색"
                 ariaLabel="생산 품목 추가"
-                emptyText="일치하는 품목이 없습니다"
+                emptyText="일치하는 품목이 없습니다. 다른 글자로 검색하세요"
               />
               {formErr.lines && <div className="b2b-field-error">{formErr.lines}</div>}
             </div>
           </div>
 
           {!wholeReqOk && purpose === "도매 납품" && (
-            <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;도매 요청 잔여&rsquo;(열린 도매 요청서)를 불러오지 못했습니다 — 권장이 이미 요청한 양을 빼지 못해 실제보다 클 수 있습니다.</div>
+            <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;도매 요청 잔여&rsquo;(열린 도매 요청서)를 불러오지 못했습니다 — 권장이 이미 요청한 양을 빼지 못해 실제보다 클 수 있습니다. 새로고침 뒤 다시 여세요.</div>
           )}
           {!inbOk && purpose === "재고 보충" && (
-            <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;입고 예정&rsquo;(열린 요청서 잔여)을 불러오지 못했습니다 — 권장이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다.</div>
+            <div className="sm-warn" style={{ marginBottom: 8 }}>&lsquo;입고 예정&rsquo;(열린 요청서 잔여)을 불러오지 못했습니다 — 권장이 시켜 둔 물량을 빼지 못해 실제보다 클 수 있습니다. 새로고침 뒤 다시 여세요.</div>
           )}
           {!settingsOk && purpose === "재고 보충" && (
             <div className="sm-warn" style={{ marginBottom: 8 }}>행사 일정·안전재고 보정을 불러오지 못했습니다 — 권장에 행사 출고가 섞이고 보정이 빠져 실제와 다를 수 있습니다. 새로고침 후 다시 확인하세요.</div>
           )}
           {lines.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: 20 }}>추가한 품목이 없습니다.</div>
+            <div className="b2b-empty" style={{ padding: 20 }}>추가한 품목이 없습니다. 위 검색창에서 품목을 고르세요.</div>
           ) : (
             // flexShrink 0 — 창 본문(flex 세로)이 넘치면 표가 한 줄 높이로 눌려 작은 스크롤 안에 갇힌다(추가한 품목이 안 보여 '선택이 안 된다'로 보이던 버그)
             <div className="b2b-table-wrap" style={{ flexShrink: 0 }}>
@@ -960,19 +960,19 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
                           <>
                             <td className="num" style={{ color: "var(--sm-text-mid)" }}>{retail == null ? "-" : retail.toLocaleString()}</td>
                             <td className="num" style={{ color: inb > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}>{!recReady || !inbOk ? "-" : inb > 0 ? inb.toLocaleString() : "0"}</td>
-                            <td className="num" style={{ color: need > 0 ? "var(--sm-orange)" : "var(--sm-text-mid)", fontWeight: need > 0 ? 700 : 400 }}>{need.toLocaleString()}</td>
+                            <td className="num" style={{ color: need > 0 ? undefined : "var(--sm-text-mid)", fontWeight: need > 0 ? 700 : 400 }}>{need.toLocaleString()}</td>
                             <td className="num" style={{ fontWeight: 700, color: (recommend ?? 0) > 0 ? "var(--sm-dark)" : "var(--sm-text-light)" }}>{recommend == null ? "-" : recommend.toLocaleString()}</td>
                           </>
                         )}
                         <td className="num"><input type="number" step={0.01} min={0} className="b2b-input" style={{ width: 100, textAlign: "right" }} value={l.auto && Number(l.requested_qty) <= 0 ? "" : l.requested_qty} onChange={(e) => updateLine(i, { requested_qty: e.target.value })} placeholder={l.auto ? "요청 없음" : "0"} title={l.auto ? "요청서에 없던 품목이 이 주간에 입고돼 자동으로 붙은 줄 — 수량을 넣으면 정식 요청 품목이 됩니다" : undefined} /></td>
                         <td>
                           {l.auto && Number(l.requested_qty) <= 0
-                            ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-info)" }} title="요청서에 없던 품목의 입고 기록 자리 — 제조사 엑셀·이행률에는 들어가지 않습니다">요청서에 없음 · 입고 {l.received.toLocaleString()}</span>
+                            ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-info)" }} title="요청서에 없던 품목의 입고 기록 자리 — 제조사 엑셀·이행률에는 들어가지 않습니다">요청서에 없음 (입고 {l.received.toLocaleString()})</span>
                             : <input className="b2b-input" value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} aria-label="품목 메모(선택)" />}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
                           {l.received > 0 ? (
-                            <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="입고 기록이 있어 뺄 수 없습니다">입고 {l.received.toLocaleString()}</span>
+                            <span className="sm-faint" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="입고 기록이 있어 뺄 수 없습니다 — 입고를 먼저 취소하세요">입고 {l.received.toLocaleString()}</span>
                           ) : (
                             <button className="b2b-link-btn" style={{ color: "var(--sm-danger)", whiteSpace: "nowrap" }} onClick={() => removeLine(i)}>삭제</button>
                           )}
@@ -986,7 +986,7 @@ function RequestModal({ initial, prefill, defaultPurpose, products, retailQty, w
           )}
 
           <label className="sm-col" style={{ gap: 3, marginTop: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>요청 메모(선택) <span style={{ fontWeight: 400, color: "var(--sm-text-light)" }}>· 생산 담당자에게 전달할 내용</span></span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>요청 메모(선택)</span>
             <textarea className="b2b-input" style={{ minHeight: memo.split("\n").length > 3 ? 180 : 72 }} value={memo} onChange={(e) => setMemo(e.target.value)} />
           </label>
         </div>
@@ -1013,9 +1013,9 @@ function LinkModal({ req, onClose, onLinked }: { req: ProductionRequest; onClose
     (async () => {
       try {
         const j = await (await fetch(`/api/production/requests/${req.id}/link`, { cache: "no-store" })).json();
-        if (!j.ok) throw new Error(j.error || "조회 실패");
+        if (!j.ok) throw new Error(j.error || "연결할 입고 목록을 불러오지 못했습니다. 창을 닫았다 다시 여세요.");
         setCands(j.candidates || []); setFrom(String(j.from || ""));
-      } catch (e) { setErr(e instanceof Error ? e.message : "조회 오류"); setCands([]); }
+      } catch (e) { setErr(e instanceof Error ? e.message : "연결할 입고 목록을 불러오지 못했습니다. 창을 닫았다 다시 여세요."); setCands([]); }
     })();
   }, [req.id]);
   const toggle = (id: string) => setPicked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -1025,27 +1025,27 @@ function LinkModal({ req, onClose, onLinked }: { req: ProductionRequest; onClose
     setSaving(true); setErr("");
     try {
       const j = await (await fetch(`/api/production/requests/${req.id}/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inv_txn_ids: [...picked] }) })).json();
-      if (!j.ok) throw new Error(j.error || "연결 실패");
+      if (!j.ok) throw new Error(j.error || "입고를 연결하지 못했습니다. 다시 누르세요.");
       const lines = (j.link?.lines || []) as { qty: number }[];
       const failed = (j.link?.failed || []) as { reason: string }[];
       const total = r2(lines.reduce((a, l) => a + (Number(l.qty) || 0), 0));
       const text = [
-        `${req.req_no || "요청서"}에 입고 ${lines.length}건(${total.toLocaleString()}) 연결${j.link?.status === "완료" ? " — 전 품목 100%로 완료" : ""}`,
-        failed.length ? `연결 못 함 ${failed.length}건: ${[...new Set(failed.map((f) => f.reason))].join(", ")}` : "",
-      ].filter(Boolean).join(" · ");
+        `${req.req_no || "요청서"}에 입고 ${lines.length}건(${total.toLocaleString()})을 연결했습니다${j.link?.status === "완료" ? " — 전 품목 100%로 완료" : ""}.`,
+        failed.length ? `연결 못 함 ${failed.length}건: ${[...new Set(failed.map((f) => f.reason))].join(", ")}.` : "",
+      ].filter(Boolean).join(" ");
       onLinked(j.request, text, failed.length > 0);
-    } catch (e) { setErr(e instanceof Error ? e.message : "연결 오류"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "입고를 연결하지 못했습니다. 다시 누르세요."); }
     setSaving(false);
   }
   return (
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" style={{ maxWidth: 820 }} onClick={(e) => e.stopPropagation()}>
-        <div className="b2b-modal-head"><h2 className="b2b-modal-title">입고 연결 · {req.req_no || ""}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose} disabled={saving}>✕</button></div>
+        <div className="b2b-modal-head"><h2 className="b2b-modal-title">입고 연결 {req.req_no || ""}</h2><button className="b2b-modal-close" aria-label="닫기" onClick={onClose} disabled={saving}>✕</button></div>
         <div className="b2b-modal-body">
           {err && <div className="b2b-error" style={{ marginBottom: 10 }}>{err}</div>}
-          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>연결 안 된 소매 입고{from ? ` · ${from}부터` : ""} · 재고는 그대로</p>
+          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>연결 안 된 소매 입고{from ? `(${from}부터)` : ""}. 재고는 그대로</p>
           {cands === null ? <div className="b2b-loading">불러오는 중...</div>
-            : cands.length === 0 ? <div className="b2b-empty">연결할 입고가 없습니다.</div>
+            : cands.length === 0 ? <div className="b2b-empty">연결할 입고가 없습니다. 입고 및 출고에서 먼저 입고를 기록하세요.</div>
             : (
               <div className="b2b-table-wrap" style={{ maxHeight: 420, overflow: "auto" }}>
                 <table className="b2b-table is-clickable">
@@ -1060,7 +1060,7 @@ function LinkModal({ req, onClose, onLinked }: { req: ProductionRequest; onClose
                         <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{dateShort(c.txn_date)}{c.order_no ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{c.order_no}</span> : null}</td>
                         <td><div style={{ fontWeight: 600 }}>{c.name}</div>{c.sku ? <div className="sm-faint" style={{ fontSize: 12 }}>{c.sku}</div> : null}</td>
                         <td className="num b2b-money">{c.left.toLocaleString()}{c.left < c.qty ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>/ {c.qty.toLocaleString()}</span> : null}</td>
-                        <td className="sm-faint" style={{ fontSize: 12 }}>{[c.partner, c.memo].filter(Boolean).join(" · ") || "-"}</td>
+                        <td className="sm-faint" style={{ fontSize: 12 }}>{[c.partner, c.memo].filter(Boolean).join(", ") || "-"}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -141,7 +141,7 @@ export default function ScanPage() {
     const seq0 = seqRef.current;
     try {
       const j = await (await fetch("/api/fulfill/scan/state", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "스캔 현황을 불러오지 못했습니다. 새로고침하세요.");
       // 출발 뒤 스캔·초기화가 있었거나 처리 중이면 이 응답은 낡았다 — 대상 건수만 반영
       if (seqRef.current !== seq0 || processingRef.current || queueRef.current.length > 0) {
         setSt((s) => (s ? { ...s, totalInvoices: j.totalInvoices } : s));
@@ -149,7 +149,7 @@ export default function ScanPage() {
       }
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
       setLastReset(j.lastReset ?? null);
-    } catch (e) { if (!silent) setError(e instanceof Error ? e.message : "조회 실패"); }
+    } catch (e) { if (!silent) setError(e instanceof Error ? e.message : "스캔 현황을 불러오지 못했습니다. 새로고침하세요."); }
   }, []);
 
   useEffect(() => {
@@ -188,7 +188,7 @@ export default function ScanPage() {
       const it = q[0];
       try {
         await sendScan(it.inv, it.include ?? includePrevRef.current);
-      } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "스캔 실패" }); alarm("err"); }
+      } catch (e) { setMsg({ kind: "bad", text: e instanceof Error ? e.message : "송장을 스캔하지 못했습니다. 다시 스캔하세요." }); alarm("err"); }
       q.shift();
       setPending(queueRef.current.length);
     }
@@ -199,19 +199,19 @@ export default function ScanPage() {
   async function sendScan(inv: string, include: boolean) {
     lastPrevRef.current = null; // F8 은 화면에 떠 있는 빨간 경고의 송장에만(다음 스캔·오류가 오면 대상 아님)
     const j = await (await fetch("/api/fulfill/scan/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invoice_no: inv, include_prev: include }) })).json();
-    if (!j.ok) throw new Error(j.error || "스캔 실패");
-    if (!j.known) { setMsg({ kind: "bad", text: `미등록 송장번호 · ${inv}` }); alarm("bad"); return; }
+    if (!j.ok) throw new Error(j.error || "송장을 스캔하지 못했습니다. 다시 스캔하세요.");
+    if (!j.known) { setMsg({ kind: "bad", text: `미등록 송장번호: ${inv}` }); alarm("bad"); return; }
     seqRef.current++;
     setSt((s) => ({ tally: j.tally, scannedCount: j.scannedCount, totalUnits: j.totalUnits, totalInvoices: s?.totalInvoices ?? 0 }));
-    if (j.moved) { setMsg({ kind: "moved", text: `이전 라운드 송장 · 이번 라운드에 넣음 · ${inv}` }); return; }
+    if (j.moved) { setMsg({ kind: "moved", text: `이전 라운드 송장 ${inv} — 이번 라운드에 넣음` }); return; }
     if (j.prevRound) {
       lastPrevRef.current = inv;
-      setMsg({ kind: "prev", text: `이전 라운드에서 스캔한 송장 · ${inv} · ${hm(j.prevRound.scanned_at)}${j.prevRound.scanned_by ? ` · ${j.prevRound.scanned_by}` : ""} — 집계 제외` });
+      setMsg({ kind: "prev", text: `이전 라운드에서 스캔한 송장 ${inv} (${hm(j.prevRound.scanned_at)}${j.prevRound.scanned_by ? `, ${j.prevRound.scanned_by}` : ""}) — 집계 제외` });
       alarm("prev");
       return;
     }
-    if (j.alreadyScanned) { setMsg({ kind: "dup", text: `이미 스캔한 송장 · ${inv}` }); alarm("dup"); return; }
-    setMsg({ kind: "ok", text: `스캔 완료 · ${inv}` });
+    if (j.alreadyScanned) { setMsg({ kind: "dup", text: `이미 스캔한 송장: ${inv}` }); alarm("dup"); return; }
+    setMsg({ kind: "ok", text: `스캔 완료: ${inv}` });
   }
   // 경고 줄의 [이번 라운드에 넣기]·F8 — 마지막 '이전 라운드' 송장 1건을 넣는다
   function includeLast() {
@@ -238,12 +238,12 @@ export default function ScanPage() {
     includePrevRef.current = false; setIncludePrev(false); lastPrevRef.current = null; // 다음 스캔부터 다시 보호
     try {
       const j = await (await fetch("/api/fulfill/scan/reset", { method: "POST" })).json();
-      if (!j.ok) throw new Error(j.error || "초기화 실패");
+      if (!j.ok) throw new Error(j.error || "스캔을 초기화하지 못했습니다. 다시 누르세요(F4).");
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
       setLastReset(j.lastReset ?? null);
-      setMsg({ kind: "ok", text: "초기화 완료 · 새로 스캔하세요" });
+      setMsg({ kind: "ok", text: "스캔을 초기화했습니다. 새로 스캔하세요" });
       scanRef.current?.focus();
-    } catch (e) { setError(e instanceof Error ? e.message : "초기화 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "스캔을 초기화하지 못했습니다. 다시 누르세요(F4)."); }
     finally { roundOpRef.current = false; void pump(); }
   }
   // 직전 초기화 되돌리기 — 실수로 초기화했을 때 다시 찍지 않고 그 라운드를 되살린다(이번 라운드에 찍은 것과 합쳐진다)
@@ -258,11 +258,11 @@ export default function ScanPage() {
     seqRef.current++;
     try {
       const j = await (await fetch("/api/fulfill/scan/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ undo: true, at: lastReset.at }) })).json();
-      if (!j.ok) throw new Error(j.error || "되돌리기 실패");
+      if (!j.ok) throw new Error(j.error || "초기화를 되돌리지 못했습니다. 새로고침 뒤 다시 누르세요.");
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
       setLastReset(j.lastReset ?? null);
-      setMsg({ kind: "ok", text: `초기화 되돌림 · ${Number(j.restored || 0).toLocaleString()}건` });
-    } catch (e) { setError(e instanceof Error ? e.message : "되돌리기 실패"); void loadState(true); }
+      setMsg({ kind: "ok", text: `초기화를 되돌렸습니다 (${Number(j.restored || 0).toLocaleString()}건)` });
+    } catch (e) { setError(e instanceof Error ? e.message : "초기화를 되돌리지 못했습니다. 새로고침 뒤 다시 누르세요."); void loadState(true); }
     finally { undoingRef.current = false; roundOpRef.current = false; void pump(); }
   }
 
@@ -291,7 +291,7 @@ export default function ScanPage() {
       + `tfoot td{font-weight:800;border-top:2px solid #333;border-bottom:none;font-size:17px}`
       + `@media print{body{margin:6mm}}</style></head><body>`
       + `<h1>피킹 리스트</h1>`
-      + `<div class="meta">출력 ${ts} · 스캔 ${st.scannedCount}건</div>`
+      + `<div class="meta">출력 ${ts}, 스캔 ${st.scannedCount}건</div>`
       + `<table><thead><tr><th>품목명</th><th class="q">수량</th></tr></thead><tbody>${rows}</tbody>`
       + `<tfoot><tr><td>합계</td><td class="q">${st.totalUnits.toLocaleString()}</td></tr></tfoot></table>`
       + `<script>window.onload=function(){setTimeout(function(){window.print()},80)}</script></body></html>`;
@@ -350,7 +350,7 @@ export default function ScanPage() {
           autoFocus
           style={{ fontSize: 18, padding: "12px 14px", fontWeight: 700, letterSpacing: 0.5 }}
         />
-        <div className="b2b-field-hint is-below">바코드를 스캔하거나 송장번호를 입력하고 Enter · 하이픈 있어도/없어도 인식</div>
+        <div className="b2b-field-hint is-below">바코드를 스캔하거나 송장번호를 입력하고 Enter. 하이픈 있어도/없어도 인식</div>
         {msg && (
           <div className="sm-row" style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700, gap: 10, flexWrap: "wrap", alignItems: "center",
             background: MSG_COLOR[msg.kind].bg, color: MSG_COLOR[msg.kind].fg }}>
@@ -397,16 +397,16 @@ export default function ScanPage() {
       {lastReset && lastReset.count > 0 && (
         <div className="sm-row" style={{ gap: 10, marginTop: -6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" className="b2b-link-btn" onClick={undoReset}>직전 초기화 되돌리기</button>
-          <span className="sm-faint" style={{ fontSize: 12 }}>{hm(lastReset.at)} · {lastReset.count.toLocaleString()}건 · 스캔 기록 30일 보관</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{hm(lastReset.at)} 초기화 {lastReset.count.toLocaleString()}건 (스캔 기록 30일 보관)</span>
         </div>
       )}
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· 총 {st?.totalUnits.toLocaleString() ?? 0}개 · 묶음 전개 반영</span></span>
+          <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>총 {st?.totalUnits.toLocaleString() ?? 0}개 (묶음 전개 반영)</span></span>
         </div>
         {!st || st.tally.length === 0 ? (
-          <div className="b2b-empty" style={{ padding: 24 }}>스캔한 송장이 없습니다.</div>
+          <div className="b2b-empty" style={{ padding: 24 }}>스캔한 송장이 없습니다. 위 칸에 송장번호를 스캔하세요.</div>
         ) : (
           <div className="b2b-table-wrap">
             <table className="b2b-table is-responsive">

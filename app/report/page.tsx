@@ -116,10 +116,10 @@ export default function ReportPage() {
     try {
       const r = await fetch("/api/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: qq, history: hist }) });
       const j = await r.json();
-      if (!j.ok) { setErr(j.error || "실패"); if (j.plan) setPlan(j.plan); setCorrected(j.corrected || 0); return; }
+      if (!j.ok) { setErr(j.error || "질문을 처리하지 못했습니다. 질문을 바꿔 다시 물어보세요"); if (j.plan) setPlan(j.plan); setCorrected(j.corrected || 0); return; }
       setPlan(j.plan); setRows(j.rows || []); setCols(j.columns || []); setCorrected(j.corrected || 0);
       setTurns([...hist, { q: qq, sql: j.plan.sql }]); setQ("");
-    } catch (e) { setErr(e instanceof Error ? e.message : "오류"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "질문을 처리하지 못했습니다. 질문을 바꿔 다시 물어보세요"); }
     finally { setLoading(false); }
   }
 
@@ -136,10 +136,10 @@ export default function ReportPage() {
     try {
       const r = await fetch("/api/report/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql }) });
       const j = await r.json();
-      if (!j.ok) { setErr(j.error || "실패"); return; }
+      if (!j.ok) { setErr(j.error || "리포트를 실행하지 못했습니다. SQL 을 확인하세요"); return; }
       setPlan({ understood: rep.name, sql, explanation: "", chart: rep.chart, looker: rep.looker, caveats: [] });
       setRows(j.rows || []); setCols(j.columns || []); setTurns([{ q: rep.name, sql }]);
-    } catch (e) { setErr(e instanceof Error ? e.message : "오류"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "리포트를 실행하지 못했습니다. SQL 을 확인하세요"); }
     finally { setLoading(false); }
   }
   async function delSaved(id: string) {
@@ -153,14 +153,14 @@ export default function ReportPage() {
     if (fe.name || fe.sql) return;
     const r = await fetch("/api/report/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: plan?.understood || "", sql: saveSql, chart: plan?.chart, looker: plan?.looker }) });
     const j = await r.json();
-    if (!j.ok) { setErr(j.error || "저장 실패"); return; }
+    if (!j.ok) { setErr(j.error || "리포트를 저장하지 못했습니다. 이름과 SQL 을 확인하세요"); return; }
     setSaveOpen(false); loadSaved();
   }
 
   async function exportXlsx() {
     if (!plan) return;
     const r = await fetch("/api/report/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql: plan.sql, title: plan.understood }) });
-    if (!r.ok) { setErr("엑셀 내보내기 실패"); return; }
+    if (!r.ok) { setErr("엑셀을 내려받지 못했습니다. 결과를 다시 조회하세요"); return; }
     const blob = await r.blob(); const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "report.xlsx"; a.click(); URL.revokeObjectURL(url);
   }
@@ -261,10 +261,10 @@ export default function ReportPage() {
       {plan && (
         <div className="sm-col" style={{ gap: 14 }}>
           <div className="rp-understood">{plan.understood}</div>
-          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 13, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({corrected}회)해 실행했어요.</div>}
+          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 13, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({corrected}회)해 실행했습니다.</div>}
           {plan.usage && (
             <div className="sm-faint" style={{ fontSize: 13, marginTop: -8 }}>
-              토큰 · 입력 {(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite).toLocaleString()}
+              토큰 입력 {(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite).toLocaleString()}
               {plan.usage.cacheRead > 0 ? ` (캐시적중 ${plan.usage.cacheRead.toLocaleString()})` : plan.usage.cacheWrite > 0 ? ` (캐시저장 ${plan.usage.cacheWrite.toLocaleString()})` : ""}
               {" · 출력 "}{plan.usage.output.toLocaleString()}
             </div>
@@ -289,7 +289,7 @@ export default function ReportPage() {
                       ))}
                     </tbody>
                   </table>
-                  {rows.length > 500 && <div className="sm-faint" style={{ fontSize: 13, padding: 6 }}>표는 500행까지 표시 · 전체는 엑셀로</div>}
+                  {rows.length > 500 && <div className="sm-faint" style={{ fontSize: 13, padding: 6 }}>표는 500행까지 표시, 전체는 엑셀로</div>}
                 </div>
               )}
               {plan.explanation && <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>· {plan.explanation}</p>}

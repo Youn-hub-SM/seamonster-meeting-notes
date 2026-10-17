@@ -92,9 +92,9 @@ export default function VocStatsPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/voc", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "VOC를 불러오지 못했습니다. 새로고침하세요");
       setRows(j.rows || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "VOC를 불러오지 못했습니다. 새로고침하세요"); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -202,7 +202,7 @@ export default function VocStatsPage() {
       {loading ? (
         <div className="b2b-loading">불러오는 중...</div>
       ) : rows.length === 0 ? (
-        <div className="b2b-empty">집계할 VOC가 없습니다.</div>
+        <div className="b2b-empty">집계할 VOC가 없습니다. 기간을 바꾸세요</div>
       ) : (
         <>
           <section className="b2b-card sm-stat-hero" style={{ marginBottom: 16 }}>
@@ -229,7 +229,7 @@ export default function VocStatsPage() {
           {/* 추세 탐색 — 분류·측정·기간 토글로 하나의 누적 막대를 여러 관점으로 */}
           <section className="b2b-card">
             <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <span className="b2b-card-title">추세 탐색 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>· {period.label}{explore.capped ? ` · 최근 ${explore.cap}개 기간` : ""}</span></span>
+              <span className="b2b-card-title">추세 탐색 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>{period.label}{explore.capped ? `, 최근 ${explore.cap}개 기간` : ""}</span></span>
               <div className="sm-tabs" style={{ margin: 0 }}>
                 {(["일별", "주별", "월별"] as Unit[]).map((u) => (
                   <button key={u} className={`sm-tab ${pUnit === u ? "is-active" : ""}`} onClick={() => setPUnit(u)}>{u}</button>
@@ -246,7 +246,7 @@ export default function VocStatsPage() {
               </div>
             </div>
             {explore.series.length === 0 ? (
-              <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>이 기간에 집계할 데이터가 없습니다.</div>
+              <div className="sm-faint" style={{ fontSize: 13, padding: "8px 2px" }}>이 기간에 집계할 데이터가 없습니다. 기간이나 분류를 바꾸세요</div>
             ) : (
               <>
                 <StackedBar periods={explore.labels} series={explore.series} colors={explore.colors} unit={isMoney ? "원" : "건"} fmtAxis={isMoney ? moneyCompact : undefined} />

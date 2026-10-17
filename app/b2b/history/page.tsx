@@ -68,12 +68,12 @@ export default function HistoryPage() {
         const res = await fetch(buildUrl(0), { cache: "no-store" });
         const j = await res.json();
         if (cancelled) return;
-        if (!res.ok || !j.ok) throw new Error(j.error || "조회 실패");
+        if (!res.ok || !j.ok) throw new Error(j.error || "이력을 불러오지 못했습니다. 새로고침하세요");
         setItems(j.activities || []);
         setHasMore(!!j.hasMore);
         setError("");
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "조회 중 오류");
+        if (!cancelled) setError(e instanceof Error ? e.message : "이력을 불러오지 못했습니다. 새로고침하세요");
       }
       if (!cancelled) setLoading(false);
     }, 250);

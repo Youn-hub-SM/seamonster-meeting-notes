@@ -21,7 +21,7 @@ export default function MeetingPage() {
   const TEXT_EXT = /\.(srt|txt|text|vtt|md)$/i;
   async function readFile(file: File) {
     if (!TEXT_EXT.test(file.name) && !file.type.startsWith("text/")) {
-      setError(`텍스트 파일만 넣을 수 있어요 (.srt .txt) — '${file.name}' 은 지원하지 않습니다.`);
+      setError(`'${file.name}' 은 넣을 수 없습니다. .srt 또는 .txt 텍스트 파일을 넣으세요`);
       return;
     }
     setError("");
@@ -66,13 +66,13 @@ export default function MeetingPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "오류가 발생했습니다.");
+        throw new Error(data.error || "회의를 정리하지 못했습니다. 내용을 확인하고 다시 누르세요");
       }
 
       const meeting = await res.json();
       setResult(meeting);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      setError(err instanceof Error ? err.message : "회의를 정리하지 못했습니다. 내용을 확인하고 다시 누르세요");
     }
     setLoading(false);
   }
@@ -97,7 +97,7 @@ export default function MeetingPage() {
       <div className="container">
         <div className="loading-overlay">
           <div className="spinner" />
-          <p className="loading-text">AI가 회의 내용을 정리하고 있습니다...</p>
+          <p className="loading-text">회의 내용을 정리하고 있습니다...</p>
         </div>
       </div>
     );
@@ -177,7 +177,7 @@ export default function MeetingPage() {
           <label className="form-label" htmlFor="rawText">
             {fileName ? "파일 내용 (수정 가능)" : "또는 직접 입력"}
           </label>
-          <div className="b2b-field-hint">회의 녹취록·메모·대화 내용 · 타임코드가 있으면 활용하고 없으면 흐름 순서로 정리 · 10자 이상</div>
+          <div className="b2b-field-hint">회의 녹취록·메모·대화 내용, 10자 이상. 타임코드가 있으면 활용하고 없으면 흐름 순서로 정리</div>
           <textarea
             id="rawText"
             className="form-textarea"

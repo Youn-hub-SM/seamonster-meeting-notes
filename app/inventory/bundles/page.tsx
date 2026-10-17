@@ -26,9 +26,9 @@ export default function BundlesPage() {
     setLoading(true); setError("");
     try {
       const j = await (await fetch("/api/inventory/bundles", { cache: "no-store" })).json();
-      if (!j.ok) throw new Error(j.error || "조회 실패");
+      if (!j.ok) throw new Error(j.error || "묶음 목록을 불러오지 못했습니다. 새로고침하세요.");
       setBundles(j.bundles || []);
-    } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "묶음 목록을 불러오지 못했습니다. 새로고침하세요."); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -41,9 +41,9 @@ export default function BundlesPage() {
       const fd = new FormData(); fd.append("file", file);
       const res = await fetch("/api/inventory/bundles/import", { method: "POST", body: fd });
       const j = await res.json();
-      if (!res.ok || !j.ok) throw new Error(j.error || "분석 실패");
+      if (!res.ok || !j.ok) throw new Error(j.error || "엑셀을 분석하지 못했습니다. 파일을 다시 올리세요.");
       setPreview(j as PreviewResp);
-    } catch (e) { setError(e instanceof Error ? e.message : "분석 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "엑셀을 분석하지 못했습니다. 파일을 다시 올리세요."); }
     setImporting(false);
   }
   async function applyImport() {
@@ -53,16 +53,16 @@ export default function BundlesPage() {
       const rows = preview.previews.filter((p) => p.ok).map((p) => ({ parentSku: p.parentSku, name: p.name, components: p.components.map((c) => ({ sku: c.sku, qty: c.qty })) }));
       const res = await fetch("/api/inventory/bundles/import/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bundles: rows }) });
       const j = await res.json();
-      if (!res.ok || !j.ok) { if (j.errors?.length) throw new Error(j.errors.join(" / ")); throw new Error(j.error || "반영 실패"); }
+      if (!res.ok || !j.ok) { if (j.errors?.length) throw new Error(j.errors.join(" / ")); throw new Error(j.error || "묶음을 반영하지 못했습니다. 다시 누르세요."); }
       setPreview(null); load();
-    } catch (e) { setError(e instanceof Error ? e.message : "반영 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "묶음을 반영하지 못했습니다. 다시 누르세요."); }
     setApplying(false);
   }
   async function removeBundle(b: BundleRow) {
     if (!(await confirm({ title: `"${b.parent_name}" 묶음 구성 삭제`, body: `구성품 ${b.components.length}종 연결이 지워집니다. 상품 자체는 유지됩니다.`, action: "구성 삭제" }))) return;
     const r = await fetch(`/api/inventory/bundles?parent=${b.parent_id}`, { method: "DELETE" });
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) { setError(`삭제 실패: ${j?.error || "서버 오류"} — 새로고침 후 다시 시도하세요.`); return; }
+    if (!r.ok || !j?.ok) { setError(`구성을 삭제하지 못했습니다(${j?.error || "서버 오류"}). 새로고침 뒤 다시 누르세요.`); return; }
     load();
   }
 
@@ -94,7 +94,7 @@ export default function BundlesPage() {
             <tbody>
               {bundles.map((b) => (
                 <tr key={b.parent_id}>
-                  <td data-label="묶음(세트)"><strong>{b.parent_name}</strong> <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>세트</span></td>
+                  <td data-label="묶음(세트)"><strong>{b.parent_name}</strong> <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>세트</span></td>
                   <td data-label="SKU" className="sm-faint">{b.parent_sku || "-"}</td>
                   <td data-label="구성품">
                     <div className="sm-col" style={{ gap: 2 }}>
@@ -130,7 +130,7 @@ export default function BundlesPage() {
                   <tbody>
                     {preview.previews.map((p, i) => (
                       <tr key={i} style={p.ok ? undefined : { background: "var(--sm-danger-bg)" }}>
-                        <td data-label="묶음SKU"><strong>{p.parentSku}</strong><div className="sm-faint" style={{ fontSize: 12 }}>{p.name}{!p.parentExists ? " · 신규생성" : ""}</div></td>
+                        <td data-label="묶음SKU"><strong>{p.parentSku}</strong><div className="sm-faint" style={{ fontSize: 12 }}>{p.name}{!p.parentExists ? " (신규생성)" : ""}</div></td>
                         <td data-label="구성"><div className="sm-col" style={{ gap: 1 }}>{p.components.map((c, ci) => (
                           <span key={ci} style={{ fontSize: 12, color: c.ok ? undefined : "var(--sm-danger)" }}>{c.name || c.sku} × {c.qty} {c.ok ? "" : `— ${c.err}`}</span>
                         ))}</div></td>
@@ -143,7 +143,7 @@ export default function BundlesPage() {
             </div>
             <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
               <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
-              {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다</span>}
+              {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 올리세요</span>}
               <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}개 반영`}</button>
             </div></div>
           </div>
@@ -207,9 +207,9 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
         }] }),
       });
       const j = await res.json();
-      if (!res.ok || !j.ok) { if (j.errors?.length) throw new Error(j.errors.join(" / ")); throw new Error(j.error || "저장 실패"); }
+      if (!res.ok || !j.ok) { if (j.errors?.length) throw new Error(j.errors.join(" / ")); throw new Error(j.error || "묶음을 저장하지 못했습니다. 다시 누르세요."); }
       onSaved(); onClose();
-    } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "묶음을 저장하지 못했습니다. 다시 누르세요."); }
     setSaving(false);
   }
 
@@ -253,8 +253,8 @@ function AddBundleModal({ products, onClose, onSaved }: { products: ProdLite[]; 
           </div>
 
           {/* ── 생산담당 입력 구역 — 택배 발주 정보 ── */}
-          <div style={{ background: "var(--sm-orange-light)", borderRadius: 10, padding: "12px 14px" }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-orange)", marginBottom: 10 }}>생산담당 입력</div>
+          <div style={{ background: "var(--sm-bg-subtle)", borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-text-mid)", marginBottom: 10 }}>생산담당 입력</div>
           <div className="b2b-field-row">
             <div className="b2b-field"><label className="b2b-field-label">택배 상품명</label>
               <input className="b2b-input" value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="진공 씨몬스터 참돔순살 100g×3" /></div>
