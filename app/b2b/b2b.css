@@ -649,6 +649,7 @@ a.b2b-history-item:hover {
 /* 촘촘한 표(.is-compact) — 열이 많은 목록(발주 목록)을 한 화면에: 셀 패딩 12/16 → 8/10, 날짜·상태 칸은 더 좁게, 상태 select 92px.
    2026-10-14 대표 지시 "여백을 줄이더라도 한 화면에". 숫자 열은 어디서나 줄바꿈 금지(금액이 세 줄로 꺾이던 것). */
 .b2b-table td.num, .b2b-table th.num { white-space: nowrap; }
+.b2b-stat-card-value { white-space: nowrap; } /* KPI 값이 '46,339,65 / 6' 처럼 자릿수 중간에서 꺾이던 것(body overflow-wrap:anywhere) — 2026-10-17 스크린샷 비평 */
 .b2b-table.is-compact th, .b2b-table.is-compact td { padding: 8px 10px; }
 .b2b-table.is-compact td .b2b-row-link { padding: 8px 10px !important; }
 .b2b-table.is-compact th.b2b-col-date, .b2b-table.is-compact td.b2b-col-date { padding-left: 4px; padding-right: 4px; }
