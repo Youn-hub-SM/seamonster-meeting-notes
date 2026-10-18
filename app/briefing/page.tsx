@@ -596,7 +596,7 @@ export default function SummaryReportPage() {
             <span>{TRIGGER_LABEL[report.trigger || ""] || report.trigger || ""} {dateTime(report.updated_at)}</span>
             <Pill p={sentPill} />
             {admin && report.model ? <span>{report.model}</span> : null}
-            {admin && report.usage ? <span>조회 {qtyText(report.usage.tool_calls, "회")} · 약 ${report.usage.est_usd}</span> : null}
+            {admin && report.usage ? <span>조회 {qtyText(report.usage.tool_calls, "회")} · {report.usage.est_usd > 0 ? `약 $${report.usage.est_usd}` : "비용 미산정"}</span> : null}
           </div>
           {hasReport ? (
             <ReportView md={md} kpi={report.kpi ?? null} charts={placed ? charts : null} />

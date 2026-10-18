@@ -641,6 +641,7 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 이커머스: 공식몰 카
 export type AnalystUsage = { input: number; cache_read: number; cache_write: number; output: number; iterations: number; tool_calls: number; est_usd: number };
 
 function priceOf(model: string): { in: number; out: number; cr: number; cw: number } {
+  if (/fable-5/.test(model)) return { in: 0, out: 0, cr: 0, cw: 0 }; // Fable 5.1 단가 미등록(2026-10-19) — 콘솔 요금표 확인 뒤 채운다. 0 이면 화면이 '비용 미산정'으로 보인다
   if (/opus-5/.test(model)) return { in: 4, out: 20, cr: 0.2, cw: 5 }; // Opus 5.5 캐시 읽기 = 입력의 0.05배($0.20/MTok)
   if (/sonnet-5/.test(model)) return { in: 2, out: 10, cr: 0.2, cw: 2.5 };
   if (/haiku/.test(model)) return { in: 1, out: 5, cr: 0.1, cw: 1.25 };

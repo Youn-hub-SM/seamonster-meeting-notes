@@ -40,6 +40,7 @@ export const MODELS = {
   sonnet: "claude-sonnet-5-5",
   haiku: "claude-haiku-4-5",
   opus: "claude-opus-5-5",
+  fable: "claude-fable-5-1", // 2026-10-19 추가 — Opus 위 등급(Mythos 급). 대표: 새 계정 크레딧(월 $200)으로 상위 모델 사용
 } as const;
 
 export type ModelKey = keyof typeof MODELS;
@@ -52,7 +53,8 @@ export const DEFAULT_MODEL: ModelKey = "sonnet";
 export const MODEL_OPTIONS: { key: ModelKey; label: string; desc: string; price: string }[] = [
   { key: "haiku", label: "빠름 · 저렴", desc: "간단한 작업, 가장 빠르고 저렴", price: "$1 / $5" },
   { key: "sonnet", label: "균형 (기본)", desc: "품질과 비용의 균형", price: "$2 / $10" },
-  { key: "opus", label: "최고 품질", desc: "가장 정확·신중 (비용 ↑)", price: "$4 / $20" },
+  { key: "opus", label: "높은 품질", desc: "정확·신중 (비용 ↑)", price: "$4 / $20" },
+  { key: "fable", label: "최상위", desc: "Opus 위 등급 — 가장 깊은 분석 (비용 ↑↑, 느림)", price: "콘솔 요금표" },
 ];
 
 // 모델 키 → 실제 모델 ID. 잘못된 키면 sonnet 으로 폴백.

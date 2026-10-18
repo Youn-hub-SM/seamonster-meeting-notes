@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "@/app/components/Feedback";
 import { qtyText } from "@/app/lib/format";
 
-type ModelKey = "haiku" | "sonnet" | "opus";
+type ModelKey = "haiku" | "sonnet" | "opus" | "fable";
 type FeatureVal = ModelKey | "inherit";
 type Option = { key: ModelKey; label: string; price: string };
 type FeatureMeta = { key: string; label: string; inheritDefault?: ModelKey };

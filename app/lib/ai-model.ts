@@ -49,14 +49,14 @@ export async function getCurrentModel(): Promise<string> {
 export type AiFeature = "meeting" | "cs" | "voc" | "production" | "report" | "briefing" | "margin" | "daily_analyst" | "notice";
 // inheritDefault: 기능 설정이 'inherit' 일 때 공통 기본 대신 쓰는 모델(정확도가 중요한 기능). 없으면 공통 기본을 따른다.
 export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inheritDefault?: ModelKey }[] = [
-  { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리" },
+  { key: "meeting", label: "회의록 정리", desc: "회의 녹취 요약·정리 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
   { key: "cs", label: "CS 코치", desc: "CS 응대 코칭·답변 초안" },
-  { key: "voc", label: "VOC 인사이트", desc: "VOC 인사이트·설문 분석·제조사 리포트" },
+  { key: "voc", label: "VOC 인사이트", desc: "VOC 인사이트·설문 분석·제조사 리포트 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
   { key: "production", label: "생산·재고 조언", desc: "생산/재고 AI 조언" },
-  { key: "report", label: "커스텀 리포트", desc: "자연어→SQL 데이터 조회 (기본 opus·정교)", inheritDefault: "opus" },
+  { key: "report", label: "커스텀 리포트", desc: "자연어→SQL 데이터 조회 (기본 fable — 2026-10-19 opus 에서 전환)", inheritDefault: "fable" },
   { key: "briefing", label: "업무 브리핑(중단)", desc: "06:30 업무 브리핑 — 2026-09-30 자동 생성 중단, 관리자용 재구성 전까지 미사용 (기본 opus)", inheritDefault: "opus" },
   { key: "margin", label: "이익률 계산기", desc: "AI 이익률 계산 (기본 sonnet — 2026-09-29 opus 에서 전환)", inheritDefault: "sonnet" },
-  { key: "daily_analyst", label: "종합 리포트(일일·주간·월간)", desc: "매출·광고 분석 에이전트 — 일일·주간·월간 공통 (기본 opus — 2026-09-30 대표 선택)", inheritDefault: "opus" },
+  { key: "daily_analyst", label: "종합 리포트(일일·주간·월간)", desc: "매출·광고 분석 에이전트 — 일일·주간·월간 공통 (기본 fable — 2026-10-19 대표 선택, 이전 opus)", inheritDefault: "fable" },
   { key: "notice", label: "공지 작성기", desc: "상황 항목 → 씨몬스터 톤 공지문 (기본 sonnet)", inheritDefault: "sonnet" },
 ];
 const FEATURE_SETTING_KEY: Record<AiFeature, string> = {
@@ -87,11 +87,11 @@ export async function getFeatureModel(f: AiFeature): Promise<string> {
   return def ? MODELS[def] : getCurrentModel();
 }
 
-// ── 생각 강도(effort) — 5.x 모델(Sonnet 5.5·Opus 5.5)에만 보낸다 ──
+// ── 생각 강도(effort) — 5.x 모델(Sonnet 5.5·Opus 5.5·Fable 5.1)에만 보낸다 ──
 //  5.x 는 답하기 전에 생각(adaptive thinking)을 하고, 생략하면 Sonnet 은 high·Opus 는 medium 으로 돌아 비용·지연이 커진다.
 //  Haiku 4.5 는 effort 를 받으면 400 이고, 4.6/4.8 로 되돌렸을 때도 요청이 종전과 같도록 그 밖의 모델엔 보내지 않는다.
 export function effortParams(model: string, effort: "low" | "medium" | "high"): Pick<Anthropic.MessageCreateParamsNonStreaming, "output_config"> {
-  return /^claude-(opus|sonnet)-5/.test(model) ? { output_config: { effort } } : {};
+  return /^claude-(opus|sonnet|fable)-5/.test(model) ? { output_config: { effort } } : {};
 }
 
 // ── 응답 텍스트 읽기 — 블록 종류로 읽고, 거절·잘림을 먼저 가린다 ──
