@@ -138,7 +138,7 @@ export default function PaymentsPage() {
               <tbody>
                 {data.orders.map((o) => (
                   <tr key={o.id} onClick={() => setModalOrder(o)}>
-                    <td><strong>{o.order_no}</strong></td>
+                    <td className="sm-nowrap"><strong>{o.order_no}</strong></td>
                     <td data-label="업체"><strong>{o.company_name}</strong></td>
                     <td data-label="발주일">{o.order_date}</td>
                     <td>{o.ship_date || "-"}</td>
