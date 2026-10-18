@@ -95,6 +95,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   outline: 2px solid var(--sm-orange);
   outline-offset: 2px;
 }
+/* 입력칸은 테두리가 이미 있어 바깥 링까지 두면 두 줄로 보인다(대표 2026-10-18) — 링을 테두리 위에 겹쳐 한 줄 2px 로 */
+input:focus-visible, select:focus-visible, textarea:focus-visible, [contenteditable="true"]:focus-visible {
+  outline-offset: -1px;
+}
 
 /* ── 유틸 클래스 — 반복되는 인라인 style 대체 (디자인 기준: docs/design-system.md) ── */
 .sm-row { display: flex; align-items: center; }
@@ -1798,7 +1802,6 @@ a {
   background: var(--sm-white); border: none; border-bottom: 1px solid var(--sm-border); border-radius: 0;
 }
 .sm-search-input::placeholder { color: var(--sm-text-light); }
-.sm-search-input:focus-visible { outline-offset: -2px; } /* 공용 주황 링을 칸 안쪽으로 — 패널이 overflow:hidden 이라 바깥 링은 잘린다. outline:none 은 쓰지 않는다(1차 결정) */
 .sm-search-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sm-space-2) var(--sm-space-2) var(--sm-space-3); }
 .sm-search-group + .sm-search-group { margin-top: var(--sm-space-2); border-top: 1px solid var(--sm-border); padding-top: var(--sm-space-2); }
 .sm-search-group-title { padding: var(--sm-space-2) var(--sm-space-3) var(--sm-space-1); font-size: var(--sm-fs-xs); font-weight: 600; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); }

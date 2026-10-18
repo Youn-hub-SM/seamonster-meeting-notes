@@ -121,7 +121,7 @@
 - 표: 머리글 12px/600 `--sm-text-mid` · 셀 15/400 · 행 패딩 12(≈44px). 밀집 표(`.inv-table` 등)만 자체 패딩.
 
 **눌리는 것이 눌리게**
-- 공용 `:focus-visible` 링(주황 2px, offset 2px)이 button·a·input·select·textarea·[role=button]·.sm-tab·summary 에 붙는다. 입력칸에 `outline:none` 을 쓰지 않는다.
+- 공용 `:focus-visible` 링(주황 2px, offset 2px)이 button·a·input·select·textarea·[role=button]·.sm-tab·summary 에 붙는다. 입력칸에 `outline:none` 을 쓰지 않는다. 입력칸(input·select·textarea)은 테두리와 겹치지 않게 `outline-offset: -1px` — 주황 한 줄로 보인다(2026-10-18 대표: 두 줄 불편).
 - `.b2b-btn-primary` 글자 16px/700 · `.b2b-btn-secondary` 흰 + strong 테두리 · `.b2b-btn-danger` 흰 + 빨강 1px 테두리 + 빨강 글자(2차와 같은 틀). 화면당 1차 버튼 하나.
 - `.sm-link`·`.b2b-link-btn` = 검정 + 밑줄(offset 2px), 호버 `--sm-orange-text`.
 - `.b2b-status-select` = strong 테두리 + ▾ 화살표(공용이 `background-image !important` 로 지킴) — 배지(`.b2b-status-pill`)와 모양이 다르다. 인라인 `background` 단축을 써도 화살표는 남는다.
