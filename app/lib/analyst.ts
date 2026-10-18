@@ -686,7 +686,7 @@ async function analyze(sb: SupabaseClient, spec: ReportSpec, facts: Record<strin
     let res: Anthropic.Message;
     try {
       res = await anthropic.messages.create({
-        model, max_tokens: 12000, system, messages,
+        model, max_tokens: 16000, system, messages, // 2026-10-19 12000→16000 (Fable 5.1 은 더 길게 쓴다 — 넘기면 readText 가 오류로 올린다)
         ...(hasFlags ? { tools, tool_choice: finalTurn ? { type: "none" as const } : { type: "auto" as const } } : {}),
         ...effortParams(model, hasFlags ? "medium" : "low"),
       }, { timeout, maxRetries: 0 });
