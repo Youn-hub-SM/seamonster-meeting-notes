@@ -21,7 +21,6 @@ import {
   RecipientInput,
   ShipmentScheduleInput,
   Shipment,
-  formatMoney,
   formatQty,
   splitTracking,
   joinTracking,
@@ -34,6 +33,7 @@ import { computeOrderMargin, seasonForDate, SEASON_MONTHS } from "@/app/lib/b2b-
 import { Combobox } from "./Combobox";
 import IconButton from "@/app/components/IconButton";
 import { useConfirm } from "@/app/components/Feedback";
+import { won, qty as fmtQty, qtyText, wonText, itemText } from "@/app/lib/format";
 
 // 저장 뒤 목록으로 가면서 차감 칸 안내(channel_notice)를 넘기는 sessionStorage 키 — 목록(page.tsx)이 경고 배너로 이어받는다(키는 page.tsx 와 같아야 한다)
 const CHANNEL_NOTICE_KEY = "b2b.orders.channelNotice";
@@ -479,7 +479,7 @@ export default function OrderForm({
       itemsLabel: sh.items
         .map((it) => {
           const oi = data.items[it.order_item_index];
-          return oi ? `${oi.product_name}${oi.spec ? ` ${oi.spec}` : ""} ×${formatQty(Number(it.qty) || 0)}` : null;
+          return oi ? itemText({ name: oi.product_name, spec: oi.spec, qty: Number(it.qty) || 0 }) : null;
         })
         .filter(Boolean)
         .join(", "),
@@ -510,7 +510,7 @@ export default function OrderForm({
   }, [mode, data.items, data.shipments, data.status]);
   const orderItemsLabel = data.items
     .filter((it) => it.product_id)
-    .map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(Number(it.qty) || 0)}`)
+    .map((it) => itemText({ name: it.product_name, spec: it.spec, qty: Number(it.qty) || 0 }))
     .join(", ");
   function copyTracking(key: string, num: string) {
     navigator.clipboard?.writeText(num).then(() => {
@@ -638,9 +638,9 @@ export default function OrderForm({
       if (!latest) return;
       const its = latest.items || [];
       const head = its.slice(0, 2).map((it: { product_name: string; spec: string | null; qty: number }) =>
-        `${it.product_name}${it.spec ? ` ${it.spec}` : ""}×${formatQty(it.qty)}`).join(", ");
-      const more = its.length > 2 ? ` 외 ${its.length - 2}종` : "";
-      const summary = `${latest.order_no} · ${head}${more} · ${formatMoney(latest.total)}원`;
+        itemText({ name: it.product_name, spec: it.spec, qty: it.qty })).join(", ");
+      const more = its.length > 2 ? ` 외 ${qtyText(its.length - 2, "종")}` : "";
+      const summary = `${latest.order_no} · ${head}${more} · ${wonText(latest.total)}`;
       setClonePrompt({ orderId: latest.id, summary });
     } catch {
       // 조회 실패는 조용히 무시 — 그냥 빈 폼으로 진행
@@ -1251,9 +1251,9 @@ export default function OrderForm({
                   <th style={{ minWidth: 240 }}>품목명 <span style={{ color: "var(--sm-orange)" }}>*</span></th>
                   <th style={{ width: 130 }}>옵션</th>
                   <th className="num" style={{ width: 90 }}>수량 *</th>
-                  <th className="num" style={{ width: 120 }}>단가</th>
+                  <th className="num" style={{ width: 120 }}>단가(원)</th>
                   <th style={{ width: 80 }}>과세</th>
-                  <th className="num" style={{ width: 120 }}>금액</th>
+                  <th className="num" style={{ width: 120 }}>금액(원)</th>
                   <th style={{ width: 1 }}></th>
                 </tr>
               </thead>
@@ -1344,7 +1344,7 @@ export default function OrderForm({
                           );
                         })()}
                       </td>
-                      <td data-label="단가">
+                      <td data-label="단가(원)">
                         <input
                           type="number"
                           inputMode="numeric"
@@ -1364,8 +1364,8 @@ export default function OrderForm({
                           ))}
                         </select>
                       </td>
-                      <td data-label="금액" className="num b2b-money b2b-item-amount" style={{ padding: "12px 10px", color: "var(--sm-text-mid)" }}>
-                        {formatMoney(qty * price)}
+                      <td data-label="금액(원)" className="num b2b-money b2b-item-amount" style={{ padding: "12px 10px", color: "var(--sm-text-mid)" }}>
+                        {won(qty * price)}
                       </td>
                       <td className="b2b-item-remove">
                         <IconButton className="is-danger" label="상품 삭제" onClick={() => removeItemRow(idx)}>
@@ -1390,13 +1390,13 @@ export default function OrderForm({
         <section className="b2b-form-section">
           <div className="b2b-totals">
             <div className="b2b-totals-row">
-              과세 분 <strong className="b2b-money">{formatMoney(totals.taxable)}원</strong>
+              과세 분 <strong className="b2b-money">{wonText(totals.taxable)}</strong>
             </div>
             <div className="b2b-totals-row">
-              면세 분 <strong className="b2b-money">{formatMoney(totals.exempt)}원</strong>
+              면세 분 <strong className="b2b-money">{wonText(totals.exempt)}</strong>
             </div>
             <div className="b2b-totals-row">
-              부가세 <strong className="b2b-money">{formatMoney(totals.vat)}원</strong>
+              부가세 <strong className="b2b-money">{wonText(totals.vat)}</strong>
             </div>
             {/* 할인/추가금 — 원 또는 %(합계 기준)로 넣고, 저장은 원 금액으로 확정된다. 음수 = 추가금(합계 가산) */}
             <div className="b2b-totals-row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1422,17 +1422,17 @@ export default function OrderForm({
             {discountAmount > 0 && (
               <div className="b2b-totals-row" style={{ color: "var(--sm-danger)" }}>
                 할인 적용{discountMode === "pct" ? ` (${Number(discountRaw) || 0}%)` : ""}
-                <strong className="b2b-money">-{formatMoney(discountAmount)}원</strong>
+                <strong className="b2b-money">-{wonText(discountAmount)}</strong>
               </div>
             )}
             {discountAmount < 0 && (
               <div className="b2b-totals-row">
                 추가금 적용{discountMode === "pct" ? ` (${Math.abs(Number(discountRaw) || 0)}%)` : ""}
-                <strong className="b2b-money">+{formatMoney(-discountAmount)}원</strong>
+                <strong className="b2b-money">+{wonText(-discountAmount)}</strong>
               </div>
             )}
             <div className="b2b-totals-row is-grand">
-              합계 <strong className="b2b-money">{formatMoney(totalAfterDiscount)}원</strong>
+              합계 <strong className="b2b-money">{wonText(totalAfterDiscount)}</strong>
             </div>
           </div>
         </section>
@@ -1449,12 +1449,12 @@ export default function OrderForm({
             <div className="b2b-field" style={{ maxWidth: 220 }}>
               <label className="b2b-field-label">배송 박스 수</label>
               <div style={{ fontSize: 13, fontWeight: 700, padding: "9px 0" }}>
-                {realScheduleCount > 0 ? `${effectiveBoxCount}박스` : "미정"}
+                {realScheduleCount > 0 ? qtyText(effectiveBoxCount, "박스") : "미정"}
               </div>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
                 {realScheduleCount > 0
-                  ? `발송 일정 ${realScheduleCount}건의 박스 수 합 · 총 부피 ${orderMargin.volume.toLocaleString()}kg`
-                  : `총 부피 ${orderMargin.volume.toLocaleString()}kg`}
+                  ? `발송 일정 ${qtyText(realScheduleCount, "건")}의 박스 수 합 · 총 부피 ${fmtQty(orderMargin.volume)}kg`
+                  : `총 부피 ${fmtQty(orderMargin.volume)}kg`}
               </span>
             </div>
             <div className="b2b-field" style={{ maxWidth: 220 }}>
@@ -1475,19 +1475,19 @@ export default function OrderForm({
             <div className="b2b-totals-row">
               {/* 매출 = 단가(공급가) × 수량 — 합계와 다르면 할인·추가금이 비율로 반영된 것 */}
               매출{orderMargin.revenue !== totals.subtotal ? (discountAmount < 0 ? " (추가금 반영)" : " (할인 반영)") : ""}{" "}
-              <strong className="b2b-money">{formatMoney(Math.round(orderMargin.revenue))}원</strong>
+              <strong className="b2b-money">{wonText(orderMargin.revenue)}</strong>
             </div>
             <div className="b2b-totals-row">
-              제품원가 <strong className="b2b-money">− {formatMoney(Math.round(orderMargin.productCost))}원</strong>
+              제품원가 <strong className="b2b-money">− {wonText(orderMargin.productCost)}</strong>
             </div>
-            <div className="b2b-totals-row" title={`박스 ${orderMargin.boxes}개 × (아이스박스 ${formatMoney(orderMargin.iceboxPerBox)} + 운반비 ${formatMoney(orderMargin.deliveryPerBox)} + 보냉비 ${formatMoney(orderMargin.coolingPerBox)})`}>
-              배송비 ({orderMargin.boxes}박스){" "}
-              <strong className="b2b-money">− {formatMoney(Math.round(orderMargin.shipping))}원</strong>
+            <div className="b2b-totals-row" title={`박스 ${qtyText(orderMargin.boxes)} × (아이스박스 ${wonText(orderMargin.iceboxPerBox)} + 운반비 ${wonText(orderMargin.deliveryPerBox)} + 보냉비 ${wonText(orderMargin.coolingPerBox)})`}>
+              배송비 ({qtyText(orderMargin.boxes, "박스")}){" "}
+              <strong className="b2b-money">− {wonText(orderMargin.shipping)}</strong>
             </div>
             <div className="b2b-totals-row is-grand">
               이익{" "}
               <strong className="b2b-money" style={{ color: orderMargin.profit >= 0 ? "var(--sm-success)" : "var(--sm-danger)" }}>
-                {orderMargin.profit >= 0 ? "+" : ""}{formatMoney(Math.round(orderMargin.profit))}원
+                {orderMargin.profit >= 0 ? "+" : ""}{wonText(orderMargin.profit)}
                 {orderMargin.revenue > 0 && (
                   <span style={{ marginLeft: 8, fontSize: 13 }}>
                     ({orderMargin.marginPct.toFixed(1)}%)

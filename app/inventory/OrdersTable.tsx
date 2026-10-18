@@ -8,6 +8,7 @@ import type { LinkResultLite } from "@/app/lib/link-result";
 import { RequestSelect, reqWarnOf, confirmUnlinkedInbound, linkMessage, type OpenReq } from "./TxnModal";
 import { deleteLedger, isMoveTxn } from "./TxnTable";
 import { useConfirm, useToast } from "@/app/components/Feedback";
+import { qty, qtyText } from "@/app/lib/format";
 
 // product_id·reason 은 대기 입고처리(요청서 잔여 확인·고객 반품 판정)에 쓴다 — 구 서버 응답엔 없다(없으면 잔여를 모른다고 확인을 받는다)
 type OrderItem = { id: string; product_name: string; sku: string | null; qty: number; unit_amount: number | null; amount: number; product_id?: string | null; reason?: string | null };
@@ -168,7 +169,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
       : isLateBatch(o) && isGrouped(o)
         ? " 한 번에 기록한 묶음이면 그 코드가 [재고 차감 기록] 목록에 다시 올라갑니다."
         : "";
-    if (!(await confirm({ title: `${label} (${cnt}개 품목) 취소`, body: `${move ? "양쪽 칸 재고와 요청서 배정이 원복됩니다." : o.status === "대기" ? "대기 기록이 지워집니다." : "재고가 원복됩니다."}${fulfillTail}`, action: move ? "이동 취소" : "기록 취소" }))) return;
+    if (!(await confirm({ title: `${label} (${qtyText(cnt)} 품목) 취소`, body: `${move ? "양쪽 칸 재고와 요청서 배정이 원복됩니다." : o.status === "대기" ? "대기 기록이 지워집니다." : "재고가 원복됩니다."}${fulfillTail}`, action: move ? "이동 취소" : "기록 취소" }))) return;
     const url = move
       ? `/api/inventory/move?group_id=${encodeURIComponent(o.key)}`
       : `/api/inventory/orders?${isGrouped(o) ? `group_id=${encodeURIComponent(o.key)}` : `id=${encodeURIComponent(o.key)}`}`;
@@ -281,9 +282,9 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                   <td style={{ whiteSpace: "nowrap" }}>{dt(o.created_at)}</td>
                   <td style={{ whiteSpace: "nowrap", fontWeight: 700 }}>{o.order_no || <span className="sm-faint">단건</span>}</td>
                   <td>{o.partner || "-"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{o.item_count}개 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>{isOpen ? "▲" : "▼"}</span></td>
-                  <td className="num b2b-money">{o.total_qty.toLocaleString()}</td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{o.total_amount.toLocaleString()}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{qtyText(o.item_count)} 품목 <span style={{ color: "var(--sm-text-light)", fontSize: 12 }}>{isOpen ? "▲" : "▼"}</span></td>
+                  <td className="num b2b-money">{qty(o.total_qty)}</td>
+                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(o.total_amount)}</td>
                   <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={displayMemo(o.memo) || ""}>{displayMemo(o.memo) || "-"}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: "nowrap" }}>
                     {!done && <button className="b2b-btn-secondary" style={{ padding: "3px 10px", fontSize: 12, marginRight: 6 }} onClick={() => setProc(o)}>{o.type === "입고" ? "입고처리" : "출고처리"}</button>}
@@ -306,8 +307,8 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                               <tr key={it.id}>
                                 <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product_name}{it.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{it.sku}</span> : null}</td>
                                 <td className="num" style={{ whiteSpace: "nowrap" }}>
-                                  <span className="b2b-money" style={{ fontWeight: 700 }}>{it.qty.toLocaleString()}</span>
-                                  {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({bal.before.toLocaleString()} → {bal.after.toLocaleString()})</span>}
+                                  <span className="b2b-money" style={{ fontWeight: 700 }}>{qty(it.qty)}</span>
+                                  {bal && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({qty(bal.before)} → {qty(bal.after)})</span>}
                                 </td>
                                 <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>
                                   {editId === it.id ? (
@@ -329,7 +330,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
                                     </>
                                   )}
                                 </td>
-                                <td className="num b2b-money">{it.amount.toLocaleString()}</td>
+                                <td className="num b2b-money">{qty(it.amount)}</td>
                               </tr>
                             );
                           })}
@@ -354,7 +355,7 @@ export default function OrdersTable({ reloadKey = 0 }: { reloadKey?: number }) {
     ) : !loading && (
       // 버튼이 없으면 "전부 불러온 것"임을 명시 — 버튼 부재가 미완성처럼 보이지 않게
       <p className="sm-faint" style={{ textAlign: "center", marginTop: 10, fontSize: 12 }}>
-        {search.trim() ? `검색 결과 ${shown.length.toLocaleString()}건` : `${shown.length.toLocaleString()}건 — 전체를 불러왔습니다`}
+        {search.trim() ? `검색 결과 ${qtyText(shown.length, "건")}` : `${qtyText(shown.length, "건")} — 전체를 불러왔습니다`}
       </p>
     )}
     {procModal}

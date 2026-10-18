@@ -4,11 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useConfirm } from "@/app/components/Feedback";
 import { parseScanCells, parseCsv } from "@/app/lib/fulfill-scan";
+import { qty, qtyText, dateTime } from "@/app/lib/format";
 
 type Upload = { id: string; title: string; created_by: string | null; created_at: string; invoice_count: number; item_count: number };
 type FileResult = { name: string; invoiceCount: number; itemCount: number; excludedNothing: number; error?: string };
 
-const fmtTime = (iso: string) => { const d = new Date(iso); return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 // ── 브라우저에서 파일 파싱(고객정보는 여기서 버려짐 — 서버로 안 감) ──
 type XlCell = { value: unknown };
@@ -147,10 +147,10 @@ export default function ScanUploadPage() {
           <div className="sm-success" style={{ marginTop: 12 }}>
             {result.files.map((f, i) => (
               <div key={i} style={{ color: f.error ? "var(--sm-danger)" : undefined }}>
-                {f.error ? "" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${f.invoiceCount.toLocaleString()}건, 라인 ${f.itemCount.toLocaleString()}개${f.excludedNothing ? `, NOTHING ${f.excludedNothing} 제외` : ""}`}
+                {f.error ? "" : "✓"} <strong>{f.name}</strong> — {f.error ? f.error : `송장 ${qtyText(f.invoiceCount, "건")}, 라인 ${qtyText(f.itemCount)}${f.excludedNothing ? `, NOTHING ${f.excludedNothing} 제외` : ""}`}
               </div>
             ))}
-            {result.unmatched.length > 0 && <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>미등록 단품코드 {result.unmatched.length}개: {result.unmatched.slice(0, 15).join(", ")}{result.unmatched.length > 15 ? " ..." : ""} — <Link href="/b2b/products">상품마스터</Link>에 없으면 스캔 집계에 빨간 줄로 표시됩니다.</div>}
+            {result.unmatched.length > 0 && <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>미등록 단품코드 {qtyText(result.unmatched.length)}: {result.unmatched.slice(0, 15).join(", ")}{result.unmatched.length > 15 ? " ..." : ""} — <Link href="/b2b/products">상품마스터</Link>에 없으면 스캔 집계에 빨간 줄로 표시됩니다.</div>}
           </div>
         )}
       </section>
@@ -175,10 +175,10 @@ export default function ScanUploadPage() {
                 {uploads.map((u) => (
                   <tr key={u.id}>
                     <td data-label="파일"><strong>{u.title || "(제목 없음)"}</strong></td>
-                    <td data-label="송장" className="num b2b-money">{u.invoice_count.toLocaleString()}</td>
-                    <td data-label="라인" className="num b2b-money">{u.item_count.toLocaleString()}</td>
+                    <td data-label="송장" className="num b2b-money">{qty(u.invoice_count)}</td>
+                    <td data-label="라인" className="num b2b-money">{qty(u.item_count)}</td>
                     <td data-label="올린이" className="sm-faint">{u.created_by || "-"}</td>
-                    <td data-label="올린 시각" className="sm-faint" style={{ whiteSpace: "nowrap" }}>{fmtTime(u.created_at)}</td>
+                    <td data-label="올린 시각" className="sm-faint" style={{ whiteSpace: "nowrap" }}>{dateTime(u.created_at)}</td>
                     <td className="actions"><button className="b2b-btn-secondary" style={{ padding: "4px 8px", fontSize: 12, color: "var(--sm-danger)" }} onClick={() => removeUpload(u.id)}>삭제</button></td>
                   </tr>
                 ))}

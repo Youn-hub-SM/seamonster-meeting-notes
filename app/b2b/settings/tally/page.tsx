@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { qtyText } from "@/app/lib/format";
 
 // 설정 · Tally 연동 — 설문 응답을 VOC로 가져오는 API 연결 (구 VOC 설정에서 이관, 2026-08-24 설정 재구성).
 export default function TallySettingsPage() {
@@ -50,7 +51,7 @@ export default function TallySettingsPage() {
     try {
       const j = await (await fetch("/api/voc/tally/import", { method: "POST" })).json();
       if (!j.ok) throw new Error(j.error || "응답을 가져오지 못했습니다. API 키와 폼을 확인하세요");
-      setMsg({ t: `응답을 가져왔습니다 — 신규 ${j.imported}건 (중복 ${j.skipped} / 조회 ${j.scanned})`, ok: true });
+      setMsg({ t: `응답을 가져왔습니다 — 신규 ${qtyText(j.imported, "건")} (중복 ${j.skipped} / 조회 ${j.scanned})`, ok: true });
     } catch (e) { setMsg({ t: e instanceof Error ? e.message : "응답을 가져오지 못했습니다. API 키와 폼을 확인하세요", ok: false }); }
     finally { setBusy(""); }
   }

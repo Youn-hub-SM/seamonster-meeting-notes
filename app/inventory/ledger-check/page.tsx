@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { qtyText } from "@/app/lib/format";
 
 // 원장 점검(대표 결정 D4d) — 장부 이상을 사람이 확인·처리한다. 화면은 읽기만 하고 고치지 않는다(S12).
 //  판정은 /api/inventory/ledger-check → inventory_ledger_check RPC(132) 한 곳(B2B 매출 원장 대조만 reconcileB2BSales).
@@ -229,7 +230,7 @@ function KindBlock({ kind, g, itemCap }: { kind: string; g: Group; itemCap: numb
         <div className="sm-col" style={{ gap: "var(--sm-space-1)", minWidth: 0, flex: "1 1 320px" }}>
           <div className="sm-row-wrap" style={{ gap: "var(--sm-space-2)", alignItems: "center" }}>
             <strong>{m.label}</strong>
-            <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>{g.count.toLocaleString()}건</span>
+            <span className="b2b-status-pill" style={{ background: "var(--sm-danger-bg)", color: "var(--sm-danger)" }}>{qtyText(g.count, "건")}</span>
             {m.first && <span className="b2b-status-pill" style={{ background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>먼저</span>}
           </div>
           <span className="sm-muted">{m.todo}</span>
@@ -243,7 +244,7 @@ function KindBlock({ kind, g, itemCap }: { kind: string; g: Group; itemCap: numb
         <div className="sm-col" style={{ gap: "var(--sm-space-2)", marginTop: "var(--sm-space-3)" }}>
           {notes.length > 0 && <div className="sm-warn sm-col" style={{ gap: "var(--sm-space-1)" }}>{notes.map((n) => <span key={n}>{n}</span>)}</div>}
           <KindRows m={m} g={g} />
-          {cut && <p className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)" }}>앞 {itemCap.toLocaleString()}건만 표시</p>}
+          {cut && <p className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)" }}>앞 {qtyText(itemCap, "건")}만 표시</p>}
         </div>
       )}
     </div>
@@ -311,13 +312,13 @@ export default function LedgerCheckPage() {
               <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginBottom: "var(--sm-space-4)" }}>
                 <div className="b2b-stat-card">
                   <div className="b2b-stat-card-label">정리할 것</div>
-                  <div className="b2b-stat-card-value" style={{ color: total ? "var(--sm-danger)" : "var(--sm-black)" }}>{total.toLocaleString()}건</div>
-                  <div className="b2b-stat-card-hint">{bad.length}개 항목</div>
+                  <div className="b2b-stat-card-value" style={{ color: total ? "var(--sm-danger)" : "var(--sm-black)" }}>{qtyText(total, "건")}</div>
+                  <div className="b2b-stat-card-hint">{qtyText(bad.length)} 항목</div>
                 </div>
                 {unknown.length > 0 && (
                   <div className="b2b-stat-card">
                     <div className="b2b-stat-card-label">확인 못 함</div>
-                    <div className="b2b-stat-card-value" style={{ color: "var(--sm-warning)" }}>{unknown.length}개 항목</div>
+                    <div className="b2b-stat-card-value" style={{ color: "var(--sm-warning)" }}>{qtyText(unknown.length)} 항목</div>
                     <div className="b2b-stat-card-hint">0건이 아닙니다</div>
                   </div>
                 )}
@@ -326,7 +327,7 @@ export default function LedgerCheckPage() {
 
           {firsts.length > 0 && (
             <div className="sm-warn" style={{ marginBottom: "var(--sm-space-4)" }}>
-              먼저 정리: {firsts.map((g) => `${META[g.kind].label} ${g.count.toLocaleString()}건`).join(", ")} — 실사·다른 정리보다 먼저
+              먼저 정리: {firsts.map((g) => `${META[g.kind].label} ${qtyText(g.count, "건")}`).join(", ")} — 실사·다른 정리보다 먼저
             </div>
           )}
 
@@ -337,7 +338,7 @@ export default function LedgerCheckPage() {
             return (
               <section key={w.key} className="b2b-card" style={{ marginBottom: "var(--sm-space-5)" }}>
                 <div className="b2b-card-head sm-between" style={{ flexWrap: "wrap", gap: "var(--sm-space-2)" }}>
-                  <span className="b2b-card-title">{w.title} <span style={{ color: "var(--sm-danger)" }}>{n.toLocaleString()}건</span></span>
+                  <span className="b2b-card-title">{w.title} <span style={{ color: "var(--sm-danger)" }}>{qtyText(n, "건")}</span></span>
                 </div>
                 {list.map((g) => <KindBlock key={g.kind} kind={g.kind} g={g} itemCap={itemCap} />)}
               </section>
@@ -356,7 +357,7 @@ export default function LedgerCheckPage() {
           {clean.length > 0 && (
             <section className="b2b-card">
               <button type="button" className="b2b-link-btn" onClick={() => setShowClean((v) => !v)}>
-                {showClean ? "이상 없는 항목 닫기" : `이상 없는 항목 ${clean.length}개 보기`}
+                {showClean ? "이상 없는 항목 닫기" : `이상 없는 항목 ${qtyText(clean.length)} 보기`}
               </button>
               {showClean && (
                 <div className="sm-faint sm-col" style={{ gap: "var(--sm-space-1)", marginTop: "var(--sm-space-2)" }}>

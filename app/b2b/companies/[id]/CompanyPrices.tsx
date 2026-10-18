@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
 import { Combobox } from "../../orders/Combobox";
+import ItemLabel from "@/app/components/ItemLabel";
+import { won, itemText } from "@/app/lib/format";
 
 type Price = { product_id: string; unit_price: number; memo: string | null; name: string; sku: string | null; spec: string | null; default_price: number };
 type Prod = { id: string; name: string; sku: string | null; spec: string | null; sale_price: number; active: boolean; is_bundle?: boolean };
@@ -37,7 +39,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
 
   const options = useMemo(() => {
     const taken = new Set(prices.map((p) => p.product_id));
-    return products.filter((p) => !taken.has(p.id)).map((p) => ({ id: p.id, label: p.spec ? `${p.name} · ${p.spec}` : p.name, sub: p.sku ?? "" }));
+    return products.filter((p) => !taken.has(p.id)).map((p) => ({ id: p.id, label: itemText({ name: p.name, spec: p.spec }), sub: p.sku ?? "" }));
   }, [products, prices]);
 
   async function save(product_id: string, unit_price: number) {
@@ -73,7 +75,7 @@ export default function CompanyPrices({ companyId }: { companyId: string }) {
       <div className="sm-row" style={{ gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 12 }}>
         <label className="sm-col" style={{ gap: 3, flex: 1, minWidth: 200 }}>
           <span className="b2b-field-label">상품</span>
-          <Combobox value={pick ? (pick.spec ? `${pick.name} · ${pick.spec}` : pick.name) : ""} options={options}
+          <Combobox value={pick ? itemText({ name: pick.name, spec: pick.spec }) : ""} options={options}
             onSelect={(o) => { const p = products.find((x) => x.id === o.id) ?? null; setPick(p); if (p && !price) setPrice(String(p.sale_price || "")); }}
             placeholder="품목·SKU 검색" ariaLabel="상품 선택" emptyText="일치하는 상품이 없습니다" />
         </label>
@@ -112,9 +114,9 @@ function PriceRow({ p, busy, onSave, onRemove }: { p: Price; busy: boolean; onSa
   const changed = valid && Math.round(Number(v)) !== p.unit_price;
   return (
     <tr>
-      <td><strong>{p.name}</strong>{p.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{p.sku}</span> : null}{p.spec ? <span className="sm-faint" style={{ marginLeft: 4, fontSize: 12 }}>· {p.spec}</span> : null}</td>
+      <td><strong><ItemLabel name={p.name} spec={p.spec} sku={p.sku} /></strong></td>
       <td className="num"><input type="number" className="b2b-input" style={{ width: 110, textAlign: "right" }} value={v} onChange={(e) => setV(e.target.value)} /></td>
-      <td className="num sm-faint">{p.default_price.toLocaleString()}</td>
+      <td className="num sm-faint">{won(p.default_price)}</td>
       <td>
         <div className="sm-row" style={{ gap: 6, justifyContent: "flex-end" }}>
           {changed && <button className="b2b-btn-primary" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => onSave(Math.round(Number(v)))}>단가 저장</button>}

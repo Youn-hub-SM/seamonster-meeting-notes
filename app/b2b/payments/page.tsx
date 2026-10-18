@@ -18,6 +18,7 @@ import {
   formatTrdt,
 } from "@/app/lib/b2b-deposit-types";
 import { pingActivityFeed } from "../ActivityFeed";
+import { qtyText, wonText } from "@/app/lib/format";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 
 type UnpaidOrder = {
@@ -88,7 +89,7 @@ export default function PaymentsPage() {
         <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
           <div className="b2b-stat-card">
             <div className="b2b-stat-card-label">미수금 발주</div>
-            <div className="b2b-stat-card-value">{data.summary.order_count}건</div>
+            <div className="b2b-stat-card-value">{qtyText(data.summary.order_count, "건")}</div>
           </div>
           <div className="b2b-stat-card">
             <div className="b2b-stat-card-label">총 청구액</div>
@@ -128,9 +129,9 @@ export default function PaymentsPage() {
                   <th>업체</th>
                   <th>발주일</th>
                   <th>발송일</th>
-                  <th className="num">청구액</th>
-                  <th className="num">입금</th>
-                  <th className="num">잔액</th>
+                  <th className="num">청구액(원)</th>
+                  <th className="num">입금(원)</th>
+                  <th className="num">잔액(원)</th>
                   <th>입금 상태</th>
                 </tr>
               </thead>
@@ -141,7 +142,7 @@ export default function PaymentsPage() {
                     <td data-label="업체"><strong>{o.company_name}</strong></td>
                     <td data-label="발주일">{o.order_date}</td>
                     <td>{o.ship_date || "-"}</td>
-                    <td className="num b2b-money" data-label="청구액">{formatMoney(o.total)}</td>
+                    <td className="num b2b-money" data-label="청구액(원)">{formatMoney(o.total)}</td>
                     <td className="num b2b-money">{formatMoney(o.paid)}</td>
                     <td className="num b2b-money" style={{ color: o.remaining > 0 ? "var(--sm-danger)" : "inherit", fontWeight: 600 }}>
                       {formatMoney(o.remaining)}
@@ -340,7 +341,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
       <div className="b2b-card-head">
         <h2 className="b2b-card-title">
           자동 입금확인
-          {data && data.review.length > 0 && <span className="pay-dep-count">{data.review.length}건 확인필요</span>}
+          {data && data.review.length > 0 && <span className="pay-dep-count">{qtyText(data.review.length, "건")} 확인필요</span>}
         </h2>
       </div>
 
@@ -360,7 +361,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
           {data.review.map((d) => (
             <div key={d.id} className="pay-dep-row is-review">
               <div className="pay-dep-main">
-                <span className="b2b-money pay-dep-amount">{formatMoney(d.amount)}원</span>
+                <span className="b2b-money pay-dep-amount">{wonText(d.amount)}</span>
                 <span className="pay-dep-remark">{d.remark || "(입금자명 없음)"}</span>
                 <span className="pay-dep-date">{formatTrdt(d.trdt)}</span>
               </div>
@@ -379,9 +380,9 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                         companyName: c.order.company_name,
                       })
                     }
-                    title={`청구 ${formatMoney(c.order.total)} · 잔액 ${formatMoney(c.order.remaining)}`}
+                    title={`청구 ${wonText(c.order.total)} · 잔액 ${wonText(c.order.remaining)}`}
                   >
-                    {c.order.company_name} · 잔액 {formatMoney(c.order.remaining)}
+                    {c.order.company_name} · 잔액 {wonText(c.order.remaining)}
                     {c.nameHit && c.amountHit ? " (이름·금액 일치)" : c.amountHit ? " (금액 일치)" : " (이름 일치)"}
                   </button>
                 ))}
@@ -404,7 +405,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                   <option value="">직접 선택...</option>
                   {data.unpaid.map((o) => (
                     <option key={o.id} value={o.id}>
-                      {o.company_name} · {o.order_no} · 잔액 {formatMoney(o.remaining)}
+                      {o.company_name} · {o.order_no} · 잔액 {wonText(o.remaining)}
                     </option>
                   ))}
                 </select>
@@ -426,7 +427,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
           ))}
 
           <button className="pay-dep-toggle" onClick={() => setShowManage((v) => !v)}>
-            입금자명 관리 — 등록 {data.aliases.length}건 · 자동무시 {data.rules.length}건 {showManage ? "접기" : "펼치기"}
+            입금자명 관리 — 등록 {qtyText(data.aliases.length, "건")} · 자동무시 {qtyText(data.rules.length, "건")} {showManage ? "접기" : "펼치기"}
           </button>
           {showManage && (
             <div className="pay-dep-manage">
@@ -503,7 +504,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
           {data.recent.length > 0 && (
             <>
               <button className="pay-dep-toggle" onClick={() => setShowRecent((v) => !v)}>
-                최근 처리 {data.recent.length}건 {showRecent ? "접기" : "펼치기"}
+                최근 처리 {qtyText(data.recent.length, "건")} {showRecent ? "접기" : "펼치기"}
               </button>
               {showRecent && (
                 <div className="sm-row-wrap sm-gap-2 pay-dep-filter">
@@ -519,7 +520,7 @@ function DepositFeed({ onMatched }: { onMatched: () => void }) {
                   .map((d) => (
                   <div key={d.id} className="pay-dep-row">
                     <div className="pay-dep-main">
-                      <span className="b2b-money pay-dep-amount">{formatMoney(d.amount)}원</span>
+                      <span className="b2b-money pay-dep-amount">{wonText(d.amount)}</span>
                       <span className="pay-dep-remark">{d.remark || "(입금자명 없음)"}</span>
                       <span className="pay-dep-date">{formatTrdt(d.trdt)}</span>
                     </div>
@@ -671,10 +672,10 @@ function PaymentModal({
             <div style={{ marginTop: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>
               {order.order_no} · {order.order_date}
               {" · 청구 "}
-              <strong className="b2b-money">{formatMoney(order.total)}</strong>
+              <strong className="b2b-money">{wonText(order.total)}</strong>
               {" · 잔액 "}
               <strong className="b2b-money" style={{ color: remaining > 0 ? "var(--sm-danger)" : "var(--sm-success)" }}>
-                {formatMoney(remaining)}
+                {wonText(remaining)}
               </strong>
             </div>
           </div>
@@ -772,7 +773,7 @@ function PaymentModal({
                 {payments.map((p) => (
                   <div key={p.id} className="pay-history-row">
                     <div className="pay-history-main">
-                      <span className="b2b-money" style={{ fontWeight: 700 }}>{formatMoney(p.amount)}</span>
+                      <span className="b2b-money" style={{ fontWeight: 700 }}>{wonText(p.amount)}</span>
                       <span className="pay-history-date">{p.paid_at}</span>
                     </div>
                     {p.notes && <div className="pay-history-note">{p.notes}</div>}

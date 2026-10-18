@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { PROFIT_COLS, type ProfitRow, type ChannelConfig } from "@/app/lib/sales-profit";
-import { won as fmtWon } from "@/app/lib/format";
+import { won, wonText, qty, qtyText, dateRange } from "@/app/lib/format";
 
 type Unmatched = { sku_code: string; line_count: number; qty_sum: number; amount_sum: number; channels: string };
 type Result = { ok: boolean; error?: string; from: string; to: string; rows: ProfitRow[]; totals: ProfitRow; unmatched: Unmatched[]; unmatched_amount: number };
 
-const won = (n: number) => `${fmtWon(n)}원`;
+// 표 셀 — 금액은 won(열 이름에 '(원)'), 건수·수량은 qty
 const fmt = (r: ProfitRow, key: keyof ProfitRow, money?: boolean, pct?: boolean) =>
-  key === "channel" ? String(r[key]) : pct ? `${Number(r[key]).toFixed(2)}%` : money ? won(Number(r[key])) : Number(r[key]).toLocaleString();
+  key === "channel" ? String(r[key]) : pct ? `${Number(r[key]).toFixed(2)}%` : money ? won(Number(r[key])) : qty(Number(r[key]));
 
 export default function SalesProfitPage() {
   const [from, setFrom] = useState("");
@@ -128,10 +128,10 @@ export default function SalesProfitPage() {
 
       {res && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title">채널별 요약 ({res.from} ~ {res.to})</span></div>
+          <div className="b2b-card-head"><span className="b2b-card-title">채널별 요약 ({dateRange(res.from, res.to)})</span></div>
           <div style={{ overflowX: "auto" }}>
             <table className="b2b-table" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-              <thead><tr>{PROFIT_COLS.map((c) => <th key={c.key} style={{ textAlign: c.key === "channel" ? "left" : "right" }}>{c.label}</th>)}</tr></thead>
+              <thead><tr>{PROFIT_COLS.map((c) => <th key={c.key} style={{ textAlign: c.key === "channel" ? "left" : "right" }}>{c.label}{c.money ? " (원)" : ""}</th>)}</tr></thead>
               <tbody>
                 {res.rows.map((r) => (
                   <tr key={r.channel}>
@@ -156,16 +156,16 @@ export default function SalesProfitPage() {
       {res && res.unmatched.length > 0 && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
           <div className="b2b-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {res.unmatched.length}개 (금액 {won(res.unmatched_amount)})</span>
+            <span className="b2b-card-title" style={{ color: "var(--sm-warning)" }}>미매칭 SKU {qtyText(res.unmatched.length)} (금액 {wonText(res.unmatched_amount)})</span>
             <button className="b2b-btn-secondary" onClick={exportUnmatchedTemplate} disabled={busy !== ""}>미매칭 목록 내려받기</button>
           </div>
           <p className="sm-faint" style={{ fontSize: 12, marginBottom: 8 }}>원가 0·중량 0으로 계산됨</p>
           <div style={{ overflowX: "auto", maxHeight: 320 }}>
             <table className="b2b-table" style={{ fontSize: 12 }}>
-              <thead><tr><th>관리코드</th><th className="num">라인수</th><th className="num">수량합</th><th className="num">결제금액합</th><th>판매처</th></tr></thead>
+              <thead><tr><th>관리코드</th><th className="num">라인수</th><th className="num">수량합</th><th className="num">결제금액합 (원)</th><th>판매처</th></tr></thead>
               <tbody>
                 {res.unmatched.map((u) => (
-                  <tr key={u.sku_code}><td style={{ fontFamily: "monospace" }}>{u.sku_code}</td><td className="num">{u.line_count}</td><td className="num">{u.qty_sum.toLocaleString()}</td><td className="num">{won(u.amount_sum)}</td><td className="sm-faint">{u.channels}</td></tr>
+                  <tr key={u.sku_code}><td style={{ fontFamily: "monospace" }}>{u.sku_code}</td><td className="num">{qty(u.line_count)}</td><td className="num">{qty(u.qty_sum)}</td><td className="num">{won(u.amount_sum)}</td><td className="sm-faint">{u.channels}</td></tr>
                 ))}
               </tbody>
             </table>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelFilter } from "../ChannelTabs";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { qtyText } from "@/app/lib/format";
 
 type Row = {
   product_id: string; sku: string | null; name: string;
@@ -131,15 +132,15 @@ export default function InventoryReconcilePage() {
           {/* 안내 배너 */}
           {kpi.sold > 0 && kpi.coverage < 90 && (
             <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--sm-warning-bg)", border: "1px solid var(--sm-warning)", marginBottom: 16, fontSize: 13, lineHeight: 1.6 }}>
-              이 기간에 실제로 <strong>{won(kpi.sold)}개</strong>가 팔렸는데, 재고에서 빠진 건 <strong>{won(kpi.out)}개({kpi.coverage}%)</strong>뿐입니다.
+              이 기간에 실제로 <strong>{qtyText(kpi.sold)}</strong>가 팔렸는데, 재고에서 빠진 건 <strong>{qtyText(kpi.out)}({kpi.coverage}%)</strong>뿐입니다.
             </div>
           )}
 
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">팔린 수(판매)</div><div className="b2b-stat-card-value b2b-money">{won(kpi.sold)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고에서 빠진 판매</div><div className="b2b-stat-card-value b2b-money" style={{ color: kpi.coverage < 90 ? "var(--sm-danger)" : "var(--sm-success)" }}>{won(kpi.out)} <span style={{ fontSize: 13 }}>({kpi.coverage}%)</span></div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">산 기록 없이 팔린 품목</div><div className="b2b-stat-card-value" style={{ color: kpi.noBuyCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{kpi.noBuyCount}개 <span className="sm-faint" style={{ fontSize: 12 }}>(판매 {won(kpi.noBuySold)})</span></div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 마이너스(오류)</div><div className="b2b-stat-card-value" style={{ color: kpi.minusCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{kpi.minusCount}개</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">산 기록 없이 팔린 품목</div><div className="b2b-stat-card-value" style={{ color: kpi.noBuyCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{qtyText(kpi.noBuyCount)} <span className="sm-faint" style={{ fontSize: 12 }}>(판매 {won(kpi.noBuySold)})</span></div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 마이너스(오류)</div><div className="b2b-stat-card-value" style={{ color: kpi.minusCount ? "var(--sm-danger)" : "var(--sm-black)" }}>{qtyText(kpi.minusCount)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">협찬·기타 출고</div><div className="b2b-stat-card-value b2b-money">{won(kpi.nonsale)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">직접 맞춘 수(보정)</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-warning)" }}>{kpi.adj > 0 ? "+" : ""}{won(kpi.adj)}</div></div>
           </div>

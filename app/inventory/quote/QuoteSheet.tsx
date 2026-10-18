@@ -1,6 +1,7 @@
 "use client";
 
 import type { QuoteItem, QuoteSummary } from "@/app/lib/inventory-quote";
+import { qty, qtyText } from "@/app/lib/format";
 
 const won = (n: number) => Math.round(n || 0).toLocaleString();
 
@@ -48,12 +49,12 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
       <div className="sm-between" style={{ marginBottom: 6 }}>
         <strong style={{ fontSize: 13 }}>품목별 매입 ({(s.itemCount ?? 0).toLocaleString()}종, {(s.totalQty ?? 0).toLocaleString()}개)</strong>
         {totalReturnQty > 0 && (
-          <span className="sm-faint" style={{ fontSize: 12 }}>반품 {totalReturnQty.toLocaleString()}개, {won(s.returnAmount)}원 차감</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>반품 {qtyText(totalReturnQty)}, {won(s.returnAmount)}원 차감</span>
         )}
       </div>
       {noPriceQty > 0 && (
         <div className="sm-warn" style={{ marginBottom: 10 }}>
-          단가를 적지 않은 입고가 <strong>{noPriceQty.toLocaleString()}개</strong> 있습니다(매입가 * 표시) — 그만큼 0원으로 계산돼 매입가가 실제보다 낮게 나옵니다.
+          단가를 적지 않은 입고가 <strong>{qtyText(noPriceQty)}</strong> 있습니다(매입가 * 표시) — 그만큼 0원으로 계산돼 매입가가 실제보다 낮게 나옵니다.
         </div>
       )}
       {zeroReturnItems.length > 0 && (
@@ -75,7 +76,7 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
                   <td>{it.name}</td>
                   <td>{it.spec || "-"}</td>
                   <td>{it.origin || "-"}</td>
-                  <td className="num b2b-money" title={np > 0 ? `단가 미입력 ${np.toLocaleString()}개가 0원으로 섞여 평균이 낮습니다` : undefined}>
+                  <td className="num b2b-money" title={np > 0 ? `단가 미입력 ${qtyText(np)}가 0원으로 섞여 평균이 낮습니다` : undefined}>
                     {(it.unit_price ?? 0).toLocaleString()}{np > 0 && <span style={{ color: "var(--sm-danger)", fontWeight: 800 }}>*</span>}
                   </td>
                   <td className="num b2b-money">{(it.qty ?? 0).toLocaleString()}</td>
@@ -84,7 +85,7 @@ export default function QuoteSheet({ ym, s, items, stamp, printable = true }: {
                   </td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }}
                     title={[
-                      rq > 0 ? `정산수량 ${(it.net_qty ?? 0).toLocaleString()} (반품 ${rq.toLocaleString()} 제외)` : "",
+                      rq > 0 ? `정산수량 ${(it.net_qty ?? 0).toLocaleString()} (반품 ${qty(rq)} 제외)` : "",
                       it.tax_type === "taxable" ? `공급가액 기준 — 부가세 포함 시 ${won((it.amount ?? 0) * 1.1)}원` : "",
                     ].filter(Boolean).join(" / ")}>{(it.total ?? 0).toLocaleString()}</td>
                   <td><span className="sm-faint" style={{ fontSize: 12 }}>{it.tax_type === "exempt" ? "면세" : "과세"}</span></td>

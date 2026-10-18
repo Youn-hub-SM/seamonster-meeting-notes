@@ -6,6 +6,7 @@ import { INV_CHANNELS, INV_CHANNEL_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } 
 import { PR_PURPOSES, PR_PURPOSE_LABEL, PURPOSE_CHANNEL } from "@/app/lib/wholesale-production";
 import { deleteLedger } from "../TxnTable";
 import { useConfirm } from "@/app/components/Feedback";
+import { qty, qtyText } from "@/app/lib/format";
 
 type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null; stock_tracked?: boolean };
 type Move = { group_id: string; product_name: string; sku: string | null; qty: number; from: string; to: string; txn_date: string; memo: string | null; created_by: string | null; created_at: string; complete: boolean; alloc_qty?: number; alloc_reqs?: string[] };
@@ -263,7 +264,7 @@ export default function InventoryMovePage() {
       }
       // 서버가 실제 기록한 배정 합(allocated) 우선 — 그 사이 닫힌 요청서로 건너뛴 배정을 '배정'으로 세지 않게(감사 #41). 구 서버면 요청값 폴백.
       const allocTotal = typeof j.allocated === "number" ? j.allocated : Math.round(items.reduce((s, it) => s + it.allocations.reduce((a, x) => a + x.qty, 0), 0) * 100) / 100;
-      setOk(`${j.replay ? "이미 옮겨져 있던 이동입니다(다시 옮기지 않음) — " : ""}${items.length}개 품목 ${totalQty.toLocaleString()}개를 ${dir.from}에서 ${dir.to}로 옮겼습니다.${allocTotal > 0 ? ` (요청서 배정 ${allocTotal.toLocaleString()}, 기타 ${Math.max(0, Math.round((totalQty - allocTotal) * 100) / 100).toLocaleString()})` : ""}`);
+      setOk(`${j.replay ? "이미 옮겨져 있던 이동입니다(다시 옮기지 않음) — " : ""}${qtyText(items.length)} 품목 ${qtyText(totalQty)}를 ${dir.from}에서 ${dir.to}로 옮겼습니다.${allocTotal > 0 ? ` (요청서 배정 ${qty(allocTotal)}, 기타 ${qty(Math.max(0, Math.round((totalQty - allocTotal) * 100) / 100))})` : ""}`);
       if (Array.isArray(j.warnings) && j.warnings.length) setError(j.warnings.join(" "));
       setLines([newLine(nextKey)]); setNextKey((k) => k + 1); setMemo("");
       submitKey.current = newKey(); // 다음 이동은 새 키
@@ -340,7 +341,7 @@ export default function InventoryMovePage() {
                   {/* 칸 배지 = 현재고(오늘까지). 출고 예정(미래 발송일 선점)이 있으면 함께 — 옮길 수 있는 건 가용(현재고 − 출고 예정)까지 */}
                   {INV_CHANNELS.map((ch) => {
                     const p = poolOf(ch, l.pid);
-                    return <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {onHandOf(p).toLocaleString()}{p.sched > 0 ? ` (출고 예정 ${p.sched.toLocaleString()})` : ""}</span>;
+                    return <span key={ch} className="b2b-status-pill" style={{ background: INV_CHANNEL_COLOR[ch].bg, color: INV_CHANNEL_COLOR[ch].fg }}>{ch} {qty(onHandOf(p))}{p.sched > 0 ? ` (출고 예정 ${qty(p.sched)})` : ""}</span>;
                   })}
                   <input className="b2b-input b2b-money" type="number" min={0.01} step={0.01} value={l.qty}
                     onChange={(e) => {
@@ -350,7 +351,7 @@ export default function InventoryMovePage() {
                     placeholder="옮길 수량" style={{ width: 120 }} aria-label={`품목 ${idx + 1} 수량`} />
                   {nQty > 0 && (
                     <span className="sm-faint" style={{ fontSize: 12 }}>
-                      옮긴 뒤 현재고 — {dir.from} {(Math.round((onHandOf(fromPool) - nQty) * 100) / 100).toLocaleString()}, {dir.to} {(Math.round((onHandOf(toPool) + nQty) * 100) / 100).toLocaleString()}
+                      옮긴 뒤 현재고 — {dir.from} {qty((Math.round((onHandOf(fromPool) - nQty) * 100) / 100))}, {dir.to} {qty((Math.round((onHandOf(toPool) + nQty) * 100) / 100))}
                     </span>
                   )}
                 </div>
@@ -359,16 +360,16 @@ export default function InventoryMovePage() {
                 const h = reservedHits.get(l.pid)!;
                 return (
                   <p style={{ fontSize: 12, color: "var(--sm-warning)", margin: "6px 0 0" }}>
-                    프로모션 요청서 몫 {h.reserved.toLocaleString()}개{h.req_nos.length ? `(${h.req_nos.join("·")})` : ""}
-                    {typeof h.free === "number" ? `, 몫 밖 ${h.free.toLocaleString()}개` : ""}
+                    프로모션 요청서 몫 {qtyText(h.reserved)}{h.req_nos.length ? `(${h.req_nos.join("·")})` : ""}
+                    {typeof h.free === "number" ? `, 몫 밖 ${qtyText(h.free)}` : ""}
                   </p>
                 );
               })()}
               {shortage && (
                 <p style={{ fontSize: 12, color: "var(--sm-danger)", margin: "6px 0 0" }}>
                   {fromPool.sched > 0
-                    ? `${dir.from} 가용 재고(${fromQty.toLocaleString()} = 현재고 ${onHandOf(fromPool).toLocaleString()} − 출고 예정 ${fromPool.sched.toLocaleString()})보다 많습니다. 그래도 옮기면 출고 예정분이 모자라거나 ${dir.from}가 마이너스가 됩니다.`
-                    : `${dir.from} 재고(${fromQty.toLocaleString()})보다 많습니다. 그래도 옮기면 ${dir.from}가 마이너스가 됩니다.`}
+                    ? `${dir.from} 가용 재고(${qty(fromQty)} = 현재고 ${qty(onHandOf(fromPool))} − 출고 예정 ${qty(fromPool.sched)})보다 많습니다. 그래도 옮기면 출고 예정분이 모자라거나 ${dir.from}가 마이너스가 됩니다.`
+                    : `${dir.from} 재고(${qty(fromQty)})보다 많습니다. 그래도 옮기면 ${dir.from}가 마이너스가 됩니다.`}
                 </p>
               )}
 
@@ -397,9 +398,9 @@ export default function InventoryMovePage() {
                                 <tr key={t.item_id}>
                                   <td><strong>{t.req_no || "-"}</strong>{t.title ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{t.title}</span> : null}</td>
                                   <td style={{ whiteSpace: "nowrap" }}>{t.due_date || "-"}</td>
-                                  <td className="num b2b-money">{t.requested_qty.toLocaleString()}</td>
-                                  <td className="num b2b-money">{t.received_qty.toLocaleString()}</td>
-                                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{t.remaining.toLocaleString()}</td>
+                                  <td className="num b2b-money">{qty(t.requested_qty)}</td>
+                                  <td className="num b2b-money">{qty(t.received_qty)}</td>
+                                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(t.remaining)}</td>
                                   <td className="num">
                                     <input className="b2b-input b2b-money" type="number" min={0} step={0.01} value={v}
                                       onChange={(e) => { const m2 = new Map(l.alloc); m2.set(t.item_id, e.target.value); patchLine(l.key, { alloc: m2, allocTouched: true }); }}
@@ -413,7 +414,7 @@ export default function InventoryMovePage() {
                         </table>
                       </div>
                       <p style={{ fontSize: 12, marginTop: 6, color: allocOver ? "var(--sm-danger)" : "var(--sm-text-mid)" }}>
-                        요청서 배정 {allocSum.toLocaleString()} + 기타 {Math.max(0, Math.round((nQty - allocSum) * 100) / 100).toLocaleString()} = 이동 {nQty.toLocaleString()}
+                        요청서 배정 {qty(allocSum)} + 기타 {qty(Math.max(0, Math.round((nQty - allocSum) * 100) / 100))} = 이동 {qty(nQty)}
                         {allocOver && " — 배정 합계가 이동 수량보다 많아 저장할 수 없습니다"}
                       </p>
                     </>
@@ -451,8 +452,8 @@ export default function InventoryMovePage() {
         </div>
 
         <div className="sm-row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 13 }}>{activeLines.length > 0 && <>합계 <strong>{activeLines.length}개 품목 {totalQty.toLocaleString()}개</strong></>}</span>
-          <button className="b2b-btn-primary" onClick={submit} disabled={busy}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${activeLines.length}개 품목)` : ""}`}</button>
+          <span style={{ fontSize: 13 }}>{activeLines.length > 0 && <>합계 <strong>{qtyText(activeLines.length)} 품목 {qtyText(totalQty)}</strong></>}</span>
+          <button className="b2b-btn-primary" onClick={submit} disabled={busy}>{busy ? "옮기는 중..." : `옮기기${activeLines.length > 1 ? ` (${qtyText(activeLines.length)} 품목)` : ""}`}</button>
         </div>
       </section>
 
@@ -475,12 +476,12 @@ export default function InventoryMovePage() {
                       {m.memo ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>({m.memo === "행사 종료 자동 합류" ? "행사 전 자동 합류" : m.memo})</span> : null}
                       {(m.alloc_qty ?? 0) > 0 && (
                         <div className="sm-faint" style={{ fontSize: 12 }}>
-                          배정 {Number(m.alloc_qty).toLocaleString()} ({(m.alloc_reqs || []).join(", ") || "요청서"})
+                          배정 {qty(Number(m.alloc_qty))} ({(m.alloc_reqs || []).join(", ") || "요청서"})
                           {m.qty - (m.alloc_qty ?? 0) > 0.001 ? `, 기타 ${(Math.round((m.qty - (m.alloc_qty ?? 0)) * 100) / 100).toLocaleString()}` : ""}
                         </div>
                       )}
                     </td>
-                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{m.qty.toLocaleString()}</td>
+                    <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(m.qty)}</td>
                     <td><span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>{m.from}에서 {m.to}로</span>{!m.complete && <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-danger)" }}>불완전</span>}</td>
                     <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{m.created_by || "-"}</td>
                     <td><button className="b2b-link-btn" onClick={() => cancelMove(m.group_id)} style={{ color: "var(--sm-danger)" }}>이동 취소</button></td>

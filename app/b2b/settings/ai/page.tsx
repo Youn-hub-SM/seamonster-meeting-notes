@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useToast } from "@/app/components/Feedback";
+import { qtyText } from "@/app/lib/format";
 
 type ModelKey = "haiku" | "sonnet" | "opus";
 type FeatureVal = ModelKey | "inherit";
@@ -258,7 +259,7 @@ function PromptCard(props: {
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
             <button className="b2b-btn-primary" onClick={props.onSave} disabled={props.saving}>{props.saving ? "저장 중..." : "프롬프트 저장"}</button>
             <button className="b2b-btn-secondary" onClick={props.onReset} disabled={props.saving || props.isDefault}>기본값으로 복원</button>
-            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{props.value.length.toLocaleString()}자, 모든 사용자 공용</span>
+            <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>{qtyText(props.value.length, "자")}, 모든 사용자 공용</span>
           </div>
         </>
       )}

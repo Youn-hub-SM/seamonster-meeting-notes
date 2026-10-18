@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, DEFAULT_BOX_CATS, validateBoxCats, type RateVersion, type BoxTier, type BoxCat } from "@/app/lib/fulfill-rates";
 import { DEDUP_DEFAULT, DEDUP_MIN_DAYS, DEDUP_MAX_DAYS, type DedupConfig, type DedupMatch } from "@/app/lib/fulfill-dedup";
+import { qty } from "@/app/lib/format";
 
 const num = (v: string) => Math.max(0, Math.round(Number(v) || 0));
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -168,7 +169,7 @@ export default function FulfillSettingsPage() {
             <span className="sm-faint" style={{ fontSize: 12 }}>최소 {DEDUP_MIN_DAYS}일</span>
           </label>
           <div className="sm-faint" style={{ fontSize: 12 }}>
-            현재 등록된 처리완료 주문 키: <strong>{processedCount == null ? "—" : processedCount.toLocaleString()}</strong>건
+            현재 등록된 처리완료 주문 키: <strong>{processedCount == null ? "—" : qty(processedCount)}</strong>건
           </div>
         </div>
         <div className="sm-row" style={{ gap: 8, alignItems: "center", marginTop: 12 }}>

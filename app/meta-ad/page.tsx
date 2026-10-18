@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useConfirm } from "@/app/components/Feedback";
 import Link from "next/link";
+import { won, wonText, qty, qtyText, dateRange } from "@/app/lib/format";
 
 type Stat = { spend: number; impressions: number; clicks: number; ctr: number; cpc: number; purchases: number; purchaseValue: number; roas: number; cpa: number };
 // daily = 증액 판정용 최근 N일(보드에서 고른 기간과 무관. 과거→최근 정렬)
@@ -26,8 +27,7 @@ const PRESETS = [
   { key: "today", label: "오늘" }, { key: "yesterday", label: "어제" },
   { key: "last_7d", label: "최근 7일" }, { key: "last_30d", label: "최근 30일" },
 ];
-const won = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
-const pct = (n?: number) => (n == null ? "-" : `${n.toFixed(2)}%`);
+const pct =(n?: number) => (n == null ? "-" : `${n.toFixed(2)}%`);
 const roasFmt = (n?: number) => (n == null ? "-" : n.toFixed(2));
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -39,7 +39,7 @@ function presetRange(key: string): { since: string; until: string } {
   if (key === "last_30d" || key === "last30days") return { since: back(30), until: back(1) };
   return { since: back(7), until: back(1) };
 }
-const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : `${r.since} ~ ${r.until}`; };
+const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : dateRange(r.since, r.until); };
 
 type StageInfo = { key: string; label: string; tone: Tone; action?: string };
 const STAGE_SHORT: Record<string, string> = {
@@ -87,7 +87,7 @@ function NameHelper({ today }: { today: string }) {
 // 대상 이름 줄 — 6개까지 나열하고 나머지는 건수로 접는다.
 const TODO_SHOWN = 6;
 const itemLine = (items: string[]) =>
-  items.slice(0, TODO_SHOWN).join(" · ") + (items.length > TODO_SHOWN ? ` 외 ${items.length - TODO_SHOWN}건` : "");
+  items.slice(0, TODO_SHOWN).join(" · ") + (items.length > TODO_SHOWN ? ` 외 ${qtyText(items.length - TODO_SHOWN, "건")}` : "");
 
 // 권장 행동 한 줄 — 클릭하면 해당 단계로 필터.
 function TodoRow({ danger, count, title, items, onClick }: { danger?: boolean; count: number; title: string; items: string[]; onClick: () => void }) {
@@ -97,7 +97,7 @@ function TodoRow({ danger, count, title, items, onClick }: { danger?: boolean; c
         <span className="ma-todo-title">{title}</span>
         <span className="ma-todo-items">{itemLine(items)}</span>
       </span>
-      <span className={danger ? "ma-todo-count is-danger" : "ma-todo-count"}>{count}건</span>
+      <span className={danger ? "ma-todo-count is-danger" : "ma-todo-count"}>{qtyText(count, "건")}</span>
       <span className="ma-todo-go" aria-hidden="true">›</span>
     </button>
   );
@@ -179,13 +179,13 @@ export default function MetaAdPage() {
     if (!c.cbo) return { key: "material", label: "① 소재테스트 캠페인", tone: TONE.info, action: "광고세트 탭에서 소재별로 판정" };
     const budget = Number(c.daily_budget) || 0;
     const up = Math.round(budget * (1 + (th?.scalePct ?? 0) / 100));
-    if (s.spend < (th?.minSpend ?? 0)) return { key: "insufficient", label: "성과테스트(데이터 부족)", tone: TONE.muted, action: `지출 ${won(th?.minSpend)}원까지 대기 후 판정` };
+    if (s.spend < (th?.minSpend ?? 0)) return { key: "insufficient", label: "성과테스트(데이터 부족)", tone: TONE.muted, action: `지출 ${wonText(th?.minSpend)}까지 대기 후 판정` };
     if (s.roas >= (th?.scaleRoas ?? 99)) {
       // 고른 기간의 평균만 보면 하루 반짝 성과에도 증액 권장이 뜬다. 최근 N일 연속 충족을 함께 본다.
       const need = Math.max(1, th?.scaleDays ?? 1);
       const streak = scaleStreak(c);
       if (streak < need) return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: `증액 대기 — ROAS ${th?.scaleRoas} 이상 ${streak}/${need}일 연속 (${need}일 채우면 증액 권장)` };
-      return { key: "scale", label: `③ 증액 권장 +${th?.scalePct}%`, tone: TONE.success, action: budget ? `광고관리자에서 일 ${won(budget)}원 → ${won(up)}원 (+${th?.scalePct}%, ${need}일 연속 ROAS ${th?.scaleRoas}↑)` : `예산 +${th?.scalePct}% 증액 — 총 예산 캠페인이라 메타에서 직접 조정` };
+      return { key: "scale", label: `③ 증액 권장 +${th?.scalePct}%`, tone: TONE.success, action: budget ? `광고관리자에서 일 ${wonText(budget)} → ${wonText(up)} (+${th?.scalePct}%, ${need}일 연속 ROAS ${th?.scaleRoas}↑)` : `예산 +${th?.scalePct}% 증액 — 총 예산 캠페인이라 메타에서 직접 조정` };
     }
     if (s.roas < (th?.declineRoas ?? 0)) return { key: "decline", label: "④ 효율 하락", tone: TONE.danger, action: "소재 점검 후 교체, 개선 없으면 예산 축소/종료" };
     return { key: "performance", label: "② 성과테스트(운영)", tone: TONE.brand, action: "운영 유지, 모니터링" };
@@ -196,21 +196,21 @@ export default function MetaAdPage() {
     const s = a.stat;
     const creatives = adsByAdset[a.id] || 1;
     const recBudget = (th?.testDailyPerCreative || 0) * creatives;
-    const budgetNote = `권장 일예산 ${won(recBudget)}원 (소재 ${creatives}개 × ${won(th?.testDailyPerCreative)}원)`;
-    if (s.spend < (th?.minSpend ?? 0)) return { key: "testing", label: "① 테스트 중", tone: TONE.muted, action: `${th?.testDays}일/지출 ${won(th?.minSpend)}원까지 유지, ${budgetNote}` };
+    const budgetNote = `권장 일예산 ${wonText(recBudget)} (소재 ${qtyText(creatives)} × ${wonText(th?.testDailyPerCreative)})`;
+    if (s.spend < (th?.minSpend ?? 0)) return { key: "testing", label: "① 테스트 중", tone: TONE.muted, action: `${th?.testDays}일/지출 ${wonText(th?.minSpend)}까지 유지, ${budgetNote}` };
     const roasOk = s.roas >= (th?.aboPassRoas ?? 99);
     const cpaOk = (th?.aboMaxCpa ?? 0) > 0 && s.cpa > 0 && s.cpa <= (th?.aboMaxCpa ?? 0);
     const beatOk = !!th?.beatLiveCampaign && liveCampaignRoas > 0 && s.roas >= liveCampaignRoas;
     const pass = s.purchases >= (th?.aboMinPurchases ?? 1) && (roasOk || cpaOk || beatOk);
     if (pass) {
-      const why = roasOk ? `ROAS ${roasFmt(s.roas)}≥${th?.aboPassRoas}` : beatOk ? `현 캠페인 ROAS ${roasFmt(liveCampaignRoas)} 상회` : cpaOk ? `CPA ${won(s.cpa)}≤${won(th?.aboMaxCpa)}` : "기준 충족";
+      const why = roasOk ? `ROAS ${roasFmt(s.roas)}≥${th?.aboPassRoas}` : beatOk ? `현 캠페인 ROAS ${roasFmt(liveCampaignRoas)} 상회` : cpaOk ? `CPA ${wonText(s.cpa)} ≤ ${wonText(th?.aboMaxCpa)}` : "기준 충족";
       return { key: "pass", label: "우수소재 → 본 캠페인", tone: TONE.success, action: `본 캠페인(CBO)에 새 세트로 추가, 이름 "${today} 메시지" (${why})` };
     }
     // 위험: 전환은 충분한데 ROAS가 하락 기준 미만 → 교체/종료
     if (s.purchases >= (th?.aboMinPurchases ?? 1) && s.roas < (th?.declineRoas ?? 0)) {
       return { key: "danger", label: "위험소재", tone: TONE.danger, action: `ROAS ${roasFmt(s.roas)} < ${th?.declineRoas} — 소재 교체 또는 종료` };
     }
-    const why = s.purchases < (th?.aboMinPurchases ?? 1) ? `전환 ${s.purchases}건 (기준 ${th?.aboMinPurchases})` : `ROAS ${roasFmt(s.roas)}`;
+    const why = s.purchases < (th?.aboMinPurchases ?? 1) ? `전환 ${qtyText(s.purchases, "건")} (기준 ${th?.aboMinPurchases})` : `ROAS ${roasFmt(s.roas)}`;
     return { key: "fail", label: "관찰 필요", tone: TONE.muted, action: `기준 미달(${why}) — 관찰 또는 소재 교체` };
   }, [th, adsByAdset, liveCampaignRoas, today]);
 
@@ -325,7 +325,7 @@ export default function MetaAdPage() {
                   <span className="ma-todo-head-main">
                     <span className="ma-todo-head-title">지금 할 일</span>
                     {todoN > 0
-                      ? <span className="ma-todo-head-n">{todoN}건{dangerN > 0 ? <span className="ma-todo-head-danger"> · 위험 {dangerN}건</span> : null}</span>
+                      ? <span className="ma-todo-head-n">{qtyText(todoN, "건")}{dangerN > 0 ? <span className="ma-todo-head-danger"> · 위험 {qtyText(dangerN, "건")}</span> : null}</span>
                       : <span className="ma-todo-head-n">조치할 항목 없음</span>}
                     <span className="ma-todo-head-note">· 라이브 기준</span>
                   </span>
@@ -354,10 +354,10 @@ export default function MetaAdPage() {
                                     </Link>
                                   </span>
                                 ))}
-                                {recos.library.length > TODO_SHOWN ? ` 외 ${recos.library.length - TODO_SHOWN}건` : ""}
+                                {recos.library.length > TODO_SHOWN ? ` 외 ${qtyText(recos.library.length - TODO_SHOWN, "건")}` : ""}
                               </span>
                             </span>
-                            <span className="ma-todo-count">{recos.library.length}건</span>
+                            <span className="ma-todo-count">{qtyText(recos.library.length, "건")}</span>
                             <span className="ma-todo-go" aria-hidden="true" />
                           </div>
                         )}
@@ -377,8 +377,8 @@ export default function MetaAdPage() {
             </button>
             {showPlaybook && (
               <div style={{ padding: 14, display: "grid", gap: 10, fontSize: 13, lineHeight: 1.55 }}>
-                <div><Badge tone={TONE.info}>① 소재테스트 (ABO)</Badge> <b>1세트=1소재</b>, 소재당 <b>{won(th.testDailyPerCreative)}원/일 · {th.testDays}일</b>. AB테스트는 한 세트에 소재를 몰아넣고 소재당 예산 추가(2개=일 {won(th.testDailyPerCreative * 2)}원).</div>
-                <div><Badge tone={TONE.success}>② 우수소재</Badge> 다음 중 하나 충족 → <b>ROAS ≥ {th.aboPassRoas}</b>{th.aboMaxCpa > 0 ? <> · <b>CPA ≤ {won(th.aboMaxCpa)}원</b></> : null}{th.beatLiveCampaign ? <> · <b>현 캠페인 ROAS 상회</b>{liveCampaignRoas > 0 ? <span className="sm-faint">(현재 {roasFmt(liveCampaignRoas)})</span> : null}</> : null}.</div>
+                <div><Badge tone={TONE.info}>① 소재테스트 (ABO)</Badge> <b>1세트=1소재</b>, 소재당 <b>{wonText(th.testDailyPerCreative)}/일 · {th.testDays}일</b>. AB테스트는 한 세트에 소재를 몰아넣고 소재당 예산 추가(2개=일 {wonText(th.testDailyPerCreative * 2)}).</div>
+                <div><Badge tone={TONE.success}>② 우수소재</Badge> 다음 중 하나 충족 → <b>ROAS ≥ {th.aboPassRoas}</b>{th.aboMaxCpa > 0 ? <> · <b>CPA ≤ {wonText(th.aboMaxCpa)}</b></> : null}{th.beatLiveCampaign ? <> · <b>현 캠페인 ROAS 상회</b>{liveCampaignRoas > 0 ? <span className="sm-faint">(현재 {roasFmt(liveCampaignRoas)})</span> : null}</> : null}.</div>
                 <div><Badge tone={TONE.brand}>③ 본 캠페인 진입 (CBO)</Badge> 우수소재는 <b>기존 본 캠페인에 새 광고세트로 추가</b>. 세트 이름은 <code>yyyy-mm-dd 주요 메시지</code>.</div>
                 <div><Badge tone={TONE.success}>④ 증액</Badge> <b>ROAS ≥ {th.scaleRoas} 를 {th.scaleDays}일 연속</b> 유지한 캠페인만 <b>주 1회 +{th.scalePct}%</b> 증액(광고관리자에서 실행).</div>
                 <div style={{ borderTop: "1px dashed var(--sm-border)", paddingTop: 10 }}><NameHelper today={today} /></div>
@@ -388,9 +388,9 @@ export default function MetaAdPage() {
 
           {/* KPI */}
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", marginBottom: 12 }}>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">지출</div><div className="b2b-stat-card-value b2b-money">{won(totals.spend)}원</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">구매수</div><div className="b2b-stat-card-value b2b-money">{won(totals.purch)}</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">매출</div><div className="b2b-stat-card-value b2b-money">{won(totals.val)}원</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">지출</div><div className="b2b-stat-card-value b2b-money">{wonText(totals.spend)}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">구매수</div><div className="b2b-stat-card-value b2b-money">{qty(totals.purch)}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">매출</div><div className="b2b-stat-card-value b2b-money">{wonText(totals.val)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">ROAS</div><div className="b2b-stat-card-value b2b-money" style={{ color: "var(--sm-orange)" }}>{roasFmt(blendRoas)}</div></div>
           </div>
 
@@ -423,8 +423,8 @@ export default function MetaAdPage() {
                 <thead><tr>
                   <th>ON</th><th>{tab === "campaign" ? "본 캠페인" : tab === "adset" ? "광고세트(소재테스트)" : "소재"}</th>
                   <th style={{ minWidth: 200 }}>단계 / 다음 행동</th>
-                  <th className="num">지출</th><th className="num">구매</th><th className="num">매출</th><th className="num">ROAS</th><th className="num">CPA</th><th className="num">CTR</th>
-                  {tab !== "ad" && <th className="num">예산</th>}
+                  <th className="num">지출 (원)</th><th className="num">구매</th><th className="num">매출 (원)</th><th className="num">ROAS</th><th className="num">CPA (원)</th><th className="num">CTR</th>
+                  {tab !== "ad" && <th className="num">예산 (원)</th>}
                 </tr></thead>
                 <tbody>
                   {shown.map((r) => {
@@ -441,7 +441,7 @@ export default function MetaAdPage() {
                           {stage?.action ? <div style={{ fontSize: 13, color: "var(--sm-text-mid)", marginTop: 3, lineHeight: 1.4, whiteSpace: "normal" }}>{stage.action}</div> : null}
                         </td>
                         <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(s.spend)}</td>
-                        <td className="num b2b-money">{won(s.purchases)}</td>
+                        <td className="num b2b-money">{qty(s.purchases)}</td>
                         <td className="num b2b-money">{won(s.purchaseValue)}</td>
                         <td className="num b2b-money" style={roasColor ? { color: roasColor, fontWeight: 700 } : undefined}>{s.purchases > 0 ? roasFmt(s.roas) : "-"}</td>
                         <td className="num b2b-money">{s.cpa > 0 ? won(s.cpa) : "-"}</td>
@@ -453,7 +453,7 @@ export default function MetaAdPage() {
                 </tbody>
                 <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
                   <td></td><td>합계 {shown.length}</td><td></td>
-                  <td className="num b2b-money">{won(totals.spend)}</td><td className="num b2b-money">{won(totals.purch)}</td>
+                  <td className="num b2b-money">{won(totals.spend)}</td><td className="num b2b-money">{qty(totals.purch)}</td>
                   <td className="num b2b-money">{won(totals.val)}</td><td className="num b2b-money" style={{ color: "var(--sm-orange)" }}>{roasFmt(blendRoas)}</td>
                   <td className="num">-</td><td className="num">-</td>{tab !== "ad" && <td className="num">-</td>}
                 </tr></tfoot>
@@ -461,7 +461,7 @@ export default function MetaAdPage() {
             </div>
           )}
           <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>
-            ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다. 증액 권장 = <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상{ov?.scaleRange ? ` (${ov.scaleRange.since} ~ ${ov.scaleRange.until} 기준)` : ""}
+            ON 스위치는 <b>실제 메타 광고</b>를 켜고/끕니다. 증액 권장 = <b>최근 {th.scaleDays}일 연속</b> ROAS {th.scaleRoas} 이상{ov?.scaleRange ? ` (${dateRange(ov.scaleRange.since, ov.scaleRange.until)} 기준)` : ""}
           </p>
         </>
       )}

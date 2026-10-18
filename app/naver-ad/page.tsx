@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ComboBarLine, ChartLegend, moneyCompact } from "@/app/components/charts";
+import { won, qty, qtyText, dateRange } from "@/app/lib/format";
 
 type Campaign = { nccCampaignId: string; name: string; campaignTp: string };
 type DayStat = { date: string; impCnt: number; clkCnt: number; salesAmt: number; ctr?: number; cpc?: number; ccnt: number; convAmt: number; ror?: number };
@@ -23,8 +24,6 @@ const TYPE_LABEL: Record<string, string> = {
 };
 const TYPE_ORDER = ["WEB_SITE", "POWER_CONTENTS", "SHOPPING", "BRAND_SEARCH", "PLACE"];
 const KEYWORD_TYPES = new Set(["WEB_SITE", "POWER_CONTENTS", "PLACE"]); // 키워드 입찰(나머지는 광고그룹 단위)
-const won = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
-const num = (n?: number) => (n == null ? "-" : Math.round(n).toLocaleString());
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 // 프리셋 → 실제 날짜(네이버: 최근 N일 = 어제까지 N일, 오늘 제외).
 function presetRange(key: string): { since: string; until: string } {
@@ -35,7 +34,7 @@ function presetRange(key: string): { since: string; until: string } {
   if (key === "last30days") return { since: back(30), until: back(1) };
   return { since: back(7), until: back(1) }; // last7days
 }
-const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : `${r.since} ~ ${r.until}`; };
+const rangeLabel = (key: string) => { const r = presetRange(key); return r.since === r.until ? r.since : dateRange(r.since, r.until); };
 // 리포트 주별 버킷: 그 날짜가 속한 주의 월요일(로컬)
 function mondayOf(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`);
@@ -270,7 +269,7 @@ export default function NaverAdPage() {
       }
       j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || "입찰가를 저장하지 못했습니다. 금액을 확인하세요");
-      setSavedMsg(`입찰가 ${j.updated}개를 저장했습니다${j.failed ? ` (${j.failed}개는 저장하지 못했습니다: ${j.error || ""})` : ""}`);
+      setSavedMsg(`입찰가 ${qtyText(j.updated)}를 저장했습니다${j.failed ? ` (${qtyText(j.failed)}는 저장하지 못했습니다: ${j.error || ""})` : ""}`);
       loadData();
     } catch (e) { setError(e instanceof Error ? e.message : "입찰가를 저장하지 못했습니다. 금액을 확인하세요"); }
     setSaving(false);
@@ -508,11 +507,11 @@ export default function NaverAdPage() {
                     <thead><tr>
                       <th>{mode === "keyword" ? "키워드" : "광고그룹"}</th><th>{mode === "keyword" ? "그룹" : "캠페인"}</th>
                       <Th f="impCnt">노출</Th><Th f="clkCnt">클릭</Th><Th f="ctr">CTR</Th>
-                      <Th f="salesAmt">광고비</Th><Th f="cpc">CPC</Th>
-                      <Th f="ccnt">{convLabel}</Th><Th f="convAmt">{convAmtLabel}</Th><Th f="ror">{roasLabel}</Th>
+                      <Th f="salesAmt">광고비 (원)</Th><Th f="cpc">CPC (원)</Th>
+                      <Th f="ccnt">{convLabel}</Th><Th f="convAmt">{convAmtLabel} (원)</Th><Th f="ror">{roasLabel}</Th>
                       <Th f="avgRnk">평균순위</Th>
                       {mode === "keyword" && <th className="num">연관/클릭</th>}
-                      <Th f="bidAmt">입찰가</Th>
+                      <Th f="bidAmt">입찰가 (원)</Th>
                     </tr></thead>
                     <tbody>
                       {shownRows.map((r) => {
@@ -529,13 +528,13 @@ export default function NaverAdPage() {
                               {r.kind === "adgroup" && <button className="b2b-link-btn" style={{ marginLeft: 6, fontSize: 13 }} onClick={() => openSearchKeywords(r)} title="이 그룹으로 유입된 검색어별 비용">검색어</button>}
                             </td>
                             <td style={{ fontSize: 13, color: "var(--sm-text-light)", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.group}</td>
-                            <td className="num b2b-money">{num(st?.impCnt)}</td>
-                            <td className="num b2b-money">{num(st?.clkCnt)}</td>
+                            <td className="num b2b-money">{qty(st?.impCnt)}</td>
+                            <td className="num b2b-money">{qty(st?.clkCnt)}</td>
                             <td className="num">{st?.ctr != null ? `${st.ctr.toFixed(2)}%` : "-"}</td>
                             <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(st?.salesAmt)}</td>
                             <td className="num b2b-money">{won(st?.cpc)}</td>
                             {(() => { const m = metric(r); const loadingP = convBasis === "purchase" && purchaseLoading; return (<>
-                              <td className="num b2b-money">{loadingP ? "..." : num(m.conv)}</td>
+                              <td className="num b2b-money">{loadingP ? "..." : qty(m.conv)}</td>
                               <td className="num b2b-money">{loadingP ? "..." : won(m.convAmt)}</td>
                               <td className="num" style={roasColor(r)}>{loadingP ? "..." : ((st?.salesAmt ?? 0) > 0 ? `${Math.round(m.roas)}%` : "-")}</td>
                             </>); })()}
@@ -560,13 +559,13 @@ export default function NaverAdPage() {
                     </tbody>
                     <tfoot>
                       <tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
-                        <td>합계</td><td style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{shownRows.length}개</td>
-                        <td className="num b2b-money">{num(totals.imp)}</td>
-                        <td className="num b2b-money">{num(totals.clk)}</td>
+                        <td>합계</td><td style={{ fontSize: 13, color: "var(--sm-text-light)" }}>{qtyText(shownRows.length)}</td>
+                        <td className="num b2b-money">{qty(totals.imp)}</td>
+                        <td className="num b2b-money">{qty(totals.clk)}</td>
                         <td className="num">{totals.ctr.toFixed(2)}%</td>
                         <td className="num b2b-money">{won(totals.cost)}</td>
                         <td className="num b2b-money">{won(totals.cpc)}</td>
-                        <td className="num b2b-money">{num(totals.conv)}</td>
+                        <td className="num b2b-money">{qty(totals.conv)}</td>
                         <td className="num b2b-money">{won(totals.convAmt)}</td>
                         <td className="num" style={totals.roas >= 300 ? { color: "var(--sm-success)" } : undefined}>{totals.cost ? `${Math.round(totals.roas)}%` : "-"}</td>
                         <td className="num">-</td>
@@ -608,7 +607,7 @@ export default function NaverAdPage() {
                     <div className="b2b-table-wrap">
                       <table className="b2b-table">
                         <thead><tr>
-                          <th>검색어</th><th className="num">노출</th><th className="num">클릭</th><th className="num">CTR</th><th className="num">광고비</th><th className="num">CPC</th><th className="num">직접전환율</th>
+                          <th>검색어</th><th className="num">노출</th><th className="num">클릭</th><th className="num">CTR</th><th className="num">광고비 (원)</th><th className="num">CPC (원)</th><th className="num">직접전환율</th>
                         </tr></thead>
                         <tbody>
                           {skShown.slice(0, 300).map((k, i) => {
@@ -617,8 +616,8 @@ export default function NaverAdPage() {
                             return (
                               <tr key={i}>
                                 <td><strong>{k.keyword || "(기타)"}</strong></td>
-                                <td className="num b2b-money">{num(k.impCnt)}</td>
-                                <td className="num b2b-money">{num(k.clkCnt)}</td>
+                                <td className="num b2b-money">{qty(k.impCnt)}</td>
+                                <td className="num b2b-money">{qty(k.clkCnt)}</td>
                                 <td className="num">{ctr ? `${ctr.toFixed(2)}%` : "-"}</td>
                                 <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(k.salesAmt)}</td>
                                 <td className="num b2b-money">{k.clkCnt ? won(cpc) : "-"}</td>
@@ -628,7 +627,7 @@ export default function NaverAdPage() {
                           })}
                         </tbody>
                         <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
-                          <td>합계 ({skShown.length})</td><td className="num b2b-money">{num(skTot.imp)}</td><td className="num b2b-money">{num(skTot.clk)}</td>
+                          <td>합계 ({skShown.length})</td><td className="num b2b-money">{qty(skTot.imp)}</td><td className="num b2b-money">{qty(skTot.clk)}</td>
                           <td className="num">{skTot.imp ? `${(skTot.clk / skTot.imp * 100).toFixed(2)}%` : "-"}</td>
                           <td className="num b2b-money">{won(skTot.cost)}</td><td className="num b2b-money">{skTot.clk ? won(skTot.cost / skTot.clk) : "-"}</td><td className="num">-</td>
                         </tr></tfoot>
@@ -683,18 +682,18 @@ export default function NaverAdPage() {
                     <table className="b2b-table">
                       <thead><tr>
                         <th>{rptGran === "day" ? "날짜" : rptGran === "week" ? "주(월요일)" : "월"}</th>
-                        <th className="num">노출</th><th className="num">클릭</th><th className="num">CTR</th><th className="num">광고비</th><th className="num">CPC</th><th className="num">전환</th><th className="num">전환매출</th><th className="num">ROAS</th>
+                        <th className="num">노출</th><th className="num">클릭</th><th className="num">CTR</th><th className="num">광고비 (원)</th><th className="num">CPC (원)</th><th className="num">전환</th><th className="num">전환매출 (원)</th><th className="num">ROAS</th>
                       </tr></thead>
                       <tbody>
                         {[...rptAgg.rows].reverse().map((r) => (
                           <tr key={r.key}>
                             <td><strong>{r.label}</strong></td>
-                            <td className="num b2b-money">{num(r.imp)}</td>
-                            <td className="num b2b-money">{num(r.clk)}</td>
+                            <td className="num b2b-money">{qty(r.imp)}</td>
+                            <td className="num b2b-money">{qty(r.clk)}</td>
                             <td className="num">{r.imp ? `${r.ctr.toFixed(2)}%` : "-"}</td>
                             <td className="num b2b-money" style={{ fontWeight: 600 }}>{won(r.cost)}</td>
                             <td className="num b2b-money">{r.clk ? won(r.cpc) : "-"}</td>
-                            <td className="num b2b-money">{num(r.conv)}</td>
+                            <td className="num b2b-money">{qty(r.conv)}</td>
                             <td className="num b2b-money">{won(r.convAmt)}</td>
                             <td className="num" style={r.cost && r.roas >= 300 ? { color: "var(--sm-success)", fontWeight: 700 } : r.cost && r.conv === 0 ? { color: "var(--sm-danger)" } : undefined}>{r.cost ? `${Math.round(r.roas)}%` : "-"}</td>
                           </tr>
@@ -702,10 +701,10 @@ export default function NaverAdPage() {
                       </tbody>
                       <tfoot><tr style={{ borderTop: "2px solid var(--sm-border)", fontWeight: 700, background: "var(--sm-bg-subtle)" }}>
                         <td>합계 {rptAgg.rows.length}</td>
-                        <td className="num b2b-money">{num(rptAgg.tot.imp)}</td><td className="num b2b-money">{num(rptAgg.tot.clk)}</td>
+                        <td className="num b2b-money">{qty(rptAgg.tot.imp)}</td><td className="num b2b-money">{qty(rptAgg.tot.clk)}</td>
                         <td className="num">{rptAgg.tot.imp ? `${rptAgg.tot.ctr.toFixed(2)}%` : "-"}</td>
                         <td className="num b2b-money">{won(rptAgg.tot.cost)}</td><td className="num b2b-money">{rptAgg.tot.clk ? won(rptAgg.tot.cpc) : "-"}</td>
-                        <td className="num b2b-money">{num(rptAgg.tot.conv)}</td><td className="num b2b-money">{won(rptAgg.tot.convAmt)}</td>
+                        <td className="num b2b-money">{qty(rptAgg.tot.conv)}</td><td className="num b2b-money">{won(rptAgg.tot.convAmt)}</td>
                         <td className="num">{rptAgg.tot.cost ? `${Math.round(rptAgg.tot.roas)}%` : "-"}</td>
                       </tr></tfoot>
                     </table>

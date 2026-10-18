@@ -7,6 +7,7 @@ import { DEFAULT_BOX_CATS, type BoxCat } from "@/app/lib/fulfill-rates";
 import { unionCategories } from "@/app/lib/delivery-log";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, ratesFor, type RateVersion } from "@/app/lib/fulfill-rates";
 import { mergeCounts, manualFeeDelta, sumCounts, type ManualEntry, type RecordEntry } from "@/app/lib/delivery-log";
+import { won, wonText, qty, qtyText, dateShort, dateTime, dateRange } from "@/app/lib/format";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -24,13 +25,7 @@ type Row = {
 };
 type EditKey = "base_fee_normal" | "base_fee_guar" | "extra_fee" | "guar_extra_fee" | "pado_fee" | "pado_extra" | "pado_cod" | "dryice_full" | "dryice_half" | "memo";
 
-const won = (n: unknown) => Math.round(Number(n) || 0).toLocaleString(); // 반올림 — format.ts won 과 동일 규칙
 const sumBoxes = (o: Boxes) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
-// 직접수정 최종 시각 — KST 초 단위 "YYYY-MM-DD HH:mm:ss"
-const kstStamp = (iso: string): string => {
-  const d = new Date(new Date(iso).getTime() + 9 * 3600e3).toISOString();
-  return `${d.slice(0, 10)} ${d.slice(11, 19)}`;
-};
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const weekday = (iso: string) => WD[new Date(`${iso}T00:00:00`).getDay()];
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -166,7 +161,7 @@ export default function DeliveryLogPage() {
   // 자동입력 배치 기록 되돌리기 — 그 배치의 박스·운임 기여분이 합계에서 빠진다
   async function delRecord(date: string, entry: RecordEntry) {
     const label = entry.mode === "baseline" ? "이전 기록 합계" : entry.mode === "replace" ? "덮어쓰기 기록" : "더하기 기록";
-    if (!(await confirm({ title: `${date} ${label} 되돌리기`, body: `일반 ${sumBoxes(entry.boxes_normal)}박스, 도착보장 ${sumBoxes(entry.boxes_guar)}박스, 운임 ${won(entry.base_fee_normal + entry.base_fee_guar)}원이 합계에서 빠집니다.`, action: "기록 되돌리기" }))) return;
+    if (!(await confirm({ title: `${date} ${label} 되돌리기`, body: `일반 ${qtyText(sumBoxes(entry.boxes_normal), "박스")}, 도착보장 ${qtyText(sumBoxes(entry.boxes_guar), "박스")}, 운임 ${wonText(entry.base_fee_normal + entry.base_fee_guar)}이 합계에서 빠집니다.`, action: "기록 되돌리기" }))) return;
     try {
       const res = await fetch("/api/fulfill/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ log_date: date, del_record: { id: entry.id } }) });
       const j = await res.json(); if (!j.ok) throw new Error(j.error || "기록을 되돌리지 못했습니다. 새로고침 뒤 다시 누르세요.");
@@ -308,16 +303,16 @@ export default function DeliveryLogPage() {
         <input type="date" className="b2b-input" value={from} onChange={(e) => { setFrom(e.target.value); setPreset(""); }} style={{ width: "auto" }} />
         <span style={{ color: "var(--sm-text-light)" }}>~</span>
         <input type="date" className="b2b-input" value={to} onChange={(e) => { setTo(e.target.value); setPreset(""); }} style={{ width: "auto" }} />
-        <span className="sm-faint" style={{ fontSize: 12 }}>{range.from} ~ {range.to}</span>
+        <span className="sm-faint" style={{ fontSize: 12 }}>{dateRange(range.from, range.to)}</span>
       </div>
 
       {error && <div className="b2b-error">{error}{error.includes("055") ? " — supabase/migrations/055_delivery_log.sql 를 먼저 적용하세요." : ""}</div>}
 
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 택배량</div><div className="b2b-stat-card-value b2b-money">{won(totals.normal)}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 택배량</div><div className="b2b-stat-card-value b2b-money">{won(totals.guar)}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계</div><div className="b2b-stat-card-value b2b-money">{won(totals.fee)}원</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(totals.dry)}원</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 택배량(박스)</div><div className="b2b-stat-card-value b2b-money">{qty(totals.normal)}</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 택배량(박스)</div><div className="b2b-stat-card-value b2b-money">{qty(totals.guar)}</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계(원)</div><div className="b2b-stat-card-value b2b-money">{won(totals.fee)}</div></div>
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스(원)</div><div className="b2b-stat-card-value b2b-money">{won(totals.dry)}</div></div>
       </div>
 
       <div className="b2b-card">
@@ -327,10 +322,10 @@ export default function DeliveryLogPage() {
           <div className="b2b-table-wrap">
             <table className="b2b-table" style={{ fontSize: 12 }}>
               <thead><tr>
-                <th></th><th>날짜</th><th className="num">일반</th><th className="num">도착보장</th>
-                <th className="num">일반운임</th><th className="num">도착보장 운임</th><th className="num">파도 운임</th>
-                <th className="num">총 운임</th>
-                <th className="num" title="드라이아이스 박스 (풀/반)">드라이(풀/반)</th><th className="num">드라이 금액</th>
+                <th></th><th>날짜</th><th className="num">일반(박스)</th><th className="num">도착보장(박스)</th>
+                <th className="num">일반운임(원)</th><th className="num">도착보장 운임(원)</th><th className="num">파도 운임(원)</th>
+                <th className="num">총 운임(원)</th>
+                <th className="num" title="드라이아이스 박스 (풀/반)">드라이(풀/반)</th><th className="num">드라이 금액(원)</th>
                 <th>비고</th><th></th>
               </tr></thead>
               <tbody>
@@ -341,9 +336,9 @@ export default function DeliveryLogPage() {
                     <FragmentRows key={r.log_date}>
                       <tr>
                         <td><button className="b2b-link-btn" onClick={() => toggle(r.log_date)} style={{ color: "var(--sm-text-light)" }}>{o ? "▾" : "▸"}</button></td>
-                        <td style={{ whiteSpace: "nowrap" }}><strong>{r.log_date.slice(5)}</strong> <span className="sm-faint">({weekday(r.log_date)})</span></td>
-                        <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(finalBoxes(r, "n")))}</td>
-                        <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(finalBoxes(r, "g")))}</td>
+                        <td style={{ whiteSpace: "nowrap" }}><strong>{dateShort(r.log_date)}</strong> <span className="sm-faint">({weekday(r.log_date)})</span></td>
+                        <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(sumBoxes(finalBoxes(r, "n")))}</td>
+                        <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(sumBoxes(finalBoxes(r, "g")))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700, cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(normalFee(r))}</td>
                         <td className="num b2b-money" style={{ fontWeight: 700, cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(guarFee(r))}</td>
                         <td className="num b2b-money" style={{ cursor: "pointer" }} onClick={() => toggle(r.log_date)} title="세부 편집: 클릭">{won(padoFee(r))}</td>
@@ -372,7 +367,7 @@ export default function DeliveryLogPage() {
                                           {CATS_VIEW.map((c) => (
                                             <td key={c} className="num b2b-money" style={{ color: auto?.[c] ? undefined : "var(--sm-text-light)" }}>{auto?.[c] || "-"}</td>
                                           ))}
-                                          <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(auto))}</td>
+                                          <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(sumBoxes(auto))}</td>
                                         </tr>
                                       );
                                     })}
@@ -383,12 +378,12 @@ export default function DeliveryLogPage() {
                                   <div style={{ marginTop: 6 }}>
                                     {[...r.record_entries].reverse().map((e) => (
                                       <div key={e.id} className="sm-row" style={{ gap: 8, alignItems: "center", fontSize: 12, padding: "3px 2px", flexWrap: "wrap" }}>
-                                        <span className="sm-faint">{e.at ? kstStamp(e.at) : "-"}</span>
+                                        <span className="sm-faint">{e.at ? dateTime(e.at) : "-"}</span>
                                         <span style={{ fontWeight: 600, color: e.mode === "baseline" ? "var(--sm-text-light)" : "var(--sm-text-mid)" }}>
                                           {e.mode === "baseline" ? "이전 기록 합계" : e.mode === "replace" ? "덮어쓰기" : "더하기"}
                                         </span>
-                                        <span>일반 {sumBoxes(e.boxes_normal)}박스, 도착보장 {sumBoxes(e.boxes_guar)}박스</span>
-                                        <span className="b2b-money">{won(e.base_fee_normal + e.base_fee_guar)}원</span>
+                                        <span>일반 {qtyText(sumBoxes(e.boxes_normal), "박스")}, 도착보장 {qtyText(sumBoxes(e.boxes_guar), "박스")}</span>
+                                        <span className="b2b-money">{wonText(e.base_fee_normal + e.base_fee_guar)}</span>
                                         {e.by && <span className="sm-faint">{e.by}</span>}
                                         <button className="b2b-link-btn" style={{ fontSize: 12, color: "var(--sm-danger)" }} onClick={() => delRecord(r.log_date, e)}>되돌리기</button>
                                       </div>
@@ -401,7 +396,7 @@ export default function DeliveryLogPage() {
                               <div>
                                 <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
                                   <span style={{ fontWeight: 700, fontSize: 12 }}>직접수정</span>
-                                  {r.manual_updated_at && <span className="sm-faint" style={{ fontSize: 12 }}>수정일 {kstStamp(r.manual_updated_at)}</span>}
+                                  {r.manual_updated_at && <span className="sm-faint" style={{ fontSize: 12 }}>수정일 {dateTime(r.manual_updated_at)}</span>}
                                   <button className="b2b-btn-secondary" style={{ padding: "3px 12px", fontSize: 12 }} onClick={() => openEntry(r.log_date)}>+ 보정 추가</button>
                                 </div>
                                 <div className="b2b-table-wrap">
@@ -420,14 +415,14 @@ export default function DeliveryLogPage() {
                                                 {man[c] ? (man[c] > 0 ? `+${man[c]}` : man[c]) : "-"}
                                               </td>
                                             ))}
-                                            <td className="num b2b-money">{won(sumCounts(man))}</td>
+                                            <td className="num b2b-money">{qty(sumCounts(man))}</td>
                                           </tr>
                                           <tr>
                                             <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>└ 최종</td>
                                             {CATS_VIEW.map((c) => (
                                               <td key={c} className="num b2b-money" style={{ color: fin[c] ? undefined : "var(--sm-text-light)" }}>{fin[c] || "-"}</td>
                                             ))}
-                                            <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(sumBoxes(fin))}</td>
+                                            <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(sumBoxes(fin))}</td>
                                           </tr>
                                         </FragmentRows>
                                       );
@@ -439,7 +434,7 @@ export default function DeliveryLogPage() {
                                   <div style={{ marginTop: 6 }}>
                                     {[...r.manual_entries].reverse().map((e) => (
                                       <div key={e.id} className="sm-row" style={{ gap: 8, alignItems: "center", fontSize: 12, padding: "3px 2px", flexWrap: "wrap" }}>
-                                        <span className="sm-faint">{e.at ? kstStamp(e.at) : "-"}</span>
+                                        <span className="sm-faint">{e.at ? dateTime(e.at) : "-"}</span>
                                         <span style={{ color: "var(--sm-text-mid)", fontWeight: 600 }}>{e.side === "n" ? "일반" : "도착보장"}</span>
                                         <span style={{ fontWeight: 600 }}>{e.category}</span>
                                         <span style={{ fontWeight: 700, color: e.qty > 0 ? "var(--sm-success)" : "var(--sm-danger)" }}>{e.qty > 0 ? `+${e.qty}` : e.qty}</span>
@@ -455,7 +450,7 @@ export default function DeliveryLogPage() {
                                 <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 12 }}>운임 세부</div>
                                 <div className="b2b-table-wrap">
                                 <table className="b2b-table" style={{ background: "var(--sm-white)", fontSize: 12, maxWidth: 480 }}>
-                                  <thead><tr><th>채널</th><th className="num">기본운임 <span className="sm-faint" style={{ fontWeight: 400 }}>(자동)</span></th><th className="num">추가운임</th><th className="num">합계</th></tr></thead>
+                                  <thead><tr><th>채널</th><th className="num">기본운임(원) <span className="sm-faint" style={{ fontWeight: 400 }}>(자동)</span></th><th className="num">추가운임(원)</th><th className="num">합계(원)</th></tr></thead>
                                   <tbody>
                                     <tr>
                                       <td style={{ whiteSpace: "nowrap" }}>씨몬 일반</td>
@@ -490,9 +485,9 @@ export default function DeliveryLogPage() {
                                 </div>
                               </div>
                               <div className="sm-row" style={{ gap: 18, flexWrap: "wrap", fontSize: 12, marginTop: 2 }}>
-                                <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {won(rt.guarSurcharge)}원/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))} = <strong>{won(guarFee(r))}원</strong></span>
-                                <span className="sm-faint">파도 운임 {won(padoFee(r))}원 (기본+추가+착불)</span>
-                                <span className="sm-faint">드라이 {won(dryAmt(r))}원 (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
+                                <span className="sm-faint">도착보장 운임 = 기본 {won(baseGuarOf(r))}(도착보장 {wonText(rt.guarSurcharge)}/건 포함) + 추가 {won(cur(r, "guar_extra_fee"))} = <strong>{wonText(guarFee(r))}</strong></span>
+                                <span className="sm-faint">파도 운임 {wonText(padoFee(r))} (기본+추가+착불)</span>
+                                <span className="sm-faint">드라이 {wonText(dryAmt(r))} (풀 {won(rt.dryFull)}·반 {won(rt.dryHalf)})</span>
                               </div>
                             </div>
                           </td>

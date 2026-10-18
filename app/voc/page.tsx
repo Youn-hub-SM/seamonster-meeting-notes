@@ -6,6 +6,7 @@ import { useConfirm } from "@/app/components/Feedback";
 import { VOC_CATEGORIES, VOC_CAT_STATUSES, VOC_CAT_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, VOC_FAULTS, suggestFault, computeVocLoss, type Voc, type VocCategoryRow, type VocCatStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 import { type VocImportRow } from "@/app/lib/voc-xlsx";
+import { won, qty, qtyText, wonText, dateShort, dateFull } from "@/app/lib/format";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10); // KST
 
@@ -274,8 +275,8 @@ export default function VocPage() {
       const qn = Math.max(1, Number(edit.comp_qty) || 1);
       const r = computeVocLoss({ compType: edit.comp_type, qty: qn, costPrice: cost, volumeKg: Number(matched.volume_kg) || 0, receivedAt: edit.received_at, fallbackMonth: nowMonth });
       lossHint = r.shipping > 0
-        ? `원가 ${cost.toLocaleString()}×${qn} + 배송 ${r.shipping.toLocaleString()}(${r.boxes}박스) = ${r.amount.toLocaleString()}원 (자동)`
-        : `원가 ${cost.toLocaleString()}×${qn} = ${r.productCost.toLocaleString()}원, 배송원가 제외(부피 미입력)`;
+        ? `원가 ${won(cost)}×${qty(qn)} + 배송 ${won(r.shipping)}(${qtyText(r.boxes, "박스")}) = ${wonText(r.amount)} (자동)`
+        : `원가 ${won(cost)}×${qty(qn)} = ${wonText(r.productCost)}, 배송원가 제외(부피 미입력)`;
     }
   }
 
@@ -325,8 +326,8 @@ export default function VocPage() {
                   <tr>
                     <th style={{ width: 1 }}></th>
                     <th>유형</th>
-                    <th className="num">{month.slice(5)}월 발생</th>
-                    <th className="num">전체 누적</th>
+                    <th className="num">{month.slice(5)}월 발생 건수</th>
+                    <th className="num">누적 건수</th>
                     <th className="b2b-col-status" style={{ width: 130, minWidth: 130 }}>개선 상태</th>
                     <th className="b2b-col-date">최근 개선완료</th>
                   </tr>
@@ -395,11 +396,11 @@ export default function VocPage() {
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} onClick={() => openEdit(r)}>
-                  <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{dateShort(r.received_at)}</td>
                   <td>{r.purchase_place || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.buyer_type || "-"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{r.purchase_date?.slice(5) || "-"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{dateShort(r.purchase_date)}</td>
                   <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.category}</td>
                   <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.customer_note || ""}>{r.customer_note || "-"}</td>
@@ -409,10 +410,10 @@ export default function VocPage() {
                     <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
                       {r.asana_task_at ? (
                         r.asana_task_url ? (
-                          <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 (${r.asana_task_at.slice(0, 10)}) — 클릭하면 업무 열림`}
+                          <a href={r.asana_task_url} target="_blank" rel="noreferrer" title={`아사나 등록됨 (${dateFull(r.asana_task_at)}) — 클릭하면 업무 열림`}
                             style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)", textDecoration: "none" }}>✓ 아사나</a>
                         ) : (
-                          <span title={`아사나 등록됨 (${r.asana_task_at.slice(0, 10)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
+                          <span title={`아사나 등록됨 (${dateFull(r.asana_task_at)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ 아사나</span>
                         )
                       ) : asanaReady ? (
                         <button className="b2b-link-btn" onClick={() => registerAsana(r)} disabled={flowBusy === r.id}
@@ -422,7 +423,7 @@ export default function VocPage() {
                       ) : null}
                       {/* 과거 flow 등록 기록 — 표시만(등록 기능은 제거됨) */}
                       {r.flow_task_at && (
-                        <span title={`flow 등록됨 (${r.flow_task_at.slice(0, 10)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
+                        <span title={`flow 등록됨 (${dateFull(r.flow_task_at)})`} style={{ fontSize: 12, fontWeight: 800, color: "var(--sm-success)" }}>✓ flow</span>
                       )}
                     </span>
                   </td>
@@ -444,8 +445,8 @@ export default function VocPage() {
             </div>
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
-                <span>등록 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
-                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
+                <span>등록 가능 <strong style={{ color: "var(--sm-success)" }}>{qtyText(preview.summary.valid, "건")}</strong></span>
+                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {qtyText(preview.summary.errors, "건")}(제외)</span>}
               </div>
               {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>등록할 행이 없습니다. 오류 행을 고쳐 다시 올리세요</div>}
               {preview.rows.length > 0 && (
@@ -455,7 +456,7 @@ export default function VocPage() {
                     <tbody>
                       {preview.rows.slice(0, 200).map((r, i) => (
                         <tr key={i}>
-                          <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>{dateShort(r.received_at)}</td>
                           <td>{r.category}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
                           <td style={{ maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
@@ -465,7 +466,7 @@ export default function VocPage() {
                       ))}
                     </tbody>
                   </table>
-                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 200}건(전체 등록됩니다)</p>}
+                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {qtyText(preview.rows.length - 200, "건")}(전체 등록됩니다)</p>}
                 </div>
               )}
               {preview.errors.length > 0 && (
@@ -644,8 +645,8 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
       <tr onClick={onToggle} className={expanded ? "is-parent" : ""}>
         <td style={{ padding: "8px", color: "var(--sm-text-light)" }}>{expanded ? "▾" : "▸"}</td>
         <td style={{ fontWeight: 700 }}>{b.name}{b.cat && !b.cat.active ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>(비활성)</span> : null}</td>
-        <td className="num" style={{ fontWeight: 700 }}>{b.monthRows.length > 0 ? `${b.monthRows.length}건` : <span className="sm-faint">-</span>}</td>
-        <td className="num sm-faint">{b.totalCount}건</td>
+        <td className="num" style={{ fontWeight: 700 }}>{b.monthRows.length > 0 ? qty(b.monthRows.length) : <span className="sm-faint">-</span>}</td>
+        <td className="num sm-faint">{qty(b.totalCount)}</td>
         <td className="b2b-col-status" onClick={(e) => e.stopPropagation()}>
           {b.cat && managed ? (
             <select className="b2b-status-select" value={st} onChange={(e) => onStatus(e.target.value as VocCatStatus)}
@@ -656,7 +657,7 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
             <span className="b2b-status-pill" style={{ background: sc.bg, color: sc.fg }}>{st}</span>
           )}
         </td>
-        <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{b.cat?.resolved_at ? b.cat.resolved_at.slice(0, 10) : "-"}</td>
+        <td className="b2b-col-date" style={{ whiteSpace: "nowrap" }}>{dateFull(b.cat?.resolved_at)}</td>
       </tr>
       {expanded && (
         <tr className="b2b-child-row">
@@ -671,7 +672,7 @@ function BoardRow({ b, expanded, managed, onToggle, onStatus, onOpen }: {
                   <tbody>
                     {b.monthRows.map((r) => (
                       <tr key={r.id} onClick={() => onOpen(r)}>
-                        <td style={{ whiteSpace: "nowrap" }}>{r.received_at?.slice(5)}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{dateShort(r.received_at)}</td>
                         <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
                         <td style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
                         <td style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.content}>{r.content}</td>

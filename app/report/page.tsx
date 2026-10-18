@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
+import { qty, qtyText, dateFull } from "@/app/lib/format";
 
 type Chart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 type Looker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
@@ -200,7 +201,7 @@ export default function ReportPage() {
                   <div className="rp-saved-meta">
                     <span>저장: {s.createdBy || "—"}</span>
                     <span>·</span>
-                    <span>{new Date(new Date(s.createdAt).getTime() + 9 * 3600e3).toISOString().slice(0, 10)}</span>
+                    <span>{dateFull(s.createdAt)}</span>
                     <button className="rp-saved-del2" onClick={async (e) => { e.stopPropagation(); if (await confirmModal({ title: `'${s.name}' 저장 리포트 삭제`, body: "저장한 질문과 SQL이 지워집니다. 되돌릴 수 없습니다.", action: "리포트 삭제" })) delSaved(s.id); }}>삭제</button>
                   </div>
                 </div>
@@ -261,19 +262,19 @@ export default function ReportPage() {
       {plan && (
         <div className="sm-col" style={{ gap: 14 }}>
           <div className="rp-understood">{plan.understood}</div>
-          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 13, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({corrected}회)해 실행했습니다.</div>}
+          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 13, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({qtyText(corrected, "회")})해 실행했습니다.</div>}
           {plan.usage && (
             <div className="sm-faint" style={{ fontSize: 13, marginTop: -8 }}>
-              토큰 입력 {(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite).toLocaleString()}
-              {plan.usage.cacheRead > 0 ? ` (캐시적중 ${plan.usage.cacheRead.toLocaleString()})` : plan.usage.cacheWrite > 0 ? ` (캐시저장 ${plan.usage.cacheWrite.toLocaleString()})` : ""}
-              {" · 출력 "}{plan.usage.output.toLocaleString()}
+              토큰 입력 {qty(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite)}
+              {plan.usage.cacheRead > 0 ? ` (캐시적중 ${qty(plan.usage.cacheRead)})` : plan.usage.cacheWrite > 0 ? ` (캐시저장 ${qty(plan.usage.cacheWrite)})` : ""}
+              {" · 출력 "}{qty(plan.usage.output)}
             </div>
           )}
 
           {!err && (
             <section className="b2b-card">
               <div className="b2b-card-head">
-                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>{rows.length}행{rows.length >= 5000 ? " (화면은 5,000행까지 — 전체는 [엑셀 내려받기]로)" : ""}</span></span>
+                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>{qtyText(rows.length, "행")}{rows.length >= 5000 ? " (화면은 5,000행까지 — 전체는 [엑셀 내려받기]로)" : ""}</span></span>
                 <div className="sm-row" style={{ gap: 6 }}>
                   <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => { setSaveErr({}); setSaveName(plan.understood?.slice(0, 40) || ""); setSaveSql(plan.sql); setSaveOpen(true); }}>리포트 저장</button>
                   <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={exportXlsx} disabled={!rows.length}>엑셀 내려받기</button>

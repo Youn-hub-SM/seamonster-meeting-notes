@@ -6,11 +6,12 @@ import { ChannelFilter } from "../ChannelTabs";
 import { deleteLedger, isMoveTxn } from "../TxnTable";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { qty, qtyText, won, dateFull } from "@/app/lib/format";
+import ItemLabel from "@/app/components/ItemLabel";
 
 // 생산요청 상태 변경/작성 이벤트(activity_log) — 원장과 함께 날짜별로 섞어 표시.
 type PrEvent = { id: string; date: string; created_at: string; summary: string; actor: string | null };
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-function kstDate(iso: string) { try { return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); } catch { return (iso || "").slice(0, 10); } }
 
 // txns GET 이 함께 싣는 출처 칸(131) — 이동·B2B 연동 판정용(없으면 종전 표식으로 본다)
 type Txn = InventoryTxn & { source?: string | null; order_no?: string | null };
@@ -48,7 +49,7 @@ export default function ActivityPage() {
       const rows: Txn[] = tj.rows || [];
       setTxns(rows);
       const evs: PrEvent[] = ej.ok
-        ? (ej.activities || []).map((a: { id: string; created_at: string; summary: string; actor: string | null }) => ({ id: a.id, created_at: a.created_at, date: kstDate(a.created_at), summary: a.summary, actor: a.actor }))
+        ? (ej.activities || []).map((a: { id: string; created_at: string; summary: string; actor: string | null }) => ({ id: a.id, created_at: a.created_at, date: dateFull(a.created_at), summary: a.summary, actor: a.actor }))
         : [];
       setEvents(evs);
       const firstDate = rows[0]?.txn_date || evs[0]?.date;
@@ -119,7 +120,7 @@ export default function ActivityPage() {
           <ChannelFilter value={channel} onChange={setChannel} />
           <input className="b2b-input" placeholder="품목·SKU 검색" aria-label="품목·SKU·메모·거래처 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260, maxWidth: "100%" }} />
         </div>
-        {q && <span className="sm-faint" style={{ fontSize: 12 }}>{groups.length}일 · {totalCount}건</span>}
+        {q && <span className="sm-faint" style={{ fontSize: 12 }}>{groups.length}일 · {qtyText(totalCount, "건")}</span>}
       </div>
 
       {loading ? (
@@ -137,7 +138,7 @@ export default function ActivityPage() {
                 <button onClick={() => toggle(date)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                   <span style={{ color: "var(--sm-text-light)", fontSize: 12, transform: o ? "rotate(90deg)" : "none", transition: "transform .12s" }}>▶</span>
                   <strong style={{ fontSize: 13 }}>{date}</strong>
-                  <span className="sm-faint" style={{ fontSize: 12 }}>{list.length}건</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>{qtyText(list.length, "건")}</span>
                   <span className="sm-row" style={{ gap: 4, marginLeft: "auto", flexWrap: "wrap" }}>
                     {Object.entries(byType).map(([ty, n]) => { const c = INV_TYPE_COLOR[ty as keyof typeof INV_TYPE_COLOR]; return <span key={ty} className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{ty} {n}</span>; })}
                     {evCount > 0 && <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>생산요청 {evCount}</span>}
@@ -146,7 +147,7 @@ export default function ActivityPage() {
                 {o && (
                   <div className="b2b-table-wrap" style={{ borderTop: "1px solid var(--sm-border)" }}>
                     <table className="b2b-table">
-                      <thead><tr><th>품목 / 내용</th><th>유형</th><th>채널</th><th className="num">수량</th><th className="num">단가</th><th>거래처</th><th>메모</th><th>담당</th><th></th></tr></thead>
+                      <thead><tr><th>품목 / 내용</th><th>유형</th><th>채널</th><th className="num">수량</th><th className="num">단가(원)</th><th>거래처</th><th>메모</th><th>담당</th><th></th></tr></thead>
                       <tbody>
                         {list.map((it) => it.kind === "event" ? (
                           <tr key={`ev-${it.e.id}`}>
@@ -159,7 +160,7 @@ export default function ActivityPage() {
                           const t = it.t; const c = INV_TYPE_COLOR[t.type];
                           return (
                             <tr key={t.id}>
-                              <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.product_name}{t.sku ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{t.sku}</span> : null}</td>
+                              <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><ItemLabel name={t.product_name || "-"} sku={t.sku} /></td>
                               <td style={{ whiteSpace: "nowrap" }}>
                                 <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span>
                                 {/* 대기 = 현재고에 안 들어간 행, 예정 = 오늘 뒤 거래일(대개 B2B 선점) — 오늘 재고와 구분해 보인다(S6) */}
@@ -168,8 +169,8 @@ export default function ActivityPage() {
                                   : t.txn_date > today ? <span className="b2b-status-pill" style={{ marginLeft: 4, background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>예정</span> : null}
                               </td>
                               <td>{t.channel ? (() => { const ch = INV_CHANNEL_COLOR[t.channel as InvChannel]; return <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span>; })() : <span className="sm-faint">-</span>}</td>
-                              <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
-                              <td className="num b2b-money">{t.unit_amount ? t.unit_amount.toLocaleString() : "-"}</td>
+                              <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{qty(t.qty)}</td>
+                              <td className="num b2b-money">{t.unit_amount ? won(t.unit_amount) : "-"}</td>
                               <td>{t.partner || "-"}</td>
                               <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.memo || ""}>{t.memo || "-"}</td>
                               <td className="sm-faint" style={{ whiteSpace: "nowrap" }}>{t.created_by || "-"}</td>

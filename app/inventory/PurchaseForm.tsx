@@ -7,6 +7,7 @@ import type { LinkResultLite } from "@/app/lib/link-result";
 import { ChannelPicker } from "./ChannelTabs";
 import { LOST_MSG, linkMessage, confirmUnlinkedInbound } from "./TxnModal";
 import { useConfirm, useToast } from "@/app/components/Feedback";
+import { qty, qtyText } from "@/app/lib/format";
 
 type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
 // 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
@@ -82,7 +83,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
   useEffect(() => { suggestRef.current?.querySelector<HTMLElement>(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);
 
   function addLine(p: PickProduct) {
-    const sub = [p.spec, p.origin, p.attrs, p.sku, `재고 ${p.qty.toLocaleString()}${p.unit}`].filter(Boolean).join(" · ");
+    const sub = [p.spec, p.origin, p.attrs, p.sku, `재고 ${qty(p.qty)}${p.unit}`].filter(Boolean).join(" · ");
     // 입고 = 상품 마스터의 '매입단가' 기준(미설정이면 빈칸 — 원가로 채우지 않음). 출고 = 원가 참고가.
     const base = type === "입고" ? p.purchase_price : p.cost_price;
     setLines((ls) => [...ls, { key: `${p.id}-${ls.length}-${Date.now()}`, product_id: p.id, name: p.name, sub, unit: p.unit, qty: "1", price: base ? String(base) : "" }]);
@@ -211,7 +212,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
               {matches.map((p, i) => (
                 <button key={p.id} className={`inv-buy-suggest-item ${i === active ? "is-active" : ""}`} onClick={() => addLine(p)} onMouseEnter={() => setActive(i)}>
                   <span><strong>{p.name}</strong> <span className="sm-faint" style={{ fontSize: 12 }}>{[p.spec, p.origin, p.attrs, p.sku].filter(Boolean).join(" · ")}</span></span>
-                  <span className="sm-faint" style={{ fontSize: 12 }}>재고 {p.qty.toLocaleString()}{p.unit}</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>재고 {qty(p.qty)}{p.unit}</span>
                 </button>
               ))}
             </div>
@@ -228,7 +229,7 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
                   <td><strong>{l.name}</strong>{l.sub && <div className="sm-faint" style={{ fontSize: 12 }}>{l.sub}</div>}</td>
                   <td className="num"><input className="b2b-input" type="number" min={0.01} step={0.01} value={l.qty} onChange={(e) => setLine(l.key, "qty", e.target.value)} style={{ width: 80, textAlign: "right", padding: "6px 8px" }} /></td>
                   <td className="num"><input className="b2b-input" type="number" min={0} value={l.price} onChange={(e) => setLine(l.key, "price", e.target.value)} style={{ width: 120, textAlign: "right", padding: "6px 8px" }} /></td>
-                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{amountOf(l).toLocaleString()}</td>
+                  <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(amountOf(l))}</td>
                   <td><button className="b2b-link-btn" onClick={() => removeLine(l.key)} style={{ color: "var(--sm-text-light)" }} aria-label="삭제">✕</button></td>
                 </tr>
               ))}
@@ -238,8 +239,8 @@ export default function PurchaseForm({ products, defaultType = "입고", onSaved
         </div>
 
         <div className="sm-between" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--sm-border)", flexWrap: "wrap", gap: 12 }}>
-          <span className="sm-faint" style={{ fontSize: 13 }}>{totals.items}개 품목, 총 {totals.qty.toLocaleString()}개</span>
-          <span style={{ fontSize: 17, fontWeight: 800 }}>총액 {totals.amount.toLocaleString()}</span>
+          <span className="sm-faint" style={{ fontSize: 13 }}>{qtyText(totals.items)} 품목, 총 {qtyText(totals.qty)}</span>
+          <span style={{ fontSize: 17, fontWeight: 800 }}>총액 {qty(totals.amount)}</span>
         </div>
       </section>
 

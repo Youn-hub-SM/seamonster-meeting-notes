@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 import { useConfirm } from "@/app/components/Feedback";
+import { qty, qtyText, dateTime } from "@/app/lib/format";
 
 type Prod = { id: string; sku: string | null; name: string; spec: string | null; active?: boolean; is_bundle?: boolean; attrs?: string | null };
 type Listing = {
@@ -56,8 +57,6 @@ const CATALOG_TITLE: Record<string, string> = { "스마트스토어": "네이버
 const HIDDEN_SALE_STATUSES = new Set(["SUSPENSION", "CLOSE", "PROHIBITION", "REJECTION", "UNUSABLE", "판매안함", "진열안함"]);
 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-// UTC 저장값 → KST 'MM-DD HH:mm' 표시
-const kstStamp = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
 // 최근 90일 판매가 없으면 '오래된 리스팅'으로 접는다
 const staleCut = () => new Date(Date.now() + 9 * 3600_000 - 90 * 86400_000).toISOString().slice(0, 10);
 
@@ -264,7 +263,7 @@ export default function SkuListingsPage() {
     }
     const label = `${CATALOG_TITLE[c.channel] || c.channel} ${c.listing_name}${c.item_name ? ` / ${c.item_name}` : ""}`;
     // 채널(외부)로 나가는 명령 — 되돌리기 토스트가 아니라 모달. 0 = 품절 처리라 빨간 버튼
-    if (!(await confirm({ title: `${label} 채널 재고 변경`, body: `채널 재고를 ${qty}개로 변경합니다${qty === 0 ? " (품절 처리)" : ""}.`, action: qty === 0 ? "품절 처리" : `${qty}개로 변경`, danger: qty === 0 }))) return;
+    if (!(await confirm({ title: `${label} 채널 재고 변경`, body: `채널 재고를 ${qtyText(qty)}로 변경합니다${qty === 0 ? " (품절 처리)" : ""}.`, action: qty === 0 ? "품절 처리" : `${qtyText(qty)}로 변경`, danger: qty === 0 }))) return;
     setApplying(c.item_key); setErr("");
     try {
       const r = await fetch("/api/channel-commands", {
@@ -338,7 +337,7 @@ export default function SkuListingsPage() {
       {Object.values(lastSynced).some(Boolean) && (
         <p className="sm-faint" style={{ margin: "-6px 0 12px", fontSize: 12, textAlign: "right" }}>
           마지막 동기화: {["스마트스토어", "쿠팡", "카페24"]
-            .map((ch) => `${CATALOG_TITLE[ch]} ${lastSynced[ch] ? kstStamp(lastSynced[ch]!) : "-"}`)
+            .map((ch) => `${CATALOG_TITLE[ch]} ${dateTime(lastSynced[ch])}`)
             .join(", ")}
         </p>
       )}
@@ -424,9 +423,9 @@ export default function SkuListingsPage() {
                           {c.via_bundle && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>묶음</span>}
                         </td>
                         <td data-label="판매상태">{c.sale_status ? (SALE_STATUS_KO[c.sale_status] || c.sale_status) : "-"}</td>
-                        <td className="num" data-label="재고">{c.stock_qty != null ? c.stock_qty.toLocaleString() : "-"}</td>
-                        <td className="num" data-label="7일">{q ? q.q7.toLocaleString() : "-"}</td>
-                        <td className="num" data-label="30일">{q ? q.q30.toLocaleString() : "-"}</td>
+                        <td className="num" data-label="재고">{qty(c.stock_qty)}</td>
+                        <td className="num" data-label="7일">{q ? qty(q.q7) : "-"}</td>
+                        <td className="num" data-label="30일">{q ? qty(q.q30) : "-"}</td>
                         <td className="actions" data-label="수량 적용">
                           <span className="sm-row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                             {noApply ? (
@@ -454,9 +453,9 @@ export default function SkuListingsPage() {
                           {cmd && !cmdStale && (
                             <div className="sm-faint" title={cmd.error || undefined}
                               style={{ fontSize: 12, marginTop: 2, whiteSpace: "normal", overflowWrap: "break-word", color: cmd.status === "실패" ? "var(--sm-danger)" : undefined }}>
-                              {cmd.status === "대기" ? `${cmd.qty}개 적용 대기중` :
-                               cmd.status === "실행중" ? `${cmd.qty}개 적용 중...` :
-                               cmd.status === "완료" ? `${cmd.qty}개 적용 완료${cmd.executed_at ? ` (${kstStamp(cmd.executed_at)})` : ""}` :
+                              {cmd.status === "대기" ? `${qtyText(cmd.qty)} 적용 대기중` :
+                               cmd.status === "실행중" ? `${qtyText(cmd.qty)} 적용 중...` :
+                               cmd.status === "완료" ? `${qtyText(cmd.qty)} 적용 완료${cmd.executed_at ? ` (${dateTime(cmd.executed_at)})` : ""}` :
                                `적용하지 못했습니다(${cmd.error || "오류"}). [적용]을 다시 누르세요`}
                             </div>
                           )}
@@ -470,7 +469,7 @@ export default function SkuListingsPage() {
             {catalogRows.hidden.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <button type="button" className="b2b-link-btn" onClick={() => setShowHidden((v) => !v)}>
-                  {showHidden ? "판매안함 접기" : `판매안함 ${catalogRows.hidden.length}개 보기`}
+                  {showHidden ? "판매안함 접기" : `판매안함 ${qtyText(catalogRows.hidden.length)} 보기`}
                 </button>
               </div>
             )}
@@ -484,7 +483,7 @@ export default function SkuListingsPage() {
             <div className="b2b-card-head">
               <span className="b2b-card-title">{g.channel}</span>
               <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>
-                30일 {g.qty30.toLocaleString()}개 판매
+                30일 {qtyText(g.qty30)} 판매
               </span>
             </div>
             <ListingTable rows={g.fresh} copied={copied} onCopy={copyName} />
@@ -492,7 +491,7 @@ export default function SkuListingsPage() {
               <div style={{ marginTop: 8 }}>
                 <button type="button" className="b2b-link-btn"
                   onClick={() => setOpenStale((p) => ({ ...p, [g.channel]: !p[g.channel] }))}>
-                  {openStale[g.channel] ? "오래된 리스팅 접기" : `90일 이상 판매 없는 리스팅 ${g.stale.length}개 보기`}
+                  {openStale[g.channel] ? "오래된 리스팅 접기" : `90일 이상 판매 없는 리스팅 ${qtyText(g.stale.length)} 보기`}
                 </button>
                 {openStale[g.channel] && (
                   <div style={{ marginTop: 8 }}>
@@ -546,8 +545,8 @@ function ListingTable({ rows, copied, onCopy }: { rows: Listing[]; copied: strin
                 {l.sku_code}
                 {l.via_bundle && <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>묶음</span>}
               </td>
-              <td className="num" data-label="7일">{l.qty_7.toLocaleString()}</td>
-              <td className="num" data-label="30일">{l.qty_30.toLocaleString()}</td>
+              <td className="num" data-label="7일">{qty(l.qty_7)}</td>
+              <td className="num" data-label="30일">{qty(l.qty_30)}</td>
               <td data-label="마지막 판매" style={{ whiteSpace: "nowrap" }}>
                 {l.last_sale ? (l.last_sale === today ? "오늘" : l.last_sale) : "-"}
               </td>

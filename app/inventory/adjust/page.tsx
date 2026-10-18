@@ -7,6 +7,7 @@ import type { CountChecks } from "@/app/api/inventory/adjust/count-check";
 import TxnModal from "../TxnModal";
 import TxnTable from "../TxnTable";
 import { ChannelPicker } from "../ChannelTabs";
+import { qty, qtyText, dateShort } from "@/app/lib/format";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const shift = (iso: string, n: number) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -98,10 +99,10 @@ export default function AdjustPage() {
       const j = await res.json();
       if (!res.ok || !j.ok) throw new Error(j.error || "조정을 반영하지 못했습니다. 다시 누르세요.");
       const parts: string[] = [];
-      if (j.note) parts.push(j.note); else parts.push(`${Number(j.applied) || 0}건을 조정했습니다.`);
-      if (Number(j.invalid) > 0) parts.push(`${j.invalid}건은 실사수량이 숫자가 아니라 건너뛰었습니다.`);
+      if (j.note) parts.push(j.note); else parts.push(`${qtyText(Number(j.applied) || 0, "건")}을 조정했습니다.`);
+      if (Number(j.invalid) > 0) parts.push(`${qtyText(j.invalid, "건")}은 실사수량이 숫자가 아니라 건너뛰었습니다.`);
       const mm = Array.isArray(j.mismatch) ? j.mismatch.length : 0;
-      if (mm > 0) parts.push(`반영 직후 ${mm}종이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.`);
+      if (mm > 0) parts.push(`반영 직후 ${qtyText(mm, "종")}이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.`);
       setNotice({ ok: mm === 0 && !(Number(j.invalid) > 0), text: parts.join(" ") });
       setPreview(null); setReload((n) => n + 1); load(); loadPre();
     } catch (e) { setError(e instanceof Error ? e.message : "조정을 반영하지 못했습니다. 다시 누르세요."); }
@@ -174,10 +175,10 @@ export default function AdjustPage() {
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
                 <span>실제 변경 <strong>{preview.summary.changed}</strong>건</span>
-                <span className="sm-faint">일치 {preview.summary.valid}건 중</span>
-                {!!preview.summary.skipped && <span className="sm-faint">미입력 {preview.summary.skipped.toLocaleString()}행 건너뜀</span>}
-                {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.summary.untracked.toLocaleString()}행 제외</span>}
-                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
+                <span className="sm-faint">일치 {qtyText(preview.summary.valid, "건")} 중</span>
+                {!!preview.summary.skipped && <span className="sm-faint">미입력 {qtyText(preview.summary.skipped, "행")} 건너뜀</span>}
+                {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {qtyText(preview.summary.untracked, "행")} 제외</span>}
+                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {qtyText(preview.summary.errors, "건")}(제외)</span>}
               </div>
               {preview.checks && <CountCheckPanel checks={preview.checks} channel={preview.reqChannel} compact />}
               {preview.rows.length === 0 && <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. SKU 열을 확인해 파일을 다시 올리세요.</div>}
@@ -185,7 +186,7 @@ export default function AdjustPage() {
                 // flex 세로 본문 안의 스크롤 표 — flexShrink 0 이 없으면 점검 패널이 길 때 이 표가 한 줄 높이로 눌린다
                 <div className="b2b-table-wrap" style={{ flexShrink: 0, maxHeight: 340, overflow: "auto", marginBottom: 12 }}>
                   <table className="b2b-table">
-                    <thead><tr><th>품목</th><th>SKU</th><th className="num">{preview.reqDate.slice(5)} 재고</th><th className="num">실사</th><th className="num">조정</th><th>메모</th></tr></thead>
+                    <thead><tr><th>품목</th><th>SKU</th><th className="num">{dateShort(preview.reqDate)} 재고</th><th className="num">실사</th><th className="num">조정</th><th>메모</th></tr></thead>
                     <tbody>
                       {preview.rows.slice(0, 300).map((r, i) => (
                         <tr key={i} style={r.delta === 0 ? { color: "var(--sm-text-light)" } : undefined}>
@@ -194,22 +195,22 @@ export default function AdjustPage() {
                             {(r.pending ?? 0) > 0 && <span className="b2b-status-pill" style={{ marginLeft: 6, background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }} title="현재고에 안 들어간 입출고 — 실사 뒤 처리하면 두 번 반영됩니다">대기 {r.pending}</span>}
                           </td>
                           <td className="sm-faint">{r.sku || "-"}</td>
-                          <td className="num b2b-money">{r.current.toLocaleString()}</td>
-                          <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.target.toLocaleString()}</td>
-                          <td className="num b2b-money" style={{ fontWeight: 700, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{r.delta.toLocaleString()}</td>
+                          <td className="num b2b-money">{qty(r.current)}</td>
+                          <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(r.target)}</td>
+                          <td className="num b2b-money" style={{ fontWeight: 700, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{qty(r.delta)}</td>
                           <td style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.memo || "-"}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
+                  {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>외 {qtyText(preview.rows.length - 300, "건")}(전체 반영됩니다)</p>}
                 </div>
               )}
               {preview.errors.length > 0 && (
                 <section>
                   <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행 제외</div>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 130, overflow: "auto" }}>
-                    {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
+                    {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
                   </ul>
                 </section>
               )}
@@ -223,7 +224,7 @@ export default function AdjustPage() {
                 {!applying && (preview.summary.changed === 0 ? <span className="b2b-btn-why">바뀐 행이 없습니다 — [그만두기]로 닫으세요</span>
                   : !preview.checks ? <span className="b2b-btn-why">점검을 확인하지 못해 반영할 수 없습니다 — 파일을 다시 올리세요</span>
                     : needsAck(preview.checks) && !ack ? <span className="b2b-btn-why">위 점검을 확인(체크)하면 켜집니다</span> : null)}
-                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.changed === 0 || !preview.checks || (needsAck(preview.checks) && !ack)}>{applying ? "반영 중..." : `${preview.summary.changed}건 조정`}</button>
+                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.changed === 0 || !preview.checks || (needsAck(preview.checks) && !ack)}>{applying ? "반영 중..." : `${qtyText(preview.summary.changed, "건")} 조정`}</button>
               </div>
             </div>
           </div>
@@ -240,15 +241,15 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
   const listMax = compact ? 160 : 220;
   const nothing = !checks.b2b.length && !checks.pendingTotal && !checks.sameDay && !checks.after && !checks.formDate;
   if (nothing) return compact ? null : <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>{channel} {checks.date} 기준 점검 이상 없음</p>;
-  const rem = (n: number | null) => (n === null ? "확인 필요" : n.toLocaleString());
+  const rem = (n: number | null) => (n === null ? "확인 필요" : qty(n));
   return (
     <div className="sm-col" style={{ gap: 8, marginBottom: 12, flexShrink: 0 }}>
       {checks.formDate && (
-        <div className="sm-warn"><strong>양식 기준일 {checks.formDate.slice(5)} ≠ 실사일 {checks.date.slice(5)}</strong> — 표의 재고는 실사일 기준입니다. 센 날 마감이 실사일이 맞는지 확인하세요.</div>
+        <div className="sm-warn"><strong>양식 기준일 {dateShort(checks.formDate)} ≠ 실사일 {dateShort(checks.date)}</strong> — 표의 재고는 실사일 기준입니다. 센 날 마감이 실사일이 맞는지 확인하세요.</div>
       )}
       {checks.b2b.length > 0 && (
         <div className="sm-warn">
-          <div><strong>장부에서 이미 빠졌지만 아직 안 나간 B2B 발주 {checks.b2b.length}건</strong> — 실사 전에 발송완료(실제 발송일)로 바꾸거나 발송일을 다시 잡으세요. 그대로 세면 그만큼 재고가 늘어납니다. 일부 발송 건은 &apos;안 나간 수량&apos;을 선반 수량에서 빼고 넣으세요.</div>
+          <div><strong>장부에서 이미 빠졌지만 아직 안 나간 B2B 발주 {qtyText(checks.b2b.length, "건")}</strong> — 실사 전에 발송완료(실제 발송일)로 바꾸거나 발송일을 다시 잡으세요. 그대로 세면 그만큼 재고가 늘어납니다. 일부 발송 건은 &apos;안 나간 수량&apos;을 선반 수량에서 빼고 넣으세요.</div>
           <div className="b2b-table-wrap" style={{ maxHeight: listMax, overflow: "auto", marginTop: 8 }}>
             <table className="b2b-table is-responsive">
               <thead><tr><th>발주</th><th>거래처</th><th>차감일</th><th>남은 발송일</th><th>상태</th><th className="num">안 나간 수량</th></tr></thead>
@@ -257,12 +258,12 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
                   <tr key={h.order_id}>
                     <td data-label="발주" style={{ whiteSpace: "nowrap" }}><a className="sm-link" href={`/b2b/orders/${h.order_id}`} target="_blank" rel="noreferrer">{h.order_no || "발주"}</a></td>
                     <td data-label="거래처">{h.company || "-"}</td>
-                    <td data-label="차감일" style={{ whiteSpace: "nowrap" }}>{h.deduct_date.slice(5)}</td>
-                    <td data-label="남은 발송일" style={{ whiteSpace: "nowrap" }}>{h.open_dates.length ? h.open_dates.map((d) => d.slice(5)).join(", ") : "-"}</td>
+                    <td data-label="차감일" style={{ whiteSpace: "nowrap" }}>{dateShort(h.deduct_date)}</td>
+                    <td data-label="남은 발송일" style={{ whiteSpace: "nowrap" }}>{h.open_dates.length ? h.open_dates.map(dateShort).join(", ") : "-"}</td>
                     <td data-label="상태">{h.partial ? "일부 발송" : "미발송"}</td>
                     <td data-label="안 나간 수량" className="num b2b-money" style={{ whiteSpace: "nowrap" }}
-                      title={h.remaining === null ? "발송완료 차수에 품목 수량이 없어 남은 수량을 알 수 없습니다 — 발주에서 확인하세요" : h.items.map((x) => `${nm(x.product_id)} ${rem(x.remaining)}${h.partial ? ` / 차감 ${x.qty.toLocaleString()}` : ""}`).join("\n")}>
-                      {rem(h.remaining)}{h.partial && <span className="sm-faint" style={{ fontSize: 12, marginLeft: 4 }}>/ 차감 {h.qty.toLocaleString()}</span>}
+                      title={h.remaining === null ? "발송완료 차수에 품목 수량이 없어 남은 수량을 알 수 없습니다 — 발주에서 확인하세요" : h.items.map((x) => `${nm(x.product_id)} ${rem(x.remaining)}${h.partial ? ` / 차감 ${qty(x.qty)}` : ""}`).join("\n")}>
+                      {rem(h.remaining)}{h.partial && <span className="sm-faint" style={{ fontSize: 12, marginLeft: 4 }}>/ 차감 {qty(h.qty)}</span>}
                     </td>
                   </tr>
                 ))}
@@ -273,7 +274,7 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
       )}
       {checks.pendingTotal > 0 && (
         <div className="sm-warn">
-          <div><strong>대기 {checks.pendingTotal}건</strong> — 현재고에 안 들어간 입출고입니다. 실물이 이미 움직였으면 실사 전에 &apos;입고 및 출고&apos;에서 처리하거나 취소하세요. 실사 뒤에 처리하면 두 번 반영됩니다.</div>
+          <div><strong>대기 {qtyText(checks.pendingTotal, "건")}</strong> — 현재고에 안 들어간 입출고입니다. 실물이 이미 움직였으면 실사 전에 &apos;입고 및 출고&apos;에서 처리하거나 취소하세요. 실사 뒤에 처리하면 두 번 반영됩니다.</div>
           <div className="b2b-table-wrap" style={{ maxHeight: listMax, overflow: "auto", marginTop: 8 }}>
             <table className="b2b-table is-responsive">
               <thead><tr><th>거래일</th><th>유형</th><th>품목</th><th className="num">수량</th><th>거래처</th></tr></thead>
@@ -281,13 +282,13 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
                 {checks.pending.map((t) => <CheckRow key={t.id} t={t} name={nm(t.product_id)} />)}
               </tbody>
             </table>
-            {checks.pendingTotal > checks.pending.length && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>외 {checks.pendingTotal - checks.pending.length}건</p>}
+            {checks.pendingTotal > checks.pending.length && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>외 {qtyText(checks.pendingTotal - checks.pending.length, "건")}</p>}
           </div>
         </div>
       )}
       {checks.sameDay > 0 && (
         <div className="sm-warn">
-          <div><strong>실사일({checks.date.slice(5)}) 당일 입출고 {checks.sameDay}건</strong> — 실사일 재고에 들어가 있습니다. 그날 입출고 전에 셌다면 실사일을 전날로 고르세요.</div>
+          <div><strong>실사일({dateShort(checks.date)}) 당일 입출고 {qtyText(checks.sameDay, "건")}</strong> — 실사일 재고에 들어가 있습니다. 그날 입출고 전에 셌다면 실사일을 전날로 고르세요.</div>
           {!compact && (
             <div className="b2b-table-wrap" style={{ maxHeight: listMax, overflow: "auto", marginTop: 8 }}>
               <table className="b2b-table is-responsive">
@@ -300,7 +301,7 @@ function CountCheckPanel({ checks, channel, compact }: { checks: CountChecks; ch
           )}
         </div>
       )}
-      {checks.after > 0 && <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>실사일 뒤 입출고 {checks.after}건은 조정 뒤에 그대로 반영됩니다.</p>}
+      {checks.after > 0 && <p className="sm-faint" style={{ fontSize: 12, margin: 0 }}>실사일 뒤 입출고 {qtyText(checks.after, "건")}은 조정 뒤에 그대로 반영됩니다.</p>}
     </div>
   );
 }
@@ -309,10 +310,10 @@ function CheckRow({ t, name }: { t: CountChecks["pending"][number]; name: string
   const c = INV_TYPE_COLOR[t.type as InvTxnType] || INV_TYPE_COLOR["조정"];
   return (
     <tr>
-      <td data-label="거래일" style={{ whiteSpace: "nowrap" }}>{t.txn_date.slice(5)}</td>
+      <td data-label="거래일" style={{ whiteSpace: "nowrap" }}>{dateShort(t.txn_date)}</td>
       <td data-label="유형"><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span></td>
       <td data-label="품목" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
-      <td data-label="수량" className="num b2b-money">{Number(t.qty) > 0 ? "+" : ""}{Number(t.qty).toLocaleString()}</td>
+      <td data-label="수량" className="num b2b-money">{Number(t.qty) > 0 ? "+" : ""}{qty(Number(t.qty))}</td>
       <td data-label="거래처">{t.partner || "-"}</td>
     </tr>
   );

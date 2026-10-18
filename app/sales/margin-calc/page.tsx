@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MarginResult, MarginResultItem, MarginSpec, MarginTurn } from "@/app/lib/margin-calc";
-import { won as fmtWon } from "@/app/lib/format";
+import { wonText, qtyText, dateFull } from "@/app/lib/format";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 import { useToast } from "@/app/components/Feedback";
-
-const won = (n: number) => `${fmtWon(n)}원`;
 
 type Saved = { id: string; name: string; question: string; specs?: MarginSpec[] | null; result?: MarginResult | null; createdAt: string; createdBy?: string | null };
 type ProdOpt = { name: string; spec: string | null; sku: string | null };
@@ -170,7 +168,7 @@ export default function MarginCalcPage() {
       setError(""); setQ("");
       setRes(s.result);
       setTurns([{ q: s.question, result: s.result }]);
-      setSnapshotOf({ name: s.name, date: s.createdAt.slice(0, 10), question: s.question });
+      setSnapshotOf({ name: s.name, date: dateFull(s.createdAt), question: s.question });
     } else {
       run(s.question, true);
     }
@@ -270,7 +268,7 @@ export default function MarginCalcPage() {
                   <div className="rp-saved-q">{s.question}</div>
                   <div className="rp-saved-meta">
                     <span>저장: {s.createdBy || "—"}</span>
-                    <span>{s.createdAt.slice(0, 10)}</span>
+                    <span>{dateFull(s.createdAt)}</span>
                     <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); delSaved(s.id); }}>삭제</button>
                   </div>
                 </div>
@@ -388,7 +386,7 @@ export default function MarginCalcPage() {
                   <button className="b2b-btn-secondary" onClick={resetPrompt} disabled={pSaving || promptIsDefault}>기본값으로 복원</button>
                   {pSaved && <span style={{ fontSize: 12, color: "var(--sm-success)" }}>{pSaved}</span>}
                   <span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>
-                    {prompt.length.toLocaleString()}자, <span style={{ color: promptIsDefault ? "var(--sm-text-light)" : "var(--sm-text-mid)", fontWeight: promptIsDefault ? 400 : 700 }}>{promptIsDefault ? "기본값" : "사용자 지정"}</span>, 모든 사용자 공용
+                    {qtyText(prompt.length, "자")}, <span style={{ color: promptIsDefault ? "var(--sm-text-light)" : "var(--sm-text-mid)", fontWeight: promptIsDefault ? 400 : 700 }}>{promptIsDefault ? "기본값" : "사용자 지정"}</span>, 모든 사용자 공용
                   </span>
                 </div>
               </>
@@ -416,7 +414,7 @@ function ResultCard({ r }: { r: MarginResultItem }) {
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 14 }}>
         <div className="b2b-stat-card" style={{ borderColor: emph, background: "var(--sm-orange-light)" }}>
           <div className="b2b-stat-card-label">순이익</div>
-          <div className="b2b-stat-card-value" style={{ color: emph }}>{won(r.netProfit)}</div>
+          <div className="b2b-stat-card-value" style={{ color: emph }}>{wonText(r.netProfit)}</div>
         </div>
         <div className="b2b-stat-card" style={{ borderColor: emph, background: "var(--sm-orange-light)" }}>
           <div className="b2b-stat-card-label">이익률</div>
@@ -430,23 +428,23 @@ function ResultCard({ r }: { r: MarginResultItem }) {
           <tbody>
             <tr>
               <td><strong>매출액</strong> <span className="sm-faint" style={{ fontSize: 12 }}>(고객 결제가)</span></td>
-              <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.revenue)}</td>
+              <td className="num b2b-money" style={{ fontWeight: 700 }}>{wonText(r.revenue)}</td>
             </tr>
             {r.supplyValue > 0 && r.supplyValue !== r.revenue && (
               <tr>
                 <td className="sm-faint">└ 공급가액 <span style={{ fontSize: 12 }}>(부가세 차감)</span></td>
-                <td className="num b2b-money sm-faint">{won(r.supplyValue)}</td>
+                <td className="num b2b-money sm-faint">{wonText(r.supplyValue)}</td>
               </tr>
             )}
             {r.expenses.map((e, i) => (
               <tr key={i}>
                 <td style={{ color: "var(--sm-text-mid)" }}>− {e.label}{e.note ? <span className="sm-faint" style={{ fontSize: 12 }}> ({e.note})</span> : null}</td>
-                <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>−{won(e.amount)}</td>
+                <td className="num b2b-money" style={{ color: "var(--sm-danger)" }}>−{wonText(e.amount)}</td>
               </tr>
             ))}
             <tr style={{ borderTop: "2px solid var(--sm-border)" }}>
               <td><strong>순이익</strong></td>
-              <td className="num b2b-money" style={{ fontWeight: 800, color: emph }}>{won(r.netProfit)}</td>
+              <td className="num b2b-money" style={{ fontWeight: 800, color: emph }}>{wonText(r.netProfit)}</td>
             </tr>
           </tbody>
         </table>

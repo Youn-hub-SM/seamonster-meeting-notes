@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InventoryRow, InvChannelFilter } from "@/app/lib/inventory";
 import { ChannelFilter } from "../ChannelTabs";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { qty, qtyText, won, wonText } from "@/app/lib/format";
+import ItemLabel from "@/app/components/ItemLabel";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -59,20 +61,20 @@ export default function AsOfPage() {
         <div className="b2b-loading">불러오는 중...</div>
       ) : (
         <>
-          <p className="sm-faint" style={{ fontSize: 13, marginBottom: 8 }}>{date} 마감 기준 · {shown.length}개 품목 · 재고자산 <strong className="b2b-money">{totalValue.toLocaleString()}원</strong></p>
+          <p className="sm-faint" style={{ fontSize: 13, marginBottom: 8 }}>{date} 마감 기준 · 품목 {qtyText(shown.length, "종")} · 재고자산 <strong className="b2b-money">{wonText(totalValue)}</strong></p>
           {shown.length === 0 ? (
             <div className="b2b-empty">{rows.length === 0 ? "해당 날짜 기준 재고 기록이 없습니다. 기준일을 바꾸세요." : "조건에 맞는 품목이 없습니다. 검색어를 지우거나 '0 숨기기'를 끄세요."}</div>
           ) : (
             <div className="b2b-table-wrap is-sticky-head">
               <table className="b2b-table">
-                <thead><tr><th>품목</th><th>SKU</th><th className="num">수량</th><th className="num">재고자산</th></tr></thead>
+                <thead><tr><th>품목</th><th>SKU</th><th className="num">수량</th><th className="num">재고자산(원)</th></tr></thead>
                 <tbody>
                   {shown.map((r) => (
                     <tr key={r.product_id}>
-                      <td><strong>{r.name}</strong>{r.spec ? <span className="sm-faint" style={{ marginLeft: 6, fontSize: 12 }}>{r.spec}</span> : null}</td>
+                      <td><ItemLabel name={r.name} spec={r.spec} /></td>
                       <td className="sm-faint">{r.sku || "-"}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.qty.toLocaleString()}{r.unit}</td>
-                      <td className="num b2b-money">{r.value.toLocaleString()}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(r.qty)}{r.unit && r.unit !== "개" ? <span className="sm-faint"> {r.unit}</span> : null}</td>
+                      <td className="num b2b-money">{won(r.value)}</td>
                     </tr>
                   ))}
                 </tbody>

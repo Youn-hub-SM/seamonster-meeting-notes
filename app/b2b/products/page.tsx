@@ -6,6 +6,7 @@ import { Product, ProductInput, EMPTY_PRODUCT, CostHistory, TAX_TYPES, TAX_TYPE_
 import BundleEditor from "@/app/components/BundleEditor";
 import CostScheduleModal from "./CostScheduleModal";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { won, qtyText, wonText, dateTime } from "@/app/lib/format";
 
 type Modal = { mode: "create" | "edit"; data: ProductInput } | null;
 
@@ -285,10 +286,10 @@ export default function ProductsPage() {
                   <th>품목명</th>
                   <th>옵션</th>
                   <th>단위</th>
-                  <th className="num">원가</th>
-                  <th className="num">소비자가</th>
-                  <th className="num">b2b도매가</th>
-                  <th className="num">b2b마진</th>
+                  <th className="num">원가(원)</th>
+                  <th className="num">소비자가(원)</th>
+                  <th className="num">b2b도매가(원)</th>
+                  <th className="num">b2b마진(원)</th>
                   <th>상태</th>
                   <th className="actions"></th>
                 </tr>
@@ -355,7 +356,7 @@ export default function ProductsPage() {
                             <span
                               className="b2b-status-pill"
                               style={{ marginLeft: 6, background: "var(--sm-info-bg)", color: "var(--sm-info)" }}
-                              title={`묶음(세트) 상품 — 구성품 ${p.bundle_count ?? 0}종`}
+                              title={`묶음(세트) 상품 — 구성품 ${qtyText(p.bundle_count ?? 0, "종")}`}
                             >
                               묶음{p.bundle_count ? ` ${p.bundle_count}` : ""}
                             </span>
@@ -372,11 +373,11 @@ export default function ProductsPage() {
                         </td>
                         <td data-label="옵션">{p.spec || "-"}</td>
                         <td data-label="단위">{p.unit}</td>
-                        <td data-label="원가" className="num b2b-money">{p.cost_price.toLocaleString()}</td>
-                        <td data-label="소비자가" className="num b2b-money">{p.retail_price ? p.retail_price.toLocaleString() : "-"}</td>
-                        <td data-label="b2b도매가" className="num b2b-money">{p.sale_price.toLocaleString()}</td>
-                        <td data-label="b2b마진" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
-                          {margin >= 0 ? "+" : ""}{margin.toLocaleString()}
+                        <td data-label="원가(원)" className="num b2b-money">{won(p.cost_price)}</td>
+                        <td data-label="소비자가(원)" className="num b2b-money">{p.retail_price ? won(p.retail_price) : "-"}</td>
+                        <td data-label="b2b도매가(원)" className="num b2b-money">{won(p.sale_price)}</td>
+                        <td data-label="b2b마진(원)" className="num b2b-money" style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
+                          {margin >= 0 ? "+" : ""}{won(margin)}
                           {p.sale_price > 0 && (
                             <span style={{ marginLeft: 6, fontSize: 12, color: "var(--sm-text-light)" }}>
                               ({marginPct.toFixed(0)}%)
@@ -509,7 +510,7 @@ export default function ProductsPage() {
                   onClick={applyImport}
                   disabled={applying || preview.summary.creates + preview.summary.updates === 0}
                 >
-                  {applying ? "적용 중..." : `${preview.summary.creates + preview.summary.updates}건 적용`}
+                  {applying ? "적용 중..." : `${qtyText(preview.summary.creates + preview.summary.updates, "건")} 적용`}
                 </button>
               </div>
             </div>
@@ -561,15 +562,15 @@ function HistoryPanel({ loading, history }: { loading: boolean; history: CostHis
         <thead>
           <tr>
             <th>변경 시각</th>
-            <th className="num">원가</th>
+            <th className="num">원가(원)</th>
             <th>사유</th>
           </tr>
         </thead>
         <tbody>
           {history.map((h) => (
             <tr key={h.id}>
-              <td data-label="변경 시각">{new Date(h.changed_at).toLocaleString("ko-KR")}</td>
-              <td data-label="원가" className="num b2b-money">{h.cost_price.toLocaleString()}</td>
+              <td data-label="변경 시각">{dateTime(h.changed_at)}</td>
+              <td data-label="원가(원)" className="num b2b-money">{won(h.cost_price)}</td>
               <td data-label="사유">{h.reason || "-"}</td>
             </tr>
           ))}
@@ -631,9 +632,9 @@ function ProductModal({
     const sw = Number(data.sku_weight_g) || 0;
     const whole = (n: number) => Math.abs(n - Math.round(n)) < 1e-9;
     const parts: string[] = [];
-    if (ow > 0 && pw > 0) parts.push(whole(pw / ow) ? `소포장 1개 = ${ow}g 조각 × ${Math.round(pw / ow)}개` : `주의: 포장중량(${pw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
-    if (pw > 0 && sw > 0) parts.push(whole(sw / pw) ? `SKU 1개 = 소포장 ${Math.round(sw / pw)}개` : `주의: SKU중량(${sw}g)이 포장중량(${pw}g)의 배수가 아닙니다`);
-    if (!pw && ow > 0 && sw > 0) parts.push(whole(sw / ow) ? `SKU 1개 = ${ow}g 조각 ${Math.round(sw / ow)}개` : `주의: SKU중량(${sw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
+    if (ow > 0 && pw > 0) parts.push(whole(pw / ow) ? `소포장 1개 = ${ow}g 조각 × ${qtyText(Math.round(pw / ow))}` : `주의: 포장중량(${pw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
+    if (pw > 0 && sw > 0) parts.push(whole(sw / pw) ? `SKU 1개 = 소포장 ${qtyText(Math.round(sw / pw))}` : `주의: SKU중량(${sw}g)이 포장중량(${pw}g)의 배수가 아닙니다`);
+    if (!pw && ow > 0 && sw > 0) parts.push(whole(sw / ow) ? `SKU 1개 = ${ow}g 조각 ${qtyText(Math.round(sw / ow))}` : `주의: SKU중량(${sw}g)이 옵션중량(${ow}g)의 배수가 아닙니다`);
     return parts.join(" · ");
   })();
 
@@ -907,11 +908,11 @@ function ProductModal({
 
           {(effCost > 0 || data.sale_price > 0) && (
             <div style={{ padding: "10px 12px", background: "var(--sm-bg)", borderRadius: 8, fontSize: 12 }}>
-              제품 단위 원가 <strong className="b2b-money">{effCost.toLocaleString()}원</strong>
+              제품 단위 원가 <strong className="b2b-money">{wonText(effCost)}</strong>
               {" · "}
               마진(배송 제외):{" "}
               <strong style={{ color: margin >= 0 ? "var(--sm-dark)" : "var(--sm-danger)" }}>
-                {margin >= 0 ? "+" : ""}{margin.toLocaleString()}원
+                {margin >= 0 ? "+" : ""}{wonText(margin)}
                 {data.sale_price > 0 && ` (${marginPct.toFixed(1)}%)`}
               </strong>
             </div>

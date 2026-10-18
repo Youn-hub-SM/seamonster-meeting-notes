@@ -5,6 +5,7 @@ import type { BundlePreview } from "@/app/api/inventory/bundles/import/route";
 import { Combobox, ComboOption } from "../../b2b/orders/Combobox";
 import BundleEditor from "@/app/components/BundleEditor";
 import { useConfirm } from "@/app/components/Feedback";
+import { qtyText } from "@/app/lib/format";
 
 type BundleRow = { parent_id: string; parent_sku: string | null; parent_name: string; components: { component_id: string; sku: string | null; name: string; spec: string | null; qty: number }[] };
 type PreviewResp = { summary: { bundles: number; valid: number; willCreate: number; errors: number }; previews: BundlePreview[] };
@@ -59,7 +60,7 @@ export default function BundlesPage() {
     setApplying(false);
   }
   async function removeBundle(b: BundleRow) {
-    if (!(await confirm({ title: `"${b.parent_name}" 묶음 구성 삭제`, body: `구성품 ${b.components.length}종 연결이 지워집니다. 상품 자체는 유지됩니다.`, action: "구성 삭제" }))) return;
+    if (!(await confirm({ title: `"${b.parent_name}" 묶음 구성 삭제`, body: `구성품 ${qtyText(b.components.length, "종")} 연결이 지워집니다. 상품 자체는 유지됩니다.`, action: "구성 삭제" }))) return;
     const r = await fetch(`/api/inventory/bundles?parent=${b.parent_id}`, { method: "DELETE" });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j?.ok) { setError(`구성을 삭제하지 못했습니다(${j?.error || "서버 오류"}). 새로고침 뒤 다시 누르세요.`); return; }
@@ -121,8 +122,8 @@ export default function BundlesPage() {
             <div className="b2b-modal-body">
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
                 <span>반영 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>개</span>
-                {preview.summary.willCreate > 0 && <span className="sm-faint">신규 세트 상품 {preview.summary.willCreate}개 생성</span>}
-                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}개(제외)</span>}
+                {preview.summary.willCreate > 0 && <span className="sm-faint">신규 세트 상품 {qtyText(preview.summary.willCreate)} 생성</span>}
+                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {qtyText(preview.summary.errors)}(제외)</span>}
               </div>
               <div className="b2b-table-wrap" style={{ maxHeight: 380, overflow: "auto" }}>
                 <table className="b2b-table is-responsive">
@@ -144,7 +145,7 @@ export default function BundlesPage() {
             <div className="b2b-modal-foot"><span /><div className="b2b-modal-foot-right">
               <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
               {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 올리세요</span>}
-              <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}개 반영`}</button>
+              <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${qtyText(preview.summary.valid)} 반영`}</button>
             </div></div>
           </div>
         </div>

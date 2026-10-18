@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useConfirm, type ConfirmOptions } from "@/app/components/Feedback";
+import { qty, qtyText, dateTime } from "@/app/lib/format";
 
 type Warn = { rowNo: number; addr: string; name: string };
 type FileOut = { name: string; b64: string };
@@ -45,7 +46,6 @@ type UnmRow = { id: string; dispatch_date: string; order_no: string | null; code
 const KW_KEY = "fulfill_addr_keywords";
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const STEPS = ["발주엑셀 업로드", "CN 파일 다운로드", "배송일지 기록", "상품 출고"];
-const hm = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 // 확인 모달(공용 useConfirm) 문구 — 나가기는 파괴가 아니라 danger:false
 const LEAVE_ASK: ConfirmOptions = { title: "상품 출고 전에 나가기", body: "CN 파일을 받았지만 ④ 상품 출고(재고 차감)를 아직 안 했습니다.", action: "그래도 나가기", danger: false };
 // 중단된 출고를 이어서 차감하지 않기로 했을 때 — 재고를 이미 맞췄으면 차감 없이 닫는다(서버 closeInterrupted)
@@ -112,7 +112,7 @@ export default function FulfillPage() {
   }
   useEffect(() => { void loadSide(); }, []);
   async function discardBatch(b: OpenBatch) {
-    if (!(await confirm({ title: `${b.file_name || "이 배치"}(${hm(b.downloaded_at)}) 발송 안 함`, body: "발송하지 않은 배치일 때만 — 미출고 배치 목록에서 빠지고 재고는 차감하지 않습니다.", action: "발송 안 함" }))) return;
+    if (!(await confirm({ title: `${b.file_name || "이 배치"}(${dateTime(b.downloaded_at)}) 발송 안 함`, body: "발송하지 않은 배치일 때만 — 미출고 배치 목록에서 빠지고 재고는 차감하지 않습니다.", action: "발송 안 함" }))) return;
     setSideBusy(b.sig);
     try {
       const j = await (await fetch("/api/fulfill/pending", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sig: b.sig, action: "discard" }) })).json();
@@ -192,7 +192,7 @@ export default function FulfillPage() {
 
   async function recordLog(): Promise<boolean> {
     if (!res || !recordDate) return false;
-    if (res.unmatched.length > 0 && !(await confirm({ title: "미매칭 SKU 가 있는 채로 배송일지 기록", body: `미매칭 SKU ${res.unmatched.length}개가 있어 기본운임이 실제보다 적게 기록될 수 있습니다. 상품마스터에서 택배 정보를 채운 뒤 다시 만드는 것을 권장합니다.`, action: "지금 기록", danger: false }))) return false;
+    if (res.unmatched.length > 0 && !(await confirm({ title: "미매칭 SKU 가 있는 채로 배송일지 기록", body: `미매칭 SKU ${qtyText(res.unmatched.length)}가 있어 기본운임이 실제보다 적게 기록될 수 있습니다. 상품마스터에서 택배 정보를 채운 뒤 다시 만드는 것을 권장합니다.`, action: "지금 기록", danger: false }))) return false;
     setRecording(true); setRecordOk(""); setError(""); setLastRecord(null);
     let ok = false;
     try {
@@ -388,11 +388,11 @@ export default function FulfillPage() {
 
           {openBatches.filter((b) => b.sig !== res?.sig).length > 0 && (
             <div className="sm-warn" style={{ lineHeight: 1.6 }}>
-              <strong>CN 파일을 받았지만 출고 완료 안 한 배치 {openBatches.filter((b) => b.sig !== res?.sig).length}건</strong> — 발송했으면 같은 파일을 다시 올려 ④ 상품 출고까지 끝내세요.
+              <strong>CN 파일을 받았지만 출고 완료 안 한 배치 {qtyText(openBatches.filter((b) => b.sig !== res?.sig).length, "건")}</strong> — 발송했으면 같은 파일을 다시 올려 ④ 상품 출고까지 끝내세요.
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
                 {openBatches.filter((b) => b.sig !== res?.sig).map((b) => (
                   <li key={b.sig}>
-                    {b.file_name || "(파일명 없음)"} ({hm(b.downloaded_at)}){b.order_count != null ? ` 주문 ${b.order_count.toLocaleString()}건` : ""}{b.total_qty != null ? `, ${Number(b.total_qty).toLocaleString()}개` : ""}{b.interrupted ? " — 출고가 중간에 끊김(재고 미차감)" : ""}
+                    {b.file_name || "(파일명 없음)"} ({dateTime(b.downloaded_at)}){b.order_count != null ? ` 주문 ${qtyText(b.order_count, "건")}` : ""}{b.total_qty != null ? `, ${qtyText(Number(b.total_qty))}` : ""}{b.interrupted ? " — 출고가 중간에 끊김(재고 미차감)" : ""}
                     <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8 }} onClick={() => discardBatch(b)} disabled={sideBusy === b.sig}>발송 안 함</button>
                   </li>
                 ))}
@@ -401,11 +401,11 @@ export default function FulfillPage() {
           )}
           {unmRows.length > 0 && (
             <div className="b2b-error" style={{ lineHeight: 1.6 }}>
-              <strong>재고가 빠지지 않은 코드 {unmRows.length}건</strong> — 상품마스터에 등록한 뒤 [재고 차감 기록]. 그 사이 실사를 했으면 [확인 완료]만 누르세요(출고일 뒤 실사가 있으면 차감 전에 한 번 더 묻습니다).
+              <strong>재고가 빠지지 않은 코드 {qtyText(unmRows.length, "건")}</strong> — 상품마스터에 등록한 뒤 [재고 차감 기록]. 그 사이 실사를 했으면 [확인 완료]만 누르세요(출고일 뒤 실사가 있으면 차감 전에 한 번 더 묻습니다).
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
                 {unmRows.map((u) => (
                   <li key={u.id}>
-                    {u.dispatch_date}{u.order_no ? ` (${u.order_no})` : ""}: {u.codes.map((c) => `${c.sku} ${c.qty.toLocaleString()}개${c.registered ? "" : "(미등록)"}`).join(", ")}
+                    {u.dispatch_date}{u.order_no ? ` (${u.order_no})` : ""}: {u.codes.map((c) => `${c.sku} ${qtyText(c.qty)}${c.registered ? "" : "(미등록)"}`).join(", ")}
                     <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8 }} onClick={() => resolveUnm(u, "record")} disabled={sideBusy === u.id || !u.codes.some((c) => c.registered)}>재고 차감 기록</button>
                     <button className="b2b-link-btn" style={{ fontSize: 12, marginLeft: 8 }} onClick={() => resolveUnm(u, "done")} disabled={sideBusy === u.id}>확인 완료</button>
                   </li>
@@ -421,24 +421,24 @@ export default function FulfillPage() {
                 <div className="sm-warn"><strong>재고가 안 빠진 중단된 출고의 파일입니다</strong> — CN 파일을 이미 발송했으면 다시 올리지 말고 ④ 상품 출고로 바로 가세요. 그 사이 [입고 및 출고]에서 직접 기록했거나 실사로 맞췄으면 ④에서 차감 없이 닫으세요.</div>
               )}
               {(res.interruptedExcluded || 0) > 0 && (
-                <div className="sm-warn">제외한 주문 중 {res.interruptedExcluded}건은 재고가 안 빠진 중단된 출고의 주문입니다 — 그 배치의 원래 파일을 그대로 다시 올려 ④ 상품 출고를 마치세요.</div>
+                <div className="sm-warn">제외한 주문 중 {qtyText(res.interruptedExcluded, "건")}은 재고가 안 빠진 중단된 출고의 주문입니다 — 그 배치의 원래 파일을 그대로 다시 올려 ④ 상품 출고를 마치세요.</div>
               )}
               <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
-                <div className="b2b-stat-card"><div className="b2b-stat-card-label">전체 주문행</div><div className="b2b-stat-card-value">{res.stats.total.toLocaleString()}</div></div>
+                <div className="b2b-stat-card"><div className="b2b-stat-card-label">전체 주문행</div><div className="b2b-stat-card-value">{qty(res.stats.total)}</div></div>
                 {(res.excludedProcessed || 0) > 0 && (
                   <div className="b2b-stat-card" style={{ borderColor: "var(--sm-warning)" }}>
                     <div className="b2b-stat-card-label">이미 처리된 주문 제외</div>
-                    <div className="b2b-stat-card-value" style={{ color: "var(--sm-warning)" }}>{(res.excludedProcessed || 0).toLocaleString()}</div>
+                    <div className="b2b-stat-card-value" style={{ color: "var(--sm-warning)" }}>{qty((res.excludedProcessed || 0))}</div>
                     <div className="b2b-stat-card-hint" title={(res.excludedOrderNos || []).join(", ")}>CN·택배량·출고에서 자동 제외</div>
                   </div>
                 )}
                 <div className="b2b-stat-card"><div className="b2b-stat-card-label">NOTHING 제외</div><div className="b2b-stat-card-value" style={{ color: res.stats.excludedNothing ? "var(--sm-warning)" : "var(--sm-text-light)" }}>{res.stats.excludedNothing}</div></div>
-                <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반</div><div className="b2b-stat-card-value">{res.stats.normalCount.toLocaleString()}</div></div>
-                <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장</div><div className="b2b-stat-card-value">{res.stats.guaranteeCount.toLocaleString()}</div></div>
+                <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반</div><div className="b2b-stat-card-value">{qty(res.stats.normalCount)}</div></div>
+                <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장</div><div className="b2b-stat-card-value">{qty(res.stats.guaranteeCount)}</div></div>
               </div>
               {res.unmatched.length > 0 && (
                 <div className="b2b-error" style={{ lineHeight: 1.6 }}>
-                  <strong>상품마스터에 택배정보가 없는 단품코드 {res.unmatched.length}개</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있고, ④ 출고 때 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
+                  <strong>상품마스터에 택배정보가 없는 단품코드 {qtyText(res.unmatched.length)}</strong> — 품목명이 비고 중량이 0이라 박스타입/운임이 틀릴 수 있고, ④ 출고 때 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에서 채운 뒤 다시 만드세요.
                   <div className="sm-faint" style={{ marginTop: 6, fontSize: 12 }}>{res.unmatched.slice(0, 30).join(", ")}{res.unmatched.length > 30 ? " ..." : ""}</div>
                 </div>
               )}
@@ -455,9 +455,9 @@ export default function FulfillPage() {
               {"error" in res.openOverlap
                 ? <strong>CN 받고 출고 안 한 다른 배치와 겹치는지 확인하지 못했습니다 — ① 화면의 미출고 배치 목록을 직접 확인한 뒤 체크하세요</strong>
                 : <>
-                    <strong>이 파일의 주문 {res.openOverlap.orders.toLocaleString()}건이 아직 출고 완료 안 한 다른 배치에 들어 있습니다</strong> — 그 배치를 먼저 ④ 출고 완료하거나 ① 화면에서 [발송 안 함]으로 정리하세요.
+                    <strong>이 파일의 주문 {qtyText(res.openOverlap.orders, "건")}이 아직 출고 완료 안 한 다른 배치에 들어 있습니다</strong> — 그 배치를 먼저 ④ 출고 완료하거나 ① 화면에서 [발송 안 함]으로 정리하세요.
                     <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
-                      {res.openOverlap.batches.map((b, i) => <li key={i}>{b.fileName || "(파일명 없음)"} ({hm(b.at)})</li>)}
+                      {res.openOverlap.batches.map((b, i) => <li key={i}>{b.fileName || "(파일명 없음)"} ({dateTime(b.at)})</li>)}
                     </ul>
                   </>}
               <label className="sm-row" style={{ gap: 7, marginTop: 10, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
@@ -467,7 +467,7 @@ export default function FulfillPage() {
           )}
           {res.addressWarnings.length > 0 && (
             <div className="sm-warn" style={{ lineHeight: 1.6 }}>
-              <strong>주소 경고 {res.addressWarnings.length}건</strong> — 발주 전 반드시 확인하세요.
+              <strong>주소 경고 {qtyText(res.addressWarnings.length, "건")}</strong> — 발주 전 반드시 확인하세요.
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
                 {res.addressWarnings.slice(0, 20).map((w, i) => <li key={i}>{w.name || "(이름?)"}: {w.addr}</li>)}
               </ul>
@@ -483,7 +483,7 @@ export default function FulfillPage() {
               border: "1px solid var(--sm-border)", borderRadius: "var(--sm-radius)",
               padding: "12px 16px", fontSize: "var(--sm-fs-sm)", marginBottom: "var(--sm-space-4)", lineHeight: 1.6,
             }}>
-              <strong>배송메시지 {msgWarns.length}건{msgGroups.length !== msgWarns.length ? `(${msgGroups.length}줄)` : ""}</strong>
+              <strong>배송메시지 {qtyText(msgWarns.length, "건")}{msgGroups.length !== msgWarns.length ? `(${msgGroups.length}줄)` : ""}</strong>
               <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, maxHeight: 300, overflowY: "auto" }}>
                 {msgGroups.map((g, i) => (
                   <li key={i} title={g.names.length > 1 ? g.names.join(", ") : undefined}>
@@ -528,7 +528,7 @@ export default function FulfillPage() {
               <button className="b2b-btn-secondary" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => downloadB64(res.files.parcel.name, res.files.parcel.b64)}>택배량 엑셀 내려받기</button>
             </div>
           </div>
-          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>택배 {res.stats.parcels}건 (일반 {res.stats.parcels - res.stats.parcelsGuar} · 도착보장 {res.stats.parcelsGuar}){(res.stats.mergedParcels ?? 0) > 0 && <>, 합배송 병합 {res.stats.mergedParcels}건</>}</p>
+          <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 8px" }}>택배 {qtyText(res.stats.parcels, "건")} (일반 {res.stats.parcels - res.stats.parcelsGuar} · 도착보장 {res.stats.parcelsGuar}){(res.stats.mergedParcels ?? 0) > 0 && <>, 합배송 병합 {qtyText(res.stats.mergedParcels, "건")}</>}</p>
           {recordOk && (
             <div className="sm-success" style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span>✓ {recordOk}</span>
@@ -572,17 +572,17 @@ export default function FulfillPage() {
           {dispatchLoading ? <div className="b2b-loading">재고 확인 중...</div> : dispatchDone ? (
             <div className="sm-success" style={{ lineHeight: 1.7 }}>
               {(dispatchDone.closed ?? 0) > 0
-                ? <>✓ <b>정리 완료</b> — 앞선 출고 {dispatchDone.closed}건을 재고 차감 없이 처리됨으로 닫았습니다{dispatchDone.orderNo ? <> (출고번호 <b>{dispatchDone.orderNo}</b>)</> : null}.</>
+                ? <>✓ <b>정리 완료</b> — 앞선 출고 {qtyText(dispatchDone.closed, "건")}을 재고 차감 없이 처리됨으로 닫았습니다{dispatchDone.orderNo ? <> (출고번호 <b>{dispatchDone.orderNo}</b>)</> : null}.</>
                 : dispatchDone.dispatched > 0
-                ? <>✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 {dispatchDone.totalQty.toLocaleString()}개를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link></>
+                ? <>✓ <b>출고 완료</b> — {dispatchDone.dispatched}품목 {qtyText(dispatchDone.totalQty)}를 소매 재고에서 차감했습니다 (출고번호 <b>{dispatchDone.orderNo || "-"}</b>). <Link href="/inventory">재고 보기</Link></>
                 : <>✓ <b>출고 완료</b> — 차감할 재고 품목이 없어 주문만 처리됨으로 표시했습니다.</>}
               {dispatchDone.already ? <div>이미 기록돼 있던 출고에 이어 붙였습니다.</div> : null}
-              {dispatchDone.resumed ? <div>재고 기록이 없던 앞선 출고 기록 {dispatchDone.resumed}건을 정리했습니다.</div> : null}
+              {dispatchDone.resumed ? <div>재고 기록이 없던 앞선 출고 기록 {qtyText(dispatchDone.resumed, "건")}을 정리했습니다.</div> : null}
               {dispatchDone.shortages > 0 ? <div style={{ color: "var(--sm-danger)" }}>재고 부족 {dispatchDone.shortages}품목(마이너스로 기록)</div> : null}
               {(dispatchDone.unmatched?.length ?? 0) > 0 && (
                 <div style={{ color: "var(--sm-danger)", marginTop: 6 }}>
-                  재고가 빠지지 않은 코드 {dispatchDone.unmatched!.length}개(총 {dispatchDone.unmatched!.reduce((s, u) => s + u.qty, 0).toLocaleString()}개) — {dispatchDone.unmatchedSaved ? "상품마스터에 등록한 뒤 ① 화면의 [재고 차감 기록]으로 넣으세요." : UNM_NOT_SAVED[dispatchDone.unmatchedNotSaved ?? "no_column"]}
-                  <div style={{ fontSize: 12 }}>{dispatchDone.unmatched!.map((u) => `${u.sku} ${u.qty.toLocaleString()}개`).join(", ")}</div>
+                  재고가 빠지지 않은 코드 {qtyText(dispatchDone.unmatched!.length)}(총 {qtyText(dispatchDone.unmatched!.reduce((s, u) => s + u.qty, 0))}) — {dispatchDone.unmatchedSaved ? "상품마스터에 등록한 뒤 ① 화면의 [재고 차감 기록]으로 넣으세요." : UNM_NOT_SAVED[dispatchDone.unmatchedNotSaved ?? "no_column"]}
+                  <div style={{ fontSize: 12 }}>{dispatchDone.unmatched!.map((u) => `${u.sku} ${qtyText(u.qty)}`).join(", ")}</div>
                 </div>
               )}
               <div style={{ fontSize: 12, marginTop: 6 }}><button className="b2b-link-btn" onClick={reset}>새 발주 시작</button></div>
@@ -591,10 +591,10 @@ export default function FulfillPage() {
             <>
               {unm.length > 0 && (
                 <div className="b2b-error" style={{ marginBottom: 12, lineHeight: 1.6 }}>
-                  <strong>상품마스터에 없어 재고가 빠지지 않는 코드 {unm.length}개</strong> — 이번 출고분은 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에 등록한 뒤 <button className="b2b-link-btn" onClick={() => setDispatchRetry((n) => n + 1)}>다시 확인</button>
-                  <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{unm.map((u) => `${u.sku} ${u.qty.toLocaleString()}개${u.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(", ")}</div>
+                  <strong>상품마스터에 없어 재고가 빠지지 않는 코드 {qtyText(unm.length)}</strong> — 이번 출고분은 재고에서 빠지지 않습니다. <Link href="/b2b/products">상품마스터</Link>에 등록한 뒤 <button className="b2b-link-btn" onClick={() => setDispatchRetry((n) => n + 1)}>다시 확인</button>
+                  <div className="sm-faint" style={{ marginTop: 5, fontSize: 12 }}>{unm.map((u) => `${u.sku} ${qtyText(u.qty)}${u.kind === "ambiguous" ? "(중복SKU)" : ""}`).join(", ")}</div>
                   <label className="sm-row" style={{ gap: 7, marginTop: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }}>
-                    <input type="checkbox" checked={unmatchedAck} onChange={(e) => setUnmatchedAck(e.target.checked)} /> 이 코드 {unm.length}개(총 {unmQty.toLocaleString()}개)는 재고 차감 없이 출고합니다
+                    <input type="checkbox" checked={unmatchedAck} onChange={(e) => setUnmatchedAck(e.target.checked)} /> 이 코드 {qtyText(unm.length)}(총 {qtyText(unmQty)})는 재고 차감 없이 출고합니다
                   </label>
                 </div>
               )}
@@ -615,9 +615,9 @@ export default function FulfillPage() {
                           <tr key={p.productId} style={p.short ? { background: "var(--sm-danger-bg)" } : undefined}>
                             <td data-label="상품"><strong>{p.name}</strong></td>
                             <td data-label="옵션" style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>{p.option || "-"}</td>
-                            <td data-label="출고수량" className="num b2b-money">{p.need.toLocaleString()}</td>
-                            <td data-label="현재 재고" className="num b2b-money">{p.current.toLocaleString()}</td>
-                            <td data-label="출고 후" className="num b2b-money" style={{ fontWeight: 700, color: p.short ? "var(--sm-danger)" : undefined }}>{p.after.toLocaleString()}</td>
+                            <td data-label="출고수량" className="num b2b-money">{qty(p.need)}</td>
+                            <td data-label="현재 재고" className="num b2b-money">{qty(p.current)}</td>
+                            <td data-label="출고 후" className="num b2b-money" style={{ fontWeight: 700, color: p.short ? "var(--sm-danger)" : undefined }}>{qty(p.after)}</td>
                           </tr>
                         ))}
                       </tbody>

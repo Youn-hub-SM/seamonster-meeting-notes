@@ -16,6 +16,7 @@ import TxnModal from "./TxnModal";
 import { ChannelFilter, writeChannelOf } from "./ChannelTabs";
 import PromoManager from "@/app/components/PromoManager";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { qty, qtyText } from "@/app/lib/format";
 
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 function shift(iso: string, n: number) { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
@@ -196,7 +197,7 @@ export default function InventoryPage() {
     const combined = Math.max(0, Math.round((g1 + g2 - inb) * 100) / 100);
     return {
       has: !!(rr || ww), recommend: combined, requestByDays: days, requestBy: by, retail: rr,
-      detail: `권장 = 온라인 일반 ${g1.toLocaleString()} + 도매 일반 ${g2.toLocaleString()} − 입고 예정 ${inb.toLocaleString()}`,
+      detail: `권장 = 온라인 일반 ${qty(g1)} + 도매 일반 ${qty(g2)} − 입고 예정 ${qty(inb)}`,
     };
   }, [channel, retailMap, wholeMap]);
 
@@ -337,7 +338,7 @@ export default function InventoryPage() {
               title={sel.size === 0 ? "아래 표에서 품목을 체크하세요"
                 : channel === "도매" ? "생산 요청 메뉴로 이동해 도매 요청 창을 엽니다 (권장 = 도매 수식)"
                 : "생산 요청 메뉴로 이동해 제조사 요청 창을 엽니다 (권장 = 소매+도매 합)"}>
-              {`선택 ${sel.size}종 생산 요청`}
+              {`선택 ${qtyText(sel.size, "종")} 생산 요청`}
             </button>
           )}
           {!confirmedTab && sel.size === 0 && <span className="b2b-btn-why">아래 표에서 품목을 체크하면 켜집니다</span>}
@@ -358,11 +359,11 @@ export default function InventoryPage() {
       {/* 데이터박스 — 재고 4 + 생산 2. 확정형 탭은 판단 카드(부족·생산 2종)를 뺀 3종만(판정 자체가 없다) */}
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 16 }}>
         <div className="b2b-stat-card"><div className="b2b-stat-card-label">품목 수</div><div className="b2b-stat-card-value">{totals.items}</div></div>
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 자산(원가)</div><div className="b2b-stat-card-value b2b-money">{totals.value.toLocaleString()}</div></div>
-        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 부족</div><div className="b2b-stat-card-value" style={{ color: totals.low ? "var(--sm-danger)" : "var(--sm-black)" }}>{totals.low}건</div></div>}
-        <div className="b2b-stat-card"><div className="b2b-stat-card-label">기간 총출고</div><div className="b2b-stat-card-value b2b-money">{totals.out.toLocaleString()}</div></div>
-        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">생산 권장 품목</div><div className="b2b-stat-card-value">{prodStats.needItems}종</div></div>}
-        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 권장 생산량</div><div className="b2b-stat-card-value b2b-money">{prodStats.needQty.toLocaleString()}</div></div>}
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 자산(원가)</div><div className="b2b-stat-card-value b2b-money">{qty(totals.value)}</div></div>
+        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">재고 부족</div><div className="b2b-stat-card-value" style={{ color: totals.low ? "var(--sm-danger)" : "var(--sm-black)" }}>{qtyText(totals.low, "건")}</div></div>}
+        <div className="b2b-stat-card"><div className="b2b-stat-card-label">기간 총출고</div><div className="b2b-stat-card-value b2b-money">{qty(totals.out)}</div></div>
+        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">생산 권장 품목</div><div className="b2b-stat-card-value">{qtyText(prodStats.needItems, "종")}</div></div>}
+        {!confirmedTab && <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 권장 생산량</div><div className="b2b-stat-card-value b2b-money">{qty(prodStats.needQty)}</div></div>}
       </div>
 
       <div className="sm-between" style={{ marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
@@ -413,7 +414,7 @@ export default function InventoryPage() {
                         <span className="prod-prio-urg" style={{ background: u.bg, color: u.fg }}>{p.urgency}</span>
                       </div>
                       <div className="prod-prio-meta">
-                        <span className="prod-prio-qty">{Number(p.qty).toLocaleString()}개</span>
+                        <span className="prod-prio-qty">{qtyText(Number(p.qty))}</span>
                         <span className="prod-prio-when">{p.byWhen}</span>
                       </div>
                       <div className="prod-prio-reason">{p.reason}</div>
@@ -478,16 +479,16 @@ export default function InventoryPage() {
                     </button>
                   </td>
                   <td className="num b2b-money" style={{ fontWeight: 700 }} title={r.is_bundle ? "구성품으로 만들 수 있는 세트 수" : "오늘까지 원장 기준"}>
-                    {onHandOf(r).toLocaleString()}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
+                    {qty(onHandOf(r))}<span className="sm-faint" style={{ fontWeight: 400, marginLeft: 2 }}>{r.is_bundle ? "세트" : r.unit}</span>
                     {/* 소매 숫자 '아래' 줄로 — 옆에 붙이면 현재고가 두 값처럼 읽힌다(대표 지시). 입고 예정 셀의 '마감' 줄과 같은 방식 */}
-                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 12, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {r.promo_pool.toLocaleString()}</span>}
+                    {(r.promo_pool ?? 0) > 0 && <span style={{ display: "block", fontWeight: 400, fontSize: 12, color: "var(--sm-warning)" }} title="프로모션 칸 확보분 — 소매 계산(권장생산·부족)에는 들어가지 않습니다. 행사 물량은 제조사 요청서 수량에 직접 더합니다">+프로모션 {qty(r.promo_pool)}</span>}
                   </td>
                   {/* 출고 예정 = 오늘 뒤 거래일로 이미 뺀 출고(대개 발송예정일이 미래인 B2B 선점, 발주 전량). 현재고에는 안 들어가고
                       예상소진·부족·권장은 이 양까지 뺀 가용으로 판단한다(D1). 거래처·날짜별 내역은 마우스를 올려 본다 */}
                   {hasSched && (
                     <td className="num b2b-money" style={{ color: (r.scheduled_out ?? 0) > 0 ? "var(--sm-info)" : "var(--sm-text-light)" }}
-                      title={(r.scheduled_out ?? 0) > 0 ? `가용 ${r.qty.toLocaleString()} (현재고 − 출고 예정)${r.scheduled_detail ? `\n${r.scheduled_detail}` : ""}` : undefined}>
-                      {(r.scheduled_out ?? 0) > 0 ? `−${r.scheduled_out.toLocaleString()}` : "-"}
+                      title={(r.scheduled_out ?? 0) > 0 ? `가용 ${qty(r.qty)} (현재고 − 출고 예정)${r.scheduled_detail ? `\n${r.scheduled_detail}` : ""}` : undefined}>
+                      {(r.scheduled_out ?? 0) > 0 ? `−${qty(r.scheduled_out)}` : "-"}
                       {(r.scheduled_out ?? 0) > 0 && r.scheduled_first ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>{r.scheduled_first.slice(5)}부터</span> : null}
                     </td>
                   )}
@@ -506,7 +507,7 @@ export default function InventoryPage() {
                     const posDays = dep != null && r.daily_out > 0 ? Math.floor((r.qty + (r.inbound ?? 0)) / r.daily_out) : null;
                     const base = (r.scheduled_out ?? 0) > 0 ? "가용(현재고 − 출고 예정) 기준" : "창고 기준";
                     const tip = dep == null ? undefined : (r.inbound ?? 0) > 0
-                      ? `${base} ${dep}일 · 입고 예정 ${r.inbound.toLocaleString()} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? (channel === "도매" ? " — 판매 가능일 전에 바닥날 수 있음" : " — 입고 전에 바닥날 수 있음") : ""}`
+                      ? `${base} ${dep}일 · 입고 예정 ${qty(r.inbound)} 포함 시 ${posDays ?? "-"}일${r.inbound_due ? ` (마감 ${r.inbound_due.slice(5)}${inbDays != null ? (r.inbound_due < TODAY() ? ", 지남" : `, ${inbDays}일 뒤`) : ""})` : ""}${red ? (channel === "도매" ? " — 판매 가능일 전에 바닥날 수 있음" : " — 입고 전에 바닥날 수 있음") : ""}`
                       : `${base} ${dep}일`;
                     return <td className="num b2b-money" title={tip} style={{ color: dep == null ? "var(--sm-text-light)" : red ? "var(--sm-danger)" : "var(--sm-black)" }}>{dep == null ? "-" : `${dep}일`}</td>;
                   })()}
@@ -517,10 +518,10 @@ export default function InventoryPage() {
                     {(r.inbound ?? 0) > 0 ? r.inbound.toLocaleString() : "-"}
                     {(r.inbound ?? 0) > 0 && r.inbound_due ? <span className="sm-faint" style={{ display: "block", fontSize: 12 }}>마감 {r.inbound_due.slice(5)}{(r.inbound_overdue ?? 0) > 0 ? <span style={{ color: "var(--sm-warning)" }}> 지남</span> : null}</span> : null}
                   </td>}
-                  {!confirmedTab && <td className="num" title={pv.detail}>{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong>{pv.recommend.toLocaleString()}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>}
+                  {!confirmedTab && <td className="num" title={pv.detail}>{!pv.has ? <span className="sm-faint">-</span> : pv.recommend > 0 ? <strong>{qty(pv.recommend)}</strong> : <span style={{ color: "var(--sm-text-light)" }}>0</span>}</td>}
                   <td className="num b2b-money" style={{ color: r.period_in ? "var(--sm-success)" : "var(--sm-text-light)" }}>{r.period_in ? r.period_in.toLocaleString() : "-"}</td>
                   <td className="num b2b-money" style={{ color: r.period_out ? "var(--sm-info)" : "var(--sm-text-light)" }}>{r.period_out ? r.period_out.toLocaleString() : "-"}</td>
-                  <td className="num b2b-money">{r.value.toLocaleString()}</td>
+                  <td className="num b2b-money">{qty(r.value)}</td>
                   <td onClick={(e) => e.stopPropagation()}><button className="b2b-btn-secondary" style={{ padding: "4px 6px", fontSize: 12, whiteSpace: "nowrap" }} onClick={() => setModalFor(r.product_id)}>입·출·조정 기록</button></td>
                 </tr>
                 );
@@ -545,8 +546,8 @@ export default function InventoryPage() {
               <span className="b2b-modal-title">
                 변경 히스토리 — {historyFor.name}{historyFor.spec ? ` ${historyFor.spec}` : ""}
                 <span className="sm-faint" style={{ marginLeft: 10, fontSize: 12, fontWeight: 400 }}>
-                  현재고 {onHandOf(historyFor).toLocaleString()}{historyFor.is_bundle ? "세트" : historyFor.unit}
-                  {(historyFor.scheduled_out ?? 0) > 0 ? `, 출고 예정 ${historyFor.scheduled_out.toLocaleString()}` : ""}
+                  현재고 {qty(onHandOf(historyFor))}{historyFor.is_bundle ? "세트" : historyFor.unit}
+                  {(historyFor.scheduled_out ?? 0) > 0 ? `, 출고 예정 ${qty(historyFor.scheduled_out)}` : ""}
                 </span>
               </span>
               <button className="b2b-modal-close" aria-label="닫기" onClick={() => setHistoryFor(null)}>✕</button>
@@ -660,10 +661,10 @@ function ProductHistory({ productId }: { productId: string }) {
                   {t.pending && <span className="b2b-status-pill" style={{ marginLeft: 4, background: "var(--sm-warning-bg)", color: "var(--sm-warning)" }}>대기</span>}
                 </td>
                 <td>{ch ? <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span> : <span className="sm-faint">-</span>}</td>
-                <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
+                <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{qty(t.qty)}</td>
                 <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>
                   {complete && !t.pending
-                    ? <><span className="sm-faint">{t.before.toLocaleString()}</span> → <strong>{t.after.toLocaleString()}</strong></>
+                    ? <><span className="sm-faint">{qty(t.before)}</span> → <strong>{qty(t.after)}</strong></>
                     : <span className="sm-faint">-</span>}
                 </td>
                 <td>{t.partner || "-"}</td>
@@ -674,7 +675,7 @@ function ProductHistory({ productId }: { productId: string }) {
           })}
         </tbody>
       </table>
-      {!complete && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>이력이 {HISTORY_LIMIT.toLocaleString()}건 이상이라 재고 전후 표시는 생략했습니다.</p>}
+      {!complete && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>이력이 {qtyText(HISTORY_LIMIT, "건")} 이상이라 재고 전후 표시는 생략했습니다.</p>}
     </div>
   );
 }

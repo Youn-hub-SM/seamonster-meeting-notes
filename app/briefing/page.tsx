@@ -6,6 +6,7 @@ import { ComboBarLine, TrendChart, PIE_COLORS, moneyCompact } from "@/app/compon
 import { splitSections, tableKindOf, TOTAL_ROW, CAMPAIGN_TOP, VOICE_HEAD, INV_WATCH_HEAD, watchCells, tableRow, tableRule, splitRow, type ReportSection, type SectionKind } from "@/app/lib/report-sections";
 import { KPI_TONE_COLOR, pctTone, type ReportKpi, type KpiPill, type KpiTile } from "@/app/lib/report-kpi";
 import { INV_WATCH_COLOR, type InvWatchState } from "@/app/lib/inventory";
+import { qtyText, dateTime, dateRange } from "@/app/lib/format";
 
 // 종합 리포트(2026-09-30, 메뉴 기타) — 매출·광고 분석 에이전트(app/lib/analyst.ts, 주간·월간은 analyst-period.ts)의 리포트.
 //  일일·주간·월간 탭. 로그인한 모두가 보고 만들고 보낸다.
@@ -30,10 +31,6 @@ const SKIP_MSG: Record<string, string> = {
   "분석 진행 중": "분석이 진행 중입니다. 잠시 뒤 새로고침하세요.",
 };
 
-const dtKst = (iso: string) => {
-  try { return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }).slice(0, 16); }
-  catch { return iso.slice(0, 16).replace("T", " "); }
-};
 
 // ── 공용 조각 ──
 const Pill = ({ p, className }: { p: KpiPill; className?: string }) => (
@@ -143,7 +140,7 @@ function CampaignTable({ head, body }: { head: string[]; body: string[][] }) {
     <div className="brf-camp">
       <div className="brf-short"><Table head={head} body={[...rows.slice(0, CAMPAIGN_TOP), ...total]} rowClass={totalCls} /></div>
       <details className="brf-fold">
-        <summary>캠페인 전체 {rows.length}개</summary>
+        <summary>캠페인 전체 {qtyText(rows.length)}</summary>
         <Table head={head} body={body} rowClass={totalCls} />
       </details>
     </div>
@@ -208,7 +205,7 @@ function renderBody(lines: string[], o: BodyOpts): ReactNode[] {
         b = j - 1;
         out.push(
           <details key={`fold${blk.i}`} className="brf-fold" open={!o.hasCharts}>
-            <summary>구간별 표 {blk.body.length}구간</summary>
+            <summary>구간별 표 {qtyText(blk.body.length, "구간")}</summary>
             {group.map((g) => (g.t === "table" ? <Table key={g.i} head={g.head} body={g.body} /> : null))}
           </details>
         );
@@ -334,7 +331,7 @@ function ReportView({ md, kpi, charts }: { md: string; kpi: ReportKpi | null; ch
             <div className="brf-box-text brf-summary-text">{s.lines.map((l) => l.trim()).filter(Boolean).map((l, k) => <div key={k}>{bold(l.replace(/^-\s*/, ""))}</div>)}</div>
             {todo && todos.length > 0 && (
               <button type="button" className="b2b-status-pill brf-pill-btn brf-box-pill" style={{ background: KPI_TONE_COLOR.info.bg, color: KPI_TONE_COLOR.info.fg }} onClick={() => go(secId(todo, sections.indexOf(todo)))}>
-                확인할 것 {todos.length}건
+                확인할 것 {qtyText(todos.length, "건")}
               </button>
             )}
           </section>
@@ -344,7 +341,7 @@ function ReportView({ md, kpi, charts }: { md: string; kpi: ReportKpi | null; ch
         const rest = s.lines.map((l) => l.trim()).filter((l) => l && !/^-\s/.test(l));
         return (
           <section key={id} id={id} className="b2b-stat-card brf-box brf-sec">
-            <span className="brf-box-label">{s.heading} · {todos.length}건</span>
+            <span className="brf-box-label">{s.heading} · {qtyText(todos.length, "건")}</span>
             <div className="brf-box-text brf-md">
               {todos.length > 0 && <ol className="brf-todo-list">{todos.map((l, k) => <li key={k}>{bold(l)}</li>)}</ol>}
               {rest.map((l, k) => <div key={`r${k}`}>{bold(l)}</div>)}
@@ -399,8 +396,7 @@ const TABS: { key: Period; label: string }[] = [{ key: "daily", label: "일일" 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const shiftD = (ymd: string, n: number) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const mondayOf = (ymd: string) => shiftD(ymd, -((new Date(`${ymd}T00:00:00Z`).getUTCDay() + 6) % 7));
-const mdS = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
-const recentWeeks = () => { const last = shiftD(mondayOf(kstToday()), -7); return Array.from({ length: 12 }, (_, k) => { const s = shiftD(last, -7 * k); return { value: s, label: `${mdS(s)}~${mdS(shiftD(s, 6))}` }; }); };
+const recentWeeks = () => { const last = shiftD(mondayOf(kstToday()), -7); return Array.from({ length: 12 }, (_, k) => { const s = shiftD(last, -7 * k); return { value: s, label: dateRange(s, shiftD(s, 6)) }; }); };
 const recentMonths = () => Array.from({ length: 12 }, (_, k) => {
   const d = new Date(`${kstToday().slice(0, 8)}01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1 - k);
   const s = d.toISOString().slice(0, 10); return { value: s, label: `${s.slice(0, 4)}년 ${Number(s.slice(5, 7))}월` };
@@ -495,7 +491,7 @@ export default function SummaryReportPage() {
 
   // 보내기 — 메일(서버 sendReport, 일일 매출 리포트와 같은 수동 발송).
   async function send() {
-    if (report?.sent_current && report.sent_at && !(await confirmModal({ title: "리포트 다시 보내기", body: `이미 ${dtKst(report.sent_at)}에 보냈습니다. 같은 리포트가 메일로 한 번 더 나갑니다.`, action: "메일 보내기", danger: false }))) return;
+    if (report?.sent_current && report.sent_at && !(await confirmModal({ title: "리포트 다시 보내기", body: `이미 ${dateTime(report.sent_at)}에 보냈습니다. 같은 리포트가 메일로 한 번 더 나갑니다.`, action: "메일 보내기", danger: false }))) return;
     setBusy("send"); setError(""); setInfo("");
     try {
       const r = await fetch("/api/analyst", {
@@ -505,7 +501,7 @@ export default function SummaryReportPage() {
       const j = await r.json().catch(() => null);
       const s = (j?.sent ?? null) as SendRes | null;
       if (!r.ok || !j?.ok) throw new Error(j?.error || s?.error || "메일을 보내지 못했습니다. 아래 메일 설정을 확인하세요");
-      if (s?.mail?.ok) setInfo(`메일을 보냈습니다${s.mail.to ? `(${s.mail.to}명)` : ""}`);
+      if (s?.mail?.ok) setInfo(`메일을 보냈습니다${s.mail.to ? `(${qtyText(s.mail.to, "명")})` : ""}`);
     } catch (e) { setError(e instanceof Error ? e.message : "메일을 보내지 못했습니다. 아래 메일 설정을 확인하세요"); }
     await load(period, date);
     setBusy("");
@@ -546,7 +542,7 @@ export default function SummaryReportPage() {
   const unsent = hasReport && !report?.sent_current && !report?.running; // 지금 버전을 아직 안 보냈다(보낸 뒤 다시 분석한 경우 포함)
   const options = period === "weekly" ? recentWeeks() : period === "monthly" ? recentMonths() : [];
   const sentPill: KpiPill = report?.sent_at
-    ? (report.sent_current ? { text: `발송 ${dtKst(report.sent_at)}`, tone: "success" } : { text: `이전 버전 발송 ${dtKst(report.sent_at)}`, tone: "warning" })
+    ? (report.sent_current ? { text: `발송 ${dateTime(report.sent_at)}`, tone: "success" } : { text: `이전 버전 발송 ${dateTime(report.sent_at)}`, tone: "warning" })
     : { text: "발송 전", tone: "warning" };
 
   return (
@@ -597,10 +593,10 @@ export default function SummaryReportPage() {
           <div className="sm-faint brf-meta">
             <span>{label || report.report_date}</span>
             <span>{report.sales_ready ? "매출 반영" : period === "daily" ? "매출 없음(광고만)" : "마지막 날 매출 미반영"}</span>
-            <span>{TRIGGER_LABEL[report.trigger || ""] || report.trigger || ""} {dtKst(report.updated_at)}</span>
+            <span>{TRIGGER_LABEL[report.trigger || ""] || report.trigger || ""} {dateTime(report.updated_at)}</span>
             <Pill p={sentPill} />
             {admin && report.model ? <span>{report.model}</span> : null}
-            {admin && report.usage ? <span>조회 {report.usage.tool_calls}회 · 약 ${report.usage.est_usd}</span> : null}
+            {admin && report.usage ? <span>조회 {qtyText(report.usage.tool_calls, "회")} · 약 ${report.usage.est_usd}</span> : null}
           </div>
           {hasReport ? (
             <ReportView md={md} kpi={report.kpi ?? null} charts={placed ? charts : null} />
@@ -627,7 +623,7 @@ export default function SummaryReportPage() {
           <label className="b2b-field brf-settings-field">
             <span className="b2b-field-label">메일 수신자</span>
             <input className="b2b-input" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder={mailDefault.join(", ")} />
-            <span className="sm-faint brf-xs">비우면 일일 매출 리포트 수신자({mailDefault.length}명)</span>
+            <span className="sm-faint brf-xs">비우면 일일 매출 리포트 수신자({qtyText(mailDefault.length, "명")})</span>
           </label>
           {settingsLoaded && !smtpReady && <div className="sm-warn brf-banner">메일 서버(SALES_SMTP_*) 설정이 없습니다. Vercel 환경변수에 넣으세요</div>}
           <div className="sm-row brf-settings-row">

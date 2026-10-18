@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import ItemLabel from "@/app/components/ItemLabel";
+import { won, qty, qtyText, wonText, itemText, dateShort } from "@/app/lib/format";
 import {
   OrderListItem,
   OrderLinePreview,
@@ -23,8 +25,6 @@ import {
   SHIPMENT_STATUSES,
   ShipmentStatus,
   ShipmentDatePreview,
-  formatMoney,
-  formatQty,
   isOrderComplete,
   orderUrgency,
   shipView,
@@ -364,7 +364,7 @@ export default function OrdersListPage() {
       }] : []),
       {
         key: "ship", label: "오늘 발송", rows: shipToday,
-        hint: shipLeft === 0 ? "모두 발송완료" : shipDone.length > 0 ? `${shipDone.length}건 완료 · ${shipLeft}건 남음` : `${shipLeft}건 남음`,
+        hint: shipLeft === 0 ? "모두 발송완료" : shipDone.length > 0 ? `${qtyText(shipDone.length, "건")} 완료 · ${qtyText(shipLeft, "건")} 남음` : `${qtyText(shipLeft, "건")} 남음`,
         tone: shipLeft === 0 ? "var(--sm-success)" : "var(--sm-orange)",
       },
       { key: "unscheduled", label: "발송일정 미등록", rows: unscheduled, hint: "", tone: "var(--sm-warning)" },
@@ -373,7 +373,7 @@ export default function OrdersListPage() {
         hint: "", tone: "var(--sm-warning)",
       }] : []),
       { key: "invoice", label: "계산서 미발행", rows: needInvoice, hint: "", tone: "var(--sm-info)" },
-      { key: "pay", label: "입금 대기", rows: needPay, hint: unpaidTotal > 0 ? `${formatMoney(unpaidTotal)}원` : "", tone: "var(--sm-danger)" },
+      { key: "pay", label: "입금 대기", rows: needPay, hint: unpaidTotal > 0 ? wonText(unpaidTotal) : "", tone: "var(--sm-danger)" },
     ];
   }, [orders, today]);
 
@@ -837,8 +837,8 @@ export default function OrdersListPage() {
       if (!ids.length) return;
     }
     if (!(await confirmModal({
-      title: `발주 ${ids.length}건 상태 변경`,
-      body: `선택한 발주 ${ids.length}건의 상태가 "${newStatus}" 로 바뀝니다.`,
+      title: `발주 ${qtyText(ids.length, "건")} 상태 변경`,
+      body: `선택한 발주 ${qtyText(ids.length, "건")}의 상태가 "${newStatus}" 로 바뀝니다.`,
       action: newStatus === "취소" ? "취소 처리" : `${newStatus}로 변경`,
       danger: newStatus === "취소",
     }))) return;
@@ -848,7 +848,7 @@ export default function OrdersListPage() {
       const shippedSel = orders.filter((o) => ids.includes(o.id) && isShippedOrder(o));
       if (shippedSel.length) {
         const names = shippedSel.slice(0, 3).map((o) => o.company_name || o.order_no).join(", ");
-        const ans = await askReturned(`발송된 발주 ${shippedSel.length}건 — ${names}${shippedSel.length > 3 ? ` 외 ${shippedSel.length - 3}건` : ""}`);
+        const ans = await askReturned(`발송된 발주 ${qtyText(shippedSel.length, "건")} — ${names}${shippedSel.length > 3 ? ` 외 ${qtyText(shippedSel.length - 3, "건")}` : ""}`);
         if (ans === null) return;
         returned = ans;
       }
@@ -856,7 +856,7 @@ export default function OrdersListPage() {
     // 저장 중인 발주는 이번 일괄 변경에서 뺀다 — 응답 전에 같은 발주로 또 보내지 않는다
     const busyCount = ids.filter((id) => busyRef.current.has(id)).length;
     const runIds = ids.filter((id) => !busyRef.current.has(id));
-    const note = [skipMsg, busyCount ? `저장 중인 발주 ${busyCount}건은 뺐습니다 — 끝난 뒤 다시 시도하세요.` : ""].filter(Boolean).join(" / ");
+    const note = [skipMsg, busyCount ? `저장 중인 발주 ${qtyText(busyCount, "건")}은 뺐습니다 — 끝난 뒤 다시 시도하세요.` : ""].filter(Boolean).join(" / ");
     if (!runIds.length) { setError(note); return; }
     lockOrders(runIds);
     setBulkSaving(true);
@@ -892,7 +892,7 @@ export default function OrdersListPage() {
         // 실패 건만 원래 값으로 되돌린다 — 성공한 건은 서버에 이미 반영됐다
         const before = new Map(snapshot.map((o) => [o.id, o]));
         setOrders((prev) => prev.map((o) => (failedIds.has(o.id) ? before.get(o.id) ?? o : o)));
-        setError([`${errors.length}건을 변경하지 못했습니다 — ${errors[0]}. 그 발주는 개별로 바꾸세요`, note].filter(Boolean).join(" / "));
+        setError([`${qtyText(errors.length, "건")}을 변경하지 못했습니다 — ${errors[0]}. 그 발주는 개별로 바꾸세요`, note].filter(Boolean).join(" / "));
       } else {
         setSelected(new Set());
         pingActivityFeed();
@@ -1116,12 +1116,12 @@ export default function OrdersListPage() {
         <div className="b2b-urgency-banner">
           {urgencyCount.overdue > 0 && (
             <span className="b2b-urgency-pill is-overdue">
-              지연 {urgencyCount.overdue}건
+              지연 {qtyText(urgencyCount.overdue, "건")}
             </span>
           )}
           {urgencyCount.urgent > 0 && (
             <span className="b2b-urgency-pill is-urgent">
-              임박 {urgencyCount.urgent}건
+              임박 {qtyText(urgencyCount.urgent, "건")}
             </span>
           )}
         </div>
@@ -1153,7 +1153,7 @@ export default function OrdersListPage() {
             >
               <div className="b2b-stat-card-label" style={{ color: none ? undefined : t.tone }}>{t.label}</div>
               <div className="b2b-stat-card-value" style={{ marginTop: 6, fontSize: none ? 17 : 27, color: none ? "var(--sm-text-light)" : t.tone }}>
-                {none ? "없음" : `${t.rows.length}건`}
+                {none ? "없음" : qtyText(t.rows.length, "건")}
               </div>
               {!none && t.hint && <div className="b2b-stat-card-hint">{t.hint}</div>}
             </button>
@@ -1164,7 +1164,7 @@ export default function OrdersListPage() {
       {taskPick && (
         <div className="sm-row" style={{ gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
           <span className="b2b-status-pill" style={{ background: "var(--sm-orange-light)", color: "var(--sm-orange)" }}>
-            {taskPick.label} {taskPick.ids.size}건만 보는 중
+            {taskPick.label} {qtyText(taskPick.ids.size, "건")}만 보는 중
           </span>
           <button type="button" className="b2b-link-btn" style={{ fontSize: 12 }} onClick={() => setTaskPick(null)}>전체 보기</button>
         </div>
@@ -1266,7 +1266,7 @@ export default function OrdersListPage() {
             </button>
           )}
           <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--sm-text-light)" }}>
-            {filtered.length}건
+            {qtyText(filtered.length, "건")}
           </span>
         </div>
 
@@ -1293,7 +1293,7 @@ export default function OrdersListPage() {
               // 안내문이 한 줄에 눌리지 않도록 이 바만 줄바꿈 허용 (.b2b-selection-bar 는 공용이라 CSS 를 건드리지 않는다)
               <div className="b2b-selection-bar" style={{ flexWrap: "wrap", rowGap: 8 }}>
                 <span>
-                  <strong>{selected.size}건</strong> 선택됨
+                  <strong>{qtyText(selected.size, "건")}</strong> 선택됨
                 </span>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <select
@@ -1362,7 +1362,7 @@ export default function OrdersListPage() {
                   <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
                   <th className="b2b-col-date" style={{ width: 104 }}>발송일</th>
-                  <th className="num" style={{ width: 84 }}>합계</th>
+                  <th className="num" style={{ width: 84 }}>합계(원)</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-status">생산</th>}
                   <th className="b2b-col-status">발송</th>
                   <th className="b2b-col-status">입금</th>
@@ -1454,7 +1454,7 @@ export default function OrdersListPage() {
                         </td>
                       )}
                       <RowCell href={`/b2b/orders/${o.id}`} className="num b2b-money">
-                        {formatMoney(o.total)}
+                        {won(o.total)}
                       </RowCell>
                       {SHOW_ORDER_PRODUCTION && (
                       <td onClick={(e) => e.stopPropagation()}>
@@ -1560,8 +1560,8 @@ export default function OrdersListPage() {
                               <span style={{ fontSize: 12 }}>{s.ship_date || "날짜 미정"}</span>
                               {s.items.length > 0 && (
                                 <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
-                                  {s.items.slice(0, 2).map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`).join(", ")}
-                                  {s.items.length > 2 ? ` 외 ${s.items.length - 2}종` : ""}
+                                  {s.items.slice(0, 2).map((it) => itemText({ name: it.product_name, spec: it.spec, qty: it.qty })).join(", ")}
+                                  {s.items.length > 2 ? ` 외 ${qtyText(s.items.length - 2, "종")}` : ""}
                                 </span>
                               )}
                             </Link>
@@ -1624,8 +1624,8 @@ export default function OrdersListPage() {
                         <UnlinkedNote o={o} />
                       </div>
                       <div className="b2b-order-card-dates">
-                        <span><em>발주</em>{o.order_date?.slice(5) || "-"}</span>
-                        {SHOW_ORDER_PRODUCTION && <span><em>생산</em>{o.production_date?.slice(5) || "-"}</span>}
+                        <span><em>발주</em>{dateShort(o.order_date)}</span>
+                        {SHOW_ORDER_PRODUCTION && <span><em>생산</em>{dateShort(o.production_date)}</span>}
                         {/* 카드 전체가 상세로 가는 링크라 눌림을 여기서 끊는다 — 안 그러면 창 대신 상세가 열린다.
                             손가락으로 누르는 화면이라 글자보다 넉넉한 영역을 준다. */}
                         <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
@@ -1633,13 +1633,13 @@ export default function OrdersListPage() {
                           <button type="button" className="b2b-link-btn"
                             style={{ fontSize: "inherit", padding: "4px 2px", margin: "-4px 0" }}
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); openShipPrompt(o.id, o.company_name || o.order_no); }}>
-                            {parent ? `${(o.shipments ?? []).length}차 일정 수정` : o.ship_date ? o.ship_date.slice(5) : "+ 발송일 등록"}
-                            {(o.remaining_total ?? 0) > 0 ? ` (${formatQty(o.remaining_total)}개 남음)` : ""}
+                            {parent ? `${(o.shipments ?? []).length}차 일정 수정` : o.ship_date ? dateShort(o.ship_date) : "+ 발송일 등록"}
+                            {(o.remaining_total ?? 0) > 0 ? ` (${qtyText(o.remaining_total)} 남음)` : ""}
                           </button>
                         </span>
                       </div>
                       <div className="b2b-order-card-foot">
-                        <span className="b2b-order-card-total">{formatMoney(o.total)}원</span>
+                        <span className="b2b-order-card-total">{wonText(o.total)}</span>
                         <div className="b2b-order-card-pills">
                           {SHOW_ORDER_PRODUCTION && (
                           <span className="b2b-status-pill" style={{ background: PRODUCTION_COLORS[o.production_status]?.bg, color: PRODUCTION_COLORS[o.production_status]?.fg }}>
@@ -1673,10 +1673,10 @@ export default function OrdersListPage() {
                         {(o.shipments ?? []).map((s) => (
                           <div key={s.id} className="b2b-order-card-child">
                             <span style={{ color: "var(--sm-text-light)", fontSize: 12, whiteSpace: "nowrap" }}>└ {s.seq}차</span>
-                            <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>{s.ship_date?.slice(5) || "날짜미정"}</span>
+                            <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>{s.ship_date ? dateShort(s.ship_date) : "날짜미정"}</span>
                             {s.items.length > 0 && (
                               <span style={{ fontSize: 12, color: "var(--sm-text-mid)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
-                                {s.items.map((it) => `${it.product_name}${it.spec ? ` ${it.spec}` : ""}×${formatQty(it.qty)}`).join(", ")}
+                                {s.items.map((it) => itemText({ name: it.product_name, spec: it.spec, qty: it.qty })).join(", ")}
                               </span>
                             )}
                             <select
@@ -1788,8 +1788,8 @@ export default function OrdersListPage() {
                           {shipItems.map((it, oi) => (
                             <div key={oi} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span style={{ flex: 1, minWidth: 0, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {it.product_name}{it.spec ? ` · ${it.spec}` : ""}
-                                <span className="sm-faint" style={{ marginLeft: 6 }}>(주문 {it.qty})</span>
+                                <ItemLabel name={it.product_name} spec={it.spec} />
+                                <span className="sm-faint" style={{ marginLeft: 6 }}>(주문 {qty(it.qty)})</span>
                               </span>
                               <input type="number" inputMode="numeric" min={0} className="b2b-input" placeholder="0"
                                 style={{ width: 90, textAlign: "right", ...(isKeptCancelRow(r) ? { background: "var(--sm-bg-subtle)" } : {}) }}
@@ -1810,7 +1810,7 @@ export default function OrdersListPage() {
                   )}
                   {shipAlloc.remain.length > 0 && (
                     <div style={{ fontSize: 12, padding: "8px 10px", background: "var(--sm-bg-subtle)", border: "1px solid var(--sm-border)", borderRadius: 8, lineHeight: 1.6 }}>
-                      <strong>남은 수량</strong> {shipAlloc.remain.map((x) => `${x.label} ${formatQty(x.qty)}개`).join(" · ")}
+                      <strong>남은 수량</strong> {shipAlloc.remain.map((x) => `${x.label} ${qtyText(x.qty)}`).join(" · ")}
                       <span className="sm-faint" style={{ display: "block" }}>발송일 미정</span>
                     </div>
                   )}
@@ -1999,7 +1999,7 @@ function CheckFilter<T extends string>({
   }, [open]);
 
   const all = options.every((o) => selected.has(o));
-  const summary = all ? "전체" : selected.size === 0 ? "없음" : `${selected.size}개`;
+  const summary = all ? "전체" : selected.size === 0 ? "없음" : qtyText(selected.size);
 
   function toggle(o: T) {
     const next = new Set(selected);
@@ -2070,11 +2070,10 @@ function isPickable(s: ShipmentExportOption): boolean {
 function shipmentSummary(s: ShipmentExportOption, fallback: ExportLineItem[]): string {
   const list = s.items.length > 0 ? s.items : fallback;
   if (list.length === 0) return "(상품 없음)";
-  const label = (it: ExportLineItem) =>
-    `${it.product_name}${it.spec ? ` ${it.spec}` : ""} ×${formatQty(it.qty)}`;
+  const label = (it: ExportLineItem) => itemText({ name: it.product_name, spec: it.spec, qty: it.qty });
   const head = list.slice(0, 2).map(label).join(", ");
   const rest = list.length - Math.min(2, list.length);
-  const base = rest > 0 ? `${head} 외 ${rest}종` : head;
+  const base = rest > 0 ? `${head} 외 ${qtyText(rest, "종")}` : head;
   return s.items.length === 0 ? `${base} · 전체상품` : base;
 }
 
@@ -2215,7 +2214,7 @@ function ExportPickModal({
 
         <div className="b2b-modal-foot">
           <span style={{ fontSize: 12, color: "var(--sm-text-mid)" }}>
-            <strong>{totalSelected}건</strong> 발송 선택됨
+            <strong>{qtyText(totalSelected, "건")}</strong> 발송 선택됨
           </span>
           <div className="b2b-modal-foot-right">
             <button type="button" className="b2b-btn-secondary" onClick={onClose}>
@@ -2308,7 +2307,7 @@ function RemainLink({ o, onOpen }: { o: OrderListItem; onOpen: () => void }) {
     <button type="button" className="b2b-link-btn" onClick={onOpen}
       style={{ display: "block", fontSize: 12, color: "var(--sm-warning)", marginTop: 2 }}
       title="남은 수량 — 고객이 원할 때 발송일 추가">
-      {formatQty(n)}개 남음, 발송일 미정
+      {qtyText(n)} 남음, 발송일 미정
     </button>
   );
 }
@@ -2326,7 +2325,7 @@ function UnlinkedNote({ o }: { o: OrderListItem }) {
   );
 }
 
-// 품목 미리보기 — 발주 상품을 "품목명 옵션 ×수량" 으로 나열, 많으면 외 N
+// 품목 미리보기 — 발주 상품을 ItemLabel('상품명 · 규격 ×수량') 로 나열, 많으면 외 N. '남음' 은 그 뒤에 덧붙인다.
 function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
   if (!items || items.length === 0) {
     return <span className="sm-faint">-</span>;
@@ -2338,14 +2337,12 @@ function ItemsPreview({ items }: { items: OrderLinePreview[] }) {
     <div className="sm-col" style={{ gap: 2, lineHeight: 1.45 }}>
       {shown.map((it, i) => (
         <span key={i} className="sm-nowrap">
-          {it.product_name}
-          {it.spec ? <span className="sm-faint"> · {it.spec}</span> : ""}
-          <span className="sm-muted"> ×{it.qty}</span>
-          {(it.remaining ?? 0) > 0 && <span style={{ color: "var(--sm-warning)", fontSize: 12 }}> · {formatQty(it.remaining)} 남음</span>}
+          <ItemLabel name={it.product_name} spec={it.spec} qty={it.qty} />
+          {(it.remaining ?? 0) > 0 && <span style={{ color: "var(--sm-warning)", fontSize: 12 }}> · {qtyText(it.remaining)} 남음</span>}
         </span>
       ))}
       {rest > 0 && (
-        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>외 {rest}종</span>
+        <span style={{ fontSize: 12, color: "var(--sm-text-light)" }}>외 {qtyText(rest, "종")}</span>
       )}
     </div>
   );

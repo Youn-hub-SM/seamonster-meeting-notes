@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { dateTime } from "@/app/lib/format";
 
 // 다른 컴포넌트(발주 목록·입금 모달 등)에서 상태를 바꾼 직후
 // 이 함수를 호출하면 최근 변경 피드가 즉시 새로고침됨.
@@ -155,7 +156,7 @@ export default function ActivityFeed() {
                       <span className="b2b-feed-summary">{a.summary}</span>
                       <span className="b2b-feed-time">
                         {a.actor ? `${a.actor} · ` : ""}
-                        {formatTime(a.created_at)}
+                        {dateTime(a.created_at)}
                       </span>
                     </>
                   );
@@ -184,12 +185,4 @@ export default function ActivityFeed() {
   );
 }
 
-// 절대 시간: "6월 8일 14:30" (24시간제)
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const month = d.getMonth() + 1;
-  const day = d.getDate();
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${month}월 ${day}일 ${hh}:${mm}`;
-}
+// 절대 시간은 공용 dateTime('YYYY-MM-DD HH:mm', KST) — 2026-10-17 표기 규율.

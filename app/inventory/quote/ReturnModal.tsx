@@ -5,6 +5,7 @@ import IconButton from "@/app/components/IconButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { useConfirm } from "@/app/components/Feedback";
+import { qty as fmtQty, qtyText } from "@/app/lib/format"; // qty 는 입력 상태 이름과 겹쳐 별칭
 
 // 제조사 반품 입력 — 재고목록의 '입출조정' 창과 같은 짜임(직접 입력 / 엑셀 업로드 탭 + 미리보기).
 //  반품 기록 자체는 재고를 건드리지 않는다(087) — 매입 결산에서 매입수량을 깎는 기록이다.
@@ -181,7 +182,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
       }
     } catch (e) { setError(e instanceof Error ? e.message : "출고를 기록하지 못했습니다. [입고 및 출고] 목록에서 기록됐는지 먼저 확인하세요."); }
     finally { busyRef.current = null; }
-    if (done) setOutDone(`재고에서 뺐습니다 — 출고 ${done}건(사유 제조사 반품).`);
+    if (done) setOutDone(`재고에서 뺐습니다 — 출고 ${qtyText(done, "건")}(사유 제조사 반품).`);
     setOutBusy(false);
   }
 
@@ -286,7 +287,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             return (
             <div className="sm-warn" style={{ marginBottom: 10 }}>
               <div className="sm-between" style={{ gap: 8, flexWrap: "wrap" }}>
-                <span>실물을 보냈으면 소매 재고에서 {rowsAll.length === 1 ? `${rowsAll[0].name} ${rowsAll[0].qty.toLocaleString()}` : `${rowsAll.length}품목`} 출고(사유 제조사 반품, 반품일)</span>
+                <span>실물을 보냈으면 소매 재고에서 {rowsAll.length === 1 ? `${rowsAll[0].name} ${fmtQty(rowsAll[0].qty)}` : `${rowsAll.length}품목`} 출고(사유 제조사 반품, 반품일)</span>
                 <span className="sm-row" style={{ gap: 6 }}>
                   <button className="b2b-btn-secondary" onClick={() => setPending((prev) => prev.filter((p) => p.held))} disabled={outBusy}>건너뛰기</button>
                   <button className="b2b-btn-primary" onClick={() => recordOutflow(false)} disabled={outBusy || !!removingId}>{outBusy ? "기록 중..." : "재고에서도 빼기"}</button>
@@ -297,7 +298,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
           })()}
           {pending.some((p) => p.held) && (() => {
             const heldRows = pending.filter((p) => p.held).flatMap((p) => p.rows);
-            const list = heldRows.slice(0, 3).map((r) => `${r.name} ${r.qty.toLocaleString()}(실사 ${String(r.countDate || "").slice(5)})`).join(", ");
+            const list = heldRows.slice(0, 3).map((r) => `${r.name} ${fmtQty(r.qty)}(실사 ${String(r.countDate || "").slice(5)})`).join(", ");
             return (
             <div className="sm-warn" style={{ marginBottom: 10 }}>
               <div className="sm-between" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -317,10 +318,10 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
             preview ? (
               <div>
                 <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
-                  <span>반영 가능 <strong style={{ color: "var(--sm-danger)" }}>{preview.valid.toLocaleString()}</strong>건</span>
-                  {!!preview.merged && <span className="sm-faint">중복 SKU {preview.merged}건 합산됨</span>}
-                  {!!preview.skipped && <span className="sm-faint">미입력 {preview.skipped.toLocaleString()}행 건너뜀</span>}
-                  {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.errCount}건(제외)</span>}
+                  <span>반영 가능 <strong style={{ color: "var(--sm-danger)" }}>{fmtQty(preview.valid)}</strong>건</span>
+                  {!!preview.merged && <span className="sm-faint">중복 SKU {qtyText(preview.merged, "건")} 합산됨</span>}
+                  {!!preview.skipped && <span className="sm-faint">미입력 {qtyText(preview.skipped, "행")} 건너뜀</span>}
+                  {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {qtyText(preview.errCount, "건")}(제외)</span>}
                 </div>
                 {preview.rows.length === 0 ? (
                   <div className="b2b-empty" style={{ padding: 20 }}>매칭된 품목이 없습니다. SKU 열을 확인해 파일을 다시 선택하세요.</div>
@@ -333,21 +334,21 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                           <tr key={i}>
                             <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</td>
                             <td className="sm-faint">{r.sku || "-"}</td>
-                            <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>{r.qty.toLocaleString()}</td>
+                            <td className="num b2b-money" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>{fmtQty(r.qty)}</td>
                             <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "매입가"}</td>
                             <td className="sm-faint">{r.memo || "-"}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
+                    {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {qtyText(preview.rows.length - 300, "건")}(전체 반영됩니다)</p>}
                   </div>
                 )}
                 {preview.errors.length > 0 && (
                   <section>
                     <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
                     <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 130, overflow: "auto" }}>
-                      {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
+                      {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
                     </ul>
                   </section>
                 )}
@@ -382,9 +383,9 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
               </div>
               {product && (
                 <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>
-                  {product.qty > 0 ? <>{mm}월 매입 <strong>{product.qty.toLocaleString()}</strong></>
+                  {product.qty > 0 ? <>{mm}월 매입 <strong>{fmtQty(product.qty)}</strong></>
                     : <>{mm}월 매입 없음</>}
-                  {alreadyReturned > 0 && <>, 이미 반품 <strong style={{ color: "var(--sm-danger)" }}>{alreadyReturned.toLocaleString()}</strong></>}
+                  {alreadyReturned > 0 && <>, 이미 반품 <strong style={{ color: "var(--sm-danger)" }}>{fmtQty(alreadyReturned)}</strong></>}
                 </p>
               )}
 
@@ -414,7 +415,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
               <div style={{ marginTop: 16, borderTop: "1px solid var(--sm-border)", paddingTop: 12 }}>
                 <div className="sm-between" style={{ marginBottom: 6 }}>
                   <strong style={{ fontSize: 13 }}>{mm}월 반품 내역</strong>
-                  {rows.length > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>{rows.length}건 {totalQty.toLocaleString()}개</span>}
+                  {rows.length > 0 && <span className="sm-faint" style={{ fontSize: 12 }}>{qtyText(rows.length, "건")} {qtyText(totalQty)}</span>}
                 </div>
                 {listLoading ? <div className="b2b-loading">불러오는 중...</div>
                   : rows.length === 0 ? <p className="sm-faint" style={{ fontSize: 12 }}>아직 없습니다. 위에서 반품을 기록하세요.</p>
@@ -427,7 +428,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                             <tr key={r.id}>
                               <td data-label="날짜" style={{ whiteSpace: "nowrap" }}>{r.return_date.slice(5)}</td>
                               <td data-label="품목" style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.memo || ""}>{r.name}</td>
-                              <td data-label="수량" className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 700 }}>{r.qty.toLocaleString()}</td>
+                              <td data-label="수량" className="num b2b-money" style={{ color: "var(--sm-danger)", fontWeight: 700 }}>{fmtQty(r.qty)}</td>
                               <td data-label="단가" className="num b2b-money">{r.unit_amount ? won(r.unit_amount) : <span className="sm-faint">매입가</span>}</td>
                               <td className="actions">
                                 <IconButton className="is-danger" label="삭제" onClick={() => remove(r.id)} disabled={outBusy || !!removingId}>{removingId === r.id ? "..." : "✕"}</IconButton>
@@ -457,7 +458,7 @@ export default function ReturnModal({ month, onClose, onSaved }: { month: string
                 <>
                   {preview.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 선택하세요</span>}
                   <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.valid === 0 || outBusy}>
-                    {applying ? "반영 중..." : `${preview.valid.toLocaleString()}건 반영`}
+                    {applying ? "반영 중..." : `${qtyText(preview.valid, "건")} 반영`}
                   </button>
                 </>
               ) : (

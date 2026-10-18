@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import IconButton from "@/app/components/IconButton";
+import { qty, dateFull, dateTime } from "@/app/lib/format";
 
 // 인스타 자동 DM — 특정 게시물에 댓글이 달리면(선택: 키워드) 그 작성자에게 1회 DM(Private Reply).
 //  계정 3개 운영 · 규칙별 켜고 끄는 일정(start/end) · 브랜드링크(link.seamonster.kr)면 클릭수 자동 집계.
@@ -32,7 +33,6 @@ const isoToLocal = (iso: string | null) => {
   return new Date(t + 9 * 3600e3).toISOString().slice(0, 16);
 };
 const localToIso = (local: string) => (local ? `${local}:00+09:00` : null);
-const fmtKst = (iso: string | null) => (iso ? isoToLocal(iso).replace("T", " ") : "");
 
 export default function InstagramDmPage() {
   const [info, setInfo] = useState<AccountsRes | null>(null);
@@ -201,7 +201,7 @@ export default function InstagramDmPage() {
           {(info?.accounts || []).map((a) => (
             <div key={a.igUserId} className="ig-account">
               <span className="ig-account-name">@{a.username}</span>
-              <span className="sm-faint ig-account-meta">{a.tokenMasked} · 토큰 {fmtKst(a.updatedAt).slice(0, 10)}</span>
+              <span className="sm-faint ig-account-meta">{a.tokenMasked} · 토큰 {dateFull(a.updatedAt)}</span>
               <button className="b2b-btn-secondary ig-btn-sm" onClick={() => subscribe(a.igUserId)} disabled={busy}>웹훅 구독</button>
               <IconButton label="연결 해제" onClick={() => removeAccount(a)}>✕</IconButton>
             </div>
@@ -244,11 +244,11 @@ export default function InstagramDmPage() {
                       <td>{r.keyword || <span className="sm-faint">모든 댓글</span>}</td>
                       <td className="ig-col-sched">
                         {r.start_at || r.end_at
-                          ? <span className="ig-sched">{fmtKst(r.start_at) || "즉시"} ~ {fmtKst(r.end_at) || "계속"}</span>
+                          ? <span className="ig-sched">{r.start_at ? dateTime(r.start_at) : "즉시"} ~ {r.end_at ? dateTime(r.end_at) : "계속"}</span>
                           : <span className="sm-faint">상시</span>}
                       </td>
-                      <td className="num b2b-money">{r.sent}{r.failed > 0 && <span className="ig-failed" title="실패">+{r.failed}실패</span>}</td>
-                      <td className="num b2b-money">{r.clicks == null ? <span className="sm-faint" title="브랜드링크(link.seamonster.kr)를 쓰면 클릭이 집계됩니다">-</span> : r.clicks}</td>
+                      <td className="num b2b-money">{qty(r.sent)}{r.failed > 0 && <span className="ig-failed" title="실패">+{qty(r.failed)}실패</span>}</td>
+                      <td className="num b2b-money">{r.clicks == null ? <span className="sm-faint" title="브랜드링크(link.seamonster.kr)를 쓰면 클릭이 집계됩니다">-</span> : qty(r.clicks)}</td>
                       <td className="actions ig-cell-nowrap">
                         <button className="b2b-btn-secondary ig-btn-sm" onClick={() => toggleRule(r)}>{r.active ? "끄기" : "켜기"}</button>
                         <button className="b2b-btn-secondary ig-btn-sm" onClick={() => openEdit(r)}>규칙 편집</button>
@@ -273,7 +273,7 @@ export default function InstagramDmPage() {
               <tbody>
                 {logs.map((l) => (
                   <tr key={l.id}>
-                    <td className="ig-cell-nowrap">{fmtKst(l.created_at)}</td>
+                    <td className="ig-cell-nowrap">{dateTime(l.created_at)}</td>
                     <td className="ig-cell-nowrap">@{accName(l.ig_user_id)}</td>
                     <td className="ig-col-media">{l.rule_caption}</td>
                     <td className="ig-cell-nowrap">@{l.commenter_username}</td>

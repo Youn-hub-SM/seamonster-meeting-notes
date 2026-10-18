@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { dateFull, dateRange } from "@/app/lib/format";
 import {
   OrderListItem,
   STATUS_COLORS,
@@ -53,8 +54,7 @@ export default function CalendarView({
     if (isMobile) {
       const start = addDaysDate(weekStart, -7);
       const end = addDaysDate(weekStart, 13);
-      const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
-      return `${fmt(start)} ~ ${fmt(end)}`;
+      return dateRange(dateFull(start), dateFull(end));
     }
     return `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`;
   }, [isMobile, weekStart, cursor]);

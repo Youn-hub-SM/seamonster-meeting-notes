@@ -2,13 +2,13 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { qtyText, wonText, dateShort } from "@/app/lib/format";
 import {
   OrderListItem,
   STATUS_COLORS,
   STATUS_SHORT,
   SHIPMENT_STATUS_COLORS,
   ShipmentStatus,
-  formatMoney,
   orderUrgency,
   URGENCY_LABEL,
 } from "@/app/lib/b2b-orders";
@@ -62,8 +62,8 @@ export default function WeeklyView({
                 {isCurrent && <span className="b2b-week-badge">이번 주</span>}
               </div>
               <div className="b2b-week-totals">
-                <span><em>발송</em><strong>{w.rows.length}건</strong></span>
-                <span><em>합계</em><strong className="b2b-money">{formatMoney(w.total)}원</strong></span>
+                <span><em>발송</em><strong>{qtyText(w.rows.length, "건")}</strong></span>
+                <span><em>합계</em><strong className="b2b-money">{wonText(w.total)}</strong></span>
               </div>
             </div>
 
@@ -81,7 +81,7 @@ export default function WeeklyView({
                     className={`b2b-week-row ${urgency !== "normal" ? `is-${urgency}` : ""}`}
                   >
                     <span className="b2b-week-row-date">
-                      {r.ship_date ? r.ship_date.slice(5) : "-"}
+                      {dateShort(r.ship_date)}
                       {urgency !== "normal" && (
                         <span className={`b2b-urgency-pill is-${urgency}`} style={{ marginLeft: 6 }}>
                           {URGENCY_LABEL[urgency]}
@@ -90,7 +90,7 @@ export default function WeeklyView({
                     </span>
                     <span className="b2b-week-row-company">{o.company_name}</span>
                     <span className="b2b-week-row-no">{o.order_no}</span>
-                    <span className="b2b-week-row-total b2b-money">{formatMoney(o.total)}원</span>
+                    <span className="b2b-week-row-total b2b-money">{wonText(o.total)}</span>
                     <span
                       className="b2b-status-pill"
                       style={{ background: badge.colors?.bg, color: badge.colors?.fg }}

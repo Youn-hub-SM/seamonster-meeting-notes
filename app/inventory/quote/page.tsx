@@ -6,6 +6,7 @@ import type { QuoteItem, QuoteSummary } from "@/app/lib/inventory-quote";
 import ReturnModal from "./ReturnModal";
 import QuoteSheet from "./QuoteSheet";
 import { useConfirm } from "@/app/components/Feedback";
+import { qty } from "@/app/lib/format";
 
 const THIS_MONTH = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 7);
 const won = (n: number) => Math.round(n).toLocaleString();
@@ -155,7 +156,7 @@ export default function QuotePage() {
     if (snap.month !== ym || data?.month !== ym) return [];
     const c = snap.summary; const d: string[] = [];
     const cmp = (label: string, a: number, b: number, unit = "") => {
-      if (Math.round(a) !== Math.round(b)) d.push(`${label} ${a.toLocaleString()}${unit} → ${b.toLocaleString()}${unit}`);
+      if (Math.round(a) !== Math.round(b)) d.push(`${label} ${qty(a)}${unit} → ${qty(b)}${unit}`);
     };
     cmp("품목", c.itemCount, s.itemCount, "종");
     cmp("매입수량", c.totalQty, s.totalQty, "개");

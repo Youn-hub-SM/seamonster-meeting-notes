@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { scheduleHorizon, kstTodayIso, type ScheduleHorizon } from "@/app/lib/production-schedule";
+import { dateShort } from "@/app/lib/format";
 
 // 설정 · 기타 — 거래명세표 공급자 정보 + 권장생산 목표 기간(생산 일정 기반, 읽기 전용) + 발송완료 매출 반영 안내.
 //  2026-08-24 설정 재구성: 알림 카드들은 'Teams 연동'(/b2b/settings/teams)으로 이동.
@@ -106,8 +107,8 @@ export default function SettingsEtcPage() {
           생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8
         </p>
         {sched && <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
-          <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {sched.nextDraft.slice(5)} 요청분 판매 가능일 {sched.nextSellable.slice(5)})</li>
-          <li><strong>부족</strong> = 현재고 + 입고 예정이 하루 출고 × <strong>{sched.leadDays}일</strong> (오늘 → 오늘 요청분 판매 가능일 {sched.sellable.slice(5)}) 미만</li>
+          <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {dateShort(sched.nextDraft)} 요청분 판매 가능일 {dateShort(sched.nextSellable)})</li>
+          <li><strong>부족</strong> = 현재고 + 입고 예정이 하루 출고 × <strong>{sched.leadDays}일</strong> (오늘 → 오늘 요청분 판매 가능일 {dateShort(sched.sellable)}) 미만</li>
           <li><strong>권장생산</strong> = 소매 모자란 양 + 도매 모자란 양 − 입고 예정 (모자란 양 = 목표 − 현재고, 0 미만은 0)</li>
         </ul>}
       </section>

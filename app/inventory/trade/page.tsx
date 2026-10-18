@@ -8,6 +8,7 @@ import { LOST_MSG, linkMessage, confirmUnlinkedInbound } from "../TxnModal";
 import { useConfirm, useToast } from "@/app/components/Feedback";
 import { INV_TYPE_COLOR, MOVE_ONLY_CHANNELS, type InvChannel } from "@/app/lib/inventory";
 import type { LinkResultLite } from "@/app/lib/link-result";
+import { qty, qtyText } from "@/app/lib/format";
 
 type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
 // 요청서 목록 조회 결과 → 입고 화면 경고 문구(없으면 ""). 조회 실패·이행률 판독 실패 모두 사람이 직접 골라야 한다.
@@ -97,7 +98,7 @@ export default function TradePage() {
       if (j.code === "request_key_conflict") setPreview((p) => (p ? { ...p, key: newKey() } : p)); // 다음 누름은 새 기록
       if (!res.ok || !j.ok) throw new Error(j.error || "엑셀 내용을 반영하지 못했습니다. 다시 누르세요.");
       if (j.replay) toast.success("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
-      else toast.success(`${preview.summary.valid}건을 반영했습니다`);
+      else toast.success(`${qtyText(preview.summary.valid, "건")}을 반영했습니다`);
       if (j.link) {
         const m = linkMessage(j.link, (pid) => preview.rows.find((r) => r.product_id === pid)?.product_name || "품목");
         if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
@@ -235,10 +236,10 @@ export default function TradePage() {
               {error && <div className="b2b-error" style={{ marginBottom: 8 }}>{error}</div>}
               <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
                 <span>반영 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.summary.valid}</strong>건</span>
-                {!!preview.summary.merged && <span className="sm-faint">중복 SKU {preview.summary.merged}건 합산됨</span>}
-                {!!preview.summary.skipped && <span className="sm-faint">미입력 {preview.summary.skipped.toLocaleString()}행 건너뜀</span>}
-                {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.summary.untracked.toLocaleString()}행 제외</span>}
-                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.summary.errors}건(제외)</span>}
+                {!!preview.summary.merged && <span className="sm-faint">중복 SKU {qtyText(preview.summary.merged, "건")} 합산됨</span>}
+                {!!preview.summary.skipped && <span className="sm-faint">미입력 {qtyText(preview.summary.skipped, "행")} 건너뜀</span>}
+                {!!preview.summary.untracked && <span className="sm-faint">재고 관리 사용 안함 {qtyText(preview.summary.untracked, "행")} 제외</span>}
+                {preview.summary.errors > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {qtyText(preview.summary.errors, "건")}(제외)</span>}
               </div>
               {preview.summary.valid === 0 && <div className="b2b-empty" style={{ padding: 20 }}>반영할 행이 없습니다. 파일을 다시 첨부하세요.</div>}
               {preview.rows.length > 0 && (
@@ -251,21 +252,21 @@ export default function TradePage() {
                           <td style={{ whiteSpace: "nowrap" }}>{r.txn_date?.slice(5)}</td>
                           <td><span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{r.type}</span></td>
                           <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
-                          <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{r.qty.toLocaleString()}</td>
+                          <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{qty(r.qty)}</td>
                           <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "-"}</td>
                           <td>{r.partner || "-"}</td>
                         </tr>
                       ); })}
                     </tbody>
                   </table>
-                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 200}건(전체 반영됩니다)</p>}
+                  {preview.rows.length > 200 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {qtyText(preview.rows.length - 200, "건")}(전체 반영됩니다)</p>}
                 </div>
               )}
               {preview.errors.length > 0 && (
                 <section>
                   <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 140, overflow: "auto" }}>
-                    {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
+                    {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
                   </ul>
                 </section>
               )}
@@ -275,7 +276,7 @@ export default function TradePage() {
               <div className="b2b-modal-foot-right">
                 <button className="b2b-btn-secondary" onClick={() => setPreview(null)} disabled={applying}>그만두기</button>
                 {preview.summary.valid === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 첨부하세요</span>}
-                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${preview.summary.valid}건 반영`}</button>
+                <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.summary.valid === 0}>{applying ? "반영 중..." : `${qtyText(preview.summary.valid, "건")} 반영`}</button>
               </div>
             </div>
           </div>

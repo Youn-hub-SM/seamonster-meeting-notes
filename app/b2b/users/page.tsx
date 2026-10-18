@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
+import { dateFull } from "@/app/lib/format";
 
 type AppRole = "internal" | "factory";
 type AppUser = { id: string; name: string; active: boolean; role: AppRole; created_at: string };
@@ -140,7 +141,7 @@ export default function UsersPage() {
                     <td data-label="상태">
                       <button className="b2b-status-pill" onClick={() => toggle(u)} style={{ cursor: "pointer", border: "none", fontFamily: "inherit", background: u.active ? "var(--sm-success-bg)" : "var(--sm-bg-subtle)", color: u.active ? "var(--sm-success)" : "var(--sm-text-mid)" }}>{u.active ? "활성" : "비활성"}</button>
                     </td>
-                    <td data-label="추가일" style={{ whiteSpace: "nowrap" }}>{u.created_at?.slice(0, 10)}</td>
+                    <td data-label="추가일" style={{ whiteSpace: "nowrap" }}>{dateFull(u.created_at)}</td>
                     <td className="actions">
                       <button className="b2b-link-btn" onClick={() => resetPassword(u)}>비밀번호 재설정</button>{" "}
                       <button className="b2b-link-btn" onClick={() => remove(u)} style={{ color: "var(--sm-danger)" }}>삭제</button>

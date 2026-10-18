@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import SalesReportPanel from "../SalesReportPanel";
-import { won as fmtWon, dateShort } from "@/app/lib/format";
+import { won, wonText, qty, qtyText, dateShort, dateFull, dateTime, dateRange, itemText } from "@/app/lib/format";
 import { useConfirm } from "@/app/components/Feedback";
 
 type Preview = {
@@ -28,8 +28,6 @@ type UploadOpts = { dupMode: "merge" | "separate"; replace: boolean; replaceFrom
 const NO_OPTS: UploadOpts = { dupMode: "merge", replace: false, replaceFrom: "", replaceTo: "", widen: false };
 const sameOpts = (a: UploadOpts, b: UploadOpts) => a.dupMode === b.dupMode && a.replace === b.replace && a.replaceFrom === b.replaceFrom && a.replaceTo === b.replaceTo && a.widen === b.widen;
 
-const won = (n: number) => `${fmtWon(n)}원`;
-const fmtTime = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
 
 export default function SalesUploadPage() {
   const confirm = useConfirm();
@@ -70,9 +68,9 @@ export default function SalesUploadPage() {
       const c = await fetch(`/api/sales/upload/revert?batch_id=${encodeURIComponent(b.id)}`).then((r) => r.json());
       if (!c.ok) { setErr(c.error || "되돌릴 행 수를 확인하지 못했습니다. 새로고침 뒤 다시 누르세요."); return; }
       const n = Number(c.rows) || 0;
-      const diff = n !== b.inserted ? ` (이력 기록 ${b.inserted.toLocaleString()}건과 다름)` : "";
+      const diff = n !== b.inserted ? ` (이력 기록 ${qtyText(b.inserted, "건")}과 다름)` : "";
       const replaced = (b.note || "").includes("기간 교체") ? " 기간 교체로 지운 기존 행은 복구되지 않습니다 — 그 기간 매출이 줄어듭니다." : "";
-      if (!(await confirm({ title: `'${b.filename}' 업로드 되돌리기`, body: `이 업로드로 추가된 ${n.toLocaleString()}건을 삭제합니다.${diff}${replaced} 되돌릴 수 없습니다.`, action: `${n.toLocaleString()}건 삭제` }))) return;
+      if (!(await confirm({ title: `'${b.filename}' 업로드 되돌리기`, body: `이 업로드로 추가된 ${qtyText(n, "건")}을 삭제합니다.${diff}${replaced} 되돌릴 수 없습니다.`, action: `${qtyText(n, "건")} 삭제` }))) return;
       const r = await fetch("/api/sales/upload/revert", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batch_id: b.id, expect_rows: n }) });
       const j = await r.json();
       if (!j.ok) setErr(j.error || "업로드를 되돌리지 못했습니다. [되돌리기]를 다시 누르세요.");
@@ -127,11 +125,11 @@ export default function SalesUploadPage() {
     // 채널마다 파일 날짜와 실제로 지우는 날짜를 같이 보여 준다(파일 행이 없거나 적은 날이 있으면 그 날짜도)
     const lines = sc.filter((x) => x.to_delete > 0).map((x) => {
       const thin = (x.uncovered ?? []).map((u) => dateShort(u.date));
-      return `${x.channel} 파일 ${dateShort(x.file_from)}~${dateShort(x.file_to)} / 교체 ${dateShort(x.win_from ?? po.replaceFrom)}~${dateShort(x.win_to ?? po.replaceTo)}, ${x.to_delete.toLocaleString()}행`
-        + (thin.length ? `\n  파일 행이 없거나 적은 날: ${thin.slice(0, 6).join(", ")}${thin.length > 6 ? ` 외 ${thin.length - 6}일` : ""}` : "");
+      return `${x.channel} 파일 ${dateShort(x.file_from)}~${dateShort(x.file_to)} / 교체 ${dateShort(x.win_from ?? po.replaceFrom)}~${dateShort(x.win_to ?? po.replaceTo)}, ${qtyText(x.to_delete, "행")}`
+        + (thin.length ? `\n  파일 행이 없거나 적은 날: ${thin.slice(0, 6).join(", ")}${thin.length > 6 ? ` 외 ${qtyText(thin.length - 6, "일")}` : ""}` : "");
     });
     if (del > 0 && !(await confirm({
-      title: `기간 교체 — 기존 ${del.toLocaleString()}행 삭제`,
+      title: `기간 교체 — 기존 ${qtyText(del, "행")} 삭제`,
       body: <span style={{ whiteSpace: "pre-line" }}>{`${lines.join("\n")}\n되돌리기로 복구되지 않습니다.`}</span>,
       action: "지우고 적용",
     }))) return;
@@ -195,15 +193,15 @@ export default function SalesUploadPage() {
 
       {future && (
         <div className="sm-warn" style={{ marginTop: 12 }}>
-          오늘 이후 날짜 매출 {future.rows != null ? `${future.rows.toLocaleString()}건` : "있음"}(최대 {future.max}) — 발송일·업로드 날짜를 확인하세요
+          오늘 이후 날짜 매출 {future.rows != null ? qtyText(future.rows, "건") : "있음"}(최대 {dateFull(future.max)}) — 발송일·업로드 날짜를 확인하세요
         </div>
       )}
       {err && <p style={{ color: "var(--sm-danger)", marginTop: 12, whiteSpace: "pre-wrap" }}>{err}</p>}
 
       {applied && (
         <section className="b2b-card" style={{ marginTop: 12 }}>
-          <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>{applied.inserted.toLocaleString()}건을 적용했습니다 ✓</span></div>
-          <p style={{ fontSize: 13 }}>신규 <strong>{applied.inserted.toLocaleString()}</strong>건 적재, 중복 {applied.skipped.toLocaleString()}건 제외.{applied.deleted > 0 && <> 기간 교체로 기존 {applied.deleted.toLocaleString()}행 삭제.</>}{applied.total_after != null && <> 현재 누적 <strong>{applied.total_after.toLocaleString()}</strong>행.</>}</p>
+          <div className="b2b-card-head"><span className="b2b-card-title" style={{ color: "var(--sm-success)" }}>{qtyText(applied.inserted, "건")}을 적용했습니다 ✓</span></div>
+          <p style={{ fontSize: 13 }}>신규 <strong>{qty(applied.inserted)}</strong>건 적재, 중복 {qtyText(applied.skipped, "건")} 제외.{applied.deleted > 0 && <> 기간 교체로 기존 {qtyText(applied.deleted, "행")} 삭제.</>}{applied.total_after != null && <> 현재 누적 <strong>{qty(applied.total_after)}</strong>행.</>}</p>
         </section>
       )}
 
@@ -228,15 +226,15 @@ export default function SalesUploadPage() {
             </div>
           )}
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginBottom: 12 }}>
-            <Stat label="파일 행" v={s.total_rows.toLocaleString()} />
-            <Stat label="신규 적재 예정" v={s.new_rows.toLocaleString()} accent />
-            <Stat label="이미 있는 행(중복)" v={s.dup_in_db.toLocaleString()} />
-            <Stat label="파일 내 중복" v={s.dup_in_file.toLocaleString()} />
-            <Stat label="오류(제외)" v={s.invalid.toLocaleString()} danger={s.invalid > 0} />
-            <Stat label="매출 합계" v={won(s.revenue)} />
+            <Stat label="파일 행" v={qty(s.total_rows)} />
+            <Stat label="신규 적재 예정" v={qty(s.new_rows)} accent />
+            <Stat label="이미 있는 행(중복)" v={qty(s.dup_in_db)} />
+            <Stat label="파일 내 중복" v={qty(s.dup_in_file)} />
+            <Stat label="오류(제외)" v={qty(s.invalid)} danger={s.invalid > 0} />
+            <Stat label="매출 합계" v={wonText(s.revenue)} />
           </div>
           <p className="sm-faint" style={{ fontSize: 12 }}>
-            기간 {preview?.date_range ? `${preview.date_range.from} ~ ${preview.date_range.to}` : "-"} · 채널 {preview?.channels?.join(", ") || "-"}
+            기간 {preview?.date_range ? dateRange(preview.date_range.from, preview.date_range.to) : "-"} · 채널 {preview?.channels?.join(", ") || "-"}
           </p>
           {preview?.errors && preview.errors.length > 0 && (
             <div style={{ marginTop: 8, fontSize: 12, color: "var(--sm-warning)" }}>오류 예시: {preview.errors.slice(0, 5).join(" / ")}{preview.errors.length > 5 ? " ..." : ""}</div>
@@ -244,19 +242,19 @@ export default function SalesUploadPage() {
           {s.invalid > 0 && (
             <label className="sm-row" style={{ marginTop: 8, gap: 6, fontSize: 13 }}>
               <input type="checkbox" className="b2b-checkbox" checked={skipInvalid} onChange={(e) => setSkipInvalid(e.target.checked)} />
-              오류 행 {s.invalid.toLocaleString()}건 빼고 적용
+              오류 행 {qtyText(s.invalid, "건")} 빼고 적용
             </label>
           )}
 
           {preview?.changed && preview.changed.count > 0 && (
             <div className="sm-warn" style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 700 }}>기존과 다른 행 {preview.changed.count.toLocaleString()}건 — 그대로 적용하면 기존 행과 새 행이 둘 다 남습니다. 취소·정정이 반영된 그 기간 전체 파일이면 기간 교체로 올리세요</div>
+              <div style={{ fontWeight: 700 }}>기존과 다른 행 {qtyText(preview.changed.count, "건")} — 그대로 적용하면 기존 행과 새 행이 둘 다 남습니다. 취소·정정이 반영된 그 기간 전체 파일이면 기간 교체로 올리세요</div>
               <div className="b2b-table-wrap" style={{ marginTop: 6 }}>
                 <table className="b2b-table">
-                  <thead><tr><th>채널</th><th>주문번호</th><th>상품</th><th className="num">기존 수량</th><th className="num">기존 금액</th><th className="num">새 수량</th><th className="num">새 금액</th></tr></thead>
+                  <thead><tr><th>채널</th><th>주문번호</th><th>상품</th><th className="num">기존 수량</th><th className="num">기존 금액 (원)</th><th className="num">새 수량</th><th className="num">새 금액 (원)</th></tr></thead>
                   <tbody>
                     {preview.changed.examples.map((c, i) => (
-                      <tr key={i}><td data-label="채널">{c.channel}</td><td data-label="주문번호">{c.order_id}</td><td data-label="상품">{c.product_name}{c.option_name ? ` · ${c.option_name}` : ""}</td><td data-label="기존 수량" className="num">{c.old_qty}</td><td data-label="기존 금액" className="num">{won(c.old_amount)}</td><td data-label="새 수량" className="num">{c.new_qty}</td><td data-label="새 금액" className="num">{won(c.new_amount)}</td></tr>
+                      <tr key={i}><td data-label="채널">{c.channel}</td><td data-label="주문번호">{c.order_id}</td><td data-label="상품">{itemText({ name: c.product_name, spec: c.option_name })}</td><td data-label="기존 수량" className="num">{qty(c.old_qty)}</td><td data-label="기존 금액 (원)" className="num">{won(c.old_amount)}</td><td data-label="새 수량" className="num">{qty(c.new_qty)}</td><td data-label="새 금액 (원)" className="num">{won(c.new_amount)}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -267,7 +265,7 @@ export default function SalesUploadPage() {
           {dupGroupCount > 0 && (
             <div style={{ marginTop: 12 }}>
               <div className="sm-between" style={{ gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 700 }}>파일 안 동일 라인 {dupGroupCount.toLocaleString()}묶음</span>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>파일 안 동일 라인 {qtyText(dupGroupCount, "묶음")}</span>
                 <label className="sm-row" style={{ gap: 6, fontSize: 13 }}>
                   <input type="checkbox" className="b2b-checkbox" checked={opts.dupMode === "separate"} disabled={busy !== ""}
                     onChange={(e) => changeOpts({ ...opts, dupMode: e.target.checked ? "separate" : "merge" })} />
@@ -277,15 +275,15 @@ export default function SalesUploadPage() {
               <p className="sm-faint" style={{ fontSize: 12, margin: "4px 0 6px" }}>기본은 1줄만 넣음 — 같은 주문에 같은 상품을 따로 담은 경우만 따로 넣기</p>
               <div className="b2b-table-wrap">
                 <table className="b2b-table">
-                  <thead><tr><th>주문일</th><th>채널</th><th>주문번호</th><th>상품</th><th>옵션</th><th className="num">수량</th><th className="num">결제금액</th><th className="num">줄 수</th></tr></thead>
+                  <thead><tr><th>주문일</th><th>채널</th><th>주문번호</th><th>상품</th><th>옵션</th><th className="num">수량</th><th className="num">결제금액 (원)</th><th className="num">줄 수</th></tr></thead>
                   <tbody>
                     {dupGroups.map((g, i) => (
-                      <tr key={i}><td data-label="주문일">{g.order_date}</td><td data-label="채널">{g.channel}</td><td data-label="주문번호">{g.order_id}</td><td data-label="상품">{g.product_name}</td><td data-label="옵션">{g.option_name || "-"}</td><td data-label="수량" className="num">{g.quantity}</td><td data-label="결제금액" className="num">{won(g.subtotal_amount)}</td><td data-label="줄 수" className="num">{g.count}</td></tr>
+                      <tr key={i}><td data-label="주문일">{dateFull(g.order_date)}</td><td data-label="채널">{g.channel}</td><td data-label="주문번호">{g.order_id}</td><td data-label="상품">{g.product_name}</td><td data-label="옵션">{g.option_name || "-"}</td><td data-label="수량" className="num">{qty(g.quantity)}</td><td data-label="결제금액 (원)" className="num">{won(g.subtotal_amount)}</td><td data-label="줄 수" className="num">{qty(g.count)}</td></tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {dupGroupCount > dupGroups.length && <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {dupGroups.length}묶음</p>}
+              {dupGroupCount > dupGroups.length && <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {qtyText(dupGroups.length, "묶음")}</p>}
             </div>
           )}
 
@@ -338,14 +336,14 @@ export default function SalesUploadPage() {
               ) : (
                 <div className="b2b-table-wrap" style={{ marginTop: 6 }}>
                   <table className="b2b-table">
-                    <thead><tr><th>채널</th><th>파일 날짜</th><th>교체 날짜</th><th className="num">파일 행</th><th className="num">기존 행</th><th className="num">지울 행</th><th className="num">지울 금액</th></tr></thead>
+                    <thead><tr><th>채널</th><th>파일 날짜</th><th>교체 날짜</th><th className="num">파일 행</th><th className="num">기존 행</th><th className="num">지울 행</th><th className="num">지울 금액 (원)</th></tr></thead>
                     <tbody>
                       {preview.replace.scopes.map((x) => {
                         const wFrom = x.win_from ?? opts.replaceFrom, wTo = x.win_to ?? opts.replaceTo;
                         const wider = wFrom < x.file_from || wTo > x.file_to; // 파일 날짜 밖까지 지움(넓히기)
                         const thin = (x.uncovered ?? []).length > 0;          // 파일 행이 없거나 적은 날이 교체 날짜 안에 있음
                         return (
-                          <tr key={x.channel}><td data-label="채널">{x.channel}</td><td data-label="파일 날짜">{dateShort(x.file_from)} ~ {dateShort(x.file_to)}</td><td data-label="교체 날짜" style={wider || thin ? { color: "var(--sm-warning)" } : undefined}>{dateShort(wFrom)} ~ {dateShort(wTo)}</td><td data-label="파일 행" className="num">{x.file_rows.toLocaleString()}</td><td data-label="기존 행" className="num">{x.existing.toLocaleString()}</td><td data-label="지울 행" className="num" style={x.to_delete > 0 ? { color: "var(--sm-danger)" } : undefined}>{x.to_delete.toLocaleString()}</td><td data-label="지울 금액" className="num">{won(x.delete_amount)}</td></tr>
+                          <tr key={x.channel}><td data-label="채널">{x.channel}</td><td data-label="파일 날짜">{dateShort(x.file_from)} ~ {dateShort(x.file_to)}</td><td data-label="교체 날짜" style={wider || thin ? { color: "var(--sm-warning)" } : undefined}>{dateShort(wFrom)} ~ {dateShort(wTo)}</td><td data-label="파일 행" className="num">{qty(x.file_rows)}</td><td data-label="기존 행" className="num">{qty(x.existing)}</td><td data-label="지울 행" className="num" style={x.to_delete > 0 ? { color: "var(--sm-danger)" } : undefined}>{qty(x.to_delete)}</td><td data-label="지울 금액 (원)" className="num">{won(x.delete_amount)}</td></tr>
                         );
                       })}
                     </tbody>
@@ -365,9 +363,9 @@ export default function SalesUploadPage() {
             )}
             {preview?.replace && !preview.replace.blocked && uncoveredDays > 0 && (
               <div className="sm-warn" style={{ marginTop: 8 }}>
-                <div style={{ fontWeight: 700 }}>파일 행이 없거나 적은 날짜 {uncoveredDays.toLocaleString()}일 — 기존 {uncoveredRows.toLocaleString()}행이 지워집니다</div>
+                <div style={{ fontWeight: 700 }}>파일 행이 없거나 적은 날짜 {qtyText(uncoveredDays, "일")} — 기존 {qtyText(uncoveredRows, "행")}이 지워집니다</div>
                 {uncoveredScopes.map((x) => (
-                  <div key={x.channel} style={{ fontSize: 12, marginTop: 4 }}>{x.channel}: {(x.uncovered ?? []).map((u) => `${dateShort(u.date)} 파일 ${(u.file_rows ?? 0).toLocaleString()}행, 지울 ${u.rows.toLocaleString()}행`).join(", ")}</div>
+                  <div key={x.channel} style={{ fontSize: 12, marginTop: 4 }}>{x.channel}: {(x.uncovered ?? []).map((u) => `${dateShort(u.date)} 파일 ${qtyText(u.file_rows ?? 0, "행")}, 지울 ${qtyText(u.rows, "행")}`).join(", ")}</div>
                 ))}
                 <div style={{ fontSize: 12, marginTop: 4 }}>앞뒤 끝 날짜는 교체 기간을 좁혀 빼면 그 날은 추가만 합니다</div>
                 <label className="sm-row" style={{ gap: 6, fontSize: 13, marginTop: 6 }}>
@@ -376,20 +374,20 @@ export default function SalesUploadPage() {
                 </label>
               </div>
             )}
-            {!!preview?.replace?.outside && <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>기간 밖 파일 행 {preview.replace.outside.toLocaleString()}건 — 추가만</p>}
+            {!!preview?.replace?.outside && <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>기간 밖 파일 행 {qtyText(preview.replace.outside, "건")} — 추가만</p>}
             {preview?.replace && preview.replace.skipped.length > 0 && <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>교체 안 함: {preview.replace.skipped.join(", ")}</p>}
           </div>
           {preview?.sample && preview.sample.length > 0 && (
             <div style={{ overflowX: "auto", marginTop: 10 }}>
               <table className="b2b-table">
-                <thead><tr><th>주문일</th><th>채널</th><th>주문번호</th><th>상품</th><th>SKU</th><th style={{ textAlign: "right" }}>수량</th><th style={{ textAlign: "right" }}>결제금액</th></tr></thead>
+                <thead><tr><th>주문일</th><th>채널</th><th>주문번호</th><th>상품</th><th>SKU</th><th style={{ textAlign: "right" }}>수량</th><th style={{ textAlign: "right" }}>결제금액 (원)</th></tr></thead>
                 <tbody>
                   {preview.sample.map((r, i) => (
-                    <tr key={i}><td>{r.order_date}</td><td>{r.channel}</td><td>{r.order_id}</td><td>{r.product_name}</td><td>{r.sku_code}</td><td style={{ textAlign: "right" }}>{r.quantity}</td><td style={{ textAlign: "right" }}>{won(r.subtotal_amount)}</td></tr>
+                    <tr key={i}><td>{dateFull(r.order_date)}</td><td>{r.channel}</td><td>{r.order_id}</td><td>{r.product_name}</td><td>{r.sku_code}</td><td style={{ textAlign: "right" }}>{qty(r.quantity)}</td><td style={{ textAlign: "right" }}>{won(r.subtotal_amount)}</td></tr>
                   ))}
                 </tbody>
               </table>
-              <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {preview.sample.length}건</p>
+              <p className="sm-faint" style={{ fontSize: 12, marginTop: 4 }}>상위 {qtyText(preview.sample.length, "건")}</p>
             </div>
           )}
           <div className="sm-between" style={{ marginTop: 14, flexWrap: "wrap", gap: 8 }}>
@@ -400,7 +398,7 @@ export default function SalesUploadPage() {
                   : replaceNotReady ? <span className="b2b-btn-why is-before">교체 기간·채널을 확인하면 켜집니다</span>
                     : nothingToDo ? <span className="b2b-btn-why is-before">적재할 신규 행이 없습니다 — 다른 파일을 올리세요</span> : null)}
               <button className="b2b-btn-primary" onClick={doApply} disabled={busy !== "" || nothingToDo || blockedByInvalid || replaceNotReady || previewStale}>
-                {busy === "apply" ? "적용 중..." : nothingToDo ? "적재할 신규 행 없음" : toDelete > 0 ? `${s.new_rows.toLocaleString()}건 적용 (${toDelete.toLocaleString()}행 삭제)` : `${s.new_rows.toLocaleString()}건 적용`}
+                {busy === "apply" ? "적용 중..." : nothingToDo ? "적재할 신규 행 없음" : toDelete > 0 ? `${qtyText(s.new_rows, "건")} 적용 (${qtyText(toDelete, "행")} 삭제)` : `${qtyText(s.new_rows, "건")} 적용`}
               </button>
             </span>
           </div>
@@ -417,9 +415,9 @@ export default function SalesUploadPage() {
               <tbody>
                 {batches.map((b) => (
                   <tr key={b.id}>
-                    <td data-label="시각">{fmtTime(b.created_at)}</td>
+                    <td data-label="시각">{dateTime(b.created_at)}</td>
                     <td data-label="파일" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={b.note || undefined}>{b.filename}{b.note && <div className="sm-faint" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{b.note}</div>}</td>
-                    <td data-label="신규" className="num">{b.inserted.toLocaleString()}</td>
+                    <td data-label="신규" className="num">{qty(b.inserted)}</td>
                     <td data-label="올린 사람">{b.uploaded_by || "-"}</td>
                     <td data-label="상태">{b.status === "reverted" ? <span className="b2b-status-pill" style={{ background: "var(--sm-bg-subtle)", color: "var(--sm-text-mid)" }}>되돌림</span> : <span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>적용됨</span>}</td>
                     <td className="actions">

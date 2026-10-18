@@ -218,12 +218,12 @@ export default function HistoryPage() {
   );
 }
 
-// "2026-06-12" → "6월 12일 (목)"
+// "2026-06-12" → "2026-06-12 (목)" — 날짜는 YYYY-MM-DD 하나(2026-10-17 표기 규율), 요일만 덧붙인다.
 function formatDay(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(y, m - 1, d);
   const wd = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
-  return `${m}월 ${d}일 (${wd})`;
+  return `${iso} (${wd})`;
 }
 
 // 시각만 "14:30"

@@ -10,6 +10,7 @@ import {
 } from "@/app/lib/crm";
 import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/charts";
 import { matchKoQuery } from "@/app/lib/hangul";
+import { qty, qtyText, wonText } from "@/app/lib/format";
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 // 기간 표시: "7/1~7/15" · 시작만 "7/1~" · 종료만 "~7/15"
@@ -34,10 +35,10 @@ const wonCompact = (n: number) => (n >= 10000 ? `${(n / 10000).toLocaleString("k
 function perfLine(p?: CrmPerf): string {
   if (!p) return "";
   const parts: string[] = [];
-  if (p.sent) parts.push(`발송 ${p.sent.toLocaleString("ko-KR")}`);
-  if (p.opened) parts.push(`열람 ${p.opened.toLocaleString("ko-KR")}`);
-  if (p.clicked) parts.push(`클릭 ${p.clicked.toLocaleString("ko-KR")}`);
-  if (p.converted) parts.push(`전환 ${p.converted.toLocaleString("ko-KR")}`);
+  if (p.sent) parts.push(`발송 ${qty(p.sent)}`);
+  if (p.opened) parts.push(`열람 ${qty(p.opened)}`);
+  if (p.clicked) parts.push(`클릭 ${qty(p.clicked)}`);
+  if (p.converted) parts.push(`전환 ${qty(p.converted)}`);
   if (p.revenue) parts.push(wonCompact(p.revenue));
   return parts.join(" · ");
 }
@@ -47,8 +48,8 @@ type GaStat = { sessions: number; users: number; purchases: number; revenue: num
 type GaState = { configured: boolean; stats: Record<string, GaStat> };
 function gaLine(g?: GaStat): string {
   if (!g) return "";
-  const parts = [`세션 ${g.sessions.toLocaleString("ko-KR")}`];
-  if (g.purchases) parts.push(`구매 ${g.purchases.toLocaleString("ko-KR")}`);
+  const parts = [`세션 ${qty(g.sessions)}`];
+  if (g.purchases) parts.push(`구매 ${qty(g.purchases)}`);
   if (g.revenue) parts.push(wonCompact(g.revenue));
   return parts.join(" · ");
 }
@@ -278,7 +279,7 @@ export default function CrmPage() {
         {summary.inactive > 0 && <Stat label="비활성" value={summary.inactive} />}
         <div className="crm-summary-spacer" />
         {Object.entries(summary.byCh).map(([k, n]) => (
-          <span key={k} className={chipCls(k)}>{labels.ch(k)} {n}</span>
+          <span key={k} className={chipCls(k)}>{labels.ch(k)} {qty(n)}</span>
         ))}
       </div>
 
@@ -338,7 +339,7 @@ export default function CrmPage() {
       {/* 기준일 안내 — 몇 개가 걸러졌는지 명시(조용히 사라지면 '데이터가 없어졌다'로 오해) */}
       {asof && tab === "flow" && (
         <p className="sm-faint crm-asof-hint">
-          {asof} 기준 진행 중 {dateFiltered.length}개 표시 · 기간 밖/비활성 {filtered.length - dateFiltered.length}개 숨김
+          {asof} 기준 진행 중 {qtyText(dateFiltered.length)} 표시 · 기간 밖/비활성 {qtyText(filtered.length - dateFiltered.length)} 숨김
         </p>
       )}
 
@@ -372,7 +373,7 @@ export default function CrmPage() {
         ) : tab === "table" ? (
           <>
             {(stageSel || custSel || stSel) && (
-              <p className="sm-faint crm-asof-hint">필터 결과 {tableFiltered.length}개 / 전체 {filtered.length}개</p>
+              <p className="sm-faint crm-asof-hint">필터 결과 {qtyText(tableFiltered.length)} / 전체 {qtyText(filtered.length)}</p>
             )}
             <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} opts={opts} labels={labels} savingId={savingId} onField={setStr} onLink={setLink} onSave={saveRow} onEdit={openEdit} />
           </>
@@ -398,7 +399,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
   return (
     <div className={`crm-stat${tone ? ` is-${tone}` : ""}`}>
       <div className="crm-stat-label">{label}</div>
-      <div className="crm-stat-value">{value}</div>
+      <div className="crm-stat-value">{qty(value)}</div>
     </div>
   );
 }
@@ -417,8 +418,8 @@ function FlowView({ stages, gaOf, msgOpen, labels, onCard, onAdd }: { stages: St
                 <div className="crm-fname">{s.stage}</div>
                 {s.sub && <div className="crm-fsub">{s.sub}</div>}
                 <div className="crm-fmeta">
-                  {s.msgs.length}개
-                  {inactiveN > 0 && <> · <span className="crm-finact">비활성 {inactiveN}{inactiveN === s.msgs.length ? " — 전부" : ""}</span></>}
+                  {qtyText(s.msgs.length)}
+                  {inactiveN > 0 && <> · <span className="crm-finact">비활성 {qty(inactiveN)}{inactiveN === s.msgs.length ? " — 전부" : ""}</span></>}
                 </div>
               </div>
               <div className="crm-ftl">
@@ -635,7 +636,7 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
     }
     const totals = [...byDate.values()].reduce((t, v) => ({ sessions: t.sessions + v.sessions, purchases: t.purchases + v.purchases, revenue: t.revenue + v.revenue }), { sessions: 0, purchases: 0, revenue: 0 });
     const rank: [string, number][] = [...byCampaign.entries()].map(([c, v]) => [c, v.revenue]);
-    const rankSub = (label: string) => { const v = byCampaign.get(label); return v ? `세션 ${v.sessions.toLocaleString("ko-KR")} · 구매 ${v.purchases.toLocaleString("ko-KR")}` : null; };
+    const rankSub = (label: string) => { const v = byCampaign.get(label); return v ? `세션 ${qty(v.sessions)} · 구매 ${qty(v.purchases)}` : null; };
     return { pts, totals, rank, rankSub };
   }, [daily, days]);
 
@@ -663,18 +664,18 @@ function StatsView({ messages, campaigns, gaConfigured, chLabel }: { messages: C
       ) : ga && (
         <>
           <div className="sm-row-wrap crm-stats-kpi">
-            <div className="crm-stat"><div className="crm-stat-label">세션</div><div className="crm-stat-value">{ga.totals.sessions.toLocaleString("ko-KR")}</div></div>
-            <div className="crm-stat"><div className="crm-stat-label">구매</div><div className="crm-stat-value">{ga.totals.purchases.toLocaleString("ko-KR")}</div></div>
+            <div className="crm-stat"><div className="crm-stat-label">세션</div><div className="crm-stat-value">{qty(ga.totals.sessions)}</div></div>
+            <div className="crm-stat"><div className="crm-stat-label">구매</div><div className="crm-stat-value">{qty(ga.totals.purchases)}</div></div>
             <div className="crm-stat"><div className="crm-stat-label">매출</div><div className="crm-stat-value">{moneyCompact(ga.totals.revenue)}</div></div>
           </div>
           <div className="crm-stats-grid">
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">일자별 세션</span></div>
-              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.sessions, tip: `${p.label} · 세션 ${p.sessions.toLocaleString("ko-KR")}` }))} />
+              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.sessions, tip: `${p.label} · 세션 ${qty(p.sessions)}` }))} />
             </section>
             <section className="b2b-card">
               <div className="b2b-card-head"><span className="b2b-card-title">일자별 매출</span></div>
-              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.revenue, tip: `${p.label} · ${p.revenue.toLocaleString("ko-KR")}원` }))} fmtAxis={moneyCompact} />
+              <TrendChart data={ga.pts.map((p) => ({ label: p.label, value: p.revenue, tip: `${p.label} · ${wonText(p.revenue)}` }))} fmtAxis={moneyCompact} />
             </section>
             <BarList title="캠페인별 매출" caption={`최근 ${days}일, 막대 = 매출`} data={ga.rank} fmt={moneyCompact} sub={ga.rankSub} sorted minPct={2} empty="기간 내 매출 없음" />
           </div>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { INV_TYPE_COLOR, INV_CHANNEL_COLOR, type InventoryTxn, type InvTxnType, type InvChannel } from "@/app/lib/inventory";
 import { useConfirm, useToast, type ConfirmOptions } from "@/app/components/Feedback";
+import { qty } from "@/app/lib/format";
 
 // 칸 이동·프로모션 합류 행인가 — app/lib/production-velocity.ts isMoveRow 와 같은 규칙(S1·S11, 화면용 순수 함수 — supabase 를 끌어오지 않는다).
 //  source(131)가 있으면 move·promo_close 만 이동, 없으면(131 이전 기록·미적용) 주문번호 없는 partner '채널이동'.
@@ -135,7 +136,7 @@ export default function TxnTable({ type, types, productId, reloadKey = 0, onChan
                     : t.txn_date > today ? <span className="b2b-status-pill" style={{ marginLeft: 4, background: "var(--sm-info-bg)", color: "var(--sm-info)" }}>예정</span> : null}
                 </td>
                 <td>{ch ? <span className="b2b-status-pill" style={{ background: ch.bg, color: ch.fg }}>{t.channel}</span> : <span className="sm-faint">-</span>}</td>
-                <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{t.qty.toLocaleString()}</td>
+                <td className="num b2b-money" style={{ color: c.fg, fontWeight: 700 }}>{t.qty > 0 ? "+" : ""}{qty(t.qty)}</td>
                 <td className="num b2b-money" style={{ whiteSpace: "nowrap" }}>
                   {editId === t.id ? (
                     <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>

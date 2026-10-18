@@ -7,6 +7,7 @@ import { ChannelPicker } from "./ChannelTabs";
 import { Combobox, type ComboOption } from "@/app/b2b/orders/Combobox";
 import { formatLinkResult, type LinkResultLite } from "@/app/lib/link-result";
 import { useConfirm, useToast, type ConfirmOptions } from "@/app/components/Feedback";
+import { qty as fmtQty, qtyText } from "@/app/lib/format"; // qty 는 컴포넌트의 입력 상태 이름과 겹쳐 별칭
 
 // 공용 확인 모달 호출 함수 — 훅(useConfirm)은 컴포넌트 안에서만 부를 수 있어, 입고 화면 3곳이 함께 쓰는 유틸에는 호출부가 넘겨 준다.
 export type ConfirmFn = (o: ConfirmOptions) => Promise<boolean>;
@@ -31,7 +32,7 @@ export function linkMessage(link: LinkResultLite, nameOf: (productId: string) =>
   }
   const failed = link.failed ?? [];
   if (!failed.length) return formatLinkResult(link, nameOf);
-  const names = failed.map((f) => `${nameOf(f.product_id)}${f.qty ? ` ${f.qty.toLocaleString()}` : ""}`).join(", ");
+  const names = failed.map((f) => `${nameOf(f.product_id)}${f.qty ? ` ${fmtQty(f.qty)}` : ""}`).join(", ");
   const head = link.lines.length ? formatLinkResult({ ...link, failed: [] }, nameOf) : `${link.req_no || "요청서"}에 연결되지 않은 품목이 있습니다.`;
   return `${head}\n연결 실패: ${names}\n${relink(link.req_no)}`;
 }
@@ -53,12 +54,12 @@ export async function confirmUnlinkedInbound(date: string, items: { product_id: 
   if (!hits.length) return true;
   const lines = hits.slice(0, 8).map((x) => {
     const r = remain[x.product_id];
-    const reqs = (r.reqs || []).slice(0, 3).map((q) => `${q.req_no || "요청서"} ${Number(q.qty).toLocaleString()}`).join(", ");
-    return `- ${x.name}: 남은 ${Number(r.qty).toLocaleString()}${reqs ? ` (${reqs}${r.reqs.length > 3 ? " 외" : ""})` : ""}`;
+    const reqs = (r.reqs || []).slice(0, 3).map((q) => `${q.req_no || "요청서"} ${fmtQty(Number(q.qty))}`).join(", ");
+    return `- ${x.name}: 남은 ${fmtQty(Number(r.qty))}${reqs ? ` (${reqs}${r.reqs.length > 3 ? " 외" : ""})` : ""}`;
   });
   return confirm({
     title: "요청서 연결 없이 입고",
-    body: preLines(`열린 요청서에 남은 수량이 있는 품목입니다.\n${lines.join("\n")}${hits.length > 8 ? `\n- 외 ${hits.length - 8}개 품목` : ""}\n요청서로 들어온 물건이면 그만두고 요청서를 고르세요. 협의분·일반 입고면 요청서 연결 없이 저장합니다.`),
+    body: preLines(`열린 요청서에 남은 수량이 있는 품목입니다.\n${lines.join("\n")}${hits.length > 8 ? `\n- 외 ${qtyText(hits.length - 8)} 품목` : ""}\n요청서로 들어온 물건이면 그만두고 요청서를 고르세요. 협의분·일반 입고면 요청서 연결 없이 저장합니다.`),
     action: "연결 없이 저장",
   });
 }
@@ -78,7 +79,7 @@ const holdRemain = (h: B2bHold, pid?: string): number | null | undefined => {
   const it = h.items.find((x) => x.product_id === pid);
   return it ? it.remaining : undefined;
 };
-const remainText = (v: number | null | undefined) => (v === undefined ? "" : v === null ? "안 나간 수량 확인 필요" : `안 나간 ${v.toLocaleString()}`);
+const remainText = (v: number | null | undefined) => (v === undefined ? "" : v === null ? "안 나간 수량 확인 필요" : `안 나간 ${fmtQty(v)}`);
 // 실사 전 점검 확인 모달 — 걸린 것이 없으면 null(묻지 않음)
 const checkConfirmAsk = (c: ShownChecks): ConfirmOptions | null => {
   const parts: string[] = [];
@@ -88,11 +89,11 @@ const checkConfirmAsk = (c: ShownChecks): ConfirmOptions | null => {
     const known = rs.every((v) => typeof v === "number");
     const unknown = rs.some((v) => v === null);
     const sum = known ? Math.round((rs as number[]).reduce((a, v) => a + v, 0) * 1000) / 1000 : 0;
-    const tail = unknown ? "(안 나간 수량 확인 필요)" : known ? `(안 나간 ${sum.toLocaleString()})` : "";
-    parts.push(`재고에서 이미 빠졌지만 아직 안 나간 B2B 발주 ${c.b2b.length}건${tail} — 이대로 맞추면 그 수량만큼 유령 재고가 생깁니다(나갔으면 발송완료, 안 나갔으면 발송일 다시 지정).`);
+    const tail = unknown ? "(안 나간 수량 확인 필요)" : known ? `(안 나간 ${fmtQty(sum)})` : "";
+    parts.push(`재고에서 이미 빠졌지만 아직 안 나간 B2B 발주 ${qtyText(c.b2b.length, "건")}${tail} — 이대로 맞추면 그 수량만큼 유령 재고가 생깁니다(나갔으면 발송완료, 안 나갔으면 발송일 다시 지정).`);
   }
-  if (c.pending) parts.push(`'대기' 입출고 ${c.pending}건 — 실물이 이미 움직였다면 실사 뒤 처리할 때 이중 반영됩니다(먼저 처리·취소).`);
-  if (c.sameDay) parts.push(`${c.sameDayChan ? "이 칸 " : ""}실사일 당일 입출고 ${c.sameDay}건 — 실사 전 움직임인지 확인하세요.`);
+  if (c.pending) parts.push(`'대기' 입출고 ${qtyText(c.pending, "건")} — 실물이 이미 움직였다면 실사 뒤 처리할 때 이중 반영됩니다(먼저 처리·취소).`);
+  if (c.sameDay) parts.push(`${c.sameDayChan ? "이 칸 " : ""}실사일 당일 입출고 ${qtyText(c.sameDay, "건")} — 실사 전 움직임인지 확인하세요.`);
   return parts.length ? { title: "실사 전 점검", body: preLines(`- ${parts.join("\n- ")}\n정리했으면 이대로 반영합니다.`), action: "이대로 반영" } : null;
 };
 export type OpenReq = { id: string; req_no: string | null; title: string | null; prod_start: string; due_date: string | null; in_window: boolean; full?: boolean };
@@ -138,7 +139,7 @@ function CountCheckWarn({ c, err }: { c: ShownChecks | null; err: string }) {
       )}
       {c.b2b.length > 0 && (
         <>
-          <strong>재고에서 빠졌지만 아직 안 나간 B2B 발주 {c.b2b.length}건</strong> — 실사 전에 정리하세요(나갔으면 발송완료, 안 나갔으면 발송일 다시 지정).
+          <strong>재고에서 빠졌지만 아직 안 나간 B2B 발주 {qtyText(c.b2b.length, "건")}</strong> — 실사 전에 정리하세요(나갔으면 발송완료, 안 나갔으면 발송일 다시 지정).
           <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12 }}>
             {c.b2b.slice(0, 6).map((h) => {
               const rt = remainText(holdRemain(h, c.pid));
@@ -150,12 +151,12 @@ function CountCheckWarn({ c, err }: { c: ShownChecks | null; err: string }) {
                 </li>
               );
             })}
-            {c.b2b.length > 6 && <li>외 {c.b2b.length - 6}건</li>}
+            {c.b2b.length > 6 && <li>외 {qtyText(c.b2b.length - 6, "건")}</li>}
           </ul>
         </>
       )}
-      {c.pending > 0 && <div style={{ marginTop: c.b2b.length ? 6 : 0 }}>대기 입출고 {c.pending.toLocaleString()}건 — 이미 움직였으면 먼저 처리·취소하세요.</div>}
-      {c.sameDay > 0 && <div>{c.sameDayChan ? "이 칸 " : ""}실사일 당일 입출고 {c.sameDay.toLocaleString()}건 — 실사 전 움직임인지 확인하세요.</div>}
+      {c.pending > 0 && <div style={{ marginTop: c.b2b.length ? 6 : 0 }}>대기 입출고 {qtyText(c.pending, "건")} — 이미 움직였으면 먼저 처리·취소하세요.</div>}
+      {c.sameDay > 0 && <div>{c.sameDayChan ? "이 칸 " : ""}실사일 당일 입출고 {qtyText(c.sameDay, "건")} — 실사 전 움직임인지 확인하세요.</div>}
     </div>
   );
 }
@@ -371,14 +372,14 @@ export default function TxnModal({
         const nameOf = (pid: string) => (preview.rows as AdjRow[]).find((r) => r.product_id === pid)?.name || "품목";
         const parts: string[] = [];
         if (j.note) parts.push(j.note);
-        if (Number(j.invalid) > 0) parts.push(`${j.invalid}건은 실사수량이 숫자가 아니라 건너뛰었습니다.`);
+        if (Number(j.invalid) > 0) parts.push(`${qtyText(j.invalid, "건")}은 실사수량이 숫자가 아니라 건너뛰었습니다.`);
         const mm = Array.isArray(j.mismatch) ? j.mismatch : [];
-        if (mm.length) parts.push(`반영 직후 ${mm.length}종이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.\n${mm.slice(0, 8).map((m) => `- ${nameOf(m.product_id)}: 실사 ${Number(m.target).toLocaleString()}, 지금 ${Number(m.actual).toLocaleString()}`).join("\n")}${mm.length > 8 ? `\n- 외 ${mm.length - 8}종` : ""}`);
+        if (mm.length) parts.push(`반영 직후 ${qtyText(mm.length, "종")}이 실사수량과 다릅니다 — 같은 순간 다른 기록이 들어왔을 수 있으니 조정 내역을 확인하세요.\n${mm.slice(0, 8).map((m) => `- ${nameOf(m.product_id)}: 실사 ${fmtQty(Number(m.target))}, 지금 ${fmtQty(Number(m.actual))}`).join("\n")}${mm.length > 8 ? `\n- 외 ${qtyText(mm.length - 8, "종")}` : ""}`);
         // 건너뜀·어긋남이 있으면 오류 토스트(7초), 안내만이면 성공 토스트
         if (parts.length) (Number(j.invalid) > 0 || mm.length ? toast.error : toast.success)(parts.join(" "));
-        else toast.success(`${preview.count.toLocaleString()}건을 조정했습니다`);
+        else toast.success(`${qtyText(preview.count, "건")}을 조정했습니다`);
       } else if (j.replay) toast.success("이미 반영돼 있던 요청입니다 — 다시 기록하지 않았습니다.");
-      else toast.success(`${preview.count.toLocaleString()}건을 반영했습니다`);
+      else toast.success(`${qtyText(preview.count, "건")}을 반영했습니다`);
       if (j.link) {
         const m = linkMessage(j.link, (pid) => (preview.rows as IoRow[]).find((r) => r.product_id === pid)?.product_name || "품목");
         if (j.link.ok && !j.link.failed?.length) toast.success(m); else toast.error(m);
@@ -402,7 +403,7 @@ export default function TxnModal({
   //  조정은 서버가 '조정 날짜 기준' 재고로 델타를 다시 계산한다 — 화면도 같은 기준(asof=거래일)으로 따로 조회한다.
   //  부모 목록(asof 없음)은 발송 예정 선점까지 빠진 값이라, 그걸로 실사를 맞추면 '현재고와 동일' 오판·유령 재고가 생긴다(감사 #6).
   //  입고·출고는 그 칸을 asof 없이 읽어 현재고(on_hand = 오늘까지)와 출고 예정(scheduled_out)을 따로 보여 준다(D1·S6).
-  //  qty(가용 = 미래 발송일 선점까지 뺀 값)는 출고 초과 경고·'거래 후'의 기준으로 그대로 쓴다 — 선점분을 다시 내보내지 않게.
+  //  fmtQty(가용 = 미래 발송일 선점까지 뺀 값)는 출고 초과 경고·'거래 후'의 기준으로 그대로 쓴다 — 선점분을 다시 내보내지 않게.
   type StockInfo = { qty: number; onHand: number | null; sched: number };
   const [chanQty, setChanQty] = useState<Record<string, StockInfo>>({});
   const [qtyErr, setQtyErr] = useState("");
@@ -472,8 +473,8 @@ export default function TxnModal({
     if (type === "출고" && after < 0 && !(await confirm({
       title: "재고보다 많은 출고",
       body: splitStock
-        ? `가용 재고(${current.toLocaleString()} = 현재고 ${(onHand ?? 0).toLocaleString()} − 출고 예정 ${sched.toLocaleString()})보다 많은 출고입니다. 가용이 ${after.toLocaleString()} 가 됩니다.`
-        : `현재고(${current.toLocaleString()})보다 많은 출고입니다. 재고가 ${after.toLocaleString()} 가 됩니다.`,
+        ? `가용 재고(${fmtQty(current)} = 현재고 ${(onHand ?? 0).toLocaleString()} − 출고 예정 ${fmtQty(sched)})보다 많은 출고입니다. 가용이 ${fmtQty(after)} 가 됩니다.`
+        : `현재고(${fmtQty(current)})보다 많은 출고입니다. 재고가 ${fmtQty(after)} 가 됩니다.`,
       action: "그래도 출고",
     }))) return;
     setSaving(true); setError("");
@@ -581,8 +582,8 @@ export default function TxnModal({
           {product && (pickMissing ? null : chanKnown
             ? (splitStock
               // 현재고 = 오늘까지 실제로 움직인 것, 출고 예정 = 미래 발송일로 이미 잡힌 출고(대부분 B2B 선점), 거래 후 = 가용 기준
-              ? <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 <strong>{(onHand ?? 0).toLocaleString()}</strong>{product.unit} · 출고 예정 {sched.toLocaleString()} · 가용 {current.toLocaleString()} → 거래 후 가용 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{after.toLocaleString()}</strong>{product.unit}</p>
-              : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{datedAdjust ? `${date} 기준 ` : ""}{channel} 현재고 <strong>{current.toLocaleString()}</strong>{product.unit} → 거래 후 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{after.toLocaleString()}</strong>{product.unit}</p>)
+              ? <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{channel} 현재고 <strong>{(onHand ?? 0).toLocaleString()}</strong>{product.unit} · 출고 예정 {fmtQty(sched)} · 가용 {fmtQty(current)} → 거래 후 가용 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{fmtQty(after)}</strong>{product.unit}</p>
+              : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px" }}>{datedAdjust ? `${date} 기준 ` : ""}{channel} 현재고 <strong>{fmtQty(current)}</strong>{product.unit} → 거래 후 <strong style={{ color: after < 0 ? "var(--sm-danger)" : "var(--sm-black)" }}>{fmtQty(after)}</strong>{product.unit}</p>)
             : <p className="sm-faint" style={{ fontSize: 12, margin: "2px 0 8px", color: qtyErr ? "var(--sm-danger)" : undefined }}>{qtyErr ? `${channel} 현재고를 불러오지 못했습니다 — ${qtyErr}. 창을 닫았다 다시 여세요.` : `${channel} 현재고 불러오는 중...`}</p>)}
 
           {isAdjust && (
@@ -648,7 +649,7 @@ export default function TxnModal({
                 <>
                   {preview.count === 0 && !applying && <span className="b2b-btn-why">반영할 행이 없습니다 — 파일을 다시 선택하세요</span>}
                   <button className="b2b-btn-primary" onClick={applyImport} disabled={applying || preview.count === 0}>
-                    {applying ? "반영 중..." : `${preview.count.toLocaleString()}건 ${preview.kind === "조정" ? "조정" : "반영"}`}
+                    {applying ? "반영 중..." : `${qtyText(preview.count, "건")} ${preview.kind === "조정" ? "조정" : "반영"}`}
                   </button>
                 </>
               ) : (
@@ -687,16 +688,16 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
         <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
           {isAdjust ? (
             <>
-              <span>실제 변경 <strong>{preview.count.toLocaleString()}</strong>건</span>
-              <span className="sm-faint">일치 {preview.valid.toLocaleString()}건 중</span>
+              <span>실제 변경 <strong>{fmtQty(preview.count)}</strong>건</span>
+              <span className="sm-faint">일치 {qtyText(preview.valid, "건")} 중</span>
             </>
           ) : (
-            <span>반영 가능 <strong style={{ color: "var(--sm-success)" }}>{preview.count.toLocaleString()}</strong>건</span>
+            <span>반영 가능 <strong style={{ color: "var(--sm-success)" }}>{fmtQty(preview.count)}</strong>건</span>
           )}
-          {!!preview.merged && <span className="sm-faint">중복 SKU {preview.merged}건 합산됨</span>}
-          {!!preview.skipped && <span className="sm-faint">미입력 {preview.skipped.toLocaleString()}행 건너뜀</span>}
-          {!!preview.untracked && <span className="sm-faint">재고 관리 사용 안함 {preview.untracked.toLocaleString()}행 제외</span>}
-          {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {preview.errCount}건(제외)</span>}
+          {!!preview.merged && <span className="sm-faint">중복 SKU {qtyText(preview.merged, "건")} 합산됨</span>}
+          {!!preview.skipped && <span className="sm-faint">미입력 {qtyText(preview.skipped, "행")} 건너뜀</span>}
+          {!!preview.untracked && <span className="sm-faint">재고 관리 사용 안함 {qtyText(preview.untracked, "행")} 제외</span>}
+          {preview.errCount > 0 && <span style={{ color: "var(--sm-danger)" }}>오류 {qtyText(preview.errCount, "건")}(제외)</span>}
         </div>
 
         {preview.rows.length === 0 ? (
@@ -711,9 +712,9 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                     <tr key={i} style={{ color: r.delta === 0 ? "var(--sm-text-light)" : undefined }}>
                       <td>{r.name}{r.spec ? <span className="sm-faint" style={{ marginLeft: 5, fontSize: 12 }}>{r.spec}</span> : null}{r.pending ? <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "var(--sm-warning)" }}>대기 {r.pending}</span> : null}</td>
                       <td className="sm-faint">{r.sku || "-"}</td>
-                      <td className="num b2b-money">{r.current.toLocaleString()}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{r.target.toLocaleString()}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{r.delta.toLocaleString()}</td>
+                      <td className="num b2b-money">{fmtQty(r.current)}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{fmtQty(r.target)}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700, color: r.delta > 0 ? "var(--sm-success)" : r.delta < 0 ? "var(--sm-danger)" : "var(--sm-text-light)" }}>{r.delta > 0 ? "+" : ""}{fmtQty(r.delta)}</td>
                       <td className="sm-faint">{r.memo || "-"}</td>
                     </tr>
                   ))}
@@ -731,7 +732,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                       <td style={{ whiteSpace: "nowrap" }}>{r.txn_date?.slice(5)}</td>
                       <td><span className="b2b-status-pill" style={{ background: rc.bg, color: rc.fg }}>{r.type}</span></td>
                       <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product_name}</td>
-                      <td className="num b2b-money" style={{ color: rc.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{r.qty.toLocaleString()}</td>
+                      <td className="num b2b-money" style={{ color: rc.fg, fontWeight: 700 }}>{r.qty > 0 ? "+" : ""}{fmtQty(r.qty)}</td>
                       <td className="num b2b-money">{r.unit_amount ? r.unit_amount.toLocaleString() : "-"}</td>
                       <td>{r.partner || "-"}</td>
                     </tr>
@@ -740,7 +741,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
                 </tbody>
               </table>
             )}
-            {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {preview.rows.length - 300}건(전체 반영됩니다)</p>}
+            {preview.rows.length > 300 && <p className="sm-faint" style={{ fontSize: 12, padding: "6px 2px" }}>...외 {qtyText(preview.rows.length - 300, "건")}(전체 반영됩니다)</p>}
           </div>
         )}
 
@@ -748,7 +749,7 @@ function ExcelPane({ type, isAdjust, templateHref, date, setDate, partner, setPa
           <section>
             <div className="b2b-field-label" style={{ fontWeight: 700, color: "var(--sm-danger)" }}>오류 ({preview.errors.length}) — 해당 행은 제외</div>
             <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 12, color: "var(--sm-danger)", maxHeight: 130, overflow: "auto" }}>
-              {preview.errors.map((e, i) => <li key={i}>{e.line}행: {e.msg}</li>)}
+              {preview.errors.map((e, i) => <li key={i}>{qtyText(e.line, "행")}: {e.msg}</li>)}
             </ul>
           </section>
         )}

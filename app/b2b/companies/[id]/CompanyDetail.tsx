@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Company, formatPhone, formatBizNo } from "@/app/lib/b2b-types";
 import CompanyPrices from "./CompanyPrices";
+import ItemLabel from "@/app/components/ItemLabel";
+import { won, qtyText } from "@/app/lib/format";
 import {
   STATUS_COLORS,
   STATUS_SHORT,
@@ -80,7 +82,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
       <div className="b2b-dash-grid" style={{ marginBottom: 16 }}>
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">총 발주</div>
-          <div className="b2b-stat-card-value">{data.summary.order_count}건</div>
+          <div className="b2b-stat-card-value">{qtyText(data.summary.order_count, "건")}</div>
         </div>
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">누적 매출 (발송완료)</div>
@@ -92,7 +94,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
             {formatMoney(data.summary.outstanding)}
           </div>
           {data.summary.unpaid_count > 0 && (
-            <div className="b2b-stat-card-hint">{data.summary.unpaid_count}건 입금전/일부입금</div>
+            <div className="b2b-stat-card-hint">{qtyText(data.summary.unpaid_count, "건")} 입금전/일부입금</div>
           )}
         </div>
         <div className="b2b-stat-card">
@@ -151,7 +153,7 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
                   <th>품목</th>
                   <th>발주일</th>
                   <th>발송일</th>
-                  <th className="num">합계</th>
+                  <th className="num">합계(원)</th>
                   <th>상태</th>
                   <th>입금</th>
                 </tr>
@@ -170,14 +172,14 @@ export default function CompanyDetail({ companyId }: { companyId: string }) {
                         : o.items.slice(0, 2).map((it, i) => (
                             <span key={i}>
                               {i > 0 && ", "}
-                              {it.product_name}{it.spec ? ` ${it.spec}` : ""} ×{it.qty}
+                              <ItemLabel name={it.product_name} spec={it.spec} qty={it.qty} />
                             </span>
                           ))}
-                      {o.items.length > 2 && <span style={{ color: "var(--sm-text-light)" }}> 외 {o.items.length - 2}종</span>}
+                      {o.items.length > 2 && <span style={{ color: "var(--sm-text-light)" }}> 외 {qtyText(o.items.length - 2, "종")}</span>}
                     </td>
                     <td>{o.order_date}</td>
                     <td>{o.ship_date || "-"}</td>
-                    <td className="num b2b-money">{formatMoney(o.total)}</td>
+                    <td className="num b2b-money">{won(o.total)}</td>
                     <td>
                       <span className="b2b-status-pill" style={{ background: STATUS_COLORS[o.status]?.bg, color: STATUS_COLORS[o.status]?.fg }}>
                         {STATUS_SHORT[o.status] || o.status}

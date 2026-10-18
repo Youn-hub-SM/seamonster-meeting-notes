@@ -4,6 +4,7 @@ import { useEscClose } from "@/app/lib/use-esc";
 import IconButton from "@/app/components/IconButton";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
+import { won, wonText } from "@/app/lib/format";
 
 // 원가 변경 예약 — "n월 n일부터 이 원가". 인상일에 맞춰 사람이 고치는 걸 놓치지 않게 미리 걸어둔다.
 //  반영은 DB 함수(apply_due_cost_schedules)가 매일 00:10 KST 에 한다. 여기서는 걸고·보고·취소한다.
@@ -18,7 +19,6 @@ type Sched = {
   cost_material: number; pkg_inner: number; pkg_label: number; pkg_outer: number;
 };
 
-const won = (n: number) => Math.round(n).toLocaleString();
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 
 export default function CostScheduleModal({ product, onClose, onApplied }: {
@@ -114,7 +114,7 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">
             원가 변경 예약 — {product.name}
-            <span className="sm-faint" style={{ marginLeft: 10, fontSize: 12, fontWeight: 400 }}>현재 {won(product.cost_price)}원</span>
+            <span className="sm-faint" style={{ marginLeft: 10, fontSize: 12, fontWeight: 400 }}>현재 {wonText(product.cost_price)}</span>
           </span>
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
@@ -165,14 +165,14 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
 
               <div className="sm-row" style={{ gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13 }}>
-                  {won(product.cost_price)}원 → <strong>{won(nextCost)}원</strong>
+                  {wonText(product.cost_price)} → <strong>{wonText(nextCost)}</strong>
                 </span>
                 {nextCost > 0 && diff !== 0 && (
                   <span className="b2b-status-pill" style={{
                     background: diff > 0 ? "var(--sm-danger-bg)" : "var(--sm-success-bg)",
                     color: diff > 0 ? "var(--sm-danger)" : "var(--sm-success)",
                   }}>
-                    {diff > 0 ? "▲" : "▼"} {won(Math.abs(diff))}원
+                    {diff > 0 ? "▲" : "▼"} {wonText(Math.abs(diff))}
                     {product.cost_price > 0 ? ` (${(Math.abs(diff) / product.cost_price * 100).toFixed(1)}%)` : ""}
                   </span>
                 )}
@@ -192,12 +192,12 @@ export default function CostScheduleModal({ product, onClose, onApplied }: {
                   : (
                     <div className="b2b-table-wrap" style={{ maxHeight: 200, overflow: "auto" }}>
                       <table className="b2b-table is-responsive" style={{ fontSize: 13 }}>
-                        <thead><tr><th>적용일</th><th className="num">원가</th><th>상태</th><th>메모</th><th /></tr></thead>
+                        <thead><tr><th>적용일</th><th className="num">원가(원)</th><th>상태</th><th>메모</th><th /></tr></thead>
                         <tbody>
                           {rows.map((r) => (
                             <tr key={r.id}>
                               <td data-label="적용일" style={{ whiteSpace: "nowrap" }}>{r.effective_date}</td>
-                              <td data-label="원가" className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.cost_price)}</td>
+                              <td data-label="원가(원)" className="num b2b-money" style={{ fontWeight: 700 }}>{won(r.cost_price)}</td>
                               <td data-label="상태">
                                 {r.applied_at
                                   ? <span className="b2b-status-pill" style={{ background: "var(--sm-success-bg)", color: "var(--sm-success)" }}>반영됨</span>

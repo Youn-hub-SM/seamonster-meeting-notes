@@ -12,6 +12,7 @@ import {
   isNoticeFieldRequired,
   promptFieldsFor,
 } from "@/app/lib/notice-types";
+import { qty, qtyText } from "@/app/lib/format";
 
 type Refine = "shorter" | "politer" | "compensation";
 type Busy = "" | "make" | "remake" | "type" | "apply" | Refine;
@@ -251,7 +252,7 @@ export default function NoticePage() {
               />
               <div className="ntc-foot">
                 <span className={`sm-faint ntc-note ${over ? "is-over" : ""}`}>
-                  글자 수 {count.toLocaleString()}{limit > 0 ? ` / 한도 ${limit.toLocaleString()}` : ""}
+                  글자 수 {qty(count)}{limit > 0 ? ` / 한도 ${qty(limit)}` : ""}
                 </span>
                 <div className="sm-row-wrap sm-gap-2">
                   <button type="button" className="b2b-btn-primary" onClick={copy} disabled={!draft || locked}>{copied ? "복사됨" : "공지 복사"}</button>
@@ -283,7 +284,7 @@ export default function NoticePage() {
               )}
               {result.optional.length > 0 && (
                 <details className="ntc-fold">
-                  <summary>선택 항목 {result.optional.length}개</summary>
+                  <summary>선택 항목 {qtyText(result.optional.length)}</summary>
                   <div className="ntc-grid">
                     {result.optional.map((f) => (
                       <GapField key={f.key} f={f} required={false} value={gapValue(f)} disabled={locked} onChange={(v) => setExtra(f.key, v)} />
@@ -293,7 +294,7 @@ export default function NoticePage() {
               )}
               {filled.length > 0 && (
                 <details className="ntc-fold">
-                  <summary>채워진 항목 {filled.length}개</summary>
+                  <summary>채워진 항목 {qtyText(filled.length)}</summary>
                   <div className="ntc-grid">
                     {filled.map(({ f, required }) => (
                       <GapField key={f.key} f={f} required={required} value={gapValue(f)} disabled={locked} onChange={(v) => setExtra(f.key, v)} />

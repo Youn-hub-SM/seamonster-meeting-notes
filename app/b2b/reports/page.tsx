@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
 import { formatMoney } from "@/app/lib/b2b-orders";
+import { qty, qtyText, wonText } from "@/app/lib/format";
 import { Donut, TrendChart, ChartLegend, moneyCompact } from "@/app/components/charts";
 
 type Report = {
@@ -216,7 +217,7 @@ export default function ReportsPage() {
         <div className="sm-warn">
           {report.ledger.error
             ? `매출 원장 합계를 불러오지 못했습니다 — ${report.ledger.error}`
-            : `매출 원장(/sales 도매)과 ${formatMoney(Math.abs(report.ledger.diff ?? 0))}원 차이 — 원장 대조로 발주를 확인하세요`}
+            : `매출 원장(/sales 도매)과 ${wonText(Math.abs(report.ledger.diff ?? 0))} 차이 — 원장 대조로 발주를 확인하세요`}
         </div>
       )}
       {ledgerErr && <div className="b2b-error">{ledgerErr}</div>}
@@ -227,7 +228,7 @@ export default function ReportsPage() {
             <button className="b2b-link-btn" onClick={() => setLedgerList(null)}>닫기</button>
           </div>
           {ledgerList.mismatches.length === 0 ? (
-            <div className="b2b-empty">발송완료 {ledgerList.checked}건 모두 원장과 같습니다.</div>
+            <div className="b2b-empty">발송완료 {qtyText(ledgerList.checked, "건")} 모두 원장과 같습니다.</div>
           ) : (
             <div className="b2b-table-wrap">
               <table className="b2b-table">
@@ -237,8 +238,8 @@ export default function ReportsPage() {
                     <th>발송일</th>
                     <th>상태</th>
                     <th>내용</th>
-                    <th className="num">발주 기준</th>
-                    <th className="num">원장</th>
+                    <th className="num">발주 기준(원)</th>
+                    <th className="num">원장(원)</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -249,8 +250,8 @@ export default function ReportsPage() {
                       <td data-label="발송일">{m.date || "-"}</td>
                       <td data-label="상태">{m.status}</td>
                       <td data-label="내용">{MISMATCH_LABEL[m.kind]}</td>
-                      <td data-label="발주 기준" className="num b2b-money">{formatMoney(m.expected)}</td>
-                      <td data-label="원장" className="num b2b-money">{formatMoney(m.ledger)}</td>
+                      <td data-label="발주 기준(원)" className="num b2b-money">{formatMoney(m.expected)}</td>
+                      <td data-label="원장(원)" className="num b2b-money">{formatMoney(m.ledger)}</td>
                       <td style={{ textAlign: "right" }}>
                         <button className="b2b-btn-secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => resyncOrder(m)} disabled={ledgerBusy !== ""}>
                           {ledgerBusy === m.order_id ? "맞추는 중..." : "다시 맞추기"}
@@ -312,19 +313,19 @@ export default function ReportsPage() {
             </div>
             <div className="sm-stat-hero-body">
               <div className="sm-stat-hero-label">총 매출 <span className="sm-faint">과세 {formatMoney(report.summary.revenue_taxable)} · 면세 {formatMoney(report.summary.revenue_exempt)}</span></div>
-              <div className="sm-stat-hero-total b2b-money">{formatMoney(report.summary.revenue)}원</div>
+              <div className="sm-stat-hero-total b2b-money">{wonText(report.summary.revenue)}</div>
               <div className="sm-stat-hero-breakdown">
                 <div className="sm-stat-hero-metric">
                   <span className="sm-stat-hero-metric-label">발송완료 발주</span>
-                  <span className="sm-stat-hero-metric-value">{report.summary.orders_completed}건</span>
-                  <span className="sm-faint" style={{ fontSize: 12 }}>건당 평균 {formatMoney(report.summary.avg_order_value)}원</span>
+                  <span className="sm-stat-hero-metric-value">{qtyText(report.summary.orders_completed, "건")}</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>건당 평균 {wonText(report.summary.avg_order_value)}</span>
                 </div>
                 <div className="sm-stat-hero-metric">
                   <span className="sm-stat-hero-metric-label">예상 마진</span>
-                  <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-success)" }}>{formatMoney(report.summary.margin)}원</span>
+                  <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-success)" }}>{wonText(report.summary.margin)}</span>
                   {(report.summary.margin_cost_missing_lines ?? 0) > 0 ? (
                     <span className="sm-faint" style={{ fontSize: 12, color: "var(--sm-danger)" }}>
-                      원가 미입력 {report.summary.margin_cost_missing_lines}건(매출 {formatMoney(report.summary.margin_cost_missing_revenue ?? 0)}원), 마진 과대 가능
+                      원가 미입력 {qtyText(report.summary.margin_cost_missing_lines, "건")}(매출 {wonText(report.summary.margin_cost_missing_revenue ?? 0)}), 마진 과대 가능
                     </span>
                   ) : (
                     <span className="sm-faint" style={{ fontSize: 12 }}>매출 대비 {report.summary.revenue > 0 ? Math.round((report.summary.margin / report.summary.revenue) * 100) : 0}%</span>
@@ -332,8 +333,8 @@ export default function ReportsPage() {
                 </div>
                 <div className="sm-stat-hero-metric">
                   <span className="sm-stat-hero-metric-label">미발송 잔고 <span className="sm-faint">(전체 기간)</span></span>
-                  <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-warning)" }}>{formatMoney(report.backlog.pending_total)}원</span>
-                  <span className="sm-faint" style={{ fontSize: 12 }}>{report.backlog.pending_orders}건 진행 중</span>
+                  <span className="sm-stat-hero-metric-value" style={{ color: "var(--sm-warning)" }}>{wonText(report.backlog.pending_total)}</span>
+                  <span className="sm-faint" style={{ fontSize: 12 }}>{qtyText(report.backlog.pending_orders, "건")} 진행 중</span>
                 </div>
               </div>
             </div>
@@ -346,7 +347,7 @@ export default function ReportsPage() {
                 <h2 className="b2b-card-title">월별 매출 추세</h2>
                 <ChartLegend items={[["매출(원)", "var(--sm-orange)"]]} />
               </div>
-              <TrendChart data={report.trend.map((t) => ({ label: t.month, value: t.revenue, tip: `${t.month} · ${formatMoney(t.revenue)}원` }))} fmtAxis={moneyCompact} />
+              <TrendChart data={report.trend.map((t) => ({ label: t.month, value: t.revenue, tip: `${t.month} · ${wonText(t.revenue)}` }))} fmtAxis={moneyCompact} />
             </div>
           )}
 
@@ -364,8 +365,8 @@ export default function ReportsPage() {
                     <tr>
                       <th>업체</th>
                       <th className="num">발주 수</th>
-                      <th className="num">매출</th>
-                      <th className="num">마진</th>
+                      <th className="num">매출(원)</th>
+                      <th className="num">마진(원)</th>
                       <th className="num">마진율</th>
                     </tr>
                   </thead>
@@ -374,8 +375,8 @@ export default function ReportsPage() {
                       <tr key={c.company_name}>
                         <td data-label="업체"><strong>{c.company_name}</strong></td>
                         <td data-label="발주 수" className="num">{c.orders}</td>
-                        <td data-label="매출" className="num b2b-money">{formatMoney(c.revenue)}</td>
-                        <td data-label="마진" className="num b2b-money">{formatMoney(c.margin)}</td>
+                        <td data-label="매출(원)" className="num b2b-money">{formatMoney(c.revenue)}</td>
+                        <td data-label="마진(원)" className="num b2b-money">{formatMoney(c.margin)}</td>
                         <td data-label="마진율" className="num">
                           {c.revenue > 0 ? `${Math.round((c.margin / c.revenue) * 100)}%` : "-"}
                         </td>
@@ -402,9 +403,9 @@ export default function ReportsPage() {
                       <th>품목</th>
                       <th>옵션</th>
                       <th className="num">수량</th>
-                      <th className="num">매출</th>
-                      <th className="num">원가</th>
-                      <th className="num">마진</th>
+                      <th className="num">매출(원)</th>
+                      <th className="num">원가(원)</th>
+                      <th className="num">마진(원)</th>
                       <th className="num">마진율</th>
                     </tr>
                   </thead>
@@ -413,7 +414,7 @@ export default function ReportsPage() {
                       <tr key={`${p.product_name} ${p.spec ?? ""}`}>
                         <td><strong>{p.product_name}</strong></td>
                         <td>{p.spec || "-"}</td>
-                        <td className="num">{p.qty.toLocaleString()}</td>
+                        <td className="num">{qty(p.qty)}</td>
                         <td className="num b2b-money">{formatMoney(p.revenue)}</td>
                         <td className="num b2b-money">{formatMoney(p.cost)}</td>
                         <td className="num b2b-money">{formatMoney(p.margin)}</td>

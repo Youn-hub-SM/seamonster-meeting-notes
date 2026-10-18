@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatQty } from "@/app/lib/b2b-orders";
+import { qtyText } from "@/app/lib/format";
 
 type ProductRow = {
   product_name: string;
@@ -61,7 +62,7 @@ export default function ProductionView() {
       <p style={{ fontSize: 12, color: "var(--sm-text-light)", marginBottom: 12 }}>
         생산대기·생산중 발주만 ·{" "}
         <strong style={{ color: "var(--sm-text-mid)" }}>
-          합계 {grandOrders}건 / {formatQty(grandQty)}개
+          합계 {qtyText(grandOrders, "건")} / {qtyText(grandQty)}
         </strong>
       </p>
       {days.map((d) => {
@@ -80,8 +81,8 @@ export default function ProductionView() {
                 {isOverdue && <span className="b2b-urgency-pill is-overdue">지연</span>}
               </div>
               <div className="b2b-week-totals">
-                <span><em>발주</em><strong>{d.order_count}건</strong></span>
-                <span><em>품목</em><strong>{d.products.length}종</strong></span>
+                <span><em>발주</em><strong>{qtyText(d.order_count, "건")}</strong></span>
+                <span><em>품목</em><strong>{qtyText(d.products.length, "종")}</strong></span>
                 <span><em>총 수량</em><strong>{formatQty(d.total_qty)}</strong></span>
               </div>
             </div>

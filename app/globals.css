@@ -1480,6 +1480,10 @@ a {
 .home-section-title { font-size: var(--sm-fs-xl); font-weight: 700; letter-spacing: var(--sm-ls-heading); line-height: var(--sm-lh-heading); margin-bottom: 4px; }
 .home-section-sub { font-size: var(--sm-fs-base); color: var(--sm-text-mid); margin-bottom: 20px; }
 
+/* 홈 첫 줄 아래 한 문장(2026-10-17 디자인 4차 D1) — "오늘 발송 2건, 입금 대기 3건 7,334,800원". 13px 회색 글 한 줄, 숫자 카드 아님.
+   비어 있어도 높이는 유지한다(문장이 뒤늦게 오며 아래 검색 줄이 밀리지 않게) */
+.home-today-line { margin: var(--sm-space-1) 0 0; min-height: calc(var(--sm-fs-base) * var(--sm-lh-ui)); font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); font-variant-numeric: tabular-nums; }
+
 /* 홈 상단 가이드 검색 줄(2026-10-14 D4) — 검색칸 + [가이드 열기] 2차 버튼 + '새 업데이트 N건' 링크. 제목 아래 한 줄, 모바일은 줄바꿈 */
 .home-guide-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 32px; }
 .home-guide-input { flex: 1 1 240px; min-width: 0; max-width: 420px; }

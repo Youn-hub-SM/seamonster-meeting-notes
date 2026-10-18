@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useConfirm } from "@/app/components/Feedback";
+import { qty, qtyText, dateTime } from "@/app/lib/format";
 
 type Tally = { key: string; sku: string; name: string; qty: number; unknown: boolean; zone?: string | null };
 type State = { tally: Tally[]; scannedCount: number; totalInvoices: number; totalUnits: number };
@@ -18,7 +19,6 @@ const MSG_COLOR: Record<Msg["kind"], { bg: string; fg: string }> = {
   bad: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)" },
   wait: { bg: "var(--sm-info-bg)", fg: "var(--sm-info)" },
 };
-const hm = (iso: string) => { try { return new Date(iso).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return iso; } };
 
 // PC 알림 소리 — 스캐너 비프음은 스캐너가 스스로 내므로 바꿀 수 없다. 정상 스캔은 소리 없음(스캐너 소리만).
 //  음성 = 브라우저 내장 한국어 음성(파일·비용 없음), 한국어 음성이 없는 PC 는 삐 소리로.
@@ -206,7 +206,7 @@ export default function ScanPage() {
     if (j.moved) { setMsg({ kind: "moved", text: `이전 라운드 송장 ${inv} — 이번 라운드에 넣음` }); return; }
     if (j.prevRound) {
       lastPrevRef.current = inv;
-      setMsg({ kind: "prev", text: `이전 라운드에서 스캔한 송장 ${inv} (${hm(j.prevRound.scanned_at)}${j.prevRound.scanned_by ? `, ${j.prevRound.scanned_by}` : ""}) — 집계 제외` });
+      setMsg({ kind: "prev", text: `이전 라운드에서 스캔한 송장 ${inv} (${dateTime(j.prevRound.scanned_at)}${j.prevRound.scanned_by ? `, ${j.prevRound.scanned_by}` : ""}) — 집계 제외` });
       alarm("prev");
       return;
     }
@@ -224,7 +224,7 @@ export default function ScanPage() {
   // 처리 중(서버 응답 전) 스캔이 있으면 인쇄·초기화를 미룬다 — 그 송장 품목이 빠진 리스트가 인쇄되거나 대기 스캔이 버려진다
   function waitBusy(what: string): boolean {
     if (!busy()) return false;
-    setMsg({ kind: "wait", text: `처리 중 ${Math.max(1, queueRef.current.length)}건 — 끝난 뒤 다시 ${what}하세요` });
+    setMsg({ kind: "wait", text: `처리 중 ${qtyText(Math.max(1, queueRef.current.length), "건")} — 끝난 뒤 다시 ${what}하세요` });
     scanRef.current?.focus();
     return true;
   }
@@ -251,7 +251,7 @@ export default function ScanPage() {
   async function undoReset() {
     if (!lastReset || undoingRef.current) return;
     if (waitBusy("되돌리기")) return;
-    const ok = await confirm({ title: "초기화 되돌리기", body: `${hm(lastReset.at)}에 초기화한 ${lastReset.count.toLocaleString()}건이 이번 라운드로 돌아와 지금 찍은 것과 합쳐집니다.`, action: `${lastReset.count.toLocaleString()}건 되돌리기`, danger: false });
+    const ok = await confirm({ title: "초기화 되돌리기", body: `${dateTime(lastReset.at)}에 초기화한 ${qtyText(lastReset.count, "건")}이 이번 라운드로 돌아와 지금 찍은 것과 합쳐집니다.`, action: `${qtyText(lastReset.count, "건")} 되돌리기`, danger: false });
     scanRef.current?.focus(); // 버튼에 포커스가 남으면 다음 스캔의 Enter 가 버튼을 또 누른다
     if (!ok) return;
     undoingRef.current = true; roundOpRef.current = true;
@@ -261,7 +261,7 @@ export default function ScanPage() {
       if (!j.ok) throw new Error(j.error || "초기화를 되돌리지 못했습니다. 새로고침 뒤 다시 누르세요.");
       setSt({ tally: j.tally, scannedCount: j.scannedCount, totalInvoices: j.totalInvoices, totalUnits: j.totalUnits });
       setLastReset(j.lastReset ?? null);
-      setMsg({ kind: "ok", text: `초기화를 되돌렸습니다 (${Number(j.restored || 0).toLocaleString()}건)` });
+      setMsg({ kind: "ok", text: `초기화를 되돌렸습니다 (${qtyText(Number(j.restored || 0), "건")})` });
     } catch (e) { setError(e instanceof Error ? e.message : "초기화를 되돌리지 못했습니다. 새로고침 뒤 다시 누르세요."); void loadState(true); }
     finally { undoingRef.current = false; roundOpRef.current = false; void pump(); }
   }
@@ -271,7 +271,7 @@ export default function ScanPage() {
     if (waitBusy("인쇄")) return;
     if (!st || !st.tally.length) return;
     const now = new Date();
-    const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const ts = dateTime(now);
     const grouped = st.tally.some((t) => t.zone); // 구역 미설정이면 소제목 없이 기존 형태 그대로
     let rows = "";
     let curZone: string | undefined;
@@ -280,7 +280,7 @@ export default function ScanPage() {
         const z = t.unknown ? "미등록 코드" : t.zone || "위치 미지정";
         if (z !== curZone) { curZone = z; rows += `<tr class="z"><td colspan="2">${esc(z)}</td></tr>`; }
       }
-      rows += `<tr><td>${esc(t.name)}</td><td class="q">${t.qty.toLocaleString()}</td></tr>`;
+      rows += `<tr><td>${esc(t.name)}</td><td class="q">${qty(t.qty)}</td></tr>`;
     }
     const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>피킹 리스트</title>`
       + `<style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;margin:22px;color:#111}`
@@ -291,9 +291,9 @@ export default function ScanPage() {
       + `tfoot td{font-weight:800;border-top:2px solid #333;border-bottom:none;font-size:17px}`
       + `@media print{body{margin:6mm}}</style></head><body>`
       + `<h1>피킹 리스트</h1>`
-      + `<div class="meta">출력 ${ts}, 스캔 ${st.scannedCount}건</div>`
+      + `<div class="meta">출력 ${ts}, 스캔 ${qtyText(st.scannedCount, "건")}</div>`
       + `<table><thead><tr><th>품목명</th><th class="q">수량</th></tr></thead><tbody>${rows}</tbody>`
-      + `<tfoot><tr><td>합계</td><td class="q">${st.totalUnits.toLocaleString()}</td></tr></tfoot></table>`
+      + `<tfoot><tr><td>합계</td><td class="q">${qty(st.totalUnits)}</td></tr></tfoot></table>`
       + `<script>window.onload=function(){setTimeout(function(){window.print()},80)}</script></body></html>`;
     const w = window.open("", "_blank", "width=560,height=880");
     if (!w) { setError("팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 인쇄하세요."); return; }
@@ -336,7 +336,7 @@ export default function ScanPage() {
         <div className="sm-between" style={{ alignItems: "baseline" }}>
           <label className="b2b-field-label">송장번호 스캔</label>
           <span className="sm-faint" style={{ fontSize: 12 }}>
-            이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 13 }}>{st?.scannedCount ?? 0}</strong>건 · 대상 {st?.totalInvoices ?? 0}건
+            이번 스캔 <strong style={{ color: "var(--sm-success)", fontSize: 13 }}>{st?.scannedCount ?? 0}</strong>건 · 대상 {qtyText(st?.totalInvoices ?? 0, "건")}
             {pending > 0 && <span style={{ color: "var(--sm-info)", marginLeft: 6 }}>· 처리 중 {pending}</span>}
           </span>
         </div>
@@ -397,13 +397,13 @@ export default function ScanPage() {
       {lastReset && lastReset.count > 0 && (
         <div className="sm-row" style={{ gap: 10, marginTop: -6, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" className="b2b-link-btn" onClick={undoReset}>직전 초기화 되돌리기</button>
-          <span className="sm-faint" style={{ fontSize: 12 }}>{hm(lastReset.at)} 초기화 {lastReset.count.toLocaleString()}건 (스캔 기록 30일 보관)</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{dateTime(lastReset.at)} 초기화 {qtyText(lastReset.count, "건")} (스캔 기록 30일 보관)</span>
         </div>
       )}
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>총 {st?.totalUnits.toLocaleString() ?? 0}개 (묶음 전개 반영)</span></span>
+          <span className="b2b-card-title">가지러 갈 상품 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>총 {qtyText(st?.totalUnits ?? 0)} (묶음 전개 반영)</span></span>
         </div>
         {!st || st.tally.length === 0 ? (
           <div className="b2b-empty" style={{ padding: 24 }}>스캔한 송장이 없습니다. 위 칸에 송장번호를 스캔하세요.</div>
@@ -419,7 +419,7 @@ export default function ScanPage() {
                     )}
                     <td data-label="품목명"><strong>{t.name}</strong></td>
                     <td data-label="SKU" className="sm-faint">{t.sku || "-"}</td>
-                    <td data-label="수량" className="num b2b-money" style={{ fontWeight: 800, fontSize: 13 }}>{t.qty.toLocaleString()}</td>
+                    <td data-label="수량" className="num b2b-money" style={{ fontWeight: 800, fontSize: 13 }}>{qty(t.qty)}</td>
                   </tr>
                 ))}
               </tbody>

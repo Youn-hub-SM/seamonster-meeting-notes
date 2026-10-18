@@ -8,10 +8,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildManufacturerReport } from "@/app/lib/voc-manufacturer";
 import type { Voc } from "@/app/lib/voc";
+import { won, qty, qtyText, wonText, dateShort, dateTime } from "@/app/lib/format";
 
 const THIS_MONTH = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 7); // KST
 const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-const won = (n: number) => Math.round(n).toLocaleString();
 
 type SavedReport = { recipient: string; draft: string; counts: { claims: number; surveys: number } | null; updated_at: string };
 
@@ -53,7 +53,7 @@ export default function VocManufacturerPage() {
           setDraft(pick.draft); setCounts(pick.counts || null);
           if (pick.recipient && !recipient) setRecipient(pick.recipient);
           loadedKey.current = `${month}|${pick.recipient}`;
-          setSaveNote(`저장본 불러옴 (${pick.updated_at.slice(0, 16).replace("T", " ")})`);
+          setSaveNote(`저장본 불러옴 (${dateTime(pick.updated_at)})`);
         } else {
           setDraft(""); setCounts(null); loadedKey.current = "";
         }
@@ -70,7 +70,7 @@ export default function VocManufacturerPage() {
     if (pick) {
       setDraft(pick.draft); setCounts(pick.counts || null);
       loadedKey.current = `${month}|${v}`;
-      setSaveNote(`저장본 불러옴 (${pick.updated_at.slice(0, 16).replace("T", " ")})`);
+      setSaveNote(`저장본 불러옴 (${dateTime(pick.updated_at)})`);
     } else if (loadedKey.current) {
       // 수신처만 바뀐 새 문서 취급 — 기존 본문 유지(같은 달 다른 제조사로 보낼 때 복제해 편집하는 흐름)
       loadedKey.current = `${month}|${v}`;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DEFAULT_RATES, DEFAULT_EFFECTIVE, DEFAULT_BOX_CATS, ratesFor, type RateVersion, type BoxCat } from "@/app/lib/fulfill-rates";
 import { unionCategories } from "@/app/lib/delivery-log";
 import { ComboBarLine, BarList, ChartLegend, CHART_LINE } from "@/app/components/charts";
+import { won, qty, qtyText, dateRange } from "@/app/lib/format";
 
 type Boxes = Record<string, number>;
 type Row = {
@@ -12,7 +13,6 @@ type Row = {
   extra_fee: number; guar_extra_fee: number; pado_fee: number; pado_extra: number; pado_cod: number;
   dryice_full: number; dryice_half: number;
 };
-const won = (n: number) => Math.round(n).toLocaleString();
 const sum = (o: Boxes) => Object.values(o || {}).reduce((a, b) => a + (Number(b) || 0), 0);
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 const WD_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 월~일
@@ -148,7 +148,7 @@ export default function FulfillStatsPage() {
           <div className="sm-tabs" style={{ margin: 0 }}>
             {PRESETS.map((p) => <button key={p.key} className={`sm-tab ${preset === p.key ? "is-active" : ""}`} onClick={() => { setFrom(p.from()); setPreset(p.key); }}>{p.key}</button>)}
           </div>
-          <span className="sm-faint" style={{ fontSize: 12 }}>{from} ~ {to}</span>
+          <span className="sm-faint" style={{ fontSize: 12 }}>{dateRange(from, to)}</span>
         </div>
       </header>
 
@@ -159,13 +159,13 @@ export default function FulfillStatsPage() {
         <div className="sm-col" style={{ gap: 16 }}>
           {/* KPI */}
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 0 }}>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 발송(택배)</div><div className="b2b-stat-card-value b2b-money">{won(tot)}</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 16 }}>{won(agg.totN)} <span className="sm-faint">/</span> {won(agg.totG)}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">총 발송(택배)</div><div className="b2b-stat-card-value b2b-money">{qty(tot)}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일반 / 도착보장</div><div className="b2b-stat-card-value" style={{ fontSize: 16 }}>{qty(agg.totN)} <span className="sm-faint">/</span> {qty(agg.totG)}</div></div>
             <div className="b2b-stat-card"><div className="b2b-stat-card-label">도착보장 비율</div><div className="b2b-stat-card-value">{tot ? Math.round((agg.totG / tot) * 100) : 0}%</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일평균 발송</div><div className="b2b-stat-card-value b2b-money">{agg.days ? won(tot / agg.days) : 0}<span className="sm-faint" style={{ fontSize: 12 }}> /{agg.days}일</span></div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계</div><div className="b2b-stat-card-value b2b-money">{won(agg.fee)}원</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스</div><div className="b2b-stat-card-value b2b-money">{won(agg.dry)}원</div></div>
-            <div className="b2b-stat-card"><div className="b2b-stat-card-label">박스비 합계</div><div className="b2b-stat-card-value b2b-money">{won(agg.boxCost)}원</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">일평균 발송</div><div className="b2b-stat-card-value b2b-money">{agg.days ? qty(Math.round(tot / agg.days)) : 0}<span className="sm-faint" style={{ fontSize: 12 }}> /{agg.days}일</span></div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">운임 합계(원)</div><div className="b2b-stat-card-value b2b-money">{won(agg.fee)}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">드라이아이스(원)</div><div className="b2b-stat-card-value b2b-money">{won(agg.dry)}</div></div>
+            <div className="b2b-stat-card"><div className="b2b-stat-card-label">박스비 합계(원)</div><div className="b2b-stat-card-value b2b-money">{won(agg.boxCost)}</div></div>
           </div>
           {agg.noPrice.length > 0 && (
             <p className="sm-faint" style={{ fontSize: 12, margin: "-8px 0 0" }}>
@@ -197,7 +197,7 @@ export default function FulfillStatsPage() {
               data={agg.weekdayAvg.map((d) => [`${d.label}요일`, d.value] as [string, number])}
               sub={(label) => {
                 const d = agg.weekdayAvg.find((x) => `${x.label}요일` === label);
-                return d ? `${d.days}일 발송 · 총 ${d.total.toLocaleString()}건` : null;
+                return d ? `${d.days}일 발송 · 총 ${qtyText(d.total, "건")}` : null;
               }}
             />
             <BarList
@@ -224,9 +224,9 @@ export default function FulfillStatsPage() {
                     <tr key={m.month}>
                       <td><strong>{m.month.slice(2)}</strong></td>
                       {m.cats.map((v, i) => <td key={i} className="num b2b-money">{v || "-"}</td>)}
-                      <td className="num b2b-money">{won(m.n)}</td>
-                      <td className="num b2b-money">{won(m.g)}</td>
-                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{won(m.n + m.g)}</td>
+                      <td className="num b2b-money">{qty(m.n)}</td>
+                      <td className="num b2b-money">{qty(m.g)}</td>
+                      <td className="num b2b-money" style={{ fontWeight: 700 }}>{qty(m.n + m.g)}</td>
                       <td className="num b2b-money">{m.boxCost ? won(m.boxCost) : "-"}</td>
                     </tr>
                   ))}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/app/components/Feedback";
+import { qtyText } from "@/app/lib/format";
 
 // 창고 위치(픽업 구역) 관리 — 송장 스캔 피킹 리스트를 걷는 순서대로 뽑기 위한 설정.
 //  · 구역 목록의 위·아래 순서 = 창고를 걷는 경로 (피킹 리스트가 이 순서로 정렬됨)
@@ -77,7 +78,7 @@ export default function LocationsPage() {
     const n = products.filter((p) => p.pick_zone === z).length;
     const prev = zones;
     saveZones(zones.filter((_, k) => k !== i));
-    toast.undo(`'${z}' 구역을 삭제했습니다${n > 0 ? ` — 품목 ${n}개는 '위치 미지정'으로 뽑힙니다` : ""}`, () => { void saveZones(prev); });
+    toast.undo(`'${z}' 구역을 삭제했습니다${n > 0 ? ` — 품목 ${qtyText(n)}는 '위치 미지정'으로 뽑힙니다` : ""}`, () => { void saveZones(prev); });
   }
 
   // 품목 구역 배정 — 변경 즉시 저장. 실패 시 그 품목만 이전 값 복구
@@ -141,7 +142,7 @@ export default function LocationsPage() {
               <li key={z} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", borderBottom: "1px solid var(--sm-border)" }}>
                 <span className="sm-faint" style={{ width: 22, textAlign: "right", fontSize: 12 }}>{i + 1}</span>
                 <strong style={{ flex: 1 }}>{z}</strong>
-                <span className="sm-faint" style={{ fontSize: 12 }}>품목 {counts.get(z) ?? 0}개</span>
+                <span className="sm-faint" style={{ fontSize: 12 }}>품목 {qtyText(counts.get(z) ?? 0)}</span>
                 <button className="b2b-btn-secondary" onClick={() => moveZone(i, -1)} disabled={i === 0 || saving} style={{ padding: "2px 9px" }}>↑</button>
                 <button className="b2b-btn-secondary" onClick={() => moveZone(i, 1)} disabled={i === zones.length - 1 || saving} style={{ padding: "2px 9px" }}>↓</button>
                 <button className="b2b-btn-secondary" onClick={() => removeZone(i)} disabled={saving} style={{ padding: "2px 9px", color: "var(--sm-danger)" }}>삭제</button>
@@ -163,7 +164,7 @@ export default function LocationsPage() {
 
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <span className="b2b-card-title">품목 배치 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>미지정 {unzonedCount}개</span></span>
+          <span className="b2b-card-title">품목 배치 <span className="sm-faint" style={{ fontSize: 12, fontWeight: 400 }}>미지정 {qtyText(unzonedCount)}</span></span>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
           <input className="b2b-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목·SKU 검색" aria-label="품목·SKU 검색" style={{ flex: "1 1 220px" }} />
