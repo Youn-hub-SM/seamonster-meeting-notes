@@ -1,47 +1,28 @@
 "use client";
 
-// 데이터 비서(2026-10-19, docs/assistant-plan.md 1차) — 커스텀 리포트를 "무엇이든 묻는" 비서로.
-//  질문 → POST /api/report/ask (NDJSON 스트리밍: progress 줄 → done/error) → 답 틀(답/근거/사실·추정/한계/이어서 물어볼 것).
-//  저장 리포트(변수 치환·실행)·루커 SQL·루커 적용 가이드는 그대로. 대화는 브라우저 메모리만(최근 3턴을 history 로 보냄).
-
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useConfirm } from "@/app/components/Feedback";
+// 커스텀 리포트 — 대화형(2026-10-19 대표 결정 "클로드 웹처럼"). 스레드는 서버(report_threads)에 저장되어 다시 열 수 있다.
+//  비서가 글로 말하고(스트리밍), 조사가 필요하면 중간에 도구를 쓰며(도구 칩), run_sql 결과는 그 자리에 표 카드로 끼어든다.
+//  표 카드의 [SQL 보기]·[리포트 저장]·[엑셀 내려받기]·루커 SQL, 저장된 리포트(변수 치환·실행), 루커 가이드는 그대로.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirm, useToast } from "@/app/components/Feedback";
 import { qty, qtyText, dateFull } from "@/app/lib/format";
+import LookerGuide from "./LookerGuide";
 
 type Chart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 type Looker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
 type Row = Record<string, unknown>;
 type Saved = { id: string; name: string; question: string; sql: string; chart: Chart; looker: Looker; createdAt: string; createdBy?: string | null };
-
-// /api/report/ask 계약(서버는 별도 구현) — 화면은 이 모양만 믿는다
 type AskTable = { title: string; sql: string; columns: string[]; rows: Row[]; rowCount: number; truncated: boolean; looker?: Looker };
-type QuoteSource = "voc" | "inquiry" | "report" | "manual" | "request" | "activity";
-type AskQuote = { source: QuoteSource; date: string; title: string; text: string };
-type AskUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; estUsd: number; estNote: string };
-type ToolLog = { name: string; label: string; ok: boolean; ms: number };
-type AskKind = "answer" | "clarify" | "chat";   // chat = 조사 없는 평문 답(되묻기·확인·설명)
-type AskResult = {
-  kind?: AskKind;                       // "clarify" = 되물음(answer = 되물은 문장, clarify.options = 선택지)
-  clarify?: { question: string; options: string[] };
-  answer: string;
-  tables: AskTable[];
-  quotes: AskQuote[];
-  facts: string[]; inferences: string[]; limits: string[]; followups: string[];
-  model: string; usage: AskUsage;
-  toolLog: ToolLog[];
-  elapsedMs?: number;
-  downgraded: boolean; timedOut: boolean;
-};
-type Progress = { name: string; label: string; ms: number };
-type Turn = { q: string; result: AskResult };
-// 저장 리포트 실행 결과(기존 /api/report/run)
+// /api/report/chat 계약(chat-assistant.ts) — 화면은 이 모양만 믿는다
+type ChatTable = AskTable & { id: string; toolUseId: string };
+type Item =
+  | { role: "user"; text: string }
+  | { role: "assistant"; text: string; live?: boolean; meta?: { model: string; estUsd: number; estNote: string; elapsedMs: number; downgraded: boolean; timedOut: boolean } }
+  | { role: "tool"; toolUseId: string; name: string; label: string; ok: boolean | null; ms?: number; table?: ChatTable };
+type Thread = { id: string; title: string; createdBy: string; createdAt: string; updatedAt: string; estUsd: number };
 type RunResult = { rep: Saved; sql: string; columns: string[]; rows: Row[] };
-// 저장 다이얼로그에 넘길 것 — 표 카드의 질문·SQL·루커
 type SaveCtx = { question: string; sql: string; looker?: Looker; chart?: Chart };
 
-const QUOTE_SOURCE_LABEL: Record<QuoteSource, string> = {
-  voc: "VOC", inquiry: "네이버 문의", report: "종합 리포트", manual: "CS 매뉴얼", request: "생산 요청", activity: "변경 기록",
-};
 const EXAMPLES = [
   "10월 채널별 매출",
   "이번 달 VOC 에서 가장 많은 불만은?",
@@ -50,48 +31,43 @@ const EXAMPLES = [
 const TABLE_ROW_LIMIT = 1000;
 
 function fmt(v: unknown): string {
-  if (v == null) return "";
-  if (typeof v === "number") return Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number") return v.toLocaleString("ko-KR");
   return String(v);
 }
+const sec = (ms: number) => `${(ms / 1000).toFixed(1)}초`;
+const usd = (v: number) => `$${v.toFixed(2)}`;
 function esc(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function extractVars(sql: string): string[] {
-  return [...new Set([...sql.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)].map((m) => m[1].trim()))];
+  return [...new Set([...sql.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g)].map((m) => m[1]))];
 }
 function fillVars(sql: string, values: Record<string, string>): string {
   let out = sql;
-  for (const v of extractVars(sql)) out = out.replace(new RegExp(`\\{\\{\\s*${esc(v)}\\s*\\}\\}`, "g"), values[v] ?? "");
+  for (const [k, v] of Object.entries(values)) out = out.replace(new RegExp(`\\{\\{\\s*${esc(k)}\\s*\\}\\}`, "g"), v);
   return out;
 }
-const sec = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)}초`;
-const usd = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
-
-/** NDJSON 스트림을 줄 단위로 읽는다 — 마지막 불완전 줄은 버퍼에 남긴다 */
 async function readNdjson(body: ReadableStream<Uint8Array>, onLine: (obj: Record<string, unknown>) => void) {
   const reader = body.getReader();
   const dec = new TextDecoder();
   let buf = "";
-  const emit = (line: string) => {
-    const s = line.trim();
-    if (!s) return;
-    let obj: unknown;
-    try { obj = JSON.parse(s); } catch { return; } // 깨진 줄은 건너뛴다
-    if (obj && typeof obj === "object") onLine(obj as Record<string, unknown>);
-  };
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     buf += dec.decode(value, { stream: true });
-    let idx: number;
-    while ((idx = buf.indexOf("\n")) >= 0) { emit(buf.slice(0, idx)); buf = buf.slice(idx + 1); }
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const l = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+      if (!l) continue;
+      try { onLine(JSON.parse(l)); } catch { /* 깨진 줄은 건너뛴다 */ }
+    }
   }
-  buf += dec.decode();
-  emit(buf);
+  const rest = buf.trim();
+  if (rest) { try { onLine(JSON.parse(rest)); } catch { /* noop */ } }
 }
 
-/** 표 카드 — 접힌 머리줄 "표 N · 제목 · N행", 펼치면 표 + [SQL 보기] + 루커 SQL. 저장 리포트 실행 결과도 같은 카드(기본 펼침) */
-function TableCard({ idx, table, question, defaultOpen, onSave, onExport }: {
-  idx?: number; table: AskTable; question: string; defaultOpen?: boolean;
+/** 표 카드 — 접힌 머리줄 "제목 · N행", 펼치면 표 + [SQL 보기] + 루커 SQL. 저장 리포트 실행 결과도 같은 카드(기본 펼침) */
+function TableCard({ table, question, defaultOpen, onSave, onExport }: {
+  table: AskTable; question: string; defaultOpen?: boolean;
   onSave: (ctx: SaveCtx) => void; onExport: (sql: string, title: string) => void;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
@@ -106,7 +82,7 @@ function TableCard({ idx, table, question, defaultOpen, onSave, onExport }: {
     <div className="rp-fold">
       <button type="button" className="rp-fold-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span className="rp-fold-chev">{open ? "▾" : "▸"}</span>
-        <span>{idx != null ? `표 ${idx} · ` : ""}{table.title} · {qtyText(table.rowCount, "행")}</span>
+        <span>{table.title} · {qtyText(table.rowCount, "행")}</span>
       </button>
       {open && (
         <div className="rp-fold-body">
@@ -152,237 +128,217 @@ function TableCard({ idx, table, question, defaultOpen, onSave, onExport }: {
   );
 }
 
-/** 답 틀(기획안 §2-3): 답 → 근거(표·인용) → 사실/추정 → 한계 → 이어서 물어볼 것 → 메타 줄. 비어 있는 섹션은 그리지 않는다 */
-function AnswerView({ turn, isAdmin, disabled, onFollowup, onSave, onExport }: {
-  turn: Turn; isAdmin: boolean; disabled: boolean;
-  onFollowup: (q: string) => void; onSave: (ctx: SaveCtx) => void; onExport: (sql: string, title: string) => void;
-}) {
-  const r = turn.result;
-  const tables = r.tables || [], quotes = r.quotes || [];
-  const facts = r.facts || [], inferences = r.inferences || [], limits = r.limits || [], followups = r.followups || [];
-  const toolLog = r.toolLog || [];
-  const totalMs = r.elapsedMs ?? toolLog.reduce((s, t) => s + (t.ms || 0), 0); // 전체 경과(서버가 주면), 아니면 도구 시간 합
-  const [quotesOpen, setQuotesOpen] = useState(true);
-  return (
-    <div className="rp-answer">
-      <p className="rp-answer-text">{r.answer}</p>
-
-      {(tables.length > 0 || quotes.length > 0) && (
-        <section className="rp-sec">
-          <h3 className="rp-sec-title">근거</h3>
-          {tables.map((t, i) => <TableCard key={i} idx={i + 1} table={t} question={turn.q} onSave={onSave} onExport={onExport} />)}
-          {quotes.length > 0 && (
-            <div className="rp-fold">
-              <button type="button" className="rp-fold-head" onClick={() => setQuotesOpen((v) => !v)} aria-expanded={quotesOpen}>
-                <span className="rp-fold-chev">{quotesOpen ? "▾" : "▸"}</span>
-                <span>인용 {qtyText(quotes.length, "건")}</span>
-              </button>
-              {quotesOpen && (
-                <div className="rp-fold-body rp-quotes">
-                  {quotes.map((qt, i) => (
-                    <div key={i} className="rp-quote">
-                      <div className="rp-quote-meta">{QUOTE_SOURCE_LABEL[qt.source] || qt.source} · {dateFull(qt.date)} · {qt.title}</div>
-                      <div className="rp-quote-text">{(qt.text || "").slice(0, 300)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-
-      {(facts.length > 0 || inferences.length > 0) && (
-        <section className="rp-sec">
-          {facts.length > 0 && (
-            <>
-              <h3 className="rp-sec-title">사실</h3>
-              <ul className="rp-list">{facts.map((f, i) => <li key={i}>{f}</li>)}</ul>
-            </>
-          )}
-          {inferences.length > 0 && (
-            <>
-              <h3 className="rp-sec-title">추정 <span className="rp-sec-sub">근거가 있는 해석</span></h3>
-              <ul className="rp-list">{inferences.map((f, i) => <li key={i}>{f}</li>)}</ul>
-            </>
-          )}
-        </section>
-      )}
-
-      {limits.length > 0 && (
-        <section className="rp-sec">
-          <h3 className="rp-sec-title">한계</h3>
-          <ul className="rp-list">{limits.map((f, i) => <li key={i}>{f}</li>)}</ul>
-        </section>
-      )}
-
-      {followups.length > 0 && (
-        <section className="rp-sec">
-          <h3 className="rp-sec-title">이어서 물어볼 것</h3>
-          <div className="rp-followups">
-            {followups.slice(0, 3).map((f, i) => (
-              <button key={i} type="button" className="b2b-btn-secondary" disabled={disabled} onClick={() => onFollowup(f)}>{f}</button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {r.downgraded && <div className="sm-warn">이달 비용 상한을 넘어 빠른 모델로 답했습니다</div>}
-      {r.timedOut && <div className="sm-warn">시간이 다 돼 조사를 다 하지 못했습니다</div>}
-      <div className="rp-meta">
-        {r.model} · 조사 {qtyText(toolLog.length, "회")} · {sec(totalMs)}
-        {isAdmin && r.usage && <> · 약 {usd(r.usage.estUsd)}{r.usage.estNote ? ` (${r.usage.estNote})` : ""}</>}
-      </div>
-    </div>
-  );
-}
-
-// 평문 답(조사 없음) — 되묻기·확인·설명. 비서의 말 그대로 보여 준다.
-function ChatView({ text }: { text: string }) {
-  return <section className="b2b-card rp-chat"><p className="rp-chat-text">{text}</p></section>;
-}
-
-// 되물음 카드 — 비서가 조사 전에 한 가지를 묻는다. 선택지를 누르면 그 글이 답으로 보내지고, 직접 쓰려면 아래 질문칸에 적는다.
-//  이미 답한 되물음(마지막 턴이 아님)은 선택지를 잠근다.
-function ClarifyView({ result, answered, disabled, onPick }: { result: AskResult; answered: boolean; disabled: boolean; onPick: (text: string) => void }) {
-  const options = result.clarify?.options || [];
-  return (
-    <section className={`b2b-card rp-clarify ${answered ? "is-answered" : ""}`}>
-      <p className="rp-clarify-q">{result.answer}</p>
-      {options.length > 0 && (
-        <div className="rp-clarify-options">
-          {options.map((o) => (
-            <button key={o} type="button" className="b2b-btn-secondary" disabled={disabled || answered} onClick={() => onPick(o)}>{o}</button>
-          ))}
-        </div>
-      )}
-      {!answered && <div className="rp-clarify-hint">선택지에 없으면 아래 질문칸에 적어 보내세요</div>}
-    </section>
-  );
-}
+const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기" };
 
 export default function ReportPage() {
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [qErr, setQErr] = useState(""); // 질문 칸 검증 오류
-  const [saveErr, setSaveErr] = useState<{ name?: string; sql?: string }>({}); // 저장 다이얼로그 칸별 오류
+  const toast = useToast();
   const confirmModal = useConfirm();
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [progress, setProgress] = useState<Progress[]>([]);
-  const [pendingQ, setPendingQ] = useState("");
-  const [runResult, setRunResult] = useState<RunResult | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [qErr, setQErr] = useState("");
+  const [loading, setLoading] = useState(false);       // 비서가 답하는 중(스트리밍)
+  const [busy, setBusy] = useState(false);             // 대화 열기·저장 리포트 실행
+  const [err, setErr] = useState("");
+  const [pendingMsg, setPendingMsg] = useState("");    // 139 미적용 안내
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [threadsOpen, setThreadsOpen] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
+  const [me, setMe] = useState<string | null>(null);
   const [saved, setSaved] = useState<Saved[]>([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedFilter, setSavedFilter] = useState<"mine" | "all">("mine");
+  const [varForm, setVarForm] = useState<{ rep: Saved; values: Record<string, string> } | null>(null);
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveSql, setSaveSql] = useState("");
   const [saveCtx, setSaveCtx] = useState<SaveCtx | null>(null);
-  const [varForm, setVarForm] = useState<{ rep: Saved; values: Record<string, string> } | null>(null);
-  const [savedOpen, setSavedOpen] = useState(false);      // 저장 리스트 기본 접힘
-  const [me, setMe] = useState<string | null>(null);       // 현재 로그인 사용자(저장자 매칭·비용 표시)
-  const [savedFilter, setSavedFilter] = useState<"mine" | "all">("mine");
+  const [saveErr, setSaveErr] = useState<{ name?: string; sql?: string }>({});
+  const endRef = useRef<HTMLDivElement>(null);
   const isAdmin = me === "현석" || me === "관리자"; // AppSidebar 와 같은 판정
 
   const loadSaved = useCallback(async () => {
     try { const j = await (await fetch("/api/report/saved", { cache: "no-store" })).json(); if (j.ok) setSaved(j.reports || []); } catch { /* noop */ }
   }, []);
-  useEffect(() => { loadSaved(); }, [loadSaved]);
+  const loadThreads = useCallback(async () => {
+    try {
+      const r = await fetch("/api/report/chat/threads", { cache: "no-store" });
+      const j = await r.json();
+      if (j.ok) setThreads(j.threads || []);
+      else if (j.pending_migration) setPendingMsg(j.error);
+    } catch { /* noop */ }
+  }, []);
+  useEffect(() => { loadSaved(); loadThreads(); }, [loadSaved, loadThreads]);
   useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/auth", { cache: "no-store" })).json(); if (j.ok) setMe(j.name); } catch { /* noop */ } })(); }, []);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [items.length, loading]);
 
-  // 저장자 필터 — 기본 '내 저장'(로그인 사용자와 createdBy 일치). me 없으면 전체.
   const filteredSaved = useMemo(
     () => (savedFilter === "all" || !me ? saved : saved.filter((s) => s.createdBy === me)),
     [saved, savedFilter, me],
   );
+  const lastUserText = useMemo(() => { for (let i = items.length - 1; i >= 0; i--) { const it = items[i]; if (it.role === "user") return it.text; } return ""; }, [items]);
 
-  async function ask(question: string) {
-    const qq = question.trim();
+  function newThread() { if (loading) return; setThreadId(null); setItems([]); setErr(""); setVarForm(null); setRunResult(null); setQ(""); setQErr(""); }
+
+  async function openThread(id: string) {
     if (loading) return;
-    if (!qq) { setQErr("질문을 입력하세요"); return; }
-    setQErr("");
-    const history = turns.slice(-8).map((t) => ({ q: t.q, answer: t.result.answer, kind: t.result.kind || "answer" }));
-    setLoading(true); setErr(""); setVarForm(null); setRunResult(null); setProgress([]); setPendingQ(qq);
+    setBusy(true); setErr(""); setVarForm(null); setRunResult(null);
     try {
-      const r = await fetch("/api/report/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: qq, history }) });
+      const j = await (await fetch(`/api/report/chat/threads/${id}`, { cache: "no-store" })).json();
+      if (!j.ok) throw new Error(j.error || "대화를 불러오지 못했습니다");
+      setThreadId(id); setItems(j.items || []); setThreadsOpen(false);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteThread(t: Thread) {
+    if (!(await confirmModal({ title: `'${t.title}' 대화 지우기`, body: "목록에서 사라집니다. 저장한 리포트는 남습니다.", action: "대화 지우기" }))) return;
+    const j = await (await fetch(`/api/report/chat/threads/${t.id}`, { method: "DELETE" })).json();
+    if (!j.ok) { toast.error(j.error || "대화를 지우지 못했습니다"); return; }
+    if (threadId === t.id) newThread();
+    toast.success("대화를 지웠습니다");
+    loadThreads();
+  }
+
+  // 한 턴 — 스레드가 없으면 먼저 만든다. 글자는 흘러오고, 도구 칩·표 카드는 그 자리에 끼어든다.
+  async function send(text: string) {
+    const tt = text.trim();
+    if (loading || busy) return;
+    if (!tt) { setQErr("메시지를 입력하세요"); return; }
+    setQErr(""); setErr(""); setVarForm(null); setRunResult(null);
+    setLoading(true);
+    let id = threadId;
+    try {
+      if (!id) {
+        const j = await (await fetch("/api/report/chat/threads", { method: "POST" })).json();
+        if (!j.ok) throw new Error(j.error || "새 대화를 만들지 못했습니다");
+        id = j.thread.id as string; setThreadId(id);
+      }
+      setItems((it) => [...it, { role: "user", text: tt }]);
+      setQ("");
+      const r = await fetch(`/api/report/chat/threads/${id}/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: tt }) });
       if (!r.ok || !r.body) {
         let msg = `서버 응답 ${r.status}`;
         try { const t = await r.text(); try { const j = JSON.parse(t); msg = j.error || msg; } catch { if (t) msg = t.slice(0, 200); } } catch { /* noop */ }
         throw new Error(msg);
       }
-      const got: { result: AskResult | null; error: string } = { result: null, error: "" };
+      let errText = "";
       await readNdjson(r.body, (obj) => {
-        if (obj.type === "progress") setProgress((p) => [...p, { name: String(obj.name || ""), label: String(obj.label || obj.name || ""), ms: Number(obj.ms) || 0 }]);
-        else if (obj.type === "done") got.result = (obj.result as AskResult) || null;
-        else if (obj.type === "error") got.error = String(obj.error || "");
+        const type = String(obj.type || "");
+        if (type === "text") {
+          const delta = String(obj.delta || "");
+          setItems((it) => {
+            const last = it[it.length - 1];
+            if (last && last.role === "assistant" && last.live) return [...it.slice(0, -1), { ...last, text: last.text + delta }];
+            return [...it, { role: "assistant", text: delta, live: true }];
+          });
+        } else if (type === "tool") {
+          const toolUseId = String(obj.toolUseId || ""), status = String(obj.status || "");
+          setItems((it) => {
+            const idx = it.findIndex((x) => x.role === "tool" && x.toolUseId === toolUseId);
+            if (idx < 0) return [...it.map((x) => (x.role === "assistant" && x.live ? { ...x, live: false } : x)), { role: "tool", toolUseId, name: String(obj.name || ""), label: String(obj.label || ""), ok: null }];
+            const cur = it[idx];
+            if (cur.role !== "tool") return it;
+            return [...it.slice(0, idx), { ...cur, ok: status === "ok" ? true : status === "fail" ? false : cur.ok, ms: typeof obj.ms === "number" ? obj.ms : cur.ms }, ...it.slice(idx + 1)];
+          });
+        } else if (type === "table") {
+          const table = obj.table as ChatTable;
+          setItems((it) => it.map((x) => (x.role === "tool" && x.toolUseId === table.toolUseId ? { ...x, table } : x)));
+        } else if (type === "done") {
+          const usage = (obj.usage || {}) as { estUsd?: number; estNote?: string };
+          setItems((it) => {
+            const idx = [...it].reverse().findIndex((x) => x.role === "assistant");
+            if (idx < 0) return it;
+            const i = it.length - 1 - idx;
+            const cur = it[i];
+            if (cur.role !== "assistant") return it;
+            return [...it.slice(0, i), { ...cur, live: false, meta: { model: String(obj.model || ""), estUsd: Number(usage.estUsd) || 0, estNote: String(usage.estNote || ""), elapsedMs: Number(obj.elapsedMs) || 0, downgraded: !!obj.downgraded, timedOut: !!obj.timedOut } }, ...it.slice(i + 1)];
+          });
+        } else if (type === "error") errText = String(obj.error || "");
       });
-      if (got.error) throw new Error(got.error);
-      const result = got.result;
-      if (!result || typeof result.answer !== "string") throw new Error("답이 오지 않았습니다");
-      setTurns((t) => [...t, { q: qq, result }]);
-      setQ("");
+      if (errText) throw new Error(errText);
+      loadThreads();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
-    } finally { setLoading(false); setProgress([]); setPendingQ(""); }
+    } finally {
+      setLoading(false);
+      setItems((it) => it.map((x) => (x.role === "assistant" && x.live ? { ...x, live: false } : x)));
+    }
   }
 
-  function newThread() { setTurns([]); setErr(""); setVarForm(null); setRunResult(null); setQ(""); setQErr(""); }
-
+  // ── 저장 리포트(변수 치환·실행)·저장·엑셀 — 종전 그대로 ──
   function startSaved(rep: Saved) {
     const vars = extractVars(rep.sql);
-    if (vars.length) setVarForm({ rep, values: Object.fromEntries(vars.map((v) => [v, ""])) });
-    else runSql(rep, rep.sql);
+    if (vars.length) { setVarForm({ rep, values: Object.fromEntries(vars.map((v) => [v, ""])) }); setRunResult(null); return; }
+    runSql(rep, rep.sql);
   }
   async function runSql(rep: Saved, sql: string) {
-    if (loading) return;
-    setLoading(true); setErr(""); setVarForm(null); setRunResult(null);
+    setBusy(true); setErr(""); setRunResult(null);
     try {
       const r = await fetch("/api/report/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql }) });
       const j = await r.json();
-      if (!j.ok) { setErr(j.error || "리포트를 실행하지 못했습니다. SQL 을 확인하세요"); return; }
-      setRunResult({ rep, sql, rows: j.rows || [], columns: j.columns || [] });
-    } catch (e) { setErr(e instanceof Error ? e.message : "리포트를 실행하지 못했습니다. SQL 을 확인하세요"); }
-    finally { setLoading(false); }
+      if (!j.ok) throw new Error(j.error || "실행 실패");
+      setRunResult({ rep, sql, columns: j.columns || [], rows: j.rows || [] }); setVarForm(null);
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
   }
   async function delSaved(id: string) {
     await fetch(`/api/report/saved?id=${id}`, { method: "DELETE" }); loadSaved();
   }
   function openSave(ctx: SaveCtx) {
-    setSaveErr({}); setSaveCtx(ctx); setSaveName(ctx.question.slice(0, 40)); setSaveSql(ctx.sql); setSaveOpen(true);
+    setSaveCtx(ctx); setSaveName(""); setSaveSql(ctx.sql); setSaveErr({}); setSaveOpen(true);
   }
   async function doSave() {
-    const fe: { name?: string; sql?: string } = {};
-    if (!saveName.trim()) fe.name = "이름을 입력하세요";
-    if (!saveSql.trim()) fe.sql = "SQL 을 입력하세요";
-    setSaveErr(fe);
-    if (fe.name || fe.sql) return;
+    const errs: { name?: string; sql?: string } = {};
+    if (!saveName.trim()) errs.name = "이름을 입력하세요";
+    if (!saveSql.trim()) errs.sql = "SQL을 입력하세요";
+    setSaveErr(errs);
+    if (errs.name || errs.sql) return;
     const r = await fetch("/api/report/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveCtx?.question || "", sql: saveSql, chart: saveCtx?.chart || { type: "none" }, looker: saveCtx?.looker || { mode: "na" } }) });
     const j = await r.json();
-    if (!j.ok) { setErr(j.error || "리포트를 저장하지 못했습니다. 이름과 SQL 을 확인하세요"); return; }
-    setSaveOpen(false); loadSaved();
+    if (!j.ok) { setSaveErr({ sql: j.error || "저장하지 못했습니다" }); return; }
+    setSaveOpen(false); toast.success("리포트를 저장했습니다"); loadSaved();
   }
-
   async function exportXlsx(sql: string, title: string) {
     const r = await fetch("/api/report/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql, title }) });
-    if (!r.ok) { setErr("엑셀을 내려받지 못했습니다. 결과를 다시 조회하세요"); return; }
-    const blob = await r.blob(); const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "report.xlsx"; a.click(); URL.revokeObjectURL(url);
+    if (!r.ok) { toast.error("엑셀을 만들지 못했습니다"); return; }
+    const blob = await r.blob();
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${title || "report"}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
   }
-  function askFollowup(text: string) { setQ(text); ask(text); }
 
-  const hasAnything = turns.length > 0 || !!runResult || loading || !!err;
-  const lastKind = turns.length > 0 ? (turns[turns.length - 1].result.kind || "answer") : "answer";
-  const awaitingReply = !loading && lastKind !== "answer"; // 직전 턴이 되물음·평문 → 다음 입력은 그 답(대화 이어가기)
+  const hasAnything = items.length > 0 || !!runResult || loading || !!err;
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
-        <div>
-          <h1 className="b2b-page-title">커스텀 리포트</h1>
+        <div><h1 className="b2b-page-title">커스텀 리포트</h1></div>
+        <div className="sm-row" style={{ gap: 8 }}>
+          {threads.length > 0 && <button className="b2b-btn-secondary" onClick={() => setThreadsOpen((v) => !v)} disabled={loading}>{threadsOpen ? "대화 목록 닫기" : `대화 목록 ${qty(threads.length)}`}</button>}
+          {hasAnything && <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 대화</button>}
         </div>
       </header>
 
-      {/* 저장된 리포트 — 기본 접힘, 펼치면 한 줄에 하나씩 전문 표시 */}
+      {pendingMsg && <div className="b2b-error">{pendingMsg}</div>}
+
+      {/* 대화 목록 — 내 스레드 최근순, 클릭하면 이어서 */}
+      {threadsOpen && (
+        <div className="rp-saved-box">
+          <div className="rp-saved-list">
+            {threads.map((t) => (
+              <div key={t.id} className={`rp-saved-item ${t.id === threadId ? "is-active" : ""}`} onClick={() => openThread(t.id)} title="클릭하면 이어서">
+                <span className="rp-saved-name">{t.title}</span>
+                <div className="rp-saved-meta">
+                  <span>{dateFull(t.updatedAt)}</span>
+                  {isAdmin && t.createdBy !== me && <><span>·</span><span>{t.createdBy}</span></>}
+                  <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); deleteThread(t); }}>지우기</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 저장된 리포트 — 기본 접힘 */}
       {saved.length > 0 && (
         <div className="rp-saved-box">
           <div className="rp-saved-bar">
@@ -402,7 +358,7 @@ export default function ReportPage() {
           ) : (
             <div className="rp-saved-list">
               {filteredSaved.map((s) => (
-                <div key={s.id} className="rp-saved-item" onClick={() => { if (!loading) startSaved(s); }} title="클릭하면 실행">
+                <div key={s.id} className="rp-saved-item" onClick={() => { if (!loading && !busy) startSaved(s); }} title="클릭하면 실행">
                   <span className="rp-saved-name">{s.name}{extractVars(s.sql).length ? <span className="rp-saved-var">변수</span> : null}</span>
                   {s.question && <div className="rp-saved-q">{s.question}</div>}
                   <div className="rp-saved-meta">
@@ -418,13 +374,6 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* 빈 상태 — 예시 질문 3개(정량·정성·혼합), 설명문 없음. 질문칸은 대화 아래(채팅 꼴, 2026-10-19) */}
-      {!hasAnything && (
-        <div className="rp-examples">
-          {EXAMPLES.map((ex) => <button key={ex} type="button" className="b2b-btn-secondary" onClick={() => askFollowup(ex)}>{ex}</button>)}
-        </div>
-      )}
-
       {/* 저장 리포트 변수 입력 */}
       {varForm && (
         <section className="b2b-card rp-varform">
@@ -436,51 +385,11 @@ export default function ReportPage() {
                 <input className="b2b-input" value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} aria-label={`${v} 값`} />
               </label>
             ))}
-            <button className="b2b-btn-primary" disabled={loading} onClick={() => runSql(varForm.rep, fillVars(varForm.rep.sql, varForm.values))}>리포트 실행</button>
+            <button className="b2b-btn-primary" disabled={busy} onClick={() => runSql(varForm.rep, fillVars(varForm.rep.sql, varForm.values))}>리포트 실행</button>
             <button className="b2b-btn-secondary" onClick={() => setVarForm(null)}>닫기</button>
           </div>
         </section>
       )}
-
-      {/* 대화 — 이전 답들이 위에 쌓인다 */}
-      {turns.length > 0 && (
-        <div className="rp-turns">
-          {turns.map((t, i) => (
-            <div key={i} className="rp-turn">
-              <div className="rp-turn-q">{t.q}</div>
-              {t.result.kind === "clarify" ? (
-                <ClarifyView result={t.result} answered={i < turns.length - 1} disabled={loading} onPick={askFollowup} />
-              ) : t.result.kind === "chat" ? (
-                <ChatView text={t.result.answer} />
-              ) : (
-                <AnswerView turn={t} isAdmin={isAdmin} disabled={loading} onFollowup={askFollowup} onSave={openSave} onExport={exportXlsx} />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {err && (
-        <div className="b2b-error rp-error">
-          <div>답을 만들지 못했습니다. {err}</div>
-          <div>질문을 바꿔 다시 물어보세요</div>
-        </div>
-      )}
-
-      {/* 진행 표시 — 도구 호출마다 한 줄, 스피너 없음 */}
-      {loading && pendingQ && (
-        <div className="rp-turn">
-          <div className="rp-turn-q">{pendingQ}</div>
-          <section className="b2b-card rp-progress">
-            <div className="b2b-card-head"><span className="b2b-card-title">조사 중</span></div>
-            <ul className="rp-progress-list">
-              {progress.map((p, i) => <li key={i}>{p.label} · {sec(p.ms)}</li>)}
-              {progress.length === 0 && <li>질문을 읽는 중</li>}
-            </ul>
-          </section>
-        </div>
-      )}
-      {loading && !pendingQ && <div className="b2b-loading">리포트를 실행하는 중...</div>}
 
       {/* 저장 리포트 실행 결과 — 표 카드(기본 펼침) */}
       {runResult && (
@@ -491,18 +400,67 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* 질문 입력 — 대화 아래(채팅 꼴). Enter = 보내기, Shift+Enter = 줄바꿈. 직전 턴이 되물음이면 [답하기] */}
+      {/* 빈 상태 — 예시 3개(정량·정성·혼합) */}
+      {!hasAnything && !busy && (
+        <div className="rp-examples">
+          {EXAMPLES.map((ex) => <button key={ex} type="button" className="b2b-btn-secondary" onClick={() => send(ex)}>{ex}</button>)}
+        </div>
+      )}
+
+      {/* 대화 — 사용자 글은 오른쪽 말풍선, 비서 글은 왼쪽 평문, 도구 칩과 표 카드는 그 자리에 */}
+      {items.length > 0 && (
+        <div className="rp-thread">
+          {items.map((it, i) => {
+            if (it.role === "user") return <div key={i} className="rp-msg rp-msg-user"><div className="rp-bubble">{it.text}</div></div>;
+            if (it.role === "tool") {
+              return (
+                <div key={it.toolUseId} className="rp-msg rp-msg-tool">
+                  <div className={`rp-tool-chip ${it.ok === false ? "is-fail" : it.ok === true ? "is-ok" : "is-run"}`}>
+                    <span className="rp-tool-kind">{TOOL_NAME[it.name] || it.name}</span>
+                    <span>{it.label}</span>
+                    <span className="rp-tool-state">{it.ok === null ? "진행 중" : it.ok ? (it.ms != null ? sec(it.ms) : "완료") : "실패"}</span>
+                  </div>
+                  {it.table && <TableCard table={it.table} question={lastUserText} defaultOpen={it.table.rowCount <= 12} onSave={openSave} onExport={exportXlsx} />}
+                </div>
+              );
+            }
+            return (
+              <div key={i} className="rp-msg rp-msg-ai">
+                <p className="rp-chat-text">{it.text}{it.live && <span className="rp-cursor" aria-hidden="true">▍</span>}</p>
+                {it.meta && (
+                  <div className="rp-meta">
+                    {it.meta.downgraded && <span className="rp-meta-warn">이달 비용 상한을 넘어 빠른 모델로 답했습니다 · </span>}
+                    {it.meta.timedOut && <span className="rp-meta-warn">시간이 다 돼 조사를 다 하지 못했습니다 · </span>}
+                    {it.meta.model} · {sec(it.meta.elapsedMs)}
+                    {isAdmin && <> · 약 {usd(it.meta.estUsd)}{it.meta.estNote ? ` (${it.meta.estNote})` : ""}</>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {loading && !items.some((x) => x.role === "assistant" && x.live) && <div className="rp-msg rp-msg-ai"><p className="rp-chat-text rp-thinking">읽는 중</p></div>}
+          <div ref={endRef} />
+        </div>
+      )}
+      {busy && !runResult && <div className="b2b-loading">불러오는 중...</div>}
+
+      {err && (
+        <div className="b2b-error rp-error">
+          <div>{err}</div>
+          <div>다시 보내거나 질문을 바꿔 보세요</div>
+        </div>
+      )}
+
+      {/* 입력 — 대화 아래. Enter = 보내기, Shift+Enter = 줄바꿈 */}
       <div className="rp-composer">
-        {awaitingReply && <div className="rp-composer-note">{lastKind === "clarify" ? "위 선택지를 누르거나 여기에 답을 적어 보내세요." : "이어서 답하거나 물어보세요."}</div>}
         <div className="rp-ask">
-          <textarea className="b2b-input rp-input" rows={2} value={q} aria-label={awaitingReply ? "되물음에 답" : "질문"}
-            placeholder={awaitingReply ? "답을 적어 보내세요. 예: 이번 달" : "예: 10월 채널별 매출과 톡스토어가 빠진 이유"}
+          <textarea className="b2b-input rp-input" rows={2} value={q} aria-label="메시지"
+            placeholder={items.length ? "이어서 답하거나 물어보세요" : "예: 10월 채널별 매출과 톡스토어가 빠진 이유"}
             aria-invalid={qErr ? "true" : undefined}
             onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(q); } }} />
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(q); } }} />
           <div className="rp-ask-actions">
-            <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading}>{loading ? "조사 중..." : awaitingReply ? "답하기" : "질문하기"}</button>
-            {hasAnything && <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 질문</button>}
+            <button className="b2b-btn-primary" onClick={() => send(q)} disabled={loading || busy}>{loading ? "답하는 중..." : "보내기"}</button>
           </div>
         </div>
         {qErr && <div className="b2b-field-error">{qErr}</div>}
@@ -536,58 +494,7 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* 루커스튜디오 적용 가이드 (하단 상시 참고) */}
-      <section className="rp-guide">
-        <button className="rp-guide-head" onClick={() => setGuideOpen((v) => !v)}>
-          <span>루커스튜디오(데이터 스튜디오)에 적용하는 법</span>
-          <span className="rp-guide-chev">{guideOpen ? "▾" : "▸"}</span>
-        </button>
-        {guideOpen && (
-          <div className="rp-guide-body">
-            <div className="rp-guide-block">
-              <div className="rp-guide-title">A. 커스텀 쿼리 <span className="rp-guide-tag ok">Supabase 작업 불필요</span></div>
-              <ol className="rp-guide-steps">
-                <li>루커스튜디오 보고서 → <b>데이터 추가</b> → <b>PostgreSQL</b> 커넥터 (이미 연결돼 있으면 그 데이터소스 선택)</li>
-                <li>접속정보 입력 후 <b>맞춤 쿼리(CUSTOM QUERY)</b> 선택</li>
-                <li>복사한 <b>SELECT</b> 문을 붙여넣기 → <b>추가</b></li>
-                <li>차트에 필드를 연결하면 끝</li>
-              </ol>
-            </div>
-            <div className="rp-guide-block">
-              <div className="rp-guide-title">B. 뷰 생성 <span className="rp-guide-tag warn">Supabase에 1회 적용 필요</span></div>
-              <ol className="rp-guide-steps">
-                <li>복사한 <code>create view ... ; grant ... to looker_ro;</code> 를 <b>Supabase 대시보드 → SQL Editor</b> 에 붙여넣고 <b>Run</b></li>
-                <li>루커스튜디오 → <b>데이터 추가</b> → 아래 접속정보 → <b>테이블 목록에서 새 뷰 선택</b><br /><span className="sm-faint">(이미 데이터소스가 있으면: 데이터소스 편집 → 우측 상단 <b>필드 새로고침</b>)</span></li>
-                <li>차트에 연결</li>
-              </ol>
-            </div>
-            <div className="rp-guide-block">
-              <div className="rp-guide-title">PostgreSQL 접속정보 (커넥터 최초 연결 시)</div>
-              <div className="b2b-table-wrap">
-              <table className="rp-guide-conn">
-                <tbody>
-                  <tr><td>호스트</td><td><code>aws-1-ap-northeast-2.pooler.supabase.com</code></td></tr>
-                  <tr><td>포트</td><td><code>5432</code></td></tr>
-                  <tr><td>데이터베이스</td><td><code>postgres</code></td></tr>
-                  <tr><td>사용자</td><td><code>looker_ro.uwbkejkztuhzcesrffzq</code> <span className="sm-faint">(반드시 role.projectref)</span></td></tr>
-                  <tr><td>비밀번호</td><td>설정하신 looker_ro 비밀번호</td></tr>
-                  <tr><td>SSL</td><td>사용 (Enable SSL)</td></tr>
-                </tbody>
-              </table>
-              </div>
-            </div>
-            <div className="rp-guide-block">
-              <div className="rp-guide-title">자주 겪는 것</div>
-              <ul className="rp-guide-tips">
-                <li><b>날짜가 안 맞아요</b> → 보고서/데이터소스 타임존을 <b>(GMT+9) 서울</b>로 설정</li>
-                <li><b>바뀐 데이터가 안 보여요</b> → 데이터소스 <b>새로고침</b> (기본 캐시 12시간)</li>
-                <li><b>새 컬럼/뷰가 안 떠요</b> → 데이터소스 편집에서 <b>필드 새로고침</b></li>
-                <li><b>팀원도 보게 하려면</b> → 데이터소스를 <b>소유자 자격증명</b>으로 공유</li>
-              </ul>
-            </div>
-          </div>
-        )}
-      </section>
+      <LookerGuide />
     </div>
   );
 }

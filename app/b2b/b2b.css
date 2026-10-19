@@ -2829,6 +2829,22 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-clarify.is-answered .rp-clarify-q { color: var(--sm-text-mid); }
 .rp-chat { display: flex; }
 .rp-chat-text { margin: 0; max-width: 68ch; font-size: var(--sm-fs-lg); line-height: var(--sm-lh-body); color: var(--sm-black); white-space: pre-line; }
+/* 대화 스레드(2026-10-19 클로드 웹 꼴) — 사용자 = 오른쪽 말풍선(경계 카드), 비서 = 왼쪽 평문, 도구 = 칩 + 표 카드 */
+.rp-thread { display: flex; flex-direction: column; gap: 14px; margin: 8px 0 4px; }
+.rp-msg { display: flex; flex-direction: column; gap: 8px; }
+.rp-msg-user { align-items: flex-end; }
+.rp-bubble { max-width: 68ch; padding: 10px 14px; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-bg-subtle); font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-dark); white-space: pre-line; }
+.rp-msg-ai { align-items: flex-start; }
+.rp-msg-tool { align-items: stretch; gap: 8px; }
+.rp-tool-chip { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 4px 10px; border: 1px solid var(--sm-border); border-radius: 999px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); background: var(--sm-white); }
+.rp-tool-chip.is-fail { color: var(--sm-danger); border-color: var(--sm-danger); }
+.rp-tool-kind { font-weight: 600; color: var(--sm-dark); }
+.rp-tool-state { color: var(--sm-text-light); }
+.rp-tool-chip.is-run .rp-tool-state { color: var(--sm-text-mid); }
+.rp-cursor { color: var(--sm-text-light); margin-left: 2px; }
+.rp-thinking { color: var(--sm-text-mid); }
+.rp-meta-warn { color: var(--sm-warning); }
+.rp-saved-item.is-active { background: var(--sm-bg-subtle); }
 .rp-composer { margin-top: 18px; }
 .rp-composer-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-bottom: 6px; }
 .rp-meta { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
