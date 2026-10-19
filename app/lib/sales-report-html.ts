@@ -1,6 +1,6 @@
 // 일일 매출 리포트 HTML 이메일 — 파이썬 build_daily_html 1:1 이식(테이블 기반, 이메일 안전).
 //  이메일은 CSS 변수 불가 → 색상 하드코딩(디자인토큰 예외). DailyStats(sales-report.ts) 소비.
-import type { DailyStats, WeeklyStats } from "./sales-report";
+import type { DailyStats, WeeklyStats, ChannelDecomp, TopSku, SubscriptionFacts } from "./sales-report";
 
 const C_DEEP = "#0d3b52", C_TIDE = "#1b6e8c", C_FOAM = "#eef6f8", C_LINE = "#d4e3e8",
   C_INK = "#0a1d2e", C_MUTED = "#5a7480", C_GOOD = "#1a8a5a", C_WARN = "#c2410c",
@@ -21,6 +21,85 @@ function pctLabel(p: number | null): [string, string] {
   if (p === null) return ["신규", C_MUTED];
   if (p >= 0) return [`+${p.toFixed(1)}%`, C_GOOD];
   return [`${p.toFixed(1)}%`, p <= -30 ? C_BAD : p <= -10 ? C_WARN : C_GOOD];
+}
+
+// ── 2026-10-19 추가 섹션(건수 × 객단가 · Top 10 순위 변동 · 정기배송) — 일일·주간 공용 ──
+const num0 = (v: number) => Math.round(v).toLocaleString();
+const TH = `font-size:11px;color:${C_MUTED};font-weight:700;padding:8px 10px;border-bottom:1px solid ${C_LINE};text-align:left;white-space:nowrap;`;
+const TD = `font-size:13px;color:${C_INK};padding:9px 10px;border-bottom:1px solid ${C_LINE};`;
+const RIGHT = "text-align:right;";
+const SEC_HEAD = `font-size:13px;font-weight:800;color:${C_DEEP};padding-bottom:8px;border-bottom:2px solid ${C_LINE};`;
+function deltaLabel(cur: number, prev: number): string {
+  if (prev === 0) return `<span style="color:${C_MUTED}">${cur === 0 ? "-" : "신규"}</span>`;
+  const [l, c] = pctLabel((cur - prev) / prev * 100);
+  return `<b style="color:${c}">${l}</b>`;
+}
+// 건수 × 객단가 — 채널 행 + 전체 행. 변화는 비교 기간 대비, 작은 숫자는 그때 값
+function decompTable(rows: ChannelDecomp[], total: ChannelDecomp, prevLabel: string): string {
+  const tr = (r: ChannelDecomp, bold = false) => `<tr>
+    <td style="${TD}${bold ? "font-weight:700;" : ""}">${esc(r.name)}</td>
+    <td style="${TD}${RIGHT}">${r.orders.toLocaleString()}</td>
+    <td style="${TD}${RIGHT}">${num0(r.aov)}</td>
+    <td style="${TD}${RIGHT}">${r.qty_per_order.toFixed(1)}</td>
+    <td style="${TD}${RIGHT}">${deltaLabel(r.orders, r.prev_orders)}<div style="font-size:11px;color:${C_MUTED};">${r.prev_orders.toLocaleString()}건</div></td>
+    <td style="${TD}${RIGHT}">${deltaLabel(r.aov, r.prev_aov)}<div style="font-size:11px;color:${C_MUTED};">${num0(r.prev_aov)}</div></td>
+  </tr>`;
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;border-collapse:separate;">
+    <tr><th style="${TH}">채널</th><th style="${TH}${RIGHT}">주문</th><th style="${TH}${RIGHT}">객단가(원)</th><th style="${TH}${RIGHT}">주문당 수량</th><th style="${TH}${RIGHT}">주문 변화</th><th style="${TH}${RIGHT}">객단가 변화</th></tr>
+    ${rows.map((r) => tr(r)).join("")}${tr(total, true)}
+    <tr><td colspan="6" style="font-size:11px;color:${C_MUTED};padding:8px 10px;">변화는 ${esc(prevLabel)} 대비, 작은 숫자는 그때 값</td></tr>
+  </table>`;
+}
+function rankChange(t: TopSku, prevLabel: string): string {
+  if (t.prev_rank === null) return `<span style="color:${C_MUTED};font-weight:600;">${esc(prevLabel)} 순위 밖</span>`;
+  const d = t.prev_rank - t.rank;
+  if (d > 0) return `<span style="color:${C_GOOD}">&#9650; ${d}</span>`;
+  if (d < 0) return `<span style="color:${C_BAD}">&#9660; ${-d}</span>`;
+  return `<span style="color:${C_MUTED}">&#8211;</span>`;
+}
+// Top 10 — 순위 배지 · 상품명(대표)+SKU · 수량 · 매출(비중) · 순위 변동(prevLabel 있을 때)
+function skuTable(list: TopSku[], prevLabel: string | null): string {
+  if (!list.length) return `<div style="border:1px solid ${C_LINE};border-radius:8px;padding:14px 16px;font-size:12px;color:${C_MUTED};">판매 데이터가 없습니다.</div>`;
+  const rows = list.map((t) => {
+    const isTop3 = t.rank <= 3;
+    const badgeBg = isTop3 ? C_DEEP : C_FOAM, badgeCol = isTop3 ? "#ffffff" : C_DEEP;
+    return `<tr>
+      <td width="28" style="padding:9px 6px 9px 12px;border-bottom:1px solid ${C_LINE};"><div style="width:22px;height:22px;background:${badgeBg};color:${badgeCol};border-radius:6px;font-size:12px;font-weight:800;text-align:center;line-height:22px;">${t.rank}</div></td>
+      <td style="padding:9px 6px;border-bottom:1px solid ${C_LINE};"><div style="font-size:13px;font-weight:600;color:${C_INK};">${esc(t.name || t.code)}</div><div style="font-size:11px;color:${C_MUTED};font-family:monospace;">${esc(t.code)}</div></td>
+      <td align="right" style="padding:9px 6px;border-bottom:1px solid ${C_LINE};font-size:12px;color:${C_MUTED};white-space:nowrap;">${t.qty.toLocaleString()}개</td>
+      <td align="right" style="padding:9px ${prevLabel ? "6px" : "12px"} 9px 6px;border-bottom:1px solid ${C_LINE};font-size:13px;font-weight:700;color:${C_INK};white-space:nowrap;">${won(t.revenue)}<div style="font-size:11px;color:${C_MUTED};font-weight:600;">${t.share.toFixed(1)}%</div></td>
+      ${prevLabel ? `<td align="right" style="padding:9px 12px 9px 6px;border-bottom:1px solid ${C_LINE};font-size:12px;font-weight:700;white-space:nowrap;">${rankChange(t, prevLabel)}</td>` : ""}
+    </tr>`;
+  }).join("");
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;">${rows}</table>`;
+}
+const kpiCellHtml = (label: string, value: string, sub: string) => `
+    <td width="50%" style="padding:6px;" valign="top">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;">
+        <tr><td style="padding:14px 16px;">
+          <div style="font-size:12px;color:${C_MUTED};font-weight:600;">${label}</div>
+          <div style="font-size:20px;color:${C_INK};font-weight:800;margin-top:4px;">${value}</div>
+          <div style="font-size:12px;margin-top:3px;font-weight:600;">${sub}</div>
+        </td></tr>
+      </table>
+    </td>`;
+// 정기배송 — 숫자는 정기배송 분석 자동 스냅샷·상태 변화 로그, 매출은 결제 주문번호 조인(sales-report.ts)
+function subscriptionHtml(s: SubscriptionFacts | null, err: string | null, periodLabel: string): string {
+  if (!s) return `<div style="border:1px solid ${C_LINE};border-radius:8px;padding:14px 16px;font-size:12px;color:${C_MUTED};">정기배송 숫자를 불러오지 못했습니다. ${esc(err || "")}</div>`;
+  let activeSub: string;
+  if (s.prev_active === null) activeSub = `<span style="color:${C_MUTED}">비교할 스냅샷 없음</span>`;
+  else {
+    const d = s.active - s.prev_active;
+    activeSub = d > 0 ? `<span style="color:${C_GOOD}">&#9650; ${d}명 (${esc(s.prev_as_of)} 대비)</span>`
+      : d < 0 ? `<span style="color:${C_BAD}">&#9660; ${-d}명 (${esc(s.prev_as_of)} 대비)</span>`
+        : `<span style="color:${C_MUTED}">${esc(s.prev_as_of)}과 같음</span>`;
+  }
+  const monthLine = s.sub_revenue_month !== null ? `이번달 누적 ${won(s.sub_revenue_month)} (비중 ${(s.sub_share_month ?? 0).toFixed(1)}%)` : `${s.sub_orders}건`;
+  return `<table width="100%" cellpadding="0" cellspacing="0">
+      <tr>${kpiCellHtml("이용중 회원", `${s.active}명`, activeSub)}${kpiCellHtml("일시정지 / 이탈 누적", `${s.pause} / ${s.lost}명`, `<span style="color:${C_MUTED}">전체 ${s.total_members}명</span>`)}</tr>
+      <tr>${kpiCellHtml(`${esc(periodLabel)} 신규 &#183; 해지 &#183; 재개`, `${s.new_cnt} &#183; ${s.cancel_cnt} &#183; ${s.resume_cnt}건`, `<span style="color:${C_MUTED}">상태 변화를 관측한 날 기준</span>`)}${kpiCellHtml(`${esc(periodLabel)} 정기배송 매출`, won(s.sub_revenue), `<span style="color:${C_MUTED}">비중 ${s.sub_share.toFixed(1)}% &#183; ${monthLine}</span>`)}</tr>
+    </table>
+    <div style="font-size:12px;color:${C_MUTED};padding:6px 6px 0;line-height:1.6;">첫결제 전환 ${esc(s.first_pay_rate)} &#183; 3회차 도달 ${esc(s.reach3_rate)} &#183; 주기 ${esc(s.cycle_mix)}<br>정기배송 분석 자동 수집 ${esc(s.as_of)} 기준. 매출은 정기배송 결제 주문번호를 매출 원장과 맞춘 값</div>`;
 }
 
 export function buildDailyHtml(s: DailyStats): string {
@@ -112,18 +191,14 @@ export function buildDailyHtml(s: DailyStats): string {
   }).join("");
   const channelsHtml = `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;"><tr><td style="padding:4px 18px;"><table width="100%" cellpadding="0" cellspacing="0">${chRows}</table></td></tr></table>`;
 
-  // Top10 SKU
-  const skuRows = s.top10.map((t) => {
-    const isTop3 = t.rank <= 3;
-    const badgeBg = isTop3 ? C_DEEP : C_FOAM, badgeCol = isTop3 ? "#ffffff" : C_DEEP;
-    return `<tr><td style="padding:11px 18px;border-bottom:1px solid ${C_LINE};">
-      <table width="100%" cellpadding="0" cellspacing="0"><tr>
-        <td width="28"><div style="width:22px;height:22px;background:${badgeBg};color:${badgeCol};border-radius:6px;font-size:12px;font-weight:800;text-align:center;line-height:22px;">${t.rank}</div></td>
-        <td style="font-size:13px;font-weight:600;color:${C_INK};font-family:monospace;padding-left:12px;">${esc(t.code)}</td>
-        <td align="right" style="font-size:14px;font-weight:700;color:${C_INK};">${won(t.revenue)}</td>
-      </tr></table></td></tr>`;
-  }).join("");
-  const skuHtml = `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;">${skuRows}</table>`;
+  // Top10 — 기간(상품명·수량·비중) + 이번달 누적(지난달 같은 기간 순위 대비)
+  const skuHtml = skuTable(s.top10, null);
+  const monthSkuHtml = skuTable(s.month_top10, "지난달");
+  // 건수 × 객단가 — 기간 채널별, 지난주 같은 요일 대비 + 이번달 누적 한 줄(지난달 같은 기간)
+  const prevLabel = `지난주 같은 요일(${esc(s.decomp_prev_start.slice(5))}~${esc(s.decomp_prev_end.slice(5))})`;
+  const decompHtml = decompTable(s.decomp, s.decomp_total, prevLabel);
+  const mtdLine = `<div style="font-size:12px;color:${C_MUTED};padding:8px 6px 0;line-height:1.6;">이번달 누적 주문 <b style="color:${C_INK}">${s.mtd_orders.toLocaleString()}건</b> ${deltaLabel(s.mtd_orders, s.mtd_prev_orders)} &#183; 객단가 <b style="color:${C_INK}">${won(s.mtd_aov)}</b> ${deltaLabel(s.mtd_aov, s.mtd_prev_aov)} (지난달 같은 기간 ${s.mtd_prev_orders.toLocaleString()}건 &#183; ${won(s.mtd_prev_aov)})</div>`;
+  const subHtml = subscriptionHtml(s.subscription, s.subscription_error, windowLabel);
 
   // 요약 한 줄
   let summary: string;
@@ -161,13 +236,26 @@ export function buildDailyHtml(s: DailyStats): string {
     <div style="height:10px;"></div>${channelsHtml}
   </td></tr>
   <tr><td style="padding:18px 24px 0;">
-    <div style="font-size:13px;font-weight:800;color:${C_DEEP};padding-bottom:8px;border-bottom:2px solid ${C_LINE};">4. ${windowLabel} 잘 팔린 상품 Top 10</div>
+    <div style="${SEC_HEAD}">4. 채널별 건수 &#215; 객단가 (${windowLabel}, 지난주 같은 요일 대비)</div>
+    <div style="height:10px;"></div>${decompHtml}${mtdLine}
+  </td></tr>
+  <tr><td style="padding:18px 24px 0;">
+    <div style="${SEC_HEAD}">5. ${windowLabel} 잘 팔린 상품 Top 10</div>
     <div style="height:10px;"></div>${skuHtml}
+  </td></tr>
+  <tr><td style="padding:18px 24px 0;">
+    <div style="${SEC_HEAD}">6. 이번달 누적 Top 10 (지난달 같은 기간 순위 대비)</div>
+    <div style="height:10px;"></div>${monthSkuHtml}
+  </td></tr>
+  <tr><td style="padding:18px 18px 0;">
+    <div style="${SEC_HEAD}margin:0 6px;padding-left:6px;">7. 정기배송</div>
+    <div style="height:4px;"></div>${subHtml}
   </td></tr>
   <tr><td style="padding:24px 24px 40px;">
     <div style="font-size:11px;color:${C_MUTED};line-height:1.6;border-top:1px solid ${C_LINE};padding-top:14px;">
       전월&#183;전년 비교는 각각 전체 기간(전월 전체, 전년 전체) 기준입니다. 같은 길이로 맞추려 30일&#183;연 환산을 적용했습니다.<br>
       30일&#183;연 환산은 단순 비례 추정이며, 월말 정산&#183;시즌성은 반영되지 않습니다.<br>
+      건수&#183;객단가의 비교는 지난주 같은 요일, 이번달 Top 10 의 순위 변동은 지난달 같은 기간(1일&#126;같은 일자) 상위 30 과 비교한 값입니다.<br>
       씨몬스터 일일 매출 보고서 &#183; 자동 생성
     </div>
   </td></tr>
@@ -228,17 +316,9 @@ export function buildWeeklyHtml(s: WeeklyStats): string {
   }).join("");
   const channelsHtml = `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;"><tr><td style="padding:4px 18px;"><table width="100%" cellpadding="0" cellspacing="0">${chRows}</table></td></tr></table>`;
 
-  const skuRows = s.top10.map((t) => {
-    const isTop3 = t.rank <= 3;
-    const badgeBg = isTop3 ? C_DEEP : C_FOAM, badgeCol = isTop3 ? "#ffffff" : C_DEEP;
-    return `<tr><td style="padding:11px 18px;border-bottom:1px solid ${C_LINE};">
-      <table width="100%" cellpadding="0" cellspacing="0"><tr>
-        <td width="28"><div style="width:22px;height:22px;background:${badgeBg};color:${badgeCol};border-radius:6px;font-size:12px;font-weight:800;text-align:center;line-height:22px;">${t.rank}</div></td>
-        <td style="font-size:13px;font-weight:600;color:${C_INK};font-family:monospace;padding-left:12px;">${esc(t.code)}</td>
-        <td align="right" style="font-size:14px;font-weight:700;color:${C_INK};">${won(t.revenue)}</td>
-      </tr></table></td></tr>`;
-  }).join("");
-  const skuHtml = `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C_LINE};border-radius:8px;">${skuRows}</table>`;
+  const skuHtml = skuTable(s.top10, "전주");
+  const decompHtml = decompTable(s.decomp, s.decomp_total, "전주");
+  const subHtml = subscriptionHtml(s.subscription, s.subscription_error, "이번 주");
 
   const wp = s.prev_week_sales === 0 ? null : (s.week_sales - s.prev_week_sales) / s.prev_week_sales * 100;
   let summary: string;
@@ -272,12 +352,20 @@ export function buildWeeklyHtml(s: WeeklyStats): string {
     <div style="height:10px;"></div>${channelsHtml}
   </td></tr>
   <tr><td style="padding:18px 24px 0;">
-    <div style="font-size:13px;font-weight:800;color:${C_DEEP};padding-bottom:8px;border-bottom:2px solid ${C_LINE};">3. 이번 주 잘 팔린 상품 Top 10</div>
+    <div style="${SEC_HEAD}">3. 채널별 건수 &#215; 객단가 (전주 대비)</div>
+    <div style="height:10px;"></div>${decompHtml}
+  </td></tr>
+  <tr><td style="padding:18px 24px 0;">
+    <div style="${SEC_HEAD}">4. 이번 주 잘 팔린 상품 Top 10 (전주 순위 대비)</div>
     <div style="height:10px;"></div>${skuHtml}
+  </td></tr>
+  <tr><td style="padding:18px 18px 0;">
+    <div style="${SEC_HEAD}margin:0 6px;padding-left:6px;">5. 정기배송</div>
+    <div style="height:4px;"></div>${subHtml}
   </td></tr>
   <tr><td style="padding:24px 24px 40px;">
     <div style="font-size:11px;color:${C_MUTED};line-height:1.6;border-top:1px solid ${C_LINE};padding-top:14px;">
-      주간은 월&#126;일 기준이며, 전주는 직전 주(월&#126;일) 전체와 비교합니다.<br>
+      주간은 월&#126;일 기준이며, 전주는 직전 주(월&#126;일) 전체와 비교합니다. Top 10 순위 변동은 전주 상위 30 과 비교한 값입니다.<br>
       씨몬스터 주간 매출 보고서 &#183; 자동 생성
     </div>
   </td></tr>
