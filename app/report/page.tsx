@@ -437,30 +437,9 @@ export default function ReportPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div><h1 className="b2b-page-title">AI 데이터 비서</h1></div>
-        <div className="sm-row" style={{ gap: 8 }}>
-          {threads.length > 0 && <button className="b2b-btn-secondary" onClick={() => setThreadsOpen((v) => !v)} disabled={loading}>{threadsOpen ? "대화 목록 닫기" : `대화 목록 ${qty(threads.length)}`}</button>}
-        </div>
       </header>
 
       {pendingMsg && <div className="b2b-error">{pendingMsg}</div>}
-
-      {/* 대화 목록 — 내 스레드 최근순, 클릭하면 이어서 */}
-      {threadsOpen && (
-        <div className="rp-saved-box">
-          <div className="rp-saved-list">
-            {threads.map((t) => (
-              <div key={t.id} className={`rp-saved-item ${t.id === threadId ? "is-active" : ""}`} onClick={() => openThread(t.id)} title="클릭하면 이어서">
-                <span className="rp-saved-name">{t.title}</span>
-                <div className="rp-saved-meta">
-                  <span>{dateFull(t.updatedAt)}</span>
-                  {isAdmin && t.createdBy !== me && <><span>·</span><span>{t.createdBy}</span></>}
-                  <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); deleteThread(t); }}>지우기</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 저장된 리포트 — 기본 접힘. [정기 받기] 로 매일·매주·매월 메일 */}
       {saved.length > 0 && (
@@ -501,6 +480,32 @@ export default function ReportPage() {
           ))}
         </div>
       )}
+
+      {/* 저장된 대화 — 저장된 리포트와 같은 접이식 UI(2026-10-19 대표). 내 스레드 최근순, 클릭하면 이어서 */}
+      <div className="rp-saved-box">
+        <div className="rp-saved-bar">
+          <button className="rp-saved-toggle" onClick={() => setThreadsOpen((v) => !v)}>
+            <span className="rp-saved-chev">{threadsOpen ? "▾" : "▸"}</span>
+            저장된 대화{threads.length > 0 ? ` ${qty(threads.length)}` : ""}
+          </button>
+        </div>
+        {threadsOpen && (threads.length === 0 ? (
+          <div className="b2b-empty">저장된 대화가 없습니다. 아래에 질문을 보내면 대화가 저장됩니다.</div>
+        ) : (
+          <div className="rp-saved-list">
+            {threads.map((t) => (
+              <div key={t.id} className={`rp-saved-item ${t.id === threadId ? "is-active" : ""}`} onClick={() => { if (!loading) openThread(t.id); }} title="클릭하면 이어서">
+                <span className="rp-saved-name">{t.title}</span>
+                <div className="rp-saved-meta">
+                  <span>{dateFull(t.updatedAt)}</span>
+                  {isAdmin && t.createdBy !== me && <><span>·</span><span>{t.createdBy}</span></>}
+                  <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); deleteThread(t); }}>지우기</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
 
       {/* 저장 리포트 변수 입력 */}
       {varForm && (
