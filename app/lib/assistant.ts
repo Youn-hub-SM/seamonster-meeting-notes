@@ -25,6 +25,8 @@ export type AskQuote = { source: QuoteSource; date: string; title: string; text:
 export type AskUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; estUsd: number; estNote: string };
 export type AskToolLog = { name: string; label: string; ok: boolean; ms: number };
 export type AskResult = {
+  kind: AskKind;                  // "clarify" = 조사 전에 되물음(answer = 되물은 문장, clarify.options = 선택지). 2026-10-19 대화형
+  clarify?: AskClarify;
   answer: string;
   tables: AskTable[];
   quotes: AskQuote[];
@@ -35,7 +37,10 @@ export type AskResult = {
   timedOut: boolean;
   elapsedMs: number;              // 질문 시작부터 답까지 전체 경과(도구 시간 합이 아님)
 };
-export type AskHistoryTurn = { q: string; answer: string };
+// 되물음 턴(kind: "clarify")은 answer 에 되물은 문장이 들어가고, 다음 사용자 메시지가 그 답이다.
+export type AskHistoryTurn = { q: string; answer: string; kind?: AskKind };
+export type AskKind = "answer" | "clarify";
+export type AskClarify = { question: string; options: string[] };
 export type AskProgress = { name: string; label: string; ms: number };
 
 export class AssistantOffError extends Error {}
@@ -189,6 +194,17 @@ function toolDefs(strict: boolean): Anthropic.Tool[] {
         },
       },
     },
+    {
+      name: "ask_user", ...s,
+      description: "질문이 모호해 답이 크게 달라질 때 사용자에게 한 가지를 되묻습니다. 호출하면 조사가 멈추고 사용자의 답을 받은 뒤 새 요청으로 이어집니다. 한 질문에 한 번만, 조사 시작 전이나 schema 확인 직후에만 쓰세요. 다른 도구와 함께 호출하지 않습니다.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["question", "options"],
+        properties: {
+          question: { type: "string", description: "되묻는 문장 한 개(존댓말, 한 문장, 무엇이 왜 필요한지 짧게)" },
+          options: { type: ["array", "null"], items: { type: "string" }, description: "사용자가 고를 선택지 2~4개(짧은 명사구). 자유 입력만 받으려면 null" },
+        },
+      },
+    },
   ];
 }
 
@@ -221,8 +237,15 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 전문 이커머스: 공식
 4) 금액=원 단위 정수, 날짜는 실제 컬럼(order_date 등). 컬럼 별칭은 한국어(AS "매출"). 스키마에 있는 실제 컬럼만 씁니다.
 5) 고객 수는 COUNT(DISTINCT customer_key). 재구매 분석은 sales_group_repeat/sales_buyer_repeat 같은 분석 뷰를 우선 씁니다.
 6) 질문이 요구한 컬럼·집계만. 요청하지 않은 파생지표(비중·순위·증감률 등)를 임의로 덧붙이지 않습니다.
-7) 질문이 모호해도 가장 문자 그대로 해석하고, 불가피한 가정은 limits 에 적습니다.
+7) 질문이 조금 모호하면 가장 문자 그대로 해석하고, 가정은 limits 에 적습니다. 답이 크게 달라질 만큼 모호하면 [되묻기] 규칙대로 ask_user 로 한 번 묻습니다.
 8) 현재 날짜가 필요하면 (now() at time zone 'Asia/Seoul')::date.
+
+[되묻기 — ask_user]
+- 묻는 경우(핵심 조건이 빠져 해석이 둘 이상이고 결과가 크게 달라질 때만): 기간이 없음("채널별 매출" — 어느 기간?), 대상이 넓음("고객" — 구매자 수? 주문 수?, "온라인" — 어느 채널?), 지표 뜻이 갈림("매출" — 주문 금액? 배송비 포함?, "재고" — 박스? kg?), 비교 기준이 없음("늘었나?" — 전주? 전월? 작년?), 묶음 단위("추이" — 일별? 주별? 월별?).
+- 묻지 않는 경우: 문맥·이전 대화·오늘 날짜로 정할 수 있을 때, 관례 기본값이 있을 때(매출 = subtotal_amount 합, 기간 = 말이 가리키는 달력 기간), 사소한 차이일 때. 이땐 가정을 두고 진행하고 limits 에 적습니다.
+- 한 질문에 한 번만, 한 가지만 묻습니다. 여러 조건이 비면 가장 결과를 바꾸는 것 하나만 묻고 나머지는 가정합니다. 조사(run_sql·search_text)를 시작한 뒤에는 묻지 않습니다(schema 확인은 괜찮음 — 실제 채널·컬럼 이름을 선택지로 쓸 수 있습니다).
+- options 는 2~4개의 짧은 명사구(예: "이번 달(10월)", "지난달(9월)", "올해 누적"). 사용자가 선택지 밖의 답을 적을 수 있으니 question 자체가 완결된 문장이어야 합니다.
+- ask_user 와 다른 도구를 같은 차례에 함께 부르지 않습니다. ask_user 가 거절되면(이미 되물은 질문) 가정을 두고 바로 조사합니다.
 
 [판단 규칙]
 - facts 는 표·인용이 직접 말하는 것만 씁니다. 숫자는 도구 결과에 있는 값만 그대로 인용하고 새로 계산하지 않습니다. 정량만 묻는 질문은 facts 를 비워 둡니다(answer 와 표가 이미 말한 것을 되풀이하지 않습니다).
@@ -243,6 +266,7 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 전문 이커머스: 공식
 
 [이전 대화]
 - 이전 질문·답이 있으면 새 질문이 그 답을 '다듬는' 요청일 수 있습니다("도매만 빼줘"·"월별로"·"상위 20개로"·"작년과 비교"). 그땐 같은 조사를 조건만 바꿔 다시 합니다.
+- 직전 턴이 [되물음]이면 새 메시지는 그 되물음의 답입니다. 원래 질문에 그 답을 보태 완성된 질문으로 보고 바로 조사합니다. 다시 되묻지 않습니다(답이 선택지 밖이어도 그대로 받아들입니다).
 
 [최종 답 — 조사가 끝나면 설명 없이 아래 JSON 하나만 출력]
 ${FINAL_JSON_SHAPE}
@@ -613,11 +637,14 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
     { type: "text", text: `[오늘] 기준일(Asia/Seoul): ${kstTodayLabel()} — '오늘·어제·이번 주·이번 달·올해·최근 N일' 등 상대 기간은 반드시 이 날짜 기준. 학습 시점의 연도를 가정하지 않습니다.` },
   ];
   const messages: Anthropic.MessageParam[] = [];
-  for (const h of (p.history || []).slice(-3)) {
-    if (!h || !String(h.q || "").trim()) continue;
+  const hist = (p.history || []).filter((h) => h && String(h.q || "").trim()).slice(-3);
+  for (const h of hist) {
     messages.push({ role: "user", content: `[이전 질문]\n${String(h.q).trim().slice(0, 1000)}` });
-    messages.push({ role: "assistant", content: String(h.answer || "").trim().slice(0, 2000) || "(답 없음)" });
+    const a = String(h.answer || "").trim().slice(0, 2000) || "(답 없음)";
+    messages.push({ role: "assistant", content: h.kind === "clarify" ? `[되물음] ${a}` : a });
   }
+  // 되물음은 한 질문에 한 번 — 직전 턴이 되물음이면(지금 메시지가 그 답) 이번엔 ask_user 를 받지 않는다
+  const askAllowed = hist[hist.length - 1]?.kind !== "clarify";
   messages.push({ role: "user", content: `[질문]\n${q}` });
 
   let strict = true;
@@ -673,6 +700,7 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
         if (roundsExhausted) limits.push("조사 횟수 한도(8차례)에 닿아 일부만 확인했습니다.");
         if (finalReason === "error") limits.push("조사 중 AI 호출이 실패해 모은 것만으로 답했습니다.");
         const result: AskResult = {
+          kind: "answer",
           answer: String(fin.answer).trim(),
           tables: buildTables(fin, ctx.sqlRuns),
           quotes: buildQuotes(fin),
@@ -684,6 +712,33 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
 
       messages.push({ role: "assistant", content: res.content }); // thinking·tool_use 블록 그대로(수정 금지)
       const uses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+
+      // 되물음 — 허용 상태(이 질문에 아직 안 물음·조사 시작 전)면 조사를 멈추고 사용자에게 돌려준다.
+      //  이미 run_sql·search_text 를 돌린 뒤거나 직전 턴이 되물음이면 거절하고(도구 오류로 돌려줌) 가정을 두고 계속하게 한다.
+      const ask = uses.find((u) => u.name === "ask_user");
+      if (ask) {
+        const investigated = toolLog.some((t) => t.name === "run_sql" || t.name === "search_text" || t.name === "read_report");
+        const input = (ask.input || {}) as Record<string, unknown>;
+        const question = String(input.question || "").trim();
+        if (askAllowed && !investigated && question) {
+          const options = strList(input.options, 4).map((o) => o.slice(0, 60));
+          toolLog.push({ name: "ask_user", label: "되묻기", ok: true, ms: 0 });
+          return {
+            kind: "clarify", clarify: { question, options },
+            answer: question, tables: [], quotes: [], facts: [], inferences: [], limits: [], followups: [],
+            model, usage, toolLog, downgraded, timedOut: false, elapsedMs: Date.now() - startedAt,
+          };
+        }
+        toolLog.push({ name: "ask_user", label: "되묻기(거절)", ok: false, ms: 0 });
+        messages.push({ role: "user", content: uses.map((u) => ({
+          type: "tool_result" as const, tool_use_id: u.id, is_error: true,
+          content: u.name === "ask_user"
+            ? (askAllowed ? "되묻기는 조사를 시작하기 전에만 할 수 있습니다. 가정을 두고 조사를 계속하고 limits 에 적으세요." : "이 질문에는 이미 되물었습니다. 받은 답과 가정으로 조사를 계속하세요.")
+            : "ask_user 와 함께 부른 도구는 실행하지 않았습니다. 다시 요청하세요.",
+        })) });
+        continue;
+      }
+
       const results: Anthropic.ToolResultBlockParam[] = await Promise.all(uses.map(async (u) => {
         const input = (u.input || {}) as Record<string, unknown>;
         const label = toolLabel(u.name, input);

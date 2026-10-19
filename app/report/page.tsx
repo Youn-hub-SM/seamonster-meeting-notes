@@ -19,7 +19,10 @@ type QuoteSource = "voc" | "inquiry" | "report" | "manual" | "request" | "activi
 type AskQuote = { source: QuoteSource; date: string; title: string; text: string };
 type AskUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; estUsd: number; estNote: string };
 type ToolLog = { name: string; label: string; ok: boolean; ms: number };
+type AskKind = "answer" | "clarify";
 type AskResult = {
+  kind?: AskKind;                       // "clarify" = 되물음(answer = 되물은 문장, clarify.options = 선택지)
+  clarify?: { question: string; options: string[] };
   answer: string;
   tables: AskTable[];
   quotes: AskQuote[];
@@ -234,6 +237,25 @@ function AnswerView({ turn, isAdmin, disabled, onFollowup, onSave, onExport }: {
   );
 }
 
+// 되물음 카드 — 비서가 조사 전에 한 가지를 묻는다. 선택지를 누르면 그 글이 답으로 보내지고, 직접 쓰려면 아래 질문칸에 적는다.
+//  이미 답한 되물음(마지막 턴이 아님)은 선택지를 잠근다.
+function ClarifyView({ result, answered, disabled, onPick }: { result: AskResult; answered: boolean; disabled: boolean; onPick: (text: string) => void }) {
+  const options = result.clarify?.options || [];
+  return (
+    <section className={`b2b-card rp-clarify ${answered ? "is-answered" : ""}`}>
+      <p className="rp-clarify-q">{result.answer}</p>
+      {options.length > 0 && (
+        <div className="rp-clarify-options">
+          {options.map((o) => (
+            <button key={o} type="button" className="b2b-btn-secondary" disabled={disabled || answered} onClick={() => onPick(o)}>{o}</button>
+          ))}
+        </div>
+      )}
+      {!answered && <div className="rp-clarify-hint">선택지에 없으면 아래 질문칸에 적어 보내세요</div>}
+    </section>
+  );
+}
+
 export default function ReportPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
@@ -274,7 +296,7 @@ export default function ReportPage() {
     if (loading) return;
     if (!qq) { setQErr("질문을 입력하세요"); return; }
     setQErr("");
-    const history = turns.slice(-3).map((t) => ({ q: t.q, answer: t.result.answer }));
+    const history = turns.slice(-3).map((t) => ({ q: t.q, answer: t.result.answer, kind: t.result.kind || "answer" }));
     setLoading(true); setErr(""); setVarForm(null); setRunResult(null); setProgress([]); setPendingQ(qq);
     try {
       const r = await fetch("/api/report/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: qq, history }) });
@@ -344,6 +366,7 @@ export default function ReportPage() {
   function askFollowup(text: string) { setQ(text); ask(text); }
 
   const hasAnything = turns.length > 0 || !!runResult || loading || !!err;
+  const awaitingReply = !loading && turns.length > 0 && turns[turns.length - 1].result.kind === "clarify"; // 직전 턴이 되물음 → 다음 입력은 그 답
 
   return (
     <div className="b2b-container">
@@ -389,22 +412,7 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* 질문 입력 — Enter = 질문, Shift+Enter = 줄바꿈 */}
-      <div className="rp-ask">
-        {qErr && <div className="b2b-error">{qErr}</div>}
-        <textarea className="b2b-input rp-input" rows={2} value={q} aria-label="질문"
-          placeholder="예: 10월 채널별 매출과 톡스토어가 빠진 이유"
-          aria-invalid={qErr ? "true" : undefined}
-          onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(q); } }} />
-        {qErr && <div className="b2b-field-error">{qErr}</div>}
-        <div className="rp-ask-actions">
-          <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading}>{loading ? "조사 중..." : "질문하기"}</button>
-          {hasAnything && <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 질문</button>}
-        </div>
-      </div>
-
-      {/* 빈 상태 — 예시 질문 3개(정량·정성·혼합), 설명문 없음 */}
+      {/* 빈 상태 — 예시 질문 3개(정량·정성·혼합), 설명문 없음. 질문칸은 대화 아래(채팅 꼴, 2026-10-19) */}
       {!hasAnything && (
         <div className="rp-examples">
           {EXAMPLES.map((ex) => <button key={ex} type="button" className="b2b-btn-secondary" onClick={() => askFollowup(ex)}>{ex}</button>)}
@@ -434,7 +442,11 @@ export default function ReportPage() {
           {turns.map((t, i) => (
             <div key={i} className="rp-turn">
               <div className="rp-turn-q">{t.q}</div>
-              <AnswerView turn={t} isAdmin={isAdmin} disabled={loading} onFollowup={askFollowup} onSave={openSave} onExport={exportXlsx} />
+              {t.result.kind === "clarify" ? (
+                <ClarifyView result={t.result} answered={i < turns.length - 1} disabled={loading} onPick={askFollowup} />
+              ) : (
+                <AnswerView turn={t} isAdmin={isAdmin} disabled={loading} onFollowup={askFollowup} onSave={openSave} onExport={exportXlsx} />
+              )}
             </div>
           ))}
         </div>
@@ -470,6 +482,23 @@ export default function ReportPage() {
             question={runResult.rep.question || runResult.rep.name} defaultOpen onSave={openSave} onExport={exportXlsx} />
         </div>
       )}
+
+      {/* 질문 입력 — 대화 아래(채팅 꼴). Enter = 보내기, Shift+Enter = 줄바꿈. 직전 턴이 되물음이면 [답하기] */}
+      <div className="rp-composer">
+        {awaitingReply && <div className="rp-composer-note">비서가 되물었습니다. 위 선택지를 누르거나 여기에 답을 적어 보내세요.</div>}
+        <div className="rp-ask">
+          <textarea className="b2b-input rp-input" rows={2} value={q} aria-label={awaitingReply ? "되물음에 답" : "질문"}
+            placeholder={awaitingReply ? "답을 적어 보내세요. 예: 이번 달" : "예: 10월 채널별 매출과 톡스토어가 빠진 이유"}
+            aria-invalid={qErr ? "true" : undefined}
+            onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(q); } }} />
+          <div className="rp-ask-actions">
+            <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading}>{loading ? "조사 중..." : awaitingReply ? "답하기" : "질문하기"}</button>
+            {hasAnything && <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 질문</button>}
+          </div>
+        </div>
+        {qErr && <div className="b2b-field-error">{qErr}</div>}
+      </div>
 
       {/* 저장 다이얼로그 */}
       {saveOpen && (

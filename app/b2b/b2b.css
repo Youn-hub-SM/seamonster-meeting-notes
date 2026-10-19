@@ -2820,6 +2820,15 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-quote-text { font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-dark); max-width: 68ch; white-space: pre-line; }
 .rp-followups { display: flex; gap: 8px; flex-wrap: wrap; }
 .rp-followups .b2b-btn-secondary { text-align: left; white-space: normal; }
+/* 되물음 카드(2026-10-19 대화형) — 경계 카드, 질문 한 문장 + 선택지 버튼. 답한 뒤엔 흐리게 */
+.rp-clarify { display: flex; flex-direction: column; gap: 10px; }
+.rp-clarify-q { margin: 0; max-width: 68ch; font-size: var(--sm-fs-lg); line-height: var(--sm-lh-body); color: var(--sm-black); }
+.rp-clarify-options { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-clarify-options .b2b-btn-secondary { white-space: normal; text-align: left; }
+.rp-clarify-hint { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.rp-clarify.is-answered .rp-clarify-q { color: var(--sm-text-mid); }
+.rp-composer { margin-top: 18px; }
+.rp-composer-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-bottom: 6px; }
 .rp-meta { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .rp-error { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
 .rp-progress .b2b-card-head { padding-top: 0; }
