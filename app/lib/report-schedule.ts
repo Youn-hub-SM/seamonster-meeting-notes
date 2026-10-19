@@ -11,6 +11,8 @@ import { sendSalesMail, defaultRecipients } from "./sales-mailer";
 import { getAppBaseUrl } from "./b2b-settings";
 import { MAIL_COLORS, mailEsc } from "./sales-report-html";
 
+// 2026-10-19 대표: "정기 받기 배포 보류, 베타에서도 숨김" — 화면(page.tsx SCHEDULE_ENABLED)·API(PATCH)·크론 틱이 모두 이 플래그를 본다. 켜려면 둘 다 true.
+export const SCHEDULE_ENABLED = false;
 export const RESERVED_VARS = ["시작일", "종료일"] as const;
 const MAX_PER_TICK = 6;
 const MAIL_ROWS = 100;
@@ -133,6 +135,7 @@ export async function sendScheduledReport(rep: SavedReport, opts?: { force?: boo
 
 // 크론 틱 — 오늘 차례이고 아직 안 보낸 것만, 최대 MAX_PER_TICK 건 순서대로
 export async function runDueScheduledReports(today = kstNow()): Promise<ScheduleRunResult[]> {
+  if (!SCHEDULE_ENABLED) return [];
   const todayIso = iso(today);
   const due = (await getSavedReports()).filter((r) => r.schedule && isDueToday(r.schedule.freq, today) && r.schedule.lastSentOn !== todayIso).slice(0, MAX_PER_TICK);
   const out: ScheduleRunResult[] = [];

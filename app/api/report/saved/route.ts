@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getSavedReports, addSavedReport, deleteSavedReport, updateSavedReport, type ReportSchedule } from "@/app/lib/report-saved";
-import { unresolvedVars, sendScheduledReport } from "@/app/lib/report-schedule";
+import { unresolvedVars, sendScheduledReport, SCHEDULE_ENABLED } from "@/app/lib/report-schedule";
 import { assertSelectOnly } from "@/app/lib/report-ai";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export async function PATCH(req: NextRequest) {
   try {
+    if (!SCHEDULE_ENABLED) return NextResponse.json({ ok: false, error: "정기 받기는 아직 열리지 않았습니다." }, { status: 403 });
     const b = (await req.json().catch(() => ({}))) as { id?: string; schedule?: ReportSchedule | null; sendNow?: boolean };
     const id = String(b.id || "");
     if (!id) return NextResponse.json({ ok: false, error: "id 필요" }, { status: 400 });

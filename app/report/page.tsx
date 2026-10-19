@@ -38,6 +38,7 @@ const EXAMPLES = [
 ];
 const TABLE_ROW_LIMIT = 1000;
 const RESERVED_VARS = ["시작일", "종료일"];
+const SCHEDULE_ENABLED = false; // 정기 받기(개선안 3) — 2026-10-19 대표 "배포 보류, 베타에서도 숨김". 코드는 두고 화면·API·크론을 모두 끈다(report-schedule.ts 와 같은 플래그)
 const FREQ_LABEL: Record<ScheduleFreq, string> = { daily: "매일", weekly: "매주 월요일", monthly: "매월 1일" };
 
 function fmt(v: unknown): string {
@@ -438,7 +439,6 @@ export default function ReportPage() {
         <div><h1 className="b2b-page-title">AI 데이터 비서</h1></div>
         <div className="sm-row" style={{ gap: 8 }}>
           {threads.length > 0 && <button className="b2b-btn-secondary" onClick={() => setThreadsOpen((v) => !v)} disabled={loading}>{threadsOpen ? "대화 목록 닫기" : `대화 목록 ${qty(threads.length)}`}</button>}
-          {hasAnything && <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 대화</button>}
         </div>
       </header>
 
@@ -485,15 +485,15 @@ export default function ReportPage() {
                 <div key={s.id} className="rp-saved-item" onClick={() => { if (!loading && !busy) startSaved(s); }} title="클릭하면 실행">
                   <span className="rp-saved-name">
                     {s.name}{extractVars(s.sql).length ? <span className="rp-saved-var">변수</span> : null}
-                    {s.schedule && <span className="rp-badge rp-sched">{FREQ_LABEL[s.schedule.freq]}{s.schedule.lastSentOn ? ` · 마지막 ${s.schedule.lastSentOn}` : ""}</span>}
+                    {SCHEDULE_ENABLED && s.schedule && <span className="rp-badge rp-sched">{FREQ_LABEL[s.schedule.freq]}{s.schedule.lastSentOn ? ` · 마지막 ${s.schedule.lastSentOn}` : ""}</span>}
                   </span>
                   {s.question && <div className="rp-saved-q">{s.question}</div>}
                   <div className="rp-saved-meta">
                     <span>저장: {s.createdBy || "—"}</span>
                     <span>·</span>
                     <span>{dateFull(s.createdAt)}</span>
-                    <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); openSchedule(s); }}>{s.schedule ? "정기 받기 바꾸기" : "정기 받기"}</button>
-                    <button className="rp-saved-del2" onClick={async (e) => { e.stopPropagation(); if (await confirmModal({ title: `'${s.name}' 저장 리포트 삭제`, body: "저장한 질문과 SQL이 지워집니다. 정기 발송도 함께 멈춥니다. 되돌릴 수 없습니다.", action: "리포트 삭제" })) delSaved(s.id); }}>삭제</button>
+                    {SCHEDULE_ENABLED && <button className="rp-saved-del2" onClick={(e) => { e.stopPropagation(); openSchedule(s); }}>{s.schedule ? "정기 받기 바꾸기" : "정기 받기"}</button>}
+                    <button className="rp-saved-del2" onClick={async (e) => { e.stopPropagation(); if (await confirmModal({ title: `'${s.name}' 저장 리포트 삭제`, body: `저장한 질문과 SQL이 지워집니다.${SCHEDULE_ENABLED ? " 정기 발송도 함께 멈춥니다." : ""} 되돌릴 수 없습니다.`, action: "리포트 삭제" })) delSaved(s.id); }}>삭제</button>
                   </div>
                 </div>
               ))}
@@ -679,13 +679,14 @@ export default function ReportPage() {
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(q); } }} />
           <div className="rp-ask-actions">
             <button className="b2b-btn-primary" onClick={() => send(q)} disabled={loading || busy}>{loading ? "답하는 중..." : "보내기"}</button>
+            <button className="b2b-btn-secondary" onClick={newThread} disabled={loading || !hasAnything}>새 대화</button>
           </div>
         </div>
         {qErr && <div className="b2b-field-error">{qErr}</div>}
       </div>
 
       {/* 정기 받기 설정 */}
-      {schedFor && (
+      {SCHEDULE_ENABLED && schedFor && (
         <div className="rp-modal-bg" onClick={() => setSchedFor(null)}>
           <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-card-head"><span className="b2b-card-title">정기 받기 — {schedFor.name}</span></div>
@@ -731,7 +732,7 @@ export default function ReportPage() {
               {saveErr.name && <span className="b2b-field-error">{saveErr.name}</span>}
             </label>
             <label className="sm-col rp-save-field">
-              <span className="b2b-field-label">SQL<span className="req">*</span> <span className="opt"><code>{"{{이름}}"}</code> = 실행 때 입력받는 값, <code>{"{{시작일}}"}</code>·<code>{"{{종료일}}"}</code> = 정기 받기 때 자동</span></span>
+              <span className="b2b-field-label">SQL<span className="req">*</span> <span className="opt"><code>{"{{이름}}"}</code> = 실행 때 입력받는 값{SCHEDULE_ENABLED && <>, <code>{"{{시작일}}"}</code>·<code>{"{{종료일}}"}</code> = 정기 받기 때 자동</>}</span></span>
               <textarea className="b2b-input rp-save-sql" value={saveSql} onChange={(e) => setSaveSql(e.target.value)} aria-invalid={saveErr.sql ? "true" : undefined} />
               {saveErr.sql && <span className="b2b-field-error">{saveErr.sql}</span>}
             </label>
