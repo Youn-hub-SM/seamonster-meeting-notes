@@ -61,16 +61,17 @@ function buildDecomp(cur: DecompRow[], prev: DecompRow[]): { rows: ChannelDecomp
   return { rows, total: mk("전체", sum(cur), sum(prev)) };
 }
 
-// SKU 하나에 채널마다 상품명이 달라(확인: P_DG-100X1 에 6개) 가장 많이 쓰인 이름을 대표로.
+// 상품명 = 상품 마스터(products.name + spec) 우선. 없으면 매출 원장에서 가장 많이 쓰인 이름(SKU 하나에 채널별 이름 6개 — 마켓 제목이라 길다).
 type TopRow = { sku_code: string; name: string; rev: number; qty: number };
 async function topSkus(from: string, to: string, limit: number): Promise<TopRow[]> {
-  return runQ<TopRow>(`select sku_code, mode() within group (order by product_name) as name, coalesce(sum(subtotal_amount),0)::bigint as rev, coalesce(sum(quantity),0)::int as qty from sales_orders where order_date between '${from}' and '${to}' and sku_code <> '' group by sku_code order by rev desc limit ${Math.max(1, Math.min(100, Math.floor(limit)))}`);
+  return runQ<TopRow>(`select o.sku_code, coalesce(max(p.name) || coalesce(' ' || max(p.spec), ''), mode() within group (order by o.product_name)) as name, coalesce(sum(o.subtotal_amount),0)::bigint as rev, coalesce(sum(o.quantity),0)::int as qty from sales_orders o left join products p on upper(p.sku) = upper(o.sku_code) where o.order_date between '${from}' and '${to}' and o.sku_code <> '' group by o.sku_code order by rev desc limit ${Math.max(1, Math.min(100, Math.floor(limit)))}`);
 }
+const shortName = (s: string, max = 40) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 // prev = 비교 기간 상위 30(순위 변동용). null 이면 변동 표시 없음.
 function buildTop(cur: TopRow[], prev: TopRow[] | null, total: number): TopSku[] {
   const prevRank = new Map<string, number>(prev ? prev.map((r, i) => [String(r.sku_code), i + 1]) : []);
   return cur.slice(0, 10).map((r, i) => ({
-    rank: i + 1, code: String(r.sku_code), name: String(r.name || ""), revenue: n(r.rev), qty: n(r.qty),
+    rank: i + 1, code: String(r.sku_code), name: shortName(String(r.name || "")), revenue: n(r.rev), qty: n(r.qty),
     share: total > 0 ? n(r.rev) / total * 100 : 0, prev_rank: prev ? (prevRank.get(String(r.sku_code)) ?? null) : null,
   }));
 }
@@ -329,9 +330,9 @@ const pctChange = (c: number, p: number) => p === 0 ? (c === 0 ? "0%" : "신규"
 const diffMoney = (c: number, p: number) => c > p ? `${won(c - p)} 증가` : c < p ? `${won(p - c)} 감소` : "변동 없음";
 const rankNote = (t: TopSku, prevLabel: string) => t.prev_rank === null ? `(${prevLabel} 순위 밖)` : t.prev_rank === t.rank ? `(${prevLabel} 같은 순위)` : `(${prevLabel} ${t.prev_rank}위)`;
 const topLine = (t: TopSku, prevLabel: string | null) => `${t.rank}위 ${t.name || t.code}(${t.code}) ${t.qty}개 ${won(t.revenue)}, 비중 ${t.share.toFixed(1)}%${prevLabel ? ` ${rankNote(t, prevLabel)}` : ""}`;
-function decompLines(rows: ChannelDecomp[], total: ChannelDecomp, curLabel: string, prevLabel: string): string[] {
-  const L = [`${curLabel} 주문은 ${total.orders}건, 객단가 ${won(total.aov)}, 주문당 ${total.qty_per_order.toFixed(1)}개이며 ${prevLabel}은 주문 ${total.prev_orders}건, 객단가 ${won(total.prev_aov)}였습니다.`];
-  for (const r of rows) L.push(`${r.name} 주문 ${r.orders}건(${prevLabel} ${r.prev_orders}건), 객단가 ${won(r.aov)}(${prevLabel} ${won(r.prev_aov)}), 주문당 ${r.qty_per_order.toFixed(1)}개.`);
+function decompLines(rows: ChannelDecomp[], total: ChannelDecomp, curLabel: string, prevLabel: string, prevShort: string): string[] {
+  const L = [`${curLabel} 주문은 ${total.orders}건, 객단가 ${won(total.aov)}, 주문당 ${total.qty_per_order.toFixed(1)}개이며 ${prevLabel}에는 주문 ${total.prev_orders}건, 객단가 ${won(total.prev_aov)}였습니다.`];
+  for (const r of rows) L.push(`${r.name} 주문 ${r.orders}건(${prevShort} ${r.prev_orders}건), 객단가 ${won(r.aov)}(${prevShort} ${won(r.prev_aov)}), 주문당 ${r.qty_per_order.toFixed(1)}개.`);
   return L;
 }
 function subscriptionLines(s: SubscriptionFacts | null, err: string | null, periodLabel: string): string[] {
@@ -361,7 +362,7 @@ export function buildDailyText(s: DailyStats): string {
   }
   L.push("");
   const wl = s.is_sunday ? "최근 3일(금~일)" : "어제";
-  L.push("건수와 객단가로 나누면 다음과 같습니다.", ...decompLines(s.decomp, s.decomp_total, wl, `지난주 같은 요일(${s.decomp_prev_start.slice(5)}~${s.decomp_prev_end.slice(5)})`));
+  L.push("건수와 객단가로 나누면 다음과 같습니다.", ...decompLines(s.decomp, s.decomp_total, wl, `지난주 같은 요일(${s.decomp_prev_start.slice(5)}~${s.decomp_prev_end.slice(5)})`, "지난주"));
   L.push(`이번달 누적 주문은 ${s.mtd_orders}건, 객단가 ${won(s.mtd_aov)}이며 지난달 같은 기간은 ${s.mtd_prev_orders}건, ${won(s.mtd_prev_aov)}였습니다.`, "");
   if (s.top10.length) L.push(`${wl} 판매된 주요 상품(sku_code 기준) Top 10은 다음과 같습니다.`, ...s.top10.map((t) => topLine(t, null)));
   L.push("");
@@ -380,7 +381,7 @@ export function buildWeeklyText(s: WeeklyStats): string {
   L.push("채널별 주간 매출은 다음과 같습니다.", "");
   for (const c of s.channels) L.push(`${c.name} 주간 매출은 ${won(c.week)}이며, 전주 대비 ${pctChange(c.week, c.prev_week)}(전주 ${won(c.prev_week)})입니다.`);
   L.push("");
-  L.push("건수와 객단가로 나누면 다음과 같습니다.", ...decompLines(s.decomp, s.decomp_total, "이번 주", "전주"), "");
+  L.push("건수와 객단가로 나누면 다음과 같습니다.", ...decompLines(s.decomp, s.decomp_total, "이번 주", "전주", "전주"), "");
   if (s.top10.length) L.push("이번 주 판매된 주요 상품(sku_code 기준) Top 10은 다음과 같습니다(전주 순위 대비).", ...s.top10.map((t) => topLine(t, "전주")));
   L.push("");
   L.push(`주간 고객 분포는 신규 고객 ${s.new_cust}명(${s.new_ratio.toFixed(1)}%), 재구매 고객 ${s.repeat_cust}명(${s.repeat_ratio.toFixed(1)}%)${s.unclassified_orders > 0 ? `, 미분류 ${s.unclassified_orders}건(안심번호·무전화, 신규/재구매 제외)` : ""}였으며,`);
