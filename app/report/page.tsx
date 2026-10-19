@@ -31,11 +31,6 @@ type Thread = { id: string; title: string; createdBy: string; createdAt: string;
 type RunResult = { rep: Saved; sql: string; columns: string[]; rows: Row[] };
 type SaveCtx = { question: string; sql: string; looker?: Looker; chart?: Chart };
 
-const EXAMPLES = [
-  "10월 채널별 매출",
-  "이번 달 VOC 에서 가장 많은 불만은?",
-  "10월 채널별 매출과 톡스토어가 빠진 이유",
-];
 const TABLE_ROW_LIMIT = 1000;
 const RESERVED_VARS = ["시작일", "종료일"];
 const SCHEDULE_ENABLED = false; // 정기 받기(개선안 3) — 2026-10-19 대표 "배포 보류, 베타에서도 숨김". 코드는 두고 화면·API·크론을 모두 끈다(report-schedule.ts 와 같은 플래그)
@@ -533,13 +528,6 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* 빈 상태 — 예시 3개(정량·정성·혼합) */}
-      {!hasAnything && !busy && (
-        <div className="rp-examples">
-          {EXAMPLES.map((ex) => <button key={ex} type="button" className="b2b-btn-secondary" onClick={() => send(ex)}>{ex}</button>)}
-        </div>
-      )}
-
       {/* 대화 — 사용자 글은 오른쪽 말풍선, 비서 글은 왼쪽 평문, 도구 칩·표 카드·용어 제안은 그 자리에 */}
       {items.length > 0 && (
         <div className="rp-thread">
@@ -627,8 +615,8 @@ export default function ReportPage() {
       {/* 입력 — 대화 아래. Enter = 보내기, Shift+Enter = 줄바꿈 */}
       <div className="rp-composer">
         <div className="rp-ask">
-          <textarea className="b2b-input rp-input" rows={2} value={q} aria-label="메시지"
-            placeholder={items.length ? "이어서 답하거나 물어보세요" : "예: 10월 채널별 매출과 톡스토어가 빠진 이유"}
+          <textarea className="b2b-input rp-input" rows={3} value={q} aria-label="메시지"
+            placeholder="원하는 정보를 입력해 주세요"
             aria-invalid={qErr ? "true" : undefined}
             onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(q); } }} />

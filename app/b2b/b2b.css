@@ -2783,8 +2783,8 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 }
 
 /* ── 커스텀 리포트(/report) ── */
-.rp-ask { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 14px; }
-.rp-input { flex: 1; resize: vertical; min-height: 46px; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); }
+.rp-ask { display: flex; gap: 8px; align-items: stretch; margin-bottom: 14px; }  /* 2026-10-19: 입력칸이 옆 버튼 두 개([보내기]·[새 대화]) 높이만큼 세로로 늘어난다 */
+.rp-input { flex: 1; resize: vertical; min-height: 84px; font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); }
 .rp-ask .b2b-btn-primary { white-space: nowrap; }
 .rp-ask-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .rp-ask-actions button { white-space: nowrap; justify-content: center; }  /* 두 버튼 동일 크기(넓은 쪽에 맞춤) */
