@@ -26,6 +26,7 @@ type AskResult = {
   facts: string[]; inferences: string[]; limits: string[]; followups: string[];
   model: string; usage: AskUsage;
   toolLog: ToolLog[];
+  elapsedMs?: number;
   downgraded: boolean; timedOut: boolean;
 };
 type Progress = { name: string; label: string; ms: number };
@@ -157,7 +158,7 @@ function AnswerView({ turn, isAdmin, disabled, onFollowup, onSave, onExport }: {
   const tables = r.tables || [], quotes = r.quotes || [];
   const facts = r.facts || [], inferences = r.inferences || [], limits = r.limits || [], followups = r.followups || [];
   const toolLog = r.toolLog || [];
-  const totalMs = toolLog.reduce((s, t) => s + (t.ms || 0), 0);
+  const totalMs = r.elapsedMs ?? toolLog.reduce((s, t) => s + (t.ms || 0), 0); // 전체 경과(서버가 주면), 아니면 도구 시간 합
   const [quotesOpen, setQuotesOpen] = useState(true);
   return (
     <div className="rp-answer">
