@@ -2827,6 +2827,8 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-clarify-options .b2b-btn-secondary { white-space: normal; text-align: left; }
 .rp-clarify-hint { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .rp-clarify.is-answered .rp-clarify-q { color: var(--sm-text-mid); }
+.rp-chat { display: flex; }
+.rp-chat-text { margin: 0; max-width: 68ch; font-size: var(--sm-fs-lg); line-height: var(--sm-lh-body); color: var(--sm-black); white-space: pre-line; }
 .rp-composer { margin-top: 18px; }
 .rp-composer-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-bottom: 6px; }
 .rp-meta { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }

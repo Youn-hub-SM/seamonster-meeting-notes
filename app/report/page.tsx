@@ -19,7 +19,7 @@ type QuoteSource = "voc" | "inquiry" | "report" | "manual" | "request" | "activi
 type AskQuote = { source: QuoteSource; date: string; title: string; text: string };
 type AskUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; estUsd: number; estNote: string };
 type ToolLog = { name: string; label: string; ok: boolean; ms: number };
-type AskKind = "answer" | "clarify";
+type AskKind = "answer" | "clarify" | "chat";   // chat = 조사 없는 평문 답(되묻기·확인·설명)
 type AskResult = {
   kind?: AskKind;                       // "clarify" = 되물음(answer = 되물은 문장, clarify.options = 선택지)
   clarify?: { question: string; options: string[] };
@@ -237,6 +237,11 @@ function AnswerView({ turn, isAdmin, disabled, onFollowup, onSave, onExport }: {
   );
 }
 
+// 평문 답(조사 없음) — 되묻기·확인·설명. 비서의 말 그대로 보여 준다.
+function ChatView({ text }: { text: string }) {
+  return <section className="b2b-card rp-chat"><p className="rp-chat-text">{text}</p></section>;
+}
+
 // 되물음 카드 — 비서가 조사 전에 한 가지를 묻는다. 선택지를 누르면 그 글이 답으로 보내지고, 직접 쓰려면 아래 질문칸에 적는다.
 //  이미 답한 되물음(마지막 턴이 아님)은 선택지를 잠근다.
 function ClarifyView({ result, answered, disabled, onPick }: { result: AskResult; answered: boolean; disabled: boolean; onPick: (text: string) => void }) {
@@ -296,7 +301,7 @@ export default function ReportPage() {
     if (loading) return;
     if (!qq) { setQErr("질문을 입력하세요"); return; }
     setQErr("");
-    const history = turns.slice(-3).map((t) => ({ q: t.q, answer: t.result.answer, kind: t.result.kind || "answer" }));
+    const history = turns.slice(-8).map((t) => ({ q: t.q, answer: t.result.answer, kind: t.result.kind || "answer" }));
     setLoading(true); setErr(""); setVarForm(null); setRunResult(null); setProgress([]); setPendingQ(qq);
     try {
       const r = await fetch("/api/report/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: qq, history }) });
@@ -366,7 +371,8 @@ export default function ReportPage() {
   function askFollowup(text: string) { setQ(text); ask(text); }
 
   const hasAnything = turns.length > 0 || !!runResult || loading || !!err;
-  const awaitingReply = !loading && turns.length > 0 && turns[turns.length - 1].result.kind === "clarify"; // 직전 턴이 되물음 → 다음 입력은 그 답
+  const lastKind = turns.length > 0 ? (turns[turns.length - 1].result.kind || "answer") : "answer";
+  const awaitingReply = !loading && lastKind !== "answer"; // 직전 턴이 되물음·평문 → 다음 입력은 그 답(대화 이어가기)
 
   return (
     <div className="b2b-container">
@@ -444,6 +450,8 @@ export default function ReportPage() {
               <div className="rp-turn-q">{t.q}</div>
               {t.result.kind === "clarify" ? (
                 <ClarifyView result={t.result} answered={i < turns.length - 1} disabled={loading} onPick={askFollowup} />
+              ) : t.result.kind === "chat" ? (
+                <ChatView text={t.result.answer} />
               ) : (
                 <AnswerView turn={t} isAdmin={isAdmin} disabled={loading} onFollowup={askFollowup} onSave={openSave} onExport={exportXlsx} />
               )}
@@ -485,7 +493,7 @@ export default function ReportPage() {
 
       {/* 질문 입력 — 대화 아래(채팅 꼴). Enter = 보내기, Shift+Enter = 줄바꿈. 직전 턴이 되물음이면 [답하기] */}
       <div className="rp-composer">
-        {awaitingReply && <div className="rp-composer-note">비서가 되물었습니다. 위 선택지를 누르거나 여기에 답을 적어 보내세요.</div>}
+        {awaitingReply && <div className="rp-composer-note">{lastKind === "clarify" ? "위 선택지를 누르거나 여기에 답을 적어 보내세요." : "이어서 답하거나 물어보세요."}</div>}
         <div className="rp-ask">
           <textarea className="b2b-input rp-input" rows={2} value={q} aria-label={awaitingReply ? "되물음에 답" : "질문"}
             placeholder={awaitingReply ? "답을 적어 보내세요. 예: 이번 달" : "예: 10월 채널별 매출과 톡스토어가 빠진 이유"}

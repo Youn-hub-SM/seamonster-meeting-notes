@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as { q?: string; history?: AskHistoryTurn[] };
     q = (body.q || "").trim();
-    history = Array.isArray(body.history) ? body.history.filter((h) => h && typeof h.q === "string").slice(-3) : undefined;
+    history = Array.isArray(body.history) ? body.history.filter((h) => h && typeof h.q === "string").slice(-8) : undefined; // 대화형(2026-10-19) — 최근 8턴
   } catch {
     return new Response(line({ type: "error", error: "요청 본문을 읽지 못했습니다." }), { status: 400, headers: NDJSON });
   }

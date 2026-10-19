@@ -39,7 +39,7 @@ export type AskResult = {
 };
 // 되물음 턴(kind: "clarify")은 answer 에 되물은 문장이 들어가고, 다음 사용자 메시지가 그 답이다.
 export type AskHistoryTurn = { q: string; answer: string; kind?: AskKind };
-export type AskKind = "answer" | "clarify";
+export type AskKind = "answer" | "clarify" | "chat";   // chat = 조사 없는 평문 답(되묻기·확인·설명). clarify = 선택지 있는 되물음
 export type AskClarify = { question: string; options: string[] };
 export type AskProgress = { name: string; label: string; ms: number };
 
@@ -196,7 +196,7 @@ function toolDefs(strict: boolean): Anthropic.Tool[] {
     },
     {
       name: "ask_user", ...s,
-      description: "질문이 모호해 답이 크게 달라질 때 사용자에게 한 가지를 되묻습니다. 호출하면 조사가 멈추고 사용자의 답을 받은 뒤 새 요청으로 이어집니다. 한 질문에 한 번만, 조사 시작 전이나 schema 확인 직후에만 쓰세요. 다른 도구와 함께 호출하지 않습니다.",
+      description: "되물을 때 사용자가 버튼으로 고르게 할 선택지를 붙입니다. 호출하면 조사가 멈추고 사용자의 답을 받은 뒤 이어집니다. 조사 시작 전이나 schema 확인 직후에만 쓰고, 다른 도구와 함께 호출하지 않습니다. 선택지가 필요 없으면 도구 없이 평문으로 되물어도 됩니다.",
       input_schema: {
         type: "object", additionalProperties: false, required: ["question", "options"],
         properties: {
@@ -240,12 +240,16 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 전문 이커머스: 공식
 7) 질문이 조금 모호하면 가장 문자 그대로 해석하고, 가정은 limits 에 적습니다. 답이 크게 달라질 만큼 모호하면 [되묻기] 규칙대로 ask_user 로 한 번 묻습니다.
 8) 현재 날짜가 필요하면 (now() at time zone 'Asia/Seoul')::date.
 
-[되묻기 — ask_user]
-- 묻는 경우(핵심 조건이 빠져 해석이 둘 이상이고 결과가 크게 달라질 때만): 기간이 없음("채널별 매출" — 어느 기간?), 대상이 넓음("고객" — 구매자 수? 주문 수?, "온라인" — 어느 채널?), 지표 뜻이 갈림("매출" — 주문 금액? 배송비 포함?, "재고" — 박스? kg?), 비교 기준이 없음("늘었나?" — 전주? 전월? 작년?), 묶음 단위("추이" — 일별? 주별? 월별?).
-- 묻지 않는 경우: 문맥·이전 대화·오늘 날짜로 정할 수 있을 때, 관례 기본값이 있을 때(매출 = subtotal_amount 합, 기간 = 말이 가리키는 달력 기간), 사소한 차이일 때. 이땐 가정을 두고 진행하고 limits 에 적습니다.
-- 한 질문에 한 번만, 한 가지만 묻습니다. 여러 조건이 비면 가장 결과를 바꾸는 것 하나만 묻고 나머지는 가정합니다. 조사(run_sql·search_text)를 시작한 뒤에는 묻지 않습니다(schema 확인은 괜찮음 — 실제 채널·컬럼 이름을 선택지로 쓸 수 있습니다).
-- options 는 2~4개의 짧은 명사구(예: "이번 달(10월)", "지난달(9월)", "올해 누적"). 사용자가 선택지 밖의 답을 적을 수 있으니 question 자체가 완결된 문장이어야 합니다.
-- ask_user 와 다른 도구를 같은 차례에 함께 부르지 않습니다. ask_user 가 거절되면(이미 되물은 질문) 가정을 두고 바로 조사합니다.
+[대화 방식 — 사용자와 채팅하듯 주고받습니다]
+- 메시지를 읽고 셋 중 하나로 응답합니다.
+  ① 조사할 만큼 분명하다 → 바로 도구로 조사하고 [최종 답] JSON 을 냅니다. 분명한 요청에 확인을 되묻지 않습니다.
+  ② 핵심 조건이 비어 답이 크게 달라진다 → 조사 전에 **평문**으로 되묻습니다(JSON 없이 1~3문장). 선택지를 눌러 답하게 하고 싶으면 ask_user 도구를 씁니다(question 한 문장 + options 2~4개).
+  ③ 데이터가 필요 없다(인사·고맙다는 말·"무엇을 물을 수 있나"·방금 답에 대한 설명 요청·조사 계획 확인) → 평문으로 짧게 답합니다.
+- 되묻는 기준: 기간이 없음("채널별 매출" — 어느 기간?), 대상이 넓음("고객" — 구매자 수? 주문 수?, "온라인" — 어느 채널?), 지표 뜻이 갈림("매출" — 주문 금액? 배송비 포함?, "재고" — 박스? kg?), **비교 기준이 없음("빠졌다·늘었다·줄었다·왜 떨어졌나" — 전월? 작년 같은 달? 최근 4주 평균? 반드시 묻습니다)**, 묶음 단위("추이" — 일별? 주별? 월별?).
+- 묻지 않는 것: 문맥·이전 대화·오늘 날짜로 정해지는 것, 사소한 차이. 이땐 가정을 두고 진행하고 limits 에 적습니다.
+- 한 메시지에 묻는 건 최대 두 가지. 사용자가 답하면 원래 요청에 그 답을 보태 바로 조사합니다. 답이 선택지 밖이어도 그대로 받아들이고, 그래도 비면 한 번 더 물을 수 있습니다(같은 요청에 되묻기는 모두 합쳐 세 번까지).
+- 되묻기는 조사(run_sql·search_text·read_report)를 시작하기 전에만. schema 확인은 괜찮습니다(실제 채널·컬럼 이름을 선택지로 쓸 수 있습니다). ask_user 는 다른 도구와 같은 차례에 함께 부르지 않습니다.
+- 평문 답은 존댓말 2~4문장, 마크다운·이모지 없음. 되물을 땐 왜 필요한지 한 토막과 함께 묻습니다(예: "'빠졌다'를 어느 기준과 비교할까요? 9월, 작년 10월, 최근 4주 평균 중에서요.").
 
 [판단 규칙]
 - facts 는 표·인용이 직접 말하는 것만 씁니다. 숫자는 도구 결과에 있는 값만 그대로 인용하고 새로 계산하지 않습니다. 정량만 묻는 질문은 facts 를 비워 둡니다(answer 와 표가 이미 말한 것을 되풀이하지 않습니다).
@@ -268,7 +272,7 @@ const SYSTEM = `당신은 씨몬스터(순살 생선 전문 이커머스: 공식
 - 이전 질문·답이 있으면 새 질문이 그 답을 '다듬는' 요청일 수 있습니다("도매만 빼줘"·"월별로"·"상위 20개로"·"작년과 비교"). 그땐 같은 조사를 조건만 바꿔 다시 합니다.
 - 직전 턴이 [되물음]이면 새 메시지는 그 되물음의 답입니다. 원래 질문에 그 답을 보태 완성된 질문으로 보고 바로 조사합니다. 다시 되묻지 않습니다(답이 선택지 밖이어도 그대로 받아들입니다).
 
-[최종 답 — 조사가 끝나면 설명 없이 아래 JSON 하나만 출력]
+[최종 답 — 도구로 조사한 요청은 조사가 끝나면 설명 없이 아래 JSON 하나만 출력. 조사 없이 평문으로 답할 땐 JSON 을 쓰지 않습니다]
 ${FINAL_JSON_SHAPE}
 - tables 의 sql 과 id 는 실행에 성공한 run_sql 의 것을 글자 그대로. 실행하지 않은 SQL 은 넣지 않습니다. 답에 쓰지 않은 탐색용 조회는 뺍니다.
 - 조사 중 시간이 부족하다는 안내를 받으면 모은 것만으로 답하고 limits 에 못 본 것을 적습니다.
@@ -637,14 +641,13 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
     { type: "text", text: `[오늘] 기준일(Asia/Seoul): ${kstTodayLabel()} — '오늘·어제·이번 주·이번 달·올해·최근 N일' 등 상대 기간은 반드시 이 날짜 기준. 학습 시점의 연도를 가정하지 않습니다.` },
   ];
   const messages: Anthropic.MessageParam[] = [];
-  const hist = (p.history || []).filter((h) => h && String(h.q || "").trim()).slice(-3);
+  // 대화 이력 최근 8턴 — 조사 답은 answer 평문만(표·인용은 빼고), 되물음·평문 답은 그대로. 되묻기 횟수 제한은 프롬프트(같은 요청에 세 번까지)로만.
+  const hist = (p.history || []).filter((h) => h && String(h.q || "").trim()).slice(-8);
   for (const h of hist) {
     messages.push({ role: "user", content: `[이전 질문]\n${String(h.q).trim().slice(0, 1000)}` });
     const a = String(h.answer || "").trim().slice(0, 2000) || "(답 없음)";
-    messages.push({ role: "assistant", content: h.kind === "clarify" ? `[되물음] ${a}` : a });
+    messages.push({ role: "assistant", content: h.kind === "clarify" ? `[되물음] ${a}` : h.kind === "answer" ? `[조사 답] ${a}` : a });
   }
-  // 되물음은 한 질문에 한 번 — 직전 턴이 되물음이면(지금 메시지가 그 답) 이번엔 ask_user 를 받지 않는다
-  const askAllowed = hist[hist.length - 1]?.kind !== "clarify";
   messages.push({ role: "user", content: `[질문]\n${q}` });
 
   let strict = true;
@@ -686,6 +689,14 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
       if (res.stop_reason !== "tool_use" || finalTurn) {
         const text = readText(res).trim();
         const fin = parseFinalJson(text);
+        // 조사(run_sql·search_text·read_report) 없이 평문으로 답했다 = 대화 턴(되묻기·확인·설명). JSON 강제하지 않는다.
+        const investigatedNow = toolLog.some((t) => t.name === "run_sql" || t.name === "search_text" || t.name === "read_report");
+        if (!investigatedNow && !finalTurn && !fin && text) {
+          return {
+            kind: "chat", answer: text.slice(0, 4000), tables: [], quotes: [], facts: [], inferences: [], limits: [], followups: [],
+            model, usage, toolLog, downgraded, timedOut: false, elapsedMs: Date.now() - startedAt,
+          };
+        }
         if (!fin || typeof fin.answer !== "string" || !fin.answer.trim()) {
           if (!jsonRetried && deadlineAt - Date.now() > 40_000) {
             jsonRetried = true; forceFinal = true;
@@ -720,7 +731,7 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
         const investigated = toolLog.some((t) => t.name === "run_sql" || t.name === "search_text" || t.name === "read_report");
         const input = (ask.input || {}) as Record<string, unknown>;
         const question = String(input.question || "").trim();
-        if (askAllowed && !investigated && question) {
+        if (!investigated && question) {
           const options = strList(input.options, 4).map((o) => o.slice(0, 60));
           toolLog.push({ name: "ask_user", label: "되묻기", ok: true, ms: 0 });
           return {
@@ -733,7 +744,7 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
         messages.push({ role: "user", content: uses.map((u) => ({
           type: "tool_result" as const, tool_use_id: u.id, is_error: true,
           content: u.name === "ask_user"
-            ? (askAllowed ? "되묻기는 조사를 시작하기 전에만 할 수 있습니다. 가정을 두고 조사를 계속하고 limits 에 적으세요." : "이 질문에는 이미 되물었습니다. 받은 답과 가정으로 조사를 계속하세요.")
+            ? "되묻기는 조사를 시작하기 전에만 할 수 있습니다. 가정을 두고 조사를 계속하고 limits 에 적으세요."
             : "ask_user 와 함께 부른 도구는 실행하지 않았습니다. 다시 요청하세요.",
         })) });
         continue;
