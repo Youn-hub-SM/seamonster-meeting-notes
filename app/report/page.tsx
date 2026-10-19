@@ -349,7 +349,7 @@ export default function ReportPage() {
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">데이터 비서</h1>
+          <h1 className="b2b-page-title">커스텀 리포트</h1>
         </div>
       </header>
 

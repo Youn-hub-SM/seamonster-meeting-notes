@@ -142,7 +142,7 @@ export const NAV: NavCategory[] = [
     label: "리포트",
     tools: [
       { href: "/briefing", label: "종합 리포트", icon: "bulb" }, // 2026-09-30 모두 열람, 일일·주간·월간 탭(매출 업로드 뒤 담당자가 생성·발송)
-      { href: "/report", label: "데이터 비서", icon: "bars" }, // 2026-10-19 커스텀 리포트 → 데이터 비서(주소·저장 리포트 그대로)
+      { href: "/report", label: "커스텀 리포트", icon: "bars" }, // 2026-10-19 커스텀 리포트 → 데이터 비서(주소·저장 리포트 그대로)
       { href: "/sales/report", label: "매출 리포트", icon: "trend" },
       { href: "/voc/manufacturer", label: "월간 VOC 리포트", icon: "megaphone" },
     ],

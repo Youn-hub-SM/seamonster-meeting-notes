@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         const result = await askAssistant({ q, history, user, onProgress: (p) => send({ type: "progress", ...p }) });
         send({ type: "done", result });
       } catch (e) {
-        send({ type: "error", error: extractErrorMsg(e, "데이터 비서가 답하지 못했습니다.") });
+        send({ type: "error", error: extractErrorMsg(e, "커스텀 리포트가 답하지 못했습니다.") });
       } finally {
         try { controller.close(); } catch { /* 이미 닫힘 */ }
       }

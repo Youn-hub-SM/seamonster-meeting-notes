@@ -596,7 +596,7 @@ export async function askAssistant(p: { q: string; history?: AskHistoryTurn[]; u
   if (!process.env.ANTHROPIC_API_KEY) throw new AiResponseError("ANTHROPIC_API_KEY 가 설정되어 있지 않습니다.");
 
   const [settings, month, featureModel] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report")]);
-  if (settings.off) throw new AssistantOffError("데이터 비서가 꺼져 있습니다. 관리자 > 설정 > AI 설정에서 켜세요.");
+  if (settings.off) throw new AssistantOffError("커스텀 리포트가 꺼져 있습니다. 관리자 > 설정 > AI 설정에서 켜세요.");
   const downgraded = month.usd >= settings.capUsd;
   const model = downgraded ? MODELS.opus : featureModel;
   const auxModel = MODELS.opus;
