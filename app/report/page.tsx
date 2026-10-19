@@ -502,56 +502,6 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* 용어 사전 — 비서가 묻지 않고 쓸 정의. 누구나 추가·수정·삭제, 누가 했는지 남는다 */}
-      <div className="rp-saved-box">
-        <div className="rp-saved-bar">
-          <button className="rp-saved-toggle" onClick={() => setGlossaryOpen((v) => !v)}>
-            <span className="rp-saved-chev">{glossaryOpen ? "▾" : "▸"}</span>
-            회사 용어 사전 {glossary.length > 0 && <span className="sm-faint">{qty(glossary.length)}</span>}
-          </button>
-        </div>
-        {glossaryOpen && (
-          <div className="rp-fold-body">
-            {gErr && <div className="b2b-error">{gErr}</div>}
-            {glossary.length === 0 ? <div className="b2b-empty">아직 정한 용어가 없습니다. 대화에서 비서가 제안하면 [사전에 저장]을 누르거나 아래에 직접 적으세요.</div> : (
-              <div className="b2b-table-wrap">
-                <table className="b2b-table rp-glossary-table">
-                  <thead><tr><th style={{ width: 180 }}>용어</th><th>정의 · 판별 기준</th><th style={{ width: 150 }}>고친 사람</th><th style={{ width: 120 }}></th></tr></thead>
-                  <tbody>
-                    {glossary.map((g) => gEdit?.id === g.id ? (
-                      <tr key={g.id}>
-                        <td><input className="b2b-input" value={gEdit.term} onChange={(e) => setGEdit({ ...gEdit, term: e.target.value })} aria-label="용어" /></td>
-                        <td><input className="b2b-input" value={gEdit.definition} onChange={(e) => setGEdit({ ...gEdit, definition: e.target.value })} aria-label="정의" /></td>
-                        <td>{g.updatedBy || g.createdBy || "—"}</td>
-                        <td>
-                          <button className="b2b-link-btn" onClick={async () => { if (await saveTerm(gEdit.term, gEdit.definition, g.id)) setGEdit(null); }}>저장</button>
-                          <button className="b2b-link-btn" onClick={() => setGEdit(null)}>그만두기</button>
-                        </td>
-                      </tr>
-                    ) : (
-                      <tr key={g.id}>
-                        <td><b>{g.term}</b></td>
-                        <td className="rp-glossary-def">{g.definition}</td>
-                        <td>{g.updatedBy || g.createdBy || "—"} <span className="sm-faint">{String(g.updatedAt).slice(0, 10)}</span></td>
-                        <td>
-                          <button className="b2b-link-btn" onClick={() => setGEdit({ id: g.id, term: g.term, definition: g.definition })}>고치기</button>
-                          <button className="b2b-link-btn" onClick={() => deleteTerm(g)}>지우기</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="rp-glossary-add">
-              <input className="b2b-input" placeholder="용어 (예: 합배송)" value={gNew.term} onChange={(e) => setGNew({ ...gNew, term: e.target.value })} aria-label="새 용어" />
-              <input className="b2b-input" placeholder="정의 · 판별 기준 (예: 한 주문번호에 상품 2줄 이상인 주문)" value={gNew.definition} onChange={(e) => setGNew({ ...gNew, definition: e.target.value })} aria-label="새 정의" />
-              <button className="b2b-btn-secondary" onClick={async () => { if (await saveTerm(gNew.term, gNew.definition)) setGNew({ term: "", definition: "" }); }}>용어 추가</button>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* 저장 리포트 변수 입력 */}
       {varForm && (
         <section className="b2b-card rp-varform">
@@ -745,6 +695,54 @@ export default function ReportPage() {
       )}
 
       <LookerGuide />
+
+      {/* 회사 용어 사전 — 루커 가이드 아래, 같은 접이식 UI(2026-10-19 대표). 누구나 추가·수정·삭제, 누가 했는지 남는다 */}
+      <section className="rp-guide">
+        <button className="rp-guide-head" onClick={() => setGlossaryOpen((v) => !v)}>
+          <span>회사 용어 사전{glossary.length > 0 ? ` (${glossary.length})` : ""} — 비서가 묻지 않고 쓸 정의</span>
+          <span className="rp-guide-chev">{glossaryOpen ? "▾" : "▸"}</span>
+        </button>
+        {glossaryOpen && (
+          <div className="rp-guide-body">
+            {gErr && <div className="b2b-error">{gErr}</div>}
+            {glossary.length === 0 ? <div className="b2b-empty">아직 정한 용어가 없습니다. 대화에서 비서가 제안하면 [사전에 저장]을 누르거나 아래에 직접 적으세요.</div> : (
+              <div className="b2b-table-wrap">
+                <table className="b2b-table rp-glossary-table">
+                  <thead><tr><th style={{ width: 180 }}>용어</th><th>정의 · 판별 기준</th><th style={{ width: 150 }}>고친 사람</th><th style={{ width: 120 }}></th></tr></thead>
+                  <tbody>
+                    {glossary.map((g) => gEdit?.id === g.id ? (
+                      <tr key={g.id}>
+                        <td><input className="b2b-input" value={gEdit.term} onChange={(e) => setGEdit({ ...gEdit, term: e.target.value })} aria-label="용어" /></td>
+                        <td><input className="b2b-input" value={gEdit.definition} onChange={(e) => setGEdit({ ...gEdit, definition: e.target.value })} aria-label="정의" /></td>
+                        <td>{g.updatedBy || g.createdBy || "—"}</td>
+                        <td>
+                          <button className="b2b-link-btn" onClick={async () => { if (await saveTerm(gEdit.term, gEdit.definition, g.id)) setGEdit(null); }}>저장</button>
+                          <button className="b2b-link-btn" onClick={() => setGEdit(null)}>그만두기</button>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={g.id}>
+                        <td><b>{g.term}</b></td>
+                        <td className="rp-glossary-def">{g.definition}</td>
+                        <td>{g.updatedBy || g.createdBy || "—"} <span className="sm-faint">{String(g.updatedAt).slice(0, 10)}</span></td>
+                        <td>
+                          <button className="b2b-link-btn" onClick={() => setGEdit({ id: g.id, term: g.term, definition: g.definition })}>고치기</button>
+                          <button className="b2b-link-btn" onClick={() => deleteTerm(g)}>지우기</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="rp-glossary-add">
+              <input className="b2b-input" placeholder="용어 (예: 합배송)" value={gNew.term} onChange={(e) => setGNew({ ...gNew, term: e.target.value })} aria-label="새 용어" />
+              <input className="b2b-input" placeholder="정의 · 판별 기준 (예: 한 주문번호에 상품 2줄 이상인 주문)" value={gNew.definition} onChange={(e) => setGNew({ ...gNew, definition: e.target.value })} aria-label="새 정의" />
+              <button className="b2b-btn-secondary" onClick={async () => { if (await saveTerm(gNew.term, gNew.definition)) setGNew({ term: "", definition: "" }); }}>용어 추가</button>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
