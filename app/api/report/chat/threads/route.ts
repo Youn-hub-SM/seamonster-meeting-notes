@@ -6,7 +6,7 @@ import { listThreads, createThread, isPending139, PENDING_139 } from "@/app/lib/
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 커스텀 리포트 대화 스레드(2026-10-19 대화형). GET ?all=1(관리자) 목록 / POST 새 스레드.
+// AI 데이터 비서 대화 스레드(2026-10-19 대화형). GET ?all=1(관리자) 목록 / POST 새 스레드.
 async function who(req: NextRequest): Promise<string> {
   const token = req.cookies.get("b2b_auth")?.value;
   return (await verifySession(token)) || resolveUserName(token) || "?";

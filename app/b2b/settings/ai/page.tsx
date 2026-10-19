@@ -48,11 +48,16 @@ export default function AiSettingsPage() {
     setDraftAiSaving(false);
   }
 
-  // 데이터 비서(/report) — 켜기/끄기 + 월 비용 상한(USD) + 이달 사용량. GET/PUT /api/b2b/settings/assistant
+  // AI 데이터 비서(/report) — 켜기/끄기 + 월 비용 상한(USD) + 이달 사용량. GET/PUT /api/b2b/settings/assistant
   const [asst, setAsst] = useState<{ off: boolean; capUsd: number; month: { ym: string; usd: number; questions: number } } | null>(null);
   const [asstCap, setAsstCap] = useState("");
   const [asstCapErr, setAsstCapErr] = useState("");
   const [asstSaving, setAsstSaving] = useState(false);
+  // 신뢰·피드백(2026-10-19 개선안 5) — 30일 맞아요/틀려요 집계 + 최근 '틀려요' 사유. GET /api/report/feedback?stats=1
+  const [fb, setFb] = useState<{ good: number; bad: number; recentBad: { id: string; user_name: string; note: string; created_at: string }[] } | null>(null);
+  useEffect(() => {
+    fetch("/api/report/feedback?stats=1", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j?.ok) setFb({ good: j.good, bad: j.bad, recentBad: j.recentBad || [] }); }).catch(() => {});
+  }, []);
   useEffect(() => {
     fetch("/api/b2b/settings/assistant", { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (!j?.ok) return;
@@ -65,10 +70,10 @@ export default function AiSettingsPage() {
     setAsstSaving(true); setError("");
     try {
       const j = await (await fetch("/api/b2b/settings/assistant", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) })).json();
-      if (!j.ok) throw new Error(j.error || "커스텀 리포트 설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요");
+      if (!j.ok) throw new Error(j.error || "AI 데이터 비서 설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요");
       setAsst((a) => a ? { ...a, off: patch.off ?? a.off, capUsd: patch.capUsd ?? a.capUsd } : a);
-      toast.success("커스텀 리포트 설정을 저장했습니다");
-    } catch (e) { setError(e instanceof Error ? e.message : "커스텀 리포트 설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
+      toast.success("AI 데이터 비서 설정을 저장했습니다");
+    } catch (e) { setError(e instanceof Error ? e.message : "AI 데이터 비서 설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
     setAsstSaving(false);
   }
   function saveAssistantCap() {
@@ -249,17 +254,17 @@ export default function AiSettingsPage() {
         )}
       </section>
 
-      {/* 데이터 비서 — 켜기/끄기 · 월 비용 상한 · 이달 사용 */}
+      {/* AI 데이터 비서 — 켜기/끄기 · 월 비용 상한 · 이달 사용 */}
       <section className="b2b-card">
         <div className="b2b-card-head">
-          <h2 className="b2b-card-title">커스텀 리포트</h2>
+          <h2 className="b2b-card-title">AI 데이터 비서</h2>
           {asst && <span className="b2b-field-hint">이달 사용 {qtyText(asst.month.questions, "건")} · 약 ${asst.month.usd.toFixed(2)}</span>}
         </div>
         {asst === null ? <div className="b2b-loading">불러오는 중...</div> : (
           <div className="sm-col" style={{ gap: 12 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
               <input type="checkbox" className="b2b-checkbox" checked={!asst.off} disabled={asstSaving} onChange={(e) => saveAssistant({ off: !e.target.checked })} />
-              커스텀 리포트 켜기
+              AI 데이터 비서 켜기
             </label>
             <div className="b2b-field" style={{ maxWidth: 320 }}>
               <span className="b2b-field-label">월 상한(USD) <span className="opt">넘으면 빠른 모델로 답한다</span></span>
@@ -273,6 +278,21 @@ export default function AiSettingsPage() {
           </div>
         )}
       </section>
+
+      {/* AI 데이터 비서 — 답 피드백 30일(개선안 5) */}
+      {fb && (
+        <section className="b2b-card">
+          <div className="b2b-card-head">
+            <h2 className="b2b-card-title">AI 데이터 비서 피드백 (30일)</h2>
+            <span className="b2b-field-hint">맞아요 {qtyText(fb.good, "건")} · 틀려요 {qtyText(fb.bad, "건")}</span>
+          </div>
+          {fb.recentBad.length === 0 ? <div className="b2b-empty">'틀려요' 사유가 아직 없습니다.</div> : (
+            <ul className="rp-list">
+              {fb.recentBad.map((r) => <li key={r.id}>{r.note} <span className="sm-faint">· {r.user_name} · {String(r.created_at).slice(0, 10)}</span></li>)}
+            </ul>
+          )}
+        </section>
+      )}
 
       {/* 회의록 정리 프롬프트 */}
       <PromptCard

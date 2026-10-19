@@ -1,4 +1,4 @@
-// 데이터 비서 공용 모듈(2026-10-19 대화형 개편 뒤) — 설정(끄기·월 상한·월 누적), PII 마스킹, 도구 정의·실행(run_sql·schema·search_text·read_report·ask_user), usage 집계.
+// AI 데이터 비서 공용 모듈(2026-10-19 대화형 개편 뒤) — 설정(끄기·월 상한·월 누적), PII 마스킹, 도구 정의·실행(run_sql·schema·search_text·read_report·ask_user), usage 집계.
 //  대화 엔진은 chat-assistant.ts(스레드 저장·스트리밍). 옛 '질문 1회 → JSON 보고서' 엔진(askAssistant)은 제거했다.
 //  안전: 쓰기 도구 없음. run_sql 은 validateReportSql(단일 SELECT·화이트리스트) → run_report(SECURITY DEFINER) 그대로.
 //   search_text 는 supabaseAdmin 직접 조회지만 읽는 컬럼을 코드가 고정하고(voc.customer 등 이름 컬럼 제외) 결과는 maskPii 로 마스킹.

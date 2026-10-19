@@ -1,4 +1,4 @@
-// 커스텀 리포트 대화 엔진(2026-10-19 대표 결정 — "클로드 웹처럼 대화형 AI", docs/assistant-plan.md §5-2)
+// AI 데이터 비서 대화 엔진(2026-10-19 대표 결정 — "클로드 웹처럼 대화형 AI", docs/assistant-plan.md §5-2)
 //  스레드(report_threads) 하나에 메시지 전부(모델 응답 블록·도구 호출·도구 결과)를 그대로 저장하고(report_messages),
 //  매 턴 그 전체를 이어 붙여 모델을 부른다. 답 틀(JSON) 없음 — 모델이 글로 말하고, 필요하면 중간에 도구를 쓰며,
 //  run_sql 결과는 표 카드(report_tables)로 그 자리에 끼운다. 글은 스트리밍으로 흘려보낸다(NDJSON 이벤트).
@@ -10,6 +10,7 @@ import { getFeatureModel, effortParams, AiResponseError, readText } from "./ai-m
 import { MODELS } from "./config";
 import { isAdminName } from "./b2b-auth";
 import { LOOKER_RELATIONS } from "./report-schema";
+import { glossaryPromptBlock } from "./report-glossary";
 import {
   anthropic, toolDefs, runTool, toolLabel, addUsage, addAssistantUsage, getAssistantSettings, getAssistantMonthUsage,
   AssistantOffError, CATALOG_INDEX, PRIVATE_NOTE, kstTodayLabel, retryable, strictRejected, withTimeout,
@@ -27,7 +28,8 @@ export type ChatEvent =
   | { type: "text"; delta: string }
   | { type: "tool"; toolUseId: string; name: string; label: string; status: "start" | "ok" | "fail"; ms?: number }
   | { type: "table"; table: ChatTable }
-  | { type: "done"; model: string; usage: AskUsage; downgraded: boolean; timedOut: boolean; elapsedMs: number; title: string }
+  | { type: "term"; toolUseId: string; term: string; definition: string }       // 용어 사전 저장 제안(사람이 화면에서 저장)
+  | { type: "done"; model: string; usage: AskUsage; downgraded: boolean; timedOut: boolean; elapsedMs: number; title: string; seq: number | null; dataDate: string | null }
   | { type: "error"; error: string };
 
 type ThreadRow = { id: string; title: string; created_by: string; model: string | null; summary: string | null; compact_seq: number; archived: boolean; est_usd: number | string; created_at: string; updated_at: string };
@@ -51,7 +53,7 @@ export function isPending139(err: unknown): boolean {
 }
 
 // ── 시스템 프롬프트(고정 — 캐시) ──
-const SYSTEM_CHAT = `당신은 씨몬스터(순살 생선 전문 이커머스: 공식몰 카페24·스마트스토어·쿠팡·톡스토어 + 도매 B2B)의 데이터 비서입니다.
+const SYSTEM_CHAT = `당신은 씨몬스터(순살 생선 전문 이커머스: 공식몰 카페24·스마트스토어·쿠팡·톡스토어 + 도매 B2B)의 AI 데이터 비서입니다.
 직원과 채팅으로 대화하며, 회사 데이터(표)와 글(VOC·채널 문의·종합 리포트·CS 매뉴얼·생산 요청 메모·변경 이력)을 도구로 조사해 근거가 붙은 답을 합니다.
 
 [대화하는 법]
@@ -65,6 +67,7 @@ const SYSTEM_CHAT = `당신은 씨몬스터(순살 생선 전문 이커머스: �
   · 비교 기준이 없음("빠졌다·늘었다·왜 떨어졌나" — 전월? 작년 같은 달? 최근 4주 평균?) — 반드시 묻습니다.
   · 묶음 단위("추이" — 일별? 주별? 월별?)
 - 사용자가 답하면 그 정의를 그대로 받아들여 조사합니다. 정의한 용어는 답에서 "(합배송 = 한 주문번호에 상품 2줄 이상)"처럼 한 번 되짚어 줍니다.
+- 사용자가 용어의 뜻이나 판별 기준을 새로 정해 주면, 그 턴에서 propose_term 도구로 용어와 정의를 제안합니다(저장은 사용자가 화면에서 누릅니다). 이미 '회사 용어 사전'에 있는 용어는 제안하지 않습니다.
 - 문맥·이전 대화·오늘 날짜로 정해지는 것과 사소한 차이는 묻지 않고 가정을 두고 진행하되, 답 끝에 가정을 한 줄 적습니다.
 - 인사·고맙다는 말·설명 요청·"무엇을 물을 수 있나"처럼 데이터가 필요 없는 말에는 도구 없이 짧게 답합니다.
 - 큰 요청(여러 표·여러 기간)은 먼저 "이렇게 조사하겠습니다" 한두 문장으로 계획을 말하고 바로 진행합니다(확인을 기다리지 않습니다).
@@ -74,6 +77,7 @@ const SYSTEM_CHAT = `당신은 씨몬스터(순살 생선 전문 이커머스: �
 - run_sql: SELECT 한 문을 실행해 표를 얻습니다. title 은 표 제목(한국어). 오류가 돌아오면 원인을 고쳐 다시 실행합니다. 루커스튜디오용 SQL 을 알면 looker_mode/looker_sql/looker_note 에 함께 적습니다(모르면 null).
 - search_text: 글 본문 검색. "왜?"·불만·문의 경향·리포트가 지적한 것처럼 글에 답이 있는 질문에 씁니다.
 - read_report: 종합 리포트(일일·주간·월간) 본문 1건 전문 — 이미 분석된 맥락을 재활용합니다.
+- propose_term: 사용자가 새로 정한 용어·정의를 '회사 용어 사전'에 넣자고 제안합니다(저장은 사용자가). 조사 도구와 같은 차례에 함께 불러도 됩니다.
 - 한 턴에 도구는 최대 12차례. 필요한 조회는 한 차례에 함께 요청하고, 차례가 적을수록 좋습니다. 이전 턴에서 이미 본 표·스키마는 다시 조회하지 않고 기억을 씁니다.
 
 [SQL 규칙]
@@ -110,6 +114,35 @@ ${LOOKER_RELATIONS.join(", ")}
 
 [조회 불가(비공개 — 시도 금지)]
 ${PRIVATE_NOTE}`;
+
+// ── 도구 — 공용 4개(ask_user 제외: 되묻기는 글로) + 용어 제안 ──
+function chatTools(strict: boolean): Anthropic.Tool[] {
+  const s = strict ? { strict: true } : {};
+  return [
+    ...toolDefs(strict).filter((t) => t.name !== "ask_user"),
+    {
+      name: "propose_term", ...s,
+      description: "사용자가 대화에서 새로 정한 용어와 정의를 '회사 용어 사전'에 저장하자고 제안합니다. 저장은 사용자가 화면에서 누르며, 이 도구는 아무것도 쓰지 않습니다.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["term", "definition"],
+        properties: {
+          term: { type: "string", description: "용어(짧은 명사구, 예: '합배송')" },
+          definition: { type: "string", description: "판별 기준이 드러나는 한 문장(예: '한 주문번호에 상품 2줄 이상인 주문')" },
+        },
+      },
+    },
+  ];
+}
+
+// 매출 원장 최신일 — 답 머리에 '데이터 최신일'을 자동으로 보여 주고(개선안 5), 모델에도 넣는다
+async function salesDataDate(): Promise<string | null> {
+  try {
+    const { data, error } = await supabaseAdmin().rpc("run_report", { q: "select max(order_date)::text as d from sales_orders where order_date <= (now() at time zone 'Asia/Seoul')::date" });
+    if (error) return null;
+    const d = Array.isArray(data) ? (data[0] as { d?: string } | undefined)?.d : null;
+    return d ? String(d) : null;
+  } catch { return null; }
+}
 
 // ── 스레드 ──
 const sb = () => supabaseAdmin();
@@ -233,8 +266,8 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (!text) throw new AiResponseError("메시지를 입력하세요.");
   if (!process.env.ANTHROPIC_API_KEY) throw new AiResponseError("ANTHROPIC_API_KEY 가 설정되어 있지 않습니다.");
 
-  const [settings, month, featureModel, thread] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user)]);
-  if (settings.off) throw new AssistantOffError("커스텀 리포트가 꺼져 있습니다. 관리자 > 설정 > AI 설정에서 켜세요.");
+  const [settings, month, featureModel, thread, glossary, dataDate] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user), glossaryPromptBlock(), salesDataDate()]);
+  if (settings.off) throw new AssistantOffError("AI 데이터 비서가 꺼져 있습니다. 관리자 > 설정 > AI 설정에서 켜세요.");
   if (!thread) throw new AiResponseError("대화를 찾을 수 없습니다. 새 대화를 시작하세요.");
   const downgraded = month.usd >= settings.capUsd;
   const model = downgraded ? MODELS.opus : featureModel;
@@ -254,12 +287,18 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
 
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: SYSTEM_CHAT, cache_control: { type: "ephemeral" } },
-    { type: "text", text: `[오늘] 기준일(Asia/Seoul): ${kstTodayLabel()} — '오늘·어제·이번 주·이번 달·올해·최근 N일' 등 상대 기간은 반드시 이 날짜 기준. 학습 시점의 연도를 가정하지 않습니다.\n[사용자] ${p.user}` },
+    { type: "text", text: [
+      `[오늘] 기준일(Asia/Seoul): ${kstTodayLabel()} — '오늘·어제·이번 주·이번 달·올해·최근 N일' 등 상대 기간은 반드시 이 날짜 기준. 학습 시점의 연도를 가정하지 않습니다.`,
+      dataDate ? `[데이터 최신일] 매출 원장(sales_orders)은 ${dataDate}까지 들어 있습니다. 그 뒤 날짜는 아직 없으니 답에 "데이터는 ${dataDate}까지"라고 적습니다.` : "",
+      `[사용자] ${p.user}`,
+      glossary,
+    ].filter(Boolean).join("\n") },
   ];
   let strict = true;
-  let tools = toolDefs(strict).filter((t) => t.name !== "ask_user"); // 되묻기는 글로 한다
+  let tools = chatTools(strict);
   let retried = false, timedOut = false, wrapUp = false;
   let toolCount = 0;
+  let lastAssistantSeq: number | null = null; // 피드백(맞아요/틀려요)이 가리킬 비서 메시지
 
   try {
     for (let round = 0; round < MAX_ROUNDS + 1; round++) {
@@ -283,12 +322,13 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
         stream.on("text", (delta) => { if (delta) p.send({ type: "text", delta }); });
         res = await stream.finalMessage();
       } catch (e) {
-        if (strict && strictRejected(e)) { strict = false; tools = toolDefs(false).filter((t) => t.name !== "ask_user"); round--; continue; }
+        if (strict && strictRejected(e)) { strict = false; tools = chatTools(false); round--; continue; }
         if (!retried && retryable(e) && deadlineAt - Date.now() > FINAL_RESERVE_MS) { retried = true; await new Promise((r) => setTimeout(r, 3000)); round--; continue; }
         throw e;
       }
       addUsage(usage, model, res.usage);
       if (res.stop_reason === "refusal") readText(res); // 거절은 오류로 올린다
+      lastAssistantSeq = seq;
       await saveMessage(p.threadId, seq++, "assistant", res.content, { input: res.usage.input_tokens, output: res.usage.output_tokens, cacheRead: res.usage.cache_read_input_tokens || 0, cacheWrite: res.usage.cache_creation_input_tokens || 0 });
       messages.push({ role: "assistant", content: res.content });
 
@@ -298,6 +338,11 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
       const uses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
       const results: Anthropic.ToolResultBlockParam[] = await Promise.all(uses.map(async (u) => {
         const input = (u.input || {}) as Record<string, unknown>;
+        if (u.name === "propose_term") { // 쓰기 아님 — 화면에 저장 제안 카드만
+          const term = String(input.term || "").trim().slice(0, 60), definition = String(input.definition || "").trim().slice(0, 600);
+          if (term && definition) p.send({ type: "term", toolUseId: u.id, term, definition });
+          return { type: "tool_result" as const, tool_use_id: u.id, content: term && definition ? "제안을 화면에 보였습니다. 사용자가 [사전에 저장]을 누르면 다음 대화부터 반영됩니다." : "용어와 정의가 비어 제안하지 못했습니다." };
+        }
         const label = toolLabel(u.name, input);
         p.send({ type: "tool", toolUseId: u.id, name: u.name, label, status: "start" });
         const t0 = Date.now();
@@ -338,7 +383,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
     console.log(`[chat] user=${p.user} thread=${p.threadId.slice(0, 8)} q="${text.slice(0, 40).replace(/\s+/g, " ")}" tools=${toolCount} ms=${elapsedMs} usd=${usage.estUsd}${downgraded ? " downgraded" : ""}${timedOut ? " timedOut" : ""}`);
   }
 
-  p.send({ type: "done", model, usage, downgraded, timedOut, elapsedMs: Date.now() - startedAt, title });
+  p.send({ type: "done", model, usage, downgraded, timedOut, elapsedMs: Date.now() - startedAt, title, seq: lastAssistantSeq, dataDate });
 
   // 긴 스레드 접기 — 응답을 보낸 뒤, 남은 시간 안에서만
   try { if (deadlineAt - Date.now() > 40_000 && charsOf(messages) > COMPACT_AT_CHARS) await compactThread(thread, p.threadId, auxModel); }

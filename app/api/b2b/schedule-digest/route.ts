@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
+import { runDueScheduledReports } from "@/app/lib/report-schedule";
 import { buildB2BDigest, getDigestConfig, kstDateStr, type B2BDigest } from "@/app/lib/b2b-digest";
 import { getAppBaseUrl, setKv } from "@/app/lib/b2b-settings";
 import { sendTeamsTextSafe } from "@/app/lib/b2b-teams";
@@ -7,7 +8,7 @@ import { supabaseAdmin } from "@/app/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60; // 2026-10-19: 아침 틱에 AI 데이터 비서 정기 리포트 발송(after) 몫 포함
 
 const COOKIE = "b2b_auth";
 async function userOf(req: NextRequest): Promise<string | null> {
@@ -68,6 +69,12 @@ export async function GET(req: NextRequest) {
   const name = await userOf(req);
   const isAdmin = name === "관리자" || name === "현석";
   if (!isCron && !isAdmin) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
+
+  // AI 데이터 비서 정기 리포트(2026-10-19) — 크론 아침 틱(KST 12시 전)에만, 응답을 보낸 뒤 after 로. 일정 알림과는 독립(실패해도 서로 영향 없음).
+  //  크론은 Hobby 한도(2개)가 꽉 차 있어 새 크론을 늘리지 않고 이 틱에 얹는다. dedup 은 저장 리포트의 schedule.lastSentOn.
+  if (isCron && (new Date(Date.now() + 9 * 3600_000)).getUTCHours() < 12) {
+    after(async () => { try { await runDueScheduledReports(); } catch (e) { console.error("[schedule-digest] 정기 리포트 발송 실패", errMsg(e)); } });
+  }
 
   const cfg = await getDigestConfig();
   const times = (cfg.times?.length ? [...cfg.times] : ["06:00", "16:00"]).sort();

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-// 루커스튜디오(데이터 스튜디오) 적용 가이드 — 커스텀 리포트 화면 하단 접이식(2026-10-19 대화형 개편 때 분리, 내용 그대로)
+// 루커스튜디오(데이터 스튜디오) 적용 가이드 — AI 데이터 비서 화면 하단 접이식(2026-10-19 대화형 개편 때 분리, 내용 그대로)
 export default function LookerGuide() {
   const [guideOpen, setGuideOpen] = useState(false);
   return (

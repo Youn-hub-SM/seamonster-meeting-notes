@@ -2845,6 +2845,27 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-thinking { color: var(--sm-text-mid); }
 .rp-meta-warn { color: var(--sm-warning); }
 .rp-saved-item.is-active { background: var(--sm-bg-subtle); }
+/* 개선안 1·3·5(2026-10-19) — 용어 제안 카드, 피드백, 숫자 대조 배지, 정기 발송 배지, 용어 사전 표 */
+.rp-term { display: flex; flex-direction: column; gap: 8px; align-self: flex-start; max-width: 68ch; }
+.rp-term-head { font-size: var(--sm-fs-xs); font-weight: 600; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); }
+.rp-term-body { font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-dark); }
+.rp-term-body b { font-weight: 700; color: var(--sm-black); }
+.rp-term-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rp-term-done { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.rp-fb { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.rp-fb .b2b-link-btn { font-size: var(--sm-fs-xs); }
+.rp-fb-note { display: flex; gap: 6px; align-items: center; }
+.rp-fb-note .b2b-input { width: 280px; max-width: 100%; }
+.rp-fb-done { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.rp-badge { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--sm-border); border-radius: 999px; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); background: var(--sm-white); }
+.rp-badge.is-warn { color: var(--sm-warning); border-color: var(--sm-warning); }
+.rp-sched { margin-left: 6px; }
+.rp-glossary-table td, .rp-glossary-table th { vertical-align: top; }
+.rp-glossary-table .b2b-input { width: 100%; }
+.rp-glossary-def { white-space: pre-line; }
+.rp-glossary-add { display: grid; grid-template-columns: 180px 1fr auto; gap: 8px; align-items: start; margin-top: 10px; }
+@media (max-width: 640px) { .rp-glossary-add { grid-template-columns: 1fr; } }
+.rp-chart { margin-top: 4px; }
 .rp-composer { margin-top: 18px; }
 .rp-composer-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin-bottom: 6px; }
 .rp-meta { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
