@@ -2788,24 +2788,53 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-ask .b2b-btn-primary { white-space: nowrap; }
 .rp-ask-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .rp-ask-actions button { white-space: nowrap; justify-content: center; }  /* 두 버튼 동일 크기(넓은 쪽에 맞춤) */
-.rp-kbd { display: block; font-size: var(--sm-fs-xs); font-weight: 400; opacity: .75; margin-top: 1px; }
-.rp-chip { font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); padding: 5px 11px; border: 1px solid var(--sm-border-strong); border-radius: 999px;
+
+/* 데이터 비서(2026-10-19 기획 1차) — 답 틀: 답 → 근거(표·인용 접힘 카드) → 사실/추정 → 한계 → 이어서 물어볼 것. 색 없음, 경계 카드는 선만(2차 결정) */
+.rp-examples { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 18px; }
+.rp-turns { display: flex; flex-direction: column; gap: 28px; margin-bottom: 20px; }
+.rp-turn { display: flex; flex-direction: column; gap: 12px; }
+.rp-turn-q { font-size: var(--sm-fs-xs); font-weight: 600; letter-spacing: var(--sm-ls-label); color: var(--sm-text-mid); }
+.rp-answer { display: flex; flex-direction: column; gap: 18px; }
+.rp-answer-text { margin: 0; max-width: 68ch; font-size: var(--sm-fs-lg); line-height: var(--sm-lh-body); color: var(--sm-black); white-space: pre-line; }
+.rp-sec { display: flex; flex-direction: column; gap: 8px; }
+.rp-sec-title { margin: 0; font-size: var(--sm-fs-lg); font-weight: 700; line-height: var(--sm-lh-heading); color: var(--sm-black); }
+.rp-sec-sub { font-size: var(--sm-fs-xs); font-weight: 400; color: var(--sm-text-mid); margin-left: 6px; }
+.rp-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; max-width: 68ch; }
+.rp-list li { font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-dark); }
+.rp-fold { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); overflow: hidden; }
+.rp-fold-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: none; border: none; cursor: pointer; text-align: left; font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-dark); }
+.rp-fold-head:hover { background: var(--sm-bg-subtle); }
+.rp-fold-chev { color: var(--sm-text-light); }
+.rp-fold-body { padding: 10px 14px 14px; border-top: 1px solid var(--sm-border-light); display: flex; flex-direction: column; gap: 10px; }
+.rp-fold-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rp-table-wrap { max-height: 480px; overflow: auto; }
+.rp-table-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); padding: 6px 0 0; }
+.rp-sql-box { display: flex; flex-direction: column; gap: 4px; }
+.rp-sql-bar { display: flex; justify-content: flex-end; }
+.rp-looker .b2b-card-head { padding-top: 6px; }
+.rp-card-sub { font-weight: 400; font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.rp-looker-note { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); margin: 8px 0; }
+.rp-quotes { gap: 12px; }
+.rp-quote { display: flex; flex-direction: column; gap: 3px; }
+.rp-quote-meta { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.rp-quote-text { font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-dark); max-width: 68ch; white-space: pre-line; }
+.rp-followups { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-followups .b2b-btn-secondary { text-align: left; white-space: normal; }
+.rp-meta { font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
+.rp-error { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.rp-progress .b2b-card-head { padding-top: 0; }
+.rp-progress-list { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.rp-progress-list li { font-size: var(--sm-fs-base); line-height: var(--sm-lh-ui); color: var(--sm-text-mid); }
+.rp-varform { margin-bottom: 14px; }
+.rp-varform-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; padding-top: 10px; }
+.rp-varform-field { gap: 3px; }
+.rp-varform-field .b2b-input { width: 150px; }
+.rp-save-field { gap: 4px; margin-top: 10px; }
+.rp-save-sql { min-height: 120px; font-family: var(--sm-mono); font-size: var(--sm-fs-base); }
+.rp-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
   background: var(--sm-white); color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
-.rp-chip:hover { background: var(--sm-bg-subtle); color: var(--sm-black); }
-.rp-chip:disabled { opacity: .5; cursor: default; }
-.rp-chip.is-active, .rp-chip.is-active:hover { background: var(--sm-orange-light); border-color: var(--sm-orange); color: var(--sm-black); font-weight: 700; }
 /* 질문 조립 도우미 */
-.rp-compose { border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); margin-bottom: 10px; overflow: hidden; }
-.rp-compose-head { width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: none; border: none; cursor: pointer; text-align: left; font-size: var(--sm-fs-base); font-weight: 700; color: var(--sm-dark); }
-.rp-compose-hint { font-size: var(--sm-fs-base); font-weight: 400; color: var(--sm-text-light); }
-.rp-compose-body { padding: 6px 14px 14px; border-top: 1px solid var(--sm-border-light); display: flex; flex-direction: column; gap: 10px; }
-.rp-compose-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.rp-compose-label { font-size: var(--sm-fs-base); font-weight: 700; color: var(--sm-text-mid); min-width: 92px; }
-.rp-compose-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
-.rp-understood { font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-dark); background: var(--sm-info-bg);
   border-radius: var(--sm-radius); padding: 10px 14px; }
-.rp-caveats { margin: 8px 0 0; padding-left: 2px; list-style: none; display: flex; flex-direction: column; gap: 3px; }
-.rp-caveats li { font-size: var(--sm-fs-base); color: var(--sm-text-mid); line-height: var(--sm-lh-ui); }
 .rp-sql { background: var(--sm-black); color: var(--sm-bg-subtle); border-radius: 8px; padding: 12px 14px; font-size: var(--sm-fs-base);
   line-height: var(--sm-lh-ui); overflow-x: auto; white-space: pre; font-family: var(--sm-mono); margin: 0; }
 @media (max-width: 768px) {
@@ -2852,8 +2881,6 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-saved-del2 { margin-left: auto; background: none; border: 1px solid var(--sm-border-strong); border-radius: 7px; cursor: pointer; color: var(--sm-text-mid); font-size: var(--sm-fs-base); padding: 3px 10px; }
 .rp-saved-del2:hover { color: var(--sm-danger); border-color: var(--sm-danger); }
 /* 이어지는 대화 */
-.rp-thread { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 8px; font-size: var(--sm-fs-base); color: var(--sm-text-mid); }
-.rp-thread-q { background: var(--sm-bg-subtle); border-radius: 999px; padding: 3px 10px; font-size: var(--sm-fs-base); color: var(--sm-text-mid); max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 저장 다이얼로그 */
 .rp-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 8vh 14px; overflow: auto; }
 .rp-modal { background: var(--sm-white); border-radius: var(--sm-radius-card); width: min(600px, 100%); padding: 16px 18px 18px; box-shadow: var(--sm-shadow-float); }

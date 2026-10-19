@@ -1,16 +1,49 @@
 "use client";
 
+// 데이터 비서(2026-10-19, docs/assistant-plan.md 1차) — 커스텀 리포트를 "무엇이든 묻는" 비서로.
+//  질문 → POST /api/report/ask (NDJSON 스트리밍: progress 줄 → done/error) → 답 틀(답/근거/사실·추정/한계/이어서 물어볼 것).
+//  저장 리포트(변수 치환·실행)·루커 SQL·루커 적용 가이드는 그대로. 대화는 브라우저 메모리만(최근 3턴을 history 로 보냄).
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
 import { qty, qtyText, dateFull } from "@/app/lib/format";
 
 type Chart = { type: "bar" | "line" | "pie" | "none"; x?: string; series?: string[]; note?: string };
 type Looker = { mode: "query" | "view" | "na"; sql?: string; note?: string };
-type Usage = { input: number; cacheRead: number; cacheWrite: number; output: number };
-type Plan = { understood: string; sql: string; explanation: string; chart?: Chart; looker: Looker; caveats: string[]; usage?: Usage };
 type Row = Record<string, unknown>;
-type Turn = { q: string; sql: string };
 type Saved = { id: string; name: string; question: string; sql: string; chart: Chart; looker: Looker; createdAt: string; createdBy?: string | null };
+
+// /api/report/ask 계약(서버는 별도 구현) — 화면은 이 모양만 믿는다
+type AskTable = { title: string; sql: string; columns: string[]; rows: Row[]; rowCount: number; truncated: boolean; looker?: Looker };
+type QuoteSource = "voc" | "inquiry" | "report" | "manual" | "request" | "activity";
+type AskQuote = { source: QuoteSource; date: string; title: string; text: string };
+type AskUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; estUsd: number; estNote: string };
+type ToolLog = { name: string; label: string; ok: boolean; ms: number };
+type AskResult = {
+  answer: string;
+  tables: AskTable[];
+  quotes: AskQuote[];
+  facts: string[]; inferences: string[]; limits: string[]; followups: string[];
+  model: string; usage: AskUsage;
+  toolLog: ToolLog[];
+  downgraded: boolean; timedOut: boolean;
+};
+type Progress = { name: string; label: string; ms: number };
+type Turn = { q: string; result: AskResult };
+// 저장 리포트 실행 결과(기존 /api/report/run)
+type RunResult = { rep: Saved; sql: string; columns: string[]; rows: Row[] };
+// 저장 다이얼로그에 넘길 것 — 표 카드의 질문·SQL·루커
+type SaveCtx = { question: string; sql: string; looker?: Looker; chart?: Chart };
+
+const QUOTE_SOURCE_LABEL: Record<QuoteSource, string> = {
+  voc: "VOC", inquiry: "네이버 문의", report: "종합 리포트", manual: "CS 매뉴얼", request: "생산 요청", activity: "변경 기록",
+};
+const EXAMPLES = [
+  "10월 채널별 매출",
+  "이번 달 VOC 에서 가장 많은 불만은?",
+  "10월 채널별 매출과 톡스토어가 빠진 이유",
+];
+const TABLE_ROW_LIMIT = 1000;
 
 function fmt(v: unknown): string {
   if (v == null) return "";
@@ -26,47 +59,176 @@ function fillVars(sql: string, values: Record<string, string>): string {
   for (const v of extractVars(sql)) out = out.replace(new RegExp(`\\{\\{\\s*${esc(v)}\\s*\\}\\}`, "g"), values[v] ?? "");
   return out;
 }
+const sec = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)}초`;
+const usd = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
 
-// 질문 조립 도우미 — 칸을 클릭하면 자연스러운 질문 문장이 만들어져 질문칸에 채워짐.
-const COMPOSER_FACETS = [
-  { key: "period", label: "기간", opts: ["오늘", "이번 주", "이번 달", "지난 달", "최근 7일", "최근 30일", "올해", "작년"] },
-  { key: "dim", label: "기준", opts: ["채널별", "상품별", "상품군별", "고객별", "지역별", "월별"] },
-  { key: "metric", label: "지표", opts: ["매출", "판매수량", "주문수", "객단가", "신규·재구매 고객수", "재구매율", "재고 현황"] },
-  { key: "scope", label: "범위·정렬", opts: ["상위 10개", "상위 20개", "많은 순", "적은 순", "전체"] },
-] as const;
-const COMPOSE_ORDER = ["period", "dim", "metric", "scope"] as const;
-
-function QuestionComposer({ disabled, onCompose }: { disabled: boolean; onCompose: (text: string) => void }) {
-  const [open, setOpen] = useState(true);
-  const [pick, setPick] = useState<Record<string, string>>({});
-  const compose = (p: Record<string, string>) => COMPOSE_ORDER.map((k) => p[k]).filter(Boolean).join(" ");
-  function toggle(key: string, opt: string) {
-    const next = { ...pick };
-    if (next[key] === opt) delete next[key]; else next[key] = opt;
-    setPick(next);
-    onCompose(compose(next));
+/** NDJSON 스트림을 줄 단위로 읽는다 — 마지막 불완전 줄은 버퍼에 남긴다 */
+async function readNdjson(body: ReadableStream<Uint8Array>, onLine: (obj: Record<string, unknown>) => void) {
+  const reader = body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  const emit = (line: string) => {
+    const s = line.trim();
+    if (!s) return;
+    let obj: unknown;
+    try { obj = JSON.parse(s); } catch { return; } // 깨진 줄은 건너뛴다
+    if (obj && typeof obj === "object") onLine(obj as Record<string, unknown>);
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n")) >= 0) { emit(buf.slice(0, idx)); buf = buf.slice(idx + 1); }
   }
-  function reset() { setPick({}); onCompose(""); }
+  buf += dec.decode();
+  emit(buf);
+}
+
+/** 표 카드 — 접힌 머리줄 "표 N · 제목 · N행", 펼치면 표 + [SQL 보기] + 루커 SQL. 저장 리포트 실행 결과도 같은 카드(기본 펼침) */
+function TableCard({ idx, table, question, defaultOpen, onSave, onExport }: {
+  idx?: number; table: AskTable; question: string; defaultOpen?: boolean;
+  onSave: (ctx: SaveCtx) => void; onExport: (sql: string, title: string) => void;
+}) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const [showSql, setShowSql] = useState(false);
+  const [copied, setCopied] = useState("");
+  const copy = (text: string, tag: string) => { navigator.clipboard?.writeText(text).then(() => { setCopied(tag); setTimeout(() => setCopied(""), 1500); }); };
+  const rows = table.rows || [];
+  const cols = table.columns || [];
+  const isNum = (c: string) => typeof rows[0]?.[c] === "number";
+  const looker = table.looker;
   return (
-    <div className="rp-compose">
-      <button className="rp-compose-head" onClick={() => setOpen((v) => !v)}>
-        <span>{open ? "▾" : "▸"} 질문 만들기 도우미</span>
+    <div className="rp-fold">
+      <button type="button" className="rp-fold-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className="rp-fold-chev">{open ? "▾" : "▸"}</span>
+        <span>{idx != null ? `표 ${idx} · ` : ""}{table.title} · {qtyText(table.rowCount, "행")}</span>
       </button>
       {open && (
-        <div className="rp-compose-body">
-          {COMPOSER_FACETS.map((f) => (
-            <div key={f.key} className="rp-compose-row">
-              <span className="rp-compose-label">{f.label}</span>
-              <div className="rp-compose-chips">
-                {f.opts.map((o) => (
-                  <button key={o} type="button" className={`rp-chip ${pick[f.key] === o ? "is-active" : ""}`} disabled={disabled} onClick={() => toggle(f.key, o)}>{o}</button>
-                ))}
-              </div>
+        <div className="rp-fold-body">
+          <div className="rp-fold-actions">
+            <button type="button" className="b2b-btn-secondary" onClick={() => onSave({ question, sql: table.sql, looker, chart: { type: "none" } })}>리포트 저장</button>
+            <button type="button" className="b2b-btn-secondary" onClick={() => onExport(table.sql, table.title)} disabled={!rows.length}>엑셀 내려받기</button>
+            <button type="button" className="b2b-link-btn" onClick={() => setShowSql((v) => !v)}>{showSql ? "SQL 닫기" : "SQL 보기"}</button>
+          </div>
+          {rows.length === 0 ? <div className="b2b-empty">조회 결과가 없습니다.</div> : (
+            <div className="b2b-table-wrap rp-table-wrap">
+              <table className="b2b-table">
+                <thead><tr>{cols.map((c) => <th key={c} className={isNum(c) ? "num" : ""}>{c}</th>)}</tr></thead>
+                <tbody>
+                  {rows.slice(0, TABLE_ROW_LIMIT).map((r, i) => (
+                    <tr key={i}>{cols.map((c) => <td key={c} className={typeof r[c] === "number" ? "num b2b-money" : ""}>{fmt(r[c])}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+              {(rows.length > TABLE_ROW_LIMIT || table.truncated) && (
+                <div className="rp-table-note">표는 {qty(Math.min(rows.length, TABLE_ROW_LIMIT))}행까지 표시, 전체는 [엑셀 내려받기]로</div>
+              )}
             </div>
-          ))}
-          {Object.keys(pick).length > 0 && <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={reset}>선택 초기화</button>}
+          )}
+          {showSql && (
+            <div className="rp-sql-box">
+              <div className="rp-sql-bar"><button type="button" className="b2b-link-btn" onClick={() => copy(table.sql, "sql")}>{copied === "sql" ? "복사됨" : "SQL 복사"}</button></div>
+              <pre className="rp-sql">{table.sql}</pre>
+            </div>
+          )}
+          {looker && looker.mode !== "na" && looker.sql && (
+            <section className="b2b-card rp-looker">
+              <div className="b2b-card-head">
+                <span className="b2b-card-title">루커스튜디오용 SQL <span className="rp-card-sub">{looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리"}</span></span>
+                <button type="button" className="b2b-btn-secondary" onClick={() => copy(looker.sql || "", "looker")}>{copied === "looker" ? "복사됨" : "루커 SQL 복사"}</button>
+              </div>
+              {looker.note && <p className="rp-looker-note">{looker.note}</p>}
+              <pre className="rp-sql">{looker.sql}</pre>
+            </section>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 답 틀(기획안 §2-3): 답 → 근거(표·인용) → 사실/추정 → 한계 → 이어서 물어볼 것 → 메타 줄. 비어 있는 섹션은 그리지 않는다 */
+function AnswerView({ turn, isAdmin, disabled, onFollowup, onSave, onExport }: {
+  turn: Turn; isAdmin: boolean; disabled: boolean;
+  onFollowup: (q: string) => void; onSave: (ctx: SaveCtx) => void; onExport: (sql: string, title: string) => void;
+}) {
+  const r = turn.result;
+  const tables = r.tables || [], quotes = r.quotes || [];
+  const facts = r.facts || [], inferences = r.inferences || [], limits = r.limits || [], followups = r.followups || [];
+  const toolLog = r.toolLog || [];
+  const totalMs = toolLog.reduce((s, t) => s + (t.ms || 0), 0);
+  const [quotesOpen, setQuotesOpen] = useState(true);
+  return (
+    <div className="rp-answer">
+      <p className="rp-answer-text">{r.answer}</p>
+
+      {(tables.length > 0 || quotes.length > 0) && (
+        <section className="rp-sec">
+          <h3 className="rp-sec-title">근거</h3>
+          {tables.map((t, i) => <TableCard key={i} idx={i + 1} table={t} question={turn.q} onSave={onSave} onExport={onExport} />)}
+          {quotes.length > 0 && (
+            <div className="rp-fold">
+              <button type="button" className="rp-fold-head" onClick={() => setQuotesOpen((v) => !v)} aria-expanded={quotesOpen}>
+                <span className="rp-fold-chev">{quotesOpen ? "▾" : "▸"}</span>
+                <span>인용 {qtyText(quotes.length, "건")}</span>
+              </button>
+              {quotesOpen && (
+                <div className="rp-fold-body rp-quotes">
+                  {quotes.map((qt, i) => (
+                    <div key={i} className="rp-quote">
+                      <div className="rp-quote-meta">{QUOTE_SOURCE_LABEL[qt.source] || qt.source} · {dateFull(qt.date)} · {qt.title}</div>
+                      <div className="rp-quote-text">{(qt.text || "").slice(0, 300)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {(facts.length > 0 || inferences.length > 0) && (
+        <section className="rp-sec">
+          {facts.length > 0 && (
+            <>
+              <h3 className="rp-sec-title">사실</h3>
+              <ul className="rp-list">{facts.map((f, i) => <li key={i}>{f}</li>)}</ul>
+            </>
+          )}
+          {inferences.length > 0 && (
+            <>
+              <h3 className="rp-sec-title">추정 <span className="rp-sec-sub">근거가 있는 해석</span></h3>
+              <ul className="rp-list">{inferences.map((f, i) => <li key={i}>{f}</li>)}</ul>
+            </>
+          )}
+        </section>
+      )}
+
+      {limits.length > 0 && (
+        <section className="rp-sec">
+          <h3 className="rp-sec-title">한계</h3>
+          <ul className="rp-list">{limits.map((f, i) => <li key={i}>{f}</li>)}</ul>
+        </section>
+      )}
+
+      {followups.length > 0 && (
+        <section className="rp-sec">
+          <h3 className="rp-sec-title">이어서 물어볼 것</h3>
+          <div className="rp-followups">
+            {followups.slice(0, 3).map((f, i) => (
+              <button key={i} type="button" className="b2b-btn-secondary" disabled={disabled} onClick={() => onFollowup(f)}>{f}</button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {r.downgraded && <div className="sm-warn">이달 비용 상한을 넘어 빠른 모델로 답했습니다</div>}
+      {r.timedOut && <div className="sm-warn">시간이 다 돼 조사를 다 하지 못했습니다</div>}
+      <div className="rp-meta">
+        {r.model} · 조사 {qtyText(toolLog.length, "회")} · {sec(totalMs)}
+        {isAdmin && r.usage && <> · 약 {usd(r.usage.estUsd)}{r.usage.estNote ? ` (${r.usage.estNote})` : ""}</>}
+      </div>
     </div>
   );
 }
@@ -78,22 +240,21 @@ export default function ReportPage() {
   const [qErr, setQErr] = useState(""); // 질문 칸 검증 오류
   const [saveErr, setSaveErr] = useState<{ name?: string; sql?: string }>({}); // 저장 다이얼로그 칸별 오류
   const confirmModal = useConfirm();
-  const [plan, setPlan] = useState<Plan | null>(null);
-  const [rows, setRows] = useState<Row[]>([]);
-  const [cols, setCols] = useState<string[]>([]);
-  const [showSql, setShowSql] = useState(false);
-  const [copied, setCopied] = useState("");
-  const [guideOpen, setGuideOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [progress, setProgress] = useState<Progress[]>([]);
+  const [pendingQ, setPendingQ] = useState("");
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [saved, setSaved] = useState<Saved[]>([]);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveSql, setSaveSql] = useState("");
+  const [saveCtx, setSaveCtx] = useState<SaveCtx | null>(null);
   const [varForm, setVarForm] = useState<{ rep: Saved; values: Record<string, string> } | null>(null);
-  const [corrected, setCorrected] = useState(0);
   const [savedOpen, setSavedOpen] = useState(false);      // 저장 리스트 기본 접힘
-  const [me, setMe] = useState<string | null>(null);       // 현재 로그인 사용자(저장자 매칭)
+  const [me, setMe] = useState<string | null>(null);       // 현재 로그인 사용자(저장자 매칭·비용 표시)
   const [savedFilter, setSavedFilter] = useState<"mine" | "all">("mine");
+  const isAdmin = me === "현석" || me === "관리자"; // AppSidebar 와 같은 판정
 
   const loadSaved = useCallback(async () => {
     try { const j = await (await fetch("/api/report/saved", { cache: "no-store" })).json(); if (j.ok) setSaved(j.reports || []); } catch { /* noop */ }
@@ -107,24 +268,37 @@ export default function ReportPage() {
     [saved, savedFilter, me],
   );
 
-  async function ask(question: string, fresh = false) {
+  async function ask(question: string) {
     const qq = question.trim();
     if (loading) return;
     if (!qq) { setQErr("질문을 입력하세요"); return; }
     setQErr("");
-    const hist = fresh ? [] : turns;
-    setLoading(true); setErr(""); setVarForm(null); setPlan(null); setRows([]); setCols([]); setShowSql(false); setCorrected(0);
+    const history = turns.slice(-3).map((t) => ({ q: t.q, answer: t.result.answer }));
+    setLoading(true); setErr(""); setVarForm(null); setRunResult(null); setProgress([]); setPendingQ(qq);
     try {
-      const r = await fetch("/api/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: qq, history: hist }) });
-      const j = await r.json();
-      if (!j.ok) { setErr(j.error || "질문을 처리하지 못했습니다. 질문을 바꿔 다시 물어보세요"); if (j.plan) setPlan(j.plan); setCorrected(j.corrected || 0); return; }
-      setPlan(j.plan); setRows(j.rows || []); setCols(j.columns || []); setCorrected(j.corrected || 0);
-      setTurns([...hist, { q: qq, sql: j.plan.sql }]); setQ("");
-    } catch (e) { setErr(e instanceof Error ? e.message : "질문을 처리하지 못했습니다. 질문을 바꿔 다시 물어보세요"); }
-    finally { setLoading(false); }
+      const r = await fetch("/api/report/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ q: qq, history }) });
+      if (!r.ok || !r.body) {
+        let msg = `서버 응답 ${r.status}`;
+        try { const t = await r.text(); try { const j = JSON.parse(t); msg = j.error || msg; } catch { if (t) msg = t.slice(0, 200); } } catch { /* noop */ }
+        throw new Error(msg);
+      }
+      const got: { result: AskResult | null; error: string } = { result: null, error: "" };
+      await readNdjson(r.body, (obj) => {
+        if (obj.type === "progress") setProgress((p) => [...p, { name: String(obj.name || ""), label: String(obj.label || obj.name || ""), ms: Number(obj.ms) || 0 }]);
+        else if (obj.type === "done") got.result = (obj.result as AskResult) || null;
+        else if (obj.type === "error") got.error = String(obj.error || "");
+      });
+      if (got.error) throw new Error(got.error);
+      const result = got.result;
+      if (!result || typeof result.answer !== "string") throw new Error("답이 오지 않았습니다");
+      setTurns((t) => [...t, { q: qq, result }]);
+      setQ("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setLoading(false); setProgress([]); setPendingQ(""); }
   }
 
-  function newThread() { setTurns([]); setPlan(null); setRows([]); setCols([]); setErr(""); setVarForm(null); setQ(""); }
+  function newThread() { setTurns([]); setErr(""); setVarForm(null); setRunResult(null); setQ(""); setQErr(""); }
 
   function startSaved(rep: Saved) {
     const vars = extractVars(rep.sql);
@@ -133,18 +307,20 @@ export default function ReportPage() {
   }
   async function runSql(rep: Saved, sql: string) {
     if (loading) return;
-    setLoading(true); setErr(""); setVarForm(null); setPlan(null); setRows([]); setCols([]); setShowSql(false); setCorrected(0);
+    setLoading(true); setErr(""); setVarForm(null); setRunResult(null);
     try {
       const r = await fetch("/api/report/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql }) });
       const j = await r.json();
       if (!j.ok) { setErr(j.error || "리포트를 실행하지 못했습니다. SQL 을 확인하세요"); return; }
-      setPlan({ understood: rep.name, sql, explanation: "", chart: rep.chart, looker: rep.looker, caveats: [] });
-      setRows(j.rows || []); setCols(j.columns || []); setTurns([{ q: rep.name, sql }]);
+      setRunResult({ rep, sql, rows: j.rows || [], columns: j.columns || [] });
     } catch (e) { setErr(e instanceof Error ? e.message : "리포트를 실행하지 못했습니다. SQL 을 확인하세요"); }
     finally { setLoading(false); }
   }
   async function delSaved(id: string) {
     await fetch(`/api/report/saved?id=${id}`, { method: "DELETE" }); loadSaved();
+  }
+  function openSave(ctx: SaveCtx) {
+    setSaveErr({}); setSaveCtx(ctx); setSaveName(ctx.question.slice(0, 40)); setSaveSql(ctx.sql); setSaveOpen(true);
   }
   async function doSave() {
     const fe: { name?: string; sql?: string } = {};
@@ -152,26 +328,27 @@ export default function ReportPage() {
     if (!saveSql.trim()) fe.sql = "SQL 을 입력하세요";
     setSaveErr(fe);
     if (fe.name || fe.sql) return;
-    const r = await fetch("/api/report/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: plan?.understood || "", sql: saveSql, chart: plan?.chart, looker: plan?.looker }) });
+    const r = await fetch("/api/report/saved", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: saveName.trim(), question: saveCtx?.question || "", sql: saveSql, chart: saveCtx?.chart || { type: "none" }, looker: saveCtx?.looker || { mode: "na" } }) });
     const j = await r.json();
     if (!j.ok) { setErr(j.error || "리포트를 저장하지 못했습니다. 이름과 SQL 을 확인하세요"); return; }
     setSaveOpen(false); loadSaved();
   }
 
-  async function exportXlsx() {
-    if (!plan) return;
-    const r = await fetch("/api/report/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql: plan.sql, title: plan.understood }) });
+  async function exportXlsx(sql: string, title: string) {
+    const r = await fetch("/api/report/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql, title }) });
     if (!r.ok) { setErr("엑셀을 내려받지 못했습니다. 결과를 다시 조회하세요"); return; }
     const blob = await r.blob(); const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "report.xlsx"; a.click(); URL.revokeObjectURL(url);
   }
-  function copy(text: string, tag: string) { navigator.clipboard?.writeText(text).then(() => { setCopied(tag); setTimeout(() => setCopied(""), 1500); }); }
+  function askFollowup(text: string) { setQ(text); ask(text); }
+
+  const hasAnything = turns.length > 0 || !!runResult || loading || !!err;
 
   return (
     <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">커스텀 리포트</h1>
+          <h1 className="b2b-page-title">데이터 비서</h1>
         </div>
       </header>
 
@@ -191,7 +368,7 @@ export default function ReportPage() {
             )}
           </div>
           {savedOpen && (filteredSaved.length === 0 ? (
-            <div className="b2b-empty" style={{ padding: 16 }}>{savedFilter === "mine" ? "내가 저장한 리포트가 없습니다." : "저장된 리포트가 없습니다."}</div>
+            <div className="b2b-empty">{savedFilter === "mine" ? "내가 저장한 리포트가 없습니다." : "저장된 리포트가 없습니다."}</div>
           ) : (
             <div className="rp-saved-list">
               {filteredSaved.map((s) => (
@@ -211,43 +388,37 @@ export default function ReportPage() {
         </div>
       )}
 
-      {/* 이어지는 대화 표시 */}
-      {turns.length > 0 && (
-        <div className="rp-thread">
-          <span>이어지는 대화</span>
-          {turns.map((t, i) => <span key={i} className="rp-thread-q">{t.q}</span>)}
-        </div>
-      )}
-
-      <QuestionComposer disabled={loading} onCompose={setQ} />
-
+      {/* 질문 입력 — Enter = 질문, Shift+Enter = 줄바꿈 */}
       <div className="rp-ask">
         {qErr && <div className="b2b-error">{qErr}</div>}
         <textarea className="b2b-input rp-input" rows={2} value={q} aria-label="질문"
-          placeholder={turns.length ? "예: 도매만 빼줘 / 월별로 바꿔줘 / 상위 20개로" : "예: 이번 달 채널별 매출 상위 10개"}
+          placeholder="예: 10월 채널별 매출과 톡스토어가 빠진 이유"
           aria-invalid={qErr ? "true" : undefined}
-          onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(q); }} />
+          onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); ask(q); } }} />
         {qErr && <div className="b2b-field-error">{qErr}</div>}
         <div className="rp-ask-actions">
-          <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading}>
-            {loading ? "분석 중..." : turns.length ? "이어서 질문" : "조회"}
-            <span className="rp-kbd">Ctrl+Enter</span>
-          </button>
-          {turns.length > 0 && (
-            <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 질문 시작</button>
-          )}
+          <button className="b2b-btn-primary" onClick={() => ask(q)} disabled={loading}>{loading ? "조사 중..." : "질문하기"}</button>
+          {hasAnything && <button className="b2b-btn-secondary" onClick={newThread} disabled={loading}>새 질문</button>}
         </div>
       </div>
 
+      {/* 빈 상태 — 예시 질문 3개(정량·정성·혼합), 설명문 없음 */}
+      {!hasAnything && (
+        <div className="rp-examples">
+          {EXAMPLES.map((ex) => <button key={ex} type="button" className="b2b-btn-secondary" onClick={() => askFollowup(ex)}>{ex}</button>)}
+        </div>
+      )}
+
       {/* 저장 리포트 변수 입력 */}
       {varForm && (
-        <section className="b2b-card" style={{ marginBottom: 14 }}>
+        <section className="b2b-card rp-varform">
           <div className="b2b-card-head"><span className="b2b-card-title">▶ {varForm.rep.name}</span></div>
-          <div className="sm-row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div className="rp-varform-row">
             {Object.keys(varForm.values).map((v) => (
-              <label key={v} className="sm-col" style={{ gap: 3, fontSize: 13 }}>
-                <span style={{ fontWeight: 600, color: "var(--sm-dark)" }}>{v}</span>
-                <input className="b2b-input" style={{ width: 150 }} value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} aria-label={`${v} 값`} />
+              <label key={v} className="sm-col rp-varform-field">
+                <span className="b2b-field-label">{v}</span>
+                <input className="b2b-input" value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} aria-label={`${v} 값`} />
               </label>
             ))}
             <button className="b2b-btn-primary" disabled={loading} onClick={() => runSql(varForm.rep, fillVars(varForm.rep.sql, varForm.values))}>리포트 실행</button>
@@ -256,68 +427,46 @@ export default function ReportPage() {
         </section>
       )}
 
-      {err && <div className="b2b-error" style={{ marginBottom: 12 }}>{err}</div>}
-      {loading && <div className="b2b-loading">데이터를 조회하는 중...</div>}
-
-      {plan && (
-        <div className="sm-col" style={{ gap: 14 }}>
-          <div className="rp-understood">{plan.understood}</div>
-          {corrected > 0 && <div className="sm-faint" style={{ fontSize: 13, color: "var(--sm-info)", marginTop: -8 }}>SQL 오류를 자동 교정({qtyText(corrected, "회")})해 실행했습니다.</div>}
-          {plan.usage && (
-            <div className="sm-faint" style={{ fontSize: 13, marginTop: -8 }}>
-              토큰 입력 {qty(plan.usage.input + plan.usage.cacheRead + plan.usage.cacheWrite)}
-              {plan.usage.cacheRead > 0 ? ` (캐시적중 ${qty(plan.usage.cacheRead)})` : plan.usage.cacheWrite > 0 ? ` (캐시저장 ${qty(plan.usage.cacheWrite)})` : ""}
-              {" · 출력 "}{qty(plan.usage.output)}
+      {/* 대화 — 이전 답들이 위에 쌓인다 */}
+      {turns.length > 0 && (
+        <div className="rp-turns">
+          {turns.map((t, i) => (
+            <div key={i} className="rp-turn">
+              <div className="rp-turn-q">{t.q}</div>
+              <AnswerView turn={t} isAdmin={isAdmin} disabled={loading} onFollowup={askFollowup} onSave={openSave} onExport={exportXlsx} />
             </div>
-          )}
+          ))}
+        </div>
+      )}
 
-          {!err && (
-            <section className="b2b-card">
-              <div className="b2b-card-head">
-                <span className="b2b-card-title">결과 <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>{qtyText(rows.length, "행")}{rows.length >= 5000 ? " (화면은 5,000행까지 — 전체는 [엑셀 내려받기]로)" : ""}</span></span>
-                <div className="sm-row" style={{ gap: 6 }}>
-                  <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => { setSaveErr({}); setSaveName(plan.understood?.slice(0, 40) || ""); setSaveSql(plan.sql); setSaveOpen(true); }}>리포트 저장</button>
-                  <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={exportXlsx} disabled={!rows.length}>엑셀 내려받기</button>
-                </div>
-              </div>
-              {rows.length === 0 ? <div className="b2b-empty">조회 결과가 없습니다.</div> : (
-                <div className="b2b-table-wrap" style={{ maxHeight: 480, overflow: "auto" }}>
-                  <table className="b2b-table">
-                    <thead><tr>{cols.map((c) => <th key={c} className={typeof rows[0][c] === "number" ? "num" : ""}>{c}</th>)}</tr></thead>
-                    <tbody>
-                      {rows.slice(0, 500).map((r, i) => (
-                        <tr key={i}>{cols.map((c) => <td key={c} className={typeof r[c] === "number" ? "num b2b-money" : ""}>{fmt(r[c])}</td>)}</tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {rows.length > 500 && <div className="sm-faint" style={{ fontSize: 13, padding: 6 }}>표는 500행까지 표시, 전체는 엑셀로</div>}
-                </div>
-              )}
-              {plan.explanation && <p className="sm-faint" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>· {plan.explanation}</p>}
-              {plan.caveats?.length > 0 && <ul className="rp-caveats">{plan.caveats.map((c, i) => <li key={i}>{c}</li>)}</ul>}
-            </section>
-          )}
+      {err && (
+        <div className="b2b-error rp-error">
+          <div>답을 만들지 못했습니다. {err}</div>
+          <div>질문을 바꿔 다시 물어보세요</div>
+        </div>
+      )}
 
-          {plan.looker && plan.looker.mode !== "na" && plan.looker.sql && (
-            <section className="b2b-card">
-              <div className="b2b-card-head">
-                <span className="b2b-card-title">루커스튜디오용 SQL <span className="sm-faint" style={{ fontWeight: 400, fontSize: 13 }}>{plan.looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리"}</span></span>
-                <button className="b2b-btn-secondary" style={{ padding: "4px 10px" }} onClick={() => copy(plan.looker.sql || "", "looker")}>{copied === "looker" ? "복사됨 ✓" : "복사"}</button>
-              </div>
-              {plan.looker.note && <p className="sm-faint" style={{ fontSize: 13, marginBottom: 8 }}>{plan.looker.note}</p>}
-              <pre className="rp-sql">{plan.looker.sql}</pre>
-            </section>
-          )}
+      {/* 진행 표시 — 도구 호출마다 한 줄, 스피너 없음 */}
+      {loading && pendingQ && (
+        <div className="rp-turn">
+          <div className="rp-turn-q">{pendingQ}</div>
+          <section className="b2b-card rp-progress">
+            <div className="b2b-card-head"><span className="b2b-card-title">조사 중</span></div>
+            <ul className="rp-progress-list">
+              {progress.map((p, i) => <li key={i}>{p.label} · {sec(p.ms)}</li>)}
+              {progress.length === 0 && <li>질문을 읽는 중</li>}
+            </ul>
+          </section>
+        </div>
+      )}
+      {loading && !pendingQ && <div className="b2b-loading">리포트를 실행하는 중...</div>}
 
-          <div>
-            <button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => setShowSql((v) => !v)}>{showSql ? "▾ 생성된 조회 SQL 숨기기" : "▸ 생성된 조회 SQL 보기"}</button>
-            {showSql && (
-              <div className="sm-col" style={{ gap: 4, marginTop: 6 }}>
-                <div className="sm-row" style={{ justifyContent: "flex-end" }}><button className="b2b-link-btn" style={{ fontSize: 13 }} onClick={() => copy(plan.sql, "sql")}>{copied === "sql" ? "복사됨 ✓" : "SQL 복사"}</button></div>
-                <pre className="rp-sql">{plan.sql}</pre>
-              </div>
-            )}
-          </div>
+      {/* 저장 리포트 실행 결과 — 표 카드(기본 펼침) */}
+      {runResult && (
+        <div className="rp-turn">
+          <TableCard
+            table={{ title: runResult.rep.name, sql: runResult.sql, columns: runResult.columns, rows: runResult.rows, rowCount: runResult.rows.length, truncated: runResult.rows.length >= 5000, looker: runResult.rep.looker }}
+            question={runResult.rep.question || runResult.rep.name} defaultOpen onSave={openSave} onExport={exportXlsx} />
         </div>
       )}
 
@@ -327,21 +476,21 @@ export default function ReportPage() {
           <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
             <div className="b2b-card-head"><span className="b2b-card-title">리포트 저장</span></div>
             {(saveErr.name || saveErr.sql) && (
-              <div className="b2b-error" style={{ marginBottom: 10 }}>
+              <div className="b2b-error">
                 {saveErr.name && saveErr.sql ? <ul><li>{saveErr.name}</li><li>{saveErr.sql}</li></ul> : (saveErr.name || saveErr.sql)}
               </div>
             )}
-            <label className="sm-col" style={{ gap: 4, marginBottom: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>이름<span className="req">*</span></span>
+            <label className="sm-col rp-save-field">
+              <span className="b2b-field-label">이름<span className="req">*</span></span>
               <input className="b2b-input" value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="예: 월별 채널 매출" aria-invalid={saveErr.name ? "true" : undefined} />
               {saveErr.name && <span className="b2b-field-error">{saveErr.name}</span>}
             </label>
-            <label className="sm-col" style={{ gap: 4 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>SQL<span className="req">*</span> <span className="sm-faint" style={{ fontWeight: 400 }}>— <code>{"{{이름}}"}</code> = 실행 때 입력받는 값</span></span>
-              <textarea className="b2b-input" style={{ minHeight: 120, fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 13 }} value={saveSql} onChange={(e) => setSaveSql(e.target.value)} aria-invalid={saveErr.sql ? "true" : undefined} />
+            <label className="sm-col rp-save-field">
+              <span className="b2b-field-label">SQL<span className="req">*</span> <span className="opt"><code>{"{{이름}}"}</code> = 실행 때 입력받는 값</span></span>
+              <textarea className="b2b-input rp-save-sql" value={saveSql} onChange={(e) => setSaveSql(e.target.value)} aria-invalid={saveErr.sql ? "true" : undefined} />
               {saveErr.sql && <span className="b2b-field-error">{saveErr.sql}</span>}
             </label>
-            <div className="sm-row" style={{ justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+            <div className="rp-modal-foot">
               <button className="b2b-btn-secondary" onClick={() => setSaveOpen(false)}>그만두기</button>
               <button className="b2b-btn-primary" onClick={doSave}>리포트 저장</button>
             </div>

@@ -48,6 +48,37 @@ export default function AiSettingsPage() {
     setDraftAiSaving(false);
   }
 
+  // 데이터 비서(/report) — 켜기/끄기 + 월 비용 상한(USD) + 이달 사용량. GET/PUT /api/b2b/settings/assistant
+  const [asst, setAsst] = useState<{ off: boolean; capUsd: number; month: { ym: string; usd: number; questions: number } } | null>(null);
+  const [asstCap, setAsstCap] = useState("");
+  const [asstCapErr, setAsstCapErr] = useState("");
+  const [asstSaving, setAsstSaving] = useState(false);
+  useEffect(() => {
+    fetch("/api/b2b/settings/assistant", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (!j?.ok) return;
+      setAsst({ off: !!j.off, capUsd: Number(j.capUsd) || 0, month: { ym: j.month?.ym || "", usd: Number(j.month?.usd) || 0, questions: Number(j.month?.questions) || 0 } });
+      setAsstCap(String(Number(j.capUsd) || 0));
+    }).catch(() => {});
+  }, []);
+  async function saveAssistant(patch: { off?: boolean; capUsd?: number }) {
+    if (!asst) return;
+    setAsstSaving(true); setError("");
+    try {
+      const j = await (await fetch("/api/b2b/settings/assistant", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) })).json();
+      if (!j.ok) throw new Error(j.error || "데이터 비서 설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요");
+      setAsst((a) => a ? { ...a, off: patch.off ?? a.off, capUsd: patch.capUsd ?? a.capUsd } : a);
+      toast.success("데이터 비서 설정을 저장했습니다");
+    } catch (e) { setError(e instanceof Error ? e.message : "데이터 비서 설정을 저장하지 못했습니다. 새로고침한 뒤 다시 하세요"); }
+    setAsstSaving(false);
+  }
+  function saveAssistantCap() {
+    const n = Number(asstCap);
+    if (asstCap.trim() === "" || Number.isNaN(n)) { setAsstCapErr("월 상한을 입력하세요"); return; }
+    if (n < 0) { setAsstCapErr("0 이상"); return; }
+    setAsstCapErr("");
+    saveAssistant({ capUsd: n });
+  }
+
   // 프롬프트(회의록·CS)
   const [meetingPrompt, setMeetingPrompt] = useState("");
   const [meetingIsDefault, setMeetingIsDefault] = useState(true);
@@ -215,6 +246,31 @@ export default function AiSettingsPage() {
             <input type="checkbox" className="b2b-checkbox" checked={draftAi} disabled={draftAiSaving} onChange={(e) => toggleDraftAi(e.target.checked)} />
             AI 검토 포인트 붙이기
           </label>
+        )}
+      </section>
+
+      {/* 데이터 비서 — 켜기/끄기 · 월 비용 상한 · 이달 사용 */}
+      <section className="b2b-card">
+        <div className="b2b-card-head">
+          <h2 className="b2b-card-title">데이터 비서</h2>
+          {asst && <span className="b2b-field-hint">이달 사용 {qtyText(asst.month.questions, "건")} · 약 ${asst.month.usd.toFixed(2)}</span>}
+        </div>
+        {asst === null ? <div className="b2b-loading">불러오는 중...</div> : (
+          <div className="sm-col" style={{ gap: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+              <input type="checkbox" className="b2b-checkbox" checked={!asst.off} disabled={asstSaving} onChange={(e) => saveAssistant({ off: !e.target.checked })} />
+              데이터 비서 켜기
+            </label>
+            <div className="b2b-field" style={{ maxWidth: 320 }}>
+              <span className="b2b-field-label">월 상한(USD) <span className="opt">넘으면 빠른 모델로 답한다</span></span>
+              <div className="sm-row" style={{ gap: 8 }}>
+                <input className="b2b-input" type="number" min={0} step={1} value={asstCap} aria-label="월 상한(USD)" aria-invalid={asstCapErr ? "true" : undefined}
+                  onChange={(e) => { setAsstCap(e.target.value); if (asstCapErr) setAsstCapErr(""); }} />
+                <button className="b2b-btn-primary" onClick={saveAssistantCap} disabled={asstSaving}>{asstSaving ? "저장 중..." : "변경 저장"}</button>
+              </div>
+              {asstCapErr && <span className="b2b-field-error">{asstCapErr}</span>}
+            </div>
+          </div>
         )}
       </section>
 
