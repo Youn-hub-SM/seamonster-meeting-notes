@@ -2832,9 +2832,6 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-save-field { gap: 4px; margin-top: 10px; }
 .rp-save-sql { min-height: 120px; font-family: var(--sm-mono); font-size: var(--sm-fs-base); }
 .rp-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-  background: var(--sm-white); color: var(--sm-text-mid); cursor: pointer; white-space: nowrap; }
-/* 질문 조립 도우미 */
-  border-radius: var(--sm-radius); padding: 10px 14px; }
 .rp-sql { background: var(--sm-black); color: var(--sm-bg-subtle); border-radius: 8px; padding: 12px 14px; font-size: var(--sm-fs-base);
   line-height: var(--sm-lh-ui); overflow-x: auto; white-space: pre; font-family: var(--sm-mono); margin: 0; }
 @media (max-width: 768px) {
