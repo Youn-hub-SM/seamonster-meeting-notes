@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { runChatTurn, isPending139, PENDING_139, type ChatEvent } from "@/app/lib/chat-assistant";
+import { runChatTurn, isPending139, PENDING_139, CHAT_MODEL_KEYS, type ChatEvent, type ChatModelKey } from "@/app/lib/chat-assistant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +18,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   if (!UUID_RE.test(id)) return new Response(line({ type: "error", error: "대화 번호가 올바르지 않습니다." }), { status: 400, headers: NDJSON });
   let text = "";
-  try { text = String(((await req.json()) as { text?: string }).text || "").trim(); }
+  let modelKey: ChatModelKey | null = null;
+  try {
+    const body = (await req.json()) as { text?: string; model?: string };
+    text = String(body.text || "").trim();
+    modelKey = (CHAT_MODEL_KEYS as readonly string[]).includes(String(body.model || "")) ? (body.model as ChatModelKey) : null; // 그 턴의 모델 선택(화면)
+  }
   catch { return new Response(line({ type: "error", error: "요청 본문을 읽지 못했습니다." }), { status: 400, headers: NDJSON }); }
   if (!text) return new Response(line({ type: "error", error: "메시지를 입력하세요." }), { status: 400, headers: NDJSON });
   if (text.length > 4000) return new Response(line({ type: "error", error: "메시지가 너무 깁니다(4,000자 이내)." }), { status: 400, headers: NDJSON });
@@ -31,7 +36,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     async start(controller) {
       const send = (e: ChatEvent) => { try { controller.enqueue(enc.encode(line(e))); } catch { /* 클라이언트가 끊음 */ } };
       try {
-        await runChatTurn({ threadId: id, text, user, send });
+        await runChatTurn({ threadId: id, text, user, modelKey, send });
       } catch (e) {
         send({ type: "error", error: isPending139(e) ? PENDING_139 : extractErrorMsg(e, "비서가 답하지 못했습니다.") });
       } finally {

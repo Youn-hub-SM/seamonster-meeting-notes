@@ -164,6 +164,10 @@ export default function ReportPage() {
   const toast = useToast();
   const confirmModal = useConfirm();
   const [q, setQ] = useState("");
+  // 모델 선택(2026-10-19 대표: "쉬운 계산도 Fable 은 좀 늦다") — "" = AI 설정의 기본 모델. 브라우저에 기억(per-viewer 편의)
+  const [modelKey, setModelKey] = useState<"" | "fable" | "opus" | "sonnet">("");
+  useEffect(() => { try { const v = localStorage.getItem("rp_model"); if (v === "fable" || v === "opus" || v === "sonnet") setModelKey(v); } catch { /* 저장소 없음 */ } }, []);
+  function pickModel(v: string) { const k = v === "fable" || v === "opus" || v === "sonnet" ? v : ""; setModelKey(k); try { if (k) localStorage.setItem("rp_model", k); else localStorage.removeItem("rp_model"); } catch { /* noop */ } }
   const [qErr, setQErr] = useState("");
   const [loading, setLoading] = useState(false);       // 비서가 답하는 중(스트리밍)
   const [busy, setBusy] = useState(false);             // 대화 열기·저장 리포트 실행
@@ -265,7 +269,7 @@ export default function ReportPage() {
       }
       setItems((it) => [...it, { role: "user", text: tt }]);
       setQ("");
-      const r = await fetch(`/api/report/chat/threads/${id}/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: tt }) });
+      const r = await fetch(`/api/report/chat/threads/${id}/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: tt, model: modelKey || undefined }) });
       if (!r.ok || !r.body) {
         let msg = `서버 응답 ${r.status}`;
         try { const t = await r.text(); try { const j = JSON.parse(t); msg = j.error || msg; } catch { if (t) msg = t.slice(0, 200); } } catch { /* noop */ }
@@ -623,6 +627,12 @@ export default function ReportPage() {
           <div className="rp-ask-actions">
             <button className="b2b-btn-primary" onClick={() => send(q)} disabled={loading || busy}>{loading ? "답하는 중..." : "보내기"}</button>
             <button className="b2b-btn-secondary" onClick={newThread} disabled={loading || !hasAnything}>새 대화</button>
+            <select className="b2b-select rp-model" value={modelKey} onChange={(e) => pickModel(e.target.value)} disabled={loading} aria-label="AI 모델" title="이 대화에 쓸 모델. 쉬운 조회는 빠른 모델이 낫습니다">
+              <option value="">모델: 기본(설정)</option>
+              <option value="fable">Fable 5.1 · 정밀</option>
+              <option value="opus">Opus 5.5 · 빠름</option>
+              <option value="sonnet">Sonnet 5.5 · 가장 빠름</option>
+            </select>
           </div>
         </div>
         {qErr && <div className="b2b-field-error">{qErr}</div>}

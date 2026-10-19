@@ -2788,6 +2788,7 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-ask .b2b-btn-primary { white-space: nowrap; }
 .rp-ask-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .rp-ask-actions button { white-space: nowrap; justify-content: center; }  /* 두 버튼 동일 크기(넓은 쪽에 맞춤) */
+.rp-ask-actions .rp-model { width: 100%; font-size: var(--sm-fs-xs); padding-top: 4px; padding-bottom: 4px; }  /* 모델 선택(2026-10-19) — 버튼 아래 한 줄 */
 
 /* 데이터 비서(2026-10-19 기획 1차) — 답 틀: 답 → 근거(표·인용 접힘 카드) → 사실/추정 → 한계 → 이어서 물어볼 것. 색 없음, 경계 카드는 선만(2차 결정) */
 .rp-examples { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 18px; }

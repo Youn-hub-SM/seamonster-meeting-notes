@@ -258,7 +258,11 @@ async function saveMessage(threadId: string, seq: number, role: "user" | "assist
 }
 
 // ── 한 턴 ──
-export async function runChatTurn(p: { threadId: string; text: string; user: string; send: (e: ChatEvent) => void }): Promise<void> {
+// 화면에서 고를 수 있는 모델(2026-10-19 대표: "쉬운 계산도 Fable 은 좀 늦다") — 그 턴에만 적용. 월 상한을 넘으면 선택과 무관하게 Opus 낮음.
+export const CHAT_MODEL_KEYS = ["fable", "opus", "sonnet"] as const;
+export type ChatModelKey = (typeof CHAT_MODEL_KEYS)[number];
+
+export async function runChatTurn(p: { threadId: string; text: string; user: string; modelKey?: ChatModelKey | null; send: (e: ChatEvent) => void }): Promise<void> {
   const startedAt = Date.now();
   const deadlineAt = startedAt + CHAT_DEADLINE_MS;
   const text = (p.text || "").trim();
@@ -269,7 +273,8 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (settings.off) throw new AssistantOffError("AI 데이터 비서가 꺼져 있습니다. 관리자 > 설정 > AI 설정에서 켜세요.");
   if (!thread) throw new AiResponseError("대화를 찾을 수 없습니다. 새 대화를 시작하세요.");
   const downgraded = month.usd >= settings.capUsd;
-  const model = downgraded ? MODELS.opus : featureModel;
+  const picked = p.modelKey && (CHAT_MODEL_KEYS as readonly string[]).includes(p.modelKey) ? MODELS[p.modelKey] : null;
+  const model = downgraded ? MODELS.opus : (picked || featureModel);
   const auxModel = MODELS.opus;
   const effort = downgraded ? "low" : "medium";
 
