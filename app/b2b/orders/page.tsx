@@ -1358,11 +1358,11 @@ export default function OrdersListPage() {
                   </th>
                   <th style={{ width: 52 }}></th>
                   <th style={{ width: "17%" }}>업체</th>
-                  <th style={{ width: "23%" }}>품목</th>
+                  <th style={{ width: "22%" }}>품목</th>
                   <th className="b2b-col-date" style={{ width: 84 }}>발주일</th>
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-date">생산일</th>}
-                  <th className="b2b-col-date" style={{ width: 104 }}>발송일</th>
-                  <th className="num" style={{ width: 84 }}>합계(원)</th>
+                  <th className="b2b-col-date" style={{ width: 100 }}>발송일</th>
+                  <th className="num" style={{ width: 100 }}>합계(원)</th>{/* 2026-10-20: 84→100 — 8~9자리 금액("18,232,000")이 잘리지 않게. 발송일 −4·품목 −1% 로 표 폭 유지 */}
                   {SHOW_ORDER_PRODUCTION && <th className="b2b-col-status">생산</th>}
                   <th className="b2b-col-status">발송</th>
                   <th className="b2b-col-status">입금</th>
