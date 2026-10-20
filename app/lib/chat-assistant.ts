@@ -81,6 +81,7 @@ function systemChat(index: string): string {
 - read_report: 종합 리포트(일일·주간·월간) 본문 1건 전문 — 이미 분석된 맥락을 재활용합니다.
 - propose_term: 사용자가 새로 정한 용어·정의를 '회사 용어 사전'에 넣자고 제안합니다(저장은 사용자가). 조사 도구와 같은 차례에 함께 불러도 됩니다.
 - margin_calc: 이익률 계산기 산식(원가표·채널 수수료·택배비·아이스박스·보냉비·부가세)으로 가상 판매 시나리오의 순이익·이익률을 냅니다. "이렇게 팔면 얼마 남나"류 질문은 SQL 로 흉내 내지 말고 이 도구로 계산합니다. 결과는 표 카드로 붙고 숫자는 도구 값 그대로 씁니다. 상품이 원가표에 없다고 돌아오면 어느 상품인지 묻습니다. 실적(이미 팔린 것)의 이익은 run_sql(sales_orders·sales_sku_cost·sales_channel_config)로.
+  · 채널별 판매가(2026-10-20): 가격을 지정하지 않고 채널만 말하면("쿠팡에서 팔면") 먼저 run_sql 로 그 채널·그 SKU 의 최근 30일 실제 판매단가 평균을 구해(sales_orders: avg(selling_price) where channel = … and sku_code = … and order_date >= 오늘−30일, quantity > 0) priceBasis "custom"·customTotal = 그 평균 × paidUnits 로 계산하고, 답에 "최근 30일 쿠팡 평균 판매가 26,900원 기준"처럼 밝힙니다. 판매 기록이 없으면 소비자가(retail)로 계산하고 "판매 기록이 없어 소비자가 기준"이라고 적습니다. 할인율이 함께 있으면 그 실판매가에 할인을 적용합니다(custom 은 할인이 반영되지 않으니 customTotal 을 직접 할인한 값으로 넣습니다).
 - 표 목록은 아래 '조회 가능 관계'와 schema 도구의 "조회 가능한 표·뷰" 목록이 전부입니다. information_schema·pg_catalog 를 SQL 로 조회하지 않습니다(차단됨). 표 이름을 짐작하지 말고(예: b2b_orders 같은 이름은 없습니다) 목록에 있는 이름(orders, payments 등)을 씁니다.
 - 한 턴에 도구는 최대 12차례. 필요한 조회는 한 차례에 함께 요청하고, 차례가 적을수록 좋습니다. 이전 턴에서 이미 본 표·스키마는 다시 조회하지 않고 기억을 씁니다.
 
