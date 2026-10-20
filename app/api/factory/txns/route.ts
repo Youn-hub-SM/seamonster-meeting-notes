@@ -28,6 +28,21 @@ type TxnRow = {
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
+
+    // ?product_id= — 재고 목록의 품목 히스토리 창: 그 품목의 기록 전부(취소 포함), 최신순.
+    //  전후 재고는 화면이 누적합으로 계산하므로 한도(LIMIT)에 닿으면 capped 로 알린다.
+    const productId = sp.get("product_id") || "";
+    if (productId) {
+      if (!UUID_RE.test(productId)) return NextResponse.json({ ok: false, error: "품목이 올바르지 않습니다." }, { status: 400 });
+      const { data, error } = await factoryDb().from("stock_txns")
+        .select("id, batch_id, product_id, txn_date, type, mfg_date, box_kg, boxes, target, partner, memo, created_by, created_at, cancelled_at, cancelled_by")
+        .eq("product_id", productId)
+        .order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(LIMIT);
+      if (error) throw error;
+      const rows = ((data || []) as TxnRow[]).map((t) => ({ ...t, box_kg: Number(t.box_kg) }));
+      return NextResponse.json({ ok: true, rows, capped: rows.length >= LIMIT });
+    }
+
     const to = validDate(sp.get("to") || "") ? sp.get("to")! : kstToday();
     const from = validDate(sp.get("from") || "") ? sp.get("from")! : to;
     // KST 하루 경계 → UTC 시각

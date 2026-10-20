@@ -62,7 +62,16 @@ export interface StockRow extends FactoryProduct {
   last_in_date: string | null;  // 최신 입고일
   oldest_in_date: string | null; // 최고령 입고일 = 남은 재고 중 가장 오래된 입고일
   lots: StockLot[];             // 잔량 있는 로트 먼저, 오래된 순
+  // 기간(재고 목록 기간 탭) — 거래일이 기간 안인 입고·출고(취소 제외). 조정은 넣지 않는다(씨몬스터 재고 목록과 같은 뜻).
+  period_in: number; period_in_kg: number;
+  period_out: number; period_out_kg: number;
+  daily_out: number;            // 하루 출고(박스) = 기간 출고 ÷ 기간 일수
+  depletion_days: number | null; // 예상소진(일) = 현재 수량 ÷ 하루 출고. 기간 출고가 없으면 null
+  value: number | null;         // 재고자산(원) = 남은 kg × kg당 제품원가. 원가 미입력이면 null
 }
+
+// 재고 목록 응답의 기간 정보
+export interface StockMeta { from: string; to: string; periodDays: number }
 
 export interface HistEvent {
   key: string;

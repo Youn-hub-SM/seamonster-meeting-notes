@@ -116,7 +116,7 @@ export default function FactoryProductsPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table is-responsive">
             <thead><tr>
-              <th>SKU</th><th>품목</th><th>원산지</th><th className="num">제품원가</th><th className="num">판매가</th><th>재고관리</th><th>비고</th><th></th>
+              <th>SKU</th><th>품목</th><th>원산지</th><th className="num">제품원가(kg당)</th><th className="num">판매가</th><th>재고관리</th><th>비고</th><th></th>
             </tr></thead>
             <tbody>
               {list.map((p) => (
@@ -281,7 +281,7 @@ function ProductModal({ product, onClose, onSaved }: { product: FactoryProduct |
           </label>
           <div className="b2b-field-row">
             <label className="b2b-field">
-              <span className="b2b-field-label">제품원가(원)</span>
+              <span className="b2b-field-label">제품원가(원/kg)</span>
               <input className="b2b-input" type="number" inputMode="numeric" min={0} value={f.cost} onChange={(e) => set({ cost: e.target.value })} />
             </label>
             <label className="b2b-field">

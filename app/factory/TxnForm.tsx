@@ -4,15 +4,20 @@
 //  입고: 품목마다 [제조일자 · 박스 중량 · 박스 수] 줄(여러 줄 가능)
 //  출고: 품목의 로트(제조일자 × 중량)마다 박스 수 — 오래된 입고부터 보인다
 //  조정: 로트마다 실사 박스 수(비우면 그대로) + 새 로트. 서버가 현재 수량과의 차이만 기록한다.
+//  새 품목(입고만, 2026-10-20): 검색해서 없으면 '+ 새 품목으로 입고' → 품목명·원산지만 적는다.
+//   품목은 [입고 저장] 때 /api/factory/products/quick 으로 먼저 등록하고(같은 이름·원산지면 기존 품목) 그 id 로 입고한다.
+//   창을 닫으면 아무것도 남지 않는다.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { boxStr, kgStr, kgNum, lotLabel, type StockRow, type TxnType } from "@/app/lib/factory";
+import { ORIGINS, boxStr, kgStr, kgNum, lotLabel, type StockRow, type TxnType } from "@/app/lib/factory";
 import { today } from "./util";
 
 type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; qty: string; have: number; in_date: string | null };
-type Block = { key: string; product_id: string; lines: Line[] };
+// draft = 아직 등록 전인 새 품목(입고 저장 때 등록). product_id 는 그때까지 비어 있다.
+type Block = { key: string; product_id: string; lines: Line[]; draft?: { name: string; origin: string } };
+const normName = (s: string) => s.trim().replace(/\s+/g, " ");
 
 let seq = 0;
 const k = () => `k${++seq}`;
@@ -59,7 +64,8 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
     if (t === type) return;
     setType(t); setError(""); setBatch(newBatch());
     if (t === "조정") setDate(today()); // 조정은 오늘 실사 기준
-    setBlocks((bs) => bs.map((b) => { const p = byId.get(b.product_id); return p ? { ...b, lines: makeLines(p, t) } : b; }));
+    // 새 품목은 입고에서만 — 다른 유형으로 바꾸면 뺀다(재고가 없으니 출고·조정할 게 없다)
+    setBlocks((bs) => bs.filter((b) => t === "입고" || !b.draft).map((b) => { const p = byId.get(b.product_id); return p ? { ...b, lines: makeLines(p, t) } : b; }));
   }
 
   const matches = useMemo(() => {
@@ -74,15 +80,40 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
   }, [rows, search, blocks, type]);
   useEffect(() => { suggestRef.current?.querySelector<HTMLElement>(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);
 
+  // 입고에서 검색어와 이름이 똑같은 품목이 없으면 '새 품목으로 입고'를 목록 끝에 띄운다(이미 추가한 새 품목 이름도 제외)
+  const newName = normName(search);
+  const canCreate = type === "입고" && !!newName
+    && !rows.some((p) => normName(p.name).toLowerCase() === newName.toLowerCase())
+    && !blocks.some((b) => b.draft && normName(b.draft.name).toLowerCase() === newName.toLowerCase());
+  const optCount = matches.length + (canCreate ? 1 : 0);
+
+  function addDraft() {
+    if (!canCreate) return;
+    setBlocks((bs) => [...bs, {
+      key: k(), product_id: "", draft: { name: newName, origin: "" },
+      lines: [{ key: k(), lot: false, mfg_date: today(), box_kg: "", qty: "", have: 0, in_date: null }],
+    }]);
+    setSearch(""); setActive(-1); setError("");
+  }
+  const setDraft = (bk: string, patch: Partial<{ name: string; origin: string }>) =>
+    setBlocks((bs) => bs.map((b) => (b.key === bk && b.draft ? { ...b, draft: { ...b.draft, ...patch } } : b)));
+  const blockName = (b: Block) => (b.draft ? normName(b.draft.name) || "새 품목" : byId.get(b.product_id)?.name || "품목");
+
   function addProduct(p: StockRow) {
     setBlocks((bs) => [...bs, { key: k(), product_id: p.id, lines: makeLines(p, type) }]);
     setSearch(""); setActive(-1); setError("");
   }
   function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!matches.length) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, matches.length - 1)); }
+    if (!optCount) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, optCount - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-    else if (e.key === "Enter") { e.preventDefault(); const m = active >= 0 ? matches[active] : matches.length === 1 ? matches[0] : null; if (m) addProduct(m); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      // 활성 줄이 목록 끝(새 품목)이거나, 일치 품목 없이 새 품목만 있으면 새 품목
+      if (canCreate && (active === matches.length || (active < 0 && matches.length === 0))) { addDraft(); return; }
+      const m = active >= 0 ? matches[active] : matches.length === 1 ? matches[0] : null;
+      if (m) addProduct(m);
+    }
   }
 
   const setLine = (bk: string, lk: string, patch: Partial<Line>) =>
@@ -118,8 +149,11 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
   async function save() {
     setError("");
     if (filled.length === 0) { setError(type === "조정" ? "실사 박스 수를 입력하세요." : "박스 수를 입력하세요."); return; }
+    for (const b of blocks) {
+      if (b.draft && !normName(b.draft.name)) { setError("새 품목의 품목명을 입력하세요."); return; }
+    }
     for (const { b, l } of filled) {
-      const name = byId.get(b.product_id)?.name || "품목";
+      const name = blockName(b);
       const n = Number(l.qty);
       if (!Number.isInteger(n) || n < (type === "조정" ? 0 : 1)) { setError(`${name}: 박스 수는 ${type === "조정" ? "0" : "1"} 이상 정수로 입력하세요.`); return; }
       if (!(Number(l.box_kg) > 0)) { setError(`${name}: 박스 중량(kg)을 입력하세요.`); return; }
@@ -128,8 +162,8 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
     // 같은 로트를 두 줄에 적으면(입고 새 줄끼리·조정 새 로트가 기존 로트와 겹침) 합계가 헷갈린다 — 막는다
     const seen = new Set<string>();
     for (const { b, l } of filled) {
-      const key = `${b.product_id}|${l.mfg_date}|${kgNum(Number(l.box_kg))}`;
-      if (seen.has(key)) { setError(`${byId.get(b.product_id)?.name || "품목"}: 같은 제조일자·중량이 두 줄에 있습니다 — 한 줄로 합치세요.`); return; }
+      const key = `${b.product_id || b.key}|${l.mfg_date}|${kgNum(Number(l.box_kg))}`;
+      if (seen.has(key)) { setError(`${blockName(b)}: 같은 제조일자·중량이 두 줄에 있습니다 — 한 줄로 합치세요.`); return; }
       seen.add(key);
     }
     if (type === "조정") {
@@ -143,8 +177,20 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
     }
     setSaving(true);
     try {
+      // 새 품목 먼저 등록 — 박스 수를 적은 새 품목만. 같은 이름·원산지가 이미 있으면 서버가 기존 품목을 돌려준다(다시 눌러도 한 번만 생김)
+      const drafts = [...new Set(filled.filter(({ b }) => b.draft).map(({ b }) => b))];
+      const idOf = new Map<string, string>();
+      if (drafts.length) {
+        const r = await fetch("/api/factory/products/quick", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: drafts.map((b) => ({ name: b.draft!.name, origin: b.draft!.origin })) }),
+        });
+        const pj = await r.json().catch(() => ({}));
+        if (!r.ok || !pj.ok) throw new Error(pj.error || "새 품목 등록 실패");
+        drafts.forEach((b, i) => idOf.set(b.key, pj.products[i].id));
+      }
       const lines = filled.map(({ b, l }) => ({
-        product_id: b.product_id, mfg_date: l.mfg_date || null, box_kg: Number(l.box_kg),
+        product_id: b.draft ? idOf.get(b.key) : b.product_id, mfg_date: l.mfg_date || null, box_kg: Number(l.box_kg),
         ...(type === "조정" ? { target: Number(l.qty) } : { boxes: Number(l.qty) }),
       }));
       const res = await fetch("/api/factory/txns", {
@@ -153,7 +199,8 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      onSaved(j.duplicate ? "이미 저장된 입력입니다." : `${type} ${j.count}건을 저장했습니다.`);
+      const created = drafts.length ? ` (새 품목 ${drafts.length}개 포함)` : "";
+      onSaved(j.duplicate ? "이미 저장된 입력입니다." : `${type} ${j.count}건을 저장했습니다.${created}`);
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
   }
@@ -192,8 +239,8 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
           <div className="fac-search-wrap">
             <input className="b2b-input fac-txn-search" value={search} autoComplete="off"
               onChange={(e) => { setSearch(e.target.value); setActive(-1); }} onKeyDown={onSearchKey}
-              placeholder="품목 추가 — 이름·SKU·초성" />
-            {matches.length > 0 && (
+              placeholder={type === "입고" ? "품목 추가 — 이름·SKU·초성 (없으면 새 품목)" : "품목 추가 — 이름·SKU·초성"} />
+            {optCount > 0 && (
               <div className="fac-suggest" ref={suggestRef}>
                 {matches.map((p, i) => (
                   <button key={p.id} type="button" className={`fac-suggest-item ${i === active ? "is-active" : ""}`} onClick={() => addProduct(p)} onMouseEnter={() => setActive(i)}>
@@ -201,26 +248,48 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                     <span className="fac-sub">{boxStr(p.boxes)}</span>
                   </button>
                 ))}
+                {canCreate && (
+                  <button type="button" className={`fac-suggest-item fac-suggest-new ${active === matches.length ? "is-active" : ""}`}
+                    onClick={addDraft} onMouseEnter={() => setActive(matches.length)}>
+                    <span>+ <strong>{newName}</strong> 새 품목으로 입고</span>
+                    <span className="fac-sub">저장할 때 등록</span>
+                  </button>
+                )}
               </div>
             )}
-            {search.trim() && matches.length === 0 && (
+            {search.trim() && optCount === 0 && (
               <div className="fac-suggest"><div className="fac-suggest-none">{type === "출고" ? "재고 있는 품목 중 일치하는 것이 없습니다." : "일치하는 품목이 없습니다."}</div></div>
             )}
           </div>
 
           {blocks.length === 0 && <div className="b2b-empty">추가한 품목이 없습니다.</div>}
 
+          <datalist id="fac-origins">{ORIGINS.map((o) => <option key={o} value={o} />)}</datalist>
           {blocks.map((b) => {
             const p = byId.get(b.product_id);
-            if (!p) return null;
-            const kgs = knownKgs(p);
+            if (!p && !b.draft) return null;
+            const kgs = p ? knownKgs(p) : [];
             return (
-              <section key={b.key} className="fac-blk">
+              <section key={b.key} className={`fac-blk ${b.draft ? "is-new" : ""}`}>
                 <div className="fac-blk-head">
-                  <div className="fac-blk-name">
-                    <strong>{p.name}</strong>
-                    <span className="fac-sub">{[p.sku, p.origin, `재고 ${boxStr(p.boxes)}`].filter(Boolean).join(" · ")}</span>
-                  </div>
+                  {b.draft ? (
+                    <div className="fac-blk-new">
+                      <span className="b2b-status-pill fac-new-pill">새 품목</span>
+                      <label className="fac-f fac-f-name">
+                        <span>품목명</span>
+                        <input className="b2b-input" value={b.draft.name} onChange={(e) => setDraft(b.key, { name: e.target.value })} />
+                      </label>
+                      <label className="fac-f">
+                        <span>원산지</span>
+                        <input className="b2b-input" list="fac-origins" value={b.draft.origin} placeholder="선택" onChange={(e) => setDraft(b.key, { origin: e.target.value })} />
+                      </label>
+                    </div>
+                  ) : p && (
+                    <div className="fac-blk-name">
+                      <strong>{p.name}</strong>
+                      <span className="fac-sub">{[p.sku, p.origin, `재고 ${boxStr(p.boxes)}`].filter(Boolean).join(" · ")}</span>
+                    </div>
+                  )}
                   <button type="button" className="b2b-link-btn fac-x" onClick={() => removeBlock(b.key)} aria-label="품목 빼기">✕</button>
                 </div>
 

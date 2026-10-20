@@ -93,6 +93,18 @@
 .fac-row-detail > td { background: var(--sm-bg-subtle); padding: 12px 16px; }
 .fac-stock-table td.num .fac-sub { white-space: nowrap; }
 
+/* 재고 목록 — 요약 카드·정렬 표시·품목명(히스토리)·행 버튼·안내줄 (씨몬스터 재고 목록 '전체' 틀) */
+.fac-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 16px; }
+.fac-sort-mark { margin-left: 3px; font-size: 12px; color: var(--sm-text-light); }
+.fac-sort-mark.is-on { color: var(--sm-orange); }
+.fac-name-btn { background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.fac-name-btn:hover strong { color: var(--sm-orange); text-decoration: underline; }
+.fac-rec-btn { padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+.fac-foot-note { margin: 10px 0 0; line-height: 1.6; }
+.fac-hist-modal { max-width: 940px; }
+.fac-hist-scroll { max-height: 440px; overflow: auto; flex-shrink: 0; }   /* 모달 flex 본문에서 눌리지 않게 */
+.fac-hist-memo { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 로트 목록 + 가격·버튼 — PC 펼침·모바일 펼침 공용 */
 .fac-detail { display: flex; flex-direction: column; gap: 10px; }
 .fac-lots { display: flex; flex-direction: column; gap: 2px; }
@@ -153,6 +165,12 @@
   border: 1px solid var(--sm-border); background: #fff; color: var(--sm-text-mid);
 }
 .fac-chip.is-on { border-color: var(--fac-blue); background: var(--sm-orange-light); color: var(--fac-blue); }
+/* 입고 창 — 새 품목(저장할 때 등록) */
+.fac-suggest-new { border-top: 1px dashed var(--sm-border); margin-top: 2px; color: var(--fac-blue); }
+.fac-blk.is-new { border-color: var(--sm-orange-border); background: var(--sm-orange-light); }
+.fac-blk-new { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.fac-new-pill { align-self: center; background: var(--sm-info-bg); color: var(--sm-info); }
+.fac-f-name .b2b-input { width: 240px; }
 .fac-txn-total { align-self: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* ── 히스토리 ───────────────────────────────────────────────────── */
@@ -208,7 +226,9 @@
   .fac-item-facts b { font-size: 15px; font-weight: 700; color: var(--sm-black); margin-left: 4px; }
   .fac-lot { grid-template-columns: 1fr auto; }
   .fac-lot > .fac-sub { grid-row: 2; }
-  .fac-detail-btns { width: 100%; display: grid; grid-template-columns: repeat(4, 1fr); }
+  .fac-detail-btns { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .fac-cards { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .fac-toolbar > .sm-tabs { flex: 1 1 100%; overflow-x: auto; flex-wrap: nowrap; }
   .fac-detail-btns > button { padding-left: 0; padding-right: 0; }
 
   .fac-actbar {
@@ -237,6 +257,8 @@
   .fac-line:not(.is-lot) { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; }
   .fac-f .b2b-input, .fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 100%; min-width: 0; }
   .fac-kg-chips { grid-column: 1 / -1; }
+  .fac-blk-new { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .fac-blk-new .fac-new-pill { grid-column: 1 / -1; justify-self: start; }
   .fac-txn-types { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
   .fac-txn-types .sm-tab { justify-content: center; }
 }
