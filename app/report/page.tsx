@@ -41,6 +41,8 @@ function fmt(v: unknown): string {
   return String(v);
 }
 const sec = (ms: number) => `${(ms / 1000).toFixed(1)}초`;
+// 연도·월·일 열은 쉼표 없이(2,025 → 2025) — 열 이름으로 판단
+const isYearCol = (c: string) => /(연도|년도|year|^년$|^월$|^일$|month|^day$)/i.test(c.trim());
 const usd = (v: number) => `$${v.toFixed(2)}`;
 function esc(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function extractVars(sql: string): string[] {
@@ -131,7 +133,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
                 <thead><tr>{cols.map((c) => <th key={c} className={isNum(c) ? "num" : ""}>{c}</th>)}</tr></thead>
                 <tbody>
                   {rows.slice(0, TABLE_ROW_LIMIT).map((r, i) => (
-                    <tr key={i}>{cols.map((c) => <td key={c} className={typeof r[c] === "number" ? "num b2b-money" : ""}>{fmt(r[c])}</td>)}</tr>
+                    <tr key={i}>{cols.map((c) => <td key={c} className={typeof r[c] === "number" ? "num b2b-money" : ""}>{isYearCol(c) && typeof r[c] === "number" ? String(r[c]) : fmt(r[c])}</td>)}</tr>
                   ))}
                 </tbody>
               </table>
