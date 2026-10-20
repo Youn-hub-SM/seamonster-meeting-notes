@@ -1,72 +1,14 @@
-"use client";
+import type { Metadata } from "next";
+import FactoryShell from "./FactoryShell";
 
-// 파도소리(제조사) 전용 셸 — 씨몬스터 셸(AppShell)은 /factory 하위에서 빠지고(AppShell 참조)
-// 이 레이아웃이 별도 사이트처럼 파도소리 브랜드(파랑·흰 배경)로 감싼다.
-// 로그인 화면(/factory/login)은 셸 없이 렌더한다.
-
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import Icon from "@/app/components/Icon";
-import "./factory.css";
-
-const NAV = [
-  { href: "/factory", label: "재고", icon: "box" as const, exact: true },
-  { href: "/factory/history", label: "히스토리", icon: "receipt" as const },
-];
+// 파도소리 구역의 문서 머리(탭 제목·설명·아이콘) — 루트(app/layout.tsx)의 씨몬스터 이름·아이콘을 덮어쓴다.
+//  대표 규칙(2026-10-20): 파도소리 화면만 봐서는 씨몬스터 업무도우미를 전혀 알 수 없어야 한다.
+//  아이콘은 이 폴더의 icon.png·apple-icon.png(파일 규칙)가 쓰인다.
+export const metadata: Metadata = {
+  title: "파도소리 재고관리",
+  description: "파도소리 재고관리",
+};
 
 export default function FactoryLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname() || "/factory";
-  const [role, setRole] = useState<string>("factory");
-
-  useEffect(() => { document.title = "파도소리 재고관리"; }, []);
-  useEffect(() => {
-    if (pathname === "/factory/login") return;
-    fetch("/api/b2b/auth", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (j?.ok) setRole(j.role || "internal"); })
-      .catch(() => {});
-  }, [pathname]);
-
-  if (pathname === "/factory/login") return <>{children}</>;
-
-  async function logout() {
-    await fetch("/api/b2b/auth", { method: "DELETE" });
-    window.location.href = "/factory/login";
-  }
-
-  return (
-    <div className="fac-theme fac-shell">
-      <aside className="fac-sb">
-        <Link href="/factory" className="fac-brand">
-          파도소리
-          <small>재고관리</small>
-        </Link>
-        <nav style={{ display: "flex", flexDirection: "inherit", gap: "inherit" } as React.CSSProperties}>
-          {NAV.map((m) => {
-            const active = m.exact ? pathname === m.href : pathname.startsWith(m.href);
-            return (
-              <Link key={m.href} href={m.href} className={`fac-nav-item ${active ? "is-active" : ""}`}>
-                <Icon name={m.icon} />
-                {m.label}
-              </Link>
-            );
-          })}
-          {/* 상품마스터는 관리자 전용 — /factory 에 들어올 수 있는 internal = 관리자뿐 */}
-          {role === "internal" && (
-            <Link href="/factory/products" className={`fac-nav-item ${pathname.startsWith("/factory/products") ? "is-active" : ""}`}>
-              <Icon name="fish" />
-              상품마스터
-            </Link>
-          )}
-        </nav>
-        {/* 사용자 이름·알림 설정·씨몬스터 도구로 링크는 뺐다(2026-10-20 대표 지시) — 로그아웃만.
-            알림 설정 화면(/factory/settings)은 주소로만 연다. */}
-        <div className="fac-sb-foot">
-          <button type="button" onClick={logout}>로그아웃</button>
-        </div>
-      </aside>
-      <main className="fac-main">{children}</main>
-    </div>
-  );
+  return <FactoryShell>{children}</FactoryShell>;
 }
