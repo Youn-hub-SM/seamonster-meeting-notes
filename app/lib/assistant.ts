@@ -12,7 +12,7 @@ import { getFeatureModel, effortParams, readText, AiResponseError } from "./ai-m
 import { MODELS } from "./config";
 import { validateReportSql } from "./report-ai";
 import { BLOCKED_NOTE } from "./report-schema";
-import { loadLiveSchema, schemaIndexText, describeTables } from "./report-live-schema";
+import { loadLiveSchema, schemaIndexText, describeTables, liveSchemaStatus } from "./report-live-schema";
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
 
@@ -245,6 +245,9 @@ async function toolSchema(ctx: ToolCtx, input: Record<string, unknown>): Promise
   const parts = [...found];
   if (missing.length) parts.push(`없는 이름: ${missing.join(", ")} — 조회 가능한 표·뷰: ${all.join(", ")}`);
   if (!live.fromDb) parts.push("(DB 스키마 조회가 실패해 손 설명으로 답했습니다 — 컬럼 자료형은 생략됨)");
+  // 진단(2026-10-20): 목록이 비는 사고가 있어 출처·행 수·마지막 오류를 답에 남긴다 — 관리자가 대화에서 바로 본다
+  const st = liveSchemaStatus();
+  parts.push(`[스키마 출처] ${live.fromDb ? "DB 주석" : "손 설명"} · 표·뷰 ${live.relations.size}개 · 컬럼 행 ${st.lastRows}${st.lastError ? ` · 마지막 오류: ${st.lastError}` : ""}`);
   return parts.join("\n\n");
 }
 
