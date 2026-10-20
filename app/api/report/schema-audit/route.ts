@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg, supabaseAdmin } from "@/app/lib/supabase";
 import { verifySession, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
-import { loadLiveSchema, auditPiiColumns } from "@/app/lib/report-live-schema";
+import { loadLiveSchema, auditPiiColumns, liveSchemaStatus } from "@/app/lib/report-live-schema";
 import { BLOCKED_RELATIONS } from "@/app/lib/report-schema";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const noComment = rels.filter((r) => !r.comment && !r.fallback).map((r) => r.name).sort();
     const jsonbNoComment = rels.flatMap((r) => r.columns.filter((c) => c.type === "jsonb" && !c.comment && !(r.fallback && r.fallback.includes(c.name))).map((c) => `${r.name}.${c.name}`)).sort();
     return NextResponse.json({
-      ok: true, fromDb: live.fromDb, loadedAt: new Date(live.loadedAt).toISOString(),
+      ok: true, fromDb: live.fromDb, loadedAt: new Date(live.loadedAt).toISOString(), status: liveSchemaStatus(),
       visible: rels.length, blocked: BLOCKED_RELATIONS,
       noComment, jsonbNoComment, pii: auditPiiColumns(live),
     });

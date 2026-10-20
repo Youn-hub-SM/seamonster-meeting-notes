@@ -31,17 +31,24 @@ function parseFallback(): Map<string, FallbackEntry> {
 const FALLBACK = parseFallback();
 
 // 접두 '/*schema*/' = run_report(141)가 information_schema 참조를 허용하는 유일한 표시(서버 고정문)
-const SCHEMA_SQL = `/*schema*/ select c.table_name as t, c.column_name as col, c.data_type as typ, c.ordinal_position as pos,
-  case when tb.table_type = 'VIEW' then 'VIEW' else 'TABLE' end as kind,
-  obj_description(('public.' || quote_ident(c.table_name))::regclass, 'pg_class') as tcomment,
-  col_description(('public.' || quote_ident(c.table_name))::regclass, c.ordinal_position) as ccomment
-from information_schema.columns c
-join information_schema.tables tb on tb.table_schema = c.table_schema and tb.table_name = c.table_name
-where c.table_schema = 'public'
-order by c.table_name, c.ordinal_position`;
+//  2026-10-20: information_schema 는 함수 소유자의 권한 기준으로 걸러져 0건이 나올 수 있어(베타에서 "조회할 수 있는 표가 없다" 사고)
+//  권한에 걸리지 않는 pg_catalog 로 읽는다. 0건이면 실패로 보고 손 설명으로 넘어간다.
+const SCHEMA_SQL = `/*schema*/ select c.relname as t, a.attname as col, pg_catalog.format_type(a.atttypid, a.atttypmod) as typ, a.attnum as pos,
+  case when c.relkind in ('v', 'm') then 'VIEW' else 'TABLE' end as kind,
+  pg_catalog.obj_description(c.oid, 'pg_class') as tcomment,
+  pg_catalog.col_description(c.oid, a.attnum) as ccomment
+from pg_catalog.pg_class c
+join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+join pg_catalog.pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+where n.nspname = 'public' and c.relkind in ('r', 'v', 'm', 'p')
+order by c.relname, a.attnum`;
+let lastError: string | null = null;
+let lastRows = 0;
+export const liveSchemaStatus = () => ({ lastError, lastRows, cachedAt: cache ? new Date(cache.loadedAt).toISOString() : null, fromDb: cache?.fromDb ?? null });
 
 // 자료형 짧게(비서가 읽기 쉽게)
-function shortType(t: string): string {
+function shortType(raw: string): string {
+  const t = raw.replace(/\(.*\)$/, "").replace(/\[\]$/, "[]").trim(); // numeric(14,0)→numeric, character varying(60)→character varying
   const m: Record<string, string> = { "character varying": "text", "timestamp with time zone": "timestamptz", "timestamp without time zone": "timestamp", "double precision": "float", "bigint": "bigint", "integer": "int", "boolean": "bool", "numeric": "numeric", "jsonb": "jsonb", "json": "json", "date": "date", "text": "text", "uuid": "uuid", "ARRAY": "array" };
   return m[t] || t;
 }
@@ -50,6 +57,8 @@ async function fetchFromDb(sb: SupabaseClient): Promise<Map<string, LiveRelation
   const { data, error } = await sb.rpc("run_report", { q: SCHEMA_SQL, p_limit: 20000 });
   if (error) throw new Error(error.message);
   const rows = (Array.isArray(data) ? data : []) as { t: string; col: string; typ: string; kind: "TABLE" | "VIEW"; tcomment: string | null; ccomment: string | null }[];
+  lastRows = rows.length;
+  if (!rows.length) throw new Error("스키마 조회가 0건으로 돌아왔습니다(run_report 권한·141 적용 여부 확인)");
   const map = new Map<string, LiveRelation>();
   for (const r of rows) {
     const name = String(r.t);
@@ -73,9 +82,12 @@ export async function loadLiveSchema(sb: SupabaseClient, opts?: { force?: boolea
   inflight = (async () => {
     try {
       const relations = await fetchFromDb(sb);
+      if (!relations.size) throw new Error("차단 목록을 빼고 남은 표가 없습니다");
+      lastError = null;
       cache = { relations, loadedAt: Date.now(), fromDb: true };
     } catch (e) {
-      console.error("[live-schema] DB 스키마 조회 실패 — 손 카탈로그로 대체", e instanceof Error ? e.message : e);
+      lastError = e instanceof Error ? e.message : String(e);
+      console.error("[live-schema] DB 스키마 조회 실패 — 손 카탈로그로 대체", lastError);
       cache = { relations: fromFallbackOnly(), loadedAt: Date.now() - CACHE_MS + 60_000, fromDb: false }; // 1분 뒤 재시도
     } finally { inflight = null; }
     return cache!;
