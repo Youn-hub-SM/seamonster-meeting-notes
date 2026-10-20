@@ -55,6 +55,11 @@ export default function AiSettingsPage() {
   const [asstSaving, setAsstSaving] = useState(false);
   // 신뢰·피드백(2026-10-19 개선안 5) — 30일 맞아요/틀려요 집계 + 최근 '틀려요' 사유. GET /api/report/feedback?stats=1
   const [fb, setFb] = useState<{ good: number; bad: number; recentBad: { id: string; user_name: string; note: string; created_at: string }[] } | null>(null);
+  // 조회 범위 점검(2026-10-20 차단 목록 방식) — 보이는 표 수, 설명 없는 표, 설명 없는 jsonb, 개인정보 의심 컬럼. GET /api/report/schema-audit
+  const [audit, setAudit] = useState<{ fromDb: boolean; visible: number; noComment: string[]; jsonbNoComment: string[]; pii: { table: string; column: string }[] } | null>(null);
+  useEffect(() => {
+    fetch("/api/report/schema-audit", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j?.ok) setAudit({ fromDb: j.fromDb, visible: j.visible, noComment: j.noComment || [], jsonbNoComment: j.jsonbNoComment || [], pii: j.pii || [] }); }).catch(() => {});
+  }, []);
   useEffect(() => {
     fetch("/api/report/feedback?stats=1", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j?.ok) setFb({ good: j.good, bad: j.bad, recentBad: j.recentBad || [] }); }).catch(() => {});
   }, []);
@@ -291,6 +296,23 @@ export default function AiSettingsPage() {
               {fb.recentBad.map((r) => <li key={r.id}>{r.note} <span className="sm-faint">· {r.user_name} · {String(r.created_at).slice(0, 10)}</span></li>)}
             </ul>
           )}
+        </section>
+      )}
+
+      {/* AI 데이터 비서 — 조회 범위 점검(차단 목록 방식) */}
+      {audit && (
+        <section className="b2b-card">
+          <div className="b2b-card-head">
+            <h2 className="b2b-card-title">AI 데이터 비서 조회 범위</h2>
+            <span className="b2b-field-hint">보이는 표·뷰 {qtyText(audit.visible, "개")}{audit.fromDb ? "" : " · DB 주석 조회 실패(손 설명으로 동작)"}</span>
+          </div>
+          {audit.pii.length > 0 && (
+            <div className="sm-warn">개인정보·비밀로 의심되는 컬럼이 차단되지 않은 표에 있습니다 — 확인하고 필요하면 BLOCKED_RELATIONS 에 넣으세요: {audit.pii.map((p) => `${p.table}.${p.column}`).join(", ")}</div>
+          )}
+          <ul className="rp-list" style={{ marginTop: 8 }}>
+            <li>설명(주석) 없는 표 {qtyText(audit.noComment.length, "개")}{audit.noComment.length ? `: ${audit.noComment.slice(0, 12).join(", ")}${audit.noComment.length > 12 ? " …" : ""}` : ""}</li>
+            <li>설명 없는 jsonb 컬럼 {qtyText(audit.jsonbNoComment.length, "개")}{audit.jsonbNoComment.length ? `: ${audit.jsonbNoComment.slice(0, 12).join(", ")}${audit.jsonbNoComment.length > 12 ? " …" : ""}` : ""} — 주석이 없으면 비서가 그 안의 값을 풀어 보지 못합니다</li>
+          </ul>
         </section>
       )}
 

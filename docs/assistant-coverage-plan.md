@@ -66,7 +66,15 @@ sales_customers(전화·이름), companies·shipments 원본(수취인 — 대�
 | 3 | §4-2 '못 본 데이터' 수집 + 관리자 카드, §4-3 점검 스크립트 | 1일 |
 | 4 | §4-1 규율을 CLAUDE.md 에 한 줄로(새 표 = 카탈로그 동시 갱신) | 즉시 |
 
-## 6. 대표가 정할 것
+## 7. 구조 전환으로 대체 (2026-10-20 대표 결정 — "표를 하나씩 열어 주는 일을 없애자")
+§3-A·§5 의 "표 하나씩 추가"는 하지 않는다. 대신:
+- **허용 목록 → 차단 목록**: `app/lib/report-schema.ts` `BLOCKED_RELATIONS`(18개: 고객·거래처 원본, 설문 원문, 설정 kv·UTM 설정·채널 명령, 계정, 입금, OKR 면담, 세금계산서, 비서 자체 표, 중단된 briefings). 그 밖의 public 표·뷰는 전부 조회 가능. SQL 검증(`report-ai.ts`)은 차단 이름 + 다른 스키마(factory·pg_catalog·information_schema) 참조를 막고, migration 141 이 `run_report` 의 차단 정규식도 같은 범위로 넓힌다(이중 방어).
+- **설명은 DB 주석에서**: `app/lib/report-live-schema.ts` 가 information_schema + `obj_description/col_description` 을 run_report 로 읽어(10분 캐시) 프롬프트 목록과 schema 도구를 만든다. 손 카탈로그(SCHEMA_CATALOG)는 141 로 표 주석에 옮겼고, 주석 없는 표의 보충용으로만 남는다. 새 표·컬럼 = 마이그레이션에 `comment on` 한 줄.
+- **점검**: `/api/report/schema-audit`(관리자) + AI 설정 '조회 범위' 카드 — 보이는 표 수, 설명 없는 표, 설명 없는 jsonb 컬럼, 개인정보 의심 컬럼 이름(phone·email·addr·token …, HMAC·해시 제외).
+- **규율**: CLAUDE.md 에 한 줄(개인정보 표 = 차단 목록 + 정규식, 새 컬럼 = 주석).
+- 남는 선택: §4-2 '못 본 데이터' 자동 수집은 보류(주석 점검 카드로 먼저 본다).
+
+## 6. 대표가 정할 것(§7 로 대체됨 — 기록용)
 | # | 질문 | 추천 |
 |---|---|---|
 | 1 | §3-A 표를 한 번에 열지, 질문이 나온 것부터 열지 | **한 번에**(개인정보 없는 것만, 1단계) |

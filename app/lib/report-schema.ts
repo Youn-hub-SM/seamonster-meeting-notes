@@ -3,28 +3,26 @@
 //  · order_date=KST 기준일. 재고 현재수량=inventory_txns 에서 status='완료' 의 qty 합.
 //  PII(전화·이름) 테이블 sales_customers 는 화이트리스트에서 제외 → 사용 금지.
 
-// 여기서(run_report) 조회 가능한 관계 — 2026-08-28 전면 개방(대표 지시).
-//  비공개(고객 PII·토큰 설정·계정·면담·입금·설문 원문·shipments/companies 원본)만 제외 — migration 100 이 RPC 단에서도 차단.
-export const RUN_HERE_RELATIONS = [
-  // 매출
-  "sales_orders", "sales_looker", "sales_group_repeat", "sales_buyer_repeat",
-  "sales_daily_new_repeat", "sales_customer_summary", "sales_okr",
-  "sales_reports", "sales_uploads", "sales_channel_config", "subscription_snapshots", "naver_conv_daily",
-  // 상품·재고
-  "products", "inventory_txns", "inventory_items", "product_bundles",
-  // B2B 발주(개인정보 없는 투영 뷰 포함)
-  "orders", "order_items", "companies_report", "shipments_report", "shipment_items",
-  "payments", "company_product_prices", "cost_history", "activity_log",
-  // 생산·매입
-  "production_requests", "production_request_items", "production_receipts",
-  "product_cost_schedules", "purchase_returns",
-  // 물류·발주처리
-  "delivery_log", "fulfill_dispatch", "fulfill_scan_uploads", "fulfill_scan_items", "fulfill_scan_events",
-  // VOC·CS
-  "voc", "voc_categories", "cs_manual",
-  // 마케팅·링크
-  "crm_messages", "short_links", "qr_scans", "utm_links", "ig_dm_rules", "ig_dm_logs",
+// ── 2026-10-20 구조 전환(대표 결정): 허용 목록 → 차단 목록 ──
+//  public 스키마의 모든 표·뷰는 아래 차단 목록에 없으면 비서가 볼 수 있다. 새 표를 만들면 따로 열어 줄 일이 없다.
+//  설명은 DB 의 표·컬럼 주석(comment on table/column — migration 141)을 비서가 직접 읽는다(report-live-schema.ts).
+//  주석이 없는 표는 컬럼 이름·자료형만 보이고, 아래 SCHEMA_CATALOG(손 설명)가 있으면 그것으로 보충한다.
+//  규칙: 개인정보·비밀·계정이 들어가는 표를 만들면 ① 여기 BLOCKED_RELATIONS 에 한 줄, ② migration 의 run_report 차단 정규식에도(이중 방어).
+//  관리자 점검: /api/report/schema-audit 가 차단되지 않은 표에서 전화·이메일·주소·토큰 같은 컬럼 이름을 찾아 경고한다.
+export const BLOCKED_RELATIONS = [
+  // 고객·거래처 개인정보
+  "sales_customers", "companies", "shipments", "survey_responses",
+  // 비밀·계정·설정
+  "b2b_settings", "app_users", "utm_settings", "channel_commands",
+  // 경영 비공개
+  "bank_deposits", "bank_deposit_names", "okr_checkins", "tax_invoices",
+  // 비서 자체·중단된 기능
+  "report_threads", "report_messages", "report_tables", "report_glossary", "report_feedback", "briefings",
 ];
+const BLOCKED_SET = new Set(BLOCKED_RELATIONS);
+export const isBlockedRelation = (name: string) => BLOCKED_SET.has(name.toLowerCase());
+// 차단 목록 사람 설명(프롬프트 '조회 불가' 절)
+export const BLOCKED_NOTE = "sales_customers(고객 전화·이름), companies·shipments(원본 — companies_report·shipments_report 뷰 사용), survey_responses(설문 원문), b2b_settings·utm_settings·channel_commands(토큰·설정), app_users(계정), bank_deposits·bank_deposit_names(입금 내역), okr_checkins(면담 비공개), tax_invoices(사업자 정보), report_*(비서 자체 저장소), briefings(중단). public 밖 스키마(factory 등)·pg_catalog·information_schema 도 조회하지 않습니다.";
 
 // 루커스튜디오(looker_ro)가 볼 수 있는 뷰(원장·재고·products 는 못 봄)
 export const LOOKER_RELATIONS = [

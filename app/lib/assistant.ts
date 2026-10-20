@@ -11,7 +11,8 @@ import { getKv, setKv } from "./b2b-settings";
 import { getFeatureModel, effortParams, readText, AiResponseError } from "./ai-model";
 import { MODELS } from "./config";
 import { validateReportSql } from "./report-ai";
-import { SCHEMA_CATALOG, RUN_HERE_RELATIONS, LOOKER_RELATIONS } from "./report-schema";
+import { BLOCKED_NOTE } from "./report-schema";
+import { loadLiveSchema, schemaIndexText, describeTables } from "./report-live-schema";
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 0 });
 
@@ -99,31 +100,13 @@ export function maskPii(text: string, opts?: { names?: boolean }): string {
 
 // ── 스키마 카탈로그 절 파싱(schema 도구) ──
 //  카탈로그는 '## 그룹' 머리글과 'TABLE name — …'/'VIEW name — …' 블록(들여쓴 컬럼 줄·※ 줄이 이어짐, 빈 줄로 끝남)으로 돼 있다.
-type CatalogEntry = { name: string; kind: string; text: string; desc: string };
-function parseCatalog(): Map<string, CatalogEntry> {
-  const map = new Map<string, CatalogEntry>();
-  let cur: CatalogEntry | null = null;
-  const flush = () => { if (cur) { cur.text = cur.text.trim(); map.set(cur.name, cur); } cur = null; };
-  for (const line of SCHEMA_CATALOG.split("\n")) {
-    const head = line.match(/^(TABLE|VIEW)\s+([a-z_][a-z0-9_]*)\s*(?:—\s*(.*))?$/);
-    if (head) {
-      flush();
-      cur = { name: head[2], kind: head[1], text: line, desc: (head[3] || "").split(/[.。]\s|\[/)[0].trim().slice(0, 70) };
-      continue;
-    }
-    if (/^##\s/.test(line) || !line.trim()) { flush(); continue; }
-    if (cur) cur.text += `\n${line}`;
-  }
-  flush();
-  return map;
+// ── 스키마(2026-10-20 구조 전환): DB 의 표·컬럼 주석을 읽는다(report-live-schema.ts). 차단 목록 밖은 전부 조회 가능 ──
+//  프롬프트용 목록 = 이름 + 한 줄 설명(주석 첫 문장). 10분 캐시라 턴마다 비용이 들지 않는다.
+export async function catalogIndex(sb: SupabaseClient): Promise<string> {
+  const live = await loadLiveSchema(sb);
+  return schemaIndexText(live);
 }
-const CATALOG = parseCatalog();
-// 시스템 프롬프트용 — 이름과 한 줄 설명만(전체 카탈로그 15KB 는 넣지 않는다)
-export const CATALOG_INDEX = RUN_HERE_RELATIONS.map((n) => {
-  const e = CATALOG.get(n);
-  return e ? `- ${n}(${e.kind}): ${e.desc || "설명 없음"}` : `- ${n}`;
-}).join("\n");
-export const PRIVATE_NOTE = (SCHEMA_CATALOG.split("## 조회 불가")[1] || "").replace(/^[^\n]*\n/, "").trim();
+export const PRIVATE_NOTE = BLOCKED_NOTE;
 
 // ── 도구 정의(strict JSON schema) ──
 export function toolDefs(strict: boolean): Anthropic.Tool[] {
@@ -254,16 +237,14 @@ async function toolRunSql(ctx: ToolCtx, input: Record<string, unknown>): Promise
   return JSON.stringify({ id: run.id, title, rowCount: all.length, shown: preview.length, note: all.length > MODEL_ROWS ? `앞 ${MODEL_ROWS}행만 표시(화면엔 ${Math.min(all.length, SCREEN_ROWS)}행). 전체가 필요하면 집계·정렬·LIMIT 로 좁히세요.` : undefined, columns, rows: preview });
 }
 
-function toolSchema(input: Record<string, unknown>): string {
+async function toolSchema(ctx: ToolCtx, input: Record<string, unknown>): Promise<string> {
   const names = (Array.isArray(input.tables) ? input.tables : []).map((t) => String(t).trim().toLowerCase().replace(/^public\./, "")).filter(Boolean).slice(0, 12);
   if (!names.length) throw new Error("tables 가 비어 있습니다.");
-  const found: string[] = [], missing: string[] = [];
-  for (const n of names) {
-    const e = CATALOG.get(n);
-    if (e) found.push(e.text); else missing.push(n);
-  }
+  const live = await loadLiveSchema(ctx.sb);
+  const { found, missing, all } = describeTables(live, names);
   const parts = [...found];
-  if (missing.length) parts.push(`카탈로그에 없는 이름: ${missing.join(", ")} — 조회 가능 관계: ${RUN_HERE_RELATIONS.join(", ")}`);
+  if (missing.length) parts.push(`없는 이름: ${missing.join(", ")} — 조회 가능한 표·뷰: ${all.join(", ")}`);
+  if (!live.fromDb) parts.push("(DB 스키마 조회가 실패해 손 설명으로 답했습니다 — 컬럼 자료형은 생략됨)");
   return parts.join("\n\n");
 }
 
@@ -453,7 +434,7 @@ export function toolLabel(name: string, input: Record<string, unknown>): string 
 
 export async function runTool(ctx: ToolCtx, name: string, input: Record<string, unknown>): Promise<string> {
   if (name === "run_sql") return toolRunSql(ctx, input);
-  if (name === "schema") return toolSchema(input);
+  if (name === "schema") return toolSchema(ctx, input);
   if (name === "search_text") return toolSearchText(ctx, input);
   if (name === "read_report") return toolReadReport(ctx.sb, input);
   throw new Error(`알 수 없는 도구: ${name}`);

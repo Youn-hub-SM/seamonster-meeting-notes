@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./config";
 import { getFeatureModel, effortParams, readText, AiResponseError } from "./ai-model";
 import { supabaseAdmin } from "./supabase";
-import { SCHEMA_CATALOG, RUN_HERE_RELATIONS, LOOKER_RELATIONS } from "./report-schema";
+import { SCHEMA_CATALOG, BLOCKED_RELATIONS, BLOCKED_NOTE, LOOKER_RELATIONS, isBlockedRelation } from "./report-schema";
 
 // AI 데이터 비서 — 자연어 질문 → Postgres SQL 생성(+루커스튜디오용 SQL).
 //  실행은 run_report(=report_ro 권한)로만. 정확도 위해 opus 고정(이익률 계산기와 동일 방식).
@@ -50,8 +50,8 @@ export const DEFAULT_REPORT_PROMPT = `당신은 씨몬스터(순살 생선 전�
 const SCHEMA_BLOCK = `[스키마 카탈로그]
 ${SCHEMA_CATALOG}
 
-[여기서 조회 가능한 관계(run-here)]
-${RUN_HERE_RELATIONS.join(", ")}
+[조회 불가(차단 목록) — 그 밖의 public 표·뷰는 전부 조회 가능]
+${BLOCKED_RELATIONS.join(", ")} — ${BLOCKED_NOTE}
 
 [루커스튜디오 노출 뷰(looker_ro)]
 ${LOOKER_RELATIONS.join(", ")}`;
@@ -110,7 +110,7 @@ export function assertSelectOnly(sql: string): string {
 
 // 앱 방어 ②: 참조 테이블이 화이트리스트에 있는지 검증 — 비공개(PII·토큰·계정 등)/시스템 테이블 차단.
 export function assertAllowedRelations(sql: string): void {
-  const allow = new Set(RUN_HERE_RELATIONS.map((r) => r.toLowerCase()));
+  // 2026-10-20: 허용 목록 → 차단 목록(BLOCKED_RELATIONS). public 밖 스키마(factory 등)·pg_catalog·information_schema 는 이름이 아니라 접두로 막는다.
   // 문자열 리터럴을 먼저 비운다('' 이스케이프 포함) — 리터럴 속 'from ...' 이 관계 검사·콤마 검사에
   //  오탐되던 결함 보정. 그 다음 내장함수의 '키워드 FROM' 오탐 제거: extract(month FROM x) 등.
   const scan = sql
@@ -118,14 +118,19 @@ export function assertAllowedRelations(sql: string): void {
     .replace(/\b(?:extract|substring|trim|overlay|position)\s*\([^()]*\)/gi, " NULL ");
   const ctes = new Set<string>();
   for (const m of scan.matchAll(/(?:\bwith\b|,)\s+([a-z_][a-z0-9_]*)\s+as\s*\(/gi)) ctes.add(m[1].toLowerCase());
+  // 스키마 한정 참조(factory.products, information_schema.columns, pg_catalog.*)는 public 만 허용
+  for (const m of scan.matchAll(/\b(?:from|join)\s+"?([a-z_][a-z0-9_]*)"?\s*\.\s*"?[a-z_]/gi)) {
+    if (m[1].toLowerCase() !== "public") throw new Error(`다른 스키마는 조회할 수 없습니다: '${m[1]}' — public 의 표만 쓸 수 있습니다.`);
+  }
   for (const m of scan.matchAll(/\b(?:from|join)\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?(\s*\()?/gi)) {
     // IS DISTINCT FROM 은 비교 연산 — 관계 참조가 아니다
     if (/distinct\s*$/i.test(scan.slice(Math.max(0, m.index! - 12), m.index!))) continue;
     if (m[2]) continue;             // 뒤에 '(' → 집합반환 함수(generate_series 등) 허용
     const name = m[1].toLowerCase();
     if (name === "_sub") continue;
-    if (!allow.has(name) && !ctes.has(name))
-      throw new Error(`허용되지 않은 테이블 참조: '${name}' — 비공개 테이블(개인정보·설정·계정 등)은 조회할 수 없습니다.`);
+    if (ctes.has(name)) continue;
+    if (isBlockedRelation(name) || /^pg_/.test(name) || name === "information_schema")
+      throw new Error(`비공개 테이블 참조: '${name}' — 개인정보·설정·계정 등은 조회할 수 없습니다.`);
   }
 
   // 콤마 조인 차단 — 위 정규식은 from/join 바로 뒤 1개만 보므로 'from 허용테이블, 비공개테이블'이

@@ -13,7 +13,7 @@ import { LOOKER_RELATIONS } from "./report-schema";
 import { glossaryPromptBlock } from "./report-glossary";
 import {
   anthropic, toolDefs, runTool, toolLabel, addUsage, addAssistantUsage, getAssistantSettings, getAssistantMonthUsage,
-  AssistantOffError, CATALOG_INDEX, PRIVATE_NOTE, kstTodayLabel, retryable, strictRejected, withTimeout,
+  AssistantOffError, catalogIndex, PRIVATE_NOTE, kstTodayLabel, retryable, strictRejected, withTimeout,
   TOOL_TIMEOUT_MS, SEARCH_TIMEOUT_MS, type ToolCtx, type AskUsage, type AskLooker,
 } from "./assistant";
 
@@ -53,7 +53,9 @@ export function isPending139(err: unknown): boolean {
 }
 
 // ── 시스템 프롬프트(고정 — 캐시) ──
-const SYSTEM_CHAT = `당신은 씨몬스터(순살 생선 전문 이커머스: 공식몰 카페24·스마트스토어·쿠팡·톡스토어 + 도매 B2B)의 AI 데이터 비서입니다.
+// 시스템 프롬프트 — 조회 가능 목록(살아 있는 스키마)은 턴마다 넣는다(10분 캐시, 바뀌면 캐시 prefix 만 다시 쓴다)
+function systemChat(index: string): string {
+  return `당신은 씨몬스터(순살 생선 전문 이커머스: 공식몰 카페24·스마트스토어·쿠팡·톡스토어 + 도매 B2B)의 AI 데이터 비서입니다.
 직원과 채팅으로 대화하며, 회사 데이터(표)와 글(VOC·채널 문의·종합 리포트·CS 매뉴얼·생산 요청 메모·변경 이력)을 도구로 조사해 근거가 붙은 답을 합니다.
 
 [대화하는 법]
@@ -106,13 +108,14 @@ const SYSTEM_CHAT = `당신은 씨몬스터(순살 생선 전문 이커머스: �
 - 그 뷰만으로 같은 표를 만들 수 있으면 looker_mode "query" + looker_sql(루커 커스텀쿼리). 원장·재고 등이 필요하면 "view" + looker_sql("create or replace view sales_xxx as … ; grant select on sales_xxx to looker_ro;" — 뷰 이름은 sales_/inv_ 접두). 애매하면 "na".
 
 [조회 가능 관계(run_sql) — 이름과 한 줄 설명. 컬럼은 schema 도구로 확인]
-${CATALOG_INDEX}
+${index}
 
 [루커 노출 뷰(looker_ro)]
 ${LOOKER_RELATIONS.join(", ")}
 
 [조회 불가(비공개 — 시도 금지)]
 ${PRIVATE_NOTE}`;
+}
 
 // ── 도구 — 공용 4개(ask_user 제외: 되묻기는 글로) + 용어 제안 ──
 function chatTools(strict: boolean): Anthropic.Tool[] {
@@ -269,7 +272,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (!text) throw new AiResponseError("메시지를 입력하세요.");
   if (!process.env.ANTHROPIC_API_KEY) throw new AiResponseError("ANTHROPIC_API_KEY 가 설정되어 있지 않습니다.");
 
-  const [settings, month, featureModel, thread, glossary, dataDate] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user), glossaryPromptBlock(), salesDataDate()]);
+  const [settings, month, featureModel, thread, glossary, dataDate, schemaIndex] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user), glossaryPromptBlock(), salesDataDate(), catalogIndex(supabaseAdmin())]);
   if (settings.off) throw new AssistantOffError("AI 데이터 비서가 꺼져 있습니다. 관리자 > 설정 > AI 설정에서 켜세요.");
   if (!thread) throw new AiResponseError("대화를 찾을 수 없습니다. 새 대화를 시작하세요.");
   const downgraded = month.usd >= settings.capUsd;
@@ -290,7 +293,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (!thread.title) await sb().from("report_threads").update({ title }).eq("id", p.threadId);
 
   const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: SYSTEM_CHAT, cache_control: { type: "ephemeral" } },
+    { type: "text", text: systemChat(schemaIndex), cache_control: { type: "ephemeral" } },
     { type: "text", text: [
       `[오늘] 기준일(Asia/Seoul): ${kstTodayLabel()} — '오늘·어제·이번 주·이번 달·올해·최근 N일' 등 상대 기간은 반드시 이 날짜 기준. 학습 시점의 연도를 가정하지 않습니다.`,
       dataDate ? `[데이터 최신일] 매출 원장(sales_orders)은 ${dataDate}까지 들어 있습니다. 그 뒤 날짜는 아직 없으니 답에 "데이터는 ${dataDate}까지"라고 적습니다.` : "",
