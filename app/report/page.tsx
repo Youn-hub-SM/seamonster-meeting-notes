@@ -699,6 +699,28 @@ export default function ReportPage() {
             <div className="rp-drawer-body">
               {panel === "saved" && (
                 <>
+                  {/* 실행한 리포트 — 목록이 길어도 바로 보이게 맨 위 */}
+                  {varForm && (
+                    <section className="b2b-card rp-varform">
+                      <div className="b2b-card-head"><span className="b2b-card-title">{varForm.rep.name}</span></div>
+                      <div className="rp-varform-row">
+                        {Object.keys(varForm.values).map((v) => (
+                          <label key={v} className="sm-col rp-varform-field">
+                            <span className="b2b-field-label">{v}</span>
+                            <input className="b2b-input" value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} aria-label={`${v} 값`} />
+                          </label>
+                        ))}
+                        <button className="b2b-btn-primary" disabled={busy} onClick={() => runSql(varForm.rep, fillVars(varForm.rep.sql, varForm.values))}>리포트 실행</button>
+                        <button className="b2b-btn-secondary" onClick={() => setVarForm(null)}>닫기</button>
+                      </div>
+                    </section>
+                  )}
+                  {busy && <div className="b2b-loading">실행하는 중...</div>}
+                  {runResult && (
+                    <TableCard
+                      table={{ title: runResult.rep.name, sql: runResult.sql, columns: runResult.columns, rows: runResult.rows, rowCount: runResult.rows.length, truncated: runResult.rows.length >= 5000, looker: runResult.rep.looker }}
+                      question={runResult.rep.question || runResult.rep.name} defaultOpen onSave={openSave} onExport={exportXlsx} />
+                  )}
                   {me && (
                     <div className="sm-tabs">
                       <button className={`sm-tab ${savedFilter === "mine" ? "is-active" : ""}`} onClick={() => setSavedFilter("mine")}>내 저장</button>
@@ -726,27 +748,6 @@ export default function ReportPage() {
                         </div>
                       ))}
                     </div>
-                  )}
-                  {varForm && (
-                    <section className="b2b-card rp-varform">
-                      <div className="b2b-card-head"><span className="b2b-card-title">{varForm.rep.name}</span></div>
-                      <div className="rp-varform-row">
-                        {Object.keys(varForm.values).map((v) => (
-                          <label key={v} className="sm-col rp-varform-field">
-                            <span className="b2b-field-label">{v}</span>
-                            <input className="b2b-input" value={varForm.values[v]} onChange={(e) => setVarForm({ rep: varForm.rep, values: { ...varForm.values, [v]: e.target.value } })} aria-label={`${v} 값`} />
-                          </label>
-                        ))}
-                        <button className="b2b-btn-primary" disabled={busy} onClick={() => runSql(varForm.rep, fillVars(varForm.rep.sql, varForm.values))}>리포트 실행</button>
-                        <button className="b2b-btn-secondary" onClick={() => setVarForm(null)}>닫기</button>
-                      </div>
-                    </section>
-                  )}
-                  {busy && <div className="b2b-loading">실행하는 중...</div>}
-                  {runResult && (
-                    <TableCard
-                      table={{ title: runResult.rep.name, sql: runResult.sql, columns: runResult.columns, rows: runResult.rows, rowCount: runResult.rows.length, truncated: runResult.rows.length >= 5000, looker: runResult.rep.looker }}
-                      question={runResult.rep.question || runResult.rep.name} defaultOpen onSave={openSave} onExport={exportXlsx} />
                   )}
                 </>
               )}
