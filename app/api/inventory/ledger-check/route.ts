@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getUntracked } from "@/app/lib/stock-tracked";
 import { reconcileB2BSales, SALES_MISMATCH_LABEL, type SalesMismatchKind } from "@/app/lib/b2b-sales-sync";
+import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ export const maxDuration = 60;
 //  예외 하나 — B2B 매출 원장 대조(b2b_sales_ledger)는 금액 규칙이 앱(buildOrderSalesRows, S10)에 있어 reconcileB2BSales 를 부른다.
 //  kinds 를 주면 그 종류만 계산한다(예: 실사 화면이 발송일 지난 발송대기만 확인할 때 ?kinds=b2b_overdue).
 //  응답 groups[] = { kind, count, items, unavailable?, error? } — unavailable/error 가 있으면 count 는 확인 못 한 값이다(0 으로 보지 않는다).
+//  [무시](145 ledger_check_ignores) — 사람이 문제없다고 본 행은 count·items 에서 빼고 ignored[] 로 따로 준다(원장은 그대로).
+//  POST { action: "ignore" | "restore", kind, key, summary? } — 무시·되살리기.
 
 const SQL_KINDS = [
   "b2b_cancelled", "b2b_no_deduct", "b2b_stock_off", "b2b_qty_mismatch", "b2b_date_mismatch", "b2b_overdue",
@@ -46,8 +49,17 @@ type RpcRow = {
   qty: number | string | null; txn_date: string | null; detail: string | null;
   tags?: string[] | null; // 화면 처리 안내를 고르는 표식(132 — 먼저 적용한 옛 132 함수에는 없다)
 };
-type Item = Omit<RpcRow, "rn" | "kind" | "qty" | "tags"> & { qty: number | null; tags: string[] };
+type Item = Omit<RpcRow, "rn" | "kind" | "qty" | "tags"> & { qty: number | null; tags: string[]; key: string };
 type Group = { kind: string; count: number; items: Item[]; unavailable?: string; error?: string };
+type Ignored = { kind: string; key: string; summary: string | null; ignored_by: string | null; created_at: string };
+
+// 점검 행 고유 값 — 수량까지 넣어 값이 바뀐 행(마이너스 재고 등)은 다시 보이게 한다(145). extra = 같은 발주의 다른 판정 구분
+type KeyPart = { ref_id: string | null; ref_no: string | null; product_id: string | null; channel: string | null; txn_date: string | null; qty: number | null };
+const itemKey = (r: KeyPart, extra = "") =>
+  [r.ref_id, r.ref_no, r.product_id, r.channel, r.txn_date, r.qty === null ? "" : String(Math.round(r.qty * 1000) / 1000), extra]
+    .map((v) => v ?? "").join("|");
+const ignoresMissing = (e: { code?: string; message?: string }) =>
+  e.code === "42P01" || e.code === "PGRST205" || /ledger_check_ignores/i.test(e.message || "");
 
 const PAGE = 1000;
 const MAX_PAGES = 30;  // 3만 행 — 넘으면 truncated 로 알린다(점검 결과가 그만큼이면 이미 손으로 볼 양이 아니다)
@@ -72,6 +84,25 @@ export async function GET(req: NextRequest) {
     const today = kstToday();
     const groups = new Map<string, Group>();
     for (const k of kinds.length ? kinds : KINDS) groups.set(k, { kind: k, count: 0, items: [] });
+    // [무시] 목록 — 145 미적용이면 무시 없이 전부 보인다(ignoreUnavailable). 그 밖의 조회 실패는 멈춘다(S4)
+    let ignoreUnavailable = false;
+    const ignoreMap = new Map<string, Ignored>();
+    {
+      const { data, error } = await sb.from("ledger_check_ignores").select("kind, item_key, summary, ignored_by, created_at").limit(5000);
+      if (error) {
+        if (!ignoresMissing(error)) return NextResponse.json({ ok: false, error: `무시 목록 조회 실패: ${error.message}` }, { status: 500 });
+        ignoreUnavailable = true;
+      }
+      for (const r of (data ?? []) as { kind: string; item_key: string; summary: string | null; ignored_by: string | null; created_at: string }[])
+        ignoreMap.set(`${r.kind} ${r.item_key}`, { kind: r.kind, key: r.item_key, summary: r.summary, ignored_by: r.ignored_by, created_at: r.created_at });
+    }
+    // 지금도 점검에 걸리는데 무시한 행만 돌려준다(이미 사라진 문제의 무시 기록은 보이지 않는다)
+    const ignored: Ignored[] = [];
+    const isIgnored = (kind: string, key: string) => {
+      const hit = ignoreMap.get(`${kind} ${key}`);
+      if (hit) ignored.push(hit);
+      return !!hit;
+    };
     // B2B 매출 원장 대조는 RPC 와 함께 돌린다(읽기만 — 실패는 아래에서 그 항목의 '확인 못 함'으로)
     const salesP = want("b2b_sales_ledger")
       ? reconcileB2BSales(daysBefore(today, SALES_LEDGER_DAYS), today).then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e }))
@@ -111,11 +142,12 @@ export async function GET(req: NextRequest) {
         }
         const g = groups.get(r.kind);
         if (!g) continue; // 화면이 모르는 새 종류 — 함수만 먼저 바뀐 경우
+        const { rn: _rn, kind: _k, qty, tags, ...rest } = r;
+        const q = qty === null || qty === undefined ? null : Number(qty);
+        const key = itemKey({ ...rest, qty: q });
+        if (isIgnored(r.kind, key)) continue;
         g.count++;
-        if (g.items.length < ITEM_CAP) {
-          const { rn: _rn, kind: _k, qty, tags, ...rest } = r;
-          g.items.push({ ...rest, qty: qty === null || qty === undefined ? null : Number(qty), tags: Array.isArray(tags) ? tags : [] });
-        }
+        if (g.items.length < ITEM_CAP) g.items.push({ ...rest, qty: q, tags: Array.isArray(tags) ? tags : [], key });
       }
       // 옛 132 함수 — 새 항목은 계산되지 않았다(0건이 아니다). 잘려서 표시 행을 못 봤으면 판단하지 않는다.
       if (!v2 && !truncated) {
@@ -130,22 +162,59 @@ export async function GET(req: NextRequest) {
       const g = groups.get("b2b_sales_ledger")!;
       const res = await salesP;
       if (res.ok) {
-        const list = res.r.mismatches.filter((m) => SALES_LEDGER_KINDS.includes(m.kind));
+        const list = res.r.mismatches.filter((m) => SALES_LEDGER_KINDS.includes(m.kind)).map((m) => {
+          const base = {
+            ref_id: m.status === "삭제됨" ? null : m.order_id, ref_no: m.order_no || null, partner: null,
+            product_id: null, product_name: null, sku: null, channel: null,
+            qty: null, txn_date: m.date,
+          };
+          return {
+            ...base, key: itemKey(base, `${m.kind}:${m.order_id}:${m.ledger}`),
+            detail: `${m.note || SALES_MISMATCH_LABEL[m.kind]} · ${m.status} · 기대 ${won(m.expected)} · 원장 ${won(m.ledger)}`,
+            tags: [m.kind === "backfill_dup" || m.kind === "backfill_only" ? "backfill" : m.kind],
+          };
+        }).filter((it) => !isIgnored("b2b_sales_ledger", it.key));
         g.count = list.length;
-        g.items = list.slice(0, ITEM_CAP).map((m) => ({
-          ref_id: m.status === "삭제됨" ? null : m.order_id, ref_no: m.order_no || null, partner: null,
-          product_id: null, product_name: null, sku: null, channel: null,
-          qty: null, txn_date: m.date,
-          detail: `${m.note || SALES_MISMATCH_LABEL[m.kind]} · ${m.status} · 기대 ${won(m.expected)} · 원장 ${won(m.ledger)}`,
-          tags: [m.kind === "backfill_dup" || m.kind === "backfill_only" ? "backfill" : m.kind],
-        }));
+        g.items = list.slice(0, ITEM_CAP);
       } else {
         g.error = extractErrorMsg(res.e, "매출 원장 대조 실패");
       }
     }
 
-    return NextResponse.json({ ok: true, today, truncated, fnStale, itemCap: ITEM_CAP, salesLedgerDays: SALES_LEDGER_DAYS, groups: [...groups.values()] });
+    return NextResponse.json({ ok: true, today, truncated, fnStale, itemCap: ITEM_CAP, salesLedgerDays: SALES_LEDGER_DAYS, groups: [...groups.values()], ignored, ignoreUnavailable });
   } catch (e) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(e, "원장 점검 실패") }, { status: 500 });
+  }
+}
+
+// POST { action: "ignore" | "restore", kind, key, summary? } — 점검 행 [무시]·[되살리기](145). 원장은 건드리지 않는다.
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json().catch(() => ({}))) as { action?: string; kind?: string; key?: string; summary?: string };
+    const kind = String(body.kind || "");
+    const key = String(body.key || "");
+    if (!(KINDS as readonly string[]).includes(kind) || !key || key.length > 500)
+      return NextResponse.json({ ok: false, error: "무시할 점검 행이 올바르지 않습니다." }, { status: 400 });
+    const sb = supabaseAdmin();
+    const token = req.cookies.get("b2b_auth")?.value;
+    const user = (await verifySession(token)) || resolveUserName(token);
+    let error: { code?: string; message?: string } | null = null;
+    if (body.action === "ignore") {
+      ({ error } = await sb.from("ledger_check_ignores").upsert(
+        { kind, item_key: key, summary: String(body.summary || "").slice(0, 300) || null, ignored_by: user || null },
+        { onConflict: "kind,item_key" }));
+    } else if (body.action === "restore") {
+      ({ error } = await sb.from("ledger_check_ignores").delete().eq("kind", kind).eq("item_key", key));
+    } else {
+      return NextResponse.json({ ok: false, error: "action 은 ignore 또는 restore 입니다." }, { status: 400 });
+    }
+    if (error) {
+      if (ignoresMissing(error))
+        return NextResponse.json({ ok: false, error: "DB 업데이트 145(supabase/migrations/145_ledger_check_ignores.sql)를 먼저 적용하세요." }, { status: 501 });
+      return NextResponse.json({ ok: false, error: `저장 실패: ${error.message}` }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: extractErrorMsg(e, "무시 저장 실패") }, { status: 500 });
   }
 }

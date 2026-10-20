@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-10-20";
+export const GUIDE_UPDATED = "2026-10-21";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -1381,10 +1381,12 @@ export const GUIDE: GuideCategory[] = [
               "'먼저' 표시가 붙은 항목부터 정리한다",
               "항목마다 제목 아래 한 줄을 읽고, 오른쪽 버튼(발주·발주처리·입고 및 출고·재고 이동·재고 조정·생산 요청·매출 집계 등)으로 그 화면에 가서 정리한다",
               "어느 건인지 보려면 [목록 보기]를 누른다 (발주 항목은 발주번호를 누르면 그 발주가 열린다)",
+              "확인해 보니 고칠 필요가 없는 줄은 그 줄 끝 [무시]를 누른다",
               "정리한 뒤 오른쪽 위 [다시 확인]을 누른다"
             ],
             "tips": [
               "이 화면은 읽기만 하고 아무것도 고치지 않는다 — 항목마다 적힌 처리 화면에서 사람이 정리한다",
+              "[무시]한 줄은 건수에서 빠지고 장부는 그대로다 — 맨 아래 '무시한 항목 N건 보기'에서 [되살리기]로 되돌린다. 수량이 바뀐 줄(예: 마이너스 재고 값이 달라짐)은 다시 보인다",
               "'확인 못 함'은 0건이 아니다 — DB 업데이트 미적용이거나 조회 실패다. 원인을 해결하기 전에는 이상 없음으로 보지 않는다",
               "'확인 못 함(132 를 다시 적용하면 확인됩니다)'이나 '원장 점검 함수가 옛 판입니다' 안내가 보이면 관리자가 supabase/migrations/132_reconcile_fix_ledger_check.sql 을 Supabase SQL Editor 에서 한 번 더 Run 한다(함수만 바뀜)",
               "[목록 보기]에 노란 주의가 뜨면 그 줄대로 한다 — '발송일 뒤 실사 있음'은 다시 저장하기 전에 사람이 판단하고, '살아 있는 회차'는 [수정]으로 저장하지 않는다",

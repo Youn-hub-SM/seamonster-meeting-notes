@@ -3,19 +3,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { qtyText } from "@/app/lib/format";
+import { useToast } from "@/app/components/Feedback";
 
 // 원장 점검(대표 결정 D4d) — 장부 이상을 사람이 확인·처리한다. 화면은 읽기만 하고 고치지 않는다(S12).
 //  판정은 /api/inventory/ledger-check → inventory_ledger_check RPC(132) 한 곳(B2B 매출 원장 대조만 reconcileB2BSales).
 //  확인하지 못한 항목(마이그레이션 미적용·조회 실패)은 0건이 아니라 '확인 못 함'으로 보인다(S4).
 //  2026-10-11 대표 피드백 "보기 어렵다" — 고치는 화면별로 묶고, 항목마다 쉬운 제목 + 할 일 한 줄만. 목록·예외는 펼쳐서 본다.
+//  2026-10-21 [무시](145) — 사람이 보고 문제없다고 본 행은 건수에서 뺀다. 원장은 그대로, 무시한 목록에서 [되살리기].
 
 type Item = {
   ref_id: string | null; ref_no: string | null; partner: string | null;
   product_id: string | null; product_name: string | null; sku: string | null; channel: string | null;
   qty: number | null; txn_date: string | null; detail: string | null;
   tags?: string[]; // 132 표식 — live·counted·multi·dup·old·covered·finished·deleted·b2b·backfill
+  key: string;     // 점검 행 고유 값(무시 키, 서버가 만든다)
 };
 type Group = { kind: string; count: number; items: Item[]; unavailable?: string; error?: string };
+type Ignored = { kind: string; key: string; summary: string | null; ignored_by: string | null; created_at: string };
+type OnIgnore = (kind: string, r: Item) => void;
 
 type Fix = { href: string; label: string };
 const TRADE: Fix = { href: "/inventory/trade", label: "입고 및 출고" };
@@ -150,6 +155,10 @@ const unknownOf = (g: Group) => g.error || g.unavailable || "";
 const num = (n: number | null) => (n === null || !Number.isFinite(n) ? "-" : (Math.round(n * 100) / 100).toLocaleString());
 // 서버 설명(132)의 내부 용어를 이 화면 용어로 — 차수 → 회차, 선점 → 미리 빠진 재고
 const plain = (s: string | null) => (s ? s.replace(/차수/g, "회차").replace(/선점/g, "미리 빠진 재고") : s);
+// 무시할 때 저장하는 한 줄(무시 목록에 그대로 보인다)
+const summaryOf = (kind: string, r: Item) =>
+  [r.product_name || r.ref_no || "-", r.partner || r.channel, r.txn_date, r.qty === null ? null : num(r.qty), plain(r.detail)]
+    .filter(Boolean).join(" · ") || META[kind]?.label || kind;
 const tagsOf = (r: Item) => [...new Set((r.tags ?? []).filter((t) => TAG[t]).map((t) => (t === "multi" ? "dup" : t)))];
 
 function TagPills({ r }: { r: Item }) {
@@ -167,7 +176,7 @@ function TagPills({ r }: { r: Item }) {
   );
 }
 
-function KindRows({ m, g }: { m: Meta; g: Group }) {
+function KindRows({ m, g, onIgnore }: { m: Meta; g: Group; onIgnore: OnIgnore }) {
   const rowTodo = (r: Item) => m.todoFor?.(r) ?? null;
   const showTodoCol = !!m.todoFor && g.items.some((r) => rowTodo(r));
   // 이 항목에서 값이 하나도 없는 열은 숨긴다
@@ -179,7 +188,7 @@ function KindRows({ m, g }: { m: Meta; g: Group }) {
         <thead>
           <tr>
             {m.view === "product" ? <><th>품목</th><th>칸</th></> : <><th>{m.view === "order" ? "발주" : "번호"}</th><th>{m.view === "order" ? "거래처" : "구분"}</th></>}
-            {showDate && <th>날짜</th>}<th className="num">수량</th>{showMark && <th>표시</th>}{showTodoCol && <th>할 일</th>}
+            {showDate && <th>날짜</th>}<th className="num">수량</th>{showMark && <th>표시</th>}{showTodoCol && <th>할 일</th>}<th />
           </tr>
         </thead>
         <tbody>
@@ -209,6 +218,7 @@ function KindRows({ m, g }: { m: Meta; g: Group }) {
                 </td>
               )}
               {showTodoCol && <td data-label="할 일">{rowTodo(r) || "-"}</td>}
+              <td className="sm-nowrap"><button type="button" className="b2b-link-btn" onClick={() => onIgnore(g.kind, r)}>무시</button></td>
             </tr>
           ))}
         </tbody>
@@ -217,7 +227,7 @@ function KindRows({ m, g }: { m: Meta; g: Group }) {
   );
 }
 
-function KindBlock({ kind, g, itemCap }: { kind: string; g: Group; itemCap: number }) {
+function KindBlock({ kind, g, itemCap, onIgnore }: { kind: string; g: Group; itemCap: number; onIgnore: OnIgnore }) {
   const m = META[kind];
   const [open, setOpen] = useState(false);
   // 이 항목 행에 붙은 표식의 주의 한 줄(그런 행이 있을 때만 — 행 상한에 잘렸으면 다 보인다)
@@ -243,7 +253,7 @@ function KindBlock({ kind, g, itemCap }: { kind: string; g: Group; itemCap: numb
       {open && (
         <div className="sm-col" style={{ gap: "var(--sm-space-2)", marginTop: "var(--sm-space-3)" }}>
           {notes.length > 0 && <div className="sm-warn sm-col" style={{ gap: "var(--sm-space-1)" }}>{notes.map((n) => <span key={n}>{n}</span>)}</div>}
-          <KindRows m={m} g={g} />
+          <KindRows m={m} g={g} onIgnore={onIgnore} />
           {cut && <p className="sm-faint" style={{ fontSize: "var(--sm-fs-xs)" }}>앞 {qtyText(itemCap, "건")}만 표시</p>}
         </div>
       )}
@@ -260,6 +270,9 @@ export default function LedgerCheckPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showClean, setShowClean] = useState(false);
+  const [ignored, setIgnored] = useState<Ignored[]>([]);
+  const [showIgnored, setShowIgnored] = useState(false);
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -267,17 +280,45 @@ export default function LedgerCheckPage() {
       const j = await (await fetch("/api/inventory/ledger-check", { cache: "no-store" })).json();
       if (!j.ok) throw new Error(j.error || "원장 점검 결과를 불러오지 못했습니다. [다시 확인]을 누르세요.");
       setGroups(j.groups || []);
+      setIgnored(j.ignored || []);
       setToday(j.today || "");
       setTruncated(!!j.truncated);
       setFnStale(!!j.fnStale);
       if (j.itemCap) setItemCap(Number(j.itemCap));
     } catch (e) {
       setGroups([]);
+      setIgnored([]);
       setError(e instanceof Error ? e.message : "원장 점검 결과를 불러오지 못했습니다. [다시 확인]을 누르세요.");
     }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // [무시]·[되살리기] — 원장 부수효과 없는 표시 변경이라 바로 반영 + 되돌리기 알림(design-system 결과 알림)
+  const post = useCallback(async (action: "ignore" | "restore", kind: string, key: string, summary?: string) => {
+    const j = await (await fetch("/api/inventory/ledger-check", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, kind, key, summary }),
+    })).json().catch(() => ({ ok: false, error: "저장하지 못했습니다. 다시 누르세요." }));
+    if (!j.ok) throw new Error(j.error || "저장하지 못했습니다. 다시 누르세요.");
+  }, []);
+  const restore = useCallback(async (it: Ignored, quiet = false) => {
+    try {
+      await post("restore", it.kind, it.key);
+      await load();
+      if (!quiet) toast.undo("되살렸습니다", async () => { await post("ignore", it.kind, it.key, it.summary || undefined); await load(); });
+    } catch (e) { toast.error(e instanceof Error ? e.message : "되살리지 못했습니다."); }
+  }, [post, load, toast]);
+  const ignore = useCallback<OnIgnore>(async (kind, r) => {
+    const summary = summaryOf(kind, r);
+    try {
+      await post("ignore", kind, r.key, summary);
+      setGroups((gs) => gs.map((g) => (g.kind === kind ? { ...g, count: Math.max(0, g.count - 1), items: g.items.filter((x) => x.key !== r.key) } : g)));
+      const it: Ignored = { kind, key: r.key, summary, ignored_by: null, created_at: new Date().toISOString() };
+      setIgnored((xs) => [it, ...xs.filter((x) => !(x.kind === kind && x.key === r.key))]);
+      toast.undo("무시했습니다", () => restore(it, true));
+    } catch (e) { toast.error(e instanceof Error ? e.message : "무시하지 못했습니다."); }
+  }, [post, restore, toast]);
 
   const byKind = useMemo(() => new Map(groups.map((g) => [g.kind, g])), [groups]);
   const sorted = useMemo(() => ORDER.map((k) => byKind.get(k)).filter((g): g is Group => !!g), [byKind]);
@@ -340,7 +381,7 @@ export default function LedgerCheckPage() {
                 <div className="b2b-card-head sm-between" style={{ flexWrap: "wrap", gap: "var(--sm-space-2)" }}>
                   <span className="b2b-card-title">{w.title} <span style={{ color: "var(--sm-danger)" }}>{qtyText(n, "건")}</span></span>
                 </div>
-                {list.map((g) => <KindBlock key={g.kind} kind={g.kind} g={g} itemCap={itemCap} />)}
+                {list.map((g) => <KindBlock key={g.kind} kind={g.kind} g={g} itemCap={itemCap} onIgnore={ignore} />)}
               </section>
             );
           })}
@@ -351,6 +392,32 @@ export default function LedgerCheckPage() {
               <div className="sm-warn sm-col" style={{ gap: "var(--sm-space-1)" }}>
                 {unknown.map((g) => <span key={g.kind}>{META[g.kind].label} — {unknownOf(g)}</span>)}
               </div>
+            </section>
+          )}
+
+          {ignored.length > 0 && (
+            <section className="b2b-card" style={{ marginBottom: "var(--sm-space-5)" }}>
+              <button type="button" className="b2b-link-btn" onClick={() => setShowIgnored((v) => !v)}>
+                {showIgnored ? "무시한 항목 닫기" : `무시한 항목 ${qtyText(ignored.length, "건")} 보기`}
+              </button>
+              {showIgnored && (
+                <div className="b2b-table-wrap" style={{ marginTop: "var(--sm-space-2)" }}>
+                  <table className="b2b-table is-responsive">
+                    <thead><tr><th>항목</th><th>내용</th><th>무시한 사람</th><th>날짜</th><th /></tr></thead>
+                    <tbody>
+                      {ignored.map((it) => (
+                        <tr key={`${it.kind}-${it.key}`}>
+                          <td data-label="항목">{META[it.kind]?.label || it.kind}</td>
+                          <td data-label="내용">{it.summary || "-"}</td>
+                          <td data-label="무시한 사람">{it.ignored_by || "-"}</td>
+                          <td data-label="날짜" className="sm-nowrap">{it.created_at.slice(0, 10)}</td>
+                          <td className="sm-nowrap"><button type="button" className="b2b-link-btn" onClick={() => restore(it)}>되살리기</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           )}
 
