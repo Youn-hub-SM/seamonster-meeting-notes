@@ -36,13 +36,16 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  // 파도소리 전용 도메인(선택). FACTORY_HOST 를 설정하면 그 호스트는 /factory 만 서비스한다.
-  //  모르는 호스트(베타 배포 URL·localhost)는 내부로 취급한다 — 접근 통제는 아래 역할 검사가 담당하고
-  //  이 분기는 주소 안내와 1차 필터다. 도메인을 붙이기 전에는 FACTORY_HOST 를 비워두면 된다.
-  const factoryHost = (process.env.FACTORY_HOST || "").toLowerCase();
-  if (factoryHost && host === factoryHost && !isFactoryPath(pathname)) {
+  // 파도소리 전용 도메인(pdsr.kr, 2026-10-20). FACTORY_HOST 를 설정하면 그 호스트는 /factory 만 서비스한다.
+  //  쉼표로 여러 개("pdsr.kr,www.pdsr.kr"). 모르는 호스트(베타 배포 URL·localhost)는 내부로 취급한다 —
+  //  접근 통제는 아래 역할 검사가 담당하고 이 분기는 주소 안내와 1차 필터다.
+  //  대표 규칙: 파도소리 주소에서는 씨몬스터 업무도우미가 전혀 보이면 안 된다 → 씨몬스터 로그인(/b2b/login)도 막고
+  //  파도소리 로그인으로 보낸다(로그인 API /api/b2b/auth 는 파도소리 로그인 화면이 쓰므로 연다).
+  const factoryHosts = (process.env.FACTORY_HOST || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+  const onFactoryHost = factoryHosts.includes(host);
+  if (onFactoryHost && (pathname === "/b2b/login" || !isFactoryPath(pathname))) {
     const url = req.nextUrl.clone();
-    url.pathname = "/factory";
+    url.pathname = pathname === "/b2b/login" ? "/factory/login" : "/factory";
     url.search = "";
     return NextResponse.redirect(url);
   }
@@ -122,7 +125,7 @@ export async function middleware(req: NextRequest) {
 
   // 파도소리 화면(/factory·전용 호스트)은 파도소리 로그인으로 — 씨몬스터 로그인 화면을 보여주지 않는다.
   const url = req.nextUrl.clone();
-  const toFactory = pathname.startsWith("/factory") || (!!factoryHost && host === factoryHost);
+  const toFactory = pathname.startsWith("/factory") || onFactoryHost;
   url.pathname = toFactory ? "/factory/login" : "/b2b/login";
   url.search = "";
   if (toFactory) {
