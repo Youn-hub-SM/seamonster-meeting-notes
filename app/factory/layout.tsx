@@ -17,7 +17,6 @@ const NAV = [
 
 export default function FactoryLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/factory";
-  const [userName, setUserName] = useState<string | null>(null);
   const [role, setRole] = useState<string>("factory");
 
   useEffect(() => { document.title = "파도소리 재고관리"; }, []);
@@ -25,7 +24,7 @@ export default function FactoryLayout({ children }: { children: React.ReactNode 
     if (pathname === "/factory/login") return;
     fetch("/api/b2b/auth", { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (j?.ok) { setUserName(j.name || null); setRole(j.role || "internal"); } })
+      .then((j) => { if (j?.ok) setRole(j.role || "internal"); })
       .catch(() => {});
   }, [pathname]);
 
@@ -61,12 +60,9 @@ export default function FactoryLayout({ children }: { children: React.ReactNode 
             </Link>
           )}
         </nav>
+        {/* 사용자 이름·알림 설정·씨몬스터 도구로 링크는 뺐다(2026-10-20 대표 지시) — 로그아웃만.
+            알림 설정 화면(/factory/settings)은 주소로만 연다. */}
         <div className="fac-sb-foot">
-          {userName && <span className="fac-sb-user">{userName}</span>}
-          {/* 알림 설정(Teams·아사나)은 관리자 전용 */}
-          {role === "internal" && <Link href="/factory/settings">알림 설정</Link>}
-          {/* 내부(씨몬스터) 계정이 들어온 경우에만 — 파도소리 계정은 어차피 미들웨어가 막는 경로다 */}
-          {role === "internal" && <Link href="/">씨몬스터 도구로</Link>}
           <button type="button" onClick={logout}>로그아웃</button>
         </div>
       </aside>

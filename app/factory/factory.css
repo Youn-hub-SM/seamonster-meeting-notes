@@ -48,7 +48,6 @@
   margin-top: auto; padding: 10px 10px 0; border-top: 1px solid var(--sm-border-light);
   display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--sm-text-mid);
 }
-.fac-sb-user { font-weight: 700; color: var(--sm-dark); }
 .fac-sb-foot button, .fac-sb-foot a {
   background: none; border: none; padding: 0; font: inherit; cursor: pointer;
   color: var(--sm-text-light); text-align: left; text-decoration: none;
