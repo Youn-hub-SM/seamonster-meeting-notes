@@ -20,8 +20,9 @@ async function isAdminReq(req: NextRequest): Promise<boolean> {
 export async function GET(req: NextRequest) {
   try {
     if (!(await isAdminReq(req))) return NextResponse.json({ ok: false, error: "대표 전용 설정입니다." }, { status: 403 });
-    const [auto, webhook, mailTo] = await Promise.all([getKv("briefing_auto"), getKv("briefing_webhook"), getKv("analyst_mail_to")]);
-    return NextResponse.json({ ok: true, auto: auto !== "off", webhook, mailTo, mailDefault: defaultRecipients(), smtpReady: smtpReady() });
+    // 2026-10-20: 옛 06:30 브리핑의 자동 생성·팀즈 웹훅(briefing_auto·briefing_webhook) 삭제 — 종합 리포트 메일 수신자만 남는다
+    const mailTo = await getKv("analyst_mail_to");
+    return NextResponse.json({ ok: true, mailTo, mailDefault: defaultRecipients(), smtpReady: smtpReady() });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "설정 조회 실패") }, { status: 500 });
   }
@@ -32,9 +33,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     if (!(await isAdminReq(req))) return NextResponse.json({ ok: false, error: "대표 전용 설정입니다." }, { status: 403 });
-    const b = (await req.json()) as { auto?: boolean; webhook?: string; mailTo?: string };
-    const webhook = b.webhook !== undefined ? String(b.webhook).trim() : undefined;
-    if (webhook && !/^https:\/\//.test(webhook)) return NextResponse.json({ ok: false, error: "웹훅 URL은 https:// 로 시작해야 합니다." }, { status: 400 });
+    const b = (await req.json()) as { mailTo?: string };
     let mailTo: string | undefined;
     if (b.mailTo !== undefined) {
       const list = splitMailList(String(b.mailTo ?? ""));
@@ -42,9 +41,7 @@ export async function PUT(req: NextRequest) {
       if (bad.length) return NextResponse.json({ ok: false, error: `메일 수신자 형식이 올바르지 않습니다: ${bad.slice(0, 3).join(", ")}` }, { status: 400 });
       mailTo = list.join(", ");
     }
-    if (b.auto !== undefined) await setKv("briefing_auto", b.auto ? "on" : "off");
     if (mailTo !== undefined) await setKv("analyst_mail_to", mailTo);
-    if (webhook !== undefined) await setKv("briefing_webhook", webhook);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "설정 저장 실패") }, { status: 500 });

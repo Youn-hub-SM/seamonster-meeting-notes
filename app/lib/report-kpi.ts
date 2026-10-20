@@ -4,7 +4,9 @@
 //  폴백: 칸이 없으면 그 타일은 null(0 으로 그리지 않음), 타일이 하나도 없으면 null(띠 생략). 옛 리포트(facts 없음)는 null.
 import { won, moneyCompact } from "./format";
 import type { InvWatchRow } from "./report-sections";
-import type { LeadLine, TeamsColor } from "./briefing"; // 타입만(팀즈 카드 핵심 줄) — 런타임 의존 없음
+// 팀즈 카드 핵심 줄 타입 — 옛 업무 브리핑 엔진(briefing.ts, 2026-10-20 삭제)에서 옮겨 옴. 종합 리포트 화면·메일이 쓴다.
+export type TeamsColor = "Good" | "Attention" | "Warning" | "Default";
+export type LeadLine = { text: string; color?: TeamsColor };
 
 export type KpiPeriod = "daily" | "weekly" | "monthly";
 export type KpiTone = "success" | "danger" | "warning" | "info" | "neutral";

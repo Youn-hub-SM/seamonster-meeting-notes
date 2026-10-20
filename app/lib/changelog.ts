@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-10-20",
+    tag: "수정",
+    tool: "관리자",
+    title: "안 쓰는 기능 정리 — OKR 1:1 체크인·옛 06:30 업무 브리핑 삭제",
+    desc: "OKR 1:1 체크인(2026-09 아사나 연동)과 옛 06:30 업무 브리핑(2026-09-30 중단)의 남은 코드·설정·표를 지웠습니다. 종합 리포트(/briefing 화면, 메일 수신자 설정, 저장소)는 그대로입니다. AI 설정에서 '업무 브리핑(중단)' 모델 행이 사라지고, 아사나 연동 가이드의 OKR 문장을 뺐습니다. DB: migration 142(표 okr_checkins·briefings 삭제, 옛 설정 키 정리).",
+    href: "/b2b/settings/ai",
+  },
+  {
+    date: "2026-10-20",
     tag: "개선",
     tool: "AI 데이터 비서",
     title: "AI 데이터 비서 — 모든 표를 보게(차단 목록 방식), 표 설명은 DB 주석에서",

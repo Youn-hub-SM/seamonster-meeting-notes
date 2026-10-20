@@ -191,16 +191,6 @@ export async function getAsanaProjectName(pat: string, gid: string): Promise<{ o
   return { ok: true, name: (r.data as { name?: string } | null)?.name || gid };
 }
 
-// 태스크 완료 여부 일괄 조회 — OKR 체크인의 이행률 계산용. 실패한 gid 는 결과에서 빠진다(모름 처리).
-export async function getAsanaTasksStatus(pat: string, gids: string[]): Promise<Map<string, { completed: boolean }>> {
-  const out = new Map<string, { completed: boolean }>();
-  await Promise.all(gids.map(async (gid) => {
-    const r = await asanaFetch(pat, `/tasks/${encodeURIComponent(gid)}?opt_fields=completed`);
-    if (r.ok) out.set(gid, { completed: !!(r.data as { completed?: boolean } | null)?.completed });
-  }));
-  return out;
-}
-
 // 연결 테스트 — 토큰(내 정보)과 프로젝트 접근을 각각 확인해 이름으로 답한다.
 export async function testAsanaConnection(pat: string, projectGid: string): Promise<{ ok: boolean; detail?: string; error?: string }> {
   const me = await asanaFetch(pat, "/users/me?opt_fields=name,email");

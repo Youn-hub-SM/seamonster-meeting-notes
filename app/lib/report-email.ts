@@ -14,7 +14,7 @@
 //   주간(고객의 소리 표 포함, 12+9) 41,880B full · 월간 30+30 59,779B full · 55+55 90,719B full · 60+60 은 full 이 한도를 넘어 ① 약 35,400B ·
 //   큰 추이 표(1,500행)는 ①로 안 줄어 ② 3,008B. 캠페인 표 한 행 ≈ 0.62KB — 메타·네이버 합쳐 약 115개를 넘어야 ① 이 돈다.
 //  폭(headless Edge 실측): 375px 화면에서 문서 폭 360px(넘침 없음, 표 7개 모두 312px 안), 데스크톱에서 바깥 표 600px.
-import type { LeadLine } from "./briefing"; // 타입만(팀즈 카드 핵심 줄) — 런타임 의존 없음
+import type { LeadLine } from "./report-kpi"; // 타입만(팀즈 카드 핵심 줄) — 런타임 의존 없음
 import { MAIL_COLORS, mailEsc as esc } from "./sales-report-html";
 import { defaultRecipients } from "./sales-mailer";
 import { pctTone, type KpiPeriod } from "./report-kpi";

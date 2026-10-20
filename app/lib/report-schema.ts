@@ -15,14 +15,14 @@ export const BLOCKED_RELATIONS = [
   // 비밀·계정·설정
   "b2b_settings", "app_users", "utm_settings", "channel_commands",
   // 경영 비공개
-  "bank_deposits", "bank_deposit_names", "okr_checkins", "tax_invoices",
-  // 비서 자체·중단된 기능
-  "report_threads", "report_messages", "report_tables", "report_glossary", "report_feedback", "briefings",
+  "bank_deposits", "bank_deposit_names", "tax_invoices",
+  // 비서 자체(okr_checkins·briefings 표는 2026-10-20 migration 142 로 삭제)
+  "report_threads", "report_messages", "report_tables", "report_glossary", "report_feedback",
 ];
 const BLOCKED_SET = new Set(BLOCKED_RELATIONS);
 export const isBlockedRelation = (name: string) => BLOCKED_SET.has(name.toLowerCase());
 // 차단 목록 사람 설명(프롬프트 '조회 불가' 절)
-export const BLOCKED_NOTE = "sales_customers(고객 전화·이름), companies·shipments(원본 — companies_report·shipments_report 뷰 사용), survey_responses(설문 원문), b2b_settings·utm_settings·channel_commands(토큰·설정), app_users(계정), bank_deposits·bank_deposit_names(입금 내역), okr_checkins(면담 비공개), tax_invoices(사업자 정보), report_*(비서 자체 저장소), briefings(중단). public 밖 스키마(factory 등)·pg_catalog·information_schema 도 조회하지 않습니다.";
+export const BLOCKED_NOTE = "sales_customers(고객 전화·이름), companies·shipments(원본 — companies_report·shipments_report 뷰 사용), survey_responses(설문 원문), b2b_settings·utm_settings·channel_commands(토큰·설정), app_users(계정), bank_deposits·bank_deposit_names(입금 내역), tax_invoices(사업자 정보), report_*(비서 자체 저장소). public 밖 스키마(factory 등)·pg_catalog·information_schema 도 조회하지 않습니다.";
 
 // 루커스튜디오(looker_ro)가 볼 수 있는 뷰(원장·재고·products 는 못 봄)
 export const LOOKER_RELATIONS = [
@@ -155,5 +155,5 @@ TABLE subscription_snapshots — 정기배송 KPI 스냅샷: data_date(text YYYY
 TABLE naver_conv_daily — 네이버 광고 구매전환 캐시(PK=stat_date,entity_type,entity_id): stat_date(date), entity_type(text keyword|adgroup), entity_id(text), purchase_conv(int), purchase_sales(bigint)
 
 ## 조회 불가(비공개 — 시도 금지)
-sales_customers(고객 전화·이름), b2b_settings(토큰·설정), app_users(계정), okr_checkins(면담 비공개),
+sales_customers(고객 전화·이름), b2b_settings(토큰·설정), app_users(계정),
 bank_deposits·bank_deposit_names(입금 내역), shipments·companies(원본 — 위 *_report 뷰 사용), survey_responses(설문 원문)`;
