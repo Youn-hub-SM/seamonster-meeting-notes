@@ -33,10 +33,12 @@ const FALLBACK = parseFallback();
 // 접두 '/*schema*/' = run_report(141)가 information_schema 참조를 허용하는 유일한 표시(서버 고정문)
 //  2026-10-20: information_schema 는 함수 소유자의 권한 기준으로 걸러져 0건이 나올 수 있어(베타에서 "조회할 수 있는 표가 없다" 사고)
 //  권한에 걸리지 않는 pg_catalog 로 읽는다. 0건이면 실패로 보고 손 설명으로 넘어간다.
-const SCHEMA_SQL = `/*schema*/ select c.relname as t, a.attname as col, pg_catalog.format_type(a.atttypid, a.atttypmod) as typ, a.attnum as pos,
-  case when c.relkind in ('v', 'm') then 'VIEW' else 'TABLE' end as kind,
-  pg_catalog.obj_description(c.oid, 'pg_class') as tcomment,
-  pg_catalog.col_description(c.oid, a.attnum) as ccomment
+//  주의(2026-10-20 사고): 열 별칭에 't' 를 쓰면 안 된다 — run_report 가 결과를 '… from (…) t' 로 감싸고 json_agg(t) 로 묶는데,
+//  열 't' 가 있으면 Postgres 가 행이 아니라 그 열을 집계해 문자열 배열이 돌아온다(모든 값 undefined). 별칭은 rel_name 처럼 겹치지 않게.
+const SCHEMA_SQL = `/*schema*/ select c.relname as rel_name, a.attname as col_name, pg_catalog.format_type(a.atttypid, a.atttypmod) as col_type, a.attnum as col_pos,
+  case when c.relkind in ('v', 'm') then 'VIEW' else 'TABLE' end as rel_kind,
+  pg_catalog.obj_description(c.oid, 'pg_class') as rel_comment,
+  pg_catalog.col_description(c.oid, a.attnum) as col_comment
 from pg_catalog.pg_class c
 join pg_catalog.pg_namespace n on n.oid = c.relnamespace
 join pg_catalog.pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
@@ -56,16 +58,17 @@ function shortType(raw: string): string {
 async function fetchFromDb(sb: SupabaseClient): Promise<Map<string, LiveRelation>> {
   const { data, error } = await sb.rpc("run_report", { q: SCHEMA_SQL, p_limit: 20000 });
   if (error) throw new Error(error.message);
-  const rows = (Array.isArray(data) ? data : []) as { t: string; col: string; typ: string; kind: "TABLE" | "VIEW"; tcomment: string | null; ccomment: string | null }[];
+  const rows = (Array.isArray(data) ? data : []) as { rel_name: string; col_name: string; col_type: string; rel_kind: "TABLE" | "VIEW"; rel_comment: string | null; col_comment: string | null }[];
   lastRows = rows.length;
   if (!rows.length) throw new Error("스키마 조회가 0건으로 돌아왔습니다(run_report 권한·141 적용 여부 확인)");
+  if (typeof rows[0] !== "object" || rows[0] === null || !("rel_name" in rows[0])) throw new Error("스키마 조회 결과의 모양이 다릅니다(행이 객체가 아님 — 별칭 충돌 의심)");
   const map = new Map<string, LiveRelation>();
   for (const r of rows) {
-    const name = String(r.t);
-    if (isBlockedRelation(name) || /^(pg_|_)/.test(name)) continue;
+    const name = String(r.rel_name || "");
+    if (!name || isBlockedRelation(name) || /^(pg_|_)/.test(name)) continue;
     let rel = map.get(name);
-    if (!rel) { rel = { name, kind: r.kind === "VIEW" ? "VIEW" : "TABLE", comment: r.tcomment ? String(r.tcomment).trim() : null, columns: [], fallback: FALLBACK.get(name)?.text ?? null }; map.set(name, rel); }
-    rel.columns.push({ name: String(r.col), type: shortType(String(r.typ)), comment: r.ccomment ? String(r.ccomment).trim() : null });
+    if (!rel) { rel = { name, kind: r.rel_kind === "VIEW" ? "VIEW" : "TABLE", comment: r.rel_comment ? String(r.rel_comment).trim() : null, columns: [], fallback: FALLBACK.get(name)?.text ?? null }; map.set(name, rel); }
+    rel.columns.push({ name: String(r.col_name), type: shortType(String(r.col_type)), comment: r.col_comment ? String(r.col_comment).trim() : null });
   }
   return map;
 }

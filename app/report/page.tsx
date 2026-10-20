@@ -76,7 +76,8 @@ async function readNdjson(body: ReadableStream<Uint8Array>, onLine: (obj: Record
 function numberCheck(text: string, tables: AskTable[]): { total: number; miss: string[] } {
   if (!tables.length) return { total: 0, miss: [] };
   const cleaned = text.replace(/\d{4}-\d{2}-\d{2}/g, " ").replace(/\d+(?:년|월|일|시|분|회차|차|행|초)/g, " "); // 행 수·초는 표 값이 아니다
-  const nums = [...new Set([...cleaned.matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{3,}(?:\.\d+)?/g)].map((m) => m[0]))];
+  // 글자·밑줄·하이픈에 붙은 숫자(SKU P_DSC-100X1 의 100)와 % 는 뺀다
+  const nums = [...new Set([...cleaned.matchAll(/(?<![A-Za-z0-9_\-.])(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{3,}(?:\.\d+)?)(?![A-Za-z0-9_\-%])/g)].map((m) => m[0]))];
   if (!nums.length) return { total: 0, miss: [] };
   const pool = new Set<string>();
   for (const t of tables) for (const r of t.rows) for (const v of Object.values(r)) {
