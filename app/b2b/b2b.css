@@ -2881,7 +2881,7 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-head-list { display: none; }
 .rp-head-title { flex: 1; min-width: 0; margin: 0; font-size: var(--sm-fs-lg); font-weight: 600; color: var(--sm-black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-head-brand { font-size: var(--sm-fs-xs); color: var(--sm-text-light); white-space: nowrap; }
-.rp-head-new { white-space: nowrap; }
+.rp-head-new { display: none; white-space: nowrap; }  /* 넓은 화면은 왼쪽 위 [새 대화] 하나만 — 좁은 화면(목록이 숨을 때)에서만 보인다 */
 
 .rp-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .rp-col { max-width: 780px; margin: 0 auto; padding: 24px 20px 28px; display: flex; flex-direction: column; gap: 18px; }
@@ -2943,6 +2943,7 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
   .rp-head { padding: 0 12px; }
   .rp-head-list { display: inline-flex; }
   .rp-head-brand { display: none; }
+  .rp-head-new { display: inline-flex; }
   .rp-col { padding: 16px 12px 20px; }
   .rp-compose { padding: 6px 12px 12px; }
   .rp-box-hint { display: none; }

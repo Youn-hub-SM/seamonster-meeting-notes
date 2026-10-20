@@ -95,6 +95,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
   const [open, setOpen] = useState(!!defaultOpen);
   const [showSql, setShowSql] = useState(false);
   const [showChart, setShowChart] = useState(false);
+  const [showLooker, setShowLooker] = useState(false);
   const [copied, setCopied] = useState("");
   const copy = (text: string, tag: string) => { navigator.clipboard?.writeText(text).then(() => { setCopied(tag); setTimeout(() => setCopied(""), 1500); }); };
   const rows = table.rows || [];
@@ -120,6 +121,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
             {!table.sql.startsWith("--") && <button type="button" className="b2b-btn-secondary" onClick={() => onExport(table.sql, table.title)} disabled={!rows.length}>엑셀 내려받기</button>}
             {chartable && <button type="button" className="b2b-link-btn" onClick={() => setShowChart((v) => !v)}>{showChart ? "차트 닫기" : "차트 보기"}</button>}
             {!table.sql.startsWith("--") && <button type="button" className="b2b-link-btn" onClick={() => setShowSql((v) => !v)}>{showSql ? "SQL 닫기" : "SQL 보기"}</button>}
+            {looker && looker.mode !== "na" && looker.sql && <button type="button" className="b2b-link-btn" onClick={() => setShowLooker((v) => !v)}>{showLooker ? "루커 SQL 닫기" : "루커 SQL"}</button>}
             {table.sql.startsWith("--") && <span className="rp-table-note">{table.sql.split("\n")[0].replace(/^--\s*/, "")}</span>}
           </div>
           {showChart && chartable && <div className="rp-chart"><BarList title={`${numCol} — ${labelCol}별`} data={chartData} fmt={(n) => n.toLocaleString("ko-KR")} /></div>}
@@ -144,7 +146,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
               <pre className="rp-sql">{table.sql}</pre>
             </div>
           )}
-          {looker && looker.mode !== "na" && looker.sql && (
+          {showLooker && looker && looker.mode !== "na" && looker.sql && (
             <section className="b2b-card rp-looker">
               <div className="b2b-card-head">
                 <span className="b2b-card-title">루커스튜디오용 SQL <span className="rp-card-sub">{looker.mode === "view" ? "· 뷰 생성(SQL Editor 적용 후 사용)" : "· 커스텀 쿼리"}</span></span>
@@ -505,6 +507,17 @@ export default function ReportPage() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${title || "report"}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
   }
 
+  // 비서 글 i 가 그 턴의 마지막 비서 글인가(다음 사용자 글 전까지 비서 글이 더 없으면) — 꼬리(복사·피드백·메타)는 턴 끝에만
+  const isTurnEnd = (i: number): boolean => {
+    for (let k = i + 1; k < items.length; k++) { const x = items[k]; if (x.role === "user") return true; if (x.role === "assistant" && !x.stopped) return false; }
+    return true;
+  };
+  // 그 턴의 비서 글 전부(복사용) — 직전 사용자 글 뒤부터 i 까지
+  const turnText = (i: number): string => {
+    let start = 0;
+    for (let k = i - 1; k >= 0; k--) if (items[k].role === "user") { start = k + 1; break; }
+    return items.slice(start, i + 1).filter((x): x is Extract<Item, { role: "assistant" }> => x.role === "assistant" && !x.stopped).map((x) => x.text.trim()).filter(Boolean).join("\n\n");
+  };
   // 비서 답 i 의 '이번 턴' 표 — 직전 사용자 메시지 뒤의 표 카드들(숫자 대조용)
   const turnTables = (i: number): AskTable[] => {
     let start = 0;
@@ -580,7 +593,7 @@ export default function ReportPage() {
                         <span className="rp-tool-state">{state === "run" ? "진행 중" : state === "ok" ? (it.ms != null ? sec(it.ms) : "완료") : "실패"}</span>
                       </div>
                     )}
-                    {it.table && <div className="rp-tool-out"><TableCard table={it.table} question={lastUserText} defaultOpen={it.table.rowCount <= 12} onSave={openSave} onExport={exportXlsx} /></div>}
+                    {it.table && <div className="rp-tool-out"><TableCard table={it.table} question={lastUserText} defaultOpen={it.table.rowCount <= 6} onSave={openSave} onExport={exportXlsx} /></div>}
                   </div>
                 );
               }
@@ -607,10 +620,10 @@ export default function ReportPage() {
               return (
                 <div key={i} className="rp-m-ai">
                   <AiText text={it.text} live={it.live} />
-                  {it.meta && (
+                  {!it.live && isTurnEnd(i) && (
                     <div className="rp-ai-foot">
                       <div className="rp-ai-actions">
-                        <button type="button" className="b2b-link-btn" onClick={() => copyText(it.text)}>복사</button>
+                        <button type="button" className="b2b-link-btn" onClick={() => copyText(turnText(i))}>복사</button>
                         {it.fb ? <span className="rp-fb-done">{it.fb === "ok" ? "맞아요로 남겼습니다" : "틀려요로 남겼습니다"}</span> : fbNoteFor === i ? (
                           <span className="rp-fb-note">
                             <input className="b2b-input" placeholder="어디가 틀렸나요? (선택)" value={fbNote} onChange={(e) => setFbNote(e.target.value)} aria-label="틀린 이유"
@@ -625,7 +638,7 @@ export default function ReportPage() {
                           </>
                         )}
                       </div>
-                      <div className="rp-meta">
+                      {it.meta && <div className="rp-meta">
                         {it.meta.downgraded && <span className="rp-meta-warn">이달 비용 상한을 넘어 빠른 모델로 답했습니다 · </span>}
                         {it.meta.timedOut && <span className="rp-meta-warn">시간이 다 돼 조사를 다 하지 못했습니다 · </span>}
                         {it.meta.dataDate && <>데이터 {it.meta.dataDate}까지 · </>}
@@ -634,7 +647,7 @@ export default function ReportPage() {
                           : <><span className="rp-badge is-warn" title={check.miss.join(", ")}>표에 없는 숫자 {qty(check.miss.length)}개: {check.miss.slice(0, 4).join(", ")}{check.miss.length > 4 ? " …" : ""}</span> · </>)}
                         {it.meta.model} · {sec(it.meta.elapsedMs)}
                         {isAdmin && <> · 약 {usd(it.meta.estUsd)}{it.meta.estNote ? ` (${it.meta.estNote})` : ""}</>}
-                      </div>
+                      </div>}
                     </div>
                   )}
                 </div>
