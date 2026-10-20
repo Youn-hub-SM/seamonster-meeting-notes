@@ -316,7 +316,9 @@ async function saveMessage(threadId: string, seq: number, role: "user" | "assist
 export const CHAT_MODEL_KEYS = ["fable", "opus", "sonnet"] as const;
 export type ChatModelKey = (typeof CHAT_MODEL_KEYS)[number];
 
-export async function runChatTurn(p: { threadId: string; text: string; user: string; modelKey?: ChatModelKey | null; send: (e: ChatEvent) => void }): Promise<void> {
+// signal: 화면의 [중지](2026-10-21 클로드 코드식 화면) — 끊기면 다음 차례를 시작하지 않고, 흐르던 응답도 멈춘다.
+//  도구 실행 중이면 그 결과까지 저장한 뒤 멈춘다(tool_use 뒤에 tool_result 가 빠지면 다음 턴이 API 오류가 나므로).
+export async function runChatTurn(p: { threadId: string; text: string; user: string; modelKey?: ChatModelKey | null; signal?: AbortSignal; send: (e: ChatEvent) => void }): Promise<void> {
   const startedAt = Date.now();
   const deadlineAt = startedAt + CHAT_DEADLINE_MS;
   const text = (p.text || "").trim();
@@ -363,6 +365,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
 
   try {
     for (let round = 0; round < MAX_ROUNDS + 1; round++) {
+      if (p.signal?.aborted) break; // 사용자가 [중지]
       const left = deadlineAt - Date.now();
       if (left < 20_000) { timedOut = true; break; }
       const finalTurn = wrapUp || round >= MAX_ROUNDS || left < FINAL_RESERVE_MS + SEARCH_TIMEOUT_MS;
@@ -379,10 +382,11 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
           model, max_tokens: MAX_TOKENS, system, messages,
           tools, tool_choice: finalTurn ? { type: "none" } : { type: "auto" },
           ...effortParams(model, effort),
-        }, { timeout, maxRetries: 0 });
+        }, { timeout, maxRetries: 0, signal: p.signal });
         stream.on("text", (delta) => { if (delta) p.send({ type: "text", delta }); });
         res = await stream.finalMessage();
       } catch (e) {
+        if (p.signal?.aborted) break; // [중지] — 흐르던 응답은 저장하지 않고 끝낸다(앞선 기록은 온전)
         if (strict && strictRejected(e)) { strict = false; tools = chatTools(false); round--; continue; }
         if (!retried && retryable(e) && deadlineAt - Date.now() > FINAL_RESERVE_MS) { retried = true; await new Promise((r) => setTimeout(r, 3000)); round--; continue; }
         throw e;

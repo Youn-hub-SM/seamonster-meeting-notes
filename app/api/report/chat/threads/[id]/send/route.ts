@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     async start(controller) {
       const send = (e: ChatEvent) => { try { controller.enqueue(enc.encode(line(e))); } catch { /* 클라이언트가 끊음 */ } };
       try {
-        await runChatTurn({ threadId: id, text, user, modelKey, send });
+        await runChatTurn({ threadId: id, text, user, modelKey, signal: req.signal, send }); // 화면 [중지] = 연결 끊기 → req.signal
       } catch (e) {
         send({ type: "error", error: isPending139(e) ? PENDING_139 : extractErrorMsg(e, "비서가 답하지 못했습니다.") });
       } finally {
