@@ -4,29 +4,24 @@
 // 이 셸이 별도 사이트처럼 파도소리 브랜드(파랑·흰 배경)로 감싼다(layout.tsx 가 감싸 부른다 — 제목·아이콘은 거기서).
 // 로그인 화면(/factory/login)은 셸 없이 렌더한다.
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/app/components/Icon";
 import "./factory.css";
 
+// 상품마스터는 파도소리 계정에게도 보인다(2026-10-20 대표 지시 — 전엔 관리자 전용).
+//  /factory 구역 자체는 미들웨어가 파도소리 계정·관리자만 들인다.
 const NAV = [
   { href: "/factory", label: "재고", icon: "box" as const, exact: true },
   { href: "/factory/history", label: "히스토리", icon: "receipt" as const },
+  { href: "/factory/products", label: "상품마스터", icon: "fish" as const },
 ];
 
 export default function FactoryShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/factory";
-  const [role, setRole] = useState<string>("factory");
 
   useEffect(() => { document.title = "파도소리 재고관리"; }, []);
-  useEffect(() => {
-    if (pathname === "/factory/login") return;
-    fetch("/api/b2b/auth", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => { if (j?.ok) setRole(j.role || "internal"); })
-      .catch(() => {});
-  }, [pathname]);
 
   if (pathname === "/factory/login") return <>{children}</>;
 
@@ -52,13 +47,6 @@ export default function FactoryShell({ children }: { children: React.ReactNode }
               </Link>
             );
           })}
-          {/* 상품마스터는 관리자 전용 — /factory 에 들어올 수 있는 internal = 관리자뿐 */}
-          {role === "internal" && (
-            <Link href="/factory/products" className={`fac-nav-item ${pathname.startsWith("/factory/products") ? "is-active" : ""}`}>
-              <Icon name="fish" />
-              상품마스터
-            </Link>
-          )}
         </nav>
         {/* 사용자 이름·알림 설정·씨몬스터 도구로 링크는 뺐다(2026-10-20 대표 지시) — 로그아웃만.
             알림 설정 화면(/factory/settings)은 주소로만 연다. */}

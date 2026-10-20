@@ -6,8 +6,8 @@ import type { FactoryProduct } from "@/app/lib/factory";
 export const dynamic = "force-dynamic";
 
 // POST { items: [{ name, origin? }] } — 입고 창에서 바로 품목 등록(모든 계정, 2026-10-20 대표 지시:
-//  "입고 품목이 워낙 많아 상품마스터를 거칠 수 없다"). 상품마스터 등록(POST /api/factory/products)은 여전히 관리자 전용.
-//  - 받는 칸은 품목명·원산지뿐. SKU 는 자동(PD-0001…) — 관리자가 상품마스터에서 바꿀 수 있다.
+//  "입고 품목이 워낙 많아 상품마스터를 거칠 수 없다"). 상품마스터 화면은 품목의 모든 칸을 다룬다.
+//  - 받는 칸은 품목명·원산지뿐. SKU 는 자동(PD-0001…) — 상품마스터에서 바꿀 수 있다.
 //  - 같은 품목명(공백 정리·대소문자 무시)+원산지가 이미 있으면 새로 만들지 않고 그 품목을 돌려준다.
 //    입고 저장이 실패해 다시 눌러도 품목이 두 번 생기지 않는다(입고 창은 저장할 때 이걸 먼저 부른다).
 //  - 응답 products 는 items 와 같은 순서. 등록 이력은 DB 트리거(product_changes '등록')가 남긴다.
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       const hit = existing.get(k);
       if (hit) {
         if (!hit.stock_tracked) {
-          return NextResponse.json({ ok: false, error: `${hit.name}: 상품마스터에서 '재고관리 사용안함'인 품목입니다 — 관리자에게 켜 달라고 하세요.` }, { status: 400 });
+          return NextResponse.json({ ok: false, error: `${hit.name}: '재고관리 사용안함' 품목입니다 — 상품마스터에서 재고관리를 켜세요.` }, { status: 400 });
         }
         out.push(hit);
         continue;

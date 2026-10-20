@@ -26,13 +26,13 @@ function cellStr(v: unknown): string {
   return String(v).trim();
 }
 
-// POST (multipart: file) — 파도소리 상품마스터 엑셀 분석 → 변경 미리보기(관리자). DB 는 바꾸지 않는다.
+// POST (multipart: file) — 파도소리 상품마스터 엑셀 분석 → 변경 미리보기. DB 는 바꾸지 않는다.
 //  씨몬스터 상품 마스터 업로드(/api/b2b/products/import)와 같은 방식: 신규·변경(칸별 이전→이후)·동일·오류(행 번호).
 //  매칭 규칙은 planFactoryImport(factory-product-xlsx.ts).
 export async function POST(req: NextRequest) {
   try {
-    const u = await factoryWho(req);
-    if (!u.admin) return NextResponse.json({ ok: false, error: "관리자만 업로드할 수 있습니다." }, { status: 403 });
+    // 파도소리 계정도 쓴다(2026-10-20 대표 지시) — 구역 접근은 미들웨어가 파도소리 계정·관리자로 막는다
+    await factoryWho(req);
     const form = await req.formData();
     const file = form.get("file");
     if (!file || typeof file === "string") return NextResponse.json({ ok: false, error: "엑셀 파일을 첨부하세요." }, { status: 400 });

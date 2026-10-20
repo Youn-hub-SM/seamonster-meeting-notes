@@ -90,10 +90,7 @@ export const NAV: NavCategory[] = [
       { href: "/inventory/reconcile", label: "재고 대사", icon: "receipt" }, // 구매·판매·재고 확인(대사)
       { href: "/inventory/ledger-check", label: "원장 점검", icon: "book" }, // 2026-10-11 대표 결정 D4d — 주 1회 장부 이상 확인(읽기 전용)
       { href: "/inventory/activity", label: "재고 변경 기록", icon: "note" },
-
-      // 파도소리(제조사) 자체 원장 — 로트 단위. 씨몬스터 재고와 연결되지 않는 별도 데이터다.
-      // 접근은 파도소리 계정+관리자만(미들웨어 차단) — 일반 직원에겐 메뉴도 숨긴다.
-      { href: "/factory", label: "파도소리 재고", icon: "fish", adminOnly: true, beta: true },
+      // 파도소리 재고는 업무도우미 메뉴에서 뺐다(2026-10-20 대표 지시) — 전용 주소 pdsr.kr 로만 들어간다.
     ],
   },
   {

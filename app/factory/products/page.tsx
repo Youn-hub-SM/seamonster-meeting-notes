@@ -1,6 +1,6 @@
 "use client";
 
-// 파도소리 상품마스터(관리자) — SKU · 품목 · 원산지 · 비고 · 제품원가 · 판매가 · 재고관리 사용안함.
+// 파도소리 상품마스터(파도소리 계정·관리자, 2026-10-20 관리자 전용 해제) — SKU · 품목 · 원산지 · 비고 · 제품원가 · 판매가 · 재고관리 사용안함.
 //  엑셀 추출 → 고쳐서 엑셀 업로드 → 변경 확인 → 적용(씨몬스터 상품 마스터와 같은 방식, ID 가 매칭 키).
 //  바꾼 값은 히스토리 '변경'에 남는다. 입출고 기록이 있는 품목은 지울 수 없다(재고관리 사용안함으로 숨긴다).
 
@@ -20,7 +20,6 @@ type ImportPreview = {
 };
 
 export default function FactoryProductsPage() {
-  const [role, setRole] = useState<string | null>(null);
   const [products, setProducts] = useState<FactoryProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,13 +30,6 @@ export default function FactoryProductsPage() {
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
 
-  // 관리자 전용 — 파도소리 계정은 안내만(API 도 관리자를 검사한다)
-  useEffect(() => {
-    fetch("/api/b2b/auth", { cache: "no-store" }).then((r) => r.json())
-      .then((j) => setRole(j?.ok ? j.role || "internal" : "factory"))
-      .catch(() => setRole("factory"));
-  }, []);
-
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
@@ -47,7 +39,7 @@ export default function FactoryProductsPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "조회 오류"); }
     setLoading(false);
   }, []);
-  useEffect(() => { if (role === "internal") load(); }, [role, load]);
+  useEffect(() => { load(); }, [load]);
 
   const list = useMemo(() => {
     const q = kw.trim();
@@ -84,9 +76,6 @@ export default function FactoryProductsPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "적용 실패"); }
     setApplying(false);
   }
-
-  if (role === null) return <div className="b2b-container"><div className="b2b-loading">불러오는 중...</div></div>;
-  if (role === "factory") return <div className="b2b-container"><div className="b2b-empty">관리자 전용 화면입니다.</div></div>;
 
   return (
     <div className="b2b-container fac-products">

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import {
   factoryDb, factoryWho, isPending005, PENDING_005,
-  parseProductInput, histValue, MASTER_FIELDS, type ProductPatch,
+  parseProductInput, histValue, type ProductPatch,
 } from "@/app/lib/factory-db";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const pending = () => NextResponse.json({ ok: false, error: PENDING_005, pending_migration: true }, { status: 503 });
 
-// PATCH — 품목 수정. SKU·품목·원산지·비고·재고관리는 관리자만, 제품원가·판매가는 모든 계정.
+// PATCH — 품목 수정. 모든 칸을 파도소리 계정·관리자가 바꾼다(2026-10-20 대표 지시, 이력은 DB 트리거가 남김).
 //  바뀐 값은 DB 트리거(factory.log_product_change)가 같은 트랜잭션에서 product_changes 에 남긴다(히스토리 '변경').
 //  '누가'는 updated_by 로 넘긴다.
 export async function PATCH(req: NextRequest, { params }: Ctx) {
@@ -31,8 +31,6 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const changed = (Object.keys(patch) as (keyof ProductPatch)[])
       .filter((k) => histValue(before[k]) !== histValue(patch[k]));
     if (changed.length === 0) return NextResponse.json({ ok: true, product: cur, unchanged: true });
-    if (!u.admin && changed.some((k) => (MASTER_FIELDS as readonly string[]).includes(k)))
-      return NextResponse.json({ ok: false, error: "SKU·품목·원산지·비고·재고관리는 관리자만 바꿀 수 있습니다." }, { status: 403 });
 
     const upd: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: u.name };
     for (const k of changed) upd[k] = patch[k];
@@ -48,13 +46,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
 }
 
-// DELETE — 품목 삭제(관리자). 입출고 기록이 한 줄이라도 있으면(취소 포함) DB 함수가 막는다 — 히스토리가 끊긴다.
+// DELETE — 품목 삭제. 입출고 기록이 한 줄이라도 있으면(취소 포함) DB 함수가 막는다 — 히스토리가 끊긴다.
 //  삭제 이력과 삭제는 DB 함수(factory.delete_product) 한 트랜잭션.
 export async function DELETE(req: NextRequest, { params }: Ctx) {
   try {
     const { id } = await params;
     const u = await factoryWho(req);
-    if (!u.admin) return NextResponse.json({ ok: false, error: "품목 삭제는 관리자만 할 수 있습니다." }, { status: 403 });
     const { error } = await factoryDb().rpc("delete_product", { p_id: id, p_actor: u.name });
     if (error) {
       const code = (error as { code?: string }).code;

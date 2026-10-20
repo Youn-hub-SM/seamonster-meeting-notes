@@ -8,12 +8,12 @@ import type { FactoryProduct } from "@/app/lib/factory";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET — 파도소리 상품마스터 전 품목(재고관리 사용안함 포함)을 엑셀로(관리자). ID 포함 → 고쳐서 다시 올리면 된다(씨몬스터 상품 마스터와 같은 방식).
+// GET — 파도소리 상품마스터 전 품목(재고관리 사용안함 포함)을 엑셀로. ID 포함 → 고쳐서 다시 올리면 된다(씨몬스터 상품 마스터와 같은 방식).
 //  품목이 없으면 헤더만 있는 양식이 내려간다.
 export async function GET(req: NextRequest) {
   try {
-    const u = await factoryWho(req);
-    if (!u.admin) return NextResponse.json({ ok: false, error: "관리자만 내려받을 수 있습니다." }, { status: 403 });
+    // 파도소리 계정도 쓴다(2026-10-20 대표 지시) — /factory 구역 접근 자체는 미들웨어가 파도소리 계정·관리자로 막는다
+    await factoryWho(req);
     const { data, error } = await factoryDb().from("products").select("*")
       .order("stock_tracked", { ascending: false }).order("name").order("sku");
     if (error) throw error;

@@ -11,12 +11,12 @@ const FIELDS = ["sku", "name", "origin", "note", "cost", "price", "stock_tracked
 const pick = (r: Record<string, unknown>) => Object.fromEntries(FIELDS.filter((k) => k in r).map((k) => [k, r[k]]));
 const nameOf = (r: Record<string, unknown>) => String(r.label || r.name || r.sku || "?");
 
-// POST { creates: Row[], updates: Row[] } — 미리보기에서 확인한 행만 반영(관리자). 서버에서 다시 정리(화면 변조 방어).
+// POST { creates: Row[], updates: Row[] } — 미리보기에서 확인한 행만 반영. 서버에서 다시 정리(화면 변조 방어).
 //  바뀐 칸은 DB 트리거가 히스토리 '변경'에 남긴다(누가 = updated_by / created_by).
 export async function POST(req: NextRequest) {
   try {
     const u = await factoryWho(req);
-    if (!u.admin) return NextResponse.json({ ok: false, error: "관리자만 반영할 수 있습니다." }, { status: 403 });
+    // 파도소리 계정도 쓴다(2026-10-20 대표 지시) — 구역 접근은 미들웨어가 파도소리 계정·관리자로 막는다
     const body = (await req.json().catch(() => ({}))) as { creates?: Record<string, unknown>[]; updates?: Record<string, unknown>[] };
     const creates = Array.isArray(body.creates) ? body.creates : [];
     const updates = Array.isArray(body.updates) ? body.updates : [];

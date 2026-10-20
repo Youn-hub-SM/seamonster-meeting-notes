@@ -17,11 +17,11 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { sku, name, origin?, note?, cost?, price?, stock_tracked? } — 품목 등록(관리자). 등록 이력은 DB 트리거가 남긴다.
+// POST { sku, name, origin?, note?, cost?, price?, stock_tracked? } — 품목 등록. 등록 이력은 DB 트리거가 남긴다.
 export async function POST(req: NextRequest) {
   try {
     const u = await factoryWho(req);
-    if (!u.admin) return NextResponse.json({ ok: false, error: "품목 등록은 관리자만 할 수 있습니다." }, { status: 403 });
+    // 파도소리 계정도 등록한다(2026-10-20 대표 지시) — 구역 접근은 미들웨어가 파도소리 계정·관리자로 막는다
     const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const { patch, error: bad } = parseProductInput({ sku: b.sku, name: b.name, origin: b.origin, note: b.note, cost: b.cost, price: b.price, stock_tracked: b.stock_tracked });
     if (bad) return NextResponse.json({ ok: false, error: bad }, { status: 400 });
