@@ -66,7 +66,6 @@ export const NAV: NavCategory[] = [
       },
       { href: "/coupon", label: "쿠폰 요청서", icon: "ticket" },
       { href: "/subscription", label: "정기배송 분석", icon: "trend" },
-      { href: "/sales/margin-calc", label: "이익률 계산기", icon: "tag" }, // 2026-10-14 C3: '기타' 해체 → 세일즈
     ],
   },
   {
