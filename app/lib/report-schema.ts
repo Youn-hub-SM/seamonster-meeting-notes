@@ -75,7 +75,8 @@ TABLE inventory_txns — 재고 원장(입고+/출고−/조정±). 현재고 = 
   created_by(text — B2B 발송 선점 행은 'B2B 자동출고'), shipment_id(uuid B2B 선점 행의 발송 차수 = shipments_report.id), created_at,
   source(text 행 출처 131 — manual|import|move|promo_close|b2b_ship|b2b_cancel_kept(발송 뒤 취소했지만 반품 안 된 출고, shipment_id 없음)|fulfill|fulfill_unmatched, null=131 이전), source_ref(text 출처 참조 — b2b_*=발주 id, move=group_id, promo_close=요청서 id), request_key(text 중복 방지 키)
   ※ 오늘 재고는 txn_date <= 오늘(KST) 인 완료 행만 — 미래 날짜 완료 행(B2B 선점)은 '출고 예정'
-  ※ 현재고 예: select p.name, sum(t.qty) 재고 from inventory_txns t join products p on p.id=t.product_id where t.status='완료' group by p.name
+  ※ 현재고 예: select p.name, sum(t.qty) 재고 from inventory_txns t join products p on p.id=t.product_id where t.status='완료' and p.active group by p.name
+    — 미사용(products.active=false) 품목의 재고·재고 금액은 0으로 본다(원장에 값이 남아 있어도 합계에 넣지 않는다)
 
 TABLE inventory_items — 품목별 재고설정(PK=product_id). product_id, min_qty(int 안전재고), barcode(text), location(text 보관위치), memo(text)
 

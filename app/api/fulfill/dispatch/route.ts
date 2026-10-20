@@ -69,11 +69,13 @@ export async function POST(req: NextRequest) {
     const sb = supabaseAdmin();
 
     // 상품 맵(대문자 SKU) + 묶음. spec = 옵션. 페이지 나눠 전량 — 잘리면 등록된 코드가 '미등록'으로 빠진다.
-    const prods = await fetchSkuProducts<{ id: string; sku: string; name: string; spec?: string }>(sb, "id, sku, name, spec");
+    const prods = await fetchSkuProducts<{ id: string; sku: string; name: string; spec?: string; active?: boolean | null }>(sb, "id, sku, name, spec, active");
     const bySku = new Map<string, { id: string; name: string }[]>();
     const nameById = new Map<string, string>();
     const optById = new Map<string, string>();
+    const inactive = new Set<string>(); // 미사용 품목 — 현재고를 0으로 보인다(2026-10-21 대표 결정, 차감 기록은 그대로)
     for (const p of prods) {
+      if (p.active === false) inactive.add(p.id);
       const k = String(p.sku || "").trim().toUpperCase();
       nameById.set(p.id, p.name || "");
       optById.set(p.id, p.spec || "");
@@ -118,7 +120,7 @@ export async function POST(req: NextRequest) {
       catch (e) {
         return NextResponse.json({ ok: false, error: `재고를 읽지 못했습니다 — 다시 시도하세요. (${extractErrorMsg(e, "재고 조회 실패")})` }, { status: 500 });
       }
-      for (const pid of productIds) { const q = all.get(pid); if (q != null) stockMap.set(pid, q); }
+      for (const pid of productIds) { const q = all.get(pid); if (q != null && !inactive.has(pid)) stockMap.set(pid, q); }
     }
 
     const productRows: ProductRow[] = productIds.map((pid) => {

@@ -75,7 +75,8 @@ group by p.id, p.name having sum(r.len) filter (where r.bal <= 0) > 0
 order by zero_days desc, first_zero limit 5`;
 }
 
-// 월말·전월말 재고 금액(현재 원가) — 세트는 자체 재고가 없어 뺀다(구성품 이중 계산 방지)
+// 월말·전월말 재고 금액(현재 원가) — 세트는 자체 재고가 없어 뺀다(구성품 이중 계산 방지).
+//  미사용(active=false) 품목은 재고 0으로 본다(2026-10-21 대표 결정 — 재고 목록·과거 재고 조회와 같은 범위)
 function valueSql(end: string, prevEnd: string): string {
   return `with s as (select product_id, sum(qty) filter (where txn_date <= '${end}') as q1, sum(qty) filter (where txn_date <= '${prevEnd}') as q0
   from inventory_txns where status = '완료' group by 1)
@@ -83,7 +84,7 @@ select round(coalesce(sum(greatest(coalesce(s.q1, 0), 0) * coalesce(p.cost_price
   round(coalesce(sum(greatest(coalesce(s.q0, 0), 0) * coalesce(p.cost_price, 0)), 0))::bigint as v0,
   (count(*) filter (where s.q1 < 0))::int as neg
 from s join products p on p.id = s.product_id
-where coalesce(p.stock_tracked, true) and not exists (select 1 from product_bundles b where b.parent_id = p.id)`;
+where coalesce(p.stock_tracked, true) and coalesce(p.active, true) and not exists (select 1 from product_bundles b where b.parent_id = p.id)`;
 }
 
 // 월 매입액(잠정) — 매입 결산(fetchQuoteTxns + computeQuote)과 같은 계산: 입고·완료·도매 칸 제외·칸 이동/합류 제외·

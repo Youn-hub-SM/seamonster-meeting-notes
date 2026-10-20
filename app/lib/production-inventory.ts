@@ -93,11 +93,11 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   // 입고 예정 — 제조사 생산 입고는 소매 채널로 들어오므로 소매·전체 수식에서만 뺀다.
   //  도매 수식의 부족은 소매→도매 이동으로 채워지는 몫이라 제조사 잔여를 빼면 이중 차감이 된다.
   //  가장 무거운 원장 속도 조회와 나란히 돌려 지연을 숨긴다.
-  type P = { id: string; sku: string | null; name: string };
+  type P = { id: string; sku: string | null; name: string; active: boolean | null };
   const [stockByProduct, prodRows, velocity, inboundByProduct, reservedMaps, untracked, wholesaleReqByProduct] = await Promise.all([
     stockRpc(),
     // 전 품목(수요 매칭은 비활성 포함) — 1000행에 잘리면 잘린 품목의 재고·수요가 통째로 빠진다(S4)
-    readAll<P>((a, b) => sb.from("products").select("id, sku, name").order("id", { ascending: true }).range(a, b)),
+    readAll<P>((a, b) => sb.from("products").select("id, sku, name, active").order("id", { ascending: true }).range(a, b)),
     getLedgerVelocity(undefined, channel), // 1b) 소진 속도(최근 출고 일평균) — 채널별
     channel === "도매" ? Promise.resolve(new Map<string, InboundRow>()) : getOpenInboundByProduct(sb, today),
     reservedRpc(), // 전체 조회에서만 확보분 칸(프로모션·도매 대량) 차감용
@@ -119,7 +119,9 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   //  소매 = 평상시 수요 대 평상시 재고. 확보분은 자기 칸에 서고 생산은 제조사와 협의한다.
   // SKU(대문자) → {name, stock}. 원장에 거래내역이 있는(=inventory_stock 에 잡히는) 제품만 현재고 보유.
   const stockBySku = new Map<string, { name: string; stock: number }>();
+  //  미사용(active=false) 품목은 재고 0으로 본다(2026-10-21 대표 결정) — 원장 값을 현재고로 쓰지 않는다
   for (const p of prodRows) {
+    if (p.active === false) continue;
     if (p.sku && stockByProduct.has(p.id)) stockBySku.set(String(p.sku).toUpperCase(), { name: p.name, stock: stockByProduct.get(p.id) || 0 });
   }
 
@@ -203,6 +205,11 @@ export async function getInventoryRows(channel?: "소매" | "도매"): Promise<I
   //  이런 행은 현재고 null → 권장 = 수요, 입고 예정만 실린다(도매 채널은 입고 예정 맵이 비어 영향 없음).
   const allSkus = new Set<string>([...stockBySku.keys(), ...demandBySku.keys(), ...inboundBySku.keys()]);
   for (const k of untracked.skus) allSkus.delete(k); // 재고 관리 사용 안함 품목은 권장 대상이 아니다
+  {
+    // 미사용 품목만 있는 SKU 도 권장 대상이 아니다(같은 SKU 에 사용 중 품목이 있으면 남긴다)
+    const activeSkus = new Set(prodRows.filter((p) => p.sku && p.active !== false).map((p) => String(p.sku).toUpperCase()));
+    for (const p of prodRows) if (p.sku && p.active === false && !activeSkus.has(String(p.sku).toUpperCase())) allSkus.delete(String(p.sku).toUpperCase());
+  }
   const rows: InvRow[] = [];
   for (const sku of allSkus) {
     const st = stockBySku.get(sku);

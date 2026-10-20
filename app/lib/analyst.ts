@@ -556,6 +556,12 @@ export async function runTool(sb: SupabaseClient, ctx: { since: string; end: str
     const comps: BundleComponent[] = ((bq.error ? [] : bq.data) as { component_id: string; qty: number }[] | null ?? [])
       .map((r) => ({ component_id: r.component_id, qty: Math.max(1, Math.round(Number(r.qty) || 1)) }));
     const out: Record<string, unknown> = { name: p.name, spec: p.spec, active: p.active, stock_tracked: p.stock_tracked !== false, is_bundle: comps.length > 0 };
+    // 미사용 품목은 재고 0으로 본다(2026-10-21 대표 결정) — 원장에 남은 값(판매 출고로 생긴 마이너스 등)을 보이지 않는다
+    if (p.active === false) {
+      for (const c of INV_CHANNELS) out[c] = 0;
+      out.note = "미사용 품목 — 재고는 0으로 본다";
+      return JSON.stringify(out);
+    }
     INV_CHANNELS.forEach((c, i) => {
       const r = stocks[i];
       if (r.status === "rejected") {

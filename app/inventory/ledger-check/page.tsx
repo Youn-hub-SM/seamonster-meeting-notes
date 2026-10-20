@@ -132,8 +132,6 @@ const META: Record<string, Meta> = {
     todo: "실사 때 이미 나가 있었다면 이 출고를 취소하세요. 실사 때 창고에 있었다면 그대로." },
   promo_stranded: { label: "요청서 없이 남은 프로모션 재고", where: "재고", view: "product", fix: MOVE,
     todo: "행사 몫이 아니면 [재고 이동]에서 프로모션에서 소매로 옮기세요." },
-  inactive_balance: { label: "미사용 품목에 남은 재고", where: "재고", view: "product", fix: PRODUCTS, also: [ADJUST],
-    todo: "[상품 목록]에서 잠시 '사용 중'으로 바꾸고 [재고 조정]으로 0을 맞춘 뒤 다시 해제하세요." },
   untracked_balance: { label: "'재고 관리 안 함' 품목에 남은 재고", where: "재고", view: "product", fix: PRODUCTS, also: [ADJUST],
     todo: "'재고 관리 사용 안함'을 잠시 풀고 [재고 조정]으로 0을 맞춘 뒤 다시 체크하세요." },
 

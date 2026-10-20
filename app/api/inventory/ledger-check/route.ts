@@ -16,13 +16,15 @@ export const maxDuration = 60;
 //  응답 groups[] = { kind, count, items, unavailable?, error? } — unavailable/error 가 있으면 count 는 확인 못 한 값이다(0 으로 보지 않는다).
 //  [무시](145 ledger_check_ignores) — 사람이 문제없다고 본 행은 count·items 에서 빼고 ignored[] 로 따로 준다(원장은 그대로).
 //  POST { action: "ignore" | "restore", kind, key, summary? } — 무시·되살리기.
+//  미사용(active=false) 품목은 재고 0으로 본다(2026-10-21 대표 결정) — 잔량 항목(마이너스 재고)에서 빼고,
+//  함수가 주는 'inactive_balance'(미사용 품목에 남은 재고)는 받지 않는다(SQL_KINDS 에서 뺌 — 화면이 모르는 종류로 버려진다).
 
 const SQL_KINDS = [
   "b2b_cancelled", "b2b_no_deduct", "b2b_stock_off", "b2b_qty_mismatch", "b2b_date_mismatch", "b2b_overdue",
   "b2b_unlinked_line", "b2b_over_alloc", "b2b_dup_shipment", "b2b_kept_orphan",
   "fulfill_interrupted", "fulfill_late_orphan", "fulfill_unmatched", "fulfill_not_dispatched",
   "move_unpaired", "bundle_row", "old_pending", "future_done",
-  "promo_stranded", "promo_unreleased", "negative_balance", "inactive_balance", "untracked_balance",
+  "promo_stranded", "promo_unreleased", "negative_balance", "untracked_balance",
   "receipt_unlinked", "return_no_out", "return_after_count",
   "shipped_no_sales", "sales_not_shipped", "sales_future",
 ] as const;
@@ -113,6 +115,14 @@ export async function GET(req: NextRequest) {
     if (!kinds.length || sqlKinds.length) {
       // 재고 관리 안 함(121) 품목 — 조회 실패면 던진다(빈 목록으로 보면 그 품목 재고가 '이상 없음'으로 숨는다, S4)
       const untracked = await getUntracked(sb);
+      // 미사용 품목 — 조회 실패면 던진다(빈 목록으로 보면 미사용 품목 잔량이 다시 섞인다)
+      const inactive = new Set<string>();
+      {
+        const { data, error } = await sb.from("products").select("id").eq("active", false).limit(10000);
+        if (error) throw error;
+        for (const r of (data ?? []) as { id: string }[]) inactive.add(r.id);
+      }
+      const BALANCE_KINDS = new Set(["negative_balance", "untracked_balance"]);
       const args = { p_today: today, p_kinds: sqlKinds.length ? sqlKinds : null, p_untracked: [...untracked.ids] };
       const rows: RpcRow[] = [];
       for (let page = 0; ; page++) {
@@ -142,6 +152,7 @@ export async function GET(req: NextRequest) {
         }
         const g = groups.get(r.kind);
         if (!g) continue; // 화면이 모르는 새 종류 — 함수만 먼저 바뀐 경우
+        if (BALANCE_KINDS.has(r.kind) && r.product_id && inactive.has(r.product_id)) continue; // 미사용 품목 재고 = 0
         const { rn: _rn, kind: _k, qty, tags, ...rest } = r;
         const q = qty === null || qty === undefined ? null : Number(qty);
         const key = itemKey({ ...rest, qty: q });
