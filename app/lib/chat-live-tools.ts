@@ -1,0 +1,187 @@
+// AI 데이터 비서 — DB 밖·코드 계산 데이터 도구(2026-10-20 대표: "데이터 비서의 역할과 능력을 더 키우고 싶다")
+//  · ad_performance  : 메타·네이버 광고 성과를 광고 API 에서 바로(종합 리포트 collectAds 재사용 — DB 에 광고 표가 없다)
+//  · ad_breakdown    : 캠페인 하나의 광고세트(메타)·광고그룹(네이버) 분해(종합 리포트 도구 재사용)
+//  · stock_status    : 창고 칸별 현재고·세트 가능 수량(공용 readStockMap — SQL 로 흉내 내면 칸·세트·선점이 틀린다)
+//  · listing_status  : 채널별 판매 상태·채널 재고 + 최근 품절·판매중지 명령(channel_commands 는 SQL 차단 표라 이 도구로만)
+//  모두 읽기 전용. 광고를 끄거나 예산을 바꾸는 쓰기는 없다.
+import type Anthropic from "@anthropic-ai/sdk";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { collectAds, newCache, runTool as runAnalystTool, validDate, kstDay, shift, type AdsCache, type AdsFacts } from "./analyst";
+import { withTimeout } from "./assistant";
+
+export const LIVE_TOOL_NAMES = ["ad_performance", "ad_breakdown", "stock_status", "listing_status"] as const;
+export type LiveToolName = (typeof LIVE_TOOL_NAMES)[number];
+export const isLiveTool = (n: string): n is LiveToolName => (LIVE_TOOL_NAMES as readonly string[]).includes(n);
+
+export const ADS_TIMEOUT_MS = 80_000;       // 매체별 60초 상한(collectAds) + 여유
+const NAVER_CONV_MS = 20_000;               // 네이버 구매 전환(하루 단위 리포트) — 넘으면 '미확정'
+const MAX_AD_DAYS = 186;
+
+const periodProps = {
+  since: { type: "string", description: "조회 시작일 YYYY-MM-DD" },
+  until: { type: "string", description: "조회 끝일 YYYY-MM-DD(오늘 이전)" },
+  compare_since: { type: ["string", "null"], description: "비교 기간 시작일. null 이면 바로 앞 같은 길이 기간" },
+  compare_until: { type: ["string", "null"], description: "비교 기간 끝일. null 이면 바로 앞 같은 길이 기간" },
+};
+
+export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
+  const s = strict ? { strict: true } : {};
+  return [
+    {
+      name: "ad_performance", ...s,
+      description: "메타 광고·네이버 검색광고의 기간 성과를 광고 API 에서 바로 조회합니다(DB 에 없는 데이터). 매체 합계와 캠페인별 지출·노출·클릭·CTR·CPC·구매·CPA·구매액·ROAS, 비교 기간 지출·ROAS. 광고비·ROAS·광고 효율 질문이나 매출 변화가 광고와 관련 있는지 볼 때 씁니다. 결과는 표 카드로 붙습니다. 최대 186일, 20~60초 걸립니다.",
+      input_schema: { type: "object", additionalProperties: false, required: ["since", "until", "compare_since", "compare_until"], properties: periodProps },
+    },
+    {
+      name: "ad_breakdown", ...s,
+      description: "캠페인 하나를 메타 광고세트별 또는 네이버 광고그룹별로 나눠 기간·비교 기간 성과를 봅니다. campaign_id 는 ad_performance 결과의 id 를 씁니다(같은 기간 값으로).",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["platform", "campaign_id", "since", "until", "compare_since", "compare_until"],
+        properties: { platform: { type: "string", enum: ["meta", "naver"] }, campaign_id: { type: "string" }, ...periodProps },
+      },
+    },
+    {
+      name: "stock_status", ...s,
+      description: "SKU 하나의 창고 현재고(소매·도매·프로모션·도매 대량 칸, 오늘 뒤 선점까지 뺀 가용). 세트는 구성품으로 만들 수 있는 수. 지금 재고·품절 여부 질문은 SQL 대신 이 도구를 씁니다(SKU 여러 개면 함께 여러 번 호출).",
+      input_schema: { type: "object", additionalProperties: false, required: ["sku"], properties: { sku: { type: "string", description: "SKU 코드" } } },
+    },
+    {
+      name: "listing_status", ...s,
+      description: "SKU 하나의 채널별 현재 판매 상태·채널 재고(매일 새벽 동기화)와 최근 14일 품절·판매중지·재고 변경 명령. 판매가 갑자기 줄었을 때 품절·판매중지였는지 확인합니다.",
+      input_schema: { type: "object", additionalProperties: false, required: ["sku"], properties: { sku: { type: "string", description: "SKU 코드" } } },
+    },
+  ];
+}
+
+export function liveToolLabel(name: string, input: Record<string, unknown>): string {
+  const range = `${String(input.since || "")}~${String(input.until || "")}`;
+  if (name === "ad_performance") return `광고 성과(메타·네이버) ${range}`;
+  if (name === "ad_breakdown") return `${input.platform === "naver" ? "네이버 광고그룹" : "메타 광고세트"} 분해 ${range}`;
+  if (name === "stock_status") return `현재고: ${String(input.sku || "").slice(0, 40)}`;
+  if (name === "listing_status") return `채널 판매 상태: ${String(input.sku || "").slice(0, 40)}`;
+  return name;
+}
+
+// 표 카드(report_tables 에 그대로 저장) — sql 칸은 '-- ' 주석으로 SQL 이 아님을 밝힌다(화면이 저장·엑셀·SQL 버튼을 숨김)
+export type LiveTable = { title: string; sql: string; columns: string[]; rows: Record<string, unknown>[] };
+export type LiveState = { ads: Map<string, { cache: AdsCache; facts: Promise<{ ads: AdsFacts; aiAds: Record<string, unknown> }> }> };
+export const newLiveState = (): LiveState => ({ ads: new Map() });
+
+const AD_SQL_NOTE = "-- 광고 API 실시간 조회(SQL 아님 · 저장·엑셀·루커 불가)";
+const dayCount = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400e3) + 1;
+
+function periods(input: Record<string, unknown>): { cur: { since: string; until: string }; prev: { since: string; until: string } } {
+  const since = String(input.since || "").trim(), until = String(input.until || "").trim();
+  if (!validDate(since) || !validDate(until)) throw new Error("since·until 은 YYYY-MM-DD 여야 합니다.");
+  if (since > until) throw new Error("since 가 until 보다 늦습니다.");
+  const today = kstDay(0);
+  if (until > today) throw new Error(`until 은 오늘(${today}) 이전이어야 합니다.`);
+  const n = dayCount(since, until);
+  if (n > MAX_AD_DAYS) throw new Error(`광고 조회는 ${MAX_AD_DAYS}일까지입니다(요청 ${n}일). 기간을 나눠 조회하세요.`);
+  const cs = typeof input.compare_since === "string" ? input.compare_since.trim() : "";
+  const cu = typeof input.compare_until === "string" ? input.compare_until.trim() : "";
+  if (cs || cu) {
+    if (!validDate(cs) || !validDate(cu) || cs > cu) throw new Error("비교 기간(compare_since·compare_until)이 올바르지 않습니다.");
+    if (dayCount(cs, cu) > MAX_AD_DAYS) throw new Error(`비교 기간도 ${MAX_AD_DAYS}일까지입니다.`);
+    return { cur: { since, until }, prev: { since: cs, until: cu } };
+  }
+  return { cur: { since, until }, prev: { since: shift(since, -n), until: shift(since, -1) } };
+}
+
+function adsFor(state: LiveState, input: Record<string, unknown>) {
+  const { cur, prev } = periods(input);
+  const key = `${cur.since}|${cur.until}|${prev.since}|${prev.until}`;
+  let hit = state.ads.get(key);
+  if (!hit) {
+    const cache = newCache(cur, prev);
+    hit = { cache, facts: collectAds(cache, NAVER_CONV_MS) };
+    hit.facts.catch(() => state.ads.delete(key)); // 실패한 조회는 다음 호출에서 다시
+    state.ads.set(key, hit);
+  }
+  return hit;
+}
+
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+function adTables(ads: AdsFacts, cur: { since: string; until: string }, prev: { since: string; until: string }): LiveTable[] {
+  const out: LiveTable[] = [];
+  const m = ads.meta;
+  if (m?.ok) {
+    const columns = ["캠페인", "상태", "지출(원)", "노출", "링크 클릭", "CTR(%)", "CPC(원)", "구매", "CPA(원)", "구매액(원)", "ROAS(배)", "비교 지출(원)", "비교 ROAS(배)"];
+    const rows: Record<string, unknown>[] = [
+      { "캠페인": "합계", "상태": "", "지출(원)": m.spend, "노출": m.impressions, "링크 클릭": m.clicks, "CTR(%)": m.ctr, "CPC(원)": m.cpc, "구매": m.purchases, "CPA(원)": m.cpa, "구매액(원)": m.value, "ROAS(배)": m.roas, "비교 지출(원)": m.prev_spend, "비교 ROAS(배)": m.prev_roas },
+      ...m.campaigns.map((c) => ({ "캠페인": c.name, "상태": c.status, "지출(원)": c.spend, "노출": c.impressions, "링크 클릭": c.clicks, "CTR(%)": c.ctr, "CPC(원)": c.cpc, "구매": c.purchases, "CPA(원)": c.cpa, "구매액(원)": c.value, "ROAS(배)": c.roas, "비교 지출(원)": c.prev_spend, "비교 ROAS(배)": c.prev_roas })),
+    ];
+    out.push({ title: `메타 광고 캠페인 성과 ${cur.since}~${cur.until} (비교 ${prev.since}~${prev.until})`, sql: `${AD_SQL_NOTE}\n-- 메타: 지출·ROAS 는 VAT 제외, 구매·구매액은 메타 픽셀 기준`, columns, rows });
+  }
+  const n = ads.naver;
+  if (n?.ok) {
+    const columns = ["캠페인", "유형", "광고비 VAT포함(원)", "노출", "클릭", "CTR(%)", "CPC(원)", "평균 순위", "전체 전환", "구매", "CPA(원)", "구매액(원)", "ROAS(배)", "비교 광고비(원)"];
+    const rows: Record<string, unknown>[] = [
+      { "캠페인": "합계", "유형": "", "광고비 VAT포함(원)": n.cost_vat_incl, "노출": n.imp, "클릭": n.clicks, "CTR(%)": n.ctr, "CPC(원)": n.cpc, "평균 순위": null, "전체 전환": null, "구매": n.purchases, "CPA(원)": null, "구매액(원)": n.purchase_sales, "ROAS(배)": n.roas, "비교 광고비(원)": n.prev_cost },
+      ...n.campaigns.map((c) => ({ "캠페인": c.name, "유형": c.type, "광고비 VAT포함(원)": c.cost_vat_incl, "노출": c.imp, "클릭": c.clicks, "CTR(%)": c.ctr, "CPC(원)": c.cpc, "평균 순위": c.avg_rank, "전체 전환": c.conv_all, "구매": c.purchases, "CPA(원)": c.cpa, "구매액(원)": c.purchase_sales, "ROAS(배)": c.roas, "비교 광고비(원)": c.prev_cost })),
+    ];
+    out.push({ title: `네이버 검색광고 캠페인 성과 ${cur.since}~${cur.until} (비교 ${prev.since}~${prev.until})`, sql: `${AD_SQL_NOTE}\n-- 네이버: 광고비는 VAT 포함, ROAS 는 VAT 제외 광고비 기준, 구매 ${n.purchase_status}`, columns, rows });
+  }
+  return out;
+}
+
+function breakdownTable(platform: string, body: string, title: string): LiveTable | null {
+  const nl = body.indexOf("\n");
+  if (nl < 0) return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(body.slice(nl + 1)); } catch { return null; }
+  const list = (Array.isArray(parsed) ? parsed : (parsed as { rows?: unknown[] })?.rows) as Record<string, unknown>[] | undefined;
+  if (!Array.isArray(list) || !list.length) return null;
+  if (platform === "meta") {
+    const columns = ["광고세트", "상태", "지출(원)", "구매", "ROAS(배)", "비교 지출(원)", "비교 구매", "비교 ROAS(배)"];
+    const rows = list.map((r) => {
+      const c = (r.current || {}) as Record<string, unknown>, p = (r.previous || {}) as Record<string, unknown>;
+      return { "광고세트": r.name, "상태": r.status, "지출(원)": num(c.spend), "구매": num(c.purchases), "ROAS(배)": num(c.roas), "비교 지출(원)": num(p.spend), "비교 구매": num(p.purchases), "비교 ROAS(배)": num(p.roas) };
+    });
+    return { title, sql: `${AD_SQL_NOTE}\n-- 메타 광고세트: VAT 제외, 픽셀 기준`, columns, rows };
+  }
+  const columns = ["광고그룹", "상태", "광고비 VAT포함(원)", "클릭", "전체 전환", "구매", "비교 광고비(원)", "비교 전체 전환"];
+  const rows = list.map((r) => {
+    const c = (r.current || {}) as Record<string, unknown>;
+    return { "광고그룹": r.name, "상태": r.status, "광고비 VAT포함(원)": num(c.cost_vat_incl), "클릭": num(c.clicks), "전체 전환": num(c.conv_all), "구매": num(c.purchases), "비교 광고비(원)": num(r.previous_cost_vat_incl), "비교 전체 전환": num(r.previous_conv_all) };
+  });
+  return { title, sql: `${AD_SQL_NOTE}\n-- 네이버 광고그룹: 광고비 VAT 포함`, columns, rows };
+}
+
+const AD_RULES = "해석 규칙: 메타 ROAS·구매는 메타 픽셀 기준, 네이버 구매는 네이버 전환 기준이라 실제 매출(sales_orders)과 다릅니다. ROAS 는 배수(3.2 = 320%)이고 두 매체 모두 VAT 제외 광고비 기준입니다. 네이버 광고비(cost_vat_incl)는 VAT 포함입니다. 네이버 conv_all 은 장바구니 등 전체 전환이라 구매와 비교하지 않습니다. 마지막 며칠의 구매는 전환 지연으로 늘어날 수 있습니다. 네이버 구매가 '미확정'이면 0 이라고 단정하지 않습니다. prev_* 는 비교 기간 합계입니다(기간 길이가 다르면 하루 평균끼리 비교). 광고 성과를 좋다·나쁘다로 단정하지 않고, 사용자가 물을 때만 근거와 함께 '추정:'으로 판단합니다. 광고를 끄거나 예산을 바꾸라고 단정하지 않습니다(실행은 사람).";
+
+// 실행 — content 는 모델에 돌려줄 글, tables 는 화면 표 카드
+export async function runLiveTool(sb: SupabaseClient, state: LiveState, name: LiveToolName, input: Record<string, unknown>): Promise<{ content: string; tables: LiveTable[] }> {
+  if (name === "ad_performance") {
+    const hit = adsFor(state, input);
+    const r = await withTimeout(hit.facts, ADS_TIMEOUT_MS);
+    if (r === "timeout") throw new Error(`광고 API 응답 시간 초과(${ADS_TIMEOUT_MS / 1000}초)`);
+    const { ads, aiAds } = r;
+    if (!ads.meta && !ads.naver) return { content: "광고 API 가 설정되어 있지 않습니다(메타·네이버 자격 없음).", tables: [] };
+    const fails = [ads.meta && !ads.meta.ok ? `메타 조회 실패: ${ads.meta.error}` : "", ads.naver && !ads.naver.ok ? `네이버 조회 실패: ${ads.naver.error}` : ""].filter(Boolean);
+    const body = JSON.stringify(aiAds);
+    return {
+      content: `${AD_RULES}\n${fails.length ? `${fails.join(" / ")}\n` : ""}캠페인은 지출 상위 20개만(전체는 표 카드). ${body.length > 16000 ? `${body.slice(0, 16000)} …(잘림)` : body}`,
+      tables: adTables(ads, hit.cache.cur, hit.cache.prev),
+    };
+  }
+  if (name === "ad_breakdown") {
+    const platform = input.platform === "naver" ? "naver" : "meta";
+    const cid = String(input.campaign_id || "").trim();
+    if (!cid || cid.length > 40) throw new Error("campaign_id 가 올바르지 않습니다.");
+    const hit = adsFor(state, input);
+    const r = await withTimeout(hit.facts, ADS_TIMEOUT_MS); // 네이버 광고그룹 원자료(cache)를 채운다
+    if (r === "timeout") throw new Error(`광고 API 응답 시간 초과(${ADS_TIMEOUT_MS / 1000}초)`);
+    const ctx = { since: hit.cache.cur.since, end: hit.cache.cur.until, maxDays: MAX_AD_DAYS };
+    const out = await withTimeout(runAnalystTool(sb, ctx, hit.cache, platform === "meta" ? "meta_campaign_adsets" : "naver_campaign_adgroups", { campaign_id: cid }), 60_000);
+    if (out === "timeout") throw new Error("광고 API 응답 시간 초과(60초)");
+    const camp = platform === "meta" ? r.ads.meta?.campaigns.find((c) => c.id === cid)?.name : r.ads.naver?.campaigns.find((c) => c.id === cid)?.name;
+    const t = breakdownTable(platform, out, `${platform === "meta" ? "메타 광고세트" : "네이버 광고그룹"} — ${camp || cid} ${hit.cache.cur.since}~${hit.cache.cur.until}`);
+    return { content: `${AD_RULES}\n${out}`, tables: t ? [t] : [] };
+  }
+  // 재고·채널 상태 — 오늘 기준(listing 명령은 최근 14일)
+  const today = kstDay(0);
+  const out = await runAnalystTool(sb, { since: shift(today, -14), end: today, maxDays: 62 }, newCache({ since: today, until: today }, { since: today, until: today }), name, { sku: input.sku });
+  return { content: out, tables: [] };
+}

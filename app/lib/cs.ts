@@ -130,7 +130,7 @@ export async function generateCsAdvice(query: string): Promise<CsAdvice> {
     // 지침·매뉴얼·출력 규칙은 문의마다 같다 → 프롬프트 캐시(가장 자주 쓰는 기능이라 입력 비용이 크게 준다)
     system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: query }],
-    ...effortParams(model, "low"),
+    ...effortParams(model, "medium"), // 2026-10-20 low→medium(대표 "품질을 과감히") — 답변 초안의 정확도
   }, { timeout: 55_000, maxRetries: 1 }); // 라우트 maxDuration 120 안(55초 × 2)
 
   const text = readText(response);

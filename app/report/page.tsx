@@ -121,7 +121,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
             {!table.sql.startsWith("--") && <button type="button" className="b2b-btn-secondary" onClick={() => onExport(table.sql, table.title)} disabled={!rows.length}>엑셀 내려받기</button>}
             {chartable && <button type="button" className="b2b-link-btn" onClick={() => setShowChart((v) => !v)}>{showChart ? "차트 닫기" : "차트 보기"}</button>}
             {!table.sql.startsWith("--") && <button type="button" className="b2b-link-btn" onClick={() => setShowSql((v) => !v)}>{showSql ? "SQL 닫기" : "SQL 보기"}</button>}
-            {table.sql.startsWith("--") && <span className="rp-table-note">이익률 계산기 산식으로 계산한 표(SQL 아님)</span>}
+            {table.sql.startsWith("--") && <span className="rp-table-note">{table.sql.split("\n")[0].replace(/^--\s*/, "")}</span>}
           </div>
           {showChart && chartable && <div className="rp-chart"><BarList title={`${numCol} — ${labelCol}별`} data={chartData} fmt={(n) => n.toLocaleString("ko-KR")} /></div>}
           {rows.length === 0 ? <div className="b2b-empty">조회 결과가 없습니다.</div> : (
@@ -161,7 +161,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
   );
 }
 
-const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기", margin_calc: "계산" };
+const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기", margin_calc: "계산", ad_performance: "광고", ad_breakdown: "광고", stock_status: "재고", listing_status: "채널" };
 
 export default function ReportPage() {
   const toast = useToast();
@@ -301,7 +301,15 @@ export default function ReportPage() {
           });
         } else if (type === "table") {
           const table = obj.table as ChatTable;
-          setItems((it) => it.map((x) => (x.role === "tool" && x.toolUseId === table.toolUseId ? { ...x, table } : x)));
+          setItems((it) => {
+            if (it.some((x) => x.role === "tool" && x.toolUseId === table.toolUseId)) return it.map((x) => (x.role === "tool" && x.toolUseId === table.toolUseId ? { ...x, table } : x));
+            // 한 도구가 표를 여러 장 낼 때(광고: 메타·네이버) 두 번째부터는 'id#n' — 같은 도구 칩 뒤(앞서 붙은 표들 뒤)에 칩 없이 표만 끼운다
+            const base = table.toolUseId.split("#")[0];
+            let at = -1;
+            it.forEach((x, k) => { if (x.role === "tool" && (x.toolUseId === base || x.toolUseId.startsWith(`${base}#`))) at = k; });
+            const extra: Item = { role: "tool", toolUseId: table.toolUseId, name: "", label: table.title, ok: true, table };
+            return at < 0 ? [...it, extra] : [...it.slice(0, at + 1), extra, ...it.slice(at + 1)];
+          });
         } else if (type === "term") {
           setItems((it) => [...unlive(it), { role: "term", toolUseId: String(obj.toolUseId || ""), term: String(obj.term || ""), definition: String(obj.definition || "") }]);
         } else if (type === "done") {
@@ -545,11 +553,11 @@ export default function ReportPage() {
             if (it.role === "tool") {
               return (
                 <div key={it.toolUseId} className="rp-msg rp-msg-tool">
-                  <div className={`rp-tool-chip ${it.ok === false ? "is-fail" : it.ok === true ? "is-ok" : "is-run"}`}>
+                  {it.name !== "" && <div className={`rp-tool-chip ${it.ok === false ? "is-fail" : it.ok === true ? "is-ok" : "is-run"}`}>
                     <span className="rp-tool-kind">{TOOL_NAME[it.name] || it.name}</span>
                     <span>{it.label}</span>
                     <span className="rp-tool-state">{it.ok === null ? "진행 중" : it.ok ? (it.ms != null ? sec(it.ms) : "완료") : "실패"}</span>
-                  </div>
+                  </div>}
                   {it.table && <TableCard table={it.table} question={lastUserText} defaultOpen={it.table.rowCount <= 12} onSave={openSave} onExport={exportXlsx} />}
                 </div>
               );

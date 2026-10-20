@@ -2,7 +2,7 @@
 //  대화 엔진은 chat-assistant.ts(스레드 저장·스트리밍). 옛 '질문 1회 → JSON 보고서' 엔진(askAssistant)은 제거했다.
 //  안전: 쓰기 도구 없음. run_sql 은 validateReportSql(단일 SELECT·화이트리스트) → run_report(SECURITY DEFINER) 그대로.
 //   search_text 는 supabaseAdmin 직접 조회지만 읽는 컬럼을 코드가 고정하고(voc.customer 등 이름 컬럼 제외) 결과는 maskPii 로 마스킹.
-//  비용: 기능 모델 = report(기본 fable). 보조(검색 결과 추리기) = opus+low. 월 상한(assistant_cap_usd, 기본 $60) 초과 시 전체 opus+low(downgraded).
+//  비용: 기능 모델 = report(기본 fable). 보조(검색 결과 추리기) = opus+low. 월 상한(assistant_cap_usd, 기본 $100) 초과 시 전체 opus+low(downgraded).
 //   끄기 = assistant_off "1". 월 누적 = assistant_usage_<YYYY-MM> {usd, questions}. Node 런타임 전용(@anthropic-ai/sdk).
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -26,7 +26,7 @@ export type AskToolLog = { name: string; label: string; ok: boolean; ms: number 
 export class AssistantOffError extends Error {}
 
 // ── 설정·월 누적(kv) ──
-export const ASSISTANT_DEFAULT_CAP_USD = 60;
+export const ASSISTANT_DEFAULT_CAP_USD = 100; // 2026-10-20 60→100 — Fable 실단가 반영(그전 추정은 실제의 약 40%) + effort high. AI 설정 카드에 값을 넣었으면 그 값이 우선
 const KV_OFF = "assistant_off";
 const KV_CAP = "assistant_cap_usd";
 const usageKey = (ym: string) => `assistant_usage_${ym}`;
@@ -179,9 +179,9 @@ export function kstTodayLabel(): string {
   return `${d.toISOString().slice(0, 10)} (${wd})`;
 }
 
-// ── 단가(USD/1M) — analyst.priceOf 와 같은 표. Fable 은 단가 미확인이라 Opus 단가로 추정하고 estNote 로 밝힌다 ──
+// ── 단가(USD/1M) — analyst.priceOf 와 같은 표. Fable 5.1 = $10/$50, 캐시 읽기 $0.25(2026-10-20 확인 — 그전엔 Opus 단가로 추정해 약 40%로 낮게 잡혔다) ──
 function priceOf(model: string): { in: number; out: number; cr: number; cw: number; approx: boolean } {
-  if (/fable/.test(model)) return { in: 4, out: 20, cr: 0.2, cw: 5, approx: true };
+  if (/fable/.test(model)) return { in: 10, out: 50, cr: 0.25, cw: 12.5, approx: false };
   if (/opus-5/.test(model)) return { in: 4, out: 20, cr: 0.2, cw: 5, approx: false };
   if (/sonnet-5/.test(model)) return { in: 2, out: 10, cr: 0.2, cw: 2.5, approx: false };
   if (/haiku/.test(model)) return { in: 1, out: 5, cr: 0.1, cw: 1.25, approx: false };
