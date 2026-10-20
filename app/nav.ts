@@ -19,6 +19,7 @@ export const NAV: NavCategory[] = [
       { href: "/updates", label: "업데이트 노트", icon: "note" },
       { href: "https://seamonster.gitbook.io/guide", label: "씨몬스터 가이드(GitBook)", icon: "link" },
       { href: "/meeting", label: "회의 정리", icon: "note" }, // 2026-10-14 대표 결정: 분류 없이 최상단
+      { href: "/report", label: "AI 데이터 비서", icon: "bars" }, // 2026-10-20 대표: 리포트 분류에서 빼 회의 정리 아래 최상단으로(주소·저장 리포트 그대로)
     ],
   },
   {
@@ -141,7 +142,6 @@ export const NAV: NavCategory[] = [
     label: "리포트",
     tools: [
       { href: "/briefing", label: "종합 리포트", icon: "bulb" }, // 2026-09-30 모두 열람, 일일·주간·월간 탭(매출 업로드 뒤 담당자가 생성·발송)
-      { href: "/report", label: "AI 데이터 비서", icon: "bars" }, // 2026-10-19 AI 데이터 비서 → AI 데이터 비서(주소·저장 리포트 그대로)
       { href: "/sales/report", label: "매출 리포트", icon: "trend" },
       { href: "/voc/manufacturer", label: "월간 VOC 리포트", icon: "megaphone" },
     ],
