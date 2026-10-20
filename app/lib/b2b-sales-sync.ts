@@ -266,6 +266,8 @@ export type SalesMismatch = {
 type LedgerRow = { order_id: string; order_date: string; upload_batch: string | null; row_hash: string; subtotal_amount: number };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// 매출 인식일이 발주일 → 발송일로 바뀐 날(b63b59f). 이날까지 발송된 발주는 발주일로 적힌 행도 정상(옛 기준)
+const SHIP_DATE_RULE_FROM = "2026-09-08";
 
 export async function reconcileB2BSales(from: string, to: string): Promise<{ checked: number; mismatches: SalesMismatch[] }> {
   if (!DATE_RE.test(from) || !DATE_RE.test(to)) throw new Error("기간 형식이 잘못되었습니다");
@@ -312,8 +314,11 @@ export async function reconcileB2BSales(from: string, to: string): Promise<{ che
       const reHashed = dates.length === 1
         ? exp.map((r) => rowHash({ ...r, order_date_int: Number(dates[0].replace(/-/g, "")) })).sort().join(",")
         : "";
-      if (reHashed && reHashed === have) note = `날짜만 다름 · 원장 ${dates[0]}`;
-      else if (expected !== ledgerSum) note = "금액 다름";
+      if (reHashed && reHashed === have) {
+        // 옛 기준(2026-09-08 전 = 발주일 인식)으로 적힌 행은 그때 기준대로 맞다 — 어긋남이 아니다
+        if (dates[0] === o.order_date && (o.ship_date || o.order_date) <= SHIP_DATE_RULE_FROM) kind = null;
+        else note = `날짜만 다름 · 원장 ${dates[0]}`;
+      } else if (expected !== ledgerSum) note = "금액 다름";
       else note = "금액 같음 · 품목 구성 다름";
     }
     if (kind) mismatches.push({ order_id: o.id, order_no: o.order_no, status: o.status, date: o.ship_date || o.order_date, kind, expected, ledger: ledgerSum, note });
