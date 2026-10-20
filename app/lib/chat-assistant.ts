@@ -11,6 +11,7 @@ import { MODELS } from "./config";
 import { isAdminName } from "./b2b-auth";
 import { LOOKER_RELATIONS } from "./report-schema";
 import { glossaryPromptBlock } from "./report-glossary";
+import { computeSpecItem, loadMarginRef, type MarginSpec, type MarginRefData, type MarginResultItem } from "./margin-calc";
 import {
   anthropic, toolDefs, runTool, toolLabel, addUsage, addAssistantUsage, getAssistantSettings, getAssistantMonthUsage,
   AssistantOffError, catalogIndex, PRIVATE_NOTE, kstTodayLabel, retryable, strictRejected, withTimeout,
@@ -79,6 +80,7 @@ function systemChat(index: string): string {
 - search_text: 글 본문 검색. "왜?"·불만·문의 경향·리포트가 지적한 것처럼 글에 답이 있는 질문에 씁니다.
 - read_report: 종합 리포트(일일·주간·월간) 본문 1건 전문 — 이미 분석된 맥락을 재활용합니다.
 - propose_term: 사용자가 새로 정한 용어·정의를 '회사 용어 사전'에 넣자고 제안합니다(저장은 사용자가). 조사 도구와 같은 차례에 함께 불러도 됩니다.
+- margin_calc: 이익률 계산기 산식(원가표·채널 수수료·택배비·아이스박스·보냉비·부가세)으로 가상 판매 시나리오의 순이익·이익률을 냅니다. "이렇게 팔면 얼마 남나"류 질문은 SQL 로 흉내 내지 말고 이 도구로 계산합니다. 결과는 표 카드로 붙고 숫자는 도구 값 그대로 씁니다. 상품이 원가표에 없다고 돌아오면 어느 상품인지 묻습니다. 실적(이미 팔린 것)의 이익은 run_sql(sales_orders·sales_sku_cost·sales_channel_config)로.
 - 표 목록은 아래 '조회 가능 관계'와 schema 도구의 "조회 가능한 표·뷰" 목록이 전부입니다. information_schema·pg_catalog 를 SQL 로 조회하지 않습니다(차단됨). 표 이름을 짐작하지 말고(예: b2b_orders 같은 이름은 없습니다) 목록에 있는 이름(orders, payments 등)을 씁니다.
 - 한 턴에 도구는 최대 12차례. 필요한 조회는 한 차례에 함께 요청하고, 차례가 적을수록 좋습니다. 이전 턴에서 이미 본 표·스키마는 다시 조회하지 않고 기억을 씁니다.
 
@@ -124,6 +126,35 @@ function chatTools(strict: boolean): Anthropic.Tool[] {
   const s = strict ? { strict: true } : {};
   return [
     ...toolDefs(strict).filter((t) => t.name !== "ask_user"),
+    {
+      name: "margin_calc", ...s,
+      description: "이익률 계산기와 같은 고정 산식으로 가상 판매 시나리오의 순이익·이익률을 계산합니다(원가표·채널 수수료·택배비·아이스박스·보냉비·부가세). 가격 설계 질문('15% 할인에 1+1로 팔면', '쿠팡으로 옮기면')에 씁니다. 실적(이미 팔린 것)의 이익은 run_sql 로 구합니다. 한 번에 여러 시나리오(items)를 넣어 비교할 수 있습니다.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["items"],
+        properties: {
+          items: {
+            type: "array", minItems: 1, maxItems: 8,
+            items: {
+              type: "object", additionalProperties: false,
+              required: ["sku", "productName", "channel", "feeRatePct", "priceBasis", "customTotal", "discountPct", "qty", "paidUnits", "boxes", "extraCosts"],
+              properties: {
+                sku: { type: ["string", "null"], description: "상품 SKU(알면). 없으면 null → productName 으로 찾음" },
+                productName: { type: "string", description: "상품명(원가표 이름, 예: '대구순살 1kg')" },
+                channel: { type: "string", description: "채널명(스마트스토어·쿠팡·카페24·톡스토어·도매 등 채널표 이름)" },
+                feeRatePct: { type: ["number", "null"], description: "채널표에 없는 채널일 때 가정 수수료율(%). 보통 null(채널표 조회)" },
+                priceBasis: { type: "string", enum: ["retail", "wholesale", "custom"], description: "retail 소비자가 / wholesale 도매가 / custom 총 결제가 직접 지정" },
+                customTotal: { type: ["number", "null"], description: "priceBasis=custom 일 때 고객 총 결제가(원). 아니면 null" },
+                discountPct: { type: "number", description: "할인율 %(0~100). 없으면 0" },
+                qty: { type: "integer", description: "고객에게 나가는 수량(원가·부피 반영). 1+1 이면 2" },
+                paidUnits: { type: "integer", description: "결제 수량(매출 = 기준가×할인×이 수량). 1+1 이면 1" },
+                boxes: { type: "integer", description: "박스 수(배송원가 × 박스). 보통 1" },
+                extraCosts: { type: ["array", "null"], items: { type: "object", additionalProperties: false, required: ["label", "amount"], properties: { label: { type: "string" }, amount: { type: "number" } } }, description: "질문에 명시된 기타 비용(원). 없으면 null" },
+              },
+            },
+          },
+        },
+      },
+    },
     {
       name: "propose_term", ...s,
       description: "사용자가 대화에서 새로 정한 용어와 정의를 '회사 용어 사전'에 저장하자고 제안합니다. 저장은 사용자가 화면에서 누르며, 이 도구는 아무것도 쓰지 않습니다.",
@@ -308,6 +339,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   let retried = false, timedOut = false, wrapUp = false;
   let toolCount = 0;
   let lastAssistantSeq: number | null = null; // 피드백(맞아요/틀려요)이 가리킬 비서 메시지
+  let marginRef: MarginRefData | null = null; // 이익률 계산기 기준 데이터(원가표·채널) — 턴 안에서 한 번만 읽는다
 
   try {
     for (let round = 0; round < MAX_ROUNDS + 1; round++) {
@@ -347,6 +379,49 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
       const uses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
       const results: Anthropic.ToolResultBlockParam[] = await Promise.all(uses.map(async (u) => {
         const input = (u.input || {}) as Record<string, unknown>;
+        if (u.name === "margin_calc") { // 이익률 계산기 산식(computeSpecItem) — 쓰기 없음. 결과는 표 카드 + 모델에 JSON
+          p.send({ type: "tool", toolUseId: u.id, name: u.name, label: "이익률 계산", status: "start" });
+          const t0 = Date.now();
+          try {
+            if (!marginRef) marginRef = await loadMarginRef();
+            const items = (Array.isArray(input.items) ? input.items : []) as Partial<MarginSpec>[];
+            const ok: MarginResultItem[] = [], failed: string[] = [];
+            for (const it of items.slice(0, 8)) {
+              const spec: MarginSpec = {
+                sku: typeof it.sku === "string" && it.sku.trim() ? it.sku.trim() : null, productName: String(it.productName || "").trim(), channel: String(it.channel || "").trim(),
+                feeRatePct: typeof it.feeRatePct === "number" ? it.feeRatePct : null, priceBasis: it.priceBasis === "wholesale" || it.priceBasis === "custom" ? it.priceBasis : "retail",
+                customTotal: typeof it.customTotal === "number" ? it.customTotal : null, discountPct: Number(it.discountPct) || 0,
+                qty: Math.max(1, Math.round(Number(it.qty) || 1)), paidUnits: Math.max(0, Math.round(Number(it.paidUnits) || 1)), boxes: Math.max(1, Math.round(Number(it.boxes) || 1)),
+                extraCosts: Array.isArray(it.extraCosts) ? it.extraCosts.map((e) => ({ label: String(e.label || "기타"), amount: Number(e.amount) || 0 })) : [],
+              };
+              try { ok.push(computeSpecItem(spec, marginRef)); } catch (e) { failed.push(`${spec.productName}/${spec.channel}: ${e instanceof Error ? e.message : String(e)}`); }
+            }
+            const ms = Date.now() - t0;
+            if (ok.length) {
+              const exp = (r: MarginResultItem, key: string) => r.expenses.find((e) => e.label.startsWith(key))?.amount ?? 0;
+              const columns = ["시나리오", "매출(원)", "공급가액(원)", "상품원가(원)", "채널 수수료(원)", "택배비(원)", "아이스박스·운반(원)", "보냉비(원)", "기타(원)", "순이익(원)", "이익률(%)"];
+              const rows = ok.map((r) => ({
+                "시나리오": r.label, "매출(원)": r.revenue, "공급가액(원)": r.supplyValue, "상품원가(원)": exp(r, "상품원가"), "채널 수수료(원)": exp(r, "채널 수수료"),
+                "택배비(원)": exp(r, "택배비"), "아이스박스·운반(원)": exp(r, "아이스박스"), "보냉비(원)": exp(r, "보냉비"),
+                "기타(원)": r.expenses.filter((e) => !/^(상품원가|채널 수수료|택배비|아이스박스|보냉비)/.test(e.label)).reduce((s, e) => s + e.amount, 0),
+                "순이익(원)": r.netProfit, "이익률(%)": r.marginPct,
+              }));
+              const title = `이익률 계산 — ${ok.length === 1 ? ok[0].label : `${ok.length}개 시나리오`}`;
+              const sql = "-- 이익률 계산기 산식(코드 계산 — SQL 아님, 저장·루커 불가)";
+              const { data } = await sb().from("report_tables").insert({ thread_id: p.threadId, tool_use_id: u.id, title, sql, columns, rows, row_count: rows.length, truncated: false, looker: null }).select("id").single();
+              p.send({ type: "table", table: { id: String((data as { id?: string } | null)?.id || u.id), toolUseId: u.id, title, sql, columns, rows, rowCount: rows.length, truncated: false } });
+            }
+            p.send({ type: "tool", toolUseId: u.id, name: u.name, label: "이익률 계산", status: ok.length ? "ok" : "fail", ms });
+            toolCount++;
+            return { type: "tool_result" as const, tool_use_id: u.id, is_error: !ok.length, content: JSON.stringify({
+              month: marginRef.month, results: ok.map((r) => ({ label: r.label, revenue: r.revenue, supplyValue: r.supplyValue, taxNote: r.taxNote, expenses: r.expenses, netProfit: r.netProfit, marginPct: r.marginPct })),
+              failed, note: "숫자는 그대로 인용. 부피 미입력 상품은 2kg 가정, 별도 언급 없으면 1박스.",
+            }) };
+          } catch (e) {
+            p.send({ type: "tool", toolUseId: u.id, name: u.name, label: "이익률 계산", status: "fail", ms: Date.now() - t0 });
+            return { type: "tool_result" as const, tool_use_id: u.id, content: `오류: ${e instanceof Error ? e.message : String(e)}`, is_error: true };
+          }
+        }
         if (u.name === "propose_term") { // 쓰기 아님 — 화면에 저장 제안 카드만
           const term = String(input.term || "").trim().slice(0, 60), definition = String(input.definition || "").trim().slice(0, 600);
           if (term && definition) p.send({ type: "term", toolUseId: u.id, term, definition });

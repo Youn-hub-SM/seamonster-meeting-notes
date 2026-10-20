@@ -432,6 +432,10 @@ export function toolLabel(name: string, input: Record<string, unknown>): string 
     return `글 검색(${src})${kw}${range ? ` ${range}` : ""}`;
   }
   if (name === "read_report") return `${{ daily: "일일", weekly: "주간", monthly: "월간" }[String(input.kind)] || String(input.kind)} 리포트 ${String(input.date || "")}`;
+  if (name === "margin_calc") {
+    const items = Array.isArray(input.items) ? (input.items as { productName?: string; channel?: string }[]) : [];
+    return items.length === 1 ? `이익률 계산: ${String(items[0].productName || "")} · ${String(items[0].channel || "")}`.slice(0, 80) : `이익률 계산: 시나리오 ${items.length}개`;
+  }
   return name;
 }
 

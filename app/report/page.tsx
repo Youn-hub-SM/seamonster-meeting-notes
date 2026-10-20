@@ -116,10 +116,12 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
       {open && (
         <div className="rp-fold-body">
           <div className="rp-fold-actions">
-            <button type="button" className="b2b-btn-secondary" onClick={() => onSave({ question, sql: table.sql, looker, chart: { type: "none" } })}>리포트 저장</button>
-            <button type="button" className="b2b-btn-secondary" onClick={() => onExport(table.sql, table.title)} disabled={!rows.length}>엑셀 내려받기</button>
+            {/* 코드 계산 표(이익률 계산기 산식 — sql 이 '--' 주석)는 저장·엑셀·SQL 이 없다 */}
+            {!table.sql.startsWith("--") && <button type="button" className="b2b-btn-secondary" onClick={() => onSave({ question, sql: table.sql, looker, chart: { type: "none" } })}>리포트 저장</button>}
+            {!table.sql.startsWith("--") && <button type="button" className="b2b-btn-secondary" onClick={() => onExport(table.sql, table.title)} disabled={!rows.length}>엑셀 내려받기</button>}
             {chartable && <button type="button" className="b2b-link-btn" onClick={() => setShowChart((v) => !v)}>{showChart ? "차트 닫기" : "차트 보기"}</button>}
-            <button type="button" className="b2b-link-btn" onClick={() => setShowSql((v) => !v)}>{showSql ? "SQL 닫기" : "SQL 보기"}</button>
+            {!table.sql.startsWith("--") && <button type="button" className="b2b-link-btn" onClick={() => setShowSql((v) => !v)}>{showSql ? "SQL 닫기" : "SQL 보기"}</button>}
+            {table.sql.startsWith("--") && <span className="rp-table-note">이익률 계산기 산식으로 계산한 표(SQL 아님)</span>}
           </div>
           {showChart && chartable && <div className="rp-chart"><BarList title={`${numCol} — ${labelCol}별`} data={chartData} fmt={(n) => n.toLocaleString("ko-KR")} /></div>}
           {rows.length === 0 ? <div className="b2b-empty">조회 결과가 없습니다.</div> : (
@@ -159,7 +161,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
   );
 }
 
-const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기" };
+const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기", margin_calc: "계산" };
 
 export default function ReportPage() {
   const toast = useToast();
