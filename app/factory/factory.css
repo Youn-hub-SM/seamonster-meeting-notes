@@ -99,7 +99,6 @@
 .fac-name-btn { background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .fac-name-btn:hover strong { color: var(--sm-orange); text-decoration: underline; }
 .fac-rec-btn { padding: 4px 8px; font-size: 12px; white-space: nowrap; }
-.fac-foot-note { margin: 10px 0 0; line-height: 1.6; }
 .fac-hist-modal { max-width: 940px; }
 .fac-hist-scroll { max-height: 440px; overflow: auto; flex-shrink: 0; }   /* 모달 flex 본문에서 눌리지 않게 */
 .fac-hist-memo { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

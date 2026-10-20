@@ -1,7 +1,7 @@
 "use client";
 
 // 파도소리 재고 목록 — 씨몬스터 재고 목록 '전체' 탭과 같은 틀(2026-10-20 대표 지시).
-//  요약 카드(품목 수·현재 재고·재고 자산·기간 총출고) → 기간 탭·검색 → 표 → 계산식 안내줄.
+//  요약 카드(품목 수·현재 재고·재고 자산·기간 총출고) → 기간 탭·검색 → 표. 계산식 안내줄은 뺐다(대표: 불필요한 요소 최소화).
 //  표: SKU | 품목(누르면 히스토리) | 현재고 | 하루 출고 | 예상소진 | 총입고 | 총출고 | 재고자산 | 기록.
 //  씨몬스터에만 있는 것(입고 예정·권장생산·생산 요청·AI 조언·프로모션)은 파도소리에 해당이 없어 뺐다.
 //  재고 부족 판정은 대표가 추후 정한다(그때 카드·'부족만 보기'·경고색을 붙인다).
@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { HIST_COLOR, boxStr, kgStr, lotLabel, weightBreakdown, type StockMeta, type StockRow, type TxnType } from "@/app/lib/factory";
+import { HIST_COLOR, boxStr, kgStr, lotLabel, weightBreakdown, type StockRow, type TxnType } from "@/app/lib/factory";
 import TxnForm from "./TxnForm";
 import { today, daysAgo } from "./util";
 
@@ -24,7 +24,6 @@ const num = (n: number) => n.toLocaleString("ko-KR", { maximumFractionDigits: 2 
 
 export default function FactoryStockPage() {
   const [rows, setRows] = useState<StockRow[]>([]);
-  const [meta, setMeta] = useState<StockMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -55,7 +54,7 @@ export default function FactoryStockPage() {
       const j = await (await fetch(`/api/factory/stock?${sp}`, { cache: "no-store" })).json();
       if (seq !== loadSeq.current) return;
       if (!j.ok) throw new Error(j.error || "재고를 불러오지 못했습니다. 새로고침하세요.");
-      setRows(j.rows || []); setMeta(j.meta || null);
+      setRows(j.rows || []);
     } catch (e) { if (seq === loadSeq.current) setError(e instanceof Error ? e.message : "재고를 불러오지 못했습니다. 새로고침하세요."); }
     if (seq === loadSeq.current) setLoading(false);
   }, [range.from, range.to]);
@@ -256,13 +255,6 @@ export default function FactoryStockPage() {
             ))}
           </div>
         </>
-      )}
-
-      {/* 기간·계산식 안내줄 — 씨몬스터 재고 목록처럼 표 아래 */}
-      {meta && (
-        <p className="fac-sub fac-foot-note">
-          기간 {meta.from} ~ {meta.to} ({meta.periodDays}일) · 총입고·총출고 = 이 기간 거래일 기준(조정·취소 제외) · 하루 출고 = 기간 출고 ÷ {meta.periodDays}일 · 예상소진 = 현재고 ÷ 하루 출고 · 재고자산 = 남은 kg × kg당 제품원가
-        </p>
       )}
 
       {/* 모바일 하단 고정 버튼 */}
