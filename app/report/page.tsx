@@ -249,6 +249,7 @@ export default function ReportPage() {
   const [fbNote, setFbNote] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
   const isAdmin = me === "현석" || me === "관리자"; // AppSidebar 와 같은 판정
 
   const loadSaved = useCallback(async () => {
@@ -273,6 +274,8 @@ export default function ReportPage() {
   useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [items.length, loading, lastText]);
   // 입력 상자 — 글이 늘면 위로 자란다(최대 10줄 남짓)
   useEffect(() => { const el = taRef.current; if (!el) return; el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 240)}px`; }, [q]);
+  // 저장 리포트를 실행·변수 입력하면 패널을 맨 위로(결과가 목록 위에 붙는다)
+  useEffect(() => { if (runResult || varForm) drawerRef.current?.scrollTo({ top: 0 }); }, [runResult, varForm]);
   // Esc — 답하는 중이면 중지, 패널이 열려 있으면 닫기
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -696,7 +699,7 @@ export default function ReportPage() {
               <span className="rp-drawer-title">{PANEL_TITLE[panel]}</span>
               <button type="button" className="b2b-link-btn" onClick={() => setPanel(null)}>닫기</button>
             </div>
-            <div className="rp-drawer-body">
+            <div className="rp-drawer-body" ref={drawerRef}>
               {panel === "saved" && (
                 <>
                   {/* 실행한 리포트 — 목록이 길어도 바로 보이게 맨 위 */}
