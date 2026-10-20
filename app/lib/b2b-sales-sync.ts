@@ -299,7 +299,11 @@ export async function reconcileB2BSales(from: string, to: string): Promise<{ che
     let kind: SalesMismatchKind | null = null;
     if (own.length === 0 && other.length === 0) kind = exp.length ? "missing" : null;
     else if (other.length && own.length) kind = "backfill_dup";
-    else if (other.length) kind = "backfill_only";
+    else if (other.length) {
+      // 구글시트 이관(백필) 행만 있는 옛 발주 — 금액이 기대와 같으면 그때 기준대로 맞은 것
+      const legacyOk = sum(other) === expected && (o.ship_date || o.order_date) <= SHIP_DATE_RULE_FROM;
+      kind = legacyOk ? null : "backfill_only";
+    }
     else {
       const want = exp.map((r) => r.row_hash).sort().join(",");
       const have = own.map((r) => r.row_hash).sort().join(",");
