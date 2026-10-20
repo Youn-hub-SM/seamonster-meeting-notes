@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { normalizeRow, type SalesOrderRow } from "./sales-normalize";
+import { normalizeRow, rowHash, type SalesOrderRow } from "./sales-normalize";
 import { fetchAllPages, fetchInChunks } from "./sales-paging";
 
 // 도매 발주가 '발송완료'되면 매출 라인을 Supabase 매출원장(sales_orders)에 반영.
@@ -252,7 +252,7 @@ export async function deleteOrderSales(orderId: string, orderNo: string): Promis
 export type SalesMismatchKind = "missing" | "differs" | "backfill_dup" | "backfill_only" | "not_completed" | "stale_date";
 export const SALES_MISMATCH_LABEL: Record<SalesMismatchKind, string> = {
   missing: "원장에 없음",
-  differs: "금액·구성 다름",
+  differs: "원장 내용 다름",
   backfill_dup: "백필 행 중복",
   backfill_only: "백필 행만 있음",
   not_completed: "발송완료 아님",
@@ -261,6 +261,7 @@ export const SALES_MISMATCH_LABEL: Record<SalesMismatchKind, string> = {
 export type SalesMismatch = {
   order_id: string; order_no: string; status: string; date: string | null;
   kind: SalesMismatchKind; expected: number; ledger: number;
+  note?: string; // differs 의 실제 차이 — 날짜만 다름(원장 날짜) / 금액 다름 / 금액 같음·품목 구성 다름
 };
 type LedgerRow = { order_id: string; order_date: string; upload_batch: string | null; row_hash: string; subtotal_amount: number };
 
@@ -302,7 +303,20 @@ export async function reconcileB2BSales(from: string, to: string): Promise<{ che
       const have = own.map((r) => r.row_hash).sort().join(",");
       if (want !== have) kind = "differs";
     }
-    if (kind) mismatches.push({ order_id: o.id, order_no: o.order_no, status: o.status, date: o.ship_date || o.order_date, kind, expected, ledger: sum(rows) });
+    const ledgerSum = sum(rows);
+    let note: string | undefined;
+    if (kind === "differs") {
+      // 원장 날짜 하나로 기대 행을 다시 해시해 같으면 날짜만 다른 것(2026-09-08 전 발주일 기준으로 적힌 행 등)
+      const dates = [...new Set(own.map((r) => r.order_date))];
+      const have = own.map((r) => r.row_hash).sort().join(",");
+      const reHashed = dates.length === 1
+        ? exp.map((r) => rowHash({ ...r, order_date_int: Number(dates[0].replace(/-/g, "")) })).sort().join(",")
+        : "";
+      if (reHashed && reHashed === have) note = `날짜만 다름 · 원장 ${dates[0]}`;
+      else if (expected !== ledgerSum) note = "금액 다름";
+      else note = "금액 같음 · 품목 구성 다름";
+    }
+    if (kind) mismatches.push({ order_id: o.id, order_no: o.order_no, status: o.status, date: o.ship_date || o.order_date, kind, expected, ledger: ledgerSum, note });
   }
 
   // 3) 기간 안 b2b 행 중 위 발주에 속하지 않는 것 — 취소·되돌림·삭제된 발주, 발송일이 기간 밖으로 바뀐 발주

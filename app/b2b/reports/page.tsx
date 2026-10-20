@@ -32,10 +32,10 @@ type Report = {
 type Preset = "this_month" | "last_month" | "this_year" | "custom";
 
 type MismatchKind = "missing" | "differs" | "backfill_dup" | "backfill_only" | "not_completed" | "stale_date";
-type Mismatch = { order_id: string; order_no: string; status: string; date: string | null; kind: MismatchKind; expected: number; ledger: number };
+type Mismatch = { order_id: string; order_no: string; status: string; date: string | null; kind: MismatchKind; expected: number; ledger: number; note?: string };
 const MISMATCH_LABEL: Record<MismatchKind, string> = {
   missing: "원장에 없음",
-  differs: "금액·구성 다름",
+  differs: "원장 내용 다름",
   backfill_dup: "백필 행 중복",
   backfill_only: "백필 행만 있음",
   not_completed: "발송완료 아님",
@@ -249,7 +249,7 @@ export default function ReportsPage() {
                       <td data-label="발주번호">{m.status === "삭제됨" ? m.order_no : <a className="sm-link" href={`/b2b/orders/${m.order_id}`}>{m.order_no}</a>}</td>
                       <td data-label="발송일">{m.date || "-"}</td>
                       <td data-label="상태">{m.status}</td>
-                      <td data-label="내용">{MISMATCH_LABEL[m.kind]}</td>
+                      <td data-label="내용">{m.note || MISMATCH_LABEL[m.kind]}</td>
                       <td data-label="발주 기준(원)" className="num b2b-money">{formatMoney(m.expected)}</td>
                       <td data-label="원장(원)" className="num b2b-money">{formatMoney(m.ledger)}</td>
                       <td style={{ textAlign: "right" }}>

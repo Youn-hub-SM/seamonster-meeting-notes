@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
           ref_id: m.status === "삭제됨" ? null : m.order_id, ref_no: m.order_no || null, partner: null,
           product_id: null, product_name: null, sku: null, channel: null,
           qty: null, txn_date: m.date,
-          detail: `${SALES_MISMATCH_LABEL[m.kind]} · ${m.status} · 기대 ${won(m.expected)} · 원장 ${won(m.ledger)}`,
+          detail: `${m.note || SALES_MISMATCH_LABEL[m.kind]} · ${m.status} · 기대 ${won(m.expected)} · 원장 ${won(m.ledger)}`,
           tags: [m.kind === "backfill_dup" || m.kind === "backfill_only" ? "backfill" : m.kind],
         }));
       } else {
