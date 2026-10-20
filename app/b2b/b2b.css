@@ -2831,7 +2831,9 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-chat { display: flex; }
 .rp-chat-text { margin: 0; max-width: 68ch; font-size: var(--sm-fs-lg); line-height: var(--sm-lh-body); color: var(--sm-black); white-space: pre-line; }
 /* 대화 스레드(2026-10-19 클로드 웹 꼴) — 사용자 = 오른쪽 말풍선(경계 카드), 비서 = 왼쪽 평문, 도구 = 칩 + 표 카드 */
-.rp-thread { display: flex; flex-direction: column; gap: 14px; margin: 8px 0 4px; }
+/* 2026-10-20 대표: 대화가 길어지면 페이지 전체가 늘어나 다른 메뉴를 못 본다 → 대화만 자체 스크롤 박스(경계 카드) */
+.rp-thread { display: flex; flex-direction: column; gap: 14px; margin: 8px 0 4px; max-height: min(62vh, 760px); min-height: 160px; overflow-y: auto; padding: 14px; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { .rp-thread { scroll-behavior: auto; } }
 .rp-msg { display: flex; flex-direction: column; gap: 8px; }
 .rp-msg-user { align-items: flex-end; }
 .rp-bubble { max-width: 68ch; padding: 10px 14px; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-bg-subtle); font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-dark); white-space: pre-line; }

@@ -115,7 +115,12 @@ TABLE purchase_returns — 제조사 반품(매입 차감): product_id, return_d
 
 TABLE delivery_log — 날짜별 배송일지(PK=log_date date): boxes_normal·boxes_guar(jsonb {박스종류:개수}),
   base_fee_normal·base_fee_guar·extra_fee·guar_extra_fee·pado_fee·pado_extra·pado_cod(bigint 운임원),
-  dryice_full·dryice_half(numeric), memo
+  dryice_full·dryice_half(numeric), memo.
+  건별 입력 내역도 이 표 안에 jsonb 배열로 있다(2026-10-20 명시):
+  · manual_entries(jsonb[]) = 직접수정 내역 {id, side('n' 일반|'g' 도착보장), category(박스종류), qty(±수량), note(사유), at(ISO 시각), by(입력자)}
+  · record_entries(jsonb[]) = 자동칸 기록(발주처리 배치) {id, at, by, mode('add'|'replace'|'baseline'), boxes_normal, boxes_guar, base_fee_normal, base_fee_guar}
+  풀어 보려면: select d.log_date, e->>'at' as "시각", e->>'side' as "구분", e->>'category' as "품목", (e->>'qty')::int as "증감", e->>'note' as "사유", e->>'by' as "입력자"
+    from delivery_log d, jsonb_array_elements(d.manual_entries) e where d.log_date between … order by 1, 2
 TABLE fulfill_dispatch — 소매 출고 배치 이력: dispatch_date(date), channel(text), sku_count(int), total_qty(int), order_no(text OUT-...), created_at,
   unmatched(jsonb 135 — 재고가 빠지지 않은 코드 [{sku,qty,kind unmatched|ambiguous}]), unmatched_done_at(timestamptz 그 목록 처리 시각, null=미처리)
   ※ sku_count=0 = 재고 행 없이 처리완료된 배치(재고 관리 안 함·미등록 코드뿐이거나, 한 줄 취소로 마지막 재고 행까지 지운 배치) — 품목 수 집계에서 뺀다

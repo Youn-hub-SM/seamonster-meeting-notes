@@ -203,7 +203,6 @@ export default function ReportPage() {
   // 피드백(개선안 5)
   const [fbNoteFor, setFbNoteFor] = useState<number | null>(null);
   const [fbNote, setFbNote] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
   const isAdmin = me === "현석" || me === "관리자"; // AppSidebar 와 같은 판정
 
   const loadSaved = useCallback(async () => {
@@ -222,7 +221,10 @@ export default function ReportPage() {
   }, []);
   useEffect(() => { loadSaved(); loadThreads(); loadGlossary(); }, [loadSaved, loadThreads, loadGlossary]);
   useEffect(() => { (async () => { try { const j = await (await fetch("/api/b2b/auth", { cache: "no-store" })).json(); if (j.ok) setMe(j.name); } catch { /* noop */ } })(); }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [items.length, loading]);
+  // 대화 박스 안에서만 맨 아래로(페이지 전체를 움직이지 않는다). 글자가 흘러올 때도 따라간다.
+  const threadRef = useRef<HTMLDivElement>(null);
+  const lastText = items.length ? (items[items.length - 1] as { text?: string }).text : "";
+  useEffect(() => { const el = threadRef.current; if (el) el.scrollTop = el.scrollHeight; }, [items.length, loading, lastText]);
 
   const filteredSaved = useMemo(
     () => (savedFilter === "all" || !me ? saved : saved.filter((s) => s.createdBy === me)),
@@ -534,7 +536,7 @@ export default function ReportPage() {
 
       {/* 대화 — 사용자 글은 오른쪽 말풍선, 비서 글은 왼쪽 평문, 도구 칩·표 카드·용어 제안은 그 자리에 */}
       {items.length > 0 && (
-        <div className="rp-thread">
+        <div className="rp-thread" ref={threadRef}>
           {items.map((it, i) => {
             if (it.role === "user") return <div key={i} className="rp-msg rp-msg-user"><div className="rp-bubble">{it.text}</div></div>;
             if (it.role === "tool") {
@@ -604,7 +606,6 @@ export default function ReportPage() {
             );
           })}
           {loading && !items.some((x) => x.role === "assistant" && x.live) && <div className="rp-msg rp-msg-ai"><p className="rp-chat-text rp-thinking">읽는 중</p></div>}
-          <div ref={endRef} />
         </div>
       )}
       {busy && !runResult && <div className="b2b-loading">불러오는 중...</div>}
