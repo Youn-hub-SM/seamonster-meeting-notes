@@ -676,20 +676,24 @@ export default function ReportPage() {
               aria-invalid={qErr ? "true" : undefined}
               onChange={(e) => { setQ(e.target.value); if (qErr) setQErr(""); }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(q); } }} />
+            {/* 상자 안 = 입력 + 보내기(오른쪽 아래) — 클로드 코드 입력창 배치 */}
             <div className="rp-box-bar" onClick={(e) => e.stopPropagation()}>
-              <select className="b2b-select rp-box-model" value={modelKey} onChange={(e) => pickModel(e.target.value)} disabled={loading} aria-label="AI 모델" title="이 대화에 쓸 모델. 쉬운 조회는 빠른 모델이 낫습니다">
-                <option value="">기본 모델(설정)</option>
-                <option value="fable">Fable 5.1 · 정밀</option>
-                <option value="opus">Opus 5.5 · 빠름</option>
-                <option value="sonnet">Sonnet 5.5 · 가장 빠름</option>
-              </select>
-              <span className="rp-box-hint">{loading ? "Esc 중지" : "Enter 보내기 · Shift+Enter 줄바꿈"}</span>
               {loading
                 ? <button type="button" className="b2b-btn-secondary rp-box-btn" onClick={stop}>중지</button>
                 : <button type="button" className="b2b-btn-primary rp-box-btn" onClick={() => send(q)} disabled={busy || !q.trim()}>보내기</button>}
             </div>
           </div>
           {qErr && <div className="b2b-field-error">{qErr}</div>}
+          {/* 상자 밖 아래 줄 = 왼쪽 단축키 안내 · 오른쪽 모델 */}
+          <div className="rp-compose-foot">
+            <span className="rp-box-hint">{loading ? "Esc 중지" : "Enter 보내기 · Shift+Enter 줄바꿈"}</span>
+            <select className="b2b-select rp-box-model" value={modelKey} onChange={(e) => pickModel(e.target.value)} disabled={loading} aria-label="AI 모델" title="이 대화에 쓸 모델. 쉬운 조회는 빠른 모델이 낫습니다">
+              <option value="">기본 모델(설정)</option>
+              <option value="fable">Fable 5.1 · 정밀</option>
+              <option value="opus">Opus 5.5 · 빠름</option>
+              <option value="sonnet">Sonnet 5.5 · 가장 빠름</option>
+            </select>
+          </div>
         </div>
       </section>
 
