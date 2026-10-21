@@ -5,6 +5,7 @@
 //  2026-10-12 대표 요청: 주간만 '4. 고객의 소리'(스마트스토어 문의·VOC 요약, report-voice.ts) — 변화와 원인·확인할 것은 5·6, 집계 표는 코드가 섹션 끝에.
 //   월간·일일 프롬프트·출력은 종전 그대로(대표 요청 범위 = 주간만).
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { ORDER_UNIT_SQL } from "./sales-order-unit";
 import {
   type ReportSpec, type ReportPeriod, type Range, type Built, type TrendSpec,
   dailySpec, collectAds, runSql, validDate, kstDay, shift, weekday, md, r0, r2, avg, pct, num, WHOLESALE, inventoryFacts, withTimeout,
@@ -59,8 +60,8 @@ async function periodSalesFacts(sb: SupabaseClient, period: "weekly" | "monthly"
     ? `case when order_date between '${cur.since}' and '${cur.until}' then 'cur' ${weeks.map((w, i) => `when order_date between '${w.since}' and '${w.until}' then 'w${i + 1}'`).join(" ")} end`
     : `case when order_date between '${cur.since}' and '${cur.until}' then 'cur' when order_date between '${prevR.since}' and '${prevR.until}' then 'prev' end`;
   const [chRows, lyRows, skuRows, nrCur, nrPrev] = await Promise.all([
-    runSql<ChDay>(sb, `select order_date::text as d, channel, sum(subtotal_amount)::bigint as rev, count(distinct nullif(order_id, ''))::int as orders from sales_orders where order_date between '${span.since}' and '${span.until}' group by 1, 2`),
-    lyR ? runSql<{ channel: string; rev: number; orders: number }>(sb, `select channel, sum(subtotal_amount)::bigint as rev, count(distinct nullif(order_id, ''))::int as orders from sales_orders where order_date between '${lyR.since}' and '${lyR.until}' group by 1`) : Promise.resolve([]),
+    runSql<ChDay>(sb, `select order_date::text as d, channel, sum(subtotal_amount)::bigint as rev, count(distinct ${ORDER_UNIT_SQL})::int as orders from sales_orders where order_date between '${span.since}' and '${span.until}' group by 1, 2`),
+    lyR ? runSql<{ channel: string; rev: number; orders: number }>(sb, `select channel, sum(subtotal_amount)::bigint as rev, count(distinct ${ORDER_UNIT_SQL})::int as orders from sales_orders where order_date between '${lyR.since}' and '${lyR.until}' group by 1`) : Promise.resolve([]),
     runSql<SkuRow>(sb, `select ${skuCase} as r, upper(sku_code) as sku, max(product_name) as name, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where order_date between '${span.since}' and '${span.until}' and sku_code <> '' and channel <> '${WHOLESALE}' group by 1, 2`),
     sb.rpc("sales_new_repeat", { p_from: cur.since, p_to: cur.until }),
     sb.rpc("sales_new_repeat", { p_from: prevR.since, p_to: prevR.until }),

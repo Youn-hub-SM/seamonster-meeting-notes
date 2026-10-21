@@ -1,6 +1,7 @@
 // 매출 리포트 계산 — 집계 RPC를 소비해 일일/주간 stats 조립(파이썬 analyze_and_build_* 1:1).
 //  run-rate(30일·연 환산) 비교식 보존. 서버 전용(supabaseAdmin).
 import { supabaseAdmin } from "./supabase";
+import { ORDER_UNIT_SQL } from "./sales-order-unit";
 
 // ── 날짜 유틸(로컬 자정 기준, KST 데이터는 date문자열이라 TZ 무관) ──
 function d(iso: string): Date { const [y, m, dd] = iso.split("-").map(Number); return new Date(y, m - 1, dd); }
@@ -48,7 +49,7 @@ export type SubscriptionFacts = {
 
 type DecompRow = { channel: string; orders: number; rev: number; qty: number };
 async function channelDecomp(from: string, to: string): Promise<DecompRow[]> {
-  return runQ<DecompRow>(`select channel, count(distinct order_id)::int as orders, coalesce(sum(subtotal_amount),0)::bigint as rev, coalesce(sum(quantity),0)::int as qty from sales_orders where order_date between '${from}' and '${to}' group by channel`);
+  return runQ<DecompRow>(`select channel, count(distinct ${ORDER_UNIT_SQL})::int as orders, coalesce(sum(subtotal_amount),0)::bigint as rev, coalesce(sum(quantity),0)::int as qty from sales_orders where order_date between '${from}' and '${to}' group by channel`);
 }
 function buildDecomp(cur: DecompRow[], prev: DecompRow[]): { rows: ChannelDecomp[]; total: ChannelDecomp } {
   const mk = (name: string, c?: DecompRow | null, p?: DecompRow | null): ChannelDecomp => {

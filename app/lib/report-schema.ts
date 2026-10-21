@@ -36,12 +36,13 @@ TABLE sales_orders — 매출 원장(줄 단위, PII 없음). [루커 못 봄 �
   order_date(date, KST 기준일), order_year(int), order_month(int), channel(text 판매처 예 '도매'),
   order_id(text 주문번호), product_name(text), option_name(text), sku_code(text 관리코드),
   quantity(int), selling_price(bigint), option_price(bigint), subtotal_amount(bigint 결제금액=매출축),
-  shipping_fee(bigint), customer_key(text 전화해시 ''=전화없음), source(text), upload_batch(text), order_date_int(int yyyymmdd)
+  shipping_fee(bigint), customer_key(text 전화해시 ''=전화없음), source(text), upload_batch(text), order_date_int(int yyyymmdd),
+  order_unit(text 주문 1건 키 — 주문 건수 = count(distinct order_unit). 톡스토어는 상품마다 주문번호가 갈려 같은 주문자·같은 주문일 = 1건, 그 밖은 order_id)
 
-VIEW sales_looker — sales_orders 의 분석용 투영(내부컬럼 제외). 루커 노출용. 컬럼은 sales_orders 와 동일(id/row_hash/source 등 제외) + customer_key(해시).
+VIEW sales_looker — sales_orders 의 분석용 투영(내부컬럼 제외). 루커 노출용. 컬럼은 sales_orders 와 동일(id/row_hash/source 등 제외) + customer_key(해시) + order_unit(주문수 = COUNT DISTINCT order_unit).
 
 VIEW sales_group_repeat — 구매차수 코호트(첫/재/재재구매)를 4축으로. 줄 단위. 전화있고 050아닌 고객만.
-  order_date, channel, order_id, order_key(=customer_key|order_id, 주문수는 이걸 COUNT DISTINCT), product_name, sku_code, quantity, subtotal_amount, customer_key,
+  order_date, channel, order_id, order_key(=customer_key|order_unit, 주문수는 이걸 COUNT DISTINCT), product_name, sku_code, quantity, subtotal_amount, customer_key,
   product_group(text SKU코어코드 예 'DG'), group_name(text 친화명 예 '대구살'),
   group_purchase_seq/label, sku_purchase_seq/label, name_purchase_seq/label, cust_order_seq/label
   (label 형식: '1_첫구매','2_재구매','3_재재구매','4_4회이상')

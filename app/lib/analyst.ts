@@ -12,6 +12,7 @@
 //   같은 리포트는 'running' 행으로 먼저 점유해 겹친 실행·중복 발송을 막고, 매출 지문이 바뀌었을 때만 다시 분석.
 //  비용: 기능별 모델(AI 설정 › 종합 리포트, 기본 opus) · 이상이 없으면 도구 없이 low · 조사 최대 5차례.
 import Anthropic from "@anthropic-ai/sdk";
+import { ORDER_UNIT_SQL } from "./sales-order-unit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "./supabase";
 import { getKv } from "./b2b-settings";
@@ -130,7 +131,7 @@ async function salesFacts(sb: SupabaseClient, y: string, ready: boolean, flags: 
   const notes: string[] = [];
   const [[chRows, skuRows], nrAll, mtdAll] = await Promise.all([
     Promise.all([
-      runSql<ChRow>(sb, `select order_date::text as d, channel, sum(subtotal_amount)::bigint as rev, count(distinct nullif(order_id, ''))::int as orders from sales_orders where order_date in (${inList(all)}) group by 1, 2`),
+      runSql<ChRow>(sb, `select order_date::text as d, channel, sum(subtotal_amount)::bigint as rev, count(distinct ${ORDER_UNIT_SQL})::int as orders from sales_orders where order_date in (${inList(all)}) group by 1, 2`),
       runSql<SkuRow>(sb, `select order_date::text as d, upper(sku_code) as sku, max(product_name) as name, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where order_date in (${inList([y, ...base])}) and sku_code <> '' and channel <> '${WHOLESALE}' group by 1, 2`),
     ]),
     Promise.all([y, ...base].map((d) => sb.rpc("sales_new_repeat", { p_from: d, p_to: d }))),
@@ -522,7 +523,7 @@ export async function runTool(sb: SupabaseClient, ctx: { since: string; end: str
   if (name === "channel_trend") {
     const ch = String(input.channel || "").trim();
     if (!CHANNEL_RE.test(ch)) throw new Error("채널 이름 형식이 올바르지 않습니다.");
-    const rows = await runSql(sb, `select order_date::text as d, sum(subtotal_amount)::bigint as rev, count(distinct nullif(order_id, ''))::int as orders from sales_orders where channel = '${ch.replace(/'/g, "''")}' and order_date between '${since}' and '${y}' group by 1 order by 1 desc`, 100);
+    const rows = await runSql(sb, `select order_date::text as d, sum(subtotal_amount)::bigint as rev, count(distinct ${ORDER_UNIT_SQL})::int as orders from sales_orders where channel = '${ch.replace(/'/g, "''")}' and order_date between '${since}' and '${y}' group by 1 order by 1 desc`, 100);
     return `${win}\n${fitJson(rows, 8000)}`;
   }
   if (name === "listing_status") {
