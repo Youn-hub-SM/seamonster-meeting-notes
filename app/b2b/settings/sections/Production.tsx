@@ -9,12 +9,15 @@ import { OnOff, Pill, SetCard, SetRow, SaveBar, Result, useDraft, useReportDirty
 
 type Mn = { enabled: boolean; botId: string; receivers: string; title: string; events: Record<string, boolean> };
 type MnEvent = { key: string; label: string; group?: string };
+type Draft = { ai: boolean; auto: boolean; time: string }; // AI 검토 포인트 · 자동 작성 · 작성 시각(수요일 KST)
 
 export default function ProductionSection({ onDirty }: SectionProps) {
   const [err, setErr] = useState("");
   const mn = useDraft<Mn>(null);
   const [defs, setDefs] = useState<MnEvent[]>([]);
-  const draftAi = useDraft<boolean>(null);
+  const draft = useDraft<Draft>(null);
+  const [lastRun, setLastRun] = useState<string | null>(null);
+  const [cronKey, setCronKey] = useState(true);
   const [teamsOn, setTeamsOn] = useState<boolean | null>(null);
   const [sched, setSched] = useState<ScheduleHorizon | null>(null);
   const [tMsg, setTMsg] = useState<Msg | null>(null);
@@ -28,26 +31,30 @@ export default function ProductionSection({ onDirty }: SectionProps) {
       try {
         const [m, d, t] = await Promise.all([
           api<{ config: Mn; events: MnEvent[] }>("/api/production/settings/master-notify"),
-          api<{ enabled: boolean }>("/api/b2b/settings/draft-ai"),
+          api<{ enabled: boolean; schedule: { enabled: boolean; time: string }; lastRun: string | null; cronKeySet: boolean }>("/api/b2b/settings/draft-ai"),
           api<{ enabled: boolean; hasUrl: boolean; hasHelperUrl: boolean }>("/api/b2b/settings/teams"),
         ]);
         mn.load(m.config); setDefs(m.events || []);
-        draftAi.load(!!d.enabled);
+        draft.load({ ai: !!d.enabled, auto: d.schedule?.enabled !== false, time: d.schedule?.time || "13:50" });
+        setLastRun(d.lastRun || null); setCronKey(d.cronKeySet !== false);
         setTeamsOn(!!t.enabled && (!!t.hasHelperUrl || !!t.hasUrl));
       } catch (e) { setErr(errText(e, "생산·재고 설정을 불러오지 못했습니다. 새로고침하세요")); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const dirty = mn.dirty || draftAi.dirty;
+  const dirty = mn.dirty || draft.dirty;
   useReportDirty(dirty, onDirty);
-  const reset = () => { mn.reset(); draftAi.reset(); setSaveMsg(null); };
+  const reset = () => { mn.reset(); draft.reset(); setSaveMsg(null); };
 
   async function save() {
     setSaving(true); setSaveMsg(null);
     try {
       if (mn.dirty && mn.draft) { await api("/api/production/settings/master-notify", "PUT", mn.draft); mn.load(mn.draft); }
-      if (draftAi.dirty && draftAi.draft !== null) { const j = await api<{ enabled: boolean }>("/api/b2b/settings/draft-ai", "PUT", { enabled: draftAi.draft }); draftAi.load(!!j.enabled); }
+      if (draft.dirty && draft.draft) {
+        const j = await api<{ enabled: boolean; schedule: { enabled: boolean; time: string } }>("/api/b2b/settings/draft-ai", "PUT", { enabled: draft.draft.ai, schedule: { enabled: draft.draft.auto, time: draft.draft.time } });
+        draft.load({ ai: !!j.enabled, auto: j.schedule.enabled, time: j.schedule.time });
+      }
       setSaveMsg({ ok: true, text: `저장했습니다 (${hhmm()})` });
     } catch (e) { setSaveMsg({ ok: false, text: errText(e, "저장하지 못했습니다. 다시 누르세요") }); }
     setSaving(false);
@@ -61,6 +68,7 @@ export default function ProductionSection({ onDirty }: SectionProps) {
   }
 
   const m = mn.draft;
+  const dr = draft.draft;
   const evOn = (k: string) => !!m && m.events[k] !== false;
   const setEv = (k: string, v: boolean) => m && mn.setDraft({ ...m, events: { ...m.events, [k]: v } });
   const group = (g: string) => defs.filter((d) => (d.group || "기타") === g);
@@ -97,11 +105,20 @@ export default function ProductionSection({ onDirty }: SectionProps) {
         )}
       </SetCard>
 
-      <SetCard title="주간 생산 요청서 초안" pill={<Pill state="on">예약 켜짐</Pill>}
-        desc="권장 수량으로 제조사 요청서 초안을 만들어 Teams 변경알림 채널(생산 요청 등록 알림)에 올립니다.">
-        <SetRow label="예약" desc="매주 수요일 13:50 — 중계 서버가 실행합니다(시각은 다음 단계에서 이 화면으로 옮깁니다)" />
-        <SetRow label="AI 검토 포인트 붙이기" desc="초안에 AI 가 본 주의할 점을 덧붙입니다. 꺼도 초안(수식 수량)은 만들어집니다"
-          control={draftAi.draft === null ? undefined : <OnOff label="AI 검토 포인트" value={draftAi.draft} onChange={(v) => draftAi.setDraft(v)} />} />
+      <SetCard title="주간 생산 요청서 초안" pill={!dr ? null : dr.auto ? <Pill state="on">자동 작성 켜짐</Pill> : <Pill state="off">자동 작성 꺼짐</Pill>}
+        desc="매주 수요일, 권장 수량으로 제조사 요청서 초안을 만들어 Teams 변경알림 채널(생산 요청 등록 알림)에 올립니다.">
+        {!dr ? <div className="b2b-loading">불러오는 중...</div> : (
+          <>
+            <SetRow label="자동 작성" desc="끄면 수요일에 초안을 만들지 않습니다(생산 요청은 직접 만듭니다)"
+              note={<>마지막 자동 작성: <strong>{lastRun || "기록 없음"}</strong>{!cronKey && <> · <span style={{ color: "var(--sm-danger)" }}>예약 실행 키가 없어 중계 서버(수 13:50)로만 실행됩니다</span></>}</>}
+              control={<OnOff label="주간 초안 자동 작성" value={dr.auto} onChange={(v) => draft.setDraft({ ...dr, auto: v })} />} />
+            <SetRow label="작성 시각" desc="매주 수요일, 한국시간 · 5분 단위"
+              control={<input type="time" className="b2b-input set-time-input" step={300} value={dr.time} disabled={!dr.auto} aria-label="작성 시각"
+                onChange={(e) => { const [h, m] = e.target.value.split(":").map(Number); if (!Number.isNaN(h) && !Number.isNaN(m)) draft.setDraft({ ...dr, time: `${String(h).padStart(2, "0")}:${String(Math.floor(m / 5) * 5).padStart(2, "0")}` }); }} />} />
+            <SetRow label="AI 검토 포인트 붙이기" desc="초안에 AI 가 본 주의할 점을 덧붙입니다. 꺼도 초안(수식 수량)은 만들어집니다"
+              control={<OnOff label="AI 검토 포인트" value={dr.ai} onChange={(v) => draft.setDraft({ ...dr, ai: v })} disabled={!dr.auto} />} />
+          </>
+        )}
       </SetCard>
 
       <SetCard title="권장생산 기준" desc="생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8. 날짜로 계산되어 바꿀 값은 없습니다.">

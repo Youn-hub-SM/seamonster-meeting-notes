@@ -7,12 +7,17 @@ import { logProductionDraftNotice } from "@/app/lib/b2b-activity";
 import { getFeatureModel, effortParams, readText } from "@/app/lib/ai-model";
 import { getKv } from "@/app/lib/b2b-settings";
 import { getAllBundles } from "@/app/lib/product-bundles";
+import { DRAFT_WEEKDAY } from "@/app/lib/production-schedule";
+import { getDraftSchedule, getDraftDone, setDraftDone, setDraftLastRun, DRAFT_TICK_WINDOW_MIN } from "@/app/lib/production-draft-schedule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// 주간 생산 요청서 AI 초안 — 매주 수요일 13:50 KST(릴레이 crontab `50 4 * * 3`, 14시 전 게시) production-draft.sh 가 운영을 호출한다.
+// 주간 생산 요청서 AI 초안 — 매주 수요일, 작성 시각·켜기는 관리자 › 설정 › 생산·재고(production_draft_schedule, 2026-10-21).
+//  주 실행 = Supabase pg_cron 이 수요일(KST)에 5분마다 {tick:true} 로 노크(migration 147, DIGEST_CRON_KEY) — 작성 시각 ~ +15분 창에서만 만든다.
+//  예비 = 릴레이 crontab `50 4 * * 3`(수 13:50) production-draft.sh — 꺼져 있거나 작성 시각 전이면 건너뛴다.
+//  date 를 직접 넘기거나 force:true 면(관리자 재실행) 설정과 무관하게 만든다.
 //  재고 목록 권장(소매 수식 + 도매 필요량 − 입고 예정)으로 제조사(재고 보충) 요청서를 '요청' 상태로 만들고,
 //  팀즈에 게시한다. 생산담당자가 화면에서 수량을 고친 뒤 결재자에게 보고하는 초안이다.
 //  일정(영업일): 작성 D → 컨펌·제출 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8.
@@ -22,7 +27,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function bearerOk(req: NextRequest): boolean {
   const authz = req.headers.get("authorization") || "";
-  const keys = [process.env.NAVER_COMMERCE_CLIENT_SECRET, process.env.CRON_SECRET];
+  const keys = [process.env.NAVER_COMMERCE_CLIENT_SECRET, process.env.CRON_SECRET, process.env.DIGEST_CRON_KEY]; // DIGEST_CRON_KEY = pg_cron 틱(147)
   return keys.some((k) => k && k.trim() && authz === `Bearer ${k.trim()}`);
 }
 
@@ -55,13 +60,34 @@ async function aiReviewNote(lines: DraftLine[], zeroButLow: DraftLine[], horizon
   }
 }
 
-// POST { date?: YYYY-MM-DD, dry?: boolean } — 초안 생성. dry=true 면 만들지 않고 계산 결과만 돌려준다(점검용).
+// POST { date?: YYYY-MM-DD, dry?: boolean, tick?: boolean, force?: boolean } — 초안 생성. dry=true 면 만들지 않고 계산 결과만 돌려준다(점검용).
 export async function POST(req: NextRequest) {
   if (!bearerOk(req)) return NextResponse.json({ ok: false, error: "권한이 없습니다." }, { status: 401 });
   let body: Record<string, unknown> = {};
   try { body = (await req.json()) as Record<string, unknown>; } catch { /* body 없음 */ }
-  const D = DATE_RE.test(String(body.date || "")) ? String(body.date) : kstTodayIso();
+  const explicitDate = DATE_RE.test(String(body.date || ""));
+  const D = explicitDate ? String(body.date) : kstTodayIso();
   const dry = body.dry === true;
+  const tick = body.tick === true;
+  // 예약 확인 — 관리자 재실행(date·force)·점검(dry)이 아니면 설정을 따른다
+  const sched = await getDraftSchedule();
+  const kst = new Date(Date.now() + 9 * 3600_000);
+  const nowMin = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  const [th, tm] = sched.time.split(":").map(Number);
+  const since = nowMin - (th * 60 + tm); // 작성 시각부터 지난 분
+  let lastTry = true; // 실패 알림은 마지막 시도에서만(틱 창 안의 앞 시도는 조용히 — 5분마다 실패 알림이 쌓이지 않게)
+  if (!explicitDate && !dry && body.force !== true) {
+    if (!sched.enabled) return NextResponse.json({ ok: true, created: false, skipped: "disabled" });
+    if (tick) {
+      if (kst.getUTCDay() !== DRAFT_WEEKDAY || since < 0 || since >= DRAFT_TICK_WINDOW_MIN) return NextResponse.json({ ok: true, created: false, skipped: "not-due" });
+      lastTry = since >= DRAFT_TICK_WINDOW_MIN - 5;
+    } else if (kst.getUTCDay() === DRAFT_WEEKDAY && since < 0) {
+      return NextResponse.json({ ok: true, created: false, skipped: `before-${sched.time}` }); // 예비 릴레이가 작성 시각보다 먼저 온 경우
+    }
+    if ((await getDraftDone()) === D) return NextResponse.json({ ok: true, created: false, skipped: "already-done" });
+  }
+  const runAt = `${D} ${String(kst.getUTCHours()).padStart(2, "0")}:${String(kst.getUTCMinutes()).padStart(2, "0")}`;
+  const finish = async (result: string) => { if (!dry) { try { await setDraftDone(D); } catch { /* 다음 호출의 중복 방지는 아래 초안 조회가 한 번 더 막는다 */ } await setDraftLastRun(`${runAt} · ${result}`); } };
   try {
     const sb = supabaseAdmin();
 
@@ -73,7 +99,7 @@ export async function POST(req: NextRequest) {
       .eq("created_by", DRAFT_AUTHOR).neq("status", "취소")
       .or(`request_date.eq.${D},and(created_at.gte.${D}T00:00:00+09:00,created_at.lt.${nextDay}T00:00:00+09:00)`).limit(1);
     if (de) throw de;
-    if (!dry && dup && dup.length) return NextResponse.json({ ok: true, created: false, existing: dup[0] });
+    if (!dry && dup && dup.length) { await finish(`이미 있음 ${dup[0].req_no || ""}`.trim()); return NextResponse.json({ ok: true, created: false, existing: dup[0] }); }
 
     const [retail, whole] = await Promise.all([getInventoryRows("소매"), getInventoryRows("도매")]);
     // 집계 실패 = 초안을 만들지 않는다(S4) — 입고 예정을 못 빼면 이미 시켜 둔 물량을 또 시키고('요청' 초안은 곧바로
@@ -141,7 +167,7 @@ export async function POST(req: NextRequest) {
     const prodStart = defaultProdStart(D);
     const dueDate = defaultDueDate("재고 보충", D) || prodStart;
     const memoLines = [
-      `AI 초안(매주 수요일 14시 자동 작성) — 생산담당자가 확인·수정한 뒤 결재자에게 보고합니다.`,
+      `AI 초안(매주 수요일 ${sched.time} 자동 작성) — 생산담당자가 확인·수정한 뒤 결재자에게 보고합니다.`,
       `근거: 재고 목록 권장(소매 수식 + 도매 필요량 − 입고 예정), 작성 ${D} / 생산 시작 ${prodStart} / 생산 마감 ${dueDate} (영업일 D+3 / D+7).`,
       // 수량은 지금 재고로 계산하므로 목표 일수도 계산일(오늘 KST) 기준 — D 를 따로 넘긴 재실행이면 계산일을 함께 적는다
       `목표: 평상시 하루 출고 × ${retail.horizonDays}일${retail.schedule.today !== D ? ` (계산일 ${retail.schedule.today} 기준)` : ""} — 이번 요청분 판매 가능 ${retail.schedule.sellable}, 다음 요청분(${retail.schedule.nextDraft}) 판매 가능 ${retail.schedule.nextSellable}까지 버틸 양.`,
@@ -158,13 +184,14 @@ export async function POST(req: NextRequest) {
         ...(lines.length > 15 ? [`- 외 ${lines.length - 15}품목`] : []),
       ].join("\n");
       if (dry) return NextResponse.json({ ok: true, created: false, dry: true, date: D, agg_failed: aggFail, lines, unmatched });
-      await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 집계 실패, 초안 미작성(재실행 필요)`, detail);
+      if (lastTry) await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 집계 실패, 초안 미작성(재실행 필요)`, detail);
+      await setDraftLastRun(`${runAt} · 집계 실패${lastTry ? "" : "(다음 틱에 다시 시도)"}`);
       return NextResponse.json({ ok: false, created: false, error: `집계 실패(${aggFail.join(", ")}) — 초안을 만들지 않았습니다. 다시 실행하세요.`, agg_failed: aggFail, date: D }, { status: 503 });
     }
 
     if (!lines.length) {
       const detail = memoLines.join("\n");
-      if (!dry) await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 권장 0, 초안을 만들지 않았습니다`, detail);
+      if (!dry) { await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 권장 0, 초안을 만들지 않았습니다`, detail); await finish("권장 0, 초안 없음"); }
       return NextResponse.json({ ok: true, created: false, reason: "권장 0", date: D, unmatched });
     }
 
@@ -188,13 +215,17 @@ export async function POST(req: NextRequest) {
       created_by: DRAFT_AUTHOR,
       client_key: `ai-draft-${D}`, // 136 — 동시에 두 번 불려도 한 장(위 중복 확인은 조회 후 삽입이라 경합을 못 막는다). 취소하면 키를 비운다
     });
+    await finish(existing ? `이미 있음 ${full.req_no || ""}`.trim() : `작성 ${full.req_no || ""} · ${full.items.length}품목`);
     if (existing) return NextResponse.json({ ok: true, created: false, existing: { id: full.id, req_no: full.req_no, status: full.status } });
     return NextResponse.json({ ok: true, created: true, request: { id: full.id, req_no: full.req_no, items: full.items.length, total: full.total_requested }, date: D, unmatched });
   } catch (err) {
     console.error("[production/requests/draft POST]", err);
     const msg = err instanceof CreateError ? err.message : extractErrorMsg(err, "초안 생성 실패");
     // 실패도 팀즈로 알린다 — 수요일 14시에 아무것도 안 오면 담당자는 '이번 주는 권장이 없나'로 오해한다
-    if (!dry) { try { await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 생성 실패: ${msg}`, "'+ 새 생산 요청'으로 직접 만들거나, 관리자에게 초안 재실행을 요청하세요."); } catch { /* 알림 실패 무시 */ } }
+    if (!dry) {
+      if (lastTry) { try { await logProductionDraftNotice(`생산요청 AI 초안 ${D} — 생성 실패: ${msg}`, "'+ 새 생산 요청'으로 직접 만들거나, 관리자에게 초안 재실행을 요청하세요."); } catch { /* 알림 실패 무시 */ } }
+      await setDraftLastRun(`${runAt} · 실패: ${msg.slice(0, 80)}${lastTry ? "" : "(다음 틱에 다시 시도)"}`);
+    }
     return NextResponse.json({ ok: false, error: msg }, { status: err instanceof CreateError ? err.status : 500 });
   }
 }
