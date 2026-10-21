@@ -430,3 +430,31 @@ index 99c4eb7..ac70492 100644
 -  return line;
 +  return { event: opts.event, text: line };
  }
+diff --git a/app/lib/guide-data.ts b/app/lib/guide-data.ts
+index 6f6d5e5..6b40126 100644
+--- a/app/lib/guide-data.ts
++++ b/app/lib/guide-data.ts
+@@ -1571,13 +1571,19 @@ export const GUIDE: GuideCategory[] = [
+           },
+           {
+             "href": "/factory/settings",
+-            "label": "설정(Swit 알림)",
+-            "what": "파도소리 입출고 Swit 알림 — 현재 미사용(도입 중단)",
++            "label": "알림 설정(Teams·아사나)",
++            "what": "파도소리 입출고를 Teams 채널에 게시하고, 고른 이벤트는 아사나 업무로 등록한다 (관리자 전용)",
+             "steps": [
+-              "현재는 사용하지 않는다 — 알림 발송을 끈 상태로 둔다"
++              "파도소리 화면 왼쪽 아래 '알림 설정'을 연다",
++              "Teams 알림: Workflows 웹훅 URL 을 붙여넣고 [테스트 발송]을 누른다",
++              "'입출고 알림 게시'를 체크한다",
++              "아사나 업무 등록: 프로젝트 주소를 붙여넣고 [연결 확인]을 누른다",
++              "업무로 올릴 이벤트를 체크하고 '아사나 업무 등록 사용'을 체크한다",
++              "[저장]을 누른다"
+             ],
+             "tips": [
+-              "차기 메신저를 도입하면 이 설정 화면을 재활용할 예정이다"
++              "아사나 토큰은 관리자 › 설정 › 아사나 연동의 값을 같이 쓴다",
++              "알림이 실패해도 입출고 기록은 그대로 저장된다"
+             ],
+             "keywords": [
+               "swit",
