@@ -330,7 +330,7 @@ export default function FulfillPage() {
   const unm = dispatch?.unmatched ?? [];
   const unmQty = unm.reduce((s, u) => s + u.qty, 0);
   const dedupOffBanner = res && res.dedupEnabled === false && (
-    <div className="sm-warn"><strong>중복 방지 꺼짐</strong> — 이미 출고한 주문이 섞여도 걸러지지 않습니다. <Link className="sm-link" href="/fulfill/settings">설정</Link></div>
+    <div className="sm-warn"><strong>중복 방지 꺼짐</strong> — 이미 출고한 주문이 섞여도 걸러지지 않습니다. <Link className="sm-link" href="/b2b/settings?s=fulfill">설정</Link></div>
   );
   const canJump = (i: number) => i === 0 || !!res;
   const canNext = step === 0 ? !!res : step === 1 ? !blocked : step === 2 ? true : false;

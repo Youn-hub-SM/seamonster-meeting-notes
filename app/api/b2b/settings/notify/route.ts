@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getNotifyConfig, setNotifyConfig, NOTIFY_EVENTS, NotifyConfig } from "@/app/lib/b2b-settings";
 
@@ -22,6 +23,7 @@ export async function GET() {
 
 // PUT /api/b2b/settings/notify — 알림 설정 저장
 export async function PUT(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const body = (await req.json()) as { config?: NotifyConfig };
     if (!body.config || typeof body.config !== "object" || Array.isArray(body.config)) {

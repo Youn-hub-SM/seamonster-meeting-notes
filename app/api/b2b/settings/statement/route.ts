@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getKv, setKv } from "@/app/lib/b2b-settings";
 
@@ -33,6 +34,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const b = (await req.json()) as { supplier?: Partial<StatementSupplier>; stamp?: string };
     if (b.supplier) {

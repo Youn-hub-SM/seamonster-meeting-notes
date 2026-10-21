@@ -84,7 +84,7 @@ export default function VocSurveysPage() {
           <h1 className="b2b-page-title">설문 응답 수집</h1>
         </div>
         <div className="b2b-page-actions">
-          <Link href="/b2b/settings/tally" className="b2b-btn-secondary">연동 설정 열기</Link>
+          <Link href="/b2b/settings?s=connect" className="b2b-btn-secondary">연동 설정 열기</Link>
           <button className="b2b-btn-primary" onClick={load} disabled={loading}>다시 불러오기</button>
         </div>
       </header>
@@ -103,7 +103,7 @@ export default function VocSurveysPage() {
       ) : rows.length === 0 ? (
         <div className="b2b-empty">
           수집된 응답이 없습니다.
-          <div className="b2b-empty-action"><Link href="/b2b/settings/tally" className="b2b-btn-secondary">연동 설정 열기</Link></div>
+          <div className="b2b-empty-action"><Link href="/b2b/settings?s=connect" className="b2b-btn-secondary">연동 설정 열기</Link></div>
         </div>
       ) : view === "목록" ? (
         <div className="b2b-table-wrap is-sticky-head">

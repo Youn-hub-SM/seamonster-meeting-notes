@@ -23,6 +23,8 @@ export const DEFAULT_NOTIFY: NotifyConfig = {
   "shipment.status_changed": [...ORDER_STATUSES],
   "order.payment_status_changed": [...PAYMENT_STATUSES],
   "order.tax_invoice_changed": [...TAX_INVOICE_STATUSES],
+  "order.production_status_changed": true, // 2026-10-21 설정 통합 — 전엔 목록에 없어 끌 수 없었다(미정의 = 발송)
+  "deposit.review": true,
   company: false, // company.created/updated/deleted 묶음
   product: false, // product.created/updated/deleted 묶음
 };
@@ -50,6 +52,8 @@ export const NOTIFY_EVENTS: {
   { key: "order.tax_invoice_changed", label: "세금계산서 상태 변경", desc: "선택한 상태로 바뀔 때만", kind: "status", statuses: TAX_INVOICE_STATUSES },
   { key: "payment.added", label: "입금 기록", desc: "입금이 기록될 때", kind: "toggle" },
   { key: "order.deleted", label: "발주 삭제", desc: "발주가 삭제될 때", kind: "toggle" },
+  { key: "order.production_status_changed", label: "발주 생산 상태 변경", desc: "발주의 생산 상태(생산대기·생산중·생산완료)가 바뀔 때", kind: "toggle" },
+  { key: "deposit.review", label: "입금 확인 필요", desc: "들어온 입금을 자동으로 발주에 맞추지 못했을 때(이름별로 거르려면 입금 확인 화면의 자동무시)", kind: "toggle" },
   { key: "company", label: "업체 변경", desc: "업체 등록·수정·삭제 (기본 꺼짐)", kind: "toggle" },
   { key: "product", label: "원가표(품목) 변경", desc: "품목 등록·수정·삭제 (기본 꺼짐)", kind: "toggle" },
 ];

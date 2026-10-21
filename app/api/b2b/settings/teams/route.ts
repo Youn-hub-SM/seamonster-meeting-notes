@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getB2BTeamsConfig, setB2BTeamsConfig, sendTeamsWebhook } from "@/app/lib/b2b-teams";
 
@@ -28,16 +29,21 @@ export async function GET() {
   }
 }
 
-// PUT { url?, helperUrl?, claimsUrl?, inquiryUrl?, enabled? } — 저장.
+// PUT { url?, helperUrl?, claimsUrl?, inquiryUrl?, enabled?, clear? } — 저장.
 //  각 URL 은 비어있지 않을 때만 갱신(빈값이면 기존 유지) — 한 칸만 바꿔도 나머지가 지워지지 않는다.
 export async function PUT(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
-    const b = (await req.json()) as { url?: string; helperUrl?: string; claimsUrl?: string; inquiryUrl?: string; enabled?: boolean };
+    const b = (await req.json()) as { url?: string; helperUrl?: string; claimsUrl?: string; inquiryUrl?: string; enabled?: boolean; clear?: string[] };
     const cur = await getB2BTeamsConfig();
-    const nextUrl = b.url !== undefined && String(b.url).trim() ? String(b.url).trim() : cur.url;
-    const nextHelper = b.helperUrl !== undefined && String(b.helperUrl).trim() ? String(b.helperUrl).trim() : cur.helperUrl;
-    const nextClaims = b.claimsUrl !== undefined && String(b.claimsUrl).trim() ? String(b.claimsUrl).trim() : cur.claimsUrl;
-    const nextInquiry = b.inquiryUrl !== undefined && String(b.inquiryUrl).trim() ? String(b.inquiryUrl).trim() : cur.inquiryUrl;
+    // clear: 지울 채널 키 목록(2026-10-21 — 전엔 빈 값 = 유지라 화면에서 주소를 지울 수 없었다)
+    const clear = new Set(Array.isArray(b.clear) ? b.clear.map(String) : []);
+    const pick = (k: "url" | "helperUrl" | "claimsUrl" | "inquiryUrl") =>
+      clear.has(k) ? "" : b[k] !== undefined && String(b[k]).trim() ? String(b[k]).trim() : cur[k];
+    const nextUrl = pick("url");
+    const nextHelper = pick("helperUrl");
+    const nextClaims = pick("claimsUrl");
+    const nextInquiry = pick("inquiryUrl");
     for (const u of [nextUrl, nextHelper, nextClaims, nextInquiry]) {
       if (u && !/^https:\/\//.test(u)) {
         return NextResponse.json({ ok: false, error: "https:// 로 시작하는 웹훅 URL을 넣으세요." }, { status: 400 });
@@ -52,7 +58,8 @@ export async function PUT(req: NextRequest) {
 }
 
 // POST — 테스트 발송. 저장된 채널 모두로 한 장씩 보낸다(enabled 여부와 무관 — 켜기 전 확인용).
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const cfg = await getB2BTeamsConfig();
     if (!cfg.url && !cfg.helperUrl && !cfg.claimsUrl && !cfg.inquiryUrl) return NextResponse.json({ ok: false, error: "웹훅 URL을 먼저 저장하세요." }, { status: 400 });

@@ -16,7 +16,8 @@ export async function GET() {
   // 자동 발송 진단 정보 포함 — lastSent(마지막 자동 발송일, 크론 성공 시에만 기록)와
   //  cronSecretSet(Vercel CRON_SECRET 환경변수 유무 — 없으면 크론이 매일 401 로 조용히 실패).
   const [config, lastSent] = await Promise.all([getDigestConfig(), getDigestLastSent()]);
-  return NextResponse.json({ ok: true, config, lastSent: lastSent || null, cronSecretSet: !!process.env.CRON_SECRET });
+  //  cronKeySet = 예약 실행 키 — 주 발송은 Supabase 5분 틱(DIGEST_CRON_KEY), 예비는 Vercel 크론(CRON_SECRET). 둘 다 없을 때만 경고(2026-10-21)
+  return NextResponse.json({ ok: true, config, lastSent: lastSent || null, cronKeySet: !!(process.env.DIGEST_CRON_KEY || process.env.CRON_SECRET) });
 }
 
 export async function PUT(req: NextRequest) {

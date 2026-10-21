@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import {
   getMasterNotifyConfig, setMasterNotifyConfig,
@@ -22,6 +23,7 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const b = (await req.json()) as Partial<MasterNotifyConfig>;
     const prev = await getMasterNotifyConfig();
@@ -41,11 +43,12 @@ export async function PUT(req: NextRequest) {
 }
 
 // 테스트 발송 — Teams '업무도우미 변경알림' 채널(미설정 시 B2B 알림 채널)로 한 장.
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const t = await getB2BTeamsConfig();
     const target = t.helperUrl || t.url;
-    if (!target) return NextResponse.json({ ok: false, error: "Teams 웹훅 URL이 없습니다 — 관리자 › 설정 › Teams 연동에서 등록하세요." }, { status: 400 });
+    if (!target) return NextResponse.json({ ok: false, error: "Teams 웹훅 URL이 없습니다 — 관리자 › 설정 › 연결 › Teams 에서 등록하세요." }, { status: 400 });
     const r = await sendTeamsWebhook(target, "테스트 메시지입니다. 상품마스터 변경(등록·수정·삭제·묶음·엑셀)과 생산·재고 알림이 이 채널로 발송됩니다.", { title: "업무도우미 변경알림 — 테스트" });
     if (!r.ok) return NextResponse.json({ ok: false, error: r.error || `발송 실패(HTTP ${r.status})` }, { status: 502 });
     return NextResponse.json({ ok: true });

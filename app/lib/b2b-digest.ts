@@ -60,7 +60,8 @@ export async function saveDigestConfig(patch: Partial<DigestConfig>): Promise<Di
   await setKv("digest_config", JSON.stringify(merged));
   return merged;
 }
-export const getDigestLastSent = () => getKv("digest_last_sent");
+// 마지막 자동 발송(날짜 시각) — digest_last_auto(2026-10-21~), 없으면 옛 날짜 표시(digest_last_sent, 중복 방지 겸용)
+export const getDigestLastSent = async () => (await getKv("digest_last_auto")) || (await getKv("digest_last_sent"));
 export const setDigestLastSent = (d: string) => setKv("digest_last_sent", d);
 
 type OrderRow = { id: string; order_no: string; company_id: string; status: string; tax_invoice_status: string; payment_status: string; total: number };

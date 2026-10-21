@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getMeetingPrompt, setMeetingPrompt, DEFAULT_MEETING_PROMPT } from "@/app/lib/claude";
 
@@ -22,6 +23,7 @@ export async function GET() {
 
 // PUT /api/b2b/settings/meeting-prompt — { prompt }  (빈 값이면 기본값으로 복원)
 export async function PUT(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const { prompt } = (await req.json()) as { prompt?: string };
     await setMeetingPrompt(typeof prompt === "string" ? prompt : "");

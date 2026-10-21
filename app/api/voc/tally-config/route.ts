@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getTallySecret, setTallySecret, getTallyApiKey, setTallyApiKey, getTallyFormId, setTallyFormId } from "@/app/lib/voc-tally";
 
@@ -16,6 +17,7 @@ export async function GET() {
 
 // POST { secret?, apiKey?, formId? } — 제공된 값만 저장(빈 문자열이면 해제)
 export async function POST(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const b = (await req.json()) as { secret?: string; apiKey?: string; formId?: string };
     if (typeof b.secret === "string") await setTallySecret(b.secret);

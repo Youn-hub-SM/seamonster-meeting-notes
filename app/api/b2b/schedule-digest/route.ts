@@ -144,6 +144,8 @@ export async function GET(req: NextRequest) {
         try { await setKv(keyFor(target), today); }
         catch (e) { markError = errMsg(e); console.error("[schedule-digest] 발송 기록 실패 — 다음 틱에 다시 나갈 수 있음", target, e); }
       }
+      // 설정 화면 '마지막 자동 발송' 표시용(날짜 시각) — 중복 방지 표시(digest_sent_*·digest_last_sent)와 따로 둔다. 실패해도 발송엔 영향 없음
+      try { await setKv("digest_last_auto", `${today} ${target}`); } catch { /* 표시용 */ }
     }
     return NextResponse.json({ ok: r.ok, time: target, sent: r.ok, error: r.error, markError, counts: digest.counts, failed: digest.failed });
   }

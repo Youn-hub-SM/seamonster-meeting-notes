@@ -3358,9 +3358,6 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-black); }
 .brf-rising { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sm-space-2); margin: var(--sm-space-2) 0 var(--sm-space-3); font-size: var(--sm-fs-xs); color: var(--sm-text-mid); }
 .brf-chart { margin-bottom: var(--sm-space-4); }
 .brf-chart-sub { font-size: var(--sm-fs-xs); margin-bottom: var(--sm-space-2); }
-.brf-settings { margin-top: var(--sm-space-6); }
-.brf-settings-row { gap: var(--sm-space-2); margin-bottom: var(--sm-space-2); }
-.brf-settings-field { max-width: 640px; margin-bottom: var(--sm-space-3); }
 @media (min-width: 769px) {
   .brf-kpi .b2b-stat-card-value { font-size: 21px; overflow-wrap: anywhere; } /* KPI 압축 예외(28/23 의 23) — 4열 띠에서 9자리 금액이 한 줄. 백스톱 overflow-wrap */
   @container (min-width: 800px) {
@@ -3377,4 +3374,54 @@ button.ma-todo-row:hover .ma-todo-go { color: var(--sm-black); }
   .brf-kpi .b2b-stat-card-value.is-long { font-size: var(--sm-fs-lg); } /* 9자리 금액('123,456,789원')은 공용 20px(≈144px)·19px(137px)에서 타일 내용폭(375px 폰 134·360px 폰 132)을 넘어 '원' 만 둘째 줄로 떨어진다 — 17px(≈123px)로 한 줄 */
   .brf-box { padding: var(--sm-space-4); grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "text" "pill"; }
   .brf-box-pill { justify-self: start; margin-top: var(--sm-space-2); }
+}
+
+/* ── 관리자 › 설정 한 화면(2026-10-21) — 왼쪽 업무 메뉴 · 오른쪽 설정 카드 · 아래 고정 저장 줄. app/b2b/settings ── */
+.set-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sm-space-5); align-items: start; }
+.set-nav { position: sticky; top: var(--sm-space-4); display: flex; flex-direction: column; gap: 2px; }
+.set-nav-item { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 10px 12px; border: 1px solid transparent; border-radius: var(--sm-radius); background: none; text-align: left; cursor: pointer; color: var(--sm-dark); font: inherit; }
+.set-nav-item:hover { background: var(--sm-bg-subtle); }
+.set-nav-item.is-active { background: var(--sm-white); border-color: var(--sm-border); }
+.set-nav-item.is-active .set-nav-label { color: var(--sm-orange); }
+.set-nav-label { font-size: var(--sm-fs-base); font-weight: 700; }
+.set-nav-desc { font-size: var(--sm-fs-xs); color: var(--sm-text-light); line-height: 1.4; }
+.set-main { min-width: 0; display: flex; flex-direction: column; gap: var(--sm-space-4); padding-bottom: 80px; }
+.set-main > .b2b-card { margin: 0; }
+.set-desc { margin: 0 0 var(--sm-space-2); font-size: var(--sm-fs-sm); line-height: var(--sm-lh-body); color: var(--sm-text-mid); }
+.set-row { padding: 12px 0; border-top: 1px solid var(--sm-border); }
+.set-card .b2b-card-head + .set-row, .set-card .set-desc + .set-row { border-top: none; }
+.set-row-main { display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-3); flex-wrap: wrap; }
+.set-row-text { min-width: 0; flex: 1 1 260px; }
+.set-row-label { font-size: var(--sm-fs-base); font-weight: 700; color: var(--sm-dark); }
+.set-row-desc { margin-top: 2px; font-size: var(--sm-fs-xs); line-height: 1.5; color: var(--sm-text-mid); }
+.set-row-note { margin: 4px 0 0; font-size: var(--sm-fs-xs); line-height: 1.5; color: var(--sm-text-mid); }
+.set-row-control { display: flex; align-items: center; justify-content: flex-end; flex: 0 1 auto; min-width: 0; }
+.set-row-body { margin-top: var(--sm-space-2); }
+.set-onoff { margin: 0; flex-wrap: nowrap; }
+.set-secret { width: 360px; max-width: 100%; }
+.set-select { width: 280px; max-width: 100%; }
+.set-num { width: 90px; text-align: right; }
+.set-time { display: inline-flex; align-items: center; gap: 6px; background: var(--sm-orange-light); color: var(--sm-orange); }
+.set-time-del { padding: 0; border: none; background: none; color: inherit; font: inherit; cursor: pointer; }
+.set-time-input { width: auto; }
+.set-preview { margin: var(--sm-space-2) 0 0; padding: 12px; border-radius: var(--sm-radius); background: var(--sm-bg); font-family: inherit; font-size: var(--sm-fs-xs); line-height: 1.6; white-space: pre-wrap; }
+.set-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sm-space-2) var(--sm-space-3); margin-bottom: var(--sm-space-2); }
+.set-grid-wide { grid-column: 1 / -1; }
+.set-stamp { width: 44px; height: 44px; object-fit: contain; border: 1px solid var(--sm-border); border-radius: var(--sm-radius); background: var(--sm-white); }
+.set-list { margin: 0; padding-left: 18px; font-size: var(--sm-fs-sm); line-height: 1.8; }
+.set-prompt { width: 100%; min-height: 280px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--sm-fs-xs); line-height: 1.7; resize: vertical; white-space: pre; overflow-x: auto; }
+.set-version { padding: var(--sm-space-3) 0; border-top: 1px solid var(--sm-border); }
+.set-card .b2b-card-head + .set-version, .set-card .set-desc + .set-version { border-top: none; padding-top: 0; }
+.set-sub { margin: var(--sm-space-3) 0 var(--sm-space-2); font-size: var(--sm-fs-xs); font-weight: 700; color: var(--sm-text-mid); }
+.set-savebar { position: sticky; bottom: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: var(--sm-space-3); flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--sm-border); border-radius: var(--sm-radius-card); background: var(--sm-white); box-shadow: var(--sm-shadow-float); }
+.set-savebar-text { font-size: var(--sm-fs-sm); color: var(--sm-text-mid); }
+.set-savebar.is-dirty { border-color: var(--sm-orange); }
+.set-savebar.is-dirty .set-savebar-text { color: var(--sm-dark); font-weight: 700; }
+@media (max-width: 900px) {
+  .set-layout { grid-template-columns: minmax(0, 1fr); gap: var(--sm-space-3); }
+  .set-nav { position: static; flex-direction: row; overflow-x: auto; gap: var(--sm-space-1); padding-bottom: 2px; }
+  .set-nav-item { width: auto; flex: 0 0 auto; padding: 8px 12px; }
+  .set-nav-desc { display: none; }
+  .set-row-control { justify-content: flex-start; width: 100%; }
+  .set-secret, .set-select { width: 100%; }
 }

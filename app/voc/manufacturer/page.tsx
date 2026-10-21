@@ -112,7 +112,7 @@ export default function VocManufacturerPage() {
       const raw = await res.text();
       let j: { ok?: boolean; draft?: string; counts?: { claims: number; surveys: number }; error?: string } | null = null;
       try { j = JSON.parse(raw); } catch { /* 플랫폼 오류 텍스트 */ }
-      if (!j) throw new Error(`초안을 생성하지 못했습니다 (HTTP ${res.status}). 데이터가 많은 달은 제한시간을 넘깁니다 — 관리자 > 설정 > AI 설정에서 'VOC 인사이트' 모델을 빠른 모델로 바꾸거나 [초안 생성]을 다시 누르세요`);
+      if (!j) throw new Error(`초안을 생성하지 못했습니다 (HTTP ${res.status}). 데이터가 많은 달은 제한시간을 넘깁니다 — 관리자 › 설정 › AI 에서 'VOC 인사이트' 모델을 빠른 모델로 바꾸거나 [초안 생성]을 다시 누르세요`);
       if (!res.ok || !j.ok) throw new Error(j.error || "초안을 생성하지 못했습니다. [초안 생성]을 다시 누르세요");
       const text = j.draft || "";
       setDraft(text);

@@ -327,7 +327,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (!process.env.ANTHROPIC_API_KEY) throw new AiResponseError("ANTHROPIC_API_KEY 가 설정되어 있지 않습니다.");
 
   const [settings, month, featureModel, thread, glossary, dataDate, schemaIndex] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user), glossaryPromptBlock(), salesDataDate(), catalogIndex(supabaseAdmin())]);
-  if (settings.off) throw new AssistantOffError("AI 데이터 비서가 꺼져 있습니다. 관리자 > 설정 > AI 설정에서 켜세요.");
+  if (settings.off) throw new AssistantOffError("AI 데이터 비서가 꺼져 있습니다. 관리자 › 설정 › AI 에서 켜세요.");
   if (!thread) throw new AiResponseError("대화를 찾을 수 없습니다. 새 대화를 시작하세요.");
   const downgraded = month.usd >= settings.capUsd;
   const picked = p.modelKey && (CHAT_MODEL_KEYS as readonly string[]).includes(p.modelKey) ? MODELS[p.modelKey] : null;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { normalizeHistory, ratesFor, normalizeBoxCats, validateBoxCats } from "@/app/lib/fulfill-rates";
 
@@ -25,6 +26,7 @@ export async function GET() {
 
 // POST body: { versions: RateVersion[], boxCats?: BoxCat[] } | RateVersion[] → 전체 이력 교체
 export async function POST(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const body = await req.json();
     const history = normalizeHistory(body);

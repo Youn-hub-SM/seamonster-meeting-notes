@@ -148,17 +148,8 @@ export const NAV: NavCategory[] = [
     adminOnly: true, // 관리자·현석에게만 노출
     tools: [
       { href: "/b2b/users", label: "계정 관리", icon: "user" },
-      {
-        href: "/b2b/settings", label: "설정", icon: "gear",
-        menu: [
-          { href: "/b2b/settings/ai", label: "AI 설정" },
-          { href: "/b2b/settings/teams", label: "Teams 연동" },
-          { href: "/b2b/settings/asana", label: "아사나 연동" },
-          { href: "/b2b/settings/tally", label: "Tally 연동" },
-          { href: "/fulfill/settings", label: "온라인 발주 설정" },
-          { href: "/b2b/settings", label: "일반 설정", exact: true },
-        ],
-      },
+      // 2026-10-21 설정 한 화면 — 업무별 칸(발주·생산·재고·온라인 발주·매출·리포트·AI·연결)은 화면 안 왼쪽 메뉴. 옛 하위 주소는 이 화면으로 넘어온다
+      { href: "/b2b/settings", label: "설정", icon: "gear" },
       // dev 브랜치 고정 미리보기 주소 — push 때마다 최신 베타로 갱신된다(주소 불변). 2026-10-14 C6: 베타 분류 해체로 관리자 분류로 이동
       { href: "https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app", label: "베타 버전", icon: "link" },
     ],

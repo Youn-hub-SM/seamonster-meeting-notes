@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import {
   getAiModelKey, setAiModelKey,
@@ -31,6 +32,7 @@ export async function GET() {
 //  - scope "global": key 는 모델 키
 //  - scope 가 기능 키(meeting/cs/voc/production 등): key 는 모델 키 또는 "inherit"(공통 따름)
 export async function PUT(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const { scope = "global", key } = (await req.json()) as { scope?: string; key?: string };
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { getDedupConfig, setDedupConfig, DEDUP_DEFAULT, type DedupConfig } from "@/app/lib/fulfill-dedup";
 
@@ -21,6 +22,7 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const b = (await req.json()) as Partial<DedupConfig>;
     const saved = await setDedupConfig({

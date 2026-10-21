@@ -1,0 +1,432 @@
+diff --git a/app/api/factory/settings/route.ts b/app/api/factory/settings/route.ts
+index c02e0d2..575e9d7 100644
+--- a/app/api/factory/settings/route.ts
++++ b/app/api/factory/settings/route.ts
+@@ -1,48 +1,75 @@
+ import { NextRequest, NextResponse } from "next/server";
+ import { extractErrorMsg } from "@/app/lib/supabase";
+ import { verifySession, resolveUserName, isAdminName } from "@/app/lib/b2b-auth";
+-import { getFactorySwitConfig, setFactorySwitConfig, sendSwit } from "@/app/lib/factory-notify";
++import {
++  FACTORY_EVENTS, type FactoryEvent, type FactoryNotifyConfig,
++  getFactoryNotifyConfig, setFactoryNotifyConfig, isTeamsWebhookUrl,
++} from "@/app/lib/factory-notify";
++import { sendTeamsWebhook } from "@/app/lib/b2b-teams";
++import { getAsanaPat, parseAsanaProjectGid, testAsanaConnection } from "@/app/lib/voc-asana";
+ 
+ export const dynamic = "force-dynamic";
+ 
+ // 파도소리 설정은 관리자만 — 미들웨어는 factory 계정도 /api/factory/* 를 통과시키므로
+-// 여기서 한 번 더 막는다(웹훅 URL 은 외부 발송 경로라 파도소리 직원이 만지면 안 된다).
++// 여기서 한 번 더 막는다(웹훅·아사나는 외부 발송 경로라 파도소리 직원이 만지면 안 된다).
+ async function isAdmin(req: NextRequest): Promise<boolean> {
+   const token = req.cookies.get("b2b_auth")?.value;
+   const name = (await verifySession(token)) || resolveUserName(token);
+   return isAdminName(name);
+ }
+ 
+-// GET — Swit 웹훅 설정 조회
++const deny = () => NextResponse.json({ ok: false, error: "관리자만 접근할 수 있습니다." }, { status: 403 });
++const bad = (error: string) => NextResponse.json({ ok: false, error }, { status: 400 });
++
++// GET — 알림 설정 + 공용 아사나 토큰 설정 여부(값은 내보내지 않는다)
+ export async function GET(req: NextRequest) {
+   try {
+-    if (!(await isAdmin(req))) return NextResponse.json({ ok: false, error: "관리자만 접근할 수 있습니다." }, { status: 403 });
+-    const cfg = await getFactorySwitConfig();
+-    return NextResponse.json({ ok: true, config: cfg });
++    if (!(await isAdmin(req))) return deny();
++    const [config, pat] = await Promise.all([getFactoryNotifyConfig(), getAsanaPat()]);
++    return NextResponse.json({ ok: true, config, asanaPatSet: !!pat, events: FACTORY_EVENTS });
+   } catch (err) {
+     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "설정 조회 실패") }, { status: 500 });
+   }
+ }
+ 
+-// POST { url, enabled } — 저장. { test: true } 면 저장 없이 현재 입력값으로 테스트 발송.
++// POST
++//  { test: "teams", teamsUrl }            — 저장 없이 입력값으로 Teams 테스트 게시
++//  { test: "asana", asanaProjectGid }     — 저장 없이 토큰·프로젝트 접근 확인(업무는 만들지 않음)
++//  { ...FactoryNotifyConfig }             — 저장
+ export async function POST(req: NextRequest) {
+   try {
+-    if (!(await isAdmin(req))) return NextResponse.json({ ok: false, error: "관리자만 접근할 수 있습니다." }, { status: 403 });
+-    const b = (await req.json()) as { url?: string; enabled?: boolean; test?: boolean };
+-    const url = String(b.url || "").trim();
+-
+-    if (b.test) {
+-      if (!url) return NextResponse.json({ ok: false, error: "웹훅 URL 을 먼저 입력하세요." }, { status: 400 });
+-      const r = await sendSwit(url, "[파도소리] 테스트 — 이 메시지가 보이면 연동 준비 완료입니다.");
+-      if (!r.ok) return NextResponse.json({ ok: false, error: r.error || "테스트 발송 실패" }, { status: 400 });
+-      return NextResponse.json({ ok: true });
+-    }
++    if (!(await isAdmin(req))) return deny();
++    const b = (await req.json()) as Partial<FactoryNotifyConfig> & { test?: "teams" | "asana" };
++    const teamsUrl = String(b.teamsUrl || "").trim();
++    const asanaProjectGid = parseAsanaProjectGid(String(b.asanaProjectGid || ""));
+ 
+-    // Swit 수신 웹훅 도메인만 허용 — 임의 주소로 내부 데이터가 나가는 것을 막는다.
+-    if (url && !/^https:\/\/hook\.swit\.io\//.test(url)) {
+-      return NextResponse.json({ ok: false, error: "Swit 웹훅 주소(https://hook.swit.io/…)만 저장할 수 있습니다." }, { status: 400 });
++    if (b.test === "teams") {
++      if (!teamsUrl) return bad("Teams 웹훅 URL 을 먼저 입력하세요.");
++      if (!isTeamsWebhookUrl(teamsUrl)) return bad("Teams Workflows 웹훅 주소만 쓸 수 있습니다.");
++      const r = await sendTeamsWebhook(teamsUrl, "[파도소리] 테스트 — 이 메시지가 보이면 연동 준비 완료입니다.", { title: "파도소리 입출고" });
++      return r.ok ? NextResponse.json({ ok: true }) : bad(r.error || "테스트 발송 실패");
++    }
++    if (b.test === "asana") {
++      const pat = await getAsanaPat();
++      if (!pat) return bad("아사나 토큰이 없습니다 — 관리자 › 설정 › 아사나 연동(/b2b/settings/asana)에서 먼저 등록하세요.");
++      if (!asanaProjectGid) return bad("아사나 프로젝트 주소(또는 gid)를 입력하세요.");
++      const r = await testAsanaConnection(pat, asanaProjectGid);
++      return r.ok ? NextResponse.json({ ok: true, detail: r.detail }) : bad(r.error || "연결 실패");
+     }
+-    await setFactorySwitConfig({ url, enabled: !!b.enabled });
++
++    if (teamsUrl && !isTeamsWebhookUrl(teamsUrl)) return bad("Teams Workflows 웹훅 주소만 저장할 수 있습니다.");
++    if (String(b.asanaProjectGid || "").trim() && !asanaProjectGid) return bad("아사나 프로젝트 주소(또는 gid)를 알아볼 수 없습니다.");
++    const asanaEvents = (Array.isArray(b.asanaEvents) ? b.asanaEvents : [])
++      .filter((e): e is FactoryEvent => (FACTORY_EVENTS as readonly string[]).includes(e));
++
++    await setFactoryNotifyConfig({
++      teamsUrl,
++      teamsEnabled: !!b.teamsEnabled && !!teamsUrl,
++      asanaEnabled: !!b.asanaEnabled && !!asanaProjectGid,
++      asanaProjectGid,
++      asanaAssignee: String(b.asanaAssignee || "").trim(),
++      asanaEvents,
++    });
+     return NextResponse.json({ ok: true });
+   } catch (err) {
+     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "설정 저장 실패") }, { status: 500 });
+diff --git a/app/factory/settings/page.tsx b/app/factory/settings/page.tsx
+index 2074a83..805dac7 100644
+--- a/app/factory/settings/page.tsx
++++ b/app/factory/settings/page.tsx
+@@ -1,40 +1,73 @@
+ "use client";
+ 
+-// 파도소리 설정 — Swit 알림 연동(관리자 전용. API 가 관리자를 검사하고, 메뉴도 관리자에게만 보인다).
+-//  파도소리 계정이 주소로 직접 들어오면 403 안내만 보게 된다.
++// 파도소리 설정 — 입출고 알림(Teams 채널 게시 + 아사나 업무 등록). 관리자 전용
++//  (API 가 관리자를 검사하고, 메뉴도 관리자에게만 보인다). 파도소리 계정이 주소로 직접 들어오면 안내만 본다.
+ 
+ import { useEffect, useState } from "react";
+ 
++type Cfg = {
++  teamsUrl: string; teamsEnabled: boolean;
++  asanaEnabled: boolean; asanaProjectGid: string; asanaAssignee: string; asanaEvents: string[];
++};
++type Msg = { ok: boolean; text: string };
++
++const EMPTY: Cfg = { teamsUrl: "", teamsEnabled: false, asanaEnabled: false, asanaProjectGid: "", asanaAssignee: "", asanaEvents: [] };
++
+ export default function FactorySettingsPage() {
+-  const [url, setUrl] = useState("");
+-  const [enabled, setEnabled] = useState(false);
++  const [cfg, setCfg] = useState<Cfg>(EMPTY);
++  const [events, setEvents] = useState<string[]>([]);
++  const [patSet, setPatSet] = useState(false);
+   const [loading, setLoading] = useState(true);
+   const [saving, setSaving] = useState(false);
+-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
++  const [msg, setMsg] = useState<Msg | null>(null);
++  const [teamsMsg, setTeamsMsg] = useState<Msg | null>(null);
++  const [asanaMsg, setAsanaMsg] = useState<Msg | null>(null);
+   const [denied, setDenied] = useState(false);
+ 
+   useEffect(() => {
+     fetch("/api/factory/settings", { cache: "no-store" }).then((r) => r.json())
+       .then((j) => {
+-        if (j.ok) { setUrl(j.config.url || ""); setEnabled(!!j.config.enabled); }
++        if (j.ok) { setCfg({ ...EMPTY, ...j.config }); setEvents(j.events || []); setPatSet(!!j.asanaPatSet); }
+         else setDenied(true);
+       })
+       .catch(() => setDenied(true))
+       .finally(() => setLoading(false));
+   }, []);
+ 
+-  async function call(body: Record<string, unknown>, okText: string) {
+-    setSaving(true); setMsg(null);
+-    const j = await (await fetch("/api/factory/settings", {
++  const set = (patch: Partial<Cfg>) => { setCfg((c) => ({ ...c, ...patch })); setMsg(null); };
++  const toggleEvent = (e: string) =>
++    set({ asanaEvents: cfg.asanaEvents.includes(e) ? cfg.asanaEvents.filter((x) => x !== e) : [...cfg.asanaEvents, e] });
++
++  async function post(body: Record<string, unknown>) {
++    return (await fetch("/api/factory/settings", {
+       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+     })).json();
++  }
++
++  async function save() {
++    setSaving(true); setMsg(null);
++    const j = await post(cfg);
++    setSaving(false);
++    setMsg(j.ok ? { ok: true, text: "저장했습니다." } : { ok: false, text: j.error || "실패" });
++  }
++  async function testTeams() {
++    setSaving(true); setTeamsMsg(null);
++    const j = await post({ test: "teams", teamsUrl: cfg.teamsUrl });
+     setSaving(false);
+-    setMsg(j.ok ? { ok: true, text: okText } : { ok: false, text: j.error || "실패" });
++    setTeamsMsg(j.ok ? { ok: true, text: "테스트 메시지를 보냈습니다 — Teams 채널을 확인하세요." } : { ok: false, text: j.error || "실패" });
++  }
++  async function testAsana() {
++    setSaving(true); setAsanaMsg(null);
++    const j = await post({ test: "asana", asanaProjectGid: cfg.asanaProjectGid });
++    setSaving(false);
++    setAsanaMsg(j.ok ? { ok: true, text: j.detail || "연결 OK" } : { ok: false, text: j.error || "실패" });
+   }
+ 
+   if (loading) return <div className="b2b-container"><div className="b2b-loading">불러오는 중...</div></div>;
+   if (denied) return <div className="b2b-container"><div className="b2b-empty">관리자 전용 화면입니다.</div></div>;
+ 
++  const checkRow = { gap: 6, alignItems: "center", cursor: "pointer", fontSize: 15 } as const;
++
+   return (
+     <div className="b2b-container" style={{ maxWidth: 640 }}>
+       <header className="b2b-page-head">
+@@ -42,24 +75,62 @@ export default function FactorySettingsPage() {
+       </header>
+ 
+       <section className="b2b-form-section">
+-        <div className="b2b-form-section-title">Swit 알림</div>
++        <div className="b2b-form-section-title">Teams 알림</div>
+         <label className="b2b-field" style={{ marginBottom: 12 }}>
+-          <span className="b2b-field-label">수신 웹훅 URL</span>
+-          <input className="b2b-input" value={url} onChange={(e) => { setUrl(e.target.value); setMsg(null); }}
+-            placeholder="https://hook.swit.io/chat/..." spellCheck={false} />
++          <span className="b2b-field-label">Workflows 웹훅 URL</span>
++          <input className="b2b-input" value={cfg.teamsUrl} onChange={(e) => { set({ teamsUrl: e.target.value }); setTeamsMsg(null); }}
++            placeholder="https://….powerplatform.com/…" spellCheck={false} />
+         </label>
+-        <label className="sm-row" style={{ gap: 6, alignItems: "center", cursor: "pointer", fontSize: 15, marginBottom: 14 }}>
+-          <input type="checkbox" className="b2b-checkbox" checked={enabled} onChange={(e) => { setEnabled(e.target.checked); setMsg(null); }} />
+-          입출고 알림 발송 (입고·출고·생산투입·이동·조정·취소)
++        <label className="sm-row" style={{ ...checkRow, marginBottom: 12 }}>
++          <input type="checkbox" className="b2b-checkbox" checked={cfg.teamsEnabled} onChange={(e) => set({ teamsEnabled: e.target.checked })} />
++          입출고 알림 게시 (입고·출고·생산투입·창고이동·조정·취소)
+         </label>
+-        {msg && <div className={msg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 12 }}>{msg.text}</div>}
++        {teamsMsg && <div className={teamsMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 12 }}>{teamsMsg.text}</div>}
+         <div className="b2b-form-foot b2b-form-foot-right">
+-          <button className="b2b-btn-secondary" onClick={() => call({ url, test: true }, "테스트 메시지를 보냈습니다 — Swit 채널을 확인하세요.")} disabled={saving || !url.trim()}>
+-            테스트 발송
+-          </button>
+-          <button className="b2b-btn-primary" onClick={() => call({ url, enabled }, "저장했습니다.")} disabled={saving}>저장</button>
++          <button className="b2b-btn-secondary" onClick={testTeams} disabled={saving || !cfg.teamsUrl.trim()}>테스트 발송</button>
+         </div>
+       </section>
++
++      <section className="b2b-form-section">
++        <div className="b2b-form-section-title">아사나 업무 등록</div>
++        {!patSet && (
++          <div className="b2b-error" style={{ marginBottom: 12 }}>
++            아사나 토큰이 없습니다 — 관리자 › 설정 › <a href="/b2b/settings/asana">아사나 연동</a>에서 먼저 등록하세요.
++          </div>
++        )}
++        <label className="b2b-field" style={{ marginBottom: 12 }}>
++          <span className="b2b-field-label">프로젝트 주소 또는 gid</span>
++          <input className="b2b-input" value={cfg.asanaProjectGid} onChange={(e) => { set({ asanaProjectGid: e.target.value }); setAsanaMsg(null); }}
++            placeholder="https://app.asana.com/1/…/project/…" spellCheck={false} />
++        </label>
++        <label className="b2b-field" style={{ marginBottom: 12 }}>
++          <span className="b2b-field-label">기본 담당자 이메일 (선택)</span>
++          <input className="b2b-input" value={cfg.asanaAssignee} onChange={(e) => set({ asanaAssignee: e.target.value })}
++            placeholder="name@example.com" spellCheck={false} />
++        </label>
++        <div className="b2b-field-label" style={{ marginBottom: 6 }}>업무로 올릴 이벤트</div>
++        <div className="sm-row" style={{ gap: 14, flexWrap: "wrap", marginBottom: 12 }}>
++          {events.map((e) => (
++            <label key={e} className="sm-row" style={checkRow}>
++              <input type="checkbox" className="b2b-checkbox" checked={cfg.asanaEvents.includes(e)} onChange={() => toggleEvent(e)} />
++              {e}
++            </label>
++          ))}
++        </div>
++        <label className="sm-row" style={{ ...checkRow, marginBottom: 12 }}>
++          <input type="checkbox" className="b2b-checkbox" checked={cfg.asanaEnabled} onChange={(e) => set({ asanaEnabled: e.target.checked })} />
++          아사나 업무 등록 사용
++        </label>
++        {asanaMsg && <div className={asanaMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 12 }}>{asanaMsg.text}</div>}
++        <div className="b2b-form-foot b2b-form-foot-right">
++          <button className="b2b-btn-secondary" onClick={testAsana} disabled={saving || !patSet || !cfg.asanaProjectGid.trim()}>연결 확인</button>
++        </div>
++      </section>
++
++      {msg && <div className={msg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 12 }}>{msg.text}</div>}
++      <div className="b2b-form-foot b2b-form-foot-right">
++        <button className="b2b-btn-primary" onClick={save} disabled={saving}>저장</button>
++      </div>
+     </div>
+   );
+ }
+diff --git a/app/lib/factory-notify.ts b/app/lib/factory-notify.ts
+index 99c4eb7..ac70492 100644
+--- a/app/lib/factory-notify.ts
++++ b/app/lib/factory-notify.ts
+@@ -1,65 +1,115 @@
+-// 파도소리 → Swit 알림 (서버 전용).
+-//  Swit 수신 웹훅은 채널별 URL 에 {"text": "..."} JSON POST 하는 방식이다(공식 문서 기준).
+-//  URL 은 관리자가 /factory/settings 에서 붙여넣어 b2b_settings kv(factory_swit)에 저장 —
+-//  코드·환경변수에 URL 을 두지 않는다(도입 검토 중이라 채널이 바뀔 수 있음).
++// 파도소리 입출고 알림 → Teams 채널 + 아사나 업무 (서버 전용, 2026-09-29 Swit 제거 후 교체).
++//  - Teams: Workflows 웹훅 URL 하나로 모든 입출고 이벤트를 게시(발송 형식은 b2b-teams 와 같은 Adaptive Card).
++//  - 아사나: 고른 이벤트만 파도소리 전용 프로젝트에 업무로 등록. 토큰(PAT)은 씨몬스터 공용 설정
++//    (asana_pat — VOC·OKR 과 같은 값)을 그대로 쓰고, 프로젝트·담당자만 여기서 따로 둔다.
++//  설정은 관리자가 /factory/settings 에서 넣고 b2b_settings kv(factory_notify)에 저장한다.
+ //
+ //  발송은 조용히 실패한다(알림이 입출고 기록을 막으면 안 된다). 단 응답을 보내기 전에
+-//  await 는 한다 — Vercel 함수는 응답 후 백그라운드 fetch 를 보장하지 않는다. 3초 타임아웃.
++//  await 는 한다 — Vercel 함수는 응답 후 백그라운드 fetch 를 보장하지 않는다. 실패는 서버 로그에만.
+ 
+ import { supabaseAdmin } from "./supabase";
++import { sendTeamsWebhook } from "./b2b-teams";
++import { getAsanaPat, createAsanaTask } from "./voc-asana";
+ 
+-const KV_KEY = "factory_swit";
++const KV_KEY = "factory_notify";
+ 
+-export type FactorySwitConfig = { url: string; enabled: boolean };
++// 알림 대상 이벤트 — factoryMsg 의 event 값. '취소(출고)'처럼 괄호가 붙는 취소는 '취소'로 묶는다.
++export const FACTORY_EVENTS = ["입고", "출고", "생산투입", "창고이동", "조정", "취소"] as const;
++export type FactoryEvent = (typeof FACTORY_EVENTS)[number];
+ 
+-export async function getFactorySwitConfig(): Promise<FactorySwitConfig> {
++export type FactoryNotifyConfig = {
++  teamsUrl: string;
++  teamsEnabled: boolean;
++  asanaEnabled: boolean;
++  asanaProjectGid: string;
++  asanaAssignee: string;       // 워크스페이스 멤버 이메일(비우면 미지정)
++  asanaEvents: FactoryEvent[]; // 업무로 올릴 이벤트
++};
++
++const EMPTY: FactoryNotifyConfig = {
++  teamsUrl: "", teamsEnabled: false,
++  asanaEnabled: false, asanaProjectGid: "", asanaAssignee: "", asanaEvents: [],
++};
++
++export async function getFactoryNotifyConfig(): Promise<FactoryNotifyConfig> {
+   try {
+     const { data } = await supabaseAdmin().from("b2b_settings").select("value").eq("key", KV_KEY).maybeSingle();
+-    const v = (data?.value ?? {}) as Partial<FactorySwitConfig>;
+-    return { url: typeof v.url === "string" ? v.url : "", enabled: !!v.enabled };
++    const v = (data?.value ?? {}) as Partial<FactoryNotifyConfig>;
++    const str = (x: unknown) => (typeof x === "string" ? x : "");
++    return {
++      teamsUrl: str(v.teamsUrl),
++      teamsEnabled: !!v.teamsEnabled,
++      asanaEnabled: !!v.asanaEnabled,
++      asanaProjectGid: str(v.asanaProjectGid),
++      asanaAssignee: str(v.asanaAssignee),
++      asanaEvents: Array.isArray(v.asanaEvents)
++        ? v.asanaEvents.filter((e): e is FactoryEvent => (FACTORY_EVENTS as readonly string[]).includes(e))
++        : [],
++    };
+   } catch {
+-    return { url: "", enabled: false };
++    return { ...EMPTY };
+   }
+ }
+ 
+-export async function setFactorySwitConfig(cfg: FactorySwitConfig): Promise<void> {
++export async function setFactoryNotifyConfig(cfg: FactoryNotifyConfig): Promise<void> {
+   const { error } = await supabaseAdmin()
+     .from("b2b_settings")
+     .upsert({ key: KV_KEY, value: cfg, updated_at: new Date().toISOString() }, { onConflict: "key" });
+   if (error) throw error;
+ }
+ 
+-// 웹훅 1건 발송. 반환값 = 성공 여부(테스트 발송에서만 씀 — 일반 알림은 결과를 무시한다).
+-export async function sendSwit(url: string, text: string): Promise<{ ok: boolean; error?: string }> {
++// Teams Workflows 웹훅 호스트만 허용 — 임의 주소로 파도소리 원장이 나가는 것을 막는다.
++//  (신) *.environment.api.powerplatform.com · (구) *.logic.azure.com · (레거시 커넥터) *.webhook.office.com
++export function isTeamsWebhookUrl(url: string): boolean {
+   try {
+-    const res = await fetch(url, {
+-      method: "POST",
+-      headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({ text }),
+-      signal: AbortSignal.timeout(3000),
+-    });
+-    if (!res.ok) return { ok: false, error: `Swit 응답 ${res.status}` };
+-    return { ok: true };
+-  } catch (err) {
+-    return { ok: false, error: err instanceof Error ? err.message : "발송 실패" };
++    const u = new URL(url);
++    if (u.protocol !== "https:") return false;
++    return [".powerplatform.com", ".logic.azure.com", ".webhook.office.com"].some((d) => u.hostname.endsWith(d));
++  } catch {
++    return false;
+   }
+ }
+ 
+-// 입출고 이벤트 알림 — 설정이 꺼져 있거나 URL 이 없으면 아무것도 안 한다.
+-export async function notifyFactory(text: string): Promise<void> {
++export type FactoryMsg = { event: string; text: string };
++
++// 이벤트 1건 → Teams·아사나로. 설정이 꺼져 있거나 비어 있으면 아무것도 안 한다.
++export async function notifyFactory(msg: FactoryMsg): Promise<void> {
+   try {
+-    const cfg = await getFactorySwitConfig();
+-    if (!cfg.enabled || !cfg.url) return;
+-    await sendSwit(cfg.url, text);
+-  } catch {
+-    /* 알림 실패가 기록을 막지 않는다 */
++    const cfg = await getFactoryNotifyConfig();
++    const first = msg.text.split("\n")[0];
++    const jobs: Promise<unknown>[] = [];
++
++    if (cfg.teamsEnabled && cfg.teamsUrl) {
++      jobs.push(sendTeamsWebhook(cfg.teamsUrl, msg.text, { title: "파도소리 입출고" }).then((r) => {
++        if (!r.ok) console.error("[factory-notify] Teams 발송 실패:", r.status, r.error ?? "");
++      }));
++    }
++
++    const baseEvent = msg.event.startsWith("취소") ? "취소" : msg.event;
++    if (cfg.asanaEnabled && cfg.asanaProjectGid && (cfg.asanaEvents as string[]).includes(baseEvent)) {
++      jobs.push((async () => {
++        const pat = await getAsanaPat();
++        if (!pat) { console.error("[factory-notify] 아사나 토큰(asana_pat) 미설정"); return; }
++        const r = await createAsanaTask({
++          pat, projectGid: cfg.asanaProjectGid,
++          name: first,
++          notes: `${msg.text}\n\n— 파도소리 재고관리에서 자동 등록`,
++          assigneeEmail: cfg.asanaAssignee || null,
++        });
++        if (!r.ok) console.error("[factory-notify] 아사나 등록 실패:", r.error ?? "");
++      })());
++    }
++
++    await Promise.allSettled(jobs);
++  } catch (e) {
++    console.error("[factory-notify] 알림 예외:", e instanceof Error ? e.message : e);
+   }
+ }
+ 
+ // 메시지 조립 헬퍼 — 모든 이벤트가 같은 꼴로 나가게 한 곳에서.
+ //  예: [파도소리] 출고 — 갈치두절 (150/200 · 국산 · 황) · 구평1 · 5B → 참바다 (현석)
+ export function factoryMsg(opts: {
+-  event: string;                 // 입고·출고·생산투입·이동·조정·취소·로트삭제
++  event: string;                 // 입고·출고·생산투입·창고이동·조정·취소(유형)
+   label: string;                 // lotLabel() 결과
+   warehouse?: string;
+   qty?: number;
+@@ -67,7 +117,7 @@ export function factoryMsg(opts: {
+   dest?: string | null;
+   who?: string | null;
+   memo?: string | null;
+-}): string {
++}): FactoryMsg {
+   const parts = [`[파도소리] ${opts.event} — ${opts.label}`];
+   if (opts.warehouse) parts.push(opts.warehouse);
+   if (opts.qty !== undefined) {
+@@ -78,5 +128,5 @@ export function factoryMsg(opts: {
+   if (opts.dest) line += ` → ${opts.dest}`;
+   if (opts.who) line += ` (${opts.who})`;
+   if (opts.memo) line += `\n메모: ${opts.memo}`;
+-  return line;
++  return { event: opts.event, text: line };
+ }

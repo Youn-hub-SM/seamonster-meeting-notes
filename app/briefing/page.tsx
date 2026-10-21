@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useConfirm } from "@/app/components/Feedback";
 import { ComboBarLine, TrendChart, PIE_COLORS, moneyCompact } from "@/app/components/charts";
@@ -13,7 +14,7 @@ import { qtyText, dateTime, dateRange } from "@/app/lib/format";
 //  흐름: 담당자가 매출 업로드 → 안내 창 '... 종합 리포트 생성'(?period=&date=&run=1) → 여기서 자동 분석 → 확인 후 [보내기](메일, 2026-10-13 — 자동 발송·팀즈 없음).
 //  (매출 › 리포트의 '일일 매출 리포트'·'주간 매출 리포트'(메일)와 별개 메일 — 수신자를 비우면 그 리포트와 같은 사람들)
 //  14:30(운영) — 매출이 다 들어왔는데 아직 발송 전이면 자동 생성·발송(일일 매일, 주간 월~수, 월간 1~5일). 06:30 업무 브리핑은 중단.
-//  [다시 분석](매출이 그대로여도 새로)과 하단 설정은 관리자만 — 서버가 판정한다(/api/analyst, /api/briefing/settings).
+//  [다시 분석](매출이 그대로여도 새로)과 메일 받는 사람 안내는 관리자만 — 서버가 판정한다(/api/analyst). 받는 사람 설정은 관리자 › 설정 › 매출·리포트(2026-10-21).
 //  2026-10-13 가시성 개선(docs/report-visibility-plan.md) — 코드 렌더만: KPI 띠(report.kpi = facts, report-kpi.ts)·섹션 카드·
 //   한 줄 요약/확인할 것 테두리 카드·코드 표 접기(캠페인 합계+상위 5, 추이 표는 그래프 뒤)·배지(재고 상태·확인됨/추정·미답변)·
 //   매출 표 증감 색·섹션 이동 바·매출 추이 막대. 프롬프트·AI 호출·저장 변경 없음. 글은 한 글자도 줄지 않는다(접히는 건 코드 표뿐).
@@ -419,12 +420,6 @@ export default function SummaryReportPage() {
   const autoRun = useRef(false); // 매출 업로드 안내 창에서 넘어오면(?run=1) 한 번 자동 분석
   const viewRef = useRef(`${period}:${date}`); // 늦게 도착한 다른 기간 응답은 버린다
   useEffect(() => { viewRef.current = `${period}:${date}`; }, [period, date]);
-  // 설정(관리자) — 로드 성공 전에는 저장을 막는다(기존 수신자가 빈 값으로 덮이지 않게)
-  const [mailTo, setMailTo] = useState("");
-  const [mailDefault, setMailDefault] = useState<string[]>([]);
-  const [smtpReady, setSmtpReady] = useState(true);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [settingsMsg, setSettingsMsg] = useState("");
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -500,36 +495,11 @@ export default function SummaryReportPage() {
       });
       const j = await r.json().catch(() => null);
       const s = (j?.sent ?? null) as SendRes | null;
-      if (!r.ok || !j?.ok) throw new Error(j?.error || s?.error || "메일을 보내지 못했습니다. 아래 메일 설정을 확인하세요");
+      if (!r.ok || !j?.ok) throw new Error(j?.error || s?.error || "메일을 보내지 못했습니다. 관리자 › 설정 › 매출·리포트의 메일 설정을 확인하세요");
       if (s?.mail?.ok) setInfo(`메일을 보냈습니다${s.mail.to ? `(${qtyText(s.mail.to, "명")})` : ""}`);
-    } catch (e) { setError(e instanceof Error ? e.message : "메일을 보내지 못했습니다. 아래 메일 설정을 확인하세요"); }
+    } catch (e) { setError(e instanceof Error ? e.message : "메일을 보내지 못했습니다. 관리자 › 설정 › 매출·리포트의 메일 설정을 확인하세요"); }
     await load(period, date);
     setBusy("");
-  }
-
-  useEffect(() => {
-    if (!admin) return;
-    (async () => {
-      try {
-        const j = await (await fetch("/api/briefing/settings", { cache: "no-store" })).json();
-        if (j.ok) {
-          setMailTo(j.mailTo || ""); setMailDefault(Array.isArray(j.mailDefault) ? j.mailDefault : []); setSmtpReady(j.smtpReady !== false);
-          setSettingsLoaded(true);
-        }
-      } catch { /* 로드 실패 시 저장 버튼 비활성 유지 */ }
-    })();
-  }, [admin]);
-
-  async function saveSettings() {
-    setSettingsMsg("");
-    try {
-      const r = await fetch("/api/briefing/settings", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mailTo }),
-      });
-      const j = await r.json().catch(() => null);
-      setSettingsMsg(r.ok && j?.ok ? "설정을 저장했습니다" : `설정을 저장하지 못했습니다 — ${j?.error || "서버 오류"}. 수신자를 확인하세요`);
-    } catch { setSettingsMsg("설정을 저장하지 못했습니다. 네트워크를 확인하세요"); }
   }
 
   const switchTo = (p: Period) => { if (p === period || busy !== "") return; setPeriod(p); setDate(defaultKey(p)); setReport(null); setError(""); setInfo(""); };
@@ -615,23 +585,8 @@ export default function SummaryReportPage() {
         </section>
       ) : null}
 
-      {admin && (
-        <section className="b2b-card brf-settings">
-          <div className="b2b-card-head">
-            <h2 className="b2b-card-title">리포트 설정</h2>
-          </div>
-          <label className="b2b-field brf-settings-field">
-            <span className="b2b-field-label">메일 수신자</span>
-            <input className="b2b-input" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder={mailDefault.join(", ")} />
-            <span className="sm-faint brf-xs">비우면 일일 매출 리포트 수신자({qtyText(mailDefault.length, "명")})</span>
-          </label>
-          {settingsLoaded && !smtpReady && <div className="sm-warn brf-banner">메일 서버(SALES_SMTP_*) 설정이 없습니다. Vercel 환경변수에 넣으세요</div>}
-          <div className="sm-row brf-settings-row">
-            <button className="b2b-btn-primary" onClick={saveSettings} disabled={!settingsLoaded}>설정 저장</button>
-            {settingsMsg && <span className="sm-faint brf-xs">{settingsMsg}</span>}
-          </div>
-        </section>
-      )}
+      {/* 메일 받는 사람은 관리자 › 설정 › 매출·리포트 한 곳에서(2026-10-21 설정 통합) */}
+      {admin && <p className="sm-faint brf-xs">메일 받는 사람은 <Link className="sm-link" href="/b2b/settings?s=reports">관리자 › 설정 › 매출·리포트</Link>에서 바꿉니다</p>}
     </div>
   );
 }

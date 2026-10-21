@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { getAsanaPat, setAsanaPat, getAsanaProjectGid, setAsanaProjectGid, getAsanaDefaultAssignee, setAsanaDefaultAssignee, parseAsanaProjectGid, testAsanaConnection } from "@/app/lib/voc-asana";
 
@@ -19,6 +20,7 @@ export async function GET() {
 // POST { pat?, project?, assignee? } — 제공된 값만 저장(빈 문자열이면 해제).
 //      { test: true } — 저장된 설정으로 연결 테스트(토큰·프로젝트 접근 확인).
 export async function POST(req: NextRequest) {
+  const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const b = (await req.json()) as { pat?: string; project?: string; assignee?: string; test?: boolean };
 

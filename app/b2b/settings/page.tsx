@@ -1,128 +1,84 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { scheduleHorizon, kstTodayIso, type ScheduleHorizon } from "@/app/lib/production-schedule";
-import { dateShort } from "@/app/lib/format";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
+import { useRouter } from "next/navigation";
+import { useConfirm } from "@/app/components/Feedback";
+import type { SectionProps } from "./ui";
+import OrdersSection from "./sections/Orders";
+import ProductionSection from "./sections/Production";
+import FulfillSection from "./sections/Fulfill";
+import ReportsSection from "./sections/Reports";
+import AiSection from "./sections/Ai";
+import ConnectSection from "./sections/Connect";
 
-// 설정 · 기타 — 거래명세표 공급자 정보 + 권장생산 목표 기간(생산 일정 기반, 읽기 전용) + 발송완료 매출 반영 안내.
-//  2026-08-24 설정 재구성: 알림 카드들은 'Teams 연동'(/b2b/settings/teams)으로 이동.
-type Msg = { ok: boolean; text: string };
+// 관리자 › 설정 — 한 화면(2026-10-21 대표 결정). 왼쪽 = 업무 메뉴, 오른쪽 = 그 메뉴의 설정 카드.
+//  옛 화면(AI 설정·Teams 연동·아사나 연동·Tally 연동·온라인 발주 설정·일반 설정)은 이 화면의 칸으로 옮겼다(옛 주소는 이리로 넘어온다).
+//  모든 설정은 바꾼 뒤 아래 [저장]으로 반영 — 저장하지 않은 채 다른 칸으로 가거나 창을 닫으면 확인한다.
+//  기획안 docs/admin-settings-plan.md. 파도소리 알림은 다시 설계하기로 해 이번엔 넣지 않았다.
 
-export default function SettingsEtcPage() {
-  // 거래명세표 — 공급자(우리 회사) 정보 + 직인
-  type Supplier = { name: string; biz_no: string; ceo: string; addr: string; biz_type: string; biz_item: string; email: string; bank: string };
-  const [sup, setSup] = useState<Supplier>({ name: "", biz_no: "", ceo: "", addr: "", biz_type: "", biz_item: "", email: "youn@seamonster.kr", bank: "" });
-  const [stamp, setStamp] = useState("");
-  const [supSaving, setSupSaving] = useState(false);
-  const [supMsg, setSupMsg] = useState<Msg | null>(null);
-  const [error, setError] = useState("");
+type Key = "orders" | "production" | "fulfill" | "reports" | "ai" | "connect";
+const SECTIONS: { key: Key; label: string; desc: string; C: ComponentType<SectionProps> }[] = [
+  { key: "orders", label: "발주(B2B)", desc: "발주 알림 · 아침 일정 알림 · 거래명세표", C: OrdersSection },
+  { key: "production", label: "생산·재고", desc: "생산·재고 알림 · 상품마스터 변경알림 · 주간 초안", C: ProductionSection },
+  { key: "fulfill", label: "온라인 발주", desc: "중복 방지 · 박스 종류 · 택배 단가", C: FulfillSection },
+  { key: "reports", label: "매출·리포트", desc: "종합 리포트 메일", C: ReportsSection },
+  { key: "ai", label: "AI", desc: "데이터 비서 · 모델 · 프롬프트", C: AiSection },
+  { key: "connect", label: "연결", desc: "Teams · 아사나 · Tally", C: ConnectSection },
+];
+const isKey = (s: string | null): s is Key => !!s && SECTIONS.some((x) => x.key === s);
 
-  // 권장생산 목표 기간 — 예전 '리드타임 · 발주 주기' 입력은 없앴다. 생산 일정(D+8 판매 가능·매주 수요일 요청)에서
-  //  날짜로 계산된다(2026-09-28). 화면을 연 날(KST) 기준 — 빌드 시점 날짜로 미리 그려지지 않게 마운트 후 계산한다.
-  const [sched, setSched] = useState<ScheduleHorizon | null>(null);
+export default function SettingsPage() {
+  const router = useRouter();
+  const confirm = useConfirm();
+  const [sec, setSec] = useState<Key>("orders");
+  const [dirty, setDirty] = useState(false);
 
+  // 주소의 ?s= 로 칸을 연다(옛 화면 주소가 이리로 넘어올 때)
   useEffect(() => {
-    setSched(scheduleHorizon(kstTodayIso()));
-    (async () => {
-      try {
-        const st = await (await fetch("/api/b2b/settings/statement", { cache: "no-store" })).json();
-        if (st.ok) { setSup(st.supplier); setStamp(st.stamp || ""); }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "설정을 불러오지 못했습니다. 새로고침하세요");
-      }
-    })();
+    const s = new URLSearchParams(window.location.search).get("s");
+    if (isKey(s)) setSec(s);
   }, []);
 
-  async function saveSupplier() {
-    setSupSaving(true); setSupMsg(null);
-    try {
-      const r = await fetch("/api/b2b/settings/statement", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplier: sup, stamp }) });
-      const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || "변경을 저장하지 못했습니다. 입력값을 확인하세요");
-      setSupMsg({ ok: true, text: "변경을 저장했습니다" });
-    } catch (e) { setSupMsg({ ok: false, text: e instanceof Error ? e.message : "변경을 저장하지 못했습니다. 입력값을 확인하세요" }); }
-    setSupSaving(false);
-  }
-  function onStampFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0]; if (!f) return;
-    if (f.size > 500_000) { setSupMsg({ ok: false, text: "직인을 올리지 못했습니다. 500KB 이하 PNG 로 다시 고르세요" }); return; }
-    const reader = new FileReader();
-    reader.onload = () => setStamp(String(reader.result || ""));
-    reader.readAsDataURL(f);
+  // 저장하지 않은 변경이 있으면 창 닫기·새로고침을 확인
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
+
+  const onDirty = useCallback((d: boolean) => setDirty(d), []);
+  async function go(k: Key) {
+    if (k === sec) return;
+    if (dirty && !(await confirm({ title: "저장하지 않은 변경", body: "이 칸에서 바꾼 내용을 저장하지 않았습니다. 이동하면 바꾼 내용은 사라집니다.", action: "버리고 이동" }))) return;
+    setDirty(false);
+    setSec(k);
+    router.replace(`/b2b/settings?s=${k}`, { scroll: false });
   }
 
+  const cur = SECTIONS.find((x) => x.key === sec)!;
+  const C = cur.C;
   return (
-    <>
+    <div className="b2b-container">
       <header className="b2b-page-head">
         <div>
-          <h1 className="b2b-page-title">일반 설정</h1>
+          <h1 className="b2b-page-title">설정</h1>
+          <p className="b2b-page-subtitle">바꾼 뒤 아래 [저장]을 눌러야 반영됩니다</p>
         </div>
       </header>
-
-      {error && <div className="b2b-error">{error}</div>}
-
-      {/* 거래명세표 — 공급자 정보 + 직인 */}
-      <section className="b2b-card">
-        <div className="b2b-card-head">
-          <h2 className="b2b-card-title">거래명세표</h2>
-          <button className="b2b-btn-primary" onClick={saveSupplier} disabled={supSaving}>{supSaving ? "저장 중..." : "변경 저장"}</button>
+      <div className="set-layout">
+        <nav className="set-nav" aria-label="설정 메뉴">
+          {SECTIONS.map((x) => (
+            <button key={x.key} type="button" className={`set-nav-item ${x.key === sec ? "is-active" : ""}`} aria-current={x.key === sec ? "page" : undefined} onClick={() => go(x.key)}>
+              <span className="set-nav-label">{x.label}</span>
+              <span className="set-nav-desc">{x.desc}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="set-main">
+          <C key={sec} onDirty={onDirty} />
         </div>
-        {supMsg && <div className={supMsg.ok ? "sm-success" : "b2b-error"} style={{ marginBottom: 10 }}>{supMsg.text}</div>}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>상호</span>
-            <input className="b2b-input" value={sup.name} onChange={(e) => setSup({ ...sup, name: e.target.value })} placeholder="예: 씨몬스터" /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>사업자등록번호</span>
-            <input className="b2b-input" value={sup.biz_no} onChange={(e) => setSup({ ...sup, biz_no: e.target.value })} placeholder="000-00-00000" /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>대표자</span>
-            <input className="b2b-input" value={sup.ceo} onChange={(e) => setSup({ ...sup, ceo: e.target.value })} /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>이메일</span>
-            <input className="b2b-input" value={sup.email} onChange={(e) => setSup({ ...sup, email: e.target.value })} placeholder="youn@seamonster.kr" /></label>
-          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 12, fontWeight: 600 }}>사업장 소재지</span>
-            <input className="b2b-input" value={sup.addr} onChange={(e) => setSup({ ...sup, addr: e.target.value })} /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>업태</span>
-            <input className="b2b-input" value={sup.biz_type} onChange={(e) => setSup({ ...sup, biz_type: e.target.value })} placeholder="예: 도소매" /></label>
-          <label className="sm-col" style={{ gap: 3 }}><span style={{ fontSize: 12, fontWeight: 600 }}>종목</span>
-            <input className="b2b-input" value={sup.biz_item} onChange={(e) => setSup({ ...sup, biz_item: e.target.value })} placeholder="예: 수산물" /></label>
-          <label className="sm-col" style={{ gap: 3, gridColumn: "1 / -1" }}><span style={{ fontSize: 12, fontWeight: 600 }}>입금 은행정보</span>
-            <input className="b2b-input" value={sup.bank} onChange={(e) => setSup({ ...sup, bank: e.target.value })} placeholder="예: 국민은행 000000-00-000000 (예금주: 씨몬스터)" /></label>
-        </div>
-        <div className="sm-row" style={{ gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>직인(도장) 이미지</span>
-          <input type="file" accept="image/png,image/jpeg" onChange={onStampFile} style={{ fontSize: 12 }} />
-          {stamp ? (
-            <>
-              <img src={stamp} alt="직인 미리보기" style={{ width: 44, height: 44, objectFit: "contain", border: "1px solid var(--sm-border)", borderRadius: 6, background: "var(--sm-white)" }} />
-              <button className="b2b-link-btn" style={{ color: "var(--sm-danger)" }} onClick={() => setStamp("")}>직인 제거</button>
-            </>
-          ) : (
-            <span className="sm-faint" style={{ fontSize: 12 }}>투명 배경 PNG, 500KB 이하</span>
-          )}
-        </div>
-      </section>
-
-      {/* 권장생산 목표 기간 — 생산 일정에서 계산(읽기 전용) */}
-      <section className="b2b-card" style={{ marginTop: 28 }}>
-        <div className="b2b-card-head"><h2 className="b2b-card-title">권장생산 목표 기간</h2></div>
-        <p style={{ fontSize: 12, color: "var(--sm-text-mid)", margin: "0 0 10px", lineHeight: 1.6 }}>
-          생산 일정(영업일): 작성 D → 컨펌 D+1 → 생산 시작 D+3 → 생산 마감 D+7 → 판매 가능 D+8
-        </p>
-        {sched && <ul style={{ fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
-          <li><strong>목표</strong> = 평상시 하루 출고 × <strong>{sched.horizonDays}일</strong> (오늘 → 다음 요청일 {dateShort(sched.nextDraft)} 요청분 판매 가능일 {dateShort(sched.nextSellable)})</li>
-          <li><strong>부족</strong> = 현재고 + 입고 예정이 하루 출고 × <strong>{sched.leadDays}일</strong> (오늘 → 오늘 요청분 판매 가능일 {dateShort(sched.sellable)}) 미만</li>
-          <li><strong>권장생산</strong> = 소매 모자란 양 + 도매 모자란 양 − 입고 예정 (모자란 양 = 목표 − 현재고, 0 미만은 0)</li>
-        </ul>}
-      </section>
-
-      {/* 발주 완료 → 매출 데이터(Supabase) 자동 반영 */}
-      <section className="b2b-card" style={{ marginTop: 28 }}>
-        <div className="b2b-card-head">
-          <h2 className="b2b-card-title">발송완료 매출 반영</h2>
-          <span style={{ fontSize: 12, color: "var(--sm-success)" }}>● 자동</span>
-        </div>
-        <p style={{ fontSize: 12.5, color: "var(--sm-text-mid)", margin: 0, lineHeight: 1.8 }}>
-          발송완료되면 매출 데이터에 반영 · 채널 &lsquo;도매&rsquo; · 발주별 1회 · 고객 집계 제외
-        </p>
-      </section>
-    </>
+      </div>
+    </div>
   );
 }

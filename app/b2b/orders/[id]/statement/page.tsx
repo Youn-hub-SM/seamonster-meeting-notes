@@ -95,7 +95,7 @@ export default function StatementPage() {
         </div>
         <div className="b2b-page-actions">
           <Link href="/b2b/orders" className="b2b-btn-secondary">발주 목록으로 돌아가기</Link>
-          <Link href="/b2b/settings" className="b2b-btn-secondary">공급자 정보 설정</Link>
+          <Link href="/b2b/settings?s=orders" className="b2b-btn-secondary">공급자 정보 설정</Link>
           <button className="b2b-btn-primary" onClick={() => window.print()} disabled={loading || !order}>인쇄 / PDF 저장</button>
         </div>
       </header>

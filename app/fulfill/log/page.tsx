@@ -280,7 +280,7 @@ export default function DeliveryLogPage() {
             <input type="date" className="b2b-input" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ width: "auto" }} title="추가할 날짜" />
             <button className="b2b-btn-primary" onClick={addDay}>+ 날짜 추가</button>
             <Link className="b2b-btn-secondary" href="/fulfill/stats">발송 통계 보기</Link>
-            <Link className="b2b-btn-secondary" href="/fulfill/settings">설정 열기</Link>
+            <Link className="b2b-btn-secondary" href="/b2b/settings?s=fulfill">설정 열기</Link>
             <a className="b2b-btn-secondary" href={exportHref()} style={rows.length ? undefined : { pointerEvents: "none", opacity: 0.5 }} title="현재 기간을 엑셀로 내려받기">엑셀 내려받기</a>
           </div>
           {/* 새로고침 — 모바일에서도 유일하게 남는 버튼(아이콘형) */}
