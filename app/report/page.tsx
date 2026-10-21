@@ -579,7 +579,6 @@ export default function ReportPage() {
             {items.length === 0 && !busy && !loading && (
               <div className="rp-empty">
                 <h2 className="rp-empty-title">무엇을 도와드릴까요?</h2>
-                <p className="rp-empty-sub">매출·재고·발주·광고·정기배송·VOC 데이터를 물어보세요. 기간과 비교 기준을 함께 적으면 바로 조사합니다.</p>
               </div>
             )}
             {busy && <div className="b2b-loading">불러오는 중...</div>}

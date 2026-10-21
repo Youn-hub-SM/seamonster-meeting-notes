@@ -2887,7 +2887,6 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 .rp-col { max-width: 780px; margin: 0 auto; padding: 24px 20px 28px; display: flex; flex-direction: column; gap: 18px; }
 .rp-empty { padding: 14vh 0 0; text-align: center; }
 .rp-empty-title { margin: 0 0 8px; font-size: var(--sm-fs-2xl); font-weight: 700; line-height: var(--sm-lh-heading); color: var(--sm-black); }
-.rp-empty-sub { margin: 0 auto; max-width: 52ch; font-size: var(--sm-fs-base); line-height: var(--sm-lh-body); color: var(--sm-text-mid); }
 
 .rp-m-user { display: flex; justify-content: flex-end; }
 .rp-m-user .rp-bubble { max-width: 82%; }
