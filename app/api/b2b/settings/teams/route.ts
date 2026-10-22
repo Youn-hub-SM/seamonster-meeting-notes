@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     if (cfg.otpUrl) {
       const r = await sendTeamsWebhook(
         cfg.otpUrl,
-        "인증번호 알림 채널 연결 확인.\n대표 휴대폰에 오는 인증 문자(알리고 등)의 인증번호가 이 채널로 들어옵니다.",
+        "인증번호 알림 채널 연결 확인.\n대표 휴대폰에 오는 알리고 인증 문자의 인증번호가 이 채널로 들어옵니다.",
         { title: "씨몬스터 업무도우미 — 테스트 발송" }
       );
       results.push(r.ok ? "인증번호 채널 OK" : `인증번호 채널 실패(${r.error || r.status})`);

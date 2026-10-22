@@ -14,7 +14,7 @@ const CHANNELS: { key: Ch; label: string; empty: string }[] = [
   { key: "helperUrl", label: "업무도우미 변경알림 채널", empty: "비우면 B2B 채널로 함께 발송" },
   { key: "claimsUrl", label: "클레임 알림 채널", empty: "비우면 변경알림·B2B 채널로 발송" },
   { key: "inquiryUrl", label: "고객문의 알림 채널", empty: "비우면 클레임 채널로 발송" },
-  { key: "otpUrl", label: "인증번호 알림 채널", empty: "인증 문자(알리고 등)의 인증번호 — 비우면 B2B 채널로 발송" }, // 2026-10-22
+  { key: "otpUrl", label: "인증번호 알림 채널", empty: "알리고 인증 문자의 인증번호 — 비우면 B2B 채널로 발송" }, // 2026-10-22
 ];
 const NO_CH = { url: "", helperUrl: "", claimsUrl: "", inquiryUrl: "", otpUrl: "" };
 const NO_CLEAR = { url: false, helperUrl: false, claimsUrl: false, inquiryUrl: false, otpUrl: false };

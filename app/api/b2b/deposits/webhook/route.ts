@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     }
     const name = (body.name ?? parsed?.name ?? null) || null;
     if (!amount || amount <= 0) {
-      // 인증번호 문자(알리고 등)면 Teams 인증번호 채널로 전달(2026-10-22) — 폰이 문자를 전부 이 주소로 보내는 경우 /api/sms/otp 를 따로 안 걸어도 된다.
+      // 알리고 인증 문자('[알리고 문자]' 머리말)면 Teams 인증번호 채널로 전달(2026-10-22, 다른 인증 문자는 대상 아님) — 폰이 문자를 전부 이 주소로 보내는 경우 /api/sms/otp 를 따로 안 걸어도 된다.
       if (body.text && parseOtpSms(body.text)) {
         const otp = await handleOtpSms(body.text, { dry: sp.get("dry") === "1" });
         return NextResponse.json({ ok: true, otp });

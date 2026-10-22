@@ -1,7 +1,8 @@
-// 인증번호 문자 → Teams 전달 (2026-10-22 대표: "알리고 인증 문자가 엄격해졌다 — 오면 팀즈 채팅방으로 자동으로").
+// 알리고 인증 문자 → Teams 전달 (2026-10-22 대표: "알리고 인증 문자가 엄격해졌다 — 오면 팀즈 채팅방으로 자동으로").
 //  입금 문자와 같은 경로다: 폰의 자동화 앱이 문자를 /api/sms/otp(또는 입금 웹훅)로 보내면 여기서 인증번호를 뽑아
-//  Teams '인증번호 알림 채널'(없으면 B2B 알림 채널)에 카드로 올린다. 인증번호가 없는 문자는 아무것도 하지 않는다 —
-//  폰이 문자를 전부 보내더라도 다른 문자가 Teams 로 새지 않는다.
+//  Teams '인증번호 알림 채널'(없으면 B2B 알림 채널)에 카드로 올린다.
+//  대상은 '[알리고 문자]' 머리말이 있는 문자뿐이다(2026-10-22 대표: "알리고가 있는 것만, 다른 건 안 한다") —
+//  다른 서비스의 인증 문자·일반 문자는 폰이 전부 보내더라도 Teams 로 새지 않는다.
 //  예) "[Web발신]\n[알리고 문자] 인증번호 [603574]를 입력해 주세요."
 
 import { getB2BTeamsConfig, sendTeamsWebhook } from "./b2b-teams";
@@ -9,18 +10,14 @@ import { getKv, setKv } from "./b2b-settings";
 
 export type OtpParsed = { code: string; service: string };
 
-// 인증번호: '인증번호 [603574]' · '인증번호: 603574' · '인증번호는 603574' · '[603574] 인증번호' 모두. 4~8자리 숫자.
-//  '[Web발신]' 같은 머리말은 서비스명이 아니다.
+// '[알리고 문자]' 머리말 + '인증번호 [603574]'(괄호·콜론 유무 허용, 4~8자리). 머리말이 없으면 인증번호가 있어도 null.
+const ALIGO_RE = /\[\s*알리고(?:\s*문자)?\s*\]/;
 export function parseOtpSms(text: string): OtpParsed | null {
   const t = (text || "").replace(/\r/g, "");
-  if (!/인증\s*번호|인증\s*코드|verification code|OTP/i.test(t)) return null;
-  const m = t.match(/(?:인증\s*번호|인증\s*코드|verification code|OTP)\s*(?:는|은|:|\]|\))?\s*\[?\s*(\d{4,8})\s*\]?/i)
-    || t.match(/\[\s*(\d{4,8})\s*\]/)
-    || t.match(/(?<!\d)(\d{4,8})(?!\d)\s*(?:를|을)?\s*(?:입력|인증)/);
+  if (!ALIGO_RE.test(t)) return null;
+  const m = t.match(/인증\s*번호\s*(?:는|은|:)?\s*\[?\s*(\d{4,8})\s*\]?/);
   if (!m) return null;
-  const heads = [...t.matchAll(/\[([^\]\n]{1,24})\]/g)].map((x) => x[1].trim()).filter((h) => !/^web\s*발신$/i.test(h) && !/^\d+$/.test(h));
-  const service = (heads[0] || "").replace(/\s*(문자|알림|인증)$/, "").trim() || "인증";
-  return { code: m[1], service };
+  return { code: m[1], service: "알리고" };
 }
 
 const KV_LAST = "sms_otp_last";
@@ -31,7 +28,7 @@ export type OtpResult = { matched: boolean; parsed: OtpParsed | null; sent: bool
 // 문자 한 통 처리. dry=true 면 파싱만.
 export async function handleOtpSms(text: string, opts?: { dry?: boolean; receivedAt?: Date }): Promise<OtpResult> {
   const parsed = parseOtpSms(text);
-  if (!parsed) return { matched: false, parsed: null, sent: false, reason: "인증번호를 찾지 못했습니다." };
+  if (!parsed) return { matched: false, parsed: null, sent: false, reason: "알리고 인증 문자가 아닙니다." };
   if (opts?.dry) return { matched: true, parsed, sent: false, reason: "dry" };
 
   // 같은 번호가 10분 안에 두 번 오면(폰이 재전송·두 경로로 보냄) 한 번만 올린다.
