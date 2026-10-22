@@ -589,7 +589,8 @@ export default function ReportPage() {
           <button type="button" className="b2b-btn-secondary rp-head-list" onClick={() => setSideOpen(true)}>대화 목록</button>
           <h1 className="rp-head-title" title={currentTitle}>{currentTitle}</h1>
           <span className="rp-head-brand">AI 비서</span>
-          <button type="button" className="b2b-link-btn rp-head-new" onClick={newThread} disabled={loading}>새 대화</button>
+          {/* 이미 새 대화면 제목이 '새 대화'라 버튼까지 두면 둘이 겹친다(대표 2026-10-22) — 대화를 열었을 때만 */}
+          {threadId && <button type="button" className="b2b-link-btn rp-head-new" onClick={newThread} disabled={loading}>새 대화</button>}
         </header>
 
         <div className="rp-scroll" ref={scrollRef}>
