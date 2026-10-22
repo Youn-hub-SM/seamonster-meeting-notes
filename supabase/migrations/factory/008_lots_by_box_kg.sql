@@ -82,9 +82,10 @@ begin
     elsif r.type = '출고' then
       if coalesce(v_kg, 0) <= 0 then raise exception '출고 kg 을 입력하세요.' using errcode = 'P0001'; end if;
       if v_bal < v_kg then
-        raise exception '% (제조 %%) 재고 %kg보다 많이 출고할 수 없습니다.',
+        -- RAISE 의 format 은 %% 를 '글자 %' 로 읽는다 — 자리표를 붙여 쓰지 말고 format() 으로 먼저 만든다
+        raise exception '%', format('%s (제조 %s%s) 재고 %skg보다 많이 출고할 수 없습니다.',
           v_name, coalesce(to_char(r.mfg_date, 'YYYY-MM-DD'), '미상'),
-          case when r.box_kg is not null then ' · ' || trim_scale(r.box_kg) || 'kg박스' else '' end, trim_scale(v_bal)
+          case when r.box_kg is not null then ' · ' || trim_scale(r.box_kg) || 'kg박스' else '' end, trim_scale(v_bal))
           using errcode = 'P0001';
       end if;
       v_delta := -v_kg;
