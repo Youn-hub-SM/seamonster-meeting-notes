@@ -63,6 +63,17 @@ export async function updateUser(id: string, patch: { role?: AppRole; password?:
   if (error) throw error;
 }
 
+// 비밀번호 중복 — 로그인은 비밀번호만으로 사람을 찾는다(환경변수 계정이 먼저). 같은 비밀번호가 둘이면
+//  뒤 계정은 앞 계정으로 로그인된다 — 파도소리 직원이 내부 계정으로 들어가는 사고가 난다(2026-10-22 발견).
+//  사용 중지 계정도 다시 켤 수 있으니 센다. exceptId = 자기 자신(비밀번호 변경 때).
+export async function dbPasswordTaken(password: string, exceptId?: string): Promise<boolean> {
+  const pw = password.trim();
+  if (!pw) return false;
+  const { data, error } = await supabaseAdmin().from("app_users").select("id").eq("password", pw);
+  if (error) throw error;
+  return ((data || []) as { id: string }[]).some((u) => String(u.id) !== exceptId);
+}
+
 export async function deleteUser(id: string): Promise<void> {
   const { error } = await supabaseAdmin().from("app_users").delete().eq("id", id);
   if (error) throw error;

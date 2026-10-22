@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName, isAdminName, getB2BUsers } from "@/app/lib/b2b-auth";
-import { listUsers, addUser, deleteUser, setUserActive, updateUser } from "@/app/lib/app-users";
+import { listUsers, addUser, deleteUser, setUserActive, updateUser, dbPasswordTaken } from "@/app/lib/app-users";
+
+// 로그인은 비밀번호만으로 사람을 찾는다 — 같은 비밀번호가 둘이면 뒤 계정이 앞 계정(환경변수 먼저)으로 로그인된다.
+const PW_TAKEN = "이미 쓰는 비밀번호입니다. 다른 값으로 하세요.";
+async function pwTaken(password: string, exceptId?: string): Promise<boolean> {
+  const pw = password.trim();
+  return getB2BUsers().some((u) => u.password === pw) || (await dbPasswordTaken(pw, exceptId));
+}
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +38,7 @@ export async function POST(req: NextRequest) {
     const { name, password, role } = (await req.json()) as { name?: string; password?: string; role?: string };
     if (!name?.trim() || !password?.trim()) return NextResponse.json({ ok: false, error: "이름과 비밀번호를 입력하세요." }, { status: 400 });
     if (getB2BUsers().some((u) => u.name === name.trim())) return NextResponse.json({ ok: false, error: "환경변수에 이미 있는 이름입니다." }, { status: 400 });
+    if (await pwTaken(password)) return NextResponse.json({ ok: false, error: PW_TAKEN }, { status: 400 });
     await addUser(name, password, admin, role === "factory" ? "factory" : "internal");
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -46,6 +54,7 @@ export async function PATCH(req: NextRequest) {
     if (!(await adminName(req))) return NextResponse.json({ ok: false, error: "관리자만 접근할 수 있습니다." }, { status: 403 });
     const { id, active, role, password } = (await req.json()) as { id?: string; active?: boolean; role?: string; password?: string };
     if (!id) return NextResponse.json({ ok: false, error: "id 가 필요합니다." }, { status: 400 });
+    if (password && password.trim() && (await pwTaken(password, id))) return NextResponse.json({ ok: false, error: PW_TAKEN }, { status: 400 });
     if (typeof active === "boolean") await setUserActive(id, active);
     if (role || password) {
       await updateUser(id, {

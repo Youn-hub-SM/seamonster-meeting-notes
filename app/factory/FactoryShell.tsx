@@ -4,7 +4,7 @@
 // 이 셸이 별도 사이트처럼 파도소리 브랜드(파랑·흰 배경)로 감싼다(layout.tsx 가 감싸 부른다 — 제목·아이콘은 거기서).
 // 로그인 화면(/factory/login)은 셸 없이 렌더한다.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/app/components/Icon";
@@ -17,11 +17,19 @@ const NAV = [
   { href: "/factory/history", label: "히스토리", icon: "receipt" as const },
   { href: "/factory/products", label: "상품마스터", icon: "fish" as const },
 ];
+// 계정(직원 계정 만들기)은 관리자에게만 — 서버(/api/factory/accounts)가 관리자 여부를 답한다
+const ADMIN_NAV = [{ href: "/factory/accounts", label: "계정", icon: "user" as const, exact: false }];
 
 export default function FactoryShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/factory";
+  const [admin, setAdmin] = useState(false);
 
   useEffect(() => { document.title = "파도소리 재고관리"; }, []);
+  useEffect(() => {
+    if (pathname === "/factory/login") return;
+    fetch("/api/factory/accounts?check=1", { cache: "no-store" })
+      .then((r) => setAdmin(r.ok)).catch(() => setAdmin(false));
+  }, [pathname]);
 
   if (pathname === "/factory/login") return <>{children}</>;
 
@@ -38,7 +46,7 @@ export default function FactoryShell({ children }: { children: React.ReactNode }
           <small>재고관리</small>
         </Link>
         <nav style={{ display: "flex", flexDirection: "inherit", gap: "inherit" } as React.CSSProperties}>
-          {NAV.map((m) => {
+          {[...NAV, ...(admin ? ADMIN_NAV : [])].map((m) => {
             const active = m.exact ? pathname === m.href : pathname.startsWith(m.href);
             return (
               <Link key={m.href} href={m.href} className={`fac-nav-item ${active ? "is-active" : ""}`}>

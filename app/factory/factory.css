@@ -177,6 +177,11 @@
 .fac-cancelled { display: inline-block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--sm-text-mid); }
 .fac-cancel { color: var(--sm-danger); white-space: nowrap; }
 
+/* ── 계정(관리자) ─────────────────────────────────────────────── */
+.fac-acc-add { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+.fac-acc-pw { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fac-acc-pw .b2b-input { width: 140px; }
+
 /* ── 상품마스터 ─────────────────────────────────────────────────── */
 .fac-row-off td { color: var(--sm-text-light); }
 .fac-pill-off { background: var(--sm-bg-subtle); color: var(--sm-text-mid); }
