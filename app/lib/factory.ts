@@ -31,6 +31,7 @@ export interface FactoryProduct {
   id: string;
   sku: string;
   name: string;
+  spec: string | null;      // 규격(자유 입력, factory/006). 로트 구분에는 안 쓴다
   origin: string | null;
   note: string | null;
   cost: number | null;
@@ -113,6 +114,11 @@ export function weightBreakdown(lots: Pick<StockLot, "box_kg" | "boxes">[]): str
   return `${parts.join(" · ")} · 총 ${kgStr(total)}`;
 }
 
+// 품목 표기 — 규격이 있으면 "갈치두절 150/200" (화면·알림 공용)
+export function productLabel(p: { name: string; spec?: string | null }): string {
+  return p.spec ? `${p.name} ${p.spec}` : p.name;
+}
+
 // 로트 이름 — "제조 2026-09-01 · 16kg" (제조일자 없으면 '제조일 미상')
 export function lotLabel(l: { mfg_date: string | null; box_kg: number }): string {
   return `${l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상"} · ${kgStr(Number(l.box_kg))}`;
@@ -121,16 +127,16 @@ export function lotLabel(l: { mfg_date: string | null; box_kg: number }): string
 // 품목 변경 이력의 필드 이름
 export const FIELD_LABEL: Record<string, string> = {
   등록: "품목 등록", 삭제: "품목 삭제",
-  sku: "SKU", name: "품목", origin: "원산지", note: "비고",
+  sku: "SKU", name: "품목", spec: "규격", origin: "원산지", note: "비고",
   cost: "제품원가", price: "판매가", stock_tracked: "재고관리",
 };
 
 // ── 품목 입력 정리(등록·수정·엑셀 업로드 공용, 서버가 다시 검사) ──────────────────────────────────
 export type ProductPatch = Partial<{
-  sku: string; name: string; origin: string | null; note: string | null;
+  sku: string; name: string; spec: string | null; origin: string | null; note: string | null;
   cost: number | null; price: number | null; stock_tracked: boolean;
 }>;
-export const MASTER_FIELDS = ["sku", "name", "origin", "note", "stock_tracked"] as const; // 관리자만
+export const MASTER_FIELDS = ["sku", "name", "spec", "origin", "note", "stock_tracked"] as const; // 관리자만
 export const PRICE_FIELDS = ["cost", "price"] as const;                                  // 모든 계정(이력 남김)
 
 // 들어온 키만 정리한다(수정 = 부분 갱신). 잘못된 값은 error.
@@ -147,6 +153,11 @@ export function parseProductInput(b: Record<string, unknown>): { patch: ProductP
     const s = String(b.name ?? "").trim();
     if (!s) return { patch, error: "품목을 입력하세요." };
     patch.name = s;
+  }
+  if ("spec" in b) {
+    const v = txt(b.spec);
+    if (v && v.length > 60) return { patch, error: "규격이 너무 깁니다(60자까지)." };
+    patch.spec = v;
   }
   if ("origin" in b) patch.origin = txt(b.origin);
   if ("note" in b) patch.note = txt(b.note);

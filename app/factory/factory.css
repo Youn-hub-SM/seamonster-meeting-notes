@@ -76,6 +76,7 @@
 
 /* ── 공용 조각 ─────────────────────────────────────────────────── */
 .fac-sub { font-size: 12px; font-weight: 500; color: var(--sm-text-light); }
+.fac-spec { font-weight: 600; color: var(--sm-text-mid); }   /* 품목명 뒤 규격 — 이름보다 한 단계 약하게 */
 .fac-sku { font-family: var(--sm-mono); font-size: 12px; color: var(--sm-text-mid); white-space: nowrap; }
 .fac-zero { color: var(--sm-text-faint); }
 .fac-num { font-variant-numeric: tabular-nums; }

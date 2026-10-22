@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import {
   factoryDb, factoryWho, isPending005, PENDING_005,
-  parseProductInput, histValue, type ProductPatch,
+  parseProductInput, histValue, type ProductPatch, isMissingSpec, PENDING_006_HINT,
 } from "@/app/lib/factory-db";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +34,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
     const upd: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: u.name };
     for (const k of changed) upd[k] = patch[k];
-    const { data, error } = await db.from("products").update(upd).eq("id", id).select("*").single();
+    let { data, error } = await db.from("products").update(upd).eq("id", id).select("*").single();
+    let warn: string | undefined;
+    if (error && isMissingSpec(error) && "spec" in upd) {
+      // 006 미적용 — 규격만 빼고 저장. 규격만 바꾼 요청이면 바꿀 게 없다(updated_at·updated_by 만 남는다)
+      delete upd.spec;
+      if (Object.keys(upd).length <= 2) return NextResponse.json({ ok: false, error: PENDING_006_HINT }, { status: 400 });
+      ({ data, error } = await db.from("products").update(upd).eq("id", id).select("*").single());
+      warn = PENDING_006_HINT;
+    }
     if (error) {
       if ((error as { code?: string }).code === "23505") return NextResponse.json({ ok: false, error: `이미 있는 SKU입니다: ${patch.sku}` }, { status: 409 });
       throw error;
     }
-    return NextResponse.json({ ok: true, product: data });
+    return NextResponse.json({ ok: true, product: data, warn });
   } catch (err) {
     if (isPending005(err)) return pending();
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "품목 수정 실패") }, { status: 500 });

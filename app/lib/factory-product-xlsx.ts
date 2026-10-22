@@ -5,13 +5,14 @@
 import { parseProductInput, histValue, type FactoryProduct, type ProductPatch } from "./factory";
 
 // 엑셀 헤더(순서 = 출력 순서). 업로드는 헤더 이름으로 칸을 찾으므로 열 순서가 바뀌어도 된다.
-export const FACTORY_XLSX_HEADERS = ["ID", "SKU", "품목", "원산지", "비고", "제품원가", "판매가", "재고관리(Y/N)"] as const;
+export const FACTORY_XLSX_HEADERS = ["ID", "SKU", "품목", "규격", "원산지", "비고", "제품원가", "판매가", "재고관리(Y/N)"] as const;
 export type FactoryXlsxHeader = (typeof FACTORY_XLSX_HEADERS)[number];
 
 // 비교·미리보기에 쓰는 칸(엑셀 헤더 이름을 그대로 라벨로)
-export const FACTORY_DIFF_FIELDS: { key: "sku" | "name" | "origin" | "note" | "cost" | "price" | "stock_tracked"; label: string }[] = [
+export const FACTORY_DIFF_FIELDS: { key: "sku" | "name" | "spec" | "origin" | "note" | "cost" | "price" | "stock_tracked"; label: string }[] = [
   { key: "sku", label: "SKU" },
   { key: "name", label: "품목" },
+  { key: "spec", label: "규격" },
   { key: "origin", label: "원산지" },
   { key: "note", label: "비고" },
   { key: "cost", label: "제품원가" },
@@ -25,6 +26,7 @@ export function factoryProductToRow(p: FactoryProduct): Record<FactoryXlsxHeader
     ID: p.id,
     SKU: p.sku,
     품목: p.name,
+    규격: p.spec ?? "",
     원산지: p.origin ?? "",
     비고: p.note ?? "",
     제품원가: p.cost == null ? "" : Number(p.cost),
@@ -40,6 +42,7 @@ const TRACK_OFF = /^(n|no|안함|안 함|사용안함|사용 안함|미사용|fa
 //  has(h)=false 인 열(파일에 없는 열)은 넣지 않는다 — 그 칸은 기존 값 그대로. SKU·품목은 필수 열.
 export function factoryRowToInput(get: (h: string) => string, has: (h: string) => boolean): { id: string; input: Record<string, unknown> } {
   const input: Record<string, unknown> = { sku: get("SKU"), name: get("품목") || get("품목명") };
+  if (has("규격")) input.spec = get("규격");
   if (has("원산지")) input.origin = get("원산지");
   if (has("비고")) input.note = get("비고");
   if (has("제품원가")) input.cost = get("제품원가");

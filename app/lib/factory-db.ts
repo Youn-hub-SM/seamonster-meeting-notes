@@ -31,5 +31,12 @@ export function isPending005(err: unknown): boolean {
 }
 export const PENDING_005 = "DB 준비 전입니다 — supabase/migrations/factory/005_products_stock_ledger.sql 을 적용하세요.";
 
+// migration factory/006(products.spec) 미적용 — 규격 칸이 없다는 오류. 호출부는 spec 을 빼고 한 번 더 시도한다(코드베이스 공통 폴백 패턴).
+export function isMissingSpec(err: unknown): boolean {
+  const m = String((err as { message?: string })?.message ?? err ?? "");
+  return /spec/.test(m) && /(column|schema cache|Could not find)/i.test(m);
+}
+export const PENDING_006_HINT = "규격은 supabase/migrations/factory/006_products_spec.sql 적용 뒤 저장됩니다.";
+
 // 품목 입력 정리 — 순수 함수라 공용 파일(factory.ts)에 있다. 기존 import 경로 유지용 재수출.
 export { parseProductInput, histValue, MASTER_FIELDS, PRICE_FIELDS, type ProductPatch } from "./factory";

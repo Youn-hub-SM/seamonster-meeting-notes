@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005 } from "@/app/lib/factory-db";
-import { TXN_TYPES, boxStr, kgStr, lotLabel, type HistEvent, type TxnType } from "@/app/lib/factory";
+import { TXN_TYPES, boxStr, kgStr, lotLabel, productLabel, type HistEvent, type TxnType } from "@/app/lib/factory";
 import { notifyFactory, factoryMsg } from "@/app/lib/factory-notify";
 
 export const dynamic = "force-dynamic";
@@ -59,11 +59,12 @@ export async function GET(req: NextRequest) {
         .order("cancelled_at", { ascending: false }).limit(LIMIT),
       db.from("product_changes").select("*").gte("changed_at", fromTs).lt("changed_at", toTs)
         .order("changed_at", { ascending: false }).limit(LIMIT),
-      db.from("products").select("id, sku, name"),
+      db.from("products").select("id, sku, name, spec"),
     ]);
     for (const r of [tx, cx, ch, pr]) if (r.error) throw r.error;
 
-    const prod = new Map(((pr.data || []) as { id: string; sku: string; name: string }[]).map((p) => [p.id, p]));
+    // 화면·검색에는 "품목 규격"으로 — HistEvent.name 을 그대로 쓴다(규격 열을 따로 두지 않는다)
+    const prod = new Map(((pr.data || []) as { id: string; sku: string; name: string; spec: string | null }[]).map((p) => [p.id, { ...p, name: productLabel(p) }]));
     const base = (t: TxnRow) => ({
       txn_id: t.id, txn_type: t.type, mfg_date: t.mfg_date, box_kg: Number(t.box_kg), boxes: t.boxes, target: t.target,
       partner: t.partner, memo: t.memo, cancelled_at: t.cancelled_at, cancelled_by: t.cancelled_by,
@@ -116,9 +117,9 @@ export async function POST(req: NextRequest) {
 
     const db = factoryDb();
     const ids = [...new Set(raw.map((l) => String(l.product_id || "")))];
-    const { data: prods, error: pe } = await db.from("products").select("id, sku, name, stock_tracked").in("id", ids);
+    const { data: prods, error: pe } = await db.from("products").select("id, sku, name, spec, stock_tracked").in("id", ids);
     if (pe) throw pe;
-    const prod = new Map(((prods || []) as { id: string; sku: string; name: string; stock_tracked: boolean }[]).map((p) => [p.id, p]));
+    const prod = new Map(((prods || []) as { id: string; sku: string; name: string; spec: string | null; stock_tracked: boolean }[]).map((p) => [p.id, { ...p, name: productLabel(p) }]));
 
     const rows: Record<string, unknown>[] = [];
     for (const [i, l] of raw.entries()) {

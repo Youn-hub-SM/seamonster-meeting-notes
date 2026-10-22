@@ -1,6 +1,6 @@
 "use client";
 
-// 파도소리 상품마스터(파도소리 계정·관리자, 2026-10-20 관리자 전용 해제) — SKU · 품목 · 원산지 · 비고 · 제품원가 · 판매가 · 재고관리 사용안함.
+// 파도소리 상품마스터(파도소리 계정·관리자, 2026-10-20 관리자 전용 해제) — SKU · 품목 · 규격 · 원산지 · 비고 · 제품원가 · 판매가 · 재고관리 사용안함.
 //  엑셀 추출 → 고쳐서 엑셀 업로드 → 변경 확인 → 적용(씨몬스터 상품 마스터와 같은 방식, ID 가 매칭 키).
 //  바꾼 값은 히스토리 '변경'에 남는다. 입출고 기록이 있는 품목은 지울 수 없다(재고관리 사용안함으로 숨긴다).
 
@@ -43,7 +43,7 @@ export default function FactoryProductsPage() {
 
   const list = useMemo(() => {
     const q = kw.trim();
-    return products.filter((p) => !q || matchKoQuery(`${p.name} ${p.sku} ${p.origin || ""} ${p.note || ""}`, q));
+    return products.filter((p) => !q || matchKoQuery(`${p.name} ${p.spec || ""} ${p.sku} ${p.origin || ""} ${p.note || ""}`, q));
   }, [products, kw]);
 
   async function handleImportFile(file: File) {
@@ -105,13 +105,14 @@ export default function FactoryProductsPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table is-responsive">
             <thead><tr>
-              <th>SKU</th><th>품목</th><th>원산지</th><th className="num">제품원가(kg당)</th><th className="num">판매가</th><th>재고관리</th><th>비고</th><th></th>
+              <th>SKU</th><th>품목</th><th>규격</th><th>원산지</th><th className="num">제품원가(kg당)</th><th className="num">판매가</th><th>재고관리</th><th>비고</th><th></th>
             </tr></thead>
             <tbody>
               {list.map((p) => (
                 <tr key={p.id} className={p.stock_tracked ? "" : "fac-row-off"}>
                   <td data-label="SKU" className="fac-sku">{p.sku}</td>
                   <td data-label="품목"><strong>{p.name}</strong></td>
+                  <td data-label="규격">{p.spec || "-"}</td>
                   <td data-label="원산지">{p.origin || "-"}</td>
                   <td data-label="제품원가" className="num">{won(p.cost)}</td>
                   <td data-label="판매가" className="num">{won(p.price)}</td>
@@ -207,7 +208,7 @@ function ImportPreviewModal({ preview, applying, onApply, onClose }: { preview: 
 
 function ProductModal({ product, onClose, onSaved }: { product: FactoryProduct | null; onClose: () => void; onSaved: (msg: string) => void }) {
   const [f, setF] = useState({
-    sku: product?.sku || "", name: product?.name || "", origin: product?.origin || "", note: product?.note || "",
+    sku: product?.sku || "", name: product?.name || "", spec: product?.spec || "", origin: product?.origin || "", note: product?.note || "",
     cost: product?.cost == null ? "" : String(product.cost), price: product?.price == null ? "" : String(product.price),
     off: product ? !product.stock_tracked : false,
   });
@@ -221,13 +222,14 @@ function ProductModal({ product, onClose, onSaved }: { product: FactoryProduct |
     if (!f.name.trim()) { setError("품목을 입력하세요."); return; }
     setSaving(true); setError("");
     try {
-      const body = { sku: f.sku, name: f.name, origin: f.origin, note: f.note, cost: f.cost, price: f.price, stock_tracked: !f.off };
+      const body = { sku: f.sku, name: f.name, spec: f.spec, origin: f.origin, note: f.note, cost: f.cost, price: f.price, stock_tracked: !f.off };
       const res = await fetch(product ? `/api/factory/products/${product.id}` : "/api/factory/products", {
         method: product ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
-      onSaved(product ? (j.unchanged ? "바뀐 내용이 없습니다." : "품목을 수정했습니다.") : "품목을 등록했습니다.");
+      // warn = 규격 칸 DB 미적용(factory/006) — 규격만 빼고 저장됐다
+      onSaved((product ? (j.unchanged ? "바뀐 내용이 없습니다." : "품목을 수정했습니다.") : "품목을 등록했습니다.") + (j.warn ? ` ${j.warn}` : ""));
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
   }
@@ -258,6 +260,10 @@ function ProductModal({ product, onClose, onSaved }: { product: FactoryProduct |
           <label className="b2b-field">
             <span className="b2b-field-label">품목</span>
             <input className="b2b-input" value={f.name} onChange={(e) => set({ name: e.target.value })} />
+          </label>
+          <label className="b2b-field">
+            <span className="b2b-field-label">규격</span>
+            <input className="b2b-input" value={f.spec} onChange={(e) => set({ spec: e.target.value })} placeholder="150/200 · 블록 · IQF" />
           </label>
           <label className="b2b-field">
             <span className="b2b-field-label">원산지</span>

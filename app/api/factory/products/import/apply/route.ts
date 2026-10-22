@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // 들어온 칸만(변경 행은 바뀐 칸만 온다) — 화이트리스트 밖(id·label 등)은 버린다. 값 검사는 parseProductInput.
-const FIELDS = ["sku", "name", "origin", "note", "cost", "price", "stock_tracked"] as const;
+const FIELDS = ["sku", "name", "spec", "origin", "note", "cost", "price", "stock_tracked"] as const;
 const pick = (r: Record<string, unknown>) => Object.fromEntries(FIELDS.filter((k) => k in r).map((k) => [k, r[k]]));
 const nameOf = (r: Record<string, unknown>) => String(r.label || r.name || r.sku || "?");
 

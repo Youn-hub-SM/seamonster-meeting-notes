@@ -78,7 +78,7 @@ export default function FactoryStockPage() {
 
   const shown = useMemo(() => {
     const q = kw.trim();
-    const f = scoped.filter((r) => !q || matchKoQuery(`${r.name} ${r.sku} ${r.origin || ""} ${r.note || ""}`, q));
+    const f = scoped.filter((r) => !q || matchKoQuery(`${r.name} ${r.spec || ""} ${r.sku} ${r.origin || ""} ${r.note || ""}`, q));
     const mul = sort.dir === "asc" ? 1 : -1;
     const val = (r: StockRow): number | string =>
       sort.key === "name" ? r.name
@@ -231,7 +231,7 @@ export default function FactoryStockPage() {
               <div key={r.id} className={`fac-item ${open.has(r.id) ? "is-open" : ""}`}>
                 <div className="fac-item-row" onClick={() => toggle(r.id)}>
                   <div className="fac-item-main">
-                    <div className="fac-item-name">{r.name}</div>
+                    <div className="fac-item-name">{r.name}{r.spec && <span className="fac-spec"> {r.spec}</span>}</div>
                     <div className="fac-item-sub">{[r.sku, r.origin].filter(Boolean).join(" · ")}</div>
                     {r.boxes !== 0 && <div className="fac-item-weights">{weightBreakdown(r.lots)}</div>}
                   </div>
@@ -291,6 +291,7 @@ function StockTableRow({ r, opened, onToggle, detail, onHistory, onRecord }: {
           {/* 품목명 = 히스토리, 줄의 다른 곳 = 로트 펼침 */}
           <button type="button" className="fac-name-btn" onClick={onHistory} title="누르면 이 품목의 기록 히스토리">
             <strong>{r.name}</strong>
+            {r.spec && <span className="fac-spec"> {r.spec}</span>}
             {r.origin && <span className="fac-sub"> {r.origin}</span>}
           </button>
         </td>
@@ -363,7 +364,7 @@ function HistoryModal({ product, onClose }: { product: StockRow; onClose: () => 
       <div className="b2b-modal fac-hist-modal" onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">
-            히스토리 — {product.name}
+            히스토리 — {product.name}{product.spec ? ` ${product.spec}` : ""}
             <span className="fac-sub" style={{ marginLeft: 10 }}>현재고 {boxStr(product.boxes)} · {kgStr(product.kg)}</span>
           </span>
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
@@ -438,7 +439,7 @@ function PriceModal({ product, onClose, onSaved }: { product: StockRow; onClose:
     <div className="b2b-modal-backdrop">
       <div className="b2b-modal" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
         <div className="b2b-modal-head">
-          <span className="b2b-modal-title">가격 수정 · {product.name}</span>
+          <span className="b2b-modal-title">가격 수정 · {product.name}{product.spec ? ` ${product.spec}` : ""}</span>
           <button className="b2b-modal-close" onClick={onClose} aria-label="닫기">✕</button>
         </div>
         <div className="b2b-modal-body">

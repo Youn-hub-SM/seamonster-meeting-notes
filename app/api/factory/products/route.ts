@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { factoryDb, factoryWho, isPending005, PENDING_005, parseProductInput } from "@/app/lib/factory-db";
+import { factoryDb, factoryWho, isPending005, PENDING_005, parseProductInput, isMissingSpec, PENDING_006_HINT } from "@/app/lib/factory-db";
 
 export const dynamic = "force-dynamic";
 
@@ -23,16 +23,23 @@ export async function POST(req: NextRequest) {
     const u = await factoryWho(req);
     // 파도소리 계정도 등록한다(2026-10-20 대표 지시) — 구역 접근은 미들웨어가 파도소리 계정·관리자로 막는다
     const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const { patch, error: bad } = parseProductInput({ sku: b.sku, name: b.name, origin: b.origin, note: b.note, cost: b.cost, price: b.price, stock_tracked: b.stock_tracked });
+    const { patch, error: bad } = parseProductInput({ sku: b.sku, name: b.name, spec: b.spec, origin: b.origin, note: b.note, cost: b.cost, price: b.price, stock_tracked: b.stock_tracked });
     if (bad) return NextResponse.json({ ok: false, error: bad }, { status: 400 });
 
     const db = factoryDb();
-    const { data, error } = await db.from("products").insert({ ...patch, created_by: u.name }).select("*").single();
+    let { data, error } = await db.from("products").insert({ ...patch, created_by: u.name }).select("*").single();
+    let warn: string | undefined;
+    if (error && isMissingSpec(error) && "spec" in patch) {
+      // 006 미적용 — 규격만 빼고 저장
+      const { spec: _s, ...rest } = patch; void _s;
+      ({ data, error } = await db.from("products").insert({ ...rest, created_by: u.name }).select("*").single());
+      warn = PENDING_006_HINT;
+    }
     if (error) {
       if ((error as { code?: string }).code === "23505") return NextResponse.json({ ok: false, error: `이미 있는 SKU입니다: ${patch.sku}` }, { status: 409 });
       throw error;
     }
-    return NextResponse.json({ ok: true, product: data });
+    return NextResponse.json({ ok: true, product: data, warn });
   } catch (err) {
     if (isPending005(err)) return NextResponse.json({ ok: false, error: PENDING_005, pending_migration: true }, { status: 503 });
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "품목 등록 실패") }, { status: 500 });

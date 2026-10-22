@@ -4,7 +4,7 @@
 //  입고: 품목마다 [제조일자 · 박스 중량 · 박스 수] 줄(여러 줄 가능)
 //  출고: 품목의 로트(제조일자 × 중량)마다 박스 수 — 오래된 입고부터 보인다
 //  조정: 로트마다 실사 박스 수(비우면 그대로) + 새 로트. 서버가 현재 수량과의 차이만 기록한다.
-//  새 품목(입고만, 2026-10-20): 검색해서 없으면 '+ 새 품목으로 입고' → 품목명·원산지만 적는다.
+//  새 품목(입고만, 2026-10-20): 검색해서 없으면 '+ 새 품목으로 입고' → 품목명·규격·원산지만 적는다.
 //   품목은 [입고 저장] 때 /api/factory/products/quick 으로 먼저 등록하고(같은 이름·원산지면 기존 품목) 그 id 로 입고한다.
 //   창을 닫으면 아무것도 남지 않는다.
 
@@ -16,7 +16,7 @@ import { today } from "./util";
 
 type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; qty: string; have: number; in_date: string | null };
 // draft = 아직 등록 전인 새 품목(입고 저장 때 등록). product_id 는 그때까지 비어 있다.
-type Block = { key: string; product_id: string; lines: Line[]; draft?: { name: string; origin: string } };
+type Block = { key: string; product_id: string; lines: Line[]; draft?: { name: string; spec: string; origin: string } };
 const normName = (s: string) => s.trim().replace(/\s+/g, " ");
 
 let seq = 0;
@@ -75,27 +75,27 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
     return rows
       .filter((p) => !added.has(p.id))
       .filter((p) => type !== "출고" || p.boxes > 0)
-      .filter((p) => matchKoQuery(`${p.name} ${p.sku} ${p.origin || ""} ${p.note || ""}`, q))
+      .filter((p) => matchKoQuery(`${p.name} ${p.spec || ""} ${p.sku} ${p.origin || ""} ${p.note || ""}`, q))
       .slice(0, 12);
   }, [rows, search, blocks, type]);
   useEffect(() => { suggestRef.current?.querySelector<HTMLElement>(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);
 
-  // 입고에서 검색어와 이름이 똑같은 품목이 없으면 '새 품목으로 입고'를 목록 끝에 띄운다(이미 추가한 새 품목 이름도 제외)
+  // 입고에서 검색어가 있으면 '새 품목으로 입고'를 목록 끝에 띄운다 — 같은 이름이라도 규격이 다르면 다른 품목이라
+  //  이름 일치로 막지 않는다(서버가 이름+규격+원산지가 같으면 기존 품목을 돌려준다). 이미 추가한 새 품목 이름만 제외.
   const newName = normName(search);
   const canCreate = type === "입고" && !!newName
-    && !rows.some((p) => normName(p.name).toLowerCase() === newName.toLowerCase())
     && !blocks.some((b) => b.draft && normName(b.draft.name).toLowerCase() === newName.toLowerCase());
   const optCount = matches.length + (canCreate ? 1 : 0);
 
   function addDraft() {
     if (!canCreate) return;
     setBlocks((bs) => [...bs, {
-      key: k(), product_id: "", draft: { name: newName, origin: "" },
+      key: k(), product_id: "", draft: { name: newName, spec: "", origin: "" },
       lines: [{ key: k(), lot: false, mfg_date: today(), box_kg: "", qty: "", have: 0, in_date: null }],
     }]);
     setSearch(""); setActive(-1); setError("");
   }
-  const setDraft = (bk: string, patch: Partial<{ name: string; origin: string }>) =>
+  const setDraft = (bk: string, patch: Partial<{ name: string; spec: string; origin: string }>) =>
     setBlocks((bs) => bs.map((b) => (b.key === bk && b.draft ? { ...b, draft: { ...b.draft, ...patch } } : b)));
   const blockName = (b: Block) => (b.draft ? normName(b.draft.name) || "새 품목" : byId.get(b.product_id)?.name || "품목");
 
@@ -180,14 +180,16 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
       // 새 품목 먼저 등록 — 박스 수를 적은 새 품목만. 같은 이름·원산지가 이미 있으면 서버가 기존 품목을 돌려준다(다시 눌러도 한 번만 생김)
       const drafts = [...new Set(filled.filter(({ b }) => b.draft).map(({ b }) => b))];
       const idOf = new Map<string, string>();
+      let specWarn = "";
       if (drafts.length) {
         const r = await fetch("/api/factory/products/quick", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: drafts.map((b) => ({ name: b.draft!.name, origin: b.draft!.origin })) }),
+          body: JSON.stringify({ items: drafts.map((b) => ({ name: b.draft!.name, spec: b.draft!.spec, origin: b.draft!.origin })) }),
         });
         const pj = await r.json().catch(() => ({}));
         if (!r.ok || !pj.ok) throw new Error(pj.error || "새 품목 등록 실패");
         drafts.forEach((b, i) => idOf.set(b.key, pj.products[i].id));
+        if (pj.warn) specWarn = ` ${pj.warn}`; // 규격 칸 DB 미적용(factory/006)
       }
       const lines = filled.map(({ b, l }) => ({
         product_id: b.draft ? idOf.get(b.key) : b.product_id, mfg_date: l.mfg_date || null, box_kg: Number(l.box_kg),
@@ -200,7 +202,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
       const j = await res.json().catch(() => ({}));
       if (!res.ok || !j.ok) throw new Error(j.error || "저장 실패");
       const created = drafts.length ? ` (새 품목 ${drafts.length}개 포함)` : "";
-      onSaved(j.duplicate ? "이미 저장된 입력입니다." : `${type} ${j.count}건을 저장했습니다.${created}`);
+      onSaved(j.duplicate ? "이미 저장된 입력입니다." : `${type} ${j.count}건을 저장했습니다.${created}${specWarn}`);
     } catch (e) { setError(e instanceof Error ? e.message : "저장 실패"); }
     setSaving(false);
   }
@@ -244,7 +246,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
               <div className="fac-suggest" ref={suggestRef}>
                 {matches.map((p, i) => (
                   <button key={p.id} type="button" className={`fac-suggest-item ${i === active ? "is-active" : ""}`} onClick={() => addProduct(p)} onMouseEnter={() => setActive(i)}>
-                    <span><strong>{p.name}</strong> <span className="fac-sub">{[p.sku, p.origin].filter(Boolean).join(" · ")}</span></span>
+                    <span><strong>{p.name}</strong>{p.spec && <span className="fac-spec"> {p.spec}</span>} <span className="fac-sub">{[p.sku, p.origin].filter(Boolean).join(" · ")}</span></span>
                     <span className="fac-sub">{boxStr(p.boxes)}</span>
                   </button>
                 ))}
@@ -280,13 +282,17 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                         <input className="b2b-input" value={b.draft.name} onChange={(e) => setDraft(b.key, { name: e.target.value })} />
                       </label>
                       <label className="fac-f">
+                        <span>규격</span>
+                        <input className="b2b-input" value={b.draft.spec} placeholder="150/200" onChange={(e) => setDraft(b.key, { spec: e.target.value })} />
+                      </label>
+                      <label className="fac-f">
                         <span>원산지</span>
                         <input className="b2b-input" list="fac-origins" value={b.draft.origin} placeholder="선택" onChange={(e) => setDraft(b.key, { origin: e.target.value })} />
                       </label>
                     </div>
                   ) : p && (
                     <div className="fac-blk-name">
-                      <strong>{p.name}</strong>
+                      <strong>{p.name}{p.spec && <span className="fac-spec"> {p.spec}</span>}</strong>
                       <span className="fac-sub">{[p.sku, p.origin, `재고 ${boxStr(p.boxes)}`].filter(Boolean).join(" · ")}</span>
                     </div>
                   )}
