@@ -104,6 +104,9 @@
 .fac-hist-scroll { max-height: 440px; overflow: auto; flex-shrink: 0; }   /* 모달 flex 본문에서 눌리지 않게 */
 .fac-hist-memo { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 펼침 — 중량별 박스 칩(표·목록은 요약만, 전체는 여기) */
+.fac-box-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
 /* 로트 목록 + 가격·버튼 — PC 펼침·모바일 펼침 공용 */
 .fac-detail { display: flex; flex-direction: column; gap: 10px; }
 .fac-lots { display: flex; flex-direction: column; gap: 2px; }

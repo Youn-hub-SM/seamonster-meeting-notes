@@ -118,13 +118,28 @@ export function kgBox(kg: number, box_kg: number | null | undefined): string {
   const b = boxesOf(kg, box_kg);
   return b == null ? kgStr(kg) : `${kgStr(kg)} (${boxQty(Math.abs(b))})`;
 }
-// 박스 중량별 박스 수 — "16kg 21.25박스 · 10kg 10박스" (잔량 있는 로트만, 무거운 순). 중량 없는 로트는 "중량 미상 120kg"
-export function boxBreakdown(lots: Pick<StockLot, "box_kg" | "kg">[]): string {
+// 박스 중량별 묶음 — 잔량 있는 로트만, 무거운 순. 중량 없는 로트는 box_kg=null, boxes=null(kg 만)
+export function boxGroups(lots: Pick<StockLot, "box_kg" | "kg">[]): { box_kg: number | null; kg: number; boxes: number | null }[] {
   const by = new Map<number | null, number>();
   for (const l of lots) if (l.kg !== 0) by.set(l.box_kg, (by.get(l.box_kg) || 0) + l.kg);
-  if (by.size === 0) return "";
   return [...by.entries()].sort((a, b) => (b[0] ?? -1) - (a[0] ?? -1))
-    .map(([bk, kg]) => (bk ? `${kgStr(bk)} ${boxQty(boxesOf(kg, bk)!)}` : `중량 미상 ${kgStr(kg)}`)).join(" · ");
+    .map(([box_kg, kg]) => ({ box_kg, kg: kgNum(kg), boxes: boxesOf(kg, box_kg) }));
+}
+const groupLabel = (g: { box_kg: number | null; kg: number; boxes: number | null }) =>
+  g.box_kg && g.boxes != null ? `${kgStr(g.box_kg)} ${boxQty(g.boxes)}` : `중량 미상 ${kgStr(g.kg)}`;
+
+// 박스 중량별 박스 수 전체 — "16kg 21.25박스 · 10kg 10박스" (툴팁·펼침용)
+export function boxBreakdown(lots: Pick<StockLot, "box_kg" | "kg">[]): string {
+  return boxGroups(lots).map(groupLabel).join(" · ");
+}
+// 한 줄 요약 — 중량이 2종 이하면 전부, 3종 이상이면 "총 7박스 · 4종"(중량 미상분은 종수에만). 목록·표처럼 자리가 좁은 곳용.
+//  전체는 boxBreakdown 으로 툴팁이나 펼침에 보여 준다. (2026-10-22 대표: 중량 종류가 많아지면 목록이 길어져 레이아웃이 깨진다)
+export function boxSummary(lots: Pick<StockLot, "box_kg" | "kg">[], max = 2): string {
+  const gs = boxGroups(lots);
+  if (gs.length === 0) return "";
+  if (gs.length <= max) return gs.map(groupLabel).join(" · ");
+  const total = Math.round(gs.reduce((s, g) => s + (g.boxes ?? 0), 0) * 100) / 100;
+  return `총 ${boxQty(total)} · ${gs.length}종`;
 }
 // 입고 때 적은 박스 참고 — "16kg × 3박스" (둘 다 있을 때만, 없으면 "")
 export function boxNote(box_kg: number | null | undefined, boxes: number | null | undefined): string {

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { HIST_COLOR, boxBreakdown, boxQty, boxesOf, kgBox, kgStr, kgNum, lotLabel, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
+import { HIST_COLOR, boxBreakdown, boxGroups, boxQty, boxSummary, boxesOf, kgStr, kgNum, lotLabel, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
 import TxnForm from "./TxnForm";
 import { today, daysAgo } from "./util";
 
@@ -113,6 +113,14 @@ export default function FactoryStockPage() {
       <div className="fac-sub">
         최신 입고 {r.last_in_date || "-"} · 최고령 입고 {r.oldest_in_date || "-"} · 누적 입고 {kgStr(r.in_kg)} · 누적 출고 {kgStr(r.out_kg)}
       </div>
+      {/* 중량별 박스 — 표·목록에는 요약만 보이므로 펼침에서 전부 */}
+      {boxGroups(r.lots).length > 0 && (
+        <div className="fac-box-chips">
+          {boxGroups(r.lots).map((g) => (
+            <span key={g.box_kg ?? "none"} className="fac-chip is-on">{g.box_kg && g.boxes != null ? `${kgStr(g.box_kg)} × ${boxQty(g.boxes)}` : `중량 미상 ${kgStr(g.kg)}`}</span>
+          ))}
+        </div>
+      )}
       {r.lots.length === 0 ? <div className="fac-sub">기록이 없습니다.</div> : (
         <div className="fac-lots">
           {r.lots.filter((l) => l.kg !== 0 || open.has(`${r.id}:all`)).map((l) => (
@@ -232,7 +240,7 @@ export default function FactoryStockPage() {
                   <div className="fac-item-main">
                     <div className="fac-item-name">{r.name}{r.spec && <span className="fac-spec"> {r.spec}</span>}</div>
                     <div className="fac-item-sub">{[r.sku, r.origin].filter(Boolean).join(" · ")}</div>
-                    {r.kg !== 0 && <div className="fac-item-weights">{boxBreakdown(r.lots)}</div>}
+                    {r.kg !== 0 && <div className="fac-item-weights" title={boxBreakdown(r.lots)}>{boxSummary(r.lots)}</div>}
                   </div>
                   <div className={`fac-item-qty ${r.kg === 0 ? "is-zero" : ""}`}>
                     {num(r.kg)}<small>kg</small>
@@ -296,7 +304,7 @@ function StockTableRow({ r, opened, onToggle, detail, onHistory, onRecord }: {
         </td>
         <td className="num">
           <strong className={r.kg === 0 ? "fac-zero" : ""}>{num(r.kg)}</strong>
-          {r.kg !== 0 && <div className="fac-sub">{boxBreakdown(r.lots)}</div>}
+          {r.kg !== 0 && <div className="fac-sub" title={boxBreakdown(r.lots)}>{boxSummary(r.lots)}</div>}
         </td>
         <td className={`num ${r.daily_out_kg ? "" : "fac-zero"}`}>{r.daily_out_kg ? num(r.daily_out_kg) : "-"}</td>
         <td className={`num ${r.depletion_days == null ? "fac-zero" : ""}`}>{r.depletion_days == null ? "-" : `${r.depletion_days}일`}</td>
@@ -358,7 +366,7 @@ function HistoryModal({ product, onClose }: { product: StockRow; onClose: () => 
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">
             히스토리 — {product.name}{product.spec ? ` ${product.spec}` : ""}
-            <span className="fac-sub" style={{ marginLeft: 10 }}>현재고 {kgStr(product.kg)}{boxBreakdown(product.lots) ? ` · ${boxBreakdown(product.lots)}` : ""}</span>
+            <span className="fac-sub" style={{ marginLeft: 10 }} title={boxBreakdown(product.lots)}>현재고 {kgStr(product.kg)}{boxSummary(product.lots) ? ` · ${boxSummary(product.lots)}` : ""}</span>
           </span>
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>

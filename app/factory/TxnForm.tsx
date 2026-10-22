@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { ORIGINS, boxBreakdown, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
+import { ORIGINS, boxBreakdown, boxSummary, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
 import { today } from "./util";
 
 // kg = 이 줄의 수량(입고·출고) 또는 실사 kg(조정). box_kg = 박스 중량(로트 줄은 로트의 값), boxes = 박스 수. have = 기존 로트의 현재 kg.
@@ -294,7 +294,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                 {matches.map((p, i) => (
                   <button key={p.id} type="button" className={`fac-suggest-item ${i === active ? "is-active" : ""}`} onClick={() => addProduct(p)} onMouseEnter={() => setActive(i)}>
                     <span><strong>{p.name}</strong>{p.spec && <span className="fac-spec"> {p.spec}</span>} <span className="fac-sub">{[p.sku, p.origin].filter(Boolean).join(" · ")}</span></span>
-                    <span className="fac-sub">{kgStr(p.kg)}{boxBreakdown(p.lots) ? ` · ${boxBreakdown(p.lots)}` : ""}</span>
+                    <span className="fac-sub" title={boxBreakdown(p.lots)}>{kgStr(p.kg)}{boxSummary(p.lots) ? ` · ${boxSummary(p.lots)}` : ""}</span>
                   </button>
                 ))}
                 {canCreate && (
@@ -355,7 +355,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                   })() : p && (
                     <div className="fac-blk-name">
                       <strong>{p.name}{p.spec && <span className="fac-spec"> {p.spec}</span>}</strong>
-                      <span className="fac-sub">{[p.sku, p.origin, `재고 ${kgStr(p.kg)}`, boxBreakdown(p.lots)].filter(Boolean).join(" · ")}</span>
+                      <span className="fac-sub" title={boxBreakdown(p.lots)}>{[p.sku, p.origin, `재고 ${kgStr(p.kg)}`, boxSummary(p.lots)].filter(Boolean).join(" · ")}</span>
                     </div>
                   )}
                   <button type="button" className="b2b-link-btn fac-x" onClick={() => removeBlock(b.key)} aria-label="품목 빼기">✕</button>
