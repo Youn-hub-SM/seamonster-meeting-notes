@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { ORIGINS, boxStr, kgStr, kgNum, lotLabel, type StockRow, type TxnType } from "@/app/lib/factory";
+import { ORIGINS, boxStr, kgStr, kgNum, lotLabel, productKey, type StockRow, type TxnType } from "@/app/lib/factory";
 import { today } from "./util";
 
 type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; qty: string; have: number; in_date: string | null };
@@ -83,10 +83,11 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
   useEffect(() => { suggestRef.current?.querySelector<HTMLElement>(".is-active")?.scrollIntoView({ block: "nearest" }); }, [active]);
 
   // 입고에서 검색어가 있으면 '새 품목으로 입고'를 목록 끝에 띄운다 — 같은 이름이라도 규격이 다르면 다른 품목이라
-  //  이름 일치로 막지 않는다(서버가 이름+규격+원산지가 같으면 기존 품목을 돌려준다). 이미 추가한 새 품목 이름만 제외.
+  //  이름 일치로 막지 않는다(서버가 이름+규격+원산지가 같으면 기존 품목을 돌려준다).
+  //  이미 추가한 새 품목과 이름이 같아도 띄운다(2026-10-22 대표: 규격만 다른 같은 이름을 한 번에 여러 개 넣는다) —
+  //  셋이 완전히 같은 칸이 둘이면 저장 때 합치라고 알린다.
   const newName = normName(search);
-  const canCreate = type === "입고" && !!newName
-    && !blocks.some((b) => b.draft && normName(b.draft.name).toLowerCase() === newName.toLowerCase());
+  const canCreate = type === "입고" && !!newName;
   const optCount = matches.length + (canCreate ? 1 : 0);
 
   function addDraft() {
@@ -151,8 +152,14 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
   async function save() {
     setError("");
     if (filled.length === 0) { setError(type === "조정" ? "실사 박스 수를 입력하세요." : "박스 수를 입력하세요."); return; }
+    const draftKeys = new Map<string, string>();
     for (const b of blocks) {
-      if (b.draft && !normName(b.draft.name)) { setError("새 품목의 품목명을 입력하세요."); return; }
+      if (!b.draft) continue;
+      if (!normName(b.draft.name)) { setError("새 품목의 품목명을 입력하세요."); return; }
+      // 이름·규격·원산지 셋이 같은 새 품목 칸이 둘이면 같은 품목이다 — 한 칸으로 합치게 한다
+      const key = productKey(b.draft);
+      if (draftKeys.has(key)) { setError(`${blockName(b)}${b.draft.spec ? ` ${b.draft.spec}` : ""}: 같은 품목명·규격·원산지인 새 품목 칸이 둘입니다 — 한 칸에 줄을 추가하세요.`); return; }
+      draftKeys.set(key, b.key);
     }
     for (const { b, l } of filled) {
       const name = blockName(b);
