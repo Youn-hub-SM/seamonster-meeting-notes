@@ -11,7 +11,7 @@
 //   창을 닫으면 아무것도 남지 않는다.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { matchKoQuery } from "@/app/lib/hangul";
+import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
 import { ORIGINS, boxStr, kgStr, kgNum, lotLabel, productKey, type StockRow, type TxnType } from "@/app/lib/factory";
 import { today } from "./util";
@@ -249,7 +249,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
 
           <div className="fac-search-wrap">
             <input className="b2b-input fac-txn-search" value={search} autoComplete="off"
-              onChange={(e) => { setSearch(e.target.value); setActive(-1); }} onKeyDown={onSearchKey}
+              onChange={(e) => { setSearch(hangulInputValue(e)); setActive(-1); }} onKeyDown={onSearchKey}
               placeholder={type === "입고" ? "품목 추가 — 이름·SKU·초성 (없으면 새 품목)" : "품목 추가 — 이름·SKU·초성"} />
             {optCount > 0 && (
               <div className="fac-suggest" ref={suggestRef}>
@@ -290,7 +290,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                         <div className="fac-new-row">
                           <label className="fac-f fac-f-name">
                             <span>품목</span>
-                            <input className="b2b-input" value={b.draft.name} onChange={(e) => setDraft(b.key, { name: e.target.value })} />
+                            <input className="b2b-input" value={b.draft.name} onChange={(e) => setDraft(b.key, { name: hangulInputValue(e) })} />
                           </label>
                           <label className="fac-f fac-f-spec">
                             <span>규격</span>

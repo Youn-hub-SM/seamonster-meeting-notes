@@ -9,7 +9,7 @@
 //  PC = 표, 모바일(≤900px) = 목록 + 하단 입고·출고·조정 버튼.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { matchKoQuery } from "@/app/lib/hangul";
+import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
 import { HIST_COLOR, boxStr, kgStr, lotLabel, weightBreakdown, type StockRow, type TxnType } from "@/app/lib/factory";
 import TxnForm from "./TxnForm";
@@ -195,7 +195,7 @@ export default function FactoryStockPage() {
           <input type="checkbox" className="b2b-checkbox" checked={showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} />
           재고 없는 품목 포함
         </label>
-        <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(e.target.value)} placeholder="품목·SKU 검색" aria-label="품목·SKU·원산지 검색(초성 가능)" />
+        <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(hangulInputValue(e))} placeholder="품목·SKU 검색" aria-label="품목·SKU·원산지 검색(초성 가능)" />
       </div>
 
       {loading && rows.length === 0 ? <div className="b2b-loading">불러오는 중...</div> : shown.length === 0 ? (

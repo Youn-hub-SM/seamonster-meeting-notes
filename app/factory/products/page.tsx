@@ -5,7 +5,7 @@
 //  바꾼 값은 히스토리 '변경'에 남는다. 입출고 기록이 있는 품목은 지울 수 없다(재고관리 사용안함으로 숨긴다).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { matchKoQuery } from "@/app/lib/hangul";
+import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
 import { ORIGINS, type FactoryProduct } from "@/app/lib/factory";
 
@@ -96,7 +96,7 @@ export default function FactoryProductsPage() {
       {notice && <div className="sm-success">{notice}</div>}
 
       <div className="fac-toolbar">
-        <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(e.target.value)} placeholder="품목·SKU 검색" />
+        <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(hangulInputValue(e))} placeholder="품목·SKU 검색" />
       </div>
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : list.length === 0 ? (

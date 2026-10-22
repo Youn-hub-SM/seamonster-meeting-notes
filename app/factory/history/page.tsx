@@ -4,7 +4,7 @@
 //  기록 취소는 모든 계정이 할 수 있고, 취소한 기록은 지워지지 않고 '취소됨'으로 남는다.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { matchKoQuery } from "@/app/lib/hangul";
+import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { HIST_COLOR, FIELD_LABEL, boxStr, kgStr, lotLabel, type HistEvent, type HistKind } from "@/app/lib/factory";
 import { today, daysAgo } from "../util";
 
@@ -135,7 +135,7 @@ export default function FactoryHistoryPage() {
             <button key={k} type="button" className={`sm-tab ${kind === k ? "is-active" : ""}`} onClick={() => setKind(k)}>{k}</button>
           ))}
         </div>
-        <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(e.target.value)} placeholder="품목·SKU·담당·메모 검색" />
+        <input className="b2b-input fac-search" value={kw} onChange={(e) => setKw(hangulInputValue(e))} placeholder="품목·SKU·담당·메모 검색" />
       </div>
       {capped && <div className="sm-warn">기록이 많아 일부만 보입니다 — 기간을 줄이세요.</div>}
 
