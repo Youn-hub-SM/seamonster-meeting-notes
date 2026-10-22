@@ -4,6 +4,7 @@ import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { isKnownDepositName, parseKbDepositSms } from "@/app/lib/b2b-deposit-types";
 import { isMissingDepositsTable, loadCompanyNames, loadDepositAliases, runAutoMatch } from "@/app/lib/b2b-deposits";
 import type { BankDeposit } from "@/app/lib/b2b-deposits";
+import { handleOtpSms, parseOtpSms } from "@/app/lib/sms-otp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,6 +83,11 @@ export async function POST(req: NextRequest) {
     }
     const name = (body.name ?? parsed?.name ?? null) || null;
     if (!amount || amount <= 0) {
+      // 인증번호 문자(알리고 등)면 Teams 인증번호 채널로 전달(2026-10-22) — 폰이 문자를 전부 이 주소로 보내는 경우 /api/sms/otp 를 따로 안 걸어도 된다.
+      if (body.text && parseOtpSms(body.text)) {
+        const otp = await handleOtpSms(body.text, { dry: sp.get("dry") === "1" });
+        return NextResponse.json({ ok: true, otp });
+      }
       // 입금 문자가 아님(출금·인증 등) — 폰 매크로가 걸러도 되고 여기서 걸러도 된다.
       //  '입금'이 든 글인데 금액을 못 찾은 것은 파서 구멍일 수 있으니 기록을 남긴다(2026-10-13 — 긴 법인명 건이 여기서 소리 없이 빠졌다).
       if (body.text && /입금/.test(body.text)) console.log(`[deposits webhook] 입금 글인데 금액을 못 찾음 — 저장 안 함: ${body.text.replace(/\s+/g, " ").slice(0, 80)}`);

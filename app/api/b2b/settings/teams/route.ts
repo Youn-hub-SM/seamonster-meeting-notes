@@ -23,35 +23,38 @@ export async function GET() {
       claimsTail: cfg.claimsUrl ? `…${cfg.claimsUrl.slice(-12)}` : "",
       hasInquiryUrl: !!cfg.inquiryUrl,
       inquiryTail: cfg.inquiryUrl ? `…${cfg.inquiryUrl.slice(-12)}` : "",
+      hasOtpUrl: !!cfg.otpUrl,
+      otpTail: cfg.otpUrl ? `…${cfg.otpUrl.slice(-12)}` : "",
     });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }
 }
 
-// PUT { url?, helperUrl?, claimsUrl?, inquiryUrl?, enabled?, clear? } — 저장.
+// PUT { url?, helperUrl?, claimsUrl?, inquiryUrl?, otpUrl?, enabled?, clear? } — 저장.
 //  각 URL 은 비어있지 않을 때만 갱신(빈값이면 기존 유지) — 한 칸만 바꿔도 나머지가 지워지지 않는다.
 export async function PUT(req: NextRequest) {
   const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
-    const b = (await req.json()) as { url?: string; helperUrl?: string; claimsUrl?: string; inquiryUrl?: string; enabled?: boolean; clear?: string[] };
+    const b = (await req.json()) as { url?: string; helperUrl?: string; claimsUrl?: string; inquiryUrl?: string; otpUrl?: string; enabled?: boolean; clear?: string[] };
     const cur = await getB2BTeamsConfig();
     // clear: 지울 채널 키 목록(2026-10-21 — 전엔 빈 값 = 유지라 화면에서 주소를 지울 수 없었다)
     const clear = new Set(Array.isArray(b.clear) ? b.clear.map(String) : []);
-    const pick = (k: "url" | "helperUrl" | "claimsUrl" | "inquiryUrl") =>
+    const pick = (k: "url" | "helperUrl" | "claimsUrl" | "inquiryUrl" | "otpUrl") =>
       clear.has(k) ? "" : b[k] !== undefined && String(b[k]).trim() ? String(b[k]).trim() : cur[k];
     const nextUrl = pick("url");
     const nextHelper = pick("helperUrl");
     const nextClaims = pick("claimsUrl");
     const nextInquiry = pick("inquiryUrl");
-    for (const u of [nextUrl, nextHelper, nextClaims, nextInquiry]) {
+    const nextOtp = pick("otpUrl");
+    for (const u of [nextUrl, nextHelper, nextClaims, nextInquiry, nextOtp]) {
       if (u && !/^https:\/\//.test(u)) {
         return NextResponse.json({ ok: false, error: "https:// 로 시작하는 웹훅 URL을 넣으세요." }, { status: 400 });
       }
     }
-    const next = { url: nextUrl, helperUrl: nextHelper, claimsUrl: nextClaims, inquiryUrl: nextInquiry, enabled: b.enabled !== undefined ? !!b.enabled : cur.enabled };
+    const next = { url: nextUrl, helperUrl: nextHelper, claimsUrl: nextClaims, inquiryUrl: nextInquiry, otpUrl: nextOtp, enabled: b.enabled !== undefined ? !!b.enabled : cur.enabled };
     await setB2BTeamsConfig(next);
-    return NextResponse.json({ ok: true, enabled: next.enabled, hasUrl: !!next.url, hasHelperUrl: !!next.helperUrl, hasClaimsUrl: !!next.claimsUrl, hasInquiryUrl: !!next.inquiryUrl });
+    return NextResponse.json({ ok: true, enabled: next.enabled, hasUrl: !!next.url, hasHelperUrl: !!next.helperUrl, hasClaimsUrl: !!next.claimsUrl, hasInquiryUrl: !!next.inquiryUrl, hasOtpUrl: !!next.otpUrl });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "저장 실패") }, { status: 500 });
   }
@@ -62,7 +65,7 @@ export async function POST(req: NextRequest) {
   const deny = await adminOnly(req); if (deny) return deny; // 관리자만 저장(2026-10-21 설정 통합)
   try {
     const cfg = await getB2BTeamsConfig();
-    if (!cfg.url && !cfg.helperUrl && !cfg.claimsUrl && !cfg.inquiryUrl) return NextResponse.json({ ok: false, error: "웹훅 URL을 먼저 저장하세요." }, { status: 400 });
+    if (!cfg.url && !cfg.helperUrl && !cfg.claimsUrl && !cfg.inquiryUrl && !cfg.otpUrl) return NextResponse.json({ ok: false, error: "웹훅 URL을 먼저 저장하세요." }, { status: 400 });
     const results: string[] = [];
     if (cfg.url) {
       const r = await sendTeamsWebhook(
@@ -95,6 +98,14 @@ export async function POST(req: NextRequest) {
         { title: "씨몬스터 업무도우미 — 테스트 발송" }
       );
       results.push(r.ok ? "고객문의 채널 OK" : `고객문의 채널 실패(${r.error || r.status})`);
+    }
+    if (cfg.otpUrl) {
+      const r = await sendTeamsWebhook(
+        cfg.otpUrl,
+        "인증번호 알림 채널 연결 확인.\n대표 휴대폰에 오는 인증 문자(알리고 등)의 인증번호가 이 채널로 들어옵니다.",
+        { title: "씨몬스터 업무도우미 — 테스트 발송" }
+      );
+      results.push(r.ok ? "인증번호 채널 OK" : `인증번호 채널 실패(${r.error || r.status})`);
     }
     // 한 장도 안 보냈는데 '완료'로 보이면 잘못된 URL 을 정상으로 오인한다 — 채널이 늘 때마다
     //  발송 블록 추가를 잊는 함정이 반복되므로 구조로 닫는다(2026-09-21 검증 지적).

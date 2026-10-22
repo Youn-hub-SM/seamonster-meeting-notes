@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-10-22",
+    tag: "신규",
+    tool: "관리자",
+    title: "인증번호 문자를 Teams 로 자동 전달",
+    desc: "알리고처럼 대표 휴대폰으로만 오는 인증 문자를 입금 문자와 같은 방식으로 받아, 인증번호를 Teams '인증번호 알림 채널'에 카드로 올립니다(채널을 비우면 B2B 알림 채널). 인증번호가 없는 문자는 올라가지 않고, 같은 번호는 10분 안에 한 번만 올라갑니다. 채널 주소는 관리자 › 설정 › 연결에서 넣습니다.",
+    href: "/b2b/settings?s=connect",
+  },
+  {
+    date: "2026-10-22",
     tag: "개선",
     tool: "AI 비서",
     title: "CS 코치·공지 작성기 화면을 AI 비서로 합침",

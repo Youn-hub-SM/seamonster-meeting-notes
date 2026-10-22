@@ -15,7 +15,8 @@ const KV_KEY = "b2b_teams";
 //  claimsUrl = '클레임 알림' 채널(채널 취소·반품·교환 요청). 비어 있으면 helperUrl → url 로 폴백.
 //  inquiryUrl = '고객문의 알림' 채널(주문문의·상품Q&A·고객센터문의). 성격이 달라 클레임과 분리
 //   (2026-09-21 대표 지시). 비어 있으면 claimsUrl → helperUrl → url 로 폴백 — 미설정이어도 알림은 계속 간다.
-export type B2BTeamsConfig = { url: string; helperUrl: string; claimsUrl: string; inquiryUrl: string; enabled: boolean };
+//  otpUrl = '인증번호 알림' 채널(알리고 등 인증 문자 전달, 2026-10-22). 비어 있으면 url 로 폴백.
+export type B2BTeamsConfig = { url: string; helperUrl: string; claimsUrl: string; inquiryUrl: string; otpUrl: string; enabled: boolean };
 
 export async function getB2BTeamsConfig(): Promise<B2BTeamsConfig> {
   try {
@@ -26,10 +27,11 @@ export async function getB2BTeamsConfig(): Promise<B2BTeamsConfig> {
       helperUrl: typeof v.helperUrl === "string" ? v.helperUrl : "",
       claimsUrl: typeof v.claimsUrl === "string" ? v.claimsUrl : "",
       inquiryUrl: typeof v.inquiryUrl === "string" ? v.inquiryUrl : "",
+      otpUrl: typeof v.otpUrl === "string" ? v.otpUrl : "",
       enabled: !!v.enabled,
     };
   } catch {
-    return { url: "", helperUrl: "", claimsUrl: "", inquiryUrl: "", enabled: false };
+    return { url: "", helperUrl: "", claimsUrl: "", inquiryUrl: "", otpUrl: "", enabled: false };
   }
 }
 

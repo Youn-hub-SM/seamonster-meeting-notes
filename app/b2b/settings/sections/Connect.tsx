@@ -4,19 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import { qtyText } from "@/app/lib/format";
 import { OnOff, Pill, SetCard, SetRow, SaveBar, Result, useReportDirty, api, errText, hhmm, type Msg, type SectionProps } from "../ui";
 
-// 연결 — 외부 채널 주소·키는 이 한 곳에만(2026-10-21 중복 정리). Teams 채널 4개 + 전체 발송, 아사나, Tally.
+// 연결 — 외부 채널 주소·키는 이 한 곳에만(2026-10-21 중복 정리). Teams 채널 5개 + 전체 발송, 아사나, Tally.
 //  주소·키는 화면에 다시 보이지 않는다(꼬리만) — 새 값을 넣거나 [지우기]를 고른 뒤 [저장].
 
 type TeamsSaved = { enabled: boolean; has: Record<Ch, boolean>; tail: Record<Ch, string> };
-type Ch = "url" | "helperUrl" | "claimsUrl" | "inquiryUrl";
+type Ch = "url" | "helperUrl" | "claimsUrl" | "inquiryUrl" | "otpUrl";
 const CHANNELS: { key: Ch; label: string; empty: string }[] = [
   { key: "url", label: "B2B 알림 채널", empty: "발주 알림·아침 일정 알림이 들어오는 채널" },
   { key: "helperUrl", label: "업무도우미 변경알림 채널", empty: "비우면 B2B 채널로 함께 발송" },
   { key: "claimsUrl", label: "클레임 알림 채널", empty: "비우면 변경알림·B2B 채널로 발송" },
   { key: "inquiryUrl", label: "고객문의 알림 채널", empty: "비우면 클레임 채널로 발송" },
+  { key: "otpUrl", label: "인증번호 알림 채널", empty: "인증 문자(알리고 등)의 인증번호 — 비우면 B2B 채널로 발송" }, // 2026-10-22
 ];
-const NO_CH = { url: "", helperUrl: "", claimsUrl: "", inquiryUrl: "" };
-const NO_CLEAR = { url: false, helperUrl: false, claimsUrl: false, inquiryUrl: false };
+const NO_CH = { url: "", helperUrl: "", claimsUrl: "", inquiryUrl: "", otpUrl: "" };
+const NO_CLEAR = { url: false, helperUrl: false, claimsUrl: false, inquiryUrl: false, otpUrl: false };
 
 type AsanaSaved = { hasPat: boolean; project: string; assignee: string };
 type TallySaved = { hasKey: boolean; formId: string };
@@ -49,11 +50,11 @@ export default function ConnectSection({ onDirty }: SectionProps) {
   const [saveMsg, setSaveMsg] = useState<Msg | null>(null);
 
   const loadTeams = useCallback(async () => {
-    const j = await api<{ enabled: boolean; hasUrl: boolean; urlTail: string; hasHelperUrl: boolean; helperTail: string; hasClaimsUrl: boolean; claimsTail: string; hasInquiryUrl: boolean; inquiryTail: string }>("/api/b2b/settings/teams");
+    const j = await api<{ enabled: boolean; hasUrl: boolean; urlTail: string; hasHelperUrl: boolean; helperTail: string; hasClaimsUrl: boolean; claimsTail: string; hasInquiryUrl: boolean; inquiryTail: string; hasOtpUrl: boolean; otpTail: string }>("/api/b2b/settings/teams");
     const s: TeamsSaved = {
       enabled: !!j.enabled,
-      has: { url: !!j.hasUrl, helperUrl: !!j.hasHelperUrl, claimsUrl: !!j.hasClaimsUrl, inquiryUrl: !!j.hasInquiryUrl },
-      tail: { url: j.urlTail || "", helperUrl: j.helperTail || "", claimsUrl: j.claimsTail || "", inquiryUrl: j.inquiryTail || "" },
+      has: { url: !!j.hasUrl, helperUrl: !!j.hasHelperUrl, claimsUrl: !!j.hasClaimsUrl, inquiryUrl: !!j.hasInquiryUrl, otpUrl: !!j.hasOtpUrl },
+      tail: { url: j.urlTail || "", helperUrl: j.helperTail || "", claimsUrl: j.claimsTail || "", inquiryUrl: j.inquiryTail || "", otpUrl: j.otpTail || "" },
     };
     setTeams(s); setTEnabled(s.enabled); setTNew(NO_CH); setTClear(NO_CLEAR);
   }, []);
@@ -153,7 +154,7 @@ export default function ConnectSection({ onDirty }: SectionProps) {
       {err && <div className="b2b-error">{err}</div>}
 
       <SetCard title="Teams" pill={!teams ? null : !anyUrl ? <Pill state="err">주소 없음</Pill> : teams.enabled ? <Pill state="on">발송 중</Pill> : <Pill state="off">꺼짐</Pill>}
-        desc="모든 Teams 알림(발주·아침 일정·변경알림·클레임·고객문의)이 나가는 채널입니다. 전체 발송을 끄면 알림이 하나도 나가지 않습니다."
+        desc="모든 Teams 알림(발주·아침 일정·변경알림·클레임·고객문의·인증번호)이 나가는 채널입니다. 전체 발송을 끄면 알림이 하나도 나가지 않습니다."
         actions={<button type="button" className="b2b-btn-secondary" onClick={testTeams} disabled={busy === "teams" || !anyUrl || teamsDirty}>{busy === "teams" ? "보내는 중..." : "테스트 발송"}</button>}>
         <SetRow label="Teams로 발송" desc="꺼 두면 아래 모든 채널로 보내지 않습니다"
           control={<OnOff label="Teams로 발송" value={tEnabled} onChange={setTEnabled} disabled={!teams} />} />
