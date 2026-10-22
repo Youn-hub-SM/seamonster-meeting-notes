@@ -4,6 +4,7 @@ import {
   factoryDb, factoryWho, isPending005, PENDING_005,
   parseProductInput, histValue, type ProductPatch, isMissingSpec, PENDING_006_HINT,
 } from "@/app/lib/factory-db";
+import { productKey } from "@/app/lib/factory";
 
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
@@ -32,6 +33,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       .filter((k) => histValue(before[k]) !== histValue(patch[k]));
     if (changed.length === 0) return NextResponse.json({ ok: true, product: cur, unchanged: true });
 
+    // 품목명·규격·원산지를 바꿔 다른 품목과 셋 다 같아지면 막는다(등록과 같은 규칙)
+    if (changed.some((k) => k === "name" || k === "spec" || k === "origin")) {
+      const merged = { ...(before as { name: string; spec?: string | null; origin?: string | null }), ...patch };
+      const { data: all, error: ae } = await db.from("products").select("id, name, spec, origin").neq("id", id);
+      if (ae) throw ae;
+      if (((all || []) as { id: string; name: string; spec: string | null; origin: string | null }[]).some((x) => productKey(x) === productKey(merged)))
+        return NextResponse.json({ ok: false, error: "같은 품목명·규격·원산지인 품목이 이미 있습니다." }, { status: 409 });
+    }
     const upd: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: u.name };
     for (const k of changed) upd[k] = patch[k];
     let { data, error } = await db.from("products").update(upd).eq("id", id).select("*").single();

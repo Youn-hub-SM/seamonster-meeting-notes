@@ -5,6 +5,8 @@
 //  출고: 품목의 로트(제조일자 × 중량)마다 박스 수 — 오래된 입고부터 보인다
 //  조정: 로트마다 실사 박스 수(비우면 그대로) + 새 로트. 서버가 현재 수량과의 차이만 기록한다.
 //  새 품목(입고만, 2026-10-20): 검색해서 없으면 '+ 새 품목으로 입고' → 품목명·규격·원산지만 적는다.
+//   칸 배치(2026-10-22 대표 지시): 품목 · 규격 · 중량 · 박스 수 / 원산지(선택) · 제조일자(기본 오늘) — 첫 줄의 중량·박스·제조일자는
+//   첫 로트 줄(lines[0])의 값이다. 줄을 더하면 아래에 보통 줄로 붙는다.
 //   품목은 [입고 저장] 때 /api/factory/products/quick 으로 먼저 등록하고(같은 이름·원산지면 기존 품목) 그 id 로 입고한다.
 //   창을 닫으면 아무것도 남지 않는다.
 
@@ -266,7 +268,6 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
 
           {blocks.length === 0 && <div className="b2b-empty">추가한 품목이 없습니다.</div>}
 
-          <datalist id="fac-origins">{ORIGINS.map((o) => <option key={o} value={o} />)}</datalist>
           {blocks.map((b) => {
             const p = byId.get(b.product_id);
             if (!p && !b.draft) return null;
@@ -274,23 +275,53 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
             return (
               <section key={b.key} className={`fac-blk ${b.draft ? "is-new" : ""}`}>
                 <div className="fac-blk-head">
-                  {b.draft ? (
-                    <div className="fac-blk-new">
-                      <span className="b2b-status-pill fac-new-pill">새 품목</span>
-                      <label className="fac-f fac-f-name">
-                        <span>품목명</span>
-                        <input className="b2b-input" value={b.draft.name} onChange={(e) => setDraft(b.key, { name: e.target.value })} />
-                      </label>
-                      <label className="fac-f">
-                        <span>규격</span>
-                        <input className="b2b-input" value={b.draft.spec} placeholder="150/200" onChange={(e) => setDraft(b.key, { spec: e.target.value })} />
-                      </label>
-                      <label className="fac-f">
-                        <span>원산지</span>
-                        <input className="b2b-input" list="fac-origins" value={b.draft.origin} placeholder="선택" onChange={(e) => setDraft(b.key, { origin: e.target.value })} />
-                      </label>
-                    </div>
-                  ) : p && (
+                  {b.draft ? (() => {
+                    const first = b.lines[0]; // 새 품목의 첫 로트 줄 — 머리에 같이 그린다
+                    return (
+                      <div className="fac-blk-new">
+                        <span className="b2b-status-pill fac-new-pill">새 품목</span>
+                        <div className="fac-new-row">
+                          <label className="fac-f fac-f-name">
+                            <span>품목</span>
+                            <input className="b2b-input" value={b.draft.name} onChange={(e) => setDraft(b.key, { name: e.target.value })} />
+                          </label>
+                          <label className="fac-f fac-f-spec">
+                            <span>규격</span>
+                            <input className="b2b-input" value={b.draft.spec} placeholder="150/200" onChange={(e) => setDraft(b.key, { spec: e.target.value })} />
+                          </label>
+                          {first && (
+                            <>
+                              <label className="fac-f fac-f-kg">
+                                <span>중량(kg)</span>
+                                <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1" value={first.box_kg}
+                                  onChange={(e) => setLine(b.key, first.key, { box_kg: e.target.value })} />
+                              </label>
+                              <label className="fac-f fac-f-qty">
+                                <span>박스 수</span>
+                                <input className="b2b-input" type="number" inputMode="numeric" min={1} step={1} value={first.qty}
+                                  onChange={(e) => setLine(b.key, first.key, { qty: e.target.value })} />
+                              </label>
+                            </>
+                          )}
+                        </div>
+                        <div className="fac-new-row">
+                          <label className="fac-f">
+                            <span>원산지</span>
+                            <select className="b2b-input" value={b.draft.origin} onChange={(e) => setDraft(b.key, { origin: e.target.value })}>
+                              <option value="">선택</option>
+                              {ORIGINS.map((o) => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          </label>
+                          {first && (
+                            <label className="fac-f">
+                              <span>제조일자</span>
+                              <input className="b2b-input" type="date" value={first.mfg_date} onChange={(e) => setLine(b.key, first.key, { mfg_date: e.target.value })} />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })() : p && (
                     <div className="fac-blk-name">
                       <strong>{p.name}{p.spec && <span className="fac-spec"> {p.spec}</span>}</strong>
                       <span className="fac-sub">{[p.sku, p.origin, `재고 ${boxStr(p.boxes)}`].filter(Boolean).join(" · ")}</span>
@@ -303,7 +334,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                   <div className="fac-sub fac-blk-empty">{type === "출고" ? "출고할 재고가 없습니다." : "로트가 없습니다."}</div>
                 )}
 
-                {b.lines.map((l) => l.lot ? (
+                {b.lines.filter((l, i) => !(b.draft && i === 0)).map((l) => l.lot ? (
                   // 기존 로트 — 출고 박스 수 / 조정 실사 수
                   <div key={l.key} className="fac-line is-lot">
                     <div className="fac-line-lot">
@@ -321,12 +352,8 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                     </div>
                   </div>
                 ) : (
-                  // 새 줄 — 입고 / 조정 새 로트
+                  // 새 줄 — 입고 / 조정 새 로트. 순서 = 중량 · 박스 수 · 제조일자(기본 오늘)
                   <div key={l.key} className="fac-line">
-                    <label className="fac-f">
-                      <span>제조일자</span>
-                      <input className="b2b-input" type="date" value={l.mfg_date} onChange={(e) => setLine(b.key, l.key, { mfg_date: e.target.value })} />
-                    </label>
                     <label className="fac-f fac-f-kg">
                       <span>중량(kg)</span>
                       <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1" value={l.box_kg}
@@ -337,7 +364,11 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                       <input className="b2b-input" type="number" inputMode="numeric" min={type === "조정" ? 0 : 1} step={1} value={l.qty}
                         onChange={(e) => setLine(b.key, l.key, { qty: e.target.value })} />
                     </label>
-                    {(b.lines.filter((x) => !x.lot).length > 1 || type === "조정") && (
+                    <label className="fac-f">
+                      <span>제조일자</span>
+                      <input className="b2b-input" type="date" value={l.mfg_date} onChange={(e) => setLine(b.key, l.key, { mfg_date: e.target.value })} />
+                    </label>
+                    {(b.draft || b.lines.filter((x) => !x.lot).length > 1 || type === "조정") && (
                       <button type="button" className="b2b-link-btn fac-x" onClick={() => removeLine(b.key, l.key)} aria-label="줄 빼기">✕</button>
                     )}
                     {kgs.length > 0 && (

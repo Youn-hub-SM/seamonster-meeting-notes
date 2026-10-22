@@ -167,9 +167,12 @@
 /* 입고 창 — 새 품목(저장할 때 등록) */
 .fac-suggest-new { border-top: 1px dashed var(--sm-border); margin-top: 2px; color: var(--fac-blue); }
 .fac-blk.is-new { border-color: var(--sm-orange-border); background: var(--sm-orange-light); }
-.fac-blk-new { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
-.fac-new-pill { align-self: center; background: var(--sm-info-bg); color: var(--sm-info); }
-.fac-f-name .b2b-input { width: 240px; }
+.fac-blk-new { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.fac-new-pill { align-self: flex-start; background: var(--sm-info-bg); color: var(--sm-info); }
+.fac-new-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.fac-f-name .b2b-input { width: 200px; }
+.fac-f-spec .b2b-input { width: 120px; }
+.fac-f select.b2b-input { width: 160px; }
 .fac-txn-total { align-self: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* ── 히스토리 ───────────────────────────────────────────────────── */
@@ -261,8 +264,9 @@
   .fac-line:not(.is-lot) { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; }
   .fac-f .b2b-input, .fac-f-kg .b2b-input, .fac-f-qty .b2b-input { width: 100%; min-width: 0; }
   .fac-kg-chips { grid-column: 1 / -1; }
-  .fac-blk-new { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-  .fac-blk-new .fac-new-pill { grid-column: 1 / -1; justify-self: start; }
+  .fac-blk-new { width: 100%; }
+  .fac-new-row { display: grid; grid-template-columns: 1fr 1fr; }
+  .fac-new-row .fac-f .b2b-input, .fac-f select.b2b-input { width: 100%; min-width: 0; }
   .fac-txn-types { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
   .fac-txn-types .sm-tab { justify-content: center; }
 }

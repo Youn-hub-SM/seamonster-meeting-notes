@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, parseProductInput, isMissingSpec, PENDING_006_HINT } from "@/app/lib/factory-db";
+import { productKey } from "@/app/lib/factory";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST { sku, name, origin?, note?, cost?, price?, stock_tracked? } — 품목 등록. 등록 이력은 DB 트리거가 남긴다.
+// POST { sku, name, spec?, origin?, note?, cost?, price?, stock_tracked? } — 품목 등록. 등록 이력은 DB 트리거가 남긴다.
 export async function POST(req: NextRequest) {
   try {
     const u = await factoryWho(req);
@@ -27,6 +28,10 @@ export async function POST(req: NextRequest) {
     if (bad) return NextResponse.json({ ok: false, error: bad }, { status: 400 });
 
     const db = factoryDb();
+    const { data: all, error: ae } = await db.from("products").select("id, name, spec, origin");
+    if (ae) throw ae;
+    const dup = ((all || []) as { id: string; name: string; spec: string | null; origin: string | null }[]).find((x) => productKey(x) === productKey(patch as { name: string }));
+    if (dup) return NextResponse.json({ ok: false, error: "같은 품목명·규격·원산지가 이미 있습니다. 규격이나 원산지가 다르면 그 칸을 채우세요." }, { status: 409 });
     let { data, error } = await db.from("products").insert({ ...patch, created_by: u.name }).select("*").single();
     let warn: string | undefined;
     if (error && isMissingSpec(error) && "spec" in patch) {

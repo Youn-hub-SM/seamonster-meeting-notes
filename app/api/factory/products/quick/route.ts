@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, isMissingSpec, PENDING_006_HINT } from "@/app/lib/factory-db";
-import type { FactoryProduct } from "@/app/lib/factory";
+import { productKey, type FactoryProduct } from "@/app/lib/factory";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 const MAX_ITEMS = 100;
 const SKU_PREFIX = "PD-";
 const norm = (s: unknown) => String(s ?? "").trim().replace(/\s+/g, " ");
-const key = (name: string, spec: string | null, origin: string | null) => `${name.toLowerCase()}|${(spec || "").toLowerCase()}|${(origin || "").toLowerCase()}`;
+const key = (name: string, spec: string | null, origin: string | null) => productKey({ name, spec, origin });
 
 export async function POST(req: NextRequest) {
   try {

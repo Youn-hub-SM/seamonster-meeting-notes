@@ -114,6 +114,11 @@ export function weightBreakdown(lots: Pick<StockLot, "box_kg" | "boxes">[]): str
   return `${parts.join(" · ")} · 총 ${kgStr(total)}`;
 }
 
+// 같은 품목 판정 키 = 품목명·규격·원산지 셋이 모두 같을 때(공백 정리·대소문자 무시, 2026-10-22 대표 규칙).
+//  상품마스터 등록·수정과 입고 창 즉시 등록(quick)이 같은 키를 쓴다.
+export const productKey = (p: { name: string; spec?: string | null; origin?: string | null }) =>
+  [p.name, p.spec || "", p.origin || ""].map((v) => String(v).trim().replace(/\s+/g, " ").toLowerCase()).join("|");
+
 // 품목 표기 — 규격이 있으면 "갈치두절 150/200" (화면·알림 공용)
 export function productLabel(p: { name: string; spec?: string | null }): string {
   return p.spec ? `${p.name} ${p.spec}` : p.name;

@@ -267,8 +267,11 @@ function ProductModal({ product, onClose, onSaved }: { product: FactoryProduct |
           </label>
           <label className="b2b-field">
             <span className="b2b-field-label">원산지</span>
-            <input className="b2b-input" value={f.origin} onChange={(e) => set({ origin: e.target.value })} list="fac-origins" />
-            <datalist id="fac-origins">{ORIGINS.map((o) => <option key={o} value={o} />)}</datalist>
+            {/* 선택 목록(2026-10-22 대표 지시). 목록에 없는 기존 값은 그대로 보이게 끼워 넣는다 */}
+            <select className="b2b-input" value={f.origin} onChange={(e) => set({ origin: e.target.value })}>
+              <option value="">선택</option>
+              {(f.origin && !(ORIGINS as readonly string[]).includes(f.origin) ? [f.origin, ...ORIGINS] : [...ORIGINS]).map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
           </label>
           <label className="b2b-field">
             <span className="b2b-field-label">비고</span>
