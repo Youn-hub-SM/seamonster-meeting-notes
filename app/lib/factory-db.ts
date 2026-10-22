@@ -36,6 +36,12 @@ export function isMissingSpec(err: unknown): boolean {
   const m = String((err as { message?: string })?.message ?? err ?? "");
   return /spec/.test(m) && /(column|schema cache|Could not find)/i.test(m);
 }
+// migration factory/007(kg 기준) 미적용 — 로트 뷰에 kg 열이 없거나 저장 함수가 kg 을 모른다
+export function isPending007(err: unknown): boolean {
+  const m = String((err as { message?: string })?.message ?? err ?? "");
+  return /(stock_lots|stock_txns|target_kg|\bkg\b)/.test(m) && /(column|schema cache|Could not find|does not exist)/i.test(m);
+}
+export const PENDING_007 = "DB 준비 전입니다 — supabase/migrations/factory/007_kg_basis.sql 을 적용하세요.";
 export const PENDING_006_HINT = "규격은 supabase/migrations/factory/006_products_spec.sql 적용 뒤 저장됩니다.";
 
 // 품목 입력 정리 — 순수 함수라 공용 파일(factory.ts)에 있다. 기존 import 경로 유지용 재수출.

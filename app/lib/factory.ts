@@ -1,6 +1,7 @@
 // 파도소리(제조사) 재고 — 공용 타입·상수·표기(클라이언트/서버 공용, DB 코드 없음).
-//  품목 마스터 1행 = SKU 1개. 재고는 박스 원장(factory.stock_txns) 합계이고, 같은 품목 안에서
-//  [제조일자 × 박스 중량] 이 다르면 따로 센다(= 로트). 수량은 박스, 중량은 박스 수 × 박스 중량.
+//  품목 마스터 1행 = SKU 1개. 재고는 원장(factory.stock_txns)의 kg 합계이고, 같은 품목 안에서
+//  제조일자가 다르면 따로 센다(= 로트). 수량 기준은 kg(2026-10-22 대표: 원물 관리라 박스가 아니라 총 kg).
+//  박스 중량·박스 수는 입고 때 적는 참고 정보(총 kg 계산 보조)다.
 //  DB 접근은 factory-db.ts(서버 전용). 이 파일에 supabase import 를 넣지 말 것 —
 //  화면이 이 파일을 import 하므로 서비스 키가 번들에 실린다.
 
@@ -41,33 +42,31 @@ export interface FactoryProduct {
   updated_at?: string;
 }
 
-// 로트 = 품목 × 제조일자 × 박스 중량 (factory.stock_lots 뷰 1행)
+// 로트 = 품목 × 제조일자 (factory.stock_lots 뷰 1행, 단위 kg)
 export interface StockLot {
   mfg_date: string | null;
-  box_kg: number;
-  boxes: number;
-  in_boxes: number;
-  out_boxes: number;
-  adj_boxes: number;
+  kg: number;                   // 현재 kg
+  in_kg: number;
+  out_kg: number;
+  adj_kg: number;
   in_date: string | null;       // 이 로트의 첫 입고일(입고 없이 조정으로 생긴 로트면 첫 기록일)
   last_in_date: string | null;
 }
 
-// 재고 화면 1행 — 품목 + 합계 + 로트
+// 재고 화면 1행 — 품목 + 합계 + 로트 (단위 kg)
 export interface StockRow extends FactoryProduct {
-  boxes: number;                // 현재 수량(박스)
-  kg: number;                   // 현재 중량
-  in_boxes: number; in_kg: number;    // 총 입고(누적)
-  out_boxes: number; out_kg: number;  // 총 출고(누적)
-  adj_boxes: number;            // 조정 합(±)
+  kg: number;                   // 현재 수량(kg)
+  in_kg: number;                // 총 입고(누적)
+  out_kg: number;               // 총 출고(누적)
+  adj_kg: number;               // 조정 합(±)
   last_in_date: string | null;  // 최신 입고일
   oldest_in_date: string | null; // 최고령 입고일 = 남은 재고 중 가장 오래된 입고일
   lots: StockLot[];             // 잔량 있는 로트 먼저, 오래된 순
   // 기간(재고 목록 기간 탭) — 거래일이 기간 안인 입고·출고(취소 제외). 조정은 넣지 않는다(씨몬스터 재고 목록과 같은 뜻).
-  period_in: number; period_in_kg: number;
-  period_out: number; period_out_kg: number;
-  daily_out: number;            // 하루 출고(박스) = 기간 출고 ÷ 기간 일수
-  depletion_days: number | null; // 예상소진(일) = 현재 수량 ÷ 하루 출고. 기간 출고가 없으면 null
+  period_in_kg: number;
+  period_out_kg: number;
+  daily_out_kg: number;         // 하루 출고(kg) = 기간 출고 ÷ 기간 일수
+  depletion_days: number | null; // 예상소진(일) = 현재 kg ÷ 하루 출고. 기간 출고가 없으면 null
   value: number | null;         // 재고자산(원) = 남은 kg × kg당 제품원가. 원가 미입력이면 null
 }
 
@@ -86,9 +85,10 @@ export interface HistEvent {
   txn_id?: string;
   txn_type?: TxnType;
   mfg_date?: string | null;
-  box_kg?: number;
-  boxes?: number;
-  target?: number | null;       // 조정: 실사 박스 수(직전 = target − boxes)
+  kg?: number;                  // 부호 있는 kg(입고 +, 출고 −, 조정 ±)
+  target_kg?: number | null;    // 조정: 실사 kg(직전 = target_kg − kg)
+  box_kg?: number | null;       // 참고: 박스 중량(입고 때 적은 값)
+  boxes?: number | null;        // 참고: 박스 수(부호 있음)
   partner?: string | null;
   memo?: string | null;
   cancelled_at?: string | null;
@@ -104,14 +104,13 @@ export const kgNum = (n: number) => Math.round(n * 100) / 100;
 export const kgStr = (n: number) => `${kgNum(n).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}kg`;
 export const boxStr = (n: number) => `${n.toLocaleString("ko-KR")}박스`;
 
-// 중량별 박스 — "16kg 3박스 · 10kg 2박스 · 총 68kg" (잔량 있는 로트만, 무거운 순)
-export function weightBreakdown(lots: Pick<StockLot, "box_kg" | "boxes">[]): string {
-  const by = new Map<number, number>();
-  for (const l of lots) if (l.boxes !== 0) by.set(Number(l.box_kg), (by.get(Number(l.box_kg)) || 0) + l.boxes);
-  if (by.size === 0) return "";
-  const parts = [...by.entries()].sort((a, b) => b[0] - a[0]).map(([kg, b]) => `${kgStr(kg)} ${boxStr(b)}`);
-  const total = [...by.entries()].reduce((s, [kg, b]) => s + kg * b, 0);
-  return `${parts.join(" · ")} · 총 ${kgStr(total)}`;
+// 부호 붙인 kg — "+340kg" / "−120kg"
+export const signedKg = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${kgStr(Math.abs(n))}`;
+
+// 입고 때 적은 박스 참고 — "16kg × 3박스" (둘 다 있을 때만, 없으면 "")
+export function boxNote(box_kg: number | null | undefined, boxes: number | null | undefined): string {
+  if (!box_kg || !boxes) return "";
+  return `${kgStr(Number(box_kg))} × ${boxStr(Math.abs(Number(boxes)))}`;
 }
 
 // 같은 품목 판정 키 = 품목명·규격·원산지 셋이 모두 같을 때(공백 정리·대소문자 무시, 2026-10-22 대표 규칙).
@@ -124,9 +123,9 @@ export function productLabel(p: { name: string; spec?: string | null }): string 
   return p.spec ? `${p.name} ${p.spec}` : p.name;
 }
 
-// 로트 이름 — "제조 2026-09-01 · 16kg" (제조일자 없으면 '제조일 미상')
-export function lotLabel(l: { mfg_date: string | null; box_kg: number }): string {
-  return `${l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상"} · ${kgStr(Number(l.box_kg))}`;
+// 로트 이름 — "제조 2026-09-01" (제조일자 없으면 '제조일 미상'). 007 부터 박스 중량은 로트를 나누지 않는다
+export function lotLabel(l: { mfg_date: string | null }): string {
+  return l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상";
 }
 
 // 품목 변경 이력의 필드 이름

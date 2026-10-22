@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { factoryDb, factoryWho, isPending005, PENDING_005 } from "@/app/lib/factory-db";
-import { boxStr, lotLabel } from "@/app/lib/factory";
+import { factoryDb, factoryWho, isPending005, PENDING_005, isPending007, PENDING_007 } from "@/app/lib/factory-db";
+import { lotLabel, productLabel, signedKg } from "@/app/lib/factory";
 import { notifyFactory, factoryMsg } from "@/app/lib/factory-notify";
 
 export const dynamic = "force-dynamic";
@@ -21,16 +21,18 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
       if (code === "22P02") return NextResponse.json({ ok: false, error: "기록을 찾을 수 없습니다." }, { status: 404 });
       throw error;
     }
-    const t = data as { product_id: string; type: string; mfg_date: string | null; box_kg: number | string; boxes: number; memo: string | null };
-    const { data: p } = await db.from("products").select("name").eq("id", t.product_id).maybeSingle();
+    const t = data as { product_id: string; type: string; mfg_date: string | null; kg: number | string; memo: string | null };
+    const { data: p } = await db.from("products").select("name, spec").eq("id", t.product_id).maybeSingle();
+    const name = p ? productLabel(p as { name: string; spec?: string | null }) : "품목";
     await Promise.race([notifyFactory(factoryMsg({
       event: `취소(${t.type})`,
-      label: `${(p as { name?: string } | null)?.name ?? "품목"}(${lotLabel({ mfg_date: t.mfg_date, box_kg: Number(t.box_kg) })}) ${t.boxes > 0 && t.type !== "입고" ? "+" : ""}${boxStr(t.boxes)}`,
+      label: `${name}(${lotLabel({ mfg_date: t.mfg_date })}) ${signedKg(Number(t.kg))}`,
       who: u.name,
     })), new Promise<void>((r) => setTimeout(r, 4000))]); // 알림이 느려도 취소 응답을 붙잡지 않는다
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (isPending005(err)) return NextResponse.json({ ok: false, error: PENDING_005, pending_migration: true }, { status: 503 });
+    if (isPending007(err)) return NextResponse.json({ ok: false, error: PENDING_007, pending_migration: true }, { status: 503 });
     console.error("[factory/txns DELETE]", err);
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "취소 실패") }, { status: 500 });
   }
