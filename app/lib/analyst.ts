@@ -22,6 +22,7 @@ import { isNaverAdConfigured, listCampaigns as naverCampaigns, listAdgroups as n
 import { getPurchaseConversions } from "./naver-conv";
 import { bundleAvailable, type BundleComponent } from "./product-bundles";
 import { getUntracked } from "./stock-tracked";
+import { isGaConfigured, runGaReport, GA_DIMENSIONS, GA_METRICS, type GaDimensionKey, type GaMetricKey } from "./ga";
 import { readStockMap } from "./inventory-template";
 import { sendSalesMail } from "./sales-mailer";
 import { buildReportEmail, reportMailRecipients, smtpReady } from "./report-email";
@@ -492,6 +493,11 @@ const TOOLS: Anthropic.Tool[] = [
     input_schema: { type: "object", properties: { sku: { type: "string" } }, required: ["sku"], additionalProperties: false },
   },
   {
+    name: "ga_report", strict: true,
+    description: "GA4 공식몰 유입·행동: 분석 기간 마지막 날부터 N일의 세션·사용자·장바구니·결제 시작·구매·구매액을 날짜·채널 그룹·소스/매체·캠페인·랜딩·기기로. 매출 변화가 유입(어느 채널·캠페인)·전환율 때문인지 볼 때. 세션+구매면 구매 전환율 열이 붙는다. GA 미연결이면 그렇다고 돌려준다.",
+    input_schema: { type: "object", properties: { dimensions: { type: "array", items: { type: "string", enum: ["date", "channel", "source_medium", "campaign", "landing_page", "device", "new_vs_returning"] }, description: "0~2개" }, metrics: { type: "array", items: { type: "string", enum: ["sessions", "users", "new_users", "add_to_carts", "checkouts", "purchases", "revenue"] }, description: "1개 이상" }, days: { type: "integer", description: "7~62" } }, required: ["dimensions", "metrics", "days"], additionalProperties: false },
+  },
+  {
     name: "meta_campaign_adsets", strict: true,
     description: "메타 캠페인 하나의 광고세트별 분석 기간·비교 기간 지출·구매·ROAS. 매출 변화가 특정 광고와 관련 있는지 세트 단위로 볼 때.",
     input_schema: { type: "object", properties: { campaign_id: { type: "string" } }, required: ["campaign_id"], additionalProperties: false },
@@ -577,6 +583,13 @@ export async function runTool(sb: SupabaseClient, ctx: { since: string; end: str
       out[c] = comps.length ? bundleAvailable(comps, stockOf, untracked.ids) : stockOf(p.id); // 세트 = 구성품으로 만들 수 있는 수(재고 관리 안 함 구성품 제외)
     });
     return JSON.stringify(out);
+  }
+  if (name === "ga_report") {
+    if (!isGaConfigured()) return "GA4 미연결(환경 변수 없음) — 유입·전환 데이터는 없다. 이 항목은 '데이터 없음'으로 다룬다.";
+    const dims = (Array.isArray(input.dimensions) ? input.dimensions : []).map(String).filter((d): d is GaDimensionKey => d in GA_DIMENSIONS && d !== "item_name").slice(0, 2);
+    const mets = (Array.isArray(input.metrics) ? input.metrics : []).map(String).filter((m): m is GaMetricKey => m in GA_METRICS && !m.startsWith("item"));
+    const r = await runGaReport({ since, until: y, dimensions: dims, metrics: mets, limit: 400 });
+    return `${win}\n${r.note}\n${fitJson(r.rows, 12000)}`;
   }
   if (name === "meta_campaign_adsets") {
     const cid = String(input.campaign_id || "").trim();

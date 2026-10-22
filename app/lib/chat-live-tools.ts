@@ -3,13 +3,15 @@
 //  · ad_breakdown    : 캠페인 하나의 광고세트(메타)·광고그룹(네이버) 분해(종합 리포트 도구 재사용)
 //  · stock_status    : 창고 칸별 현재고·세트 가능 수량(공용 readStockMap — SQL 로 흉내 내면 칸·세트·선점이 틀린다)
 //  · listing_status  : 채널별 판매 상태·채널 재고 + 최근 품절·판매중지 명령(channel_commands 는 SQL 차단 표라 이 도구로만)
+//  · ga_report       : GA4 데이터 API(2026-10-22) — 세션·사용자·구매를 채널 그룹·소스/매체·캠페인·랜딩·기기·날짜로. 자격은 env(ga.ts)
 //  모두 읽기 전용. 광고를 끄거나 예산을 바꾸는 쓰기는 없다.
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { collectAds, newCache, runTool as runAnalystTool, validDate, kstDay, shift, type AdsCache, type AdsFacts } from "./analyst";
 import { withTimeout } from "./assistant";
+import { isGaConfigured, runGaReport, GA_DIMENSIONS, GA_METRICS, GA_MAX_DAYS, type GaDimensionKey, type GaMetricKey } from "./ga";
 
-export const LIVE_TOOL_NAMES = ["ad_performance", "ad_breakdown", "stock_status", "listing_status"] as const;
+export const LIVE_TOOL_NAMES = ["ad_performance", "ad_breakdown", "stock_status", "listing_status", "ga_report"] as const;
 export type LiveToolName = (typeof LIVE_TOOL_NAMES)[number];
 export const isLiveTool = (n: string): n is LiveToolName => (LIVE_TOOL_NAMES as readonly string[]).includes(n);
 
@@ -50,6 +52,20 @@ export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
       description: "SKU 하나의 채널별 현재 판매 상태·채널 재고(매일 새벽 동기화)와 최근 14일 품절·판매중지·재고 변경 명령. 판매가 갑자기 줄었을 때 품절·판매중지였는지 확인합니다.",
       input_schema: { type: "object", additionalProperties: false, required: ["sku"], properties: { sku: { type: "string", description: "SKU 코드" } } },
     },
+    {
+      name: "ga_report", ...s,
+      description: "구글 애널리틱스(GA4) 공식몰 유입·행동 데이터를 바로 조회합니다(DB 에 없음). 세션·사용자·신규·참여·장바구니·결제 시작·구매·구매액을 날짜·채널 그룹·소스/매체·캠페인·랜딩 페이지·기기·신규/재방문으로 나눠 봅니다(상품명 차원은 상품 측정항목과만). '어디서 들어왔나·유입은 늘었는데 왜 안 샀나·전환율' 질문에 씁니다. 세션+구매를 함께 넣으면 구매 전환율 열이 붙습니다. 결과는 표 카드로 붙습니다. 최대 400일.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["since", "until", "dimensions", "metrics", "limit"],
+        properties: {
+          since: { type: "string", description: "시작일 YYYY-MM-DD" },
+          until: { type: "string", description: "끝일 YYYY-MM-DD(어제 이전)" },
+          dimensions: { type: "array", items: { type: "string", enum: Object.keys(GA_DIMENSIONS) }, description: "나눌 기준 0~3개. 비우면 기간 합계 한 줄" },
+          metrics: { type: "array", minItems: 1, items: { type: "string", enum: Object.keys(GA_METRICS) }, description: "측정항목 1개 이상" },
+          limit: { type: ["integer", "null"], description: "행 수 상한(기본 200, 최대 5000)" },
+        },
+      },
+    },
   ];
 }
 
@@ -59,6 +75,10 @@ export function liveToolLabel(name: string, input: Record<string, unknown>): str
   if (name === "ad_breakdown") return `${input.platform === "naver" ? "네이버 광고그룹" : "메타 광고세트"} 분해 ${range}`;
   if (name === "stock_status") return `현재고: ${String(input.sku || "").slice(0, 40)}`;
   if (name === "listing_status") return `채널 판매 상태: ${String(input.sku || "").slice(0, 40)}`;
+  if (name === "ga_report") {
+    const dims = (Array.isArray(input.dimensions) ? input.dimensions : []).map((d) => GA_DIMENSIONS[String(d) as GaDimensionKey]?.label || String(d)).join("·");
+    return `GA4 ${dims || "합계"} ${range}`;
+  }
   return name;
 }
 
@@ -179,6 +199,23 @@ export async function runLiveTool(sb: SupabaseClient, state: LiveState, name: Li
     const camp = platform === "meta" ? r.ads.meta?.campaigns.find((c) => c.id === cid)?.name : r.ads.naver?.campaigns.find((c) => c.id === cid)?.name;
     const t = breakdownTable(platform, out, `${platform === "meta" ? "메타 광고세트" : "네이버 광고그룹"} — ${camp || cid} ${hit.cache.cur.since}~${hit.cache.cur.until}`);
     return { content: `${AD_RULES}\n${out}`, tables: t ? [t] : [] };
+  }
+  if (name === "ga_report") {
+    if (!isGaConfigured()) return { content: "GA4 가 연결되어 있지 않습니다(관리자가 Vercel 환경 변수 GA4_PROPERTY_ID·GA_SA_EMAIL·GA_SA_PRIVATE_KEY 를 넣어야 합니다). 유입·전환 데이터는 지금 볼 수 없습니다.", tables: [] };
+    const since = String(input.since || "").trim(), until = String(input.until || "").trim();
+    if (!validDate(since) || !validDate(until) || since > until) throw new Error("since·until 은 YYYY-MM-DD 이고 since ≤ until 이어야 합니다.");
+    const yesterday = kstDay(-1);
+    if (until > yesterday) throw new Error(`GA4 는 어제(${yesterday})까지만 확정값입니다 — until 을 어제 이전으로.`);
+    if (dayCount(since, until) > GA_MAX_DAYS) throw new Error(`GA4 조회는 ${GA_MAX_DAYS}일까지입니다.`);
+    const dims = (Array.isArray(input.dimensions) ? input.dimensions : []).map(String).filter((d): d is GaDimensionKey => d in GA_DIMENSIONS).slice(0, 3);
+    const mets = (Array.isArray(input.metrics) ? input.metrics : []).map(String).filter((m): m is GaMetricKey => m in GA_METRICS);
+    const r = await runGaReport({ since, until, dimensions: dims, metrics: mets, limit: typeof input.limit === "number" ? input.limit : 200 });
+    const title = `GA4 ${dims.map((d) => GA_DIMENSIONS[d].label).join("·") || "합계"} ${since}~${until}`;
+    const body = JSON.stringify(r.rows.slice(0, 120));
+    return {
+      content: `${r.note}\n행 ${r.rowCount}${r.truncated ? "(상한에 잘림)" : ""} — 아래는 앞 120행(전체는 표 카드)\n${body.length > 14000 ? `${body.slice(0, 14000)} …(잘림)` : body}`,
+      tables: [{ title, sql: "-- GA4 API 실시간 조회(SQL 아님 · 저장·엑셀·루커 불가)", columns: r.columns, rows: r.rows }],
+    };
   }
   // 재고·채널 상태 — 오늘 기준(listing 명령은 최근 14일)
   const today = kstDay(0);
