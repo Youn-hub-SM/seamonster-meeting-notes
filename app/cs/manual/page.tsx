@@ -142,7 +142,7 @@ export default function CsManualPage() {
         <div>
           <h1 className="page-title">CS 매뉴얼 (지식베이스)</h1>
         </div>
-        <Link href="/cs" className="btn-secondary csm-back">CS 코치로 돌아가기</Link>
+        <Link href="/report" className="btn-secondary csm-back">AI 비서로 가기</Link>
       </div>
 
       {error && <div className="b2b-error" style={{ margin: "12px 0" }}>{error}</div>}

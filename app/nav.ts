@@ -113,14 +113,9 @@ export const NAV: NavCategory[] = [
   {
     label: "CS",
     tools: [
-      {
-        href: "/cs", label: "CS 코치", icon: "chat",
-        menu: [
-          { href: "/cs", label: "코치" },
-          { href: "/cs/manual", label: "매뉴얼" },
-        ],
-      },
-      { href: "/notice", label: "공지 작성기", icon: "pen" }, // 2026-10-13 상황 항목 → 씨몬스터 톤 공지문(고객·B2B)
+      // 2026-10-22 대표: CS 코치·공지 작성기 화면은 AI 비서가 대신(cs_coach·write_notice 도구) — 메뉴에서 빼고 /cs·/notice 는 비서로 넘긴다.
+      //  응대 매뉴얼(비서도 같은 매뉴얼을 읽는다)만 남기고, 공지 톤 프롬프트는 관리자 › 설정 › AI 로.
+      { href: "/cs/manual", label: "응대 매뉴얼", icon: "chat", exact: true },
       {
         href: "/voc", label: "VOC 관리", icon: "megaphone",
         menu: [
