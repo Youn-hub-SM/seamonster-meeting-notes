@@ -5,13 +5,13 @@
 //  표: SKU | 품목(누르면 히스토리) | 현재고(kg) | 하루 출고(kg) | 예상소진 | 총입고 | 총출고 | 재고자산 | 기록.
 //  씨몬스터에만 있는 것(입고 예정·권장생산·생산 요청·AI 조언·프로모션)은 파도소리에 해당이 없어 뺐다.
 //  재고 부족 판정은 대표가 추후 정한다(그때 카드·'부족만 보기'·경고색을 붙인다).
-//  파도소리 고유: 행을 누르면 로트(제조일자)가 펼쳐진다.
+//  파도소리 고유: 행을 누르면 로트(제조일자 × 박스 중량)가 펼쳐지고, 현재고 아래 박스 중량별 박스 수(kg ÷ 중량)가 보인다.
 //  PC = 표, 모바일(≤900px) = 목록 + 하단 입고·출고·조정 버튼.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { HIST_COLOR, boxNote, kgStr, kgNum, lotLabel, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
+import { HIST_COLOR, boxBreakdown, boxQty, boxesOf, kgBox, kgStr, kgNum, lotLabel, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
 import TxnForm from "./TxnForm";
 import { today, daysAgo } from "./util";
 
@@ -71,6 +71,8 @@ export default function FactoryStockPage() {
     kg: kgNum(scoped.reduce((s, r) => s + r.kg, 0)),
     value: scoped.reduce((s, r) => s + (r.value ?? 0), 0),
     noCost: scoped.filter((r) => r.value == null && r.kg > 0).length,
+    // 박스 수 합 — 중량이 다른 박스를 더한 값이라 참고용. 중량 없는 로트는 셀 수 없어 뺀다
+    boxes: Math.round(scoped.reduce((s, r) => s + r.lots.reduce((t, l) => t + (boxesOf(l.kg, l.box_kg) ?? 0), 0), 0) * 100) / 100,
     outKg: kgNum(scoped.reduce((s, r) => s + r.period_out_kg, 0)),
   }), [scoped]);
 
@@ -114,10 +116,10 @@ export default function FactoryStockPage() {
       {r.lots.length === 0 ? <div className="fac-sub">기록이 없습니다.</div> : (
         <div className="fac-lots">
           {r.lots.filter((l) => l.kg !== 0 || open.has(`${r.id}:all`)).map((l) => (
-            <div key={l.mfg_date || "none"} className={`fac-lot ${l.kg === 0 ? "is-zero" : ""}`}>
+            <div key={`${l.mfg_date || "none"}|${l.box_kg ?? ""}`} className={`fac-lot ${l.kg === 0 ? "is-zero" : ""}`}>
               <span className="fac-lot-name">{lotLabel(l)}</span>
               <span className="fac-sub">{l.in_date ? `입고 ${l.in_date}` : ""}{l.adj_kg ? ` · 조정 ${signedKg(l.adj_kg)}` : ""}</span>
-              <span className="fac-lot-qty">{kgStr(l.kg)}</span>
+              <span className="fac-lot-qty">{kgStr(l.kg)}{boxesOf(l.kg, l.box_kg) != null && <small>{boxQty(boxesOf(l.kg, l.box_kg)!)}</small>}</span>
             </div>
           ))}
           {r.lots.some((l) => l.kg === 0) && (
@@ -162,6 +164,7 @@ export default function FactoryStockPage() {
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">현재 재고</div>
           <div className="b2b-stat-card-value">{kgStr(totals.kg)}</div>
+          {totals.boxes > 0 && <div className="b2b-stat-card-hint">{boxQty(totals.boxes)}</div>}
         </div>
         <div className="b2b-stat-card">
           <div className="b2b-stat-card-label">재고 자산(원가)</div>
@@ -229,6 +232,7 @@ export default function FactoryStockPage() {
                   <div className="fac-item-main">
                     <div className="fac-item-name">{r.name}{r.spec && <span className="fac-spec"> {r.spec}</span>}</div>
                     <div className="fac-item-sub">{[r.sku, r.origin].filter(Boolean).join(" · ")}</div>
+                    {r.kg !== 0 && <div className="fac-item-weights">{boxBreakdown(r.lots)}</div>}
                   </div>
                   <div className={`fac-item-qty ${r.kg === 0 ? "is-zero" : ""}`}>
                     {num(r.kg)}<small>kg</small>
@@ -290,7 +294,10 @@ function StockTableRow({ r, opened, onToggle, detail, onHistory, onRecord }: {
             {r.origin && <span className="fac-sub"> {r.origin}</span>}
           </button>
         </td>
-        <td className="num"><strong className={r.kg === 0 ? "fac-zero" : ""}>{num(r.kg)}</strong></td>
+        <td className="num">
+          <strong className={r.kg === 0 ? "fac-zero" : ""}>{num(r.kg)}</strong>
+          {r.kg !== 0 && <div className="fac-sub">{boxBreakdown(r.lots)}</div>}
+        </td>
         <td className={`num ${r.daily_out_kg ? "" : "fac-zero"}`}>{r.daily_out_kg ? num(r.daily_out_kg) : "-"}</td>
         <td className={`num ${r.depletion_days == null ? "fac-zero" : ""}`}>{r.depletion_days == null ? "-" : `${r.depletion_days}일`}</td>
         <td className="num">{r.period_in_kg ? <span style={{ color: HIST_COLOR.입고.fg }}>{num(r.period_in_kg)}</span> : <span className="fac-zero">-</span>}</td>
@@ -351,7 +358,7 @@ function HistoryModal({ product, onClose }: { product: StockRow; onClose: () => 
         <div className="b2b-modal-head">
           <span className="b2b-modal-title">
             히스토리 — {product.name}{product.spec ? ` ${product.spec}` : ""}
-            <span className="fac-sub" style={{ marginLeft: 10 }}>현재고 {kgStr(product.kg)}</span>
+            <span className="fac-sub" style={{ marginLeft: 10 }}>현재고 {kgStr(product.kg)}{boxBreakdown(product.lots) ? ` · ${boxBreakdown(product.lots)}` : ""}</span>
           </span>
           <button className="b2b-modal-close" aria-label="닫기" onClick={onClose}>✕</button>
         </div>
@@ -362,11 +369,10 @@ function HistoryModal({ product, onClose }: { product: StockRow; onClose: () => 
             : (
               <div className="b2b-table-wrap fac-hist-scroll">
                 <table className="b2b-table">
-                  <thead><tr><th>거래일</th><th>유형</th><th>로트</th><th className="num">kg</th><th className="num">재고(kg)</th><th>거래처</th><th>메모</th><th>담당</th></tr></thead>
+                  <thead><tr><th>거래일</th><th>유형</th><th>로트</th><th className="num">kg (박스)</th><th className="num">재고(kg)</th><th>거래처</th><th>메모</th><th>담당</th></tr></thead>
                   <tbody>
                     {withBalance.map((t) => {
                       const c = HIST_COLOR[t.type];
-                      const box = boxNote(t.box_kg, t.boxes);
                       return (
                         <tr key={t.id} className={t.cancelled_at ? "fac-row-cancelled" : undefined}>
                           <td className="sm-nowrap">{t.txn_date}</td>
@@ -374,8 +380,11 @@ function HistoryModal({ product, onClose }: { product: StockRow; onClose: () => 
                             <span className="b2b-status-pill" style={{ background: c.bg, color: c.fg }}>{t.type}</span>
                             {t.cancelled_at && <span className="b2b-status-pill" style={{ marginLeft: 4, background: HIST_COLOR.취소.bg, color: HIST_COLOR.취소.fg }}>취소</span>}
                           </td>
-                          <td className="sm-nowrap">{lotLabel(t)}{box && <div className="fac-sub">{box}</div>}</td>
-                          <td className="num fac-num" style={{ color: t.cancelled_at ? undefined : c.fg, fontWeight: 700 }}>{signedKg(Number(t.kg))}</td>
+                          <td className="sm-nowrap">{lotLabel(t)}</td>
+                          <td className="num fac-num" style={{ color: t.cancelled_at ? undefined : c.fg, fontWeight: 700 }}>
+                            {signedKg(Number(t.kg))}
+                            {boxesOf(Math.abs(Number(t.kg)), t.box_kg) != null && <div className="fac-sub">{boxQty(boxesOf(Math.abs(Number(t.kg)), t.box_kg)!)}</div>}
+                          </td>
                           <td className="num sm-nowrap">
                             {capped || t.cancelled_at ? <span className="fac-zero">-</span>
                               : <><span className="fac-sub">{num(t.before)}</span> → <strong>{num(t.after)}</strong></>}

@@ -10,9 +10,9 @@ const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 
 const validDate = (s: string) => DATE_RE.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400e3);
 
-// factory.stock_lots 1행 — 품목 × 제조일자, kg (007)
+// factory.stock_lots 1행 — 품목 × 제조일자 × 박스 중량, kg (008)
 type LotRow = {
-  product_id: string; mfg_date: string | null;
+  product_id: string; mfg_date: string | null; box_kg: number | string | null;
   kg: number | string; in_kg: number | string; out_kg: number | string; adj_kg: number | string;
   first_in_date: string | null; last_in_date: string | null; first_txn_date: string | null;
   live_in_date: string | null;
@@ -23,7 +23,7 @@ async function allLots(): Promise<LotRow[]> {
   const out: LotRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await factoryDb().from("stock_lots").select("*")
-      .order("product_id").order("mfg_date", { nullsFirst: true }).range(from, from + 999);
+      .order("product_id").order("mfg_date", { nullsFirst: true }).order("box_kg", { nullsFirst: true }).range(from, from + 999);
     if (error) throw error;
     out.push(...((data || []) as LotRow[]));
     if (!data || data.length < 1000) return out;
@@ -45,7 +45,7 @@ async function periodTxns(from: string, to: string): Promise<PeriodTxn[]> {
   }
 }
 
-// GET ?from=&to= — 재고장: 재고관리 사용 품목 전체 + 합계 + 로트(품목 × 제조일자). 단위 kg.
+// GET ?from=&to= — 재고장: 재고관리 사용 품목 전체 + 합계 + 로트(품목 × 제조일자 × 박스 중량). 단위 kg, 박스 수 = kg ÷ 박스 중량.
 //  최신 입고일 = 가장 최근 입고 기록일, 최고령 입고일 = 남은 kg 가 들어온 가장 오래된 입고일(뷰 live_in_date).
 //  총 입고·총 출고 = 누적(취소 제외). 현재 kg = 입고 − 출고 ± 조정. 기간 입고·출고·하루 출고·예상소진·재고자산.
 export async function GET(req: NextRequest) {
@@ -87,6 +87,7 @@ export async function GET(req: NextRequest) {
     const rows: StockRow[] = ((pr.data || []) as FactoryProduct[]).map((p) => {
       const lots: StockLot[] = (byProduct.get(p.id) || []).map((l) => ({
         mfg_date: l.mfg_date,
+        box_kg: l.box_kg == null ? null : Number(l.box_kg),
         kg: kgNum(Number(l.kg) || 0),
         in_kg: kgNum(Number(l.in_kg) || 0),
         out_kg: kgNum(Number(l.out_kg) || 0),
@@ -97,7 +98,8 @@ export async function GET(req: NextRequest) {
       // 잔량 있는 로트 먼저, 그 안에서 오래된 입고(→제조일자) 순 — 출고할 때 오래된 것부터 보이게
       lots.sort((a, b) => (Number(b.kg > 0) - Number(a.kg > 0))
         || String(a.in_date || "9999").localeCompare(String(b.in_date || "9999"))
-        || String(a.mfg_date || "9999").localeCompare(String(b.mfg_date || "9999")));
+        || String(a.mfg_date || "9999").localeCompare(String(b.mfg_date || "9999"))
+        || (b.box_kg ?? 0) - (a.box_kg ?? 0));
       const sum = (f: (l: StockLot) => number) => kgNum(lots.reduce((s, l) => s + f(l), 0));
       const live = lots.filter((l) => l.kg > 0);
       const inDates = lots.map((l) => l.last_in_date).filter((d): d is string => !!d).sort();

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, isPending007, PENDING_007 } from "@/app/lib/factory-db";
-import { lotLabel, productLabel, signedKg } from "@/app/lib/factory";
+import { lotLabel, productLabel, kgBox } from "@/app/lib/factory";
 import { notifyFactory, factoryMsg } from "@/app/lib/factory-notify";
 
 export const dynamic = "force-dynamic";
@@ -21,12 +21,12 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
       if (code === "22P02") return NextResponse.json({ ok: false, error: "기록을 찾을 수 없습니다." }, { status: 404 });
       throw error;
     }
-    const t = data as { product_id: string; type: string; mfg_date: string | null; kg: number | string; memo: string | null };
+    const t = data as { product_id: string; type: string; mfg_date: string | null; kg: number | string; box_kg: number | string | null; memo: string | null };
     const { data: p } = await db.from("products").select("name, spec").eq("id", t.product_id).maybeSingle();
     const name = p ? productLabel(p as { name: string; spec?: string | null }) : "품목";
     await Promise.race([notifyFactory(factoryMsg({
       event: `취소(${t.type})`,
-      label: `${name}(${lotLabel({ mfg_date: t.mfg_date })}) ${signedKg(Number(t.kg))}`,
+      label: `${name}(${lotLabel({ mfg_date: t.mfg_date })}) ${Number(t.kg) < 0 ? "−" : "+"}${kgBox(Math.abs(Number(t.kg)), t.box_kg == null ? null : Number(t.box_kg))}`,
       who: u.name,
     })), new Promise<void>((r) => setTimeout(r, 4000))]); // 알림이 느려도 취소 응답을 붙잡지 않는다
     return NextResponse.json({ ok: true });

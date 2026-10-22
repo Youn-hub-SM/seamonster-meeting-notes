@@ -1,7 +1,7 @@
 // 파도소리(제조사) 재고 — 공용 타입·상수·표기(클라이언트/서버 공용, DB 코드 없음).
 //  품목 마스터 1행 = SKU 1개. 재고는 원장(factory.stock_txns)의 kg 합계이고, 같은 품목 안에서
-//  제조일자가 다르면 따로 센다(= 로트). 수량 기준은 kg(2026-10-22 대표: 원물 관리라 박스가 아니라 총 kg).
-//  박스 중량·박스 수는 입고 때 적는 참고 정보(총 kg 계산 보조)다.
+//  [제조일자 × 박스 중량]이 다르면 따로 센다(= 로트). 수량 기준은 kg(2026-10-22 대표: 원물 관리라 총 kg)이고
+//  박스 수는 kg ÷ 박스 중량으로 보인다(소수 가능 — 대표: "박스가 보이면서 기준은 kg"). 박스 중량 없는 로트는 kg 만.
 //  DB 접근은 factory-db.ts(서버 전용). 이 파일에 supabase import 를 넣지 말 것 —
 //  화면이 이 파일을 import 하므로 서비스 키가 번들에 실린다.
 
@@ -42,9 +42,10 @@ export interface FactoryProduct {
   updated_at?: string;
 }
 
-// 로트 = 품목 × 제조일자 (factory.stock_lots 뷰 1행, 단위 kg)
+// 로트 = 품목 × 제조일자 × 박스 중량 (factory.stock_lots 뷰 1행, 단위 kg · 박스 수 = kg ÷ box_kg)
 export interface StockLot {
   mfg_date: string | null;
+  box_kg: number | null;        // 박스 중량(없으면 kg 만)
   kg: number;                   // 현재 kg
   in_kg: number;
   out_kg: number;
@@ -107,6 +108,24 @@ export const boxStr = (n: number) => `${n.toLocaleString("ko-KR")}박스`;
 // 부호 붙인 kg — "+340kg" / "−120kg"
 export const signedKg = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${kgStr(Math.abs(n))}`;
 
+// 박스 수 — kg ÷ 박스 중량(소수 둘째 자리). 박스 중량이 없으면 null
+export const boxesOf = (kg: number, box_kg: number | null | undefined) =>
+  box_kg && Number(box_kg) > 0 ? Math.round((kg / Number(box_kg)) * 100) / 100 : null;
+// 소수 박스 표기 — "21.25박스"
+export const boxQty = (n: number) => `${n.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}박스`;
+// kg 뒤에 박스를 괄호로 — "340kg (21.25박스)". 박스 중량이 없으면 kg 만
+export function kgBox(kg: number, box_kg: number | null | undefined): string {
+  const b = boxesOf(kg, box_kg);
+  return b == null ? kgStr(kg) : `${kgStr(kg)} (${boxQty(Math.abs(b))})`;
+}
+// 박스 중량별 박스 수 — "16kg 21.25박스 · 10kg 10박스" (잔량 있는 로트만, 무거운 순). 중량 없는 로트는 "중량 미상 120kg"
+export function boxBreakdown(lots: Pick<StockLot, "box_kg" | "kg">[]): string {
+  const by = new Map<number | null, number>();
+  for (const l of lots) if (l.kg !== 0) by.set(l.box_kg, (by.get(l.box_kg) || 0) + l.kg);
+  if (by.size === 0) return "";
+  return [...by.entries()].sort((a, b) => (b[0] ?? -1) - (a[0] ?? -1))
+    .map(([bk, kg]) => (bk ? `${kgStr(bk)} ${boxQty(boxesOf(kg, bk)!)}` : `중량 미상 ${kgStr(kg)}`)).join(" · ");
+}
 // 입고 때 적은 박스 참고 — "16kg × 3박스" (둘 다 있을 때만, 없으면 "")
 export function boxNote(box_kg: number | null | undefined, boxes: number | null | undefined): string {
   if (!box_kg || !boxes) return "";
@@ -123,9 +142,10 @@ export function productLabel(p: { name: string; spec?: string | null }): string 
   return p.spec ? `${p.name} ${p.spec}` : p.name;
 }
 
-// 로트 이름 — "제조 2026-09-01" (제조일자 없으면 '제조일 미상'). 007 부터 박스 중량은 로트를 나누지 않는다
-export function lotLabel(l: { mfg_date: string | null }): string {
-  return l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상";
+// 로트 이름 — "제조 2026-09-01 · 16kg박스" (제조일자 없으면 '제조일 미상', 박스 중량 없으면 날짜만)
+export function lotLabel(l: { mfg_date: string | null; box_kg?: number | null }): string {
+  const d = l.mfg_date ? `제조 ${l.mfg_date}` : "제조일 미상";
+  return l.box_kg ? `${d} · ${kgStr(Number(l.box_kg))}박스` : d;
 }
 
 // 품목 변경 이력의 필드 이름

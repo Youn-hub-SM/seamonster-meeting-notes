@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { factoryDb, factoryWho, isPending005, PENDING_005, isPending007, PENDING_007 } from "@/app/lib/factory-db";
-import { TXN_TYPES, kgStr, kgNum, lotLabel, productLabel, signedKg, type HistEvent, type TxnType } from "@/app/lib/factory";
+import { TXN_TYPES, kgStr, kgNum, kgBox, lotLabel, productLabel, signedKg, type HistEvent, type TxnType } from "@/app/lib/factory";
 import { notifyFactory, factoryMsg } from "@/app/lib/factory-notify";
 
 export const dynamic = "force-dynamic";
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
     if (!("kg" in saved[0])) return pending7(); // 옛 함수가 돌았다(007 미적용)
 
     // 알림 1건(입력 1회) — 줄이 여러 개면 한 줄로 이어 붙인다
-    const parts = saved.map((t) => `${prod.get(t.product_id)?.name ?? "품목"}(${lotLabel({ mfg_date: t.mfg_date })}) ${signedKg(Number(t.kg))}`);
+    const parts = saved.map((t) => `${prod.get(t.product_id)?.name ?? "품목"}(${lotLabel({ mfg_date: t.mfg_date })}) ${Number(t.kg) < 0 ? "−" : "+"}${kgBox(Math.abs(Number(t.kg)), num(t.box_kg))}`);
     const totalKg = saved.reduce((s, t) => s + Math.abs(Number(t.kg)), 0);
     await notifySoon(notifyFactory(factoryMsg({
       event: type,

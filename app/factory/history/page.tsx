@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
-import { HIST_COLOR, FIELD_LABEL, boxNote, kgStr, kgNum, lotLabel, signedKg, type HistEvent, type HistKind } from "@/app/lib/factory";
+import { HIST_COLOR, FIELD_LABEL, boxQty, boxesOf, kgStr, kgNum, lotLabel, signedKg, type HistEvent, type HistKind } from "@/app/lib/factory";
 import { today, daysAgo } from "../util";
 
 const KINDS: ("전체" | HistKind)[] = ["전체", "입고", "출고", "조정", "취소", "변경"];
@@ -25,9 +25,7 @@ function describe(e: HistEvent): string {
     if (f === "삭제") return "품목 삭제";
     return `${FIELD_LABEL[f] || f} ${money(f, e.old_value)} → ${money(f, e.new_value)}`;
   }
-  const parts = [lotLabel({ mfg_date: e.mfg_date ?? null })];
-  const box = boxNote(e.box_kg, e.boxes);
-  if (box) parts.push(box);
+  const parts = [lotLabel({ mfg_date: e.mfg_date ?? null, box_kg: e.box_kg })];
   if (e.txn_type === "조정" && e.target_kg != null && e.kg != null) parts.push(`실사 ${kgStr(e.target_kg)}(이전 ${kgStr(kgNum(e.target_kg - e.kg))})`);
   if (e.partner) parts.push(e.partner);
   const head = e.kind === "취소" ? `${e.txn_type} 기록 취소 · ` : "";
@@ -78,6 +76,8 @@ export default function FactoryHistoryPage() {
 
   // 취소 = 그 기록의 반대 효과(입고 +30kg 취소 → −30kg)
   const qtyKg = (e: HistEvent) => (e.kg == null || e.kind === "변경" ? null : e.kind === "취소" ? -e.kg : e.kg);
+  // 박스 수 = kg ÷ 로트 박스 중량(부호는 kg 를 따른다)
+  const qtyBox = (e: HistEvent) => { const q = qtyKg(e); const b = q == null ? null : boxesOf(Math.abs(q), e.box_kg); return b == null ? null : (q! < 0 ? "−" : "+") + boxQty(b); };
 
   async function cancel(e: HistEvent) {
     if (!e.txn_id) return;
@@ -146,7 +146,7 @@ export default function FactoryHistoryPage() {
             <table className="b2b-table">
               <thead><tr>
                 <th>날짜</th><th>유형</th><th>품목</th><th>내용</th>
-                <th className="num">kg</th><th>담당</th><th>메모</th><th></th>
+                <th className="num">kg</th><th className="num">박스</th><th>담당</th><th>메모</th><th></th>
               </tr></thead>
               <tbody>
                 {list.map((e) => {
@@ -158,6 +158,7 @@ export default function FactoryHistoryPage() {
                       <td><strong>{e.name || "-"}</strong><div className="fac-sub">{e.sku || ""}</div></td>
                       <td>{describe(e)}{cancelledNote(e) && <div>{cancelledNote(e)}</div>}</td>
                       <td className="num fac-num">{q == null ? "-" : signedKg(q)}</td>
+                      <td className="num fac-num">{qtyBox(e) ?? "-"}</td>
                       <td className="sm-nowrap">{e.who || "-"}</td>
                       <td className="sm-faint">{e.memo || "-"}</td>
                       <td className="sm-nowrap">{cancelBtn(e)}</td>
@@ -178,7 +179,7 @@ export default function FactoryHistoryPage() {
                     <span className="fac-hist-name">{e.name || "-"}</span>
                     {q != null && <span className="fac-hist-qty fac-num">{signedKg(q)}</span>}
                   </div>
-                  <div className="fac-hist-desc">{describe(e)}</div>
+                  <div className="fac-hist-desc">{describe(e)}{qtyBox(e) ? ` · ${qtyBox(e)}` : ""}</div>
                   <div className="fac-hist-meta">
                     <span>{e.date} {stamp(e)}</span>
                     <span>{e.who || "-"}</span>

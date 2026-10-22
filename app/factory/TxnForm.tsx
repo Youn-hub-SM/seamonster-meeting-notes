@@ -1,10 +1,11 @@
 "use client";
 
-// 입고·출고·조정 한 번에 여러 품목 — 씨몬스터 입고/출고(PurchaseForm)와 같은 흐름에 제조일자를 더했다. 수량 기준 = kg(007).
+// 입고·출고·조정 한 번에 여러 품목 — 씨몬스터 입고/출고(PurchaseForm)와 같은 흐름에 제조일자·박스 중량을 더했다.
+//  수량 기준 = kg(007), 박스 수는 kg ÷ 박스 중량(008) — 어느 칸을 적어도 나머지가 따라 채워진다(대표: "박스가 보이면서 기준은 kg").
 //  입고: 품목마다 [박스 중량 · 박스 수 · 총 kg · 제조일자] 줄(여러 줄 가능). 박스 중량·박스 수를 적으면 총 kg 이 곱으로 채워지고,
-//        총 kg 만 바로 적어도 된다(박스 칸은 참고).
-//  출고: 품목의 로트(제조일자)마다 kg — 오래된 입고부터 보인다
-//  조정: 로트마다 실사 kg(비우면 그대로) + 새 로트. 서버가 현재 kg 과의 차이만 기록한다.
+//        총 kg 만 바로 적어도 된다. 박스 중량을 적으면 그 중량이 로트를 나눈다.
+//  출고: 품목의 로트(제조일자 × 박스 중량)마다 박스 수 또는 kg — 둘이 연동(박스 중량이 있는 로트). 오래된 입고부터 보인다
+//  조정: 로트마다 실사 박스/실사 kg(비우면 그대로) + 새 로트. 서버가 현재 kg 과의 차이만 기록한다.
 //  새 품목(입고만, 2026-10-20): 검색해서 없으면 '+ 새 품목으로 입고' → 품목명·규격·원산지만 적는다.
 //   칸 배치(2026-10-22 대표 지시): 품목 · 규격 · 박스 중량 · 박스 수 · 총 kg / 원산지(선택) · 제조일자(기본 오늘) — 첫 줄의
 //   수량·제조일자는 첫 로트 줄(lines[0])의 값이다. 줄을 더하면 아래에 보통 줄로 붙는다.
@@ -14,10 +15,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchKoQuery, hangulInputValue } from "@/app/lib/hangul";
 import { useEscClose } from "@/app/lib/use-esc";
-import { ORIGINS, kgStr, kgNum, lotLabel, productKey, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
+import { ORIGINS, boxBreakdown, kgBox, kgStr, kgNum, lotLabel, productKey, signedKg, type StockRow, type TxnType } from "@/app/lib/factory";
 import { today } from "./util";
 
-// kg = 이 줄의 수량(입고·출고) 또는 실사 kg(조정). box_kg·boxes = 입고 참고(선택). have = 기존 로트의 현재 kg.
+// kg = 이 줄의 수량(입고·출고) 또는 실사 kg(조정). box_kg = 박스 중량(로트 줄은 로트의 값), boxes = 박스 수. have = 기존 로트의 현재 kg.
 type Line = { key: string; lot: boolean; mfg_date: string; box_kg: string; boxes: string; kg: string; have: number; in_date: string | null };
 // draft = 아직 등록 전인 새 품목(입고 저장 때 등록). product_id 는 그때까지 비어 있다.
 type Block = { key: string; product_id: string; lines: Line[]; draft?: { name: string; spec: string; origin: string } };
@@ -26,11 +27,12 @@ const normName = (s: string) => s.trim().replace(/\s+/g, " ");
 let seq = 0;
 const k = () => `k${++seq}`;
 const newLine = (): Line => ({ key: k(), lot: false, mfg_date: today(), box_kg: "", boxes: "", kg: "", have: 0, in_date: null });
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 function makeLines(p: StockRow, type: TxnType): Line[] {
   if (type === "입고") return [newLine()];
   const lots = p.lots.filter((l) => (type === "출고" ? l.kg > 0 : l.kg !== 0));
-  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: "", boxes: "", kg: "", have: l.kg, in_date: l.in_date }));
+  return lots.map((l) => ({ key: k(), lot: true, mfg_date: l.mfg_date || "", box_kg: l.box_kg == null ? "" : String(l.box_kg), boxes: "", kg: "", have: l.kg, in_date: l.in_date }));
 }
 
 const TITLE: Record<TxnType, string> = { 입고: "입고", 출고: "출고", 조정: "조정" };
@@ -116,14 +118,24 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
     }
   }
 
-  // 줄 수정 — 박스 중량·박스 수를 바꿨고 둘 다 있으면 총 kg 을 곱으로 채운다(총 kg 을 직접 고치면 그 값이 남는다)
+  // 줄 수정 — 박스 중량이 있으면 박스 수 ↔ kg 이 연동된다.
+  //  새 줄: 박스 중량·박스 수를 바꿨고 둘 다 있으면 총 kg = 곱. 총 kg 을 직접 고치면 박스 수 = kg ÷ 중량.
+  //  로트 줄(출고·조정): 박스 수를 적으면 kg = 박스 × 중량, kg 를 적으면 박스 = kg ÷ 중량(소수 둘째 자리).
   const setLine = (bk: string, lk: string, patch: Partial<Line>) =>
     setBlocks((bs) => bs.map((b) => (b.key !== bk ? b : {
       ...b,
       lines: b.lines.map((l) => {
         if (l.key !== lk) return l;
         const n = { ...l, ...patch };
-        if (("box_kg" in patch || "boxes" in patch) && Number(n.box_kg) > 0 && Number(n.boxes) > 0) n.kg = String(kgNum(Number(n.box_kg) * Number(n.boxes)));
+        const bk2 = Number(n.box_kg);
+        if (bk2 > 0) {
+          if ("boxes" in patch || "box_kg" in patch) {
+            if (n.boxes.trim() !== "" && Number(n.boxes) >= 0) n.kg = String(kgNum(bk2 * Number(n.boxes)));
+            else if ("box_kg" in patch && n.kg.trim() !== "") n.boxes = String(r2(Number(n.kg) / bk2));
+          } else if ("kg" in patch) {
+            n.boxes = n.kg.trim() === "" ? "" : String(r2(Number(n.kg) / bk2));
+          }
+        }
         return n;
       }),
     })));
@@ -150,7 +162,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
 
   async function save() {
     setError("");
-    if (filled.length === 0) { setError(type === "조정" ? "실사 kg 을 입력하세요." : "kg 을 입력하세요."); return; }
+    if (filled.length === 0) { setError(type === "조정" ? "실사 kg(또는 박스 수)을 입력하세요." : "kg(또는 박스 수)을 입력하세요."); return; }
     const draftKeys = new Map<string, string>();
     for (const b of blocks) {
       if (!b.draft) continue;
@@ -164,23 +176,22 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
       const name = blockName(b);
       const n = Number(l.kg);
       if (!Number.isFinite(n) || (type === "조정" ? n < 0 : n <= 0)) { setError(`${name}: ${type === "조정" ? "실사 kg 은 0 이상" : "kg 은 0보다 크게"} 입력하세요.`); return; }
-      const bk = numOr(l.box_kg), bx = numOr(l.boxes);
+      const bk = numOr(l.box_kg);
       if (bk !== null && !(bk > 0)) { setError(`${name}: 박스 중량(kg)이 올바르지 않습니다.`); return; }
-      if (bx !== null && (!Number.isInteger(bx) || bx < 1)) { setError(`${name}: 박스 수는 1 이상 정수로 입력하세요.`); return; }
-      if (type === "출고" && n > l.have + 0.0005) { setError(`${name} (${lotLabel({ mfg_date: l.mfg_date || null })}): 재고 ${kgStr(l.have)}보다 많습니다.`); return; }
+      if (type === "출고" && n > l.have + 0.0005) { setError(`${name} (${lotLabel({ mfg_date: l.mfg_date || null, box_kg: bk })}): 재고 ${kgBox(l.have, bk)}보다 많습니다.`); return; }
     }
     // 같은 로트를 두 줄에 적으면(입고 새 줄끼리·조정 새 로트가 기존 로트와 겹침) 합계가 헷갈린다 — 막는다
     const seen = new Set<string>();
     for (const { b, l } of filled) {
-      const key = `${b.product_id || b.key}|${l.mfg_date}`;
-      if (seen.has(key)) { setError(`${blockName(b)}: 같은 제조일자가 두 줄에 있습니다 — 한 줄로 합치세요.`); return; }
+      const key = `${b.product_id || b.key}|${l.mfg_date}|${numOr(l.box_kg) ?? ""}`;
+      if (seen.has(key)) { setError(`${blockName(b)}: 같은 제조일자·박스 중량이 두 줄에 있습니다 — 한 줄로 합치세요.`); return; }
       seen.add(key);
     }
     if (type === "조정") {
       for (const { b, l } of filled) {
         if (l.lot) continue;
         const p = byId.get(b.product_id);
-        if (p?.lots.some((x) => (x.mfg_date || "") === l.mfg_date && x.kg !== 0)) {
+        if (p?.lots.some((x) => (x.mfg_date || "") === l.mfg_date && (x.box_kg ?? null) === numOr(l.box_kg) && x.kg !== 0)) {
           setError(`${p.name}: 이미 있는 로트입니다 — 위 목록에서 실사 kg 을 적으세요.`); return;
         }
       }
@@ -201,11 +212,15 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
         drafts.forEach((b, i) => idOf.set(b.key, pj.products[i].id));
         if (pj.warn) specWarn = ` ${pj.warn}`; // 규격 칸 DB 미적용(factory/006)
       }
-      const lines = filled.map(({ b, l }) => ({
-        product_id: b.draft ? idOf.get(b.key) : b.product_id, mfg_date: l.mfg_date || null,
-        box_kg: numOr(l.box_kg), boxes: numOr(l.boxes),
-        ...(type === "조정" ? { target_kg: Number(l.kg) } : { kg: Number(l.kg) }),
-      }));
+      // box_kg 는 로트 키(출고·조정은 로트의 값), boxes 는 정수일 때만 참고로 보낸다(소수 박스는 kg 로만 남는다)
+      const lines = filled.map(({ b, l }) => {
+        const bx = numOr(l.boxes);
+        return {
+          product_id: b.draft ? idOf.get(b.key) : b.product_id, mfg_date: l.mfg_date || null,
+          box_kg: numOr(l.box_kg), boxes: bx !== null && Number.isInteger(bx) && bx > 0 ? bx : null,
+          ...(type === "조정" ? { target_kg: Number(l.kg) } : { kg: Number(l.kg) }),
+        };
+      });
       const res = await fetch("/api/factory/txns", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, txn_date: type === "조정" ? today() : date, partner: type === "조정" ? "" : partner, memo, lines, batch_id: batch }),
@@ -218,8 +233,8 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
     setSaving(false);
   }
 
-  // 새 줄의 수량 칸(입고: 박스 중량·박스 수·총 kg / 조정 새 로트: 실사 kg) — 새 품목 머리와 보통 줄이 같이 쓴다
-  const qtyFields = (b: Block, l: Line) => type === "입고" ? (
+  // 새 줄의 수량 칸(입고: 박스 중량·박스 수·총 kg / 조정 새 로트: 박스 중량·실사 박스·실사 kg) — 새 품목 머리와 보통 줄이 같이 쓴다
+  const qtyFields = (b: Block, l: Line) => (
     <>
       <label className="fac-f fac-f-kg">
         <span>박스 중량(kg)</span>
@@ -227,22 +242,16 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
           onChange={(e) => setLine(b.key, l.key, { box_kg: e.target.value })} />
       </label>
       <label className="fac-f fac-f-qty">
-        <span>박스 수</span>
-        <input className="b2b-input" type="number" inputMode="numeric" min={1} step={1} value={l.boxes} placeholder="선택"
+        <span>{type === "조정" ? "실사 박스" : "박스 수"}</span>
+        <input className="b2b-input" type="number" inputMode="decimal" min={0} step={1} value={l.boxes} placeholder="선택"
           onChange={(e) => setLine(b.key, l.key, { boxes: e.target.value })} />
       </label>
       <label className="fac-f fac-f-qty">
-        <span>총 kg</span>
+        <span>{type === "조정" ? "실사 kg" : "총 kg"}</span>
         <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1" value={l.kg}
           onChange={(e) => setLine(b.key, l.key, { kg: e.target.value })} />
       </label>
     </>
-  ) : (
-    <label className="fac-f fac-f-qty">
-      <span>실사 kg</span>
-      <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1" value={l.kg}
-        onChange={(e) => setLine(b.key, l.key, { kg: e.target.value })} />
-    </label>
   );
 
   return (
@@ -285,7 +294,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                 {matches.map((p, i) => (
                   <button key={p.id} type="button" className={`fac-suggest-item ${i === active ? "is-active" : ""}`} onClick={() => addProduct(p)} onMouseEnter={() => setActive(i)}>
                     <span><strong>{p.name}</strong>{p.spec && <span className="fac-spec"> {p.spec}</span>} <span className="fac-sub">{[p.sku, p.origin].filter(Boolean).join(" · ")}</span></span>
-                    <span className="fac-sub">{kgStr(p.kg)}</span>
+                    <span className="fac-sub">{kgStr(p.kg)}{boxBreakdown(p.lots) ? ` · ${boxBreakdown(p.lots)}` : ""}</span>
                   </button>
                 ))}
                 {canCreate && (
@@ -346,7 +355,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                   })() : p && (
                     <div className="fac-blk-name">
                       <strong>{p.name}{p.spec && <span className="fac-spec"> {p.spec}</span>}</strong>
-                      <span className="fac-sub">{[p.sku, p.origin, `재고 ${kgStr(p.kg)}`].filter(Boolean).join(" · ")}</span>
+                      <span className="fac-sub">{[p.sku, p.origin, `재고 ${kgStr(p.kg)}`, boxBreakdown(p.lots)].filter(Boolean).join(" · ")}</span>
                     </div>
                   )}
                   <button type="button" className="b2b-link-btn fac-x" onClick={() => removeBlock(b.key)} aria-label="품목 빼기">✕</button>
@@ -356,25 +365,37 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
                   <div className="fac-sub fac-blk-empty">{type === "출고" ? "출고할 재고가 없습니다." : "로트가 없습니다."}</div>
                 )}
 
-                {b.lines.filter((l, i) => !(b.draft && i === 0)).map((l) => l.lot ? (
-                  // 기존 로트 — 출고 kg / 조정 실사 kg
-                  <div key={l.key} className="fac-line is-lot">
-                    <div className="fac-line-lot">
-                      <span>{lotLabel({ mfg_date: l.mfg_date || null })}</span>
-                      <span className="fac-sub">{l.in_date ? `입고 ${l.in_date} · ` : ""}재고 {kgStr(l.have)}</span>
+                {b.lines.filter((l, i) => !(b.draft && i === 0)).map((l) => l.lot ? (() => {
+                  // 기존 로트 — 출고 박스/kg · 조정 실사 박스/kg (박스 중량이 있는 로트만 박스 칸)
+                  const bk = numOr(l.box_kg);
+                  return (
+                    <div key={l.key} className="fac-line is-lot">
+                      <div className="fac-line-lot">
+                        <span>{lotLabel({ mfg_date: l.mfg_date || null, box_kg: bk })}</span>
+                        <span className="fac-sub">{l.in_date ? `입고 ${l.in_date} · ` : ""}재고 {kgBox(l.have, bk)}</span>
+                      </div>
+                      <div className="fac-line-qty">
+                        {bk !== null && (
+                          <>
+                            <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.01" value={l.boxes}
+                              placeholder={type === "조정" ? String(r2(l.have / bk)) : "0"}
+                              onChange={(e) => setLine(b.key, l.key, { boxes: e.target.value })}
+                              aria-label={type === "조정" ? "실사 박스 수" : "출고 박스 수"} />
+                            <span className="fac-unit">박스</span>
+                          </>
+                        )}
+                        <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1"
+                          max={type === "출고" ? l.have : undefined} value={l.kg}
+                          placeholder={type === "조정" ? String(l.have) : "0"}
+                          onChange={(e) => setLine(b.key, l.key, { kg: e.target.value })}
+                          aria-label={type === "조정" ? "실사 kg" : "출고 kg"} />
+                        <span className="fac-unit">kg</span>
+                        {type === "출고" && <button type="button" className="b2b-link-btn" onClick={() => setLine(b.key, l.key, { kg: String(l.have) })}>전량</button>}
+                      </div>
                     </div>
-                    <div className="fac-line-qty">
-                      <input className="b2b-input" type="number" inputMode="decimal" min={0} step="0.1"
-                        max={type === "출고" ? l.have : undefined} value={l.kg}
-                        placeholder={type === "조정" ? String(l.have) : "0"}
-                        onChange={(e) => setLine(b.key, l.key, { kg: e.target.value })}
-                        aria-label={type === "조정" ? "실사 kg" : "출고 kg"} />
-                      <span className="fac-unit">kg</span>
-                      {type === "출고" && <button type="button" className="b2b-link-btn" onClick={() => setLine(b.key, l.key, { kg: String(l.have) })}>전량</button>}
-                    </div>
-                  </div>
-                ) : (
-                  // 새 줄 — 입고(박스 중량 · 박스 수 · 총 kg · 제조일자) / 조정 새 로트(실사 kg · 제조일자)
+                  );
+                })() : (
+                  // 새 줄 — 입고(박스 중량 · 박스 수 · 총 kg · 제조일자) / 조정 새 로트(박스 중량 · 실사 박스 · 실사 kg · 제조일자)
                   <div key={l.key} className="fac-line">
                     {qtyFields(b, l)}
                     <label className="fac-f">
@@ -389,7 +410,7 @@ export default function TxnForm({ rows, initialType, initialProductId, onClose, 
 
                 {type !== "출고" && (
                   <button type="button" className="b2b-link-btn fac-add-line" onClick={() => addLine(b.key)}>
-                    + {type === "입고" ? "제조일자 추가" : "새 로트"}
+                    + {type === "입고" ? "제조일자·중량 추가" : "새 로트"}
                   </button>
                 )}
               </section>
