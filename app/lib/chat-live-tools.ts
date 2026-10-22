@@ -56,13 +56,14 @@ export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
       name: "ga_report", ...s,
       description: "구글 애널리틱스(GA4) 공식몰 유입·행동 데이터를 바로 조회합니다(DB 에 없음). 세션·사용자·신규·참여·장바구니·결제 시작·구매·구매액·페이지 조회·이탈률·참여율·이벤트 수·평균 세션 시간을 날짜·채널 그룹·소스/매체·캠페인·랜딩 페이지·페이지 경로·페이지 제목·이벤트·기기·신규/재방문으로 나눠 봅니다(상품명 차원은 상품 측정항목과만). filter 로 특정 페이지('/buy')·채널만 거릅니다. '어디서 들어왔나·유입은 늘었는데 왜 안 샀나·전환율·특정 페이지 이탈률' 질문에 씁니다. 세션+구매를 함께 넣으면 구매 전환율 열이 붙습니다. 페이지 사이의 이동·단계별 이탈은 ga_funnel. 결과는 표 카드로 붙습니다. 최대 400일.",
       input_schema: {
-        type: "object", additionalProperties: false, required: ["since", "until", "dimensions", "metrics", "limit", "filter"],
+        type: "object", additionalProperties: false, required: ["since", "until", "dimensions", "metrics", "limit", "filter", "custom_dimension"],
         properties: {
           since: { type: "string", description: "시작일 YYYY-MM-DD" },
           until: { type: "string", description: "끝일 YYYY-MM-DD(어제 이전)" },
           dimensions: { type: "array", items: { type: "string", enum: Object.keys(GA_DIMENSIONS) }, description: "나눌 기준 0~3개. 비우면 기간 합계 한 줄" },
           metrics: { type: "array", minItems: 1, items: { type: "string", enum: Object.keys(GA_METRICS) }, description: "측정항목 1개 이상" },
           limit: { type: ["integer", "null"], description: "행 수 상한(기본 200, 최대 5000)" },
+          custom_dimension: { type: ["string", "null"], description: "사용자 정의 측정기준 API 이름 하나(예: customEvent:sm_label). 지침의 'GA4 — 우리 속성에 실제로 있는 것' 목록에 있는 것만. 보통 null" },
           filter: {
             type: ["object", "null"], additionalProperties: false, required: ["dimension", "match", "value"],
             description: "행을 거를 조건 하나(없으면 null). 예: 페이지 '/buy'만 → {dimension:'page_path', match:'exact', value:'/buy'}",
@@ -246,7 +247,8 @@ export async function runLiveTool(sb: SupabaseClient, state: LiveState, name: Li
     const fi = input.filter && typeof input.filter === "object" ? (input.filter as { dimension?: unknown; match?: unknown; value?: unknown }) : null;
     const filter = fi && typeof fi.dimension === "string" && fi.dimension in GA_DIMENSIONS && typeof fi.value === "string" && fi.value.trim()
       ? { dimension: fi.dimension as GaDimensionKey, match: (["exact", "contains", "begins_with"].includes(String(fi.match)) ? fi.match : "exact") as GaMatch, value: fi.value.trim() } : null;
-    const r = await runGaReport({ since, until, dimensions: dims, metrics: mets, limit: typeof input.limit === "number" ? input.limit : 200, filter });
+    const extraDimension = typeof input.custom_dimension === "string" && input.custom_dimension.trim() ? input.custom_dimension.trim() : null;
+    const r = await runGaReport({ since, until, dimensions: dims, metrics: mets, limit: typeof input.limit === "number" ? input.limit : 200, filter, extraDimension });
     const title = `GA4 ${dims.map((d) => GA_DIMENSIONS[d].label).join("·") || "합계"}${filter ? ` (${GA_DIMENSIONS[filter.dimension].label} ${filter.value})` : ""} ${since}~${until}`;
     const body = JSON.stringify(r.rows.slice(0, 120));
     return {

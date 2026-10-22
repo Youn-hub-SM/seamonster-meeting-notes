@@ -147,6 +147,7 @@ export const GA_METRICS = {
   event_count: { api: "eventCount", label: "이벤트 수" },
   avg_session_sec: { api: "averageSessionDuration", label: "평균 세션 시간(초)" },
   views_per_session: { api: "screenPageViewsPerSession", label: "세션당 페이지 조회" },
+  key_events: { api: "keyEvents", label: "주요 이벤트" },                      // GA 에서 '주요 이벤트(전환)'로 표시한 이벤트 수
   item_views: { api: "itemsViewed", label: "상품 조회" },
   items_purchased: { api: "itemsPurchased", label: "상품 구매 수량" },
   item_revenue: { api: "itemRevenue", label: "상품 구매액(원)" },
@@ -163,8 +164,12 @@ const RATE_METRICS = new Set<GaMetricKey>(["bounce_rate", "engagement_rate"]); /
 
 // since·until = YYYY-MM-DD(어제까지). 행 = 차원 조합, 측정항목 순. 구매·세션이 함께 있으면 '구매 전환율(%)' 열을 덧붙인다.
 //  filter = 차원 하나로 행을 거른다(예: page_path exact '/buy'). 필터 차원은 dimensions 에 없어도 된다.
-export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number; filter?: GaFilter | null }): Promise<GaReportResult> {
+//  extraDimension = 사용자 정의 측정기준 API 이름(customEvent:sm_label 등, 속성 메타데이터에 있는 것만) — 열 이름은 ':' 뒤 부분
+const CUSTOM_DIM_RE = /^custom(Event|User|Item):[A-Za-z0-9_]{1,40}$/;
+export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number; filter?: GaFilter | null; extraDimension?: string | null }): Promise<GaReportResult> {
   const dims = [...new Set(p.dimensions)].filter((d) => d in GA_DIMENSIONS);
+  const extra = p.extraDimension && CUSTOM_DIM_RE.test(p.extraDimension) ? p.extraDimension : null;
+  const extraLabel = extra ? extra.split(":")[1] : "";
   const mets = [...new Set(p.metrics)].filter((m) => m in GA_METRICS);
   if (!mets.length) throw new Error("측정항목(metrics)이 하나 이상 필요합니다.");
   const itemDim = dims.includes("item_name");
@@ -180,7 +185,7 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       dateRanges: [{ startDate: p.since, endDate: p.until }],
-      dimensions: dims.map((d) => ({ name: GA_DIMENSIONS[d].api })),
+      dimensions: [...dims.map((d) => ({ name: GA_DIMENSIONS[d].api })), ...(extra ? [{ name: extra }] : [])],
       metrics: mets.map((m) => ({ name: GA_METRICS[m].api })),
       ...(f ? { dimensionFilter: { filter: { fieldName: GA_DIMENSIONS[f.dimension].api, stringFilter: { matchType: MATCH_API[f.match] || "EXACT", value: String(f.value).trim(), caseSensitive: false } } } } : {}),
       orderBys: dims.includes("date") ? [{ dimension: { dimensionName: "date" } }] : [{ metric: { metricName: GA_METRICS[mets[0]].api }, desc: true }],
@@ -196,7 +201,7 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
   if (!res.ok) throw new Error(`GA API ${res.status}: ${j.error?.message || "조회 실패"}`);
   const si = mets.indexOf("sessions"), pi = mets.indexOf("purchases");
   const withRate = si >= 0 && pi >= 0;
-  const columns = [...dims.map((d) => GA_DIMENSIONS[d].label), ...mets.map((m) => GA_METRICS[m].label), ...(withRate ? ["구매 전환율(%)"] : [])];
+  const columns = [...dims.map((d) => GA_DIMENSIONS[d].label), ...(extra ? [extraLabel] : []), ...mets.map((m) => GA_METRICS[m].label), ...(withRate ? ["구매 전환율(%)"] : [])];
   const all = j.rows || [];
   const rows = all.slice(0, limit).map((r) => {
     const row: Record<string, unknown> = {};
@@ -204,6 +209,7 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
       const v = r.dimensionValues?.[i]?.value ?? "";
       row[GA_DIMENSIONS[d].label] = d === "date" && v.length === 8 ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}` : v;
     });
+    if (extra) row[extraLabel] = r.dimensionValues?.[dims.length]?.value ?? "";
     mets.forEach((m, i) => {
       const v = Number(r.metricValues?.[i]?.value) || 0;
       row[GA_METRICS[m].label] = m === "revenue" || m === "item_revenue" ? Math.round(v)
