@@ -55,7 +55,7 @@ export async function runSql<T>(sb: SupabaseClient, q: string, limit = 5000): Pr
   return (Array.isArray(data) ? data : []) as T[];
 }
 const inList = (dates: string[]) => dates.filter((d) => DATE_RE.test(d)).map((d) => `'${d}'`).join(",");
-const SKU_RE = /^[A-Za-z0-9_.\-]{1,64}$/;
+const SKU_RE = /^[A-Za-z0-9_.\-+/]{1,64}$/; // 2026-10-22 '+'(묶음 GA-100-K-100X5+D)·'/'(BULK-DSC-100/b2b) 허용 — 상품 마스터에 실제로 있다. 따옴표는 여전히 막고 SQL 엔 이스케이프
 const CHANNEL_RE = /^[가-힣A-Za-z0-9 _()\-]{1,30}$/;
 export const WHOLESALE = "도매"; // 발송완료 시점에 한꺼번에 잡혀 날마다 들쭉날쭉 — 전체·SKU 이상 판정에서 뺀다
 
@@ -516,8 +516,8 @@ export async function runTool(sb: SupabaseClient, ctx: { since: string; end: str
     // 35일을 넘으면 주 단위(월요일 시작)×채널로 묶는다 — 날짜×채널 행이 글자 상한에 잘려 앞 기간이 빠지지 않게
     const weekly = days > 35;
     const rows = await runSql(sb, weekly
-      ? `select date_trunc('week', order_date)::date::text as week, channel, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where upper(sku_code) = '${sku}' and order_date between '${since}' and '${y}' group by 1, 2 order by 1 desc, 2`
-      : `select order_date::text as d, channel, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where upper(sku_code) = '${sku}' and order_date between '${since}' and '${y}' group by 1, 2 order by 1 desc, 2`, 3000);
+      ? `select date_trunc('week', order_date)::date::text as week, channel, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where upper(sku_code) = '${sku.replace(/'/g, "''")}' and order_date between '${since}' and '${y}' group by 1, 2 order by 1 desc, 2`
+      : `select order_date::text as d, channel, sum(quantity)::int as qty, sum(subtotal_amount)::bigint as rev from sales_orders where upper(sku_code) = '${sku.replace(/'/g, "''")}' and order_date between '${since}' and '${y}' group by 1, 2 order by 1 desc, 2`, 3000);
     return `${win}${weekly ? " · 주 단위(월요일 시작, 첫·끝 주는 일부)" : ""}\n${fitJson(rows, 12000)}`;
   }
   if (name === "channel_trend") {
