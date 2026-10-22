@@ -240,8 +240,7 @@ export default function ReportPage() {
   const [err, setErr] = useState("");
   const [pendingMsg, setPendingMsg] = useState("");    // 139 미적용 안내
   const [threads, setThreads] = useState<Thread[]>([]);
-  // 대화 목록은 기본으로 숨긴다(2026-10-22 대표: 공용 계정으로 들어온 동료의 대화까지 보여 "나도 보지 않고 싶다") —
-  //  주소에 ?all=1 을 붙여 열 때만 목록을 불러온다(서버는 관리자에게만 전원 목록, 그 밖엔 본인 것). 이어서 묻기는 같은 화면 안에서만.
+  // 목록은 본인 대화만. 주소에 ?all=1 을 붙이면 전원 대화(서버가 관리자에게만 허용, 그 밖엔 본인 것) — 2026-10-22 대표: 평소엔 남의 대화를 보고 싶지 않다
   const [showAll, setShowAll] = useState(false);
   useEffect(() => { setShowAll(new URLSearchParams(window.location.search).get("all") === "1"); }, []);
   const [sideOpen, setSideOpen] = useState(false);     // 좁은 화면에서 대화 목록 열기
@@ -281,9 +280,8 @@ export default function ReportPage() {
     try { const j = await (await fetch("/api/report/saved", { cache: "no-store" })).json(); if (j.ok) setSaved(j.reports || []); } catch { /* noop */ }
   }, []);
   const loadThreads = useCallback(async () => {
-    if (!showAll) { setThreads([]); return; }
     try {
-      const r = await fetch("/api/report/chat/threads?all=1", { cache: "no-store" });
+      const r = await fetch(showAll ? "/api/report/chat/threads?all=1" : "/api/report/chat/threads", { cache: "no-store" });
       const j = await r.json();
       if (j.ok) setThreads(j.threads || []);
       else if (j.pending_migration) setPendingMsg(j.error);
@@ -565,8 +563,7 @@ export default function ReportPage() {
           <button type="button" className="b2b-btn-secondary rp-side-new" onClick={newThread} disabled={loading}>새 대화</button>
         </div>
         <nav className="rp-side-list">
-          {!showAll && <div className="rp-side-empty">지난 대화 목록은 보이지 않습니다. 새 대화로 시작하세요.</div>}
-          {showAll && threads.length === 0 && <div className="rp-side-empty">저장된 대화가 없습니다.</div>}
+          {threads.length === 0 && <div className="rp-side-empty">저장된 대화가 없습니다. 질문을 보내면 여기에 쌓입니다.</div>}
           {grouped.map(([g, list]) => (
             <div key={g} className="rp-side-group">
               <div className="rp-side-glabel">{g}</div>
