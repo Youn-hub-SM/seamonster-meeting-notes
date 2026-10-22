@@ -140,8 +140,8 @@ export async function GET(req: NextRequest) {
       const comps = bundles.get(p.id);
       const isBundle = !!comps && comps.length > 0;
       // 묶음은 자체 재고 대신 '만들 수 있는 세트 수'(구성품 현재고 ÷ 구성수량의 최소값)
-      const qty = isBundle ? bundleAvailable(comps!, stockOf) : stockOf(p.id);
-      const onHand = isBundle ? bundleAvailable(comps!, todayOf) : todayOf(p.id);
+      const qty = isBundle ? bundleAvailable(comps!, stockOf, untracked.ids) : stockOf(p.id); // 세트 — 재고 관리 안 함 구성품(드라이아이스)은 빼고
+      const onHand = isBundle ? bundleAvailable(comps!, todayOf, untracked.ids) : todayOf(p.id);
       const sched = schedOut.get(p.id);
       const cost = Number(p.cost_price) || 0;
       const period_in = inq.get(p.id) || 0;

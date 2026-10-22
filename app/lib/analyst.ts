@@ -21,6 +21,7 @@ import { isMetaAdConfigured, listCampaigns as metaCampaigns, listAdsets as metaA
 import { isNaverAdConfigured, listCampaigns as naverCampaigns, listAdgroups as naverAdgroups, getStats as naverStats, type NaverAdgroup } from "./naver-ad";
 import { getPurchaseConversions } from "./naver-conv";
 import { bundleAvailable, type BundleComponent } from "./product-bundles";
+import { getUntracked } from "./stock-tracked";
 import { readStockMap } from "./inventory-template";
 import { sendSalesMail } from "./sales-mailer";
 import { buildReportEmail, reportMailRecipients, smtpReady } from "./report-email";
@@ -547,10 +548,12 @@ export async function runTool(sb: SupabaseClient, ctx: { since: string; end: str
     const p = list[0];
     //  재고 = 공용 readStockMap(S1·S4) — RPC 결과도 서버 Max Rows(1000)에 잘리므로 페이지 끝까지 읽는다
     //  (잘린 뒤쪽 품목을 0 으로 보면 AI 가 품절로 단정한다). 기준은 종전대로 asof 없음(오늘 뒤 선점까지 뺀 가용).
-    const [bq, stocks] = await Promise.all([
+    const [bq, stocks, untracked] = await Promise.all([
       sb.from("product_bundles").select("component_id, qty").eq("parent_id", p.id),
       // 036 미적용(칸 없음)이면 전부 소매 — 다른 칸에 전 칸 합을 되풀이해 보이지 않게 빈 맵
       Promise.allSettled(INV_CHANNELS.map((c) => readStockMap(sb, { asof: null, chan: c, onMissingChan: c === "소매" ? "all" : "empty" }))),
+      // 세트 계산에서 뺄 '재고 관리 사용 안함' 구성품(드라이아이스 등) — 못 읽으면 던진다(빈 집합으로 보면 -463 같은 값이 세트 수량이 된다)
+      getUntracked(sb),
     ]);
     // 세트 구성 조회 실패를 '세트 아님(재고 0)'으로 넘기면 AI 가 품절로 단정한다 — 테이블 없음(037 미적용)만 세트 아님으로 본다
     if (bq.error && !/product_bundles/i.test(bq.error.message)) throw new Error(`세트 구성 조회 실패: ${bq.error.message}`);
@@ -571,7 +574,7 @@ export async function runTool(sb: SupabaseClient, ctx: { since: string; end: str
         return;
       }
       const stockOf = (id: string) => num(r.value.get(id));
-      out[c] = comps.length ? bundleAvailable(comps, stockOf) : stockOf(p.id); // 세트 = 구성품으로 만들 수 있는 수
+      out[c] = comps.length ? bundleAvailable(comps, stockOf, untracked.ids) : stockOf(p.id); // 세트 = 구성품으로 만들 수 있는 수(재고 관리 안 함 구성품 제외)
     });
     return JSON.stringify(out);
   }

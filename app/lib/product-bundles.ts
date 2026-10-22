@@ -137,7 +137,10 @@ export async function replaceBundleComponents(
 }
 
 // 한 세트를 만들 수 있는 수량 = min( 구성품 현재고 ÷ 구성수량 ). 구성품 없으면 0.
-export function bundleAvailable(components: BundleComponent[], stockOf: (id: string) => number): number {
-  if (!components.length) return 0;
-  return Math.min(...components.map((c) => Math.floor((stockOf(c.component_id) || 0) / c.qty)));
+//  skip = '재고 관리 사용 안함'(121) 구성품 id — 드라이아이스처럼 세지 않는 품목은 빼고 계산한다(2026-10-22 — 원장 잔량 -463 이 세트 수량으로 보였다).
+//  구성품이 전부 그런 품목이면 셀 재고가 없어 0.
+export function bundleAvailable(components: BundleComponent[], stockOf: (id: string) => number, skip?: Set<string>): number {
+  const comps = skip ? components.filter((c) => !skip.has(c.component_id)) : components;
+  if (!comps.length) return 0;
+  return Math.min(...comps.map((c) => Math.floor((stockOf(c.component_id) || 0) / c.qty)));
 }
