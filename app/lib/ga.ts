@@ -260,7 +260,10 @@ export async function runGaFunnel(p: { since: string; until: string; steps: GaFu
   if (!res.ok) throw new Error(`GA 유입경로 API ${res.status}: ${j.error?.message || "조회 실패"}`);
   const t = j.funnelTable || {};
   const dh = (t.dimensionHeaders || []).map((h) => String(h.name || ""));
-  const mh = (t.metricHeaders || []).map((h) => String(h.name || ""));
+  // API 가 metricHeaders 를 두 번 반복해 보낸다(2026-10-22 실측: 머리글 8개·값 4개) — 행 값 개수만큼만 쓴다
+  const mhAll = (t.metricHeaders || []).map((h) => String(h.name || ""));
+  const nVal = Math.max(0, ...(t.rows || []).map((r) => (r.metricValues || []).length));
+  const mh = mhAll.slice(0, nVal || mhAll.length);
   const dimLabel = (n: string) => (n === "funnelStepName" ? "단계" : n === "deviceCategory" ? "기기" : n === "sessionDefaultChannelGroup" ? "채널 그룹" : n);
   const metLabel = (n: string) => (n === "activeUsers" ? "사용자" : n === "funnelStepCompletionRate" ? "완료율(%)" : n === "funnelStepAbandonments" ? "이탈 수" : n === "funnelStepAbandonmentRate" ? "이탈률(%)" : n);
   const columns = [...dh.map(dimLabel), ...mh.map(metLabel)];
