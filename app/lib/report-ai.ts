@@ -4,7 +4,7 @@ import { getFeatureModel, effortParams, readText, AiResponseError } from "./ai-m
 import { supabaseAdmin } from "./supabase";
 import { SCHEMA_CATALOG, BLOCKED_RELATIONS, BLOCKED_NOTE, LOOKER_RELATIONS, isBlockedRelation } from "./report-schema";
 
-// AI 데이터 비서 — 자연어 질문 → Postgres SQL 생성(+루커스튜디오용 SQL).
+// AI 비서 — 자연어 질문 → Postgres SQL 생성(+루커스튜디오용 SQL).
 //  실행은 run_report(=report_ro 권한)로만. 정확도 위해 opus 고정(이익률 계산기와 동일 방식).
 //  Node 런타임 전용(@anthropic-ai/sdk).
 

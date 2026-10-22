@@ -1,4 +1,4 @@
-// AI 데이터 비서 — 저장 리포트 정기 발송(2026-10-19 개선안 3). 서버 전용.
+// AI 비서 — 저장 리포트 정기 발송(2026-10-19 개선안 3). 서버 전용.
 //  저장 리포트(report-saved.ts)에 schedule{freq, to, lastSentOn} 이 있으면 아침 크론 틱(schedule-digest 06:00 KST)에서
 //  오늘 차례인 것을 골라 SQL 을 실행하고 표를 메일로 보낸다(nodemailer, 매출 리포트와 같은 SMTP).
 //  예약 변수 {{시작일}}·{{종료일}} 은 주기에 맞춰 자동으로 채운다(매일 = 어제, 매주 = 지난주 월~일, 매월 = 지난달).
@@ -71,7 +71,7 @@ export function buildScheduleHtml(rep: SavedReport, rangeLabel: string, columns:
     const bar = barCol === c ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;"><tr><td width="${Math.max(1, Math.round(Math.abs(Number(r[c]) || 0) / maxBar * 100))}%" bgcolor="${C.C_TIDE}" style="height:6px;font-size:0;line-height:0;border-radius:3px;">&nbsp;</td><td></td></tr></table>` : "";
     return `<td style="text-align:${isNum ? "right" : "left"};font-size:13px;color:${C.C_INK};padding:8px 10px;border-bottom:1px solid ${C.C_LINE};${isNum ? "white-space:nowrap;" : ""}">${cell(r[c])}${bar}</td>`;
   }).join("")}</tr>`).join("");
-  const note = rows.length > MAIL_ROWS ? `<div style="font-size:11px;color:${C.C_MUTED};padding:8px 10px;">앞 ${MAIL_ROWS}행만 표시(전체 ${won(rows.length)}행). 전체는 AI 데이터 비서에서 [엑셀 내려받기]</div>` : "";
+  const note = rows.length > MAIL_ROWS ? `<div style="font-size:11px;color:${C.C_MUTED};padding:8px 10px;">앞 ${MAIL_ROWS}행만 표시(전체 ${won(rows.length)}행). 전체는 AI 비서에서 [엑셀 내려받기]</div>` : "";
   return `<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#f7fafb;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;">
@@ -90,8 +90,8 @@ export function buildScheduleHtml(rep: SavedReport, rangeLabel: string, columns:
   </td></tr>
   <tr><td style="padding:20px 24px 36px;">
     <div style="font-size:11px;color:${C.C_MUTED};line-height:1.6;border-top:1px solid ${C.C_LINE};padding-top:14px;">
-      저장 리포트의 정기 발송입니다. 바꾸거나 끄려면 AI 데이터 비서 › 저장된 리포트 › [정기 받기] &#183; <a href="${mailEsc(baseUrl)}/report" style="color:${C.C_TIDE};">${mailEsc(baseUrl)}/report</a><br>
-      씨몬스터 AI 데이터 비서 &#183; 자동 발송
+      저장 리포트의 정기 발송입니다. 바꾸거나 끄려면 AI 비서 › 저장된 리포트 › [정기 받기] &#183; <a href="${mailEsc(baseUrl)}/report" style="color:${C.C_TIDE};">${mailEsc(baseUrl)}/report</a><br>
+      씨몬스터 AI 비서 &#183; 자동 발송
     </div>
   </td></tr>
 </table>
@@ -99,7 +99,7 @@ export function buildScheduleHtml(rep: SavedReport, rangeLabel: string, columns:
 </body></html>`;
 }
 function buildScheduleText(rep: SavedReport, rangeLabel: string, columns: string[], rows: Record<string, unknown>[]): string {
-  const L = [`[AI 데이터 비서] ${rep.name} — ${rangeLabel}`, "", columns.join(" | ")];
+  const L = [`[AI 비서] ${rep.name} — ${rangeLabel}`, "", columns.join(" | ")];
   for (const r of rows.slice(0, MAIL_ROWS)) L.push(columns.map((c) => cell(r[c]).replace(/&[a-z]+;/g, "")).join(" | "));
   if (rows.length > MAIL_ROWS) L.push(`… 앞 ${MAIL_ROWS}행만(전체 ${rows.length}행)`);
   return L.join("\n");
@@ -125,7 +125,7 @@ export async function sendScheduledReport(rep: SavedReport, opts?: { force?: boo
   const to = (sch.to && sch.to.length ? sch.to : defaultRecipients());
   if (!to.length) return { id: rep.id, name: rep.name, ok: false, error: "수신자가 없습니다(SALES_MAIL_TO 미설정)." };
   const base = await getAppBaseUrl().catch(() => "");
-  const subject = `[AI 데이터 비서] ${rep.name} — ${range.label}`;
+  const subject = `[AI 비서] ${rep.name} — ${range.label}`;
   try {
     await sendSalesMail({ subject, text: buildScheduleText(rep, range.label, columns, rows), html: buildScheduleHtml(rep, range.label, columns, rows, base), to }, { timeoutMs: 15_000 });
   } catch (e) { return { id: rep.id, name: rep.name, ok: false, error: `메일 발송 실패: ${e instanceof Error ? e.message : String(e)}` }; }

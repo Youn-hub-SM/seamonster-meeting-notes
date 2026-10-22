@@ -1,6 +1,6 @@
 "use client";
 
-// AI 데이터 비서 — 클로드 코드식 대화 화면(2026-10-21 대표: "클로드 코드 대화창과 최대한 비슷하게"). 스레드는 서버(report_threads)에 저장.
+// AI 비서 — 클로드 코드식 대화 화면(2026-10-21 대표: "클로드 코드 대화창과 최대한 비슷하게"). 스레드는 서버(report_threads)에 저장.
 //  비서가 글로 말하고(스트리밍), 조사가 필요하면 중간에 도구를 쓰며(도구 줄), 결과 표는 그 아래 카드로 붙는다. [중지]·Esc 로 멈춘다.
 //  개선안(2026-10-19): 1 회사 용어 사전(비서 제안 → [사전에 저장]) · 3 저장 리포트(정기 받기는 숨김) + 표 카드 차트
 //  · 5 답마다 데이터 최신일·숫자 대조 배지·[맞아요]/[틀려요] 피드백. 표 카드의 SQL 보기·리포트 저장·엑셀·루커 SQL 그대로.
@@ -164,7 +164,26 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
   );
 }
 
-const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기", margin_calc: "계산", ad_performance: "광고", ad_breakdown: "광고", stock_status: "재고", listing_status: "채널" };
+const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기", margin_calc: "계산", ad_performance: "광고", ad_breakdown: "광고", stock_status: "재고", listing_status: "채널", write_notice: "공지", cs_coach: "CS 코치" };
+
+// 빈 화면 추천 문장 구름(2026-10-22 대표) — 비서가 할 수 있는 일 전부(매출·원인·광고·재고·이익률·공지·CS·VOC·정기배송·B2B·생산·리포트·예측·재구매).
+//  누르면 입력칸에 채우기만 한다(기간·상품을 고쳐 보내게). size = 구름 글자 크기(대표 기능은 크게)
+const SUGGESTIONS: { text: string; size: "lg" | "md" | "sm" }[] = [
+  { text: "어제 채널별 매출과 주문 건수 알려줘", size: "md" },
+  { text: "지금 품절이거나 일주일 안에 바닥날 상품은?", size: "sm" },
+  { text: "10월 매출이 9월보다 줄어든 이유를 광고·재고까지 같이 봐줘", size: "lg" },
+  { text: "이번 주 메타 광고 캠페인별 ROAS", size: "sm" },
+  { text: "배송 지연 사과 공지를 알림톡으로 써줘", size: "lg" },
+  { text: "대구순살 1kg를 쿠팡에서 15% 할인해 팔면 얼마 남아?", size: "md" },
+  { text: "고객이 해동돼서 왔다고 환불해 달래요. 어떻게 답하죠?", size: "lg" },
+  { text: "이번 주 고객 문의에서 가장 많은 불만은?", size: "md" },
+  { text: "정기배송 몇 회차에 일시정지가 많아?", size: "sm" },
+  { text: "입금 안 된 도매 발주를 거래처별로", size: "md" },
+  { text: "진행 중인 생산 요청서 상황 정리해줘", size: "sm" },
+  { text: "지난주 주간 리포트 핵심만 요약해줘", size: "md" },
+  { text: "이달 말 매출 예상해줘", size: "sm" },
+  { text: "재구매율 높은 상품 Top 10", size: "md" },
+];
 
 // ── 화면(2026-10-21 대표: "클로드 코드 대화창과 최대한 비슷하게 — 사용자가 익숙하게") ──
 //  왼쪽 = 대화 목록(새 대화·날짜별 묶음·아래에 저장된 리포트·용어 사전·루커 적용법), 가운데 = 대화(가운데 정렬 한 단, 사용자 말풍선·비서 평문·
@@ -569,7 +588,7 @@ export default function ReportPage() {
         <header className="rp-head">
           <button type="button" className="b2b-btn-secondary rp-head-list" onClick={() => setSideOpen(true)}>대화 목록</button>
           <h1 className="rp-head-title" title={currentTitle}>{currentTitle}</h1>
-          <span className="rp-head-brand">AI 데이터 비서</span>
+          <span className="rp-head-brand">AI 비서</span>
           <button type="button" className="b2b-link-btn rp-head-new" onClick={newThread} disabled={loading}>새 대화</button>
         </header>
 
@@ -578,6 +597,12 @@ export default function ReportPage() {
             {pendingMsg && <div className="b2b-error">{pendingMsg}</div>}
             {items.length === 0 && !busy && !loading && (
               <div className="rp-empty">
+                <div className="rp-cloud" aria-label="추천 질문">
+                  {SUGGESTIONS.map((x) => (
+                    <button key={x.text} type="button" className={`rp-cloud-item is-${x.size}`}
+                      onClick={() => { setQ(x.text); setQErr(""); setTimeout(() => taRef.current?.focus(), 0); }}>{x.text}</button>
+                  ))}
+                </div>
                 <h2 className="rp-empty-title">무엇을 도와드릴까요?</h2>
               </div>
             )}

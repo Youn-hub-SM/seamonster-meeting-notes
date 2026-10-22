@@ -1,4 +1,4 @@
-// 이익률 산식(2026-10-20 — 이익률 계산기 화면 삭제, AI 데이터 비서의 margin_calc 도구가 이 산식을 쓴다).
+// 이익률 산식(2026-10-20 — 이익률 계산기 화면 삭제, AI 비서의 margin_calc 도구가 이 산식을 쓴다).
 //  원가표(products)·채널표(sales_channel_config)·현재 월(계절 보냉비)을 읽어, 시나리오(MarginSpec)를 고정 산식으로 계산한다.
 //  AI 호출 없음. 배송 단가표(택배·아이스박스·보냉)는 아래 parcelFee/iceboxFee/coolFee — 정책이 바뀌면 여기만 고친다.
 import { supabaseAdmin } from "./supabase";

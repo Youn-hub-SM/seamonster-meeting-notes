@@ -6,7 +6,7 @@ import { isPending140, PENDING_140 } from "@/app/lib/report-glossary";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// AI 데이터 비서 답 피드백(migration 140). POST {threadId, seq, ok, note?} / GET ?stats=1(관리자) 30일 집계 + 최근 '틀려요' 사유
+// AI 비서 답 피드백(migration 140). POST {threadId, seq, ok, note?} / GET ?stats=1(관리자) 30일 집계 + 최근 '틀려요' 사유
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function who(req: NextRequest): Promise<string> {
   const token = req.cookies.get("b2b_auth")?.value;

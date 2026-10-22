@@ -22,7 +22,7 @@ const SECTIONS: { key: Key; label: string; desc: string; C: ComponentType<Sectio
   { key: "production", label: "생산·재고", desc: "생산·재고 알림 · 상품마스터 변경알림 · 주간 초안", C: ProductionSection },
   { key: "fulfill", label: "온라인 발주", desc: "중복 방지 · 박스 종류 · 택배 단가", C: FulfillSection },
   { key: "reports", label: "매출·리포트", desc: "종합 리포트 메일", C: ReportsSection },
-  { key: "ai", label: "AI", desc: "데이터 비서 · 모델 · 프롬프트", C: AiSection },
+  { key: "ai", label: "AI", desc: "AI 비서 · 모델 · 프롬프트", C: AiSection },
   { key: "connect", label: "연결", desc: "Teams · 아사나 · Tally", C: ConnectSection },
 ];
 const isKey = (s: string | null): s is Key => !!s && SECTIONS.some((x) => x.key === s);

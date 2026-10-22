@@ -1,4 +1,4 @@
-// AI 데이터 비서 공용 모듈(2026-10-19 대화형 개편 뒤) — 설정(끄기·월 상한·월 누적), PII 마스킹, 도구 정의·실행(run_sql·schema·search_text·read_report·ask_user), usage 집계.
+// AI 비서 공용 모듈(2026-10-19 대화형 개편 뒤) — 설정(끄기·월 상한·월 누적), PII 마스킹, 도구 정의·실행(run_sql·schema·search_text·read_report·ask_user), usage 집계.
 //  대화 엔진은 chat-assistant.ts(스레드 저장·스트리밍). 옛 '질문 1회 → JSON 보고서' 엔진(askAssistant)은 제거했다.
 //  안전: 쓰기 도구 없음. run_sql 은 validateReportSql(단일 SELECT·화이트리스트) → run_report(SECURITY DEFINER) 그대로.
 //   search_text 는 supabaseAdmin 직접 조회지만 읽는 컬럼을 코드가 고정하고(voc.customer 등 이름 컬럼 제외) 결과는 maskPii 로 마스킹.
@@ -436,6 +436,8 @@ export function toolLabel(name: string, input: Record<string, unknown>): string 
     const items = Array.isArray(input.items) ? (input.items as { productName?: string; channel?: string }[]) : [];
     return items.length === 1 ? `이익률 계산: ${String(items[0].productName || "")} · ${String(items[0].channel || "")}`.slice(0, 80) : `이익률 계산: 시나리오 ${items.length}개`;
   }
+  if (name === "write_notice") return `공지 작성: ${String(input.channel || "")}${input.refine ? " · 다듬기" : ""}`.slice(0, 80); // 2026-10-22 공지 작성기 연결
+  if (name === "cs_coach") return `CS 코치: ${String(input.query || "").replace(/\s+/g, " ").slice(0, 40)}`; // 2026-10-22 CS 코치 연결
   return name;
 }
 

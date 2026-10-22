@@ -23,16 +23,24 @@ export function changeMenu(tool: string): string {
   if (t.includes("UTM")) return "UTM 만들기";
   if (t.includes("광고")) return "광고";
   if (t.includes("VOC")) return "VOC 관리";
-  if (t.includes("커스텀리포트") || t.includes("데이터비서")) return "AI 데이터 비서"; // 2026-10-19 명명 — 옛 기록의 tool 도 같은 메뉴로
+  if (t.includes("커스텀리포트") || t.includes("데이터비서") || t.includes("AI비서")) return "AI 비서"; // 2026-10-19 명명, 10-22 'AI 비서'로 — 옛 기록의 tool 도 같은 메뉴로
   if (t.includes("CS")) return "CS 코치";
   if (t.includes("관리자")) return "관리자";
   if (t.includes("전체")) return "공통";
   return tool;
 }
 // 필터 칩 정렬 순서(nav 순서 기준). 목록에 없는 메뉴는 뒤로.
-export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "생산 및 재고", "UTM 만들기", "광고", "CS 코치", "VOC 관리", "AI 데이터 비서", "관리자", "공통"];
+export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정기배송 분석", "매출", "생산 및 재고", "UTM 만들기", "광고", "CS 코치", "VOC 관리", "AI 비서", "관리자", "공통"];
 
 export const CHANGELOG: ChangeEntry[] = [
+  {
+    date: "2026-10-22",
+    tag: "개선",
+    tool: "AI 비서",
+    title: "AI 비서 — 이름을 바꾸고 공지 작성·CS 코칭도 함께",
+    desc: "'AI 데이터 비서'가 'AI 비서'가 됐습니다. 데이터 조사에 더해 '배송 지연 사과 공지를 알림톡으로 써줘'처럼 공지문 초안(공지 작성기와 같은 규칙)을, 고객 문의 원문을 붙여넣고 '어떻게 답하죠?'라고 물으면 CS 매뉴얼 기준의 응대 코칭(CS 코치와 같은 매뉴얼)을 받을 수 있습니다. 새 대화의 '무엇을 도와드릴까요?' 위 추천 문장을 누르면 입력칸에 채워지니 기간·상품을 고쳐 보내세요.",
+    href: "/report",
+  },
   {
     date: "2026-10-21",
     tag: "개선",

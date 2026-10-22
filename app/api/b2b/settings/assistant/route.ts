@@ -6,7 +6,7 @@ import { getAssistantSettings, setAssistantSettings, getAssistantMonthUsage, kst
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// AI 데이터 비서 설정(관리자 › 설정 › AI) — kv: assistant_off("1"/""), assistant_cap_usd(기본 60), assistant_usage_<YYYY-MM>({usd, questions})
+// AI 비서 설정(관리자 › 설정 › AI) — kv: assistant_off("1"/""), assistant_cap_usd(기본 60), assistant_usage_<YYYY-MM>({usd, questions})
 const COOKIE = "b2b_auth";
 async function isAdminReq(req: NextRequest): Promise<boolean> {
   const t = req.cookies.get(COOKIE)?.value;

@@ -504,7 +504,7 @@ const TOOLS: Anthropic.Tool[] = [
 const toolsFor = (maxDays: number): Anthropic.Tool[] => JSON.parse(JSON.stringify(TOOLS).split("7~62").join(`7~${maxDays}`));
 const INV_CHANNELS = ["소매", "도매", "프로모션", "도매 대량"] as const;
 
-// AI 데이터 비서(chat-live-tools.ts)도 같은 도구를 쓴다 — 바꾸면 양쪽에 영향
+// AI 비서(chat-live-tools.ts)도 같은 도구를 쓴다 — 바꾸면 양쪽에 영향
 export async function runTool(sb: SupabaseClient, ctx: { since: string; end: string; maxDays: number }, cache: AdsCache, name: string, input: Record<string, unknown>): Promise<string> {
   const y = ctx.end;
   const days = Math.min(ctx.maxDays, Math.max(7, Math.round(num(input.days) || 14)));

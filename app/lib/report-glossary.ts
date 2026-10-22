@@ -1,4 +1,4 @@
-// AI 데이터 비서 — 회사 용어 사전(report_glossary, migration 140). 서버 전용.
+// AI 비서 — 회사 용어 사전(report_glossary, migration 140). 서버 전용.
 //  한 번 정한 정의를 모든 대화의 시스템 프롬프트에 넣어 다시 묻지 않게 한다. 쓰기는 화면(사람)만 — 비서는 propose_term 으로 제안만.
 import { supabaseAdmin } from "./supabase";
 

@@ -1,10 +1,13 @@
-// AI 데이터 비서 대화 엔진(2026-10-19 대표 결정 — "클로드 웹처럼 대화형 AI", docs/assistant-plan.md §5-2)
+// AI 비서 대화 엔진(2026-10-19 대표 결정 — "클로드 웹처럼 대화형 AI", docs/assistant-plan.md §5-2)
 //  스레드(report_threads) 하나에 메시지 전부(모델 응답 블록·도구 호출·도구 결과)를 그대로 저장하고(report_messages),
 //  매 턴 그 전체를 이어 붙여 모델을 부른다. 답 틀(JSON) 없음 — 모델이 글로 말하고, 필요하면 중간에 도구를 쓰며,
 //  run_sql 결과는 표 카드(report_tables)로 그 자리에 끼운다. 글은 스트리밍으로 흘려보낸다(NDJSON 이벤트).
 //  긴 스레드는 앞부분을 보조 모델로 요약해 접는다(thread.summary + compact_seq).
 //  안전·비용·도구는 assistant.ts 공용(쓰기 도구 없음, run_report 읽기 전용, 마스킹, 월 상한·끄기).
 import Anthropic from "@anthropic-ai/sdk";
+import { generateNotice, NOTICE_REFINES, type NoticeRefine } from "./notice";
+import { NOTICE_CHANNELS } from "./notice-types";
+import { generateCsAdvice } from "./cs";
 import { supabaseAdmin } from "./supabase";
 import { getFeatureModel, effortParams, AiResponseError, readText } from "./ai-model";
 import { MODELS } from "./config";
@@ -57,8 +60,9 @@ export function isPending139(err: unknown): boolean {
 // ── 시스템 프롬프트(고정 — 캐시) ──
 // 시스템 프롬프트 — 조회 가능 목록(살아 있는 스키마)은 턴마다 넣는다(10분 캐시, 바뀌면 캐시 prefix 만 다시 쓴다)
 function systemChat(index: string): string {
-  return `당신은 씨몬스터(순살 생선 전문 이커머스: 공식몰 카페24·스마트스토어·쿠팡·톡스토어 + 도매 B2B)의 AI 데이터 비서입니다.
+  return `당신은 씨몬스터(순살 생선 전문 이커머스: 공식몰 카페24·스마트스토어·쿠팡·톡스토어 + 도매 B2B)의 AI 비서입니다.
 직원과 채팅으로 대화하며, 회사 데이터(표)·광고 성과(메타·네이버 광고 API)·현재고·채널 판매 상태와 글(VOC·채널 문의·종합 리포트·CS 매뉴얼·생산 요청 메모·변경 이력)을 도구로 조사해 근거가 붙은 답을 합니다.
+고객 공지문 초안(write_notice — 공지 작성기와 같은 규칙)과 고객 문의 응대 코칭(cs_coach — CS 코치와 같은 매뉴얼·규칙)도 돕습니다.
 숫자를 꺼내 주는 데서 그치지 않고, 묻는 사람이 다음에 무엇을 할지 정할 수 있게 돕는 분석가입니다.
 
 [분석가로 일하는 법]
@@ -94,6 +98,8 @@ function systemChat(index: string): string {
 - propose_term: 사용자가 새로 정한 용어·정의를 '회사 용어 사전'에 넣자고 제안합니다(저장은 사용자가). 조사 도구와 같은 차례에 함께 불러도 됩니다.
 - margin_calc: 이익률 계산기 산식(원가표·채널 수수료·택배비·아이스박스·보냉비·부가세)으로 가상 판매 시나리오의 순이익·이익률을 냅니다. "이렇게 팔면 얼마 남나"류 질문은 SQL 로 흉내 내지 말고 이 도구로 계산합니다. 결과는 표 카드로 붙고 숫자는 도구 값 그대로 씁니다. 상품이 원가표에 없다고 돌아오면 어느 상품인지 묻습니다. 실적(이미 팔린 것)의 이익은 run_sql(sales_orders·sales_sku_cost·sales_channel_config)로.
   · 채널별 판매가(2026-10-20): 가격을 지정하지 않고 채널만 말하면("쿠팡에서 팔면") 먼저 run_sql 로 그 채널·그 SKU 의 최근 30일 실제 판매단가 평균을 구해(sales_orders: avg(selling_price) where channel = … and sku_code = … and order_date >= 오늘−30일, quantity > 0) priceBasis "custom"·customTotal = 그 평균 × paidUnits 로 계산하고, 답에 "최근 30일 쿠팡 평균 판매가 26,900원 기준"처럼 밝힙니다. 판매 기록이 없으면 소비자가(retail)로 계산하고 "판매 기록이 없어 소비자가 기준"이라고 적습니다. 할인율이 함께 있으면 그 실판매가에 할인을 적용합니다(custom 은 할인이 반영되지 않으니 customTotal 을 직접 할인한 값으로 넣습니다).
+- write_notice: 공지 작성기와 같은 규칙(톤 프롬프트·유형별 항목·채널 글자 수)으로 고객·거래처 공지문 초안을 씁니다. "공지 써 줘·안내문 만들어 줘·지연 사과문" 같은 요청에 씁니다. 채널을 말하지 않으면 묻습니다(알림톡·문자 / 네이버 톡톡 / 카카오 채널 / 홈페이지 공지 / 이메일). text 에는 사용자가 말한 사실을 빠짐없이 그대로 넣습니다(지어내지 않습니다). 초안 본문(draft)은 고치지 말고 그대로 보여 주고, 그 아래 '빠진 필수 항목'(missing)이 있으면 무엇을 알려 주면 완성되는지 한 줄로 묻습니다. "더 짧게·더 정중하게·보상을 더 분명하게"는 refine 과 previous(직전 초안)로 다시 부릅니다.
+- cs_coach: CS 코치와 같은 매뉴얼·지침으로 고객 문의 응대를 코칭합니다(상황 진단·응대 방향·추천 답변·주의·적용 정책). 고객이 보낸 문의 원문이나 상황을 query 에 그대로 넣습니다. 추천 답변(reply)은 고치지 말고 그대로 보여 주고, 상황 진단·응대 방향·주의·정책은 짧게 요약합니다. manualMissing 이 true 면 매뉴얼에 기준이 없다는 것 — 추측해 답하지 말고 매뉴얼 추가를 요청하라고 전합니다.
 - 표 목록은 아래 '조회 가능 관계'와 schema 도구의 "조회 가능한 표·뷰" 목록이 전부입니다. information_schema·pg_catalog 를 SQL 로 조회하지 않습니다(차단됨). 표 이름을 짐작하지 말고(예: b2b_orders 같은 이름은 없습니다) 목록에 있는 이름(orders, payments 등)을 씁니다.
 - 광고 도구는 한 번에 20~60초 걸립니다. 같은 기간은 한 턴에 한 번만 부르고(결과는 기억), 광고와 상관없는 질문엔 부르지 않습니다.
 - 한 턴에 도구는 최대 12차례. 필요한 조회는 한 차례에 함께 요청하고, 차례가 적을수록 좋습니다. 이전 턴에서 이미 본 표·스키마는 다시 조회하지 않고 기억을 씁니다.
@@ -170,6 +176,29 @@ function chatTools(strict: boolean): Anthropic.Tool[] {
               },
             },
           },
+        },
+      },
+    },
+    {
+      name: "write_notice", ...s,
+      description: "공지 작성기와 같은 규칙으로 고객·거래처 공지문 초안을 씁니다(유형 판단·항목 추출·채널 글자 수 반영). 쓰기 없음 — 초안만 돌려줍니다.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["channel", "text", "refine", "previous"],
+        properties: {
+          channel: { type: "string", enum: [...NOTICE_CHANNELS], description: "보낼 채널" },
+          text: { type: "string", description: "공지할 내용 — 사용자가 말한 사실(무엇이·언제·누구에게·보상 등)을 빠짐없이 그대로" },
+          refine: { type: ["string", "null"], enum: [...NOTICE_REFINES, null], description: "다듬기: shorter 더 짧게 / politer 더 정중하게 / compensation 보상·조치 더 분명하게. 처음 쓸 땐 null" },
+          previous: { type: ["string", "null"], description: "다듬을 때 직전 초안 본문. 처음 쓸 땐 null" },
+        },
+      },
+    },
+    {
+      name: "cs_coach", ...s,
+      description: "CS 코치와 같은 매뉴얼·지침으로 고객 문의 응대를 코칭합니다(상황 진단·응대 방향·추천 답변·주의·적용 정책). 쓰기 없음.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["query"],
+        properties: {
+          query: { type: "string", description: "고객 문의 원문 또는 상황 설명(채널·주문 상황 등 사용자가 준 정보 그대로)" },
         },
       },
     },
@@ -327,7 +356,7 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
   if (!process.env.ANTHROPIC_API_KEY) throw new AiResponseError("ANTHROPIC_API_KEY 가 설정되어 있지 않습니다.");
 
   const [settings, month, featureModel, thread, glossary, dataDate, schemaIndex] = await Promise.all([getAssistantSettings(), getAssistantMonthUsage(), getFeatureModel("report"), getThreadRow(p.threadId, p.user), glossaryPromptBlock(), salesDataDate(), catalogIndex(supabaseAdmin())]);
-  if (settings.off) throw new AssistantOffError("AI 데이터 비서가 꺼져 있습니다. 관리자 › 설정 › AI 에서 켜세요.");
+  if (settings.off) throw new AssistantOffError("AI 비서가 꺼져 있습니다. 관리자 › 설정 › AI 에서 켜세요.");
   if (!thread) throw new AiResponseError("대화를 찾을 수 없습니다. 새 대화를 시작하세요.");
   const downgraded = month.usd >= settings.capUsd;
   const picked = p.modelKey && (CHAT_MODEL_KEYS as readonly string[]).includes(p.modelKey) ? MODELS[p.modelKey] : null;
@@ -444,6 +473,30 @@ export async function runChatTurn(p: { threadId: string; text: string; user: str
             }) };
           } catch (e) {
             p.send({ type: "tool", toolUseId: u.id, name: u.name, label: "이익률 계산", status: "fail", ms: Date.now() - t0 });
+            return { type: "tool_result" as const, tool_use_id: u.id, content: `오류: ${e instanceof Error ? e.message : String(e)}`, is_error: true };
+          }
+        }
+        if (u.name === "write_notice" || u.name === "cs_coach") { // 공지 작성기·CS 코치와 같은 함수(2026-10-22 대표: 비서에 연결) — 쓰기 없음
+          const label = toolLabel(u.name, input);
+          p.send({ type: "tool", toolUseId: u.id, name: u.name, label, status: "start" });
+          const t0 = Date.now();
+          toolCount++;
+          try {
+            const left = deadlineAt - Date.now() - FINAL_RESERVE_MS;
+            if (left < 20_000) throw new Error("남은 시간이 부족합니다 — 이어서 다시 요청해 주세요");
+            const run: Promise<Record<string, unknown>> = u.name === "write_notice"
+              ? generateNotice({
+                  channel: String(input.channel || ""), text: String(input.text || ""),
+                  refine: (NOTICE_REFINES as readonly string[]).includes(String(input.refine)) ? (input.refine as NoticeRefine) : null,
+                  previous: typeof input.previous === "string" && input.previous.trim() ? input.previous : undefined,
+                }).then((r) => ({ type: r.typeLabel, channel: String(input.channel || ""), limit: r.limit, length: r.text.length, draft: r.text, missing: r.missing.map((f) => f.label), optional_empty: r.optional.map((f) => f.label) }))
+              : generateCsAdvice(String(input.query || "")).then((r) => ({ category: r.category, situation: r.situation, approach: r.approach, reply: r.reply, cautions: r.cautions, policy: r.policy, manualMissing: r.manualMissing }));
+            const r = await withTimeout(run, Math.min(115_000, left));
+            if (r === "timeout") throw new Error("작성 시간 초과");
+            p.send({ type: "tool", toolUseId: u.id, name: u.name, label, status: "ok", ms: Date.now() - t0 });
+            return { type: "tool_result" as const, tool_use_id: u.id, content: JSON.stringify(r) };
+          } catch (e) {
+            p.send({ type: "tool", toolUseId: u.id, name: u.name, label, status: "fail", ms: Date.now() - t0 });
             return { type: "tool_result" as const, tool_use_id: u.id, content: `오류: ${e instanceof Error ? e.message : String(e)}`, is_error: true };
           }
         }

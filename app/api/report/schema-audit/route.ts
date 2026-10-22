@@ -7,7 +7,7 @@ import { BLOCKED_RELATIONS } from "@/app/lib/report-schema";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 관리자 — AI 데이터 비서 조회 범위 점검(2026-10-20 차단 목록 방식).
+// 관리자 — AI 비서 조회 범위 점검(2026-10-20 차단 목록 방식).
 //  비서가 보는 표 수, 주석(설명) 없는 표, 차단되지 않은 표에서 개인정보·비밀로 의심되는 컬럼 이름. ?refresh=1 로 캐시 갱신.
 export async function GET(req: NextRequest) {
   try {

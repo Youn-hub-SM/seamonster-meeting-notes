@@ -53,7 +53,7 @@ export const AI_FEATURES: { key: AiFeature; label: string; desc: string; inherit
   { key: "cs", label: "CS 코치", desc: "CS 응대 코칭·답변 초안" },
   { key: "voc", label: "VOC 인사이트", desc: "VOC 인사이트·설문 분석·제조사 리포트 (기본 fable — 2026-10-19)", inheritDefault: "fable" },
   { key: "production", label: "생산·재고 조언", desc: "생산/재고 AI 조언" },
-  { key: "report", label: "AI 데이터 비서", desc: "질문 → 조사(SQL·글 검색) → 근거 있는 답 (기본 fable — 2026-10-19). 보조 작업은 Opus 낮음 고정", inheritDefault: "fable" },
+  { key: "report", label: "AI 비서", desc: "질문 → 조사(SQL·글 검색) → 근거 있는 답 (기본 fable — 2026-10-19). 보조 작업은 Opus 낮음 고정", inheritDefault: "fable" },
   { key: "daily_analyst", label: "종합 리포트(일일·주간·월간)", desc: "매출·광고 분석 에이전트 — 일일·주간·월간 공통 (기본 fable — 2026-10-19 대표 선택, 이전 opus)", inheritDefault: "fable" },
   { key: "notice", label: "공지 작성기", desc: "상황 항목 → 씨몬스터 톤 공지문 (기본 sonnet)", inheritDefault: "sonnet" },
 ];

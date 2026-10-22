@@ -6,7 +6,7 @@ import { listGlossary, upsertGlossary, deleteGlossary, isPending140, PENDING_140
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// AI 데이터 비서 용어 사전(migration 140). GET 목록 / POST {term, definition} 추가(같은 용어면 덮어씀) / PUT {id, term, definition} / DELETE ?id=
+// AI 비서 용어 사전(migration 140). GET 목록 / POST {term, definition} 추가(같은 용어면 덮어씀) / PUT {id, term, definition} / DELETE ?id=
 //  누구나 추가·수정·삭제할 수 있고 누가 했는지 남는다(created_by·updated_by).
 async function who(req: NextRequest): Promise<string> {
   const token = req.cookies.get("b2b_auth")?.value;

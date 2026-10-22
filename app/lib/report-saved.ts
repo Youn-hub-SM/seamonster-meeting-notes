@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import type { ReportChart, ReportLooker } from "./report-ai";
 
-// 저장된 AI 데이터 비서 — b2b_settings(key-value)에 JSON 배열로 보관(별도 테이블/RLS 불필요).
-//  sql 에 {{변수}} 를 넣어두면 재사용 시 그 값만 바꿔 실행(템플릿). BoxHero AI 데이터 비서와 동일 개념.
+// 저장된 AI 비서 — b2b_settings(key-value)에 JSON 배열로 보관(별도 테이블/RLS 불필요).
+//  sql 에 {{변수}} 를 넣어두면 재사용 시 그 값만 바꿔 실행(템플릿). BoxHero AI 비서와 동일 개념.
 
 // 정기 발송(2026-10-19 개선안 3) — 아침 크론 틱에서 오늘 차례면 표를 메일로. to 비우면 기본 수신자(SALES_MAIL_TO).
 //  예약 변수 {{시작일}}·{{종료일}} 은 주기에 맞춰 자동(report-schedule.ts). lastSentOn = 마지막 발송 KST 날짜(중복 방지).

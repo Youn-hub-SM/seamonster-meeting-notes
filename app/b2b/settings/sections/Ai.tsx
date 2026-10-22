@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { qtyText } from "@/app/lib/format";
 import { OnOff, Pill, SetCard, SetRow, SaveBar, useDraft, useReportDirty, api, errText, hhmm, type Msg, type SectionProps } from "../ui";
 
-// AI — 데이터 비서(켜기·월 상한) · 공통·기능별 모델 · 프롬프트(회의록·CS) · 비서 피드백·조회 범위(읽기 전용).
+// AI — AI 비서(켜기·월 상한) · 공통·기능별 모델 · 프롬프트(회의록·CS) · 비서 피드백·조회 범위(읽기 전용).
 //  공지 작성기 톤 프롬프트는 공지 작성기 화면 안에서 편집한다(작성하면서 바로 보는 값이라).
 
 type ModelKey = "haiku" | "sonnet" | "opus" | "fable";
@@ -98,12 +98,12 @@ export default function AiSection({ onDirty }: SectionProps) {
     <>
       {err && <div className="b2b-error">{err}</div>}
 
-      <SetCard title="AI 데이터 비서" pill={!a ? null : a.off ? <Pill state="off">꺼짐</Pill> : <Pill state="on">켜짐</Pill>}
+      <SetCard title="AI 비서" pill={!a ? null : a.off ? <Pill state="off">꺼짐</Pill> : <Pill state="on">켜짐</Pill>}
         desc={usage ? `이달 사용 ${qtyText(usage.questions, "건")} · 약 $${usage.usd.toFixed(2)}` : undefined}>
         {!a ? (!err && <div className="b2b-loading">불러오는 중...</div>) : (
           <>
-            <SetRow label="AI 데이터 비서" desc="끄면 누구도 질문할 수 없습니다"
-              control={<OnOff label="AI 데이터 비서" value={!a.off} onChange={(v) => asst.setDraft({ ...a, off: !v })} />} />
+            <SetRow label="AI 비서" desc="끄면 누구도 질문할 수 없습니다"
+              control={<OnOff label="AI 비서" value={!a.off} onChange={(v) => asst.setDraft({ ...a, off: !v })} />} />
             <SetRow label="월 상한(USD)" desc="넘으면 빠른 모델로 답합니다"
               control={<span className="sm-col" style={{ gap: "var(--sm-space-1)", alignItems: "flex-end" }}>
                 <input className="b2b-input set-num" type="number" min={1} step={1} value={a.cap} aria-label="월 상한(USD)" aria-invalid={capErr ? "true" : undefined}
@@ -147,7 +147,7 @@ export default function AiSection({ onDirty }: SectionProps) {
       ))}
 
       {fb && (
-        <SetCard title="AI 데이터 비서 피드백 (30일)" desc={`맞아요 ${qtyText(fb.good, "건")} · 틀려요 ${qtyText(fb.bad, "건")}`}>
+        <SetCard title="AI 비서 피드백 (30일)" desc={`맞아요 ${qtyText(fb.good, "건")} · 틀려요 ${qtyText(fb.bad, "건")}`}>
           {fb.recentBad.length === 0 ? <div className="b2b-empty">'틀려요' 사유가 아직 없습니다.</div> : (
             <ul className="set-list">{fb.recentBad.map((r) => <li key={r.id}>{r.note} <span className="sm-faint">· {r.user_name} · {String(r.created_at).slice(0, 10)}</span></li>)}</ul>
           )}
@@ -155,7 +155,7 @@ export default function AiSection({ onDirty }: SectionProps) {
       )}
 
       {audit && (
-        <SetCard title="AI 데이터 비서 조회 범위" desc={`보이는 표·뷰 ${qtyText(audit.visible, "개")}${audit.fromDb ? "" : " · DB 설명 조회 실패(손 설명으로 동작)"}`}>
+        <SetCard title="AI 비서 조회 범위" desc={`보이는 표·뷰 ${qtyText(audit.visible, "개")}${audit.fromDb ? "" : " · DB 설명 조회 실패(손 설명으로 동작)"}`}>
           {audit.pii.length > 0 && <div className="sm-warn">개인정보·비밀로 의심되는 컬럼이 막히지 않은 표에 있습니다 — 확인하고 필요하면 BLOCKED_RELATIONS 에 넣으세요: {audit.pii.map((x) => `${x.table}.${x.column}`).join(", ")}</div>}
           <ul className="set-list">
             <li>설명 없는 표 {qtyText(audit.noComment.length, "개")}{audit.noComment.length ? `: ${audit.noComment.slice(0, 12).join(", ")}${audit.noComment.length > 12 ? " …" : ""}` : ""}</li>

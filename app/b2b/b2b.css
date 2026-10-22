@@ -2885,7 +2885,13 @@ select.b2b-select:disabled, select.b2b-input:disabled { opacity: 0.6; }
 
 .rp-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .rp-col { max-width: 780px; margin: 0 auto; padding: 24px 20px 28px; display: flex; flex-direction: column; gap: 18px; }
-.rp-empty { padding: 14vh 0 0; text-align: center; }
+.rp-empty { padding: 8vh 0 0; text-align: center; }
+/* 추천 문장 구름(2026-10-22) — 누르면 입력칸에 채움. 크기 3단계로 구름처럼 */
+.rp-cloud { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 10px; max-width: 720px; margin: 0 auto 28px; }
+.rp-cloud-item { padding: 6px 14px; border: 1px solid var(--sm-border); border-radius: 999px; background: var(--sm-white); color: var(--sm-text-mid); font: inherit; font-size: var(--sm-fs-sm); line-height: 1.4; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+.rp-cloud-item:hover { border-color: var(--sm-orange); color: var(--sm-dark); }
+.rp-cloud-item.is-lg { padding: 8px 16px; font-size: var(--sm-fs-base); font-weight: 600; color: var(--sm-dark); }
+.rp-cloud-item.is-sm { font-size: var(--sm-fs-xs); color: var(--sm-text-light); }
 .rp-empty-title { margin: 0 0 8px; font-size: var(--sm-fs-2xl); font-weight: 700; line-height: var(--sm-lh-heading); color: var(--sm-black); }
 
 .rp-m-user { display: flex; justify-content: flex-end; }
