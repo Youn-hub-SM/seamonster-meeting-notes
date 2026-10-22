@@ -9,9 +9,9 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { collectAds, newCache, runTool as runAnalystTool, validDate, kstDay, shift, type AdsCache, type AdsFacts } from "./analyst";
 import { withTimeout } from "./assistant";
-import { isGaConfigured, runGaReport, GA_DIMENSIONS, GA_METRICS, GA_MAX_DAYS, type GaDimensionKey, type GaMetricKey } from "./ga";
+import { isGaConfigured, runGaReport, runGaFunnel, GA_DIMENSIONS, GA_METRICS, GA_MAX_DAYS, type GaDimensionKey, type GaMetricKey, type GaMatch, type GaFunnelStep } from "./ga";
 
-export const LIVE_TOOL_NAMES = ["ad_performance", "ad_breakdown", "stock_status", "listing_status", "ga_report"] as const;
+export const LIVE_TOOL_NAMES = ["ad_performance", "ad_breakdown", "stock_status", "listing_status", "ga_report", "ga_funnel"] as const;
 export type LiveToolName = (typeof LIVE_TOOL_NAMES)[number];
 export const isLiveTool = (n: string): n is LiveToolName => (LIVE_TOOL_NAMES as readonly string[]).includes(n);
 
@@ -54,15 +54,44 @@ export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
     },
     {
       name: "ga_report", ...s,
-      description: "구글 애널리틱스(GA4) 공식몰 유입·행동 데이터를 바로 조회합니다(DB 에 없음). 세션·사용자·신규·참여·장바구니·결제 시작·구매·구매액을 날짜·채널 그룹·소스/매체·캠페인·랜딩 페이지·기기·신규/재방문으로 나눠 봅니다(상품명 차원은 상품 측정항목과만). '어디서 들어왔나·유입은 늘었는데 왜 안 샀나·전환율' 질문에 씁니다. 세션+구매를 함께 넣으면 구매 전환율 열이 붙습니다. 결과는 표 카드로 붙습니다. 최대 400일.",
+      description: "구글 애널리틱스(GA4) 공식몰 유입·행동 데이터를 바로 조회합니다(DB 에 없음). 세션·사용자·신규·참여·장바구니·결제 시작·구매·구매액·페이지 조회·이탈률·참여율·이벤트 수·평균 세션 시간을 날짜·채널 그룹·소스/매체·캠페인·랜딩 페이지·페이지 경로·페이지 제목·이벤트·기기·신규/재방문으로 나눠 봅니다(상품명 차원은 상품 측정항목과만). filter 로 특정 페이지('/buy')·채널만 거릅니다. '어디서 들어왔나·유입은 늘었는데 왜 안 샀나·전환율·특정 페이지 이탈률' 질문에 씁니다. 세션+구매를 함께 넣으면 구매 전환율 열이 붙습니다. 페이지 사이의 이동·단계별 이탈은 ga_funnel. 결과는 표 카드로 붙습니다. 최대 400일.",
       input_schema: {
-        type: "object", additionalProperties: false, required: ["since", "until", "dimensions", "metrics", "limit"],
+        type: "object", additionalProperties: false, required: ["since", "until", "dimensions", "metrics", "limit", "filter"],
         properties: {
           since: { type: "string", description: "시작일 YYYY-MM-DD" },
           until: { type: "string", description: "끝일 YYYY-MM-DD(어제 이전)" },
           dimensions: { type: "array", items: { type: "string", enum: Object.keys(GA_DIMENSIONS) }, description: "나눌 기준 0~3개. 비우면 기간 합계 한 줄" },
           metrics: { type: "array", minItems: 1, items: { type: "string", enum: Object.keys(GA_METRICS) }, description: "측정항목 1개 이상" },
           limit: { type: ["integer", "null"], description: "행 수 상한(기본 200, 최대 5000)" },
+          filter: {
+            type: ["object", "null"], additionalProperties: false, required: ["dimension", "match", "value"],
+            description: "행을 거를 조건 하나(없으면 null). 예: 페이지 '/buy'만 → {dimension:'page_path', match:'exact', value:'/buy'}",
+            properties: { dimension: { type: "string", enum: Object.keys(GA_DIMENSIONS) }, match: { type: "string", enum: ["exact", "contains", "begins_with"] }, value: { type: "string" } },
+          },
+        },
+      },
+    },
+    {
+      name: "ga_funnel", ...s,
+      description: "GA4 유입경로 — 사용자가 단계(페이지·이벤트)를 차례로 밟았는지와 단계별 완료율·이탈률. '메인에서 /buy 로 간 사람 중 아무 행동 없이 나간 비율'처럼 페이지 사이의 이동·이탈 질문에 씁니다. 단계 2~10개, 각 단계는 page_path(페이지 경로)나 events(이벤트 이름, 여러 개면 그중 하나) 또는 둘 다. '아무 행동'은 마지막 단계를 events ['click','scroll','view_item','select_item','add_to_cart','begin_checkout','purchase','page_view'] 처럼 두고 그 앞 단계의 이탈률을 읽습니다. 결과는 표 카드로 붙습니다.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["since", "until", "steps", "breakdown"],
+        properties: {
+          since: { type: "string", description: "시작일 YYYY-MM-DD" },
+          until: { type: "string", description: "끝일 YYYY-MM-DD(어제 이전)" },
+          steps: {
+            type: "array", minItems: 2, maxItems: 10,
+            items: {
+              type: "object", additionalProperties: false, required: ["name", "page_path", "page_match", "events"],
+              properties: {
+                name: { type: "string", description: "단계 이름(한국어, 예: '메인')" },
+                page_path: { type: ["string", "null"], description: "페이지 경로(예: '/', '/buy'). 없으면 null" },
+                page_match: { type: ["string", "null"], enum: ["exact", "contains", "begins_with", null], description: "경로 비교 방식. 보통 exact" },
+                events: { type: ["array", "null"], items: { type: "string" }, description: "이벤트 이름 목록(그중 하나). 없으면 null" },
+              },
+            },
+          },
+          breakdown: { type: ["string", "null"], enum: ["device", "channel", null], description: "기기·채널 그룹별로 나눠 볼 때. 보통 null" },
         },
       },
     },
@@ -77,7 +106,12 @@ export function liveToolLabel(name: string, input: Record<string, unknown>): str
   if (name === "listing_status") return `채널 판매 상태: ${String(input.sku || "").slice(0, 40)}`;
   if (name === "ga_report") {
     const dims = (Array.isArray(input.dimensions) ? input.dimensions : []).map((d) => GA_DIMENSIONS[String(d) as GaDimensionKey]?.label || String(d)).join("·");
-    return `GA4 ${dims || "합계"} ${range}`;
+    const f = input.filter && typeof input.filter === "object" ? (input.filter as { value?: unknown }).value : null;
+    return `GA4 ${dims || "합계"}${f ? ` (${String(f).slice(0, 30)})` : ""} ${range}`;
+  }
+  if (name === "ga_funnel") {
+    const names = (Array.isArray(input.steps) ? input.steps : []).map((st) => String((st as { name?: unknown }).name || "")).filter(Boolean).join(" → ");
+    return `GA4 유입경로 ${names.slice(0, 60)} ${range}`;
   }
   return name;
 }
@@ -209,12 +243,38 @@ export async function runLiveTool(sb: SupabaseClient, state: LiveState, name: Li
     if (dayCount(since, until) > GA_MAX_DAYS) throw new Error(`GA4 조회는 ${GA_MAX_DAYS}일까지입니다.`);
     const dims = (Array.isArray(input.dimensions) ? input.dimensions : []).map(String).filter((d): d is GaDimensionKey => d in GA_DIMENSIONS).slice(0, 3);
     const mets = (Array.isArray(input.metrics) ? input.metrics : []).map(String).filter((m): m is GaMetricKey => m in GA_METRICS);
-    const r = await runGaReport({ since, until, dimensions: dims, metrics: mets, limit: typeof input.limit === "number" ? input.limit : 200 });
-    const title = `GA4 ${dims.map((d) => GA_DIMENSIONS[d].label).join("·") || "합계"} ${since}~${until}`;
+    const fi = input.filter && typeof input.filter === "object" ? (input.filter as { dimension?: unknown; match?: unknown; value?: unknown }) : null;
+    const filter = fi && typeof fi.dimension === "string" && fi.dimension in GA_DIMENSIONS && typeof fi.value === "string" && fi.value.trim()
+      ? { dimension: fi.dimension as GaDimensionKey, match: (["exact", "contains", "begins_with"].includes(String(fi.match)) ? fi.match : "exact") as GaMatch, value: fi.value.trim() } : null;
+    const r = await runGaReport({ since, until, dimensions: dims, metrics: mets, limit: typeof input.limit === "number" ? input.limit : 200, filter });
+    const title = `GA4 ${dims.map((d) => GA_DIMENSIONS[d].label).join("·") || "합계"}${filter ? ` (${GA_DIMENSIONS[filter.dimension].label} ${filter.value})` : ""} ${since}~${until}`;
     const body = JSON.stringify(r.rows.slice(0, 120));
     return {
       content: `${r.note}\n행 ${r.rowCount}${r.truncated ? "(상한에 잘림)" : ""} — 아래는 앞 120행(전체는 표 카드)\n${body.length > 14000 ? `${body.slice(0, 14000)} …(잘림)` : body}`,
       tables: [{ title, sql: "-- GA4 API 실시간 조회(SQL 아님 · 저장·엑셀·루커 불가)", columns: r.columns, rows: r.rows }],
+    };
+  }
+  if (name === "ga_funnel") {
+    if (!isGaConfigured()) return { content: "GA4 가 연결되어 있지 않습니다(관리자가 Vercel 환경 변수를 넣어야 합니다).", tables: [] };
+    const since = String(input.since || "").trim(), until = String(input.until || "").trim();
+    if (!validDate(since) || !validDate(until) || since > until) throw new Error("since·until 은 YYYY-MM-DD 이고 since ≤ until 이어야 합니다.");
+    const yesterday = kstDay(-1);
+    if (until > yesterday) throw new Error(`GA4 는 어제(${yesterday})까지만 확정값입니다 — until 을 어제 이전으로.`);
+    if (dayCount(since, until) > GA_MAX_DAYS) throw new Error(`GA4 조회는 ${GA_MAX_DAYS}일까지입니다.`);
+    const steps: GaFunnelStep[] = (Array.isArray(input.steps) ? input.steps : []).map((st) => {
+      const o = (st && typeof st === "object" ? st : {}) as Record<string, unknown>;
+      return {
+        name: String(o.name || ""), page_path: typeof o.page_path === "string" ? o.page_path : null,
+        page_match: (["exact", "contains", "begins_with"].includes(String(o.page_match)) ? o.page_match : "exact") as GaMatch,
+        events: Array.isArray(o.events) ? o.events.map(String) : null,
+      };
+    });
+    const breakdown = input.breakdown === "device" || input.breakdown === "channel" ? input.breakdown : null;
+    const r = await runGaFunnel({ since, until, steps, breakdown });
+    const title = `GA4 유입경로 ${steps.map((s2) => s2.name).join(" → ").slice(0, 70)} ${since}~${until}`;
+    return {
+      content: `${r.note}\n${JSON.stringify(r.rows).slice(0, 12000)}`,
+      tables: [{ title, sql: "-- GA4 유입경로 API 실시간 조회(SQL 아님 · 저장·엑셀·루커 불가)", columns: r.columns, rows: r.rows }],
     };
   }
   // 재고·채널 상태 — 오늘 기준(listing 명령은 최근 14일)

@@ -127,6 +127,9 @@ export const GA_DIMENSIONS = {
   landing_page: { api: "landingPage", label: "랜딩 페이지" },
   device: { api: "deviceCategory", label: "기기" },
   new_vs_returning: { api: "newVsReturning", label: "신규/재방문" },
+  page_path: { api: "pagePath", label: "페이지 경로" },                       // 2026-10-22 페이지 단위(/, /buy …)
+  page_title: { api: "pageTitle", label: "페이지 제목" },
+  event_name: { api: "eventName", label: "이벤트" },
   item_name: { api: "itemName", label: "상품명" },                             // 상품 측정항목(item_*)과만 짝
 } as const;
 export const GA_METRICS = {
@@ -138,6 +141,12 @@ export const GA_METRICS = {
   checkouts: { api: "checkouts", label: "결제 시작" },
   purchases: { api: "transactions", label: "구매" },
   revenue: { api: "purchaseRevenue", label: "구매액(원)" },
+  page_views: { api: "screenPageViews", label: "페이지 조회" },                 // 2026-10-22 페이지·참여 지표
+  bounce_rate: { api: "bounceRate", label: "이탈률(%)" },                       // API 는 0~1 비율 → %
+  engagement_rate: { api: "engagementRate", label: "참여율(%)" },
+  event_count: { api: "eventCount", label: "이벤트 수" },
+  avg_session_sec: { api: "averageSessionDuration", label: "평균 세션 시간(초)" },
+  views_per_session: { api: "screenPageViewsPerSession", label: "세션당 페이지 조회" },
   item_views: { api: "itemsViewed", label: "상품 조회" },
   items_purchased: { api: "itemsPurchased", label: "상품 구매 수량" },
   item_revenue: { api: "itemRevenue", label: "상품 구매액(원)" },
@@ -147,9 +156,14 @@ export type GaMetricKey = keyof typeof GA_METRICS;
 export const GA_MAX_DAYS = 400;
 
 export type GaReportResult = { columns: string[]; rows: Record<string, unknown>[]; rowCount: number; truncated: boolean; note: string };
+export type GaMatch = "exact" | "contains" | "begins_with";
+export type GaFilter = { dimension: GaDimensionKey; match: GaMatch; value: string };
+const MATCH_API: Record<GaMatch, string> = { exact: "EXACT", contains: "CONTAINS", begins_with: "BEGINS_WITH" };
+const RATE_METRICS = new Set<GaMetricKey>(["bounce_rate", "engagement_rate"]); // API 비율(0~1) → %
 
 // since·until = YYYY-MM-DD(어제까지). 행 = 차원 조합, 측정항목 순. 구매·세션이 함께 있으면 '구매 전환율(%)' 열을 덧붙인다.
-export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number }): Promise<GaReportResult> {
+//  filter = 차원 하나로 행을 거른다(예: page_path exact '/buy'). 필터 차원은 dimensions 에 없어도 된다.
+export async function runGaReport(p: { since: string; until: string; dimensions: GaDimensionKey[]; metrics: GaMetricKey[]; limit?: number; filter?: GaFilter | null }): Promise<GaReportResult> {
   const dims = [...new Set(p.dimensions)].filter((d) => d in GA_DIMENSIONS);
   const mets = [...new Set(p.metrics)].filter((m) => m in GA_METRICS);
   if (!mets.length) throw new Error("측정항목(metrics)이 하나 이상 필요합니다.");
@@ -158,6 +172,7 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
   if (itemMet && !itemDim) throw new Error("상품 측정항목(item_*)은 차원 item_name 과 함께 써야 합니다.");
   if (itemDim && mets.some((m) => !m.startsWith("item"))) throw new Error("차원 item_name 에는 상품 측정항목(item_views·items_purchased·item_revenue)만 함께 씁니다.");
   const limit = Math.min(5000, Math.max(1, Math.round(p.limit || 200)));
+  const f = p.filter && p.filter.dimension in GA_DIMENSIONS && String(p.filter.value || "").trim() ? p.filter : null;
   const { propertyId } = creds();
   const token = await accessToken();
   const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
@@ -167,6 +182,7 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
       dateRanges: [{ startDate: p.since, endDate: p.until }],
       dimensions: dims.map((d) => ({ name: GA_DIMENSIONS[d].api })),
       metrics: mets.map((m) => ({ name: GA_METRICS[m].api })),
+      ...(f ? { dimensionFilter: { filter: { fieldName: GA_DIMENSIONS[f.dimension].api, stringFilter: { matchType: MATCH_API[f.match] || "EXACT", value: String(f.value).trim(), caseSensitive: false } } } } : {}),
       orderBys: dims.includes("date") ? [{ dimension: { dimensionName: "date" } }] : [{ metric: { metricName: GA_METRICS[mets[0]].api }, desc: true }],
       limit: String(limit + 1), // 한 줄 더 읽어 잘림을 안다
       keepEmptyRows: false,
@@ -190,7 +206,9 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
     });
     mets.forEach((m, i) => {
       const v = Number(r.metricValues?.[i]?.value) || 0;
-      row[GA_METRICS[m].label] = m === "revenue" || m === "item_revenue" ? Math.round(v) : v;
+      row[GA_METRICS[m].label] = m === "revenue" || m === "item_revenue" ? Math.round(v)
+        : RATE_METRICS.has(m) ? Math.round(v * 10000) / 100
+        : m === "avg_session_sec" || m === "views_per_session" ? Math.round(v * 10) / 10 : v;
     });
     if (withRate) {
       const ses = Number(r.metricValues?.[si]?.value) || 0, pur = Number(r.metricValues?.[pi]?.value) || 0;
@@ -202,4 +220,55 @@ export async function runGaReport(p: { since: string; until: string; dimensions:
     columns, rows, rowCount: rows.length, truncated: all.length > limit,
     note: "GA4 세션 귀속 기준(마지막 클릭이 아니라 세션 시작 소스). 구매·구매액은 GA 전자상거래 이벤트 기준이라 매출 원장과 다를 수 있다. 어제까지만 확정값.",
   };
+}
+
+// ── 유입경로(단계별 이탈) — runFunnelReport(v1alpha, 구글이 '변경될 수 있음'이라 둔 API). 2026-10-22 비서 ga_funnel ──
+//  단계 = 페이지 경로(unifiedPagePathScreen)·이벤트 이름(여러 개면 '그중 하나') 조건. 닫힌 유입경로(1단계부터 들어온 사용자만).
+//  답 = 단계별 활성 사용자·완료율·이탈 수·이탈률. "메인 → /buy → 아무 행동 없이 나감"은 3단계(행동 이벤트들)로 두고 2단계 이탈률을 본다.
+export type GaFunnelStep = { name: string; page_path?: string | null; page_match?: GaMatch | null; events?: string[] | null };
+export type GaFunnelResult = { columns: string[]; rows: Record<string, unknown>[]; note: string };
+
+export async function runGaFunnel(p: { since: string; until: string; steps: GaFunnelStep[]; open?: boolean; breakdown?: "device" | "channel" | null }): Promise<GaFunnelResult> {
+  const steps = (p.steps || []).slice(0, 10).map((st, i) => {
+    const exprs: Record<string, unknown>[] = [];
+    const path = String(st.page_path || "").trim();
+    if (path) exprs.push({ funnelFieldFilter: { fieldName: "unifiedPagePathScreen", stringFilter: { matchType: MATCH_API[st.page_match || "exact"] || "EXACT", value: path, caseSensitive: false } } });
+    const evs = (st.events || []).map((e) => String(e).trim()).filter(Boolean).slice(0, 20);
+    if (evs.length === 1) exprs.push({ funnelEventFilter: { eventName: evs[0] } });
+    else if (evs.length > 1) exprs.push({ orGroup: { expressions: evs.map((e) => ({ funnelEventFilter: { eventName: e } })) } });
+    if (!exprs.length) throw new Error(`${i + 1}단계(${st.name || ""})에 페이지 경로나 이벤트 조건이 없습니다.`);
+    return { name: String(st.name || `${i + 1}단계`).slice(0, 40), filterExpression: exprs.length === 1 ? exprs[0] : { andGroup: { expressions: exprs } } };
+  });
+  if (steps.length < 2) throw new Error("유입경로는 단계가 2개 이상이어야 합니다.");
+  const { propertyId } = creds();
+  const token = await accessToken();
+  const breakdown = p.breakdown === "device" ? "deviceCategory" : p.breakdown === "channel" ? "sessionDefaultChannelGroup" : null;
+  const res = await fetch(`https://analyticsdata.googleapis.com/v1alpha/properties/${propertyId}:runFunnelReport`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dateRanges: [{ startDate: p.since, endDate: p.until }],
+      funnel: { isOpenFunnel: !!p.open, steps },
+      ...(breakdown ? { funnelBreakdown: { breakdownDimension: { name: breakdown }, limit: 5 } } : {}),
+    }),
+    cache: "no-store",
+  });
+  const j = (await res.json().catch(() => ({}))) as {
+    funnelTable?: { dimensionHeaders?: { name?: string }[]; metricHeaders?: { name?: string }[]; rows?: { dimensionValues?: { value?: string }[]; metricValues?: { value?: string }[] }[] };
+    error?: { message?: string };
+  };
+  if (!res.ok) throw new Error(`GA 유입경로 API ${res.status}: ${j.error?.message || "조회 실패"}`);
+  const t = j.funnelTable || {};
+  const dh = (t.dimensionHeaders || []).map((h) => String(h.name || ""));
+  const mh = (t.metricHeaders || []).map((h) => String(h.name || ""));
+  const dimLabel = (n: string) => (n === "funnelStepName" ? "단계" : n === "deviceCategory" ? "기기" : n === "sessionDefaultChannelGroup" ? "채널 그룹" : n);
+  const metLabel = (n: string) => (n === "activeUsers" ? "사용자" : n === "funnelStepCompletionRate" ? "완료율(%)" : n === "funnelStepAbandonments" ? "이탈 수" : n === "funnelStepAbandonmentRate" ? "이탈률(%)" : n);
+  const columns = [...dh.map(dimLabel), ...mh.map(metLabel)];
+  const rows = (t.rows || []).map((r) => {
+    const row: Record<string, unknown> = {};
+    dh.forEach((n, i) => { const v = r.dimensionValues?.[i]?.value ?? ""; row[dimLabel(n)] = v === "RESERVED_TOTAL" ? "합계" : v; });
+    mh.forEach((n, i) => { const v = Number(r.metricValues?.[i]?.value) || 0; row[metLabel(n)] = /Rate$/.test(n) ? Math.round(v * 10000) / 100 : v; });
+    return row;
+  });
+  return { columns, rows, note: "닫힌 유입경로(1단계부터 들어온 사용자 기준, 사용자 수). 완료율 = 다음 단계로 간 비율, 이탈률 = 그 단계에서 멈춘 비율. 단계 사이 순서는 같은 세션 안의 선후만 본다(바로 다음일 필요 없음)." };
 }
