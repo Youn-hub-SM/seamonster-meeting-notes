@@ -10,7 +10,8 @@ param(
   [Parameter(Mandatory = $true)][string]$ExportDir,
   [string]$Tenant = "seamonster2016",
   [string]$SiteAlias = "manual",
-  [switch]$KeepExistingNav      # 기존 왼쪽 탐색을 지우지 않고 뒤에 덧붙인다
+  [switch]$KeepExistingNav,     # 기존 왼쪽 탐색을 지우지 않고 뒤에 덧붙인다
+  [string[]]$Exclude = @("edit") # 건너뛸 최상위 항목 제목(GitBook 의 초안·숨김 묶음 등)
 )
 $ErrorActionPreference = "Continue"
 if ($PSVersionTable.PSVersion.Major -lt 7) { Write-Host "PowerShell 7(pwsh)에서 실행하세요." -ForegroundColor Red; exit 1 }
@@ -23,6 +24,9 @@ $cidFile = Join-Path $env:USERPROFILE ".secrets\pnp-clientid.txt"
 if (-not (Test-Path $cidFile)) { Write-Host "로그인 앱 ID 파일이 없습니다: $cidFile (docs/sharepoint-manual-build.ps1 을 먼저 실행)" -ForegroundColor Red; exit 1 }
 $ClientId = (Get-Content $cidFile -Raw).Trim()
 $json = Get-Content (Join-Path $ExportDir "pages.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$json.pages = @($json.pages | Where-Object { $Exclude -notcontains $_.title })
+# 본문이 비어 있는 페이지(GitBook 에서 묶음 머리로만 쓴 것)는 페이지를 만들지 않고 탐색 레이블로만 쓴다
+function Has-Body([string]$html) { return (($html -replace '<[^>]+>', '') -replace '\s|&nbsp;', '').Length -ge 5 }
 
 Import-Module PnP.PowerShell
 Connect-PnPOnline -Url $SiteUrl -Interactive -ClientId $ClientId
@@ -66,8 +70,8 @@ function Ensure-Page([string]$title, [string]$html) {
 $urls = @{}   # title → url (탐색용)
 function Import-Tree($nodes, [string]$parentTitle) {
   foreach ($n in $nodes) {
-    if ($n.file) {
-      $html = Get-Content (Join-Path $ExportDir "pages\$($n.file)") -Raw -Encoding UTF8
+    $html = if ($n.file) { Get-Content (Join-Path $ExportDir "pages\$($n.file)") -Raw -Encoding UTF8 } else { "" }
+    if ($n.file -and (Has-Body $html)) {
       $html = $html.Replace("@@IMG@@/", "$imgBase/")
       $title = if ($n.depth -ge 2 -and $parentTitle) { "$parentTitle › $($n.title)" } else { $n.title }
       try { $urls[$n.id] = Ensure-Page $title $html; Ok ("  " * $n.depth + $title) } catch { Warn "페이지 실패 '$title': $($_.Exception.Message)" }

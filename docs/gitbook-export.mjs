@@ -32,7 +32,7 @@ async function all(path) { // 페이징(next.page)
 // ── 마크다운 → HTML (GitBook 문법 포함, SharePoint 텍스트 웹 파트가 받아들이는 태그만) ──
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function inline(s, images) {
-  s = esc(s);
+  s = esc(s).replace(/@@BR@@/g, "<br>");
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, alt, url) => { const name = images.add(url); return `<img src="@@IMG@@/${name}" alt="${alt.replace(/&lt;[^&]*&gt;/g, "").trim()}">`; });
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, t, u) => `<a href="${u}">${t}</a>`);
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
@@ -41,15 +41,23 @@ function inline(s, images) {
   s = s.replace(/~~([^~]+)~~/g, "<s>$1</s>");
   return s;
 }
-export function mdToHtml(md, images) {
+export function mdToHtml(md, images, opts = {}) {
+  // GitBook 내보내기 특유의 것: 머리 정보(--- description ---), HTML 엔티티(&#x20;), 백슬래시 이스케이프(\&), 줄 끝 \ = 줄바꿈
+  md = md.replace(/\r/g, "").replace(/^---\n[\s\S]*?\n---\n/, "")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => { const c = parseInt(h, 16); return c === 13 ? "" : c === 10 ? " " : String.fromCodePoint(c); })
+    .replace(/&#(\d+);/g, (_, d) => { const c = Number(d); return c === 13 ? "" : c === 10 ? " " : String.fromCodePoint(c); })
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .replace(/\\\n/g, "@@BR@@\n").replace(/\\([&_*#\[\]()`~>|-])/g, "$1");
+  // 첫 제목이 페이지 제목과 같으면 뺀다(SharePoint 페이지 제목이 그 역할)
+  if (opts.title) md = md.replace(new RegExp(`^\\s*#{1,2}\\s+${opts.title.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(\\n|$)`), "");
   // GitBook 블록 → 일반 마크다운
-  md = md.replace(/\r/g, "")
+  md = md
     .replace(/\{%\s*hint\s+style="(\w+)"\s*%\}([\s\S]*?)\{%\s*endhint\s*%\}/g, (_, st, body) => `> **${({ info: "안내", warning: "주의", danger: "경고", success: "팁" })[st] || "안내"}**\n> ${body.trim().split("\n").join("\n> ")}\n`)
     .replace(/\{%\s*tabs\s*%\}|\{%\s*endtabs\s*%\}/g, "")
-    .replace(/\{%\s*tab\s+title="([^"]*)"\s*%\}/g, "\n#### $1\n").replace(/\{%\s*endtab\s*%\}/g, "\n")
+    .replace(/\{%\s*tab\s+title="([^"]*)"\s*%\}/g, "\n### $1\n").replace(/\{%\s*endtab\s*%\}/g, "\n")
     .replace(/\{%\s*embed\s+url="([^"]*)"\s*%\}/g, "[$1]($1)")
     .replace(/\{%\s*content-ref\s+url="([^"]*)"\s*%\}[\s\S]*?\{%\s*endcontent-ref\s*%\}/g, "[관련: $1]($1)")
-    .replace(/<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g, "\n#### $1\n$2\n")
+    .replace(/<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g, "\n### $1\n$2\n")
     .replace(/<figure>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*>[\s\S]*?(?:<figcaption>([\s\S]*?)<\/figcaption>)?[\s\S]*?<\/figure>/g, (_, src, cap) => `![${(cap || "").replace(/<[^>]+>/g, "").trim()}](${src})`)
     .replace(/\{%[^%]*%\}/g, "");
   const lines = md.split("\n"); const out = []; let i = 0;
@@ -58,8 +66,8 @@ export function mdToHtml(md, images) {
   while (i < lines.length) {
     const l = lines[i];
     let m;
-    // SharePoint 텍스트 웹 파트의 '제목 1' 은 h2 — 한 단계 내리고 h4 까지만(페이지 제목이 h1 역할)
-    if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { flushPara(para); const lv = Math.min(m[1].length + 1, 4); out.push(`<h${lv}>${inline(m[2], images)}</h${lv}>`); i++; continue; }
+    // SharePoint 텍스트 웹 파트의 '제목 1' 은 h2(목차 웹 파트는 h2·h3 를 모은다) — h1 은 h2 로, h4 까지만
+    if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { flushPara(para); const lv = Math.max(2, Math.min(m[1].length, 4)); out.push(`<h${lv}>${inline(m[2], images)}</h${lv}>`); i++; continue; }
     if (/^```/.test(l)) { flushPara(para); const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]); i++; out.push(`<pre>${esc(buf.join("\n"))}</pre>`); continue; }
     if (/^\s*[-*+]\s+/.test(l) || /^\s*\d+[.)]\s+/.test(l)) {
       flushPara(para); const ordered = /^\s*\d+[.)]\s+/.test(l); const items = [];
@@ -138,7 +146,7 @@ async function cmdExport(spaceId, outRoot) {
         try {
           const j = await api(`/spaces/${spaceId}/content/page/${p.id}?format=markdown`);
           const md = typeof j.markdown === "string" ? j.markdown : docToMd(j.document);
-          html = mdToHtml(md, images);
+          html = mdToHtml(md, images, { title });
         } catch (e) { html = `<p>(본문을 가져오지 못했습니다: ${esc(String(e.message))})</p>`; }
       }
       let file = safeName([...parentTitles.slice(-1), title].join(" - ")); let c = 1; const base = file; while (used.has(file)) file = `${base}-${++c}`; used.add(file);
