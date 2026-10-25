@@ -5,7 +5,7 @@
 #   3 머리글 최소 레이아웃·푸터 끄기                          4 왼쪽 탐색 트리(CS·세일즈·물류·관리자)
 #   5 페이지 템플릿 '매뉴얼'                                   6 홈 페이지(빠른 연결·최근 바뀐 매뉴얼)
 #   7 전 직원 읽기 권한
-#  실행:
+#  실행 — 반드시 PowerShell 7(pwsh)에서. Windows PowerShell 5.1 에는 최신 PnP 모듈이 안 깔린다(winget install --id Microsoft.PowerShell -e):
 #    Set-ExecutionPolicy -Scope Process Bypass
 #    .\docs\sharepoint-manual-build.ps1
 #  처음 한 번: PnP 모듈 설치(몇 분) + 로그인용 Entra 앱 등록(브라우저에서 관리자 동의 한 번). 앱 ID 는 내 PC 파일에 저장된다.
@@ -24,6 +24,11 @@ $Nav = @(                                           # 왼쪽 탐색 — 그룹(�
 # ───────────────────────────────────────────────────────────────
 
 $ErrorActionPreference = "Continue"
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+  Write-Host "PowerShell 7 에서 실행해야 합니다(지금은 $($PSVersionTable.PSVersion)). 최신 PnP 모듈은 Windows PowerShell 5.1 에 설치되지 않습니다." -ForegroundColor Red
+  Write-Host "설치: winget install --id Microsoft.PowerShell -e   → 설치 뒤 시작 메뉴의 'PowerShell 7' 을 열어 다시 실행" -ForegroundColor Yellow
+  exit 1
+}
 $AdminUrl = "https://$Tenant-admin.sharepoint.com"
 $SiteUrl  = "https://$Tenant.sharepoint.com/sites/$SiteAlias"
 function Step($msg) { Write-Host "`n== $msg" -ForegroundColor Cyan }
