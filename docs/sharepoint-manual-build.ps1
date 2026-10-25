@@ -47,7 +47,9 @@ if (Test-Path $cidFile) { $ClientId = (Get-Content $cidFile -Raw).Trim() }
 if (-not $ClientId) {
   Step "준비: 로그인용 Entra 앱 등록(한 번만) — 브라우저에서 관리자 로그인·동의"
   $reg = $null
-  try { $reg = Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "seamonster-pnp-login" -Tenant "$Tenant.onmicrosoft.com" -Interactive -ErrorAction Stop } catch { Warn "앱 등록 호출 실패(이미 있으면 정상): $($_.Exception.Message)" }
+  # 기본이 브라우저 로그인(-Interactive 스위치 없음). 사이트 쓰기 + Graph 사이트 쓰기만 요청한다.
+  try { $reg = Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "seamonster-pnp-login" -Tenant "$Tenant.onmicrosoft.com" -SharePointDelegatePermissions "AllSites.FullControl" -GraphDelegatePermissions "Sites.FullControl.All","User.Read" -ErrorAction Stop } catch { Warn "앱 등록 호출 실패(이미 있으면 정상): $($_.Exception.Message)" }
+  if ($reg) { Write-Host "   등록 결과:" -ForegroundColor DarkGray; $reg | Format-List | Out-String | Write-Host }
   if ($reg) {
     foreach ($prop in @('AzureAppId/ClientId', 'ClientId', 'AppId', 'AzureAppId')) {
       if (-not $ClientId -and $reg.PSObject.Properties[$prop]) { $ClientId = [string]$reg.$prop }
