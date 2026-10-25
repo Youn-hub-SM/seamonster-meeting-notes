@@ -148,6 +148,7 @@ async function pdfText(bytes: Buffer): Promise<string> {
   const { extractText } = await import("unpdf");
   const r = await extractText(new Uint8Array(bytes), { mergePages: true });
   const text = Array.isArray(r.text) ? r.text.join("\n") : String(r.text || "");
+  if (text.trim().length < 20) return `(PDF ${r.totalPages}쪽 — 글자가 없습니다. 스캔 이미지 PDF 로 보이며 본문을 읽을 수 없습니다.)`;
   return `(PDF ${r.totalPages}쪽)\n${text.trim()}`;
 }
 

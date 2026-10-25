@@ -65,7 +65,7 @@ Vercel → 프로젝트 → Settings → Environment Variables (Production·Prev
 
 ## 읽는 형식·한계
 
-- docx·pptx·xlsx·pdf·txt·csv·md·json. 옛 doc·xls·ppt 는 Graph 의 PDF 변환을 거쳐 읽는다. OneNote·이미지·한글(hwp)은 못 읽는다.
+- docx·pptx·xlsx·pdf·txt·csv·md·json. 옛 doc·xls·ppt 는 Graph 의 PDF 변환을 거쳐 읽는다. OneNote·이미지·한글(hwp)은 못 읽고, 스캔 이미지 PDF 는 글자가 없어 "읽을 수 없음"으로 돌아온다(검증: 글자 PDF·docx·xlsx 추출 확인, 2026-10-25).
 - 파일 25MB 상한, 본문은 한 번에 2만 4천 자씩 이어 읽는다(비서가 next 로 알아서 넘긴다). 엑셀은 시트당 앞 500행.
 - 검색은 SharePoint 검색 인덱스를 쓴다 — 방금 올린 문서는 몇 분 뒤에 잡힌다. 이름 검색이 안 되면 docs_list 로 폴더를 따라간다.
 - 쓰기·수정·삭제 없음. 직원별 권한 구분 없음(여기 적은 문서함은 업무도우미 사용자 전원이 비서를 통해 읽는다) — 민감 문서가 있는 사이트는 적지 않는다.
