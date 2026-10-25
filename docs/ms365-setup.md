@@ -22,7 +22,22 @@
 
 ## 2. Sites.Selected 를 골랐으면 — 사이트별 읽기 허용
 
-`Sites.Selected` 는 사이트에 권한을 따로 줘야 Graph 가 403(accessDenied)을 안 낸다. 가장 쉬운 길은 Graph 탐색기.
+`Sites.Selected` 는 사이트에 권한을 따로 줘야 Graph 가 403(accessDenied)을 안 낸다.
+대표 결정(2026-10-25): 급여 정보가 있는 사이트가 있어 **권한 자체를 사이트별로 막는다** → 이 방식으로 간다.
+
+### 2-a. 여러 사이트를 한 번에 — PowerShell 스크립트(권장)
+
+`docs/ms365-grant-sites.ps1` 을 연다 → `$AppId` 와 `$Sites`(읽게 할 사이트 주소 목록)만 채운다 → PowerShell 에서 실행.
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\docs\ms365-grant-sites.ps1
+```
+
+처음엔 Microsoft.Graph 모듈 설치와 브라우저 로그인 창이 뜬다(관리자 계정). 사이트마다 "허용:" 또는 "이미 허용됨:" 이 찍히면 끝.
+나중에 사이트를 더 열 땐 목록에 추가해 다시 실행(이미 허용된 건 건너뛴다).
+
+### 2-b. 하나씩 — Graph 탐색기
 
 1. https://developer.microsoft.com/graph/graph-explorer 에 **전역 관리자**로 로그인.
 2. 사이트 ID 조회: `GET https://graph.microsoft.com/v1.0/sites/회사.sharepoint.com:/sites/사이트이름` → 응답의 `id` 복사
