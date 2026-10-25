@@ -41,12 +41,21 @@ $cidFile = Join-Path $secretDir "pnp-clientid.txt"
 if (Test-Path $cidFile) { $ClientId = (Get-Content $cidFile -Raw).Trim() }
 if (-not $ClientId) {
   Step "준비: 로그인용 Entra 앱 등록(한 번만) — 브라우저에서 관리자 로그인·동의"
-  $reg = Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "seamonster-pnp-login" -Tenant "$Tenant.onmicrosoft.com" -Interactive
-  $ClientId = $reg.'AzureAppId/ClientId'
-  if (-not $ClientId) { $ClientId = $reg.ClientId }
-  if (-not $ClientId) { Write-Host "앱 등록 결과에서 ClientId 를 못 읽었습니다. 출력:"; $reg | Format-List; exit 1 }
+  $reg = $null
+  try { $reg = Register-PnPEntraIDAppForInteractiveLogin -ApplicationName "seamonster-pnp-login" -Tenant "$Tenant.onmicrosoft.com" -Interactive -ErrorAction Stop } catch { Warn "앱 등록 호출 실패(이미 있으면 정상): $($_.Exception.Message)" }
+  if ($reg) {
+    foreach ($prop in @('AzureAppId/ClientId', 'ClientId', 'AppId', 'AzureAppId')) {
+      if (-not $ClientId -and $reg.PSObject.Properties[$prop]) { $ClientId = [string]$reg.$prop }
+    }
+    if (-not $ClientId) { $m = ($reg | Out-String) -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})'; if ($m) { $ClientId = $Matches[1] } }
+  }
+  if (-not $ClientId) {
+    Write-Host "앱 ID 를 자동으로 못 읽었습니다. https://entra.microsoft.com → 앱 등록 → 'seamonster-pnp-login' → 개요의 '애플리케이션(클라이언트) ID' 를 복사해 붙여넣으세요." -ForegroundColor Yellow
+    $ClientId = (Read-Host "애플리케이션(클라이언트) ID").Trim()
+    if ($ClientId -notmatch '^[0-9a-fA-F-]{36}$') { Write-Host "ID 형식이 아닙니다." -ForegroundColor Red; exit 1 }
+  }
   Set-Content -Path $cidFile -Value $ClientId -Encoding ascii
-  Ok "앱 등록 완료 — ID 저장: $cidFile"
+  Ok "앱 ID 저장: $cidFile (다음부터는 묻지 않음)"
 }
 
 # ── 1. 사이트 ──
