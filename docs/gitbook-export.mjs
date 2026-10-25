@@ -150,7 +150,7 @@ async function cmdExport(spaceId, outRoot) {
         } catch (e) { html = `<p>(본문을 가져오지 못했습니다: ${esc(String(e.message))})</p>`; }
       }
       let file = safeName([...parentTitles.slice(-1), title].join(" - ")); let c = 1; const base = file; while (used.has(file)) file = `${base}-${++c}`; used.add(file);
-      if (html) writeFileSync(join(dir, "pages", `${file}.html`), html, "utf8");
+      writeFileSync(join(dir, "pages", `${file}.html`), html, "utf8"); // 빈 본문도 써서 이전 실행의 찌꺼기를 덮는다
       const node = { id: p.id, title, kind: p.kind || "sheet", path: p.path || "", file: html ? `${file}.html` : null, order: k, depth, children: [] };
       into.push(node);
       await walk(p.pages, [...parentTitles, title], depth + 1, node.children);
