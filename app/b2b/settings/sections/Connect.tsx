@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { qtyText } from "@/app/lib/format";
 import { OnOff, Pill, SetCard, SetRow, SaveBar, Result, useReportDirty, api, errText, hhmm, type Msg, type SectionProps } from "../ui";
 
-// 연결 — 외부 채널 주소·키는 이 한 곳에만(2026-10-21 중복 정리). Teams 채널 5개 + 전체 발송, 아사나, Tally.
+// 연결 — 외부 채널 주소·키는 이 한 곳에만(2026-10-21 중복 정리). Teams 채널 5개 + 전체 발송, 아사나, Tally, Microsoft 365 문서(2026-10-25).
 //  주소·키는 화면에 다시 보이지 않는다(꼬리만) — 새 값을 넣거나 [지우기]를 고른 뒤 [저장].
 
 type TeamsSaved = { enabled: boolean; has: Record<Ch, boolean>; tail: Record<Ch, string> };
@@ -21,6 +21,9 @@ const NO_CLEAR = { url: false, helperUrl: false, claimsUrl: false, inquiryUrl: f
 
 type AsanaSaved = { hasPat: boolean; project: string; assignee: string };
 type TallySaved = { hasKey: boolean; formId: string };
+type MsSaved = { configured: boolean; text: string }; // text = '주소 | 이름' 한 줄에 하나(화면 편집용)
+const msToText = (s: { url: string; label: string }[]) => s.map((x) => (x.label ? `${x.url} | ${x.label}` : x.url)).join("\n");
+const msFromText = (t: string) => t.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const [url, ...rest] = l.split("|"); return { url: url.trim(), label: rest.join("|").trim() }; });
 
 export default function ConnectSection({ onDirty }: SectionProps) {
   const [err, setErr] = useState("");
@@ -44,6 +47,10 @@ export default function ConnectSection({ onDirty }: SectionProps) {
   const [formId, setFormId] = useState("");
   const [forms, setForms] = useState<{ id: string; name: string }[]>([]);
   const [yMsg, setYMsg] = useState<Msg | null>(null);
+  // Microsoft 365 문서
+  const [ms, setMs] = useState<MsSaved | null>(null);
+  const [msText, setMsText] = useState("");
+  const [mMsg, setMMsg] = useState<Msg | null>(null);
 
   const [busy, setBusy] = useState("");
   const [saving, setSaving] = useState(false);
@@ -68,21 +75,28 @@ export default function ConnectSection({ onDirty }: SectionProps) {
     const s = { hasKey: !!j.hasApiKey, formId: j.formId || "" };
     setTally(s); setKNew(""); setKClear(false); setFormId(s.formId);
   }, []);
+  const loadMs = useCallback(async () => {
+    const j = await api<{ configured: boolean; sources: { url: string; label: string }[] }>("/api/b2b/settings/ms365");
+    const s = { configured: !!j.configured, text: msToText(j.sources || []) };
+    setMs(s); setMsText(s.text);
+  }, []);
 
   useEffect(() => {
-    Promise.all([loadTeams(), loadAsana(), loadTally()]).catch((e) => setErr(errText(e, "연결 설정을 불러오지 못했습니다. 새로고침하세요")));
-  }, [loadTeams, loadAsana, loadTally]);
+    Promise.all([loadTeams(), loadAsana(), loadTally(), loadMs()]).catch((e) => setErr(errText(e, "연결 설정을 불러오지 못했습니다. 새로고침하세요")));
+  }, [loadTeams, loadAsana, loadTally, loadMs]);
 
   const teamsDirty = !!teams && (tEnabled !== teams.enabled || CHANNELS.some((c) => tNew[c.key].trim() || tClear[c.key]));
   const asanaDirty = !!asana && (!!aPat.trim() || aPatClear || aProject.trim() !== asana.project || aAssignee.trim() !== asana.assignee);
   const tallyDirty = !!tally && (!!kNew.trim() || kClear || formId !== tally.formId);
-  const dirty = teamsDirty || asanaDirty || tallyDirty;
+  const msDirty = !!ms && msText.trim() !== ms.text.trim();
+  const dirty = teamsDirty || asanaDirty || tallyDirty || msDirty;
   useReportDirty(dirty, onDirty);
 
   function reset() {
     if (teams) { setTEnabled(teams.enabled); setTNew(NO_CH); setTClear(NO_CLEAR); }
     if (asana) { setAPat(""); setAPatClear(false); setAProject(asana.project); setAAssignee(asana.assignee); }
     if (tally) { setKNew(""); setKClear(false); setFormId(tally.formId); }
+    if (ms) setMsText(ms.text);
     setSaveMsg(null);
   }
 
@@ -108,6 +122,10 @@ export default function ConnectSection({ onDirty }: SectionProps) {
         if (formId !== tally.formId) await api("/api/voc/tally-config", "POST", { formId });
         await loadTally();
       }
+      if (msDirty) {
+        await api("/api/b2b/settings/ms365", "PUT", { sources: msFromText(msText) });
+        await loadMs();
+      }
       setSaveMsg({ ok: true, text: `저장했습니다 (${hhmm()})` });
     } catch (e) { setSaveMsg({ ok: false, text: errText(e, "저장하지 못했습니다. 입력값을 확인하세요") }); }
     setSaving(false);
@@ -129,6 +147,11 @@ export default function ConnectSection({ onDirty }: SectionProps) {
     setYMsg(null);
     try { const j = await api<{ forms: { id: string; name: string }[] }>("/api/voc/tally/forms"); setForms(j.forms || []); if (!j.forms?.length) setYMsg({ ok: false, text: "폼이 없습니다. Tally 에서 폼을 만든 뒤 다시 불러오세요" }); }
     catch (e) { setYMsg({ ok: false, text: errText(e, "폼을 불러오지 못했습니다. API 키를 확인하세요") }); }
+  });
+  const testMs = () => run("ms", async () => {
+    setMMsg(null);
+    try { const j = await api<{ detail: string }>("/api/b2b/settings/ms365", "POST"); setMMsg({ ok: true, text: `연결됨 — ${j.detail || ""}` }); }
+    catch (e) { setMMsg({ ok: false, text: errText(e, "연결을 확인하지 못했습니다. 사이트 주소와 앱 권한을 확인하세요") }); }
   });
   const importNow = () => run("import", async () => {
     setYMsg(null);
@@ -194,6 +217,15 @@ export default function ConnectSection({ onDirty }: SectionProps) {
           ) : undefined} />
         {tallyDirty && <p className="set-row-note">폼 불러오기·응답 가져오기는 저장한 뒤에 켜집니다</p>}
         <Result msg={yMsg} />
+      </SetCard>
+
+      <SetCard title="Microsoft 365 문서" pill={!ms ? null : !ms.configured ? <Pill state="err">자격 없음</Pill> : ms.text.trim() ? <Pill state="on">연결됨</Pill> : <Pill state="warn">문서함 없음</Pill>}
+        desc="AI 비서가 읽는 회사 공용 문서함(SharePoint 사이트·OneDrive). 읽기만 하고, 여기 적은 곳만 읽습니다. 앱 자격(테넌트·클라이언트 ID·시크릿)은 Vercel 환경 변수에 두고 절차는 docs/ms365-setup.md 를 따릅니다."
+        actions={<button type="button" className="b2b-btn-secondary" onClick={testMs} disabled={busy === "ms" || !ms?.configured || !ms?.text.trim() || msDirty}>{busy === "ms" ? "확인 중..." : "연결 확인"}</button>}>
+        <SetRow label="읽을 문서함" desc="한 줄에 하나 — 사이트 주소, 그 뒤에 ' | 이름'(비서가 부르는 이름). 예: https://회사.sharepoint.com/sites/docs | 공용 문서"
+          control={<textarea className="b2b-input set-secret" rows={4} value={msText} onChange={(e) => setMsText(e.target.value)} placeholder={"https://회사.sharepoint.com/sites/docs | 공용 문서\nhttps://회사-my.sharepoint.com/personal/이름_회사_com | 대표 OneDrive"} aria-label="읽을 문서함" disabled={!ms} style={{ fontFamily: "inherit", resize: "vertical" }} />} />
+        {msDirty && <p className="set-row-note">연결 확인은 저장한 뒤에 켜집니다</p>}
+        <Result msg={mMsg} />
       </SetCard>
 
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} msg={saveMsg} />

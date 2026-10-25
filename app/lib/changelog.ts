@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-10-25",
+    tag: "신규",
+    tool: "AI 비서",
+    title: "회사 문서함(Microsoft 365)을 AI 비서가 읽습니다",
+    desc: "SharePoint·OneDrive 의 회사 공용 문서를 AI 비서에게 물어볼 수 있습니다 — '거래처 계약서 찾아줘', '이 매뉴얼 요약해줘', '보고서 폴더에 뭐가 있나'. 비서가 문서함을 검색해 본문(Word·PowerPoint·Excel·PDF·텍스트)을 읽고 문서 이름·위치와 함께 답합니다. 읽기만 하고, 관리자 › 설정 › 연결에 적은 문서함만 읽습니다.",
+    href: "/report",
+  },
+  {
     date: "2026-10-22",
     tag: "신규",
     tool: "관리자",

@@ -1,0 +1,199 @@
+// 회사 공용 문서(SharePoint·OneDrive) 검색·읽기 — AI 비서 docs_* 도구와 관리자 › 설정 › 연결의 'Microsoft 365 문서' 카드가 쓴다(2026-10-25).
+//  읽을 곳(사이트 주소 목록)은 kv 'ms365_sources' — 관리자가 설정 화면에서 넣는다. 자격(env)은 msgraph.ts.
+//  문서 본문은 서버에서 글로 바꿔 모델에 넘긴다: docx·pptx 는 zip 안 XML, xlsx 는 exceljs, pdf 는 unpdf,
+//  doc·xls·ppt 같은 옛 형식은 Graph 의 PDF 변환을 거친다. 쓰기는 없다(대표 결정: 읽기만).
+
+import JSZip from "jszip";
+import ExcelJS from "exceljs";
+import { getKv, setKv } from "./b2b-settings";
+import { graphDownload, getItem, isMsConfigured, itemPath, listChildren, listDrives, resolveSite, searchDrive, type GraphDrive, type GraphItem, type GraphSite } from "./msgraph";
+
+export type DocSource = { url: string; label: string };
+const KV_SOURCES = "ms365_sources";
+
+export async function getDocSources(): Promise<DocSource[]> {
+  try {
+    const raw = await getKv(KV_SOURCES);
+    const arr = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.map((s) => ({ url: String((s as DocSource).url || "").trim(), label: String((s as DocSource).label || "").trim() })).filter((s) => s.url);
+  } catch { return []; }
+}
+export async function setDocSources(list: DocSource[]): Promise<void> {
+  await setKv(KV_SOURCES, JSON.stringify(list.map((s) => ({ url: s.url.trim(), label: s.label.trim() })).filter((s) => s.url).slice(0, 20)));
+}
+
+// ── 사이트 → 드라이브 해석(1시간 캐시) ──
+export type ResolvedSource = DocSource & { site: GraphSite; drives: GraphDrive[]; error?: string };
+let resolvedCache: { at: number; key: string; list: ResolvedSource[] } | null = null;
+
+export async function resolveSources(opts?: { force?: boolean }): Promise<ResolvedSource[]> {
+  const sources = await getDocSources();
+  const key = JSON.stringify(sources);
+  if (!opts?.force && resolvedCache && resolvedCache.key === key && Date.now() - resolvedCache.at < 3600_000) return resolvedCache.list;
+  const list: ResolvedSource[] = [];
+  for (const s of sources) {
+    try {
+      const site = await resolveSite(s.url);
+      const drives = (await listDrives(site.id)).filter((d) => !d.driveType || d.driveType === "documentLibrary" || d.driveType === "business").slice(0, 5);
+      list.push({ ...s, label: s.label || site.name, site, drives });
+    } catch (e) {
+      list.push({ ...s, site: { id: "", name: s.label || s.url, webUrl: s.url }, drives: [], error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  resolvedCache = { at: Date.now(), key, list };
+  return list;
+}
+
+const MAX_BYTES = 25 * 1024 * 1024;
+const EXT_TEXT = /\.(txt|md|csv|json|log|xml|html?)$/i;
+const EXT_CONVERT = /\.(doc|xls|ppt|rtf|odt|ods|odp)$/i; // Graph 가 PDF 로 바꿔 줄 수 있는 옛 형식
+
+export const docRef = (it: GraphItem, driveId?: string) => `${driveId || it.parentReference?.driveId || ""}:${it.id}`;
+function parseRef(ref: string): { driveId: string; itemId: string } {
+  const i = ref.indexOf(":");
+  if (i <= 0 || i === ref.length - 1) throw new Error("ref 는 docs_search 결과의 'ref' 값(드라이브:항목) 그대로여야 합니다.");
+  return { driveId: ref.slice(0, i), itemId: ref.slice(i + 1) };
+}
+
+export type DocHit = { ref: string; name: string; path: string; source: string; kind: "file" | "folder"; modified: string; sizeKb: number; url: string };
+const toHit = (it: GraphItem, src: ResolvedSource, driveId: string): DocHit => ({
+  ref: docRef(it, driveId), name: it.name, path: itemPath(it), source: src.label,
+  kind: it.folder ? "folder" : "file", modified: (it.lastModifiedDateTime || "").slice(0, 10), sizeKb: Math.round((it.size || 0) / 1024), url: it.webUrl || "",
+});
+
+function matchSource(list: ResolvedSource[], source?: string | null): ResolvedSource[] {
+  if (!source?.trim()) return list;
+  const q = source.trim().toLowerCase();
+  const hit = list.filter((s) => s.label.toLowerCase().includes(q) || s.site.name.toLowerCase().includes(q) || s.url.toLowerCase().includes(q));
+  if (!hit.length) throw new Error(`'${source}' 라는 문서함이 없습니다. 등록된 곳: ${list.map((s) => s.label).join(", ") || "(없음)"}`);
+  return hit;
+}
+
+export async function searchDocs(p: { query: string; source?: string | null; limit?: number }): Promise<{ hits: DocHit[]; note: string }> {
+  if (!isMsConfigured()) throw new Error("Microsoft 365 가 연결되어 있지 않습니다(관리자가 Vercel 환경 변수 MS_TENANT_ID·MS_CLIENT_ID·MS_CLIENT_SECRET 를 넣어야 합니다).");
+  const all = await resolveSources();
+  if (!all.length) throw new Error("읽을 문서함이 등록되어 있지 않습니다(관리자 › 설정 › 연결 › Microsoft 365 문서).");
+  const targets = matchSource(all, p.source);
+  const limit = Math.min(Math.max(p.limit ?? 20, 1), 50);
+  const hits: DocHit[] = [];
+  const errs: string[] = [];
+  for (const src of targets) {
+    if (src.error) { errs.push(`${src.label}: ${src.error}`); continue; }
+    for (const d of src.drives) {
+      try { for (const it of await searchDrive(d.id, p.query, limit)) hits.push(toHit(it, src, d.id)); }
+      catch (e) { errs.push(`${src.label}/${d.name}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+  }
+  hits.sort((a, b) => (b.modified || "").localeCompare(a.modified || ""));
+  return { hits: hits.slice(0, limit), note: errs.length ? `일부 문서함은 읽지 못했습니다 — ${errs.join(" / ")}` : "" };
+}
+
+export async function listDocs(p: { source?: string | null; path?: string | null }): Promise<{ hits: DocHit[]; where: string }> {
+  if (!isMsConfigured()) throw new Error("Microsoft 365 가 연결되어 있지 않습니다.");
+  const all = await resolveSources();
+  if (!all.length) throw new Error("읽을 문서함이 등록되어 있지 않습니다(관리자 › 설정 › 연결 › Microsoft 365 문서).");
+  const targets = matchSource(all, p.source);
+  const hits: DocHit[] = [];
+  for (const src of targets) {
+    if (src.error) throw new Error(`${src.label}: ${src.error}`);
+    for (const d of src.drives) {
+      try { for (const it of await listChildren(d.id, p.path || "")) hits.push(toHit(it, src, d.id)); }
+      catch (e) { if (targets.length === 1 && src.drives.length === 1) throw e; }
+    }
+  }
+  return { hits: hits.slice(0, 200), where: `${targets.map((s) => s.label).join(", ")}${p.path ? ` / ${p.path}` : ""}` };
+}
+
+// ── 본문 추출 ──
+const decodeXml = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, "&");
+const stripTags = (xml: string) => decodeXml(xml.replace(/<[^>]+>/g, ""));
+
+async function docxText(bytes: Buffer): Promise<string> {
+  const zip = await JSZip.loadAsync(bytes);
+  const xml = await zip.file("word/document.xml")?.async("string");
+  if (!xml) throw new Error("docx 안에 본문(word/document.xml)이 없습니다.");
+  return stripTags(xml.replace(/<w:tab\/>/g, "\t").replace(/<\/w:p>/g, "\n").replace(/<w:br\/>/g, "\n")).replace(/\n{3,}/g, "\n\n").trim();
+}
+async function pptxText(bytes: Buffer): Promise<string> {
+  const zip = await JSZip.loadAsync(bytes);
+  const names = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => Number(a.match(/\d+/)![0]) - Number(b.match(/\d+/)![0]));
+  const out: string[] = [];
+  for (const n of names) {
+    const xml = (await zip.file(n)!.async("string")).replace(/<\/a:p>/g, "\n");
+    out.push(`[슬라이드 ${n.match(/\d+/)![0]}]\n${stripTags(xml).replace(/\n{2,}/g, "\n").trim()}`);
+  }
+  return out.join("\n\n");
+}
+async function xlsxText(bytes: Buffer): Promise<string> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(bytes as unknown as ArrayBuffer);
+  const out: string[] = [];
+  wb.eachSheet((ws) => {
+    const lines: string[] = [];
+    ws.eachRow({ includeEmpty: false }, (row, i) => {
+      if (lines.length >= 500) return;
+      const cells = (row.values as unknown[]).slice(1).map((v) => {
+        if (v == null) return "";
+        if (typeof v === "object") { const o = v as { text?: unknown; result?: unknown; richText?: { text: string }[] }; if (o.richText) return o.richText.map((r) => r.text).join(""); if (o.result !== undefined) return String(o.result); if (o.text !== undefined) return String(o.text); if (v instanceof Date) return v.toISOString().slice(0, 10); }
+        return String(v);
+      });
+      lines.push(`${i}\t${cells.join("\t")}`);
+    });
+    out.push(`[시트 ${ws.name}] (${ws.rowCount}행${ws.rowCount > 500 ? ", 앞 500행만" : ""})\n${lines.join("\n")}`);
+  });
+  return out.join("\n\n");
+}
+async function pdfText(bytes: Buffer): Promise<string> {
+  const { extractText } = await import("unpdf");
+  const r = await extractText(new Uint8Array(bytes), { mergePages: true });
+  const text = Array.isArray(r.text) ? r.text.join("\n") : String(r.text || "");
+  return `(PDF ${r.totalPages}쪽)\n${text.trim()}`;
+}
+
+// 파일 바이트 → 글(형식은 이름의 확장자로). 로컬 검증용으로도 내보낸다.
+export async function extractTextBytes(name: string, bytes: Buffer): Promise<string> {
+  if (/\.docx$/i.test(name)) return docxText(bytes);
+  if (/\.pptx$/i.test(name)) return pptxText(bytes);
+  if (/\.xlsx$/i.test(name)) return xlsxText(bytes);
+  if (/\.pdf$/i.test(name)) return pdfText(bytes);
+  if (EXT_TEXT.test(name)) return bytes.toString("utf8");
+  throw new Error(`읽을 수 없는 형식입니다(${name.split(".").pop()}). docx·pptx·xlsx·pdf·txt·csv·md 와 옛 doc·xls·ppt 만 읽습니다.`);
+}
+
+async function extractText(it: GraphItem, driveId: string): Promise<string> {
+  const name = it.name || "";
+  if ((it.size || 0) > MAX_BYTES) throw new Error(`파일이 너무 큽니다(${Math.round((it.size || 0) / 1024 / 1024)}MB, 상한 25MB).`);
+  const path = `/drives/${driveId}/items/${it.id}`;
+  if (EXT_CONVERT.test(name)) return pdfText((await graphDownload(path, { format: "pdf" })).bytes); // 옛 형식은 Graph 가 PDF 로 바꿔 준다
+  return extractTextBytes(name, (await graphDownload(path)).bytes);
+}
+
+// 본문 캐시(같은 문서를 이어 읽을 때 다시 내려받지 않게) — 서버리스 인스턴스 안에서만, 10분
+const textCache = new Map<string, { at: number; text: string; name: string; path: string; url: string }>();
+
+export const DOC_PAGE_CHARS = 24_000;
+export async function readDoc(p: { ref: string; offset?: number | null }): Promise<{ name: string; path: string; url: string; text: string; offset: number; total: number; next: number | null }> {
+  if (!isMsConfigured()) throw new Error("Microsoft 365 가 연결되어 있지 않습니다.");
+  const { driveId, itemId } = parseRef(p.ref);
+  let c = textCache.get(p.ref);
+  if (!c || Date.now() - c.at > 600_000) {
+    const it = await getItem(driveId, itemId);
+    if (it.folder) throw new Error(`'${it.name}' 은 폴더입니다 — docs_list 로 안을 보세요.`);
+    const text = await extractText(it, driveId);
+    c = { at: Date.now(), text, name: it.name, path: itemPath(it), url: it.webUrl || "" };
+    textCache.set(p.ref, c);
+  }
+  const offset = Math.max(0, Math.min(Number(p.offset) || 0, c.text.length));
+  const slice = c.text.slice(offset, offset + DOC_PAGE_CHARS);
+  const next = offset + DOC_PAGE_CHARS < c.text.length ? offset + DOC_PAGE_CHARS : null;
+  return { name: c.name, path: c.path, url: c.url, text: slice, offset, total: c.text.length, next };
+}
+
+// 비서 지침용 — 등록된 문서함 목록(턴마다 붙는 블록). 없으면 빈 문자열.
+export async function docsPromptBlock(): Promise<string> {
+  if (!isMsConfigured()) return "";
+  const s = await getDocSources();
+  if (!s.length) return "";
+  return `[회사 문서함(Microsoft 365) — docs_search·docs_list·docs_read 로 읽는 곳] ${s.map((x) => x.label || x.url).join(", ")}`;
+}

@@ -4,14 +4,16 @@
 //  · stock_status    : 창고 칸별 현재고·세트 가능 수량(공용 readStockMap — SQL 로 흉내 내면 칸·세트·선점이 틀린다)
 //  · listing_status  : 채널별 판매 상태·채널 재고 + 최근 품절·판매중지 명령(channel_commands 는 SQL 차단 표라 이 도구로만)
 //  · ga_report       : GA4 데이터 API(2026-10-22) — 세션·사용자·구매를 채널 그룹·소스/매체·캠페인·랜딩·기기·날짜로. 자격은 env(ga.ts)
+//  · docs_search/docs_list/docs_read : 회사 공용 문서(SharePoint·OneDrive, 2026-10-25) — Microsoft Graph 앱 자격으로 검색·목록·본문. 읽을 곳은 설정의 ms365_sources
 //  모두 읽기 전용. 광고를 끄거나 예산을 바꾸는 쓰기는 없다.
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { collectAds, newCache, runTool as runAnalystTool, validDate, kstDay, shift, type AdsCache, type AdsFacts } from "./analyst";
 import { withTimeout } from "./assistant";
 import { isGaConfigured, runGaReport, runGaFunnel, GA_DIMENSIONS, GA_METRICS, GA_MAX_DAYS, type GaDimensionKey, type GaMetricKey, type GaMatch, type GaFunnelStep } from "./ga";
+import { searchDocs, listDocs, readDoc, DOC_PAGE_CHARS } from "./ms365-docs";
 
-export const LIVE_TOOL_NAMES = ["ad_performance", "ad_breakdown", "stock_status", "listing_status", "ga_report", "ga_funnel"] as const;
+export const LIVE_TOOL_NAMES = ["ad_performance", "ad_breakdown", "stock_status", "listing_status", "ga_report", "ga_funnel", "docs_search", "docs_list", "docs_read"] as const;
 export type LiveToolName = (typeof LIVE_TOOL_NAMES)[number];
 export const isLiveTool = (n: string): n is LiveToolName => (LIVE_TOOL_NAMES as readonly string[]).includes(n);
 
@@ -96,6 +98,40 @@ export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
         },
       },
     },
+    {
+      name: "docs_search", ...s,
+      description: "회사 공용 문서함(Microsoft 365 SharePoint·OneDrive)에서 문서를 찾습니다 — 파일 이름과 본문(인덱싱된 것)을 함께 검색. 계약서·매뉴얼·보고서·회의 자료처럼 DB 에 없는 '문서'를 물으면 먼저 이 도구로 찾고, 결과의 ref 로 docs_read 를 불러 본문을 읽습니다. 검색어는 짧은 핵심어(문서 이름에 있을 법한 말) 1~3개. 결과는 표 카드로 붙습니다.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["query", "source", "limit"],
+        properties: {
+          query: { type: "string", description: "검색어(핵심어, 한국어 그대로)" },
+          source: { type: ["string", "null"], description: "문서함 이름 일부(지침의 '회사 문서함' 목록). null 이면 전체" },
+          limit: { type: ["integer", "null"], description: "결과 수 상한(기본 20, 최대 50)" },
+        },
+      },
+    },
+    {
+      name: "docs_list", ...s,
+      description: "회사 공용 문서함의 폴더 목록(파일·하위 폴더 이름, 수정일, 크기). '어떤 문서가 있나·최근에 올라온 문서'처럼 구조를 볼 때나 검색이 못 찾을 때 폴더를 따라가며 씁니다. path 는 문서함 루트 기준 경로('' 이면 루트, '보고서/2026' 처럼).",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["source", "path"],
+        properties: {
+          source: { type: ["string", "null"], description: "문서함 이름 일부. null 이면 전체(루트만)" },
+          path: { type: ["string", "null"], description: "폴더 경로. null 또는 '' 이면 루트" },
+        },
+      },
+    },
+    {
+      name: "docs_read", ...s,
+      description: "문서 하나의 본문을 글로 읽습니다(docx·pptx·xlsx·pdf·txt·csv·md, 옛 doc·xls·ppt 는 변환). ref 는 docs_search·docs_list 결과의 ref 값 그대로. 한 번에 약 2만 4천 자이고 더 있으면 next 값이 돌아오니 offset 에 넣어 이어 읽습니다. 요약·답변에는 문서 이름과 위치를 함께 적습니다.",
+      input_schema: {
+        type: "object", additionalProperties: false, required: ["ref", "offset"],
+        properties: {
+          ref: { type: "string", description: "문서 ref(드라이브:항목)" },
+          offset: { type: ["integer", "null"], description: "이어 읽을 시작 위치(글자). 처음은 null" },
+        },
+      },
+    },
   ];
 }
 
@@ -114,6 +150,9 @@ export function liveToolLabel(name: string, input: Record<string, unknown>): str
     const names = (Array.isArray(input.steps) ? input.steps : []).map((st) => String((st as { name?: unknown }).name || "")).filter(Boolean).join(" → ");
     return `GA4 유입경로 ${names.slice(0, 60)} ${range}`;
   }
+  if (name === "docs_search") return `문서 검색: ${String(input.query || "").slice(0, 40)}${input.source ? ` (${String(input.source).slice(0, 20)})` : ""}`;
+  if (name === "docs_list") return `문서함 목록: ${[input.source, input.path].filter(Boolean).map(String).join(" / ").slice(0, 50) || "루트"}`;
+  if (name === "docs_read") return `문서 읽기${Number(input.offset) > 0 ? ` (이어서 ${Number(input.offset).toLocaleString("ko-KR")}자부터)` : ""}`;
   return name;
 }
 
@@ -278,6 +317,29 @@ export async function runLiveTool(sb: SupabaseClient, state: LiveState, name: Li
       content: `${r.note}\n${JSON.stringify(r.rows).slice(0, 12000)}`,
       tables: [{ title, sql: "-- GA4 유입경로 API 실시간 조회(SQL 아님 · 저장·엑셀·루커 불가)", columns: r.columns, rows: r.rows }],
     };
+  }
+  if (name === "docs_search") {
+    const query = String(input.query || "").trim();
+    if (!query) throw new Error("query 가 비어 있습니다.");
+    const r = await searchDocs({ query, source: typeof input.source === "string" ? input.source : null, limit: typeof input.limit === "number" ? input.limit : 20 });
+    const rows = r.hits.map((h) => ({ 이름: h.name, 종류: h.kind === "folder" ? "폴더" : "파일", 위치: `${h.source} / ${h.path}`, 수정일: h.modified, "크기(KB)": h.sizeKb, ref: h.ref, 링크: h.url }));
+    return {
+      content: `${r.note ? `${r.note}\n` : ""}${r.hits.length ? `${r.hits.length}건 — 본문은 docs_read(ref)로 읽습니다.\n${JSON.stringify(rows.map(({ 링크: _l, ...x }) => x))}` : "찾은 문서가 없습니다. 검색어를 바꾸거나(짧은 핵심어·파일 이름에 있을 말) docs_list 로 폴더를 따라가 보세요."}`,
+      tables: r.hits.length ? [{ title: `문서 검색 '${query}'`, sql: "-- Microsoft 365 문서함 검색(SQL 아님 · 저장·엑셀·루커 불가)", columns: ["이름", "종류", "위치", "수정일", "크기(KB)", "ref", "링크"], rows }] : [],
+    };
+  }
+  if (name === "docs_list") {
+    const r = await listDocs({ source: typeof input.source === "string" ? input.source : null, path: typeof input.path === "string" ? input.path : null });
+    const rows = r.hits.map((h) => ({ 이름: h.name, 종류: h.kind === "folder" ? "폴더" : "파일", 위치: `${h.source} / ${h.path}`, 수정일: h.modified, "크기(KB)": h.sizeKb, ref: h.ref, 링크: h.url }));
+    return {
+      content: `${r.where}: ${r.hits.length}개\n${JSON.stringify(rows.map(({ 링크: _l, ...x }) => x)).slice(0, 14000)}`,
+      tables: r.hits.length ? [{ title: `문서함 ${r.where}`, sql: "-- Microsoft 365 문서함 목록(SQL 아님 · 저장·엑셀·루커 불가)", columns: ["이름", "종류", "위치", "수정일", "크기(KB)", "ref", "링크"], rows }] : [],
+    };
+  }
+  if (name === "docs_read") {
+    const r = await readDoc({ ref: String(input.ref || ""), offset: typeof input.offset === "number" ? input.offset : null });
+    const head = `문서: ${r.name} (${r.path}) — 전체 ${r.total.toLocaleString("ko-KR")}자 중 ${r.offset.toLocaleString("ko-KR")}~${(r.offset + r.text.length).toLocaleString("ko-KR")}자${r.next != null ? ` · 더 있음 → offset ${r.next}` : " · 끝"}${r.url ? `\n링크: ${r.url}` : ""}`;
+    return { content: `${head}\n\n${r.text}`, tables: [] };
   }
   // 재고·채널 상태 — 오늘 기준(listing 명령은 최근 14일)
   const today = kstDay(0);

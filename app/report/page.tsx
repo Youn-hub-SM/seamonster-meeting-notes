@@ -164,7 +164,7 @@ function TableCard({ table, question, defaultOpen, onSave, onExport }: {
   );
 }
 
-const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기", margin_calc: "계산", ad_performance: "광고", ad_breakdown: "광고", stock_status: "재고", listing_status: "채널", ga_report: "GA4", ga_funnel: "GA4", write_notice: "공지", cs_coach: "CS 코치" };
+const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키마", search_text: "글 검색", read_report: "리포트 읽기", margin_calc: "계산", ad_performance: "광고", ad_breakdown: "광고", stock_status: "재고", listing_status: "채널", ga_report: "GA4", ga_funnel: "GA4", docs_search: "문서", docs_list: "문서", docs_read: "문서", write_notice: "공지", cs_coach: "CS 코치" };
 
 // 빈 화면 추천 문장 구름(2026-10-22 대표) — 비서가 할 수 있는 일 전부(매출·원인·광고·재고·이익률·공지·CS·VOC·정기배송·B2B·생산·리포트·예측·재구매).
 //  누르면 입력칸에 채우기만 한다(기간·상품을 고쳐 보내게). size = 구름 글자 크기(대표 기능은 크게)
