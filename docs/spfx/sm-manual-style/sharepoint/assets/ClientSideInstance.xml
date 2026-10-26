@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Elements xmlns="http://schemas.microsoft.com/sharepoint/">
+    <ClientSideComponentInstance
+        Title="ManualStyle"
+        Location="ClientSideExtension.ApplicationCustomizer"
+        ComponentId="fa3a8d1b-4779-49ee-b262-673d069ac8a5"
+        Properties="{}">
+    </ClientSideComponentInstance>
+</Elements>

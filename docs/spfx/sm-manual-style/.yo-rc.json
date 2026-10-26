@@ -1,0 +1,22 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "whichFolder": "subdir",
+    "solutionName": "sm-manual-style",
+    "packageManager": "npm",
+    "skipFeatureDeployment": true,
+    "useGulp": false,
+    "componentType": "extension",
+    "extensionType": "ApplicationCustomizer",
+    "componentName": "ManualStyle",
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "22.23.4",
+    "sdksVersions": {},
+    "version": "1.23.2",
+    "libraryName": "sm-manual-style",
+    "libraryId": "a803f68a-e8bd-4c91-8abe-68db9ad7d52c",
+    "environment": "spo",
+    "solutionShortDescription": "sm-manual-style description",
+    "isDomainIsolated": false
+  }
+}

@@ -1,0 +1,51 @@
+/* 씨몬스터 매뉴얼 사이트 — GitBook 식 읽기 서식 (2026-10-26). 디자인 가이드: 검정 본문·흰 배경·코랄은 링크/강조에만. */
+:root { --smm-ink: #1A1A1A; --smm-mute: #6B6B6B; --smm-coral: #F15A30; --smm-line: #E3E3E3; --smm-bg-subtle: #F7F8FA; --smm-bg-warm: #FFF5F0; }
+
+/* 본문 폭·줄 간격 — 텍스트 웹 파트(.ck-content) */
+div[data-automation-id="CanvasControl"] .ck-content,
+.ck-content { max-width: 760px; font-size: 16px; line-height: 1.8; color: var(--smm-ink); }
+.ck-content p { margin: 0 0 1.1em; }
+.ck-content ul, .ck-content ol { margin: 0 0 1.2em; padding-left: 1.6em; }
+.ck-content li { margin: 0.35em 0; line-height: 1.75; }
+.ck-content li > p { margin: 0; }
+.ck-content a { color: var(--smm-coral); text-decoration: none; border-bottom: 1px solid rgba(241, 90, 48, 0.35); }
+.ck-content a:hover { border-bottom-color: var(--smm-coral); }
+.ck-content strong { font-weight: 700; }
+.ck-content hr { border: 0; border-top: 1px solid var(--smm-line); margin: 2.2em 0; }
+
+/* 요약(lead) — 제목 바로 아래 한 줄 */
+.ck-content p.lead, .ck-content > p:first-child > em:only-child { font-size: 17px; color: var(--smm-mute); }
+.ck-content p.lead em { font-style: normal; }
+
+/* 소제목 — GitBook: 큰 여백, 굵게, 밑줄 없음 */
+.ck-content h2 { font-size: 24px; font-weight: 700; line-height: 1.35; margin: 2.2em 0 0.7em; letter-spacing: -0.01em; }
+.ck-content h3 { font-size: 19px; font-weight: 700; line-height: 1.4; margin: 1.8em 0 0.6em; }
+.ck-content h4 { font-size: 17px; font-weight: 700; line-height: 1.4; margin: 1.5em 0 0.5em; }
+.ck-content h2:first-child, .ck-content h3:first-child { margin-top: 0.4em; }
+
+/* 표 — 얇은 테두리, 머리글 옅은 배경, 넉넉한 셀 여백 */
+.ck-content table { border-collapse: collapse; width: 100%; margin: 1.2em 0 1.6em; font-size: 15px; line-height: 1.6; }
+.ck-content table th, .ck-content table td { border: 1px solid var(--smm-line); padding: 10px 12px; vertical-align: top; text-align: left; }
+.ck-content table th { background: var(--smm-bg-subtle); font-weight: 700; }
+.ck-content table tr:hover td { background: #FCFCFD; }
+
+/* 안내 상자 — GitBook hint: 왼쪽 코랄 선 + 따뜻한 배경 */
+.ck-content blockquote { margin: 1.4em 0; padding: 14px 18px; border-left: 4px solid var(--smm-coral); background: var(--smm-bg-warm); border-radius: 0 6px 6px 0; color: var(--smm-ink); font-style: normal; }
+.ck-content blockquote p { margin: 0; }
+.ck-content blockquote p + p { margin-top: 0.5em; }
+.ck-content blockquote strong:first-child { color: var(--smm-coral); }
+
+/* 코드 */
+.ck-content code { font-family: Consolas, "Cascadia Mono", "D2Coding", monospace; font-size: 14px; background: var(--smm-bg-subtle); border: 1px solid var(--smm-line); border-radius: 4px; padding: 1px 6px; }
+.ck-content pre { font-family: Consolas, "Cascadia Mono", "D2Coding", monospace; font-size: 13.5px; line-height: 1.6; background: var(--smm-bg-subtle); border: 1px solid var(--smm-line); border-radius: 6px; padding: 14px 16px; overflow-x: auto; margin: 1.2em 0; }
+.ck-content pre code { background: none; border: 0; padding: 0; }
+
+/* 이미지 */
+.ck-content img { max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--smm-line); margin: 0.6em 0 1.2em; }
+
+/* 페이지 제목 영역 — 여백 조금, 글자 크기 */
+[data-automation-id="pageHeader"] h1, .ms-Page-title, div[class*="pageTitle"] { font-size: 34px; letter-spacing: -0.01em; }
+
+/* 왼쪽 탐색 — 현재 페이지 코랄, 묶음 레이블 굵게 */
+.ms-Nav-compositeLink.is-selected .ms-Nav-link, nav a[aria-current="page"] { color: var(--smm-coral) !important; font-weight: 700; }
+.ms-Nav-compositeLink.is-selected::after { border-left-color: var(--smm-coral) !important; }

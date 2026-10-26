@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "manual-style-application-customizer": {
+      "components": [
+        {
+          "entrypoint": "./lib/extensions/manualStyle/ManualStyleApplicationCustomizer.js",
+          "manifest": "./src/extensions/manualStyle/ManualStyleApplicationCustomizer.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "ManualStyleApplicationCustomizerStrings": "lib/extensions/manualStyle/loc/{locale}.js"
+  }
+}
