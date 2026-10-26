@@ -11,6 +11,11 @@ function Has-Body([string]$html) { return (($html -replace '<[^>]+>', '') -repla
 function Enc([string]$s) { [System.Net.WebUtility]::HtmlEncode($s) }
 
 $json = Get-Content (Join-Path $ExportDir "pages.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+$json.pages = @($json.pages | Where-Object { $_.title -ne "edit" })
+# GitBook 원문 제목 오타 교정(표시 글자만) — sharepoint-manual-polish.ps1 과 같은 표
+$TitleFix = @{ "자기평가서 작성법기평가서 작성법" = "자기평가서 작성법"; "#1" = "디자이너 OKR 학습 자료 1" }
+function FixTree($nodes) { foreach ($n in $nodes) { $d = if ($TitleFix[$n.title]) { $TitleFix[$n.title] } else { $n.title }; $n | Add-Member -NotePropertyName display -NotePropertyValue $d -Force; if ($n.children.Count) { FixTree $n.children } } }
+FixTree $json.pages
 $pages = @{}
 function Walk($nodes, [string]$parentTitle) {
   foreach ($n in $nodes) {
@@ -25,13 +30,13 @@ foreach ($top in $json.pages) {
   if ($top.children.Count) {
     $kids = @(); $stack = [System.Collections.Generic.List[object]]::new(); foreach ($c in $top.children) { $stack.Add($c) }
     while ($stack.Count) { $c = $stack[0]; $stack.RemoveAt(0); if ($pages[$c.id]) { $kids += $pages[$c.id] }; foreach ($g in $c.children) { $stack.Add($g) } }
-    $groups += @{ title = $top.title; self = $pages[$top.id]; kids = $kids }
+    $groups += @{ title = $top.display; self = $pages[$top.id]; kids = $kids }
   } elseif ($pages[$top.id]) { $loose += $pages[$top.id] }
 }
 if ($loose.Count) { $groups = @(@{ title = "소개"; self = $null; kids = $loose }) + $groups }
 function LinkList($g) {
   $head = if ($g.self) { "<h3><a href=`"$SiteUrl/SitePages/$($g.self.name).aspx`">$(Enc $g.title)</a></h3>" } else { "<h3>$(Enc $g.title)</h3>" }
-  $lis = ($g.kids | ForEach-Object { "<li><a href=`"$SiteUrl/SitePages/$($_.name).aspx`">$(Enc $_.node.title)</a></li>" }) -join ""
+  $lis = ($g.kids | ForEach-Object { "<li><a href=`"$SiteUrl/SitePages/$($_.name).aspx`">$(Enc $_.node.display)</a></li>" }) -join ""
   return "$head<ul>$lis</ul>"
 }
 $third = [math]::Ceiling($groups.Count / 3)

@@ -16,7 +16,7 @@ $json.pages = @($json.pages | Where-Object { $_.title -ne "edit" })
 # GitBook 원문의 제목 오타·이상한 제목 교정(탐색·홈 링크 글자에만 적용, 페이지 파일 이름은 그대로)
 $TitleFix = @{ "자기평가서 작성법기평가서 작성법" = "자기평가서 작성법"; "#1" = "디자이너 OKR 학습 자료 1" }
 function FixT([string]$t) { if ($TitleFix[$t]) { $TitleFix[$t] } else { $t } }
-function FixTree($nodes) { foreach ($n in $nodes) { $n.title = FixT $n.title; if ($n.children.Count) { FixTree $n.children } } }
+function FixTree($nodes) { foreach ($n in $nodes) { $n | Add-Member -NotePropertyName display -NotePropertyValue (FixT $n.title) -Force; if ($n.children.Count) { FixTree $n.children } } }
 FixTree $json.pages
 
 # 페이지 제목(파일명) 계산 — 가져오기 스크립트와 같은 규칙
@@ -64,41 +64,19 @@ foreach ($v in $pages.Values) {
 }
 Ok "설명 넣은 페이지 $n 개"
 
-# ── 3. 홈 페이지 ──
-Step "3. 홈 페이지"
-try {
+# ── 3. 묶음 계산(홈은 docs/sharepoint-manual-home.ps1 이 만든다 — 여기서 덮어쓰지 않는다) ──
+Step "3. 묶음 계산"
   $groups = @()
   $loose = @()
   foreach ($top in $json.pages) {
     if ($top.children.Count) {
       $kids = @(); $stack = [System.Collections.Generic.List[object]]::new(); foreach ($c in $top.children) { $stack.Add($c) }
       while ($stack.Count) { $c = $stack[0]; $stack.RemoveAt(0); if ($pages[$c.id]) { $kids += $pages[$c.id] }; foreach ($g in $c.children) { $stack.Add($g) } }
-      $groups += @{ title = $top.title; self = $pages[$top.id]; kids = $kids }
+      $groups += @{ title = $top.display; self = $pages[$top.id]; kids = $kids }
     } elseif ($pages[$top.id]) { $loose += $pages[$top.id] }
   }
   if ($loose.Count) { $groups = @(@{ title = "소개"; self = $null; kids = $loose }) + $groups }
-  function LinkList($g) {
-    $head = if ($g.self) { "<h3><a href=`"$SiteUrl/SitePages/$($g.self.name).aspx`">$($g.title)</a></h3>" } else { "<h3>$($g.title)</h3>" }
-    $lis = ($g.kids | ForEach-Object { "<li><a href=`"$SiteUrl/SitePages/$($_.name).aspx`">$([System.Net.WebUtility]::HtmlEncode($_.node.title))</a></li>" }) -join ""
-    return "$head<ul>$lis</ul>"
-  }
-  $half = [math]::Ceiling($groups.Count / 2)
-  $left = ($groups[0..($half - 1)] | ForEach-Object { LinkList $_ }) -join ""
-  $right = if ($groups.Count -gt $half) { ($groups[$half..($groups.Count - 1)] | ForEach-Object { LinkList $_ }) -join "" } else { "" }
-
-  $name = "Manual-Home"
-  $h = $null; try { $h = Get-PnPPage -Identity $name -ErrorAction Stop } catch { }
-  if ($h) { Remove-PnPPage -Identity $name -Force | Out-Null }
-  $h = Add-PnPPage -Name $name -Title "씨몬스터 매뉴얼" -LayoutType Home -HeaderLayoutType NoImage -CommentsEnabled:$false
-  Add-PnPPageSection -Page $h -SectionTemplate OneColumn -Order 1 | Out-Null
-  Add-PnPPageTextPart -Page $h -Section 1 -Column 1 -Text "<p class=`"lead`"><em>업무 순서는 여기서, 숫자는 업무도우미에서. 같은 기준과 같은 방식으로 일하기 위한 문서입니다.</em></p>" | Out-Null
-  Add-PnPPageSection -Page $h -SectionTemplate TwoColumn -Order 2 | Out-Null
-  Add-PnPPageTextPart -Page $h -Section 2 -Column 1 -Text $left | Out-Null
-  if ($right) { Add-PnPPageTextPart -Page $h -Section 2 -Column 2 -Text $right | Out-Null }
-  Set-PnPPage -Identity $h -Publish | Out-Null
-  Set-PnPHomePage -RootFolderRelativeUrl "SitePages/$name.aspx"
-  Ok "홈 = SitePages/$name.aspx (묶음 $($groups.Count)개)"
-} catch { Warn "홈 실패: $($_.Exception.Message)" }
+Ok "묶음 $($groups.Count)개"
 
 # ── 4. 왼쪽 탐색 재구성(홈 → 소개 → GitBook 순서) ──
 Step "4. 왼쪽 탐색"
@@ -108,7 +86,7 @@ try {
   foreach ($g in $groups) {
     $url = if ($g.self) { "$SiteUrl/SitePages/$($g.self.name).aspx" } else { "http://linkless.header/" }
     $label = Add-PnPNavigationNode -Location QuickLaunch -Title $g.title -Url $url
-    foreach ($k in $g.kids) { Add-PnPNavigationNode -Location QuickLaunch -Title $k.node.title -Url "$SiteUrl/SitePages/$($k.name).aspx" -Parent $label.Id | Out-Null }
+    foreach ($k in $g.kids) { Add-PnPNavigationNode -Location QuickLaunch -Title $k.node.display -Url "$SiteUrl/SitePages/$($k.name).aspx" -Parent $label.Id | Out-Null }
     Ok "$($g.title): $($g.kids.Count)"
   }
 } catch { Warn "탐색 실패: $($_.Exception.Message)" }
