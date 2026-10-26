@@ -1,5 +1,5 @@
 import { Log } from '@microsoft/sp-core-library';
-import { BaseApplicationCustomizer } from '@microsoft/sp-application-base';
+import { BaseApplicationCustomizer, PlaceholderContent, PlaceholderName } from '@microsoft/sp-application-base';
 import { MANUAL_CSS } from './manualStyleCss';
 
 const LOG_SOURCE: string = 'ManualStyleApplicationCustomizer';
@@ -22,7 +22,8 @@ export default class ManualStyleApplicationCustomizer
     this._injectStyle();
     this._markHome();
     this._scheduleToc();
-    this.context.application.navigatedEvent.add(this, () => { this._markHome(); this._scheduleToc(); });
+    this._placeBar();
+    this.context.application.navigatedEvent.add(this, () => { this._markHome(); this._scheduleToc(); this._placeBar(); });
     // 본문은 늦게 렌더되므로 DOM 변화를 보고 목차를 다시 만든다(디바운스)
     this._observer = new MutationObserver(() => this._scheduleToc());
     this._observer.observe(document.body, { childList: true, subtree: true });
@@ -99,6 +100,24 @@ export default class ManualStyleApplicationCustomizer
       if (h && h.getBoundingClientRect().top <= 140) { current = a; }
     }
     links.forEach((a: HTMLAnchorElement) => a.classList.toggle('is-active', a === current));
+  }
+
+  // 위쪽 '← 뒤로 · 홈' 줄 — Teams 탭처럼 브라우저 뒤로가기가 없는 곳을 위해(2026-10-26). 홈에서는 '뒤로'만 숨긴다
+  private _placeBar(): void {
+    const BAR_ID: string = 'sm-manual-bar';
+    let bar: HTMLElement | null = document.getElementById(BAR_ID);
+    if (!bar) {
+      const top: PlaceholderContent | undefined = this.context.placeholderProvider.tryCreateContent(PlaceholderName.Top, { onDispose: () => { /* noop */ } });
+      if (!top) { return; }
+      bar = document.createElement('div');
+      bar.id = BAR_ID;
+      bar.innerHTML = `<a href="#" class="smb-back" aria-label="이전 페이지로">← 뒤로</a><span class="smb-sep">·</span><a class="smb-home" href="${this.context.pageContext.web.absoluteUrl}/SitePages/Manual-Home.aspx">홈</a><span class="smb-sep">·</span><a class="smb-open" href="#" aria-label="새 창에서 열기">새 창</a>`;
+      bar.querySelector('.smb-back')!.addEventListener('click', (e: Event) => { e.preventDefault(); if (history.length > 1) { history.back(); } else { location.href = `${this.context.pageContext.web.absoluteUrl}/SitePages/Manual-Home.aspx`; } });
+      bar.querySelector('.smb-open')!.addEventListener('click', (e: Event) => { e.preventDefault(); window.open(location.href, '_blank'); });
+      top.domElement.appendChild(bar);
+    }
+    bar.setAttribute('data-home', document.body.getAttribute('data-sm-home') || '0');
+    bar.setAttribute('data-framed', window.self !== window.top ? '1' : '0');
   }
 
   private _esc(s: string): string {

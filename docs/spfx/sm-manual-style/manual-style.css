@@ -71,3 +71,11 @@ body[data-sm-home="1"] :is(.ck-content, [data-automation-id="textBox"], [data-sp
 body[data-sm-home="1"] :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) h3 + ul li:first-child { border-top: 0; }
 body[data-sm-home="1"] :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) h3 + ul a { color: var(--smm-ink); text-decoration: none; }
 body[data-sm-home="1"] :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) h3 + ul a:hover { color: var(--smm-coral); }
+
+/* 위쪽 '← 뒤로 · 홈 · 새 창' 줄 — Teams 탭 등 뒤로가기가 없는 곳용. 홈에서는 뒤로 숨김, 새 창은 iframe 안에서만 */
+#sm-manual-bar { display: flex; align-items: center; gap: 8px; padding: 6px 24px; font-size: 13px; color: var(--smm-mute); background: #fff; border-bottom: 1px solid var(--smm-line); }
+#sm-manual-bar a { color: var(--smm-ink); text-decoration: none; padding: 2px 4px; border-radius: 4px; }
+#sm-manual-bar a:hover { color: var(--smm-coral); background: var(--smm-bg-subtle); }
+#sm-manual-bar .smb-sep { color: var(--smm-line); }
+#sm-manual-bar[data-home="1"] .smb-back, #sm-manual-bar[data-home="1"] .smb-back + .smb-sep { display: none; }
+#sm-manual-bar[data-framed="0"] .smb-open, #sm-manual-bar[data-framed="0"] .smb-home + .smb-sep { display: none; }

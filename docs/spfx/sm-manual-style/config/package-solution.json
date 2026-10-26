@@ -3,7 +3,7 @@
   "solution": {
     "name": "sm-manual-style-client-side-solution",
     "id": "a803f68a-e8bd-4c91-8abe-68db9ad7d52c",
-    "version": "1.0.0.3",
+    "version": "1.0.0.4",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": false,
     "isDomainIsolated": false,
