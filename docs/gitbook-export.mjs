@@ -30,14 +30,22 @@ async function all(path) { // 페이징(next.page)
 }
 
 // ── 마크다운 → HTML (GitBook 문법 포함, SharePoint 텍스트 웹 파트가 받아들이는 태그만) ──
-const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// GitBook 마크다운에는 HTML 이 섞여 온다(표 <table>, <br>, <strong>, <mark>). 허용 태그는 그대로 두고 나머지 '<' 만 이스케이프.
+const ALLOWED_TAG = /^<\/?(table|thead|tbody|tr|td|th|strong|b|em|i|br|p|a|ul|ol|li|h[1-6]|code|pre|blockquote|hr|u|s|sup|sub)\b[^>]*>$/i;
+function esc(s) {
+  s = s.replace(/<\/?mark\b[^>]*>/gi, (t) => (t.startsWith("</") ? "</strong>" : "<strong>")).replace(/<\/?(span|div|font)\b[^>]*>/gi, "");
+  return s.split(/(<\/?[a-zA-Z][^>]*>)/).map((part, k) => (k % 2 === 1 && ALLOWED_TAG.test(part)) ? part.replace(/\s(align|style|class|width|height)="[^"]*"/gi, "") : part.replace(/&(?!(amp|lt|gt|quot|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("");
+}
+const fileNameFromUrl = (url) => { try { const seg = decodeURIComponent(new URL(url).pathname.split("/").pop() || ""); return decodeURIComponent(seg.split("%2F").pop() || seg).split("/").pop() || "file"; } catch { return "file"; } };
 function inline(s, images) {
   s = esc(s).replace(/@@BR@@/g, "<br>");
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, alt, url) => { const name = images.add(url); return `<img src="@@IMG@@/${name}" alt="${alt.replace(/&lt;[^&]*&gt;/g, "").trim()}">`; });
+  s = s.replace(/\[@@FILE@@\]\(([^)\s]+)\)/g, (_, url) => { const fname = fileNameFromUrl(url); const name = images.add(url, fname); return `<a href="@@IMG@@/${name}">첨부 파일: ${fname}</a>`; });
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, t, u) => `<a href="${u}">${t}</a>`);
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/__([^_]+)__/g, "<strong>$1</strong>");
-  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>").replace(/(^|[^_])_([^_\n]+)_/g, "$1<em>$2</em>");
+  // 기울임: 낱말 경계에서만(파일명·주소 속 _ 와 * 를 건드리지 않게). 태그 안(href 등)은 제외
+  s = s.replace(/(^|[\s(（>])\*([^*\n<>]+)\*(?=[\s).,;:!?）<]|$)/g, "$1<em>$2</em>").replace(/(^|[\s(（>])_([^_\n<>]+)_(?=[\s).,;:!?）<]|$)/g, "$1<em>$2</em>");
   s = s.replace(/~~([^~]+)~~/g, "<s>$1</s>");
   return s;
 }
@@ -56,10 +64,12 @@ export function mdToHtml(md, images, opts = {}) {
     .replace(/\{%\s*tabs\s*%\}|\{%\s*endtabs\s*%\}/g, "")
     .replace(/\{%\s*tab\s+title="([^"]*)"\s*%\}/g, "\n### $1\n").replace(/\{%\s*endtab\s*%\}/g, "\n")
     .replace(/\{%\s*embed\s+url="([^"]*)"\s*%\}/g, "[$1]($1)")
+    .replace(/\{%\s*file\s+src="([^"]*)"\s*%\}/g, "[@@FILE@@]($1)")
+    .replace(/<br\s*\/?>/gi, "@@BR@@")
     .replace(/\{%\s*content-ref\s+url="([^"]*)"\s*%\}[\s\S]*?\{%\s*endcontent-ref\s*%\}/g, "[관련: $1]($1)")
     .replace(/<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g, "\n### $1\n$2\n")
     .replace(/<figure>[\s\S]*?<img[^>]*src="([^"]+)"[^>]*>[\s\S]*?(?:<figcaption>([\s\S]*?)<\/figcaption>)?[\s\S]*?<\/figure>/g, (_, src, cap) => `![${(cap || "").replace(/<[^>]+>/g, "").trim()}](${src})`)
-    .replace(/\{%[^%]*%\}/g, "");
+    .replace(/\{%[\s\S]*?%\}/g, "");
   const lines = md.split("\n"); const out = []; let i = 0;
   const flushPara = (buf) => { if (buf.length) { out.push(`<p>${inline(buf.join(" "), images)}</p>`); buf.length = 0; } };
   const para = [];
@@ -86,6 +96,8 @@ export function mdToHtml(md, images, opts = {}) {
       out.push(`<table><thead><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`); continue;
     }
     if (/^\s*(---|\*\*\*)\s*$/.test(l)) { flushPara(para); out.push("<hr>"); i++; continue; }
+    // 마크다운 안의 HTML 표 — 블록째로 통과(허용 태그만 남긴다)
+    if (/^\s*<table\b/i.test(l)) { flushPara(para); const buf = []; while (i < lines.length) { buf.push(lines[i]); if (/<\/table>/i.test(lines[i++])) break; } out.push(inline(buf.join(" ").replace(/\s{2,}/g, " "), images)); continue; }
     if (/^\s*<(img|figure|iframe)/.test(l)) { flushPara(para); const src = l.match(/src="([^"]+)"/)?.[1]; if (src && /<img/.test(l)) out.push(`<p><img src="@@IMG@@/${images.add(src)}"></p>`); else if (src) out.push(`<p><a href="${src}">${src}</a></p>`); i++; continue; }
     if (!l.trim()) { flushPara(para); i++; continue; }
     para.push(l.trim()); i++;
@@ -130,12 +142,17 @@ async function cmdList() {
   }
 }
 
-async function cmdExport(spaceId, outRoot) {
+async function cmdExport(spaceId, outRoot, excludeTop = ["edit"]) {
   const space = await api(`/spaces/${spaceId}`);
   const content = await api(`/spaces/${spaceId}/content`);
+  // 최상위 묶음 제외(초안·숨김 'edit' 등) — 본문도 첨부 파일도 받지 않는다(자격 파일 같은 것이 섞여 내려오지 않게)
+  content.pages = (content.pages || []).filter((p) => !excludeTop.includes((p.title || "").trim()));
   const dir = join(outRoot || join(homedir(), "Desktop", "claude", "gitbook-export"), safeName(space.title));
   mkdirSync(join(dir, "pages"), { recursive: true }); mkdirSync(join(dir, "images"), { recursive: true });
-  const images = { map: new Map(), add(url) { if (!this.map.has(url)) { const ext = (extname(url.split("?")[0]) || ".png").slice(0, 6); this.map.set(url, `img${this.map.size + 1}${ext}`); } return this.map.get(url); } };
+  const images = { map: new Map(), add(url, fname) {
+    if (!this.map.has(url)) { const ext = (extname(url.split("?")[0]) || ".png").slice(0, 6); this.map.set(url, fname ? `${this.map.size + 1}-${safeName(fname)}` : `img${this.map.size + 1}${ext}`); }
+    return this.map.get(url);
+  } };
   const used = new Set();
   const tree = [];
   async function walk(pages, parentTitles, depth, into) {
@@ -173,6 +190,6 @@ import { pathToFileURL } from "node:url";
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [cmd, a1, a2] = process.argv.slice(2);
   if (cmd === "list") { auth(); await cmdList(); }
-  else if (cmd === "export" && a1) { auth(); await cmdExport(a1, a2); }
-  else { console.log("사용: node docs/gitbook-export.mjs list | export <spaceId> [출력폴더]"); process.exit(1); }
+  else if (cmd === "export" && a1) { auth(); await cmdExport(a1, a2 || undefined, process.argv[5] !== undefined ? process.argv[5].split(",").filter(Boolean) : ["edit"]); }
+  else { console.log("사용: node docs/gitbook-export.mjs list | export <spaceId> [출력폴더] [제외할 최상위 제목,쉼표구분 — 기본 edit]"); process.exit(1); }
 }

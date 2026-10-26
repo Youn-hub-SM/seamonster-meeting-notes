@@ -37,10 +37,14 @@ $imgDir = Join-Path $ExportDir "images"
 $imgBase = "$SiteUrl/SiteAssets/manual"
 $assets = Get-PnPList -Identity "Site Assets" -ErrorAction SilentlyContinue
 if (-not $assets) { $assets = Get-PnPList -Identity "SiteAssets" -ErrorAction SilentlyContinue }
+# 가져오는 페이지가 실제로 가리키는 파일만 올린다 — 제외한 묶음(초안·숨김)의 첨부(자격 파일 등)가 올라가면 안 된다
+$referenced = @{}
+function Collect-Refs($nodes) { foreach ($n in $nodes) { if ($n.file) { $h = Get-Content (Join-Path $ExportDir "pages\$($n.file)") -Raw -Encoding UTF8; foreach ($m in [regex]::Matches($h, '@@IMG@@/([^"]+)"')) { $referenced[[System.Net.WebUtility]::HtmlDecode($m.Groups[1].Value)] = $true } }; if ($n.children.Count) { Collect-Refs $n.children } } }
+Collect-Refs $json.pages
 if ($assets -and (Test-Path $imgDir)) {
   try { Resolve-PnPFolder -SiteRelativePath "SiteAssets/manual" | Out-Null } catch { }
   $n = 0
-  foreach ($f in Get-ChildItem $imgDir -File) {
+  foreach ($f in (Get-ChildItem $imgDir -File | Where-Object { $referenced[$_.Name] })) {
     try { Add-PnPFile -Path $f.FullName -Folder "SiteAssets/manual" -ErrorAction Stop | Out-Null; $n++ } catch { Warn "이미지 실패 $($f.Name): $($_.Exception.Message)" }
   }
   Ok "이미지 $n 개"
