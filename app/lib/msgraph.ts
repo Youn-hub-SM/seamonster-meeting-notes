@@ -151,6 +151,19 @@ export async function listSitePages(siteId: string): Promise<GraphSitePage[]> {
   return out;
 }
 
+// 진단 — 페이지가 0개로 읽힐 때 [연결 확인]이 보여 주는 정보: 사이트의 목록 이름·템플릿, 페이지 목록 첫 항목의 열 이름
+export async function debugSitePages(siteId: string): Promise<string> {
+  const lists = await graphJson<{ value: { id: string; name?: string; displayName?: string; list?: { template?: string; hidden?: boolean } }[] }>(`/sites/${siteId}/lists?$select=id,name,displayName,list`);
+  const names = lists.value.map((l) => `${l.displayName || l.name}(${l.list?.template || "?"})`).join(", ");
+  const pagesList = lists.value.find((l) => l.list?.template === "webPageLibrary") || lists.value.find((l) => /^(Site ?Pages|사이트 페이지)$/i.test(l.displayName || l.name || ""));
+  if (!pagesList) return `목록 ${lists.value.length}개: ${names} — 사이트 페이지 목록을 못 찾음`;
+  try {
+    const r = await graphJson<{ value: { id: string; fields?: Record<string, unknown> }[] }>(`/sites/${siteId}/lists/${pagesList.id}/items?$top=3&$expand=fields`);
+    const first = r.value[0];
+    return `페이지 목록 '${pagesList.displayName || pagesList.name}' 항목 ${r.value.length}개(앞 3개 조회) — 첫 항목 열: ${first ? Object.keys(first.fields || {}).slice(0, 25).join(", ") : "(없음)"}`;
+  } catch (e) { return `페이지 목록 '${pagesList.displayName || pagesList.name}' 항목 조회 실패: ${e instanceof Error ? e.message.slice(0, 160) : "오류"}`; }
+}
+
 // 항목의 드라이브 안 경로('/drive/root:/보고서/2026' → '보고서/2026/파일명')
 export function itemPath(it: GraphItem): string {
   const parent = (it.parentReference?.path || "").replace(/^\/drives\/[^/]+\/root:?/, "").replace(/^\/drive\/root:?/, "");

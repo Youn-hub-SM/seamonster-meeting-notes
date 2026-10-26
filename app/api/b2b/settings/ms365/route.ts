@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { isMsConfigured, listSitePages } from "@/app/lib/msgraph";
+import { isMsConfigured, listSitePages, debugSitePages } from "@/app/lib/msgraph";
 import { getDocSources, setDocSources, resolveSources, type DocSource } from "@/app/lib/ms365-docs";
 
 export const runtime = "nodejs";
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     for (const s of list) {
       if (s.error) { lines.push(`${s.label}: 실패 — ${s.error}`); continue; }
       let pages = "";
-      try { const n = (await listSitePages(s.site.id)).length; pages = n ? ` · 페이지 ${n}개` : ""; } catch (e) { pages = ` · 페이지 읽기 실패(${e instanceof Error ? e.message.slice(0, 80) : "오류"})`; }
+      try { const n = (await listSitePages(s.site.id)).length; pages = n ? ` · 페이지 ${n}개` : ` · 페이지 0개 [진단: ${await debugSitePages(s.site.id)}]`; } catch (e) { pages = ` · 페이지 읽기 실패(${e instanceof Error ? e.message.slice(0, 80) : "오류"})`; }
       lines.push(`${s.label}: OK (${s.drives.map((d) => d.name).join(", ") || "문서함 없음"}${pages})`);
     }
     const anyFail = list.some((s) => s.error);
