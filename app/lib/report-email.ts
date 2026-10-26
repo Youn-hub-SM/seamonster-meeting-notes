@@ -45,13 +45,13 @@ const SPACER = `<div style="height:6px;line-height:6px;font-size:6px;">&nbsp;</d
 
 // 코드 표 아래 집계 기준 줄은 12px 흐리게 — 화면(briefing/page.tsx CODE_SUB·BASIS_LINE)과 같은 규칙
 const CODE_SUB = /^###\s*(캠페인 전체|광고 추이|재고 주의 품목|고객의 소리 집계)/;
-const BASIS_LINE = /^(품절 =|방향 =|문의 =|메타 클릭은|문의 (?:마지막 수집|대장 마지막 저장):)/;
+const BASIS_LINE = /^(재고 없음 =|품절 =|방향 =|문의 =|메타 클릭은|문의 (?:마지막 수집|대장 마지막 저장):)/;
 
 // ── 표 ──
 //  머리글 행 배경 C_FOAM, 첫 열 왼쪽·숫자 열 오른쪽('상태'·'구분' 열은 왼쪽 — 화면 Table 과 같은 규칙), 합계 행 굵게 — 화면과 같은 자리만:
 //  캠페인 표는 TOTAL_ROW '합계 N개'(화면 캠페인 표), 매출 섹션의 일반 표는 첫 칸 /합계/('소매 합계' — 화면 SalesTable .brf-total).
 //  재고 주의 품목·고객의 소리 집계·추이 표는 합계 행 처리 없음(화면 InvTable·VoiceTable 과 같다 — 'VOC 합계'·이름에 '합계'가 든 품목을 굵게 하지 않는다).
-//  '상태' 품절 빨강·부족 주황. 화면과 같은 글자 색: 재고 '버티는 날' ≤3 빨강 · 매출 섹션 '증감·대비' 열의 부호 있는 % (|값|<3 중립) ·
+//  '상태' 재고 없음 빨강·부족 주황. 화면과 같은 글자 색: 재고 '버티는 날' ≤3 빨강 · 매출 섹션 '증감·대비' 열의 부호 있는 % (|값|<3 중립) ·
 //  고객의 소리 '문의 중 미답변' >0 주황 · 'VOC 손해 합계' 전주보다 크면 빨강. 광고는 색 없음.
 //  셀 여백은 table cellpadding(셀마다 style 을 늘어놓지 않는다 — 캠페인 30개 표 바이트). 표마다 가로 스크롤 감싸개(좁은 화면 안전망).
 const STATUS_COL = /상태|구분/;
@@ -88,7 +88,7 @@ function tableHtml(head: string[], body: string[][], sec: SectionKind): string {
   const pctCol = head.map((h, k) => sec === "sales" && k > 0 && /증감|대비/.test(h));
   const isTotal = (r: string[]) => sec === "sales" && !kind && /합계/.test(r[0] ?? "");
   const colorOf = (c: string, k: number, r: string[]): string | null => {
-    if (k === stateCol) return c === "품절" ? C_BAD : c === "부족" ? C_WARN : null;
+    if (k === stateCol) return (c === "재고 없음" || c === "품절") ? C_BAD : c === "부족" ? C_WARN : null;
     if (k === daysCol) { const m = c.match(/^(\d+)일$/); return m && Number(m[1]) <= 3 ? C_BAD : null; }
     if (pctCol[k] && SIGNED_PCT.test(c)) { const t = pctTone(parseFloat(c.replace("−", "-"))); return t === "success" ? C_GOOD : t === "danger" ? C_BAD : null; }
     if (k === 1 && r[0] === "문의 중 미답변") { const n = intOf(c); return n != null && n > 0 ? C_WARN : null; }
@@ -143,15 +143,15 @@ function bodyHtml(lines: string[], sec: SectionKind): string {
 
 // ── 핵심 줄(lead) → KPI 칸 ──
 //  lead 글자 = report-kpi leadText: '{라벨} {값} · {비교 기준 증감} · {배지} · {힌트}'. 라벨은 KPI 타일 라벨(아래 목록) — 맞는 라벨이 없으면 줄 전체를 값 칸에.
-//  값에 ' · ' 가 든 타일(재고 '품절 N · 부족 M', 고객의 소리 '문의 N · VOC M')은 앞 두 조각이 값.
-//  색: 증감(%)·'미답변 N' 조각이 있으면 그 조각만, 없으면 값(재고 품절·부족) — 화면 KPI 띠(배지·값 색)와 같은 자리.
+//  값에 ' · ' 가 든 타일(재고 '재고 없음 N · 부족 M', 고객의 소리 '문의 N · VOC M')은 앞 두 조각이 값.
+//  색: 증감(%)·'미답변 N' 조각이 있으면 그 조각만, 없으면 값(재고 없음·부족) — 화면 KPI 띠(배지·값 색)와 같은 자리.
 const KPI_LABELS = ["광고비(VAT 제외)", "월말 재고 금액", "고객의 소리", "소매 매출", "월 누적", "재고"];
 const LEAD_COLOR: Record<string, string> = { Good: C_GOOD, Attention: C_BAD, Warning: C_WARN };
 const COLOR_PART = /([+\-]\d+(\.\d+)?%|^미답변 \d+)$/;
 function leadCell(l: LeadLine): string {
   const label = KPI_LABELS.find((x) => l.text.startsWith(`${x} `)) ?? "";
   const parts = (label ? l.text.slice(label.length + 1) : l.text).split(" · ");
-  const two = !!label && /^(품절|문의) /.test(parts[0]) && parts.length > 1;
+  const two = !!label && /^(재고 없음|품절|문의) /.test(parts[0]) && parts.length > 1;
   const value = label ? (two ? parts.slice(0, 2).join(" · ") : parts[0]) : l.text;
   const rest = label ? parts.slice(two ? 2 : 1) : [];
   const color = l.color ? LEAD_COLOR[l.color] ?? null : null;

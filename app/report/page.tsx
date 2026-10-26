@@ -170,7 +170,7 @@ const TOOL_NAME: Record<string, string> = { run_sql: "조회", schema: "스키�
 //  누르면 입력칸에 채우기만 한다(기간·상품을 고쳐 보내게). size = 구름 글자 크기(대표 기능은 크게)
 const SUGGESTIONS: { text: string; size: "lg" | "md" | "sm" }[] = [
   { text: "어제 채널별 매출과 주문 건수 알려줘", size: "md" },
-  { text: "지금 품절이거나 일주일 안에 바닥날 상품은?", size: "sm" },
+  { text: "지금 재고가 없거나 일주일 안에 바닥날 상품은?", size: "sm" },
   { text: "10월 매출이 9월보다 줄어든 이유를 광고·재고까지 같이 봐줘", size: "lg" },
   { text: "이번 주 메타 광고 캠페인별 ROAS", size: "sm" },
   { text: "배송 지연 사과 공지를 알림톡으로 써줘", size: "lg" },

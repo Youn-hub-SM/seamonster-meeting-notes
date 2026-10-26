@@ -23,7 +23,7 @@ type Listing = {
 
 const KIND_KO: Record<string, string> = { product: "단일", option: "옵션", supplement: "추가상품" };
 const SALE_STATUS_KO: Record<string, string> = {
-  SALE: "판매중", OUTOFSTOCK: "품절", SUSPENSION: "판매중지", WAIT: "판매대기",
+  SALE: "판매중", OUTOFSTOCK: "상품 품절", SUSPENSION: "판매중지", WAIT: "판매대기",
   UNADMISSION: "승인대기", REJECTION: "승인거부", CLOSE: "판매종료", PROHIBITION: "판매금지", UNUSABLE: "사용안함",
 };
 const CATALOG_TITLE: Record<string, string> = { "스마트스토어": "네이버", "쿠팡": "쿠팡", "카페24": "공식몰(카페24)" };

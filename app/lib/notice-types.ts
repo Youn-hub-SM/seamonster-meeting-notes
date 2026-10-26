@@ -92,7 +92,7 @@ export const NOTICE_TYPES: NoticeType[] = [
     ],
   },
   {
-    key: "soldout", label: "품절·발송 불가", audience: "customer", apology: true,
+    key: "soldout", label: "상품 품절·발송 불가", audience: "customer", apology: true,
     fields: [
       { key: "product", label: "상품", kind: "text", required: true },
       { key: "reason", label: "사유", kind: "text", required: true, placeholder: "예: 원물 입고 지연으로 생산 불가" },

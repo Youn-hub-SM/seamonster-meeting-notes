@@ -9,11 +9,13 @@ export const INV_TYPE_COLOR: Record<InvTxnType, { bg: string; fg: string }> = {
   조정: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)" }, // 실사 보정(±)
 };
 
-// 재고 주의 상태(종합 리포트 '재고 주의 품목' 표·KPI, 2026-10-13 대표 결정 3) — 품절 = danger, 부족 = warning.
+// 재고 주의 상태(종합 리포트 '재고 주의 품목' 표·KPI, 2026-10-13 대표 결정 3) — 재고 없음 = danger, 부족 = warning.
+//  2026-10-26 대표: 창고 재고가 0 인 것은 '재고 없음'(채널의 '상품 품절'과 구분). 저장된 옛 리포트의 "품절" 값은 normInvState 로 읽는다.
 //  같은 빨강이면 급한 것을 못 가른다. row = 표 행 톤(.b2b-table tr.is-overdue / .is-urgent). 화면에서 색을 새로 선언하지 않는다.
-export type InvWatchState = "품절" | "부족";
+export type InvWatchState = "재고 없음" | "부족";
+export const normInvState = (s: unknown): InvWatchState | null => (s === "재고 없음" || s === "품절") ? "재고 없음" : s === "부족" ? "부족" : null;
 export const INV_WATCH_COLOR: Record<InvWatchState, { bg: string; fg: string; row: "is-overdue" | "is-urgent" }> = {
-  품절: { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)", row: "is-overdue" },
+  "재고 없음": { bg: "var(--sm-danger-bg)", fg: "var(--sm-danger)", row: "is-overdue" },
   부족: { bg: "var(--sm-warning-bg)", fg: "var(--sm-warning)", row: "is-urgent" },
 };
 

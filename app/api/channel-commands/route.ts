@@ -5,7 +5,7 @@ import { verifySessionFull, resolveUserName } from "@/app/lib/b2b-auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 채널 재고 명령 큐 (migration 108) — SKU 리스팅 찾기의 '수량 적용(품절=0)' 버튼.
+// 채널 재고 명령 큐 (migration 108) — SKU 리스팅 찾기의 '수량 적용(상품 품절=0)' 버튼.
 //  네이버·쿠팡 쓰기 API 는 등록 IP 전용이라 Vercel 이 직접 실행하지 못한다 —
 //  화면이 여기로 명령을 넣으면(대기) 중계 서버 크론이 2분마다 가져가 실행하고 결과를 보고한다.
 //  미들웨어 예외 경로(실행기의 Bearer 접근용)라 여기서 직접 인증한다.
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
           .eq("id", c.id)
           .eq("status", "실행중");
       }
-      // 실행 순서 — 재고 명령이 먼저(품절이 동기화에 밀려 잠기지 않게), 그 다음 동기화. 각각 등록순.
+      // 실행 순서 — 재고 명령이 먼저(상품 품절이 동기화에 밀려 잠기지 않게), 그 다음 동기화. 각각 등록순.
       alive.sort((a, b) =>
         (a.command === "sync_catalog" ? 1 : 0) - (b.command === "sync_catalog" ? 1 : 0) || a.id - b.id);
       return NextResponse.json({ ok: true, commands: alive });
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
     }
     const qty = Number(body.qty);
     if (!Number.isInteger(qty) || qty < 0 || qty > 99999) {
-      return NextResponse.json({ ok: false, error: "수량은 0~99999 정수여야 합니다 (0 = 품절)." }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "수량은 0~99999 정수여야 합니다 (0 = 상품 품절)." }, { status: 400 });
     }
 
     // 같은 아이템의 '대기' 명령이 있으면 값만 갱신(연타 방지) — 조건부 update 라 실행기가 그 사이

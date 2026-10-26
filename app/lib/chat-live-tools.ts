@@ -2,7 +2,7 @@
 //  · ad_performance  : 메타·네이버 광고 성과를 광고 API 에서 바로(종합 리포트 collectAds 재사용 — DB 에 광고 표가 없다)
 //  · ad_breakdown    : 캠페인 하나의 광고세트(메타)·광고그룹(네이버) 분해(종합 리포트 도구 재사용)
 //  · stock_status    : 창고 칸별 현재고·세트 가능 수량(공용 readStockMap — SQL 로 흉내 내면 칸·세트·선점이 틀린다)
-//  · listing_status  : 채널별 판매 상태·채널 재고 + 최근 품절·판매중지 명령(channel_commands 는 SQL 차단 표라 이 도구로만)
+//  · listing_status  : 채널별 판매 상태·채널 재고 + 최근 상품 품절·판매중지 명령(channel_commands 는 SQL 차단 표라 이 도구로만)
 //  · ga_report       : GA4 데이터 API(2026-10-22) — 세션·사용자·구매를 채널 그룹·소스/매체·캠페인·랜딩·기기·날짜로. 자격은 env(ga.ts)
 //  · docs_search/docs_list/docs_read : 회사 공용 문서(SharePoint·OneDrive, 2026-10-25) — Microsoft Graph 앱 자격으로 검색·목록·본문. 읽을 곳은 설정의 ms365_sources
 //  모두 읽기 전용. 광고를 끄거나 예산을 바꾸는 쓰기는 없다.
@@ -46,12 +46,12 @@ export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
     },
     {
       name: "stock_status", ...s,
-      description: "SKU 하나의 창고 현재고(소매·도매·프로모션·도매 대량 칸, 오늘 뒤 선점까지 뺀 가용). 세트는 구성품으로 만들 수 있는 수. 지금 재고·품절 여부 질문은 SQL 대신 이 도구를 씁니다(SKU 여러 개면 함께 여러 번 호출).",
+      description: "SKU 하나의 창고 현재고(소매·도매·프로모션·도매 대량 칸, 오늘 뒤 선점까지 뺀 가용). 세트는 구성품으로 만들 수 있는 수. 지금 재고가 있나·재고 없음인가 질문은 SQL 대신 이 도구를 씁니다(SKU 여러 개면 함께 여러 번 호출).",
       input_schema: { type: "object", additionalProperties: false, required: ["sku"], properties: { sku: { type: "string", description: "SKU 코드" } } },
     },
     {
       name: "listing_status", ...s,
-      description: "SKU 하나의 채널별 현재 판매 상태·채널 재고(매일 새벽 동기화)와 최근 14일 품절·판매중지·재고 변경 명령. 판매가 갑자기 줄었을 때 품절·판매중지였는지 확인합니다.",
+      description: "SKU 하나의 채널별 현재 판매 상태·채널 재고(매일 새벽 동기화)와 최근 14일 상품 품절·판매중지·재고 변경 명령. 판매가 갑자기 줄었을 때 상품 품절·판매중지였는지 확인합니다.",
       input_schema: { type: "object", additionalProperties: false, required: ["sku"], properties: { sku: { type: "string", description: "SKU 코드" } } },
     },
     {

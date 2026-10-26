@@ -6,15 +6,15 @@
 
 // ── 재고 사실(analyst-inventory 가 모은다) ──
 export type InvFlowRow = { kind: string; qty: number; net: number; items: number; cost: number };
-export type InvWatchRow = { name: string; stock: number; daily: number; days: number | null; inbound: number; due: string | null; state: "품절" | "부족" };
+export type InvWatchRow = { name: string; stock: number; daily: number; days: number | null; inbound: number; due: string | null; state: "재고 없음" | "부족" };
 export type InventoryFacts = {
   ok: boolean;
   note?: string;                 // 실패·생략 사유
   basis: string;                 // 기준 설명(AI·표 아래 한 줄)
   now: null | {                  // 지금(리포트를 만든 시각) 기준 — 끝난 지 7일 넘은 기간은 null
     at: string;
-    soldout: number;             // 품절 = 소매 현재고 0 이하 + 최근 30일 출고 있음
-    short: number;               // 부족 = 현재고 + 입고 예정 < 부족 기준(생산요청 화면과 같은 기준), 품절 제외
+    soldout: number;             // 재고 없음 = 소매 현재고 0 이하 + 최근 30일 출고 있음
+    short: number;               // 부족 = 현재고 + 입고 예정 < 부족 기준(생산요청 화면과 같은 기준), 재고 없음 제외
     soldout_top: string[];
     urgent_top: { name: string; days: number | null; request_by_days: number | null }[];
     inbound_total: number;       // 오는 중 = 열린 제조사 요청서(재고 보충) 잔여 합
@@ -43,7 +43,7 @@ export function renderInventoryTable(inv: InventoryFacts | null | undefined): st
   const w = inv?.ok ? inv.now?.watch ?? [] : [];
   if (!inv?.ok || !inv.now) return "";
   const out = [`### 재고 주의 품목 (지금 기준)`];
-  if (!w.length) out.push("- 품절·부족 품목 없음");
+  if (!w.length) out.push("- 재고 없음·부족 품목 없음");
   else {
     out.push(`| ${INV_WATCH_HEAD.join(" | ")} |`, `|${INV_WATCH_HEAD.map(() => "---").join("|")}|`);
     for (const r of w) out.push(`| ${watchCells(r).join(" | ")} |`);

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 // GET /api/sales/listings?product_id=<uuid>
 //  선택 상품의 SKU + 그 상품을 구성품으로 갖는 묶음들의 SKU 가 매출원장(sales_orders)에 등장한
 //  채널별 리스팅(판매처·상품명·옵션명·관리코드)과 최근 판매량(7일/30일/1년·마지막 판매일)을 돌려준다.
-//  구성품이 품절이면 그 구성품이 든 묶음 리스팅도 내려야 하므로 묶음까지 자동 전개한다.
+//  구성품이 상품 품절이면 그 구성품이 든 묶음 리스팅도 내려야 하므로 묶음까지 자동 전개한다.
 //  데이터원이 매출이라 판매 이력이 없는 리스팅은 나오지 않는다(집계 창 365일).
 
 type RpcRow = {
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "이 상품은 상품마스터에 SKU 가 없어 검색할 수 없습니다." }, { status: 400 });
     }
 
-    // 2) 이 상품을 구성품으로 갖는 묶음들 — 구성품 품절 시 묶음 리스팅도 조치 대상.
+    // 2) 이 상품을 구성품으로 갖는 묶음들 — 구성품 상품 품절 시 묶음 리스팅도 조치 대상.
     //  중첩 묶음(묶음 안의 묶음)까지 상향으로 재귀 수집 — expandBundleQty(하향 재귀, depth 8)와 대칭 규칙.
     const { data: allLinks, error: bErr } = await sb.from("product_bundles").select("parent_id, component_id");
     if (bErr) throw bErr;

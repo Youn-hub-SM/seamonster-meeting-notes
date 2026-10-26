@@ -47,13 +47,13 @@ type Result = {
 
 // 네이버 판매상태 원문 → 한글 (모르는 값은 원문 그대로)
 const SALE_STATUS_KO: Record<string, string> = {
-  SALE: "판매중", OUTOFSTOCK: "품절", SUSPENSION: "판매중지", WAIT: "판매대기",
+  SALE: "판매중", OUTOFSTOCK: "상품 품절", SUSPENSION: "판매중지", WAIT: "판매대기",
   UNADMISSION: "승인대기", REJECTION: "승인거부", CLOSE: "판매종료", PROHIBITION: "판매금지", UNUSABLE: "사용안함",
 };
 const KIND_KO: Record<string, string> = { product: "단일", option: "옵션", supplement: "추가상품" };
 // 카탈로그 카드 제목 — 채널 값(매출 판매처 표기)을 사용자에게 익숙한 이름으로
 const CATALOG_TITLE: Record<string, string> = { "스마트스토어": "네이버", "쿠팡": "쿠팡", "카페24": "공식몰(카페24)" };
-// 기본 숨김인 '비판매' 상태 — 품절(OUTOFSTOCK)은 조치 대상이라 항상 표시
+// 기본 숨김인 '비판매' 상태 — 상품 품절(OUTOFSTOCK)은 조치 대상이라 항상 표시
 const HIDDEN_SALE_STATUSES = new Set(["SUSPENSION", "CLOSE", "PROHIBITION", "REJECTION", "UNUSABLE", "판매안함", "진열안함"]);
 
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -211,7 +211,7 @@ export default function SkuListingsPage() {
   const total = res?.listings?.length ?? 0;
 
   // 카탈로그 단일 표 — 채널 고정 순서(네이버-쿠팡-공식몰) → 등록 상품명 정렬. 원본 idx 는 catalogQty 매칭용.
-  //  비판매 상태(판매안함·진열안함·판매중지 등)는 기본 숨김 — 품절은 조치 대상이라 항상 표시.
+  //  비판매 상태(판매안함·진열안함·판매중지 등)는 기본 숨김 — 상품 품절은 조치 대상이라 항상 표시.
   const catalogRows = useMemo(() => {
     const ORDER = ["스마트스토어", "쿠팡", "카페24"];
     const orderOf = (ch: string) => { const i = ORDER.indexOf(ch); return i < 0 ? 99 : i; };
@@ -226,7 +226,7 @@ export default function SkuListingsPage() {
     return { visible: all.filter((r) => !isHidden(r)), hidden: all.filter(isHidden) };
   }, [res]);
 
-  // ── 채널 재고 명령(수량 적용, 0 = 품절) — 중계 서버 데몬이 10초 폴링으로 실행 ──
+  // ── 채널 재고 명령(수량 적용, 0 = 상품 품절) — 중계 서버 데몬이 10초 폴링으로 실행 ──
   const [cmdQty, setCmdQty] = useState<Record<string, string>>({});
   const [cmdMap, setCmdMap] = useState<Record<string, ChannelCommand>>({});
   const [showHidden, setShowHidden] = useState(false);
@@ -258,12 +258,12 @@ export default function SkuListingsPage() {
     const raw = (cmdQty[c.item_key] ?? "").trim();
     const qty = Number(raw);
     if (raw === "" || !Number.isInteger(qty) || qty < 0) {
-      setErr("수량은 0 이상의 정수로 입력하세요 (0 = 품절).");
+      setErr("수량은 0 이상의 정수로 입력하세요 (0 = 상품 품절).");
       return;
     }
     const label = `${CATALOG_TITLE[c.channel] || c.channel} ${c.listing_name}${c.item_name ? ` / ${c.item_name}` : ""}`;
-    // 채널(외부)로 나가는 명령 — 되돌리기 토스트가 아니라 모달. 0 = 품절 처리라 빨간 버튼
-    if (!(await confirm({ title: `${label} 채널 재고 변경`, body: `채널 재고를 ${qtyText(qty)}로 변경합니다${qty === 0 ? " (품절 처리)" : ""}.`, action: qty === 0 ? "품절 처리" : `${qtyText(qty)}로 변경`, danger: qty === 0 }))) return;
+    // 채널(외부)로 나가는 명령 — 되돌리기 토스트가 아니라 모달. 0 = 상품 품절 처리라 빨간 버튼
+    if (!(await confirm({ title: `${label} 채널 재고 변경`, body: `채널 재고를 ${qtyText(qty)}로 변경합니다${qty === 0 ? " (상품 품절 처리)" : ""}.`, action: qty === 0 ? "상품 품절 처리" : `${qtyText(qty)}로 변경`, danger: qty === 0 }))) return;
     setApplying(c.item_key); setErr("");
     try {
       const r = await fetch("/api/channel-commands", {
@@ -369,7 +369,7 @@ export default function SkuListingsPage() {
               <span className="b2b-card-title">채널 등록 카탈로그</span>
             </div>
             <p className="sm-faint" style={{ margin: "0 0 8px", fontSize: 12 }}>
-              수량 0 = 품절 처리
+              수량 0 = 상품 품절 처리
             </p>
             <div className="b2b-table-wrap">
               <table className="b2b-table is-responsive" style={{ tableLayout: "fixed", width: "100%" }}>
@@ -405,7 +405,7 @@ export default function SkuListingsPage() {
                     const q = catalogQty.get(idx);
                     const cmd = cmdMap[cmdKey(c.channel, c.item_key)];
                     // '완료' 표시는 그 이후 카탈로그 동기화가 돌기 전까지만 — 표 재고에 반영된 뒤엔 소음(대표 요청).
-                    //  실패는 채널에 반영된 게 없으므로 계속 남긴다(밤새 실패를 놓치면 품절 미처리 사고).
+                    //  실패는 채널에 반영된 게 없으므로 계속 남긴다(밤새 실패를 놓치면 상품 품절 미처리 사고).
                     //  비교 기준은 행 자신의 synced_at(수집 시작 시각) — 채널 최대값을 쓰면 부분 업로드 행이 오판된다.
                     const chSynced = c.synced_at;
                     const cmdStale = !!cmd && cmd.status === "완료" &&

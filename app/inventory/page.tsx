@@ -500,7 +500,7 @@ export default function InventoryPage() {
                   {!confirmedTab && (() => {
                     const dep = r.depletion_days;
                     const inbDays = r.inbound_due ? Math.max(0, Math.round((Date.parse(r.inbound_due + "T00:00:00Z") - Date.parse(TODAY() + "T00:00:00Z")) / 86400_000)) : null;
-                    // 하루치 미만·품절(dep ≤ 0)은 입고 예정과 무관하게 항상 빨강 — 마감이 오늘이거나 지난 입고 예정이
+                    // 하루치 미만·재고 없음(dep ≤ 0)은 입고 예정과 무관하게 항상 빨강 — 마감이 오늘이거나 지난 입고 예정이
                     //  있으면 inbDays=0 이라 '0 < 0' 이 거짓이 되어 창고가 빈 가장 급한 품목이 검정으로 보이던 구멍(#10)
                     // 도매 탭의 입고 예정은 이동 대기(소매에 물건이 있어야 옮긴다)라 빨강 판정에 쓰지 않는다 — 부족 판정과 같은 기준(현재고만)
                     const red = dep != null && (dep <= 0 || ((r.inbound ?? 0) > 0 && channel !== "도매" && inbDays != null ? dep < inbDays : dep <= (meta?.leadDays ?? 14)));

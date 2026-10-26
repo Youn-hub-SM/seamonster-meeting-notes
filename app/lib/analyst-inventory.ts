@@ -1,5 +1,5 @@
 // 종합 리포트 '3. 재고' 사실 모으기(서버 전용) — 2026-10-01 대표 결정.
-//  지금(생성 시점) 기준: 품절·부족·오는 중 — 생산요청 화면과 같은 계산(getInventoryRows '소매')이라 숫자가 일치한다.
+//  지금(생성 시점) 기준: 재고 없음·부족·오는 중 — 생산요청 화면과 같은 계산(getInventoryRows '소매')이라 숫자가 일치한다.
 //  기간 기준: 원장 합계(완료분, 칸 이동 제외)·기간 중 0이 된 품목·(월간) 재고 금액·매입액 — run_report 고정 집계문(1000행 캡 없음).
 //  재고 경보는 flags 에 넣지 않는다 — flags 가 있으면 AI 조사 도구가 켜져 비용이 오른다(사실로만 넘긴다).
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -123,7 +123,7 @@ export async function collectInventory(
 
   const nowP = withNow ? (async () => {
     const [inv, inact] = await Promise.all([getInventoryRows("소매"), sb.from("products").select("sku").eq("active", false)]);
-    // 사용 중(active) 품목만 — 재고 목록·요청 창·주간 초안이 보여 주는 품목과 같게(단종 품목이 품절로 잡히지 않게)
+    // 사용 중(active) 품목만 — 재고 목록·요청 창·주간 초안이 보여 주는 품목과 같게(단종 품목이 재고 없음으로 잡히지 않게)
     const off = new Set(((inact.data ?? []) as { sku: string | null }[]).map((p) => String(p.sku ?? "").trim().toUpperCase()).filter(Boolean));
     if (inact.error) notes.push("단종 품목 조회 실패 — 단종 품목이 섞일 수 있음");
     const live = inv.rows.filter((r) => !off.has(String(r.sku || "").toUpperCase()));
@@ -132,7 +132,7 @@ export async function collectInventory(
     const short = rows.filter((r) => (r.stock ?? 0) > 0 && r.belowSafety)
       .sort((a, b) => (a.requestByDays ?? 9999) - (b.requestByDays ?? 9999) || a.name.localeCompare(b.name, "ko"));
     const daysOf = (r: { stock: number | null; dailyOut: number }) => (r.dailyOut > 0 ? Math.max(0, Math.floor(Math.max(0, r.stock ?? 0) / r.dailyOut)) : null);
-    const watch: InvWatchRow[] = [...soldout.map((r) => ({ r, state: "품절" as const })), ...short.map((r) => ({ r, state: "부족" as const }))]
+    const watch: InvWatchRow[] = [...soldout.map((r) => ({ r, state: "재고 없음" as const })), ...short.map((r) => ({ r, state: "부족" as const }))]
       .slice(0, 6)
       .map(({ r, state }) => ({ name: r.name, stock: r.stock ?? 0, daily: r1(r.dailyOut), days: daysOf(r), inbound: r.inbound, due: r.inboundDue, state }));
     const od = await sb.from("production_requests").select("id", { count: "exact", head: true })
@@ -175,8 +175,8 @@ export async function collectInventory(
   const facts: InventoryFacts = {
     ok: now !== null || flowR.status === "fulfilled",
     basis: [
-      now ? `품절 = 소매 현재고 0 이하·최근 30일 출고 있음, 부족 = 지금 요청해도 판매 가능일 전에 바닥날 품목(생산요청 화면과 같은 기준). 하루 출고 = 최근 30일 평균(행사 제외). 지금 = ${now.at} 리포트 생성 시각` : "",
-      !withNow ? "끝난 지 7일이 지난 기간이라 지금 기준 품절·부족 목록은 생략" : "",
+      now ? `재고 없음 = 소매 현재고 0 이하·최근 30일 출고 있음, 부족 = 지금 요청해도 판매 가능일 전에 바닥날 품목(생산요청 화면과 같은 기준). 하루 출고 = 최근 30일 평균(행사 제외). 지금 = ${now.at} 리포트 생성 시각` : "",
+      !withNow ? "끝난 지 7일이 지난 기간이라 지금 기준 재고 없음·부족 목록은 생략" : "",
       "기간 입출고 = 재고 원장 완료분(칸 이동 제외), 고객 반품 입고·제조사 반품 출고는 따로, 판매 출고는 택배 출고 처리일(이전 기록은 주문일)로 기록되어 매출과 날짜가 어긋날 수 있음, 금액 = 현재 원가",
     ].filter(Boolean).join(". "),
     now,

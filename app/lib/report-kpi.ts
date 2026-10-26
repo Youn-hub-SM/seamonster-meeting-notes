@@ -15,7 +15,7 @@ export type KpiTile = {
   label: string;
   value: string;                                    // 표시 글자(금액은 won()+'원')
   amount?: number;                                  // 금액 타일의 원 값(팀즈 제목 헤드라인 축약용) — 글자 타일(재고·고객의 소리)은 없음
-  valueTone?: "danger" | "warning" | "light";       // 재고: 품절>0 danger · 부족만 warning / 매출 없음 light
+  valueTone?: "danger" | "warning" | "light";       // 재고: 재고 없음>0 danger · 부족만 warning / 매출 없음 light
   delta?: { pill: KpiPill; basis: string; pct: number } | null; // 증감 pill + 비교 기준(주 비교 하나만) + 원 % 값
   hint: string;                                     // 집계 기준 한 줄(빈 문자열 = 없음)
   hintPills?: KpiPill[];                            // 힌트 앞 배지(주간 '미답변 N')
@@ -91,7 +91,7 @@ function adsTile(ads: Record<string, unknown> | null): KpiTile | null {
   return { label: "광고비(VAT 제외)", value: wonS(total), amount: total, hint: parts ? `ROAS ${parts}` : "" };
 }
 
-// 재고(지금 기준) — 품절>0 danger, 부족만 >0 warning. now 가 없으면(집계 실패·끝난 지 7일 넘은 기간 재생성) 타일 생략.
+// 재고(지금 기준) — 재고 없음>0 danger, 부족만 >0 warning. now 가 없으면(집계 실패·끝난 지 7일 넘은 기간 재생성) 타일 생략.
 function inventoryTile(inv: Record<string, unknown> | null): KpiTile | null {
   const now = inv && inv.ok !== false ? obj(inv.now) : null;
   const soldout = numOf(now?.soldout), short = numOf(now?.short);
@@ -103,7 +103,7 @@ function inventoryTile(inv: Record<string, unknown> | null): KpiTile | null {
     uName ? `${uName}${uDays == null ? "" : ` ${uDays}일`}` : null,
     inbound == null ? null : `오는 중 ${inbound.toLocaleString("ko-KR")}${overdue ? `(마감 지남 ${overdue.toLocaleString("ko-KR")})` : ""}`,
   ]);
-  return { label: "재고", value: `품절 ${soldout} · 부족 ${short}`, valueTone: soldout > 0 ? "danger" : short > 0 ? "warning" : undefined, hint };
+  return { label: "재고", value: `재고 없음 ${soldout} · 부족 ${short}`, valueTone: soldout > 0 ? "danger" : short > 0 ? "warning" : undefined, hint };
 }
 
 // 기간 고유 타일(대표 결정 1) — 일일 '월 누적' / 주간 '고객의 소리' / 월간 '월말 재고 금액'
@@ -159,7 +159,7 @@ function salesChart(period: KpiPeriod, sales: Record<string, unknown> | null): S
 const watchRows = (inv: Record<string, unknown> | null): InvWatchRow[] | null => {
   const now = inv && inv.ok !== false ? obj(inv.now) : null;
   if (!now || !Array.isArray(now.watch)) return null;
-  const rows = now.watch.map(obj).filter((r): r is Record<string, unknown> => !!r && typeof r.name === "string" && (r.state === "품절" || r.state === "부족"));
+  const rows = now.watch.map(obj).filter((r): r is Record<string, unknown> => !!r && typeof r.name === "string" && (r.state === "재고 없음" || r.state === "품절" || r.state === "부족"));
   return rows.map((r) => ({
     name: String(r.name), stock: numOf(r.stock) ?? 0, daily: numOf(r.daily) ?? 0, days: numOf(r.days),
     inbound: numOf(r.inbound) ?? 0, due: typeof r.due === "string" ? r.due : null, state: r.state as InvWatchRow["state"],
@@ -203,7 +203,7 @@ export function takeKpiParts(data: Record<string, unknown>): { parts: KpiParts; 
 
 // ── 팀즈 카드(docs/report-visibility-plan.md §5 2차) — 제목 헤드라인 + 제목 아래 핵심 줄 3~4개 ──
 //  headline = '소매 2,140만(-5%)'(moneyCompact 축약, 증감은 정수 %) — 매출 타일이 없거나 '매출 없음'이면 null(제목은 종전 noSalesSuffix 규칙).
-//  lead = 매출(증감 ≥+3 Good · ≤−3 Attention · 그 사이 Default) · 광고비(Default, 판정 색 없음) · 재고(품절>0 Attention · 부족만 Warning)
+//  lead = 매출(증감 ≥+3 Good · ≤−3 Attention · 그 사이 Default) · 광고비(Default, 판정 색 없음) · 재고(재고 없음>0 Attention · 부족만 Warning)
 //   · 주간 고객의 소리(미답변>0 Warning). 줄 글자 = 타일 라벨·값·증감 기준·배지·힌트를 ' · ' 로 이은 것(화면 타일과 같은 숫자).
 //  일일 '월 누적'·월간 '월말 재고 금액' 타일은 팀즈 줄에 넣지 않는다(§5 목록대로 — 휴대폰 미리보기에 매출·광고·재고가 먼저 보이게).
 const TONE_COLOR: Record<KpiTone, TeamsColor> = { success: "Good", danger: "Attention", warning: "Warning", info: "Default", neutral: "Default" };

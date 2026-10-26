@@ -6,7 +6,7 @@ import { useConfirm } from "@/app/components/Feedback";
 import { ComboBarLine, TrendChart, PIE_COLORS, moneyCompact } from "@/app/components/charts";
 import { splitSections, tableKindOf, TOTAL_ROW, CAMPAIGN_TOP, VOICE_HEAD, INV_WATCH_HEAD, watchCells, tableRow, tableRule, splitRow, type ReportSection, type SectionKind } from "@/app/lib/report-sections";
 import { KPI_TONE_COLOR, pctTone, type ReportKpi, type KpiPill, type KpiTile } from "@/app/lib/report-kpi";
-import { INV_WATCH_COLOR, type InvWatchState } from "@/app/lib/inventory";
+import { INV_WATCH_COLOR, normInvState, type InvWatchState } from "@/app/lib/inventory";
 import { qtyText, dateTime, dateRange } from "@/app/lib/format";
 
 // 종합 리포트(2026-09-30, 메뉴 기타) — 매출·광고 분석 에이전트(app/lib/analyst.ts, 주간·월간은 analyst-period.ts)의 리포트.
@@ -114,12 +114,12 @@ const SalesTable = ({ head, body }: { head: string[]; body: string[][] }) => {
 // 재고 주의 품목 표: '상태' 셀 → 배지(INV_WATCH_COLOR) + 행 톤, '버티는 날' ≤3 은 danger 글자
 const InvTable = ({ head, body }: { head: string[]; body: string[][] }) => {
   const stateCol = head.findIndex((h) => h === "상태"), daysCol = head.findIndex((h) => /버티는 날/.test(h));
-  const stateOf = (r: string[]): InvWatchState | null => { const s = r[stateCol]; return s === "품절" || s === "부족" ? s : null; };
+  const stateOf = (r: string[]): InvWatchState | null => normInvState(r[stateCol]);
   return (
     <Table head={head} body={body}
       rowClass={(r) => { const s = stateOf(r); return s ? INV_WATCH_COLOR[s].row : undefined; }}
       cellClass={(c, k) => { if (k !== daysCol) return undefined; const m = c.match(/^(\d+)일$/); return m && Number(m[1]) <= 3 ? "brf-neg" : undefined; }}
-      cell={(c, k) => { if (k !== stateCol) return bold(c); const s = c === "품절" || c === "부족" ? INV_WATCH_COLOR[c] : null; return s ? <span className="b2b-status-pill" style={{ background: s.bg, color: s.fg }}>{c}</span> : bold(c); }}
+      cell={(c, k) => { if (k !== stateCol) return bold(c); const st = normInvState(c); const s = st ? INV_WATCH_COLOR[st] : null; return s ? <span className="b2b-status-pill" style={{ background: s.bg, color: s.fg }}>{c}</span> : bold(c); }}
     />
   );
 };
@@ -185,7 +185,7 @@ const VoiceLine = ({ s }: { s: string }) => {
 //  코드 표 아래 집계 기준 줄(- 품절 = ... / - 방향 = ... / - 문의 = ... / - 메타 클릭은 ... / - 문의 마지막 수집: ...)만 12px 흐리게.
 //  같은 자리의 경고 줄(- 주의: / - 참고: / - 메타: ...지출 없는 캠페인 / - 네이버: 광고그룹 조회에 실패해 ...)은 본문 15px 그대로.
 const CODE_SUB = /^###\s*(캠페인 전체|광고 추이|재고 주의 품목|고객의 소리 집계)/;
-const BASIS_LINE = /^(품절 =|방향 =|문의 =|메타 클릭은|문의 (?:마지막 수집|대장 마지막 저장):)/;
+const BASIS_LINE = /^(재고 없음 =|품절 =|방향 =|문의 =|메타 클릭은|문의 (?:마지막 수집|대장 마지막 저장):)/;
 type BodyOpts = { kind: SectionKind; slot?: ReactNode; hasCharts: boolean; watch?: ReportKpi["watch"]; rising?: ReportKpi["rising"]; chart?: ReactNode };
 function renderBody(lines: string[], o: BodyOpts): ReactNode[] {
   const out: ReactNode[] = [];
