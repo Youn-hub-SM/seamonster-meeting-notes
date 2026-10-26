@@ -9,28 +9,32 @@ export const dynamic = "force-dynamic";
 //  start/end_date = migration 074 · customer/msg_type = migration 077.
 //  단계: 전체 → 077 제외 → 074도 제외. 응답 플래그로 화면이 해당 입력만 숨긴다.
 const BASE_COLS = "id, stage_num, stage, sub, title, status, channel, timing, detail, msg, img_url, links, perf, tags, sort_order, active, created_at, updated_at";
+//  triggers = migration 149(utm_medium)+150(trigger·offset_days·offset_note·target_ctr·solapi_template_id) — 2026-10-27
+const TRIGGER_COLS = "trigger, offset_days, offset_note, target_ctr, solapi_template_id, utm_medium";
 const TIERS = [
-  { cols: `${BASE_COLS}, start_date, end_date, customer, msg_type`, dates: true, fields: true },
-  { cols: `${BASE_COLS}, start_date, end_date`, dates: true, fields: false },
-  { cols: BASE_COLS, dates: false, fields: false },
+  { cols: `${BASE_COLS}, start_date, end_date, customer, msg_type, ${TRIGGER_COLS}`, dates: true, fields: true, triggers: true },
+  { cols: `${BASE_COLS}, start_date, end_date, customer, msg_type`, dates: true, fields: true, triggers: false },
+  { cols: `${BASE_COLS}, start_date, end_date`, dates: true, fields: false, triggers: false },
+  { cols: BASE_COLS, dates: false, fields: false, triggers: false },
 ] as const;
 const missing = (err: unknown) => {
   const m = extractErrorMsg(err, "");
-  return { fields: /customer|msg_type/.test(m), dates: /start_date|end_date/.test(m) };
+  return { fields: /customer|msg_type/.test(m), dates: /start_date|end_date/.test(m), triggers: /trigger|offset_days|offset_note|target_ctr|solapi_template_id|utm_medium/.test(m) };
 };
 
 // 저장용 행 — 날짜 ""는 date 컬럼이 거부하므로 null 로. 미적용 컬럼은 키 자체를 뺀다.
 function toRow(n: CrmMessageInput, tier: (typeof TIERS)[number]) {
-  const { id: _omit, start_date, end_date, customer, msg_type, ...rest } = n;
+  const { id: _omit, start_date, end_date, customer, msg_type, trigger, offset_days, offset_note, target_ctr, solapi_template_id, utm_medium, ...rest } = n;
   void _omit;
   return {
     ...rest,
     ...(tier.dates ? { start_date: start_date || null, end_date: end_date || null } : {}),
     ...(tier.fields ? { customer, msg_type } : {}),
+    ...(tier.triggers ? { trigger, offset_days, offset_note, target_ctr, solapi_template_id, utm_medium } : {}),
   };
 }
 
-const flags = (tier: (typeof TIERS)[number]) => ({ datesSupported: tier.dates, fieldsSupported: tier.fields });
+const flags = (tier: (typeof TIERS)[number]) => ({ datesSupported: tier.dates, fieldsSupported: tier.fields, triggersSupported: tier.triggers });
 
 // GET — 전체 메시지(스테이지·순서 정렬)
 export async function GET() {
@@ -42,7 +46,7 @@ export async function GET() {
       if (!error) return NextResponse.json({ ok: true, ...flags(tier), messages: data ?? [] });
       lastErr = error;
       const miss = missing(error);
-      if (!miss.fields && !miss.dates) throw error; // 컬럼 문제가 아니면 즉시 실패
+      if (!miss.fields && !miss.dates && !miss.triggers) throw error; // 컬럼 문제가 아니면 즉시 실패
     }
     throw lastErr;
   } catch (err) {
@@ -62,7 +66,7 @@ export async function POST(req: NextRequest) {
       if (!error) return NextResponse.json({ ok: true, ...flags(tier), message: data });
       lastErr = error;
       const miss = missing(error);
-      if (!miss.fields && !miss.dates) throw error;
+      if (!miss.fields && !miss.dates && !miss.triggers) throw error;
     }
     throw lastErr;
   } catch (err) {
@@ -83,7 +87,7 @@ export async function PUT(req: NextRequest) {
       if (!error) return NextResponse.json({ ok: true, ...flags(tier), message: data });
       lastErr = error;
       const miss = missing(error);
-      if (!miss.fields && !miss.dates) throw error;
+      if (!miss.fields && !miss.dates && !miss.triggers) throw error;
     }
     throw lastErr;
   } catch (err) {

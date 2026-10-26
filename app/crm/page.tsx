@@ -12,6 +12,7 @@ import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/cha
 import { matchKoQuery } from "@/app/lib/hangul";
 import { qty, qtyText, wonText } from "@/app/lib/format";
 import WeeklyStats from "./WeeklyStats";
+import { CRM_TRIGGERS } from "@/app/lib/crm";
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 // 기간 표시: "7/1~7/15" · 시작만 "7/1~" · 종료만 "~7/15"
@@ -61,6 +62,8 @@ export default function CrmPage() {
   const [messages, setMessages] = useState<CrmMessage[]>([]);
   const [datesSupported, setDatesSupported] = useState(true);   // migration 074 미적용이면 false → 날짜 기능 숨김
   const [fieldsSupported, setFieldsSupported] = useState(true); // migration 077 미적용이면 false → 고객·유형 숨김
+  const [triggersSupported, setTriggersSupported] = useState(true); // migration 149·150 미적용이면 false → 트리거·D+n·목표 클릭률 숨김
+  const [draftMsg, setDraftMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const confirmModal = useConfirm();
@@ -128,6 +131,7 @@ export default function CrmPage() {
       })));
       setDatesSupported(j.datesSupported !== false);
       setFieldsSupported(j.fieldsSupported !== false);
+      setTriggersSupported(j.triggersSupported !== false);
     } catch (e) { setError(e instanceof Error ? e.message : "메시지를 불러오지 못했습니다. [다시 불러오기]를 누르세요"); }
     setLoading(false);
   }, []);
@@ -379,7 +383,13 @@ export default function CrmPage() {
             {(stageSel || custSel || stSel) && (
               <p className="sm-faint crm-asof-hint">필터 결과 {qtyText(tableFiltered.length)} / 전체 {qtyText(filtered.length)}</p>
             )}
-            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} opts={opts} labels={labels} savingId={savingId} onField={setStr} onLink={setLink} onSave={saveRow} onEdit={openEdit} />
+            {triggersSupported && (
+              <div className="sm-row-wrap" style={{ gap: 8, alignItems: "center", margin: "0 0 10px" }}>
+                <button className="b2b-btn-secondary" onClick={async () => { setDraftMsg(""); try { const j = await fetch("/api/crm/messages/draft-triggers", { method: "POST" }).then((r) => r.json()); if (!j.ok) throw new Error(j.error || "실패"); setDraftMsg(`트리거 초안 ${qtyText(j.filled, "건")} 채움${j.unmatched?.length ? ` · 못 맞춘 제목: ${j.unmatched.join(", ")}` : ""}`); load(); } catch (e) { setDraftMsg(e instanceof Error ? e.message : "실패"); } }}>트리거 초안 채우기</button>
+                {draftMsg && <span className="sm-faint" style={{ fontSize: 12 }}>{draftMsg}</span>}
+              </div>
+            )}
+            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} opts={opts} labels={labels} savingId={savingId} onField={setStr} onLink={setLink} onSave={saveRow} onEdit={openEdit} />
           </>
         ) : (
           <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} chLabel={labels.ch} />
@@ -388,7 +398,7 @@ export default function CrmPage() {
       {edit && (
         <EditModal
           data={edit} onChange={setEdit} onClose={() => setEdit(null)} onSave={save}
-          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported} fieldsSupported={fieldsSupported}
+          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported}
           opts={opts} labels={labels}
         />
       )}
@@ -474,8 +484,8 @@ function FlowView({ stages, gaOf, msgOpen, labels, onCard, onAdd }: { stages: St
 }
 
 // ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·내용·링크·성과)는 '상세' 버튼→모달 ──
-function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, onField, onLink, onSave, onEdit }: {
-  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; opts: CrmOptions; labels: Labels; savingId: string | null;
+function TableView({ msgs, stageNames, fieldsSupported, triggersSupported, opts, labels, savingId, onField, onLink, onSave, onEdit }: {
+  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; triggersSupported: boolean; opts: CrmOptions; labels: Labels; savingId: string | null;
   onField: (id: string, key: keyof CrmMessage, value: string) => void;
   onLink: (id: string, key: string, value: string) => void;
   onSave: (id: string, override?: Partial<CrmMessage>) => void;
@@ -498,8 +508,13 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
             <th className="crm-col-select">발송채널</th>
             {fieldsSupported && <th className="crm-col-select">유형</th>}
             <th className="crm-col-timing">발송시점</th>
+            {triggersSupported && <th className="crm-col-select">트리거</th>}
+            {triggersSupported && <th style={{ width: 64 }}>D+n</th>}
             <th className="crm-col-select">상태</th>
             <th className="crm-col-utm">UTM 캠페인</th>
+            {triggersSupported && <th className="crm-col-select">UTM 매체</th>}
+            {triggersSupported && <th style={{ width: 72 }}>목표 클릭률</th>}
+            {triggersSupported && <th style={{ width: 120 }}>솔라피 템플릿</th>}
             <th className="crm-col-tags">태그</th><th className="crm-col-actions"></th>
           </tr></thead>
           <tbody>
@@ -532,12 +547,24 @@ function TableView({ msgs, stageNames, fieldsSupported, opts, labels, savingId, 
                   </td>
                 )}
                 <td><CellText value={m.timing} placeholder="예: 결제 후 1시간" onLocal={(v) => onField(m.id, "timing", v)} onCommit={() => onSave(m.id)} /></td>
+                {triggersSupported && (
+                  <td>
+                    <select className="b2b-status-select" value={m.trigger || ""} aria-label="트리거" onChange={sel(m, "trigger")}>
+                      <option value="">없음</option>
+                      {CRM_TRIGGERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                    </select>
+                  </td>
+                )}
+                {triggersSupported && <td><CellText value={m.offset_days == null ? "" : String(m.offset_days)} placeholder="D+n" onLocal={(v) => onField(m.id, "offset_days", v)} onCommit={() => onSave(m.id)} /></td>}
                 <td>
                   <select className={stSelCls(m.status)} value={statusKey(m.status)} aria-label="상태" onChange={sel(m, "status")}>
                     {CRM_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                   </select>
                 </td>
                 <td><CellText value={m.links?.utm_campaign || ""} placeholder="예: crm_60d_winback" onLocal={(v) => onLink(m.id, "utm_campaign", v)} onCommit={() => onSave(m.id)} /></td>
+                {triggersSupported && <td><CellText value={m.utm_medium || ""} placeholder="예: alimtalk-naver" onLocal={(v) => onField(m.id, "utm_medium", v)} onCommit={() => onSave(m.id)} /></td>}
+                {triggersSupported && <td><CellText value={m.target_ctr == null ? "" : String(m.target_ctr)} placeholder="%" onLocal={(v) => onField(m.id, "target_ctr", v)} onCommit={() => onSave(m.id)} /></td>}
+                {triggersSupported && <td><CellText value={m.solapi_template_id || ""} placeholder="템플릿 ID" onLocal={(v) => onField(m.id, "solapi_template_id", v)} onCommit={() => onSave(m.id)} /></td>}
                 <td><CellText value={m.tags} placeholder="예: 신규, 자동화" onLocal={(v) => onField(m.id, "tags", v)} onCommit={() => onSave(m.id)} /></td>
                 <td className="actions">
                   {savingId === m.id
@@ -779,9 +806,9 @@ function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onCl
 }
 
 // ── 편집 모달 ──
-function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported, opts, labels }: {
+function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported, triggersSupported, opts, labels }: {
   data: CrmMessageInput; onChange: (d: CrmMessageInput) => void; onClose: () => void;
-  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean; fieldsSupported: boolean;
+  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean; fieldsSupported: boolean; triggersSupported: boolean;
   opts: CrmOptions; labels: Labels;
 }) {
   const set = <K extends keyof CrmMessageInput>(k: K, v: CrmMessageInput[K]) => onChange({ ...data, [k]: v });
@@ -838,6 +865,31 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
             <label className="b2b-field"><span className="b2b-field-label">발송 시점</span>
               <input className="b2b-input" value={data.timing} onChange={(e) => set("timing", e.target.value)} placeholder="예: 선정 시 / 상시" /></label>
           </div>
+          {triggersSupported && (
+            <>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">트리거</span>
+                  <select className="b2b-select" value={data.trigger || ""} onChange={(e) => set("trigger", e.target.value)}>
+                    <option value="">없음</option>
+                    {CRM_TRIGGERS.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                  </select></label>
+                <label className="b2b-field"><span className="b2b-field-label">D+n (며칠째, 전이면 음수)</span>
+                  <input className="b2b-input" type="number" value={data.offset_days == null ? "" : String(data.offset_days)} onChange={(e) => set("offset_days", e.target.value === "" ? null : Number(e.target.value))} placeholder="0" /></label>
+              </div>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">발송 조건 메모</span>
+                  <input className="b2b-input" value={data.offset_note || ""} onChange={(e) => set("offset_note", e.target.value)} placeholder="예: 2회 구매 시점" /></label>
+                <label className="b2b-field"><span className="b2b-field-label">목표 클릭률(%)</span>
+                  <input className="b2b-input" type="number" step="0.1" min={0} value={data.target_ctr == null ? "" : String(data.target_ctr)} onChange={(e) => set("target_ctr", e.target.value === "" ? null : Number(e.target.value))} /></label>
+              </div>
+              <div className="b2b-field-row">
+                <label className="b2b-field"><span className="b2b-field-label">UTM 매체</span>
+                  <input className="b2b-input" value={data.utm_medium || ""} onChange={(e) => set("utm_medium", e.target.value)} placeholder="예: alimtalk-naver" spellCheck={false} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">솔라피 템플릿 ID</span>
+                  <input className="b2b-input" value={data.solapi_template_id || ""} onChange={(e) => set("solapi_template_id", e.target.value)} spellCheck={false} /></label>
+              </div>
+            </>
+          )}
           {datesSupported && (
             <div className="b2b-field-row">
               <label className="b2b-field"><span className="b2b-field-label">진행 시작일 (선택)</span>

@@ -35,6 +35,13 @@ export interface CrmMessage {
   /** 고객(어느 스토어 고객 대상) · 유형(메시지 형식). migration 077 — 미적용 DB에선 항상 "". */
   customer: string;
   msg_type: string;
+  /** 트리거·D+n·목표 클릭률·솔라피 템플릿 ID(migration 150, 2026-10-27) — 미적용 DB 에선 기본값. utm_medium 은 149. */
+  trigger: string;
+  offset_days: number | null;
+  offset_note: string;
+  target_ctr: number | null;
+  solapi_template_id: string;
+  utm_medium: string;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +82,32 @@ export const CRM_STATUSES: { key: string; label: string }[] = [
 ];
 export const CRM_STATUS_LABEL: Record<string, string> = Object.fromEntries(CRM_STATUSES.map((s) => [s.key, s.label]));
 
+// 트리거(기준 사건) — 메시지가 '무슨 사건 뒤 며칠째' 나가는지(2026-10-27, docs/crm-message-map-plan.md).
+//  estimable = 업무도우미 매출 원장으로 그 주 대상자 수를 셀 수 있는 것(발송 수 추정).
+export const CRM_TRIGGERS: { key: string; label: string; estimable: boolean }[] = [
+  { key: "signup", label: "가입", estimable: false },
+  { key: "first_order", label: "첫 구매", estimable: true },
+  { key: "reorder", label: "재구매", estimable: true },
+  { key: "shipped", label: "출고", estimable: true },
+  { key: "delivered", label: "배송 완료", estimable: true },
+  { key: "cart", label: "장바구니 이탈", estimable: false },
+  { key: "subscription", label: "정기배송 회차", estimable: true },
+  { key: "inactive", label: "마지막 구매 후 경과", estimable: true },
+  { key: "event", label: "행사·기획전", estimable: false },
+  { key: "always", label: "상시", estimable: false },
+];
+export const CRM_TRIGGER_LABEL: Record<string, string> = Object.fromEntries(CRM_TRIGGERS.map((t) => [t.key, t.label]));
+/** 추적 메시지 = utm_campaign 이 있는 메시지(대표 결정 2026-10-26 — 따로 켜고 끄지 않는다) */
+export const isTracked = (m: { links?: CrmLinks }) => !!(m.links?.utm_campaign || "").trim();
+/** 트리거 D+n 짧은 표기: '첫 구매 D+3', '정기배송 회차 D-3', '상시' */
+export function triggerText(m: { trigger: string; offset_days: number | null; offset_note?: string }): string {
+  if (!m.trigger) return "";
+  const base = CRM_TRIGGER_LABEL[m.trigger] || m.trigger;
+  if (m.trigger === "always" || m.offset_days == null) return m.offset_note ? `${base} · ${m.offset_note}` : base;
+  const d = m.offset_days;
+  return `${base} D${d >= 0 ? "+" : "-"}${Math.abs(d)}${m.offset_note ? ` · ${m.offset_note}` : ""}`;
+}
+
 /** 구 상태 체계를 2종으로 수렴: auto(자동발송 중)=활성, gap(공백)·paused(중단)=비활성. */
 export function statusKey(s: string): "active" | "inactive" {
   const v = (s || "").trim().toLowerCase();
@@ -87,6 +120,7 @@ export const EMPTY_CRM_MESSAGE: CrmMessageInput = {
   stage_num: 0, stage: "", sub: "", title: "", status: "active", channel: "kakao",
   timing: "", detail: "", msg: "", img_url: "", links: {}, perf: {}, tags: "", sort_order: 0, active: true,
   start_date: "", end_date: "", customer: "", msg_type: "",
+  trigger: "", offset_days: null, offset_note: "", target_ctr: null, solapi_template_id: "", utm_medium: "",
 };
 
 const clean = (v: unknown): string => (typeof v === "string" ? v.trim() : v == null ? "" : String(v));
@@ -129,6 +163,12 @@ export function normalizeCrmMessage(input: CrmMessageInput): CrmMessageInput {
     end_date: toYmd(input.end_date),
     customer: clean(input.customer),
     msg_type: clean(input.msg_type),
+    trigger: CRM_TRIGGERS.some((t) => t.key === clean(input.trigger)) ? clean(input.trigger) : "",
+    offset_days: input.offset_days === null || input.offset_days === undefined || String(input.offset_days) === "" ? null : toInt(input.offset_days),
+    offset_note: clean(input.offset_note),
+    target_ctr: input.target_ctr === null || input.target_ctr === undefined || String(input.target_ctr) === "" ? null : Math.max(0, Math.round(Number(input.target_ctr) * 10) / 10),
+    solapi_template_id: clean(input.solapi_template_id),
+    utm_medium: clean(input.utm_medium),
   };
 }
 

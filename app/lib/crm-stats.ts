@@ -3,6 +3,8 @@
 import { supabaseAdmin } from "./supabase";
 import { isGaConfigured, runGaReport } from "./ga";
 import { fetchSolapiMessages, aggregateSolapi, isSolapiConfigured } from "./solapi";
+import { estimateAudience } from "./crm-audience";
+import { isTracked, triggerText, CRM_CUSTOMER_LABEL, type CrmMessage } from "./crm";
 
 export const CRM_SOURCES = [
   { key: "datarize_brand", label: "데이터라이즈 브랜드메시지", how: "csv" },
@@ -84,6 +86,55 @@ export async function gaByMedium(since: string, until: string): Promise<GaMedium
   if (!isGaConfigured()) return null;
   const r = await runGaReport({ since, until, dimensions: ["source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 200, filter: { dimension: "source_medium", match: "begins_with", value: "kakao" } });
   return r.rows.map((row) => ({ medium: String(row["소스/매체"] || "").replace(/^kakao\s*\/\s*/, ""), sessions: Number(row["세션"]) || 0, purchases: Number(row["구매"]) || 0, revenue: Math.round(Number(row["구매액(원)"]) || 0) })).filter((x) => x.medium).sort((a, b) => b.sessions - a.sessions);
+}
+
+// ── 추적 메시지(utm_campaign 있는 것)별 주간 성과 — 발송 = 실제(솔라피 템플릿) → 직접 입력(제목) → 추정(업무도우미), 클릭 = GA 세션 ──
+export type TrackedRow = {
+  id: string; title: string; stage: string; customer: string; medium: string; campaign: string; triggerText: string;
+  sent: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sentNote: string;
+  sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null;
+};
+export async function trackedMessages(weekStart: string, until: string, rows: CrmStatRow[]): Promise<{ tracked: TrackedRow[]; gaNote: string }> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.from("crm_messages").select("id,title,stage,customer,links,trigger,offset_days,offset_note,target_ctr,solapi_template_id,utm_medium,active").eq("active", true);
+  if (error) {
+    // 150 미적용 → 트리거 칸 없이 다시(추정은 못 함)
+    const r2 = await sb.from("crm_messages").select("id,title,stage,customer,links,active").eq("active", true);
+    if (r2.error) throw r2.error;
+    return { tracked: await buildTracked(sb, (r2.data || []).map((m) => ({ ...m, trigger: "", offset_days: null, offset_note: "", target_ctr: null, solapi_template_id: "", utm_medium: "" })) as unknown as CrmMessage[], weekStart, until, rows), gaNote: "" };
+  }
+  return { tracked: await buildTracked(sb, (data || []) as unknown as CrmMessage[], weekStart, until, rows), gaNote: "" };
+}
+async function buildTracked(sb: ReturnType<typeof supabaseAdmin>, msgs: CrmMessage[], weekStart: string, until: string, rows: CrmStatRow[]): Promise<TrackedRow[]> {
+  const tracked = msgs.filter((m) => isTracked(m));
+  if (!tracked.length) return [];
+  // GA: 캠페인 × 소스/매체(kakao 만) 한 번에
+  const ga = new Map<string, { sessions: number; purchases: number; revenue: number }>();
+  let gaOk = false;
+  if (isGaConfigured()) {
+    try {
+      const r = await runGaReport({ since: weekStart, until, dimensions: ["campaign", "source_medium"], metrics: ["sessions", "purchases", "revenue"], limit: 500, filter: { dimension: "source_medium", match: "begins_with", value: "kakao" } });
+      for (const row of r.rows) {
+        const c = String(row["캠페인"] || ""); const cur = ga.get(c) || { sessions: 0, purchases: 0, revenue: 0 };
+        cur.sessions += Number(row["세션"]) || 0; cur.purchases += Number(row["구매"]) || 0; cur.revenue += Number(row["구매액(원)"]) || 0; ga.set(c, cur);
+      }
+      gaOk = true;
+    } catch { /* GA 실패 → 세션 null */ }
+  }
+  const out: TrackedRow[] = [];
+  for (const m of tracked) {
+    const campaign = (m.links?.utm_campaign || "").trim();
+    // 발송 수: 솔라피 템플릿 ID → 직접 입력(제목 일치) → 추정
+    let sent: number | null = null, sentBasis: TrackedRow["sentBasis"] = "none", sentNote = "";
+    const tid = (m.solapi_template_id || "").trim();
+    if (tid) { const s = rows.filter((r) => r.source === "solapi" && r.template.endsWith(`:${tid}`)).reduce((a, r) => a + r.sent, 0); if (s > 0 || rows.some((r) => r.source === "solapi")) { sent = s; sentBasis = "solapi"; sentNote = "솔라피 실제"; } }
+    if (sent == null) { const manual = rows.filter((r) => r.batch === "manual" && r.template === m.title); if (manual.length) { sent = manual.reduce((a, r) => a + r.sent, 0); sentBasis = "manual"; sentNote = "직접 입력"; } }
+    if (sent == null && m.trigger) { const e = await estimateAudience(sb, m, weekStart, until); if (e.count != null) { sent = e.count; sentBasis = "estimate"; sentNote = `추정 · ${e.note}`; } else sentNote = e.note; }
+    const g = gaOk ? ga.get(campaign) || { sessions: 0, purchases: 0, revenue: 0 } : null;
+    const ctr = g && sent ? Math.round((g.sessions / sent) * 1000) / 10 : null;
+    out.push({ id: m.id, title: m.title, stage: m.stage, customer: CRM_CUSTOMER_LABEL[m.customer] || m.customer || "", medium: m.utm_medium || "", campaign, triggerText: triggerText(m), sent, sentBasis, sentNote, sessions: g ? g.sessions : null, purchases: g ? g.purchases : null, revenue: g ? g.revenue : null, ctr, targetCtr: m.target_ctr ?? null });
+  }
+  return out.sort((a, b) => (b.sessions || 0) - (a.sessions || 0));
 }
 
 // 최근 N주 수단별 발송 추이(주간 표 아래 차트)

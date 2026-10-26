@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { weeklyStats, gaByMedium, weeklyTrend, upsertCrmStats, weekStartOf, kstToday, isCrmSource, CRM_SOURCES } from "@/app/lib/crm-stats";
+import { weeklyStats, gaByMedium, weeklyTrend, upsertCrmStats, weekStartOf, kstToday, isCrmSource, CRM_SOURCES, trackedMessages } from "@/app/lib/crm-stats";
 import { isSolapiConfigured } from "@/app/lib/solapi";
 
 export const runtime = "nodejs";
@@ -20,7 +20,9 @@ export async function GET(req: NextRequest) {
     const [w, trend] = await Promise.all([weeklyStats(week), weeklyTrend(12, week)]);
     let ga: Awaited<ReturnType<typeof gaByMedium>> = null, gaNote = "";
     try { ga = await gaByMedium(week, w.until); } catch (e) { gaNote = e instanceof Error ? e.message : "GA 조회 실패"; }
-    return NextResponse.json({ ok: true, ...w, ga, gaNote, trend, sources: w.sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured() });
+    let tracked: Awaited<ReturnType<typeof trackedMessages>>["tracked"] = [], trackedNote = "";
+    try { tracked = (await trackedMessages(week, w.until, w.rows)).tracked; } catch (e) { trackedNote = e instanceof Error ? e.message : "추적 메시지 집계 실패"; }
+    return NextResponse.json({ ok: true, ...w, ga, gaNote, trend, tracked, trackedNote, sources: w.sources, sourceDefs: CRM_SOURCES, solapi: isSolapiConfigured() });
   } catch (err) {
     return NextResponse.json({ ok: false, error: extractErrorMsg(err, "조회 실패") }, { status: 500 });
   }

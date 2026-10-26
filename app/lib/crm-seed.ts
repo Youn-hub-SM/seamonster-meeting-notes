@@ -88,6 +88,7 @@ export function seedMessages(): CrmMessageInput[] {
         links: {}, perf: {}, tags: "",
         sort_order: mi + 1, active: true,
         start_date: "", end_date: "", customer: "", msg_type: "",
+        trigger: "", offset_days: null, offset_note: "", target_ctr: null, solapi_template_id: "", utm_medium: "",
       });
     });
   });
@@ -186,6 +187,7 @@ export function csvToMessages(csv: string): CrmMessageInput[] {
       timing: g(row, "timing"), detail: g(row, "detail"), msg: g(row, "msg"), img_url: g(row, "img_url"),
       links, perf, tags: g(row, "tags"), sort_order: sort, active: true,
       start_date: "", end_date: "", customer: "", msg_type: "",
+        trigger: "", offset_days: null, offset_note: "", target_ctr: null, solapi_template_id: "", utm_medium: "",
     });
   }
   return out;

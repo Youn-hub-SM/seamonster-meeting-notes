@@ -11,7 +11,8 @@ type SourceDef = { key: string; label: string; how: "csv" | "api" | "manual" };
 type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; sent: number; clicked: number | null; days: number }[] };
 type GaRow = { medium: string; sessions: number; purchases: number; revenue: number };
 type StatRow = { id: string; source: string; grain: "day" | "week"; date: string; template: string; sent: number; clicked: number | null; cost: number | null; note: string; batch: string };
-type Resp = { ok: boolean; error?: string; week: string; until: string; sources: WeeklySource[]; rows: StatRow[]; ga: GaRow[] | null; gaNote: string; trend: { week: string; bySource: Record<string, number> }[]; sourceDefs: SourceDef[]; solapi: boolean };
+type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; triggerText: string; sent: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null };
+type Resp = { ok: boolean; error?: string; week: string; until: string; sources: WeeklySource[]; rows: StatRow[]; ga: GaRow[] | null; gaNote: string; trend: { week: string; bySource: Record<string, number> }[]; tracked: TrackedRow[]; trackedNote: string; sourceDefs: SourceDef[]; solapi: boolean };
 
 const fmtDate = (iso: string) => iso.slice(5).replace("-", "/");
 const pct = (a: number | null, b: number) => (a == null || !b ? "-" : `${((a / b) * 100).toFixed(1)}%`);
@@ -113,6 +114,31 @@ export default function WeeklyStats() {
           </div>
         </section>
       )}
+
+      <section className="b2b-card" style={{ marginBottom: 14 }}>
+        <div className="b2b-card-head"><span className="b2b-card-title">추적 메시지 클릭률 (utm 단 메시지)</span><span className="sm-faint" style={{ fontSize: 12, marginLeft: "auto" }}>클릭률 = GA 세션 ÷ 발송 수</span></div>
+        {loading ? <p className="sm-faint">불러오는 중...</p> : data?.trackedNote ? <div className="b2b-error">{data.trackedNote}</div> : !data?.tracked?.length ? <p className="sm-faint" style={{ fontSize: 13 }}>메시지맵에 UTM 캠페인이 적힌 메시지가 없습니다. 표(편집) 탭에서 UTM 캠페인을 넣으면 여기 나타납니다.</p> : (
+          <div className="b2b-table-wrap"><table className="b2b-table">
+            <thead><tr><th>메시지</th><th>트리거</th><th>매체</th><th className="num">발송</th><th className="num">클릭(세션)</th><th className="num">클릭률</th><th className="num">구매</th><th className="num">매출</th></tr></thead>
+            <tbody>{data.tracked.map((t) => {
+              const tone = t.ctr == null || t.targetCtr == null ? undefined : t.ctr >= t.targetCtr ? "var(--sm-success)" : "var(--sm-danger)";
+              return (
+                <tr key={t.id}>
+                  <td><div>{t.title}</div><div className="sm-faint" style={{ fontSize: 12 }}>{[t.stage, t.customer, t.campaign].filter(Boolean).join(" · ")}</div></td>
+                  <td style={{ whiteSpace: "nowrap" }}>{t.triggerText || "-"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{t.medium || "-"}</td>
+                  <td className="num" title={t.sentNote}>{t.sent == null ? "-" : qty(t.sent)}{t.sentBasis === "estimate" && <span className="sm-faint" style={{ fontSize: 11 }}> 추정</span>}</td>
+                  <td className="num">{t.sessions == null ? "-" : qty(t.sessions)}</td>
+                  <td className="num" style={{ color: tone, fontWeight: tone ? 700 : undefined }}>{t.ctr == null ? "-" : `${t.ctr}%`}{t.targetCtr != null && <span className="sm-faint" style={{ fontSize: 11 }}> /{t.targetCtr}%</span>}</td>
+                  <td className="num">{t.purchases == null ? "-" : qty(t.purchases)}</td>
+                  <td className="num">{t.revenue == null ? "-" : wonText(t.revenue)}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table></div>
+        )}
+        <p className="sm-faint" style={{ fontSize: 12, marginTop: 8 }}>발송 수는 솔라피 템플릿 ID 가 있으면 실제, 직접 입력이 있으면 그 값, 둘 다 없으면 트리거·D+n 으로 매출 원장에서 센 대상자 수(추정 — 실제 발송보다 많음). 클릭은 GA 세션으로 통일합니다.</p>
+      </section>
 
       <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
         <section className="b2b-card">
