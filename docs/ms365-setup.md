@@ -78,6 +78,12 @@ Vercel → 프로젝트 → Settings → Environment Variables (Production·Prev
    - "토큰 발급 실패" → 3단계 값(특히 암호 '값'이 아니라 '암호 ID'를 넣은 경우) 확인.
 3. AI 비서에게 "공용 문서에서 거래처 계약서 찾아줘"라고 물어 본다.
 
+## 사이트 페이지(매뉴얼)도 읽는다 (2026-10-26)
+
+문서함의 파일뿐 아니라 사이트의 **페이지**('사이트 페이지' 목록, 매뉴얼 사이트 `sites/manual`)도 docs_search·docs_read 가 읽는다.
+Graph '목록 항목' API 로 CanvasContent1(본문 HTML)을 받아 글로 바꾼다(Sites.Selected 로 된다). 사이트당 10분 캐시, 검색은 제목·요약·본문 글자 포함.
+매뉴얼 사이트를 읽게 하려면 ① `docs/ms365-grant-sites.ps1` 의 `$Sites` 에 `https://seamonster2016.sharepoint.com/sites/manual` 추가 → 실행 ② 설정 › 연결 › Microsoft 365 문서에 `…/sites/manual | 매뉴얼` 추가.
+
 ## 읽는 형식·한계
 
 - docx·pptx·xlsx·pdf·txt·csv·md·json. 옛 doc·xls·ppt 는 Graph 의 PDF 변환을 거쳐 읽는다. OneNote·이미지·한글(hwp)은 못 읽고, 스캔 이미지 PDF 는 글자가 없어 "읽을 수 없음"으로 돌아온다(검증: 글자 PDF·docx·xlsx 추출 확인, 2026-10-25).

@@ -1,4 +1,4 @@
-# Sites.Selected — 업무도우미 앱에 SharePoint 사이트 읽기 권한을 한 번에 부여 (2026-10-25)
+﻿# Sites.Selected — 업무도우미 앱에 SharePoint 사이트 읽기 권한을 한 번에 부여 (2026-10-25)
 #  누가: Microsoft 365 전역 관리자(또는 SharePoint 관리자). 내 PC 의 PowerShell 에서 실행.
 #  하는 일: 아래 $Sites 목록의 사이트마다 앱(seamonster-helper-docs)에 'read' 권한을 준다. 목록에 없는 사이트(급여 등)는 앱이 아예 못 본다.
 #  준비: Entra 앱 등록에 Microsoft Graph 애플리케이션 권한 Sites.Selected 가 있고 관리자 동의가 된 상태(docs/ms365-setup.md 1단계).
@@ -9,12 +9,11 @@
 #  처음엔 Microsoft.Graph 모듈 설치(몇 분)와 브라우저 로그인 창이 뜬다. 로그인은 관리자 계정으로.
 
 # ── 여기만 고친다 ─────────────────────────────────────────────
-$AppId       = "<Entra 앱 등록의 애플리케이션(클라이언트) ID>"
-$AppName     = "seamonster-helper-docs"
+$AppId       = "465468a1-5459-408e-9126-187397b775c2"
+$AppName     = "seamonster-helper"
 $Sites = @(
-  "https://회사.sharepoint.com/sites/sales",
-  "https://회사.sharepoint.com/sites/cs"
-  # 읽게 할 사이트 주소를 한 줄에 하나씩. 급여처럼 막을 사이트는 적지 않는다.
+  "https://seamonster2016.sharepoint.com/sites/seamonster117"
+  # 읽게 할 사이트 주소를 한 줄에 하나씩(줄 사이는 쉼표, 마지막 줄은 쉼표 없음). 급여처럼 막을 사이트는 적지 않는다.
 )
 # ───────────────────────────────────────────────────────────────
 

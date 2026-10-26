@@ -1,4 +1,4 @@
-# 매뉴얼 사이트 다듬기(2026-10-26, 가져오기 뒤 실행): 자리표시 페이지 삭제 · 페이지 설명(lead) · 홈 구성 · 왼쪽 탐색 재구성 · 테마/머리글 재확인. pwsh 7 + PnP, 로그인 지속(-PersistLogin).
+﻿# 매뉴얼 사이트 다듬기(2026-10-26): 자리표시 페이지 삭제 · 페이지 설명(lead) · 홈 구성 · 왼쪽 탐색 재구성 · 테마/머리글 재확인
 $ErrorActionPreference = "Continue"
 $SiteUrl = "https://seamonster2016.sharepoint.com/sites/manual"
 $ExportDir = "C:\Users\younh\Desktop\claude\gitbook-export\seamonster guide"
@@ -13,6 +13,11 @@ function Has-Body([string]$html) { return (($html -replace '<[^>]+>', '') -repla
 
 $json = Get-Content (Join-Path $ExportDir "pages.json") -Raw -Encoding UTF8 | ConvertFrom-Json
 $json.pages = @($json.pages | Where-Object { $_.title -ne "edit" })
+# GitBook 원문의 제목 오타·이상한 제목 교정(탐색·홈 링크 글자에만 적용, 페이지 파일 이름은 그대로)
+$TitleFix = @{ "자기평가서 작성법기평가서 작성법" = "자기평가서 작성법"; "#1" = "디자이너 OKR 학습 자료 1" }
+function FixT([string]$t) { if ($TitleFix[$t]) { $TitleFix[$t] } else { $t } }
+function FixTree($nodes) { foreach ($n in $nodes) { $n.title = FixT $n.title; if ($n.children.Count) { FixTree $n.children } } }
+FixTree $json.pages
 
 # 페이지 제목(파일명) 계산 — 가져오기 스크립트와 같은 규칙
 $pages = @{}   # id → @{ title; name; desc; depth; node }

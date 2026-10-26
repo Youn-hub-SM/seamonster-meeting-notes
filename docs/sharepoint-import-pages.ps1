@@ -71,12 +71,24 @@ function Ensure-Page([string]$title, [string]$html) {
   Set-PnPPage -Identity $p -Publish | Out-Null
   return "$SiteUrl/SitePages/$name.aspx"
 }
-$urls = @{}   # title → url (탐색용)
+$urls = @{}   # id → url (탐색용)
+# id → 페이지 파일 이름(링크 치환용) — 본문 있는 페이지만
+$script:nameById = @{}
+function Map-Names($nodes, [string]$parentTitle) {
+  foreach ($n in $nodes) {
+    $h = if ($n.file) { Get-Content (Join-Path $ExportDir "pages\$($n.file)") -Raw -Encoding UTF8 } else { "" }
+    if ($n.file -and (Has-Body $h)) { $t = if ($n.depth -ge 2 -and $parentTitle) { "$parentTitle › $($n.title)" } else { $n.title }; $script:nameById[$n.id] = (Safe $t) }
+    if ($n.children.Count) { Map-Names $n.children $n.title }
+  }
+}
+Map-Names $json.pages ""
 function Import-Tree($nodes, [string]$parentTitle) {
   foreach ($n in $nodes) {
     $html = if ($n.file) { Get-Content (Join-Path $ExportDir "pages\$($n.file)") -Raw -Encoding UTF8 } else { "" }
     if ($n.file -and (Has-Body $html)) {
       $html = $html.Replace("@@IMG@@/", "$imgBase/")
+      # 페이지 간 링크(@@PAGE@@<id>) → SharePoint 페이지 주소. 본문 없는 묶음 페이지는 링크를 풀고 글자만 남긴다
+      $html = [regex]::Replace($html, '<a href="@@PAGE@@([^"]+)">(.*?)</a>', { param($m) $id = $m.Groups[1].Value; if ($script:nameById[$id]) { "<a href=`"$SiteUrl/SitePages/$($script:nameById[$id]).aspx`">$($m.Groups[2].Value)</a>" } else { $m.Groups[2].Value } })
       $title = if ($n.depth -ge 2 -and $parentTitle) { "$parentTitle › $($n.title)" } else { $n.title }
       try { $urls[$n.id] = Ensure-Page $title $html; Ok ("  " * $n.depth + $title) } catch { Warn "페이지 실패 '$title': $($_.Exception.Message)" }
     }

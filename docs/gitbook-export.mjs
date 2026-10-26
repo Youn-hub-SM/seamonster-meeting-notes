@@ -36,12 +36,20 @@ function esc(s) {
   s = s.replace(/<\/?mark\b[^>]*>/gi, (t) => (t.startsWith("</") ? "</strong>" : "<strong>")).replace(/<\/?(span|div|font)\b[^>]*>/gi, "");
   return s.split(/(<\/?[a-zA-Z][^>]*>)/).map((part, k) => (k % 2 === 1 && ALLOWED_TAG.test(part)) ? part.replace(/\s(align|style|class|width|height)="[^"]*"/gi, "") : part.replace(/&(?!(amp|lt|gt|quot|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("");
 }
+// GitBook 페이지 사이 링크(공간 루트 기준 경로, 예 '2026plan/okr' · '../start.md') → @@PAGE@@<id>. 못 찾으면 원래대로
+let PATH_TO_ID = new Map();
+function pageLink(u) {
+  if (/^(https?:|mailto:|tel:|#|\/\/)/i.test(u)) return u;
+  const key = u.replace(/^(\.\.?\/)+/, "").replace(/#.*$/, "").replace(/\.md$/i, "").replace(/^\/+|\/+$/g, "").replace(/\/README$/i, "");
+  const id = PATH_TO_ID.get(key) || PATH_TO_ID.get(key.split("/").pop() || "");
+  return id ? `@@PAGE@@${id}` : u;
+}
 const fileNameFromUrl = (url) => { try { const seg = decodeURIComponent(new URL(url).pathname.split("/").pop() || ""); return decodeURIComponent(seg.split("%2F").pop() || seg).split("/").pop() || "file"; } catch { return "file"; } };
 function inline(s, images) {
   s = esc(s).replace(/@@BR@@/g, "<br>");
-  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, alt, url) => { const name = images.add(url); return `<img src="@@IMG@@/${name}" alt="${alt.replace(/&lt;[^&]*&gt;/g, "").trim()}">`; });
-  s = s.replace(/\[@@FILE@@\]\(([^)\s]+)\)/g, (_, url) => { const fname = fileNameFromUrl(url); const name = images.add(url, fname); return `<a href="@@IMG@@/${name}">첨부 파일: ${fname}</a>`; });
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, t, u) => `<a href="${u}">${t}</a>`);
+  s = s.replace(/!\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)(?:\s+"[^"]*")?\)/g, (_, alt, url) => { const name = images.add(url); return `<img src="@@IMG@@/${name}" alt="${alt.replace(/&lt;[^&]*&gt;/g, "").trim()}">`; });
+  s = s.replace(/\[@@FILE@@\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, url) => { const fname = fileNameFromUrl(url); const name = images.add(url, fname); return `<a href="@@IMG@@/${name}">첨부 파일: ${fname}</a>`; });
+  s = s.replace(/\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)(?:\s+"[^"]*")?\)/g, (_, t, u) => `<a href="${pageLink(u)}">${t}</a>`);
   s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/__([^_]+)__/g, "<strong>$1</strong>");
   // 기울임: 낱말 경계에서만(파일명·주소 속 _ 와 * 를 건드리지 않게). 태그 안(href 등)은 제외
@@ -155,6 +163,10 @@ async function cmdExport(spaceId, outRoot, excludeTop = ["edit"]) {
   } };
   const used = new Set();
   const tree = [];
+  // 경로 → 페이지 id (전체 경로와 마지막 조각 둘 다, 마지막 조각은 하나뿐일 때만)
+  PATH_TO_ID = new Map(); const lastSeg = new Map();
+  (function idx(ps) { for (const p of ps || []) { if (p.path) { PATH_TO_ID.set(p.path, p.id); const l = p.path.split("/").pop(); lastSeg.set(l, lastSeg.has(l) ? null : p.id); } idx(p.pages); } })(content.pages);
+  for (const [l, id] of lastSeg) if (id && !PATH_TO_ID.has(l)) PATH_TO_ID.set(l, id);
   async function walk(pages, parentTitles, depth, into) {
     for (const [k, p] of (pages || []).entries()) {
       const title = p.title || "(제목 없음)";

@@ -6,7 +6,7 @@
 import JSZip from "jszip";
 import ExcelJS from "exceljs";
 import { getKv, setKv } from "./b2b-settings";
-import { graphDownload, getItem, isMsConfigured, itemPath, listChildren, listDrives, resolveSite, searchDrive, type GraphDrive, type GraphItem, type GraphSite } from "./msgraph";
+import { graphDownload, getItem, isMsConfigured, itemPath, listChildren, listDrives, listSitePages, resolveSite, searchDrive, type GraphDrive, type GraphItem, type GraphSite, type GraphSitePage } from "./msgraph";
 
 export type DocSource = { url: string; label: string };
 const KV_SOURCES = "ms365_sources";
@@ -56,7 +56,24 @@ function parseRef(ref: string): { driveId: string; itemId: string } {
   return { driveId: ref.slice(0, i), itemId: ref.slice(i + 1) };
 }
 
-export type DocHit = { ref: string; name: string; path: string; source: string; kind: "file" | "folder"; modified: string; sizeKb: number; url: string };
+export type DocHit = { ref: string; name: string; path: string; source: string; kind: "file" | "folder" | "page"; modified: string; sizeKb: number; url: string };
+
+// ── 사이트 페이지(매뉴얼 사이트) — 사이트당 한 번 읽어 10분 캐시, 검색은 제목·요약·본문 글자 포함으로 ──
+type PageText = GraphSitePage & { text: string };
+const pageCache = new Map<string, { at: number; pages: PageText[] }>();
+const htmlToText = (html: string) => html
+  .replace(/<\/(p|div|li|tr|h[1-6]|blockquote|pre)>/gi, "\n").replace(/<br\s*\/?>/gi, "\n").replace(/<\/t[dh]>/gi, "\t")
+  .replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+  .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+async function sitePages(src: ResolvedSource): Promise<PageText[]> {
+  const c = pageCache.get(src.site.id);
+  if (c && Date.now() - c.at < 600_000) return c.pages;
+  const raw = await listSitePages(src.site.id);
+  const pages = raw.filter((p) => !/^(Home|SCHome|Template-[^.]*)\.aspx$/i.test(p.fileName)).map((p) => ({ ...p, text: htmlToText(p.canvas) })).filter((p) => p.text.length >= 20);
+  pageCache.set(src.site.id, { at: Date.now(), pages });
+  return pages;
+}
+const pageHit = (p: PageText, src: ResolvedSource): DocHit => ({ ref: `page:${src.site.id}:${p.id}`, name: p.title, path: `페이지/${p.fileName}`, source: src.label, kind: "page", modified: p.modified, sizeKb: Math.round(p.text.length / 1024), url: p.webUrl });
 const toHit = (it: GraphItem, src: ResolvedSource, driveId: string): DocHit => ({
   ref: docRef(it, driveId), name: it.name, path: itemPath(it), source: src.label,
   kind: it.folder ? "folder" : "file", modified: (it.lastModifiedDateTime || "").slice(0, 10), sizeKb: Math.round((it.size || 0) / 1024), url: it.webUrl || "",
@@ -78,15 +95,24 @@ export async function searchDocs(p: { query: string; source?: string | null; lim
   const limit = Math.min(Math.max(p.limit ?? 20, 1), 50);
   const hits: DocHit[] = [];
   const errs: string[] = [];
+  const terms = p.query.toLowerCase().split(/\s+/).filter(Boolean);
   for (const src of targets) {
     if (src.error) { errs.push(`${src.label}: ${src.error}`); continue; }
     for (const d of src.drives) {
       try { for (const it of await searchDrive(d.id, p.query, limit)) hits.push(toHit(it, src, d.id)); }
       catch (e) { errs.push(`${src.label}/${d.name}: ${e instanceof Error ? e.message : String(e)}`); }
     }
+    // 사이트 페이지(매뉴얼) — 모든 검색어가 제목·요약·본문 중 어딘가에 있으면 적중, 제목 적중을 앞으로
+    try {
+      const pages = await sitePages(src);
+      const scored = pages.map((pg) => { const t = pg.title.toLowerCase(), d = pg.description.toLowerCase(), b = pg.text.toLowerCase(); const ok = terms.every((w) => t.includes(w) || d.includes(w) || b.includes(w)); return { pg, score: ok ? terms.filter((w) => t.includes(w)).length * 2 + terms.filter((w) => d.includes(w)).length : -1 }; }).filter((x) => x.score >= 0).sort((a, b) => b.score - a.score);
+      for (const x of scored.slice(0, limit)) hits.push(pageHit(x.pg, src));
+    } catch (e) { errs.push(`${src.label}/페이지: ${e instanceof Error ? e.message : String(e)}`); }
   }
-  hits.sort((a, b) => (b.modified || "").localeCompare(a.modified || ""));
-  return { hits: hits.slice(0, limit), note: errs.length ? `일부 문서함은 읽지 못했습니다 — ${errs.join(" / ")}` : "" };
+  // 페이지(제목 적중 순)를 앞에, 파일은 최근 수정 순
+  const pagesFirst = hits.filter((h) => h.kind === "page");
+  const files = hits.filter((h) => h.kind !== "page").sort((a, b) => (b.modified || "").localeCompare(a.modified || ""));
+  return { hits: [...pagesFirst, ...files].slice(0, limit), note: errs.length ? `일부 문서함은 읽지 못했습니다 — ${errs.join(" / ")}` : "" };
 }
 
 export async function listDocs(p: { source?: string | null; path?: string | null }): Promise<{ hits: DocHit[]; where: string }> {
@@ -101,6 +127,7 @@ export async function listDocs(p: { source?: string | null; path?: string | null
       try { for (const it of await listChildren(d.id, p.path || "")) hits.push(toHit(it, src, d.id)); }
       catch (e) { if (targets.length === 1 && src.drives.length === 1) throw e; }
     }
+    if (!p.path) { try { for (const pg of await sitePages(src)) hits.push(pageHit(pg, src)); } catch { /* 페이지 없는 사이트 */ } }
   }
   return { hits: hits.slice(0, 200), where: `${targets.map((s) => s.label).join(", ")}${p.path ? ` / ${p.path}` : ""}` };
 }
@@ -176,6 +203,17 @@ const textCache = new Map<string, { at: number; text: string; name: string; path
 export const DOC_PAGE_CHARS = 24_000;
 export async function readDoc(p: { ref: string; offset?: number | null }): Promise<{ name: string; path: string; url: string; text: string; offset: number; total: number; next: number | null }> {
   if (!isMsConfigured()) throw new Error("Microsoft 365 가 연결되어 있지 않습니다.");
+  if (p.ref.startsWith("page:")) {
+    const [, siteId, itemId] = p.ref.split(":");
+    const src = (await resolveSources()).find((s) => s.site.id === siteId);
+    if (!src) throw new Error("이 페이지의 사이트가 등록되어 있지 않습니다.");
+    const pg = (await sitePages(src)).find((x) => x.id === itemId);
+    if (!pg) throw new Error("페이지를 찾지 못했습니다(ref 를 docs_search 결과에서 다시 가져오세요).");
+    const full = pg.description ? `${pg.description}\n\n${pg.text}` : pg.text;
+    const offset = Math.max(0, Math.min(Number(p.offset) || 0, full.length));
+    const slice = full.slice(offset, offset + DOC_PAGE_CHARS);
+    return { name: pg.title, path: `${src.label} / 페이지 / ${pg.fileName}`, url: pg.webUrl, text: slice, offset, total: full.length, next: offset + DOC_PAGE_CHARS < full.length ? offset + DOC_PAGE_CHARS : null };
+  }
   const { driveId, itemId } = parseRef(p.ref);
   let c = textCache.get(p.ref);
   if (!c || Date.now() - c.at > 600_000) {
@@ -196,5 +234,5 @@ export async function docsPromptBlock(): Promise<string> {
   if (!isMsConfigured()) return "";
   const s = await getDocSources();
   if (!s.length) return "";
-  return `[회사 문서함(Microsoft 365) — docs_search·docs_list·docs_read 로 읽는 곳] ${s.map((x) => x.label || x.url).join(", ")}`;
+  return `[회사 문서함(Microsoft 365) — docs_search·docs_list·docs_read 로 읽는 곳] ${s.map((x) => x.label || x.url).join(", ")}. 문서함의 파일뿐 아니라 사이트 페이지(매뉴얼)도 검색·읽기 대상입니다 — 업무 절차·기준·역할 질문은 먼저 docs_search 로 매뉴얼 페이지를 찾습니다.`;
 }

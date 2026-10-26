@@ -121,6 +121,30 @@ export async function listChildren(driveId: string, path: string, top = 100): Pr
 
 export const getItem = (driveId: string, itemId: string) => graphJson<GraphItem>(`/drives/${driveId}/items/${itemId}?${ITEM_SELECT}`);
 
+// 사이트 페이지(SharePoint 모던 페이지) — 매뉴얼 사이트처럼 문서가 '파일'이 아니라 '페이지'인 곳(2026-10-26).
+//  Graph 의 페이지 API 는 Sites.Selected 에서 막히는 경우가 있어, 누구나 되는 '목록 항목' API 로 '사이트 페이지' 목록(템플릿 119)을 읽는다.
+//  CanvasContent1 = 페이지 본문(웹 파트 HTML). 본문은 호출부에서 글로 바꾼다.
+export type GraphSitePage = { id: string; title: string; fileName: string; webUrl: string; description: string; modified: string; canvas: string };
+export async function listSitePages(siteId: string): Promise<GraphSitePage[]> {
+  const lists = await graphJson<{ value: { id: string; name?: string; displayName?: string; list?: { template?: string } }[] }>(`/sites/${siteId}/lists?$select=id,name,displayName,list`);
+  const pagesList = lists.value.find((l) => l.list?.template === "webPageLibrary") || lists.value.find((l) => /^(Site ?Pages|사이트 페이지)$/i.test(l.displayName || l.name || ""));
+  if (!pagesList) return [];
+  const out: GraphSitePage[] = [];
+  let next: string | null = `/sites/${siteId}/lists/${pagesList.id}/items?$top=200&$expand=fields($select=Title,FileLeafRef,Description,Modified,CanvasContent1,FSObjType)`;
+  while (next) {
+    const r: { value: { id: string; webUrl?: string; fields?: Record<string, unknown> }[]; "@odata.nextLink"?: string } = await graphJson(next);
+    for (const it of r.value || []) {
+      const f = it.fields || {};
+      if (Number(f.FSObjType) === 1) continue; // 폴더
+      const fileName = String(f.FileLeafRef || "");
+      if (!/\.aspx$/i.test(fileName)) continue;
+      out.push({ id: it.id, title: String(f.Title || fileName.replace(/\.aspx$/i, "")), fileName, webUrl: it.webUrl || "", description: String(f.Description || ""), modified: String(f.Modified || "").slice(0, 10), canvas: String(f.CanvasContent1 || "") });
+    }
+    next = r["@odata.nextLink"] || null;
+  }
+  return out;
+}
+
 // 항목의 드라이브 안 경로('/drive/root:/보고서/2026' → '보고서/2026/파일명')
 export function itemPath(it: GraphItem): string {
   const parent = (it.parentReference?.path || "").replace(/^\/drives\/[^/]+\/root:?/, "").replace(/^\/drive\/root:?/, "");

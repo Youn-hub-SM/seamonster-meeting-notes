@@ -34,6 +34,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-10-26",
+    tag: "개선",
+    tool: "AI 비서",
+    title: "씨몬스터 매뉴얼이 SharePoint 로 옮겨졌고, AI 비서가 매뉴얼 페이지를 읽습니다",
+    desc: "GitBook 에 있던 씨몬스터 가이드가 SharePoint 매뉴얼 사이트로 옮겨졌습니다(왼쪽 메뉴 '씨몬스터 매뉴얼'). AI 비서에게 '프로모션 진행 순서가 뭐야', '출고 흐름 알려줘'처럼 물으면 매뉴얼 페이지를 검색해 본문을 읽고 페이지 링크와 함께 답합니다. 관리자가 설정 › 연결에 매뉴얼 사이트를 등록한 뒤부터 동작합니다.",
+    href: "/report",
+  },
+  {
     date: "2026-10-25",
     tag: "신규",
     tool: "AI 비서",
