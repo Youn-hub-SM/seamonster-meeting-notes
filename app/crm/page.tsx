@@ -11,6 +11,7 @@ import {
 import { TrendChart, BarList, PieCard, moneyCompact } from "@/app/components/charts";
 import { matchKoQuery } from "@/app/lib/hangul";
 import { qty, qtyText, wonText } from "@/app/lib/format";
+import WeeklyStats from "./WeeklyStats";
 
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 // 기간 표시: "7/1~7/15" · 시작만 "7/1~" · 종료만 "~7/15"
@@ -63,7 +64,7 @@ export default function CrmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const confirmModal = useConfirm();
-  const [tab, setTab] = useState<"flow" | "table" | "stats">("flow");
+  const [tab, setTab] = useState<"weekly" | "flow" | "table" | "stats">("weekly"); // 2026-10-26 주간 성과가 기본(대시보드 개편)
   const [search, setSearch] = useState("");
   const [chFilter, setChFilter] = useState("");
   const [asof, setAsof] = useState(""); // 기준일(YYYY-MM-DD) — 비면 전체, 고르면 그날 진행 중만(흐름)
@@ -286,6 +287,7 @@ export default function CrmPage() {
       {/* 탭 + 필터 */}
       <div className="crm-toolbar">
         <div className="sm-tabs">
+          <button className={`sm-tab ${tab === "weekly" ? "is-active" : ""}`} onClick={() => setTab("weekly")}>주간 성과</button>
           <button className={`sm-tab ${tab === "flow" ? "is-active" : ""}`} onClick={() => setTab("flow")}>흐름</button>
           <button className={`sm-tab ${tab === "table" ? "is-active" : ""}`} onClick={() => setTab("table")}>표(편집)</button>
           <button className={`sm-tab ${tab === "stats" ? "is-active" : ""}`} onClick={() => setTab("stats")}>통계</button>
@@ -368,6 +370,8 @@ export default function CrmPage() {
               </div>
             )}
           </div>
+        ) : tab === "weekly" ? (
+          <WeeklyStats />
         ) : tab === "flow" ? (
           <FlowView stages={stages} gaOf={gaOf} msgOpen={msgOpen} labels={labels} onCard={openEdit} onAdd={(st) => openNew({ stage: st.stage, sub: st.sub, stage_num: st.stage_num })} />
         ) : tab === "table" ? (
