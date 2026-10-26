@@ -89,10 +89,22 @@ export default class ManualStyleApplicationCustomizer
     this._spy();
   }
 
-  // 스크롤 위치에 맞춰 현재 항목 강조
+  // 목차 세로 위치 — 본문(텍스트 웹 파트) 윗선에 맞추되, 스크롤하면 위쪽 고정 막대(명령 모음·Teams 머리) 아래에서 멈춘다(겹침 방지, 2026-10-26)
+  private _placeToc(nav: HTMLElement): void {
+    const content: HTMLElement | null = document.querySelector(CONTENT_SEL);
+    let floor: number = 120;
+    const bars: HTMLElement[] = Array.prototype.slice.call(document.querySelectorAll('[data-automation-id="pageCommandBar"], [data-automation-id="pageHeader"], #spCommandBar, [role="menubar"]'));
+    for (const b of bars) { const r: DOMRect = b.getBoundingClientRect(); if (r.height > 0 && r.top < 200 && r.bottom > floor) { floor = r.bottom; } }
+    floor += 16;
+    const contentTop: number = content ? content.getBoundingClientRect().top : floor;
+    nav.style.top = `${Math.max(floor, contentTop)}px`;
+  }
+
+  // 스크롤 위치에 맞춰 현재 항목 강조 + 위치 보정
   private _spy(): void {
     const nav: HTMLElement | null = document.getElementById(TOC_ID);
     if (!nav) { return; }
+    this._placeToc(nav);
     const links: HTMLAnchorElement[] = Array.prototype.slice.call(nav.querySelectorAll('a'));
     let current: HTMLAnchorElement | undefined;
     for (const a of links) {

@@ -50,7 +50,7 @@
 .ms-Nav-compositeLink.is-selected::after { border-left-color: var(--smm-coral) !important; }
 
 /* 오른쪽 페이지 목차(TOC) — 확장이 h2·h3 로 만들어 body 끝에 붙인다. 넓은 화면에서만 */
-#sm-manual-toc { display: none; position: fixed; top: 150px; right: 28px; width: 220px; max-height: calc(100vh - 200px); overflow: auto; font-size: 13px; line-height: 1.5; z-index: 5; }
+#sm-manual-toc { display: none; position: fixed; top: 150px; transition: top 0.15s; right: 28px; width: 220px; max-height: calc(100vh - 200px); overflow: auto; font-size: 13px; line-height: 1.5; z-index: 5; }
 @media (min-width: 1360px) { #sm-manual-toc { display: block; } }
 #sm-manual-toc .smt-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--smm-mute); text-transform: uppercase; margin: 0 0 8px 12px; }
 #sm-manual-toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--smm-line); }
