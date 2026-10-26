@@ -19,10 +19,25 @@ export async function lookupVocOrder(orderNoRaw: unknown): Promise<VocOrderInfo>
   const none: VocOrderInfo = { found: false, order_no, channel: "", order_date: "", product: "", orders: 0, repeat: null };
   if (!order_no) return none;
   const sb = supabaseAdmin();
-  const { data, error } = await sb.from("sales_orders").select("channel,order_date,product_name,customer_key").eq("order_id", order_no).order("order_date", { ascending: true }).limit(20);
+  type Row = { order_id: string; channel: string; order_date: string; product_name: string; customer_key: string };
+  const sel = "order_id,channel,order_date,product_name,customer_key";
+  // 하이픈·공백은 있어도 없어도 되게: 입력 그대로 / 하이픈 뺀 것 / 숫자 15자리면 카페24 꼴(YYYYMMDD-NNNNNNN) 후보를 한 번에 찾는다
+  const digits = order_no.replace(/[^0-9A-Za-z]/g, "");
+  const cands = new Set<string>([order_no, digits]);
+  if (/^\d{15}$/.test(digits)) cands.add(`${digits.slice(0, 8)}-${digits.slice(8)}`);
+  let { data, error } = await sb.from("sales_orders").select(sel).in("order_id", [...cands]).order("order_date", { ascending: true }).limit(20);
   if (error) throw error;
-  const rows = (data || []) as { channel: string; order_date: string; product_name: string; customer_key: string }[];
+  let rows = (data || []) as Row[];
+  // 그래도 없으면 부분 일치(앞뒤 일부만 넣은 경우) — 주문번호 하나로만 좁혀질 때 채택
+  if (!rows.length && digits.length >= 6) {
+    const r2 = await sb.from("sales_orders").select(sel).ilike("order_id", `%${digits}%`).order("order_date", { ascending: true }).limit(40);
+    if (r2.error) throw r2.error;
+    const all = (r2.data || []) as Row[];
+    const ids = [...new Set(all.map((r) => r.order_id))];
+    if (ids.length === 1) rows = all;
+  }
   if (!rows.length) return none;
+  const order_no_found = rows[0].order_id || order_no;
   const names = [...new Set(rows.map((r) => r.product_name).filter(Boolean))];
   const product = names.length > 1 ? `${names[0]} 외 ${names.length - 1}` : names[0] || "";
   const key = rows[0].customer_key || "";
@@ -33,7 +48,7 @@ export async function lookupVocOrder(orderNoRaw: unknown): Promise<VocOrderInfo>
     orders = new Set(((od || []) as { order_unit: string | null }[]).map((r) => r.order_unit).filter(Boolean)).size;
     repeat = orders >= 2;
   }
-  return { found: true, order_no, channel: rows[0].channel || "", order_date: rows[0].order_date || "", product, orders, repeat };
+  return { found: true, order_no: order_no_found, channel: rows[0].channel || "", order_date: rows[0].order_date || "", product, orders, repeat };
 }
 
 // 저장 직전 자동 채움 — 주문번호가 있고 찾으면 구매자 구분·구매일을 덮어쓴다(손으로 안 넣는 칸). 못 찾으면 건드리지 않는다.
