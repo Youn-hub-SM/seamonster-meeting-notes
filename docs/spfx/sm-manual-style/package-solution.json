@@ -1,0 +1,46 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "sm-manual-style-client-side-solution",
+    "id": "a803f68a-e8bd-4c91-8abe-68db9ad7d52c",
+    "version": "1.0.0.1",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": false,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.23.2"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "씨몬스터 매뉴얼 사이트 읽기 서식(줄 간격·표·소제목·안내 상자)"
+      },
+      "longDescription": {
+        "default": "GitBook 식 본문 서식을 매뉴얼 사이트에 적용하는 CSS 확장. 사이트에 설치하면 켜지고, 제거하면 원래대로."
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "씨몬스터 매뉴얼 서식",
+        "description": "매뉴얼 사이트 본문 CSS 적용",
+        "id": "0032807b-311c-4faa-905c-5abeddca86d1",
+        "version": "1.0.0.0",
+        "assets": {
+          "elementManifests": [
+            "elements.xml",
+            "ClientSideInstance.xml"
+          ]
+        }
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/sm-manual-style.sppkg"
+  }
+}
