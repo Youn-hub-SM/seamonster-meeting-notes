@@ -35,7 +35,9 @@ export async function resolveSources(opts?: { force?: boolean }): Promise<Resolv
   for (const s of sources) {
     try {
       const site = await resolveSite(s.url);
-      const drives = (await listDrives(site.id)).filter((d) => !d.driveType || d.driveType === "documentLibrary" || d.driveType === "business").slice(0, 5);
+      // 시스템 라이브러리(앱 패키지·클라이언트 자산·스타일·양식·사이트 자산·사이트 페이지 드라이브)는 검색 대상이 아니다 — 매뉴얼 사이트에서 500 을 냈다(2026-10-26)
+      const SYSTEM_LIB = /^(SharePoint용 앱|Apps for SharePoint|클라이언트 측 자산|Client Side Assets|스타일 라이브러리|Style Library|양식 서식 파일|Form Templates|사이트 자산|Site Assets|사이트 페이지|Site Pages|Teams Wiki Data|Converted Forms|변환된 양식)$/i;
+      const drives = (await listDrives(site.id)).filter((d) => (!d.driveType || d.driveType === "documentLibrary" || d.driveType === "business") && !SYSTEM_LIB.test(d.name || "")).slice(0, 5);
       list.push({ ...s, label: s.label || site.name, site, drives });
     } catch (e) {
       list.push({ ...s, site: { id: "", name: s.label || s.url, webUrl: s.url }, drives: [], error: e instanceof Error ? e.message : String(e) });
@@ -121,15 +123,16 @@ export async function listDocs(p: { source?: string | null; path?: string | null
   if (!all.length) throw new Error("읽을 문서함이 등록되어 있지 않습니다(관리자 › 설정 › 연결 › Microsoft 365 문서).");
   const targets = matchSource(all, p.source);
   const hits: DocHit[] = [];
+  const pageErrs: string[] = [];
   for (const src of targets) {
     if (src.error) throw new Error(`${src.label}: ${src.error}`);
     for (const d of src.drives) {
       try { for (const it of await listChildren(d.id, p.path || "")) hits.push(toHit(it, src, d.id)); }
       catch (e) { if (targets.length === 1 && src.drives.length === 1) throw e; }
     }
-    if (!p.path) { try { for (const pg of await sitePages(src)) hits.push(pageHit(pg, src)); } catch { /* 페이지 없는 사이트 */ } }
+    if (!p.path) { try { for (const pg of await sitePages(src)) hits.push(pageHit(pg, src)); } catch (e) { pageErrs.push(`${src.label} 페이지: ${e instanceof Error ? e.message : String(e)}`); } }
   }
-  return { hits: hits.slice(0, 200), where: `${targets.map((s) => s.label).join(", ")}${p.path ? ` / ${p.path}` : ""}` };
+  return { hits: hits.slice(0, 200), where: `${targets.map((s) => s.label).join(", ")}${p.path ? ` / ${p.path}` : ""}${pageErrs.length ? ` (페이지 목록 오류: ${pageErrs.join(" / ")})` : ""}` };
 }
 
 // ── 본문 추출 ──

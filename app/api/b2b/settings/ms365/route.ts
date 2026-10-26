@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
-import { isMsConfigured } from "@/app/lib/msgraph";
+import { isMsConfigured, listSitePages } from "@/app/lib/msgraph";
 import { getDocSources, setDocSources, resolveSources, type DocSource } from "@/app/lib/ms365-docs";
 
 export const runtime = "nodejs";
@@ -47,7 +47,14 @@ export async function POST(req: NextRequest) {
     if (!isMsConfigured()) return NextResponse.json({ ok: false, error: "Vercel 환경 변수 MS_TENANT_ID·MS_CLIENT_ID·MS_CLIENT_SECRET 가 없습니다(docs/ms365-setup.md)." }, { status: 400 });
     const list = await resolveSources({ force: true });
     if (!list.length) return NextResponse.json({ ok: false, error: "사이트 주소를 먼저 저장하세요." }, { status: 400 });
-    const lines = list.map((s) => s.error ? `${s.label}: 실패 — ${s.error}` : `${s.label}: OK (${s.drives.map((d) => d.name).join(", ") || "문서함 없음"})`);
+    // 문서함 이름 + 사이트 페이지 수(매뉴얼 사이트) — 페이지 읽기가 막히면 여기서 바로 보인다
+    const lines: string[] = [];
+    for (const s of list) {
+      if (s.error) { lines.push(`${s.label}: 실패 — ${s.error}`); continue; }
+      let pages = "";
+      try { const n = (await listSitePages(s.site.id)).length; pages = n ? ` · 페이지 ${n}개` : ""; } catch (e) { pages = ` · 페이지 읽기 실패(${e instanceof Error ? e.message.slice(0, 80) : "오류"})`; }
+      lines.push(`${s.label}: OK (${s.drives.map((d) => d.name).join(", ") || "문서함 없음"}${pages})`);
+    }
     const anyFail = list.some((s) => s.error);
     if (anyFail) return NextResponse.json({ ok: false, error: lines.join(" · ") }, { status: 502 });
     return NextResponse.json({ ok: true, detail: lines.join(" · ") });

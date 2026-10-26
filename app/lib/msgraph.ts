@@ -130,12 +130,18 @@ export async function listSitePages(siteId: string): Promise<GraphSitePage[]> {
   const pagesList = lists.value.find((l) => l.list?.template === "webPageLibrary") || lists.value.find((l) => /^(Site ?Pages|사이트 페이지)$/i.test(l.displayName || l.name || ""));
   if (!pagesList) return [];
   const out: GraphSitePage[] = [];
-  let next: string | null = `/sites/${siteId}/lists/${pagesList.id}/items?$top=200&$expand=fields($select=Title,FileLeafRef,Description,Modified,CanvasContent1,FSObjType)`;
+  // CanvasContent1 은 숨은 열이라 $select 로 꼭 집어야 온다. 열 이름이 테넌트에 없으면 400 → 선택 없이 다시 시도(본문 없이 제목만).
+  const base = `/sites/${siteId}/lists/${pagesList.id}/items?$top=200`;
+  let next: string | null = `${base}&$expand=fields($select=Title,FileLeafRef,Description,Modified,CanvasContent1)`;
+  let first = true;
   while (next) {
-    const r: { value: { id: string; webUrl?: string; fields?: Record<string, unknown> }[]; "@odata.nextLink"?: string } = await graphJson(next);
+    let r: { value: { id: string; webUrl?: string; fields?: Record<string, unknown> }[]; "@odata.nextLink"?: string };
+    try { r = await graphJson(next); }
+    catch (e) { if (!first) throw e; r = await graphJson(`${base}&$expand=fields`); }
+    first = false;
     for (const it of r.value || []) {
       const f = it.fields || {};
-      if (Number(f.FSObjType) === 1) continue; // 폴더
+      if (String(f.ContentType || "") === "Folder" || String(f.ContentType || "").includes("폴더")) continue;
       const fileName = String(f.FileLeafRef || "");
       if (!/\.aspx$/i.test(fileName)) continue;
       out.push({ id: it.id, title: String(f.Title || fileName.replace(/\.aspx$/i, "")), fileName, webUrl: it.webUrl || "", description: String(f.Description || ""), modified: String(f.Modified || "").slice(0, 10), canvas: String(f.CanvasContent1 || "") });
