@@ -125,9 +125,18 @@ export const getItem = (driveId: string, itemId: string) => graphJson<GraphItem>
 //  Graph 의 페이지 API 는 Sites.Selected 에서 막히는 경우가 있어, 누구나 되는 '목록 항목' API 로 '사이트 페이지' 목록(템플릿 119)을 읽는다.
 //  CanvasContent1 = 페이지 본문(웹 파트 HTML). 본문은 호출부에서 글로 바꾼다.
 export type GraphSitePage = { id: string; title: string; fileName: string; webUrl: string; description: string; modified: string; canvas: string };
+// '사이트 페이지' 목록은 /sites/{id}/lists 목록 조회에 안 나온다(2026-10-26 확인) — 이름으로 바로 연다(내부 이름 SitePages → 표시 이름 순).
+type GraphList = { id: string; name?: string; displayName?: string; list?: { template?: string } };
+export async function findSitePagesList(siteId: string): Promise<GraphList | null> {
+  for (const key of ["SitePages", "Site Pages", "사이트 페이지"]) {
+    try { return await graphJson<GraphList>(`/sites/${siteId}/lists/${encodeURIComponent(key)}?$select=id,name,displayName,list`); }
+    catch { /* 다음 이름 */ }
+  }
+  const lists = await graphJson<{ value: GraphList[] }>(`/sites/${siteId}/lists?$select=id,name,displayName,list`);
+  return lists.value.find((l) => l.list?.template === "webPageLibrary") || lists.value.find((l) => /^(Site ?Pages|사이트 페이지)$/i.test(l.displayName || l.name || "")) || null;
+}
 export async function listSitePages(siteId: string): Promise<GraphSitePage[]> {
-  const lists = await graphJson<{ value: { id: string; name?: string; displayName?: string; list?: { template?: string } }[] }>(`/sites/${siteId}/lists?$select=id,name,displayName,list`);
-  const pagesList = lists.value.find((l) => l.list?.template === "webPageLibrary") || lists.value.find((l) => /^(Site ?Pages|사이트 페이지)$/i.test(l.displayName || l.name || ""));
+  const pagesList = await findSitePagesList(siteId);
   if (!pagesList) return [];
   const out: GraphSitePage[] = [];
   // CanvasContent1 은 숨은 열이라 $select 로 꼭 집어야 온다. 열 이름이 테넌트에 없으면 400 → 선택 없이 다시 시도(본문 없이 제목만).
@@ -153,10 +162,8 @@ export async function listSitePages(siteId: string): Promise<GraphSitePage[]> {
 
 // 진단 — 페이지가 0개로 읽힐 때 [연결 확인]이 보여 주는 정보: 사이트의 목록 이름·템플릿, 페이지 목록 첫 항목의 열 이름
 export async function debugSitePages(siteId: string): Promise<string> {
-  const lists = await graphJson<{ value: { id: string; name?: string; displayName?: string; list?: { template?: string; hidden?: boolean } }[] }>(`/sites/${siteId}/lists?$select=id,name,displayName,list`);
-  const names = lists.value.map((l) => `${l.displayName || l.name}(${l.list?.template || "?"})`).join(", ");
-  const pagesList = lists.value.find((l) => l.list?.template === "webPageLibrary") || lists.value.find((l) => /^(Site ?Pages|사이트 페이지)$/i.test(l.displayName || l.name || ""));
-  if (!pagesList) return `목록 ${lists.value.length}개: ${names} — 사이트 페이지 목록을 못 찾음`;
+  const pagesList = await findSitePagesList(siteId);
+  if (!pagesList) return "사이트 페이지 목록 없음(문서함만 있는 사이트)";
   try {
     const r = await graphJson<{ value: { id: string; fields?: Record<string, unknown> }[] }>(`/sites/${siteId}/lists/${pagesList.id}/items?$top=3&$expand=fields`);
     const first = r.value[0];
