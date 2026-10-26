@@ -1,4 +1,4 @@
-# 매뉴얼 사이트 서식 확장 설치/업데이트 (2026-10-26) — pwsh 7 + PnP. 앱 카탈로그가 있어야 한다.
+﻿# 매뉴얼 사이트 서식 확장 설치/업데이트 (2026-10-26) — pwsh 7 + PnP. 앱 카탈로그가 있어야 한다.
 #  하는 일: docs/spfx/sm-manual-style.sppkg 를 테넌트 앱 카탈로그에 올리고(게시), 매뉴얼 사이트에 설치(또는 업데이트).
 param(
   [string]$Tenant = "seamonster2016",
@@ -12,6 +12,11 @@ $SiteUrl = "https://$Tenant.sharepoint.com/sites/$SiteAlias"
 Import-Module PnP.PowerShell
 Connect-PnPOnline -Url "https://$Tenant-admin.sharepoint.com" -Interactive -ClientId $ClientId -PersistLogin
 $cat = $null; try { $cat = Get-PnPTenantAppCatalogUrl -ErrorAction Stop } catch { }
+if (-not $cat) {
+  # 방금 만든 카탈로그는 URL 조회가 잠시 비어 있을 수 있다 — 사이트가 APPCATALOG 템플릿이면 그 주소를 쓴다
+  $guess = "https://$Tenant.sharepoint.com/sites/appcatalog"
+  try { $s = Get-PnPTenantSite -Identity $guess -ErrorAction Stop; if ($s.Template -like "APPCATALOG*") { $cat = $guess } } catch { }
+}
 if (-not $cat) { Write-Host "테넌트 앱 카탈로그가 없습니다. 먼저 만드세요(관리자: Register-PnPAppCatalogSite)." -ForegroundColor Red; exit 1 }
 Write-Host "앱 카탈로그: $cat"
 Connect-PnPOnline -Url $cat -Interactive -ClientId $ClientId -PersistLogin
