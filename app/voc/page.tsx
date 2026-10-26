@@ -529,6 +529,7 @@ export default function VocPage() {
               })()}
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">접수일<span className="req">*</span></span>
+                  <span className="b2b-field-hint" aria-hidden="true">&nbsp;</span>{/* 옆 칸(접수 유형)의 힌트 줄과 높이를 맞춰 입력칸을 나란히 */}
                   <input className="b2b-input" type="date" required value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} aria-invalid={fieldErr.received_at ? "true" : undefined} />
                   {fieldErr.received_at && <span className="b2b-field-error">{fieldErr.received_at}</span>}</label>
                 <label className="b2b-field"><span className="b2b-field-label">접수 유형</span>
@@ -539,6 +540,7 @@ export default function VocPage() {
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">이름</span>
+                  <span className="b2b-field-hint">연락처는 넣지 않는다</span>
                   <input className="b2b-input" value={edit.customer} onChange={(e) => setF("customer", e.target.value)} placeholder="예: 홍길동" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">주문번호</span>
                   <span className="b2b-field-hint">재구매 여부·구매일은 주문번호로 자동 확인</span>
