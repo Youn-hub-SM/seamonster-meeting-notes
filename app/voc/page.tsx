@@ -529,21 +529,17 @@ export default function VocPage() {
               })()}
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">접수일<span className="req">*</span></span>
-                  <span className="b2b-field-hint" aria-hidden="true">&nbsp;</span>{/* 옆 칸(접수 유형)의 힌트 줄과 높이를 맞춰 입력칸을 나란히 */}
                   <input className="b2b-input" type="date" required value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} aria-invalid={fieldErr.received_at ? "true" : undefined} />
                   {fieldErr.received_at && <span className="b2b-field-error">{fieldErr.received_at}</span>}</label>
                 <label className="b2b-field"><span className="b2b-field-label">접수 유형</span>
-                  <span className="b2b-field-hint">리뷰 = 직접 응대하지 않고 리뷰에서 가져온 내용</span>
                   <select className="b2b-input" value={edit.intake_type} onChange={(e) => setF("intake_type", e.target.value)}>
                     {VOC_INTAKE_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
                   </select></label>
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">이름</span>
-                  <span className="b2b-field-hint">연락처는 넣지 않는다</span>
                   <input className="b2b-input" value={edit.customer} onChange={(e) => setF("customer", e.target.value)} placeholder="예: 홍길동" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">주문번호</span>
-                  <span className="b2b-field-hint">재구매 여부·구매일은 주문번호로 자동 확인</span>
                   <span className="sm-row" style={{ gap: 6 }}>
                     <input className="b2b-input" value={edit.order_no} onChange={(e) => { setF("order_no", e.target.value); setOrderInfo(null); }} onBlur={checkOrder} placeholder="채널 주문번호" style={{ flex: 1, minWidth: 0 }} />
                     <button type="button" className="b2b-btn-secondary" onClick={checkOrder} disabled={orderBusy || !edit.order_no.trim()} style={{ whiteSpace: "nowrap" }}>{orderBusy ? "확인 중" : "확인"}</button>
@@ -556,14 +552,12 @@ export default function VocPage() {
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">구매처</span>
-                  <span className="b2b-field-hint">기존 구매처에서 고르거나 직접 입력</span>
                   {/* 이미 등록된 VOC 의 구매처를 선택지로 — 표기가 흩어지지 않게(구매상품과 같은 콤보박스) */}
                   <Combobox value={edit.purchase_place}
                     options={placeOpts.map((p) => ({ id: p, label: p }))}
                     onSelect={(o) => setF("purchase_place", o.label)} onType={(t) => setF("purchase_place", t)}
                     allowFreeText placeholder="검색" ariaLabel="구매처" /></label>
                 <label className="b2b-field"><span className="b2b-field-label">구매상품</span>
-                  <span className="b2b-field-hint">상품 마스터에서 고르거나 직접 입력</span>
                   <Combobox value={edit.product}
                     options={products.map((p) => ({ id: p.id, label: p.name, sub: p.sku || p.spec || undefined }))}
                     onSelect={(o) => setF("product", o.label)} onType={(t) => setF("product", t)}
@@ -596,22 +590,16 @@ export default function VocPage() {
                 <label className="b2b-field"><span className="b2b-field-label">손해 귀책</span>
                   <select className="b2b-input" value={edit.fault} onChange={(e) => setF("fault", e.target.value)}>{VOC_FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
               </div>
-              <p className="sm-faint" style={{ fontSize: 12, margin: "-4px 0 8px" }}>제조사 = 청구 가능, 물류/자사 = 자사 부담</p>
               <label className="b2b-field"><span className="b2b-field-label">상세내용 <span className="req">*</span></span>
-                <span className="b2b-field-hint">고객이 말한 내용</span>
                 <textarea className="b2b-textarea" rows={3} value={edit.content} onChange={(e) => setF("content", e.target.value)} aria-invalid={fieldErr.content ? "true" : undefined} />
                 {fieldErr.content && <span className="b2b-field-error">{fieldErr.content}</span>}</label>
               <label className="b2b-field"><span className="b2b-field-label">원인</span>
-                <span className="b2b-field-hint">왜 발생했는지(분석)</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.cause} onChange={(e) => setF("cause", e.target.value)} /></label>
               <label className="b2b-field"><span className="b2b-field-label">처리내용</span>
-                <span className="b2b-field-hint">어떻게 처리했는지</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.resolution} onChange={(e) => setF("resolution", e.target.value)} /></label>
               <label className="b2b-field"><span className="b2b-field-label">개선 필요사항</span>
-                <span className="b2b-field-hint">재발 방지를 위해 바꿔야 할 것</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.improvement} onChange={(e) => setF("improvement", e.target.value)} /></label>
               <label className="b2b-field"><span className="b2b-field-label">고객 특이사항</span>
-                <span className="b2b-field-hint">VIP · 과거 클레임 이력 · 연락 시 주의할 점</span>
                 <textarea className="b2b-textarea" rows={2} value={edit.customer_note} onChange={(e) => setF("customer_note", e.target.value)} /></label>
               <div className="b2b-field">
                 <span className="b2b-field-label">사진 첨부 <span className="sm-faint" style={{ fontWeight: 400 }}>· 개선요청서에 자동 첨부됩니다</span></span>
