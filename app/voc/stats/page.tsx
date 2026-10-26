@@ -57,11 +57,12 @@ const STATUS_META: { key: string; color: string }[] = [
 ];
 
 // 추세 탐색 — 분류 기준(무엇으로 쌓을지) & 측정값
-const DIMS = ["유형", "구매처", "구매자", "귀책", "보상유형", "상태", "없음"] as const;
+const DIMS = ["유형", "접수유형", "구매처", "구매자", "귀책", "보상유형", "상태", "없음"] as const;
 type Dim = (typeof DIMS)[number];
 const DIM_FIELD: Record<Dim, (r: Voc) => string> = {
   유형: (r) => r.category || "미지정",
   구매처: (r) => r.purchase_place || "미지정",
+  접수유형: (r) => r.intake_type || "문의",
   구매자: (r) => r.buyer_type || "미지정",
   귀책: (r) => r.fault || "미분류",
   보상유형: (r) => r.comp_type || "없음",
@@ -121,6 +122,7 @@ export default function VocStatsPage() {
     return counts.sort((a, b) => (b[1] - a[1]) || ((order.get(a[0]) ?? 99) - (order.get(b[0]) ?? 99)));
   }, [shown]);
   const byBuyer = useMemo(() => countBy(shown, (r) => r.buyer_type), [shown]);
+  const byIntake = useMemo(() => countBy(shown, (r) => r.intake_type || "문의"), [shown]);
   const bySource = useMemo(() => countBy(shown, (r) => r.source), [shown]);
   const byPlace = useMemo(() => countBy(shown, (r) => r.purchase_place), [shown]);
   const statusComp = useMemo(() => STATUS_META.map((s) => ({ ...s, n: shown.filter((r) => r.status === s.key).length })), [shown]);
@@ -272,7 +274,8 @@ export default function VocStatsPage() {
 
           <div className="b2b-dash-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginTop: 16 }}>
             <PieCard title="클레임 유형별" data={byCategory} />
-            <PieCard title="구매자 구분" data={byBuyer} />
+            <PieCard title="접수 유형" data={byIntake} />
+            <PieCard title="첫구매·재구매(주문번호 자동)" data={byBuyer} />
             <PieCard title="수집경로별" data={bySource} />
             <PieCard title="구매처별" data={byPlace} />
           </div>

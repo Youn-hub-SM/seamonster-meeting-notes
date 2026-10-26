@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
-import { VOC_SOURCES, VOC_STATUSES, VOC_SENTIMENTS, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_FAULTS } from "@/app/lib/voc";
+import { VOC_SOURCES, VOC_STATUSES, VOC_SENTIMENTS, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_FAULTS, VOC_INTAKE_TYPES } from "@/app/lib/voc";
+import { autoFillFromOrder } from "@/app/lib/voc-order";
 import { loadVocCategoryNames } from "@/app/lib/voc-categories";
 
 export const dynamic = "force-dynamic";
 
 // 폼이 실제로 다루는 사용자 입력 필드만 허용(매스 어사인 방지).
 // source(수집방식)·assignee·sentiment·loss_amount 는 자동수집/정산 전용 → 전용 경로에서만 기록.
-const EDITABLE = ["received_at", "customer", "buyer_type", "purchase_date", "production_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "customer_note", "comp_type", "comp_qty", "fault", "loss_amount", "photos"] as const;
+const EDITABLE = ["received_at", "customer", "order_no", "intake_type", "buyer_type", "purchase_date", "production_date", "purchase_place", "product", "category", "content", "resolution", "cause", "status", "improvement", "customer_note", "comp_type", "comp_qty", "fault", "loss_amount", "photos"] as const;
 
 // "" → null 로 강등할 nullable 컬럼. 그 외(NOT NULL/Default 보유: received_at·category·status·content·photos·comp_type·comp_qty)는
 // "" 면 키 자체를 생략 → POST 는 DB default, PATCH 는 기존값 유지(NOT NULL 위반 방지).
-const NULLABLE = new Set(["customer", "buyer_type", "purchase_date", "production_date", "purchase_place", "product", "resolution", "cause", "improvement", "customer_note"]);
+const NULLABLE = new Set(["customer", "order_no", "buyer_type", "purchase_date", "production_date", "purchase_place", "product", "resolution", "cause", "improvement", "customer_note"]);
 
 // category 는 사용자가 추가/편집하는 마스터(072 voc_categories) 기준이라 여기 두지 않고 저장 직전에 DB 로 검증한다.
-const ENUMS: Record<string, readonly string[]> = { source: VOC_SOURCES, status: VOC_STATUSES, sentiment: VOC_SENTIMENTS, buyer_type: VOC_BUYER_TYPES, comp_type: VOC_COMP_TYPES, fault: VOC_FAULTS };
+const ENUMS: Record<string, readonly string[]> = { source: VOC_SOURCES, status: VOC_STATUSES, sentiment: VOC_SENTIMENTS, buyer_type: VOC_BUYER_TYPES, intake_type: VOC_INTAKE_TYPES, comp_type: VOC_COMP_TYPES, fault: VOC_FAULTS };
 const DATE_FIELDS = ["received_at", "purchase_date", "production_date"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LEN = 5000;
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
     const row = pick(body);
     const verr = await validate(row);
     if (verr) return NextResponse.json({ ok: false, error: verr }, { status: 400 });
+    await autoFillFromOrder(row); // 주문번호 → 구매자 구분·구매일 자동(2026-10-26)
     const { data, error } = await supabaseAdmin().from("voc").insert(row).select().single();
     if (error) throw error;
     return NextResponse.json({ ok: true, row: data });
@@ -127,6 +129,7 @@ export async function PATCH(req: NextRequest) {
     const picked = pick(body);
     const verr = await validate(picked);
     if (verr) return NextResponse.json({ ok: false, error: verr }, { status: 400 });
+    await autoFillFromOrder(picked);
     const row = { ...picked, updated_at: new Date().toISOString() };
     const { data, error } = await supabaseAdmin().from("voc").update(row).eq("id", body.id).select().single();
     if (error) throw error;

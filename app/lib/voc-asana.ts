@@ -57,8 +57,8 @@ export function buildTaskFromVoc(v: Voc): { title: string; contents: string } {
   const L: string[] = [];
   L.push(`■ VOC 요약`);
   L.push(`· 유형/상태: ${v.category} · ${v.status}`);
-  L.push(`· 접수일: ${v.received_at}${v.purchase_date ? ` · 구매일: ${v.purchase_date}` : ""}`);
-  L.push(`· 고객: ${who}${v.buyer_type ? ` (${v.buyer_type})` : ""}`);
+  L.push(`· 접수: ${v.received_at}${v.intake_type ? ` · ${v.intake_type}` : ""}${v.purchase_date ? ` · 구매일: ${v.purchase_date}` : ""}`);
+  L.push(`· 고객: ${who}${v.buyer_type ? ` (${v.buyer_type})` : ""}${v.order_no ? ` · 주문번호 ${v.order_no}` : ""}`);
   if (v.purchase_place || v.product) L.push(`· 구매처/상품: ${v.purchase_place || "-"} / ${v.product || "-"}`);
   if (v.production_date) L.push(`· 제품 생산일: ${v.production_date}`);
   L.push("");

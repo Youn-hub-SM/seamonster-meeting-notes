@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, extractErrorMsg } from "@/app/lib/supabase";
 import { verifySession, resolveUserName } from "@/app/lib/b2b-auth";
-import { VOC_STATUSES, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_FAULTS } from "@/app/lib/voc";
+import { VOC_STATUSES, VOC_INTAKE_TYPES, VOC_COMP_TYPES, VOC_FAULTS } from "@/app/lib/voc";
+import { autoFillFromOrder } from "@/app/lib/voc-order";
 import { loadVocCategoryOptions, faultOf } from "@/app/lib/voc-categories";
 import type { VocImportRow } from "@/app/lib/voc-xlsx";
 
@@ -34,10 +35,10 @@ export async function POST(req: NextRequest) {
         return {
           received_at: r.received_at,
           customer: r.customer ? String(r.customer).slice(0, 5000) : null,
-          buyer_type: typeof r.buyer_type === "string" && (VOC_BUYER_TYPES as readonly string[]).includes(r.buyer_type) ? r.buyer_type : null,
+          intake_type: inSet(r.intake_type, VOC_INTAKE_TYPES, "문의"),
+          order_no: r.order_no ? String(r.order_no).trim().slice(0, 60) : null,
           purchase_place: r.purchase_place ? String(r.purchase_place).slice(0, 500) : null,
           product: r.product ? String(r.product).slice(0, 500) : null,
-          purchase_date: dateOrNull(r.purchase_date),
           production_date: dateOrNull(r.production_date),
           category,
           comp_type: inSet(r.comp_type, VOC_COMP_TYPES, "없음"),
@@ -54,6 +55,8 @@ export async function POST(req: NextRequest) {
         };
       });
     if (!insert.length) return NextResponse.json({ ok: false, error: "유효한 행이 없습니다." }, { status: 400 });
+    // 주문번호가 있는 행은 구매자 구분·구매일을 매출 원장에서 채운다(화면 저장과 같은 규칙, 2026-10-26). 한 행씩 — 보통 수십 건이라 충분히 빠르다.
+    for (const row of insert) await autoFillFromOrder(row as unknown as Record<string, unknown>);
 
     const { error } = await supabaseAdmin().from("voc").insert(insert);
     if (error) throw error;

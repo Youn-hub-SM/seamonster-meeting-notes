@@ -5,7 +5,8 @@ export const VOC_SOURCES = ["직접입력", "설문", "리뷰", "기타"] as con
 export const VOC_CATEGORIES = ["배송", "품질", "포장", "누락", "오배송", "가시", "이물", "기타"] as const;
 export const VOC_STATUSES = ["접수", "응대·개선중", "개선완료"] as const;
 export const VOC_SENTIMENTS = ["긍정", "부정", "중립"] as const;
-export const VOC_BUYER_TYPES = ["첫구매", "재구매"] as const;          // 구매자 구분
+export const VOC_BUYER_TYPES = ["첫구매", "재구매"] as const;          // 구매자 구분 — 2026-10-26 부터 주문번호로 자동 판정(손으로 안 고름)
+export const VOC_INTAKE_TYPES = ["문의", "상담", "리뷰", "기타"] as const; // 접수 유형(2026-10-26, migration 148) — 리뷰 = 직접 응대 없이 리뷰에서 가져온 것
 export const VOC_COMP_TYPES = ["환불", "반품", "교환·재발송", "추가보상", "부분환불", "없음"] as const; // 보상유형
 export const VOC_FAULTS = ["제조사", "물류", "자사", "고객", "미분류"] as const; // 손해 귀책(정산 분리)
 
@@ -14,6 +15,7 @@ export type VocCategory = (typeof VOC_CATEGORIES)[number];
 export type VocStatus = (typeof VOC_STATUSES)[number];
 export type VocSentiment = (typeof VOC_SENTIMENTS)[number];
 export type VocBuyerType = (typeof VOC_BUYER_TYPES)[number];
+export type VocIntakeType = (typeof VOC_INTAKE_TYPES)[number];
 export type VocCompType = (typeof VOC_COMP_TYPES)[number];
 export type VocFault = (typeof VOC_FAULTS)[number];
 
@@ -73,12 +75,14 @@ export interface Voc {
   received_at: string;        // YYYY-MM-DD 접수일
   channel: string | null;     // 접수채널
   source: VocSource;          // 수집 방식
-  customer: string | null;    // 고객명
+  customer: string | null;    // 고객명(이름만 — 연락처 X)
+  order_no?: string | null;   // 주문번호(148) — 재구매·구매일 자동 판정의 열쇠
+  intake_type?: VocIntakeType | null; // 접수 유형(148): 문의·상담·리뷰·기타
   purchase_date: string | null;  // 구매일
   production_date: string | null; // 제품 생산일(제조사 배치 추적)
   purchase_place: string | null; // 구매처
   product: string | null;     // 구매상품
-  buyer_type: VocBuyerType | null; // 구매자 구분(첫/재구매)
+  buyer_type: VocBuyerType | null; // 구매자 구분(첫/재구매) — 주문번호로 자동
   photos: string[];           // 첨부 사진 공개 URL
   category: VocCategory;      // 클레임 유형
   content: string;            // 상세내용

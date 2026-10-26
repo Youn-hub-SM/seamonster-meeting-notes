@@ -3,7 +3,7 @@
 import { matchKoQuery } from "@/app/lib/hangul";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirm } from "@/app/components/Feedback";
-import { VOC_CATEGORIES, VOC_CAT_STATUSES, VOC_CAT_STATUS_COLOR, VOC_BUYER_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, VOC_FAULTS, suggestFault, computeVocLoss, type Voc, type VocCategoryRow, type VocCatStatus } from "@/app/lib/voc";
+import { VOC_CATEGORIES, VOC_CAT_STATUSES, VOC_CAT_STATUS_COLOR, VOC_BUYER_TYPES, VOC_INTAKE_TYPES, VOC_COMP_TYPES, VOC_COMP_MANUAL, VOC_FAULTS, suggestFault, computeVocLoss, type Voc, type VocCategoryRow, type VocCatStatus } from "@/app/lib/voc";
 import { Combobox } from "@/app/b2b/orders/Combobox";
 import { type VocImportRow } from "@/app/lib/voc-xlsx";
 import { won, qty, qtyText, wonText, dateShort, dateFull } from "@/app/lib/format";
@@ -12,14 +12,14 @@ const TODAY = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 1
 
 type Form = {
   id?: string;
-  received_at: string; customer: string; buyer_type: string;
+  received_at: string; customer: string; buyer_type: string; order_no: string; intake_type: string;
   purchase_date: string; production_date: string; purchase_place: string; product: string;
   category: string; content: string; resolution: string; cause: string;
   status: string; improvement: string; customer_note: string;
   comp_type: string; comp_qty: string; fault: string; loss_amount: string; photos: string[];
 };
 const emptyForm = (): Form => ({
-  received_at: TODAY(), customer: "", buyer_type: "",
+  received_at: TODAY(), customer: "", buyer_type: "", order_no: "", intake_type: "문의",
   purchase_date: "", production_date: "", purchase_place: "", product: "",
   category: "배송", content: "", resolution: "", cause: "",
   status: "접수", improvement: "", customer_note: "",
@@ -45,6 +45,10 @@ export default function VocPage() {
   const [fProduct, setFProduct] = useState("");
   const [fPlace, setFPlace] = useState("");
   const [fBuyer, setFBuyer] = useState("");
+  const [fIntake, setFIntake] = useState("");
+  // 주문번호 확인 결과(추가/수정 창) — 서버가 저장할 때 다시 확인해 구매자 구분·구매일을 채운다
+  const [orderInfo, setOrderInfo] = useState<{ order_no: string; found: boolean; channel: string; order_date: string; product: string; orders: number; repeat: boolean | null } | null>(null);
+  const [orderBusy, setOrderBusy] = useState(false);
   const [fFrom, setFFrom] = useState("");
   const [fTo, setFTo] = useState("");
   const [edit, setEdit] = useState<Form | null>(null);
@@ -130,11 +134,12 @@ export default function VocPage() {
       if (fProduct && r.product !== fProduct) return false;
       if (fPlace && r.purchase_place !== fPlace) return false;
       if (fBuyer && r.buyer_type !== fBuyer) return false;
+      if (fIntake && (r.intake_type || "문의") !== fIntake) return false;
       if (fFrom && (r.received_at || "") < fFrom) return false;
       if (fTo && (r.received_at || "") > fTo) return false;
       return true;
     });
-  }, [rows, search, fCategory, fProduct, fPlace, fBuyer, fFrom, fTo]);
+  }, [rows, search, fCategory, fProduct, fPlace, fBuyer, fIntake, fFrom, fTo]);
 
   const shown = base;
 
@@ -152,19 +157,34 @@ export default function VocPage() {
     }).sort((a, b) => (b.monthRows.length - a.monthRows.length) || ((a.cat?.sort ?? 99) - (b.cat?.sort ?? 99)) || a.name.localeCompare(b.name, "ko"));
   }, [rows, cats, month]);
 
-  const hasFilter = !!(search || fCategory || fProduct || fPlace || fBuyer || fFrom || fTo);
-  const resetFilters = () => { setSearch(""); setFCategory(""); setFProduct(""); setFPlace(""); setFBuyer(""); setFFrom(""); setFTo(""); };
+  const hasFilter = !!(search || fCategory || fProduct || fPlace || fBuyer || fIntake || fFrom || fTo);
+  const resetFilters = () => { setSearch(""); setFCategory(""); setFProduct(""); setFPlace(""); setFBuyer(""); setFIntake(""); setFFrom(""); setFTo(""); };
 
-  function openNew() { setFieldErr({}); setEdit(emptyForm()); } // 이전 창의 검증 오류가 새 창에 남지 않게(✕ 닫기는 지우지 않는다)
+  function openNew() { setFieldErr({}); setOrderInfo(null); setEdit(emptyForm()); } // 이전 창의 검증 오류가 새 창에 남지 않게(✕ 닫기는 지우지 않는다)
   function openEdit(r: Voc) {
     setFieldErr({});
+    setOrderInfo(null);
     setEdit({
-      id: r.id, received_at: r.received_at, customer: r.customer || "", buyer_type: r.buyer_type || "",
+      id: r.id, received_at: r.received_at, customer: r.customer || "", buyer_type: r.buyer_type || "", order_no: r.order_no || "", intake_type: r.intake_type || "문의",
       purchase_date: r.purchase_date || "", production_date: r.production_date || "", purchase_place: r.purchase_place || "", product: r.product || "",
       category: r.category, content: r.content, resolution: r.resolution || "", cause: r.cause || "",
       status: r.status, improvement: r.improvement || "", customer_note: r.customer_note || "",
       comp_type: r.comp_type || "없음", comp_qty: String(r.comp_qty ?? 1), fault: r.fault || suggestFault(r.category), loss_amount: r.loss_amount ? String(r.loss_amount) : "", photos: r.photos || [],
     });
+  }
+
+  // 주문번호 확인 — 채널·주문일·상품·재구매 여부를 보여 주고, 비어 있는 구매처·구매상품을 채운다
+  async function checkOrder() {
+    const no = (edit?.order_no || "").trim();
+    if (!no) { setOrderInfo(null); return; }
+    setOrderBusy(true);
+    try {
+      const j = await fetch(`/api/voc/order?order_no=${encodeURIComponent(no)}`, { cache: "no-store" }).then((r) => r.json());
+      if (!j.ok) throw new Error(j.error || "주문 확인 실패");
+      setOrderInfo(j);
+      if (j.found) setEdit((f) => (f ? { ...f, order_no: j.order_no, purchase_place: f.purchase_place || j.channel, product: f.product || j.product, purchase_date: j.order_date || f.purchase_date, buyer_type: j.repeat === null ? f.buyer_type : (j.repeat ? "재구매" : "첫구매") } : f));
+    } catch (e) { setOrderInfo({ order_no: no, found: false, channel: "", order_date: "", product: "", orders: 0, repeat: null }); setError(e instanceof Error ? e.message : "주문 확인 실패"); }
+    finally { setOrderBusy(false); }
   }
 
   async function save() {
@@ -364,8 +384,12 @@ export default function VocPage() {
           <option value="">구매처 전체</option>
           {placeOpts.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
+        <select className="b2b-input" value={fIntake} onChange={(e) => setFIntake(e.target.value)} style={{ width: "auto" }} aria-label="접수 유형 필터">
+          <option value="">접수 유형 전체</option>
+          {VOC_INTAKE_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
         <select className="b2b-input" value={fBuyer} onChange={(e) => setFBuyer(e.target.value)} style={{ width: "auto" }} aria-label="구매자 구분 필터">
-          <option value="">구매자 전체</option>
+          <option value="">첫구매·재구매 전체</option>
           {VOC_BUYER_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
         <label className="sm-row" style={{ gap: 4, fontSize: 12, color: "var(--sm-text-mid)" }}>접수일
@@ -391,16 +415,17 @@ export default function VocPage() {
         <div className="b2b-table-wrap">
           <table className="b2b-table is-clickable">
             <thead><tr>
-              <th>접수일</th><th>구매채널</th><th>고객명</th><th>구매</th><th>구매일</th><th>구매상품</th><th>유형</th><th>특이사항</th><th>상세내용</th><th>처리내용</th><th>업무</th>
+              <th>접수일</th><th>접수</th><th>구매채널</th><th>고객명</th><th>주문번호</th><th>구매</th><th>구매상품</th><th>유형</th><th>특이사항</th><th>상세내용</th><th>처리내용</th><th>업무</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} onClick={() => openEdit(r)}>
                   <td style={{ whiteSpace: "nowrap" }}>{dateShort(r.received_at)}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>{r.intake_type || "문의"}</td>
                   <td>{r.purchase_place || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.customer || "-"}</td>
+                  <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }} title={r.purchase_date ? `구매일 ${r.purchase_date}` : undefined}>{r.order_no || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.buyer_type || "-"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{dateShort(r.purchase_date)}</td>
                   <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.product || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{r.category}</td>
                   <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.customer_note || ""}>{r.customer_note || "-"}</td>
@@ -506,18 +531,26 @@ export default function VocPage() {
                 <label className="b2b-field"><span className="b2b-field-label">접수일<span className="req">*</span></span>
                   <input className="b2b-input" type="date" required value={edit.received_at} onChange={(e) => setF("received_at", e.target.value)} aria-invalid={fieldErr.received_at ? "true" : undefined} />
                   {fieldErr.received_at && <span className="b2b-field-error">{fieldErr.received_at}</span>}</label>
-                <label className="b2b-field"><span className="b2b-field-label">구매자 구분</span>
-                  <select className="b2b-input" value={edit.buyer_type} onChange={(e) => setF("buyer_type", e.target.value)}>
-                    <option value="">선택 안 함</option>
-                    {VOC_BUYER_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
+                <label className="b2b-field"><span className="b2b-field-label">접수 유형</span>
+                  <span className="b2b-field-hint">리뷰 = 직접 응대하지 않고 리뷰에서 가져온 내용</span>
+                  <select className="b2b-input" value={edit.intake_type} onChange={(e) => setF("intake_type", e.target.value)}>
+                    {VOC_INTAKE_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
                   </select></label>
               </div>
               <div className="b2b-field-row">
-                <label className="b2b-field"><span className="b2b-field-label">고객명</span>
-                  <span className="b2b-field-hint">이름 또는 연락처</span>
+                <label className="b2b-field"><span className="b2b-field-label">이름</span>
                   <input className="b2b-input" value={edit.customer} onChange={(e) => setF("customer", e.target.value)} placeholder="예: 홍길동" /></label>
-                <label className="b2b-field"><span className="b2b-field-label">구매일</span>
-                  <input className="b2b-input" type="date" value={edit.purchase_date} onChange={(e) => setF("purchase_date", e.target.value)} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">주문번호</span>
+                  <span className="b2b-field-hint">재구매 여부·구매일은 주문번호로 자동 확인</span>
+                  <span className="sm-row" style={{ gap: 6 }}>
+                    <input className="b2b-input" value={edit.order_no} onChange={(e) => { setF("order_no", e.target.value); setOrderInfo(null); }} onBlur={checkOrder} placeholder="채널 주문번호" style={{ flex: 1, minWidth: 0 }} />
+                    <button type="button" className="b2b-btn-secondary" onClick={checkOrder} disabled={orderBusy || !edit.order_no.trim()} style={{ whiteSpace: "nowrap" }}>{orderBusy ? "확인 중" : "확인"}</button>
+                  </span>
+                  {orderInfo && (orderInfo.found
+                    ? <span className="b2b-field-hint" style={{ color: "var(--sm-success)" }}>{[orderInfo.channel, orderInfo.order_date, orderInfo.product].filter(Boolean).join(" · ")}{orderInfo.repeat === null ? "" : ` · ${orderInfo.repeat ? `재구매 고객(주문 ${orderInfo.orders}건)` : "첫 구매"}`}</span>
+                    : <span className="b2b-field-hint" style={{ color: "var(--sm-danger)" }}>매출 원장에 없는 주문번호입니다 — 그대로 저장되지만 재구매 판정은 안 됩니다</span>)}
+                  {!orderInfo && edit.id && (edit.buyer_type || edit.purchase_date) && <span className="b2b-field-hint">{[edit.buyer_type, edit.purchase_date ? `구매일 ${edit.purchase_date}` : ""].filter(Boolean).join(" · ")}</span>}
+                </label>
               </div>
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">구매처</span>
