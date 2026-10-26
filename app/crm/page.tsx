@@ -64,6 +64,8 @@ export default function CrmPage() {
   const [fieldsSupported, setFieldsSupported] = useState(true); // migration 077 미적용이면 false → 고객·유형 숨김
   const [triggersSupported, setTriggersSupported] = useState(true); // migration 149·150 미적용이면 false → 트리거·D+n·목표 클릭률 숨김
   const [draftMsg, setDraftMsg] = useState("");
+  const [solapiTpls, setSolapiTpls] = useState<{ id: string; name: string }[]>([]); // 솔라피 템플릿(ID→이름) — 표(편집) 선택지
+  useEffect(() => { fetch("/api/crm/stats/solapi", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j.ok) setSolapiTpls(j.templates || []); }).catch(() => {}); }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const confirmModal = useConfirm();
@@ -389,7 +391,7 @@ export default function CrmPage() {
                 {draftMsg && <span className="sm-faint" style={{ fontSize: 12 }}>{draftMsg}</span>}
               </div>
             )}
-            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} opts={opts} labels={labels} savingId={savingId} onField={setStr} onLink={setLink} onSave={saveRow} onEdit={openEdit} />
+            <TableView msgs={tableFiltered} stageNames={stageNames} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} solapiTpls={solapiTpls} opts={opts} labels={labels} savingId={savingId} onField={setStr} onLink={setLink} onSave={saveRow} onEdit={openEdit} />
           </>
         ) : (
           <StatsView messages={messages} campaigns={campaigns} gaConfigured={ga?.configured} chLabel={labels.ch} />
@@ -398,7 +400,7 @@ export default function CrmPage() {
       {edit && (
         <EditModal
           data={edit} onChange={setEdit} onClose={() => setEdit(null)} onSave={save}
-          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported}
+          onDelete={() => remove(edit.id)} saving={saving} datesSupported={datesSupported} fieldsSupported={fieldsSupported} triggersSupported={triggersSupported} solapiTpls={solapiTpls}
           opts={opts} labels={labels}
         />
       )}
@@ -484,8 +486,8 @@ function FlowView({ stages, gaOf, msgOpen, labels, onCard, onAdd }: { stages: St
 }
 
 // ── 표(편집) 뷰 — 셀에서 바로 편집(자동저장). 깊은 필드(상세·내용·링크·성과)는 '상세' 버튼→모달 ──
-function TableView({ msgs, stageNames, fieldsSupported, triggersSupported, opts, labels, savingId, onField, onLink, onSave, onEdit }: {
-  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; triggersSupported: boolean; opts: CrmOptions; labels: Labels; savingId: string | null;
+function TableView({ msgs, stageNames, fieldsSupported, triggersSupported, solapiTpls, opts, labels, savingId, onField, onLink, onSave, onEdit }: {
+  msgs: CrmMessage[]; stageNames: string[]; fieldsSupported: boolean; triggersSupported: boolean; solapiTpls: { id: string; name: string }[]; opts: CrmOptions; labels: Labels; savingId: string | null;
   onField: (id: string, key: keyof CrmMessage, value: string) => void;
   onLink: (id: string, key: string, value: string) => void;
   onSave: (id: string, override?: Partial<CrmMessage>) => void;
@@ -564,7 +566,17 @@ function TableView({ msgs, stageNames, fieldsSupported, triggersSupported, opts,
                 <td><CellText value={m.links?.utm_campaign || ""} placeholder="예: crm_60d_winback" onLocal={(v) => onLink(m.id, "utm_campaign", v)} onCommit={() => onSave(m.id)} /></td>
                 {triggersSupported && <td><CellText value={m.utm_medium || ""} placeholder="예: alimtalk-naver" onLocal={(v) => onField(m.id, "utm_medium", v)} onCommit={() => onSave(m.id)} /></td>}
                 {triggersSupported && <td><CellText value={m.target_ctr == null ? "" : String(m.target_ctr)} placeholder="%" onLocal={(v) => onField(m.id, "target_ctr", v)} onCommit={() => onSave(m.id)} /></td>}
-                {triggersSupported && <td><CellText value={m.solapi_template_id || ""} placeholder="템플릿 ID" onLocal={(v) => onField(m.id, "solapi_template_id", v)} onCommit={() => onSave(m.id)} /></td>}
+                {triggersSupported && (
+                  <td>
+                    {solapiTpls.length ? (
+                      <select className="b2b-status-select" value={m.solapi_template_id || ""} aria-label="솔라피 템플릿" onChange={sel(m, "solapi_template_id")}>
+                        <option value="">없음</option>
+                        {m.solapi_template_id && !solapiTpls.some((t) => t.id === m.solapi_template_id) && <option value={m.solapi_template_id}>{m.solapi_template_id}</option>}
+                        {solapiTpls.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    ) : <CellText value={m.solapi_template_id || ""} placeholder="템플릿 ID" onLocal={(v) => onField(m.id, "solapi_template_id", v)} onCommit={() => onSave(m.id)} />}
+                  </td>
+                )}
                 <td><CellText value={m.tags} placeholder="예: 신규, 자동화" onLocal={(v) => onField(m.id, "tags", v)} onCommit={() => onSave(m.id)} /></td>
                 <td className="actions">
                   {savingId === m.id
@@ -806,9 +818,9 @@ function OptionsModal({ current, onClose, onSaved }: { current: CrmOptions; onCl
 }
 
 // ── 편집 모달 ──
-function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported, triggersSupported, opts, labels }: {
+function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSupported, fieldsSupported, triggersSupported, solapiTpls, opts, labels }: {
   data: CrmMessageInput; onChange: (d: CrmMessageInput) => void; onClose: () => void;
-  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean; fieldsSupported: boolean; triggersSupported: boolean;
+  onSave: () => void; onDelete: () => void; saving: boolean; datesSupported: boolean; fieldsSupported: boolean; triggersSupported: boolean; solapiTpls: { id: string; name: string }[];
   opts: CrmOptions; labels: Labels;
 }) {
   const set = <K extends keyof CrmMessageInput>(k: K, v: CrmMessageInput[K]) => onChange({ ...data, [k]: v });
@@ -885,8 +897,14 @@ function EditModal({ data, onChange, onClose, onSave, onDelete, saving, datesSup
               <div className="b2b-field-row">
                 <label className="b2b-field"><span className="b2b-field-label">UTM 매체</span>
                   <input className="b2b-input" value={data.utm_medium || ""} onChange={(e) => set("utm_medium", e.target.value)} placeholder="예: alimtalk-naver" spellCheck={false} /></label>
-                <label className="b2b-field"><span className="b2b-field-label">솔라피 템플릿 ID</span>
-                  <input className="b2b-input" value={data.solapi_template_id || ""} onChange={(e) => set("solapi_template_id", e.target.value)} spellCheck={false} /></label>
+                <label className="b2b-field"><span className="b2b-field-label">솔라피 템플릿</span>
+                  {solapiTpls.length ? (
+                    <select className="b2b-select" value={data.solapi_template_id || ""} onChange={(e) => set("solapi_template_id", e.target.value)}>
+                      <option value="">없음</option>
+                      {data.solapi_template_id && !solapiTpls.some((t) => t.id === data.solapi_template_id) && <option value={data.solapi_template_id}>{data.solapi_template_id}</option>}
+                      {solapiTpls.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  ) : <input className="b2b-input" value={data.solapi_template_id || ""} onChange={(e) => set("solapi_template_id", e.target.value)} placeholder="템플릿 ID" spellCheck={false} />}</label>
               </div>
             </>
           )}

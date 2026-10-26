@@ -2,7 +2,8 @@
 //  수단별 발송·클릭은 crm_send_stats 에서, 랜딩 성과(세션·구매·매출)는 GA4 의 utm medium(소스/매체 'kakao / …')에서.
 import { supabaseAdmin } from "./supabase";
 import { isGaConfigured, runGaReport } from "./ga";
-import { fetchSolapiMessages, aggregateSolapi, isSolapiConfigured } from "./solapi";
+import { fetchSolapiMessages, aggregateSolapi, isSolapiConfigured, fetchSolapiTemplates, type SolapiTemplate } from "./solapi";
+import { getKv, setKv } from "./b2b-settings";
 import { estimateAudience } from "./crm-audience";
 import { isTracked, triggerText, CRM_CUSTOMER_LABEL, type CrmMessage } from "./crm";
 
@@ -45,17 +46,36 @@ export async function upsertCrmStats(rows: CrmStatUpsert[]): Promise<number> {
 }
 
 // ── 솔라피 동기화: 기간의 발송을 일별×종류×템플릿으로 upsert ──
-export async function syncSolapi(p: { since: string; until: string }): Promise<{ rows: number; messages: number }> {
+const KV_TPL = "solapi_templates"; // 템플릿 ID → 이름(동기화 때 갱신, 화면·표에서 이름 표시)
+export async function getSolapiTemplateMap(): Promise<Record<string, string>> {
+  try { const raw = await getKv(KV_TPL); return raw ? (JSON.parse(raw) as Record<string, string>) : {}; } catch { return {}; }
+}
+export async function refreshSolapiTemplates(): Promise<SolapiTemplate[]> {
+  const list = await fetchSolapiTemplates();
+  const map: Record<string, string> = {};
+  for (const t of list) map[t.templateId] = t.name || t.templateId;
+  try { await setKv(KV_TPL, JSON.stringify(map)); } catch { /* 저장 실패해도 동기화는 계속 */ }
+  return list;
+}
+// 표시용 템플릿 라벨: 'ATA:KA01TP…' → '알림톡 · <템플릿 이름>'
+const TYPE_KO: Record<string, string> = { ATA: "알림톡", CTA: "친구톡", CTI: "친구톡(이미지)", BMS: "브랜드메시지", SMS: "문자", LMS: "문자(장문)", MMS: "문자(사진)", RCS_SMS: "RCS", RCS_LMS: "RCS", RCS_MMS: "RCS" };
+export function solapiTemplateLabel(template: string, map: Record<string, string>): string {
+  const [type, id] = template.split(":");
+  const ko = TYPE_KO[type] || type;
+  return id ? `${ko} · ${map[id] || id}` : ko;
+}
+export async function syncSolapi(p: { since: string; until: string }): Promise<{ rows: number; messages: number; templates: number }> {
   if (!isSolapiConfigured()) throw new Error("솔라피 자격(SOLAPI_API_KEY·SOLAPI_API_SECRET)이 없습니다.");
-  const msgs = await fetchSolapiMessages(p);
+  const [msgs, tpls] = await Promise.all([fetchSolapiMessages(p), refreshSolapiTemplates().catch(() => [] as SolapiTemplate[])]);
+  const names: Record<string, string> = {}; for (const t of tpls) names[t.templateId] = t.name;
   const agg = aggregateSolapi(msgs);
-  const rows: CrmStatUpsert[] = agg.map((a) => ({ source: "solapi", grain: "day", date: a.date, template: `${a.type}${a.templateId ? `:${a.templateId}` : ""}`, sent: a.sent, delivered: null, clicked: null, cost: null, utm_campaign: null, note: a.failed ? `실패 ${a.failed}` : "", batch: "solapi-sync" }));
+  const rows: CrmStatUpsert[] = agg.map((a) => ({ source: "solapi", grain: "day", date: a.date, template: `${a.type}${a.templateId ? `:${a.templateId}` : ""}`, sent: a.sent, delivered: null, clicked: null, cost: null, utm_campaign: null, note: [names[a.templateId] || "", a.failed ? `실패 ${a.failed}` : ""].filter(Boolean).join(" · "), batch: "solapi-sync" }));
   const n = await upsertCrmStats(rows);
-  return { rows: n, messages: msgs.length };
+  return { rows: n, messages: msgs.length, templates: tpls.length };
 }
 
 // ── 주간 집계 ──
-export type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; sent: number; clicked: number | null; days: number }[] };
+export type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; label: string; sent: number; clicked: number | null; days: number }[] };
 export type GaMediumRow = { medium: string; sessions: number; purchases: number; revenue: number };
 
 export async function weeklyStats(weekStart: string): Promise<{ week: string; until: string; sources: WeeklySource[]; rows: CrmStatRow[] }> {
@@ -64,6 +84,7 @@ export async function weeklyStats(weekStart: string): Promise<{ week: string; un
   const { data, error } = await sb.from("crm_send_stats").select("*").gte("date", weekStart).lte("date", until).order("date");
   if (error) throw error;
   const rows = (data || []) as CrmStatRow[];
+  const tplMap = await getSolapiTemplateMap();
   const bySrc = new Map<string, WeeklySource>();
   for (const r of rows) {
     if (r.grain === "week" && r.date !== weekStart) continue; // 주별 행은 주 시작일 것만
@@ -71,7 +92,7 @@ export async function weeklyStats(weekStart: string): Promise<{ week: string; un
     s.sent += r.sent || 0;
     if (r.clicked != null) s.clicked = (s.clicked || 0) + r.clicked;
     if (r.cost != null) s.cost = (s.cost || 0) + Number(r.cost);
-    const t = s.templates.find((x) => x.template === r.template) || (s.templates.push({ template: r.template, sent: 0, clicked: null, days: 0 }), s.templates[s.templates.length - 1]);
+    const t = s.templates.find((x) => x.template === r.template) || (s.templates.push({ template: r.template, label: r.source === "solapi" ? solapiTemplateLabel(r.template, tplMap) : r.template, sent: 0, clicked: null, days: 0 }), s.templates[s.templates.length - 1]);
     t.sent += r.sent || 0; if (r.clicked != null) t.clicked = (t.clicked || 0) + r.clicked; t.days++;
     bySrc.set(r.source, s);
   }

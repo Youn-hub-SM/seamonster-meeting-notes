@@ -8,7 +8,7 @@ import { qty, qtyText, wonText } from "@/app/lib/format";
 //  솔라피는 [가져오기] 버튼(API), 데이터라이즈·블룸은 CSV 업로드(2단계), 네이버 톡톡·톡스토어·문자는 직접 입력.
 
 type SourceDef = { key: string; label: string; how: "csv" | "api" | "manual" };
-type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; sent: number; clicked: number | null; days: number }[] };
+type WeeklySource = { source: string; label: string; sent: number; clicked: number | null; cost: number | null; templates: { template: string; label: string; sent: number; clicked: number | null; days: number }[] };
 type GaRow = { medium: string; sessions: number; purchases: number; revenue: number };
 type StatRow = { id: string; source: string; grain: "day" | "week"; date: string; template: string; sent: number; clicked: number | null; cost: number | null; note: string; batch: string };
 type TrackedRow = { id: string; title: string; stage: string; customer: string; medium: string; campaign: string; triggerText: string; sent: number | null; sentBasis: "solapi" | "manual" | "estimate" | "none"; sentNote: string; sessions: number | null; purchases: number | null; revenue: number | null; ctr: number | null; targetCtr: number | null };
@@ -48,7 +48,7 @@ export default function WeeklyStats() {
     try {
       const j = await fetch("/api/crm/stats/solapi", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ since: shiftDays(week, -7), until: data?.until && data.until < kstToday() ? data.until : kstToday() }) }).then((r) => r.json());
       if (!j.ok) throw new Error(j.error || "가져오기 실패");
-      setMsg(`솔라피 ${j.since}~${j.until}: 메시지 ${qtyText(j.messages, "건")} → ${qtyText(j.rows, "줄")} 저장`);
+      setMsg(`솔라피 ${j.since}~${j.until}: 메시지 ${qtyText(j.messages, "건")} → ${qtyText(j.rows, "줄")} 저장 · 템플릿 이름 ${qtyText(j.templates || 0, "개")}`);
       await load(week);
     } catch (e) { setMsg(e instanceof Error ? e.message : "가져오기 실패"); }
     finally { setBusy(""); }
@@ -160,7 +160,7 @@ export default function WeeklyStats() {
                     </tr>,
                     ...(isOpen ? s.templates.map((t) => (
                       <tr key={`${s.source}:${t.template}`} style={{ background: "var(--sm-bg-subtle)" }}>
-                        <td style={{ paddingLeft: 28, fontSize: 13 }}>{t.template || "(이름 없음)"} <span className="sm-faint">· {t.days}일</span></td>
+                        <td style={{ paddingLeft: 28, fontSize: 13 }} title={t.template}>{t.label || t.template || "(이름 없음)"} <span className="sm-faint">· {t.days}일</span></td>
                         <td className="num" style={{ fontSize: 13 }}>{qty(t.sent)}</td>
                         <td className="num" style={{ fontSize: 13 }}>{t.clicked == null ? "-" : qty(t.clicked)}</td>
                         <td className="num" style={{ fontSize: 13 }}>{pct(t.clicked, t.sent)}</td>
@@ -202,7 +202,7 @@ export default function WeeklyStats() {
               <tr key={r.id}>
                 <td style={{ whiteSpace: "nowrap" }}>{r.date}{r.grain === "week" ? " 주" : ""}</td>
                 <td>{defs.find((d) => d.key === r.source)?.label || r.source}</td>
-                <td style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.template}>{r.template || "-"}</td>
+                <td style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.template}>{r.batch === "solapi-sync" && r.note ? r.note.split(" · ")[0] : (r.template || "-")}</td>
                 <td className="num">{qty(r.sent)}</td>
                 <td className="num">{r.clicked == null ? "-" : qty(r.clicked)}</td>
                 <td className="sm-faint" style={{ fontSize: 12 }}>{r.note || ""}</td>

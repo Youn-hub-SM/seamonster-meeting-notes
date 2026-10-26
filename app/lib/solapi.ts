@@ -48,6 +48,24 @@ export async function fetchSolapiMessages(p: { since: string; until: string; max
   return out;
 }
 
+// 카카오 템플릿 목록(ID → 이름) — 발송 내역엔 템플릿 ID 만 있어 화면에 이름을 붙이려고 같이 가져온다. GET /kakao/v2/templates (startKey 페이징)
+export type SolapiTemplate = { templateId: string; name: string; status?: string; channelId?: string };
+export async function fetchSolapiTemplates(): Promise<SolapiTemplate[]> {
+  const out: SolapiTemplate[] = [];
+  let startKey: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const q = new URLSearchParams({ limit: "500" });
+    if (startKey) q.set("startKey", startKey);
+    const res = await fetch(`${BASE}/kakao/v2/templates?${q}`, { headers: { Authorization: authHeader() }, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+    const j = (await res.json().catch(() => ({}))) as { templateList?: { templateId?: string; name?: string; status?: string; channelId?: string; pfId?: string }[]; nextKey?: string; errorMessage?: string; errorCode?: string };
+    if (!res.ok) throw new Error(`솔라피 템플릿 ${res.status}: ${j.errorMessage || j.errorCode || "조회 실패"}`);
+    for (const t of j.templateList || []) if (t.templateId) out.push({ templateId: t.templateId, name: t.name || "", status: t.status, channelId: t.channelId || t.pfId });
+    if (!j.nextKey) break;
+    startKey = j.nextKey;
+  }
+  return out;
+}
+
 export type SolapiDayStat = { date: string; type: string; templateId: string; sent: number; failed: number };
 
 // KST 날짜 × 메시지 종류(ATA 알림톡·CTA/CTI 친구톡·브랜드메시지·SMS 등) × 템플릿 ID 집계. 성공 = statusCode '4000'(발송 성공)
