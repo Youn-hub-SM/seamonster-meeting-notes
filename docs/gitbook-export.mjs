@@ -141,17 +141,18 @@ async function cmdExport(spaceId, outRoot) {
   async function walk(pages, parentTitles, depth, into) {
     for (const [k, p] of (pages || []).entries()) {
       const title = p.title || "(제목 없음)";
-      let html = "";
+      let html = "", description = "";
       if (p.kind !== "group") {
         try {
           const j = await api(`/spaces/${spaceId}/content/page/${p.id}?format=markdown`);
           const md = typeof j.markdown === "string" ? j.markdown : docToMd(j.document);
+          description = (p.description || md.match(/^---\n[\s\S]*?description:\s*(.+?)\n[\s\S]*?---\n/)?.[1] || "").trim().replace(/^["']|["']$/g, "");
           html = mdToHtml(md, images, { title });
         } catch (e) { html = `<p>(본문을 가져오지 못했습니다: ${esc(String(e.message))})</p>`; }
       }
       let file = safeName([...parentTitles.slice(-1), title].join(" - ")); let c = 1; const base = file; while (used.has(file)) file = `${base}-${++c}`; used.add(file);
       writeFileSync(join(dir, "pages", `${file}.html`), html, "utf8"); // 빈 본문도 써서 이전 실행의 찌꺼기를 덮는다
-      const node = { id: p.id, title, kind: p.kind || "sheet", path: p.path || "", file: html ? `${file}.html` : null, order: k, depth, children: [] };
+      const node = { id: p.id, title, description, kind: p.kind || "sheet", path: p.path || "", file: html ? `${file}.html` : null, order: k, depth, children: [] };
       into.push(node);
       await walk(p.pages, [...parentTitles, title], depth + 1, node.children);
       process.stdout.write(`${"  ".repeat(depth)}${html ? "페이지" : "그룹  "} ${title}\n`);
