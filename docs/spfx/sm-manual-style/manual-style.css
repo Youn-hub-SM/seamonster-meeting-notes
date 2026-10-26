@@ -7,8 +7,8 @@
 :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) ul, :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) ol { margin: 0 0 1.2em; padding-left: 1.6em; }
 :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) li { margin: 0.35em 0; line-height: 1.75; }
 :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) li > p { margin: 0; }
-:is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) a { color: var(--smm-coral); text-decoration: none; border-bottom: 1px solid rgba(241, 90, 48, 0.35); }
-:is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) a:hover { border-bottom-color: var(--smm-coral); }
+:is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) a { color: var(--smm-coral); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: rgba(241, 90, 48, 0.45); border-bottom: 0; }
+:is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) a:hover { text-decoration-color: var(--smm-coral); }
 :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) strong { font-weight: 700; }
 :is(.ck-content, [data-automation-id="textBox"], [data-sp-feature-tag="Rich Text Editor"], .rte--read) hr { border: 0; border-top: 1px solid var(--smm-line); margin: 2.2em 0; }
 
