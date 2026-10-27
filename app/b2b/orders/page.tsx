@@ -1722,7 +1722,7 @@ export default function OrdersListPage() {
             </div>
             <div className="b2b-modal-body">
               <p className="sm-faint" style={{ fontSize: 12, margin: "0 0 12px" }}>
-                저장하면 발주 전량이 가장 이른 발송일에 재고에서 차감됩니다.
+                저장하면 각 차수에 담은 수량이 그 차수의 발송일에 재고에서 차감됩니다. 아직 차수를 잡지 않은 남은 수량은 재고에 남습니다.
               </p>
               {shipError && <div className="b2b-error" style={{ marginBottom: 10 }}>{shipError}</div>}
               {shipLoading ? (
@@ -1781,7 +1781,7 @@ export default function OrdersListPage() {
                           발송 뒤 취소(안 돌아옴) — 발송일·수량은 고칠 수 없습니다. 목록에서 그 차수를 되돌린 뒤 고치세요
                         </div>
                       )}
-                      {/* 이 차수에 담을 수량 — 발송요청 양식·남은 수량 계산이 이 배분을 읽는다(매출·재고는 발주 전량 기준) */}
+                      {/* 이 차수에 담을 수량 — 발송요청 양식·남은 수량 계산·재고 차감(이 차수 발송일에 이 수량, 2026-10-27)이 이 배분을 읽는다(매출은 발주 전량 기준) */}
                       {shipItems.length > 0 && (
                         <div className="sm-col" style={{ gap: 6, marginTop: 8, paddingLeft: 2 }}>
                           <span className="b2b-field-label" style={{ margin: 0 }}>보낼 수량 (상품별)</span>

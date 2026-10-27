@@ -84,10 +84,10 @@ const META: Record<string, Meta> = {
     todo: "발주를 열어 발송일을 확인하고 [수정]으로 다시 저장하세요." },
   b2b_stock_off: { label: "재고 차감이 꺼진 발송 회차", where: "발주", view: "order", fix: ORDERS,
     todo: "발주를 열어 [수정]으로 다시 저장하세요(차감이 켜집니다)." },
-  b2b_qty_mismatch: { label: "빠진 재고 수량이 발주와 다른 발주", where: "발주", view: "order", fix: ORDERS,
-    todo: "발주를 열어 [수정]으로 다시 저장하세요. 수량 = 빠져야 할 수량 − 빠진 수량." },
-  b2b_date_mismatch: { label: "재고가 빠진 날짜가 첫 발송일과 다른 발주", where: "발주", view: "order", fix: ORDERS,
-    todo: "발주를 열어 [수정]으로 다시 저장하세요(첫 발송일 하루로 합쳐지고 재고 총량은 그대로)." },
+  b2b_qty_mismatch: { label: "빠진 재고 수량이 차수 수량과 다른 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주를 열어 [수정]으로 다시 저장하세요. 수량 = 빠져야 할 수량(차수에 담은 수량) − 빠진 수량. '옛 규칙'이 붙은 발주는 전량 선점 시절 것 — 다시 저장하면 보낸 양만 남고 발송일 미정 잔여는 재고로 돌아옵니다." },
+  b2b_date_mismatch: { label: "재고가 빠진 날짜가 차수 발송일과 다른 발주", where: "발주", view: "order", fix: ORDERS,
+    todo: "발주를 열어 [수정]으로 다시 저장하세요(차수별 발송일로 다시 기록되고 재고 총량은 그대로)." },
   b2b_dup_shipment: { label: "발송 회차가 두 번 잡힌 발주", where: "발주", view: "order", fix: ORDERS,
     todo: "발주 목록의 발송일 칸에서 겹친(안 나간) 회차를 ✕로 지우고 [저장]하세요. 발송완료 회차는 지우지 마세요." },
   b2b_over_alloc: { label: "회차별 수량 합이 발주 수량보다 많은 발주", where: "발주", view: "order", fix: ORDERS,
@@ -263,7 +263,7 @@ export default function LedgerCheckPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [today, setToday] = useState("");
   const [truncated, setTruncated] = useState(false);
-  const [fnStale, setFnStale] = useState(false); // 원장 점검 함수가 옛 판(132 다시 적용 필요)
+  const [fnStale, setFnStale] = useState(false); // 원장 점검 함수가 옛 판(155 적용 필요)
   const [itemCap, setItemCap] = useState(200);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -339,7 +339,7 @@ export default function LedgerCheckPage() {
       </header>
 
       {error && <div className="b2b-error">{error}</div>}
-      {!loading && !error && fnStale && <div className="sm-warn">원장 점검 함수가 옛 판입니다 — supabase/migrations/132_reconcile_fix_ledger_check.sql 을 한 번 더 적용하세요.</div>}
+      {!loading && !error && fnStale && <div className="sm-warn">원장 점검 함수가 옛 판입니다 — supabase/migrations/155_split_shipment_deduct.sql 을 적용하세요(차수별 재고 차감 규칙).</div>}
       {truncated && <div className="sm-warn">이상 기록이 많아 일부만 읽었습니다 — 위 항목부터 정리한 뒤 [다시 확인]을 누르세요.</div>}
 
       {loading ? <div className="b2b-loading">불러오는 중...</div> : !error && (

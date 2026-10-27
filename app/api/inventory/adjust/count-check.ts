@@ -1,6 +1,7 @@
 // 실사(재고 조정) 전 점검 — 실사 화면(엑셀·미리보기)과 /api/inventory/adjust/precheck 가 같이 쓴다(서버 전용).
 //  실사 = '실사일 마감 기준 장부'를 센 수량에 맞추는 일이라, 장부와 선반이 원래부터 어긋나 있는 자리를 먼저 드러낸다(S8·D4a).
-//   ① B2B 선점: 발주 전량이 가장 이른 발송일에 이미 빠졌는데(대표 결정) 아직 안 나간 발주 — 물건은 선반에 있다(일부 발송이면 안 나간 수량 remaining 만).
+//   ① B2B 선점: 차수에 담은 수량이 그 차수 발송일에 이미 빠졌는데(2026-10-27 규칙) 아직 안 나간 차수 — 물건은 선반에 있다.
+//      옛 규칙(첫 발송일에 발주 전량)으로 남은 발주는 나간 차수 배분을 뺀 나머지(remaining)만 선반에 있다.
 //      세어 넣으면 그만큼 유령 재고가 생기고, 나중에 발송해도 다시 빠지지 않는다.
 //   ② 대기 행: 현재고에 안 들어간 입출고 — 실물이 이미 움직였다면 실사 뒤에 처리할 때 이중 반영된다.
 //   ③ 실사일 당일·이후 입출고: 당일 기록은 실사 전 움직임인지 사람이 확인해야 한다(이후 기록은 조정 뒤에 그대로 남는다).
@@ -15,9 +16,9 @@ type Sb = ReturnType<typeof supabaseAdmin>;
 
 export type B2bHold = {
   order_id: string; order_no: string | null; company: string | null;
-  deduct_date: string;   // 선점 출고 거래일(= 가장 이른 발송일)
+  deduct_date: string;   // 가장 이른 선점 출고 거래일
   open_dates: string[];  // 아직 안 나간 차수의 발송예정일
-  partial: boolean;      // 실사일까지 일부 차수가 나감 — 선점은 발주 전량이라 선반에는 remaining 만 남아 있다
+  partial: boolean;      // 실사일까지 일부 차수가 나감 — 옛 전량 선점이면 선반에는 remaining 만 남아 있다
   qty: number;           // 선점(차감)된 수량 합
   remaining: number | null; // 선반에 남은(안 나간) 수량 합. null = 나간 차수에 품목 배분이 없어 계산할 수 없음
   items: { product_id: string; qty: number; remaining: number | null }[]; // remaining 0(다 나감) 품목은 뺀다
@@ -78,6 +79,12 @@ async function b2bHolds(sb: Sb, chan: InvChannel, date: string): Promise<B2bHold
     return q.order("id", { ascending: true }).range(a, b);
   })));
 
+  // '실사일까지 나간 차수' = 취소 아님 + 발송완료(또는 shipped_at) + 차수 발송일(D2 이후 실제 발송일)과 shipped_at 의 KST 날짜 중
+  //  이른 쪽 ≤ 실사일(둘 다 없으면 나간 것으로 본다). 선점 행은 붙은 차수가 나갔는지로 나눠 센다(아래 remaining).
+  const goneDay = (s: Ship) => [s.ship_date || "", s.shipped_at ? kstDay(s.shipped_at) : ""].filter(Boolean).sort()[0] || "";
+  const goneBy = (s: Ship) => s.status !== "취소" && shipped(s) && goneDay(s) <= date;
+  const shipById = new Map(ships.map((s) => [s.id, s]));
+  const goneQty = new Map<string, Map<string, number>>(); // 발주 → 품목 → 나간 차수에 붙은 선점 수량
   const by = new Map<string, B2bHold>();
   for (const t of txns) {
     const oid = shipOrder.get(t.shipment_id);
@@ -92,16 +99,20 @@ async function b2bHolds(sb: Sb, chan: InvChannel, date: string): Promise<B2bHold
     if (t.txn_date < h.deduct_date) h.deduct_date = t.txn_date;
     const q = Math.abs(Number(t.qty) || 0);
     h.qty += q;
+    const sh = shipById.get(t.shipment_id);
+    if (sh && goneBy(sh)) {
+      const gm = goneQty.get(oid) ?? new Map<string, number>();
+      goneQty.set(oid, gm);
+      gm.set(t.product_id, (gm.get(t.product_id) || 0) + q);
+    }
     const it = h.items.find((x) => x.product_id === t.product_id);
     if (it) it.qty += q; else h.items.push({ product_id: t.product_id, qty: q, remaining: null });
   }
 
-  // 남은(안 나간) 수량 — 선점은 발주 전량이라, 일부 차수가 나간 발주는 선반에 그 나머지만 있다(대표 결정 0절).
-  //  남은 = 차감량 − 실사일까지 나간 차수(발송완료 또는 shipped_at, 취소 제외)의 배분(shipment_items → 품목, 세트는 구성품 전개).
-  //  0~차감량으로 자른다. 나간 차수에 배분이 하나도 없으면(옛 데이터) 얼마가 나갔는지 알 수 없어 null — 사람이 발주에서 확인한다.
-  //  '실사일까지' = 차수 발송일(D2 이후 실제 발송일)과 shipped_at 의 KST 날짜 중 이른 쪽 ≤ 실사일(둘 다 없으면 나간 것으로 본다).
-  const goneDay = (s: Ship) => [s.ship_date || "", s.shipped_at ? kstDay(s.shipped_at) : ""].filter(Boolean).sort()[0] || "";
-  const goneBy = (s: Ship) => s.status !== "취소" && shipped(s) && goneDay(s) <= date;
+  // 남은(안 나간) 수량(품목별) = 안 나간 차수에 붙은 선점 전부 + max(0, 나간 차수에 붙은 선점 − 실사일까지 나간 차수의 배분).
+  //  2026-10-27 규칙(차수 수량만 그 차수에)에선 나간 차수의 선점 = 그 차수 배분이라 뒤 항이 0 이고, 옛 규칙(첫 차수에 발주 전량)으로
+  //  남은 발주는 뒤 항이 '전량 − 나간 배분'이 된다. 배분은 shipment_items → 품목, 세트는 구성품 전개. 0~차감량으로 자른다.
+  //  나간 차수에 배분이 하나도 없으면(옛 데이터) 얼마가 나갔는지 알 수 없어 null — 사람이 발주에서 확인한다.
   const gone = ships.filter((s) => by.has(s.order_id) && goneBy(s));
   const outBy = new Map<string, Map<string, number>>(); // 발주 → 품목 → 나간 수량
   const unknown = new Set<string>();
@@ -135,7 +146,12 @@ async function b2bHolds(sb: Sb, chan: InvChannel, date: string): Promise<B2bHold
     h.open_dates = os.filter((s) => !shipped(s)).map((s) => s.ship_date || "").filter(Boolean).sort();
     const unk = unknown.has(h.order_id);
     const sent = outBy.get(h.order_id);
-    for (const it of h.items) it.remaining = unk ? null : r3(Math.min(it.qty, Math.max(0, it.qty - (sent?.get(it.product_id) || 0))));
+    const gq = goneQty.get(h.order_id);
+    for (const it of h.items) {
+      const gone = gq?.get(it.product_id) || 0;
+      const open = it.qty - gone;
+      it.remaining = unk && gone > 0 ? null : r3(Math.min(it.qty, Math.max(0, gone - (sent?.get(it.product_id) || 0)) + open));
+    }
     h.items = h.items.filter((x) => x.remaining !== 0); // 다 나간 품목은 선반에 없다 — 경고 대상 아님
     if (!h.items.length) continue;
     h.qty = r3(h.items.reduce((a, x) => a + x.qty, 0));

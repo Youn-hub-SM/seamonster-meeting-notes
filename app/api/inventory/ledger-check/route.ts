@@ -41,7 +41,7 @@ const V2_KINDS = new Set<string>([
 //  4 = 중단된 출고 'old'(7일 지남) 표식 폐지(④가 출고일과 무관하게 이어서 차감 — 옛 판은 '7일 지남'을 내용에 붙인다),
 //  5 = 중단된 출고 'finished'(대기 키 없음 + 그 배치 처리완료 키 있음 = 출고 완료 뒤 재고만 취소 — 다시 올려도 이어받지 못한다).
 //  옛 판도 항목은 모두 계산하지만 표식·내용이 달라 안내가 틀릴 수 있다 — 화면이 '132 다시 적용'을 알린다.
-const FN_VERSION = 5;
+const FN_VERSION = 6; // 6 = 155(차수별 선점 규칙 — b2b_qty_mismatch 기대치·b2b_date_mismatch 재정의)
 const SALES_LEDGER_DAYS = 90; // B2B 매출 원장 대조 기간(최근 N일 발송분) — 더 앞은 [매출 집계]의 원장 대조로 본다
 const SALES_LEDGER_KINDS: SalesMismatchKind[] = ["differs", "backfill_dup", "backfill_only", "stale_date"]; // missing·not_completed 는 SQL 항목(전 기간)이 본다
 

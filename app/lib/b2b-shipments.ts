@@ -166,8 +166,8 @@ async function stockOutAvailable(sb: SbClient): Promise<boolean> {
 }
 
 // ── 발주 수정(PUT)의 라인 수량 ↔ 차수 배분 검사 ──
-//  선점·매출·청구는 '발주 수량 − 취소 차수 배분'으로 계산한다. 라인 수량을 배분 합(취소 차수 포함)보다 줄이면
-//  실제로 나간 것보다 적게 잡힌다(발주 100·1차 60 발송·2차 40 취소 → 수량 60 으로 고치면 선점·매출이 20, 최종 점검 확정).
+//  매출·청구는 '발주 수량 − 취소 차수 배분'으로 계산한다(재고 선점은 2026-10-27 부터 차수 배분 그대로). 라인 수량을 배분 합(취소 차수 포함)보다 줄이면
+//  실제로 나간 것보다 적게 잡힌다(발주 100·1차 60 발송·2차 40 취소 → 수량 60 으로 고치면 매출이 20, 최종 점검 확정).
 //  - 단일 발송 전량: 취소 아닌 차수가 하나뿐이고 이 라인 몫이 전부 거기 있으며(취소 차수 배분 없음) 저장된 수량과 같으면
 //    그 차수 배분이 새 수량을 따른다(늘리든 줄이든). 발송된 차수면 발송 수량을 다시 기록하는 것 — 선점·매출이 새 수량을 따른다.
 //    화면이 확인을 받고(allow_shipped_qty), 확인 없이 오면 막는다.
@@ -368,7 +368,7 @@ export function applyAllocCuts(schedules: ShipSchedule[], savedItems: SavedOrder
 // 복수 발송(2건 이상) 발주의 상위 발송상태를 하위 차수 발송상태들로부터 도출.
 //  전부 취소 → 취소 / 취소 아닌 차수 중 하나라도 발송완료 → 발송완료 / 아직 하나도 안 나감 → 발송대기.
 //  첫 차수가 나가면 발송완료 = 매출 인식(발주 전량, 첫 발송일) — 2026-09-28 대표 확인: '첫 발송 시 매출 등록'.
-//  재고도 첫 발송일에 발주 전량을 차감하므로 매출과 같은 시점이 된다. 예전(전 차수 발송완료 시 인식)엔
+//  재고는 차수마다 담은 수량을 그 차수 발송일에 뺀다(2026-10-27 — 매출과 시점·수량이 다르다). 예전(전 차수 발송완료 시 인식)엔
 //  1차 발송 뒤 2차를 추가하면 발주가 발송대기로 돌아가 이미 잡힌 매출이 원장에서 지워졌다.
 //  남은 차수의 지연·완료 판정은 발주 상태가 아니라 차수로 본다(b2b-orders orderUrgency·isOrderComplete).
 //  발송이 2건 미만이면 null(도출 안 함 — 일반 발주는 메인 발송상태를 직접 관리).
@@ -532,7 +532,7 @@ export async function saveOrderShipments(
     : [new Map<string, BundleComponent[]>(), EMPTY_UNTRACKED()];
   const today = kstToday();
 
-  // 발주 라인별 주문 수량 — 재고 차감은 '발주 전량' 기준이라 항상 필요하다. 조회 오류면 멈춘다(차감 0 으로 저장 금지).
+  // 발주 라인별 주문 수량 — 자동 전량 배분·취소 차수 몫 채우기에 쓴다. 조회 오류면 멈춘다(배분 0 으로 저장 금지).
   const orderQtyById = new Map<string, number>();
   {
     const { data: oi, error: oiErr } = await sb.from("order_items").select("id, qty").eq("order_id", orderId);
@@ -551,8 +551,8 @@ export async function saveOrderShipments(
   }
 
   // 차수에 상품 수량이 하나도 배정되지 않았으면(분할발송 미사용) 발주 전량을 첫 차수에 자동 배분한다.
-  //  이 배분은 shipment_items(발송요청 양식·재고 대사의 '팔린 수'·발송일 미정 잔여 계산) 기준이고,
-  //  재고 차감량과는 별개다 — 차감은 아래에서 발주 전량으로 따로 계산한다. 매출은 취소 차수 배분만 읽는다.
+  //  이 배분(shipment_items)이 발송요청 양식·재고 대사의 '팔린 수'·발송일 미정 잔여·재고 차감(아래, 2026-10-27 부터)의 기준이다.
+  //  매출은 취소 차수 배분만 읽는다(첫 발송 때 발주 전량).
   if (canDeduct) {
     const anyAssigned = schedules.some((s) => (s.items || []).some((it) => Number(it.qty) > 0));
     if (!anyAssigned) {
@@ -565,41 +565,31 @@ export async function saveOrderShipments(
     }
   }
 
-  // ── 재고 차감은 '첫 발송일에 발주 전량' 1회 ──
-  //  선결제 대량 발주를 나눠 받는 거래라, 첫 발송일 전까지 전 물량을 생산해 두고 그때 재고에서 뺀다.
-  //  차수별로 나눠 찍지 않는 이유: 차수에 수량을 일부만 배정하면 나머지가 영영 차감되지 않았다.
-  //  대상 = 실제로 저장되는 차수 중 취소가 아니고 재고차감이 켜진 것, 그중 발송예정일이 가장 이른 것.
-  //  (발송예정일이 있는 차수가 없으면 첫 차수에 붙이고 날짜는 헤더 발송예정일 → 오늘 순으로 잡는다.)
+  // ── 재고 차감은 '차수마다 그 차수에 담은 수량'을 그 차수 발송일에(2026-10-27 대표 결정) ──
+  //  종전(2026-07-31~10-27)은 첫 발송일에 발주 전량 1회였다 — 나눠 보내는 발주에서 10개 중 1개만 보내도 10개가 선점돼
+  //  실제론 채워 두기 어려웠다. 이제 보내는 양만 빠지고, 아직 차수를 잡지 않은 잔여('N개 남음 · 발송일 미정')는 재고에 남는다.
+  //  대상 = 실제로 저장되는 차수 중 취소가 아니고 재고차감이 켜진 것. 배분이 하나도 없는 발주는 위에서 첫 차수에 전량을 담았다.
+  //  취소 차수 배분은 빠지지 않는다(매출·잔여 계산과 같은 규칙). 번들 라인은 구성품으로 전개(번들은 자체 재고가 없음).
+  //  날짜 없는 차수(옛 '발송일 미정' 차수에 담긴 수량)는 헤더 발송예정일 → 오늘로 찍는다(저장 때 날짜 fallback 과 같다).
+  //  대사(inventory_reconcile)·원장 점검(inventory_ledger_check)의 기대치는 migration 155 가 같은 규칙으로 맞춘다.
   const willInsert = (s: ShipmentScheduleInput) =>
     !!s.ship_date || (s.items || []).some((it) => Number(it.qty) > 0 && orderItems[it.order_item_index]);
-  let deductIdx = -1;
+  const deductBySchedule = new Map<number, Map<string, number>>(); // 차수 index → 구성품 → 수량
+  const deductPerProduct = new Map<string, number>();              // 전 차수 합(안내·도매 대량 잔여 계산용)
   if (canDeduct) {
-    const eligible = schedules
-      .map((s, i) => ({ s, i }))
-      .filter(({ s }) => willInsert(s) && s.status !== "취소" && stockOn(s));
-    const dated = eligible.filter(({ s }) => !!s.ship_date);
-    deductIdx = dated.length
-      ? dated.reduce((a, b) => ((a.s.ship_date as string) <= (b.s.ship_date as string) ? a : b)).i
-      : (eligible[0]?.i ?? -1);
-  }
-
-  // 차감할 품목·수량 — 발주 전량에서 '취소 차수에 배정된 수량'만 뺀다(매출 리포트와 같은 규칙).
-  //  번들 라인은 구성품으로 전개(번들은 자체 재고가 없음).
-  const deductPerProduct = new Map<string, number>();
-  if (canDeduct && deductIdx >= 0) {
-    const effQty = new Map(orderQtyById);
-    for (const s of schedules) {
-      if (s.status !== "취소") continue;
+    schedules.forEach((s, i) => {
+      if (!willInsert(s) || s.status === "취소" || !stockOn(s)) return;
+      const m = new Map<string, number>();
       for (const it of s.items || []) {
         const line = orderItems[it.order_item_index];
-        if (!line) continue;
-        effQty.set(line.id, Math.max(0, (effQty.get(line.id) || 0) - (Number(it.qty) || 0)));
+        const q = Number(it.qty) || 0;
+        if (!line || !line.product_id || q <= 0) continue;
+        expandBundleQty(bundles, line.product_id, q, m);
       }
-    }
-    for (const line of orderItems) {
-      const q = effQty.get(line.id) || 0;
-      if (line.product_id && q > 0) expandBundleQty(bundles, line.product_id, q, deductPerProduct);
-    }
+      if (!m.size) return;
+      deductBySchedule.set(i, m);
+      for (const [pid, q] of m) deductPerProduct.set(pid, (deductPerProduct.get(pid) || 0) + q);
+    });
   }
 
   // 재저장 도중 실패 시 복원할 수 있도록 옛 발송 상태를 먼저 스냅샷(아래 catch 에서 사용).
@@ -616,7 +606,11 @@ export async function saveOrderShipments(
   //  빼 버리면 표시 전의 실제 출고 기록이 조용히 사라진다(최종 점검 확정).
   if (untracked.ids.size && deductPerProduct.size) {
     const prevDeducted = new Set(snap.txns.filter((t) => t.created_by === B2B_SHIP_BY).map((t) => String(t.product_id)));
-    for (const pid of [...deductPerProduct.keys()]) if (untracked.ids.has(pid) && !prevDeducted.has(pid)) deductPerProduct.delete(pid);
+    for (const pid of [...deductPerProduct.keys()]) {
+      if (!untracked.ids.has(pid) || prevDeducted.has(pid)) continue;
+      deductPerProduct.delete(pid);
+      for (const [i, m] of deductBySchedule) { m.delete(pid); if (!m.size) deductBySchedule.delete(i); }
+    }
   }
 
   // 실제 차감 칸 — 이미 나간 옛 선점 출고가 있으면 그 칸을 이어 쓴다(기획 6절).
@@ -629,9 +623,9 @@ export async function saveOrderShipments(
       .filter((s) => (s as { status?: string }).status === "발송완료" || !!(s as { shipped_at?: string | null }).shipped_at)
       .map((s) => (s as { id: string }).id)
   );
-  const newDeductDate = deductIdx >= 0
-    ? (schedules[deductIdx].ship_date || headerShipDate || today)
-    : today;
+  const newDeductDate = [...deductBySchedule.keys()]
+    .map((i) => schedules[i].ship_date || headerShipDate || today)
+    .sort()[0] ?? today; // 가장 이른 새 차감일(차감이 없으면 오늘)
   const prevOut = snap.txns.find((t) =>
     t.created_by === B2B_SHIP_BY && typeof t.channel === "string" &&
     (shippedIds.has(t.shipment_id as string) || (String(t.txn_date) < today && newDeductDate < today))
@@ -784,12 +778,13 @@ export async function saveOrderShipments(
       if (siErr) throw siErr;
     }
 
-    // 재고 차감(선점) — 발주 전량을 이 차수(가장 이른 발송일) 하나에만 기록한다.
+    // 재고 차감(선점) — 이 차수에 담은 수량을 이 차수의 발송일로 기록한다(2026-10-27, 종전 첫 차수에 발주 전량).
     //  shipment_id 로 묶여 있어 재저장·발주 삭제 시 cascade 로 함께 지워지며 재고가 원복된다.
     //  차감 칸 = 대량 발주면 '도매 대량'(115), 아니면 '도매'(036) — 단, 이미 나간 옛 선점이 있으면 그 칸(effChannel).
     //  칸 제약이 맞지 않는 옛 환경용 폴백(channel 을 빼고 재시도)은 지웠다 — 기본값 '소매'로 떨어져 도매 판매가 소매 재고를 깎았다.
-    if (canDeduct && si === deductIdx && deductPerProduct.size > 0) {
-      const txns: Record<string, unknown>[] = [...deductPerProduct.entries()].map(([product_id, qty]) => ({
+    const dedHere = canDeduct ? deductBySchedule.get(si) : undefined;
+    if (dedHere && dedHere.size > 0) {
+      const txns: Record<string, unknown>[] = [...dedHere.entries()].map(([product_id, qty]) => ({
         product_id,
         type: "출고",
         channel: effChannel,
@@ -797,7 +792,7 @@ export async function saveOrderShipments(
         unit_amount: null,
         txn_date: sch.ship_date || headerShipDate || today,
         partner,
-        memo: effChannel === "도매 대량" ? "B2B 대량 발송 선점(발주 전량)" : "B2B 발송 선점(발주 전량)",
+        memo: `${effChannel === "도매 대량" ? "B2B 대량 발송 선점" : "B2B 발송 선점"}(${shipInsert.seq}차 수량)`,
         shipment_id: shipRow.id,
         created_by: B2B_SHIP_BY,
         source: B2B_SHIP_SOURCE, // 131 — 원천 식별(메모·거래처 글자로 판정하지 않는다)
@@ -811,7 +806,7 @@ export async function saveOrderShipments(
       }
       if (txr.error) throw txr.error;
       writtenChannel = effChannel;
-      for (const [pid, q] of deductPerProduct) writtenPerProduct.set(pid, q);
+      for (const [pid, q] of dedHere) writtenPerProduct.set(pid, (writtenPerProduct.get(pid) || 0) + q);
     }
 
     // 취소 차수는 발송일 후보에서 제외 — earliest 는 orders.ship_date 가 되어 매출 인식일(발송일 기준)의
