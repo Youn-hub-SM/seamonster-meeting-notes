@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminOnly } from "@/app/lib/admin-req";
 import { extractErrorMsg } from "@/app/lib/supabase";
 import { isMsConfigured, listSitePages, debugSitePages } from "@/app/lib/msgraph";
-import { getDocSources, setDocSources, resolveSources, type DocSource } from "@/app/lib/ms365-docs";
+import { getDocSources, setDocSources, resolveSources, probeDriveSearch, type DocSource } from "@/app/lib/ms365-docs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +57,9 @@ export async function POST(req: NextRequest) {
         if (n) pages = ` · 페이지 ${n}개`;
         else { const d = await debugSitePages(s.site.id); pages = d.startsWith("사이트 페이지 목록 없음") ? "" : ` · 페이지 0개 [진단: ${d}]`; }
       } catch (e) { pages = ` · 페이지 읽기 실패(${e instanceof Error ? e.message.slice(0, 80) : "오류"})`; }
-      lines.push(`${s.label}: OK (${s.drives.map((d) => d.name).join(", ") || "문서함 없음"}${pages})`);
+      // 드라이브별 검색 끝점 점검 — 팀즈 자료실처럼 search(q=) 가 Graph 오류를 내는 곳은 여기서 원문이 보인다(비서는 폴더 훑기로 대체한다)
+      const drv = await Promise.all(s.drives.map(async (d) => `${d.name}: ${await probeDriveSearch(d.id)}`));
+      lines.push(`${s.label}: OK (${drv.join(", ") || "문서함 없음"}${pages})`);
     }
     const anyFail = list.some((s) => s.error);
     if (anyFail) return NextResponse.json({ ok: false, error: lines.join(" · ") }, { status: 502 });

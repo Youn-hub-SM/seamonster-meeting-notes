@@ -89,6 +89,31 @@ function matchSource(list: ResolvedSource[], source?: string | null): ResolvedSo
   return hit;
 }
 
+// Graph 드라이브 검색(search(q=))이 실패할 때의 대체 — 폴더를 너비 우선으로 걸으며 이름에 검색어가 모두 들어간 파일·폴더를 고른다(2026-10-27).
+//  팀즈 자료실에서 검색 끝점이 Graph 오류를 내서 비서가 폴더를 손으로 열어야 했다. 본문은 못 보지만 이름 적중은 챙긴다.
+//  상한: 폴더 60개·항목 3,000개·12초 — 서버리스 한 번에 끝나게.
+const WALK_FOLDERS = 60, WALK_ITEMS = 3000, WALK_MS = 12_000;
+async function walkDriveByName(driveId: string, terms: string[], limit: number): Promise<{ items: GraphItem[]; partial: boolean }> {
+  const out: GraphItem[] = [];
+  const queue: string[] = [""];
+  const t0 = Date.now();
+  let folders = 0, scanned = 0, partial = false;
+  while (queue.length && out.length < limit) {
+    if (folders >= WALK_FOLDERS || scanned >= WALK_ITEMS || Date.now() - t0 > WALK_MS) { partial = true; break; }
+    const path = queue.shift() as string;
+    folders++;
+    let kids: GraphItem[];
+    try { kids = await listChildren(driveId, path, 200); } catch { partial = true; continue; }
+    for (const it of kids) {
+      scanned++;
+      const name = (it.name || "").toLowerCase();
+      if (terms.every((w) => name.includes(w))) out.push(it);
+      if (it.folder && (it.folder.childCount ?? 1) > 0) queue.push(path ? `${path}/${it.name}` : it.name);
+    }
+  }
+  return { items: out.slice(0, limit), partial: partial || queue.length > 0 };
+}
+
 export async function searchDocs(p: { query: string; source?: string | null; limit?: number }): Promise<{ hits: DocHit[]; note: string }> {
   if (!isMsConfigured()) throw new Error("Microsoft 365 가 연결되어 있지 않습니다(관리자가 Vercel 환경 변수 MS_TENANT_ID·MS_CLIENT_ID·MS_CLIENT_SECRET 를 넣어야 합니다).");
   const all = await resolveSources();
@@ -102,7 +127,15 @@ export async function searchDocs(p: { query: string; source?: string | null; lim
     if (src.error) { errs.push(`${src.label}: ${src.error}`); continue; }
     for (const d of src.drives) {
       try { for (const it of await searchDrive(d.id, p.query, limit)) hits.push(toHit(it, src, d.id)); }
-      catch (e) { errs.push(`${src.label}/${d.name}: ${e instanceof Error ? e.message : String(e)}`); }
+      catch (e) {
+        // 검색 끝점 실패 → 폴더 걷기(이름 적중)로 대체. 본문 검색이 빠졌다는 것을 note 로 알려 비서가 docs_list 로 더 찾게 한다.
+        const why = e instanceof Error ? e.message : String(e);
+        try {
+          const w = await walkDriveByName(d.id, terms, limit);
+          for (const it of w.items) hits.push(toHit(it, src, d.id));
+          errs.push(`${src.label}/${d.name}: 본문 검색 불가(${why.slice(0, 90)}) → 폴더를 훑어 이름이 맞는 ${w.items.length}건${w.partial ? "(일부 폴더만 봄)" : ""}`);
+        } catch (e2) { errs.push(`${src.label}/${d.name}: ${why.slice(0, 120)} / 폴더 훑기도 실패(${e2 instanceof Error ? e2.message.slice(0, 80) : "오류"})`); }
+      }
     }
     // 사이트 페이지(매뉴얼) — 모든 검색어가 제목·요약·본문 중 어딘가에 있으면 적중, 제목 적중을 앞으로
     try {
@@ -114,7 +147,13 @@ export async function searchDocs(p: { query: string; source?: string | null; lim
   // 페이지(제목 적중 순)를 앞에, 파일은 최근 수정 순
   const pagesFirst = hits.filter((h) => h.kind === "page");
   const files = hits.filter((h) => h.kind !== "page").sort((a, b) => (b.modified || "").localeCompare(a.modified || ""));
-  return { hits: [...pagesFirst, ...files].slice(0, limit), note: errs.length ? `일부 문서함은 읽지 못했습니다 — ${errs.join(" / ")}` : "" };
+  return { hits: [...pagesFirst, ...files].slice(0, limit), note: errs.length ? `일부 문서함은 검색이 제한됐습니다 — ${errs.join(" / ")}` : "" };
+}
+
+// 연결 확인용 — 드라이브마다 검색 끝점이 되는지 한 번 찔러 본다(안 되면 Graph 오류 원문을 돌려준다).
+export async function probeDriveSearch(driveId: string): Promise<string> {
+  try { await searchDrive(driveId, "a", 1); return "검색 OK"; }
+  catch (e) { return `검색 실패: ${e instanceof Error ? e.message.slice(0, 160) : String(e)}`; }
 }
 
 export async function listDocs(p: { source?: string | null; path?: string | null }): Promise<{ hits: DocHit[]; where: string }> {

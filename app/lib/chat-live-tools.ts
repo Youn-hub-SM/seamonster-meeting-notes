@@ -100,7 +100,7 @@ export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
     },
     {
       name: "docs_search", ...s,
-      description: "회사 공용 문서함(Microsoft 365 SharePoint·OneDrive)에서 문서를 찾습니다 — 파일 이름과 본문(인덱싱된 것)을 함께 검색. 계약서·매뉴얼·보고서·회의 자료처럼 DB 에 없는 '문서'를 물으면 먼저 이 도구로 찾고, 결과의 ref 로 docs_read 를 불러 본문을 읽습니다. 검색어는 짧은 핵심어(문서 이름에 있을 법한 말) 1~3개. 결과는 표 카드로 붙습니다.",
+      description: "회사 공용 문서함(Microsoft 365 SharePoint·OneDrive)에서 문서를 찾습니다 — 파일 이름과 본문(인덱싱된 것)을 함께 검색. 검색 끝점이 막힌 문서함(팀즈 자료실 등)은 폴더를 훑어 이름이 맞는 것만 돌려주고 note 에 '본문 검색 불가'라고 적힙니다 — 그때는 결과가 비어도 없다고 단정하지 말고 docs_list 로 폴더를 따라가 찾습니다. 계약서·매뉴얼·보고서·회의 자료처럼 DB 에 없는 '문서'를 물으면 먼저 이 도구로 찾고, 결과의 ref 로 docs_read 를 불러 본문을 읽습니다. 검색어는 짧은 핵심어(문서 이름에 있을 법한 말) 1~3개. 결과는 표 카드로 붙습니다.",
       input_schema: {
         type: "object", additionalProperties: false, required: ["query", "source", "limit"],
         properties: {
