@@ -291,7 +291,7 @@ export async function readDoc(p: { ref: string; offset?: number | null }): Promi
 
 // ── 매뉴얼 핵심 페이지·목차(2026-10-27 지식 통합) — 제목이 '[비서]'로 시작하는 페이지 본문은 턴마다 프롬프트에 그대로, 나머지는 목차(제목·요약·ref)만 ──
 //  상한 20,000자(대표 결정 A7). 넘으면 뒤 페이지를 자르고 그 사실을 적는다. 사이트 페이지 캐시(10분)를 그대로 써서 수정이 10분 안에 반영된다.
-const KNOWLEDGE_CAP = 20_000;
+const KNOWLEDGE_CAP = 30_000; // 2026-10-27 2만→3만: [비서] 페이지 10개가 19,200자라 상한에 걸려 뒤 페이지가 빠짐(프롬프트 캐시로 반복 비용은 작다)
 const CORE_RE = /^\s*\[비서\]\s*/;
 export type ManualKnowledge = { core: { title: string; chars: number; ref: string; included: boolean }[]; toc: number; chars: number; note: string };
 async function manualPages(): Promise<{ src: ResolvedSource; pages: PageText[] }[]> {

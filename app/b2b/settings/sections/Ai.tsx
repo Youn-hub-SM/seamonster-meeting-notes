@@ -146,7 +146,7 @@ export default function AiSection({ onDirty }: SectionProps) {
               <textarea className="b2b-textarea set-prompt" value={p.draft.text} spellCheck={false} aria-label={title} onChange={(e) => p.setDraft({ ...p.draft!, text: e.target.value })} />
               <p className="set-row-note">{qtyText(p.draft.text.length, "자")} · 모든 사용자 공용</p>
               {p === guide && knowledge && (
-                <p className="set-row-note">매뉴얼 핵심 페이지 {qtyText(knowledge.core.length, "개")}({qtyText(knowledge.chars, "자")} 탑재, 상한 20,000자) · 목차 {qtyText(knowledge.toc, "페이지")}{knowledge.core.length ? ` — ${knowledge.core.map((c) => `${c.title}${c.included ? "" : "(제외)"}`).join(", ")}` : " — 제목이 '[비서]'로 시작하는 페이지가 없습니다"}{knowledge.note ? ` · ${knowledge.note}` : ""}</p>
+                <p className="set-row-note">매뉴얼 핵심 페이지 {qtyText(knowledge.core.length, "개")}({qtyText(knowledge.chars, "자")} 탑재, 상한 30,000자) · 목차 {qtyText(knowledge.toc, "페이지")}{knowledge.core.length ? ` — ${knowledge.core.map((c) => `${c.title}${c.included ? "" : "(제외)"}`).join(", ")}` : " — 제목이 '[비서]'로 시작하는 페이지가 없습니다"}{knowledge.note ? ` · ${knowledge.note}` : ""}</p>
               )}
             </>
           )}
