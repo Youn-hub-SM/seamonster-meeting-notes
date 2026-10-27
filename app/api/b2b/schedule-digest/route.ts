@@ -5,6 +5,7 @@ import { buildB2BDigest, getDigestConfig, kstDateStr, type B2BDigest } from "@/a
 import { getAppBaseUrl, setKv } from "@/app/lib/b2b-settings";
 import { sendTeamsTextSafe } from "@/app/lib/b2b-teams";
 import { supabaseAdmin } from "@/app/lib/supabase";
+import { reindexNow } from "@/app/lib/ms365-docs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +75,10 @@ export async function GET(req: NextRequest) {
   //  크론은 Hobby 한도(2개)가 꽉 차 있어 새 크론을 늘리지 않고 이 틱에 얹는다. dedup 은 저장 리포트의 schedule.lastSentOn.
   if (isCron && (new Date(Date.now() + 9 * 3600_000)).getUTCHours() < 12) {
     after(async () => { try { await runDueScheduledReports(); } catch (e) { console.error("[schedule-digest] 정기 리포트 발송 실패", errMsg(e)); } });
+  }
+  // 회사 문서함 본문 색인(2026-10-27) — 크론 틱마다(아침·오후) 바뀐 파일만. 미연결·표 없음이면 조용히 건너뛴다.
+  if (isCron) {
+    after(async () => { try { await reindexNow({ budgetMs: 35_000 }); } catch (e) { console.error("[schedule-digest] 문서 색인 실패", errMsg(e)); } });
   }
 
   const cfg = await getDigestConfig();

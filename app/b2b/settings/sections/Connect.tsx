@@ -153,6 +153,14 @@ export default function ConnectSection({ onDirty }: SectionProps) {
     try { const j = await api<{ detail: string }>("/api/b2b/settings/ms365", "POST"); setMMsg({ ok: true, text: `연결됨 — ${j.detail || ""}` }); }
     catch (e) { setMMsg({ ok: false, text: errText(e, "연결을 확인하지 못했습니다. 사이트 주소와 앱 권한을 확인하세요") }); }
   });
+  const indexMs = () => run("msidx", async () => {
+    setMMsg(null);
+    try {
+      const j = await api<{ summary: { scanned: number; indexed: number; skipped: number; errors: number; pending: number; deleted: number; partial: boolean; note: string } }>("/api/b2b/settings/ms365/index", "POST");
+      const s = j.summary;
+      setMMsg({ ok: true, text: `색인 갱신 — 파일 ${s.scanned}개 중 새로 읽음 ${s.indexed}, 이름만 ${s.skipped}, 실패 ${s.errors}${s.pending ? `, 다음에 이어서 ${s.pending}` : ""}${s.deleted ? `, 정리 ${s.deleted}` : ""}${s.partial ? " (일부만 봄 — 한 번 더 누르면 이어집니다)" : ""}${s.note ? ` · ${s.note}` : ""}` });
+    } catch (e) { setMMsg({ ok: false, text: errText(e, "색인을 갱신하지 못했습니다") }); }
+  });
   const importNow = () => run("import", async () => {
     setYMsg(null);
     try { const j = await api<{ imported: number; skipped: number; scanned: number }>("/api/voc/tally/import", "POST"); setYMsg({ ok: true, text: `응답을 가져왔습니다 — 새로 ${qtyText(j.imported, "건")} (이미 있음 ${j.skipped} / 조회 ${j.scanned})` }); }
@@ -221,10 +229,13 @@ export default function ConnectSection({ onDirty }: SectionProps) {
 
       <SetCard title="Microsoft 365 문서" pill={!ms ? null : !ms.configured ? <Pill state="err">자격 없음</Pill> : ms.text.trim() ? <Pill state="on">연결됨</Pill> : <Pill state="warn">문서함 없음</Pill>}
         desc="AI 비서가 읽는 회사 공용 문서함(SharePoint 사이트·OneDrive). 읽기만 하고, 여기 적은 곳만 읽습니다. 앱 자격(테넌트·클라이언트 ID·시크릿)은 Vercel 환경 변수에 두고 절차는 docs/ms365-setup.md 를 따릅니다."
-        actions={<button type="button" className="b2b-btn-secondary" onClick={testMs} disabled={busy === "ms" || !ms?.configured || !ms?.text.trim() || msDirty}>{busy === "ms" ? "확인 중..." : "연결 확인"}</button>}>
+        actions={<>
+          <button type="button" className="b2b-btn-secondary" onClick={testMs} disabled={busy === "ms" || !ms?.configured || !ms?.text.trim() || msDirty}>{busy === "ms" ? "확인 중..." : "연결 확인"}</button>
+          <button type="button" className="b2b-btn-secondary" onClick={indexMs} disabled={busy === "msidx" || !ms?.configured || !ms?.text.trim() || msDirty}>{busy === "msidx" ? "색인 중..." : "문서 색인 갱신"}</button>
+        </>}>
         <SetRow label="읽을 문서함" desc="한 줄에 하나 — 사이트 주소, 그 뒤에 ' | 이름'(비서가 부르는 이름). 예: https://회사.sharepoint.com/sites/docs | 공용 문서"
           control={<textarea className="b2b-input set-secret" rows={4} value={msText} onChange={(e) => setMsText(e.target.value)} placeholder={"https://회사.sharepoint.com/sites/docs | 공용 문서\nhttps://회사-my.sharepoint.com/personal/이름_회사_com | 대표 OneDrive"} aria-label="읽을 문서함" disabled={!ms} style={{ fontFamily: "inherit", resize: "vertical" }} />} />
-        {msDirty && <p className="set-row-note">연결 확인은 저장한 뒤에 켜집니다</p>}
+        {msDirty && <p className="set-row-note">연결 확인·문서 색인 갱신은 저장한 뒤에 켜집니다</p>}
         <Result msg={mMsg} />
       </SetCard>
 

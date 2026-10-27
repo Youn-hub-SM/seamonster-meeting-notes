@@ -100,7 +100,7 @@ export function liveToolDefs(strict: boolean): Anthropic.Tool[] {
     },
     {
       name: "docs_search", ...s,
-      description: "회사 공용 문서함(Microsoft 365 SharePoint·OneDrive)에서 문서를 찾습니다 — 파일 이름과 본문(인덱싱된 것)을 함께 검색. 검색 끝점이 막힌 문서함(팀즈 자료실 등)은 폴더를 훑어 이름이 맞는 것만 돌려주고 note 에 '본문 검색 불가'라고 적힙니다 — 그때는 결과가 비어도 없다고 단정하지 말고 docs_list 로 폴더를 따라가 찾습니다. 계약서·매뉴얼·보고서·회의 자료처럼 DB 에 없는 '문서'를 물으면 먼저 이 도구로 찾고, 결과의 ref 로 docs_read 를 불러 본문을 읽습니다. 검색어는 짧은 핵심어(문서 이름에 있을 법한 말) 1~3개. 결과는 표 카드로 붙습니다.",
+      description: "회사 공용 문서함(Microsoft 365 SharePoint·OneDrive)에서 문서를 찾습니다 — 파일 이름·경로·본문(업무도우미가 만든 본문 색인)을 함께 검색하고 적중 부분(본문)을 같이 돌려줍니다. 색인이 없는 문서함은 폴더를 훑어 이름만 맞춥니다(note 에 표시) — 그때는 결과가 비어도 없다고 단정하지 말고 docs_list 로 폴더를 따라가 찾습니다. 색인 시각 뒤에 올라온 파일도 docs_list 로. 계약서·매뉴얼·보고서·회의 자료처럼 DB 에 없는 '문서'를 물으면 먼저 이 도구로 찾고, 결과의 ref 로 docs_read 를 불러 본문을 읽습니다. 검색어는 짧은 핵심어(문서 이름에 있을 법한 말) 1~3개. 결과는 표 카드로 붙습니다.",
       input_schema: {
         type: "object", additionalProperties: false, required: ["query", "source", "limit"],
         properties: {
@@ -322,10 +322,10 @@ export async function runLiveTool(sb: SupabaseClient, state: LiveState, name: Li
     const query = String(input.query || "").trim();
     if (!query) throw new Error("query 가 비어 있습니다.");
     const r = await searchDocs({ query, source: typeof input.source === "string" ? input.source : null, limit: typeof input.limit === "number" ? input.limit : 20 });
-    const rows = r.hits.map((h) => ({ 이름: h.name, 종류: h.kind === "folder" ? "폴더" : "파일", 위치: `${h.source} / ${h.path}`, 수정일: h.modified, "크기(KB)": h.sizeKb, ref: h.ref, 링크: h.url }));
+    const rows = r.hits.map((h) => ({ 이름: h.name, 종류: h.kind === "folder" ? "폴더" : h.kind === "page" ? "페이지" : "파일", 위치: `${h.source} / ${h.path}`, 수정일: h.modified, "크기(KB)": h.sizeKb, 본문: h.snippet || "", ref: h.ref, 링크: h.url }));
     return {
       content: `${r.note ? `${r.note}\n` : ""}${r.hits.length ? `${r.hits.length}건 — 본문은 docs_read(ref)로 읽습니다.\n${JSON.stringify(rows.map(({ 링크: _l, ...x }) => x))}` : "찾은 문서가 없습니다. 검색어를 바꾸거나(짧은 핵심어·파일 이름에 있을 말) docs_list 로 폴더를 따라가 보세요."}`,
-      tables: r.hits.length ? [{ title: `문서 검색 '${query}'`, sql: "-- Microsoft 365 문서함 검색(SQL 아님 · 저장·엑셀·루커 불가)", columns: ["이름", "종류", "위치", "수정일", "크기(KB)", "ref", "링크"], rows }] : [],
+      tables: r.hits.length ? [{ title: `문서 검색 '${query}'`, sql: "-- Microsoft 365 문서함 검색(SQL 아님 · 저장·엑셀·루커 불가)", columns: ["이름", "종류", "위치", "수정일", "크기(KB)", "본문", "ref", "링크"], rows }] : [],
     };
   }
   if (name === "docs_list") {

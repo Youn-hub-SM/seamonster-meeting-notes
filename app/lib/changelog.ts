@@ -35,6 +35,14 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 export const CHANGELOG: ChangeEntry[] = [
   {
     date: "2026-10-27",
+    tag: "개선",
+    tool: "AI 비서",
+    title: "회사 문서함 본문 검색 — 업무도우미가 직접 색인을 만들어 파일 안의 글로도 찾는다",
+    desc: "Microsoft 365 검색 끝점이 앱 권한 제약으로 실패해 파일 이름으로만 찾던 것을, 문서함을 훑어 본문을 저장한 색인(ms365_doc_index)으로 찾는다. 결과에 적중 부분이 같이 보인다. 갱신은 관리자 › 설정 › 연결 › [문서 색인 갱신] 또는 일정 알림 크론 틱(아침·오후). 마이그레이션 151 적용 필요.",
+    href: "/b2b/settings",
+  },
+  {
+    date: "2026-10-27",
     tag: "신규",
     tool: "관리자",
     title: "GA4 MCP 서버 — Poke 같은 외부 AI 비서에서 공식몰 GA 데이터를 바로 조회",

@@ -6,6 +6,7 @@
 import JSZip from "jszip";
 import ExcelJS from "exceljs";
 import { getKv, setKv } from "./b2b-settings";
+import { searchIndex, reindexDocs, lastIndexRun, type IndexSummary } from "./ms365-index";
 import { graphDownload, getItem, isMsConfigured, itemPath, listChildren, listDrives, listSitePages, resolveSite, searchDrive, type GraphDrive, type GraphItem, type GraphSite, type GraphSitePage } from "./msgraph";
 
 export type DocSource = { url: string; label: string };
@@ -58,7 +59,7 @@ function parseRef(ref: string): { driveId: string; itemId: string } {
   return { driveId: ref.slice(0, i), itemId: ref.slice(i + 1) };
 }
 
-export type DocHit = { ref: string; name: string; path: string; source: string; kind: "file" | "folder" | "page"; modified: string; sizeKb: number; url: string };
+export type DocHit = { ref: string; name: string; path: string; source: string; kind: "file" | "folder" | "page"; modified: string; sizeKb: number; url: string; snippet?: string };
 
 // ── 사이트 페이지(매뉴얼 사이트) — 사이트당 한 번 읽어 10분 캐시, 검색은 제목·요약·본문 글자 포함으로 ──
 type PageText = GraphSitePage & { text: string };
@@ -123,9 +124,17 @@ export async function searchDocs(p: { query: string; source?: string | null; lim
   const hits: DocHit[] = [];
   const errs: string[] = [];
   const terms = p.query.toLowerCase().split(/\s+/).filter(Boolean);
+  // 본문 색인(ms365_doc_index, 2026-10-27) — 색인된 사이트는 표에서 찾고 Graph 검색 끝점(Sites.Selected 에서 500)은 부르지 않는다.
+  let idx: Awaited<ReturnType<typeof searchIndex>> = null;
+  try { idx = await searchIndex({ terms, siteIds: targets.filter((s) => !s.error).map((s) => s.site.id), limit }); }
+  catch (e) { errs.push(`색인: ${e instanceof Error ? e.message.slice(0, 120) : String(e)}`); }
+  let usedIndex = false;
   for (const src of targets) {
     if (src.error) { errs.push(`${src.label}: ${src.error}`); continue; }
-    for (const d of src.drives) {
+    if (idx && idx.indexedSites.has(src.site.id)) {
+      usedIndex = true;
+      for (const h of idx.hits.filter((x) => x.site_id === src.site.id)) hits.push({ ref: h.ref, name: h.name, path: h.path, source: src.label, kind: "file", modified: h.modified, sizeKb: h.size_kb, url: h.url, snippet: h.snippet });
+    } else for (const d of src.drives) {
       try { for (const it of await searchDrive(d.id, p.query, limit)) hits.push(toHit(it, src, d.id)); }
       catch (e) {
         // 검색 끝점 실패 → 폴더 걷기(이름 적중)로 대체. 본문 검색이 빠졌다는 것을 note 로 알려 비서가 docs_list 로 더 찾게 한다.
@@ -147,7 +156,16 @@ export async function searchDocs(p: { query: string; source?: string | null; lim
   // 페이지(제목 적중 순)를 앞에, 파일은 최근 수정 순
   const pagesFirst = hits.filter((h) => h.kind === "page");
   const files = hits.filter((h) => h.kind !== "page").sort((a, b) => (b.modified || "").localeCompare(a.modified || ""));
-  return { hits: [...pagesFirst, ...files].slice(0, limit), note: errs.length ? `일부 문서함은 검색이 제한됐습니다 — ${errs.join(" / ")}` : "" };
+  const idxNote = usedIndex && idx?.at ? `본문 색인 기준 ${idx.at.slice(0, 16).replace("T", " ")}(UTC) — 그 뒤 올라온 파일은 docs_list 로 확인` : (!usedIndex && idx ? "본문 색인이 아직 없습니다(관리자 › 설정 › 연결 › [문서 색인 갱신]) — 지금은 이름·페이지만 찾습니다" : "");
+  return { hits: [...pagesFirst, ...files].slice(0, limit), note: [idxNote, errs.length ? `일부 문서함은 검색이 제한됐습니다 — ${errs.join(" / ")}` : ""].filter(Boolean).join("\n") };
+}
+
+// 색인 갱신(관리자 버튼·크론) — 등록된 문서함을 훑어 바뀐 파일의 본문을 ms365_doc_index 에 저장
+export async function reindexNow(opts?: { budgetMs?: number }): Promise<IndexSummary> {
+  if (!isMsConfigured()) throw new Error("Microsoft 365 가 연결되어 있지 않습니다.");
+  const sources = await resolveSources();
+  if (!sources.length) throw new Error("읽을 문서함이 등록되어 있지 않습니다.");
+  return reindexDocs({ sources, extract: extractText, itemPath, docRef, budgetMs: opts?.budgetMs });
 }
 
 // 연결 확인용 — 드라이브마다 검색 끝점이 되는지 한 번 찔러 본다(안 되면 Graph 오류 원문을 돌려준다).
@@ -276,5 +294,7 @@ export async function docsPromptBlock(): Promise<string> {
   if (!isMsConfigured()) return "";
   const s = await getDocSources();
   if (!s.length) return "";
-  return `[회사 문서함(Microsoft 365) — docs_search·docs_list·docs_read 로 읽는 곳] ${s.map((x) => x.label || x.url).join(", ")}. 문서함의 파일뿐 아니라 사이트 페이지(매뉴얼)도 검색·읽기 대상입니다 — 업무 절차·기준·역할 질문은 먼저 docs_search 로 매뉴얼 페이지를 찾습니다.`;
+  const last = await lastIndexRun();
+  const idxText = last ? ` 파일 본문은 업무도우미 색인(${last.at.slice(0, 10)} 갱신)으로 찾습니다.` : " 파일 본문 색인이 아직 없어 이름·페이지로만 찾습니다.";
+  return `[회사 문서함(Microsoft 365) — docs_search·docs_list·docs_read 로 읽는 곳] ${s.map((x) => x.label || x.url).join(", ")}.${idxText} 문서함의 파일뿐 아니라 사이트 페이지(매뉴얼)도 검색·읽기 대상입니다 — 업무 절차·기준·역할 질문은 먼저 docs_search 로 매뉴얼 페이지를 찾습니다.`;
 }

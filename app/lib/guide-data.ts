@@ -15,7 +15,7 @@ export type GuideEntry = {
 export type GuideTool = { tool: string; entries: GuideEntry[] };
 export type GuideCategory = { category: string; tools: GuideTool[] };
 
-export const GUIDE_UPDATED = "2026-10-22";
+export const GUIDE_UPDATED = "2026-10-27";
 
 export const GUIDE: GuideCategory[] = [
   {
@@ -2563,6 +2563,7 @@ export const GUIDE: GuideCategory[] = [
               "아사나: 개인 액세스 토큰(PAT)·프로젝트 주소·기본 담당자를 넣는다",
               "Tally: API 키를 넣는다",
               "Microsoft 365 문서: AI 비서가 읽을 SharePoint 사이트·OneDrive 주소를 한 줄에 하나씩 넣는다(주소 | 이름)",
+              "Microsoft 365 문서: [문서 색인 갱신]을 눌러 파일 본문을 색인한다(처음·문서를 많이 올린 뒤, 평소엔 아침·오후 자동)",
               "[저장]을 누른다",
               "[테스트 발송]·[연결 확인]으로 확인한다",
               "Tally 는 [폼 불러오기]로 폼을 고른 뒤 [저장]하고 [응답 가져오기]를 누른다"
@@ -2577,7 +2578,7 @@ export const GUIDE: GuideCategory[] = [
               "아사나 PAT 와 프로젝트가 모두 있으면 VOC 화면에 '아사나 등록' 버튼이 나온다. 업무는 항상 '개선요청' 섹션에 들어간다",
               "Tally 가져오기는 이미 가져온 응답을 건너뛴다. 처음엔 최근 60일치",
               "주소는 채널 게시 권한 그 자체 — 외부에 공유하지 않는다",
-              "Microsoft 365 문서는 여기 적은 문서함만 읽고 쓰지 않는다. 앱 자격(MS_TENANT_ID·MS_CLIENT_ID·MS_CLIENT_SECRET)은 Vercel 환경 변수, 사이트별 읽기 허용 절차는 docs/ms365-setup.md. [연결 확인]이 '접근 거부'면 그 사이트에 앱 권한이 허용되지 않은 것",
+              "Microsoft 365 문서는 여기 적은 문서함만 읽고 쓰지 않는다. 앱 자격(MS_TENANT_ID·MS_CLIENT_ID·MS_CLIENT_SECRET)은 Vercel 환경 변수, 사이트별 읽기 허용 절차는 docs/ms365-setup.md. [연결 확인]이 '접근 거부'면 그 사이트에 앱 권한이 허용되지 않은 것. 파일 본문 검색은 업무도우미 색인으로 한다 — [문서 색인 갱신] 결과에 '일부만 봄'이 뜨면 한 번 더 누른다",
               "비서에게 '지난달 거래처 계약서 찾아줘', '이 매뉴얼 요약해줘'처럼 물으면 문서함을 검색해 본문을 읽고 답한다(docx·pptx·xlsx·pdf·txt)"
             ],
             "keywords": [
