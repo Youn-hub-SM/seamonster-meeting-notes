@@ -19,6 +19,8 @@ const WALK_FOLDERS = 400, WALK_ITEMS = 20_000;
 const DELTA_PAGES = 150; // 200개씩 → 30,000 항목
 const EXTRACT_PARALLEL = 4;
 const PENDING_BATCH = 120;
+const RETRY_ERROR_AFTER_MS = 24 * 3600_000; // 실패(error)한 파일은 하루 지나면 다시 시도 — delta 는 안 바뀐 파일을 다시 주지 않으므로 여기서 챙긴다
+const THROTTLE_RE = /\(429|TooManyRequests|throttl|activityLimitReached|serviceNotAvailable|\(503/i;
 const INDEXABLE = /\.(docx|pptx|xlsx|pdf|txt|md|csv|json|xml|html?|log|doc|xls|ppt|rtf|odt|ods|odp)$/i;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 // 데이터 성격 파일(엑셀·CSV·JSON 등)은 1MB 를 넘으면 숫자 덩어리라 본문 검색 가치가 낮고 글자만 많다 → 이름·경로만
@@ -177,16 +179,26 @@ export async function reindexDocs(p: {
     }
   }
 
-  // 2) pending 본문 읽기 — 작은 파일부터, 4개씩 병렬, 예산 끝까지
+  // 2) pending 본문 읽기 — 작은 파일부터, 4개씩 병렬, 예산 끝까지. Graph 가 호출을 제한(429·503)하면 그 파일은 pending 으로 두고 1개씩·2초 간격으로 늦춘다.
   const siteIds = sum.sites;
+  let parallel = EXTRACT_PARALLEL;
+  let throttled = 0;
+  let retriedErrors = false;
   while (siteIds.length && Date.now() < deadline) {
     const { data: pend, error: pe } = await sb.from(TABLE).select("ref, drive_id, name, size_kb").in("site_id", siteIds).eq("status", "pending").order("size_kb", { ascending: true }).limit(PENDING_BATCH);
     if (pe) { if (pendingUnsupported(pe.message)) throw new Error("색인 표가 옛 버전입니다 — 마이그레이션 152_ms365_doc_index_pending.sql 을 적용하세요."); throw new Error(`대기 목록 읽기 실패: ${pe.message}`); }
-    const list = (pend || []) as { ref: string; drive_id: string; name: string; size_kb: number }[];
+    let list = (pend || []) as { ref: string; drive_id: string; name: string; size_kb: number }[];
+    if (!list.length && !retriedErrors) {
+      // 대기가 비면 하루 지난 실패분을 한 번 다시 시도
+      retriedErrors = true;
+      const { data: errs } = await sb.from(TABLE).select("ref, drive_id, name, size_kb").in("site_id", siteIds).eq("status", "error").lt("indexed_at", new Date(Date.now() - RETRY_ERROR_AFTER_MS).toISOString()).order("size_kb", { ascending: true }).limit(40);
+      list = (errs || []) as typeof list;
+    }
     if (!list.length) break;
     let progressed = 0;
-    for (let i = 0; i < list.length && Date.now() < deadline; i += EXTRACT_PARALLEL) {
-      const group = list.slice(i, i + EXTRACT_PARALLEL);
+    for (let i = 0; i < list.length && Date.now() < deadline; i += parallel) {
+      const group = list.slice(i, i + parallel);
+      if (throttled) await new Promise((r) => setTimeout(r, 2000));
       const done = await Promise.all(group.map(async (r) => {
         const [driveId, itemId] = r.ref.split(":");
         const stub = { id: itemId, name: r.name, size: r.size_kb * 1024 } as GraphItem;
@@ -195,8 +207,13 @@ export async function reindexDocs(p: {
         const skipWhy = !INDEXABLE.test(r.name) ? "읽지 않는 형식" : bytes > MAX_FILE_BYTES ? "25MB 초과" : DATA_EXT.test(r.name) && bytes > DATA_MAX_BYTES ? "데이터 파일(1MB 초과, 이름만)" : "";
         if (skipWhy) { sum.skipped++; return { ref: r.ref, status: "skipped" as const, error: skipWhy, text: "", indexed_at: now }; }
         try { const text = (await p.extract(stub, driveId || r.drive_id)).slice(0, TEXT_CAP); sum.indexed++; return { ref: r.ref, status: "ok" as const, error: "", text, indexed_at: now }; }
-        catch (e) { sum.errors++; return { ref: r.ref, status: "error" as const, error: (e instanceof Error ? e.message : String(e)).slice(0, 200), text: "", indexed_at: now }; }
+        catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (THROTTLE_RE.test(msg)) { throttled++; parallel = 1; return { ref: r.ref, status: "pending" as const, error: msg.slice(0, 200), text: "", indexed_at: now }; }
+          sum.errors++; return { ref: r.ref, status: "error" as const, error: msg.slice(0, 200), text: "", indexed_at: now };
+        }
       }));
+      if (throttled >= 20) { notes.push(`Graph 호출 제한(429)으로 ${throttled}건 미뤄짐 — 다음 실행에 이어서`); break; }
       // 부분 갱신 — name·path 는 그대로 두고 상태·본문만
       for (const x of done) {
         const { error } = await sb.from(TABLE).update({ status: x.status, error: x.error, text: x.text, indexed_at: x.indexed_at }).eq("ref", x.ref);
@@ -211,6 +228,7 @@ export async function reindexDocs(p: {
     sum.pending = count || 0;
     if (sum.pending) sum.partial = true;
   }
+  if (throttled && throttled < 20) notes.push(`Graph 호출 제한으로 ${throttled}건 미뤄짐(다음 실행에)`);
   sum.note = notes.join(" / ");
   try { await setKv(KV_LAST, JSON.stringify(sum)); } catch { /* 요약 저장 실패는 무시 */ }
   return sum;
