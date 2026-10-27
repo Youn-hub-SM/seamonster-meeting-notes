@@ -153,7 +153,7 @@ export default function ConnectSection({ onDirty }: SectionProps) {
     try { const j = await api<{ detail: string }>("/api/b2b/settings/ms365", "POST"); setMMsg({ ok: true, text: `연결됨 — ${j.detail || ""}` }); }
     catch (e) { setMMsg({ ok: false, text: errText(e, "연결을 확인하지 못했습니다. 사이트 주소와 앱 권한을 확인하세요") }); }
   });
-  // 문서 색인 갱신 — 한 번 호출은 45초 예산이라, 남은 파일(pending)이 없어질 때까지 자동으로 이어 부른다(최대 40회 ≈ 30분)
+  // 문서 색인 갱신 — 한 번 호출은 280초 예산, 남은 파일(pending)이 없어질 때까지 자동으로 이어 부른다(최대 40회)
   const indexMs = () => run("msidx", async () => {
     setMMsg(null);
     type Sum = { scanned: number; indexed: number; skipped: number; errors: number; pending: number; deleted: number; partial: boolean; note: string };
