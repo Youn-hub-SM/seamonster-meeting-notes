@@ -95,8 +95,9 @@ Graph '목록 항목' API 로 CanvasContent1(본문 HTML)을 받아 글로 바�
 
 Graph 의 드라이브 검색 끝점(`/drives/{id}/root/search`)은 사이트별 허용(Sites.Selected) 앱 권한에서 `500 generalException` 을 낸다(두 사이트 모두 확인). 그래서 본문 검색은 업무도우미가 직접 만든 색인으로 한다.
 
-- 표: `ms365_doc_index`(마이그레이션 151) — ref·이름·경로·수정시각·본문 앞 60,000자. 비서의 run_report 에서는 차단, docs_search 로만 읽는다.
-- 갱신: 관리자 › 설정 › 연결 › Microsoft 365 문서 [문서 색인 갱신](45초 예산, 바뀐 파일만) + 일정 알림 크론 틱(아침·오후, 35초 예산). 결과에 '일부만 봄'이 뜨면 한 번 더 누른다.
+- 표: `ms365_doc_index`(마이그레이션 151 + 152) — ref·이름·경로·수정시각·본문 앞 60,000자·status(ok·skipped·error·pending). 비서의 run_report 에서는 차단, docs_search 로만 읽는다.
+- 목록: Graph 변경분(delta) API — 처음엔 전체, 그 뒤엔 바뀐 것만(토큰은 b2b_settings 'ms365_delta:<드라이브>'). 새·바뀐 파일은 pending 으로 먼저 저장.
+- 갱신: 관리자 › 설정 › 연결 › Microsoft 365 문서 [문서 색인 갱신] — 45초 예산 호출을 남은 파일이 없을 때까지 자동 반복(최대 40회). 화면에 '색인 중 (n회) … 남은 파일 k'가 흐른다. 평소엔 일정 알림 크론 틱(아침·오후, 35초 예산)이 바뀐 것만 읽는다. 한 호출이 45초인 것은 Vercel Hobby 의 함수 상한(60초) 때문.
 - 읽는 형식: docx·pptx·xlsx·pdf·txt·csv·md·json·html 과 옛 doc·xls·ppt(PDF 변환). 그 밖(이미지·압축)은 이름·경로만.
 - 삭제된 파일은 드라이브를 끝까지 훑은 실행에서 색인에서 지운다.
 - 사이트 페이지(매뉴얼)는 색인과 무관하게 종전대로 바로 읽는다.

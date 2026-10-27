@@ -153,12 +153,20 @@ export default function ConnectSection({ onDirty }: SectionProps) {
     try { const j = await api<{ detail: string }>("/api/b2b/settings/ms365", "POST"); setMMsg({ ok: true, text: `연결됨 — ${j.detail || ""}` }); }
     catch (e) { setMMsg({ ok: false, text: errText(e, "연결을 확인하지 못했습니다. 사이트 주소와 앱 권한을 확인하세요") }); }
   });
+  // 문서 색인 갱신 — 한 번 호출은 45초 예산이라, 남은 파일(pending)이 없어질 때까지 자동으로 이어 부른다(최대 40회 ≈ 30분)
   const indexMs = () => run("msidx", async () => {
     setMMsg(null);
+    type Sum = { scanned: number; indexed: number; skipped: number; errors: number; pending: number; deleted: number; partial: boolean; note: string };
+    const tot = { indexed: 0, skipped: 0, errors: 0, deleted: 0, rounds: 0 };
     try {
-      const j = await api<{ summary: { scanned: number; indexed: number; skipped: number; errors: number; pending: number; deleted: number; partial: boolean; note: string } }>("/api/b2b/settings/ms365/index", "POST");
-      const s = j.summary;
-      setMMsg({ ok: true, text: `색인 갱신 — 파일 ${s.scanned}개 중 새로 읽음 ${s.indexed}, 이름만 ${s.skipped}, 실패 ${s.errors}${s.pending ? `, 다음에 이어서 ${s.pending}` : ""}${s.deleted ? `, 정리 ${s.deleted}` : ""}${s.partial ? " (일부만 봄 — 한 번 더 누르면 이어집니다)" : ""}${s.note ? ` · ${s.note}` : ""}` });
+      let s: Sum;
+      do {
+        tot.rounds++;
+        s = (await api<{ summary: Sum }>("/api/b2b/settings/ms365/index", "POST")).summary;
+        tot.indexed += s.indexed; tot.skipped += s.skipped; tot.errors += s.errors; tot.deleted += s.deleted;
+        setMMsg({ ok: true, text: `색인 중 (${tot.rounds}회) — 본문 읽음 ${tot.indexed}, 이름만 ${tot.skipped}, 실패 ${tot.errors} · 남은 파일 ${s.pending}` });
+      } while (s.pending > 0 && (s.indexed + s.skipped + s.errors) > 0 && tot.rounds < 40);
+      setMMsg({ ok: true, text: `색인 완료 — 본문 읽음 ${tot.indexed}, 이름만 ${tot.skipped}, 실패 ${tot.errors}${tot.deleted ? `, 정리 ${tot.deleted}` : ""}${s.pending ? ` · 남은 파일 ${s.pending}(한 번 더 누르면 이어집니다)` : ""}${s.note ? ` · ${s.note}` : ""}` });
     } catch (e) { setMMsg({ ok: false, text: errText(e, "색인을 갱신하지 못했습니다") }); }
   });
   const importNow = () => run("import", async () => {
