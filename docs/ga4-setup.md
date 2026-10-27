@@ -54,6 +54,26 @@ claude mcp add analytics-mcp --scope user -e "GOOGLE_APPLICATION_CREDENTIALS=C:\
 - 붙인 뒤 클로드 코드 세션을 새로 열면 `analytics-mcp` 도구(속성 목록·리포트 실행)가 보인다.
 - 읽기 전용이다(`--allow-write` 를 넣지 않는다).
 
+## 5. 외부 AI 비서(Poke 등)에 GA 붙이기 — 업무도우미 MCP 서버 (2026-10-27)
+
+업무도우미가 GA4 조회 도구를 MCP 규격으로 연다. 외부 서비스에 구글 서비스 계정 키를 넘기지 않고, 업무도우미 키 하나만 준다.
+
+- 주소: `https://meeting-notes-beryl.vercel.app/api/mcp/ga` (운영). 베타는 `https://meeting-notes-git-dev-younhyunshuk-5999s-projects.vercel.app/api/mcp/ga`
+- 규격: MCP Streamable HTTP(POST JSON-RPC, 세션 없음). 구형 SSE 전용 클라이언트는 붙지 않는다.
+- 인증: `Authorization: Bearer <MCP_API_KEY>` (또는 `X-Api-Key`). 키는 Vercel 환경 변수 `MCP_API_KEY`(Production·Preview). 키 원문은 `C:\Users\younh\.secrets\mcp-api-key.txt` — 대화·문서에 적지 않는다.
+- 도구: `ga_report`(기간·차원·측정항목·필터), `ga_funnel`(단계별 완료율·이탈률), `ga_catalog`(우리 속성에 있는 이벤트·페이지·사용자 정의 측정기준). AI 비서의 같은 이름 도구와 같은 코드.
+- 읽기 전용. 어제까지 확정값. 날짜는 한국 시간.
+
+Poke 연동 화면: Name 은 자유(예: 씨몬스터 GA), Server URL 은 위 주소, API Key 는 MCP_API_KEY 값.
+
+키 바꾸기: 새 값을 만들어 Vercel 환경 변수를 갱신하고 재배포 → Poke 쪽 키도 바꾼다. 키를 지우면 503 으로 전부 막힌다.
+
+연결 확인(키는 파일에서 읽는다):
+
+```bash
+curl -s -X POST https://meeting-notes-beryl.vercel.app/api/mcp/ga -H "Authorization: Bearer $(cat ~/.secrets/mcp-api-key.txt)" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
 ## 4. 그다음 (클로드가 함)
 
 AI 비서·종합 리포트에 `ga_report` 도구 — 기간·측정항목(세션·사용자·구매·구매액·전환율)·차원(채널·소스/매체·캠페인·랜딩·기기) 조회. 2 가 끝나야 실데이터로 검증한다.

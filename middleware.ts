@@ -50,8 +50,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 로그인 페이지·로그인 API + QR 숏링크(/q/*) + 아침 다이제스트 크론·일일 리포트 크론·은행입금 동기화 크론·입금문자 웹훅·인증번호 문자 웹훅(/api/sms/otp) + 인스타 댓글 웹훅·Tally 설문 웹훅(서명 검증) — 자체 검증이 있어 보호 제외
-  if (pathname === "/b2b/login" || pathname === "/factory/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname === "/api/b2b/schedule-digest" || pathname === "/api/analyst/cron" || pathname === "/api/b2b/deposits/webhook" || pathname === "/api/sms/otp" || pathname === "/api/instagram/webhook" || pathname === "/api/naver/catalog/sync" || pathname === "/api/naver/catalog/upload" || pathname === "/api/channel-commands" || pathname === "/api/claims/report" || pathname === "/api/production/requests/draft" || pathname === "/api/subscription/sync" || pathname.startsWith("/q/")) {
+  // 로그인 페이지·로그인 API + QR 숏링크(/q/*) + 아침 다이제스트 크론·일일 리포트 크론·은행입금 동기화 크론·입금문자 웹훅·인증번호 문자 웹훅(/api/sms/otp) + 인스타 댓글 웹훅·Tally 설문 웹훅(서명 검증) + GA MCP 서버(/api/mcp/*, Bearer MCP_API_KEY) — 자체 검증이 있어 보호 제외
+  if (pathname === "/b2b/login" || pathname === "/factory/login" || pathname === "/api/b2b/auth" || pathname === "/api/voc/tally" || pathname === "/api/b2b/schedule-digest" || pathname === "/api/analyst/cron" || pathname === "/api/b2b/deposits/webhook" || pathname === "/api/sms/otp" || pathname === "/api/instagram/webhook" || pathname === "/api/naver/catalog/sync" || pathname === "/api/naver/catalog/upload" || pathname === "/api/channel-commands" || pathname === "/api/claims/report" || pathname === "/api/production/requests/draft" || pathname === "/api/subscription/sync" || pathname.startsWith("/api/mcp/") || pathname.startsWith("/q/")) {
     return NextResponse.next();
   }
 

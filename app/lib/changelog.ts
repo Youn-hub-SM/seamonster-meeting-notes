@@ -34,6 +34,13 @@ export const MENU_ORDER = ["B2B", "상품 마스터", "온라인 발주", "정�
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    date: "2026-10-27",
+    tag: "신규",
+    tool: "관리자",
+    title: "GA4 MCP 서버 — Poke 같은 외부 AI 비서에서 공식몰 GA 데이터를 바로 조회",
+    desc: "업무도우미가 쓰는 GA4 조회 도구(리포트·유입경로·속성 카탈로그)를 MCP 규격으로 열었다. 주소 /api/mcp/ga, 키는 Vercel 환경 변수 MCP_API_KEY(관리자). 읽기 전용이고 어제까지 확정값만 돌려준다. 설정 절차는 docs/ga4-setup.md 5절.",
+  },
+  {
     date: "2026-10-26",
     tag: "신규",
     tool: "CRM 메시지맵",
