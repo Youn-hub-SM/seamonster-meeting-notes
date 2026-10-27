@@ -28,6 +28,12 @@ const DATA_EXT = /\.(xlsx|xls|csv|json|xml|log|ods)$/i;
 const DATA_MAX_BYTES = 1024 * 1024;
 const ITEM_SELECT = "$select=id,name,webUrl,size,lastModifiedDateTime,file,folder,parentReference,deleted";
 
+// 저장 전 글 정리 — PDF·옛 형식 변환본에 섞이는 깨진 서로게이트·NUL·제어 문자는 JSON/Postgres 가 거부한다("Empty or invalid json", 2026-10-27 실측)
+const clean = (s: string) => s
+  .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "").replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "$1")
+  .replace(/\u0000/g, "").replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+  .replace(/\uFFFE|\uFFFF/g, "");
+
 type DeltaItem = GraphItem & { deleted?: { state?: string } };
 export type IndexRow = {
   ref: string; source: string; site_id: string; drive_id: string; name: string; path: string; url: string;
@@ -119,12 +125,16 @@ export async function reindexDocs(p: {
 
   const upsert = async (rows: (IndexRow & { seen_at?: string })[]) => {
     for (let i = 0; i < rows.length; i += 20) {
-      const chunk = rows.slice(i, i + 20).map((r) => ({ ...r, seen_at: sum.at }));
+      const chunk = rows.slice(i, i + 20).map((r) => ({ ...r, name: clean(r.name), path: clean(r.path), error: clean(r.error), text: clean(r.text), seen_at: sum.at }));
       const { error } = await sb.from(TABLE).upsert(chunk, { onConflict: "ref" });
       if (error) {
         if (missingTable(error.message)) throw new Error("문서 색인 표가 없습니다 — 마이그레이션 151_ms365_doc_index.sql 을 적용하세요.");
         if (pendingUnsupported(error.message)) throw new Error("색인 표가 옛 버전입니다 — 마이그레이션 152_ms365_doc_index_pending.sql 을 적용하세요.");
-        throw new Error(`색인 저장 실패: ${error.message}`);
+        // 묶음이 거부되면 한 건씩 — 문제 있는 행만 건너뛰고 나머지는 저장
+        for (const one of chunk) {
+          const { error: e1 } = await sb.from(TABLE).upsert(one, { onConflict: "ref" });
+          if (e1) notes.push(`저장 거부: ${one.name.slice(0, 40)} (${e1.message.slice(0, 60)})`);
+        }
       }
     }
   };
@@ -216,8 +226,13 @@ export async function reindexDocs(p: {
       if (throttled >= 20) { notes.push(`Graph 호출 제한(429)으로 ${throttled}건 미뤄짐 — 다음 실행에 이어서`); break; }
       // 부분 갱신 — name·path 는 그대로 두고 상태·본문만
       for (const x of done) {
-        const { error } = await sb.from(TABLE).update({ status: x.status, error: x.error, text: x.text, indexed_at: x.indexed_at }).eq("ref", x.ref);
-        if (error) throw new Error(`색인 저장 실패: ${error.message}`);
+        const { error } = await sb.from(TABLE).update({ status: x.status, error: clean(x.error), text: clean(x.text), indexed_at: x.indexed_at }).eq("ref", x.ref);
+        if (error) {
+          // 본문이 거부되면 그 파일만 실패로 남기고 계속(전체 실행을 멈추지 않는다)
+          const { error: e2 } = await sb.from(TABLE).update({ status: "error", error: `저장 거부: ${error.message.slice(0, 160)}`, text: "", indexed_at: x.indexed_at }).eq("ref", x.ref);
+          if (e2) throw new Error(`색인 저장 실패: ${e2.message}`);
+          if (x.status === "ok") { sum.indexed--; sum.errors++; }
+        }
       }
       progressed += done.length;
     }
